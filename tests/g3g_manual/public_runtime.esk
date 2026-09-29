@@ -245,4 +245,165 @@
 (expect-error "C4 model remains wrong kind after input releases"
   'invalid-argument 'generation-tensor-release!
   (lambda () (generation-tensor-release! c4-model-b)))
+
+;;; The separately admitted C4 profile uses the same installed operation
+;;; names, with a fixed P2/G1 result and no EOS stop policy.
+(define (c4-seed-policy sampling seed)
+  (list ':profile 'diagnostic-c4-p2g1 ':sampling sampling
+        ':temperature-bits (if (eq? sampling 'greedy)
+                               #x3f800000 #x3f400000)
+        ':top-k (if (eq? sampling 'greedy) 256 32)
+        ':top-p-bits (if (eq? sampling 'greedy)
+                        #x3f800000 #x3f000000)
+        ':max-new-tokens 1 ':eos #f ':seed seed))
+(define (c4-successor-policy rng)
+  (list ':profile 'diagnostic-c4-p2g1 ':sampling 'categorical
+        ':temperature-bits #x3f400000 ':top-k 32
+        ':top-p-bits #x3f000000 ':max-new-tokens 1
+        ':eos #f ':rng rng))
+(expect-error "C4 rejects C2 profile" 'invalid-argument 'generator-create
+  (lambda () (generator-create c4-model-a tokenizer policy-g1)))
+(expect-error "C2 rejects C4 profile" 'invalid-argument 'generator-create
+  (lambda () (generator-create model tokenizer
+               (c4-seed-policy 'greedy 41))))
+(expect-error "C4 rejects zero budget" 'invalid-argument 'generator-create
+  (lambda () (generator-create c4-model-a tokenizer
+               (list ':profile 'diagnostic-c4-p2g1 ':sampling 'greedy
+                     ':temperature-bits #x3f800000 ':top-k 256
+                     ':top-p-bits #x3f800000 ':max-new-tokens 0
+                     ':eos #f ':seed 41))))
+(expect-error "C4 EOS requires later policy" 'invalid-argument 'generator-create
+  (lambda () (generator-create c4-model-a tokenizer
+               (list ':profile 'diagnostic-c4-p2g1 ':sampling 'greedy
+                     ':temperature-bits #x3f800000 ':top-k 256
+                     ':top-p-bits #x3f800000 ':max-new-tokens 1
+                     ':eos 0 ':seed 41))))
+(define c2-cap-generator (generator-create model tokenizer policy-g1))
+(define c2-cap-input (generation-input-create c4-t1-two))
+(expect-error "C2 P2/G1 remains over capacity before C4 call"
+  'shape-mismatch 'generator-generate!
+  (lambda () (generator-generate! c2-cap-generator c2-cap-input)))
+(define c4-prompt (generation-c4-input-create c4-t1-two))
+(define c4-dead-before-call
+  (generator-create c4-model-a tokenizer (c4-seed-policy 'greedy 40)))
+(check "C4 generator closes before pending gate admission"
+  (generator-close! c4-dead-before-call))
+(expect-error "dead C4 generator rejects before pending gate admission"
+  'invalid-state 'generator-generate!
+  (lambda () (generator-generate! c4-dead-before-call c4-prompt)))
+(define c4-greedy (generator-create c4-model-a tokenizer
+                     (c4-seed-policy 'greedy 41)))
+(expect-error "C4 rejects C2 input" 'invalid-argument 'generator-generate!
+  (lambda () (generator-generate! c4-greedy scalar-input)))
+(define c4-greedy-out (generator-generate! c4-greedy c4-prompt))
+(expect-error "C2 P2/G1 remains over capacity after C4 call"
+  'shape-mismatch 'generator-generate!
+  (lambda () (generator-generate! c2-cap-generator c2-cap-input)))
+(check "C2 capacity witnesses release"
+  (and (generator-close! c2-cap-generator)
+       (generation-tensor-release! c2-cap-input)))
+(define c4-greedy-text (car (generation-output-text c4-greedy-out)))
+(check "C4 emitted one raw byte"
+  (and (bytevector? c4-greedy-text)
+       (= (bytevector-length c4-greedy-text) 1)))
+(define c4-greedy-id (car (generation-output-ids c4-greedy-out)))
+(define c4-greedy-id-next (car (generation-output-ids c4-greedy-out)))
+(define c4-greedy-len (generation-output-lengths c4-greedy-out))
+(define c4-greedy-cache (generation-output-cache-lengths c4-greedy-out))
+(define c4-greedy-rng (generation-output-rng c4-greedy-out))
+(expect-error "C4 IDs owner is not RNG constructor source"
+  'invalid-argument 'generator-create
+  (lambda () (generator-create c4-model-a tokenizer
+               (c4-successor-policy c4-greedy-id))))
+(check "C4 clones have distinct owners"
+  (and (not (eq? c4-greedy-id c4-greedy-id-next))
+       (not (eq? c4-greedy-text
+                 (car (generation-output-text c4-greedy-out))))))
+(expect-error "C4 generator cannot emit twice" 'invalid-state
+  'generator-generate!
+  (lambda () (generator-generate! c4-greedy c4-prompt)))
+(expect-error "C4 model is not output" 'invalid-argument
+  'generation-output-text
+  (lambda () (generation-output-text c4-model-a)))
+(expect-error "C4 output is not tensor" 'invalid-argument
+  'generation-tensor-release!
+  (lambda () (generation-tensor-release! c4-greedy-out)))
+(check "C4 output survives generator close" (generator-close! c4-greedy))
+(check "C4 output byte after close"
+  (= (bytevector-u8-ref c4-greedy-text 0)
+     (bytevector-u8-ref (car (generation-output-text c4-greedy-out)) 0)))
+(check "C4 independent clones release"
+  (and (generation-tensor-release! c4-greedy-id)
+       (generation-tensor-release! c4-greedy-len)
+       (generation-tensor-release! c4-greedy-cache)))
+(check "C4 output release is idempotent"
+  (and (generation-output-release! c4-greedy-out)
+       (generation-output-release! c4-greedy-out)))
+(check "C4 detached ID and RNG survive output release"
+  (and (generation-tensor-release! c4-greedy-id-next)
+       (generation-rng-release! c4-greedy-rng)))
+(expect-error "C4 dead output rejects read" 'invalid-state
+  'generation-output-text
+  (lambda () (generation-output-text c4-greedy-out)))
+
+(define c4-other-prompt (generation-c4-input-create t1-two))
+(define c4-other-generator (generator-create c4-model-a tokenizer
+                             (c4-seed-policy 'greedy 41)))
+(define c4-other-output
+  (generator-generate! c4-other-generator c4-other-prompt))
+(check "distinct authentic P2 prompt publishes one byte"
+  (= (bytevector-length
+       (car (generation-output-text c4-other-output))) 1))
+(check "second P2 owners release"
+  (and (generation-output-release! c4-other-output)
+       (generator-close! c4-other-generator)
+       (generation-tensor-release! c4-other-prompt)))
+
+(define c4-categorical (generator-create c4-model-a tokenizer
+                         (c4-seed-policy 'categorical 97)))
+(define c4-cat-out (generator-generate! c4-categorical c4-prompt))
+(define c4-successor (generation-output-rng c4-cat-out))
+(expect-error "forged C4 result RNG rejects constructor"
+  'invalid-argument 'generator-create
+  (lambda () (generator-create c4-model-a tokenizer
+               (c4-successor-policy (vector 'g3c4-rng-private)))))
+(define c4-follow-a (generator-create c4-model-a tokenizer
+                      (c4-successor-policy c4-successor)))
+(define c4-follow-b (generator-create c4-model-a tokenizer
+                      (c4-successor-policy c4-successor)))
+(check "source result RNG releases after two copied constructors"
+  (generation-rng-release! c4-successor))
+(expect-error "released result RNG rejects constructor" 'invalid-state
+  'generator-create
+  (lambda () (generator-create c4-model-a tokenizer
+               (c4-successor-policy c4-successor))))
+(define c2-cross-input (generation-token-input-create 65))
+(define c2-cross-generator (generator-create model tokenizer policy-g1))
+(define c2-cross-output (generator-generate! c2-cross-generator c2-cross-input))
+(define c2-cross-rng (generation-output-rng c2-cross-output))
+(expect-error "C2 RNG is not C4 result RNG" 'invalid-argument
+  'generator-create
+  (lambda () (generator-create c4-model-a tokenizer
+               (c4-successor-policy c2-cross-rng))))
+(check "C2 cross-profile owners release"
+  (and (generation-rng-release! c2-cross-rng)
+       (generation-output-release! c2-cross-output)
+       (generator-close! c2-cross-generator)
+       (generation-tensor-release! c2-cross-input)))
+(check "source output and generator close independently"
+  (and (generation-output-release! c4-cat-out)
+       (generator-close! c4-categorical)))
+(define c4-follow-out-a (generator-generate! c4-follow-a c4-prompt))
+(define c4-follow-out-b (generator-generate! c4-follow-b c4-prompt))
+(check "same successor snapshot gives same next selected byte"
+  (= (bytevector-u8-ref
+       (car (generation-output-text c4-follow-out-a)) 0)
+     (bytevector-u8-ref
+       (car (generation-output-text c4-follow-out-b)) 0)))
+(check "C4 continuation owners release independently"
+  (and (generation-output-release! c4-follow-out-a)
+       (generator-close! c4-follow-a)
+       (generation-output-release! c4-follow-out-b)
+       (generator-close! c4-follow-b)
+       (generation-tensor-release! c4-prompt)))
 (display "G3G-MANUAL-PUBLIC-PASS") (newline)

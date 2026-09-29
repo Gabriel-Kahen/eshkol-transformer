@@ -705,14 +705,18 @@ clone ownership and an exact borrowed-view device check. Current retained
 I1 storage is CPU-only with no device field, so A0's non-CPU retained-state
 branch is unreachable through this fixed public profile; the proposed
 test-only in-borrow injection witnesses defensive `device-mismatch` mapping.
-An isolated source-composed C4 result-owner candidate now implements the
-fixed P2/G1 clone/device/release seam and tests it against the existing
-private producer archive. Its exact-head supported gate and independent
-source review are pending. The installed G3-G package still compiles only
-C4 model/input authority: adding C4 shell/copy-out/result symbols and routing
-its existing public wrappers requires a separate one-archive closure gate.
-Neither leaf admits EOS,
-repeated decode, persistence or CLI3 `generate`.
+The source-composed C4 result-owner adapter is independently reviewed and
+supported-gated at `031ea3d`/tree `3ade857`; the public C4 seeded model and
+owned P2 input have merged through #159 at `a51ab96`. A separate isolated
+G3-G one-archive candidate now composes the accepted private coordinator and
+result adapter, routes only exact C4 identities through the existing public
+operations, and admits a copied published C4 result RNG as a constructor
+source. Its installed closure probe passes, but a P2/G1 runtime admission
+failure exposed a package-local top-level pending-gate initializer that does
+not execute in the installed archive. An explicit authenticated C4 route
+enablement and exact installed normal/repeat/sanitizer gate remain under
+review; no installed C4 generator authority is accepted yet. This fixed leaf
+does not admit EOS, repeated decode, persistence or CLI3 `generate`.
 
 The source-private [T1/I1 exact-pair prerequisite](g3/G3_C4_T1_I1_EXACT_PAIR_PREREQUISITE.md)
 is independently reviewed and passed a supported pinned-fe9 normal/repeat/
