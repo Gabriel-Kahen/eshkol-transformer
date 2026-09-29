@@ -133,6 +133,15 @@ def check() -> None:
     # not add a raw pointer/view/borrow seam.
     t1_declarations = set(re.findall(
         r"\b(et_t1_i64_shell_[a-z0-9_]+_v1)\s*\(", t1_header))
+    private_t1 = {
+        "et_t1_i64_shell_private_c4_read_v1",
+        "et_t1_i64_shell_test_corrupt_v1",
+        "et_t1_i64_shell_test_restore_v1",
+    }
+    require(t1_header.count("#ifdef ET_G3C4_T1_I1_EXACT_PAIR_PRIVATE") == 2 and
+            all(symbol in t1_header for symbol in private_t1),
+            "new T1 exact-pair declarations are not private-feature gated")
+    t1_declarations -= private_t1
     require(t1_declarations == {
         "et_t1_i64_shell_create_v1",
         "et_t1_i64_shell_length_v1",

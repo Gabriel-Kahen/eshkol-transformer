@@ -33,6 +33,10 @@ common_flags=(
   -I "${PROJECT_ROOT}/src" -I "${PROJECT_ROOT}/src/eshkol_transformer"
   -I "$(eshkol_source_dir)/inc"
 )
+exact_pair_flags=()
+if [[ "${G3C4_EXACT_PAIR_PRIVATE:-0}" == 1 ]]; then
+  exact_pair_flags=(-DET_G3C4_T1_I1_EXACT_PAIR_PRIVATE)
+fi
 
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-g3c4-prompt-t1.XXXXXX")"
 cleanup() {
@@ -69,6 +73,7 @@ compile_mode() {
     -c "${PROJECT_ROOT}/src/eshkol_transformer/m3t_f32_integration.c" \
     -o "${directory}/objects/m3t_f32_integration.o"
   "${cc}" "${common_flags[@]}" "${mode_flags[@]}" \
+    "${exact_pair_flags[@]}" \
     -c "${PROJECT_ROOT}/tests/g3c4/prompt_t1_borrow_native.c" \
     -o "${directory}/objects/g3c4_prompt_t1_borrow_native.o"
   "${cxx}" -std=c++17 -Wall -Wextra -Werror -Wpedantic -fPIC \
@@ -94,10 +99,11 @@ compile_mode() {
       -o "${directory}/objects/${source}.o"
   done
   "${cc}" "${common_flags[@]}" "${mode_flags[@]}" \
-    -DET_T1_I64_SHELL_TESTING -c "${PROJECT_ROOT}/native/t1_i64_shell.c" \
+    "${exact_pair_flags[@]}" -DET_T1_I64_SHELL_TESTING \
+    -c "${PROJECT_ROOT}/native/t1_i64_shell.c" \
     -o "${directory}/objects/t1_i64_shell.o"
   "${cc}" "${common_flags[@]}" "${mode_flags[@]}" \
-    -DET_I64_TENSOR_TESTING -DET_M3_TESTING \
+    "${exact_pair_flags[@]}" -DET_I64_TENSOR_TESTING -DET_M3_TESTING \
     -c "${PROJECT_ROOT}/src/eshkol_transformer/m3_i64_integration.c" \
     -o "${directory}/objects/m3_i64_integration.o"
   "${cc}" "${common_flags[@]}" "${mode_flags[@]}" \
@@ -167,6 +173,32 @@ WRAPPER
       -o "${directory}/allocation" \
       >"${directory}/allocation-compile.stdout" \
       2>"${directory}/allocation-compile.stderr"
+  if [[ "${G3C4_EXACT_PAIR_PRIVATE:-0}" == 1 ]]; then
+    env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
+      XDG_CACHE_HOME="${directory}/cache" \
+      ESHKOL_CXX_COMPILER="${compiler}" \
+      ESHKOL_LIB_DIR="${PROJECT_ROOT}/lib" \
+      timeout --foreground --signal=TERM --kill-after=5s 600s \
+        "${eshkol_runner}" --strict-types --optimize 0 --no-stdlib \
+        -I "${PROJECT_ROOT}/internal/p1/lib" \
+        -I "${PROJECT_ROOT}/internal/c1/lib" \
+        -I "${PROJECT_ROOT}/internal/t1/lib" \
+        -I "${PROJECT_ROOT}/src" -I "${PROJECT_ROOT}/lib" \
+        -I "${PROJECT_ROOT}/native" \
+        -L "${directory}" --lib g3c4_prompt_t1 \
+        "${PROJECT_ROOT}/tests/g3c4/t1_i1_exact_pair_linked.esk" \
+        -o "${directory}/exact-pair-linked" \
+        >"${directory}/exact-pair-compile.stdout" \
+        2>"${directory}/exact-pair-compile.stderr"
+    "${runtime[@]}" ESHKOL_ARENA_POISON=1 \
+      timeout --foreground --signal=TERM --kill-after=5s 120s \
+      "${directory}/exact-pair-linked" \
+      >"${directory}/exact-pair-runtime.stdout" \
+      2>"${directory}/exact-pair-runtime.stderr"
+    test ! -s "${directory}/exact-pair-runtime.stderr"
+    grep -E '^G3-C4 T1/I1 EXACT PAIR LINKED PASS: [1-9][0-9]* checks$' \
+      "${directory}/exact-pair-runtime.stdout" >/dev/null
+  fi
   "${runtime[@]}" ESHKOL_ARENA_POISON=1 \
     timeout --foreground --signal=TERM --kill-after=5s 120s \
     "${directory}/witness" \
@@ -196,6 +228,15 @@ WRAPPER
 }
 
 compile_mode normal
+if [[ "${G3C4_EXACT_PAIR_PRIVATE:-0}" == 1 ]]; then
+  ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 120s \
+    "${tmp}/normal/exact-pair-linked" \
+    >"${tmp}/normal/exact-pair-repeat.stdout" \
+    2>"${tmp}/normal/exact-pair-repeat.stderr"
+  test ! -s "${tmp}/normal/exact-pair-repeat.stderr"
+  cmp "${tmp}/normal/exact-pair-runtime.stdout" \
+      "${tmp}/normal/exact-pair-repeat.stdout"
+fi
 ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 120s \
   "${tmp}/normal/witness" \
   >"${tmp}/normal/runtime-repeat.stdout" \
@@ -222,6 +263,16 @@ for mode in normal sanitize; do
     "${evidence}/${mode}-allocation.stdout"
   cp "${tmp}/${mode}/allocation.stderr" \
     "${evidence}/${mode}-allocation.stderr"
+  if [[ "${G3C4_EXACT_PAIR_PRIVATE:-0}" == 1 ]]; then
+    cp "${tmp}/${mode}/exact-pair-compile.stdout" \
+      "${evidence}/${mode}-exact-pair-compile.stdout"
+    cp "${tmp}/${mode}/exact-pair-compile.stderr" \
+      "${evidence}/${mode}-exact-pair-compile.stderr"
+    cp "${tmp}/${mode}/exact-pair-runtime.stdout" \
+      "${evidence}/${mode}-exact-pair-runtime.stdout"
+    cp "${tmp}/${mode}/exact-pair-runtime.stderr" \
+      "${evidence}/${mode}-exact-pair-runtime.stderr"
+  fi
   for horizon in 1024 8192; do
     cp "${tmp}/${mode}/retention-${horizon}.stdout" \
       "${evidence}/${mode}-retention-${horizon}.stdout"
@@ -230,6 +281,10 @@ for mode in normal sanitize; do
   done
 done
 cp "${tmp}/normal/runtime-repeat.stdout" "${evidence}/runtime-repeat.stdout"
+if [[ "${G3C4_EXACT_PAIR_PRIVATE:-0}" == 1 ]]; then
+  cp "${tmp}/normal/exact-pair-repeat.stdout" \
+    "${evidence}/exact-pair-repeat.stdout"
+fi
 cp "${PROJECT_ROOT}/native/g3c4_prompt_t1_borrow_source_closure.txt" \
   "${evidence}/source-closure.txt"
 while IFS= read -r source; do
