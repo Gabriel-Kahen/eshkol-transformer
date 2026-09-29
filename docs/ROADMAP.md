@@ -1572,7 +1572,7 @@ wider profiles and hosted integration remain pending.
 The docs-only [explicit interruption proposal](TR3_EXPLICIT_INTERRUPT_PROPOSAL.md)
 starts from the reviewed #150 head `304a2a1` and specifies a same-thread
 caller predicate at committed update boundaries. It is unimplemented and
-requires independent contract review, including its proposed summary reason.
+requires independent contract review, including its scoped poll-phase guard.
 
 The bounded public `trainer-state` / `trainer-load-state!` candidate uses the
 accepted same-registry TR3-C snapshot and joint-restore entries with private
