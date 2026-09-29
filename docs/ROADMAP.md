@@ -679,8 +679,10 @@ token-frame, prompt/prefill and output-reservation projections for accepted
 later private features, while preserving synthetic negative rejection. All
 37 G3-C4 structural checkers now pass on the composed tree; production and
 runtime test blobs remain identical to the gated `123505d` tree. #155 and
-#157 are merged. The later copy-out integration is under hosted review as
-[#158](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/158).
+#157 are merged. The later copy-out integration passed 23/23 hosted checks
+on exact reviewed head `0972bed`/tree `11b7779` and merged as
+[#158](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/158) at
+`c7b0cc9`.
 
 The independently reviewed [public C4 model/input authority contract](g3/G3_C4_PUBLIC_MODEL_INPUT_AUTHORITY_PROPOSAL.md)
 is the next additive `diagnostic-c4` package leaf. Its isolated implementation
@@ -695,8 +697,10 @@ and independent source-and-test review passed at `9581b8a`/tree `fb3882d`.
 The pinned Clang 21 gate captured both underlying runner exits as zero and
 verified the 137-file
 `g3c4-public-model-input-validated-clang21-9581b8a-20260929-b/SHA256SUMS`
-seal. Integration with #158 and current main has separate manifest, supported
-gate and hosted CI requirements. This leaf does not
+seal. The reviewed integration with #158 repinned five predecessor manifests
+and passed the pinned Clang 21 installed/linked gate at `3c5e584`/tree
+`ddd06ba` (138-file seal). Composition with the newer #153/#158 main and
+hosted CI remain. This leaf does not
 admit a public C4 generator, result, EOS,
 repeated decode, persistence or CLI3 `generate`.
 
