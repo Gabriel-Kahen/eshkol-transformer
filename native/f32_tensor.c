@@ -844,6 +844,89 @@ static int storage_aliases_live(const void *storage, size_t bytes) {
   return storage_aliases_live_reference(storage, bytes);
 }
 
+#ifdef ET_F32_TENSOR_STORAGE_QUERY_PRIVATE
+/* The public alias helper trusts its private registry. Before exposing its
+ * answer to a separate owner TU, reject impossible registry descriptors so
+ * malformed internal state cannot be mistaken for a disjoint caller span.
+ * Registry links themselves are allocated and retained by I2. */
+static int f32_private_span_reliable(const void *pointer, size_t bytes) {
+  return bytes == 0u || pointer_span_fits(pointer, bytes);
+}
+
+static void f32_private_storage_preflight(void) {
+  const et_f32_tensor *tensor;
+  const et_f32_tensor_borrow *borrow;
+  const et_f32_parameter *parameter;
+  const et_f32_tensor_copy_plan *copy_plan;
+  const et_f32_gradient_plan *gradient_plan;
+  const et_f32_gradient_reset_plan *reset_plan;
+  for (tensor = live_tensors; tensor != NULL;
+       tensor = tensor->registry_next) {
+    if (tensor->magic != ET_F32_TENSOR_MAGIC ||
+        tensor->rank > ET_KERNEL_MAX_RANK ||
+        !f32_private_span_reliable(tensor->shape,
+                                   tensor->rank * sizeof(*tensor->shape)) ||
+        !f32_private_span_reliable(tensor->strides,
+                                   tensor->rank * sizeof(*tensor->strides)) ||
+        !f32_private_span_reliable(tensor->data, tensor->byte_length))
+      abort();
+  }
+  for (borrow = live_borrows; borrow != NULL;
+       borrow = borrow->registry_next)
+    if (borrow->magic != ET_F32_BORROW_MAGIC ||
+        find_tensor(borrow->owner) == NULL)
+      abort();
+  for (parameter = live_parameters; parameter != NULL;
+       parameter = parameter->registry_next)
+    if (parameter->magic != ET_F32_PARAMETER_MAGIC ||
+        find_tensor(parameter->value) == NULL ||
+        find_tensor(parameter->gradient) == NULL)
+      abort();
+  for (copy_plan = live_copy_plans; copy_plan != NULL;
+       copy_plan = copy_plan->registry_next)
+    if (copy_plan->magic != ET_F32_COPY_PLAN_MAGIC ||
+        copy_plan->count > SIZE_MAX / sizeof(*copy_plan->assignments) ||
+        !f32_private_span_reliable(
+            copy_plan->assignments,
+            copy_plan->count * sizeof(*copy_plan->assignments)))
+      abort();
+  for (gradient_plan = live_gradient_plans; gradient_plan != NULL;
+       gradient_plan = gradient_plan->registry_next) {
+    if (gradient_plan->magic != ET_F32_GRAD_PLAN_MAGIC ||
+        gradient_plan->count > SIZE_MAX / sizeof(*gradient_plan->entries) ||
+        !f32_private_span_reliable(
+            gradient_plan->entries,
+            gradient_plan->count * sizeof(*gradient_plan->entries)))
+      abort();
+    for (size_t index = 0u; index < gradient_plan->count; index++) {
+      const et_f32_gradient_plan_entry *entry =
+          &gradient_plan->entries[index];
+      et_f32_parameter *owner = find_parameter(entry->parameter);
+      if (owner == NULL || find_tensor(owner->gradient) == NULL ||
+          !f32_private_span_reliable(
+              entry->prepared, owner->gradient->byte_length))
+        abort();
+    }
+  }
+  for (reset_plan = live_reset_plans; reset_plan != NULL;
+       reset_plan = reset_plan->registry_next)
+    if (reset_plan->magic != ET_F32_RESET_PLAN_MAGIC ||
+        reset_plan->count > SIZE_MAX / sizeof(*reset_plan->parameters) ||
+        !f32_private_span_reliable(
+            reset_plan->parameters,
+            reset_plan->count * sizeof(*reset_plan->parameters)))
+      abort();
+}
+
+int32_t et_f32_tensor_private_storage_overlap_v1(
+    const void *pointer, size_t bytes) {
+  if (pointer == NULL || bytes == 0u || !pointer_span_fits(pointer, bytes))
+    return -1;
+  f32_private_storage_preflight();
+  return storage_aliases_live_reference(pointer, bytes) ? 1 : 0;
+}
+#endif
+
 void et_f32_tensor_error_clear_v1(et_f32_tensor_error *error) {
   if (error != NULL && !storage_aliases_live(error, sizeof(*error))) {
     memset(error, 0, sizeof(*error));
