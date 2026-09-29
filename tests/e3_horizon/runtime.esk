@@ -48,8 +48,9 @@
 (define before (token-dataset-cursor dataset))
 (define arena-before (__arena-used))
 
-;; D2 open has authenticated both shards. The final target alone resides in
-;; shard two; a missing shard is encountered only on the final packed row.
+;; D2 open has authenticated one or eight full 2,048-token shards plus the
+;; singleton final shard. Only the final packed row reads that shard's token,
+;; so hiding it after open faults at the final row.
 (check 'hide-late-shard (= (hide-late-shard) 0))
 (define failed
   (guard (caught (#t caught))
