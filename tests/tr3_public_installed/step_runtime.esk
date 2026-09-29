@@ -389,6 +389,152 @@
          (metrics-ref unequal-summary 'microbatches) #f))
 (check 'unequal-train-release (trainer-release! unequal-train-trainer))
 (check 'unequal-train-close (token-dataset-close! unequal-train-dataset))
+
+;;; Optional interrupt predicate is called through the installed boxed ABI.
+;;; Its captured acknowledgement stays caller-owned; no extra metrics key is
+;;; introduced and no trainer operation is permitted during the poll phase.
+(define (interrupt-error? category operation thunk)
+  (guard (caught
+           (#t (and (transformer-error? caught)
+                    (eq? (transformer-error-category caught) category)
+                    (eq? (transformer-error-operation caught) operation))))
+    (thunk) #f))
+(define interrupt-dataset
+  (token-dataset-open (dataset-options directory 4) tokenizer))
+(define interrupt-model
+  (with-region ('tr3-public-interrupt-model 65536)
+    (diagnostic-model-create resolved (diagnostic-initializer-state 1729))))
+(define interrupt-tree (module-parameters interrupt-model))
+(define interrupt-optimizer
+  (optimizer-create
+    (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+          '(none) '(constant)
+          (list (list 'group (unique-paths interrupt-tree)
+                      "3dcccccd" "3f000000" "3f000000"
+                      "3a83126f" "00000000")))
+    interrupt-tree))
+(define interrupt-trainer
+  (trainer-create resolved tokenizer interrupt-dataset
+                  interrupt-model interrupt-optimizer))
+(define interrupt-one (trainer-stop-policy #f 1 #f))
+(define interrupt-three (trainer-stop-policy #f 3 #f))
+(check 'interrupt-invalid-predicate
+  (interrupt-error? 'invalid-argument 'trainer-train!
+    (lambda () (trainer-train! interrupt-trainer interrupt-three 7))))
+(check 'interrupt-extra-predicate
+  (interrupt-error? 'invalid-argument 'trainer-train!
+    (lambda () (trainer-train! interrupt-trainer interrupt-three
+                               (lambda () #f) (lambda () #t)))))
+(define tie-polls (vector 0))
+(define tie-summary
+  (trainer-train! interrupt-trainer interrupt-one
+    (lambda ()
+      (vector-set! tie-polls 0 (+ (vector-ref tie-polls 0) 1))
+      #t)))
+(check 'interrupt-limit-wins
+  (and (= (vector-ref tie-polls 0) 0)
+       (= (metrics-ref tie-summary 'updates) 1)
+       (= (metrics-ref tie-summary 'tokens) 3)))
+(define interrupt-idle-state (trainer-state interrupt-trainer))
+(define interrupt-ack (vector #f))
+(define interrupt-before (published-metrics-count))
+(define interrupt-predicate
+  (with-region ('tr3-public-interrupt-callback 65536)
+    (lambda ()
+      (let ((cursor-before (token-dataset-cursor interrupt-dataset)))
+        (check 'poll-release-guard
+          (interrupt-error? 'invalid-state 'trainer-release!
+            (lambda () (trainer-release! interrupt-trainer))))
+        (check 'poll-step-guard
+          (interrupt-error? 'invalid-state 'trainer-step!
+            (lambda () (trainer-step! interrupt-trainer))))
+        (check 'poll-train-guard
+          (interrupt-error? 'invalid-state 'trainer-train!
+            (lambda () (trainer-train! interrupt-trainer interrupt-one))))
+        (check 'poll-state-guard
+          (interrupt-error? 'invalid-state 'trainer-state
+            (lambda () (trainer-state interrupt-trainer))))
+        (check 'poll-load-guard
+          (interrupt-error? 'invalid-state 'trainer-load-state!
+            (lambda ()
+              (trainer-load-state! interrupt-trainer interrupt-idle-state))))
+        (check 'poll-evaluate-guard
+          (interrupt-error? 'invalid-state 'trainer-evaluate!
+            (lambda ()
+              (trainer-evaluate! interrupt-trainer interrupt-dataset))))
+        (check 'poll-cursor-preserved
+          (bytes-equal? cursor-before
+                        (token-dataset-cursor interrupt-dataset)))
+        (vector-set! interrupt-ack 0 #t)
+        #t))))
+(define interrupt-summary
+  (trainer-train! interrupt-trainer interrupt-three interrupt-predicate))
+(check 'interrupt-linked-callback-and-five-keys
+  (and (vector-ref interrupt-ack 0)
+       (= (metrics-ref interrupt-summary 'updates) 1)
+       (= (published-metrics-count) (+ interrupt-before 1))
+       (interrupt-error? 'invalid-argument 'metrics-ref
+         (lambda () (metrics-ref interrupt-summary 'stop-reason)))))
+(check 'interrupt-idle-state-release
+  (trainer-state-release! interrupt-idle-state))
+(define false-then-true-polls (vector 0))
+(define two-poll-summary
+  (trainer-train! interrupt-trainer interrupt-three
+    (lambda ()
+      (vector-set! false-then-true-polls 0
+        (+ (vector-ref false-then-true-polls 0) 1))
+      (= (vector-ref false-then-true-polls 0) 2))))
+(check 'interrupt-false-then-true
+  (and (= (vector-ref false-then-true-polls 0) 2)
+       (= (metrics-ref two-poll-summary 'updates) 2)))
+(define before-bad-predicate (published-metrics-count))
+(check 'interrupt-nonboolean-after-commit
+  (interrupt-error? 'invalid-argument 'trainer-train!
+    (lambda ()
+      (trainer-train! interrupt-trainer interrupt-three
+        (lambda () 'bad-result)))))
+(check 'interrupt-nonboolean-no-summary
+  (= (published-metrics-count) before-bad-predicate))
+(define before-categorized-throw (published-metrics-count))
+(check 'interrupt-categorized-throw
+  (interrupt-error? 'invalid-state 'trainer-train!
+    (lambda ()
+      (trainer-train! interrupt-trainer interrupt-three
+        (lambda () (trainer-release! interrupt-trainer))))))
+(check 'interrupt-categorized-no-summary
+  (= (published-metrics-count) before-categorized-throw))
+(define before-foreign-throw (published-metrics-count))
+(check 'interrupt-foreign-throw
+  (interrupt-error? 'internal 'trainer-train!
+    (lambda ()
+      (trainer-train! interrupt-trainer interrupt-three
+        (lambda () (raise 'caller-fault))))))
+(check 'interrupt-foreign-no-summary
+  (= (published-metrics-count) before-foreign-throw))
+(define failed-step-polls (vector 0))
+(define armed-interrupt (vector #f))
+(arm-train-after-one (vector #t) armed-interrupt)
+(check 'interrupt-fault-arm (vector-ref armed-interrupt 0))
+(define before-failed-interrupt (published-metrics-count))
+(check 'interrupt-failed-step
+  (interrupt-error? 'invalid-state 'trainer-train!
+    (lambda ()
+      (trainer-train! interrupt-trainer interrupt-three
+        (lambda ()
+          (vector-set! failed-step-polls 0
+            (+ (vector-ref failed-step-polls 0) 1))
+          #f)))))
+(check 'interrupt-no-poll-on-failed-step
+  (and (= (vector-ref failed-step-polls 0) 1)
+       (= (published-metrics-count) before-failed-interrupt)))
+(inject! #f)
+(define reused-interrupt
+  (trainer-train! interrupt-trainer interrupt-three
+    (lambda () #t)))
+(check 'interrupt-reuse-after-failure
+  (= (metrics-ref reused-interrupt 'updates) 1))
+(check 'interrupt-release (trainer-release! interrupt-trainer))
+(check 'interrupt-close (token-dataset-close! interrupt-dataset))
 (display "TR3-PUBLIC-STEP-AOT-PASS loss-bits=")
 (display first-loss-bits)
 (display " weight-bits=")

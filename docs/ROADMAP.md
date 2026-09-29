@@ -1635,6 +1635,11 @@ differs by one ULP on the fourth post-update numerator and is checked using
 the accepted post-update tolerance, not treated as an exact native oracle.
 Independent review of `e7041cd`, explicit interruption, public resume,
 wider profiles and hosted integration remain pending.
+The independently approved [explicit interruption contract](TR3_EXPLICIT_INTERRUPT_PROPOSAL.md)
+starts from reviewed #150 head `304a2a1`. A bounded optional same-thread
+predicate implementation and linked caller are staged on its isolated branch;
+the pinned fe9 gate, independent source/test review, #149/#151/#153 composition,
+and public train-interrupt fresh-process proof remain pending.
 
 The bounded public `trainer-state` / `trainer-load-state!` candidate uses the
 accepted same-registry TR3-C snapshot and joint-restore entries with private
@@ -1711,6 +1716,41 @@ is sealed at `tr3-public-checkpoint-package-20260928/final-head/SHA256SUMS`
 pending integration with the state/train composition and its linked fe9 gate;
 it does not claim the wider full-trajectory or fresh-process resume acceptance
 gate.
+
+The bounded [public fresh-process resume witness](TR3_PUBLIC_FRESH_RESUME.md)
+now runs an ordinary installed-facade caller in separate baseline, checkpoint
+producer, and receiver processes for `A=1,2,3`, `K=1`, and a three-update
+suffix crossing finite D2 EOS. On the exact #151 base `f85871a`, the supported
+fe9 linked gate passes all nine processes, bit-identical public step metrics,
+all K/restore/suffix canonical C2 byte comparisons, and corrupt-load and
+config-mismatch receiver-preservation negatives. Its 208-file evidence seal
+is `tr3-public-fresh-resume-f85871a-20260928-a/SHA256SUMS` (`c9acf59f...`).
+The follow-up public fixture uses accepted O2 linear W=2/T=6/R=0.1. A fresh
+supported fe9 rerun passes the same nine-process and 15 continuation C2
+comparisons, with distinct successive C2 files and four distinct public f32
+loss words per accumulation profile. Its 209-file evidence seal is
+`tr3-public-fresh-resume-linear-4218b84-20260928-a/SHA256SUMS`
+(`252053a8...`); the predecessor constant-schedule seal is preserved.
+The separate reviewed private factor gate directly measures the four changing
+effective rates. The public API has no factor, moment, RNG-word, or epoch-start
+accessor; the fixed no-dropout trainer does not advance RNG counters. This
+test-only follow-up awaits narrow independent review and integration.
+The combined train-interrupt candidate composes reviewed public C2 resume
+and the explicit same-thread interrupt callback on the merged #149/C2 base.
+Its installed caller now runs an uninterrupted four-update `trainer-train!`
+path, a caller-acknowledged interrupt after one committed update, and a fresh
+OS-process C2 load followed by three public train calls for `A=1,2,3`.
+The callback publishes ready while train is active; the external driver then
+issues the request and observes an acknowledgement. Public state/load probes
+reject during polling, with exact K checkpoint and cursor preservation checks.
+It compares final and intermediate canonical C2 bytes with the public step
+reference and compares each one-update train summary with independent step
+metrics. The combined `efd23d0` candidate passed the supported pinned fe9
+linked public gate and independent source/test review, with a 230-file seal at
+`tr3-public-train-interrupt-resume-fe9-efd23d0-20260929-a/SHA256SUMS`.
+The #153 production and test sources match that gated tree; exact-head hosted CI
+and merged-dependency retest remain. The fixed no-dropout profile supports
+only zero-RNG-state preservation.
 
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
