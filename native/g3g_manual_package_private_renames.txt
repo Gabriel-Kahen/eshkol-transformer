@@ -1,3 +1,5 @@
+g3c4-public-generation-input-create et_e1b_private_g3c4_generation_input_create_cabi_v1
+g3c4-public-model-create-seeded et_e1b_private_g3c4_model_create_seeded_cabi_v1
 g3g-public-diagnostic-generation-logits-bits et_e1b_private_g3_diagnostic_generation_logits_bits_cabi_v1
 g3g-public-generation-input-create et_e1b_private_g3_generation_input_create_cabi_v1
 g3g-public-generation-output-cache-lengths et_e1b_private_g3_generation_output_cache_lengths_cabi_v1

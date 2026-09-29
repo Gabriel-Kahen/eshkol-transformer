@@ -20,4 +20,8 @@
 (load "g3m_prefill_p2_extension.esk")
 (load "g3m_manual_decode_extension.esk")
 (load "g3t_manual_logits_materialize_extension.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+(load "g3c4_public_model_input_extension.esk")
 (load "g3g_manual_public_extension.esk")
