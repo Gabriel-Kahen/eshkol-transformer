@@ -1,0 +1,116 @@
+;;; Fixed public C4 P2/G1 producer in the single G3-G owning aggregate.
+;;; The ordinary C2 public path is selected only for identities absent from
+;;; both C4 registries. A published result RNG remains independently owned;
+;;; the native constructor copies its words into the new generator.
+
+(define (g3c4-public-profile-config config operation)
+  (let ((slots (make-vector 16 #f))
+        (has-rng #f)
+        (rng-shell #f))
+    (let walk ((tail config) (index 0))
+      (if (= index 16)
+          (if (not (null? tail))
+              (g3c4-fail 'invalid-argument operation
+                         "C4 config must have exactly eight pairs"))
+          (if (not (and (pair? tail) (pair? (cdr tail))))
+              (g3c4-fail 'invalid-argument operation
+                         "C4 config must be a proper flat list")
+              (let ((key (car tail)) (value (car (cdr tail))))
+                (if (and (eq? key ':profile)
+                         (not (eq? value 'diagnostic-c4-p2g1)))
+                    (g3c4-fail 'invalid-argument operation
+                               "C4 public profile is invalid"))
+                (vector-set! slots index
+                  (if (eq? key ':rng) ':seed key))
+                (vector-set! slots (+ index 1)
+                  (cond ((eq? key ':profile) g3c4-model-profile)
+                        ((eq? key ':rng) 0)
+                        (else value)))
+                (if (eq? key ':rng)
+                    (begin (set! has-rng #t) (set! rng-shell value)))
+                (walk (cdr (cdr tail)) (+ index 2))))))
+    (vector
+      (list (vector-ref slots 0) (vector-ref slots 1)
+            (vector-ref slots 2) (vector-ref slots 3)
+            (vector-ref slots 4) (vector-ref slots 5)
+            (vector-ref slots 6) (vector-ref slots 7)
+            (vector-ref slots 8) (vector-ref slots 9)
+            (vector-ref slots 10) (vector-ref slots 11)
+            (vector-ref slots 12) (vector-ref slots 13)
+            (vector-ref slots 14) (vector-ref slots 15))
+      has-rng rng-shell)))
+
+(define (g3c4-public-result-rng-entry rng operation)
+  (let ((record (g3c4-public-result-record rng)))
+    (if record
+        (let ((entry (g3c4-public-result-entry-live rng operation)))
+          (if (not (eq? (vector-ref entry 1) 'result-rng))
+              (g3c4-fail 'invalid-argument operation
+                         "expected an exact C4 result RNG"))
+          entry)
+        (g3c4-fail 'invalid-argument operation
+                   "expected an exact C4 result RNG"))))
+
+(define (g3c4-public-generator-create model tokenizer config)
+  (g3c4-public-boundary 'generator-create
+    ;; Authenticate the original C4 model before the C2 fallback or any
+    ;; public-profile translation; tombstoned membership stays authoritative.
+    (g3c4-model-entry-live model 'generator-create #f)
+    (let* ((parsed
+             (g3c4-public-profile-config config 'generator-create))
+           (translated (vector-ref parsed 0))
+           (normalized (g3c4-normalize-config translated 'generator-create))
+           (policy (vector-ref normalized 0))
+           (has-rng (vector-ref parsed 1))
+           (rng-shell (vector-ref parsed 2))
+           (rng-entry (if has-rng
+                          (g3c4-public-result-rng-entry
+                            rng-shell 'generator-create)
+                          #f))
+           (source (if has-rng
+                       (vector policy 'rng rng-entry)
+                       normalized)))
+      (if (not (and (= (vector-ref policy 5) 1)
+                    (eq? (vector-ref policy 6) #f)))
+          (g3c4-fail 'invalid-argument 'generator-create
+                     "C4 public profile requires one token and no EOS"))
+      (g3c4-generator-create-with-source
+        model tokenizer 'generator-create
+        (lambda () source)
+        (lambda (entry)
+          (or (not has-rng)
+              (eq? entry
+                   (g3c4-public-result-rng-entry
+                     rng-shell 'generator-create))))))))
+
+(define (g3c4-public-generator-generate generator input)
+  (g3c4-public-boundary 'generator-generate!
+    (let ((member (g3c4-public-transport-member generator)))
+      (if (not (and member (eq? (vector-ref member 1) 'generator)))
+          (g3c4-fail 'invalid-argument 'generator-generate!
+                     "C4 identity is not a generator"))
+      ;; Authenticate both owners and the whole request before changing the
+      ;; package-local admission gate. The private coordinator repeats these
+      ;; checks at its call boundary.
+      (let* ((generator-entry
+               (g3c4-generator-entry-call-ready
+                 generator 'generator-generate!))
+             (input-entry
+               (g3c4-input-entry-live input 'generator-generate!)))
+        (g3c4-native-check
+          (g3c4-native-p2g1-preflight
+            (vector-ref generator-entry 3) (vector-ref input-entry 3))
+          'generator-generate!))
+      ;; Installed archives do not execute the pending extension's top-level
+      ;; initializer. Activate its existing private P2/G1 gate only on this
+      ;; exact C4 route before the output envelope checks P+G=3.
+      (vector-set! g3t-p2g1-pending-gate 0 #t)
+      (g3c4-p2g1-generate-internal generator input))))
+
+(define (g3c4-public-generator-close generator)
+  (g3c4-public-boundary 'generator-close!
+    (let ((member (g3c4-public-transport-member generator)))
+      (if (not (and member (eq? (vector-ref member 1) 'generator)))
+          (g3c4-fail 'invalid-argument 'generator-close!
+                     "C4 identity is not a generator"))
+      (g3c4-generator-close-internal! generator))))

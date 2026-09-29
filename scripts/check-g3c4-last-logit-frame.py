@@ -33,7 +33,9 @@ def check():
     require("ET_G3C4_LAST_LOGIT_FRAME_PRIVATE requires Step 12A" in source,
             "adapter macro does not require the accepted prefill leaf")
     symbol = "et_g3c4_private_token_frame_begin_last_v1"
-    require(source.count(symbol) == 1 and header.count(symbol) == 1,
+    require(source.count(f"int64_t {symbol}(") == 1 and
+            source.count(f"status = {symbol}(") == 1 and
+            header.count(symbol) == 1,
             "source-private last-logit boundary changed")
     start = source.index(f"int64_t {symbol}")
     end = source.index("\n#endif", start)

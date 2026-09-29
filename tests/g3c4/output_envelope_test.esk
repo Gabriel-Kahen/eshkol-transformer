@@ -58,7 +58,7 @@
 (define model-entry (car (vector-ref g3c4-model-registry 0)))
 
 (reject "unregistered call entry" 'invalid-argument
-  (lambda () (g3t-output-reserve (vector 'forged) 1)))
+  (lambda () (g3c4-output-reserve (vector 'forged) 1)))
 
 (define (exercise-route generated seed)
   (let* ((generator
@@ -75,7 +75,7 @@
         (g3c4-with-call-internal
           'g3c4-output-envelope-test generator 2 generated
           (let* ((call (vector-ref m3-call-state 0))
-                 (output (g3t-output-reserve call prompt-length))
+                 (output (g3c4-output-reserve call prompt-length))
                  (auxiliary (vector-ref output 8))
                  (raw (vector-ref auxiliary 0))
                  (staging (vector-ref auxiliary 1))
@@ -95,29 +95,29 @@
                    (and (= (bytevector-length raw) generated)
                         (= (bytevector-length staging) (* generated 8))))
             (reject "wrong call kind" 'invalid-state
-              (lambda () (g3t-output-prepare generator-entry output)))
+              (lambda () (g3c4-output-prepare generator-entry output)))
             (let ((saved (vector-ref ledger 4)))
               (vector-set! ledger 4 #f)
               (reject "missing call/output linkage" 'invalid-state
-                (lambda () (g3t-output-prepare call output)))
+                (lambda () (g3c4-output-prepare call output)))
               (vector-set! ledger 4 saved))
             (let ((saved (vector-ref output 6)))
               (vector-set! output 6 strict-tokenizer)
               (reject "changed output tokenizer link" 'invalid-state
-                (lambda () (g3t-output-prepare call output)))
+                (lambda () (g3c4-output-prepare call output)))
               (vector-set! output 6 saved))
             (check "real native G0/G1 preparation"
                    (= (envelope-test-prepare
                         (vector-ref generator-entry 3)
                         (vector-ref output 3) generated) 0))
             (check "numeric preparation wrapper"
-                   (g3t-output-prepare call output))
+                   (g3c4-output-prepare call output))
             (check "numeric readiness only"
                    (and (= (envelope-test-field observed-native 1) 1)
                         (= (envelope-test-field observed-native 2) 0)
                         (= (envelope-test-field observed-native 3) 0)))
             (check "two-argument decode coordinator"
-                   (g3t-t1-decode-output! call output))
+                   (g3c4-t1-decode-output! call output))
             (check "native text readiness complete"
                    (and (= (envelope-test-field observed-native 1) 1)
                         (= (envelope-test-field observed-native 2) 1)
@@ -135,7 +135,7 @@
             (let ((saved-byte
                     (if (= generated 0) 0 (bytevector-u8-ref raw 0))))
               (reject "coordinator is once-only" 'invalid-state
-                (lambda () (g3t-t1-decode-output! call output)))
+                (lambda () (g3c4-t1-decode-output! call output)))
               (check "repeat preserves raw bytes"
                      (or (= generated 0)
                          (= (bytevector-u8-ref raw 0) saved-byte))))
@@ -170,7 +170,7 @@
   (lambda ()
     (g3c4-with-call-internal
       'g3c4-output-envelope-native-cut failure-generator 2 1
-      (g3t-output-reserve (vector-ref m3-call-state 0) 1))))
+      (g3c4-output-reserve (vector-ref m3-call-state 0) 1))))
 (check "reset native output allocator"
        (= (envelope-test-owner-fail-reset) 0))
 (check "native failure leaves an exact output tombstone"

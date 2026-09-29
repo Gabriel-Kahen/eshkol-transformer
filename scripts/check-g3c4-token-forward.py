@@ -33,7 +33,9 @@ def check():
     require("ET_G3C4_TOKEN_FORWARD_PRIVATE requires Step 10A" in source,
             "token-forward macro does not require the accepted frame leaf")
     symbol = "et_g3c4_private_token_forward_v1"
-    require(source.count(symbol) == 1 and header.count(symbol) == 1,
+    require(source.count(f"int64_t {symbol}(") == 1 and
+            source.count(f"return {symbol}(") == 1 and
+            header.count(symbol) == 1,
             "source-private token-forward boundary changed")
     start = source.index(f"int64_t {symbol}")
     future = source.find("\n#ifdef ET_G3C4_PREFILL3_PRIVATE", start)
