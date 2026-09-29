@@ -1689,6 +1689,17 @@ The #153 production and test sources match that gated tree; exact-head hosted CI
 and merged-dependency retest remain. The fixed no-dropout profile supports
 only zero-RNG-state preservation.
 
+The local #151/#152/#153 composition at `221bfb2`/tree `9fb8748` includes
+public C2, explicit `trainer-train!` interruption, fresh-process resume and
+`trainer-evaluate!` in one installed aggregate. An independent source/test
+review approved the merge and its two same-trainer evaluation-during-polling
+assertions. The exact-head supported fe9 linked gate passed the public step,
+evaluation and A=1/2/3 resume callers; all 264 evidence files verify under
+`tr3-resume-eval-poll-fe9-221bfb2-20260929-a/SHA256SUMS` (seal SHA-256
+`44094c37b0f25e880bd7df33c8f3e2f2fe4778ba6ee2075ee399d39669a87802`).
+This is local composition evidence; hosted CI, dependency merges and the
+merged-head retest remain.
+
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2
 update-and-clear source in one test-only aggregate. Its pinned f31/LLVM21

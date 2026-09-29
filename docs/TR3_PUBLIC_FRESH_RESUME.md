@@ -38,8 +38,10 @@ The linked step caller also checks that reentrant public release, step,
 train, state, and load calls reject during polling and preserve the cursor.
 The producer repeats state and load rejection; its exact K checkpoint
 comparison checks full receiver preservation after those attempts.
-The installed facade does not yet provide `trainer-evaluate!`; its polling
-guard remains a composition requirement for the evaluation package.
+The combined evaluation candidate now supplies `trainer-evaluate!`. Both the
+installed step caller and the fresh-process producer reject same-trainer
+evaluation during callback polling as public `invalid-state`, before dataset
+identity admission, and preserve the training cursor.
 The public `optimizer-create` receives the accepted O2 linear schedule
 `(linear 2 6 "3dcccccd")`: two warmup updates, six total updates, and a
 binary32 minimum ratio of 0.1. Successive baseline C2 files differ, and all
