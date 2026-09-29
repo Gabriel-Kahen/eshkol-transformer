@@ -1569,10 +1569,11 @@ differs by one ULP on the fourth post-update numerator and is checked using
 the accepted post-update tolerance, not treated as an exact native oracle.
 Independent review of `e7041cd`, explicit interruption, public resume,
 wider profiles and hosted integration remain pending.
-The docs-only [explicit interruption proposal](TR3_EXPLICIT_INTERRUPT_PROPOSAL.md)
-starts from the reviewed #150 head `304a2a1` and specifies a same-thread
-caller predicate at committed update boundaries. It is unimplemented and
-requires independent contract review, including its scoped poll-phase guard.
+The independently approved [explicit interruption contract](TR3_EXPLICIT_INTERRUPT_PROPOSAL.md)
+starts from reviewed #150 head `304a2a1`. A bounded optional same-thread
+predicate implementation and linked caller are staged on its isolated branch;
+the pinned fe9 gate, independent source/test review, #149/#151/#153 composition,
+and public train-interrupt fresh-process proof remain pending.
 
 The bounded public `trainer-state` / `trainer-load-state!` candidate uses the
 accepted same-registry TR3-C snapshot and joint-restore entries with private
