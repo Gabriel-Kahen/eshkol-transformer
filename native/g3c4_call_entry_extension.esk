@@ -460,10 +460,10 @@
     (g3c4-require-model-eval model-entry operation 'invalid-state)
     entry))
 
-(define (g3c4-generator-create-internal model tokenizer config)
-  (let ((operation 'g3c4-generator-create-internal))
+(define (g3c4-generator-create-with-source
+          model tokenizer operation normalized-source source-check)
     (m3-call operation
-      (let* ((normalized (g3c4-normalize-config config operation))
+      (let* ((normalized (normalized-source))
              (policy (vector-ref normalized 0))
              (source-kind (vector-ref normalized 1))
              (source (vector-ref normalized 2))
@@ -492,8 +492,11 @@
           (let* ((canonical (car (vector-ref g3c4-registry 0)))
                  (canonical-policy (vector-ref canonical 7))
                  (canonical-ledger (vector-ref canonical 10))
-                 (eos (vector-ref canonical-policy 6))
-                 (created
+                 (eos (vector-ref canonical-policy 6)))
+            (if (not (source-check source))
+                (g3c4-fail 'invalid-state operation
+                           "C4 source RNG changed before construction"))
+            (let ((created
                    (if (eq? source-kind 'seed)
                        (g3c4-native-generator-seed
                          (vector-ref model-entry 3) source
@@ -518,6 +521,13 @@
             (vector-set! canonical 2 'live)
             (vector-set! canonical 10 #f)
             (vector-ref canonical 0)))))))
+
+(define (g3c4-generator-create-internal model tokenizer config)
+  (let ((operation 'g3c4-generator-create-internal))
+    (g3c4-generator-create-with-source
+      model tokenizer operation
+      (lambda () (g3c4-normalize-config config operation))
+      (lambda (source) #t))))
 
 (define (g3c4-generator-close-internal! generator)
   (let ((operation 'g3c4-generator-close-internal!))

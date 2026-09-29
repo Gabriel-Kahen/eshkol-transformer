@@ -79,11 +79,16 @@ def check() -> None:
         "g3c4-baseline-tokenizer-fingerprint",
     ], "same-aggregate baseline T1 admission")
 
-    constructor = form(source, "g3c4-generator-create-internal")
-    require(constructor.startswith(
+    private = form(source, "g3c4-generator-create-internal")
+    require(private.startswith(
         "(define (g3c4-generator-create-internal model tokenizer config)"),
         "generator constructor is not the accepted private arity 3")
+    require("(g3c4-generator-create-with-source" in private and
+            "(g3c4-normalize-config config operation)" in private,
+            "private constructor does not delegate exact config admission")
+    constructor = form(source, "g3c4-generator-create-with-source")
     ordered(constructor, [
+        "(normalized-source)",
         "(g3c4-model-entry-live model operation #f)",
         "(g3c4-baseline-tokenizer-entry",
         "tokenizer operation 'invalid-argument 'unsupported",
@@ -91,6 +96,7 @@ def check() -> None:
         "(entry (vector shell 'generator 'pending #f #f model-entry",
         "(car tokenizer-entry) policy",
         "(vector-set! g3c4-registry 0 next)",
+        "(source-check source)",
         "(g3c4-native-generator-",
     ], "atomic tokenizer/eval generator publication")
 

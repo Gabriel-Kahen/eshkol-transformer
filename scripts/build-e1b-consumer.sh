@@ -1488,7 +1488,8 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     elif [[ "${package_policy}" == g3g-manual-public-aggregate &&
             "${package_native_source}" == "${PROJECT_ROOT}/src/eshkol_transformer/m3_call_f32_integration.c" ]]; then
       package_source_flags=(
-        -DET_G3C4_NATIVE_PINS_PRIVATE -DET_G3C4_NATIVE_OWNER_PRIVATE)
+        -DET_G3C4_NATIVE_PINS_PRIVATE -DET_G3C4_NATIVE_OWNER_PRIVATE
+        -DET_F32_TENSOR_STORAGE_QUERY_PRIVATE)
     elif [[ "${g3g_package_policy}" == 1 &&
             "${package_native_source}" == "${PROJECT_ROOT}/src/eshkol_transformer/m3_i64_integration.c" ]]; then
       package_source_flags=(-DET_I64_TENSOR_STORAGE_QUERY_PRIVATE)
@@ -1507,7 +1508,29 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
         -DET_G3C4_CONTEXT_PRIVATE -DET_G3C4_NATIVE_PINS_PRIVATE
         -DET_G3C4_ACTIVE_CALL_PRIVATE -DET_G3C4_GENERATOR_PRIVATE
         -DET_G3C4_PROMPT_T1_BORROW_PRIVATE
-        -DET_G3C4_T1_I1_EXACT_PAIR_PRIVATE)
+        -DET_G3C4_T1_I1_EXACT_PAIR_PRIVATE
+        -DET_G3C4_PROVIDER_ROUTES_PRIVATE
+        -DET_G3C4_FULL_PREFIX_FORWARD_PRIVATE
+        -DET_G3C4_SAMPLER_TRANSPORT_PRIVATE
+        -DET_G3C4_TOKEN_FRAME_PRIVATE
+        -DET_G3C4_TOKEN_FORWARD_PRIVATE
+        -DET_G3C4_PREFILL3_PRIVATE
+        -DET_G3C4_PREFILL1_PRIVATE
+        -DET_G3C4_PREFILL2_PRIVATE
+        -DET_G3C4_PROMPT_PREFILL_PRIVATE
+        -DET_G3C4_OUTPUT_RESERVATION_PRIVATE
+        -DET_G3C4_LAST_LOGIT_FRAME_PRIVATE
+        -DET_G3C4_OUTPUT_PREPARE_PRIVATE
+        -DET_G3C4_OUTPUT_DECODE_IDS_PRIVATE
+        -DET_G3C4_OUTPUT_TEXT_PRIVATE
+        -DET_G3C4_P2_G1_PENDING_PRIVATE
+        -DET_G3C4_P2_G1_PUBLICATION_PRIVATE
+        -DET_G3C4_P2_G1_COPYOUT_PRIVATE
+        -DET_G3C4_P2_G1_COORDINATOR_PRIVATE
+        -DET_G3C4_P2_G1_PUBLIC_RESULT_PRIVATE
+        -DET_I64_TENSOR_STORAGE_QUERY_PRIVATE
+        -DET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE
+        -DET_F32_TENSOR_STORAGE_QUERY_PRIVATE)
     fi
     "${e1b_clean_toolchain_env[@]}" \
       "${e1b_cc}" "${package_native_cflags[@]}" "${package_source_flags[@]}" \

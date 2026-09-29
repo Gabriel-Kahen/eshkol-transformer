@@ -2,15 +2,15 @@
 ;;; Load after g3c4_call_entry_extension.esk and
 ;;; g3c4_t1_output_decode_extension.esk. Never install this source.
 
-(extern ptr g3t-native-output-reserve ptr i64
+(extern ptr g3c4-native-output-reserve ptr i64
         :real et_g3c4_private_output_reserve_v1)
-(extern i64 g3t-native-output-release ptr
+(extern i64 g3c4-native-output-release ptr
         :real et_g3c4_private_output_release_v1)
-(extern i64 g3t-native-output-prepare ptr ptr
+(extern i64 g3c4-native-output-prepare ptr ptr
         :real et_g3c4_private_output_prepare_v1)
-(extern i64 g3t-native-output-copy-decode-ids ptr ptr ptr
+(extern i64 g3c4-native-output-copy-decode-ids ptr ptr ptr
         :real et_g3c4_private_output_copy_decode_ids_v1)
-(extern i64 g3t-native-output-accept-text ptr ptr ptr
+(extern i64 g3c4-native-output-accept-text ptr ptr ptr
         :real et_g3c4_private_output_accept_text_v1)
 
 ;;; A later private extension may enable only the P2/G1 pending transcript.
@@ -101,7 +101,7 @@
                    "C4 pending output envelope is not exact and linked"))
     entry))
 
-(define (g3t-output-reserve call-entry prompt-length)
+(define (g3c4-output-reserve call-entry prompt-length)
   (let* ((operation 'g3t-output-reserve)
          (call (g3t-call-entry-live call-entry operation))
          (generator-entry (vector-ref call 4))
@@ -133,7 +133,7 @@
         (caught
           (#t
             (if (not (null? native))
-                (if (not (= (g3t-native-output-release native) 0))
+                (if (not (= (g3c4-native-output-release native) 0))
                     (exit 134)))
             (if (eq? (vector-ref ledger 4) entry)
                 (vector-set! ledger 4 #f))
@@ -143,24 +143,24 @@
         (let ((canonical (car (vector-ref g3c4-registry 0))))
           (vector-set! ledger 4 canonical)
           (let ((created
-                  (g3t-native-output-reserve
+                  (g3c4-native-output-reserve
                     (vector-ref generator-entry 3) prompt-length)))
             (set! native created)
             (if (null? created) (g3c4-native-fail operation))
             (vector-set! canonical 3 created)
             canonical))))))
 
-(define (g3t-output-prepare call-entry output-entry)
+(define (g3c4-output-prepare call-entry output-entry)
   (let* ((operation 'g3t-output-prepare)
          (call (g3t-call-entry-live call-entry operation))
          (output (g3t-output-entry-pending call output-entry operation))
          (generator-entry (vector-ref call 4)))
     (g3c4-native-check
-      (g3t-native-output-prepare
+      (g3c4-native-output-prepare
         (vector-ref generator-entry 3) (vector-ref output 3))
       operation)))
 
-(define (g3t-t1-decode-output! call-entry output-entry)
+(define (g3c4-t1-decode-output! call-entry output-entry)
   (let* ((operation 'g3t-t1-decode-output!)
          (call (g3t-call-entry-live call-entry operation))
          (output (g3t-output-entry-pending call output-entry operation))
@@ -172,11 +172,11 @@
     (g3c4-baseline-tokenizer-entry
       tokenizer operation 'invalid-state 'invalid-state)
     (g3c4-native-check
-      (g3t-native-output-copy-decode-ids
+      (g3c4-native-output-copy-decode-ids
         (vector-ref generator-entry 3) (vector-ref output 3) staging)
       operation)
     (t1-private-g3-decode-raw-into! tokenizer staging raw)
     (g3c4-native-check
-      (g3t-native-output-accept-text
+      (g3c4-native-output-accept-text
         (vector-ref generator-entry 3) (vector-ref output 3) raw)
       operation)))

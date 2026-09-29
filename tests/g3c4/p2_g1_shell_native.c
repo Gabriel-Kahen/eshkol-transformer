@@ -18,6 +18,63 @@ static shell_bytevector *shell_staging;
 static int64_t shell_mutation;
 static int64_t copyout_corrupt;
 static int64_t copyout_corrupt_consumed;
+#ifdef ET_G3C4_P2_G1_COORDINATOR_PRIVATE
+static et_i64_tensor_borrow *coordinator_input_borrow;
+static et_a2_kv_cache_read_borrow *coordinator_cache_borrow;
+
+int64_t et_g3c4_coordinator_test_generator_rng_word_v1(
+    void *context_candidate, int64_t index) {
+  et_g3c4_context_internal *context =
+      et_g3c4_admit_idle_call(context_candidate);
+  if (context == NULL || index < 0 || index >= 4) return -1;
+  return context->generator_rng_words[index];
+}
+
+int64_t et_g3c4_coordinator_test_input_length_v1(
+    void *input_candidate, int64_t length) {
+  et_g3c4_input_internal *input = et_g3c4_admit_input(input_candidate, 0);
+  if (input == NULL || (length != 1 && length != 2)) return -1;
+  input->length = length;
+  return 0;
+}
+
+int64_t et_g3c4_coordinator_test_prefill_token_v1(
+    void *context_candidate, int64_t index) {
+  et_g3c4_context_internal *context =
+      et_g3c4_admit_idle_call(context_candidate);
+  if (context == NULL || index < 0 || index > 1 ||
+      context->prefill_binding_ready != 1u) return -1;
+  return context->prefill_tokens[index];
+}
+
+int64_t et_g3c4_coordinator_test_input_borrow_v1(
+    void *input_candidate, int64_t active) {
+  et_g3c4_input_internal *input = et_g3c4_admit_input(input_candidate, 0);
+  et_i64_tensor_error error;
+  if (input == NULL) return -1;
+  if (active == 1 && coordinator_input_borrow == NULL)
+    return et_i64_tensor_borrow_begin_v1(
+        input->tensor, &coordinator_input_borrow, &error);
+  if (active == 0 && coordinator_input_borrow != NULL)
+    return et_i64_tensor_borrow_end_v1(&coordinator_input_borrow, &error);
+  return -1;
+}
+
+int64_t et_g3c4_coordinator_test_cache_borrow_v1(
+    void *context_candidate, int64_t active) {
+  et_g3c4_context_internal *context =
+      et_g3c4_admit_idle_call(context_candidate);
+  et_kernel_error error;
+  if (context == NULL) return -1;
+  if (active == 1 && coordinator_cache_borrow == NULL)
+    return et_a2_kv_cache_read_borrow_begin_v1(
+        context->cache, &coordinator_cache_borrow, &error);
+  if (active == 0 && coordinator_cache_borrow != NULL)
+    return et_a2_kv_cache_read_borrow_end_v1(
+        &coordinator_cache_borrow, &error);
+  return -1;
+}
+#endif
 
 int64_t et_g3c4_shell_test_copyout_corrupt_v1(int64_t active) {
   if (active != 0 && active != 1) return -1;
@@ -153,3 +210,139 @@ int64_t __wrap_et_g3c4_private_output_accept_text_v1(
   }
   return status;
 }
+
+#ifdef ET_G3C4_P2_G1_PUBLIC_RESULT_PRIVATE
+static et_i64_tensor_borrow *result_test_borrow;
+int64_t et_g3c4_result_test_value_v1(void *candidate, int64_t kind) {
+  et_g3c4_result_tensor_internal *result =
+      et_g3c4_admit_result(candidate, 0);
+  et_i64_tensor_error error;
+  et_i64_tensor_borrow *borrow = NULL;
+  const et_kernel_tensor_view_v1 *view = NULL;
+  int64_t value = -1;
+  if (result == NULL || result->transport.kind != (uint32_t)kind ||
+      et_i64_tensor_borrow_begin_v1(result->tensor, &borrow, &error) != 0)
+    return -1;
+  if (et_i64_tensor_borrow_view_v1(borrow, &view, &error) == 0 &&
+      view != NULL && view->rank == 1u && view->shape != NULL &&
+      view->shape[0] == 1u && view->data != NULL &&
+      view->byte_length == sizeof(int64_t) &&
+      strcmp(view->dtype, "i64") == 0 &&
+      strcmp(view->device, "cpu") == 0)
+    memcpy(&value, view->data, sizeof(value));
+  if (et_i64_tensor_borrow_end_v1(&borrow, &error) != 0) abort();
+  return value;
+}
+int64_t et_g3c4_result_test_borrow_v1(void *candidate, int64_t active) {
+  et_g3c4_result_tensor_internal *result =
+      et_g3c4_admit_result(candidate, 0);
+  et_i64_tensor_error error;
+  if (result == NULL) return -1;
+  if (active == 1 && result_test_borrow == NULL)
+    return et_i64_tensor_borrow_begin_v1(
+        result->tensor, &result_test_borrow, &error);
+  if (active == 0 && result_test_borrow != NULL)
+    return et_i64_tensor_borrow_end_v1(&result_test_borrow, &error);
+  return -1;
+}
+#endif
+
+#ifdef ET_G3C4_P2_G1_PUBLIC_RESULT_PRIVATE
+int64_t et_g3c4_result_test_prior_view_device_v1(void *candidate) {
+  et_g3c4_output_internal *output = et_g3c4_admit_output(candidate, 0);
+  et_i64_tensor_error error;
+  et_i64_tensor_borrow *borrow = NULL;
+  const et_kernel_tensor_view_v1 *view = NULL;
+  if (output == NULL || output->ids == NULL ||
+      et_i64_tensor_borrow_begin_v1(output->ids, &borrow, &error) != 0)
+    return -1;
+  if (et_i64_tensor_borrow_view_v1(borrow, &view, &error) != 0) abort();
+  ((et_kernel_tensor_view_v1 *)view)->device = "prior-non-cpu";
+  if (et_i64_tensor_borrow_end_v1(&borrow, &error) != 0) abort();
+  return 0;
+}
+int64_t et_g3c4_result_test_output_shape_v1(
+    void *candidate, int64_t malformed) {
+  et_g3c4_transport_header_internal *header;
+  for (header = et_g3c4_transport_registry;
+       header != NULL && (void *)header != candidate;
+       header = header->registry_next) {}
+  if (header == NULL || header->kind != ET_G3C4_OUTPUT_KIND ||
+      header->magic != ET_G3C4_OUTPUT_MAGIC ||
+      header->state != ET_G3C4_OUTPUT_PUBLISHED ||
+      (malformed != 0 && malformed != 1)) return -1;
+  et_g3c4_output_internal *output = (et_g3c4_output_internal *)header;
+  if (output->ids == NULL) return -1;
+  uint64_t *shape =
+      (uint64_t *)et_i64_tensor_test_shape_storage_v1(output->ids);
+  if (shape == NULL) return -1;
+  shape[0] = malformed ? 2u : 1u;
+  return 0;
+}
+#endif
+
+#ifdef ET_G3C4_P2_G1_PUBLIC_RESULT_TESTING
+static int64_t result_i1_cut = -1;
+static int64_t result_copy_cut;
+static int64_t result_post_clone_kind;
+static int64_t result_copy_cut_consumed;
+static int64_t result_post_clone_reached;
+extern int64_t et_g3c4_call_entry_alloc_arm_v1(int64_t, int64_t);
+
+int64_t et_g3c4_result_test_i1_cut_v1(int64_t index) {
+  if (index < -1 || index > 8) return -1;
+  result_i1_cut = index;
+  return 0;
+}
+int64_t et_g3c4_result_test_copy_cut_v1(int64_t active) {
+  if (active != 0 && active != 1) return -1;
+  result_copy_cut = active;
+  result_copy_cut_consumed = 0;
+  return 0;
+}
+int64_t et_g3c4_result_test_copy_consumed_v1(void) {
+  return result_copy_cut_consumed;
+}
+int64_t et_g3c4_result_test_post_clone_v1(int64_t kind) {
+  if (kind != 0 && kind != 1 && kind != 2) return -1;
+  result_post_clone_kind = kind;
+  result_post_clone_reached = 0;
+  return 0;
+}
+int64_t et_g3c4_result_test_post_reached_v1(void) {
+  return result_post_clone_reached;
+}
+
+void *__real_et_g3c4_private_result_tensor_create_v1(int64_t, int64_t);
+void *__wrap_et_g3c4_private_result_tensor_create_v1(
+    int64_t kind, int64_t value) {
+  void *result;
+  if (result_i1_cut >= 0)
+    et_i64_tensor_test_fail_alloc_after_v1((size_t)result_i1_cut);
+  result = __real_et_g3c4_private_result_tensor_create_v1(kind, value);
+  if (result_i1_cut >= 0) {
+    et_i64_tensor_test_reset_allocator_v1();
+    result_i1_cut = -1;
+  }
+  if (result != NULL && result_post_clone_kind != 0) {
+    result_post_clone_reached = 1;
+    if (et_g3c4_call_entry_alloc_arm_v1(result_post_clone_kind, 0) != 0)
+      abort();
+    result_post_clone_kind = 0;
+  }
+  return result;
+}
+int32_t __real_et_i64_tensor_copy_from_v1(
+    et_i64_tensor *, const int64_t *, size_t, et_i64_tensor_error *);
+int32_t __wrap_et_i64_tensor_copy_from_v1(
+    et_i64_tensor *tensor, const int64_t *source, size_t count,
+    et_i64_tensor_error *error) {
+  if (result_copy_cut) {
+    result_copy_cut = 0;
+    result_copy_cut_consumed = 1;
+    return __real_et_i64_tensor_copy_from_v1(
+        tensor, NULL, count, error);
+  }
+  return __real_et_i64_tensor_copy_from_v1(tensor, source, count, error);
+}
+#endif

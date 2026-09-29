@@ -80,8 +80,8 @@ if nm -u --format=posix "${g3g_evidence}/g3c4-feature-off.o" | \
   die "C4 owner feature-off path requires exact-pair authority"
 fi
 if nm -g --defined-only "${g3g_evidence}/g3c4-feature-off.o" | \
-    grep -F 'et_g3c4_private_input_from_t1_p2_v1'; then
-  die "C4 owner feature-off path exposed P2-only admission"
+    grep -E 'et_g3c4_private_(input_from_t1_p2|p2g1_(preflight|run)|result_(tensor|rng)_create|output_device_state)_v1'; then
+  die "C4 owner feature-off path exposed a gated public P2/G1 dependency"
 fi
 g3g_compile() {
   env -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH \

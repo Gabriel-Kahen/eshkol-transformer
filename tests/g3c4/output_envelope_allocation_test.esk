@@ -49,7 +49,7 @@
         (g3c4-with-call-internal
           'g3c4-output-envelope-allocation-test generator 2 1
           (allocation-arm kind index)
-          (g3t-output-reserve (vector-ref m3-call-state 0) 1)
+          (g3c4-output-reserve (vector-ref m3-call-state 0) 1)
           (set! sweep-seen (allocation-disarm))
           (g3c4-fail 'internal 'g3c4-output-envelope-allocation-test
                      "end allocation probe")))

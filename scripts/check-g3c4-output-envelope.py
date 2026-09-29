@@ -48,16 +48,16 @@ def check() -> None:
     for symbol in ("reserve", "release", "prepare", "copy_decode_ids", "accept_text"):
         require(ext.count(f"et_g3c4_private_output_{symbol}_v1") == 1,
                 f"native boundary changed: {symbol}")
-    reserve = form(ext, "(define (g3t-output-reserve")
+    reserve = form(ext, "(define (g3c4-output-reserve")
     ordered(reserve, ["(make-bytevector generated 0)",
                       "(make-bytevector (* generated 8) 0)",
                       "(vector 'g3c4-output-private)", "(vector raw staging)",
                       "(vector shell 'output 'pending", "(cons entry",
                       "(vector-set! g3c4-registry 0 next)",
                       "(vector-set! ledger 4 canonical)",
-                      "(g3t-native-output-reserve", "(vector-set! canonical 3 created)"],
+                      "(g3c4-native-output-reserve", "(vector-set! canonical 3 created)"],
             "rooted reservation")
-    for phrase in ("g3c4-entry-dead! entry", "g3t-native-output-release native",
+    for phrase in ("g3c4-entry-dead! entry", "g3c4-native-output-release native",
                    "(eq? (vector-ref ledger 4) entry)"):
         require(phrase in reserve, f"reservation cleanup omits: {phrase}")
     pending = form(ext, "(define (g3t-output-entry-pending")
@@ -67,10 +67,10 @@ def check() -> None:
                    "(eq? (vector-ref entry 6) tokenizer)",
                    "(* generated 8)", "(eq? (vector-ref ledger 4) entry)"):
         require(phrase in pending, f"pending validation omits: {phrase}")
-    decode = form(ext, "(define (g3t-t1-decode-output!")
-    ordered(decode, ["g3t-native-output-copy-decode-ids",
+    decode = form(ext, "(define (g3c4-t1-decode-output!")
+    ordered(decode, ["g3c4-native-output-copy-decode-ids",
                      "t1-private-g3-decode-raw-into!",
-                     "g3t-native-output-accept-text"], "decode coordinator")
+                     "g3c4-native-output-accept-text"], "decode coordinator")
     for phrase in ("(exercise-route 0 31)", "(exercise-route 1 37)",
                    "real native G0/G1 preparation", "two-argument decode coordinator",
                    "rollback tombstones rooted output", "linkage-cuts=3",

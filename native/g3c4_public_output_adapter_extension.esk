@@ -1,0 +1,218 @@
+;;; Fixed C4 P2/G1 public result adapter. This source never produces an output.
+;;; Load in the one G3-G registry-owning aggregate after private copy-out.
+(extern ptr g3c4-native-result-tensor-create i64 i64
+        :real et_g3c4_private_result_tensor_create_v1)
+(extern i64 g3c4-native-result-tensor-release ptr
+        :real et_g3c4_private_result_tensor_release_v1)
+(extern ptr g3c4-native-result-rng-create i64 i64 i64 i64
+        :real et_g3c4_private_result_rng_create_v1)
+(extern i64 g3c4-native-output-device-state ptr
+        :real et_g3c4_private_output_device_state_v1)
+
+;;; Record: exact registry entry, native control, kind, scalar/words, shell.
+(define g3c4-public-result-records (vector '()))
+(define (g3c4-public-result-record shell)
+  (let loop ((tail (vector-ref g3c4-public-result-records 0)))
+    (cond ((null? tail) #f)
+          ((eq? (vector-ref (car tail) 4) shell) (car tail))
+          (else (loop (cdr tail))))))
+(define (g3c4-public-result-kind? kind)
+  (or (eq? kind 'ids) (eq? kind 'lengths)
+      (eq? kind 'cache-lengths) (eq? kind 'result-rng)))
+(define (g3c4-public-result-entry-live shell operation)
+  (let* ((entry (g3c4-registry-find shell operation))
+         (record (g3c4-public-result-record shell))
+         (kind (vector-ref entry 1)))
+    (if (not (and record (eq? (vector-ref record 0) entry)
+                  (eq? (vector-ref record 4) shell)
+                  (g3c4-public-result-kind? kind)
+                  (eq? (vector-ref record 2) kind)
+                  (eq? (vector-ref entry 2) 'live)
+                  (eq? (vector-ref entry 0) shell)
+                  (eq? (vector-ref entry 3) (vector-ref record 1))
+                  (vector-ref entry 3)
+                  (eq? (vector-ref entry 4) #f)
+                  (eq? (vector-ref entry 5) #f)
+                  (eq? (vector-ref entry 6) #f)
+                  (eq? (vector-ref entry 8) #f)
+                  (eq? (vector-ref entry 9) #f)
+                  (eq? (vector-ref entry 10) #f)
+                  (eq? (vector-ref entry 11) g3c4-model-profile)
+                  (if (eq? kind 'result-rng)
+                      (and (g3c4-rng-snapshot? (vector-ref entry 7))
+                           (let check-words ((index 1))
+                             (if (= index 5) #t
+                                 (and (= (vector-ref (vector-ref entry 7) index)
+                                         (vector-ref (vector-ref record 3) index))
+                                      (check-words (+ index 1))))))
+                      (and (m3t-exact-i64? (vector-ref entry 7))
+                           (= (vector-ref entry 7) (vector-ref record 3))))))
+        (g3c4-fail 'invalid-state operation
+                   "C4 result identity or protected clone link changed"))
+    entry))
+(define (g3c4-public-output-copy shell operation)
+  ;; Sibling scopes: never nest m3-call around the accepted copy-out scope.
+  (m3-call operation
+    (let* ((member (g3c4-public-transport-member shell))
+           (model (g3c4-public-model-member shell)))
+      (if (or model (not member) (not (eq? (vector-ref member 1) 'output)))
+          (g3c4-fail 'invalid-argument operation
+                     "C4 identity is not an output"))
+      (let* ((entry (g3c4-p2g1-output-entry-live shell operation))
+           (status (g3c4-native-output-device-state (vector-ref entry 3))))
+      (cond ((= status 1)
+             (g3c4-fail 'device-mismatch operation
+                        "C4 output's current borrowed device differs"))
+            ((= status -1) (g3c4-native-fail operation))
+            ((not (= status 0))
+             (g3c4-fail 'internal operation
+                        "C4 output device inspection returned invalid status")))
+      #t)))
+  (g3c4-p2g1-output-copy-internal shell))
+(define (g3c4-public-copy-valid copy operation)
+  (if (not (and (vector? copy) (= (vector-length copy) 5)
+                (bytevector? (vector-ref copy 0))
+                (= (bytevector-length (vector-ref copy 0)) 1)
+                (m3t-exact-i64? (vector-ref copy 1))
+                (<= 0 (vector-ref copy 1)) (<= (vector-ref copy 1) 255)
+                (= (bytevector-u8-ref (vector-ref copy 0) 0)
+                   (vector-ref copy 1))
+                (= (vector-ref copy 2) 1) (= (vector-ref copy 3) 3)
+                (g3c4-rng-snapshot? (vector-ref copy 4))))
+      (g3c4-fail 'internal operation "C4 detached copy is malformed"))
+  copy)
+(define (g3c4-public-result-publish output copy kind operation)
+  (m3-call operation
+    (let* ((source (g3c4-p2g1-output-entry-live output operation))
+           (checked (g3c4-public-copy-valid copy operation))
+           (scalar (cond ((eq? kind 'ids) (vector-ref checked 1))
+                         ((eq? kind 'lengths) 1)
+                         ((eq? kind 'cache-lengths) 3)
+                         (else (vector-ref checked 4))))
+           (protected (if (eq? kind 'result-rng)
+                          (vector g3c4-rng-algorithm
+                                  (vector-ref scalar 1) (vector-ref scalar 2)
+                                  (vector-ref scalar 3) (vector-ref scalar 4))
+                          scalar))
+           (shell (vector 'g3c4-result-private))
+           (ledger (vector #f))
+           (entry (vector shell kind 'pending #f #f #f #f #f #f #f
+                          ledger g3c4-model-profile))
+           (record (vector entry #f kind protected shell))
+           (next (cons entry (vector-ref g3c4-registry 0)))
+           (record-next (cons record (vector-ref g3c4-public-result-records 0)))
+           (answer (if (eq? kind 'ids) (list shell) shell))
+           (native '()))
+      (guard (caught
+               (#t
+                 (if (not (null? native))
+                     (if (not (= (if (eq? kind 'result-rng)
+                                     (g3c4-native-rng-release native)
+                                     (g3c4-native-result-tensor-release native))
+                                 0))
+                         (exit 134)))
+                 (g3c4-entry-dead! entry)
+                 (vector-set! record 1 #f)
+                 (raise caught)))
+        (vector-set! g3c4-registry 0 next)
+        (vector-set! g3c4-public-result-records 0 record-next)
+        (set! native
+          (if (eq? kind 'result-rng)
+              (g3c4-native-result-rng-create
+                (vector-ref scalar 1) (vector-ref scalar 2)
+                (vector-ref scalar 3) (vector-ref scalar 4))
+              (g3c4-native-result-tensor-create
+                (cond ((eq? kind 'ids) 5) ((eq? kind 'lengths) 6) (else 7))
+                scalar)))
+        (if (null? native) (g3c4-native-fail operation))
+        (vector-set! ledger 0 native)
+        (vector-set! record 1 native)
+        (vector-set! entry 3 native)
+        (vector-set! entry 7 scalar)
+        ;; Reauthentication is the last fallible step before publication.
+        (if (not (eq? source (g3c4-p2g1-output-entry-live output operation)))
+            (g3c4-fail 'invalid-state operation "C4 source output changed"))
+        (g3c4-public-copy-valid copy operation)
+        (vector-set! entry 2 'live)
+        (vector-set! entry 10 #f)
+        answer))))
+(define (g3c4-public-output-access shell kind operation)
+  (let ((copy (g3c4-public-output-copy shell operation)))
+    (guard (caught
+             (#t (if (and (vector? copy) (bytevector? (vector-ref copy 0)))
+                     (g3c4-p2g1-zero-bytes! (vector-ref copy 0) 1))
+                 (raise caught)))
+      (if (eq? kind 'text)
+          (m3-call operation
+            (g3c4-p2g1-output-entry-live shell operation)
+            (g3c4-public-copy-valid copy operation)
+            (list (vector-ref copy 0)))
+          (g3c4-public-result-publish shell copy kind operation)))))
+(define (g3c4-public-result-release! shell expected operation)
+  (m3-call operation
+    (let* ((entry (g3c4-registry-find shell operation))
+           (record (g3c4-public-result-record shell)))
+      (if (not (and record (eq? entry (vector-ref record 0))
+                    (eq? (vector-ref entry 1) expected)
+                    (eq? (vector-ref record 2) expected)))
+          (g3c4-fail 'invalid-argument operation
+                     "C4 identity is not this result owner"))
+      (if (eq? (vector-ref entry 2) 'dead)
+          #t
+          (let ((live (g3c4-public-result-entry-live shell operation)))
+            (g3c4-native-check
+              (if (eq? expected 'result-rng)
+                  (g3c4-native-rng-release (vector-ref live 3))
+                  (g3c4-native-result-tensor-release (vector-ref live 3)))
+              operation)
+            (g3c4-entry-dead! live)
+            (vector-set! record 1 #f)
+            #t)))))
+
+;;; Source-composed C4 branch of the existing arity-one public operations.
+;;; The installed G3-G dispatch remains C2-only until the package closure gate.
+(define (g3c4-public-generation-output-ids output)
+  (g3c4-public-boundary 'generation-output-ids
+    (g3c4-public-output-access output 'ids 'generation-output-ids)))
+(define (g3c4-public-generation-output-lengths output)
+  (g3c4-public-boundary 'generation-output-lengths
+    (g3c4-public-output-access output 'lengths 'generation-output-lengths)))
+(define (g3c4-public-generation-output-cache-lengths output)
+  (g3c4-public-boundary 'generation-output-cache-lengths
+    (g3c4-public-output-access output 'cache-lengths
+                              'generation-output-cache-lengths)))
+(define (g3c4-public-generation-output-text output)
+  (g3c4-public-boundary 'generation-output-text
+    (g3c4-public-output-access output 'text 'generation-output-text)))
+(define (g3c4-public-generation-output-rng output)
+  (g3c4-public-boundary 'generation-output-rng
+    (g3c4-public-output-access output 'result-rng 'generation-output-rng)))
+(define (g3c4-public-generation-output-release! output)
+  (g3c4-public-boundary 'generation-output-release!
+    (let ((entry (g3c4-public-transport-member output)))
+      (if (not (and entry (eq? (vector-ref entry 1) 'output)))
+          (g3c4-fail 'invalid-argument 'generation-output-release!
+                     "C4 identity is not an output"))
+      (g3c4-p2g1-output-release-internal! output))))
+(define (g3c4-public-generation-tensor-release! tensor)
+  (g3c4-public-boundary 'generation-tensor-release!
+    (let ((entry (g3c4-public-transport-member tensor)))
+      (if (not entry)
+          (g3c4-fail 'invalid-argument 'generation-tensor-release!
+                     "C4 tensor is not registered"))
+      (let ((kind (vector-ref entry 1)))
+        (cond ((eq? kind 'input) (generation-tensor-release-internal! tensor))
+              ((or (eq? kind 'ids) (eq? kind 'lengths)
+                   (eq? kind 'cache-lengths))
+               (g3c4-public-result-release!
+                 tensor kind 'generation-tensor-release!))
+              (else (g3c4-fail 'invalid-argument 'generation-tensor-release!
+                               "C4 identity is not a result tensor")))))))
+(define (g3c4-public-generation-rng-release! rng)
+  (g3c4-public-boundary 'generation-rng-release!
+    (let ((entry (g3c4-public-transport-member rng)))
+      (if (not (and entry (eq? (vector-ref entry 1) 'result-rng)))
+          (g3c4-fail 'invalid-argument 'generation-rng-release!
+                     "C4 identity is not a result RNG"))
+      (g3c4-public-result-release!
+        rng 'result-rng 'generation-rng-release!))))

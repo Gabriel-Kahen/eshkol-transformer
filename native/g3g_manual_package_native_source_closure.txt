@@ -49,9 +49,11 @@ src/eshkol_transformer/g3t_prefill2_roles.inc
 src/eshkol_transformer/g3t_prefill_roles.inc
 native/a2_kv_cache.c
 src/eshkol_transformer/g3c4_model_owner.c
+include/eshkol_transformer/g3c4_primitives_abi.h
 src/eshkol_transformer/g3c4_context_internal.h
 native/n2_primitives_provider.c
 native/n3k_primitives_provider.c
 native/a2_attention_provider.c
 native/g3n_primitives_provider.c
 native/g3s_sampling_provider.c
+native/g3c4_primitives_provider.c
