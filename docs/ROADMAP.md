@@ -1602,8 +1602,34 @@ An isolated state/train composition candidate combines the public snapshot and
 atomic load entries with invocation-delta `trainer-train!` in the same installed
 facade, bridge, private root, and symbol/source inventories. The ordinary
 caller restores and repeats its next step before exercising train summaries.
-Merge conflict, shell/Python syntax, and static package-inventory checks pass;
-the combined fe9 linked gate and independent review remain pending.
+Merge conflict, shell/Python syntax, and static package-inventory checks passed
+at `55b0f57`; subsequent independent review and the supported fe9 linked gate
+passed for that state/train tree.
+
+The bounded installed `trainer-evaluate!` candidate at `9778097`/tree
+`2d42c096` composes the accepted E3 evaluator with the same TR3/D2/T2/M3T
+aggregate. A private lease witness authenticates the T2-held T1 raw-byte core
+at trainer creation without narrowing existing trainer creation; evaluation
+admits only a distinct authentic validation dataset with matching V256 D1/D2
+identity and E3's fixed traversal profile. E3 restores the validation cursor
+and model mode on success and failure, while TR3 publishes exact f32 loss and
+mask-weight words and i64 token/batch counters through the sole metrics root.
+The pinned fe9 linked gate passed with 64 Eshkol sources, 33 native objects,
+108 global definitions and 176 undefined runtime symbols. Its poisoned public
+callers cover forged and busy receivers, cursor rollback, repeat publication,
+exact accepted E3 loss/weight words and counts, EOS rollback, and retained old
+metrics; the existing exact step and bridge checks remain green. The native
+gate proves E3's M3/M3T replacements retain every installed defined symbol
+and rejects predecessor objects in the link. Its 161-file evidence seal is
+`/home/gabe/.codex/evidence/eshkol-transformer/tr3-public-evaluate-20260928-b/SHA256SUMS`
+(`9c3257c2...`). The E3 profile remains fixed to N1/T2/V256/D4; that isolated
+leaf does not establish wider D2 or three-facet resume composition.
+
+An isolated state/train/evaluate candidate now keeps all three entries in the
+same registry-owning package. Its ordinary caller evaluates a held-out dataset,
+restores and repeats a training step, then trains with invocation-delta limits
+while old evaluation metrics remain readable. The combined fe9 linked gate,
+independent source review and wider resume proof remain pending.
 
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2

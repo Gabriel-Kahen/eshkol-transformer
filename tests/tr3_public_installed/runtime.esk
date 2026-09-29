@@ -292,6 +292,57 @@
   (lambda () (trainer-load-state! trainer (vector 'forged))))
 (define idle-state (trainer-state trainer))
 (check "public snapshot is detached from trainer" (not (eq? idle-state trainer)))
+(define evaluation-dataset (token-dataset-open (dataset-options) tokenizer))
+(define evaluation-cursor (token-dataset-cursor evaluation-dataset))
+(define training-cursor-before-evaluation (token-dataset-cursor dataset))
+(expect-error "evaluation requires an authentic trainer"
+              'invalid-argument 'trainer-evaluate!
+  (lambda () (trainer-evaluate! (vector 'forged) evaluation-dataset)))
+(expect-error "evaluation requires a distinct dataset"
+              'invalid-argument 'trainer-evaluate!
+  (lambda () (trainer-evaluate! trainer dataset)))
+(expect-error "evaluation rejects forged dataset"
+              'invalid-argument 'trainer-evaluate!
+  (lambda () (trainer-evaluate! trainer (vector 'forged))))
+(define evaluation-result (trainer-evaluate! trainer evaluation-dataset))
+(check "evaluation publishes f32 and exact counters"
+       (and (number? (metrics-ref evaluation-result 'loss))
+            (not (exact? (metrics-ref evaluation-result 'loss)))
+            (number? (metrics-ref evaluation-result 'mask-weight))
+            (not (exact? (metrics-ref evaluation-result 'mask-weight)))
+            (> (metrics-ref evaluation-result 'mask-weight) 0)
+            (exact? (metrics-ref evaluation-result 'tokens))
+            (> (metrics-ref evaluation-result 'tokens) 0)
+            (exact? (metrics-ref evaluation-result 'batches))
+            (> (metrics-ref evaluation-result 'batches) 0)))
+(check "evaluation restores both cursors"
+       (and (bytes-equal? evaluation-cursor
+                          (token-dataset-cursor evaluation-dataset))
+            (bytes-equal? training-cursor-before-evaluation
+                          (token-dataset-cursor dataset))))
+(expect-error "evaluation metrics reject step key"
+              'invalid-argument 'metrics-ref
+  (lambda () (metrics-ref evaluation-result 'update)))
+(define evaluation-live-batch (token-dataset-next-batch evaluation-dataset))
+(define evaluation-busy-cursor (token-dataset-cursor evaluation-dataset))
+(expect-error "live validation batch rejects evaluation"
+              'invalid-state 'trainer-evaluate!
+  (lambda () (trainer-evaluate! trainer evaluation-dataset)))
+(check "failed evaluation keeps validation cursor"
+       (bytes-equal? evaluation-busy-cursor
+                     (token-dataset-cursor evaluation-dataset)))
+(check "release validation batch" (token-batch-release! evaluation-live-batch))
+(check "seek validation after busy rejection"
+       (token-dataset-seek! evaluation-dataset evaluation-cursor))
+(define second-evaluation (trainer-evaluate! trainer evaluation-dataset))
+(check "evaluation metrics are stable after another publication"
+       (and (= (metrics-ref evaluation-result 'tokens)
+               (metrics-ref second-evaluation 'tokens))
+            (= (metrics-ref evaluation-result 'batches)
+               (metrics-ref second-evaluation 'batches))
+            (= (metrics-ref evaluation-result 'loss)
+               (metrics-ref second-evaluation 'loss))))
+(check "close validation dataset" (token-dataset-close! evaluation-dataset))
 (expect-error "forged public step rejects exact shell"
               'invalid-argument 'trainer-step!
   (lambda () (trainer-step! (vector 'forged))))
@@ -449,6 +500,14 @@
             (= (metrics-ref mixed-summary 'tokens) 11)
             (= (metrics-ref second-step 'update) 2)
             (= (metrics-ref first-step 'update) 1)))
+(check "evaluation metrics survive train publication"
+       (and (= (metrics-ref evaluation-result 'batches)
+               (metrics-ref second-evaluation 'batches))
+            (= (metrics-ref evaluation-result 'loss)
+               (metrics-ref second-evaluation 'loss))))
+(expect-error "train summary rejects evaluation-only key"
+              'invalid-argument 'metrics-ref
+  (lambda () (metrics-ref mixed-summary 'batches)))
 (expect-error "step token rejects train-only key"
               'invalid-argument 'metrics-ref
   (lambda () (metrics-ref first-step 'updates)))

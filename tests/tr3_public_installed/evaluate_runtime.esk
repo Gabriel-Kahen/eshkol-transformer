@@ -1,0 +1,102 @@
+;;; Exact installed TR3/E3 selected-word witness on the accepted E3 corpus.
+(require transformer.config)
+(require transformer.data)
+(require transformer.diagnostic_transport)
+(require transformer.module)
+(require transformer.optim)
+(require transformer.tokenizer)
+(require transformer.trainer)
+(require transformer.error_consumer)
+
+(extern i64 f32-bits ptr :real et_tr3_test_f32_bits_v1)
+(define (check label okay)
+  (if (not okay)
+      (begin (display "TR3-PUBLIC-EVALUATE-FAIL ") (display label)
+             (newline) (exit 1))))
+(define (bytes=? left right)
+  (and (= (bytevector-length left) (bytevector-length right))
+       (let loop ((i 0))
+         (if (= i (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left i) (bytevector-u8-ref right i))
+                  (loop (+ i 1)))))))
+(define (seen? handle values)
+  (if (null? values) #f
+      (or (eq? handle (car values)) (seen? handle (cdr values)))))
+(define (reverse-list source)
+  (let loop ((left source) (result '()))
+    (if (null? left) result
+        (loop (cdr left) (cons (car left) result)))))
+(define (unique-paths tree)
+  (let loop ((left (parameter-tree-paths tree)) (seen '()) (result '()))
+    (if (null? left) (reverse-list result)
+        (let ((handle (parameter-tree-handle tree (car left))))
+          (if (seen? handle seen)
+              (loop (cdr left) seen result)
+              (loop (cdr left) (cons handle seen) (cons (car left) result)))))))
+(define (dataset-options path)
+  (list ':directory path ':batch-size 1 ':sequence-length 2
+        ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 65536 ':maximum-batch-bytes 34
+        ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #t))
+(define (expect-error label category thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category)
+                      (eq? (transformer-error-operation caught)
+                           'trainer-evaluate!))))
+      (thunk) #f)))
+
+(define path (car (cdr (command-line))))
+(define config
+  (config-resolve
+    (config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729,\"training.accumulation-steps\":2}")
+    '()))
+(define tokenizer (tokenizer-byte config))
+(define training (token-dataset-open (dataset-options path) tokenizer))
+(define validation (token-dataset-open (dataset-options path) tokenizer))
+(define model
+  (with-region ('tr3-public-evaluate-model 65536)
+    (diagnostic-model-create config (diagnostic-initializer-state 1729))))
+(define tree (module-parameters model))
+(define optimizer
+  (optimizer-create
+    (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+          '(none) '(constant)
+          (list (list 'group (unique-paths tree)
+                      "3dcccccd" "3f000000" "3f000000"
+                      "3a83126f" "00000000")))
+    tree))
+(define trainer (trainer-create config tokenizer training model optimizer))
+(define training-before (token-dataset-cursor training))
+(define validation-before (token-dataset-cursor validation))
+(define result (trainer-evaluate! trainer validation))
+(check 'selected-loss-word
+       (= (f32-bits (vector (metrics-ref result 'loss))) 1085366897))
+(check 'selected-weight-word
+       (= (f32-bits (vector (metrics-ref result 'mask-weight))) 1084227584))
+(check 'exact-counters
+       (and (= (metrics-ref result 'tokens) 5)
+            (= (metrics-ref result 'batches) 3)))
+(check 'success-cursors
+       (and (bytes=? training-before (token-dataset-cursor training))
+            (bytes=? validation-before (token-dataset-cursor validation))))
+
+;; EOS occurs after consuming genuine D2 batches. E3 restores that cursor and
+;; the failed call cannot revoke the previously published metrics identity.
+(let drain ()
+  (let ((batch (token-dataset-next-batch validation)))
+    (if (token-dataset-end? batch) #t
+        (begin (check 'batch-release (token-batch-release! batch)) (drain)))))
+(define eos-before (token-dataset-cursor validation))
+(expect-error 'eos-rollback 'invalid-state
+  (lambda () (trainer-evaluate! trainer validation)))
+(check 'eos-cursor (bytes=? eos-before (token-dataset-cursor validation)))
+(check 'old-publication
+       (and (= (f32-bits (vector (metrics-ref result 'loss))) 1085366897)
+            (= (metrics-ref result 'batches) 3)))
+(check 'lease-remains-usable (trainer-release! trainer))
+(check 'close-training (token-dataset-close! training))
+(check 'close-validation (token-dataset-close! validation))
+(display "TR3-PUBLIC-EVALUATE-AOT-PASS") (newline)
