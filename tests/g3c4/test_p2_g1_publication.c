@@ -310,7 +310,10 @@ static void sampled_abort_and_retry(
   OK(et_g3c4_private_generator_close_v1(context));
 }
 
-int main(void) {
+#ifndef ET_G3C4_P2_G1_PUBLICATION_TEST_MAIN
+#define ET_G3C4_P2_G1_PUBLICATION_TEST_MAIN main
+#endif
+int ET_G3C4_P2_G1_PUBLICATION_TEST_MAIN(void) {
   CHECK(et_g3c4_p2g1_pending_predecessor_main() == 0);
   et_g3c4_model_owner_internal *owner = p2g1_test_owner;
   publication_success(owner, 0);
