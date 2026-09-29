@@ -66,11 +66,14 @@ cmp "${evidence}/linked/normal-exact-pair-runtime.stdout" \
 
 printf 'private native normal/repeat/sanitizer and linked normal/sanitizer PASS\n' \
   >"${evidence}/result.stdout"
-if git -C "${PROJECT_ROOT}" rev-parse --git-dir >/dev/null 2>&1; then
+if git -C "${PROJECT_ROOT}" rev-parse HEAD >/dev/null 2>&1; then
   git -C "${PROJECT_ROOT}" rev-parse HEAD HEAD^{tree} \
     >"${evidence}/source-git.stdout"
   git -C "${PROJECT_ROOT}" diff --check
 else
+  declared_gitdir="$(sed -n 's/^gitdir: //p' "${PROJECT_ROOT}/.git" 2>/dev/null || true)"
+  [[ "${declared_gitdir}" == /* && ! -e "${declared_gitdir}" ]] || \
+    die "source Git failed for a reason other than inaccessible worktree metadata"
   printf 'git metadata inaccessible in runner; host check required\n' \
     >"${evidence}/source-git.stdout"
 fi
