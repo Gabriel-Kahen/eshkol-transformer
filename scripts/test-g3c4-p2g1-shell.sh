@@ -128,7 +128,7 @@ exec $(printf '%q' "$cxx") $sanitizer_link "\$@" \\
 WRAPPER
   chmod 0500 "$directory/cxx-wrap"
   local test expected
-  for test in success mutation lease owner_swap; do
+  for test in success mutation lease ledger old_scope owner_swap; do
     env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
       XDG_CACHE_HOME="$directory/cache" ESHKOL_CXX_COMPILER="$directory/cxx-wrap" \
       ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
@@ -151,7 +151,9 @@ WRAPPER
     case "$test" in
       success) expected='success=2' ;;
       mutation) expected='mutation=3 retry=1' ;;
-      lease) expected='leases=2 ledger=1 old-scope=1' ;;
+      lease) expected='leases=2' ;;
+      ledger) expected='ledger=1' ;;
+      old_scope) expected='old-scope=1' ;;
       owner_swap) expected='swap=1' ;;
     esac
     grep -E "^G3-C4 P2/G1 shell PASS: checks=[1-9][0-9]* $expected$" \
@@ -181,14 +183,14 @@ edge_status=$?
 set -e
 test "$edge_status" -eq 134
 test ! -s "$tmp/normal/edge.stdout"
-for test in success mutation lease owner_swap; do
+for test in success mutation lease ledger old_scope owner_swap; do
   ESHKOL_ARENA_POISON=1 "$tmp/normal/p2g1-$test" \
     >"$tmp/normal/$test-repeat.stdout" \
     2>"$tmp/normal/$test-repeat.stderr"
   test ! -s "$tmp/normal/$test-repeat.stderr"
 done
 compile_mode sanitize
-for test in success mutation lease owner_swap; do
+for test in success mutation lease ledger old_scope owner_swap; do
   cmp "$tmp/normal/$test.stdout" "$tmp/normal/$test-repeat.stdout"
   cmp "$tmp/normal/$test.stdout" "$tmp/sanitize/$test.stdout"
 done
@@ -196,14 +198,14 @@ for mode in normal sanitize; do
   for log in native.stdout native.stderr oracle.stdout; do
     cp "$tmp/$mode/$log" "$evidence/$mode-$log"
   done
-  for test in success mutation lease owner_swap; do
+  for test in success mutation lease ledger old_scope owner_swap; do
     for log in "$test.stdout" "$test.stderr" \
         "$test-compile.stdout" "$test-compile.stderr"; do
       cp "$tmp/$mode/$log" "$evidence/$mode-$log"
     done
   done
 done
-for test in success mutation lease owner_swap; do
+for test in success mutation lease ledger old_scope owner_swap; do
   cp "$tmp/normal/$test-repeat.stdout" "$evidence/$test-repeat.stdout"
 done
 for log in edge-compile.stdout edge-compile.stderr edge.stdout edge.stderr; do
@@ -216,5 +218,6 @@ git -C "$PROJECT_ROOT" diff --check
 )
 cat "$evidence/static.stdout" "$evidence/normal-success.stdout" \
   "$evidence/normal-mutation.stdout" "$evidence/normal-lease.stdout" \
+  "$evidence/normal-ledger.stdout" "$evidence/normal-old_scope.stdout" \
   "$evidence/normal-owner_swap.stdout"
 printf 'G3-C4 P2/G1 shell evidence: %s\n' "$evidence"

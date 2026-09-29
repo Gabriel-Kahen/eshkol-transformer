@@ -1,0 +1,22 @@
+(load "p2_g1_shell_test_common.esk")
+
+(define old-scope-generator
+  (g3c4-generator-create-internal model tokenizer (config 'greedy 37)))
+(reject "old auto scope still rejects a pending P2/G1 output" 'invalid-state
+  (lambda ()
+    (g3c4-with-call-internal
+      'g3c4-p2g1-old-scope old-scope-generator 2 1
+      (let* ((call (vector-ref m3-call-state 0))
+             (output (g3t-output-reserve call 2)))
+        (reject "joint shell coordinator rejects old call scope"
+                'invalid-state
+          (lambda () (g3c4-p2g1-output-publish! call output)))
+        #t))))
+(check "old auto scope rolls back"
+       (and (dead? (latest 'output))
+            (not (vector-ref m3-call-state 0))
+            (g3c4-generator-close-internal! old-scope-generator)))
+
+(display "G3-C4 P2/G1 shell PASS: checks=")
+(display checks)
+(display " old-scope=1") (newline)

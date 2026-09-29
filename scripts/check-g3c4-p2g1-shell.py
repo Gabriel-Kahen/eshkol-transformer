@@ -7,7 +7,7 @@ root = Path(__file__).resolve().parents[1]
 shell = (root / "native/g3c4_p2g1_shell_publication_extension.esk").read_text()
 fixture = "\n".join(
     (root / f"tests/g3c4/p2_g1_shell_{case}_test.esk").read_text()
-    for case in ("success", "mutation", "lease", "owner_swap")
+    for case in ("success", "mutation", "lease", "ledger", "old_scope", "owner_swap")
 )
 common = (root / "tests/g3c4/p2_g1_shell_test_common.esk").read_text()
 edge = (root / "tests/g3c4/p2_g1_shell_edge_escape_test.esk").read_text()

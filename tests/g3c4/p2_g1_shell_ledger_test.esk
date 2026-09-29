@@ -1,0 +1,24 @@
+(load "p2_g1_shell_test_common.esk")
+
+(define ledger-generator
+  (g3c4-generator-create-internal model tokenizer (config 'greedy 31)))
+(define ledger-shell
+  (g3c4-with-p2g1-output-call-internal
+    'g3c4-p2g1-shell-ledger ledger-generator (call)
+    (let* ((output (prepare call))
+           (ledger (vector-ref call 10)))
+      (vector-set! ledger 4 #f)
+      (reject "altered child ledger rejects before rollback" 'invalid-state
+        (lambda () (g3c4-p2g1-output-publish! call output)))
+      (vector-set! ledger 4 output)
+      (g3c4-p2g1-output-publish! call output))))
+(check "repaired child ledger permits publication"
+       (g3c4-p2g1-output-entry-live ledger-shell 'test))
+(check "ledger output release"
+       (g3c4-p2g1-output-release-internal! ledger-shell))
+(check "ledger generator close"
+       (g3c4-generator-close-internal! ledger-generator))
+
+(display "G3-C4 P2/G1 shell PASS: checks=")
+(display checks)
+(display " ledger=1") (newline)
