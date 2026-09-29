@@ -211,7 +211,13 @@ done
 for log in edge-compile.stdout edge-compile.stderr edge.stdout edge.stderr; do
   cp "$tmp/normal/$log" "$evidence/$log"
 done
-git -C "$PROJECT_ROOT" diff --check
+if git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree \
+    >/dev/null 2>&1; then
+  git -C "$PROJECT_ROOT" diff --check
+else
+  printf 'Docker worktree git metadata inaccessible; host-side clean and diff check required\n' \
+    >"$evidence/git-metadata.stdout"
+fi
 (
   cd "$evidence"
   sha256sum -- *.stdout *.stderr >SHA256SUMS
