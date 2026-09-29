@@ -1,0 +1,218 @@
+;;; Source-private C4 P2/G1 output shell publication. Load after the C4
+;;; pending-output/T1 decoder extensions with the native publication feature.
+;;; Never install this source as a public generation facade.
+
+(extern i64 g3c4-native-generation-frame-prepare ptr ptr
+        :real et_g3c4_private_generation_frame_prepare_v1)
+(extern i64 g3c4-native-generation-frame-commit ptr ptr
+        :real et_g3c4_private_generation_frame_commit_v1)
+
+(define (g3c4-p2g1-zero-bytes! value count)
+  (let loop ((index 0))
+    (if (< index count)
+        (begin (bytevector-u8-set! value index 0)
+               (loop (+ index 1)))
+        #t)))
+
+(define (g3c4-p2g1-call-rollback! call generator-entry model-entry)
+  (let* ((ledger (vector-ref call 10))
+         (child (vector-ref ledger 4)))
+    (if (vector-ref ledger 0)
+        (if (not (= (g3c4-native-call-abort
+                      (vector-ref generator-entry 3)) 0))
+            (exit 134)))
+    (if child
+        (begin
+          (if (not (and (vector? child) (= (vector-length child) 12)
+                        (eq? (vector-ref child 1) 'output)
+                        (eq? (vector-ref child 2) 'pending)))
+              (exit 134))
+          (let ((auxiliary (vector-ref child 8)))
+            (if (not (and
+                        (vector? auxiliary)
+                        (= (vector-length auxiliary) 2)
+                        (bytevector? (vector-ref auxiliary 0))
+                        (= (bytevector-length (vector-ref auxiliary 0)) 1)
+                        (bytevector? (vector-ref auxiliary 1))
+                        (= (bytevector-length (vector-ref auxiliary 1)) 8)))
+              (exit 134))
+          (g3c4-p2g1-zero-bytes! (vector-ref auxiliary 0) 1)
+          (g3c4-p2g1-zero-bytes! (vector-ref auxiliary 1) 8)
+          (g3c4-entry-dead! child)
+          (vector-set! ledger 4 #f))))
+    (if (vector-ref ledger 1)
+        (if (eq? (vector-ref model-entry 10) call)
+            (vector-set! model-entry 10 #f)
+            (exit 134)))
+    (if (vector-ref ledger 2)
+        (if (eq? (vector-ref generator-entry 9) call)
+            (vector-set! generator-entry 9 #f)
+            (exit 134)))
+    (g3c4-call-dead! call)))
+
+;;; The body must finish by calling g3c4-p2g1-output-publish! once. A caught
+;;; in-region preflight rejection may be repaired before that final call.
+(define-syntax g3c4-with-p2g1-output-call-internal
+  (syntax-rules ()
+    ((_ operation generator (call) body ...)
+     (m3-call operation
+       (let* ((generator-entry
+                (g3c4-generator-entry-call-ready generator operation))
+              (model-entry (vector-ref generator-entry 5))
+              (tokenizer (vector-ref generator-entry 6))
+              (shell (vector 'g3c4-call-private))
+              (ledger (vector #f #f #f #f #f))
+              (call (vector shell 'call 'pending #f generator-entry
+                            model-entry tokenizer #f #f #f ledger
+                            g3c4-model-profile))
+              (next (cons call (vector-ref g3c4-registry 0))))
+         (guard (caught
+                  (#t
+                    (if (not (eq? (vector-ref ledger 3) 'committed))
+                        (if (not (eq? (vector-ref call 2) 'dead))
+                            (g3c4-p2g1-call-rollback!
+                              call generator-entry model-entry))
+                        (exit 134))
+                    (raise caught)))
+           (vector-set! g3c4-registry 0 next)
+           (let ((canonical (car (vector-ref g3c4-registry 0))))
+             (g3c4-native-check
+               (g3c4-native-call-acquire
+                 (vector-ref generator-entry 3) 2 1) operation)
+             (vector-set! ledger 0 #t)
+             (vector-set! model-entry 10 canonical)
+             (vector-set! ledger 1 #t)
+             (vector-set! generator-entry 9 canonical)
+             (vector-set! ledger 2 #t)
+             (vector-set! canonical 2 'live)
+             (vector-set! ledger 3 'p2g1-shell)
+             (if (not (eq? (vector-ref m3-call-state 0) #t)) (exit 134))
+             (vector-set! m3-call-state 0 canonical)
+             (let ((answer (begin body ...)))
+               (if (eq? (vector-ref canonical 2) 'live)
+                   (g3c4-fail 'invalid-state operation
+                              "C4 P2/G1 call returned without publication"))
+               answer))))))))
+
+(define (g3c4-p2g1-output-publish! call-entry output-entry)
+  (let* ((operation 'g3c4-p2g1-output-publish!)
+         (call (g3t-call-entry-live call-entry operation))
+         (output (g3t-output-entry-pending call output-entry operation))
+         (generator-entry (vector-ref call 4))
+         (model-entry (vector-ref call 5))
+         (tokenizer (vector-ref call 6))
+         (ledger (vector-ref call 10))
+         (auxiliary (vector-ref output 8))
+         (raw (vector-ref auxiliary 0))
+         (staging (vector-ref auxiliary 1))
+         (native (vector-ref generator-entry 3))
+         (output-native (vector-ref output 3))
+         (shell (vector-ref output 0)))
+    (if (not (and (eq? (vector-ref ledger 3) 'p2g1-shell)
+                  (= (vector-ref (vector-ref generator-entry 7) 5) 1)
+                  (= (bytevector-length raw) 1)
+                  (= (bytevector-length staging) 8)
+                  (eq? (vector-ref ledger 4) output)))
+        (g3c4-fail 'invalid-state operation
+                   "C4 P2/G1 output tuple or child ledger changed"))
+    (g3c4-native-check (g3t-native-output-prepare native output-native)
+                       operation)
+    (g3c4-native-check
+      (g3t-native-output-copy-decode-ids native output-native staging)
+      operation)
+    (let ((accepted-byte (bytevector-u8-ref staging 0)))
+      (let check-upper ((index 1))
+        (if (< index 8)
+            (begin
+              (if (not (= (bytevector-u8-ref staging index) 0))
+                  (g3c4-fail 'invalid-state operation
+                             "C4 decoded ID upper bytes changed"))
+              (check-upper (+ index 1)))))
+      (t1-private-g3-decode-raw-into! tokenizer staging raw)
+      (g3c4-native-check
+        (g3t-native-output-accept-text native output-native raw) operation)
+      (g3t-output-entry-pending call output operation)
+      (g3c4-baseline-tokenizer-entry
+        tokenizer operation 'invalid-state 'invalid-state)
+      (g3c4-require-model-eval model-entry operation 'invalid-state)
+      (if (not (and (eq? (vector-ref output 8) auxiliary)
+                    (eq? (vector-ref auxiliary 0) raw)
+                    (eq? (vector-ref auxiliary 1) staging)
+                    (= (bytevector-u8-ref raw 0) accepted-byte)
+                    (= (bytevector-u8-ref staging 0) accepted-byte)))
+          (g3c4-fail 'invalid-state operation
+                     "C4 P2/G1 accepted raw carrier changed"))
+      (g3c4-native-check
+        (g3c4-native-generation-frame-prepare native output-native)
+        operation)
+      (g3c4-native-check (g3c4-native-call-prepare-end native) operation)
+      ;; Recheck mutable shell carriers and every no-failure-tail edge before
+      ;; entering native joint commit. No callback or allocation follows.
+      (g3t-output-entry-pending call output operation)
+      (g3c4-baseline-tokenizer-entry
+        tokenizer operation 'invalid-state 'invalid-state)
+      (g3c4-require-model-eval model-entry operation 'invalid-state)
+      (if (not (and (eq? (vector-ref output 8) auxiliary)
+                    (eq? (vector-ref auxiliary 0) raw)
+                    (eq? (vector-ref auxiliary 1) staging)
+                    (eq? (vector-ref output 3) output-native)
+                    (eq? (vector-ref ledger 4) output)
+                    (eq? (vector-ref generator-entry 9) call)
+                    (eq? (vector-ref model-entry 10) call)
+                    (= (bytevector-u8-ref raw 0) accepted-byte)
+                    (= (bytevector-u8-ref staging 0) accepted-byte)))
+          (g3c4-fail 'invalid-state operation
+                     "C4 P2/G1 raw text or publication link changed"))
+      (let check-upper ((index 1))
+        (if (< index 8)
+            (begin
+              (if (not (= (bytevector-u8-ref staging index) 0))
+                  (g3c4-fail 'invalid-state operation
+                             "C4 P2/G1 staging bytes changed"))
+              (check-upper (+ index 1)))))
+      (g3c4-native-check
+        (g3c4-native-generation-frame-commit native output-native)
+        operation)
+      (vector-set! ledger 3 'committed)
+      ;; Native A2/RNG/output are committed. Every remaining operation is
+      ;; preflighted, bounded and nonallocating; impossible failure is fatal.
+      (if (not (= (g3c4-native-call-finish native) 0)) (exit 134))
+      (vector-set! output 4 #f)
+      (vector-set! output 5 #f)
+      (vector-set! output 6 #f)
+      (vector-set! output 8 raw)
+      (vector-set! output 2 'live)
+      (vector-set! ledger 4 #f)
+      (g3c4-call-success! call generator-entry model-entry)
+      shell)))
+
+(define (g3c4-p2g1-output-entry-live shell operation)
+  (let ((entry (g3c4-registry-find shell operation)))
+    (if (not (and (vector? entry) (= (vector-length entry) 12)
+                  (eq? (vector-ref entry 0) shell)
+                  (eq? (vector-ref entry 1) 'output)
+                  (eq? (vector-ref entry 2) 'live)
+                  (vector-ref entry 3)
+                  (eq? (vector-ref entry 4) #f)
+                  (eq? (vector-ref entry 5) #f)
+                  (eq? (vector-ref entry 6) #f)
+                  (eq? (vector-ref entry 7) #f)
+                  (bytevector? (vector-ref entry 8))
+                  (= (bytevector-length (vector-ref entry 8)) 1)
+                  (eq? (vector-ref entry 9) #f)
+                  (eq? (vector-ref entry 10) #f)
+                  (eq? (vector-ref entry 11) g3c4-model-profile)))
+        (g3c4-fail 'invalid-state operation
+                   "C4 P2/G1 output shell is not independently live"))
+    entry))
+
+(define (g3c4-p2g1-output-release-internal! shell)
+  (let ((operation 'g3c4-p2g1-output-release-internal!))
+    (m3-call operation
+      (let ((entry (g3c4-registry-find shell operation)))
+        (if (g3c4-dead-entry? entry 'output)
+            #t
+            (let ((live (g3c4-p2g1-output-entry-live shell operation)))
+              (g3c4-native-check
+                (g3t-native-output-release (vector-ref live 3)) operation)
+              (g3c4-entry-dead! live)))))))
