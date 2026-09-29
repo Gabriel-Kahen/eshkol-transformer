@@ -13,6 +13,8 @@
         :real et_g3c4_output_envelope_test_owner_fail_after_v1)
 (extern i64 owner-fail-reset
         :real et_g3c4_output_envelope_test_owner_fail_reset_v1)
+(extern i64 coordinator-input-borrow ptr i64
+        :real et_g3c4_coordinator_test_input_borrow_v1)
 
 (define (reject-public label category operation thunk)
   (check label
@@ -47,10 +49,27 @@
 (define greedy
   (g3c4-public-generator-create
     model tokenizer (public-config 'greedy ':seed 41)))
+;; The private source-composed root initializes this gate eagerly, unlike an
+;; installed archive. Force the installed initial condition for this fixture.
+(vector-set! g3t-p2g1-pending-gate 0 #f)
 (reject-public "C4 input kind before native frame" 'invalid-argument
                'generator-generate!
   (lambda () (g3c4-public-generator-generate greedy model)))
+(check "wrong-kind rejection leaves pending gate disabled"
+  (not (vector-ref g3t-p2g1-pending-gate 0)))
+(define prompt-a-entry (g3c4-input-entry-live prompt-a 'test))
+(check "held input borrow begins before public preflight"
+  (= (coordinator-input-borrow (vector-ref prompt-a-entry 3) 1) 0))
+(reject-public "held input rejects during public native preflight"
+               'invalid-state 'generator-generate!
+  (lambda () (g3c4-public-generator-generate greedy prompt-a)))
+(check "rejected preflight leaves pending gate disabled"
+  (not (vector-ref g3t-p2g1-pending-gate 0)))
+(check "held input borrow ends before retry"
+  (= (coordinator-input-borrow (vector-ref prompt-a-entry 3) 0) 0))
 (define greedy-output (g3c4-public-generator-generate greedy prompt-a))
+(check "first valid C4 P2/G1 enables pending gate"
+  (vector-ref g3t-p2g1-pending-gate 0))
 (define greedy-copy (g3c4-p2g1-output-copy-internal greedy-output))
 (check "public greedy ID/raw parity and cache three"
   (and (= (vector-ref greedy-copy 2) 1)
