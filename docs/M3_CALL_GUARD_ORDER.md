@@ -1,8 +1,9 @@
 # M3 call cleanup-handler ordering follow-up
 
-Status: the reviewed source was integrated at `c9dce36` and the project now pins
-Eshkol `fe9dfd52`; the focused fe9 compiled witness and exact-head full CI remain
-pending for [issue #117](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/117).
+Status: the reviewed source was integrated at `c9dce36` and the project pins
+Eshkol `fe9dfd52`. The supported fe9 compiled handler-allocation witness
+passed, and the identical-tree PR #159 passed full supported CI for
+[issue #117](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/117).
 This is a narrow follow-up to the accepted shared-call implementation in PR #105;
 it does not revoke or broaden that implementation's recorded evidence.
 
@@ -70,6 +71,19 @@ and source-input manifest SHA-256
 This is focused witness evidence; it is not full integration CI or runtime-pin
 adoption.
 
+The supported fe9 follow-up witness at transformer commit `70e8293` passed
+with the pinned Clang 21 runner and runtime archive after the pin adoption.
+Its `m3-guard-fe9-witness-70e8293-20260929-a/SHA256SUMS` evidence seal
+(SHA-256 `204b790f21722ad37d122e7650cba66352a655c73ef6d3062573382f263a3b89`)
+verifies. The compiled run reports prepublication `body=0 idle=1 retry=1`
+and body-failure `body=1 idle=1 retry=1`, with exact condition-5 identity
+and empty runtime stderr. PR #156 passed the supported model-composition
+and suite-evidence jobs at this implementation. PR #159 then passed all
+23 supported checks at head `b839b17`/tree `1eefefb`, identical to merged
+main `a51ab96`'s tree; no M3 production blob changed between the witness
+and then-main tree. This closes the requested fe9 failure/retry and full-CI
+acceptance for the narrow guard-order correction.
+
 The reviewed implementation and witness fixture were replayed onto main at
 `c9dce36`; nine issue-117 source, test and document files have the same blobs
 as `dda768b`. The tenth, `tests/m3cg/predecessor_sources.sha256`, records an
@@ -85,10 +99,10 @@ The fe9 header retains the handler layout and tagged condition fields used by th
 fixture; its archive exports the same push, caught-value, emergency-raise and
 handler-stack symbols. The `--wrap=malloc` failure and exact caught identity,
 guard-stack, untouched-body, idle-state and retry assertions are unchanged. This
-is a candidate: the fe9 compiled witness has not run, and the 81298 evidence
-does not establish fe9 behavior. Run the script on the supported Ubuntu 22.04 /
-LLVM 21.1.8 image against the authenticated source and build, then verify its
-recorded source-input and evidence manifests before #117 acceptance.
+was the pre-run candidate contract: the 81298 evidence alone did not establish
+fe9 behavior. The supported Ubuntu 22.04 / LLVM 21.1.8 fe9 run above executed
+that same failure/retry witness against the authenticated source and build;
+its verified seal covers the source-input and evidence manifests.
 
 Independent reviewer `/root/c4_final_review` approved the frozen implementation,
 tests and documentation. The reviewed aggregate manifests have SHA-256
@@ -121,9 +135,8 @@ The test records raw depfiles, a sorted SHA-256 manifest of every compiler-repor
 Eshkol input plus all manually compiled and reviewed-delta sources, the exact
 inherited-plus-two-runner global inventory, link map, runtime/source/executable
 hashes, stdout and stderr. This is a focused allocation-failure witness, not
-evidence for every failure path, sanitizer coverage or full CI. Root still owns
-the immutable-runtime adoption, full integration CI and acceptance union.
+evidence for every failure path or sanitizer coverage. The supported fe9 run
+and identical-tree full CI above complete this correction's acceptance union.
 
 No E3/P1/D2 consumer implementation, G3 runtime, public ABI, numerical behavior,
-full-training capability, or new pin is part of this correction. Root owns the
-runtime-pin union, the single full-CI dispatch, acceptance, and merge.
+full-training capability, or new pin is part of this correction.
