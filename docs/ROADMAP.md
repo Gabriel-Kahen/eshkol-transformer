@@ -660,9 +660,14 @@ tokenizer and native failure helpers. Independent review and the linked/runtime
 gate remain pending. The next supported build compiled the IR and native objects,
 then rejected a 101-row native closure manifest: compiler depfiles selected 98
 rows and did not include the historical T1, X1, or P1 package bridge sources.
-The test-only manifest now matches those 98 compiler-selected rows while
-retaining the exact closure comparison. Link and runtime behavior remain
-unproved pending the next exact-head gate.
+The test-only manifest matched those 98 compiler-selected rows and retained
+the exact closure comparison. The next gate passed that check but failed final
+native link: E3 and G3-T each included the M3 model and transport, yielding 49
+duplicate globals and separate private registries. The test-only CLI3 package
+now compiles E3 then G3-T in one native translation unit with one M3 owner;
+standalone E3 and G3-T retain their original source modes. The candidate
+99-row closure adds only the aggregate source path. Local strict C/object tests
+pass; supported linked/runtime acceptance remains pending independent review.
 
 The bounded [TR3 one-batch overfit](TR3_ONE_BATCH_OVERFIT.md) and
 [disjoint held-out improvement](TR3_HELDOUT_IMPROVEMENT.md) witnesses are

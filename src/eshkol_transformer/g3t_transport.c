@@ -1,6 +1,12 @@
 /* Source-private G3-T transport composition. M3T's native registry and owner
  * are included once; no C4 identity or transport source enters this TU. */
+#ifdef ET_G3T_REUSE_E3_M3_OWNER_PRIVATE
+#ifndef ET_CLI3_E3_M3_OWNER_INCLUDED
+#error "G3-T shared M3 owner requires the CLI3 E3/G3-T aggregate TU"
+#endif
+#else
 #include "m3_model.c"
+#endif
 #include "g3t_transport.h"
 #include "m3_call_pins.h"
 #include "eshkol_transformer/a2_kv_cache.h"
