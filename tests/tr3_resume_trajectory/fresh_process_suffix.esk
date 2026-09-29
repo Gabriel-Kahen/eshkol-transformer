@@ -75,6 +75,18 @@
          (<= (* updates trajectory-accumulation) tokens)
          (<= tokens (* 2 updates trajectory-accumulation)))))
 (define (trajectory-step shell)
+  (let* ((optimizer (vector-ref (record-for-shell shell) 13))
+         (update (+ 1 (o2-optimizer-completed-updates-internal optimizer)))
+         (factor (o2-optimizer-schedule-factor-bits-internal optimizer)))
+    (display "TR3-C NEXT LR ")
+    (display trajectory-mode)
+    (display " ")
+    (display trajectory-accumulation)
+    (display " ")
+    (display update)
+    (display " ")
+    (display factor)
+    (newline))
   (check "genuine configured update" (tr3-step-composer-internal! shell)))
 
 (check "supported accumulation profile"
