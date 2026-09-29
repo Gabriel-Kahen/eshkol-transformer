@@ -1,0 +1,44 @@
+;;; Additive C4 model/input authority in the single G3-G owning aggregate.
+;;; The probes inspect exact registered shell identity without touching payloads.
+(extern ptr g3c4-native-input-from-t1-p2 ptr
+        :real et_g3c4_private_input_from_t1_p2_v1)
+(define (g3c4-public-transport-member shell)
+  (let loop ((entries (vector-ref g3c4-registry 0)))
+    (cond ((null? entries) #f)
+          ((eq? (vector-ref (car entries) 0) shell) (car entries))
+          (else (loop (cdr entries))))))
+
+(define (g3c4-public-model-member shell)
+  (let loop ((entries (vector-ref g3c4-model-registry 0)))
+    (cond ((null? entries) #f)
+          ((eq? (vector-ref (car entries) 0) shell) (car entries))
+          (else (loop (cdr entries))))))
+
+(define (g3c4-public-rethrow caught operation)
+  (let ((unreachable
+          (if (transformer-error? caught)
+              (et-e1b-private-raise
+                (transformer-error-category caught) operation
+                "generation operation rejected the request"
+                (transformer-error-details caught) #f)
+              (et-e1b-private-raise
+                'internal operation "generation dependency failed" '() #f))))
+    unreachable))
+
+(define-syntax g3c4-public-boundary
+  (syntax-rules ()
+    ((_ operation body ...)
+     (guard (caught (#t (g3c4-public-rethrow caught operation)))
+       body ...))))
+
+(define (g3c4-public-model-create-seeded seed)
+  (g3c4-public-boundary 'diagnostic-c4-model-create-seeded
+    (g3c4-model-create-seeded-internal seed)))
+
+(define (g3c4-public-generation-input-create encoded)
+  (g3c4-public-boundary 'generation-c4-input-create
+    (if (not (t1-wave1-tensor-admitted? encoded))
+        (g3c4-fail 'invalid-argument 'generation-c4-input-create
+                   "expected same-aggregate sealed T1 input"))
+    (g3c4-input-create-with-native encoded 'generation-c4-input-create
+      g3c4-native-input-from-t1-p2)))

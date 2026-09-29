@@ -166,4 +166,83 @@
        (generation-tensor-release! zero-decode)
        (generation-tensor-release! zero-prefix)
        (generation-tensor-release! zero-token)))
+;;; Additive C4 authority remains separate from C2 generation.
+(expect-error "C4 seed negative" 'invalid-argument
+  'diagnostic-c4-model-create-seeded
+  (lambda () (diagnostic-c4-model-create-seeded -1)))
+(expect-error "C4 seed noninteger" 'invalid-argument
+  'diagnostic-c4-model-create-seeded
+  (lambda () (diagnostic-c4-model-create-seeded "1729")))
+(define c4-model-a (diagnostic-c4-model-create-seeded 1729))
+(define c4-model-b (diagnostic-c4-model-create-seeded 1730))
+(check "distinct rooted C4 model shells" (not (eq? c4-model-a c4-model-b)))
+(define c4-tree (module-parameters c4-model-a))
+(define (proper-length values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count (loop (cdr remaining) (+ count 1)))))
+(check "C4 has 14 unique handles and one tied path"
+  (= (proper-length (parameter-tree-paths c4-tree)) 15))
+(check "C4 head weight shares the embedding handle"
+  (eq? (parameter-tree-handle c4-tree '("head" "weight"))
+       (parameter-tree-handle c4-tree '("token_embedding" "weight"))))
+(define (c4-only-tie? left right)
+  (or (and (equal? left '("head" "weight"))
+           (equal? right '("token_embedding" "weight")))
+      (and (equal? right '("head" "weight"))
+           (equal? left '("token_embedding" "weight")))))
+(define (c4-unique-handles? tree paths)
+  (let outer ((rest paths))
+    (if (null? rest) #t
+        (and (let inner ((later (cdr rest)))
+               (if (null? later) #t
+                   (and (or (not (eq?
+                                   (parameter-tree-handle tree (car rest))
+                                   (parameter-tree-handle tree (car later))))
+                            (c4-only-tie? (car rest) (car later)))
+                        (inner (cdr later)))))
+             (outer (cdr rest))))))
+(check "C4 no other handle aliases"
+  (c4-unique-handles? c4-tree (parameter-tree-paths c4-tree)))
+(check "C4 vocabulary handle shape"
+  (equal? (parameter-handle-shape
+            (parameter-tree-handle c4-tree '("head" "weight")))
+          '(256 4)))
+(check "C4 model remains in eval mode" (module-eval! c4-model-a))
+(expect-error "C4 model is wrong release kind" 'invalid-argument
+  'generation-tensor-release!
+  (lambda () (generation-tensor-release! c4-model-a)))
+(define c4-t1-two (tokenizer-encode tokenizer (bytevector 0 255)))
+(define c4-input-a (generation-c4-input-create c4-t1-two))
+(define c4-input-b (generation-c4-input-create c4-t1-two))
+(check "distinct copied C4 input shells" (not (eq? c4-input-a c4-input-b)))
+(check "T1 source remains readable" (same-bytes?
+  (tokenizer-decode tokenizer c4-t1-two) (bytevector 0 255)))
+(expect-error "C4 input copied shell rejects" 'invalid-argument
+  'generation-tensor-release!
+  (lambda () (generation-tensor-release! (vector 'g3c4-input-private))))
+(expect-error "C4 input wrong T1 kind" 'invalid-argument
+  'generation-c4-input-create
+  (lambda () (generation-c4-input-create pair-input)))
+(expect-error "C4 input foreign T1" 'invalid-argument
+  'generation-c4-input-create
+  (lambda () (generation-c4-input-create (vector 'foreign))))
+(expect-error "C4 input P1 rejects" 'shape-mismatch
+  'generation-c4-input-create
+  (lambda () (generation-c4-input-create
+               (tokenizer-encode tokenizer (bytevector 0)))))
+(expect-error "C4 input P3 rejects" 'shape-mismatch
+  'generation-c4-input-create
+  (lambda () (generation-c4-input-create
+               (tokenizer-encode tokenizer (bytevector 0 1 255)))))
+(expect-error "C4 input empty rejects" 'shape-mismatch
+  'generation-c4-input-create
+  (lambda () (generation-c4-input-create
+               (tokenizer-encode tokenizer (bytevector)))))
+(check "C4 input exact release and repeated release"
+  (and (generation-tensor-release! c4-input-a)
+       (generation-tensor-release! c4-input-a)))
+(check "C4 sibling survives release" (generation-tensor-release! c4-input-b))
+(expect-error "C4 model remains wrong kind after input releases"
+  'invalid-argument 'generation-tensor-release!
+  (lambda () (generation-tensor-release! c4-model-b)))
 (display "G3G-MANUAL-PUBLIC-PASS") (newline)

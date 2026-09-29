@@ -273,9 +273,10 @@
                    "C4 input authority is not exact and live"))
     entry))
 
-(define (generation-input-create-internal encoded)
-  (let ((operation 'generation-input-create-internal))
-    (m3-call operation
+(define-syntax g3c4-input-create-with-native
+  (syntax-rules ()
+    ((_ encoded operation native-create)
+     (m3-call operation
       (if (not (t1-wave1-tensor-admitted? encoded))
           (g3c4-fail 'invalid-argument operation
                      "C4 prompt must be a same-aggregate T1 tensor"))
@@ -295,14 +296,18 @@
           (vector-set! g3c4-registry 0 next)
           (let* ((canonical (car (vector-ref g3c4-registry 0)))
                  (canonical-ledger (vector-ref canonical 10))
-                 (created (g3c4-native-input-from-t1 encoded)))
+                 (created (native-create encoded)))
             (set! native created)
             (if (null? created) (g3c4-native-fail operation))
             (vector-set! canonical-ledger 0 created)
             (vector-set! canonical 3 created)
             (vector-set! canonical 2 'live)
             (vector-set! canonical 10 #f)
-            (vector-ref canonical 0)))))))
+            (vector-ref canonical 0))))))))
+
+(define (generation-input-create-internal encoded)
+  (g3c4-input-create-with-native encoded 'generation-input-create-internal
+    g3c4-native-input-from-t1))
 
 (define (generation-tensor-release-internal! value)
   (let ((operation 'generation-tensor-release-internal!))
