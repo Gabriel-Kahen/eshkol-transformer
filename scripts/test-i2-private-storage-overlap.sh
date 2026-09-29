@@ -47,6 +47,17 @@ run_mode() {
     environment=(env ASAN_OPTIONS=detect_leaks=1:halt_on_error=1
       UBSAN_OPTIONS=halt_on_error=1)
   fi
+  for test_name in test_f32_tensor test_f32_parameter; do
+    "${cc}" "${flags[@]}" "${mode_flags[@]}" \
+      "${project_root}/tests/i2/${test_name}.c" \
+      "${project_root}/native/f32_tensor.c" \
+      "${project_root}/native/kernel_abi.c" -lm \
+      -o "${evidence}/${test_name}-${mode}"
+    "${environment[@]}" "${evidence}/${test_name}-${mode}" \
+      >"${evidence}/${test_name}-${mode}.stdout" \
+      2>"${evidence}/${test_name}-${mode}.stderr"
+    test ! -s "${evidence}/${test_name}-${mode}.stderr"
+  done
   "${cc}" "${flags[@]}" "${mode_flags[@]}" \
     "${project_root}/tests/i2/test_alias_envelope.c" \
     "${project_root}/native/kernel_abi.c" -lm \
@@ -82,6 +93,10 @@ test ! -s "${evidence}/g3-repeat.stderr"
 cmp "${evidence}/g3-normal.stdout" "${evidence}/g3-repeat.stdout"
 run_mode sanitizer
 cmp "${evidence}/g3-normal.stdout" "${evidence}/g3-sanitizer.stdout"
+for test_name in test_f32_tensor test_f32_parameter; do
+  cmp "${evidence}/${test_name}-normal.stdout" \
+      "${evidence}/${test_name}-sanitizer.stdout"
+done
 for case_name in coverage product endpoint uninitialized; do
   cmp "${evidence}/i2-normal-${case_name}.stdout" \
       "${evidence}/i2-sanitizer-${case_name}.stdout"
