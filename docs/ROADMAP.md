@@ -659,8 +659,10 @@ pending; the production CLI3 package does not yet export `generate`.
 The independently reviewed exact CLI3 tuple repair passed source-policy tests.
 Its next supported build exposed six shared error globals incorrectly listed as
 package exports. The corrected manifest matches the retained builder-selected
-146-export list byte for byte; independent review and the linked/runtime gate
-remain pending.
+146-export prerequisite list byte for byte, with six shared error globals in its
+152 public strings. The command successor adds one `generate` export: 147 exports
+and 153 public strings. Independent review and the linked/runtime gate remain
+pending.
 
 The bounded [TR3 one-batch overfit](TR3_ONE_BATCH_OVERFIT.md) and
 [disjoint held-out improvement](TR3_HELDOUT_IMPROVEMENT.md) witnesses are
