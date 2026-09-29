@@ -189,6 +189,8 @@
              (lambda () (trainer-state trainer)))
            (expect-error 'poll-load 'invalid-state 'trainer-load-state!
              (lambda () (trainer-load-state! trainer idle-state)))
+           (expect-error 'poll-evaluate 'invalid-state 'trainer-evaluate!
+             (lambda () (trainer-evaluate! trainer dataset)))
            (check 'poll-cursor-preserved
              (bytes=? cursor-before (token-dataset-cursor dataset)))
            (write-bytes receipt (bytevector 1)))

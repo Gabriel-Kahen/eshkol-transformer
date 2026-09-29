@@ -458,6 +458,10 @@
           (interrupt-error? 'invalid-state 'trainer-load-state!
             (lambda ()
               (trainer-load-state! interrupt-trainer interrupt-idle-state))))
+        (check 'poll-evaluate-guard
+          (interrupt-error? 'invalid-state 'trainer-evaluate!
+            (lambda ()
+              (trainer-evaluate! interrupt-trainer interrupt-dataset))))
         (check 'poll-cursor-preserved
           (bytes-equal? cursor-before
                         (token-dataset-cursor interrupt-dataset)))
