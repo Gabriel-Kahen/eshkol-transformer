@@ -1,0 +1,10 @@
+;;; A0 trainer state facade over the accepted same-registry TR3-C transactions.
+;;; The private result cells never cross the installed API boundary.
+
+(define (trainer-state trainer)
+  (let ((result (vector #f)))
+    (tr3-c-trainer-state-internal trainer result)))
+
+(define (trainer-load-state! trainer state)
+  (let ((result (vector #f)))
+    (tr3-c-trainer-load-state-internal! trainer state result)))

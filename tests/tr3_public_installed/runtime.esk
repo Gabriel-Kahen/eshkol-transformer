@@ -284,6 +284,14 @@
 (define trainer (trainer-create resolved tokenizer dataset model optimizer))
 (check "genuine trainer shell" (and (vector? trainer)
                                     (= (vector-length trainer) 1)))
+(expect-error "forged public snapshot trainer"
+              'invalid-argument 'trainer-state
+  (lambda () (trainer-state (vector 'forged))))
+(expect-error "forged public restore state"
+              'invalid-argument 'trainer-load-state!
+  (lambda () (trainer-load-state! trainer (vector 'forged))))
+(define idle-state (trainer-state trainer))
+(check "public snapshot is detached from trainer" (not (eq? idle-state trainer)))
 (expect-error "forged public step rejects exact shell"
               'invalid-argument 'trainer-step!
   (lambda () (trainer-step! (vector 'forged))))
@@ -305,6 +313,12 @@
 (define live-batch (token-dataset-next-batch dataset))
 (check "genuine D2 batch is live" (procedure? live-batch))
 (define before-busy-step-cursor (token-dataset-cursor dataset))
+(expect-error "live D2 batch rejects snapshot"
+              'invalid-state 'trainer-state
+  (lambda () (trainer-state trainer)))
+(expect-error "live D2 batch rejects restore"
+              'invalid-state 'trainer-load-state!
+  (lambda () (trainer-load-state! trainer idle-state)))
 (expect-error "live D2 batch rejects public step"
               'invalid-state 'trainer-step!
   (lambda () (trainer-step! trainer)))
@@ -322,6 +336,10 @@
        (and (token-dataset-seek! dataset trainer-start-cursor)
             (bytes-equal? trainer-start-cursor
                           (token-dataset-cursor dataset))))
+(check "detached state release" (trainer-state-release! idle-state))
+(expect-error "released detached state rejects restore"
+              'invalid-state 'trainer-load-state!
+  (lambda () (trainer-load-state! trainer idle-state)))
 (check "idle trainer release" (trainer-release! trainer))
 (expect-release-error "repeat release tombstone"
                       'invalid-argument
@@ -348,11 +366,63 @@
 (expect-error "step metrics reject foreign key"
               'invalid-argument 'metrics-ref
   (lambda () (metrics-ref first-step 'epochs)))
+(define first-state (trainer-state step-trainer))
+(define first-cursor (token-dataset-cursor dataset))
+(define mismatch-resolved
+  (config-resolve
+    (config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":9876,\"training.accumulation-steps\":2}")
+    '()))
+(define mismatch-tokenizer (tokenizer-byte mismatch-resolved))
+(define mismatch-dataset
+  (token-dataset-open (dataset-options) mismatch-tokenizer))
+(define mismatch-model
+  (with-region ('tr3-public-mismatch-model 65536)
+    (diagnostic-model-create
+      mismatch-resolved (diagnostic-initializer-state 9876))))
+(define mismatch-tree (module-parameters mismatch-model))
+(define mismatch-optimizer-config
+  (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+        '(none) '(constant)
+        (list (list 'group (unique-paths mismatch-tree)
+                    "3dcccccd" "3f000000" "3f000000"
+                    "3a83126f" "00000000"))))
+(define mismatch-optimizer
+  (optimizer-create mismatch-optimizer-config mismatch-tree))
+(define mismatch-trainer
+  (trainer-create mismatch-resolved mismatch-tokenizer mismatch-dataset
+                  mismatch-model mismatch-optimizer))
+(define mismatch-cursor (token-dataset-cursor mismatch-dataset))
+(expect-error "authentic X1 run-seed mismatch rejects public restore"
+              'invalid-state 'trainer-load-state!
+  (lambda () (trainer-load-state! mismatch-trainer first-state)))
+(check "mismatch preserves receiver cursor"
+       (bytes-equal? mismatch-cursor (token-dataset-cursor mismatch-dataset)))
+(check "mismatch trainer releases" (trainer-release! mismatch-trainer))
+(check "mismatch dataset closes" (token-dataset-close! mismatch-dataset))
 (define second-step (trainer-step! step-trainer))
 (check "public step increments update with old metrics stable"
        (and (= (metrics-ref second-step 'update) 2)
             (= (metrics-ref first-step 'update) 1)
             (= (metrics-ref second-step 'microbatches) 2)))
+(check "public restore rewinds the advanced trainer"
+       (trainer-load-state! step-trainer first-state))
+(check "public restore recovers exact D2 cursor"
+       (bytes-equal? first-cursor (token-dataset-cursor dataset)))
+(define repeated-second-step (trainer-step! step-trainer))
+(check "public restore repeats the next numerical step"
+       (and (= (metrics-ref second-step 'loss)
+               (metrics-ref repeated-second-step 'loss))
+            (= (metrics-ref second-step 'mask-weight)
+               (metrics-ref repeated-second-step 'mask-weight))
+            (= (metrics-ref second-step 'tokens)
+               (metrics-ref repeated-second-step 'tokens))
+            (= (metrics-ref second-step 'microbatches)
+               (metrics-ref repeated-second-step 'microbatches))
+            (= (metrics-ref second-step 'update)
+               (metrics-ref repeated-second-step 'update))))
+(check "public resume owner releases after restore"
+       (trainer-state-release! first-state))
 (define resumed-summary
   (trainer-train! step-trainer (trainer-stop-policy #f 2 #f)))
 (check "nonzero lifetime counters still allow invocation-delta updates"

@@ -123,6 +123,7 @@
             (= (metrics-ref first 'microbatches) 2)
             (= (metrics-ref first 'update) 1)))
 (define committed-cursor (token-dataset-cursor dataset))
+(define committed-state (trainer-state trainer))
 (inject! 'rewind)
 (expect-step-failure trainer)
 (check 'rewind-cursor-rollback
@@ -138,6 +139,27 @@
                1085108487)
             (= (f32-bits (vector (metrics-ref second 'mask-weight)))
                1077936128)))
+(check 'restore-advanced-step (trainer-load-state! trainer committed-state))
+(check 'restore-committed-cursor
+       (bytes-equal? committed-cursor (token-dataset-cursor dataset)))
+(inject! 'precommit)
+(expect-step-failure trainer)
+(check 'restored-precommit-rollback
+       (bytes-equal? committed-cursor (token-dataset-cursor dataset)))
+(inject! #f)
+(define repeated-second (trainer-step! trainer))
+(check 'restored-next-step-exact-f32-metrics
+       (and (= (f32-bits (vector (metrics-ref second 'loss)))
+               (f32-bits (vector (metrics-ref repeated-second 'loss))))
+            (= (f32-bits (vector (metrics-ref second 'mask-weight)))
+               (f32-bits (vector (metrics-ref repeated-second 'mask-weight))))
+            (= (metrics-ref second 'tokens)
+               (metrics-ref repeated-second 'tokens))
+            (= (metrics-ref second 'microbatches)
+               (metrics-ref repeated-second 'microbatches))
+            (= (metrics-ref second 'update)
+               (metrics-ref repeated-second 'update))))
+(check 'detached-state-release (trainer-state-release! committed-state))
 (check 'release (trainer-release! trainer))
 (check 'close (token-dataset-close! dataset))
 (define train-dataset
