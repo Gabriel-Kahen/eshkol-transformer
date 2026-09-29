@@ -41,7 +41,7 @@ test ! -s "${evidence}/added-undefined.txt"
 
 run_mode() {
   local mode="$1"
-  local -a mode_flags=(-O2) environment=()
+  local -a mode_flags=(-O2) environment=(env)
   if [[ "${mode}" == sanitizer ]]; then
     mode_flags=(-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer)
     environment=(env ASAN_OPTIONS=detect_leaks=1:halt_on_error=1
