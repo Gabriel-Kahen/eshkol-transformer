@@ -83,6 +83,31 @@ class SingleRegistryContract(unittest.TestCase):
         self.assertIn('void et_e1b_public_cli3_generate_dispatch_v1(',
                       bridge[len(expected):])
 
+    def test_native_closure_uses_installed_tr3_bridge(self):
+        closure = lines(FIXTURE / 'aggregate_native_source_closure.txt')
+        predecessor = lines(NATIVE / 'cli3_native_source_closure.txt')
+        self.assertEqual(closure[:len(predecessor) + 1],
+                         predecessor[:6] +
+                         ['tests/cli3_generate/aggregate_bridge.c'] +
+                         predecessor[6:])
+        self.assertEqual(closure[len(predecessor) + 1:], [
+            'src/eshkol_transformer/g3t_transport.c',
+            'src/eshkol_transformer/g3t_transport.h',
+            'include/eshkol_transformer/a2_kv_cache.h',
+            'include/eshkol_transformer/g3n_primitives_abi.h',
+            'include/eshkol_transformer/g3s_sampling_abi.h',
+            'src/eshkol_transformer/g3t_prefill_roles.inc',
+            'native/a2_kv_cache.c',
+            'native/g3n_primitives_provider.c',
+            'native/g3s_sampling_provider.c',
+        ])
+        self.assertIn('#include "tr3_public_installed_bridge.c"',
+                      (NATIVE / 'cli3_package_bridge.c').read_text())
+        for legacy_bridge in ('native/t1_wave1_package_bridge.c',
+                              'native/x1_config_consumer_bridge.c',
+                              'native/p1_package_bridge.c'):
+            self.assertNotIn(legacy_bridge, closure)
+
     def test_witness_uses_public_checkpoint_and_generation(self):
         witness = (FIXTURE / 'public_runtime.esk').read_text()
         for call in ('(capability-discover)', '(checkpoint-load ',
