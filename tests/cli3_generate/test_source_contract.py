@@ -18,10 +18,17 @@ class SingleRegistryContract(unittest.TestCase):
         g3 = lines(NATIVE / 'g3g_package_root.esk')
         self.assertEqual(aggregate[1], '(load "cli3_root.esk")')
         self.assertEqual(aggregate[2], '(load "t2_g3g_private_bridge.esk")')
-        self.assertEqual(aggregate[3:-1], g3[3:])
-        self.assertEqual(aggregate[-1], '(load "generate_extension.esk")')
+        self.assertEqual(aggregate[3:len(g3)], g3[3:])
+        self.assertEqual(aggregate[len(g3)], '(load "generate_extension.esk")')
+        self.assertEqual(aggregate.count('(load "generate_extension.esk")'), 1)
         self.assertEqual(aggregate.count('(load "cli3_root.esk")'), 1)
         self.assertNotIn('(load "m3_package_root.esk")', aggregate)
+
+        root = (FIXTURE / 'aggregate_root.esk').read_text()
+        self.assertIn('(vector-set! t2-wave2-policy-projector 0 '
+                      'c2-policy-t2-entry-internal)', root)
+        self.assertIn('(c2-public-persistence-policy', root)
+        self.assertEqual(root.count('(vector-set! t2-wave2-policy-projector'), 1)
 
     def test_g3g_uses_the_existing_t2_tokenizer_authority(self):
         bridge = (FIXTURE / 't2_g3g_private_bridge.esk').read_text()
@@ -75,13 +82,21 @@ class SingleRegistryContract(unittest.TestCase):
         g3_wrappers = g3.split('#include "m3_package_bridge.c"\n', 1)[1].strip()
         expected = (
             '/* Test-only same-registry CLI3/TR3 plus accepted G3 wrappers. */\n'
-            '#include "cli3_package_bridge.c"\n\n'
+            '/* Keep the installed public C signature and route only this fixture\'s policy\n'
+            ' * entry through the canonical C2-to-T2 projector installation. */\n'
+            '#define et_e1b_private_c2_persistence_policy_cabi_v1 \\\n'
+            '  et_e1b_private_cli3_generate_policy_cabi_v1\n'
+            '#include "cli3_package_bridge.c"\n'
+            '#undef et_e1b_private_c2_persistence_policy_cabi_v1\n\n'
             + g3_wrappers + '\n')
         self.assertIn(m3_wrappers, tr3)
         self.assertTrue(bridge.startswith(expected))
         self.assertNotIn(m3_wrappers, bridge)
         self.assertIn('void et_e1b_public_cli3_generate_dispatch_v1(',
                       bridge[len(expected):])
+        self.assertIn(
+            'cli3-generate-public-policy et_e1b_private_cli3_generate_policy_cabi_v1',
+            lines(FIXTURE / 'aggregate_private_renames.txt'))
 
     def test_native_closure_uses_installed_tr3_bridge(self):
         closure = lines(FIXTURE / 'aggregate_native_source_closure.txt')
@@ -122,6 +137,13 @@ class SingleRegistryContract(unittest.TestCase):
                      '(generation-input-create encoded)',
                      '(generation-output-text output)', '(greedy-oracle '):
             self.assertIn(call, witness)
+        self.assertIn('(tokenizer-load tokenizer-path (vector \'forged))', witness)
+        self.assertLess(witness.index('(define before-logits'),
+                        witness.index('(define trainer (trainer-create'))
+        self.assertLess(witness.index('failed LOAD leaves receiver model untouched'),
+                        witness.index('(define trainer (trainer-create'))
+        self.assertLess(witness.index('(check "trainer release"'),
+                        witness.index('(check "restored model changed"'))
         self.assertNotIn('et_e1b_private_', witness)
         self.assertNotIn('g3t-', witness)
 

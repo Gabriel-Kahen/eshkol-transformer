@@ -15,3 +15,11 @@
 (load "g3t_text_result_extension.esk")
 (load "g3g_public_extension.esk")
 (load "generate_extension.esk")
+
+;;; Direct public facades do not pass through CLI3 dispatch, which reinstalls
+;;; this authenticated C2-to-T2 projector at its own entry boundary.
+(define (cli3-generate-public-policy max-file max-metadata max-tensor
+                                     max-tensors device)
+  (vector-set! t2-wave2-policy-projector 0 c2-policy-t2-entry-internal)
+  (c2-public-persistence-policy
+    max-file max-metadata max-tensor max-tensors device))

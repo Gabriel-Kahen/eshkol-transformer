@@ -1,5 +1,10 @@
 /* Test-only same-registry CLI3/TR3 plus accepted G3 wrappers. */
+/* Keep the installed public C signature and route only this fixture's policy
+ * entry through the canonical C2-to-T2 projector installation. */
+#define et_e1b_private_c2_persistence_policy_cabi_v1 \
+  et_e1b_private_cli3_generate_policy_cabi_v1
 #include "cli3_package_bridge.c"
+#undef et_e1b_private_c2_persistence_policy_cabi_v1
 
 extern eshkol_tagged_value_t et_e1b_private_g3_generator_create_cabi_v1(eshkol_tagged_value_t arg0, eshkol_tagged_value_t arg1, eshkol_tagged_value_t arg2);
 void et_e1b_public_g3_generator_create_v1(void *arg0, void *arg1, void *arg2, void *output) {

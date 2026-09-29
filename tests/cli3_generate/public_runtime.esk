@@ -88,9 +88,11 @@
     (config-parse
       "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729,\"training.accumulation-steps\":2}")
     '()))
-(define tokenizer
-  (tokenizer-load tokenizer-path
-                  (persistence-policy 1048576 1048576 1048576 64 'cpu)))
+(define tokenizer-policy
+  (persistence-policy 1048576 1048576 1048576 64 'cpu))
+(expect-error "forged tokenizer policy" 'invalid-argument 'tokenizer-load
+  (lambda () (tokenizer-load tokenizer-path (vector 'forged))))
+(define tokenizer (tokenizer-load tokenizer-path tokenizer-policy))
 (check "canonical T1" (and (= (tokenizer-vocab-size tokenizer) 256)
                             (string=? (tokenizer-fingerprint tokenizer)
                               "sha256:eshkol-byte-tokenizer-v1:aabb31f49216963582383a00fd2e85d7c20b658d5bef0e7945344ed6bfe50704")))
@@ -112,7 +114,6 @@
           (list (list 'group (unique-paths tree) "3dcccccd" "3f000000"
                       "3f000000" "3a83126f" "00000000")))
     tree))
-(define trainer (trainer-create resolved tokenizer dataset model optimizer))
 (define before-logits (logits-for model 65))
 (define checkpoint-policy (persistence-policy 16777216 524288 8388608 64 'cpu))
 (expect-error "forged capability report" 'invalid-argument 'checkpoint-load
@@ -124,6 +125,7 @@
   (lambda () (checkpoint-load torn-path checkpoint-policy capabilities)))
 (check "failed LOAD leaves receiver model untouched"
   (same-bytes? before-logits (logits-for model 65)))
+(define trainer (trainer-create resolved tokenizer dataset model optimizer))
 (define loaded (checkpoint-load checkpoint-path checkpoint-policy capabilities))
 (expect-error "forged trainer state" 'invalid-argument 'trainer-load-state!
   (lambda () (trainer-load-state! trainer (vector 'forged))))
@@ -131,6 +133,7 @@
 (check "detached state release" (trainer-state-release! loaded))
 (expect-error "released state cannot restore" 'invalid-state 'trainer-load-state!
   (lambda () (trainer-load-state! trainer loaded)))
+(check "trainer release" (trainer-release! trainer))
 (check "restored model changed" (not (same-bytes? before-logits (logits-for model 65))))
 (check "eval mode" (module-eval! model))
 (expect-error "wrong-kind model" 'invalid-argument 'generator-create
@@ -186,7 +189,6 @@
 (define categorical (generate-once categorical-policy))
 (check "seeded categorical repeat"
   (= categorical (generate-once categorical-policy)))
-(check "trainer release" (trainer-release! trainer))
 (check "D2 close" (token-dataset-close! dataset))
 (display "CLI3-GENERATE-CHECKPOINT-PREREQUISITE-PASS ")
 (display first)

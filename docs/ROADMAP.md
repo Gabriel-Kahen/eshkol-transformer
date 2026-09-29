@@ -665,18 +665,24 @@ and 153 public strings. The following supported prerequisite build reached
 LLVM IR generation and found three G3-G T1 private helper names absent from the
 CLI3 TR3/T2 root. An independently reviewed test-only bridge binds those names
 to the same-registry T2 tokenizer and native failure helpers. The next
-supported prerequisite build compiled the IR and native objects, then rejected
-a 101-row native closure manifest: compiler depfiles selected 98 rows and did
-not include the historical T1, X1, or P1 package bridge sources. Both test-only
-manifests matched those 98 compiler-selected rows and retained the exact
-closure comparison. The next prerequisite gate passed that check but failed
-final native link: E3 and G3-T each included the M3 model and transport,
-yielding 49 duplicate globals and separate private registries. An independently
-reviewed test-only aggregate now compiles E3 then G3-T in one native translation
-unit with one M3 owner; standalone E3 and G3-T keep their original source modes.
-Both 99-row closures add only the aggregate source path. Local strict C/object
-tests pass. Supported prerequisite and successor linked/runtime gates remain
-pending.
+supported prerequisite build compiled IR and native objects, then rejected a
+101-row native closure manifest: compiler depfiles selected 98 rows and did not
+include the historical T1, X1, or P1 package bridge sources. Both test-only
+manifests matched those 98 rows and retained the exact closure comparison. The
+next prerequisite gate passed that check but failed final native link: E3 and
+G3-T each included the M3 model and transport, yielding 49 duplicate globals
+and separate private registries. An independently reviewed test-only aggregate
+now compiles E3 then G3-T in one native translation unit with one M3 owner;
+standalone E3 and G3-T keep their original source modes. Both 99-row closures
+add only the aggregate source path. The supported prerequisite gate then built
+and linked both executables and completed CLI3 tokenizer, corpus, and one-update
+pretrain, but the first direct public runtime call failed: package initialization
+left T2's authenticated C2 policy projector unset outside CLI dispatch, so
+public tokenizer LOAD rejected its valid C2 policy. The fixture now reinstalls
+that exact projector at its public policy entry; forged policies still reach
+the T2 guard. The witness also moves model forwards outside the trainer's
+enrolled ownership window, as required by the accepted TR3 contract. Supported
+prerequisite and command linked/runtime acceptance remain pending.
 
 The bounded [TR3 one-batch overfit](TR3_ONE_BATCH_OVERFIT.md) and
 [disjoint held-out improvement](TR3_HELDOUT_IMPROVEMENT.md) witnesses are
