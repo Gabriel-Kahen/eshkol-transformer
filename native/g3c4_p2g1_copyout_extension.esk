@@ -38,7 +38,10 @@
                        (g3c4-p2g1-zero-bytes! stage 56))
                    (if (bytevector? copy)
                        (g3c4-p2g1-zero-bytes! copy 1))
-                   (raise caught)))
+                   (if (transformer-error? caught)
+                       (raise caught)
+                       (g3c4-fail 'internal operation
+                                  "C4 copy-out dependency raised a foreign value"))))
           (set! copy (make-bytevector 1 0))
           (set! stage (make-bytevector 56 0))
           (set! rng (vector g3c4-rng-algorithm 0 0 0 0))
