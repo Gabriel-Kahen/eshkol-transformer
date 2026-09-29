@@ -94,7 +94,7 @@
          (optimizer
            (optimizer-create
              (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
-                   '(none) '(constant)
+                   '(none) '(linear 2 6 "3dcccccd")
                    (list (list 'group (unique-paths tree)
                                "3dcccccd" "3f000000" "3f000000"
                                "3a83126f" "00000000")))

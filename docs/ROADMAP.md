@@ -1567,9 +1567,16 @@ fe9 linked gate passes all nine processes, bit-identical public step metrics,
 all K/restore/suffix canonical C2 byte comparisons, and corrupt-load and
 config-mismatch receiver-preservation negatives. Its 208-file evidence seal
 is `tr3-public-fresh-resume-f85871a-20260928-a/SHA256SUMS` (`c9acf59f...`).
-This test-only candidate awaits independent review and integration. Effective
-rate, RNG words, optimizer moments, and epoch-start cursor are covered by
-complete C2 bytes but have no independent public accessors.
+The follow-up public fixture uses accepted O2 linear W=2/T=6/R=0.1. A fresh
+supported fe9 rerun passes the same nine-process and 15 continuation C2
+comparisons, with distinct successive C2 files and four distinct public f32
+loss words per accumulation profile. Its 209-file evidence seal is
+`tr3-public-fresh-resume-linear-4218b84-20260928-a/SHA256SUMS`
+(`252053a8...`); the predecessor constant-schedule seal is preserved.
+The separate reviewed private factor gate directly measures the four changing
+effective rates. The public API has no factor, moment, RNG-word, or epoch-start
+accessor; the fixed no-dropout trainer does not advance RNG counters. This
+test-only follow-up awaits narrow independent review and integration.
 
 The [private single-update composition leaf](TR3_STEP_PRIVATE_COMPOSITION.md)
 now combines accepted lease, D2/M3/L2/L3S numerator VJP, and O2

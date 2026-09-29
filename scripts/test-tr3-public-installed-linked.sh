@@ -264,8 +264,26 @@ for accumulation in 1 2 3; do
   for ordinal in 2 3 4; do
     cmp "${directory}/resume-baseline-${ordinal}.c2" \
         "${directory}/resume-resumed-${ordinal}.c2"
+    ! cmp -s "${directory}/resume-baseline-$((ordinal - 1)).c2" \
+        "${directory}/resume-baseline-${ordinal}.c2"
   done
 done
+python3 - /out <<PY
+from pathlib import Path
+import sys
+
+evidence = Path(sys.argv[1])
+rows = ["accumulation\tupdate\tloss_f32_bits\tmask_weight_f32_bits"]
+for accumulation in (1, 2, 3):
+    records = [line.split() for line in
+               (evidence / f"fresh-{accumulation}-baseline.metrics").read_text().splitlines()]
+    assert len(records) == 4
+    assert len({record[2] for record in records}) == 4, records
+    for update, record in enumerate(records, 1):
+        assert record[0] == "METRIC" and int(record[1]) == update
+        rows.append(f"{accumulation}\t{update}\t{int(record[2]):08x}\t{int(record[3]):08x}")
+(evidence / "fresh-loss-variation.tsv").write_text("\n".join(rows) + "\n")
+PY
 
 # Focused bit and counter boundary proof for the actual installed C bridge.
 clang-21 "${flags[@]}" -ffunction-sections -fdata-sections \
