@@ -674,9 +674,12 @@ independent G3-S/Philox oracle.
 All 21 files verify under
 `g3c4-copyout-union-fe9-123505d-20260929-a/SHA256SUMS` (seal SHA-256
 `3664752479150b9d41d136872bdefccfab9a3fa01ad1482e2a718bec776cb2fa`).
-The Step 5 structural checker still reports an inherited later-feature
-`generator_rng` source-string assertion on both reviewed inputs; the focused
-copy-out gate passes. Hosted #155/#157 merges and merged-head retest remain.
+Three independently reviewed checker-only commits update inherited Step 5,
+token-frame, prompt/prefill and output-reservation projections for accepted
+later private features, while preserving synthetic negative rejection. All
+37 G3-C4 structural checkers now pass on the composed tree; production and
+runtime test blobs remain identical to the gated `123505d` tree. Hosted
+#155/#157 merges and merged-head retest remain.
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
