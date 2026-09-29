@@ -71,6 +71,7 @@ python3 - "${scratch}" <<'PY'
 import json
 from pathlib import Path
 import re
+import struct
 import sys
 
 root = Path(sys.argv[1])
@@ -82,8 +83,18 @@ assert first['artifact'] == resumed['artifact'] == whole['artifact'] == 'checkpo
 assert evaluation['artifact'] == 'evaluation'
 assert first['updates'] == resumed['updates'] == 1
 assert whole['updates'] == 2
-assert whole['loss_f32_bits'] == '40aef60e'
-assert first['tokens'] > 0 and resumed['tokens'] > 0
+assert (first['tokens'], resumed['tokens'], whole['tokens']) == (4, 3, 7)
+assert (first['mask_weight_f32_bits'], resumed['mask_weight_f32_bits'],
+        whole['mask_weight_f32_bits']) == ('40800000', '40400000', '40e00000')
+# Independently weight the two public per-update metrics by their D2 mask
+# counts, then round once to f32 for the full-run summary.
+def f32(word):
+    return struct.unpack('>f', bytes.fromhex(word))[0]
+
+weighted = (4 * f32(first['loss_f32_bits']) +
+            3 * f32(resumed['loss_f32_bits'])) / 7
+expected_loss_bits = struct.pack('>f', weighted).hex()
+assert whole['loss_f32_bits'] == expected_loss_bits
 assert evaluation['tokens'] > 0 and evaluation['batches'] > 0
 for record in (first, resumed, whole, evaluation):
     for key in ('loss_f32_bits', 'mask_weight_f32_bits'):
