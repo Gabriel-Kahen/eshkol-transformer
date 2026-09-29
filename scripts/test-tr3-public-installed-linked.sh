@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
-for command in ar cmp docker git nm objcopy python3 readlink rg sha256sum; do
+for command in ar cmp docker git mv nm objcopy python3 readlink rg sha256sum; do
   require_command "${command}"
 done
 cd "${PROJECT_ROOT}"
@@ -275,7 +275,9 @@ for accumulation in 1 2 3; do
     exit 1
   fi
   test ! -e "${directory}/interrupt-ack"
-  printf "1" > "${directory}/interrupt-request"
+  test ! -e "${directory}/interrupt-request.tmp"
+  printf "1" > "${directory}/interrupt-request.tmp"
+  mv -- "${directory}/interrupt-request.tmp" "${directory}/interrupt-request"
   wait "${producer_pid}"
   test "$(cat "${directory}/interrupt-ready")" = 1
   test "$(cat "${directory}/interrupt-ack")" = 1
