@@ -247,9 +247,16 @@ int64_t et_g3c4_result_test_prior_view_device_v1(void *candidate) {
 }
 int64_t et_g3c4_result_test_output_shape_v1(
     void *candidate, int64_t malformed) {
-  et_g3c4_output_internal *output = et_g3c4_admit_output(candidate, 0);
-  if (output == NULL || output->ids == NULL ||
+  et_g3c4_transport_header_internal *header;
+  for (header = et_g3c4_transport_registry;
+       header != NULL && (void *)header != candidate;
+       header = header->registry_next) {}
+  if (header == NULL || header->kind != ET_G3C4_OUTPUT_KIND ||
+      header->magic != ET_G3C4_OUTPUT_MAGIC ||
+      header->state != ET_G3C4_OUTPUT_PUBLISHED ||
       (malformed != 0 && malformed != 1)) return -1;
+  et_g3c4_output_internal *output = (et_g3c4_output_internal *)header;
+  if (output->ids == NULL) return -1;
   uint64_t *shape =
       (uint64_t *)et_i64_tensor_test_shape_storage_v1(output->ids);
   if (shape == NULL) return -1;
