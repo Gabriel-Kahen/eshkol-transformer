@@ -694,9 +694,15 @@ and independent source-and-test review passed at `9581b8a` (the current
 private-coordinator base). The next isolated source-private P2/G1 producer
 uses the accepted caller-owned C4 input for genuine P2 prefill, last-logit
 sampling, one-token forward, and exactly one existing shell publication.
-Its two-prompt and failure/retry gate remains pending. This producer does not
-admit a public C4 generator or result; an exact-owner output accessor/release
-adapter is the next public dependency. Neither leaf admits EOS,
+The independent source-and-test review and supported pinned-fe9 normal,
+repeat and sanitizer gate passed at `9f41d1a`/tree `b31e5fb`: two authentic
+P2 prompts, 30 linked coordinator checks and rollback/retry; its 30-file
+seal is `g3c4-p2g1-coordinator-clang21-9f41d1a-20260929-a/SHA256SUMS`.
+This producer does not admit a public C4 generator or result. The proposed
+[exact-owner output adapter](g3/G3_C4_P2_G1_PUBLIC_OUTPUT_ADAPTER_PROPOSAL.md)
+is the next review dependency: it requires new source-private rank-one I1
+clone ownership and a device-specific retained-output discriminator before
+public access/release dispatch. Neither leaf admits EOS,
 repeated decode, persistence or CLI3 `generate`.
 
 The source-private [T1/I1 exact-pair prerequisite](g3/G3_C4_T1_I1_EXACT_PAIR_PREREQUISITE.md)
