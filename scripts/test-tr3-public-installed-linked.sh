@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
-for command in ar cmp docker git nm objcopy python3 readlink rg sha256sum; do
+for command in ar cmp docker git mv nm objcopy python3 readlink rg sha256sum; do
   require_command "${command}"
 done
 cd "${PROJECT_ROOT}"
@@ -254,6 +254,118 @@ grep -Fx "TR3-PUBLIC-STEP-AOT-PASS loss-bits=1085403699 weight-bits=1077936128" 
   /out/step.stdout >/dev/null
 test ! -s /out/step.stderr
 
+# A localized installed aggregate plus one read-only test bit inspector. The
+# same caller runs in twelve fresh OS processes across A=1,2,3; no private
+# trainer, C2, D2, or optimizer entry is linked into the caller.
+clang-21 "${flags[@]}" -I /fixed-source/inc \
+  -c tests/tr3_public_installed/resume_bits.c -o /out/resume_bits.o
+ar rcsD /out/libeshkol_transformer_tr3_public_resume_test.a \
+  /out/combined.o /out/resume_bits.o
+timeout --foreground --signal=TERM --kill-after=5s 120s \
+  "${TR3_COMPILER_RUNNER}" --strict-types --no-stdlib -O 0 \
+    -I /out/facades -L /out -L /candidate/eshkol-build-canonical \
+    --lib eshkol_transformer_tr3_public_resume_test \
+    tests/tr3_public_installed/fresh_resume.esk -o /out/fresh_resume \
+    > /out/fresh-resume-compile.stdout \
+    2> /out/fresh-resume-compile.stderr
+for accumulation in 1 2 3; do
+  directory="/out/corpus/resume-${accumulation}"
+  cp -a /out/corpus/step-two "${directory}"
+  for mode in baseline train-baseline; do
+    ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM \
+      --kill-after=5s 120s \
+      /out/fresh_resume "${directory}" "${mode}" "${accumulation}" \
+      > "/out/fresh-${accumulation}-${mode}.stdout" \
+      2> "/out/fresh-${accumulation}-${mode}.stderr"
+    grep -Fx "TR3-PUBLIC-FRESH-RESUME-PASS ${mode} A=${accumulation}" \
+      "/out/fresh-${accumulation}-${mode}.stdout" >/dev/null
+    test ! -s "/out/fresh-${accumulation}-${mode}.stderr"
+  done
+  test ! -e "${directory}/interrupt-request"
+  ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM \
+    --kill-after=5s 120s \
+    /out/fresh_resume "${directory}" producer "${accumulation}" \
+    > "/out/fresh-${accumulation}-producer.stdout" \
+    2> "/out/fresh-${accumulation}-producer.stderr" &
+  producer_pid=$!
+  for ((attempt=0; attempt<1000; attempt++)); do
+    if test -f "${directory}/interrupt-ready"; then break; fi
+    if ! kill -0 "${producer_pid}" 2>/dev/null; then break; fi
+    sleep 0.01
+  done
+  if ! test -f "${directory}/interrupt-ready"; then
+    kill "${producer_pid}" 2>/dev/null || true
+    wait "${producer_pid}" 2>/dev/null || true
+    echo "producer did not publish ready after committed update" >&2
+    exit 1
+  fi
+  test ! -e "${directory}/interrupt-ack"
+  test ! -e "${directory}/interrupt-request.tmp"
+  printf "1" > "${directory}/interrupt-request.tmp"
+  mv -- "${directory}/interrupt-request.tmp" "${directory}/interrupt-request"
+  wait "${producer_pid}"
+  cmp -s <(printf "\001") "${directory}/interrupt-ready"
+  cmp -s <(printf "\001") "${directory}/interrupt-ack"
+  grep -Fx "TR3-PUBLIC-FRESH-RESUME-PASS producer A=${accumulation}" \
+    "/out/fresh-${accumulation}-producer.stdout" >/dev/null
+  test ! -s "/out/fresh-${accumulation}-producer.stderr"
+  ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM \
+    --kill-after=5s 120s \
+    /out/fresh_resume "${directory}" receiver "${accumulation}" \
+    > "/out/fresh-${accumulation}-receiver.stdout" \
+    2> "/out/fresh-${accumulation}-receiver.stderr"
+  grep -Fx "TR3-PUBLIC-FRESH-RESUME-PASS receiver A=${accumulation}" \
+    "/out/fresh-${accumulation}-receiver.stdout" >/dev/null
+  test ! -s "/out/fresh-${accumulation}-receiver.stderr"
+  grep -Fx "INTERRUPT-ACK 1" \
+    "/out/fresh-${accumulation}-producer.stdout" >/dev/null
+  grep "^METRIC " "/out/fresh-${accumulation}-baseline.stdout" \
+    > "/out/fresh-${accumulation}-baseline.metrics"
+  test "$(wc -l < "/out/fresh-${accumulation}-baseline.metrics")" = 4
+  cmp "${directory}/resume-fresh-before-0.c2" \
+      "${directory}/resume-fresh-after-0.c2"
+  cmp "${directory}/resume-mismatch-before-0.c2" \
+      "${directory}/resume-mismatch-after-0.c2"
+  cmp "${directory}/resume-baseline-1.c2" "${directory}/resume-k-1.c2"
+  cmp "${directory}/resume-baseline-4.c2" \
+      "${directory}/resume-train-baseline-4.c2"
+  cmp "${directory}/resume-baseline-1.c2" \
+      "${directory}/resume-restored-1.c2"
+  for ordinal in 2 3 4; do
+    cmp "${directory}/resume-baseline-${ordinal}.c2" \
+        "${directory}/resume-resumed-${ordinal}.c2"
+    ! cmp -s "${directory}/resume-baseline-$((ordinal - 1)).c2" \
+        "${directory}/resume-baseline-${ordinal}.c2"
+  done
+done
+python3 - /out <<PY
+from pathlib import Path
+import sys
+
+evidence = Path(sys.argv[1])
+rows = ["accumulation\tupdate\tloss_f32_bits\tmask_weight_f32_bits"]
+for accumulation in (1, 2, 3):
+    records = [line.split() for line in
+               (evidence / f"fresh-{accumulation}-baseline.metrics").read_text().splitlines()]
+    assert len(records) == 4
+    assert len({record[2] for record in records}) == 4, records
+    producer = (evidence / f"fresh-{accumulation}-producer.stdout").read_text().splitlines()
+    receiver = (evidence / f"fresh-{accumulation}-receiver.stdout").read_text().splitlines()
+    trained = [line.split() for line in producer + receiver if line.startswith("TRAIN ")]
+    assert len(trained) == 4, trained
+    full = [line.split() for line in
+            (evidence / f"fresh-{accumulation}-train-baseline.stdout").read_text().splitlines()
+            if line.startswith("FULL ")]
+    assert len(full) == 1 and int(full[0][4]) == 4, full
+    assert int(full[0][3]) == sum(int(record[4]) for record in records), full
+    for update, record in enumerate(records, 1):
+        assert record[0] == "METRIC" and int(record[1]) == update
+        train = trained[update - 1]
+        assert train[0] == "TRAIN" and int(train[1]) == update, train
+        assert train[2:5] == record[2:5] and int(train[5]) == 1, (train, record)
+        rows.append(f"{accumulation}\t{update}\t{int(record[2]):08x}\t{int(record[3]):08x}")
+(evidence / "fresh-loss-variation.tsv").write_text("\n".join(rows) + "\n")
+PY
 # Independently fixed E3 words, exact counters and EOS rollback through the
 # installed public trainer and metrics-ref, using the raw-link f32 inspector.
 timeout --foreground --signal=TERM --kill-after=5s 120s \
