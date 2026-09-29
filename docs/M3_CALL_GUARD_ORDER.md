@@ -1,8 +1,8 @@
 # M3 call cleanup-handler ordering follow-up
 
-Status: focused implementation and compiled-witness candidate for
-[issue #117](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/117);
-runtime-pin adoption and full integration CI remain pending.
+Status: the reviewed source was integrated at `c9dce36` and the project now pins
+Eshkol `fe9dfd52`; the focused fe9 compiled witness and exact-head full CI remain
+pending for [issue #117](https://github.com/Gabriel-Kahen/eshkol-transformer/issues/117).
 This is a narrow follow-up to the accepted shared-call implementation in PR #105;
 it does not revoke or broaden that implementation's recorded evidence.
 
@@ -46,9 +46,9 @@ allocation of this exact inner exception handler while an outer boundary is
 live. The run proves the model-call body did not mutate state, proves the busy
 flag stayed false, then executes a subsequent normal M3/shared call successfully.
 Static source order or IR inspection cannot replace that witness.
-The explicit repaired-runtime gate is
+The historical repaired-runtime gate was
 `scripts/test-m3cg-repaired-handler.sh RUNTIME_SOURCE RUNTIME_BUILD OUTPUT`.
-It requires clean frozen runtime source commit
+Its passing 81298 run required clean frozen runtime source commit
 `81298b4a9608fb92eb6f351a2eabd8392da7d9ef` (tree
 `7669312845a9d8d372006af52271045e69505813`), runner SHA-256
 `4a0e6303f7b85ed06fb753b52b62155235a3a77bca6c32aeb17241a28ed80be1`
@@ -69,6 +69,26 @@ and source-input manifest SHA-256
 `24d759ac63c589b582d1935ee6cac246baff053d2959d971f35ae63209a1c5f4`.
 This is focused witness evidence; it is not full integration CI or runtime-pin
 adoption.
+
+The reviewed implementation and witness fixture were replayed onto main at
+`c9dce36`; nine issue-117 source, test and document files have the same blobs
+as `dda768b`. The tenth, `tests/m3cg/predecessor_sources.sha256`, records an
+intervening main change to the `native/f32_tensor.c` digest (`cf66922` to
+`cea6694`). Main now pins the descendant fe9 runtime. The script is prepared
+to require clean
+`fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9` (tree
+`66c21f7ec19b1b4a42199fa30ed8e0e9727021bf`), the supported-image
+`eshkol-run` SHA-256 `7dd254bab761fe41142a0e3777338f41b3b9f03a5ce4c0bba419f1e2b22a99aa`,
+runtime archive SHA-256 `32cd446a3aeaa2e78bbe49b0c04cda961b8e1eeb7bb0ea53ec5e55c11f0c183e`,
+and provenance TSV SHA-256 `4b2e87315b91dd27f6453862a4c4ebcd9fa1f577619d3bfa6ceca92964a9824c`.
+The fe9 header retains the handler layout and tagged condition fields used by the
+fixture; its archive exports the same push, caught-value, emergency-raise and
+handler-stack symbols. The `--wrap=malloc` failure and exact caught identity,
+guard-stack, untouched-body, idle-state and retry assertions are unchanged. This
+is a candidate: the fe9 compiled witness has not run, and the 81298 evidence
+does not establish fe9 behavior. Run the script on the supported Ubuntu 22.04 /
+LLVM 21.1.8 image against the authenticated source and build, then verify its
+recorded source-input and evidence manifests before #117 acceptance.
 
 Independent reviewer `/root/c4_final_review` approved the frozen implementation,
 tests and documentation. The reviewed aggregate manifests have SHA-256
