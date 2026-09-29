@@ -139,11 +139,13 @@ compile_mode() {
 #!/usr/bin/env bash
 exec $(printf '%q' "$cxx") $sanitizer_link "\$@" \\
   -Wl,--wrap=arena_allocate_vector_with_header \\
+  -Wl,--wrap=arena_allocate_with_header \\
   -Wl,--wrap=arena_allocate_cons_with_header \\
   -Wl,--wrap=malloc -Wl,--wrap=eshkol_push_exception_handler \\
   -Wl,--wrap=et_kernel_runtime_dispatch \
   -Wl,--wrap=et_g3c4_private_output_copy_decode_ids_v1 \
-  -Wl,--wrap=et_g3c4_private_output_accept_text_v1
+  -Wl,--wrap=et_g3c4_private_output_accept_text_v1 \
+  -Wl,--wrap=et_g3c4_private_output_copy_snapshot_v1
 WRAPPER
   chmod 0500 "$directory/cxx-wrap"
   local test expected
@@ -166,8 +168,11 @@ WRAPPER
       timeout --foreground --signal=TERM --kill-after=5s 120s \
       "$directory/p2g1-$test" \
       >"$directory/$test.stdout" 2>"$directory/$test.stderr"
-    test ! -s "$directory/$test.stderr"
-    expected='greedy=1 categorical=1'
+    printf '%s\n' \
+      'Error in make-bytevector: out of memory (len=1)' \
+      'Error in make-bytevector: out of memory (len=56)' |
+      cmp - "$directory/$test.stderr"
+    expected='greedy=1 categorical=1 bytevector-cuts=2 vector-cuts=2 decode-cut=1'
     grep -E "^G3-C4 P2/G1 copy-out PASS: checks=[1-9][0-9]* $expected$" \
       "$directory/$test.stdout" >/dev/null
   done
@@ -177,7 +182,7 @@ compile_mode normal
 ESHKOL_ARENA_POISON=1 "$tmp/normal/p2g1-copyout" \
   >"$tmp/normal/copyout-repeat.stdout" \
   2>"$tmp/normal/copyout-repeat.stderr"
-test ! -s "$tmp/normal/copyout-repeat.stderr"
+cmp "$tmp/normal/copyout.stderr" "$tmp/normal/copyout-repeat.stderr"
 compile_mode sanitize
 cmp "$tmp/normal/copyout.stdout" "$tmp/normal/copyout-repeat.stdout"
 cmp "$tmp/normal/copyout.stdout" "$tmp/sanitize/copyout.stdout"

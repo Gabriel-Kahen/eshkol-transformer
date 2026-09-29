@@ -11,6 +11,35 @@ static et_i64_tensor_borrow *shell_ids_borrow;
 static et_a2_kv_cache_transaction_view *shell_a2_view;
 static shell_bytevector *shell_staging;
 static int64_t shell_mutation;
+static int64_t copyout_corrupt;
+static int64_t copyout_corrupt_consumed;
+
+int64_t et_g3c4_shell_test_copyout_corrupt_v1(int64_t active) {
+  if (active != 0 && active != 1) return -1;
+  copyout_corrupt = active;
+  copyout_corrupt_consumed = 0;
+  return 0;
+}
+
+int64_t et_g3c4_shell_test_copyout_corrupt_consumed_v1(void) {
+  return copyout_corrupt_consumed;
+}
+
+int64_t __real_et_g3c4_private_output_copy_snapshot_v1(
+    void *, void *, void *);
+int64_t __wrap_et_g3c4_private_output_copy_snapshot_v1(
+    void *output, void *raw, void *stage) {
+  int64_t status = __real_et_g3c4_private_output_copy_snapshot_v1(
+      output, raw, stage);
+  if (status == 0 && copyout_corrupt != 0) {
+    shell_bytevector *carrier = (shell_bytevector *)stage;
+    carrier->bytes[8] = 2u; /* Decoded length is invalid after native success. */
+    for (size_t i = 9; i < 16; ++i) carrier->bytes[i] = 0u;
+    copyout_corrupt = 0;
+    copyout_corrupt_consumed = 1;
+  }
+  return status;
+}
 
 int64_t et_g3c4_shell_test_prepare_v1(void *context_candidate,
                                        void *output_candidate) {

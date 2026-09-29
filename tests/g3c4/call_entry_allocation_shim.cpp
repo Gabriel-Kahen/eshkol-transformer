@@ -11,6 +11,8 @@
 extern "C" void *__real_malloc(size_t);
 extern "C" void *__real_arena_allocate_vector_with_header(arena_t *, size_t);
 extern "C" void *__real_arena_allocate_cons_with_header(arena_t *);
+extern "C" void *__real_arena_allocate_with_header(
+    arena_t *, size_t, uint8_t, uint8_t);
 extern "C" void __real_eshkol_push_exception_handler(void *);
 
 static int allocation_kind;
@@ -37,7 +39,7 @@ static void require(bool condition, const char *message) {
 
 extern "C" int64_t et_g3c4_call_entry_alloc_arm_v1(
     int64_t kind, int64_t before) {
-  require(!allocation_kind && !handler_armed && kind >= 1 && kind <= 2 &&
+  require(!allocation_kind && !handler_armed && kind >= 1 && kind <= 3 &&
               before >= 0,
           "valid vector/cons arm");
   allocation_kind = (int)kind;
@@ -66,6 +68,14 @@ extern "C" void *__wrap_arena_allocate_cons_with_header(arena_t *arena) {
   return allocation_should_fail(2)
              ? nullptr
              : __real_arena_allocate_cons_with_header(arena);
+}
+
+extern "C" void *__wrap_arena_allocate_with_header(
+    arena_t *arena, size_t data_size, uint8_t subtype, uint8_t flags) {
+  return subtype == HEAP_SUBTYPE_BYTEVECTOR && allocation_should_fail(3)
+             ? nullptr
+             : __real_arena_allocate_with_header(
+                   arena, data_size, subtype, flags);
 }
 
 extern "C" int64_t et_g3c4_call_entry_alloc_consumed_v1(void) {

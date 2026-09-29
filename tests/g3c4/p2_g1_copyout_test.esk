@@ -1,6 +1,36 @@
 (load "p2_g1_shell_test_common.esk")
 (load "g3c4_p2g1_copyout_extension.esk")
 
+(extern i64 allocation-arm i64 i64
+        :real et_g3c4_call_entry_alloc_arm_v1)
+(extern i64 allocation-consumed
+        :real et_g3c4_call_entry_alloc_consumed_v1)
+(extern i64 allocation-disarm
+        :real et_g3c4_call_entry_alloc_disarm_v1)
+(extern i64 shell-test-copyout-corrupt i64
+        :real et_g3c4_shell_test_copyout_corrupt_v1)
+(extern i64 shell-test-copyout-corrupt-consumed
+        :real et_g3c4_shell_test_copyout_corrupt_consumed_v1)
+
+;; Observe the production scrub helper without replacing its mutation. This
+;; records which scratch carrier was wiped and checks the whole payload.
+(define copyout-original-zero-bytes! g3c4-p2g1-zero-bytes!)
+(define copyout-copy-scrubs 0)
+(define copyout-stage-scrubs 0)
+(set! g3c4-p2g1-zero-bytes!
+  (lambda (value count)
+    (let ((answer (copyout-original-zero-bytes! value count)))
+      (if (= count 1)
+          (set! copyout-copy-scrubs (+ copyout-copy-scrubs 1)))
+      (if (= count 56)
+          (set! copyout-stage-scrubs (+ copyout-stage-scrubs 1)))
+      (let loop ((index 0))
+        (if (= index count)
+            answer
+            (if (= (bytevector-u8-ref value index) 0)
+                (loop (+ index 1))
+                (exit 2)))))))
+
 (define (publish-copyout mode seed)
   (let* ((generator
            (g3c4-generator-create-internal model tokenizer
@@ -64,6 +94,69 @@
        (= (vector-ref (g3c4-p2g1-output-copy-internal shell-a) 1)
           original-byte))
 
+;; Bytevectors use the runtime's bytevector arena constructor; RNG/result
+;; vectors use the separate vector constructor. Cut both in source order.
+(define (sweep-copyout-allocations kind)
+  (let loop ((index 0))
+    (if (> index 8) (exit 3))
+    (let ((caught #f)
+          (before-copy copyout-copy-scrubs)
+          (before-stage copyout-stage-scrubs))
+      (check "allocation arm" (= (allocation-arm kind index) 0))
+      (guard (condition (#t (set! caught condition)))
+        (g3c4-p2g1-output-copy-internal shell-a))
+      (let ((consumed (allocation-consumed))
+            (seen (allocation-disarm)))
+        (if (= consumed 1)
+            (begin
+              (check "allocation cut raised typed internal error"
+                     (and (transformer-error? caught)
+                          (eq? (transformer-error-category caught)
+                               'internal)))
+              (check "allocation cut hit exact constructor"
+                     (= seen (+ index 1)))
+              (check "partial copy scrubbed when allocated"
+                     (= (- copyout-copy-scrubs before-copy)
+                        (if (and (= kind 3) (= index 0)) 0 1)))
+              (check "partial stage scrubbed when allocated"
+                     (= (- copyout-stage-scrubs before-stage)
+                        (if (= kind 3) 0 1)))
+              (check "allocation cut preserved published owner"
+                     (= (shell-test-published native-a raw-a) 1))
+              (check "allocation cut permits same-output retry"
+                     (= (vector-ref
+                          (g3c4-p2g1-output-copy-internal shell-a) 1)
+                        original-byte))
+              (loop (+ index 1)))
+            (begin
+              (check "all constructors traversed without failure"
+                     (not caught))
+              index))))))
+(define copyout-bytevector-cuts (sweep-copyout-allocations 3))
+(define copyout-vector-cuts (sweep-copyout-allocations 1))
+(check "two raw/stage bytevector allocation cuts"
+       (= copyout-bytevector-cuts 2))
+(check "two RNG/result vector allocation cuts"
+       (= copyout-vector-cuts 2))
+
+;; The native read succeeds, then a test-only linker wrapper changes only the
+;; transient staging word. Eshkol decoding must reject and scrub both buffers.
+(define before-decode-copy-scrubs copyout-copy-scrubs)
+(define before-decode-stage-scrubs copyout-stage-scrubs)
+(check "post-native decode corruption arm"
+       (= (shell-test-copyout-corrupt 1) 0))
+(reject "post-native decoded length rejects" 'invalid-state
+  (lambda () (g3c4-p2g1-output-copy-internal shell-a)))
+(check "post-native decode corruption was reached"
+       (= (shell-test-copyout-corrupt-consumed) 1))
+(check "decode rejection scrubs both transient carriers"
+       (and (= (- copyout-copy-scrubs before-decode-copy-scrubs) 1)
+            (= (- copyout-stage-scrubs before-decode-stage-scrubs) 1)))
+(check "decode rejection preserves publication and retry"
+       (and (= (shell-test-published native-a raw-a) 1)
+            (= (vector-ref (g3c4-p2g1-output-copy-internal shell-a) 1)
+               original-byte)))
+
 (define second (publish-copyout 'categorical 43))
 (define generator-b (vector-ref second 0))
 (define shell-b (vector-ref second 1))
@@ -106,4 +199,4 @@
 
 (display "G3-C4 P2/G1 copy-out PASS: checks=")
 (display checks)
-(display " greedy=1 categorical=1") (newline)
+(display " greedy=1 categorical=1 bytevector-cuts=2 vector-cuts=2 decode-cut=1") (newline)
