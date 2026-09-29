@@ -15,9 +15,11 @@ each accumulation count `A=1,2,3`, the gate starts four OS processes:
 2. `train-baseline` makes four updates in one uninterrupted two-argument
    `trainer-train!` call and saves its final public C2 state.
 3. `producer` enters the three-argument `trainer-train!` with a four-update
-   limit. After update `K=1`, its callback observes a caller-owned request
-   marker, records an acknowledgement, and returns `#t`. The returned summary
-   is checked as one committed update before the public state is saved.
+   limit. After update `K=1`, its callback publishes a ready marker. The
+   external shell driver observes ready, creates the request marker, and the
+   callback records an acknowledgement before returning `#t`. Both sides
+   bound their waits. The returned summary is checked as one committed update
+   before the public state is saved.
 4. `receiver` constructs fresh compatible operands, verifies that a corrupted
    checkpoint fails `checkpoint-load`, verifies that the loaded valid owner
    fails `trainer-load-state!` against a different run-seed configuration, then
@@ -32,6 +34,12 @@ update 4. It also compares the four one-update train summary `loss` and
 metrics. The uninterrupted train summary must report four updates and the
 same total token count as the step path. The callback acknowledgement is
 observational caller state and does not enter C2.
+The linked step caller also checks that reentrant public release, step,
+train, state, and load calls reject during polling and preserve the cursor.
+The producer repeats state and load rejection; its exact K checkpoint
+comparison checks full receiver preservation after those attempts.
+The installed facade does not yet provide `trainer-evaluate!`; its polling
+guard remains a composition requirement for the evaluation package.
 The public `optimizer-create` receives the accepted O2 linear schedule
 `(linear 2 6 "3dcccccd")`: two warmup updates, six total updates, and a
 binary32 minimum ratio of 0.1. Successive baseline C2 files differ, and all

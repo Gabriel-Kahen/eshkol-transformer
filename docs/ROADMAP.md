@@ -1648,6 +1648,9 @@ and the explicit same-thread interrupt callback on the merged #149/C2 base.
 Its installed caller now runs an uninterrupted four-update `trainer-train!`
 path, a caller-acknowledged interrupt after one committed update, and a fresh
 OS-process C2 load followed by three public train calls for `A=1,2,3`.
+The callback publishes ready while train is active; the external driver then
+issues the request and observes an acknowledgement. Public state/load probes
+reject during polling, with exact K checkpoint and cursor preservation checks.
 It compares final and intermediate canonical C2 bytes with the public step
 reference and compares each one-update train summary with independent step
 metrics. Focused static checks pass; the combined pinned fe9 linked gate and

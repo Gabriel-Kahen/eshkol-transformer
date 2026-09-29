@@ -166,14 +166,33 @@
      (display " ") (display (metrics-ref summary 'epochs)) (newline)
      (save trainer "train-baseline" 4)))
   ((string=? mode "producer")
-   (let ((ack (vector #f)))
+   (let ((ack (vector #f))
+         (idle-state (trainer-state trainer)))
      (train-one trainer 1 "k"
        (lambda ()
-         (check 'external-request
-           (= (file-size (string-append directory "/interrupt-request")) 1))
+         (let ((ready (string-append directory "/interrupt-ready"))
+               (request (string-append directory "/interrupt-request"))
+               (receipt (string-append directory "/interrupt-ack"))
+               (cursor-before (token-dataset-cursor dataset)))
+           (check 'request-not-early (not (file-exists? request)))
+           (write-bytes ready (bytevector 1))
+           (let loop ((attempt 0))
+             (if (file-exists? request) #t
+                 (if (= attempt 1000000)
+                     (begin (check 'request-timeout #f) #f)
+                     (loop (+ attempt 1)))))
+           (check 'external-request (= (file-size request) 1))
+           (expect-error 'poll-state 'invalid-state 'trainer-state
+             (lambda () (trainer-state trainer)))
+           (expect-error 'poll-load 'invalid-state 'trainer-load-state!
+             (lambda () (trainer-load-state! trainer idle-state)))
+           (check 'poll-cursor-preserved
+             (bytes=? cursor-before (token-dataset-cursor dataset)))
+           (write-bytes receipt (bytevector 1)))
          (vector-set! ack 0 #t)
          #t))
      (check 'interrupt-ack (vector-ref ack 0))
+     (check 'idle-state-release (trainer-state-release! idle-state))
      (display "INTERRUPT-ACK 1") (newline)))
   (else
    (let* ((before-cursor (token-dataset-cursor dataset))

@@ -435,22 +435,34 @@
   (and (= (vector-ref tie-polls 0) 0)
        (= (metrics-ref tie-summary 'updates) 1)
        (= (metrics-ref tie-summary 'tokens) 3)))
+(define interrupt-idle-state (trainer-state interrupt-trainer))
 (define interrupt-ack (vector #f))
 (define interrupt-before (published-metrics-count))
 (define interrupt-predicate
   (with-region ('tr3-public-interrupt-callback 65536)
     (lambda ()
-      (check 'poll-release-guard
-        (interrupt-error? 'invalid-state 'trainer-release!
-          (lambda () (trainer-release! interrupt-trainer))))
-      (check 'poll-step-guard
-        (interrupt-error? 'invalid-state 'trainer-step!
-          (lambda () (trainer-step! interrupt-trainer))))
-      (check 'poll-train-guard
-        (interrupt-error? 'invalid-state 'trainer-train!
-          (lambda () (trainer-train! interrupt-trainer interrupt-one))))
-      (vector-set! interrupt-ack 0 #t)
-      #t)))
+      (let ((cursor-before (token-dataset-cursor interrupt-dataset)))
+        (check 'poll-release-guard
+          (interrupt-error? 'invalid-state 'trainer-release!
+            (lambda () (trainer-release! interrupt-trainer))))
+        (check 'poll-step-guard
+          (interrupt-error? 'invalid-state 'trainer-step!
+            (lambda () (trainer-step! interrupt-trainer))))
+        (check 'poll-train-guard
+          (interrupt-error? 'invalid-state 'trainer-train!
+            (lambda () (trainer-train! interrupt-trainer interrupt-one))))
+        (check 'poll-state-guard
+          (interrupt-error? 'invalid-state 'trainer-state
+            (lambda () (trainer-state interrupt-trainer))))
+        (check 'poll-load-guard
+          (interrupt-error? 'invalid-state 'trainer-load-state!
+            (lambda ()
+              (trainer-load-state! interrupt-trainer interrupt-idle-state))))
+        (check 'poll-cursor-preserved
+          (bytes-equal? cursor-before
+                        (token-dataset-cursor interrupt-dataset)))
+        (vector-set! interrupt-ack 0 #t)
+        #t))))
 (define interrupt-summary
   (trainer-train! interrupt-trainer interrupt-three interrupt-predicate))
 (check 'interrupt-linked-callback-and-five-keys
@@ -459,6 +471,8 @@
        (= (published-metrics-count) (+ interrupt-before 1))
        (interrupt-error? 'invalid-argument 'metrics-ref
          (lambda () (metrics-ref interrupt-summary 'stop-reason)))))
+(check 'interrupt-idle-state-release
+  (trainer-state-release! interrupt-idle-state))
 (define false-then-true-polls (vector 0))
 (define two-poll-summary
   (trainer-train! interrupt-trainer interrupt-three
