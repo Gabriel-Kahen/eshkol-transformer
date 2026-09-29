@@ -47,7 +47,10 @@ C4 native input. The wrapper rejects P1 though the private constructor also
 supports P1/P2. G3-T/C2 inputs, T1 shell copies, output-ID clones, arbitrary
 shape-matching I1 owners and raw pointers gain no C4 input authority. No T1
 borrow, model/generator reference or aliased T1 storage survives the call.
-Caller changes to the T1 source after return cannot change the C4 prompt.
+The sealed T1 source cannot be written or normally released. Copy
+independence is proved by distinct native I1 storage, continued T1 source
+reachability and rejected post-seal write/abort attempts, not by promising
+caller mutation of sealed T1.
 
 The result is the exact `g3c4-registry` entry with kind `input`, profile
 `diagnostic-c4`, and its own native I1 owner. Failure before publication
@@ -61,28 +64,32 @@ operation name, bounded data-only details and `cause #f` through E1.
 
 The installed arity-one `generation-input-create` continues to make only
 G3-T/C2 owners. For public `generation-tensor-release!`, test exact C4
-registry membership **before** the existing G3-T lookup: a registered C4
-`input` delegates to `generation-tensor-release-internal!`, which destroys
+**transport and model** registry membership before the existing G3-T lookup.
+A registered C4 transport `input` delegates to
+`generation-tensor-release-internal!`, which destroys
 native I1 first, then tombstones the shell. Exact already-dead C4 input
-release is idempotent. An authentic C4 wrong-kind value rejects
-`invalid-argument` without C2 fallback. An active I1 borrow or other
-recoverable native rejection leaves the C4 input live and retryable, with no
+release is idempotent. A registered C4 transport wrong-kind value or an
+authentic C4 model shell rejects `invalid-argument` without C2 fallback.
+An active I1 borrow or other recoverable native rejection leaves the C4
+input live and retryable, with no
 partial tombstone. Unregistered values follow the current C2 path unchanged,
 including its wrong-kind/dead/error order. Mutable shell tags and C4 native
 pointers never authorize G3-T release.
 The current `g3c4-registry-find` raises on an unregistered shell; a future
-public branch selector therefore needs a reviewed **nonthrowing exact-shell
-membership probe** in the one owning aggregate before either branch's
-throwing validator. The same rule applies to the separate C4 model registry
-at future `generator-create` dispatch. A new public pointer/registry API is
+public branch selector therefore needs reviewed **nonthrowing exact-shell
+membership probes** for both C4 registries in the one owning aggregate
+before either branch's throwing validator. The model probe also serves the
+future `generator-create` dispatch. A new public pointer/registry API is
 not implied.
 
-An input remains caller-owned after future generator close and T1 source
-release. Releasing an idle input does not close the generator or model;
-generation with that exact dead input later rejects `invalid-state` before
-cache/RNG mutation. The future C4 producer authenticates exact C4 shell and
-live native owner, then performs P2/G1 full-request admission. This leaf
-does not enable `generator-generate!`.
+The copied input is independently caller-owned while its sealed T1 source
+remains live. Releasing an idle C4 input does not close a model; a future
+generator must likewise leave it caller-owned on close. A later generate
+call with that exact dead input rejects `invalid-state` before cache/RNG
+mutation. The future C4 producer authenticates exact C4 shell and live
+native owner, then performs P2/G1 full-request admission. Generator-close
+and dead-input generation witnesses belong to that later producer gate;
+this leaf does not enable `generator-generate!`.
 
 ## Package and acceptance gate
 
@@ -99,13 +106,19 @@ never fall through to C2; unrelated models retain the C2 path.
 
 Gate two distinct seeded C4 models and independently copied P2 prompts;
 the `[4,4]` position/14-handle/tie/eval identity; bytes `0` and `255`;
-T1 release/mutation independence; and C4 input release after generator
-close. Cover wrong seed, P1/P3/empty prompt, `-1`/`256` IDs, malformed
-rank/extent/dtype/device/layout/storage, forged/copied/dead/cross-registry
-shells, held I1 borrow, wrong-kind/repeated release, constructor/allocation
+continued T1 source reads, rejected post-seal write/abort, and disjoint
+owned I1 storage with unchanged copied IDs. Cover wrong seed,
+P1/P3/empty prompt and `-1`/`256` IDs. Malformed authentic T1
+rank/extent/dtype/device/layout/storage needs an explicit **test-only
+descriptor/storage corruption hook**, with fixture-owned restoration; a
+forged T1 pointer alone does not prove this rejection. Also cover forged,
+copied, dead and cross-registry shells, held I1 borrow,
+wrong-kind/repeated release, constructor/allocation
 failure cuts, preservation and same-authority retry. Re-run unchanged C2
 input/release tests; prove one owner archive, exact exports/closure,
 private-link negatives, fresh AOT callers, feature-off and supported pinned
-fe9 normal/repeat/sanitizer gates. No public C4 result/generation follows
-until the production coordinator and output accessor/release adapter are
+fe9 normal/repeat/sanitizer gates. Input release after generator close and
+dead-input generate rejection move to the later producer gate. No public
+C4 result/generation follows until the production coordinator and output
+accessor/release adapter are
 reviewed and composed. EOS, loop, N>1, persistence and CLI3 remain separate.
