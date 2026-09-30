@@ -74,6 +74,10 @@
           (set! trainer (trainer-create resolved tokenizer dataset
                                         model optimizer))
           (cli3-b-restore! trainer checkpoint)
+          ;; TR3 owns the model until release, which requires idle train mode.
+          ;; Generation takes the restored model only after that lease ends.
+          (trainer-release! trainer)
+          (set! trainer #f)
           (module-eval! model)
           (set! generator
             (g3g-public-generator-create

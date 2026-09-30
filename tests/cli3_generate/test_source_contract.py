@@ -158,6 +158,18 @@ class SingleRegistryContract(unittest.TestCase):
     def test_generate_command_is_a_bounded_successor(self):
         extension = (FIXTURE / 'generate_extension.esk').read_text()
         self.assertIn('(cli3-b-restore! trainer checkpoint)', extension)
+        restore = extension.index('(cli3-b-restore! trainer checkpoint)')
+        release = extension.index('(trainer-release! trainer)', restore)
+        clear = extension.index('(set! trainer #f)', release)
+        evaluation = extension.index('(module-eval! model)', clear)
+        generator = extension.index('(g3g-public-generator-create', evaluation)
+        self.assertLess(restore, release)
+        self.assertLess(release, clear)
+        self.assertLess(clear, evaluation)
+        self.assertLess(evaluation, generator)
+        self.assertIn('(if owned-trainer\n'
+                      '            (attempt (lambda () (trainer-release! owned-trainer))))',
+                      extension)
         self.assertIn('(g3g-public-generator-create', extension)
         self.assertIn('(t2-wave2-tokenizer-encode tokenizer (bytevector prompt))',
                       extension)

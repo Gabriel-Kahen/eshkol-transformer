@@ -690,6 +690,13 @@ K2's `invalid-argument`/`capability-require` error under public
 and categories, while the remaining negative checks retain their strict cause
 expectations. Supported prerequisite and command linked/runtime acceptance
 remain pending at the corrected heads.
+The subsequent command gate built and linked, passed tokenizer, corpus,
+pretrain, and both public-runtime repetitions, then the first greedy generate
+returned `invalid-state`/`trainer-release!` during cleanup: the command had
+switched its still-enrolled model to eval mode. The command successor now ends
+the TR3 lease immediately after checkpoint restore, while the model is idle
+in train mode, and only then enters eval mode for G3 generation. Exact linked
+command acceptance remains pending.
 
 The bounded [TR3 one-batch overfit](TR3_ONE_BATCH_OVERFIT.md) and
 [disjoint held-out improvement](TR3_HELDOUT_IMPROVEMENT.md) witnesses are
