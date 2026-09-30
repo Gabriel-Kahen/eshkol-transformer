@@ -16,10 +16,10 @@ trap 'rm -rf -- "${temporary_dir}"' EXIT
 
 E1B_COMPILER_TIMEOUT_SECONDS="${CLI3_COMPILER_TIMEOUT_SECONDS:-900}" \
   /usr/bin/bash "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
-    "${PROJECT_ROOT}/native/cli3_root.esk" \
-    "${PROJECT_ROOT}/native/cli3_package_bridge.c" \
-    "${PROJECT_ROOT}/native/cli3_private_renames.txt" \
-    "${PROJECT_ROOT}/native/cli3_public_exports.txt" \
+    "${PROJECT_ROOT}/native/cli3_generate_root.esk" \
+    "${PROJECT_ROOT}/native/cli3_generate_package_bridge.c" \
+    "${PROJECT_ROOT}/native/cli3_generate_private_renames.txt" \
+    "${PROJECT_ROOT}/native/cli3_generate_public_exports.txt" \
     "${temporary_dir}/cli3.o" \
     "${PROJECT_ROOT}/internal/p1/lib" \
     "${PROJECT_ROOT}/internal/c1/lib" \
