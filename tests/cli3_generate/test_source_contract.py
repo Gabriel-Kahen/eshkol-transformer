@@ -73,6 +73,22 @@ class SingleRegistryContract(unittest.TestCase):
             with self.subTest(rejected_export=name):
                 self.assertIsNone(re.fullmatch(pattern, name))
 
+    def test_canonical_cli3_strings_include_localized_tr3_m3_wrappers(self):
+        wrappers = [name for name in lines(NATIVE / 'tr3_public_installed_exports.txt')
+                    if name.startswith('et_e1b_public_m3_')]
+        self.assertEqual(len(wrappers), 8)
+        manifest = lines(NATIVE / 'cli3_public_strings.txt')
+        self.assertEqual(manifest, sorted(set(manifest)))
+        self.assertEqual([name for name in manifest
+                          if name.startswith('et_e1b_public_m3_')], wrappers)
+        bridge = (NATIVE / 'tr3_public_installed_bridge.c').read_text()
+        for name in wrappers:
+            self.assertIn('void ' + name + '(', bridge)
+            self.assertNotIn(name, lines(NATIVE / 'cli3_public_exports.txt'))
+            self.assertNotIn(name, lines(NATIVE / 'cli3_defined_symbols.txt'))
+        self.assertIn('#include "tr3_public_installed_bridge.c"',
+                      (NATIVE / 'cli3_package_bridge.c').read_text())
+
     def test_bridge_keeps_one_predecessor(self):
         bridge = (FIXTURE / 'aggregate_bridge.c').read_text()
         m3 = (NATIVE / 'm3_package_bridge.c').read_text()

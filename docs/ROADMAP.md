@@ -697,6 +697,14 @@ switched its still-enrolled model to eval mode. The command successor now ends
 the TR3 lease immediately after checkpoint restore, while the model is idle
 in train mode, and only then enters eval mode for G3 generation. Exact linked
 command acceptance remains pending.
+The next command gate passed greedy/categorical generation and repeats, all
+command negatives, and both public-runtime repetitions. Its final predecessor
+CLI3 compatibility rebuild rejected a stale 131-string manifest: the accepted
+TR3 bridge adds eight localized M3 public wrapper strings, producing 139
+compiler-selected strings. The canonical CLI3 manifest now lists those exact
+eight; its two exports and eight defined globals remain unchanged. The
+six-command compatibility gate and complete command gate remain pending at the
+corrected head.
 
 The bounded [TR3 one-batch overfit](TR3_ONE_BATCH_OVERFIT.md) and
 [disjoint held-out improvement](TR3_HELDOUT_IMPROVEMENT.md) witnesses are
