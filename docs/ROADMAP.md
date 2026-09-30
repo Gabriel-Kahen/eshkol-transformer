@@ -853,10 +853,14 @@ gate. The candidate retains selected ID, raw
 byte and authentic next logits in the native context while the requested
 budget-two output stays pending and unexposed; abort preserves committed
 `3/1110` cache and successor RNG. First-token EOS is rejected before commit
-until the terminal output contract exists. Local unsupported-host Clang 22
-normal and ASan/UBSan/LSan checks pass 301 each, and the unchanged first-frame
-test passes 2,368 checks. Independent review and the supported pinned gate
-remain pending.
+until the terminal output contract exists. The independently reviewed source
+at `3626fda`/tree `e523e229` passed the supported pinned-fe9/Clang 21
+normal, repeat and ASan+UBSan+LSan gate: 301 native checks per mode,
+independent G3-S/Philox oracle, exact private-symbol delta, isolated-macro
+rejection, and unchanged first-frame 2,368 checks. The 24-file seal is
+`g3c4-p2g2-prefix-3626fda-20260930-a/SHA256SUMS` (`7ca07439...`). Genuine
+same-aggregate T1 decode, second-token forward, EOS and terminal output remain
+later gates.
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
