@@ -45,6 +45,18 @@ Commands:
   pretrain    Train the fixed CPU f32 diagnostic profile (1..4 updates)
   evaluate    Evaluate a checkpoint with that fixed profile
 EOF
+if [[ "${CLI3_GENERATE_EXPECTED:-0}" == 1 ]]; then
+  python3 - "${temporary_dir}/help.expected" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+text = p.read_text()
+text = text.replace('pretrain|evaluate [OPTIONS]',
+                    'pretrain|evaluate|generate [OPTIONS]')
+text += '  generate    Restore a C2 checkpoint and generate one raw byte\n'
+p.write_text(text)
+PY
+fi
 run_exact help 0 "${executable}" --help
 cmp "${temporary_dir}/help.expected" "${temporary_dir}/help.stdout"
 [[ ! -s "${temporary_dir}/help.stderr" ]]
@@ -57,6 +69,12 @@ printf '%s\n' 'Usage: eshkol-transformer evaluate --config PATH --tokenizer PATH
 run_exact evaluate-help 0 "${executable}" evaluate --help
 cmp "${temporary_dir}/evaluate-help.expected" "${temporary_dir}/evaluate-help.stdout"
 [[ ! -s "${temporary_dir}/evaluate-help.stderr" ]]
+if [[ "${CLI3_GENERATE_EXPECTED:-0}" == 1 ]]; then
+  printf '%s\n' 'Usage: eshkol-transformer generate --config PATH --tokenizer PATH --train-corpus DIRECTORY --checkpoint PATH --prompt-hex HH --sampling greedy|categorical --seed N' >"${temporary_dir}/generate-help.expected"
+  run_exact generate-help 0 "${executable}" generate --help
+  cmp "${temporary_dir}/generate-help.expected" "${temporary_dir}/generate-help.stdout"
+  [[ ! -s "${temporary_dir}/generate-help.stderr" ]]
+fi
 for cli3_b_case in pretrain evaluate; do
   run_exact "${cli3_b_case}-missing" 2 "${executable}" "${cli3_b_case}"
   [[ ! -s "${temporary_dir}/${cli3_b_case}-missing.stdout" ]]
