@@ -844,7 +844,19 @@ ASan+UBSan+LSan gate passed 2,368 first-frame checks per mode, the 4,477-check
 feature-off predecessor, and the independent G3-S/Philox oracle. The sealed
 23-file evidence is `g3c4-p2g2-first-frame-clang21-3b90582-20260929-c/`
 `SHA256SUMS` (`bfdbb5892b05...`). This remains a private first-frame leaf:
-no first-token commit, second decode, EOS, G2 output, public API or CLI claim.
+no second decode, EOS, G2 output, public API or CLI claim. The next isolated
+[private prefix candidate](g3/G3_C4_P2_G2_PREFIX_COMMIT_LEAF.md) adds a
+feature-gated position-two K/V and RNG commit
+after verifying the staged frame and caller-supplied V256 byte against the
+selected ID. Genuine same-aggregate T1 decode provenance remains an Eshkol
+gate. The candidate retains selected ID, raw
+byte and authentic next logits in the native context while the requested
+budget-two output stays pending and unexposed; abort preserves committed
+`3/1110` cache and successor RNG. First-token EOS is rejected before commit
+until the terminal output contract exists. Local unsupported-host Clang 22
+normal and ASan/UBSan/LSan checks pass 301 each, and the unchanged first-frame
+test passes 2,368 checks. Independent review and the supported pinned gate
+remain pending.
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
