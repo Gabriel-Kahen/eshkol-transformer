@@ -18,6 +18,8 @@ raw_include_dirs=("${@:6}")
 # still run before toolchain verification or compilation.
 cli3_generate_exact_tuple=0
 cli3_generate_prefix="${PROJECT_ROOT}/tests/cli3_generate/aggregate"
+cli3_production_exact_tuple=0
+cli3_production_prefix="${PROJECT_ROOT}/native/cli3_generate"
 if [[ "${raw_private_root}" == "${cli3_generate_prefix}_root.esk" && \
       "${raw_package_bridge}" == "${cli3_generate_prefix}_bridge.c" && \
       "${raw_package_renames}" == "${cli3_generate_prefix}_private_renames.txt" && \
@@ -31,6 +33,20 @@ if [[ "${raw_private_root}" == "${cli3_generate_prefix}_root.esk" && \
       "${raw_include_dirs[5]}" == "${PROJECT_ROOT}/internal/e3/lib" && \
       "${raw_include_dirs[6]}" == "${PROJECT_ROOT}/src" ]]; then
   cli3_generate_exact_tuple=1
+fi
+if [[ "${raw_private_root}" == "${cli3_production_prefix}_root.esk" && \
+      "${raw_package_bridge}" == "${cli3_production_prefix}_package_bridge.c" && \
+      "${raw_package_renames}" == "${cli3_production_prefix}_private_renames.txt" && \
+      "${raw_public_exports}" == "${cli3_production_prefix}_public_exports.txt" && \
+      "${#raw_include_dirs[@]}" == 7 && \
+      "${raw_include_dirs[0]}" == "${PROJECT_ROOT}/internal/p1/lib" && \
+      "${raw_include_dirs[1]}" == "${PROJECT_ROOT}/internal/c1/lib" && \
+      "${raw_include_dirs[2]}" == "${PROJECT_ROOT}/internal/t2/lib" && \
+      "${raw_include_dirs[3]}" == "${PROJECT_ROOT}/internal/t1/lib" && \
+      "${raw_include_dirs[4]}" == "${PROJECT_ROOT}/internal/d2/lib" && \
+      "${raw_include_dirs[5]}" == "${PROJECT_ROOT}/internal/e3/lib" && \
+      "${raw_include_dirs[6]}" == "${PROJECT_ROOT}/src" ]]; then
+  cli3_production_exact_tuple=1
 fi
 g3g_tuple_requested=0
 g3g_g0_tuple_requested=0
@@ -69,7 +85,8 @@ source "${PROJECT_ROOT}/scripts/e3-private-package-policy.sh"
 if [[ "${e3_tuple_requested}" == 1 ]]; then
   m3_tuple_requested=0
   m3t_tuple_requested=0
-elif [[ "${cli3_generate_exact_tuple}" == 1 ]]; then
+elif [[ "${cli3_generate_exact_tuple}" == 1 || \
+        "${cli3_production_exact_tuple}" == 1 ]]; then
   m3_tuple_requested=0
   m3t_tuple_requested=0
 else
@@ -119,6 +136,14 @@ cli3_lexical_generate_source_closure="${cli3_generate_prefix}_source_closure.txt
 cli3_lexical_generate_native_source_closure="${cli3_generate_prefix}_native_source_closure.txt"
 cli3_lexical_undefined="${PROJECT_ROOT}/native/cli3_undefined_symbols.txt"
 cli3_lexical_generate_undefined="${cli3_generate_prefix}_undefined_symbols.txt"
+cli3_lexical_production_root="${cli3_production_prefix}_root.esk"
+cli3_lexical_production_bridge="${cli3_production_prefix}_package_bridge.c"
+cli3_lexical_production_renames="${cli3_production_prefix}_private_renames.txt"
+cli3_lexical_production_exports="${cli3_production_prefix}_public_exports.txt"
+cli3_lexical_production_public_strings="${cli3_production_prefix}_public_strings.txt"
+cli3_lexical_production_source_closure="${cli3_production_prefix}_source_closure.txt"
+cli3_lexical_production_native_source_closure="${cli3_production_prefix}_native_source_closure.txt"
+cli3_lexical_production_undefined="${cli3_production_prefix}_undefined_symbols.txt"
 k2_tuple_requested=0
 for raw_k2_input in \
     "${raw_private_root}" "${raw_package_bridge}" \
@@ -222,6 +247,10 @@ for raw_cli3_input in \
     "${cli3_lexical_generate_bridge}"|\
     "${cli3_lexical_generate_renames}"|\
     "${cli3_lexical_generate_exports}"|\
+    "${cli3_lexical_production_root}"|\
+    "${cli3_lexical_production_bridge}"|\
+    "${cli3_lexical_production_renames}"|\
+    "${cli3_lexical_production_exports}"|\
     "${cli3_lexical_bridge}"|native/cli3_package_bridge.c|\
     "${cli3_lexical_renames}"|native/cli3_private_renames.txt|\
     "${cli3_lexical_exports}"|native/cli3_public_exports.txt)
@@ -251,6 +280,16 @@ if [[ "${cli3_tuple_requested}" == 1 ]]; then
     cli3_requested_lexical_public_strings="${cli3_lexical_generate_public_strings}"
     cli3_requested_lexical_native_closure="${cli3_lexical_generate_native_source_closure}"
     cli3_requested_lexical_undefined="${cli3_lexical_generate_undefined}"
+  fi
+  if [[ "${raw_private_root}" == "${cli3_lexical_production_root}" ]]; then
+    cli3_requested_lexical_root="${cli3_lexical_production_root}"
+    cli3_requested_lexical_source_closure="${cli3_lexical_production_source_closure}"
+    cli3_requested_lexical_bridge="${cli3_lexical_production_bridge}"
+    cli3_requested_lexical_renames="${cli3_lexical_production_renames}"
+    cli3_requested_lexical_exports="${cli3_lexical_production_exports}"
+    cli3_requested_lexical_public_strings="${cli3_lexical_production_public_strings}"
+    cli3_requested_lexical_native_closure="${cli3_lexical_production_native_source_closure}"
+    cli3_requested_lexical_undefined="${cli3_lexical_production_undefined}"
   fi
   for raw_cli3_input in \
       "${raw_private_root}" "${raw_package_bridge}" \
@@ -428,6 +467,7 @@ package_source_closure=
 package_native_source_closure=
 cli3_formatter_fixture=0
 cli3_generate_fixture=0
+cli3_production_generate=0
 if [[ "${e3_tuple_requested}" == 1 ]]; then
     [[ "${private_root}" == "${e3_private_root}" && \
        "${package_bridge}" == "${e3_package_bridge}" && \
@@ -541,7 +581,8 @@ elif [[ "${m3t_tuple_requested}" == 1 ]]; then
     )
 elif [[ "${private_root}" == "${cli3_private_root}" || \
         "${private_root}" == "${cli3_formatter_private_root}" || \
-        "${private_root}" == "$(realpath -- "${cli3_lexical_generate_root}")" ]]; then
+        "${private_root}" == "$(realpath -- "${cli3_lexical_generate_root}")" || \
+        "${private_root}" == "$(realpath -- "${cli3_lexical_production_root}")" ]]; then
     cli3_selected_lexical_root="${cli3_lexical_root}"
     cli3_selected_lexical_source_closure="${cli3_lexical_source_closure}"
     cli3_selected_source_closure="${cli3_source_closure}"
@@ -568,6 +609,24 @@ elif [[ "${private_root}" == "${cli3_private_root}" || \
       cli3_lexical_public_strings="${cli3_lexical_generate_public_strings}"
       cli3_lexical_native_source_closure="${cli3_lexical_generate_native_source_closure}"
       cli3_lexical_undefined="${cli3_lexical_generate_undefined}"
+    fi
+    if [[ "${private_root}" == "$(realpath -- "${cli3_lexical_production_root}")" ]]; then
+      cli3_production_generate=1
+      cli3_selected_lexical_root="${cli3_lexical_production_root}"
+      cli3_selected_lexical_source_closure="${cli3_lexical_production_source_closure}"
+      cli3_selected_source_closure="${cli3_lexical_production_source_closure}"
+      cli3_lexical_bridge="${cli3_lexical_production_bridge}"
+      cli3_lexical_renames="${cli3_lexical_production_renames}"
+      cli3_lexical_exports="${cli3_lexical_production_exports}"
+      cli3_package_bridge="$(realpath -- "${cli3_lexical_production_bridge}")"
+      cli3_package_renames="$(realpath -- "${cli3_lexical_production_renames}")"
+      cli3_public_exports="$(realpath -- "${cli3_lexical_production_exports}")"
+      cli3_undefined_symbols="$(realpath -- "${cli3_lexical_production_undefined}")"
+      cli3_public_strings="$(realpath -- "${cli3_lexical_production_public_strings}")"
+      cli3_native_source_closure="$(realpath -- "${cli3_lexical_production_native_source_closure}")"
+      cli3_lexical_public_strings="${cli3_lexical_production_public_strings}"
+      cli3_lexical_native_source_closure="${cli3_lexical_production_native_source_closure}"
+      cli3_lexical_undefined="${cli3_lexical_production_undefined}"
     fi
     [[ "${raw_private_root}" == "${cli3_selected_lexical_root}" && \
        "${raw_package_bridge}" == "${cli3_lexical_bridge}" && \
@@ -627,6 +686,8 @@ elif [[ "${private_root}" == "${cli3_private_root}" || \
     cli3_e3_source="${PROJECT_ROOT}/src/eshkol_transformer/e3_frame.c"
     if [[ "${cli3_generate_fixture}" == 1 ]]; then
       cli3_e3_source="${PROJECT_ROOT}/tests/cli3_generate/aggregate_native_owner.c"
+    elif [[ "${cli3_production_generate}" == 1 ]]; then
+      cli3_e3_source="${PROJECT_ROOT}/native/cli3_generate_native_owner.c"
     fi
     package_native_sources=(
       "${PROJECT_ROOT}/native/data_io.c"
@@ -661,7 +722,8 @@ elif [[ "${private_root}" == "${cli3_private_root}" || \
       "${PROJECT_ROOT}/native/tr3_c_restore_bindings.c"
       "${PROJECT_ROOT}/native/tr3_public_step_metrics.c"
     )
-    if [[ "${cli3_generate_fixture}" == 1 ]]; then
+    if [[ "${cli3_generate_fixture}" == 1 || \
+          "${cli3_production_generate}" == 1 ]]; then
       package_native_sources+=(
         "${PROJECT_ROOT}/native/a2_kv_cache.c"
       )
@@ -1462,8 +1524,8 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
                                 -DET_TR3_C_O2_RESTORE_NATIVE) ;;
       esac
     fi
-    if [[ "${cli3_generate_fixture}" == 1 &&
-          "${package_native_source}" == "${PROJECT_ROOT}/tests/cli3_generate/aggregate_native_owner.c" ]]; then
+    if [[ ( "${cli3_generate_fixture}" == 1 || "${cli3_production_generate}" == 1 ) &&
+          "${package_native_source}" == "${cli3_e3_source}" ]]; then
       package_source_flags=(
         -DET_CLI3_E3_G3T_AGGREGATE_BUILD
         -DET_G3T_PREFILL_SAMPLE_PRIVATE -DET_G3T_OUTPUT_TEXT_PRIVATE
@@ -1478,10 +1540,10 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
         -DET_G3T_OWNED_TOKEN_INPUT_PRIVATE
         -DET_I64_TENSOR_STORAGE_QUERY_PRIVATE
         -DET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE)
-    elif [[ "${cli3_generate_fixture}" == 1 &&
+    elif [[ ( "${cli3_generate_fixture}" == 1 || "${cli3_production_generate}" == 1 ) &&
             "${package_native_source}" == "${PROJECT_ROOT}/src/eshkol_transformer/m3_i64_integration.c" ]]; then
       package_source_flags=(-DET_I64_TENSOR_STORAGE_QUERY_PRIVATE)
-    elif [[ "${cli3_generate_fixture}" == 1 &&
+    elif [[ ( "${cli3_generate_fixture}" == 1 || "${cli3_production_generate}" == 1 ) &&
             "${package_native_source}" == "${PROJECT_ROOT}/native/a2_kv_cache.c" ]]; then
       package_source_flags=(-DET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE)
     elif [[ "${g3g_package_policy}" == 1 &&
@@ -1568,7 +1630,7 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
   done
 fi
 
-if [[ "${cli3_generate_fixture}" == 1 ]]; then
+if [[ "${cli3_generate_fixture}" == 1 || "${cli3_production_generate}" == 1 ]]; then
   source "${PROJECT_ROOT}/scripts/cli3-generate-native-inputs.sh"
 elif [[ "${package_policy}" == e3-private-aggregate ]]; then
   source "${PROJECT_ROOT}/scripts/e3-private-native-inputs.sh"

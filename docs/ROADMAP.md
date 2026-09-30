@@ -679,6 +679,19 @@ The checksum is repinned to the current builder bytes, with the remaining
 M3CG predecessor hashes and package guard checks unchanged. A fresh hosted
 exact-head run is required.
 
+The Wave 3 production CLI3 `generate` candidate moves the reviewed fixed
+CPU-f32 P1/G1 command into an exact installed CLI3 successor tuple. It retains
+the executable's dispatch/fallback ABI (two exports, eight globals), uses the
+same T2 tokenizer registry and one E3/G3-T M3 owner, and pins 85 Eshkol and
+99 native source rows plus the 139-string and 177-undefined boundaries. A
+focused host contract suite checks the exact tuple, near-match rejection,
+single native owner and trainer-release ordering. A new supported gate will
+build through `build-cli3.sh`, exercise greedy/categorical one-byte output,
+malformed and corrupt inputs, and rerun the six earlier commands. The linked
+production gate and independent review remain pending; this candidate adds no
+EOS control, multi-token continuation, general profile, GPU or new resume
+behavior.
+
 The bounded [TR3 one-batch overfit](TR3_ONE_BATCH_OVERFIT.md) and
 [disjoint held-out improvement](TR3_HELDOUT_IMPROVEMENT.md) witnesses are
 accepted locally at `328f049`/tree `55f84c0` against merged main `a51ab96`.

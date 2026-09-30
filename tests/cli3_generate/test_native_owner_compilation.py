@@ -82,6 +82,26 @@ class NativeOwnerCompilation(unittest.TestCase):
             self.assertIn('requires the CLI3 E3/G3-T aggregate TU',
                           wrong_order.stderr)
 
+    def test_production_owner_matches_reviewed_single_registry(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            fixture = directory / 'fixture.o'
+            production = directory / 'production.o'
+            flags = ['-DET_CLI3_E3_G3T_AGGREGATE_BUILD', *G3_FLAGS]
+            for source, output in (
+                ('tests/cli3_generate/aggregate_native_owner.c', fixture),
+                ('native/cli3_generate_native_owner.c', production),
+            ):
+                result = self.compile(source, output, flags)
+                self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(self.symbols(production, True),
+                             self.symbols(fixture, True))
+            self.assertEqual(self.symbols(production).count('m3_workspaces'), 1)
+            rejected = self.compile('native/cli3_generate_native_owner.c',
+                                    directory / 'rejected.o', G3_FLAGS)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn('exact package build mode', rejected.stderr)
+
 
 if __name__ == '__main__':
     unittest.main()
