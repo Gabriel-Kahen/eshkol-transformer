@@ -103,8 +103,12 @@ impossible failure in its closed mutation tail is fail-stop.
 
 Before the prefix commit, a caught failure aborts only the genuine staged
 frame/output and releases the exact call/model/generator links. It scrubs the
-captured original raw/staging buffers, leaves committed P2 cache `2/1100`,
-original RNG and binding intact, and permits a fresh authenticated request.
+captured original raw/staging buffers and preserves the original RNG. If P2
+prefill failed, its candidate transaction did not commit: rollback preserves
+the authenticated entry cache and binding, without asserting `2/1100`. If
+prefill succeeded but later sampling, forward, decode or precommit validation
+failed, rollback preserves its committed P2 cache `2/1100` and prefill
+binding. Either path permits a fresh authenticated request.
 After the prefix commit, the same authenticated rollback invokes native
 `call_abort_v1` to discard the pending output, scrubs the captured carriers
 and closes the Eshkol call, while preserving native committed K/V at
@@ -135,9 +139,11 @@ model/eval/pin drift, altered or equal-mutated raw **and** staging bytes,
 wrong output/ledger/auxiliary identities, sampled `-1/256`, first-token EOS,
 held output-I1/A2 leases, malformed/aliased bytevector headers, bridge
 prefill/sample/forward failures, decoder failure and native precommit failures;
-repair and retry where permitted. Inject an impossible closed-tail failure
-and require fail-stop. Run feature-off P2/G1/manual/C2 checks, Q0 exact
-checker allowlist/near misses, static closure, and supported pinned normal,
+check entry cache/binding after prefill failure versus P2 `2/1100` and its
+binding after sample/forward failure, then repair and retry where permitted.
+Inject an impossible closed-tail failure and require fail-stop. Run feature-off
+P2/G1/manual/C2 checks, Q0 exact checker allowlist/near misses, static closure,
+and supported pinned normal,
 repeat and sanitizer Eshkol plus native gates. Only after this ownership and
 provenance contract is reviewed should its code be written. Second-token
 forward, EOS, terminal G=1/2 output, public ABI/profile and CLI remain
