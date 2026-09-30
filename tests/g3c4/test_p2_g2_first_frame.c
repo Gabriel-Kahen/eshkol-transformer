@@ -215,7 +215,10 @@ static void rejection_and_retry(et_g3c4_model_owner_internal *owner) {
   OK(et_g3c4_private_generator_close_v1(context));
 }
 
-int main(void) {
+#ifndef ET_G3C4_P2_G2_FIRST_FRAME_TEST_MAIN
+#define ET_G3C4_P2_G2_FIRST_FRAME_TEST_MAIN main
+#endif
+int ET_G3C4_P2_G2_FIRST_FRAME_TEST_MAIN(void) {
   et_g3c4_model_owner_internal *owner = create_owner();
   first_frame(owner, 0);
   first_frame(owner, 1);
