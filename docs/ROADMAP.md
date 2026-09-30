@@ -672,6 +672,12 @@ profile and one-byte prompt/output. The production CLI3 package does not yet
 export `generate`; production integration, broader G3 generation, E3
 coexistence beyond this bounded aggregate, and hosted exact-head CI remain
 separate gates.
+PR #168 hosted run `36655911684` failed model-composition at M3CG's pinned
+predecessor checksum for `scripts/build-e1b-consumer.sh`; the reviewed exact
+CLI3 fixture dispatcher had changed that shared builder after M3CG's pin.
+The checksum is repinned to the current builder bytes, with the remaining
+M3CG predecessor hashes and package guard checks unchanged. A fresh hosted
+exact-head run is required.
 
 The bounded [TR3 one-batch overfit](TR3_ONE_BATCH_OVERFIT.md) and
 [disjoint held-out improvement](TR3_HELDOUT_IMPROVEMENT.md) witnesses are
