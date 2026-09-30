@@ -860,7 +860,15 @@ independent G3-S/Philox oracle, exact private-symbol delta, isolated-macro
 rejection, and unchanged first-frame 2,368 checks. The 24-file seal is
 `g3c4-p2g2-prefix-3626fda-20260930-a/SHA256SUMS` (`7ca07439...`). Genuine
 same-aggregate T1 decode, second-token forward, EOS and terminal output remain
-later gates.
+later gates. A [proposed Eshkol P2/G2 ownership and T1 prefix contract](g3/G3_C4_P2_G2_T1_PREFIX_OWNERSHIP_CONTRACT.md)
+now specifies the missing private budget-two policy/call/output admission,
+one-region nonterminal call scope, native sampled-ID carrier through genuine
+same-aggregate T1 decode, exact pre/post-prefix rollback and closed commit
+tail. It also identifies the required reviewed private native carrier bridge:
+Eshkol `ptr` passes a bytevector header, while first-frame native entrypoints
+take raw scalar/f32 pointers. It is documentation only and awaits independent
+contract review before implementation; the public P2/G1 and C2 paths remain
+capped as before.
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
