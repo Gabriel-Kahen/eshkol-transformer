@@ -11,7 +11,8 @@ already admit and commit the numerical prefix. The accepted
 `t1-private-g3-decode-raw-into!` checks the registered raw V256 tokenizer
 and converts one little-endian `i64` staging word to one raw byte. Eshkol
 currently admits neither a budget-two generator/call/output nor a call that
-can remain active after this internal commit.
+can remain active after this internal commit. It also has no accepted FFI
+carrier for the native first-frame raw pointer arguments.
 
 ## Private admission and preallocation
 
@@ -30,10 +31,11 @@ and valid policy/RNG before a P2 call. The owned P2 input, first categorical
 draw availability and pending-output capacity must be checked before prefill.
 
 Before the initial prefill commit, allocate the pending output's two-byte raw
-and sixteen-byte final staging buffers through the accepted output envelope,
-plus distinct private **one-byte raw and eight-byte ID staging** carriers for
-the first prefix. The latter are fixed owner-record children, never public
-output fields. The native pending `I1[2]` output remains zero and unready.
+and sixteen-byte final staging payloads through the accepted output envelope,
+plus distinct private **one-byte raw and eight-byte ID staging payloads** for
+the first prefix. Each bytevector also has its Eshkol length header. The
+private carriers are fixed owner-record children, never public output fields.
+The native pending `I1[2]` output remains zero and unready.
 `g3t-output-entry-pending` must recognize the exact feature-gated P2/G2
 capacity and original auxiliary identities without treating capacity two as
 two emitted tokens. The P2/G1 text/copy-out/public validators continue to
@@ -55,17 +57,33 @@ an output, detached continuation or active call to another region. A bounded
 test-only path may abort inside that region after proving the prefix. A later
 second-token composer must run in the *same* region before terminal finish.
 
-Bind existing native prompt preflight/prefill, last-logit sample,
-`token_forward_v1` and `p2g2_prefix_commit_v1` through private Eshkol externs
-with their existing signatures; this is binding work, not a new native ABI.
-The native last-logit sampler writes its selected `i64` directly into the
-recorded eight-byte staging carrier. Check all seven upper bytes are zero,
-take the low byte as the exact `0..255` speculative ID, and pass that ID to
-`token_forward_v1`. No caller-provided ID, encoded token or raw byte may
-replace this carrier. The first prompt ID equal to EOS has no effect; a
-**selected** first-token EOS is rejected before the prefix commit in this
-nonterminal leaf. Later terminal `G=1` EOS publication needs a separate
-contract.
+The accepted native prompt prefill, `token_frame_begin_last_v1` and
+`token_forward_v1` take raw `float[256]`/`int64_t*` pointers. An Eshkol
+bytevector passed as `ptr` points to its signed-i64 **length header**, not
+its payload. Directly passing the eight-byte ID staging bytevector to the
+sampler would overwrite its length, and passing a 1,024-byte bytevector as a
+logits buffer would overwrite that header. No such direct binding is
+admitted. A separately reviewed **private native carrier bridge** is a
+prerequisite: it authenticates an Eshkol bytevector header declaring exactly
+eight payload bytes, rejects overlap with context, model, output, I1 and A2
+storage, owns raw
+`float[256]` prefill/forward scratch and a scalar selected-ID slot, and
+calls the accepted native P2 prefill, last-logit sample and token forward in
+order. On complete success only, it writes the native sampled `i64` as
+little-endian bytes into the staging **payload**, leaving the length header
+eight. Failures before that write leave staging unchanged and let the call
+scope abort the candidate frame. No public symbol, installed facade, provider
+row or exact private bridge name/signature is assumed here; its ABI and
+ownership checks need their own source-and-test review before this Eshkol
+coordinator can be implemented. `p2g2_prefix_commit_v1` already accepts the
+one-byte raw carrier header and needs no signature change.
+
+After the bridge succeeds, check all seven upper payload bytes are zero and
+take the low payload byte as the exact `0..255` selected ID. No
+caller-provided ID, encoded token or raw byte may replace this carrier. The
+first prompt ID equal to EOS has no effect; a **selected** first-token EOS is
+rejected before the prefix commit in this nonterminal leaf. Later terminal
+`G=1` EOS publication needs a separate contract.
 
 Call `t1-private-g3-decode-raw-into!` with the retained, reauthenticated
 same-aggregate tokenizer and this same staging carrier, writing the recorded
@@ -109,13 +127,14 @@ call entry. Do not use P2/G1's `COMMITTED`-means-finished path.
 ## Proving gate and next dependency
 
 Exercise two authentic P2 prompts, greedy and categorical, with native
-selected-ID staging, genuine same-registry T1 raw decode, bitwise P3
-next-logit/K/V reference and independent G3-S/Philox ID/RNG oracle. Check
-pre/post commit `2/1100` and `3/1110`, zero/unexposed pending `I1[2]`, and
-exact rollback cache/RNG states. Cut tokenizer registry/core drift,
+bridge-produced selected-ID staging, genuine same-registry T1 raw decode,
+bitwise P3 next-logit/K/V reference and independent G3-S/Philox ID/RNG
+oracle. Check pre/post commit `2/1100` and `3/1110`, zero/unexposed pending
+`I1[2]`, and exact rollback cache/RNG states. Cut tokenizer registry/core drift,
 model/eval/pin drift, altered or equal-mutated raw **and** staging bytes,
 wrong output/ledger/auxiliary identities, sampled `-1/256`, first-token EOS,
-held output-I1/A2 leases, decoder failure and native precommit failures;
+held output-I1/A2 leases, malformed/aliased bytevector headers, bridge
+prefill/sample/forward failures, decoder failure and native precommit failures;
 repair and retry where permitted. Inject an impossible closed-tail failure
 and require fail-stop. Run feature-off P2/G1/manual/C2 checks, Q0 exact
 checker allowlist/near misses, static closure, and supported pinned normal,
