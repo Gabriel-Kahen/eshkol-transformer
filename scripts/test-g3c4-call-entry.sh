@@ -81,6 +81,7 @@ cat >"${temporary_dir}/cxx-wrap" <<EOF
 #!/usr/bin/env bash
 exec $(printf '%q' "${cxx}") "\$@" \
   -Wl,--wrap=arena_allocate_vector_with_header \
+  -Wl,--wrap=arena_allocate_with_header \
   -Wl,--wrap=arena_allocate_cons_with_header \
   -Wl,--wrap=malloc -Wl,--wrap=eshkol_push_exception_handler
 EOF

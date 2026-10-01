@@ -895,9 +895,14 @@ adds an off-default source gate for exact budget-two private policy/call
 tuple and `(P,G)=(2,2)` pending output capacity, while the old terminal
 scope and public C4 adapter reject budget two. It preallocates two-byte raw
 and sixteen-byte staging auxiliaries and keeps the native output pending,
-zero and unready. This bounded prerequisite has passed local static, Q0 and
-CI topology checks; compiled Eshkol and supported normal/repeat/sanitizer
-evidence plus independent source/test review remain pending. The protected
+zero and unready. This bounded prerequisite passed local static, Q0 and
+CI topology checks. Its first supported fe9/f31 compiled gate stopped in the
+P2/G1 predecessor link: the shared allocation shim calls
+`__real_arena_allocate_with_header`, but that runner omitted the corresponding
+GNU linker wrap option. A test-only runner repair adds the option to every
+G3-C4 consumer of the shared shim and checks that pairing statically; compiled
+normal/repeat/sanitizer evidence and independent repair review remain pending.
+The protected
 one-region call record, original auxiliary identity/extent authentication,
 private prefix carriers, genuine T1 decode and native prefix commit remain
 the next gate; no generated token or terminal output is claimed.
