@@ -46,6 +46,11 @@ class RetentionTupleTest(unittest.TestCase):
         native = lines(BASE, "native_source_closure")
         native.insert(native.index("native/e3_private_bridge.c"),
                       "tests/e3_private/retention_bridge.c")
+        # The retention-only E3 observer includes D2's allocation controls
+        # before m3_model.c; preserve the compiler's first-seen dependency order.
+        native.remove("native/d2_native.h")
+        native.insert(native.index("src/eshkol_transformer/m3_model.c"),
+                      "native/d2_native.h")
         self.assertEqual(lines(RETENTION, "native_source_closure"), native)
         self.assertEqual(lines(RETENTION, "archive_members"),
                          ["e3_retention_package.o"])
