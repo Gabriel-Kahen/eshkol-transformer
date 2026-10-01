@@ -160,6 +160,7 @@ scripts/check-g3c4-p2g2-ownership.py
 scripts/test-g3c4-p2g2-carrier-bridge.sh
 scripts/test-g3c4-p2g2-ownership.sh
 tests/g3c4/p2_g1_public_generation_test.esk
+tests/g3c4/p2_g2_ownership_feature_off_test.esk
 tests/g3c4/p2_g2_ownership_test.esk
 docs/g3/G3_C4_P2_G2_T1_PREFIX_OWNERSHIP_CONTRACT.md
 docs/g3/G3_C4_P2_G2_ESHKOL_OWNERSHIP_ADMISSION_LEAF.md

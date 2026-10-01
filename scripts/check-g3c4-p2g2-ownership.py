@@ -17,6 +17,7 @@ envelope = (root / "native/g3c4_output_envelope_extension.esk").read_text()
 gate = (root / "native/g3c4_p2g2_ownership_extension.esk").read_text()
 public = (root / "native/g3c4_public_generation_dispatch_extension.esk").read_text()
 fixture = (root / "tests/g3c4/p2_g2_ownership_test.esk").read_text()
+feature_off = (root / "tests/g3c4/p2_g2_ownership_feature_off_test.esk").read_text()
 public_fixture = (root / "tests/g3c4/p2_g1_public_generation_test.esk").read_text()
 runner = (root / "scripts/test-g3c4-p2g2-ownership.sh").read_text()
 base_closure = (root / "native/g3c4_output_envelope_source_closure.txt").read_text().splitlines()
@@ -28,6 +29,7 @@ additions = [
     "scripts/test-g3c4-p2g2-carrier-bridge.sh",
     "scripts/test-g3c4-p2g2-ownership.sh",
     "tests/g3c4/p2_g1_public_generation_test.esk",
+    "tests/g3c4/p2_g2_ownership_feature_off_test.esk",
     "tests/g3c4/p2_g2_ownership_test.esk",
     "tests/q0/test_python_isolation.py",
     "docs/g3/G3_C4_P2_G2_T1_PREFIX_OWNERSHIP_CONTRACT.md",
@@ -56,9 +58,14 @@ assert gate.count("(vector-set! g3c4-p2g2-ownership-gate 0 #t)") == 1
 assert "extern" not in gate and "provide" not in gate
 assert "(= (vector-ref policy 5) 1)" in public
 assert "public C4 still rejects budget two with private gate on" in public_fixture
+assert "g3c4_p2g2_ownership_extension.esk" not in feature_off
+assert "(vector-set! g3c4-p2g2-ownership-gate 0 #f)" not in feature_off
+assert "(load \"g3c4_p2g2_ownership_extension.esk\")" in fixture.splitlines()[:8]
+for phrase in ("feature starts off", "feature-off policy rejects budget two",
+               "feature-off call rejects budget two",
+               "feature-off constructor rejects budget two"):
+    assert phrase in feature_off, phrase
 for phrase in (
-    "feature-off policy rejects budget two",
-    "feature-off call rejects budget two",
     "terminal scope rejects budget-two call",
     "P1/G2 reservation is rejected",
     "budget-two reservation requires retained request marker",
@@ -80,7 +87,10 @@ for phrase in ("verify_toolchain", "tests.q0.test_python_isolation",
                "detect_leaks=1", "cmp \"$evidence/normal-run.stdout\"",
                "ET_G3C4_P2_G2_FIRST_FRAME_PRIVATE",
                "test-g3c4-p2g1-pending.sh",
-               "test-g3c4-p2g2-carrier-bridge.sh"):
+               "test-g3c4-p2g2-carrier-bridge.sh",
+               "p2_g2_ownership_feature_off_test.esk",
+               "repeat-feature-off-run.stdout",
+               "sanitize-feature-off-run.stdout"):
     assert phrase in runner, phrase
 
 print("G3-C4 P2/G2 ownership static PASS")

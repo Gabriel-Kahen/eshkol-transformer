@@ -21,9 +21,14 @@ copy-out, terminal finish or a returned output through this leaf. The
 compiled Eshkol witness enrolls a budget-two call **only in its test fixture**
 to check native-backed pending ownership, rejected wrong tuples, malformed
 auxiliary lengths and child ledger, unready output and abort cleanup. The
-fixture also turns the private gate on while checking that the public C4
-constructor still rejects budget two. The accepted P2/G1 and C2 regressions
-remain predecessors of the supported gate.
+runner compiles separate feature-off and feature-on fixtures: the former never
+loads the enabling extension and checks default rejection; the latter loads it
+before exercising pending ownership. This separation matches Eshkol AOT source
+loading, which enables a loaded top-level gate before the original fixture's
+runtime assertions. The public C4 constructor's one-token guard and budget-two
+rejection fixture have source checks in this leaf; compiled public rejection
+remains outside its evidence. The accepted P2/G1 and C2 regressions remain
+predecessors of the supported gate.
 
 This is an admission prerequisite, not the protected one-region coordinator.
 The generic pending validator does not authenticate same-length replacement

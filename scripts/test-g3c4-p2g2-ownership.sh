@@ -94,42 +94,60 @@ exec $(printf '%q' "$cxx") $sanitizer_link "\$@" \\
   -Wl,--wrap=et_kernel_runtime_dispatch
 WRAPPER
   chmod 0500 "$directory/cxx-wrap"
-  env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
-    XDG_CACHE_HOME="$directory/cache" ESHKOL_CXX_COMPILER="$directory/cxx-wrap" \
-    ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
-    timeout --foreground --signal=TERM --kill-after=5s 600s \
-    "$eshkol_runner" --strict-types --optimize 0 --no-stdlib \
-    -I "$PROJECT_ROOT/internal/p1/lib" -I "$PROJECT_ROOT/internal/c1/lib" \
-    -I "$PROJECT_ROOT/internal/t1/lib" -I "$PROJECT_ROOT/src" \
-    -I "$PROJECT_ROOT/lib" -I "$PROJECT_ROOT/native" \
-    -L "$directory" --lib g3c4_p2g2_ownership \
-    "$PROJECT_ROOT/tests/g3c4/p2_g2_ownership_test.esk" \
-    -o "$directory/p2g2-ownership" \
-    >"$directory/compile.stdout" 2>"$directory/compile.stderr"
-  "${runtime[@]}" ESHKOL_ARENA_POISON=1 \
-    timeout --foreground --signal=TERM --kill-after=5s 120s \
-    "$directory/p2g2-ownership" >"$directory/run.stdout" \
-    2>"$directory/run.stderr"
-  test ! -s "$directory/run.stderr"
-  grep -E '^G3-C4 P2/G2 ownership PASS: checks=[1-9][0-9]* pending-only=1$' \
-    "$directory/run.stdout" >/dev/null
-  cp "$directory/compile.stdout" "$directory/compile.stderr" \
-     "$directory/run.stdout" "$directory/run.stderr" "$evidence/"
-  mv "$evidence/compile.stdout" "$evidence/$mode-compile.stdout"
-  mv "$evidence/compile.stderr" "$evidence/$mode-compile.stderr"
-  mv "$evidence/run.stdout" "$evidence/$mode-run.stdout"
-  mv "$evidence/run.stderr" "$evidence/$mode-run.stderr"
+  local fixture prefix source expected log
+  for fixture in feature-off ownership; do
+    prefix=
+    source="$PROJECT_ROOT/tests/g3c4/p2_g2_ownership_test.esk"
+    expected='^G3-C4 P2/G2 ownership PASS: checks=[1-9][0-9]* pending-only=1$'
+    if [[ "$fixture" == feature-off ]]; then
+      prefix=feature-off-
+      source="$PROJECT_ROOT/tests/g3c4/p2_g2_ownership_feature_off_test.esk"
+      expected='^G3-C4 P2/G2 feature-off PASS: checks=[1-9][0-9]*$'
+    fi
+    mkdir -p "$directory/cache/$fixture"
+    env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
+      XDG_CACHE_HOME="$directory/cache/$fixture" \
+      ESHKOL_CXX_COMPILER="$directory/cxx-wrap" \
+      ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
+      timeout --foreground --signal=TERM --kill-after=5s 600s \
+      "$eshkol_runner" --strict-types --optimize 0 --no-stdlib \
+      -I "$PROJECT_ROOT/internal/p1/lib" -I "$PROJECT_ROOT/internal/c1/lib" \
+      -I "$PROJECT_ROOT/internal/t1/lib" -I "$PROJECT_ROOT/src" \
+      -I "$PROJECT_ROOT/lib" -I "$PROJECT_ROOT/native" \
+      -L "$directory" --lib g3c4_p2g2_ownership \
+      "$source" -o "$directory/p2g2-$fixture" \
+      >"$directory/${prefix}compile.stdout" \
+      2>"$directory/${prefix}compile.stderr"
+    "${runtime[@]}" ESHKOL_ARENA_POISON=1 \
+      timeout --foreground --signal=TERM --kill-after=5s 120s \
+      "$directory/p2g2-$fixture" >"$directory/${prefix}run.stdout" \
+      2>"$directory/${prefix}run.stderr"
+    test ! -s "$directory/${prefix}run.stderr"
+    grep -E "$expected" "$directory/${prefix}run.stdout" >/dev/null
+    for log in compile.stdout compile.stderr run.stdout run.stderr; do
+      cp "$directory/${prefix}$log" "$evidence/$mode-${prefix}$log"
+    done
+  done
 }
 
 compile_mode normal
+ESHKOL_ARENA_POISON=1 "$tmp/normal/p2g2-feature-off" \
+  >"$evidence/repeat-feature-off-run.stdout" \
+  2>"$evidence/repeat-feature-off-run.stderr"
 ESHKOL_ARENA_POISON=1 "$tmp/normal/p2g2-ownership" \
   >"$evidence/repeat-run.stdout" 2>"$evidence/repeat-run.stderr"
+test ! -s "$evidence/repeat-feature-off-run.stderr"
 test ! -s "$evidence/repeat-run.stderr"
 compile_mode sanitize
+cmp "$evidence/normal-feature-off-run.stdout" \
+    "$evidence/repeat-feature-off-run.stdout"
+cmp "$evidence/normal-feature-off-run.stdout" \
+    "$evidence/sanitize-feature-off-run.stdout"
 cmp "$evidence/normal-run.stdout" "$evidence/repeat-run.stdout"
 cmp "$evidence/normal-run.stdout" "$evidence/sanitize-run.stdout"
 git -C "$PROJECT_ROOT" diff --check
 sha256sum "$PROJECT_ROOT/native/g3c4_p2g2_ownership_source_closure.txt" \
   >"$evidence/closure.sha256"
-cat "$evidence/static.stdout" "$evidence/normal-run.stdout"
+cat "$evidence/static.stdout" "$evidence/normal-feature-off-run.stdout" \
+    "$evidence/normal-run.stdout"
 printf 'G3-C4 P2/G2 ownership evidence: %s\n' "$evidence"

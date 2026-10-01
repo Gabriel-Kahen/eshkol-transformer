@@ -4,6 +4,7 @@
 (load "g3c4_call_entry_extension.esk")
 (load "g3c4_t1_output_decode_extension.esk")
 (load "g3c4_output_envelope_extension.esk")
+(load "g3c4_p2g2_ownership_extension.esk")
 
 (extern i64 output-test-field ptr i64
         :real et_g3c4_output_envelope_test_field_v1)
@@ -33,17 +34,6 @@
   (t1-private-register-core
     (t1-tokenizer-core-create 'raw '() '() '())))
 (define model (g3c4-model-create-seeded-internal 1729))
-(check "feature starts off" (not (vector-ref g3c4-p2g2-ownership-gate 0)))
-(check "feature-off policy rejects budget two"
-       (not (g3c4-policy?
-              (vector g3c4-model-profile 0 1065353216 256
-                      1065353216 2 #f))))
-(check "feature-off call rejects budget two"
-       (not (g3c4-call-tuple? 2 2)))
-(reject "feature-off constructor rejects budget two" 'invalid-argument
-  (lambda () (g3c4-generator-create-internal model tokenizer (config 2))))
-
-(load "g3c4_p2g2_ownership_extension.esk")
 (check "private gate enables exact budget two"
        (and (vector-ref g3c4-p2g2-ownership-gate 0)
             (g3c4-call-tuple? 2 2)

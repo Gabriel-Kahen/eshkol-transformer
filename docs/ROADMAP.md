@@ -900,9 +900,15 @@ CI topology checks. Its first supported fe9/f31 compiled gate stopped in the
 P2/G1 predecessor link: the shared allocation shim calls
 `__real_arena_allocate_with_header`, but that runner omitted the corresponding
 GNU linker wrap option. A test-only runner repair adds the option to every
-G3-C4 consumer of the shared shim and checks that pairing statically; compiled
-normal/repeat/sanitizer evidence and independent repair review remain pending.
-The protected
+G3-C4 consumer of the shared shim and checks that pairing statically. The
+fresh `c76e270` gate passed both predecessors and linked the ownership fixture,
+then failed its first normal runtime assertion: Eshkol AOT had enabled the
+top-level loaded private gate before the fixture checked its default-off state.
+A bounded test repair splits default-off and feature-on into independently
+compiled executables, so no gate reset can mask initialization; the compiled
+normal/repeat/sanitizer rerun and independent repair review remain pending.
+The public budget-two guard has source evidence in this leaf, with compiled
+public rejection still pending separately. The protected
 one-region call record, original auxiliary identity/extent authentication,
 private prefix carriers, genuine T1 decode and native prefix commit remain
 the next gate; no generated token or terminal output is claimed.
