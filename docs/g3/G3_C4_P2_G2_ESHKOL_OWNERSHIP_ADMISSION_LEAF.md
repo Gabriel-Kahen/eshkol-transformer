@@ -40,7 +40,16 @@ merged native carrier bridge, genuine same-registry T1 decode and native
 prefix commit. First-token EOS publication, second-token forward, terminal
 output, public ABI and CLI remain separate.
 
-Source and static/Q0/CI topology checks are local at this stage. The
-compiled Eshkol normal/repeat/sanitizer gate and independent source-and-test
-review are pending on an immutable commit; no supported execution claim is
-made here.
+The independently reviewed `10469b3`/tree `4744e099` source passed the
+supported pinned fe9/f31 Clang 21 gate. The two compiled fixtures each ran
+normal, repeat and ASan+UBSan+LSan: default-off passed four checks per mode,
+and private feature-on pending ownership passed 23 per mode with
+`pending-only=1`. Each fixture's stdout was byte-identical across modes;
+stderr was empty. Both predecessor gates, pre/post source pins and the
+launcher/Docker exits passed. The 89-file seal is
+`g3c4-p2g2-ownership-10469b3-fe9-f31-20261001-prepared-c/SHA256SUMS-RUN`
+(SHA-256 `6d99d776625a3e8ed6f19818f51e3865d0e1fd1204ced99f9d0aed1e66bfcf84`).
+Independent evidence review accepted the seal without findings. Hosted CI and
+merge remain pending. Public budget-two rejection has source checks here;
+protected call scope, prefix behavior and public execution remain outside
+this leaf.
