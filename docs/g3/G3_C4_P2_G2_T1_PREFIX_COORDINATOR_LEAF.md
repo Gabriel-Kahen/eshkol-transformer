@@ -4,4 +4,14 @@ This stacked source candidate follows the accepted [protected ownership scope](G
 
 The new compiled fixture is intended to exercise two genuine P2 prompts with greedy and categorical sampling, native sampled ID/T1 raw parity, pending zero `I1[2]`, committed `3/1110` cache and successor RNG, and bitwise direct P3 next-logit/K/V reference. A fresh native P2 prefill on the same unchanged owner, prompt and policy emits reference last logits for an independent Python G3-S/Philox check against the two **actual coordinator** selected IDs and RNG states. The fixture cuts prefill, sampling, forward, invalid-ID, selected-EOS, native prefix precommit lease, malformed header, alias and byte-mismatch paths; probes same-region decoder/core/registry/model/pin drift and equal-length carrier-byte changes; verifies exact entry/P2/post-prefix binding snapshots, cache/RNG/model parameter/gradient preservation and captured-buffer scrub; challenges post-prefix output/ledger/auxiliary identity before abort; and retries held output-I1 and A2 abort leases inside the call region. A forked native commit failure checks the impossible closed tail fails stop without damaging the parent’s real staged frame. A separate feature-off fixture rejects coordinator preflight. The native carrier, prefix and protected-scope predecessor gates remain dependencies of the supported runner.
 
-This is an **unverified source candidate** until independent source review and a pinned supported Eshkol normal/repeat/sanitizer gate accept the exact tree. Local host C syntax/static checks alone do not prove Eshkol compilation or runtime behavior. Parent PR #174 must merge before final integration of this stacked change. Second-token generation, EOS terminal handling, output publication, public ABI/profile and CLI remain later gates.
+Independent source-and-test review approved `d8e58859`/tree `806a7df6`,
+but its first pinned supported gate stopped at the feature-off Eshkol link
+before running either new fixture. The runner compiled the T1 shell and M3
+I1 owner without their exact-pair feature macro and omitted the existing
+I1 borrow-view test wrapper from the link. This follow-up aligns those
+real owner/wrapper flags and checks their object symbols before the fixture
+link; it changes no production API or numerical path. A fresh pinned
+normal/repeat/sanitizer Eshkol/native gate remains required before runtime
+or integration acceptance. Parent PR #174 is merged. Second-token
+generation, EOS terminal handling, output publication, public ABI/profile
+and CLI remain later gates.

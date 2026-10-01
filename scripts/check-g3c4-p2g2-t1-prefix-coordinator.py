@@ -68,6 +68,13 @@ assert "coordinator preflight rejects feature-off entry" in off
 assert "-DET_G3C4_P2_G2_CARRIER_BRIDGE_PRIVATE" in runner
 assert "-DET_G3C4_P2_G2_PREFIX_COMMIT_PRIVATE" in runner
 assert "-DET_G3C4_T1_I1_EXACT_PAIR_PRIVATE" in runner
+assert "-DET_G3C4_T1_I1_EXACT_PAIR_PRIVATE -DET_T1_I64_SHELL_TESTING" in runner
+assert ("-DET_G3C4_T1_I1_EXACT_PAIR_PRIVATE \\\n"
+        "    -DET_I64_TENSOR_STORAGE_QUERY_PRIVATE" in runner)
+assert "et_t1_i64_shell_private_c4_read_v1$'" in runner
+assert "et_i64_tensor_private_t1_pair_validate_v1$'" in runner
+assert "__wrap_et_i64_tensor_borrow_view_v1$'" in runner
+assert "--wrap=et_i64_tensor_borrow_view_v1" in runner
 assert "--wrap=et_g3c4_private_p2g2_prefix_commit_v1" in runner
 assert "--wrap=et_a2_kv_cache_transaction_commit_v1" in runner
 assert "check_p2_g2_t1_prefix_oracle.py" in runner

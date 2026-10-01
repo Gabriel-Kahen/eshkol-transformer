@@ -3,7 +3,7 @@ set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 verify_toolchain
-for command in ar cmp env git grep python3 sha256sum timeout; do
+for command in ar cmp env git grep nm python3 sha256sum timeout; do
   require_command "$command"
 done
 cc= cxx=
@@ -74,16 +74,24 @@ compile_mode() {
       -c "$PROJECT_ROOT/native/$source.c" \
       -o "$directory/objects/$source.o"
   done
-  "$cc" "${common[@]}" "${optimization[@]}" -DET_T1_I64_SHELL_TESTING \
+  "$cc" "${common[@]}" "${optimization[@]}" \
+    -DET_G3C4_T1_I1_EXACT_PAIR_PRIVATE -DET_T1_I64_SHELL_TESTING \
     -c "$PROJECT_ROOT/native/t1_i64_shell.c" \
     -o "$directory/objects/t1_i64_shell.o"
   "$cc" "${common[@]}" "${optimization[@]}" -DET_I64_TENSOR_TESTING \
+    -DET_G3C4_T1_I1_EXACT_PAIR_PRIVATE \
     -DET_I64_TENSOR_STORAGE_QUERY_PRIVATE -DET_M3_TESTING \
     -c "$PROJECT_ROOT/src/eshkol_transformer/m3_i64_integration.c" \
     -o "$directory/objects/m3_i64_integration.o"
   "$cc" "${common[@]}" "${optimization[@]}" \
     -c "$PROJECT_ROOT/src/eshkol_transformer/m3_model.c" \
     -o "$directory/objects/m3_model.o"
+  nm -g --defined-only "$directory/objects/t1_i64_shell.o" | \
+    grep -E ' [TW] et_t1_i64_shell_private_c4_read_v1$' >/dev/null
+  nm -g --defined-only "$directory/objects/m3_i64_integration.o" | \
+    grep -E ' [TW] et_i64_tensor_private_t1_pair_validate_v1$' >/dev/null
+  nm -g --defined-only "$directory/objects/output_envelope_native.o" | \
+    grep -E ' [TW] __wrap_et_i64_tensor_borrow_view_v1$' >/dev/null
   ar rcsD "$directory/libg3c4_p2g2_t1_prefix.a" "$directory"/objects/*.o
   local sanitizer_link=
   [[ "$mode" == sanitize ]] && \
@@ -96,6 +104,7 @@ exec $(printf '%q' "$cxx") $sanitizer_link "\$@" \\
   -Wl,--wrap=arena_allocate_cons_with_header \\
   -Wl,--wrap=malloc -Wl,--wrap=eshkol_push_exception_handler \\
   -Wl,--wrap=et_kernel_runtime_dispatch \\
+  -Wl,--wrap=et_i64_tensor_borrow_view_v1 \\
   -Wl,--wrap=et_g3c4_private_p2g2_first_frame_carrier_v1 \\
   -Wl,--wrap=et_g3c4_private_p2g2_prefix_commit_v1 \\
   -Wl,--wrap=et_a2_kv_cache_transaction_commit_v1

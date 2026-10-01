@@ -932,10 +932,14 @@ same-registry T1 decode and pre/post-prefix rollback remain the next gate.
 The stacked [private P2/G2 T1 prefix coordinator candidate](g3/G3_C4_P2_G2_T1_PREFIX_COORDINATOR_LEAF.md)
 composes the accepted native first-frame carrier, same-registry T1 raw decode,
 and native prefix commit inside that protected region. Its source and compiled
-off/on fixtures are pending independent review and a pinned supported gate;
-no `3/1110` Eshkol rollback proof or integration is claimed yet. Parent
-PR #174 must merge before this dependent source is integrated. Second-token,
-terminal/EOS, public and CLI work remain separate.
+off/on fixtures passed independent source-and-test review at `d8e58859`/tree
+`806a7df6`. Its first pinned supported gate stopped at the feature-off link
+before either new runtime fixture: the runner omitted exact-pair feature
+flags on the real T1 shell/M3 I1 owners and the I1 borrow-view test wrapper
+link flag. A focused runner repair is pending independent review and a new
+exact supported gate; no `3/1110` Eshkol runtime proof or integration is
+claimed. Parent PR #174 merged at `9fc17bcd`. Second-token, terminal/EOS,
+public and CLI work remain separate.
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
