@@ -911,6 +911,15 @@ one-region call record, original auxiliary identity/extent authentication,
 private prefix carriers, genuine T1 decode and native prefix commit remain
 the next gate; no generated token or terminal output is claimed.
 
+The [protected P2/G2 ownership scope candidate](g3/G3_C4_P2_G2_PROTECTED_SCOPE_LEAF.md)
+adds a private one-region call/child record, captured auxiliary and prefix
+carrier identities and extents, and authenticated abort with in-region I1/A2
+lease retry. It also preflights a staged native A2 transaction view before
+discarding the P2/G2 frame. Static closure and local Clang syntax checks pass;
+the compiled Eshkol fixture and supported gate await the pinned toolchain.
+The scope aborts before any prefix commit. Authentic bridge sampling,
+same-registry T1 decode and pre/post-prefix rollback remain the next gate.
+
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
 call with X1/T2/D2/M3T/P1/O2 producers in one

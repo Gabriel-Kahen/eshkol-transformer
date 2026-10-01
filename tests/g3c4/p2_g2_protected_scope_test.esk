@@ -1,0 +1,228 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+(load "g3c4_t1_output_decode_extension.esk")
+(load "g3c4_output_envelope_extension.esk")
+(load "g3c4_p2g2_ownership_extension.esk")
+(load "g3c4_p2g2_protected_scope_extension.esk")
+
+(extern i64 protected-ids-lease ptr i64
+        :real et_g3c4_p2g2_protected_test_ids_lease_v1)
+(extern i64 protected-cache-lease ptr i64
+        :real et_g3c4_p2g2_protected_test_cache_lease_v1)
+(extern i64 protected-native-stage ptr
+        :real et_g3c4_p2g2_protected_test_stage_v1)
+(extern i64 protected-output-field ptr i64
+        :real et_g3c4_output_envelope_test_field_v1)
+(extern i64 protected-owner-fail-after i64
+        :real et_g3c4_output_envelope_test_owner_fail_after_v1)
+(extern i64 protected-owner-fail-reset
+        :real et_g3c4_output_envelope_test_owner_fail_reset_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3-C4 P2/G2 protected FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject-category label category thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught)
+                           category))))
+      (thunk) #f)))
+(define (reject label thunk)
+  (reject-category label 'invalid-state thunk))
+(define (reject-internal label thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught)
+                           'internal))))
+      (thunk) #f)))
+(define (config seed)
+  (list ':profile 'diagnostic-c4 ':sampling 'greedy
+        ':temperature-bits 1065353216 ':top-k 256
+        ':top-p-bits 1065353216 ':max-new-tokens 2
+        ':eos #f ':seed seed))
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define model (g3c4-model-create-seeded-internal 1729))
+
+(define (one-case seed lease)
+  (let* ((generator
+           (g3c4-generator-create-internal model tokenizer (config seed)))
+         (output #f)
+         (auxiliary #f)
+         (raw #f)
+         (staging #f)
+         (prefix-raw #f)
+         (prefix-staging #f))
+    (g3c4-with-p2g2-protected-call
+      'p2g2-protected-witness generator (call)
+      (let* ((record (g3c4-p2g2-protected-for call))
+             (ledger (vector-ref call 10))
+             (generator-entry (vector-ref call 4))
+             (model-entry (vector-ref call 5)))
+        (check "captured original call and native"
+               (and (eq? (vector-ref record 0) call)
+                    (eq? (vector-ref record 5)
+                         (vector-ref generator-entry 3))
+                    (eq? (vector-ref ledger 3) 'p2g2-protected)
+                    (eq? (vector-ref record 13) 'before-prefix)))
+        (if (= seed 7)
+            (begin
+              (check "arm reservation allocation cut"
+                     (= (protected-owner-fail-after 0) 0))
+              (reject-internal "reservation cut keeps scope retryable"
+                (lambda () (g3c4-p2g2-protected-reserve call)))
+              (check "failed reservation has no child"
+                     (and (not (vector-ref ledger 4))
+                          (not (vector-ref record 6))))
+              (check "reset reservation allocation cut"
+                     (= (protected-owner-fail-reset) 0))))
+        (set! output (g3c4-p2g2-protected-reserve call))
+        (set! auxiliary (vector-ref output 8))
+        (set! raw (vector-ref auxiliary 0))
+        (set! staging (vector-ref auxiliary 1))
+        (set! prefix-raw (vector-ref record 11))
+        (set! prefix-staging (vector-ref record 12))
+        (check "captured allocation extents and distinct carriers"
+               (and (= (vector-ref (vector-ref record 16) 0) 10)
+                    (= (vector-ref (vector-ref record 16) 1) 24)
+                    (= (vector-ref (vector-ref record 16) 2) 9)
+                    (= (vector-ref (vector-ref record 16) 3) 16)
+                    (not (eq? raw prefix-raw))
+                    (not (eq? staging prefix-staging))
+                    (eq? (g3c4-p2g2-protected-check call 'test) record)))
+        (reject "equal-length raw replacement rejected"
+          (lambda ()
+            (vector-set! auxiliary 0 (make-bytevector 2 0))
+            (g3c4-p2g2-protected-check call 'test)))
+        (vector-set! auxiliary 0 raw)
+        (reject "equal-length staging replacement rejected"
+          (lambda ()
+            (vector-set! auxiliary 1 (make-bytevector 16 0))
+            (g3c4-p2g2-protected-check call 'test)))
+        (vector-set! auxiliary 1 staging)
+        (reject "prefix raw replacement rejected"
+          (lambda ()
+            (vector-set! record 11 (make-bytevector 1 0))
+            (g3c4-p2g2-protected-check call 'test)))
+        (vector-set! record 11 prefix-raw)
+        (reject "prefix staging replacement rejected"
+          (lambda ()
+            (vector-set! record 12 (make-bytevector 8 0))
+            (g3c4-p2g2-protected-check call 'test)))
+        (vector-set! record 12 prefix-staging)
+        (reject "unearned prefix phase rejected"
+          (lambda ()
+            (vector-set! record 13 'prefix-committed)
+            (g3c4-p2g2-protected-check call 'test)))
+        (vector-set! record 13 'before-prefix)
+        (let ((shell (vector-ref output 0)))
+          (reject "equal-shape output shell replacement rejected"
+            (lambda ()
+              (vector-set! output 0 (vector 'forged-output))
+              (g3c4-p2g2-protected-check call 'test)))
+          (vector-set! output 0 shell))
+        (reject "output ledger change rejected"
+          (lambda ()
+            (vector-set! ledger 4 #f)
+            (g3c4-p2g2-protected-check call 'test)))
+        (vector-set! ledger 4 output)
+        (let ((output-native (vector-ref output 3)))
+          (reject "output native identity change rejected"
+            (lambda ()
+              (vector-set! output 3 #f)
+              (g3c4-p2g2-protected-check call 'test)))
+          (vector-set! output 3 output-native))
+        (reject "model link change rejected"
+          (lambda ()
+            (vector-set! model-entry 10 #f)
+            (g3c4-p2g2-protected-check call 'test)))
+        (vector-set! model-entry 10 call)
+        (reject "generator native change rejected"
+          (lambda ()
+            (vector-set! generator-entry 3 #f)
+            (g3c4-p2g2-protected-check call 'test)))
+        (vector-set! generator-entry 3 (vector-ref record 5))
+        (reject "model native identity change rejected"
+          (lambda ()
+            (vector-set! model-entry 3 #f)
+            (g3c4-p2g2-protected-check call 'test)))
+        (vector-set! model-entry 3 (vector-ref record 19))
+        (let* ((token-entry (t1-private-entry tokenizer))
+               (core (car (cdr token-entry))))
+          (reject "tokenizer core identity change rejected"
+            (lambda ()
+              (set-car! (cdr token-entry)
+                        (t1-tokenizer-core-create 'raw '() '() '()))
+              (g3c4-p2g2-protected-check call 'test)))
+          (set-car! (cdr token-entry) core))
+        (check "owner recovered after repair"
+               (eq? (g3c4-p2g2-protected-check call 'test) record))
+        (if (eq? lease 'cache)
+            (check "native P2 frame staged before A2 lease"
+                   (= (protected-native-stage (vector-ref record 5)) 0)))
+        (bytevector-u8-set! raw 0 7)
+        (bytevector-u8-set! staging 0 8)
+        (bytevector-u8-set! prefix-raw 0 9)
+        (bytevector-u8-set! prefix-staging 0 10)
+        (if (eq? lease 'ids)
+            (check "open I1 lease" (= (protected-ids-lease
+                                         (vector-ref output 3) 1) 0)))
+        (if (eq? lease 'cache)
+            (check "open A2 lease" (= (protected-cache-lease
+                                         (vector-ref record 5) 1) 0)))
+        (if (not (eq? lease 'none))
+            (begin
+              (reject-category "lease rejects abort without mutation"
+                (if (eq? lease 'cache) 'invalid-argument 'invalid-state)
+                (lambda () (g3c4-p2g2-protected-abort! call)))
+              (check "failed abort keeps exact pending owners"
+                     (and (eq? (vector-ref call 2) 'live)
+                          (eq? (vector-ref ledger 4) output)
+                          (eq? (vector-ref output 2) 'pending)
+                          (eq? (vector-ref model-entry 10) call)
+                          (eq? (vector-ref generator-entry 9) call)
+                          (= (bytevector-u8-ref raw 0) 7)
+                          (= (bytevector-u8-ref staging 0) 8)
+                          (= (bytevector-u8-ref prefix-raw 0) 9)
+                          (= (bytevector-u8-ref prefix-staging 0) 10)
+                          (= (protected-output-field
+                               (vector-ref output 3) 1) 0)))
+              (if (eq? lease 'ids)
+                  (check "close I1 lease"
+                         (= (protected-ids-lease
+                              (vector-ref output 3) 0) 0)))
+              (if (eq? lease 'cache)
+                  (check "close A2 lease"
+                         (= (protected-cache-lease
+                              (vector-ref record 5) 0) 0)))))
+        (check "authenticated abort"
+               (g3c4-p2g2-protected-abort! call))
+        (check "native pending I1 never published"
+               (and (= (protected-output-field (vector-ref record 7) 0) 2)
+                    (= (protected-output-field (vector-ref record 7) 1) 0)
+                    (= (protected-output-field (vector-ref record 7) 2) 0)
+                    (= (protected-output-field (vector-ref record 7) 3) 0)))))
+    (check "exact original buffers scrubbed and shell dead"
+           (and (eq? (vector-ref output 2) 'dead)
+                (= (bytevector-u8-ref raw 0) 0)
+                (= (bytevector-u8-ref staging 0) 0)
+                (= (bytevector-u8-ref prefix-raw 0) 0)
+                (= (bytevector-u8-ref prefix-staging 0) 0)))
+    (check "generator reusable after abort"
+           (g3c4-generator-close-internal! generator))))
+
+(one-case 7 'none)
+(one-case 11 'ids)
+(one-case 13 'cache)
+(display "G3-C4 P2/G2 protected PASS: checks=")
+(display checks)
+(display " pending-only=1")
+(newline)

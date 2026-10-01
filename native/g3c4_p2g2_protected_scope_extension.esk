@@ -1,0 +1,233 @@
+;;; Source-private, nonterminal P2/G2 ownership scope. Load after the
+;;; ownership admission and output envelope. A body must abort in this same
+;;; m3-call region; no active call or pending output can escape.
+
+(define g3c4-p2g2-protected-records (vector '()))
+
+;;; Record: call, generator, model, tokenizer, tokenizer core, native,
+;;; output, output native, auxiliary, raw[2], staging[16], prefix raw[1],
+;;; prefix staging[8], phase, ledger, policy, allocated header extents,
+;;; original call shell, original output shell, original model native.
+(define (g3c4-p2g2-protected-for call)
+  (let loop ((remaining (vector-ref g3c4-p2g2-protected-records 0)))
+    (cond ((null? remaining) #f)
+          ((eq? (vector-ref (car remaining) 0) call) (car remaining))
+          (else (loop (cdr remaining))))))
+
+(define (g3c4-p2g2-protected-check call operation)
+  (let ((record (g3c4-p2g2-protected-for call)))
+    (if (not (and record (vector? record) (= (vector-length record) 20)
+                  (eq? (vector-ref record 0) call)
+                  (pair? (vector-ref g3c4-p2g2-protected-records 0))
+                  (eq? (car (vector-ref g3c4-p2g2-protected-records 0))
+                       record)
+                  (eq? (g3t-registry-entry call operation) call)
+                  (vector? call) (= (vector-length call) 12)
+                  (eq? (vector-ref call 1) 'call)
+                  (eq? (vector-ref call 2) 'live)
+                  (eq? (vector-ref call 0) (vector-ref record 17))
+                  (eq? (vector-ref m3-call-state 0) call)
+                  (eq? (vector-ref call 4) (vector-ref record 1))
+                  (eq? (vector-ref call 5) (vector-ref record 2))
+                  (eq? (vector-ref call 6) (vector-ref record 3))
+                  (m3t-exact-i64? (vector-ref call 7))
+                  (= (vector-ref call 7) 2)
+                  (eq? (vector-ref call 8) #f)
+                  (eq? (vector-ref call 9) #f)
+                  (eq? (vector-ref call 10) (vector-ref record 14))
+                  (eq? (vector-ref call 11) g3c4-model-profile)
+                  (eq? (vector-ref (vector-ref record 1) 3)
+                       (vector-ref record 5))
+                  (eq? (vector-ref (vector-ref record 1) 5)
+                       (vector-ref record 2))
+                  (eq? (vector-ref (vector-ref record 2) 3)
+                       (vector-ref record 19))
+                  (eq? (vector-ref (vector-ref record 1) 6)
+                       (vector-ref record 3))
+                  (eq? (vector-ref (vector-ref record 1) 7)
+                       (vector-ref record 15))
+                  (eq? (vector-ref (vector-ref record 1) 9) call)
+                  (eq? (vector-ref (vector-ref record 2) 10) call)
+                  (eq? (vector-ref (vector-ref record 14) 0) #t)
+                  (eq? (vector-ref (vector-ref record 14) 1) #t)
+                  (eq? (vector-ref (vector-ref record 14) 2) #t)
+                  (eq? (vector-ref (vector-ref record 14) 3)
+                       'p2g2-protected)
+                  (eq? (vector-ref record 13) 'before-prefix)
+                  (vector? (vector-ref record 16))
+                  (= (vector-length (vector-ref record 16)) 4)
+                  (= (vector-ref (vector-ref record 16) 0) 10)
+                  (= (vector-ref (vector-ref record 16) 1) 24)
+                  (= (vector-ref (vector-ref record 16) 2) 9)
+                  (= (vector-ref (vector-ref record 16) 3) 16)
+                  (g3c4-policy? (vector-ref record 15))
+                  (= (vector-ref (vector-ref record 15) 5) 2)
+                  (bytevector? (vector-ref record 11))
+                  (= (bytevector-length (vector-ref record 11)) 1)
+                  (bytevector? (vector-ref record 12))
+                  (= (bytevector-length (vector-ref record 12)) 8)
+                  (not (eq? (vector-ref record 11)
+                            (vector-ref record 12)))))
+        (g3c4-fail 'invalid-state operation
+                   "P2/G2 protected call identities changed"))
+    (let* ((tokenizer-entry
+             (g3c4-baseline-tokenizer-entry
+               (vector-ref record 3) operation 'invalid-state 'invalid-state))
+           (output (vector-ref record 6)))
+      (if (not (eq? (car (cdr tokenizer-entry)) (vector-ref record 4)))
+          (g3c4-fail 'invalid-state operation
+                     "P2/G2 tokenizer core identity changed"))
+      (g3c4-require-model-eval (vector-ref record 2)
+                               operation 'invalid-state)
+      (if (not (eq? (g3t-call-entry-live call operation) call))
+          (g3c4-fail 'invalid-state operation
+                     "P2/G2 call is not live"))
+      (if output
+          (let ((auxiliary (vector-ref record 8)))
+            (if (not (and (eq? (vector-ref (vector-ref record 14) 4)
+                               output)
+                          (eq? (g3t-output-entry-pending
+                                 call output operation) output)
+                          (eq? (vector-ref output 0)
+                               (vector-ref record 18))
+                          (eq? (vector-ref output 3)
+                               (vector-ref record 7))
+                          (eq? (vector-ref output 8) auxiliary)
+                          (eq? (vector-ref auxiliary 0)
+                               (vector-ref record 9))
+                          (eq? (vector-ref auxiliary 1)
+                               (vector-ref record 10))
+                          (= (bytevector-length (vector-ref record 9)) 2)
+                          (= (bytevector-length (vector-ref record 10)) 16)
+                          (not (eq? (vector-ref record 9)
+                                    (vector-ref record 10)))
+                          (not (eq? (vector-ref record 9)
+                                    (vector-ref record 11)))
+                          (not (eq? (vector-ref record 9)
+                                    (vector-ref record 12)))
+                          (not (eq? (vector-ref record 10)
+                                    (vector-ref record 11)))
+                          (not (eq? (vector-ref record 10)
+                                    (vector-ref record 12)))))
+                (g3c4-fail 'invalid-state operation
+                           "P2/G2 protected output identities changed")))
+          (if (vector-ref (vector-ref record 14) 4)
+              (g3c4-fail 'invalid-state operation
+                         "P2/G2 protected output edge changed")))
+      record)))
+
+(define (g3c4-p2g2-zero-bytes! bytes count)
+  (let loop ((index 0))
+    (if (= index count) #t
+        (begin (bytevector-u8-set! bytes index 0)
+               (loop (+ index 1))))))
+
+;;; Native abort preflights the real pending output I1 and A2 cache leases.
+;;; A recoverable rejection leaves this record and every Eshkol edge intact.
+(define (g3c4-p2g2-protected-abort! call)
+  (let* ((operation 'g3c4-p2g2-protected-abort!)
+         (record (g3c4-p2g2-protected-check call operation))
+         (ledger (vector-ref record 14))
+         (output (vector-ref record 6)))
+    (g3c4-native-check
+      (g3c4-native-call-abort (vector-ref record 5)) operation)
+    (if output
+        (begin
+          (g3c4-p2g2-zero-bytes! (vector-ref record 9) 2)
+          (g3c4-p2g2-zero-bytes! (vector-ref record 10) 16)
+          (g3c4-entry-dead! output)
+          (vector-set! ledger 4 #f)))
+    (g3c4-p2g2-zero-bytes! (vector-ref record 11) 1)
+    (g3c4-p2g2-zero-bytes! (vector-ref record 12) 8)
+    (vector-set! (vector-ref record 2) 10 #f)
+    (vector-set! (vector-ref record 1) 9 #f)
+    (g3c4-call-dead! call)
+    (vector-set! record 0 #f)
+    (vector-set! g3c4-p2g2-protected-records 0
+                 (cdr (vector-ref g3c4-p2g2-protected-records 0)))
+    #t))
+
+(define (g3c4-p2g2-protected-reserve call)
+  (let* ((operation 'g3c4-p2g2-protected-reserve)
+         (record (g3c4-p2g2-protected-check call operation)))
+    (if (vector-ref record 6)
+        (g3c4-fail 'invalid-state operation
+                   "P2/G2 output already reserved"))
+    (let* ((output (g3c4-output-reserve call 2))
+           (auxiliary (vector-ref output 8)))
+      (vector-set! record 6 output)
+      (vector-set! record 7 (vector-ref output 3))
+      (vector-set! record 8 auxiliary)
+      (vector-set! record 9 (vector-ref auxiliary 0))
+      (vector-set! record 10 (vector-ref auxiliary 1))
+      (vector-set! record 18 (vector-ref output 0))
+      (g3c4-p2g2-protected-check call operation)
+      output)))
+
+(define-syntax g3c4-with-p2g2-protected-call
+  (syntax-rules ()
+    ((_ operation generator (call) body ...)
+     (m3-call operation
+       (let* ((generator-entry
+                (g3c4-generator-entry-call-ready generator operation))
+              (model-entry (vector-ref generator-entry 5))
+              (tokenizer (vector-ref generator-entry 6))
+              (tokenizer-core
+                (car (cdr (g3c4-baseline-tokenizer-entry
+                           tokenizer operation 'invalid-state
+                           'invalid-state))))
+              (native (vector-ref generator-entry 3))
+              (policy (vector-ref generator-entry 7))
+              (prefix-raw (make-bytevector 1 0))
+              (prefix-staging (make-bytevector 8 0))
+              (ledger (vector #f #f #f #f #f))
+              (call (vector (vector 'g3c4-call-private) 'call 'pending #f
+                            generator-entry model-entry tokenizer 2 #f #f
+                            ledger g3c4-model-profile))
+              (record (vector call generator-entry model-entry tokenizer
+                              tokenizer-core native #f #f #f #f #f
+                              prefix-raw prefix-staging 'before-prefix ledger
+                              policy (vector 10 24 9 16) (vector-ref call 0)
+                              #f (vector-ref model-entry 3))))
+         (if (not (and (vector-ref g3c4-p2g2-ownership-gate 0)
+                       (= (vector-ref policy 5) 2)
+                       (g3c4-call-tuple? 2 2)))
+             (g3c4-fail 'invalid-argument operation
+                        "P2/G2 protected scope needs exact budget two"))
+         (guard (caught
+                  (#t
+                    (if (not (eq? (vector-ref call 2) 'dead))
+                        (if (vector-ref ledger 0)
+                            (guard (abort-failure (#t (exit 134)))
+                              (g3c4-p2g2-protected-abort! call))
+                            (begin
+                              (g3c4-p2g2-zero-bytes! prefix-raw 1)
+                              (g3c4-p2g2-zero-bytes! prefix-staging 8)
+                              (g3c4-call-dead! call)
+                              (vector-set! record 0 #f)
+                              (vector-set! g3c4-p2g2-protected-records 0
+                                           (cdr (vector-ref
+                                                  g3c4-p2g2-protected-records
+                                                  0))))))
+                    (raise caught)))
+           (vector-set! g3c4-registry 0
+                        (cons call (vector-ref g3c4-registry 0)))
+           (vector-set! g3c4-p2g2-protected-records 0
+                        (cons record (vector-ref g3c4-p2g2-protected-records 0)))
+           (g3c4-native-check (g3c4-native-call-acquire native 2 2)
+                              operation)
+           (vector-set! ledger 0 #t)
+           (vector-set! model-entry 10 call)
+           (vector-set! ledger 1 #t)
+           (vector-set! generator-entry 9 call)
+           (vector-set! ledger 2 #t)
+           (vector-set! call 2 'live)
+           (vector-set! ledger 3 'p2g2-protected)
+           (if (not (eq? (vector-ref m3-call-state 0) #t)) (exit 134))
+           (vector-set! m3-call-state 0 call)
+           (begin
+             body ...
+             (if (not (eq? (vector-ref call 2) 'dead))
+                 (g3c4-fail 'invalid-state operation
+                            "P2/G2 scope must abort in its call region"))
+             #t))))))
