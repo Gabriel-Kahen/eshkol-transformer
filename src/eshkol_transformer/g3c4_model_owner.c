@@ -840,6 +840,11 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
      !defined(ET_G3C4_OUTPUT_DECODE_IDS_PRIVATE))
 #error "C4 P2/G2 prefix commit requires first frame and output ownership"
 #endif
+#if defined(ET_G3C4_P2_G2_CARRIER_BRIDGE_PRIVATE) && \
+    (!defined(ET_G3C4_P2_G2_PREFIX_COMMIT_PRIVATE) || \
+     !defined(ET_F32_TENSOR_STORAGE_QUERY_PRIVATE))
+#error "C4 P2/G2 carrier bridge requires prefix commit and private f32 storage inspection"
+#endif
 #ifdef ET_G3C4_P2_G2_FIRST_FRAME_PRIVATE
 #define ET_G3C4_PRIVATE_MAX_NEW 2
 #define ET_G3C4_P2_G2_TUPLE(prompt, budget) \
@@ -6686,6 +6691,135 @@ static int et_g3c4_output_decode_owned_alias(
   return et_a2_kv_cache_private_storage_overlap_v1(
              carrier, carrier_bytes) != 0;
 }
+
+#ifdef ET_G3C4_P2_G2_CARRIER_BRIDGE_PRIVATE
+static int et_g3c4_p2g2_carrier_owned_alias(
+    const et_g3c4_context_internal *context, const void *carrier,
+    size_t carrier_bytes) {
+  const et_g3c4_transport_header_internal *transport;
+  const et_g3c4_model_owner_internal *model;
+  size_t index;
+
+  for (transport = et_g3c4_transport_registry; transport != NULL;
+       transport = transport->registry_next)
+    if (et_g3c4_ranges_overlap(
+            carrier, carrier_bytes, transport,
+            et_g3c4_transport_record_bytes(transport)))
+      return 1;
+  for (model = et_g3c4_owner_registry; model != NULL;
+       model = model->registry_next)
+    if (et_g3c4_ranges_overlap(
+            carrier, carrier_bytes, model, sizeof(*model)))
+      return 1;
+  for (index = 0u; index < 14u; index++) {
+    const et_kernel_tensor_view_v1 *view = &context->pins.views[index];
+    if (et_g3c4_ranges_overlap(
+            carrier, carrier_bytes, view->data, view->byte_length))
+      return 1;
+  }
+  if (et_i64_tensor_private_storage_overlap_v1(
+          carrier, carrier_bytes) != 0 ||
+      et_f32_tensor_private_storage_overlap_v1(
+          carrier, carrier_bytes) != 0 ||
+      et_a2_kv_cache_private_storage_overlap_v1(
+          carrier, carrier_bytes) != 0)
+    return 1;
+  return 0;
+}
+
+int64_t et_g3c4_private_p2g2_first_frame_carrier_v1(
+    void *context_candidate, void *input_candidate, void *staging_header,
+    int64_t carrier_bytes) {
+  et_g3c4_context_internal *context;
+  et_g3c4_input_internal *input;
+  et_g3c4_output_internal *pending = NULL;
+  float last_logits[256];
+  float next_logits[256];
+  int64_t declared_bytes;
+  int64_t selected = -1;
+  int64_t bridge_result;
+  unsigned char encoded[8];
+  size_t index;
+
+  et_g3c4_error_reset_internal();
+  context = et_g3c4_admit_active_call(context_candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  input = et_g3c4_admit_input(input_candidate, 0);
+  if (input == NULL) return et_g3c4_error_state.category;
+  if (et_g3c4_pending_output_lookup(context, &pending) != 0)
+    return et_g3c4_error_state.category;
+  if (context->call_kind != 2 || context->budget != 2 ||
+      context->p2g2_prefix_committed != 0u ||
+      !et_g3c4_token_frame_idle(context) || input->length != 2 ||
+      pending == NULL || pending->parent_ctx != context ||
+      pending->prompt_length != 2 || pending->generated_length != 2 ||
+      pending->numeric_ready != 0u || pending->ids_copied != 0u ||
+      pending->text_ready != 0u)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (carrier_bytes != (int64_t)(sizeof(int64_t) + sizeof(encoded)) ||
+      !et_g3c4_range_valid(staging_header, sizeof(int64_t) + sizeof(encoded)) ||
+      (uintptr_t)staging_header % _Alignof(int64_t) != 0u)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+  if (et_g3c4_p2g2_carrier_owned_alias(
+          context, staging_header, sizeof(int64_t) + sizeof(encoded)))
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_ALIAS);
+  memcpy(&declared_bytes, staging_header, sizeof(declared_bytes));
+  if (declared_bytes != (int64_t)sizeof(encoded))
+    return et_g3c4_fail(
+        ET_G3C4_SHAPE_MISMATCH, ET_G3C4_CODE_SHAPE);
+
+  bridge_result = et_g3c4_private_prompt_prefill_v1(
+      context, input, last_logits);
+  if (bridge_result != 0) return bridge_result;
+  bridge_result = et_g3c4_private_token_frame_begin_last_v1(
+      context, last_logits, &selected);
+  if (bridge_result != 0) return bridge_result;
+  if (selected < 0 || selected > 255)
+    return et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+  if (selected == context->generator_policy[5])
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  bridge_result = et_g3c4_private_token_forward_v1(
+      context, selected, next_logits);
+  if (bridge_result != 0) return bridge_result;
+  if (context->token_frame_state != ET_G3C4_TOKEN_FRAME_READY ||
+      context->token_frame_candidate != selected)
+    return et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+  /* A provider cannot receive this carrier; still reject callback tampering
+   * before the sole carrier write. The caller authenticates its allocation. */
+  if (et_g3c4_admit_active_call(context) == NULL ||
+      et_g3c4_admit_input(input, 0) == NULL)
+    return et_g3c4_error_state.category;
+  if (et_g3c4_pending_output_lookup(context, &pending) != 0)
+    return et_g3c4_error_state.category;
+  if (context->call_kind != 2 || context->budget != 2 ||
+      context->p2g2_prefix_committed != 0u ||
+      !et_g3c4_prefill_binding_matches_pins(context) ||
+      pending == NULL || pending->parent_ctx != context ||
+      pending->prompt_length != 2 || pending->generated_length != 2 ||
+      pending->numeric_ready != 0u || pending->ids_copied != 0u ||
+      pending->text_ready != 0u)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (!et_g3c4_range_valid(staging_header, sizeof(int64_t) + sizeof(encoded)) ||
+      et_g3c4_p2g2_carrier_owned_alias(
+          context, staging_header, sizeof(int64_t) + sizeof(encoded)))
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_ALIAS);
+  memcpy(&declared_bytes, staging_header, sizeof(declared_bytes));
+  if (declared_bytes != (int64_t)sizeof(encoded))
+    return et_g3c4_fail(
+        ET_G3C4_SHAPE_MISMATCH, ET_G3C4_CODE_SHAPE);
+  for (index = 0u; index < sizeof(encoded); index++)
+    encoded[index] = (unsigned char)((uint64_t)selected >> (8u * index));
+  memcpy((unsigned char *)staging_header + sizeof(declared_bytes),
+         encoded, sizeof(encoded));
+  return 0;
+}
+#endif
 
 int64_t et_g3c4_private_output_copy_decode_ids_v1(
     void *context_candidate, void *output_candidate,

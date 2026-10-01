@@ -197,6 +197,18 @@ int64_t et_g3c4_private_token_frame_begin_last_v1(
     int64_t *speculative_token);
 #endif
 
+#ifdef ET_G3C4_P2_G2_CARRIER_BRIDGE_PRIVATE
+/* Source-private nonterminal P2/G2 first-frame bridge. Eshkol must verify
+ * bytevector?, bytevector-length==8, retained owner identity and backing
+ * extent in the same call region, then pass its complete 16-byte carrier.
+ * A raw C pointer and self-declared header cannot prove that allocation.
+ * Writes the sampled i64 in
+ * little-endian form to the payload only after prefill/sample/forward succeed.
+ * No result or prefix cache/RNG is published. */
+int64_t et_g3c4_private_p2g2_first_frame_carrier_v1(
+    void *context, void *input, void *staging_header, int64_t carrier_bytes);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

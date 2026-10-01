@@ -64,8 +64,11 @@ def check() -> None:
         "et_g3c4_private_prompt_prefill_v1",
     )
     for symbol in symbols:
+        # The private P2/G2 carrier bridge is the sole additional bound
+        # prefill caller; it still routes through the accepted I1 borrow.
+        expected_calls = 3 if symbol == "et_g3c4_private_prompt_prefill_v1" else 2
         require(source.count(f"int64_t {symbol}(") == 1 and
-                source.count(symbol) == 2 and
+                source.count(symbol) == expected_calls and
                 header.count(symbol) == 1,
                 f"source-private binding boundary changed: {symbol}")
 

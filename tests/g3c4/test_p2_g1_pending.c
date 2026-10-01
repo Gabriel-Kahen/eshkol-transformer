@@ -10,6 +10,10 @@ static int64_t forged_token;
 static int forge_descriptor;
 static int malformed_input_view;
 static int malformed_output_view;
+#ifdef ET_G3C4_P2_G2_CARRIER_BRIDGE_PRIVATE
+static int fail_bridge_forward;
+static int fail_bridge_sample;
+#endif
 static et_g3c4_model_owner_internal *p2g1_test_owner;
 
 int32_t __real_et_i64_tensor_borrow_view_v1(
@@ -66,6 +70,28 @@ static et_g3c4_context_internal *p2g1_categorical_generator(
 int32_t __wrap_et_kernel_runtime_dispatch(
     const et_kernel_runtime *runtime, const et_kernel_call_v1 *call,
     et_kernel_error *error) {
+#ifdef ET_G3C4_P2_G2_CARRIER_BRIDGE_PRIVATE
+  if (fail_bridge_sample && call->capability != NULL &&
+      strncmp(call->capability, "g3s.", 4u) == 0) {
+    memset(error, 0, sizeof(*error));
+    error->category = ET_KERNEL_ERROR_INTERNAL;
+    error->code = ET_KERNEL_CODE_PROVIDER_REJECTED;
+    strcpy(error->operation, "g3c4.bridge-sample-cut");
+    strcpy(error->message, "injected bridge sample failure");
+    return ET_KERNEL_ERROR_INTERNAL;
+  }
+  if (fail_bridge_forward && call->capability != NULL &&
+      strcmp(call->capability, "g3n.embedding-forward") == 0 &&
+      call->request != NULL && call->request->rank == 4u &&
+      call->request->shape[1] == 1u) {
+    memset(error, 0, sizeof(*error));
+    error->category = ET_KERNEL_ERROR_INTERNAL;
+    error->code = ET_KERNEL_CODE_PROVIDER_REJECTED;
+    strcpy(error->operation, "g3c4.bridge-forward-cut");
+    strcpy(error->message, "injected bridge forward failure");
+    return ET_KERNEL_ERROR_INTERNAL;
+  }
+#endif
   if (forge_sample && call->capability != NULL &&
       strncmp(call->capability, "g3s.", 4u) == 0) {
     if (forge_descriptor) {

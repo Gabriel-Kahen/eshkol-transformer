@@ -866,9 +866,21 @@ one-region nonterminal call scope, native sampled-ID carrier through genuine
 same-aggregate T1 decode, exact pre/post-prefix rollback and closed commit
 tail. It also identifies the required reviewed private native carrier bridge:
 Eshkol `ptr` passes a bytevector header, while first-frame native entrypoints
-take raw scalar/f32 pointers. It is documentation only and awaits independent
-contract review before implementation; the public P2/G1 and C2 paths remain
-capped as before.
+take raw scalar/f32 pointers. That contract was accepted as documentation;
+the public P2/G1 and C2 paths remain capped as before.
+
+The [private P2/G2 first-frame carrier bridge candidate](g3/G3_C4_P2_G2_CARRIER_BRIDGE_LEAF.md)
+now binds the accepted P2 prefill, native last-logit sample, and selected-token
+forward through raw native scratch, writing the authentic sampled ID only to
+an exact Eshkol bytevector payload after success. Its private macro requires
+the prefix feature and f32 storage inspection; carrier geometry and aliases
+are checked natively while Eshkol must authenticate the backing owner and
+extent before the call. This native leaf does not yet provide the Eshkol
+coordinator, same-registry T1 decode, prefix commit, or terminal output.
+The local unsupported-host Clang 22 compatibility probe passed 918 bridge
+checks in normal/repeat/sanitizer modes, the independent two-mode Philox
+oracle, and exact private-symbol closure. Supported pinned-build validation
+waits for independent committed source-and-test review.
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
