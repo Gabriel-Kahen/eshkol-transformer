@@ -885,10 +885,22 @@ private-symbol/feature closure. Both Docker and launcher exited zero; the
 verified 44-file seal is
 `g3c4-p2g2-carrier-810c08b-fe9-f31-20260930-prepared-b/SHA256SUMS-RUN`
 (SHA-256 `d68020558419dc1e3886f7f4df3dca5e8fe3729d5076669b992382a6ef21bc0b`).
-Independent evidence review accepted the sealed gate; hosted CI and merge
-remain pending. Eshkol caller allocation
+Independent evidence review accepted the sealed gate, and [PR #172](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/172)
+merged at `7906637`/tree `57022969` after 23/23 hosted checks. Eshkol caller allocation
 authentication, genuine same-aggregate T1 decode and the one-region
 coordinator/rollback remain separate next gates.
+
+The [private Eshkol P2/G2 ownership admission candidate](g3/G3_C4_P2_G2_ESHKOL_OWNERSHIP_ADMISSION_LEAF.md)
+adds an off-default source gate for exact budget-two private policy/call
+tuple and `(P,G)=(2,2)` pending output capacity, while the old terminal
+scope and public C4 adapter reject budget two. It preallocates two-byte raw
+and sixteen-byte staging auxiliaries and keeps the native output pending,
+zero and unready. This bounded prerequisite has passed local static, Q0 and
+CI topology checks; compiled Eshkol and supported normal/repeat/sanitizer
+evidence plus independent source/test review remain pending. The protected
+one-region call record, original auxiliary identity/extent authentication,
+private prefix carriers, genuine T1 decode and native prefix commit remain
+the next gate; no generated token or terminal output is claimed.
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
