@@ -953,7 +953,8 @@ Predecessor, oracle, symbol and source-pin checks passed; Docker and launcher
 exited zero. The 89-file evidence seal is
 `g3c4-p2g2-protected-be63d0a-fe9-f31-20261001-prepared-a/SHA256SUMS-RUN`
 (SHA-256 `b23698ceebd621d8ea7d88df46e57ae77dfe5e7f3d4a822f591b68099083b100`);
-independent evidence review accepted it. Hosted CI and merge remain pending.
+independent evidence review accepted it. PR #174 merged as `9fc17bcd` after
+23/23 exact-head hosted checks passed.
 The scope aborts before any prefix commit. Authentic bridge sampling,
 same-registry T1 decode and pre/post-prefix rollback remain the next gate.
 
