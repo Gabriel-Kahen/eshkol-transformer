@@ -1,0 +1,329 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+(load "g3c4_t1_output_decode_extension.esk")
+(load "g3c4_output_envelope_extension.esk")
+(load "g3c4_p2g2_ownership_extension.esk")
+(load "g3c4_p2g2_protected_scope_extension.esk")
+(load "g3c4_p2g2_t1_prefix_coordinator_extension.esk")
+
+(extern i64 coordinator-mark ptr i64 i64
+        :real et_g3c4_p2g2_coordinator_test_mark_v1)
+(extern i64 coordinator-fault i64
+        :real et_g3c4_p2g2_coordinator_test_fault_v1)
+(extern i64 coordinator-observe ptr ptr i64 i64
+        :real et_g3c4_p2g2_coordinator_test_observe_v1)
+(extern i64 coordinator-prefix ptr ptr i64
+        :real et_g3c4_p2g2_coordinator_test_prefix_v1)
+(extern i64 coordinator-after-abort ptr i64
+        :real et_g3c4_p2g2_coordinator_test_after_abort_v1)
+(extern i64 coordinator-reference
+        :real et_g3c4_p2g2_coordinator_test_reference_v1)
+(extern i64 coordinator-dead-output ptr
+        :real et_g3c4_p2g2_coordinator_test_dead_output_v1)
+(extern i64 coordinator-ids-lease ptr i64
+        :real et_g3c4_p2g2_coordinator_test_ids_lease_v1)
+(extern i64 coordinator-cache-lease ptr i64
+        :real et_g3c4_p2g2_coordinator_test_cache_lease_v1)
+(extern i64 coordinator-failstop ptr ptr ptr
+        :real et_g3c4_p2g2_coordinator_test_failstop_v1)
+(extern i64 coordinator-pin-drift ptr i64
+        :real et_g3c4_p2g2_coordinator_test_pin_drift_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3-C4 P2/G2 T1 prefix FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label thunk)
+  (check label
+    (guard (caught (#t (transformer-error? caught)))
+      (thunk) #f)))
+(define (config sampling seed eos)
+  (list ':profile 'diagnostic-c4 ':sampling sampling
+        ':temperature-bits 1065353216
+        ':top-k (if (eq? sampling 'greedy) 256 17)
+        ':top-p-bits (if (eq? sampling 'greedy) 1065353216 1056964608)
+        ':max-new-tokens 2 ':eos eos ':seed seed))
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define model (g3c4-model-create-seeded-internal 1729))
+(define prompt-a
+  (g3c4-p2g2-owned-input-create
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255))))
+(define prompt-b
+  (g3c4-p2g2-owned-input-create
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 7 11))))
+
+(define (case-run input first second sampling seed eos fault lease)
+  (let* ((generator (g3c4-generator-create-internal
+                      model tokenizer (config sampling seed eos)))
+         (generator-entry (g3c4-generator-entry-call-ready generator 'test))
+         (native (vector-ref generator-entry 3))
+         (input-entry (g3c4-input-entry-live input 'test))
+         (output #f) (output-native #f) (raw #f) (staging #f)
+         (prefix-raw #f) (prefix-staging #f)
+         (selected -1))
+    (check "idle owned P2 preflight"
+           (eq? (g3c4-p2g2-prefix-preflight generator input) input-entry))
+    (check "capture native model, gradient, cache and RNG"
+           (= (coordinator-mark native first second) 0))
+    (g3c4-with-p2g2-prefix-call
+      'p2g2-t1-prefix-witness generator input (call)
+      (let* ((record (g3c4-p2g2-protected-for call))
+             (ledger (vector-ref call 10)))
+        (set! output (g3c4-p2g2-protected-reserve call))
+        (set! output-native (vector-ref output 3))
+        (set! raw (vector-ref (vector-ref output 8) 0))
+        (set! staging (vector-ref (vector-ref output 8) 1))
+        (set! prefix-raw (vector-ref record 11))
+        (set! prefix-staging (vector-ref record 12))
+        (check "original four carrier lengths and pending child"
+               (and (= (bytevector-length raw) 2)
+                    (= (bytevector-length staging) 16)
+                    (= (bytevector-length prefix-raw) 1)
+                    (= (bytevector-length prefix-staging) 8)
+                    (eq? (vector-ref ledger 4) output)))
+        (if (and (= first 0) (= fault 0))
+            (begin
+              (reject "different owned P2 input rejected after preflight"
+                (lambda () (g3c4-p2g2-prefix-commit! call prompt-b)))
+              (let ((saved-native (vector-ref input-entry 3)))
+                (vector-set! input-entry 3 #f)
+                (reject "input native drift rejected before pointer use"
+                  (lambda () (g3c4-p2g2-prefix-commit! call input)))
+                (vector-set! input-entry 3 saved-native))
+              (bytevector-u8-set! prefix-staging 0 42)
+              (bytevector-u8-set! prefix-raw 0 42)
+              (check "exact matching private bytes admitted"
+                     (g3c4-p2g2-prefix-byte-check record 42 'test))
+              (bytevector-u8-set! prefix-raw 0 43)
+              (reject "equal-length raw byte mutation rejected"
+                (lambda () (g3c4-p2g2-prefix-byte-check record 42 'test)))
+              (bytevector-u8-set! prefix-raw 0 42)
+              (bytevector-u8-set! prefix-staging 1 1)
+              (reject "equal-length staging upper byte rejected"
+                (lambda () (g3c4-p2g2-prefix-byte-check record 42 'test)))
+              (bytevector-u8-set! prefix-staging 1 0)
+              (bytevector-u8-set! prefix-staging 0 0)
+              (bytevector-u8-set! prefix-raw 0 0)))
+        (check "arm exact native bridge fault" (= (coordinator-fault fault) 0))
+        (if (= fault 0)
+            (begin
+              (set! selected
+                (if (= first 0)
+                    (g3c4-p2g2-prefix-commit-probed!
+                      call input (lambda (record) #t)
+                      (lambda (record)
+                        (check "impossible closed native tail fails stop"
+                               (= (coordinator-failstop
+                                    native output-native prefix-raw) 0))))
+                    (g3c4-p2g2-prefix-commit! call input)))
+              (check "authentic native ID equals T1 raw and trusted phase"
+                     (and (>= selected 0) (<= selected 255)
+                          (= (bytevector-u8-ref prefix-staging 0) selected)
+                          (= (bytevector-u8-ref prefix-raw 0) selected)
+                          (eq? (vector-ref record 13) 'prefix-committed)
+                          (eq? (vector-ref ledger 3)
+                               'p2g2-prefix-committed)
+                          (eq? (g3c4-p2g2-protected-check call 'test)
+                               record)))
+              (check "native prefix is committed, output stays unready"
+                     (= (coordinator-prefix
+                          native (vector-ref output 3) selected) 0))
+              (reject "second prefix is rejected"
+                (lambda () (g3c4-p2g2-prefix-commit! call input)))
+              (if (eq? lease 'ids)
+                  (check "hold post-prefix I1 lease"
+                         (= (coordinator-ids-lease
+                              (vector-ref output 3) 1) 0)))
+              (if (eq? lease 'cache)
+                  (check "hold post-prefix A2 lease"
+                         (= (coordinator-cache-lease native 1) 0)))
+              (if (not (eq? lease 'none))
+                  (begin
+                    (reject "held lease rejects abort in-region"
+                      (lambda () (g3c4-p2g2-protected-abort! call)))
+                    (check "lease rejection preserves authentic owner"
+                           (and (eq? (vector-ref call 2) 'live)
+                                (eq? (vector-ref ledger 4) output)
+                                (eq? (vector-ref output 2) 'pending)
+                                (eq? (vector-ref record 13)
+                                     'prefix-committed)
+                                (= (bytevector-u8-ref prefix-raw 0)
+                                   selected)))
+                    (if (eq? lease 'ids)
+                        (check "release post-prefix I1 lease"
+                               (= (coordinator-ids-lease
+                                    (vector-ref output 3) 0) 0)))
+                    (if (eq? lease 'cache)
+                        (check "release post-prefix A2 lease"
+                               (= (coordinator-cache-lease native 0) 0))))))
+            (begin
+              (reject "bridge failure never commits prefix"
+                (lambda () (g3c4-p2g2-prefix-commit! call input)))
+              (check "clear native fault before authenticated abort"
+                     (= (coordinator-fault 0) 0))
+              (check "rollback state before native abort"
+                     (= (coordinator-observe
+                          native (vector-ref output 3)
+                          (if (or (= fault 1) (>= fault 11)) 0 2)
+                          -1) 0))
+              (check "unearned prefix phase remains rejected"
+                     (eq? (vector-ref record 13) 'before-prefix))))
+        (check "abort exact pending owner in same call region"
+               (g3c4-p2g2-protected-abort! call))))
+    (check "rollback cache, parameters, gradients and RNG"
+           (= (coordinator-after-abort native
+                (if (= fault 0) 3
+                    (if (or (= fault 1) (>= fault 11)) 0 2))) 0))
+    (check "all captured carrier bytes scrubbed and child dead"
+           (and (eq? (vector-ref output 2) 'dead)
+                (= (coordinator-dead-output output-native) 0)
+                (= (bytevector-u8-ref raw 0) 0)
+                (= (bytevector-u8-ref staging 0) 0)
+                (= (bytevector-u8-ref prefix-raw 0) 0)
+                (= (bytevector-u8-ref prefix-staging 0) 0)))
+    (check "generator closes after abort"
+           (g3c4-generator-close-internal! generator))
+    (check "coordinator input anchor ended with call"
+           (null? (vector-ref g3c4-p2g2-prefix-input-anchors 0)))
+    (if (= fault 0)
+        (check "P3 logits and K/V bitwise direct reference"
+               (= (coordinator-reference) 0)))
+    selected))
+
+(define greedy-selected
+  (case-run prompt-a 0 255 'greedy 7 #f 0 'ids))
+(case-run prompt-b 7 11 'categorical 1729 #f 0 'cache)
+(case-run prompt-a 0 255 'greedy 7 #f 1 'none)
+(case-run prompt-a 0 255 'greedy 7 #f 2 'none)
+(case-run prompt-a 0 255 'greedy 7 #f 3 'none)
+(case-run prompt-a 0 255 'greedy 7 #f 4 'none)
+(case-run prompt-a 0 255 'greedy 7 #f 5 'none)
+(case-run prompt-a 0 255 'greedy 7 #f 6 'none)
+(case-run prompt-a 0 255 'greedy 7 #f 7 'none)
+(case-run prompt-a 0 255 'greedy 7 #f 8 'none)
+(case-run prompt-a 0 255 'greedy 7 #f 9 'none)
+(case-run prompt-a 0 255 'greedy 7 #f 10 'none)
+(case-run prompt-a 0 255 'greedy 7 #f 11 'none)
+(case-run prompt-a 0 255 'greedy 7 #f 12 'none)
+
+(define (probe-case kind)
+  (let* ((generator
+           (g3c4-generator-create-internal
+             model tokenizer (config 'greedy 7 #f)))
+         (native (vector-ref
+                   (g3c4-generator-entry-call-ready generator 'test) 3))
+         (token-entry (t1-private-entry tokenizer))
+         (original-core (car (cdr token-entry)))
+         (output #f) (raw #f) (staging #f))
+    (check "probe case idle P2 preflight"
+           (g3c4-p2g2-prefix-preflight generator prompt-a))
+    (check "probe case original native state"
+           (= (coordinator-mark native 0 255) 0))
+    (g3c4-with-p2g2-prefix-call
+      'p2g2-precommit-probe generator prompt-a (call)
+      (let ((record (g3c4-p2g2-protected-for call)))
+        (set! output (g3c4-p2g2-protected-reserve call))
+        (set! raw (vector-ref record 11))
+        (set! staging (vector-ref record 12))
+        (reject "authentic frame rejects before prefix under drift"
+          (lambda ()
+            (g3c4-p2g2-prefix-commit-probed!
+              call prompt-a
+              (lambda (captured)
+                (if (eq? kind 'decoder)
+                    (begin
+                      (set-car! (cdr token-entry) #f)
+                      (guard (caught
+                               (#t
+                                 (set-car! (cdr token-entry) original-core)
+                                 (raise caught)))
+                        (t1-private-g3-decode-raw-into!
+                          tokenizer (vector-ref captured 12)
+                          (vector-ref captured 11)))))
+              (lambda (captured)
+                (cond
+                  ((eq? kind 'core)
+                   (set-car! (cdr token-entry) #f))
+                  ((eq? kind 'registry)
+                   (set-car! token-entry #f))
+                  ((eq? kind 'model)
+                   (module-train! model))
+                  ((eq? kind 'pin)
+                   (check "mutate one pinned model bit"
+                          (= (coordinator-pin-drift native 1) 0)))
+                  ((eq? kind 'raw)
+                   (bytevector-u8-set!
+                     raw 0 (if (= (bytevector-u8-ref raw 0) 255)
+                               0 (+ (bytevector-u8-ref raw 0) 1))))
+                  ((eq? kind 'staging)
+                   (bytevector-u8-set! staging 1 1))))))))
+        (if (or (eq? kind 'core) (eq? kind 'decoder))
+            (set-car! (cdr token-entry) original-core))
+        (if (eq? kind 'registry) (set-car! token-entry tokenizer))
+        (if (eq? kind 'model) (module-eval! model))
+        (if (eq? kind 'pin)
+            (check "restore exact pinned model bit"
+                   (= (coordinator-pin-drift native 0) 0)))
+        (check "drift leaves authentic pending P2 and original RNG"
+               (= (coordinator-observe
+                    native (vector-ref output 3) 2 -1) 0))
+        (check "repaired drift aborts same protected call"
+               (g3c4-p2g2-protected-abort! call))))
+    (check "drift rollback retains P2, model and RNG"
+           (= (coordinator-after-abort native 2) 0))
+    (check "drift carriers scrubbed and output dead"
+           (and (eq? (vector-ref output 2) 'dead)
+                (= (bytevector-u8-ref raw 0) 0)
+                (= (bytevector-u8-ref staging 0) 0)))
+    (check "drift generator closes" (g3c4-generator-close-internal! generator))))
+
+(probe-case 'decoder)
+(probe-case 'core)
+(probe-case 'registry)
+(probe-case 'model)
+(probe-case 'pin)
+(probe-case 'raw)
+(probe-case 'staging)
+
+(define (eos-case selected)
+  (let* ((generator
+           (g3c4-generator-create-internal
+             model tokenizer (config 'greedy 7 selected)))
+         (native (vector-ref
+                   (g3c4-generator-entry-call-ready generator 'test) 3))
+         (output #f) (output-native #f))
+    (check "first-token EOS idle preflight"
+           (g3c4-p2g2-prefix-preflight generator prompt-a))
+    (check "first-token EOS baseline capture"
+           (= (coordinator-mark native 0 255) 0))
+    (g3c4-with-p2g2-prefix-call
+      'p2g2-first-eos-rejection generator prompt-a (call)
+      (set! output (g3c4-p2g2-protected-reserve call))
+      (set! output-native (vector-ref output 3))
+      (reject "selected first-token EOS rejects before commit"
+        (lambda () (g3c4-p2g2-prefix-commit! call prompt-a)))
+      (check "first-token EOS leaves precommit P2 cache"
+             (= (coordinator-observe
+                  native (vector-ref output 3) 2 -1) 0))
+      (check "first-token EOS aborts in call region"
+             (g3c4-p2g2-protected-abort! call)))
+    (check "first-token EOS preserves P2 and entry RNG"
+           (= (coordinator-after-abort native 2) 0))
+    (check "first-token EOS publishes no output"
+           (and (eq? (vector-ref output 2) 'dead)
+                (= (coordinator-dead-output output-native) 0)))
+    (check "EOS generator closes" (g3c4-generator-close-internal! generator))))
+(eos-case greedy-selected)
+(check "owned P2 inputs release after all calls"
+       (and (generation-tensor-release-internal! prompt-a)
+            (generation-tensor-release-internal! prompt-b)))
+(display "G3-C4 P2/G2 T1 prefix PASS: checks=")
+(display checks)
+(display " pending-only=1")
+(newline)

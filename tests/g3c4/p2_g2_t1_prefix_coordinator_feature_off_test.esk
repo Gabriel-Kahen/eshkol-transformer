@@ -1,0 +1,45 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+(load "g3c4_t1_output_decode_extension.esk")
+(load "g3c4_output_envelope_extension.esk")
+(load "g3c4_p2g2_protected_scope_extension.esk")
+(load "g3c4_p2g2_t1_prefix_coordinator_extension.esk")
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3-C4 P2/G2 T1 prefix off FAIL: ")
+             (display label) (newline) (exit 1))))
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define model (g3c4-model-create-seeded-internal 1729))
+(define input
+  (g3c4-p2g2-owned-input-create
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255))))
+(define generator
+  (g3c4-generator-create-internal model tokenizer
+    (list ':profile 'diagnostic-c4 ':sampling 'greedy
+          ':temperature-bits 1065353216 ':top-k 256
+          ':top-p-bits 1065353216 ':max-new-tokens 1
+          ':eos #f ':seed 7)))
+(check "private P2/G2 gate remains off"
+       (not (vector-ref g3c4-p2g2-ownership-gate 0)))
+(check "coordinator preflight rejects feature-off entry"
+  (guard (caught
+           (#t (and (transformer-error? caught)
+                    (eq? (transformer-error-category caught)
+                         'invalid-argument))))
+    (g3c4-p2g2-prefix-preflight generator input) #f))
+(check "feature-off preflight enrolls no call or output"
+       (and (null? (vector-ref g3c4-p2g2-protected-records 0))
+            (null? (vector-ref g3c4-p2g2-protected-anchors 0))))
+(check "feature-off generator closes"
+       (g3c4-generator-close-internal! generator))
+(check "feature-off input releases"
+       (generation-tensor-release-internal! input))
+(display "G3-C4 P2/G2 T1 prefix off PASS: checks=")
+(display checks)
+(newline)

@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+"""Closed source-private P2/G2 native-carrier/T1 prefix dependency."""
+
+from pathlib import Path
+import subprocess
+import sys
+
+root = Path(__file__).resolve().parents[1]
+subprocess.run([sys.executable,
+                str(root / "scripts/check-g3c4-p2g2-protected-scope.py")],
+               cwd=root, check=True, stdout=subprocess.DEVNULL)
+base = (root / "native/g3c4_p2g2_protected_scope_source_closure.txt").read_text().splitlines()
+additions = [
+    "native/g3c4_p2g2_t1_prefix_coordinator_extension.esk",
+    "tests/g3c4/p2_g2_t1_prefix_coordinator_native.c",
+    "tests/g3c4/p2_g2_t1_prefix_coordinator_test.esk",
+    "tests/g3c4/p2_g2_t1_prefix_coordinator_feature_off_test.esk",
+    "scripts/check-g3c4-p2g2-t1-prefix-coordinator.py",
+    "scripts/test-g3c4-p2g2-t1-prefix-coordinator.sh",
+    "docs/g3/G3_C4_P2_G2_T1_PREFIX_COORDINATOR_LEAF.md",
+    "native/g3c4_p2g2_t1_prefix_coordinator_source_closure.txt",
+]
+closure = (root / additions[-1]).read_text().splitlines()
+assert closure == base + additions
+assert len(closure) == len(set(closure))
+assert all((root / path).is_file() for path in closure)
+
+scope = (root / "native/g3c4_p2g2_protected_scope_extension.esk").read_text()
+source = (root / additions[0]).read_text()
+fixture = (root / additions[2]).read_text()
+off = (root / additions[3]).read_text()
+runner = (root / additions[5]).read_text()
+assert "(eq? (vector-ref record index)" in scope
+assert "(vector-ref anchor index)" in scope
+assert "'p2g2-prefix-committed" in scope
+assert "(define (g3c4-p2g2-owned-input-create" in source
+assert "(define-syntax g3c4-with-p2g2-prefix-call" in source
+assert "(eq? (vector-ref anchor 3) native-input)" in source
+assert "(eq? (vector-ref anchor 4) (vector-ref record 1))" in source
+assert "et_g3c4_private_input_from_t1_p2_v1" in source
+assert "et_g3c4_private_prompt_prefill_preflight_v1" in source
+assert "et_g3c4_private_p2g2_first_frame_carrier_v1" in source
+assert "et_g3c4_private_p2g2_prefix_commit_v1" in source
+body = source[source.index("(define (g3c4-p2g2-prefix-commit-probed!"):]
+assert body.index("(g3c4-p2g2-native-first-frame") < body.index(
+    "(t1-private-g3-decode-raw-into!") < body.index(
+    "(g3c4-p2g2-native-prefix-commit") < body.index(
+    "(vector-set! (g3c4-p2g2-anchor-for call) 13")
+assert body.count("(g3c4-p2g2-prefix-input-check") >= 3
+assert body.index("(before-decode record)") < body.index(
+    "(t1-private-g3-decode-raw-into!") < body.index(
+    "(after-decode record)")
+assert body.index("(g3c4-p2g2-prefix-byte-check") < body.index(
+    "(g3c4-p2g2-native-prefix-commit")
+assert "(g3c4-p2g2-protected-abort! call)" in fixture
+for phrase in ("native prefix is committed, output stays unready",
+               "held lease rejects abort in-region",
+               "P3 logits and K/V bitwise direct reference",
+               "rollback cache, parameters, gradients and RNG",
+               "all captured carrier bytes scrubbed and child dead",
+               "bridge failure never commits prefix"):
+    assert phrase in fixture, phrase
+assert "g3c4_p2g2_ownership_extension.esk" not in off
+assert "coordinator preflight rejects feature-off entry" in off
+assert "-DET_G3C4_P2_G2_CARRIER_BRIDGE_PRIVATE" in runner
+assert "-DET_G3C4_P2_G2_PREFIX_COMMIT_PRIVATE" in runner
+assert "-DET_G3C4_T1_I1_EXACT_PAIR_PRIVATE" in runner
+assert "--wrap=et_g3c4_private_p2g2_prefix_commit_v1" in runner
+assert "--wrap=et_a2_kv_cache_transaction_commit_v1" in runner
+for phrase in ("impossible closed native tail fails stop",
+               "different owned P2 input rejected after preflight",
+               "equal-length raw byte mutation rejected",
+               "equal-length staging upper byte rejected",
+               "selected first-token EOS rejects before commit",
+               "(probe-case 'decoder)", "(probe-case 'core)",
+               "(probe-case 'registry)", "(probe-case 'model)",
+               "(probe-case 'pin)", "(probe-case 'raw)",
+               "(probe-case 'staging)"):
+    assert phrase in fixture, phrase
+for mode in range(1, 13):
+    assert f"#f {mode} 'none)" in fixture or mode == 0
+assert "compile_mode normal" in runner and "compile_mode sanitize" in runner
+assert "repeat-feature-off-run.stdout" in runner
+assert "sanitize-feature-off-run.stdout" in runner
+assert "cmp \"$evidence/normal-run.stdout\"" in runner
+assert "g3c4-native-call-finish" not in source
+assert "g3c4-native-generation-frame-commit" not in source
+print("G3-C4 P2/G2 T1 prefix coordinator static PASS")
