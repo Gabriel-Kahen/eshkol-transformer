@@ -14,6 +14,17 @@ remain authoritative for first-token admission and provenance.
 
 The current first-frame carrier, `token_frame_begin_last_v1` and
 `token_forward_v1` admit budget two only before prefix commit at position 2.
+The accepted carrier also rejects a sampled first EOS **before** calling
+`token_forward_v1`; the current prefix coordinator therefore cannot reach
+an EOS forward. A reviewed EOS-capable first-frame carrier route is a
+separate prerequisite. It must sample and forward the genuine selected EOS
+with the accepted P2 input/pending-output, bytevector header/extent,
+native-owned alias and prefill-binding checks, and write the authentic ID
+only after successful forward and reauthentication. One guarded successor
+bridge may handle both selected EOS and non-EOS and branch only after that
+single real draw; an EOS-rejected frame must never be replayed to discover
+which route to take. The existing non-EOS bridge and prefix behavior must
+remain unchanged when this feature is off.
 The accepted prefix commit retains the genuine first selected ID/raw byte,
 `[1,256]` next logits, K/V at position 2 and successor RNG at `3/1110`, but
 leaves the sole requested-capacity-two output pending and unready. There is
@@ -69,10 +80,12 @@ P2/G1 copy-out continues to reject this owner type.
 
 Two **proposed**, mutually exclusive terminal routes are required:
 
-1. **First selected EOS:** the first native carrier and genuine same-registry
-   T1 decode still drive position-2 forward. Current
-   `p2g2_prefix_commit_v1` rejects EOS, so this branch must use a new
-   first-frame terminal preflight/commit, not a fabricated non-EOS prefix.
+1. **First selected EOS:** the newly reviewed EOS-capable first-frame carrier
+   must complete genuine position-2 forward, then same-registry T1 decodes
+   its selected-ID payload. Both the accepted first-frame bridge and
+   `p2g2_prefix_commit_v1` reject EOS; this branch needs the new carrier
+   route **and** a distinct first-frame terminal preflight/commit, not a
+   fabricated non-EOS prefix or a bypass of either rejection.
    Prepare exact logical `G=1` ID/text/output, verify staged A2 K/V and
    successor RNG, then commit position 2 and publish the sole output in one
    no-failure tail. Final cache is `3/1110`; no second sampler/frame runs.
@@ -137,9 +150,10 @@ stop. Once terminal commit has begun, no recoverable abort path applies.
 
 ## Required proof and dependency order
 
-First accept the narrow native second-frame admission/carrier/forward leaf
-against authentic prefix state; then accept the EOS-aware native terminal
-output/finish leaf and its exact logical-length ownership model; finally
+First accept the narrow EOS-capable first-frame carrier and post-prefix
+second-frame admission/carrier/forward routes against authentic owner and
+prefix state; then accept the EOS-aware native terminal output/finish leaf
+and its exact logical-length ownership model; finally
 compose both with same-registry T1 and the protected Eshkol ledger/shell
 tail. The ABI and ownership leaves are coupled by the exact active call,
 pending output and prefix state, so neither may define a contradictory

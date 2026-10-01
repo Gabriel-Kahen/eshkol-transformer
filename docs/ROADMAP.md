@@ -933,8 +933,10 @@ The stacked [private P2/G2 T1 prefix coordinator candidate](g3/G3_C4_P2_G2_T1_PR
 composes the accepted native first-frame carrier, same-registry T1 raw decode,
 and native prefix commit inside that protected region. Its source and compiled
 off/on fixtures passed independent source-and-test review at `d8e58859`/tree
-`806a7df6`. Its pinned supported Eshkol/native gate and integration remain
-pending; parent PR #174 must merge before the dependent source is integrated.
+`806a7df6`. Its first pinned supported gate stopped at the feature-off link
+before runtime execution because two owner/wrap symbols were unresolved;
+repair and a new exact supported gate are pending. Parent PR #174 merged at
+`9fc17bcd`, but the dependent coordinator is not integrated.
 No full G2 generation, terminal output or public result is claimed. The
 [proposed private second-frame and terminal ownership contract](g3/G3_C4_P2_G2_SECOND_FRAME_TERMINAL_OWNERSHIP_CONTRACT.md)
 defines the missing retained-logit second-frame bridge, first/second-EOS
