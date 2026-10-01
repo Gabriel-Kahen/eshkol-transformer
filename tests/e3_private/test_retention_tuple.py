@@ -16,6 +16,12 @@ def lines(prefix: Path, suffix: str) -> list[str]:
 
 class RetentionTupleTest(unittest.TestCase):
     def test_exact_successor_inventories(self) -> None:
+        successor_runtime = {
+            "eshkol_format_float32_bits", "eshkol_runtime_fatal",
+        }
+        self.assertTrue(successor_runtime.issubset(
+            set(lines(BASE, "undefined_symbols"))
+        ))
         for suffix in ("native_objects",):
             self.assertEqual(lines(RETENTION, suffix), lines(BASE, suffix))
         self.assertEqual(

@@ -6,6 +6,22 @@ counts 1,024/8,192 batches inside one call; it does not exercise this path.
 This candidate requires independent source review and a supported exact-tree
 normal, poisoned and ASan/UBSan/LSan gate before acceptance.
 
+The first supported attempt at `d724c537` stopped in its canonical predecessor
+package before compiling the retention tuple: fe9 emitted exactly two
+actual-only undefined runtime imports, `eshkol_format_float32_bits` and
+`eshkol_runtime_fatal`. The failed 13-file evidence is sealed at
+`/home/gabe/e3-complete-call-retention-d724c53-fe9-f31-20261001-prepared-a/SHA256SUMS-FAILED`.
+Both symbols are defined in the pinned runtime archives and already admitted by
+the installed E3 diagnostic package. This repair adds only those observed
+imports to the exact canonical and retention test manifests. A separate
+diagnostic-private fe9 object inventory found the same exact two actual-only
+imports and no expected-only difference; its 69-file evidence is sealed at
+`/home/gabe/e3-diagnostic-private-inventory-d724c53-fe9-f31-20261001-probe-a/SHA256SUMS-INVENTORY`.
+The diagnostic-private manifest adds that independently observed pair, while
+the installed diagnostic manifest and production sources remain unchanged. No
+retention runtime or sanitizer result follows from that failed attempt; a fresh
+pinned gate must compile and execute the repaired tree.
+
 `tests/e3_private/retention_driver_root.esk` loads the unchanged canonical
 private driver, then adds one boxed retention entry. The exact retention tuple
 has its own policy inputs, source/native closures, export/string/undefined

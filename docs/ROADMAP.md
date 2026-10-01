@@ -741,9 +741,17 @@ Its probes cover exact
 root/caller-region bytes and I2/D2/frame cumulative controls, mixed17 modes,
 full parameter and absent/present gradient words, initializer successor, and a D2 read
 failure with same-authority retry. Normal, poisoned and ASan/UBSan/LSan paths
-are scripted. Only local static/compile-syntax checks have run; independent
-review and supported exact-tree execution remain pending, so §9 acceptance is
-still open.
+are scripted. Independent source/tests review approved `d724c537`/tree
+`c9d3b068`, but its first supported gate stopped at the canonical predecessor
+package before retention runtime: fe9 emitted exactly two actual-only runtime
+imports absent from the old private manifest. The sealed 13-file failure is
+`e3-complete-call-retention-d724c53-fe9-f31-20261001-prepared-a/SHA256SUMS-FAILED`.
+An independently sealed 69-file fe9 diagnostic-private inventory found the same
+exact pair and no other import difference at
+`e3-diagnostic-private-inventory-d724c53-fe9-f31-20261001-probe-a/SHA256SUMS-INVENTORY`.
+The scoped private/diagnostic-private/retention manifest repair is present in
+this source tree. A fresh supported exact-tree execution is required, so §9
+acceptance remains open.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.

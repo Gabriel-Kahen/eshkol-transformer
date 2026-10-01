@@ -2,12 +2,22 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 verify_toolchain
-for command in ar cmp diff env grep python3 timeout wc; do require_command "${command}"; done
+for command in ar cmp diff env grep nm python3 timeout wc; do require_command "${command}"; done
 [[ -x /usr/bin/time ]] || die "GNU time is required for E3 retention measurements"
 [[ $# -le 1 ]] || die "usage: $0 [FRESH_OUTPUT_DIRECTORY]"
 out="${1:-$(project_build_dir)/e3-complete-call-retention}"
 [[ ! -e "${out}" ]] || die "E3 retention output directory must be fresh: ${out}"
 mkdir -p "${out}"
+
+# The two fe9 actual-only imports observed in the predecessor failure must be
+# supplied by the pinned runtime, not by a test shim or an unverified fallback.
+for archive in libeshkol-runtime.a libeshkol-static.a; do
+  for symbol in eshkol_format_float32_bits eshkol_runtime_fatal; do
+    nm -g --defined-only "$(eshkol_build_dir)/${archive}" | \
+      grep -E "[[:space:]]T ${symbol}$" >/dev/null || \
+      die "pinned ${archive} lacks ${symbol}"
+  done
+done
 
 # The accepted private package is rebuilt and checked independently; the
 # retention successor may not change its source, symbol or dependency closure.
