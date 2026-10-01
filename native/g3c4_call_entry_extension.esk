@@ -30,6 +30,8 @@
 
 (define g3c4-registry (vector '()))
 (define g3c4-rng-algorithm 'g3.philox4x32-10.categorical-f32.v1)
+;;; Enabled only by the source-private P2/G2 ownership extension.
+(define g3c4-p2g2-ownership-gate (vector #f))
 
 (define (g3c4-entry-dead! entry)
   (vector-set! entry 3 #f)
@@ -340,7 +342,10 @@
        (g3c4-positive-finite-f32-bits? (vector-ref policy 4))
        (<= (vector-ref policy 4) 1065353216)
        (m3t-exact-i64? (vector-ref policy 5))
-       (>= (vector-ref policy 5) 0) (<= (vector-ref policy 5) 1)
+       (>= (vector-ref policy 5) 0)
+       (or (<= (vector-ref policy 5) 1)
+           (and (vector-ref g3c4-p2g2-ownership-gate 0)
+                (= (vector-ref policy 5) 2)))
        (or (eq? (vector-ref policy 6) #f)
            (and (m3t-exact-i64? (vector-ref policy 6))
                 (>= (vector-ref policy 6) 0)
@@ -547,7 +552,10 @@
   (and (m3t-exact-i64? call-kind) (m3t-exact-i64? budget)
        (or (and (= call-kind 0) (= budget 0))
            (and (= call-kind 1) (= budget 0))
-           (and (= call-kind 2) (or (= budget 0) (= budget 1))))))
+           (and (= call-kind 2)
+                (or (= budget 0) (= budget 1)
+                    (and (vector-ref g3c4-p2g2-ownership-gate 0)
+                         (= budget 2)))))))
 
 (define (g3c4-call-rollback! call-entry generator-entry model-entry operation)
   (let ((ledger (vector-ref call-entry 10)))
@@ -588,7 +596,9 @@
   (syntax-rules ()
     ((_ operation generator call-kind budget body ...)
      (m3-call operation
-       (if (not (g3c4-call-tuple? call-kind budget))
+       ;; This terminal scope cannot own the nonterminal P2/G2 prefix.
+       (if (or (not (g3c4-call-tuple? call-kind budget))
+               (and (= call-kind 2) (= budget 2)))
            (g3c4-fail 'invalid-argument operation
                       "C4 call kind and budget are invalid"))
        (let* ((generator-entry
