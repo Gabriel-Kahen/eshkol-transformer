@@ -379,7 +379,7 @@ static void e3_numerical_final(et_e3_frame_internal *frame) {
   }
   printf("\t%" PRId64 ",%" PRId64 "\n",
          frame->published_counts[0], frame->published_counts[1]);
-  if (fflush(stdout) != 0) abort();
+  if (fflush(NULL) != 0) abort();
 }
 #endif
 
