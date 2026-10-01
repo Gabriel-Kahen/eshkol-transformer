@@ -732,6 +732,16 @@ historical, not passes. The 3,600-second bound and 512 MiB RSS ceiling remain.
 It does not close the other E3 §9 retention, mode, gradient, and sanitizer
 obligations.
 
+The separate [E3 complete-call retention candidate](e3/E3_COMPLETE_CALL_RETENTION.md)
+now has an exact test-only package tuple and a source-staged 1,024/8,192-call
+runner reusing one D2 dataset, frame and destinations. Its probes cover exact
+root-arena and I2/D2/frame cumulative controls, mixed17 modes, full parameter
+and absent/present gradient words, initializer successor, and a D2 read
+failure with same-authority retry. Normal, poisoned and ASan/UBSan/LSan paths
+are scripted. Only local static/compile-syntax checks have run; independent
+review and supported exact-tree execution remain pending, so §9 acceptance is
+still open.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained

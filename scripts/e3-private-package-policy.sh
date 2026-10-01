@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Sourced only by E1B. This admits the base private E3 tuple, its exact
-# source-private diagnostic successor, or the exact installed diagnostic tuple.
+# source-private diagnostic successor, the installed diagnostic tuple, or the
+# separate noninstalled complete-call retention test successor.
 # Mixed and partial tuples are rejected.
 e3_base_prefix="${PROJECT_ROOT}/native/e3_private_package"
 e3_diagnostic_prefix="${PROJECT_ROOT}/native/e3_diagnostic_private_package"
 e3_public_prefix="${PROJECT_ROOT}/native/e3_diagnostic_public_package"
+e3_retention_prefix="${PROJECT_ROOT}/tests/e3_private/retention_package"
 e3_base_inputs=(
   "${PROJECT_ROOT}/native/e3_private_driver_root.esk"
   "${PROJECT_ROOT}/native/e3_private_bridge.c"
@@ -22,6 +24,12 @@ e3_public_inputs=(
   "${PROJECT_ROOT}/native/e3_diagnostic_public_bridge.c"
   "${e3_public_prefix}_private_renames.txt"
   "${e3_public_prefix}_public_exports.txt"
+)
+e3_retention_inputs=(
+  "${PROJECT_ROOT}/tests/e3_private/retention_driver_root.esk"
+  "${PROJECT_ROOT}/tests/e3_private/retention_bridge.c"
+  "${e3_retention_prefix}_private_renames.txt"
+  "${e3_retention_prefix}_public_exports.txt"
 )
 e3_prefix="${e3_base_prefix}"
 e3_inputs=("${e3_base_inputs[@]}")
@@ -55,6 +63,14 @@ for e3_raw in "${raw_private_root}" "${raw_package_bridge}" \
       e3_tuple_requested=1
     fi
   done
+  for e3_expected in "${e3_retention_inputs[@]}"; do
+    if [[ "$(realpath -m -- "${e3_raw}")" == "${e3_expected}" ]]; then
+      [[ -z "${e3_tuple_kind}" || "${e3_tuple_kind}" == retention ]] || \
+        die "E3 policy rejects mixed retention and canonical tuples"
+      e3_tuple_kind=retention
+      e3_tuple_requested=1
+    fi
+  done
 done
 
 if [[ "${e3_tuple_kind}" == diagnostic ]]; then
@@ -65,6 +81,9 @@ elif [[ "${e3_tuple_kind}" == public ]]; then
   e3_prefix="${e3_public_prefix}"
   e3_inputs=("${e3_public_inputs[@]}")
   e3_public_tuple=1
+elif [[ "${e3_tuple_kind}" == retention ]]; then
+  e3_prefix="${e3_retention_prefix}"
+  e3_inputs=("${e3_retention_inputs[@]}")
 fi
 
 e3_check_repository_path() {

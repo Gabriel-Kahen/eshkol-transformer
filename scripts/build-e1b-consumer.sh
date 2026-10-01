@@ -1142,6 +1142,19 @@ g3g_package_policy=0
 if [[ "${package_policy}" == g3g-public-aggregate || "${package_policy}" == g3g-g0-public-aggregate || "${package_policy}" == g3g-manual-public-aggregate ]]; then
   g3g_package_policy=1
 fi
+e3_retention_sanitize=0
+if [[ "${E3_RETENTION_SANITIZE:-0}" != 0 ]]; then
+  [[ "${E3_RETENTION_SANITIZE}" == 1 && \
+     "${package_policy}" == e3-private-aggregate && \
+     "${e3_tuple_kind}" == retention ]] || \
+    die "E3 retention sanitizer is allowed only for the exact test tuple"
+  e3_retention_sanitize=1
+fi
+e3_retention_sanitize_flags=()
+if [[ "${e3_retention_sanitize}" == 1 ]]; then
+  e3_retention_sanitize_flags=(-O1 -g -fsanitize=address,undefined
+                               -fno-omit-frame-pointer)
+fi
 
 require_command awk
 require_command cmp
@@ -1214,6 +1227,8 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1)$'
     if [[ "${e3_diagnostic_tuple}" == 1 ]]; then
       export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
+    elif [[ "${e3_tuple_kind}" == retention ]]; then
+      export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1)$'
     fi
   fi
 fi
@@ -1339,7 +1354,7 @@ grep -Eq "^attributes ${e1b_raise_attribute} = .*noreturn" \
   die "E1B fixed raise-only seam is not noreturn in generated IR"
 
 "${e1b_clean_toolchain_env[@]}" \
-  "${e1b_cc}" -c -x ir "${e1b_tmp}/private.ll" \
+  "${e1b_cc}" "${e3_retention_sanitize_flags[@]}" -c -x ir "${e1b_tmp}/private.ll" \
   -o "${e1b_tmp}/private.o"
 
 {
@@ -1421,6 +1436,7 @@ objcopy --redefine-syms="${e1b_tmp}/renames.txt" \
 "${e1b_clean_toolchain_env[@]}" \
   "${e1b_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
   -fstack-protector-all \
+  "${e3_retention_sanitize_flags[@]}" \
   -I "${e1b_source}/inc" -I "${PROJECT_ROOT}/native" \
   -MMD -MF "${e1b_tmp}/bridge.d" \
   -c "${PROJECT_ROOT}/native/e1b_error_consumer_bridge.c" \
@@ -1447,6 +1463,7 @@ if [[ "${package_policy}" == g3g-manual-public-aggregate ]]; then
 fi
 "${e1b_clean_toolchain_env[@]}" \
   "${e1b_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
+  "${e3_retention_sanitize_flags[@]}" \
   "${package_bridge_flags[@]}" \
   -I "${e1b_source}/inc" -I "${PROJECT_ROOT}/include" \
   -I "${PROJECT_ROOT}/native" \
@@ -1462,6 +1479,7 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     -I "${PROJECT_ROOT}/include" -I "${PROJECT_ROOT}/native"
     -I "${PROJECT_ROOT}/src"
   )
+  package_native_cflags+=("${e3_retention_sanitize_flags[@]}")
   if [[ "${package_policy}" == cli3-tr3-aggregate || \
       "${package_policy}" == cli3-c2-successor || \
     "${package_policy}" == e3-private-aggregate || \
@@ -1489,11 +1507,28 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
   if [[ -n "${package_native_define}" ]]; then
     package_native_cflags+=("${package_native_define}")
   fi
+  if [[ "${package_policy}" == e3-private-aggregate &&
+        "${e3_tuple_kind}" == retention ]]; then
+    # Only the exact test successor observes inherited I2/D2 registries.
+    # Canonical private, diagnostic and installed tuples keep their old code.
+    package_native_cflags+=(-DET_E3_RETENTION_TESTING)
+  fi
   native_index=0
   for package_native_source in "${package_native_sources[@]}"; do
     package_native_object="${e1b_tmp}/package-native-${native_index}.o"
     package_native_depfile="${e1b_tmp}/package-native-${native_index}.d"
     package_source_flags=()
+    if [[ "${package_policy}" == e3-private-aggregate &&
+          "${e3_tuple_kind}" == retention ]]; then
+      case "${package_native_source}" in
+        "${PROJECT_ROOT}/src/eshkol_transformer/m3_call_f32_integration.c")
+          package_source_flags+=(-DET_F32_TENSOR_TESTING) ;;
+        "${PROJECT_ROOT}/src/eshkol_transformer/e3_frame.c")
+          package_source_flags+=(-DET_F32_TENSOR_TESTING -DET_D2_NATIVE_TESTING) ;;
+        "${PROJECT_ROOT}/native/e3_d2_native.c")
+          package_source_flags+=(-DET_D2_NATIVE_TESTING) ;;
+      esac
+    fi
     if [[ "${package_policy}" == cli3-tr3-aggregate ]]; then
       case "${package_native_source}" in
         "${PROJECT_ROOT}/native/e3_d2_native.c")
@@ -1715,9 +1750,22 @@ cmp -s "${e1b_tmp}/expected-global-defined.txt" \
 
 nm -u --format=posix "${e1b_tmp}/combined.o" | awk '{ print $1 }' | \
   LC_ALL=C sort -u >"${e1b_tmp}/undefined.txt"
-if ! e1b_compare_exact_undefined_allowlist \
-    "${e1b_tmp}/expected-undefined.txt" "${e1b_tmp}/undefined.txt"; then
-  die "E1B final object differs from the exact undefined-symbol allowlist"
+if [[ "${e3_retention_sanitize}" == 1 ]]; then
+  grep -E '^(__asan_|__ubsan_|__sanitizer_|__start_asan_globals$|__stop_asan_globals$)' \
+    "${e1b_tmp}/undefined.txt" >"${e1b_tmp}/sanitizer-undefined.txt" || \
+    die "E3 retention sanitizer object has no instrumentation references"
+  grep -Ev '^(__asan_|__ubsan_|__sanitizer_|__start_asan_globals$|__stop_asan_globals$)' \
+    "${e1b_tmp}/undefined.txt" >"${e1b_tmp}/noninstrumentation-undefined.txt" || true
+  comm -13 "${e1b_tmp}/expected-undefined.txt" \
+    "${e1b_tmp}/noninstrumentation-undefined.txt" \
+    >"${e1b_tmp}/unexpected-undefined.txt"
+  [[ ! -s "${e1b_tmp}/unexpected-undefined.txt" ]] || \
+    die "E3 sanitized retention object adds noninstrumentation imports"
+else
+  if ! e1b_compare_exact_undefined_allowlist \
+      "${e1b_tmp}/expected-undefined.txt" "${e1b_tmp}/undefined.txt"; then
+    die "E1B final object differs from the exact undefined-symbol allowlist"
+  fi
 fi
 if grep -E 'et_e1b|e1(-internal-dispatch|_2Dinternal_2Ddispatch)|transformer(-error-(make|raise|wrap-foreign)|_2Derror_2D(make|raise|wrap_2Dforeign))' \
     "${e1b_tmp}/undefined.txt" >/dev/null; then
@@ -1947,6 +1995,19 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
       et_e3_test_destination_bits_v1
       et_e3_test_frame_fail_alloc_after_v1
     )
+    if [[ "${e3_tuple_kind}" == retention ]]; then
+      e3_required_private+=(
+        et_e3_private_retention_dispatch_cabi_v1
+        et_e3_test_retention_probe_v1
+        et_e3_test_model_word_count_v1
+        et_e3_test_model_word_v1
+        et_e3_test_gradient_metadata_v1
+        et_e3_test_seed_gradient_v1
+        et_d2_exact_read_test_fail_stage_v1
+        et_f32_test_live_counts_snapshot_v1
+        et_f32_test_retired_counts_snapshot_v1
+      )
+    fi
   fi
   for privileged in "${e3_required_private[@]}"; do
     grep -E "[[:space:]]LOCAL[[:space:]].*[[:space:]]${privileged}$" \
@@ -2014,6 +2075,8 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1)$'
     if [[ "${e3_diagnostic_tuple}" == 1 ]]; then
       public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
+    elif [[ "${e3_tuple_kind}" == retention ]]; then
+      public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1)$'
     fi
   fi
 fi
