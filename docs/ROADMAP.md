@@ -750,7 +750,14 @@ An independently sealed 69-file fe9 diagnostic-private inventory found the same
 exact pair and no other import difference at
 `e3-diagnostic-private-inventory-d724c53-fe9-f31-20261001-probe-a/SHA256SUMS-INVENTORY`.
 The scoped private/diagnostic-private/retention manifest repair is present in
-this source tree. A fresh supported exact-tree execution is required, so §9
+this source tree. Its exact `0c358d5` rerun passed canonical packaging, then
+stopped at the retention tuple's ordered native-closure check before runtime.
+All 56 dependencies matched; the retention observer's early D2 header include
+moves only `native/d2_native.h` before `m3_model.c`. The test manifest now
+matches that first-seen order reconstructed from the sealed raw depfiles;
+production manifests and sources are unchanged. The 103-file failed seal is
+`e3-complete-call-retention-0c358d5-fe9-f31-20261001-prepared-b/SHA256SUMS-FAILED`
+(`579aa559...`). A fresh supported exact-tree execution is required, so §9
 acceptance remains open.
 
 The separate [E3 compiled numerical transcript candidate](e3/E3_NUMERICAL_TRANSCRIPT.md)

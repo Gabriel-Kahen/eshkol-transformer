@@ -22,6 +22,18 @@ the installed diagnostic manifest and production sources remain unchanged. No
 retention runtime or sanitizer result follows from that failed attempt; a fresh
 pinned gate must compile and execute the repaired tree.
 
+The exact `0c358d5` supported rerun passed canonical packaging, then stopped
+before retention runtime at the strict native-closure comparison. Its emitted
+56 dependencies exactly match the expected set: only `native/d2_native.h`
+appears earlier, because the retention-only observer includes it before
+`m3_model.c`. The test manifest now preserves that measured first-seen order;
+the production manifest and native sources remain unchanged. All 103 failed
+evidence files, including the raw native depfiles, are sealed at
+`/home/gabe/e3-complete-call-retention-0c358d5-fe9-f31-20261001-prepared-b/SHA256SUMS-FAILED`
+(`579aa559c2651a121bb146702f833ce6fa30eedda66c8b513b4d116e9627bdf4`).
+No dependency or check was removed, and compiled retention/sanitizer acceptance
+still requires a fresh exact-head gate.
+
 `tests/e3_private/retention_driver_root.esk` loads the unchanged canonical
 private driver, then adds one boxed retention entry. The exact retention tuple
 has its own policy inputs, source/native closures, export/string/undefined
