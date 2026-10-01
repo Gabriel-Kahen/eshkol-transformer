@@ -4,9 +4,15 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 binary="${1:-$(project_build_dir)/cli3/eshkol-transformer}"
 [[ -x "${binary}" ]] || die "CLI3 executable unavailable: ${binary}"
-for command in cmp python3; do require_command "${command}"; done
-scratch="$(mktemp -d "${TMPDIR:-/tmp}/cli3-b.XXXXXX")"
-trap 'rm -rf -- "${scratch}"' EXIT
+for command in cmp python3 realpath; do require_command "${command}"; done
+if [[ -n "${CLI3_B_EVIDENCE_DIR:-}" ]]; then
+  scratch="$(realpath -m -- "${CLI3_B_EVIDENCE_DIR}")"
+  [[ ! -e "${scratch}" ]] || die "CLI3-B evidence must be fresh: ${scratch}"
+  mkdir -p -- "${scratch}"
+else
+  scratch="$(mktemp -d "${TMPDIR:-/tmp}/cli3-b.XXXXXX")"
+  trap 'rm -rf -- "${scratch}"' EXIT
+fi
 
 cat >"${scratch}/config.json" <<'JSON'
 {"config-schema-major":1,"config-schema-minor":0,"model.context-length":2,"model.hidden-size":4,"model.layer-count":1,"model.query-head-count":2,"model.vocabulary-size":256,"run.seed":1729,"training.accumulation-steps":2}

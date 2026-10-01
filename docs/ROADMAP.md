@@ -685,8 +685,9 @@ evidence seal is
 `/home/gabe/cli3-production-generate-main7c38-fe9-b0c7f3d-evidence/SHA256SUMS-RUN`
 (`5b34561eaeebd67ed4f677a692327888b61ae8cc562316bd2d637c7d694786fc`),
 independently reviewed. This supports only the fixed CPU f32, one-byte
-diagnostic profile; hosted exact-head CI and merge remain pending, as do
-EOS, multi-token generation, GPU, and general profiles.
+diagnostic profile. PR #169 merged as `219014ad` after 23/23 exact-head
+hosted checks. EOS, multi-token generation, GPU, and general profiles remain
+outside that acceptance.
 
 The Wave 3 production CLI3 `generate` candidate moves the reviewed fixed
 CPU-f32 P1/G1 command into an exact installed CLI3 successor tuple. It retains
@@ -698,6 +699,15 @@ single native owner and trainer-release ordering. The supported linked gate
 and independent evidence review passed as recorded above. This candidate
 adds no EOS control, multi-token continuation, general profile, GPU or new
 resume behavior.
+
+A test-only current-interface integration gate now builds this production CLI
+twice with distinct fresh compiler/application caches, compares the complete
+object/archive/executable bytes and all emitted closure evidence, and runs
+the merged pretrain/evaluate/fresh-process exact-resume and production
+generate/oracle/negative/six-command suites against both builds. The gate
+retains the training and evaluation fixtures for independent evidence review.
+Source review and the supported pinned build/runtime gate remain pending;
+this adds no broader generation profile or full CLI3 acceptance claim.
 
 The bounded [TR3 one-batch overfit](TR3_ONE_BATCH_OVERFIT.md) and
 [disjoint held-out improvement](TR3_HELDOUT_IMPROVEMENT.md) witnesses are

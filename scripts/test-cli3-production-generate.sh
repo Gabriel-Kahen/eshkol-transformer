@@ -3,13 +3,18 @@ set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 verify_toolchain
 for command in cmp python3 realpath sha256sum; do require_command "${command}"; done
-[[ $# == 1 ]] || die "usage: $0 DISK_BACKED_EVIDENCE_DIR"
+[[ $# == 1 || $# == 2 ]] || die "usage: $0 DISK_BACKED_EVIDENCE_DIR [BUILT_PACKAGE_DIR]"
 evidence="$(realpath -m -- "$1")"
 mkdir -p -- "${evidence}"
-scratch="$(mktemp -d "${evidence}/.build.XXXXXX")"
+if [[ $# == 2 ]]; then
+  scratch="$(realpath -- "$2")"
+  [[ -x "${scratch}/eshkol-transformer" ]] || die "CLI3 executable unavailable: ${scratch}"
+else
+  scratch="$(mktemp -d "${evidence}/.build.XXXXXX")"
+  TMPDIR="${evidence}" CLI3_COMPILER_TIMEOUT_SECONDS=1200 \
+    /usr/bin/bash "${PROJECT_ROOT}/scripts/build-cli3.sh" "${scratch}"
+fi
 printf '%s\n' "${scratch}" >"${evidence}/scratch-path.txt"
-TMPDIR="${evidence}" CLI3_COMPILER_TIMEOUT_SECONDS=1200 \
-  /usr/bin/bash "${PROJECT_ROOT}/scripts/build-cli3.sh" "${scratch}"
 cmp "${PROJECT_ROOT}/native/cli3_generate_source_closure.txt" \
   "${scratch}/cli3.o.evidence/source-closure.txt"
 cmp "${PROJECT_ROOT}/native/cli3_generate_native_source_closure.txt" \
