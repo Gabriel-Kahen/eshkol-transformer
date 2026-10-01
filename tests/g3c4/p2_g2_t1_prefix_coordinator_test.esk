@@ -134,6 +134,32 @@
               (check "native prefix is committed, output stays unready"
                      (= (coordinator-prefix
                           native (vector-ref output 3) selected) 0))
+              (let ((auxiliary (vector-ref output 8))
+                    (shell (vector-ref output 0)))
+                (vector-set! ledger 4 #f)
+                (reject "post-prefix wrong child ledger rejected"
+                  (lambda () (g3c4-p2g2-protected-abort! call)))
+                (vector-set! ledger 4 output)
+                (vector-set! output 0 (vector 'wrong-output))
+                (reject "post-prefix wrong output shell rejected"
+                  (lambda () (g3c4-p2g2-protected-check call 'test)))
+                (vector-set! output 0 shell)
+                (vector-set! output 3 #f)
+                (reject "post-prefix wrong output native rejected"
+                  (lambda () (g3c4-p2g2-protected-check call 'test)))
+                (vector-set! output 3 output-native)
+                (let ((replacement (make-bytevector 2 0)))
+                  (vector-set! auxiliary 0 replacement)
+                  (vector-set! record 9 replacement)
+                  (reject "post-prefix paired equal-length auxiliary rejected"
+                    (lambda () (g3c4-p2g2-protected-abort! call)))
+                  (vector-set! auxiliary 0 raw)
+                  (vector-set! record 9 raw))
+                (check "post-prefix original owner restored before abort"
+                       (and (eq? (g3c4-p2g2-protected-check call 'test)
+                                 record)
+                            (= (coordinator-prefix
+                                 native output-native selected) 0))))
               (reject "second prefix is rejected"
                 (lambda () (g3c4-p2g2-prefix-commit! call input)))
               (if (eq? lease 'ids)

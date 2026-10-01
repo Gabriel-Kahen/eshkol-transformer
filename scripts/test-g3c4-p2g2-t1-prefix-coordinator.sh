@@ -138,6 +138,8 @@ WRAPPER
 }
 
 compile_mode normal
+python3 "$PROJECT_ROOT/tests/g3c4/check_p2_g2_t1_prefix_oracle.py" \
+  "$evidence/normal-run.stdout" >"$evidence/oracle.stdout"
 ESHKOL_ARENA_POISON=1 "$tmp/normal/p2g2-feature-off" \
   >"$evidence/repeat-feature-off-run.stdout" \
   2>"$evidence/repeat-feature-off-run.stderr"
@@ -155,6 +157,7 @@ cmp "$evidence/normal-run.stdout" "$evidence/sanitize-run.stdout"
 git -C "$PROJECT_ROOT" diff --check
 sha256sum "$PROJECT_ROOT/native/g3c4_p2g2_t1_prefix_coordinator_source_closure.txt" \
   >"$evidence/closure.sha256"
-cat "$evidence/static.stdout" "$evidence/normal-feature-off-run.stdout" \
+cat "$evidence/static.stdout" "$evidence/oracle.stdout" \
+    "$evidence/normal-feature-off-run.stdout" \
     "$evidence/normal-run.stdout"
 printf 'G3-C4 P2/G2 T1 prefix evidence: %s\n' "$evidence"

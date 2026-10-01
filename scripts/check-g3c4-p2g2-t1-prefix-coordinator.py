@@ -15,6 +15,7 @@ additions = [
     "tests/g3c4/p2_g2_t1_prefix_coordinator_native.c",
     "tests/g3c4/p2_g2_t1_prefix_coordinator_test.esk",
     "tests/g3c4/p2_g2_t1_prefix_coordinator_feature_off_test.esk",
+    "tests/g3c4/check_p2_g2_t1_prefix_oracle.py",
     "scripts/check-g3c4-p2g2-t1-prefix-coordinator.py",
     "scripts/test-g3c4-p2g2-t1-prefix-coordinator.sh",
     "docs/g3/G3_C4_P2_G2_T1_PREFIX_COORDINATOR_LEAF.md",
@@ -29,7 +30,9 @@ scope = (root / "native/g3c4_p2g2_protected_scope_extension.esk").read_text()
 source = (root / additions[0]).read_text()
 fixture = (root / additions[2]).read_text()
 off = (root / additions[3]).read_text()
-runner = (root / additions[5]).read_text()
+runner = (root / additions[6]).read_text()
+oracle = (root / additions[4]).read_text()
+native_fixture = (root / additions[1]).read_text()
 assert "(eq? (vector-ref record index)" in scope
 assert "(vector-ref anchor index)" in scope
 assert "'p2g2-prefix-committed" in scope
@@ -67,6 +70,14 @@ assert "-DET_G3C4_P2_G2_PREFIX_COMMIT_PRIVATE" in runner
 assert "-DET_G3C4_T1_I1_EXACT_PAIR_PRIVATE" in runner
 assert "--wrap=et_g3c4_private_p2g2_prefix_commit_v1" in runner
 assert "--wrap=et_a2_kv_cache_transaction_commit_v1" in runner
+assert "check_p2_g2_t1_prefix_oracle.py" in runner
+assert "COORD_ORACLE " in oracle
+assert "reference.philox" in oracle and "reference.literal" in oracle
+assert "coordinator_entry_binding" in native_fixture
+assert "coordinator_precommit_binding" in native_fixture
+assert "coordinator_prefix_binding" in native_fixture
+assert "coordinator_binding_equal" in native_fixture
+assert "COORD_ORACLE %s" in native_fixture
 for phrase in ("impossible closed native tail fails stop",
                "different owned P2 input rejected after preflight",
                "equal-length raw byte mutation rejected",
@@ -76,6 +87,11 @@ for phrase in ("impossible closed native tail fails stop",
                "(probe-case 'registry)", "(probe-case 'model)",
                "(probe-case 'pin)", "(probe-case 'raw)",
                "(probe-case 'staging)"):
+    assert phrase in fixture, phrase
+for phrase in ("post-prefix wrong child ledger rejected",
+               "post-prefix wrong output shell rejected",
+               "post-prefix wrong output native rejected",
+               "post-prefix paired equal-length auxiliary rejected"):
     assert phrase in fixture, phrase
 for mode in range(1, 13):
     assert f"#f {mode} 'none)" in fixture or mode == 0

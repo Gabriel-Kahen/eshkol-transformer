@@ -177,6 +177,7 @@ native/g3c4_p2g2_t1_prefix_coordinator_extension.esk
 tests/g3c4/p2_g2_t1_prefix_coordinator_native.c
 tests/g3c4/p2_g2_t1_prefix_coordinator_test.esk
 tests/g3c4/p2_g2_t1_prefix_coordinator_feature_off_test.esk
+tests/g3c4/check_p2_g2_t1_prefix_oracle.py
 scripts/check-g3c4-p2g2-t1-prefix-coordinator.py
 scripts/test-g3c4-p2g2-t1-prefix-coordinator.sh
 docs/g3/G3_C4_P2_G2_T1_PREFIX_COORDINATOR_LEAF.md

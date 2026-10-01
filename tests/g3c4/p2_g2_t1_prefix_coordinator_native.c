@@ -176,9 +176,13 @@ static uint32_t coordinator_values[1192], coordinator_gradients[1192];
 static int64_t coordinator_entry_rng[4], coordinator_successor_rng[4];
 static cache_snapshot coordinator_entry_cache, coordinator_precommit_cache;
 static cache_snapshot coordinator_prefix_cache;
+static binding_snapshot coordinator_entry_binding;
+static binding_snapshot coordinator_precommit_binding;
+static binding_snapshot coordinator_prefix_binding;
 static float coordinator_next_logits[256];
 static int64_t coordinator_selected;
 static int64_t coordinator_prompt[2];
+static int64_t coordinator_policy[6];
 static int coordinator_saw_prefix;
 
 static void coordinator_owner_bytes(uint32_t values[1192],
@@ -211,6 +215,15 @@ static int coordinator_cache_equal(const cache_snapshot *a,
          memcmp(a->keep, b->keep, sizeof(a->keep)) == 0;
 }
 
+static int coordinator_binding_equal(const binding_snapshot *a,
+                                     const binding_snapshot *b) {
+  return a->ready == b->ready &&
+         memcmp(a->identities, b->identities,
+                sizeof(a->identities)) == 0 &&
+         memcmp(a->values, b->values, sizeof(a->values)) == 0 &&
+         memcmp(a->tokens, b->tokens, sizeof(a->tokens)) == 0;
+}
+
 static int coordinator_pending_zero(et_g3c4_output_internal *output) {
   et_i64_tensor_borrow *borrow = NULL;
   const et_kernel_tensor_view_v1 *view = NULL;
@@ -236,12 +249,16 @@ int64_t et_g3c4_p2g2_coordinator_test_mark_v1(
   coordinator_owner = context->owner;
   coordinator_prompt[0] = first;
   coordinator_prompt[1] = second;
+  memcpy(coordinator_policy, context->generator_policy,
+         sizeof(coordinator_policy));
   coordinator_owner_bytes(coordinator_values, coordinator_gradients);
   memcpy(coordinator_entry_rng, context->generator_rng_words,
          sizeof(coordinator_entry_rng));
   snapshot_cache(context->cache, &coordinator_entry_cache);
+  snapshot_binding(context, &coordinator_entry_binding);
   coordinator_saw_prefix = 0;
   return coordinator_entry_cache.length == 0 &&
+         coordinator_entry_binding.ready == 0u &&
          coordinator_owner_unchanged() ? 0 : -1;
 }
 
@@ -305,7 +322,11 @@ int64_t et_g3c4_p2g2_coordinator_test_observe_v1(
              sizeof(coordinator_entry_rng)) != 0) return -1;
   if (selected >= 0 && context->token_frame_candidate != selected)
     return -1;
-  if (cache_length == 2) coordinator_precommit_cache = cache;
+  if (cache_length == 2) {
+    coordinator_precommit_cache = cache;
+    snapshot_binding(context, &coordinator_precommit_binding);
+    if (coordinator_precommit_binding.ready != 1u) return -1;
+  }
   return 0;
 }
 
@@ -324,9 +345,11 @@ int64_t et_g3c4_p2g2_coordinator_test_prefix_v1(
       !coordinator_owner_unchanged() ||
       !coordinator_pending_zero(output)) return -1;
   snapshot_cache(context->cache, &coordinator_prefix_cache);
+  snapshot_binding(context, &coordinator_prefix_binding);
   if (coordinator_prefix_cache.length != 3 ||
       memcmp(coordinator_prefix_cache.keep,
-             (const uint8_t[4]){1, 1, 1, 0}, 4u) != 0)
+             (const uint8_t[4]){1, 1, 1, 0}, 4u) != 0 ||
+      coordinator_prefix_binding.ready != 1u)
     return -1;
   memcpy(coordinator_next_logits, context->p2g2_prefix_next_logits,
          sizeof(coordinator_next_logits));
@@ -342,10 +365,12 @@ int64_t et_g3c4_p2g2_coordinator_test_after_abort_v1(
   et_g3c4_context_internal *context =
       et_g3c4_admit_idle_call(context_candidate);
   cache_snapshot actual;
+  binding_snapshot actual_binding;
   if (context == NULL ||
       expected_length < 0 || expected_length > 3 ||
       !coordinator_owner_unchanged()) return -1;
   snapshot_cache(context->cache, &actual);
+  snapshot_binding(context, &actual_binding);
   if (actual.length != expected_length ||
       memcmp(actual.keep,
              expected_length == 0 ? (const uint8_t[4]){0, 0, 0, 0} :
@@ -353,15 +378,20 @@ int64_t et_g3c4_p2g2_coordinator_test_after_abort_v1(
                                     (const uint8_t[4]){1, 1, 1, 0}, 4u) != 0)
     return -1;
   if (expected_length == 0 &&
-      !coordinator_cache_equal(&actual, &coordinator_entry_cache))
+      (!coordinator_cache_equal(&actual, &coordinator_entry_cache) ||
+       !coordinator_binding_equal(&actual_binding,
+                                  &coordinator_entry_binding)))
     return -1;
   if (expected_length == 2 &&
       (!coordinator_cache_equal(&actual, &coordinator_precommit_cache) ||
-       context->prefill_binding_ready != 1u))
+       !coordinator_binding_equal(&actual_binding,
+                                  &coordinator_precommit_binding)))
     return -1;
   if (expected_length == 3 &&
       (!coordinator_saw_prefix ||
        !coordinator_cache_equal(&actual, &coordinator_prefix_cache) ||
+       !coordinator_binding_equal(&actual_binding,
+                                  &coordinator_prefix_binding) ||
        memcmp(context->generator_rng_words, coordinator_successor_rng,
               sizeof(coordinator_successor_rng)) != 0)) return -1;
   if (expected_length < 3 &&
@@ -384,8 +414,12 @@ int64_t et_g3c4_p2g2_coordinator_test_dead_output_v1(void *candidate) {
 
 int64_t et_g3c4_p2g2_coordinator_test_reference_v1(void) {
   et_g3c4_context_internal *reference;
+  et_g3c4_context_internal *oracle_context;
+  et_g3c4_input_internal *oracle_input;
+  et_g3c4_output_internal *oracle_output;
   cache_snapshot actual;
   float logits[256];
+  float last_logits[256];
   const int64_t ids[3] = {
       coordinator_prompt[0], coordinator_prompt[1], coordinator_selected};
   if (!coordinator_saw_prefix || coordinator_owner == NULL) return -1;
@@ -401,5 +435,49 @@ int64_t et_g3c4_p2g2_coordinator_test_reference_v1(void) {
   if (et_g3c4_private_call_abort_v1(reference) != 0 ||
       et_g3c4_private_generator_close_v1(reference) != 0)
     return -1;
-  return coordinator_owner_unchanged() ? 0 : -1;
+  if (!coordinator_owner_unchanged()) return -1;
+
+  /* Independent P2 prefill supplies the oracle's 256 last logits. The
+   * compared token/RNG words remain those observed from the Eshkol call. */
+  oracle_context = et_g3c4_private_generator_seed_v1(
+      coordinator_owner, coordinator_entry_rng[1],
+      coordinator_policy[0], coordinator_policy[1],
+      coordinator_policy[2], coordinator_policy[3],
+      coordinator_policy[4], coordinator_policy[5]);
+  oracle_input = create_prompt(coordinator_prompt, 2);
+  if (oracle_context == NULL || oracle_input == NULL ||
+      et_g3c4_private_prompt_prefill_preflight_v1(
+          oracle_context, oracle_input, 2) != 0 ||
+      et_g3c4_private_call_acquire_v1(oracle_context, 2, 2) != 0)
+    return -1;
+  oracle_output = et_g3c4_private_output_reserve_v1(oracle_context, 2);
+  if (oracle_output == NULL ||
+      et_g3c4_private_prompt_prefill_v1(
+          oracle_context, oracle_input, last_logits) != 0)
+    return -1;
+  if (et_g3c4_private_call_abort_v1(oracle_context) != 0 ||
+      et_g3c4_private_tensor_release_v1(oracle_input) != 0 ||
+      et_g3c4_private_generator_close_v1(oracle_context) != 0 ||
+      !coordinator_owner_unchanged())
+    return -1;
+  printf("COORD_ORACLE %s %lld %lld %lld %lld %lld %lld %lld",
+         coordinator_policy[0] == 0 ? "greedy" : "categorical",
+         (long long)coordinator_prompt[0],
+         (long long)coordinator_prompt[1],
+         (long long)coordinator_policy[1],
+         (long long)coordinator_policy[2],
+         (long long)coordinator_policy[3],
+         (long long)coordinator_policy[5],
+         (long long)coordinator_selected);
+  for (size_t index = 0u; index < 4u; index++)
+    printf(" %lld", (long long)coordinator_entry_rng[index]);
+  for (size_t index = 0u; index < 4u; index++)
+    printf(" %lld", (long long)coordinator_successor_rng[index]);
+  for (size_t index = 0u; index < 256u; index++) {
+    uint32_t bits;
+    memcpy(&bits, &last_logits[index], sizeof(bits));
+    printf(" %08x", bits);
+  }
+  putchar('\n');
+  return 0;
 }
