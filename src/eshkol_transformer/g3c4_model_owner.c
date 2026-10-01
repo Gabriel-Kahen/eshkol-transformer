@@ -7847,10 +7847,14 @@ int64_t et_g3c4_private_call_abort_v1(void *candidate) {
 #endif
 #ifdef ET_G3C4_TOKEN_FRAME_PRIVATE
   if (!et_g3c4_token_frame_idle(context)) {
+#if defined(ET_G3C4_P2_G1_PUBLICATION_PRIVATE) || \
+    defined(ET_G3C4_P2_G2_FIRST_FRAME_PRIVATE)
+    if (context->token_frame_state == ET_G3C4_TOKEN_FRAME_READY
 #ifdef ET_G3C4_P2_G1_PUBLICATION_PRIVATE
-    if (context->token_frame_state == ET_G3C4_TOKEN_FRAME_READY ||
-        context->token_frame_state == ET_G3C4_TOKEN_FRAME_PREPARED ||
-        context->token_frame_state == ET_G3C4_TOKEN_FRAME_END_READY) {
+        || context->token_frame_state == ET_G3C4_TOKEN_FRAME_PREPARED ||
+        context->token_frame_state == ET_G3C4_TOKEN_FRAME_END_READY
+#endif
+        ) {
       et_a2_kv_cache_transaction_view *view = NULL;
       et_kernel_error error;
       if (et_g3c4_capture_kernel(
@@ -7861,6 +7865,8 @@ int64_t et_g3c4_private_call_abort_v1(void *candidate) {
       if (et_a2_kv_cache_transaction_view_end_v1(&view, &error) != 0)
         abort();
     }
+#endif
+#ifdef ET_G3C4_P2_G1_PUBLICATION_PRIVATE
     staged_frame = 1;
 #endif
     et_g3c4_token_frame_discard(context);
