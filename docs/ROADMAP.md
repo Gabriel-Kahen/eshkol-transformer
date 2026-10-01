@@ -885,10 +885,31 @@ private-symbol/feature closure. Both Docker and launcher exited zero; the
 verified 44-file seal is
 `g3c4-p2g2-carrier-810c08b-fe9-f31-20260930-prepared-b/SHA256SUMS-RUN`
 (SHA-256 `d68020558419dc1e3886f7f4df3dca5e8fe3729d5076669b992382a6ef21bc0b`).
-Independent evidence review accepted the sealed gate; hosted CI and merge
-remain pending. Eshkol caller allocation
+Independent evidence review accepted the sealed gate, and [PR #172](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/172)
+merged at `7906637`/tree `57022969` after 23/23 hosted checks. Eshkol caller allocation
 authentication, genuine same-aggregate T1 decode and the one-region
 coordinator/rollback remain separate next gates.
+
+The [private Eshkol P2/G2 ownership admission candidate](g3/G3_C4_P2_G2_ESHKOL_OWNERSHIP_ADMISSION_LEAF.md)
+adds an off-default source gate for exact budget-two private policy/call
+tuple and `(P,G)=(2,2)` pending output capacity, while the old terminal
+scope and public C4 adapter reject budget two. It preallocates two-byte raw
+and sixteen-byte staging auxiliaries and keeps the native output pending,
+zero and unready. The independently reviewed source at `10469b3`/tree
+`4744e099` passed the supported pinned fe9/f31 Clang 21 gate: separate
+feature-off and feature-on compiled fixtures passed 4 and 23 checks in each
+normal, repeat and ASan+UBSan+LSan mode, with byte-identical stdout and empty
+stderr. The P2/G1 pending and native carrier predecessors passed; launcher
+and Docker exited zero, and pre/post source pins passed. The 89-file evidence
+is sealed at
+`g3c4-p2g2-ownership-10469b3-fe9-f31-20261001-prepared-c/SHA256SUMS-RUN`
+(SHA-256 `6d99d776625a3e8ed6f19818f51e3865d0e1fd1204ced99f9d0aed1e66bfcf84`);
+independent evidence review accepted the seal without findings. Hosted CI and
+merge remain pending. The public budget-two guard has source evidence in this
+leaf, with compiled public rejection pending separately. The protected
+one-region call record, original auxiliary identity/extent authentication,
+private prefix carriers, genuine T1 decode and native prefix commit remain
+the next gate; no generated token or terminal output is claimed.
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver

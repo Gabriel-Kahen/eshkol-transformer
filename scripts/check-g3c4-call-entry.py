@@ -66,6 +66,14 @@ def main() -> int:
             "source closure must be sorted and duplicate-free")
     require(all((ROOT / path).is_file() for path in closure),
             "source closure contains a missing file")
+    shim = (ROOT / "tests/g3c4/call_entry_allocation_shim.cpp").read_text()
+    require("__real_arena_allocate_with_header(" in shim,
+            "allocation shim no longer forwards generic arena allocations")
+    for runner in sorted((ROOT / "scripts").glob("test-g3c4-*.sh")):
+        body = runner.read_text()
+        if "call_entry_allocation_shim.cpp" in body:
+            require("-Wl,--wrap=arena_allocate_with_header" in body,
+                    f"{runner.name} omits generic arena allocation wrap")
     for required in ("native/g3c4_call_entry_extension.esk",
                      "scripts/common.sh",
                      "tests/g3c4/call_entry_native.c",

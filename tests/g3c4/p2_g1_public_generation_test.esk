@@ -6,6 +6,7 @@
 (load "g3c4_p2g1_coordinator_extension.esk")
 (load "g3c4_public_output_adapter_extension.esk")
 (load "g3c4_public_generation_dispatch_extension.esk")
+(load "g3c4_p2g2_ownership_extension.esk")
 
 (extern i64 generator-rng-word ptr i64
         :real et_g3c4_coordinator_test_generator_rng_word_v1)
@@ -43,6 +44,14 @@
 (define prompt-a
   (g3c4-public-generation-input-create
     (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255))))
+(reject-public "public C4 still rejects budget two with private gate on"
+               'invalid-argument 'generator-create
+  (lambda ()
+    (g3c4-public-generator-create model tokenizer
+      (list ':profile 'diagnostic-c4-p2g1 ':sampling 'greedy
+            ':temperature-bits #x3f800000 ':top-k 256
+            ':top-p-bits #x3f800000 ':max-new-tokens 2
+            ':eos #f ':seed 41))))
 (define prompt-b
   (g3c4-public-generation-input-create
     (t1-wave1-tokenizer-encode tokenizer (bytevector 83 89))))

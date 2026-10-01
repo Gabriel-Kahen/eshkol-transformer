@@ -1,0 +1,179 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+(load "g3c4_t1_output_decode_extension.esk")
+(load "g3c4_output_envelope_extension.esk")
+(load "g3c4_p2g2_ownership_extension.esk")
+
+(extern i64 output-test-field ptr i64
+        :real et_g3c4_output_envelope_test_field_v1)
+(extern i64 output-test-owner-fail-after i64
+        :real et_g3c4_output_envelope_test_owner_fail_after_v1)
+(extern i64 output-test-owner-fail-reset
+        :real et_g3c4_output_envelope_test_owner_fail_reset_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3-C4 P2/G2 ownership FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label category thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category))))
+      (thunk) #f)))
+(define (config max-new)
+  (list ':profile 'diagnostic-c4 ':sampling 'greedy
+        ':temperature-bits 1065353216 ':top-k 256
+        ':top-p-bits 1065353216 ':max-new-tokens max-new
+        ':eos #f ':seed 7))
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define model (g3c4-model-create-seeded-internal 1729))
+(check "private gate enables exact budget two"
+       (and (vector-ref g3c4-p2g2-ownership-gate 0)
+            (g3c4-call-tuple? 2 2)
+            (not (g3c4-call-tuple? 1 2))
+            (not (g3c4-call-tuple? 2 3))
+            (not (g3c4-call-tuple? 3 2))))
+(reject "feature-on budget three remains rejected" 'invalid-argument
+  (lambda () (g3c4-generator-create-internal model tokenizer (config 3))))
+
+(define generator
+  (g3c4-generator-create-internal model tokenizer (config 2)))
+(define generator-entry (car (vector-ref g3c4-registry 0)))
+(define pending #f)
+(reject "terminal scope rejects budget-two call" 'invalid-argument
+  (lambda ()
+    (g3c4-with-call-internal 'p2g2-terminal-forbidden generator 2 2 #t)))
+
+;;; Test-only enrollment witnesses the accepted native budget-two reservation.
+;;; Production enrollment and protected rollback belong to the next leaf.
+(define (with-test-call generator body)
+  (m3-call 'p2g2-ownership-test
+    (let* ((generator-entry
+             (g3c4-generator-entry-call-ready generator
+                                              'p2g2-ownership-test))
+           (model-entry (vector-ref generator-entry 5))
+           (native (vector-ref generator-entry 3))
+           (ledger (vector #f #f #f #f #f))
+           (call (vector (vector 'g3c4-call-private) 'call 'pending #f
+                         generator-entry model-entry
+                         (vector-ref generator-entry 6) 2 #f #f ledger
+                         g3c4-model-profile)))
+      (vector-set! g3c4-registry 0
+                   (cons call (vector-ref g3c4-registry 0)))
+      (g3c4-native-check (g3c4-native-call-acquire native 2 2)
+                         'p2g2-ownership-test)
+      (vector-set! ledger 0 #t)
+      (vector-set! model-entry 10 call)
+      (vector-set! ledger 1 #t)
+      (vector-set! generator-entry 9 call)
+      (vector-set! ledger 2 #t)
+      (vector-set! call 2 'live)
+      (vector-set! ledger 3 'p2g2-test)
+      (if (not (eq? (vector-ref m3-call-state 0) #t)) (exit 134))
+      (vector-set! m3-call-state 0 call)
+      (let ((answer (body call)))
+        (if (not (= (g3c4-native-call-abort native) 0)) (exit 134))
+        (if (vector-ref ledger 4)
+            (begin (g3c4-entry-dead! (vector-ref ledger 4))
+                   (vector-set! ledger 4 #f)))
+        (vector-set! model-entry 10 #f)
+        (vector-set! generator-entry 9 #f)
+        (g3c4-call-dead! call)
+        answer))))
+
+(with-test-call generator
+  (lambda (call)
+    (let* ((ledger (vector-ref call 10))
+             (wrong-raw (make-bytevector 1 0))
+             (output #f))
+        (check "requested call budget retained"
+               (and (m3t-exact-i64? (vector-ref call 7))
+                    (= (vector-ref call 7) 2)))
+        (reject "P1/G2 reservation is rejected" 'shape-mismatch
+          (lambda () (g3c4-output-reserve call 1)))
+        (vector-set! call 7 #f)
+        (reject "budget-two reservation requires retained request marker"
+                'shape-mismatch
+          (lambda () (g3c4-output-reserve call 2)))
+        (vector-set! call 7 2)
+        (check "arm native reservation allocation cut"
+               (= (output-test-owner-fail-after 0) 0))
+        (reject "native budget-two reservation failure" 'internal
+          (lambda () (g3c4-output-reserve call 2)))
+        (check "failed native reservation leaves no child"
+               (not (vector-ref ledger 4)))
+        (check "reset native reservation allocator"
+               (= (output-test-owner-fail-reset) 0))
+        (set! output (g3c4-output-reserve call 2))
+        (set! pending output)
+        (let* ((auxiliary (vector-ref output 8))
+               (raw (vector-ref auxiliary 0))
+               (staging (vector-ref auxiliary 1))
+               (native (vector-ref generator-entry 3)))
+          (check "exact pending P2/G2 capacity and private child"
+                 (and (eq? (vector-ref ledger 4) output)
+                      (eq? (vector-ref output 2) 'pending)
+                      (eq? (g3t-output-entry-pending call output 'p2g2-test)
+                           output)
+                      (= (bytevector-length raw) 2)
+                      (= (bytevector-length staging) 16)
+                      (= (output-test-field (vector-ref output 3) 4) 2)
+                      (= (output-test-field (vector-ref output 3) 1) 0)
+                      (= (output-test-field (vector-ref output 3) 2) 0)
+                      (= (output-test-field (vector-ref output 3) 3) 0)))
+          (reject "unprepared output is not publishable" 'invalid-state
+            (lambda () (g3c4-output-prepare call output)))
+          (reject "pending output has no copyable token IDs" 'invalid-state
+            (lambda ()
+              (g3c4-native-check
+                (g3c4-native-output-copy-decode-ids
+                  native (vector-ref output 3) staging) 'p2g2-test)))
+          (reject "pending output cannot enter T1 output decode" 'invalid-state
+            (lambda () (g3c4-t1-decode-output! call output)))
+          (vector-set! call 7 1)
+          (reject "pending output rejects changed request marker"
+                  'invalid-state
+            (lambda () (g3t-output-entry-pending call output 'p2g2-test)))
+          (vector-set! call 7 2)
+          (check "restored request marker recovers pending owner"
+                 (eq? (g3t-output-entry-pending call output 'p2g2-test)
+                      output))
+          (reject "pending output has no accepted text" 'invalid-state
+            (lambda ()
+              (g3c4-native-check
+                (g3c4-native-output-accept-text
+                  native (vector-ref output 3) raw) 'p2g2-test)))
+          (vector-set! auxiliary 0 wrong-raw)
+          (reject "auxiliary raw length is exact" 'invalid-state
+            (lambda () (g3t-output-entry-pending call output 'p2g2-test)))
+          (vector-set! auxiliary 0 raw)
+          (vector-set! auxiliary 1 (make-bytevector 15 0))
+          (reject "auxiliary staging length is exact" 'invalid-state
+            (lambda () (g3t-output-entry-pending call output 'p2g2-test)))
+          (vector-set! auxiliary 1 staging)
+          (vector-set! ledger 4 #f)
+          (reject "child ledger identity is exact" 'invalid-state
+            (lambda () (g3t-output-entry-pending call output 'p2g2-test)))
+          (vector-set! ledger 4 output)
+          (check "owner repaired before rollback"
+                 (eq? (g3t-output-entry-pending call output 'p2g2-test)
+                      output)))
+        #t)))
+(check "rollback tombstones unpublished pending child"
+       (and pending (eq? (vector-ref pending 2) 'dead)
+            (not (vector-ref pending 3))
+            (not (vector-ref generator-entry 9))
+            (not (vector-ref m3-call-state 0))))
+(check "budget-two generator closes"
+       (g3c4-generator-close-internal! generator))
+(display "G3-C4 P2/G2 ownership PASS: checks=")
+(display checks)
+(display " pending-only=1")
+(newline)
