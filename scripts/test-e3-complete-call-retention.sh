@@ -2,7 +2,7 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 verify_toolchain
-for command in ar cmp env grep python3 timeout; do require_command "${command}"; done
+for command in ar cmp diff env grep python3 timeout wc; do require_command "${command}"; done
 [[ -x /usr/bin/time ]] || die "GNU time is required for E3 retention measurements"
 [[ $# -le 1 ]] || die "usage: $0 [FRESH_OUTPUT_DIRECTORY]"
 out="${1:-$(project_build_dir)/e3-complete-call-retention}"
@@ -25,28 +25,41 @@ for observer in et_e3_test_retention_probe_v1 \
   fi
 done
 
-artifact="${out}/private"
-/usr/bin/bash "${PROJECT_ROOT}/scripts/build-e3-retention-test.sh" "${artifact}" \
-  >"${out}/package.stdout" 2>"${out}/package.stderr"
-for pair in defined_symbols:global-defined public_exports:package-exports \
-    public_strings:public-strings undefined_symbols:undefined \
-    source_closure:source-closure native_source_closure:native-source-closure \
-    native_objects:native-objects; do
-  expected=${pair%%:*}
-  observed=${pair#*:}
-  cmp "${PROJECT_ROOT}/tests/e3_private/retention_package_${expected}.txt" \
-    "${artifact}/e3_retention_package.o.evidence/${observed}.txt"
+for cache in a b; do
+  artifact="${out}/private-${cache}"
+  /usr/bin/bash "${PROJECT_ROOT}/scripts/build-e3-retention-test.sh" \
+    "${artifact}" >"${out}/package-${cache}.stdout" \
+    2>"${out}/package-${cache}.stderr"
+  for pair in defined_symbols:global-defined public_exports:package-exports \
+      public_strings:public-strings undefined_symbols:undefined \
+      source_closure:source-closure native_source_closure:native-source-closure \
+      native_objects:native-objects; do
+    expected=${pair%%:*}
+    observed=${pair#*:}
+    cmp "${PROJECT_ROOT}/tests/e3_private/retention_package_${expected}.txt" \
+      "${artifact}/e3_retention_package.o.evidence/${observed}.txt"
+  done
+  for observer in et_e3_private_retention_dispatch_cabi_v1 \
+      et_e3_test_retention_probe_v1 et_e3_test_model_word_count_v1 \
+      et_e3_test_model_word_v1 et_e3_test_gradient_metadata_v1 \
+      et_e3_test_seed_gradient_v1 et_d2_exact_read_test_fail_stage_v1 \
+      et_f32_test_live_counts_snapshot_v1 \
+      et_f32_test_retired_counts_snapshot_v1; do
+    grep -E "[[:space:]]LOCAL[[:space:]].*[[:space:]]${observer}$" \
+      "${artifact}/e3_retention_package.o.evidence/readelf-symbols.txt" \
+      >/dev/null || die "retention observer is not private: ${observer}"
+  done
 done
-for observer in et_e3_private_retention_dispatch_cabi_v1 \
-    et_e3_test_retention_probe_v1 et_e3_test_model_word_count_v1 \
-    et_e3_test_model_word_v1 et_e3_test_gradient_metadata_v1 \
-    et_e3_test_seed_gradient_v1 et_d2_exact_read_test_fail_stage_v1 \
-    et_f32_test_live_counts_snapshot_v1 \
-    et_f32_test_retired_counts_snapshot_v1; do
-  grep -E "[[:space:]]LOCAL[[:space:]].*[[:space:]]${observer}$" \
-    "${artifact}/e3_retention_package.o.evidence/readelf-symbols.txt" \
-    >/dev/null || die "retention observer is not private: ${observer}"
-done
+cmp "${out}/private-a/e3_retention_package.o" \
+    "${out}/private-b/e3_retention_package.o"
+cmp "${out}/private-a/libeshkol_transformer_e3_retention.a" \
+    "${out}/private-b/libeshkol_transformer_e3_retention.a"
+# E1B normalizes only its private build root to <E1B_BUILD> when preserving
+# raw compiler depfiles. Compare every file and path in both source/C closures.
+cmp "${out}/private-a/e3_retention_package.o.evidence/private.d" \
+    "${out}/private-b/e3_retention_package.o.evidence/private.d"
+diff -r "${out}/private-a/e3_retention_package.o.evidence/native-depfiles" \
+        "${out}/private-b/e3_retention_package.o.evidence/native-depfiles"
 sanitized="${out}/sanitized-private"
 /usr/bin/bash "${PROJECT_ROOT}/scripts/build-e3-retention-test.sh" \
   "${sanitized}" sanitize \
@@ -96,16 +109,25 @@ runner="$(eshkol_build_dir)/eshkol-run"
   -o "${out}/retention_arena_sanitized.o" \
   >"${out}/arena-sanitized-compile.stdout" \
   2>"${out}/arena-sanitized-compile.stderr"
-ar p "${artifact}/libeshkol_transformer_e3_retention.a" \
-  e3_retention_package.o >"${out}/package.o"
-cmp "${artifact}/e3_retention_package.o" "${out}/package.o"
-ar rcsD "${out}/libeshkol_transformer_e3_retention_test.a" \
-  "${out}/package.o" "${out}/retention_arena.o"
+for cache in a b; do
+  artifact="${out}/private-${cache}"
+  mkdir "${out}/link-${cache}"
+  ar p "${artifact}/libeshkol_transformer_e3_retention.a" \
+    e3_retention_package.o >"${out}/link-${cache}/package.o"
+  cmp "${artifact}/e3_retention_package.o" \
+    "${out}/link-${cache}/package.o"
+  ar rcsD "${out}/link-${cache}/libeshkol_transformer_e3_retention_test.a" \
+    "${out}/link-${cache}/package.o" "${out}/retention_arena.o"
+done
+cmp "${out}/link-a/libeshkol_transformer_e3_retention_test.a" \
+    "${out}/link-b/libeshkol_transformer_e3_retention_test.a"
+mkdir "${out}/link-sanitized"
 ar p "${sanitized}/libeshkol_transformer_e3_retention.a" \
-  e3_retention_package.o >"${out}/package-sanitized.o"
-cmp "${sanitized}/e3_retention_package.o" "${out}/package-sanitized.o"
-ar rcsD "${out}/libeshkol_transformer_e3_retention_test_sanitized.a" \
-  "${out}/package-sanitized.o" "${out}/retention_arena_sanitized.o"
+  e3_retention_package.o >"${out}/link-sanitized/package.o"
+cmp "${sanitized}/e3_retention_package.o" \
+  "${out}/link-sanitized/package.o"
+ar rcsD "${out}/link-sanitized/libeshkol_transformer_e3_retention_test.a" \
+  "${out}/link-sanitized/package.o" "${out}/retention_arena_sanitized.o"
 
 cat >"${out}/cxx-sanitized" <<WRAPPER
 #!/usr/bin/env bash
@@ -129,7 +151,7 @@ for cache in a b; do
     ESHKOL_CXX_COMPILER="${cxx}" \
     timeout --foreground --signal=TERM --kill-after=5s "${compiler_timeout}s" \
     "${runner}" --strict-types --no-stdlib -O 2 \
-      -L "${out}" --lib eshkol_transformer_e3_retention_test \
+      -L "${out}/link-${cache}" --lib eshkol_transformer_e3_retention_test \
       "${PROJECT_ROOT}/tests/e3_private/retention_runtime.esk" \
       -o "${out}/runtime-${cache}" \
       >"${out}/compile-${cache}.stdout" \
@@ -145,7 +167,7 @@ env -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH \
   ESHKOL_CXX_COMPILER="${out}/cxx-sanitized" \
   timeout --foreground --signal=TERM --kill-after=5s "${compiler_timeout}s" \
   "${runner}" --strict-types --no-stdlib -O 2 \
-    -L "${out}" --lib eshkol_transformer_e3_retention_test_sanitized \
+    -L "${out}/link-sanitized" --lib eshkol_transformer_e3_retention_test \
     "${PROJECT_ROOT}/tests/e3_private/retention_runtime.esk" \
     -o "${out}/runtime-sanitized" \
     >"${out}/compile-sanitized.stdout" \
@@ -153,10 +175,11 @@ env -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH \
 
 for horizon in 1024 8192; do
   for gradient in absent present; do
-    for profile in normal poisoned sanitized; do
+    for profile in normal-a normal-b poisoned-a poisoned-b sanitized; do
       poison=0
-      [[ "${profile}" == poisoned || "${profile}" == sanitized ]] && poison=1
+      [[ "${profile}" == poisoned-* || "${profile}" == sanitized ]] && poison=1
       executable="${out}/runtime-a"
+      [[ "${profile}" != *-b ]] || executable="${out}/runtime-b"
       [[ "${profile}" != sanitized ]] || executable="${out}/runtime-sanitized"
       ESHKOL_ARENA_POISON="${poison}" \
         ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
@@ -169,15 +192,21 @@ for horizon in 1024 8192; do
           >"${out}/${horizon}-${gradient}-${profile}.stdout" \
           2>"${out}/${horizon}-${gradient}-${profile}.stderr"
       grep -E "^E3-COMPLETE-CALL-RETENTION-PASS horizon=${horizon} gradient=${gradient} " \
+        "${out}/${horizon}-${gradient}-${profile}.stdout" >/dev/null
+      grep -E '^E3-RETENTION-RSS rss_before_kib=[0-9]+ rss_after_kib=[0-9]+$' \
+        "${out}/${horizon}-${gradient}-${profile}.stdout" >/dev/null
+      [[ "$(wc -l <"${out}/${horizon}-${gradient}-${profile}.stdout")" == 2 ]] || \
+        die "E3 retention runtime wrote unexpected stdout: ${horizon}/${gradient}/${profile}"
+      grep -v '^E3-RETENTION-RSS ' \
         "${out}/${horizon}-${gradient}-${profile}.stdout" \
         >"${out}/${horizon}-${gradient}-${profile}.semantic"
       [[ ! -s "${out}/${horizon}-${gradient}-${profile}.stderr" ]] || \
         die "E3 retention runtime wrote stderr: ${horizon}/${gradient}/${profile}"
     done
-    cmp "${out}/${horizon}-${gradient}-normal.semantic" \
-        "${out}/${horizon}-${gradient}-poisoned.semantic"
-    cmp "${out}/${horizon}-${gradient}-normal.semantic" \
-        "${out}/${horizon}-${gradient}-sanitized.semantic"
+    for profile in normal-b poisoned-a poisoned-b sanitized; do
+      cmp "${out}/${horizon}-${gradient}-normal-a.semantic" \
+        "${out}/${horizon}-${gradient}-${profile}.semantic"
+    done
   done
 done
 printf 'E3 complete-call retention passed: %s\n' "${out}"

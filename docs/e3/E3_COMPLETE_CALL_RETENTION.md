@@ -39,12 +39,15 @@ batch/borrow, owned-allocation and FD controls. Live controls must return to
 baseline; graph owners, busy frames and active batch/borrow/FD controls must be
 zero. The I2 retired-borrow count must equal completed borrow ends, and its
 retained bytes must equal that count times the measured borrow-control size;
-other retired I2/frame controls remain fixed. These are cumulative retained
-native controls, not root-arena bytes, and their measured growth is reported.
+other retired I2/frame controls remain fixed. Cumulative D2 owned allocations
+and FD peak growth are recorded and reconciled with before/after probes rather
+than presumed zero. These native controls are distinct from root-arena bytes.
 
-`scripts/test-e3-complete-call-retention.sh` builds the exact private test
-tuple and two fresh optimized AOT executables, then runs normal, poisoned and
-sanitized executions for both horizons and gradient states. The sanitized
+`scripts/test-e3-complete-call-retention.sh` builds two fresh exact private test
+tuples, compares their complete objects, archives and normalized raw Eshkol/C
+depfiles, then compiles and runs each in a separate fresh optimized AOT cache.
+It compares their semantic stdout for every required horizon and gradient
+state under normal and poisoned execution. The sanitized
 aggregate instruments generated Eshkol IR, the private bridge, E3/I2/D2/native
 providers and the caller shim; its executable links ASan/UBSan with
 `detect_leaks=1` and fails on sanitizer diagnostics. Its noninstrumentation

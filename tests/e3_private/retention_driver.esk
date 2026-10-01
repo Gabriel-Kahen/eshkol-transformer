@@ -168,7 +168,8 @@
       (let check ((index 0))
         (if (= index 29) #t
             (begin
-              (if (or (<= index 6) (and (>= index 17) (<= index 26)))
+              (if (or (<= index 6)
+                      (and (>= index 17) (<= index 26) (not (= index 25))))
                   (e3-test-retention-check 'failure-live
                     (= (vector-ref probes index)
                        (e3-test-retention-probe index))))
@@ -183,7 +184,8 @@
     (if (= index 29) #t
         (begin
           (if (or (<= index 8) (and (>= index 10) (<= index 12))
-                  (and (>= index 17) (<= index 26)) (= index 28))
+                  (and (>= index 17) (<= index 26) (not (= index 25)))
+                  (= index 28))
               (e3-test-retention-check 'fixed-native-control
                 (= (vector-ref before index) (vector-ref after index))))
           (unchanged (+ index 1)))))
@@ -196,13 +198,18 @@
         (views (- (vector-ref after 15) (vector-ref before 15)))
         (ends (- (vector-ref after 16) (vector-ref before 16)))
         (retired-borrows (- (vector-ref after 9) (vector-ref before 9)))
-        (retained-bytes (- (vector-ref after 13) (vector-ref before 13))))
+        (retained-bytes (- (vector-ref after 13) (vector-ref before 13)))
+        (d2-allocations (- (vector-ref after 25) (vector-ref before 25)))
+        (fd-peak-growth (- (vector-ref after 27) (vector-ref before 27))))
     (e3-test-retention-check 'balanced-i2-views-pins
       (and (> begins 0) (= begins ends) (>= views begins)))
     (e3-test-retention-check 'reconciled-retired-borrows
       (and (= retired-borrows ends)
            (= retained-bytes (* retired-borrows (vector-ref before 28)))))
-    (vector begins views ends retired-borrows retained-bytes)))
+    (e3-test-retention-check 'cumulative-d2-growth
+      (and (>= d2-allocations 0) (>= fd-peak-growth 0)))
+    (vector begins views ends retired-borrows retained-bytes
+            d2-allocations fd-peak-growth)))
 
 (define (e3-test-retention-prepare horizon present? corpus-path)
   (e3-test-retention-check 'horizon (or (= horizon 1024) (= horizon 8192)))
