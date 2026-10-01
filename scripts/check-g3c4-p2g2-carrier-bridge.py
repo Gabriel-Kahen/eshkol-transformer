@@ -41,6 +41,9 @@ for required in (
     "check_cache_snapshot_equal(&actual_cache, &reference_cache)",
     "context, dead_input, &carrier, 16",
     "context, input, (void *)keys->data, 16",
+    "context, input, (void *)f32_data, 16",
+    "context->generator_policy[5] = 56",
+    "context->token_frame_state == ET_G3C4_TOKEN_FRAME_SAMPLED",
     "carrier.canary[i] == 0x5au",
 ):
     if required not in test:

@@ -167,6 +167,15 @@ static void rejection_case(et_g3c4_model_owner_internal *owner) {
   CHECK(et_g3c4_private_p2g2_first_frame_carrier_v1(
       context, input, (void *)context->pins.views[0].data, 16) ==
         ET_G3C4_INVALID_ARGUMENT);
+  et_f32_tensor *spare_f32 = NULL;
+  et_f32_tensor_error f32_error;
+  OK(et_f32_tensor_create_v1(
+      1u, (const uint64_t[1]){4u}, &spare_f32, &f32_error));
+  const float *f32_data = et_f32_tensor_test_data_storage_v1(spare_f32);
+  CHECK(f32_data != NULL);
+  CHECK(et_g3c4_private_p2g2_first_frame_carrier_v1(
+      context, input, (void *)f32_data, 16) == ET_G3C4_INVALID_ARGUMENT);
+  OK(et_f32_tensor_destroy_v1(&spare_f32, &f32_error));
   et_a2_kv_cache_read_borrow *held = NULL;
   const et_kernel_tensor_view_v1 *keys = NULL, *values = NULL;
   const et_kernel_tensor_view_v1 *lengths = NULL, *keep = NULL;
@@ -229,6 +238,23 @@ static void rejection_case(et_g3c4_model_owner_internal *owner) {
   OK(et_g3c4_private_call_abort_v1(context));
   snapshot_cache(context->cache, &after);
   CHECK(after.length == 2);
+  check_dead_output(output);
+  OK(et_g3c4_private_tensor_release_v1(input));
+  OK(et_g3c4_private_generator_close_v1(context));
+
+  active_pair(owner, 0, prompt, &context, &input, &output, NULL);
+  context->generator_policy[5] = 56;
+  CHECK(et_g3c4_private_p2g2_first_frame_carrier_v1(
+      context, input, &carrier, 16) == ET_G3C4_INVALID_STATE);
+  check_carrier_untouched(&carrier);
+  CHECK(context->token_frame_candidate == 56);
+  CHECK(context->token_frame_state == ET_G3C4_TOKEN_FRAME_SAMPLED);
+  CHECK(memcmp(rng, context->generator_rng_words, sizeof(rng)) == 0);
+  OK(et_g3c4_private_call_abort_v1(context));
+  snapshot_cache(context->cache, &after);
+  CHECK(after.length == 2);
+  CHECK(memcmp(after.keep, (const uint8_t[4]){1, 1, 0, 0}, 4u) == 0);
+  CHECK(memcmp(rng, context->generator_rng_words, sizeof(rng)) == 0);
   check_dead_output(output);
   OK(et_g3c4_private_tensor_release_v1(input));
   OK(et_g3c4_private_generator_close_v1(context));

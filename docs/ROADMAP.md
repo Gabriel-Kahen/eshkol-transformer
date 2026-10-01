@@ -877,7 +877,7 @@ the prefix feature and f32 storage inspection; carrier geometry and aliases
 are checked natively while Eshkol must authenticate the backing owner and
 extent before the call. This native leaf does not yet provide the Eshkol
 coordinator, same-registry T1 decode, prefix commit, or terminal output.
-The local unsupported-host Clang 22 compatibility probe passed 918 bridge
+The local unsupported-host Clang 22 compatibility probe passed 972 bridge
 checks in normal/repeat/sanitizer modes, the independent two-mode Philox
 oracle, and exact private-symbol closure. Supported pinned-build validation
 waits for independent committed source-and-test review.
