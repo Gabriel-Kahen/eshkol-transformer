@@ -1142,19 +1142,37 @@ g3g_package_policy=0
 if [[ "${package_policy}" == g3g-public-aggregate || "${package_policy}" == g3g-g0-public-aggregate || "${package_policy}" == g3g-manual-public-aggregate ]]; then
   g3g_package_policy=1
 fi
-e3_retention_sanitize=0
+e3_private_test_sanitize=0
 if [[ "${E3_RETENTION_SANITIZE:-0}" != 0 ]]; then
   [[ "${E3_RETENTION_SANITIZE}" == 1 && \
      "${package_policy}" == e3-private-aggregate && \
      "${e3_tuple_kind}" == retention ]] || \
     die "E3 retention sanitizer is allowed only for the exact test tuple"
-  e3_retention_sanitize=1
+  e3_private_test_sanitize=1
 fi
-e3_retention_sanitize_flags=()
-if [[ "${e3_retention_sanitize}" == 1 ]]; then
-  e3_retention_sanitize_flags=(-O1 -g -fsanitize=address,undefined
+if [[ "${E3_NUMERICAL_SANITIZE:-0}" != 0 ]]; then
+  [[ "${E3_NUMERICAL_SANITIZE}" == 1 && \
+     "${package_policy}" == e3-private-aggregate && \
+     "${e3_tuple_kind}" == numerical && \
+     "${e3_private_test_sanitize}" == 0 ]] || \
+    die "E3 numerical sanitizer is allowed only for the exact test tuple"
+  e3_private_test_sanitize=1
+fi
+e3_private_test_sanitize_flags=()
+if [[ "${e3_private_test_sanitize}" == 1 ]]; then
+  e3_private_test_sanitize_flags=(-O1 -g -fsanitize=address,undefined
                                -fno-omit-frame-pointer)
 fi
+e3_numerical_mutant=${E3_NUMERICAL_MUTANT:-normal}
+if [[ -n "${E3_NUMERICAL_MUTANT+x}" ]]; then
+  [[ "${package_policy}" == e3-private-aggregate &&
+     "${e3_tuple_kind}" == numerical ]] || \
+    die "E3 numerical mutation is allowed only for the exact test tuple"
+fi
+case "${e3_numerical_mutant}" in
+  normal|wrong-target|mean-of-means) ;;
+  *) die "unknown E3 numerical mutation: ${e3_numerical_mutant}" ;;
+esac
 
 require_command awk
 require_command cmp
@@ -1354,7 +1372,7 @@ grep -Eq "^attributes ${e1b_raise_attribute} = .*noreturn" \
   die "E1B fixed raise-only seam is not noreturn in generated IR"
 
 "${e1b_clean_toolchain_env[@]}" \
-  "${e1b_cc}" "${e3_retention_sanitize_flags[@]}" -c -x ir "${e1b_tmp}/private.ll" \
+  "${e1b_cc}" "${e3_private_test_sanitize_flags[@]}" -c -x ir "${e1b_tmp}/private.ll" \
   -o "${e1b_tmp}/private.o"
 
 {
@@ -1436,7 +1454,7 @@ objcopy --redefine-syms="${e1b_tmp}/renames.txt" \
 "${e1b_clean_toolchain_env[@]}" \
   "${e1b_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
   -fstack-protector-all \
-  "${e3_retention_sanitize_flags[@]}" \
+  "${e3_private_test_sanitize_flags[@]}" \
   -I "${e1b_source}/inc" -I "${PROJECT_ROOT}/native" \
   -MMD -MF "${e1b_tmp}/bridge.d" \
   -c "${PROJECT_ROOT}/native/e1b_error_consumer_bridge.c" \
@@ -1463,7 +1481,7 @@ if [[ "${package_policy}" == g3g-manual-public-aggregate ]]; then
 fi
 "${e1b_clean_toolchain_env[@]}" \
   "${e1b_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
-  "${e3_retention_sanitize_flags[@]}" \
+  "${e3_private_test_sanitize_flags[@]}" \
   "${package_bridge_flags[@]}" \
   -I "${e1b_source}/inc" -I "${PROJECT_ROOT}/include" \
   -I "${PROJECT_ROOT}/native" \
@@ -1479,7 +1497,7 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     -I "${PROJECT_ROOT}/include" -I "${PROJECT_ROOT}/native"
     -I "${PROJECT_ROOT}/src"
   )
-  package_native_cflags+=("${e3_retention_sanitize_flags[@]}")
+  package_native_cflags+=("${e3_private_test_sanitize_flags[@]}")
   if [[ "${package_policy}" == cli3-tr3-aggregate || \
       "${package_policy}" == cli3-c2-successor || \
     "${package_policy}" == e3-private-aggregate || \
@@ -1512,6 +1530,14 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     # Only the exact test successor observes inherited I2/D2 registries.
     # Canonical private, diagnostic and installed tuples keep their old code.
     package_native_cflags+=(-DET_E3_RETENTION_TESTING)
+  fi
+  if [[ "${package_policy}" == e3-private-aggregate &&
+        "${e3_tuple_kind}" == numerical ]]; then
+    package_native_cflags+=(-DET_E3_NUMERICAL_TESTING -fno-builtin-printf)
+    case "${e3_numerical_mutant}" in
+      wrong-target) package_native_cflags+=(-DET_E3_NUMERICAL_WRONG_TARGET) ;;
+      mean-of-means) package_native_cflags+=(-DET_E3_NUMERICAL_MEAN_OF_MEANS) ;;
+    esac
   fi
   native_index=0
   for package_native_source in "${package_native_sources[@]}"; do
@@ -1750,17 +1776,17 @@ cmp -s "${e1b_tmp}/expected-global-defined.txt" \
 
 nm -u --format=posix "${e1b_tmp}/combined.o" | awk '{ print $1 }' | \
   LC_ALL=C sort -u >"${e1b_tmp}/undefined.txt"
-if [[ "${e3_retention_sanitize}" == 1 ]]; then
+if [[ "${e3_private_test_sanitize}" == 1 ]]; then
   grep -E '^(__asan_|__ubsan_|__sanitizer_|__start_asan_globals$|__stop_asan_globals$)' \
     "${e1b_tmp}/undefined.txt" >"${e1b_tmp}/sanitizer-undefined.txt" || \
-    die "E3 retention sanitizer object has no instrumentation references"
+    die "E3 private test sanitizer object has no instrumentation references"
   grep -Ev '^(__asan_|__ubsan_|__sanitizer_|__start_asan_globals$|__stop_asan_globals$)' \
     "${e1b_tmp}/undefined.txt" >"${e1b_tmp}/noninstrumentation-undefined.txt" || true
   comm -13 "${e1b_tmp}/expected-undefined.txt" \
     "${e1b_tmp}/noninstrumentation-undefined.txt" \
     >"${e1b_tmp}/unexpected-undefined.txt"
   [[ ! -s "${e1b_tmp}/unexpected-undefined.txt" ]] || \
-    die "E3 sanitized retention object adds noninstrumentation imports"
+    die "E3 sanitized private test object adds noninstrumentation imports"
 else
   if ! e1b_compare_exact_undefined_allowlist \
       "${e1b_tmp}/expected-undefined.txt" "${e1b_tmp}/undefined.txt"; then
