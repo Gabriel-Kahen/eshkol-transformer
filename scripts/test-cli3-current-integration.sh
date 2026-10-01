@@ -30,14 +30,12 @@ done <"${evidence}/first-evidence-files.txt"
 printf 'CLI3-FRESH-BUILD-BYTES-PASS\n' >"${evidence}/build-comparison.stdout"
 
 for name in first second; do
+  # The production-generate suite runs test-cli3.sh, which invokes CLI3-B.
+  # Retain that real train/evaluate/resume witness without running it twice.
   CLI3_B_EVIDENCE_DIR="${evidence}/${name}-train-evaluate" \
-    /usr/bin/bash "${PROJECT_ROOT}/scripts/test-cli3-b.sh" \
-      "${evidence}/${name}/eshkol-transformer" \
-      >"${evidence}/${name}-train-evaluate.stdout" \
-      2>"${evidence}/${name}-train-evaluate.stderr"
-  /usr/bin/bash "${PROJECT_ROOT}/scripts/test-cli3-production-generate.sh" \
-    "${evidence}/${name}-generate" "${evidence}/${name}" \
-    >"${evidence}/${name}-generate.stdout" 2>"${evidence}/${name}-generate.stderr"
+    /usr/bin/bash "${PROJECT_ROOT}/scripts/test-cli3-production-generate.sh" \
+      "${evidence}/${name}-generate" "${evidence}/${name}" \
+      >"${evidence}/${name}-generate.stdout" 2>"${evidence}/${name}-generate.stderr"
 done
 for mode in greedy categorical; do
   cmp "${evidence}/first-generate/${mode}-first.json" \

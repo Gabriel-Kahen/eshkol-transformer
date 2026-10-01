@@ -50,6 +50,7 @@ printf '%s\\n' "$1" >>"${TRACE:?}"
 set -euo pipefail
 [[ $# == 2 && -f "$2/eshkol-transformer" ]]
 mkdir "$1"
+/usr/bin/bash "$(dirname "${BASH_SOURCE[0]}")/test-cli3-b.sh" "$2/eshkol-transformer"
 printf '%s\\n' "$2" >>"${TRACE:?}"
 for mode in greedy categorical; do printf oracle >"$1/$mode-first.json"; done
 ''')
