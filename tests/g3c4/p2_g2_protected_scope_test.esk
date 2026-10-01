@@ -108,6 +108,13 @@
             (vector-set! auxiliary 1 (make-bytevector 16 0))
             (g3c4-p2g2-protected-check call 'test)))
         (vector-set! auxiliary 1 staging)
+        (let ((replacement (make-bytevector 2 0)))
+          (vector-set! auxiliary 0 replacement)
+          (vector-set! record 9 replacement)
+          (reject "paired auxiliary and record swap rejected"
+            (lambda () (g3c4-p2g2-protected-check call 'test)))
+          (vector-set! auxiliary 0 raw)
+          (vector-set! record 9 raw))
         (reject "prefix raw replacement rejected"
           (lambda ()
             (vector-set! record 11 (make-bytevector 1 0))

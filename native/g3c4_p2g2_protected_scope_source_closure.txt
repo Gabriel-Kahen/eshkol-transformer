@@ -168,6 +168,7 @@ native/g3c4_p2g2_ownership_source_closure.txt
 native/g3c4_p2g2_protected_scope_extension.esk
 tests/g3c4/p2_g2_protected_scope_native.c
 tests/g3c4/p2_g2_protected_scope_test.esk
+tests/g3c4/p2_g2_protected_scope_feature_off_test.esk
 scripts/check-g3c4-p2g2-protected-scope.py
 scripts/test-g3c4-p2g2-protected-scope.sh
 docs/g3/G3_C4_P2_G2_PROTECTED_SCOPE_LEAF.md

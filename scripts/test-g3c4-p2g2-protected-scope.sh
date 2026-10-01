@@ -95,10 +95,15 @@ exec $(printf '%q' "$cxx") $sanitizer_link "\$@" \\
 WRAPPER
   chmod 0500 "$directory/cxx-wrap"
   local fixture prefix source expected log
-  for fixture in protected; do
+  for fixture in feature-off protected; do
     prefix=
     source="$PROJECT_ROOT/tests/g3c4/p2_g2_protected_scope_test.esk"
     expected='^G3-C4 P2/G2 protected PASS: checks=[1-9][0-9]* pending-only=1$'
+    if [[ "$fixture" == feature-off ]]; then
+      prefix=feature-off-
+      source="$PROJECT_ROOT/tests/g3c4/p2_g2_protected_scope_feature_off_test.esk"
+      expected='^G3-C4 P2/G2 protected off PASS: checks=[1-9][0-9]*$'
+    fi
     mkdir -p "$directory/cache/$fixture"
     env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
       XDG_CACHE_HOME="$directory/cache/$fixture" \
@@ -126,14 +131,23 @@ WRAPPER
 }
 
 compile_mode normal
+ESHKOL_ARENA_POISON=1 "$tmp/normal/p2g2-feature-off" \
+  >"$evidence/repeat-feature-off-run.stdout" \
+  2>"$evidence/repeat-feature-off-run.stderr"
 ESHKOL_ARENA_POISON=1 "$tmp/normal/p2g2-protected" \
   >"$evidence/repeat-run.stdout" 2>"$evidence/repeat-run.stderr"
+test ! -s "$evidence/repeat-feature-off-run.stderr"
 test ! -s "$evidence/repeat-run.stderr"
 compile_mode sanitize
+cmp "$evidence/normal-feature-off-run.stdout" \
+    "$evidence/repeat-feature-off-run.stdout"
+cmp "$evidence/normal-feature-off-run.stdout" \
+    "$evidence/sanitize-feature-off-run.stdout"
 cmp "$evidence/normal-run.stdout" "$evidence/repeat-run.stdout"
 cmp "$evidence/normal-run.stdout" "$evidence/sanitize-run.stdout"
 git -C "$PROJECT_ROOT" diff --check
 sha256sum "$PROJECT_ROOT/native/g3c4_p2g2_protected_scope_source_closure.txt" \
   >"$evidence/closure.sha256"
-cat "$evidence/static.stdout" "$evidence/normal-run.stdout"
+cat "$evidence/static.stdout" "$evidence/normal-feature-off-run.stdout" \
+    "$evidence/normal-run.stdout"
 printf 'G3-C4 P2/G2 protected evidence: %s\n' "$evidence"

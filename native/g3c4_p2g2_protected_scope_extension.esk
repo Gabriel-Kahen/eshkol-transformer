@@ -3,6 +3,9 @@
 ;;; m3-call region; no active call or pending output can escape.
 
 (define g3c4-p2g2-protected-records (vector '()))
+;;; This second private map is the allocation-time anchor. A mutable call
+;;; record slot cannot redefine what the scope originally allocated.
+(define g3c4-p2g2-protected-anchors (vector '()))
 
 ;;; Record: call, generator, model, tokenizer, tokenizer core, native,
 ;;; output, output native, auxiliary, raw[2], staging[16], prefix raw[1],
@@ -14,13 +17,31 @@
           ((eq? (vector-ref (car remaining) 0) call) (car remaining))
           (else (loop (cdr remaining))))))
 
+(define (g3c4-p2g2-anchor-for call)
+  (let loop ((remaining (vector-ref g3c4-p2g2-protected-anchors 0)))
+    (cond ((null? remaining) #f)
+          ((eq? (vector-ref (car remaining) 0) call) (car remaining))
+          (else (loop (cdr remaining))))))
+
 (define (g3c4-p2g2-protected-check call operation)
-  (let ((record (g3c4-p2g2-protected-for call)))
+  (let ((record (g3c4-p2g2-protected-for call))
+        (anchor (g3c4-p2g2-anchor-for call)))
     (if (not (and record (vector? record) (= (vector-length record) 20)
+                  anchor (vector? anchor) (= (vector-length anchor) 20)
+                  (eq? (vector-ref anchor 0) call)
+                  (pair? (vector-ref g3c4-p2g2-protected-anchors 0))
+                  (eq? (car (vector-ref g3c4-p2g2-protected-anchors 0))
+                       anchor)
                   (eq? (vector-ref record 0) call)
                   (pair? (vector-ref g3c4-p2g2-protected-records 0))
                   (eq? (car (vector-ref g3c4-p2g2-protected-records 0))
                        record)
+                  (let original ((index 0))
+                    (if (= index 20) #t
+                        (and (or (= index 13)
+                                 (eq? (vector-ref record index)
+                                      (vector-ref anchor index)))
+                             (original (+ index 1)))))
                   (eq? (g3t-registry-entry call operation) call)
                   (vector? call) (= (vector-length call) 12)
                   (eq? (vector-ref call 1) 'call)
@@ -127,6 +148,7 @@
 (define (g3c4-p2g2-protected-abort! call)
   (let* ((operation 'g3c4-p2g2-protected-abort!)
          (record (g3c4-p2g2-protected-check call operation))
+         (anchor (g3c4-p2g2-anchor-for call))
          (ledger (vector-ref record 14))
          (output (vector-ref record 6)))
     (g3c4-native-check
@@ -143,8 +165,11 @@
     (vector-set! (vector-ref record 1) 9 #f)
     (g3c4-call-dead! call)
     (vector-set! record 0 #f)
+    (vector-set! anchor 0 #f)
     (vector-set! g3c4-p2g2-protected-records 0
                  (cdr (vector-ref g3c4-p2g2-protected-records 0)))
+    (vector-set! g3c4-p2g2-protected-anchors 0
+                 (cdr (vector-ref g3c4-p2g2-protected-anchors 0)))
     #t))
 
 (define (g3c4-p2g2-protected-reserve call)
@@ -154,13 +179,20 @@
         (g3c4-fail 'invalid-state operation
                    "P2/G2 output already reserved"))
     (let* ((output (g3c4-output-reserve call 2))
-           (auxiliary (vector-ref output 8)))
+           (auxiliary (vector-ref output 8))
+           (anchor (g3c4-p2g2-anchor-for call)))
       (vector-set! record 6 output)
+      (vector-set! anchor 6 output)
       (vector-set! record 7 (vector-ref output 3))
+      (vector-set! anchor 7 (vector-ref output 3))
       (vector-set! record 8 auxiliary)
+      (vector-set! anchor 8 auxiliary)
       (vector-set! record 9 (vector-ref auxiliary 0))
+      (vector-set! anchor 9 (vector-ref auxiliary 0))
       (vector-set! record 10 (vector-ref auxiliary 1))
+      (vector-set! anchor 10 (vector-ref auxiliary 1))
       (vector-set! record 18 (vector-ref output 0))
+      (vector-set! anchor 18 (vector-ref output 0))
       (g3c4-p2g2-protected-check call operation)
       output)))
 
@@ -188,6 +220,11 @@
                               tokenizer-core native #f #f #f #f #f
                               prefix-raw prefix-staging 'before-prefix ledger
                               policy (vector 10 24 9 16) (vector-ref call 0)
+                              #f (vector-ref model-entry 3)))
+              (anchor (vector call generator-entry model-entry tokenizer
+                              tokenizer-core native #f #f #f #f #f
+                              prefix-raw prefix-staging 'before-prefix ledger
+                              policy (vector-ref record 16) (vector-ref call 0)
                               #f (vector-ref model-entry 3))))
          (if (not (and (vector-ref g3c4-p2g2-ownership-gate 0)
                        (= (vector-ref policy 5) 2)
@@ -205,15 +242,22 @@
                               (g3c4-p2g2-zero-bytes! prefix-staging 8)
                               (g3c4-call-dead! call)
                               (vector-set! record 0 #f)
+                              (vector-set! anchor 0 #f)
                               (vector-set! g3c4-p2g2-protected-records 0
                                            (cdr (vector-ref
                                                   g3c4-p2g2-protected-records
+                                                  0)))
+                              (vector-set! g3c4-p2g2-protected-anchors 0
+                                           (cdr (vector-ref
+                                                  g3c4-p2g2-protected-anchors
                                                   0))))))
                     (raise caught)))
            (vector-set! g3c4-registry 0
                         (cons call (vector-ref g3c4-registry 0)))
            (vector-set! g3c4-p2g2-protected-records 0
                         (cons record (vector-ref g3c4-p2g2-protected-records 0)))
+           (vector-set! g3c4-p2g2-protected-anchors 0
+                        (cons anchor (vector-ref g3c4-p2g2-protected-anchors 0)))
            (g3c4-native-check (g3c4-native-call-acquire native 2 2)
                               operation)
            (vector-set! ledger 0 #t)
@@ -230,4 +274,4 @@
              (if (not (eq? (vector-ref call 2) 'dead))
                  (g3c4-fail 'invalid-state operation
                             "P2/G2 scope must abort in its call region"))
-             #t))))))
+             #t)))))))
