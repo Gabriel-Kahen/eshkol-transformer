@@ -36,3 +36,22 @@ independent oracle, bitwise next logits and staged K/V against the direct
 native route, full-carrier canaries, malformed lengths/extents, aliases,
 stale/repeated calls, provider cuts and feature closure. Genuine Eshkol T1
 decode provenance, output ownership and rollback are separate next gates.
+
+## Supported gate status
+
+The independently source-and-test-reviewed `810c08b985bd979796878625db8d41c01591dbd3`
+(tree `48f7dbd89d648f948fe85153322c8926e3a03047`) passed its pinned
+`fe9dfd52` compiler / f31 LLVM 21 image gate. The single rootless,
+network-disabled launch exited zero in both Docker and launcher records.
+Normal, repeat and ASan+UBSan+LSan runs each passed 972 checks with
+byte-identical stdout and empty stderr. The independent two-mode G3-S/Philox
+oracle, predecessor gates, exact private-symbol delta and isolated-macro
+rejection passed. The verified 44-file evidence seal is
+`/home/gabe/g3c4-p2g2-carrier-810c08b-fe9-f31-20260930-prepared-b/SHA256SUMS-RUN`
+(SHA-256 `d68020558419dc1e3886f7f4df3dca5e8fe3729d5076669b992382a6ef21bc0b`).
+Independent evidence review accepted the sealed gate; hosted CI and merge
+remain pending. The next Eshkol leaf
+still must authenticate the caller-owned bytevector allocation and retained
+identity, perform genuine same-aggregate T1 decode and own the call/output
+rollback before invoking the accepted native prefix commit. This gate makes
+no second-token, EOS publication, terminal result, public ABI or CLI claim.
