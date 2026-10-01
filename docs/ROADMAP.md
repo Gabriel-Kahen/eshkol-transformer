@@ -866,9 +866,29 @@ one-region nonterminal call scope, native sampled-ID carrier through genuine
 same-aggregate T1 decode, exact pre/post-prefix rollback and closed commit
 tail. It also identifies the required reviewed private native carrier bridge:
 Eshkol `ptr` passes a bytevector header, while first-frame native entrypoints
-take raw scalar/f32 pointers. It is documentation only and awaits independent
-contract review before implementation; the public P2/G1 and C2 paths remain
-capped as before.
+take raw scalar/f32 pointers. That contract was accepted as documentation;
+the public P2/G1 and C2 paths remain capped as before.
+
+The [private P2/G2 first-frame carrier bridge candidate](g3/G3_C4_P2_G2_CARRIER_BRIDGE_LEAF.md)
+binds the accepted P2 prefill, native last-logit sample, and selected-token
+forward through raw native scratch, writing the authentic sampled ID only to
+an exact Eshkol bytevector payload after success. Its private macro requires
+the prefix feature and f32 storage inspection; carrier geometry and aliases
+are checked natively while Eshkol must authenticate the backing owner and
+extent before the call. This native leaf does not yet provide the Eshkol
+coordinator, same-registry T1 decode, prefix commit, or terminal output.
+The independently source-and-test-reviewed `810c08b`/tree `48f7dbd` passed
+its pinned fe9/f31 LLVM 21 rootless, network-disabled gate: 972 checks in each
+normal/repeat/ASan+UBSan+LSan mode with byte-identical stdout and empty
+stderr, independent two-mode Philox oracle, predecessor gates, and exact
+private-symbol/feature closure. Both Docker and launcher exited zero; the
+verified 44-file seal is
+`g3c4-p2g2-carrier-810c08b-fe9-f31-20260930-prepared-b/SHA256SUMS-RUN`
+(SHA-256 `d68020558419dc1e3886f7f4df3dca5e8fe3729d5076669b992382a6ef21bc0b`).
+Independent evidence review accepted the sealed gate; hosted CI and merge
+remain pending. Eshkol caller allocation
+authentication, genuine same-aggregate T1 decode and the one-region
+coordinator/rollback remain separate next gates.
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
