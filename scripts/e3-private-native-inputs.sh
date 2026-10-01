@@ -2,7 +2,7 @@
 [[ "${package_policy}" == e3-private-aggregate ]] || \
   die "E3 native input policy mismatch"
 e3_provider_mode=normal
-[[ "${e3_retention_sanitize:-0}" != 1 ]] || e3_provider_mode=sanitize
+[[ "${e3_private_test_sanitize:-0}" != 1 ]] || e3_provider_mode=sanitize
 for e3_provider in n2 n3k a2; do
   "${e1b_clean_toolchain_env[@]}" /usr/bin/bash \
     "${PROJECT_ROOT}/scripts/build-${e3_provider}.sh" \

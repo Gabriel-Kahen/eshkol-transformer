@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import subprocess
+import tempfile
 import unittest
 
 from tests.e3_private.parse_numerical_observation import ROLE_NAMES, parse
@@ -84,6 +85,49 @@ printf '%s\\n' "$e3_tuple_kind"
         self.assertIn("#ifdef ET_E3_NUMERICAL_WRONG_TARGET", frame)
         self.assertIn("#ifdef ET_E3_NUMERICAL_MEAN_OF_MEANS", metrics)
         self.assertNotIn("E3ROW", (ROOT / "tests/e3_private/driver.esk").read_text())
+
+    def test_native_provider_mode_tracks_both_test_sanitizers(self) -> None:
+        policy = ROOT / "scripts/e3-private-native-inputs.sh"
+        with tempfile.TemporaryDirectory(prefix="e3-native-mode-") as temporary:
+            sandbox = Path(temporary)
+            scripts = sandbox / "scripts"
+            scripts.mkdir()
+            objects = ["n2/n2_primitives_provider.o",
+                       "n3k/n3k_primitives_provider.o",
+                       "a2/a2_attention_provider.o"]
+            (sandbox / "tuple_native_objects.txt").write_text(
+                "\n".join(objects) + "\n"
+            )
+            for provider in ("n2", "n3k", "a2"):
+                stub = scripts / f"build-{provider}.sh"
+                stub.write_text(
+                    "#!/usr/bin/env bash\n"
+                    f"printf '%s\\n' \"$2\" >'{sandbox}/mode-{provider}'\n"
+                )
+                stub.chmod(0o755)
+            shell = '''
+set -euo pipefail
+PROJECT_ROOT=$1
+e1b_tmp=$2
+e3_prefix=$3
+e3_private_test_sanitize=$4
+package_policy=e3-private-aggregate
+e1b_clean_toolchain_env=()
+package_native_objects=()
+package_native_depfiles=()
+die() { printf '%s\\n' "$*" >&2; exit 77; }
+source "$5"
+'''
+            for value, expected in (("0", "normal"), ("1", "sanitize")):
+                run = subprocess.run(
+                    ["bash", "-c", shell, "bash", str(sandbox), str(sandbox),
+                     str(sandbox / "tuple"), value, str(policy)],
+                    capture_output=True, text=True, check=False,
+                )
+                self.assertEqual(run.returncode, 0, run.stderr)
+                for provider in ("n2", "n3k", "a2"):
+                    self.assertEqual((sandbox / f"mode-{provider}").read_text(),
+                                     expected + "\n")
 
     def test_incomplete_compiled_stdout_cannot_become_observation(self) -> None:
         with self.assertRaisesRegex(ValueError, "did not complete"):
