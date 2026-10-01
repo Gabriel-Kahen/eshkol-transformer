@@ -736,7 +736,8 @@ The separate [E3 complete-call retention candidate](e3/E3_COMPLETE_CALL_RETENTIO
 now has an exact test-only package tuple and a source-staged 1,024/8,192-call
 runner reusing one D2 dataset, frame and destinations. The runner requires two
 fresh test-package builds with exact object/archive/raw-depfile equality and
-executes each fresh-cache AOT across both horizons. Its probes cover exact
+executes each fresh-cache AOT across both horizons with full stdout equality.
+Its probes cover exact
 root/caller-region bytes and I2/D2/frame cumulative controls, mixed17 modes,
 full parameter and absent/present gradient words, initializer successor, and a D2 read
 failure with same-authority retry. Normal, poisoned and ASan/UBSan/LSan paths

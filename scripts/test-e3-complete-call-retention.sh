@@ -182,6 +182,7 @@ for horizon in 1024 8192; do
       [[ "${profile}" != *-b ]] || executable="${out}/runtime-b"
       [[ "${profile}" != sanitized ]] || executable="${out}/runtime-sanitized"
       ESHKOL_ARENA_POISON="${poison}" \
+        E3_RETENTION_RSS_PATH="${out}/${horizon}-${gradient}-${profile}.rss" \
         ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
         UBSAN_OPTIONS=halt_on_error=1 \
         /usr/bin/time -f 'elapsed_seconds=%e peak_rss_kib=%M' \
@@ -193,19 +194,16 @@ for horizon in 1024 8192; do
           2>"${out}/${horizon}-${gradient}-${profile}.stderr"
       grep -E "^E3-COMPLETE-CALL-RETENTION-PASS horizon=${horizon} gradient=${gradient} " \
         "${out}/${horizon}-${gradient}-${profile}.stdout" >/dev/null
-      grep -E '^E3-RETENTION-RSS rss_before_kib=[0-9]+ rss_after_kib=[0-9]+$' \
-        "${out}/${horizon}-${gradient}-${profile}.stdout" >/dev/null
-      [[ "$(wc -l <"${out}/${horizon}-${gradient}-${profile}.stdout")" == 2 ]] || \
+      grep -E '^rss_before_kib=[0-9]+ rss_after_kib=[0-9]+$' \
+        "${out}/${horizon}-${gradient}-${profile}.rss" >/dev/null
+      [[ "$(wc -l <"${out}/${horizon}-${gradient}-${profile}.stdout")" == 1 ]] || \
         die "E3 retention runtime wrote unexpected stdout: ${horizon}/${gradient}/${profile}"
-      grep -v '^E3-RETENTION-RSS ' \
-        "${out}/${horizon}-${gradient}-${profile}.stdout" \
-        >"${out}/${horizon}-${gradient}-${profile}.semantic"
       [[ ! -s "${out}/${horizon}-${gradient}-${profile}.stderr" ]] || \
         die "E3 retention runtime wrote stderr: ${horizon}/${gradient}/${profile}"
     done
     for profile in normal-b poisoned-a poisoned-b sanitized; do
-      cmp "${out}/${horizon}-${gradient}-normal-a.semantic" \
-        "${out}/${horizon}-${gradient}-${profile}.semantic"
+      cmp "${out}/${horizon}-${gradient}-normal-a.stdout" \
+        "${out}/${horizon}-${gradient}-${profile}.stdout"
     done
   done
 done

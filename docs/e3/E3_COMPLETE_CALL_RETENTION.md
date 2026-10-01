@@ -39,20 +39,20 @@ batch/borrow, owned-allocation and FD controls. Live controls must return to
 baseline; graph owners, busy frames and active batch/borrow/FD controls must be
 zero. The I2 retired-borrow count must equal completed borrow ends, and its
 retained bytes must equal that count times the measured borrow-control size;
-other retired I2/frame controls remain fixed. Cumulative D2 owned allocations
-and FD peak growth are recorded and reconciled with before/after probes rather
-than presumed zero. These native controls are distinct from root-arena bytes.
+other retired I2/frame controls and the D2 owned-allocation live balance remain
+fixed. FD peak growth is measured and reconciled with before/after probes.
+These native controls are distinct from root-arena bytes.
 
 `scripts/test-e3-complete-call-retention.sh` builds two fresh exact private test
 tuples, compares their complete objects, archives and normalized raw Eshkol/C
 depfiles, then compiles and runs each in a separate fresh optimized AOT cache.
-It compares their semantic stdout for every required horizon and gradient
+It compares their byte-exact stdout for every required horizon and gradient
 state under normal and poisoned execution. The sanitized
 aggregate instruments generated Eshkol IR, the private bridge, E3/I2/D2/native
 providers and the caller shim; its executable links ASan/UBSan with
 `detect_leaks=1` and fails on sanitizer diagnostics. Its noninstrumentation
 undefined imports stay within the normal test tuple's exact allowlist. The
 runner records elapsed time and peak RSS for every process, retained RSS before
-and after the measured horizon, exact generated-corpus payload bytes and the
-counter transcripts; no measured limit or full E3 acceptance
+and after the measured horizon in a separate file, exact generated-corpus
+payload bytes and the counter transcripts; no measured limit or full E3 acceptance
 is claimed before the supported gate passes.

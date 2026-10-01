@@ -37,3 +37,14 @@ extern "C" int64_t et_e3_retention_rss_kib_v1() {
   return static_cast<int64_t>(resident * static_cast<unsigned long long>(page_bytes) /
                               1024);
 }
+
+extern "C" void et_e3_retention_rss_record_v1(int64_t before, int64_t after) {
+  const char *path = std::getenv("E3_RETENTION_RSS_PATH");
+  if (!path || !*path) std::abort();
+  FILE *stream = std::fopen(path, "wx");
+  if (!stream) std::abort();
+  const int written = std::fprintf(stream,
+      "rss_before_kib=%lld rss_after_kib=%lld\n",
+      static_cast<long long>(before), static_cast<long long>(after));
+  if (written < 0 || std::fclose(stream)) std::abort();
+}
