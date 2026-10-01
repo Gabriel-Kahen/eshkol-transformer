@@ -904,20 +904,28 @@ and Docker exited zero, and pre/post source pins passed. The 89-file evidence
 is sealed at
 `g3c4-p2g2-ownership-10469b3-fe9-f31-20261001-prepared-c/SHA256SUMS-RUN`
 (SHA-256 `6d99d776625a3e8ed6f19818f51e3865d0e1fd1204ced99f9d0aed1e66bfcf84`);
-independent evidence review accepted the seal without findings. Hosted CI and
-merge remain pending. The public budget-two guard has source evidence in this
-leaf, with compiled public rejection pending separately. The protected
-one-region call record, original auxiliary identity/extent authentication,
-private prefix carriers, genuine T1 decode and native prefix commit remain
-the next gate; no generated token or terminal output is claimed.
+independent evidence review accepted the seal without findings. [PR #173](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/173)
+merged at `dea07ff7`/tree `b4273a74` after 23/23 hosted checks. The public
+budget-two guard has source evidence in this leaf, with compiled public
+rejection pending separately. At this admission gate, the protected call
+record, original auxiliary identity/extent authentication, private prefix
+carriers, genuine T1 decode and native prefix commit remained later work;
+no generated token or terminal output was claimed.
 
 The [protected P2/G2 ownership scope candidate](g3/G3_C4_P2_G2_PROTECTED_SCOPE_LEAF.md)
 adds a private one-region call/child record with independent original-identity
-anchors for auxiliary and prefix carriers, and authenticated abort with in-region I1/A2
-lease retry. It also preflights a staged native A2 transaction view before
-discarding the P2/G2 frame. Static closure and local Clang syntax checks pass;
-separate compiled feature-off and feature-on fixtures and the supported gate
-await the pinned toolchain.
+anchors for auxiliary and prefix carriers, and authenticated abort with
+in-region I1/A2 lease retry. It also preflights a staged native A2
+transaction view before discarding the P2/G2 frame. The independently
+reviewed `be63d0a`/tree
+`e3a3bedf` passed the pinned fe9/f31 Clang 21 supported gate: separate
+feature-off and feature-on fixtures passed 4 and 73 checks in each normal,
+repeat and ASan+UBSan+LSan mode, with byte-identical stdout and empty stderr.
+Predecessor, oracle, symbol and source-pin checks passed; Docker and launcher
+exited zero. The 89-file evidence seal is
+`g3c4-p2g2-protected-be63d0a-fe9-f31-20261001-prepared-a/SHA256SUMS-RUN`
+(SHA-256 `b23698ceebd621d8ea7d88df46e57ae77dfe5e7f3d4a822f591b68099083b100`);
+independent evidence review accepted it. Hosted CI and merge remain pending.
 The scope aborts before any prefix commit. Authentic bridge sampling,
 same-registry T1 decode and pre/post-prefix rollback remain the next gate.
 
