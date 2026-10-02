@@ -111,6 +111,16 @@ class ModeSeamVariantTest(unittest.TestCase):
                 f"(if (eq? (vector-ref (vector-ref nodes {index}) 1) "
                 f"e3-mode-eval) {1 << index} 0)", generated,
             )
+        expected_mixed_mask = sum(1 << index for index in range(17)
+                                  if index % 2 == 1)
+        fixture = (ROOT / "tests/e3_p1/mode_seam_runtime.esk").read_text()
+        self.assertEqual(expected_mixed_mask, 43690)
+        for label in ("mixed17-mask", "exact-mixed17-restore",
+                      "retry-mixed17-restore"):
+            self.assertIn(
+                f"(check '{label} (p1-e3-test-mode-mask token) "
+                f"{expected_mixed_mask})", fixture,
+            )
 
     def test_duplicate_parsed_anchors_are_rejected(self) -> None:
         canonical = variant.CANONICAL.read_text()
