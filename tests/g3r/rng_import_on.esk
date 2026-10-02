@@ -61,6 +61,11 @@
         ':temperature-bits #x3f800000 ':top-k 256
         ':top-p-bits #x3f800000 ':max-new-tokens 1
         ':eos #f ':rng source))
+(define (seed-policy seed)
+  (list ':profile 'diagnostic-c2 ':sampling 'categorical
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens 1
+        ':eos #f ':seed seed))
 (define (live-rng-shells)
   (let loop ((tail (vector-ref g3t-registry 0)) (count 0))
     (if (null? tail) count
@@ -170,6 +175,57 @@
                 (vector-ref model-entry 3) (vector-ref model-entry 3)
                 0 #x3f800000 256 #x3f800000 1 -1)))
 
+(define predecessor-generator
+  (g3t-generator-create model tokenizer (seed-policy 1729)))
+(define predecessor-input (g3t-generation-token-input-create 65))
+(define predecessor-output
+  (g3m-generate-p1-g1! predecessor-generator predecessor-input))
+(define predecessor-clone (g3t-generation-output-rng predecessor-output))
+(define predecessor-native
+  (vector-ref (g3t-prefill-entry predecessor-clone 'rng 'g3r-predecessor) 3))
+(check "genuine published-output RNG predecessor words"
+       (and (= 1 (g3r-test-rng-clone-word predecessor-native 0))
+            (= 1729 (g3r-test-rng-clone-word predecessor-native 1))
+            (= 1 (g3r-test-rng-clone-word predecessor-native 2))
+            (= 0 (g3r-test-rng-clone-word predecessor-native 3))))
+(check "published-output clone survives its generator and output"
+       (and (g3t-output-release! predecessor-output)
+            (g3t-generation-tensor-release! predecessor-input)
+            (g3t-generator-close! predecessor-generator)
+            (= 1 (g3r-test-rng-clone-state predecessor-native))))
+(define imported-successor (g3r-rng-owner-from-checked-words 1 1729 1 0))
+(define imported-successor-native
+  (vector-ref (g3t-prefill-entry imported-successor 'rng 'g3r-predecessor) 3))
+(check "imported four words equal authentic output-clone predecessor"
+       (let compare ((index 0))
+         (if (= index 4) #t
+             (and (= (g3r-test-rng-clone-word predecessor-native index)
+                     (g3r-test-rng-clone-word imported-successor-native index))
+                  (compare (+ index 1))))))
+(define clone-derived
+  (g3t-generator-create model tokenizer
+    (rng-policy predecessor-clone 'categorical)))
+(define imported-derived
+  (g3t-generator-create model tokenizer
+    (rng-policy imported-successor 'categorical)))
+(define clone-derived-native
+  (vector-ref (g3t-generator-find clone-derived 'g3r-predecessor) 3))
+(define imported-derived-native
+  (vector-ref (g3t-generator-find imported-derived 'g3r-predecessor) 3))
+(check "both authentic clone and imported owner seed equivalent contexts"
+       (let compare ((index 0))
+         (if (= index 4) #t
+             (and (= (g3r-test-rng-word clone-derived-native index)
+                     (g3r-test-rng-word imported-derived-native index))
+                  (compare (+ index 1))))))
+(check "predecessor shell independent release and context cleanup"
+       (and (g3t-generation-rng-release! predecessor-clone)
+            (g3t-generation-rng-release! imported-successor)
+            (= -1 (g3r-test-rng-clone-state predecessor-native))
+            (= -1 (g3r-test-rng-clone-state imported-successor-native))
+            (g3t-generator-close! clone-derived)
+            (g3t-generator-close! imported-derived)))
+
 (define (oracle-run low high expected-low expected-high mode)
   (let* ((source (g3r-rng-owner-from-checked-words 1 1729 low high))
          (source-entry (g3t-prefill-entry source 'rng 'g3r-run))
@@ -189,14 +245,26 @@
     (let* ((input (g3t-generation-token-input-create 65))
            (output (g3m-generate-p1-g1! generator input))
            (native-output (vector-ref (g3t-prefill-entry output 'output 'g3r-run) 3))
+           (output-clone (g3t-generation-output-rng output))
+           (native-clone (vector-ref
+                           (g3t-prefill-entry output-clone 'rng 'g3r-run) 3))
            (id (g3r-test-output-word native-output 6)))
       (check "successor words match independent carry expectation"
              (and (= expected-low (g3r-test-rng-word native-generator 2))
                   (= expected-high (g3r-test-rng-word native-generator 3))))
       (display "G3R_ORACLE ") (display mode) (display " ")
       (display 1729) (display " ") (display low) (display " ")
-      (display high) (display " ") (display id) (display " ")
-      (display expected-low) (display " ") (display expected-high)
+      (display high) (display " ") (display id)
+      (let emit-state ((index 0))
+        (if (< index 4)
+            (begin (display " ")
+                   (display (g3r-test-rng-word native-generator index))
+                   (emit-state (+ index 1)))))
+      (let emit-clone ((index 0))
+        (if (< index 4)
+            (begin (display " ")
+                   (display (g3r-test-rng-clone-word native-clone index))
+                   (emit-clone (+ index 1)))))
       (let emit ((index 0))
         (if (< index 256)
             (begin (display " ")
@@ -204,7 +272,11 @@
                    (emit (+ index 1)))))
       (newline)
       (check "output release" (g3t-output-release! output))
-      (check "input release" (g3t-generation-tensor-release! input)))
+      (check "input release" (g3t-generation-tensor-release! input))
+      (check "output RNG clone survives output release"
+             (= 1 (g3r-test-rng-clone-state native-clone)))
+      (check "output RNG clone typed release"
+             (g3t-generation-rng-release! output-clone)))
     (check "generator close" (g3t-generator-close! generator))))
 
 (oracle-run -1 0 0 1 'categorical)

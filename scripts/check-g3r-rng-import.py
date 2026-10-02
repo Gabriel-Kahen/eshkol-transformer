@@ -102,8 +102,17 @@ for phrase in (
     "forged shell rejected", "stale shell rejected", "busy source rejected",
     "raw native pointer not Eshkol owner", "G3R_ORACLE",
     "Eshkol vector/cons allocation cuts reached",
+    "genuine published-output RNG predecessor words",
+    "imported four words equal authentic output-clone predecessor",
 ):
     assert phrase in on, phrase
+ordered(on, "(g3m-generate-p1-g1! predecessor-generator predecessor-input)",
+        "(g3t-generation-output-rng predecessor-output)",
+        "(g3r-rng-owner-from-checked-words 1 1729 1 0)")
+assert "(display expected-low)" not in on
+assert "(display expected-high)" not in on
+assert "(g3r-test-rng-word native-generator index)" in on
+assert "(g3r-test-rng-clone-word native-clone index)" in on
 assert "g3r_rng_import_extension.esk" not in off
 for phrase in ("build_mode off", "build_mode normal", "build_mode sanitize",
                "repeat.stdout", "detect_leaks=1", "rng_import_native_test.c",

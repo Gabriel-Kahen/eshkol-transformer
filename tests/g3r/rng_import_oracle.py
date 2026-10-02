@@ -29,10 +29,16 @@ def check(path: Path) -> None:
             ]
     for line in lines:
         fields = line.split()
-        assert len(fields) == 8 + 256, len(fields)
-        _, mode, seed, low, high, actual_id, actual_low, actual_high, *raw = fields
+        assert len(fields) == 14 + 256, len(fields)
+        _, mode, seed, low, high, actual_id, *tail = fields
         seed, low, high = int(seed), int(low), int(high)
+        native_state = tuple(map(int, tail[:4]))
+        clone_state = tuple(map(int, tail[4:8]))
+        raw = tail[8:]
         assert seed == 1729
+        expected_state = (1, seed, *successor(low, high, mode))
+        assert native_state == expected_state, (mode, native_state, expected_state)
+        assert clone_state == expected_state, (mode, clone_state, expected_state)
         logit_bits = [int(value) for value in raw]
         assert all(0 <= value <= 0xFFFFFFFF for value in logit_bits)
         logits = [word(value) for value in logit_bits]
@@ -44,7 +50,6 @@ def check(path: Path) -> None:
         else:
             expected_id = min(range(256), key=lambda index: (-logits[index], index))
         assert int(actual_id) == expected_id, (mode, actual_id, expected_id)
-        assert (int(actual_low), int(actual_high)) == successor(low, high, mode)
     print("G3-R imported RNG G3-S/Philox oracle: PASS (3 actual runs)")
 
 
