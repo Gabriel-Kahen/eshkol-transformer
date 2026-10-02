@@ -1,0 +1,240 @@
+(load "c1_sha256.esk")
+(load "g3r_record_codec_extension.esk")
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3-R record codec FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (bytes=? left right)
+  (and (bytevector? left) (bytevector? right)
+       (= (bytevector-length left) (bytevector-length right))
+       (g3r-bytes=? left 0 right 0 (bytevector-length left))))
+(define (words=? left right size)
+  (and (vector? left) (vector? right)
+       (= (vector-length left) size) (= (vector-length right) size)
+       (let loop ((index 0))
+         (if (= index size) #t
+             (and (= (vector-ref left index) (vector-ref right index))
+                  (loop (+ index 1)))))))
+(define (unchanged-vector? destination)
+  (let loop ((index 0))
+    (if (= index 8) #t
+        (and (eq? (vector-ref destination index) 'untouched)
+             (loop (+ index 1))))))
+(define (reject-encode label destination policy rng history prompt generated
+                       manual fingerprint digest)
+  (let ((before (bytevector-copy destination 0 288))
+        (caught #f))
+    (guard (condition (#t (set! caught #t)))
+      (g3r-record-encode! destination policy rng history prompt generated
+                          manual fingerprint digest))
+    (check label (and caught (bytes=? destination before)))))
+(define (reject-decode label source digest)
+  (let ((destination (make-vector 8 'untouched))
+        (caught #f))
+    (guard (condition (#t (set! caught #t)))
+      (g3r-record-decode! source digest destination))
+    (check label (and caught (unchanged-vector? destination)))))
+(define (reseal! bytes)
+  (bytevector-copy! bytes 256
+                    (c1-sha256 (bytevector-copy bytes 0 256)) 0 32))
+(define (changed source index value reseal?)
+  (let ((copy (bytevector-copy source 0 288)))
+    (bytevector-u8-set! copy index value)
+    (if reseal? (reseal! copy))
+    copy))
+(define hex-digits "0123456789abcdef")
+(define (emit-vector label bytes)
+  (display "G3R_VECTOR ") (display label) (display " ")
+  (let loop ((index 0))
+    (if (< index 288)
+        (let ((value (bytevector-u8-ref bytes index)))
+          (display (string-ref hex-digits (quotient value 16)))
+          (display (string-ref hex-digits (modulo value 16)))
+          (loop (+ index 1)))))
+  (newline))
+
+(define fingerprint
+  (string->utf8
+    "sha256:eshkol-byte-tokenizer-v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+;;; Opaque test digest bytes exercise the codec only. No C2 image is loaded.
+(define digest (make-bytevector 32 0))
+(let fill ((index 0))
+  (if (< index 32)
+      (begin (bytevector-u8-set! digest index index)
+             (fill (+ index 1)))))
+(define greedy-policy (vector 0 1065353216 256 1065353216 1 -1))
+(define categorical-policy (vector 1 1065353216 17 1056964608 1 255))
+(define manual-policy (vector 1 1065353216 17 1056964608 0 11))
+(define greedy-rng (vector 1 7 0 0))
+(define terminal-rng (vector 1 1729 -1 -1))
+(define carry-rng (vector 1 1729 -1 0))
+(define high-bit-rng
+  (vector 1 9223372036854775807 -9223372036854775808
+          9223372036854775807))
+(define greedy-history (bytevector 7 11))
+(define terminal-history (bytevector 7 255))
+(define carry-history (bytevector 0))
+(define manual-history (bytevector 7 11))
+(define greedy-record (make-bytevector 288 0))
+(define terminal-record (make-bytevector 288 0))
+(define carry-record (make-bytevector 288 0))
+(define high-bit-record (make-bytevector 288 0))
+(define manual-record (make-bytevector 288 0))
+(check "greedy encode"
+       (eq? (g3r-record-encode! greedy-record greedy-policy greedy-rng
+                                 greedy-history 2 0 0 fingerprint digest)
+            greedy-record))
+(check "categorical terminal/exhausted encode"
+       (eq? (g3r-record-encode! terminal-record categorical-policy terminal-rng
+                                 terminal-history 1 1 0 fingerprint digest)
+            terminal-record))
+(check "categorical carry encode"
+       (eq? (g3r-record-encode! carry-record categorical-policy carry-rng
+                                 carry-history 1 0 0 fingerprint digest)
+            carry-record))
+(check "high-bit counter and maximum seed encode"
+       (eq? (g3r-record-encode! high-bit-record categorical-policy
+                                 high-bit-rng carry-history 1 0 0
+                                 fingerprint digest)
+            high-bit-record))
+(check "manual EOS-match history and zero budget encode"
+       (eq? (g3r-record-encode! manual-record manual-policy greedy-rng
+                                 manual-history 1 0 1 fingerprint digest)
+            manual-record))
+(emit-vector "greedy" greedy-record)
+(emit-vector "terminal" terminal-record)
+(emit-vector "carry" carry-record)
+(emit-vector "high-bit" high-bit-record)
+(emit-vector "manual" manual-record)
+
+(define decoded (make-vector 8 'untouched))
+(check "decode exact pair"
+       (eq? (g3r-record-decode! terminal-record digest decoded) decoded))
+(check "decode exact policy and all four RNG words"
+       (and (words=? (vector-ref decoded 0) categorical-policy 6)
+            (words=? (vector-ref decoded 1) terminal-rng 4)))
+(check "decode EOS-bearing generated history partition"
+       (and (bytes=? (vector-ref decoded 2) terminal-history)
+            (= (vector-ref decoded 3) 1)
+            (= (vector-ref decoded 4) 1)
+            (= (vector-ref decoded 5) 0)))
+(check "decode detached fingerprint and digest"
+       (and (bytes=? (vector-ref decoded 6) fingerprint)
+            (bytes=? (vector-ref decoded 7) digest)
+            (not (eq? (vector-ref decoded 6) fingerprint))
+            (not (eq? (vector-ref decoded 7) digest))))
+(let ((roundtrip (make-bytevector 288 0)))
+  (check "decode/encode canonical exact bytes"
+         (bytes=? terminal-record
+                  (g3r-record-encode! roundtrip
+                    (vector-ref decoded 0) (vector-ref decoded 1)
+                    (vector-ref decoded 2) (vector-ref decoded 3)
+                    (vector-ref decoded 4) (vector-ref decoded 5)
+                    (vector-ref decoded 6) (vector-ref decoded 7)))))
+(check "decode high-bit counter and maximum seed"
+       (and (eq? (g3r-record-decode! high-bit-record digest decoded) decoded)
+            (words=? (vector-ref decoded 1) high-bit-rng 4)))
+(check "decode carry counter words"
+       (and (eq? (g3r-record-decode! carry-record digest decoded) decoded)
+            (words=? (vector-ref decoded 1) carry-rng 4)))
+(check "decode manual EOS-match partition without generated byte"
+       (and (eq? (g3r-record-decode! manual-record digest decoded) decoded)
+            (words=? (vector-ref decoded 0) manual-policy 6)
+            (bytes=? (vector-ref decoded 2) manual-history)
+            (= (vector-ref decoded 4) 0)
+            (= (vector-ref decoded 5) 1)))
+
+(define untouched (make-bytevector 288 90))
+(reject-encode "reject bad mode" untouched
+               (vector 2 1065353216 256 1065353216 1 -1)
+               greedy-rng greedy-history 2 0 0 fingerprint digest)
+(reject-encode "reject high f32 bits" untouched
+               (vector 1 4294967296 17 1056964608 1 255)
+               terminal-rng terminal-history 1 1 0 fingerprint digest)
+(reject-encode "reject NaN temperature" untouched
+               (vector 1 2143289344 17 1056964608 1 255)
+               terminal-rng terminal-history 1 1 0 fingerprint digest)
+(reject-encode "reject top-p zero" untouched
+               (vector 1 1065353216 17 0 1 255)
+               terminal-rng terminal-history 1 1 0 fingerprint digest)
+(reject-encode "reject top-p above one" untouched
+               (vector 1 1065353216 17 1069547520 1 255)
+               terminal-rng terminal-history 1 1 0 fingerprint digest)
+(reject-encode "reject noncanonical greedy controls" untouched
+               (vector 0 1065353216 17 1065353216 1 -1)
+               greedy-rng greedy-history 2 0 0 fingerprint digest)
+(reject-encode "reject budget two" untouched
+               (vector 0 1065353216 256 1065353216 2 -1)
+               greedy-rng greedy-history 2 0 0 fingerprint digest)
+(reject-encode "reject bad EOS" untouched
+               (vector 0 1065353216 256 1065353216 1 256)
+               greedy-rng greedy-history 2 0 0 fingerprint digest)
+(reject-encode "reject negative EOS below sentinel" untouched
+               (vector 0 1065353216 256 1065353216 1 -2)
+               greedy-rng greedy-history 2 0 0 fingerprint digest)
+(reject-encode "reject RNG version" untouched greedy-policy
+               (vector 2 7 0 0) greedy-history 2 0 0 fingerprint digest)
+(reject-encode "reject negative seed" untouched greedy-policy
+               (vector 1 -1 0 0) greedy-history 2 0 0 fingerprint digest)
+(reject-encode "reject overwide counter" untouched greedy-policy
+               (vector 1 7 9223372036854775808 0)
+               greedy-history 2 0 0 fingerprint digest)
+(reject-encode "reject empty history" untouched greedy-policy
+               greedy-rng (bytevector) 1 0 0 fingerprint digest)
+(reject-encode "reject impossible partition" untouched greedy-policy
+               greedy-rng greedy-history 1 1 1 fingerprint digest)
+(reject-encode "reject generated byte under budget zero" untouched
+               (vector 0 1065353216 256 1065353216 0 -1)
+               greedy-rng terminal-history 1 1 0 fingerprint digest)
+(reject-encode "reject malformed fingerprint" untouched greedy-policy
+               greedy-rng greedy-history 2 0 0
+               (make-bytevector 96 97) digest)
+(reject-encode "reject missing digest" untouched greedy-policy
+               greedy-rng greedy-history 2 0 0 fingerprint
+               (make-bytevector 31 0))
+(let ((short (make-bytevector 287 90)) (caught #f))
+  (guard (condition (#t (set! caught #t)))
+    (g3r-record-encode! short greedy-policy greedy-rng greedy-history
+                        2 0 0 fingerprint digest))
+  (check "reject short destination unchanged"
+         (and caught
+              (let loop ((index 0))
+                (if (= index 287) #t
+                    (and (= (bytevector-u8-ref short index) 90)
+                         (loop (+ index 1))))))))
+
+(reject-decode "reject truncated record"
+               (bytevector-copy greedy-record 0 287) digest)
+(let ((extended (make-bytevector 289 0)))
+  (bytevector-copy! extended 0 greedy-record 0 288)
+  (reject-decode "reject extended record" extended digest))
+(reject-decode "reject torn checksum"
+               (changed greedy-record 120 8 #f) digest)
+(reject-decode "reject wrong magic"
+               (changed greedy-record 0 0 #t) digest)
+(reject-decode "reject major version"
+               (changed greedy-record 8 2 #t) digest)
+(reject-decode "reject declared length"
+               (changed greedy-record 12 0 #t) digest)
+(reject-decode "reject profile" (changed greedy-record 16 2 #t) digest)
+(reject-decode "reject algorithm" (changed greedy-record 20 2 #t) digest)
+(reject-decode "reject reserved" (changed greedy-record 122 1 #t) digest)
+(reject-decode "reject unused history slot"
+               (changed carry-record 121 1 #t) digest)
+(reject-decode "reject history partition"
+               (changed greedy-record 32 1 #t) digest)
+(reject-decode "reject bad policy after reseal"
+               (changed greedy-record 51 255 #t) digest)
+(reject-decode "reject bad RNG version after reseal"
+               (changed greedy-record 88 2 #t) digest)
+(reject-decode "reject bad fingerprint after reseal"
+               (changed greedy-record 128 0 #t) digest)
+(let ((other-digest (make-bytevector 32 0)))
+  (reject-decode "reject wrong authenticated C2 pair"
+                 greedy-record other-digest))
+(check "failed encode destination still intact"
+       (and (= (bytevector-u8-ref untouched 0) 90)
+            (= (bytevector-u8-ref untouched 287) 90)))
+(display "G3-R record codec PASS: checks=") (display checks) (newline)

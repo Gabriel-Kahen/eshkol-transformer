@@ -1,0 +1,9 @@
+internal/c1/lib/c1_sha256.esk
+native/g3r_record_codec_extension.esk
+tests/g3r/record_codec_test.esk
+tests/g3r/record_codec_feature_off_test.esk
+tests/g3r/check_record_codec_oracle.py
+scripts/check-g3r-record-codec.py
+scripts/test-g3r-record-codec.sh
+docs/g3/G3_R_RECORD_CODEC_LEAF.md
+native/g3r_record_codec_source_closure.txt

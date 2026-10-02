@@ -1424,6 +1424,16 @@ publication transaction. Full G3-R still requires a separately admitted larger
 repeated-decode and later-EOS continuation profile. No persistence implementation
 or save/reload equivalence is claimed.
 
+The [private G3-R fixed-record codec leaf](g3/G3_R_RECORD_CODEC_LEAF.md)
+stages an in-memory 288-byte encoder/decoder using the existing C1 SHA-256.
+It validates the exact policy, G3-S words, history/EOS partition, T1
+fingerprint syntax, C2 digest binding and canonical record checksum before
+changing caller destinations. The fixture includes independent Python SHA/
+layout vectors and malformed/feature-off negatives. Source review and a
+supported Eshkol normal/repeat/sanitizer gate remain pending. The digest is
+an authenticated C2-image precondition; this leaf does not perform C2 I/O,
+live-owner reconstruction, cache replay or continuation.
+
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
 names would return newly owned authenticated CPU f32 `[1,256]` kind-3 shells,

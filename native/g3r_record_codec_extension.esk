@@ -1,0 +1,221 @@
+;;; Private, in-memory G3RCV1 codec. The caller supplies an independently
+;;; authenticated digest of one immutable C2 image; this file performs no I/O,
+;;; registry lookup, model restore, RNG-owner reconstruction or cache replay.
+;;; Source-compose with internal/c1/lib/c1_sha256.esk only for this leaf.
+
+(define g3r-record-size 288)
+(define g3r-u64-modulus 18446744073709551616)
+(define g3r-i64-sign 9223372036854775808)
+(define g3r-i64-min -9223372036854775808)
+(define g3r-i64-max 9223372036854775807)
+(define g3r-fingerprint-prefix
+  (string->utf8 "sha256:eshkol-byte-tokenizer-v1:"))
+
+(define (g3r-record-fail reason)
+  (raise reason))
+
+(define (g3r-i64? value)
+  (and (integer? value) (exact? value) (real? value)
+       (>= value g3r-i64-min) (<= value g3r-i64-max)))
+
+(define (g3r-bytes=? left left-start right right-start count)
+  (let loop ((index 0))
+    (if (= index count) #t
+        (and (= (bytevector-u8-ref left (+ left-start index))
+                (bytevector-u8-ref right (+ right-start index)))
+             (loop (+ index 1))))))
+
+(define (g3r-zero-range? bytes start end)
+  (let loop ((index start))
+    (if (= index end) #t
+        (and (= (bytevector-u8-ref bytes index) 0)
+             (loop (+ index 1))))))
+
+(define (g3r-u-read bytes offset width)
+  (let loop ((index (- width 1)) (value 0))
+    (if (< index 0) value
+        (loop (- index 1)
+              (+ (* value 256)
+                 (bytevector-u8-ref bytes (+ offset index)))))))
+
+(define (g3r-i64-read bytes offset)
+  (let ((unsigned (g3r-u-read bytes offset 8)))
+    (if (>= unsigned g3r-i64-sign)
+        (- unsigned g3r-u64-modulus)
+        unsigned)))
+
+(define (g3r-u-write! bytes offset width value)
+  (let loop ((index 0))
+    (if (< index width)
+        (begin
+          (bytevector-u8-set!
+            bytes (+ offset index)
+            (bitwise-and (arithmetic-shift value (- (* index 8))) 255))
+          (loop (+ index 1))))))
+
+(define (g3r-i64-write! bytes offset value)
+  (g3r-u-write! bytes offset 8 value))
+
+(define (g3r-fingerprint? bytes)
+  (and (bytevector? bytes) (= (bytevector-length bytes) 96)
+       (g3r-bytes=? bytes 0 g3r-fingerprint-prefix 0 32)
+       (let loop ((index 32))
+         (if (= index 96) #t
+             (let ((value (bytevector-u8-ref bytes index)))
+               (and (or (and (>= value 48) (<= value 57))
+                        (and (>= value 97) (<= value 102)))
+                    (loop (+ index 1))))))))
+
+(define (g3r-policy? policy)
+  (and (vector? policy) (= (vector-length policy) 6)
+       (let loop ((index 0))
+         (if (= index 6) #t
+             (and (g3r-i64? (vector-ref policy index))
+                  (loop (+ index 1)))))
+       (let ((mode (vector-ref policy 0))
+             (temperature (vector-ref policy 1))
+             (top-k (vector-ref policy 2))
+             (top-p (vector-ref policy 3))
+             (budget (vector-ref policy 4))
+             (eos (vector-ref policy 5)))
+         (and (or (= mode 0) (= mode 1))
+              (> temperature 0) (<= temperature 2139095039)
+              (>= top-k 1) (<= top-k 256)
+              (> top-p 0) (<= top-p 1065353216)
+              (>= budget 0) (<= budget 1)
+              (>= eos -1) (<= eos 255)
+              (or (= mode 1)
+                  (and (= temperature 1065353216)
+                       (= top-k 256) (= top-p 1065353216)))))))
+
+(define (g3r-rng? rng)
+  (and (vector? rng) (= (vector-length rng) 4)
+       (let loop ((index 0))
+         (if (= index 4) #t
+             (and (g3r-i64? (vector-ref rng index))
+                  (loop (+ index 1)))))
+       (= (vector-ref rng 0) 1)
+       (>= (vector-ref rng 1) 0)))
+
+(define (g3r-history? history prompt generated manual policy)
+  (and (bytevector? history)
+       (let ((length (bytevector-length history)))
+         (and (>= length 1) (<= length 2)
+              (g3r-i64? prompt) (>= prompt 1) (<= prompt 2)
+              (g3r-i64? generated) (>= generated 0) (<= generated 1)
+              (g3r-i64? manual) (>= manual 0) (<= manual 1)
+              (= (+ prompt generated manual) length)
+              (or (= (+ generated manual) 0)
+                  (and (= prompt 1) (= (+ generated manual) 1)))
+              (or (= generated 0) (= (vector-ref policy 4) 1))))))
+
+(define (g3r-record-fields? policy rng history prompt generated manual
+                            fingerprint c2-digest)
+  (and (g3r-policy? policy) (g3r-rng? rng)
+       (g3r-history? history prompt generated manual policy)
+       (g3r-fingerprint? fingerprint)
+       (bytevector? c2-digest) (= (bytevector-length c2-digest) 32)))
+
+;;; Encode into a caller-owned exact 288-byte destination. All potentially
+;;; failing validation, allocation and SHA work precede the one fixed copy.
+(define (g3r-record-encode! destination policy rng history prompt
+                            generated manual fingerprint c2-digest)
+  (if (not (and (bytevector? destination)
+                (= (bytevector-length destination) g3r-record-size)
+                (g3r-record-fields? policy rng history prompt generated manual
+                                    fingerprint c2-digest)))
+      (g3r-record-fail "G3-R record encode: invalid bounded fields"))
+  (let* ((staged (make-bytevector g3r-record-size 0))
+         (magic (string->utf8 "G3RCV1")))
+    (bytevector-copy! staged 0 magic 0 6)
+    (g3r-u-write! staged 8 2 1)
+    (g3r-u-write! staged 10 2 0)
+    (g3r-u-write! staged 12 4 g3r-record-size)
+    (g3r-u-write! staged 16 4 1)
+    (g3r-u-write! staged 20 4 1)
+    (g3r-u-write! staged 24 4 (bytevector-length history))
+    (g3r-u-write! staged 28 4 prompt)
+    (g3r-u-write! staged 32 4 generated)
+    (g3r-u-write! staged 36 4 manual)
+    (let policy-words ((index 0))
+      (if (< index 6)
+          (begin
+            (g3r-i64-write! staged (+ 40 (* index 8))
+                            (vector-ref policy index))
+            (policy-words (+ index 1)))))
+    (let rng-words ((index 0))
+      (if (< index 4)
+          (begin
+            (g3r-i64-write! staged (+ 88 (* index 8))
+                            (vector-ref rng index))
+            (rng-words (+ index 1)))))
+    (bytevector-copy! staged 120 history 0 (bytevector-length history))
+    (bytevector-copy! staged 128 fingerprint 0 96)
+    (bytevector-copy! staged 224 c2-digest 0 32)
+    (let ((checksum (c1-sha256 (bytevector-copy staged 0 256))))
+      (bytevector-copy! staged 256 checksum 0 32))
+    (bytevector-copy! destination 0 staged 0 g3r-record-size)
+    destination))
+
+;;; Decode into exactly eight data-only slots: policy[6], rng[4], history,
+;;; prompt length, generated count, manual count, fingerprint[96], C2 digest[32].
+;;; The expected digest must already belong to a separately authenticated
+;;; immutable C2 image. No slot changes until all checks and copies finish.
+(define (g3r-record-decode! source expected-c2-digest destination)
+  (if (not (and (bytevector? source)
+                (= (bytevector-length source) g3r-record-size)
+                (bytevector? expected-c2-digest)
+                (= (bytevector-length expected-c2-digest) 32)
+                (vector? destination) (= (vector-length destination) 8)))
+      (g3r-record-fail "G3-R record decode: invalid extents"))
+  (let ((magic (string->utf8 "G3RCV1")))
+    (if (not (and (g3r-bytes=? source 0 magic 0 6)
+                  (g3r-zero-range? source 6 8)
+                  (= (g3r-u-read source 8 2) 1)
+                  (= (g3r-u-read source 10 2) 0)
+                  (= (g3r-u-read source 12 4) g3r-record-size)
+                  (= (g3r-u-read source 16 4) 1)
+                  (= (g3r-u-read source 20 4) 1)
+                  (g3r-zero-range? source 122 128)
+                  (g3r-bytes=? source 224 expected-c2-digest 0 32)
+                  (g3r-bytes=? source 256
+                                (c1-sha256 (bytevector-copy source 0 256))
+                                0 32)))
+        (g3r-record-fail "G3-R record decode: header, pair or checksum")))
+  (let* ((length (g3r-u-read source 24 4))
+         (prompt (g3r-u-read source 28 4))
+         (generated (g3r-u-read source 32 4))
+         (manual (g3r-u-read source 36 4)))
+    (if (not (and (>= length 1) (<= length 2)
+                  (or (= length 2)
+                      (= (bytevector-u8-ref source 121) 0))))
+        (g3r-record-fail "G3-R record decode: noncanonical history"))
+    (let* ((policy (make-vector 6 0))
+           (rng (make-vector 4 0))
+           (history (bytevector-copy source 120 (+ 120 length)))
+           (fingerprint (bytevector-copy source 128 224))
+           (c2-digest (bytevector-copy source 224 256)))
+      (let policy-words ((index 0))
+        (if (< index 6)
+            (begin
+              (vector-set! policy index
+                           (g3r-i64-read source (+ 40 (* index 8))))
+              (policy-words (+ index 1)))))
+      (let rng-words ((index 0))
+        (if (< index 4)
+            (begin
+              (vector-set! rng index
+                           (g3r-i64-read source (+ 88 (* index 8))))
+              (rng-words (+ index 1)))))
+      (if (not (g3r-record-fields? policy rng history prompt generated manual
+                                   fingerprint c2-digest))
+          (g3r-record-fail "G3-R record decode: invalid bounded fields"))
+      (vector-set! destination 0 policy)
+      (vector-set! destination 1 rng)
+      (vector-set! destination 2 history)
+      (vector-set! destination 3 prompt)
+      (vector-set! destination 4 generated)
+      (vector-set! destination 5 manual)
+      (vector-set! destination 6 fingerprint)
+      (vector-set! destination 7 c2-digest)
+      destination)))
