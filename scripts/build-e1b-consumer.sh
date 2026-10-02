@@ -1856,9 +1856,8 @@ if [[ "${e3_private_test_sanitize}" == 1 ]]; then
     "${e1b_tmp}/noninstrumentation-undefined.txt" \
     >"${e1b_tmp}/unexpected-undefined.txt"
   if [[ "${e3_tuple_kind:-}" == mode-graph ]]; then
-    # Clang O1 retains generated gradient_ho_0/1 helpers that the normal
-    # object optimizes away; native M3/E3 objects also lower memcmp to bcmp.
-    # Pin the complete emitted imports of this exact noninstalled tuple.
+    # Admit only the pinned imports of this noninstalled sanitizer tuple.
+    # A driver semantic correction requires fresh own emission before repinning.
     source "${PROJECT_ROOT}/scripts/e3-mode-graph-sanitizer-import-policy.sh"
     e3_mode_graph_verify_sanitizer_imports \
       "${e1b_tmp}/expected-undefined.txt" \
@@ -2151,6 +2150,12 @@ cp "${e1b_tmp}/undefined.txt" \
   "${evidence_dir}.tmp.$$/undefined.txt"
 cp "${e1b_tmp}/expected-undefined.txt" \
   "${evidence_dir}.tmp.$$/expected-undefined.txt"
+# Keep the exact mode/graph IR on successful admission as well as failure;
+# its loop-resolution diagnostic must not infer IR semantics from nm alone.
+if [[ "${package_policy}" == e3-private-aggregate &&
+      "${e3_tuple_kind:-}" == mode-graph ]]; then
+  cp "${e1b_tmp}/private.ll" "${evidence_dir}.tmp.$$/private.ll"
+fi
 if [[ "${e3_private_test_sanitize}" == 1 && \
       "${e3_tuple_kind:-}" == mode-graph ]]; then
   cp "${e1b_tmp}/noninstrumentation-undefined.txt" \

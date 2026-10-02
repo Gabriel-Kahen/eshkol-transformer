@@ -830,7 +830,9 @@ IR review traced all 27 added references to two named-let loops called
 `grad-kind` for both loops. The old emitted AD/math inventory must not be used
 to enlarge admission around that semantic defect. Fresh normal and sanitizer
 compiler emission, exact import policies, runtime observations and compiled
-mutant controls remain required for the corrected driver. No mode/graph
+mutant controls remain required for the corrected driver. Its exact
+noninstalled package now retains `private.ll` on successful admission too, so
+the fresh diagnostic can inspect recursive-loop IR in either build outcome. No mode/graph
 acceptance is claimed. The 159-file failed full gate is sealed at
 `e3-mode-graph-0c86bc3-fe9-f31-20261002-prepared-d/SHA256SUMS-FAILED`
 (`8c4d1f0f6b1a3a47c7c336c355298b9852d98849880ac3bb9e2cf09f4fb47ff3`).
