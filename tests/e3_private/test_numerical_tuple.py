@@ -86,6 +86,38 @@ class NumericalTupleTest(unittest.TestCase):
             self.assertIn("e3_private_test_reloc_flags=(-Wl,-d)", builder)
             self.assertIn('"${e1b_cxx}" -r "${e3_private_test_reloc_flags[@]}"', builder)
 
+    def test_real_sanitized_optimization_import_delta(self) -> None:
+        added = lines(NUMERICAL, "sanitized_added_undefined_symbols")
+        absent = lines(NUMERICAL, "sanitized_absent_undefined_symbols")
+        self.assertEqual(added, ["bcmp", "puts"])
+        self.assertEqual(absent, ["eshkol_ad_seed_flag", "eshkol_runtime_fatal",
+                                  "eshkol_taylor_lift_ad_node", "memcmp"])
+        if any(shutil.which(tool) is None for tool in ("clang", "nm")):
+            self.skipTest("Clang/binutils sanitizer object tools unavailable")
+        with tempfile.TemporaryDirectory(prefix="e3-sanitizer-imports-") as temporary:
+            directory = Path(temporary)
+            source = directory / "probe.c"
+            source.write_text(
+                '#include <stdio.h>\n#include <string.h>\n'
+                'int equal(const void *a, const void *b) '
+                '{ return memcmp(a, b, 32) == 0; }\n'
+                'void print(void) { printf("fixture\\n"); }\n'
+            )
+            object_file = directory / "probe.o"
+            subprocess.run(
+                ["clang", "-O1", "-g", "-fsanitize=address,undefined",
+                 "-fno-omit-frame-pointer", "-c", str(source), "-o", str(object_file)],
+                check=True, capture_output=True, text=True,
+            )
+            imports = subprocess.run(
+                ["nm", "-u", "--format=posix", str(object_file)],
+                check=True, capture_output=True, text=True,
+            ).stdout
+            names = {line.split()[0] for line in imports.splitlines()}
+            self.assertTrue(set(added) <= names)
+            self.assertFalse({"memcmp", "printf"} & names)
+            self.assertIn("__asan_init", names)
+
     def test_exact_noninstalled_successor_inventories(self) -> None:
         for suffix in (
             "native_objects", "defined_symbols", "public_exports",

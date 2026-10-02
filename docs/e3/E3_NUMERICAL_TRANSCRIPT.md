@@ -57,3 +57,12 @@ link arguments and every export/import manifest remain unchanged. A real
 Clang ASan object regression reproduces the leak and checks the corrected
 private registration cell and retained sanitizer imports. Independent repair
 review and a fresh supported complete numerical gate remain required.
+
+The later exact `94b8fecd` fe9/f31 gate F stopped at sanitized package import
+admission before AOT runtime. Its launcher exited one with unchanged pins; the
+retained scratch lists `bcmp` and `puts` as additional noninstrumentation
+imports. Clang `-O1` lowers native `memcmp` equality to `bcmp` and generated
+literal `printf` calls to `puts`. The bounded numerical-sanitized-only repair
+pins both the exact added and absent import sets against the unchanged normal
+manifest; sanitizer references and canonical/normal inventories retain their
+checks. No numerical acceptance follows from this failed gate.
