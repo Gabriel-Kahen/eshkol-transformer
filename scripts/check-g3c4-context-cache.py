@@ -44,6 +44,26 @@ def without_conditional_feature(text, macro):
     return "".join(kept)
 
 
+def step4_context_surface(block):
+    for macro in (
+        "ET_G3C4_ACTIVE_CALL_PRIVATE",
+        "ET_G3C4_GENERATOR_PRIVATE",
+        "ET_G3C4_P2_G2_TERMINAL_PRIVATE",
+        "ET_G3C4_P2_G2_TERMINAL_IDS_CLONE_PRIVATE",
+    ):
+        block = without_conditional_feature(block, macro)
+    return block
+
+
+def check_deferred_surface(block):
+    for forbidden in (
+        "et_g3c4_model_pins", "generator_seed", "generator_rng",
+        "policy", "sampler", "forward", "owner->active =",
+    ):
+        require(forbidden not in block,
+                f"Step 4a reaches deferred surface: {forbidden}")
+
+
 def check():
     subprocess.run(
         [sys.executable, str(ROOT / "scripts/check-g3c4-model-authority.py")],
@@ -59,10 +79,7 @@ def check():
     require(source.count("#ifdef ET_G3C4_CONTEXT_PRIVATE") == 1,
             "context implementation feature block changed")
     block = source[source.index("#ifdef ET_G3C4_CONTEXT_PRIVATE"):]
-    step4_block = without_conditional_feature(
-        block, "ET_G3C4_ACTIVE_CALL_PRIVATE")
-    step4_block = without_conditional_feature(
-        step4_block, "ET_G3C4_GENERATOR_PRIVATE")
+    step4_block = step4_context_surface(block)
     require(source.index("#ifdef ET_G3C4_CONTEXT_PRIVATE") >
             source.index("et_g3c4_private_model_owner_abort_v1"),
             "context block no longer follows accepted owner implementation")
@@ -77,12 +94,7 @@ def check():
         "registry_next", "magic", "kind", "state", "busy", "owner", "cache",
     ]:
         require(field in block, f"context record omits {field}")
-    for forbidden in [
-        "et_g3c4_model_pins", "generator_seed", "generator_rng",
-        "policy", "sampler", "forward", "owner->active =",
-    ]:
-        require(forbidden not in step4_block,
-                f"Step 4a reaches deferred surface: {forbidden}")
+    check_deferred_surface(step4_block)
 
     ordered(block, [
         "owner = et_g3c4_admit_owner(candidate, 0)",
