@@ -33,6 +33,61 @@ off = (root / additions[3]).read_text()
 runner = (root / additions[6]).read_text()
 oracle = (root / additions[4]).read_text()
 native_fixture = (root / additions[1]).read_text()
+
+
+def call_arity_at(text: str, start: int) -> int:
+    """Count direct operands in one fixture call, ignoring nested forms."""
+    depth = 1
+    operands = 0
+    atom = False
+    quoted = False
+    escaped = False
+    comment = False
+    for char in text[start:]:
+        if comment:
+            if char == "\n":
+                comment = False
+            continue
+        if quoted:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                quoted = False
+            continue
+        if char == ";":
+            comment = True
+        elif char == '"':
+            if depth == 1:
+                operands += 1
+            quoted = True
+            atom = False
+        elif char == "(":
+            if depth == 1:
+                operands += 1
+            depth += 1
+            atom = False
+        elif char == ")":
+            depth -= 1
+            atom = False
+            if depth == 0:
+                return operands
+        elif char.isspace():
+            atom = False
+        elif depth == 1 and not atom:
+            operands += 1
+            atom = True
+    raise AssertionError("unterminated prefix probe call")
+
+
+probe_name = "(g3c4-p2g2-prefix-commit-probed!"
+probe_sites = []
+cursor = 0
+while (site := fixture.find(probe_name, cursor)) >= 0:
+    probe_sites.append(call_arity_at(fixture, site + len(probe_name)))
+    cursor = site + len(probe_name)
+assert probe_sites == [4, 4], probe_sites
 assert "(eq? (vector-ref record index)" in scope
 assert "(vector-ref anchor index)" in scope
 assert "'p2g2-prefix-committed" in scope

@@ -936,9 +936,14 @@ off/on fixtures passed independent source-and-test review at `d8e58859`/tree
 `806a7df6`. Its first pinned supported gate stopped at the feature-off link
 before either new runtime fixture: the runner omitted exact-pair feature
 flags on the real T1 shell/M3 I1 owners and the I1 borrow-view test wrapper
-link flag. A focused runner repair is pending independent review and a new
-exact supported gate; no `3/1110` Eshkol runtime proof or integration is
-claimed. Parent PR #174 merged at `9fc17bcd`. Second-token, terminal/EOS,
+link flag. Its reviewed runner repair, composed with merged parent
+`9fc17bcd`, passed the next pinned feature-off Eshkol link/runtime (five
+checks), but the enabled fixture stopped at IR generation: a test-only
+precommit probe call supplied three operands to a four-argument helper due
+to one misplaced lambda close. That fixture-only correction and an explicit
+static probe-arity check await independent review and a fresh exact supported
+gate; no `3/1110` Eshkol runtime proof or integration is claimed.
+Second-token, terminal/EOS,
 public and CLI work remain separate.
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)

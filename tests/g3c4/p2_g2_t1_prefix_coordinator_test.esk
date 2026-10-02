@@ -271,7 +271,7 @@
                                  (raise caught)))
                         (t1-private-g3-decode-raw-into!
                           tokenizer (vector-ref captured 12)
-                          (vector-ref captured 11)))))
+                          (vector-ref captured 11))))))
               (lambda (captured)
                 (cond
                   ((eq? kind 'core)
@@ -288,7 +288,7 @@
                      raw 0 (if (= (bytevector-u8-ref raw 0) 255)
                                0 (+ (bytevector-u8-ref raw 0) 1))))
                   ((eq? kind 'staging)
-                   (bytevector-u8-set! staging 1 1))))))))
+                   (bytevector-u8-set! staging 1 1)))))))
         (if (or (eq? kind 'core) (eq? kind 'decoder))
             (set-car! (cdr token-entry) original-core))
         (if (eq? kind 'registry) (set-car! token-entry tokenizer))

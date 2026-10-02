@@ -10,8 +10,13 @@ before running either new fixture. The runner compiled the T1 shell and M3
 I1 owner without their exact-pair feature macro and omitted the existing
 I1 borrow-view test wrapper from the link. This follow-up aligns those
 real owner/wrapper flags and checks their object symbols before the fixture
-link; it changes no production API or numerical path. A fresh pinned
-normal/repeat/sanitizer Eshkol/native gate remains required before runtime
-or integration acceptance. Parent PR #174 is merged. Second-token
+link; it changes no production API or numerical path. The next pinned gate
+linked and ran the feature-off fixture (five checks) but stopped while
+generating enabled Eshkol IR: one test-only precommit probe nested its
+after-decode lambda inside the before-decode lambda, giving the four-argument
+probe function only three operands. This follow-up closes that lambda and
+checks both probe call arities statically. A fresh pinned
+normal/repeat/sanitizer Eshkol/native gate remains required before enabled
+runtime or integration acceptance. Parent PR #174 is merged. Second-token
 generation, EOS terminal handling, output publication, public ABI/profile
 and CLI remain later gates.
