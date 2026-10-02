@@ -21,6 +21,10 @@
         :real et_e3_zero_control_census_v1)
 (extern i64 e3-zero-control-model-idle ptr
         :real et_e3_zero_control_model_idle_v1)
+(extern i64 e3-zero-census-probe-begin ptr i64 ptr i64
+        :real et_e3_zero_control_census_probe_begin_v1)
+(extern i64 e3-zero-census-probe-end ptr i64 ptr i64
+        :real et_e3_zero_control_census_probe_end_v1)
 (extern i64 e3-zero-p1-live :real et_p1_test_live_entry_count_v1)
 (extern i64 e3-zero-p1-tombstones :real et_p1_test_tombstone_count_v1)
 (extern ptr e3-zero-staged-initializer i64
@@ -83,12 +87,22 @@
   (e3-zero-invariant (eq? source rooted))
   (vector-ref (i2-carrier-preflight source 'parameter 'e3-zero-negative) 2))
 
+(define (e3-zero-negative-bytes=? left right)
+  (and (= (bytevector-length left) (bytevector-length right))
+       (let compare ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (compare (+ index 1)))))))
+
 (define (e3-zero-negative-busy! model handles sources pin?)
   (let* ((owner (e3-zero-negative-owner model))
          (source (vector-ref sources 0))
          (pointer (e3-zero-negative-source-pointer source
                     (vector-ref sources 0)))
-         (baseline (e3-zero-negative-census model)))
+         (baseline (e3-zero-negative-census model))
+         (fixed (e3-zero-negative-fixed-set model)))
+    (e3-zero-invariant (= (e3-zero-control-model-idle owner) 0))
     (e3-zero-invariant (= (e3-zero-control-anchor owner 0 pointer) 0))
     (let ((began #f))
       (guard (caught
@@ -104,6 +118,7 @@
                  (e3-zero-control-pin-begin owner 0 pointer)
                  (e3-zero-control-borrow-begin owner 0 pointer)) 0))
         (set! began #t)
+        (e3-zero-invariant (not (= (e3-zero-control-model-idle owner) 0)))
         (let ((rejected
                 (guard (caught (#t (transformer-error? caught)))
                   (i2-prepare-load
@@ -119,7 +134,59 @@
           (e3-zero-invariant
             (e3-zero-negative-same-census?
               baseline (e3-zero-negative-census model)))
+          (e3-zero-invariant (= (e3-zero-control-model-idle owner) 0))
+          (e3-zero-invariant
+            (= (tr3-p1-fixed-recheck-internal model
+                 (vector-ref fixed 0) (vector-ref fixed 1)
+                 (vector-ref fixed 2)) 0))
           rejected)))))
+
+(define (e3-zero-negative-unanchored-busy! model sources plan?)
+  (let* ((owner (e3-zero-negative-owner model))
+         (source (vector-ref sources 0))
+         (pointer (e3-zero-negative-source-pointer source source))
+         (kind (if plan? 1 0))
+         (source-before
+           (i2-checkpoint-encode
+             (vector source 'parameter (vector-ref e3-zero-shapes 0)
+                     'f32 'cpu 'dense-row-major-contiguous
+                     'e3-zero-negative)))
+         (baseline (e3-zero-negative-census model))
+         (fixed (e3-zero-negative-fixed-set model)))
+    (e3-zero-invariant (= (e3-zero-control-model-idle owner) 0))
+    (e3-zero-invariant
+      (= (e3-zero-census-probe-begin owner 0 pointer kind) 0))
+    (let ((live #t))
+      (guard (caught
+               (#t (if live
+                       (if (not (= (e3-zero-census-probe-end
+                                     owner 0 pointer kind) 0))
+                           (e3-native-invariant-fail)))
+                   (raise caught)))
+        (e3-zero-invariant
+          (> (e3-zero-control-census owner (if plan? 4 3)) 0))
+        (e3-zero-invariant
+          (and (= (e3-zero-control-census owner 7) 0)
+               (= (e3-zero-control-census owner 8) 0)))
+        (e3-zero-invariant (not (= (e3-zero-control-model-idle owner) 0)))
+        (e3-zero-invariant
+          (= (e3-zero-census-probe-end owner 0 pointer kind) 0))
+        (set! live #f)
+        (e3-zero-invariant (= (e3-zero-control-model-idle owner) 0))
+        (e3-zero-invariant
+          (e3-zero-negative-same-census?
+            baseline (e3-zero-negative-census model)))
+        (e3-zero-invariant
+          (e3-zero-negative-bytes=? source-before
+            (i2-checkpoint-encode
+              (vector source 'parameter (vector-ref e3-zero-shapes 0)
+                      'f32 'cpu 'dense-row-major-contiguous
+                      'e3-zero-negative))))
+        (e3-zero-invariant
+          (= (tr3-p1-fixed-recheck-internal model
+               (vector-ref fixed 0) (vector-ref fixed 1)
+               (vector-ref fixed 2)) 0))
+        #t))))
 
 (define (e3-zero-negative-fault! model handles sources domain decode?)
   (let* ((owner (e3-zero-negative-owner model))
@@ -143,14 +210,6 @@
         (e3-zero-negative-same-census?
           baseline (e3-zero-negative-census model)))
       rejected)))
-
-(define (e3-zero-negative-bytes=? left right)
-  (and (= (bytevector-length left) (bytevector-length right))
-       (let compare ((index 0))
-         (if (= index (bytevector-length left)) #t
-             (and (= (bytevector-u8-ref left index)
-                     (bytevector-u8-ref right index))
-                  (compare (+ index 1)))))))
 
 (define (e3-zero-negative-parameters handles)
   (let ((result (make-vector 14 #f)))
@@ -473,6 +532,10 @@
                       (e3-zero-negative-busy! model handles sources #f))
                      ((string=? name "active-pin")
                       (e3-zero-negative-busy! model handles sources #t))
+                     ((string=? name "p1-census-borrow")
+                      (e3-zero-negative-unanchored-busy! model sources #f))
+                     ((string=? name "p1-census-plan")
+                      (e3-zero-negative-unanchored-busy! model sources #t))
                      ((string=? name "alloc-i2-decode")
                       (e3-zero-negative-fault! model handles sources 1 #t))
                      ((string=? name "alloc-f32-decode")

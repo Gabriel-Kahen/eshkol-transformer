@@ -11,6 +11,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "internal/p1/lib/transformer/module.esk"
 SOURCE_SHA256 = "1146eee9e053b4a761c24f56b75ed43e756ec2d907d0de48b04e72abe805775d"
+IMPORT_ANCHOR = "(require e1b_error_consumer_private)\n"
+IMPORT = "(extern void e3-zero-p1-invariant-fail :real abort)\n"
 ANCHOR = """  (lambda (identity)
     (construction-seal-prepared! identity))
   )))"""
@@ -50,8 +52,7 @@ SLOT = """  (lambda (identity)
                                (#t (vector-set! target field original)
                                    (if (not (= (tr3-fixed-recheck!
                                                  model modules handles carriers) 0))
-                                       (fail 'internal 'e3-zero-projection-test
-                                             "P1 projection restoration failed" '()))
+                                       (e3-zero-p1-invariant-fail))
                                    (raise caught)))
                         (vector-set! target field replacement)
                         (set! status
@@ -59,11 +60,9 @@ SLOT = """  (lambda (identity)
                         (vector-set! target field original))
                       (if (not (= (tr3-fixed-recheck!
                                     model modules handles carriers) 0))
-                          (fail 'internal 'e3-zero-projection-test
-                                "P1 projection restoration failed" '()))
+                          (e3-zero-p1-invariant-fail))
                       (if (not (= status 4))
-                          (fail 'internal 'e3-zero-projection-test
-                                "P1 projection mismatch was not rejected" '()))
+                          (e3-zero-p1-invariant-fail))
                       status))))))
   ))))"""
 
@@ -73,9 +72,12 @@ def rendered() -> bytes:
     if hashlib.sha256(source).hexdigest() != SOURCE_SHA256:
         raise ValueError("canonical P1 module bytes differ from the reviewed predecessor")
     text = source.decode("utf-8")
-    if text.count(ANCHOR) != 1:
-        raise ValueError("P1 slot-73 insertion anchor is not unique")
-    return text.replace(ANCHOR, SLOT).encode("utf-8")
+    if text.count(ANCHOR) != 1 or text.count(IMPORT_ANCHOR) != 1:
+        raise ValueError("P1 overlay insertion anchors are not unique")
+    if SLOT.count("(e3-zero-p1-invariant-fail)") != 3 or "(fail " in SLOT:
+        raise ValueError("P1 projection defect path must abort")
+    return text.replace(IMPORT_ANCHOR, IMPORT_ANCHOR + IMPORT).replace(
+        ANCHOR, SLOT).encode("utf-8")
 
 
 def main() -> None:

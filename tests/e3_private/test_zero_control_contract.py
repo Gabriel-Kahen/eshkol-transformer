@@ -44,9 +44,12 @@ class ZeroControlContract(unittest.TestCase):
         overlay = generator.rendered()
         self.assertEqual(hashlib.sha256(canonical).hexdigest(),
                          generator.SOURCE_SHA256)
-        self.assertEqual(overlay.count(b"e3-zero-projection-test"), 3)
-        self.assertEqual(overlay.replace(generator.SLOT.encode(),
-                                         generator.ANCHOR.encode()), canonical)
+        self.assertEqual(overlay.count(b"(e3-zero-p1-invariant-fail)"), 3)
+        self.assertEqual(
+            overlay.replace(generator.SLOT.encode(), generator.ANCHOR.encode())
+                   .replace((generator.IMPORT_ANCHOR + generator.IMPORT).encode(),
+                            generator.IMPORT_ANCHOR.encode()), canonical)
+        self.assertIn(generator.IMPORT.encode(), overlay)
         self.assertIn(b"(vector-set! target field original)", overlay)
         self.assertIn(b"(tr3-fixed-recheck! model modules handles carriers)",
                       overlay)
@@ -54,7 +57,17 @@ class ZeroControlContract(unittest.TestCase):
         self.assertIn(b"(wrong-shape '(255 4))", overlay)
         self.assertIn(b"(eq? (vector-ref binding 2) head)", overlay)
         self.assertIn(b"(if (not (= status 4))", overlay)
+        self.assertNotIn(b"(fail ", generator.SLOT.encode())
         self.assertNotIn(b"(module-parameters model)", generator.SLOT.encode())
+        original_slot = generator.SLOT
+        try:
+            generator.SLOT = original_slot.replace(
+                "(e3-zero-p1-invariant-fail)",
+                "(fail 'internal 'e3-zero-projection-test \"defect\" '())", 1)
+            with self.assertRaisesRegex(ValueError, "defect path must abort"):
+                generator.rendered()
+        finally:
+            generator.SLOT = original_slot
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             command = ["python3", str(script), "--output-dir", str(directory)]
@@ -89,12 +102,25 @@ class ZeroControlContract(unittest.TestCase):
         self.assertIn("@BUILD@/p1/transformer/module.esk", policy)
         for case in ("foreign-p1-handle", "foreign-p1-module",
                      "foreign-p1-carrier", "stale-p1-handle", "p1-path-10",
-                     "p1-shape-10", "p1-tie-10"):
+                     "p1-shape-10", "p1-tie-10", "p1-census-borrow",
+                     "p1-census-plan"):
             self.assertIn(case, negative)
             self.assertIn(case, runner)
         self.assertIn("i2-construction-abort-internal! construction", negative)
         self.assertIn("(e3-zero-staged-owner-abort owner)", negative)
         self.assertIn("(e3-zero-control-model-idle", negative)
+        native = (ROOT / "src/eshkol_transformer/e3_frame.c").read_text()
+        self.assertIn("idle_fields[] = {0, 1, 2, 3, 4, 6, 7, 8, 10}", native)
+        self.assertIn("et_e3_zero_control_census_v1(pointer, idle_fields[index])", native)
+        self.assertIn("et_f32_tensor_test_plan_pins_v1(value, &pins)", native)
+        self.assertIn("et_f32_tensor_borrow_begin_v1((et_f32_tensor *)destination", native)
+        self.assertIn("et_f32_tensor_copy_plan_prepare_v1(1u, &assignment", native)
+        self.assertIn("(e3-zero-census-probe-begin owner 0 pointer kind)", negative)
+        self.assertIn("(e3-zero-census-probe-end owner 0 pointer kind)", negative)
+        self.assertIn("(e3-zero-negative-bytes=? source-before", negative)
+        self.assertIn("(e3-zero-control-borrow-begin owner 0 pointer)", negative)
+        self.assertIn("(e3-zero-control-pin-begin owner 0 pointer)", negative)
+        self.assertIn("(not (= (e3-zero-control-model-idle owner) 0))", negative)
 
     def test_observer_requires_complete_ordered_actual_roles(self) -> None:
         raw = complete_observation()
@@ -214,7 +240,7 @@ class ZeroControlContract(unittest.TestCase):
     def test_negative_byte_image_uses_its_defined_comparator(self) -> None:
         driver = (ROOT / "tests/e3_private/zero_control_negative_driver.esk").read_text()
         self.assertIn("(define (e3-zero-negative-bytes=? left right)", driver)
-        self.assertEqual(driver.count("(e3-zero-negative-bytes=?"), 3)
+        self.assertEqual(driver.count("(e3-zero-negative-bytes=?"), 4)
         self.assertNotIn("(e3-zero-negative-bytes?", driver)
 
 

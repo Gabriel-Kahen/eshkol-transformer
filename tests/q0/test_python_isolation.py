@@ -59,6 +59,7 @@ G3C4_DEVELOPMENT_SCRIPTS = frozenset({
 })
 DEVELOPMENT_SCRIPTS = frozenset({
     ROOT / "scripts" / "generate-e3-d2-source.py",
+    ROOT / "scripts" / "generate-e3-zero-p1-overlay.py",
     ROOT / "scripts" / "check-e3-p1-contract.py",
     ROOT / "scripts" / "check-tr3-p1-fixed.py",
     ROOT / "scripts" / "check-p1-native-index.py",
@@ -132,9 +133,11 @@ class PythonIsolationTests(unittest.TestCase):
         for relative in (
             "scripts/generate-other-source.py", "scripts/runtime.py",
             "scripts/generate-e3-d2-source.py.extra.py",
+            "scripts/generate-e3-zero-p1-overlay.py.extra.py",
             "scripts/check-e3-p1-contract.py.extra.py",
             "scripts/e3-atomic-publish.py.extra.py",
             "scripts/nested/generate-e3-d2-source.py",
+            "scripts/nested/generate-e3-zero-p1-overlay.py",
             "src/generate-e3-d2-source.py", "lib/runtime.py",
             "internal/e3/runtime.py", "native/runtime.py",
         ):

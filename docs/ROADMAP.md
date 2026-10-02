@@ -768,8 +768,9 @@ P1 negative successor source adds authentic second-model foreign shells and
 carriers, a revoked P1 handle from aborted construction, and fixed path/shape/
 tie perturbations of the genuine P1 projection through a SHA-pinned,
 zero-tuple-only lexical overlay. The compiled witness is written to check
-restoration and unchanged native owner identities and state images. Its source
-and host tests still need
+restoration, zero global builder/borrow/plan/pin counts, and unchanged native
+owner identities and state images; separate real unanchored borrow/plan
+controls challenge that idle admission. Its source and host tests still need
 independent review; normal/sanitized AOT evidence remains pending. It does
 not retire a sealed M3 owner or rewrite the native graph. This candidate
 does not discharge

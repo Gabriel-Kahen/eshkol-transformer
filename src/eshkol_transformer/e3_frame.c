@@ -1528,6 +1528,8 @@ static int e3_zero_control_owner(void *pointer, int64_t index,
   return 0;
 }
 
+int64_t et_e3_zero_control_census_v1(void *pointer, int64_t field);
+
 /* Exact zero tuple only: read-only complete native owner/identity admission. */
 int64_t et_e3_zero_control_model_idle_v1(void *pointer) {
   owner *model = admit(pointer, OWNER, 0);
@@ -1537,10 +1539,105 @@ int64_t et_e3_zero_control_model_idle_v1(void *pointer) {
   for (int64_t index = 0; index < 14; ++index) {
     owner *actual = NULL;
     const et_f32_tensor *value = NULL;
+    size_t pins = 0;
     if (e3_zero_control_owner(pointer, index, &actual, &value) != 0 ||
-        actual != model || !value) return -1;
+        actual != model || !value ||
+        et_f32_tensor_test_plan_pins_v1(value, &pins) != 0 || pins != 0)
+      return -1;
+  }
+  /* Fields 5/9 are owned clone/allocation history, not idle leases. */
+  static const int64_t idle_fields[] = {0, 1, 2, 3, 4, 6, 7, 8, 10};
+  for (size_t index = 0; index < sizeof(idle_fields) / sizeof(idle_fields[0]);
+       ++index) {
+    if (et_e3_zero_control_census_v1(pointer, idle_fields[index]) != 0)
+      return -1;
   }
   return 0;
+}
+
+/* Real unanchored leases isolate the global census from the E3 control slot. */
+static struct e3_zero_census_probe_slot {
+  owner *model;
+  int64_t index;
+  et_f32_tensor *source;
+  const et_f32_tensor *destination;
+  et_f32_tensor_borrow *borrow;
+  et_f32_tensor_copy_plan *plan;
+} e3_zero_census_probe;
+
+int64_t et_e3_zero_control_census_probe_begin_v1(void *pointer, int64_t index,
+                                                  void *source, int64_t plan) {
+  owner *model = NULL;
+  const et_f32_tensor *destination = NULL;
+  et_f32_tensor_error error;
+  et_f32_tensor_error_clear_v1(&error);
+  if ((plan != 0 && plan != 1) || !source || e3_zero_census_probe.model ||
+      e3_zero_control.model || e3_zero_control.borrow || e3_zero_control.pin ||
+      e3_zero_control.fail_domain ||
+      e3_zero_control_owner(pointer, index, &model, &destination) != 0 ||
+      source == destination ||
+      et_i2_private_owned_clone_match_v1(
+        (const et_f32_tensor *)source, destination,
+        ET_I2_PRIVATE_OWNED_VALUE_FINITE) != ET_I2_PRIVATE_OWNED_RESULT_OK)
+    return -1;
+  et_f32_tensor_borrow *borrowed = NULL;
+  et_f32_tensor_copy_plan *prepared = NULL;
+  if (plan == 0) {
+    if (et_f32_tensor_borrow_begin_v1((et_f32_tensor *)destination,
+                                      &borrowed, &error) != 0) {
+      if (borrowed) {
+        et_f32_tensor_error_clear_v1(&error);
+        if (et_f32_tensor_borrow_end_v1(&borrowed, &error) != 0) abort();
+      }
+      return -1;
+    }
+  } else {
+    const et_f32_tensor_copy_assignment_v1 assignment = {
+      .struct_size = sizeof(assignment),
+      .destination = (et_f32_tensor *)destination,
+      .source = (et_f32_tensor *)source,
+    };
+    if (et_f32_tensor_copy_plan_prepare_v1(1u, &assignment, &prepared,
+                                            &error) != 0) {
+      if (prepared) {
+        et_f32_tensor_error_clear_v1(&error);
+        if (et_f32_tensor_copy_plan_release_v1(&prepared, &error) != 0) abort();
+      }
+      return -1;
+    }
+  }
+  e3_zero_census_probe.model = model;
+  e3_zero_census_probe.index = index;
+  e3_zero_census_probe.source = source;
+  e3_zero_census_probe.destination = destination;
+  e3_zero_census_probe.borrow = borrowed;
+  e3_zero_census_probe.plan = prepared;
+  return 0;
+}
+
+int64_t et_e3_zero_control_census_probe_end_v1(void *pointer, int64_t index,
+                                                void *source, int64_t plan) {
+  et_f32_tensor_error error;
+  et_f32_tensor_error_clear_v1(&error);
+  if (!e3_zero_census_probe.model ||
+      admit(pointer, OWNER, 0) != e3_zero_census_probe.model ||
+      index != e3_zero_census_probe.index ||
+      source != e3_zero_census_probe.source ||
+      ((plan == 0) != (e3_zero_census_probe.borrow != NULL)) ||
+      ((plan == 1) != (e3_zero_census_probe.plan != NULL)))
+    return -1;
+  if (plan == 0) {
+    if (et_f32_tensor_borrow_end_v1(&e3_zero_census_probe.borrow, &error) != 0)
+      return -1;
+  } else if (plan == 1) {
+    if (et_f32_tensor_copy_plan_release_v1(&e3_zero_census_probe.plan,
+                                            &error) != 0) return -1;
+  } else return -1;
+  const int64_t matched = et_i2_private_owned_clone_match_v1(
+    e3_zero_census_probe.source, e3_zero_census_probe.destination,
+    ET_I2_PRIVATE_OWNED_VALUE_FINITE);
+  memset(&e3_zero_census_probe, 0, sizeof(e3_zero_census_probe));
+  return matched == ET_I2_PRIVATE_OWNED_RESULT_OK ? 0 : -1;
 }
 
 static int e3_zero_control_identical(void *pointer, int64_t index,
@@ -1557,7 +1654,7 @@ int64_t et_e3_zero_control_anchor_v1(void *pointer, int64_t index,
   owner *model = NULL;
   const et_f32_tensor *value = NULL;
   if (e3_zero_control.model || e3_zero_control.borrow || e3_zero_control.pin ||
-      e3_zero_control.fail_domain || !source ||
+      e3_zero_control.fail_domain || e3_zero_census_probe.model || !source ||
       e3_zero_control_owner(pointer, index, &model, &value) != 0 ||
       source == value ||
       et_i2_private_owned_clone_match_v1(

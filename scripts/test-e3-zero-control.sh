@@ -209,7 +209,7 @@ for case_name in missing-path foreign-handle duplicate-destination \
     decode-short decode-extent decode-role commit-reuse active-borrow active-pin \
     alloc-i2-decode alloc-f32-decode alloc-i2-prepare alloc-f32-prepare \
     foreign-p1-handle foreign-p1-module foreign-p1-carrier stale-p1-handle \
-    p1-path-10 p1-shape-10 p1-tie-10; do
+    p1-path-10 p1-shape-10 p1-tie-10 p1-census-borrow p1-census-plan; do
   for gradient in absent present; do
     for variant in a b sanitize-a sanitize-b; do
       ESHKOL_ARENA_POISON=0 \

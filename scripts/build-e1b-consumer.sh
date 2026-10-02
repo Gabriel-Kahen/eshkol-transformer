@@ -2062,6 +2062,8 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
         et_e3_zero_control_fail_reset_v1
         et_e3_zero_control_census_v1
         et_e3_zero_control_model_idle_v1
+        et_e3_zero_control_census_probe_begin_v1
+        et_e3_zero_control_census_probe_end_v1
         et_p1_test_live_entry_count_v1
         et_p1_test_tombstone_count_v1
       )
