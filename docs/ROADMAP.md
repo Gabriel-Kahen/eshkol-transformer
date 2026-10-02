@@ -1428,6 +1428,14 @@ publication transaction. Full G3-R still requires a separately admitted larger
 repeated-decode and later-EOS continuation profile. No persistence implementation
 or save/reload equivalence is claimed.
 
+The proposed [G3-R typed RNG import contract](g3/G3_R_TYPED_RNG_IMPORT_CONTRACT.md)
+defines a source-private G3-T kind-8 owner constructor for four exact signed
+G3-S words, preserving carry and exhaustion without a seed reset. It records
+the existing same-registry `:rng` consumer, pending ledger cleanup, and the
+authenticated G3RCV1/C2 pair prerequisite. No import ABI or wrapper is yet
+implemented; the separate record codec still awaits its supported gate. This
+does not restore model/cache/tokenizer state or prove continuation.
+
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
 names would return newly owned authenticated CPU f32 `[1,256]` kind-3 shells,
