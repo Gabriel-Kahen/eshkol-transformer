@@ -13,6 +13,10 @@ This scalar constructor has no checkpoint authority. A trusted future restore
 transaction must authenticate the immutable G3RCV1/C2 pair, policy,
 model and T1 identities before calling it. No file I/O, live model restore,
 cache/logit replay, terminal output or continuation equivalence is provided.
+Malformed G3RCV1 bytes belong to the separate record codec; this leaf has no
+decoded-record input and rejects malformed scalar domains only. Its supported
+record-codec predecessor gate remains pending; malformed-record rejection must
+be composed with this import before a restore transaction is admitted.
 The accepted [ownership contract](G3_R_TYPED_RNG_IMPORT_CONTRACT.md) remains
 the controlling boundary.
 
