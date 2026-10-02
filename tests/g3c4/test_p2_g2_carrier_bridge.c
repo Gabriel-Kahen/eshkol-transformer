@@ -269,7 +269,10 @@ static void rejection_case(et_g3c4_model_owner_internal *owner) {
       context, input, &carrier, 16) == ET_G3C4_INVALID_STATE);
 }
 
-int main(void) {
+#ifndef ET_G3C4_P2_G2_CARRIER_TEST_MAIN
+#define ET_G3C4_P2_G2_CARRIER_TEST_MAIN main
+#endif
+int ET_G3C4_P2_G2_CARRIER_TEST_MAIN(void) {
   et_g3c4_model_owner_internal *owner = create_owner();
   parity_case(owner, (const int64_t[2]){0, 255}, 0);
   parity_case(owner, (const int64_t[2]){7, 11}, 1);
