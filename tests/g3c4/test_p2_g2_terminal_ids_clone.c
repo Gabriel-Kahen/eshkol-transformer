@@ -1,4 +1,6 @@
 #define ET_G3C4_P2_G2_TERMINAL_IDS_CLONE_PRIVATE 1
+#define ET_G3C4_P2_G1_PUBLICATION_PRIVATE 1
+#define ET_G3C4_P2_G1_COPYOUT_PRIVATE 1
 #define ET_G3C4_P2_G2_TERMINAL_TEST_MAIN terminal_clone_predecessor_main
 #include "test_p2_g2_native_terminal.c"
 
@@ -36,6 +38,12 @@ static void clone_alias_walkers(et_g3c4_model_owner_internal *owner,
                                 clone_control *control, int dead) {
   et_g3c4_context_internal *context = create_generator(owner);
   const void *tail = &control->logical_length;
+  unsigned char before[sizeof(*control)];
+  memcpy(before, control, sizeof(before));
+  CHECK(et_g3c4_copyout_carrier_preflight(tail, 8u) ==
+        ET_G3C4_INVALID_ARGUMENT);
+  CHECK(et_g3c4_private_last_error_code_v1() == ET_G3C4_CODE_ALIAS);
+  CHECK(memcmp(control, before, sizeof(before)) == 0);
   CHECK(et_g3c4_output_decode_owned_alias(context, tail, 8u) != 0);
   CHECK(et_g3c4_p2g2_carrier_owned_alias(context, tail, 8u) != 0);
   CHECK(et_g3c4_terminal_snapshot_alias(tail, 8u) != 0);
