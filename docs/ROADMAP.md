@@ -744,6 +744,14 @@ release mutation under active E3 model authority remain unaccepted
 prerequisites. No implementation, compiled proof, or edge-corpus acceptance is
 claimed here.
 
+The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
+is a docs-only candidate for the remaining private numerical, compiled-mutant,
+failure and rollback gates. It tracks authentic D2/model reachability separately
+from direct-provider-only cases and names the missing noninstalled model-control
+and stage-selective fault/observer seams for review. It provides no new runtime
+proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
+verdicts remain prerequisites before the full matrix is implemented and run.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
