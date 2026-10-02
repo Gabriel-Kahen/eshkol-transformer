@@ -2101,6 +2101,11 @@ if [[ "${e3_zero_sanitize}" == 1 ]]; then
 fi
 cp "${e1b_tmp}/expected-undefined.txt" \
   "${evidence_dir}.tmp.$$/expected-undefined.txt"
+# Preserve the exact zero-control compiler IR after successful admission.
+if [[ "${package_policy}" == e3-private-aggregate &&
+      "${e3_tuple_kind:-}" == zero ]]; then
+  cp "${e1b_tmp}/private.ll" "${evidence_dir}.tmp.$$/private.ll"
+fi
 if [[ -n "${package_source_closure}" ]]; then
   cp "${e1b_tmp}/source-closure.txt" \
     "${evidence_dir}.tmp.$$/source-closure.txt"

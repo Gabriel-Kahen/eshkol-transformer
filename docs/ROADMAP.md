@@ -776,6 +776,12 @@ not retire a sealed M3 owner or rewrite the native graph. This candidate
 does not discharge
 the broader §9 numerical, fault, rollback, or typed RNG rows.
 
+The noninstalled E3 zero-control package now retains its exact `private.ll`
+in successful package evidence too. The fresh own-tuple normal/sanitizer
+diagnostic must inspect emitted closure/imports from the reviewed projection
+and idle-census controls, not reuse the old 3a inventory. This evidence
+retention change adds no API or runtime-acceptance claim.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
