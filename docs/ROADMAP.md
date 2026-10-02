@@ -2417,3 +2417,11 @@ remain unproven.
 - Review and integrate in dependency order; rerun affected downstream gates.
 - Treat Eshkol-core defects as explicit upstream issues or isolated native-extension
   work, never as silent library fallbacks.
+
+The separate E3 repeated-complete-call retention source successor now replaces
+the invalid M3T slot-4 mode-vector walk with the accepted P1 lexical token seam.
+The exact private retention tuple selects the pinned P1 test variant; snapshots
+use the authentic E3 frame token and immediate mixed17 mask 43690 before/after
+success, fault/retry and horizon. Source review, deterministic generated-source
+staging composition and compiled 1,024/8,192 normal/poison/sanitizer evidence
+remain pending. The accepted single-invocation horizon is a separate proof.

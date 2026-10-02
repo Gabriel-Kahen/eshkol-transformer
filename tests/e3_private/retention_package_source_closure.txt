@@ -12,7 +12,7 @@ native/e1b_error_consumer_private.esk
 lib/transformer/error_internal.esk
 lib/transformer/error_core.esk
 native/x1_config_private.esk
-internal/p1/lib/transformer/module.esk
+@BUILD@/source/transformer/module.esk
 internal/c1/lib/transformer/persistence_policy_internal.esk
 internal/c1/lib/transformer/checkpoint_internal.esk
 internal/c1/lib/c1_sha256.esk

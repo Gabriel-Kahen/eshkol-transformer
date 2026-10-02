@@ -1228,7 +1228,16 @@ e1b_timeout_seconds="${E1B_COMPILER_TIMEOUT_SECONDS:-120}"
 [[ "${e1b_timeout_seconds}" =~ ^[1-9][0-9]*$ ]] || \
   die "E1B_COMPILER_TIMEOUT_SECONDS must be a positive integer"
 
+e3_retention_generated_dir=
+if [[ "${package_policy}" == e3-private-aggregate &&
+      "${e3_tuple_kind}" == retention ]]; then
+  source "${PROJECT_ROOT}/scripts/e3-mode-graph-stage-cleanup.sh"
+  e3_retention_generated_dir="$(e3_retention_generated_stage "${output_object}")" ||
+    die "E3 retention generated source requires a fresh private gate stage"
+fi
+
 e1b_tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-e1b.XXXXXX")"
+e3_retention_generated_owned=0
 e1b_cleanup() {
   local status=$?
   if [[ "${status}" != 0 && \
@@ -1241,14 +1250,39 @@ e1b_cleanup() {
   else
     rm -rf -- "${e1b_tmp}"
   fi
+  if [[ "${status}" == 0 && "${e3_retention_generated_owned}" == 1 ]]; then
+    rm -rf -- "${e3_retention_generated_dir}"
+  fi
+  return "${status}"
 }
 trap e1b_cleanup EXIT
+if [[ -n "${e3_retention_generated_dir}" ]]; then
+  trap 'exit 143' TERM
+  trap 'exit 130' INT
+fi
 mkdir -p "${e1b_tmp}/cache" "$(dirname -- "${output_object}")"
 if [[ "${package_policy}" == e3-private-aggregate ]]; then
   require_command python3
+  if [[ -n "${e3_retention_generated_dir}" ]]; then
+    mkdir -m 0700 -- "${e3_retention_generated_dir}" ||
+      die "E3 retention generated source path was claimed concurrently"
+    e3_retention_generated_owned=1
+  else
+    e3_retention_generated_dir="${e1b_tmp}/generated"
+  fi
   python3 "${PROJECT_ROOT}/scripts/generate-e3-d2-source.py" \
-    --output-dir "${e1b_tmp}/generated" >"${e1b_tmp}/d2-generation.json"
-  e3_generated_source_root="${e1b_tmp}/generated/source"
+    --output-dir "${e3_retention_generated_dir}" >"${e1b_tmp}/d2-generation.json"
+  e3_generated_source_root="${e3_retention_generated_dir}/source"
+  if [[ "${e3_tuple_kind}" == retention ]]; then
+    python3 "${PROJECT_ROOT}/scripts/generate-e3-p1-mode-test-variant.py" \
+      --output "${e3_generated_source_root}/transformer/module.esk" \
+      >"${e1b_tmp}/retention-p1-generation.txt"
+    python3 "${PROJECT_ROOT}/scripts/generate-e3-p1-mode-test-variant.py" \
+      --output "${e3_generated_source_root}/transformer/module.esk" --check \
+      >"${e1b_tmp}/retention-p1-check.txt"
+    cmp "${e1b_tmp}/retention-p1-generation.txt" \
+        "${e1b_tmp}/retention-p1-check.txt"
+  fi
   if [[ "${e3_tuple_kind}" == mode-graph ]]; then
     python3 "${PROJECT_ROOT}/scripts/generate-e3-mode-graph-source.py" \
       --output-dir "${e3_generated_source_root}" \
@@ -1351,7 +1385,8 @@ for include_dir in "${canonical_include_dirs[@]}"; do
 done
 if [[ "${package_policy}" == e3-private-aggregate ]]; then
   include_args+=(-I "${e3_generated_source_root}")
-  if [[ "${e3_tuple_kind}" == mode-graph ]]; then
+  if [[ "${e3_tuple_kind}" == mode-graph ||
+        "${e3_tuple_kind}" == retention ]]; then
     include_args=(-I "${e3_generated_source_root}" "${include_args[@]}")
   fi
 fi

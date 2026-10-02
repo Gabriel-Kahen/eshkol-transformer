@@ -2,10 +2,10 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 verify_toolchain
-for command in ar cmp diff env grep nm python3 timeout wc; do require_command "${command}"; done
+for command in ar cmp diff env grep nm python3 realpath strings timeout wc; do require_command "${command}"; done
 [[ -x /usr/bin/time ]] || die "GNU time is required for E3 retention measurements"
 [[ $# -le 1 ]] || die "usage: $0 [FRESH_OUTPUT_DIRECTORY]"
-out="${1:-$(project_build_dir)/e3-complete-call-retention}"
+out="$(realpath -m -- "${1:-$(project_build_dir)/e3-complete-call-retention}")"
 [[ ! -e "${out}" ]] || die "E3 retention output directory must be fresh: ${out}"
 mkdir -p "${out}"
 
@@ -78,6 +78,15 @@ for cache in a b; do
       "${artifact}/e3_retention_package.o.evidence/readelf-symbols.txt" \
       >/dev/null || die "retention observer is not private: ${observer}"
   done
+done
+generated_source="${out}/.e3-retention-generated/source/e3_d2_dataset.esk"
+for cache in a b; do
+  object="${out}/private-${cache}/e3_retention_package.o"
+  strings -a "${object}" | grep -Fx "${generated_source}" >/dev/null ||
+    die "retention ${cache} object omitted its stable runtime source filename"
+  if strings -a "${object}" | grep -F '/eshkol-transformer-e1b.' >/dev/null; then
+    die "retention ${cache} object retained a random generated source path"
+  fi
 done
 cmp "${out}/private-a/e3_retention_package.o" \
     "${out}/private-b/e3_retention_package.o"

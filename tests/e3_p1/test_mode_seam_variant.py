@@ -43,7 +43,6 @@ class ModeSeamVariantTest(unittest.TestCase):
             "native/e3_private_package_source_closure.txt",
             "native/e3_diagnostic_private_package_source_closure.txt",
             "native/e3_diagnostic_public_package_source_closure.txt",
-            "tests/e3_private/retention_package_source_closure.txt",
             "tests/e3_private/numerical_package_source_closure.txt",
         ):
             rows = (ROOT / manifest).read_text().splitlines()
@@ -51,6 +50,15 @@ class ModeSeamVariantTest(unittest.TestCase):
                              1, manifest)
             self.assertFalse(any("mode-test-variant" in row for row in rows),
                              manifest)
+
+    def test_retention_successor_explicitly_selects_the_pinned_variant(self) -> None:
+        rows = (ROOT / "tests/e3_private/retention_package_source_closure.txt").read_text().splitlines()
+        self.assertEqual(rows.count("@BUILD@/source/transformer/module.esk"), 1)
+        self.assertNotIn("internal/p1/lib/transformer/module.esk", rows)
+        builder = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
+        self.assertIn('if [[ "${e3_tuple_kind}" == retention ]]; then', builder)
+        self.assertIn('scripts/generate-e3-p1-mode-test-variant.py', builder)
+        self.assertIn('--output "${e3_generated_source_root}/transformer/module.esk" --check', builder)
 
     def test_exact_regeneration_and_near_matches(self) -> None:
         canonical = variant.CANONICAL.read_text()

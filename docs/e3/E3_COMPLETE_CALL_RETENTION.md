@@ -66,11 +66,26 @@ keeps every other unresolved private authority forbidden, and makes the runner
 verify its compiled C++ definition and final normal/sanitized AOT resolution.
 A fresh supported run remains required; no retention runtime result exists.
 
-The fixture's current mixed17 helpers also incorrectly treat M3T model-entry
-slot 4 as a P1 node vector. It is `#f`; slot 0 is an opaque P1 shell. Mixed17
-setup and restoration cannot be claimed until a separately reviewed P1-owned
-test seam replaces those helpers. The policy repair does not change this
-runtime prerequisite.
+The previous fixture incorrectly treated M3T model-entry slot 4 as a P1
+node vector. It is `#f`; slot 0 is an opaque P1 shell. This source successor
+uses the authentic live E3 frame's bound token in slot 6 and the accepted
+P1-owned `p1-e3-test-fixed-mixed!`/`p1-e3-test-mode-mask` closures. The latter
+returns an immediate 17-bit mask; no node, shell, mutable vector or raw ledger
+is exposed. Setup requires the fixed alternating mask 43690, and each complete
+success, failure/retry and final restoration compares that same authenticated
+mask. The exact noninstalled retention tuple opts into the unchanged,
+canonical-digest-pinned P1 test variant, with generated-root precedence and
+its own exact source-closure row. Canonical, diagnostic, numerical and
+installed source resolution stays unchanged.
+
+This is a source candidate, not compiled retention acceptance. Independent
+source/tests review, supported compiler-selected inventories, normal/poisoned
+ASan+UBSan+LSan complete-call horizons and sealed evidence remain required.
+The exact retention tuple now uses a gate-owned, atomically claimed stable
+generated-source path for both independent fresh packages. Failure, TERM and
+INT preserve their actual stages and original exit statuses. Each object must
+retain that stable runtime source filename; no bytewise object/archive check
+is waived. Supported compiler and runtime verification remains pending.
 
 `tests/e3_private/retention_driver_root.esk` loads the unchanged canonical
 private driver, then adds one boxed retention entry. The exact retention tuple
@@ -81,8 +96,9 @@ canonical private package and rejects any retention symbol in its object.
 
 For each 1,024/8,192 horizon and absent/present gradient state, the fixture
 creates one genuine fixed M3 model, T1 tokenizer, packed D2 dataset, E3 frame
-and four I2 destinations. A separately reviewed retention successor must use
-the P1-owned test seam to set and record mixed modes on all 17 nodes, seed one
+and four I2 destinations. This candidate uses the P1-owned test seam to set
+and record mixed modes on all 17 nodes, and must prove those snapshots in the
+compiled gate. It seeds one
 nonzero present gradient when selected, and snapshot every word of
 all 14 parameter values and gradients, gradient metadata, the four initializer
 successor words, destination bits, counters and D2 cursor. One complete call

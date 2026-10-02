@@ -30,32 +30,21 @@
           (begin (vector-set! result index (e3-test-retention-probe index))
                  (fill (+ index 1)))))))
 
-(define (e3-test-retention-modes model)
-  (let* ((modules (vector-ref (m3t-entry model 'model 'e3-test-run #t) 4))
-         (result (make-vector 17 #f)))
-    (let fill ((index 0))
-      (if (= index 17) result
-          (begin (vector-set! result index
-                              (module-mode-internal (vector-ref modules index)))
-                 (fill (+ index 1)))))))
+(define (e3-test-retention-mode-token frame)
+  (vector-ref (e3-frame-entry-live frame 'e3-test-retention-modes) 6))
 
-(define (e3-test-retention-modes=? model expected)
-  (let ((modules (vector-ref (m3t-entry model 'model 'e3-test-run #t) 4)))
-    (let check ((index 0))
-      (if (= index 17) #t
-          (and (eq? (module-mode-internal (vector-ref modules index))
-                    (vector-ref expected index))
-               (check (+ index 1)))))))
+(define (e3-test-retention-modes frame)
+  (let ((mask (p1-e3-test-mode-mask
+                (e3-test-retention-mode-token frame))))
+    (e3-test-retention-check 'authentic-mixed17-mask (= mask 43690))
+    mask))
 
-(define (e3-test-retention-set-mixed! model)
-  (let ((modules (vector-ref (m3t-entry model 'model 'e3-test-run #t) 4)))
-    (let set ((index 0))
-      (if (= index 17) #t
-          (begin
-            (if (= (modulo index 2) 0)
-                (module-train! (vector-ref modules index))
-                (module-eval! (vector-ref modules index)))
-            (set (+ index 1)))))))
+(define (e3-test-retention-modes=? frame expected)
+  (= (p1-e3-test-mode-mask (e3-test-retention-mode-token frame)) expected))
+
+(define (e3-test-retention-set-mixed! frame)
+  (e3-test-retention-check 'fixed-mixed17
+    (= (p1-e3-test-fixed-mixed! (e3-test-retention-mode-token frame)) 0)))
 
 (define (e3-test-retention-model-snapshot model)
   (let* ((owner (vector-ref (m3t-entry model 'model 'e3-test-run #t) 3))
@@ -129,7 +118,7 @@
       (e3-test-retention-check 'metrics
         (e3-test-retention-output=? frame destinations))
       (e3-test-retention-check 'mixed17
-        (e3-test-retention-modes=? model modes))
+        (e3-test-retention-modes=? frame modes))
       (- (e3-test-region-used) region-before))))
 
 (define (e3-test-retention-fail-retry! model dataset frame destinations
@@ -159,7 +148,7 @@
       (e3-test-retention-check 'failure-output
         (e3-test-retention-output=? frame destinations))
       (e3-test-retention-check 'failure-modes
-        (e3-test-retention-modes=? model modes))
+        (e3-test-retention-modes=? frame modes))
       (e3-test-retention-check 'failure-model-image
         (e3-test-retention-model=? model model-image))
       (e3-test-retention-check 'failure-rng
@@ -220,13 +209,13 @@
          (frame (vector-ref fixture 3))
          (dataset (d2-token-dataset-open
                     (e3-test-dataset-config corpus-path #t) tokenizer)))
-    (e3-test-retention-set-mixed! model)
+    (e3-test-retention-set-mixed! frame)
     (if present?
         (e3-test-retention-check 'seed-present-gradient
           (= (e3-test-seed-gradient
                (vector-ref (m3t-entry model 'model 'e3-test-run #t) 3)) 0)))
     (let* ((cursor (d2-token-dataset-cursor dataset))
-           (modes (e3-test-retention-modes model)))
+           (modes (e3-test-retention-modes frame)))
       ;; Warm up lazy setup, then measure a separate steady-state complete call.
       (e3-test-retention-call! model dataset frame destinations cursor modes)
       (let* ((calibrated-region-bytes
@@ -294,7 +283,7 @@
       (e3-test-retention-check 'final-model-image
         (e3-test-retention-model=? model model-image))
       (e3-test-retention-check 'final-modes
-        (e3-test-retention-modes=? model modes))
+        (e3-test-retention-modes=? frame modes))
       (e3-test-retention-check 'final-rng
         (with-region ('e3-retention-rng 4096)
           (equal? rng (m3t-public-initializer-words

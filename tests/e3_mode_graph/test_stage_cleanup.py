@@ -18,6 +18,9 @@ class StageCleanupTest(unittest.TestCase):
                       BUILDER.read_text())
         self.assertIn('e3_mode_graph_install_stage_cleanup "${staging}"',
                       BUILDER.read_text())
+        retention_builder = (ROOT / "scripts/build-e3-retention-test.sh").read_text()
+        self.assertIn('source "${PROJECT_ROOT}/scripts/e3-mode-graph-stage-cleanup.sh"', retention_builder)
+        self.assertIn('e3_mode_graph_install_stage_cleanup "${staging}" retention', retention_builder)
         for label, signum, status in (("failure", None, 7),
                                       ("TERM", signal.SIGTERM, 143),
                                       ("INT", signal.SIGINT, 130)):
@@ -25,7 +28,7 @@ class StageCleanupTest(unittest.TestCase):
                 stage = Path(temp) / "stage"
                 stage.mkdir()
                 (stage / "actual-manifest.txt").write_text("emitted inventory\n")
-                script = ('source "$1"; e3_mode_graph_install_stage_cleanup "$2"; '
+                script = ('source "$1"; e3_mode_graph_install_stage_cleanup "$2" retention; '
                           'printf "READY\\n"; '
                           + ('while :; do sleep 0.05; done' if signum else 'exit 7'))
                 process = subprocess.Popen(
@@ -40,7 +43,7 @@ class StageCleanupTest(unittest.TestCase):
                 self.assertEqual((stage / "exit.status").read_text(), f"{status}\n")
                 self.assertEqual((stage / "actual-manifest.txt").read_text(),
                                  "emitted inventory\n")
-                self.assertIn("failed staging retained", stderr)
+                self.assertIn("E3 retention failed staging retained", stderr)
 
     def test_success_cleans_stage(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

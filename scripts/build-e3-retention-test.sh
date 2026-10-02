@@ -9,7 +9,8 @@ mode="${2:-normal}"
 case "${mode}" in normal|sanitize) ;; *) die "unknown E3 retention build mode: ${mode}" ;; esac
 mkdir -p "$(dirname -- "${artifact}")"
 staging="$(mktemp -d "$(dirname -- "${artifact}")/.e3-retention.XXXXXX")"
-trap 'rm -rf -- "${staging}"' EXIT
+source "${PROJECT_ROOT}/scripts/e3-mode-graph-stage-cleanup.sh"
+e3_mode_graph_install_stage_cleanup "${staging}" retention
 prefix="${PROJECT_ROOT}/tests/e3_private/retention_package"
 sanitize=0
 [[ "${mode}" != sanitize ]] || sanitize=1
