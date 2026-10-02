@@ -2427,6 +2427,21 @@ publication, public G2 and continuation remain pending.
   after native commit. Native terminal integration and logical I1 clone code
   are prerequisites; Eshkol implementation and compiled same-call proof remain
   pending. No public G2 or continuation acceptance is claimed.
+  A bounded same-aggregate private composer source candidate now stages the
+  genuine EOS-first or second-frame T1 path, original pending output and
+  surviving allocation anchors, an assignment-only post-native terminal
+  tail, a detached 72-byte snapshot and logical I1 clone wrapper. Its
+  independent source review and compiled normal/repeat/sanitizer, fault and
+  predecessor evidence are pending; this source stage is not terminal
+  acceptance. Focused Step 4a/Step 5 predecessor projections at local
+  `a39d97e1`, `88582ef5`, and corrective `17f8a501` retain feature-off
+  branches while excluding the exact later terminal guards; negative-guard,
+  `#else`, nested and unguarded deferred-surface regressions pass. The full
+  private prefix static predecessor chain passes, but compiled composer and
+  independent source review remain pending. The exact-source test overlays
+  needed for in-region T1 decode cuts and a real post-zero fail-stop witness
+  are separately proposed and unimplemented; static tail checks and native
+  predecessor evidence do not substitute for those compiled witnesses.
 
 ## Wave 4 — practical pretraining and performance
 
