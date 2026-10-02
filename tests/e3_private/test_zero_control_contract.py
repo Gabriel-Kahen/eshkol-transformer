@@ -121,6 +121,32 @@ class ZeroControlContract(unittest.TestCase):
                            committed)
         self.assertNotIn('model-release', driver)
 
+    def test_prebind_source_cleanup_precedes_seed_and_destination_allocation(self) -> None:
+        driver = (ROOT / "tests/e3_private/zero_control_negative_driver.esk").read_text()
+
+        def covered(source: str) -> bool:
+            stage = source.index('(e3-zero-stage! tree handles sources)')
+            guard = source.index('(guard (caught', stage)
+            seed = source.index('(if gradient-present?', stage)
+            destination = source.index('(e3-test-destinations-create)', stage)
+            cleanup = source.index('(e3-zero-release-sources! sources)', guard)
+            depth = 0
+            end = guard
+            for end in range(guard, len(source)):
+                if source[end] == '(':
+                    depth += 1
+                elif source[end] == ')':
+                    depth -= 1
+                    if depth == 0:
+                        break
+            return stage < guard < cleanup < seed < destination < end
+
+        self.assertTrue(covered(driver))
+        damaged = driver.replace(
+            '(e3-zero-release-sources! sources)', '(begin #t)', 1
+        )
+        self.assertFalse(covered(damaged))
+
 
 if __name__ == "__main__":
     unittest.main()

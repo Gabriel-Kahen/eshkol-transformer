@@ -210,6 +210,13 @@
            (owned-before (i2-native-owned-clone-live-count)))
       (e3-zero-invariant (>= owned-before 0))
       (e3-zero-stage! tree handles sources)
+      ;; Installation of the decoded roots precedes the first fallible seed,
+      ;; observation or destination allocation. Preserve the original error.
+      (guard (caught
+               (#t
+                 (guard (cleanup-error (#t #f))
+                   (e3-zero-release-sources! sources))
+                 (raise caught)))
       (if gradient-present?
           (i2-parameter-accumulate-uniform-internal!
             (parameter-handle-tensor-internal (vector-ref handles 0))
@@ -316,4 +323,4 @@
             (d2-token-dataset-close! dataset)
             (set! dataset #f)
             (e3-test-destinations-destroy! destinations)
-            (vector 'e3-zero-negative-result-v1 name)))))))
+            (vector 'e3-zero-negative-result-v1 name))))))))
