@@ -970,6 +970,18 @@ zero and pre/post pins matched. The 134-file evidence seal is
 Independent sealed-evidence review accepted this result; hosted integration
 remains pending. Second-token, terminal/EOS, public and CLI work remain separate.
 
+The [private retained-logit second-frame carrier](g3/G3_C4_P2_G2_SECOND_FRAME_CARRIER_CONTRACT.md)
+now has a source/test candidate under its independently reviewed contract.
+It authenticates the committed non-EOS P2/G2 prefix and sole unused pending
+output, draws directly from retained next logits, stages the genuine
+position-three forward and writes only the selected ID carrier. The original
+raw last-logit entry still rejects post-prefix calls. Native development
+normal/repeat/sanitizer, T4 logits/K/V parity, independent second-draw oracle,
+carry/final/singleton/exhaustion, lease/alias/forward cuts and feature-off
+boundary checks are being finalized; exact source/tests review and pinned
+supported fe9/f31 evidence remain pending. It publishes no terminal result,
+Eshkol T1 decode, public admission or persistence.
+
 The [private EOS-capable first-frame carrier candidate](g3/G3_C4_P2_G2_EOS_FIRST_FRAME_LEAF.md)
 adds a guarded genuine first sample/forward route for selected EOS, using
 the accepted header/extent/alias and pending-owner carrier contract. It keeps

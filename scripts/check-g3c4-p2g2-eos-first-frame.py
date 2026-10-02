@@ -18,6 +18,12 @@ macro = "ET_G3C4_P2_G2_EOS_FIRST_FRAME_PRIVATE"
 owner = (root / "src/eshkol_transformer/g3c4_model_owner.c").read_text()
 header = (root / "src/eshkol_transformer/g3c4_context_internal.h").read_text()
 
+# A separately guarded successor reconstructs these exact reviewed bytes first.
+if "ET_G3C4_P2_G2_SECOND_FRAME_PRIVATE" in owner:
+    import runpy
+    strip = runpy.run_path(str(root / "scripts/check-g3c4-p2g2-second-frame.py"))["strip_second_frame"]
+    owner, header = strip(owner), strip(header)
+
 
 def replace_once(pattern, replacement, text):
     result, count = re.subn(pattern, replacement, text, flags=re.DOTALL)

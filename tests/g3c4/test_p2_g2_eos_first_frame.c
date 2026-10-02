@@ -6,7 +6,10 @@
 static bridge_carrier *tampered_carrier;
 static et_g3c4_context_internal *tampered_context;
 
-int32_t __wrap_et_kernel_runtime_dispatch(
+#ifndef ET_G3C4_P2_G2_EOS_TEST_DISPATCH
+#define ET_G3C4_P2_G2_EOS_TEST_DISPATCH __wrap_et_kernel_runtime_dispatch
+#endif
+int32_t ET_G3C4_P2_G2_EOS_TEST_DISPATCH(
     const et_kernel_runtime *runtime, const et_kernel_call_v1 *call,
     et_kernel_error *error) {
   int32_t status = carrier_dispatch(runtime, call, error);
@@ -224,7 +227,10 @@ static void eos_rejections(et_g3c4_model_owner_internal *owner) {
   close_pair(context, input, output);
 }
 
-int main(void) {
+#ifndef ET_G3C4_P2_G2_EOS_TEST_MAIN
+#define ET_G3C4_P2_G2_EOS_TEST_MAIN main
+#endif
+int ET_G3C4_P2_G2_EOS_TEST_MAIN(void) {
   et_g3c4_model_owner_internal *owner = create_owner();
   parity_case(owner, (const int64_t[2]){0, 255}, 0);
   parity_case(owner, (const int64_t[2]){7, 11}, 1);

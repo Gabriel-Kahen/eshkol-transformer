@@ -1,6 +1,7 @@
 # Private P2/G2 second-frame carrier contract
 
-Proposed native ownership leaf; no implementation or runtime acceptance yet.
+Source/test implementation in progress under this independently reviewed native
+ownership contract; supported runtime acceptance remains pending.
 This follows the authentic non-EOS prefix commit and protected T1 prefix
 coordinator, and complements the separately gated EOS first-frame carrier.
 It admits only the existing diagnostic CPU-f32/V256 P2/G2 request with
@@ -91,7 +92,20 @@ non-EOS, singleton/carry/final available/exhausted second draw, original raw
 begin rejection, forged/stale/wrong pending owner, first-EOS/noncommitted/wrong
 position, malformed/aliased carriers, provider cuts and header tampering,
 unchanged parameters/binding, unready output, held-view abort/release/retry.
+Pending I1 backing bytes must remain zero throughout success and recoverable
+faults, and abort must tombstone the released output without exposing freed
+backing storage. Retrying after call abort begins a fresh request; releasing a
+held lease permits the original in-region abort to be retried.
 Normal/repeat and ASan+UBSan+LSan must pass pinned fe9/f31 gates with exact
 feature-off source/symbol boundaries and all relevant predecessors. Native
 ownership alone does not prove Eshkol T1 provenance, terminal G1/G2 output,
 public admission, persistence, larger profiles or complete Wave 3 generation.
+
+The current candidate has only development evidence from unsupported host
+Clang 22: strict normal/repeat and ASan+UBSan+LSan outputs match, a real
+four-token full-prefix reference matches staged logits/K/V, the independent
+G3-S/Philox reference checks both prompts and carry/final/singleton cases,
+and immutable-predecessor reconstruction plus feature-off preprocessing,
+sole private-symbol delta and isolated-macro rejection pass. Source/tests
+review and a fresh pinned fe9/f31 Clang 21 gate remain required before
+acceptance. No supported runtime or terminal-output claim is made here.
