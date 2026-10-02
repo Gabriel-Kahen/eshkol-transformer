@@ -778,6 +778,14 @@ mutants are compiled test variants. Independent source-and-test review approved
 composition review and supported exact-tree execution; the other E3 §9
 numerical, failure and resource obligations remain open.
 
+The [E3 in-call mode and graph observation contract](e3/E3_MODE_GRAPH_OBSERVATION_CONTRACT.md)
+is a design-only next leaf for §9. The unmerged retention candidate's postcall
+mixed17 restoration and zero live graph-owner probes do not establish all-eval
+modes during traversal or exclude transient graph creation. A nonreentrant
+test-only in-call source seam and a genuinely reachable M3 graph-create/release
+mutation under active E3 model authority remain unaccepted prerequisites. No
+implementation, compiled proof, or edge-corpus acceptance is claimed here.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
@@ -1451,6 +1459,17 @@ passes M3CG 9/9 plus its exact SHA manifest. Root independently reviewed
 its source and sealed evidence without a blocking finding. Hosted integration
 remains pending; no public manual facade, continuation or N>1 behavior is
 claimed.
+
+The proposed [G3-R data-only continuation contract](g3/G3_R_DATA_ONLY_CONTINUATION_CONTRACT.md)
+is documentation only. Its bounded diagnostic-C2 witness binds a canonical
+versioned/checksummed G3 policy, four-word Philox state and full raw-token
+history to an immutable C2 checkpoint, then requires fresh-process live-model
+restore and no-draw manual cache replay. C2/K2 already admit the listed C4
+rank-two storage shapes, and a test-only CLI3/G3-G aggregate reaches a live
+M3T restore; neither supplies a typed G3 RNG file import or a G3-R replay/
+publication transaction. Full G3-R still requires a separately admitted larger
+repeated-decode and later-EOS continuation profile. No persistence implementation
+or save/reload equivalence is claimed.
 
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
