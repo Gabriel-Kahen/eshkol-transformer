@@ -2,7 +2,7 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 verify_toolchain
-for command in ar cmp diff env grep python3 realpath strings timeout; do require_command "${command}"; done
+for command in ar awk cat cmp diff env grep python3 realpath sort strings timeout; do require_command "${command}"; done
 [[ $# -le 1 ]] || die "usage: $0 [FRESH_OUTPUT_DIRECTORY]"
 out="$(realpath -m -- "${1:-$(project_build_dir)/e3-mode-graph}")"
 [[ ! -e "${out}" ]] || die "E3 mode/graph output directory must be fresh"
@@ -40,6 +40,16 @@ for variant in a b missed-child enter-write-only graph-create sanitized; do
   done
   if [[ "${variant}" != sanitized ]]; then
     cmp "${prefix}_undefined_symbols.txt" "${artifact}/undefined.txt"
+  else
+    cmp "${prefix}_sanitized_noninstrumentation_undefined_symbols.txt" \
+      "${artifact}/noninstrumentation-undefined.txt"
+    cmp "${prefix}_sanitized_instrumentation_undefined_symbols.txt" \
+      "${artifact}/sanitizer-undefined.txt"
+    [[ "$(awk 'END {print NR}' "${artifact}/undefined.txt")" == 252 ]] || \
+      die "mode/graph sanitized total import count differs from sealed tuple"
+    cat "${artifact}/noninstrumentation-undefined.txt" \
+        "${artifact}/sanitizer-undefined.txt" | LC_ALL=C sort -u | \
+      cmp "${artifact}/undefined.txt" -
   fi
   grep -F 'et_e3_test_graph_event_v1' "${artifact}/strings.txt" >/dev/null || \
     die "mode/graph owner observer absent from ${variant}"

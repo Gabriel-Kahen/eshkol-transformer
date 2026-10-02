@@ -161,9 +161,54 @@ printf '%s\\n' "$e3_tuple_kind"
         self.assertIn('kill-missed-child-${gradient}', runner)
         self.assertIn('kill-graph-create-${gradient}', runner)
         self.assertIn('status}" == 134', runner)
+        self.assertIn("e3_mode_graph_verify_sanitizer_imports", builder)
+        self.assertIn('"${variant}" != sanitized', runner)
+        self.assertIn('"${artifact}/sanitizer-undefined.txt"', runner)
         self.assertIn(':real et_e3_test_retention_probe_v1', driver)
         self.assertIn("(>= index 17) (<= index 26)", driver)
         self.assertIn("(e3-mg-owner-controls-restored? probes)", driver)
+
+    def test_sanitized_import_policy_rejects_inventory_drift(self) -> None:
+        normal = lines(MODE, "undefined_symbols")
+        non = lines(MODE, "sanitized_noninstrumentation_undefined_symbols")
+        instrumentation = lines(MODE, "sanitized_instrumentation_undefined_symbols")
+        self.assertEqual((len(normal), len(non), len(instrumentation)),
+                         (176, 201, 51))
+        self.assertEqual((len(set(non) - set(normal)),
+                          len(set(normal) - set(non))), (30, 5))
+        self.assertEqual(non, sorted(set(non)))
+        self.assertEqual(instrumentation, sorted(set(instrumentation)))
+        self.assertFalse(set(non) & set(instrumentation))
+        self.assertIn("bcmp", non)
+        self.assertIn("eshkol_ad_mixed_record", non)
+        self.assertIn("__asan_init", instrumentation)
+        helper = ROOT / "scripts/e3-mode-graph-sanitizer-import-policy.sh"
+
+        def admitted(actual_normal: list[str], actual_non: list[str],
+                     actual_instrumentation: list[str]) -> bool:
+            with tempfile.TemporaryDirectory() as temporary:
+                paths = [Path(temporary) / name for name in
+                         ("normal", "noninstrumentation", "instrumentation")]
+                for path, content in zip(paths, (actual_normal, actual_non,
+                                                 actual_instrumentation)):
+                    path.write_text("\n".join(content) + "\n")
+                script = ('die() { exit 42; }; PROJECT_ROOT=$1; source "$2"; '
+                          'e3_mode_graph_verify_sanitizer_imports "$3" "$4" "$5"')
+                result = subprocess.run(
+                    ["bash", "-c", script, "policy-check", str(ROOT), str(helper),
+                     *(str(path) for path in paths)],
+                    capture_output=True, text=True, check=False,
+                )
+                return result.returncode == 0
+
+        self.assertTrue(admitted(normal, non, instrumentation))
+        self.assertFalse(admitted(normal, non[1:], instrumentation))
+        self.assertFalse(admitted(normal, sorted(set(non) | {"unexpected_import"}),
+                                  instrumentation))
+        self.assertFalse(admitted(normal, non, instrumentation[1:]))
+        self.assertFalse(admitted(normal, non,
+                                  sorted(set(instrumentation) | {"__asan_unexpected"})))
+        self.assertFalse(admitted(normal[1:], non, instrumentation))
 
     def test_parser_rejects_missing_or_mismatched_in_call_data(self) -> None:
         def transcript(mask: int, graph: int) -> str:

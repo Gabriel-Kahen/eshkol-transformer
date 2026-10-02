@@ -821,6 +821,21 @@ candidate uses a fresh gate-owned path shared across sequential builds and
 keeps the original object/archive equality check. Source review and a fresh
 supported gate remain required.
 
+The af348 mode/graph sanitizer diagnostic is a retained failed admission,
+not a runtime pass: on pinned fe9/f31 it emitted 252 undefined symbols (51
+instrumentation, 201 other) versus 176 normal imports. The other-import
+delta is exactly 30 added and five absent. The generated private IR contains
+two `gradient_ho` helper bodies that retain 28 AD/math/format references at
+sanitized `-O1`; generated literal lowering adds `puts`, and two native
+M3/E3 objects emit `bcmp`. A separate test-only
+manifest candidate pins both complete sanitized sets while preserving the
+normal manifest. The Eshkol additions have definitions in the pinned runtime
+archives; libc/libm imports and the full supported link/run still require the
+fresh mode/graph gate. No compiled mode/graph behavior is accepted from the
+diagnostic alone. The 104-file diagnostic seal is
+`e3-mode-graph-sanitized-diagnostic-af3489d-fe9-f31-20261002-prepared-c/SHA256SUMS-DIAGNOSTIC`
+(`1d1195d630657e172b5bfc47a098d729070a3565f237a3bd5d5b5f4a82e17124`).
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
