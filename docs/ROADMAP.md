@@ -792,13 +792,15 @@ The [E3 in-call mode and graph observation contract](e3/E3_MODE_GRAPH_OBSERVATIO
 is a design-only next leaf for §9. Its corrected P1-owned test variant keys a
 fixed mixed17 setter and immediate actual 17-bit mode reader by the authentic
 bound E3 token; the raw nodes remain lexical and canonical trusted/public
-surfaces unchanged. Exact source composition and compiled evidence are still
-pending. The unmerged retention candidate's postcall helpers currently cannot
+surfaces unchanged. The exact P1 test-variant generator and a P1-only token-
+phase fixture/runner are source-staged, with canonical P1 and ordinary tuple
+inventories unchanged; supported compilation and execution remain pending.
+The unmerged retention candidate's postcall helpers currently cannot
 run, and a zero live graph-owner probe does not exclude transient creation.
 A nonreentrant in-call source seam and a genuinely reachable M3 graph-create/
 release mutation under active E3 model authority remain unaccepted
-prerequisites. No implementation, compiled proof, or edge-corpus acceptance is
-claimed here.
+prerequisites. The P1-only source candidate does not establish in-call E3
+behavior, graph absence, or edge-corpus acceptance.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
