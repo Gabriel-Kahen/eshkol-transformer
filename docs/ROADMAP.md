@@ -821,18 +821,20 @@ candidate uses a fresh gate-owned path shared across sequential builds and
 keeps the original object/archive equality check. Source review and a fresh
 supported gate remain required.
 
-The af348 mode/graph sanitizer diagnostic is a retained failed admission,
-not a runtime pass: on pinned fe9/f31 it emitted 252 undefined symbols (51
-instrumentation, 201 other) versus 176 normal imports. The other-import
-delta is exactly 30 added and five absent. The generated private IR contains
-two `gradient_ho` helper bodies that retain 28 AD/math/format references at
-sanitized `-O1`; generated literal lowering adds `puts`, and two native
-M3/E3 objects emit `bcmp`. A separate test-only
-manifest candidate pins both complete sanitized sets while preserving the
-normal manifest. The Eshkol additions have definitions in the pinned runtime
-archives; libc/libm imports and the full supported link/run still require the
-fresh mode/graph gate. No compiled mode/graph behavior is accepted from the
-diagnostic alone. The 104-file diagnostic seal is
+The af348 mode/graph sanitizer diagnostic and the subsequent 0c full gate
+are retained failed admissions, not runtime passes. The 0c normal object
+emitted 202 imports against the 176-entry manifest before runtime. Independent
+IR review traced all 27 added references to two named-let loops called
+`gradient` in the fixture driver: the compiler selected higher-order AD
+`gradient_ho_0/1` instead of the intended recursion. The driver now uses
+`grad-kind` for both loops. The old emitted AD/math inventory must not be used
+to enlarge admission around that semantic defect. Fresh normal and sanitizer
+compiler emission, exact import policies, runtime observations and compiled
+mutant controls remain required for the corrected driver. No mode/graph
+acceptance is claimed. The 159-file failed full gate is sealed at
+`e3-mode-graph-0c86bc3-fe9-f31-20261002-prepared-d/SHA256SUMS-FAILED`
+(`8c4d1f0f6b1a3a47c7c336c355298b9852d98849880ac3bb9e2cf09f4fb47ff3`).
+The earlier 104-file sanitizer diagnostic remains preserved at
 `e3-mode-graph-sanitized-diagnostic-af3489d-fe9-f31-20261002-prepared-c/SHA256SUMS-DIAGNOSTIC`
 (`1d1195d630657e172b5bfc47a098d729070a3565f237a3bd5d5b5f4a82e17124`).
 

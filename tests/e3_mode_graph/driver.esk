@@ -23,7 +23,7 @@
     (let parameter ((index 0))
       (if (= index 14) image
           (let ((fields (make-vector 5 #f)))
-            (let gradient ((kind 0))
+            (let grad-kind ((kind 0))
               (if (= kind 2) #t
                   (let ((count (e3-mg-model-count owner index kind)))
                     (e3-mg-check 'model-count (and (> count 0) (<= count 1024)))
@@ -35,7 +35,7 @@
                                 (e3-mg-model-word owner index kind offset))
                               (word (+ offset 1)))))
                       (vector-set! fields kind words)
-                      (gradient (+ kind 1))))))
+                      (grad-kind (+ kind 1))))))
             (let metadata ((field 0))
               (if (= field 3) #t
                   (begin
@@ -51,7 +51,7 @@
       (if (= index 14) #t
           (let ((fields (vector-ref expected index)))
             (and
-              (let gradient ((kind 0))
+              (let grad-kind ((kind 0))
                 (if (= kind 2) #t
                     (let ((words (vector-ref fields kind)))
                       (and (= (e3-mg-model-count owner index kind)
@@ -61,7 +61,7 @@
                                  (and (= (e3-mg-model-word owner index kind offset)
                                          (vector-ref words offset))
                                       (word (+ offset 1)))))
-                           (gradient (+ kind 1))))))
+                           (grad-kind (+ kind 1))))))
               (let metadata ((field 0))
                 (if (= field 3) #t
                     (and (= (e3-mg-gradient-metadata owner index field)
