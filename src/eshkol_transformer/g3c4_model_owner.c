@@ -845,6 +845,10 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
      !defined(ET_F32_TENSOR_STORAGE_QUERY_PRIVATE))
 #error "C4 P2/G2 carrier bridge requires prefix commit and private f32 storage inspection"
 #endif
+#if defined(ET_G3C4_P2_G2_EOS_FIRST_FRAME_PRIVATE) && \
+    !defined(ET_G3C4_P2_G2_CARRIER_BRIDGE_PRIVATE)
+#error "C4 P2/G2 EOS first frame requires the authenticated carrier bridge"
+#endif
 #ifdef ET_G3C4_P2_G2_FIRST_FRAME_PRIVATE
 #define ET_G3C4_PRIVATE_MAX_NEW 2
 #define ET_G3C4_P2_G2_TUPLE(prompt, budget) \
@@ -6727,9 +6731,15 @@ static int et_g3c4_p2g2_carrier_owned_alias(
   return 0;
 }
 
+#ifdef ET_G3C4_P2_G2_EOS_FIRST_FRAME_PRIVATE
+static int64_t et_g3c4_p2g2_first_frame_carrier(
+    void *context_candidate, void *input_candidate, void *staging_header,
+    int64_t carrier_bytes, int allow_eos) {
+#else
 int64_t et_g3c4_private_p2g2_first_frame_carrier_v1(
     void *context_candidate, void *input_candidate, void *staging_header,
     int64_t carrier_bytes) {
+#endif
   et_g3c4_context_internal *context;
   et_g3c4_input_internal *input;
   et_g3c4_output_internal *pending = NULL;
@@ -6779,7 +6789,11 @@ int64_t et_g3c4_private_p2g2_first_frame_carrier_v1(
   if (bridge_result != 0) return bridge_result;
   if (selected < 0 || selected > 255)
     return et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+#ifdef ET_G3C4_P2_G2_EOS_FIRST_FRAME_PRIVATE
+  if (!allow_eos && selected == context->generator_policy[5])
+#else
   if (selected == context->generator_policy[5])
+#endif
     return et_g3c4_fail(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
   bridge_result = et_g3c4_private_token_forward_v1(
@@ -6819,6 +6833,19 @@ int64_t et_g3c4_private_p2g2_first_frame_carrier_v1(
          encoded, sizeof(encoded));
   return 0;
 }
+#ifdef ET_G3C4_P2_G2_EOS_FIRST_FRAME_PRIVATE
+int64_t et_g3c4_private_p2g2_first_frame_carrier_v1(
+    void *context, void *input, void *staging_header, int64_t carrier_bytes) {
+  return et_g3c4_p2g2_first_frame_carrier(
+      context, input, staging_header, carrier_bytes, 0);
+}
+
+int64_t et_g3c4_private_p2g2_eos_first_frame_carrier_v1(
+    void *context, void *input, void *staging_header, int64_t carrier_bytes) {
+  return et_g3c4_p2g2_first_frame_carrier(
+      context, input, staging_header, carrier_bytes, 1);
+}
+#endif
 #endif
 
 int64_t et_g3c4_private_output_copy_decode_ids_v1(
