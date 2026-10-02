@@ -110,11 +110,16 @@ class ModeGraphTupleTest(unittest.TestCase):
         for tuple_root in ("native/e3_private_package",
                            "native/e3_diagnostic_private_package",
                            "native/e3_diagnostic_public_package",
-                           "tests/e3_private/retention_package",
                            "tests/e3_private/numerical_package"):
             source = lines(ROOT / tuple_root, "source_closure")
             self.assertNotIn("@BUILD@/source/transformer/module.esk", source)
             self.assertFalse(any("mode_graph" in item for item in source))
+        # Retention deliberately opts into only the accepted P1 mode seam.
+        retention = lines(ROOT / "tests/e3_private/retention_package", "source_closure")
+        self.assertEqual(retention.count("@BUILD@/source/transformer/module.esk"), 1)
+        self.assertNotIn("internal/p1/lib/transformer/module.esk", retention)
+        self.assertIn("native/e3_private_extension.esk", retention)
+        self.assertFalse(any("mode_graph" in item for item in retention))
 
     def test_exact_tuple_admission_and_near_match_rejection(self) -> None:
         policy = ROOT / "scripts/e3-private-package-policy.sh"
