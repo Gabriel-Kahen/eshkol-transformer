@@ -131,7 +131,7 @@
 (define (e3-zero-negative-same-parameters? left right)
   (let compare ((index 0))
     (if (= index 14) #t
-        (and (e3-zero-negative-bytes?
+        (and (e3-zero-negative-bytes=?
                (vector-ref left index) (vector-ref right index))
              (compare (+ index 1))))))
 
@@ -295,7 +295,7 @@
                 destinations-before
                 (e3-zero-negative-destinations destinations)))
             (e3-zero-invariant
-              (e3-zero-negative-bytes?
+              (e3-zero-negative-bytes=?
                 cursor-before (d2-token-dataset-cursor dataset)))
             (e3-zero-release-sources! sources)
             (e3-zero-invariant

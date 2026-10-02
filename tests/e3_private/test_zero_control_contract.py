@@ -147,6 +147,12 @@ class ZeroControlContract(unittest.TestCase):
         )
         self.assertFalse(covered(damaged))
 
+    def test_negative_byte_image_uses_its_defined_comparator(self) -> None:
+        driver = (ROOT / "tests/e3_private/zero_control_negative_driver.esk").read_text()
+        self.assertIn("(define (e3-zero-negative-bytes=? left right)", driver)
+        self.assertEqual(driver.count("(e3-zero-negative-bytes=?"), 3)
+        self.assertNotIn("(e3-zero-negative-bytes?", driver)
+
 
 if __name__ == "__main__":
     unittest.main()
