@@ -58,25 +58,26 @@ compiler_timeout="${E3_COMPILER_TIMEOUT_SECONDS:-1200}"
 [[ "${compiler_timeout}" =~ ^[1-9][0-9]*$ ]] ||
   die "E3 P1 mode-seam compiler timeout must be positive"
 for cache in a b; do
+  eshkol_args=(--strict-types --no-stdlib -O 2
+    -I "${out}/source" -I "${PROJECT_ROOT}/native"
+    -I "${PROJECT_ROOT}/internal/p1/lib"
+    -I "${PROJECT_ROOT}/internal/c1/lib"
+    -I "${PROJECT_ROOT}/internal/t1/lib"
+    -I "${PROJECT_ROOT}/src"
+    -L "${out}/native" --lib e3_p1_mode_seam_test)
   env -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH \
     -u OBJC_INCLUDE_PATH -u DEPENDENCIES_OUTPUT -u SUNPRO_DEPENDENCIES \
     -u GCC_EXEC_PREFIX -u COMPILER_PATH -u LIBRARY_PATH \
     -u CLANG_CONFIG_FILE -u CCC_OVERRIDE_OPTIONS -u CCC_CC -u CCC_CXX \
     ESHKOL_JIT_CACHE=0 ESHKOL_CXX_COMPILER="${cxx}" \
-    XDG_CACHE_HOME="${out}/cache-${cache}" \
+    XDG_CACHE_HOME="${out}/cache-object-${cache}" \
     timeout --foreground --signal=TERM --kill-after=5s \
-      "${compiler_timeout}s" "${runner}" --strict-types --no-stdlib -O 2 \
-      --emit-depfile "${out}/deps-${cache}.d" \
-      -I "${out}/source" -I "${PROJECT_ROOT}/native" \
-      -I "${PROJECT_ROOT}/internal/p1/lib" \
-      -I "${PROJECT_ROOT}/internal/c1/lib" \
-      -I "${PROJECT_ROOT}/internal/t1/lib" \
-      -I "${PROJECT_ROOT}/src" \
-      -L "${out}/native" --lib e3_p1_mode_seam_test \
+      "${compiler_timeout}s" "${runner}" "${eshkol_args[@]}" \
+      --compile-only --emit-depfile "${out}/deps-${cache}.d" \
       "${PROJECT_ROOT}/tests/e3_p1/mode_seam_runtime.esk" \
-      -o "${out}/runtime-${cache}" \
-      >"${out}/compile-${cache}.stdout" \
-      2>"${out}/compile-${cache}.stderr"
+      -o "${out}/object-${cache}.o" \
+      >"${out}/compile-object-${cache}.stdout" \
+      2>"${out}/compile-object-${cache}.stderr"
   grep -F "${out}/source/transformer/module.esk" \
     "${out}/deps-${cache}.d" >/dev/null ||
     die "E3 P1 mode-seam build did not resolve the generated P1 variant"
@@ -86,7 +87,20 @@ for cache in a b; do
   fi
   sed '1s/^[^:]*:/<TARGET>:/' "${out}/deps-${cache}.d" \
     >"${out}/deps-${cache}.normalized.d"
+  env -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH \
+    -u OBJC_INCLUDE_PATH -u DEPENDENCIES_OUTPUT -u SUNPRO_DEPENDENCIES \
+    -u GCC_EXEC_PREFIX -u COMPILER_PATH -u LIBRARY_PATH \
+    -u CLANG_CONFIG_FILE -u CCC_OVERRIDE_OPTIONS -u CCC_CC -u CCC_CXX \
+    ESHKOL_JIT_CACHE=0 ESHKOL_CXX_COMPILER="${cxx}" \
+    XDG_CACHE_HOME="${out}/cache-link-${cache}" \
+    timeout --foreground --signal=TERM --kill-after=5s \
+      "${compiler_timeout}s" "${runner}" "${eshkol_args[@]}" \
+      "${PROJECT_ROOT}/tests/e3_p1/mode_seam_runtime.esk" \
+      -o "${out}/runtime-${cache}" \
+      >"${out}/link-${cache}.stdout" \
+      2>"${out}/link-${cache}.stderr"
 done
+cmp "${out}/object-a.o" "${out}/object-b.o"
 cmp "${out}/runtime-a" "${out}/runtime-b"
 cmp "${out}/deps-a.normalized.d" "${out}/deps-b.normalized.d"
 for cache in a b; do

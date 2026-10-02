@@ -22,10 +22,21 @@ class ModeSeamVariantTest(unittest.TestCase):
         runner = (ROOT / "scripts/test-e3-p1-mode-seam.sh").read_text()
         self.assertLess(runner.index('-I "${out}/source"'),
                         runner.index('-I "${PROJECT_ROOT}/internal/p1/lib"'))
-        self.assertIn('--emit-depfile "${out}/deps-${cache}.d"', runner)
+        self.assertIn('--compile-only --emit-depfile "${out}/deps-${cache}.d"',
+                      runner)
+        self.assertIn('-o "${out}/object-${cache}.o"', runner)
+        self.assertIn('XDG_CACHE_HOME="${out}/cache-object-${cache}"', runner)
+        self.assertIn('XDG_CACHE_HOME="${out}/cache-link-${cache}"', runner)
+        self.assertLess(runner.index('--compile-only --emit-depfile'),
+                        runner.index('-o "${out}/runtime-${cache}"'))
         self.assertIn('did not resolve the generated P1 variant', runner)
         self.assertIn('also resolved canonical P1', runner)
+        self.assertIn('cmp "${out}/object-a.o" "${out}/object-b.o"', runner)
+        self.assertIn('cmp "${out}/deps-a.normalized.d" "${out}/deps-b.normalized.d"',
+                      runner)
         self.assertIn('cmp "${out}/runtime-a" "${out}/runtime-b"', runner)
+        self.assertIn('cmp "${out}/runtime-a.stdout" "${out}/runtime-b.stdout"',
+                      runner)
 
     def test_existing_e3_tuples_keep_canonical_p1(self) -> None:
         for manifest in (
