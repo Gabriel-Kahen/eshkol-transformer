@@ -1,0 +1,41 @@
+;;; Source-private G3-R typed RNG import. Load after the G3-T constructor,
+;;; prefill transport and RNG owner mapping in the same owning aggregate.
+;;; The caller must separately authenticate the G3RCV1/C2 pair before this
+;;; numeric constructor is reachable; these scalars grant no file authority.
+(extern ptr g3r-native-rng-words-create i64 i64 i64 i64
+        :real et_g3t_private_rng_words_create_v1)
+
+(define (g3r-rng-owner-from-checked-words version seed counter-low counter-high)
+  (let ((operation 'g3r-rng-owner-from-checked-words))
+    (m3-call operation
+      (if (not (and (m3t-exact-i64? version) (= version 1)
+                    (m3t-exact-i64? seed) (>= seed 0)
+                    (m3t-exact-i64? counter-low)
+                    (m3t-exact-i64? counter-high)))
+          (g3t-fail-raw 'invalid-argument operation 3
+                        "G3-R RNG words require version 1 and signed i64 state"))
+      (let* ((shell (vector 'g3t-rng-private))
+             (ledger (vector #f))
+             (entry (vector shell 'rng 'pending #f #f #f #f #f #f #f
+                            ledger 'diagnostic-c2))
+             (next (cons entry (vector-ref g3t-registry 0)))
+             (created '()))
+        (guard (caught
+                 (#t
+                   (if (not (null? created))
+                       (if (not (= 0 (g3t-native-rng-release created)))
+                           (exit 134)))
+                   (g3t-prefill-dead! entry)
+                   (raise caught)))
+          (vector-set! g3t-registry 0 next)
+          (let* ((canonical (car (vector-ref g3t-registry 0)))
+                 (canonical-ledger (vector-ref canonical 10))
+                 (native (g3r-native-rng-words-create
+                           version seed counter-low counter-high)))
+            (set! created native)
+            (if (null? native) (g3t-native-fail-raw operation))
+            (vector-set! canonical-ledger 0 native)
+            (vector-set! canonical 3 native)
+            (vector-set! canonical 10 #f)
+            (vector-set! canonical 2 'live)
+            (vector-ref canonical 0)))))))

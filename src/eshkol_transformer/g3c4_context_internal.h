@@ -209,6 +209,22 @@ int64_t et_g3c4_private_p2g2_first_frame_carrier_v1(
     void *context, void *input, void *staging_header, int64_t carrier_bytes);
 #endif
 
+#ifdef ET_G3C4_P2_G2_EOS_FIRST_FRAME_PRIVATE
+/* Same authenticated carrier and speculative first-frame contract, including
+ * genuinely sampled EOS. No prefix commit, terminal output or RNG publication.
+ * The caller still authenticates the bytevector identity and backing extent. */
+int64_t et_g3c4_private_p2g2_eos_first_frame_carrier_v1(
+    void *context, void *input, void *staging_header, int64_t carrier_bytes);
+#endif
+
+#ifdef ET_G3C4_P2_G2_SECOND_FRAME_PRIVATE
+/* Samples retained prefix logits, then stages one genuine position-three
+ * frame. Caller proves bytevector allocation/identity; no terminal result. */
+int64_t et_g3c4_private_p2g2_second_frame_carrier_v1(
+    void *context, void *pending_output,
+    void *staging_header, int64_t carrier_bytes);
+#endif
+
 #ifdef __cplusplus
 }
 #endif
