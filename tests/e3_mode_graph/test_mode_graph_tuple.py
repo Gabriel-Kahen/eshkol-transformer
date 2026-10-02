@@ -151,6 +151,7 @@ printf '%s\\n' "$e3_tuple_kind"
         driver = (ROOT / "tests/e3_mode_graph/driver.esk").read_text()
         self.assertIn('"${e3_tuple_kind}" == mode-graph', builder)
         self.assertIn("-DET_E3_MODE_GRAPH_TESTING", builder)
+        self.assertIn("e3_private_test_reloc_flags=(-Wl,-d)", builder)
         self.assertIn("#ifdef ET_E3_MODE_GRAPH_TESTING", frame)
         self.assertIn("enroll(&g->r, M3_GRAPH);", frame)
         self.assertIn("++e3_graph_enrollments", frame)

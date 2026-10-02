@@ -810,6 +810,9 @@ supported compiled P1 prerequisite passed and was independently accepted;
 complete mode/graph normal, poison, sanitizer, fresh-build, failure/retry and
 mutation gates remain pending. No §9 mode or
 graph acceptance is claimed.
+The candidate also composes the reviewed sanitizer-only COMMON materialization
+fix; its local Clang/binutils regression passes, while supported mode/graph
+sanitizer execution is still pending.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.

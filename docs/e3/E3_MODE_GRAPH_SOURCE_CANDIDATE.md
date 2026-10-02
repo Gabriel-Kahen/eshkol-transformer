@@ -53,3 +53,8 @@ numerical package sources and inventories are unchanged. Supported emitted
 inventory comparison and actual runtime behavior are pending; an unexpected
 emitted dependency is a gate failure requiring evidence, not an allowlist
 waiver.
+
+The candidate composes the independently reviewed numerical sanitizer fix:
+the relocatable link materializes Clang ASan's COMMON registration cell only
+for an authenticated noninstalled sanitized E3 tuple before unchanged symbol
+localization and export checks. Canonical and normal link flags stay unchanged.
