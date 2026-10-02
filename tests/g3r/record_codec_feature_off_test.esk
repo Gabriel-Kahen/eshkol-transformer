@@ -1,0 +1,8 @@
+(load "c1_sha256.esk")
+
+(define digest (c1-sha256 (string->utf8 "abc")))
+(if (and (= (bytevector-length digest) 32)
+         (= (bytevector-u8-ref digest 0) 186)
+         (= (bytevector-u8-ref digest 31) 173))
+    (begin (display "G3-R record codec off PASS: checks=2") (newline))
+    (begin (display "G3-R record codec off FAIL") (newline) (exit 1)))

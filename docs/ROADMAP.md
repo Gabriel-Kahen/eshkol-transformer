@@ -1502,6 +1502,22 @@ publication transaction. Full G3-R still requires a separately admitted larger
 repeated-decode and later-EOS continuation profile. No persistence implementation
 or save/reload equivalence is claimed.
 
+The [private G3-R fixed-record codec leaf](g3/G3_R_RECORD_CODEC_LEAF.md)
+stages an in-memory 288-byte encoder/decoder using the existing C1 SHA-256.
+It validates the exact policy, G3-S words, history/EOS partition, T1
+fingerprint syntax, C2 digest binding and canonical record checksum before
+changing caller destinations. The fixture includes independent Python SHA/
+layout vectors and malformed/feature-off negatives. The independently
+accepted `a7c8a384` / tree `9c54e5e5` supported fe9/f31 gate passed on
+2026-10-02 10:38:00–10:38:07 UTC: feature-off 2 and feature-on 49 checks
+matched across normal, repeat and ASan+UBSan+LSan, with empty compile and
+runtime stderr. Five SHA/layout vectors matched the independent oracle.
+The 44-file run is sealed at
+`g3r-record-codec-a7c8a38-fe9-f31-20261002-prepared-c/SHA256SUMS-RUN`
+(`f865823a22ce457964585a2f1b5cf1e0119c0ac38a51171bca256fd5819b587a`).
+The digest is an authenticated C2-image precondition; this leaf does not
+perform C2 I/O, live-owner reconstruction, cache replay or continuation.
+
 The proposed [G3-R typed RNG import contract](g3/G3_R_TYPED_RNG_IMPORT_CONTRACT.md)
 defines a source-private G3-T kind-8 owner constructor for four exact signed
 G3-S words, preserving carry and exhaustion without a seed reset. It records
