@@ -41,8 +41,17 @@ carry, high-bit counter and manual EOS-match/zero-budget vectors; an
 independent Python `hashlib`/`struct` oracle compares all 288 bytes. Malformed
 input, truncated/extended records, repaired checksums over invalid semantics,
 reserved bytes, wrong pair digest, and failed whole-range publication with
-destination preservation are negative cases. The pinned supported normal,
-repeat, ASan+UBSan+LSan Eshkol gate and exact symbol/source closure remain
-the acceptance gate for this leaf. No C2 pair publication, typed live-RNG
-import, live model restore, full-history no-draw replay, continuation or
-larger-profile G3-R claim follows from this codec.
+destination preservation are negative cases. The independently accepted
+supported fe9/f31 gate ran on exact source
+`a7c8a3849c738379c9410f752dbceb3584b18721` (tree
+`9c54e5e5fadca168163f6db5d7ff6e4e6f10fee6`) from 2026-10-02
+10:38:00–10:38:07 UTC. Feature-off 2 and feature-on 49 checks passed with
+identical normal, repeat and ASan+UBSan+LSan output; compile and runtime
+stderr were empty. Five 288-byte SHA/layout vectors matched the independent
+oracle, and source/symbol closure checks passed. The 44-file evidence is
+sealed at `g3r-record-codec-a7c8a38-fe9-f31-20261002-prepared-c/SHA256SUMS-RUN`
+(`f865823a22ce457964585a2f1b5cf1e0119c0ac38a51171bca256fd5819b587a`),
+with launcher/Docker exits 0 and both pin checks PASS. This accepts the
+private in-memory codec only. C2 pair publication, typed live-RNG import,
+live model restore, full-history no-draw replay, continuation and larger
+G3-R profiles remain separate work.
