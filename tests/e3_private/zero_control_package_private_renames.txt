@@ -46,3 +46,4 @@ g3t-checked-m3t-workspace-reset! et_e1b_private_m3t_workspace_reset_cabi_v1
 g3t-checked-m3t-workspace-vjp-begin! et_e1b_private_m3t_workspace_vjp_begin_cabi_v1
 e3-test-run et_e3_private_test_run_cabi_v1
 e3-zero-control-run et_e3_private_zero_control_run_cabi_v1
+e3-zero-negative-run et_e3_private_zero_negative_run_cabi_v1

@@ -41,7 +41,7 @@ fi
 prefix="${PROJECT_ROOT}/tests/e3_private/zero_control_package"
 for variant in a b; do
   "${PROJECT_ROOT}/scripts/build-e3-zero-control-test.sh" \
-    "${out}/package-${variant}" \
+    "${out}/package-${variant}" normal \
     >"${out}/package-${variant}.stdout" \
     2>"${out}/package-${variant}.stderr"
   artifact="${out}/package-${variant}/e3_zero_control_package.o.evidence"
@@ -71,8 +71,27 @@ cmp "${out}/package-a/e3_zero_control_package.o.evidence/private.d" \
 diff -r "${out}/package-a/e3_zero_control_package.o.evidence/native-depfiles" \
         "${out}/package-b/e3_zero_control_package.o.evidence/native-depfiles"
 
+"${PROJECT_ROOT}/scripts/build-e3-zero-control-test.sh" \
+  "${out}/package-sanitize" sanitize \
+  >"${out}/package-sanitize.stdout" \
+  2>"${out}/package-sanitize.stderr"
+san_artifact="${out}/package-sanitize/e3_zero_control_package.o.evidence"
+for pair in defined_symbols:global-defined public_exports:package-exports \
+    public_strings:public-strings source_closure:source-closure \
+    native_source_closure:native-source-closure native_objects:native-objects; do
+  expected=${pair%%:*}; actual=${pair#*:}
+  cmp "${prefix}_${expected}.txt" "${san_artifact}/${actual}.txt"
+done
+cmp "${prefix}_sanitized_undefined_symbols.txt" \
+    "${san_artifact}/noninstrumentation-undefined.txt"
+cmp "${prefix}_sanitizer_undefined_symbols.txt" \
+    "${san_artifact}/sanitizer-undefined.txt"
+
 provenance="$(eshkol_build_dir)/eshkol-transformer-provenance.tsv"
 cxx="$(tsv_value "${provenance}" cxx_path)"
+printf '#!/usr/bin/env bash\nexec %q -fsanitize=address,undefined -fno-omit-frame-pointer "$@"\n' \
+  "${cxx}" >"${out}/sanitizer-cxx"
+chmod 700 "${out}/sanitizer-cxx"
 runner="$(eshkol_build_dir)/eshkol-run"
 compiler_timeout="${E3_COMPILER_TIMEOUT_SECONDS:-900}"
 [[ "${compiler_timeout}" =~ ^[1-9][0-9]*$ ]] || \
@@ -92,14 +111,67 @@ for variant in a b; do
         -o "${out}/runtime-${variant}" \
         >"${out}/compile-${variant}.stdout" \
         2>"${out}/compile-${variant}.stderr"
+  env -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH \
+    -u DEPENDENCIES_OUTPUT -u SUNPRO_DEPENDENCIES -u GCC_EXEC_PREFIX \
+    -u COMPILER_PATH -u LIBRARY_PATH -u CLANG_CONFIG_FILE \
+    -u CCC_OVERRIDE_OPTIONS -u CCC_CC -u CCC_CXX \
+    -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
+    XDG_CACHE_HOME="${out}/cache-negative-${variant}" \
+    ESHKOL_LIB_DIR="${PROJECT_ROOT}/lib" ESHKOL_CXX_COMPILER="${cxx}" \
+    timeout --foreground --signal=TERM --kill-after=5s "${compiler_timeout}s" \
+      "${runner}" --strict-types --no-stdlib -O 2 \
+        -L "${out}/package-${variant}" --lib eshkol_transformer_e3_zero_control \
+        "${PROJECT_ROOT}/tests/e3_private/zero_control_negative_runtime.esk" \
+        -o "${out}/negative-runtime-${variant}" \
+        >"${out}/negative-compile-${variant}.stdout" \
+        2>"${out}/negative-compile-${variant}.stderr"
+done
+for variant in a b; do
+  env -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH \
+    -u DEPENDENCIES_OUTPUT -u SUNPRO_DEPENDENCIES -u GCC_EXEC_PREFIX \
+    -u COMPILER_PATH -u LIBRARY_PATH -u CLANG_CONFIG_FILE \
+    -u CCC_OVERRIDE_OPTIONS -u CCC_CC -u CCC_CXX \
+    -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
+    XDG_CACHE_HOME="${out}/cache-sanitize-${variant}" \
+    ESHKOL_LIB_DIR="${PROJECT_ROOT}/lib" \
+    ESHKOL_CXX_COMPILER="${out}/sanitizer-cxx" \
+    timeout --foreground --signal=TERM --kill-after=5s "${compiler_timeout}s" \
+      "${runner}" --strict-types --no-stdlib -O 1 \
+        -L "${out}/package-sanitize" --lib eshkol_transformer_e3_zero_control \
+        "${PROJECT_ROOT}/tests/e3_private/zero_control_runtime.esk" \
+        -o "${out}/runtime-sanitize-${variant}" \
+        >"${out}/compile-sanitize-${variant}.stdout" \
+        2>"${out}/compile-sanitize-${variant}.stderr"
+  env -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH \
+    -u DEPENDENCIES_OUTPUT -u SUNPRO_DEPENDENCIES -u GCC_EXEC_PREFIX \
+    -u COMPILER_PATH -u LIBRARY_PATH -u CLANG_CONFIG_FILE \
+    -u CCC_OVERRIDE_OPTIONS -u CCC_CC -u CCC_CXX \
+    -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
+    XDG_CACHE_HOME="${out}/cache-sanitize-negative-${variant}" \
+    ESHKOL_LIB_DIR="${PROJECT_ROOT}/lib" \
+    ESHKOL_CXX_COMPILER="${out}/sanitizer-cxx" \
+    timeout --foreground --signal=TERM --kill-after=5s "${compiler_timeout}s" \
+      "${runner}" --strict-types --no-stdlib -O 1 \
+        -L "${out}/package-sanitize" --lib eshkol_transformer_e3_zero_control \
+        "${PROJECT_ROOT}/tests/e3_private/zero_control_negative_runtime.esk" \
+        -o "${out}/negative-runtime-sanitize-${variant}" \
+        >"${out}/negative-compile-sanitize-${variant}.stdout" \
+        2>"${out}/negative-compile-sanitize-${variant}.stderr"
 done
 cmp "${out}/runtime-a" "${out}/runtime-b"
+cmp "${out}/negative-runtime-a" "${out}/negative-runtime-b"
+cmp "${out}/runtime-sanitize-a" "${out}/runtime-sanitize-b"
+cmp "${out}/negative-runtime-sanitize-a" "${out}/negative-runtime-sanitize-b"
 for case_name in all-correct all-wrong; do
   for gradient in absent present; do
-    for variant in a b; do
+    for variant in a b sanitize-a sanitize-b; do
+      runtime="${out}/runtime-${variant}"
       ESHKOL_ARENA_POISON=0 \
+        ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+        UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+        LSAN_OPTIONS=exitcode=23 \
         timeout --foreground --signal=TERM --kill-after=5s 900s \
-        "${out}/runtime-${variant}" \
+        "${runtime}" \
         "${out}/oracle-a/${case_name}" "${case_name}" "${gradient}" \
         >"${out}/run-${case_name}-${gradient}-${variant}.stdout" \
         2>"${out}/run-${case_name}-${gradient}-${variant}.stderr"
@@ -122,6 +194,43 @@ for case_name in all-correct all-wrong; do
         "${out}/run-${case_name}-${gradient}-b.stdout"
     cmp "${out}/transcript-${case_name}-${gradient}-a.json" \
         "${out}/transcript-${case_name}-${gradient}-b.json"
+    cmp "${out}/run-${case_name}-${gradient}-a.stdout" \
+        "${out}/run-${case_name}-${gradient}-sanitize-a.stdout"
+    cmp "${out}/run-${case_name}-${gradient}-sanitize-a.stdout" \
+        "${out}/run-${case_name}-${gradient}-sanitize-b.stdout"
+    cmp "${out}/transcript-${case_name}-${gradient}-a.json" \
+        "${out}/transcript-${case_name}-${gradient}-sanitize-a.json"
+    cmp "${out}/transcript-${case_name}-${gradient}-sanitize-a.json" \
+        "${out}/transcript-${case_name}-${gradient}-sanitize-b.json"
   done
 done
-printf 'E3 real zero-model all-correct/all-wrong control passed\n'
+for case_name in missing-path foreign-handle duplicate-destination \
+    source-alias wrong-shape wrong-kind forged-source released-source \
+    decode-short decode-extent decode-role commit-reuse active-borrow active-pin \
+    alloc-i2-decode alloc-f32-decode alloc-i2-prepare alloc-f32-prepare; do
+  for gradient in absent present; do
+    for variant in a b sanitize-a sanitize-b; do
+      ESHKOL_ARENA_POISON=0 \
+        ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+        UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+        LSAN_OPTIONS=exitcode=23 \
+        timeout --foreground --signal=TERM --kill-after=5s 900s \
+        "${out}/negative-runtime-${variant}" \
+        "${out}/oracle-a/all-correct" "${case_name}" "${gradient}" \
+        >"${out}/negative-${case_name}-${gradient}-${variant}.stdout" \
+        2>"${out}/negative-${case_name}-${gradient}-${variant}.stderr"
+      [[ ! -s "${out}/negative-${case_name}-${gradient}-${variant}.stderr" ]] || \
+        die "zero-control ${case_name}/${gradient} emitted diagnostics"
+      grep -Fx 'E3-ZERO-NEGATIVE-RUNTIME-PASS' \
+        "${out}/negative-${case_name}-${gradient}-${variant}.stdout" >/dev/null || \
+        die "zero-control ${case_name}/${gradient} did not complete"
+    done
+    cmp "${out}/negative-${case_name}-${gradient}-a.stdout" \
+        "${out}/negative-${case_name}-${gradient}-b.stdout"
+    cmp "${out}/negative-${case_name}-${gradient}-a.stdout" \
+        "${out}/negative-${case_name}-${gradient}-sanitize-a.stdout"
+    cmp "${out}/negative-${case_name}-${gradient}-sanitize-a.stdout" \
+        "${out}/negative-${case_name}-${gradient}-sanitize-b.stdout"
+  done
+done
+printf 'E3 real zero-model and preprepare controls passed\n'

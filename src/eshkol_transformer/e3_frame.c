@@ -1493,4 +1493,203 @@ int64_t et_e3_zero_gradient_metadata_v1(void *pointer, int64_t parameter,
        : field == 1 ? (int64_t)metadata.contribution_count
                     : (int64_t)metadata.normalization_weight_bits;
 }
+
+/* Test-only controls are bound to one registered M3 owner and the exact decoded
+ * clone rooted by the Eshkol driver. They never write a parameter or gradient. */
+extern void et_i2_test_fail_alloc_after_v1(size_t);
+extern void et_i2_test_reset_allocator_v1(void);
+extern void et_i2_test_live_builder_counts_v1(size_t *, size_t *, size_t *);
+extern int64_t et_i2_private_owned_clone_live_count_v1(void);
+
+static struct e3_zero_control_slot {
+  owner *model;
+  int64_t index;
+  et_f32_tensor *source;
+  const et_f32_tensor *destination;
+  et_f32_tensor_borrow *borrow;
+  et_f32_tensor_copy_plan *pin;
+  owner *fail_model;
+  int fail_domain;
+} e3_zero_control;
+
+static int e3_zero_control_owner(void *pointer, int64_t index,
+                                 owner **actual,
+                                 const et_f32_tensor **value) {
+  owner *model = admit(pointer, OWNER, 0);
+  et_f32_tensor_error error;
+  et_f32_tensor_error_clear_v1(&error);
+  if (!model || model->r.state != 1 || index < 0 || index >= 14 ||
+      !model->p[index] || !model->handles[index] ||
+      et_f32_parameter_validate_identity_v1(model->p[index],
+                                             model->handles[index], &error) != 0 ||
+      et_f32_parameter_value_tensor_v1(model->p[index], value, &error) != 0)
+    return -1;
+  *actual = model;
+  return 0;
+}
+
+static int e3_zero_control_identical(void *pointer, int64_t index,
+                                     void *source) {
+  owner *model = NULL;
+  const et_f32_tensor *value = NULL;
+  return e3_zero_control_owner(pointer, index, &model, &value) == 0 &&
+      model == e3_zero_control.model && index == e3_zero_control.index &&
+      source == e3_zero_control.source && value == e3_zero_control.destination;
+}
+
+int64_t et_e3_zero_control_anchor_v1(void *pointer, int64_t index,
+                                     void *source) {
+  owner *model = NULL;
+  const et_f32_tensor *value = NULL;
+  if (e3_zero_control.model || e3_zero_control.borrow || e3_zero_control.pin ||
+      e3_zero_control.fail_domain || !source ||
+      e3_zero_control_owner(pointer, index, &model, &value) != 0 ||
+      source == value ||
+      et_i2_private_owned_clone_match_v1(
+        (const et_f32_tensor *)source, value,
+        ET_I2_PRIVATE_OWNED_VALUE_FINITE) != ET_I2_PRIVATE_OWNED_RESULT_OK)
+    return -1;
+  e3_zero_control.model = model;
+  e3_zero_control.index = index;
+  e3_zero_control.source = source;
+  e3_zero_control.destination = value;
+  return 0;
+}
+
+int64_t et_e3_zero_control_unanchor_v1(void *pointer, int64_t index,
+                                       void *source) {
+  if (!e3_zero_control_identical(pointer, index, source) ||
+      e3_zero_control.borrow || e3_zero_control.pin ||
+      e3_zero_control.fail_domain ||
+      et_i2_private_owned_clone_match_v1(
+        e3_zero_control.source, e3_zero_control.destination,
+        ET_I2_PRIVATE_OWNED_VALUE_FINITE) != ET_I2_PRIVATE_OWNED_RESULT_OK)
+    return -1;
+  memset(&e3_zero_control, 0, sizeof(e3_zero_control));
+  return 0;
+}
+
+int64_t et_e3_zero_control_borrow_begin_v1(void *pointer, int64_t index,
+                                            void *source) {
+  et_f32_tensor_error error;
+  et_f32_tensor_error_clear_v1(&error);
+  if (!e3_zero_control_identical(pointer, index, source) ||
+      e3_zero_control.borrow || e3_zero_control.pin ||
+      et_i2_private_owned_clone_match_v1(
+        e3_zero_control.source, e3_zero_control.destination,
+        ET_I2_PRIVATE_OWNED_VALUE_FINITE) != ET_I2_PRIVATE_OWNED_RESULT_OK)
+    return -1;
+  if (et_f32_tensor_borrow_begin_v1(
+        (et_f32_tensor *)e3_zero_control.destination,
+        &e3_zero_control.borrow, &error) == 0) return 0;
+  if (e3_zero_control.borrow) {
+    et_f32_tensor_error_clear_v1(&error);
+    (void)et_f32_tensor_borrow_end_v1(&e3_zero_control.borrow, &error);
+  }
+  return -1;
+}
+
+int64_t et_e3_zero_control_borrow_end_v1(void *pointer, int64_t index,
+                                          void *source) {
+  et_f32_tensor_error error;
+  et_f32_tensor_error_clear_v1(&error);
+  if (!e3_zero_control_identical(pointer, index, source) ||
+      !e3_zero_control.borrow || e3_zero_control.pin ||
+      et_f32_tensor_borrow_end_v1(&e3_zero_control.borrow, &error) != 0)
+    return -1;
+  return et_i2_private_owned_clone_match_v1(
+           e3_zero_control.source, e3_zero_control.destination,
+           ET_I2_PRIVATE_OWNED_VALUE_FINITE) == ET_I2_PRIVATE_OWNED_RESULT_OK
+             ? 0 : -1;
+}
+
+int64_t et_e3_zero_control_pin_begin_v1(void *pointer, int64_t index,
+                                         void *source) {
+  et_f32_tensor_error error;
+  et_f32_tensor_error_clear_v1(&error);
+  if (!e3_zero_control_identical(pointer, index, source) ||
+      e3_zero_control.borrow || e3_zero_control.pin ||
+      et_i2_private_owned_clone_match_v1(
+        e3_zero_control.source, e3_zero_control.destination,
+        ET_I2_PRIVATE_OWNED_VALUE_FINITE) != ET_I2_PRIVATE_OWNED_RESULT_OK)
+    return -1;
+  const et_f32_tensor_copy_assignment_v1 assignment = {
+    .struct_size = sizeof(assignment),
+    .destination = (et_f32_tensor *)e3_zero_control.destination,
+    .source = e3_zero_control.source,
+  };
+  if (et_f32_tensor_copy_plan_prepare_v1(
+        1u, &assignment, &e3_zero_control.pin, &error) == 0) return 0;
+  if (e3_zero_control.pin) {
+    et_f32_tensor_error_clear_v1(&error);
+    (void)et_f32_tensor_copy_plan_release_v1(&e3_zero_control.pin, &error);
+  }
+  return -1;
+}
+
+int64_t et_e3_zero_control_pin_end_v1(void *pointer, int64_t index,
+                                       void *source) {
+  et_f32_tensor_error error;
+  et_f32_tensor_error_clear_v1(&error);
+  if (!e3_zero_control_identical(pointer, index, source) ||
+      e3_zero_control.borrow || !e3_zero_control.pin ||
+      et_f32_tensor_copy_plan_release_v1(&e3_zero_control.pin, &error) != 0)
+    return -1;
+  return et_i2_private_owned_clone_match_v1(
+           e3_zero_control.source, e3_zero_control.destination,
+           ET_I2_PRIVATE_OWNED_VALUE_FINITE) == ET_I2_PRIVATE_OWNED_RESULT_OK
+             ? 0 : -1;
+}
+
+int64_t et_e3_zero_control_fail_after_v1(void *pointer, int64_t domain,
+                                          int64_t allowed) {
+  owner *model = admit(pointer, OWNER, 0);
+  if (!model || model->r.state != 1 || e3_zero_control.fail_domain ||
+      e3_zero_control.borrow || e3_zero_control.pin || allowed < 0 ||
+      (domain != 1 && domain != 2)) return -1;
+  if (e3_zero_control.model && e3_zero_control.model != model) return -1;
+  e3_zero_control.fail_model = model;
+  e3_zero_control.fail_domain = (int)domain;
+  if (domain == 1) et_i2_test_fail_alloc_after_v1((size_t)allowed);
+  else et_f32_tensor_test_fail_alloc_after_v1((size_t)allowed);
+  return 0;
+}
+
+int64_t et_e3_zero_control_fail_reset_v1(void *pointer, int64_t domain) {
+  owner *model = admit(pointer, OWNER, 0);
+  if (!model || model->r.state != 1 ||
+      model != e3_zero_control.fail_model ||
+      domain != e3_zero_control.fail_domain) return -1;
+  if (domain == 1) et_i2_test_reset_allocator_v1();
+  else et_f32_tensor_test_reset_allocator_v1();
+  e3_zero_control.fail_domain = 0;
+  e3_zero_control.fail_model = NULL;
+  return 0;
+}
+
+int64_t et_e3_zero_control_census_v1(void *pointer, int64_t field) {
+  owner *model = admit(pointer, OWNER, 0);
+  et_f32_test_live_counts_v1 counts = {.struct_size = sizeof(counts)};
+  size_t copies = 0, resets = 0, decodes = 0, pins = 0, source_pins = 0;
+  if (!model || model->r.state != 1 || field < 0 || field > 10 ||
+      (e3_zero_control.model && e3_zero_control.model != model) ||
+      (e3_zero_control.fail_model && e3_zero_control.fail_model != model))
+    return -1;
+  et_i2_test_live_builder_counts_v1(&copies, &resets, &decodes);
+  et_f32_test_live_counts_snapshot_v1(&counts);
+  if (e3_zero_control.destination &&
+      et_f32_tensor_test_plan_pins_v1(e3_zero_control.destination,
+                                       &pins) != 0) return -1;
+  if (e3_zero_control.source &&
+      et_f32_tensor_test_plan_pins_v1(e3_zero_control.source,
+                                       &source_pins) != 0) return -1;
+  const size_t values[] = {
+    copies, resets, decodes, counts.borrows, counts.copy_plans,
+    counts.owned_clones, pins, (size_t)(e3_zero_control.borrow != NULL),
+    (size_t)(e3_zero_control.pin != NULL),
+    et_f32_tensor_test_successful_allocations_v1(),
+    source_pins,
+  };
+  return values[field] <= (size_t)INT64_MAX ? (int64_t)values[field] : -1;
+}
 #endif

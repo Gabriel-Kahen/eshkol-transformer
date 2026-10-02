@@ -16,10 +16,13 @@
                   (loop (+ index 1)))))))
 
 (define args (command-line))
-(check 'arguments (= (length args) 4))
-(define corpus (list-ref args 1))
-(define case-name (list-ref args 2))
-(define gradient-name (list-ref args 3))
+(check 'arguments
+  (and (pair? args) (pair? (cdr args)) (pair? (cdr (cdr args)))
+       (pair? (cdr (cdr (cdr args))))
+       (null? (cdr (cdr (cdr (cdr args)))))))
+(define corpus (car (cdr args)))
+(define case-name (car (cdr (cdr args))))
+(define gradient-name (car (cdr (cdr (cdr args)))))
 (check 'case (or (string=? case-name "all-correct")
                  (string=? case-name "all-wrong")))
 (check 'gradient (or (string=? gradient-name "absent")

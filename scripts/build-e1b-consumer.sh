@@ -1142,6 +1142,21 @@ g3g_package_policy=0
 if [[ "${package_policy}" == g3g-public-aggregate || "${package_policy}" == g3g-g0-public-aggregate || "${package_policy}" == g3g-manual-public-aggregate ]]; then
   g3g_package_policy=1
 fi
+e3_zero_sanitize=0
+e3_zero_sanitize_flags=()
+e3_zero_reloc_flags=()
+if [[ "${E3_ZERO_CONTROL_SANITIZE:-0}" != 0 ]]; then
+  [[ "${E3_ZERO_CONTROL_SANITIZE}" == 1 &&
+     "${package_policy}" == e3-private-aggregate &&
+     "${e3_tuple_kind}" == zero ]] || \
+    die "E3 zero sanitizer requires the exact noninstalled tuple"
+  e3_zero_sanitize=1
+  e3_zero_sanitize_flags=(-O1 -g -fsanitize=address,undefined
+                          -fno-omit-frame-pointer -fno-builtin-printf
+                          -fno-builtin-memcmp)
+  # ASan's registration cell must be materialized before symbol localization.
+  e3_zero_reloc_flags=(-Wl,-d)
+fi
 
 require_command awk
 require_command cmp
@@ -1238,7 +1253,7 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     if [[ "${e3_diagnostic_tuple}" == 1 ]]; then
       export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
     elif [[ "${e3_tuple_kind}" == zero ]]; then
-      export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_zero_control_run_v1)$'
+      export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_zero_(control|negative)_run_v1)$'
     fi
   fi
 fi
@@ -1364,7 +1379,8 @@ grep -Eq "^attributes ${e1b_raise_attribute} = .*noreturn" \
   die "E1B fixed raise-only seam is not noreturn in generated IR"
 
 "${e1b_clean_toolchain_env[@]}" \
-  "${e1b_cc}" -c -x ir "${e1b_tmp}/private.ll" \
+  "${e1b_cc}" "${e3_zero_sanitize_flags[@]}" -c -x ir \
+  "${e1b_tmp}/private.ll" \
   -o "${e1b_tmp}/private.o"
 
 {
@@ -1461,6 +1477,10 @@ elif [[ "${package_policy}" == e3-private-aggregate ]]; then
   if [[ "${e3_public_tuple:-0}" != 1 ]]; then
     package_bridge_flags+=(-DET_E3_TESTING)
   fi
+  if [[ "${e3_tuple_kind}" == zero ]]; then
+    # The exact bridge includes I2's helper implementation in this TU.
+    package_bridge_flags+=(-DET_F32_TENSOR_TESTING)
+  fi
 elif [[ "${package_policy}" == m3-model-aggregate || \
       "${g3g_package_policy}" == 1 || \
       "${package_policy}" == m3t-diagnostic-aggregate ]]; then
@@ -1472,6 +1492,7 @@ if [[ "${package_policy}" == g3g-manual-public-aggregate ]]; then
 fi
 "${e1b_clean_toolchain_env[@]}" \
   "${e1b_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
+  "${e3_zero_sanitize_flags[@]}" \
   "${package_bridge_flags[@]}" \
   -I "${e1b_source}/inc" -I "${PROJECT_ROOT}/include" \
   -I "${PROJECT_ROOT}/native" \
@@ -1514,6 +1535,7 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
   if [[ -n "${package_native_define}" ]]; then
     package_native_cflags+=("${package_native_define}")
   fi
+  package_native_cflags+=("${e3_zero_sanitize_flags[@]}")
   if [[ "${package_policy}" == e3-private-aggregate &&
         "${e3_tuple_kind}" == zero ]]; then
     package_native_cflags+=(-DET_E3_ZERO_CONTROL_TESTING -fno-builtin-printf)
@@ -1526,7 +1548,13 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     if [[ "${package_policy}" == e3-private-aggregate &&
           "${e3_tuple_kind}" == zero &&
           "${package_native_source}" == "${PROJECT_ROOT}/src/eshkol_transformer/m3_call_f32_integration.c" ]]; then
-      package_source_flags+=(-DET_F32_TENSOR_TESTING)
+      package_source_flags+=(-DET_F32_TENSOR_TESTING
+                             -DET_I2_PRIVATE_OWNED_CLONE_MATCH)
+    elif [[ "${package_policy}" == e3-private-aggregate &&
+            "${e3_tuple_kind}" == zero &&
+            "${package_native_source}" == "${PROJECT_ROOT}/src/eshkol_transformer/e3_frame.c" ]]; then
+      package_source_flags+=(-DET_F32_TENSOR_TESTING
+                             -DET_I2_PRIVATE_OWNED_CLONE_MATCH)
     fi
     if [[ "${package_policy}" == cli3-tr3-aggregate ]]; then
       case "${package_native_source}" in
@@ -1726,7 +1754,8 @@ if [[ -n "${package_native_source_closure}" ]]; then
 fi
 
 "${e1b_clean_toolchain_env[@]}" \
-  "${e1b_cxx}" -r -Wl,-Map,"${e1b_tmp}/combined.map" \
+  "${e1b_cxx}" -r "${e3_zero_reloc_flags[@]}" \
+  -Wl,-Map,"${e1b_tmp}/combined.map" \
   "${e1b_tmp}/private.o" "${e1b_tmp}/bridge.o" \
   "${e1b_tmp}/package-bridge.o" "${package_native_objects[@]}" \
   -o "${e1b_tmp}/combined.raw.o"
@@ -1749,9 +1778,26 @@ cmp -s "${e1b_tmp}/expected-global-defined.txt" \
 
 nm -u --format=posix "${e1b_tmp}/combined.o" | awk '{ print $1 }' | \
   LC_ALL=C sort -u >"${e1b_tmp}/undefined.txt"
-if ! e1b_compare_exact_undefined_allowlist \
-    "${e1b_tmp}/expected-undefined.txt" "${e1b_tmp}/undefined.txt"; then
-  die "E1B final object differs from the exact undefined-symbol allowlist"
+if [[ "${e3_zero_sanitize}" == 1 ]]; then
+  grep -E '^(__asan_|__ubsan_|__sanitizer_|__start_asan_globals$|__stop_asan_globals$)' \
+    "${e1b_tmp}/undefined.txt" >"${e1b_tmp}/sanitizer-undefined.txt" || \
+    die "E3 zero sanitizer emitted no instrumentation imports"
+  grep -Ev '^(__asan_|__ubsan_|__sanitizer_|__start_asan_globals$|__stop_asan_globals$)' \
+    "${e1b_tmp}/undefined.txt" \
+    >"${e1b_tmp}/noninstrumentation-undefined.txt" || true
+  zero_sanitized="${PROJECT_ROOT}/tests/e3_private/zero_control_package_sanitized_undefined_symbols.txt"
+  zero_instrumentation="${PROJECT_ROOT}/tests/e3_private/zero_control_package_sanitizer_undefined_symbols.txt"
+  cmp -s "${zero_sanitized}" \
+    "${e1b_tmp}/noninstrumentation-undefined.txt" || \
+    die "E3 zero sanitized noninstrumentation imports differ from own exact manifest"
+  cmp -s "${zero_instrumentation}" \
+    "${e1b_tmp}/sanitizer-undefined.txt" || \
+    die "E3 zero sanitizer instrumentation imports differ from own exact manifest"
+else
+  if ! e1b_compare_exact_undefined_allowlist \
+      "${e1b_tmp}/expected-undefined.txt" "${e1b_tmp}/undefined.txt"; then
+    die "E1B final object differs from the exact undefined-symbol allowlist"
+  fi
 fi
 if grep -E 'et_e1b|e1(-internal-dispatch|_2Dinternal_2Ddispatch)|transformer(-error-(make|raise|wrap-foreign)|_2Derror_2D(make|raise|wrap_2Dforeign))' \
     "${e1b_tmp}/undefined.txt" >/dev/null; then
@@ -1984,9 +2030,19 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     if [[ "${e3_tuple_kind}" == zero ]]; then
       e3_required_private+=(
         et_e3_private_zero_control_run_cabi_v1
+        et_e3_private_zero_negative_run_cabi_v1
         et_e3_zero_gradient_word_count_v1
         et_e3_zero_gradient_word_v1
         et_e3_zero_gradient_metadata_v1
+        et_e3_zero_control_anchor_v1
+        et_e3_zero_control_unanchor_v1
+        et_e3_zero_control_borrow_begin_v1
+        et_e3_zero_control_borrow_end_v1
+        et_e3_zero_control_pin_begin_v1
+        et_e3_zero_control_pin_end_v1
+        et_e3_zero_control_fail_after_v1
+        et_e3_zero_control_fail_reset_v1
+        et_e3_zero_control_census_v1
       )
     fi
   fi
@@ -2014,6 +2070,12 @@ cp "${e1b_tmp}/package-exports.txt" \
   "${evidence_dir}.tmp.$$/package-exports.txt"
 cp "${e1b_tmp}/undefined.txt" \
   "${evidence_dir}.tmp.$$/undefined.txt"
+if [[ "${e3_zero_sanitize}" == 1 ]]; then
+  cp "${e1b_tmp}/sanitizer-undefined.txt" \
+    "${evidence_dir}.tmp.$$/sanitizer-undefined.txt"
+  cp "${e1b_tmp}/noninstrumentation-undefined.txt" \
+    "${evidence_dir}.tmp.$$/noninstrumentation-undefined.txt"
+fi
 cp "${e1b_tmp}/expected-undefined.txt" \
   "${evidence_dir}.tmp.$$/expected-undefined.txt"
 if [[ -n "${package_source_closure}" ]]; then
@@ -2057,7 +2119,7 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     if [[ "${e3_diagnostic_tuple}" == 1 ]]; then
       public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
     elif [[ "${e3_tuple_kind}" == zero ]]; then
-      public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_zero_control_run_v1)$'
+      public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_zero_(control|negative)_run_v1)$'
     fi
   fi
 fi

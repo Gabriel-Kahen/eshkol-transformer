@@ -122,8 +122,9 @@
             (i2-prepare-load
               (vector (e3-zero-assignments handles sources)
                       'e3-zero-control)))))
-    (i2-commit-load! (vector-ref prepared 0)))
-  (e3-zero-release-sources! sources))
+    (i2-commit-load! (vector-ref prepared 0))
+    (e3-zero-release-sources! sources)
+    (vector-ref prepared 0)))
 
 (define (e3-zero-check-bytes! handles)
   ;; Existing authenticated checkpoint encoder reads actual registered owners.
@@ -215,8 +216,12 @@
          (config (e3-test-fixed-config))
          (tokenizer (t1-private-tokenizer-byte config))
          (initial (g3t-checked-m3t-initializer-state 1729))
+         (initial-words (m3t-public-initializer-words initial))
          (model (g3t-checked-m3t-model-create config initial)))
     (vector-set! e3-zero-owner-root 0 model)
+    (e3-zero-invariant (equal? initial-words '(1 1729 0 0)))
+    (e3-zero-invariant
+      (equal? initial-words (m3t-public-initializer-words initial)))
     (let* ((tree (e3-zero-check-tree model))
            (handles (make-vector 14 #f))
            (sources (make-vector 14 #f)))
@@ -235,6 +240,8 @@
                           (m3t-public-initializer-words
                             (m3t-public-model-initializer model)))
                         (modes (e3-zero-modes model)))
+                   (e3-zero-invariant
+                     (equal? initial-words (m3t-public-initializer-words initial)))
                    (e3-zero-invariant (equal? initializer '(1 1729 290 0)))
                    (e3-zero-invariant
                      (if (vector-ref checked 0)
@@ -257,6 +264,8 @@
           (equal? initializer-before
             (m3t-public-initializer-words
               (m3t-public-model-initializer model))))
+        (e3-zero-invariant
+          (equal? initial-words (m3t-public-initializer-words initial)))
         (e3-zero-invariant
           (e3-zero-same-modes? modes-before (e3-zero-modes model)))
         (let ((destinations (e3-test-destinations-create)) (frame #f))
@@ -282,6 +291,8 @@
                       (equal? initializer-before
                         (m3t-public-initializer-words
                           (m3t-public-model-initializer model))))
+                    (e3-zero-invariant
+                      (equal? initial-words (m3t-public-initializer-words initial)))
                     (e3-zero-invariant
                       (e3-zero-same-modes?
                         modes-before (e3-zero-modes model)))

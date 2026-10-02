@@ -758,8 +758,14 @@ for all 14 authentic M3 parameter owners before frame binding. The isolated
 zero-model implementation candidate adds genuine packed all-correct/all-wrong
 D1/D2 controls, the 21-role PyTorch comparison, and absent/present gradient
 snapshots while preserving the two-field private scenario and tied owner.
-Its exact package inventories and supported normal/sanitized compiled proof
-remain pending independent review and gate execution; it does not discharge
+Its separate preprepare negative driver captures all 14 parameter byte images,
+gradient state, modes, initializer words, destinations and D2 cursor, and uses
+test-only authenticated real borrow/pin and allocator controls. The corrected
+source and tests await independent review. Sanitizer imports require a bounded
+compiler-emitted inventory diagnostic before an exact pin and supported
+normal/sanitized compiled gate; no compiled proof is claimed. Stale M3 handle
+and mutated tie/owner metadata controls lack a reviewed authentic fixture seam.
+This candidate does not discharge
 the broader §9 numerical, fault, rollback, or typed RNG rows.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4

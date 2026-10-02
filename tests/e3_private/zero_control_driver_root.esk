@@ -1,3 +1,4 @@
 ;;; Separate, noninstalled real-zero-model control; canonical E3 entry stays intact.
 (load "../../native/e3_private_driver_root.esk")
 (load "zero_control_driver.esk")
+(load "zero_control_negative_driver.esk")

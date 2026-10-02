@@ -30,3 +30,4 @@ internal/e3/lib/e3_d2_restore.esk
 native/e3_forward_schedule.esk
 tests/e3_private/driver.esk
 tests/e3_private/zero_control_driver.esk
+tests/e3_private/zero_control_negative_driver.esk

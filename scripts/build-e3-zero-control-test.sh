@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
-[[ $# -eq 1 ]] || die "usage: $0 FRESH_ARTIFACT_DIRECTORY"
+[[ $# -eq 2 ]] || die "usage: $0 FRESH_ARTIFACT_DIRECTORY normal|sanitize"
+mode=$2
+[[ "${mode}" == normal || "${mode}" == sanitize ]] || \
+  die "unknown E3 zero-control build mode"
 verify_toolchain
 for command in ar cmp; do require_command "${command}"; done
 artifact="$(realpath -m -- "$1")"
@@ -22,6 +25,7 @@ trap cleanup EXIT
 trap 'exit 143' TERM
 trap 'exit 130' INT
 prefix="${PROJECT_ROOT}/tests/e3_private/zero_control_package"
+E3_ZERO_CONTROL_SANITIZE="$([[ "${mode}" == sanitize ]] && printf 1 || printf 0)" \
 E1B_COMPILER_TIMEOUT_SECONDS="${E3_COMPILER_TIMEOUT_SECONDS:-900}" \
   /usr/bin/bash "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
   "${PROJECT_ROOT}/tests/e3_private/zero_control_driver_root.esk" \

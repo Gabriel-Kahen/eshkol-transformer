@@ -87,3 +87,4 @@ et_e1b_public_x1_config_resolve_v1
 et_e1b_public_x1_config_validate_v1
 et_e3_test_run_v1
 et_e3_zero_control_run_v1
+et_e3_zero_negative_run_v1

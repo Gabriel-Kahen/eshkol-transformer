@@ -158,4 +158,9 @@ if [[ "${e3_tuple_requested}" == 1 ]]; then
   if [[ "${e3_public_tuple}" == 1 ]]; then
     e3_check_repository_path "${e3_prefix}_facades.txt"
   fi
+  if [[ "${e3_tuple_kind}" == zero &&
+        "${E3_ZERO_CONTROL_SANITIZE:-0}" == 1 ]]; then
+    e3_check_repository_path "${e3_prefix}_sanitized_undefined_symbols.txt"
+    e3_check_repository_path "${e3_prefix}_sanitizer_undefined_symbols.txt"
+  fi
 fi
