@@ -1,0 +1,188 @@
+;;; Source-private nonterminal P2/G2 prefix composition. Load after the
+;;; protected scope and the same-aggregate T1 raw decoder. This cannot finish
+;;; a call; its caller must abort inside the protected m3-call region.
+
+(extern ptr g3c4-p2g2-native-input-from-t1 ptr
+        :real et_g3c4_private_input_from_t1_p2_v1)
+(extern i64 g3c4-p2g2-native-prefill-preflight ptr ptr i64
+        :real et_g3c4_private_prompt_prefill_preflight_v1)
+(extern i64 g3c4-p2g2-native-first-frame ptr ptr ptr i64
+        :real et_g3c4_private_p2g2_first_frame_carrier_v1)
+(extern i64 g3c4-p2g2-native-prefix-commit ptr ptr ptr
+        :real et_g3c4_private_p2g2_prefix_commit_v1)
+
+;;; This map binds the exact preflighted input to the new protected call.
+;;; The protected scope itself is input-agnostic and remains reusable.
+(define g3c4-p2g2-prefix-input-anchors (vector '()))
+
+(define (g3c4-p2g2-prefix-anchor-for call)
+  (let loop ((remaining (vector-ref g3c4-p2g2-prefix-input-anchors 0)))
+    (cond ((null? remaining) #f)
+          ((eq? (vector-ref (car remaining) 0) call) (car remaining))
+          (else (loop (cdr remaining))))))
+
+(define (g3c4-p2g2-owned-input-create encoded)
+  (g3c4-input-create-with-native
+    encoded 'g3c4-p2g2-owned-input-create
+    g3c4-p2g2-native-input-from-t1))
+
+;;; This is called while the generator is idle, before the protected scope
+;;; acquires a call or allocates its child. The native preflight admits only
+;;; an owned P2 input with the exact budget-two policy.
+(define (g3c4-p2g2-prefix-preflight generator input)
+  (let* ((operation 'g3c4-p2g2-prefix-preflight)
+         (generator-entry
+           (g3c4-generator-entry-call-ready generator operation))
+         (input-entry (g3c4-input-entry-live input operation)))
+    (if (not (and (vector-ref g3c4-p2g2-ownership-gate 0)
+                  (= (vector-ref (vector-ref generator-entry 7) 5) 2)))
+        (g3c4-fail 'invalid-argument operation
+                   "P2/G2 prefix needs the exact private budget"))
+    (g3c4-native-check
+      (g3c4-p2g2-native-prefill-preflight
+        (vector-ref generator-entry 3) (vector-ref input-entry 3) 2)
+      operation)
+    input-entry))
+
+;;; Every coordinator call redoes idle preflight and retains the exact
+;;; input/entry/native and generator entry through the one call region.
+(define-syntax g3c4-with-p2g2-prefix-call
+  (syntax-rules ()
+    ((_ operation generator input (call) body ...)
+     (let* ((original-generator generator)
+            (original-input input)
+            (original-input-entry
+              (g3c4-p2g2-prefix-preflight
+                original-generator original-input))
+            (original-native-input (vector-ref original-input-entry 3))
+            (original-generator-entry
+              (g3c4-generator-entry-call-ready
+                original-generator operation)))
+       (g3c4-with-p2g2-protected-call operation original-generator (call)
+         (if (not (eq? (vector-ref call 4) original-generator-entry))
+             (g3c4-fail 'invalid-state operation
+                        "P2/G2 generator changed after input preflight"))
+         (let ((anchor (vector call original-input original-input-entry
+                               original-native-input
+                               original-generator-entry)))
+           (vector-set! g3c4-p2g2-prefix-input-anchors 0
+                        (cons anchor
+                              (vector-ref g3c4-p2g2-prefix-input-anchors 0)))
+           (guard (caught
+                    (#t
+                      (vector-set! g3c4-p2g2-prefix-input-anchors 0
+                                   (cdr (vector-ref
+                                          g3c4-p2g2-prefix-input-anchors 0)))
+                      (raise caught)))
+             body ...
+             (vector-set! g3c4-p2g2-prefix-input-anchors 0
+                          (cdr (vector-ref
+                                 g3c4-p2g2-prefix-input-anchors 0)))
+             #t)))))))
+
+(define (g3c4-p2g2-prefix-input-check call input input-entry native-input
+                                       operation)
+  (let ((record (g3c4-p2g2-protected-check call operation)))
+    (let ((anchor (g3c4-p2g2-prefix-anchor-for call)))
+      (if (not (and anchor
+                    (pair? (vector-ref g3c4-p2g2-prefix-input-anchors 0))
+                    (eq? (car (vector-ref
+                                 g3c4-p2g2-prefix-input-anchors 0)) anchor)
+                    (eq? (vector-ref anchor 0) call)
+                    (eq? (vector-ref anchor 1) input)
+                    (eq? (vector-ref anchor 2) input-entry)
+                    (eq? (vector-ref anchor 3) native-input)
+                    (eq? (vector-ref anchor 4) (vector-ref record 1))
+                    (eq? (g3c4-input-entry-live input operation) input-entry)
+                  (eq? (vector-ref input-entry 3) native-input)
+                  (eq? (vector-ref input-entry 0) input)
+                  (eq? (vector-ref record 13) 'before-prefix)
+                  (vector-ref record 6)))
+          (g3c4-fail 'invalid-state operation
+                     "P2/G2 prefix input or pending owner changed")))
+    record))
+
+(define (g3c4-p2g2-prefix-byte-check record selected operation)
+  (let ((staging (vector-ref record 12))
+        (raw (vector-ref record 11)))
+    (if (not (and (= (bytevector-length staging) 8)
+                  (= (bytevector-length raw) 1)
+                  (m3t-exact-i64? selected)
+                  (>= selected 0) (<= selected 255)
+                  (= (bytevector-u8-ref staging 0) selected)
+                  (let upper ((index 1))
+                    (if (= index 8) #t
+                        (and (= (bytevector-u8-ref staging index) 0)
+                             (upper (+ index 1)))))
+                  (not (and (m3t-exact-i64?
+                              (vector-ref (vector-ref record 15) 6))
+                            (= selected
+                               (vector-ref (vector-ref record 15) 6))))))
+        (g3c4-fail 'invalid-state operation
+                   "P2/G2 first selected ID is not a non-EOS V256 byte"))
+    (if (not (= (bytevector-u8-ref raw 0) selected))
+        (g3c4-fail 'invalid-state operation
+                   "P2/G2 T1 raw byte differs from native selected ID"))
+    #t))
+
+;;; The test-only probes run before the final reauthentication. Production
+;;; passes inert probes. A returned probe cannot authorize a different
+;;; carrier or skip the real same-registry T1 decode.
+(define (g3c4-p2g2-prefix-commit-probed!
+          call input before-decode after-decode)
+  (let* ((operation 'g3c4-p2g2-prefix-commit!)
+         (input-entry (g3c4-input-entry-live input operation))
+         (native-input (vector-ref input-entry 3))
+         (record (g3c4-p2g2-prefix-input-check
+                   call input input-entry native-input operation))
+         (native (vector-ref record 5))
+         (output-native (vector-ref record 7))
+         (staging (vector-ref record 12))
+         (raw (vector-ref record 11)))
+    (g3c4-native-check
+      (g3c4-p2g2-native-first-frame native native-input staging 16)
+      operation)
+    (set! record (g3c4-p2g2-prefix-input-check
+                   call input input-entry native-input operation))
+    (let ((selected (bytevector-u8-ref staging 0)))
+      ;; The bridge wrote this exact i64 carrier only after native sampling
+      ;; and forward. Require its full little-endian V256 form before decode.
+      (let upper ((index 1))
+        (if (< index 8)
+            (if (= (bytevector-u8-ref staging index) 0)
+                (upper (+ index 1))
+                (g3c4-fail 'invalid-state operation
+                           "P2/G2 native ID is outside raw V256"))))
+      (if (and (m3t-exact-i64? (vector-ref (vector-ref record 15) 6))
+               (= selected (vector-ref (vector-ref record 15) 6)))
+          (g3c4-fail 'invalid-state operation
+                     "P2/G2 first-token EOS is terminal"))
+      (before-decode record)
+      (set! record (g3c4-p2g2-prefix-input-check
+                     call input input-entry native-input operation))
+      (t1-private-g3-decode-raw-into!
+        (vector-ref record 3) staging raw)
+      (set! record (g3c4-p2g2-prefix-input-check
+                     call input input-entry native-input operation))
+      (after-decode record)
+      (set! record (g3c4-p2g2-prefix-input-check
+                     call input input-entry native-input operation))
+      (if (not (and (eq? (vector-ref record 5) native)
+                    (eq? (vector-ref record 7) output-native)
+                    (eq? (vector-ref record 11) raw)
+                    (eq? (vector-ref record 12) staging)))
+          (g3c4-fail 'invalid-state operation
+                     "P2/G2 prefix carrier identity changed"))
+      (g3c4-p2g2-prefix-byte-check record selected operation)
+      (g3c4-native-check
+        (g3c4-p2g2-native-prefix-commit native output-native raw)
+        operation)
+      (vector-set! (g3c4-p2g2-anchor-for call) 13 'prefix-committed)
+      (vector-set! record 13 'prefix-committed)
+      (vector-set! (vector-ref record 14) 3 'p2g2-prefix-committed)
+      selected)))
+
+(define (g3c4-p2g2-prefix-commit! call input)
+  (g3c4-p2g2-prefix-commit-probed!
+    call input (lambda (record) #t)
+    (lambda (record) #t)))
