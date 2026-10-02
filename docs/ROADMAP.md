@@ -744,6 +744,14 @@ release mutation under active E3 model authority remain unaccepted
 prerequisites. No implementation, compiled proof, or edge-corpus acceptance is
 claimed here.
 
+The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
+is a docs-only candidate for the remaining private numerical, compiled-mutant,
+failure and rollback gates. It tracks authentic D2/model reachability separately
+from direct-provider-only cases and names the missing noninstalled model-control
+and stage-selective fault/observer seams for review. It provides no new runtime
+proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
+verdicts remain prerequisites before the full matrix is implemented and run.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
@@ -971,15 +979,19 @@ Independent sealed-evidence review accepted this result; hosted integration
 remains pending. Second-token, terminal/EOS, public and CLI work remain separate.
 
 The [private retained-logit second-frame carrier](g3/G3_C4_P2_G2_SECOND_FRAME_CARRIER_CONTRACT.md)
-now has a source/test candidate under its independently reviewed contract.
+is independently source/test approved at `4851e17`/tree `d63ad549`.
 It authenticates the committed non-EOS P2/G2 prefix and sole unused pending
 output, draws directly from retained next logits, stages the genuine
 position-three forward and writes only the selected ID carrier. The original
-raw last-logit entry still rejects post-prefix calls. Native development
-normal/repeat/sanitizer, T4 logits/K/V parity, independent second-draw oracle,
-carry/final/singleton/exhaustion, lease/alias/forward cuts and feature-off
-boundary checks are being finalized; exact source/tests review and pinned
-supported fe9/f31 evidence remain pending. It publishes no terminal result,
+raw last-logit entry still rejects post-prefix calls. Its exact pinned fe9/f31
+Clang 21 gate passed normal/repeat/ASan+UBSan+LSan with 2,965 checks per mode
+and byte-identical output, T4 logits/K/V parity, and an independent eight-row
+second-draw G3-S/Philox oracle including carry/final/singleton. Lease, alias,
+forward-cut, exhaustion, predecessor and private feature-boundary checks pass.
+Independent evidence review accepted all 106 files in
+`g3c4-p2g2-second-frame-4851e17-fe9-f31-20261002-prepared-b/SHA256SUMS-RUN`
+(SHA-256 `6b2c96a4d4b6cc79881d73d9ce9ff4c4ad9a809e27e78e8fa64aa0d9cfb50a5e`).
+Hosted integration remains pending. It publishes no terminal result,
 Eshkol T1 decode, public admission or persistence.
 
 The [private EOS-capable first-frame carrier candidate](g3/G3_C4_P2_G2_EOS_FIRST_FRAME_LEAF.md)
