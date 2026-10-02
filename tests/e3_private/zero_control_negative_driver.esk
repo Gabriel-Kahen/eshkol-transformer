@@ -19,6 +19,24 @@
         :real et_e3_zero_control_fail_reset_v1)
 (extern i64 e3-zero-control-census ptr i64
         :real et_e3_zero_control_census_v1)
+(extern i64 e3-zero-control-model-idle ptr
+        :real et_e3_zero_control_model_idle_v1)
+(extern i64 e3-zero-p1-live :real et_p1_test_live_entry_count_v1)
+(extern i64 e3-zero-p1-tombstones :real et_p1_test_tombstone_count_v1)
+(extern ptr e3-zero-staged-initializer i64
+        :real et_m3t_private_initializer_create_v1)
+(extern i64 e3-zero-staged-initializer-seal ptr
+        :real et_m3t_private_initializer_seal_v1)
+(extern ptr e3-zero-staged-owner ptr
+        :real et_m3t_private_owner_create_v1)
+(extern ptr e3-zero-staged-parameter ptr i64
+        :real et_m3t_private_owner_parameter_v1)
+(extern i64 e3-zero-staged-owner-abort ptr
+        :real et_m3t_private_owner_abort_v1)
+
+;; There is no reviewed postconstruction M3 release. Keep a second authentic
+;; sealed model rooted until this one-case process exits.
+(define e3-zero-secondary-root (vector #f))
 
 (define (e3-zero-negative-owner model)
   (vector-ref (m3t-entry model 'model 'e3-zero-negative #t) 3))
@@ -39,6 +57,27 @@
     (if (= index 10) #t
         (and (= (vector-ref left index) (vector-ref right index))
              (compare (+ index 1))))))
+
+(define (e3-zero-negative-fixed-set model)
+  (let ((source (vector-ref (m3t-entry model 'model 'e3-zero-negative #t) 8))
+        (modules (make-vector 17 #f))
+        (handles (make-vector 14 #f))
+        (carriers (make-vector 14 #f)))
+    (e3-zero-invariant
+      (= (tr3-p1-fixed-capture-internal
+           model source modules handles carriers) 0))
+    (e3-zero-invariant
+      (= (tr3-p1-fixed-recheck-internal
+           model modules handles carriers) 0))
+    (vector modules handles carriers)))
+
+(define (e3-zero-negative-copy-vector source)
+  (let ((copy (make-vector (vector-length source) #f)))
+    (let fill ((index 0))
+      (if (= index (vector-length source)) copy
+          (begin
+            (vector-set! copy index (vector-ref source index))
+            (fill (+ index 1)))))))
 
 (define (e3-zero-negative-source-pointer source rooted)
   (e3-zero-invariant (eq? source rooted))
@@ -134,6 +173,183 @@
         (and (e3-zero-negative-bytes=?
                (vector-ref left index) (vector-ref right index))
              (compare (+ index 1))))))
+
+(define (e3-zero-negative-projection! model config name)
+  (let* ((secondary-initial (g3t-checked-m3t-initializer-state 1729))
+         (secondary (g3t-checked-m3t-model-create config secondary-initial)))
+    (vector-set! e3-zero-secondary-root 0 secondary)
+    (let* ((primary-set (e3-zero-negative-fixed-set model))
+           (second-set (e3-zero-negative-fixed-set secondary))
+           (primary-owner (e3-zero-negative-owner model))
+           (second-owner (e3-zero-negative-owner secondary))
+           (primary-params
+             (e3-zero-negative-parameters (vector-ref primary-set 1)))
+           (second-params
+             (e3-zero-negative-parameters (vector-ref second-set 1)))
+           (primary-gradient (e3-zero-gradient-image model))
+           (second-gradient (e3-zero-gradient-image secondary))
+           (primary-modes (e3-zero-modes model))
+           (second-modes (e3-zero-modes secondary))
+           (primary-initial
+             (m3t-public-initializer-words
+               (m3t-public-model-initializer model)))
+           (second-initial
+             (m3t-public-initializer-words
+               (m3t-public-model-initializer secondary)))
+           (second-seed
+             (m3t-public-initializer-words secondary-initial))
+           (primary-census (e3-zero-negative-census model))
+           (second-census (e3-zero-negative-census secondary))
+           (live (e3-zero-p1-live))
+           (tombstones (e3-zero-p1-tombstones))
+           (bad-modules
+             (e3-zero-negative-copy-vector (vector-ref primary-set 0)))
+           (bad-handles
+             (e3-zero-negative-copy-vector (vector-ref primary-set 1)))
+           (bad-carriers
+             (e3-zero-negative-copy-vector (vector-ref primary-set 2))))
+      (e3-zero-invariant (= (e3-zero-control-model-idle primary-owner) 0))
+      (e3-zero-invariant (= (e3-zero-control-model-idle second-owner) 0))
+      (let ((status
+              (cond
+                ((string=? name "foreign-p1-handle")
+                 (vector-set! bad-handles 10
+                   (vector-ref (vector-ref second-set 1) 10))
+                 (tr3-p1-fixed-recheck-internal
+                   model bad-modules bad-handles bad-carriers))
+                ((string=? name "foreign-p1-module")
+                 (vector-set! bad-modules 16
+                   (vector-ref (vector-ref second-set 0) 16))
+                 (tr3-p1-fixed-recheck-internal
+                   model bad-modules bad-handles bad-carriers))
+                ((string=? name "foreign-p1-carrier")
+                 (vector-set! bad-carriers 10
+                   (vector-ref (vector-ref second-set 2) 10))
+                 (tr3-p1-fixed-recheck-internal
+                   model bad-modules bad-handles bad-carriers))
+                (else
+                  (e3-zero-projection-check-internal
+                    model (vector-ref primary-set 0)
+                    (vector-ref primary-set 1)
+                    (vector-ref primary-set 2)
+                    (cond ((string=? name "p1-path-10") 'path-10)
+                          ((string=? name "p1-shape-10") 'shape-10)
+                          (else 'tie-10)))))))
+        (e3-zero-invariant (= status 4))
+        (e3-zero-invariant
+          (= (tr3-p1-fixed-recheck-internal
+               model (vector-ref primary-set 0)
+               (vector-ref primary-set 1)
+               (vector-ref primary-set 2)) 0))
+        (e3-zero-invariant (= (e3-zero-control-model-idle primary-owner) 0))
+        (e3-zero-invariant (= (e3-zero-control-model-idle second-owner) 0))
+        (e3-zero-invariant
+          (e3-zero-negative-same-parameters?
+            primary-params
+            (e3-zero-negative-parameters (vector-ref primary-set 1))))
+        (e3-zero-invariant
+          (e3-zero-negative-same-parameters?
+            second-params
+            (e3-zero-negative-parameters (vector-ref second-set 1))))
+        (e3-zero-invariant
+          (e3-zero-same-gradient?
+            primary-gradient (e3-zero-gradient-image model)))
+        (e3-zero-invariant
+          (e3-zero-same-gradient?
+            second-gradient (e3-zero-gradient-image secondary)))
+        (e3-zero-invariant
+          (e3-zero-same-modes? primary-modes (e3-zero-modes model)))
+        (e3-zero-invariant
+          (e3-zero-same-modes? second-modes (e3-zero-modes secondary)))
+        (e3-zero-invariant
+          (equal? primary-initial
+            (m3t-public-initializer-words
+              (m3t-public-model-initializer model))))
+        (e3-zero-invariant
+          (equal? second-initial
+            (m3t-public-initializer-words
+              (m3t-public-model-initializer secondary))))
+        (e3-zero-invariant
+          (equal? second-seed
+            (m3t-public-initializer-words secondary-initial)))
+        (e3-zero-invariant
+          (e3-zero-negative-same-census?
+            primary-census (e3-zero-negative-census model)))
+        (e3-zero-invariant
+          (e3-zero-negative-same-census?
+            second-census (e3-zero-negative-census secondary)))
+        (e3-zero-invariant
+          (and (= live (e3-zero-p1-live))
+               (= tombstones (e3-zero-p1-tombstones))))
+        (e3-zero-check-tree model)
+        (e3-zero-check-tree secondary)
+        #t))))
+
+(define (e3-zero-negative-admit-p1-handle! handle)
+  ;; P1 registry admission precedes any carrier or I2 plan lookup.
+  (parameter-handle-shape handle))
+
+(define (e3-zero-negative-stale-p1! model)
+  ;; Authentic preseal I2/P1 construction, then actual abort. This proves a
+  ;; stale P1 shell; the primary sealed M3 owner is never retired or changed.
+  (let* ((initial (e3-zero-staged-initializer 1729))
+         (sealed (e3-zero-staged-initializer-seal initial))
+         (owner (if (= sealed 0) (e3-zero-staged-owner initial) #f))
+         (construction #f))
+    (e3-zero-invariant (= sealed 0))
+    (e3-zero-invariant (not (null? owner)))
+    (guard (caught
+             (#t
+               ;; An unexpected preseal failure is fail-stop, but it must not
+               ;; leave an active P1 construction or staged native owner.
+               (let ((clean #t))
+                 (if construction
+                     (guard (cleanup-error (#t (set! clean #f)))
+                       (if (not (i2-construction-abort-internal! construction))
+                           (set! clean #f))))
+                 (if owner
+                     (guard (cleanup-error (#t (set! clean #f)))
+                       (if (not (= (e3-zero-staged-owner-abort owner) 0))
+                           (set! clean #f))))
+                 (if clean (raise caught) (e3-native-invariant-fail)))))
+      (set! construction
+        (with-region ('e3-zero-stale-construction 1048576)
+          (i2-construction-begin-internal)))
+      (let* ((root (vector-ref construction 2))
+             (parameter (e3-zero-staged-parameter owner 0)))
+        (e3-zero-invariant (not (null? parameter)))
+        (vector-set! (vector-ref construction 8) 2 parameter)
+        (let ((stale
+                (with-region ('e3-zero-stale-handle 1048576)
+                  (i2-module-register-parameter-internal!
+                    root "stale"
+                    (i2-carrier 'parameter parameter 'parameter)))))
+          (e3-zero-invariant (i2-construction-abort-internal! construction))
+          (set! construction #f)
+          (e3-zero-invariant (= (e3-zero-staged-owner-abort owner) 0))
+          (set! owner #f)
+          (let ((live (e3-zero-p1-live))
+                (tombstones (e3-zero-p1-tombstones))
+                (census (e3-zero-negative-census model)))
+            (e3-zero-invariant
+              (guard (rejected
+                       (#t (and (transformer-error? rejected)
+                                (eq? (transformer-error-category rejected)
+                                     'invalid-state))))
+                (e3-zero-negative-admit-p1-handle! stale)
+                #f))
+            (e3-zero-invariant
+              (equal? (e3-zero-negative-admit-p1-handle!
+                        (parameter-tree-handle
+                          (e3-zero-check-tree model) '("head" "weight")))
+                      '(256 4)))
+            (e3-zero-invariant
+              (and (= live (e3-zero-p1-live))
+                   (= tombstones (e3-zero-p1-tombstones))))
+            (e3-zero-invariant
+              (e3-zero-negative-same-census?
+                census (e3-zero-negative-census model)))
+            #t))))))
 
 (define (e3-zero-negative-destinations destinations)
   (vector (e3-test-u32-ref (vector-ref destinations 0))
@@ -265,6 +481,15 @@
                       (e3-zero-negative-fault! model handles sources 1 #f))
                      ((string=? name "alloc-f32-prepare")
                       (e3-zero-negative-fault! model handles sources 2 #f))
+                     ((string=? name "stale-p1-handle")
+                      (e3-zero-negative-stale-p1! model))
+                     ((or (string=? name "foreign-p1-handle")
+                          (string=? name "foreign-p1-module")
+                          (string=? name "foreign-p1-carrier")
+                          (string=? name "p1-path-10")
+                          (string=? name "p1-shape-10")
+                          (string=? name "p1-tie-10"))
+                      (e3-zero-negative-projection! model config name))
                      (else
                        (guard (caught
                                 (#t (transformer-error? caught)))

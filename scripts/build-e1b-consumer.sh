@@ -1233,6 +1233,16 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
   fi
   python3 "${PROJECT_ROOT}/scripts/generate-e3-d2-source.py" \
     --output-dir "${e3_zero_generated_dir}" >"${e1b_tmp}/d2-generation.json"
+  if [[ "${e3_tuple_kind}" == zero ]]; then
+    python3 "${PROJECT_ROOT}/scripts/generate-e3-zero-p1-overlay.py" \
+      --output-dir "${e3_zero_generated_dir}" \
+      >"${e1b_tmp}/p1-overlay-generation.sha256"
+    python3 "${PROJECT_ROOT}/scripts/generate-e3-zero-p1-overlay.py" \
+      --output-dir "${e3_zero_generated_dir}" --check \
+      >"${e1b_tmp}/p1-overlay-check.sha256"
+    cmp "${e1b_tmp}/p1-overlay-generation.sha256" \
+        "${e1b_tmp}/p1-overlay-check.sha256"
+  fi
   e3_generated_source_root="${e3_zero_generated_dir}/source"
 fi
 
@@ -1316,6 +1326,10 @@ if [[ "${package_policy}" == e3-private-aggregate || \
   include_args=()
 else
   include_args=(-I "${PROJECT_ROOT}/lib" -I "${PROJECT_ROOT}/native")
+fi
+if [[ "${package_policy}" == e3-private-aggregate &&
+      "${e3_tuple_kind}" == zero ]]; then
+  include_args+=(-I "${e3_zero_generated_dir}/p1")
 fi
 for include_dir in "${canonical_include_dirs[@]}"; do
   include_args+=(-I "${include_dir}")
@@ -1555,6 +1569,10 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
             "${package_native_source}" == "${PROJECT_ROOT}/src/eshkol_transformer/e3_frame.c" ]]; then
       package_source_flags+=(-DET_F32_TENSOR_TESTING
                              -DET_I2_PRIVATE_OWNED_CLONE_MATCH)
+    elif [[ "${package_policy}" == e3-private-aggregate &&
+            "${e3_tuple_kind}" == zero &&
+            "${package_native_source}" == "${PROJECT_ROOT}/native/p1_identity.c" ]]; then
+      package_source_flags+=(-DET_P1_TEST_HOOKS)
     fi
     if [[ "${package_policy}" == cli3-tr3-aggregate ]]; then
       case "${package_native_source}" in
@@ -2043,6 +2061,9 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
         et_e3_zero_control_fail_after_v1
         et_e3_zero_control_fail_reset_v1
         et_e3_zero_control_census_v1
+        et_e3_zero_control_model_idle_v1
+        et_p1_test_live_entry_count_v1
+        et_p1_test_tombstone_count_v1
       )
     fi
   fi

@@ -116,14 +116,18 @@ e3_check_native_dependency_path() {
 }
 
 e3_normalize_source_dependencies() {
-  local dependency generated
+  local dependency generated overlay
   [[ -n "${e3_generated_source_root:-}" ]] || \
     die "E3 private generated source was not initialized"
   generated="${e3_generated_source_root}/e3_d2_dataset.esk"
+  overlay="${e3_zero_generated_dir:-}/p1/transformer/module.esk"
   while IFS= read -r dependency; do
     [[ -n "${dependency}" ]] || continue
     if [[ "$(realpath -m -- "${dependency}")" == "${generated}" ]]; then
       printf '@BUILD@/source/e3_d2_dataset.esk\n'
+    elif [[ "${e3_tuple_kind}" == zero &&
+            "$(realpath -m -- "${dependency}")" == "${overlay}" ]]; then
+      printf '@BUILD@/p1/transformer/module.esk\n'
     else
       e3_check_repository_path "${dependency}"
       printf '%s\n' "${dependency#"${PROJECT_ROOT}/"}"

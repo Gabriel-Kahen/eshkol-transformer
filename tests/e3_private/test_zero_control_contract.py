@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import subprocess
+import importlib.util
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -32,6 +34,68 @@ def complete_observation() -> bytes:
 
 
 class ZeroControlContract(unittest.TestCase):
+    def test_p1_overlay_is_exact_single_slot_and_fails_closed(self) -> None:
+        script = ROOT / "scripts/generate-e3-zero-p1-overlay.py"
+        spec = importlib.util.spec_from_file_location("zero_p1_overlay", script)
+        assert spec and spec.loader
+        generator = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(generator)
+        canonical = generator.SOURCE.read_bytes()
+        overlay = generator.rendered()
+        self.assertEqual(hashlib.sha256(canonical).hexdigest(),
+                         generator.SOURCE_SHA256)
+        self.assertEqual(overlay.count(b"e3-zero-projection-test"), 3)
+        self.assertEqual(overlay.replace(generator.SLOT.encode(),
+                                         generator.ANCHOR.encode()), canonical)
+        self.assertIn(b"(vector-set! target field original)", overlay)
+        self.assertIn(b"(tr3-fixed-recheck! model modules handles carriers)",
+                      overlay)
+        self.assertIn(b"(wrong-path '(\"head\" \"wrong\"))", overlay)
+        self.assertIn(b"(wrong-shape '(255 4))", overlay)
+        self.assertIn(b"(eq? (vector-ref binding 2) head)", overlay)
+        self.assertIn(b"(if (not (= status 4))", overlay)
+        self.assertNotIn(b"(module-parameters model)", generator.SLOT.encode())
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            command = ["python3", str(script), "--output-dir", str(directory)]
+            self.assertEqual(subprocess.run(command, capture_output=True).returncode,
+                             0)
+            self.assertEqual(subprocess.run(command + ["--check"],
+                                            capture_output=True).returncode, 0)
+            self.assertNotEqual(subprocess.run(command,
+                                               capture_output=True).returncode, 0)
+            generated = directory / "p1/transformer/module.esk"
+            generated.write_bytes(overlay + b"; corrupted\n")
+            self.assertNotEqual(subprocess.run(command + ["--check"],
+                                               capture_output=True).returncode, 0)
+            generator.SOURCE = generated
+            with self.assertRaisesRegex(ValueError, "canonical P1 module bytes"):
+                generator.rendered()
+
+    def test_projection_source_closure_and_real_negative_routes(self) -> None:
+        closure = (ROOT / "tests/e3_private/zero_control_package_source_closure.txt"
+                   ).read_text().splitlines()
+        self.assertEqual(closure.count("@BUILD@/p1/transformer/module.esk"), 1)
+        self.assertNotIn("internal/p1/lib/transformer/module.esk", closure)
+        self.assertEqual(
+            closure.count("native/tr3_p1_fixed_set_extension.esk"), 1)
+        builder = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
+        policy = (ROOT / "scripts/e3-private-package-policy.sh").read_text()
+        negative = (ROOT / "tests/e3_private/zero_control_negative_driver.esk"
+                    ).read_text()
+        runner = (ROOT / "scripts/test-e3-zero-control.sh").read_text()
+        self.assertIn('generate-e3-zero-p1-overlay.py', builder)
+        self.assertIn('include_args+=(-I "${e3_zero_generated_dir}/p1")', builder)
+        self.assertIn("@BUILD@/p1/transformer/module.esk", policy)
+        for case in ("foreign-p1-handle", "foreign-p1-module",
+                     "foreign-p1-carrier", "stale-p1-handle", "p1-path-10",
+                     "p1-shape-10", "p1-tie-10"):
+            self.assertIn(case, negative)
+            self.assertIn(case, runner)
+        self.assertIn("i2-construction-abort-internal! construction", negative)
+        self.assertIn("(e3-zero-staged-owner-abort owner)", negative)
+        self.assertIn("(e3-zero-control-model-idle", negative)
+
     def test_observer_requires_complete_ordered_actual_roles(self) -> None:
         raw = complete_observation()
         observed, roles = parse(raw)

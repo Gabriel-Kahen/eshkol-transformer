@@ -1528,6 +1528,21 @@ static int e3_zero_control_owner(void *pointer, int64_t index,
   return 0;
 }
 
+/* Exact zero tuple only: read-only complete native owner/identity admission. */
+int64_t et_e3_zero_control_model_idle_v1(void *pointer) {
+  owner *model = admit(pointer, OWNER, 0);
+  if (!model || model->r.state != 1 || model->initialized != 14 ||
+      model->active || e3_zero_control.model || e3_zero_control.borrow ||
+      e3_zero_control.pin || e3_zero_control.fail_domain) return -1;
+  for (int64_t index = 0; index < 14; ++index) {
+    owner *actual = NULL;
+    const et_f32_tensor *value = NULL;
+    if (e3_zero_control_owner(pointer, index, &actual, &value) != 0 ||
+        actual != model || !value) return -1;
+  }
+  return 0;
+}
+
 static int e3_zero_control_identical(void *pointer, int64_t index,
                                      void *source) {
   owner *model = NULL;

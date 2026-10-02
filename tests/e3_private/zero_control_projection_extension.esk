@@ -1,0 +1,7 @@
+;;; Zero-only private P1 projection control. Slot 73 exists only in the
+;;; gate-owned overlay and never escapes as a production/public P1 entry.
+(require transformer.module)
+(define (e3-zero-projection-check-internal
+          model modules handles carriers selector)
+  ((vector-ref p1-trusted-surface 73)
+   model modules handles carriers selector))

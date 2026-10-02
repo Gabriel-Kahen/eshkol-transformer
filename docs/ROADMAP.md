@@ -763,9 +763,16 @@ gradient state, modes, initializer words, destinations and D2 cursor, and uses
 test-only authenticated real borrow/pin and allocator controls. The corrected
 source and tests await independent review. Sanitizer imports require a bounded
 compiler-emitted inventory diagnostic before an exact pin and supported
-normal/sanitized compiled gate; no compiled proof is claimed. Stale M3 handle
-and mutated tie/owner metadata controls lack a reviewed authentic fixture seam.
-This candidate does not discharge
+normal/sanitized compiled gate; no compiled proof is claimed. The isolated
+P1 negative successor source adds authentic second-model foreign shells and
+carriers, a revoked P1 handle from aborted construction, and fixed path/shape/
+tie perturbations of the genuine P1 projection through a SHA-pinned,
+zero-tuple-only lexical overlay. The compiled witness is written to check
+restoration and unchanged native owner identities and state images. Its source
+and host tests still need
+independent review; normal/sanitized AOT evidence remains pending. It does
+not retire a sealed M3 owner or rewrite the native graph. This candidate
+does not discharge
 the broader §9 numerical, fault, rollback, or typed RNG rows.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
