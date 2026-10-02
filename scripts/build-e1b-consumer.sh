@@ -1815,8 +1815,29 @@ if [[ "${e3_private_test_sanitize}" == 1 ]]; then
   comm -13 "${e1b_tmp}/expected-undefined.txt" \
     "${e1b_tmp}/noninstrumentation-undefined.txt" \
     >"${e1b_tmp}/unexpected-undefined.txt"
-  [[ ! -s "${e1b_tmp}/unexpected-undefined.txt" ]] || \
-    die "E3 sanitized private test object adds noninstrumentation imports"
+  if [[ "${e3_tuple_kind:-}" == numerical ]]; then
+    # Clang O1 on the exact sanitized tuple lowers native memcmp to bcmp and
+    # generated literal printf to puts. Pin both sides of the complete delta;
+    # the normal object's exact undefined-symbol manifest is unchanged.
+    numerical_added="${PROJECT_ROOT}/tests/e3_private/numerical_package_sanitized_added_undefined_symbols.txt"
+    numerical_absent="${PROJECT_ROOT}/tests/e3_private/numerical_package_sanitized_absent_undefined_symbols.txt"
+    for numerical_manifest in "${numerical_added}" "${numerical_absent}"; do
+      [[ -s "${numerical_manifest}" ]] || die "E3 numerical sanitizer delta manifest is empty"
+      LC_ALL=C sort -u "${numerical_manifest}" | \
+        cmp -s "${numerical_manifest}" - || \
+        die "E3 numerical sanitizer delta manifest is not sorted unique text"
+    done
+    cmp -s "${numerical_added}" "${e1b_tmp}/unexpected-undefined.txt" || \
+      die "E3 numerical sanitizer added imports differ from exact delta"
+    comm -23 "${e1b_tmp}/expected-undefined.txt" \
+      "${e1b_tmp}/noninstrumentation-undefined.txt" \
+      >"${e1b_tmp}/absent-undefined.txt"
+    cmp -s "${numerical_absent}" "${e1b_tmp}/absent-undefined.txt" || \
+      die "E3 numerical sanitizer absent imports differ from exact delta"
+  else
+    [[ ! -s "${e1b_tmp}/unexpected-undefined.txt" ]] || \
+      die "E3 sanitized private test object adds noninstrumentation imports"
+  fi
 else
   if ! e1b_compare_exact_undefined_allowlist \
       "${e1b_tmp}/expected-undefined.txt" "${e1b_tmp}/undefined.txt"; then

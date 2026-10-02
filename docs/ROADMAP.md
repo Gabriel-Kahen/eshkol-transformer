@@ -791,6 +791,10 @@ sealed separately; no numerical acceptance followed. A bounded numerical
 test-tuple staging repair uses one fresh gate-owned generated-source path for
 independent package builds while retaining exact object/archive comparisons.
 Independent source review and a fresh supported gate remain required.
+The subsequent `94b8fecd` fe9/f31 gate F stopped at sanitized import
+admission before AOT execution, with `bcmp` and `puts` introduced by Clang
+optimization. An exact numerical-sanitized-only added/absent import delta is
+under review; F supplies no numerical acceptance.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
