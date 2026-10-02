@@ -784,6 +784,13 @@ evidence is sealed with unchanged pre/post pins. A test-tuple-only linker
 repair materializes COMMON before unchanged symbol localization/export
 validation; a genuine Clang ASan object regression passes locally.
 Independent repair review and a fresh supported numerical run remain required.
+An interrupted `06abb6f` fe9/f31 gate E also retained two byte-different
+normal package objects: only the randomly staged generated-source filename in
+runtime strings and the resulting build ID differed. Its terminal evidence is
+sealed separately; no numerical acceptance followed. A bounded numerical
+test-tuple staging repair uses one fresh gate-owned generated-source path for
+independent package builds while retaining exact object/archive comparisons.
+Independent source review and a fresh supported gate remain required.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.

@@ -9,7 +9,18 @@ mode="${2:-normal}"
 case "${mode}" in normal|wrong-target|mean-of-means|sanitize) ;; *) die "unknown E3 numerical mode: ${mode}" ;; esac
 mkdir -p "$(dirname -- "${artifact}")"
 staging="$(mktemp -d "$(dirname -- "${artifact}")/.e3-numerical.XXXXXX")"
-trap 'rm -rf -- "${staging}"' EXIT
+numerical_stage_cleanup() {
+  local status=$?
+  if [[ "${status}" == 0 ]]; then
+    rm -rf -- "${staging}"
+  else
+    printf 'E3 numerical rejected-build stage retained at %s\n' "${staging}" >&2
+  fi
+  return "${status}"
+}
+trap numerical_stage_cleanup EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
 prefix="${PROJECT_ROOT}/tests/e3_private/numerical_package"
 mutant="${mode}"
 sanitize=0
