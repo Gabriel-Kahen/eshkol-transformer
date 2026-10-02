@@ -12,7 +12,8 @@ case "${mode}" in
 esac
 mkdir -p "$(dirname -- "${artifact}")"
 staging="$(mktemp -d "$(dirname -- "${artifact}")/.e3-mode-graph.XXXXXX")"
-trap 'rm -rf -- "${staging}"' EXIT
+source "${PROJECT_ROOT}/scripts/e3-mode-graph-stage-cleanup.sh"
+e3_mode_graph_install_stage_cleanup "${staging}"
 prefix="${PROJECT_ROOT}/tests/e3_mode_graph/package"
 mutant="${mode}"
 sanitize=0

@@ -810,7 +810,10 @@ normal, poison, sanitizer, fresh-build, failure/retry and mutation gates remain
 pending; the emitted test inventory is not yet supported-verified. No §9 mode
 or graph acceptance is claimed. The candidate also composes the reviewed
 sanitizer-only COMMON materialization fix; its local Clang/binutils regression
-passes, while supported mode/graph sanitizer execution remains pending.
+passes, while supported mode/graph sanitizer execution remains pending. The
+test package wrapper now retains failed staged manifests and exact signal/
+failure status under mounted evidence; this does not establish compiled
+behavior.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.

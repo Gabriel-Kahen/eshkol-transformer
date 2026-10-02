@@ -53,6 +53,10 @@ numerical package sources and inventories are unchanged. Supported emitted
 inventory comparison and actual runtime behavior are pending; an unexpected
 emitted dependency is a gate failure requiring evidence, not an allowlist
 waiver.
+The package wrapper retains its actual staged object and manifests with an
+`exit.status` on a failed postbuild check, TERM or INT; successful publication
+removes staging. E1B itself retains rejected build scratch under the gate's
+mounted `TMPDIR`.
 
 The candidate composes the independently reviewed numerical sanitizer fix:
 the relocatable link materializes Clang ASan's COMMON registration cell only
