@@ -189,6 +189,8 @@ native/g3c4_p2g2_terminal_composer_extension.esk
 tests/g3c4/p2_g2_terminal_composer_native.c
 tests/g3c4/p2_g2_terminal_composer_test.esk
 tests/g3c4/p2_g2_terminal_composer_feature_off_test.esk
+tests/g3c4/p2_g2_terminal_fault_fixture.esk.in
+tests/g3c4/generate_p2_g2_terminal_fault_overlays.py
 tests/g3c4/check_p2_g2_terminal_composer_oracle.py
 tests/g3c4/test_context_cache_checker.py
 tests/g3c4/test_active_call_checker.py

@@ -183,6 +183,41 @@ int64_t et_g3c4_p2g2_composer_test_clone_count_v1(int64_t state) {
   return count;
 }
 
+/* Test-only proof markers; the production sources have no callback seam. */
+static int composer_overlay_active, composer_first_success;
+static int composer_second_success, composer_zero_marker;
+static et_g3c4_output_internal *composer_overlay_pending;
+int64_t et_g3c4_p2g2_composer_test_overlay_mark_v1(
+    void *context, int64_t prompt0, int64_t prompt1) {
+  composer_overlay_active = 0;
+  composer_first_success = composer_second_success = 0;
+  composer_overlay_pending = NULL;
+  if (et_g3c4_p2g2_coordinator_test_mark_v1(
+          context, prompt0, prompt1) != 0)
+    return -1;
+  composer_overlay_active = 1;
+  return 0;
+}
+int64_t et_g3c4_p2g2_composer_test_overlay_after_v1(
+    void *context, int64_t ordinal) {
+  if (!composer_overlay_active || !composer_first_success ||
+      (ordinal != 1 && ordinal != 2) ||
+      (ordinal == 2 && !composer_second_success) ||
+      (ordinal == 1 && composer_second_success) ||
+      composer_overlay_pending == NULL ||
+      et_g3c4_p2g2_coordinator_test_dead_output_v1(
+          composer_overlay_pending) != 0 ||
+      et_g3c4_p2g2_coordinator_test_after_abort_v1(
+          context, ordinal == 1 ? 2 : 3) != 0)
+    return -1;
+  return 0;
+}
+int64_t et_g3c4_p2g2_composer_test_zero_marker_v1(int64_t active) {
+  if (active != 0 && active != 1) return -1;
+  composer_zero_marker = (int)active;
+  return 0;
+}
+
 int64_t __real_et_g3c4_private_p2g2_eos_first_frame_carrier_v1(
     void *, void *, void *, int64_t);
 int64_t __wrap_et_g3c4_private_p2g2_eos_first_frame_carrier_v1(
@@ -216,6 +251,15 @@ int64_t __wrap_et_g3c4_private_p2g2_eos_first_frame_carrier_v1(
            context, pending, 2,
            ((et_g3c4_context_internal *)context)->token_frame_candidate) != 0))
     return -1;
+  if (result == 0 && composer_overlay_active) {
+    if (pending == NULL || coordinator_precommit_cache_owner == NULL ||
+        coordinator_saw_prefix || composer_first_success ||
+        memcmp(((et_g3c4_context_internal *)context)->generator_rng_words,
+               coordinator_entry_rng, sizeof(coordinator_entry_rng)) != 0)
+      abort();
+    composer_overlay_pending = pending;
+    composer_first_success = 1;
+  }
   return result;
 }
 
@@ -230,6 +274,7 @@ int64_t __real_et_g3c4_private_p2g2_second_frame_carrier_v1(
 int64_t __wrap_et_g3c4_private_p2g2_second_frame_carrier_v1(
     void *context, void *output, void *staging, int64_t bytes) {
   et_g3c4_context_internal *actual = (et_g3c4_context_internal *)context;
+  int64_t result;
   if (et_g3c4_p2g2_coordinator_test_prefix_v1(
           context, output, actual->p2g2_prefix_token) != 0)
     return -1;
@@ -237,8 +282,47 @@ int64_t __wrap_et_g3c4_private_p2g2_second_frame_carrier_v1(
     composer_fault_mode = 0;
     return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
   }
-  return __real_et_g3c4_private_p2g2_second_frame_carrier_v1(
+  result = __real_et_g3c4_private_p2g2_second_frame_carrier_v1(
       context, output, staging, bytes);
+  if (result == 0 && composer_overlay_active) {
+    et_a2_kv_cache_transaction_view *view = NULL;
+    const et_kernel_tensor_view_v1 *keys = NULL, *values = NULL;
+    const et_kernel_tensor_view_v1 *lengths = NULL, *keep = NULL;
+    et_kernel_error error;
+    const unsigned char *staged = (const unsigned char *)staging;
+    if (!composer_first_success || composer_second_success ||
+        output != composer_overlay_pending ||
+        !coordinator_saw_prefix || bytes != 16 ||
+        actual->token_frame_state != ET_G3C4_TOKEN_FRAME_READY ||
+        actual->token_frame_candidate < 0 ||
+        actual->token_frame_candidate > 255 ||
+        actual->p2g2_second_frame != 1u ||
+        et_a2_kv_cache_private_terminal_transaction_witness_v1(
+          actual->token_frame_transaction, actual->cache, 3) != 1 ||
+        memcmp(actual->generator_rng_words, coordinator_successor_rng,
+               sizeof(coordinator_successor_rng)) != 0 ||
+        staged[0] != 8 || staged[8] != actual->token_frame_candidate ||
+        memcmp(staged + 9, (const unsigned char[7]){0}, 7u) != 0 ||
+        et_a2_kv_cache_transaction_view_begin_v1(
+          actual->token_frame_transaction, 0u, &view, &error) != 0 ||
+        et_a2_kv_cache_transaction_view_tensors_v1(
+          view, &keys, &values, &lengths, &keep, &error) != 0)
+      abort();
+    if (keys == NULL || values == NULL || lengths == NULL || keep == NULL ||
+        keys->data == NULL || values->data == NULL ||
+        keys->byte_length != sizeof(actual->p2g2_frame_keys) ||
+        values->byte_length != sizeof(actual->p2g2_frame_values) ||
+        *(const int64_t *)lengths->data != 4 ||
+        memcmp(keep->data, (const uint8_t[4]){1, 1, 1, 1}, 4u) != 0 ||
+        memcmp(keys->data, actual->p2g2_frame_keys,
+               sizeof(actual->p2g2_frame_keys)) != 0 ||
+        memcmp(values->data, actual->p2g2_frame_values,
+               sizeof(actual->p2g2_frame_values)) != 0 ||
+        et_a2_kv_cache_transaction_view_end_v1(&view, &error) != 0)
+      abort();
+    composer_second_success = 1;
+  }
+  return result;
 }
 
 int64_t __real_et_g3c4_private_p2g2_terminal_commit_v1(
@@ -250,8 +334,11 @@ int64_t __wrap_et_g3c4_private_p2g2_terminal_commit_v1(
     composer_fault_mode = 0;
     return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
   }
-  return __real_et_g3c4_private_p2g2_terminal_commit_v1(
+  int64_t result = __real_et_g3c4_private_p2g2_terminal_commit_v1(
       context, output, first, first_bytes, second, second_bytes);
+  if (result == 0 && composer_zero_marker && write(3, "Z", 1) != 1)
+    abort();
+  return result;
 }
 
 static et_i64_tensor_borrow *composer_clone_borrow;

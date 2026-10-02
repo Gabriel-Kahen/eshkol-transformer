@@ -2438,10 +2438,15 @@ publication, public G2 and continuation remain pending.
   branches while excluding the exact later terminal guards; negative-guard,
   `#else`, nested and unguarded deferred-surface regressions pass. The full
   private prefix static predecessor chain passes, but compiled composer and
-  independent source review remain pending. The exact-source test overlays
-  needed for in-region T1 decode cuts and a real post-zero fail-stop witness
-  are separately proposed and unimplemented; static tail checks and native
-  predecessor evidence do not substitute for those compiled witnesses.
+  independent source review remain pending. Test-only exact-source overlays
+  now stage actual first/second T1 decode cuts and a post-native-zero
+  fail-stop witness in disposable processes. They also check removal identity,
+  ordinary-source parity, an unmarked-route rejection, and the no-zero
+  precommit control. Authentic native
+  counter setup stages singleton, carry, final and exhausted Philox cases with
+  an independent second-logit oracle. These tests are generated and statically
+  checked but remain uncompiled and ungated; native predecessor evidence does
+  not substitute for the same-call Eshkol runtime proof.
 
 ## Wave 4 — practical pretraining and performance
 

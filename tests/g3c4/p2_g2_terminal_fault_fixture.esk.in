@@ -1,0 +1,110 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+
+;;; Both conditions and the ordinal cell exist before the protected call.
+(define terminal-decode-cut (vector 0 @ORDINAL@))
+(define terminal-decode-condition
+  (guard (caught (#t caught))
+    (t1-private-raise 'invalid-state 'terminal-decode-cut
+                      "test-only T1 decode cut")))
+(define terminal-postzero-condition
+  (guard (caught (#t caught))
+    (g3c4-fail 'invalid-state 'terminal-postzero-cut
+               "test-only postzero cut")))
+(load @T1_SOURCE@)
+(load "g3c4_output_envelope_extension.esk")
+(load "g3c4_p2g2_ownership_extension.esk")
+(load "g3c4_p2g2_protected_scope_extension.esk")
+(load "g3c4_p2g2_t1_prefix_coordinator_extension.esk")
+(load @COMPOSER_SOURCE@)
+
+(extern i64 overlay-mark ptr i64 i64
+        :real et_g3c4_p2g2_composer_test_overlay_mark_v1)
+(extern i64 overlay-after ptr i64
+        :real et_g3c4_p2g2_composer_test_overlay_after_v1)
+(extern i64 overlay-zero-marker i64
+        :real et_g3c4_p2g2_composer_test_zero_marker_v1)
+(extern i64 overlay-precommit-fault i64
+        :real et_g3c4_p2g2_composer_test_fault_v1)
+
+(define (check good)
+  (if (not good) (exit 1)))
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define model (g3c4-model-create-seeded-internal 1729))
+(define prompt
+  (g3c4-p2g2-owned-input-create
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255))))
+(define generator
+  (g3c4-generator-create-internal model tokenizer
+    (list ':profile 'diagnostic-c4 ':sampling 'greedy
+          ':temperature-bits 1065353216 ':top-k 256
+          ':top-p-bits 1065353216 ':max-new-tokens 2
+          ':eos #f ':seed 7)))
+(define native
+  (vector-ref (g3c4-generator-entry-call-ready generator 'test) 3))
+(define mode '@MODE@)
+
+(if (eq? mode 'parity)
+    (let* ((output (g3c4-p2g2-terminal-generate-internal generator prompt))
+           (snapshot (g3c4-p2g2-terminal-snapshot-internal output))
+           (clone (g3c4-p2g2-terminal-ids-clone-internal output))
+           (copy (g3c4-p2g2-terminal-ids-copy-internal clone)))
+      (check (and (= (vector-ref snapshot 2) 2)
+                  (= (vector-ref snapshot 3) 4)
+                  (= (g3c4-p2g2-terminal-word copy 0)
+                     (vector-ref snapshot 0))
+                  (= (g3c4-p2g2-terminal-word copy 8)
+                     (vector-ref snapshot 1))))
+      (check (g3c4-p2g2-terminal-release-internal! output))
+      (check (g3c4-p2g2-terminal-ids-release-internal! clone))
+      (check (g3c4-generator-close-internal! generator))
+      (check (generation-tensor-release-internal! prompt))
+      (display "OVERLAY_PARITY ")
+      (display (vector-ref snapshot 0))
+      (display " ")
+      (display (vector-ref snapshot 1))
+      (display " ")
+      (display (vector-ref snapshot 3))
+      (newline))
+    (if (eq? mode 'unmarked)
+        (let ((output
+                (g3c4-p2g2-terminal-generate-internal generator prompt)))
+          (check (= (overlay-after native 2) -1))
+          (check (g3c4-p2g2-terminal-release-internal! output))
+          (check (g3c4-generator-close-internal! generator))
+          (check (generation-tensor-release-internal! prompt))
+          (display "OVERLAY_UNMARKED") (newline))
+    (begin
+      (check (= (overlay-mark native 0 255) 0))
+      (if (or (eq? mode 'postzero) (eq? mode 'precommit))
+          (check (= (overlay-zero-marker 1) 0)))
+      (if (eq? mode 'precommit)
+          (check (= (overlay-precommit-fault 3) 0)))
+      (let ((caught #f))
+        (guard (condition (#t (set! caught condition)))
+          (g3c4-p2g2-terminal-generate-internal generator prompt)
+          (display "ILLEGAL_TERMINAL_RETURN")
+          (newline)
+          (exit 1))
+        (if (eq? mode 'postzero)
+            (exit 1))
+        (check (and (transformer-error? caught)
+                    (not (vector-ref m3-call-state 0))
+                    (null? (vector-ref g3c4-p2g2-protected-records 0))
+                    (null? (vector-ref g3c4-p2g2-prefix-input-anchors 0))
+                    (null? (vector-ref g3c4-p2g2-terminal-anchors 0))
+                    (null? (vector-ref g3c4-p2g2-terminal-originals 0))))
+        (if (eq? mode 'precommit)
+            (check (= (overlay-after native 2) 0))
+            (check (and (eq? caught terminal-decode-condition)
+                        (= (vector-ref terminal-decode-cut 0) @ORDINAL@)
+                        (= (overlay-after native @ORDINAL@) 0))))
+        (check (g3c4-generator-close-internal! generator))
+        (check (generation-tensor-release-internal! prompt))
+        (display "OVERLAY_ABORT ")
+        (display mode)
+        (newline)))))

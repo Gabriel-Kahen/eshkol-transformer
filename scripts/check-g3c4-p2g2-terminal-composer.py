@@ -13,6 +13,8 @@ additions = [
     "tests/g3c4/p2_g2_terminal_composer_native.c",
     "tests/g3c4/p2_g2_terminal_composer_test.esk",
     "tests/g3c4/p2_g2_terminal_composer_feature_off_test.esk",
+    "tests/g3c4/p2_g2_terminal_fault_fixture.esk.in",
+    "tests/g3c4/generate_p2_g2_terminal_fault_overlays.py",
     "tests/g3c4/check_p2_g2_terminal_composer_oracle.py",
     "tests/g3c4/test_context_cache_checker.py",
     "tests/g3c4/test_active_call_checker.py",
@@ -110,4 +112,13 @@ assert "et_g3c4_p2g2_coordinator_test_prefix_v1(" in native_fixture
 assert "et_g3c4_p2g2_coordinator_test_observe_v1(" in native_fixture
 assert "reference.philox" in oracle and "reference.literal" in oracle
 assert "normal-run.stdout" in runner and "sanitize-run.stdout" in runner
+overlay_generator = (root / additions[8]).read_text()
+assert "T1_SHA =" in overlay_generator and "COMPOSER_SHA =" in overlay_generator
+assert "result.replace(insertion, \"\", 1) != source" in overlay_generator
+assert "ambiguous/wrong-marker negative control escaped" in overlay_generator
+assert "decode-first decode-second" in runner
+assert "test \"$exit_status\" -eq 134" in runner
+assert "cmp \"$evidence/$mode-parity-original-run.stdout\"" in runner
+assert "categorical-singleton" in fixture and "composer-exhausted" in fixture
+assert "categorical-carry" in native_fixture and "categorical-final" in native_fixture
 print("G3-C4 private Eshkol terminal source closure and tail PASS")

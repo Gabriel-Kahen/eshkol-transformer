@@ -150,6 +150,61 @@ WRAPPER
     test ! -s "$evidence/$label-run.stderr"
     grep -E "$expected" "$evidence/$label-run.stdout" >/dev/null
   done
+
+  python3 "$PROJECT_ROOT/tests/g3c4/generate_p2_g2_terminal_fault_overlays.py" \
+    "$directory/overlays" >"$evidence/$mode-overlay-generation.stdout"
+  (cd "$directory/overlays" && sha256sum -c SHA256SUMS) \
+    >"$evidence/$mode-overlay-identity.stdout"
+  cp "$directory/overlays/SHA256SUMS" "$evidence/$mode-overlay-SHA256SUMS"
+  for fixture in parity-original parity-overlay unmarked decode-first decode-second \
+      precommit postzero; do
+    mkdir -p "$directory/cache/$fixture"
+    env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
+      XDG_CACHE_HOME="$directory/cache/$fixture" \
+      ESHKOL_CXX_COMPILER="$directory/cxx-wrap" \
+      ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
+      timeout --foreground --signal=TERM --kill-after=5s 600s \
+      "$runner" --strict-types --optimize 0 --no-stdlib \
+      -I "$PROJECT_ROOT/internal/p1/lib" -I "$PROJECT_ROOT/internal/c1/lib" \
+      -I "$PROJECT_ROOT/internal/t1/lib" -I "$PROJECT_ROOT/src" \
+      -I "$PROJECT_ROOT/lib" -I "$PROJECT_ROOT/native" \
+      -L "$directory" --lib g3c4_p2g2_terminal_composer \
+      "$directory/overlays/$fixture.esk" \
+      -o "$directory/composer-$fixture" \
+      >"$evidence/$mode-$fixture-compile.stdout" \
+      2>"$evidence/$mode-$fixture-compile.stderr"
+    local exit_status=0
+    "${runtime[@]}" ESHKOL_ARENA_POISON=1 \
+      timeout --foreground --signal=TERM --kill-after=5s 120s \
+      "$directory/composer-$fixture" \
+      3>"$evidence/$mode-$fixture.marker" \
+      >"$evidence/$mode-$fixture-run.stdout" \
+      2>"$evidence/$mode-$fixture-run.stderr" || exit_status=$?
+    if [[ "$fixture" == postzero ]]; then
+      test "$exit_status" -eq 134
+      test "$(cat "$evidence/$mode-$fixture.marker")" = Z
+      ! grep -Eq 'ILLEGAL_TERMINAL_RETURN|OVERLAY_PARITY|OVERLAY_ABORT|ESH_TERMINAL' \
+        "$evidence/$mode-$fixture-run.stdout"
+    else
+      test "$exit_status" -eq 0
+      test ! -s "$evidence/$mode-$fixture.marker"
+      test ! -s "$evidence/$mode-$fixture-run.stderr"
+      if [[ "$fixture" == parity-* ]]; then
+        grep -Eq '^OVERLAY_PARITY [0-9]+ [0-9]+ 4$' \
+          "$evidence/$mode-$fixture-run.stdout"
+      elif [[ "$fixture" == unmarked ]]; then
+        grep -Fx OVERLAY_UNMARKED \
+          "$evidence/$mode-$fixture-run.stdout" >/dev/null
+      else
+        grep -Fx "OVERLAY_ABORT ${fixture#decode-}" \
+          "$evidence/$mode-$fixture-run.stdout" >/dev/null
+      fi
+    fi
+    printf '%s %s\n' "$fixture" "$exit_status" \
+      >>"$evidence/$mode-overlay-exits.txt"
+  done
+  cmp "$evidence/$mode-parity-original-run.stdout" \
+      "$evidence/$mode-parity-overlay-run.stdout"
 }
 
 compile_mode normal
