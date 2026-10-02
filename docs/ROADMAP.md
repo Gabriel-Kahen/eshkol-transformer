@@ -752,6 +752,13 @@ and stage-selective fault/observer seams for review. It provides no new runtime
 proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
 verdicts remain prerequisites before the full matrix is implemented and run.
 
+The [E3 idle real-model control contract](e3/E3_IDLE_REAL_MODEL_CONTROL_CONTRACT.md)
+specifies a test-only use of existing I2 checkpoint decode and whole-batch load
+for all 14 authentic M3 parameter owners before frame binding. It preserves the
+current two-field private scenario, the single tied head/token-embedding owner,
+and immediate commit after successful prepare. Integration and compiled proof
+remain pending; this contract does not discharge any §9 numerical or rollback row.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
