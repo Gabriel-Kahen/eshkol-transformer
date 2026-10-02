@@ -732,6 +732,14 @@ historical, not passes. The 3,600-second bound and 512 MiB RSS ceiling remain.
 It does not close the other E3 §9 retention, mode, gradient, and sanitizer
 obligations.
 
+The [E3 in-call mode and graph observation contract](e3/E3_MODE_GRAPH_OBSERVATION_CONTRACT.md)
+is a design-only next leaf for §9. The unmerged retention candidate's postcall
+mixed17 restoration and zero live graph-owner probes do not establish all-eval
+modes during traversal or exclude transient graph creation. A nonreentrant
+test-only in-call source seam and a genuinely reachable M3 graph-create/release
+mutation under active E3 model authority remain unaccepted prerequisites. No
+implementation, compiled proof, or edge-corpus acceptance is claimed here.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
