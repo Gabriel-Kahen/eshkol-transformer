@@ -128,6 +128,19 @@
                   'e3-zero-negative)))
             (image (+ index 1)))))))
 
+(define (e3-zero-negative-sources sources)
+  (let ((result (make-vector 14 #f)))
+    (let image ((index 0))
+      (if (= index 14) result
+          (begin
+            (vector-set! result index
+              (i2-checkpoint-encode
+                (vector (vector-ref sources index) 'parameter
+                        (vector-ref e3-zero-shapes index)
+                        'f32 'cpu 'dense-row-major-contiguous
+                        'e3-zero-negative)))
+            (image (+ index 1)))))))
+
 (define (e3-zero-negative-same-parameters? left right)
   (let compare ((index 0))
     (if (= index 14) #t
@@ -251,6 +264,10 @@
                  (destinations-before
                    (e3-zero-negative-destinations destinations))
                  (cursor-before (d2-token-dataset-cursor dataset))
+                 (census-before (e3-zero-negative-census model))
+                 (source-bytes-before
+                   (if (string=? name "postprepare-envelope")
+                       (e3-zero-negative-sources sources) #f))
                  (rejected
                    (cond
                      ((string=? name "active-borrow")
@@ -265,6 +282,12 @@
                       (e3-zero-negative-fault! model handles sources 1 #f))
                      ((string=? name "alloc-f32-prepare")
                       (e3-zero-negative-fault! model handles sources 2 #f))
+                     ((string=? name "postprepare-envelope")
+                      (guard (caught (#t #t))
+                        (i2-prepare-load
+                          (vector (e3-zero-assignments handles sources)
+                                  'e3-zero-negative))
+                        #f))
                      (else
                        (guard (caught
                                 (#t (transformer-error? caught)))
@@ -274,8 +297,16 @@
                          #f)))))
             (e3-zero-invariant rejected)
             (e3-zero-invariant
+              (e3-zero-negative-same-census?
+                census-before (e3-zero-negative-census model)))
+            (e3-zero-invariant
               (e3-zero-negative-same-parameters?
                 parameters-before (e3-zero-negative-parameters handles)))
+            (if source-bytes-before
+                (e3-zero-invariant
+                  (e3-zero-negative-same-parameters?
+                    source-bytes-before
+                    (e3-zero-negative-sources sources))))
             (e3-zero-invariant
               (e3-zero-same-gradient?
                 gradient-before (e3-zero-gradient-image model)))

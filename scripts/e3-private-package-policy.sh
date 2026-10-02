@@ -124,6 +124,19 @@ e3_normalize_source_dependencies() {
     [[ -n "${dependency}" ]] || continue
     if [[ "$(realpath -m -- "${dependency}")" == "${generated}" ]]; then
       printf '@BUILD@/source/e3_d2_dataset.esk\n'
+    elif [[ -n "${e3_i2_overlay_root:-}" &&
+            "${dependency}" == "${e3_i2_overlay_root}/"* ]]; then
+      local name="${dependency#"${e3_i2_overlay_root}/"}"
+      case "${name}" in
+        zero_control_driver_root.esk|e3_private_driver_root.esk|\
+        e3_private_root.esk|m3_package_root.esk|m3t_package_root.esk|\
+        i2_wave2_root.esk)
+          [[ ! -L "${dependency}" && -f "${dependency}" ]] ||
+            die "E3 I2 staged root is not a regular private file"
+          printf '@BUILD@/source/i2-guard-overlay/%s\n' "${name}"
+          ;;
+        *) die "E3 I2 mutant depfile contains an unexpected staged source" ;;
+      esac
     else
       e3_check_repository_path "${dependency}"
       printf '%s\n' "${dependency#"${PROJECT_ROOT}/"}"

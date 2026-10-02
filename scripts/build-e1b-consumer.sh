@@ -1145,6 +1145,36 @@ fi
 e3_zero_sanitize=0
 e3_zero_sanitize_flags=()
 e3_zero_reloc_flags=()
+e3_i2_overlay_root=
+e3_i2_guard_length="${E3_I2_POSTPREPARE_GUARD_LENGTH:-}"
+e3_i2_mutant="${E3_I2_POSTPREPARE_MUTANT:-}"
+if [[ -n "${e3_i2_guard_length}" ]]; then
+  [[ ( "${e3_i2_guard_length}" == 1 || "${e3_i2_guard_length}" == 3 ) &&
+     "${package_policy}" == e3-private-aggregate &&
+     "${e3_tuple_kind}" == zero ]] ||
+    die "I2 postprepare guard requires exact zero tuple and vector length 1 or 3"
+  e3_check_repository_path "${PROJECT_ROOT}/tests/e3_private/i2_postprepare_wrap.c"
+  e3_check_repository_path "${PROJECT_ROOT}/tests/e3_private/i2_guard_package_native_source_closure.txt"
+  package_native_sources+=(
+    "${PROJECT_ROOT}/tests/e3_private/i2_postprepare_wrap.c")
+  package_native_source_closure="${PROJECT_ROOT}/tests/e3_private/i2_guard_package_native_source_closure.txt"
+  e3_zero_reloc_flags+=(
+    -Wl,--wrap=et_i2_private_copy_builder_prepare_v1
+    -Wl,--wrap=et_i2_private_copy_builder_abort_v1
+    -Wl,--wrap=et_i2_private_copy_builder_commit_v1
+    -Wl,--wrap=arena_allocate_vector_with_header
+    -Wl,--wrap=eshkol_get_raised_value)
+fi
+if [[ -n "${e3_i2_mutant}" ]]; then
+  [[ "${e3_i2_mutant}" == omit-abort &&
+     -n "${e3_i2_guard_length}" &&
+     "${package_policy}" == e3-private-aggregate &&
+     "${e3_tuple_kind}" == zero ]] ||
+    die "I2 postprepare mutant requires the exact wrapped zero tuple"
+  e3_check_repository_path "${PROJECT_ROOT}/tests/e3_private/i2_guard_mutant_package_source_closure.txt"
+  e3_check_repository_path "${PROJECT_ROOT}/scripts/generate-e3-i2-guard-mutant.py"
+  package_source_closure="${PROJECT_ROOT}/tests/e3_private/i2_guard_mutant_package_source_closure.txt"
+fi
 if [[ "${E3_ZERO_CONTROL_SANITIZE:-0}" != 0 ]]; then
   [[ "${E3_ZERO_CONTROL_SANITIZE}" == 1 &&
      "${package_policy}" == e3-private-aggregate &&
@@ -1155,7 +1185,7 @@ if [[ "${E3_ZERO_CONTROL_SANITIZE:-0}" != 0 ]]; then
                           -fno-omit-frame-pointer -fno-builtin-printf
                           -fno-builtin-memcmp)
   # ASan's registration cell must be materialized before symbol localization.
-  e3_zero_reloc_flags=(-Wl,-d)
+  e3_zero_reloc_flags+=(-Wl,-d)
 fi
 
 require_command awk
@@ -1234,6 +1264,14 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
   python3 "${PROJECT_ROOT}/scripts/generate-e3-d2-source.py" \
     --output-dir "${e3_zero_generated_dir}" >"${e1b_tmp}/d2-generation.json"
   e3_generated_source_root="${e3_zero_generated_dir}/source"
+  if [[ -n "${e3_i2_mutant}" ]]; then
+    e3_i2_overlay_root="${e3_generated_source_root}/i2-guard-overlay"
+    mkdir -m 0700 -- "${e3_i2_overlay_root}"
+    python3 "${PROJECT_ROOT}/scripts/generate-e3-i2-guard-mutant.py" \
+      --root "${PROJECT_ROOT}" --output "${e3_i2_overlay_root}" \
+      >"${e1b_tmp}/i2-mutant-provenance.json"
+    private_root="${e3_i2_overlay_root}/zero_control_driver_root.esk"
+  fi
 fi
 
 awk '
@@ -1322,6 +1360,9 @@ for include_dir in "${canonical_include_dirs[@]}"; do
 done
 if [[ "${package_policy}" == e3-private-aggregate ]]; then
   include_args+=(-I "${e3_generated_source_root}")
+  if [[ -n "${e3_i2_mutant}" ]]; then
+    include_args+=(-I "${PROJECT_ROOT}/tests/e3_private")
+  fi
 fi
 if [[ "${package_policy}" == e3-private-aggregate || \
       "${package_policy}" == m3-model-aggregate || \
@@ -1364,6 +1405,15 @@ if [[ -n "${package_source_closure}" ]]; then
   fi
   cmp -s "${package_source_closure}" "${e1b_tmp}/source-closure.txt" || \
     die "${package_policy} trusted Eshkol source closure drifted"
+  if [[ -n "${e3_i2_mutant}" ]]; then
+    [[ "$(grep -Fxc '@BUILD@/source/i2-guard-overlay/i2_wave2_root.esk' \
+        "${e1b_tmp}/source-closure.txt")" == 1 ]] ||
+      die "I2 mutant closure omitted its single staged loaded root"
+    if grep -Fqx 'native/i2_wave2_root.esk' \
+        "${e1b_tmp}/source-closure.txt"; then
+      die "I2 mutant closure also loaded the canonical I2 root"
+    fi
+  fi
 fi
 e1b_raise_attribute="$(
   awk '
@@ -1550,6 +1600,10 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
           "${package_native_source}" == "${PROJECT_ROOT}/src/eshkol_transformer/m3_call_f32_integration.c" ]]; then
       package_source_flags+=(-DET_F32_TENSOR_TESTING
                              -DET_I2_PRIVATE_OWNED_CLONE_MATCH)
+    elif [[ -n "${e3_i2_guard_length}" &&
+            "${package_native_source}" == "${PROJECT_ROOT}/tests/e3_private/i2_postprepare_wrap.c" ]]; then
+      package_source_flags+=(-DET_E3_I2_GUARD_FAIL_LENGTH="${e3_i2_guard_length}"
+                             -I "${e1b_source}/inc")
     elif [[ "${package_policy}" == e3-private-aggregate &&
             "${e3_tuple_kind}" == zero &&
             "${package_native_source}" == "${PROJECT_ROOT}/src/eshkol_transformer/e3_frame.c" ]]; then
@@ -2089,6 +2143,18 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     "${evidence_dir}.tmp.$$/e3_d2_dataset.esk"
   cp "${e3_generated_source_root}/e3_d2_source_provenance.json" \
     "${evidence_dir}.tmp.$$/e3_d2_source_provenance.json"
+  if [[ -n "${e3_i2_guard_length}" ]]; then
+    cp "${e1b_tmp}/private.o" "${evidence_dir}.tmp.$$/private.prelink.o"
+    cp "${e1b_tmp}/combined.raw.o" "${evidence_dir}.tmp.$$/combined.raw.o"
+    printf 'target_vector_length\t%s\n' "${e3_i2_guard_length}" \
+      >"${evidence_dir}.tmp.$$/i2-guard-policy.tsv"
+  fi
+  if [[ -n "${e3_i2_mutant}" ]]; then
+    cp "${e1b_tmp}/i2-mutant-provenance.json" \
+      "${evidence_dir}.tmp.$$/i2-mutant-provenance.json"
+    cp "${e3_i2_overlay_root}/i2_wave2_root.esk" \
+      "${evidence_dir}.tmp.$$/i2-wave2-mutant-root.esk"
+  fi
 fi
 if [[ -n "${package_native_source_closure}" ]]; then
   cp "${e1b_tmp}/native-source-closure.txt" \
