@@ -101,7 +101,7 @@ int64_t et_g3c4_p2g2_composer_test_fault_v1(int64_t active) {
   return 0;
 }
 int64_t et_g3c4_p2g2_composer_test_read_fault_v1(int64_t active) {
-  if (active < 0 || active > 2) return -1;
+  if (active < 0 || active > 3) return -1;
   composer_read_fault = (int)active;
   return 0;
 }
@@ -122,12 +122,35 @@ int64_t __real_et_g3c4_private_p2g2_terminal_ids_clone_copy_v1(
     void *, int64_t, void *, int64_t);
 int64_t __wrap_et_g3c4_private_p2g2_terminal_ids_clone_copy_v1(
     void *clone, int64_t count, void *destination, int64_t bytes) {
+  if (composer_read_fault == 3) {
+    int64_t *declared = (int64_t *)destination;
+    int64_t result;
+    composer_read_fault = 0;
+    *declared += 8;
+    result = __real_et_g3c4_private_p2g2_terminal_ids_clone_copy_v1(
+        clone, count, destination, bytes);
+    *declared -= 8;
+    if (result == 0) abort();
+    return result;
+  }
   if (composer_read_fault == 2) {
     composer_read_fault = 0;
     return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
   }
   return __real_et_g3c4_private_p2g2_terminal_ids_clone_copy_v1(
       clone, count, destination, bytes);
+}
+
+int64_t et_g3c4_p2g2_composer_test_clone_count_v1(int64_t state) {
+  int64_t count = 0;
+  const et_g3c4_transport_header_internal *record;
+  if (state != ET_G3C4_CONTEXT_LIVE && state != ET_G3C4_CONTEXT_DEAD)
+    return -1;
+  for (record = et_g3c4_transport_registry; record != NULL;
+       record = record->registry_next)
+    if (record->kind == ET_G3C4_TERMINAL_IDS_KIND && record->state == state)
+      count++;
+  return count;
 }
 
 int64_t __real_et_g3c4_private_p2g2_eos_first_frame_carrier_v1(

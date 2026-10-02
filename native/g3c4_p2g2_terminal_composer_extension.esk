@@ -604,13 +604,31 @@
              (record (vector owner-shell 'pending #f count copy))
              (anchor (vector record owner-shell #f count copy))
              (result (list owner-shell))
+             (old-records (vector-ref g3c4-p2g2-terminal-ids-records 0))
+             (old-anchors (vector-ref g3c4-p2g2-terminal-ids-anchors 0))
              (next-record
-               (cons record (vector-ref g3c4-p2g2-terminal-ids-records 0)))
+               (cons record old-records))
              (next-anchor
-               (cons anchor (vector-ref g3c4-p2g2-terminal-ids-anchors 0)))
+               (cons anchor old-anchors))
              (native '()))
         (guard (caught
                  (#t
+                   ;; Remove only this attempt's nodes. A displaced head is
+                   ;; not ours to restore or overwrite.
+                   (if (eq? (vector-ref g3c4-p2g2-terminal-ids-records 0)
+                            next-record)
+                       (vector-set! g3c4-p2g2-terminal-ids-records 0
+                                    old-records)
+                       (if (not (eq? (vector-ref g3c4-p2g2-terminal-ids-records 0)
+                                     old-records))
+                           (exit 134)))
+                   (if (eq? (vector-ref g3c4-p2g2-terminal-ids-anchors 0)
+                            next-anchor)
+                       (vector-set! g3c4-p2g2-terminal-ids-anchors 0
+                                    old-anchors)
+                       (if (not (eq? (vector-ref g3c4-p2g2-terminal-ids-anchors 0)
+                                     old-anchors))
+                           (exit 134)))
                    (if (not (null? native))
                        (if (not (= (g3c4-p2g2-native-ids-release native) 0))
                            (exit 134)))

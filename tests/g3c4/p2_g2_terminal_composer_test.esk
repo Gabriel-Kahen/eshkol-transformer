@@ -17,6 +17,8 @@
         :real et_g3c4_p2g2_composer_test_fault_v1)
 (extern i64 composer-read-fault i64
         :real et_g3c4_p2g2_composer_test_read_fault_v1)
+(extern i64 composer-clone-count i64
+        :real et_g3c4_p2g2_composer_test_clone_count_v1)
 (extern i64 composer-mark ptr i64 i64
         :real et_g3c4_p2g2_coordinator_test_mark_v1)
 (extern i64 composer-after-abort ptr i64
@@ -81,6 +83,38 @@
              #t))
          (snapshot (g3c4-p2g2-terminal-snapshot-internal output))
          (count (vector-ref snapshot 2))
+         (source-entry (g3c4-registry-find output 'test))
+         (old-clone-records (vector-ref g3c4-p2g2-terminal-ids-records 0))
+         (old-clone-anchors (vector-ref g3c4-p2g2-terminal-ids-anchors 0))
+         (old-live (composer-clone-count 1))
+         (old-dead (composer-clone-count 2))
+         (clone-fault-probe
+           (begin
+             (check "hold authentic source I1 before native clone"
+                    (= (composer-source-lease (vector-ref source-entry 3) 1) 0))
+             (reject "native clone rejects held source I1"
+               (lambda () (g3c4-p2g2-terminal-ids-clone-internal output)))
+             (check "release held source I1 for retry"
+                    (= (composer-source-lease (vector-ref source-entry 3) 0) 0))
+             (check "clone failure leaves no Eshkol enrollment or native owner"
+                    (and (eq? old-clone-records
+                              (vector-ref g3c4-p2g2-terminal-ids-records 0))
+                         (eq? old-clone-anchors
+                              (vector-ref g3c4-p2g2-terminal-ids-anchors 0))
+                         (= old-live (composer-clone-count 1))
+                         (= old-dead (composer-clone-count 2))))
+             (check "arm authentic native clone copy preflight failure"
+                    (= (composer-read-fault 3) 0))
+             (reject "native copy rejects malformed declared extent"
+               (lambda () (g3c4-p2g2-terminal-ids-clone-internal output)))
+             (check "copy failure removes enrollment and releases native I1"
+                    (and (eq? old-clone-records
+                              (vector-ref g3c4-p2g2-terminal-ids-records 0))
+                         (eq? old-clone-anchors
+                              (vector-ref g3c4-p2g2-terminal-ids-anchors 0))
+                         (= old-live (composer-clone-count 1))
+                         (= (+ old-dead 1) (composer-clone-count 2))))
+             #t))
          (clone (g3c4-p2g2-terminal-ids-clone-internal output))
          (copy-probe
            (begin
@@ -90,12 +124,13 @@
                (lambda () (g3c4-p2g2-terminal-ids-copy-internal clone)))
              #t))
          (copy (g3c4-p2g2-terminal-ids-copy-internal clone))
-         (entry (g3c4-registry-find output 'test))
+         (entry source-entry)
          (anchor (g3c4-p2g2-terminal-for-output entry))
          (clone-shell (car clone))
          (clone-record (g3c4-p2g2-terminal-ids-record clone-shell 'test)))
     (check "capture original reference" marked)
-    (check "detached read failures were injected" (and snapshot-probe copy-probe))
+    (check "detached read and clone failures were injected"
+           (and snapshot-probe clone-fault-probe copy-probe))
     (check "terminal shell original and independently live"
            (and (vector? output) (= (vector-length output) 1)
                 (eq? (vector-ref (g3c4-registry-find output 'test) 1)
