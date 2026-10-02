@@ -2323,6 +2323,12 @@ sanitizers, publication and deterministic rebuilds. The evidence seal is
 lookup but no overall speed or memory improvement claim; 8,192 cycles
 remain unproven.
 
+- **E3 numerical AOT fixture repair:** pinned fe9/f31 source `0476fe14`
+  completed package gates but AOT compilation stopped on unavailable no-stdlib
+  `length`/`list-ref` helpers. The fixture now uses primitive pair/car/cdr
+  operations with the same exact two-argument check. Package source is unchanged;
+  fresh compiled runtime proof and full E3 section 9 acceptance remain pending.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |

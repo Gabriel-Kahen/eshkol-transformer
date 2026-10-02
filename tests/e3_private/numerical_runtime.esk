@@ -17,9 +17,10 @@
                   (loop (+ index 1)))))))
 
 (define args (command-line))
-(check 'arguments (= (length args) 2))
+(check 'arguments
+  (and (pair? args) (pair? (cdr args)) (null? (cdr (cdr args)))))
 (define output (vector #f))
-(e3-private-test-run (vector (vector #t 0)) (vector (list-ref args 1)) output)
+(e3-private-test-run (vector (vector #t 0)) (vector (car (cdr args))) output)
 (define result (vector-ref output 0))
 (check 'result
   (and (vector? result) (= (vector-length result) 9)
