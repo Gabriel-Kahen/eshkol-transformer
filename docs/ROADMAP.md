@@ -955,10 +955,16 @@ actual greedy/categorical oracle records before a test observer tried a
 normal A2 cache read borrow while a sampled token-frame transaction held
 the cache. The fixture now asserts that genuine lease rejection and checks
 the committed cache against an independent P2 reference after native abort.
-Source review and a fresh supported gate remain pending; no complete
-`3/1110` Eshkol runtime proof or integration is claimed.
-Second-token, terminal/EOS,
-public and CLI work remain separate.
+The final repair at `501f8d18`/tree `cdc5933e` passed independent
+source-and-test review and its exact supported fe9/f31 Clang 21 gate: off
+five checks; enabled normal/repeat/ASan/UBSan/LSan each 273 checks,
+byte-identical output and empty compile/runtime stderr; actual two-mode
+G3-S/Philox oracle and all predecessor gates passed. Docker/launcher exited
+zero and pre/post pins matched. The 134-file evidence seal is
+`g3c4-t1-prefix-coordinator-501f8d1-fe9-f31-20261002-prepared-d/SHA256SUMS-RUN`
+(SHA-256 `54068de810fd834b7076c887172a0ed364d3d4986c2e5741ece41264c3636822`).
+Independent sealed-evidence review accepted this result; hosted integration
+remains pending. Second-token, terminal/EOS, public and CLI work remain separate.
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver

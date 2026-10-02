@@ -21,9 +21,19 @@ pinned gate at `e7aef68` compiled both modes and passed feature-off runtime
 then stopped when a test observer requested an ordinary A2 read borrow during
 a genuine pending token-frame transaction. That A2 lease rejection is expected.
 The fixture repair asserts the rejection in-region and checks exact committed
-cache bytes against an independent P2 prefill after native abort. Independent
-source review and a fresh pinned normal/repeat/sanitizer Eshkol/native gate
-remain required before enabled-runtime or integration acceptance. Parent PR
+cache bytes against an independent P2 prefill after native abort. Independent source-and-test review approved the final repair composed on
+main at `501f8d18`/tree `cdc5933e`. Its exact supported fe9/f31 Clang 21
+gate passed with Docker and launcher exits zero and unchanged pre/post pins.
+Separate default-off fixtures passed five checks; enabled normal, repeat and
+ASan/UBSan/LSan runs each passed 273 checks with pending-only output,
+byte-identical stdout and empty compile/runtime stderr. The independent
+G3-S/Philox reference checked both actual sampling modes and all 256 logits.
+The protected-scope, native carrier, prefix and first-frame predecessors passed.
+The 134-file evidence seal is
+`g3c4-t1-prefix-coordinator-501f8d1-fe9-f31-20261002-prepared-d/SHA256SUMS-RUN`
+(SHA-256 `54068de810fd834b7076c887172a0ed364d3d4986c2e5741ece41264c3636822`).
+Independent sealed-evidence review accepted this result; hosted integration
+remains pending. Parent PR
 #174 is merged. Second-token
 generation, EOS terminal handling, output publication, public ABI/profile
 and CLI remain later gates.
