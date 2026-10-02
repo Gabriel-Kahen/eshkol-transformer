@@ -45,6 +45,7 @@ G3C4_DEVELOPMENT_SCRIPTS = frozenset({
         "check-g3c4-p2g2-carrier-bridge.py",
         "check-g3c4-p2g2-eos-first-frame.py",
         "check-g3c4-p2g2-second-frame.py",
+        "check-g3c4-p2g2-terminal.py",
         "check-g3c4-p2g2-ownership.py",
         "check-g3c4-p2g2-protected-scope.py",
         "check-g3c4-p2g2-t1-prefix-coordinator.py",
