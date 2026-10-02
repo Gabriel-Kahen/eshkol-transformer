@@ -63,6 +63,11 @@
 #error "G3-T RNG constructor requires kind-8 RNG clone authority"
 #endif
 #endif
+#ifdef ET_G3T_RECORD_RNG_IMPORT_PRIVATE
+#ifndef ET_G3T_OUTPUT_RNG_CLONE_PRIVATE
+#error "G3-R word import requires kind-8 RNG clone ownership and release"
+#endif
+#endif
 #ifdef ET_G3T_MANUAL_P1_PREFILL_PRIVATE
 #if !defined(ET_G3T_MANUAL_LOGITS_PRIVATE) || \
     !defined(ET_G3T_FINAL_PUBLICATION_PRIVATE)
@@ -1229,6 +1234,40 @@ void *et_g3t_private_output_rng_clone_v1(void *candidate) {
   g3t_registry = &clone->h;
   return clone;
 }
+#ifdef ET_G3T_RECORD_RNG_IMPORT_PRIVATE
+void *et_g3t_private_rng_words_create_v1(
+    int64_t version, int64_t seed, int64_t counter_low,
+    int64_t counter_high) {
+  g3t_clear();
+  if (version != 1 || seed < 0) {
+    g3t_bad(G3T_ARGUMENT, G3T_CONFIG);
+    return NULL;
+  }
+#ifdef ET_G3T_TESTING
+  if (g3t_allocations >= g3t_allocation_limit) {
+    g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
+    return NULL;
+  }
+#endif
+  g3t_rng_clone *clone = calloc(1, sizeof(*clone));
+  if (!clone) {
+    g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
+    return NULL;
+  }
+#ifdef ET_G3T_TESTING
+  ++g3t_allocations;
+#endif
+  clone->words[0] = version;
+  clone->words[1] = seed;
+  clone->words[2] = counter_low;
+  clone->words[3] = counter_high;
+  clone->h.kind = G3T_RNG_CLONE;
+  clone->h.state = G3T_LIVE;
+  clone->h.next = g3t_registry;
+  g3t_registry = &clone->h;
+  return clone;
+}
+#endif
 int64_t et_g3t_private_rng_release_v1(void *candidate) {
   g3t_clear();
   g3t_rng_clone *clone = (g3t_rng_clone *)g3t_admit_record(
