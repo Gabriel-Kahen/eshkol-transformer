@@ -1538,6 +1538,17 @@ The separate record codec has also passed its supported gate. This scalar
 private kind-8 import does not authenticate a record, restore C2/model/cache/
 tokenizer state, replay draws or prove continuation.
 
+The proposed [G3-R restore prerequisites contract](g3/G3_R_RESTORE_PREREQUISITES_CONTRACT.md)
+specifies two missing private source witnesses before pair admission: an
+ordinary whole-image SHA-256 from the *same authoritative second C2 LOAD
+stage* that reconstructs the detached owner, and an authenticated idle G3-T
+generator four-word equality predicate to prove manual replay consumes no
+G3-S draw. It also bounds the fixed diagnostic-C2 candidate recipe to
+external X1/T1/D2 inputs authenticated against loaded C2 controls before
+TR3 restore, with candidate-only cleanup and no public LOAD or generation ABI
+change. Both signatures and the ownership contract await independent review;
+no pair loader, live replay, save writer or resumed continuation is accepted.
+
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
 names would return newly owned authenticated CPU f32 `[1,256]` kind-3 shells,
