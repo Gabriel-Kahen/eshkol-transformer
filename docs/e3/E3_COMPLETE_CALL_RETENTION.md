@@ -53,6 +53,25 @@ evidence files, including the raw native depfiles, are sealed at
 No dependency or check was removed, and compiled retention/sanitizer acceptance
 still requires a fresh exact-head gate.
 
+The later supported `5d642a2` fe9/f31 attempt passed canonical packaging and
+the repaired retention undefined inventory, then stopped before retention
+runtime. E1B's unresolved-private guard rejected the expected
+`et_e3_retention_region_used_v1` import, whose real definition is supplied by
+the separately compiled, noninstalled `retention_arena.cpp` at final link.
+The 113-file failed seal is
+`/home/gabe/e3-complete-call-retention-5d642a2-fe9-f31-20261002-prepared-f/SHA256SUMS-FAILED`
+(`ceca414727634776d126c77ea2d393563a31e21a2032dcdfe8d5941fa7fb710c`).
+The scoped policy repair allows only this declared retention-tuple import,
+keeps every other unresolved private authority forbidden, and makes the runner
+verify its compiled C++ definition and final normal/sanitized AOT resolution.
+A fresh supported run remains required; no retention runtime result exists.
+
+The fixture's current mixed17 helpers also incorrectly treat M3T model-entry
+slot 4 as a P1 node vector. It is `#f`; slot 0 is an opaque P1 shell. Mixed17
+setup and restoration cannot be claimed until a separately reviewed P1-owned
+test seam replaces those helpers. The policy repair does not change this
+runtime prerequisite.
+
 `tests/e3_private/retention_driver_root.esk` loads the unchanged canonical
 private driver, then adds one boxed retention entry. The exact retention tuple
 has its own policy inputs, source/native closures, export/string/undefined
@@ -62,7 +81,8 @@ canonical private package and rejects any retention symbol in its object.
 
 For each 1,024/8,192 horizon and absent/present gradient state, the fixture
 creates one genuine fixed M3 model, T1 tokenizer, packed D2 dataset, E3 frame
-and four I2 destinations. It sets and records mixed modes on all 17 P1 nodes,
+and four I2 destinations. After the P1 test seam is implemented, it must set
+and record mixed modes on all 17 P1 nodes,
 seeds one nonzero present gradient when selected, and snapshots every word of
 all 14 parameter values and gradients, gradient metadata, the four initializer
 successor words, destination bits, counters and D2 cursor. One complete call

@@ -1993,10 +1993,9 @@ if [[ "${package_policy}" == cli3-tr3-aggregate || \
   done
 fi
 if [[ "${package_policy}" == e3-private-aggregate ]]; then
-  if grep -E '^et_(e3|d2|l2|l3s|m3|m3t|n2|n3k|a2|f32|i64|p1|kernel)_' \
-      "${e1b_tmp}/undefined.txt" >/dev/null; then
-    die "E3 aggregate retains unresolved private native authority"
-  fi
+  source "${PROJECT_ROOT}/scripts/e3-private-unresolved-policy.sh"
+  e3_reject_unresolved_private "${e3_tuple_kind}" \
+    "${e1b_tmp}/undefined.txt" "${e1b_tmp}/expected-undefined.txt"
   e3_required_private=(
     et_e3_private_frame_create_v1 et_e3_private_acquire_v1
     et_e3_private_stage_inputs_v1 et_e3_private_forward_role_v1

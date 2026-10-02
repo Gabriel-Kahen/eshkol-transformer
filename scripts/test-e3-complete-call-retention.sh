@@ -135,6 +135,12 @@ runner="$(eshkol_build_dir)/eshkol-run"
   -o "${out}/retention_arena_sanitized.o" \
   >"${out}/arena-sanitized-compile.stdout" \
   2>"${out}/arena-sanitized-compile.stderr"
+for supplement in "${out}/retention_arena.o" \
+    "${out}/retention_arena_sanitized.o"; do
+  nm -g --defined-only "${supplement}" | \
+    grep -E '[[:space:]]T et_e3_retention_region_used_v1$' >/dev/null || \
+    die "retention supplement lacks its exact compiled observer definition"
+done
 for cache in a b; do
   artifact="${out}/private-${cache}"
   mkdir "${out}/link-${cache}"
@@ -184,6 +190,12 @@ for cache in a b; do
       2>"${out}/compile-${cache}.stderr"
 done
 cmp "${out}/runtime-a" "${out}/runtime-b"
+for executable in "${out}/runtime-a" "${out}/runtime-b"; do
+  if nm -u "${executable}" | \
+      grep -E '[[:space:]]U et_e3_retention_region_used_v1(@|$)' >/dev/null; then
+    die "retention observer remained unresolved after final AOT link"
+  fi
+done
 env -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH \
   -u DEPENDENCIES_OUTPUT -u SUNPRO_DEPENDENCIES -u GCC_EXEC_PREFIX \
   -u COMPILER_PATH -u LIBRARY_PATH -u CLANG_CONFIG_FILE \
@@ -198,6 +210,10 @@ env -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH \
     -o "${out}/runtime-sanitized" \
     >"${out}/compile-sanitized.stdout" \
     2>"${out}/compile-sanitized.stderr"
+if nm -u "${out}/runtime-sanitized" | \
+    grep -E '[[:space:]]U et_e3_retention_region_used_v1(@|$)' >/dev/null; then
+  die "sanitized retention observer remained unresolved after final AOT link"
+fi
 
 for horizon in 1024 8192; do
   for gradient in absent present; do

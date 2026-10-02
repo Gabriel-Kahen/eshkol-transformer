@@ -737,7 +737,7 @@ now has an exact test-only package tuple and a source-staged 1,024/8,192-call
 runner reusing one D2 dataset, frame and destinations. The runner requires two
 fresh test-package builds with exact object/archive/raw-depfile equality and
 executes each fresh-cache AOT across both horizons with full stdout equality.
-Its probes cover exact
+Its probes are designed to cover exact
 root/caller-region bytes and I2/D2/frame cumulative controls, mixed17 modes,
 full parameter and absent/present gradient words, initializer successor, and a D2 read
 failure with same-authority retry. Normal, poisoned and ASan/UBSan/LSan paths
@@ -766,7 +766,18 @@ retention runtime on five exact retention-only generated Eshkol imports. Its
 (`569b8e2e...`). The scoped retention manifest/provider preflight repair is
 described in [the retention leaf](e3/E3_COMPLETE_CALL_RETENTION.md); canonical,
 diagnostic, installed and numerical manifests remain unchanged. A fresh
-supported exact-tree run is required, so §9 acceptance remains open.
+supported `5d642a2` fe9/f31 run passed canonical packaging and the repaired
+retention undefined inventory, then stopped before runtime: the E3
+unresolved-private guard rejected the exact test-only
+`et_e3_retention_region_used_v1` import, whose C++ provider is linked later.
+The sealed 113-file failure is
+`e3-complete-call-retention-5d642a2-fe9-f31-20261002-prepared-f/SHA256SUMS-FAILED`
+(`ceca4147...`). The scoped exact-retention import policy and final-link
+witness are source-staged; a fresh supported run is required. The retention
+driver's mixed17 helpers also incorrectly treat M3T model-entry slot 4 (`#f`)
+as a P1 node vector, while slot 0 is an opaque P1 shell. Authentic mixed17
+setup/restoration awaits a separate P1-owned test seam; no repeated-call
+runtime result or §9 acceptance is claimed.
 
 The separate [E3 compiled numerical transcript candidate](e3/E3_NUMERICAL_TRANSCRIPT.md)
 adds an exact noninstalled test tuple over the genuine three-batch D2/E3
