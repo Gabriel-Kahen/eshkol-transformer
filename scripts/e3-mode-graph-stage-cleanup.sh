@@ -1,5 +1,18 @@
 #!/usr/bin/env bash
-# Sourced only by the noninstalled mode/graph package builder.
+# Private mode/graph build staging and cleanup helpers.
+e3_mode_graph_generated_stage() {
+  local object=$1 stage gate generated
+  stage="$(dirname -- "${object}")"
+  gate="$(dirname -- "${stage}")"
+  [[ "$(basename -- "${object}")" == e3_mode_graph_package.o &&
+     "$(basename -- "${stage}")" =~ ^\.e3-mode-graph\.[[:alnum:]]{6}$ &&
+     -d "${stage}" && ! -L "${stage}" && -O "${stage}" &&
+     -d "${gate}" && ! -L "${gate}" && -O "${gate}" ]] || return 1
+  generated="${gate}/.e3-mode-graph-generated"
+  [[ ! -e "${generated}" && ! -L "${generated}" ]] || return 1
+  printf '%s\n' "${generated}"
+}
+
 e3_mode_graph_stage_cleanup() {
   local status=$?
   trap - EXIT

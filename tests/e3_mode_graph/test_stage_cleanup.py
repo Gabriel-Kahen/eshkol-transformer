@@ -13,6 +13,34 @@ BUILDER = ROOT / "scripts/build-e3-mode-graph-test.sh"
 
 
 class StageCleanupTest(unittest.TestCase):
+    def test_private_generated_source_stage_is_stable_and_fresh(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="e3-mode-graph-gate-") as temp:
+            gate = Path(temp)
+            stages = [gate / ".e3-mode-graph.ABC123",
+                      gate / ".e3-mode-graph.XYZ789"]
+            for stage in stages:
+                stage.mkdir()
+
+            def select(object_path: Path) -> subprocess.CompletedProcess[str]:
+                return subprocess.run(
+                    ["bash", "-c", 'source "$1"; e3_mode_graph_generated_stage "$2"',
+                     "bash", str(HELPER), str(object_path)],
+                    capture_output=True, text=True, check=False,
+                )
+
+            expected = str(gate / ".e3-mode-graph-generated") + "\n"
+            for stage in stages:
+                selected = select(stage / "e3_mode_graph_package.o")
+                self.assertEqual((selected.returncode, selected.stdout),
+                                 (0, expected), selected.stderr)
+            self.assertNotEqual(select(stages[0] / "other.o").returncode, 0)
+            alias = gate / ".e3-mode-graph.ALIAS1"
+            alias.symlink_to(stages[0], target_is_directory=True)
+            self.assertNotEqual(select(alias / "e3_mode_graph_package.o").returncode, 0)
+            (gate / ".e3-mode-graph-generated").symlink_to(
+                stages[0], target_is_directory=True)
+            self.assertNotEqual(select(stages[0] / "e3_mode_graph_package.o").returncode, 0)
+
     def test_failed_and_signaled_builds_retain_actual_stage(self) -> None:
         self.assertIn('source "${PROJECT_ROOT}/scripts/e3-mode-graph-stage-cleanup.sh"',
                       BUILDER.read_text())

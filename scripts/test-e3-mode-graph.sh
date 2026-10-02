@@ -2,9 +2,9 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 verify_toolchain
-for command in ar cmp diff env grep python3 timeout; do require_command "${command}"; done
+for command in ar cmp diff env grep python3 realpath strings timeout; do require_command "${command}"; done
 [[ $# -le 1 ]] || die "usage: $0 [FRESH_OUTPUT_DIRECTORY]"
-out="${1:-$(project_build_dir)/e3-mode-graph}"
+out="$(realpath -m -- "${1:-$(project_build_dir)/e3-mode-graph}")"
 [[ ! -e "${out}" ]] || die "E3 mode/graph output directory must be fresh"
 mkdir -p "${out}"
 
@@ -43,6 +43,15 @@ for variant in a b missed-child enter-write-only graph-create sanitized; do
   fi
   grep -F 'et_e3_test_graph_event_v1' "${artifact}/strings.txt" >/dev/null || \
     die "mode/graph owner observer absent from ${variant}"
+done
+generated_source="${out}/.e3-mode-graph-generated/source/e3_d2_dataset.esk"
+for variant in a b; do
+  object="${out}/package-${variant}/e3_mode_graph_package.o"
+  strings -a "${object}" | grep -Fx "${generated_source}" >/dev/null ||
+    die "mode/graph ${variant} object omitted its stable runtime source filename"
+  if strings -a "${object}" | grep -F '/eshkol-transformer-e1b.' >/dev/null; then
+    die "mode/graph ${variant} object retained a random generated source path"
+  fi
 done
 cmp "${out}/package-a/e3_mode_graph_package.o" \
     "${out}/package-b/e3_mode_graph_package.o"

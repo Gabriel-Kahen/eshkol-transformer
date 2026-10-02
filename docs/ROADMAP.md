@@ -814,6 +814,12 @@ passes, while supported mode/graph sanitizer execution remains pending. The
 test package wrapper now retains failed staged manifests and exact signal/
 failure status under mounted evidence; this does not establish compiled
 behavior.
+The unrun e085 mode/graph gate also needs a private generated-source staging
+repair: independently built objects would embed different random D2 source
+filenames in runtime strings before the exact bytewise comparison. The bounded
+candidate uses a fresh gate-owned path shared across sequential builds and
+keeps the original object/archive equality check. Source review and a fresh
+supported gate remain required.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
