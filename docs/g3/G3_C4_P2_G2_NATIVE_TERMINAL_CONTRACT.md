@@ -90,6 +90,55 @@ mutation, with the same owners and links live; releasing the genuine lease
 permits retry. Forged, stale or cross-owner handles never authorize release.
 Balance every preflight borrow on failure while preserving the first error.
 
+### Exact A2 ownership witness prerequisite
+
+The genuine READY frame owns an active A2 transaction. A2's committed read
+borrow excludes that transaction (`a2_kv_cache.c` transaction/read-borrow
+admission), so terminal preflight must not attempt a simultaneous committed
+read. The authentic first/second-frame route read the predecessor *before*
+transaction begin, then began on `context->cache` with width one and count one.
+The transaction view subsequently exposes the same full-capacity cache K/V
+storage and its staged effective length/mask. Terminal preflight compares **all
+16 f32 K and 16 f32 V values**, including every committed prefix position, against
+the retained frame arrays, and checks effective length/mask `3/1110` or
+`4/1111`. This view alone does not expose transaction-to-cache ownership,
+original append width/count, or the committed predecessor length. Matching
+candidate bytes cannot authenticate a foreign live transaction.
+
+Add exactly one source-private, feature-gated A2 predicate in the existing
+`a2_kv_cache.h`/`a2_kv_cache.c` pair:
+
+```c
+#ifdef ET_A2_KV_CACHE_TERMINAL_WITNESS_PRIVATE
+int32_t et_a2_kv_cache_private_terminal_transaction_witness_v1(
+    const et_a2_kv_cache_transaction *transaction,
+    const et_a2_kv_cache *cache, int64_t committed_length);
+#endif
+```
+
+It returns one only for a registered live transaction and registered live cache
+whose identities agree, whose cache's active transaction is exactly the supplied
+transaction, whose cache has the fixed one-layer/batch-one/two-head/capacity-four/
+head-dimension-two profile, whose committed length is the supplied value
+(`2` or `3` only), and whose transaction has append width one, count one,
+effective length `committed_length + 1`, fully staged layer zero, and no active
+view. It returns zero for every other condition. Look up both handles in their
+live registries before dereferencing either. This predicate performs no
+allocation, lease, mutation, output write, or diagnostic publication; it
+exposes no pointer, descriptor, or A2 internal. The guard is private to this
+native leaf and is absent from feature-off/public builds.
+
+Call this predicate before the fallible candidate view and again after every
+recoverable call, immediately before the closed ID-copy tail. Recheck the full
+candidate view and retained arrays, model pins, binding, policy, RNG, raw
+carriers, I1 and parent/ledger edge in that final preflight. A held A2 view,
+foreign/stale handle, swapped transaction/cache association, changed append
+geometry/count, or wrong committed predecessor rejects without mutation and
+permits genuine lease release and retry. Test the predicate itself with live
+and dead registered handles, foreign transactions, held views, and tampered
+geometry; also test its integration through terminal commit. Neither the
+predicate nor this native leaf admits a public continuation or Eshkol result.
+
 Preflight both raw carriers and construct the two-i64 ID payload in native
 scratch. The actual I1 `copy_from_v1` validates exact shape, source extent,
 alias and absence of active borrow, then copies without allocation. After
