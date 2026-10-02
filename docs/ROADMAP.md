@@ -1027,8 +1027,12 @@ remain downstream.
 PR #184's first hosted M3, M3T and G3-S jobs stopped at stale bytewise A2
 predecessor pins after the reviewed private terminal witness changed the A2
 header and source. The five affected A2 entries and G3-N's dependent N3K
-manifest pin now track those exact bytes; other predecessor rows and checks
-remain unchanged. Hosted rerun and broader PR acceptance remain pending.
+manifest pin now track those exact bytes. The O2 hook acceptance test also
+repins its include-tree digest for the same private feature-gated A2 header
+addition; its public facade and O2 source remain unchanged. A byte-tokenizer
+job lost runner communication without a retained test failure; fresh hosted
+CI must resolve that infrastructure result. Hosted rerun and broader PR
+acceptance remain pending.
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
