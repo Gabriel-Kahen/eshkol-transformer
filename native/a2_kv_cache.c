@@ -140,6 +140,31 @@ static et_a2_kv_cache_read_borrow *find_borrow(
   return NULL;
 }
 
+#ifdef ET_A2_KV_CACHE_TERMINAL_WITNESS_PRIVATE
+int32_t et_a2_kv_cache_private_terminal_transaction_witness_v1(
+    const et_a2_kv_cache_transaction *transaction,
+    const et_a2_kv_cache *cache, int64_t committed_length) {
+  et_a2_kv_cache_transaction *live_txn = find_transaction(transaction);
+  et_a2_kv_cache *live_cache = find_cache(cache);
+  if (live_txn == NULL || live_cache == NULL ||
+      (committed_length != 2 && committed_length != 3)) return 0;
+  return live_txn->magic == TXN_MAGIC && live_cache->magic == CACHE_MAGIC &&
+         live_txn->cache == live_cache &&
+         live_cache->active_transaction == live_txn &&
+         live_cache->active_borrow == NULL &&
+         live_cache->layers == 1u && live_cache->batch == 1u &&
+         live_cache->kv_heads == 2u && live_cache->capacity == 4u &&
+         live_cache->head_dimension == 2u && live_cache->lengths != NULL &&
+         live_cache->lengths[0] == committed_length &&
+         live_txn->append_width == 1u && live_txn->counts != NULL &&
+         live_txn->counts[0] == 1 &&
+         live_txn->effective_lengths != NULL &&
+         live_txn->effective_lengths[0] == committed_length + 1 &&
+         live_txn->staged != NULL && live_txn->staged[0] == 1u &&
+         live_txn->active_view == NULL;
+}
+#endif
+
 static int live_storage_overlap(const void *p, size_t n) {
   et_a2_kv_cache *c;
   et_a2_kv_cache_transaction *t;

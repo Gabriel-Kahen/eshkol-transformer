@@ -996,6 +996,17 @@ seal `g3c4-p2g2-eos-first-frame-a9c0e2c-fe9-f31-20261002-prepared-a/SHA256SUMS-R
 was independently accepted. Hosted CI/integration remain pending; no EOS
 termination, logical-G1 publication, second token or public G2 claim follows.
 
+The [private native P2/G2 terminal candidate](g3/G3_C4_P2_G2_NATIVE_TERMINAL_CONTRACT.md)
+commits one genuine first EOS or two genuine sampled IDs with a guarded A2
+transaction/cache ownership witness, logical length one or two, final RNG and
+detached snapshot. It retains physical output capacity two and a distinct
+terminal owner marker; P2/G1 publication remains disjoint. Local Clang 22
+compatibility tests cover P3/T4 full-prefix cache parity, independent Philox
+draws, lease/alias/tamper/retry and fail-stop cuts. Independent whole-source
+review and pinned fe9/f31 native normal/repeat/sanitizer, feature-boundary and
+predecessor gates remain pending. This is native-private only; T1-authenticated
+Eshkol text/result composition, public G2 and continuation remain downstream.
+
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
 call with X1/T2/D2/M3T/P1/O2 producers in one

@@ -1,11 +1,10 @@
 # Private P2/G2 native terminal publication contract
 
-Proposed for independent review; unimplemented. This closes the native
-dependency after the EOS-capable first-frame carrier and authentic second-frame
-carrier. It does not admit public G2 or establish Eshkol T1 provenance. The
-second-frame source/tests and supported gate must be accepted before dependent
-code is implemented. Existing P2/G1 publication and public adapters stay on
-their original route.
+The source-private implementation candidate follows the independently accepted
+EOS-capable first-frame and authentic second-frame carriers. Terminal source
+review and its supported gate remain pending. It does not admit public G2 or
+establish Eshkol T1 provenance. Existing P2/G1 publication and public adapters
+stay on their original route.
 
 ## Exact private ABI and terminal forms
 
@@ -106,7 +105,7 @@ original append width/count, or the committed predecessor length. Matching
 candidate bytes cannot authenticate a foreign live transaction.
 
 Add exactly one source-private, feature-gated A2 predicate in the existing
-`a2_kv_cache.h`/`a2_kv_cache.c` pair:
+`include/eshkol_transformer/a2_kv_cache.h` and `native/a2_kv_cache.c` pair:
 
 ```c
 #ifdef ET_A2_KV_CACHE_TERMINAL_WITNESS_PRIVATE
