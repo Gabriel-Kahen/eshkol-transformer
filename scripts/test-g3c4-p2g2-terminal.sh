@@ -112,6 +112,8 @@ for mode in normal sanitize; do
     "$evidence/$mode.stdout" >/dev/null
   python3 "$PROJECT_ROOT/tests/g3c4/check_p2_g2_second_oracle.py" \
     "$evidence/$mode.stdout" >"$evidence/$mode.oracle.stdout"
+  grep -Fx 'G3-C4 P2/G2 independent second-draw oracle PASS: rows=17 carry/final/singleton=1' \
+    "$evidence/$mode.oracle.stdout" >/dev/null
 done
 "$tmp/normal" >"$evidence/repeat.stdout" 2>"$evidence/repeat.stderr"
 test ! -s "$evidence/repeat.stderr"
