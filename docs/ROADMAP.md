@@ -1024,6 +1024,12 @@ Hosted CI and merge remain pending. This is native-private only;
 T1-authenticated Eshkol text/result composition, public G2 and continuation
 remain downstream.
 
+PR #184's first hosted M3, M3T and G3-S jobs stopped at stale bytewise A2
+predecessor pins after the reviewed private terminal witness changed the A2
+header and source. The five affected A2 entries and G3-N's dependent N3K
+manifest pin now track those exact bytes; other predecessor rows and checks
+remain unchanged. Hosted rerun and broader PR acceptance remain pending.
+
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
 call with X1/T2/D2/M3T/P1/O2 producers in one
