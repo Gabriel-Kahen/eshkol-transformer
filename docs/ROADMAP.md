@@ -970,6 +970,14 @@ zero and pre/post pins matched. The 134-file evidence seal is
 Independent sealed-evidence review accepted this result; hosted integration
 remains pending. Second-token, terminal/EOS, public and CLI work remain separate.
 
+The [private EOS-capable first-frame carrier candidate](g3/G3_C4_P2_G2_EOS_FIRST_FRAME_LEAF.md)
+adds a guarded genuine first sample/forward route for selected EOS, using
+the accepted header/extent/alias and pending-owner carrier contract. It keeps
+the original carrier's EOS rejection and leaves EOS in an unpublished READY
+frame for a future terminal commit. Source-and-test review and an exact
+supported gate remain pending; no EOS termination, logical-G1 publication,
+second token or public G2 claim follows.
+
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
 call with X1/T2/D2/M3T/P1/O2 producers in one
