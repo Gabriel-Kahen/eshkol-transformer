@@ -19,6 +19,35 @@ def lines(prefix: Path, suffix: str) -> list[str]:
 
 
 class NumericalTupleTest(unittest.TestCase):
+    def test_private_generated_source_stage_is_stable_and_fresh(self) -> None:
+        helper = ROOT / "scripts/e3-generated-source-stage.sh"
+        with tempfile.TemporaryDirectory(prefix="e3-numerical-gate-") as temporary:
+            gate = Path(temporary)
+            stages = [gate / ".e3-numerical.ABC123",
+                      gate / ".e3-numerical.XYZ789"]
+            for stage in stages:
+                stage.mkdir()
+
+            def select(object_path: Path) -> subprocess.CompletedProcess[str]:
+                return subprocess.run(
+                    ["bash", "-c", 'source "$1"; e3_numerical_generated_stage "$2"',
+                     "bash", str(helper), str(object_path)],
+                    capture_output=True, text=True, check=False,
+                )
+
+            expected = str(gate / ".e3-numerical-generated") + "\n"
+            for stage in stages:
+                selected = select(stage / "e3_numerical_package.o")
+                self.assertEqual((selected.returncode, selected.stdout),
+                                 (0, expected), selected.stderr)
+            self.assertNotEqual(select(stages[0] / "other.o").returncode, 0)
+            alias = gate / ".e3-numerical.ALIAS1"
+            alias.symlink_to(stages[0], target_is_directory=True)
+            self.assertNotEqual(select(alias / "e3_numerical_package.o").returncode, 0)
+            generated = gate / ".e3-numerical-generated"
+            generated.symlink_to(stages[0], target_is_directory=True)
+            self.assertNotEqual(select(stages[0] / "e3_numerical_package.o").returncode, 0)
+
     def test_real_asan_common_cell_is_private_after_relocatable_link(self) -> None:
         # Exercise actual Clang instrumentation and binutils, not a stubbed nm.
         required = ("clang", "clang++", "nm", "objcopy")
