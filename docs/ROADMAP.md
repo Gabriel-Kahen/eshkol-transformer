@@ -775,44 +775,42 @@ The sealed 113-file failure is
 (`ceca4147...`). The scoped exact-retention import policy and final-link
 witness are source-staged; a fresh supported run is required. The retention
 driver's mixed17 helpers also incorrectly treat M3T model-entry slot 4 (`#f`)
-as a P1 node vector, while slot 0 is an opaque P1 shell. Authentic mixed17
-setup/restoration awaits a separate P1-owned test seam; no repeated-call
-runtime result or §9 acceptance is claimed.
+as a P1 node vector, while slot 0 is an opaque P1 shell. The P1-owned test seam separately passed its P1-only supported gate, but
+the frozen retention tuple has not adopted it; no repeated-call runtime result
+or §9 acceptance is claimed.
 
 The separate [E3 compiled numerical transcript candidate](e3/E3_NUMERICAL_TRANSCRIPT.md)
 adds an exact noninstalled test tuple over the genuine three-batch D2/E3
 private evaluator. Guarded native observations carry all 21 role words,
 IDs/targets/masks, CE, L3S, serial states and published metrics into the
 independent frozen development comparator. Wrong-target and mean-of-means
-mutants are compiled test variants. Independent source-and-test review approved
-`30579532`/tree `44b8fbdb`. The combined tree still requires bounded
-composition review and supported exact-tree execution; the other E3 §9
-numerical, failure and resource obligations remain open.
+mutants are compiled test variants. Independent source-and-test review approved `30579532`/tree `44b8fbdb`;
+the exact noninstalled sanitizer COMMON repair was separately approved at
+`06abb6f0`. Its supported numerical runtime gate remains unaccepted, and the
+other E3 §9 numerical, failure and resource obligations remain open.
 
 The [E3 in-call mode and graph observation contract](e3/E3_MODE_GRAPH_OBSERVATION_CONTRACT.md)
 uses a P1-owned test variant keyed by the authentic bound E3 mode token;
-canonical P1 and ordinary tuple inventories remain unchanged. Its exact
-generator, fixed mixed17 setter, immediate actual 17-bit reader, P1-only
-token-phase fixture, and runner are independently source-and-test approved at
-`f53f6ccf`/tree `0efa0095`. Supported P1 compilation and execution remain
-pending. The frozen retention helper still cannot run, and a zero live graph
-count does not exclude transient creation. A separate in-call E3 observation
-seam and a genuinely reachable M3 graph-create/release mutation under active
-E3 authority are required before mode/graph or §9 acceptance.
+raw P1 nodes remain lexical and canonical trusted/public surfaces unchanged.
+The exact P1 generator, fixed mixed17 setter, immediate actual 17-bit reader,
+and token-phase fixture were approved at `f53f6ccf`/tree `0efa0095`;
+the supported P1-only normal/poisoned two-build gate passed and its sealed
+evidence was independently accepted. This does not prove in-call E3 behavior.
+The frozen retention helper still cannot run, and a zero live graph count does
+not exclude transient creation.
 
 The separate [mode/graph source candidate](e3/E3_MODE_GRAPH_SOURCE_CANDIDATE.md)
-stages an exact noninstalled tuple with generated P1/E3 test variants,
+is independently source-and-test approved at `6f174247`/tree `e8771b12`.
+It stages an exact noninstalled tuple with generated P1/E3 test variants,
 preallocated in-call 17-mode observations and real M3 capture/enrollment/
-release counts. Its test-only preacquire graph mutant uses the same model's
-authentic workspace and input inside the existing E3 call guard. Source
-regeneration, tuple isolation and parser negatives are local checks. The
-supported compiled P1 prerequisite passed and was independently accepted;
-complete mode/graph normal, poison, sanitizer, fresh-build, failure/retry and
-mutation gates remain pending. No §9 mode or
-graph acceptance is claimed.
-The candidate also composes the reviewed sanitizer-only COMMON materialization
-fix; its local Clang/binutils regression passes, while supported mode/graph
-sanitizer execution is still pending.
+release counts. Its preacquire graph mutant uses the same model's authentic
+workspace and input inside the existing E3 call guard. Source regeneration,
+tuple isolation and parser negatives are local checks. Complete mode/graph
+normal, poison, sanitizer, fresh-build, failure/retry and mutation gates remain
+pending; the emitted test inventory is not yet supported-verified. No §9 mode
+or graph acceptance is claimed. The candidate also composes the reviewed
+sanitizer-only COMMON materialization fix; its local Clang/binutils regression
+passes, while supported mode/graph sanitizer execution remains pending.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
@@ -1007,10 +1005,38 @@ Predecessor, oracle, symbol and source-pin checks passed; Docker and launcher
 exited zero. The 89-file evidence seal is
 `g3c4-p2g2-protected-be63d0a-fe9-f31-20261001-prepared-a/SHA256SUMS-RUN`
 (SHA-256 `b23698ceebd621d8ea7d88df46e57ae77dfe5e7f3d4a822f591b68099083b100`);
-independent evidence review accepted it. PR #174 merged as `9fc17bcd` after
-23/23 exact-head hosted checks passed.
+independent evidence review accepted it. Hosted CI and merge remain pending.
 The scope aborts before any prefix commit. Authentic bridge sampling,
 same-registry T1 decode and pre/post-prefix rollback remain the next gate.
+
+The stacked [private P2/G2 T1 prefix coordinator candidate](g3/G3_C4_P2_G2_T1_PREFIX_COORDINATOR_LEAF.md)
+composes the accepted native first-frame carrier, same-registry T1 raw decode,
+and native prefix commit inside that protected region. Its source and compiled
+off/on fixtures passed independent source-and-test review at `d8e58859`/tree
+`806a7df6`. Its first pinned supported gate stopped at the feature-off link
+before either new runtime fixture: the runner omitted exact-pair feature
+flags on the real T1 shell/M3 I1 owners and the I1 borrow-view test wrapper
+link flag. Its reviewed runner repair, composed with merged parent
+`9fc17bcd`, passed the next pinned feature-off Eshkol link/runtime (five
+checks), but the enabled fixture stopped at IR generation: a test-only
+precommit probe call supplied three operands to a four-argument helper due
+to one misplaced lambda close. Its reviewed fixture-only correction reached
+the next exact supported gate at `e7aef68`: both compiles were clean,
+feature-off passed five runtime checks, and enabled execution emitted both
+actual greedy/categorical oracle records before a test observer tried a
+normal A2 cache read borrow while a sampled token-frame transaction held
+the cache. The fixture now asserts that genuine lease rejection and checks
+the committed cache against an independent P2 reference after native abort.
+The final repair at `501f8d18`/tree `cdc5933e` passed independent
+source-and-test review and its exact supported fe9/f31 Clang 21 gate: off
+five checks; enabled normal/repeat/ASan/UBSan/LSan each 273 checks,
+byte-identical output and empty compile/runtime stderr; actual two-mode
+G3-S/Philox oracle and all predecessor gates passed. Docker/launcher exited
+zero and pre/post pins matched. The 134-file evidence seal is
+`g3c4-t1-prefix-coordinator-501f8d1-fe9-f31-20261002-prepared-d/SHA256SUMS-RUN`
+(SHA-256 `54068de810fd834b7076c887172a0ed364d3d4986c2e5741ece41264c3636822`).
+Independent sealed-evidence review accepted this result; hosted integration
+remains pending. Second-token, terminal/EOS, public and CLI work remain separate.
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
@@ -1487,6 +1513,17 @@ passes M3CG 9/9 plus its exact SHA manifest. Root independently reviewed
 its source and sealed evidence without a blocking finding. Hosted integration
 remains pending; no public manual facade, continuation or N>1 behavior is
 claimed.
+
+The proposed [G3-R data-only continuation contract](g3/G3_R_DATA_ONLY_CONTINUATION_CONTRACT.md)
+is documentation only. Its bounded diagnostic-C2 witness binds a canonical
+versioned/checksummed G3 policy, four-word Philox state and full raw-token
+history to an immutable C2 checkpoint, then requires fresh-process live-model
+restore and no-draw manual cache replay. C2/K2 already admit the listed C4
+rank-two storage shapes, and a test-only CLI3/G3-G aggregate reaches a live
+M3T restore; neither supplies a typed G3 RNG file import or a G3-R replay/
+publication transaction. Full G3-R still requires a separately admitted larger
+repeated-decode and later-EOS continuation profile. No persistence implementation
+or save/reload equivalence is claimed.
 
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual

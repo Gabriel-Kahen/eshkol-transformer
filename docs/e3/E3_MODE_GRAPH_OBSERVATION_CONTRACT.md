@@ -88,15 +88,14 @@ owned. Parameter and present/absent gradient bytes, typed RNG/initializer
 successor, cursor, four destination bytes, two counters, and mode restoration
 retain the candidate's success/failure/retry comparisons.
 
-The P1 variant generator, fixed token-keyed closures and a separate P1-only
-compiled fixture/runner are source-staged; their compiled behavior has not
-been observed on the supported toolchain. The present `.esk` build does not
-C-preprocess Scheme and has no accepted conditional in-call hook in
-`native/e3_private_extension.esk`. Its later test-only
-root/extension transform must be separately pinned and byte-compared to the
-canonical evaluator, inserting only the fixed reader calls and the reviewed
-graph mutation points. A postcall wrapper or P1 public setter does not satisfy
-the in-call seam. The E3 transform is not implemented or compiled yet.
+The P1 test variant passed its own supported compiled gate; a distinct
+noninstalled E3 root/extension transform is now source-and-test reviewed at
+`6f174247`/tree `e8771b12`. The `.esk` build does not C-preprocess Scheme:
+that transform pins and byte-compares canonical evaluator sources and inserts
+only the fixed reader calls and reviewed graph mutation points. Its emitted
+test aggregate and normal, poisoned, sanitizer, failure/retry and mutation
+behavior remain unsupported until the complete supported gate. A postcall
+wrapper or P1 public setter cannot satisfy the in-call seam.
 
 ## Real graph event, and current reachability blocker
 
