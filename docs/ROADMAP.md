@@ -2364,6 +2364,14 @@ reviewed and gated in PR #184; clone source must pin its accepted ABI and
 final integration requires its merge gates. Eshkol terminal publication,
 public G2 and continuation remain pending.
 
+- **Private Eshkol P2/G2 terminal close contract:**
+  [accepted same-call ownership contract](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md)
+  specifies one original pending output entry, a surviving terminal anchor,
+  authentic T1/EOS/second-token composition, and a preflighted no-failure close
+  after native commit. Native terminal integration and logical I1 clone code
+  are prerequisites; Eshkol implementation and compiled same-call proof remain
+  pending. No public G2 or continuation acceptance is claimed.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
