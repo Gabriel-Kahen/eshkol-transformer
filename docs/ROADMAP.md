@@ -752,6 +752,13 @@ and stage-selective fault/observer seams for review. It provides no new runtime
 proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
 verdicts remain prerequisites before the full matrix is implemented and run.
 
+The [E3 idle real-model control contract](e3/E3_IDLE_REAL_MODEL_CONTROL_CONTRACT.md)
+specifies a test-only use of existing I2 checkpoint decode and whole-batch load
+for all 14 authentic M3 parameter owners before frame binding. It preserves the
+current two-field private scenario, the single tied head/token-embedding owner,
+and immediate commit after successful prepare. Integration and compiled proof
+remain pending; this contract does not discharge any §9 numerical or rollback row.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
@@ -1023,6 +1030,16 @@ Docker/launcher exits and pre/post pins passed. The independently accepted
 Hosted CI and merge remain pending. This is native-private only;
 T1-authenticated Eshkol text/result composition, public G2 and continuation
 remain downstream.
+
+PR #184's first hosted M3, M3T and G3-S jobs stopped at stale bytewise A2
+predecessor pins after the reviewed private terminal witness changed the A2
+header and source. The five affected A2 entries and G3-N's dependent N3K
+manifest pin now track those exact bytes. The O2 hook acceptance test also
+repins its include-tree digest for the same private feature-gated A2 header
+addition; its public facade and O2 source remain unchanged. A byte-tokenizer
+job lost runner communication without a retained test failure; fresh hosted
+CI must resolve that infrastructure result. Hosted rerun and broader PR
+acceptance remain pending.
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
@@ -1510,6 +1527,26 @@ M3T restore; neither supplies a typed G3 RNG file import or a G3-R replay/
 publication transaction. Full G3-R still requires a separately admitted larger
 repeated-decode and later-EOS continuation profile. No persistence implementation
 or save/reload equivalence is claimed.
+
+The proposed [G3-R typed RNG import contract](g3/G3_R_TYPED_RNG_IMPORT_CONTRACT.md)
+defines a source-private G3-T kind-8 owner constructor for four exact signed
+G3-S words, preserving carry and exhaustion without a seed reset. It records
+the existing same-registry `:rng` consumer, pending ledger cleanup, and the
+authenticated G3RCV1/C2 pair prerequisite. A source-private
+[typed import candidate](g3/G3_R_TYPED_RNG_IMPORT_LEAF.md) now adds the guarded
+kind-8 word constructor and closed G3-T wrapper, with native/Eshkol off/on and
+independent G3-S oracle fixtures. The independently accepted `8ebed705` /
+tree `4217a5e8` supported fe9/f31 gate ran 2026-10-02 10:57:10–11:01:28
+UTC with launcher/Docker exits 0 and both pin checks PASS. Feature-off 1,
+native C and normal/sanitizer 101 checks passed; normal and sanitizer output
+matched, the gate's repeat comparison passed, and compile/runtime stderr were
+empty. Three actual imported runs matched the G3-S/Philox oracle and published
+clone successors. Repeat logs were not separately retained. Its 29-file seal
+is `g3r-rng-import-8ebed70-fe9-f31-20261002-prepared-a/SHA256SUMS-RUN`
+(`90c52bf074c7cea0c9ec3004aae08ee331c0de0d05e78c203e72a6482d1e0fbf`).
+The separate record codec has also passed its supported gate. This scalar
+private kind-8 import does not authenticate a record, restore C2/model/cache/
+tokenizer state, replay draws or prove continuation.
 
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
@@ -2382,6 +2419,14 @@ evidence review accepted all 90 files in
 Hosted CI and upstream merge remain pending. The native terminal dependency
 is reviewed and gated in PR #184; final integration requires its merge gates. Eshkol terminal
 publication, public G2 and continuation remain pending.
+
+- **Private Eshkol P2/G2 terminal close contract:**
+  [accepted same-call ownership contract](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md)
+  specifies one original pending output entry, a surviving terminal anchor,
+  authentic T1/EOS/second-token composition, and a preflighted no-failure close
+  after native commit. Native terminal integration and logical I1 clone code
+  are prerequisites; Eshkol implementation and compiled same-call proof remain
+  pending. No public G2 or continuation acceptance is claimed.
 
 ## Wave 4 — practical pretraining and performance
 
