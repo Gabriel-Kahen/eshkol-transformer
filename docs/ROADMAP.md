@@ -2439,3 +2439,15 @@ use the authentic E3 frame token and immediate mixed17 mask 43690 before/after
 success, fault/retry and horizon. Source review, deterministic generated-source
 staging composition and compiled 1,024/8,192 normal/poison/sanitizer evidence
 remain pending. The accepted single-invocation horizon is a separate proof.
+
+Retention sanitizer prerequisite: the exact c52c7a9/fe9/f31 Clang21 diagnostic
+failed the strict import guard before runtime, with pre/post pins intact. Its
+103-file sealed evidence is
+`/home/gabe/e3-retention-sanitized-diagnostic-c52c7a9-fe9-f31-20261002-prepared-h/SHA256SUMS-DIAGNOSTIC`
+(SHA256 `29312f684f9d16c1b4570d0edc07d35d53e64104ec7d3db7798354b52a5c7d6c`).
+Own emitted imports are 226 total: 51 instrumentation and 175
+noninstrumentation, adding `bcmp`/`puts` and removing five imports against
+unchanged normal178. A retention-only exact inventory policy and negative
+tests are prepared; independent source review and the full supported
+normal/repeat/poison/sanitized retention runtime gates remain pending. This
+does not establish complete-call retention or broader E3 acceptance.

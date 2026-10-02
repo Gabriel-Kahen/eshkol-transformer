@@ -1866,8 +1866,18 @@ if [[ "${e3_private_test_sanitize}" == 1 ]]; then
   comm -13 "${e1b_tmp}/expected-undefined.txt" \
     "${e1b_tmp}/noninstrumentation-undefined.txt" \
     >"${e1b_tmp}/unexpected-undefined.txt"
-  [[ ! -s "${e1b_tmp}/unexpected-undefined.txt" ]] || \
-    die "E3 sanitized private test object adds noninstrumentation imports"
+  if [[ "${e3_tuple_kind:-}" == retention ]]; then
+    # Own Clang21 sanitizer diagnostic emits bcmp/puts and removes five
+    # normal-only imports; pin this exact noninstalled retention tuple.
+    source "${PROJECT_ROOT}/scripts/e3-retention-sanitizer-import-policy.sh"
+    e3_retention_verify_sanitizer_imports \
+      "${e1b_tmp}/expected-undefined.txt" \
+      "${e1b_tmp}/noninstrumentation-undefined.txt" \
+      "${e1b_tmp}/sanitizer-undefined.txt"
+  else
+    [[ ! -s "${e1b_tmp}/unexpected-undefined.txt" ]] || \
+      die "E3 sanitized private test object adds noninstrumentation imports"
+  fi
 else
   if ! e1b_compare_exact_undefined_allowlist \
       "${e1b_tmp}/expected-undefined.txt" "${e1b_tmp}/undefined.txt"; then

@@ -111,8 +111,18 @@ for pair in defined_symbols:global-defined public_exports:package-exports \
   cmp "${PROJECT_ROOT}/tests/e3_private/retention_package_${expected}.txt" \
     "${sanitized}/e3_retention_package.o.evidence/${observed}.txt"
 done
-[[ -s "${sanitized}/e3_retention_package.o.evidence/undefined.txt" ]] || \
-  die "E3 sanitized retention object has no undefined inventory"
+source "${PROJECT_ROOT}/scripts/e3-retention-sanitizer-import-policy.sh"
+e3_retention_verify_sanitizer_imports \
+  "${PROJECT_ROOT}/tests/e3_private/retention_package_undefined_symbols.txt" \
+  "${sanitized}/e3_retention_package.o.evidence/noninstrumentation-undefined.txt" \
+  "${sanitized}/e3_retention_package.o.evidence/sanitizer-undefined.txt"
+cat "${PROJECT_ROOT}/tests/e3_private/retention_package_sanitized_noninstrumentation_undefined_symbols.txt" \
+    "${PROJECT_ROOT}/tests/e3_private/retention_package_sanitized_instrumentation_undefined_symbols.txt" | \
+  LC_ALL=C sort -u >"${out}/expected-sanitized-undefined.txt"
+cmp "${out}/expected-sanitized-undefined.txt" \
+    "${sanitized}/e3_retention_package.o.evidence/undefined.txt"
+[[ "$(wc -l <"${out}/expected-sanitized-undefined.txt")" == 226 ]] || \
+  die "E3 sanitized retention import union differs from its exact tuple"
 python3 -m tests.e3_reference.corpus --output "${out}/corpus" \
   >"${out}/corpus.stdout" 2>"${out}/corpus.stderr"
 corpus="${out}/corpus/packed-single"
