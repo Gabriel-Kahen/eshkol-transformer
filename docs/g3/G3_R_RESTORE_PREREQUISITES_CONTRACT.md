@@ -46,8 +46,10 @@ whole-image SHA-256. The public result stays exactly 192 bytes, and
 measurement remains exactly 192 bytes. This keeps the current 16-argument
 Eshkol FFI arity. The Eshkol wrapper must
 allocate and retain the actual bytevectors and authenticate their backing
-lengths. Native must validate each header, pointer range and all complete
-header-plus-payload spans before I/O or copy; the whole 224-byte result must
+lengths. Native can validate only header declarations and pointer/span
+arithmetic; the owning Eshkol wrapper must prove the actual backing extent
+of every passed bytevector before its native call. Native must reject invalid
+declared spans before I/O or copy; the whole 224-byte result must
 be disjoint from path, measurement and all eight destinations. No interior
 alias is allowed. The signature supplies no expected digest and accepts no caller
 digest as authority. On successful stage, compute ordinary SHA-256 over
@@ -55,9 +57,12 @@ digest as authority. On successful stage, compute ordinary SHA-256 over
 that supplied the eight components, before releasing it. Use bounded,
 allocation-free SHA state. Do not hash just the C2 trailer, model segment,
 first measure image, or a reopened path. Match the existing stage's
-size-race/status behavior; wrong spans and changed component lengths reject
-before copying any component or digest. On any nonzero status, zero the entire
-224-byte private result, including its SHA tail. Digest and component outputs are
+size-race/status behavior; invalid or aliased spans reject **without touching
+any caller buffer**. Once valid, disjoint 224-byte result storage is admitted,
+later stage or image-release failure retains the existing 192-byte C2 failure
+record, including its diagnostic fields at `136..184`, and clears only the
+private SHA tail `192..223`. Changed component lengths reject before copying
+any component or digest. Digest and component outputs are
 private staging scratch until the full C2/K2 load finishes. A stage or image
 release failure must not publish a C2 owner or digest receipt; a cleanup defect
 after private copy is internal/fail-stop if it cannot be rolled back.
@@ -100,15 +105,22 @@ int64_t et_g3t_private_idle_rng_words_equal_v1(
 ```
 
 Return `0` only for an exact four-word match on a registered, live, kind-1
-generator with a live authentic model, idle frame/call, no active model link,
-no pins and no pending output/logits; otherwise return the existing G3-T
-category/status with TLS domain/category/code set. Search the G3-T registry
+generator with its authentic live `c->model`, idle frame/call, no active model
+link (`o->active == NULL`), no pins and no **pending** output/logits pointers;
+otherwise return the existing G3-T category/status with TLS
+domain/category/code set. Search the G3-T registry
 before dereferencing `generator`; validate `version == 1` and `seed >= 0`.
 Treat word mismatch as `G3T_STATE/G3T_INVARIANT`, wrong-kind/foreign as
 `G3T_ARGUMENT/G3T_IDENTITY`, and busy/dead as lifecycle rejection. The
 predicate allocates, borrows, samples, copies, mutates and publishes nothing;
 it returns no pointer, RNG shell, raw vector or output buffer. Both signed
 counter words are compared bit-for-bit, including carry and exhaustion.
+An idle generator after a real manual commit/call-finish may legitimately have
+`prefill_committed`, committed cache/KV, `binding_ready` and `last_logits`, and
+the returned live logits owner is detached from `c->pending_logits`; these
+states must pass when the other idle checks hold. `o->active == NULL` does
+**not** mean `c->model == NULL`. Reject an active frame, held pins or an
+actual pending pointer, not a completed manual replay.
 The Eshkol restore aggregate calls it after typed `:rng` generator creation
 and after each closed manual replay frame, using the four independently
 authenticated G3RCV1 words. Same-aggregate exact Eshkol generator admission
