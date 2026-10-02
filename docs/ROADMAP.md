@@ -971,15 +971,19 @@ Independent sealed-evidence review accepted this result; hosted integration
 remains pending. Second-token, terminal/EOS, public and CLI work remain separate.
 
 The [private retained-logit second-frame carrier](g3/G3_C4_P2_G2_SECOND_FRAME_CARRIER_CONTRACT.md)
-now has a source/test candidate under its independently reviewed contract.
+is independently source/test approved at `4851e17`/tree `d63ad549`.
 It authenticates the committed non-EOS P2/G2 prefix and sole unused pending
 output, draws directly from retained next logits, stages the genuine
 position-three forward and writes only the selected ID carrier. The original
-raw last-logit entry still rejects post-prefix calls. Native development
-normal/repeat/sanitizer, T4 logits/K/V parity, independent second-draw oracle,
-carry/final/singleton/exhaustion, lease/alias/forward cuts and feature-off
-boundary checks are being finalized; exact source/tests review and pinned
-supported fe9/f31 evidence remain pending. It publishes no terminal result,
+raw last-logit entry still rejects post-prefix calls. Its exact pinned fe9/f31
+Clang 21 gate passed normal/repeat/ASan+UBSan+LSan with 2,965 checks per mode
+and byte-identical output, T4 logits/K/V parity, and an independent eight-row
+second-draw G3-S/Philox oracle including carry/final/singleton. Lease, alias,
+forward-cut, exhaustion, predecessor and private feature-boundary checks pass.
+Independent evidence review accepted all 106 files in
+`g3c4-p2g2-second-frame-4851e17-fe9-f31-20261002-prepared-b/SHA256SUMS-RUN`
+(SHA-256 `6b2c96a4d4b6cc79881d73d9ce9ff4c4ad9a809e27e78e8fa64aa0d9cfb50a5e`).
+Hosted integration remains pending. It publishes no terminal result,
 Eshkol T1 decode, public admission or persistence.
 
 The [private EOS-capable first-frame carrier candidate](g3/G3_C4_P2_G2_EOS_FIRST_FRAME_LEAF.md)
