@@ -17,6 +17,10 @@
         :real et_g3c4_p2g2_composer_test_fault_v1)
 (extern i64 composer-read-fault i64
         :real et_g3c4_p2g2_composer_test_read_fault_v1)
+(extern i64 composer-counter ptr i64
+        :real et_g3c4_p2g2_composer_test_counter_v1)
+(extern i64 composer-exhausted
+        :real et_g3c4_p2g2_composer_test_exhausted_v1)
 (extern i64 composer-clone-count i64
         :real et_g3c4_p2g2_composer_test_clone_count_v1)
 (extern i64 composer-mark ptr i64 i64
@@ -48,9 +52,12 @@
     (guard (caught (#t (transformer-error? caught)))
       (thunk) #f)))
 (define (config sampling seed eos)
-  (list ':profile 'diagnostic-c4 ':sampling sampling
+  (list ':profile 'diagnostic-c4
+        ':sampling (if (eq? sampling 'categorical-singleton)
+                       'categorical sampling)
         ':temperature-bits 1065353216
-        ':top-k (if (eq? sampling 'greedy) 256 17)
+        ':top-k (if (eq? sampling 'greedy) 256
+                    (if (eq? sampling 'categorical-singleton) 1 17))
         ':top-p-bits (if (eq? sampling 'greedy) 1065353216 1056964608)
         ':max-new-tokens 2 ':eos eos ':seed seed))
 
@@ -65,12 +72,13 @@
   (g3c4-p2g2-owned-input-create
     (t1-wave1-tokenizer-encode tokenizer (bytevector 7 11))))
 
-(define (case-run input first second sampling seed eos expected-count)
+(define (case-run input first second sampling seed eos expected-count counter-case)
   (let* ((generator
            (g3c4-generator-create-internal
              model tokenizer (config sampling seed eos)))
          (native (vector-ref
                    (g3c4-generator-entry-call-ready generator 'test) 3))
+         (counter-ready (= (composer-counter native counter-case) 0))
          (marked (if (= expected-count 2)
                      (= (composer-mark native first second) 0) #t))
          (output (g3c4-p2g2-terminal-generate-internal generator input))
@@ -128,7 +136,8 @@
          (anchor (g3c4-p2g2-terminal-for-output entry))
          (clone-shell (car clone))
          (clone-record (g3c4-p2g2-terminal-ids-record clone-shell 'test)))
-    (check "capture original reference" marked)
+    (check "capture authentic native counter and original reference"
+           (and counter-ready marked))
     (check "detached read and clone failures were injected"
            (and snapshot-probe clone-fault-probe copy-probe))
     (check "terminal shell original and independently live"
@@ -231,17 +240,41 @@
     (newline)
     snapshot))
 
-(define first-a (case-run prompt-a 0 255 'greedy 7 #f 2))
-(case-run prompt-a 0 255 'greedy 7 (vector-ref first-a 0) 1)
-(define first-b (case-run prompt-b 7 11 'categorical 1729 #f 2))
-(case-run prompt-b 7 11 'categorical 1729 (vector-ref first-b 0) 1)
+(define first-a (case-run prompt-a 0 255 'greedy 7 #f 2 0))
+(case-run prompt-a 0 255 'greedy 7 (vector-ref first-a 0) 1 0)
+(define first-b (case-run prompt-b 7 11 'categorical 1729 #f 2 0))
+(case-run prompt-b 7 11 'categorical 1729 (vector-ref first-b 0) 1 0)
 (check "one sampled second token differs from its first token"
        (or (not (= (vector-ref first-a 0) (vector-ref first-a 1)))
            (not (= (vector-ref first-b 0) (vector-ref first-b 1)))))
 (if (not (= (vector-ref first-a 0) (vector-ref first-a 1)))
-    (case-run prompt-a 0 255 'greedy 7 (vector-ref first-a 1) 2)
+    (case-run prompt-a 0 255 'greedy 7 (vector-ref first-a 1) 2 0)
     (case-run prompt-b 7 11 'categorical 1729
-              (vector-ref first-b 1) 2))
+              (vector-ref first-b 1) 2 0))
+(case-run prompt-a 0 255 'categorical-singleton 7 #f 2 0)
+(case-run prompt-a 0 255 'categorical 7 #f 2 1)
+(case-run prompt-a 0 255 'categorical 7 #f 2 2)
+
+(let* ((generator
+         (g3c4-generator-create-internal
+           model tokenizer (config 'categorical 7 #f)))
+       (native (vector-ref
+                 (g3c4-generator-entry-call-ready generator 'test) 3)))
+  (check "arm genuine exhausted native Philox counter"
+         (= (composer-counter native 3) 0))
+  (check "capture exhausted-entry owner and RNG"
+         (= (composer-mark native 0 255) 0))
+  (reject "exhausted first draw aborts without terminal publication"
+    (lambda () (g3c4-p2g2-terminal-generate-internal generator prompt-a)))
+  (check "exhaustion reached real first sampler after P2"
+         (= (composer-exhausted) 1))
+  (check "exhausted first draw restores full P2/cache/RNG and no anchors"
+         (and (= (composer-after-abort native 2) 0)
+              (null? (vector-ref g3c4-p2g2-protected-records 0))
+              (null? (vector-ref g3c4-p2g2-prefix-input-anchors 0))
+              (null? (vector-ref g3c4-p2g2-terminal-anchors 0))
+              (null? (vector-ref g3c4-p2g2-terminal-originals 0))))
+  (check "exhausted generator closes" (g3c4-generator-close-internal! generator)))
 
 (define (fault-case mode cache-length)
   (let* ((generator

@@ -70,6 +70,9 @@ int64_t et_g3c4_p2g2_composer_test_full_prefix_v1(
   return 0;
 }
 
+static int composer_counter_case;
+static int composer_exhausted_observed;
+
 int64_t et_g3c4_p2g2_composer_test_second_oracle_v1(
     void *context_candidate, int64_t selected) {
   et_g3c4_context_internal *context =
@@ -77,8 +80,11 @@ int64_t et_g3c4_p2g2_composer_test_second_oracle_v1(
   if (context == NULL || !coordinator_saw_prefix ||
       selected < 0 || selected > 255 || !coordinator_owner_unchanged())
     return -1;
-  printf("COMPOSER_SECOND %s %lld %lld",
-         coordinator_policy[0] == 0 ? "greedy" : "categorical",
+  const char *mode = coordinator_policy[0] == 0 ? "greedy" :
+      coordinator_policy[2] == 1 ? "categorical-singleton" :
+      composer_counter_case == 1 ? "categorical-carry" :
+      composer_counter_case == 2 ? "categorical-final" : "categorical";
+  printf("COMPOSER_SECOND %s %lld %lld", mode,
          (long long)coordinator_selected, (long long)selected);
   for (size_t index = 0u; index < 4u; index++)
     printf(" %lld", (long long)coordinator_successor_rng[index]);
@@ -95,6 +101,30 @@ int64_t et_g3c4_p2g2_composer_test_second_oracle_v1(
 
 static int composer_fault_mode;
 static int composer_read_fault;
+int64_t et_g3c4_p2g2_composer_test_counter_v1(
+    void *candidate, int64_t counter_case) {
+  et_g3c4_context_internal *context = et_g3c4_admit_idle_call(candidate);
+  if (context == NULL || counter_case < 0 || counter_case > 3 ||
+      context->generator_rng_words[0] != 1 ||
+      context->generator_rng_words[2] != 0 ||
+      context->generator_rng_words[3] != 0)
+    return -1;
+  composer_counter_case = (int)counter_case;
+  composer_exhausted_observed = 0;
+  if (counter_case == 1)
+    context->generator_rng_words[2] = -2;
+  else if (counter_case == 2) {
+    context->generator_rng_words[2] = -3;
+    context->generator_rng_words[3] = -1;
+  } else if (counter_case == 3) {
+    context->generator_rng_words[2] = -1;
+    context->generator_rng_words[3] = -1;
+  }
+  return 0;
+}
+int64_t et_g3c4_p2g2_composer_test_exhausted_v1(void) {
+  return composer_exhausted_observed;
+}
 int64_t et_g3c4_p2g2_composer_test_fault_v1(int64_t active) {
   if (active < 0 || active > 3) return -1;
   composer_fault_mode = (int)active;
@@ -165,6 +195,20 @@ int64_t __wrap_et_g3c4_private_p2g2_eos_first_frame_carrier_v1(
   }
   result = __real_et_g3c4_private_p2g2_eos_first_frame_carrier_v1(
       context, input, staging, bytes);
+  if (result != 0 && composer_counter_case == 3) {
+    et_g3c4_context_internal *actual = (et_g3c4_context_internal *)context;
+    snapshot_cache(actual->cache, &coordinator_precommit_cache);
+    snapshot_binding(actual, &coordinator_precommit_binding);
+    coordinator_precommit_cache_owner = actual->cache;
+    coordinator_precommit_cache_readable = 1;
+    composer_exhausted_observed =
+        coordinator_precommit_cache.length == 2 &&
+        memcmp(coordinator_precommit_cache.keep,
+               (const uint8_t[4]){1, 1, 0, 0}, 4u) == 0 &&
+        coordinator_precommit_binding.ready == 1u &&
+        memcmp(actual->generator_rng_words, coordinator_entry_rng,
+               sizeof(coordinator_entry_rng)) == 0;
+  }
   if (result == 0 &&
       (et_g3c4_pending_output_lookup(context, &pending) != 0 ||
        pending == NULL ||
