@@ -20,6 +20,12 @@
 #error "C4 T1/I1 exact pair requires the private T1 prompt path"
 #endif
 
+#if defined(ET_G3C4_P2_G2_SECOND_FRAME_PRIVATE) && \
+    (!defined(ET_G3C4_P2_G2_PREFIX_COMMIT_PRIVATE) || \
+     !defined(ET_G3C4_P2_G2_CARRIER_BRIDGE_PRIVATE))
+#error "C4 P2/G2 second frame requires the authenticated prefix and carrier bridge"
+#endif
+
 #include <limits.h>
 #include <math.h>
 #include <stddef.h>
@@ -1109,6 +1115,9 @@ typedef struct et_g3c4_context_internal {
 #endif
 #ifdef ET_G3C4_P2_G2_PREFIX_COMMIT_PRIVATE
   uint32_t p2g2_prefix_committed;
+#ifdef ET_G3C4_P2_G2_SECOND_FRAME_PRIVATE
+  uint32_t p2g2_second_frame;
+#endif
   int64_t p2g2_prefix_token;
   unsigned char p2g2_prefix_raw;
   float p2g2_frame_next_logits[256];
@@ -1506,13 +1515,27 @@ static int et_g3c4_token_frame_idle(
 static int et_g3c4_p2g2_prefix_valid(
     const et_g3c4_context_internal *context) {
   if (context->p2g2_prefix_committed == 0u)
+#ifdef ET_G3C4_P2_G2_SECOND_FRAME_PRIVATE
+    return context->p2g2_prefix_token == 0 &&
+           context->p2g2_prefix_raw == 0u && context->p2g2_second_frame == 0u;
+#else
     return context->p2g2_prefix_token == 0 &&
            context->p2g2_prefix_raw == 0u;
+#endif
   return context->p2g2_prefix_committed == 1u &&
          context->transport.state == ET_G3C4_CONTEXT_LIVE &&
          context->transport.busy == ET_G3C4_CALL_ACTIVE &&
          context->call_kind == 2 && context->budget == 2 &&
+#ifdef ET_G3C4_P2_G2_SECOND_FRAME_PRIVATE
+         ((context->p2g2_second_frame == 0u &&
+           et_g3c4_token_frame_idle(context)) ||
+          (context->p2g2_second_frame == 1u &&
+           context->token_frame_position == 3 &&
+           (context->token_frame_state == ET_G3C4_TOKEN_FRAME_SAMPLED ||
+            context->token_frame_state == ET_G3C4_TOKEN_FRAME_READY))) &&
+#else
          et_g3c4_token_frame_idle(context) &&
+#endif
          context->p2g2_prefix_token >= 0 &&
          context->p2g2_prefix_token <= 255 &&
          context->p2g2_prefix_raw ==
@@ -2068,8 +2091,35 @@ static int et_g3c4_p2g2_first_frame_preflight(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
   return 0;
 }
+#ifdef ET_G3C4_P2_G2_SECOND_FRAME_PRIVATE
+static int et_g3c4_p2g2_second_frame_preflight(
+    et_g3c4_context_internal *context) {
+  et_g3c4_output_internal *pending = NULL;
+  if (context->call_kind != 2 || context->budget != 2 ||
+      context->generator_policy[4] != 2 ||
+      context->p2g2_prefix_committed != 1u ||
+      context->p2g2_prefix_token == context->generator_policy[5] ||
+      (et_g3c4_token_frame_idle(context) ?
+       context->p2g2_second_frame != 0u :
+       (context->p2g2_second_frame != 1u ||
+        context->token_frame_position != 3)))
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (et_g3c4_pending_output_lookup(context, &pending) != 0)
+    return et_g3c4_error_state.category;
+  if (pending == NULL || pending->prompt_length != 2 ||
+      pending->generated_length != 2 || pending->numeric_ready != 0u ||
+      pending->ids_copied != 0u || pending->text_ready != 0u)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  return 0;
+}
+#define ET_G3C4_P2_G2_FRAME_CHECK(context) \
+  ((context)->p2g2_prefix_committed != 0u ? \
+   et_g3c4_p2g2_second_frame_preflight(context) != 0 : \
+   et_g3c4_p2g2_first_frame_preflight(context) != 0)
+#else
 #define ET_G3C4_P2_G2_FRAME_CHECK(context) \
   (et_g3c4_p2g2_first_frame_preflight(context) != 0)
+#endif
 #endif
 #endif
 
@@ -3619,6 +3669,9 @@ static void et_g3c4_token_frame_reset(
   context->token_frame_transaction = NULL;
   context->token_frame_state = ET_G3C4_TOKEN_FRAME_IDLE;
   context->token_frame_candidate = 0;
+#ifdef ET_G3C4_P2_G2_SECOND_FRAME_PRIVATE
+  context->p2g2_second_frame = 0u;
+#endif
   memset(context->token_frame_successor, 0,
          sizeof(context->token_frame_successor));
 #ifdef ET_G3C4_TOKEN_FORWARD_PRIVATE
@@ -5586,9 +5639,15 @@ int64_t et_g3c4_private_p2g1_run_v1(
 #endif
 
 #ifdef ET_G3C4_LAST_LOGIT_FRAME_PRIVATE
+#ifdef ET_G3C4_P2_G2_SECOND_FRAME_PRIVATE
+static int64_t et_g3c4_token_frame_begin_last(
+    void *candidate, const float last_logits[256],
+    int64_t *speculative_token_output, int second_frame) {
+#else
 int64_t et_g3c4_private_token_frame_begin_last_v1(
     void *candidate, const float last_logits[256],
     int64_t *speculative_token_output) {
+#endif
   static const uint64_t logits_shape[2] = {1u, 256u};
   static const uint64_t rng_shape[1] = {4u};
   static const uint64_t token_shape[1] = {1u};
@@ -5647,8 +5706,16 @@ int64_t et_g3c4_private_token_frame_begin_last_v1(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
     return et_g3c4_error_state.category;
   }
+#ifdef ET_G3C4_P2_G2_SECOND_FRAME_PRIVATE
+  if (second_frame ?
+      (et_g3c4_p2g2_second_frame_preflight(context) != 0) :
+      (context->budget == 2 &&
+       et_g3c4_p2g2_first_frame_preflight(context) != 0))
+    return et_g3c4_error_state.category;
+#else
   if (context->budget == 2 && ET_G3C4_P2_G2_FRAME_CHECK(context))
     return et_g3c4_error_state.category;
+#endif
   if (!et_g3c4_prefill_binding_matches_pins(context)) {
     (void)et_g3c4_fail(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_STALE_BINDING);
@@ -5763,7 +5830,12 @@ int64_t et_g3c4_private_token_frame_begin_last_v1(
   }
   token_position = *(const int64_t *)committed_lengths->data;
   if (et_a2_kv_cache_read_borrow_end_v1(&borrow, &error) != 0) abort();
+#ifdef ET_G3C4_P2_G2_SECOND_FRAME_PRIVATE
+  if (ET_G3C4_P2_G2_TUPLE(2, context->budget) &&
+      token_position != (second_frame ? 3 : 2))
+#else
   if (ET_G3C4_P2_G2_TUPLE(2, context->budget) && token_position != 2)
+#endif
     return et_g3c4_fail(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
   append_counts = et_g3c4_view(
@@ -5780,10 +5852,21 @@ int64_t et_g3c4_private_token_frame_begin_last_v1(
   memcpy(context->token_frame_successor, successor_candidate,
          sizeof(successor_candidate));
   context->token_frame_position = token_position;
+#ifdef ET_G3C4_P2_G2_SECOND_FRAME_PRIVATE
+  context->p2g2_second_frame = second_frame ? 1u : 0u;
+#endif
   memcpy(speculative_token_output, &token_candidate,
          sizeof(token_candidate));
   return 0;
 }
+#ifdef ET_G3C4_P2_G2_SECOND_FRAME_PRIVATE
+int64_t et_g3c4_private_token_frame_begin_last_v1(
+    void *candidate, const float last_logits[256],
+    int64_t *speculative_token_output) {
+  return et_g3c4_token_frame_begin_last(
+      candidate, last_logits, speculative_token_output, 0);
+}
+#endif
 #endif
 #endif
 #endif
@@ -6846,6 +6929,152 @@ int64_t et_g3c4_private_p2g2_eos_first_frame_carrier_v1(
       context, input, staging_header, carrier_bytes, 1);
 }
 #endif
+#endif
+
+#ifdef ET_G3C4_P2_G2_SECOND_FRAME_PRIVATE
+static int et_g3c4_p2g2_second_output_clean(
+    et_g3c4_context_internal *context, et_g3c4_output_internal *output) {
+  et_g3c4_output_internal *pending = NULL;
+  et_i64_tensor_borrow *borrow = NULL;
+  const et_kernel_tensor_view_v1 *ids = NULL;
+  et_i64_tensor_error error;
+  et_g3c4_error_state_internal first;
+  size_t stride = 0u;
+  if (et_g3c4_pending_output_lookup(context, &pending) != 0)
+    return et_g3c4_error_state.category;
+  if (pending != output || output->parent_ctx != context ||
+      output->prompt_length != 2 || output->generated_length != 2 ||
+      output->numeric_ready != 0u || output->ids_copied != 0u ||
+      output->text_ready != 0u || output->length != 0 ||
+      output->cache_length != 0)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (et_g3c4_capture_i64(et_m3_private_i64_unborrowed_v1(
+          output->ids, &error), &error) != 0 ||
+      et_g3c4_capture_i64(et_i64_tensor_borrow_begin_v1(
+          output->ids, &borrow, &error), &error) != 0)
+    return et_g3c4_error_state.category;
+  if (et_g3c4_capture_i64(et_i64_tensor_borrow_view_v1(
+          borrow, &ids, &error), &error) != 0 ||
+      et_g3c4_capture_i64(et_i64_tensor_stride_bytes_at_v1(
+          output->ids, 0u, &stride, &error), &error) != 0)
+    goto fail;
+  if (ids == NULL || ids->struct_size != sizeof(*ids) ||
+      ids->rank != 1u || ids->shape == NULL || ids->shape[0] != 2u ||
+      ids->data == NULL || ids->byte_length != 2u * sizeof(int64_t) ||
+      ids->dtype == NULL || strcmp(ids->dtype, "i64") != 0 ||
+      ids->device == NULL || strcmp(ids->device, "cpu") != 0 ||
+      ids->layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR ||
+      ids->offset_bytes != 0u || stride != sizeof(int64_t) ||
+      memcmp(ids->data, (const int64_t[2]){0, 0}, 2u * sizeof(int64_t)) != 0) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    goto fail;
+  }
+  if (et_i64_tensor_borrow_end_v1(&borrow, &error) != 0) abort();
+  return 0;
+fail:
+  first = et_g3c4_error_snapshot_internal();
+  if (et_i64_tensor_borrow_end_v1(&borrow, &error) != 0) abort();
+  et_g3c4_error_restore_internal(first);
+  return et_g3c4_error_state.category;
+}
+
+static int et_g3c4_p2g2_second_cache_preflight(
+    et_g3c4_context_internal *context) {
+  et_a2_kv_cache_read_borrow *borrow = NULL;
+  const et_kernel_tensor_view_v1 *keys = NULL, *values = NULL;
+  const et_kernel_tensor_view_v1 *lengths = NULL, *keep = NULL;
+  et_kernel_error error;
+  et_g3c4_error_state_internal first;
+  if (et_g3c4_capture_kernel(et_a2_kv_cache_read_borrow_begin_v1(
+          context->cache, &borrow, &error), &error) != 0)
+    return et_g3c4_error_state.category;
+  if (et_g3c4_capture_kernel(et_a2_kv_cache_read_borrow_layer_v1(
+          borrow, 0u, &keys, &values, &lengths, &keep, &error), &error) != 0)
+    goto fail;
+  if (keys == NULL || values == NULL || lengths == NULL || keep == NULL ||
+      lengths->data == NULL || lengths->byte_length != sizeof(int64_t) ||
+      *(const int64_t *)lengths->data != 3 || keep->data == NULL ||
+      keep->byte_length != 4u ||
+      memcmp(keep->data, (const uint8_t[4]){1, 1, 1, 0}, 4u) != 0) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    goto fail;
+  }
+  if (et_a2_kv_cache_read_borrow_end_v1(&borrow, &error) != 0) abort();
+  return 0;
+fail:
+  first = et_g3c4_error_snapshot_internal();
+  if (et_a2_kv_cache_read_borrow_end_v1(&borrow, &error) != 0) abort();
+  et_g3c4_error_restore_internal(first);
+  return et_g3c4_error_state.category;
+}
+
+int64_t et_g3c4_private_p2g2_second_frame_carrier_v1(
+    void *context_candidate, void *output_candidate,
+    void *staging_header, int64_t carrier_bytes) {
+  et_g3c4_context_internal *context;
+  et_g3c4_output_internal *output;
+  float last_logits[256], next_logits[256];
+  int64_t declared_bytes, selected = -1, prefix_token;
+  int64_t policy[6], rng[4];
+  unsigned char encoded[8];
+  size_t index;
+  int64_t result;
+  et_g3c4_error_reset_internal();
+  context = et_g3c4_admit_active_call(context_candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  output = et_g3c4_admit_output(output_candidate, 0);
+  if (output == NULL) return et_g3c4_error_state.category;
+  if (et_g3c4_p2g2_second_frame_preflight(context) != 0)
+    return et_g3c4_error_state.category;
+  if (!et_g3c4_token_frame_idle(context))
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (!et_g3c4_prefill_binding_matches_pins(context))
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_STALE_BINDING);
+  if (et_g3c4_p2g2_second_output_clean(context, output) != 0)
+    return et_g3c4_error_state.category;
+  if (carrier_bytes != 16 || !et_g3c4_range_valid(staging_header, 16u) ||
+      (uintptr_t)staging_header % _Alignof(int64_t) != 0u)
+    return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+  if (et_g3c4_p2g2_carrier_owned_alias(context, staging_header, 16u))
+    return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_ALIAS);
+  memcpy(&declared_bytes, staging_header, sizeof(declared_bytes));
+  if (declared_bytes != 8)
+    return et_g3c4_fail(ET_G3C4_SHAPE_MISMATCH, ET_G3C4_CODE_SHAPE);
+  if (et_g3c4_p2g2_second_cache_preflight(context) != 0)
+    return et_g3c4_error_state.category;
+  memcpy(last_logits, context->p2g2_prefix_next_logits, sizeof(last_logits));
+  memcpy(policy, context->generator_policy, sizeof(policy));
+  memcpy(rng, context->generator_rng_words, sizeof(rng));
+  prefix_token = context->p2g2_prefix_token;
+  result = et_g3c4_token_frame_begin_last(context, last_logits, &selected, 1);
+  if (result != 0) return result;
+  result = et_g3c4_private_token_forward_v1(context, selected, next_logits);
+  if (result != 0) return result;
+  if (et_g3c4_admit_active_call(context) == NULL ||
+      et_g3c4_admit_output(output, 0) == NULL)
+    return et_g3c4_error_state.category;
+  if (et_g3c4_p2g2_second_frame_preflight(context) != 0)
+    return et_g3c4_error_state.category;
+  if (context->token_frame_state != ET_G3C4_TOKEN_FRAME_READY ||
+      context->token_frame_candidate != selected ||
+      !et_g3c4_prefill_binding_matches_pins(context) ||
+      context->p2g2_prefix_token != prefix_token ||
+      memcmp(policy, context->generator_policy, sizeof(policy)) != 0 ||
+      memcmp(rng, context->generator_rng_words, sizeof(rng)) != 0 ||
+      memcmp(last_logits, context->p2g2_prefix_next_logits, sizeof(last_logits)) != 0)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (et_g3c4_p2g2_second_output_clean(context, output) != 0)
+    return et_g3c4_error_state.category;
+  if (et_g3c4_p2g2_carrier_owned_alias(context, staging_header, 16u))
+    return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_ALIAS);
+  memcpy(&declared_bytes, staging_header, sizeof(declared_bytes));
+  if (declared_bytes != 8)
+    return et_g3c4_fail(ET_G3C4_SHAPE_MISMATCH, ET_G3C4_CODE_SHAPE);
+  for (index = 0u; index < sizeof(encoded); index++)
+    encoded[index] = (unsigned char)((uint64_t)selected >> (8u * index));
+  memcpy((unsigned char *)staging_header + sizeof(declared_bytes), encoded, sizeof(encoded));
+  return 0;
+}
 #endif
 
 int64_t et_g3c4_private_output_copy_decode_ids_v1(
