@@ -79,8 +79,7 @@
          (native (vector-ref
                    (g3c4-generator-entry-call-ready generator 'test) 3))
          (counter-ready (= (composer-counter native counter-case) 0))
-         (marked (if (= expected-count 2)
-                     (= (composer-mark native first second) 0) #t))
+         (marked (= (composer-mark native first second) 0))
          (output (g3c4-p2g2-terminal-generate-internal generator input))
          (snapshot-probe
            (begin
