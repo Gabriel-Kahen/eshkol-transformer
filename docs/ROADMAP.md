@@ -941,6 +941,35 @@ independent evidence review accepted it. Hosted CI and merge remain pending.
 The scope aborts before any prefix commit. Authentic bridge sampling,
 same-registry T1 decode and pre/post-prefix rollback remain the next gate.
 
+The stacked [private P2/G2 T1 prefix coordinator candidate](g3/G3_C4_P2_G2_T1_PREFIX_COORDINATOR_LEAF.md)
+composes the accepted native first-frame carrier, same-registry T1 raw decode,
+and native prefix commit inside that protected region. Its source and compiled
+off/on fixtures passed independent source-and-test review at `d8e58859`/tree
+`806a7df6`. Its first pinned supported gate stopped at the feature-off link
+before either new runtime fixture: the runner omitted exact-pair feature
+flags on the real T1 shell/M3 I1 owners and the I1 borrow-view test wrapper
+link flag. Its reviewed runner repair, composed with merged parent
+`9fc17bcd`, passed the next pinned feature-off Eshkol link/runtime (five
+checks), but the enabled fixture stopped at IR generation: a test-only
+precommit probe call supplied three operands to a four-argument helper due
+to one misplaced lambda close. Its reviewed fixture-only correction reached
+the next exact supported gate at `e7aef68`: both compiles were clean,
+feature-off passed five runtime checks, and enabled execution emitted both
+actual greedy/categorical oracle records before a test observer tried a
+normal A2 cache read borrow while a sampled token-frame transaction held
+the cache. The fixture now asserts that genuine lease rejection and checks
+the committed cache against an independent P2 reference after native abort.
+The final repair at `501f8d18`/tree `cdc5933e` passed independent
+source-and-test review and its exact supported fe9/f31 Clang 21 gate: off
+five checks; enabled normal/repeat/ASan/UBSan/LSan each 273 checks,
+byte-identical output and empty compile/runtime stderr; actual two-mode
+G3-S/Philox oracle and all predecessor gates passed. Docker/launcher exited
+zero and pre/post pins matched. The 134-file evidence seal is
+`g3c4-t1-prefix-coordinator-501f8d1-fe9-f31-20261002-prepared-d/SHA256SUMS-RUN`
+(SHA-256 `54068de810fd834b7076c887172a0ed364d3d4986c2e5741ece41264c3636822`).
+Independent sealed-evidence review accepted this result; hosted integration
+remains pending. Second-token, terminal/EOS, public and CLI work remain separate.
+
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
 call with X1/T2/D2/M3T/P1/O2 producers in one
