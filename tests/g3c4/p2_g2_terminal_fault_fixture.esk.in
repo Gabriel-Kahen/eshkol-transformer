@@ -22,6 +22,8 @@
 
 (extern i64 overlay-mark ptr i64 i64
         :real et_g3c4_p2g2_composer_test_overlay_mark_v1)
+(extern i64 coordinator-mark ptr i64 i64
+        :real et_g3c4_p2g2_coordinator_test_mark_v1)
 (extern i64 overlay-after ptr i64
         :real et_g3c4_p2g2_composer_test_overlay_after_v1)
 (extern i64 overlay-zero-marker i64
@@ -47,6 +49,9 @@
 (define native
   (vector-ref (g3c4-generator-entry-call-ready generator 'test) 3))
 (define mode '@MODE@)
+(if (eq? mode 'unmarked)
+    (check (= (coordinator-mark native 0 255) 0))
+    (check (= (overlay-mark native 0 255) 0)))
 
 (if (eq? mode 'parity)
     (let* ((output (g3c4-p2g2-terminal-generate-internal generator prompt))
@@ -79,7 +84,6 @@
           (check (generation-tensor-release-internal! prompt))
           (display "OVERLAY_UNMARKED") (newline))
     (begin
-      (check (= (overlay-mark native 0 255) 0))
       (if (or (eq? mode 'postzero) (eq? mode 'precommit))
           (check (= (overlay-zero-marker 1) 0)))
       (if (eq? mode 'precommit)
