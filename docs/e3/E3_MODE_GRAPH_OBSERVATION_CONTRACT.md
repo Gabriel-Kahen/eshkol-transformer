@@ -33,23 +33,31 @@ canonical `transformer.module` source. The variant is admitted only by one
 exact test tuple and earlier include-root precedence. Generation pins the
 canonical source digest, unique insertion anchors, exact output digest and
 source closure; regeneration must byte-compare, and near-match tuples must
-fail. Canonical private, diagnostic, public, retention and numerical tuples
-continue resolving the original P1 source and keep their source, object,
-defined/undefined/export/string inventories unchanged. The E3 test root may
-invoke these two closures only with its authentic bound mode token. Neither
+fail. The frozen `5d642a2` retention tuple and the existing canonical private,
+diagnostic, public and numerical tuples continue resolving the original P1
+source and keep their inventories unchanged. Their current retention mixed17
+helpers remain blocked. A separately reviewed retention successor must opt in
+to the exact P1 test variant and reprove its distinct source/object and
+symbol inventories before it can claim mixed17 restoration. The E3 test root
+may invoke these two closures only with its authentic bound mode token. Neither
 closure returns a node, shell, ledger record, mutable vector or callable
 authority to the caller.
 
 The fixed setup closure accepts only the authentic token in the bound-idle
-state before a call. It rechecks P1's record, provider, shape, topology and
-identity, then writes one fixed alternating train/eval pattern over all 17
-P1-owned nodes; the caller cannot select a module, path or mode pattern. The
-read closure accepts that same authenticated token in its proper lifecycle
-state and returns only an immediate 17-bit actual-mode mask. It rechecks
-record identity and state without constructing a new error or allocating;
+state before a call. It pins that exact token as this fixture's sole witness,
+rechecks P1's record, provider, shape, topology and identity, then writes one
+fixed alternating train/eval pattern over all 17 P1-owned nodes; the caller
+cannot select a module, path or mode pattern. It rejects prepared, entered,
+foreign, stale and otherwise busy tokens without changing any mode. The read
+closure accepts only this pinned authenticated token in bound-idle phase for
+outside snapshots or in authentic entered phase when called from the matching
+E3 frame's active evaluator. E3 checks its own frame token and guard before
+that in-call invocation. The reader returns only an immediate 17-bit
+actual-mode mask; it rechecks record identity and phase without constructing a
+new error or allocating;
 the in-call path reads the existing nodes with fixed, unrolled operations.
-Reject forged, copied, foreign, stale and busy tokens, and show that rejected
-setup leaves all modes untouched. The fixture snapshots a genuine mixed17
+Reject forged, copied, foreign and stale tokens at either seam, and show that
+rejected setup leaves all modes untouched. The fixture snapshots a genuine mixed17
 mask before each call, proves exact restoration after success and later D2
 failure, then reuses the same authority for a clean retry. No raw-vector walk
 of the opaque M3T/P1 shell is permitted.
