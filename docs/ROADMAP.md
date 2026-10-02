@@ -974,9 +974,15 @@ The [private EOS-capable first-frame carrier candidate](g3/G3_C4_P2_G2_EOS_FIRST
 adds a guarded genuine first sample/forward route for selected EOS, using
 the accepted header/extent/alias and pending-owner carrier contract. It keeps
 the original carrier's EOS rejection and leaves EOS in an unpublished READY
-frame for a future terminal commit. Source-and-test review and an exact
-supported gate remain pending; no EOS termination, logical-G1 publication,
-second token or public G2 claim follows.
+frame for a future terminal commit. Exact reviewed source `a9c0e2c`/tree
+`4b078fab` passed its pinned fe9/f31 Clang 21 normal/repeat/ASan+UBSan+LSan
+gate, each 2,051 pending-only checks with identical stdout and empty stderr.
+Both independent two-mode Philox/P3 oracle pairs, predecessor gates and
+private symbol/macro/feature-off preprocessor boundaries passed. The 77-file
+seal `g3c4-p2g2-eos-first-frame-a9c0e2c-fe9-f31-20261002-prepared-a/SHA256SUMS-RUN`
+(`1287d2a520ed7de09c61f87b69b77a1ae13736ef9b737ff4ae924b64ab6e3b2d`)
+was independently accepted. Hosted CI/integration remain pending; no EOS
+termination, logical-G1 publication, second token or public G2 claim follows.
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver

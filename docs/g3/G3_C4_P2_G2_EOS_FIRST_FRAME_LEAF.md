@@ -48,11 +48,19 @@ checks the sole private symbol addition and isolated-macro rejection, runs
 the carrier predecessor gate, and compares normal/repeat/ASan+UBSan+LSan
 execution. Its fresh build scratch is retained for evidence inspection.
 
-Local unsupported Clang 22.1.8 development execution passed 2,051 checks in
-normal/repeat/ASan+UBSan+LSan with identical stdout and empty stderr. Both
-independent oracle pairs, exact private-symbol delta, isolated-feature
-rejection, reviewed predecessor hashes and feature-off preprocessor identity
-passed. Source-and-test review and the supported pinned fe9/f31 Clang 21 gate
-remain pending. These development results do not establish supported
-acceptance. Carry/exhaustion, later draws, Eshkol T1 provenance and terminal
-publication require their own subsequent gates.
+The independently source-and-test-reviewed `a9c0e2c2c52942018c2dd3326842bd91ecfb50aa`
+(tree `4b078fabe1d73db3c5f9bb5b8811a7128c072cc7`) passed its exact pinned
+fe9/f31 Clang 21 gate on 2026-10-02 from 02:56:59 to 02:58:22 UTC.
+Docker and launcher exited zero, with matching clean pre/post source,
+compiler, runner, runtime/static-archive and image pins. Normal/repeat and
+ASan+UBSan+LSan each passed 2,051 pending-only checks with identical stdout
+and empty compile/runtime stderr. Both independent two-mode/256-logit
+oracle pairs, all carrier/prefix/first-frame predecessors, exact private-symbol
+delta, isolated-feature rejection, reviewed predecessor hashes and feature-off
+preprocessor identity passed. Independent evidence review accepted the
+verified 77-file seal at
+`/home/gabe/g3c4-p2g2-eos-first-frame-a9c0e2c-fe9-f31-20261002-prepared-a/SHA256SUMS-RUN`
+(SHA-256 `1287d2a520ed7de09c61f87b69b77a1ae13736ef9b737ff4ae924b64ab6e3b2d`).
+Hosted exact-head CI and integration remain pending. Carry/exhaustion, later
+draws, Eshkol T1 provenance and terminal publication still require their own
+subsequent gates; this accepted native gate does not prove those behaviors.
