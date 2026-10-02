@@ -2,6 +2,7 @@
 """Fast structural checks for the accepted G3-C4 Step 4a context/cache leaf."""
 
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -22,23 +23,37 @@ def ordered(text, fragments, label):
 
 
 def without_conditional_feature(text, macro):
-    """Remove source regions compiled only when a later feature is enabled."""
+    """Project exact feature-off arms; retain unknown expressions for scanning."""
     kept = []
     depth = 0
+    baseline = False
     for line in text.splitlines(keepends=True):
-        directive = line.lstrip()
-        opens = (directive.startswith("#if ") or
-                 directive.startswith("#ifdef ") or
-                 directive.startswith("#ifndef "))
+        directive = line.strip()
+        opens = bool(re.match(r"#(?:if|ifdef|ifndef)\b", directive))
         if depth:
             if opens:
                 depth += 1
+            elif directive == "#else" and depth == 1:
+                baseline = not baseline
+                continue
+            elif directive.startswith("#elif") and depth == 1:
+                raise ValueError(f"unsupported later-feature #elif: {macro}")
             elif directive.startswith("#endif"):
                 depth -= 1
+                if depth == 0:
+                    baseline = False
+                    continue
+            if baseline:
+                kept.append(line)
             continue
-        if opens and macro in directive:
+        enabled = (f"#ifdef {macro}", f"#if defined({macro})")
+        disabled = (f"#ifndef {macro}", f"#if !defined({macro})")
+        if directive in enabled or directive in disabled:
             depth = 1
+            baseline = directive in disabled
             continue
+        # Compound or unknown expressions remain visible to the forbidden
+        # surface scan; they cannot authorize hiding their bodies.
         kept.append(line)
     require(depth == 0, f"unterminated conditional feature block: {macro}")
     return "".join(kept)

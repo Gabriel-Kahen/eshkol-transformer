@@ -2,6 +2,7 @@
 """Fast structural checks for accepted G3-C4 Step 5 active calls."""
 
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -21,26 +22,22 @@ def ordered(text, fragments, label):
         position = found
 
 
-def without_conditional_feature(text, macro, keep_else=False):
-    """Remove a later feature block; optionally retain its baseline #else."""
+def without_conditional_feature(text, macro):
+    """Project exact feature-off arms; retain unknown expressions for scanning."""
     kept = []
     depth = 0
     baseline = False
     for line in text.splitlines(keepends=True):
-        directive = line.lstrip()
-        opens = (directive.startswith("#if ") or
-                 directive.startswith("#ifdef ") or
-                 directive.startswith("#ifndef "))
+        directive = line.strip()
+        opens = bool(re.match(r"#(?:if|ifdef|ifndef)\b", directive))
         if depth:
             if opens:
                 depth += 1
-            elif directive.startswith("#else") and depth == 1:
-                baseline = keep_else
+            elif directive == "#else" and depth == 1:
+                baseline = not baseline
                 continue
             elif directive.startswith("#elif") and depth == 1:
-                require(not keep_else,
-                        f"unsupported later-feature #elif: {macro}")
-                continue
+                raise ValueError(f"unsupported later-feature #elif: {macro}")
             elif directive.startswith("#endif"):
                 depth -= 1
                 if depth == 0:
@@ -49,17 +46,21 @@ def without_conditional_feature(text, macro, keep_else=False):
             if baseline:
                 kept.append(line)
             continue
-        if opens and macro in directive:
+        enabled = (f"#ifdef {macro}", f"#if defined({macro})")
+        disabled = (f"#ifndef {macro}", f"#if !defined({macro})")
+        if directive in enabled or directive in disabled:
             depth = 1
+            baseline = directive in disabled
             continue
+        # Compound or unknown expressions remain visible to the forbidden
+        # surface scan; they cannot authorize hiding their bodies.
         kept.append(line)
     require(depth == 0, f"unterminated conditional feature block: {macro}")
     return "".join(kept)
 
 
 def step5_projection(source):
-    # These features were accepted after Step 5. Keep the original baseline
-    # branches in shared active-call functions when a later feature has #else.
+    # These features were accepted after Step 5. Retain their feature-off arms.
     for macro in (
         "ET_G3C4_MANUAL_ROLE_STEP_PRIVATE",
         "ET_G3C4_MANUAL_FRAME_COMMIT_PRIVATE",
@@ -73,9 +74,7 @@ def step5_projection(source):
         "ET_G3C4_P2_G2_TERMINAL_PRIVATE",
         "ET_G3C4_P2_G2_TERMINAL_IDS_CLONE_PRIVATE",
     ):
-        source = without_conditional_feature(
-            source, macro,
-            keep_else=(macro == "ET_G3C4_P2_G1_PUBLICATION_PRIVATE"))
+        source = without_conditional_feature(source, macro)
     return source
 
 

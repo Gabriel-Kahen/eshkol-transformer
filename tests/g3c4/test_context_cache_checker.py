@@ -35,6 +35,29 @@ class ContextCacheCheckerTests(unittest.TestCase):
             CHECKER["check_deferred_surface"](
                 CHECKER["step4_context_surface"](guarded + "generator_rng\n"))
 
+    def test_disabled_and_unknown_arms_remain_visible(self):
+        for macro in ("ET_G3C4_P2_G2_TERMINAL_PRIVATE",
+                      "ET_G3C4_P2_G2_TERMINAL_IDS_CLONE_PRIVATE"):
+            mutants = (
+                f"#ifndef {macro}\ngenerator_rng\n#endif\n",
+                f"#if !defined({macro})\ngenerator_rng\n#endif\n",
+                f"#ifdef {macro}\nsafe\n#else\ngenerator_rng\n#endif\n",
+                f"#ifdef {macro}\nsafe\n#else\n"
+                "#if defined(OTHER)\ngenerator_rng\n#endif\n#endif\n",
+                f"#if defined({macro}) || defined(OTHER)\n"
+                "generator_rng\n#endif\n",
+            )
+            for mutant in mutants:
+                with self.subTest(macro=macro, mutant=mutant):
+                    with self.assertRaisesRegex(ValueError, "generator_rng"):
+                        CHECKER["check_deferred_surface"](
+                            CHECKER["step4_context_surface"](mutant))
+            with self.subTest(macro=macro, mutant="unsupported elif"):
+                with self.assertRaisesRegex(ValueError, "unsupported.*#elif"):
+                    CHECKER["step4_context_surface"](
+                        f"#ifdef {macro}\nsafe\n#elif defined(OTHER)\n"
+                        "generator_rng\n#endif\n")
+
 
 if __name__ == "__main__":
     unittest.main()
