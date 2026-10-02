@@ -800,6 +800,17 @@ count does not exclude transient creation. A separate in-call E3 observation
 seam and a genuinely reachable M3 graph-create/release mutation under active
 E3 authority are required before mode/graph or §9 acceptance.
 
+The separate [mode/graph source candidate](e3/E3_MODE_GRAPH_SOURCE_CANDIDATE.md)
+stages an exact noninstalled tuple with generated P1/E3 test variants,
+preallocated in-call 17-mode observations and real M3 capture/enrollment/
+release counts. Its test-only preacquire graph mutant uses the same model's
+authentic workspace and input inside the existing E3 call guard. Source
+regeneration, tuple isolation and parser negatives are local checks. The
+supported compiled P1 prerequisite passed and was independently accepted;
+complete mode/graph normal, poison, sanitizer, fresh-build, failure/retry and
+mutation gates remain pending. No §9 mode or
+graph acceptance is claimed.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained

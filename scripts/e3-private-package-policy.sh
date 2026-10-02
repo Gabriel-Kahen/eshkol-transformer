@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Sourced only by E1B. This admits the base private E3 tuple, its exact
 # source-private diagnostic successor, the installed diagnostic tuple, or the
-# separate noninstalled complete-call retention and numerical test successors.
+# separate noninstalled retention, numerical, and mode/graph test successors.
 # Mixed and partial tuples are rejected.
 e3_base_prefix="${PROJECT_ROOT}/native/e3_private_package"
 e3_diagnostic_prefix="${PROJECT_ROOT}/native/e3_diagnostic_private_package"
 e3_public_prefix="${PROJECT_ROOT}/native/e3_diagnostic_public_package"
 e3_retention_prefix="${PROJECT_ROOT}/tests/e3_private/retention_package"
 e3_numerical_prefix="${PROJECT_ROOT}/tests/e3_private/numerical_package"
+e3_mode_graph_prefix="${PROJECT_ROOT}/tests/e3_mode_graph/package"
 e3_base_inputs=(
   "${PROJECT_ROOT}/native/e3_private_driver_root.esk"
   "${PROJECT_ROOT}/native/e3_private_bridge.c"
@@ -37,6 +38,12 @@ e3_numerical_inputs=(
   "${PROJECT_ROOT}/tests/e3_private/numerical_bridge.c"
   "${e3_numerical_prefix}_private_renames.txt"
   "${e3_numerical_prefix}_public_exports.txt"
+)
+e3_mode_graph_inputs=(
+  "${PROJECT_ROOT}/tests/e3_mode_graph/driver_root.esk"
+  "${PROJECT_ROOT}/tests/e3_mode_graph/bridge.c"
+  "${e3_mode_graph_prefix}_private_renames.txt"
+  "${e3_mode_graph_prefix}_public_exports.txt"
 )
 e3_prefix="${e3_base_prefix}"
 e3_inputs=("${e3_base_inputs[@]}")
@@ -86,6 +93,14 @@ for e3_raw in "${raw_private_root}" "${raw_package_bridge}" \
       e3_tuple_requested=1
     fi
   done
+  for e3_expected in "${e3_mode_graph_inputs[@]}"; do
+    if [[ "$(realpath -m -- "${e3_raw}")" == "${e3_expected}" ]]; then
+      [[ -z "${e3_tuple_kind}" || "${e3_tuple_kind}" == mode-graph ]] || \
+        die "E3 policy rejects mixed mode/graph and canonical tuples"
+      e3_tuple_kind=mode-graph
+      e3_tuple_requested=1
+    fi
+  done
 done
 
 if [[ "${e3_tuple_kind}" == diagnostic ]]; then
@@ -102,6 +117,9 @@ elif [[ "${e3_tuple_kind}" == retention ]]; then
 elif [[ "${e3_tuple_kind}" == numerical ]]; then
   e3_prefix="${e3_numerical_prefix}"
   e3_inputs=("${e3_numerical_inputs[@]}")
+elif [[ "${e3_tuple_kind}" == mode-graph ]]; then
+  e3_prefix="${e3_mode_graph_prefix}"
+  e3_inputs=("${e3_mode_graph_inputs[@]}")
 fi
 
 e3_check_repository_path() {
@@ -142,6 +160,14 @@ e3_normalize_source_dependencies() {
     [[ -n "${dependency}" ]] || continue
     if [[ "$(realpath -m -- "${dependency}")" == "${generated}" ]]; then
       printf '@BUILD@/source/e3_d2_dataset.esk\n'
+    elif [[ "${e3_tuple_kind}" == mode-graph && \
+            "$(realpath -m -- "${dependency}")" == \
+              "${e3_generated_source_root}/transformer/module.esk" ]]; then
+      printf '@BUILD@/source/transformer/module.esk\n'
+    elif [[ "${e3_tuple_kind}" == mode-graph && \
+            "$(realpath -m -- "${dependency}")" == \
+              "${e3_generated_source_root}/e3_mode_graph_extension.esk" ]]; then
+      printf '@BUILD@/source/e3_mode_graph_extension.esk\n'
     else
       e3_check_repository_path "${dependency}"
       printf '%s\n' "${dependency#"${PROJECT_ROOT}/"}"

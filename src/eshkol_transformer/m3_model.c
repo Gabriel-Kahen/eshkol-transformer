@@ -44,6 +44,27 @@ typedef struct m3_workspace {
 } m3_workspace;
 static m3_workspace *m3_workspaces;
 
+#ifdef ET_E3_MODE_GRAPH_TESTING
+/* Exact noninstalled E3 tuple only: count real capture and owner transitions. */
+static int64_t e3_graph_capture_attempts;
+static int64_t e3_graph_enrollments;
+static int64_t e3_graph_root_releases;
+int64_t et_e3_test_graph_event_v1(int64_t selector) {
+  switch (selector) {
+    case 0: return e3_graph_capture_attempts;
+    case 1: return e3_graph_enrollments;
+    case 2: return e3_graph_root_releases;
+    case 3: {
+      int64_t live = 0;
+      for (const record *r = registry; r; r = r->next)
+        if (r->kind == M3_GRAPH && r->state >= 0) ++live;
+      return live;
+    }
+    default: return -1;
+  }
+}
+#endif
+
 /* An impossible cleanup defect terminates instead of misreporting committed
  * state as a retryable rejection. Tests exercise these tails with allocation off. */
 static void m3_infallible(int rc) { if (rc) abort(); }
@@ -185,6 +206,9 @@ static void m3_drop_graph(m3_graph *g) {
   if (!g->leases) { g->r.state = -1; m3_destroy_graph_payload(g); }
 }
 void *et_m3_private_graph_capture_v1(void *p) {
+#ifdef ET_E3_MODE_GRAPH_TESTING
+  ++e3_graph_capture_attempts;
+#endif
   clear();
   m3_workspace *s = m3_admit_workspace(p, 0);
   if (!s) return NULL;
@@ -213,6 +237,9 @@ void *et_m3_private_graph_capture_v1(void *p) {
   if (m3_graph_constants(g)) goto failed;
   g->leases = 1; g->root_live = 1;
   enroll(&g->r, M3_GRAPH);
+#ifdef ET_E3_MODE_GRAPH_TESTING
+  ++e3_graph_enrollments;
+#endif
   return g;
 failed:
   m3_destroy_graph_payload(g); free(g); return NULL;
@@ -273,7 +300,11 @@ int64_t et_m3_private_graph_release_v1(void *gp) {
   if (!g->root_live) return 0;
   if (g->active) return bad(ET_M3T_INVALID_STATE, ET_M3T_CODE_REENTRANCY);
   if (m3_graph_storage(g)) return error_category;
-  g->root_live = 0; m3_drop_graph(g); return 0;
+  g->root_live = 0; m3_drop_graph(g);
+#ifdef ET_E3_MODE_GRAPH_TESTING
+  ++e3_graph_root_releases;
+#endif
+  return 0;
 }
 void *et_m3_private_model_logits_create_v1(void *gp) {
   clear();

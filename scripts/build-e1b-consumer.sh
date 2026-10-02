@@ -1158,6 +1158,14 @@ if [[ "${E3_NUMERICAL_SANITIZE:-0}" != 0 ]]; then
     die "E3 numerical sanitizer is allowed only for the exact test tuple"
   e3_private_test_sanitize=1
 fi
+if [[ "${E3_MODE_GRAPH_SANITIZE:-0}" != 0 ]]; then
+  [[ "${E3_MODE_GRAPH_SANITIZE}" == 1 && \
+     "${package_policy}" == e3-private-aggregate && \
+     "${e3_tuple_kind}" == mode-graph && \
+     "${e3_private_test_sanitize}" == 0 ]] || \
+    die "E3 mode/graph sanitizer is allowed only for the exact test tuple"
+  e3_private_test_sanitize=1
+fi
 e3_private_test_sanitize_flags=()
 if [[ "${e3_private_test_sanitize}" == 1 ]]; then
   e3_private_test_sanitize_flags=(-O1 -g -fsanitize=address,undefined
@@ -1172,6 +1180,16 @@ fi
 case "${e3_numerical_mutant}" in
   normal|wrong-target|mean-of-means) ;;
   *) die "unknown E3 numerical mutation: ${e3_numerical_mutant}" ;;
+esac
+e3_mode_graph_mutant=${E3_MODE_GRAPH_MUTANT:-normal}
+if [[ -n "${E3_MODE_GRAPH_MUTANT+x}" ]]; then
+  [[ "${package_policy}" == e3-private-aggregate && \
+     "${e3_tuple_kind}" == mode-graph ]] || \
+    die "E3 mode/graph mutation is allowed only for the exact test tuple"
+fi
+case "${e3_mode_graph_mutant}" in
+  normal|missed-child|enter-write-only|graph-create) ;;
+  *) die "unknown E3 mode/graph mutation: ${e3_mode_graph_mutant}" ;;
 esac
 
 require_command awk
@@ -1227,6 +1245,18 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
   python3 "${PROJECT_ROOT}/scripts/generate-e3-d2-source.py" \
     --output-dir "${e1b_tmp}/generated" >"${e1b_tmp}/d2-generation.json"
   e3_generated_source_root="${e1b_tmp}/generated/source"
+  if [[ "${e3_tuple_kind}" == mode-graph ]]; then
+    python3 "${PROJECT_ROOT}/scripts/generate-e3-mode-graph-source.py" \
+      --output-dir "${e3_generated_source_root}" \
+      --mode "${e3_mode_graph_mutant}" \
+      >"${e1b_tmp}/mode-graph-generation.txt"
+    python3 "${PROJECT_ROOT}/scripts/generate-e3-mode-graph-source.py" \
+      --output-dir "${e3_generated_source_root}" \
+      --mode "${e3_mode_graph_mutant}" --check \
+      >"${e1b_tmp}/mode-graph-check.txt"
+    cmp "${e1b_tmp}/mode-graph-generation.txt" \
+        "${e1b_tmp}/mode-graph-check.txt"
+  fi
 fi
 
 awk '
@@ -1247,6 +1277,8 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
       export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
     elif [[ "${e3_tuple_kind}" == retention ]]; then
       export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1)$'
+    elif [[ "${e3_tuple_kind}" == mode-graph ]]; then
+      export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_mode_graph_run_v1)$'
     fi
   fi
 fi
@@ -1315,6 +1347,9 @@ for include_dir in "${canonical_include_dirs[@]}"; do
 done
 if [[ "${package_policy}" == e3-private-aggregate ]]; then
   include_args+=(-I "${e3_generated_source_root}")
+  if [[ "${e3_tuple_kind}" == mode-graph ]]; then
+    include_args=(-I "${e3_generated_source_root}" "${include_args[@]}")
+  fi
 fi
 if [[ "${package_policy}" == e3-private-aggregate || \
       "${package_policy}" == m3-model-aggregate || \
@@ -1532,6 +1567,11 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     package_native_cflags+=(-DET_E3_RETENTION_TESTING)
   fi
   if [[ "${package_policy}" == e3-private-aggregate &&
+        "${e3_tuple_kind}" == mode-graph ]]; then
+    package_native_cflags+=(-DET_E3_RETENTION_TESTING
+                            -DET_E3_MODE_GRAPH_TESTING)
+  fi
+  if [[ "${package_policy}" == e3-private-aggregate &&
         "${e3_tuple_kind}" == numerical ]]; then
     package_native_cflags+=(-DET_E3_NUMERICAL_TESTING -fno-builtin-printf)
     case "${e3_numerical_mutant}" in
@@ -1545,7 +1585,8 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     package_native_depfile="${e1b_tmp}/package-native-${native_index}.d"
     package_source_flags=()
     if [[ "${package_policy}" == e3-private-aggregate &&
-          "${e3_tuple_kind}" == retention ]]; then
+          ( "${e3_tuple_kind}" == retention ||
+            "${e3_tuple_kind}" == mode-graph ) ]]; then
       case "${package_native_source}" in
         "${PROJECT_ROOT}/src/eshkol_transformer/m3_call_f32_integration.c")
           package_source_flags+=(-DET_F32_TENSOR_TESTING) ;;
@@ -2032,6 +2073,16 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
         et_f32_test_live_counts_snapshot_v1
         et_f32_test_retired_counts_snapshot_v1
       )
+    elif [[ "${e3_tuple_kind}" == mode-graph ]]; then
+      e3_required_private+=(
+        et_e3_mode_graph_dispatch_cabi_v1
+        et_e3_test_graph_event_v1
+        et_e3_test_model_word_count_v1
+        et_e3_test_model_word_v1
+        et_e3_test_gradient_metadata_v1
+        et_e3_test_seed_gradient_v1
+        et_d2_exact_read_test_fail_stage_v1
+      )
     fi
   fi
   for privileged in "${e3_required_private[@]}"; do
@@ -2102,6 +2153,8 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
       public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
     elif [[ "${e3_tuple_kind}" == retention ]]; then
       public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1)$'
+    elif [[ "${e3_tuple_kind}" == mode-graph ]]; then
+      public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_mode_graph_run_v1)$'
     fi
   fi
 fi

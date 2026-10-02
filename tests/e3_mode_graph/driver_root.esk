@@ -1,0 +1,4 @@
+;;; Exact noninstalled E3 mode/graph tuple, outside canonical E3 packages.
+(load "private_root.esk")
+(load "../e3_private/driver.esk")
+(load "driver.esk")
