@@ -793,8 +793,25 @@ independent package builds while retaining exact object/archive comparisons.
 Independent source review and a fresh supported gate remain required.
 The subsequent `94b8fecd` fe9/f31 gate F stopped at sanitized import
 admission before AOT execution, with `bcmp` and `puts` introduced by Clang
-optimization. An exact numerical-sanitized-only added/absent import delta is
-under review; F supplies no numerical acceptance.
+optimization. The exact numerical-sanitized-only added/absent import delta
+was independently reviewed; F itself supplies no numerical acceptance.
+The subsequent G package builds passed all canonical and normal/mutant/
+sanitized checks, but its runtime fixture stopped before AOT on unavailable
+no-stdlib list helpers. Source/tests `8dafe8cb`/tree `78a3fb15` repair only
+that fixture and preserve all packaged inputs. Independently reviewed H
+reuses the readonly 291-file G seal after exact source/closure/recipe checks
+and performs fresh AOT builds and runtime tests. On pinned fe9/f31 Clang 21,
+normal, repeat, poison and ASan/UBSan/LSan each pass three batches and 63
+actual native role rows (21 per batch) against independent pinned PyTorch.
+Normal binaries/stdout/transcripts match, and actual wrong-target CE and
+mean-of-means accumulator mutants fail at their expected value checks without
+publishing transcripts. All runtime stderr is empty. The 75-file H seal is
+`e3-numerical-aot-continuation-8dafe8c-fe9-f31-20261002-prepared-h/SHA256SUMS-RUN`
+(SHA-256 `1c12e66d2f7ed1f72ba5c40a2b385e305d96cacf0a8651ed40a47ac09db1bbaa`),
+independently accepted with unchanged pre/post pins and launcher/Docker 0/0.
+This accepts the bounded three-batch numerical transcript and two mutants;
+zero-model controls, mode/gradient preservation, failure/resource horizons,
+current-main integration and full E3 section 9 acceptance remain open.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
@@ -2327,7 +2344,8 @@ remain unproven.
   completed package gates but AOT compilation stopped on unavailable no-stdlib
   `length`/`list-ref` helpers. The fixture now uses primitive pair/car/cdr
   operations with the same exact two-argument check. Package source is unchanged;
-  fresh compiled runtime proof and full E3 section 9 acceptance remain pending.
+  the independently reviewed H continuation above proves the bounded compiled
+  numerical runtime. Full E3 section 9 acceptance remains pending.
 
 ## Wave 4 — practical pretraining and performance
 
