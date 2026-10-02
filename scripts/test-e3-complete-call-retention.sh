@@ -9,15 +9,34 @@ out="${1:-$(project_build_dir)/e3-complete-call-retention}"
 [[ ! -e "${out}" ]] || die "E3 retention output directory must be fresh: ${out}"
 mkdir -p "${out}"
 
-# The two fe9 actual-only imports observed in the predecessor failure must be
-# supplied by the pinned runtime, not by a test shim or an unverified fallback.
+# Actual-only fe9 imports observed in predecessor and retention tuple builds
+# must be supplied by the pinned runtime, not by a test shim or fallback.
 for archive in libeshkol-runtime.a libeshkol-static.a; do
-  for symbol in eshkol_format_float32_bits eshkol_runtime_fatal; do
+  for symbol in eshkol_format_float32_bits eshkol_runtime_fatal \
+      eshkol_builtin_arena_used eshkol_display_value \
+      eshkol_runtime_current_output_fp eshkol_tail_transfer_slot; do
     nm -g --defined-only "$(eshkol_build_dir)/${archive}" | \
       grep -E "[[:space:]]T ${symbol}$" >/dev/null || \
       die "pinned ${archive} lacks ${symbol}"
   done
 done
+provenance="$(eshkol_build_dir)/eshkol-transformer-provenance.tsv"
+cc="$(tsv_value "${provenance}" cc_path)"
+cxx="$(tsv_value "${provenance}" cxx_path)"
+# fputc is the fifth retention-only import. Prove the supported image's libc
+# supplies the exact symbol with the pinned compiler before the long build.
+"${cc}" -x c - -o "${out}/libc-fputc-probe" <<'C'
+#include <stdio.h>
+int main(void) {
+  int (*volatile call)(int, FILE *) = fputc;
+  return call('x', stdout) == EOF;
+}
+C
+nm -D "${out}/libc-fputc-probe" | \
+  grep -E '[[:space:]]U fputc(@|$)' >/dev/null || \
+  die "supported libc link did not retain fputc"
+"${out}/libc-fputc-probe" >"${out}/libc-fputc-probe.stdout"
+printf x | cmp - "${out}/libc-fputc-probe.stdout"
 
 # The accepted private package is rebuilt and checked independently; the
 # retention successor may not change its source, symbol or dependency closure.
@@ -101,9 +120,6 @@ rows.append(f"TOTAL\t{sum(p.stat().st_size for p in files)}")
 output.write_text("\n".join(rows) + "\n")
 PY
 
-provenance="$(eshkol_build_dir)/eshkol-transformer-provenance.tsv"
-cc="$(tsv_value "${provenance}" cc_path)"
-cxx="$(tsv_value "${provenance}" cxx_path)"
 runner="$(eshkol_build_dir)/eshkol-run"
 "${cxx}" -std=c++17 -Wall -Wextra -Werror -fstack-protector-all \
   -fPIC -fvisibility=hidden -fno-common \

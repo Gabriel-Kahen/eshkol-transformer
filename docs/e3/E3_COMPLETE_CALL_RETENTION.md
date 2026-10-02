@@ -7,6 +7,24 @@ The final closure-order source repair at `4771e408` has independent source-and-
 test approval. A supported exact-tree normal, poisoned and ASan/UBSan/LSan
 gate is still required before acceptance.
 
+The composed `c78682ae` fe9/f31 gate passed canonical packaging but stopped
+at the retention test tuple's exact undefined-symbol inventory, before any
+retention runtime. The retained generated Eshkol `private.o` has five
+actual-only imports and no expected-only imports:
+`eshkol_builtin_arena_used`, `eshkol_display_value`,
+`eshkol_runtime_current_output_fp`, `eshkol_tail_transfer_slot`, and `fputc`.
+The first is emitted for the retention-only `__arena-used` reading; the
+display/output imports come from its test failure reporting, and the tail
+transfer is compiler-emitted for the test source. The four `eshkol_*` symbols
+are defined by both pinned fe9 runtime archives; `fputc` is a libc import.
+The scoped repair admits these five only in the retention tuple and checks
+their actual providers before the long build. Canonical, diagnostic, installed,
+and numerical manifests are unchanged. The 110-file failed evidence is sealed
+at `/home/gabe/e3-complete-call-retention-c78682a-fe9-f31-20261001-prepared-e/SHA256SUMS-FAILED`
+(SHA-256 `569b8e2e31a3cda148c8520d77dff8ca6d4b9ce012aeea96b5ad95efe1a63f53`).
+This is inventory evidence, not a compiled retention result; a fresh pinned
+run of the repaired tuple remains required.
+
 The first supported attempt at `d724c537` stopped in its canonical predecessor
 package before compiling the retention tuple: fe9 emitted exactly two
 actual-only undefined runtime imports, `eshkol_format_float32_bits` and

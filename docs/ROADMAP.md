@@ -758,8 +758,15 @@ matches that first-seen order reconstructed from the sealed raw depfiles;
 production manifests and sources are unchanged. The 103-file failed seal is
 `e3-complete-call-retention-0c358d5-fe9-f31-20261001-prepared-b/SHA256SUMS-FAILED`
 (`579aa559...`). The closure-order repair at `4771e408` was independently
-source-and-test reviewed and is composed with current main. A fresh supported
-exact-tree execution is required, so §9 acceptance remains open.
+source-and-test reviewed and is composed with current main. The composed
+`c78682ae` fe9/f31 gate passed canonical packaging, then stopped before
+retention runtime on five exact retention-only generated Eshkol imports. Its
+110-file failed seal is
+`e3-complete-call-retention-c78682a-fe9-f31-20261001-prepared-e/SHA256SUMS-FAILED`
+(`569b8e2e...`). The scoped retention manifest/provider preflight repair is
+described in [the retention leaf](e3/E3_COMPLETE_CALL_RETENTION.md); canonical,
+diagnostic, installed and numerical manifests remain unchanged. A fresh
+supported exact-tree run is required, so §9 acceptance remains open.
 
 The separate [E3 compiled numerical transcript candidate](e3/E3_NUMERICAL_TRANSCRIPT.md)
 adds an exact noninstalled test tuple over the genuine three-batch D2/E3

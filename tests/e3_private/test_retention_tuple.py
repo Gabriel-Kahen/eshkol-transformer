@@ -27,7 +27,11 @@ class RetentionTupleTest(unittest.TestCase):
         self.assertEqual(
             lines(RETENTION, "undefined_symbols"),
             sorted(lines(BASE, "undefined_symbols")
-                   + ["et_e3_retention_region_used_v1"]),
+                   + ["eshkol_builtin_arena_used",
+                      "eshkol_display_value",
+                      "eshkol_runtime_current_output_fp",
+                      "eshkol_tail_transfer_slot",
+                      "et_e3_retention_region_used_v1", "fputc"]),
         )
         for suffix in ("defined_symbols", "public_exports", "public_strings"):
             expected = sorted(lines(BASE, suffix) + ["et_e3_retention_run_v1"])
