@@ -2372,9 +2372,15 @@ native implementation candidate adds
 three feature-gated private clone/copy/release entries and host development
 normal, repeat and sanitizer tests for first-EOS `[1]` and two-ID `[2]`
 owners, release independence, leases, aliases and failure cleanup. Its
-supported pinned toolchain gate, independent source review and upstream merge
-remain pending. The native terminal dependency is reviewed and gated in
-PR #184; final integration requires its merge gates. Eshkol terminal
+exact source/tests `4a21e6ca`/tree `de3178a3` are independently reviewed.
+The pinned fe9/f31 Clang 21 gate passes 398 clone checks per normal, repeat
+and ASan/UBSan/LSan run with identical stdout and empty stderr, plus 265
+coexistence checks and the terminal predecessor/oracle gates. Independent
+evidence review accepted all 90 files in
+`g3c4-p2g2-terminal-ids-clone-4a21e6c-fe9-f31-20261002-prepared-a/SHA256SUMS-RUN`
+(SHA-256 `378ac9b4ac4d50d7ed7dd648679b21e2b3ddcf57acbdc8acbfd6bf4c99ec58ed`).
+Hosted CI and upstream merge remain pending. The native terminal dependency
+is reviewed and gated in PR #184; final integration requires its merge gates. Eshkol terminal
 publication, public G2 and continuation remain pending.
 
 ## Wave 4 — practical pretraining and performance
