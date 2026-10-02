@@ -42,3 +42,19 @@ also runs poisoned optimized AOT and an ASan/UBSan/LSan build with leak
 detection enabled. The runner records each failed mutant verifier transcript
 without publishing a validated transcript. No supported numerical result or
 full E3 §9 acceptance is claimed before the pinned gate passes.
+
+The exact `5d642a2` fe9/f31 gate built both normal numerical packages and
+both compiled-mutant packages, but stopped before executable/runtime proof
+in the sanitized aggregate's final export check. Clang's
+`___asan_globals_registered` was a COMMON cell; objcopy did not localize
+COMMON, leaving this extra name global. Docker and launcher exited one,
+with unchanged pre/post pins. The preserved 308-file failed evidence seal is
+`/home/gabe/e3-numerical-transcript-5d642a2-fe9-f31-20261002-prepared-c/SHA256SUMS-FAILED`
+(SHA-256 `8939a6bf7036f30bc3a4fa6af185519724e700f4770b5832b5ded7830941fc7f`).
+The bounded repair materializes COMMON storage during the relocatable link
+only for the already-authenticated noninstalled sanitized E3 tuple, then
+applies the unchanged localization and exact export check. Normal/canonical
+link arguments and every export/import manifest remain unchanged. A real
+Clang ASan object regression reproduces the leak and checks the corrected
+private registration cell and retained sanitizer imports. Independent repair
+review and a fresh supported complete numerical gate remain required.

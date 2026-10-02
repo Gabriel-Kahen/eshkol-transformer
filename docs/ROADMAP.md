@@ -777,6 +777,13 @@ mutants are compiled test variants. Independent source-and-test review approved
 `30579532`/tree `44b8fbdb`. The combined tree still requires bounded
 composition review and supported exact-tree execution; the other E3 §9
 numerical, failure and resource obligations remain open.
+The exact `5d642a2` fe9/f31 numerical gate built the normal and mutant
+packages but failed before runtime at sanitized export isolation: the ASan
+registration COMMON cell remained global after objcopy. Its 308-file failed
+evidence is sealed with unchanged pre/post pins. A test-tuple-only linker
+repair materializes COMMON before unchanged symbol localization/export
+validation; a genuine Clang ASan object regression passes locally.
+Independent repair review and a fresh supported numerical run remain required.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.

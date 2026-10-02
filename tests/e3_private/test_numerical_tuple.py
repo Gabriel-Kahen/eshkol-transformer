@@ -1,6 +1,7 @@
 """Static exact-tuple and compiled-mutant boundary checks."""
 
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -18,6 +19,44 @@ def lines(prefix: Path, suffix: str) -> list[str]:
 
 
 class NumericalTupleTest(unittest.TestCase):
+    def test_real_asan_common_cell_is_private_after_relocatable_link(self) -> None:
+        # Exercise actual Clang instrumentation and binutils, not a stubbed nm.
+        required = ("clang", "clang++", "nm", "objcopy")
+        if any(shutil.which(tool) is None for tool in required):
+            self.skipTest("Clang/binutils sanitizer object tools unavailable")
+        with tempfile.TemporaryDirectory(prefix="e3-asan-common-") as temporary:
+            directory = Path(temporary)
+            source = directory / "probe.c"
+            source.write_text("int fixture_global;\n"
+                              "int fixture_public(void) { return fixture_global; }\n")
+            def run(*command: str) -> str:
+                return subprocess.check_output(command, cwd=directory,
+                                               text=True, stderr=subprocess.STDOUT)
+            run("clang", "-fPIC", "-fsanitize=address,undefined", "-c",
+                str(source), "-o", "probe.o")
+            symbols = run("nm", "-g", "--defined-only", "--format=posix", "probe.o")
+            self.assertIn("___asan_globals_registered C ", symbols)
+            private_names = [line.split()[0] for line in symbols.splitlines()
+                             if line.split()[0] != "fixture_public"]
+            (directory / "private.txt").write_text("\n".join(private_names) + "\n")
+            # Reproduce the observed failure: localization alone leaves COMMON.
+            run("objcopy", "--localize-symbols=private.txt", "probe.o", "old.o")
+            self.assertIn("___asan_globals_registered C ",
+                          run("nm", "-g", "--defined-only", "--format=posix", "old.o"))
+            run("clang++", "-r", "-Wl,-d", "probe.o", "-o", "defined.o")
+            run("objcopy", "--localize-symbols=private.txt", "defined.o", "fixed.o")
+            final = run("nm", "-g", "--defined-only", "--format=posix", "fixed.o")
+            self.assertEqual([line.split()[0] for line in final.splitlines()],
+                             ["fixture_public"])
+            all_symbols = run("nm", "--defined-only", "--format=posix", "fixed.o")
+            self.assertIn("___asan_globals_registered b ", all_symbols)
+            imports = run("nm", "-u", "--format=posix", "fixed.o")
+            self.assertIn("__asan_init U", imports)
+            builder = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
+            self.assertIn("e3_private_test_reloc_flags=()", builder)
+            self.assertIn("e3_private_test_reloc_flags=(-Wl,-d)", builder)
+            self.assertIn('"${e1b_cxx}" -r "${e3_private_test_reloc_flags[@]}"', builder)
+
     def test_exact_noninstalled_successor_inventories(self) -> None:
         for suffix in (
             "native_objects", "defined_symbols", "public_exports",

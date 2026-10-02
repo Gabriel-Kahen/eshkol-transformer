@@ -1159,9 +1159,14 @@ if [[ "${E3_NUMERICAL_SANITIZE:-0}" != 0 ]]; then
   e3_private_test_sanitize=1
 fi
 e3_private_test_sanitize_flags=()
+e3_private_test_reloc_flags=()
 if [[ "${e3_private_test_sanitize}" == 1 ]]; then
   e3_private_test_sanitize_flags=(-O1 -g -fsanitize=address,undefined
                                -fno-omit-frame-pointer)
+  # ASan's registration cell is COMMON. objcopy cannot localize COMMON;
+  # materialize it inside this exact noninstalled sanitized aggregate first.
+  # The unchanged final export allowlist still rejects any exposed extra name.
+  e3_private_test_reloc_flags=(-Wl,-d)
 fi
 e3_numerical_mutant=${E3_NUMERICAL_MUTANT:-normal}
 if [[ -n "${E3_NUMERICAL_MUTANT+x}" ]]; then
@@ -1753,7 +1758,8 @@ if [[ -n "${package_native_source_closure}" ]]; then
 fi
 
 "${e1b_clean_toolchain_env[@]}" \
-  "${e1b_cxx}" -r -Wl,-Map,"${e1b_tmp}/combined.map" \
+  "${e1b_cxx}" -r "${e3_private_test_reloc_flags[@]}" \
+  -Wl,-Map,"${e1b_tmp}/combined.map" \
   "${e1b_tmp}/private.o" "${e1b_tmp}/bridge.o" \
   "${e1b_tmp}/package-bridge.o" "${package_native_objects[@]}" \
   -o "${e1b_tmp}/combined.raw.o"
