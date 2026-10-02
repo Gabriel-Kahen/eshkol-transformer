@@ -51,6 +51,11 @@ void *et_g3t_private_output_cache_lengths_clone_v1(void *output);
 #endif
 #ifdef ET_G3T_OUTPUT_RNG_CLONE_PRIVATE
 void *et_g3t_private_output_rng_clone_v1(void *output);
+#ifdef ET_G3T_RECORD_RNG_IMPORT_PRIVATE
+void *et_g3t_private_rng_words_create_v1(
+    int64_t version, int64_t seed, int64_t counter_low,
+    int64_t counter_high);
+#endif
 int64_t et_g3t_private_rng_release_v1(void *rng);
 #endif
 int64_t et_g3t_private_output_prepare_v1(void *context, void *output);

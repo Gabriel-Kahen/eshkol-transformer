@@ -1432,9 +1432,12 @@ The proposed [G3-R typed RNG import contract](g3/G3_R_TYPED_RNG_IMPORT_CONTRACT.
 defines a source-private G3-T kind-8 owner constructor for four exact signed
 G3-S words, preserving carry and exhaustion without a seed reset. It records
 the existing same-registry `:rng` consumer, pending ledger cleanup, and the
-authenticated G3RCV1/C2 pair prerequisite. No import ABI or wrapper is yet
-implemented; the separate record codec still awaits its supported gate. This
-does not restore model/cache/tokenizer state or prove continuation.
+authenticated G3RCV1/C2 pair prerequisite. A source-private
+[typed import candidate](g3/G3_R_TYPED_RNG_IMPORT_LEAF.md) now adds the guarded
+kind-8 word constructor and closed G3-T wrapper, with native/Eshkol off/on and
+independent G3-S oracle fixtures. Its supported gate is pending; the separate
+record codec also awaits its supported gate. This does not restore
+model/cache/tokenizer state or prove continuation.
 
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
