@@ -1478,9 +1478,18 @@ the existing same-registry `:rng` consumer, pending ledger cleanup, and the
 authenticated G3RCV1/C2 pair prerequisite. A source-private
 [typed import candidate](g3/G3_R_TYPED_RNG_IMPORT_LEAF.md) now adds the guarded
 kind-8 word constructor and closed G3-T wrapper, with native/Eshkol off/on and
-independent G3-S oracle fixtures. Its supported gate is pending; the separate
-record codec also awaits its supported gate. This does not restore
-model/cache/tokenizer state or prove continuation.
+independent G3-S oracle fixtures. The independently accepted `8ebed705` /
+tree `4217a5e8` supported fe9/f31 gate ran 2026-10-02 10:57:10–11:01:28
+UTC with launcher/Docker exits 0 and both pin checks PASS. Feature-off 1,
+native C and normal/sanitizer 101 checks passed; normal and sanitizer output
+matched, the gate's repeat comparison passed, and compile/runtime stderr were
+empty. Three actual imported runs matched the G3-S/Philox oracle and published
+clone successors. Repeat logs were not separately retained. Its 29-file seal
+is `g3r-rng-import-8ebed70-fe9-f31-20261002-prepared-a/SHA256SUMS-RUN`
+(`90c52bf074c7cea0c9ec3004aae08ee331c0de0d05e78c203e72a6482d1e0fbf`).
+The separate record codec has also passed its supported gate. This scalar
+private kind-8 import does not authenticate a record, restore C2/model/cache/
+tokenizer state, replay draws or prove continuation.
 
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
