@@ -3,8 +3,9 @@
 This test-only successor addresses the separate repeated-complete-call horizon
 in [E3 §9](../E3_EVALUATION_PROPOSAL.md). The merged single-invocation witness
 counts 1,024/8,192 batches inside one call; it does not exercise this path.
-This candidate requires independent source review and a supported exact-tree
-normal, poisoned and ASan/UBSan/LSan gate before acceptance.
+The final closure-order source repair at `4771e408` has independent source-and-
+test approval. A supported exact-tree normal, poisoned and ASan/UBSan/LSan
+gate is still required before acceptance.
 
 The first supported attempt at `d724c537` stopped in its canonical predecessor
 package before compiling the retention tuple: fe9 emitted exactly two

@@ -3,8 +3,9 @@
 This noninstalled test tuple targets the three-batch numerical portion of
 [E3 §9](../E3_EVALUATION_PROPOSAL.md). It is not a public evaluator or a
 replacement for the separate complete-call retention, failure, and broader
-numerical boundary gates. Independent source review and a supported exact-tree
-run are required before its observations can be accepted.
+numerical boundary gates. Independent source-and-test review approved
+`30579532`/tree `44b8fbdb`; the composed tree still needs bounded integration
+review and a supported exact-tree run before its observations can be accepted.
 
 The exact `numerical_driver_root.esk` loads the unchanged private E3 driver.
 The ordinary boxed `et_e3_test_run_v1` entry constructs the genuine fixed M3

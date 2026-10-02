@@ -757,17 +757,19 @@ moves only `native/d2_native.h` before `m3_model.c`. The test manifest now
 matches that first-seen order reconstructed from the sealed raw depfiles;
 production manifests and sources are unchanged. The 103-file failed seal is
 `e3-complete-call-retention-0c358d5-fe9-f31-20261001-prepared-b/SHA256SUMS-FAILED`
-(`579aa559...`). A fresh supported exact-tree execution is required, so §9
-acceptance remains open.
+(`579aa559...`). The closure-order repair at `4771e408` was independently
+source-and-test reviewed and is composed with current main. A fresh supported
+exact-tree execution is required, so §9 acceptance remains open.
 
 The separate [E3 compiled numerical transcript candidate](e3/E3_NUMERICAL_TRANSCRIPT.md)
 adds an exact noninstalled test tuple over the genuine three-batch D2/E3
 private evaluator. Guarded native observations carry all 21 role words,
 IDs/targets/masks, CE, L3S, serial states and published metrics into the
 independent frozen development comparator. Wrong-target and mean-of-means
-mutants are compiled test variants. Only source/static checks have run;
-independent review and supported exact-tree execution remain pending, and the
-other E3 §9 numerical, failure and resource obligations remain open.
+mutants are compiled test variants. Independent source-and-test review approved
+`30579532`/tree `44b8fbdb`. The combined tree still requires bounded
+composition review and supported exact-tree execution; the other E3 §9
+numerical, failure and resource obligations remain open.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
