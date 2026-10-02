@@ -15,8 +15,8 @@ policy vector of six exact signed i64 words, G3-S vector of four signed i64
 words, one- or two-byte raw history, origin prompt length, prior generated
 count, prior manual append count, exact 96-byte T1 fingerprint, and 32-byte
 C2 digest. `g3r-record-decode!` takes the exact 288-byte source, expected
-32-byte C2 digest, and an exact eight-slot destination vector. On success the
-slots contain newly owned data-only policy, RNG, history, prompt length,
+32-byte C2 digest, and an exact eight-slot mutable general vector. On success
+the slots contain newly owned data-only policy, RNG, history, prompt length,
 generated count, manual count, fingerprint and C2 digest, in that order.
 Neither function grants authority to use those words as a live RNG or model.
 
@@ -25,7 +25,12 @@ version/profile/algorithm, zero padding/unused history, history partition,
 greedy/categorical f32 bit domains, budget/EOS, RNG version/seed/full signed
 counter words including exhaustion, and checksum. Encode builds and hashes
 a private staged record before its sole fixed destination copy. Decode hashes,
-validates and allocates fresh slot values before its final eight assignments.
+validates and allocates fresh slot values into a separate eight-slot vector,
+then uses one checked whole-range `vector-copy!` publication. Pinned fe9
+`eshkol_region_copy_tagged_checked` stages every tagged promotion before any
+destination slot is written; a late promotion failure cannot leave early
+slots published. A numeric tensor-backed vector cannot hold these data-only
+objects and is rejected by the same checked publication.
 Rejected inputs leave the caller's destination bytes or slot identities
 unchanged. Calls assume serialized access to caller-owned bytevectors; there
 is no claim under concurrent mutation or process failure during a copy.
@@ -35,7 +40,7 @@ The enabled fixture tests exact greedy, generated-EOS/exhausted categorical,
 carry, high-bit counter and manual EOS-match/zero-budget vectors; an
 independent Python `hashlib`/`struct` oracle compares all 288 bytes. Malformed
 input, truncated/extended records, repaired checksums over invalid semantics,
-reserved bytes, wrong pair digest and
+reserved bytes, wrong pair digest, and failed whole-range publication with
 destination preservation are negative cases. The pinned supported normal,
 repeat, ASan+UBSan+LSan Eshkol gate and exact symbol/source closure remain
 the acceptance gate for this leaf. No C2 pair publication, typed live-RNG

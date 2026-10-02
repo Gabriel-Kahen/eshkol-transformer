@@ -231,6 +231,19 @@
                (changed greedy-record 88 2 #t) digest)
 (reject-decode "reject bad fingerprint after reseal"
                (changed greedy-record 128 0 #t) digest)
+(let ((numeric-destination #(77 77 77 77 77 77 77 77))
+      (caught #f))
+  (check "numeric destination passes exact vector extent"
+         (and (vector? numeric-destination)
+              (= (vector-length numeric-destination) 8)))
+  (guard (condition (#t (set! caught #t)))
+    (g3r-record-decode! terminal-record digest numeric-destination))
+  (check "failed whole-range publication leaves numeric destination intact"
+         (and caught
+              (let loop ((index 0))
+                (if (= index 8) #t
+                    (and (= (vector-ref numeric-destination index) 77)
+                         (loop (+ index 1))))))))
 (let ((other-digest (make-bytevector 32 0)))
   (reject-decode "reject wrong authenticated C2 pair"
                  greedy-record other-digest))

@@ -210,12 +210,9 @@
       (if (not (g3r-record-fields? policy rng history prompt generated manual
                                    fingerprint c2-digest))
           (g3r-record-fail "G3-R record decode: invalid bounded fields"))
-      (vector-set! destination 0 policy)
-      (vector-set! destination 1 rng)
-      (vector-set! destination 2 history)
-      (vector-set! destination 3 prompt)
-      (vector-set! destination 4 generated)
-      (vector-set! destination 5 manual)
-      (vector-set! destination 6 fingerprint)
-      (vector-set! destination 7 c2-digest)
+      ;; The pinned runtime stages/promotes the complete tagged range before
+      ;; vector-copy! publishes it. Per-slot writes could partially publish.
+      (let ((staged (vector policy rng history prompt generated manual
+                            fingerprint c2-digest)))
+        (vector-copy! destination 0 staged 0 8))
       destination)))
