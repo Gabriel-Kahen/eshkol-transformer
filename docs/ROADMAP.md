@@ -991,8 +991,8 @@ forward-cut, exhaustion, predecessor and private feature-boundary checks pass.
 Independent evidence review accepted all 106 files in
 `g3c4-p2g2-second-frame-4851e17-fe9-f31-20261002-prepared-b/SHA256SUMS-RUN`
 (SHA-256 `6b2c96a4d4b6cc79881d73d9ce9ff4c4ad9a809e27e78e8fa64aa0d9cfb50a5e`).
-Hosted integration remains pending. It publishes no terminal result,
-Eshkol T1 decode, public admission or persistence.
+Hosted exact-head checks passed 23/23 and PR #180 merged at `4b7e7c23`.
+It publishes no terminal result, Eshkol T1 decode, public admission or persistence.
 
 The [private EOS-capable first-frame carrier candidate](g3/G3_C4_P2_G2_EOS_FIRST_FRAME_LEAF.md)
 adds a guarded genuine first sample/forward route for selected EOS, using
