@@ -1,10 +1,9 @@
 # Private P2/G2 native terminal publication contract
 
-The source-private implementation candidate follows the independently accepted
-EOS-capable first-frame and authentic second-frame carriers. Terminal source
-review and its supported gate remain pending. It does not admit public G2 or
-establish Eshkol T1 provenance. Existing P2/G1 publication and public adapters
-stay on their original route.
+The independently reviewed source-private implementation follows the accepted
+EOS-capable first-frame and authentic second-frame carriers. Its pinned native
+gate passed. It does not admit public G2 or establish Eshkol T1 provenance.
+Existing P2/G1 publication and public adapters stay on their original route.
 
 ## Exact private ABI and terminal forms
 
@@ -222,3 +221,18 @@ gradient preservation is required, not a new gradient formula. Supported
 native acceptance still leaves same-registry Eshkol terminal composition,
 logical detached result adapters, public/larger-profile admission, repeated
 decode and data-only continuation/save/reload/replay acceptance unfinished.
+
+The independently reviewed `aae70bb57d597e13c1469fc02b7c655cd40226f5`
+(tree `01d1e855daed2b2e7bb99485e79e39ebe1cf99b3`) passed its exact
+pinned fe9/f31 Clang 21 native gate. Normal, repeat and ASan+UBSan+LSan each
+passed 4,036 checks with identical stdout and empty compile/runtime stderr;
+the independent second-draw oracle accepted 17 rows in normal and sanitizer
+modes. P2/G1 coexistence passed 263 checks, while prefix, EOS first-frame and
+second-frame predecessors passed 301, 2,051 and 2,965 checks. Exact private
+symbols, macro closure, feature-off preprocessing, source/toolchain/image
+pre/post pins, and Docker/launcher numeric exits passed. The independently
+accepted 62-file evidence seal is
+`/home/gabe/g3c4-p2g2-terminal-aae70bb-fe9-f31-20261002-prepared-a/SHA256SUMS-RUN`
+(SHA-256 `2e6a74108fa55d4f440661b0322317e9374c3daf0dad6a25da3059700f817d6f`).
+Hosted CI and merge remain pending. This result proves only the private native
+terminal contract, not Eshkol text/result composition or continuation.

@@ -996,16 +996,21 @@ seal `g3c4-p2g2-eos-first-frame-a9c0e2c-fe9-f31-20261002-prepared-a/SHA256SUMS-R
 was independently accepted. Hosted CI/integration remain pending; no EOS
 termination, logical-G1 publication, second token or public G2 claim follows.
 
-The [private native P2/G2 terminal candidate](g3/G3_C4_P2_G2_NATIVE_TERMINAL_CONTRACT.md)
+The [private native P2/G2 terminal](g3/G3_C4_P2_G2_NATIVE_TERMINAL_CONTRACT.md)
 commits one genuine first EOS or two genuine sampled IDs with a guarded A2
 transaction/cache ownership witness, logical length one or two, final RNG and
 detached snapshot. It retains physical output capacity two and a distinct
-terminal owner marker; P2/G1 publication remains disjoint. Local Clang 22
-compatibility tests cover P3/T4 full-prefix cache parity, independent Philox
-draws, lease/alias/tamper/retry and fail-stop cuts. Independent whole-source
-review and pinned fe9/f31 native normal/repeat/sanitizer, feature-boundary and
-predecessor gates remain pending. This is native-private only; T1-authenticated
-Eshkol text/result composition, public G2 and continuation remain downstream.
+terminal owner marker; P2/G1 publication remains disjoint. Independently
+reviewed `aae70bb`/tree `01d1e855` passed the pinned fe9/f31 Clang 21 native
+normal/repeat/ASan+UBSan+LSan gate (4,036 checks each), 17-row independent
+second-draw oracle, P2/G1 coexistence (263 checks), prefix/EOS/second-frame
+predecessors (301/2,051/2,965 checks), and private feature/symbol boundaries.
+Docker/launcher exits and pre/post pins passed. The independently accepted
+62-file seal is `g3c4-p2g2-terminal-aae70bb-fe9-f31-20261002-prepared-a/SHA256SUMS-RUN`
+(`2e6a74108fa55d4f440661b0322317e9374c3daf0dad6a25da3059700f817d6f`).
+Hosted CI and merge remain pending. This is native-private only;
+T1-authenticated Eshkol text/result composition, public G2 and continuation
+remain downstream.
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
