@@ -53,6 +53,17 @@ evidence files, including the raw native depfiles, are sealed at
 No dependency or check was removed, and compiled retention/sanitizer acceptance
 still requires a fresh exact-head gate.
 
+The later supported `5d642a2` fe9/f31 attempt passed the canonical package and
+the repaired retention undefined inventory, then stopped before retention
+runtime. E1B's broad unresolved-private guard rejected the expected
+`et_e3_retention_region_used_v1` import, whose real definition is supplied by
+the separately compiled test-only `retention_arena.cpp` at final link. The
+113-file failed seal is
+`/home/gabe/e3-complete-call-retention-5d642a2-fe9-f31-20261002-prepared-f/SHA256SUMS-FAILED`
+(`ceca414727634776d126c77ea2d393563a31e21a2032dcdfe8d5941fa7fb710c`).
+The exact tuple-specific linkage-policy repair still needs review and a fresh
+supported run. No retained-byte, sanitizer or mixed-mode runtime result exists.
+
 `tests/e3_private/retention_driver_root.esk` loads the unchanged canonical
 private driver, then adds one boxed retention entry. The exact retention tuple
 has its own policy inputs, source/native closures, export/string/undefined
@@ -62,7 +73,11 @@ canonical private package and rejects any retention symbol in its object.
 
 For each 1,024/8,192 horizon and absent/present gradient state, the fixture
 creates one genuine fixed M3 model, T1 tokenizer, packed D2 dataset, E3 frame
-and four I2 destinations. It sets and records mixed modes on all 17 P1 nodes,
+and four I2 destinations. Its current mixed17 helpers incorrectly read M3T
+model-entry slot 4 as a node vector; that slot is `#f`, while slot 0 is an
+opaque P1 shell. Those helpers are blocked pending the P1-owned, token-keyed
+test seam in [the mode/graph contract](E3_MODE_GRAPH_OBSERVATION_CONTRACT.md).
+Once repaired, the fixture must set and record actual modes on all 17 P1 nodes,
 seeds one nonzero present gradient when selected, and snapshots every word of
 all 14 parameter values and gradients, gradient metadata, the four initializer
 successor words, destination bits, counters and D2 cursor. One complete call
