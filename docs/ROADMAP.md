@@ -940,9 +940,15 @@ link flag. Its reviewed runner repair, composed with merged parent
 `9fc17bcd`, passed the next pinned feature-off Eshkol link/runtime (five
 checks), but the enabled fixture stopped at IR generation: a test-only
 precommit probe call supplied three operands to a four-argument helper due
-to one misplaced lambda close. That fixture-only correction and an explicit
-static probe-arity check await independent review and a fresh exact supported
-gate; no `3/1110` Eshkol runtime proof or integration is claimed.
+to one misplaced lambda close. Its reviewed fixture-only correction reached
+the next exact supported gate at `e7aef68`: both compiles were clean,
+feature-off passed five runtime checks, and enabled execution emitted both
+actual greedy/categorical oracle records before a test observer tried a
+normal A2 cache read borrow while a sampled token-frame transaction held
+the cache. The fixture now asserts that genuine lease rejection and checks
+the committed cache against an independent P2 reference after native abort.
+Source review and a fresh supported gate remain pending; no complete
+`3/1110` Eshkol runtime proof or integration is claimed.
 Second-token, terminal/EOS,
 public and CLI work remain separate.
 

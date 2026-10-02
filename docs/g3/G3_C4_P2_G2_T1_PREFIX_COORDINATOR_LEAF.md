@@ -14,9 +14,16 @@ link; it changes no production API or numerical path. The next pinned gate
 linked and ran the feature-off fixture (five checks) but stopped while
 generating enabled Eshkol IR: one test-only precommit probe nested its
 after-decode lambda inside the before-decode lambda, giving the four-argument
-probe function only three operands. This follow-up closes that lambda and
-checks both probe call arities statically. A fresh pinned
-normal/repeat/sanitizer Eshkol/native gate remains required before enabled
-runtime or integration acceptance. Parent PR #174 is merged. Second-token
+probe function only three operands. The independently reviewed correction
+closed that lambda and checks both probe call arities statically. The next
+pinned gate at `e7aef68` compiled both modes and passed feature-off runtime
+(five checks). Enabled runtime emitted both greedy/categorical oracle records,
+then stopped when a test observer requested an ordinary A2 read borrow during
+a genuine pending token-frame transaction. That A2 lease rejection is expected.
+The fixture repair asserts the rejection in-region and checks exact committed
+cache bytes against an independent P2 prefill after native abort. Independent
+source review and a fresh pinned normal/repeat/sanitizer Eshkol/native gate
+remain required before enabled-runtime or integration acceptance. Parent PR
+#174 is merged. Second-token
 generation, EOS terminal handling, output publication, public ABI/profile
 and CLI remain later gates.

@@ -179,6 +179,10 @@ static cache_snapshot coordinator_prefix_cache;
 static binding_snapshot coordinator_entry_binding;
 static binding_snapshot coordinator_precommit_binding;
 static binding_snapshot coordinator_prefix_binding;
+static et_a2_kv_cache *coordinator_entry_cache_owner;
+static et_a2_kv_cache *coordinator_precommit_cache_owner;
+static et_a2_kv_cache *coordinator_prefix_cache_owner;
+static int coordinator_precommit_cache_readable;
 static float coordinator_next_logits[256];
 static int64_t coordinator_selected;
 static int64_t coordinator_prompt[2];
@@ -256,6 +260,10 @@ int64_t et_g3c4_p2g2_coordinator_test_mark_v1(
          sizeof(coordinator_entry_rng));
   snapshot_cache(context->cache, &coordinator_entry_cache);
   snapshot_binding(context, &coordinator_entry_binding);
+  coordinator_entry_cache_owner = context->cache;
+  coordinator_precommit_cache_owner = NULL;
+  coordinator_prefix_cache_owner = NULL;
+  coordinator_precommit_cache_readable = 0;
   coordinator_saw_prefix = 0;
   return coordinator_entry_cache.length == 0 &&
          coordinator_entry_binding.ready == 0u &&
@@ -298,6 +306,9 @@ int64_t et_g3c4_p2g2_coordinator_test_observe_v1(
   et_g3c4_output_internal *output =
       et_g3c4_admit_output(output_candidate, 0);
   cache_snapshot cache;
+  et_a2_kv_cache_read_borrow *borrow = NULL;
+  et_kernel_error error;
+  int frame_owns_cache;
   if (context == NULL || output == NULL ||
       (cache_length != 0 && cache_length != 2) ||
       !coordinator_owner_unchanged() ||
@@ -306,12 +317,27 @@ int64_t et_g3c4_p2g2_coordinator_test_observe_v1(
       output->numeric_ready != 0u || output->ids_copied != 0u ||
       output->text_ready != 0u || !coordinator_pending_zero(output))
     return -1;
-  snapshot_cache(context->cache, &cache);
-  if (cache.length != cache_length ||
-      memcmp(cache.keep,
-             cache_length == 0 ? (const uint8_t[4]){0, 0, 0, 0} :
-                                 (const uint8_t[4]){1, 1, 0, 0}, 4u) != 0)
-    return -1;
+  frame_owns_cache = context->token_frame_transaction != NULL;
+  if (frame_owns_cache) {
+    /* A2 forbids a second read lease while the genuine pending append owns
+     * the cache. Its committed bytes become readable after native abort. */
+    if (cache_length != 2 || context->token_frame_position != 2 ||
+        (context->token_frame_state != ET_G3C4_TOKEN_FRAME_SAMPLED &&
+         context->token_frame_state != ET_G3C4_TOKEN_FRAME_READY) ||
+        et_a2_kv_cache_read_borrow_begin_v1(
+            context->cache, &borrow, &error) !=
+            ET_KERNEL_ERROR_INVALID_ARGUMENT ||
+        borrow != NULL || error.category != ET_KERNEL_ERROR_INVALID_ARGUMENT ||
+        error.code != ET_KERNEL_CODE_PROVIDER_REJECTED)
+      return -1;
+  } else {
+    snapshot_cache(context->cache, &cache);
+    if (cache.length != cache_length ||
+        memcmp(cache.keep,
+               cache_length == 0 ? (const uint8_t[4]){0, 0, 0, 0} :
+                                   (const uint8_t[4]){1, 1, 0, 0}, 4u) != 0)
+      return -1;
+  }
   if (cache_length == 2 &&
       (context->p2g2_prefix_committed != 0u ||
        context->prefill_binding_ready != 1u ||
@@ -323,9 +349,13 @@ int64_t et_g3c4_p2g2_coordinator_test_observe_v1(
   if (selected >= 0 && context->token_frame_candidate != selected)
     return -1;
   if (cache_length == 2) {
-    coordinator_precommit_cache = cache;
+    coordinator_precommit_cache_owner = context->cache;
+    coordinator_precommit_cache_readable = !frame_owns_cache;
+    if (!frame_owns_cache) coordinator_precommit_cache = cache;
     snapshot_binding(context, &coordinator_precommit_binding);
     if (coordinator_precommit_binding.ready != 1u) return -1;
+  } else if (context->cache != coordinator_entry_cache_owner) {
+    return -1;
   }
   return 0;
 }
@@ -345,6 +375,7 @@ int64_t et_g3c4_p2g2_coordinator_test_prefix_v1(
       !coordinator_owner_unchanged() ||
       !coordinator_pending_zero(output)) return -1;
   snapshot_cache(context->cache, &coordinator_prefix_cache);
+  coordinator_prefix_cache_owner = context->cache;
   snapshot_binding(context, &coordinator_prefix_binding);
   if (coordinator_prefix_cache.length != 3 ||
       memcmp(coordinator_prefix_cache.keep,
@@ -378,17 +409,41 @@ int64_t et_g3c4_p2g2_coordinator_test_after_abort_v1(
                                     (const uint8_t[4]){1, 1, 1, 0}, 4u) != 0)
     return -1;
   if (expected_length == 0 &&
-      (!coordinator_cache_equal(&actual, &coordinator_entry_cache) ||
+      (context->cache != coordinator_entry_cache_owner ||
+       !coordinator_cache_equal(&actual, &coordinator_entry_cache) ||
        !coordinator_binding_equal(&actual_binding,
                                   &coordinator_entry_binding)))
     return -1;
-  if (expected_length == 2 &&
-      (!coordinator_cache_equal(&actual, &coordinator_precommit_cache) ||
-       !coordinator_binding_equal(&actual_binding,
-                                  &coordinator_precommit_binding)))
-    return -1;
+  if (expected_length == 2) {
+    if (context->cache != coordinator_precommit_cache_owner ||
+        !coordinator_binding_equal(&actual_binding,
+                                   &coordinator_precommit_binding))
+      return -1;
+    if (coordinator_precommit_cache_readable) {
+      if (!coordinator_cache_equal(&actual, &coordinator_precommit_cache))
+        return -1;
+    } else {
+      et_g3c4_context_internal *reference = create_generator(coordinator_owner);
+      cache_snapshot expected;
+      binding_snapshot expected_binding;
+      float logits[256];
+      if (reference == NULL ||
+          et_g3c4_private_call_acquire_v1(reference, 2, 1) != 0 ||
+          et_g3c4_private_prefill2_v1(
+              reference, coordinator_prompt, logits) != 0)
+        return -1;
+      snapshot_cache(reference->cache, &expected);
+      snapshot_binding(reference, &expected_binding);
+      if (!coordinator_cache_equal(&actual, &expected) ||
+          !coordinator_binding_equal(&actual_binding, &expected_binding) ||
+          et_g3c4_private_call_abort_v1(reference) != 0 ||
+          et_g3c4_private_generator_close_v1(reference) != 0)
+        return -1;
+    }
+  }
   if (expected_length == 3 &&
       (!coordinator_saw_prefix ||
+       context->cache != coordinator_prefix_cache_owner ||
        !coordinator_cache_equal(&actual, &coordinator_prefix_cache) ||
        !coordinator_binding_equal(&actual_binding,
                                   &coordinator_prefix_binding) ||

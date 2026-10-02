@@ -139,6 +139,20 @@ assert "coordinator_entry_binding" in native_fixture
 assert "coordinator_precommit_binding" in native_fixture
 assert "coordinator_prefix_binding" in native_fixture
 assert "coordinator_binding_equal" in native_fixture
+observe = native_fixture.split(
+    "int64_t et_g3c4_p2g2_coordinator_test_observe_v1(", 1)[1].split(
+    "int64_t et_g3c4_p2g2_coordinator_test_prefix_v1(", 1)[0]
+after_abort = native_fixture.split(
+    "int64_t et_g3c4_p2g2_coordinator_test_after_abort_v1(", 1)[1].split(
+    "int64_t et_g3c4_p2g2_coordinator_test_dead_output_v1(", 1)[0]
+assert "frame_owns_cache = context->token_frame_transaction != NULL" in observe
+assert "if (frame_owns_cache)" in observe
+assert "et_a2_kv_cache_read_borrow_begin_v1(" in observe
+assert "error.code != ET_KERNEL_CODE_PROVIDER_REJECTED" in observe
+assert "coordinator_precommit_cache_readable = !frame_owns_cache" in observe
+assert "coordinator_precommit_cache_readable" in after_abort
+assert "et_g3c4_private_prefill2_v1(" in after_abort
+assert "coordinator_cache_equal(&actual, &expected)" in after_abort
 assert "COORD_ORACLE %s" in native_fixture
 for phrase in ("impossible closed native tail fails stop",
                "different owned P2 input rejected after preflight",
