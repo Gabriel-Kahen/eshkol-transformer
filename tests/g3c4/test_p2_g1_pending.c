@@ -67,7 +67,10 @@ static et_g3c4_context_internal *p2g1_categorical_generator(
   return context;
 }
 
-int32_t __wrap_et_kernel_runtime_dispatch(
+#ifndef ET_G3C4_P2_G1_TEST_DISPATCH
+#define ET_G3C4_P2_G1_TEST_DISPATCH __wrap_et_kernel_runtime_dispatch
+#endif
+int32_t ET_G3C4_P2_G1_TEST_DISPATCH(
     const et_kernel_runtime *runtime, const et_kernel_call_v1 *call,
     et_kernel_error *error) {
 #ifdef ET_G3C4_P2_G2_CARRIER_BRIDGE_PRIVATE
