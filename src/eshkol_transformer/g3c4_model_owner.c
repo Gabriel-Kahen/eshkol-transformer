@@ -8328,6 +8328,9 @@ static int64_t et_g3c4_terminal_candidate_preflight(
   }
   if (et_a2_kv_cache_transaction_view_end_v1(&candidate, &error) != 0)
     abort();
+  if (!et_a2_kv_cache_private_terminal_transaction_witness_v1(
+          context->token_frame_transaction, context->cache, prior))
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
   return 0;
 fail:
   first = et_g3c4_error_snapshot_internal();

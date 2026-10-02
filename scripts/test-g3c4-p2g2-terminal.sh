@@ -88,6 +88,7 @@ sources=("$PROJECT_ROOT/src/eshkol_transformer/m3_i64_integration.c"
 terminal_test="$PROJECT_ROOT/tests/g3c4/test_p2_g2_native_terminal.c"
 terminal_wrap=(-Wl,--wrap=et_kernel_runtime_dispatch
   -Wl,--wrap=et_i64_tensor_borrow_view_v1
+  -Wl,--wrap=et_a2_kv_cache_transaction_view_end_v1
   -Wl,--wrap=et_a2_kv_cache_transaction_abort_v1
   -Wl,--wrap=et_i64_tensor_copy_from_v1
   -Wl,--wrap=et_a2_kv_cache_transaction_commit_v1)

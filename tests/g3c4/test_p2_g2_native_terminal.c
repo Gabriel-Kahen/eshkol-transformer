@@ -11,6 +11,19 @@
 #include <unistd.h>
 
 static int fail_terminal_copy, fail_terminal_cache_commit;
+static et_g3c4_context_internal *tamper_terminal_view_owner;
+static int tamper_terminal_view_at, terminal_view_ends;
+int32_t __real_et_a2_kv_cache_transaction_view_end_v1(
+    et_a2_kv_cache_transaction_view **view, et_kernel_error *error);
+int32_t __wrap_et_a2_kv_cache_transaction_view_end_v1(
+    et_a2_kv_cache_transaction_view **view, et_kernel_error *error) {
+  int32_t result = __real_et_a2_kv_cache_transaction_view_end_v1(view, error);
+  if (result == 0 && tamper_terminal_view_owner != NULL &&
+      ++terminal_view_ends == tamper_terminal_view_at)
+    tamper_terminal_view_owner->cache =
+        (et_a2_kv_cache *)(uintptr_t)0x1000u;
+  return result;
+}
 int32_t __real_et_i64_tensor_copy_from_v1(
     et_i64_tensor *handle, const int64_t *source, size_t count,
     et_i64_tensor_error *error);
@@ -166,7 +179,7 @@ static void terminal_ready(et_g3c4_model_owner_internal *owner,
 static void terminal_failure_matrix(et_g3c4_model_owner_internal *owner) {
   const int64_t prompt[2] = {7, 11};
   for (int first_eos = 0; first_eos <= 1; first_eos++)
-    for (int cut = 0; cut < 19; cut++) {
+    for (int cut = 0; cut < 21; cut++) {
       et_g3c4_context_internal *context;
       et_g3c4_input_internal *input;
       et_g3c4_output_internal *output;
@@ -180,6 +193,7 @@ static void terminal_failure_matrix(et_g3c4_model_owner_internal *owner) {
       et_a2_kv_cache_transaction_view *cache_view = NULL;
       et_kernel_error cache_error;
       int64_t saved_policy = context->generator_policy[5];
+      et_a2_kv_cache *saved_cache = context->cache;
       void *requested_output = output;
       void *requested_first = &first;
       void *requested_second = first_eos ? NULL : &second;
@@ -217,6 +231,12 @@ static void terminal_failure_matrix(et_g3c4_model_owner_internal *owner) {
           else context->p2g2_prefix_raw ^= 1u;
           break;
         case 18: context->generator_policy[4] = 1; break;
+        case 19:
+        case 20:
+          tamper_terminal_view_owner = context;
+          tamper_terminal_view_at = cut == 19 ? 1 : 2;
+          terminal_view_ends = 0;
+          break;
       }
       CHECK(et_g3c4_private_p2g2_terminal_commit_v1(
           context, requested_output, requested_first, first_bytes,
@@ -234,6 +254,14 @@ static void terminal_failure_matrix(et_g3c4_model_owner_internal *owner) {
       if (cache_view != NULL)
         OK(et_a2_kv_cache_transaction_view_end_v1(
             &cache_view, &cache_error));
+      tamper_terminal_view_owner = NULL;
+      context->cache = saved_cache;
+      if (cut == 19 || cut == 20) {
+        CHECK(terminal_view_ends == tamper_terminal_view_at);
+        CHECK(et_a2_kv_cache_private_terminal_transaction_witness_v1(
+            context->token_frame_transaction, context->cache,
+            first_eos ? 2 : 3) == 1);
+      }
       et_a2_kv_cache_test_reset_allocator_v1();
       context->generator_policy[5] = saved_policy;
       if (cut == 7) context->token_frame_successor[0] = 1;
@@ -245,7 +273,7 @@ static void terminal_failure_matrix(et_g3c4_model_owner_internal *owner) {
         else context->p2g2_prefix_raw ^= 1u;
       }
       if (cut == 18) context->generator_policy[4] = 2;
-      if (cut == 9 || cut == 10 || cut == 14) {
+      if (cut == 9 || cut == 10 || cut == 14 || cut == 20) {
         OK(et_g3c4_private_p2g2_terminal_commit_v1(
             context, output, &first, 9, first_eos ? NULL : &second,
             first_eos ? 0 : 9));
@@ -253,13 +281,25 @@ static void terminal_failure_matrix(et_g3c4_model_owner_internal *owner) {
         OK(et_g3c4_private_output_release_v1(output));
         OK(et_g3c4_private_generator_close_v1(context));
       } else {
+        cache_snapshot expected_rollback;
+        memset(&expected_rollback, 0, sizeof(expected_rollback));
+        memcpy(expected_rollback.keys, context->p2g2_frame_keys,
+               sizeof(expected_rollback.keys));
+        memcpy(expected_rollback.values, context->p2g2_frame_values,
+               sizeof(expected_rollback.values));
+        expected_rollback.length = first_eos ? 2 : 3;
+        memcpy(expected_rollback.keep,
+               first_eos ? (const uint8_t[4]){1, 1, 0, 0} :
+                           (const uint8_t[4]){1, 1, 1, 0}, 4u);
+        for (size_t head = 0u; head < 2u; head++) {
+          size_t offset = head * 8u + (size_t)expected_rollback.length * 2u;
+          memset(expected_rollback.keys + offset, 0, 2u * sizeof(float));
+          memset(expected_rollback.values + offset, 0, 2u * sizeof(float));
+        }
         OK(et_g3c4_private_call_abort_v1(context));
         cache_snapshot rolled_back;
         snapshot_cache(context->cache, &rolled_back);
-        CHECK(rolled_back.length == (first_eos ? 2 : 3));
-        CHECK(memcmp(rolled_back.keep,
-                     first_eos ? (const uint8_t[4]){1, 1, 0, 0} :
-                                 (const uint8_t[4]){1, 1, 1, 0}, 4u) == 0);
+        check_cache_snapshot_equal(&rolled_back, &expected_rollback);
         CHECK(memcmp(rng, context->generator_rng_words, sizeof(rng)) == 0);
         check_dead_output(output);
         OK(et_g3c4_private_tensor_release_v1(input));
