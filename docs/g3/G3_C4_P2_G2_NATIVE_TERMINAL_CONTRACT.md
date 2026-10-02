@@ -23,6 +23,19 @@ int64_t et_g3c4_private_p2g2_terminal_snapshot_v1(
     int64_t destination_bytes);
 ```
 
+The terminal feature does not require `ET_G3C4_P2_G1_PUBLICATION_PRIVATE`.
+Current published-state definition, admission and borrow-aware release are
+guarded by that predecessor feature; they are not available merely because
+output reservation is enabled. This leaf must provide a narrowly
+terminal-guarded published-state definition/admission/release branch, including
+the same published-state constant where its declaration needs a union guard.
+Admission accepts only the distinct authentic terminal marker and exact
+capacity/logical-length facts below. Release validates that terminal owner and
+its I1 lease before mutation. When both features are enabled, their branches
+remain disjoint; the P2/G1 path still rejects capacity two and cannot authorize
+a terminal owner. This is an explicit native prerequisite, not an assumption
+that the predecessor release code is compiled or already admits this output.
+
 Commit derives the emitted count from authentic native state; there is no
 caller count, token, logits, raw RNG or route selector. Both forms require the
 original active `(kind,budget)=(2,2)` generator call and exact sole unpublished
