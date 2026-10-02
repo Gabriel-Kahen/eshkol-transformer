@@ -13,6 +13,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef ET_E3_ZERO_CONTROL_TESTING
+#include <inttypes.h>
+#include <stdio.h>
+extern et_f32_tensor *et_m3t_test_parameter_gradient(et_f32_parameter *);
+#endif
+
 /* E3 is the native owner of the fixed M3 aggregate.  The package tuple compiles
  * m3_call_f32_integration.c separately so there is one I2 registry. */
 #include "m3_model.c"
@@ -289,6 +295,89 @@ static int64_t e3_scope_begin(et_f32_tensor *tensor,
 static void e3_scope_end(et_f32_scoped_guard_internal *guard) {
   if (et_f32_tensor_scoped_end_internal(guard) != 0) abort();
 }
+
+#ifdef ET_E3_ZERO_CONTROL_TESTING
+/* Exact noninstalled zero-model tuple only. Read each completed role before the next D2
+ * batch reuses the frame; no value is fabricated from the reference bundle. */
+static const char *const e3_zero_role_names[21] = {
+  "ET", "EP", "X", "N1", "QT", "KT", "VT", "QH", "KH", "VH", "AH",
+  "AT", "AO", "R", "N2", "FU", "FG", "FD", "Y", "NF", "Z"
+};
+
+static void e3_zero_words(et_f32_tensor *tensor, size_t expected) {
+  et_f32_scoped_guard_internal guard = {0};
+  if (e3_scope_begin(tensor, &guard, 0) != 0 ||
+      guard.view.byte_length != expected * sizeof(uint32_t)) abort();
+  for (size_t i = 0; i < expected; ++i) {
+    uint32_t word;
+    memcpy(&word, (const unsigned char *)guard.view.data + i * sizeof(word),
+           sizeof(word));
+    if (i) printf(",");
+    printf("%08" PRIx32, word);
+  }
+  e3_scope_end(&guard);
+}
+
+static void e3_zero_batch(et_e3_frame_internal *frame) {
+  const size_t bank = frame->sum_bank;
+  const int64_t ordinal = frame->counts[bank][1] - 1;
+  if (ordinal < 0 || ordinal >= 3) abort();
+  printf("E3ROW\t%" PRId64 "\t%" PRId64 ",%" PRId64
+         "\t%" PRId64 ",%" PRId64 "\t%u,%u\n", ordinal,
+         frame->ids[0], frame->ids[1], frame->targets[0], frame->targets[1],
+         (unsigned)frame->mask[0], (unsigned)frame->mask[1]);
+  for (size_t role = 0; role < 21; ++role) {
+    et_f32_scoped_guard_internal guard = {0};
+    if (e3_scope_begin(frame->forward[role], &guard, 0) != 0 ||
+        guard.view.rank < 1 || guard.view.rank > 4 ||
+        guard.view.byte_length % sizeof(uint32_t) != 0) abort();
+    printf("E3ROLE\t%" PRId64 "\t%s\t", ordinal,
+           e3_zero_role_names[role]);
+    for (size_t axis = 0; axis < guard.view.rank; ++axis) {
+      if (axis) printf(",");
+      printf("%" PRIu64, guard.view.shape[axis]);
+    }
+    printf("\t");
+    const size_t count = guard.view.byte_length / sizeof(uint32_t);
+    for (size_t i = 0; i < count; ++i) {
+      uint32_t word;
+      memcpy(&word, (const unsigned char *)guard.view.data + i * sizeof(word),
+             sizeof(word));
+      if (i) printf(",");
+      printf("%08" PRIx32, word);
+    }
+    printf("\n");
+    e3_scope_end(&guard);
+  }
+  printf("E3CE\t%" PRId64 "\t", ordinal);
+  e3_zero_words(frame->ce, 2);
+  printf("\n");
+  printf("E3BATCH\t%" PRId64 "\t", ordinal);
+  for (size_t i = 0; i < 4; ++i) {
+    if (i) printf(",");
+    e3_zero_words(frame->batch[i], 1);
+  }
+  printf("\t%" PRId64 "\n", frame->active);
+  printf("E3STATE\t%" PRId64 "\t", ordinal);
+  for (size_t i = 0; i < 3; ++i) {
+    if (i) printf(",");
+    e3_zero_words(frame->sum[bank][i], 1);
+  }
+  printf("\t%" PRId64 ",%" PRId64 "\n",
+         frame->counts[bank][0], frame->counts[bank][1]);
+}
+
+static void e3_zero_final(et_e3_frame_internal *frame) {
+  printf("E3FINAL\t");
+  for (size_t i = 0; i < 4; ++i) {
+    if (i) printf(",");
+    e3_zero_words(frame->destination[i], 1);
+  }
+  printf("\t%" PRId64 ",%" PRId64 "\n",
+         frame->published_counts[0], frame->published_counts[1]);
+  if (fflush(NULL) != 0) abort();
+}
+#endif
 
 static int64_t e3_tensor_shape(et_f32_tensor *tensor, size_t rank,
                                const uint64_t *shape, int destination) {
@@ -1104,6 +1193,9 @@ int64_t et_e3_private_accumulate_v1(void *pointer) {
   int64_t rc = e3_accumulate_dispatch(frame);
   if (!rc) {
     frame->sum_bank ^= 1u;
+#ifdef ET_E3_ZERO_CONTROL_TESTING
+    e3_zero_batch(frame);
+#endif
     frame->phase = E3_ACQUIRED;
     frame->stage_plane = 0;
     frame->next_role = 0;
@@ -1233,6 +1325,9 @@ int64_t et_e3_private_publish_v1(void *pointer) {
   frame->published_valid = 1;
   frame->committed = 2;
   while (destination_count) e3_scope_end(&destinations[--destination_count]);
+#ifdef ET_E3_ZERO_CONTROL_TESTING
+  e3_zero_final(frame);
+#endif
   return 0;
 }
 
@@ -1350,3 +1445,52 @@ void et_e3_private_frame_destroy_v1(void *pointer) {
   frame->next_role = frame->stage_plane = frame->sum_bank = 0;
   frame->committed = frame->cleanup_ready = frame->published_valid = 0;
 }
+
+#ifdef ET_E3_ZERO_CONTROL_TESTING
+/* Exact noninstalled read-only observation of the registered M3 gradient.
+ * The fixture seeds via I2's existing accumulation API, never by this seam. */
+static et_f32_tensor *e3_zero_gradient(void *pointer, int64_t parameter) {
+  owner *model = admit(pointer, OWNER, 0);
+  if (!model || model->r.state != 1 || parameter < 0 || parameter >= 14)
+    return NULL;
+  return et_m3t_test_parameter_gradient(model->p[parameter]);
+}
+
+int64_t et_e3_zero_gradient_word_count_v1(void *pointer, int64_t parameter) {
+  et_f32_tensor *tensor = e3_zero_gradient(pointer, parameter);
+  et_f32_tensor_error error;
+  size_t bytes = 0;
+  et_f32_tensor_error_clear_v1(&error);
+  if (!tensor || et_f32_tensor_byte_length_v1(tensor, &bytes, &error) != 0 ||
+      bytes % sizeof(uint32_t) != 0 || bytes > 4096) return -1;
+  return (int64_t)(bytes / sizeof(uint32_t));
+}
+
+int64_t et_e3_zero_gradient_word_v1(void *pointer, int64_t parameter,
+                                     int64_t index) {
+  const int64_t count = et_e3_zero_gradient_word_count_v1(pointer, parameter);
+  et_f32_tensor *tensor = e3_zero_gradient(pointer, parameter);
+  et_f32_tensor_error error;
+  uint32_t words[1024] = {0};
+  et_f32_tensor_error_clear_v1(&error);
+  if (count < 0 || index < 0 || index >= count || !tensor ||
+      et_f32_tensor_copy_bits_to_v1(tensor, words, (size_t)count, &error) != 0)
+    return -1;
+  return (int64_t)words[index];
+}
+
+int64_t et_e3_zero_gradient_metadata_v1(void *pointer, int64_t parameter,
+                                         int64_t field) {
+  owner *model = admit(pointer, OWNER, 0);
+  et_f32_gradient_metadata_v1 metadata = {.struct_size = sizeof(metadata)};
+  et_f32_tensor_error error;
+  et_f32_tensor_error_clear_v1(&error);
+  if (!model || model->r.state != 1 || parameter < 0 || parameter >= 14 ||
+      field < 0 || field > 2 ||
+      et_f32_parameter_gradient_metadata_v1(model->p[parameter], &metadata,
+                                             &error) != 0) return -1;
+  return field == 0 ? (int64_t)metadata.state
+       : field == 1 ? (int64_t)metadata.contribution_count
+                    : (int64_t)metadata.normalization_weight_bits;
+}
+#endif

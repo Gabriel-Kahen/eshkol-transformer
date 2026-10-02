@@ -1,6 +1,6 @@
 # E3 idle real-model control contract
 
-Status: approved design, repository integration pending; no implementation or compiled proof. Basis: numerical source `0476fe14ad3dc647655e539b8795b3b780f0774c` / tree `8f03d1e5febe89c02db7122ef9de4374ff1cfa5e`. The proposed control uses existing I2/M3 APIs only and adds no native setter or public ABI.
+Status: approved design with a bounded noninstalled implementation candidate under independent source review; no compiled proof. Basis: numerical source `0476fe14ad3dc647655e539b8795b3b780f0774c` / tree `8f03d1e5febe89c02db7122ef9de4374ff1cfa5e`. The control uses existing I2/M3 APIs only and adds no native setter or public ABI.
 
 ## Available, authentic route
 

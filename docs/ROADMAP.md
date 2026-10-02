@@ -754,10 +754,13 @@ verdicts remain prerequisites before the full matrix is implemented and run.
 
 The [E3 idle real-model control contract](e3/E3_IDLE_REAL_MODEL_CONTROL_CONTRACT.md)
 specifies a test-only use of existing I2 checkpoint decode and whole-batch load
-for all 14 authentic M3 parameter owners before frame binding. It preserves the
-current two-field private scenario, the single tied head/token-embedding owner,
-and immediate commit after successful prepare. Integration and compiled proof
-remain pending; this contract does not discharge any §9 numerical or rollback row.
+for all 14 authentic M3 parameter owners before frame binding. The isolated
+zero-model implementation candidate adds genuine packed all-correct/all-wrong
+D1/D2 controls, the 21-role PyTorch comparison, and absent/present gradient
+snapshots while preserving the two-field private scenario and tied owner.
+Its exact package inventories and supported normal/sanitized compiled proof
+remain pending independent review and gate execution; it does not discharge
+the broader §9 numerical, fault, rollback, or typed RNG rows.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.

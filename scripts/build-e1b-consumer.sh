@@ -1175,6 +1175,14 @@ e1b_timeout_seconds="${E1B_COMPILER_TIMEOUT_SECONDS:-120}"
 [[ "${e1b_timeout_seconds}" =~ ^[1-9][0-9]*$ ]] || \
   die "E1B_COMPILER_TIMEOUT_SECONDS must be a positive integer"
 
+e3_zero_generated_dir=
+if [[ "${package_policy}" == e3-private-aggregate &&
+      "${e3_tuple_kind}" == zero ]]; then
+  source "${PROJECT_ROOT}/scripts/e3-zero-generated-source-stage.sh"
+  e3_zero_generated_dir="$(e3_zero_generated_stage "${output_object}")" ||
+    die "E3 zero-control generated source requires a fresh private gate stage"
+fi
+e3_zero_generated_owned=0
 e1b_tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-e1b.XXXXXX")"
 e1b_cleanup() {
   local status=$?
@@ -1188,14 +1196,29 @@ e1b_cleanup() {
   else
     rm -rf -- "${e1b_tmp}"
   fi
+  if [[ "${status}" == 0 && "${e3_zero_generated_owned}" == 1 ]]; then
+    rm -rf -- "${e3_zero_generated_dir}"
+  fi
+  return "${status}"
 }
 trap e1b_cleanup EXIT
+if [[ -n "${e3_zero_generated_dir}" ]]; then
+  trap 'exit 143' TERM
+  trap 'exit 130' INT
+fi
 mkdir -p "${e1b_tmp}/cache" "$(dirname -- "${output_object}")"
 if [[ "${package_policy}" == e3-private-aggregate ]]; then
   require_command python3
+  if [[ -n "${e3_zero_generated_dir}" ]]; then
+    mkdir -m 0700 -- "${e3_zero_generated_dir}" ||
+      die "E3 zero-control generated source path was claimed concurrently"
+    e3_zero_generated_owned=1
+  else
+    e3_zero_generated_dir="${e1b_tmp}/generated"
+  fi
   python3 "${PROJECT_ROOT}/scripts/generate-e3-d2-source.py" \
-    --output-dir "${e1b_tmp}/generated" >"${e1b_tmp}/d2-generation.json"
-  e3_generated_source_root="${e1b_tmp}/generated/source"
+    --output-dir "${e3_zero_generated_dir}" >"${e1b_tmp}/d2-generation.json"
+  e3_generated_source_root="${e3_zero_generated_dir}/source"
 fi
 
 awk '
@@ -1214,6 +1237,8 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1)$'
     if [[ "${e3_diagnostic_tuple}" == 1 ]]; then
       export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
+    elif [[ "${e3_tuple_kind}" == zero ]]; then
+      export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_zero_control_run_v1)$'
     fi
   fi
 fi
@@ -1489,11 +1514,20 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
   if [[ -n "${package_native_define}" ]]; then
     package_native_cflags+=("${package_native_define}")
   fi
+  if [[ "${package_policy}" == e3-private-aggregate &&
+        "${e3_tuple_kind}" == zero ]]; then
+    package_native_cflags+=(-DET_E3_ZERO_CONTROL_TESTING -fno-builtin-printf)
+  fi
   native_index=0
   for package_native_source in "${package_native_sources[@]}"; do
     package_native_object="${e1b_tmp}/package-native-${native_index}.o"
     package_native_depfile="${e1b_tmp}/package-native-${native_index}.d"
     package_source_flags=()
+    if [[ "${package_policy}" == e3-private-aggregate &&
+          "${e3_tuple_kind}" == zero &&
+          "${package_native_source}" == "${PROJECT_ROOT}/src/eshkol_transformer/m3_call_f32_integration.c" ]]; then
+      package_source_flags+=(-DET_F32_TENSOR_TESTING)
+    fi
     if [[ "${package_policy}" == cli3-tr3-aggregate ]]; then
       case "${package_native_source}" in
         "${PROJECT_ROOT}/native/e3_d2_native.c")
@@ -1947,6 +1981,14 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
       et_e3_test_destination_bits_v1
       et_e3_test_frame_fail_alloc_after_v1
     )
+    if [[ "${e3_tuple_kind}" == zero ]]; then
+      e3_required_private+=(
+        et_e3_private_zero_control_run_cabi_v1
+        et_e3_zero_gradient_word_count_v1
+        et_e3_zero_gradient_word_v1
+        et_e3_zero_gradient_metadata_v1
+      )
+    fi
   fi
   for privileged in "${e3_required_private[@]}"; do
     grep -E "[[:space:]]LOCAL[[:space:]].*[[:space:]]${privileged}$" \
@@ -2014,6 +2056,8 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1)$'
     if [[ "${e3_diagnostic_tuple}" == 1 ]]; then
       public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
+    elif [[ "${e3_tuple_kind}" == zero ]]; then
+      public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_zero_control_run_v1)$'
     fi
   fi
 fi

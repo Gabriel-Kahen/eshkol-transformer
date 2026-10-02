@@ -1,0 +1,38 @@
+;;; Exact noninstalled zero-model E3 entry; one fresh process per corpus/state.
+(extern void e3-zero-run ptr ptr ptr :real et_e3_zero_control_run_v1)
+
+(define (check label condition)
+  (if condition #t
+      (begin (display "E3-ZERO-CONTROL-FAIL: ") (display label)
+             (newline) (exit 1))))
+
+(define (bytes=? left right)
+  (and (bytevector? left) (bytevector? right)
+       (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+
+(define args (command-line))
+(check 'arguments (= (length args) 4))
+(define corpus (list-ref args 1))
+(define case-name (list-ref args 2))
+(define gradient-name (list-ref args 3))
+(check 'case (or (string=? case-name "all-correct")
+                 (string=? case-name "all-wrong")))
+(check 'gradient (or (string=? gradient-name "absent")
+                     (string=? gradient-name "present")))
+(define output (vector #f))
+(e3-zero-run (vector (vector (string=? gradient-name "present")))
+             (vector corpus) output)
+(define result (vector-ref output 0))
+(check 'result
+  (and (vector? result) (= (vector-length result) 9)
+       (eq? (vector-ref result 0) 'e3-private-result-v1)
+       (= (vector-ref result 5) 5) (= (vector-ref result 6) 3)
+       (bytes=? (vector-ref result 7) (vector-ref result 8))
+       (= (vector-ref result 4)
+          (if (string=? case-name "all-correct") 1065353216 0))))
+(display "E3-ZERO-CONTROL-RUNTIME-PASS") (newline)
