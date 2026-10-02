@@ -1005,7 +1005,8 @@ Predecessor, oracle, symbol and source-pin checks passed; Docker and launcher
 exited zero. The 89-file evidence seal is
 `g3c4-p2g2-protected-be63d0a-fe9-f31-20261001-prepared-a/SHA256SUMS-RUN`
 (SHA-256 `b23698ceebd621d8ea7d88df46e57ae77dfe5e7f3d4a822f591b68099083b100`);
-independent evidence review accepted it. Hosted CI and merge remain pending.
+independent evidence review accepted it. PR #174 merged as `9fc17bcd`
+after 23/23 exact-head hosted checks passed.
 The scope aborts before any prefix commit. Authentic bridge sampling,
 same-registry T1 decode and pre/post-prefix rollback remain the next gate.
 
@@ -1035,8 +1036,8 @@ G3-S/Philox oracle and all predecessor gates passed. Docker/launcher exited
 zero and pre/post pins matched. The 134-file evidence seal is
 `g3c4-t1-prefix-coordinator-501f8d1-fe9-f31-20261002-prepared-d/SHA256SUMS-RUN`
 (SHA-256 `54068de810fd834b7076c887172a0ed364d3d4986c2e5741ece41264c3636822`).
-Independent sealed-evidence review accepted this result; hosted integration
-remains pending. Second-token, terminal/EOS, public and CLI work remain separate.
+Independent sealed-evidence review accepted this result. PR #178 merged as
+`637ec924`. Second-token, terminal/EOS, public and CLI work remain separate.
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
