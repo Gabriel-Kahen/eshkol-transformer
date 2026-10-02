@@ -81,9 +81,9 @@ canonical private package and rejects any retention symbol in its object.
 
 For each 1,024/8,192 horizon and absent/present gradient state, the fixture
 creates one genuine fixed M3 model, T1 tokenizer, packed D2 dataset, E3 frame
-and four I2 destinations. After the P1 test seam is implemented, it must set
-and record mixed modes on all 17 P1 nodes,
-seeds one nonzero present gradient when selected, and snapshots every word of
+and four I2 destinations. A separately reviewed retention successor must use
+the P1-owned test seam to set and record mixed modes on all 17 nodes, seed one
+nonzero present gradient when selected, and snapshot every word of
 all 14 parameter values and gradients, gradient metadata, the four initializer
 successor words, destination bits, counters and D2 cursor. One complete call
 warms lazy setup and a second sets the steady-state caller-region baseline.
