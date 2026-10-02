@@ -744,6 +744,21 @@ release mutation under active E3 model authority remain unaccepted
 prerequisites. No implementation, compiled proof, or edge-corpus acceptance is
 claimed here.
 
+The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
+is a docs-only candidate for the remaining private numerical, compiled-mutant,
+failure and rollback gates. It tracks authentic D2/model reachability separately
+from direct-provider-only cases and names the missing noninstalled model-control
+and stage-selective fault/observer seams for review. It provides no new runtime
+proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
+verdicts remain prerequisites before the full matrix is implemented and run.
+
+The [E3 idle real-model control contract](e3/E3_IDLE_REAL_MODEL_CONTROL_CONTRACT.md)
+specifies a test-only use of existing I2 checkpoint decode and whole-batch load
+for all 14 authentic M3 parameter owners before frame binding. It preserves the
+current two-field private scenario, the single tied head/token-embedding owner,
+and immediate commit after successful prepare. Integration and compiled proof
+remain pending; this contract does not discharge any §9 numerical or rollback row.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
@@ -969,6 +984,22 @@ zero and pre/post pins matched. The 134-file evidence seal is
 (SHA-256 `54068de810fd834b7076c887172a0ed364d3d4986c2e5741ece41264c3636822`).
 Independent sealed-evidence review accepted this result; hosted integration
 remains pending. Second-token, terminal/EOS, public and CLI work remain separate.
+
+The [private retained-logit second-frame carrier](g3/G3_C4_P2_G2_SECOND_FRAME_CARRIER_CONTRACT.md)
+is independently source/test approved at `4851e17`/tree `d63ad549`.
+It authenticates the committed non-EOS P2/G2 prefix and sole unused pending
+output, draws directly from retained next logits, stages the genuine
+position-three forward and writes only the selected ID carrier. The original
+raw last-logit entry still rejects post-prefix calls. Its exact pinned fe9/f31
+Clang 21 gate passed normal/repeat/ASan+UBSan+LSan with 2,965 checks per mode
+and byte-identical output, T4 logits/K/V parity, and an independent eight-row
+second-draw G3-S/Philox oracle including carry/final/singleton. Lease, alias,
+forward-cut, exhaustion, predecessor and private feature-boundary checks pass.
+Independent evidence review accepted all 106 files in
+`g3c4-p2g2-second-frame-4851e17-fe9-f31-20261002-prepared-b/SHA256SUMS-RUN`
+(SHA-256 `6b2c96a4d4b6cc79881d73d9ce9ff4c4ad9a809e27e78e8fa64aa0d9cfb50a5e`).
+Hosted integration remains pending. It publishes no terminal result,
+Eshkol T1 decode, public admission or persistence.
 
 The [private EOS-capable first-frame carrier candidate](g3/G3_C4_P2_G2_EOS_FIRST_FRAME_LEAF.md)
 adds a guarded genuine first sample/forward route for selected EOS, using
@@ -1486,6 +1517,26 @@ The 44-file run is sealed at
 (`f865823a22ce457964585a2f1b5cf1e0119c0ac38a51171bca256fd5819b587a`).
 The digest is an authenticated C2-image precondition; this leaf does not
 perform C2 I/O, live-owner reconstruction, cache replay or continuation.
+
+The proposed [G3-R typed RNG import contract](g3/G3_R_TYPED_RNG_IMPORT_CONTRACT.md)
+defines a source-private G3-T kind-8 owner constructor for four exact signed
+G3-S words, preserving carry and exhaustion without a seed reset. It records
+the existing same-registry `:rng` consumer, pending ledger cleanup, and the
+authenticated G3RCV1/C2 pair prerequisite. A source-private
+[typed import candidate](g3/G3_R_TYPED_RNG_IMPORT_LEAF.md) now adds the guarded
+kind-8 word constructor and closed G3-T wrapper, with native/Eshkol off/on and
+independent G3-S oracle fixtures. The independently accepted `8ebed705` /
+tree `4217a5e8` supported fe9/f31 gate ran 2026-10-02 10:57:10–11:01:28
+UTC with launcher/Docker exits 0 and both pin checks PASS. Feature-off 1,
+native C and normal/sanitizer 101 checks passed; normal and sanitizer output
+matched, the gate's repeat comparison passed, and compile/runtime stderr were
+empty. Three actual imported runs matched the G3-S/Philox oracle and published
+clone successors. Repeat logs were not separately retained. Its 29-file seal
+is `g3r-rng-import-8ebed70-fe9-f31-20261002-prepared-a/SHA256SUMS-RUN`
+(`90c52bf074c7cea0c9ec3004aae08ee331c0de0d05e78c203e72a6482d1e0fbf`).
+The separate record codec has also passed its supported gate. This scalar
+private kind-8 import does not authenticate a record, restore C2/model/cache/
+tokenizer state, replay draws or prove continuation.
 
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
@@ -2339,6 +2390,23 @@ sanitizers, publication and deterministic rebuilds. The evidence seal is
 (`3d7b3224...`). The separate 128/256-cycle samples show faster native
 lookup but no overall speed or memory improvement claim; 8,192 cycles
 remain unproven.
+
+The [private terminal logical I1 clone contract](g3/G3_C4_P2_G2_LOGICAL_I1_CLONE_CONTRACT.md)
+is independently reviewed for an exact logical `[1]` or `[2]` detached owner,
+with copied readback, borrow-aware release, complete kind-9 alias coverage
+and Eshkol caller proof of original bytevector backing extent. It adds no
+implementation or runtime evidence. Its native terminal dependency is
+reviewed and gated in PR #184; clone source must pin its accepted ABI and
+final integration requires its merge gates. Eshkol terminal publication,
+public G2 and continuation remain pending.
+
+- **Private Eshkol P2/G2 terminal close contract:**
+  [accepted same-call ownership contract](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md)
+  specifies one original pending output entry, a surviving terminal anchor,
+  authentic T1/EOS/second-token composition, and a preflighted no-failure close
+  after native commit. Native terminal integration and logical I1 clone code
+  are prerequisites; Eshkol implementation and compiled same-call proof remain
+  pending. No public G2 or continuation acceptance is claimed.
 
 ## Wave 4 — practical pretraining and performance
 
