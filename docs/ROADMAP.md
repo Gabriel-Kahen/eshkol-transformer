@@ -2366,12 +2366,16 @@ remain unproven.
 
 The [private terminal logical I1 clone contract](g3/G3_C4_P2_G2_LOGICAL_I1_CLONE_CONTRACT.md)
 is independently reviewed for an exact logical `[1]` or `[2]` detached owner,
-with copied readback, borrow-aware release, complete kind-9 alias coverage
-and Eshkol caller proof of original bytevector backing extent. It adds no
-implementation or runtime evidence. Its native terminal dependency is
-reviewed and gated in PR #184; clone source must pin its accepted ABI and
-final integration requires its merge gates. Eshkol terminal publication,
-public G2 and continuation remain pending.
+with copied readback and borrow-aware release. The same-registry Eshkol
+adapter must still prove the original bytevector backing extent. A scoped
+native implementation candidate adds
+three feature-gated private clone/copy/release entries and host development
+normal, repeat and sanitizer tests for first-EOS `[1]` and two-ID `[2]`
+owners, release independence, leases, aliases and failure cleanup. Its
+supported pinned toolchain gate, independent source review and upstream merge
+remain pending. The native terminal dependency is reviewed and gated in
+PR #184; final integration requires its merge gates. Eshkol terminal
+publication, public G2 and continuation remain pending.
 
 ## Wave 4 — practical pretraining and performance
 
