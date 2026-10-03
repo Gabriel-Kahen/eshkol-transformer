@@ -46,9 +46,21 @@ def verify_runner(runner: str) -> None:
             or 'UBSAN_OPTIONS=halt_on_error=1' not in runner
             or 'LSAN_OPTIONS=exitcode=23:report_objects=1' not in runner
             or '--dump-ir' not in runner
+            or runner.count('--emit-object') != 1
+            or runner.count('--emit-depfile') != 1
+            or runner.count('"${eshkol_inputs[@]}"') != 2
+            or not (runner.index('--dump-ir') < runner.index('--emit-object')
+                    < runner.index('--emit-depfile')
+                    < runner.index('test -s "$directory/stage.d"'))
             or '"$directory/stage-test.ll"' not in runner
             or '"$directory/stage-test.o"' not in runner
             or '"$directory/stage.d"' not in runner
+            or runner.count('"$directory/stage-dep.o"') != 4
+            or runner.count('"$directory/object-build.stderr"') != 2
+            or 'test -s "$directory/stage-dep.o"' not in runner
+            or 'test ! -s "$directory/object-build.stderr"' not in runner
+            or '"$directory/dep-object-undefined-symbols.txt"' not in runner
+            or '"$directory/dep-object-defined-symbols.txt"' not in runner
             or "build-e1b-consumer.sh" in runner):
         raise ValueError("private native feature build differs")
 
@@ -110,6 +122,13 @@ class C2ShaStageStaticTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "feature"):
             verify_runner(runner.replace('build_mode sanitize',
                                          'build_mode normal'))
+        for removed in ('--emit-object', '--emit-depfile',
+                        '"${eshkol_inputs[@]}"',
+                        'test -s "$directory/stage-dep.o"',
+                        'test ! -s "$directory/object-build.stderr"'):
+            with self.subTest(removed=removed):
+                with self.assertRaisesRegex(ValueError, "feature"):
+                    verify_runner(runner.replace(removed, '', 1))
         native = NATIVE_RUNNER.read_text()
         with self.assertRaisesRegex(ValueError, "compiler handoff"):
             verify_compiler_handoff(runner.replace('"$cc" \\', '"$cxx" \\'),

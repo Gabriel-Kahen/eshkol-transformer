@@ -1564,9 +1564,17 @@ passed its native predecessor but exposed an Eshkol compile error: the test's
 short-backing fault injection used `set!` on a procedure definition that the
 compiler did not bind to a mutable location. The allocation helper now uses a
 lambda-valued binding; the same owning allocation path and negative fixture
-remain. A fresh supported normal/repeat/sanitizer rerun is pending. Reconstruction,
-the owning SHA receipt, G3-T predicate, pair loader, live replay, save writer
-and resumed continuation remain separate gates.
+remain. On exact `4744f40`, the next supported gate passed pre/post pins and
+the 563-check native predecessor. Its executable build emitted a
+1,108,596,200-byte IR file and linked binary with empty compiler stderr, then
+stopped before runtime
+because this pinned Eshkol compiler emits depfiles only in object or shared
+mode. The runner now compiles the same private root a second time in object
+mode to obtain the exact dependency closure; executable IR, native object and
+symbol checks, and normal/repeat/sanitizer runtime remain required. This
+runner repair has host static/Q0 checks but no supported rerun yet.
+Reconstruction, the owning SHA receipt, G3-T predicate, pair loader, live
+replay, save writer and resumed continuation remain separate gates.
 
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual

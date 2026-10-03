@@ -51,6 +51,16 @@ test_flags=(-DET_C2_CHECKPOINT_LOAD_TESTING -DET_C2_CHECKPOINT_CORE_TESTING
 build_mode() {
   local mode="$1" directory="$out/$1" name cxx_quoted
   local -a flags=(-O2) runtime=(env)
+  local -a eshkol_inputs=(
+    -I "$PROJECT_ROOT/internal/p1/lib"
+    -I "$PROJECT_ROOT/internal/c1/lib"
+    -I "$PROJECT_ROOT/internal/t2/lib"
+    -I "$PROJECT_ROOT/internal/t1/lib"
+    -I "$PROJECT_ROOT/internal/d2/lib"
+    -I "$PROJECT_ROOT/src" -I "$PROJECT_ROOT/lib"
+    -I "$PROJECT_ROOT/native" -L "$directory"
+    --lib g3r_c2_sha_stage
+    "$PROJECT_ROOT/tests/g3r/c2_sha_stage_test.esk")
   local sanitizer_link=
   if [[ "$mode" == sanitize ]]; then
     flags=(-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer)
@@ -129,21 +139,33 @@ WRAPPER
       ESHKOL_CXX_COMPILER="$directory/cxx-wrap" \
       timeout --foreground --signal=TERM --kill-after=5s 900s "$runner" \
         --strict-types --optimize 0 --no-stdlib --dump-ir \
-        --emit-depfile "$directory/stage.d" \
-        -I "$PROJECT_ROOT/internal/p1/lib" \
-        -I "$PROJECT_ROOT/internal/c1/lib" \
-        -I "$PROJECT_ROOT/internal/t2/lib" \
-        -I "$PROJECT_ROOT/internal/t1/lib" \
-        -I "$PROJECT_ROOT/internal/d2/lib" \
-        -I "$PROJECT_ROOT/src" -I "$PROJECT_ROOT/lib" \
-        -I "$PROJECT_ROOT/native" -L "$directory" \
-        --lib g3r_c2_sha_stage \
-        "$PROJECT_ROOT/tests/g3r/c2_sha_stage_test.esk" \
+        "${eshkol_inputs[@]}" \
         -o "$directory/stage-test" \
         >"$directory/build.stdout" 2>"$directory/build.stderr")
   test ! -s "$directory/build.stderr"
   test -s "$directory/stage-test.ll"
+  test -s "$directory/stage-test"
+
+  # This pinned compiler emits depfiles for object/shared-library mode, not
+  # executable-link mode. Compile the exact same private root a second time.
+  (cd "$directory" &&
+    env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
+      XDG_CACHE_HOME="$directory/cache" ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
+      ESHKOL_CXX_COMPILER="$directory/cxx-wrap" \
+      timeout --foreground --signal=TERM --kill-after=5s 900s "$runner" \
+        --strict-types --optimize 0 --no-stdlib --emit-object \
+        --emit-depfile "$directory/stage.d" \
+        "${eshkol_inputs[@]}" \
+        -o "$directory/stage-dep.o" \
+        >"$directory/object-build.stdout" \
+        2>"$directory/object-build.stderr")
+  test ! -s "$directory/object-build.stderr"
   test -s "$directory/stage.d"
+  test -s "$directory/stage-dep.o"
+  nm -u --format=posix "$directory/stage-dep.o" \
+    >"$directory/dep-object-undefined-symbols.txt"
+  nm -g --defined-only --format=posix "$directory/stage-dep.o" \
+    >"$directory/dep-object-defined-symbols.txt"
   "$cc" "${flags[@]}" -c -x ir "$directory/stage-test.ll" \
     -o "$directory/stage-test.o"
   nm -u --format=posix "$directory/stage-test.o" \
