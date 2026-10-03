@@ -1553,7 +1553,9 @@ test matches with the feature enabled and disabled. The Eshkol backing-extent
 admission is source-staged as a feature-local private C2 root: fresh anchored
 bytevectors feed the 224-byte native stage, and its copied SHA is registered
 only with the exact staging shell. Host topology, closed-feature and Q0 checks
-pass; the private Eshkol compile/runtime gate has not run. Reconstruction,
+pass. Its exact private runner now defines fresh normal, repeat and
+ASan/UBSan/LSan source, object and runtime evidence; that compiled gate has
+not run. Reconstruction,
 the owning SHA receipt, G3-T predicate, pair loader, live replay, save writer
 and resumed continuation remain separate gates.
 

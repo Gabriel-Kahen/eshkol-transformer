@@ -2,17 +2,35 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 verify_toolchain
-for command in ar cmp nm python3 realpath rg sed timeout tr; do
+for command in ar cmp nm python3 realpath rg sed sha256sum timeout tr; do
   require_command "$command"
 done
 [[ $# -eq 1 ]] || die "usage: $0 FRESH_OUTPUT_DIRECTORY"
 out="$(realpath -m -- "$1")"
 [[ ! -e "$out" && ! -L "$out" ]] || die "G3-R C2 SHA output must be fresh"
-mkdir -p "$out/objects" "$out/cache"
+mkdir -p "$out"
 cc= cxx=
 resolve_provenance_compilers cc cxx \
   "${CC:-$(lock_value supported_cc)}" "${CXX:-$(lock_value supported_cxx)}"
 runner="$(eshkol_build_dir)/eshkol-run"
+{
+  printf 'cc\t%s\n' "$cc"
+  printf 'cxx\t%s\n' "$cxx"
+  printf 'cc_version\t%s\n' "$("$cc" --version | sed -n '1p')"
+  printf 'cxx_version\t%s\n' "$("$cxx" --version | sed -n '1p')"
+  printf 'eshkol_runner_sha256\t%s\n' "$(sha256sum "$runner" | cut -d ' ' -f 1)"
+} >"$out/compiler-selected.tsv"
+cp "$(eshkol_build_dir)/eshkol-transformer-provenance.tsv" \
+  "$out/compiler-provenance.tsv"
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v \
+  tests.g3r.test_c2_sha_stage_static tests.q0.test_python_isolation \
+  >"$out/static.stdout" 2>"$out/static.stderr"
+/usr/bin/bash "$PROJECT_ROOT/scripts/test-g3r-c2-stage-sha.sh" \
+  >"$out/native-predecessor.stdout" 2>"$out/native-predecessor.stderr"
+rg -x 'G3R C2 stage SHA PASS: 563 checks' \
+  "$out/native-predecessor.stdout" >/dev/null
+test ! -s "$out/native-predecessor.stderr"
+
 python3 "$PROJECT_ROOT/tests/c2/prepare_checkpoint_load_fixtures.py" \
   "$out/fixtures"
 python3 - "$out/fixtures/valid.c2" "$out/fixtures/truncated.c2" <<'PY'
@@ -20,6 +38,8 @@ from pathlib import Path
 import sys
 Path(sys.argv[2]).write_bytes(Path(sys.argv[1]).read_bytes()[:-1])
 PY
+sha256sum "$out/fixtures/valid.c2" "$out/fixtures/truncated.c2" \
+  >"$out/fixture-sha256.txt"
 
 common=(-std=c11 -Wall -Wextra -Werror -Wpedantic -Wconversion
   -Wsign-conversion -Wshadow -ffp-contract=off -fexcess-precision=standard
@@ -27,65 +47,138 @@ common=(-std=c11 -Wall -Wextra -Werror -Wpedantic -Wconversion
   -I "$PROJECT_ROOT/include" -I "$PROJECT_ROOT/native")
 test_flags=(-DET_C2_CHECKPOINT_LOAD_TESTING -DET_C2_CHECKPOINT_CORE_TESTING
   -DET_C2_CHECKPOINT_READER_TESTING -DET_CHECKPOINT_IO_TESTING)
-"$cc" "${common[@]}" -c "$PROJECT_ROOT/native/c2_checkpoint_load_bridge.c" \
-  -o "$out/load-off.o"
-if nm -g --defined-only "$out/load-off.o" | \
-    rg 'et_c2_private_checkpoint_load_stage_with_sha_v1'; then
-  die "C2 SHA stage leaked into feature-off native object"
-fi
 
-"$cc" "${common[@]}" "${test_flags[@]}" -DET_I2_NATIVE_HELPERS_ONLY \
-  -c "$PROJECT_ROOT/native/i2_wave2_package_bridge.c" -o "$out/objects/i2.o"
-"$cc" "${common[@]}" "${test_flags[@]}" -DET_O2_NATIVE_HELPERS_ONLY \
-  -DET_C2_O2_RECONSTRUCT_BRIDGE \
-  -c "$PROJECT_ROOT/native/o2_wave2_package_bridge.c" -o "$out/objects/o2.o"
-"$cc" "${common[@]}" "${test_flags[@]}" -DET_P1_TRUSTED_BUILD=1 \
-  -c "$PROJECT_ROOT/native/p1_identity.c" -o "$out/objects/p1.o"
-for name in data_io kernel_abi t1_i64_shell f32_tensor i64_tensor \
-            d2_native o2_optimizer c2_x1_canonical c2_checkpoint_format; do
-  "$cc" "${common[@]}" "${test_flags[@]}" \
-    -c "$PROJECT_ROOT/native/$name.c" -o "$out/objects/$name.o"
-done
-"$cc" "${common[@]}" "${test_flags[@]}" -DET_C2_CARRIER_FACTORIES \
-  -c "$PROJECT_ROOT/native/k2_capabilities.c" -o "$out/objects/k2.o"
-"$cc" "${common[@]}" "${test_flags[@]}" \
-  -c "$PROJECT_ROOT/native/checkpoint_io.c" -o "$out/objects/io.o"
-"$cc" "${common[@]}" "${test_flags[@]}" \
-  -c "$PROJECT_ROOT/native/c2_checkpoint_reader.c" -o "$out/objects/reader.o"
-"$cc" "${common[@]}" "${test_flags[@]}" \
-  -c "$PROJECT_ROOT/native/c2_checkpoint_core.c" -o "$out/objects/core.o"
-"$cc" "${common[@]}" "${test_flags[@]}" \
-  -DET_G3R_C2_STAGE_SHA_PRIVATE \
-  -c "$PROJECT_ROOT/native/c2_checkpoint_load_bridge.c" \
-  -o "$out/objects/load.o"
-nm -g --defined-only "$out/objects/load.o" | \
-  rg 'et_c2_private_checkpoint_load_stage_with_sha_v1' >/dev/null
-ar rcsD "$out/libg3r_c2_sha_stage.a" "$out/objects"/*.o
+build_mode() {
+  local mode="$1" directory="$out/$1" name cxx_quoted
+  local -a flags=(-O2) runtime=(env)
+  local sanitizer_link=
+  if [[ "$mode" == sanitize ]]; then
+    flags=(-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer)
+    sanitizer_link='-fsanitize=address,undefined -fno-omit-frame-pointer'
+    runtime=(env ASAN_OPTIONS=detect_leaks=1:halt_on_error=1
+                 UBSAN_OPTIONS=halt_on_error=1
+                 LSAN_OPTIONS=exitcode=23:report_objects=1)
+  fi
+  mkdir -p "$directory/objects" "$directory/cache"
+  "$cc" "${common[@]}" "${flags[@]}" -c \
+    "$PROJECT_ROOT/native/c2_checkpoint_load_bridge.c" \
+    -o "$directory/load-off.o"
+  if nm -g --defined-only "$directory/load-off.o" | \
+      rg 'et_c2_private_checkpoint_load_stage_with_sha_v1'; then
+    die "C2 SHA stage leaked into feature-off native object"
+  fi
+  "$cc" "${common[@]}" "${flags[@]}" "${test_flags[@]}" \
+    -DET_I2_NATIVE_HELPERS_ONLY -MMD -MF "$directory/objects/i2.d" \
+    -c "$PROJECT_ROOT/native/i2_wave2_package_bridge.c" \
+    -o "$directory/objects/i2.o"
+  "$cc" "${common[@]}" "${flags[@]}" "${test_flags[@]}" \
+    -DET_O2_NATIVE_HELPERS_ONLY -DET_C2_O2_RECONSTRUCT_BRIDGE \
+    -MMD -MF "$directory/objects/o2.d" \
+    -c "$PROJECT_ROOT/native/o2_wave2_package_bridge.c" \
+    -o "$directory/objects/o2.o"
+  "$cc" "${common[@]}" "${flags[@]}" "${test_flags[@]}" \
+    -DET_P1_TRUSTED_BUILD=1 -MMD -MF "$directory/objects/p1.d" \
+    -c "$PROJECT_ROOT/native/p1_identity.c" \
+    -o "$directory/objects/p1.o"
+  for name in data_io kernel_abi t1_i64_shell f32_tensor i64_tensor \
+              d2_native o2_optimizer c2_x1_canonical c2_checkpoint_format; do
+    "$cc" "${common[@]}" "${flags[@]}" "${test_flags[@]}" \
+      -MMD -MF "$directory/objects/$name.d" \
+      -c "$PROJECT_ROOT/native/$name.c" -o "$directory/objects/$name.o"
+  done
+  "$cc" "${common[@]}" "${flags[@]}" "${test_flags[@]}" \
+    -DET_C2_CARRIER_FACTORIES -MMD -MF "$directory/objects/k2.d" \
+    -c "$PROJECT_ROOT/native/k2_capabilities.c" \
+    -o "$directory/objects/k2.o"
+  "$cc" "${common[@]}" "${flags[@]}" "${test_flags[@]}" \
+    -MMD -MF "$directory/objects/io.d" \
+    -c "$PROJECT_ROOT/native/checkpoint_io.c" -o "$directory/objects/io.o"
+  "$cc" "${common[@]}" "${flags[@]}" "${test_flags[@]}" \
+    -MMD -MF "$directory/objects/reader.d" \
+    -c "$PROJECT_ROOT/native/c2_checkpoint_reader.c" \
+    -o "$directory/objects/reader.o"
+  "$cc" "${common[@]}" "${flags[@]}" "${test_flags[@]}" \
+    -MMD -MF "$directory/objects/core.d" \
+    -c "$PROJECT_ROOT/native/c2_checkpoint_core.c" \
+    -o "$directory/objects/core.o"
+  "$cc" "${common[@]}" "${flags[@]}" "${test_flags[@]}" \
+    -DET_G3R_C2_STAGE_SHA_PRIVATE -MMD -MF "$directory/objects/load.d" \
+    -c "$PROJECT_ROOT/native/c2_checkpoint_load_bridge.c" \
+    -o "$directory/objects/load.o"
+  nm -g --defined-only "$directory/objects/load.o" | \
+    rg 'et_c2_private_checkpoint_load_stage_with_sha_v1' \
+    >"$directory/feature-on-symbol.txt"
+  nm -g --defined-only "$directory/load-off.o" \
+    >"$directory/feature-off-symbols.txt"
+  ar rcsD "$directory/libg3r_c2_sha_stage.a" "$directory/objects"/*.o
+  nm -u --format=posix "$directory/libg3r_c2_sha_stage.a" \
+    >"$directory/native-undefined-symbols.txt"
+  nm -g --defined-only --format=posix \
+    "$directory/libg3r_c2_sha_stage.a" \
+    >"$directory/native-defined-symbols.txt"
 
-env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
-  XDG_CACHE_HOME="$out/cache" ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
-  ESHKOL_CXX_COMPILER="$cxx" \
-  timeout --foreground --signal=TERM --kill-after=5s 900s "$runner" \
-    --strict-types --optimize 0 --no-stdlib --emit-depfile "$out/stage.d" \
-    -I "$PROJECT_ROOT/internal/p1/lib" \
-    -I "$PROJECT_ROOT/internal/c1/lib" \
-    -I "$PROJECT_ROOT/internal/t2/lib" \
-    -I "$PROJECT_ROOT/internal/t1/lib" \
-    -I "$PROJECT_ROOT/internal/d2/lib" \
-    -I "$PROJECT_ROOT/src" -I "$PROJECT_ROOT/lib" -I "$PROJECT_ROOT/native" \
-    -L "$out" --lib g3r_c2_sha_stage \
-    "$PROJECT_ROOT/tests/g3r/c2_sha_stage_test.esk" -o "$out/stage-test" \
-    >"$out/build.stdout" 2>"$out/build.stderr"
-test ! -s "$out/build.stderr"
-sed -e 's/^[^:]*://' -e 's/\\//g' "$out/stage.d" | \
-  tr -s '[:space:]' '\n' | rg "^$PROJECT_ROOT/" | \
-  sed "s#^$PROJECT_ROOT/##" | \
-  rg -v '^tests/g3r/c2_sha_stage_test\.esk$' >"$out/source-closure.txt"
-cmp "$PROJECT_ROOT/native/g3r_c2_sha_stage_source_closure.txt" \
-    "$out/source-closure.txt"
-ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s \
-  360s "$out/stage-test" "$out/fixtures/valid.c2" \
-  "$out/fixtures/truncated.c2" >"$out/run.stdout" 2>"$out/run.stderr"
-test ! -s "$out/run.stderr"
-rg -x 'G3-R C2 SHA Eshkol stage PASS: [0-9]+ checks' "$out/run.stdout" >/dev/null
-printf 'G3-R C2 SHA private stage PASS: %s\n' "$out"
+  printf -v cxx_quoted '%q' "$cxx"
+  cat >"$directory/cxx-wrap" <<WRAPPER
+#!/usr/bin/env bash
+exec $cxx_quoted $sanitizer_link "\$@"
+WRAPPER
+  chmod 0500 "$directory/cxx-wrap"
+  (cd "$directory" &&
+    env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
+      XDG_CACHE_HOME="$directory/cache" ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
+      ESHKOL_CXX_COMPILER="$directory/cxx-wrap" \
+      timeout --foreground --signal=TERM --kill-after=5s 900s "$runner" \
+        --strict-types --optimize 0 --no-stdlib --dump-ir \
+        --emit-depfile "$directory/stage.d" \
+        -I "$PROJECT_ROOT/internal/p1/lib" \
+        -I "$PROJECT_ROOT/internal/c1/lib" \
+        -I "$PROJECT_ROOT/internal/t2/lib" \
+        -I "$PROJECT_ROOT/internal/t1/lib" \
+        -I "$PROJECT_ROOT/internal/d2/lib" \
+        -I "$PROJECT_ROOT/src" -I "$PROJECT_ROOT/lib" \
+        -I "$PROJECT_ROOT/native" -L "$directory" \
+        --lib g3r_c2_sha_stage \
+        "$PROJECT_ROOT/tests/g3r/c2_sha_stage_test.esk" \
+        -o "$directory/stage-test" \
+        >"$directory/build.stdout" 2>"$directory/build.stderr")
+  test ! -s "$directory/build.stderr"
+  test -s "$directory/stage-test.ll"
+  test -s "$directory/stage.d"
+  "$cc" "${flags[@]}" -c -x ir "$directory/stage-test.ll" \
+    -o "$directory/stage-test.o"
+  nm -u --format=posix "$directory/stage-test.o" \
+    >"$directory/eshkol-object-undefined-symbols.txt"
+  nm -g --defined-only --format=posix "$directory/stage-test.o" \
+    >"$directory/eshkol-object-defined-symbols.txt"
+  rg -F 'et_c2_private_checkpoint_load_stage_with_sha_v1' \
+    "$directory/eshkol-object-undefined-symbols.txt" >/dev/null
+  sed -e 's/^[^:]*://' -e 's/\\//g' "$directory/stage.d" | \
+    tr -s '[:space:]' '\n' | rg "^$PROJECT_ROOT/" | \
+    sed "s#^$PROJECT_ROOT/##" | \
+    rg -v '^tests/g3r/c2_sha_stage_test\.esk$' \
+    >"$directory/source-closure.txt"
+  cmp "$PROJECT_ROOT/native/g3r_c2_sha_stage_source_closure.txt" \
+      "$directory/source-closure.txt"
+  rg -F 'et_c2_private_checkpoint_load_stage_with_sha_v1' \
+    "$directory/stage-test.ll" >/dev/null
+  nm --format=posix "$directory/stage-test" >"$directory/linked-symbols.txt"
+  nm -u --format=posix "$directory/stage-test" \
+    >"$directory/linked-undefined-symbols.txt"
+  "${runtime[@]}" ESHKOL_ARENA_POISON=1 \
+    timeout --foreground --signal=TERM --kill-after=5s 360s \
+    "$directory/stage-test" "$out/fixtures/valid.c2" \
+    "$out/fixtures/truncated.c2" \
+    >"$directory/run.stdout" 2>"$directory/run.stderr"
+  test ! -s "$directory/run.stderr"
+  rg -x 'G3-R C2 SHA Eshkol stage PASS: [1-9][0-9]* checks' \
+    "$directory/run.stdout" >/dev/null
+}
+
+build_mode normal
+build_mode repeat
+build_mode sanitize
+cmp "$out/normal/run.stdout" "$out/repeat/run.stdout"
+cmp "$out/normal/run.stdout" "$out/sanitize/run.stdout"
+cmp "$out/normal/source-closure.txt" "$out/repeat/source-closure.txt"
+cmp "$out/normal/source-closure.txt" "$out/sanitize/source-closure.txt"
+printf 'G3-R C2 SHA private stage PASS: normal/repeat/sanitize\n'

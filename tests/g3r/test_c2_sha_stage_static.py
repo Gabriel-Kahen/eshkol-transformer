@@ -34,9 +34,19 @@ def verify_root_and_manifest(root: str, manifest: str) -> None:
 
 def verify_runner(runner: str) -> None:
     if (runner.count("-DET_G3R_C2_STAGE_SHA_PRIVATE") != 1
-            or '"$out/load-off.o"' not in runner
-            or '"$out/objects/load.o"' not in runner
-            or '"$out/objects"/*.o' not in runner
+            or '"$directory/load-off.o"' not in runner
+            or '"$directory/objects/load.o"' not in runner
+            or '"$directory/objects"/*.o' not in runner
+            or 'build_mode normal' not in runner
+            or 'build_mode repeat' not in runner
+            or 'build_mode sanitize' not in runner
+            or 'ASAN_OPTIONS=detect_leaks=1:halt_on_error=1' not in runner
+            or 'UBSAN_OPTIONS=halt_on_error=1' not in runner
+            or 'LSAN_OPTIONS=exitcode=23:report_objects=1' not in runner
+            or '--dump-ir' not in runner
+            or '"$directory/stage-test.ll"' not in runner
+            or '"$directory/stage-test.o"' not in runner
+            or '"$directory/stage.d"' not in runner
             or "build-e1b-consumer.sh" in runner):
         raise ValueError("private native feature build differs")
 
@@ -68,8 +78,11 @@ class C2ShaStageStaticTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "feature"):
             verify_runner(runner.replace("-DET_G3R_C2_STAGE_SHA_PRIVATE", ""))
         with self.assertRaisesRegex(ValueError, "feature"):
-            verify_runner(runner.replace('"$out/load-off.o"',
-                                         '"$out/objects/load-off.o"'))
+            verify_runner(runner.replace('"$directory/load-off.o"',
+                                         '"$directory/objects/load-off.o"'))
+        with self.assertRaisesRegex(ValueError, "feature"):
+            verify_runner(runner.replace('build_mode sanitize',
+                                         'build_mode normal'))
 
 
 if __name__ == "__main__":
