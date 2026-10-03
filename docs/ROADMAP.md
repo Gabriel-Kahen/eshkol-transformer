@@ -1554,8 +1554,13 @@ admission is source-staged as a feature-local private C2 root: fresh anchored
 bytevectors feed the 224-byte native stage, and its copied SHA is registered
 only with the exact staging shell. Host topology, closed-feature and Q0 checks
 pass. Its exact private runner now defines fresh normal, repeat and
-ASan/UBSan/LSan source, object and runtime evidence; that compiled gate has
-not run. Reconstruction,
+ASan/UBSan/LSan source, object and runtime evidence. The first supported
+`f55c14a` run passed pre/post pins but stopped in the native predecessor before
+Eshkol compilation: the image provides pinned `clang-21`, while that script
+called unversioned `clang`. The runner now passes its provenance-verified
+absolute Clang path to the predecessor; GCC parity, the 563-check native
+suite and all three compiled modes remain required. A fresh supported rerun
+is pending. Reconstruction,
 the owning SHA receipt, G3-T predicate, pair loader, live replay, save writer
 and resumed continuation remain separate gates.
 

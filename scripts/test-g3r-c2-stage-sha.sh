@@ -1,6 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ $# -ne 1 || "$1" != /* || ! -x "$1" ]]; then
+  echo 'usage: test-g3r-c2-stage-sha.sh ABSOLUTE_CLANG_COMPILER' >&2
+  exit 2
+fi
+clang_cc="$1"
+if [[ "$("$clang_cc" --version)" != *'clang version'* ]]; then
+  echo 'native predecessor requires an explicit Clang compiler' >&2
+  exit 2
+fi
+if ! command -v gcc >/dev/null 2>&1; then
+  echo 'native predecessor requires GCC for independent parity' >&2
+  exit 2
+fi
+
 project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 tmp="$(mktemp -d)"
 trap 'rm -rf -- "${tmp}"' EXIT
@@ -38,18 +52,18 @@ args=(
   "${fixture}/exact-valid.c2" "${sha_a}" "${sha_c}"
   "${tmp}/mutable.c2"
 )
-for compiler in clang gcc; do
-  "${compiler}" "${cflags[@]}" "${sources[@]}" -o "${tmp}/${compiler}"
-  "${tmp}/${compiler}" "${args[@]}" >"${tmp}/${compiler}.out"
-done
+"$clang_cc" "${cflags[@]}" "${sources[@]}" -o "${tmp}/clang"
+"${tmp}/clang" "${args[@]}" >"${tmp}/clang.out"
+gcc "${cflags[@]}" "${sources[@]}" -o "${tmp}/gcc"
+"${tmp}/gcc" "${args[@]}" >"${tmp}/gcc.out"
 cmp "${tmp}/clang.out" "${tmp}/gcc.out"
-clang "${cflags[@]}" -O1 -fsanitize=address,undefined \
+"$clang_cc" "${cflags[@]}" -O1 -fsanitize=address,undefined \
   -fno-omit-frame-pointer "${sources[@]}" -o "${tmp}/san"
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
   "${tmp}/san" "${args[@]}" >"${tmp}/san.out"
 cmp "${tmp}/clang.out" "${tmp}/san.out"
 
-clang "${cflags[@]}" "${sources[@]:0:6}" \
+"$clang_cc" "${cflags[@]}" "${sources[@]:0:6}" \
   "${project_root}/tests/c2/test_checkpoint_load_bridge.c" \
   -o "${tmp}/old-bridge"
 old_args=("${fixture}/valid.c2" "${fixture}/nonf32-buffer.c2"
@@ -64,15 +78,15 @@ for flag in "${cflags[@]}"; do
     off_flags+=("${flag}")
   fi
 done
-clang "${off_flags[@]}" "${sources[@]:0:6}" \
+"$clang_cc" "${off_flags[@]}" "${sources[@]:0:6}" \
   "${project_root}/tests/c2/test_checkpoint_load_bridge.c" \
   -o "${tmp}/old-bridge-off"
 "${tmp}/old-bridge-off" "${old_args[@]}" >"${tmp}/old-bridge-off.out"
 cmp "${tmp}/old-bridge.out" "${tmp}/old-bridge-off.out"
 
-clang -std=c11 -I "${project_root}/native" -c \
+"$clang_cc" -std=c11 -I "${project_root}/native" -c \
   "${project_root}/native/c2_checkpoint_load_bridge.c" -o "${tmp}/off.o"
-clang -std=c11 -I "${project_root}/native" \
+"$clang_cc" -std=c11 -I "${project_root}/native" \
   -DET_G3R_C2_STAGE_SHA_PRIVATE -c \
   "${project_root}/native/c2_checkpoint_load_bridge.c" -o "${tmp}/on.o"
 nm -g --defined-only --format=posix "${tmp}/off.o" | \

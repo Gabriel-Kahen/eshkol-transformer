@@ -25,7 +25,7 @@ cp "$(eshkol_build_dir)/eshkol-transformer-provenance.tsv" \
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v \
   tests.g3r.test_c2_sha_stage_static tests.q0.test_python_isolation \
   >"$out/static.stdout" 2>"$out/static.stderr"
-/usr/bin/bash "$PROJECT_ROOT/scripts/test-g3r-c2-stage-sha.sh" \
+/usr/bin/bash "$PROJECT_ROOT/scripts/test-g3r-c2-stage-sha.sh" "$cc" \
   >"$out/native-predecessor.stdout" 2>"$out/native-predecessor.stderr"
 rg -x 'G3R C2 stage SHA PASS: 563 checks' \
   "$out/native-predecessor.stdout" >/dev/null

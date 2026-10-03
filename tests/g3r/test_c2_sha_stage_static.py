@@ -1,5 +1,6 @@
 """Closed private C2 SHA stage topology checks; no runtime claim."""
 from pathlib import Path
+import subprocess
 import unittest
 
 from tests.c2.test_handler_order import parse
@@ -9,6 +10,7 @@ PRIVATE = ROOT / "native/g3r_c2_sha_stage_root.esk"
 MANIFEST = ROOT / "native/g3r_c2_sha_stage_source_closure.txt"
 BASE = ROOT / "native/c2_checkpoint_load_source_closure.txt"
 RUNNER = ROOT / "scripts/test-g3r-c2-sha-stage.sh"
+NATIVE_RUNNER = ROOT / "scripts/test-g3r-c2-stage-sha.sh"
 EXTENSION = ROOT / "native/g3r_c2_sha_stage_extension.esk"
 
 LOADS = ["d2_wave2_root.esk", "c2_d2_cursor_pair_extension.esk",
@@ -51,10 +53,23 @@ def verify_runner(runner: str) -> None:
         raise ValueError("private native feature build differs")
 
 
+def verify_compiler_handoff(runner: str, native: str) -> None:
+    call = '"$PROJECT_ROOT/scripts/test-g3r-c2-stage-sha.sh" "$cc"'
+    if (call not in runner
+            or runner.index("resolve_provenance_compilers") >= runner.index(call)
+            or 'clang_cc="$1"' not in native
+            or native.count('"$clang_cc"') < 7
+            or 'gcc "${cflags[@]}" "${sources[@]}"' not in native
+            or 'for compiler in clang gcc' in native
+            or '\nclang ' in native):
+        raise ValueError("native compiler handoff differs")
+
+
 class C2ShaStageStaticTest(unittest.TestCase):
     def test_exact_private_ownership_and_symbols(self) -> None:
         verify_root_and_manifest(PRIVATE.read_text(), MANIFEST.read_text())
         verify_runner(RUNNER.read_text())
+        verify_compiler_handoff(RUNNER.read_text(), NATIVE_RUNNER.read_text())
         extension = EXTENSION.read_text()
         parse(extension)
         parse((ROOT / "tests/g3r/c2_sha_stage_test.esk").read_text())
@@ -83,6 +98,21 @@ class C2ShaStageStaticTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "feature"):
             verify_runner(runner.replace('build_mode sanitize',
                                          'build_mode normal'))
+        native = NATIVE_RUNNER.read_text()
+        with self.assertRaisesRegex(ValueError, "compiler handoff"):
+            verify_compiler_handoff(runner.replace('"$cc" \\', '"$cxx" \\'),
+                                    native)
+        with self.assertRaisesRegex(ValueError, "compiler handoff"):
+            verify_compiler_handoff(runner, native.replace('clang_cc="$1"',
+                                                          'clang_cc=clang'))
+        for arguments in ((), ("clang",), ("/usr/bin/gcc",),
+                          ("/no/such/clang",)):
+            with self.subTest(arguments=arguments):
+                result = subprocess.run(
+                    ["bash", str(NATIVE_RUNNER), *arguments],
+                    capture_output=True, text=True, check=False)
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertEqual(result.stdout, "")
 
 
 if __name__ == "__main__":
