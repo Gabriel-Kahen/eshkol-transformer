@@ -1,15 +1,21 @@
 # E3 in-call mode and graph observation contract
 
-This is a **design-only, noninstalled test contract** for the remaining mode
-and graph obligations in [E3 §9](../E3_EVALUATION_PROPOSAL.md). It adds no
-runtime observer, source mutation, native API, accepted result, or edge-corpus
-claim. This read-only design audit uses main `d3988abd` and the separately
+This is the original **noninstalled test contract** for the mode and graph
+obligations in [E3 §9](../E3_EVALUATION_PROPOSAL.md). Its subsequent
+implementation passed the bounded `d2b47a8` supported gate; scoped
+`3db0f94`/tree `cab4d7ec` passed its separate full supported gate with a
+405-file seal (`b6550c62aa9e1c39e426a5e5819383710692f58fba88b3666d226734f6870a10`).
+The current-main `5520dfe` union leaves all enrolled package inputs unchanged;
+hosted CI and merge remain pending. The original design audit used
+main `d3988abd` and the separately
 reviewed, unmerged E3 test candidate `c78682ae`/tree `853f83e7`; its retention
 and numerical candidate files are not promoted by this document. The existing
 [P1 mode contract](E3_P1_MODES_CONTRACT.md) and those two test candidates
 address different parts of §9. None reads all 17 modes *inside* the evaluator
 or counts transient graph creation. Implementation must wait for the two
 source/ownership decisions identified below.
+The sections below preserve those preimplementation findings; current gate
+status is recorded in [the roadmap](../ROADMAP.md).
 
 ## Exact mode witness
 
@@ -88,12 +94,16 @@ owned. Parameter and present/absent gradient bytes, typed RNG/initializer
 successor, cursor, four destination bytes, two counters, and mode restoration
 retain the candidate's success/failure/retry comparisons.
 
-The present `.esk` build does not C-preprocess Scheme and has no accepted
-conditional in-call hook in `native/e3_private_extension.esk`. Its test-only
-root/extension transform must be separately pinned and byte-compared to the
-canonical evaluator, inserting only the fixed reader calls and the reviewed
-graph mutation points. A postcall wrapper or P1 public setter does not satisfy
-the in-call seam. Neither transform is implemented or compiled yet.
+The P1 test variant passed its own supported compiled gate; a distinct
+noninstalled E3 root/extension transform was source-and-test reviewed at
+`6f174247`/tree `e8771b12`. The `.esk` build does not C-preprocess Scheme:
+that transform pins and byte-compares canonical evaluator sources and inserts
+only the fixed reader calls and reviewed graph mutation points. The later
+`d2b47a8` full gate accepted the bounded emitted test aggregate and in-call
+observations; the scoped `3db0f94` full gate repeated those observations on
+the exact scoped tree. The current-main union changes no source/native closure
+or depfile input for those packages.
+A postcall wrapper or P1 public setter cannot satisfy the in-call seam.
 
 ## Real graph event, and current reachability blocker
 

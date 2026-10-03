@@ -157,6 +157,8 @@ printf 'input=%s\n' "${e3_inputs[@]}"
             "set -euo pipefail\n"
             "package_policy=e3-private-aggregate\n"
             "e3_diagnostic_tuple=$1\n"
+            "e3_tuple_kind=base\n"
+            '[[ "$e3_diagnostic_tuple" != 1 ]] || e3_tuple_kind=diagnostic\n'
             + selection
             + "printf '%s\\n' "
             + " ".join(candidates)

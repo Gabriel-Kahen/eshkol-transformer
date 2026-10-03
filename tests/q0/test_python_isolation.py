@@ -61,6 +61,8 @@ G3C4_DEVELOPMENT_SCRIPTS = frozenset({
 })
 DEVELOPMENT_SCRIPTS = frozenset({
     ROOT / "scripts" / "generate-e3-d2-source.py",
+    ROOT / "scripts" / "generate-e3-p1-mode-test-variant.py",
+    ROOT / "scripts" / "generate-e3-mode-graph-source.py",
     ROOT / "scripts" / "check-e3-p1-contract.py",
     ROOT / "scripts" / "check-tr3-p1-fixed.py",
     ROOT / "scripts" / "check-p1-native-index.py",
@@ -96,6 +98,7 @@ DEVELOPMENT_SCRIPTS = frozenset({
     ROOT / "scripts" / "check-g3g-g0-package.py",
     ROOT / "scripts" / "check-g3g-manual-package.py",
     ROOT / "scripts" / "check-g3r-record-codec.py",
+    ROOT / "scripts" / "check-g3r-p1-roster.py",
 }) | G3C4_DEVELOPMENT_SCRIPTS
 
 

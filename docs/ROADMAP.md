@@ -733,16 +733,35 @@ It does not close the other E3 §9 retention, mode, gradient, and sanitizer
 obligations.
 
 The [E3 in-call mode and graph observation contract](e3/E3_MODE_GRAPH_OBSERVATION_CONTRACT.md)
-is a design-only next leaf for §9. Its corrected P1-owned test variant keys a
-fixed mixed17 setter and immediate actual 17-bit mode reader by the authentic
-bound E3 token; the raw nodes remain lexical and canonical trusted/public
-surfaces unchanged. Exact source composition and compiled evidence are still
-pending. The unmerged retention candidate's postcall helpers currently cannot
-run, and a zero live graph-owner probe does not exclude transient creation.
-A nonreentrant in-call source seam and a genuinely reachable M3 graph-create/
-release mutation under active E3 model authority remain unaccepted
-prerequisites. No implementation, compiled proof, or edge-corpus acceptance is
-claimed here.
+now has a bounded [source candidate](e3/E3_MODE_GRAPH_SOURCE_CANDIDATE.md).
+Its P1-owned test variant reads all 17 modes through the authentic E3 token;
+the noninstalled E3 tuple observes real M3 capture, enrollment, release and
+live graph records during a call. The accepted `d2b47a8`/tree `539a09ce`
+fe9/f31 gate passed canonical and six closed mode/graph packages, 175 normal
+and 223 sanitizer imports, byte-identical fresh builds, compiled normal,
+repeat, poisoned and sanitizer cases with absent/present gradients, and real
+missed-child and graph-create mutant rejection at the in-call assertions.
+Enter-write-only exited 134 before success. Its 405-file supported seal is
+`e3-mode-graph-d2b47a8-fe9-f31-20261003-prepared-i/SHA256SUMS-RUN`
+(`60dfa849257d0cf1b5160aa0ac3ea2407e29fce8ef3b664a57f3a62ad5d9ec16`).
+The shell's expected abort diagnostic appears in Docker stderr; ordinary
+compiled case stderr is empty. The separately scoped `3db0f94`/tree
+`cab4d7ec` candidate on main `90f3c420` passed its own full fe9/f31 gate:
+canonical and six closed packages, exact 175 normal and 223 sanitizer imports,
+byte-identical fresh objects and runtimes, and 12 compiled absent/present
+gradient cases across normal A/B, poisoned, sanitizer, missed-child and
+graph-create variants. The actual 17-mode observer and M3 graph event counts
+survived success, later D2 failure and same-authority retry; both compiled
+mutants died at their specific in-call assertions, and enter-write-only exited
+134 before success. All 405 files verify under
+`e3-mode-graph-scoped-3db0f94-fe9-f31-20261003-prepared-j/SHA256SUMS-RUN`
+(`b6550c62aa9e1c39e426a5e5819383710692f58fba88b3666d226734f6870a10`).
+The expected abort diagnostic appears in Docker stderr; ordinary/sanitized
+compile and runtime stderr is empty. Its current-main `5520dfe` union changes
+only unrelated G3 RNG code/tests and documentation outside the seven package
+source/native closures and depfiles; hosted CI and merge remain pending.
+Retention, numerical, other §9 and public-path acceptance remain pending; the
+separate retention and numerical test candidates are not included here.
 
 The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
 is a docs-only candidate for the remaining private numerical, compiled-mutant,
@@ -1572,7 +1591,10 @@ generator four-word equality predicate to prove manual replay consumes no
 G3-S draw. It also bounds the fixed diagnostic-C2 candidate recipe to
 external X1/T1/D2 inputs authenticated against loaded C2 controls before
 TR3 restore, with candidate-only cleanup and no public LOAD or generation ABI
-change. The C2 native SHA candidate adds a guarded 224-byte private stage
+change. The private signatures bound separate implementation leaves; no pair
+loader, live replay, save writer or resumed continuation is accepted.
+
+The C2 native SHA leaf adds a guarded 224-byte private stage
 result while retaining the public 192-byte result. Exact source `84113e1f`
 passed the pinned fe9/f31 Clang 21 native gate: normal and repeat report 563
 checks with byte-identical output and empty stderr; each invocation includes
@@ -1582,9 +1604,26 @@ Docker and both runs exited zero; pre/post source/toolchain pins passed.
 Independent evidence review accepted the 23-file seal
 `g3r-c2-stage-sha-84113-fe9-f31-20261003-prepared-b/SHA256SUMS-RUN`
 (SHA-256 `c8ea09325ed743655053f7aa329660d5d20b85e51dc3d26d3482adda5f222124`).
-Hosted integration remains pending. This is native-only: Eshkol backing-extent
-admission and owning SHA receipt, G3-T predicate, pair loader, live replay,
-save writer and resumed continuation remain separate gates.
+PR #190 merged this native leaf as `9149` after 23 exact-head hosted checks.
+This is native-only: Eshkol backing-extent admission and the owning SHA receipt
+remain separate gates.
+
+The private idle G3-T RNG equality predicate at exact source `daca071d`
+passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
+checks the authentic idle generator's four RNG words without allocation,
+borrowing, sampling or mutation; a genuine completed manual commit may keep
+its committed cache/binding and detached logits. Feature-off passed one
+compiled check; normal and ASan+UBSan+LSan each passed 183 Eshkol checks with
+byte-identical output and empty compiler/runtime stderr. Native typed import,
+three actual G3-S/Philox reference runs and Q0/static checks passed. The runner
+executed and compared a repeat, but its separate stdout was not retained.
+Launcher/Docker exits and pre/post pins passed. Independent evidence review
+accepted the 30-file seal
+`g3r-g3t-idle-rng-equal-daca071-fe9-f31-20261003-prepared-a/SHA256SUMS-RUN`
+(`7958a230f3ef2a4f86a0c12477dada4e0ccb040d55f11eb6ed42158239ab16a6`).
+Hosted integration is pending. This private predicate does not authenticate a
+C2 SHA receipt or pair, reconstruct a candidate, replay history, or prove
+resumed generation.
 
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
@@ -1608,10 +1647,17 @@ fail-stop retirement tail. A feature-gated native f32 producer candidate now
 records creation/clone-time backing, checks destroy readiness without a
 borrow or authority change, and preflights every feature-on tensor/parameter
 free against that backing before the first destructive write. Its focused
-host normal, repeat and sanitizer
-gate is local evidence, pending independent review and a supported gate.
+supported fe9/f31 Clang 21 normal, repeat and ASan/UBSan/LSan gate at
+`637ca102` passed 451 readiness checks per mode with identical output and
+empty compiler/runtime stderr. Existing feature-on storage and parameter
+suites passed 1,944 and 3,153 checks. Feature-off object bytes match the
+pinned baseline; the production feature-on symbol delta is only the private
+readiness entry point. Independent review accepted the 114-file seal
+`g3r-f32-destroy-ready-637ca102-fe9-f31-20261003-prepared-a/SHA256SUMS-RUN`
+(SHA256 `dc7888d8a92067d5d201dd0b7d375a5c36c27be8f1869751018139e142fb5c56`).
 O2 pointer admission alone cannot prove the closed Eshkol ledger or 14 M3T/P1
-associations. The O2 retire path and candidate cleanup remain pending.
+associations. Hosted integration, the O2 retire path and candidate cleanup
+remain pending.
 
 The proposed [G3-R P1/I2 sealed-graph retirement producer contract](g3/G3_R_P1_I2_SEALED_GRAPH_RETIREMENT_CONTRACT.md)
 pins the candidate-aware preseal M3T/I2/P1 handshake and a retained exact
@@ -1621,6 +1667,30 @@ tombstone before revoking P1/I2 authority and later M3T f32 payloads. Native
 P1 retained-roster admission/revocation is the first separable implementation
 gate. This is documentation only; no sealed-graph revoke, candidate cleanup,
 public API or full replay acceptance is implemented.
+
+The isolated native P1 retained-roster candidate on
+`codex/g3r-p1-candidate-roster` adds feature-gated candidate construction
+begin, exact sealed roster retention on ordinary and prepared seal, native
+identity preflight/revocation and test-only roster census. Focused host
+normal/sanitizer tests and default-off object parity passed; independent
+source/tests review accepted the original leaf. The runner now accepts an
+explicit fresh evidence directory and retains normal/repeat/sanitizer output,
+numeric run exits, compiler diagnostics, default-off parity objects/symbols,
+and the expected public-role compile rejection for sealed review. This
+runner-only deltas were independently reviewed. The exact code/tests head
+`390851bf` (tree `74342d46`) passed the pinned fe9/f31 Clang 21 gate on
+2026-10-03: normal, repeat and ASan/UBSan/LSan each returned zero and reported
+19 retired tokens with identical output and empty stderr. Default-off public
+and trusted objects and symbol lists matched the accepted main baseline;
+the feature-on public-role build rejected with exit 1. Root independently
+verified the retained 81-file evidence seal
+`g3r-native-p1-roster-390851b-fe9-f31-20261003-prepared-b/SHA256SUMS-RUN`
+(SHA256 `a558c496cf144b15356d6d0ef3fc487363ee1c3ae9eaba479bd37d28a2914f0f`).
+Hosted exact-head CI and merge remain pending.
+This native leaf cannot authenticate the Eshkol candidate ledger, M3T
+parameter graph or live O2 witness; the candidate-aware I2/P1/M3T adapter
+and owner teardown
+remain dependent work.
 
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
