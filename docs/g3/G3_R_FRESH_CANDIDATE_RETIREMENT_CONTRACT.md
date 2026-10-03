@@ -77,10 +77,13 @@ int64_t et_m3t_private_candidate_initializer_retire_commit_v1(
 The corresponding closed Eshkol interfaces are
 `(g3r-candidate-retire-preflight-internal! ledger) -> witness` and
 `(g3r-candidate-retire-internal! ledger witness) -> #t`. The second consumes
-the exact witness; it cannot accept arbitrary component pointers. An internal
-P1/I2 `candidate-graph-retire-preflight/commit` seam is also required, with
-its exact signature to be separately accepted against the real P1 token and
-module registry. No existing P1 release is represented as that seam. The
+the exact witness; it cannot accept arbitrary component pointers. The
+[candidate P1/I2 sealed-graph contract](G3_R_P1_I2_SEALED_GRAPH_RETIREMENT_CONTRACT.md)
+defines the required producer handshake and private graph preflight/commit
+seam. Graph preflight admits the exact candidate O2 optimizer **while live**
+with its retirement witness; graph commit requires that same optimizer's
+authenticated tombstone after O2 commit. No existing P1 release is represented
+as that seam. The
 behavioral admission rules are:
 
 * `g3r-candidate-retire-preflight-internal!` accepts only its registered,
@@ -115,6 +118,8 @@ behavioral admission rules are:
 * A private P1/I2 sealed-graph preflight and revocation commit must prove the
   exact root, all 14 unique handles and one tied alias, no active state/copy
   plan/provider callback lease, and no other live graph using the parameters.
+  It admits only the candidate's exact live O2 optimizer and its preflight
+  witness; all foreign or additional consumers reject.
   It revokes references before native M3T parameter destruction, without
   touching the caller's graph. Its native token and Eshkol module enrollment
   identities must be checked independently; a Scheme vector shape check alone
