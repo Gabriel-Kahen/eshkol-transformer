@@ -7,6 +7,7 @@ root = Path(__file__).resolve().parents[1]
 source = (root / "native/p1_identity.c").read_text()
 header = (root / "native/p1_identity_internal.h").read_text()
 test = (root / "tests/p1/test_g3r_candidate_roster.c").read_text()
+runner = (root / "scripts/test-g3r-p1-roster.sh").read_text()
 
 def require(ok: bool, message: str) -> None:
     if not ok:
@@ -40,4 +41,66 @@ for name in (
     require(name not in
             (root / "native/p1_identity_trusted_symbols.txt").read_text(),
             "ordinary trusted manifest includes candidate symbol")
-print("G3-R P1 ROSTER STRUCTURE PASS: private guard, registry-first admission")
+
+def runner_valid(text: str) -> bool:
+    required = {
+        "(( $# <= 1 ))": 1,
+        "if (( $# == 1 )); then": 1,
+        '[[ "${temporary}" == /* && ! -e "${temporary}" && ! -L "${temporary}" ]]': 1,
+        'mkdir -- "${temporary}"': 1,
+        'trap \'rm -rf -- "${temporary}"\' EXIT': 1,
+        'for role in public trusted; do': 1,
+        'for run in a b; do': 1,
+        'baseline=90f3c42025556596a206b125138de49e09e3f7d3': 1,
+        '1fc04e8299610d5fe508d44c888f1f4b1c9a4021': 1,
+        'cmp "${temporary}/baseline-${role}.o" "${temporary}/current-${role}.o"': 1,
+        'p1_identity_${role}_symbols.txt': 1,
+        'cmp "${temporary}/expected-candidate-symbols" "${temporary}/candidate-symbols"': 1,
+        "grep -F 'requires the trusted P1 build'": 1,
+        'cmp "${temporary}/run-a.stdout" "${temporary}/run-b.stdout"': 1,
+        'cmp "${temporary}/run-a.stdout" "${temporary}/san.stdout"': 1,
+        '-fsanitize=address,undefined': 1,
+        'ASAN_OPTIONS=detect_leaks=1:halt_on_error=1': 1,
+        '-Wl,--wrap=calloc': 2,
+        'forbidden-public.exit': 2,
+        'forbidden-public.stderr': 2,
+        'candidate-symbols': 4,
+        'current-${role}.compile.stderr': 1,
+        'baseline-${role}.compile.stderr': 1,
+        'roster-${run}.compile.stderr': 1,
+        'roster-sanitized.compile.stderr': 1,
+        'run-${run}.stderr': 2,
+        'san.stderr': 2,
+        'compiler-provenance.tsv': 1,
+        'compiler-selected.tsv': 1,
+        'repeat-cmp.stdout': 1,
+        'san-cmp.stdout': 1,
+    }
+    if any(text.count(fragment) != count for fragment, count in required.items()):
+        return False
+    fresh = text.index('[[ "${temporary}" == /*')
+    mkdir = text.index('mkdir -- "${temporary}"')
+    default_branch = text.index("\nelse\n", mkdir)
+    cleanup = text.index('trap \'rm -rf -- "${temporary}"\' EXIT')
+    branch_end = text.index("\nfi\n", cleanup)
+    verify = text.index('verify_toolchain >"${temporary}/toolchain.stdout"')
+    return (fresh < mkdir < default_branch < cleanup < branch_end < verify
+            and text.count("rm -rf --") == 1)
+
+
+require(runner_valid(runner), "runner freshness, retention, or gate mode narrowed")
+for mutation in (
+    '! -e "${temporary}"',
+    'mkdir -- "${temporary}"',
+    'trap \'rm -rf -- "${temporary}"\' EXIT',
+    'for role in public trusted; do',
+    'for run in a b; do',
+    'cmp "${temporary}/baseline-${role}.o" "${temporary}/current-${role}.o"',
+    'cmp "${temporary}/run-a.stdout" "${temporary}/san.stdout"',
+    '-fsanitize=address,undefined',
+    'forbidden-public.exit',
+    'roster-sanitized.compile.stderr',
+):
+    require(not runner_valid(runner.replace(mutation, "", 1)),
+            f"runner mutation escaped admission: {mutation}")
+print("G3-R P1 ROSTER STRUCTURE PASS: private guard, registry-first admission, retained runner evidence")
