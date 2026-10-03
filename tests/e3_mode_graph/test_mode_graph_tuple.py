@@ -173,14 +173,19 @@ printf '%s\\n' "$e3_tuple_kind"
         non = lines(MODE, "sanitized_noninstrumentation_undefined_symbols")
         instrumentation = lines(MODE, "sanitized_instrumentation_undefined_symbols")
         self.assertEqual((len(normal), len(non), len(instrumentation)),
-                         (176, 201, 51))
+                         (175, 172, 51))
         self.assertEqual((len(set(non) - set(normal)),
-                          len(set(normal) - set(non))), (30, 5))
+                          len(set(normal) - set(non))), (2, 5))
+        self.assertEqual(set(non) - set(normal), {"bcmp", "puts"})
+        self.assertEqual(set(normal) - set(non),
+                         {"eshkol_ad_seed_flag", "eshkol_runtime_fatal",
+                          "eshkol_taylor_lift_ad_node", "memcmp", "printf"})
         self.assertEqual(non, sorted(set(non)))
         self.assertEqual(instrumentation, sorted(set(instrumentation)))
         self.assertFalse(set(non) & set(instrumentation))
         self.assertIn("bcmp", non)
-        self.assertIn("eshkol_ad_mixed_record", non)
+        self.assertNotIn("eshkol_ad_mixed_record", non)
+        self.assertNotIn("eshkol_tail_transfer_slot", normal)
         self.assertIn("__asan_init", instrumentation)
         helper = ROOT / "scripts/e3-mode-graph-sanitizer-import-policy.sh"
 
@@ -205,10 +210,20 @@ printf '%s\\n' "$e3_tuple_kind"
         self.assertFalse(admitted(normal, non[1:], instrumentation))
         self.assertFalse(admitted(normal, sorted(set(non) | {"unexpected_import"}),
                                   instrumentation))
+        self.assertFalse(admitted(normal,
+                                  sorted((set(non) - {"bcmp"}) | {"unexpected_import"}),
+                                  instrumentation))
         self.assertFalse(admitted(normal, non, instrumentation[1:]))
         self.assertFalse(admitted(normal, non,
                                   sorted(set(instrumentation) | {"__asan_unexpected"})))
+        self.assertFalse(admitted(
+            normal, non,
+            sorted((set(instrumentation) - {"__asan_init"}) |
+                   {"__asan_unexpected"})))
         self.assertFalse(admitted(normal[1:], non, instrumentation))
+        self.assertFalse(admitted(
+            sorted((set(normal) - {"eshkol_ad_seed_flag"}) | {"unexpected_import"}),
+            non, instrumentation))
 
     def test_parser_rejects_missing_or_mismatched_in_call_data(self) -> None:
         def transcript(mask: int, graph: int) -> str:

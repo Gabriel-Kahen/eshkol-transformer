@@ -829,8 +829,18 @@ IR review traced all 27 added references to two named-let loops called
 `gradient_ho_0/1` instead of the intended recursion. The driver now uses
 `grad-kind` for both loops. The old emitted AD/math inventory must not be used
 to enlarge admission around that semantic defect. Fresh normal and sanitizer
-compiler emission, exact import policies, runtime observations and compiled
-mutant controls remain required for the corrected driver. Its exact
+compiler emission was captured in the sealed 173-file diagnostic
+`e3-mode-graph-loop-diagnostic-9b14e28-fe9-f31-20261002-prepared-g/SHA256SUMS-DIAGNOSTIC`
+(`610df667d4f487c4adac58aa4d8a45848bf3b159402fbdfa5e608473b099c297`).
+The corrected driver emits two recursive `grad-kind` loops and no
+`gradient_ho` references. Normal emits 175 imports, removing only
+`eshkol_tail_transfer_slot` from the old 176-entry manifest. Sanitizer emits
+172 noninstrumentation and 51 instrumentation imports; relative to corrected
+normal, it adds `bcmp` and `puts` and removes five imports. The own mode/graph
+manifests and count policy are repinned to those exact emitted sets. Both
+diagnostic builds stopped at their old import manifests before package or
+runtime execution. Independent source review and a fresh supported normal,
+poison, sanitizer, and mutant runtime gate remain required. Its exact
 noninstalled package now retains `private.ll` on successful admission too, so
 the fresh diagnostic can inspect recursive-loop IR in either build outcome. No mode/graph
 acceptance is claimed. The 159-file failed full gate is sealed at
