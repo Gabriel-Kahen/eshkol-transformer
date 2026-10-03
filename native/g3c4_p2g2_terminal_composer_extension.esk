@@ -174,6 +174,16 @@
                  (cdr (vector-ref g3c4-p2g2-terminal-originals 0)))
     #t))
 
+(define (g3c4-p2g2-terminal-rollback-node! cell enrolled item old)
+  (let ((current (vector-ref cell 0)))
+    (if enrolled
+        (if (not (and (pair? current) (eq? (car current) item)
+                      (eq? (cdr current) old)))
+            (exit 134))
+        (if (not (eq? current old)) (exit 134)))
+    (if enrolled (vector-set! cell 0 old))
+    #t))
+
 ;;; This is the only producer. It supplies no body after terminal commit.
 (define (g3c4-p2g2-terminal-generate-internal generator input)
   (let* ((operation 'g3c4-p2g2-terminal-generate-internal)
@@ -212,7 +222,12 @@
                              generator-entry))
              (barrier (vector #f))
              (terminal #f)
-             (enrolled #f))
+             (enrolled #f)
+             (record-enrolled #f)
+             (anchor-enrolled #f)
+             (old-records (vector-ref g3c4-p2g2-protected-records 0))
+             (old-anchors (vector-ref g3c4-p2g2-protected-anchors 0))
+             (old-prefixes (vector-ref g3c4-p2g2-prefix-input-anchors 0)))
         (if (not (and (eq? (vector-ref generator-entry 3) native)
                       (eq? (vector-ref generator-entry 5) model-entry)
                       (eq? (vector-ref generator-entry 6) tokenizer)
@@ -237,33 +252,46 @@
                          (g3c4-call-dead! call)
                          (vector-set! record 0 #f)
                          (vector-set! original 0 #f)
-                         (vector-set! g3c4-p2g2-protected-records 0
-                                      (cdr (vector-ref
-                                             g3c4-p2g2-protected-records 0)))
-                         (vector-set! g3c4-p2g2-protected-anchors 0
-                                      (cdr (vector-ref
-                                             g3c4-p2g2-protected-anchors 0)))))
+                         (g3c4-p2g2-terminal-rollback-node!
+                           g3c4-p2g2-protected-records record-enrolled
+                           record old-records)
+                         (g3c4-p2g2-terminal-rollback-node!
+                           g3c4-p2g2-protected-anchors anchor-enrolled
+                           original old-anchors)))
                    (g3c4-p2g2-zero-bytes! second 1)
                    (g3c4-p2g2-zero-bytes! second-staging 8)
                    (g3c4-p2g2-zero-bytes! text1 1)
                    (g3c4-p2g2-zero-bytes! text2 2)
-                   (if enrolled
-                       (vector-set! g3c4-p2g2-prefix-input-anchors 0
-                                    (cdr (vector-ref
-                                           g3c4-p2g2-prefix-input-anchors 0))))
+                   (g3c4-p2g2-terminal-rollback-node!
+                     g3c4-p2g2-prefix-input-anchors enrolled
+                     prefix old-prefixes)
                    (raise caught)))
-          (vector-set! g3c4-registry 0
-                       (cons call (vector-ref g3c4-registry 0)))
-          (vector-set! g3c4-p2g2-protected-records 0
-                       (cons record (vector-ref
-                                      g3c4-p2g2-protected-records 0)))
-          (vector-set! g3c4-p2g2-protected-anchors 0
-                       (cons original (vector-ref
-                                        g3c4-p2g2-protected-anchors 0)))
-          (vector-set! g3c4-p2g2-prefix-input-anchors 0
-                       (cons prefix (vector-ref
-                                      g3c4-p2g2-prefix-input-anchors 0)))
-          (set! enrolled #t)
+          (let ((next (cons call (vector-ref g3c4-registry 0))))
+            (if (not (and (pair? next) (eq? (car next) call)))
+                (g3c4-fail 'internal operation
+                           "P2/G2 call registry allocation failed"))
+            (vector-set! g3c4-registry 0 next))
+          (let ((next (cons record old-records)))
+            (if (not (and (pair? next) (eq? (car next) record)
+                          (eq? (cdr next) old-records)))
+                (g3c4-fail 'internal operation
+                           "P2/G2 protected record allocation failed"))
+            (vector-set! g3c4-p2g2-protected-records 0 next)
+            (set! record-enrolled #t))
+          (let ((next (cons original old-anchors)))
+            (if (not (and (pair? next) (eq? (car next) original)
+                          (eq? (cdr next) old-anchors)))
+                (g3c4-fail 'internal operation
+                           "P2/G2 protected anchor allocation failed"))
+            (vector-set! g3c4-p2g2-protected-anchors 0 next)
+            (set! anchor-enrolled #t))
+          (let ((next (cons prefix old-prefixes)))
+            (if (not (and (pair? next) (eq? (car next) prefix)
+                          (eq? (cdr next) old-prefixes)))
+                (g3c4-fail 'internal operation
+                           "P2/G2 prefix anchor allocation failed"))
+            (vector-set! g3c4-p2g2-prefix-input-anchors 0 next)
+            (set! enrolled #t))
           (g3c4-native-check (g3c4-native-call-acquire native 2 2)
                              operation)
           (vector-set! ledger 0 #t)

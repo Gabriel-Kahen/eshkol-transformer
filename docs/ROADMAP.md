@@ -2473,6 +2473,20 @@ The prior combined assertion does not prove the native rollback check passed.
 No production source changed; a fresh reviewed full normal/repeat/sanitizer
 and fault-overlay gate remains required before composer acceptance.
 
+The next pinned composer run at `cf225dc` reached the normal Eshkol terminal
+fixture's 507-check pass line, but its stderr contained three `cdr: argument is
+not a pair` diagnostics during allocation-cut rollback. The full gate correctly
+stopped before repeat, sanitizer and seven fault overlays. The 247-file failed
+seal is `g3c4-p2g2-eshkol-terminal-composer-cf225dc-fe9-f31-20261003-prepared-d/SHA256SUMS-FAILED`
+(`3b6de40d7f0ba5649d9a1ea815a69b58c3ad09137a3f86037691a39fb7b4566d`);
+launcher and Docker exited 1 and both pin checks passed. Debugger breakpoints
+identified unchecked `cdr` calls on protected record/anchor list heads in the
+composer rollback path. A source repair now tracks exact enrollment and prior
+list identities, validates each new cons node before publication, and only
+removes nodes this call actually enrolled. The allocation-cut fixture also
+requires a transformer error and exact restoration of all five ledger heads.
+This repair is source-staged only; a fresh full gate is still required.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
