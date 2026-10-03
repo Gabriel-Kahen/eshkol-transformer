@@ -1614,9 +1614,10 @@ identity preflight/revocation and test-only roster census. Focused host
 normal/sanitizer tests and default-off object parity passed; independent
 source/tests review accepted the original leaf. The runner now accepts an
 explicit fresh evidence directory and retains normal/repeat/sanitizer output,
-compiler diagnostics, default-off parity objects/symbols, and the expected
-public-role compile rejection for sealed review. This runner-only delta and
-the pinned supported gate remain pending independent review and execution.
+numeric run exits, compiler diagnostics, default-off parity objects/symbols,
+and the expected public-role compile rejection for sealed review. This
+runner-only delta and the pinned supported gate remain pending independent
+review and execution.
 This native leaf cannot authenticate the Eshkol candidate ledger, M3T
 parameter graph or live O2 witness; the candidate-aware I2/P1/M3T adapter
 and owner teardown

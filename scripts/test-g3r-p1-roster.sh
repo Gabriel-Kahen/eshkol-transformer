@@ -106,9 +106,14 @@ for run in a b; do
     -Wl,--wrap=calloc -o "${temporary}/roster-${run}" \
     >"${temporary}/roster-${run}.compile.stdout" \
     2>"${temporary}/roster-${run}.compile.stderr"
+  set +e
   timeout --foreground --signal=TERM --kill-after=5s 60s \
     "${temporary}/roster-${run}" >"${temporary}/run-${run}.stdout" \
     2>"${temporary}/run-${run}.stderr"
+  status=$?
+  set -e
+  printf '%d\n' "${status}" >"${temporary}/run-${run}.exit"
+  [[ "${status}" -eq 0 ]] || die "native roster ${run} exited ${status}"
   [[ ! -s "${temporary}/run-${run}.stderr" ]] || die "native roster stderr is nonempty"
 done
 cmp "${temporary}/run-a.stdout" "${temporary}/run-b.stdout" \
@@ -122,10 +127,15 @@ grep -Fx 'G3-R P1 candidate roster PASS: 19 retired tokens, exact native enrollm
   -Wl,--wrap=calloc -o "${temporary}/roster-sanitized" \
   >"${temporary}/roster-sanitized.compile.stdout" \
   2>"${temporary}/roster-sanitized.compile.stderr"
+set +e
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
   timeout --foreground --signal=TERM --kill-after=5s 60s \
   "${temporary}/roster-sanitized" >"${temporary}/san.stdout" \
   2>"${temporary}/san.stderr"
+status=$?
+set -e
+printf '%d\n' "${status}" >"${temporary}/san.exit"
+[[ "${status}" -eq 0 ]] || die "sanitized native roster exited ${status}"
 cmp "${temporary}/run-a.stdout" "${temporary}/san.stdout" \
   >"${temporary}/san-cmp.stdout" 2>"${temporary}/san-cmp.stderr"
 [[ ! -s "${temporary}/san.stderr" ]] || die "sanitized native roster stderr is nonempty"

@@ -70,7 +70,13 @@ def runner_valid(text: str) -> bool:
         'roster-${run}.compile.stderr': 1,
         'roster-sanitized.compile.stderr': 1,
         'run-${run}.stderr': 2,
+        'run-${run}.exit': 1,
         'san.stderr': 2,
+        'san.exit': 1,
+        'status=$?': 2,
+        'set +e': 2,
+        'printf \'%d\\n\' "${status}"': 2,
+        '[[ "${status}" -eq 0 ]] || die': 2,
         'compiler-provenance.tsv': 1,
         'compiler-selected.tsv': 1,
         'repeat-cmp.stdout': 1,
@@ -84,8 +90,33 @@ def runner_valid(text: str) -> bool:
     cleanup = text.index('trap \'rm -rf -- "${temporary}"\' EXIT')
     branch_end = text.index("\nfi\n", cleanup)
     verify = text.index('verify_toolchain >"${temporary}/toolchain.stdout"')
+    normal = text[text.index('for run in a b; do'):
+                  text.index('\ndone', text.index('for run in a b; do'))]
+    sanitize = text[text.index('"${cc}" "${flags[@]}" -fsanitize=address,undefined'):]
+
+    def ordered(block: str, fragments: tuple[str, ...]) -> bool:
+        try:
+            positions = [block.index(fragment) for fragment in fragments]
+        except ValueError:
+            return False
+        return positions == sorted(positions) and len(set(positions)) == len(positions)
+
+    normal_checked = ordered(normal, (
+        'set +e', 'timeout --foreground', 'status=$?', 'set -e',
+        'printf \'%d\\n\' "${status}" >"${temporary}/run-${run}.exit"',
+        '[[ "${status}" -eq 0 ]] || die "native roster ${run} exited ${status}"',
+        '[[ ! -s "${temporary}/run-${run}.stderr" ]]',
+    ))
+    sanitize_checked = ordered(sanitize, (
+        'set +e', 'ASAN_OPTIONS=detect_leaks=1:halt_on_error=1',
+        'timeout --foreground', 'status=$?', 'set -e',
+        'printf \'%d\\n\' "${status}" >"${temporary}/san.exit"',
+        '[[ "${status}" -eq 0 ]] || die "sanitized native roster exited ${status}"',
+        'cmp "${temporary}/run-a.stdout" "${temporary}/san.stdout"',
+    ))
     return (fresh < mkdir < default_branch < cleanup < branch_end < verify
-            and text.count("rm -rf --") == 1)
+            and text.count("rm -rf --") == 1 and normal_checked
+            and sanitize_checked)
 
 
 require(runner_valid(runner), "runner freshness, retention, or gate mode narrowed")
@@ -100,6 +131,11 @@ for mutation in (
     '-fsanitize=address,undefined',
     'forbidden-public.exit',
     'roster-sanitized.compile.stderr',
+    'run-${run}.exit',
+    'san.exit',
+    'status=$?',
+    '[[ "${status}" -eq 0 ]] || die "native roster ${run} exited ${status}"',
+    '[[ "${status}" -eq 0 ]] || die "sanitized native roster exited ${status}"',
 ):
     require(not runner_valid(runner.replace(mutation, "", 1)),
             f"runner mutation escaped admission: {mutation}")
