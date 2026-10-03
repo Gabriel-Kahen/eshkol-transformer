@@ -133,6 +133,11 @@ assert "prefix-oracle-input.stdout" in runner
 assert "check_p2_g2_terminal_composer_oracle.py" in runner
 assert "p2_g2_terminal_composer_feature_off_test.esk" in runner
 assert "composer rejects feature-off entry" in off
+assert '(load "g3c4_p2g2_ownership_extension.esk")' not in off
+assert '(load "g3c4_p2g2_terminal_composer_extension.esk")' in off
+assert '(config 1)' in off and '(config 2)' in off
+assert 'feature-off constructor rejects budget two' in off
+assert 'private P2/G2 gate remains off' in off
 assert "COMPOSER_SECOND " in native_fixture
 assert "et_g3c4_p2g2_coordinator_test_prefix_v1(" in native_fixture
 assert "et_g3c4_p2g2_coordinator_test_observe_v1(" in native_fixture

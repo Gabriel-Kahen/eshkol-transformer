@@ -2502,6 +2502,18 @@ error assertion, rollback ledger/cache/RNG check, and the unchanged full
 normal/repeat/sanitizer/fault-overlay gate. This correction has host static
 checks only; compiled gate acceptance remains pending.
 
+The `4e07c9f` pinned run passed native and prefix predecessors and the normal
+composer, then failed its first feature-off assertion. Its feature-off fixture
+loaded `g3c4_p2g2_ownership_extension.esk`, whose top-level action turns the
+private gate on. The failed artifact is retained at
+`g3c4-p2g2-eshkol-terminal-composer-4e07c9f-fe9-f31-20261003-prepared-f/`;
+launcher/Docker exited 1, and pre/post pins passed. The source-staged fixture
+repair omits that admission load, proves budget-two construction is rejected
+while the gate remains off, then calls the composer with an otherwise valid
+budget-one generator to check preflight rejection and empty ledgers. The
+static closure check now enforces these conditions. The corrected feature-off
+fixture and full normal/repeat/sanitizer/fault-overlay gate remain uncompiled.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |

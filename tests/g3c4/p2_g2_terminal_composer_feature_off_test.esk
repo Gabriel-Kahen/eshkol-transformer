@@ -4,7 +4,6 @@
 (load "g3c4_call_entry_extension.esk")
 (load "g3c4_t1_output_decode_extension.esk")
 (load "g3c4_output_envelope_extension.esk")
-(load "g3c4_p2g2_ownership_extension.esk")
 (load "g3c4_p2g2_protected_scope_extension.esk")
 (load "g3c4_p2g2_t1_prefix_coordinator_extension.esk")
 (load "g3c4_p2g2_terminal_composer_extension.esk")
@@ -18,17 +17,25 @@
   (t1-private-register-core
     (t1-tokenizer-core-create 'raw '() '() '())))
 (define model (g3c4-model-create-seeded-internal 1729))
+(define (config max-new)
+  (list ':profile 'diagnostic-c4 ':sampling 'greedy
+        ':temperature-bits 1065353216 ':top-k 256
+        ':top-p-bits 1065353216 ':max-new-tokens max-new
+        ':eos #f ':seed 7))
 (define input
   (g3c4-p2g2-owned-input-create
     (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255))))
 (define generator
   (g3c4-generator-create-internal model tokenizer
-    (list ':profile 'diagnostic-c4 ':sampling 'greedy
-          ':temperature-bits 1065353216 ':top-k 256
-          ':top-p-bits 1065353216 ':max-new-tokens 2
-          ':eos #f ':seed 7)))
+    (config 1)))
 (check "private P2/G2 gate remains off"
        (not (vector-ref g3c4-p2g2-ownership-gate 0)))
+(check "feature-off constructor rejects budget two"
+  (guard (caught
+           (#t (and (transformer-error? caught)
+                    (eq? (transformer-error-category caught)
+                         'invalid-argument))))
+    (g3c4-generator-create-internal model tokenizer (config 2)) #f))
 (check "composer rejects feature-off entry"
   (guard (caught
            (#t (and (transformer-error? caught)
