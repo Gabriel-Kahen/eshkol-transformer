@@ -44,17 +44,18 @@
                      (inner (cdr later)))))
           (outer (cdr remaining))))))
 
-(define (g3r-c2-sha-stage-allocations measure)
-  (vector
-    (g3r-c2-sha-allocate-bytevector-internal (c2-load-u64 measure 16))
-    (g3r-c2-sha-allocate-bytevector-internal 93)
-    (g3r-c2-sha-allocate-bytevector-internal (c2-load-u64 measure 24))
-    (g3r-c2-sha-allocate-bytevector-internal (c2-load-u64 measure 32))
-    (g3r-c2-sha-allocate-bytevector-internal (c2-load-u64 measure 40))
-    (g3r-c2-sha-allocate-bytevector-internal (c2-load-u64 measure 48))
-    (g3r-c2-sha-allocate-bytevector-internal (c2-load-u64 measure 56))
-    (g3r-c2-sha-allocate-bytevector-internal (c2-load-u64 measure 64))
-    (g3r-c2-sha-allocate-bytevector-internal g3r-c2-sha-stage-result-bytes)))
+(define g3r-c2-sha-stage-allocations
+  (lambda (measure)
+    (vector
+      (g3r-c2-sha-allocate-bytevector-internal (c2-load-u64 measure 16))
+      (g3r-c2-sha-allocate-bytevector-internal 93)
+      (g3r-c2-sha-allocate-bytevector-internal (c2-load-u64 measure 24))
+      (g3r-c2-sha-allocate-bytevector-internal (c2-load-u64 measure 32))
+      (g3r-c2-sha-allocate-bytevector-internal (c2-load-u64 measure 40))
+      (g3r-c2-sha-allocate-bytevector-internal (c2-load-u64 measure 48))
+      (g3r-c2-sha-allocate-bytevector-internal (c2-load-u64 measure 56))
+      (g3r-c2-sha-allocate-bytevector-internal (c2-load-u64 measure 64))
+      (g3r-c2-sha-allocate-bytevector-internal g3r-c2-sha-stage-result-bytes))))
 
 (define (g3r-c2-sha-backing-valid? path-bytes measure allocations)
   (and (g3r-c2-sha-exact-bytes? measure c2-load-result-bytes)

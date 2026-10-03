@@ -65,6 +65,17 @@ def verify_compiler_handoff(runner: str, native: str) -> None:
         raise ValueError("native compiler handoff differs")
 
 
+def verify_stage_allocator_binding(extension: str) -> None:
+    forms = parse(extension)
+    definitions = [form for form in forms if isinstance(form, list)
+                   and len(form) == 3 and form[0] == "define"
+                   and form[1] == "g3r-c2-sha-stage-allocations"]
+    if (len(definitions) != 1 or not isinstance(definitions[0][2], list)
+            or definitions[0][2][0] != "lambda"
+            or definitions[0][2][1] != ["measure"]):
+        raise ValueError("stage allocator needs a mutable binding")
+
+
 class C2ShaStageStaticTest(unittest.TestCase):
     def test_exact_private_ownership_and_symbols(self) -> None:
         verify_root_and_manifest(PRIVATE.read_text(), MANIFEST.read_text())
@@ -72,6 +83,7 @@ class C2ShaStageStaticTest(unittest.TestCase):
         verify_compiler_handoff(RUNNER.read_text(), NATIVE_RUNNER.read_text())
         extension = EXTENSION.read_text()
         parse(extension)
+        verify_stage_allocator_binding(extension)
         parse((ROOT / "tests/g3r/c2_sha_stage_test.esk").read_text())
         self.assertIn(":real et_c2_private_checkpoint_load_stage_with_sha_v1",
                       extension)
@@ -105,6 +117,11 @@ class C2ShaStageStaticTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "compiler handoff"):
             verify_compiler_handoff(runner, native.replace('clang_cc="$1"',
                                                           'clang_cc=clang'))
+        extension = EXTENSION.read_text()
+        with self.assertRaisesRegex(ValueError, "mutable binding"):
+            verify_stage_allocator_binding(extension.replace(
+                "(define g3r-c2-sha-stage-allocations",
+                "(define (g3r-c2-sha-stage-allocations measure)"))
         for arguments in ((), ("clang",), ("/usr/bin/gcc",),
                           ("/no/such/clang",)):
             with self.subTest(arguments=arguments):

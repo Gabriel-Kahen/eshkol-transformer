@@ -1559,8 +1559,12 @@ ASan/UBSan/LSan source, object and runtime evidence. The first supported
 Eshkol compilation: the image provides pinned `clang-21`, while that script
 called unversioned `clang`. The runner now passes its provenance-verified
 absolute Clang path to the predecessor; GCC parity, the 563-check native
-suite and all three compiled modes remain required. A fresh supported rerun
-is pending. Reconstruction,
+suite and all three compiled modes remain required. The next supported run
+passed its native predecessor but exposed an Eshkol compile error: the test's
+short-backing fault injection used `set!` on a procedure definition that the
+compiler did not bind to a mutable location. The allocation helper now uses a
+lambda-valued binding; the same owning allocation path and negative fixture
+remain. A fresh supported normal/repeat/sanitizer rerun is pending. Reconstruction,
 the owning SHA receipt, G3-T predicate, pair loader, live replay, save writer
 and resumed continuation remain separate gates.
 
