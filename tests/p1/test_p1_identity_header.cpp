@@ -81,6 +81,14 @@ CHECK_SIGNATURE(et_p1_private_state_release_begin_v1,
                 int64_t (*)(void *, void *));
 CHECK_SIGNATURE(et_p1_private_live_entry_count_v1, int64_t (*)(void *));
 CHECK_SIGNATURE(et_p1_private_tombstone_count_v1, int64_t (*)(void *));
+#if defined(ET_G3R_CANDIDATE_RETIRE_PRIVATE)
+CHECK_SIGNATURE(et_p1_private_candidate_construction_begin_v1,
+                int64_t (*)(void *));
+CHECK_SIGNATURE(et_p1_private_candidate_graph_preflight_v1,
+                int64_t (*)(void *, void *));
+CHECK_SIGNATURE(et_p1_private_candidate_graph_revoke_v1,
+                int64_t (*)(void *, void *));
+#endif
 #endif
 
 #undef CHECK_SIGNATURE

@@ -109,6 +109,13 @@ int64_t et_p1_private_construction_commit_prepared_v1(void *context,
                                                        void *construction);
 int64_t et_p1_private_construction_abort_prepared_v1(void *context,
                                                       void *construction);
+#if defined(ET_G3R_CANDIDATE_RETIRE_PRIVATE)
+int64_t et_p1_private_candidate_construction_begin_v1(void *context);
+int64_t et_p1_private_candidate_graph_preflight_v1(void *context,
+                                                   void *construction);
+int64_t et_p1_private_candidate_graph_revoke_v1(void *context,
+                                                void *construction);
+#endif
 int64_t et_p1_private_module_create_v1(void *context);
 int64_t et_p1_private_parameter_handle_create_v1(void *context);
 int64_t et_p1_private_parameter_tree_create_v1(void *context);
@@ -153,6 +160,10 @@ int64_t et_p1_private_tombstone_count_v1(void *context);
 #if defined(ET_P1_TEST_HOOKS)
 int64_t et_p1_test_state_bind_fail_next_v1(void);
 int64_t et_p1_test_record_index_invalidate_v1(void);
+#if defined(ET_G3R_CANDIDATE_RETIRE_PRIVATE)
+int64_t et_p1_test_candidate_roster_entries_v1(void *context);
+int64_t et_p1_test_candidate_roster_bytes_v1(void *context);
+#endif
 #endif
 #endif
 

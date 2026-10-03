@@ -1,6 +1,9 @@
 #if defined(ET_P1_TRUSTED_BUILD)
 #define ET_P1_PRIVATE_API 1
 #endif
+#if defined(ET_G3R_CANDIDATE_RETIRE_PRIVATE) && !defined(ET_P1_TRUSTED_BUILD)
+#error "G3-R candidate P1 roster requires the trusted P1 build"
+#endif
 #include "p1_identity_internal.h"
 
 #include <stdio.h>
@@ -47,6 +50,10 @@ typedef struct et_p1_record {
   struct et_p1_record *index_left;
   struct et_p1_record *index_right;
   uint8_t index_height;
+#if defined(ET_G3R_CANDIDATE_RETIRE_PRIVATE) && defined(ET_P1_TRUSTED_BUILD)
+  struct et_p1_construction *candidate_construction;
+  size_t candidate_index;
+#endif
 } et_p1_record;
 
 #if defined(ET_P1_TRUSTED_BUILD)
@@ -69,8 +76,13 @@ _Static_assert(sizeof(et_p1_token) == 264u, "P1 token layout changed");
 _Static_assert(offsetof(et_p1_token, nonce_lo) == 0u &&
                    offsetof(et_p1_token, nonce_hi) == 8u,
                "P1 caller token nonce layout changed");
+#if defined(ET_G3R_CANDIDATE_RETIRE_PRIVATE) && defined(ET_P1_TRUSTED_BUILD)
+_Static_assert(sizeof(et_p1_record) == 296u,
+               "G3-R private P1 record extension layout changed");
+#else
 _Static_assert(sizeof(et_p1_record) == 280u,
                "P1 private registry record layout changed");
+#endif
 _Static_assert(offsetof(et_p1_record, binding) == 24u &&
                    offsetof(et_p1_record, callbacks) == 32u &&
                    offsetof(et_p1_record, kind) == 88u &&
@@ -94,6 +106,11 @@ typedef struct et_p1_construction {
   size_t count;
   int64_t origin_pid;
   uint8_t state; /* 0 open, 1 sealed, 2 aborted, 3 prepared */
+#if defined(ET_G3R_CANDIDATE_RETIRE_PRIVATE)
+  uint8_t candidate_retirable;
+  size_t sealed_count;
+  et_p1_record **candidate_roster_base;
+#endif
 } et_p1_construction;
 static et_p1_construction *constructions;
 static et_p1_construction *active_construction;
@@ -565,6 +582,19 @@ ET_P1_PRIVATE int64_t et_p1_private_construction_begin_v1(void *candidate) {
   return ET_P1_STATUS_OK;
 }
 
+#if defined(ET_G3R_CANDIDATE_RETIRE_PRIVATE)
+ET_P1_PRIVATE int64_t et_p1_private_candidate_construction_begin_v1(
+    void *candidate) {
+  int64_t status = et_p1_private_construction_begin_v1(candidate);
+  if (status == ET_P1_STATUS_OK) {
+    /* The ordinary begin has enrolled this exact scope; no token exists yet. */
+    active_construction->candidate_retirable = 1u;
+    active_construction->candidate_roster_base = active_construction->entries;
+  }
+  return status;
+}
+#endif
+
 static int64_t construction_create(void *candidate, void *construction,
                                    int64_t kind, const char *operation) {
   et_p1_context *context = require_context(candidate);
@@ -579,8 +609,19 @@ static int64_t construction_create(void *candidate, void *construction,
     return set_error(context, ET_P1_STATUS_UNSUPPORTED,
                      ET_P1_CODE_CAPACITY_EXCEEDED, operation, "construction is full");
   status = create_token(context, kind, operation, NULL, 0u);
+#if defined(ET_G3R_CANDIDATE_RETIRE_PRIVATE)
+  if (status == ET_P1_STATUS_OK) {
+    et_p1_record *created = find_record(context->result_ptr);
+    if (ledger->candidate_retirable != 0u) {
+      created->candidate_construction = ledger;
+      created->candidate_index = ledger->count;
+    }
+    ledger->entries[ledger->count++] = created;
+  }
+#else
   if (status == ET_P1_STATUS_OK)
     ledger->entries[ledger->count++] = find_record(context->result_ptr);
+#endif
   return status;
 }
 ET_P1_PRIVATE int64_t et_p1_private_construction_module_create_v1(
@@ -605,8 +646,16 @@ ET_P1_PRIVATE int64_t et_p1_private_construction_seal_v1(
   if (status != ET_P1_STATUS_OK) return status;
   ledger->state = 1u;
   active_construction = NULL;
+#if defined(ET_G3R_CANDIDATE_RETIRE_PRIVATE)
+  if (ledger->candidate_retirable != 0u) {
+    ledger->sealed_count = ledger->count;
+  } else {
+#endif
   free(ledger->entries);
   ledger->entries = NULL;
+#if defined(ET_G3R_CANDIDATE_RETIRE_PRIVATE)
+  }
+#endif
   return ET_P1_STATUS_OK;
 }
 ET_P1_PRIVATE int64_t et_p1_private_construction_prepare_v1(
@@ -643,12 +692,137 @@ ET_P1_PRIVATE int64_t et_p1_private_construction_commit_prepared_v1(
                      "injected prepared commit failure");
   }
 #endif
-  free(ledger->entries);
-  ledger->entries = NULL;
+#if defined(ET_G3R_CANDIDATE_RETIRE_PRIVATE)
+  if (ledger->candidate_retirable != 0u) {
+    ledger->sealed_count = ledger->count;
+  } else {
+#endif
+    free(ledger->entries);
+    ledger->entries = NULL;
+#if defined(ET_G3R_CANDIDATE_RETIRE_PRIVATE)
+  }
+#endif
   ledger->state = 1u;
   active_construction = NULL;
   return ET_P1_STATUS_OK;
 }
+
+#if defined(ET_G3R_CANDIDATE_RETIRE_PRIVATE)
+static int p1_record_registered(const et_p1_record *candidate) {
+  const et_p1_record *cursor = records;
+  while (cursor != NULL && cursor != candidate) cursor = cursor->next;
+  return cursor != NULL;
+}
+
+static int64_t candidate_roster_preflight(et_p1_context *context,
+                                         et_p1_construction *ledger,
+                                         const char *operation) {
+  size_t i;
+  if (ledger->candidate_retirable != 1u || ledger->state != 1u ||
+      active_construction != NULL ||
+      ledger->entries == NULL ||
+      ledger->entries != ledger->candidate_roster_base ||
+      ledger->count == 0u ||
+      ledger->count > ET_P1_CONSTRUCTION_CAPACITY ||
+      ledger->count != ledger->sealed_count) {
+    return set_error(context, ET_P1_STATUS_INVALID_STATE,
+                     ET_P1_CODE_ALREADY_SEALED, operation,
+                     "candidate roster is not sealed and complete");
+  }
+  for (i = 0u; i < ledger->count; ++i) {
+    const et_p1_record *record = ledger->entries[i];
+    size_t j;
+    /* A faulted roster pointer is never dereferenced before list admission. */
+    if (!p1_record_registered(record) ||
+        record->candidate_construction != ledger ||
+        record->candidate_index != i || record->owner != context ||
+        record->origin_pid != (int64_t)getpid() ||
+        (record->kind != ET_P1_TOKEN_MODULE &&
+         record->kind != ET_P1_TOKEN_PARAMETER_HANDLE) ||
+        !token_integrity(record)) {
+      return set_error(context, ET_P1_STATUS_INVALID_ARGUMENT,
+                       ET_P1_CODE_TOKEN_INTEGRITY, operation,
+                       "candidate token enrollment is stale or foreign");
+    }
+    for (j = 0u; j < i; ++j) {
+      if (ledger->entries[j] == record) {
+        return set_error(context, ET_P1_STATUS_INVALID_ARGUMENT,
+                         ET_P1_CODE_TOKEN_INTEGRITY, operation,
+                         "candidate roster repeats a token");
+      }
+    }
+  }
+  return ET_P1_STATUS_OK;
+}
+
+ET_P1_PRIVATE int64_t et_p1_private_candidate_graph_preflight_v1(
+    void *candidate, void *construction) {
+  et_p1_context *context = require_context(candidate);
+  et_p1_construction *ledger;
+  if (context == NULL) return ET_P1_STATUS_INVALID_ARGUMENT;
+  ledger = require_construction(context, construction,
+                                "candidate-graph-preflight");
+  if (ledger == NULL) return context->error.category;
+  return candidate_roster_preflight(context, ledger,
+                                    "candidate-graph-preflight");
+}
+
+ET_P1_PRIVATE int64_t et_p1_private_candidate_graph_revoke_v1(
+    void *candidate, void *construction) {
+  et_p1_context *context = require_context(candidate);
+  et_p1_construction *ledger;
+  size_t i;
+  if (context == NULL) return ET_P1_STATUS_INVALID_ARGUMENT;
+  ledger = require_construction(context, construction,
+                                "candidate-graph-revoke");
+  if (ledger == NULL) return context->error.category;
+  if (ledger->candidate_retirable == 1u && ledger->state == 4u &&
+      ledger->entries == NULL && ledger->candidate_roster_base == NULL &&
+      ledger->sealed_count != 0u && ledger->count == ledger->sealed_count)
+    return ET_P1_STATUS_OK;
+  if (candidate_roster_preflight(context, ledger,
+                                  "candidate-graph-revoke") != ET_P1_STATUS_OK)
+    return context->error.category;
+  /* Complete admission above; this tail invokes no callback or allocation. */
+  for (i = 0u; i < ledger->count; ++i) ledger->entries[i]->live = 0u;
+  free(ledger->entries);
+  ledger->entries = NULL;
+  ledger->candidate_roster_base = NULL;
+  ledger->state = 4u;
+  return ET_P1_STATUS_OK;
+}
+
+#if defined(ET_P1_TEST_HOOKS)
+ET_P1_PRIVATE int64_t et_p1_test_candidate_roster_entries_v1(void *candidate) {
+  et_p1_context *context = require_context(candidate);
+  const et_p1_construction *ledger = constructions;
+  size_t total = 0u;
+  if (context == NULL) return ET_P1_STATUS_INVALID_ARGUMENT;
+  while (ledger != NULL) {
+    if (ledger->owner == context && ledger->candidate_retirable == 1u &&
+        ledger->entries != NULL) total += ledger->count;
+    ledger = ledger->next;
+  }
+  context->result_i64 = (int64_t)total;
+  return ET_P1_STATUS_OK;
+}
+
+ET_P1_PRIVATE int64_t et_p1_test_candidate_roster_bytes_v1(void *candidate) {
+  et_p1_context *context = require_context(candidate);
+  const et_p1_construction *ledger = constructions;
+  size_t total = 0u;
+  if (context == NULL) return ET_P1_STATUS_INVALID_ARGUMENT;
+  while (ledger != NULL) {
+    if (ledger->owner == context && ledger->candidate_retirable == 1u &&
+        ledger->entries != NULL)
+      total += ET_P1_CONSTRUCTION_CAPACITY * sizeof(*ledger->entries);
+    ledger = ledger->next;
+  }
+  context->result_i64 = (int64_t)total;
+  return ET_P1_STATUS_OK;
+}
+#endif
+#endif
 
 #if defined(ET_P1_TEST_HOOKS)
 ET_P1_PRIVATE int64_t et_p1_test_construction_commit_fail_next_v1(void) {

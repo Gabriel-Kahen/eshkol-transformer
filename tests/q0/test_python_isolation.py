@@ -98,6 +98,7 @@ DEVELOPMENT_SCRIPTS = frozenset({
     ROOT / "scripts" / "check-g3g-g0-package.py",
     ROOT / "scripts" / "check-g3g-manual-package.py",
     ROOT / "scripts" / "check-g3r-record-codec.py",
+    ROOT / "scripts" / "check-g3r-p1-roster.py",
 }) | G3C4_DEVELOPMENT_SCRIPTS
 
 
