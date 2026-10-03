@@ -154,10 +154,12 @@ def check(root, overrides=None):
     assert run(steps(aj["select"])["Validate topology and selection"]) == [
         "make test-ci-topology",
         "python3 -m unittest discover -v -s tests/ci -p 'test_*.py'",
-        "python3 -m unittest -v tests.q0.test_python_isolation"]
+        "python3 -m unittest -v tests.q0.test_python_isolation",
+        "python3 -m unittest -v tests.q0.test_g3r_f32_destroy_ready_static"]
     assert run(steps(cj["topology"])["Test change selection"]) == [
         "python3 -m unittest discover -v -s tests/ci -p 'test_*.py'",
-        "python3 -m unittest -v tests.q0.test_python_isolation"]
+        "python3 -m unittest -v tests.q0.test_python_isolation",
+        "python3 -m unittest -v tests.q0.test_g3r_f32_destroy_ready_static"]
     assert "      - run: make test-ci-topology\n" in cj["topology"]
     suite = ej["suites"]
     assert field(suite, 4, "runs-on") == "ubuntu-22.04"
