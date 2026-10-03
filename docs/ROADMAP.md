@@ -1561,7 +1561,13 @@ reconstruction. It preallocates receipt and rollback authority, enrolls the
 returned owner before any fallible post-reconstruction step, and tombstones
 the stage SHA sidecar. Its focused source, host topology, and compiled
 three-mode runner are candidate work only; no supported Eshkol receipt gate
-has run. The G3-T predicate, pair loader, live replay, save writer and
+has run. The receipt identity helper now uses a lambda-valued mutable binding
+for its existing preallocation-failure injection, addressing the same
+procedure-binding limitation observed in the supported stage compile.
+Its helper body and raised-false rollback test are unchanged. Integration of
+the reviewed stage runner and allocator repairs remains pending the supported
+stage gate; the old prepared receipt launcher must not run. The G3-T
+predicate, pair loader, live replay, save writer and
 resumed continuation remain separate gates.
 
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)

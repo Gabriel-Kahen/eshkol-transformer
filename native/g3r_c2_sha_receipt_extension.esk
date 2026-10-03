@@ -11,9 +11,10 @@
           ((eq? shell (vector-ref (car remaining) 0)) (car remaining))
           (else (loop (cdr remaining))))))
 
-(define (g3r-c2-receipt-identity)
-  (guard (raised (#t raised))
-    (error "transformer.g3r-c2-sha-receipt:v1")))
+(define g3r-c2-receipt-identity
+  (lambda ()
+    (guard (raised (#t raised))
+      (error "transformer.g3r-c2-sha-receipt:v1"))))
 
 (define (g3r-c2-receipt-borrow-identity)
   (guard (raised (#t raised))

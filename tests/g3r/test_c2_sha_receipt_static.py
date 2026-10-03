@@ -93,6 +93,17 @@ def verify_runner(source: str) -> None:
         raise ValueError("compiled three-mode receipt gate is incomplete")
 
 
+def verify_fault_bindings(source: str) -> None:
+    forms = parse(source)
+    for name in ("g3r-c2-receipt-identity",
+                 "g3r-c2-receipt-after-owner-enrolled-internal"):
+        matches = [form for form in forms if isinstance(form, list)
+                   and len(form) == 3 and form[:2] == ["define", name]]
+        if (len(matches) != 1 or not isinstance(matches[0][2], list)
+                or matches[0][2][:2] != ["lambda", []]):
+            raise ValueError("receipt fault helper needs a mutable binding")
+
+
 class C2ShaReceiptStaticTest(unittest.TestCase):
     def test_private_sources_and_handoff(self) -> None:
         for relative, digest in PINNED.items():
@@ -101,6 +112,7 @@ class C2ShaReceiptStaticTest(unittest.TestCase):
         verify_root_and_closure(ROOT_FILE.read_text(), MANIFEST.read_text(),
                                 STAGE_MANIFEST.read_text())
         verify_handoff(RECEIPT.read_text())
+        verify_fault_bindings(RECEIPT.read_text())
         verify_runner(RUNNER.read_text())
         parse(STAGE.read_text())
         parse((ROOT / "tests/g3r/c2_sha_receipt_test.esk").read_text())
@@ -126,6 +138,10 @@ class C2ShaReceiptStaticTest(unittest.TestCase):
                 "(c2-load-exact-live-owner? owner)\n              (vector-set! owner-cell 0 owner)"))
         with self.assertRaisesRegex(ValueError, "three-mode"):
             verify_runner(runner.replace("build_mode sanitize", "build_mode normal"))
+        with self.assertRaisesRegex(ValueError, "mutable binding"):
+            verify_fault_bindings(source.replace(
+                "(define g3r-c2-receipt-identity\n  (lambda ()",
+                "(define (g3r-c2-receipt-identity)\n  (begin", 1))
 
 
 if __name__ == "__main__":
