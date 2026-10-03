@@ -178,4 +178,4 @@ grep -F 'state_f32' "${out}/verify-mean-of-means.stderr" >/dev/null || \
   die "mean-of-means mutant failed outside the accumulator value assertion"
 grep -F 'final.metrics_f32' "${out}/verify-second-normalization.stderr" >/dev/null || \
   die "second-normalization mutant failed outside the final loss value assertion"
-printf 'E3 compiled three-batch numerical transcript and two mutants passed\n'
+printf 'E3 compiled three-batch numerical transcript and three mutants passed\n'

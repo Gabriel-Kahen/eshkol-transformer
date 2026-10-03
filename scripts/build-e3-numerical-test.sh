@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
-[[ $# -le 2 ]] || die "usage: $0 [ARTIFACT_DIR] [normal|wrong-target|mean-of-means|sanitize]"
+[[ $# -le 2 ]] || die "usage: $0 [ARTIFACT_DIR] [normal|wrong-target|mean-of-means|second-normalization|sanitize]"
 verify_toolchain
 for command in ar cmp; do require_command "${command}"; done
 artifact="${1:-$(project_build_dir)/e3-numerical-test}"
