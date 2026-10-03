@@ -1572,7 +1572,10 @@ generator four-word equality predicate to prove manual replay consumes no
 G3-S draw. It also bounds the fixed diagnostic-C2 candidate recipe to
 external X1/T1/D2 inputs authenticated against loaded C2 controls before
 TR3 restore, with candidate-only cleanup and no public LOAD or generation ABI
-change. The C2 native SHA candidate adds a guarded 224-byte private stage
+change. The private signatures bound separate implementation leaves; no pair
+loader, live replay, save writer or resumed continuation is accepted.
+
+The C2 native SHA leaf adds a guarded 224-byte private stage
 result while retaining the public 192-byte result. Exact source `84113e1f`
 passed the pinned fe9/f31 Clang 21 native gate: normal and repeat report 563
 checks with byte-identical output and empty stderr; each invocation includes
@@ -1582,9 +1585,26 @@ Docker and both runs exited zero; pre/post source/toolchain pins passed.
 Independent evidence review accepted the 23-file seal
 `g3r-c2-stage-sha-84113-fe9-f31-20261003-prepared-b/SHA256SUMS-RUN`
 (SHA-256 `c8ea09325ed743655053f7aa329660d5d20b85e51dc3d26d3482adda5f222124`).
-Hosted integration remains pending. This is native-only: Eshkol backing-extent
-admission and owning SHA receipt, G3-T predicate, pair loader, live replay,
-save writer and resumed continuation remain separate gates.
+PR #190 merged this native leaf as `9149` after 23 exact-head hosted checks.
+This is native-only: Eshkol backing-extent admission and the owning SHA receipt
+remain separate gates.
+
+The private idle G3-T RNG equality predicate at exact source `daca071d`
+passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
+checks the authentic idle generator's four RNG words without allocation,
+borrowing, sampling or mutation; a genuine completed manual commit may keep
+its committed cache/binding and detached logits. Feature-off passed one
+compiled check; normal and ASan+UBSan+LSan each passed 183 Eshkol checks with
+byte-identical output and empty compiler/runtime stderr. Native typed import,
+three actual G3-S/Philox reference runs and Q0/static checks passed. The runner
+executed and compared a repeat, but its separate stdout was not retained.
+Launcher/Docker exits and pre/post pins passed. Independent evidence review
+accepted the 30-file seal
+`g3r-g3t-idle-rng-equal-daca071-fe9-f31-20261003-prepared-a/SHA256SUMS-RUN`
+(`7958a230f3ef2a4f86a0c12477dada4e0ccb040d55f11eb6ed42158239ab16a6`).
+Hosted integration is pending. This private predicate does not authenticate a
+C2 SHA receipt or pair, reconstruct a candidate, replay history, or prove
+resumed generation.
 
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
