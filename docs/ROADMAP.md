@@ -2459,6 +2459,20 @@ publication, public G2 and continuation remain pending.
   pass; pinned runtime, oracle, overlays, repeat and sanitizer evidence still
   require a fresh reviewed gate.
 
+The corrected terminal-composer test lease helper reached the genuine
+exhausted-counter case in its next pinned run at `3a76086`, but the fixture
+incorrectly required all terminal history lists to be empty after earlier
+successful releases. Released terminals retain dead anchors for authenticated
+idempotent release. The 247-file failed seal
+`g3c4-p2g2-eshkol-terminal-composer-3a76086-fe9-f31-20261003-prepared-c/SHA256SUMS-FAILED`
+(`c77300ba252c1d3e16ba248a3ddadc6a99e15a47da0dd768f2600d20f5f7f498`)
+preserves numeric failure and unchanged pre/post pins. The exhaustion and
+three native fault cases now compare exact entry terminal/protected/prefix
+list identities, with separate unchanged full-cache/binding/RNG assertions.
+The prior combined assertion does not prove the native rollback check passed.
+No production source changed; a fresh reviewed full normal/repeat/sanitizer
+and fault-overlay gate remains required before composer acceptance.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |

@@ -260,7 +260,12 @@
          (g3c4-generator-create-internal
            model tokenizer (config 'categorical 7 #f)))
        (native (vector-ref
-                 (g3c4-generator-entry-call-ready generator 'test) 3)))
+                 (g3c4-generator-entry-call-ready generator 'test) 3))
+       ;; Released terminals retain dead history for authenticated idempotence.
+       (entry-terminals (vector-ref g3c4-p2g2-terminal-anchors 0))
+       (entry-originals (vector-ref g3c4-p2g2-terminal-originals 0))
+       (entry-protected (vector-ref g3c4-p2g2-protected-records 0))
+       (entry-prefixes (vector-ref g3c4-p2g2-prefix-input-anchors 0)))
   (check "arm genuine exhausted native Philox counter"
          (= (composer-counter native 3) 0))
   (check "capture exhausted-entry owner and RNG"
@@ -269,12 +274,14 @@
     (lambda () (g3c4-p2g2-terminal-generate-internal generator prompt-a)))
   (check "exhaustion reached real first sampler after P2"
          (= (composer-exhausted) 1))
-  (check "exhausted first draw restores full P2/cache/RNG and no anchors"
-         (and (= (composer-after-abort native 2) 0)
-              (null? (vector-ref g3c4-p2g2-protected-records 0))
-              (null? (vector-ref g3c4-p2g2-prefix-input-anchors 0))
-              (null? (vector-ref g3c4-p2g2-terminal-anchors 0))
-              (null? (vector-ref g3c4-p2g2-terminal-originals 0))))
+  (check "exhausted draw publishes no new terminal history"
+         (and (eq? (vector-ref g3c4-p2g2-terminal-anchors 0) entry-terminals)
+              (eq? (vector-ref g3c4-p2g2-terminal-originals 0) entry-originals)))
+  (check "exhausted first draw restores full P2/cache/RNG"
+         (= (composer-after-abort native 2) 0))
+  (check "exhausted draw restores protected and prefix ledger identities"
+         (and (eq? (vector-ref g3c4-p2g2-protected-records 0) entry-protected)
+              (eq? (vector-ref g3c4-p2g2-prefix-input-anchors 0) entry-prefixes)))
   (check "exhausted generator closes" (g3c4-generator-close-internal! generator)))
 
 (define (fault-case mode cache-length)
@@ -282,7 +289,11 @@
            (g3c4-generator-create-internal
              model tokenizer (config 'greedy 7 #f)))
          (native (vector-ref
-                   (g3c4-generator-entry-call-ready generator 'test) 3)))
+                   (g3c4-generator-entry-call-ready generator 'test) 3))
+         (entry-terminals (vector-ref g3c4-p2g2-terminal-anchors 0))
+         (entry-originals (vector-ref g3c4-p2g2-terminal-originals 0))
+         (entry-protected (vector-ref g3c4-p2g2-protected-records 0))
+         (entry-prefixes (vector-ref g3c4-p2g2-prefix-input-anchors 0)))
     (check "capture independent rollback reference"
            (= (composer-mark native 0 255) 0))
     (check "arm one native pre-tail rejection"
@@ -290,13 +301,14 @@
     (reject "native rejection aborts same call without publication"
       (lambda () (g3c4-p2g2-terminal-generate-internal
                    generator prompt-a)))
+    (check "native rejection publishes no new terminal history"
+           (and (eq? (vector-ref g3c4-p2g2-terminal-anchors 0) entry-terminals)
+                (eq? (vector-ref g3c4-p2g2-terminal-originals 0) entry-originals)))
     (check "P2/P3 cache and original/first RNG survive abort"
            (= (composer-after-abort native cache-length) 0))
-    (check "all aborted anchors removed"
-           (and (null? (vector-ref g3c4-p2g2-protected-records 0))
-                (null? (vector-ref g3c4-p2g2-prefix-input-anchors 0))
-                (null? (vector-ref g3c4-p2g2-terminal-anchors 0))
-                (null? (vector-ref g3c4-p2g2-terminal-originals 0))))
+    (check "native rejection restores protected and prefix ledger identities"
+           (and (eq? (vector-ref g3c4-p2g2-protected-records 0) entry-protected)
+                (eq? (vector-ref g3c4-p2g2-prefix-input-anchors 0) entry-prefixes)))
     (check "generator closes after rollback"
            (g3c4-generator-close-internal! generator))))
 (fault-case 1 0)
