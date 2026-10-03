@@ -1607,6 +1607,16 @@ P1 retained-roster admission/revocation is the first separable implementation
 gate. This is documentation only; no sealed-graph revoke, candidate cleanup,
 public API or full replay acceptance is implemented.
 
+The isolated native P1 retained-roster candidate on
+`codex/g3r-p1-candidate-roster` adds feature-gated candidate construction
+begin, exact sealed roster retention on ordinary and prepared seal, native
+identity preflight/revocation and test-only roster census. Focused host
+normal/sanitizer tests and default-off object parity passed; independent
+source review and the pinned supported gate remain pending. This native
+leaf cannot authenticate the Eshkol candidate ledger, M3T parameter graph
+or live O2 witness; the candidate-aware I2/P1/M3T adapter and owner teardown
+remain dependent work.
+
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
 names would return newly owned authenticated CPU f32 `[1,256]` kind-3 shells,
