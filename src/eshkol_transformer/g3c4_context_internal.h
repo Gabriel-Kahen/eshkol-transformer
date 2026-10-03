@@ -209,6 +209,47 @@ int64_t et_g3c4_private_p2g2_first_frame_carrier_v1(
     void *context, void *input, void *staging_header, int64_t carrier_bytes);
 #endif
 
+#ifdef ET_G3C4_P2_G2_EOS_FIRST_FRAME_PRIVATE
+/* Same authenticated carrier and speculative first-frame contract, including
+ * genuinely sampled EOS. No prefix commit, terminal output or RNG publication.
+ * The caller still authenticates the bytevector identity and backing extent. */
+int64_t et_g3c4_private_p2g2_eos_first_frame_carrier_v1(
+    void *context, void *input, void *staging_header, int64_t carrier_bytes);
+#endif
+
+#ifdef ET_G3C4_P2_G2_SECOND_FRAME_PRIVATE
+/* Samples retained prefix logits, then stages one genuine position-three
+ * frame. Caller proves bytevector allocation/identity; no terminal result. */
+int64_t et_g3c4_private_p2g2_second_frame_carrier_v1(
+    void *context, void *pending_output,
+    void *staging_header, int64_t carrier_bytes);
+#endif
+
+#ifdef ET_G3C4_P2_G2_TERMINAL_PRIVATE
+/* Publishes exactly one EOS or two genuine sampled IDs, commits the matching
+ * A2 candidate, and drains the original active call in one closed native tail.
+ * The Eshkol caller authenticates bytevector identity and backing extent. */
+int64_t et_g3c4_private_p2g2_terminal_commit_v1(
+    void *context, void *pending_output,
+    const void *first_raw_header, int64_t first_raw_bytes,
+    const void *second_raw_header, int64_t second_raw_bytes);
+/* Copies eight little-endian i64 words from a detached terminal owner into a
+ * prevalidated 64-byte destination payload. */
+int64_t et_g3c4_private_p2g2_terminal_snapshot_v1(
+    void *published_output, void *destination_header,
+    int64_t destination_bytes);
+#endif
+
+#ifdef ET_G3C4_P2_G2_TERMINAL_IDS_CLONE_PRIVATE
+/* Source-private detached logical I1[1] or I1[2] owner. The caller proves
+ * Eshkol bytevector backing extent before passing a copy destination. */
+void *et_g3c4_private_p2g2_terminal_ids_clone_v1(void *terminal_output);
+int64_t et_g3c4_private_p2g2_terminal_ids_clone_copy_v1(
+    void *clone, int64_t expected_length,
+    void *destination_header, int64_t destination_bytes);
+int64_t et_g3c4_private_p2g2_terminal_ids_clone_release_v1(void *clone);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

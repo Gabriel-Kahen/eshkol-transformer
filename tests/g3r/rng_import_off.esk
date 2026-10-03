@@ -1,0 +1,12 @@
+(load "m3_package_root.esk")
+(load "m3_call_adapters.esk")
+(load "g3t_model_admission_extension.esk")
+(load "g3t_generator_constructor_extension.esk")
+(load "g3t_prefill_sample_extension.esk")
+(load "g3t_rng_owner_extension.esk")
+
+;;; The existing owner/release surface remains linkable. The import extension
+;;; and its guarded native symbol are intentionally absent in this aggregate.
+(if (not (procedure? g3t-generation-rng-release!)) (exit 1))
+(display "G3-R typed RNG import feature-off PASS: checks=1")
+(newline)

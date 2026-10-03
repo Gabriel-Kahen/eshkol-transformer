@@ -9,6 +9,9 @@ extern "C" {
 
 #define ET_C2_CHECKPOINT_LOAD_RESULT_BYTES INT64_C(192)
 #define ET_C2_CHECKPOINT_LOAD_RESULT_MAGIC UINT64_C(0x43324c4f41443130)
+#ifdef ET_G3R_C2_STAGE_SHA_PRIVATE
+#define ET_G3R_C2_STAGE_SHA_RESULT_BYTES INT64_C(224)
+#endif
 
 /*
  * Private K2-independent staging bridge. Every pointer addresses a pinned
@@ -36,9 +39,25 @@ int64_t et_c2_private_checkpoint_load_stage_v1(
     void *epoch_cursor, void *model_c1, void *optimizer_metadata,
     void *optimizer_payload, void *result);
 
+#ifdef ET_G3R_C2_STAGE_SHA_PRIVATE
+/* Exact 224-byte result: the existing 192-byte record followed by ordinary
+ * SHA-256 of the same authoritative retained second image. The Eshkol caller
+ * must prove actual backing extents for every header-declared span first. */
+int64_t et_c2_private_checkpoint_load_stage_with_sha_v1(
+    const void *path, int64_t maximum_file_bytes,
+    int64_t maximum_metadata_bytes, int64_t maximum_tensor_bytes,
+    int64_t maximum_tensors, int64_t enforce_operational_profile,
+    const void *measurement, void *tokenizer_fingerprint,
+    void *config_fingerprint, void *x1_canonical,
+    void *current_cursor, void *epoch_cursor, void *model_c1,
+    void *optimizer_metadata, void *optimizer_payload,
+    void *result_with_sha);
+#endif
+
 #ifdef ET_C2_CHECKPOINT_LOAD_TESTING
 void et_c2_checkpoint_load_test_reset_v1(void);
 void et_c2_checkpoint_load_test_fail_after_validate_v1(int64_t enabled);
+void et_c2_checkpoint_load_test_fail_after_release_v1(int64_t enabled);
 uint64_t et_c2_checkpoint_load_test_copy_count_v1(void);
 #endif
 

@@ -805,21 +805,22 @@ It stages an exact noninstalled tuple with generated P1/E3 test variants,
 preallocated in-call 17-mode observations and real M3 capture/enrollment/
 release counts. Its preacquire graph mutant uses the same model's authentic
 workspace and input inside the existing E3 call guard. Source regeneration,
-tuple isolation and parser negatives are local checks. Complete mode/graph
-normal, poison, sanitizer, fresh-build, failure/retry and mutation gates remain
-pending; the emitted test inventory is not yet supported-verified. No §9 mode
-or graph acceptance is claimed. The candidate also composes the reviewed
+tuple isolation and parser negatives were local checks at this stage. Complete
+mode/graph normal, poison, sanitizer, fresh-build, failure/retry and mutation
+gates were then pending; the emitted test inventory was not yet
+supported-verified. No §9 mode or graph acceptance followed from source
+review alone. The candidate also composes the reviewed
 sanitizer-only COMMON materialization fix; its local Clang/binutils regression
-passes, while supported mode/graph sanitizer execution remains pending. The
+passes; supported mode/graph sanitizer execution was then pending. The
 test package wrapper now retains failed staged manifests and exact signal/
-failure status under mounted evidence; this does not establish compiled
+failure status under mounted evidence; this did not establish compiled
 behavior.
-The unrun e085 mode/graph gate also needs a private generated-source staging
+The then-unrun e085 mode/graph gate also needed a private generated-source staging
 repair: independently built objects would embed different random D2 source
 filenames in runtime strings before the exact bytewise comparison. The bounded
 candidate uses a fresh gate-owned path shared across sequential builds and
 keeps the original object/archive equality check. Source review and a fresh
-supported gate remain required.
+supported gate were still required at that stage.
 
 The af348 mode/graph sanitizer diagnostic and the subsequent 0c full gate
 are retained failed admissions, not runtime passes. The 0c normal object
@@ -840,19 +841,19 @@ normal, it adds `bcmp` and `puts` and removes five imports. The own mode/graph
 manifests and count policy are repinned to those exact emitted sets. Both
 diagnostic builds stopped at their old import manifests before package or
 runtime execution. Independent source review and a fresh supported normal,
-poison, sanitizer, and mutant runtime gate remain required. Its exact
+poison, sanitizer, and mutant runtime gate were then required. Its exact
 noninstalled package now retains `private.ll` on successful admission too, so
 the fresh diagnostic can inspect recursive-loop IR in either build outcome. No mode/graph
-acceptance is claimed. The 159-file failed full gate is sealed at
+acceptance followed from that diagnostic. The 159-file failed full gate is sealed at
 `e3-mode-graph-0c86bc3-fe9-f31-20261002-prepared-d/SHA256SUMS-FAILED`
 (`8c4d1f0f6b1a3a47c7c336c355298b9852d98849880ac3bb9e2cf09f4fb47ff3`).
 The later `27fb728` full gate completed its canonical and six mode/graph
 package builds, then stopped at the first runtime-driver compile: strict
 `--no-stdlib` Eshkol does not resolve the driver's `length` and `list-ref`
 calls. The driver now checks exactly three command-line entries with supported
-pair access and retains the two input arguments. This repair has host source
-checks only; a fresh supported compiled runtime, sanitizer and mutant gate is
-still required.
+pair access and retains the two input arguments. That repair had host source
+checks only; a fresh supported compiled runtime, sanitizer and mutant gate was
+still required at that point.
 That fresh gate has now passed on exact `d2b47a8`/tree `539a09ce` with
 fe9/f31 pins: canonical and six closed mode/graph packages, 175 normal and
 223 sanitizer imports, byte-identical fresh A/B objects, archives, depfiles
@@ -869,6 +870,21 @@ not the remaining E3 §9 numerical, failure, resource or public-path gates.
 The earlier 104-file sanitizer diagnostic remains preserved at
 `e3-mode-graph-sanitized-diagnostic-af3489d-fe9-f31-20261002-prepared-c/SHA256SUMS-DIAGNOSTIC`
 (`1d1195d630657e172b5bfc47a098d729070a3565f237a3bd5d5b5f4a82e17124`).
+
+The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
+is a docs-only candidate for the remaining private numerical, compiled-mutant,
+failure and rollback gates. It tracks authentic D2/model reachability separately
+from direct-provider-only cases and names the missing noninstalled model-control
+and stage-selective fault/observer seams for review. It provides no new runtime
+proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
+verdicts remain prerequisites before the full matrix is implemented and run.
+
+The [E3 idle real-model control contract](e3/E3_IDLE_REAL_MODEL_CONTROL_CONTRACT.md)
+specifies a test-only use of existing I2 checkpoint decode and whole-batch load
+for all 14 authentic M3 parameter owners before frame binding. It preserves the
+current two-field private scenario, the single tied head/token-embedding owner,
+and immediate commit after successful prepare. Integration and compiled proof
+remain pending; this contract does not discharge any §9 numerical or rollback row.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
@@ -1096,6 +1112,62 @@ zero and pre/post pins matched. The 134-file evidence seal is
 (SHA-256 `54068de810fd834b7076c887172a0ed364d3d4986c2e5741ece41264c3636822`).
 Independent sealed-evidence review accepted this result. PR #178 merged as
 `637ec924`. Second-token, terminal/EOS, public and CLI work remain separate.
+
+The [private retained-logit second-frame carrier](g3/G3_C4_P2_G2_SECOND_FRAME_CARRIER_CONTRACT.md)
+is independently source/test approved at `4851e17`/tree `d63ad549`.
+It authenticates the committed non-EOS P2/G2 prefix and sole unused pending
+output, draws directly from retained next logits, stages the genuine
+position-three forward and writes only the selected ID carrier. The original
+raw last-logit entry still rejects post-prefix calls. Its exact pinned fe9/f31
+Clang 21 gate passed normal/repeat/ASan+UBSan+LSan with 2,965 checks per mode
+and byte-identical output, T4 logits/K/V parity, and an independent eight-row
+second-draw G3-S/Philox oracle including carry/final/singleton. Lease, alias,
+forward-cut, exhaustion, predecessor and private feature-boundary checks pass.
+Independent evidence review accepted all 106 files in
+`g3c4-p2g2-second-frame-4851e17-fe9-f31-20261002-prepared-b/SHA256SUMS-RUN`
+(SHA-256 `6b2c96a4d4b6cc79881d73d9ce9ff4c4ad9a809e27e78e8fa64aa0d9cfb50a5e`).
+Hosted exact-head checks passed 23/23 and PR #180 merged at `4b7e7c23`.
+It publishes no terminal result, Eshkol T1 decode, public admission or persistence.
+
+The [private EOS-capable first-frame carrier candidate](g3/G3_C4_P2_G2_EOS_FIRST_FRAME_LEAF.md)
+adds a guarded genuine first sample/forward route for selected EOS, using
+the accepted header/extent/alias and pending-owner carrier contract. It keeps
+the original carrier's EOS rejection and leaves EOS in an unpublished READY
+frame for a future terminal commit. Exact reviewed source `a9c0e2c`/tree
+`4b078fab` passed its pinned fe9/f31 Clang 21 normal/repeat/ASan+UBSan+LSan
+gate, each 2,051 pending-only checks with identical stdout and empty stderr.
+Both independent two-mode Philox/P3 oracle pairs, predecessor gates and
+private symbol/macro/feature-off preprocessor boundaries passed. The 77-file
+seal `g3c4-p2g2-eos-first-frame-a9c0e2c-fe9-f31-20261002-prepared-a/SHA256SUMS-RUN`
+(`1287d2a520ed7de09c61f87b69b77a1ae13736ef9b737ff4ae924b64ab6e3b2d`)
+was independently accepted. Hosted CI/integration remain pending; no EOS
+termination, logical-G1 publication, second token or public G2 claim follows.
+
+The [private native P2/G2 terminal](g3/G3_C4_P2_G2_NATIVE_TERMINAL_CONTRACT.md)
+commits one genuine first EOS or two genuine sampled IDs with a guarded A2
+transaction/cache ownership witness, logical length one or two, final RNG and
+detached snapshot. It retains physical output capacity two and a distinct
+terminal owner marker; P2/G1 publication remains disjoint. Independently
+reviewed `aae70bb`/tree `01d1e855` passed the pinned fe9/f31 Clang 21 native
+normal/repeat/ASan+UBSan+LSan gate (4,036 checks each), 17-row independent
+second-draw oracle, P2/G1 coexistence (263 checks), prefix/EOS/second-frame
+predecessors (301/2,051/2,965 checks), and private feature/symbol boundaries.
+Docker/launcher exits and pre/post pins passed. The independently accepted
+62-file seal is `g3c4-p2g2-terminal-aae70bb-fe9-f31-20261002-prepared-a/SHA256SUMS-RUN`
+(`2e6a74108fa55d4f440661b0322317e9374c3daf0dad6a25da3059700f817d6f`).
+Hosted CI and merge remain pending. This is native-private only;
+T1-authenticated Eshkol text/result composition, public G2 and continuation
+remain downstream.
+
+PR #184's first hosted M3, M3T and G3-S jobs stopped at stale bytewise A2
+predecessor pins after the reviewed private terminal witness changed the A2
+header and source. The five affected A2 entries and G3-N's dependent N3K
+manifest pin now track those exact bytes. The O2 hook acceptance test also
+repins its include-tree digest for the same private feature-gated A2 header
+addition; its public facade and O2 source remain unchanged. A byte-tokenizer
+job lost runner communication without a retained test failure; fresh hosted
+CI must resolve that infrastructure result. Hosted rerun and broader PR
+acceptance remain pending.
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
@@ -1583,6 +1655,85 @@ M3T restore; neither supplies a typed G3 RNG file import or a G3-R replay/
 publication transaction. Full G3-R still requires a separately admitted larger
 repeated-decode and later-EOS continuation profile. No persistence implementation
 or save/reload equivalence is claimed.
+
+The [private G3-R fixed-record codec leaf](g3/G3_R_RECORD_CODEC_LEAF.md)
+stages an in-memory 288-byte encoder/decoder using the existing C1 SHA-256.
+It validates the exact policy, G3-S words, history/EOS partition, T1
+fingerprint syntax, C2 digest binding and canonical record checksum before
+changing caller destinations. The fixture includes independent Python SHA/
+layout vectors and malformed/feature-off negatives. The independently
+accepted `a7c8a384` / tree `9c54e5e5` supported fe9/f31 gate passed on
+2026-10-02 10:38:00–10:38:07 UTC: feature-off 2 and feature-on 49 checks
+matched across normal, repeat and ASan+UBSan+LSan, with empty compile and
+runtime stderr. Five SHA/layout vectors matched the independent oracle.
+The 44-file run is sealed at
+`g3r-record-codec-a7c8a38-fe9-f31-20261002-prepared-c/SHA256SUMS-RUN`
+(`f865823a22ce457964585a2f1b5cf1e0119c0ac38a51171bca256fd5819b587a`).
+The digest is an authenticated C2-image precondition; this leaf does not
+perform C2 I/O, live-owner reconstruction, cache replay or continuation.
+
+The proposed [G3-R typed RNG import contract](g3/G3_R_TYPED_RNG_IMPORT_CONTRACT.md)
+defines a source-private G3-T kind-8 owner constructor for four exact signed
+G3-S words, preserving carry and exhaustion without a seed reset. It records
+the existing same-registry `:rng` consumer, pending ledger cleanup, and the
+authenticated G3RCV1/C2 pair prerequisite. A source-private
+[typed import candidate](g3/G3_R_TYPED_RNG_IMPORT_LEAF.md) now adds the guarded
+kind-8 word constructor and closed G3-T wrapper, with native/Eshkol off/on and
+independent G3-S oracle fixtures. The independently accepted `8ebed705` /
+tree `4217a5e8` supported fe9/f31 gate ran 2026-10-02 10:57:10–11:01:28
+UTC with launcher/Docker exits 0 and both pin checks PASS. Feature-off 1,
+native C and normal/sanitizer 101 checks passed; normal and sanitizer output
+matched, the gate's repeat comparison passed, and compile/runtime stderr were
+empty. Three actual imported runs matched the G3-S/Philox oracle and published
+clone successors. Repeat logs were not separately retained. Its 29-file seal
+is `g3r-rng-import-8ebed70-fe9-f31-20261002-prepared-a/SHA256SUMS-RUN`
+(`90c52bf074c7cea0c9ec3004aae08ee331c0de0d05e78c203e72a6482d1e0fbf`).
+The separate record codec has also passed its supported gate. This scalar
+private kind-8 import does not authenticate a record, restore C2/model/cache/
+tokenizer state, replay draws or prove continuation.
+
+The proposed [G3-R restore prerequisites contract](g3/G3_R_RESTORE_PREREQUISITES_CONTRACT.md)
+specifies two missing private source witnesses before pair admission: an
+ordinary whole-image SHA-256 from the *same authoritative second C2 LOAD
+stage* that reconstructs the detached owner, and an authenticated idle G3-T
+generator four-word equality predicate to prove manual replay consumes no
+G3-S draw. It also bounds the fixed diagnostic-C2 candidate recipe to
+external X1/T1/D2 inputs authenticated against loaded C2 controls before
+TR3 restore, with candidate-only cleanup and no public LOAD or generation ABI
+change. The C2 native SHA candidate adds a guarded 224-byte private stage
+result while retaining the public 192-byte result. Exact source `84113e1f`
+passed the pinned fe9/f31 Clang 21 native gate: normal and repeat report 563
+checks with byte-identical output and empty stderr; each invocation includes
+Clang/GCC/ASan+UBSan parity, an independent whole-image SHA oracle, and the
+existing 1,163-check bridge with the feature enabled and disabled. Launcher,
+Docker and both runs exited zero; pre/post source/toolchain pins passed.
+Independent evidence review accepted the 23-file seal
+`g3r-c2-stage-sha-84113-fe9-f31-20261003-prepared-b/SHA256SUMS-RUN`
+(SHA-256 `c8ea09325ed743655053f7aa329660d5d20b85e51dc3d26d3482adda5f222124`).
+Hosted integration remains pending. This is native-only: Eshkol backing-extent
+admission and owning SHA receipt, G3-T predicate, pair loader, live replay,
+save writer and resumed continuation remain separate gates.
+
+The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
+bounds a private, feature-gated pre-replay teardown for an unpublished
+diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use
+construction abort, O2 has no live optimizer retire, and TR3 unenrollment
+does not free native model or optimizer payloads. The contract requires
+complete identity/lease/provider preflight, optimizer-before-model retirement,
+sealed P1/I2 graph revocation, and separate accounting for reclaimed native
+payload and retained identity tombstones. It is documentation only: no
+implementation, supported release gate, full replay rollback or public API is
+accepted. G3-T live-generator retirement remains a separate prerequisite for
+replay failure cleanup.
+
+The proposed [G3-R P1/I2 sealed-graph retirement producer contract](g3/G3_R_P1_I2_SEALED_GRAPH_RETIREMENT_CONTRACT.md)
+pins the candidate-aware preseal M3T/I2/P1 handshake and a retained exact
+native P1 token roster. Graph preflight admits the candidate's exact live O2
+optimizer with its retirement witness; graph commit requires that same O2
+tombstone before revoking P1/I2 authority and later M3T f32 payloads. Native
+P1 retained-roster admission/revocation is the first separable implementation
+gate. This is documentation only; no sealed-graph revoke, candidate cleanup,
+public API or full replay acceptance is implemented.
 
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
@@ -2436,6 +2587,33 @@ sanitizers, publication and deterministic rebuilds. The evidence seal is
 (`3d7b3224...`). The separate 128/256-cycle samples show faster native
 lookup but no overall speed or memory improvement claim; 8,192 cycles
 remain unproven.
+
+The [private terminal logical I1 clone contract](g3/G3_C4_P2_G2_LOGICAL_I1_CLONE_CONTRACT.md)
+is independently reviewed for an exact logical `[1]` or `[2]` detached owner,
+with copied readback and borrow-aware release. The same-registry Eshkol
+adapter must still prove the original bytevector backing extent. A scoped
+native implementation candidate adds
+three feature-gated private clone/copy/release entries and host development
+normal, repeat and sanitizer tests for first-EOS `[1]` and two-ID `[2]`
+owners, release independence, leases, aliases and failure cleanup. Its
+exact source/tests `4a21e6ca`/tree `de3178a3` are independently reviewed.
+The pinned fe9/f31 Clang 21 gate passes 398 clone checks per normal, repeat
+and ASan/UBSan/LSan run with identical stdout and empty stderr, plus 265
+coexistence checks and the terminal predecessor/oracle gates. Independent
+evidence review accepted all 90 files in
+`g3c4-p2g2-terminal-ids-clone-4a21e6c-fe9-f31-20261002-prepared-a/SHA256SUMS-RUN`
+(SHA-256 `378ac9b4ac4d50d7ed7dd648679b21e2b3ddcf57acbdc8acbfd6bf4c99ec58ed`).
+Hosted CI and upstream merge remain pending. The native terminal dependency
+is reviewed and gated in PR #184; final integration requires its merge gates. Eshkol terminal
+publication, public G2 and continuation remain pending.
+
+- **Private Eshkol P2/G2 terminal close contract:**
+  [accepted same-call ownership contract](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md)
+  specifies one original pending output entry, a surviving terminal anchor,
+  authentic T1/EOS/second-token composition, and a preflighted no-failure close
+  after native commit. Native terminal integration and logical I1 clone code
+  are prerequisites; Eshkol implementation and compiled same-call proof remain
+  pending. No public G2 or continuation acceptance is claimed.
 
 ## Wave 4 — practical pretraining and performance
 

@@ -7,6 +7,10 @@
 #include <stdint.h>
 #include <string.h>
 
+#ifdef ET_G3R_C2_STAGE_SHA_PRIVATE
+#include "c2_checkpoint_load_sha.inc"
+#endif
+
 #define C2_PATH_MAX ((size_t)4096u)
 #define C2_CONFIG_FINGERPRINT_BYTES ((size_t)93u)
 
@@ -19,15 +23,21 @@ typedef struct c2_span {
 
 #ifdef ET_C2_CHECKPOINT_LOAD_TESTING
 static int c2_fail_after_validate;
+static int c2_fail_after_release;
 static uint64_t c2_copy_count;
 
 void et_c2_checkpoint_load_test_reset_v1(void) {
   c2_fail_after_validate = 0;
+  c2_fail_after_release = 0;
   c2_copy_count = 0u;
 }
 
 void et_c2_checkpoint_load_test_fail_after_validate_v1(int64_t enabled) {
   c2_fail_after_validate = enabled != 0;
+}
+
+void et_c2_checkpoint_load_test_fail_after_release_v1(int64_t enabled) {
+  c2_fail_after_release = enabled != 0;
 }
 
 uint64_t et_c2_checkpoint_load_test_copy_count_v1(void) {
@@ -141,15 +151,14 @@ static int prepare_call(const void *path_opaque, int64_t maximum_file_bytes,
                         int64_t maximum_metadata_bytes,
                         int64_t maximum_tensor_bytes, int64_t maximum_tensors,
                         int64_t enforce_operational_profile, void *result_opaque,
+                        size_t result_bytes,
                         c2_span *path_span, c2_span *result_span,
                         char path[C2_PATH_MAX + 1u],
                         et_c2_checkpoint_limits_v1 *limits) {
   if (!const_span_from_bytevector(path_opaque, C2_PATH_MAX, path_span) ||
       path_span->length == 0u ||
       memchr(path_span->bytes, 0, path_span->length) != NULL ||
-      !span_from_bytevector(result_opaque,
-                            (size_t)ET_C2_CHECKPOINT_LOAD_RESULT_BYTES,
-                            (size_t)ET_C2_CHECKPOINT_LOAD_RESULT_BYTES,
+      !span_from_bytevector(result_opaque, result_bytes, result_bytes,
                             result_span) ||
       overlaps(path_span, result_span) ||
       !valid_limits(maximum_file_bytes, maximum_metadata_bytes,
@@ -196,7 +205,8 @@ int64_t et_c2_private_checkpoint_load_measure_v1(
   init_error(&error);
   if (!prepare_call(path_opaque, maximum_file_bytes, maximum_metadata_bytes,
                     maximum_tensor_bytes, maximum_tensors,
-                    enforce_operational_profile, result_opaque, &path_span,
+                    enforce_operational_profile, result_opaque,
+                    (size_t)ET_C2_CHECKPOINT_LOAD_RESULT_BYTES, &path_span,
                     &result_span, path, &limits))
     return ET_C2_CORE_INVALID_ARGUMENT;
   memset(result_span.bytes, 0, result_span.length);
@@ -213,7 +223,7 @@ int64_t et_c2_private_checkpoint_load_measure_v1(
   return status;
 }
 
-int64_t et_c2_private_checkpoint_load_stage_v1(
+static int64_t c2_stage_impl(
     const void *path_opaque, int64_t maximum_file_bytes,
     int64_t maximum_metadata_bytes, int64_t maximum_tensor_bytes,
     int64_t maximum_tensors, int64_t enforce_operational_profile,
@@ -221,7 +231,7 @@ int64_t et_c2_private_checkpoint_load_stage_v1(
     void *config_opaque, void *x1_opaque,
     void *current_opaque, void *epoch_opaque, void *model_opaque,
     void *optimizer_metadata_opaque, void *optimizer_payload_opaque,
-    void *result_opaque) {
+    void *result_opaque, size_t result_bytes) {
   c2_span path_span, result_span, measurement_span, outputs[8];
   char path[C2_PATH_MAX + 1u];
   et_c2_checkpoint_limits_v1 limits;
@@ -240,7 +250,8 @@ int64_t et_c2_private_checkpoint_load_stage_v1(
   init_error(&error);
   if (!prepare_call(path_opaque, maximum_file_bytes, maximum_metadata_bytes,
                     maximum_tensor_bytes, maximum_tensors,
-                    enforce_operational_profile, result_opaque, &path_span,
+                    enforce_operational_profile, result_opaque, result_bytes,
+                    &path_span,
                     &result_span, path, &limits))
     return ET_C2_CORE_INVALID_ARGUMENT;
   if (!const_span_from_bytevector(
@@ -326,6 +337,24 @@ int64_t et_c2_private_checkpoint_load_stage_v1(
   }
 #endif
   if (status == ET_C2_CORE_OK) {
+#ifdef ET_G3R_C2_STAGE_SHA_PRIVATE
+    if (result_bytes == (size_t)ET_G3R_C2_STAGE_SHA_RESULT_BYTES) {
+      c2_stage_sha_state sha;
+      if (view->file_bytes > (uint64_t)SIZE_MAX) {
+        status = ET_C2_CORE_INTERNAL;
+        error.category = ET_C2_CORE_INTERNAL;
+        error.code = ET_C2_CORE_CODE_INVALID_IMAGE;
+      } else {
+        c2_stage_sha_init(&sha);
+        c2_stage_sha_update(&sha, view->bytes, (size_t)view->file_bytes);
+        c2_stage_sha_final(&sha,
+                           result_span.bytes +
+                               (size_t)ET_C2_CHECKPOINT_LOAD_RESULT_BYTES);
+      }
+    }
+#endif
+  }
+  if (status == ET_C2_CORE_OK) {
     for (i = 0u; i < 8u; ++i) {
       if (exact[i] != 0u) memcpy(outputs[i].bytes, source[i], exact[i]);
 #ifdef ET_C2_CHECKPOINT_LOAD_TESTING
@@ -337,7 +366,55 @@ int64_t et_c2_private_checkpoint_load_stage_v1(
   if (image != NULL) {
     int32_t release_status = release_image(&image, &error);
     if (release_status != ET_C2_CORE_OK) status = release_status;
+#ifdef ET_C2_CHECKPOINT_LOAD_TESTING
+    if (c2_fail_after_release && release_status == ET_C2_CORE_OK) {
+      status = ET_C2_CORE_INTERNAL;
+      error.category = ET_C2_CORE_INTERNAL;
+      error.code = ET_C2_CORE_CODE_INVALID_IMAGE;
+    }
+#endif
   }
-  if (status != ET_C2_CORE_OK) publish_failure(result_span.bytes, &error);
+  if (status != ET_C2_CORE_OK) {
+    publish_failure(result_span.bytes, &error);
+#ifdef ET_G3R_C2_STAGE_SHA_PRIVATE
+    if (result_bytes == (size_t)ET_G3R_C2_STAGE_SHA_RESULT_BYTES)
+      memset(result_span.bytes + (size_t)ET_C2_CHECKPOINT_LOAD_RESULT_BYTES,
+             0, 32u);
+#endif
+  }
   return status;
 }
+
+int64_t et_c2_private_checkpoint_load_stage_v1(
+    const void *path, int64_t maximum_file_bytes,
+    int64_t maximum_metadata_bytes, int64_t maximum_tensor_bytes,
+    int64_t maximum_tensors, int64_t enforce_operational_profile,
+    const void *measurement, void *tokenizer_fingerprint,
+    void *config_fingerprint, void *x1_canonical,
+    void *current_cursor, void *epoch_cursor, void *model_c1,
+    void *optimizer_metadata, void *optimizer_payload, void *result) {
+  return c2_stage_impl(
+      path, maximum_file_bytes, maximum_metadata_bytes, maximum_tensor_bytes,
+      maximum_tensors, enforce_operational_profile, measurement,
+      tokenizer_fingerprint, config_fingerprint, x1_canonical, current_cursor,
+      epoch_cursor, model_c1, optimizer_metadata, optimizer_payload, result,
+      (size_t)ET_C2_CHECKPOINT_LOAD_RESULT_BYTES);
+}
+
+#ifdef ET_G3R_C2_STAGE_SHA_PRIVATE
+int64_t et_c2_private_checkpoint_load_stage_with_sha_v1(
+    const void *path, int64_t maximum_file_bytes,
+    int64_t maximum_metadata_bytes, int64_t maximum_tensor_bytes,
+    int64_t maximum_tensors, int64_t enforce_operational_profile,
+    const void *measurement, void *tokenizer_fingerprint,
+    void *config_fingerprint, void *x1_canonical,
+    void *current_cursor, void *epoch_cursor, void *model_c1,
+    void *optimizer_metadata, void *optimizer_payload, void *result_with_sha) {
+  return c2_stage_impl(
+      path, maximum_file_bytes, maximum_metadata_bytes, maximum_tensor_bytes,
+      maximum_tensors, enforce_operational_profile, measurement,
+      tokenizer_fingerprint, config_fingerprint, x1_canonical, current_cursor,
+      epoch_cursor, model_c1, optimizer_metadata, optimizer_payload,
+      result_with_sha, (size_t)ET_G3R_C2_STAGE_SHA_RESULT_BYTES);
+}
+#endif

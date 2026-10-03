@@ -26,6 +26,10 @@ def check():
         cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
     source = (ROOT / "src/eshkol_transformer/g3c4_model_owner.c").read_text()
     header = (ROOT / "src/eshkol_transformer/g3c4_context_internal.h").read_text()
+    if "ET_G3C4_P2_G2_SECOND_FRAME_PRIVATE" in source:
+        import runpy
+        strip = runpy.run_path(str(ROOT / "scripts/check-g3c4-p2g2-second-frame.py"))["strip_second_frame"]
+        source, header = strip(source), strip(header)
     test = (ROOT / "tests/g3c4/test_last_logit_frame.c").read_text()
     contract = (ROOT / "docs/g3/G3_C4_LAST_LOGIT_FRAME_STEP13A_CONTRACT.md").read_text()
     runner = (ROOT / "scripts/test-g3c4-last-logit-frame.sh").read_text()
