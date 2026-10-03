@@ -745,11 +745,23 @@ Enter-write-only exited 134 before success. Its 405-file supported seal is
 `e3-mode-graph-d2b47a8-fe9-f31-20261003-prepared-i/SHA256SUMS-RUN`
 (`60dfa849257d0cf1b5160aa0ac3ea2407e29fce8ef3b664a57f3a62ad5d9ec16`).
 The shell's expected abort diagnostic appears in Docker stderr; ordinary
-compiled case stderr is empty. This scoped main integration changes the exact
-source tree and therefore requires its own full supported gate before a
-merged-head claim. Retention, numerical, other §9 and public-path acceptance
-remain pending; the separate retention and numerical test candidates are not
-included in this scoped branch.
+compiled case stderr is empty. The separately scoped `3db0f94`/tree
+`cab4d7ec` candidate on main `90f3c420` passed its own full fe9/f31 gate:
+canonical and six closed packages, exact 175 normal and 223 sanitizer imports,
+byte-identical fresh objects and runtimes, and 12 compiled absent/present
+gradient cases across normal A/B, poisoned, sanitizer, missed-child and
+graph-create variants. The actual 17-mode observer and M3 graph event counts
+survived success, later D2 failure and same-authority retry; both compiled
+mutants died at their specific in-call assertions, and enter-write-only exited
+134 before success. All 405 files verify under
+`e3-mode-graph-scoped-3db0f94-fe9-f31-20261003-prepared-j/SHA256SUMS-RUN`
+(`b6550c62aa9e1c39e426a5e5819383710692f58fba88b3666d226734f6870a10`).
+The expected abort diagnostic appears in Docker stderr; ordinary/sanitized
+compile and runtime stderr is empty. Its current-main `5520dfe` union changes
+only unrelated G3 RNG code/tests and documentation outside the seven package
+source/native closures and depfiles; hosted CI and merge remain pending.
+Retention, numerical, other §9 and public-path acceptance remain pending; the
+separate retention and numerical test candidates are not included here.
 
 The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
 is a docs-only candidate for the remaining private numerical, compiled-mutant,
