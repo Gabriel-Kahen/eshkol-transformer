@@ -2408,3 +2408,8 @@ public G2 and continuation remain pending.
 - Review and integrate in dependency order; rerun affected downstream gates.
 - Treat Eshkol-core defects as explicit upstream issues or isolated native-extension
   work, never as silent library fallbacks.
+
+The exact I2 post-prepare guard test tuple now retains its emitted private IR
+on successful package publication as well as failed compiler diagnostics. The
+existing length-1/3 private zero admission scopes this evidence copy; no import
+policy or other tuple changes. Supported compilation and runtime remain pending.

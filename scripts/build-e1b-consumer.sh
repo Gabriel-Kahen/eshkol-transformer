@@ -2144,6 +2144,7 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
   cp "${e3_generated_source_root}/e3_d2_source_provenance.json" \
     "${evidence_dir}.tmp.$$/e3_d2_source_provenance.json"
   if [[ -n "${e3_i2_guard_length}" ]]; then
+    cp "${e1b_tmp}/private.ll" "${evidence_dir}.tmp.$$/private.ll"
     cp "${e1b_tmp}/private.o" "${evidence_dir}.tmp.$$/private.prelink.o"
     cp "${e1b_tmp}/combined.raw.o" "${evidence_dir}.tmp.$$/combined.raw.o"
     printf 'target_vector_length\t%s\n' "${e3_i2_guard_length}" \
