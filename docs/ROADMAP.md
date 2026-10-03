@@ -1550,8 +1550,12 @@ change. The C2 native SHA candidate adds a guarded 224-byte private stage
 result while retaining the public 192-byte result. Its focused host gate passes
 563 checks under Clang, GCC and ASan/UBSan, and the existing 1,163-check bridge
 test matches with the feature enabled and disabled. The Eshkol backing-extent
-admission and owning SHA receipt, G3-T predicate, pair loader, live replay,
-save writer and resumed continuation remain separate gates.
+admission is source-staged as a feature-local private C2 root: fresh anchored
+bytevectors feed the 224-byte native stage, and its copied SHA is registered
+only with the exact staging shell. Host topology, closed-feature and Q0 checks
+pass; the private Eshkol compile/runtime gate has not run. Reconstruction,
+the owning SHA receipt, G3-T predicate, pair loader, live replay, save writer
+and resumed continuation remain separate gates.
 
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual

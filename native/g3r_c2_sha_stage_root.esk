@@ -1,0 +1,11 @@
+;;; Feature-local owning C2 SHA staging root. Never install or substitute for
+;;; the canonical C2 public aggregate.
+(load "d2_wave2_root.esk")
+(load "c2_d2_cursor_pair_extension.esk")
+(load "o2_wave2_extension.esk")
+(load "c2_o2_reconstruct_extension.esk")
+(load "c2_x1_canonical_extension.esk")
+(load "c2_training_state_extension.esk")
+(load "c2_persistence_policy_extension.esk")
+(load "c2_checkpoint_load_extension.esk")
+(load "g3r_c2_sha_stage_extension.esk")
