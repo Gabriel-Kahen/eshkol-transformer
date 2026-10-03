@@ -1586,6 +1586,18 @@ Hosted integration remains pending. This is native-only: Eshkol backing-extent
 admission and owning SHA receipt, G3-T predicate, pair loader, live replay,
 save writer and resumed continuation remain separate gates.
 
+The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
+bounds a private, feature-gated pre-replay teardown for an unpublished
+diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use
+construction abort, O2 has no live optimizer retire, and TR3 unenrollment
+does not free native model or optimizer payloads. The contract requires
+complete identity/lease/provider preflight, optimizer-before-model retirement,
+sealed P1/I2 graph revocation, and separate accounting for reclaimed native
+payload and retained identity tombstones. It is documentation only: no
+implementation, supported release gate, full replay rollback or public API is
+accepted. G3-T live-generator retirement remains a separate prerequisite for
+replay failure cleanup.
+
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
 names would return newly owned authenticated CPU f32 `[1,256]` kind-3 shells,
