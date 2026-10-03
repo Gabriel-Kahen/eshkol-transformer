@@ -1582,6 +1582,23 @@ Feature-off symbols, compiled runtime, repeat and sanitizer evidence remain
 pending independent review and a fresh supported gate. The separate C2
 same-stage SHA prerequisite remains unimplemented.
 
+The private idle G3-T RNG equality predicate at exact source `daca071d`
+passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
+checks the authentic idle generator's four RNG words without allocation,
+borrowing, sampling or mutation; a genuine completed manual commit may keep
+its committed cache/binding and detached logits. Feature-off passed one
+compiled check; normal and ASan+UBSan+LSan each passed 183 Eshkol checks with
+byte-identical output and empty compiler/runtime stderr. Native typed import,
+three actual G3-S/Philox reference runs and Q0/static checks passed. The runner
+executed and compared a repeat, but its separate stdout was not retained.
+Launcher/Docker exits and pre/post pins passed. Independent evidence review
+accepted the 30-file seal
+`g3r-g3t-idle-rng-equal-daca071-fe9-f31-20261003-prepared-a/SHA256SUMS-RUN`
+(`7958a230f3ef2a4f86a0c12477dada4e0ccb040d55f11eb6ed42158239ab16a6`).
+Hosted integration is pending. This private predicate does not authenticate a
+C2 SHA receipt or pair, reconstruct a candidate, replay history, or prove
+resumed generation.
+
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
 names would return newly owned authenticated CPU f32 `[1,256]` kind-3 shells,
