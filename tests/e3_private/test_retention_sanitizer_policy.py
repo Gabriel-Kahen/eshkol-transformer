@@ -53,6 +53,37 @@ class RetentionSanitizerPolicyTests(unittest.TestCase):
             with self.subTest(mutation=mutation):
                 self.assertNotEqual(self.run_policy(0, mutation).returncode, 0)
 
+    def test_verified_split_inventories_reach_published_evidence(self):
+        builder = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
+        start = builder.index('if [[ "${e3_retention_sanitizer_inventory_verified}" == 1 ]]; then')
+        end = builder.index('if [[ -n "${package_source_closure}" ]]; then', start)
+        publication = builder[start:end]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            scratch = root / "scratch"
+            scratch.mkdir()
+            expected = {}
+            for target, suffix in (
+                ("noninstrumentation-undefined.txt", "sanitized_noninstrumentation_undefined_symbols"),
+                ("sanitizer-undefined.txt", "sanitized_instrumentation_undefined_symbols"),
+            ):
+                expected[target] = Path(str(PREFIX) + "_" + suffix + ".txt").read_bytes()
+                (scratch / target).write_bytes(expected[target])
+            for verified in ("1", "0"):
+                evidence = root / ("evidence" + verified)
+                result = subprocess.run(
+                    ["bash", "-c", 'set -euo pipefail; e1b_tmp=$1; evidence_dir=$2; '
+                     'e3_retention_sanitizer_inventory_verified=$3; '
+                     'mkdir "${evidence_dir}.tmp.$$"; ' + publication +
+                     'mv "${evidence_dir}.tmp.$$" "$evidence_dir"',
+                     "publication", str(scratch), str(evidence), verified], capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stderr.decode())
+                if verified == "1":
+                    for name, contents in expected.items():
+                        self.assertEqual((evidence / name).read_bytes(), contents)
+                else:
+                    self.assertEqual(list(evidence.iterdir()), [])
+
     def test_only_sanitized_retention_branch_admits_delta(self):
         builder = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
         sanitized = builder.split('if [[ "${e3_private_test_sanitize}" == 1 ]]; then')[-1]

@@ -1857,6 +1857,7 @@ cmp -s "${e1b_tmp}/expected-global-defined.txt" \
 
 nm -u --format=posix "${e1b_tmp}/combined.o" | awk '{ print $1 }' | \
   LC_ALL=C sort -u >"${e1b_tmp}/undefined.txt"
+e3_retention_sanitizer_inventory_verified=0
 if [[ "${e3_private_test_sanitize}" == 1 ]]; then
   grep -E '^(__asan_|__ubsan_|__sanitizer_|__start_asan_globals$|__stop_asan_globals$)' \
     "${e1b_tmp}/undefined.txt" >"${e1b_tmp}/sanitizer-undefined.txt" || \
@@ -1874,6 +1875,7 @@ if [[ "${e3_private_test_sanitize}" == 1 ]]; then
       "${e1b_tmp}/expected-undefined.txt" \
       "${e1b_tmp}/noninstrumentation-undefined.txt" \
       "${e1b_tmp}/sanitizer-undefined.txt"
+    e3_retention_sanitizer_inventory_verified=1
   else
     [[ ! -s "${e1b_tmp}/unexpected-undefined.txt" ]] || \
       die "E3 sanitized private test object adds noninstrumentation imports"
@@ -2161,6 +2163,12 @@ cp "${e1b_tmp}/undefined.txt" \
   "${evidence_dir}.tmp.$$/undefined.txt"
 cp "${e1b_tmp}/expected-undefined.txt" \
   "${evidence_dir}.tmp.$$/expected-undefined.txt"
+if [[ "${e3_retention_sanitizer_inventory_verified}" == 1 ]]; then
+  cp "${e1b_tmp}/noninstrumentation-undefined.txt" \
+    "${evidence_dir}.tmp.$$/noninstrumentation-undefined.txt"
+  cp "${e1b_tmp}/sanitizer-undefined.txt" \
+    "${evidence_dir}.tmp.$$/sanitizer-undefined.txt"
+fi
 if [[ -n "${package_source_closure}" ]]; then
   cp "${e1b_tmp}/source-closure.txt" \
     "${evidence_dir}.tmp.$$/source-closure.txt"

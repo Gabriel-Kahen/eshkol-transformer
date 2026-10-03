@@ -2451,3 +2451,13 @@ unchanged normal178. A retention-only exact inventory policy and negative
 tests are prepared; independent source review and the full supported
 normal/repeat/poison/sanitized retention runtime gates remain pending. This
 does not establish complete-call retention or broader E3 acceptance.
+
+The exact retention gate on `a5fc208` stopped before runtime because the
+builder published the combined undefined inventory without the two verified
+sanitizer split inventories consumed by the runner. All 226 emitted symbols
+match the existing 175/51 manifests; no import policy is changed. The scoped
+publication repair retains both files only after successful retention sanitizer
+validation. Failed evidence is preserved at
+`/home/gabe/e3-complete-call-retention-a5fc208-fe9-f31-20261002-prepared-i/SHA256SUMS-FAILED`
+(SHA256 `45f87942cc62f262aac559ab129cdd8a7322e8372c0b3b90a6baf4a880c850b7`).
+Independent review and a fresh complete-call runtime gate remain pending.
