@@ -761,17 +761,36 @@ static void retire_tensor(et_f32_tensor *tensor) {
   retired_tensors = tensor;
 }
 
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+static int f32_destroy_backing_safe(const et_f32_tensor *tensor);
+#endif
+
 /* The caller has already proved that tensor is the exact live canonical owner
  * and has no active borrow or plan pin.  This is the nonraising destruction
  * tail used after public or parameter-owner release admission. */
 static void destroy_tensor_admitted(et_f32_tensor *tensor) {
 #ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  /* Every caller preflights before its first write. A defect in that
+   * no-failure tail cannot become a retryable partial release. */
+  f32_destroy_provenance *record = f32_destroy_record_find(tensor);
+  if (record == NULL || !f32_destroy_backing_safe(tensor)) {
+    abort();
+  }
+  uint64_t *shape = (uint64_t *)record->shape;
+  size_t *strides = (size_t *)record->strides;
+  float *data = (float *)record->data;
   f32_destroy_record_remove(tensor);
 #endif
   unregister_tensor(tensor);
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  free(data);
+  free(strides);
+  free(shape);
+#else
   free(tensor->data);
   free(tensor->strides);
   free(tensor->shape);
+#endif
   retire_tensor(tensor);
 }
 
@@ -1510,6 +1529,12 @@ static int f32_destroy_backing_aliased(const f32_destroy_provenance *owner) {
   return 0;
 }
 
+static int f32_destroy_backing_safe(const et_f32_tensor *tensor) {
+  const f32_destroy_provenance *record = f32_destroy_record_find(tensor);
+  return f32_destroy_backing_consistent(tensor, record) &&
+         !f32_destroy_backing_aliased(record);
+}
+
 int32_t et_f32_tensor_private_destroy_ready_v1(
     const et_f32_tensor *candidate, et_f32_tensor_error *error) {
   et_f32_tensor *tensor;
@@ -1563,6 +1588,11 @@ int32_t et_f32_tensor_private_destroy_ready_v1(
 int32_t et_f32_tensor_destroy_v1(et_f32_tensor **slot,
                                  et_f32_tensor_error *error) {
   et_f32_tensor *tensor;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  if (f32_destroy_error_aliases(error)) {
+    return ET_F32_TENSOR_ERROR_INVALID_ARGUMENT;
+  }
+#endif
   int32_t result = preflight_output(
       slot, slot == NULL ? 0u : sizeof(*slot), error, "f32-tensor-destroy");
   if (result != 0) {
@@ -1591,6 +1621,13 @@ int32_t et_f32_tensor_destroy_v1(et_f32_tensor **slot,
                      ET_F32_TENSOR_CODE_INVALID_HANDLE, "f32-tensor-destroy",
                      "tensor is retained by a prepared plan");
   }
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  if (!f32_destroy_backing_safe(tensor)) {
+    return f32_destroy_report(error, ET_F32_TENSOR_ERROR_INTERNAL,
+                              ET_F32_TENSOR_CODE_PROVIDER_REJECTED,
+                              "tensor backing provenance is unproved");
+  }
+#endif
   (void)success(error);
   destroy_tensor_admitted(tensor);
   *slot = NULL;
@@ -2355,6 +2392,11 @@ int32_t et_f32_parameter_destroy_v1(et_f32_parameter **slot,
   et_f32_parameter **cursor;
   et_f32_parameter *parameter;
   int32_t result;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  if (f32_destroy_error_aliases(error)) {
+    return ET_F32_TENSOR_ERROR_INVALID_ARGUMENT;
+  }
+#endif
   result = preflight_output(slot, slot == NULL ? 0u : sizeof(*slot), error,
                             "f32-parameter-destroy");
   if (result != 0) {
@@ -2373,6 +2415,17 @@ int32_t et_f32_parameter_destroy_v1(et_f32_parameter **slot,
   if (result != 0) {
     return result;
   }
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  if (find_tensor(parameter->value) != parameter->value ||
+      find_tensor(parameter->gradient) != parameter->gradient ||
+      parameter->value == parameter->gradient ||
+      parameter->value->magic != ET_F32_TENSOR_MAGIC ||
+      parameter->gradient->magic != ET_F32_TENSOR_MAGIC) {
+    return f32_destroy_report(error, ET_F32_TENSOR_ERROR_INTERNAL,
+                              ET_F32_TENSOR_CODE_PROVIDER_REJECTED,
+                              "parameter child identity is unproved");
+  }
+#endif
   if (parameter->plan_pins != 0u ||
       parameter->value->active_borrow != NULL ||
       parameter->gradient->active_borrow != NULL ||
@@ -2382,6 +2435,14 @@ int32_t et_f32_parameter_destroy_v1(et_f32_parameter **slot,
                      ET_F32_TENSOR_CODE_INVALID_HANDLE,
                      "f32-parameter-destroy", "parameter is borrowed or pinned");
   }
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  if (!f32_destroy_backing_safe(parameter->gradient) ||
+      !f32_destroy_backing_safe(parameter->value)) {
+    return f32_destroy_report(error, ET_F32_TENSOR_ERROR_INTERNAL,
+                              ET_F32_TENSOR_CODE_PROVIDER_REJECTED,
+                              "parameter backing provenance is unproved");
+  }
+#endif
   cursor = &live_parameters;
   while (*cursor != parameter) {
     cursor = &(*cursor)->registry_next;

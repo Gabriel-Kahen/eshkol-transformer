@@ -42,6 +42,22 @@ class F32DestroyReadinessStaticTests(unittest.TestCase):
         self.assertIn("f32_destroy_backing_aliased(record)", seam)
         self.assertNotIn("et_f32_tensor_borrow_begin_v1", seam)
 
+    def test_all_admitted_free_paths_preflight(self) -> None:
+        source = (ROOT / "native/f32_tensor.c").read_text()
+        tail = source.split("static void destroy_tensor_admitted(", 1)[1]
+        tail = tail.split("static void retire_borrow(", 1)[0]
+        self.assertLess(tail.index("f32_destroy_backing_safe(tensor)"),
+                        tail.index("unregister_tensor(tensor)"))
+        ordinary = source.split("int32_t et_f32_tensor_destroy_v1(", 1)[1]
+        ordinary = ordinary.split("static int32_t scalar_output(", 1)[0]
+        self.assertLess(ordinary.index("f32_destroy_backing_safe(tensor)"),
+                        ordinary.index("destroy_tensor_admitted(tensor)"))
+        parameter = source.split("int32_t et_f32_parameter_destroy_v1(", 1)[1]
+        parameter = parameter.split("int32_t et_f32_parameter_bind_identity_v1(", 1)[0]
+        for child in ("gradient", "value"):
+            self.assertLess(parameter.index(f"f32_destroy_backing_safe(parameter->{child})"),
+                            parameter.index("*cursor = parameter->registry_next"))
+
 
 if __name__ == "__main__":
     unittest.main()

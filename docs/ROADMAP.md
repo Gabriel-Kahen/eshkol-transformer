@@ -1605,8 +1605,10 @@ destroy errors and f32 has no read-only production destroy preflight. The
 contract requires registry-first identity, idle borrow/plan state and exact
 backing-allocation provenance before O2 can promise an allocation-free,
 fail-stop retirement tail. A feature-gated native f32 producer candidate now
-records creation/clone-time backing and checks destroy readiness without a
-borrow or authority change; its focused host normal, repeat and sanitizer
+records creation/clone-time backing, checks destroy readiness without a
+borrow or authority change, and preflights every feature-on tensor/parameter
+free against that backing before the first destructive write. Its focused
+host normal, repeat and sanitizer
 gate is local evidence, pending independent review and a supported gate.
 O2 pointer admission alone cannot prove the closed Eshkol ledger or 14 M3T/P1
 associations. The O2 retire path and candidate cleanup remain pending.

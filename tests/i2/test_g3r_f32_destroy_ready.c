@@ -270,11 +270,128 @@ static void owned_clone_allocation_cuts(void) {
   release(&source);
 }
 
+static void corrupt_peer_release_preflight(void) {
+  et_f32_tensor *owner = make_tensor(80u);
+  et_f32_tensor *peer = make_tensor(80u);
+  et_f32_tensor_error error;
+  uint32_t bits[80];
+  for (size_t i = 0u; i < 80u; ++i) bits[i] = UINT32_C(0x3f000000) + (uint32_t)i;
+  CHECK(et_f32_tensor_copy_bits_from_v1(owner, bits, 80u, &error) == 0);
+  et_f32_test_tensor_metadata_v1 original = {.struct_size = sizeof(original)};
+  CHECK(et_f32_tensor_test_metadata_snapshot_v1(peer, &original) == 0);
+  const size_t records = et_f32_tensor_test_destroy_record_count_v1();
+  const size_t record_bytes = et_f32_tensor_test_destroy_record_bytes_v1();
+  const size_t tensors = live_counts().tensors;
+
+  for (unsigned variant = 0u; variant < 4u; ++variant) {
+    et_f32_test_tensor_metadata_v1 corrupt = original;
+    et_f32_test_tensor_metadata_v1 before = {.struct_size = sizeof(before)};
+    et_f32_test_tensor_metadata_v1 after = {.struct_size = sizeof(after)};
+    if (variant == 0u)
+      corrupt.data_storage = (float *)et_f32_tensor_test_data_storage_v1(owner);
+    else if (variant == 1u)
+      corrupt.shape_storage = (uint64_t *)et_f32_tensor_test_shape_storage_v1(owner);
+    else if (variant == 2u)
+      corrupt.stride_storage = (size_t *)et_f32_tensor_test_stride_storage_v1(owner);
+    else
+      corrupt.data_storage = (float *)owner;
+    CHECK(et_f32_tensor_test_metadata_restore_v1(peer, &corrupt) == 0);
+    CHECK(et_f32_tensor_test_metadata_snapshot_v1(peer, &before) == 0);
+    CHECK(et_f32_tensor_destroy_v1(&peer, &error) ==
+          ET_F32_TENSOR_ERROR_INTERNAL);
+    CHECK(error.category == ET_F32_TENSOR_ERROR_INTERNAL);
+    CHECK(error.code == ET_F32_TENSOR_CODE_PROVIDER_REJECTED);
+    CHECK(peer != NULL);
+    CHECK(et_f32_tensor_test_metadata_snapshot_v1(peer, &after) == 0);
+    CHECK(memcmp(&before, &after, sizeof(before)) == 0);
+    CHECK(memcmp(et_f32_tensor_test_data_storage_v1(owner), bits,
+                 sizeof(bits)) == 0);
+    CHECK(live_counts().tensors == tensors);
+    CHECK(et_f32_tensor_test_destroy_record_count_v1() == records);
+    CHECK(et_f32_tensor_test_destroy_record_bytes_v1() == record_bytes);
+    expect_status(owner, ET_F32_TENSOR_ERROR_INTERNAL,
+                  ET_F32_TENSOR_CODE_PROVIDER_REJECTED);
+    CHECK(et_f32_tensor_test_metadata_restore_v1(peer, &original) == 0);
+    expect_status(owner, ET_F32_TENSOR_ERROR_NONE, ET_F32_TENSOR_CODE_OK);
+    expect_status(peer, ET_F32_TENSOR_ERROR_NONE, ET_F32_TENSOR_CODE_OK);
+  }
+  release(&peer);
+  release(&owner);
+}
+
+static void associated_release_preflight(void) {
+  et_f32_tensor *owner = make_tensor(80u);
+  et_f32_tensor *clone = NULL;
+  et_f32_parameter *parameter = NULL;
+  et_f32_tensor_error error;
+  uint32_t bits[80] = {0};
+  bits[0] = UINT32_C(0x3f800000);
+  CHECK(et_f32_tensor_copy_bits_from_v1(owner, bits, 80u, &error) == 0);
+  CHECK(et_f32_owned_tensor_clone_v1(owner, &clone, &error) == 0);
+  et_f32_test_tensor_metadata_v1 original = {.struct_size = sizeof(original)};
+  et_f32_test_tensor_metadata_v1 corrupt = {.struct_size = sizeof(corrupt)};
+  CHECK(et_f32_tensor_test_metadata_snapshot_v1(clone, &original) == 0);
+  corrupt = original;
+  corrupt.data_storage = (float *)et_f32_tensor_test_data_storage_v1(owner);
+  CHECK(et_f32_tensor_test_metadata_restore_v1(clone, &corrupt) == 0);
+  size_t records = et_f32_tensor_test_destroy_record_count_v1();
+  CHECK(et_f32_owned_tensor_release_v1(clone, &error) ==
+        ET_F32_TENSOR_ERROR_INTERNAL);
+  CHECK(error.code == ET_F32_TENSOR_CODE_PROVIDER_REJECTED);
+  CHECK(et_f32_tensor_test_destroy_record_count_v1() == records);
+  CHECK(memcmp(et_f32_tensor_test_data_storage_v1(owner), bits,
+               sizeof(bits)) == 0);
+  CHECK(et_f32_tensor_test_metadata_restore_v1(clone, &original) == 0);
+  CHECK(et_f32_owned_tensor_release_v1(clone, &error) == 0);
+  expect_status(owner, ET_F32_TENSOR_ERROR_NONE, ET_F32_TENSOR_CODE_OK);
+
+  CHECK(et_f32_parameter_create_v1(owner, &parameter, &error) == 0);
+  et_f32_tensor *gradient = (et_f32_tensor *)
+      et_f32_parameter_test_gradient_tensor_v1(parameter);
+  original.struct_size = sizeof(original);
+  CHECK(et_f32_tensor_test_metadata_snapshot_v1(gradient, &original) == 0);
+  corrupt = original;
+  corrupt.data_storage = (float *)et_f32_tensor_test_data_storage_v1(owner);
+  CHECK(et_f32_tensor_test_metadata_restore_v1(gradient, &corrupt) == 0);
+  records = et_f32_tensor_test_destroy_record_count_v1();
+  size_t tensors = live_counts().tensors;
+  CHECK(et_f32_parameter_destroy_v1(&parameter, &error) ==
+        ET_F32_TENSOR_ERROR_INTERNAL);
+  CHECK(error.code == ET_F32_TENSOR_CODE_PROVIDER_REJECTED);
+  CHECK(parameter != NULL);
+  CHECK(et_f32_parameter_is_live_v1(parameter) == 1);
+  CHECK(live_counts().tensors == tensors);
+  CHECK(et_f32_tensor_test_destroy_record_count_v1() == records);
+  CHECK(memcmp(et_f32_tensor_test_data_storage_v1(owner), bits,
+               sizeof(bits)) == 0);
+  CHECK(et_f32_tensor_test_metadata_restore_v1(gradient, &original) == 0);
+  const et_f32_tensor *value_view = NULL;
+  CHECK(et_f32_parameter_value_tensor_v1(parameter, &value_view, &error) == 0);
+  et_f32_tensor *value = (et_f32_tensor *)value_view;
+  original.struct_size = sizeof(original);
+  CHECK(et_f32_tensor_test_metadata_snapshot_v1(value, &original) == 0);
+  corrupt = original;
+  corrupt.data_storage = (float *)et_f32_tensor_test_data_storage_v1(owner);
+  CHECK(et_f32_tensor_test_metadata_restore_v1(value, &corrupt) == 0);
+  CHECK(et_f32_parameter_destroy_v1(&parameter, &error) ==
+        ET_F32_TENSOR_ERROR_INTERNAL);
+  CHECK(error.code == ET_F32_TENSOR_CODE_PROVIDER_REJECTED);
+  CHECK(parameter != NULL);
+  CHECK(live_counts().tensors == tensors);
+  CHECK(et_f32_tensor_test_destroy_record_count_v1() == records);
+  CHECK(et_f32_tensor_test_metadata_restore_v1(value, &original) == 0);
+  CHECK(et_f32_parameter_destroy_v1(&parameter, &error) == 0);
+  expect_status(owner, ET_F32_TENSOR_ERROR_NONE, ET_F32_TENSOR_CODE_OK);
+  release(&owner);
+}
+
 int main(void) {
   basic_and_lifetime();
   associations_and_aliases();
   metadata_and_allocations();
   owned_clone_allocation_cuts();
+  corrupt_peer_release_preflight();
+  associated_release_preflight();
   if (failures != 0u) return 1;
   printf("G3R f32 destroy readiness PASS: %u checks\n", checks);
   return 0;
