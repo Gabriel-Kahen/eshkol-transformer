@@ -5,11 +5,14 @@
 (extern i64 g3r-c2-native-stage-with-sha
         ptr i64 i64 i64 i64 i64 ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr
         :real et_c2_private_checkpoint_load_stage_with_sha_v1)
+(extern void g3r-c2-sha-fail-stop i64 :real _Exit)
 
 (define g3r-c2-sha-stage-result-bytes 224)
 (define g3r-c2-sha-stages '())
 (define g3r-c2-sha-allocate-bytevector-internal
   (lambda (length) (make-bytevector length 0)))
+;;; Private compiled fault cut; production uses the inert binding.
+(define g3r-c2-sha-after-factory-hook (lambda (shell digest) #t))
 
 (define (g3r-c2-sha-find-stage shell)
   (let loop ((remaining g3r-c2-sha-stages))
@@ -190,31 +193,41 @@
                   (c2-load-fail 'internal operation
                                 "checkpoint SHA copy backing is invalid" '())))
             (vector-set! sidecar 2 digest)
-            ;; Existing C2 parsing and entry construction validate all eight
-            ;; authoritative lengths, then publish one exact stage shell.
-            (let ((outcome (vector #f #f)))
-              (guard (caught
-                       (#t (vector-set! outcome 0 #f)
-                           (vector-set! outcome 1 caught)
-                           outcome))
-                (let ((shell
-                        (c2-load-build-stage-entry
-                          optimizer-metadata optimizer-payload tokenizer
-                          config-fingerprint x1 current epoch model stage-result
-                          subpolicy)))
-                  (vector-set! outcome 0 #t)
-                  (vector-set! outcome 1 shell)))
-              (if (not (vector-ref outcome 0))
+            ;; The canonical factory publishes C2 before returning. Install
+            ;; both handlers first, then bind its exact shell directly in a
+            ;; lexical slot. Any later checked write must either publish the
+            ;; matching SHA sidecar or retire that one C2 stage and scrub SHA.
+            (let ((shell #f) (failure #f))
+              (if (not (= (c2-runtime-reserve-exception-handlers 2) 0))
                   (begin
                     (g3r-c2-sha-zero! digest)
-                    (c2-load-internal-after-validation
-                      'staging (vector-ref outcome 1))))
-              ;; Sidecar and C2 entry are both preallocated. The remaining
-              ;; publication uses assignments only; no digest can bind later.
-              (vector-set! sidecar 0 (vector-ref outcome 1))
-              (vector-set! sidecar 1 'live)
-              (set! g3r-c2-sha-stages next)
-              (vector-ref outcome 1))))))))
+                    (c2-load-fail 'internal operation
+                                  "checkpoint SHA handler reserve failed" '())))
+              (let ((published
+                      (guard (cleanup-defect
+                               (#t (g3r-c2-sha-fail-stop 134)))
+                        (guard (caught
+                                 (#t
+                                   (if shell
+                                       (c2-checkpoint-load-staging-release-internal!
+                                         shell))
+                                   (g3r-c2-sha-zero! digest)
+                                   (set! failure caught)
+                                   #f))
+                          (set! shell
+                            (c2-load-build-stage-entry
+                              optimizer-metadata optimizer-payload tokenizer
+                              config-fingerprint x1 current epoch model
+                              stage-result subpolicy))
+                          (g3r-c2-sha-after-factory-hook shell digest)
+                          (vector-set! sidecar 0 shell)
+                          (vector-set! sidecar 1 'live)
+                          (set! g3r-c2-sha-stages next)
+                          shell))))
+                (if published published
+                    (if shell (raise failure)
+                        (c2-load-internal-after-validation
+                          'staging failure)))))))))))
 
 (define (g3r-c2-sha-stage-release-internal! shell)
   (let ((entry (g3r-c2-sha-find-stage shell)))

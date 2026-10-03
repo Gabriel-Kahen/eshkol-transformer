@@ -167,7 +167,22 @@ WRAPPER
   nm -g --defined-only --format=posix "$directory/stage-dep.o" \
     >"$directory/dep-object-defined-symbols.txt"
   "$cc" "${flags[@]}" -c -x ir "$directory/stage-test.ll" \
-    -o "$directory/stage-test.o"
+    -o "$directory/stage-test.o" \
+    >"$directory/ir-object-build.stdout" \
+    2>"$directory/ir-object-build.stderr"
+  test ! -s "$directory/ir-object-build.stdout"
+  python3 - "$directory/ir-object-build.stderr" <<'PY'
+from pathlib import Path
+import sys
+
+warning = ("warning: <unknown>:0:0: loop not vectorized: the optimizer was "
+           "unable to perform the requested transformation; the transformation "
+           "might be disabled or specified as part of an unsupported "
+           "transformation ordering [-Wpass-failed=transform-warning]\n")
+expected = warning * 4 + "4 warnings generated.\n"
+if Path(sys.argv[1]).read_text() != expected:
+    raise SystemExit("unexpected LLVM IR object compiler diagnostics")
+PY
   nm -u --format=posix "$directory/stage-test.o" \
     >"$directory/eshkol-object-undefined-symbols.txt"
   nm -g --defined-only --format=posix "$directory/stage-test.o" \
@@ -192,7 +207,7 @@ WRAPPER
     "$out/fixtures/truncated.c2" \
     >"$directory/run.stdout" 2>"$directory/run.stderr"
   test ! -s "$directory/run.stderr"
-  rg -x 'G3-R C2 SHA Eshkol stage PASS: [1-9][0-9]* checks' \
+  rg -x 'G3-R C2 SHA Eshkol stage PASS: 24 checks' \
     "$directory/run.stdout" >/dev/null
 }
 

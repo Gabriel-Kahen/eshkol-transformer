@@ -1,6 +1,7 @@
 """Closed private C2 SHA stage topology checks; no runtime claim."""
 from pathlib import Path
 import subprocess
+import tempfile
 import unittest
 
 from tests.c2.test_handler_order import parse
@@ -88,6 +89,34 @@ def verify_stage_allocator_binding(extension: str) -> None:
         raise ValueError("stage allocator needs a mutable binding")
 
 
+def verify_publication_recovery(extension: str, runner: str) -> None:
+    checkpoints = (
+        "(c2-runtime-reserve-exception-handlers 2)",
+        "(guard (cleanup-defect",
+        "(guard (caught",
+        "(set! shell\n                            (c2-load-build-stage-entry",
+        "(g3r-c2-sha-after-factory-hook shell digest)",
+        "(vector-set! sidecar 0 shell)",
+        "(vector-set! sidecar 1 'live)",
+        "(set! g3r-c2-sha-stages next)",
+    )
+    positions = [extension.find(checkpoints[0])]
+    for token in checkpoints[1:]:
+        positions.append(extension.find(token, positions[-1] + 1))
+    if (-1 in positions
+            or "(c2-checkpoint-load-staging-release-internal!\n"
+               "                                         shell)" not in extension
+            or "(g3r-c2-sha-zero! digest)" not in extension
+            or "(g3r-c2-sha-fail-stop 134)" not in extension):
+        raise ValueError("stage publication recovery differs")
+    if (">\"$directory/ir-object-build.stdout\"" not in runner
+            or "2>\"$directory/ir-object-build.stderr\"" not in runner
+            or "expected = warning * 4 + \"4 warnings generated.\\n\""
+               not in runner
+            or "unexpected LLVM IR object compiler diagnostics" not in runner):
+        raise ValueError("IR diagnostics policy differs")
+
+
 class C2ShaStageStaticTest(unittest.TestCase):
     def test_exact_private_ownership_and_symbols(self) -> None:
         verify_root_and_manifest(PRIVATE.read_text(), MANIFEST.read_text())
@@ -96,7 +125,10 @@ class C2ShaStageStaticTest(unittest.TestCase):
         extension = EXTENSION.read_text()
         parse(extension)
         verify_stage_allocator_binding(extension)
-        parse((ROOT / "tests/g3r/c2_sha_stage_test.esk").read_text())
+        verify_publication_recovery(extension, RUNNER.read_text())
+        fixture = (ROOT / "tests/g3r/c2_sha_stage_test.esk").read_text()
+        parse(fixture)
+        self.assertIn("(borrow g3r-c2-sha-stages", fixture)
         self.assertIn(":real et_c2_private_checkpoint_load_stage_with_sha_v1",
                       extension)
         self.assertNotIn("c2-checkpoint-load-reconstruct-internal", extension)
@@ -149,6 +181,35 @@ class C2ShaStageStaticTest(unittest.TestCase):
                     capture_output=True, text=True, check=False)
                 self.assertEqual(result.returncode, 2, result.stderr)
                 self.assertEqual(result.stdout, "")
+        for removed in ("(g3r-c2-sha-after-factory-hook shell digest)",
+                        "(c2-checkpoint-load-staging-release-internal!\n"
+                        "                                         shell)",
+                        "(g3r-c2-sha-fail-stop 134)"):
+            with self.subTest(removed=removed):
+                with self.assertRaisesRegex(ValueError, "publication recovery"):
+                    verify_publication_recovery(extension.replace(removed, "", 1),
+                                                runner)
+        with self.assertRaisesRegex(ValueError, "diagnostics policy"):
+            verify_publication_recovery(extension, runner.replace(
+                "expected = warning * 4", "expected = warning * 5"))
+
+    def test_ir_diagnostics_exact_match(self) -> None:
+        runner = RUNNER.read_text()
+        script = runner.split("  python3 - \"$directory/ir-object-build.stderr\" <<'PY'\n", 1)[1].split("\nPY\n", 1)[0]
+        warning = ("warning: <unknown>:0:0: loop not vectorized: the optimizer was "
+                   "unable to perform the requested transformation; the transformation "
+                   "might be disabled or specified as part of an unsupported "
+                   "transformation ordering [-Wpass-failed=transform-warning]\n")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "diagnostics"
+            for value, accepted in ((warning * 4 + "4 warnings generated.\n", True),
+                                    (warning * 3 + "3 warnings generated.\n", False),
+                                    (warning * 4 + "4 warnings generated.\nerror: bad\n", False),
+                                    ("", False)):
+                path.write_text(value)
+                result = subprocess.run(["python3", "-", str(path)], input=script,
+                                        text=True, capture_output=True, check=False)
+                self.assertEqual(result.returncode == 0, accepted)
 
 
 if __name__ == "__main__":

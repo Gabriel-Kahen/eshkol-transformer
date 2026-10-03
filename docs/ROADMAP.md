@@ -1573,6 +1573,15 @@ mode. The runner now compiles the same private root a second time in object
 mode to obtain the exact dependency closure; executable IR, native object and
 symbol checks, and normal/repeat/sanitizer runtime remain required. This
 runner repair has host static/Q0 checks but no supported rerun yet.
+The subsequent exact `2da13de` supported run completed its native 563 checks
+and all three compiled 20-check Eshkol modes, but launcher acceptance failed
+because Clang IR-to-object vectorization warnings reached gate stderr. Retained
+IR also exposed checked writes between canonical C2 staging publication and
+SHA sidecar publication. A feature-local guarded exact-stage rollback and
+retained, exact-match IR diagnostic policy are now source candidates; compiled
+handler dominance, post-factory fault cuts and a fresh supported gate remain
+pending independent review. The failed run is sealed at
+`g3r-c2-eshkol-sha-stage-2da13de-fe9-f31-20261003-prepared-e/SHA256SUMS-FAILED`.
 Reconstruction, the owning SHA receipt, G3-T predicate, pair loader, live
 replay, save writer and resumed continuation remain separate gates.
 
