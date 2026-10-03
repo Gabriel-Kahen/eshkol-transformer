@@ -1586,6 +1586,27 @@ Hosted integration remains pending. This is native-only: Eshkol backing-extent
 admission and owning SHA receipt, G3-T predicate, pair loader, live replay,
 save writer and resumed continuation remain separate gates.
 
+The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
+bounds a private, feature-gated pre-replay teardown for an unpublished
+diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use
+construction abort, O2 has no live optimizer retire, and TR3 unenrollment
+does not free native model or optimizer payloads. The contract requires
+complete identity/lease/provider preflight, optimizer-before-model retirement,
+sealed P1/I2 graph revocation, and separate accounting for reclaimed native
+payload and retained identity tombstones. It is documentation only: no
+implementation, supported release gate, full replay rollback or public API is
+accepted. G3-T live-generator retirement remains a separate prerequisite for
+replay failure cleanup.
+
+The proposed [G3-R P1/I2 sealed-graph retirement producer contract](g3/G3_R_P1_I2_SEALED_GRAPH_RETIREMENT_CONTRACT.md)
+pins the candidate-aware preseal M3T/I2/P1 handshake and a retained exact
+native P1 token roster. Graph preflight admits the candidate's exact live O2
+optimizer with its retirement witness; graph commit requires that same O2
+tombstone before revoking P1/I2 authority and later M3T f32 payloads. Native
+P1 retained-roster admission/revocation is the first separable implementation
+gate. This is documentation only; no sealed-graph revoke, candidate cleanup,
+public API or full replay acceptance is implemented.
+
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
 names would return newly owned authenticated CPU f32 `[1,256]` kind-3 shells,
