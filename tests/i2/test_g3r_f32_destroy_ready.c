@@ -385,6 +385,48 @@ static void associated_release_preflight(void) {
   release(&owner);
 }
 
+static void null_parameter_child_preflight(void) {
+  et_f32_tensor *source = make_tensor(4u);
+  const uint32_t bits[4] = {UINT32_C(0x80000000), UINT32_C(0x3f800000),
+                            UINT32_C(0x40000000), UINT32_C(0x40400000)};
+  et_f32_tensor_error error;
+  CHECK(et_f32_tensor_copy_bits_from_v1(source, bits, 4u, &error) == 0);
+  for (uint32_t child = 0u; child < 2u; ++child) {
+    et_f32_parameter *parameter = NULL;
+    const et_f32_tensor *value = NULL;
+    CHECK(et_f32_parameter_create_v1(source, &parameter, &error) == 0);
+    CHECK(et_f32_parameter_value_tensor_v1(parameter, &value, &error) == 0);
+    const et_f32_tensor *gradient =
+        et_f32_parameter_test_gradient_tensor_v1(parameter);
+    CHECK(value != NULL && gradient != NULL && value != gradient);
+    const et_f32_test_live_counts_v1 before = live_counts();
+    const size_t record_count = et_f32_tensor_test_destroy_record_count_v1();
+    const size_t record_bytes = et_f32_tensor_test_destroy_record_bytes_v1();
+    et_f32_tensor *saved = (et_f32_tensor *)(child == 0u ? value : gradient);
+    CHECK(et_f32_parameter_test_replace_child_v1(parameter, child, NULL) == 0);
+    et_f32_parameter *const original = parameter;
+    CHECK(et_f32_parameter_destroy_v1(&parameter, &error) ==
+          ET_F32_TENSOR_ERROR_INTERNAL);
+    CHECK(error.category == ET_F32_TENSOR_ERROR_INTERNAL);
+    CHECK(error.code == ET_F32_TENSOR_CODE_PROVIDER_REJECTED);
+    CHECK(parameter == original);
+    CHECK(et_f32_parameter_is_live_v1(parameter) == 1);
+    CHECK(et_f32_tensor_is_live_v1(value) == 1);
+    CHECK(et_f32_tensor_is_live_v1(gradient) == 1);
+    CHECK(live_counts().parameters == before.parameters);
+    CHECK(live_counts().tensors == before.tensors);
+    CHECK(et_f32_tensor_test_destroy_record_count_v1() == record_count);
+    CHECK(et_f32_tensor_test_destroy_record_bytes_v1() == record_bytes);
+    CHECK(memcmp(et_f32_tensor_test_data_storage_v1(source), bits,
+                 sizeof(bits)) == 0);
+    CHECK(et_f32_parameter_test_replace_child_v1(parameter, child, saved) == 0);
+    CHECK(et_f32_parameter_destroy_v1(&parameter, &error) == 0);
+    CHECK(parameter == NULL);
+    expect_status(source, ET_F32_TENSOR_ERROR_NONE, ET_F32_TENSOR_CODE_OK);
+  }
+  release(&source);
+}
+
 int main(void) {
   basic_and_lifetime();
   associations_and_aliases();
@@ -392,6 +434,7 @@ int main(void) {
   owned_clone_allocation_cuts();
   corrupt_peer_release_preflight();
   associated_release_preflight();
+  null_parameter_child_preflight();
   if (failures != 0u) return 1;
   printf("G3R f32 destroy readiness PASS: %u checks\n", checks);
   return 0;

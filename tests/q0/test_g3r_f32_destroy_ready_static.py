@@ -54,6 +54,8 @@ class F32DestroyReadinessStaticTests(unittest.TestCase):
                         ordinary.index("destroy_tensor_admitted(tensor)"))
         parameter = source.split("int32_t et_f32_parameter_destroy_v1(", 1)[1]
         parameter = parameter.split("int32_t et_f32_parameter_bind_identity_v1(", 1)[0]
+        self.assertLess(parameter.index("parameter->value == NULL || parameter->gradient == NULL"),
+                        parameter.index("find_tensor(parameter->value)"))
         for child in ("gradient", "value"):
             self.assertLess(parameter.index(f"f32_destroy_backing_safe(parameter->{child})"),
                             parameter.index("*cursor = parameter->registry_next"))

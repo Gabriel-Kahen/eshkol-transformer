@@ -2416,7 +2416,8 @@ int32_t et_f32_parameter_destroy_v1(et_f32_parameter **slot,
     return result;
   }
 #ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
-  if (find_tensor(parameter->value) != parameter->value ||
+  if (parameter->value == NULL || parameter->gradient == NULL ||
+      find_tensor(parameter->value) != parameter->value ||
       find_tensor(parameter->gradient) != parameter->gradient ||
       parameter->value == parameter->gradient ||
       parameter->value->magic != ET_F32_TENSOR_MAGIC ||
@@ -3208,6 +3209,17 @@ const et_f32_tensor *et_f32_parameter_test_gradient_tensor_v1(
     const et_f32_parameter *candidate) {
   et_f32_parameter *parameter = find_parameter(candidate);
   return parameter == NULL ? NULL : parameter->gradient;
+}
+
+int32_t et_f32_parameter_test_replace_child_v1(
+    et_f32_parameter *candidate, uint32_t child, et_f32_tensor *replacement) {
+  et_f32_parameter *parameter = find_parameter(candidate);
+  if (parameter == NULL || child > 1u) return -1;
+  if (child == 0u)
+    parameter->value = replacement;
+  else
+    parameter->gradient = replacement;
+  return 0;
 }
 
 size_t et_f32_tensor_test_destroy_record_count_v1(void) {
