@@ -1637,6 +1637,30 @@ P1 retained-roster admission/revocation is the first separable implementation
 gate. This is documentation only; no sealed-graph revoke, candidate cleanup,
 public API or full replay acceptance is implemented.
 
+The isolated native P1 retained-roster candidate on
+`codex/g3r-p1-candidate-roster` adds feature-gated candidate construction
+begin, exact sealed roster retention on ordinary and prepared seal, native
+identity preflight/revocation and test-only roster census. Focused host
+normal/sanitizer tests and default-off object parity passed; independent
+source/tests review accepted the original leaf. The runner now accepts an
+explicit fresh evidence directory and retains normal/repeat/sanitizer output,
+numeric run exits, compiler diagnostics, default-off parity objects/symbols,
+and the expected public-role compile rejection for sealed review. This
+runner-only deltas were independently reviewed. The exact code/tests head
+`390851bf` (tree `74342d46`) passed the pinned fe9/f31 Clang 21 gate on
+2026-10-03: normal, repeat and ASan/UBSan/LSan each returned zero and reported
+19 retired tokens with identical output and empty stderr. Default-off public
+and trusted objects and symbol lists matched the accepted main baseline;
+the feature-on public-role build rejected with exit 1. Root independently
+verified the retained 81-file evidence seal
+`g3r-native-p1-roster-390851b-fe9-f31-20261003-prepared-b/SHA256SUMS-RUN`
+(SHA256 `a558c496cf144b15356d6d0ef3fc487363ee1c3ae9eaba479bd37d28a2914f0f`).
+Hosted exact-head CI and merge remain pending.
+This native leaf cannot authenticate the Eshkol candidate ledger, M3T
+parameter graph or live O2 witness; the candidate-aware I2/P1/M3T adapter
+and owner teardown
+remain dependent work.
+
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
 names would return newly owned authenticated CPU f32 `[1,256]` kind-3 shells,
