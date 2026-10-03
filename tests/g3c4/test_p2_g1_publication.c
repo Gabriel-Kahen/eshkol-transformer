@@ -106,6 +106,9 @@ static void publication_success(
   CHECK(memcmp(context->generator_rng_words, fixture.successor,
                sizeof(fixture.successor)) == 0);
   CHECK(output->transport.state == ET_G3C4_OUTPUT_PUBLISHED);
+#ifdef ET_G3C4_P2_G2_TERMINAL_IDS_CLONE_PRIVATE
+  CHECK(et_g3c4_private_p2g2_terminal_ids_clone_v1(output) == NULL);
+#endif
   CHECK(output->parent_ctx == NULL && output->ids != NULL);
   CHECK(output->length == 1 && output->cache_length == 3);
   CHECK(memcmp(output->rng, fixture.successor,

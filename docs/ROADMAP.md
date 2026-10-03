@@ -1572,15 +1572,22 @@ generator four-word equality predicate to prove manual replay consumes no
 G3-S draw. It also bounds the fixed diagnostic-C2 candidate recipe to
 external X1/T1/D2 inputs authenticated against loaded C2 controls before
 TR3 restore, with candidate-only cleanup and no public LOAD or generation ABI
-change. The private signatures bound their separate implementation leaves;
-no pair loader, live replay, save writer or resumed continuation is accepted.
-The G3-T idle four-word equality predicate now has a bounded private source
-candidate under `ET_G3R_G3T_RNG_EQUAL_PRIVATE`. Its fixture uses an authentic
-typed-import generator, checks all signed words and rejection provenance,
-and verifies unchanged RNG after a real manual prefill and call finish.
-Feature-off symbols, compiled runtime, repeat and sanitizer evidence remain
-pending independent review and a fresh supported gate. The separate C2
-same-stage SHA prerequisite remains unimplemented.
+change. The private signatures bound separate implementation leaves; no pair
+loader, live replay, save writer or resumed continuation is accepted.
+
+The C2 native SHA leaf adds a guarded 224-byte private stage
+result while retaining the public 192-byte result. Exact source `84113e1f`
+passed the pinned fe9/f31 Clang 21 native gate: normal and repeat report 563
+checks with byte-identical output and empty stderr; each invocation includes
+Clang/GCC/ASan+UBSan parity, an independent whole-image SHA oracle, and the
+existing 1,163-check bridge with the feature enabled and disabled. Launcher,
+Docker and both runs exited zero; pre/post source/toolchain pins passed.
+Independent evidence review accepted the 23-file seal
+`g3r-c2-stage-sha-84113-fe9-f31-20261003-prepared-b/SHA256SUMS-RUN`
+(SHA-256 `c8ea09325ed743655053f7aa329660d5d20b85e51dc3d26d3482adda5f222124`).
+PR #190 merged this native leaf as `9149` after 23 exact-head hosted checks.
+This is native-only: Eshkol backing-extent admission and the owning SHA receipt
+remain separate gates.
 
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
@@ -2454,12 +2461,22 @@ remain unproven.
 
 The [private terminal logical I1 clone contract](g3/G3_C4_P2_G2_LOGICAL_I1_CLONE_CONTRACT.md)
 is independently reviewed for an exact logical `[1]` or `[2]` detached owner,
-with copied readback, borrow-aware release, complete kind-9 alias coverage
-and Eshkol caller proof of original bytevector backing extent. It adds no
-implementation or runtime evidence. Its native terminal dependency is
-reviewed and gated in PR #184; clone source must pin its accepted ABI and
-final integration requires its merge gates. Eshkol terminal publication,
-public G2 and continuation remain pending.
+with copied readback and borrow-aware release. The same-registry Eshkol
+adapter must still prove the original bytevector backing extent. A scoped
+native implementation candidate adds
+three feature-gated private clone/copy/release entries and host development
+normal, repeat and sanitizer tests for first-EOS `[1]` and two-ID `[2]`
+owners, release independence, leases, aliases and failure cleanup. Its
+exact source/tests `4a21e6ca`/tree `de3178a3` are independently reviewed.
+The pinned fe9/f31 Clang 21 gate passes 398 clone checks per normal, repeat
+and ASan/UBSan/LSan run with identical stdout and empty stderr, plus 265
+coexistence checks and the terminal predecessor/oracle gates. Independent
+evidence review accepted all 90 files in
+`g3c4-p2g2-terminal-ids-clone-4a21e6c-fe9-f31-20261002-prepared-a/SHA256SUMS-RUN`
+(SHA-256 `378ac9b4ac4d50d7ed7dd648679b21e2b3ddcf57acbdc8acbfd6bf4c99ec58ed`).
+Hosted CI and upstream merge remain pending. The native terminal dependency
+is reviewed and gated in PR #184; final integration requires its merge gates. Eshkol terminal
+publication, public G2 and continuation remain pending.
 
 - **Private Eshkol P2/G2 terminal close contract:**
   [accepted same-call ownership contract](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md)
