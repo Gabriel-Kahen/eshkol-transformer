@@ -1535,6 +1535,118 @@ static int f32_destroy_backing_safe(const et_f32_tensor *tensor) {
          !f32_destroy_backing_aliased(record);
 }
 
+static int f32_private_owned_span_hits(const void *span, size_t bytes,
+                                        const void *owned, size_t owned_bytes,
+                                        int *unproved) {
+  if (owned_bytes == 0u) return 0;
+  if (!pointer_span_fits(owned, owned_bytes)) {
+    *unproved = 1;
+    return 0;
+  }
+  return ranges_overlap(span, bytes, owned, owned_bytes);
+}
+
+int32_t et_f32_tensor_private_owned_span_overlap_v1(
+    const void *span, size_t bytes) {
+  int unproved = 0;
+#define F32_OWNED_HIT(pointer, extent)                                         \
+  do {                                                                         \
+    if (f32_private_owned_span_hits(span, bytes, (pointer), (extent),          \
+                                    &unproved)) return 1;                     \
+  } while (0)
+  if (span == NULL || bytes == 0u || !pointer_span_fits(span, bytes))
+    return 2;
+  for (const f32_destroy_provenance *record = f32_destroy_records;
+       record != NULL; record = record->next) {
+    F32_OWNED_HIT(record, sizeof(*record));
+    F32_OWNED_HIT(record->owner, sizeof(et_f32_tensor));
+    if (record->rank > ET_KERNEL_MAX_RANK) {
+      unproved = 1;
+    } else {
+      F32_OWNED_HIT(record->shape, record->rank * sizeof(*record->shape));
+      F32_OWNED_HIT(record->strides,
+                    record->rank * sizeof(*record->strides));
+    }
+    F32_OWNED_HIT(record->data, record->bytes);
+    et_f32_tensor *owner = find_tensor(record->owner);
+    if (owner == NULL || owner->magic != ET_F32_TENSOR_MAGIC ||
+        f32_destroy_record_find(record->owner) != record ||
+        !f32_destroy_backing_consistent(owner, record))
+      unproved = 1;
+  }
+  for (const et_f32_tensor *tensor = live_tensors; tensor != NULL;
+       tensor = tensor->registry_next) {
+    F32_OWNED_HIT(tensor, sizeof(*tensor));
+    if (tensor->magic != ET_F32_TENSOR_MAGIC ||
+        f32_destroy_record_find(tensor) == NULL)
+      unproved = 1;
+  }
+  for (const et_f32_parameter *parameter = live_parameters;
+       parameter != NULL; parameter = parameter->registry_next) {
+    F32_OWNED_HIT(parameter, sizeof(*parameter));
+    if (parameter->magic != ET_F32_PARAMETER_MAGIC ||
+        find_tensor(parameter->value) == NULL ||
+        find_tensor(parameter->gradient) == NULL ||
+        parameter->value == parameter->gradient)
+      unproved = 1;
+  }
+  for (const et_f32_tensor_borrow *borrow = live_borrows; borrow != NULL;
+       borrow = borrow->registry_next) {
+    F32_OWNED_HIT(borrow, sizeof(*borrow));
+    et_f32_tensor *owner = find_tensor(borrow->owner);
+    if (borrow->magic != ET_F32_BORROW_MAGIC || owner == NULL ||
+        owner->active_borrow != borrow)
+      unproved = 1;
+  }
+  for (const et_f32_tensor_copy_plan *plan = live_copy_plans; plan != NULL;
+       plan = plan->registry_next) {
+    F32_OWNED_HIT(plan, sizeof(*plan));
+    unproved = 1; /* No immutable address/length for assignments yet. */
+  }
+  for (const et_f32_gradient_plan *plan = live_gradient_plans; plan != NULL;
+       plan = plan->registry_next) {
+    F32_OWNED_HIT(plan, sizeof(*plan));
+    unproved = 1; /* Entries and prepared arrays lack immutable extents. */
+  }
+  for (const et_f32_gradient_reset_plan *plan = live_reset_plans;
+       plan != NULL; plan = plan->registry_next) {
+    F32_OWNED_HIT(plan, sizeof(*plan));
+    unproved = 1; /* Parameter array lacks immutable extent. */
+  }
+  for (const et_f32_tensor *item = retired_tensors; item != NULL;
+       item = item->registry_next) {
+    F32_OWNED_HIT(item, sizeof(*item));
+    if (item->magic != 0u) unproved = 1;
+  }
+  for (const et_f32_tensor_borrow *item = retired_borrows; item != NULL;
+       item = item->registry_next) {
+    F32_OWNED_HIT(item, sizeof(*item));
+    if (item->magic != 0u) unproved = 1;
+  }
+  for (const et_f32_tensor_copy_plan *item = retired_copy_plans; item != NULL;
+       item = item->registry_next) {
+    F32_OWNED_HIT(item, sizeof(*item));
+    if (item->magic != 0u) unproved = 1;
+  }
+  for (const et_f32_parameter *item = retired_parameters; item != NULL;
+       item = item->registry_next) {
+    F32_OWNED_HIT(item, sizeof(*item));
+    if (item->magic != 0u) unproved = 1;
+  }
+  for (const et_f32_gradient_plan *item = retired_gradient_plans;
+       item != NULL; item = item->registry_next) {
+    F32_OWNED_HIT(item, sizeof(*item));
+    if (item->magic != 0u) unproved = 1;
+  }
+  for (const et_f32_gradient_reset_plan *item = retired_reset_plans;
+       item != NULL; item = item->registry_next) {
+    F32_OWNED_HIT(item, sizeof(*item));
+    if (item->magic != 0u) unproved = 1;
+  }
+#undef F32_OWNED_HIT
+  return unproved ? 3 : 0;
+}
+
 int32_t et_f32_tensor_private_destroy_ready_v1(
     const et_f32_tensor *candidate, et_f32_tensor_error *error) {
   et_f32_tensor *tensor;
