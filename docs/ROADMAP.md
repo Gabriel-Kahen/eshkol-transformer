@@ -846,6 +846,13 @@ the fresh diagnostic can inspect recursive-loop IR in either build outcome. No m
 acceptance is claimed. The 159-file failed full gate is sealed at
 `e3-mode-graph-0c86bc3-fe9-f31-20261002-prepared-d/SHA256SUMS-FAILED`
 (`8c4d1f0f6b1a3a47c7c336c355298b9852d98849880ac3bb9e2cf09f4fb47ff3`).
+The later `27fb728` full gate completed its canonical and six mode/graph
+package builds, then stopped at the first runtime-driver compile: strict
+`--no-stdlib` Eshkol does not resolve the driver's `length` and `list-ref`
+calls. The driver now checks exactly three command-line entries with supported
+pair access and retains the two input arguments. This repair has host source
+checks only; a fresh supported compiled runtime, sanitizer and mutant gate is
+still required.
 The earlier 104-file sanitizer diagnostic remains preserved at
 `e3-mode-graph-sanitized-diagnostic-af3489d-fe9-f31-20261002-prepared-c/SHA256SUMS-DIAGNOSTIC`
 (`1d1195d630657e172b5bfc47a098d729070a3565f237a3bd5d5b5f4a82e17124`).

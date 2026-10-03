@@ -168,6 +168,17 @@ printf '%s\\n' "$e3_tuple_kind"
         self.assertIn("(>= index 17) (<= index 26)", driver)
         self.assertIn("(e3-mg-owner-controls-restored? probes)", driver)
 
+    def test_no_stdlib_runtime_driver_arguments(self) -> None:
+        runner = (ROOT / "scripts/test-e3-mode-graph.sh").read_text()
+        runtime = (ROOT / "tests/e3_mode_graph/runtime.esk").read_text()
+        self.assertIn('--strict-types --no-stdlib -O 2', runner)
+        self.assertNotIn('(length args)', runtime)
+        self.assertNotIn('(list-ref args', runtime)
+        self.assertIn('(null? (cdr (cdr (cdr args))))', runtime)
+        self.assertIn('(define corpus (car (cdr args)))', runtime)
+        self.assertIn('(define gradient (car (cdr (cdr args))))', runtime)
+        self.assertIn('(vector corpus) output)', runtime)
+
     def test_sanitized_import_policy_rejects_inventory_drift(self) -> None:
         normal = lines(MODE, "undefined_symbols")
         non = lines(MODE, "sanitized_noninstrumentation_undefined_symbols")
