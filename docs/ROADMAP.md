@@ -998,8 +998,8 @@ forward-cut, exhaustion, predecessor and private feature-boundary checks pass.
 Independent evidence review accepted all 106 files in
 `g3c4-p2g2-second-frame-4851e17-fe9-f31-20261002-prepared-b/SHA256SUMS-RUN`
 (SHA-256 `6b2c96a4d4b6cc79881d73d9ce9ff4c4ad9a809e27e78e8fa64aa0d9cfb50a5e`).
-Hosted integration remains pending. It publishes no terminal result,
-Eshkol T1 decode, public admission or persistence.
+Hosted exact-head checks passed 23/23 and PR #180 merged at `4b7e7c23`.
+It publishes no terminal result, Eshkol T1 decode, public admission or persistence.
 
 The [private EOS-capable first-frame carrier candidate](g3/G3_C4_P2_G2_EOS_FIRST_FRAME_LEAF.md)
 adds a guarded genuine first sample/forward route for selected EOS, using
@@ -1014,6 +1014,32 @@ seal `g3c4-p2g2-eos-first-frame-a9c0e2c-fe9-f31-20261002-prepared-a/SHA256SUMS-R
 (`1287d2a520ed7de09c61f87b69b77a1ae13736ef9b737ff4ae924b64ab6e3b2d`)
 was independently accepted. Hosted CI/integration remain pending; no EOS
 termination, logical-G1 publication, second token or public G2 claim follows.
+
+The [private native P2/G2 terminal](g3/G3_C4_P2_G2_NATIVE_TERMINAL_CONTRACT.md)
+commits one genuine first EOS or two genuine sampled IDs with a guarded A2
+transaction/cache ownership witness, logical length one or two, final RNG and
+detached snapshot. It retains physical output capacity two and a distinct
+terminal owner marker; P2/G1 publication remains disjoint. Independently
+reviewed `aae70bb`/tree `01d1e855` passed the pinned fe9/f31 Clang 21 native
+normal/repeat/ASan+UBSan+LSan gate (4,036 checks each), 17-row independent
+second-draw oracle, P2/G1 coexistence (263 checks), prefix/EOS/second-frame
+predecessors (301/2,051/2,965 checks), and private feature/symbol boundaries.
+Docker/launcher exits and pre/post pins passed. The independently accepted
+62-file seal is `g3c4-p2g2-terminal-aae70bb-fe9-f31-20261002-prepared-a/SHA256SUMS-RUN`
+(`2e6a74108fa55d4f440661b0322317e9374c3daf0dad6a25da3059700f817d6f`).
+Hosted CI and merge remain pending. This is native-private only;
+T1-authenticated Eshkol text/result composition, public G2 and continuation
+remain downstream.
+
+PR #184's first hosted M3, M3T and G3-S jobs stopped at stale bytewise A2
+predecessor pins after the reviewed private terminal witness changed the A2
+header and source. The five affected A2 entries and G3-N's dependent N3K
+manifest pin now track those exact bytes. The O2 hook acceptance test also
+repins its include-tree digest for the same private feature-gated A2 header
+addition; its public facade and O2 source remain unchanged. A byte-tokenizer
+job lost runner communication without a retained test failure; fresh hosted
+CI must resolve that infrastructure result. Hosted rerun and broader PR
+acceptance remain pending.
 
 The [TR3 same-aggregate constructor candidate](TR3_PUBLIC_CANDIDATE_PACKAGE.md)
 is integrated at `210db84` through `04349f8` and proves an A0 five-receiver
