@@ -1604,9 +1604,12 @@ moment tensors and its entry array, but current builder cleanup ignores tensor
 destroy errors and f32 has no read-only production destroy preflight. The
 contract requires registry-first identity, idle borrow/plan state and exact
 backing-allocation provenance before O2 can promise an allocation-free,
-fail-stop retirement tail. O2 pointer admission alone cannot prove the closed
-Eshkol ledger or 14 M3T/P1 associations. This is documentation only: the f32
-producer, O2 retire path, supported gate and candidate cleanup remain pending.
+fail-stop retirement tail. A feature-gated native f32 producer candidate now
+records creation/clone-time backing and checks destroy readiness without a
+borrow or authority change; its focused host normal, repeat and sanitizer
+gate is local evidence, pending independent review and a supported gate.
+O2 pointer admission alone cannot prove the closed Eshkol ledger or 14 M3T/P1
+associations. The O2 retire path and candidate cleanup remain pending.
 
 The proposed [G3-R P1/I2 sealed-graph retirement producer contract](g3/G3_R_P1_I2_SEALED_GRAPH_RETIREMENT_CONTRACT.md)
 pins the candidate-aware preseal M3T/I2/P1 handshake and a retained exact

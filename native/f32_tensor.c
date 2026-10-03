@@ -151,6 +151,24 @@ static et_f32_gradient_plan *retired_gradient_plans;
 static et_f32_gradient_reset_plan *retired_reset_plans;
 static f32_retired_index_node *f32_retired_index_root;
 
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+typedef struct f32_destroy_provenance {
+  struct f32_destroy_provenance *next;
+  const et_f32_tensor *owner;
+  const uint64_t *shape;
+  const size_t *strides;
+  const float *data;
+  size_t rank;
+  size_t count;
+  size_t bytes;
+  uint32_t ownership_kind;
+  uint64_t dimensions[ET_KERNEL_MAX_RANK];
+  size_t pitches[ET_KERNEL_MAX_RANK];
+} f32_destroy_provenance;
+
+static f32_destroy_provenance *f32_destroy_records;
+#endif
+
 #define F32_RETIRED_INDEX_OFFSET offsetof(et_f32_tensor, retired_index)
 _Static_assert(F32_RETIRED_INDEX_OFFSET ==
                    offsetof(et_f32_tensor_borrow, retired_index) &&
@@ -265,6 +283,55 @@ static void *f32_calloc(size_t count, size_t size) {
   f32_record_allocation(allocation, count, size);
   return allocation;
 }
+
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+static f32_destroy_provenance *f32_destroy_record_find(
+    const et_f32_tensor *owner) {
+  for (f32_destroy_provenance *record = f32_destroy_records; record != NULL;
+       record = record->next) {
+    if (record->owner == owner) {
+      return record;
+    }
+  }
+  return NULL;
+}
+
+static int f32_destroy_record_add(const et_f32_tensor *tensor) {
+  f32_destroy_provenance *record =
+      (f32_destroy_provenance *)f32_calloc(1u, sizeof(*record));
+  if (record == NULL) {
+    return 0;
+  }
+  record->owner = tensor;
+  record->shape = tensor->shape;
+  record->strides = tensor->strides;
+  record->data = tensor->data;
+  record->rank = tensor->rank;
+  record->count = tensor->element_count;
+  record->bytes = tensor->byte_length;
+  record->ownership_kind = ET_F32_OWNERSHIP_ORDINARY;
+  for (size_t index = 0u; index < tensor->rank; ++index) {
+    record->dimensions[index] = tensor->shape[index];
+    record->pitches[index] = tensor->strides[index];
+  }
+  record->next = f32_destroy_records;
+  f32_destroy_records = record;
+  return 1;
+}
+
+static void f32_destroy_record_remove(const et_f32_tensor *owner) {
+  f32_destroy_provenance **cursor = &f32_destroy_records;
+  while (*cursor != NULL && (*cursor)->owner != owner) {
+    cursor = &(*cursor)->next;
+  }
+  if (*cursor == NULL) {
+    abort();
+  }
+  f32_destroy_provenance *record = *cursor;
+  *cursor = record->next;
+  free(record);
+}
+#endif
 
 static int pointer_span_fits(const void *pointer, size_t bytes) {
   return bytes == 0u ||
@@ -698,6 +765,9 @@ static void retire_tensor(et_f32_tensor *tensor) {
  * and has no active borrow or plan pin.  This is the nonraising destruction
  * tail used after public or parameter-owner release admission. */
 static void destroy_tensor_admitted(et_f32_tensor *tensor) {
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  f32_destroy_record_remove(tensor);
+#endif
   unregister_tensor(tensor);
   free(tensor->data);
   free(tensor->strides);
@@ -1163,12 +1233,332 @@ int32_t et_f32_tensor_create_v1(size_t rank, const uint64_t *shape,
                        "f32-tensor-create", "cannot allocate tensor storage");
     }
   }
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  if (!f32_destroy_record_add(tensor)) {
+    free(tensor->data);
+    free(tensor->strides);
+    free(tensor->shape);
+    free(tensor);
+    return set_error(error, ET_F32_TENSOR_ERROR_INTERNAL,
+                     ET_F32_TENSOR_CODE_ALLOCATION_FAILED,
+                     "f32-tensor-create", "cannot record tensor backing");
+  }
+#endif
   tensor->magic = ET_F32_TENSOR_MAGIC;
   (void)success(error);
   register_tensor(tensor);
   *output = tensor;
   return 0;
 }
+
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+typedef struct f32_destroy_span {
+  const void *address;
+  size_t bytes;
+} f32_destroy_span;
+
+static int f32_destroy_spans_overlap(const f32_destroy_span *spans,
+                                     size_t count, const void *address,
+                                     size_t bytes) {
+  for (size_t index = 0u; index < count; ++index) {
+    if (ranges_overlap(spans[index].address, spans[index].bytes, address,
+                       bytes)) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+static int f32_destroy_error_aliases(const et_f32_tensor_error *error) {
+  if (error == NULL) {
+    return 0;
+  }
+  if (!aligned_pointer(error, _Alignof(et_f32_tensor_error)) ||
+      !pointer_span_fits(error, sizeof(*error)) ||
+      f32_retired_control_overlaps(error, sizeof(*error))) {
+    return 1;
+  }
+  for (const f32_destroy_provenance *record = f32_destroy_records;
+       record != NULL; record = record->next) {
+    if (ranges_overlap(error, sizeof(*error), record, sizeof(*record)) ||
+        ranges_overlap(error, sizeof(*error), record->owner,
+                       sizeof(et_f32_tensor)) ||
+        ranges_overlap(error, sizeof(*error), record->shape,
+                       record->rank * sizeof(*record->shape)) ||
+        ranges_overlap(error, sizeof(*error), record->strides,
+                       record->rank * sizeof(*record->strides)) ||
+        ranges_overlap(error, sizeof(*error), record->data, record->bytes)) {
+      return 1;
+    }
+  }
+  for (const et_f32_tensor_borrow *borrow = live_borrows; borrow != NULL;
+       borrow = borrow->registry_next) {
+    if (ranges_overlap(error, sizeof(*error), borrow, sizeof(*borrow)))
+      return 1;
+  }
+  for (const et_f32_parameter *parameter = live_parameters;
+       parameter != NULL; parameter = parameter->registry_next) {
+    if (ranges_overlap(error, sizeof(*error), parameter, sizeof(*parameter)))
+      return 1;
+  }
+  for (const et_f32_tensor_copy_plan *plan = live_copy_plans; plan != NULL;
+       plan = plan->registry_next) {
+    if (plan->count > SIZE_MAX / sizeof(*plan->assignments) ||
+        ranges_overlap(error, sizeof(*error), plan, sizeof(*plan)) ||
+        ranges_overlap(error, sizeof(*error), plan->assignments,
+                       plan->count * sizeof(*plan->assignments)))
+      return 1;
+  }
+  for (const et_f32_gradient_plan *plan = live_gradient_plans; plan != NULL;
+       plan = plan->registry_next) {
+    if (plan->count > SIZE_MAX / sizeof(*plan->entries) ||
+        ranges_overlap(error, sizeof(*error), plan, sizeof(*plan)) ||
+        ranges_overlap(error, sizeof(*error), plan->entries,
+                       plan->count * sizeof(*plan->entries)))
+      return 1;
+    for (size_t index = 0u; index < plan->count; ++index) {
+      const et_f32_gradient_plan_entry *entry = &plan->entries[index];
+      const et_f32_parameter *parameter = find_parameter(entry->parameter);
+      const et_f32_tensor *gradient =
+          parameter == NULL ? NULL : find_tensor(parameter->gradient);
+      const f32_destroy_provenance *record =
+          gradient == NULL ? NULL : f32_destroy_record_find(gradient);
+      if (record == NULL ||
+          ranges_overlap(error, sizeof(*error), entry->prepared, record->bytes))
+        return 1;
+    }
+  }
+  for (const et_f32_gradient_reset_plan *plan = live_reset_plans;
+       plan != NULL; plan = plan->registry_next) {
+    if (plan->count > SIZE_MAX / sizeof(*plan->parameters) ||
+        ranges_overlap(error, sizeof(*error), plan, sizeof(*plan)) ||
+        ranges_overlap(error, sizeof(*error), plan->parameters,
+                       plan->count * sizeof(*plan->parameters)))
+      return 1;
+  }
+  return 0;
+}
+
+static int32_t f32_destroy_report(et_f32_tensor_error *error,
+                                  et_f32_tensor_error_category category,
+                                  et_f32_tensor_error_code code,
+                                  const char *message) {
+  if (error != NULL) {
+    memset(error, 0, sizeof(*error));
+    error->category = category;
+    error->code = code;
+    (void)snprintf(error->operation, sizeof(error->operation), "%s",
+                   "f32-private-destroy-ready");
+    (void)snprintf(error->message, sizeof(error->message), "%s", message);
+  }
+  return (int32_t)category;
+}
+
+static int f32_destroy_backing_consistent(const et_f32_tensor *tensor,
+                                           const f32_destroy_provenance *record) {
+  size_t count = 1u;
+  int empty = 0;
+  if (record == NULL || record->owner != tensor ||
+      record->rank > ET_KERNEL_MAX_RANK || tensor->rank != record->rank ||
+      tensor->element_count != record->count ||
+      tensor->byte_length != record->bytes ||
+      tensor->shape != record->shape ||
+      tensor->strides != record->strides || tensor->data != record->data ||
+      tensor->ownership_kind != record->ownership_kind ||
+      (record->rank == 0u && (record->shape != NULL || record->strides != NULL)) ||
+      (record->rank != 0u && (record->shape == NULL || record->strides == NULL)) ||
+      (record->bytes == 0u && record->data != NULL) ||
+      (record->bytes != 0u && record->data == NULL)) {
+    return 0;
+  }
+  for (size_t index = 0u; index < record->rank; ++index) {
+    if (record->shape[index] != record->dimensions[index] ||
+        record->strides[index] != record->pitches[index]) {
+      return 0;
+    }
+    empty = empty || record->dimensions[index] == 0u;
+  }
+  if (empty) {
+    count = 0u;
+  } else {
+    for (size_t index = 0u; index < record->rank; ++index) {
+      if (record->dimensions[index] > SIZE_MAX ||
+          count > SIZE_MAX / (size_t)record->dimensions[index]) {
+        return 0;
+      }
+      count *= (size_t)record->dimensions[index];
+    }
+  }
+  if (count > SIZE_MAX / sizeof(float) || count != record->count ||
+      count * sizeof(float) != record->bytes) {
+    return 0;
+  }
+  size_t stride = sizeof(float);
+  for (size_t index = record->rank; index > 0u; --index) {
+    size_t dimension = index - 1u;
+    if (record->pitches[dimension] != (empty ? 0u : stride)) {
+      return 0;
+    }
+    if (!empty) {
+      if (stride > SIZE_MAX / (size_t)record->dimensions[dimension]) {
+        return 0;
+      }
+      stride *= (size_t)record->dimensions[dimension];
+    }
+  }
+  return 1;
+}
+
+static int f32_destroy_backing_aliased(const f32_destroy_provenance *owner) {
+  const f32_destroy_span spans[] = {
+      {owner->owner, sizeof(et_f32_tensor)},
+      {owner->shape, owner->rank * sizeof(*owner->shape)},
+      {owner->strides, owner->rank * sizeof(*owner->strides)},
+      {owner->data, owner->bytes},
+  };
+  for (size_t left = 0u; left < 4u; ++left) {
+    if (!pointer_span_fits(spans[left].address, spans[left].bytes) ||
+        f32_retired_control_overlaps(spans[left].address, spans[left].bytes)) {
+      return 1;
+    }
+    for (size_t right = left + 1u; right < 4u; ++right) {
+      if (ranges_overlap(spans[left].address, spans[left].bytes,
+                         spans[right].address, spans[right].bytes)) {
+        return 1;
+      }
+    }
+  }
+  for (const et_f32_tensor *tensor = live_tensors; tensor != NULL;
+       tensor = tensor->registry_next) {
+    const f32_destroy_provenance *other = f32_destroy_record_find(tensor);
+    if (other == NULL || other->rank > ET_KERNEL_MAX_RANK) {
+      return 1;
+    }
+    if (tensor != owner->owner &&
+        (f32_destroy_spans_overlap(spans, 4u, tensor, sizeof(*tensor)) ||
+         f32_destroy_spans_overlap(spans, 4u, other->shape,
+                                   other->rank * sizeof(*other->shape)) ||
+         f32_destroy_spans_overlap(spans, 4u, other->strides,
+                                   other->rank * sizeof(*other->strides)) ||
+         f32_destroy_spans_overlap(spans, 4u, other->data, other->bytes) ||
+         f32_destroy_spans_overlap(spans, 4u, tensor->shape,
+                                   other->rank * sizeof(*other->shape)) ||
+         f32_destroy_spans_overlap(spans, 4u, tensor->strides,
+                                   other->rank * sizeof(*other->strides)) ||
+         f32_destroy_spans_overlap(spans, 4u, tensor->data, other->bytes))) {
+      return 1;
+    }
+  }
+  for (const f32_destroy_provenance *record = f32_destroy_records;
+       record != NULL; record = record->next) {
+    if (f32_destroy_spans_overlap(spans, 4u, record, sizeof(*record))) {
+      return 1;
+    }
+  }
+  for (const et_f32_tensor_borrow *borrow = live_borrows; borrow != NULL;
+       borrow = borrow->registry_next) {
+    if (f32_destroy_spans_overlap(spans, 4u, borrow, sizeof(*borrow))) {
+      return 1;
+    }
+  }
+  for (const et_f32_parameter *parameter = live_parameters; parameter != NULL;
+       parameter = parameter->registry_next) {
+    if (f32_destroy_spans_overlap(spans, 4u, parameter, sizeof(*parameter))) {
+      return 1;
+    }
+  }
+  for (const et_f32_tensor_copy_plan *plan = live_copy_plans; plan != NULL;
+       plan = plan->registry_next) {
+    if (plan->count > SIZE_MAX / sizeof(*plan->assignments) ||
+        f32_destroy_spans_overlap(spans, 4u, plan, sizeof(*plan)) ||
+        f32_destroy_spans_overlap(spans, 4u, plan->assignments,
+                                  plan->count * sizeof(*plan->assignments))) {
+      return 1;
+    }
+  }
+  for (const et_f32_gradient_plan *plan = live_gradient_plans; plan != NULL;
+       plan = plan->registry_next) {
+    if (plan->count > SIZE_MAX / sizeof(*plan->entries) ||
+        f32_destroy_spans_overlap(spans, 4u, plan, sizeof(*plan)) ||
+        f32_destroy_spans_overlap(spans, 4u, plan->entries,
+                                  plan->count * sizeof(*plan->entries))) {
+      return 1;
+    }
+    for (size_t index = 0u; index < plan->count; ++index) {
+      const et_f32_gradient_plan_entry *entry = &plan->entries[index];
+      const et_f32_parameter *parameter = find_parameter(entry->parameter);
+      const et_f32_tensor *gradient =
+          parameter == NULL ? NULL : find_tensor(parameter->gradient);
+      const f32_destroy_provenance *gradient_record =
+          gradient == NULL ? NULL : f32_destroy_record_find(gradient);
+      if (gradient_record == NULL ||
+          f32_destroy_spans_overlap(spans, 4u, entry->prepared,
+                                    gradient_record->bytes)) {
+        return 1;
+      }
+    }
+  }
+  for (const et_f32_gradient_reset_plan *plan = live_reset_plans; plan != NULL;
+       plan = plan->registry_next) {
+    if (plan->count > SIZE_MAX / sizeof(*plan->parameters) ||
+        f32_destroy_spans_overlap(spans, 4u, plan, sizeof(*plan)) ||
+        f32_destroy_spans_overlap(spans, 4u, plan->parameters,
+                                  plan->count * sizeof(*plan->parameters))) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+int32_t et_f32_tensor_private_destroy_ready_v1(
+    const et_f32_tensor *candidate, et_f32_tensor_error *error) {
+  et_f32_tensor *tensor;
+  f32_destroy_provenance *record;
+  if (f32_destroy_error_aliases(error)) {
+    return ET_F32_TENSOR_ERROR_INVALID_ARGUMENT;
+  }
+  if (candidate == NULL) {
+    return f32_destroy_report(error, ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+                     ET_F32_TENSOR_CODE_NULL_ARGUMENT,
+                     "tensor handle is null");
+  }
+  tensor = find_tensor(candidate);
+  if (tensor == NULL || tensor->magic != ET_F32_TENSOR_MAGIC) {
+    return f32_destroy_report(error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+                     ET_F32_TENSOR_CODE_INVALID_HANDLE,
+                     "tensor handle is foreign or stale");
+  }
+  if (tensor->active_borrow != NULL) {
+    return f32_destroy_report(error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+                     ET_F32_TENSOR_CODE_ACTIVE_BORROW,
+                     "tensor has an active borrow");
+  }
+  if (tensor->plan_pins != 0u ||
+      tensor->ownership_kind != ET_F32_OWNERSHIP_ORDINARY) {
+    return f32_destroy_report(error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+                     ET_F32_TENSOR_CODE_INVALID_HANDLE,
+                     "tensor is pinned or not ordinary-owned");
+  }
+  for (const et_f32_parameter *parameter = live_parameters;
+       parameter != NULL; parameter = parameter->registry_next) {
+    if (parameter->value == tensor || parameter->gradient == tensor) {
+      return f32_destroy_report(error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+                       ET_F32_TENSOR_CODE_INVALID_HANDLE,
+                       "tensor belongs to a live parameter");
+    }
+  }
+  record = f32_destroy_record_find(tensor);
+  if (!f32_destroy_backing_consistent(tensor, record) ||
+      record->ownership_kind != ET_F32_OWNERSHIP_ORDINARY ||
+      f32_destroy_backing_aliased(record)) {
+    return f32_destroy_report(error, ET_F32_TENSOR_ERROR_INTERNAL,
+                     ET_F32_TENSOR_CODE_PROVIDER_REJECTED,
+                     "tensor backing provenance is unproved");
+  }
+  if (error != NULL) memset(error, 0, sizeof(*error));
+  return 0;
+}
+#endif
 
 int32_t et_f32_tensor_destroy_v1(et_f32_tensor **slot,
                                  et_f32_tensor_error *error) {
@@ -1839,6 +2229,13 @@ int32_t et_f32_owned_tensor_clone_v1(const et_f32_tensor *source,
   int32_t result = et_f32_tensor_clone_v1(source, output, error);
   if (result == 0) {
     (*output)->ownership_kind = ET_F32_OWNERSHIP_PRIVATE_CLONE;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+    f32_destroy_provenance *record = f32_destroy_record_find(*output);
+    if (record == NULL) {
+      abort();
+    }
+    record->ownership_kind = ET_F32_OWNERSHIP_PRIVATE_CLONE;
+#endif
   }
   return result;
 }
@@ -2745,6 +3142,25 @@ int32_t et_f32_gradient_reset_plan_release_v1(
 }
 
 #ifdef ET_F32_TENSOR_TESTING
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+const et_f32_tensor *et_f32_parameter_test_gradient_tensor_v1(
+    const et_f32_parameter *candidate) {
+  et_f32_parameter *parameter = find_parameter(candidate);
+  return parameter == NULL ? NULL : parameter->gradient;
+}
+
+size_t et_f32_tensor_test_destroy_record_count_v1(void) {
+  size_t count = 0u;
+  for (const f32_destroy_provenance *record = f32_destroy_records;
+       record != NULL; record = record->next) ++count;
+  return count;
+}
+
+size_t et_f32_tensor_test_destroy_record_bytes_v1(void) {
+  return et_f32_tensor_test_destroy_record_count_v1() *
+         sizeof(f32_destroy_provenance);
+}
+#endif
 void et_f32_parameter_test_set_metadata_v1(et_f32_parameter *parameter,
                                            uint32_t state,
                                            uint64_t count,
