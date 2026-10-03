@@ -27,8 +27,9 @@ but its current mutable control fields alone do not independently prove that
 `shape`, `strides` and `data` still name the exact allocations owned by that
 tensor. The allocation envelope is an overlap accelerator, not a per-tensor
 backing ledger. A new production-private readiness seam therefore requires
-immutable creation/clone-time backing provenance, or an equivalently reviewed
-per-control ownership record, before O2 can claim that all 28 frees have a
+immutable creation/clone-time backing provenance for currently live
+allocations, or an equivalently reviewed per-control ownership record,
+before O2 can claim that all 28 frees have a
 non-failing tail. A broad address-range test or a shape check is insufficient.
 
 ## Proposed f32 seam
@@ -45,9 +46,11 @@ Return zero only when one **non-null** tensor can be destroyed by the existing
 ordinary tensor destructor without changing any other live authority. The
 call allocates nothing, takes no borrow, invokes no provider, and changes no
 tensor, plan or registry state. It may write only a caller-supplied, disjoint
-error record. O2 supplies its own stack record; an error-output span inside
-any live/retired I2 storage rejects before writing it. Failure leaves the
-candidate and all its backing bytes intact. The implementation must match
+error record. O2 supplies its own stack record; an error-output span inside a
+current live owned allocation or a retained control/tombstone span rejects
+before writing it. Historical freed payload spans are not reserved: their
+addresses may back new legitimate allocations. Failure leaves the candidate
+and all its backing bytes intact. The implementation must match
 the existing `et_f32_tensor_error` category/code conventions: null rejects as
 `INVALID_ARGUMENT/NULL_ARGUMENT`; foreign or stale registry identity as
 `INVALID_STATE/INVALID_HANDLE`; active borrow as
@@ -58,8 +61,8 @@ exact live-registry match.
 
 After that match, require the ordinary-owned tensor kind used by O2's clone
 path, no borrow or prepared-plan pin, internally consistent rank/count/byte
-length/shape/stride metadata, and exact recorded ownership of each present
-control, shape, stride and data allocation. Empty spans must obey the same
+length/shape/stride metadata, and exact recorded ownership of each currently
+live control, shape, stride and data allocation. Empty spans must obey the same
 create-time representation. Reject a moment that is any live parameter's
 value or gradient, an I2 private-owned clone, or whose backing/control span
 aliases another live owner's allocation or a retained control. These checks
