@@ -1671,6 +1671,11 @@ read-only provenance-backed span query needs independent contract and source
 review before O2 may write a caller error record while preserving owned state.
 The caller must independently supply a null error pointer or an aligned,
 writable 264-byte record; the query proves only known-owned-span disjointness.
+A guarded f32 producer candidate now uses creation-time tensor backing records
+and fails closed for live plan-owned arrays without immutable extents. Its local
+Clang 22 normal/repeat/sanitizer gate and existing readiness regression pass;
+independent review and the pinned supported gate remain pending. O2 retirement
+is still unaccepted.
 
 The proposed [G3-R P1/I2 sealed-graph retirement producer contract](g3/G3_R_P1_I2_SEALED_GRAPH_RETIREMENT_CONTRACT.md)
 pins the candidate-aware preseal M3T/I2/P1 handshake and a retained exact

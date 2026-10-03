@@ -81,3 +81,21 @@ then independently review the exact source and tests. Only after this gate
 may the O2 leaf claim a preflight that leaves component, provider and allocator
 state unchanged, with the disjoint caller error record as its only possible
 write, and a non-failing retirement tail.
+
+## Bounded producer candidate
+
+The guarded f32 producer candidate implements the signature above using the
+existing creation-time tensor backing records. It returns `3` for a live copy,
+gradient or reset plan unless the queried span overlaps the authenticated
+plan control itself: those plans have no immutable owned-array extent yet.
+This conservatively blocks O2 admission while any such plan is live, including
+an unrelated plan. It does not change the accepted destroy-readiness API or
+feature-off f32 object bytes.
+
+On local Clang 22, the focused normal, repeat and ASan/UBSan/LSan modes each
+pass 104 checks, including a real 320-byte backing allocation, decoy pointer,
+264-byte O2 error span, malformed public metadata and backing record, retry,
+plans, retained controls and freed payload. The existing f32 readiness gate
+still passes 451 checks per mode. The production feature-on symbol delta is
+only `et_f32_tensor_private_owned_span_overlap_v1`. Independent source review
+and the pinned supported compiler gate remain pending.
