@@ -89,7 +89,10 @@ behavioral admission rules are:
   preflight statuses plus P1/I2 graph revocation readiness; it returns a
   private retained witness, never a raw owner or caller callback. An absent
   ledger, forged/copied shell, foreign native pointer, stale handle, changed
-  14-path/tied-alias graph or shared input initializer rejects before mutation.
+  14-path/tied-alias graph rejects before mutation. A caller-owned input
+  initializer borrowed for construction is not in the retirement set. An
+  initializer claimed as candidate-owned but also shared or bound externally
+  rejects before mutation.
 * Native `et_o2_private_candidate_retire_preflight_v1` and
   `et_m3t_private_candidate_retire_preflight_v1` authenticate pointer identity
   by their own registries **before dereference**, prove live kind/provider and
@@ -127,7 +130,9 @@ and initializer preflight before the first destructive owner-retirement write,
 including proof
 that no G3-T generator/frame pins this model and that no published receiver
 or external shell aliases the candidate. A ledger-owned initializer may be
-retired; an externally supplied initializer remains the caller's. The
+retired only if its exclusive ownership is authenticated. A caller-owned
+initializer merely borrowed by the candidate remains untouched, while a
+candidate-owned initializer with any external binding rejects preflight. The
 unpublished candidate graph must have no live external binding. The witness
 is single-use and invalidated by any intervening enrollment/lease change.
 
@@ -163,7 +168,9 @@ bytes must be reported separately and truthfully, with a per-attempt bound.
 Do not report the total process footprint as zero or assert leak-free release
 from a flat live-payload count. Normal, repeat and ASan/UBSan/LSan tests must
 cover exact candidate teardown after restore and each construction cut;
-foreign/stale/copied identities; a retained model initializer; bound TR3
+foreign/stale/copied identities; caller-owned borrowed initializer survival;
+falsely candidate-owned but externally shared initializer rejection; a
+retained model initializer; bound TR3
 trainer; active O2 operation; held f32/P1/I2 borrow or pin; live M3T workspace
 and G3-T model lease; moment/provider mismatch; and fault injection before
 and after the first commit. Preflight failures must preserve the candidate for
