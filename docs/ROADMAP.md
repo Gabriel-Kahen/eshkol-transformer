@@ -1662,6 +1662,13 @@ O2 pointer admission alone cannot prove the closed Eshkol ledger or 14 M3T/P1
 associations. Hosted integration, the O2 retire path and candidate cleanup
 remain pending.
 
+The proposed [O2 error-span provenance prerequisite](g3/G3_R_O2_ERROR_SPAN_PROVENANCE_PREREQUISITE.md)
+records a concrete gap before native O2 retirement acceptance: the existing
+f32 storage-overlap query follows mutable tensor descriptors and can miss a
+still-owned recorded payload after descriptor corruption. A new guarded,
+read-only provenance-backed span query needs independent contract and source
+review before O2 may write a caller error record or claim read-only preflight.
+
 The proposed [G3-R P1/I2 sealed-graph retirement producer contract](g3/G3_R_P1_I2_SEALED_GRAPH_RETIREMENT_CONTRACT.md)
 pins the candidate-aware preseal M3T/I2/P1 handshake and a retained exact
 native P1 token roster. Graph preflight admits the candidate's exact live O2
