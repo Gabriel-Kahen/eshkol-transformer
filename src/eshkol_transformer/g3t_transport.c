@@ -63,6 +63,11 @@
 #error "G3-T RNG constructor requires kind-8 RNG clone authority"
 #endif
 #endif
+#ifdef ET_G3R_G3T_RNG_EQUAL_PRIVATE
+#ifndef ET_G3T_GENERATOR_RNG_PRIVATE
+#error "G3-R idle RNG equality requires the typed G3-T RNG constructor"
+#endif
+#endif
 #ifdef ET_G3T_RECORD_RNG_IMPORT_PRIVATE
 #ifndef ET_G3T_OUTPUT_RNG_CLONE_PRIVATE
 #error "G3-R word import requires kind-8 RNG clone ownership and release"
@@ -573,6 +578,35 @@ void *et_g3t_private_generator_rng_v1(
   c->h.next = g3t_registry;
   g3t_registry = &c->h;
   return c;
+}
+#endif
+#ifdef ET_G3R_G3T_RNG_EQUAL_PRIVATE
+int64_t et_g3t_private_idle_rng_words_equal_v1(
+    void *generator, int64_t version, int64_t seed,
+    int64_t counter_low, int64_t counter_high) {
+  g3t_clear();
+  g3t_context *c = g3t_admit(generator, 0);
+  if (!c) return g3t_error_category;
+  if (version != 1 || seed < 0)
+    return g3t_bad(G3T_ARGUMENT, G3T_CONFIG);
+  if (!c->model || !c->cache || c->h.busy || c->call_kind != 0 ||
+      c->final_committed ||
+      c->frame.active || c->frame.kind != 0 ||
+      c->frame.transaction || c->frame.candidate_cache ||
+      c->pins.held_mask || c->pending_output
+#ifdef ET_G3T_MANUAL_LOGITS_PRIVATE
+      || c->pending_logits
+#endif
+      )
+    return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+  owner *o = g3t_model(c->model);
+  if (!o) return g3t_error_category;
+  if (o->active != NULL)
+    return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+  if (c->rng[0] != version || c->rng[1] != seed ||
+      c->rng[2] != counter_low || c->rng[3] != counter_high)
+    return g3t_bad(G3T_STATE, G3T_INVARIANT);
+  return 0;
 }
 #endif
 int64_t et_g3t_private_generator_close_v1(void *candidate) {

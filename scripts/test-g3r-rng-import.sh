@@ -55,7 +55,9 @@ build_mode() {
         -DET_G3T_OWNED_TOKEN_INPUT_PRIVATE
         -DET_I64_TENSOR_STORAGE_QUERY_PRIVATE
         -DET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE)
-      [[ "$mode" != off ]] && extra+=(-DET_G3T_RECORD_RNG_IMPORT_PRIVATE)
+      [[ "$mode" != off ]] && extra+=(
+        -DET_G3T_RECORD_RNG_IMPORT_PRIVATE
+        -DET_G3R_G3T_RNG_EQUAL_PRIVATE)
     fi
     [[ "$stem" == m3_i64_integration ]] && extra=(-DET_M3_TESTING -DET_I64_TENSOR_TESTING -DET_I64_TENSOR_STORAGE_QUERY_PRIVATE)
     [[ "$stem" == m3_call_f32_integration ]] && extra=(-DET_F32_TENSOR_TESTING)
@@ -72,12 +74,14 @@ build_mode() {
   ar rcsD "$directory/libg3r_rng_import.a" "$directory"/objects/*.o
   if [[ "$mode" == off ]]; then
     if nm -g --defined-only "$directory/objects/g3t_transport.o" | \
-        grep 'et_g3t_private_rng_words_create_v1'; then
-      die "typed RNG import symbol escaped feature-off object"
+        grep -E 'et_g3t_private_(rng_words_create|idle_rng_words_equal)_v1'; then
+      die "G3-R private RNG symbol escaped feature-off object"
     fi
   else
     nm -g --defined-only "$directory/objects/g3t_transport.o" | \
       grep 'et_g3t_private_rng_words_create_v1' >/dev/null
+    nm -g --defined-only "$directory/objects/g3t_transport.o" | \
+      grep 'et_g3t_private_idle_rng_words_equal_v1' >/dev/null
     "$cc" "${common[@]}" "${flags[@]}" \
       -DET_G3T_TESTING -DET_G3T_PREFILL_SAMPLE_PRIVATE \
       -DET_G3T_OUTPUT_RNG_CLONE_PRIVATE \
@@ -144,8 +148,8 @@ done
 cp "$temporary/normal/oracle.stdout" "$evidence/oracle.stdout"
 cp "$temporary/normal/native.stdout" "$evidence/native.stdout"
 if nm -g --defined-only "$temporary/off/objects/g3t_transport.o" | \
-    grep 'et_g3t_private_rng_words_create_v1'; then
-  die "feature-off import symbol present"
+    grep -E 'et_g3t_private_(rng_words_create|idle_rng_words_equal)_v1'; then
+  die "feature-off private RNG symbol present"
 fi
 sha256sum "$PROJECT_ROOT/native/g3r_rng_import_source_closure.txt" \
   >"$evidence/closure.sha256"
