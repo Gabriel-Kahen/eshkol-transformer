@@ -2,8 +2,11 @@
 
 This is the original **noninstalled test contract** for the mode and graph
 obligations in [E3 §9](../E3_EVALUATION_PROPOSAL.md). Its subsequent
-implementation passed the bounded `d2b47a8` supported gate; the scoped main
-integration requires a fresh exact-tree gate. The original design audit used
+implementation passed the bounded `d2b47a8` supported gate; scoped
+`3db0f94`/tree `cab4d7ec` passed its separate full supported gate with a
+405-file seal (`b6550c62aa9e1c39e426a5e5819383710692f58fba88b3666d226734f6870a10`).
+The current-main `5520dfe` union leaves all enrolled package inputs unchanged;
+hosted CI and merge remain pending. The original design audit used
 main `d3988abd` and the separately
 reviewed, unmerged E3 test candidate `c78682ae`/tree `853f83e7`; its retention
 and numerical candidate files are not promoted by this document. The existing
@@ -97,7 +100,9 @@ noninstalled E3 root/extension transform was source-and-test reviewed at
 that transform pins and byte-compares canonical evaluator sources and inserts
 only the fixed reader calls and reviewed graph mutation points. The later
 `d2b47a8` full gate accepted the bounded emitted test aggregate and in-call
-observations; this scoped integration still needs its own exact-tree gate.
+observations; the scoped `3db0f94` full gate repeated those observations on
+the exact scoped tree. The current-main union changes no source/native closure
+or depfile input for those packages.
 A postcall wrapper or P1 public setter cannot satisfy the in-call seam.
 
 ## Real graph event, and current reachability blocker

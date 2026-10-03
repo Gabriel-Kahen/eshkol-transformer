@@ -5,8 +5,13 @@ as one exact E1B test tuple. The independently approved P1 test seam passed
 its supported compiled gate. The earlier complete `d2b47a8` source tree
 passed its supported mode/graph gate, sealed at
 `e3-mode-graph-d2b47a8-fe9-f31-20261003-prepared-i/SHA256SUMS-RUN`
-(`60dfa849...`). This scoped main integration needs a fresh exact-tree gate.
-No retention, numerical, full E3 §9 or public-path result follows.
+(`60dfa849...`). The scoped `3db0f94`/tree `cab4d7ec` source also passed its
+full supported gate, with all 405 files sealed at
+`e3-mode-graph-scoped-3db0f94-fe9-f31-20261003-prepared-j/SHA256SUMS-RUN`
+(`b6550c62aa9e1c39e426a5e5819383710692f58fba88b3666d226734f6870a10`).
+The current-main `5520dfe` union changes no enrolled package source or
+depfile input; hosted CI and merge remain pending. No retention, numerical,
+full E3 §9 or public-path result follows.
 
 `generate-e3-mode-graph-source.py` pins the canonical P1 and E3 roots and
 extension, checks the small checked-in E3 test root, and emits two build-private
@@ -52,8 +57,10 @@ The exact tuple has separate root/bridge, generated-source normalization,
 source/native closure and export/string/defined/undefined inventories, and
 native test flags. Canonical, diagnostic and installed package boundaries
 remain unchanged. Exact-tree inventory and runtime verification for this
-scoped integration remain pending; an unexpected emitted dependency is a gate
-failure requiring evidence, not an allowlist waiver.
+scoped source passed at `3db0f94`; none of the current-main union's changed
+paths appears in the seven package source/native closures or depfiles. An
+unexpected emitted dependency remains a gate failure requiring evidence,
+not an allowlist waiver.
 The package wrapper retains its actual staged object and manifests with an
 `exit.status` on a failed postbuild check, TERM or INT; successful publication
 removes staging. E1B itself retains rejected build scratch under the gate's
