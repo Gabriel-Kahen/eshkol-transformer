@@ -1598,6 +1598,16 @@ implementation, supported release gate, full replay rollback or public API is
 accepted. G3-T live-generator retirement remains a separate prerequisite for
 replay failure cleanup.
 
+The proposed [native O2 moment destroy-readiness prerequisite](g3/G3_R_O2_MOMENT_RETIRE_READINESS_CONTRACT.md)
+narrows the first O2 retirement gate. The live optimizer owns 28 ordinary f32
+moment tensors and its entry array, but current builder cleanup ignores tensor
+destroy errors and f32 has no read-only production destroy preflight. The
+contract requires registry-first identity, idle borrow/plan state and exact
+backing-allocation provenance before O2 can promise an allocation-free,
+fail-stop retirement tail. O2 pointer admission alone cannot prove the closed
+Eshkol ledger or 14 M3T/P1 associations. This is documentation only: the f32
+producer, O2 retire path, supported gate and candidate cleanup remain pending.
+
 The proposed [G3-R P1/I2 sealed-graph retirement producer contract](g3/G3_R_P1_I2_SEALED_GRAPH_RETIREMENT_CONTRACT.md)
 pins the candidate-aware preseal M3T/I2/P1 handshake and a retained exact
 native P1 token roster. Graph preflight admits the candidate's exact live O2
