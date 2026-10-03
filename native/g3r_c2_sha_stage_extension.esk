@@ -231,3 +231,22 @@
           (g3r-c2-sha-zero! (vector-ref entry 2))
           (vector-set! entry 1 'dead)
           #t))))
+
+;;; A reconstruction consumes the C2 stage but does not own this private SHA
+;;; sidecar. The receipt aggregate retires it after reconstruction succeeds or
+;;; fails. This transition admits only the exact registered, consumed shell.
+(define (g3r-c2-sha-stage-finalize-consumed-internal! shell)
+  (let ((entry (g3r-c2-sha-find-stage shell))
+        (c2-entry (c2-load-find-stage shell)))
+    (if (or (not entry) (not c2-entry))
+        (c2-load-fail 'invalid-argument 'checkpoint-load
+                      "expected exact private SHA stage" '()))
+    (if (eq? (vector-ref entry 1) 'dead) #t
+        (begin
+          (if (or (not (eq? (vector-ref entry 1) 'live))
+                  (not (eq? (vector-ref c2-entry 2) 'dead)))
+              (c2-load-fail 'invalid-state 'checkpoint-load
+                            "private SHA stage is not consumed" '()))
+          (g3r-c2-sha-zero! (vector-ref entry 2))
+          (vector-set! entry 1 'dead)
+          #t))))
