@@ -216,10 +216,65 @@ static void metadata_and_allocations(void) {
   CHECK(et_f32_tensor_test_destroy_record_bytes_v1() == record_bytes);
 }
 
+static void owned_clone_allocation_cuts(void) {
+  et_f32_tensor *source = make_tensor(4u);
+  const uint32_t bits[4] = {UINT32_C(0x80000000), UINT32_C(0x3f800000),
+                            UINT32_C(0x7fc01234), UINT32_C(0xff7fffff)};
+  et_f32_tensor_error error;
+  CHECK(et_f32_tensor_copy_bits_from_v1(source, bits, 4u, &error) == 0);
+  et_f32_test_tensor_metadata_v1 original = {.struct_size = sizeof(original)};
+  CHECK(et_f32_tensor_test_metadata_snapshot_v1(source, &original) == 0);
+  const et_f32_test_live_counts_v1 baseline = live_counts();
+  const size_t record_count = et_f32_tensor_test_destroy_record_count_v1();
+  const size_t record_bytes = et_f32_tensor_test_destroy_record_bytes_v1();
+
+  /* Rank-one, nonempty clone: control, shape, stride, data, provenance. */
+  for (size_t cut = 0u; cut < 5u; ++cut) {
+    et_f32_tensor *clone = NULL;
+    et_f32_test_tensor_metadata_v1 observed = {
+        .struct_size = sizeof(observed)};
+    et_f32_tensor_test_fail_alloc_after_v1(cut);
+    CHECK(et_f32_owned_tensor_clone_v1(source, &clone, &error) ==
+          ET_F32_TENSOR_ERROR_INTERNAL);
+    CHECK(error.category == ET_F32_TENSOR_ERROR_INTERNAL);
+    CHECK(error.code == ET_F32_TENSOR_CODE_ALLOCATION_FAILED);
+    CHECK(clone == NULL);
+    CHECK(et_f32_tensor_test_successful_allocations_v1() == cut);
+    CHECK(live_counts().tensors == baseline.tensors);
+    CHECK(live_counts().owned_clones == baseline.owned_clones);
+    CHECK(et_f32_tensor_test_destroy_record_count_v1() == record_count);
+    CHECK(et_f32_tensor_test_destroy_record_bytes_v1() == record_bytes);
+    CHECK(et_f32_tensor_test_metadata_snapshot_v1(source, &observed) == 0);
+    CHECK(memcmp(&original, &observed, sizeof(original)) == 0);
+    CHECK(memcmp(et_f32_tensor_test_data_storage_v1(source), bits,
+                 sizeof(bits)) == 0);
+    et_f32_tensor_test_reset_allocator_v1();
+  }
+
+  et_f32_tensor *clone = NULL;
+  uint32_t cloned_bits[4] = {0};
+  CHECK(et_f32_owned_tensor_clone_v1(source, &clone, &error) == 0);
+  CHECK(clone != NULL);
+  CHECK(live_counts().tensors == baseline.tensors + 1u);
+  CHECK(live_counts().owned_clones == baseline.owned_clones + 1u);
+  CHECK(et_f32_tensor_test_destroy_record_count_v1() == record_count + 1u);
+  CHECK(et_f32_tensor_copy_bits_to_v1(clone, cloned_bits, 4u, &error) == 0);
+  CHECK(memcmp(cloned_bits, bits, sizeof(bits)) == 0);
+  expect_status(clone, ET_F32_TENSOR_ERROR_INVALID_STATE,
+                ET_F32_TENSOR_CODE_INVALID_HANDLE);
+  CHECK(et_f32_owned_tensor_release_v1(clone, &error) == 0);
+  CHECK(live_counts().tensors == baseline.tensors);
+  CHECK(live_counts().owned_clones == baseline.owned_clones);
+  CHECK(et_f32_tensor_test_destroy_record_count_v1() == record_count);
+  CHECK(et_f32_tensor_test_destroy_record_bytes_v1() == record_bytes);
+  release(&source);
+}
+
 int main(void) {
   basic_and_lifetime();
   associations_and_aliases();
   metadata_and_allocations();
+  owned_clone_allocation_cuts();
   if (failures != 0u) return 1;
   printf("G3R f32 destroy readiness PASS: %u checks\n", checks);
   return 0;
