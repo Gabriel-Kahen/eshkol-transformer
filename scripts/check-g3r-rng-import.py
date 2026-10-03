@@ -54,6 +54,7 @@ add = [
     "tests/q0/test_python_isolation.py",
     "docs/g3/G3_R_TYPED_RNG_IMPORT_CONTRACT.md",
     "docs/g3/G3_R_TYPED_RNG_IMPORT_LEAF.md",
+    "docs/g3/G3_R_RESTORE_PREREQUISITES_CONTRACT.md",
     "docs/ROADMAP.md",
 ]
 expected = list(dict.fromkeys(base + owner + add))
@@ -71,6 +72,22 @@ runner = (root / "scripts/test-g3r-rng-import.sh").read_text()
 ctor = native.split("void *et_g3t_private_rng_words_create_v1(", 1)[1].split(
     "int64_t et_g3t_private_rng_release_v1(", 1
 )[0]
+equal = native.split("int64_t et_g3t_private_idle_rng_words_equal_v1(", 1)[1].split(
+    "int64_t et_g3t_private_generator_close_v1(", 1
+)[0]
+assert '#error "G3-R idle RNG equality requires the typed G3-T RNG constructor"' in native
+assert "#ifdef ET_G3R_G3T_RNG_EQUAL_PRIVATE" in header
+ordered(equal, "g3t_clear();", "g3t_admit(generator, 0)",
+        "version != 1 || seed < 0", "g3t_model(c->model)",
+        "o->active != NULL", "c->rng[0] != version", "c->rng[1] != seed",
+        "c->rng[2] != counter_low", "c->rng[3] != counter_high")
+for forbidden in ("calloc(", "malloc(", "realloc(", "memcpy(", "et_g3t_test_",
+                  "borrow_begin", "sample_v1", "output_rng_clone"):
+    assert forbidden not in equal, forbidden
+for required in ("c->h.busy", "c->frame.active", "c->pins.held_mask",
+                 "c->pending_output", "c->pending_logits", "c->frame.transaction",
+                 "c->frame.candidate_cache", "G3T_STATE, G3T_INVARIANT"):
+    assert required in equal, required
 assert "#error \"G3-R word import requires kind-8 RNG clone ownership" in native
 assert "#ifdef ET_G3T_RECORD_RNG_IMPORT_PRIVATE" in native
 assert "#ifdef ET_G3T_RECORD_RNG_IMPORT_PRIVATE" in header
@@ -104,6 +121,13 @@ for phrase in (
     "Eshkol vector/cons allocation cuts reached",
     "genuine published-output RNG predecessor words",
     "imported four words equal authentic output-clone predecessor",
+    "genuine imported generator exact idle RNG equality",
+    "version validation and seed/counter mismatches",
+    "wrong-kind and foreign generator identity",
+    "pending output rejects equality without changing RNG",
+    "idle generator rejects held model lease",
+    "real manual prefill and call-finish retain idle RNG",
+    "idle equality needs no native G3-T allocation",
 ):
     assert phrase in on, phrase
 ordered(on, "(g3m-generate-p1-g1! predecessor-generator predecessor-input)",
@@ -117,6 +141,8 @@ assert "g3r_rng_import_extension.esk" not in off
 for phrase in ("build_mode off", "build_mode normal", "build_mode sanitize",
                "repeat.stdout", "detect_leaks=1", "rng_import_native_test.c",
                "rng_import_oracle.py", "et_g3t_private_rng_words_create_v1",
+               "et_g3t_private_idle_rng_words_equal_v1",
+               "ET_G3R_G3T_RNG_EQUAL_PRIVATE",
                "closure.sha256", "--wrap=arena_allocate_vector_with_header",
                "--wrap=arena_allocate_cons_with_header"):
     assert phrase in runner, phrase

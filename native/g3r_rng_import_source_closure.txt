@@ -183,3 +183,4 @@ scripts/check-g3r-rng-import.py
 scripts/test-g3r-rng-import.sh
 docs/g3/G3_R_TYPED_RNG_IMPORT_CONTRACT.md
 docs/g3/G3_R_TYPED_RNG_IMPORT_LEAF.md
+docs/g3/G3_R_RESTORE_PREREQUISITES_CONTRACT.md

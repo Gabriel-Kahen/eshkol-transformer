@@ -13,6 +13,12 @@ void *et_g3t_private_generator_rng_v1(
     void *model_owner, void *rng, int64_t mode, int64_t temperature_bits,
     int64_t k, int64_t p_bits, int64_t max_new, int64_t eos);
 #endif
+#ifdef ET_G3R_G3T_RNG_EQUAL_PRIVATE
+/* Scalar status only; authentic idle generator and exact four-word match. */
+int64_t et_g3t_private_idle_rng_words_equal_v1(
+    void *generator, int64_t version, int64_t seed,
+    int64_t counter_low, int64_t counter_high);
+#endif
 int64_t et_g3t_private_generator_close_v1(void *context);
 int64_t et_g3t_private_call_acquire_v1(void *context, int64_t call_kind);
 int64_t et_g3t_private_call_abort_v1(void *context);

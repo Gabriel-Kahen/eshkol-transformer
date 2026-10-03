@@ -1572,8 +1572,15 @@ generator four-word equality predicate to prove manual replay consumes no
 G3-S draw. It also bounds the fixed diagnostic-C2 candidate recipe to
 external X1/T1/D2 inputs authenticated against loaded C2 controls before
 TR3 restore, with candidate-only cleanup and no public LOAD or generation ABI
-change. Both signatures and the ownership contract await independent review;
+change. The private signatures bound their separate implementation leaves;
 no pair loader, live replay, save writer or resumed continuation is accepted.
+The G3-T idle four-word equality predicate now has a bounded private source
+candidate under `ET_G3R_G3T_RNG_EQUAL_PRIVATE`. Its fixture uses an authentic
+typed-import generator, checks all signed words and rejection provenance,
+and verifies unchanged RNG after a real manual prefill and call finish.
+Feature-off symbols, compiled runtime, repeat and sanitizer evidence remain
+pending independent review and a fresh supported gate. The separate C2
+same-stage SHA prerequisite remains unimplemented.
 
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
