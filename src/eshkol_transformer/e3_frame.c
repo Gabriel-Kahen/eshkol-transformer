@@ -13,6 +13,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+
+#ifdef ET_E3_RETENTION_TESTING
+#include "d2_native.h"
+extern et_f32_tensor *et_m3t_test_parameter_gradient(et_f32_parameter *);
+#endif
+
 /* E3 is the native owner of the fixed M3 aggregate.  The package tuple compiles
  * m3_call_f32_integration.c separately so there is one I2 registry. */
 #include "m3_model.c"
@@ -289,6 +295,7 @@ static int64_t e3_scope_begin(et_f32_tensor *tensor,
 static void e3_scope_end(et_f32_scoped_guard_internal *guard) {
   if (et_f32_tensor_scoped_end_internal(guard) != 0) abort();
 }
+
 
 static int64_t e3_tensor_shape(et_f32_tensor *tensor, size_t rank,
                                const uint64_t *shape, int destination) {
@@ -1350,3 +1357,121 @@ void et_e3_private_frame_destroy_v1(void *pointer) {
   frame->next_role = frame->stage_plane = frame->sum_bank = 0;
   frame->committed = frame->cleanup_ready = frame->published_valid = 0;
 }
+
+#ifdef ET_E3_RETENTION_TESTING
+/* Mode/graph-only noninstalled probes. Snapshots do not create owners. */
+int64_t et_e3_test_retention_probe_v1(int64_t selector) {
+  et_f32_test_live_counts_v1 live = {.struct_size = sizeof(live)};
+  et_f32_test_retired_counts_v1 retired = {.struct_size = sizeof(retired)};
+  et_f32_test_borrow_event_counts_v1 events = {.struct_size = sizeof(events)};
+  et_f32_test_live_counts_snapshot_v1(&live);
+  et_f32_test_retired_counts_snapshot_v1(&retired);
+  et_f32_test_borrow_event_counts_snapshot_v1(&events);
+  size_t frames = 0, dead_frames = 0, busy_frames = 0, graphs = 0;
+  for (const et_e3_frame_internal *f = e3_registry; f; f = f->next) {
+    if (f->lifecycle == 1) {
+      ++frames;
+      if (f->phase != E3_IDLE || !e3_pins_idle(&f->pins)) ++busy_frames;
+    } else if (f->lifecycle == 2) {
+      ++dead_frames;
+    }
+  }
+  for (const record *r = registry; r; r = r->next)
+    if (r->kind == M3_GRAPH && r->state >= 0) ++graphs;
+  switch (selector) {
+    case 0: return (int64_t)live.tensors;
+    case 1: return (int64_t)live.parameters;
+    case 2: return (int64_t)live.owned_clones;
+    case 3: return (int64_t)live.borrows;
+    case 4: return (int64_t)live.copy_plans;
+    case 5: return (int64_t)live.gradient_plans;
+    case 6: return (int64_t)live.reset_plans;
+    case 7: return (int64_t)retired.tensors;
+    case 8: return (int64_t)retired.parameters;
+    case 9: return (int64_t)retired.borrows;
+    case 10: return (int64_t)retired.copy_plans;
+    case 11: return (int64_t)retired.gradient_plans;
+    case 12: return (int64_t)retired.reset_plans;
+    case 13: return (int64_t)retired.retained_control_bytes;
+    case 14: return (int64_t)events.begin_calls;
+    case 15: return (int64_t)events.view_calls;
+    case 16: return (int64_t)events.end_calls;
+    case 17: return (int64_t)frames;
+    case 18: return (int64_t)dead_frames;
+    case 19: return (int64_t)(dead_frames * sizeof(et_e3_frame_internal));
+    case 20: return (int64_t)busy_frames;
+    case 21: return (int64_t)graphs;
+    case 22: return et_d2_dataset_test_live_count_v1();
+    case 23: return et_d2_batch_test_live_count_v1();
+    case 24: return et_d2_batch_test_borrow_count_v1();
+    case 25: return et_d2_test_owned_allocation_count_v1();
+    case 26: return et_d2_exact_read_test_fd_live_count_v1();
+    case 27: return et_d2_exact_read_test_fd_peak_count_v1();
+    case 28: return (int64_t)et_f32_tensor_test_borrow_bytes_v1();
+    default: return -1;
+  }
+}
+
+static et_f32_tensor *e3_test_model_tensor(owner *model, int64_t parameter,
+                                            int64_t gradient) {
+  if (!model || model->r.state != 1 || parameter < 0 || parameter >= 14 ||
+      (gradient != 0 && gradient != 1)) return NULL;
+  return gradient ? et_m3t_test_parameter_gradient(model->p[parameter])
+                  : value(model, (size_t)parameter);
+}
+
+int64_t et_e3_test_model_word_count_v1(void *pointer, int64_t parameter,
+                                        int64_t gradient) {
+  owner *model = admit(pointer, OWNER, 0);
+  et_f32_tensor *tensor = e3_test_model_tensor(model, parameter, gradient);
+  size_t bytes = 0;
+  et_f32_tensor_error error;
+  if (!tensor || et_f32_tensor_byte_length_v1(tensor, &bytes, &error) != 0 ||
+      bytes % sizeof(uint32_t) || bytes > 4096) return -1;
+  return (int64_t)(bytes / sizeof(uint32_t));
+}
+
+int64_t et_e3_test_model_word_v1(void *pointer, int64_t parameter,
+                                  int64_t gradient, int64_t index) {
+  const int64_t count =
+      et_e3_test_model_word_count_v1(pointer, parameter, gradient);
+  if (count < 0 || index < 0 || index >= count) return -1;
+  owner *model = admit(pointer, OWNER, 0);
+  et_f32_tensor *tensor = e3_test_model_tensor(model, parameter, gradient);
+  uint32_t words[1024] = {0};
+  et_f32_tensor_error error;
+  if (et_f32_tensor_copy_bits_to_v1(tensor, words, (size_t)count, &error) != 0)
+    return -1;
+  return (int64_t)words[index];
+}
+
+int64_t et_e3_test_gradient_metadata_v1(void *pointer, int64_t parameter,
+                                         int64_t field) {
+  owner *model = admit(pointer, OWNER, 0);
+  if (!model || model->r.state != 1 || parameter < 0 || parameter >= 14 ||
+      field < 0 || field > 2) return -1;
+  et_f32_gradient_metadata_v1 metadata = {.struct_size = sizeof(metadata)};
+  et_f32_tensor_error error;
+  if (et_f32_parameter_gradient_metadata_v1(model->p[parameter], &metadata,
+                                             &error) != 0) return -1;
+  return field == 0 ? (int64_t)metadata.state
+       : field == 1 ? (int64_t)metadata.contribution_count
+                    : (int64_t)metadata.normalization_weight_bits;
+}
+
+int64_t et_e3_test_seed_gradient_v1(void *pointer) {
+  owner *model = admit(pointer, OWNER, 0);
+  if (!model || model->r.state != 1 || model->active) return -1;
+  et_f32_tensor *gradient = e3_test_model_tensor(model, 0, 1);
+  size_t bytes = 0;
+  et_f32_tensor_error error;
+  if (!gradient || et_f32_tensor_byte_length_v1(gradient, &bytes, &error) != 0 ||
+      bytes % sizeof(uint32_t) || bytes == 0 || bytes > 4096) return -1;
+  uint32_t words[1024] = {UINT32_C(0x3f000000)};
+  et_f32_parameter_test_set_gradient_bits_v1(model->p[0], words,
+                                               bytes / sizeof(uint32_t));
+  et_f32_parameter_test_set_metadata_v1(model->p[0], ET_F32_GRADIENT_PRESENT,
+                                        1u, UINT32_C(0x3f800000));
+  return 0;
+}
+#endif

@@ -733,16 +733,23 @@ It does not close the other E3 §9 retention, mode, gradient, and sanitizer
 obligations.
 
 The [E3 in-call mode and graph observation contract](e3/E3_MODE_GRAPH_OBSERVATION_CONTRACT.md)
-is a design-only next leaf for §9. Its corrected P1-owned test variant keys a
-fixed mixed17 setter and immediate actual 17-bit mode reader by the authentic
-bound E3 token; the raw nodes remain lexical and canonical trusted/public
-surfaces unchanged. Exact source composition and compiled evidence are still
-pending. The unmerged retention candidate's postcall helpers currently cannot
-run, and a zero live graph-owner probe does not exclude transient creation.
-A nonreentrant in-call source seam and a genuinely reachable M3 graph-create/
-release mutation under active E3 model authority remain unaccepted
-prerequisites. No implementation, compiled proof, or edge-corpus acceptance is
-claimed here.
+now has a bounded [source candidate](e3/E3_MODE_GRAPH_SOURCE_CANDIDATE.md).
+Its P1-owned test variant reads all 17 modes through the authentic E3 token;
+the noninstalled E3 tuple observes real M3 capture, enrollment, release and
+live graph records during a call. The accepted `d2b47a8`/tree `539a09ce`
+fe9/f31 gate passed canonical and six closed mode/graph packages, 175 normal
+and 223 sanitizer imports, byte-identical fresh builds, compiled normal,
+repeat, poisoned and sanitizer cases with absent/present gradients, and real
+missed-child and graph-create mutant rejection at the in-call assertions.
+Enter-write-only exited 134 before success. Its 405-file supported seal is
+`e3-mode-graph-d2b47a8-fe9-f31-20261003-prepared-i/SHA256SUMS-RUN`
+(`60dfa849257d0cf1b5160aa0ac3ea2407e29fce8ef3b664a57f3a62ad5d9ec16`).
+The shell's expected abort diagnostic appears in Docker stderr; ordinary
+compiled case stderr is empty. This scoped main integration changes the exact
+source tree and therefore requires its own full supported gate before a
+merged-head claim. Retention, numerical, other §9 and public-path acceptance
+remain pending; the separate retention and numerical test candidates are not
+included in this scoped branch.
 
 The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
 is a docs-only candidate for the remaining private numerical, compiled-mutant,

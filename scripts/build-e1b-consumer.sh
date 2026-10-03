@@ -1142,6 +1142,37 @@ g3g_package_policy=0
 if [[ "${package_policy}" == g3g-public-aggregate || "${package_policy}" == g3g-g0-public-aggregate || "${package_policy}" == g3g-manual-public-aggregate ]]; then
   g3g_package_policy=1
 fi
+e3_private_test_sanitize=0
+[[ "${E3_RETENTION_SANITIZE:-0}" == 0 &&
+   "${E3_NUMERICAL_SANITIZE:-0}" == 0 &&
+   -z "${E3_NUMERICAL_MUTANT+x}" ]] ||
+  die "noninstalled E3 retention/numerical tuples are absent from this source"
+if [[ "${E3_MODE_GRAPH_SANITIZE:-0}" != 0 ]]; then
+  [[ "${E3_MODE_GRAPH_SANITIZE}" == 1 && \
+     "${package_policy}" == e3-private-aggregate && \
+     "${e3_tuple_kind}" == mode-graph ]] || \
+    die "E3 mode/graph sanitizer is allowed only for the exact test tuple"
+  e3_private_test_sanitize=1
+fi
+e3_private_test_sanitize_flags=()
+e3_private_test_reloc_flags=()
+if [[ "${e3_private_test_sanitize}" == 1 ]]; then
+  e3_private_test_sanitize_flags=(-O1 -g -fsanitize=address,undefined
+                               -fno-omit-frame-pointer)
+  # Materialize ASan's COMMON registration cell before exact localization.
+  # Only the authenticated noninstalled mode/graph tuple reaches this path.
+  e3_private_test_reloc_flags=(-Wl,-d)
+fi
+e3_mode_graph_mutant=${E3_MODE_GRAPH_MUTANT:-normal}
+if [[ -n "${E3_MODE_GRAPH_MUTANT+x}" ]]; then
+  [[ "${package_policy}" == e3-private-aggregate && \
+     "${e3_tuple_kind}" == mode-graph ]] || \
+    die "E3 mode/graph mutation is allowed only for the exact test tuple"
+fi
+case "${e3_mode_graph_mutant}" in
+  normal|missed-child|enter-write-only|graph-create) ;;
+  *) die "unknown E3 mode/graph mutation: ${e3_mode_graph_mutant}" ;;
+esac
 
 require_command awk
 require_command cmp
@@ -1175,7 +1206,16 @@ e1b_timeout_seconds="${E1B_COMPILER_TIMEOUT_SECONDS:-120}"
 [[ "${e1b_timeout_seconds}" =~ ^[1-9][0-9]*$ ]] || \
   die "E1B_COMPILER_TIMEOUT_SECONDS must be a positive integer"
 
+e3_mode_graph_generated_dir=
+if [[ "${package_policy}" == e3-private-aggregate &&
+      "${e3_tuple_kind}" == mode-graph ]]; then
+  source "${PROJECT_ROOT}/scripts/e3-mode-graph-stage-cleanup.sh"
+  e3_mode_graph_generated_dir="$(e3_mode_graph_generated_stage "${output_object}")" ||
+    die "E3 mode/graph generated source requires a fresh private gate stage"
+fi
+
 e1b_tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-e1b.XXXXXX")"
+e3_mode_graph_generated_owned=0
 e1b_cleanup() {
   local status=$?
   if [[ "${status}" != 0 && \
@@ -1188,14 +1228,41 @@ e1b_cleanup() {
   else
     rm -rf -- "${e1b_tmp}"
   fi
+  if [[ "${status}" == 0 && "${e3_mode_graph_generated_owned}" == 1 ]]; then
+    rm -rf -- "${e3_mode_graph_generated_dir}"
+  fi
+  return "${status}"
 }
 trap e1b_cleanup EXIT
+if [[ -n "${e3_mode_graph_generated_dir}" ]]; then
+  trap 'exit 143' TERM
+  trap 'exit 130' INT
+fi
 mkdir -p "${e1b_tmp}/cache" "$(dirname -- "${output_object}")"
 if [[ "${package_policy}" == e3-private-aggregate ]]; then
   require_command python3
+  if [[ -n "${e3_mode_graph_generated_dir}" ]]; then
+    mkdir -m 0700 -- "${e3_mode_graph_generated_dir}" ||
+      die "E3 mode/graph generated source path was claimed concurrently"
+    e3_mode_graph_generated_owned=1
+  else
+    e3_mode_graph_generated_dir="${e1b_tmp}/generated"
+  fi
   python3 "${PROJECT_ROOT}/scripts/generate-e3-d2-source.py" \
-    --output-dir "${e1b_tmp}/generated" >"${e1b_tmp}/d2-generation.json"
-  e3_generated_source_root="${e1b_tmp}/generated/source"
+    --output-dir "${e3_mode_graph_generated_dir}" >"${e1b_tmp}/d2-generation.json"
+  e3_generated_source_root="${e3_mode_graph_generated_dir}/source"
+  if [[ "${e3_tuple_kind}" == mode-graph ]]; then
+    python3 "${PROJECT_ROOT}/scripts/generate-e3-mode-graph-source.py" \
+      --output-dir "${e3_generated_source_root}" \
+      --mode "${e3_mode_graph_mutant}" \
+      >"${e1b_tmp}/mode-graph-generation.txt"
+    python3 "${PROJECT_ROOT}/scripts/generate-e3-mode-graph-source.py" \
+      --output-dir "${e3_generated_source_root}" \
+      --mode "${e3_mode_graph_mutant}" --check \
+      >"${e1b_tmp}/mode-graph-check.txt"
+    cmp "${e1b_tmp}/mode-graph-generation.txt" \
+        "${e1b_tmp}/mode-graph-check.txt"
+  fi
 fi
 
 awk '
@@ -1214,6 +1281,8 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1)$'
     if [[ "${e3_diagnostic_tuple}" == 1 ]]; then
       export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
+    elif [[ "${e3_tuple_kind}" == mode-graph ]]; then
+      export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_mode_graph_run_v1)$'
     fi
   fi
 fi
@@ -1282,6 +1351,9 @@ for include_dir in "${canonical_include_dirs[@]}"; do
 done
 if [[ "${package_policy}" == e3-private-aggregate ]]; then
   include_args+=(-I "${e3_generated_source_root}")
+  if [[ "${e3_tuple_kind}" == mode-graph ]]; then
+    include_args=(-I "${e3_generated_source_root}" "${include_args[@]}")
+  fi
 fi
 if [[ "${package_policy}" == e3-private-aggregate || \
       "${package_policy}" == m3-model-aggregate || \
@@ -1339,7 +1411,7 @@ grep -Eq "^attributes ${e1b_raise_attribute} = .*noreturn" \
   die "E1B fixed raise-only seam is not noreturn in generated IR"
 
 "${e1b_clean_toolchain_env[@]}" \
-  "${e1b_cc}" -c -x ir "${e1b_tmp}/private.ll" \
+  "${e1b_cc}" "${e3_private_test_sanitize_flags[@]}" -c -x ir "${e1b_tmp}/private.ll" \
   -o "${e1b_tmp}/private.o"
 
 {
@@ -1421,6 +1493,7 @@ objcopy --redefine-syms="${e1b_tmp}/renames.txt" \
 "${e1b_clean_toolchain_env[@]}" \
   "${e1b_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
   -fstack-protector-all \
+  "${e3_private_test_sanitize_flags[@]}" \
   -I "${e1b_source}/inc" -I "${PROJECT_ROOT}/native" \
   -MMD -MF "${e1b_tmp}/bridge.d" \
   -c "${PROJECT_ROOT}/native/e1b_error_consumer_bridge.c" \
@@ -1447,6 +1520,7 @@ if [[ "${package_policy}" == g3g-manual-public-aggregate ]]; then
 fi
 "${e1b_clean_toolchain_env[@]}" \
   "${e1b_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
+  "${e3_private_test_sanitize_flags[@]}" \
   "${package_bridge_flags[@]}" \
   -I "${e1b_source}/inc" -I "${PROJECT_ROOT}/include" \
   -I "${PROJECT_ROOT}/native" \
@@ -1462,6 +1536,7 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     -I "${PROJECT_ROOT}/include" -I "${PROJECT_ROOT}/native"
     -I "${PROJECT_ROOT}/src"
   )
+  package_native_cflags+=("${e3_private_test_sanitize_flags[@]}")
   if [[ "${package_policy}" == cli3-tr3-aggregate || \
       "${package_policy}" == cli3-c2-successor || \
     "${package_policy}" == e3-private-aggregate || \
@@ -1489,11 +1564,28 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
   if [[ -n "${package_native_define}" ]]; then
     package_native_cflags+=("${package_native_define}")
   fi
+  if [[ "${package_policy}" == e3-private-aggregate &&
+        "${e3_tuple_kind}" == mode-graph ]]; then
+    # Shared probes are needed by the mode/graph test; other tuples keep old code.
+    package_native_cflags+=(-DET_E3_RETENTION_TESTING
+                            -DET_E3_MODE_GRAPH_TESTING)
+  fi
   native_index=0
   for package_native_source in "${package_native_sources[@]}"; do
     package_native_object="${e1b_tmp}/package-native-${native_index}.o"
     package_native_depfile="${e1b_tmp}/package-native-${native_index}.d"
     package_source_flags=()
+    if [[ "${package_policy}" == e3-private-aggregate &&
+          "${e3_tuple_kind}" == mode-graph ]]; then
+      case "${package_native_source}" in
+        "${PROJECT_ROOT}/src/eshkol_transformer/m3_call_f32_integration.c")
+          package_source_flags+=(-DET_F32_TENSOR_TESTING) ;;
+        "${PROJECT_ROOT}/src/eshkol_transformer/e3_frame.c")
+          package_source_flags+=(-DET_F32_TENSOR_TESTING -DET_D2_NATIVE_TESTING) ;;
+        "${PROJECT_ROOT}/native/e3_d2_native.c")
+          package_source_flags+=(-DET_D2_NATIVE_TESTING) ;;
+      esac
+    fi
     if [[ "${package_policy}" == cli3-tr3-aggregate ]]; then
       case "${package_native_source}" in
         "${PROJECT_ROOT}/native/e3_d2_native.c")
@@ -1692,7 +1784,8 @@ if [[ -n "${package_native_source_closure}" ]]; then
 fi
 
 "${e1b_clean_toolchain_env[@]}" \
-  "${e1b_cxx}" -r -Wl,-Map,"${e1b_tmp}/combined.map" \
+  "${e1b_cxx}" -r "${e3_private_test_reloc_flags[@]}" \
+  -Wl,-Map,"${e1b_tmp}/combined.map" \
   "${e1b_tmp}/private.o" "${e1b_tmp}/bridge.o" \
   "${e1b_tmp}/package-bridge.o" "${package_native_objects[@]}" \
   -o "${e1b_tmp}/combined.raw.o"
@@ -1715,9 +1808,32 @@ cmp -s "${e1b_tmp}/expected-global-defined.txt" \
 
 nm -u --format=posix "${e1b_tmp}/combined.o" | awk '{ print $1 }' | \
   LC_ALL=C sort -u >"${e1b_tmp}/undefined.txt"
-if ! e1b_compare_exact_undefined_allowlist \
-    "${e1b_tmp}/expected-undefined.txt" "${e1b_tmp}/undefined.txt"; then
-  die "E1B final object differs from the exact undefined-symbol allowlist"
+if [[ "${e3_private_test_sanitize}" == 1 ]]; then
+  grep -E '^(__asan_|__ubsan_|__sanitizer_|__start_asan_globals$|__stop_asan_globals$)' \
+    "${e1b_tmp}/undefined.txt" >"${e1b_tmp}/sanitizer-undefined.txt" || \
+    die "E3 private test sanitizer object has no instrumentation references"
+  grep -Ev '^(__asan_|__ubsan_|__sanitizer_|__start_asan_globals$|__stop_asan_globals$)' \
+    "${e1b_tmp}/undefined.txt" >"${e1b_tmp}/noninstrumentation-undefined.txt" || true
+  comm -13 "${e1b_tmp}/expected-undefined.txt" \
+    "${e1b_tmp}/noninstrumentation-undefined.txt" \
+    >"${e1b_tmp}/unexpected-undefined.txt"
+  if [[ "${e3_tuple_kind:-}" == mode-graph ]]; then
+    # Admit only the pinned imports of this noninstalled sanitizer tuple.
+    # A driver semantic correction requires fresh own emission before repinning.
+    source "${PROJECT_ROOT}/scripts/e3-mode-graph-sanitizer-import-policy.sh"
+    e3_mode_graph_verify_sanitizer_imports \
+      "${e1b_tmp}/expected-undefined.txt" \
+      "${e1b_tmp}/noninstrumentation-undefined.txt" \
+      "${e1b_tmp}/sanitizer-undefined.txt"
+  else
+    [[ ! -s "${e1b_tmp}/unexpected-undefined.txt" ]] || \
+      die "E3 sanitized private test object adds noninstrumentation imports"
+  fi
+else
+  if ! e1b_compare_exact_undefined_allowlist \
+      "${e1b_tmp}/expected-undefined.txt" "${e1b_tmp}/undefined.txt"; then
+    die "E1B final object differs from the exact undefined-symbol allowlist"
+  fi
 fi
 if grep -E 'et_e1b|e1(-internal-dispatch|_2Dinternal_2Ddispatch)|transformer(-error-(make|raise|wrap-foreign)|_2Derror_2D(make|raise|wrap_2Dforeign))' \
     "${e1b_tmp}/undefined.txt" >/dev/null; then
@@ -1947,6 +2063,18 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
       et_e3_test_destination_bits_v1
       et_e3_test_frame_fail_alloc_after_v1
     )
+    if [[ "${e3_tuple_kind}" == mode-graph ]]; then
+      e3_required_private+=(
+        et_e3_mode_graph_dispatch_cabi_v1
+        et_e3_test_graph_event_v1
+        et_e3_test_retention_probe_v1
+        et_e3_test_model_word_count_v1
+        et_e3_test_model_word_v1
+        et_e3_test_gradient_metadata_v1
+        et_e3_test_seed_gradient_v1
+        et_d2_exact_read_test_fail_stage_v1
+      )
+    fi
   fi
   for privileged in "${e3_required_private[@]}"; do
     grep -E "[[:space:]]LOCAL[[:space:]].*[[:space:]]${privileged}$" \
@@ -1974,6 +2102,19 @@ cp "${e1b_tmp}/undefined.txt" \
   "${evidence_dir}.tmp.$$/undefined.txt"
 cp "${e1b_tmp}/expected-undefined.txt" \
   "${evidence_dir}.tmp.$$/expected-undefined.txt"
+# Keep the exact mode/graph IR on successful admission as well as failure;
+# its loop-resolution diagnostic must not infer IR semantics from nm alone.
+if [[ "${package_policy}" == e3-private-aggregate &&
+      "${e3_tuple_kind:-}" == mode-graph ]]; then
+  cp "${e1b_tmp}/private.ll" "${evidence_dir}.tmp.$$/private.ll"
+fi
+if [[ "${e3_private_test_sanitize}" == 1 && \
+      "${e3_tuple_kind:-}" == mode-graph ]]; then
+  cp "${e1b_tmp}/noninstrumentation-undefined.txt" \
+    "${evidence_dir}.tmp.$$/noninstrumentation-undefined.txt"
+  cp "${e1b_tmp}/sanitizer-undefined.txt" \
+    "${evidence_dir}.tmp.$$/sanitizer-undefined.txt"
+fi
 if [[ -n "${package_source_closure}" ]]; then
   cp "${e1b_tmp}/source-closure.txt" \
     "${evidence_dir}.tmp.$$/source-closure.txt"
@@ -2014,6 +2155,8 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1)$'
     if [[ "${e3_diagnostic_tuple}" == 1 ]]; then
       public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
+    elif [[ "${e3_tuple_kind}" == mode-graph ]]; then
+      public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_mode_graph_run_v1)$'
     fi
   fi
 fi

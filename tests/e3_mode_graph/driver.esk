@@ -1,0 +1,228 @@
+;;; One test-only same-authority success, later D2 fault, and retry trajectory.
+(extern i64 e3-mg-model-count ptr i64 i64
+        :real et_e3_test_model_word_count_v1)
+(extern i64 e3-mg-model-word ptr i64 i64 i64
+        :real et_e3_test_model_word_v1)
+(extern i64 e3-mg-gradient-metadata ptr i64 i64
+        :real et_e3_test_gradient_metadata_v1)
+(extern i64 e3-mg-seed-gradient ptr
+        :real et_e3_test_seed_gradient_v1)
+(extern void e3-mg-read-fail-stage i64
+        :real et_d2_exact_read_test_fail_stage_v1)
+(extern i64 e3-mg-retention-probe i64
+        :real et_e3_test_retention_probe_v1)
+
+(define (e3-mg-check label condition)
+  (if condition #t
+      (begin (display "E3-MODE-GRAPH-FAIL: ") (display label) (newline)
+             (e3-native-invariant-fail))))
+
+(define (e3-mg-model-image model)
+  (let* ((owner (vector-ref (m3t-entry model 'model 'e3-mg-model-image #t) 3))
+         (image (make-vector 14 #f)))
+    (let parameter ((index 0))
+      (if (= index 14) image
+          (let ((fields (make-vector 5 #f)))
+            (let grad-kind ((kind 0))
+              (if (= kind 2) #t
+                  (let ((count (e3-mg-model-count owner index kind)))
+                    (e3-mg-check 'model-count (and (> count 0) (<= count 1024)))
+                    (let ((words (make-vector count 0)))
+                      (let word ((offset 0))
+                        (if (= offset count) #t
+                            (begin
+                              (vector-set! words offset
+                                (e3-mg-model-word owner index kind offset))
+                              (word (+ offset 1)))))
+                      (vector-set! fields kind words)
+                      (grad-kind (+ kind 1))))))
+            (let metadata ((field 0))
+              (if (= field 3) #t
+                  (begin
+                    (vector-set! fields (+ field 2)
+                      (e3-mg-gradient-metadata owner index field))
+                    (metadata (+ field 1)))))
+            (vector-set! image index fields)
+            (parameter (+ index 1)))))))
+
+(define (e3-mg-model=? model expected)
+  (let ((owner (vector-ref (m3t-entry model 'model 'e3-mg-model=? #t) 3)))
+    (let parameter ((index 0))
+      (if (= index 14) #t
+          (let ((fields (vector-ref expected index)))
+            (and
+              (let grad-kind ((kind 0))
+                (if (= kind 2) #t
+                    (let ((words (vector-ref fields kind)))
+                      (and (= (e3-mg-model-count owner index kind)
+                              (vector-length words))
+                           (let word ((offset 0))
+                             (if (= offset (vector-length words)) #t
+                                 (and (= (e3-mg-model-word owner index kind offset)
+                                         (vector-ref words offset))
+                                      (word (+ offset 1)))))
+                           (grad-kind (+ kind 1))))))
+              (let metadata ((field 0))
+                (if (= field 3) #t
+                    (and (= (e3-mg-gradient-metadata owner index field)
+                            (vector-ref fields (+ field 2)))
+                         (metadata (+ field 1)))))
+              (parameter (+ index 1))))))))
+
+(define (e3-mg-publication frame destinations)
+  (vector (e3-test-u32-ref (vector-ref destinations 0))
+          (e3-test-u32-ref (vector-ref destinations 1))
+          (e3-test-u32-ref (vector-ref destinations 2))
+          (e3-test-u32-ref (vector-ref destinations 3))
+          (e3-counter-ref frame 0) (e3-counter-ref frame 1)))
+
+(define (e3-mg-events)
+  (vector (e3-test-graph-event 0) (e3-test-graph-event 1)
+          (e3-test-graph-event 2) (e3-test-graph-event 3)))
+
+(define (e3-mg-probes)
+  (let ((values (make-vector 29 0)))
+    (let fill ((index 0))
+      (if (= index 29) values
+          (begin
+            (vector-set! values index (e3-mg-retention-probe index))
+            (fill (+ index 1)))))))
+
+(define (e3-mg-owner-controls-restored? before)
+  (let ((after (e3-mg-probes)))
+    (and
+      (let check ((index 0))
+        (if (= index 29) #t
+            (and (if (or (<= index 6) (and (>= index 17) (<= index 26)))
+                     (= (vector-ref before index) (vector-ref after index))
+                     #t)
+                 (check (+ index 1)))))
+      (= (- (vector-ref after 14) (vector-ref before 14))
+         (- (vector-ref after 16) (vector-ref before 16))))))
+
+(define (e3-mg-report label baseline)
+  (let ((count (vector-ref e3-mode-graph-cell 3))
+        (events (e3-mg-events)))
+    (let notes ((index 0))
+      (if (= index count) #t
+          (begin
+            (display "E3MG-NOTE ") (display label)
+            (display " ") (display index) (display " ")
+            (display (vector-ref (vector-ref e3-mode-graph-cell 4) index))
+            (let event ((field 0))
+              (if (= field 4) #t
+                  (begin
+                    (display " ")
+                    (display (- (vector-ref
+                                  (vector-ref e3-mode-graph-cell (+ field 5))
+                                  index)
+                                (vector-ref baseline field)))
+                    (event (+ field 1)))))
+            (newline)
+            (notes (+ index 1)))))
+    (display "E3MG-END ") (display label) (display " ") (display count)
+    (let event ((index 0))
+      (if (= index 4) #t
+          (begin
+            (display " ")
+            (display (- (vector-ref events index)
+                        (vector-ref baseline index)))
+            (event (+ index 1)))))
+    (newline)
+    (e3-mg-check 'event-note-count (= (vector-ref e3-mode-graph-cell 3) count))
+    #t))
+
+(define (e3-mg-one-call! label model dataset frame destinations
+                         cursor image rng publication token probes fault?)
+  (e3-mode-graph-clear-observations!)
+  (let ((before (e3-mg-events)))
+    (if fault? (e3-mg-read-fail-stage 1))
+    (let ((failed?
+           (with-region ('e3-mode-graph-call 262144)
+             (guard
+              (caught
+               (#t (and fault? (transformer-error? caught)
+                        (eq? (transformer-error-category caught) 'io)
+                        (eq? (transformer-error-operation caught)
+                             'e3-evaluate-into!))))
+              (e3-evaluate-into! model dataset frame)
+              #f))))
+      (if fault? (e3-mg-read-fail-stage 0))
+      (e3-mg-check 'fault-category (eq? failed? fault?))
+      (e3-mg-check 'cursor (d2-core-bytes=? cursor
+                                       (d2-token-dataset-cursor dataset)))
+      (e3-mg-check 'model-image (e3-mg-model=? model image))
+      (e3-mg-check 'rng
+        (equal? rng (m3t-public-initializer-words
+                     (m3t-public-model-initializer model))))
+      (e3-mg-check 'mixed17-restored
+        (= (p1-e3-test-mode-mask token) 43690))
+      (e3-mg-check 'output
+        (equal? publication (e3-mg-publication frame destinations)))
+      (e3-mg-check 'no-live-graphs (= (e3-test-graph-event 3) 0))
+      (e3-mg-check 'owner-controls-restored
+        (e3-mg-owner-controls-restored? probes))
+      (e3-mg-report label before)
+      #t)))
+
+(define (e3-mode-graph-dispatch scenario corpus-path)
+  (e3-mg-check 'scenario
+    (and (vector? scenario) (= (vector-length scenario) 1)
+         (boolean? (vector-ref scenario 0))))
+  (let* ((fixture (e3-test-fixture))
+         (model (vector-ref fixture 0))
+         (tokenizer (vector-ref fixture 1))
+         (destinations (vector-ref fixture 2))
+         (frame (vector-ref fixture 3))
+         (entry (e3-frame-entry-internal frame))
+         (token (vector-ref entry 6))
+         (input (g3t-checked-m3t-input-create))
+         (dataset (d2-token-dataset-open
+                   (e3-test-dataset-config corpus-path #t) tokenizer)))
+    (guard
+     (caught
+      (#t
+       (e3-mg-read-fail-stage 0)
+       (d2-token-dataset-close! dataset)
+       (g3t-checked-m3t-input-release! input)
+       (raise caught)))
+     (e3-mg-check 'input-copy
+       (g3t-checked-m3t-input-copy! input '(3 197)))
+     (e3-mg-check 'fixed-mixed (= (p1-e3-test-fixed-mixed! token) 0))
+     (if (vector-ref scenario 0)
+         (e3-mg-check 'seed-gradient
+           (= (e3-mg-seed-gradient (vector-ref
+                (m3t-entry model 'model 'e3-mode-graph-dispatch #t) 3)) 0)))
+     (e3-mode-graph-arm! model frame input)
+     (let* ((cursor (d2-token-dataset-cursor dataset))
+            (image (e3-mg-model-image model))
+            (rng (m3t-public-initializer-words
+                   (m3t-public-model-initializer model)))
+            (probes (e3-mg-probes)))
+       (e3-mode-graph-clear-observations!)
+       (let ((initial (e3-mg-events)))
+         (with-region ('e3-mode-graph-success 262144)
+           (e3-evaluate-into! model dataset frame))
+         (e3-mg-check 'success-cursor
+           (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset)))
+         (e3-mg-check 'success-image (e3-mg-model=? model image))
+         (e3-mg-check 'success-modes
+           (= (p1-e3-test-mode-mask token) 43690))
+         (e3-mg-check 'success-rng
+           (equal? rng (m3t-public-initializer-words
+                         (m3t-public-model-initializer model))))
+         (e3-mg-check 'success-graph-live (= (e3-test-graph-event 3) 0))
+         (e3-mg-check 'success-owner-controls
+           (e3-mg-owner-controls-restored? probes))
+         (e3-mg-report 'success initial))
+       (let ((publication (e3-mg-publication frame destinations)))
+         (e3-mg-check 'three-batch-counters
+           (and (= (vector-ref publication 4) 5)
+                (= (vector-ref publication 5) 3)))
+         (e3-mg-one-call! 'later-failure model dataset frame destinations
+                          cursor image rng publication token probes #t)
+         (e3-mg-one-call! 'retry model dataset frame destinations
+                          cursor image rng publication token probes #f)))
+     (d2-token-dataset-close! dataset)
+     (g3t-checked-m3t-input-release! input)
+     #t)))
