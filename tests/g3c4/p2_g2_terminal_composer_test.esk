@@ -10,7 +10,7 @@
 (load "g3c4_p2g2_terminal_composer_extension.esk")
 
 (extern i64 composer-source-lease ptr i64
-        :real et_g3c4_p2g2_coordinator_test_ids_lease_v1)
+        :real et_g3c4_p2g2_composer_test_source_lease_v1)
 (extern i64 composer-clone-lease ptr i64
         :real et_g3c4_p2g2_composer_test_clone_lease_v1)
 (extern i64 composer-terminal-fault i64
@@ -99,8 +99,10 @@
            (begin
              (check "hold authentic source I1 before native clone"
                     (= (composer-source-lease (vector-ref source-entry 3) 1) 0))
-             (reject "native clone rejects held source I1"
+             (reject "Eshkol clone rejects held source I1"
                (lambda () (g3c4-p2g2-terminal-ids-clone-internal output)))
+             (check "foreign owner cannot end held source I1 lease"
+                    (= (composer-source-lease native 0) -1))
              (check "release held source I1 for retry"
                     (= (composer-source-lease (vector-ref source-entry 3) 0) 0))
              (check "clone failure leaves no Eshkol enrollment or native owner"

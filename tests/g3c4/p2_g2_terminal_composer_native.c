@@ -342,6 +342,32 @@ int64_t __wrap_et_g3c4_private_p2g2_terminal_commit_v1(
 }
 
 static et_i64_tensor_borrow *composer_clone_borrow;
+static et_i64_tensor_borrow *composer_source_borrow;
+static et_g3c4_output_internal *composer_source_owner;
+int64_t et_g3c4_p2g2_composer_test_source_lease_v1(
+    void *candidate, int64_t active) {
+  et_i64_tensor_error error;
+  if (active == 1 && composer_source_borrow == NULL) {
+    et_g3c4_output_internal *output = et_g3c4_admit_output(candidate, 0);
+    if (output == NULL || output->ids == NULL) return -1;
+    if (et_i64_tensor_borrow_begin_v1(
+          output->ids, &composer_source_borrow, &error) != 0)
+      return -1;
+    composer_source_owner = output;
+    return 0;
+  }
+  /* Admission requires an unborrowed terminal I1. Match the owner captured
+   * on acquire before ending the genuine lease. */
+  if (active == 0 && candidate == composer_source_owner &&
+      composer_source_borrow != NULL) {
+    if (et_i64_tensor_borrow_end_v1(&composer_source_borrow, &error) != 0)
+      return -1;
+    composer_source_owner = NULL;
+    return 0;
+  }
+  return -1;
+}
+
 int64_t et_g3c4_p2g2_composer_test_clone_lease_v1(
     void *candidate, int64_t active) {
   et_g3c4_terminal_ids_clone_internal *clone =

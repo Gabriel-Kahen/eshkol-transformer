@@ -71,6 +71,7 @@ assert "(cons " not in tail and "(make-" not in tail
 assert tail.count("(vector-set!") >= 20
 for phrase in (
     "held source I1 prevents terminal release",
+    "foreign owner cannot end held source I1 lease",
     "held clone I1 prevents clone release",
     "equal-length terminal text substitution rejected",
     "equal-length clone readback substitution rejected",

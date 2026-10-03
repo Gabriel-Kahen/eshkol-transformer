@@ -2444,9 +2444,20 @@ publication, public G2 and continuation remain pending.
   ordinary-source parity, an unmarked-route rejection, and the no-zero
   precommit control. Authentic native
   counter setup stages singleton, carry, final and exhausted Philox cases with
-  an independent second-logit oracle. These tests are generated and statically
-  checked but remain uncompiled and ungated; native predecessor evidence does
-  not substitute for the same-call Eshkol runtime proof.
+  an independent second-logit oracle. These tests are generated, statically
+  checked and compiled in the normal mode; the full gate remains incomplete.
+  Native predecessor evidence does not substitute for the same-call Eshkol
+  runtime proof.
+  The first pinned compiler/runtime gate compiled the composer and passed its
+  native and prefix predecessors, then stopped in the first terminal runtime
+  case at the held-source I1 lease retry. Failed evidence is retained in
+  `g3c4-p2g2-eshkol-terminal-composer-cf5a20d5-fe9-f31-20261002-prepared-b/`
+  under `SHA256SUMS-FAILED` (SHA-256 `2dfef26a985005bde9bc9033823fc711aae6e24e2a1e7a07cd86648519e0732e`).
+  The composer-local test lease helper now releases the exact captured native
+  borrow without invoking terminal admission while that borrow is held, and
+  checks that a foreign owner cannot end it. Host static and C syntax checks
+  pass; pinned runtime, oracle, overlays, repeat and sanitizer evidence still
+  require a fresh reviewed gate.
 
 ## Wave 4 — practical pretraining and performance
 
