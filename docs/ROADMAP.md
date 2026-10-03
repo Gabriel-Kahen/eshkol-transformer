@@ -2487,6 +2487,21 @@ removes nodes this call actually enrolled. The allocation-cut fixture also
 requires a transformer error and exact restoration of all five ledger heads.
 This repair is source-staged only; a fresh full gate is still required.
 
+The next pinned run at `dbf66f8` passed its native/prefix predecessors and
+compiled the normal composer with empty compile/runtime stderr, then stopped
+at the first injected constructor allocation cut. The 246-file failed seal is
+`g3c4-p2g2-eshkol-terminal-composer-dbf66f8-fe9-f31-20261003-prepared-e/SHA256SUMS-FAILED`
+(`4bc8b356224731667cc4535ef880fd3ab2056218ec227a55784e76fbd34814ee`);
+launcher/Docker exited 1 and both pin checks passed. The pinned compiler
+raises exact static runtime condition 5 when a generated arena constructor
+returns null, and the accepted M3 emergency bridge rethrows it before E1
+conversion. The fixture incorrectly required an E1 transformer error for
+these raw constructor cuts. A test-only exact-condition witness now replaces
+that assertion while retaining every allocation cut, native/provider typed
+error assertion, rollback ledger/cache/RNG check, and the unchanged full
+normal/repeat/sanitizer/fault-overlay gate. This correction has host static
+checks only; compiled gate acceptance remains pending.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |

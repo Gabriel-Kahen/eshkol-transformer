@@ -196,4 +196,5 @@ tests/g3c4/test_context_cache_checker.py
 tests/g3c4/test_active_call_checker.py
 scripts/check-g3c4-p2g2-terminal-composer.py
 scripts/test-g3c4-p2g2-terminal-composer.sh
+tests/g3c4/call_entry_allocation_shim.cpp
 native/g3c4_p2g2_terminal_composer_source_closure.txt

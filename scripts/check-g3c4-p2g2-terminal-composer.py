@@ -20,6 +20,7 @@ additions = [
     "tests/g3c4/test_active_call_checker.py",
     "scripts/check-g3c4-p2g2-terminal-composer.py",
     "scripts/test-g3c4-p2g2-terminal-composer.sh",
+    "tests/g3c4/call_entry_allocation_shim.cpp",
     "native/g3c4_p2g2_terminal_composer_source_closure.txt",
 ]
 closure = (root / additions[-1]).read_text().splitlines()
@@ -32,6 +33,30 @@ native_fixture = (root / "tests/g3c4/p2_g2_terminal_composer_native.c").read_tex
 runner = (root / "scripts/test-g3c4-p2g2-terminal-composer.sh").read_text()
 oracle = (root / "tests/g3c4/check_p2_g2_terminal_composer_oracle.py").read_text()
 off = (root / "tests/g3c4/p2_g2_terminal_composer_feature_off_test.esk").read_text()
+shim = (root / "tests/g3c4/call_entry_allocation_shim.cpp").read_text()
+for symbol in (
+    "et_g3c4_composer_emergency_raise_v1",
+    "et_g3c4_composer_emergency_capture_v1",
+    "et_g3c4_composer_emergency_exact_v1",
+):
+    assert shim.count(f" {symbol}(") == 1, symbol
+    assert f":real {symbol})" in fixture, symbol
+    assert symbol not in source and symbol not in off, symbol
+assert "call_entry_allocation_shim.cpp" in runner
+assert "eshkol_runtime_emergency_raise_v1((int32_t)condition)" in shim
+assert "eshkol_get_raised_value(&raised)" in shim
+assert "g_current_exception == allocation_condition5" in shim
+assert "raised.data.ptr_val ==" in shim
+assert "object or exception-handler allocation failed" in shim
+assert "condition == 4 || condition == 5" in shim
+assert "different runtime emergency is not condition 5" in fixture
+assert "(composer-emergency-raise 4) #f" in fixture
+sweep = fixture[fixture.index("(define (allocation-sweep kind)"):
+                fixture.index("(allocation-sweep 1)")]
+assert "(= (composer-emergency-exact) 1)" in sweep
+assert "(and caught caught-condition5)" in sweep
+assert "(transformer-error? caught)" not in sweep
+assert all(f"(allocation-sweep {kind})" in fixture for kind in (1, 2, 3))
 for symbol in (
     "et_g3c4_private_p2g2_eos_first_frame_carrier_v1",
     "et_g3c4_private_p2g2_second_frame_carrier_v1",

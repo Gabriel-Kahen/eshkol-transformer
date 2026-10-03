@@ -41,6 +41,12 @@
         :real et_g3c4_call_entry_alloc_consumed_v1)
 (extern i64 composer-allocation-disarm
         :real et_g3c4_call_entry_alloc_disarm_v1)
+(extern i64 composer-emergency-raise i64
+        :real et_g3c4_composer_emergency_raise_v1)
+(extern i64 composer-emergency-capture
+        :real et_g3c4_composer_emergency_capture_v1)
+(extern i64 composer-emergency-exact
+        :real et_g3c4_composer_emergency_exact_v1)
 
 (define checks 0)
 (define (check label good)
@@ -314,6 +320,12 @@
 (fault-case 1 0)
 (fault-case 2 3)
 (fault-case 3 3)
+(check "calibrate exact pinned runtime allocation emergency"
+       (guard (caught (#t (= (composer-emergency-capture) 1)))
+         (composer-emergency-raise 5) #f))
+(check "different runtime emergency is not condition 5"
+       (guard (caught (#t (= (composer-emergency-exact) 0)))
+         (composer-emergency-raise 4) #f))
 (define (no-pending-terminal?)
   (let loop ((remaining (vector-ref g3c4-p2g2-terminal-anchors 0)))
     (if (null? remaining) #t
@@ -332,17 +344,20 @@
            (entry-prefixes (vector-ref g3c4-p2g2-prefix-input-anchors 0))
            (entry-terminals (vector-ref g3c4-p2g2-terminal-anchors 0))
            (entry-originals (vector-ref g3c4-p2g2-terminal-originals 0))
-           (caught #f) (output #f))
+           (caught #f) (caught-condition5 #f) (output #f))
       (check "capture allocation-cut original native owner"
              (= (composer-mark native 0 255) 0))
-      (guard (condition (#t (set! caught condition)))
+      (guard (condition (#t
+                          (set! caught-condition5
+                                (= (composer-emergency-exact) 1))
+                          (set! caught condition)))
         (composer-allocation-arm kind index)
         (set! output (g3c4-p2g2-terminal-generate-internal
                        generator prompt-a)))
       (if (= (composer-allocation-consumed) 1)
           (begin
-            (check "injected constructor cut raises a transformer error"
-                   (and caught (transformer-error? caught)))
+            (check "injected constructor cut raises exact runtime condition 5"
+                   (and caught caught-condition5))
             (check "allocation cut leaves no live call or pending owner"
                    (and (not (vector-ref m3-call-state 0))
                         (eq? (vector-ref g3c4-p2g2-protected-records 0)
