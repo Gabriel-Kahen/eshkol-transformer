@@ -240,6 +240,16 @@ int64_t et_g3c4_private_p2g2_terminal_snapshot_v1(
     int64_t destination_bytes);
 #endif
 
+#ifdef ET_G3C4_P2_G2_TERMINAL_IDS_CLONE_PRIVATE
+/* Source-private detached logical I1[1] or I1[2] owner. The caller proves
+ * Eshkol bytevector backing extent before passing a copy destination. */
+void *et_g3c4_private_p2g2_terminal_ids_clone_v1(void *terminal_output);
+int64_t et_g3c4_private_p2g2_terminal_ids_clone_copy_v1(
+    void *clone, int64_t expected_length,
+    void *destination_header, int64_t destination_bytes);
+int64_t et_g3c4_private_p2g2_terminal_ids_clone_release_v1(void *clone);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

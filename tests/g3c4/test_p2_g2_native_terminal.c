@@ -11,6 +11,9 @@
 #include <unistd.h>
 
 static int fail_terminal_copy, fail_terminal_cache_commit;
+#ifdef ET_G3C4_P2_G2_TERMINAL_IDS_CLONE_PRIVATE
+static int64_t *tamper_clone_source_on_copy;
+#endif
 static et_g3c4_context_internal *tamper_terminal_view_owner;
 static int tamper_terminal_view_at, terminal_view_ends;
 int32_t __real_et_a2_kv_cache_transaction_view_end_v1(
@@ -30,8 +33,23 @@ int32_t __real_et_i64_tensor_copy_from_v1(
 int32_t __wrap_et_i64_tensor_copy_from_v1(
     et_i64_tensor *handle, const int64_t *source, size_t count,
     et_i64_tensor_error *error) {
-  if (fail_terminal_copy) return -1;
-  return __real_et_i64_tensor_copy_from_v1(handle, source, count, error);
+  if (fail_terminal_copy) {
+#ifdef ET_G3C4_P2_G2_TERMINAL_IDS_CLONE_PRIVATE
+    memset(error, 0, sizeof(*error));
+    error->category = ET_I64_TENSOR_ERROR_INTERNAL;
+    error->code = ET_I64_TENSOR_CODE_PROVIDER_REJECTED;
+#endif
+    return -1;
+  }
+  int32_t result = __real_et_i64_tensor_copy_from_v1(
+      handle, source, count, error);
+#ifdef ET_G3C4_P2_G2_TERMINAL_IDS_CLONE_PRIVATE
+  if (result == 0 && tamper_clone_source_on_copy != NULL) {
+    tamper_clone_source_on_copy[0] ^= 1;
+    tamper_clone_source_on_copy = NULL;
+  }
+#endif
+  return result;
 }
 int32_t __real_et_a2_kv_cache_transaction_commit_v1(
     et_a2_kv_cache_transaction **transaction, et_kernel_error *error);
@@ -668,6 +686,9 @@ static void terminal_second_counter(et_g3c4_model_owner_internal *owner,
   OK(et_g3c4_private_generator_close_v1(context));
 }
 
+#ifdef ET_G3C4_P2_G2_TERMINAL_TEST_MAIN
+#define main ET_G3C4_P2_G2_TERMINAL_TEST_MAIN
+#endif
 int main(void) {
   et_g3c4_model_owner_internal *owner = create_owner();
   const int64_t prompts[2][2] = {{0, 255}, {7, 11}};
@@ -685,3 +706,6 @@ int main(void) {
   printf("G3-C4 P2/G2 terminal PASS: checks=%zu\n", checks);
   return 0;
 }
+#ifdef ET_G3C4_P2_G2_TERMINAL_TEST_MAIN
+#undef main
+#endif
