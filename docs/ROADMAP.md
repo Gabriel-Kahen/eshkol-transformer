@@ -1655,7 +1655,7 @@ pinned baseline; the production feature-on symbol delta is only the private
 readiness entry point. Independent review accepted the 114-file seal
 `g3r-f32-destroy-ready-637ca102-fe9-f31-20261003-prepared-a/SHA256SUMS-RUN`
 (SHA256 `dc7888d8a92067d5d201dd0b7d375a5c36c27be8f1869751018139e142fb5c56`).
-The G3N, G3S, E3-METRICS and M3CG predecessor inventories pin the reviewed
+The G3N, G3S, L3S, E3-METRICS and M3CG predecessor inventories pin the reviewed
 native blobs; the private extension retains measured feature-off object
 parity. Fresh whole-suite hosted CI remains the integration gate.
 O2 pointer admission alone cannot prove the closed Eshkol ledger or 14 M3T/P1
