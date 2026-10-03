@@ -1546,8 +1546,12 @@ generator four-word equality predicate to prove manual replay consumes no
 G3-S draw. It also bounds the fixed diagnostic-C2 candidate recipe to
 external X1/T1/D2 inputs authenticated against loaded C2 controls before
 TR3 restore, with candidate-only cleanup and no public LOAD or generation ABI
-change. Both signatures and the ownership contract await independent review;
-no pair loader, live replay, save writer or resumed continuation is accepted.
+change. The C2 native SHA candidate adds a guarded 224-byte private stage
+result while retaining the public 192-byte result. Its focused host gate passes
+563 checks under Clang, GCC and ASan/UBSan, and the existing 1,163-check bridge
+test matches with the feature enabled and disabled. The Eshkol backing-extent
+admission and owning SHA receipt, G3-T predicate, pair loader, live replay,
+save writer and resumed continuation remain separate gates.
 
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
