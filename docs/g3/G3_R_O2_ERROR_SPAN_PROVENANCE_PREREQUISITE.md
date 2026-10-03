@@ -8,10 +8,12 @@ unchanged by this proposal.
 
 ## Concrete gap
 
-O2's preflight and commit accept a caller-owned `et_o2_error_v1 *`. A rejected
-preflight may write that 264-byte record. Before its first write, O2 must prove
-the output is disjoint from every live or retained allocation it could
-otherwise alter, including f32 moment backing. The existing
+O2's preflight and commit accept a caller-owned `et_o2_error_v1 *`. The caller
+must supply either null or a properly aligned, writable extent of
+`sizeof(et_o2_error_v1) == 264` bytes. A rejected preflight may write that
+record. Before its first write, O2 must prove the output is disjoint from
+known live or retained allocations it could otherwise alter, including f32
+moment backing. The existing
 `et_f32_tensor_private_storage_overlap_v1` is read-only, but it scans mutable
 `tensor->shape`, `strides`, `data` and `byte_length`. It is not a provenance
 query. A test-only metadata restoration can move a live tensor's mutable
@@ -36,22 +38,31 @@ int32_t et_f32_tensor_private_owned_span_overlap_v1(
 The input is an opaque, nonempty, representable address span. The function
 does not dereference or write through `span`, allocate, borrow, pin, invoke a
 provider, or change any registry. It returns `0` only when it can prove
-disjointness; `1` for overlap; `2` for null, zero-length or overflowing span;
+disjointness from the known f32-owned spans below; it does not prove that an
+arbitrary pointer is writable or has the caller's claimed backing extent.
+It returns `1` for overlap; `2` for null, zero-length or overflowing span;
 and `3` when any relevant live or retained backing cannot be authenticated.
 All nonzero results are fail-closed to O2. A forged pointer cannot be treated
-as a request to inspect that memory. The producer must use immutable
+as a request to inspect that memory; the query does not dereference it.
+The producer must use immutable
 creation/clone-time f32 backing provenance for the exact currently live
 control, shape, stride and data allocations, including parameter value and
 gradient children, ordinary tensors and private clones. It must also cover
 live parameter, borrow and plan controls and their owned arrays, and retained
-dead f32 controls. A current live allocation cannot disappear from this scan
+dead f32 controls. Plan-owned array addresses and lengths need their own
+immutable authenticated provenance; if the producer has only mutable plan
+pointers or counts, it returns `3` rather than claiming disjointness. A
+current live allocation cannot disappear from this scan
 because its mutable descriptor is corrupt. Historical freed payload spans
 are not reserved; the allocator may legitimately reuse them.
 
 O2 checks its own current and retained controls and owned arrays separately.
-It calls this f32 query on the exact 264-byte error span, then rejects every
-nonzero result **before** writing the error record. A null O2 error pointer
-requires no span query. The native optimizer lookup remains registry-first,
+For a nonnull caller error record satisfying the caller precondition, it calls
+this f32 query on the exact 264-byte span, then rejects every nonzero result
+**before** writing the record. A null O2 error pointer skips the query and
+causes no output write. A zero result proves only disjointness from known
+owned spans; valid caller storage remains an independent precondition. The
+native optimizer lookup remains registry-first,
 and the aggregate Eshkol ledger/M3T/P1 witness remains a separate admission;
 neither this query nor a caller-provided extent proves those associations.
 
@@ -67,4 +78,6 @@ yield disjoint for the original live allocation. Malformed provenance returns
 `3` without writing caller memory; restoration permits a successful retry.
 Run normal, repeat and ASan/UBSan/LSan modes on the supported pinned compiler,
 then independently review the exact source and tests. Only after this gate
-may the O2 leaf claim read-only preflight and a non-failing retirement tail.
+may the O2 leaf claim a preflight that leaves component, provider and allocator
+state unchanged, with the disjoint caller error record as its only possible
+write, and a non-failing retirement tail.

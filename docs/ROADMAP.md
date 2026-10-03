@@ -1667,7 +1667,9 @@ records a concrete gap before native O2 retirement acceptance: the existing
 f32 storage-overlap query follows mutable tensor descriptors and can miss a
 still-owned recorded payload after descriptor corruption. A new guarded,
 read-only provenance-backed span query needs independent contract and source
-review before O2 may write a caller error record or claim read-only preflight.
+review before O2 may write a caller error record while preserving owned state.
+The caller must independently supply a null error pointer or an aligned,
+writable 264-byte record; the query proves only known-owned-span disjointness.
 
 The proposed [G3-R P1/I2 sealed-graph retirement producer contract](g3/G3_R_P1_I2_SEALED_GRAPH_RETIREMENT_CONTRACT.md)
 pins the candidate-aware preseal M3T/I2/P1 handshake and a retained exact
