@@ -853,6 +853,19 @@ calls. The driver now checks exactly three command-line entries with supported
 pair access and retains the two input arguments. This repair has host source
 checks only; a fresh supported compiled runtime, sanitizer and mutant gate is
 still required.
+That fresh gate has now passed on exact `d2b47a8`/tree `539a09ce` with
+fe9/f31 pins: canonical and six closed mode/graph packages, 175 normal and
+223 sanitizer imports, byte-identical fresh A/B objects, archives, depfiles
+and AOT executables, and compiled absent/present-gradient normal, repeat,
+poisoned and sanitizer cases. Real missed-child and graph-create mutants fail
+the in-call mode-mask and graph-event assertions; enter-write-only exits 134
+before success. The 405-file supported seal is
+`e3-mode-graph-d2b47a8-fe9-f31-20261003-prepared-i/SHA256SUMS-RUN`
+(`60dfa849257d0cf1b5160aa0ac3ea2407e29fce8ef3b664a57f3a62ad5d9ec16`),
+with launcher/Docker 0/0 and pre/post pins passing. Docker stderr contains
+the expected shell abort diagnostic for enter-write-only; ordinary compiled
+case stderr is empty. This accepts the bounded in-call mode/graph witness,
+not the remaining E3 §9 numerical, failure, resource or public-path gates.
 The earlier 104-file sanitizer diagnostic remains preserved at
 `e3-mode-graph-sanitized-diagnostic-af3489d-fe9-f31-20261002-prepared-c/SHA256SUMS-DIAGNOSTIC`
 (`1d1195d630657e172b5bfc47a098d729070a3565f237a3bd5d5b5f4a82e17124`).
