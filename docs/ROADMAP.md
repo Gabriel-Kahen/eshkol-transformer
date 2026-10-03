@@ -761,13 +761,18 @@ compile and runtime stderr is empty. Its current-main `5520dfe` union changes
 only unrelated G3 RNG code/tests and documentation outside the seven package
 source/native closures and depfiles; hosted CI and merge remain pending.
 The supported mode/graph gate did not include retention or numerical test
-candidates. A scoped source integration now adds the separate complete-call
+candidates. A scoped source integration adds the separate complete-call
 retention tuple and strict 1,024/8,192-call normal A/B, poison A/B and
 sanitizer runner with gradients absent/present. The frozen `091461f2` prepared
-retention J gate was not run. The combined tree requires independent source
-review, its own full 20-run supported retention gate and an affected mode/graph
-gate before either combined proof can be claimed. Numerical, other §9 and
-public-path acceptance remain pending.
+retention J gate was not run. A further [numerical transcript source
+candidate](e3/E3_NUMERICAL_TRANSCRIPT.md) composes the authentic three-batch
+observer and two accepted compiled mutants onto that combined source, and
+adds a third final-loss second-normalization mutant. Its source and static
+tests require independent review, then a fresh supported numerical gate.
+The changed native frame, metrics provider and shared builder also require
+full affected mode/graph and 20-run retention gates on the exact integrated
+tree. The prior 75-file numerical seal applies only to `8dafe8cb`; broader
+§9 and public-path acceptance remain pending.
 
 The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
 is a docs-only candidate for the remaining private numerical, compiled-mutant,

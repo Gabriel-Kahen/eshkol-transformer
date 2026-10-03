@@ -1,0 +1,30 @@
+;;; The exact noninstalled three-batch E3 numerical entry. Native test hooks
+;;; emit each completed frame role and final published result on this tuple.
+(extern void e3-private-test-run ptr ptr ptr :real et_e3_test_run_v1)
+
+(define (check label value)
+  (if value #t
+      (begin (display "E3-NUMERICAL-FAIL: ") (display label)
+             (newline) (exit 1))))
+
+(define (bytes=? left right)
+  (and (bytevector? left) (bytevector? right)
+       (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+
+(define args (command-line))
+(check 'arguments
+  (and (pair? args) (pair? (cdr args)) (null? (cdr (cdr args)))))
+(define output (vector #f))
+(e3-private-test-run (vector (vector #t 0)) (vector (car (cdr args))) output)
+(define result (vector-ref output 0))
+(check 'result
+  (and (vector? result) (= (vector-length result) 9)
+       (eq? (vector-ref result 0) 'e3-private-result-v1)
+       (= (vector-ref result 5) 5) (= (vector-ref result 6) 3)
+       (bytes=? (vector-ref result 7) (vector-ref result 8))))
+(display "E3-NUMERICAL-RUNTIME-PASS") (newline)

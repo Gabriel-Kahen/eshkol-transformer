@@ -211,8 +211,14 @@ static int32_t evaluate_accumulate(const et_kernel_call_v1 *c, union results *re
   if (batches > 8192 || tokens > 16384) return capped(e,op);
   if (batches > tokens) return domain(e,op);
   if (tokens-batches > batches) return domain(e,op);
+#ifdef ET_E3_NUMERICAL_MEAN_OF_MEANS
+  /* Compiled test mutant: accumulate each batch mean with unit batch weight. */
+  if (w != (float)batches) return domain(e,op);
+  if (correct > (float)tokens || !integral_bounded(correct)) return domain(e,op);
+#else
   if (w != (float)tokens) return domain(e,op);
   if (correct > w || !integral_bounded(correct)) return domain(e,op);
+#endif
   if (batches == 0 && n != 0.0f) return domain(e,op);
   if (wb != (float)active) return domain(e,op);
   if (cb > wb || !integral_bounded(cb)) return domain(e,op);
@@ -222,9 +228,17 @@ static int32_t evaluate_accumulate(const et_kernel_call_v1 *c, union results *re
   const int64_t next_tokens = tokens + active;
   const int64_t next_batches = batches + 1;
   if (next_batches > 8192 || next_tokens > 16384) return capped(e,op);
+#ifdef ET_E3_NUMERICAL_MEAN_OF_MEANS
+  const float next_n = n + nb / wb;
+#else
   const float next_n = n + nb;
+#endif
   if (!isfinite(next_n)) return domain(e,op);
+#ifdef ET_E3_NUMERICAL_MEAN_OF_MEANS
+  const float next_w = w + 1.0f;
+#else
   const float next_w = w + wb;
+#endif
   if (!isfinite(next_w)) return domain(e,op);
   const float next_c = correct + cb;
   if (!isfinite(next_c)) return domain(e,op);
@@ -246,7 +260,12 @@ static int32_t evaluate_finalize(const et_kernel_call_v1 *c, union results *resu
   if (w > 16384.0f) return capped(e,op);
   if (!integral_bounded(w)) return domain(e,op);
   if (correct > w || !integral_bounded(correct)) return domain(e,op);
+#ifdef ET_E3_NUMERICAL_SECOND_NORMALIZATION
+  /* Compiled test mutant: apply the global token denominator twice. */
+  const float loss = (n / w) / w;
+#else
   const float loss = n / w;
+#endif
   if (!isfinite(loss)) return domain(e,op);
   const float accuracy = correct / w;
   if (!isfinite(accuracy)) return domain(e,op);
