@@ -146,6 +146,15 @@ int32_t et_a2_kv_cache_private_storage_overlap_v1(
     const void *pointer, size_t bytes);
 #endif
 
+#ifdef ET_A2_KV_CACHE_TERMINAL_WITNESS_PRIVATE
+/* Read-only fixed-profile terminal ownership predicate. One means the live
+ * transaction is this cache's exclusive staged one-token append from an
+ * exact committed P2/P3 predecessor; zero means no such proof. */
+int32_t et_a2_kv_cache_private_terminal_transaction_witness_v1(
+    const et_a2_kv_cache_transaction *transaction,
+    const et_a2_kv_cache *cache, int64_t committed_length);
+#endif
+
 #ifdef ET_A2_KV_CACHE_TESTING
 void et_a2_kv_cache_test_fail_alloc_after_v1(size_t successful_allocations);
 void et_a2_kv_cache_test_reset_allocator_v1(void);
