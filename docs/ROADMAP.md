@@ -1657,10 +1657,11 @@ readiness entry point. Independent review accepted the 114-file seal
 (SHA256 `dc7888d8a92067d5d201dd0b7d375a5c36c27be8f1869751018139e142fb5c56`).
 The G3N, G3S, L3S, E3-METRICS and M3CG predecessor inventories pin the reviewed
 native blobs; the private extension retains measured feature-off object
-parity. Fresh whole-suite hosted CI remains the integration gate.
-O2 pointer admission alone cannot prove the closed Eshkol ledger or 14 M3T/P1
-associations. Hosted integration, the O2 retire path and candidate cleanup
-remain pending.
+parity. PR #196 integrated exact independently reviewed head `e8bd168d`
+after all 23 checks passed in hosted run `37165451764`; merge `50cfaa84`
+retains that reviewed tree. O2 pointer admission alone cannot prove the closed
+Eshkol ledger or 14 M3T/P1 associations. The O2 retire path and candidate
+cleanup remain pending.
 
 The proposed [O2 error-span provenance prerequisite](g3/G3_R_O2_ERROR_SPAN_PROVENANCE_PREREQUISITE.md)
 records a concrete gap before native O2 retirement acceptance: the existing
