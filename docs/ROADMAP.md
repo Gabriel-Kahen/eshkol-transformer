@@ -1699,6 +1699,14 @@ IR/diagnostic classification. Composed Eshkol execution, exact getter/cleanup
 IR, compiled ownership proof, supported gate, independent runner/source-delta
 review and integration remain pending. No sealed-graph revocation or
 public/replay behavior is claimed.
+The candidate runner now uses the independently approved streaming Eshkol
+ASan IR helper copied byte for byte from composer blob `545b1613e598` (SHA-256
+`876543d05a6bd3bc321c31e88abb9129d11ef924c9392fd897a5bdfb54625f83`).
+It retains the raw and derived IR plus an exact rewrite receipt, and requires
+generated ASan load/store reporter references in the derived object. Native
+sanitizer flags include ASan/UBSan; this recipe does not claim generated
+Eshkol UBSan instrumentation. The revised runner and its supported compiled
+gate remain unrun and pending independent review.
 
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual

@@ -4,10 +4,12 @@ from pathlib import Path
 import hashlib
 import re
 import subprocess
+import sys
 import tempfile
 import unittest
 from tests.g3r.check_candidate_construction_inputs import (
-    compare_depfile, depfile_paths, load_allowlist, require_regular,
+    check_sanitizer_generated, compare_depfile, depfile_paths, load_allowlist,
+    require_regular,
 )
 
 
@@ -30,6 +32,66 @@ def digest(path: Path) -> str:
 
 
 class CandidateConstructionStatic(unittest.TestCase):
+    def test_generated_asan_receipt_and_reporter_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = Path(temporary)
+            mode = evidence / "sanitize"
+            mode.mkdir()
+            raw = mode / "candidate.raw.o.ll"
+            derived = mode / "candidate.asan.ll"
+            receipt = mode / "candidate.asan.json"
+            raw.write_bytes(b"define i32 @read(ptr %p) {\nentry:\n"
+                            b" %v = load i32, ptr %p\n ret i32 %v\n}\n")
+            invoked = subprocess.run(
+                [sys.executable, "-B", str(ROOT / "tests/shared/prepare_eshkol_asan_ir.py"),
+                 str(raw), str(derived), str(receipt)],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertEqual((invoked.returncode, invoked.stdout, invoked.stderr),
+                             (0, "", ""))
+            (mode / "candidate.asan.o").write_bytes(b"retained object")
+            symbols = evidence / "sanitize.asan-symbols.stdout"
+            for step in ("asan-prepare", "asan-compile", "asan-symbols"):
+                for suffix, value in (("stdout", ""), ("stderr", ""),
+                                      ("exit", "0\n")):
+                    (evidence / f"sanitize.{step}.{suffix}").write_text(value)
+            symbols.write_text("__asan_report_load4 U         \n")
+            check_sanitizer_generated(ROOT, evidence)
+            original = derived.read_bytes()
+            derived.write_bytes(original.replace(b"@read", b"@evil", 1))
+            with self.assertRaisesRegex(ValueError, "derived IR differs"):
+                check_sanitizer_generated(ROOT, evidence)
+            derived.write_bytes(original)
+            original_receipt = receipt.read_bytes()
+            receipt.write_bytes(original_receipt + b" ")
+            with self.assertRaisesRegex(ValueError, "receipt differs"):
+                check_sanitizer_generated(ROOT, evidence)
+            receipt.write_bytes(original_receipt)
+            symbols.write_text("__asan_init U\n")
+            with self.assertRaisesRegex(ValueError, "lacks ASan"):
+                check_sanitizer_generated(ROOT, evidence)
+            symbols.write_text("__asan_report_load4 U         \n")
+            (evidence / "sanitize.asan-compile.exit").write_text("137\n")
+            with self.assertRaisesRegex(ValueError, "numeric exit"):
+                check_sanitizer_generated(ROOT, evidence)
+            (evidence / "sanitize.asan-compile.exit").write_text("0\n")
+            (evidence / "sanitize.asan-prepare.stderr").write_text("unexpected\n")
+            with self.assertRaisesRegex(ValueError, "unexpected stderr"):
+                check_sanitizer_generated(ROOT, evidence)
+            (evidence / "sanitize.asan-prepare.stderr").write_text("")
+            symbols.unlink()
+            symbols.symlink_to(evidence / "sanitize.asan-prepare.stdout")
+            with self.assertRaisesRegex(ValueError, "nonregular or symlink"):
+                check_sanitizer_generated(ROOT, evidence)
+
+    def test_runner_uses_approved_generated_asan_recipe(self) -> None:
+        runner = (ROOT / "scripts/test-g3r-candidate-construction.sh").read_text()
+        self.assertIn("tests/shared/prepare_eshkol_asan_ir.py", runner)
+        self.assertIn('"$evidence/$mode/candidate.asan.ll"', runner)
+        self.assertIn('"$evidence/$mode/candidate.asan.json"', runner)
+        self.assertIn('"$evidence/$mode/candidate.asan.o"', runner)
+        self.assertNotIn("candidate.instrumented.o", runner)
+
     def test_depfile_and_evidence_file_boundary(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

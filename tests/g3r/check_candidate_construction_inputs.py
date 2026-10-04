@@ -5,11 +5,14 @@ from hashlib import sha256
 import json
 import os
 from pathlib import Path
+import re
 import stat
 import sys
 
 
 ALLOWLIST_SHA256 = "24a4102909aa7543017fb4f3c9e7dc2b25127830ef629803efe2736ff373d8a4"
+APPROVED_ASAN_HELPER_SHA256 = "876543d05a6bd3bc321c31e88abb9129d11ef924c9392fd897a5bdfb54625f83"
+ASAN_REPORT = re.compile(r"^__asan_report_(?:load|store)[0-9]+\s+U\s*$")
 
 
 def require_regular(path: Path) -> None:
@@ -70,10 +73,48 @@ def compare_depfile(path: Path, target: Path, expected: set[Path]) -> list[Path]
     return actual
 
 
+def check_sanitizer_generated(project: Path, evidence: Path) -> None:
+    if project != Path(__file__).resolve().parents[2]:
+        raise ValueError("candidate checker project root differs from its source")
+    helper = project / "tests/shared/prepare_eshkol_asan_ir.py"
+    require_regular(helper)
+    if sha256(helper.read_bytes()).hexdigest() != APPROVED_ASAN_HELPER_SHA256:
+        raise ValueError("candidate ASan helper differs from approved source")
+    sys.path.insert(0, str(project))
+    from tests.shared.prepare_eshkol_asan_ir import scan_pair
+    mode = evidence / "sanitize"
+    raw = mode / "candidate.raw.o.ll"
+    derived = mode / "candidate.asan.ll"
+    receipt = mode / "candidate.asan.json"
+    object_file = mode / "candidate.asan.o"
+    symbols = evidence / "sanitize.asan-symbols.stdout"
+    for path in (raw, derived, receipt, object_file, symbols):
+        require_regular(path)
+    if object_file.stat().st_size == 0:
+        raise ValueError("candidate ASan object is empty")
+    expected = scan_pair(raw, derived)
+    encoded = (json.dumps(expected, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    if receipt.read_bytes() != encoded:
+        raise ValueError("candidate ASan receipt differs from exact derived IR")
+    if not any(ASAN_REPORT.fullmatch(line) for line in symbols.read_text().splitlines()):
+        raise ValueError("candidate generated Eshkol object lacks ASan load/store checks")
+    for step in ("asan-prepare", "asan-compile", "asan-symbols"):
+        label = evidence / f"sanitize.{step}"
+        for suffix in ("stdout", "stderr", "exit"):
+            require_regular(Path(f"{label}.{suffix}"))
+        if Path(f"{label}.exit").read_text() != "0\n":
+            raise ValueError(f"sanitize.{step}: unexpected numeric exit")
+        if step != "asan-symbols" and Path(f"{label}.stdout").stat().st_size:
+            raise ValueError(f"sanitize.{step}: unexpected stdout")
+        if step != "asan-compile" and Path(f"{label}.stderr").stat().st_size:
+            raise ValueError(f"sanitize.{step}: unexpected stderr")
+
+
 def main() -> None:
     if len(sys.argv) != 3:
         raise SystemExit("usage: checker PROJECT_ROOT EVIDENCE")
     project, evidence = map(Path, sys.argv[1:])
+    check_sanitizer_generated(project, evidence)
     allowlist = load_allowlist(project / "tests/g3r/candidate_depfile_allowlist.json")
     admitted = set()
     native = allowlist["native"]
@@ -146,6 +187,8 @@ def main() -> None:
         "scripts/common.sh",
         "tests/q0/test_g3r_candidate_construction_static.py",
         "tests/g3r/check_candidate_construction_inputs.py",
+        "tests/shared/__init__.py",
+        "tests/shared/prepare_eshkol_asan_ir.py",
         "tests/g3r/candidate_depfile_allowlist.json",
         "tests/g3r/candidate_construction_test.esk",
         "tests/g3r/candidate_construction_bridge.c",

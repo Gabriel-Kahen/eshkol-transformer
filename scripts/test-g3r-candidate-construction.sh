@@ -132,11 +132,17 @@ WRAPPER
      -s "$evidence/$mode/candidate.raw.o.bc" && \
      -s "$evidence/$mode/candidate.d" ]] || die "$mode raw IR/bitcode/depfile missing"
   if [[ "$mode" == sanitize ]]; then
-    run_checked "$mode.ir-instrument" "$cc" -O1 -g -fsanitize=address,undefined \
-      -fno-omit-frame-pointer -x ir -c \
+    run_checked "$mode.asan-prepare" env PYTHONDONTWRITEBYTECODE=1 python3 -B \
+      "$PROJECT_ROOT/tests/shared/prepare_eshkol_asan_ir.py" \
       "$evidence/$mode/candidate.raw.o.ll" \
-      -o "$evidence/$mode/candidate.instrumented.o"
-    candidate_object="$evidence/$mode/candidate.instrumented.o"
+      "$evidence/$mode/candidate.asan.ll" \
+      "$evidence/$mode/candidate.asan.json"
+    run_checked "$mode.asan-compile" "$cc" -O1 -g -fsanitize=address,undefined \
+      -fno-omit-frame-pointer -x ir -c \
+      "$evidence/$mode/candidate.asan.ll" \
+      -o "$evidence/$mode/candidate.asan.o"
+    candidate_object="$evidence/$mode/candidate.asan.o"
+    run_checked "$mode.asan-symbols" nm -u --format=posix "$candidate_object"
   else
     candidate_object="$evidence/$mode/candidate.raw.o"
   fi
@@ -170,8 +176,8 @@ WRAPPER
     >"$evidence/$mode/candidate.undefined.raw"
 done
 
-# One repeat of the same normal binary, plus an independently built ASan/UBSan
-# binary whose Eshkol IR and native objects are instrumented by pinned Clang.
+# One repeat of the same normal binary, plus independently built native
+# ASan/UBSan objects and an Eshkol object with generated ASan load/store checks.
 run_checked normal.repeat env ESHKOL_ARENA_POISON=1 \
   timeout --foreground --signal=TERM --kill-after=5s 120s \
   "$evidence/normal/candidate"
@@ -312,9 +318,11 @@ run_checked toolchain-post bash -c 'source "$1"; verify_toolchain' _ \
   "$PROJECT_ROOT/scripts/common.sh"
 printf 'PENDING: Manual classification of every compiler/linker diagnostic and\n' \
   >"$evidence/MANUAL_REVIEW_PENDING.txt"
-printf 'full raw candidate IR/ABI/ownership review is required. Exit zero\n' \
+printf 'Full raw candidate IR/ABI/ownership review is required.\n' \
   >>"$evidence/MANUAL_REVIEW_PENDING.txt"
-printf 'means only mechanical checks passed; it is not source or gate ACCEPT.\n' \
+printf 'Generated Eshkol ASan coverage and all diagnostics require review.\n' \
+  >>"$evidence/MANUAL_REVIEW_PENDING.txt"
+printf 'Exit zero means only mechanical checks passed; it is not source or gate ACCEPT.\n' \
   >>"$evidence/MANUAL_REVIEW_PENDING.txt"
 [[ "$(git -C "$PROJECT_ROOT" rev-parse HEAD)" == \
    "$(cat "$evidence/source.commit")" && \
