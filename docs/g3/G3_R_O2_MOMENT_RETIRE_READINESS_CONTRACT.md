@@ -1,7 +1,8 @@
 # G3-R native O2 moment retirement prerequisite
 
-This is a **proposed private contract**, not an implemented API or a release
-result. It narrows the O2 portion of [fresh-candidate retirement](G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
+This is a **private contract**, not an integrated API or a release result. An
+isolated native candidate is described below. It narrows the O2 portion of
+[fresh-candidate retirement](G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 and precedes [sealed P1/I2 graph revocation](G3_R_P1_I2_SEALED_GRAPH_RETIREMENT_CONTRACT.md).
 The source baseline is main `90f3c420`; no public O2, f32 or Eshkol surface
 changes here. The candidate's closed Eshkol ledger must separately authenticate
@@ -117,3 +118,34 @@ fail-stop fault injection. Count live O2 entries/moment payload and f32 live
 bytes separately from retained O2/f32 control tombstones. No native O2
 release, complete candidate cleanup, sealed-graph revocation or replay
 rollback is accepted by this document.
+
+## Isolated native candidate status
+
+The isolated `dc3f1e7` O2 candidate stacks the accepted `af987fe2` f32
+`et_f32_tensor_private_owned_span_overlap_v1` API under
+`ET_G3R_CANDIDATE_RETIRE_PRIVATE`. It allocates a separate entry-provenance
+roster at optimizer publication, keeps that record and the retired optimizer
+control as tombstones, and frees the 14-entry allocation only after 28 checked
+moment destroys. Before any nonnull 264-byte caller-error write, every
+nonzero f32 span-query result fails closed; O2 also checks its registered
+controls, genuine entry allocations and retained provenance records. The
+caller independently supplies null or a properly aligned, writable 264-byte
+record. The query does not establish arbitrary pointer writability.
+
+Live O2 builder, state and reconstruction arrays lack separate immutable
+allocation records. The candidate therefore rejects a nonnull caller-error
+record while any such owner is live, and rejects retirement with such an
+active owner even when the error pointer is null. This is a conservative
+admission limit, not a proof that those arrays have been reclaimed. Independent
+source and actual fe9/f31 evidence reviews accepted this native-only gate:
+normal, repeat and ASan/UBSan/LSan each pass 1,812 checks, including authentic
+moment/parameter backing aliases, decoy metadata, entry/retained-control
+aliases, no-allocation retry and fail-stop injection. Feature-off O2 objects
+match the accepted baseline, and C++ verifies the 264-byte private error layout
+and absence of private names without the feature guard or through the public
+header. The 179-file supported run seal is
+`g3r-o2-retire-dc3f1e7-fe9-f31-20261004-prepared-c/SHA256SUMS-RUN`
+(`5d48b1ed9e1b07a0c0002b9b4f0bd7a21d5b7884e36d4daefc685bb0fa1a8135`).
+This composed source still needs independent integration review; it does not
+prove a closed Eshkol ledger, tied M3T/P1 graph, Scheme enrollment, public
+retire API or full replay rollback.
