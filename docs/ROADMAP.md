@@ -760,8 +760,126 @@ The expected abort diagnostic appears in Docker stderr; ordinary/sanitized
 compile and runtime stderr is empty. Its current-main `5520dfe` union changes
 only unrelated G3 RNG code/tests and documentation outside the seven package
 source/native closures and depfiles; hosted CI and merge remain pending.
-Retention, numerical, other §9 and public-path acceptance remain pending; the
-separate retention and numerical test candidates are not included here.
+The supported mode/graph gate did not include retention or numerical test
+candidates. A scoped source integration adds the separate complete-call
+retention tuple and strict 1,024/8,192-call normal A/B, poison A/B and
+sanitizer runner with gradients absent/present. The frozen `091461f2` prepared
+retention J gate was not run. The supported retention attempt on frozen
+`d9328ce` built its packages but stopped at the first strict-AOT executable:
+under `--no-stdlib`, the private `retention_runtime.esk` used unavailable
+`length` and `list-ref` functions. This isolated successor reuses the existing
+private runtime's `car`/`cdr` argument traversal while preserving the retention
+assertions and full 20-case matrix. Its sanitizer manifests are still
+provisional pending fresh actual compiler diagnostics; the earlier retained
+readelf DWARF warnings have no clean-stderr or runtime acceptance claim.
+Fresh supported retention and affected mode/graph gates on this exact composed
+tree remain required. A further [numerical transcript source
+candidate](e3/E3_NUMERICAL_TRANSCRIPT.md) composes the authentic three-batch
+observer and two accepted compiled mutants onto that combined source, and
+adds a third final-loss second-normalization mutant. Its source and static
+tests require independent review, then a fresh supported numerical gate.
+The changed native frame, metrics provider and shared builder also require
+full affected mode/graph and 20-run retention gates on the exact integrated
+tree. The prior 75-file numerical seal applies only to `8dafe8cb`; broader
+§9 and public-path acceptance remain pending. A separate five-case private
+numerical transcript source candidate extends the noninstalled runtime and
+strict parser to all five existing authentic D2 layouts, with independent
+role/CE/state/final verification and byte equality for identical packed
+emissions. Its three compiled mutants remain on packed-single. Local parser
+and shell checks do not substitute for independent source/test review or a
+fresh supported compiled gate; this extension has no runtime evidence yet.
+An isolated all-correct/all-wrong source candidate adds two fixed raw V256
+six-byte D1 corpora, authentic packed D2 rows, seed-1729 M3 selection proof,
+and a separate two-case private numerical runner. The new versioned manifest
+checks exact IDs, physical hashes, cursor identity, row/mask/count and declared
+class; the compiled gate is scoped to these two cases across normal A/B,
+poison and sanitizer with 21 roles, CE, exact accumulation, six final outputs
+and accuracy 1.0/0.0. The existing five-case corpus, schema and transcripts
+are unchanged. Independent source review and a supported compiled run are
+pending; the local mathematical reference is not compiled E3 evidence.
+An isolated test-only wrong-vocabulary-axis candidate adds one numerical-tuple
+mutant that reads the existing `[1,2,256]` binary32 logits at `[V,T]` stride 2
+instead of `[T,V]` stride 256. The exact all-correct D2 rows include final
+padding input `[31,0]`; the corrected two-repeat mathematical audit yields
+normal accuracy 5/5 and wrong-stride accuracy 0/5. The candidate's private
+compiled runner requires all 63 role records, unchanged logits/CE/reduction
+and counters, then rejection at the strict `correct_f32` check with no mutant
+transcript publication. A test-only negative classifier now requires canonical
+exit 1, empty validator stdout, exact expected diagnostics (with only the
+pinned two-line NumPy warning admitted), retained raw traceback/source context,
+and absent transcript; timeouts, crashes, extra output and other exceptions
+fail closed. The production/default profile and frozen corpora are
+unchanged. Independent source review and a supported compiled mutant run are
+pending; mathematical reachability alone is not a compiled mutant kill.
+The isolated E3 private sanitizer source candidate reuses the reviewed
+streaming, reversible ASan IR helper byte-for-byte. Only exact noninstalled
+retention, mode/graph and numerical sanitizer tuples select the derived IR;
+normal and public/default builds retain the original compile input. The
+source-pinned helper and verifier compare the raw and derived IR, retain both
+with a receipt, and require generated-object `__asan_report` imports before
+native linking. This is address instrumentation of Eshkol IR, not evidence of
+Eshkol frontend UBSan coverage. Actual emitted sanitizer imports and the
+existing exact test manifests still need a fresh supported diagnostic run and
+independent review before any sanitizer or §9 acceptance claim.
+
+The pinned `32484f6` numerical compiler diagnostic stopped before runtime on
+the exact sanitizer import delta. Its retained Clang 21 objects replace
+`memcpy`, `memmove`, and `memset` imports with the corresponding `__asan_mem*`
+interceptors; raw and derived IR retain the LLVM memory intrinsics. Independent
+discovery review accepted the attribution, and a bounded manifest correction
+adds these three absent names with a real compiler-lowering regression probe.
+The 112-file discovery seal is
+`e3-streaming-asan-imports-32484f6-fe9-f31-20261004-prepared-b/SHA256SUMS-DISCOVERY`
+(`5cfc20c6...`). This is compiler discovery only. Exact source review and a fresh
+supported compiled runtime gate remain required; no sanitizer acceptance is
+claimed, and the independent upstream foreign-pointer repair remains pending.
+
+An isolated E3 uniform-tie source candidate uses a checksummed C1 zero-state
+container for the real seed-1729 M3 model before frame binding. Its dedicated
+noninstalled tuple retains the ordinary E3 entry and compares all 21 emitted
+roles, CE, state, four metrics, counts and saved D2 cursor against a separate
+six-zero-byte D1/D2 reference. The `>=` last-tie mutant and five I2 fault/census
+hooks are confined to the test build. Checksum, provider, shape and tie
+rejection plus an authentic copy-builder preparation allocation failure must
+preserve original parameter identities, values and owners before a successful
+zero-state retry. Local Q0/static controls pass; exact emitted tuple manifests,
+independent source review, and supported normal/repeat, poison and sanitizer
+execution remain pending. This supplies no §9 N3/M2 compiled acceptance or
+target-offset, wrong-axis, finite-boundary or overflow proof.
+
+A separate noninstalled E3 overflow tuple is a source candidate for a genuine
+stage-12 finalization boundary. It loads a checksummed C1 state into one fresh
+model before its authentic frame bind, uses the fixed D1 `0304`/D2 padded row,
+and checks finite gamma 22.125 against overflow gamma 22.25 in separate process
+invocations. The overflow invocation repeats rejection on its unchanged model,
+frame and corpus authority while checking six caller outputs, cursor, mixed
+17-mode token, all 14 model/gradient owners, initializer, 29 retention probes,
+arena and dataset closure. The ordinary retention entry and its 20 cases are
+unchanged. Local fixture and transcript-classifier tests do not prove compiled
+reachability, rollback or §9 acceptance; supported normal/repeat/sanitizer
+execution, emitted import closure and full IR review remain pending.
+An isolated test-only clamp-overlay successor pins the production E3 metrics
+finalizer hash and changes only its `expf` overflow rejection to `FLT_MAX` in
+an owned generated translation unit for the noninstalled overflow tuple. A
+strict parser requires the full numerical trace, `E3FINAL`, the fixture's
+stage-12 failure marker and canonical abort; the finite control must match
+the ordinary tuple byte for byte. Local hash, selector, closure and classifier
+controls do not establish a compiled mutant kill. The alternate binary64
+calculation with binary32 conversion and the same post-conversion finite
+check is observationally equivalent at this boundary. Supported fe9 runtime,
+unbuffered-output, import, sanitizer and ordinary-object parity proofs remain
+pending.
+
+The current-main source composition from `391f67ea` combines the scoped
+retention/numerical, generated-ASan import, uniform-tie, overflow and
+clamp candidates with the merged mode/graph source. Its uniform
+sanitizer absent-import manifest mirrors the reviewed numerical
+Clang 21 memory-intrinsic delta only as a strict candidate; actual
+uniform fe9 emission must match or fail closed. The combined metrics
+source requires fresh clamp source/derived hashes, source review and
+supported normal/repeat/sanitizer/runtime gates. The upstream typed
+foreign-pointer prerequisite remains unresolved; no generated-ASan,
+ordinary-object-parity or E3 §9 acceptance is claimed for this union.
 
 The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
 is a docs-only candidate for the remaining private numerical, compiled-mutant,

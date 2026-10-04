@@ -1,0 +1,69 @@
+;;; Exact noninstalled zero-state E3 witness. The package performs genuine
+;;; C1 admission and rollback before frame bind, then runs the normal E3 path.
+(extern void e3-private-test-run ptr ptr ptr :real et_e3_test_run_v1)
+
+(define (uniform-check label value)
+  (if value #t
+      (begin (display "E3-UNIFORM-RUNTIME-FAIL: ") (display label)
+             (newline) (exit 1))))
+
+(define (uniform-argument args index)
+  (if (= index 0) (car args)
+      (uniform-argument (cdr args) (- index 1))))
+
+(define (uniform-count args)
+  (let loop ((rest args) (count 0))
+    (if (null? rest) count (loop (cdr rest) (+ count 1)))))
+
+(define (uniform-bytes=? left right)
+  (and (bytevector? left) (bytevector? right)
+       (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+
+(define (uniform-print-cursor bytes)
+  (let ((digits "0123456789abcdef"))
+    (let loop ((index 0))
+      (if (= index (bytevector-length bytes)) #t
+          (let ((byte (bytevector-u8-ref bytes index)))
+            (display (string-ref digits (quotient byte 16)))
+            (display (string-ref digits (remainder byte 16)))
+            (loop (+ index 1)))))))
+
+(define arguments (command-line))
+(uniform-check 'arguments (= (uniform-count arguments) 8))
+(uniform-check 'case
+  (or (string=? (uniform-argument arguments 1) "uniform-zero")
+      (string=? (uniform-argument arguments 1) "uniform-zero-last-tie")))
+(define expected-accuracy
+  (if (string=? (uniform-argument arguments 1) "uniform-zero-last-tie")
+      0 1065353216))
+(e3-uniform-set-files!
+  (vector (uniform-argument arguments 3)
+          (uniform-argument arguments 4)
+          (uniform-argument arguments 5)
+          (uniform-argument arguments 6)
+          (uniform-argument arguments 7)))
+(define output (vector #f))
+(e3-private-test-run (vector (vector #t 0))
+                     (vector (uniform-argument arguments 2)) output)
+(define result (vector-ref output 0))
+(uniform-check 'result
+  (and (vector? result) (= (vector-length result) 9)
+       (eq? (vector-ref result 0) 'e3-private-result-v1)
+       (= (vector-ref result 1) 1085370904)
+       (= (vector-ref result 2) 1084227584)
+       (= (vector-ref result 3) 1132462080)
+       (= (vector-ref result 4) expected-accuracy)
+       (= (vector-ref result 5) 5)
+       (= (vector-ref result 6) 3)
+       (uniform-bytes=? (vector-ref result 7) (vector-ref result 8))))
+(display "E3CURSOR\t")
+(uniform-print-cursor (vector-ref result 7))
+(display "\t")
+(uniform-print-cursor (vector-ref result 8))
+(newline)
+(display "E3-NUMERICAL-RUNTIME-PASS") (newline)
