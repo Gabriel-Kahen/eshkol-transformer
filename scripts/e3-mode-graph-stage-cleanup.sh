@@ -13,6 +13,19 @@ e3_retention_generated_stage() {
   printf '%s\n' "${generated}"
 }
 
+e3_overflow_generated_stage() {
+  local object=$1 stage gate generated
+  stage="$(dirname -- "${object}")"
+  gate="$(dirname -- "${stage}")"
+  [[ "$(basename -- "${object}")" == e3_overflow_package.o &&
+     "$(basename -- "${stage}")" =~ ^\.e3-overflow\.[[:alnum:]]{6}$ &&
+     -d "${stage}" && ! -L "${stage}" && -O "${stage}" &&
+     -d "${gate}" && ! -L "${gate}" && -O "${gate}" ]] || return 1
+  generated="${gate}/.e3-overflow-generated"
+  [[ ! -e "${generated}" && ! -L "${generated}" ]] || return 1
+  printf '%s\n' "${generated}"
+}
+
 e3_mode_graph_generated_stage() {
   local object=$1 stage gate generated
   stage="$(dirname -- "${object}")"

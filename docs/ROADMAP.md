@@ -802,6 +802,18 @@ independent source review, and supported normal/repeat, poison and sanitizer
 execution remain pending. This supplies no §9 N3/M2 compiled acceptance or
 target-offset, wrong-axis, finite-boundary or overflow proof.
 
+A separate noninstalled E3 overflow tuple is a source candidate for a genuine
+stage-12 finalization boundary. It loads a checksummed C1 state into one fresh
+model before its authentic frame bind, uses the fixed D1 `0304`/D2 padded row,
+and checks finite gamma 22.125 against overflow gamma 22.25 in separate process
+invocations. The overflow invocation repeats rejection on its unchanged model,
+frame and corpus authority while checking six caller outputs, cursor, mixed
+17-mode token, all 14 model/gradient owners, initializer, 29 retention probes,
+arena and dataset closure. The ordinary retention entry and its 20 cases are
+unchanged. Local fixture and transcript-classifier tests do not prove compiled
+reachability, rollback or §9 acceptance; supported normal/repeat/sanitizer
+execution, emitted import closure and full IR review remain pending.
+
 The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
 is a docs-only candidate for the remaining private numerical, compiled-mutant,
 failure and rollback gates. It tracks authentic D2/model reachability separately

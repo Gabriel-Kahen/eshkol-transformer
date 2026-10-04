@@ -1150,6 +1150,14 @@ if [[ "${E3_RETENTION_SANITIZE:-0}" != 0 ]]; then
     die "E3 retention sanitizer is allowed only for the exact test tuple"
   e3_private_test_sanitize=1
 fi
+if [[ "${E3_OVERFLOW_SANITIZE:-0}" != 0 ]]; then
+  [[ "${E3_OVERFLOW_SANITIZE}" == 1 &&
+     "${package_policy}" == e3-private-aggregate &&
+     "${e3_tuple_kind}" == retention-overflow &&
+     "${e3_private_test_sanitize}" == 0 ]] ||
+    die "E3 overflow sanitizer is allowed only for the exact test tuple"
+  e3_private_test_sanitize=1
+fi
 if [[ "${E3_MODE_GRAPH_SANITIZE:-0}" != 0 ]]; then
   [[ "${E3_MODE_GRAPH_SANITIZE}" == 1 && \
      "${package_policy}" == e3-private-aggregate && \
@@ -1248,6 +1256,7 @@ e1b_timeout_seconds="${E1B_COMPILER_TIMEOUT_SECONDS:-120}"
 
 e3_mode_graph_generated_dir=
 e3_retention_generated_dir=
+e3_overflow_generated_dir=
 e3_numerical_generated_dir=
 e3_uniform_generated_dir=
 if [[ "${package_policy}" == e3-private-aggregate &&
@@ -1260,6 +1269,11 @@ elif [[ "${package_policy}" == e3-private-aggregate &&
   source "${PROJECT_ROOT}/scripts/e3-mode-graph-stage-cleanup.sh"
   e3_retention_generated_dir="$(e3_retention_generated_stage "${output_object}")" ||
     die "E3 retention generated source requires a fresh private gate stage"
+elif [[ "${package_policy}" == e3-private-aggregate &&
+        "${e3_tuple_kind}" == retention-overflow ]]; then
+  source "${PROJECT_ROOT}/scripts/e3-mode-graph-stage-cleanup.sh"
+  e3_overflow_generated_dir="$(e3_overflow_generated_stage "${output_object}")" ||
+    die "E3 overflow generated source requires a fresh private gate stage"
 elif [[ "${package_policy}" == e3-private-aggregate &&
         "${e3_tuple_kind}" == numerical ]]; then
   source "${PROJECT_ROOT}/scripts/e3-generated-source-stage.sh"
@@ -1275,6 +1289,7 @@ fi
 e1b_tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-e1b.XXXXXX")"
 e3_mode_graph_generated_owned=0
 e3_retention_generated_owned=0
+e3_overflow_generated_owned=0
 e3_numerical_generated_owned=0
 e3_uniform_generated_owned=0
 e1b_cleanup() {
@@ -1295,6 +1310,9 @@ e1b_cleanup() {
   if [[ "${status}" == 0 && "${e3_retention_generated_owned}" == 1 ]]; then
     rm -rf -- "${e3_retention_generated_dir}"
   fi
+  if [[ "${status}" == 0 && "${e3_overflow_generated_owned}" == 1 ]]; then
+    rm -rf -- "${e3_overflow_generated_dir}"
+  fi
   if [[ "${status}" == 0 && "${e3_numerical_generated_owned}" == 1 ]]; then
     rm -rf -- "${e3_numerical_generated_dir}"
   fi
@@ -1304,7 +1322,7 @@ e1b_cleanup() {
   return "${status}"
 }
 trap e1b_cleanup EXIT
-if [[ -n "${e3_mode_graph_generated_dir}${e3_retention_generated_dir}${e3_numerical_generated_dir}${e3_uniform_generated_dir}" ]]; then
+if [[ -n "${e3_mode_graph_generated_dir}${e3_retention_generated_dir}${e3_overflow_generated_dir}${e3_numerical_generated_dir}${e3_uniform_generated_dir}" ]]; then
   trap 'exit 143' TERM
   trap 'exit 130' INT
 fi
@@ -1319,6 +1337,10 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     mkdir -m 0700 -- "${e3_retention_generated_dir}" ||
       die "E3 retention generated source path was claimed concurrently"
     e3_retention_generated_owned=1
+  elif [[ -n "${e3_overflow_generated_dir}" ]]; then
+    mkdir -m 0700 -- "${e3_overflow_generated_dir}" ||
+      die "E3 overflow generated source path was claimed concurrently"
+    e3_overflow_generated_owned=1
   elif [[ -n "${e3_numerical_generated_dir}" ]]; then
     mkdir -m 0700 -- "${e3_numerical_generated_dir}" ||
       die "E3 numerical generated source path was claimed concurrently"
@@ -1330,11 +1352,12 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
   else
     e3_mode_graph_generated_dir="${e1b_tmp}/generated"
   fi
-  e3_generated_dir="${e3_uniform_generated_dir:-${e3_numerical_generated_dir:-${e3_retention_generated_dir:-${e3_mode_graph_generated_dir}}}}"
+  e3_generated_dir="${e3_uniform_generated_dir:-${e3_numerical_generated_dir:-${e3_overflow_generated_dir:-${e3_retention_generated_dir:-${e3_mode_graph_generated_dir}}}}}"
   python3 "${PROJECT_ROOT}/scripts/generate-e3-d2-source.py" \
     --output-dir "${e3_generated_dir}" >"${e1b_tmp}/d2-generation.json"
   e3_generated_source_root="${e3_generated_dir}/source"
-  if [[ "${e3_tuple_kind}" == retention ]]; then
+  if [[ "${e3_tuple_kind}" == retention ||
+        "${e3_tuple_kind}" == retention-overflow ]]; then
     python3 "${PROJECT_ROOT}/scripts/generate-e3-p1-mode-test-variant.py" \
       --output "${e3_generated_source_root}/transformer/module.esk" \
       >"${e1b_tmp}/retention-p1-generation.txt"
@@ -1376,6 +1399,8 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
       export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
     elif [[ "${e3_tuple_kind}" == retention ]]; then
       export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1)$'
+    elif [[ "${e3_tuple_kind}" == retention-overflow ]]; then
+      export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1|et_e3_overflow_run_v1)$'
     elif [[ "${e3_tuple_kind}" == mode-graph ]]; then
       export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_mode_graph_run_v1)$'
     fi
@@ -1447,7 +1472,8 @@ done
 if [[ "${package_policy}" == e3-private-aggregate ]]; then
   include_args+=(-I "${e3_generated_source_root}")
   if [[ "${e3_tuple_kind}" == mode-graph ||
-        "${e3_tuple_kind}" == retention ]]; then
+        "${e3_tuple_kind}" == retention ||
+        "${e3_tuple_kind}" == retention-overflow ]]; then
     include_args=(-I "${e3_generated_source_root}" "${include_args[@]}")
   fi
 fi
@@ -1668,6 +1694,11 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     package_native_cflags+=(-DET_E3_RETENTION_TESTING)
   fi
   if [[ "${package_policy}" == e3-private-aggregate &&
+        "${e3_tuple_kind}" == retention-overflow ]]; then
+    package_native_cflags+=(-DET_E3_RETENTION_TESTING
+                            -DET_E3_NUMERICAL_TESTING -fno-builtin-printf)
+  fi
+  if [[ "${package_policy}" == e3-private-aggregate &&
         "${e3_tuple_kind}" == mode-graph ]]; then
     # Shared probes are needed by the mode/graph test; other tuples keep old code.
     package_native_cflags+=(-DET_E3_RETENTION_TESTING
@@ -1696,7 +1727,8 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     package_source_flags=()
     if [[ "${package_policy}" == e3-private-aggregate &&
           ( "${e3_tuple_kind}" == mode-graph ||
-            "${e3_tuple_kind}" == retention ) ]]; then
+            "${e3_tuple_kind}" == retention ||
+            "${e3_tuple_kind}" == retention-overflow ) ]]; then
       case "${package_native_source}" in
         "${PROJECT_ROOT}/src/eshkol_transformer/m3_call_f32_integration.c")
           package_source_flags+=(-DET_F32_TENSOR_TESTING) ;;
@@ -1944,6 +1976,14 @@ if [[ "${e3_private_test_sanitize}" == 1 ]]; then
       "${e1b_tmp}/expected-undefined.txt" \
       "${e1b_tmp}/noninstrumentation-undefined.txt" \
       "${e1b_tmp}/sanitizer-undefined.txt"
+    e3_retention_sanitizer_inventory_verified=1
+  elif [[ "${e3_tuple_kind:-}" == retention-overflow ]]; then
+    overflow_non="${e3_prefix}_sanitized_noninstrumentation_undefined_symbols.txt"
+    overflow_inst="${e3_prefix}_sanitized_instrumentation_undefined_symbols.txt"
+    cmp -s "${overflow_non}" "${e1b_tmp}/noninstrumentation-undefined.txt" ||
+      die "E3 overflow sanitizer noninstrumentation imports differ"
+    cmp -s "${overflow_inst}" "${e1b_tmp}/sanitizer-undefined.txt" ||
+      die "E3 overflow sanitizer instrumentation imports differ"
     e3_retention_sanitizer_inventory_verified=1
   elif [[ "${e3_tuple_kind:-}" == numerical ||
           "${e3_tuple_kind:-}" == uniform ]]; then
@@ -2206,7 +2246,8 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
       et_e3_test_destination_bits_v1
       et_e3_test_frame_fail_alloc_after_v1
     )
-    if [[ "${e3_tuple_kind}" == retention ]]; then
+    if [[ "${e3_tuple_kind}" == retention ||
+          "${e3_tuple_kind}" == retention-overflow ]]; then
       e3_required_private+=(
         et_e3_private_retention_dispatch_cabi_v1
         et_e3_test_retention_probe_v1
@@ -2218,6 +2259,9 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
         et_f32_test_live_counts_snapshot_v1
         et_f32_test_retired_counts_snapshot_v1
       )
+      if [[ "${e3_tuple_kind}" == retention-overflow ]]; then
+        e3_required_private+=(et_e3_private_overflow_dispatch_cabi_v1)
+      fi
     elif [[ "${e3_tuple_kind}" == mode-graph ]]; then
       e3_required_private+=(
         et_e3_mode_graph_dispatch_cabi_v1
@@ -2261,6 +2305,7 @@ cp "${e1b_tmp}/expected-undefined.txt" \
 if [[ "${package_policy}" == e3-private-aggregate &&
       ( "${e3_tuple_kind:-}" == mode-graph ||
         "${e3_tuple_kind:-}" == retention ||
+        "${e3_tuple_kind:-}" == retention-overflow ||
         "${e3_tuple_kind:-}" == numerical ||
         "${e3_tuple_kind:-}" == uniform ) ]]; then
   cp "${e1b_tmp}/private.ll" "${evidence_dir}.tmp.$$/private.ll"
@@ -2320,6 +2365,8 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
       public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
     elif [[ "${e3_tuple_kind}" == retention ]]; then
       public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1)$'
+    elif [[ "${e3_tuple_kind}" == retention-overflow ]]; then
+      public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1|et_e3_overflow_run_v1)$'
     elif [[ "${e3_tuple_kind}" == mode-graph ]]; then
       public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_mode_graph_run_v1)$'
     fi

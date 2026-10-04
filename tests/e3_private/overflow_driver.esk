@@ -1,0 +1,260 @@
+;;; A distinct noninstalled entry; no overflow state enters the retention root.
+;;; Each successful C1 load precedes creation of its own E3 frame.
+(define e3-overflow-root (vector #f))
+(define e3-overflow-policy
+  (c1-persistence-policy-internal 1048576 524288 262144 64 'cpu))
+
+(define (e3-overflow-check label value)
+  (e3-test-retention-check label value))
+
+(define (e3-overflow-bytes=? left right)
+  (and (bytevector? left) (bytevector? right)
+       (d2-core-bytes=? left right)))
+
+(define e3-overflow-paths
+  '(("blocks" "0" "attention" "key" "weight")
+    ("blocks" "0" "attention" "output" "weight")
+    ("blocks" "0" "attention" "query" "weight")
+    ("blocks" "0" "attention" "value" "weight")
+    ("blocks" "0" "ffn" "down" "weight")
+    ("blocks" "0" "ffn" "up" "weight")
+    ("blocks" "0" "norm1" "bias")
+    ("blocks" "0" "norm1" "weight")
+    ("blocks" "0" "norm2" "bias")
+    ("blocks" "0" "norm2" "weight")
+    ("head" "weight")
+    ("norm_final" "bias")
+    ("norm_final" "weight")
+    ("position_embedding" "weight")
+    ("token_embedding" "weight")))
+(define e3-overflow-shapes
+  (vector '(4 4) '(4 4) '(4 4) '(4 4) '(4 8) '(8 4)
+          '(4) '(4) '(4) '(4) '(256 4) '(4) '(4) '(2 4) '(256 4)))
+
+(define (e3-overflow-handle-image model)
+  (let* ((tree (module-parameters model))
+         (paths (parameter-tree-paths tree))
+         (result (make-vector 15 #f)))
+    (e3-overflow-check 'overflow-fixed-paths
+      (equal? paths e3-overflow-paths))
+    (e3-overflow-check 'overflow-single-tie
+      (equal? (parameter-tree-tie-groups tree)
+              '((("head" "weight") ("token_embedding" "weight")))))
+    (e3-overflow-check 'overflow-head-identity
+      (eq? (parameter-tree-handle tree '("head" "weight"))
+           (parameter-tree-handle tree '("token_embedding" "weight"))))
+    (let loop ((remaining paths) (index 0))
+      (if (null? remaining) result
+          (let* ((path (car remaining))
+                 (handle (parameter-tree-handle tree path)))
+            (e3-overflow-check 'overflow-handle-metadata
+              (and (eq? (parameter-handle-dtype handle) 'f32)
+                   (eq? (parameter-handle-device handle) 'cpu)
+                   (equal? (parameter-handle-shape handle)
+                           (vector-ref e3-overflow-shapes index))))
+            (vector-set! result index
+              (vector path handle (parameter-handle-shape handle)
+                      (parameter-handle-tensor-identity-internal handle)))
+            (loop (cdr remaining) (+ index 1)))))))
+
+(define (e3-overflow-handles=? left right)
+  (let loop ((index 0))
+    (if (= index 15) #t
+        (let ((a (vector-ref left index)) (b (vector-ref right index)))
+          (and (equal? (vector-ref a 0) (vector-ref b 0))
+               (eq? (vector-ref a 1) (vector-ref b 1))
+               (equal? (vector-ref a 2) (vector-ref b 2))
+               (eq? (vector-ref a 3) (vector-ref b 3))
+               (loop (+ index 1)))))))
+
+(define (e3-overflow-state-bytes model)
+  (let ((state (module-state-dict model)))
+    (guard (caught (#t (state-dict-release! state) (raise caught)))
+      (let ((bytes (c1-checkpoint-encode-state-internal
+                     state e3-overflow-policy i2-checkpoint-codec-internal)))
+        (state-dict-release! state)
+        bytes))))
+
+(define (e3-overflow-output frame destinations)
+  (vector (e3-test-u32-ref (vector-ref destinations 0))
+          (e3-test-u32-ref (vector-ref destinations 1))
+          (e3-test-u32-ref (vector-ref destinations 2))
+          (e3-test-u32-ref (vector-ref destinations 3))
+          (e3-counter-ref frame 0) (e3-counter-ref frame 1)))
+
+(define (e3-overflow-output=? left right)
+  (let loop ((index 0))
+    (if (= index 6) #t
+        (and (= (vector-ref left index) (vector-ref right index))
+             (loop (+ index 1))))))
+
+;;; Record: model/tokenizer/destinations/frame/dataset/cursor/modes/values/
+;;; initializer/probes/outputs/handles. The model is rooted before loading.
+(define (e3-overflow-create checkpoint corpus present?)
+  (let* ((config (e3-test-fixed-config))
+         (tokenizer (t1-private-tokenizer-byte config))
+         (initial (g3t-checked-m3t-initializer-state 1729))
+         (model (g3t-checked-m3t-model-create config initial))
+         (record (make-vector 12 #f)))
+    (vector-set! e3-overflow-root 0 record)
+    (vector-set! record 0 model)
+    (vector-set! record 1 tokenizer)
+    (let ((original (e3-overflow-handle-image model))
+          (initializer (m3t-public-initializer-words
+                         (m3t-public-model-initializer model)))
+          (owned (i2-native-owned-clone-live-count)))
+      (e3-overflow-check 'overflow-seed1729-successor
+        (equal? initializer '(1 1729 580 0)))
+      (c1-checkpoint-load-module-internal!
+        model checkpoint e3-overflow-policy i2-checkpoint-codec-internal
+        i2-provider-name)
+      (e3-overflow-check 'overflow-c1-owners
+        (= owned (i2-native-owned-clone-live-count)))
+      (e3-overflow-check 'overflow-c1-value-bytes
+        (e3-overflow-bytes=? (e3-overflow-state-bytes model)
+                            (c1-read-file checkpoint e3-overflow-policy
+                                          'e3-overflow-create)))
+      (e3-overflow-check 'overflow-c1-handle-identity
+        (e3-overflow-handles=? original (e3-overflow-handle-image model)))
+      (e3-overflow-check 'overflow-c1-initializer
+        (equal? initializer
+                (m3t-public-initializer-words
+                  (m3t-public-model-initializer model))))
+      (let* ((destinations (e3-test-destinations-create))
+             (frame (e3-frame-bind! model destinations))
+             (dataset (d2-token-dataset-open
+                        (e3-test-dataset-config corpus #t) tokenizer)))
+        (vector-set! record 2 destinations)
+        (vector-set! record 3 frame)
+        (vector-set! record 4 dataset)
+        (e3-test-retention-set-mixed! frame)
+        (if present?
+            (e3-overflow-check 'overflow-seed-gradient
+              (= (e3-test-seed-gradient
+                   (vector-ref (m3t-entry model 'model 'e3-test-run #t) 3)) 0)))
+        (vector-set! record 5 (d2-token-dataset-cursor dataset))
+        (vector-set! record 6 (e3-test-retention-modes frame))
+        (vector-set! record 7 (e3-test-retention-model-snapshot model))
+        (vector-set! record 8 initializer)
+        (vector-set! record 9 (e3-test-retention-probes))
+        (vector-set! record 10 (e3-overflow-output frame destinations))
+        (vector-set! record 11 original)
+        record))))
+
+(define (e3-overflow-controls-stable? record)
+  (let ((model (vector-ref record 0))
+        (frame (vector-ref record 3))
+        (dataset (vector-ref record 4))
+        (before (vector-ref record 9)))
+    (and (d2-core-bytes=? (vector-ref record 5)
+                           (d2-token-dataset-cursor dataset))
+         (e3-test-retention-modes=? frame (vector-ref record 6))
+         (e3-test-retention-model=? model (vector-ref record 7))
+         (e3-overflow-handles=? (vector-ref record 11)
+                                 (e3-overflow-handle-image model))
+         (equal? (vector-ref record 8)
+                 (m3t-public-initializer-words
+                   (m3t-public-model-initializer model)))
+         (let ((after (e3-test-retention-probes)))
+           (let loop ((index 0))
+             (if (= index 29) #t
+                 (and (if (or (<= index 6)
+                              (and (>= index 17) (<= index 26))
+                              (= index 28))
+                          (= (vector-ref before index) (vector-ref after index))
+                          (>= (vector-ref after index)
+                              (vector-ref before index)))
+                      (if (= index 16)
+                          (= (- (vector-ref after 14) (vector-ref before 14))
+                             (- (vector-ref after 16) (vector-ref before 16)))
+                          #t)
+                      (loop (+ index 1)))))))))
+
+(define (e3-overflow-stable? record)
+  (and (e3-overflow-controls-stable? record)
+       (e3-overflow-output=? (vector-ref record 10)
+                              (e3-overflow-output (vector-ref record 3)
+                                                   (vector-ref record 2)))))
+
+(define (e3-overflow-reject-once! record)
+  (let ((model (vector-ref record 0))
+        (dataset (vector-ref record 4))
+        (frame (vector-ref record 3))
+        (matched? #f)
+        (arena-before (__arena-used)))
+    (with-region ('e3-overflow-call 262144)
+      (guard (caught
+               (#t (set! matched?
+                     (and (transformer-error? caught)
+                          (eq? (transformer-error-category caught)
+                               'invalid-argument)
+                          (eq? (transformer-error-operation caught)
+                               'e3-evaluate-into!)
+                          (eq? caught
+                               (e3-error-table-ref 12 'invalid-argument))))))
+        (e3-evaluate-into! model dataset frame)))
+    (e3-overflow-check 'overflow-stage12-error matched?)
+    (e3-overflow-check 'overflow-region-restored
+      (= (__arena-used) arena-before))
+    (e3-overflow-check 'overflow-failure-atomic (e3-overflow-stable? record))
+    (let* ((entry (e3-frame-entry-internal frame))
+           (source (vector-ref entry 12)))
+      (e3-overflow-check 'overflow-metrics-domain
+        (and (= (vector-ref source 0) 12)
+             (= (vector-ref source 1) 1)
+             (= (vector-ref source 2) 1))))
+    #t))
+
+(define (e3-overflow-finite! record)
+  (let ((arena-before (__arena-used)))
+    (with-region ('e3-finite-call 262144)
+      (e3-evaluate-into! (vector-ref record 0) (vector-ref record 4)
+                         (vector-ref record 3)))
+    (e3-overflow-check 'finite-region-restored
+      (= (__arena-used) arena-before)))
+  (let ((frame (vector-ref record 3))
+        (destinations (vector-ref record 2)))
+    (e3-overflow-check 'finite-cursor
+      (d2-core-bytes=? (vector-ref record 5)
+                        (d2-token-dataset-cursor (vector-ref record 4))))
+    (e3-overflow-check 'finite-model
+      (e3-test-retention-model=? (vector-ref record 0)
+                                 (vector-ref record 7)))
+    (e3-overflow-check 'finite-owner-controls
+      (e3-overflow-controls-stable? record))
+    (e3-overflow-check 'finite-modes
+      (e3-test-retention-modes=? frame (vector-ref record 6)))
+    (e3-overflow-check 'finite-metrics
+      (and (= (e3-test-u32-ref (vector-ref destinations 0)) 1118896070)
+           (= (e3-test-u32-ref (vector-ref destinations 1)) 1065353216)
+           (= (e3-test-u32-ref (vector-ref destinations 2)) 2135737744)
+           (= (e3-test-u32-ref (vector-ref destinations 3)) 0)
+           (= (e3-counter-ref frame 0) 1)
+           (= (e3-counter-ref frame 1) 1)))
+    #t))
+
+(define (e3-overflow-dispatch scenario corpus-path)
+  (e3-overflow-check 'overflow-scenario
+    (and (vector? scenario) (= (vector-length scenario) 4)
+         (eq? (vector-ref scenario 0) 'finite-overflow)
+         (or (eq? (vector-ref scenario 1) 'finite)
+             (eq? (vector-ref scenario 1) 'overflow))
+         (string? (vector-ref scenario 2))
+         (boolean? (vector-ref scenario 3))
+         (not (vector-ref e3-overflow-root 0))))
+  ;; The accepted P1 mode observer selects one authentic frame token per
+  ;; process; the finite and overflow cases therefore run in separate processes.
+  (let ((record (e3-overflow-create (vector-ref scenario 2)
+                                     corpus-path (vector-ref scenario 3))))
+    (if (eq? (vector-ref scenario 1) 'finite)
+        (e3-overflow-finite! record)
+        (begin (e3-overflow-reject-once! record)
+               (e3-overflow-reject-once! record)))
+    (d2-token-dataset-close! (vector-ref record 4))
+    (e3-overflow-check 'overflow-datasets-closed
+      (= (e3-test-retention-probe 22) 0))
+    (vector 'e3-finite-overflow-result-v1
+            (vector-ref scenario 1)
+            (e3-overflow-output (vector-ref record 3)
+                                 (vector-ref record 2))
+            (vector-ref record 5))))

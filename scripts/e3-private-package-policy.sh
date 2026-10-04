@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Sourced only by E1B. This admits the base private E3 tuple, its exact
 # source-private diagnostic successor, the installed diagnostic tuple, or the
-# separate noninstalled retention, mode/graph, numerical, and uniform-tie successors.
+# separate noninstalled retention, overflow, mode/graph, numerical, and
+# uniform-tie successors.
 # Mixed and partial tuples are rejected.
 e3_base_prefix="${PROJECT_ROOT}/native/e3_private_package"
 e3_diagnostic_prefix="${PROJECT_ROOT}/native/e3_diagnostic_private_package"
 e3_public_prefix="${PROJECT_ROOT}/native/e3_diagnostic_public_package"
 e3_retention_prefix="${PROJECT_ROOT}/tests/e3_private/retention_package"
+e3_overflow_prefix="${PROJECT_ROOT}/tests/e3_private/overflow_package"
 e3_mode_graph_prefix="${PROJECT_ROOT}/tests/e3_mode_graph/package"
 e3_numerical_prefix="${PROJECT_ROOT}/tests/e3_private/numerical_package"
 e3_uniform_prefix="${PROJECT_ROOT}/tests/e3_private/uniform_package"
@@ -33,6 +35,12 @@ e3_retention_inputs=(
   "${PROJECT_ROOT}/tests/e3_private/retention_bridge.c"
   "${e3_retention_prefix}_private_renames.txt"
   "${e3_retention_prefix}_public_exports.txt"
+)
+e3_overflow_inputs=(
+  "${PROJECT_ROOT}/tests/e3_private/overflow_driver_root.esk"
+  "${PROJECT_ROOT}/tests/e3_private/overflow_bridge.c"
+  "${e3_overflow_prefix}_private_renames.txt"
+  "${e3_overflow_prefix}_public_exports.txt"
 )
 e3_mode_graph_inputs=(
   "${PROJECT_ROOT}/tests/e3_mode_graph/driver_root.esk"
@@ -92,6 +100,14 @@ for e3_raw in "${raw_private_root}" "${raw_package_bridge}" \
       e3_tuple_requested=1
     fi
   done
+  for e3_expected in "${e3_overflow_inputs[@]}"; do
+    if [[ "$(realpath -m -- "${e3_raw}")" == "${e3_expected}" ]]; then
+      [[ -z "${e3_tuple_kind}" || "${e3_tuple_kind}" == retention-overflow ]] || \
+        die "E3 policy rejects mixed overflow and other tuples"
+      e3_tuple_kind=retention-overflow
+      e3_tuple_requested=1
+    fi
+  done
   for e3_expected in "${e3_mode_graph_inputs[@]}"; do
     if [[ "$(realpath -m -- "${e3_raw}")" == "${e3_expected}" ]]; then
       [[ -z "${e3_tuple_kind}" || "${e3_tuple_kind}" == mode-graph ]] || \
@@ -129,6 +145,9 @@ elif [[ "${e3_tuple_kind}" == public ]]; then
 elif [[ "${e3_tuple_kind}" == retention ]]; then
   e3_prefix="${e3_retention_prefix}"
   e3_inputs=("${e3_retention_inputs[@]}")
+elif [[ "${e3_tuple_kind}" == retention-overflow ]]; then
+  e3_prefix="${e3_overflow_prefix}"
+  e3_inputs=("${e3_overflow_inputs[@]}")
 elif [[ "${e3_tuple_kind}" == mode-graph ]]; then
   e3_prefix="${e3_mode_graph_prefix}"
   e3_inputs=("${e3_mode_graph_inputs[@]}")
@@ -179,7 +198,8 @@ e3_normalize_source_dependencies() {
     if [[ "$(realpath -m -- "${dependency}")" == "${generated}" ]]; then
       printf '@BUILD@/source/e3_d2_dataset.esk\n'
     elif [[ ( "${e3_tuple_kind}" == mode-graph ||
-              "${e3_tuple_kind}" == retention ) && \
+              "${e3_tuple_kind}" == retention ||
+              "${e3_tuple_kind}" == retention-overflow ) && \
             "$(realpath -m -- "${dependency}")" == \
               "${e3_generated_source_root}/transformer/module.esk" ]]; then
       printf '@BUILD@/source/transformer/module.esk\n'
