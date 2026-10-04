@@ -199,6 +199,8 @@ class TerminalOverlayTests(unittest.TestCase):
                 compiler_evidence.dep_target(dep, target, {source})
             extra = directory / "extra.esk"
             extra.write_text("extra\n")
+            dep.write_text(f"{target}: {source} \\\n  {extra}\n")
+            compiler_evidence.dep_target(dep, target, {source, extra})
             for bad in (
                 f"{target}: /tmp/unreviewed.esk\nphony: {source}\n",
                 f"{target}: {source} {extra}\n",
@@ -206,6 +208,8 @@ class TerminalOverlayTests(unittest.TestCase):
                 f"{target}: {source} {source}\n",
                 f"{target}: {source}\\x\n",
                 f"{target}: {source}\\\n  {extra}\n",
+                f"{target}: {str(source)[:-4]}\\\n  .esk\n",
+                f"{str(target)[:-2]}\\\n  .o: {source}\n",
             ):
                 dep.write_text(bad)
                 with self.subTest(bad=bad), self.assertRaises(ValueError):
@@ -220,6 +224,11 @@ class TerminalOverlayTests(unittest.TestCase):
             linked = directory / "linked.esk"
             linked.symlink_to(source)
             dep.write_text(f"{target}: {linked}\n")
+            with self.assertRaisesRegex(ValueError, "symlink dependency"):
+                compiler_evidence.dep_target(dep, target, {source})
+            parent_link = directory / "alias"
+            parent_link.symlink_to(directory, target_is_directory=True)
+            dep.write_text(f"{target}: {parent_link / source.name}\n")
             with self.assertRaisesRegex(ValueError, "symlink dependency"):
                 compiler_evidence.dep_target(dep, target, {source})
 

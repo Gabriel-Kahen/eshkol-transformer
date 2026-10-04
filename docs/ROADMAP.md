@@ -2543,6 +2543,8 @@ per-native-input dependency inventory derived from the reviewed source/header
 graph (with Clang 22 preprocessing for native headers), rather than learning
 the expected set from a gate-produced depfile. Its single-rule parser rejects
 extra targets, absent or extra prerequisites, and unsupported Make escapes.
+It also rejects symlinked dependency ancestors and continuations within a
+target or prerequisite token, while retaining compiler-style line folds.
 The ASan IR copy and verification stream the retained raw and derived files,
 reject unmarked alternate definition syntax, and require nonsymlink evidence
 directories and exclusive fresh outputs. These are test-recipe repairs only;

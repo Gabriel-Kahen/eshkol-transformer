@@ -52,6 +52,11 @@ def dep_words(depfile: Path) -> tuple[str, list[str]]:
                 raise ValueError(f"{depfile}: dangling escape")
             next_char = source[index + 1]
             if next_char == "\n":
+                # Make replaces a continuation with whitespace. It never
+                # splices two halves of one prerequisite or target together.
+                if (word or index + 2 >= len(source) or
+                        source[index + 2] not in " \t"):
+                    raise ValueError(f"{depfile}: continuation inside token")
                 index += 2
                 continue
             if next_char not in (" ", "#", ":", "\\"):
@@ -95,7 +100,9 @@ def dep_target(depfile: Path, target: Path, expected: set[Path]) -> None:
     if actual_target != str(target) or not all(
             Path(item).is_absolute() for item in actual_dependencies):
         raise ValueError(f"{depfile}: wrong target or relative dependency")
-    if any(Path(item).is_symlink() for item in actual_dependencies):
+    if any(any(part.is_symlink() for part in
+               (Path(item), *Path(item).parents))
+           for item in actual_dependencies):
         raise ValueError(f"{depfile}: symlink dependency")
     try:
         resolved = [Path(item).resolve(strict=True) for item in actual_dependencies]
