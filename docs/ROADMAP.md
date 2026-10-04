@@ -822,6 +822,18 @@ Eshkol frontend UBSan coverage. Actual emitted sanitizer imports and the
 existing exact test manifests still need a fresh supported diagnostic run and
 independent review before any sanitizer or §9 acceptance claim.
 
+The pinned `32484f6` numerical compiler diagnostic stopped before runtime on
+the exact sanitizer import delta. Its retained Clang 21 objects replace
+`memcpy`, `memmove`, and `memset` imports with the corresponding `__asan_mem*`
+interceptors; raw and derived IR retain the LLVM memory intrinsics. Independent
+discovery review accepted the attribution, and a bounded manifest correction
+adds these three absent names with a real compiler-lowering regression probe.
+The 112-file discovery seal is
+`e3-streaming-asan-imports-32484f6-fe9-f31-20261004-prepared-b/SHA256SUMS-DISCOVERY`
+(`5cfc20c6...`). This is compiler discovery only. Exact source review and a fresh
+supported compiled runtime gate remain required; no sanitizer acceptance is
+claimed, and the independent upstream foreign-pointer repair remains pending.
+
 The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
 is a docs-only candidate for the remaining private numerical, compiled-mutant,
 failure and rollback gates. It tracks authentic D2/model reachability separately

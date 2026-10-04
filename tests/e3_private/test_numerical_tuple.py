@@ -113,7 +113,8 @@ class NumericalTupleTest(unittest.TestCase):
         absent = lines(NUMERICAL, "sanitized_absent_undefined_symbols")
         self.assertEqual(added, ["bcmp", "puts"])
         self.assertEqual(absent, ["eshkol_ad_seed_flag", "eshkol_runtime_fatal",
-                                  "eshkol_taylor_lift_ad_node", "memcmp"])
+                                  "eshkol_taylor_lift_ad_node", "memcmp",
+                                  "memcpy", "memmove", "memset"])
         if any(shutil.which(tool) is None for tool in ("clang", "nm")):
             self.skipTest("Clang/binutils sanitizer object tools unavailable")
         with tempfile.TemporaryDirectory(prefix="e3-sanitizer-imports-") as temporary:
@@ -124,6 +125,9 @@ class NumericalTupleTest(unittest.TestCase):
                 'int equal(const void *a, const void *b) '
                 '{ return memcmp(a, b, 32) == 0; }\n'
                 'void print(void) { printf("fixture\\n"); }\n'
+                'void copy(void *d, const void *s, size_t n) { memcpy(d, s, n); }\n'
+                'void move(void *d, const void *s, size_t n) { memmove(d, s, n); }\n'
+                'void fill(void *d, int v, size_t n) { memset(d, v, n); }\n'
             )
             object_file = directory / "probe.o"
             subprocess.run(
@@ -137,7 +141,8 @@ class NumericalTupleTest(unittest.TestCase):
             ).stdout
             names = {line.split()[0] for line in imports.splitlines()}
             self.assertTrue(set(added) <= names)
-            self.assertFalse({"memcmp", "printf"} & names)
+            self.assertFalse({"memcmp", "printf", "memcpy", "memmove", "memset"} & names)
+            self.assertTrue({"__asan_memcpy", "__asan_memmove", "__asan_memset"} <= names)
             self.assertIn("__asan_init", names)
 
     def test_exact_noninstalled_successor_inventories(self) -> None:
