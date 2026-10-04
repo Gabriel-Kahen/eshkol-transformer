@@ -789,6 +789,19 @@ and accuracy 1.0/0.0. The existing five-case corpus, schema and transcripts
 are unchanged. Independent source review and a supported compiled run are
 pending; the local mathematical reference is not compiled E3 evidence.
 
+An isolated E3 uniform-tie source candidate uses a checksummed C1 zero-state
+container for the real seed-1729 M3 model before frame binding. Its dedicated
+noninstalled tuple retains the ordinary E3 entry and compares all 21 emitted
+roles, CE, state, four metrics, counts and saved D2 cursor against a separate
+six-zero-byte D1/D2 reference. The `>=` last-tie mutant and five I2 fault/census
+hooks are confined to the test build. Checksum, provider, shape and tie
+rejection plus an authentic copy-builder preparation allocation failure must
+preserve original parameter identities, values and owners before a successful
+zero-state retry. Local Q0/static controls pass; exact emitted tuple manifests,
+independent source review, and supported normal/repeat, poison and sanitizer
+execution remain pending. This supplies no §9 N3/M2 compiled acceptance or
+target-offset, wrong-axis, finite-boundary or overflow proof.
+
 The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
 is a docs-only candidate for the remaining private numerical, compiled-mutant,
 failure and rollback gates. It tracks authentic D2/model reachability separately

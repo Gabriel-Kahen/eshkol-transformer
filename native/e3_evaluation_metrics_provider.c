@@ -156,7 +156,11 @@ static int64_t argmax(const float *row) {
   int64_t winner = 0;
   float maximum = row[0];
   for (int64_t j = 1; j < 256; ++j) {
+#ifdef ET_E3_UNIFORM_LAST_TIE_TEST
+    if (row[j] >= maximum) {
+#else
     if (row[j] > maximum) {
+#endif
       maximum = row[j];
       winner = j;
     }

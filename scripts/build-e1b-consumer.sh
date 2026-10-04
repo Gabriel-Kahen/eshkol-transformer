@@ -1166,6 +1166,14 @@ if [[ "${E3_NUMERICAL_SANITIZE:-0}" != 0 ]]; then
     die "E3 numerical sanitizer is allowed only for the exact test tuple"
   e3_private_test_sanitize=1
 fi
+if [[ "${E3_UNIFORM_SANITIZE:-0}" != 0 ]]; then
+  [[ "${E3_UNIFORM_SANITIZE}" == 1 && \
+     "${package_policy}" == e3-private-aggregate && \
+     "${e3_tuple_kind}" == uniform && \
+     "${e3_private_test_sanitize}" == 0 ]] || \
+    die "E3 uniform sanitizer is allowed only for the exact test tuple"
+  e3_private_test_sanitize=1
+fi
 e3_private_test_sanitize_flags=()
 e3_private_test_reloc_flags=()
 if [[ "${e3_private_test_sanitize}" == 1 ]]; then
@@ -1194,6 +1202,16 @@ fi
 case "${e3_numerical_mutant}" in
   normal|wrong-target|mean-of-means|second-normalization) ;;
   *) die "unknown E3 numerical mutation: ${e3_numerical_mutant}" ;;
+esac
+e3_uniform_mutant=${E3_UNIFORM_MUTANT:-normal}
+if [[ -n "${E3_UNIFORM_MUTANT+x}" ]]; then
+  [[ "${package_policy}" == e3-private-aggregate && \
+     "${e3_tuple_kind}" == uniform ]] || \
+    die "E3 uniform mutation is allowed only for the exact test tuple"
+fi
+case "${e3_uniform_mutant}" in
+  normal|last-tie) ;;
+  *) die "unknown E3 uniform mutation: ${e3_uniform_mutant}" ;;
 esac
 
 require_command awk
@@ -1231,6 +1249,7 @@ e1b_timeout_seconds="${E1B_COMPILER_TIMEOUT_SECONDS:-120}"
 e3_mode_graph_generated_dir=
 e3_retention_generated_dir=
 e3_numerical_generated_dir=
+e3_uniform_generated_dir=
 if [[ "${package_policy}" == e3-private-aggregate &&
       "${e3_tuple_kind}" == mode-graph ]]; then
   source "${PROJECT_ROOT}/scripts/e3-mode-graph-stage-cleanup.sh"
@@ -1246,12 +1265,18 @@ elif [[ "${package_policy}" == e3-private-aggregate &&
   source "${PROJECT_ROOT}/scripts/e3-generated-source-stage.sh"
   e3_numerical_generated_dir="$(e3_numerical_generated_stage "${output_object}")" ||
     die "E3 numerical generated source requires a fresh private gate stage"
+elif [[ "${package_policy}" == e3-private-aggregate &&
+        "${e3_tuple_kind}" == uniform ]]; then
+  source "${PROJECT_ROOT}/scripts/e3-generated-source-stage.sh"
+  e3_uniform_generated_dir="$(e3_uniform_generated_stage "${output_object}")" ||
+    die "E3 uniform generated source requires a fresh private gate stage"
 fi
 
 e1b_tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-e1b.XXXXXX")"
 e3_mode_graph_generated_owned=0
 e3_retention_generated_owned=0
 e3_numerical_generated_owned=0
+e3_uniform_generated_owned=0
 e1b_cleanup() {
   local status=$?
   if [[ "${status}" != 0 && \
@@ -1273,10 +1298,13 @@ e1b_cleanup() {
   if [[ "${status}" == 0 && "${e3_numerical_generated_owned}" == 1 ]]; then
     rm -rf -- "${e3_numerical_generated_dir}"
   fi
+  if [[ "${status}" == 0 && "${e3_uniform_generated_owned}" == 1 ]]; then
+    rm -rf -- "${e3_uniform_generated_dir}"
+  fi
   return "${status}"
 }
 trap e1b_cleanup EXIT
-if [[ -n "${e3_mode_graph_generated_dir}${e3_retention_generated_dir}${e3_numerical_generated_dir}" ]]; then
+if [[ -n "${e3_mode_graph_generated_dir}${e3_retention_generated_dir}${e3_numerical_generated_dir}${e3_uniform_generated_dir}" ]]; then
   trap 'exit 143' TERM
   trap 'exit 130' INT
 fi
@@ -1295,10 +1323,14 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     mkdir -m 0700 -- "${e3_numerical_generated_dir}" ||
       die "E3 numerical generated source path was claimed concurrently"
     e3_numerical_generated_owned=1
+  elif [[ -n "${e3_uniform_generated_dir}" ]]; then
+    mkdir -m 0700 -- "${e3_uniform_generated_dir}" ||
+      die "E3 uniform generated source path was claimed concurrently"
+    e3_uniform_generated_owned=1
   else
     e3_mode_graph_generated_dir="${e1b_tmp}/generated"
   fi
-  e3_generated_dir="${e3_numerical_generated_dir:-${e3_retention_generated_dir:-${e3_mode_graph_generated_dir}}}"
+  e3_generated_dir="${e3_uniform_generated_dir:-${e3_numerical_generated_dir:-${e3_retention_generated_dir:-${e3_mode_graph_generated_dir}}}}"
   python3 "${PROJECT_ROOT}/scripts/generate-e3-d2-source.py" \
     --output-dir "${e3_generated_dir}" >"${e1b_tmp}/d2-generation.json"
   e3_generated_source_root="${e3_generated_dir}/source"
@@ -1573,6 +1605,9 @@ elif [[ "${package_policy}" == e3-private-aggregate ]]; then
   if [[ "${e3_public_tuple:-0}" != 1 ]]; then
     package_bridge_flags+=(-DET_E3_TESTING)
   fi
+  if [[ "${e3_tuple_kind}" == uniform ]]; then
+    package_bridge_flags+=(-DET_F32_TENSOR_TESTING)
+  fi
 elif [[ "${package_policy}" == m3-model-aggregate || \
       "${g3g_package_policy}" == 1 || \
       "${package_policy}" == m3t-diagnostic-aggregate ]]; then
@@ -1646,6 +1681,13 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
       mean-of-means) package_native_cflags+=(-DET_E3_NUMERICAL_MEAN_OF_MEANS) ;;
       second-normalization) package_native_cflags+=(-DET_E3_NUMERICAL_SECOND_NORMALIZATION) ;;
     esac
+  fi
+  if [[ "${package_policy}" == e3-private-aggregate &&
+        "${e3_tuple_kind}" == uniform ]]; then
+    package_native_cflags+=(-DET_E3_NUMERICAL_TESTING -fno-builtin-printf)
+    if [[ "${e3_uniform_mutant}" == last-tie ]]; then
+      package_native_cflags+=(-DET_E3_UNIFORM_LAST_TIE_TEST)
+    fi
   fi
   native_index=0
   for package_native_source in "${package_native_sources[@]}"; do
@@ -1903,9 +1945,10 @@ if [[ "${e3_private_test_sanitize}" == 1 ]]; then
       "${e1b_tmp}/noninstrumentation-undefined.txt" \
       "${e1b_tmp}/sanitizer-undefined.txt"
     e3_retention_sanitizer_inventory_verified=1
-  elif [[ "${e3_tuple_kind:-}" == numerical ]]; then
-    numerical_added="${PROJECT_ROOT}/tests/e3_private/numerical_package_sanitized_added_undefined_symbols.txt"
-    numerical_absent="${PROJECT_ROOT}/tests/e3_private/numerical_package_sanitized_absent_undefined_symbols.txt"
+  elif [[ "${e3_tuple_kind:-}" == numerical ||
+          "${e3_tuple_kind:-}" == uniform ]]; then
+    numerical_added="${e3_prefix}_sanitized_added_undefined_symbols.txt"
+    numerical_absent="${e3_prefix}_sanitized_absent_undefined_symbols.txt"
     for numerical_manifest in "${numerical_added}" "${numerical_absent}"; do
       [[ -s "${numerical_manifest}" ]] || die "E3 numerical sanitizer delta manifest is empty"
       LC_ALL=C sort -u "${numerical_manifest}" | cmp -s "${numerical_manifest}" - || \
@@ -2218,7 +2261,8 @@ cp "${e1b_tmp}/expected-undefined.txt" \
 if [[ "${package_policy}" == e3-private-aggregate &&
       ( "${e3_tuple_kind:-}" == mode-graph ||
         "${e3_tuple_kind:-}" == retention ||
-        "${e3_tuple_kind:-}" == numerical ) ]]; then
+        "${e3_tuple_kind:-}" == numerical ||
+        "${e3_tuple_kind:-}" == uniform ) ]]; then
   cp "${e1b_tmp}/private.ll" "${evidence_dir}.tmp.$$/private.ll"
 fi
 if [[ "${e3_private_test_sanitize}" == 1 &&

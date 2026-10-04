@@ -13,3 +13,17 @@ e3_numerical_generated_stage() {
   [[ ! -e "${generated}" && ! -L "${generated}" ]] || return 1
   printf '%s\n' "${generated}"
 }
+
+e3_uniform_generated_stage() {
+  local object=$1 stage gate generated
+  stage="$(dirname -- "${object}")"
+  gate="$(dirname -- "${stage}")"
+  [[ "$(basename -- "${object}")" == e3_uniform_package.o &&
+     "$(basename -- "${stage}")" =~ ^\.e3-uniform\.[[:alnum:]]{6}$ &&
+     -d "${stage}" && ! -L "${stage}" && -O "${stage}" &&
+     -d "${gate}" && ! -L "${gate}" && -O "${gate}" ]] ||
+    return 1
+  generated="${gate}/.e3-uniform-generated"
+  [[ ! -e "${generated}" && ! -L "${generated}" ]] || return 1
+  printf '%s\n' "${generated}"
+}
