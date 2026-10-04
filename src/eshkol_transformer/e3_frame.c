@@ -1508,6 +1508,19 @@ int64_t et_e3_test_retention_probe_v1(int64_t selector) {
   }
 }
 
+#ifdef ET_E3_OVERFLOW_TESTING
+/* Overflow-only private witness: observe storage even before publication.
+ * e3_find checks registry identity before any caller-pointer dereference.
+ * This deliberately does not call e3_admit or change native error state. */
+int64_t et_e3_test_published_counter_raw_v1(void *pointer, int64_t selector) {
+  et_e3_frame_internal *frame = e3_find(pointer);
+  if (!frame || frame->lifecycle != 1 || frame->phase != E3_IDLE ||
+      !frame->model || frame->model->active || !e3_pins_idle(&frame->pins) ||
+      selector < 0 || selector > 1) return -1;
+  return frame->published_counts[selector];
+}
+#endif
+
 static et_f32_tensor *e3_test_model_tensor(owner *model, int64_t parameter,
                                             int64_t gradient) {
   if (!model || model->r.state != 1 || parameter < 0 || parameter >= 14 ||

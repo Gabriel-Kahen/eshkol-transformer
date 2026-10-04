@@ -79,8 +79,9 @@ def parse(raw: bytes, case: str, gradient: str) -> int:
                     _pair(fields[2]) != [1, 1]:
                 raise ValueError("finite publication differs")
             continue
-        ordinal = index // len(batch_tags)
-        if len(fields) < 3 or fields[1] != str(ordinal):
+        # Every fresh E3 acquire zeros its native batch counts. The retry is
+        # the second record set in this process, but its native ordinal is 0.
+        if len(fields) < 3 or fields[1] != "0":
             raise ValueError("overflow ordinal differs")
         if tag == "E3ROW":
             if len(fields) != 5 or _pair(fields[2]) != [3, 0] or \

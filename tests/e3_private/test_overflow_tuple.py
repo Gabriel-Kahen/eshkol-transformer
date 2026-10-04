@@ -21,7 +21,8 @@ PRIVATE = ROOT / "tests/e3_private"
 
 def transcript(case: str, gradient: str) -> bytes:
     records = []
-    for ordinal in range(1 if case == "finite" else 2):
+    for _call in range(1 if case == "finite" else 2):
+        ordinal = 0
         records.append(f"E3ROW\t{ordinal}\t3,0\t4,0\t1,0")
         for name, shape in zip(ROLE_NAMES, SHAPES, strict=True):
             records.append("\t".join(("E3ROLE", str(ordinal), name,
@@ -126,6 +127,23 @@ printf '%s\n' "$e3_tuple_kind"
         self.assertEqual((PRIVATE / "overflow_package_native_objects.txt").read_bytes(),
                          (PRIVATE / "retention_package_native_objects.txt").read_bytes())
 
+    def test_raw_counter_observer_is_overflow_only_and_registry_first(self) -> None:
+        frame = (ROOT / "src/eshkol_transformer/e3_frame.c").read_text()
+        builder = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
+        guarded = frame.split("#ifdef ET_E3_OVERFLOW_TESTING\n", 1)[1].split("#endif", 1)[0]
+        self.assertIn("e3_find(pointer)", guarded)
+        self.assertNotIn("e3_admit(pointer)", guarded)
+        self.assertIn("frame->published_counts[selector]", guarded)
+        self.assertIn("frame->lifecycle != 1", guarded)
+        self.assertIn("frame->phase != E3_IDLE", guarded)
+        self.assertIn("selector < 0 || selector > 1", guarded)
+        retention_flags = builder.split('"${e3_tuple_kind}" == retention ]]; then', 1)[1]
+        retention_flags = retention_flags.split("fi", 1)[0]
+        self.assertNotIn("ET_E3_OVERFLOW_TESTING", retention_flags)
+        overflow_flags = builder.split('"${e3_tuple_kind}" == retention-overflow ]]; then', 2)[-1]
+        self.assertIn("-DET_E3_OVERFLOW_TESTING", builder)
+        self.assertIn("et_e3_test_published_counter_raw_v1", overflow_flags)
+
     def test_full_trace_and_fault_classification(self) -> None:
         for case, calls in (("finite", 1), ("overflow", 2)):
             for gradient in ("absent", "present"):
@@ -138,9 +156,17 @@ printf '%s\n' "$e3_tuple_kind"
                         good.replace(b"3,0\t4,0", b"3,0\t3,0", 1),
                         good.replace(b"1,2,256", b"1,2,255", 1),
                         good.replace(NORM[case].encode(), b"7f800000", 1),
+                        good.replace(b"E3ROW\t0", b"E3ROW\t1", 1),
                     ):
                         with self.assertRaises(ValueError):
                             parse(bad, case, gradient)
+                    if case == "overflow":
+                        second = good.find(b"E3ROW\t0", good.find(b"E3ROW\t0") + 1)
+                        self.assertGreater(second, 0)
+                        old_retry_ordinal = good[:second] + \
+                            good[second:].replace(b"E3ROW\t0", b"E3ROW\t1", 1)
+                        with self.assertRaisesRegex(ValueError, "ordinal"):
+                            parse(old_retry_ordinal, case, gradient)
 
 
 if __name__ == "__main__":

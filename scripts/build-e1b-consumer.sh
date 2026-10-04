@@ -1696,6 +1696,7 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
   if [[ "${package_policy}" == e3-private-aggregate &&
         "${e3_tuple_kind}" == retention-overflow ]]; then
     package_native_cflags+=(-DET_E3_RETENTION_TESTING
+                            -DET_E3_OVERFLOW_TESTING
                             -DET_E3_NUMERICAL_TESTING -fno-builtin-printf)
   fi
   if [[ "${package_policy}" == e3-private-aggregate &&
@@ -2260,7 +2261,8 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
         et_f32_test_retired_counts_snapshot_v1
       )
       if [[ "${e3_tuple_kind}" == retention-overflow ]]; then
-        e3_required_private+=(et_e3_private_overflow_dispatch_cabi_v1)
+        e3_required_private+=(et_e3_private_overflow_dispatch_cabi_v1
+                              et_e3_test_published_counter_raw_v1)
       fi
     elif [[ "${e3_tuple_kind}" == mode-graph ]]; then
       e3_required_private+=(

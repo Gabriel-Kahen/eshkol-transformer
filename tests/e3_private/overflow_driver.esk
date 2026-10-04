@@ -1,5 +1,7 @@
 ;;; A distinct noninstalled entry; no overflow state enters the retention root.
 ;;; Each successful C1 load precedes creation of its own E3 frame.
+(extern i64 e3-test-published-counter-raw ptr i64
+        :real et_e3_test_published_counter_raw_v1)
 (define e3-overflow-root (vector #f))
 (define e3-overflow-policy
   (c1-persistence-policy-internal 1048576 524288 262144 64 'cpu))
@@ -80,7 +82,8 @@
           (e3-test-u32-ref (vector-ref destinations 1))
           (e3-test-u32-ref (vector-ref destinations 2))
           (e3-test-u32-ref (vector-ref destinations 3))
-          (e3-counter-ref frame 0) (e3-counter-ref frame 1)))
+          (e3-test-published-counter-raw (vector-ref (e3-frame-entry-internal frame) 4) 0)
+          (e3-test-published-counter-raw (vector-ref (e3-frame-entry-internal frame) 4) 1)))
 
 (define (e3-overflow-output=? left right)
   (let loop ((index 0))
@@ -128,6 +131,17 @@
         (vector-set! record 3 frame)
         (vector-set! record 4 dataset)
         (e3-test-retention-set-mixed! frame)
+        (let ((native (vector-ref (e3-frame-entry-internal frame) 4)))
+          (e3-overflow-check 'overflow-initial-raw-counters
+            (and (= (e3-test-published-counter-raw native 0) 0)
+                 (= (e3-test-published-counter-raw native 1) 0)))
+          (e3-overflow-check 'overflow-raw-selector-boundary
+            (and (= (e3-test-published-counter-raw native -1) -1)
+                 (= (e3-test-published-counter-raw native 2) -1)))
+          ;; Public getter hides unpublished bytes behind an invalid-state
+          ;; sentinel; it is intentionally separate from the raw-image proof.
+          (e3-overflow-check 'overflow-public-unpublished-sentinel
+            (= (e3-native-counter-ref native 0) -1)))
         (if present?
             (e3-overflow-check 'overflow-seed-gradient
               (= (e3-test-seed-gradient
@@ -197,6 +211,10 @@
     (e3-overflow-check 'overflow-region-restored
       (= (__arena-used) arena-before))
     (e3-overflow-check 'overflow-failure-atomic (e3-overflow-stable? record))
+    (let ((native (vector-ref (e3-frame-entry-internal frame) 4)))
+      (e3-overflow-check 'overflow-raw-counts-still-zero
+        (and (= (e3-test-published-counter-raw native 0) 0)
+             (= (e3-test-published-counter-raw native 1) 0))))
     (let* ((entry (e3-frame-entry-internal frame))
            (source (vector-ref entry 12)))
       (e3-overflow-check 'overflow-metrics-domain
