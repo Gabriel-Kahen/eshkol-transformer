@@ -1,0 +1,116 @@
+{
+  "eshkol_candidate_extra": [
+    "tests/g3r/candidate_construction_test.esk",
+    "native/g3r_candidate_construction_root.esk"
+  ],
+  "eshkol_common": [
+    "internal/c1/lib/c1_sha256.esk",
+    "internal/c1/lib/transformer/checkpoint_internal.esk",
+    "internal/c1/lib/transformer/persistence_policy_internal.esk",
+    "internal/t1/lib/t1_tokenizer_core.esk",
+    "internal/t1/lib/transformer/tokenizer_internal.esk",
+    "lib/transformer/error_core.esk",
+    "lib/transformer/error_internal.esk",
+    "native/e1b_error_consumer_private.esk",
+    "native/i2_wave2_root.esk",
+    "native/m3t_package_root.esk",
+    "native/m3t_transport_extension.esk",
+    "native/t1_wave1_root.esk",
+    "native/x1_config_private.esk",
+    "src/eshkol_transformer/token_shard.esk"
+  ],
+  "eshkol_off_extra": [
+    "tests/p1/i2_construction_test.esk"
+  ],
+  "native": {
+    "a2_attention_provider": [
+      "include/eshkol_transformer/a2_attention_abi.h",
+      "include/eshkol_transformer/kernel_abi.h",
+      "native/a2_attention_provider.c"
+    ],
+    "candidate_bridge": [
+      "include/eshkol_transformer/f32_tensor.h",
+      "include/eshkol_transformer/kernel_abi.h",
+      "native/f32_parameter_internal.h",
+      "native/p1_identity.c",
+      "native/p1_identity_internal.h",
+      "src/eshkol_transformer/m3t_f32_scoped.h",
+      "tests/g3r/candidate_construction_bridge.c",
+      "tests/p1/i2_construction_test_bridge.c"
+    ],
+    "checkpoint_io": [
+      "native/checkpoint_io.c",
+      "native/checkpoint_io.h"
+    ],
+    "data_io": [
+      "native/data_io.c"
+    ],
+    "i2_bridge": [
+      "include/eshkol_transformer/f32_tensor.h",
+      "include/eshkol_transformer/kernel_abi.h",
+      "native/f32_parameter_internal.h",
+      "native/i2_wave2_package_bridge.c",
+      "src/eshkol_transformer/m3t_transport.h"
+    ],
+    "i64_tensor": [
+      "include/eshkol_transformer/i64_tensor.h",
+      "include/eshkol_transformer/kernel_abi.h",
+      "native/i64_tensor.c"
+    ],
+    "kernel_abi": [
+      "include/eshkol_transformer/kernel_abi.h",
+      "native/kernel_abi.c"
+    ],
+    "m3t_f32_integration": [
+      "include/eshkol_transformer/f32_tensor.h",
+      "include/eshkol_transformer/kernel_abi.h",
+      "native/f32_parameter_internal.h",
+      "native/f32_tensor.c",
+      "src/eshkol_transformer/m3t_f32_integration.c",
+      "src/eshkol_transformer/m3t_f32_scoped.h"
+    ],
+    "m3t_transport": [
+      "include/eshkol_transformer/a2_attention_abi.h",
+      "include/eshkol_transformer/f32_tensor.h",
+      "include/eshkol_transformer/i64_tensor.h",
+      "include/eshkol_transformer/kernel_abi.h",
+      "include/eshkol_transformer/n2_primitives_abi.h",
+      "include/eshkol_transformer/n3k_primitives_abi.h",
+      "native/f32_parameter_internal.h",
+      "native/t1_i64_shell.h",
+      "src/eshkol_transformer/m3t_f32_scoped.h",
+      "src/eshkol_transformer/m3t_transport.c",
+      "src/eshkol_transformer/m3t_transport.h"
+    ],
+    "n2_primitives_provider": [
+      "include/eshkol_transformer/kernel_abi.h",
+      "include/eshkol_transformer/n2_primitives_abi.h",
+      "native/n2_primitives_provider.c"
+    ],
+    "n3k_primitives_provider": [
+      "include/eshkol_transformer/kernel_abi.h",
+      "include/eshkol_transformer/n3k_primitives_abi.h",
+      "native/n3k_primitives_provider.c"
+    ],
+    "ordinary_bridge": [
+      "include/eshkol_transformer/f32_tensor.h",
+      "include/eshkol_transformer/kernel_abi.h",
+      "native/f32_parameter_internal.h",
+      "native/p1_identity.c",
+      "native/p1_identity_internal.h",
+      "src/eshkol_transformer/m3t_f32_scoped.h",
+      "tests/p1/i2_construction_test_bridge.c"
+    ],
+    "p1_identity": [
+      "native/p1_identity.c",
+      "native/p1_identity_internal.h"
+    ],
+    "t1_i64_shell": [
+      "include/eshkol_transformer/i64_tensor.h",
+      "include/eshkol_transformer/kernel_abi.h",
+      "native/t1_i64_shell.c",
+      "native/t1_i64_shell.h"
+    ]
+  },
+  "version": 1
+}

@@ -6,7 +6,9 @@ import re
 import subprocess
 import tempfile
 import unittest
-from tests.g3r.check_candidate_construction_inputs import depfile_paths, require_regular
+from tests.g3r.check_candidate_construction_inputs import (
+    compare_depfile, depfile_paths, load_allowlist, require_regular,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -31,18 +33,44 @@ class CandidateConstructionStatic(unittest.TestCase):
     def test_depfile_and_evidence_file_boundary(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            dependency = root / "input.esk"
-            dependency.write_text("(define x 1)\n")
+            entry = root / "entry.esk"
+            private = root / "private.esk"
+            ordinary = root / "ordinary.esk"
+            native = root / "native.c"
+            extra = root / "extra.esk"
+            for dependency in (entry, private, ordinary, native, extra):
+                dependency.write_text("fixed source\n")
             depfile = root / "input.d"
-            depfile.write_text(f"{root}/output.o: {dependency}\n")
-            self.assertEqual(depfile_paths(depfile), [dependency])
-            depfile.write_text(f"{root}/output.o: ../input.esk\n")
+            target = root / "output.o"
+            expected = {entry, private, native}
+            def write(target_name: Path, inputs: tuple[Path, ...]) -> None:
+                depfile.write_text(f"{target_name}: {' '.join(map(str, inputs))}\n")
+            write(target, (entry, private, native))
+            self.assertEqual(set(compare_depfile(depfile, target, expected)), expected)
+            write(root / "wrong-object.o", (entry, private, native))
             with self.assertRaises(ValueError):
-                depfile_paths(depfile)
+                depfile_paths(depfile, target)
+            for inputs in ((entry, ordinary, native), (private, native),
+                           (entry, private), (entry, private, native, extra)):
+                write(target, inputs)
+                with self.assertRaises(ValueError):
+                    compare_depfile(depfile, target, expected)
+            write(target, (Path("../entry.esk"),))
+            with self.assertRaises(ValueError):
+                depfile_paths(depfile, target)
             alias = root / "alias"
-            alias.symlink_to(dependency)
+            alias.symlink_to(entry)
             with self.assertRaises(ValueError):
                 require_regular(alias)
+
+    def test_depfile_allowlist_is_immutable(self) -> None:
+        original = ROOT / "tests/g3r/candidate_depfile_allowlist.json"
+        self.assertEqual(load_allowlist(original)["version"], 1)
+        with tempfile.TemporaryDirectory() as temporary:
+            changed = Path(temporary) / "allowlist.json"
+            changed.write_bytes(original.read_bytes() + b" \n")
+            with self.assertRaises(ValueError):
+                load_allowlist(changed)
 
     def test_ordinary_sources_are_exactly_unchanged(self) -> None:
         self.assertEqual(digest(MODULE), ORIGINAL_MODULE_SHA)

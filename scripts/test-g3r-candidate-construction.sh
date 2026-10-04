@@ -307,7 +307,7 @@ done
 
 run_checked inputs env PYTHONDONTWRITEBYTECODE=1 python3 \
   "$PROJECT_ROOT/tests/g3r/check_candidate_construction_inputs.py" \
-  "$PROJECT_ROOT" "$evidence" "$(eshkol_source_dir)"
+  "$PROJECT_ROOT" "$evidence"
 run_checked toolchain-post bash -c 'source "$1"; verify_toolchain' _ \
   "$PROJECT_ROOT/scripts/common.sh"
 printf 'PENDING: Manual classification of every compiler/linker diagnostic and\n' \

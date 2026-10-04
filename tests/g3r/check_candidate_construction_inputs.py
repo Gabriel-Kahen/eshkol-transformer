@@ -2,10 +2,14 @@
 """Close the supported candidate fixture's source and retained evidence sets."""
 
 from hashlib import sha256
+import json
 import os
 from pathlib import Path
 import stat
 import sys
+
+
+ALLOWLIST_SHA256 = "02106f31375643c1744f7f4a8feb1aa96d992ef245eef9e9c02d367a2877ecd7"
 
 
 def require_regular(path: Path) -> None:
@@ -16,67 +20,108 @@ def require_regular(path: Path) -> None:
         raise ValueError(f"noncanonical input path: {path}")
 
 
-def depfile_paths(path: Path) -> list[Path]:
+def load_allowlist(path: Path) -> dict:
+    require_regular(path)
+    raw = path.read_bytes()
+    if sha256(raw).hexdigest() != ALLOWLIST_SHA256:
+        raise ValueError("candidate depfile allowlist hash differs")
+    value = json.loads(raw)
+    if value.get("version") != 1:
+        raise ValueError("candidate depfile allowlist version differs")
+    return value
+
+
+def canonical_dependency(path: Path) -> Path:
+    if not path.is_absolute():
+        raise ValueError(f"relative depfile prerequisite: {path}")
+    current = Path("/")
+    for component in path.parts[1:]:
+        current /= component
+        if current.is_symlink():
+            raise ValueError(f"symlink depfile prerequisite: {path}")
+    resolved = path.resolve(strict=True)
+    require_regular(resolved)
+    return resolved
+
+
+def depfile_paths(path: Path, expected_target: Path) -> list[Path]:
     require_regular(path)
     raw = path.read_text()
     raw = raw.replace("\\\n", " ")
     if raw.count(":") != 1:
         raise ValueError(f"unexpected depfile format: {path}")
     target, prerequisites = raw.split(":", 1)
-    if not target.strip() or not prerequisites.strip():
-        raise ValueError(f"empty depfile target/prerequisites: {path}")
+    if target.strip() != str(expected_target) or not prerequisites.strip():
+        raise ValueError(f"wrong depfile target or empty prerequisites: {path}")
     # All admitted worktree/evidence/toolchain roots have no shell whitespace.
     # A Make escape here would need an independently reviewed path parser.
     if "\\" in prerequisites:
         raise ValueError(f"escaped depfile prerequisite: {path}")
-    result = [Path(item) for item in prerequisites.split()]
-    if any(not item.is_absolute() for item in result):
-        raise ValueError(f"relative depfile prerequisite: {path}")
+    result = [canonical_dependency(Path(item)) for item in prerequisites.split()]
     return result
 
 
+def compare_depfile(path: Path, target: Path, expected: set[Path]) -> list[Path]:
+    actual = depfile_paths(path, target)
+    if set(actual) != expected:
+        missing = sorted(expected - set(actual))
+        extra = sorted(set(actual) - expected)
+        raise ValueError(f"{path} closure differs: missing={missing}, extra={extra}")
+    return actual
+
+
 def main() -> None:
-    if len(sys.argv) != 4:
-        raise SystemExit("usage: checker PROJECT_ROOT EVIDENCE ESHKOL_SOURCE")
-    project, evidence, eshkol = map(Path, sys.argv[1:])
-    roots = (project, evidence / "overlay", evidence / "baseline",
-             evidence / "off/stage", eshkol)
+    if len(sys.argv) != 3:
+        raise SystemExit("usage: checker PROJECT_ROOT EVIDENCE")
+    project, evidence = map(Path, sys.argv[1:])
+    allowlist = load_allowlist(project / "tests/g3r/candidate_depfile_allowlist.json")
     admitted = set()
-    c_stems = (
-        "i2_bridge", "data_io", "checkpoint_io", "kernel_abi",
-        "i64_tensor", "t1_i64_shell", "n3k_primitives_provider",
-        "n2_primitives_provider", "a2_attention_provider", "m3t_transport",
-        "m3t_f32_integration", "candidate_bridge", "candidate",
-    )
-    expected = {evidence / mode / f"{stem}.d"
-                for mode in ("normal", "sanitize") for stem in c_stems}
-    expected |= {evidence / "off" / f"{stem}.d"
-                 for stem in ("ordinary_bridge", "baseline", "current",
-                              "baseline.native", "current.native")}
-    depfiles = set(evidence.glob("normal/*.d"))
-    depfiles |= set(evidence.glob("sanitize/*.d"))
-    depfiles |= set(evidence.glob("off/*.d"))
-    if depfiles != expected:
-        raise ValueError(f"depfile set mismatch: missing={expected - depfiles}, extra={depfiles - expected}")
-    for depfile in sorted(depfiles):
-        dependencies = depfile_paths(depfile)
-        for path in dependencies:
-            require_regular(path)
-            if not any(path.is_relative_to(root) for root in roots):
-                raise ValueError(f"depfile escaped source roots: {path}")
-            admitted.add(path)
+    native = allowlist["native"]
+    common = {project / item for item in allowlist["eshkol_common"]}
     private = evidence / "overlay/transformer/module.esk"
     ordinary = project / "internal/p1/lib/transformer/module.esk"
     baseline = evidence / "baseline/transformer/module.esk"
-    for mode in ("normal", "sanitize"):
-        deps = set(depfile_paths(evidence / mode / "candidate.d"))
-        if private not in deps or ordinary in deps:
-            raise ValueError(f"{mode} private overlay closure is wrong")
     staged = evidence / "off/stage/transformer/module.esk"
+    expected = {}
+    for mode in ("normal", "sanitize"):
+        for stem in native:
+            if stem in ("ordinary_bridge", "p1_identity"):
+                continue
+            expected[evidence / mode / f"{stem}.d"] = (
+                evidence / mode / f"{stem}.o",
+                {project / item for item in native[stem]},
+            )
+        expected[evidence / mode / "candidate.d"] = (
+            evidence / mode / "candidate.raw.o",
+            common | {project / item for item in allowlist["eshkol_candidate_extra"]} | {private},
+        )
+    expected[evidence / "off/ordinary_bridge.d"] = (
+        evidence / "off/ordinary_bridge.o",
+        {project / item for item in native["ordinary_bridge"]},
+    )
+    for variant in ("baseline", "current"):
+        expected[evidence / "off" / f"{variant}.d"] = (
+            evidence / "off" / f"{variant}.o",
+            common | {project / item for item in allowlist["eshkol_off_extra"]} | {staged},
+        )
+        native_inputs = {project / item for item in native["p1_identity"]}
+        if variant == "baseline":
+            native_inputs.remove(project / "native/p1_identity.c")
+            native_inputs.add(evidence / "baseline/p1_identity.c")
+        expected[evidence / "off" / f"{variant}.native.d"] = (
+            evidence / "off" / f"{variant}.native.o", native_inputs,
+        )
+    depfiles = set(evidence.glob("normal/*.d"))
+    depfiles |= set(evidence.glob("sanitize/*.d"))
+    depfiles |= set(evidence.glob("off/*.d"))
+    if depfiles != set(expected):
+        missing = sorted(set(expected) - depfiles)
+        extra = sorted(depfiles - set(expected))
+        raise ValueError(f"depfile set mismatch: missing={missing}, extra={extra}")
+    for depfile in sorted(depfiles):
+        target, dependencies = expected[depfile]
+        admitted.update(compare_depfile(depfile, target, dependencies))
     for variant, original in (("baseline", baseline), ("current", ordinary)):
-        deps = set(depfile_paths(evidence / "off" / f"{variant}.d"))
-        if staged not in deps or private in deps or baseline in deps or ordinary in deps:
-            raise ValueError(f"{variant} fixed-path ordinary closure is wrong")
         snapshot = evidence / "off" / f"{variant}.source.esk"
         require_regular(snapshot)
         if snapshot.read_bytes() != original.read_bytes() or snapshot.read_bytes() != staged.read_bytes():
@@ -101,6 +146,7 @@ def main() -> None:
         "scripts/common.sh",
         "tests/q0/test_g3r_candidate_construction_static.py",
         "tests/g3r/check_candidate_construction_inputs.py",
+        "tests/g3r/candidate_depfile_allowlist.json",
         "tests/g3r/candidate_construction_test.esk",
         "tests/g3r/candidate_construction_bridge.c",
         "tests/p1/i2_construction_test.esk",
