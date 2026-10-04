@@ -764,7 +764,16 @@ The supported mode/graph gate did not include retention or numerical test
 candidates. A scoped source integration adds the separate complete-call
 retention tuple and strict 1,024/8,192-call normal A/B, poison A/B and
 sanitizer runner with gradients absent/present. The frozen `091461f2` prepared
-retention J gate was not run. A further [numerical transcript source
+retention J gate was not run. The supported retention attempt on frozen
+`d9328ce` built its packages but stopped at the first strict-AOT executable:
+under `--no-stdlib`, the private `retention_runtime.esk` used unavailable
+`length` and `list-ref` functions. This isolated successor reuses the existing
+private runtime's `car`/`cdr` argument traversal while preserving the retention
+assertions and full 20-case matrix. Its sanitizer manifests are still
+provisional pending fresh actual compiler diagnostics; the earlier retained
+readelf DWARF warnings have no clean-stderr or runtime acceptance claim.
+Fresh supported retention and affected mode/graph gates on this exact composed
+tree remain required. A further [numerical transcript source
 candidate](e3/E3_NUMERICAL_TRANSCRIPT.md) composes the authentic three-batch
 observer and two accepted compiled mutants onto that combined source, and
 adds a third final-loss second-normalization mutant. Its source and static
