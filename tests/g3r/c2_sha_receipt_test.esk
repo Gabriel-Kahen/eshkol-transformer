@@ -99,6 +99,30 @@
   (and (= (receipt-count) before) (= (live-c2) owners-before)
        (all-sidecars-dead?) (native-flat?)))
 
+(define original-stage-return g3r-c2-receipt-after-stage-return-internal)
+(set! g3r-c2-receipt-after-stage-return-internal
+  (lambda (stage) (raise #f)))
+(reject-false "stage return before cell enrollment retains raised false"
+  (lambda () (g3r-c2-load-with-sha-internal valid-path policy report)))
+(set! g3r-c2-receipt-after-stage-return-internal original-stage-return)
+(check "pre-cell stage cut retires exact stage and SHA"
+  (and (= (receipt-count) before) (= (live-c2) owners-before)
+       (all-sidecars-dead?) (native-flat?)))
+
+(define original-owner-return g3r-c2-receipt-after-owner-return-internal)
+(define dead-before-owner-return
+  (vector-ref (c2-load-owner-counts-internal) 3))
+(set! g3r-c2-receipt-after-owner-return-internal
+  (lambda (owner) (raise #f)))
+(reject-false "owner return before cell enrollment retains raised false"
+  (lambda () (g3r-c2-load-with-sha-internal valid-path policy report)))
+(set! g3r-c2-receipt-after-owner-return-internal original-owner-return)
+(check "pre-cell owner cut releases once and retires SHA"
+  (and (= (receipt-count) before) (= (live-c2) owners-before)
+       (= (vector-ref (c2-load-owner-counts-internal) 3)
+          (+ dead-before-owner-return 1))
+       (all-sidecars-dead?) (native-flat?)))
+
 (define original-identity g3r-c2-receipt-identity)
 (set! g3r-c2-receipt-identity (lambda () (raise #f)))
 (reject-false "receipt allocation fault preserves original raised false"

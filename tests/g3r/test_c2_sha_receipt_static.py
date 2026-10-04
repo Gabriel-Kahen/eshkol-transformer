@@ -3,7 +3,8 @@ from pathlib import Path
 import hashlib
 import unittest
 
-from tests.c2.test_handler_order import definition, lists, parse, protected
+from tests.c2.test_handler_order import (consecutive, definition, handler,
+                                         lists, parse, protected, render)
 
 ROOT = Path(__file__).resolve().parents[2]
 RECEIPT = ROOT / "native/g3r_c2_sha_receipt_extension.esk"
@@ -52,28 +53,37 @@ def verify_root_and_closure(root: str, closure: str, predecessor: str) -> None:
 def verify_handoff(source: str) -> None:
     forms = parse(source)
     load = definition({"receipt": forms}, "g3r-c2-load-with-sha-internal")
-    candidates = [node for node in lists(load)
-                  if node[:1] == ["let*"] and len(node) >= 4
-                  and isinstance(node[1], list)
-                  and any(binding[:1] == ["owner"] for binding in node[1]
-                          if isinstance(binding, list))]
-    if len(candidates) != 1:
-        raise ValueError("expected one direct owner return binding")
-    body = candidates[0]
-    owner_binding = [binding for binding in body[1]
-                     if binding[:1] == ["owner"]][0]
-    if owner_binding != [
-        "owner", ["c2-checkpoint-load-reconstruct-internal",
-                  "stage", ["quote", "checkpoint-load"]]
-    ] or body[2] != ["vector-set!", "owner-cell", "0", "owner"]:
-        raise ValueError("fallible step or wrapper before owner enrollment")
+    if "(c2-runtime-reserve-exception-handlers 14)" not in source:
+        raise ValueError("receipt lacks fourteen-frame handler reserve")
+    stage_guards = protected(
+        load, "(set! stage (g3r-c2-sha-stage-internal path policy))", 3,
+        "(g3r-c2-receipt-retire-stage! stage)")
+    owner_guards = protected(
+        load,
+        "(set! owner (c2-checkpoint-load-reconstruct-internal stage 'checkpoint-load))",
+        3, "(g3r-c2-receipt-release-owner! owner #f release-record defect)")
+    for guards in (stage_guards, owner_guards):
+        if "(g3r-c2-sha-fail-stop 134)" not in render(handler(guards[1])):
+            raise ValueError("returned authority lacks cleanup fail-stop")
+    consecutive(load,
+                "(set! stage (g3r-c2-sha-stage-internal path policy))",
+                "(g3r-c2-receipt-after-stage-return-internal stage)",
+                "(vector-set! stage-cell 0 stage)")
+    consecutive(load,
+                "(set! owner (c2-checkpoint-load-reconstruct-internal stage 'checkpoint-load))",
+                "(g3r-c2-receipt-after-owner-return-internal owner)",
+                "(vector-set! owner-cell 0 owner)")
+    if ("(let ((stage #f) (stage-cut (vector #f #f)))" not in source
+            or "(let ((owner #f))" not in source
+            or "(release-record (c2-training-state-release-record #f))" not in source):
+        raise ValueError("returned authority lacks preallocated lexical slots")
     protected(load,
               "(c2-checkpoint-load-reconstruct-internal stage 'checkpoint-load)",
-              1, "(g3r-c2-receipt-cleanup-failure! stage-cell owner-cell digest-cell release-record defect)")
+              3, "(g3r-c2-receipt-release-owner! owner #f release-record defect)")
     if "c2-public-checkpoint-load" in source or "c2-checkpoint-load-stage-internal" in source:
         raise ValueError("receipt reopens C2 via another LOAD")
-    if "(c2-runtime-reserve-exception-handlers 12)" not in source:
-        raise ValueError("receipt lacks outer-frame handler reserve")
+    if "(g3r-c2-receipt-cleanup-failure!" not in source:
+        raise ValueError("receipt lacks outer cleanup")
 
 
 def verify_runner(source: str) -> None:
@@ -108,12 +118,15 @@ def verify_runner(source: str) -> None:
 
 def verify_fault_bindings(source: str) -> None:
     forms = parse(source)
-    for name in ("g3r-c2-receipt-identity",
-                 "g3r-c2-receipt-after-owner-enrolled-internal"):
+    for name, parameters in (
+            ("g3r-c2-receipt-identity", []),
+            ("g3r-c2-receipt-after-owner-enrolled-internal", []),
+            ("g3r-c2-receipt-after-stage-return-internal", ["stage"]),
+            ("g3r-c2-receipt-after-owner-return-internal", ["owner"])):
         matches = [form for form in forms if isinstance(form, list)
                    and len(form) == 3 and form[:2] == ["define", name]]
         if (len(matches) != 1 or not isinstance(matches[0][2], list)
-                or matches[0][2][:2] != ["lambda", []]):
+                or matches[0][2][:2] != ["lambda", parameters]):
             raise ValueError("receipt fault helper needs a mutable binding")
 
 
@@ -145,10 +158,20 @@ class C2ShaReceiptStaticTest(unittest.TestCase):
             verify_root_and_closure(root, closure.replace(
                 "native/g3r_c2_sha_receipt_extension.esk",
                 "native/c2_public_extension.esk"), predecessor)
-        with self.assertRaisesRegex(ValueError, "enrollment"):
+        with self.assertRaisesRegex(ValueError, "consecutive"):
             verify_handoff(source.replace(
                 "(vector-set! owner-cell 0 owner)",
                 "(c2-load-exact-live-owner? owner)\n              (vector-set! owner-cell 0 owner)"))
+        with self.assertRaisesRegex(ValueError, "guard depth"):
+            verify_handoff(source.replace(
+                "(guard (cleanup-defect (#t (g3r-c2-sha-fail-stop 134)))",
+                "(begin", 1))
+        with self.assertRaisesRegex(ValueError, "guard depth"):
+            verify_handoff(source.replace(
+                "(guard (cleanup-defect (#t (g3r-c2-sha-fail-stop 134)))",
+                "(begin", 1).replace(
+                "(guard (cleanup-defect (#t (g3r-c2-sha-fail-stop 134)))",
+                "(begin", 1))
         with self.assertRaisesRegex(ValueError, "three-mode"):
             verify_runner(runner.replace("build_mode sanitize", "build_mode normal"))
         with self.assertRaisesRegex(ValueError, "object depfile"):

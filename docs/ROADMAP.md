@@ -1566,6 +1566,11 @@ the stage SHA sidecar. Its focused source, host topology, and compiled
 three-mode runner are candidate work only; no supported Eshkol receipt gate
 has run. The runner now derives its source closure from a separate object-mode
 compile of the same receipt inputs used for executable IR/runtime evidence.
+The receipt candidate now binds both returned stage and returned owner in
+preinstalled lexical ownership guards before its checked authority-cell
+writes; focused fault cuts exercise each return-to-cell interval. Actual full
+IR review of both publication intervals and the supported receipt gate remain
+mandatory before accepting that ownership proof.
 The receipt identity helper uses a lambda-valued mutable binding
 for its existing preallocation-failure injection, addressing the same
 procedure-binding limitation observed in the supported stage compile.
