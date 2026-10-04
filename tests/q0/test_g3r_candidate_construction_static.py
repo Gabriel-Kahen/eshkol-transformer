@@ -49,8 +49,12 @@ class CandidateConstructionStatic(unittest.TestCase):
             self.assertEqual(source.count("et_p1_private_candidate_graph_preflight_v1"), 1)
             self.assertIn("(vector-ref p1-trusted-surface 73)", source)
             self.assertIn("(vector-ref p1-trusted-surface 74)", source)
-            for slot in range(75, 80):
+            for slot in range(75, 81):
                 self.assertIn(f"(vector-ref p1-trusted-surface {slot})", source)
+            for slot in range(73, 81):
+                self.assertEqual(source.count(f"(vector-ref p1-trusted-surface {slot})"), 1)
+                self.assertNotIn(f"((vector-ref p1-trusted-surface {slot})", source)
+                self.assertIn(f"(let ((fixed (vector-ref p1-trusted-surface {slot})))", source)
             self.assertIn("(define g3r-candidate-ledgers (vector '() #f))", source)
             self.assertEqual(source.count("(define p1-trusted-surface"), 1)
             self.assertLess(source.index("(define g3r-candidate-ledgers"),
@@ -89,9 +93,27 @@ class CandidateConstructionStatic(unittest.TestCase):
         self.assertEqual(set(re.findall(r"\(vector-set! row (\d+)", source)),
                          {"7", "8"})
         self.assertIn("(vector-set! row 7 'armed)\n"
+                      "          (if (= g3r-candidate-test-fault 6)\n"
+                      "              (g3r-candidate-test-armed-probes p1-cell row))\n"
                       "          (let ((construction\n"
                       "                  (candidate-construction-begin\n"
                       "                    i2-provider-name p1-cell)))", source)
+        self.assertIn("(vector-set! owner-cell 0 foreign)", source)
+        self.assertIn("(vector-set! owner-cell 0 owned)", source)
+        self.assertIn("(g3r-candidate-test-armed-probes p1-cell row)", source)
+        self.assertIn("(g3r-candidate-roster-bytes)", source)
+        self.assertIn("(candidate-construction-begin 'foreign-provider p1-cell)", source)
+        self.assertIn("(candidate-construction-begin i2-provider-name copied)", source)
+        p1 = (ROOT / "native/g3r_candidate_p1_inside.esk").read_text()
+        self.assertLess(p1.index("(set! begin-attempted? #t)"),
+                        p1.index("(p1-native-candidate-construction-begin native-context)"))
+        self.assertLess(p1.index("(p1-native-candidate-construction-begin native-context)"),
+                        p1.index("(g3r-candidate-test-cut 7)"))
+        self.assertLess(p1.index("(g3r-candidate-test-cut 7)"),
+                        p1.index("(set! identity (p1-native-result-ptr native-context))"))
+        self.assertLess(p1.index("(g3r-candidate-test-cut 8)"),
+                        p1.index("(vector-set! canonical 0 identity)"))
+        self.assertIn("(p1-native-result-ptr native-context))\n                                 #f)", p1)
         self.assertLess(source.index("(vector-set! enrollment-cell 3 (vector-ref record 4))"),
                         source.index("(i2-construction-seal-internal! record)"))
         self.assertLess(source.index("(g3r-candidate-test-cut 4)"),

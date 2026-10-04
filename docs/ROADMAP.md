@@ -1688,7 +1688,9 @@ holder; P1 consumes exact one-use admission before native begin. The
 requires independent source and compiled ownership proof before this producer
 can claim an authenticated candidate. Ordinary module, I2, M3T and native P1
 source bytes remain unchanged. Static overlay/source-boundary checks and a
-host C feature-on bridge compile pass; the composed Eshkol fixture, compiled
+host C feature-on bridge compile pass. The fixture poisons mutable private
+surface slots and stages authentic armed-row, owner and native-return fault
+cuts; its composed Eshkol execution and the exact getter/cleanup IR, compiled
 ownership IR, supported normal/repeat/sanitizer gate, independent source
 review and integration remain pending. No sealed-graph revocation or
 public/replay behavior is claimed.

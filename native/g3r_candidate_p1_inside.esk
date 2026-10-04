@@ -44,18 +44,28 @@
     (let* ((sidecar (vector-ref enrollment-cell 1))
            (record (vector #f 'aborted provider-name #f #f sidecar))
            (next (cons record (vector-ref construction-registry-root 0)))
+           (begin-attempted? #f)
            (identity #f))
       (vector-set! construction-registry-root 0 next)
       (let ((canonical (car (vector-ref construction-registry-root 0))))
         (guard (caught
                  (#t
                    (guard (cleanup (#t (exit 134)))
-                     (if identity
-                         (if (eq? (vector-ref canonical 1) 'open)
-                             (construction-abort! identity)
-                             (native-check operation
-                               (p1-native-construction-abort
-                                 native-context identity))))
+                     ;; Native begin clears any prior context result before
+                     ;; it can allocate. A successful begin leaves the exact
+                     ;; pointer there. This total C getter covers even a
+                     ;; failure between native status and lexical assignment.
+                     (let ((owned
+                             (if begin-attempted?
+                                 (if identity identity
+                                     (p1-native-result-ptr native-context))
+                                 #f)))
+                       (if (and owned (not (null? owned)))
+                           (if (eq? (vector-ref canonical 1) 'open)
+                               (construction-abort! owned)
+                               (native-check operation
+                                 (p1-native-construction-abort
+                                   native-context owned)))))
                      (vector-set! enrollment-cell 0 #f)
                      (vector-set! sidecar 1 'aborted)
                      (vector-set! sidecar 2 #f)
@@ -63,12 +73,15 @@
                      (vector-set! sidecar 4 #f)
                      (vector-set! row 7 'aborted))
                    (raise caught)))
+          (set! begin-attempted? #t)
           (native-check operation
             (p1-native-candidate-construction-begin native-context))
-          ;; This lexical slot owns the native return before any rooted write.
+          ;; The context holds the native return until this lexical slot does.
+          (g3r-candidate-test-cut 7)
           (set! identity (p1-native-result-ptr native-context))
           (if (null? identity)
-              (fail 'internal operation "candidate begin omitted identity" '()))
+              (exit 134))
+          (g3r-candidate-test-cut 8)
           (vector-set! canonical 0 identity)
           (vector-set! sidecar 4 identity)
           (vector-set! enrollment-cell 0 identity)

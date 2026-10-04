@@ -30,6 +30,18 @@
                (loop (cdr remaining) (+ count 1)
                      (or root-seen? (eq? (vector-ref entry 0) root))))))))
 
+;; The private wrappers captured their fixed closures during module creation.
+;; Poison every newly appended mutable surface slot before invoking any of
+;; them; a fresh vector-ref dispatch would exit 77 instead of passing.
+(vector-set! p1-trusted-surface 73 (lambda (a b) (exit 77)))
+(vector-set! p1-trusted-surface 74 (lambda (a) (exit 77)))
+(vector-set! p1-trusted-surface 75 (lambda (a b) (exit 77)))
+(vector-set! p1-trusted-surface 76 (lambda (a b c) (exit 77)))
+(vector-set! p1-trusted-surface 77 (lambda (a) (exit 77)))
+(vector-set! p1-trusted-surface 78 (lambda (a b) (exit 77)))
+(vector-set! p1-trusted-surface 79 (lambda (a) (exit 77)))
+(vector-set! p1-trusted-surface 80 (lambda () (exit 77)))
+
 (define config
   (x1-private-config-resolve
     (x1-private-config-parse
@@ -38,6 +50,7 @@
 (define initial (m3t-public-initializer-state 1729))
 (define other-initial (m3t-public-initializer-state 1730))
 (define baseline-p1 (g3r-test-p1-live))
+(define baseline-roster-bytes (g3r-candidate-test-roster-bytes-internal))
 (define baseline-i2 i2-module-count)
 (define baseline-parameters (g3r-test-count 0))
 (define baseline-tensors (g3r-test-count 1))
@@ -80,8 +93,9 @@
        (= baseline-tensors (g3r-test-count 1))))
 
 (define second-ledger (g3r-candidate-ledger-begin-internal! config initial))
-(let fault ((stage 1))
-  (if (= stage 6) #t
+(let fault ((stages '(1 2 3 4 5 7 8)))
+  (if (null? stages) #t
+      (let ((stage (car stages)))
       (let ((ledger (g3r-candidate-ledger-begin-internal! config initial))
             (caught? #f))
         (g3r-candidate-test-fault-internal! stage)
@@ -102,11 +116,16 @@
                        i2-provider-name (vector-ref ledger 5))))
         (check "P1/I2 counts recover before seal"
           (and (= baseline-p1 (g3r-test-p1-live))
-               (= baseline-i2 i2-module-count)))
+               (= baseline-i2 i2-module-count)
+               (= baseline-roster-bytes
+                  (g3r-candidate-test-roster-bytes-internal))))
         (check "native owner parameters recover before seal"
           (and (= baseline-parameters (g3r-test-count 0))
                (= baseline-tensors (g3r-test-count 1))))
-        (fault (+ stage 1)))))
+        (display "G3-R candidate fault stage PASS: ")
+        (display stage)
+        (newline)
+        (fault (cdr stages))))))
 
 (define ledger (g3r-candidate-ledger-begin-internal! config initial))
 (define copied-p1-cell
@@ -131,9 +150,13 @@
   (lambda () (g3r-candidate-model-create-internal! copied-ledger config initial)))
 (reject "swapped initializer rejected" 'invalid-argument
   (lambda () (g3r-candidate-model-create-internal! ledger config other-initial)))
+(g3r-candidate-test-fault-internal! 6)
 (define root
   (with-region ('g3r-candidate-construction 1048576)
     (g3r-candidate-model-create-internal! ledger config initial)))
+(g3r-candidate-test-fault-internal! -1)
+(display "G3-R owner and armed-row probes PASS")
+(newline)
 (check "candidate is sealed and still live"
   (and (eq? (vector-ref ledger 1) 'live)
        (eq? (vector-ref (vector-ref ledger 6) 1) 'sealed)
@@ -181,6 +204,7 @@
                i2-provider-name (vector-ref second-ledger 5))))
 (check "sealed success deliberately keeps native payload live"
   (and (> (g3r-test-p1-live) baseline-p1)
+       (> (g3r-candidate-test-roster-bytes-internal) baseline-roster-bytes)
        (> (g3r-test-count 0) baseline-parameters)))
 (display "G3-R candidate construction PASS: checks=")
 (display checks)

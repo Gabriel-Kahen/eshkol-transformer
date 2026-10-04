@@ -34,7 +34,9 @@ def main() -> None:
         "(extern i64 p1-native-candidate-construction-begin ptr\n"
         "        :real et_p1_private_candidate_construction_begin_v1)\n"
         "(extern i64 p1-native-candidate-roster-preflight ptr ptr\n"
-        "        :real et_p1_private_candidate_graph_preflight_v1)\n",
+        "        :real et_p1_private_candidate_graph_preflight_v1)\n"
+        "(extern i64 p1-native-candidate-roster-bytes ptr\n"
+        "        :real et_p1_test_candidate_roster_bytes_v1)\n",
     )
     source = replace_once(
         source,
@@ -47,6 +49,7 @@ def main() -> None:
         "         i2-candidate-construction-begin-internal!\n"
         "         i2-candidate-construction-seal-internal!\n"
         "         g3r-candidate-test-fault-internal!\n"
+        "         g3r-candidate-test-roster-bytes-internal\n"
         "         p1-trusted-surface)",
     )
     source = replace_once(
@@ -115,6 +118,8 @@ def main() -> None:
     (i2-candidate-construction-seal-internal! construction sidecar))
   (lambda (stage)
     (set! g3r-candidate-test-fault stage))
+  (lambda ()
+    (g3r-candidate-roster-bytes))
 """
     source = replace_once(
         source,
@@ -124,20 +129,30 @@ def main() -> None:
     )
     source += """
 ;; Candidate-only wrapper, absent from the installed module source.
-(define (module-candidate-construction-begin-internal provider enrollment-cell)
-  ((vector-ref p1-trusted-surface 73) provider enrollment-cell))
-(define (module-candidate-native-roster-preflight-internal! identity)
-  ((vector-ref p1-trusted-surface 74) identity))
-(define (g3r-candidate-ledger-begin-internal! config initializer)
-  ((vector-ref p1-trusted-surface 75) config initializer))
-(define (g3r-candidate-model-create-internal! ledger config initializer)
-  ((vector-ref p1-trusted-surface 76) ledger config initializer))
-(define (i2-candidate-construction-begin-internal! sidecar)
-  ((vector-ref p1-trusted-surface 77) sidecar))
-(define (i2-candidate-construction-seal-internal! construction sidecar)
-  ((vector-ref p1-trusted-surface 78) construction sidecar))
-(define (g3r-candidate-test-fault-internal! stage)
-  ((vector-ref p1-trusted-surface 79) stage))
+(define module-candidate-construction-begin-internal
+  (let ((fixed (vector-ref p1-trusted-surface 73)))
+    (lambda (provider enrollment-cell) (fixed provider enrollment-cell))))
+(define module-candidate-native-roster-preflight-internal!
+  (let ((fixed (vector-ref p1-trusted-surface 74)))
+    (lambda (identity) (fixed identity))))
+(define g3r-candidate-ledger-begin-internal!
+  (let ((fixed (vector-ref p1-trusted-surface 75)))
+    (lambda (config initializer) (fixed config initializer))))
+(define g3r-candidate-model-create-internal!
+  (let ((fixed (vector-ref p1-trusted-surface 76)))
+    (lambda (ledger config initializer) (fixed ledger config initializer))))
+(define i2-candidate-construction-begin-internal!
+  (let ((fixed (vector-ref p1-trusted-surface 77)))
+    (lambda (sidecar) (fixed sidecar))))
+(define i2-candidate-construction-seal-internal!
+  (let ((fixed (vector-ref p1-trusted-surface 78)))
+    (lambda (construction sidecar) (fixed construction sidecar))))
+(define g3r-candidate-test-fault-internal!
+  (let ((fixed (vector-ref p1-trusted-surface 79)))
+    (lambda (stage) (fixed stage))))
+(define g3r-candidate-test-roster-bytes-internal
+  (let ((fixed (vector-ref p1-trusted-surface 80)))
+    (lambda () (fixed))))
 """
     out = Path(sys.argv[1]).resolve() / "transformer/module.esk"
     out.parent.mkdir(parents=True, exist_ok=True)

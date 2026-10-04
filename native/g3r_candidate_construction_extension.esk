@@ -3,11 +3,17 @@
 
 (define g3r-candidate-ledger-tag (vector 'g3r-candidate-ledger))
 (define g3r-candidate-ledgers (vector '() #f))
+(define (g3r-candidate-roster-bytes)
+  (native-check 'g3r-candidate-test-roster-bytes-internal
+    (p1-native-candidate-roster-bytes native-context))
+  (p1-native-result-i64 native-context))
 ;; Fixed preseal test cut; this noninstalled aggregate has no application entry.
 (define g3r-candidate-test-fault -1)
 (define (g3r-candidate-test-cut stage)
   (if (and (= g3r-candidate-test-fault 5) (= stage 2))
       (begin (g3r-candidate-test-cross-ledger) (raise #f)))
+  (if (and (= g3r-candidate-test-fault 6) (= stage 2))
+      (g3r-candidate-test-owner-probe))
   (if (= g3r-candidate-test-fault stage) (raise #f)))
 
 ;; Ledger: tag state exact-config exact-initializer owner-cell P1-cell I2-sidecar
@@ -108,6 +114,68 @@
                  (m3t-fail 'internal 'g3r-candidate-test-cross-ledger
                            "cross-ledger P1 admission was not rejected")))))))
 
+;; This fixed test cut runs only after the native owner is enrolled. It
+;; restores the authentic pointer before the constructor's primary I2 call.
+(define (g3r-candidate-test-owner-probe)
+  (let* ((operation 'g3r-candidate-test-owner-probe)
+         (ledger (vector-ref g3r-candidate-ledgers 1))
+         (row (g3r-candidate-ledger-entry ledger operation))
+         (owner-cell (vector-ref row 3))
+         (owned (vector-ref row 8))
+         (foreign (vector 'foreign-owner))
+         (p1-count (native-live-count operation))
+         (roster-bytes (g3r-candidate-roster-bytes))
+         (i2-count i2-module-count)
+         (rejected? #f))
+    (vector-set! owner-cell 0 foreign)
+    (guard (caught
+             (#t (set! rejected?
+                   (and (transformer-error? caught)
+                        (eq? (transformer-error-category caught)
+                             'invalid-argument)))))
+      (i2-candidate-construction-begin-internal! (vector-ref row 5)))
+    (vector-set! owner-cell 0 owned)
+    (if (not (and rejected?
+                  (eq? (vector-ref owner-cell 0) owned)
+                  (eq? (vector-ref row 7) 'owner-enrolled)
+                  (= i2-module-count i2-count)
+                  (= (native-live-count operation) p1-count)
+                  (= (g3r-candidate-roster-bytes) roster-bytes)))
+        (m3t-fail 'internal operation "owner substitution probe failed"))))
+
+;; Only the fixed fixture cut enters here while the exact active row is armed.
+;; Neither candidate call may consume that row or create a native token.
+(define (g3r-candidate-test-armed-probes p1-cell row)
+  (let* ((operation 'g3r-candidate-test-armed-probes)
+         (p1-count (native-live-count operation))
+         (roster-bytes (g3r-candidate-roster-bytes))
+         (i2-count i2-module-count)
+         (i2-record (vector-ref i2-construction-registry-root 1))
+         (copied (vector #f (vector-ref p1-cell 1)))
+         (wrong-provider? #f)
+         (copied-cell? #f))
+    (guard (caught
+             (#t (set! wrong-provider?
+                   (and (transformer-error? caught)
+                        (eq? (transformer-error-category caught)
+                             'invalid-argument)))))
+      (candidate-construction-begin 'foreign-provider p1-cell))
+    (guard (caught
+             (#t (set! copied-cell?
+                   (and (transformer-error? caught)
+                        (eq? (transformer-error-category caught)
+                             'invalid-argument)))))
+      (candidate-construction-begin i2-provider-name copied))
+    (if (not (and wrong-provider? copied-cell?
+                  (eq? (vector-ref row 7) 'armed)
+                  (eq? (vector-ref p1-cell 0) #f)
+                  (eq? (vector-ref (vector-ref p1-cell 1) 1) 'inert)
+                  (eq? (vector-ref i2-construction-registry-root 1) i2-record)
+                  (= i2-module-count i2-count)
+                  (= (native-live-count operation) p1-count)
+                  (= (g3r-candidate-roster-bytes) roster-bytes)))
+        (m3t-fail 'internal operation "armed P1 probe failed"))))
+
 (define (g3r-candidate-p1-sealed? ledger)
   (eq? (vector-ref (vector-ref (vector-ref ledger 5) 1) 1) 'sealed))
 
@@ -172,6 +240,8 @@
           (vector-set! i2-construction-registry-root 1 canonical)
           (vector-set! enrollment-cell 1 'admitting)
           (vector-set! row 7 'armed)
+          (if (= g3r-candidate-test-fault 6)
+              (g3r-candidate-test-armed-probes p1-cell row))
           (let ((construction
                   (candidate-construction-begin
                     i2-provider-name p1-cell)))

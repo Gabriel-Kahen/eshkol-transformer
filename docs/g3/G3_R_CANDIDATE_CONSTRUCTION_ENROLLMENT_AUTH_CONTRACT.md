@@ -20,10 +20,12 @@ top-level `g3r-candidate-ledgers` binding. Neither the verifier nor native
 begin is passed as a callback, stored in a candidate cell or chosen by a
 caller. The test-only fault selector accepts a fixed numeric stage and never
 accepts or returns an identity; its cross-ledger cut selects another authentic
-row inside the closure. The
-ledger creator registers one source-private row whose original identity fields
-contain the exact ledger object,
-original config and initializer, preallocated owner cell, P1 enrollment cell,
+row inside the closure. The private wrappers capture each fixed operation once while the P1 module is
+initialized. They do not reread mutable `p1-trusted-surface` slots on each
+call; replacing those appended slots later cannot redirect ledger, I2, P1 or
+M3T authority. No wrapper returns a row, holder, admission setter or verifier.
+The ledger creator registers one source-private row whose original identity fields
+contain the exact ledger object, original config and initializer, preallocated owner cell, P1 enrollment cell,
 P1 sidecar and I2 sidecar. The row's separate admission state and native-owner
 identity advance only through the fixed constructor. The row
 and all cells are rooted before the candidate constructor or any native owner
@@ -56,9 +58,24 @@ one-use admission **before** invoking
 `et_p1_private_candidate_construction_begin_v1`. No module/handle token may be
 created before that check. I2 arms and immediately calls P1 in the same trusted
 stack frame, with no caller, provider or user callback between those steps.
-Once native begin succeeds, a predeclared lexical
-identity slot owns its returned construction pointer before any fallible
-rooted write. The pointer is enrolled in the canonical P1 record and original
+Before native begin, a predeclared lexical attempt flag is set. Native begin
+clears the authentic context's prior result before any allocation and, on
+success, retains the exact new pointer in that context. The existing read-only
+`et_p1_private_result_ptr_v1` getter assigns it to a predeclared lexical
+identity slot, before any fallible rooted write. The cleanup guard reads the
+same context-held result for any error after native begin is attempted,
+including a fault between successful status and lexical assignment. A failed
+native begin leaves no allocated ledger and no context result. The getter must
+remain total, allocation-free and free of
+Scheme errors for the private authentic context; emitted IR must prove the
+pointer return is packed without a runtime call or intervening fallible edge.
+The frozen native source's getter only scans context pointers and returns its
+result field; successful begin stores that field before returning status zero.
+Pinned Eshkol `fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9` lowers an `extern
+ptr` result through LLVM `ptrtoint` and SSA `insertvalue` packing, with no
+allocation call in that return packing. This source inspection is not a
+substitute for the fixture's emitted full IR review.
+The pointer is enrolled in the canonical P1 record and original
 P1 cell before creating the first root module token. If any enrollment write
 fails, that lexical identity drives native/P1 abort; cleanup must not depend
 on a cell write that may have failed.
@@ -91,5 +108,16 @@ owner-return, P1-return and preseal enrollment cuts must release exactly the
 owned native authority and preserve the first cause. Source and emitted IR
 must demonstrate the lexical return-to-guard cuts, the root/registry order,
 and no fallible gap between successful native P1 return and lexical ownership.
+Fixed internal test cuts must exercise wrong-provider and copied-cell rejection
+while an authentic row is armed, then continue the successful P1 admission;
+owner-cell substitution must occur after native owner enrollment and be
+restored before the primary I2 call. Distinct raised-`#f` cuts must land after
+native begin status but before result-pointer assignment, and after assignment
+but before the first rooted P1 write. Counts and the active authentic row must
+survive each negative probe; fault cleanup must preserve the first cause.
+The fixture also replaces every appended mutable P1 surface slot before using
+the fixed wrappers to detect a regression to per-call dispatch. Its fixed
+test-only numeric roster-byte readout uses an existing P1 native test hook;
+faults must restore the baseline even when no P1 token was created.
 The generated overlay, its raw depfile and exact feature-on/off symbols must
 remain in the later supported normal/repeat/sanitizer evidence.

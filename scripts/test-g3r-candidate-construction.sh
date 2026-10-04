@@ -117,7 +117,21 @@ for pass in normal repeat; do
     2>"$evidence/$pass.stderr"
   grep -Eq '^G3-R candidate construction PASS: checks=[1-9][0-9]*$' \
     "$evidence/$pass.stdout"
+  test "$(grep -Fxc 'G3-R owner and armed-row probes PASS' \
+            "$evidence/$pass.stdout")" -eq 1
   test ! -s "$evidence/$pass.stderr"
+  grep '^G3-R candidate fault stage PASS: ' "$evidence/$pass.stdout" \
+    >"$evidence/$pass.fault-stages"
+  printf '%s\n' \
+    'G3-R candidate fault stage PASS: 1' \
+    'G3-R candidate fault stage PASS: 2' \
+    'G3-R candidate fault stage PASS: 3' \
+    'G3-R candidate fault stage PASS: 4' \
+    'G3-R candidate fault stage PASS: 5' \
+    'G3-R candidate fault stage PASS: 7' \
+    'G3-R candidate fault stage PASS: 8' \
+    >"$evidence/$pass.expected-fault-stages"
+  cmp "$evidence/$pass.expected-fault-stages" "$evidence/$pass.fault-stages"
 done
 cmp "$evidence/normal.stdout" "$evidence/repeat.stdout"
 find "$evidence" -type f ! -name SHA256SUMS -print0 | LC_ALL=C sort -z | \
