@@ -152,6 +152,7 @@ union results {
   struct { float n, w, correct; int64_t tokens, batches; } accumulate;
   struct { float loss, weight, perplexity, accuracy; } finalize;
 };
+#ifndef ET_E3_NUMERICAL_WRONG_VOCAB_AXIS
 static int64_t argmax(const float *row) {
   int64_t winner = 0;
   float maximum = row[0];
@@ -163,6 +164,25 @@ static int64_t argmax(const float *row) {
   }
   return winner;
 }
+#endif
+#if defined(ET_E3_NUMERICAL_WRONG_VOCAB_AXIS) && !defined(ET_E3_NUMERICAL_TESTING)
+#error "wrong-vocabulary-axis mutation requires the private numerical test tuple"
+#endif
+#ifdef ET_E3_NUMERICAL_WRONG_VOCAB_AXIS
+/* Test mutant: reinterpret the same [T=2,V=256] logits as [V=256,T=2]. */
+static int64_t wrong_vocab_axis_argmax(const float *logits, size_t token) {
+  int64_t winner = 0;
+  float maximum = logits[token];
+  for (int64_t j = 1; j < 256; ++j) {
+    const float value = logits[2*j+token];
+    if (value > maximum) {
+      maximum = value;
+      winner = j;
+    }
+  }
+  return winner;
+}
+#endif
 static int32_t evaluate_correct(const et_kernel_call_v1 *c, union results *result,
                                 et_kernel_error *e) {
   const char *op = operations[CORRECT_BOOL];
@@ -179,8 +199,13 @@ static int32_t evaluate_correct(const et_kernel_call_v1 *c, union results *resul
   for (size_t i = 0; i < 2; ++i)
     if (mask[i] > 1u) return domain(e,op);
   if (mask[0] == 0u && mask[1] == 0u) return domain(e,op);
+#ifdef ET_E3_NUMERICAL_WRONG_VOCAB_AXIS
+  const int64_t winner0 = wrong_vocab_axis_argmax(logits, 0);
+  const int64_t winner1 = wrong_vocab_axis_argmax(logits, 1);
+#else
   const int64_t winner0 = argmax(logits);
   const int64_t winner1 = argmax(logits + 256);
+#endif
   const float weight0 = mask[0] == 0u ? 0.0f : 1.0f;
   const float weight1 = mask[1] == 0u ? 0.0f : 1.0f;
   const float hit0 = winner0 == targets[0] ? 1.0f : 0.0f;

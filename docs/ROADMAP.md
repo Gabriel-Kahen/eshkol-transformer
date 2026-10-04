@@ -788,6 +788,16 @@ poison and sanitizer with 21 roles, CE, exact accumulation, six final outputs
 and accuracy 1.0/0.0. The existing five-case corpus, schema and transcripts
 are unchanged. Independent source review and a supported compiled run are
 pending; the local mathematical reference is not compiled E3 evidence.
+An isolated test-only wrong-vocabulary-axis candidate adds one numerical-tuple
+mutant that reads the existing `[1,2,256]` binary32 logits at `[V,T]` stride 2
+instead of `[T,V]` stride 256. The exact all-correct D2 rows include final
+padding input `[31,0]`; the corrected two-repeat mathematical audit yields
+normal accuracy 5/5 and wrong-stride accuracy 0/5. The candidate's private
+compiled runner requires all 63 role records, unchanged logits/CE/reduction
+and counters, then rejection at the strict `correct_f32` check with no mutant
+transcript publication. The production/default profile and frozen corpora are
+unchanged. Independent source review and a supported compiled mutant run are
+pending; mathematical reachability alone is not a compiled mutant kill.
 
 The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
 is a docs-only candidate for the remaining private numerical, compiled-mutant,

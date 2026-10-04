@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
+import struct
 import tempfile
 import unittest
 
@@ -10,6 +11,7 @@ from tests.e3_reference.correctness import (
     validate_materialized, verify_observed,
 )
 from tests.e3_reference.transcript import canonical
+from tests.e3_reference.transcript import validate_observed_case
 
 
 class CorrectnessCasesTests(unittest.TestCase):
@@ -92,6 +94,43 @@ class CorrectnessCasesTests(unittest.TestCase):
             verify_observed(self.manifest, "all-wrong", wrong)
         with self.assertRaisesRegex(ValueError, "case mismatch"):
             verify_observed(self.manifest, "missing", self.reference["cases"][0]["synthetic"])
+
+    def test_all_correct_real_rows_kill_wrong_vocabulary_axis(self) -> None:
+        case = self.reference["cases"][0]
+        observed = case["synthetic"]
+        rows = self.manifest["cases"][0]["batches"]
+        self.assertEqual([row["inputs"] for row in rows],
+                         [[3, 14], [31, 14], [31, 0]])
+        self.assertEqual([row["mask"] for row in rows],
+                         [[True, True], [True, True], [True, False]])
+        self.assertEqual([len(batch["roles"]) for batch in case["mathematical"]],
+                         [21, 21, 21])
+        normal_winners = []
+        wrong_winners = []
+        for batch in observed["batches"]:
+            logits = [struct.unpack(">f", bytes.fromhex(word))[0]
+                      for word in batch["logits_f32"]]
+            normal_winners.append([
+                max(range(256), key=lambda j: (logits[position*256+j], -j))
+                for position in range(2)
+            ])
+            wrong_winners.append([
+                max(range(256), key=lambda j: (logits[2*j+position], -j))
+                for position in range(2)
+            ])
+        self.assertEqual(normal_winners, [[14, 31], [14, 31], [14, 56]])
+        self.assertEqual(wrong_winners, [[135, 143], [7, 143], [156, 22]])
+        self.assertEqual(sum(int(mask and winner == target)
+                             for batch, winners in zip(rows, wrong_winners)
+                             for mask, winner, target in zip(batch["mask"], winners,
+                                                              batch["targets"])), 0)
+        mutant = copy.deepcopy(observed)
+        for batch in mutant["batches"]:
+            batch["correct_f32"] = "00000000"
+            batch["state_f32"][2] = "00000000"
+        mutant["final"]["metrics_f32"][3] = "00000000"
+        with self.assertRaisesRegex(ValueError, "correct_f32: target/argmax wiring mismatch"):
+            validate_observed_case(mutant, tuple(rows))
 
 
 if __name__ == "__main__":

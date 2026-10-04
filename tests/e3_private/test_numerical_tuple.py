@@ -204,12 +204,64 @@ printf '%s\\n' "$e3_tuple_kind"
         self.assertIn("-DET_E3_NUMERICAL_WRONG_TARGET", builder)
         self.assertIn("-DET_E3_NUMERICAL_MEAN_OF_MEANS", builder)
         self.assertIn("-DET_E3_NUMERICAL_SECOND_NORMALIZATION", builder)
+        self.assertIn("wrong-vocab-axis) package_native_cflags+=(-DET_E3_NUMERICAL_WRONG_VOCAB_AXIS)", builder)
         self.assertIn("second-normalization", (ROOT / "scripts/test-e3-numerical-transcript.sh").read_text())
         self.assertIn("#ifdef ET_E3_NUMERICAL_TESTING", frame)
         self.assertIn("#ifdef ET_E3_NUMERICAL_WRONG_TARGET", frame)
         self.assertIn("#ifdef ET_E3_NUMERICAL_MEAN_OF_MEANS", metrics)
         self.assertIn("#ifdef ET_E3_NUMERICAL_SECOND_NORMALIZATION", metrics)
+        self.assertIn("#ifdef ET_E3_NUMERICAL_WRONG_VOCAB_AXIS", metrics)
         self.assertNotIn("E3ROW", (ROOT / "tests/e3_private/driver.esk").read_text())
+
+    def test_wrong_vocab_axis_macro_requires_private_numerical_tuple(self) -> None:
+        if shutil.which("clang") is None:
+            self.skipTest("Clang unavailable")
+        source = ROOT / "native/e3_evaluation_metrics_provider.c"
+        base = ["clang", "-std=c11", "-fsyntax-only", "-I", str(ROOT / "include"),
+                "-I", str(ROOT / "src")]
+        forbidden = subprocess.run(
+            base + ["-DET_E3_NUMERICAL_WRONG_VOCAB_AXIS", str(source)],
+            capture_output=True, text=True, check=False,
+        )
+        self.assertNotEqual(forbidden.returncode, 0)
+        self.assertIn("requires the private numerical test tuple", forbidden.stderr)
+        admitted = subprocess.run(
+            base + ["-DET_E3_NUMERICAL_TESTING", "-DET_E3_NUMERICAL_WRONG_VOCAB_AXIS",
+                    str(source)], capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(admitted.returncode, 0, admitted.stderr)
+        selector = (ROOT / "scripts/build-e3-numerical-test.sh").read_text()
+        runner = (ROOT / "scripts/test-e3-correctness-cases.sh").read_text()
+        self.assertIn("wrong-vocab-axis|sanitize", selector)
+        self.assertIn("compiled wrong-vocab-axis mutant survived strict transcript validation", runner)
+        self.assertIn("correct_f32: target/argmax wiring mismatch", runner)
+        self.assertIn('"${e3_tuple_kind}" == numerical',
+                      (ROOT / "scripts/build-e1b-consumer.sh").read_text())
+
+    def test_wrong_vocab_axis_selector_rejects_mixed_and_near_miss_tuples(self) -> None:
+        builder = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
+        selector = builder.split("e3_numerical_mutant=${E3_NUMERICAL_MUTANT:-normal}", 1)[1]
+        selector = "e3_numerical_mutant=${E3_NUMERICAL_MUTANT:-normal}" + selector.split(
+            "require_command awk", 1)[0]
+        shell = ("set -euo pipefail\n"
+                 "package_policy=$1\ne3_tuple_kind=$2\n"
+                 "die() { printf '%s\\n' \"$*\" >&2; exit 77; }\n"
+                 + selector + "printf '%s\\n' \"$e3_numerical_mutant\"\n")
+        def select(policy: str, kind: str, value: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                ["bash", "-c", shell, "bash", policy, kind],
+                env={"E3_NUMERICAL_MUTANT": value}, capture_output=True,
+                text=True, check=False,
+            )
+        accepted = select("e3-private-aggregate", "numerical", "wrong-vocab-axis")
+        self.assertEqual((accepted.returncode, accepted.stdout),
+                         (0, "wrong-vocab-axis\n"), accepted.stderr)
+        for policy, kind, value in (("e3-private-aggregate", "base", "wrong-vocab-axis"),
+                                    ("e3-private-aggregate", "mode-graph", "wrong-vocab-axis"),
+                                    ("other", "numerical", "wrong-vocab-axis"),
+                                    ("e3-private-aggregate", "numerical", "wrong-vocab-axes")):
+            with self.subTest(policy=policy, kind=kind, value=value):
+                self.assertEqual(select(policy, kind, value).returncode, 77)
 
     def test_native_provider_mode_tracks_both_test_sanitizers(self) -> None:
         policy = ROOT / "scripts/e3-private-native-inputs.sh"

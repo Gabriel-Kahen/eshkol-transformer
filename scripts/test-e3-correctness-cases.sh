@@ -31,9 +31,10 @@ cmp "${out}/reference-a.json" "${out}/reference-b.json"
 cmp "${out}/selection-a.json" "${out}/selection-b.json"
 
 prefix="${PROJECT_ROOT}/tests/e3_private/numerical_package"
-for variant in a b sanitized; do
+for variant in a b sanitized wrong-vocab-axis; do
   mode=normal
   [[ "${variant}" == sanitized ]] && mode=sanitize
+  [[ "${variant}" == wrong-vocab-axis ]] && mode=wrong-vocab-axis
   "${PROJECT_ROOT}/scripts/build-e3-numerical-test.sh" "${out}/package-${variant}" "${mode}" \
     >"${out}/package-${variant}.stdout" 2>"${out}/package-${variant}.stderr"
   artifact="${out}/package-${variant}/e3_numerical_package.o.evidence"
@@ -73,7 +74,7 @@ WRAPPER
 chmod 0500 "${out}/cxx-sanitized"
 compiler_timeout="${E3_COMPILER_TIMEOUT_SECONDS:-900}"
 [[ "${compiler_timeout}" =~ ^[1-9][0-9]*$ ]] || die "E3 compiler timeout must be positive"
-for variant in a b sanitized; do
+for variant in a b sanitized wrong-vocab-axis; do
   cxx_selected="${cxx}"
   [[ "${variant}" == sanitized ]] && cxx_selected="${out}/cxx-sanitized"
   env -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH \
@@ -131,4 +132,61 @@ for case_name in all-correct all-wrong; do
     cmp "${out}/transcript-a-${case_name}.json" "${out}/transcript-${variant}-${case_name}.json"
   done
 done
-printf 'E3 compiled all-correct/all-wrong numerical transcripts passed\n'
+ESHKOL_ARENA_POISON=0 timeout --foreground --signal=TERM --kill-after=5s 900s \
+  "${out}/runtime-wrong-vocab-axis" all-correct "${out}/corpus-a/all-correct" \
+  >"${out}/run-wrong-vocab-axis-all-correct.stdout" \
+  2>"${out}/run-wrong-vocab-axis-all-correct.stderr"
+[[ ! -s "${out}/run-wrong-vocab-axis-all-correct.stderr" ]] || \
+  die "wrong-vocab-axis: runtime diagnostics"
+python3 -B -m tests.e3_private.parse_numerical_observation \
+  --stdout "${out}/run-wrong-vocab-axis-all-correct.stdout" --batch-count 3 \
+  --observed "${out}/observed-wrong-vocab-axis-all-correct.json" \
+  --roles "${out}/roles-wrong-vocab-axis-all-correct.tsv"
+cmp "${out}/roles-a-all-correct.tsv" \
+    "${out}/roles-wrong-vocab-axis-all-correct.tsv"
+python3 -B - "${out}/observed-a-all-correct.json" \
+  "${out}/observed-wrong-vocab-axis-all-correct.json" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+normal, mutant = (json.loads(Path(path).read_bytes()) for path in sys.argv[1:])
+def require(condition, label):
+    if not condition:
+        raise SystemExit(f"wrong-vocab-axis {label} differs")
+
+require([batch["inputs"] for batch in normal["batches"]] ==
+        [[3, 14], [31, 14], [31, 0]], "normal D2 inputs")
+require([batch["mask"] for batch in normal["batches"]] ==
+        [[True, True], [True, True], [True, False]], "normal D2 masks")
+require(len(mutant["batches"]) == 3, "batch count")
+for baseline, changed in zip(normal["batches"], mutant["batches"]):
+    for key in ("ordinal", "inputs", "targets", "mask", "logits_f32", "ce_f32",
+                "reduction_f32", "counters"):
+        require(baseline[key] == changed[key], key)
+    require(baseline["state_f32"][:2] == changed["state_f32"][:2], "N/W state")
+    require(changed["correct_f32"] == "00000000", "batch correct")
+    require(changed["state_f32"][2] == "00000000", "C state")
+require(normal["final"]["counters"] == mutant["final"]["counters"] == [5, 3],
+        "final counters")
+require(normal["final"]["metrics_f32"][:3] == mutant["final"]["metrics_f32"][:3],
+        "final loss/weight/perplexity")
+require(normal["final"]["metrics_f32"][3] == "3f800000", "normal accuracy")
+require(mutant["final"]["metrics_f32"][3] == "00000000", "mutant accuracy")
+PY
+if ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "${q0_python}" -B \
+  -m tests.e3_native_parity.verify_observation \
+  --reference "${out}/reference-a.json" --case all-correct \
+  --observed "${out}/observed-wrong-vocab-axis-all-correct.json" \
+  --roles "${out}/roles-wrong-vocab-axis-all-correct.tsv" \
+  --transcript "${out}/transcript-wrong-vocab-axis-all-correct.json" \
+  >"${out}/verify-wrong-vocab-axis-all-correct.stdout" \
+  2>"${out}/verify-wrong-vocab-axis-all-correct.stderr"; then
+  die "compiled wrong-vocab-axis mutant survived strict transcript validation"
+fi
+grep -F 'correct_f32: target/argmax wiring mismatch' \
+  "${out}/verify-wrong-vocab-axis-all-correct.stderr" >/dev/null || \
+  die "wrong-vocab-axis mutant failed outside the correct/argmax assertion"
+[[ ! -e "${out}/transcript-wrong-vocab-axis-all-correct.json" ]] || \
+  die "failed wrong-vocab-axis mutant published a transcript"
+printf 'E3 compiled all-correct/all-wrong transcripts and wrong-vocab-axis mutant passed\n'
