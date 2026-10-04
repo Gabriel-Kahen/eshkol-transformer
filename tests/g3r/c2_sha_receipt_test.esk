@@ -79,7 +79,9 @@
   (and (= c2-load-result-bytes 192)
        (= g3r-c2-sha-stage-result-bytes 224)))
 (define before (receipt-count))
-(define owners-before (live-c2))
+(define owner-counts-before (c2-load-owner-counts-internal))
+(define owners-before (vector-ref owner-counts-before 0))
+(define busy-before (vector-ref owner-counts-before 1))
 (reject "truncated image has no receipt" 'corrupt-data
   (lambda () (g3r-c2-load-with-sha-internal truncated-path policy report)))
 (check "truncated image leaves owners and native resources flat"
@@ -212,28 +214,47 @@
 (set! g3r-c2-sha-stage-allocations original-alloc)
 (set! g3r-c2-receipt-after-owner-enrolled-internal original-cut)
 (define record (g3r-c2-receipt-find receipt))
+(define counts-after-publication (c2-load-owner-counts-internal))
+(check "same second image publishes one exact receipt" record)
+(check "same second image publishes one live C2 owner"
+  (= (vector-ref counts-after-publication 0) (+ owners-before 1)))
+(check "same second image preserves prior busy C2 count"
+  (= (vector-ref counts-after-publication 1) busy-before))
+(check "same second image publishes one receipt identity"
+  (= (receipt-count) (+ before 1)))
+(check "new receipt is live before borrowing"
+  (eq? (vector-ref record 1) 'live))
 (define borrowed
   (g3r-c2-receipt-borrow-begin-internal receipt 'checkpoint-load))
+(define counts-during-borrow (c2-load-owner-counts-internal))
+(check "borrowed C2 owner no longer counts live"
+  (= (vector-ref counts-during-borrow 0) owners-before))
+(check "borrowed C2 owner counts busy exactly once"
+  (= (vector-ref counts-during-borrow 1) (+ busy-before 1)))
+(check "receipt records the active borrow identity"
+  (eq? (vector-ref record 1) borrowed))
 (define c2-borrow
   (g3r-c2-receipt-borrow-c2-internal borrowed 'checkpoint-load))
 (define controls
   (vector-ref (c2-training-state-borrow-projection-internal c2-borrow) 2))
 (define sha-copy
   (g3r-c2-receipt-borrow-sha-internal borrowed 'checkpoint-load))
-(check "same second image B supplies the owner and SHA"
-  (and record (= (receipt-count) (+ before 1))
-       (= (live-c2) (+ owners-before 1))
-       (bytes=? sha-copy expected-b)
-       (bytes=?
-              expected-a
-              (c1-sha256
-                (c1-read-file mutable-path
-                  (c2-policy-c1-subpolicy-internal
-                    'checkpoint-load policy)
-                  'checkpoint-load)))
-       (equal? (vector-ref controls 0)
-               (vector 'philox4x32-10 1 1729 -1 -9223372036854775808))
-       (all-sidecars-dead?) (native-flat?)))
+(check "same second image B supplies the stored receipt SHA"
+  (bytes=? sha-copy expected-b))
+(check "late path replacement leaves image A at the mutable path"
+  (bytes=?
+    expected-a
+    (c1-sha256
+      (c1-read-file mutable-path
+        (c2-policy-c1-subpolicy-internal 'checkpoint-load policy)
+        'checkpoint-load))))
+(check "same second image B supplies the Philox controls"
+  (equal? (vector-ref controls 0)
+          (vector 'philox4x32-10 1 1729 -1 -9223372036854775808)))
+(check "consumed stage sidecars are dead with zero SHA"
+  (all-sidecars-dead?))
+(check "receipt load leaves native image reader and FD counts flat"
+  (native-flat?))
 (bytevector-u8-set! sha-copy 0 0)
 (check "borrowed digest copy cannot mutate receipt authority"
   (bytes=? (g3r-c2-receipt-borrow-sha-internal
@@ -254,6 +275,13 @@
       (vector 'g3r-c2-sha-borrow-v1) 'checkpoint-load)))
 (check "borrow end returns live receipt"
   (g3r-c2-receipt-borrow-end-internal! borrowed))
+(define counts-after-borrow-end (c2-load-owner-counts-internal))
+(check "borrow end restores one live C2 owner"
+  (= (vector-ref counts-after-borrow-end 0) (+ owners-before 1)))
+(check "borrow end restores prior busy C2 count"
+  (= (vector-ref counts-after-borrow-end 1) busy-before))
+(check "borrow end restores live receipt status"
+  (eq? (vector-ref record 1) 'live))
 (reject "stale borrow cannot read SHA" 'invalid-argument
   (lambda ()
     (g3r-c2-receipt-borrow-sha-internal

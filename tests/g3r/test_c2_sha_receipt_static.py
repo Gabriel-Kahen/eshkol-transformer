@@ -3,7 +3,7 @@ from pathlib import Path
 import hashlib
 import unittest
 
-from tests.c2.test_handler_order import (consecutive, definition, handler,
+from tests.c2.test_handler_order import (consecutive, definition, form, handler,
                                          lists, parse, protected, render)
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -13,6 +13,7 @@ ROOT_FILE = ROOT / "native/g3r_c2_sha_receipt_root.esk"
 MANIFEST = ROOT / "native/g3r_c2_sha_receipt_source_closure.txt"
 STAGE_MANIFEST = ROOT / "native/g3r_c2_sha_stage_source_closure.txt"
 RUNNER = ROOT / "scripts/test-g3r-c2-sha-receipt.sh"
+FIXTURE = ROOT / "tests/g3r/c2_sha_receipt_test.esk"
 PINNED = {
     "native/c2_checkpoint_load_extension.esk":
         "adb2f3f832f9f91ec65a665ad2ccfe2665ce56463a209978794ae34df659770d",
@@ -130,6 +131,69 @@ def verify_fault_bindings(source: str) -> None:
             raise ValueError("receipt fault helper needs a mutable binding")
 
 
+def verify_race_assertions(source: str) -> None:
+    forms = parse(source)
+    phases = (
+        (("same second image publishes one exact receipt", "record"),
+         ("same second image publishes one live C2 owner",
+          "(= (vector-ref counts-after-publication 0) (+ owners-before 1))"),
+         ("same second image preserves prior busy C2 count",
+          "(= (vector-ref counts-after-publication 1) busy-before)"),
+         ("same second image publishes one receipt identity",
+          "(= (receipt-count) (+ before 1))"),
+         ("new receipt is live before borrowing",
+          "(eq? (vector-ref record 1) 'live)")),
+        (("borrowed C2 owner no longer counts live",
+          "(= (vector-ref counts-during-borrow 0) owners-before)"),
+         ("borrowed C2 owner counts busy exactly once",
+          "(= (vector-ref counts-during-borrow 1) (+ busy-before 1))"),
+         ("receipt records the active borrow identity",
+          "(eq? (vector-ref record 1) borrowed)"),
+         ("same second image B supplies the stored receipt SHA",
+          "(bytes=? sha-copy expected-b)"),
+         ("late path replacement leaves image A at the mutable path",
+          "(bytes=? expected-a (c1-sha256 (c1-read-file mutable-path "
+          "(c2-policy-c1-subpolicy-internal 'checkpoint-load policy) "
+          "'checkpoint-load)))"),
+         ("same second image B supplies the Philox controls",
+          "(equal? (vector-ref controls 0) "
+          "(vector 'philox4x32-10 1 1729 -1 -9223372036854775808))"),
+         ("consumed stage sidecars are dead with zero SHA",
+          "(all-sidecars-dead?)"),
+         ("receipt load leaves native image reader and FD counts flat",
+          "(native-flat?)")),
+        (("borrow end restores one live C2 owner",
+          "(= (vector-ref counts-after-borrow-end 0) (+ owners-before 1))"),
+         ("borrow end restores prior busy C2 count",
+          "(= (vector-ref counts-after-borrow-end 1) busy-before)"),
+         ("borrow end restores live receipt status",
+          "(eq? (vector-ref record 1) 'live)")),
+    )
+    checks = {}
+    for index, node in enumerate(forms):
+        if isinstance(node, list) and node[:1] == ["check"] and len(node) == 3:
+            checks.setdefault(node[1], []).append((index, node[2]))
+    def position(head: str, name: str) -> int:
+        matches = [i for i, node in enumerate(forms) if isinstance(node, list)
+                   and node[:2] == [head, name]]
+        if len(matches) != 1:
+            raise ValueError("receipt race phase anchor differs")
+        return matches[0]
+    boundaries = (position("define", "record"),
+                  position("define", "borrowed"),
+                  position("check", '"borrow end returns live receipt"'),
+                  position("check", '"receipt release retires exactly one owner"'))
+    if boundaries != tuple(sorted(boundaries)):
+        raise ValueError("receipt race phase order differs")
+    for phase, (start, end) in zip(phases, zip(boundaries, boundaries[1:])):
+        for label, expected in phase:
+            match = checks.get(f'"{label}"', [])
+            if len(match) != 1 or match[0][1] != form(expected):
+                raise ValueError(f"receipt race check differs: {label}")
+            if not start < match[0][0] < end:
+                raise ValueError(f"receipt race phase order differs: {label}")
+
+
 class C2ShaReceiptStaticTest(unittest.TestCase):
     def test_private_sources_and_handoff(self) -> None:
         for relative, digest in PINNED.items():
@@ -141,7 +205,7 @@ class C2ShaReceiptStaticTest(unittest.TestCase):
         verify_fault_bindings(RECEIPT.read_text())
         verify_runner(RUNNER.read_text())
         parse(STAGE.read_text())
-        parse((ROOT / "tests/g3r/c2_sha_receipt_test.esk").read_text())
+        verify_race_assertions(FIXTURE.read_text())
         self.assertIn("g3r-c2-sha-stage-finalize-consumed-internal!", STAGE.read_text())
 
     def test_near_misses_reject(self) -> None:
@@ -186,6 +250,21 @@ class C2ShaReceiptStaticTest(unittest.TestCase):
             verify_fault_bindings(source.replace(
                 "(define g3r-c2-receipt-identity\n  (lambda ()",
                 "(define (g3r-c2-receipt-identity)\n  (begin", 1))
+
+    def test_race_assertion_near_misses_reject(self) -> None:
+        source = FIXTURE.read_text()
+        with self.assertRaisesRegex(ValueError, "borrowed C2 owner no longer"):
+            verify_race_assertions(source.replace(
+                "(= (vector-ref counts-during-borrow 0) owners-before)",
+                "(= (vector-ref counts-during-borrow 0) (+ owners-before 1))"))
+        with self.assertRaisesRegex(ValueError, "stored receipt SHA"):
+            verify_race_assertions(source.replace(
+                "(bytes=? sha-copy expected-b)", "#t", 1))
+        late = ('(check "borrow end restores one live C2 owner"\n'
+                '  (= (vector-ref counts-after-borrow-end 0) (+ owners-before 1)))')
+        with self.assertRaisesRegex(ValueError, "receipt race phase order"):
+            verify_race_assertions(source.replace(late, "").replace(
+                "(define borrowed\n", late + "\n(define borrowed\n", 1))
 
 
 if __name__ == "__main__":

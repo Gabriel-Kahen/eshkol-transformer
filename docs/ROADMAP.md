@@ -1562,21 +1562,30 @@ gate. A separate feature-local owning C2/SHA receipt candidate composes
 real K2 capability admission with that same stage and canonical C2
 reconstruction. It preallocates receipt and rollback authority, enrolls the
 returned owner before any fallible post-reconstruction step, and tombstones
-the stage SHA sidecar. Its focused source, host topology, and compiled
-three-mode runner are candidate work only; no supported Eshkol receipt gate
-has run. The runner now derives its source closure from a separate object-mode
+the stage SHA sidecar. Its first supported fe9/f31 receipt gate passed the
+stage predecessor in normal, repeat and sanitizer modes, then stopped in the
+normal receipt runtime: the fixture expected a newly borrowed owner to count
+as live, although the canonical borrow had moved it to busy. The failed
+307-file bundle is preserved at
+`/home/gabe/g3r-c2-receipt-83bbebf-fe9-f31-20261003-prepared-b` with
+`SHA256SUMS-RUN` SHA-256
+`fc4b1fcf67ccdd9a8c669840609e87f740ab18c2a491741b1503beffadc982e0`.
+The test-only successor checks live and busy counts at each borrow phase and
+separates the stored B SHA, late A path, Philox controls and cleanup checks;
+its supported receipt gate remains unrun. The runner derives its source
+closure from a separate object-mode
 compile of the same receipt inputs used for executable IR/runtime evidence.
 The receipt candidate now binds both returned stage and returned owner in
 preinstalled lexical ownership guards before its checked authority-cell
 writes; focused fault cuts exercise each return-to-cell interval. Actual full
-IR review of both publication intervals and the supported receipt gate remain
-mandatory before accepting that ownership proof.
+IR review of both publication intervals and a successful supported receipt
+gate remain mandatory before accepting that ownership proof.
 The receipt identity helper uses a lambda-valued mutable binding
 for its existing preallocation-failure injection, addressing the same
 procedure-binding limitation observed in the supported stage compile.
 Its helper body and raised-false rollback test are unchanged. A fresh pinned
-receipt launcher is required after independent review; the old prepared
-receipt launcher must not run. The G3-T
+receipt successor launcher is required after independent review; the failed
+prepared B bundle cannot establish the repaired fixture's gate. The G3-T
 predicate, pair loader, live replay, save writer and
 resumed continuation remain separate gates.
 
