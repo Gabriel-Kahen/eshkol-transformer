@@ -227,6 +227,31 @@ cmp "$evidence/off/baseline.native.o" "$evidence/off/current.native.o" \
   >"$evidence/off/native-cmp.stdout" \
   2>"$evidence/off/native-cmp.stderr"
 
+# The native candidate macro is forbidden in the public P1 compilation role.
+# Plain diagnostics make the single intended preprocessor error an exact byte
+# comparison; any warning, note, second error or infrastructure failure fails.
+set +e
+"$cc" "${common_c[@]}" -O2 \
+  -fno-caret-diagnostics -fno-show-column \
+  -fno-diagnostics-show-option -fno-color-diagnostics \
+  -DET_G3R_CANDIDATE_RETIRE_PRIVATE=1 \
+  -c "$PROJECT_ROOT/native/p1_identity.c" \
+  -o "$evidence/off/forbidden-public.o" \
+  >"$evidence/off.forbidden-public.stdout" \
+  2>"$evidence/off.forbidden-public.stderr"
+public_status=$?
+set -e
+printf '%d\n' "$public_status" >"$evidence/off.forbidden-public.exit"
+[[ "$public_status" -eq 1 && ! -s "$evidence/off.forbidden-public.stdout" && \
+   ! -e "$evidence/off/forbidden-public.o" ]] || \
+  die "public-role candidate compile did not fail exactly before object emission"
+printf '%s\n' "$PROJECT_ROOT/native/p1_identity.c:5: error: \"G3-R candidate P1 roster requires the trusted P1 build\"" \
+  >"$evidence/off.forbidden-public.expected-stderr"
+cmp "$evidence/off.forbidden-public.expected-stderr" \
+  "$evidence/off.forbidden-public.stderr" \
+  >"$evidence/off.forbidden-public.diagnostic-cmp.stdout" \
+  2>"$evidence/off.forbidden-public.diagnostic-cmp.stderr"
+
 nm -g --defined-only --format=posix "$evidence/normal/candidate_bridge.o" | \
   awk 'NF >= 2 { print $1 }' | LC_ALL=C sort -u \
   >"$evidence/private.defined"
