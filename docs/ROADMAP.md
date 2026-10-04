@@ -878,7 +878,10 @@ Clang 21 memory-intrinsic delta only as a strict candidate; actual
 uniform fe9 emission must match or fail closed. The combined metrics
 source has rederived exact clamp source/derived hashes; independent whole-tree
 source review and supported normal/repeat/sanitizer/runtime gates remain
-pending. The upstream typed
+pending. The overflow tuple also admits only the exact declared retention
+region observer supplied by its separately linked test object; other private
+imports and tuple near misses remain rejected. This source correction has no
+compiled acceptance yet. The upstream typed
 foreign-pointer prerequisite remains unresolved; no generated-ASan,
 ordinary-object-parity or E3 §9 acceptance is claimed for this union.
 

@@ -50,10 +50,12 @@ e3_reject_unresolved_private "$2" "$3" "$4"
 
     def test_exact_declared_retention_supplement_only(self) -> None:
         runtime = ["eshkol_builtin_arena_used", "fputc"]
-        self.check_policy("retention", runtime + [OBSERVER],
-                          runtime + [OBSERVER], True)
-        self.check_policy("retention", runtime + [OBSERVER], runtime, False)
-        for kind in ("base", "diagnostic", "public", "numerical"):
+        for kind in ("retention", "retention-overflow"):
+            self.check_policy(kind, runtime + [OBSERVER],
+                              runtime + [OBSERVER], True)
+            self.check_policy(kind, runtime + [OBSERVER], runtime, False)
+        for kind in ("base", "diagnostic", "public", "numerical", "uniform",
+                     "mode-graph", "retention-overflows", ""):
             self.check_policy(kind, runtime + [OBSERVER],
                               runtime + [OBSERVER], False)
 
@@ -61,8 +63,18 @@ e3_reject_unresolved_private "$2" "$3" "$4"
         for forbidden in ("et_e3_private_acquire_v1",
                           "et_d2_private_cursor_v1",
                           "et_m3_private_graph_capture_v1"):
-            self.check_policy("retention", [OBSERVER, forbidden],
-                              [OBSERVER, forbidden], False)
+            for kind in ("retention", "retention-overflow"):
+                self.check_policy(kind, [OBSERVER, forbidden],
+                                  [OBSERVER, forbidden], False)
+
+    def test_overflow_declares_and_links_the_same_observer(self) -> None:
+        manifest = (ROOT / "tests/e3_private/overflow_package_undefined_symbols.txt")
+        self.assertEqual(manifest.read_text().splitlines().count(OBSERVER), 1)
+        runner = (ROOT / "scripts/test-e3-finite-overflow.sh").read_text()
+        self.assertIn('tests/e3_private/retention_arena.cpp', runner)
+        self.assertIn('"$out/$mode/arena.o"', runner)
+        supplement = (ROOT / "tests/e3_private/retention_arena.cpp").read_text()
+        self.assertIn('extern "C" int64_t ' + OBSERVER + '()', supplement)
 
 
 if __name__ == "__main__":
