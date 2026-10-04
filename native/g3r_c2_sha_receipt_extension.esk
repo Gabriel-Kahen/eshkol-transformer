@@ -1,0 +1,288 @@
+;;; Private owning C2/SHA receipt. The only byte authority is the exact
+;;; G3-R stage sidecar; reconstruction uses that stage once and never reopens.
+
+(define g3r-c2-receipts '())
+(define g3r-c2-receipt-after-owner-enrolled-internal
+  (lambda () #t))
+(define g3r-c2-receipt-after-stage-return-internal
+  (lambda (stage) #t))
+(define g3r-c2-receipt-after-owner-return-internal
+  (lambda (owner) #t))
+
+(define (g3r-c2-receipt-find shell)
+  (let loop ((remaining g3r-c2-receipts))
+    (cond ((null? remaining) #f)
+          ((eq? shell (vector-ref (car remaining) 0)) (car remaining))
+          (else (loop (cdr remaining))))))
+
+(define g3r-c2-receipt-identity
+  (lambda ()
+    (guard (raised (#t raised))
+      (error "transformer.g3r-c2-sha-receipt:v1"))))
+
+(define (g3r-c2-receipt-borrow-identity)
+  (guard (raised (#t raised))
+    (error "transformer.g3r-c2-sha-borrow:v1")))
+
+(define (g3r-c2-receipt-note-defect! defect caught)
+  (if (not (vector-ref defect 0))
+      (begin (vector-set! defect 0 #t)
+             (vector-set! defect 1 caught)))
+  #f)
+
+;;; The release record exists before reconstruction. A null authority cell
+;;; releases a lexical owner that returned before cell enrollment; the outer
+;;; cleanup passes its preallocated cell after enrollment.
+(define (g3r-c2-receipt-release-owner! owner cell record defect)
+  (if owner
+      (begin
+        (guard (caught
+                 (#t (g3r-c2-receipt-note-defect! defect caught)))
+          (guard (caught
+                   (#t (g3r-c2-receipt-note-defect! defect caught)))
+            (c2-training-state-release-take-authority!
+              record owner cell 'trainer-state-release!)
+            (c2-training-state-release-record-p1!
+              record 'trainer-state-release!))
+          (if (eq? (vector-ref record 2) 'started)
+              (c2-training-state-release-record-o2!
+                record 'trainer-state-release!)))
+        (if (eq? (vector-ref record 2) 'started)
+            (guard (caught
+                     (#t (g3r-c2-receipt-note-defect! defect caught)))
+              (c2-training-state-release-record-finalize!
+                record 'trainer-state-release!))))
+  #t))
+
+(define (g3r-c2-receipt-release-owner-cell! cell record defect)
+  (g3r-c2-receipt-release-owner!
+    (vector-ref cell 0) cell record defect))
+
+(define (g3r-c2-receipt-retire-stage! shell)
+  (let ((entry (c2-load-find-stage shell)))
+    (if (not entry)
+        (c2-load-fail 'internal 'checkpoint-load
+                      "paired C2 stage identity disappeared" '()))
+    (cond ((eq? (vector-ref entry 2) 'live)
+           (g3r-c2-sha-stage-release-internal! shell))
+          ((eq? (vector-ref entry 2) 'dead)
+           (g3r-c2-sha-stage-finalize-consumed-internal! shell))
+          (else
+            (c2-load-fail 'internal 'checkpoint-load
+                          "paired C2 stage remained consuming" '())))))
+
+(define (g3r-c2-receipt-cleanup-failure!
+          stage-cell owner-cell digest-cell release-record defect)
+  (g3r-c2-receipt-release-owner-cell! owner-cell release-record defect)
+  (let ((stage (vector-ref stage-cell 0)))
+    (if stage
+        (guard (caught
+                 (#t (g3r-c2-receipt-note-defect! defect caught)))
+          (g3r-c2-receipt-retire-stage! stage))))
+  (let ((digest (vector-ref digest-cell 0)))
+    (if (bytevector? digest) (g3r-c2-sha-zero! digest)))
+  #t)
+
+(define (g3r-c2-receipt-admit-one report descriptor)
+  (guard (caught
+           (#t
+             (if (transformer-error? caught)
+                 (let ((unreachable
+                         (et-e1b-private-raise
+                           (transformer-error-category caught)
+                           'checkpoint-load
+                           "checkpoint capability admission failed"
+                           (transformer-error-details caught) caught)))
+                   unreachable)
+                 (let ((unreachable
+                         (et-e1b-private-raise
+                           'internal 'checkpoint-load
+                           "checkpoint capability admission raised a foreign value"
+                           '() caught)))
+                   unreachable))))
+    (let* ((request
+             (k2-public-capability-request
+               'storage.copy (vector-ref descriptor 0)
+               (vector-ref descriptor 1) (vector-ref descriptor 2) #t))
+           (entry
+             (k2-public-capability-require
+               report 'tensor.f32 request)))
+      (if entry #t
+          (c2-load-fail 'internal 'checkpoint-load
+                        "K2 admitted no capability entry" '())))))
+
+(define (g3r-c2-receipt-admit-all report descriptors)
+  (if (null? descriptors) #t
+      (begin
+        (g3r-c2-receipt-admit-one report (car descriptors))
+        (g3r-c2-receipt-admit-all report (cdr descriptors)))))
+
+(define (g3r-c2-load-with-sha-internal path policy report)
+  (let ((stage-cell (vector #f))
+        (owner-cell (vector #f))
+        (digest-cell (vector #f))
+        (release-record (c2-training-state-release-record #f))
+        (defect (vector #f #f)))
+    ;; The outer cleanup and the two preinstalled return-ownership guards add
+    ;; three frames to C2's eleven-frame reconstruction peak.
+    (if (not (= (c2-runtime-reserve-exception-handlers 14) 0))
+        (c2-load-fail 'internal 'checkpoint-load
+                      "handler reserve returned invalid status" '()))
+    (guard (caught
+             (#t
+               (g3r-c2-receipt-cleanup-failure!
+                 stage-cell owner-cell digest-cell release-record defect)
+               (if (vector-ref defect 0)
+                   (c2-load-fail
+                     'internal 'checkpoint-load
+                     "C2/SHA receipt cleanup reported a provider defect" '())
+                   (raise caught))))
+      (let ((stage #f) (stage-cut (vector #f #f)))
+        ;; The stage's exact shell is bound lexically before any fallible cell
+        ;; write. Both handlers exist before the stage factory is called.
+        (guard (cleanup-defect (#t (g3r-c2-sha-fail-stop 134)))
+          (guard (stage-caught
+                   (#t
+                     (if stage (g3r-c2-receipt-retire-stage! stage))
+                     (vector-set! stage-cut 0 #t)
+                     (vector-set! stage-cut 1 stage-caught)
+                     #f))
+            (set! stage (g3r-c2-sha-stage-internal path policy))
+            (g3r-c2-receipt-after-stage-return-internal stage)
+            (vector-set! stage-cell 0 stage)))
+        (if (vector-ref stage-cut 0) (raise (vector-ref stage-cut 1)))
+        (g3r-c2-receipt-admit-all
+          report (c2-checkpoint-load-capability-descriptors-internal
+                   stage 'checkpoint-load))
+        (let ((sidecar (g3r-c2-sha-find-stage stage)))
+          (if (or (not sidecar)
+                  (not (eq? (vector-ref sidecar 1) 'live))
+                  (not (g3r-c2-sha-exact-bytes?
+                         (vector-ref sidecar 2) 32)))
+              (c2-load-fail 'internal 'checkpoint-load
+                            "paired private SHA sidecar is invalid" '()))
+          (let ((digest (bytevector-copy (vector-ref sidecar 2) 0 32)))
+            (vector-set! digest-cell 0 digest)
+            ;; All receipt allocation and registry cons precede C2 consumption.
+            (let* ((shell (g3r-c2-receipt-identity))
+                   ;; [shell,status,exact-C2-owner,copied-SHA,C2-borrow]
+                   (record (vector shell 'pending #f digest #f))
+                   (next (cons record g3r-c2-receipts))
+                   (owner-cut (vector #f #f)))
+              (let ((owner #f))
+                ;; The release record was allocated before reconstruction.
+                ;; A returned owner is first bound to this lexical slot; if
+                ;; enrollment fails, release it directly with null cell
+                ;; authority and let the outer guard retire the stage/SHA.
+                (guard (cleanup-defect (#t (g3r-c2-sha-fail-stop 134)))
+                  (guard (owner-caught
+                           (#t
+                             (if (and owner
+                                      (not (eq? (vector-ref owner-cell 0)
+                                                owner)))
+                                 (begin
+                                   (g3r-c2-receipt-release-owner!
+                                     owner #f release-record defect)
+                                   (if (vector-ref defect 0)
+                                       (g3r-c2-sha-fail-stop 134))))
+                             (vector-set! owner-cut 0 #t)
+                             (vector-set! owner-cut 1 owner-caught)
+                             #f))
+                    (set! owner
+                      (c2-checkpoint-load-reconstruct-internal
+                        stage 'checkpoint-load))
+                    (g3r-c2-receipt-after-owner-return-internal owner)
+                    (vector-set! owner-cell 0 owner)))
+                (if (vector-ref owner-cut 0)
+                    (raise (vector-ref owner-cut 1)))
+                (g3r-c2-receipt-after-owner-enrolled-internal)
+                (if (or (not (c2-load-exact-live-owner? owner))
+                        (not (c2-checkpoint-load-staging-dead-internal? stage)))
+                    (c2-load-fail 'internal 'checkpoint-load
+                                  "C2 reconstruction returned no exact owner" '()))
+                (g3r-c2-sha-stage-finalize-consumed-internal! stage)
+                ;; The remaining publication tail has assignments only.
+                (vector-set! record 2 owner)
+                (vector-set! record 1 'live)
+                (set! g3r-c2-receipts next)
+                (vector-set! owner-cell 0 #f)
+                (vector-set! digest-cell 0 #f)
+                (vector-set! stage-cell 0 #f)
+                shell))))))))
+
+(define (g3r-c2-receipt-borrow-find borrow operation)
+  (if (or (symbol? borrow) (not (symbol? operation)))
+      (c2-load-fail 'invalid-argument operation
+                    "expected exact active C2/SHA receipt borrow" '()))
+  (let loop ((remaining g3r-c2-receipts))
+    (cond ((null? remaining)
+           (c2-load-fail 'invalid-argument operation
+                         "expected exact active C2/SHA receipt borrow" '()))
+          ((and (eq? (vector-ref (car remaining) 1) borrow)
+                (vector-ref (car remaining) 4))
+           (car remaining))
+          (else (loop (cdr remaining))))))
+
+(define (g3r-c2-receipt-borrow-begin-internal shell operation)
+  (let ((record (g3r-c2-receipt-find shell)))
+    (if (or (not record) (not (symbol? operation)))
+        (c2-load-fail 'invalid-argument operation
+                      "expected exact C2/SHA receipt" '()))
+    (if (not (eq? (vector-ref record 1) 'live))
+        (c2-load-fail 'invalid-state operation
+                      "C2/SHA receipt is busy or dead" '()))
+    (let* ((borrow (g3r-c2-receipt-borrow-identity))
+           (c2-borrow
+             (c2-training-state-borrow-begin-internal
+               (vector-ref record 2) operation)))
+      (vector-set! record 4 c2-borrow)
+      (vector-set! record 1 borrow)
+      borrow)))
+
+(define (g3r-c2-receipt-borrow-c2-internal borrow operation)
+  (let ((record (g3r-c2-receipt-borrow-find borrow operation)))
+    (vector-ref record 4)))
+
+(define (g3r-c2-receipt-borrow-sha-internal borrow operation)
+  (let ((record (g3r-c2-receipt-borrow-find borrow operation)))
+    (bytevector-copy (vector-ref record 3) 0 32)))
+
+(define (g3r-c2-receipt-borrow-end-internal! borrow)
+  (let ((record (g3r-c2-receipt-borrow-find borrow 'checkpoint-load)))
+    (c2-training-state-borrow-end-internal (vector-ref record 4))
+    (vector-set! record 4 #f)
+    (vector-set! record 1 'live)
+    #t))
+
+(define (g3r-c2-receipt-release-internal! shell)
+  (let ((record (g3r-c2-receipt-find shell)))
+    (if (not record)
+        (c2-load-fail 'invalid-argument 'checkpoint-load
+                      "expected exact C2/SHA receipt" '()))
+    (if (eq? (vector-ref record 1) 'dead) #t
+        (begin
+          (if (not (eq? (vector-ref record 1) 'live))
+              (c2-load-fail 'invalid-state 'checkpoint-load
+                            "C2/SHA receipt is borrowed or releasing" '()))
+          (let ((cell (vector (vector-ref record 2)))
+                (release-record (c2-training-state-release-record #f))
+                (defect (vector #f #f)))
+            (if (not (= (c2-runtime-reserve-exception-handlers 7) 0))
+                (c2-load-fail 'internal 'checkpoint-load
+                              "handler reserve returned invalid status" '()))
+            (vector-set! record 1 'releasing)
+            (g3r-c2-receipt-release-owner-cell!
+              cell release-record defect)
+            (if (eq? (vector-ref release-record 2) 'empty)
+                (begin
+                  (vector-set! record 1 'live)
+                  (c2-load-fail 'internal 'checkpoint-load
+                                "C2/SHA receipt owner was not released" '())))
+            (g3r-c2-sha-zero! (vector-ref record 3))
+            (vector-set! record 2 #f)
+            (vector-set! record 1 'dead)
+            (if (vector-ref defect 0)
+                (c2-load-fail
+                  'internal 'checkpoint-load
+                  "C2/SHA receipt release reported a provider defect" '())
+                #t))))))

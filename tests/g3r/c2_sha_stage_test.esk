@@ -1,0 +1,212 @@
+(load "g3r_c2_sha_stage_root.esk")
+
+(extern void g3r-c2-test-reset
+        :real et_c2_checkpoint_load_test_reset_v1)
+(extern void g3r-c2-test-fail-after-validate i64
+        :real et_c2_checkpoint_load_test_fail_after_validate_v1)
+(extern i64 g3r-c2-test-live-images
+        :real et_c2_checkpoint_core_test_live_images_v1)
+(extern i64 g3r-c2-test-live-readers
+        :real et_c2_checkpoint_reader_test_live_count_v1)
+(extern i64 g3r-c2-test-live-fds
+        :real et_c2_checkpoint_reader_test_fd_live_count_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3-R C2 SHA STAGE FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label category thunk)
+  (let ((caught #f))
+    (guard (raised (#t (set! caught raised))) (thunk))
+    (check label
+      (and caught (transformer-error? caught)
+           (eq? (transformer-error-category caught) category)
+           (eq? (transformer-error-operation caught) 'checkpoint-load)))))
+(define (same-bytes? left right)
+  (and (bytevector? left) (bytevector? right)
+       (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+(define (zero-digest? digest)
+  (let loop ((index 0))
+    (if (= index 32) #t
+        (and (= 0 (bytevector-u8-ref digest index))
+             (loop (+ index 1))))))
+(define (stage-count)
+  (let loop ((remaining g3r-c2-sha-stages) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining) (+ count 1)))))
+(define (native-flat?)
+  (and (= 0 (g3r-c2-test-live-images))
+       (= 0 (g3r-c2-test-live-readers))
+       (= 0 (g3r-c2-test-live-fds))))
+
+(define args (command-line))
+(define valid-path (car (cdr args)))
+(define bad-path (car (cdr (cdr args))))
+(define policy
+  (c2-persistence-policy-internal 1048576 1048576 1048576 16 'cpu))
+
+(check "stage root owns exact SHA feature closure"
+  (and (= c2-load-result-bytes 192)
+       (= g3r-c2-sha-stage-result-bytes 224)))
+(define shared (make-bytevector 8 0))
+(check "aliased backing identity rejects"
+  (not (g3r-c2-sha-disjoint? (list shared shared))))
+(define alias-measure (make-bytevector 192 0))
+(bytevector-u8-set! alias-measure 16 93)
+(let fill ((offsets '(24 32 40 48 56 64)))
+  (if (not (null? offsets))
+      (begin (bytevector-u8-set! alias-measure (car offsets) 1)
+             (fill (cdr offsets)))))
+(define alias-allocations (g3r-c2-sha-stage-allocations alias-measure))
+(vector-set! alias-allocations 1 (vector-ref alias-allocations 0))
+(check "equal-size destination alias fails full preflight"
+  (not (g3r-c2-sha-backing-valid?
+         (string->utf8 "x") alias-measure alias-allocations)))
+(reject "forged stage cannot release" 'invalid-argument
+  (lambda () (g3r-c2-sha-stage-release-internal!
+               (vector 'c2-private-checkpoint-load-stage-v1))))
+(reject "bad image publishes no sidecar" 'corrupt-data
+  (lambda () (g3r-c2-sha-stage-internal bad-path policy)))
+(check "bad image leaves stage registry empty and native flat"
+  (and (= 0 (stage-count)) (native-flat?)))
+
+(define stage (g3r-c2-sha-stage-internal valid-path policy))
+(define sidecar (g3r-c2-sha-find-stage stage))
+(define digest (vector-ref sidecar 2))
+(define c2-entry (c2-load-find-stage stage))
+(define expected
+  (c1-sha256
+    (c1-read-file valid-path
+      (c2-policy-c1-subpolicy-internal 'checkpoint-load policy)
+      'checkpoint-load)))
+(check "one exact live stage and paired copied SHA"
+  (and (= 1 (stage-count)) sidecar c2-entry
+       (eq? (vector-ref sidecar 0) stage)
+       (eq? (vector-ref sidecar 1) 'live)
+       (eq? (vector-ref c2-entry 2) 'live)
+       (= 32 (bytevector-length digest))
+       (same-bytes? digest expected)
+       (native-flat?)))
+(reject "equal-shaped forged shell cannot consume sidecar" 'invalid-argument
+  (lambda ()
+    (g3r-c2-sha-stage-release-internal!
+      (vector 'c2-private-checkpoint-load-stage-v1))))
+(check "forgery leaves exact live stage" (eq? (vector-ref c2-entry 2) 'live))
+(check "release exact stage" (g3r-c2-sha-stage-release-internal! stage))
+(check "release tombstones stage and clears retained digest"
+  (and (eq? (vector-ref sidecar 1) 'dead)
+       (eq? (vector-ref c2-entry 2) 'dead)
+       (zero-digest? digest)))
+(check "exact release is idempotent"
+  (g3r-c2-sha-stage-release-internal! stage))
+
+(define unrelated (g3r-c2-sha-stage-internal valid-path policy))
+(define unrelated-sidecar (g3r-c2-sha-find-stage unrelated))
+(define unrelated-digest
+  (bytevector-copy (vector-ref unrelated-sidecar 2) 0 32))
+(define before-cut-stage-count (stage-count))
+(define before-cut-c2-counts (c2-load-stage-counts-internal))
+(define cut-shell #f)
+(define cut-digest #f)
+(define saved-after-factory-hook g3r-c2-sha-after-factory-hook)
+(set! g3r-c2-sha-after-factory-hook
+  (lambda (shell digest)
+    (set! cut-shell shell)
+    (set! cut-digest digest)
+    (c2-load-fail 'invalid-state 'checkpoint-load
+                  "injected after canonical stage publication" '())))
+(reject "post-factory cut preserves first error" 'invalid-state
+  (lambda () (g3r-c2-sha-stage-internal valid-path policy)))
+(set! g3r-c2-sha-after-factory-hook saved-after-factory-hook)
+(define after-cut-c2-counts (c2-load-stage-counts-internal))
+(check "post-factory cleanup owns only its exact C2 stage"
+  (and cut-shell cut-digest
+       (c2-checkpoint-load-staging-dead-internal? cut-shell)
+       (zero-digest? cut-digest)
+       (= before-cut-stage-count (stage-count))
+       (= (vector-ref before-cut-c2-counts 0)
+          (vector-ref after-cut-c2-counts 0))
+       (= (+ 1 (vector-ref before-cut-c2-counts 2))
+          (vector-ref after-cut-c2-counts 2))
+       (eq? (vector-ref unrelated-sidecar 1) 'live)
+       (same-bytes? unrelated-digest (vector-ref unrelated-sidecar 2))
+       (native-flat?)))
+(define borrowed-cut-shell #f)
+(define borrowed-cut-digest #f)
+(define borrow-caught #f)
+(set! g3r-c2-sha-after-factory-hook
+  (lambda (shell digest)
+    (set! borrowed-cut-shell shell)
+    (set! borrowed-cut-digest digest)
+    #t))
+(borrow g3r-c2-sha-stages
+  (guard (raised (#t (set! borrow-caught raised)))
+    (g3r-c2-sha-stage-internal valid-path policy)))
+(set! g3r-c2-sha-after-factory-hook saved-after-factory-hook)
+(define after-borrow-c2-counts (c2-load-stage-counts-internal))
+(check "borrow conflict after factory retires exact stage"
+  (and borrow-caught borrowed-cut-shell borrowed-cut-digest
+       (c2-checkpoint-load-staging-dead-internal? borrowed-cut-shell)
+       (zero-digest? borrowed-cut-digest)
+       (= before-cut-stage-count (stage-count))
+       (= (vector-ref before-cut-c2-counts 0)
+          (vector-ref after-borrow-c2-counts 0))
+       (= (+ 2 (vector-ref before-cut-c2-counts 2))
+          (vector-ref after-borrow-c2-counts 2))
+       (eq? (vector-ref unrelated-sidecar 1) 'live)
+       (same-bytes? unrelated-digest (vector-ref unrelated-sidecar 2))
+       (native-flat?)))
+(define retry-stage (g3r-c2-sha-stage-internal valid-path policy))
+(check "post-factory failure can retry and release"
+  (and (g3r-c2-sha-stage-release-internal! retry-stage)
+       (g3r-c2-sha-stage-release-internal! unrelated)
+       (native-flat?)))
+
+(define before-failure (stage-count))
+(g3r-c2-test-reset)
+(g3r-c2-test-fail-after-validate 1)
+(reject "native post-validation failure stays internal" 'internal
+  (lambda () (g3r-c2-sha-stage-internal valid-path policy)))
+(g3r-c2-test-reset)
+(check "native failure publishes no paired stage"
+  (and (= before-failure (stage-count)) (native-flat?)))
+
+(define saved-alloc g3r-c2-sha-stage-allocations)
+(set! g3r-c2-sha-stage-allocations
+  (lambda (measure)
+    (let ((result (saved-alloc measure)))
+      (vector-set! result 8 (make-bytevector 192 0))
+      result)))
+(reject "short actual result backing rejects before native stage" 'internal
+  (lambda () (g3r-c2-sha-stage-internal valid-path policy)))
+(set! g3r-c2-sha-stage-allocations saved-alloc)
+(check "short backing publishes no stage"
+  (and (= before-failure (stage-count)) (native-flat?)))
+
+(define saved-bytevector-allocator g3r-c2-sha-allocate-bytevector-internal)
+(set! g3r-c2-sha-allocate-bytevector-internal
+  (lambda (length) (raise #f)))
+(reject "stage allocation failure publishes no paired stage" 'internal
+  (lambda () (g3r-c2-sha-stage-internal valid-path policy)))
+(set! g3r-c2-sha-allocate-bytevector-internal saved-bytevector-allocator)
+(check "allocation failure leaves registries and native flat"
+  (and (= before-failure (stage-count)) (native-flat?)))
+
+(define saved-parse c2-load-parse-o2-internal)
+(set! c2-load-parse-o2-internal (lambda (a b c d e) (raise #f)))
+(reject "post-copy parser failure publishes no paired stage" 'internal
+  (lambda () (g3r-c2-sha-stage-internal valid-path policy)))
+(set! c2-load-parse-o2-internal saved-parse)
+(check "post-copy failure leaves registries and native flat"
+  (and (= before-failure (stage-count)) (native-flat?)))
+
+(display "G3-R C2 SHA Eshkol stage PASS: ")
+(display checks)
+(display " checks")
+(newline)

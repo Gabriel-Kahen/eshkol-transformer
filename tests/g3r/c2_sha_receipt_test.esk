@@ -1,0 +1,303 @@
+(load "g3r_c2_sha_receipt_root.esk")
+
+(extern i64 g3r-receipt-test-replace ptr ptr
+        :real et_g3r_c2_receipt_test_replace_v1)
+(extern i64 g3r-receipt-test-k2-count
+        :real et_k2_test_require_count_v1)
+(extern void g3r-receipt-test-k2-fail-at i64
+        :real et_k2_test_fail_require_at_v1)
+(extern i64 g3r-receipt-test-live-images
+        :real et_c2_checkpoint_core_test_live_images_v1)
+(extern i64 g3r-receipt-test-live-readers
+        :real et_c2_checkpoint_reader_test_live_count_v1)
+(extern i64 g3r-receipt-test-live-fds
+        :real et_c2_checkpoint_reader_test_fd_live_count_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3-R C2 SHA RECEIPT FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label category thunk)
+  (let ((caught? #f) (caught #f))
+    (guard (raised (#t (set! caught? #t) (set! caught raised)))
+      (thunk))
+    (check label
+      (and caught? (transformer-error? caught)
+           (eq? (transformer-error-category caught) category)
+           (eq? (transformer-error-operation caught) 'checkpoint-load)))))
+(define (reject-false label thunk)
+  (let ((caught? #f) (caught #t))
+    (guard (raised (#t (set! caught? #t) (set! caught raised)))
+      (thunk))
+    (check label (and caught? (eq? caught #f)))))
+(define (bytes=? left right)
+  (and (bytevector? left) (bytevector? right)
+       (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+(define (zero-sha? digest)
+  (let loop ((index 0))
+    (if (= index 32) #t
+        (and (= 0 (bytevector-u8-ref digest index))
+             (loop (+ index 1))))))
+(define (native-flat?)
+  (and (= 0 (g3r-receipt-test-live-images))
+       (= 0 (g3r-receipt-test-live-readers))
+       (= 0 (g3r-receipt-test-live-fds))))
+(define (receipt-count)
+  (let loop ((entries g3r-c2-receipts) (count 0))
+    (if (null? entries) count
+        (loop (cdr entries) (+ count 1)))))
+(define (all-sidecars-dead?)
+  (let loop ((entries g3r-c2-sha-stages))
+    (if (null? entries) #t
+        (let ((sidecar (car entries)))
+          (and (eq? (vector-ref sidecar 1) 'dead)
+               (zero-sha? (vector-ref sidecar 2))
+               (eq? (vector-ref (c2-load-find-stage
+                                  (vector-ref sidecar 0)) 2) 'dead)
+               (loop (cdr entries)))))))
+(define (live-c2)
+  (vector-ref (c2-load-owner-counts-internal) 0))
+
+(define args (command-line))
+(define valid-path (car (cdr args)))
+(define truncated-path (car (cdr (cdr args))))
+(define larger-path (car (cdr (cdr (cdr args)))))
+(define exact-path (car (cdr (cdr (cdr (cdr args))))))
+(define mutable-path (car (cdr (cdr (cdr (cdr (cdr args)))))))
+(define late-path (car (cdr (cdr (cdr (cdr (cdr (cdr args))))))))
+(define policy
+  (c2-persistence-policy-internal 1048576 1048576 1048576 16 'cpu))
+(define report (k2-public-capability-discover))
+
+(check "feature-local real K2 and private SHA stage are loaded"
+  (and (= c2-load-result-bytes 192)
+       (= g3r-c2-sha-stage-result-bytes 224)))
+(define before (receipt-count))
+(define owner-counts-before (c2-load-owner-counts-internal))
+(define owners-before (vector-ref owner-counts-before 0))
+(define busy-before (vector-ref owner-counts-before 1))
+(reject "truncated image has no receipt" 'corrupt-data
+  (lambda () (g3r-c2-load-with-sha-internal truncated-path policy report)))
+(check "truncated image leaves owners and native resources flat"
+  (and (= (receipt-count) before) (= (live-c2) owners-before)
+       (all-sidecars-dead?) (native-flat?)))
+(reject "forged report fails actual K2 admission" 'invalid-argument
+  (lambda ()
+    (g3r-c2-load-with-sha-internal valid-path policy
+                                   (vector 'forged-k2-report))))
+(check "K2 rejection leaves no receipt or C2 owner"
+  (and (= (receipt-count) before) (= (live-c2) owners-before)
+       (all-sidecars-dead?) (native-flat?)))
+(g3r-receipt-test-k2-fail-at (+ 1 (g3r-receipt-test-k2-count)))
+(reject "injected provider K2 rejection retains no owner" 'unsupported
+  (lambda () (g3r-c2-load-with-sha-internal valid-path policy report)))
+(check "K2 provider failure leaves no receipt or C2 owner"
+  (and (= (receipt-count) before) (= (live-c2) owners-before)
+       (all-sidecars-dead?) (native-flat?)))
+
+(define original-stage-return g3r-c2-receipt-after-stage-return-internal)
+(set! g3r-c2-receipt-after-stage-return-internal
+  (lambda (stage) (raise #f)))
+(reject-false "stage return before cell enrollment retains raised false"
+  (lambda () (g3r-c2-load-with-sha-internal valid-path policy report)))
+(set! g3r-c2-receipt-after-stage-return-internal original-stage-return)
+(check "pre-cell stage cut retires exact stage and SHA"
+  (and (= (receipt-count) before) (= (live-c2) owners-before)
+       (all-sidecars-dead?) (native-flat?)))
+
+(define original-owner-return g3r-c2-receipt-after-owner-return-internal)
+(define dead-before-owner-return
+  (vector-ref (c2-load-owner-counts-internal) 3))
+(set! g3r-c2-receipt-after-owner-return-internal
+  (lambda (owner) (raise #f)))
+(reject-false "owner return before cell enrollment retains raised false"
+  (lambda () (g3r-c2-load-with-sha-internal valid-path policy report)))
+(set! g3r-c2-receipt-after-owner-return-internal original-owner-return)
+(check "pre-cell owner cut releases once and retires SHA"
+  (and (= (receipt-count) before) (= (live-c2) owners-before)
+       (= (vector-ref (c2-load-owner-counts-internal) 3)
+          (+ dead-before-owner-return 1))
+       (all-sidecars-dead?) (native-flat?)))
+
+(define original-identity g3r-c2-receipt-identity)
+(set! g3r-c2-receipt-identity (lambda () (raise #f)))
+(reject-false "receipt allocation fault preserves original raised false"
+  (lambda () (g3r-c2-load-with-sha-internal valid-path policy report)))
+(set! g3r-c2-receipt-identity original-identity)
+(check "receipt preallocation failure does not consume owner"
+  (and (= (receipt-count) before) (= (live-c2) owners-before)
+       (all-sidecars-dead?) (native-flat?)))
+
+(define original-compose c2-load-compose-owner-internal)
+(set! c2-load-compose-owner-internal
+  (lambda (request)
+    (original-compose request)
+    (raise #f)))
+(reject "post-factory provider fault rolls back inside canonical C2" 'internal
+  (lambda () (g3r-c2-load-with-sha-internal valid-path policy report)))
+(set! c2-load-compose-owner-internal original-compose)
+(check "post-factory fault leaves no receipt or live owner"
+  (and (= (receipt-count) before) (= (live-c2) owners-before)
+       (all-sidecars-dead?) (native-flat?)))
+
+(define original-cut g3r-c2-receipt-after-owner-enrolled-internal)
+(set! g3r-c2-receipt-after-owner-enrolled-internal
+  (lambda () (raise #f)))
+(define dead-before
+  (vector-ref (c2-load-owner-counts-internal) 3))
+(reject-false "post-reconstruction cut retains first raised false"
+  (lambda () (g3r-c2-load-with-sha-internal valid-path policy report)))
+(set! g3r-c2-receipt-after-owner-enrolled-internal original-cut)
+(check "post-reconstruction cut retires exact owner once"
+  (and (= (receipt-count) before) (= (live-c2) owners-before)
+       (= (vector-ref (c2-load-owner-counts-internal) 3)
+          (+ dead-before 1))
+       (all-sidecars-dead?) (native-flat?)))
+
+(define original-release-p1 c2-training-state-release-p1-owned!)
+(define release-p1-calls 0)
+(set! c2-training-state-release-p1-owned!
+  (lambda (state token)
+    (set! release-p1-calls (+ release-p1-calls 1))
+    (original-release-p1 state token)
+    (raise #f)))
+(set! g3r-c2-receipt-after-owner-enrolled-internal
+  (lambda () (raise #f)))
+(define dead-before-defect
+  (vector-ref (c2-load-owner-counts-internal) 3))
+(reject "cleanup provider defect reports internal" 'internal
+  (lambda () (g3r-c2-load-with-sha-internal valid-path policy report)))
+(set! c2-training-state-release-p1-owned! original-release-p1)
+(set! g3r-c2-receipt-after-owner-enrolled-internal original-cut)
+(check "cleanup defect consumes each owner once and clears SHA"
+  (and (= release-p1-calls 1)
+       (= (receipt-count) before) (= (live-c2) owners-before)
+       (= (vector-ref (c2-load-owner-counts-internal) 3)
+          (+ dead-before-defect 1))
+       (all-sidecars-dead?) (native-flat?)))
+
+;;; The first image is valid A. The allocation seam runs strictly after
+;;; measurement and atomically replaces it with same-size valid B.
+(define expected-b
+  (c1-sha256
+    (c1-read-file exact-path
+      (c2-policy-c1-subpolicy-internal 'checkpoint-load policy)
+      'checkpoint-load)))
+(define expected-a
+  (c1-sha256
+    (c1-read-file larger-path
+      (c2-policy-c1-subpolicy-internal 'checkpoint-load policy)
+      'checkpoint-load)))
+(check "valid A and B have distinct whole-image SHA" (not (bytes=? expected-a expected-b)))
+(define original-alloc g3r-c2-sha-stage-allocations)
+(set! g3r-c2-sha-stage-allocations
+  (lambda (measure)
+    (let ((allocations (original-alloc measure)))
+      (check "same-size replacement occurred between measure and stage"
+        (= 0 (g3r-receipt-test-replace
+               (string->utf8 exact-path) (string->utf8 mutable-path))))
+      allocations)))
+(set! g3r-c2-receipt-after-owner-enrolled-internal
+  (lambda ()
+    (check "late path replacement occurs after owner enrollment"
+      (= 0 (g3r-receipt-test-replace
+             (string->utf8 late-path) (string->utf8 mutable-path))))
+    #t))
+(define receipt
+  (g3r-c2-load-with-sha-internal mutable-path policy report))
+(set! g3r-c2-sha-stage-allocations original-alloc)
+(set! g3r-c2-receipt-after-owner-enrolled-internal original-cut)
+(define record (g3r-c2-receipt-find receipt))
+(define counts-after-publication (c2-load-owner-counts-internal))
+(check "same second image publishes one exact receipt" record)
+(check "same second image publishes one live C2 owner"
+  (= (vector-ref counts-after-publication 0) (+ owners-before 1)))
+(check "same second image preserves prior busy C2 count"
+  (= (vector-ref counts-after-publication 1) busy-before))
+(check "same second image publishes one receipt identity"
+  (= (receipt-count) (+ before 1)))
+(check "new receipt is live before borrowing"
+  (eq? (vector-ref record 1) 'live))
+(define borrowed
+  (g3r-c2-receipt-borrow-begin-internal receipt 'checkpoint-load))
+(define counts-during-borrow (c2-load-owner-counts-internal))
+(check "borrowed C2 owner no longer counts live"
+  (= (vector-ref counts-during-borrow 0) owners-before))
+(check "borrowed C2 owner counts busy exactly once"
+  (= (vector-ref counts-during-borrow 1) (+ busy-before 1)))
+(check "receipt records the active borrow identity"
+  (eq? (vector-ref record 1) borrowed))
+(define c2-borrow
+  (g3r-c2-receipt-borrow-c2-internal borrowed 'checkpoint-load))
+(define controls
+  (vector-ref (c2-training-state-borrow-projection-internal c2-borrow) 2))
+(define sha-copy
+  (g3r-c2-receipt-borrow-sha-internal borrowed 'checkpoint-load))
+(check "same second image B supplies the stored receipt SHA"
+  (bytes=? sha-copy expected-b))
+(check "late path replacement leaves image A at the mutable path"
+  (bytes=?
+    expected-a
+    (c1-sha256
+      (c1-read-file mutable-path
+        (c2-policy-c1-subpolicy-internal 'checkpoint-load policy)
+        'checkpoint-load))))
+(check "same second image B supplies the Philox controls"
+  (equal? (vector-ref controls 0)
+          (vector 'philox4x32-10 1 1729 -1 -9223372036854775808)))
+(check "consumed stage sidecars are dead with zero SHA"
+  (all-sidecars-dead?))
+(check "receipt load leaves native image reader and FD counts flat"
+  (native-flat?))
+(bytevector-u8-set! sha-copy 0 0)
+(check "borrowed digest copy cannot mutate receipt authority"
+  (bytes=? (g3r-c2-receipt-borrow-sha-internal
+             borrowed 'checkpoint-load)
+           expected-b))
+(reject "busy receipt cannot release" 'invalid-state
+  (lambda () (g3r-c2-receipt-release-internal! receipt)))
+(reject "busy receipt cannot borrow twice" 'invalid-state
+  (lambda ()
+    (g3r-c2-receipt-borrow-begin-internal receipt 'checkpoint-load)))
+(reject "forged receipt cannot release" 'invalid-argument
+  (lambda ()
+    (g3r-c2-receipt-release-internal!
+      (vector 'g3r-c2-sha-receipt-v1))))
+(reject "forged borrow cannot read SHA" 'invalid-argument
+  (lambda ()
+    (g3r-c2-receipt-borrow-sha-internal
+      (vector 'g3r-c2-sha-borrow-v1) 'checkpoint-load)))
+(check "borrow end returns live receipt"
+  (g3r-c2-receipt-borrow-end-internal! borrowed))
+(define counts-after-borrow-end (c2-load-owner-counts-internal))
+(check "borrow end restores one live C2 owner"
+  (= (vector-ref counts-after-borrow-end 0) (+ owners-before 1)))
+(check "borrow end restores prior busy C2 count"
+  (= (vector-ref counts-after-borrow-end 1) busy-before))
+(check "borrow end restores live receipt status"
+  (eq? (vector-ref record 1) 'live))
+(reject "stale borrow cannot read SHA" 'invalid-argument
+  (lambda ()
+    (g3r-c2-receipt-borrow-sha-internal
+      borrowed 'checkpoint-load)))
+(define authoritative-digest (vector-ref record 3))
+(check "receipt release retires exactly one owner"
+  (and (g3r-c2-receipt-release-internal! receipt)
+       (= (live-c2) owners-before)
+       (eq? (vector-ref record 1) 'dead)
+       (zero-sha? authoritative-digest)))
+(check "receipt release is idempotent"
+  (g3r-c2-receipt-release-internal! receipt))
+(reject "dead receipt cannot borrow" 'invalid-state
+  (lambda ()
+    (g3r-c2-receipt-borrow-begin-internal receipt 'checkpoint-load)))
+(check "final native resources are flat" (native-flat?))
+
+(display "G3-R C2 SHA owning receipt PASS: ")
+(display checks) (display " checks") (newline)
