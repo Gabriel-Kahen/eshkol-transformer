@@ -813,6 +813,17 @@ arena and dataset closure. The ordinary retention entry and its 20 cases are
 unchanged. Local fixture and transcript-classifier tests do not prove compiled
 reachability, rollback or §9 acceptance; supported normal/repeat/sanitizer
 execution, emitted import closure and full IR review remain pending.
+An isolated test-only clamp-overlay successor pins the production E3 metrics
+finalizer hash and changes only its `expf` overflow rejection to `FLT_MAX` in
+an owned generated translation unit for the noninstalled overflow tuple. A
+strict parser requires the full numerical trace, `E3FINAL`, the fixture's
+stage-12 failure marker and canonical abort; the finite control must match
+the ordinary tuple byte for byte. Local hash, selector, closure and classifier
+controls do not establish a compiled mutant kill. The alternate binary64
+calculation with binary32 conversion and the same post-conversion finite
+check is observationally equivalent at this boundary. Supported fe9 runtime,
+unbuffered-output, import, sanitizer and ordinary-object parity proofs remain
+pending.
 
 The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
 is a docs-only candidate for the remaining private numerical, compiled-mutant,

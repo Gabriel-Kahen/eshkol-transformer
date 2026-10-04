@@ -1221,6 +1221,7 @@ case "${e3_uniform_mutant}" in
   normal|last-tie) ;;
   *) die "unknown E3 uniform mutation: ${e3_uniform_mutant}" ;;
 esac
+source "${PROJECT_ROOT}/scripts/e3-overflow-clamp-policy.sh"
 
 require_command awk
 require_command cmp
@@ -1378,6 +1379,29 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
       >"${e1b_tmp}/mode-graph-check.txt"
     cmp "${e1b_tmp}/mode-graph-generation.txt" \
         "${e1b_tmp}/mode-graph-check.txt"
+  fi
+  if [[ "${e3_overflow_mutant}" == clamp ]]; then
+    [[ "${e3_overflow_generated_owned}" == 1 &&
+       "${#package_native_sources[@]}" == 11 &&
+       "${package_native_sources[10]}" == \
+         "${PROJECT_ROOT}/native/e3_evaluation_metrics_provider.c" ]] ||
+      die "E3 clamp cannot replace the exact metrics translation unit"
+    e3_overflow_clamp_source="${e3_overflow_generated_dir}/native/e3_evaluation_metrics_provider.c"
+    python3 -B "${PROJECT_ROOT}/scripts/generate-e3-overflow-clamp-overlay.py" \
+      --output "${e3_overflow_clamp_source}" \
+      >"${e1b_tmp}/overflow-clamp-generation.stdout" \
+      2>"${e1b_tmp}/overflow-clamp-generation.stderr" ||
+      die "E3 clamp overlay generation failed"
+    python3 -B "${PROJECT_ROOT}/scripts/generate-e3-overflow-clamp-overlay.py" \
+      --output "${e3_overflow_clamp_source}" --check \
+      >"${e1b_tmp}/overflow-clamp-check.stdout" \
+      2>"${e1b_tmp}/overflow-clamp-check.stderr" ||
+      die "E3 clamp overlay verification failed"
+    cmp "${e1b_tmp}/overflow-clamp-generation.stdout" \
+        "${e1b_tmp}/overflow-clamp-check.stdout"
+    package_native_sources[10]="${e3_overflow_clamp_source}"
+    package_native_source_closure="${e3_prefix}_clamp_native_source_closure.txt"
+    e3_check_repository_path "${package_native_source_closure}"
   fi
 fi
 
@@ -1891,6 +1915,16 @@ elif [[ "${package_policy}" == m3t-diagnostic-aggregate ]]; then
   source "${PROJECT_ROOT}/scripts/m3t-native-inputs.sh"
 fi
 
+if [[ "${e3_overflow_mutant}" == clamp ]]; then
+  python3 -B "${PROJECT_ROOT}/scripts/generate-e3-overflow-clamp-overlay.py" \
+    --output "${e3_overflow_clamp_source}" --check \
+    >"${e1b_tmp}/overflow-clamp-postcheck.stdout" \
+    2>"${e1b_tmp}/overflow-clamp-postcheck.stderr" ||
+    die "E3 clamp overlay changed during compilation"
+  cmp "${e1b_tmp}/overflow-clamp-generation.stdout" \
+      "${e1b_tmp}/overflow-clamp-postcheck.stdout"
+fi
+
 if [[ -n "${package_native_source_closure}" ]]; then
   {
     for native_depfile in "${package_native_depfiles[@]}"; do
@@ -1912,6 +1946,10 @@ if [[ -n "${package_native_source_closure}" ]]; then
             fi
             m3t_verified_source="$(realpath -- "${e1b_source}")"
             case "${native_dependency}" in
+              "${e3_overflow_clamp_source:-/no-overflow-clamp-source}")
+                e3_overflow_clamp_dependency "${native_dependency}" ||
+                  die "E3 clamp dependency was not the authenticated overlay"
+                ;;
               "${m3t_verified_source}/"*)
                 # verify_toolchain above authenticates this external pinned tree.
                 printf '%s/.deps/eshkol-src/%s\n' "${PROJECT_ROOT}" \
@@ -2336,6 +2374,17 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     "${evidence_dir}.tmp.$$/e3_d2_dataset.esk"
   cp "${e3_generated_source_root}/e3_d2_source_provenance.json" \
     "${evidence_dir}.tmp.$$/e3_d2_source_provenance.json"
+  if [[ "${e3_overflow_mutant}" == clamp ]]; then
+    cp "${e3_overflow_clamp_source}" \
+      "${evidence_dir}.tmp.$$/e3_overflow_clamp_provider.c"
+    cp "${e3_overflow_generated_dir}/native/overlay-receipt.json" \
+      "${evidence_dir}.tmp.$$/e3_overflow_clamp_receipt.json"
+    for stream in overflow-clamp-generation.stdout overflow-clamp-generation.stderr \
+                  overflow-clamp-check.stdout overflow-clamp-check.stderr \
+                  overflow-clamp-postcheck.stdout overflow-clamp-postcheck.stderr; do
+      cp "${e1b_tmp}/${stream}" "${evidence_dir}.tmp.$$/"
+    done
+  fi
 fi
 if [[ -n "${package_native_source_closure}" ]]; then
   cp "${e1b_tmp}/native-source-closure.txt" \

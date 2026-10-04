@@ -1,12 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
-[[ $# -le 2 ]] || die "usage: $0 [ARTIFACT_DIR] [normal|sanitize]"
-verify_toolchain
-for command in ar cmp; do require_command "${command}"; done
+[[ $# -le 3 ]] || die "usage: $0 [ARTIFACT_DIR] [normal|sanitize] [normal|clamp]"
+[[ ! -v E3_OVERFLOW_MUTANT ]] || die "E3 clamp selector must use the exact builder argument"
 artifact="${1:-$(project_build_dir)/e3-overflow-test}"
 mode="${2:-normal}"
 case "${mode}" in normal|sanitize) ;; *) die "unknown E3 overflow mode: ${mode}" ;; esac
+variant="${3:-normal}"
+case "${variant}" in
+  normal) unset E3_OVERFLOW_MUTANT ;;
+  clamp)
+    [[ "${mode}" == normal ]] || die "E3 clamp cannot combine with sanitizer"
+    export E3_OVERFLOW_MUTANT=clamp ;;
+  *) die "unknown E3 overflow mutation: ${variant}" ;;
+esac
+verify_toolchain
+for command in ar cmp; do require_command "${command}"; done
 mkdir -p "$(dirname -- "${artifact}")"
 staging="$(mktemp -d "$(dirname -- "${artifact}")/.e3-overflow.XXXXXX")"
 source "${PROJECT_ROOT}/scripts/e3-mode-graph-stage-cleanup.sh"

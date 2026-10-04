@@ -28,7 +28,7 @@ run_mode() {
     timeout --foreground --signal=TERM --kill-after=5s 900s "$runner" "$@"
 }
 verify_toolchain
-for command in ar cmp nm python3 sha256sum timeout; do require_command "$command"; done
+for command in ar cmp nm python3 sha256sum stdbuf timeout; do require_command "$command"; done
 cc= cxx=
 resolve_provenance_compilers cc cxx "${CC:-$(lock_value supported_cc)}" \
   "${CXX:-$(lock_value supported_cxx)}"
@@ -42,6 +42,16 @@ cp "$(eshkol_build_dir)/eshkol-transformer-provenance.tsv" \
 run_checked toolchain.cc "$cc" --version
 run_checked toolchain.cxx "$cxx" --version
 run_checked toolchain.runner sha256sum "$runner"
+run_checked toolchain.stdbuf sha256sum "$(command -v stdbuf)"
+run_checked toolchain.timeout sha256sum "$(command -v timeout)"
+run_checked toolchain.stdbuf-preload stdbuf -o0 bash -c \
+  'printf "%s\n" "${LD_PRELOAD:-}"'
+[[ ! -s "$out/toolchain.stdbuf-preload.stderr" ]] || \
+  die "stdbuf preload discovery emitted diagnostics"
+preload="$(cat "$out/toolchain.stdbuf-preload.stdout")"
+[[ "$preload" == /* && -f "$preload" && ! -L "$preload" ]] || \
+  die "stdbuf preload library is not a regular absolute file"
+run_checked toolchain.stdbuf-library sha256sum "$preload"
 run_checked static env PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -v \
   tests.e3_private.test_overflow_tuple
 run_checked fixture env PYTHONDONTWRITEBYTECODE=1 python3 -B -m \
@@ -128,4 +138,72 @@ done
 cmp "$out/package-builds/normal/e3_overflow_package.o" \
     "$out/package-builds/repeat/e3_overflow_package.o"
 cmp "$out/normal/runtime" "$out/repeat/runtime"
+
+# The clamp is an isolated noninstalled package; the exact same ordinary E3
+# runtime object is relinked with that provider. No new Eshkol source is used.
+mkdir "$out/mutant" "$out/mutant.cache"
+cp "$out/normal/cxx-wrap" "$out/mutant/cxx-wrap"
+run_checked mutant.package bash "$PROJECT_ROOT/scripts/build-e3-overflow-test.sh" \
+  "$out/package-builds/mutant" normal clamp
+[[ -s "$out/package-builds/mutant/e3_overflow_package.o.evidence/e3_overflow_clamp_provider.c" && \
+   -s "$out/package-builds/mutant/e3_overflow_package.o.evidence/e3_overflow_clamp_receipt.json" ]] || \
+  die "mutant overlay provenance was not retained"
+run_checked mutant.archive ar rcsD \
+  "$out/mutant/libeshkol_transformer_e3_overflow_test.a" \
+  "$out/package-builds/mutant/e3_overflow_package.o" "$out/normal/arena.o"
+run_mode mutant.link mutant --no-stdlib -L "$out/mutant" \
+  --lib eshkol_transformer_e3_overflow_test "$out/normal/runtime.raw.o" \
+  -o "$out/mutant/runtime"
+for gradient in absent present; do
+  run_checked "mutant.$gradient.finite.run" env ESHKOL_ARENA_POISON=1 \
+    timeout --foreground --signal=TERM --kill-after=5s 120s \
+    "$out/mutant/runtime" finite "$out/fixture/finite.etcp" \
+    "$out/fixture/finite-overflow" "$gradient"
+  [[ ! -s "$out/mutant.$gradient.finite.run.stderr" ]] || \
+    die "mutant finite control emitted diagnostics"
+  cmp "$out/normal.$gradient.finite.run.stdout" \
+      "$out/mutant.$gradient.finite.run.stdout" || \
+    die "mutant changed finite control trace or published bytes"
+done
+
+# The fixture's expected rejection check prints a labeled failure and calls
+# native abort if the mutant publishes. Validate that stdbuf actually retains
+# an unflushed C stdout line before classifying any mutant exit.
+cat >"$out/mutant/unbuffered-control.c" <<'C'
+#include <stdio.h>
+#include <stdlib.h>
+int main(void) { fputs("E3-UNBUFFERED-CONTROL\n", stdout); abort(); }
+C
+run_checked mutant.unbuffered-compile "$cc" -std=c11 -Wall -Wextra -Werror \
+  "$out/mutant/unbuffered-control.c" -o "$out/mutant/unbuffered-control"
+ulimit -c 0
+run_abort() {
+  local label=$1
+  shift
+  run_checked "$label.capture" env PYTHONDONTWRITEBYTECODE=1 python3 -B \
+    -m tests.e3_private.capture_abort --prefix "$out/$label" -- "$@"
+  [[ "$(cat "$out/$label.exit")" == 134 ]] || \
+    die "$label did not exit through SIGABRT"
+}
+printf 'timeout: the monitored command dumped core\n' \
+  >"$out/mutant/expected-abort.stderr"
+run_abort mutant.unbuffered-control env LC_ALL=C \
+  timeout --foreground --signal=TERM --kill-after=5s 120s \
+  stdbuf -o0 -e0 "$out/mutant/unbuffered-control"
+printf 'E3-UNBUFFERED-CONTROL\n' >"$out/mutant/expected-control.stdout"
+cmp "$out/mutant/expected-control.stdout" "$out/mutant.unbuffered-control.stdout"
+cmp "$out/mutant/expected-abort.stderr" "$out/mutant.unbuffered-control.stderr"
+for gradient in absent present; do
+  run_abort "mutant.$gradient.overflow.run" env LC_ALL=C ESHKOL_ARENA_POISON=1 \
+    timeout --foreground --signal=TERM --kill-after=5s 120s \
+    stdbuf -o0 -e0 "$out/mutant/runtime" overflow \
+    "$out/fixture/overflow.etcp" "$out/fixture/finite-overflow" "$gradient"
+  cmp "$out/mutant/expected-abort.stderr" \
+      "$out/mutant.$gradient.overflow.run.stderr" || \
+    die "mutant runtime diagnostic differed from the pinned abort control"
+  run_checked "mutant.$gradient.overflow.trace" env PYTHONDONTWRITEBYTECODE=1 \
+    python3 -B -m tests.e3_private.parse_overflow_observation \
+    --stdout "$out/mutant.$gradient.overflow.run.stdout" \
+    --case overflow --gradient "$gradient" --mutant clamp
+done
 printf 'E3 overflow mechanical gate complete; manual IR/diagnostics review pending\n'

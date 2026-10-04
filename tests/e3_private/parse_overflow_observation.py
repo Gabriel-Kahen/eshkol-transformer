@@ -51,33 +51,39 @@ def _product(shape: tuple[int, ...]) -> int:
     return size
 
 
-def parse(raw: bytes, case: str, gradient: str) -> int:
+def parse(raw: bytes, case: str, gradient: str, *, mutant: str = "normal") -> int:
     if case not in LOSS or gradient not in {"absent", "present"}:
         raise ValueError("unknown overflow fixture case")
+    if mutant not in {"normal", "clamp"}:
+        raise ValueError("unknown overflow mutant")
     if not raw.endswith(b"\n") or len(raw) > 262144:
         raise ValueError("overflow observation is incomplete or oversized")
     try:
         lines = raw.decode("ascii").splitlines()
     except UnicodeDecodeError as error:
         raise ValueError("overflow observation is not ASCII") from error
-    calls = 1 if case == "finite" else 2
+    killed = mutant == "clamp" and case == "overflow"
+    calls = 1 if case == "finite" or killed else 2
     batch_tags = ["E3ROW", *(["E3ROLE"] * 21), "E3CE", "E3BATCH", "E3STATE"]
-    tags = batch_tags * calls + (["E3FINAL"] if case == "finite" else [])
-    tags += ["E3-FINITE-OVERFLOW-PASS gradient=" + gradient]
+    tags = batch_tags * calls + (["E3FINAL"] if case == "finite" or killed else [])
+    tags += (["E3-RETENTION-FAIL: overflow-stage12-error"] if killed else
+             ["E3-FINITE-OVERFLOW-PASS gradient=" + gradient])
     if len(lines) != len(tags):
         raise ValueError("overflow observation omitted or duplicated a record")
     for index, (line, tag) in enumerate(zip(lines, tags, strict=True)):
         fields = line.split("\t")
-        if tag.startswith("E3-FINITE-"):
+        if tag.startswith("E3-FINITE-") or tag.startswith("E3-RETENTION-FAIL:"):
             if line != tag:
                 raise ValueError("overflow runtime did not complete exactly")
             continue
         if fields[0] != tag:
             raise ValueError("overflow record order differs")
         if tag == "E3FINAL":
-            if len(fields) != 3 or _words(fields[1], 4) != [LOSS[case], ONE, PPL, ZERO] or \
+            expected_ppl = "7f7fffff" if killed else PPL
+            if len(fields) != 3 or _words(fields[1], 4) != \
+                    [LOSS[case], ONE, expected_ppl, ZERO] or \
                     _pair(fields[2]) != [1, 1]:
-                raise ValueError("finite publication differs")
+                raise ValueError("final publication differs")
             continue
         # Every fresh E3 acquire zeros its native batch counts. The retry is
         # the second record set in this process, but its native ordinal is 0.
@@ -117,9 +123,11 @@ def main() -> None:
     parser.add_argument("--stdout", required=True, type=Path)
     parser.add_argument("--case", required=True, choices=tuple(LOSS))
     parser.add_argument("--gradient", required=True, choices=("absent", "present"))
+    parser.add_argument("--mutant", choices=("normal", "clamp"), default="normal")
     arguments = parser.parse_args()
     print("verified_calls=" + str(parse(arguments.stdout.read_bytes(),
-                                       arguments.case, arguments.gradient)))
+                                       arguments.case, arguments.gradient,
+                                       mutant=arguments.mutant)))
 
 
 if __name__ == "__main__":
