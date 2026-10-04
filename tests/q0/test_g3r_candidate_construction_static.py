@@ -72,6 +72,44 @@ class CandidateConstructionStatic(unittest.TestCase):
             with self.assertRaises(ValueError):
                 load_allowlist(changed)
 
+    def test_candidate_and_ordinary_load_topology(self) -> None:
+        allowlist = load_allowlist(ROOT / "tests/g3r/candidate_depfile_allowlist.json")
+        p1 = "internal/p1/lib/transformer/module.esk"
+        accepted_i2 = set((ROOT / "native/i2_wave2_source_closure.txt").read_text().splitlines())
+        self.assertEqual(set(allowlist["eshkol_common"]), accepted_i2 - {p1})
+        self.assertEqual(set(allowlist["eshkol_candidate_extra"]), {
+            "tests/g3r/candidate_construction_test.esk",
+            "native/g3r_candidate_construction_root.esk",
+            "native/m3t_package_root.esk",
+            "native/m3t_transport_extension.esk",
+        })
+        self.assertEqual(allowlist["eshkol_off_extra"],
+                         ["tests/p1/i2_construction_test.esk"])
+        topology = {
+            "tests/g3r/candidate_construction_test.esk":
+                ['(load "g3r_candidate_construction_root.esk")'],
+            "tests/p1/i2_construction_test.esk": ['(load "i2_wave2_root.esk")'],
+            "native/g3r_candidate_construction_root.esk":
+                ['(load "m3t_package_root.esk")'],
+            "native/m3t_package_root.esk":
+                ['(load "i2_wave2_root.esk")',
+                 '(load "m3t_transport_extension.esk")'],
+            "native/i2_wave2_root.esk":
+                ['(load "t1_wave1_root.esk")',
+                 '(require transformer.checkpoint_internal)'],
+            "native/t1_wave1_root.esk":
+                ['(require e1b_error_consumer_private)',
+                 '(require x1_config_private)', '(require transformer.module)',
+                 '(require transformer.persistence_policy_internal)',
+                 '(load "eshkol_transformer/token_shard.esk")',
+                 '(load "transformer/tokenizer_internal.esk")'],
+        }
+        for relative, expected in topology.items():
+            with self.subTest(relative=relative):
+                actual = [line for line in (ROOT / relative).read_text().splitlines()
+                          if line.startswith("(load ") or line.startswith("(require ")]
+                self.assertEqual(actual, expected)
+
     def test_ordinary_sources_are_exactly_unchanged(self) -> None:
         self.assertEqual(digest(MODULE), ORIGINAL_MODULE_SHA)
         for relative, expected in UNCHANGED.items():

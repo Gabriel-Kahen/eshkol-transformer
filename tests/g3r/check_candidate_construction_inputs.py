@@ -9,7 +9,7 @@ import stat
 import sys
 
 
-ALLOWLIST_SHA256 = "02106f31375643c1744f7f4a8feb1aa96d992ef245eef9e9c02d367a2877ecd7"
+ALLOWLIST_SHA256 = "24a4102909aa7543017fb4f3c9e7dc2b25127830ef629803efe2736ff373d8a4"
 
 
 def require_regular(path: Path) -> None:

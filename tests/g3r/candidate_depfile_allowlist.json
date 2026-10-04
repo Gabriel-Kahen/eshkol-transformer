@@ -1,7 +1,9 @@
 {
   "eshkol_candidate_extra": [
-    "tests/g3r/candidate_construction_test.esk",
-    "native/g3r_candidate_construction_root.esk"
+    "native/g3r_candidate_construction_root.esk",
+    "native/m3t_package_root.esk",
+    "native/m3t_transport_extension.esk",
+    "tests/g3r/candidate_construction_test.esk"
   ],
   "eshkol_common": [
     "internal/c1/lib/c1_sha256.esk",
@@ -13,8 +15,6 @@
     "lib/transformer/error_internal.esk",
     "native/e1b_error_consumer_private.esk",
     "native/i2_wave2_root.esk",
-    "native/m3t_package_root.esk",
-    "native/m3t_transport_extension.esk",
     "native/t1_wave1_root.esk",
     "native/x1_config_private.esk",
     "src/eshkol_transformer/token_shard.esk"
