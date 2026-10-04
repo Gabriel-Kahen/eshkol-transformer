@@ -1623,9 +1623,19 @@ the derivative extraction seal is
 (`588406ea1f51c0739afec8b16d876824fe80ed04910b15bfb78e3ba0d706bede`).
 The sanitizer lane instrumented native sources; generated Eshkol ASan coverage
 is not established. This source union retains main's later f32, O2 and P1
-native changes, so its own compiled gate, hosted checks and public acceptance
-remain pending. It does not implement a G3-R pair loader, live replay or
-resumed continuation.
+native changes. Its exact clean `62554988`/tree `52e231fb` current-main
+supported fe9/f31 gate completed with launcher, Docker, pre/post pins and
+normal/repeat/sanitizer gate exits zero; each mode reported 49 private receipt
+and 24 stage checks, and the native predecessor reported 563. Root verified
+the 486-file run seal at
+`g3r-c2-receipt-main625-fe9-f31-20261004-prepared-b/SHA256SUMS-RUN`
+(`2efbc98808a3efddcfb40c850924d5a392187f9f8d0f0af4c8352dab804a17b6`).
+Independent review accepted the narrow compiled private receipt path after
+matching all three full IR streams and the 17-body index to the reviewed
+isolated run; all-path ownership is not proven.
+Hosted integration checks, merge and public acceptance remain pending. This
+private receipt does not implement a G3-R pair loader, live replay or resumed
+continuation.
 
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
