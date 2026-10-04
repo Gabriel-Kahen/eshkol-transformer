@@ -92,10 +92,21 @@ This conservatively blocks O2 admission while any such plan is live, including
 an unrelated plan. It does not change the accepted destroy-readiness API or
 feature-off f32 object bytes.
 
-On local Clang 22, the focused normal, repeat and ASan/UBSan/LSan modes each
-pass 104 checks, including a real 320-byte backing allocation, decoy pointer,
-264-byte O2 error span, malformed public metadata and backing record, retry,
-plans, retained controls and freed payload. The existing f32 readiness gate
-still passes 451 checks per mode. The production feature-on symbol delta is
-only `et_f32_tensor_private_owned_span_overlap_v1`. Independent source review
-and the pinned supported compiler gate remain pending.
+The exact independently reviewed source/tests head `af987fe2` (tree
+`47d41967`) passed the pinned fe9/f31 Clang 21 gate on 2026-10-04. Normal,
+repeat and ASan/UBSan/LSan each report 104 checks, including a real 320-byte
+backing allocation, decoy pointer, 264-byte O2 error span, malformed public
+metadata and backing record, retry, plans, retained controls and freed payload.
+The existing f32 readiness gate passes 451 checks per mode. Positive compiler
+and runtime stderr are empty, mode outputs are identical, and default-off
+objects match the accepted baseline. Relative to that readiness baseline, the
+only added production feature-on symbol is
+`et_f32_tensor_private_owned_span_overlap_v1`; public/off header consumers
+reject the private symbol with the exact expected diagnostic. Independent
+review accepted the complete 164-file run seal
+`g3r-f32-owned-span-af987fe2-fe9-f31-20261003-prepared-b/SHA256SUMS-RUN`
+(SHA256 `4ef814b7e0268b8a1c2606e4e07da3e641856841208e49546173e55c7b2635e4`)
+and raw dependency, symbol and pre/post pin evidence. All eleven native gate
+inputs are byte-identical in the current-main integration. Hosted integration
+and the dependent O2 retirement proof remain pending; this gate proves no
+Eshkol candidate cleanup or full replay.

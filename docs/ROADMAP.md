@@ -1671,11 +1671,20 @@ read-only provenance-backed span query needs independent contract and source
 review before O2 may write a caller error record while preserving owned state.
 The caller must independently supply a null error pointer or an aligned,
 writable 264-byte record; the query proves only known-owned-span disjointness.
-A guarded f32 producer candidate now uses creation-time tensor backing records
-and fails closed for live plan-owned arrays without immutable extents. Its local
-Clang 22 normal/repeat/sanitizer gate and existing readiness regression pass;
-independent review and the pinned supported gate remain pending. O2 retirement
-is still unaccepted.
+The independently reviewed private f32 span query uses creation-time tensor
+backing records and fails closed for live plan-owned arrays without immutable
+extents. Exact source/test head `af987fe2` (tree `47d41967`) passed the pinned
+fe9/f31 Clang 21 gate on 2026-10-04: normal, repeat and ASan/UBSan/LSan each
+reported 104 query checks and 451 readiness checks, with identical output and
+empty positive compile/runtime stderr. Feature-off objects match the accepted
+baseline; the only new feature-on symbol is the private owned-span query.
+Independent review accepted the full 164-file evidence seal
+`g3r-f32-owned-span-af987fe2-fe9-f31-20261003-prepared-b/SHA256SUMS-RUN`
+(SHA256 `4ef814b7e0268b8a1c2606e4e07da3e641856841208e49546173e55c7b2635e4`),
+including raw dependency closures, symbols, expected private-header negatives
+and pre/post pins. Current-main integration preserves all eleven gate input
+blobs and updates six predecessor checksum rows for the reviewed native source
+and private header. Hosted integration and O2 retirement remain pending.
 
 The proposed [G3-R P1/I2 sealed-graph retirement producer contract](g3/G3_R_P1_I2_SEALED_GRAPH_RETIREMENT_CONTRACT.md)
 pins the candidate-aware preseal M3T/I2/P1 handshake and a retained exact
