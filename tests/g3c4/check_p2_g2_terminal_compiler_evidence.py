@@ -8,6 +8,8 @@ import re
 import subprocess
 import sys
 
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
 from tests.shared.prepare_eshkol_asan_ir import real_directory, scan_pair, sha
 
 
@@ -20,7 +22,6 @@ NATIVE = ("composer_native", "kernel_fail_allocator", "i2_native_helpers",
           "g3s_sampling_provider", "a2_attention_provider", "a2_kv_cache",
           "t1_i64_shell", "m3_i64_integration", "m3_model")
 REPORT = re.compile(r"\b__asan_report_(?:load|store)\d+\b")
-ROOT = Path(__file__).resolve().parents[2]
 DEPENDENCIES = ROOT / "tests/g3c4/p2_g2_terminal_compiler_dependencies.json"
 
 

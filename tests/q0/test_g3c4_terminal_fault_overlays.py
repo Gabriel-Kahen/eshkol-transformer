@@ -4,6 +4,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -23,6 +24,21 @@ SPEC.loader.exec_module(OVERLAYS)
 
 
 class TerminalOverlayTests(unittest.TestCase):
+    def test_compiler_verifier_direct_invocation_is_cwd_independent(self) -> None:
+        environment = os.environ.copy()
+        environment.pop("PYTHONPATH", None)
+        with tempfile.TemporaryDirectory() as tmp:
+            result = subprocess.run(
+                [sys.executable, "-I", "-B",
+                 str(ROOT / "tests/g3c4/check_p2_g2_terminal_compiler_evidence.py")],
+                cwd=tmp, env=environment, capture_output=True, text=True,
+                check=False,
+            )
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "")
+        self.assertTrue(result.stderr.startswith("usage: "), result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
     def test_exact_sources_and_fault_sites(self) -> None:
         t1 = OVERLAYS.T1.read_bytes()
         composer = OVERLAYS.COMPOSER.read_bytes()
