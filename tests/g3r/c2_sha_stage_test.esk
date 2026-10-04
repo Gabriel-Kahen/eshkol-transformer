@@ -106,6 +106,68 @@
 (check "exact release is idempotent"
   (g3r-c2-sha-stage-release-internal! stage))
 
+(define unrelated (g3r-c2-sha-stage-internal valid-path policy))
+(define unrelated-sidecar (g3r-c2-sha-find-stage unrelated))
+(define unrelated-digest
+  (bytevector-copy (vector-ref unrelated-sidecar 2) 0 32))
+(define before-cut-stage-count (stage-count))
+(define before-cut-c2-counts (c2-load-stage-counts-internal))
+(define cut-shell #f)
+(define cut-digest #f)
+(define saved-after-factory-hook g3r-c2-sha-after-factory-hook)
+(set! g3r-c2-sha-after-factory-hook
+  (lambda (shell digest)
+    (set! cut-shell shell)
+    (set! cut-digest digest)
+    (c2-load-fail 'invalid-state 'checkpoint-load
+                  "injected after canonical stage publication" '())))
+(reject "post-factory cut preserves first error" 'invalid-state
+  (lambda () (g3r-c2-sha-stage-internal valid-path policy)))
+(set! g3r-c2-sha-after-factory-hook saved-after-factory-hook)
+(define after-cut-c2-counts (c2-load-stage-counts-internal))
+(check "post-factory cleanup owns only its exact C2 stage"
+  (and cut-shell cut-digest
+       (c2-checkpoint-load-staging-dead-internal? cut-shell)
+       (zero-digest? cut-digest)
+       (= before-cut-stage-count (stage-count))
+       (= (vector-ref before-cut-c2-counts 0)
+          (vector-ref after-cut-c2-counts 0))
+       (= (+ 1 (vector-ref before-cut-c2-counts 2))
+          (vector-ref after-cut-c2-counts 2))
+       (eq? (vector-ref unrelated-sidecar 1) 'live)
+       (same-bytes? unrelated-digest (vector-ref unrelated-sidecar 2))
+       (native-flat?)))
+(define borrowed-cut-shell #f)
+(define borrowed-cut-digest #f)
+(define borrow-caught #f)
+(set! g3r-c2-sha-after-factory-hook
+  (lambda (shell digest)
+    (set! borrowed-cut-shell shell)
+    (set! borrowed-cut-digest digest)
+    #t))
+(borrow g3r-c2-sha-stages
+  (guard (raised (#t (set! borrow-caught raised)))
+    (g3r-c2-sha-stage-internal valid-path policy)))
+(set! g3r-c2-sha-after-factory-hook saved-after-factory-hook)
+(define after-borrow-c2-counts (c2-load-stage-counts-internal))
+(check "borrow conflict after factory retires exact stage"
+  (and borrow-caught borrowed-cut-shell borrowed-cut-digest
+       (c2-checkpoint-load-staging-dead-internal? borrowed-cut-shell)
+       (zero-digest? borrowed-cut-digest)
+       (= before-cut-stage-count (stage-count))
+       (= (vector-ref before-cut-c2-counts 0)
+          (vector-ref after-borrow-c2-counts 0))
+       (= (+ 2 (vector-ref before-cut-c2-counts 2))
+          (vector-ref after-borrow-c2-counts 2))
+       (eq? (vector-ref unrelated-sidecar 1) 'live)
+       (same-bytes? unrelated-digest (vector-ref unrelated-sidecar 2))
+       (native-flat?)))
+(define retry-stage (g3r-c2-sha-stage-internal valid-path policy))
+(check "post-factory failure can retry and release"
+  (and (g3r-c2-sha-stage-release-internal! retry-stage)
+       (g3r-c2-sha-stage-release-internal! unrelated)
+       (native-flat?)))
+
 (define before-failure (stage-count))
 (g3r-c2-test-reset)
 (g3r-c2-test-fail-after-validate 1)

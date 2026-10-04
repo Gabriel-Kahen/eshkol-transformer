@@ -1552,21 +1552,26 @@ result while retaining the public 192-byte result. Its focused host gate passes
 test matches with the feature enabled and disabled. The Eshkol backing-extent
 admission is source-staged as a feature-local private C2 root: fresh anchored
 bytevectors feed the 224-byte native stage, and its copied SHA is registered
-only with the exact staging shell. Host topology, closed-feature and Q0 checks
-pass. Its exact private runner now defines fresh normal, repeat and
-ASan/UBSan/LSan source, object and runtime evidence; that compiled gate has
-not run. A separate feature-local owning C2/SHA receipt candidate composes
+only with the exact staging shell. The separately reviewed A-f stage source
+passed its supported fe9/f31 compiled gate: 24 Eshkol checks in each of
+normal, repeat and sanitizer modes, plus 563 native predecessor checks. This
+branch carries A-f's factory-return ownership and fail-stop repair into the
+receipt root while preserving the receipt-only consumed-sidecar finalizer;
+the combined source still awaits independent review and its own compiled
+gate. A separate feature-local owning C2/SHA receipt candidate composes
 real K2 capability admission with that same stage and canonical C2
 reconstruction. It preallocates receipt and rollback authority, enrolls the
 returned owner before any fallible post-reconstruction step, and tombstones
 the stage SHA sidecar. Its focused source, host topology, and compiled
 three-mode runner are candidate work only; no supported Eshkol receipt gate
-has run. The receipt identity helper now uses a lambda-valued mutable binding
+has run. The runner now derives its source closure from a separate object-mode
+compile of the same receipt inputs used for executable IR/runtime evidence.
+The receipt identity helper uses a lambda-valued mutable binding
 for its existing preallocation-failure injection, addressing the same
 procedure-binding limitation observed in the supported stage compile.
-Its helper body and raised-false rollback test are unchanged. Integration of
-the reviewed stage runner and allocator repairs remains pending the supported
-stage gate; the old prepared receipt launcher must not run. The G3-T
+Its helper body and raised-false rollback test are unchanged. A fresh pinned
+receipt launcher is required after independent review; the old prepared
+receipt launcher must not run. The G3-T
 predicate, pair loader, live replay, save writer and
 resumed continuation remain separate gates.
 

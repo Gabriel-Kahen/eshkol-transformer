@@ -22,7 +22,7 @@ PINNED = {
     "native/g3r_c2_sha_stage_root.esk":
         "4678059d58eafbd9a0358dd1f9fb97704a6e2c3a07ecfd53d95b6889aaae35c6",
     "scripts/test-g3r-c2-sha-stage.sh":
-        "e2e64a43a7e993a77d33e06e2772695649b88ad806c4f3b5fa482b271548687c",
+        "dcffd1648f2a8eaebb9392e4aee7033f62eccef7c9f993e4765a1b619f277387",
 }
 LOADS = [
     "d2_wave2_root.esk", "c2_d2_cursor_pair_extension.esk",
@@ -86,11 +86,24 @@ def verify_runner(source: str) -> None:
         "UBSAN_OPTIONS=halt_on_error=1",
         "LSAN_OPTIONS=exitcode=23:report_objects=1",
         "--dump-ir", "--emit-depfile", "receipt-test.ll", "receipt-test.o",
+        "--emit-object", "stage-dep.o", "object-build.stdout",
+        "object-build.stderr", "dep-object-undefined-symbols.txt",
+        "dep-object-defined-symbols.txt", "ir-object-build.stdout",
+        "ir-object-build.stderr", "unexpected LLVM IR object compiler diagnostics",
         "native-undefined-symbols.txt", "eshkol-object-undefined-symbols.txt",
         "linked-symbols.txt", "source-closure.txt",
     )
     if any(item not in source for item in required):
         raise ValueError("compiled three-mode receipt gate is incomplete")
+    if (source.count("local -a eshkol_inputs=(") != 1
+            or source.count('"${eshkol_inputs[@]}"') != 2
+            or source.count('--emit-depfile "$directory/stage.d"') != 1
+            or not (source.index("--dump-ir") < source.index("--emit-object")
+                    < source.index('--emit-depfile "$directory/stage.d"'))
+            or 'test ! -s "$directory/object-build.stderr"' not in source
+            or 'test -s "$directory/stage-dep.o"' not in source
+            or 'if diagnostics != expected:' not in source):
+        raise ValueError("receipt object depfile must use the executable inputs")
 
 
 def verify_fault_bindings(source: str) -> None:
@@ -138,6 +151,14 @@ class C2ShaReceiptStaticTest(unittest.TestCase):
                 "(c2-load-exact-live-owner? owner)\n              (vector-set! owner-cell 0 owner)"))
         with self.assertRaisesRegex(ValueError, "three-mode"):
             verify_runner(runner.replace("build_mode sanitize", "build_mode normal"))
+        with self.assertRaisesRegex(ValueError, "object depfile"):
+            verify_runner(runner.replace('"${eshkol_inputs[@]}"',
+                                         '"${eshkol_inputs[@]:1}"', 1))
+        with self.assertRaisesRegex(ValueError, "three-mode"):
+            verify_runner(runner.replace('--emit-object \\\n', '', 1))
+        with self.assertRaisesRegex(ValueError, "object depfile"):
+            verify_runner(runner.replace('if diagnostics != expected:',
+                                         'if False:', 1))
         with self.assertRaisesRegex(ValueError, "mutable binding"):
             verify_fault_bindings(source.replace(
                 "(define g3r-c2-receipt-identity\n  (lambda ()",

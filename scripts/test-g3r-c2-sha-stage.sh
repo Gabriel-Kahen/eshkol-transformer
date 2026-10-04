@@ -25,7 +25,7 @@ cp "$(eshkol_build_dir)/eshkol-transformer-provenance.tsv" \
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v \
   tests.g3r.test_c2_sha_stage_static tests.q0.test_python_isolation \
   >"$out/static.stdout" 2>"$out/static.stderr"
-/usr/bin/bash "$PROJECT_ROOT/scripts/test-g3r-c2-stage-sha.sh" \
+/usr/bin/bash "$PROJECT_ROOT/scripts/test-g3r-c2-stage-sha.sh" "$cc" \
   >"$out/native-predecessor.stdout" 2>"$out/native-predecessor.stderr"
 rg -x 'G3R C2 stage SHA PASS: 563 checks' \
   "$out/native-predecessor.stdout" >/dev/null
@@ -51,6 +51,16 @@ test_flags=(-DET_C2_CHECKPOINT_LOAD_TESTING -DET_C2_CHECKPOINT_CORE_TESTING
 build_mode() {
   local mode="$1" directory="$out/$1" name cxx_quoted
   local -a flags=(-O2) runtime=(env)
+  local -a eshkol_inputs=(
+    -I "$PROJECT_ROOT/internal/p1/lib"
+    -I "$PROJECT_ROOT/internal/c1/lib"
+    -I "$PROJECT_ROOT/internal/t2/lib"
+    -I "$PROJECT_ROOT/internal/t1/lib"
+    -I "$PROJECT_ROOT/internal/d2/lib"
+    -I "$PROJECT_ROOT/src" -I "$PROJECT_ROOT/lib"
+    -I "$PROJECT_ROOT/native" -L "$directory"
+    --lib g3r_c2_sha_stage
+    "$PROJECT_ROOT/tests/g3r/c2_sha_stage_test.esk")
   local sanitizer_link=
   if [[ "$mode" == sanitize ]]; then
     flags=(-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer)
@@ -129,23 +139,50 @@ WRAPPER
       ESHKOL_CXX_COMPILER="$directory/cxx-wrap" \
       timeout --foreground --signal=TERM --kill-after=5s 900s "$runner" \
         --strict-types --optimize 0 --no-stdlib --dump-ir \
-        --emit-depfile "$directory/stage.d" \
-        -I "$PROJECT_ROOT/internal/p1/lib" \
-        -I "$PROJECT_ROOT/internal/c1/lib" \
-        -I "$PROJECT_ROOT/internal/t2/lib" \
-        -I "$PROJECT_ROOT/internal/t1/lib" \
-        -I "$PROJECT_ROOT/internal/d2/lib" \
-        -I "$PROJECT_ROOT/src" -I "$PROJECT_ROOT/lib" \
-        -I "$PROJECT_ROOT/native" -L "$directory" \
-        --lib g3r_c2_sha_stage \
-        "$PROJECT_ROOT/tests/g3r/c2_sha_stage_test.esk" \
+        "${eshkol_inputs[@]}" \
         -o "$directory/stage-test" \
         >"$directory/build.stdout" 2>"$directory/build.stderr")
   test ! -s "$directory/build.stderr"
   test -s "$directory/stage-test.ll"
+  test -s "$directory/stage-test"
+
+  # This pinned compiler emits depfiles for object/shared-library mode, not
+  # executable-link mode. Compile the exact same private root a second time.
+  (cd "$directory" &&
+    env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
+      XDG_CACHE_HOME="$directory/cache" ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
+      ESHKOL_CXX_COMPILER="$directory/cxx-wrap" \
+      timeout --foreground --signal=TERM --kill-after=5s 900s "$runner" \
+        --strict-types --optimize 0 --no-stdlib --emit-object \
+        --emit-depfile "$directory/stage.d" \
+        "${eshkol_inputs[@]}" \
+        -o "$directory/stage-dep.o" \
+        >"$directory/object-build.stdout" \
+        2>"$directory/object-build.stderr")
+  test ! -s "$directory/object-build.stderr"
   test -s "$directory/stage.d"
+  test -s "$directory/stage-dep.o"
+  nm -u --format=posix "$directory/stage-dep.o" \
+    >"$directory/dep-object-undefined-symbols.txt"
+  nm -g --defined-only --format=posix "$directory/stage-dep.o" \
+    >"$directory/dep-object-defined-symbols.txt"
   "$cc" "${flags[@]}" -c -x ir "$directory/stage-test.ll" \
-    -o "$directory/stage-test.o"
+    -o "$directory/stage-test.o" \
+    >"$directory/ir-object-build.stdout" \
+    2>"$directory/ir-object-build.stderr"
+  test ! -s "$directory/ir-object-build.stdout"
+  python3 - "$directory/ir-object-build.stderr" <<'PY'
+from pathlib import Path
+import sys
+
+warning = ("warning: <unknown>:0:0: loop not vectorized: the optimizer was "
+           "unable to perform the requested transformation; the transformation "
+           "might be disabled or specified as part of an unsupported "
+           "transformation ordering [-Wpass-failed=transform-warning]\n")
+expected = warning * 4 + "4 warnings generated.\n"
+if Path(sys.argv[1]).read_text() != expected:
+    raise SystemExit("unexpected LLVM IR object compiler diagnostics")
+PY
   nm -u --format=posix "$directory/stage-test.o" \
     >"$directory/eshkol-object-undefined-symbols.txt"
   nm -g --defined-only --format=posix "$directory/stage-test.o" \
@@ -170,7 +207,7 @@ WRAPPER
     "$out/fixtures/truncated.c2" \
     >"$directory/run.stdout" 2>"$directory/run.stderr"
   test ! -s "$directory/run.stderr"
-  rg -x 'G3-R C2 SHA Eshkol stage PASS: [1-9][0-9]* checks' \
+  rg -x 'G3-R C2 SHA Eshkol stage PASS: 24 checks' \
     "$directory/run.stdout" >/dev/null
 }
 
