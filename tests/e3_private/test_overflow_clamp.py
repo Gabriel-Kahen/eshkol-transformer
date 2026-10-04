@@ -182,6 +182,34 @@ e3_overflow_clamp_dependency "$3"
             with self.assertRaisesRegex(ValueError, "without a SIGABRT"):
                 capture(forged, [sys.executable, "-c", "raise SystemExit(134)"])
 
+    def test_abort_wrapper_streams_must_both_be_empty(self) -> None:
+        policy = ROOT / "scripts/e3-overflow-capture-policy.sh"
+        runner = 'source "$1"; e3_overflow_capture_streams_empty "$2"'
+        with tempfile.TemporaryDirectory(prefix="e3-clamp-capture-policy-") as base:
+            prefix = Path(base) / "capture"
+            stdout = Path(f"{prefix}.stdout")
+            stderr = Path(f"{prefix}.stderr")
+            stdout.write_bytes(b"")
+            stderr.write_bytes(b"")
+
+            def admitted() -> bool:
+                result = subprocess.run(["bash", "-c", runner, "bash", str(policy),
+                                         str(prefix)], capture_output=True, check=False)
+                self.assertEqual(result.stdout, b"")
+                self.assertEqual(result.stderr, b"")
+                return result.returncode == 0
+
+            self.assertTrue(admitted())
+            stdout.write_bytes(b"unexpected wrapper stdout\n")
+            self.assertFalse(admitted())
+            stdout.write_bytes(b"")
+            stderr.write_bytes(b"unexpected wrapper stderr\n")
+            self.assertFalse(admitted())
+            stderr.unlink()
+            self.assertFalse(admitted())
+            stderr.symlink_to(stdout)
+            self.assertFalse(admitted())
+
 
 if __name__ == "__main__":
     unittest.main()

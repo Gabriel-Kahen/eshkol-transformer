@@ -177,11 +177,14 @@ C
 run_checked mutant.unbuffered-compile "$cc" -std=c11 -Wall -Wextra -Werror \
   "$out/mutant/unbuffered-control.c" -o "$out/mutant/unbuffered-control"
 ulimit -c 0
+source "$PROJECT_ROOT/scripts/e3-overflow-capture-policy.sh"
 run_abort() {
   local label=$1
   shift
   run_checked "$label.capture" env PYTHONDONTWRITEBYTECODE=1 python3 -B \
     -m tests.e3_private.capture_abort --prefix "$out/$label" -- "$@"
+  e3_overflow_capture_streams_empty "$out/$label.capture" || \
+    die "$label SIGABRT capture wrapper emitted an unclassified stream"
   [[ "$(cat "$out/$label.exit")" == 134 ]] || \
     die "$label did not exit through SIGABRT"
 }
