@@ -1605,8 +1605,37 @@ Independent evidence review accepted the 23-file seal
 `g3r-c2-stage-sha-84113-fe9-f31-20261003-prepared-b/SHA256SUMS-RUN`
 (SHA-256 `c8ea09325ed743655053f7aa329660d5d20b85e51dc3d26d3482adda5f222124`).
 PR #190 merged this native leaf as `9149` after 23 exact-head hosted checks.
-This is native-only: Eshkol backing-extent admission and the owning SHA receipt
-remain separate gates.
+The separately accepted private Eshkol stage and owning SHA receipt sources are
+now composed onto this main-line native leaf. The stage uses the same guarded
+native SHA result; the receipt binds the returned stage and reconstructed owner
+in preinstalled lexical cleanup guards, records the SHA from the authoritative
+second image, and tombstones the consumed stage sidecar. The isolated receipt
+source `188fcc73` passed a supported fe9/f31 normal, repeat and sanitizer
+runtime with 49 checks per mode; its native predecessor passed 563 checks and
+the Eshkol stage passed 24 per mode. The original receipt D launcher failed
+only at IR extraction, and a separately sealed postprocess extraction and
+independent full-IR review accepted the retained publication intervals. The
+original 455-file run seal is
+`g3r-c2-receipt-188fcc7-fe9-f31-20261004-prepared-d/SHA256SUMS-RUN`
+(`688cb55044de50421a554580e14b33cbf8e68e004d33558611be1d4331e0e9b6`);
+the derivative extraction seal is
+`g3r-c2-receipt-188fcc7-ir-postprocess-20261004-prepared-a/SHA256SUMS-RUN`
+(`588406ea1f51c0739afec8b16d876824fe80ed04910b15bfb78e3ba0d706bede`).
+The sanitizer lane instrumented native sources; generated Eshkol ASan coverage
+is not established. This source union retains main's later f32, O2 and P1
+native changes. Its exact clean `62554988`/tree `52e231fb` current-main
+supported fe9/f31 gate completed with launcher, Docker, pre/post pins and
+normal/repeat/sanitizer gate exits zero; each mode reported 49 private receipt
+and 24 stage checks, and the native predecessor reported 563. Root verified
+the 486-file run seal at
+`g3r-c2-receipt-main625-fe9-f31-20261004-prepared-b/SHA256SUMS-RUN`
+(`2efbc98808a3efddcfb40c850924d5a392187f9f8d0f0af4c8352dab804a17b6`).
+Independent review accepted the narrow compiled private receipt path after
+matching all three full IR streams and the 17-body index to the reviewed
+isolated run; all-path ownership is not proven.
+Hosted integration checks, merge and public acceptance remain pending. This
+private receipt does not implement a G3-R pair loader, live replay or resumed
+continuation.
 
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry

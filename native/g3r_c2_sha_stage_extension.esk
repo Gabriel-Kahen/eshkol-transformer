@@ -1,0 +1,266 @@
+;;; Private G3-R C2 SHA staging prerequisite. Compose only in the feature-local
+;;; root with ET_G3R_C2_STAGE_SHA_PRIVATE on the native LOAD bridge. No receipt,
+;;; reconstruction, public LOAD, or candidate authority is published here.
+
+(extern i64 g3r-c2-native-stage-with-sha
+        ptr i64 i64 i64 i64 i64 ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr
+        :real et_c2_private_checkpoint_load_stage_with_sha_v1)
+(extern void g3r-c2-sha-fail-stop i64 :real _Exit)
+
+(define g3r-c2-sha-stage-result-bytes 224)
+(define g3r-c2-sha-stages '())
+(define g3r-c2-sha-allocate-bytevector-internal
+  (lambda (length) (make-bytevector length 0)))
+;;; Private compiled fault cut; production uses the inert binding.
+(define g3r-c2-sha-after-factory-hook (lambda (shell digest) #t))
+
+(define (g3r-c2-sha-find-stage shell)
+  (let loop ((remaining g3r-c2-sha-stages))
+    (cond ((null? remaining) #f)
+          ((eq? shell (vector-ref (car remaining) 0)) (car remaining))
+          (else (loop (cdr remaining))))))
+
+(define (g3r-c2-sha-zero! digest)
+  (let loop ((index 0))
+    (if (< index (bytevector-length digest))
+        (begin (bytevector-u8-set! digest index 0)
+               (loop (+ index 1)))))
+  #t)
+
+(define (g3r-c2-sha-zero-tail! result)
+  (let loop ((index 192))
+    (if (< index 224)
+        (begin (bytevector-u8-set! result index 0)
+               (loop (+ index 1)))))
+  #t)
+
+(define (g3r-c2-sha-exact-bytes? bytes length)
+  (and (bytevector? bytes) (= (bytevector-length bytes) length)))
+
+(define (g3r-c2-sha-disjoint? buffers)
+  (let outer ((remaining buffers))
+    (if (null? remaining) #t
+        (and
+          (let inner ((later (cdr remaining)))
+            (if (null? later) #t
+                (and (not (eq? (car remaining) (car later)))
+                     (inner (cdr later)))))
+          (outer (cdr remaining))))))
+
+(define g3r-c2-sha-stage-allocations
+  (lambda (measure)
+    (vector
+      (g3r-c2-sha-allocate-bytevector-internal (c2-load-u64 measure 16))
+      (g3r-c2-sha-allocate-bytevector-internal 93)
+      (g3r-c2-sha-allocate-bytevector-internal (c2-load-u64 measure 24))
+      (g3r-c2-sha-allocate-bytevector-internal (c2-load-u64 measure 32))
+      (g3r-c2-sha-allocate-bytevector-internal (c2-load-u64 measure 40))
+      (g3r-c2-sha-allocate-bytevector-internal (c2-load-u64 measure 48))
+      (g3r-c2-sha-allocate-bytevector-internal (c2-load-u64 measure 56))
+      (g3r-c2-sha-allocate-bytevector-internal (c2-load-u64 measure 64))
+      (g3r-c2-sha-allocate-bytevector-internal g3r-c2-sha-stage-result-bytes))))
+
+(define (g3r-c2-sha-backing-valid? path-bytes measure allocations)
+  (and (g3r-c2-sha-exact-bytes? measure c2-load-result-bytes)
+       (c2-load-path-bytes-valid? path-bytes)
+       (vector? allocations) (= (vector-length allocations) 9)
+       (let ((lengths
+               (vector (c2-load-u64 measure 16) 93
+                       (c2-load-u64 measure 24)
+                       (c2-load-u64 measure 32)
+                       (c2-load-u64 measure 40)
+                       (c2-load-u64 measure 48)
+                       (c2-load-u64 measure 56)
+                       (c2-load-u64 measure 64)
+                       g3r-c2-sha-stage-result-bytes)))
+         (let loop ((index 0))
+           (if (= index 9) #t
+               (and (g3r-c2-sha-exact-bytes?
+                      (vector-ref allocations index)
+                      (vector-ref lengths index))
+                    (loop (+ index 1))))))
+       (g3r-c2-sha-disjoint?
+         (cons path-bytes
+               (cons measure
+                     (let loop ((index 8) (result '()))
+                       (if (< index 0) result
+                           (loop (- index 1)
+                                 (cons (vector-ref allocations index)
+                                       result)))))))))
+
+(define (g3r-c2-sha-stage-internal path policy)
+  (let* ((operation 'checkpoint-load)
+         (limits (c2-policy-limits-internal operation policy)))
+    (if (not (c2-load-path-structural-valid? path))
+        (c2-load-fail 'invalid-argument operation
+                      "checkpoint path is invalid" '()))
+    (let* ((measure-allocations
+             (c2-load-managed-call
+               'measure-allocation
+               (lambda () (c2-load-measure-allocations path))))
+           (path-bytes (vector-ref measure-allocations 0))
+           (measure (vector-ref measure-allocations 1))
+           (profile
+             (if (eq? (vector-ref limits 5) 'operational-target) 1 0)))
+      (if (or (not (g3r-c2-sha-exact-bytes? measure c2-load-result-bytes))
+              (not (c2-load-path-bytes-valid? path-bytes))
+              (not (g3r-c2-sha-disjoint? (list path-bytes measure))))
+          (c2-load-fail 'internal operation
+                        "checkpoint measure backing is invalid" '()))
+      (let ((measure-status
+              (c2-load-native-measure
+                path-bytes (vector-ref limits 0) (vector-ref limits 1)
+                (vector-ref limits 2) (vector-ref limits 3) profile measure)))
+        (if (not (= measure-status 0))
+            (c2-load-native-fail measure-status measure)))
+      (if (or (not (g3r-c2-sha-exact-bytes?
+                     measure c2-load-result-bytes))
+              (not (c2-load-path-bytes-valid? path-bytes))
+              (not (= (c2-load-u64 measure 0) c2-load-result-magic)))
+          (c2-load-fail 'internal operation
+                        "checkpoint measure projection was not published" '()))
+      (let* ((allocations
+               (c2-load-managed-call
+                 'stage-allocation
+                 (lambda () (g3r-c2-sha-stage-allocations measure)))))
+        (if (not (g3r-c2-sha-backing-valid?
+                   path-bytes measure allocations))
+            (c2-load-fail 'internal operation
+                          "checkpoint stage backing is invalid" '()))
+        (let* ((tokenizer (vector-ref allocations 0))
+               (config-fingerprint (vector-ref allocations 1))
+               (x1 (vector-ref allocations 2))
+               (current (vector-ref allocations 3))
+               (epoch (vector-ref allocations 4))
+               (model (vector-ref allocations 5))
+               (optimizer-metadata (vector-ref allocations 6))
+               (optimizer-payload (vector-ref allocations 7))
+               (stage-result (vector-ref allocations 8))
+               (anchored
+                 (vector tokenizer config-fingerprint x1 current epoch model
+                         optimizer-metadata optimizer-payload stage-result))
+               (subpolicy
+                 (c2-policy-c1-subpolicy-internal operation policy))
+               (sidecar (vector #f 'pending #f))
+               (next (cons sidecar g3r-c2-sha-stages))
+               (stage-status
+                 (begin
+                   (if (not (g3r-c2-sha-backing-valid?
+                              path-bytes measure anchored))
+                       (c2-load-fail 'internal operation
+                                     "checkpoint stage backing changed" '()))
+                   (g3r-c2-native-stage-with-sha
+                     path-bytes (vector-ref limits 0) (vector-ref limits 1)
+                     (vector-ref limits 2) (vector-ref limits 3) profile
+                     measure tokenizer config-fingerprint x1 current epoch model
+                     optimizer-metadata optimizer-payload stage-result))))
+          (if (not (= stage-status 0))
+              (c2-load-native-fail stage-status stage-result))
+          (if (or (not (g3r-c2-sha-backing-valid?
+                         path-bytes measure anchored))
+                  (not (= (c2-load-u64 stage-result 0)
+                          c2-load-result-magic))
+                  (not (= (bytevector-length tokenizer)
+                          (c2-load-u64 stage-result 16)))
+                  (not (= (bytevector-length config-fingerprint) 93))
+                  (not (= (bytevector-length x1)
+                          (c2-load-u64 stage-result 24)))
+                  (not (= (bytevector-length current)
+                          (c2-load-u64 stage-result 32)))
+                  (not (= (bytevector-length epoch)
+                          (c2-load-u64 stage-result 40)))
+                  (not (= (bytevector-length model)
+                          (c2-load-u64 stage-result 48)))
+                  (not (= (bytevector-length optimizer-metadata)
+                          (c2-load-u64 stage-result 56)))
+                  (not (= (bytevector-length optimizer-payload)
+                          (c2-load-u64 stage-result 64))))
+              (c2-load-fail 'internal operation
+                            "authoritative SHA stage backing changed" '()))
+          ;; Copy the SHA before any C2 stage entry exists. This is the exact
+          ;; second-image digest, never a hash of the path or measurement.
+          (let ((digest
+                  (guard (caught
+                           (#t
+                             (g3r-c2-sha-zero-tail! stage-result)
+                             (c2-load-internal-after-validation
+                               'sha-copy caught)))
+                    (bytevector-copy stage-result 192 224))))
+            (g3r-c2-sha-zero-tail! stage-result)
+            (if (not (g3r-c2-sha-exact-bytes? digest 32))
+                (begin
+                  (if (bytevector? digest) (g3r-c2-sha-zero! digest))
+                  (c2-load-fail 'internal operation
+                                "checkpoint SHA copy backing is invalid" '())))
+            (vector-set! sidecar 2 digest)
+            ;; The canonical factory publishes C2 before returning. Install
+            ;; both handlers first, then bind its exact shell directly in a
+            ;; lexical slot. Any later checked write must either publish the
+            ;; matching SHA sidecar or retire that one C2 stage and scrub SHA.
+            (let ((shell #f) (failure #f))
+              (if (not (= (c2-runtime-reserve-exception-handlers 2) 0))
+                  (begin
+                    (g3r-c2-sha-zero! digest)
+                    (c2-load-fail 'internal operation
+                                  "checkpoint SHA handler reserve failed" '())))
+              (let ((published
+                      (guard (cleanup-defect
+                               (#t (g3r-c2-sha-fail-stop 134)))
+                        (guard (caught
+                                 (#t
+                                   (if shell
+                                       (c2-checkpoint-load-staging-release-internal!
+                                         shell))
+                                   (g3r-c2-sha-zero! digest)
+                                   (set! failure caught)
+                                   #f))
+                          (set! shell
+                            (c2-load-build-stage-entry
+                              optimizer-metadata optimizer-payload tokenizer
+                              config-fingerprint x1 current epoch model
+                              stage-result subpolicy))
+                          (g3r-c2-sha-after-factory-hook shell digest)
+                          (vector-set! sidecar 0 shell)
+                          (vector-set! sidecar 1 'live)
+                          (set! g3r-c2-sha-stages next)
+                          shell))))
+                (if published published
+                    (if shell (raise failure)
+                        (c2-load-internal-after-validation
+                          'staging failure)))))))))))
+
+(define (g3r-c2-sha-stage-release-internal! shell)
+  (let ((entry (g3r-c2-sha-find-stage shell)))
+    (if (not entry)
+        (c2-load-fail 'invalid-argument 'checkpoint-load
+                      "expected exact private SHA stage" '()))
+    (if (eq? (vector-ref entry 1) 'dead) #t
+        (begin
+          (if (not (and (eq? (vector-ref entry 1) 'live)
+                        (let ((c2-entry (c2-load-find-stage shell)))
+                          (and c2-entry (eq? (vector-ref c2-entry 2) 'live)))))
+              (c2-load-fail 'invalid-state 'checkpoint-load
+                            "private SHA stage is busy or consumed" '()))
+          (c2-checkpoint-load-staging-release-internal! shell)
+          (g3r-c2-sha-zero! (vector-ref entry 2))
+          (vector-set! entry 1 'dead)
+          #t))))
+
+;;; A reconstruction consumes the C2 stage but does not own this private SHA
+;;; sidecar. The receipt aggregate retires it after reconstruction succeeds or
+;;; fails. This transition admits only the exact registered, consumed shell.
+(define (g3r-c2-sha-stage-finalize-consumed-internal! shell)
+  (let ((entry (g3r-c2-sha-find-stage shell))
+        (c2-entry (c2-load-find-stage shell)))
+    (if (or (not entry) (not c2-entry))
+        (c2-load-fail 'invalid-argument 'checkpoint-load
+                      "expected exact private SHA stage" '()))
+    (if (eq? (vector-ref entry 1) 'dead) #t
+        (begin
+          (if (or (not (eq? (vector-ref entry 1) 'live))
+                  (not (eq? (vector-ref c2-entry 2) 'dead)))
+              (c2-load-fail 'invalid-state 'checkpoint-load
+                            "private SHA stage is not consumed" '()))
+          (g3r-c2-sha-zero! (vector-ref entry 2))
+          (vector-set! entry 1 'dead)
+          #t))))
