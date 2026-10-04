@@ -58,14 +58,16 @@ one-use admission **before** invoking
 `et_p1_private_candidate_construction_begin_v1`. No module/handle token may be
 created before that check. I2 arms and immediately calls P1 in the same trusted
 stack frame, with no caller, provider or user callback between those steps.
-Before native begin, a predeclared lexical attempt flag is set. Native begin
-clears the authentic context's prior result before any allocation and, on
-success, retains the exact new pointer in that context. The existing read-only
+Before native begin, a predeclared lexical attempt flag is set. The native
+implementation calls `require_context`, which resets the result field for the
+authentic private context. Successful begin stores the new ledger pointer in
+that field before returning status zero. The existing read-only
 `et_p1_private_result_ptr_v1` getter assigns it to a predeclared lexical
 identity slot, before any fallible rooted write. The cleanup guard reads the
 same context-held result for any error after native begin is attempted,
-including a fault between successful status and lexical assignment. A failed
-native begin leaves no allocated ledger and no context result. The getter must
+including a fault between successful status and lexical assignment. A nonzero
+native status leaves no newly enrolled construction and a null context result
+for this authentic context. The getter must
 remain total, allocation-free and free of
 Scheme errors for the private authentic context; emitted IR must prove the
 pointer return is packed without a runtime call or intervening fallible edge.
