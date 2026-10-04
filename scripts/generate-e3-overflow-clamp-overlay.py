@@ -60,7 +60,9 @@ def _paths(output: Path) -> tuple[Path, Path]:
             output.parent.name != "native" or \
             output.parent.parent.name != ".e3-overflow-generated" or \
             not output.is_absolute() or output.parent.parent.is_symlink() or \
-            output.parent.parent.resolve() != output.parent.parent:
+            output.parent.is_symlink() or \
+            output.parent.parent.resolve() != output.parent.parent or \
+            output.parent.resolve() != output.parent:
         raise ValueError("overlay must occupy the owned overflow native stage")
     receipt = output.parent / "overlay-receipt.json"
     return output, receipt

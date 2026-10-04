@@ -66,6 +66,12 @@ class ClampOverlayTests(unittest.TestCase):
             output.symlink_to(GEN.SOURCE)
             with self.assertRaises(ValueError):
                 GEN.run(output, check=True)
+            other_stage = Path(base) / "second/.e3-overflow-generated"
+            other_stage.mkdir(parents=True)
+            (other_stage / "native").symlink_to(stage / "native", target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, "owned overflow native stage"):
+                GEN.run(other_stage / "native/e3_evaluation_metrics_provider.c",
+                        check=True)
 
     def test_selector_and_exact_native_dependency(self) -> None:
         policy = ROOT / "scripts/e3-overflow-clamp-policy.sh"
