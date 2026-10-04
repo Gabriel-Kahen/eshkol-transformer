@@ -74,6 +74,10 @@ const et_f32_tensor *
 et_f32_parameter_canonical_owner_v1(const et_f32_parameter *parameter);
 int32_t et_f32_tensor_storage_owner_identical_v1(
     const et_f32_tensor *left, const et_f32_tensor *right);
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+int32_t et_f32_tensor_private_destroy_ready_v1(
+    const et_f32_tensor *candidate, et_f32_tensor_error *error);
+#endif
 int32_t et_f32_owned_tensor_clone_v1(const et_f32_tensor *source,
                                      et_f32_tensor **owned_clone,
                                      et_f32_tensor_error *error);
@@ -140,6 +144,15 @@ int32_t et_f32_gradient_reset_plan_release_v1(
     et_f32_gradient_reset_plan **plan, et_f32_tensor_error *error);
 
 #ifdef ET_F32_TENSOR_TESTING
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+const et_f32_tensor *et_f32_parameter_test_gradient_tensor_v1(
+    const et_f32_parameter *parameter);
+/* Test-only: 0 replaces value, 1 replaces gradient. */
+int32_t et_f32_parameter_test_replace_child_v1(
+    et_f32_parameter *parameter, uint32_t child, et_f32_tensor *replacement);
+size_t et_f32_tensor_test_destroy_record_count_v1(void);
+size_t et_f32_tensor_test_destroy_record_bytes_v1(void);
+#endif
 typedef struct et_f32_test_live_counts_v1 {
   size_t struct_size;
   size_t tensors;

@@ -1643,9 +1643,33 @@ moment tensors and its entry array, but current builder cleanup ignores tensor
 destroy errors and f32 has no read-only production destroy preflight. The
 contract requires registry-first identity, idle borrow/plan state and exact
 backing-allocation provenance before O2 can promise an allocation-free,
-fail-stop retirement tail. O2 pointer admission alone cannot prove the closed
-Eshkol ledger or 14 M3T/P1 associations. This is documentation only: the f32
-producer, O2 retire path, supported gate and candidate cleanup remain pending.
+fail-stop retirement tail. A feature-gated native f32 producer candidate now
+records creation/clone-time backing, checks destroy readiness without a
+borrow or authority change, and preflights every feature-on tensor/parameter
+free against that backing before the first destructive write. Its focused
+supported fe9/f31 Clang 21 normal, repeat and ASan/UBSan/LSan gate at
+`637ca102` passed 451 readiness checks per mode with identical output and
+empty compiler/runtime stderr. Existing feature-on storage and parameter
+suites passed 1,944 and 3,153 checks. Feature-off object bytes match the
+pinned baseline; the production feature-on symbol delta is only the private
+readiness entry point. Independent review accepted the 114-file seal
+`g3r-f32-destroy-ready-637ca102-fe9-f31-20261003-prepared-a/SHA256SUMS-RUN`
+(SHA256 `dc7888d8a92067d5d201dd0b7d375a5c36c27be8f1869751018139e142fb5c56`).
+The G3N, G3S, L3S, E3-METRICS and M3CG predecessor inventories pin the reviewed
+native blobs; the private extension retains measured feature-off object
+parity. Fresh whole-suite hosted CI remains the integration gate.
+O2 pointer admission alone cannot prove the closed Eshkol ledger or 14 M3T/P1
+associations. Hosted integration, the O2 retire path and candidate cleanup
+remain pending.
+
+The proposed [O2 error-span provenance prerequisite](g3/G3_R_O2_ERROR_SPAN_PROVENANCE_PREREQUISITE.md)
+records a concrete gap before native O2 retirement acceptance: the existing
+f32 storage-overlap query follows mutable tensor descriptors and can miss a
+still-owned recorded payload after descriptor corruption. A new guarded,
+read-only provenance-backed span query needs independent contract and source
+review before O2 may write a caller error record while preserving owned state.
+The caller must independently supply a null error pointer or an aligned,
+writable 264-byte record; the query proves only known-owned-span disjointness.
 
 The proposed [G3-R P1/I2 sealed-graph retirement producer contract](g3/G3_R_P1_I2_SEALED_GRAPH_RETIREMENT_CONTRACT.md)
 pins the candidate-aware preseal M3T/I2/P1 handshake and a retained exact

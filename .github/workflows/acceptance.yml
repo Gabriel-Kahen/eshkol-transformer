@@ -23,6 +23,7 @@ jobs:
           make test-ci-topology
           python3 -m unittest discover -v -s tests/ci -p 'test_*.py'
           python3 -m unittest -v tests.q0.test_python_isolation
+          python3 -m unittest -v tests.q0.test_g3r_f32_destroy_ready_static
       - name: Find completed exact-tree full CI
         id: evidence
         env:
