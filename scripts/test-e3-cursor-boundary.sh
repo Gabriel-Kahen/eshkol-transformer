@@ -104,6 +104,7 @@ for cache in a b; do
     "${out}/runtime-${cache}" \
     "${out}/corpus-a/empty" "${out}/corpus-a/singleton" \
     "${out}/corpus-a/entry-eos" "${out}/corpus-a/final-suffix" \
+    "${out}/corpus-a/one-over" \
     >"${out}/run-${cache}.stdout" 2>"${out}/run-${cache}.stderr"
   printf 'E3-CURSOR-BOUNDARY-PASS\n' | cmp - "${out}/run-${cache}.stdout"
 done

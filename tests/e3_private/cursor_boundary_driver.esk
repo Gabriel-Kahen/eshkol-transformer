@@ -105,9 +105,89 @@
         (d2-token-dataset-close! dataset)
         #t))))
 
+(define (e3-boundary-one-over! model tokenizer frame destinations directory
+                               modes model-image rng output)
+  (let ((dataset
+         (d2-token-dataset-open (e3-test-dataset-config directory #t) tokenizer)))
+    (guard (caught (#t (d2-token-dataset-close! dataset) (raise caught)))
+      (let* ((state (d2-open-dataset-state dataset 'e3-evaluate-into!))
+             (core (vector-ref state 6))
+             (cursor (d2-token-dataset-cursor dataset))
+             (source-read-count (vector-ref state 8))
+             (entry (e3-frame-entry-internal frame))
+             (record (e3-d2-record frame))
+             (expected-details
+              (list (list 'source-domain 'e3-evaluation)
+                    (list 'source-code 2)
+                    (list 'source-message
+                          "evaluation dataset preparation failed"))))
+        (e3-boundary-check 'one-over-authentic-core
+          (and (= (vector-ref core 14) 8193)
+               (= (vector-ref core 15) 0)
+               (= (vector-ref state 15) 0)
+               (eq? (vector-ref state 10) 'none)
+               (eq? (vector-ref record 3) 'idle)))
+        (let retry ((ordinal 0) (first-error #f))
+          (if (= ordinal 2) #t
+              (let* ((before-call-probes (e3-test-retention-probes))
+                     (caught-error
+                     (with-region ('e3-boundary-one-over 262144)
+                       (guard (caught (#t caught))
+                         (e3-evaluate-into! model dataset frame)
+                         #f))))
+                (e3-boundary-check 'one-over-live-owner-event-counters
+                  (let compare ((index 0))
+                    (if (= index 29) #t
+                        (and (= (vector-ref before-call-probes index)
+                                (e3-test-retention-probe index))
+                             (compare (+ index 1))))))
+                (e3-boundary-check 'one-over-stage-two-unsupported
+                  (and (transformer-error? caught-error)
+                       (eq? (transformer-error-category caught-error)
+                            'unsupported)
+                       (eq? (transformer-error-operation caught-error)
+                            'e3-evaluate-into!)
+                       (string=? (transformer-error-message caught-error)
+                                 "evaluation dataset preparation failed")
+                       (equal? (transformer-error-details caught-error)
+                               expected-details)
+                       (eq? (transformer-error-cause caught-error) #f)
+                       (or (not first-error) (eq? caught-error first-error))))
+                ;; Stage 2, zero acquired bits, and an idle D2 restore record
+                ;; distinguish this admission rejection from the stage-5/7
+                ;; defensive traversal cap after 8,193 batches.
+                (e3-boundary-check 'one-over-no-acquire-or-traversal
+                  (and (= (vector-ref (vector-ref entry 12) 0) 2)
+                       (= (vector-ref entry 15) 29)
+                       (= (vector-ref entry 10) 0)
+                       (eq? (vector-ref entry 11) caught-error)
+                       (eq? (vector-ref record 3) 'idle)
+                       (not (vector-ref record 4))
+                       (= (vector-ref core 14) 8193)
+                       (= (vector-ref core 15) 0)
+                       (= (vector-ref state 8) source-read-count)
+                       (= (vector-ref state 15) 0)
+                       (eq? (vector-ref state 10) 'none)))
+                (e3-boundary-check 'one-over-cursor
+                  (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset)))
+                (e3-boundary-check 'one-over-output-six
+                  (e3-boundary-output=? frame destinations output))
+                (e3-boundary-check 'one-over-modes
+                  (e3-test-retention-modes=? frame modes))
+                (e3-boundary-check 'one-over-model-gradient
+                  (e3-test-retention-model=? model model-image))
+                (e3-boundary-check 'one-over-rng
+                  (equal? rng (m3t-public-initializer-words
+                               (m3t-public-model-initializer model))))
+                (e3-boundary-check 'one-over-frame-idle
+                  (e3-boundary-frame-idle? frame))
+                (retry (+ ordinal 1) caught-error)))))
+      (d2-token-dataset-close! dataset)
+      #t)))
+
 (define (e3-test-cursor-boundary-dispatch paths)
   (e3-boundary-check 'paths
-    (and (vector? paths) (= (vector-length paths) 4)))
+    (and (vector? paths) (= (vector-length paths) 5)))
   (let* ((fixture (e3-test-fixture))
          (model (vector-ref fixture 0))
          (tokenizer (vector-ref fixture 1))
@@ -129,6 +209,8 @@
                          (vector-ref paths 1) 0 modes model-image rng output)
       (e3-boundary-zero! 'entry-eos model tokenizer frame destinations
                          (vector-ref paths 2) 1 modes model-image rng output)
+      (e3-boundary-one-over! model tokenizer frame destinations
+                             (vector-ref paths 4) modes model-image rng output)
       (e3-boundary-valid! model tokenizer frame destinations (vector-ref paths 3))
       (e3-boundary-check 'retry-output-six
         (e3-boundary-output=? frame destinations output))

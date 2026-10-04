@@ -7,8 +7,9 @@ import tempfile
 import unittest
 
 from tests.d2.reference import decode_reference_cursor
-from tests.e3_reference.cursor_boundary import materialize
+from tests.e3_reference.cursor_boundary import ONE_OVER_TOKENS, materialize
 from tests.e3_reference.reference import _synthetic_case
+from tests.e3_reference.corpus import FINGERPRINT
 from tests.m3.reference import parameters
 
 
@@ -18,7 +19,7 @@ class CursorBoundaryReferenceTests(unittest.TestCase):
             root = Path(temporary) / "fixture"
             cases = materialize(root)
             self.assertEqual(tuple(cases),
-                             ("empty", "singleton", "entry-eos", "final-suffix"))
+                             ("empty", "singleton", "entry-eos", "final-suffix", "one-over"))
             for name in ("empty", "singleton", "entry-eos"):
                 case = cases[name]
                 self.assertEqual(case["batches"], [])
@@ -38,6 +39,18 @@ class CursorBoundaryReferenceTests(unittest.TestCase):
             self.assertEqual(expected["final"]["counters"], [1, 1])
             self.assertEqual(expected["final"]["metrics_f32"],
                              ["40b1b2bd", "3f800000", "4381039a", "00000000"])
+            over = cases["one-over"]
+            self.assertEqual(len(ONE_OVER_TOKENS), 16_387)
+            self.assertLess(len(ONE_OVER_TOKENS), 65_536)
+            self.assertEqual(sum(1 for _ in range(0, len(ONE_OVER_TOKENS) - 1, 2)),
+                             8_193)
+            self.assertEqual(over["total_rows"], 8_193)
+            self.assertEqual(decode_reference_cursor(over["saved_cursor"]).next_ordinal, 0)
+            self.assertEqual(over["batches"], [])
+            self.assertEqual((over["directory"] / "shard-0000000000000000.ets").stat().st_size,
+                             80 + len(FINGERPRINT.encode()) + 8 * 16_387 + 32)
+            self.assertLess((over["directory"] / "shard-0000000000000000.ets").stat().st_size,
+                            1_048_576)
 
     def test_fresh_path_required(self) -> None:
         with tempfile.TemporaryDirectory(prefix="e3-boundary-") as temporary:

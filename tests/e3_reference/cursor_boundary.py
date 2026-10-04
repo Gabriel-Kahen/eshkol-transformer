@@ -4,19 +4,22 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tests.d2.reference import ReferenceConfig, ReferenceDataset
+from tests.d2.reference import ReferenceConfig, ReferenceDataset, packed_row_count
 from tests.d2.test_resources import load_d1_resource, write_d1_resource
 from tests.e3_reference.corpus import FINGERPRINT, IDENTITY, VOCAB_SIZE
 from tests.t1.reference import encode_artifact, encode_bytes
 
 
 # Keep these outside the frozen five-case transcript. The first three have no
-# evaluated target; the last starts on the padded, one-valid-token final row.
+# evaluated target; the fourth starts on the padded, one-valid-token final row.
+# The fifth is 16,387 authentic raw bytes: D2 T=2 packing emits 8,193 rows.
+ONE_OVER_TOKENS = tuple((index * 37 + 11) & 255 for index in range(16_387))
 CASES = (
     ("empty", (), 0),
     ("singleton", ((7,),), 0),
     ("entry-eos", ((7, 8),), 1),
     ("final-suffix", ((3, 197, 0, 255, 7, 7),), 2),
+    ("one-over", (ONE_OVER_TOKENS,), 0),
 )
 
 
@@ -50,12 +53,16 @@ def materialize(root: Path) -> dict[str, dict[str, object]]:
                 raise AssertionError("cursor starts beyond EOS")
         saved = dataset.snapshot()
         batches: list[dict[str, object]] = []
-        while (batch := dataset.next_batch()) is not None:
-            batches.append({
-                "inputs": list(batch.inputs[0]),
-                "targets": list(batch.targets[0]),
-                "mask": list(batch.loss_mask[0]),
-            })
+        if name == "one-over":
+            if len(dataset.rows) != packed_row_count(len(ONE_OVER_TOKENS), 2):
+                raise AssertionError("independent D2 row count changed")
+        else:
+            while (batch := dataset.next_batch()) is not None:
+                batches.append({
+                    "inputs": list(batch.inputs[0]),
+                    "targets": list(batch.targets[0]),
+                    "mask": list(batch.loss_mask[0]),
+                })
         result[name] = {
             "directory": directory,
             "start_ordinal": start_ordinal,

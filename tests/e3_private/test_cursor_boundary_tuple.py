@@ -101,6 +101,13 @@ class CursorBoundaryTupleTests(unittest.TestCase):
         self.assertIn("--strict-types --no-stdlib -O 2", gate)
         self.assertIn("diff -r \"${out}/corpus-a\" \"${out}/corpus-b\"", gate)
         self.assertIn("ESHKOL_ARENA_POISON=1", gate)
+        self.assertIn('"${out}/corpus-a/one-over"', gate)
+        self.assertIn("(= (vector-length paths) 5)", driver)
+        self.assertIn("'one-over-stage-two-unsupported", driver)
+        self.assertIn("'one-over-no-acquire-or-traversal", driver)
+        self.assertIn("'source-code 2", driver)
+        self.assertIn("(= (vector-ref core 14) 8193)", driver)
+        self.assertIn("(= (vector-ref core 15) 0)", driver)
         self.assertEqual(
             (ROOT / "tests/e3_private/cursor_boundary_driver_root.esk").read_text().splitlines()[-2:],
             ['(load "retention_driver_root.esk")', '(load "cursor_boundary_driver.esk")'],

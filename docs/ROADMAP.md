@@ -788,14 +788,19 @@ and stage-selective fault/observer seams for review. It provides no new runtime
 proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
 verdicts remain prerequisites before the full matrix is implemented and run.
 
-The separate noninstalled E3 cursor-boundary source candidate now pins genuine
+The separate noninstalled E3 cursor-boundary source candidate pins genuine
 raw-T1/D1/D2 empty, singleton, entry-EOS and one-valid-token final-suffix
 resources. Its private witness requires an `invalid-state` zero-weight error,
 exact cursor, model/gradient/RNG, mode, six-output and live FD/native-owner
 restoration across repeated failures, then the independent one-token M3/CE
-answer on retry. Local reference and tuple-policy checks pass; the exact
-compiled, poisoned gate and independent review remain pending. No production
-evaluator or existing five-case/retention tuple changed.
+answer on retry. A fifth test-only resource has 16,387 checksummed raw tokens
+and independently counted 8,193 packed D2 rows. Its same-authority double
+rejection requires exact stage-2 `unsupported` before native acquisition or
+traversal, unchanged cursor, 17 modes, model/gradient/RNG, six outputs and
+owner/event probes. This row does not establish 8,192 acceptance or joint
+payload/RSS reachability. Local reference and tuple-policy checks pass; the
+exact compiled, poisoned gate and independent review remain pending. No
+production evaluator or existing five-case/retention tuple changed.
 
 The [E3 idle real-model control contract](e3/E3_IDLE_REAL_MODEL_CONTROL_CONTRACT.md)
 specifies a test-only use of existing I2 checkpoint decode and whole-batch load
