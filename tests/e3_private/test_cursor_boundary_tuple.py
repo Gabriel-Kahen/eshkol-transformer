@@ -115,6 +115,54 @@ class CursorBoundaryTupleTests(unittest.TestCase):
         self.assertIn('#include "retention_bridge.c"',
                       (ROOT / "tests/e3_private/cursor_boundary_bridge.c").read_text())
 
+    def test_sanitized_boundary_imports_are_exact_and_fail_closed(self) -> None:
+        self.assertEqual(lines(BOUNDARY, "undefined_symbols"),
+                         lines(RETENTION, "undefined_symbols"))
+        non = ROOT / "tests/e3_private/retention_package_sanitized_noninstrumentation_undefined_symbols.txt"
+        instrumentation = ROOT / "tests/e3_private/retention_package_sanitized_instrumentation_undefined_symbols.txt"
+        self.assertEqual((len(non.read_text().splitlines()),
+                          len(instrumentation.read_text().splitlines())), (175, 51))
+        check = '''
+PROJECT_ROOT=$1
+die() { printf '%s\\n' "$*" >&2; exit 77; }
+source "$PROJECT_ROOT/scripts/e3-retention-sanitizer-import-policy.sh"
+e3_retention_verify_sanitizer_imports "$2" "$3" "$4"
+'''
+        normal = Path(f"{BOUNDARY}_undefined_symbols.txt")
+
+        def verify(non_path: Path, instrumentation_path: Path) -> int:
+            return subprocess.run(
+                ["bash", "-c", check, "bash", str(ROOT), str(normal),
+                 str(non_path), str(instrumentation_path)],
+                capture_output=True, text=True, check=False,
+            ).returncode
+
+        self.assertEqual(verify(non, instrumentation), 0)
+        with tempfile.TemporaryDirectory(prefix="e3-boundary-imports-") as temporary:
+            damaged = Path(temporary)
+            extra = damaged / "non-extra.txt"
+            extra.write_text(non.read_text() + "unexpected_boundary_import\n")
+            absent = damaged / "instrumentation-absent.txt"
+            absent.write_text("\n".join(instrumentation.read_text().splitlines()[:-1]) + "\n")
+            self.assertEqual(verify(extra, instrumentation), 77)
+            self.assertEqual(verify(non, absent), 77)
+
+    def test_sanitizer_is_bound_to_private_tuple_and_all_five_cases(self) -> None:
+        builder = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
+        package = (ROOT / "scripts/build-e3-cursor-boundary-test.sh").read_text()
+        gate = (ROOT / "scripts/test-e3-cursor-boundary.sh").read_text()
+        self.assertIn('"${e3_tuple_kind}" == boundary', builder)
+        self.assertIn('"${e3_private_test_sanitize}" == 0', builder)
+        self.assertIn('E3_CURSOR_BOUNDARY_SANITIZE="${sanitize}"', package)
+        self.assertIn('"${sanitized}" sanitize', gate)
+        self.assertIn('e3_retention_verify_sanitizer_imports', gate)
+        self.assertIn('"${evidence}/native-depfiles"', gate)
+        self.assertIn('"${out}/runtime-sanitized"', gate)
+        self.assertIn('ASAN_OPTIONS=detect_leaks=1:halt_on_error=1', gate)
+        self.assertIn('UBSAN_OPTIONS=halt_on_error=1', gate)
+        self.assertIn('"${out}/corpus-a/one-over"', gate)
+        self.assertIn('"\\$@"', gate)
+
 
 if __name__ == "__main__":
     unittest.main()

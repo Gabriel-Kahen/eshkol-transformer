@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
-[[ $# -le 1 ]] || die "usage: $0 [ARTIFACT_DIR]"
+[[ $# -le 2 ]] || die "usage: $0 [ARTIFACT_DIR] [normal|sanitize]"
 verify_toolchain
 for command in ar cmp; do require_command "${command}"; done
 artifact="${1:-$(project_build_dir)/e3-cursor-boundary-test}"
+mode="${2:-normal}"
+case "${mode}" in
+  normal) sanitize=0 ;;
+  sanitize) sanitize=1 ;;
+  *) die "E3 cursor boundary build mode must be normal or sanitize" ;;
+esac
 mkdir -p "$(dirname -- "${artifact}")"
 # Retention's exact generated-source gate is reused, including its object name.
 staging="$(mktemp -d "$(dirname -- "${artifact}")/.e3-retention.XXXXXX")"
@@ -12,6 +18,7 @@ source "${PROJECT_ROOT}/scripts/e3-mode-graph-stage-cleanup.sh"
 e3_mode_graph_install_stage_cleanup "${staging}" cursor-boundary
 prefix="${PROJECT_ROOT}/tests/e3_private/cursor_boundary_package"
 E1B_COMPILER_TIMEOUT_SECONDS="${E3_COMPILER_TIMEOUT_SECONDS:-900}" \
+  E3_CURSOR_BOUNDARY_SANITIZE="${sanitize}" \
   /usr/bin/bash "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
   "${PROJECT_ROOT}/tests/e3_private/cursor_boundary_driver_root.esk" \
   "${PROJECT_ROOT}/tests/e3_private/cursor_boundary_bridge.c" \

@@ -798,8 +798,12 @@ and independently counted 8,193 packed D2 rows. Its same-authority double
 rejection requires exact stage-2 `unsupported` before native acquisition or
 traversal, unchanged cursor, 17 modes, model/gradient/RNG, six outputs and
 owner/event probes. This row does not establish 8,192 acceptance or joint
-payload/RSS reachability. Local reference and tuple-policy checks pass; the
-exact compiled, poisoned gate and independent review remain pending. No
+payload/RSS reachability. The isolated sanitizer-gate successor adds a
+test-only ASan/UBSan/LSan package, AOT and five-case poisoned runtime lane
+with exact private-symbol and import checks; it has not run on the pinned
+supported host. Local reference and tuple-policy checks pass; the exact
+compiled normal/repeat/poison/sanitizer gate and independent review remain
+pending. No
 production evaluator or existing five-case/retention tuple changed.
 
 The [E3 idle real-model control contract](e3/E3_IDLE_REAL_MODEL_CONTROL_CONTRACT.md)

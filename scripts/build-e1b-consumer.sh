@@ -1151,6 +1151,14 @@ if [[ "${E3_RETENTION_SANITIZE:-0}" != 0 ]]; then
     die "E3 retention sanitizer is allowed only for the exact test tuple"
   e3_private_test_sanitize=1
 fi
+if [[ "${E3_CURSOR_BOUNDARY_SANITIZE:-0}" != 0 ]]; then
+  [[ "${E3_CURSOR_BOUNDARY_SANITIZE}" == 1 && \
+     "${package_policy}" == e3-private-aggregate && \
+     "${e3_tuple_kind}" == boundary && \
+     "${e3_private_test_sanitize}" == 0 ]] || \
+    die "E3 cursor boundary sanitizer is allowed only for the exact test tuple"
+  e3_private_test_sanitize=1
+fi
 if [[ "${E3_MODE_GRAPH_SANITIZE:-0}" != 0 ]]; then
   [[ "${E3_MODE_GRAPH_SANITIZE}" == 1 && \
      "${package_policy}" == e3-private-aggregate && \
@@ -1901,7 +1909,13 @@ if [[ "${e3_private_test_sanitize}" == 1 ]]; then
   comm -13 "${e1b_tmp}/expected-undefined.txt" \
     "${e1b_tmp}/noninstrumentation-undefined.txt" \
     >"${e1b_tmp}/unexpected-undefined.txt"
-  if [[ "${e3_tuple_kind:-}" == retention ]]; then
+  if [[ "${e3_tuple_kind:-}" == retention ||
+        "${e3_tuple_kind:-}" == boundary ]]; then
+    if [[ "${e3_tuple_kind:-}" == boundary ]]; then
+      cmp -s "${PROJECT_ROOT}/tests/e3_private/retention_package_undefined_symbols.txt" \
+        "${PROJECT_ROOT}/tests/e3_private/cursor_boundary_package_undefined_symbols.txt" || \
+        die "E3 boundary normal imports differ from the reviewed retention inventory"
+    fi
     source "${PROJECT_ROOT}/scripts/e3-retention-sanitizer-import-policy.sh"
     e3_retention_verify_sanitizer_imports \
       "${e1b_tmp}/expected-undefined.txt" \
@@ -2226,6 +2240,7 @@ cp "${e1b_tmp}/expected-undefined.txt" \
 if [[ "${package_policy}" == e3-private-aggregate &&
       ( "${e3_tuple_kind:-}" == mode-graph ||
         "${e3_tuple_kind:-}" == retention ||
+        "${e3_tuple_kind:-}" == boundary ||
         "${e3_tuple_kind:-}" == numerical ) ]]; then
   cp "${e1b_tmp}/private.ll" "${evidence_dir}.tmp.$$/private.ll"
 fi
