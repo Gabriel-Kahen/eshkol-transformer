@@ -31,8 +31,19 @@
 (extern i64 overlay-precommit-fault i64
         :real et_g3c4_p2g2_composer_test_fault_v1)
 
-(define (check good)
-  (if (not good) (exit 1)))
+(define (check label good)
+  (if (not good)
+      (begin (display "FAIL: ") (display label) (newline) (exit 1))))
+(check "prebuilt decode condition"
+  (and (transformer-error? terminal-decode-condition)
+       (eq? (transformer-error-category terminal-decode-condition)
+            'invalid-state)
+       (eq? (transformer-error-operation terminal-decode-condition)
+            'terminal-decode-cut)
+       (string=? (transformer-error-message terminal-decode-condition)
+                 "test-only T1 decode cut")
+       (null? (transformer-error-details terminal-decode-condition))
+       (eq? (transformer-error-cause terminal-decode-condition) #f)))
 (define tokenizer
   (t1-private-register-core
     (t1-tokenizer-core-create 'raw '() '() '())))
@@ -50,24 +61,29 @@
   (vector-ref (g3c4-generator-entry-call-ready generator 'test) 3))
 (define mode '@MODE@)
 (if (eq? mode 'unmarked)
-    (check (= (coordinator-mark native 0 255) 0))
-    (check (= (overlay-mark native 0 255) 0)))
+    (check "unmarked coordinator mark"
+      (= (coordinator-mark native 0 255) 0))
+    (check "overlay mark" (= (overlay-mark native 0 255) 0)))
 
 (if (eq? mode 'parity)
     (let* ((output (g3c4-p2g2-terminal-generate-internal generator prompt))
            (snapshot (g3c4-p2g2-terminal-snapshot-internal output))
            (clone (g3c4-p2g2-terminal-ids-clone-internal output))
            (copy (g3c4-p2g2-terminal-ids-copy-internal clone)))
-      (check (and (= (vector-ref snapshot 2) 2)
+      (check "parity output image" (and (= (vector-ref snapshot 2) 2)
                   (= (vector-ref snapshot 3) 4)
                   (= (g3c4-p2g2-terminal-word copy 0)
                      (vector-ref snapshot 0))
                   (= (g3c4-p2g2-terminal-word copy 8)
                      (vector-ref snapshot 1))))
-      (check (g3c4-p2g2-terminal-release-internal! output))
-      (check (g3c4-p2g2-terminal-ids-release-internal! clone))
-      (check (g3c4-generator-close-internal! generator))
-      (check (generation-tensor-release-internal! prompt))
+      (check "parity output release"
+        (g3c4-p2g2-terminal-release-internal! output))
+      (check "parity clone release"
+        (g3c4-p2g2-terminal-ids-release-internal! clone))
+      (check "parity generator close"
+        (g3c4-generator-close-internal! generator))
+      (check "parity prompt release"
+        (generation-tensor-release-internal! prompt))
       (display "OVERLAY_PARITY ")
       (display (vector-ref snapshot 0))
       (display " ")
@@ -78,16 +94,20 @@
     (if (eq? mode 'unmarked)
         (let ((output
                 (g3c4-p2g2-terminal-generate-internal generator prompt)))
-          (check (= (overlay-after native 2) -1))
-          (check (g3c4-p2g2-terminal-release-internal! output))
-          (check (g3c4-generator-close-internal! generator))
-          (check (generation-tensor-release-internal! prompt))
+          (check "unmarked marker"
+            (= (overlay-after native 2) -1))
+          (check "unmarked output release"
+            (g3c4-p2g2-terminal-release-internal! output))
+          (check "unmarked generator close"
+            (g3c4-generator-close-internal! generator))
+          (check "unmarked prompt release"
+            (generation-tensor-release-internal! prompt))
           (display "OVERLAY_UNMARKED") (newline))
     (begin
       (if (or (eq? mode 'postzero) (eq? mode 'precommit))
-          (check (= (overlay-zero-marker 1) 0)))
+          (check "postzero marker arm" (= (overlay-zero-marker 1) 0)))
       (if (eq? mode 'precommit)
-          (check (= (overlay-precommit-fault 3) 0)))
+          (check "precommit fault arm" (= (overlay-precommit-fault 3) 0)))
       (let ((caught #f))
         (guard (condition (#t (set! caught condition)))
           (g3c4-p2g2-terminal-generate-internal generator prompt)
@@ -96,19 +116,47 @@
           (exit 1))
         (if (eq? mode 'postzero)
             (exit 1))
-        (check (and (transformer-error? caught)
-                    (not (vector-ref m3-call-state 0))
-                    (null? (vector-ref g3c4-p2g2-protected-records 0))
-                    (null? (vector-ref g3c4-p2g2-prefix-input-anchors 0))
-                    (null? (vector-ref g3c4-p2g2-terminal-anchors 0))
-                    (null? (vector-ref g3c4-p2g2-terminal-originals 0))))
+        (check "caught transformer error" (transformer-error? caught))
+        (check "idle model call" (not (vector-ref m3-call-state 0)))
+        (check "protected records released"
+          (null? (vector-ref g3c4-p2g2-protected-records 0)))
+        (check "prefix anchors released"
+          (null? (vector-ref g3c4-p2g2-prefix-input-anchors 0)))
+        (check "terminal anchors released"
+          (null? (vector-ref g3c4-p2g2-terminal-anchors 0)))
+        (check "terminal originals released"
+          (null? (vector-ref g3c4-p2g2-terminal-originals 0)))
         (if (eq? mode 'precommit)
-            (check (= (overlay-after native 2) 0))
-            (check (and (eq? caught terminal-decode-condition)
-                        (= (vector-ref terminal-decode-cut 0) @ORDINAL@)
-                        (= (overlay-after native @ORDINAL@) 0))))
-        (check (g3c4-generator-close-internal! generator))
-        (check (generation-tensor-release-internal! prompt))
+            (check "precommit native abort state"
+              (= (overlay-after native 2) 0))
+            (begin
+              (check "decode error was transported"
+                (not (eq? caught terminal-decode-condition)))
+              (check "decode transported category"
+                (eq? (transformer-error-category caught) 'invalid-state))
+              (check "decode transported operation"
+                (eq? (transformer-error-operation caught)
+                     'g3c4-p2g2-terminal-generate-internal))
+              (check "decode transported message"
+                (string=? (transformer-error-message caught)
+                          "diagnostic transport rejected the request"))
+              (check "decode bounded detail snapshot"
+                (equal? (transformer-error-details caught)
+                        '((native-category 2)
+                          (source-code 2)
+                          (source-domain m3t-transport)
+                          (source-message
+                           "diagnostic dependency rejected the request"))))
+              (check "decode transported cause"
+                (eq? (transformer-error-cause caught) #f))
+              (check "decode exact ordinal"
+                (= (vector-ref terminal-decode-cut 0) @ORDINAL@))
+              (check "decode native abort state"
+                (= (overlay-after native @ORDINAL@) 0))))
+        (check "abort generator close"
+          (g3c4-generator-close-internal! generator))
+        (check "abort prompt release"
+          (generation-tensor-release-internal! prompt))
         (display "OVERLAY_ABORT ")
         (display mode)
         (newline)))))

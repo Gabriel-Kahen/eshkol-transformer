@@ -6,6 +6,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -24,6 +25,86 @@ SPEC.loader.exec_module(OVERLAYS)
 
 
 class TerminalOverlayTests(unittest.TestCase):
+    def test_decode_fixture_requires_exact_transport_and_cleanup(self) -> None:
+        fixture = (ROOT / "tests/g3c4/p2_g2_terminal_fault_fixture.esk.in").read_text()
+        required = (
+            '(display "FAIL: ")',
+            '(check "prebuilt decode condition"',
+            "'terminal-decode-cut)",
+            '"test-only T1 decode cut"',
+            '(null? (transformer-error-details terminal-decode-condition))',
+            '(check "decode error was transported"',
+            '(not (eq? caught terminal-decode-condition))',
+            "(transformer-error-category caught) 'invalid-state",
+            "'g3c4-p2g2-terminal-generate-internal))",
+            '"diagnostic transport rejected the request"',
+            '(equal? (transformer-error-details caught)',
+            '(native-category 2)',
+            '(source-code 2)',
+            '(source-domain m3t-transport)',
+            '"diagnostic dependency rejected the request"',
+            '(eq? (transformer-error-cause caught) #f)',
+            '(= (vector-ref terminal-decode-cut 0) @ORDINAL@)',
+            '(= (overlay-after native @ORDINAL@) 0)',
+            '(check "idle model call" (not (vector-ref m3-call-state 0)))',
+            '(check "protected records released"',
+            '(check "prefix anchors released"',
+            '(check "terminal anchors released"',
+            '(check "terminal originals released"',
+            '(check "abort generator close"',
+            '(check "abort prompt release"',
+            '(check "precommit native abort state"',
+            '(check "postzero marker arm"',
+            '(check "parity output image"',
+            '(check "unmarked marker"',
+        )
+        paired = (
+            '(check "idle model call" (not (vector-ref m3-call-state 0)))',
+            '(check "protected records released" '
+            '(null? (vector-ref g3c4-p2g2-protected-records 0)))',
+            '(check "prefix anchors released" '
+            '(null? (vector-ref g3c4-p2g2-prefix-input-anchors 0)))',
+            '(check "terminal anchors released" '
+            '(null? (vector-ref g3c4-p2g2-terminal-anchors 0)))',
+            '(check "terminal originals released" '
+            '(null? (vector-ref g3c4-p2g2-terminal-originals 0)))',
+            '(check "abort generator close" '
+            '(g3c4-generator-close-internal! generator))',
+            '(check "abort prompt release" '
+            '(generation-tensor-release-internal! prompt))',
+            '(check "decode transported category" '
+            "(eq? (transformer-error-category caught) 'invalid-state))",
+            '(check "decode transported message" '
+            '(string=? (transformer-error-message caught) '
+            '"diagnostic transport rejected the request"))',
+        )
+
+        def require_contract(source: str) -> None:
+            for phrase in required:
+                self.assertIn(phrase, source)
+            normalized = re.sub(r"\s+", " ", source)
+            for phrase in paired:
+                self.assertIn(phrase, normalized)
+
+        require_contract(fixture)
+        for old, replacement in (
+            ("(not (eq? caught terminal-decode-condition))",
+             "(eq? caught terminal-decode-condition)"),
+            ("(transformer-error-category caught) 'invalid-state",
+             "(transformer-error-category caught) 'internal"),
+            ('"diagnostic transport rejected the request"',
+             '"diagnostic dependency rejected the request"'),
+            ('(native-category 2)', '(native-category 1)'),
+            ('(check "terminal originals released"',
+             '(check "terminal originals skipped"'),
+            ('(check "abort prompt release"', '(check "abort prompt skipped"'),
+            ('(null? (vector-ref g3c4-p2g2-prefix-input-anchors 0))', '#t'),
+        ):
+            with self.subTest(old=old):
+                self.assertEqual(fixture.count(old), 1)
+                with self.assertRaises(AssertionError):
+                    require_contract(fixture.replace(old, replacement, 1))
+
     def test_compiler_verifier_direct_invocation_is_cwd_independent(self) -> None:
         environment = os.environ.copy()
         environment.pop("PYTHONPATH", None)

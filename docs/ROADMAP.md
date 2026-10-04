@@ -2552,6 +2552,18 @@ the pinned Clang 21 compiler output must match the frozen inventory in the
 unrun supported gate, and diagnostics and generated-function ASan coverage
 remain for independent review.
 
+The `5cbbf68` pinned composer run passed the earlier normal fixtures but
+stopped at the first decode fault: `normal-decode-first-run.exit` was 1 with
+empty stdout and stderr. The 471-file failed seal is
+`g3c4-p2g2-eshkol-terminal-composer-5cbbf68-fe9-f31-20261004-prepared-h/SHA256SUMS-FAILED`
+(`75a3866b6ea15a88eb79b95b87013af43d4770dd407fd0b01f9fe2fc437dd9e2`).
+The test fixture required the final caught object to be identical to the
+prebuilt T1 condition, although the existing M3 call boundary creates a new
+bounded transport error. A test-only successor checks the prebuilt condition,
+the exact final category, operation, message and detail snapshot, the cut
+ordinal, and the unchanged cleanup and native-abort witnesses. Host static
+checks pass; no compiled rerun or composer acceptance is claimed.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
