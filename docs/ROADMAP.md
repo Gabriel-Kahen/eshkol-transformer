@@ -1653,8 +1653,8 @@ native P1 token roster. Graph preflight admits the candidate's exact live O2
 optimizer with its retirement witness; graph commit requires that same O2
 tombstone before revoking P1/I2 authority and later M3T f32 payloads. Native
 P1 retained-roster admission/revocation is the first separable implementation
-gate. This is documentation only; no sealed-graph revoke, candidate cleanup,
-public API or full replay acceptance is implemented.
+gate. The contract alone does not implement sealed-graph revoke, candidate
+cleanup, a public API or full replay acceptance.
 
 The isolated native P1 retained-roster candidate on
 `codex/g3r-p1-candidate-roster` adds feature-gated candidate construction
@@ -1679,6 +1679,19 @@ This native leaf cannot authenticate the Eshkol candidate ledger, M3T
 parameter graph or live O2 witness; the candidate-aware I2/P1/M3T adapter
 and owner teardown
 remain dependent work.
+
+An isolated candidate-construction enrollment source draft places its private
+ledger holder and original identity rows inside the generated P1 closure.
+The fixed ledger, I2, P1 and M3T candidate operations share that hidden
+holder; P1 consumes exact one-use admission before native begin. The
+[enrollment authentication contract](g3/G3_R_CANDIDATE_CONSTRUCTION_ENROLLMENT_AUTH_CONTRACT.md)
+requires independent source and compiled ownership proof before this producer
+can claim an authenticated candidate. Ordinary module, I2, M3T and native P1
+source bytes remain unchanged. Static overlay/source-boundary checks and a
+host C feature-on bridge compile pass; the composed Eshkol fixture, compiled
+ownership IR, supported normal/repeat/sanitizer gate, independent source
+review and integration remain pending. No sealed-graph revocation or
+public/replay behavior is claimed.
 
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual

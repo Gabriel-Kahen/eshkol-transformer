@@ -1,0 +1,323 @@
+;;; Injected inside the generated P1 trusted let, never loaded or exported.
+;;; Its fixed closures share the P1 begin's lexical registry authority.
+
+(define g3r-candidate-ledger-tag (vector 'g3r-candidate-ledger))
+(define g3r-candidate-ledgers (vector '() #f))
+;; Fixed preseal test cut; this noninstalled aggregate has no application entry.
+(define g3r-candidate-test-fault -1)
+(define (g3r-candidate-test-cut stage)
+  (if (and (= g3r-candidate-test-fault 5) (= stage 2))
+      (begin (g3r-candidate-test-cross-ledger) (raise #f)))
+  (if (= g3r-candidate-test-fault stage) (raise #f)))
+
+;; Ledger: tag state exact-config exact-initializer owner-cell P1-cell I2-sidecar
+;;         model-entry successor-entry I2-record. All cells exist before create.
+(define (g3r-candidate-ledger-begin-internal! config initializer)
+  (let* ((operation 'g3r-candidate-ledger-begin-internal!)
+         (initial (m3t-entry initializer 'initializer operation #t))
+         (validated (m3t-config-check config initial operation))
+         (p1-sidecar (vector 'g3r-candidate-p1 'inert #f '() #f))
+         (p1-cell (vector #f p1-sidecar))
+         (i2-sidecar (vector 'g3r-candidate-i2 'inert #f '() '() 0 p1-cell))
+         (record (vector g3r-candidate-ledger-tag 'inert config initializer
+                         (vector #f) p1-cell i2-sidecar #f #f #f))
+         ;; Slots 0..6 retain original references. Slots 7/8 alone mutate.
+         (registered (vector record config initializer (vector-ref record 4)
+                             p1-cell i2-sidecar p1-sidecar 'issued #f))
+         (next (cons registered (vector-ref g3r-candidate-ledgers 0))))
+    ;; A rooted canonical ledger precedes the first model constructor call.
+    (vector-set! g3r-candidate-ledgers 0 next)
+    (let ((canonical (vector-ref (car (vector-ref g3r-candidate-ledgers 0)) 0)))
+      ;; Preserve this checked validation as the constructor's fixed input.
+      (if (not (vector? validated))
+          (m3t-fail 'internal operation "fixed configuration lost"))
+      canonical)))
+
+(define (g3r-candidate-ledger-entry ledger operation)
+  (let loop ((remaining (vector-ref g3r-candidate-ledgers 0)))
+    (cond ((null? remaining)
+           (m3t-fail 'invalid-argument operation "foreign candidate ledger"))
+          ((eq? ledger (vector-ref (car remaining) 0))
+           (if (not (and (vector? ledger) (= (vector-length ledger) 10)
+                         (eq? (vector-ref ledger 0) g3r-candidate-ledger-tag)
+                         (eq? (vector-ref ledger 2)
+                              (vector-ref (car remaining) 1))
+                         (eq? (vector-ref ledger 3)
+                              (vector-ref (car remaining) 2))
+                         (eq? (vector-ref ledger 4)
+                              (vector-ref (car remaining) 3))
+                         (eq? (vector-ref ledger 5)
+                              (vector-ref (car remaining) 4))
+                         (eq? (vector-ref ledger 6)
+                              (vector-ref (car remaining) 5))
+                         (vector? (vector-ref ledger 4))
+                         (= (vector-length (vector-ref ledger 4)) 1)
+                         (vector? (vector-ref ledger 5))
+                         (= (vector-length (vector-ref ledger 5)) 2)
+                         (eq? (vector-ref (vector-ref ledger 5) 1)
+                              (vector-ref (car remaining) 6))
+                         (vector? (vector-ref (vector-ref ledger 5) 1))
+                         (= (vector-length
+                              (vector-ref (vector-ref ledger 5) 1)) 5)
+                         (eq? (vector-ref
+                                (vector-ref (vector-ref ledger 5) 1) 0)
+                              'g3r-candidate-p1)
+                         (vector? (vector-ref ledger 6))
+                         (= (vector-length (vector-ref ledger 6)) 7)
+                         (eq? (vector-ref (vector-ref ledger 6) 6)
+                              (vector-ref ledger 5))))
+               (m3t-fail 'invalid-state operation "candidate ledger changed"))
+           (car remaining))
+          (else (loop (cdr remaining))))))
+
+(define (g3r-candidate-cell-entry cell operation)
+  (let loop ((remaining (vector-ref g3r-candidate-ledgers 0)))
+    (cond ((null? remaining)
+           (fail 'invalid-argument operation "foreign P1 enrollment" '()))
+          ((eq? cell (vector-ref (car remaining) 4)) (car remaining))
+          (else (loop (cdr remaining))))))
+
+(define (g3r-candidate-i2-entry sidecar operation)
+  (let loop ((remaining (vector-ref g3r-candidate-ledgers 0)))
+    (cond ((null? remaining)
+           (m3t-fail 'invalid-argument operation "foreign I2 enrollment"))
+          ((eq? sidecar (vector-ref (car remaining) 5)) (car remaining))
+          (else (loop (cdr remaining))))))
+
+;; Fixed test cut selects a different authentic row itself. The fixture can
+;; request the cut but cannot supply a cell, arm a row or change an identity.
+(define (g3r-candidate-test-cross-ledger)
+  (let loop ((remaining (vector-ref g3r-candidate-ledgers 0)))
+    (cond ((null? remaining)
+           (m3t-fail 'internal 'g3r-candidate-test-cross-ledger
+                     "second authentic ledger is missing"))
+          ((or (eq? (vector-ref (car remaining) 0)
+                    (vector-ref g3r-candidate-ledgers 1))
+               (not (eq? (vector-ref (car remaining) 7) 'issued)))
+           (loop (cdr remaining)))
+          (else
+           (let ((rejected? #f))
+             (guard (caught
+                      (#t (set! rejected?
+                            (and (transformer-error? caught)
+                                 (eq? (transformer-error-category caught)
+                                      'invalid-argument)))))
+               (candidate-construction-begin i2-provider-name
+                                             (vector-ref (car remaining) 4)))
+             (if (not rejected?)
+                 (m3t-fail 'internal 'g3r-candidate-test-cross-ledger
+                           "cross-ledger P1 admission was not rejected")))))))
+
+(define (g3r-candidate-p1-sealed? ledger)
+  (eq? (vector-ref (vector-ref (vector-ref ledger 5) 1) 1) 'sealed))
+
+(define (i2-candidate-construction-begin-internal! enrollment-cell)
+  (let* ((operation 'i2-candidate-construction-begin-internal!)
+         (row (g3r-candidate-i2-entry enrollment-cell operation))
+         (ledger (vector-ref row 0)))
+    (if (not (and (vector? enrollment-cell)
+                  (= (vector-length enrollment-cell) 7)
+                  (eq? (vector-ref enrollment-cell 0) 'g3r-candidate-i2)
+                  (eq? (vector-ref enrollment-cell 1) 'inert)
+                  (eq? (vector-ref enrollment-cell 2) #f)
+                  (vector? (vector-ref enrollment-cell 6))
+                  (= (vector-length (vector-ref enrollment-cell 6)) 2)
+                  (eq? ledger (vector-ref g3r-candidate-ledgers 1))
+                  (eq? (vector-ref row 7) 'owner-enrolled)
+                  (eq? (vector-ref ledger 1) 'building)
+                  (eq? (vector-ref row 3) (vector-ref ledger 4))
+                  (eq? (vector-ref row 4) (vector-ref ledger 5))
+                  (eq? (vector-ref row 5) (vector-ref ledger 6))
+                  (eq? (vector-ref row 4) (vector-ref enrollment-cell 6))
+                  (eq? (vector-ref row 6)
+                       (vector-ref (vector-ref row 4) 1))
+                  (eq? (vector-ref (vector-ref row 3) 0)
+                       (vector-ref row 8))
+                  (not (eq? (vector-ref row 8) #f))))
+        (i2-fail 'invalid-argument operation "invalid candidate enrollment"))
+    (if (= (i2-native-construction-parameter-preflight '() '()) -1)
+        (i2-fail 'unsupported operation "fixed I2 construction unavailable"))
+    (if (vector-ref i2-construction-registry-root 1)
+        (i2-fail 'invalid-state operation "nested I2 construction"))
+    (if (>= i2-module-count 4096)
+        (i2-fail 'invalid-state operation "I2 module provenance limit"))
+    (let* ((membership (vector #f))
+           (record (vector 'i2-construction #f #f 'aborted (list membership) '()
+                           (i2-modules-current) i2-module-count
+                           (i2-carrier 'parameter '() 'parameter) 'm3t #f))
+           (next (cons record (vector-ref i2-construction-registry-root 0)))
+           (p1-cell (vector-ref enrollment-cell 6)))
+      (vector-set! i2-construction-registry-root 0 next)
+      (let* ((canonical (car (vector-ref i2-construction-registry-root 0)))
+             (canonical-membership (car (vector-ref canonical 4))))
+        (guard (caught
+                 (#t
+                   (guard (cleanup (#t (exit 134)))
+                     ;; The P1 enrollment cell owns a successful native begin
+                     ;; even if the I2 record write failed immediately after.
+                     (if (vector-ref p1-cell 0)
+                         (module-construction-abort-internal!
+                           (vector-ref p1-cell 0)))
+                     (i2-construction-rollback-tail! canonical)
+                     (vector-set! p1-cell 0 #f)
+                     (vector-set! (vector-ref p1-cell 1) 4 #f)
+                     (vector-set! (vector-ref p1-cell 1) 1 'aborted)
+                     (vector-set! enrollment-cell 1 'aborted)
+                     (vector-set! row 7 'aborted))
+                   (raise caught)))
+          (vector-set! enrollment-cell 2 canonical)
+          (vector-set! i2-module-registry-root 0
+                       (cons canonical-membership (vector-ref canonical 6)))
+          (set! i2-module-count (+ (vector-ref canonical 7) 1))
+          (vector-set! i2-construction-registry-root 1 canonical)
+          (vector-set! enrollment-cell 1 'admitting)
+          (vector-set! row 7 'armed)
+          (let ((construction
+                  (candidate-construction-begin
+                    i2-provider-name p1-cell)))
+            (g3r-candidate-test-cut 3)
+            (vector-set! canonical 1 construction)
+            (let ((root (module-construction-root-internal construction)))
+              (vector-set! canonical 2 root)
+              (vector-set! canonical-membership 0 root)
+              (vector-set! canonical 3 'open)
+              (vector-set! enrollment-cell 1 'open)
+              canonical)))))))
+
+(define (i2-candidate-construction-seal-internal! value enrollment-cell)
+  (let* ((operation 'i2-candidate-construction-seal-internal!)
+         (record (i2-construction-open-route value 'm3t operation)))
+    (if (not (and (vector? enrollment-cell)
+                  (= (vector-length enrollment-cell) 7)
+                  (eq? (vector-ref enrollment-cell 2) record)
+                  (eq? (vector-ref enrollment-cell 1) 'open)))
+        (i2-fail 'invalid-argument operation "foreign candidate construction"))
+    ;; These exact member cells and prior registry/count are otherwise erased
+    ;; by ordinary I2 seal. All writes occur before P1's irreversible seal.
+    (vector-set! enrollment-cell 3 (vector-ref record 4))
+    (vector-set! enrollment-cell 4 (vector-ref record 6))
+    (vector-set! enrollment-cell 5 (vector-ref record 7))
+    (guard (caught
+             (#t
+               (if (eq? (vector-ref
+                           (vector-ref (vector-ref enrollment-cell 6) 1) 1)
+                         'sealed)
+                   (exit 134))
+               (raise caught)))
+      (let ((root (i2-construction-seal-internal! record)))
+        (vector-set! enrollment-cell 1 'sealed)
+        root))))
+
+(define (g3r-candidate-model-create-internal! ledger config initializer)
+  (let* ((operation 'g3r-candidate-model-create-internal!)
+         (row (g3r-candidate-ledger-entry ledger operation))
+         (canonical (vector-ref row 0)))
+    (if (not (and (eq? (vector-ref canonical 1) 'inert)
+                  (eq? (vector-ref row 7) 'issued)
+                  (eq? (vector-ref g3r-candidate-ledgers 1) #f)
+                  (eq? (vector-ref canonical 2) config)
+                  (eq? (vector-ref canonical 3) initializer)
+                  (eq? (vector-ref (vector-ref canonical 4) 0) #f)
+                  (eq? (vector-ref (vector-ref canonical 5) 0) #f)
+                  (eq? (vector-ref
+                         (vector-ref (vector-ref canonical 5) 1) 1) 'inert)
+                  (eq? (vector-ref (vector-ref canonical 6) 1) 'inert)
+                  (eq? (vector-ref (vector-ref canonical 6) 2) #f)))
+        (m3t-fail 'invalid-argument operation "candidate input changed"))
+    (let* ((initial (m3t-entry initializer 'initializer operation #t))
+           (config-data (m3t-config-check config initial operation))
+           (entry #f) (successor #f) (native '()) (construction #f)
+           (handles (make-vector 14 #f))
+           (cache (vector '())))
+      (m3t-boundary operation
+        (guard (caught
+                 (#t
+                   (if (g3r-candidate-p1-sealed? canonical) (exit 134))
+                   (guard (cleanup (#t (exit 134)))
+                     (if (vector-ref (vector-ref canonical 6) 2)
+                         (let ((pending (vector-ref (vector-ref canonical 6) 2)))
+                           (if (eq? (vector-ref pending 3) 'open)
+                               (i2-construction-abort-internal! pending))))
+                     (if (not (null? native))
+                         (m3t-check (m3t-native-owner-abort native) operation))
+                     (if entry (vector-set! entry 2 'dead))
+                     (if successor (vector-set! successor 2 'dead))
+                     (vector-set! canonical 1 'aborted)
+                     (vector-set! row 7 'aborted)
+                     (vector-set! g3r-candidate-ledgers 1 #f)
+                     (vector-set! (vector-ref canonical 6) 1 'aborted)
+                     (vector-set! (vector-ref (vector-ref canonical 5) 1) 1
+                                  'aborted))
+                   (raise caught)))
+          (vector-set! g3r-candidate-ledgers 1 canonical)
+          (vector-set! canonical 1 'building)
+          (set! entry (m3t-stage 'model))
+          (set! successor (m3t-stage 'initializer))
+          (vector-set! entry 5 initial)
+          (vector-set! entry 6 successor)
+          (vector-set! entry 7 config-data)
+          (vector-set! entry 8 handles)
+          (vector-set! entry 11 m3t-profile)
+          ;; The lexical slot is declared before the native return and guards
+          ;; every later rooted vector write, including the owner cell.
+          (set! native (m3t-native-owner-create (vector-ref initial 3)))
+          (if (null? native) (m3t-native-fail operation))
+          (g3r-candidate-test-cut 1)
+          (vector-set! (vector-ref canonical 4) 0 native)
+          (vector-set! row 8 native)
+          (vector-set! row 7 'owner-enrolled)
+          (vector-set! entry 3 native)
+          (g3r-candidate-test-cut 2)
+          (set! construction
+                (i2-candidate-construction-begin-internal!
+                  (vector-ref canonical 6)))
+          (vector-set! canonical 9 construction)
+          (vector-set! (vector-ref construction 8) 2
+                       (m3t-native-owner-parameter native 0))
+          (let ((root (vector-ref construction 2)))
+            (vector-set! entry 0 root)
+            (let register ((index 0))
+              (if (= index 14) #t
+                  (let* ((path (vector-ref m3t-paths index))
+                         (parent (m3t-child-parent root path cache))
+                         (parameter (m3t-native-owner-parameter native index)))
+                    (if (null? parameter) (m3t-native-fail operation))
+                    (let* ((carrier (i2-carrier 'parameter parameter 'parameter))
+                           (handle (i2-module-register-parameter-internal!
+                                     parent (m3t-path-leaf path) carrier)))
+                      (vector-set! handles index handle)
+                      (m3t-check (m3t-native-owner-bind native index handle)
+                                 operation)
+                      (register (+ index 1))))))
+            (let ((parent
+                    (m3t-child-parent root '("token_embedding" "weight") cache)))
+              (i2-module-register-tied-parameter-internal!
+                parent "weight" (vector-ref handles 10)))
+            (let ((schedule
+                    (module-construction-parameters-internal
+                      (vector-ref construction 1))))
+              (m3t-validate-schedule schedule handles operation))
+            (let initialize ((index 0))
+              (if (= index 14) #t
+                  (begin
+                    (m3t-check (m3t-native-owner-initialize native index)
+                               operation)
+                    (initialize (+ index 1)))))
+            (let ((next (m3t-native-owner-successor native)))
+              (if (null? next) (m3t-native-fail operation))
+              (vector-set! successor 3 next))
+            (g3r-candidate-test-cut 4)
+            (i2-candidate-construction-seal-internal!
+              construction (vector-ref canonical 6))
+            ;; No construction abort is legal from here forward.
+            (m3t-check (m3t-native-owner-seal native) operation)
+            (m3t-check (m3t-native-initializer-seal (vector-ref successor 3))
+                       operation)
+            (vector-set! successor 2 'live)
+            (vector-set! entry 2 'live)
+            (vector-set! canonical 7 entry)
+            (vector-set! canonical 8 successor)
+            (vector-set! canonical 1 'live)
+            (vector-set! row 7 'sealed)
+            (vector-set! g3r-candidate-ledgers 1 #f)
+            root))))))

@@ -1,0 +1,187 @@
+;;; Source-composed private producer fixture. A successful candidate remains
+;;; live by design; this test does not claim a graph or optimizer retirement.
+(load "g3r_candidate_construction_root.esk")
+
+(extern i64 g3r-test-p1-live :real et_p1_test_live_entry_count_v1)
+(extern i64 g3r-test-count i64 :real et_i2_construction_test_count_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3-R candidate construction FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label category thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category))))
+      (thunk) #f)))
+(define (list-count values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining) (+ count 1)))))
+(define (p1-roster-exact? roster identity root)
+  (let loop ((remaining roster) (count 0) (root-seen? #f))
+    (if (null? remaining)
+        (and (= count 31) root-seen?)
+        (let ((entry (car remaining)))
+          (and (vector? entry) (= (vector-length entry) 4)
+               (eq? (vector-ref entry 3) identity)
+               (loop (cdr remaining) (+ count 1)
+                     (or root-seen? (eq? (vector-ref entry 0) root))))))))
+
+(define config
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define initial (m3t-public-initializer-state 1729))
+(define other-initial (m3t-public-initializer-state 1730))
+(define baseline-p1 (g3r-test-p1-live))
+(define baseline-i2 i2-module-count)
+(define baseline-parameters (g3r-test-count 0))
+(define baseline-tensors (g3r-test-count 1))
+
+(reject "foreign initializer rejected before ledger" 'invalid-argument
+  (lambda () (g3r-candidate-ledger-begin-internal! config other-initial)))
+(reject "noninitializer rejected before ledger" 'invalid-argument
+  (lambda () (g3r-candidate-ledger-begin-internal! config #f)))
+(reject "malformed P1 enrollment rejected" 'invalid-argument
+  (lambda () (module-candidate-construction-begin-internal
+               i2-provider-name (vector #f #f))))
+(reject "forged pristine P1 cell rejected" 'invalid-argument
+  (lambda () (module-candidate-construction-begin-internal
+               i2-provider-name
+               (vector #f (vector 'g3r-candidate-p1 'inert #f '() #f)))))
+(reject "malformed I2 enrollment rejected" 'invalid-argument
+  (lambda () (i2-candidate-construction-begin-internal! (vector #f))))
+(define forged-owner-ledger
+  (g3r-candidate-ledger-begin-internal! config initial))
+(vector-set! (vector-ref forged-owner-ledger 4) 0 (vector 'foreign-owner))
+(reject "substituted owner is rejected before native create" 'invalid-argument
+  (lambda ()
+    (g3r-candidate-model-create-internal! forged-owner-ledger config initial)))
+(define copied-i2-ledger
+  (g3r-candidate-ledger-begin-internal! config initial))
+(define copied-i2-sidecar
+  (let ((copy (make-vector 7 #f)))
+    (let loop ((index 0))
+      (if (= index 7) copy
+          (begin
+            (vector-set! copy index
+                         (vector-ref (vector-ref copied-i2-ledger 6) index))
+            (loop (+ index 1)))))))
+(reject "copied I2 sidecar is not authority" 'invalid-argument
+  (lambda () (i2-candidate-construction-begin-internal! copied-i2-sidecar)))
+(check "early negatives preserve counts"
+  (and (= baseline-p1 (g3r-test-p1-live))
+       (= baseline-i2 i2-module-count)
+       (= baseline-parameters (g3r-test-count 0))
+       (= baseline-tensors (g3r-test-count 1))))
+
+(define second-ledger (g3r-candidate-ledger-begin-internal! config initial))
+(let fault ((stage 1))
+  (if (= stage 6) #t
+      (let ((ledger (g3r-candidate-ledger-begin-internal! config initial))
+            (caught? #f))
+        (g3r-candidate-test-fault-internal! stage)
+        (guard (caught
+                 (#t
+                   (set! caught? #t)
+                   (check "raised #f is converted only after cleanup"
+                          (and (transformer-error? caught)
+                               (eq? (transformer-error-category caught)
+                                    'internal)))))
+          (g3r-candidate-model-create-internal! ledger config initial))
+        (g3r-candidate-test-fault-internal! -1)
+        (check "staged failure was observed" caught?)
+        (check "staged failure retires only its inert ledger"
+          (eq? (vector-ref ledger 1) 'aborted))
+        (reject "aborted P1 cell is stale" 'invalid-argument
+          (lambda () (module-candidate-construction-begin-internal
+                       i2-provider-name (vector-ref ledger 5))))
+        (check "P1/I2 counts recover before seal"
+          (and (= baseline-p1 (g3r-test-p1-live))
+               (= baseline-i2 i2-module-count)))
+        (check "native owner parameters recover before seal"
+          (and (= baseline-parameters (g3r-test-count 0))
+               (= baseline-tensors (g3r-test-count 1))))
+        (fault (+ stage 1)))))
+
+(define ledger (g3r-candidate-ledger-begin-internal! config initial))
+(define copied-p1-cell
+  (vector (vector-ref (vector-ref ledger 5) 0)
+          (vector-ref (vector-ref ledger 5) 1)))
+(reject "copied P1 cell is not admitted" 'invalid-argument
+  (lambda () (module-candidate-construction-begin-internal
+               i2-provider-name copied-p1-cell)))
+(reject "authentic but unarmed P1 cell is not admitted" 'invalid-argument
+  (lambda () (module-candidate-construction-begin-internal
+               i2-provider-name (vector-ref ledger 5))))
+(reject "wrong P1 provider is not admitted" 'invalid-argument
+  (lambda () (module-candidate-construction-begin-internal
+               'foreign-provider (vector-ref ledger 5))))
+(define copied-ledger
+  (let ((copy (make-vector 10 #f)))
+    (let loop ((index 0))
+      (if (= index 10) copy
+          (begin (vector-set! copy index (vector-ref ledger index))
+                 (loop (+ index 1)))))))
+(reject "copied ledger is not authority" 'invalid-argument
+  (lambda () (g3r-candidate-model-create-internal! copied-ledger config initial)))
+(reject "swapped initializer rejected" 'invalid-argument
+  (lambda () (g3r-candidate-model-create-internal! ledger config other-initial)))
+(define root
+  (with-region ('g3r-candidate-construction 1048576)
+    (g3r-candidate-model-create-internal! ledger config initial)))
+(check "candidate is sealed and still live"
+  (and (eq? (vector-ref ledger 1) 'live)
+       (eq? (vector-ref (vector-ref ledger 6) 1) 'sealed)
+       (eq? (vector-ref (vector-ref (vector-ref ledger 5) 1) 1) 'sealed)
+       (eq? root (vector-ref (vector-ref ledger 7) 0))
+       (eq? (vector-ref (vector-ref ledger 4) 0)
+            (vector-ref (vector-ref ledger 7) 3))))
+(check "exact root and P1 construction identities"
+  (and (eq? root (vector-ref (vector-ref (vector-ref ledger 5) 1) 2))
+       (eq? (vector-ref (vector-ref ledger 5) 0)
+            (vector-ref (vector-ref (vector-ref ledger 6) 2) 1))))
+(check "retained native P1 roster preflight"
+  (module-candidate-native-roster-preflight-internal!
+    (vector-ref (vector-ref ledger 5) 0)))
+(check "retained exact P1 shell roster"
+  (p1-roster-exact?
+    (vector-ref (vector-ref (vector-ref ledger 5) 1) 3)
+    (vector-ref (vector-ref ledger 5) 0) root))
+(reject "forged P1 construction identity rejected" 'invalid-argument
+  (lambda ()
+    (module-candidate-native-roster-preflight-internal! (vector #f))))
+(reject "copied I2 construction identity rejected" 'invalid-argument
+  (lambda ()
+    (i2-candidate-construction-seal-internal!
+      (vector (vector-ref ledger 9)) (vector-ref ledger 6))))
+(define tree (module-parameters root))
+(check "14 unique handles and one tied path"
+  (and (= (list-count (parameter-tree-paths tree)) 15)
+       (= (vector-length (vector-ref (vector-ref ledger 7) 8)) 14)
+       (eq? (parameter-tree-handle tree '("head" "weight"))
+            (parameter-tree-handle tree '("token_embedding" "weight")))))
+(check "I2 membership list retained before seal"
+  (and (> (list-count (vector-ref (vector-ref ledger 6) 3)) 1)
+       (= (vector-ref (vector-ref ledger 6) 5) baseline-i2)
+       (= i2-module-count
+          (+ baseline-i2
+             (list-count (vector-ref (vector-ref ledger 6) 3))))))
+(reject "consumed ledger cannot construct again" 'invalid-argument
+  (lambda () (g3r-candidate-model-create-internal! ledger config initial)))
+(reject "sealed P1 cell is stale" 'invalid-argument
+  (lambda () (module-candidate-construction-begin-internal
+               i2-provider-name (vector-ref ledger 5))))
+(reject "different authentic ledger remains inert" 'invalid-argument
+  (lambda () (module-candidate-construction-begin-internal
+               i2-provider-name (vector-ref second-ledger 5))))
+(check "sealed success deliberately keeps native payload live"
+  (and (> (g3r-test-p1-live) baseline-p1)
+       (> (g3r-test-count 0) baseline-parameters)))
+(display "G3-R candidate construction PASS: checks=")
+(display checks)
+(newline)
