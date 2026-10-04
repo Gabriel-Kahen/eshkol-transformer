@@ -11,10 +11,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "native/e3_evaluation_metrics_provider.c"
-SOURCE_SHA = "b2e6cca9acf9f39db8021ddd78be15f847fd26b39d358260928095f48635851c"
+SOURCE_SHA = "73c0a603f143448f936a0b7b12c736c308f8f95b2be75ed3820ab940f0357be8"
 FUNCTION_SHA = "6186305f57904cc47d9862a8d733c7b0882eaef0b1ba38643865b67465c322a7"
 WITH_NEWLINE_SHA = "555fd8a836817e709feb84c71f8abec7f0db2481497dcc2341774f93ec2f7bf6"
-DERIVED_SHA = "47f151b382a768b6c2371a0a94f94571d301d230e24d6e25ba5e7887ec7052bb"
+DERIVED_SHA = "864c73359ccd436a94f8798756677cbae8c1ad5f094f8859b91f35722044c809"
 START = b"static int32_t evaluate_finalize("
 END = b"\nstatic int32_t evaluate("
 OLD = (b"  const float perplexity = expf(loss);\n"
