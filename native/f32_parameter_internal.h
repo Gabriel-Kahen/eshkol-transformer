@@ -77,6 +77,10 @@ int32_t et_f32_tensor_storage_owner_identical_v1(
 #ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
 int32_t et_f32_tensor_private_destroy_ready_v1(
     const et_f32_tensor *candidate, et_f32_tensor_error *error);
+/* Read-only provenance query: 0 disjoint, 1 overlap, 2 invalid span,
+ * 3 unproved live or retained backing. This does not validate writability. */
+int32_t et_f32_tensor_private_owned_span_overlap_v1(
+    const void *span, size_t bytes);
 #endif
 int32_t et_f32_owned_tensor_clone_v1(const et_f32_tensor *source,
                                      et_f32_tensor **owned_clone,

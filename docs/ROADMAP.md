@@ -1657,10 +1657,11 @@ readiness entry point. Independent review accepted the 114-file seal
 (SHA256 `dc7888d8a92067d5d201dd0b7d375a5c36c27be8f1869751018139e142fb5c56`).
 The G3N, G3S, L3S, E3-METRICS and M3CG predecessor inventories pin the reviewed
 native blobs; the private extension retains measured feature-off object
-parity. Fresh whole-suite hosted CI remains the integration gate.
-O2 pointer admission alone cannot prove the closed Eshkol ledger or 14 M3T/P1
-associations. Hosted integration, the O2 retire path and candidate cleanup
-remain pending.
+parity. PR #196 integrated exact independently reviewed head `e8bd168d`
+after all 23 checks passed in hosted run `37165451764`; merge `50cfaa84`
+retains that reviewed tree. O2 pointer admission alone cannot prove the closed
+Eshkol ledger or 14 M3T/P1 associations. The O2 retire path and candidate
+cleanup remain pending.
 
 The proposed [O2 error-span provenance prerequisite](g3/G3_R_O2_ERROR_SPAN_PROVENANCE_PREREQUISITE.md)
 records a concrete gap before native O2 retirement acceptance: the existing
@@ -1670,6 +1671,25 @@ read-only provenance-backed span query needs independent contract and source
 review before O2 may write a caller error record while preserving owned state.
 The caller must independently supply a null error pointer or an aligned,
 writable 264-byte record; the query proves only known-owned-span disjointness.
+Hosted PR #197 native-numerics reached L3S and rejected its stale f32
+predecessor checksum. The bounded repair updates that one checksum to the
+already reviewed query source; provider code and gated query inputs remain
+unchanged. Independent repair review and fresh hosted checks are pending.
+
+The independently reviewed private f32 span query uses creation-time tensor
+backing records and fails closed for live plan-owned arrays without immutable
+extents. Exact source/test head `af987fe2` (tree `47d41967`) passed the pinned
+fe9/f31 Clang 21 gate on 2026-10-04: normal, repeat and ASan/UBSan/LSan each
+reported 104 query checks and 451 readiness checks, with identical output and
+empty positive compile/runtime stderr. Feature-off objects match the accepted
+baseline; the only new feature-on symbol is the private owned-span query.
+Independent review accepted the full 164-file evidence seal
+`g3r-f32-owned-span-af987fe2-fe9-f31-20261003-prepared-b/SHA256SUMS-RUN`
+(SHA256 `4ef814b7e0268b8a1c2606e4e07da3e641856841208e49546173e55c7b2635e4`),
+including raw dependency closures, symbols, expected private-header negatives
+and pre/post pins. Current-main integration preserves all eleven gate input
+blobs and updates six predecessor checksum rows for the reviewed native source
+and private header. Hosted integration and O2 retirement remain pending.
 
 The proposed [G3-R P1/I2 sealed-graph retirement producer contract](g3/G3_R_P1_I2_SEALED_GRAPH_RETIREMENT_CONTRACT.md)
 pins the candidate-aware preseal M3T/I2/P1 handshake and a retained exact
