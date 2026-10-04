@@ -768,6 +768,15 @@ retention J gate was not run. The combined tree requires independent source
 review, its own full 20-run supported retention gate and an affected mode/graph
 gate before either combined proof can be claimed. Numerical, other §9 and
 public-path acceptance remain pending.
+The supported retention attempt on frozen `d9328ce` built its packages but
+stopped at the first strict-AOT executable: under `--no-stdlib`, the test-only
+`retention_runtime.esk` used unavailable `length` and `list-ref` functions.
+A scoped fixture successor reuses the existing private E3 runtime's explicit
+`car`/`cdr` command-line traversal without changing the retention assertions
+or case matrix. The retained sanitizer-package stderr also contains raw
+readelf DWARF warnings; they remain separate diagnostics, with no clean-stderr
+or sanitizer-runtime claim. Fresh supported retention and affected mode/graph
+gates remain required.
 
 The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
 is a docs-only candidate for the remaining private numerical, compiled-mutant,

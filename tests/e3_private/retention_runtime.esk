@@ -10,14 +10,25 @@
   (if condition #t
       (begin (display "FAIL: ") (display label) (newline) (exit 1))))
 
+;;; Reuse the private no-stdlib runtime's command-line list traversal.
+(define (argument-count values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining) (+ count 1)))))
+
+(define (argument-ref values wanted)
+  (let loop ((remaining values) (index 0))
+    (if (= index wanted) (car remaining)
+        (loop (cdr remaining) (+ index 1)))))
+
 (define args (command-line))
-(check 'arguments (= (length args) 4))
-(define path (list-ref args 1))
-(define horizon (string->number (list-ref args 2)))
-(define present? (string=? (list-ref args 3) "present"))
+(check 'arguments (= (argument-count args) 4))
+(define path (argument-ref args 1))
+(define horizon (string->number (argument-ref args 2)))
+(define present? (string=? (argument-ref args 3) "present"))
 (check 'horizon (or (= horizon 1024) (= horizon 8192)))
 (check 'gradient-option
-       (or present? (string=? (list-ref args 3) "absent")))
+       (or present? (string=? (argument-ref args 3) "absent")))
 
 (define input (vector path))
 (define output (vector #f))
