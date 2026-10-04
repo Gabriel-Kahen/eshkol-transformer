@@ -3,6 +3,7 @@
 import contextlib
 import importlib.util
 import io
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -10,7 +11,8 @@ import tempfile
 import unittest
 
 from tests.g3c4 import check_p2_g2_terminal_compiler_evidence as compiler_evidence
-from tests.shared.prepare_eshkol_asan_ir import prepare, sha
+from tests.shared.prepare_eshkol_asan_ir import main as prepare_file
+from tests.shared.prepare_eshkol_asan_ir import prepare, scan_pair, sha
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -117,11 +119,43 @@ class TerminalOverlayTests(unittest.TestCase):
             b'define i32 @load(ptr %p) { nounwind } {\n ret i32 0\n}\n',
             b'define i32 @load(ptr %p) {\r\n ret i32 0\r\n}\r\n',
             b' define i32 @load(ptr %p) {\n ret i32 0\n}\n',
+            b'define i32 @good(ptr %p) {\n ret i32 0\n}\n'
+            b'define\ti32 @unmarked(ptr %p) {\n %x = load i32, ptr %p\n ret i32 %x\n}\n',
             b'define i32 @load(ptr %p) #0 {\n ret i32 0\n}\n'
             b'attributes #0 = { sanitize_address }\n',
         ):
             with self.subTest(raw=raw[:40]), self.assertRaises(ValueError):
                 prepare(raw)
+
+    def test_asan_file_streaming_and_unsafe_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            raw = directory / "raw.ll"
+            derived = directory / "derived.ll"
+            receipt = directory / "receipt.json"
+            raw.write_bytes(b'define i32 @good(ptr %p) {\n ret i32 0\n}\n' * 4096)
+            prepare_file(raw, derived, receipt)
+            self.assertEqual(scan_pair(raw, derived),
+                             json.loads(receipt.read_text()))
+            with self.assertRaises(ValueError):
+                prepare_file(raw, derived, directory / "other.json")
+            derived.write_bytes(derived.read_bytes().replace(b"@good", b"@evil", 1))
+            with self.assertRaisesRegex(ValueError, "derived IR differs"):
+                scan_pair(raw, derived)
+            derived.unlink()
+            derived.symlink_to(directory / "absent.ll")
+            with self.assertRaisesRegex(ValueError, "output already exists"):
+                prepare_file(raw, derived, directory / "other.json")
+            derived.unlink()
+            receipt.unlink()
+            receipt.symlink_to(directory / "absent.json")
+            with self.assertRaisesRegex(ValueError, "output already exists"):
+                prepare_file(raw, derived, receipt)
+            receipt.unlink()
+            raw.unlink()
+            raw.symlink_to(directory / "absent.ll")
+            with self.assertRaises((ValueError, FileNotFoundError)):
+                prepare_file(raw, derived, receipt)
 
     def test_compiler_artifact_set_rejects_missing_extra_and_symlink(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -136,24 +170,74 @@ class TerminalOverlayTests(unittest.TestCase):
             (directory / "raw.d").symlink_to(directory / "raw.ll")
             with self.assertRaises(ValueError):
                 compiler_evidence.require_files(directory, {"raw.ll", "raw.d"})
+            external = directory / "external"
+            external.mkdir()
+            (external / "raw.ll").write_text("define x\n")
+            (external / "raw.d").write_text("target: source\n")
+            linked = directory / "linked"
+            linked.symlink_to(external, target_is_directory=True)
+            with self.assertRaises(ValueError):
+                compiler_evidence.require_files(linked, {"raw.ll", "raw.d"})
 
     def test_compiler_dep_target_and_source_must_match(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp)
             target = directory / "target.o"
             source = directory / "fixture.esk"
+            source.write_text("source\n")
             dep = directory / "fixture.d"
             dep.write_text(f"{target}: \\\n  {source}\n")
-            compiler_evidence.dep_target(dep, target, source)
+            compiler_evidence.dep_target(dep, target, {source})
             for wrong_target, wrong_source in (
                 (directory / "other.o", source),
                 (target, directory / "other.esk"),
             ):
                 with self.assertRaises(ValueError):
-                    compiler_evidence.dep_target(dep, wrong_target, wrong_source)
+                    compiler_evidence.dep_target(dep, wrong_target, {wrong_source})
             dep.write_text(f"{target}: {source}.extra\n")
             with self.assertRaises(ValueError):
-                compiler_evidence.dep_target(dep, target, source)
+                compiler_evidence.dep_target(dep, target, {source})
+            extra = directory / "extra.esk"
+            extra.write_text("extra\n")
+            for bad in (
+                f"{target}: /tmp/unreviewed.esk\nphony: {source}\n",
+                f"{target}: {source} {extra}\n",
+                f"{target}:\n",
+                f"{target}: {source} {source}\n",
+                f"{target}: {source}\\x\n",
+                f"{target}: {source}\\\n  {extra}\n",
+            ):
+                dep.write_text(bad)
+                with self.subTest(bad=bad), self.assertRaises(ValueError):
+                    compiler_evidence.dep_target(dep, target, {source})
+            spaced = directory / "space #$.esk"
+            spaced.write_text("source\n")
+            dep.write_text(f"{target}: {str(spaced).replace(' ', chr(92)+' ').replace('#', chr(92)+'#').replace('$', '$$')}\n")
+            compiler_evidence.dep_target(dep, target, {spaced})
+            dep.write_text(f"{target}: {spaced}\n")
+            with self.assertRaises(ValueError):
+                compiler_evidence.dep_target(dep, target, {spaced})
+            linked = directory / "linked.esk"
+            linked.symlink_to(source)
+            dep.write_text(f"{target}: {linked}\n")
+            with self.assertRaisesRegex(ValueError, "symlink dependency"):
+                compiler_evidence.dep_target(dep, target, {source})
+
+    def test_frozen_eshkol_dependency_inventory_covers_each_fixture(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            mode = Path(tmp)
+            with contextlib.redirect_stdout(io.StringIO()):
+                OVERLAYS.main(mode / "overlays")
+            for fixture in compiler_evidence.FIXTURES:
+                with self.subTest(fixture=fixture):
+                    expected = compiler_evidence.closed_dependencies(
+                        mode, "eshkol", fixture)
+                    source = {
+                        "terminal": ROOT / "tests/g3c4/p2_g2_terminal_composer_test.esk",
+                        "feature-off": ROOT / "tests/g3c4/p2_g2_terminal_composer_feature_off_test.esk",
+                    }.get(fixture, mode / "overlays" / f"{fixture}.esk")
+                    self.assertIn(source.resolve(), expected)
+                    self.assertGreater(len(expected), 15)
 
     def test_compiler_source_identity_rejects_changed_bytes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

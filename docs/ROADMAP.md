@@ -2538,6 +2538,18 @@ ASan/UBSan/LSan-instrumented; generated Eshkol IR has address checks only,
 and this recipe does not establish bounds of the bump arena or instrumentation
 of the prebuilt runtime archive.
 
+The compiler-evidence prerequisite now uses a frozen, per-fixture and
+per-native-input dependency inventory derived from the reviewed source/header
+graph (with Clang 22 preprocessing for native headers), rather than learning
+the expected set from a gate-produced depfile. Its single-rule parser rejects
+extra targets, absent or extra prerequisites, and unsupported Make escapes.
+The ASan IR copy and verification stream the retained raw and derived files,
+reject unmarked alternate definition syntax, and require nonsymlink evidence
+directories and exclusive fresh outputs. These are test-recipe repairs only;
+the pinned Clang 21 compiler output must match the frozen inventory in the
+unrun supported gate, and diagnostics and generated-function ASan coverage
+remain for independent review.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |

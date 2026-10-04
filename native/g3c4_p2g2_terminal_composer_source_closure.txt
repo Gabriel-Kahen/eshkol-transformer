@@ -197,6 +197,7 @@ tests/g3c4/test_active_call_checker.py
 tests/q0/test_g3c4_terminal_fault_overlays.py
 tests/shared/__init__.py
 tests/shared/prepare_eshkol_asan_ir.py
+tests/g3c4/p2_g2_terminal_compiler_dependencies.json
 tests/g3c4/check_p2_g2_terminal_compiler_evidence.py
 scripts/check-g3c4-p2g2-terminal-composer.py
 scripts/test-g3c4-p2g2-terminal-composer.sh
