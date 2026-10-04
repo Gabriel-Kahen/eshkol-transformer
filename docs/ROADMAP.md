@@ -2413,3 +2413,13 @@ The exact I2 post-prepare guard test tuple now retains its emitted private IR
 on successful package publication as well as failed compiler diagnostics. The
 existing length-1/3 private zero admission scopes this evidence copy; no import
 policy or other tuple changes. Supported compilation and runtime remain pending.
+The separate guarded-import successor has versioned, exact compiler inventories
+for the private length-1/3 ordinary and sole-abort-mutant packages: 174 normal
+imports and 172 noninstrumentation plus 50 sanitizer imports. These bytes were
+read from all eight variants in the sealed, compiler-only
+`e3-i2-postprepare-imports-fa5c5d2-fe9-f31-20261003-prepared-c` diagnostic;
+the diagnostic is not a runtime gate. The unwrapped zero-control package built
+first by the supported I2 gate has no authenticated current import inventory.
+Its old 171-entry manifest remains unchanged, and that independent control
+build and the full six-case normal/repeat/sanitizer fault and mutant gate remain
+pending. The guarded inventories do not establish the control imports.

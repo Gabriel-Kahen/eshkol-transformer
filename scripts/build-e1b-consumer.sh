@@ -1187,6 +1187,11 @@ if [[ "${E3_ZERO_CONTROL_SANITIZE:-0}" != 0 ]]; then
   # ASan's registration cell must be materialized before symbol localization.
   e3_zero_reloc_flags+=(-Wl,-d)
 fi
+if [[ -n "${e3_i2_guard_length}" ]]; then
+  e3_check_repository_path "${PROJECT_ROOT}/scripts/e3-i2-guard-import-policy.sh"
+  source "${PROJECT_ROOT}/scripts/e3-i2-guard-import-policy.sh"
+  undefined_symbols="$(e3_i2_guard_import_manifest normal)"
+fi
 
 require_command awk
 require_command cmp
@@ -1839,8 +1844,13 @@ if [[ "${e3_zero_sanitize}" == 1 ]]; then
   grep -Ev '^(__asan_|__ubsan_|__sanitizer_|__start_asan_globals$|__stop_asan_globals$)' \
     "${e1b_tmp}/undefined.txt" \
     >"${e1b_tmp}/noninstrumentation-undefined.txt" || true
-  zero_sanitized="${PROJECT_ROOT}/tests/e3_private/zero_control_package_sanitized_undefined_symbols.txt"
-  zero_instrumentation="${PROJECT_ROOT}/tests/e3_private/zero_control_package_sanitizer_undefined_symbols.txt"
+  if [[ -n "${e3_i2_guard_length}" ]]; then
+    zero_sanitized="$(e3_i2_guard_import_manifest sanitized_noninstrumentation)"
+    zero_instrumentation="$(e3_i2_guard_import_manifest sanitized_instrumentation)"
+  else
+    zero_sanitized="${PROJECT_ROOT}/tests/e3_private/zero_control_package_sanitized_undefined_symbols.txt"
+    zero_instrumentation="${PROJECT_ROOT}/tests/e3_private/zero_control_package_sanitizer_undefined_symbols.txt"
+  fi
   cmp -s "${zero_sanitized}" \
     "${e1b_tmp}/noninstrumentation-undefined.txt" || \
     die "E3 zero sanitized noninstrumentation imports differ from own exact manifest"
