@@ -9,6 +9,9 @@ import sys
 import tempfile
 import unittest
 
+from tests.g3c4 import check_p2_g2_terminal_compiler_evidence as compiler_evidence
+from tests.shared.prepare_eshkol_asan_ir import prepare, sha
+
 
 ROOT = Path(__file__).resolve().parents[2]
 GENERATOR = ROOT / "tests/g3c4/generate_p2_g2_terminal_fault_overlays.py"
@@ -94,6 +97,96 @@ class TerminalOverlayTests(unittest.TestCase):
                         ValueError, "source marker must occur exactly once"
                     ):
                         OVERLAYS.insert_exact(changed, marker, insertion, after)
+
+    def test_asan_ir_copy_is_reversible_and_definitions_are_counted(self) -> None:
+        raw = (b'define i32 @load(ptr %p) {\n'
+               b'entry:\n %v = load i32, ptr %p\n ret i32 %v\n}\n'
+               b'define i32 @copy(ptr %p) #0 {\n ret i32 0\n}\n'
+               b'attributes #0 = { nounwind }\n')
+        derived, definitions = prepare(raw)
+        self.assertEqual(len(definitions), 2)
+        self.assertEqual(derived.count(b" sanitize_address {\n"), 2)
+        self.assertEqual(derived.replace(b" sanitize_address {\n", b" {\n"), raw)
+        self.assertEqual(definitions[0], sha(b'define i32 @load(ptr %p) {\n'))
+
+    def test_asan_ir_unsupported_syntax_fails_closed(self) -> None:
+        for raw in (
+            b'declare i32 @load(ptr)\n',
+            b'define i32 @load(ptr %p) sanitize_address {\n ret i32 0\n}\n',
+            b'define i32 @load(ptr %p)\n{\n ret i32 0\n}\n',
+            b'define i32 @load(ptr %p) { nounwind } {\n ret i32 0\n}\n',
+            b'define i32 @load(ptr %p) {\r\n ret i32 0\r\n}\r\n',
+            b' define i32 @load(ptr %p) {\n ret i32 0\n}\n',
+            b'define i32 @load(ptr %p) #0 {\n ret i32 0\n}\n'
+            b'attributes #0 = { sanitize_address }\n',
+        ):
+            with self.subTest(raw=raw[:40]), self.assertRaises(ValueError):
+                prepare(raw)
+
+    def test_compiler_artifact_set_rejects_missing_extra_and_symlink(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            (directory / "raw.ll").write_text("define x\n")
+            (directory / "raw.d").write_text("target: source\n")
+            compiler_evidence.require_files(directory, {"raw.ll", "raw.d"})
+            for missing in ({"raw.ll"}, {"raw.ll", "raw.d", "extra"}):
+                with self.assertRaises(ValueError):
+                    compiler_evidence.require_files(directory, missing)
+            (directory / "raw.d").unlink()
+            (directory / "raw.d").symlink_to(directory / "raw.ll")
+            with self.assertRaises(ValueError):
+                compiler_evidence.require_files(directory, {"raw.ll", "raw.d"})
+
+    def test_compiler_dep_target_and_source_must_match(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            target = directory / "target.o"
+            source = directory / "fixture.esk"
+            dep = directory / "fixture.d"
+            dep.write_text(f"{target}: \\\n  {source}\n")
+            compiler_evidence.dep_target(dep, target, source)
+            for wrong_target, wrong_source in (
+                (directory / "other.o", source),
+                (target, directory / "other.esk"),
+            ):
+                with self.assertRaises(ValueError):
+                    compiler_evidence.dep_target(dep, wrong_target, wrong_source)
+            dep.write_text(f"{target}: {source}.extra\n")
+            with self.assertRaises(ValueError):
+                compiler_evidence.dep_target(dep, target, source)
+
+    def test_compiler_source_identity_rejects_changed_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            source = directory / "fixture.esk"
+            source.write_text("original")
+            identity = f"{sha(source.read_bytes())}  {source}\n"
+            (directory / "case-source.before").write_text(identity)
+            (directory / "case-source.after").write_text(identity)
+            self.assertEqual(compiler_evidence.source_identity(directory, "case"),
+                             source)
+            source.write_text("changed")
+            with self.assertRaises(ValueError):
+                compiler_evidence.source_identity(directory, "case")
+
+    def test_compiler_recorded_exit_and_streams_are_required(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            for suffix, value in (("command", "clang -c source\n"),
+                                  ("stdout", ""), ("stderr", ""),
+                                  ("exit", "0\n")):
+                (directory / f"case.{suffix}").write_text(value)
+            compiler_evidence.recorded(directory, "case", 0)
+            with self.assertRaises(ValueError):
+                compiler_evidence.recorded(directory, "case", 134)
+            (directory / "case.stderr").unlink()
+            with self.assertRaises(ValueError):
+                compiler_evidence.recorded(directory, "case", 0)
+
+    def test_asan_symbol_gate_rejects_module_initializer_only(self) -> None:
+        self.assertIsNone(compiler_evidence.REPORT.search("U __asan_init\n"))
+        self.assertIsNotNone(compiler_evidence.REPORT.search(
+            "U __asan_report_load4\n"))
 
 
 if __name__ == "__main__":

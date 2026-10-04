@@ -19,6 +19,9 @@ additions = [
     "tests/g3c4/test_context_cache_checker.py",
     "tests/g3c4/test_active_call_checker.py",
     "tests/q0/test_g3c4_terminal_fault_overlays.py",
+    "tests/shared/__init__.py",
+    "tests/shared/prepare_eshkol_asan_ir.py",
+    "tests/g3c4/check_p2_g2_terminal_compiler_evidence.py",
     "scripts/check-g3c4-p2g2-terminal-composer.py",
     "scripts/test-g3c4-p2g2-terminal-composer.sh",
     "tests/g3c4/call_entry_allocation_shim.cpp",
@@ -143,7 +146,10 @@ assert "COMPOSER_SECOND " in native_fixture
 assert "et_g3c4_p2g2_coordinator_test_prefix_v1(" in native_fixture
 assert "et_g3c4_p2g2_coordinator_test_observe_v1(" in native_fixture
 assert "reference.philox" in oracle and "reference.literal" in oracle
-assert "normal-run.stdout" in runner and "sanitize-run.stdout" in runner
+assert all(f"compile_mode {mode}" in runner for mode in
+           ("normal", "repeat", "sanitize"))
+assert 'cmp "$evidence/normal-$label.stdout" "$evidence/repeat-$label.stdout"' in runner
+assert 'cmp "$evidence/normal-$label.stdout" "$evidence/sanitize-$label.stdout"' in runner
 overlay_generator = (root / additions[8]).read_text()
 assert "T1_SHA =" in overlay_generator and "COMPOSER_SHA =" in overlay_generator
 assert "result.replace(insertion, \"\", 1) != source" in overlay_generator

@@ -26,8 +26,29 @@ bash "$PROJECT_ROOT/scripts/test-g3c4-p2g2-terminal-ids-clone.sh" \
   "$evidence/native-terminal-clone-predecessor" \
   >"$evidence/native-terminal-clone-predecessor.stdout"
 tmp="$(mktemp -d "$evidence/build.XXXXXX")"
-trap 'status=$?; if (( status == 0 )); then rm -rf -- "$tmp"; else
-  printf "P2/G2 terminal composer failure retained: %s\n" "$tmp" >&2; fi' EXIT
+printf '%s\n' "$tmp" >"$evidence/build-path.txt"
+trap 'status=$?; printf "%d\n" "$status" >"$evidence/gate.exit";
+  if (( status != 0 )); then
+    printf "P2/G2 terminal composer failure retained: %s\n" "$tmp" >&2
+  fi' EXIT
+
+run_recorded() {
+  local label=$1 status=0
+  shift
+  printf '%q ' "$@" >"$evidence/$label.command"
+  printf '\n' >>"$evidence/$label.command"
+  "$@" >"$evidence/$label.stdout" 2>"$evidence/$label.stderr" || status=$?
+  printf '%d\n' "$status" >"$evidence/$label.exit"
+  return "$status"
+}
+
+native_compile() {
+  local mode=$1 directory=$2 name=$3 compiler=$4
+  shift 4
+  run_recorded "$mode-native-$name-compile" "$compiler" "$@" \
+    -MMD -MF "$directory/objects/$name.d" \
+    -MT "$directory/objects/$name.o"
+}
 
 compile_mode() {
   local mode=$1 directory="$tmp/$1" source
@@ -37,14 +58,15 @@ compile_mode() {
     runtime=(env ASAN_OPTIONS=detect_leaks=1:halt_on_error=1
                  UBSAN_OPTIONS=halt_on_error=1)
   fi
-  mkdir -p "$directory/objects" "$directory/cache"
+  mkdir -p "$directory/objects" "$directory/cache" "$directory/generated"
   local -a common=(-std=c11 -Wall -Wextra -Werror -Wpedantic -fPIC
     -fvisibility=hidden -fno-common -fstack-protector-all -ffp-contract=off
     -fexcess-precision=standard -fno-fast-math
     -I "$PROJECT_ROOT/include" -I "$PROJECT_ROOT/native"
     -I "$PROJECT_ROOT/src" -I "$PROJECT_ROOT/src/eshkol_transformer"
     -I "$(eshkol_source_dir)/inc")
-  "$cc" "${common[@]}" "${optimization[@]}" \
+  native_compile "$mode" "$directory" composer_native "$cc" \
+    "${common[@]}" "${optimization[@]}" \
     -DET_A2_KV_CACHE_TESTING -DET_A2_KV_CACHE_TERMINAL_WITNESS_PRIVATE \
     -DET_G3C4_P2_G1_PENDING_PRIVATE \
     -DET_G3C4_P2_G2_FIRST_FRAME_PRIVATE \
@@ -55,47 +77,55 @@ compile_mode() {
     -DET_I64_TENSOR_STORAGE_QUERY_PRIVATE \
     -c "$PROJECT_ROOT/tests/g3c4/p2_g2_terminal_composer_native.c" \
     -o "$directory/objects/composer_native.o"
-  "$cc" "${common[@]}" "${optimization[@]}" \
+  native_compile "$mode" "$directory" kernel_fail_allocator "$cc" \
+    "${common[@]}" "${optimization[@]}" \
     -c "$PROJECT_ROOT/tests/m3t/kernel_fail_allocator.c" \
     -o "$directory/objects/kernel_fail_allocator.o"
-  "$cc" "${common[@]}" "${optimization[@]}" \
+  native_compile "$mode" "$directory" i2_native_helpers "$cc" \
+    "${common[@]}" "${optimization[@]}" \
     -DET_I2_NATIVE_HELPERS_ONLY -DET_G3C4_I2_CONSTRUCTION_PRIVATE \
     -DET_G3C4_NATIVE_OWNER_PRIVATE \
     -c "$PROJECT_ROOT/native/i2_wave2_package_bridge.c" \
     -o "$directory/objects/i2_native_helpers.o"
-  "$cxx" -std=c++17 -Wall -Wextra -Werror -Wpedantic -fPIC \
+  native_compile "$mode" "$directory" call_entry_allocation_shim "$cxx" \
+    -std=c++17 -Wall -Wextra -Werror -Wpedantic -fPIC \
     -fvisibility=hidden -fno-common -fstack-protector-all \
     "${optimization[@]}" -I "$(eshkol_source_dir)/inc" \
     -I "$(eshkol_source_dir)/lib/core" \
     -c "$PROJECT_ROOT/tests/g3c4/call_entry_allocation_shim.cpp" \
     -o "$directory/objects/call_entry_allocation_shim.o"
-  "$cc" "${common[@]}" "${optimization[@]}" -DET_P1_TRUSTED_BUILD=1 \
+  native_compile "$mode" "$directory" p1_identity "$cc" \
+    "${common[@]}" "${optimization[@]}" -DET_P1_TRUSTED_BUILD=1 \
     -c "$PROJECT_ROOT/native/p1_identity.c" \
     -o "$directory/objects/p1_identity.o"
   for source in data_io checkpoint_io n3k_primitives_provider \
       g3n_primitives_provider n2_primitives_provider \
       g3c4_primitives_provider g3s_sampling_provider \
       a2_attention_provider a2_kv_cache; do
-    "$cc" "${common[@]}" "${optimization[@]}" \
+    native_compile "$mode" "$directory" "$source" "$cc" \
+      "${common[@]}" "${optimization[@]}" \
       -DET_A2_KV_CACHE_TESTING -DET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE \
       -DET_A2_KV_CACHE_TERMINAL_WITNESS_PRIVATE \
       -c "$PROJECT_ROOT/native/$source.c" \
       -o "$directory/objects/$source.o"
   done
-  "$cc" "${common[@]}" "${optimization[@]}" \
+  native_compile "$mode" "$directory" t1_i64_shell "$cc" \
+    "${common[@]}" "${optimization[@]}" \
     -DET_G3C4_T1_I1_EXACT_PAIR_PRIVATE -DET_T1_I64_SHELL_TESTING \
     -c "$PROJECT_ROOT/native/t1_i64_shell.c" \
     -o "$directory/objects/t1_i64_shell.o"
-  "$cc" "${common[@]}" "${optimization[@]}" -DET_I64_TENSOR_TESTING \
+  native_compile "$mode" "$directory" m3_i64_integration "$cc" \
+    "${common[@]}" "${optimization[@]}" -DET_I64_TENSOR_TESTING \
     -DET_G3C4_T1_I1_EXACT_PAIR_PRIVATE \
     -DET_I64_TENSOR_STORAGE_QUERY_PRIVATE -DET_M3_TESTING \
     -c "$PROJECT_ROOT/src/eshkol_transformer/m3_i64_integration.c" \
     -o "$directory/objects/m3_i64_integration.o"
-  "$cc" "${common[@]}" "${optimization[@]}" \
+  native_compile "$mode" "$directory" m3_model "$cc" \
+    "${common[@]}" "${optimization[@]}" \
     -c "$PROJECT_ROOT/src/eshkol_transformer/m3_model.c" \
     -o "$directory/objects/m3_model.o"
-  ar rcsD "$directory/libg3c4_p2g2_terminal_composer.a" \
-    "$directory"/objects/*.o
+  run_recorded "$mode-native-archive" ar rcsD \
+    "$directory/libg3c4_p2g2_terminal_composer.a" "$directory"/objects/*.o
   local sanitizer_link=
   [[ "$mode" == sanitize ]] && \
     sanitizer_link='-fsanitize=address,undefined -fno-omit-frame-pointer'
@@ -119,6 +149,57 @@ exec $(printf '%q' "$cxx") $sanitizer_link "\$@" \\
   -Wl,--wrap=et_a2_kv_cache_transaction_commit_v1
 WRAPPER
   chmod 0500 "$directory/cxx-wrap"
+  local -a eshkol_args=(--strict-types --optimize 0 --no-stdlib
+    -I "$PROJECT_ROOT/internal/p1/lib" -I "$PROJECT_ROOT/internal/c1/lib"
+    -I "$PROJECT_ROOT/internal/t1/lib" -I "$PROJECT_ROOT/src"
+    -I "$PROJECT_ROOT/lib" -I "$PROJECT_ROOT/native"
+    -L "$directory" --lib g3c4_p2g2_terminal_composer)
+
+  compile_fixture() {
+    local fixture=$1 label=$2 fixture_source=$3 raw ir object
+    raw="$directory/generated/$fixture.raw.o"
+    ir="$raw.ll"
+    sha256sum "$fixture_source" >"$evidence/$label-source.before"
+    mkdir -p "$directory/cache/$fixture"
+    run_recorded "$label-compile" env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR \
+      ESHKOL_JIT_CACHE=0 XDG_CACHE_HOME="$directory/cache/$fixture" \
+      ESHKOL_CXX_COMPILER="$directory/cxx-wrap" \
+      ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
+      timeout --foreground --signal=TERM --kill-after=5s 600s \
+      "$runner" "${eshkol_args[@]}" --emit-object --dump-ir \
+      --emit-depfile "$directory/generated/$fixture.d" \
+      "$fixture_source" -o "$raw"
+    test -s "$raw" && test -s "$raw.bc" && test -s "$ir"
+    test -s "$directory/generated/$fixture.d"
+    object="$raw"
+    if [[ "$mode" == sanitize ]]; then
+      run_recorded "$label-asan-prepare" \
+        timeout --foreground --signal=TERM --kill-after=5s 300s python3 \
+        "$PROJECT_ROOT/tests/shared/prepare_eshkol_asan_ir.py" \
+        "$ir" "$directory/generated/$fixture.asan.ll" \
+        "$directory/generated/$fixture.asan.json"
+      run_recorded "$label-asan-compile" \
+        timeout --foreground --signal=TERM --kill-after=5s 900s \
+        "$cc" -O0 -g -fPIC \
+        -fsanitize=address -fno-omit-frame-pointer -c -x ir \
+        "$directory/generated/$fixture.asan.ll" \
+        -o "$directory/generated/$fixture.asan.o"
+      object="$directory/generated/$fixture.asan.o"
+      run_recorded "$label-asan-symbols" nm -u "$object"
+      grep -Eq '__asan_report_(load|store)[0-9]+' \
+        "$evidence/$label-asan-symbols.stdout"
+    fi
+    run_recorded "$label-link" env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR \
+      ESHKOL_JIT_CACHE=0 XDG_CACHE_HOME="$directory/cache/$fixture" \
+      ESHKOL_CXX_COMPILER="$directory/cxx-wrap" \
+      ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
+      timeout --foreground --signal=TERM --kill-after=5s 600s \
+      "$runner" "${eshkol_args[@]}" "$object" \
+      -o "$directory/composer-$fixture"
+    sha256sum "$fixture_source" >"$evidence/$label-source.after"
+    cmp "$evidence/$label-source.before" "$evidence/$label-source.after"
+  }
+
   local fixture label expected fixture_source
   for fixture in terminal feature-off; do
     label="$mode"
@@ -129,25 +210,10 @@ WRAPPER
       expected='^G3-C4 P2/G2 terminal off PASS: checks=[1-9][0-9]*$'
       fixture_source="$PROJECT_ROOT/tests/g3c4/p2_g2_terminal_composer_feature_off_test.esk"
     fi
-    mkdir -p "$directory/cache/$fixture"
-    env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
-      XDG_CACHE_HOME="$directory/cache/$fixture" \
-      ESHKOL_CXX_COMPILER="$directory/cxx-wrap" \
-      ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
-      timeout --foreground --signal=TERM --kill-after=5s 600s \
-      "$runner" --strict-types --optimize 0 --no-stdlib \
-      -I "$PROJECT_ROOT/internal/p1/lib" -I "$PROJECT_ROOT/internal/c1/lib" \
-      -I "$PROJECT_ROOT/internal/t1/lib" -I "$PROJECT_ROOT/src" \
-      -I "$PROJECT_ROOT/lib" -I "$PROJECT_ROOT/native" \
-      -L "$directory" --lib g3c4_p2g2_terminal_composer \
-      "$fixture_source" \
-      -o "$directory/composer-$fixture" \
-      >"$evidence/$label-compile.stdout" \
-      2>"$evidence/$label-compile.stderr"
-    "${runtime[@]}" ESHKOL_ARENA_POISON=1 \
+    compile_fixture "$fixture" "$label" "$fixture_source"
+    run_recorded "$label-run" "${runtime[@]}" ESHKOL_ARENA_POISON=1 \
       timeout --foreground --signal=TERM --kill-after=5s 120s \
-      "$directory/composer-$fixture" >"$evidence/$label-run.stdout" \
-      2>"$evidence/$label-run.stderr"
+      "$directory/composer-$fixture"
     test ! -s "$evidence/$label-run.stderr"
     grep -E "$expected" "$evidence/$label-run.stdout" >/dev/null
   done
@@ -159,28 +225,13 @@ WRAPPER
   cp "$directory/overlays/SHA256SUMS" "$evidence/$mode-overlay-SHA256SUMS"
   for fixture in parity-original parity-overlay unmarked decode-first decode-second \
       precommit postzero; do
-    mkdir -p "$directory/cache/$fixture"
-    env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
-      XDG_CACHE_HOME="$directory/cache/$fixture" \
-      ESHKOL_CXX_COMPILER="$directory/cxx-wrap" \
-      ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
-      timeout --foreground --signal=TERM --kill-after=5s 600s \
-      "$runner" --strict-types --optimize 0 --no-stdlib \
-      -I "$PROJECT_ROOT/internal/p1/lib" -I "$PROJECT_ROOT/internal/c1/lib" \
-      -I "$PROJECT_ROOT/internal/t1/lib" -I "$PROJECT_ROOT/src" \
-      -I "$PROJECT_ROOT/lib" -I "$PROJECT_ROOT/native" \
-      -L "$directory" --lib g3c4_p2g2_terminal_composer \
-      "$directory/overlays/$fixture.esk" \
-      -o "$directory/composer-$fixture" \
-      >"$evidence/$mode-$fixture-compile.stdout" \
-      2>"$evidence/$mode-$fixture-compile.stderr"
+    compile_fixture "$fixture" "$mode-$fixture" \
+      "$directory/overlays/$fixture.esk"
     local exit_status=0
-    "${runtime[@]}" ESHKOL_ARENA_POISON=1 \
+    run_recorded "$mode-$fixture-run" "${runtime[@]}" ESHKOL_ARENA_POISON=1 \
       timeout --foreground --signal=TERM --kill-after=5s 120s \
       "$directory/composer-$fixture" \
-      3>"$evidence/$mode-$fixture.marker" \
-      >"$evidence/$mode-$fixture-run.stdout" \
-      2>"$evidence/$mode-$fixture-run.stderr" || exit_status=$?
+      3>"$evidence/$mode-$fixture.marker" || exit_status=$?
     if [[ "$fixture" == postzero ]]; then
       test "$exit_status" -eq 134
       test "$(cat "$evidence/$mode-$fixture.marker")" = Z
@@ -206,6 +257,9 @@ WRAPPER
   done
   cmp "$evidence/$mode-parity-original-run.stdout" \
       "$evidence/$mode-parity-overlay-run.stdout"
+  run_recorded "$mode-compiler-evidence" python3 \
+    "$PROJECT_ROOT/tests/g3c4/check_p2_g2_terminal_compiler_evidence.py" \
+    "$directory" "$evidence" "$mode"
 }
 
 compile_mode normal
@@ -215,20 +269,15 @@ python3 "$PROJECT_ROOT/tests/g3c4/check_p2_g2_t1_prefix_oracle.py" \
   "$evidence/prefix-oracle-input.stdout" >"$evidence/oracle.stdout"
 python3 "$PROJECT_ROOT/tests/g3c4/check_p2_g2_terminal_composer_oracle.py" \
   "$evidence/normal-run.stdout" >"$evidence/second-oracle.stdout"
-ESHKOL_ARENA_POISON=1 "$tmp/normal/composer-terminal" \
-  >"$evidence/repeat-run.stdout" 2>"$evidence/repeat-run.stderr"
-ESHKOL_ARENA_POISON=1 "$tmp/normal/composer-feature-off" \
-  >"$evidence/repeat-feature-off-run.stdout" \
-  2>"$evidence/repeat-feature-off-run.stderr"
-test ! -s "$evidence/repeat-run.stderr"
-test ! -s "$evidence/repeat-feature-off-run.stderr"
+compile_mode repeat
 compile_mode sanitize
-cmp "$evidence/normal-run.stdout" "$evidence/repeat-run.stdout"
-cmp "$evidence/normal-run.stdout" "$evidence/sanitize-run.stdout"
-cmp "$evidence/normal-feature-off-run.stdout" \
-    "$evidence/repeat-feature-off-run.stdout"
-cmp "$evidence/normal-feature-off-run.stdout" \
-    "$evidence/sanitize-feature-off-run.stdout"
+for fixture in terminal feature-off parity-original parity-overlay unmarked \
+    decode-first decode-second precommit postzero; do
+  label="$fixture"
+  [[ "$fixture" == terminal ]] && label=run || label="$fixture-run"
+  cmp "$evidence/normal-$label.stdout" "$evidence/repeat-$label.stdout"
+  cmp "$evidence/normal-$label.stdout" "$evidence/sanitize-$label.stdout"
+done
 git -C "$PROJECT_ROOT" diff --check
 sha256sum "$PROJECT_ROOT/native/g3c4_p2g2_terminal_composer_source_closure.txt" \
   >"$evidence/closure.sha256"

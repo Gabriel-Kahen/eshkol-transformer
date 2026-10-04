@@ -2524,6 +2524,20 @@ the postzero fault site, byte-exact overlay removal, and rejection of mutated
 or ambiguous source. The corrected normal/repeat/sanitizer overlay gate is
 still unrun; this repair does not establish composer acceptance.
 
+The next composer gate recipe retains complete native and Eshkol build trees,
+raw command streams and numeric exits. Each terminal, feature-off and seven
+overlay fixture is compiled afresh in normal, repeat and sanitizer modes with
+its object, LLVM IR and transitive depfile retained. The sanitizer recipe
+keeps the original generated IR byte-for-byte, creates a separately hashed
+copy with `sanitize_address` on every supported function definition, compiles
+that copy with Clang, and links the resulting object for the actual runtime
+case. It rejects unsupported IR syntax and objects lacking generated ASan
+checks. This is a source-staged test recipe: its compiled result and IR
+instrumentation still require supported-run inspection. Native C remains
+ASan/UBSan/LSan-instrumented; generated Eshkol IR has address checks only,
+and this recipe does not establish bounds of the bump arena or instrumentation
+of the prebuilt runtime archive.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
