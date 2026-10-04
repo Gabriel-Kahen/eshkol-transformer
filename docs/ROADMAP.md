@@ -795,7 +795,11 @@ padding input `[31,0]`; the corrected two-repeat mathematical audit yields
 normal accuracy 5/5 and wrong-stride accuracy 0/5. The candidate's private
 compiled runner requires all 63 role records, unchanged logits/CE/reduction
 and counters, then rejection at the strict `correct_f32` check with no mutant
-transcript publication. The production/default profile and frozen corpora are
+transcript publication. A test-only negative classifier now requires canonical
+exit 1, empty validator stdout, exact expected diagnostics (with only the
+pinned two-line NumPy warning admitted), retained raw traceback/source context,
+and absent transcript; timeouts, crashes, extra output and other exceptions
+fail closed. The production/default profile and frozen corpora are
 unchanged. Independent source review and a supported compiled mutant run are
 pending; mathematical reachability alone is not a compiled mutant kill.
 

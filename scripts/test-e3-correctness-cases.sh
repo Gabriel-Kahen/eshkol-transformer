@@ -174,19 +174,25 @@ require(normal["final"]["metrics_f32"][:3] == mutant["final"]["metrics_f32"][:3]
 require(normal["final"]["metrics_f32"][3] == "3f800000", "normal accuracy")
 require(mutant["final"]["metrics_f32"][3] == "00000000", "mutant accuracy")
 PY
-if ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "${q0_python}" -B \
-  -m tests.e3_native_parity.verify_observation \
-  --reference "${out}/reference-a.json" --case all-correct \
+set +e
+ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE \
+  timeout --foreground --signal=TERM --kill-after=5s 120s "${q0_python}" -B \
+  "${PROJECT_ROOT}/tests/e3_private/wrong_vocab_axis_rejection.py" run \
+  --reference "${out}/reference-a.json" \
   --observed "${out}/observed-wrong-vocab-axis-all-correct.json" \
   --roles "${out}/roles-wrong-vocab-axis-all-correct.tsv" \
   --transcript "${out}/transcript-wrong-vocab-axis-all-correct.json" \
+  --traceback "${out}/verify-wrong-vocab-axis-all-correct.traceback" \
   >"${out}/verify-wrong-vocab-axis-all-correct.stdout" \
-  2>"${out}/verify-wrong-vocab-axis-all-correct.stderr"; then
-  die "compiled wrong-vocab-axis mutant survived strict transcript validation"
-fi
-grep -F 'correct_f32: target/argmax wiring mismatch' \
-  "${out}/verify-wrong-vocab-axis-all-correct.stderr" >/dev/null || \
-  die "wrong-vocab-axis mutant failed outside the correct/argmax assertion"
-[[ ! -e "${out}/transcript-wrong-vocab-axis-all-correct.json" ]] || \
-  die "failed wrong-vocab-axis mutant published a transcript"
+  2>"${out}/verify-wrong-vocab-axis-all-correct.stderr"
+verify_status=$?
+set -e
+printf '%d\n' "${verify_status}" >"${out}/verify-wrong-vocab-axis-all-correct.exit"
+"${q0_python}" -B \
+  "${PROJECT_ROOT}/tests/e3_private/wrong_vocab_axis_rejection.py" check \
+  --status "${out}/verify-wrong-vocab-axis-all-correct.exit" \
+  --stdout "${out}/verify-wrong-vocab-axis-all-correct.stdout" \
+  --stderr "${out}/verify-wrong-vocab-axis-all-correct.stderr" \
+  --traceback "${out}/verify-wrong-vocab-axis-all-correct.traceback" \
+  --transcript "${out}/transcript-wrong-vocab-axis-all-correct.json"
 printf 'E3 compiled all-correct/all-wrong transcripts and wrong-vocab-axis mutant passed\n'

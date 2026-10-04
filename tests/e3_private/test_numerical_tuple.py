@@ -233,8 +233,9 @@ printf '%s\\n' "$e3_tuple_kind"
         selector = (ROOT / "scripts/build-e3-numerical-test.sh").read_text()
         runner = (ROOT / "scripts/test-e3-correctness-cases.sh").read_text()
         self.assertIn("wrong-vocab-axis|sanitize", selector)
-        self.assertIn("compiled wrong-vocab-axis mutant survived strict transcript validation", runner)
-        self.assertIn("correct_f32: target/argmax wiring mismatch", runner)
+        self.assertIn('wrong_vocab_axis_rejection.py" run', runner)
+        self.assertIn('wrong_vocab_axis_rejection.py" check', runner)
+        self.assertIn('verify-wrong-vocab-axis-all-correct.exit', runner)
         self.assertIn('"${e3_tuple_kind}" == numerical',
                       (ROOT / "scripts/build-e1b-consumer.sh").read_text())
 
