@@ -20,6 +20,10 @@
 
 #define ET_O2_BUILDER_MAGIC UINT64_C(0x45544f324255494c)
 #define ET_O2_OPTIMIZER_MAGIC UINT64_C(0x45544f324f505449)
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+#define ET_O2_RETIRED_OPTIMIZER_MAGIC UINT64_C(0x45544f3252455449)
+#define ET_O2_CANDIDATE_COUNT 14u
+#endif
 #define ET_O2_STATE_MAGIC UINT64_C(0x45544f3253544154)
 #define ET_O2_HANDLE_MAGIC UINT64_C(0x45544f3248414e44)
 #define ET_O2_BORROW_MAGIC UINT64_C(0x45544f32424f5252)
@@ -34,6 +38,10 @@ _Static_assert(ET_O2_MAX_PARAMETERS <= ET_F32_PARAMETER_MAX_BATCH / 3u,
                "O2 step exceeds the I2 transaction ceiling");
 _Static_assert(ET_O2_MAX_PARAMETERS <= SIZE_MAX / 3u,
                "O2 entry multipliers overflow size_t");
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+_Static_assert(sizeof(et_o2_error_v1) == 264u,
+               "G3-R O2 error record size changed");
+#endif
 
 typedef struct et_o2_options {
   uint32_t learning_rate_bits;
@@ -140,6 +148,17 @@ struct et_o2_state_reconstruct_builder {
   uint32_t prepared;
 };
 
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+typedef struct et_o2_retire_provenance {
+  struct et_o2_retire_provenance *next;
+  et_o2_optimizer *owner;
+  et_o2_entry *entries;
+  size_t count;
+  uint32_t live;
+  et_o2_entry roster[];
+} et_o2_retire_provenance;
+#endif
+
 static et_o2_optimizer_builder *et_o2_builders;
 static et_o2_optimizer *et_o2_optimizers;
 static et_o2_optimizer_state *et_o2_states;
@@ -148,6 +167,17 @@ static et_o2_optimizer_state_borrow *et_o2_borrows;
 static et_o2_optimizer_state_borrow *et_o2_retired_borrows;
 static et_o2_state_reconstruct_builder *et_o2_reconstruct_builders;
 static size_t et_o2_owned_state_clones;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+static et_o2_retire_provenance *et_o2_retire_records;
+
+static et_o2_retire_provenance *et_o2_retire_record_find(
+    const et_o2_optimizer *owner) {
+  for (et_o2_retire_provenance *record = et_o2_retire_records;
+       record != NULL; record = record->next)
+    if (record->owner == owner) return record;
+  return NULL;
+}
+#endif
 
 #ifdef ET_O2_TESTING
 static size_t et_o2_allocation_limit = SIZE_MAX;
@@ -765,6 +795,277 @@ static void et_o2_destroy_entry_moments(et_o2_entry *entries, size_t count) {
   }
 }
 
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+static int et_o2_retire_span_overlap(const void *left, size_t left_bytes,
+                                     const void *right, size_t right_bytes) {
+  uintptr_t a = (uintptr_t)left;
+  uintptr_t b = (uintptr_t)right;
+  return left != NULL && right != NULL && left_bytes != 0u &&
+         right_bytes != 0u && a <= UINTPTR_MAX - left_bytes &&
+         b <= UINTPTR_MAX - right_bytes && a < b + right_bytes &&
+         b < a + left_bytes;
+}
+
+static int et_o2_retire_owned_hit(const et_o2_error_v1 *error,
+                                  const void *owned, size_t bytes) {
+  if (owned == NULL || bytes == 0u ||
+      (uintptr_t)owned > UINTPTR_MAX - bytes) return 1;
+  return et_o2_retire_span_overlap(error, sizeof(*error), owned, bytes);
+}
+
+static int et_o2_retire_error_overlaps(const et_o2_error_v1 *error) {
+  if (error == NULL) return 0;
+  if ((uintptr_t)error % _Alignof(et_o2_error_v1) != 0u ||
+      (uintptr_t)error > UINTPTR_MAX - sizeof(*error) ||
+      et_f32_tensor_private_owned_span_overlap_v1(error, sizeof(*error)) != 0)
+    return 1;
+  for (const et_o2_retire_provenance *record = et_o2_retire_records;
+       record != NULL; record = record->next) {
+    if (record->count == 0u || record->count > ET_O2_MAX_PARAMETERS ||
+        record->count > (SIZE_MAX - sizeof(*record)) / sizeof(et_o2_entry))
+      return 1;
+    if (et_o2_retire_owned_hit(
+            error, record,
+            sizeof(*record) + record->count * sizeof(et_o2_entry)) ||
+        et_o2_retire_owned_hit(error, record->owner,
+                                sizeof(*record->owner))) return 1;
+    if (record->live == 1u) {
+      if (et_o2_retire_owned_hit(
+              error, record->entries,
+              record->count * sizeof(*record->entries))) return 1;
+    } else if (record->live != 0u || record->entries != NULL) {
+      return 1;
+    }
+  }
+  for (const et_o2_optimizer *other = et_o2_optimizers; other != NULL;
+       other = other->registry_next) {
+    const et_o2_retire_provenance *record =
+        et_o2_retire_record_find(other);
+    if (et_o2_retire_owned_hit(error, other, sizeof(*other)) ||
+        record == NULL) return 1;
+    if (other->magic == ET_O2_OPTIMIZER_MAGIC) {
+      if (record->live != 1u || other->entries != record->entries ||
+          other->count != record->count) return 1;
+    } else if (other->magic == ET_O2_RETIRED_OPTIMIZER_MAGIC) {
+      if (record->live != 0u || record->entries != NULL ||
+          other->entries != NULL) return 1;
+    } else {
+      return 1;
+    }
+  }
+  for (const et_o2_optimizer_builder *builder = et_o2_builders;
+       builder != NULL; builder = builder->registry_next) {
+    if (et_o2_retire_owned_hit(error, builder, sizeof(*builder))) return 1;
+    return 1; /* Builder-owned entry arrays lack independent provenance. */
+  }
+  for (const et_o2_optimizer_state *state = et_o2_states; state != NULL;
+       state = state->registry_next) {
+    if (et_o2_retire_owned_hit(error, state, sizeof(*state))) return 1;
+    if (state->lifecycle == ET_O2_OPTIMIZER_STATE_LIVE ||
+        state->entries != NULL || state->handles != NULL ||
+        state->owned_clones != NULL) return 1;
+  }
+  for (const et_o2_optimizer_state_handle *handle = et_o2_handles;
+       handle != NULL; handle = handle->registry_next)
+    if (et_o2_retire_owned_hit(error, handle, sizeof(*handle)))
+      return 1;
+  for (const et_o2_optimizer_state_borrow *borrow = et_o2_borrows;
+       borrow != NULL; borrow = borrow->registry_next)
+    if (et_o2_retire_owned_hit(error, borrow, sizeof(*borrow)))
+      return 1;
+  for (const et_o2_optimizer_state_borrow *borrow = et_o2_retired_borrows;
+       borrow != NULL; borrow = borrow->registry_next)
+    if (et_o2_retire_owned_hit(error, borrow, sizeof(*borrow)))
+      return 1;
+  for (const et_o2_state_reconstruct_builder *builder =
+           et_o2_reconstruct_builders;
+       builder != NULL; builder = builder->registry_next) {
+    if (et_o2_retire_owned_hit(error, builder, sizeof(*builder))) return 1;
+    return 1; /* Reconstruct-owned arrays lack independent provenance. */
+  }
+  return 0;
+}
+
+int32_t et_o2_private_candidate_retire_preflight_v1(
+    et_o2_optimizer *candidate, et_o2_error_v1 *error) {
+  static const char operation[] = "candidate-optimizer-retire";
+  et_o2_optimizer *optimizer = et_o2_find_optimizer(candidate);
+  et_o2_retire_provenance *record = et_o2_retire_record_find(optimizer);
+  et_f32_tensor_error i2_error;
+  if (et_o2_retire_error_overlaps(error)) {
+    return ET_O2_STATUS_INVALID_ARGUMENT;
+  }
+  if (optimizer == NULL) {
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                      ET_O2_CODE_INVALID_HANDLE, operation,
+                      "optimizer is foreign or retired");
+  }
+  if (!et_o2_optimizer_provider_valid(optimizer) ||
+      optimizer->count != ET_O2_CANDIDATE_COUNT ||
+      record == NULL || record->live != 1u ||
+      record->count != ET_O2_CANDIDATE_COUNT ||
+      optimizer->entries == NULL ||
+      optimizer->entries != record->entries) {
+    return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
+                      ET_O2_CODE_PROVIDER_DEFECT, operation,
+                      "optimizer provider or 14-entry roster is invalid");
+  }
+  if (optimizer->busy != 0u
+#ifdef ET_TR3_O2_PRIVATE_OPERATIONS
+      || optimizer->active_operation != NULL
+#endif
+  ) {
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                      ET_O2_CODE_ACTIVE_BORROW, operation,
+                      "optimizer has an active operation");
+  }
+  if (et_o2_builders != NULL || et_o2_reconstruct_builders != NULL) {
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                      ET_O2_CODE_ACTIVE_BORROW, operation,
+                      "an O2 builder is still active");
+  }
+  for (const et_o2_optimizer_state *state = et_o2_states; state != NULL;
+       state = state->registry_next) {
+    if (state->lifecycle == ET_O2_OPTIMIZER_STATE_LIVE ||
+        state->active_borrows != 0u) {
+      return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                        ET_O2_CODE_ACTIVE_BORROW, operation,
+                        "an O2 state or borrow is still active");
+    }
+  }
+  for (size_t index = 0u; index < ET_O2_CANDIDATE_COUNT; ++index) {
+    const et_o2_entry *entry = &optimizer->entries[index];
+    const et_o2_entry *roster = &record->roster[index];
+    const et_f32_tensor *moments[2] = {entry->exp_avg, entry->exp_avg_sq};
+    if (memcmp(entry, roster, sizeof(*entry)) != 0 ||
+        entry->initialized != 1u || entry->parameter == NULL ||
+        entry->p1_handle == NULL || entry->storage_owner == NULL ||
+        moments[0] == NULL || moments[1] == NULL) {
+      return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                        ET_O2_CODE_INVALID_HANDLE, operation,
+                        "optimizer entry differs from its published roster");
+    }
+    memset(&i2_error, 0, sizeof(i2_error));
+    if (et_f32_parameter_validate_identity_v1(
+            entry->parameter, entry->p1_handle, &i2_error) != 0 ||
+        et_f32_parameter_canonical_owner_v1(entry->parameter) !=
+            entry->storage_owner) {
+      return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                        ET_O2_CODE_INVALID_HANDLE, operation,
+                        "parameter, P1 binding or storage identity changed");
+    }
+    for (size_t kind = 0u; kind < 2u; ++kind) {
+      memset(&i2_error, 0, sizeof(i2_error));
+      if (et_f32_tensor_private_destroy_ready_v1(moments[kind],
+                                                  &i2_error) != 0) {
+        return et_o2_from_i2(&i2_error, error, operation,
+                             ET_O2_STATUS_INVALID_STATE);
+      }
+      for (size_t previous = 0u; previous <= index; ++previous) {
+        const et_o2_entry *earlier = &optimizer->entries[previous];
+        if ((previous < index &&
+             (entry->parameter == earlier->parameter ||
+              entry->p1_handle == earlier->p1_handle ||
+              entry->storage_owner == earlier->storage_owner)) ||
+            (previous < index &&
+             (moments[kind] == earlier->exp_avg ||
+              moments[kind] == earlier->exp_avg_sq)) ||
+            (previous == index && kind == 1u &&
+             moments[kind] == earlier->exp_avg)) {
+          return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                            ET_O2_CODE_OWNER_CONFLICT, operation,
+                            "optimizer entries share an owned identity");
+        }
+      }
+      for (const et_o2_optimizer *other = et_o2_optimizers; other != NULL;
+           other = other->registry_next) {
+        if (other == optimizer || other->magic != ET_O2_OPTIMIZER_MAGIC)
+          continue;
+        const et_o2_retire_provenance *other_record =
+            et_o2_retire_record_find(other);
+        if (other_record == NULL || other_record->live != 1u ||
+            other_record->count == 0u ||
+            other_record->count > ET_O2_MAX_PARAMETERS ||
+            other->entries == NULL || other->entries != other_record->entries ||
+            other->count != other_record->count) {
+          return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
+                            ET_O2_CODE_PROVIDER_DEFECT, operation,
+                            "another live optimizer has an invalid roster");
+        }
+        for (size_t peer = 0u; peer < other->count; ++peer) {
+          const et_o2_entry *foreign = &other->entries[peer];
+          if (entry->parameter == foreign->parameter ||
+              entry->p1_handle == foreign->p1_handle ||
+              entry->storage_owner == foreign->storage_owner ||
+              moments[kind] == foreign->exp_avg ||
+              moments[kind] == foreign->exp_avg_sq) {
+            return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                              ET_O2_CODE_OWNER_CONFLICT, operation,
+                              "another live optimizer shares an entry identity");
+          }
+          if (memcmp(foreign, &other_record->roster[peer],
+                     sizeof(*foreign)) != 0) {
+            return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
+                              ET_O2_CODE_PROVIDER_DEFECT, operation,
+                              "another live optimizer changed its roster");
+          }
+        }
+      }
+    }
+  }
+  return et_o2_success(error);
+}
+
+#ifdef ET_O2_TESTING
+static size_t et_o2_retire_fail_after = SIZE_MAX;
+void et_o2_test_retire_fail_after_v1(size_t destroyed) {
+  et_o2_retire_fail_after = destroyed;
+}
+#endif
+
+int32_t et_o2_private_candidate_retire_commit_v1(
+    et_o2_optimizer *candidate, et_o2_error_v1 *error) {
+  et_o2_optimizer *optimizer;
+  et_o2_retire_provenance *record;
+  et_f32_tensor_error i2_error;
+#ifdef ET_O2_TESTING
+  size_t destroyed = 0u;
+#endif
+  int32_t result =
+      et_o2_private_candidate_retire_preflight_v1(candidate, error);
+  if (result != 0) return result;
+  optimizer = et_o2_find_optimizer(candidate);
+  if (optimizer == NULL) _Exit(134);
+  record = et_o2_retire_record_find(optimizer);
+  if (record == NULL || record->live != 1u ||
+      record->entries != optimizer->entries) _Exit(134);
+  for (size_t index = 0u; index < ET_O2_CANDIDATE_COUNT; ++index) {
+    et_f32_tensor **slots[2] = {&optimizer->entries[index].exp_avg,
+                                &optimizer->entries[index].exp_avg_sq};
+    for (size_t kind = 0u; kind < 2u; ++kind) {
+      et_f32_tensor *local = *slots[kind];
+#ifdef ET_O2_TESTING
+      if (destroyed == et_o2_retire_fail_after) _Exit(134);
+#endif
+      memset(&i2_error, 0, sizeof(i2_error));
+      if (et_f32_tensor_destroy_v1(&local, &i2_error) != 0 || local != NULL)
+        _Exit(134);
+      *slots[kind] = NULL;
+#ifdef ET_O2_TESTING
+      ++destroyed;
+#endif
+    }
+  }
+  free(optimizer->entries);
+  optimizer->entries = NULL;
+  record->entries = NULL;
+  record->live = 0u;
+  optimizer->count = 0u;
+  optimizer->magic = ET_O2_RETIRED_OPTIMIZER_MAGIC;
+  return et_o2_success(error);
+}
+#endif
+
 int32_t et_o2_optimizer_builder_create_v1(
     size_t parameter_count, uint32_t clip_kind, uint32_t clip_max_bits,
     uint32_t schedule_kind, uint64_t warmup_updates, uint64_t total_updates,
@@ -925,6 +1226,31 @@ int32_t et_o2_optimizer_builder_finish_v1(et_o2_optimizer_builder **slot,
                       ET_O2_CODE_ALLOCATION_FAILED, "optimizer-create",
                       "cannot publish optimizer receiver");
   }
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  if (builder->count > (SIZE_MAX - sizeof(et_o2_retire_provenance)) /
+                           sizeof(et_o2_entry)) {
+    free(optimizer);
+    return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
+                      ET_O2_CODE_ALLOCATION_FAILED, "optimizer-create",
+                      "cannot record optimizer entry provenance");
+  }
+  size_t retire_bytes = sizeof(et_o2_retire_provenance) +
+                        builder->count * sizeof(et_o2_entry);
+  et_o2_retire_provenance *record =
+      (et_o2_retire_provenance *)et_o2_calloc(1u, retire_bytes);
+  if (record == NULL) {
+    free(optimizer);
+    return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
+                      ET_O2_CODE_ALLOCATION_FAILED, "optimizer-create",
+                      "cannot record optimizer entry provenance");
+  }
+  record->owner = optimizer;
+  record->entries = builder->entries;
+  record->count = builder->count;
+  record->live = 1u;
+  memcpy(record->roster, builder->entries,
+         builder->count * sizeof(et_o2_entry));
+#endif
   optimizer->magic = ET_O2_OPTIMIZER_MAGIC;
   optimizer->count = builder->count;
   optimizer->config = builder->config;
@@ -934,6 +1260,10 @@ int32_t et_o2_optimizer_builder_finish_v1(et_o2_optimizer_builder **slot,
   memcpy(optimizer->provider_id, ET_O2_PROVIDER_ID, sizeof(ET_O2_PROVIDER_ID));
   optimizer->registry_next = et_o2_optimizers;
   et_o2_optimizers = optimizer;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  record->next = et_o2_retire_records;
+  et_o2_retire_records = record;
+#endif
   builder->entries = NULL;
   et_o2_unlink_builder(builder);
   builder->magic = 0u;
@@ -2794,6 +3124,31 @@ void et_o2_test_live_counts_snapshot_v1(et_o2_test_live_counts_v1 *counts) {
   }
   for (optimizer = et_o2_optimizers; optimizer != NULL;
        optimizer = optimizer->registry_next) {
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+    if (optimizer->magic == ET_O2_RETIRED_OPTIMIZER_MAGIC) {
+      counts->retired_optimizers++;
+      continue;
+    }
+    const et_o2_retire_provenance *record =
+        et_o2_retire_record_find(optimizer);
+    if (optimizer->magic == ET_O2_OPTIMIZER_MAGIC && record != NULL &&
+        record->live == 1u && optimizer->entries == record->entries &&
+        optimizer->count == record->count &&
+        optimizer->count <= ET_O2_MAX_PARAMETERS) {
+      counts->live_entry_bytes += optimizer->count * sizeof(et_o2_entry);
+      counts->live_optimizer_moments += optimizer->count * 2u;
+      for (size_t index = 0u; index < optimizer->count; ++index) {
+        size_t bytes = 0u;
+        if (et_f32_tensor_byte_length_v1(
+                optimizer->entries[index].exp_avg, &bytes, NULL) == 0)
+          counts->live_optimizer_moment_bytes += bytes;
+        bytes = 0u;
+        if (et_f32_tensor_byte_length_v1(
+                optimizer->entries[index].exp_avg_sq, &bytes, NULL) == 0)
+          counts->live_optimizer_moment_bytes += bytes;
+      }
+    }
+#endif
     counts->optimizers++;
   }
   for (state = et_o2_states; state != NULL; state = state->registry_next) {
