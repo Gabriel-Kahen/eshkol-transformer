@@ -2514,6 +2514,16 @@ budget-one generator to check preflight rejection and empty ledgers. The
 static closure check now enforces these conditions. The corrected feature-off
 fixture and full normal/repeat/sanitizer/fault-overlay gate remain uncompiled.
 
+The `132a618` pinned composer run stopped before its first fault-overlay
+runtime: the disposable-overlay generator still pinned the composer source
+hash from before the rollback-enrollment repair. The frozen composer source
+hash is `e1b6fb68a083bc450b4fee414ce9c4be9ecea09a9e8af0243dd94910b1474ccf`;
+the T1 source hash and both insertion markers are unchanged. The generator's
+test-only hash pin is corrected, with Q0 checks for exact source identity,
+the postzero fault site, byte-exact overlay removal, and rejection of mutated
+or ambiguous source. The corrected normal/repeat/sanitizer overlay gate is
+still unrun; this repair does not establish composer acceptance.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |

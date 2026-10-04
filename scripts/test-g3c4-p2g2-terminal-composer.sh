@@ -18,6 +18,7 @@ python3 "$PROJECT_ROOT/tests/g3c4/test_active_call_checker.py" \
   2>"$evidence/step5-regression.stderr"
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v \
   tests.q0.test_python_isolation \
+  tests.q0.test_g3c4_terminal_fault_overlays \
   >"$evidence/q0.stdout" 2>"$evidence/q0.stderr"
 bash "$PROJECT_ROOT/scripts/test-g3c4-p2g2-t1-prefix-coordinator.sh" \
   "$evidence/prefix-predecessor" >"$evidence/prefix-predecessor.stdout"

@@ -18,6 +18,7 @@ additions = [
     "tests/g3c4/check_p2_g2_terminal_composer_oracle.py",
     "tests/g3c4/test_context_cache_checker.py",
     "tests/g3c4/test_active_call_checker.py",
+    "tests/q0/test_g3c4_terminal_fault_overlays.py",
     "scripts/check-g3c4-p2g2-terminal-composer.py",
     "scripts/test-g3c4-p2g2-terminal-composer.sh",
     "tests/g3c4/call_entry_allocation_shim.cpp",

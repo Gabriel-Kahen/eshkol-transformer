@@ -11,7 +11,7 @@ T1 = ROOT / "native/g3c4_t1_output_decode_extension.esk"
 COMPOSER = ROOT / "native/g3c4_p2g2_terminal_composer_extension.esk"
 TEMPLATE = ROOT / "tests/g3c4/p2_g2_terminal_fault_fixture.esk.in"
 T1_SHA = "ed6b7fa5195179c8ad987cb410dd938cda4a08faf42e39e79094c83c917a34d9"
-COMPOSER_SHA = "cc263096cb6814de887514fb5662f00590047587e5fa1e11ef066ee891cf10ef"
+COMPOSER_SHA = "e1b6fb68a083bc450b4fee414ce9c4be9ecea09a9e8af0243dd94910b1474ccf"
 T1_MARKER = ("                      (bytevector-u8-set!\n"
              "                        raw 0 (bytevector-u8-ref staging 0))")
 COMPOSER_MARKER = "                  (vector-set! barrier 0 #t)\n"
