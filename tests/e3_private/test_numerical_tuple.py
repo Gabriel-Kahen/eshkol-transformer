@@ -7,6 +7,7 @@ import tempfile
 import unittest
 
 from tests.e3_private.parse_numerical_observation import ROLE_NAMES, parse
+from tests.c2.test_handler_order import parse as parse_source
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -41,6 +42,24 @@ def frame_bytes(records: list[str]) -> bytes:
 
 
 class NumericalTupleTest(unittest.TestCase):
+    def test_runtime_drivers_parse_completely_and_reject_extra_close(self) -> None:
+        # A stray close previously stopped the supported gate before runtime.
+        for name in ("numerical_runtime.esk", "correctness_runtime.esk"):
+            with self.subTest(driver=name):
+                source = (ROOT / "tests/e3_private" / name).read_text()
+                forms = parse_source(source)
+                arguments = [node for node in forms
+                             if isinstance(node, list) and len(node) > 1
+                             and node[:2] == ["check", ["quote", "arguments"]]]
+                self.assertEqual(len(arguments), 1)
+                self.assertEqual(forms[-2:],
+                                 [["display", '"E3-NUMERICAL-RUNTIME-PASS"'],
+                                  ["newline"]])
+                with self.assertRaisesRegex(ValueError, "unexpected close"):
+                    parse_source(source + ")")
+                with self.assertRaisesRegex(ValueError, "unclosed list"):
+                    parse_source("(" + source)
+
     def test_private_generated_source_stage_is_stable_and_fresh(self) -> None:
         helper = ROOT / "scripts/e3-generated-source-stage.sh"
         with tempfile.TemporaryDirectory(prefix="e3-numerical-gate-") as temporary:

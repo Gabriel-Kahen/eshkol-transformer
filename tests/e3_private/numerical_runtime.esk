@@ -27,7 +27,7 @@
 (define args (command-line))
 (check 'arguments
   (and (pair? args) (pair? (cdr args)) (pair? (cdr (cdr args)))
-       (null? (cdr (cdr (cdr args)))))))
+       (null? (cdr (cdr (cdr args))))))
 (define spec (case-spec (car (cdr args))))
 (check 'case spec)
 (define output (vector #f))

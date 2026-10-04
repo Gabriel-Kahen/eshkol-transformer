@@ -18,7 +18,7 @@
 (define args (command-line))
 (check 'arguments
   (and (pair? args) (pair? (cdr args)) (pair? (cdr (cdr args)))
-       (null? (cdr (cdr (cdr args)))))))
+       (null? (cdr (cdr (cdr args))))))
 (check 'case
   (or (string=? (car (cdr args)) "all-correct")
       (string=? (car (cdr args)) "all-wrong")))

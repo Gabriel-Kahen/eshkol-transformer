@@ -885,6 +885,16 @@ compiled acceptance yet. The upstream typed
 foreign-pointer prerequisite remains unresolved; no generated-ASan,
 ordinary-object-parity or E3 §9 acceptance is claimed for this union.
 
+The frozen five-case gate at `2b74b534` built its package variants but
+stopped at the first runtime compile on an extra closing parenthesis in the
+argument check; no numerical runtime or mutant verdict was produced. The same
+syntax defect exists in the correctness driver. An isolated test-only successor
+removes that one character from each driver and checks complete source parsing
+with malformed-close controls. The frozen failed evidence is preserved at
+`e3-numerical-five-case-2b74b53-fe9-f31-20261004-prepared-a/SHA256SUMS-FAILED`
+(`cdb4d3cd...`). Independent source review and a fresh supported compile/runtime
+gate remain required; static parsing does not prove E3 numerical acceptance.
+
 The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
 is a docs-only candidate for the remaining private numerical, compiled-mutant,
 failure and rollback gates. It tracks authentic D2/model reachability separately
