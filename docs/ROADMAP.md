@@ -779,6 +779,15 @@ role/CE/state/final verification and byte equality for identical packed
 emissions. Its three compiled mutants remain on packed-single. Local parser
 and shell checks do not substitute for independent source/test review or a
 fresh supported compiled gate; this extension has no runtime evidence yet.
+An isolated all-correct/all-wrong source candidate adds two fixed raw V256
+six-byte D1 corpora, authentic packed D2 rows, seed-1729 M3 selection proof,
+and a separate two-case private numerical runner. The new versioned manifest
+checks exact IDs, physical hashes, cursor identity, row/mask/count and declared
+class; the compiled gate is scoped to these two cases across normal A/B,
+poison and sanitizer with 21 roles, CE, exact accumulation, six final outputs
+and accuracy 1.0/0.0. The existing five-case corpus, schema and transcripts
+are unchanged. Independent source review and a supported compiled run are
+pending; the local mathematical reference is not compiled E3 evidence.
 
 The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
 is a docs-only candidate for the remaining private numerical, compiled-mutant,
