@@ -112,6 +112,10 @@ must demonstrate the lexical return-to-guard cuts, the root/registry order,
 and no fallible gap between successful native P1 return and lexical ownership.
 Fixed internal test cuts must exercise wrong-provider and copied-cell rejection
 while an authentic row is armed, then continue the successful P1 admission;
+the same-cell/provider replay after consumption, while that original call is
+active and before native begin, must reject without changing the P1 live
+count/roster, I2 registry/count or consumed row, then let the original call
+continue;
 owner-cell substitution must occur after native owner enrollment and be
 restored before the primary I2 call. Distinct raised-`#f` cuts must land after
 native begin status but before result-pointer assignment, and after assignment

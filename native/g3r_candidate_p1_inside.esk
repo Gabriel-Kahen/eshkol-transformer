@@ -41,6 +41,9 @@
         (fail 'invalid-state operation "nested construction" '()))
     ;; Consume authority before the first native candidate token.
     (vector-set! row 7 'consumed)
+    (if (= g3r-candidate-test-fault 6)
+        (g3r-candidate-test-consumed-replay
+          provider-name enrollment-cell row))
     (let* ((sidecar (vector-ref enrollment-cell 1))
            (record (vector #f 'aborted provider-name #f #f sidecar))
            (next (cons record (vector-ref construction-registry-root 0)))

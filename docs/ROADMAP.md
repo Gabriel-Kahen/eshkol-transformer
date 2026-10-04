@@ -1690,8 +1690,13 @@ can claim an authenticated candidate. Ordinary module, I2, M3T and native P1
 source bytes remain unchanged. Static overlay/source-boundary checks and a
 host C feature-on bridge compile pass. The fixture poisons mutable private
 surface slots and stages authentic armed-row, owner and native-return fault
-cuts; its composed Eshkol execution and the exact getter/cleanup IR, compiled
-ownership IR, supported normal/repeat/sanitizer gate, independent source
+cuts, plus a fixed same-cell/provider replay after admission consumption and
+before native begin. A fresh-evidence runner is prepared to retain raw full
+IR, depfiles and diagnostics, compile normal/repeat and instrumented
+sanitizer modes, and require ordinary-source/object parity; it has not run on
+the supported host. Its mechanical exit cannot approve the required manual
+IR/diagnostic classification. Composed Eshkol execution, exact getter/cleanup
+IR, compiled ownership proof, supported gate, independent runner/source-delta
 review and integration remain pending. No sealed-graph revocation or
 public/replay behavior is claimed.
 

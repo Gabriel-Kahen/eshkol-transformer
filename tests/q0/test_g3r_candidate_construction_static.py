@@ -6,6 +6,7 @@ import re
 import subprocess
 import tempfile
 import unittest
+from tests.g3r.check_candidate_construction_inputs import depfile_paths, require_regular
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -27,6 +28,22 @@ def digest(path: Path) -> str:
 
 
 class CandidateConstructionStatic(unittest.TestCase):
+    def test_depfile_and_evidence_file_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            dependency = root / "input.esk"
+            dependency.write_text("(define x 1)\n")
+            depfile = root / "input.d"
+            depfile.write_text(f"{root}/output.o: {dependency}\n")
+            self.assertEqual(depfile_paths(depfile), [dependency])
+            depfile.write_text(f"{root}/output.o: ../input.esk\n")
+            with self.assertRaises(ValueError):
+                depfile_paths(depfile)
+            alias = root / "alias"
+            alias.symlink_to(dependency)
+            with self.assertRaises(ValueError):
+                require_regular(alias)
+
     def test_ordinary_sources_are_exactly_unchanged(self) -> None:
         self.assertEqual(digest(MODULE), ORIGINAL_MODULE_SHA)
         for relative, expected in UNCHANGED.items():
@@ -105,6 +122,13 @@ class CandidateConstructionStatic(unittest.TestCase):
         self.assertIn("(candidate-construction-begin 'foreign-provider p1-cell)", source)
         self.assertIn("(candidate-construction-begin i2-provider-name copied)", source)
         p1 = (ROOT / "native/g3r_candidate_p1_inside.esk").read_text()
+        self.assertLess(p1.index("(vector-set! row 7 'consumed)"),
+                        p1.index("(g3r-candidate-test-consumed-replay"))
+        self.assertLess(p1.index("(g3r-candidate-test-consumed-replay"),
+                        p1.index("(p1-native-candidate-construction-begin native-context)"))
+        self.assertIn("(candidate-construction-begin provider p1-cell)", source)
+        self.assertIn("(eq? (vector-ref row 7) 'consumed)", source)
+        self.assertIn("(eq? (vector-ref i2-construction-registry-root 1) i2-record)", source)
         self.assertLess(p1.index("(set! begin-attempted? #t)"),
                         p1.index("(p1-native-candidate-construction-begin native-context)"))
         self.assertLess(p1.index("(p1-native-candidate-construction-begin native-context)"),
