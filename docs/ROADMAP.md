@@ -1689,7 +1689,20 @@ Independent review accepted the full 164-file evidence seal
 including raw dependency closures, symbols, expected private-header negatives
 and pre/post pins. Current-main integration preserves all eleven gate input
 blobs and updates six predecessor checksum rows for the reviewed native source
-and private header. Hosted integration and O2 retirement remain pending.
+and private header. Hosted integration remains pending.
+
+The separate feature-guarded native O2 retirement source `dc3f1e7`/tree
+`6376b8c3` has independent source and actual fe9/f31 gate acceptance. Its
+179-file seal
+`g3r-o2-retire-dc3f1e7-fe9-f31-20261004-prepared-c/SHA256SUMS-RUN`
+(`5d48b1ed9e1b07a0c0002b9b4f0bd7a21d5b7884e36d4daefc685bb0fa1a8135`)
+records 1,812 checks in each normal, repeat and sanitizer mode, exact
+feature-off object parity, private-only preflight/commit symbols, C++ 264-byte
+error layout, and terminal fail-stop after the first destructive free. This
+isolated composition with reviewed f32 query source still needs independent
+integration review and updated-base hosted checks. Native O2 readiness does
+not establish the closed Eshkol ledger, graph retirement, public API or full
+G3-R candidate cleanup.
 
 The proposed [G3-R P1/I2 sealed-graph retirement producer contract](g3/G3_R_P1_I2_SEALED_GRAPH_RETIREMENT_CONTRACT.md)
 pins the candidate-aware preseal M3T/I2/P1 handshake and a retained exact
