@@ -802,6 +802,16 @@ and absent transcript; timeouts, crashes, extra output and other exceptions
 fail closed. The production/default profile and frozen corpora are
 unchanged. Independent source review and a supported compiled mutant run are
 pending; mathematical reachability alone is not a compiled mutant kill.
+The isolated E3 private sanitizer source candidate reuses the reviewed
+streaming, reversible ASan IR helper byte-for-byte. Only exact noninstalled
+retention, mode/graph and numerical sanitizer tuples select the derived IR;
+normal and public/default builds retain the original compile input. The
+source-pinned helper and verifier compare the raw and derived IR, retain both
+with a receipt, and require generated-object `__asan_report` imports before
+native linking. This is address instrumentation of Eshkol IR, not evidence of
+Eshkol frontend UBSan coverage. Actual emitted sanitizer imports and the
+existing exact test manifests still need a fresh supported diagnostic run and
+independent review before any sanitizer or §9 acceptance claim.
 
 The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
 is a docs-only candidate for the remaining private numerical, compiled-mutant,

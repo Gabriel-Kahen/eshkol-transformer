@@ -1474,9 +1474,48 @@ grep -Eq "^attributes ${e1b_raise_attribute} = .*noreturn" \
   "${e1b_tmp}/private.ll" || \
   die "E1B fixed raise-only seam is not noreturn in generated IR"
 
+e1b_private_compile_ir="${e1b_tmp}/private.ll"
+if [[ "${e3_private_test_sanitize}" == 1 ]]; then
+  [[ "${package_policy}" == e3-private-aggregate ]] || \
+    die "E3 generated ASan IR is restricted to private test tuples"
+  case "${e3_tuple_kind:-}" in
+    retention|mode-graph|numerical) ;;
+    *) die "E3 generated ASan IR has no admitted test tuple" ;;
+  esac
+  require_command sha256sum
+  e3_asan_source_manifest="${PROJECT_ROOT}/tests/e3_private/asan_ir_sources.sha256"
+  for e3_asan_source in "${e3_asan_source_manifest}" \
+      "${PROJECT_ROOT}/tests/shared/prepare_eshkol_asan_ir.py" \
+      "${PROJECT_ROOT}/tests/e3_private/check_asan_ir.py"; do
+    [[ -f "${e3_asan_source}" && ! -L "${e3_asan_source}" ]] || \
+      die "E3 generated ASan IR helper source is missing or symlinked"
+  done
+  (cd "${PROJECT_ROOT}" && sha256sum --quiet -c "${e3_asan_source_manifest}") || \
+    die "E3 generated ASan IR helper source pins differ"
+  python3 -B "${PROJECT_ROOT}/tests/shared/prepare_eshkol_asan_ir.py" \
+    "${e1b_tmp}/private.ll" "${e1b_tmp}/private.asan.ll" \
+    "${e1b_tmp}/private.asan.json" || \
+    die "E3 generated ASan IR exact streaming rewrite failed"
+  e1b_private_compile_ir="${e1b_tmp}/private.asan.ll"
+fi
 "${e1b_clean_toolchain_env[@]}" \
-  "${e1b_cc}" "${e3_private_test_sanitize_flags[@]}" -c -x ir "${e1b_tmp}/private.ll" \
+  "${e1b_cc}" "${e3_private_test_sanitize_flags[@]}" -c -x ir "${e1b_private_compile_ir}" \
   -o "${e1b_tmp}/private.o"
+if [[ "${e3_private_test_sanitize}" == 1 ]]; then
+  nm -u --format=posix "${e1b_tmp}/private.o" \
+    >"${e1b_tmp}/private.asan-imports.txt" \
+    2>"${e1b_tmp}/private.asan-nm.stderr" || \
+    die "E3 generated ASan object symbol inventory failed"
+  [[ ! -s "${e1b_tmp}/private.asan-nm.stderr" ]] || \
+    die "E3 generated ASan object symbol inventory emitted diagnostics"
+  python3 -B "${PROJECT_ROOT}/tests/e3_private/check_asan_ir.py" \
+    "${e1b_tmp}/private.ll" "${e1b_tmp}/private.asan.ll" \
+    "${e1b_tmp}/private.asan.json" "${e1b_tmp}/private.o" \
+    "${e1b_tmp}/private.asan-imports.txt" || \
+    die "E3 generated private object lacks exact ASan IR evidence"
+  (cd "${PROJECT_ROOT}" && sha256sum --quiet -c "${e3_asan_source_manifest}") || \
+    die "E3 generated ASan IR helper source changed during compilation"
+fi
 
 {
   if [[ "${package_policy}" == cli3-tr3-aggregate ]]; then
@@ -2221,6 +2260,14 @@ if [[ "${package_policy}" == e3-private-aggregate &&
         "${e3_tuple_kind:-}" == retention ||
         "${e3_tuple_kind:-}" == numerical ) ]]; then
   cp "${e1b_tmp}/private.ll" "${evidence_dir}.tmp.$$/private.ll"
+fi
+if [[ "${e3_private_test_sanitize}" == 1 ]]; then
+  cp "${e1b_tmp}/private.asan.ll" "${evidence_dir}.tmp.$$/private.asan.ll"
+  cp "${e1b_tmp}/private.asan.json" "${evidence_dir}.tmp.$$/private.asan.json"
+  cp "${e1b_tmp}/private.asan-imports.txt" \
+    "${evidence_dir}.tmp.$$/private.asan-imports.txt"
+  cp "${e1b_tmp}/private.asan-nm.stderr" \
+    "${evidence_dir}.tmp.$$/private.asan-nm.stderr"
 fi
 if [[ "${e3_private_test_sanitize}" == 1 &&
       "${e3_tuple_kind:-}" == mode-graph ]]; then
