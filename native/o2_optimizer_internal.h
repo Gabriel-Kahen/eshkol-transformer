@@ -150,6 +150,15 @@ int32_t et_o2_optimizer_builder_finish_v1(et_o2_optimizer_builder **builder,
 int32_t et_o2_optimizer_builder_abort_v1(et_o2_optimizer_builder **builder,
                                          et_o2_error_v1 *error);
 
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+/* Pointer-only O2 admission. The aggregate separately authenticates the
+ * closed Eshkol ledger and the ordered M3T/P1 graph before commit. */
+int32_t et_o2_private_candidate_retire_preflight_v1(
+    et_o2_optimizer *optimizer, et_o2_error_v1 *error);
+int32_t et_o2_private_candidate_retire_commit_v1(
+    et_o2_optimizer *optimizer, et_o2_error_v1 *error);
+#endif
+
 int32_t et_o2_optimizer_step_v1(et_o2_optimizer *optimizer,
                                 et_o2_error_v1 *error);
 int32_t et_o2_optimizer_zero_grad_v1(et_o2_optimizer *optimizer,
@@ -237,6 +246,12 @@ typedef struct et_o2_test_live_counts_v1 {
   size_t state_borrows;
   size_t owned_state_clones;
   size_t reconstruct_builders;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  size_t retired_optimizers;
+  size_t live_entry_bytes;
+  size_t live_optimizer_moments;
+  size_t live_optimizer_moment_bytes;
+#endif
 } et_o2_test_live_counts_v1;
 
 void et_o2_test_fail_alloc_after_v1(size_t successful_allocations);

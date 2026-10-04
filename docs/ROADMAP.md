@@ -1673,6 +1673,17 @@ Clang 22 normal/repeat/sanitizer gate and existing readiness regression pass;
 independent review and the pinned supported gate remain pending. O2 retirement
 is still unaccepted.
 
+An isolated feature-guarded native O2 retirement candidate now stacks the
+accepted `af987fe2` f32 owned-span API. It keeps a separate publication-time
+provenance roster for O2 entry allocations, admits the exact 14 entries and 28
+moments without borrowing or allocating, rejects every nonzero f32 span-query
+result before writing a nonnull caller error record, and retains an O2 control
+tombstone after checked moment destruction. A local Clang 22 focused gate
+passes 1,812 checks in normal, repeat and sanitizer modes with feature-off O2
+object parity. The supported f32 span-query gate, independent O2 review and
+O2 supported gate remain pending. A native O2 pointer does not prove the
+closed Eshkol ledger, tied M3T/P1 graph or full candidate cleanup.
+
 The proposed [G3-R P1/I2 sealed-graph retirement producer contract](g3/G3_R_P1_I2_SEALED_GRAPH_RETIREMENT_CONTRACT.md)
 pins the candidate-aware preseal M3T/I2/P1 handshake and a retained exact
 native P1 token roster. Graph preflight admits the candidate's exact live O2
