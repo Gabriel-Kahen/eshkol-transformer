@@ -18,6 +18,28 @@ def lines(prefix: Path, suffix: str) -> list[str]:
     return Path(f"{prefix}_{suffix}.txt").read_text().splitlines()
 
 
+def frame_lines(batch_count: int) -> list[str]:
+    records = []
+    for ordinal in range(batch_count):
+        records.append(f"E3ROW\t{ordinal}\t3,197\t197,0\t1,1")
+        for name in ROLE_NAMES:
+            shape = "1,2,256" if name == "Z" else "1"
+            words = ",".join(["3f800000"] * (512 if name == "Z" else 1))
+            records.append(f"E3ROLE\t{ordinal}\t{name}\t{shape}\t{words}")
+        records.extend((
+            f"E3CE\t{ordinal}\t3f800000,40000000",
+            f"E3BATCH\t{ordinal}\t40400000,40000000,3fc00000,00000000\t2",
+            f"E3STATE\t{ordinal}\t40400000,40000000,00000000\t{2 * (ordinal + 1)},{ordinal + 1}",
+        ))
+    records.extend((f"E3FINAL\t3f800000,40000000,40400000,00000000\t{2 * batch_count},{batch_count}",
+                    "E3-NUMERICAL-RUNTIME-PASS"))
+    return records
+
+
+def frame_bytes(records: list[str]) -> bytes:
+    return ("\n".join(records) + "\n").encode("ascii")
+
+
 class NumericalTupleTest(unittest.TestCase):
     def test_private_generated_source_stage_is_stable_and_fresh(self) -> None:
         helper = ROOT / "scripts/e3-generated-source-stage.sh"
@@ -234,27 +256,14 @@ source "$5"
 
     def test_incomplete_compiled_stdout_cannot_become_observation(self) -> None:
         with self.assertRaisesRegex(ValueError, "did not complete"):
-            parse(b"E3ROW\t0\t3,197\t197,0\t1,1\n")
-        with self.assertRaisesRegex(ValueError, "unexpected"):
+            parse(b"E3ROW\t0\t3,197\t197,0\t1,1\n", 2)
+        with self.assertRaisesRegex(ValueError, "omitted"):
             parse(b"reference JSON instead of native frame\n"
-                  b"E3-NUMERICAL-RUNTIME-PASS\n")
+                  b"E3-NUMERICAL-RUNTIME-PASS\n", 2)
 
     def test_parser_uses_tagged_frame_words_without_oracle_substitution(self) -> None:
-        lines = []
-        for ordinal in range(3):
-            lines.append(f"E3ROW\t{ordinal}\t3,197\t197,0\t1,1")
-            for name in ROLE_NAMES:
-                shape = "1,2,256" if name == "Z" else "1"
-                words = ",".join(["3f800000"] * (512 if name == "Z" else 1))
-                lines.append(f"E3ROLE\t{ordinal}\t{name}\t{shape}\t{words}")
-            lines.extend((
-                f"E3CE\t{ordinal}\t3f800000,40000000",
-                f"E3BATCH\t{ordinal}\t40400000,40000000,3fc00000,00000000\t2",
-                f"E3STATE\t{ordinal}\t40400000,40000000,00000000\t{2 * (ordinal + 1)},{ordinal + 1}",
-            ))
-        lines.extend(("E3FINAL\t3f800000,40000000,40400000,00000000\t6,3",
-                      "E3-NUMERICAL-RUNTIME-PASS"))
-        payload, roles = parse(("\n".join(lines) + "\n").encode("ascii"))
+        records = frame_lines(3)
+        payload, roles = parse(frame_bytes(records), 3)
         self.assertEqual(payload["batches"][0]["inputs"], [3, 197])
         self.assertEqual(payload["batches"][2]["targets"], [197, 0])
         self.assertEqual(payload["batches"][1]["ce_f32"],
@@ -262,7 +271,34 @@ source "$5"
         self.assertEqual(payload["final"]["metrics_f32"][0], "3f800000")
         self.assertEqual(len(roles.splitlines()), 63)
         with self.assertRaisesRegex(ValueError, "duplicate"):
-            parse(("\n".join(lines[:-1] + [lines[0], lines[-1]]) + "\n").encode("ascii"))
+            parse(frame_bytes(records[:-1] + [records[0], records[-1]]), 3)
+
+    def test_two_batch_parser_requires_complete_ordered_native_records(self) -> None:
+        records = frame_lines(2)
+        payload, roles = parse(frame_bytes(records), 2)
+        self.assertEqual([batch["ordinal"] for batch in payload["batches"]], [0, 1])
+        self.assertEqual(payload["final"]["counters"], [4, 2])
+        self.assertEqual(len(roles.splitlines()), 42)
+        with self.assertRaisesRegex(ValueError, "omitted"):
+            parse(frame_bytes(records), 3)
+        for bad_count in (0, 1, 4, True):
+            with self.subTest(count=bad_count), self.assertRaisesRegex(ValueError, "count"):
+                parse(frame_bytes(records), bad_count)
+        broken = {
+            "missing-role": records[:2] + records[3:],
+            "duplicate-row": records[:1] + records[:1] + records[1:],
+            "swapped-roles": records[:1] + [records[2], records[1]] + records[3:],
+            "wrong-ordinal": [records[0].replace("E3ROW\t0", "E3ROW\t1")] + records[1:],
+            "early-final": records[:-3] + [records[-2], records[-3], records[-1]],
+            "missing-final": records[:-2] + records[-1:],
+            "malformed-word": records[:1] + [records[1].replace("3f800000", "zzzzzzzz")]
+            + records[2:],
+            "wrong-active-count": records[:23] + [records[23].replace("\t2", "\t1")]
+            + records[24:],
+        }
+        for name, lines in broken.items():
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                parse(frame_bytes(lines), 2)
 
 
 if __name__ == "__main__":

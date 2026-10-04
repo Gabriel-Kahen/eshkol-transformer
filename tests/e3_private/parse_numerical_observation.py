@@ -35,19 +35,32 @@ def _pair(raw: str, *, mask: bool = False) -> list[int] | list[bool]:
     return values
 
 
-def parse(raw: bytes) -> tuple[dict[str, object], bytes]:
+def parse(raw: bytes, batch_count: int) -> tuple[dict[str, object], bytes]:
+    if type(batch_count) is not int or batch_count not in (2, 3):
+        raise ValueError("numerical batch count must be two or three")
     try:
         lines = raw.decode("ascii").splitlines()
     except UnicodeDecodeError as error:
         raise ValueError("numerical stdout is not ASCII") from error
     if not raw.endswith(b"\n") or lines[-1:] != ["E3-NUMERICAL-RUNTIME-PASS"]:
         raise ValueError("compiled numerical runtime did not complete")
-    batches = [dict() for _ in range(3)]
+    batches = [dict() for _ in range(batch_count)]
     roles: list[str] = []
     final: dict[str, object] | None = None
-    for line in lines[:-1]:
+    batch_tags = (("E3ROW",) + ("E3ROLE",) * len(ROLE_NAMES)
+                  + ("E3CE", "E3BATCH", "E3STATE"))
+    expected_order = [
+        (tag, ordinal)
+        for ordinal in range(batch_count)
+        for tag in batch_tags
+    ] + [("E3FINAL", None)]
+    if len(lines) - 1 != len(expected_order):
+        raise ValueError("numerical frame omitted or duplicated a record")
+    for line, (expected_tag, expected_ordinal) in zip(lines[:-1], expected_order):
         fields = line.split("\t")
         tag = fields[0]
+        if tag != expected_tag:
+            raise ValueError("numerical frame record order or duplicate differs")
         if tag == "E3FINAL":
             if len(fields) != 3 or final is not None:
                 raise ValueError("missing or duplicate final publication")
@@ -59,8 +72,8 @@ def parse(raw: bytes) -> tuple[dict[str, object], bytes]:
         if len(fields) < 3 or not fields[1].isascii() or not fields[1].isdecimal():
             raise ValueError("numerical batch ordinal is malformed")
         ordinal = int(fields[1])
-        if ordinal not in range(3):
-            raise ValueError("numerical batch ordinal is out of range")
+        if ordinal != expected_ordinal:
+            raise ValueError("numerical batch ordinal differs from record order")
         batch = batches[ordinal]
         if tag == "E3ROLE":
             if len(fields) != 5:
@@ -98,7 +111,7 @@ def parse(raw: bytes) -> tuple[dict[str, object], bytes]:
             if len(fields) != 4:
                 raise ValueError("numerical state line is malformed")
             batch[key] = (_words(fields[2], 3), _pair(fields[3]))
-    if final is None or len(roles) != 3 * len(ROLE_NAMES):
+    if final is None or len(roles) != batch_count * len(ROLE_NAMES):
         raise ValueError("numerical frame omitted final or roles")
     observed = []
     for ordinal, batch in enumerate(batches):
@@ -126,10 +139,11 @@ def parse(raw: bytes) -> tuple[dict[str, object], bytes]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--stdout", required=True, type=Path)
+    parser.add_argument("--batch-count", required=True, type=int, choices=(2, 3))
     parser.add_argument("--observed", required=True, type=Path)
     parser.add_argument("--roles", required=True, type=Path)
     args = parser.parse_args()
-    payload, roles = parse(args.stdout.read_bytes())
+    payload, roles = parse(args.stdout.read_bytes(), args.batch_count)
     args.observed.write_bytes(canonical(payload))
     args.roles.write_bytes(roles)
 

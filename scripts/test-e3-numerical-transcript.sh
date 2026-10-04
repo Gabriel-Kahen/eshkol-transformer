@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export PYTHONDONTWRITEBYTECODE=1
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 verify_toolchain
 for command in ar cmp diff env grep python3 realpath strings timeout; do require_command "${command}"; done
@@ -10,7 +11,7 @@ mkdir -p "${out}"
 q0_python="${Q0_PYTHON:-}"
 [[ "${q0_python}" == /* && -x "${q0_python}" ]] || \
   die "E3 numerical proof requires absolute pinned Q0_PYTHON"
-versions="$(ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "${q0_python}" - <<'PY'
+versions="$(ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "${q0_python}" -B - <<'PY'
 import platform, torch
 print(platform.python_version())
 print(torch.__version__)
@@ -19,11 +20,11 @@ PY
 [[ "${versions}" == $'3.14.6\n2.13.0+cpu' ]] || \
   die "E3 numerical oracle versions are not pinned: ${versions//$'\n'/ }"
 for cache in a b; do
-  "${q0_python}" -m tests.e3_reference.corpus \
+  "${q0_python}" -B -m tests.e3_reference.corpus \
     --output "${out}/corpus-${cache}" \
     >"${out}/corpus-${cache}.stdout" 2>"${out}/corpus-${cache}.stderr"
   ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "${q0_python}" \
-    -m tests.e3_reference.reference \
+    -B -m tests.e3_reference.reference \
     --corpus-reference "${out}/corpus-${cache}/corpus-reference.json" \
     --output "${out}/reference-${cache}.json" \
     >"${out}/reference-${cache}.stdout" 2>"${out}/reference-${cache}.stderr"
@@ -114,54 +115,106 @@ for variant in a b wrong-target mean-of-means second-normalization sanitized; do
       2>"${out}/compile-${variant}.stderr"
 done
 cmp "${out}/runtime-a" "${out}/runtime-b"
-for variant in a b wrong-target mean-of-means second-normalization sanitized; do
+cases=(packed-single packed-sharded packed-suffix unpacked-three unpacked-pairs)
+batch_counts=(3 3 2 2 3)
+
+# Retain the original packed-single filenames for the exact three-batch gate.
+case_key() {
+  if [[ "$2" == packed-single ]]; then printf '%s' "$1"
+  else printf '%s-%s' "$1" "$2"; fi
+}
+
+run_case() {
+  local variant="$1" case_name="$2" batch_count="$3" key runtime poison
+  key="$(case_key "${variant}" "${case_name}")"
+  runtime="${variant}"
+  poison=0
+  if [[ "${variant}" == poison ]]; then runtime=a; poison=1; fi
   if [[ "${variant}" == sanitized ]]; then
     ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
-      UBSAN_OPTIONS=halt_on_error=1 \
-      ESHKOL_ARENA_POISON=1 \
+      UBSAN_OPTIONS=halt_on_error=1 ESHKOL_ARENA_POISON=1 \
       timeout --foreground --signal=TERM --kill-after=5s 900s \
-      "${out}/runtime-${variant}" "${out}/corpus-a/packed-single" \
-      >"${out}/run-${variant}.stdout" 2>"${out}/run-${variant}.stderr"
+      "${out}/runtime-${runtime}" "${case_name}" "${out}/corpus-a/${case_name}" \
+      >"${out}/run-${key}.stdout" 2>"${out}/run-${key}.stderr"
   else
-    ESHKOL_ARENA_POISON=0 \
+    ESHKOL_ARENA_POISON="${poison}" \
       timeout --foreground --signal=TERM --kill-after=5s 900s \
-      "${out}/runtime-${variant}" "${out}/corpus-a/packed-single" \
-      >"${out}/run-${variant}.stdout" 2>"${out}/run-${variant}.stderr"
+      "${out}/runtime-${runtime}" "${case_name}" "${out}/corpus-a/${case_name}" \
+      >"${out}/run-${key}.stdout" 2>"${out}/run-${key}.stderr"
   fi
-  grep -Fx 'E3-NUMERICAL-RUNTIME-PASS' "${out}/run-${variant}.stdout" \
-    >/dev/null || die "compiled numerical ${variant} did not complete"
-  [[ ! -s "${out}/run-${variant}.stderr" ]] || \
-    die "compiled numerical ${variant} emitted runtime diagnostics"
-  python3 -m tests.e3_private.parse_numerical_observation \
-    --stdout "${out}/run-${variant}.stdout" \
-    --observed "${out}/observed-${variant}.json" \
-    --roles "${out}/roles-${variant}.tsv"
-done
-ESHKOL_ARENA_POISON=1 \
-  timeout --foreground --signal=TERM --kill-after=5s 900s \
-  "${out}/runtime-a" "${out}/corpus-a/packed-single" \
-  >"${out}/run-poison.stdout" 2>"${out}/run-poison.stderr"
-cmp "${out}/run-a.stdout" "${out}/run-poison.stdout"
-[[ ! -s "${out}/run-poison.stderr" ]] || \
-  die "poisoned numerical runtime emitted diagnostics"
-python3 -m tests.e3_private.parse_numerical_observation \
-  --stdout "${out}/run-poison.stdout" \
-  --observed "${out}/observed-poison.json" \
-  --roles "${out}/roles-poison.tsv"
-cmp "${out}/run-a.stdout" "${out}/run-b.stdout"
-for variant in a b poison sanitized; do
+  grep -Fx 'E3-NUMERICAL-RUNTIME-PASS' "${out}/run-${key}.stdout" \
+    >/dev/null || die "compiled numerical ${key} did not complete"
+  [[ ! -s "${out}/run-${key}.stderr" ]] || \
+    die "compiled numerical ${key} emitted runtime diagnostics"
+  python3 -B -m tests.e3_private.parse_numerical_observation \
+    --stdout "${out}/run-${key}.stdout" --batch-count "${batch_count}" \
+    --observed "${out}/observed-${key}.json" \
+    --roles "${out}/roles-${key}.tsv"
+}
+
+verify_case() {
+  local variant="$1" case_name="$2" key
+  key="$(case_key "${variant}" "${case_name}")"
   ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "${q0_python}" \
-    -m tests.e3_native_parity.verify_observation \
-    --reference "${out}/reference-a.json" --case packed-single \
-    --observed "${out}/observed-${variant}.json" \
-    --roles "${out}/roles-${variant}.tsv" \
-    --transcript "${out}/transcript-${variant}.json" \
-    >"${out}/verify-${variant}.stdout" 2>"${out}/verify-${variant}.stderr"
+    -B -m tests.e3_native_parity.verify_observation \
+    --reference "${out}/reference-a.json" --case "${case_name}" \
+    --observed "${out}/observed-${key}.json" \
+    --roles "${out}/roles-${key}.tsv" \
+    --transcript "${out}/transcript-${key}.json" \
+    >"${out}/verify-${key}.stdout" 2>"${out}/verify-${key}.stderr"
+}
+
+for index in "${!cases[@]}"; do
+  case_name="${cases[index]}"
+  batch_count="${batch_counts[index]}"
+  for variant in a b sanitized poison; do
+    run_case "${variant}" "${case_name}" "${batch_count}"
+  done
+  key_a="$(case_key a "${case_name}")"
+  key_b="$(case_key b "${case_name}")"
+  key_poison="$(case_key poison "${case_name}")"
+  cmp "${out}/run-${key_a}.stdout" "${out}/run-${key_b}.stdout"
+  cmp "${out}/run-${key_a}.stdout" "${out}/run-${key_poison}.stdout"
+  for variant in a b poison sanitized; do
+    verify_case "${variant}" "${case_name}"
+  done
+  cmp "${out}/transcript-${key_a}.json" "${out}/transcript-${key_b}.json"
+  cmp "${out}/transcript-${key_a}.json" "${out}/transcript-${key_poison}.json"
 done
-cmp "${out}/transcript-a.json" "${out}/transcript-b.json"
+
+# Only these two D2 layouts emit identical packed batches. Compare every
+# observed field and every role word, not merely the final scalar result.
+for variant in a b poison sanitized; do
+  key_single="$(case_key "${variant}" packed-single)"
+  key_sharded="$(case_key "${variant}" packed-sharded)"
+  cmp "${out}/observed-${key_single}.json" "${out}/observed-${key_sharded}.json"
+  cmp "${out}/roles-${key_single}.tsv" "${out}/roles-${key_sharded}.tsv"
+  cmp "${out}/transcript-${key_single}.json" "${out}/transcript-${key_sharded}.json"
+done
+for case_name in packed-suffix unpacked-three unpacked-pairs; do
+  if cmp -s "${out}/observed-a.json" "${out}/observed-a-${case_name}.json"; then
+    die "${case_name} unexpectedly reused the packed-single observation"
+  fi
+  if cmp -s "${out}/transcript-a.json" "${out}/transcript-a-${case_name}.json"; then
+    die "${case_name} unexpectedly reused the packed-single transcript"
+  fi
+  python3 -B - "${out}/observed-a.json" "${out}/observed-a-${case_name}.json" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+baseline, changed = (json.loads(Path(name).read_bytes()) for name in sys.argv[1:])
+if baseline["batches"] == changed["batches"] or baseline["final"] == changed["final"]:
+    raise SystemExit("changed D2 boundaries did not change both batches and final bits")
+PY
+done
+
+for variant in wrong-target mean-of-means second-normalization; do
+  run_case "${variant}" packed-single 3
+done
 for variant in wrong-target mean-of-means second-normalization; do
   if ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "${q0_python}" \
-    -m tests.e3_native_parity.verify_observation \
+    -B -m tests.e3_native_parity.verify_observation \
     --reference "${out}/reference-a.json" --case packed-single \
     --observed "${out}/observed-${variant}.json" \
     --roles "${out}/roles-${variant}.tsv" \
@@ -178,4 +231,4 @@ grep -F 'state_f32' "${out}/verify-mean-of-means.stderr" >/dev/null || \
   die "mean-of-means mutant failed outside the accumulator value assertion"
 grep -F 'final.metrics_f32' "${out}/verify-second-normalization.stderr" >/dev/null || \
   die "second-normalization mutant failed outside the final loss value assertion"
-printf 'E3 compiled three-batch numerical transcript and three mutants passed\n'
+printf 'E3 compiled five-case private numerical transcripts and three mutants passed\n'

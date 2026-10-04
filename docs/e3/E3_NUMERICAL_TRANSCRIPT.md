@@ -1,7 +1,7 @@
-# E3 compiled three-batch numerical transcript source candidate
+# E3 compiled five-case numerical transcript source candidate
 
-This noninstalled tuple is a bounded private numerical gate for the authentic
-packed-single D1/D2 corpus. It does not close E3 §9 or provide public evaluator
+This noninstalled tuple is a bounded private numerical gate for five authentic
+D1/D2 corpus layouts. It does not close E3 §9 or provide public evaluator
 evidence. The numerical tuple builds beside the accepted mode/graph and
 complete-call retention tuples; their source staging, package policy and native
 probes remain separate. Only this tuple defines `ET_E3_NUMERICAL_TESTING`.
@@ -18,10 +18,13 @@ values. The parser rejects missing, reordered or duplicate records.
 The pinned Python/PyTorch development oracle regenerates a direct mathematical
 M3/D2 reference twice. `verify_observation.py` compares actual rows, roles,
 CE, serial binary32 state and final outputs with the independent reference.
-The three genuine rows have active counts 2, 2 and 1, so unequal-count
-aggregation and padded-final behavior are observable.
+Packed-single and packed-sharded emit the same three batches, with active counts
+2, 2 and 1; their full observations, role words and transcripts must be byte
+equal. Packed-suffix and the two unpacked cases have their own independent
+expected batches and outputs. The parser accepts only the expected two or three
+complete, ordered batches, followed by one final publication.
 
-Three one-at-a-time compiled mutants use the same test-only tuple:
+Three one-at-a-time compiled mutants remain on packed-single in the same test-only tuple:
 `wrong-target` feeds input IDs to CE, `mean-of-means` replaces weighted serial
 aggregation, and `second-normalization` divides the final loss by global W
 twice. Each must complete the evaluator, then fail its named CE, state or final
@@ -29,14 +32,14 @@ loss assertion. None of their defines is admitted for canonical, diagnostic,
 installed, retention or mode/graph packages.
 
 `test-e3-numerical-transcript.sh` pins exact package inventories, two fresh
-source/object/archive/AOT builds and raw depfiles, normal/poisoned AOT output,
-and an ASan/UBSan/LSan run with leak detection. Its accepted predecessor
+source/object/archive/AOT builds and raw depfiles, normal/repeat/poisoned and
+ASan/UBSan/LSan runs for all five cases with leak detection. Its accepted predecessor
 `8dafe8cb`/tree `78a3fb15` had a sealed supported 75-file run covering the
 three batches, 63 role rows and the first two compiled mutants. That run is
-bounded predecessor evidence only. The combined source and third mutant need
+bounded predecessor evidence only. The five-case source and third mutant need
 independent review and a fresh supported gate on the exact tree.
 
-Still open under §9: the other authentic layouts and cursor cases, empty and
+Still open under §9: additional cursor and edge cases, empty and
 singleton outcomes, true tie/uniform/correctness and finite overflow witnesses,
 8,192/8,193 boundaries, the remaining private compiled mutant matrix, native
 negative cases, rollback cuts, and the separate full retention and affected

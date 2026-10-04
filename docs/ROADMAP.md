@@ -772,7 +772,13 @@ tests require independent review, then a fresh supported numerical gate.
 The changed native frame, metrics provider and shared builder also require
 full affected mode/graph and 20-run retention gates on the exact integrated
 tree. The prior 75-file numerical seal applies only to `8dafe8cb`; broader
-§9 and public-path acceptance remain pending.
+§9 and public-path acceptance remain pending. A separate five-case private
+numerical transcript source candidate extends the noninstalled runtime and
+strict parser to all five existing authentic D2 layouts, with independent
+role/CE/state/final verification and byte equality for identical packed
+emissions. Its three compiled mutants remain on packed-single. Local parser
+and shell checks do not substitute for independent source/test review or a
+fresh supported compiled gate; this extension has no runtime evidence yet.
 
 The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
 is a docs-only candidate for the remaining private numerical, compiled-mutant,
