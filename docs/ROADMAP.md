@@ -2419,7 +2419,13 @@ imports and 172 noninstrumentation plus 50 sanitizer imports. These bytes were
 read from all eight variants in the sealed, compiler-only
 `e3-i2-postprepare-imports-fa5c5d2-fe9-f31-20261003-prepared-c` diagnostic;
 the diagnostic is not a runtime gate. The unwrapped zero-control package built
-first by the supported I2 gate has no authenticated current import inventory.
-Its old 171-entry manifest remains unchanged, and that independent control
-build and the full six-case normal/repeat/sanitizer fault and mutant gate remain
-pending. The guarded inventories do not establish the control imports.
+first by the supported I2 gate reached its own exact import check in a separate
+fe9/f31 compiler-only diagnostic at `ca8c3e32`. Its emitted 174-entry inventory
+adds only `eshkol_format_float32_bits`, `eshkol_runtime_fatal`, and
+`eshkol_tail_transfer_slot` to the former 171-entry manifest; all three have
+actual generated IR calls and definitions in the pinned runtime archive. The
+98-file compiler-discovery seal is `f273c475...` in
+`e3-i2-unwrapped-control-ca8c3e3-fe9-f31-20261004-prepared-a`.
+This source manifest correction is not control or runtime acceptance. The
+independent control build and full six-case normal/repeat/sanitizer fault and
+mutant gate remain pending; the guarded inventories do not prove their results.
