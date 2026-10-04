@@ -1671,6 +1671,11 @@ read-only provenance-backed span query needs independent contract and source
 review before O2 may write a caller error record while preserving owned state.
 The caller must independently supply a null error pointer or an aligned,
 writable 264-byte record; the query proves only known-owned-span disjointness.
+Hosted PR #197 native-numerics reached L3S and rejected its stale f32
+predecessor checksum. The bounded repair updates that one checksum to the
+already reviewed query source; provider code and gated query inputs remain
+unchanged. Independent repair review and fresh hosted checks are pending.
+
 The independently reviewed private f32 span query uses creation-time tensor
 backing records and fails closed for live plan-owned arrays without immutable
 extents. Exact source/test head `af987fe2` (tree `47d41967`) passed the pinned
