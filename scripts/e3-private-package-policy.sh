@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Sourced only by E1B. This admits the base private E3 tuple, its exact
 # source-private diagnostic successor, the installed diagnostic tuple, or the
-# separate noninstalled retention, mode/graph, and numerical test successors.
+# separate noninstalled retention, cursor-boundary, mode/graph, and numerical
+# test successors.
 # Mixed and partial tuples are rejected.
 e3_base_prefix="${PROJECT_ROOT}/native/e3_private_package"
 e3_diagnostic_prefix="${PROJECT_ROOT}/native/e3_diagnostic_private_package"
 e3_public_prefix="${PROJECT_ROOT}/native/e3_diagnostic_public_package"
 e3_retention_prefix="${PROJECT_ROOT}/tests/e3_private/retention_package"
+e3_boundary_prefix="${PROJECT_ROOT}/tests/e3_private/cursor_boundary_package"
 e3_mode_graph_prefix="${PROJECT_ROOT}/tests/e3_mode_graph/package"
 e3_numerical_prefix="${PROJECT_ROOT}/tests/e3_private/numerical_package"
 e3_base_inputs=(
@@ -33,6 +35,12 @@ e3_retention_inputs=(
   "${e3_retention_prefix}_private_renames.txt"
   "${e3_retention_prefix}_public_exports.txt"
 )
+e3_boundary_inputs=(
+  "${PROJECT_ROOT}/tests/e3_private/cursor_boundary_driver_root.esk"
+  "${PROJECT_ROOT}/tests/e3_private/cursor_boundary_bridge.c"
+  "${e3_boundary_prefix}_private_renames.txt"
+  "${e3_boundary_prefix}_public_exports.txt"
+)
 e3_mode_graph_inputs=(
   "${PROJECT_ROOT}/tests/e3_mode_graph/driver_root.esk"
   "${PROJECT_ROOT}/tests/e3_mode_graph/bridge.c"
@@ -51,6 +59,7 @@ e3_tuple_requested=0
 e3_tuple_kind=
 e3_diagnostic_tuple=0
 e3_public_tuple=0
+e3_boundary_tuple=0
 for e3_raw in "${raw_private_root}" "${raw_package_bridge}" \
     "${raw_package_renames}" "${raw_public_exports}"; do
   for e3_expected in "${e3_base_inputs[@]}"; do
@@ -85,6 +94,14 @@ for e3_raw in "${raw_private_root}" "${raw_package_bridge}" \
       e3_tuple_requested=1
     fi
   done
+  for e3_expected in "${e3_boundary_inputs[@]}"; do
+    if [[ "$(realpath -m -- "${e3_raw}")" == "${e3_expected}" ]]; then
+      [[ -z "${e3_tuple_kind}" || "${e3_tuple_kind}" == boundary ]] || \
+        die "E3 policy rejects mixed boundary and predecessor tuples"
+      e3_tuple_kind=boundary
+      e3_tuple_requested=1
+    fi
+  done
   for e3_expected in "${e3_mode_graph_inputs[@]}"; do
     if [[ "$(realpath -m -- "${e3_raw}")" == "${e3_expected}" ]]; then
       [[ -z "${e3_tuple_kind}" || "${e3_tuple_kind}" == mode-graph ]] || \
@@ -114,6 +131,12 @@ elif [[ "${e3_tuple_kind}" == public ]]; then
 elif [[ "${e3_tuple_kind}" == retention ]]; then
   e3_prefix="${e3_retention_prefix}"
   e3_inputs=("${e3_retention_inputs[@]}")
+elif [[ "${e3_tuple_kind}" == boundary ]]; then
+  e3_prefix="${e3_boundary_prefix}"
+  e3_inputs=("${e3_boundary_inputs[@]}")
+  e3_boundary_tuple=1
+  # This exact successor uses the retention instrumentation and staged P1 root.
+  e3_tuple_kind=retention
 elif [[ "${e3_tuple_kind}" == mode-graph ]]; then
   e3_prefix="${e3_mode_graph_prefix}"
   e3_inputs=("${e3_mode_graph_inputs[@]}")

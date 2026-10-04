@@ -1,0 +1,139 @@
+;;; Genuine fixed M3/T1/D1/D2 private E3 boundary witness. No numerical loop lives here.
+
+(define (e3-boundary-check label predicate)
+  (e3-test-retention-check label predicate))
+
+(define (e3-boundary-output frame destinations)
+  (vector (e3-test-u32-ref (vector-ref destinations 0))
+          (e3-test-u32-ref (vector-ref destinations 1))
+          (e3-test-u32-ref (vector-ref destinations 2))
+          (e3-test-u32-ref (vector-ref destinations 3))
+          (e3-counter-ref frame 0) (e3-counter-ref frame 1)))
+
+(define (e3-boundary-output=? frame destinations image)
+  (let ((now (e3-boundary-output frame destinations)))
+    (let compare ((index 0))
+      (if (= index 6) #t
+          (and (= (vector-ref now index) (vector-ref image index))
+               (compare (+ index 1)))))))
+
+(define (e3-boundary-probes=? before)
+  (and (= (e3-test-retention-probe 3) 0)
+       (= (e3-test-retention-probe 20) 0)
+       (= (e3-test-retention-probe 21) 0)
+       (= (e3-test-retention-probe 23) 0)
+       (= (e3-test-retention-probe 24) 0)
+       (= (e3-test-retention-probe 26) 0)
+       (let compare ((index 0))
+         (if (= index 29) #t
+             (and (if (or (<= index 6) (and (>= index 17) (<= index 26)))
+                      (= (vector-ref before index) (e3-test-retention-probe index))
+                      #t)
+                  (compare (+ index 1)))))))
+
+(define (e3-boundary-frame-idle? frame)
+  (let ((entry (e3-frame-entry-internal frame)))
+    (and (= (vector-ref entry 1) 1)
+         (not (vector-ref (vector-ref entry 3) 10))
+         (vector-ref entry 14))))
+
+(define (e3-boundary-valid! model tokenizer frame destinations directory)
+  (let ((dataset
+         (d2-token-dataset-open (e3-test-dataset-config directory #t) tokenizer)))
+    (guard (caught (#t (d2-token-dataset-close! dataset) (raise caught)))
+      (e3-test-skip! dataset 2)
+      (let ((cursor (d2-token-dataset-cursor dataset)))
+        (with-region ('e3-boundary-valid 262144)
+          (e3-evaluate-into! model dataset frame))
+        (e3-boundary-check 'valid-cursor
+          (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset)))
+        ;; Independent M3/CE/f32 oracle: one active target 7 in [7,0]->[7,0].
+        (e3-boundary-check 'one-valid-token-final
+          (and (= (e3-test-u32-ref (vector-ref destinations 0)) 1085387453)
+               (= (e3-test-u32-ref (vector-ref destinations 1)) 1065353216)
+               (= (e3-test-u32-ref (vector-ref destinations 2)) 1132528538)
+               (= (e3-test-u32-ref (vector-ref destinations 3)) 0)
+               (= (e3-counter-ref frame 0) 1)
+               (= (e3-counter-ref frame 1) 1)))
+        (e3-boundary-check 'valid-frame-idle (e3-boundary-frame-idle? frame))
+        (d2-token-dataset-close! dataset)
+        #t))))
+
+(define (e3-boundary-zero! label model tokenizer frame destinations
+                           directory skip modes model-image rng output)
+  (let ((dataset
+         (d2-token-dataset-open (e3-test-dataset-config directory #t) tokenizer)))
+    (guard (caught (#t (d2-token-dataset-close! dataset) (raise caught)))
+      (e3-test-skip! dataset skip)
+      (let ((cursor (d2-token-dataset-cursor dataset))
+            (probes (e3-test-retention-probes)))
+        (let retry ((ordinal 0) (first-error #f))
+          (if (= ordinal 2) #t
+              (let ((caught-error
+                     (with-region ('e3-boundary-zero 262144)
+                       (guard (caught (#t caught))
+                         (e3-evaluate-into! model dataset frame)
+                         #f))))
+                (e3-boundary-check label
+                  (and (transformer-error? caught-error)
+                       (eq? (transformer-error-category caught-error)
+                            'invalid-state)
+                       (eq? (transformer-error-operation caught-error)
+                            'e3-evaluate-into!)
+                       (string? (transformer-error-message caught-error))))
+                (let ((message (transformer-error-message caught-error)))
+                  (e3-boundary-check 'stable-original-error
+                    (and (string=? message
+                          "evaluation finalization or publication failed")
+                         (or (not first-error) (eq? caught-error first-error))))
+                  (e3-boundary-check 'failure-cursor
+                    (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset)))
+                  (e3-boundary-check 'failure-output-six
+                    (e3-boundary-output=? frame destinations output))
+                  (e3-boundary-check 'failure-modes
+                    (e3-test-retention-modes=? frame modes))
+                  (e3-boundary-check 'failure-model
+                    (e3-test-retention-model=? model model-image))
+                  (e3-boundary-check 'failure-rng
+                    (equal? rng (m3t-public-initializer-words
+                                 (m3t-public-model-initializer model))))
+                  (e3-boundary-check 'failure-native-fd-owner
+                    (e3-boundary-probes=? probes))
+                  (e3-boundary-check 'failure-frame-idle
+                    (e3-boundary-frame-idle? frame))
+                  (retry (+ ordinal 1) caught-error)))))
+        (d2-token-dataset-close! dataset)
+        #t))))
+
+(define (e3-test-cursor-boundary-dispatch paths)
+  (e3-boundary-check 'paths
+    (and (vector? paths) (= (vector-length paths) 4)))
+  (let* ((fixture (e3-test-fixture))
+         (model (vector-ref fixture 0))
+         (tokenizer (vector-ref fixture 1))
+         (destinations (vector-ref fixture 2))
+         (frame (vector-ref fixture 3)))
+    (e3-test-retention-set-mixed! frame)
+    (e3-boundary-check 'seed-present-gradient
+      (= (e3-test-seed-gradient
+           (vector-ref (m3t-entry model 'model 'e3-test-run #t) 3)) 0))
+    (e3-boundary-valid! model tokenizer frame destinations (vector-ref paths 3))
+    (let ((modes (e3-test-retention-modes frame))
+          (model-image (e3-test-retention-model-snapshot model))
+          (rng (m3t-public-initializer-words
+                 (m3t-public-model-initializer model)))
+          (output (e3-boundary-output frame destinations)))
+      (e3-boundary-zero! 'empty model tokenizer frame destinations
+                         (vector-ref paths 0) 0 modes model-image rng output)
+      (e3-boundary-zero! 'singleton model tokenizer frame destinations
+                         (vector-ref paths 1) 0 modes model-image rng output)
+      (e3-boundary-zero! 'entry-eos model tokenizer frame destinations
+                         (vector-ref paths 2) 1 modes model-image rng output)
+      (e3-boundary-valid! model tokenizer frame destinations (vector-ref paths 3))
+      (e3-boundary-check 'retry-output-six
+        (e3-boundary-output=? frame destinations output))
+      (e3-boundary-check 'retry-model
+        (e3-test-retention-model=? model model-image))
+      (e3-boundary-check 'retry-modes
+        (e3-test-retention-modes=? frame modes))
+      #t)))

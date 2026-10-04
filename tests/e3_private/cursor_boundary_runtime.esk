@@ -1,0 +1,12 @@
+;;; The compiled witness receives only authentic resource paths from the test gate.
+(extern void e3-cursor-boundary-run ptr ptr
+        :real et_e3_cursor_boundary_run_v1)
+(define args (command-line))
+(if (not (= (length args) 5)) (exit 2))
+(define paths (vector (list-ref args 1) (list-ref args 2)
+                      (list-ref args 3) (list-ref args 4)))
+(define output (vector #f))
+(e3-cursor-boundary-run paths output)
+(if (not (eq? (vector-ref output 0) #t)) (exit 1))
+(display "E3-CURSOR-BOUNDARY-PASS")
+(newline)

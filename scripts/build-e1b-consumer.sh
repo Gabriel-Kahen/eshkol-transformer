@@ -1146,7 +1146,8 @@ e3_private_test_sanitize=0
 if [[ "${E3_RETENTION_SANITIZE:-0}" != 0 ]]; then
   [[ "${E3_RETENTION_SANITIZE}" == 1 &&
      "${package_policy}" == e3-private-aggregate &&
-     "${e3_tuple_kind}" == retention ]] ||
+     "${e3_tuple_kind}" == retention &&
+     "${e3_boundary_tuple:-0}" == 0 ]] ||
     die "E3 retention sanitizer is allowed only for the exact test tuple"
   e3_private_test_sanitize=1
 fi
@@ -1343,7 +1344,11 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     if [[ "${e3_diagnostic_tuple}" == 1 ]]; then
       export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
     elif [[ "${e3_tuple_kind}" == retention ]]; then
-      export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1)$'
+      if [[ "${e3_boundary_tuple:-0}" == 1 ]]; then
+        export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1|et_e3_cursor_boundary_run_v1)$'
+      else
+        export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1)$'
+      fi
     elif [[ "${e3_tuple_kind}" == mode-graph ]]; then
       export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_mode_graph_run_v1)$'
     fi
@@ -2175,6 +2180,9 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
         et_f32_test_live_counts_snapshot_v1
         et_f32_test_retired_counts_snapshot_v1
       )
+      if [[ "${e3_boundary_tuple:-0}" == 1 ]]; then
+        e3_required_private+=(et_e3_private_cursor_boundary_dispatch_cabi_v1)
+      fi
     elif [[ "${e3_tuple_kind}" == mode-graph ]]; then
       e3_required_private+=(
         et_e3_mode_graph_dispatch_cabi_v1
@@ -2275,7 +2283,11 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     if [[ "${e3_diagnostic_tuple}" == 1 ]]; then
       public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
     elif [[ "${e3_tuple_kind}" == retention ]]; then
-      public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1)$'
+      if [[ "${e3_boundary_tuple:-0}" == 1 ]]; then
+        public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1|et_e3_cursor_boundary_run_v1)$'
+      else
+        public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1)$'
+      fi
     elif [[ "${e3_tuple_kind}" == mode-graph ]]; then
       public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_mode_graph_run_v1)$'
     fi
