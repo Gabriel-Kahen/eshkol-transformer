@@ -39,7 +39,8 @@ def main() -> None:
     if len(sys.argv) != 4:
         raise SystemExit("usage: checker PROJECT_ROOT EVIDENCE ESHKOL_SOURCE")
     project, evidence, eshkol = map(Path, sys.argv[1:])
-    roots = (project, evidence / "overlay", evidence / "baseline", eshkol)
+    roots = (project, evidence / "overlay", evidence / "baseline",
+             evidence / "off/stage", eshkol)
     admitted = set()
     c_stems = (
         "i2_bridge", "data_io", "checkpoint_io", "kernel_abi",
@@ -71,10 +72,29 @@ def main() -> None:
         deps = set(depfile_paths(evidence / mode / "candidate.d"))
         if private not in deps or ordinary in deps:
             raise ValueError(f"{mode} private overlay closure is wrong")
-    for variant, expected in (("baseline", baseline), ("current", ordinary)):
+    staged = evidence / "off/stage/transformer/module.esk"
+    for variant, original in (("baseline", baseline), ("current", ordinary)):
         deps = set(depfile_paths(evidence / "off" / f"{variant}.d"))
-        if expected not in deps or private in deps:
-            raise ValueError(f"{variant} ordinary closure is wrong")
+        if staged not in deps or private in deps or baseline in deps or ordinary in deps:
+            raise ValueError(f"{variant} fixed-path ordinary closure is wrong")
+        snapshot = evidence / "off" / f"{variant}.source.esk"
+        require_regular(snapshot)
+        if snapshot.read_bytes() != original.read_bytes() or snapshot.read_bytes() != staged.read_bytes():
+            raise ValueError(f"{variant} staged source differs from its retained origin")
+        digest = sha256(snapshot.read_bytes()).hexdigest()
+        require_regular(evidence / "off" / f"{variant}.source.sha256")
+        source_record = (evidence / "off" / f"{variant}.source.sha256").read_text()
+        if source_record != f"{digest}  {snapshot}\n":
+            raise ValueError(f"{variant} source digest record changed")
+        for phase in ("pre", "post"):
+            record = evidence / "off" / f"{variant}.stage.{phase}.sha256"
+            require_regular(record)
+            if record.read_text() != f"{digest}  {staged}\n":
+                raise ValueError(f"{variant} staged {phase} digest differs")
+        phase_provenance = evidence / "off" / f"{variant}.compiler-provenance.tsv"
+        require_regular(phase_provenance)
+        if phase_provenance.read_bytes() != (evidence / "compiler-provenance.tsv").read_bytes():
+            raise ValueError(f"{variant} compiler provenance differs")
     explicit = (
         "scripts/test-g3r-candidate-construction.sh",
         "scripts/build-g3r-candidate-p1-overlay.py",
@@ -92,7 +112,10 @@ def main() -> None:
     )
     for relative in explicit:
         admitted.add(project / relative)
-    for path in (private, ordinary, baseline, evidence / "baseline/p1_identity.c"):
+    for path in (private, ordinary, baseline, staged,
+                 evidence / "off/baseline.source.esk",
+                 evidence / "off/current.source.esk",
+                 evidence / "baseline/p1_identity.c"):
         admitted.add(path)
     manifest = evidence / "source-inputs.sha256"
     with manifest.open("x") as stream:

@@ -181,26 +181,48 @@ cmp "$evidence/normal.run.stdout" "$evidence/normal.repeat.stdout" \
 cmp "$evidence/normal.run.stdout" "$evidence/sanitize.run.stdout" \
   >"$evidence/sanitize-cmp.stdout" 2>"$evidence/sanitize-cmp.stderr"
 
-# Feature-off ordinary Eshkol compilation from the accepted source and the
-# current installed source, with the same compiler/options. Preserve both raw
-# objects and require exact byte parity. A path-sensitive difference fails.
-mkdir "$evidence/off" "$evidence/off.cache"
+# fe9 embeds the P1 module's absolute source filename in FFI error-location
+# globals. Stage the accepted and current snapshots sequentially at the SAME
+# physical pathname, then compile in distinct processes/caches. Both phases
+# retain their own source snapshot, full IR, depfile, object and provenance.
+mkdir "$evidence/off" "$evidence/off/stage" "$evidence/off/stage/transformer"
+staged_module="$evidence/off/stage/transformer/module.esk"
 mode_flags=(-O2)
 compile_c off ordinary_bridge \
   "$PROJECT_ROOT/tests/p1/i2_construction_test_bridge.c"
 for variant in baseline current; do
-  include="$PROJECT_ROOT/internal/p1/lib"
-  [[ "$variant" == baseline ]] && include="$evidence/baseline"
+  origin="$PROJECT_ROOT/internal/p1/lib/transformer/module.esk"
+  [[ "$variant" == baseline ]] && origin="$evidence/baseline/transformer/module.esk"
+  cp "$origin" "$evidence/off/$variant.source.esk"
+  cp "$evidence/off/$variant.source.esk" "$staged_module"
+  cmp "$origin" "$staged_module" \
+    >"$evidence/off/$variant.stage-source-cmp.stdout" \
+    2>"$evidence/off/$variant.stage-source-cmp.stderr"
+  sha256sum "$evidence/off/$variant.source.esk" \
+    >"$evidence/off/$variant.source.sha256"
+  sha256sum "$staged_module" >"$evidence/off/$variant.stage.pre.sha256"
+  cp "$evidence/compiler-provenance.tsv" \
+    "$evidence/off/$variant.compiler-provenance.tsv"
+  mkdir "$evidence/off/$variant.cache"
   run_checked "off.$variant.object" env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR \
-    ESHKOL_JIT_CACHE=0 XDG_CACHE_HOME="$evidence/off.cache" \
+    -u ESHKOL_AOT_MODULE_CACHE_DIR ESHKOL_JIT_CACHE=0 \
+    XDG_CACHE_HOME="$evidence/off/$variant.cache" \
     ESHKOL_CXX_COMPILER="$cxx" ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
     timeout --foreground --signal=TERM --kill-after=5s 900s "$runner" \
-    --strict-types --optimize 0 --no-stdlib -I "$include" \
+    --strict-types --optimize 0 --no-stdlib -I "$evidence/off/stage" \
     -I "$PROJECT_ROOT/internal/c1/lib" -I "$PROJECT_ROOT/internal/t1/lib" \
     -I "$PROJECT_ROOT/src" -I "$PROJECT_ROOT/lib" -I "$PROJECT_ROOT/native" \
     --emit-object --dump-ir \
     --emit-depfile "$evidence/off/$variant.d" "$ordinary_fixture" \
     -o "$evidence/off/$variant.o"
+  sha256sum "$staged_module" >"$evidence/off/$variant.stage.post.sha256"
+  cmp "$evidence/off/$variant.stage.pre.sha256" \
+    "$evidence/off/$variant.stage.post.sha256" \
+    >"$evidence/off/$variant.stage-integrity-cmp.stdout" \
+    2>"$evidence/off/$variant.stage-integrity-cmp.stderr"
+  [[ -s "$evidence/off/$variant.o.ll" && \
+     -s "$evidence/off/$variant.o.bc" && -s "$evidence/off/$variant.d" ]] || \
+    die "$variant ordinary IR/bitcode/depfile missing"
   nm -u --format=posix "$evidence/off/$variant.o" \
     >"$evidence/off/$variant.undefined.raw"
   if grep -Eq 'et_p1_private_candidate_|et_p1_test_candidate_' \
@@ -208,6 +230,8 @@ for variant in baseline current; do
     die "private candidate symbol escaped $variant ordinary object"
   fi
 done
+cmp "$evidence/off/baseline.o.ll" "$evidence/off/current.o.ll" \
+  >"$evidence/off/ir-cmp.stdout" 2>"$evidence/off/ir-cmp.stderr"
 cmp "$evidence/off/baseline.o" "$evidence/off/current.o" \
   >"$evidence/off/object-cmp.stdout" \
   2>"$evidence/off/object-cmp.stderr"
