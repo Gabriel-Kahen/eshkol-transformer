@@ -19,7 +19,8 @@ from tests.t2.reference import encode_artifact, pack_i64, train
 
 
 SCENARIOS = (
-    "encode-no-match", "encode-overlap", "encode-zero-merge",
+    "encode-no-match", "encode-overlap", "encode-mixed-no-adjacency",
+    "encode-zero-merge",
     "encode-tiny", "train-many-docs", "train-one-doc",
 )
 
@@ -33,6 +34,9 @@ def oracle() -> dict[str, str]:
     results = {
         "encode-no-match": (65536 * 8, hashlib.sha256(pack_i64((42,) * 65536)).hexdigest()),
         "encode-overlap": (32768 * 8, hashlib.sha256(pack_i64((256,) * 32768)).hexdigest()),
+        "encode-mixed-no-adjacency":
+            (65536 * 8, hashlib.sha256(pack_i64(tuple((index * 17) % 256
+                                                     for index in range(65536)))).hexdigest()),
         "encode-zero-merge": (65536 * 8, hashlib.sha256(pack_i64((42,) * 65536)).hexdigest()),
         "encode-tiny": (2 * 8, hashlib.sha256(pack_i64((256, 97))).hexdigest()),
         "train-many-docs": (len(trained.merges), hashlib.sha256(encode_artifact(trained)).hexdigest()),

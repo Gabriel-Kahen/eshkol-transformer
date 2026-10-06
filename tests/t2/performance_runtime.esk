@@ -20,6 +20,15 @@
 (define (make-input length value)
   (let ((bytes (make-bytevector length value))) bytes))
 
+(define (make-mixed-input)
+  (let ((bytes (make-bytevector 65536 0)))
+    (let fill ((index 0))
+      (if (< index 65536)
+          (begin (bytevector-u8-set! bytes index
+                   (modulo (* index 17) 256))
+                 (fill (+ index 1)))))
+    bytes))
+
 (define (make-many-documents)
   (let loop ((document 4095) (out '()))
     (if (< document 0) out
@@ -49,6 +58,7 @@
 (cond
   ((or (string=? scenario "encode-no-match")
        (string=? scenario "encode-overlap")
+       (string=? scenario "encode-mixed-no-adjacency")
        (string=? scenario "encode-zero-merge")
        (string=? scenario "encode-tiny"))
    (let* ((overlap? (string=? scenario "encode-overlap"))
@@ -57,8 +67,10 @@
           (model (t2-tokenizer-core-create
                   'raw (if zero? '() (make-merges (or overlap? tiny?)))
                   '() '() '()))
-          (input (make-input (if tiny? 3 65536)
-                             (if (or overlap? tiny?) 97 42)))
+          (input (if (string=? scenario "encode-mixed-no-adjacency")
+                     (make-mixed-input)
+                     (make-input (if tiny? 3 65536)
+                                 (if (or overlap? tiny?) 97 42))))
           (encoded (t2-tokenizer-core-encode-i64-le model input)))
      (display scenario) (display "\t")
      (display (bytevector-length encoded)) (display "\t")
