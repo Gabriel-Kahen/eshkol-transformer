@@ -182,7 +182,7 @@ cmp "${t2_tmp}/utf8-stream-1.stdout" \
   "${t2_tmp}/utf8-stream-2.stdout"
 grep -Fx 'T2 CORE SMOKE PASS: 6 checks' \
   "${t2_tmp}/core-smoke-1.stdout" >/dev/null
-grep -Fx 'T2 TRAINING STREAM PASS: 91 checks' \
+grep -Fx 'T2 TRAINING STREAM PASS: 96 checks' \
   "${t2_tmp}/training-stream-1.stdout" >/dev/null
 grep -Fx 'T2 DECODER PARTITION PASS: 73728 one-ID omit chunks' \
   "${t2_tmp}/decoder-partition-1.stdout" >/dev/null

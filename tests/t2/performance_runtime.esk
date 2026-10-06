@@ -1,0 +1,76 @@
+(load "internal/t1/lib/t1_tokenizer_core.esk")
+(load "internal/t2/lib/t2_bpe_core.esk")
+
+;;; Development-only workload. One invocation executes one bounded case and
+;;; prints a digest of the exact output for the external reference runner.
+(define arguments (cdr (command-line)))
+(if (not (= (t1-core-list-length-bounded arguments 2) 1)) (exit 2))
+(define scenario (car arguments))
+
+(define (make-merges overlap?)
+  (let loop ((rank 255) (out '()))
+    (if (< rank 0) out
+        (loop (- rank 1)
+              (cons (list rank (+ 256 rank)
+                          (if (and overlap? (= rank 0)) 97 rank)
+                          (if (and overlap? (= rank 0)) 97
+                              (modulo (+ rank 1) 256)))
+                    out)))))
+
+(define (make-input length value)
+  (let ((bytes (make-bytevector length value))) bytes))
+
+(define (make-many-documents)
+  (let loop ((document 4095) (out '()))
+    (if (< document 0) out
+        (let ((bytes (make-bytevector 16 0)))
+          (let fill ((index 0))
+            (if (< index 16)
+                (begin
+                  (bytevector-u8-set! bytes index
+                    (modulo (+ (* document 73) (* index 17)) 256))
+                  (fill (+ index 1)))))
+          (loop (- document 1) (cons (list bytes) out))))))
+
+(define (make-one-document)
+  (let ((bytes (make-bytevector 65536 0)))
+    (let fill ((index 0))
+      (if (< index 65536)
+          (begin
+            (bytevector-u8-set! bytes index
+              (modulo (+ (* (quotient index 16) 73)
+                         (* (modulo index 16) 17)) 256))
+            (fill (+ index 1)))))
+    (list (list bytes))))
+
+(define (digest bytes)
+  (t1-core-hex (t1-core-sha256 bytes)))
+
+(cond
+  ((or (string=? scenario "encode-no-match")
+       (string=? scenario "encode-overlap")
+       (string=? scenario "encode-zero-merge")
+       (string=? scenario "encode-tiny"))
+   (let* ((overlap? (string=? scenario "encode-overlap"))
+          (zero? (string=? scenario "encode-zero-merge"))
+          (tiny? (string=? scenario "encode-tiny"))
+          (model (t2-tokenizer-core-create
+                  'raw (if zero? '() (make-merges (or overlap? tiny?)))
+                  '() '() '()))
+          (input (make-input (if tiny? 3 65536)
+                             (if (or overlap? tiny?) 97 42)))
+          (encoded (t2-tokenizer-core-encode-i64-le model input)))
+     (display scenario) (display "\t")
+     (display (bytevector-length encoded)) (display "\t")
+     (display (digest encoded)) (newline)))
+  ((or (string=? scenario "train-many-docs")
+       (string=? scenario "train-one-doc"))
+   (let* ((documents (if (string=? scenario "train-many-docs")
+                         (make-many-documents) (make-one-document)))
+          (model (t2-bpe-train-core documents 64 2 'raw '() '() '()))
+          (artifact (t2-tokenizer-core-serialize model)))
+     (display scenario) (display "\t")
+     (display (t1-core-list-length-bounded (vector-ref model 2) 257))
+     (display "\t")
+     (display (digest artifact)) (newline)))
+  (else (exit 2)))

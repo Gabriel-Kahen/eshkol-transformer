@@ -420,20 +420,24 @@
                       "unknown BPE special token"))))
 
 ;;; -------------------------------------------------------------------------
-;;; Whole-input vectorized merge application.
+;;; Owned forward compaction. At loop entry written <= input. A match reads
+;;; both operands before writing and advances input by two; otherwise it
+;;; advances by one. Thus target may alias current without overwriting any
+;;; unread token. Training documents and whole-input token vectors are newly
+;;; allocated here, so no caller-owned input can alias either vector.
 
-(define (t2-core-apply-one-merge current current-length left right result-id)
-  (let ((out (make-vector current-length 0)))
-    (let loop ((input 0) (written 0))
-      (if (= input current-length)
-          (vector out written)
-          (if (and (< (+ input 1) current-length)
-                   (= (vector-ref current input) left)
-                   (= (vector-ref current (+ input 1)) right))
-              (begin (vector-set! out written result-id)
-                     (loop (+ input 2) (+ written 1)))
-              (begin (vector-set! out written (vector-ref current input))
-                     (loop (+ input 1) (+ written 1))))))))
+(define (t2-core-apply-one-merge! current current-length
+                                  left right result-id)
+  (let loop ((input 0) (written 0))
+    (if (= input current-length)
+        written
+        (if (and (< (+ input 1) current-length)
+                 (= (vector-ref current input) left)
+                 (= (vector-ref current (+ input 1)) right))
+            (begin (vector-set! current written result-id)
+                   (loop (+ input 2) (+ written 1)))
+            (begin (vector-set! current written (vector-ref current input))
+                   (loop (+ input 1) (+ written 1)))))))
 
 (define (t2-core-input-within-byte-limit? input maximum)
   (cond
@@ -456,24 +460,38 @@
     (if (> length t2-core-max-stream-bytes)
         (t1-core-fail 'invalid-argument operation
                       "BPE input exceeds 65536 bytes"))
-    (let ((initial (make-vector length 0)))
+    (let ((initial (make-vector length 0))
+          (counts (make-vector 512 0)))
       (let fill ((index 0))
         (if (< index length)
-            (begin (vector-set! initial index (bytevector-u8-ref bytes index))
-                   (fill (+ index 1)))))
+            (let ((id (bytevector-u8-ref bytes index)))
+              (vector-set! initial index id)
+              (vector-set! counts id (+ (vector-ref counts id) 1))
+              (fill (+ index 1)))))
       (let apply ((remaining (vector-ref value 2))
-                  (current initial) (current-length length))
-        (if (null? remaining)
-            (vector current current-length)
+                  (current-length length))
+        (if (or (null? remaining) (< current-length 2))
+            (vector initial current-length)
             (let* ((merge (car remaining))
-                   (next
-                    (t2-core-apply-one-merge
-                     current current-length
-                     (car (cdr (cdr merge)))
-                     (car (cdr (cdr (cdr merge))))
-                     (car (cdr merge)))))
-              (apply (cdr remaining) (vector-ref next 0)
-                     (vector-ref next 1))))))))
+                   (left (car (cdr (cdr merge))))
+                   (right (car (cdr (cdr (cdr merge))))))
+              (if (or (= (vector-ref counts left) 0)
+                      (= (vector-ref counts right) 0))
+                  (apply (cdr remaining) current-length)
+                  (let* ((next-length
+                          (t2-core-apply-one-merge!
+                           initial current-length left right
+                           (car (cdr merge))))
+                         (matches (- current-length next-length)))
+                    ;; Each replacement consumes one of each operand, even
+                    ;; when left = right. The fresh result ID occurs exactly
+                    ;; once per replacement. Unread stale suffix is excluded.
+                    (vector-set! counts left
+                      (- (vector-ref counts left) matches))
+                    (vector-set! counts right
+                      (- (vector-ref counts right) matches))
+                    (vector-set! counts (car (cdr merge)) matches)
+                    (apply (cdr remaining) next-length)))))))))
 
 (define (t2-core-write-vector-ids! result start ids count)
   (let loop ((index 0))
@@ -1291,17 +1309,14 @@
               (loop (cdr remaining) best best-count))))))
 
 (define (t2-core-replace-training-pair documents left right result-id)
-  (let loop ((remaining documents) (out '()))
-    (if (null? remaining) (t2-core-t1-reverse out)
-        (let* ((document (car remaining))
-               (replaced
-                (t2-core-apply-one-merge
-                 (vector-ref document 0) (vector-ref document 1)
-                 left right result-id)))
-          (loop (cdr remaining)
-                (cons (vector (vector-ref replaced 0)
-                              (vector-ref replaced 1))
-                      out))))))
+  (let loop ((remaining documents))
+    (if (null? remaining) documents
+        (let ((document (car remaining)))
+          (vector-set! document 1
+            (t2-core-apply-one-merge!
+             (vector-ref document 0) (vector-ref document 1)
+             left right result-id))
+          (loop (cdr remaining))))))
 
 (define (t2-bpe-train-core documents maximum-merges minimum-frequency
                            utf8-policy special-specs prefix-names suffix-names)

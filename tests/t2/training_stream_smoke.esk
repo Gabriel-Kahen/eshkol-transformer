@@ -115,6 +115,44 @@
        (and (= (car (cdr (cdr tie-merge))) 97)
             (= (car (cdr (cdr (cdr tie-merge)))) 98)))
 
+;;; Rank one consumes adjacency created by rank zero; rank two then consumes
+;;; another newly adjacent pair. Equal operands also overlap at the first rank.
+(define chain-model
+  (t2-tokenizer-core-create
+   'raw (list (list 0 256 97 97) (list 1 257 256 97)
+              (list 2 258 256 257))
+   '() '() '()))
+(define caller-bytes (bytevector 97 97 97 97 97))
+(define caller-copy (bytevector-copy caller-bytes 0 5))
+(check "owned compaction across later ranks"
+       (t1-core-bytes=?
+        (t2-tokenizer-core-encode-i64-le chain-model caller-bytes)
+        (repeat-staging 1 258)))
+(check "equal operands compact without overlap"
+       (t1-core-bytes=?
+        (t2-tokenizer-core-encode-i64-le
+         chain-model (bytevector 97 97 97 97))
+        (repeat-staging 2 256)))
+(check "empty owned compaction"
+       (= (bytevector-length
+           (t2-tokenizer-core-encode-i64-le chain-model (bytevector))) 0))
+(check "repeat encode leaves caller bytes intact"
+       (and (t1-core-bytes=?
+             (t2-tokenizer-core-encode-i64-le chain-model caller-bytes)
+             (repeat-staging 1 258))
+            (t1-core-bytes=? caller-bytes caller-copy)))
+(define training-chunk (bytevector 97 97 97 97 97))
+(define training-copy (bytevector-copy training-chunk 0 5))
+(define owned-training-model
+  (t2-bpe-train-core (list (list training-chunk)) 3 1 'raw
+                     '() '() '()))
+(check "train compaction leaves caller chunk intact"
+       (and (t1-core-bytes=? training-chunk training-copy)
+            (t1-core-bytes=?
+             (t2-tokenizer-core-encode-i64-le
+              owned-training-model training-chunk)
+             (repeat-staging 1 258))))
+
 (define source (bytevector 98 97 110 97 110 97 0 255 98 97 110 100 97 110 97))
 (define whole (t2-tokenizer-core-encode-i64-le model source))
 (define encoder (t2-stream-encoder-open model))
