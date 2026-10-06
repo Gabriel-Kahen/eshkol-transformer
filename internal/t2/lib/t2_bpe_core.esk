@@ -576,7 +576,10 @@
     (vector-set! (vector-ref workspace 12) 0
                  (- (vector-ref (vector-ref workspace 12) 0) 1))
     (t2-core-pair-add! workspace before)
-    (t2-core-pair-add! workspace node)))
+    ;; Keep the bucket insertion in this frame. A cross-procedure tail call
+    ;; would add a runtime tail-transfer import to the accepted Wave 2 object.
+    (t2-core-pair-add! workspace node)
+    #t))
 
 (define (t2-core-pair-heap-down! candidates index size)
   (let ((child (+ (* index 2) 1)))
@@ -724,25 +727,32 @@
                (vector initial length))
               ((or (<= length 128)
                    (= (vector-ref counts (vector-ref initial 0)) length))
-               (t2-core-tokenize-small! initial length merges counts))
+               (let ((tokenized
+                      (t2-core-tokenize-small!
+                       initial length merges counts)))
+                 (vector-ref (vector tokenized) 0)))
               (else
                (let ((workspace
                       (t2-core-pair-workspace
                        (list (vector initial length)) #f
                        (+ 256 (t1-core-list-length-bounded merges 257))
                        operation)))
-                 (let apply ((remaining merges))
-                   (if (or (null? remaining)
-                           (< (vector-ref (vector-ref workspace 12) 0) 2))
-                       (t2-core-pair-compact! workspace)
-                       (let* ((merge (car remaining))
-                              (slot (t2-core-pair-slot workspace
-                                     (car (cdr (cdr merge)))
-                                     (car (cdr (cdr (cdr merge)))))))
-                         (if (> (vector-ref (vector-ref workspace 7) slot) 0)
-                             (t2-core-pair-apply!
-                              workspace slot (car (cdr merge))))
-                         (apply (cdr remaining)))))))))))))
+                 (let ((tokenized
+                        (let apply ((remaining merges))
+                          (if (or (null? remaining)
+                                  (< (vector-ref (vector-ref workspace 12) 0) 2))
+                              (let ((compacted
+                                     (t2-core-pair-compact! workspace)))
+                                (vector-ref (vector compacted) 0))
+                              (let* ((merge (car remaining))
+                                     (slot (t2-core-pair-slot workspace
+                                            (car (cdr (cdr merge)))
+                                            (car (cdr (cdr (cdr merge)))))))
+                                (if (> (vector-ref (vector-ref workspace 7) slot) 0)
+                                    (t2-core-pair-apply!
+                                     workspace slot (car (cdr merge))))
+                                (apply (cdr remaining)))))))
+                   (vector-ref (vector tokenized) 0))))))))))
 
 (define (t2-core-write-vector-ids! result start ids count)
   (let loop ((index 0))
