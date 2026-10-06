@@ -57,3 +57,17 @@ timing difference are too short or small to support a speed claim. This is a
 bounded 65,536-byte implementation; these measurements do not establish
 large-corpus throughput or isolated kernel latency. The source and tests keep
 the accepted streaming path and exact operational ceilings.
+
+Validation on this source passed 25 Python reference checks and 96 compiled
+training/stream checks. The complete T2 invocation passed its runtime,
+public, parser, D1 and T1 successor checks, then its boundary section first
+stopped at a missing D2 build prerequisite. After building D2 from this exact
+tree, the boundary rerun passed both fresh production/D1 aggregate repeats,
+byte comparisons, localization, negative binding and public-caller checks,
+then hit the nested Wave 1 builder's 300-second default timeout. The same
+Wave 1 build passed standalone with the supported 600-second override in
+405.12 seconds; the exact Wave 1 and candidate Wave 2 archives then failed
+their combined link for the expected duplicate E1 owner symbols. The boundary
+script now forwards its configured timeout to that nested builder. These
+separate checks cover the remaining assertion, but no uninterrupted full
+boundary invocation returned success on this worktree.
