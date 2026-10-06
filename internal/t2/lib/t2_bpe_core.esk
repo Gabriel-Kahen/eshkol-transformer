@@ -439,6 +439,248 @@
             (begin (vector-set! current written (vector-ref current input))
                    (loop (+ input 1) (+ written 1)))))))
 
+;;; Private bounded adjacency index. Node numbers are original byte positions,
+;;; in document order. A merged pair retains its left node and kills its right
+;;; node, so increasing live node numbers remain the exact token order. Each
+;;; live edge belongs to one intrusive pair bucket; relinking removes old edges
+;;; before inserting new ones, without accumulating stale occurrences.
+;;; Workspace fields: token, previous, next, bucket head, bucket previous,
+;;; bucket next, edge slot, slot count, seen slots, touched slots, touched count,
+;;; candidate heap, active count, token spelling lengths, operation, table
+;;; width. The table covers only IDs possible in this bounded invocation.
+
+(define (t2-core-pair-slot workspace left right)
+  (+ (* left (vector-ref workspace 15)) right))
+
+(define (t2-core-pair-counted? workspace left right)
+  (let ((lengths (vector-ref workspace 13)))
+    (or (not lengths)
+        (<= (+ (vector-ref lengths left) (vector-ref lengths right))
+            t2-core-max-token-bytes))))
+
+(define (t2-core-pair-remove! workspace node)
+  (if (>= node 0)
+      (let* ((slots (vector-ref workspace 6))
+             (slot (vector-ref slots node)))
+        (if (>= slot 0)
+            (let* ((heads (vector-ref workspace 3))
+                   (bucket-prev (vector-ref workspace 4))
+                   (bucket-next (vector-ref workspace 5))
+                   (previous (vector-ref bucket-prev node))
+                   (following (vector-ref bucket-next node))
+                   (tokens (vector-ref workspace 0))
+                   (right (vector-ref (vector-ref workspace 2) node))
+                   (counts (vector-ref workspace 7)))
+              (if (>= previous 0)
+                  (vector-set! bucket-next previous following)
+                  (vector-set! heads slot following))
+              (if (>= following 0)
+                  (vector-set! bucket-prev following previous))
+              (if (t2-core-pair-counted?
+                   workspace (vector-ref tokens node)
+                   (vector-ref tokens right))
+                  (vector-set! counts slot (- (vector-ref counts slot) 1)))
+              (vector-set! slots node -1))))))
+
+(define (t2-core-pair-add! workspace node)
+  (if (>= node 0)
+      (let* ((next (vector-ref workspace 2))
+             (right (vector-ref next node)))
+        (if (>= right 0)
+            (let* ((tokens (vector-ref workspace 0))
+                   (left-id (vector-ref tokens node))
+                   (right-id (vector-ref tokens right))
+                   (slot (t2-core-pair-slot workspace left-id right-id))
+                   (heads (vector-ref workspace 3))
+                   (old-head (vector-ref heads slot))
+                   (counts (vector-ref workspace 7)))
+              (vector-set! (vector-ref workspace 6) node slot)
+              (vector-set! (vector-ref workspace 4) node -1)
+              (vector-set! (vector-ref workspace 5) node old-head)
+              (if (>= old-head 0)
+                  (vector-set! (vector-ref workspace 4) old-head node))
+              (vector-set! heads slot node)
+              (if (t2-core-pair-counted? workspace left-id right-id)
+                  (let ((prior (vector-ref counts slot)))
+                    (if (= prior t1-core-max-i64)
+                        (t2-core-local-fail
+                         'internal (vector-ref workspace 14)
+                         "BPE pair count overflow"))
+                    (vector-set! counts slot (+ prior 1))
+                    (let ((seen (vector-ref workspace 8)))
+                      (if (and seen (not (vector-ref seen slot)))
+                          (let ((used (vector-ref workspace 10)))
+                            (vector-set! seen slot #t)
+                            (vector-set! (vector-ref workspace 9)
+                                         (vector-ref used 0) slot)
+                            (vector-set! used 0 (+ (vector-ref used 0) 1))))))))))))
+
+(define (t2-core-pair-workspace documents token-lengths width operation)
+  (let total-loop ((remaining documents) (total 0))
+    (if (null? remaining)
+        (let* ((tokens (make-vector total -1))
+               (previous (make-vector total -1))
+               (next (make-vector total -1))
+               (heads (make-vector (* width width) -1))
+               (bucket-prev (make-vector total -1))
+               (bucket-next (make-vector total -1))
+               (slots (make-vector total -1))
+               (counts (make-vector (* width width) 0))
+               (seen (if token-lengths
+                         (make-vector (* width width) #f) #f))
+               (touched (if token-lengths
+                            (make-vector (* width width) 0) #f))
+               (workspace
+                (vector tokens previous next heads bucket-prev bucket-next
+                        slots counts seen touched (vector 0)
+                        (make-vector total 0) (vector total)
+                        token-lengths operation width)))
+          (let copy-documents ((remaining documents) (start 0))
+            (if (null? remaining)
+                (begin
+                  (let index-loop ((index 0))
+                    (if (< index total)
+                        (begin (t2-core-pair-add! workspace index)
+                               (index-loop (+ index 1)))))
+                  workspace)
+                (let* ((document (car remaining))
+                       (source (vector-ref document 0))
+                       (length (vector-ref document 1)))
+                  (let copy ((offset 0))
+                    (if (< offset length)
+                        (let ((index (+ start offset)))
+                          (vector-set! tokens index (vector-ref source offset))
+                          (if (> offset 0)
+                              (vector-set! previous index (- index 1)))
+                          (if (< (+ offset 1) length)
+                              (vector-set! next index (+ index 1)))
+                          (copy (+ offset 1)))))
+                  (copy-documents (cdr remaining) (+ start length))))))
+        (total-loop (cdr remaining)
+                    (+ total (vector-ref (car remaining) 1))))))
+
+(define (t2-core-pair-merge-at! workspace node result-id)
+  (let* ((tokens (vector-ref workspace 0))
+         (previous (vector-ref workspace 1))
+         (next (vector-ref workspace 2))
+         (right (vector-ref next node))
+         (before (vector-ref previous node))
+         (after (vector-ref next right)))
+    (t2-core-pair-remove! workspace before)
+    (t2-core-pair-remove! workspace node)
+    (t2-core-pair-remove! workspace right)
+    (vector-set! tokens node result-id)
+    (vector-set! tokens right -1)
+    (vector-set! next node after)
+    (if (>= after 0) (vector-set! previous after node))
+    (vector-set! (vector-ref workspace 12) 0
+                 (- (vector-ref (vector-ref workspace 12) 0) 1))
+    (t2-core-pair-add! workspace before)
+    (t2-core-pair-add! workspace node)))
+
+(define (t2-core-pair-heap-down! candidates index size)
+  (let ((child (+ (* index 2) 1)))
+    (if (< child size)
+        (let* ((other (+ child 1))
+               (smaller (if (and (< other size)
+                                 (< (vector-ref candidates other)
+                                    (vector-ref candidates child)))
+                            other child)))
+          (if (> (vector-ref candidates index)
+                 (vector-ref candidates smaller))
+              (let ((saved (vector-ref candidates index)))
+                (vector-set! candidates index
+                             (vector-ref candidates smaller))
+                (vector-set! candidates smaller saved)
+                (t2-core-pair-heap-down! candidates smaller size)))))))
+
+(define (t2-core-pair-apply! workspace slot result-id)
+  (let* ((counts (vector-ref workspace 7))
+         (occurrences (vector-ref counts slot))
+         (tokens (vector-ref workspace 0))
+         (slots (vector-ref workspace 6))
+         (total (vector-length tokens)))
+    (if (>= (* occurrences 4) total)
+        ;; Dense ranks visit original node numbers directly. A fresh result ID
+        ;; cannot create another occurrence of this rank's operand pair.
+        (let scan ((node 0))
+          (if (< node total)
+              (begin
+                (if (= (vector-ref slots node) slot)
+                    (t2-core-pair-merge-at! workspace node result-id))
+                (scan (+ node 1)))))
+        (let* ((candidates (vector-ref workspace 11))
+               (heads (vector-ref workspace 3))
+               (bucket-next (vector-ref workspace 5)))
+          (let gather ((node (vector-ref heads slot)) (size 0))
+            (if (>= node 0)
+                (begin
+                  (vector-set! candidates size node)
+                  (gather (vector-ref bucket-next node) (+ size 1)))
+                (begin
+                  (let heapify ((index (- (quotient size 2) 1)))
+                    (if (>= index 0)
+                        (begin
+                          (t2-core-pair-heap-down! candidates index size)
+                          (heapify (- index 1)))))
+                  (let pop ((remaining size))
+                    (if (> remaining 0)
+                        (let ((node (vector-ref candidates 0))
+                              (last (vector-ref candidates (- remaining 1))))
+                          (vector-set! candidates 0 last)
+                          (t2-core-pair-heap-down!
+                           candidates 0 (- remaining 1))
+                          (if (= (vector-ref slots node) slot)
+                              (t2-core-pair-merge-at!
+                               workspace node result-id))
+                          (pop (- remaining 1))))))))))))
+
+(define (t2-core-pair-compact! workspace)
+  (let ((tokens (vector-ref workspace 0))
+        (length (vector-length (vector-ref workspace 0))))
+    (let loop ((read 0) (written 0))
+      (if (= read length)
+          (vector tokens written)
+          (let ((id (vector-ref tokens read)))
+            (if (>= id 0)
+                (begin (vector-set! tokens written id)
+                       (loop (+ read 1) (+ written 1)))
+                (loop (+ read 1) written)))))))
+
+;;; The bounded scan remains cheaper than constructing a pair table for short
+;;; calls. It uses only private token vectors and the same left-to-right merge.
+(define (t2-core-tokenize-small! initial length merges counts)
+    (let apply ((remaining merges) (current-length length))
+      (if (or (null? remaining) (< current-length 2))
+          (vector initial current-length)
+          (let* ((merge (car remaining))
+                 (left (car (cdr (cdr merge))))
+                 (right (car (cdr (cdr (cdr merge))))))
+            (if (or (= (vector-ref counts left) 0)
+                    (= (vector-ref counts right) 0))
+                (apply (cdr remaining) current-length)
+                (let* ((next-length
+                        (t2-core-apply-one-merge!
+                         initial current-length left right
+                         (car (cdr merge))))
+                       (matches (- current-length next-length)))
+                  (vector-set! counts left
+                               (- (vector-ref counts left) matches))
+                  (vector-set! counts right
+                               (- (vector-ref counts right) matches))
+                  (vector-set! counts (car (cdr merge)) matches)
+                  (apply (cdr remaining) next-length)))))))
+
+(define (t2-core-any-initial-merge? merges counts)
+  (let loop ((remaining merges))
+    (if (null? remaining) #f
+        (let* ((merge (car remaining))
+               (left (car (cdr (cdr merge))))
+               (right (car (cdr (cdr (cdr merge))))))
+          (if (and (> (vector-ref counts left) 0)
+                   (> (vector-ref counts right) 0))
+              #t (loop (cdr remaining)))))))
+
 (define (t2-core-input-within-byte-limit? input maximum)
   (cond
     ((bytevector? input) (<= (bytevector-length input) maximum))
@@ -461,37 +703,46 @@
         (t1-core-fail 'invalid-argument operation
                       "BPE input exceeds 65536 bytes"))
     (let ((initial (make-vector length 0))
-          (counts (make-vector 512 0)))
-      (let fill ((index 0))
-        (if (< index length)
-            (let ((id (bytevector-u8-ref bytes index)))
-              (vector-set! initial index id)
-              (vector-set! counts id (+ (vector-ref counts id) 1))
-              (fill (+ index 1)))))
-      (let apply ((remaining (vector-ref value 2))
-                  (current-length length))
-        (if (or (null? remaining) (< current-length 2))
-            (vector initial current-length)
-            (let* ((merge (car remaining))
-                   (left (car (cdr (cdr merge))))
-                   (right (car (cdr (cdr (cdr merge))))))
-              (if (or (= (vector-ref counts left) 0)
-                      (= (vector-ref counts right) 0))
-                  (apply (cdr remaining) current-length)
-                  (let* ((next-length
-                          (t2-core-apply-one-merge!
-                           initial current-length left right
-                           (car (cdr merge))))
-                         (matches (- current-length next-length)))
-                    ;; Each replacement consumes one of each operand, even
-                    ;; when left = right. The fresh result ID occurs exactly
-                    ;; once per replacement. Unread stale suffix is excluded.
-                    (vector-set! counts left
-                      (- (vector-ref counts left) matches))
-                    (vector-set! counts right
-                      (- (vector-ref counts right) matches))
-                    (vector-set! counts (car (cdr merge)) matches)
-                    (apply (cdr remaining) next-length)))))))))
+          (merges (vector-ref value 2)))
+      (if (or (null? merges) (< length 2))
+          (begin
+            (let fill ((index 0))
+              (if (< index length)
+                  (begin
+                    (vector-set! initial index (bytevector-u8-ref bytes index))
+                    (fill (+ index 1)))))
+            (vector initial length))
+          (let ((counts (make-vector 512 0)))
+            (let fill ((index 0))
+              (if (< index length)
+                  (let ((id (bytevector-u8-ref bytes index)))
+                    (vector-set! initial index id)
+                    (vector-set! counts id (+ (vector-ref counts id) 1))
+                    (fill (+ index 1)))))
+            (cond
+              ((not (t2-core-any-initial-merge? merges counts))
+               (vector initial length))
+              ((or (<= length 128)
+                   (= (vector-ref counts (vector-ref initial 0)) length))
+               (t2-core-tokenize-small! initial length merges counts))
+              (else
+               (let ((workspace
+                      (t2-core-pair-workspace
+                       (list (vector initial length)) #f
+                       (+ 256 (t1-core-list-length-bounded merges 257))
+                       operation)))
+                 (let apply ((remaining merges))
+                   (if (or (null? remaining)
+                           (< (vector-ref (vector-ref workspace 12) 0) 2))
+                       (t2-core-pair-compact! workspace)
+                       (let* ((merge (car remaining))
+                              (slot (t2-core-pair-slot workspace
+                                     (car (cdr (cdr merge)))
+                                     (car (cdr (cdr (cdr merge)))))))
+                         (if (> (vector-ref (vector-ref workspace 7) slot) 0)
+                             (t2-core-pair-apply!
+                              workspace slot (car (cdr merge))))
+                         (apply (cdr remaining)))))))))))))
 
 (define (t2-core-write-vector-ids! result start ids count)
   (let loop ((index 0))
@@ -1266,57 +1517,80 @@
                (string-append label " references a non-omit special")))
           (loop (cdr remaining) (cons (car special) out))))))
 
-(define t2-core-pair-table-width 512)
+(define (t2-core-select-training-pair workspace minimum)
+  (let ((touched (vector-ref workspace 9))
+        (used (vector-ref (vector-ref workspace 10) 0))
+        (counts (vector-ref workspace 7)))
+    (let loop ((index 0) (best -1) (best-count 0))
+      (if (= index used)
+          best
+          (let* ((slot (vector-ref touched index))
+                 (count (vector-ref counts slot)))
+            (if (and (>= count minimum)
+                     (or (> count best-count)
+                         (and (= count best-count)
+                              (or (= best -1) (< slot best)))))
+                (loop (+ index 1) slot count)
+                (loop (+ index 1) best best-count)))))))
 
-(define (t2-core-count-training-pairs documents token-lengths counts operation)
-  (let documents-loop ((remaining documents) (touched '()))
-    (if (null? remaining) touched
-        (let* ((document (car remaining))
-               (tokens (vector-ref document 0))
-               (length (vector-ref document 1)))
-          (let pairs-loop ((index 0) (seen touched))
-            (if (>= (+ index 1) length)
-                (documents-loop (cdr remaining) seen)
-                (let* ((left (vector-ref tokens index))
-                       (right (vector-ref tokens (+ index 1)))
-                       (spelling-size
-                        (+ (vector-ref token-lengths left)
-                           (vector-ref token-lengths right))))
-                  (if (> spelling-size t2-core-max-token-bytes)
-                      (pairs-loop (+ index 1) seen)
-                      (let* ((slot (+ (* left t2-core-pair-table-width) right))
-                             (prior (vector-ref counts slot)))
-                        (if (= prior t1-core-max-i64)
-                            (t2-core-local-fail
-                             'internal operation "BPE pair count overflow"))
-                        (vector-set! counts slot (+ prior 1))
-                        (pairs-loop (+ index 1)
-                                    (if (= prior 0) (cons slot seen)
-                                        seen)))))))))))
+;;; This route is admitted only for <=128 bytes, so every count is <=127 and
+;;; the i64 overflow branch used by the indexed route is unreachable here.
+(define (t2-core-small-training-select documents token-lengths minimum total)
+  (let ((slots (make-vector total 0))
+        (counts (make-vector total 0))
+        (used (vector 0)))
+    (let document-loop ((remaining documents))
+      (if (not (null? remaining))
+          (let* ((document (car remaining))
+                 (tokens (vector-ref document 0))
+                 (length (vector-ref document 1)))
+            (let pair-loop ((index 0))
+              (if (< (+ index 1) length)
+                  (let ((left (vector-ref tokens index))
+                        (right (vector-ref tokens (+ index 1))))
+                    (if (<= (+ (vector-ref token-lengths left)
+                               (vector-ref token-lengths right))
+                            t2-core-max-token-bytes)
+                        (let ((slot (+ (* left 512) right)))
+                          (let find ((candidate 0))
+                            (if (= candidate (vector-ref used 0))
+                                (begin
+                                  (vector-set! slots candidate slot)
+                                  (vector-set! counts candidate 1)
+                                  (vector-set! used 0 (+ candidate 1)))
+                                (if (= (vector-ref slots candidate) slot)
+                                    (vector-set! counts candidate
+                                                 (+ (vector-ref counts candidate) 1))
+                                    (find (+ candidate 1)))))))
+                    (pair-loop (+ index 1)))))
+            (document-loop (cdr remaining)))))
+    (let select ((index 0) (best -1) (best-count 0))
+      (if (= index (vector-ref used 0))
+          best
+          (let ((slot (vector-ref slots index))
+                (count (vector-ref counts index)))
+            (if (and (>= count minimum)
+                     (or (> count best-count)
+                         (and (= count best-count)
+                              (or (= best -1) (< slot best)))))
+                (select (+ index 1) slot count)
+                (select (+ index 1) best best-count)))))))
 
-(define (t2-core-select-training-pair touched counts minimum)
-  (let loop ((remaining touched) (best -1) (best-count 0))
-    (if (null? remaining)
-        (vector best best-count)
-        (let* ((slot (car remaining))
-               (count (vector-ref counts slot)))
-          (vector-set! counts slot 0)
-          (if (and (>= count minimum)
-                   (or (> count best-count)
-                       (and (= count best-count)
-                            (or (= best -1) (< slot best)))))
-              (loop (cdr remaining) slot count)
-              (loop (cdr remaining) best best-count))))))
-
-(define (t2-core-replace-training-pair documents left right result-id)
+(define (t2-core-small-training-replace! documents left right result-id)
   (let loop ((remaining documents))
-    (if (null? remaining) documents
+    (if (not (null? remaining))
         (let ((document (car remaining)))
           (vector-set! document 1
-            (t2-core-apply-one-merge!
-             (vector-ref document 0) (vector-ref document 1)
-             left right result-id))
+                       (t2-core-apply-one-merge!
+                        (vector-ref document 0) (vector-ref document 1)
+                        left right result-id))
           (loop (cdr remaining))))))
+
+(define (t2-core-training-total documents)
+  (let loop ((remaining documents) (total 0))
+    (if (null? remaining) total
+        (loop (cdr remaining)
+              (+ total (vector-ref (car remaining) 1))))))
 
 (define (t2-bpe-train-core documents maximum-merges minimum-frequency
                            utf8-policy special-specs prefix-names suffix-names)
@@ -1342,13 +1616,17 @@
             (t2-core-require-insertion-names
              suffix-names t2-core-max-suffix operation "suffix"))
            (token-lengths (make-vector 512 0))
-           (counts (make-vector (* t2-core-pair-table-width
-                                   t2-core-pair-table-width) 0)))
+           (total (t2-core-training-total training-documents)))
       (let initialize-bytes ((index 0))
         (if (< index 256)
             (begin (vector-set! token-lengths index 1)
                    (initialize-bytes (+ index 1)))))
-      (let train ((rank 0) (current training-documents) (merges '()))
+      (let ((workspace
+             (if (or (= maximum-merges 0) (<= total 128)) #f
+                 (t2-core-pair-workspace
+                  training-documents token-lengths
+                  (+ 256 maximum-merges) operation))))
+      (let train ((rank 0) (merges '()))
         (if (= rank maximum-merges)
             (let* ((learned (t2-core-t1-reverse merges))
                    (specials (t2-core-build-specials specs (+ 256 rank)))
@@ -1360,13 +1638,13 @@
                      checked-suffix-names specials operation "suffix")))
               (t2-tokenizer-core-create
                utf8-policy learned specials prefix suffix))
-            (let* ((touched
-                    (t2-core-count-training-pairs
-                     current token-lengths counts operation))
-                   (selected
-                    (t2-core-select-training-pair
-                     touched counts minimum-frequency))
-                   (slot (vector-ref selected 0)))
+            (let ((slot
+                   (if workspace
+                       (t2-core-select-training-pair
+                        workspace minimum-frequency)
+                       (t2-core-small-training-select
+                        training-documents token-lengths
+                        minimum-frequency total))))
               (if (= slot -1)
                   (let* ((learned (t2-core-t1-reverse merges))
                          (specials
@@ -1379,8 +1657,9 @@
                            checked-suffix-names specials operation "suffix")))
                     (t2-tokenizer-core-create
                      utf8-policy learned specials prefix suffix))
-                  (let* ((left (quotient slot t2-core-pair-table-width))
-                         (right (modulo slot t2-core-pair-table-width))
+                  (let* ((width (if workspace (vector-ref workspace 15) 512))
+                         (left (quotient slot width))
+                         (right (modulo slot width))
                          (result-id (+ 256 rank))
                          (spelling-size
                           (+ (vector-ref token-lengths left)
@@ -1390,11 +1669,13 @@
                          'internal operation
                          "selected BPE pair exceeds token byte bound"))
                     (vector-set! token-lengths result-id spelling-size)
+                    (if workspace
+                        (t2-core-pair-apply! workspace slot result-id)
+                        (t2-core-small-training-replace!
+                         training-documents left right result-id))
                     (train
                      (+ rank 1)
-                     (t2-core-replace-training-pair
-                      current left right result-id)
-                     (cons (list rank result-id left right) merges))))))))))
+                     (cons (list rank result-id left right) merges)))))))))))
 
 (define (t2-core-raise-caught caught)
   (let ((unreachable (raise caught))) unreachable))

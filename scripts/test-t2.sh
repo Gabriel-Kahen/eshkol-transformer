@@ -178,6 +178,23 @@ for repetition in 1 2; do
     "${t2_tmp}/utf8-stream-${repetition}"
 done
 cmp "${t2_tmp}/core-smoke-1.stdout" "${t2_tmp}/core-smoke-2.stdout"
+
+for repetition in 1 2; do
+  PYTHONDONTWRITEBYTECODE=1 python3 -m \
+    tests.t2.generate_pair_index_differential \
+    --output "${t2_tmp}/pair-differential-${repetition}.esk"
+done
+cmp "${t2_tmp}/pair-differential-1.esk" \
+    "${t2_tmp}/pair-differential-2.esk"
+compile_core "${t2_tmp}/pair-differential-1.esk" \
+  "${t2_tmp}/pair-differential"
+run_bounded "T2 pair-index differential" \
+  "${t2_tmp}/pair-differential.stdout" \
+  "${t2_tmp}/pair-differential.stderr" \
+  "${t2_tmp}/pair-differential"
+grep -Fx 'T2 PAIR DIFFERENTIAL PASS: 125 checks' \
+  "${t2_tmp}/pair-differential.stdout" >/dev/null || \
+  die "T2 pair-index differential did not report all 125 checks"
 cmp "${t2_tmp}/training-stream-1.stdout" \
   "${t2_tmp}/training-stream-2.stdout"
 cmp "${t2_tmp}/decoder-partition-1.stdout" \

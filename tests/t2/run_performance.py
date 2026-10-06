@@ -15,13 +15,14 @@ import subprocess
 import tempfile
 import time
 
-from tests.t2.reference import encode_artifact, pack_i64, train
+from tests.t2.reference import Core, Merge, encode_artifact, encode_bytes, pack_i64, train
 
 
 SCENARIOS = (
     "encode-no-match", "encode-overlap", "encode-mixed-no-adjacency",
-    "encode-zero-merge",
+    "encode-sparse-chain", "encode-zero-merge",
     "encode-tiny", "train-many-docs", "train-one-doc",
+    "train-near-limit-256",
 )
 
 
@@ -31,16 +32,29 @@ def oracle() -> dict[str, str]:
     documents = tuple((part,) for part in source)
     trained = train(documents, 64, 2)
     joined = train(((b"".join(source),),), 64, 2)
+    near_limit = train((((bytes(range(256)) * 256)[:-2],), (b"aa",)), 256, 1)
+    sparse_model = Core(merges=tuple(
+        Merge(rank, 256 + rank, 97 if rank == 0 else 255 + rank, 98)
+        for rank in range(255)
+    ))
+    sparse_input = bytearray(b"c" * 65536)
+    sparse_input[32768] = 97
+    sparse_input[32769:33024] = b"b" * 255
     results = {
         "encode-no-match": (65536 * 8, hashlib.sha256(pack_i64((42,) * 65536)).hexdigest()),
         "encode-overlap": (32768 * 8, hashlib.sha256(pack_i64((256,) * 32768)).hexdigest()),
         "encode-mixed-no-adjacency":
             (65536 * 8, hashlib.sha256(pack_i64(tuple((index * 17) % 256
                                                      for index in range(65536)))).hexdigest()),
+        "encode-sparse-chain":
+            (65281 * 8,
+             hashlib.sha256(pack_i64(encode_bytes(sparse_model, bytes(sparse_input)))).hexdigest()),
         "encode-zero-merge": (65536 * 8, hashlib.sha256(pack_i64((42,) * 65536)).hexdigest()),
         "encode-tiny": (2 * 8, hashlib.sha256(pack_i64((256, 97))).hexdigest()),
         "train-many-docs": (len(trained.merges), hashlib.sha256(encode_artifact(trained)).hexdigest()),
         "train-one-doc": (len(joined.merges), hashlib.sha256(encode_artifact(joined)).hexdigest()),
+        "train-near-limit-256":
+            (len(near_limit.merges), hashlib.sha256(encode_artifact(near_limit)).hexdigest()),
     }
     return {name: f"{name}\t{size}\t{digest}" for name, (size, digest) in results.items()}
 
