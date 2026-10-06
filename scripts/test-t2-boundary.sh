@@ -425,7 +425,7 @@ fi
 
 # Independent Wave 1 and Wave 2 packages must not be combined: each owns the
 # same E1 registry and public wrappers.
-E1B_COMPILER_TIMEOUT_SECONDS="${t2_boundary_timeout}" \
+T1_COMPILER_TIMEOUT_SECONDS="${t2_boundary_timeout}" \
   /usr/bin/bash "${PROJECT_ROOT}/scripts/build-t1.sh" \
     "${t2_boundary_tmp}/wave1"
 if "${t2_boundary_cc}" -r -Wl,--whole-archive \
