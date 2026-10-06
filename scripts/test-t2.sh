@@ -20,6 +20,10 @@ esac
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 verify_toolchain
+if [[ "${runtime_only}" == 0 && \
+      ! -r "$(project_build_dir)/d2/libeshkol_transformer_wave2.a" ]]; then
+  die "T2 boundary requires the D2 aggregate; run scripts/build-d2.sh first"
+fi
 for command in ar cmp cut diff find grep ldd nm ps python3 rg sha256sum sleep sort strings timeout wc; do
   require_command "${command}"
 done

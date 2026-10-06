@@ -4,6 +4,8 @@ set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 verify_toolchain
+[[ -r "$(project_build_dir)/d2/libeshkol_transformer_wave2.a" ]] || \
+  die "T2 boundary requires the D2 aggregate; run scripts/build-d2.sh first"
 for command in ar awk cmp cp diff grep ldd nm readelf sed strings timeout tr xargs; do
   require_command "${command}"
 done
