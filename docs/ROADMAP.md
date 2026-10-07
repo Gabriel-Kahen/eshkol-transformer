@@ -939,11 +939,19 @@ The bounded first-warmup AOT runner now builds normal A/B and sanitizer mutant
 packages, checks source, object and symbol inventories, links exact runtime
 executables and captures all 30 selector/horizon/profile abort controls with
 raw wait status, streams, deadline/teardown, hashes and resource observations.
+Its capture keeps the owned session leader unreaped until live descendants
+quiesce, authenticates PID/start/session/UID before group signals, and records
+uncertainty as a failed capture. Normal A/B executable import and symbol
+inventories are compared in full; source, toolchain, package and executable
+identities are checked again after all tuples. The exact Python development
+helpers are admitted through Q0's narrow path list and near-miss negatives.
 Its strict parser requires the complete `success-model-image` label and an
 actual SIGABRT after successful compile/link. Source parser controls pass; the
 compiled detector gate, separate closing LSan baselines and the §9 matrix remain
 pending source review and ROOT immutable gate admission. An intentional abort
-cannot establish leak-clean closure or complete-horizon rollback.
+cannot establish leak-clean closure or complete-horizon rollback. The capture
+assumes the pinned builder/compiler/runtime do not detach from their owned
+session; it makes no hostile-process containment claim.
 
 The [E3 idle real-model control contract](e3/E3_IDLE_REAL_MODEL_CONTROL_CONTRACT.md)
 specifies a test-only use of existing I2 checkpoint decode and whole-batch load

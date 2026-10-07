@@ -46,62 +46,182 @@ def require(condition: bool, message: str) -> None:
         raise ValueError(message)
 
 
+def process_identity(pid: int) -> tuple[int, int, int, int, str]:
+    """Read Linux PID, group, session, start tick and owner without guessing."""
+    raw = (Path("/proc") / str(pid) / "stat").read_text()
+    fields = raw[raw.rfind(")") + 2:].split()
+    return (pid, int(fields[2]), int(fields[3]), int(fields[19]), fields[0])
+
+
+def owned_members(sid: int, uid: int) -> list[tuple[int, int, int, int, str]]:
+    """Live members of this fixed-source, non-detaching captured session."""
+    members = []
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdecimal():
+            continue
+        try:
+            identity = process_identity(int(entry.name))
+            owner = entry.stat().st_uid
+        except FileNotFoundError:
+            continue
+        if identity[2] == sid and identity[4] != "Z":
+            require(owner == uid, "captured session contains a foreign UID")
+            members.append(identity)
+    return members
+
+
+def signal_owned_session(leader: tuple[int, int, int, int, str], uid: int,
+                         sig: signal.Signals) -> None:
+    """Keep leader unreaped so its PGID cannot be reused before signaling."""
+    pid, pgrp, sid, start, _ = leader
+    current = process_identity(pid)
+    require((current[1], current[2], current[3]) == (pgrp, sid, start) and
+            (Path("/proc") / str(pid)).stat().st_uid == uid,
+            "captured leader identity changed; refusing group signal")
+    members = owned_members(sid, uid)
+    require(all(member[1] == pgrp for member in members),
+            "captured child changed process group; refusing group signal")
+    try:
+        os.killpg(pgrp, sig)
+    except ProcessLookupError:
+        pass
+
+
 def capture(out: Path, name: str, argv: list[str], env: dict[str, str],
             cwd: Path, deadline: int) -> dict[str, object]:
-    """Own raw streams, wait status, group teardown and per-child resource use."""
+    """Own a trusted no-detach child session through writer closure and wait4."""
     require(deadline > 0 and all(isinstance(arg, str) for arg in argv),
             "invalid capture command or deadline")
     stem = out / name
     started = time.monotonic()
+    uid = os.getuid()
+    child = None
+    pidfd = None
+    leader = None
+    wait = usage = None
+    timed_out = survivors = False
+    teardown: list[str] = []
+    failure: BaseException | None = None
+    quiescent = False
     with stem.with_suffix(".stdout").open("xb") as stdout, \
          stem.with_suffix(".stderr").open("xb") as stderr:
-        child = subprocess.Popen(argv, cwd=cwd, env=env, stdout=stdout,
-                                 stderr=stderr, start_new_session=True,
-                                 preexec_fn=lambda: resource.setrlimit(
-                                     resource.RLIMIT_CORE, (0, 0)))
-        timed_out = False
-        while True:
-            pid, wait, usage = os.wait4(child.pid, os.WNOHANG)
-            if pid:
-                break
-            if time.monotonic() - started >= deadline:
-                timed_out = True
-                os.killpg(child.pid, signal.SIGTERM)
+        try:
+            child = subprocess.Popen(argv, cwd=cwd, env=env, stdout=stdout,
+                                     stderr=stderr, start_new_session=True,
+                                     preexec_fn=lambda: resource.setrlimit(
+                                         resource.RLIMIT_CORE, (0, 0)))
+            leader = process_identity(child.pid)
+            require(leader[1:3] == (child.pid, child.pid) and
+                    (Path("/proc") / str(child.pid)).stat().st_uid == uid,
+                    "spawned child session identity differs")
+            pidfd = os.pidfd_open(child.pid)
+            termination_at = None
+            killed_at = None
+            while True:
+                # WNOWAIT retains the leader PID and PGID until all writers
+                # in its owned session have closed and the actual wait4 occurs.
+                exited = os.waitid(os.P_PID, child.pid,
+                                   os.WEXITED | os.WNOHANG | os.WNOWAIT)
+                now = time.monotonic()
+                if not exited and termination_at is None and now - started < deadline:
+                    time.sleep(0.05)
+                    continue
+                members = owned_members(child.pid, uid)
+                live_descendants = [member for member in members
+                                    if member[0] != child.pid]
+                if exited and not live_descendants:
+                    quiescent = True
+                    break
+                if exited and live_descendants and termination_at is None:
+                    survivors = True
+                    signal_owned_session(leader, uid, signal.SIGTERM)
+                    teardown.append("unexpected descendants: SIGTERM")
+                    termination_at = now
+                elif now - started >= deadline and termination_at is None:
+                    timed_out = True
+                    signal_owned_session(leader, uid, signal.SIGTERM)
+                    teardown.append("deadline: SIGTERM")
+                    termination_at = now
+                elif termination_at is not None and now - termination_at >= 5 and \
+                        killed_at is None:
+                    signal_owned_session(leader, uid, signal.SIGKILL)
+                    teardown.append("grace expired: SIGKILL")
+                    killed_at = now
+                elif killed_at is not None and now - killed_at >= 5:
+                    raise RuntimeError("captured session did not quiesce after SIGKILL")
+                time.sleep(0.05)
+        except BaseException as error:
+            failure = error
+        finally:
+            if child is not None and not quiescent:
+                try:
+                    # Cleanup remains bounded and is refused if identity is
+                    # uncertain. No signal is sent after the leader is reaped.
+                    require(leader is not None, "spawned leader identity unavailable")
+                    signal_owned_session(leader, uid, signal.SIGKILL)
+                    teardown.append("exception cleanup: SIGKILL")
+                    stop = time.monotonic() + 5
+                    while time.monotonic() < stop:
+                        exited = os.waitid(os.P_PID, child.pid,
+                                           os.WEXITED | os.WNOHANG | os.WNOWAIT)
+                        members = owned_members(child.pid, uid)
+                        if exited and all(member[0] == child.pid for member in members):
+                            quiescent = True
+                            break
+                        time.sleep(0.05)
+                except BaseException as error:
+                    teardown.append("cleanup uncertainty: " + repr(error))
+                    if failure is None:
+                        failure = error
+                    if pidfd is not None:
+                        try:
+                            signal.pidfd_send_signal(pidfd, signal.SIGKILL)
+                            teardown.append("owned leader pidfd: SIGKILL")
+                        except ProcessLookupError:
+                            pass
+            if child is not None and quiescent:
+                try:
+                    _, wait, usage = os.wait4(child.pid, 0)
+                    child.returncode = os.waitstatus_to_exitcode(wait)
+                except BaseException as error:
+                    teardown.append("wait4 uncertainty: " + repr(error))
+                    if failure is None:
+                        failure = error
+            elif child is not None:
                 stop = time.monotonic() + 5
                 while time.monotonic() < stop:
-                    pid, wait, usage = os.wait4(child.pid, os.WNOHANG)
+                    try:
+                        pid, raw_wait, raw_usage = os.wait4(child.pid, os.WNOHANG)
+                    except ChildProcessError:
+                        break
                     if pid:
+                        wait, usage = raw_wait, raw_usage
+                        child.returncode = os.waitstatus_to_exitcode(wait)
+                        teardown.append("unverified session; leader reaped")
                         break
                     time.sleep(0.05)
-                if not pid:
-                    os.killpg(child.pid, signal.SIGKILL)
-                    _, wait, usage = os.wait4(child.pid, 0)
-                break
-            time.sleep(0.05)
-        code = os.waitstatus_to_exitcode(wait)
-        child.returncode = code
-        try:
-            os.killpg(child.pid, 0)
-        except ProcessLookupError:
-            survivors = False
-        else:
-            survivors = True
-            os.killpg(child.pid, signal.SIGKILL)
+            if pidfd is not None:
+                os.close(pidfd)
+    code = os.waitstatus_to_exitcode(wait) if wait is not None else None
     result = {
         "argv": argv, "cwd": str(cwd), "env": env, "deadline_seconds": deadline,
-        "elapsed_seconds": time.monotonic() - started, "wait_status": wait,
-        "exit_status": code if code >= 0 else None,
-        "signal": os.WTERMSIG(wait) if os.WIFSIGNALED(wait) else None,
+        "elapsed_seconds": time.monotonic() - started, "leader_identity": leader,
+        "wait_status": wait, "exit_status": code if code is not None and code >= 0 else None,
+        "signal": os.WTERMSIG(wait) if wait is not None and os.WIFSIGNALED(wait) else None,
         "returncode": code, "timed_out": timed_out, "survivors": survivors,
-        "teardown": "SIGKILL process group" if survivors else
-                    ("timeout TERM/KILL" if timed_out else "none"),
-        "max_rss_kib": usage.ru_maxrss, "user_seconds": usage.ru_utime,
-        "system_seconds": usage.ru_stime,
-        "stdout_sha256": digest(stem.with_suffix(".stdout")),
-        "stderr_sha256": digest(stem.with_suffix(".stderr")),
+        "quiescent": quiescent, "teardown": teardown,
+        "capture_error": repr(failure) if failure is not None else None,
+        "max_rss_kib": usage.ru_maxrss if usage is not None else None,
+        "user_seconds": usage.ru_utime if usage is not None else None,
+        "system_seconds": usage.ru_stime if usage is not None else None,
+        "stdout_sha256": digest(stem.with_suffix(".stdout")) if quiescent else None,
+        "stderr_sha256": digest(stem.with_suffix(".stderr")) if quiescent else None,
     }
     stem.with_suffix(".json").write_text(json.dumps(result, sort_keys=True,
                                                      indent=2) + "\n")
+    if failure is not None:
+        raise RuntimeError(f"capture {name} failed; see {stem.with_suffix('.json')}") from failure
+    require(quiescent and wait is not None, "capture did not close writers and wait4")
     return result
 
 
@@ -134,9 +254,12 @@ def check_package(artifact: Path, sanitized: bool) -> None:
         require((observed / "undefined.txt").read_text().splitlines() == union,
                 "sanitized undefined-symbol union differs")
     symbols = (observed / "readelf-symbols.txt").read_text()
-    require(" et_e3_test_first_eval_corrupt_v1\n" in symbols and
-            any("LOCAL" in line and line.endswith("et_e3_test_first_eval_corrupt_v1")
-                for line in symbols.splitlines()), "mutant helper is not private")
+    local = {line.split()[-1] for line in symbols.splitlines()
+             if " LOCAL " in f" {line} " and line.split()}
+    renamed = {line.split()[1] for line in
+               (expected / (PREFIX + "private_renames.txt")).read_text().splitlines()}
+    require(renamed <= local and "et_e3_test_first_eval_corrupt_v1" in local,
+            "private rename/helper local-symbol inventory differs")
 
 
 def tracked_source_hashes() -> dict[str, str]:
@@ -156,13 +279,13 @@ def main() -> None:
             not out.is_relative_to(ROOT),
             "output must be a fresh absolute directory with a real parent")
     source_hashes = tracked_source_hashes()
+    source_commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT)
+    source_tree = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], cwd=ROOT)
     out.mkdir(mode=0o700)
     (out / "source-sha256.json").write_text(json.dumps(source_hashes,
                                                         sort_keys=True, indent=2) + "\n")
-    (out / "source-commit.txt").write_bytes(subprocess.check_output(
-        ["git", "rev-parse", "HEAD"], cwd=ROOT))
-    (out / "source-tree.txt").write_bytes(subprocess.check_output(
-        ["git", "rev-parse", "HEAD^{tree}"], cwd=ROOT))
+    (out / "source-commit.txt").write_bytes(source_commit)
+    (out / "source-tree.txt").write_bytes(source_tree)
     provenance = Path(os.environ.get("ESHKOL_BUILD_DIR", ROOT / ".deps/eshkol-build")) / \
         "eshkol-transformer-provenance.tsv"
     values = dict(line.split("\t", 1) for line in provenance.read_text().splitlines())
@@ -177,9 +300,9 @@ def main() -> None:
                        build / "libeshkol-runtime.a", build / "libeshkol-static.a"]
     require(all(path.is_file() for path in toolchain_files),
             "selected runtime archives are unavailable")
+    toolchain_hashes = {str(path): digest(path) for path in toolchain_files}
     (out / "toolchain-sha256.json").write_text(json.dumps(
-        {str(path): digest(path) for path in toolchain_files},
-        sort_keys=True, indent=2) + "\n")
+        toolchain_hashes, sort_keys=True, indent=2) + "\n")
     env = {key: os.environ[key] for key in ("PATH", "HOME") if key in os.environ}
     env.update(LANG="C", LC_ALL="C", ESHKOL_SOURCE_DIR=str(source),
                ESHKOL_BUILD_DIR=str(build), ESHKOL_JIT_CACHE="0",
@@ -229,6 +352,7 @@ def main() -> None:
     wrapper.chmod(0o500)
     compiled = {}
     linked = {}
+    executable_imports = {}
     for mode in ("a", "b", "sanitized"):
         link = out / ("link-" + mode)
         link.mkdir()
@@ -257,15 +381,39 @@ def main() -> None:
         good(compile_stage, "AOT compile/link " + mode)
         compiled[mode] = compile_stage
         require(executable.is_file(), "AOT executable absent")
-        nm_stage = capture(out, "nm-" + mode, ["nm", "-u", str(executable)],
-                           env, ROOT, build_timeout)
-        good(nm_stage, "AOT unresolved inventory")
-        require(b"et_e3_retention_region_used_v1" not in
-                (out / ("nm-" + mode + ".stdout")).read_bytes(),
-                "arena observer remained unresolved")
+        for inventory, argv in (
+            ("nm", ["nm", "-u", "--format=posix", str(executable)]),
+            ("dynamic-imports", ["nm", "-D", "-u", "--format=posix",
+                                 str(executable)]),
+        ):
+            good(capture(out, inventory + "-" + mode, argv, env, ROOT,
+                         build_timeout), "AOT " + inventory)
+        raw_imports = (out / ("dynamic-imports-" + mode + ".stdout")).read_text()
+        for inventory in ("nm", "dynamic-imports"):
+            rows = [line.split() for line in
+                    (out / (inventory + "-" + mode + ".stdout")).read_text().splitlines()]
+            imports = [row[0].split("@", 1)[0] for row in rows if row]
+            require(all(len(row) == 2 and row[1] in {"U", "w", "v"}
+                        for row in rows) and
+                    not any(symbol.startswith(("et_", "eshkol_")) for symbol in imports),
+                    "AOT executable has an unclassified or project-private import")
+        executable_imports[mode] = raw_imports
+        for inventory, argv in (
+            ("all-symbols", ["readelf", "-W", "-s", str(executable)]),
+            ("dynamic-symbols", ["readelf", "-W", "--dyn-syms", str(executable)]),
+            ("defined-symbols", ["nm", "-a", "--defined-only", str(executable)]),
+        ):
+            good(capture(out, inventory + "-" + mode, argv, env, ROOT,
+                         build_timeout), inventory + " " + mode)
     same(out / "link-a/libeshkol_transformer_e3_retention_mutant_test.a",
          out / "link-b/libeshkol_transformer_e3_retention_mutant_test.a")
     same(out / "runtime-a", out / "runtime-b")
+    require(executable_imports["a"] == executable_imports["b"],
+            "normal A/B executable import inventories differ")
+    same(out / "nm-a.stdout", out / "nm-b.stdout")
+    for inventory in ("all-symbols", "dynamic-symbols", "defined-symbols"):
+        same(out / (inventory + "-a.stdout"),
+             out / (inventory + "-b.stdout"))
     hashes = {p.relative_to(out).as_posix(): digest(p) for p in out.rglob("*")
               if p.is_file() and not p.name.endswith((".stdout", ".stderr", ".json"))}
     (out / "artifacts-sha256.json").write_text(json.dumps(hashes,
@@ -295,6 +443,15 @@ def main() -> None:
                        survivors=stage["survivors"],
                        stdout=(out / (name + ".stdout")).read_bytes(),
                        stderr=(out / (name + ".stderr")).read_bytes())
+    require(tracked_source_hashes() == source_hashes and
+            subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT) ==
+            source_commit and
+            subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], cwd=ROOT) ==
+            source_tree, "source identity changed during detector run")
+    require({str(path): digest(path) for path in toolchain_files} == toolchain_hashes,
+            "selected toolchain identity changed during detector run")
+    require({name: digest(out / name) for name in hashes} == hashes,
+            "package or executable identity changed during detector run")
     sealed = sorted(p for p in out.rglob("*") if p.is_file())
     (out / "SHA256SUMS").write_text("".join(
         f"{digest(path)}  {path.relative_to(out).as_posix()}\n" for path in sealed))
