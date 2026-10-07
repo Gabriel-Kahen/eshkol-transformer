@@ -902,6 +902,13 @@ from direct-provider-only cases and names the missing noninstalled model-control
 and stage-selective fault/observer seams for review. It provides no new runtime
 proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
 verdicts remain prerequisites before the full matrix is implemented and run.
+The test-only retention driver now snapshots all 14 parameter value and gradient
+word arrays plus three metadata fields before its first evaluator call, after
+optional fixed gradient seeding, and compares that original image after each
+completed warmup, calibration, success and retry call. The evaluator's measured
+region-byte interval is unchanged. Source mutation controls check the baseline
+order and comparison topology; a compiled first-call bit-mutation witness and
+supported complete-call gate remain pending, so this is not §9 acceptance.
 
 The [E3 idle real-model control contract](e3/E3_IDLE_REAL_MODEL_CONTROL_CONTRACT.md)
 specifies a test-only use of existing I2 checkpoint decode and whole-batch load
