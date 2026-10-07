@@ -1143,6 +1143,13 @@ if [[ "${package_policy}" == g3g-public-aggregate || "${package_policy}" == g3g-
   g3g_package_policy=1
 fi
 e3_private_test_sanitize=0
+if [[ "${E3_FIRST_EVAL_MUTANT_SANITIZE:-0}" != 0 ]]; then
+  [[ "${E3_FIRST_EVAL_MUTANT_SANITIZE}" == 1 &&
+     "${package_policy}" == e3-private-aggregate &&
+     "${e3_tuple_kind}" == retention-first-eval-mutant ]] ||
+    die "E3 first-eval mutant sanitizer requires its exact test tuple"
+  e3_private_test_sanitize=1
+fi
 if [[ "${E3_RETENTION_SANITIZE:-0}" != 0 ]]; then
   [[ "${E3_RETENTION_SANITIZE}" == 1 &&
      "${package_policy}" == e3-private-aggregate &&
@@ -1265,7 +1272,8 @@ if [[ "${package_policy}" == e3-private-aggregate &&
   e3_mode_graph_generated_dir="$(e3_mode_graph_generated_stage "${output_object}")" ||
     die "E3 mode/graph generated source requires a fresh private gate stage"
 elif [[ "${package_policy}" == e3-private-aggregate &&
-        "${e3_tuple_kind}" == retention ]]; then
+        ( "${e3_tuple_kind}" == retention ||
+          "${e3_tuple_kind}" == retention-first-eval-mutant ) ]]; then
   source "${PROJECT_ROOT}/scripts/e3-mode-graph-stage-cleanup.sh"
   e3_retention_generated_dir="$(e3_retention_generated_stage "${output_object}")" ||
     die "E3 retention generated source requires a fresh private gate stage"
@@ -1356,7 +1364,8 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
   python3 "${PROJECT_ROOT}/scripts/generate-e3-d2-source.py" \
     --output-dir "${e3_generated_dir}" >"${e1b_tmp}/d2-generation.json"
   e3_generated_source_root="${e3_generated_dir}/source"
-  if [[ "${e3_tuple_kind}" == retention ||
+    if [[ "${e3_tuple_kind}" == retention ||
+        "${e3_tuple_kind}" == retention-first-eval-mutant ||
         "${e3_tuple_kind}" == retention-overflow ]]; then
     python3 "${PROJECT_ROOT}/scripts/generate-e3-p1-mode-test-variant.py" \
       --output "${e3_generated_source_root}/transformer/module.esk" \
@@ -1404,6 +1413,16 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
   fi
 fi
 
+if [[ "${package_policy}" == e3-private-aggregate &&
+      "${e3_tuple_kind}" == retention-first-eval-mutant ]]; then
+  [[ "${#package_native_sources[@]}" == 11 &&
+     "${package_native_sources[6]}" == "${PROJECT_ROOT}/src/eshkol_transformer/e3_frame.c" ]] ||
+    die "first-eval mutant cannot replace exactly one E3 native object"
+  package_native_sources[6]="${PROJECT_ROOT}/tests/e3_private/retention_first_eval_frame.c"
+  python3 -I -B "${PROJECT_ROOT}/tests/e3_private/retention_first_eval_mutant_source.py" \
+    --check || die "first-eval mutant driver differs from reviewed baseline"
+fi
+
 awk '
   NF != 1 || $1 !~ /^[A-Za-z_][A-Za-z0-9_]*$/ { bad = 1 }
   END { if (bad) exit 1 }
@@ -1420,7 +1439,8 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1)$'
     if [[ "${e3_diagnostic_tuple}" == 1 ]]; then
       export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
-    elif [[ "${e3_tuple_kind}" == retention ]]; then
+    elif [[ "${e3_tuple_kind}" == retention ||
+            "${e3_tuple_kind}" == retention-first-eval-mutant ]]; then
       export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1)$'
     elif [[ "${e3_tuple_kind}" == retention-overflow ]]; then
       export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1|et_e3_overflow_run_v1)$'
@@ -1496,6 +1516,7 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
   include_args+=(-I "${e3_generated_source_root}")
   if [[ "${e3_tuple_kind}" == mode-graph ||
         "${e3_tuple_kind}" == retention ||
+        "${e3_tuple_kind}" == retention-first-eval-mutant ||
         "${e3_tuple_kind}" == retention-overflow ]]; then
     include_args=(-I "${e3_generated_source_root}" "${include_args[@]}")
   fi
@@ -1560,7 +1581,7 @@ if [[ "${e3_private_test_sanitize}" == 1 ]]; then
   [[ "${package_policy}" == e3-private-aggregate ]] || \
     die "E3 generated ASan IR is restricted to private test tuples"
   case "${e3_tuple_kind:-}" in
-    retention|retention-overflow|mode-graph|numerical|uniform) ;;
+    retention|retention-first-eval-mutant|retention-overflow|mode-graph|numerical|uniform) ;;
     *) die "E3 generated ASan IR has no admitted test tuple" ;;
   esac
   require_command sha256sum
@@ -1752,7 +1773,8 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     package_native_cflags+=("${package_native_define}")
   fi
   if [[ "${package_policy}" == e3-private-aggregate &&
-        "${e3_tuple_kind}" == retention ]]; then
+        ( "${e3_tuple_kind}" == retention ||
+          "${e3_tuple_kind}" == retention-first-eval-mutant ) ]]; then
     package_native_cflags+=(-DET_E3_RETENTION_TESTING)
   fi
   if [[ "${package_policy}" == e3-private-aggregate &&
@@ -1792,12 +1814,16 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     if [[ "${package_policy}" == e3-private-aggregate &&
           ( "${e3_tuple_kind}" == mode-graph ||
             "${e3_tuple_kind}" == retention ||
+            "${e3_tuple_kind}" == retention-first-eval-mutant ||
             "${e3_tuple_kind}" == retention-overflow ) ]]; then
       case "${package_native_source}" in
         "${PROJECT_ROOT}/src/eshkol_transformer/m3_call_f32_integration.c")
           package_source_flags+=(-DET_F32_TENSOR_TESTING) ;;
         "${PROJECT_ROOT}/src/eshkol_transformer/e3_frame.c")
           package_source_flags+=(-DET_F32_TENSOR_TESTING -DET_D2_NATIVE_TESTING) ;;
+        "${PROJECT_ROOT}/tests/e3_private/retention_first_eval_frame.c")
+          package_source_flags+=(-DET_F32_TENSOR_TESTING -DET_D2_NATIVE_TESTING
+                                 -DET_E3_FIRST_EVAL_MUTATION_TESTING) ;;
         "${PROJECT_ROOT}/native/e3_d2_native.c")
           package_source_flags+=(-DET_D2_NATIVE_TESTING) ;;
       esac
@@ -2049,6 +2075,13 @@ if [[ "${e3_private_test_sanitize}" == 1 ]]; then
     "${e1b_tmp}/noninstrumentation-undefined.txt" \
     >"${e1b_tmp}/unexpected-undefined.txt"
   if [[ "${e3_tuple_kind:-}" == retention ]]; then
+    source "${PROJECT_ROOT}/scripts/e3-retention-sanitizer-import-policy.sh"
+    e3_retention_verify_sanitizer_imports \
+      "${e1b_tmp}/expected-undefined.txt" \
+      "${e1b_tmp}/noninstrumentation-undefined.txt" \
+      "${e1b_tmp}/sanitizer-undefined.txt"
+    e3_retention_sanitizer_inventory_verified=1
+  elif [[ "${e3_tuple_kind:-}" == retention-first-eval-mutant ]]; then
     source "${PROJECT_ROOT}/scripts/e3-retention-sanitizer-import-policy.sh"
     e3_retention_verify_sanitizer_imports \
       "${e1b_tmp}/expected-undefined.txt" \
@@ -2325,6 +2358,7 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
       et_e3_test_frame_fail_alloc_after_v1
     )
     if [[ "${e3_tuple_kind}" == retention ||
+          "${e3_tuple_kind}" == retention-first-eval-mutant ||
           "${e3_tuple_kind}" == retention-overflow ]]; then
       e3_required_private+=(
         et_e3_private_retention_dispatch_cabi_v1
@@ -2337,6 +2371,9 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
         et_f32_test_live_counts_snapshot_v1
         et_f32_test_retired_counts_snapshot_v1
       )
+      if [[ "${e3_tuple_kind}" == retention-first-eval-mutant ]]; then
+        e3_required_private+=(et_e3_test_first_eval_corrupt_v1)
+      fi
       if [[ "${e3_tuple_kind}" == retention-overflow ]]; then
         e3_required_private+=(et_e3_private_overflow_dispatch_cabi_v1
                               et_e3_test_published_counter_raw_v1)
@@ -2384,6 +2421,7 @@ cp "${e1b_tmp}/expected-undefined.txt" \
 if [[ "${package_policy}" == e3-private-aggregate &&
       ( "${e3_tuple_kind:-}" == mode-graph ||
         "${e3_tuple_kind:-}" == retention ||
+        "${e3_tuple_kind:-}" == retention-first-eval-mutant ||
         "${e3_tuple_kind:-}" == retention-overflow ||
         "${e3_tuple_kind:-}" == numerical ||
         "${e3_tuple_kind:-}" == uniform ) ]]; then
@@ -2461,7 +2499,8 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1)$'
     if [[ "${e3_diagnostic_tuple}" == 1 ]]; then
       public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
-    elif [[ "${e3_tuple_kind}" == retention ]]; then
+    elif [[ "${e3_tuple_kind}" == retention ||
+            "${e3_tuple_kind}" == retention-first-eval-mutant ]]; then
       public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1)$'
     elif [[ "${e3_tuple_kind}" == retention-overflow ]]; then
       public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1|et_e3_overflow_run_v1)$'

@@ -795,8 +795,16 @@ checks exact IDs, physical hashes, cursor identity, row/mask/count and declared
 class; the compiled gate is scoped to these two cases across normal A/B,
 poison and sanitizer with 21 roles, CE, exact accumulation, six final outputs
 and accuracy 1.0/0.0. The existing five-case corpus, schema and transcripts
-are unchanged. Independent source review and a supported compiled run are
-pending; the local mathematical reference is not compiled E3 evidence.
+are unchanged. A bounded test-only successor emits the genuine `e3-test-run`
+result cell and both D2 cursor bytevectors after the numerical frame. Its strict
+parser checks the six returned words against the observed final frame and both
+caller cursor snapshots against the independent **start** cursor. The evaluator
+restores that cursor after traversing the observed batches; the manifest's end
+cursor is a reference traversal endpoint, not a caller result. This includes the
+wrong-axis mutant's isolated published accuracy change. Local parser and
+reference tests pass; independent source review and a supported compiled run
+are pending. The mathematical reference is not compiled E3 evidence, and the
+new record does not add a model-control seam or compute gradients.
 An isolated test-only wrong-vocabulary-axis candidate adds one numerical-tuple
 mutant that reads the existing `[1,2,256]` binary32 logits at `[V,T]` stride 2
 instead of `[T,V]` stride 256. The exact all-correct D2 rows include final
@@ -902,6 +910,40 @@ from direct-provider-only cases and names the missing noninstalled model-control
 and stage-selective fault/observer seams for review. It provides no new runtime
 proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
 verdicts remain prerequisites before the full matrix is implemented and run.
+The test-only retention driver now snapshots all 14 parameter value and gradient
+word arrays plus three metadata fields before its first evaluator call, after
+optional fixed gradient seeding, and compares that original image after each
+completed warmup, calibration, success and retry call. The evaluator's measured
+region-byte interval is unchanged. Source mutation controls check the baseline
+order and comparison topology; a compiled first-call bit-mutation witness and
+supported complete-call gate remain pending, so this is not §9 acceptance.
+An isolated noninstalled first-evaluation mutant tuple now derives a private
+driver mechanically from that baseline and replaces only the E3 frame test
+object with a feature-gated, fixed one-shot helper. Source controls cover
+absent-to-present, seeded gradient-bit and metadata changes, tuple isolation,
+the prehook baseline check, and readback before the first comparison. Its
+normal and sanitizer manifests are candidate inputs; no mutant has been
+compiled or run, so first-call detection, manifest closure, normal/repeat,
+poison and sanitizer results remain pending independent review and a fresh
+supported gate. The original retention tuple and production sources remain
+unchanged.
+An additional test-owned native harness now specifies real M3 owner creation,
+stale/foreign/active/owner-state/gradient-state/contribution-count denials,
+unchanged full-model images on denied calls, a successful one-shot mutation
+and second-call denial, plus a feature-off object-symbol check that requires
+the symbol tool itself to succeed. This harness is source-only and has not
+been compiled or executed; its native and first-evaluator verdicts remain open.
+Malformed gradient-tensor geometry is not fabricated through a new private
+setter: the sealed fixed M3 owner exposes no reviewed geometry mutation seam.
+The bounded first-warmup AOT runner now builds normal A/B and sanitizer mutant
+packages, checks source, object and symbol inventories, links exact runtime
+executables and captures all 30 selector/horizon/profile abort controls with
+raw wait status, streams, deadline/teardown, hashes and resource observations.
+Its strict parser requires the complete `success-model-image` label and an
+actual SIGABRT after successful compile/link. Source parser controls pass; the
+compiled detector gate, separate closing LSan baselines and the §9 matrix remain
+pending source review and ROOT immutable gate admission. An intentional abort
+cannot establish leak-clean closure or complete-horizon rollback.
 
 The [E3 idle real-model control contract](e3/E3_IDLE_REAL_MODEL_CONTROL_CONTRACT.md)
 specifies a test-only use of existing I2 checkpoint decode and whole-batch load
