@@ -75,6 +75,36 @@ static void denied_unchanged(owner *model, void *candidate, int64_t selector) {
   CHECK(memcmp(&before, &after, sizeof(before)) == 0);
 }
 
+static void denied_wrong_owner_state(owner *model, int64_t selector) {
+  model_image before, after;
+  snapshot(model, &before);
+  model->r.state = 0;
+  CHECK(et_e3_test_first_eval_corrupt_v1(model, selector) == -1);
+  CHECK(model->r.state == 0 && first_eval_mutation_used == 0);
+  model->r.state = 1;
+  snapshot(model, &after);
+  CHECK(memcmp(&before, &after, sizeof(before)) == 0);
+}
+
+static void denied_wrong_gradient_state(owner *model, int64_t selector) {
+  model_image before, wrong, after;
+  snapshot(model, &before);
+  const uint32_t state = selector == 0 ? ET_F32_GRADIENT_PRESENT
+                                       : ET_F32_GRADIENT_ABSENT;
+  et_f32_parameter_test_set_metadata_v1(model->p[0], state,
+                                         selector == 0 ? 1u : 0u,
+                                         selector == 0 ? UINT32_C(0x3f800000) : 0);
+  snapshot(model, &wrong);
+  CHECK(wrong.metadata[0][0] == state &&
+        memcmp(&before, &wrong, sizeof(before)) != 0);
+  denied_unchanged(model, model, selector);
+  et_f32_parameter_test_set_metadata_v1(
+      model->p[0], (uint32_t)before.metadata[0][0],
+      (uint64_t)before.metadata[0][1], (uint32_t)before.metadata[0][2]);
+  snapshot(model, &after);
+  CHECK(memcmp(&before, &after, sizeof(before)) == 0);
+}
+
 int main(int argc, char **argv) {
   CHECK(argc == 2 && argv[1][0] >= '0' && argv[1][0] <= '2' &&
         argv[1][1] == '\0');
@@ -92,9 +122,8 @@ int main(int argc, char **argv) {
   model->active = model;
   denied_unchanged(model, model, selector);
   model->active = NULL;
-  model->r.state = 0;
-  denied_unchanged(model, model, selector);
-  model->r.state = 1;
+  denied_wrong_owner_state(model, selector);
+  denied_wrong_gradient_state(model, selector);
   if (selector != 0) {
     et_f32_parameter_test_set_metadata_v1(
         model->p[0], ET_F32_GRADIENT_PRESENT, 2,

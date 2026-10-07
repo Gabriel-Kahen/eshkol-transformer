@@ -920,9 +920,10 @@ poison and sanitizer results remain pending independent review and a fresh
 supported gate. The original retention tuple and production sources remain
 unchanged.
 An additional test-owned native harness now specifies real M3 owner creation,
-stale/foreign/active/state/contribution-count denials, unchanged full-model
-images on denied calls, a successful one-shot mutation and second-call denial,
-plus a feature-off object-symbol check. This harness is source-only and has not
+stale/foreign/active/owner-state/gradient-state/contribution-count denials,
+unchanged full-model images on denied calls, a successful one-shot mutation
+and second-call denial, plus a feature-off object-symbol check that requires
+the symbol tool itself to succeed. This harness is source-only and has not
 been compiled or executed; its native and first-evaluator verdicts remain open.
 Malformed gradient-tensor geometry is not fabricated through a new private
 setter: the sealed fixed M3 owner exposes no reviewed geometry mutation seam.

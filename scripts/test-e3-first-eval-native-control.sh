@@ -37,10 +37,21 @@ sources=("${PROJECT_ROOT}/tests/e3_private/retention_first_eval_native_control.c
 # definition may survive even in a non-exported symbol table.
 "${cc}" "${flags[@]}" -O2 -c "${wrapper}" -o "${out}/feature-off.o" \
   >"${out}/feature-off.compile.stdout" 2>"${out}/feature-off.compile.stderr"
-if nm -a --defined-only "${out}/feature-off.o" | \
-    grep -E '[[:space:]]et_e3_test_first_eval_corrupt_v1$' >/dev/null; then
-  die "first-eval mutation helper exists with its feature disabled"
-fi
+set +e
+nm -a --defined-only "${out}/feature-off.o" \
+  >"${out}/feature-off.nm.stdout" 2>"${out}/feature-off.nm.stderr"
+nm_status=$?
+set -e
+printf '%d\n' "${nm_status}" >"${out}/feature-off.nm.exit"
+(( nm_status == 0 )) || die "feature-off nm failed"
+set +e
+grep -E '[[:space:]]et_e3_test_first_eval_corrupt_v1$' \
+  "${out}/feature-off.nm.stdout" \
+  >"${out}/feature-off.grep.stdout" 2>"${out}/feature-off.grep.stderr"
+grep_status=$?
+set -e
+printf '%d\n' "${grep_status}" >"${out}/feature-off.grep.exit"
+(( grep_status == 1 )) || die "feature-off symbol check failed"
 
 for mode in normal sanitize; do
   extra=(-O2)

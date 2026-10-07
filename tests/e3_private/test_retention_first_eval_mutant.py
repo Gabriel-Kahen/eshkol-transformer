@@ -191,7 +191,7 @@ printf '%s\\n' "$e3_tuple_kind"
         self.assertLess(control.index("denied_unchanged(model, stale"),
                         control.index("CHECK(et_e3_test_first_eval_corrupt_v1(model, selector) == 0)"))
         self.assertLess(control.index("CHECK(et_e3_test_first_eval_corrupt_v1(model, selector) == 0)"),
-                        control.index("CHECK(et_e3_test_first_eval_corrupt_v1(model, selector) == -1)"))
+                        control.rindex("CHECK(et_e3_test_first_eval_corrupt_v1(model, selector) == -1)"))
         self.assertIn("-DET_E3_RETENTION_TESTING", runner)
         self.assertIn("-DET_E3_FIRST_EVAL_MUTATION_TESTING", runner)
         self.assertIn('"${out}/feature-off.o"', runner)
@@ -199,6 +199,42 @@ printf '%s\\n' "$e3_tuple_kind"
         self.assertIn('"${out}/native-${mode}" "${selector}"', runner)
         self.assertIn("detect_leaks=1:halt_on_error=1", runner)
         self.assertIn('cmp "${out}/normal-${selector}.stdout"', runner)
+
+    def test_native_denials_restore_image_and_feature_off_requires_nm(self) -> None:
+        control = (PRIVATE / "retention_first_eval_native_control.c").read_text()
+        owner_state = control.split("static void denied_wrong_owner_state", 1)[1].split(
+            "static void denied_wrong_gradient_state", 1)[0]
+        self.assertLess(owner_state.index("snapshot(model, &before)"),
+                        owner_state.index("model->r.state = 0"))
+        self.assertLess(owner_state.index("model->r.state = 0"),
+                        owner_state.index("et_e3_test_first_eval_corrupt_v1(model, selector)"))
+        self.assertLess(owner_state.index("CHECK(model->r.state == 0 && first_eval_mutation_used == 0)"),
+                        owner_state.index("model->r.state = 1"))
+        self.assertLess(owner_state.index("model->r.state = 1"),
+                        owner_state.index("snapshot(model, &after)"))
+        gradient_state = control.split("static void denied_wrong_gradient_state", 1)[1].split(
+            "int main", 1)[0]
+        for item in ("selector == 0 ? ET_F32_GRADIENT_PRESENT",
+                     ": ET_F32_GRADIENT_ABSENT", "denied_unchanged(model, model, selector)",
+                     "first_eval_mutation_used == 0", "snapshot(model, &after)"):
+            if item == "first_eval_mutation_used == 0":
+                self.assertIn(item, control.split("static void denied_unchanged", 1)[1])
+            else:
+                self.assertIn(item, gradient_state)
+        self.assertLess(gradient_state.index("snapshot(model, &before)"),
+                        gradient_state.index("et_f32_parameter_test_set_metadata_v1(model->p[0], state"))
+        self.assertLess(gradient_state.index("denied_unchanged(model, model, selector)"),
+                        gradient_state.index("(uint32_t)before.metadata[0][0]"))
+        self.assertIn("denied_wrong_owner_state(model, selector)", control)
+        self.assertIn("denied_wrong_gradient_state(model, selector)", control)
+        runner = ROOT / "scripts/test-e3-first-eval-native-control.sh"
+        raw = runner.read_text()
+        for item in ('feature-off.nm.stdout', 'feature-off.nm.stderr',
+                     'feature-off.nm.exit', '(( nm_status == 0 ))',
+                     'feature-off.grep.exit', '(( grep_status == 1 ))'):
+            self.assertIn(item, raw)
+        self.assertEqual(subprocess.run(["/usr/bin/bash", "-n", str(runner)],
+                                        capture_output=True, check=False).returncode, 0)
 
 
 if __name__ == "__main__":
