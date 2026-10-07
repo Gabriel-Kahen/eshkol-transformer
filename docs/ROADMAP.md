@@ -909,6 +909,16 @@ completed warmup, calibration, success and retry call. The evaluator's measured
 region-byte interval is unchanged. Source mutation controls check the baseline
 order and comparison topology; a compiled first-call bit-mutation witness and
 supported complete-call gate remain pending, so this is not §9 acceptance.
+An isolated noninstalled first-evaluation mutant tuple now derives a private
+driver mechanically from that baseline and replaces only the E3 frame test
+object with a feature-gated, fixed one-shot helper. Source controls cover
+absent-to-present, seeded gradient-bit and metadata changes, tuple isolation,
+the prehook baseline check, and readback before the first comparison. Its
+normal and sanitizer manifests are candidate inputs; no mutant has been
+compiled or run, so first-call detection, manifest closure, normal/repeat,
+poison and sanitizer results remain pending independent review and a fresh
+supported gate. The original retention tuple and production sources remain
+unchanged.
 
 The [E3 idle real-model control contract](e3/E3_IDLE_REAL_MODEL_CONTROL_CONTRACT.md)
 specifies a test-only use of existing I2 checkpoint decode and whole-batch load

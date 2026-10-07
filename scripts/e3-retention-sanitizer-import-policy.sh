@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
-# Only the exact noninstalled retention sanitizer tuple may use this inventory.
+# Only the exact noninstalled retention test tuples may use these inventories.
 e3_retention_verify_sanitizer_imports() {
   local normal=$1 noninstrumentation=$2 instrumentation=$3
-  local prefix="${PROJECT_ROOT}/tests/e3_private/retention_package_sanitized"
+  local prefix
+  case "${e3_tuple_kind:-retention}" in
+    retention) prefix="${PROJECT_ROOT}/tests/e3_private/retention_package_sanitized" ;;
+    retention-first-eval-mutant)
+      prefix="${PROJECT_ROOT}/tests/e3_private/retention_first_eval_mutant_package_sanitized" ;;
+    *) die "E3 retention sanitizer policy rejects unrelated tuple" ;;
+  esac
   local expected_non="${prefix}_noninstrumentation_undefined_symbols.txt"
   local expected_instrumentation="${prefix}_instrumentation_undefined_symbols.txt"
   local manifest

@@ -1,0 +1,165 @@
+"""Source-only admission controls; no compiled mutant claim."""
+
+from pathlib import Path
+import hashlib
+import runpy
+import subprocess
+import unittest
+
+ROOT = Path(__file__).resolve().parents[2]
+PRIVATE = ROOT / "tests/e3_private"
+PREFIX = "retention_first_eval_mutant_package_"
+DERIVATION = runpy.run_path(str(PRIVATE / "retention_first_eval_mutant_source.py"))
+BASE, MUTANT, transform = (DERIVATION[name] for name in ("BASE", "MUTANT", "transform"))
+
+
+def sha(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def audit_native(source: str) -> None:
+    required = (
+        '#include "../../src/eshkol_transformer/e3_frame.c"',
+        "defined(ET_E3_RETENTION_TESTING) &&",
+        "defined(ET_E3_FIRST_EVAL_MUTATION_TESTING)",
+        "if (first_eval_mutation_used || selector < 0 || selector > 2)",
+        "owner *model = admit(pointer, OWNER, 0)",
+        "model->r.state != 1 || model->active",
+        "metadata.state != ET_F32_GRADIENT_ABSENT",
+        "metadata.state != ET_F32_GRADIENT_PRESENT",
+        "et_f32_tensor_copy_bits_to_v1(gradient, words, count, &error)",
+        "et_e3_test_seed_gradient_v1(pointer)",
+        "et_f32_parameter_test_set_gradient_bits_v1(model->p[0], words, count)",
+        "et_f32_parameter_test_set_metadata_v1(model->p[0]",
+        "for (size_t i = 0; i < count; ++i)",
+        "et_e3_test_model_word_v1(pointer, 0, 1, (int64_t)i)",
+        "et_e3_test_gradient_metadata_v1(pointer, 0, 1)",
+        "first_eval_mutation_used = 1",
+    )
+    if any(source.count(item) != 1 for item in required):
+        raise ValueError("first-call native guard or readback missing")
+    if not (source.index(required[1]) < source.index("int64_t et_e3_test_first_eval_corrupt_v1")
+            < source.index(required[3]) < source.index(required[4])
+            < source.index(required[8]) < source.index(required[10])
+            < source.index(required[12]) < source.index(required[14])):
+        raise ValueError("native denial, write, full readback or one-shot order changed")
+
+
+class FirstEvaluationMutantTuple(unittest.TestCase):
+    def test_exact_driver_inverse_and_first_call_boundary(self) -> None:
+        base, mutant = BASE.read_text(), MUTANT.read_text()
+        self.assertEqual(sha(BASE),
+                         "44d64a8bd96d48ae3faea18d437fb5ee4934016da7f75a3011c666bd0a35be09")
+        self.assertEqual(transform(base), mutant)
+        self.assertEqual(transform(mutant, reverse=True), base)
+        measured = mutant.index("(- (e3-test-region-used) region-before)")
+        precheck = mutant.index("'pre-mutation-model-image")
+        apply = mutant.index("'mutation-applied")
+        readback = mutant.index("'mutation-readback")
+        compare = mutant.index("'success-model-image")
+        self.assertTrue(measured < precheck < apply < readback < compare)
+        self.assertEqual(mutant.count("(vector-set! e3-test-retention-first-mutation 0 mutation)"), 1)
+        self.assertEqual(mutant.count("(vector-set! e3-test-retention-first-mutation 0 -1)"), 1)
+        for missing in ("'pre-mutation-model-image", "'mutation-readback",
+                        "(vector-set! e3-test-retention-first-mutation 0 -1)"):
+            with self.subTest(missing=missing):
+                self.assertNotEqual(transform(base), mutant.replace(missing, "removed", 1))
+
+    def test_normal_inputs_unchanged_and_manifests_exact(self) -> None:
+        self.assertEqual(sha(ROOT / "src/eshkol_transformer/e3_frame.c"),
+                         "8d238ed79b0b14d74b8ed454e328bcc22da46e766e4d70a59482763ef18b8857")
+        digest = hashlib.sha256()
+        originals = sorted(PRIVATE.glob("retention_package_*.txt"))
+        self.assertEqual(len(originals), 11)
+        for path in originals:
+            digest.update(path.name.encode() + b"\0" + path.read_bytes())
+            copied = PRIVATE / (PREFIX + path.name.removeprefix("retention_package_"))
+            expected = path.read_text()
+            if path.name.endswith("_source_closure.txt") and not path.name.endswith("_native_source_closure.txt"):
+                expected = expected.replace("tests/e3_private/retention_driver_root.esk",
+                                            "tests/e3_private/retention_first_eval_mutant_driver_root.esk")
+                expected = expected.replace("tests/e3_private/retention_driver.esk",
+                                            "tests/e3_private/retention_first_eval_mutant_driver.esk")
+            if path.name.endswith("_native_source_closure.txt"):
+                expected = expected.replace("tests/e3_private/retention_bridge.c",
+                                            "tests/e3_private/retention_first_eval_mutant_bridge.c")
+                expected = expected.replace("src/eshkol_transformer/e3_frame.c\n",
+                                            "tests/e3_private/retention_first_eval_frame.c\n"
+                                            "src/eshkol_transformer/e3_frame.c\n", 1)
+            self.assertEqual(copied.read_text(), expected, copied.name)
+        self.assertEqual(digest.hexdigest(),
+                         "9e11fe618c284dcc20c0c26f1b65d808345511fe303bb2fb115377d963cedaa7")
+        self.assertEqual((PRIVATE / "retention_first_eval_mutant_bridge.c").read_bytes(),
+                         (PRIVATE / "retention_bridge.c").read_bytes())
+
+    def test_private_native_one_shot_and_feature_off(self) -> None:
+        source = (PRIVATE / "retention_first_eval_frame.c").read_text()
+        audit_native(source)
+        for old, new in (
+            ("first_eval_mutation_used || ", ""),
+            ("selector > 2", "selector > 3"),
+            ("model->r.state != 1 || model->active", "model->r.state != 1"),
+            ("metadata.state != ET_F32_GRADIENT_ABSENT", "0"),
+            ("metadata.state != ET_F32_GRADIENT_PRESENT", "0"),
+            ("et_f32_tensor_copy_bits_to_v1(gradient, words, count, &error)", "0"),
+            ("for (size_t i = 0; i < count; ++i)", "for (size_t i = 0; i < 1; ++i)"),
+            ("defined(ET_E3_FIRST_EVAL_MUTATION_TESTING)", "defined(ET_E3_TESTING)"),
+        ):
+            with self.subTest(old=old), self.assertRaises(ValueError):
+                audit_native(source.replace(old, new, 1))
+        self.assertNotIn("et_e3_test_first_eval_corrupt_v1",
+                         (ROOT / "src/eshkol_transformer/e3_frame.c").read_text())
+        for manifest in ("defined_symbols", "public_exports", "public_strings"):
+            self.assertNotIn("first_eval_corrupt",
+                             (PRIVATE / f"{PREFIX}{manifest}.txt").read_text())
+
+    def test_actual_tuple_policy_rejects_mixed_inputs(self) -> None:
+        prefix = PRIVATE / "retention_first_eval_mutant_package"
+        entry = PRIVATE / "retention_first_eval_mutant_driver_root.esk"
+        bridge = PRIVATE / "retention_first_eval_mutant_bridge.c"
+        script = '''set -euo pipefail
+die() { printf '%s\\n' "$*" >&2; exit 77; }
+PROJECT_ROOT=$1
+raw_private_root=$2
+raw_package_bridge=$3
+raw_package_renames=$4
+raw_public_exports=$5
+raw_include_dirs=("$PROJECT_ROOT/internal/p1/lib" "$PROJECT_ROOT/internal/c1/lib"
+  "$PROJECT_ROOT/internal/t1/lib" "$PROJECT_ROOT/src"
+  "$PROJECT_ROOT/internal/d2/lib" "$PROJECT_ROOT/internal/e3/lib")
+source "$PROJECT_ROOT/scripts/e3-private-package-policy.sh"
+printf '%s\\n' "$e3_tuple_kind"
+'''
+        args = [str(ROOT), str(entry), str(bridge),
+                str(prefix) + "_private_renames.txt",
+                str(prefix) + "_public_exports.txt"]
+        def select(argv: list[str]) -> subprocess.CompletedProcess:
+            return subprocess.run(["/usr/bin/bash", "-c", script, "policy", *argv],
+                                  capture_output=True, text=True)
+        valid = select(args)
+        self.assertEqual((valid.returncode, valid.stdout),
+                         (0, "retention-first-eval-mutant\n"), valid.stderr)
+        for index, foreign in ((1, PRIVATE / "retention_driver_root.esk"),
+                               (2, PRIVATE / "retention_bridge.c"),
+                               (3, PRIVATE / "retention_package_private_renames.txt")):
+            wrong = args.copy()
+            wrong[index] = str(foreign)
+            with self.subTest(index=index):
+                self.assertNotEqual(select(wrong).returncode, 0)
+
+    def test_runtime_and_builder_select_only_the_private_mutant(self) -> None:
+        runtime = (PRIVATE / "retention_first_eval_mutant_runtime.esk").read_text()
+        self.assertIn("(vector 'retention 'prepare horizon present? mutation)", runtime)
+        self.assertIn("FIRST-EVAL-MUTANT-SURVIVED", runtime)
+        for mode in ("absent-to-present", "seeded-bit", "seeded-metadata"):
+            self.assertIn(f'"{mode}"', runtime)
+        builder = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
+        self.assertIn('package_native_sources[6]="${PROJECT_ROOT}/tests/e3_private/retention_first_eval_frame.c"', builder)
+        self.assertIn("-DET_E3_FIRST_EVAL_MUTATION_TESTING", builder)
+        self.assertIn("e3_required_private+=(et_e3_test_first_eval_corrupt_v1)", builder)
+        self.assertIn("E3_FIRST_EVAL_MUTANT_SANITIZE", builder)
+        self.assertIn("retention-first-eval-mutant|retention-overflow", builder)
+
+
+if __name__ == "__main__":
+    unittest.main()
