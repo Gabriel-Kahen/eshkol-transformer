@@ -1,11 +1,12 @@
 """Owned negative controls for the exact compiled first-warmup verdict."""
 
 import signal
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 import importlib.util
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -26,7 +27,108 @@ def runner():
     return module
 
 
+@contextmanager
+def isolated_staged_source():
+    """An owned tiny Git source tree; never stage the project checkout."""
+    module = runner()
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary) / "source"
+        root.mkdir()
+        (root / "scripts").mkdir()
+        (root / "toolchain").mkdir()
+        common = root / "scripts/common.sh"
+        common.write_bytes(b"#!/bin/bash\n" + module.ORIGINAL_LOCK_LINE + b"true\n")
+        lock = root / "toolchain/eshkol.lock"
+        lock.write_bytes(module.FE9_LINE + b"llvm_version\t21.1.8\n")
+        (root / "extra.txt").write_text("original\n")
+        subprocess.run(["git", "init", "-q", str(root)], check=True)
+        subprocess.run(["git", "-C", str(root), "add", "--all"], check=True)
+        subprocess.run(["git", "-C", str(root), "-c", "user.name=Test",
+                        "-c", "user.email=test@example.invalid", "commit", "-qm",
+                        "source"], check=True)
+        candidate = Path(temporary) / "candidate-eshkol.lock"
+        candidate.write_bytes(lock.read_bytes().replace(module.FE9_LINE,
+                                                       module.E7A_LINE))
+        with mock.patch.object(module, "ROOT", root), \
+             mock.patch.object(module, "STAGED_LOCK", candidate):
+            yield module, root, candidate
+
+
 class FirstEvalVerdict(unittest.TestCase):
+    def test_source_admission_clean_and_exact_staged(self) -> None:
+        with isolated_staged_source() as (module, root, candidate):
+            clean_hashes, clean = module.source_observation(False)
+            self.assertEqual(clean, {"mode": "clean", "git_status": ""})
+            self.assertEqual(clean_hashes["scripts/common.sh"],
+                             module.digest(root / "scripts/common.sh"))
+            with self.assertRaises(ValueError):
+                module.source_observation(True)
+            common = root / "scripts/common.sh"
+            common.write_bytes(common.read_bytes().replace(module.ORIGINAL_LOCK_LINE,
+                                                           module.STAGED_LOCK_LINE))
+            with self.assertRaises(ValueError):
+                module.source_observation(False)
+            observation = module.source_observation(True)
+            hashes, admission = observation
+            self.assertEqual(admission["git_status"], " M scripts/common.sh\n")
+            self.assertEqual(bytes.fromhex(admission["original_common"]["hex"]),
+                             module.git_bytes("show", "HEAD:scripts/common.sh"))
+            self.assertEqual(bytes.fromhex(admission["staged_common"]["hex"]),
+                             common.read_bytes())
+            self.assertEqual(bytes.fromhex(admission["candidate_lock"]["hex"]),
+                             candidate.read_bytes())
+            self.assertEqual(hashes["scripts/common.sh"], module.digest(common))
+            module.require_source_unchanged(True, observation,
+                module.git_bytes("rev-parse", "HEAD"),
+                module.git_bytes("rev-parse", "HEAD^{tree}"))
+
+    def test_staged_source_rejects_near_misses_and_post_drift(self) -> None:
+        changes = ("wrong-path", "multiline", "index", "untracked",
+                   "other-dirty", "wrong-lock", "tracked-lock")
+        for change in changes:
+            with self.subTest(change=change), \
+                 isolated_staged_source() as (module, root, candidate):
+                common = root / "scripts/common.sh"
+                staged = common.read_bytes().replace(module.ORIGINAL_LOCK_LINE,
+                                                     module.STAGED_LOCK_LINE)
+                if change == "wrong-path":
+                    staged = staged.replace(module.STAGED_LOCK_LINE,
+                        b'LOCK_FILE="/bundle/eshkol.lock"\n')
+                if change == "multiline":
+                    staged += b"echo unauthorized\n"
+                common.write_bytes(staged)
+                if change == "index":
+                    subprocess.run(["git", "-C", str(root), "add",
+                                    "scripts/common.sh"], check=True)
+                if change == "untracked":
+                    (root / "stray.txt").write_text("unexpected\n")
+                if change == "other-dirty":
+                    (root / "extra.txt").write_text("modified\n")
+                if change == "wrong-lock":
+                    candidate.write_bytes(candidate.read_bytes() + b"extra\n")
+                if change == "tracked-lock":
+                    (root / "toolchain/eshkol.lock").write_bytes(
+                        candidate.read_bytes())
+                with self.assertRaises(ValueError):
+                    module.source_observation(True)
+        for drift in ("candidate-lock", "tracked-source", "common"):
+            with self.subTest(drift=drift), \
+                 isolated_staged_source() as (module, root, candidate):
+                common = root / "scripts/common.sh"
+                common.write_bytes(common.read_bytes().replace(
+                    module.ORIGINAL_LOCK_LINE, module.STAGED_LOCK_LINE))
+                initial = module.source_observation(True)
+                commit = module.git_bytes("rev-parse", "HEAD")
+                tree = module.git_bytes("rev-parse", "HEAD^{tree}")
+                if drift == "candidate-lock":
+                    candidate.write_bytes(candidate.read_bytes() + b"drift\n")
+                elif drift == "tracked-source":
+                    (root / "extra.txt").write_text("drift\n")
+                else:
+                    common.write_bytes(common.read_bytes() + b"drift\n")
+                with self.assertRaises(ValueError):
+                    module.require_source_unchanged(True, initial, commit, tree)
+
     def test_accepts_only_exact_signal_and_label(self) -> None:
         for selector, gradient in (("absent-to-present", "absent"),
                                    ("seeded-bit", "present"),

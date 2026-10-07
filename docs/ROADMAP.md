@@ -945,6 +945,11 @@ uncertainty as a failed capture. Normal A/B executable import and symbol
 inventories are compared in full; source, toolchain, package and executable
 identities are checked again after all tuples. The exact Python development
 helpers are admitted through Q0's narrow path list and near-miss negatives.
+An opt-in detector test flag admits only the reviewed one-line staged
+`common.sh` redirect to the externally pinned 7aa candidate lock; the default
+still requires clean Git. The runner records actual staged source and lock
+bytes/hashes and rechecks them after all tuples. This source-only admission
+does not authorize a compiled gate or change the tracked production lock.
 Its strict parser requires the complete `success-model-image` label and an
 actual SIGABRT after successful compile/link. Source parser controls pass; the
 compiled detector gate, separate closing LSan baselines and the §9 matrix remain

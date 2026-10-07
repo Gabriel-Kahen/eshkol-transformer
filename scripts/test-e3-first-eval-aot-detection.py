@@ -36,6 +36,11 @@ MANIFESTS = {
     "sanitizer-undefined", "sanitized_noninstrumentation_undefined_symbols":
     "noninstrumentation-undefined",
 }
+STAGED_LOCK = Path("/bundle/candidate-eshkol.lock")
+ORIGINAL_LOCK_LINE = b'LOCK_FILE="${PROJECT_ROOT}/toolchain/eshkol.lock"\n'
+STAGED_LOCK_LINE = b'LOCK_FILE="/bundle/candidate-eshkol.lock"\n'
+FE9_LINE = b'eshkol_commit\tfe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9\n'
+E7A_LINE = b'eshkol_commit\t7aa9df4cc078ca5c1cb0985ebe3cb43136b5a53d\n'
 
 
 def digest(path: Path) -> str:
@@ -296,28 +301,79 @@ def check_package(artifact: Path, sanitized: bool) -> None:
             "private rename/helper local-symbol inventory differs")
 
 
-def tracked_source_hashes() -> dict[str, str]:
-    require(not subprocess.check_output(["git", "status", "--porcelain"],
-                                        cwd=ROOT), "runner requires a clean committed union")
-    files = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT).split(b"\0")
-    return {name.decode(): digest(ROOT / name.decode()) for name in files if name}
+def git_bytes(*args: str) -> bytes:
+    return subprocess.check_output(["git", *args], cwd=ROOT,
+                                   env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"})
+
+
+def source_observation(staged_toolchain: bool) -> tuple[dict[str, str], dict[str, object]]:
+    """Record actual source; admit only the reviewed one-line 7aa test staging."""
+    status = git_bytes("status", "--porcelain=v1", "--untracked-files=all")
+    expected_status = b" M scripts/common.sh\n" if staged_toolchain else b""
+    require(status == expected_status,
+            "runner requires clean Git or only the exact unstaged common.sh modification")
+    files = git_bytes("ls-files", "-z").split(b"\0")
+    hashes = {name.decode(): digest(ROOT / name.decode()) for name in files if name}
+    admission: dict[str, object] = {
+        "mode": "staged-7aa-test-toolchain" if staged_toolchain else "clean",
+        "git_status": status.decode(),
+    }
+    if staged_toolchain:
+        original_common = git_bytes("show", "HEAD:scripts/common.sh")
+        common = (ROOT / "scripts/common.sh").read_bytes()
+        original_lock = git_bytes("show", "HEAD:toolchain/eshkol.lock")
+        tracked_lock = (ROOT / "toolchain/eshkol.lock").read_bytes()
+        require(original_common.count(ORIGINAL_LOCK_LINE) == 1 and
+                common == original_common.replace(ORIGINAL_LOCK_LINE,
+                                                  STAGED_LOCK_LINE),
+                "staged common.sh differs from the exact one-line lock redirect")
+        require(original_lock.count(FE9_LINE) == 1 and
+                original_lock.count(b"eshkol_commit\t") == 1 and
+                tracked_lock == original_lock,
+                "tracked production lock changed or lacks the unique fe9 pin")
+        require(STAGED_LOCK.is_file() and not STAGED_LOCK.is_symlink(),
+                "staged test lock must be an ordinary file")
+        candidate_lock = STAGED_LOCK.read_bytes()
+        require(candidate_lock == original_lock.replace(FE9_LINE, E7A_LINE),
+                "staged test lock differs from the sole fe9-to-7aa replacement")
+        for name, raw in (("original_common", original_common),
+                          ("staged_common", common),
+                          ("tracked_lock", tracked_lock),
+                          ("candidate_lock", candidate_lock)):
+            admission[name] = {"hex": raw.hex(),
+                               "sha256": hashlib.sha256(raw).hexdigest()}
+        admission["candidate_lock_path"] = str(STAGED_LOCK)
+    return hashes, admission
+
+
+def require_source_unchanged(staged_toolchain: bool,
+                             initial: tuple[dict[str, str], dict[str, object]],
+                             commit: bytes, tree: bytes) -> None:
+    require(source_observation(staged_toolchain) == initial and
+            git_bytes("rev-parse", "HEAD") == commit and
+            git_bytes("rev-parse", "HEAD^{tree}") == tree,
+            "source identity changed during detector run")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path, help="fresh absolute evidence directory")
+    parser.add_argument("--staged-toolchain-test", action="store_true",
+                        help="admit only the exact reviewed 7aa test-lock staging")
     args = parser.parse_args()
     out = args.output
     require(out.is_absolute() and not out.exists() and not out.is_symlink() and
             out.parent.is_dir() and not out.parent.is_symlink() and
             not out.is_relative_to(ROOT),
             "output must be a fresh absolute directory with a real parent")
-    source_hashes = tracked_source_hashes()
-    source_commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT)
-    source_tree = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], cwd=ROOT)
+    source_hashes, source_admission = source_observation(args.staged_toolchain_test)
+    source_commit = git_bytes("rev-parse", "HEAD")
+    source_tree = git_bytes("rev-parse", "HEAD^{tree}")
     out.mkdir(mode=0o700)
     (out / "source-sha256.json").write_text(json.dumps(source_hashes,
                                                         sort_keys=True, indent=2) + "\n")
+    (out / "source-admission.json").write_text(json.dumps(
+        source_admission, sort_keys=True, indent=2) + "\n")
     (out / "source-commit.txt").write_bytes(source_commit)
     (out / "source-tree.txt").write_bytes(source_tree)
     provenance = Path(os.environ.get("ESHKOL_BUILD_DIR", ROOT / ".deps/eshkol-build")) / \
@@ -477,11 +533,9 @@ def main() -> None:
                        survivors=stage["survivors"],
                        stdout=(out / (name + ".stdout")).read_bytes(),
                        stderr=(out / (name + ".stderr")).read_bytes())
-    require(tracked_source_hashes() == source_hashes and
-            subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT) ==
-            source_commit and
-            subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], cwd=ROOT) ==
-            source_tree, "source identity changed during detector run")
+    require_source_unchanged(args.staged_toolchain_test,
+                             (source_hashes, source_admission),
+                             source_commit, source_tree)
     require({str(path): digest(path) for path in toolchain_files} == toolchain_hashes,
             "selected toolchain identity changed during detector run")
     require({name: digest(out / name) for name in hashes} == hashes,
