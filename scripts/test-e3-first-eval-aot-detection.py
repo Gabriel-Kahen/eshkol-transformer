@@ -8,6 +8,7 @@ cannot close LSan; the separate complete-call and native controls must close.
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import hashlib
 import json
 import os
@@ -103,8 +104,10 @@ def capture(out: Path, name: str, argv: list[str], env: dict[str, str],
     teardown: list[str] = []
     failure: BaseException | None = None
     quiescent = False
-    with stem.with_suffix(".stdout").open("xb") as stdout, \
-         stem.with_suffix(".stderr").open("xb") as stderr:
+    streams = ExitStack()
+    try:
+        stdout = streams.enter_context(stem.with_suffix(".stdout").open("xb"))
+        stderr = streams.enter_context(stem.with_suffix(".stderr").open("xb"))
         try:
             child = subprocess.Popen(argv, cwd=cwd, env=env, stdout=stdout,
                                      stderr=stderr, start_new_session=True,
@@ -179,6 +182,10 @@ def capture(out: Path, name: str, argv: list[str], env: dict[str, str],
                             teardown.append("owned leader pidfd: SIGKILL")
                         except ProcessLookupError:
                             pass
+                        except OSError as error:
+                            teardown.append("pidfd signal uncertainty: " + repr(error))
+                            if failure is None:
+                                failure = error
             if child is not None and quiescent:
                 try:
                     _, wait, usage = os.wait4(child.pid, 0)
@@ -192,7 +199,10 @@ def capture(out: Path, name: str, argv: list[str], env: dict[str, str],
                 while time.monotonic() < stop:
                     try:
                         pid, raw_wait, raw_usage = os.wait4(child.pid, os.WNOHANG)
-                    except ChildProcessError:
+                    except OSError as error:
+                        teardown.append("unverified wait4 uncertainty: " + repr(error))
+                        if failure is None:
+                            failure = error
                         break
                     if pid:
                         wait, usage = raw_wait, raw_usage
@@ -201,7 +211,32 @@ def capture(out: Path, name: str, argv: list[str], env: dict[str, str],
                         break
                     time.sleep(0.05)
             if pidfd is not None:
-                os.close(pidfd)
+                try:
+                    os.close(pidfd)
+                except OSError as error:
+                    teardown.append("pidfd close uncertainty: " + repr(error))
+                    if failure is None:
+                        failure = error
+    except BaseException as error:
+        teardown.append("capture I/O uncertainty: " + repr(error))
+        if failure is None:
+            failure = error
+    finally:
+        try:
+            streams.close()
+        except BaseException as error:
+            teardown.append("stream close uncertainty: " + repr(error))
+            if failure is None:
+                failure = error
+    stdout_hash = stderr_hash = None
+    if quiescent and failure is None:
+        try:
+            stdout_hash = digest(stem.with_suffix(".stdout"))
+            stderr_hash = digest(stem.with_suffix(".stderr"))
+        except OSError as error:
+            teardown.append("stream hash uncertainty: " + repr(error))
+            failure = error
+            stdout_hash = stderr_hash = None
     code = os.waitstatus_to_exitcode(wait) if wait is not None else None
     result = {
         "argv": argv, "cwd": str(cwd), "env": env, "deadline_seconds": deadline,
@@ -214,8 +249,7 @@ def capture(out: Path, name: str, argv: list[str], env: dict[str, str],
         "max_rss_kib": usage.ru_maxrss if usage is not None else None,
         "user_seconds": usage.ru_utime if usage is not None else None,
         "system_seconds": usage.ru_stime if usage is not None else None,
-        "stdout_sha256": digest(stem.with_suffix(".stdout")) if quiescent else None,
-        "stderr_sha256": digest(stem.with_suffix(".stderr")) if quiescent else None,
+        "stdout_sha256": stdout_hash, "stderr_sha256": stderr_hash,
     }
     stem.with_suffix(".json").write_text(json.dumps(result, sort_keys=True,
                                                      indent=2) + "\n")

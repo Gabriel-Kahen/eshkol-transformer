@@ -1,6 +1,7 @@
 """Owned negative controls for the exact compiled first-warmup verdict."""
 
 import signal
+from contextlib import ExitStack
 import importlib.util
 import json
 import os
@@ -9,6 +10,7 @@ import sys
 import tempfile
 import unittest
 from unittest import mock
+import warnings
 
 from tests.e3_private.parse_first_eval_detection import LABEL, verify
 
@@ -143,6 +145,147 @@ class FirstEvalVerdict(unittest.TestCase):
             self.assertIn("exception cleanup: SIGKILL", record["teardown"])
             self.assertTrue(record["quiescent"])
             self.assertEqual(record["signal"], signal.SIGKILL)
+
+    def test_pidfd_close_failure_retains_wait_and_rejects_hash(self) -> None:
+        module = runner()
+        real_open, real_close = os.pidfd_open, os.close
+        owned_fds = set()
+
+        def open_owned(pid):
+            fd = real_open(pid)
+            owned_fds.add(fd)
+            return fd
+
+        def close_fault(fd):
+            real_close(fd)
+            if fd in owned_fds:
+                raise OSError("injected pidfd close failure")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            out = Path(temporary)
+            with mock.patch.object(module.os, "pidfd_open", side_effect=open_owned), \
+                 mock.patch.object(module.os, "close", side_effect=close_fault):
+                with self.assertRaises(RuntimeError):
+                    module.capture(out, "close-failure", [sys.executable, "-c",
+                        "print('closed')"], {"PATH": os.environ.get("PATH", "")},
+                        ROOT, 5)
+            record = json.loads((out / "close-failure.json").read_text())
+            self.assertIn("injected pidfd close failure", record["capture_error"])
+            self.assertTrue(record["quiescent"])
+            self.assertIsNotNone(record["wait_status"])
+            self.assertIsNone(record["stdout_sha256"])
+
+    def test_pidfd_close_does_not_replace_primary_wait_failure(self) -> None:
+        module = runner()
+        real_waitid, real_open, real_close = os.waitid, os.pidfd_open, os.close
+        owned_fds = set()
+        calls = 0
+
+        def fail_first_wait(*args):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise RuntimeError("primary wait failure")
+            return real_waitid(*args)
+
+        def open_owned(pid):
+            fd = real_open(pid)
+            owned_fds.add(fd)
+            return fd
+
+        def close_fault(fd):
+            real_close(fd)
+            if fd in owned_fds:
+                raise OSError("secondary pidfd close fault")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            out = Path(temporary)
+            with mock.patch.object(module.os, "waitid", side_effect=fail_first_wait), \
+                 mock.patch.object(module.os, "pidfd_open", side_effect=open_owned), \
+                 mock.patch.object(module.os, "close", side_effect=close_fault):
+                with self.assertRaises(RuntimeError):
+                    module.capture(out, "primary-close", [sys.executable, "-c",
+                        "import time;time.sleep(30)"],
+                        {"PATH": os.environ.get("PATH", "")}, ROOT, 5)
+            record = json.loads((out / "primary-close.json").read_text())
+            self.assertIn("primary wait failure", record["capture_error"])
+            self.assertTrue(any("secondary pidfd close fault" in item
+                                for item in record["teardown"]))
+            self.assertIsNone(record["stdout_sha256"])
+
+    def test_pidfd_signal_and_unverified_wait_faults_keep_primary(self) -> None:
+        module = runner()
+        real_waitid, real_wait4 = os.waitid, os.wait4
+        for wait4_fault in (False, True):
+            calls = 0
+
+            def fail_first_wait(*args):
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    raise RuntimeError("primary waitid fault")
+                return real_waitid(*args)
+
+            def fail_wait4(*args):
+                raise InterruptedError("injected unverified wait4 fault")
+
+            with self.subTest(wait4_fault=wait4_fault), \
+                 tempfile.TemporaryDirectory() as temporary:
+                out = Path(temporary)
+                wait4 = fail_wait4 if wait4_fault else real_wait4
+                with mock.patch.object(module.os, "waitid", side_effect=fail_first_wait), \
+                     mock.patch.object(module, "signal_owned_session",
+                                       side_effect=ValueError("group cleanup refused")), \
+                     mock.patch.object(module.signal, "pidfd_send_signal",
+                                       side_effect=OSError("injected pidfd signal fault")), \
+                     mock.patch.object(module.os, "wait4", side_effect=wait4):
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore", ResourceWarning)
+                        with self.assertRaises(RuntimeError):
+                            module.capture(out, "cleanup-fault", [sys.executable, "-c",
+                                "print('done')"],
+                                {"PATH": os.environ.get("PATH", "")}, ROOT, 5)
+                record = json.loads((out / "cleanup-fault.json").read_text())
+                self.assertIn("primary waitid fault", record["capture_error"])
+                self.assertTrue(any("pidfd signal uncertainty" in item
+                                    for item in record["teardown"]))
+                self.assertFalse(record["quiescent"])
+                self.assertIsNone(record["stdout_sha256"])
+                if wait4_fault:
+                    self.assertIsNone(record["wait_status"])
+                    self.assertTrue(any("unverified wait4 uncertainty" in item
+                                        for item in record["teardown"]))
+                pid = record["leader_identity"][0]
+                try:
+                    os.waitpid(pid, 0)
+                except ChildProcessError:
+                    pass
+
+    def test_stream_close_fault_still_records_failed_capture(self) -> None:
+        module = runner()
+
+        class FaultStack:
+            def __init__(self):
+                self.inner = ExitStack()
+
+            def enter_context(self, context):
+                return self.inner.enter_context(context)
+
+            def close(self):
+                self.inner.close()
+                raise OSError("injected stream close fault")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            out = Path(temporary)
+            with mock.patch.object(module, "ExitStack", FaultStack):
+                with self.assertRaises(RuntimeError):
+                    module.capture(out, "stream-close", [sys.executable, "-c",
+                        "print('done')"], {"PATH": os.environ.get("PATH", "")},
+                        ROOT, 5)
+            record = json.loads((out / "stream-close.json").read_text())
+            self.assertIn("injected stream close fault", record["capture_error"])
+            self.assertIsNotNone(record["wait_status"])
+            self.assertIsNone(record["stdout_sha256"])
 
 
 if __name__ == "__main__":
