@@ -160,6 +160,46 @@ printf '%s\\n' "$e3_tuple_kind"
         self.assertIn("E3_FIRST_EVAL_MUTANT_SANITIZE", builder)
         self.assertIn("retention-first-eval-mutant|retention-overflow", builder)
 
+    def test_native_executable_control_is_authentic_and_feature_scoped(self) -> None:
+        control = (PRIVATE / "retention_first_eval_native_control.c").read_text()
+        runner = (ROOT / "scripts/test-e3-first-eval-native-control.sh").read_text()
+        required = (
+            '#include "retention_first_eval_frame.c"',
+            "et_m3t_private_owner_create_v1(initial)",
+            "et_m3t_private_owner_bind_v1(model",
+            "et_m3t_private_owner_initialize_v1(model",
+            "et_m3t_private_owner_seal_v1(model)",
+            "et_m3t_private_owner_abort_v1(stale)",
+            "et_e3_test_model_word_count_v1(",
+            "et_e3_test_model_word_v1(",
+            "et_e3_test_gradient_metadata_v1(model",
+            "denied_unchanged(model, stale, selector)",
+            "denied_unchanged(model, &checks, selector)",
+            "denied_unchanged(model, model->original, selector)",
+            "denied_unchanged(model, model, -1)",
+            "denied_unchanged(model, model, 3)",
+            "model->active = model",
+            "model->r.state = 0",
+            "ET_F32_GRADIENT_PRESENT, 2",
+            "CHECK(first_eval_mutation_used == 0)",
+            "CHECK(first_eval_mutation_used == 1)",
+            "memcmp(&before, &after, sizeof(before)) != 0",
+            "memcmp(&after, &second, sizeof(after)) == 0",
+        )
+        for item in required:
+            self.assertIn(item, control)
+        self.assertLess(control.index("denied_unchanged(model, stale"),
+                        control.index("CHECK(et_e3_test_first_eval_corrupt_v1(model, selector) == 0)"))
+        self.assertLess(control.index("CHECK(et_e3_test_first_eval_corrupt_v1(model, selector) == 0)"),
+                        control.index("CHECK(et_e3_test_first_eval_corrupt_v1(model, selector) == -1)"))
+        self.assertIn("-DET_E3_RETENTION_TESTING", runner)
+        self.assertIn("-DET_E3_FIRST_EVAL_MUTATION_TESTING", runner)
+        self.assertIn('"${out}/feature-off.o"', runner)
+        self.assertIn("nm -a --defined-only", runner)
+        self.assertIn('"${out}/native-${mode}" "${selector}"', runner)
+        self.assertIn("detect_leaks=1:halt_on_error=1", runner)
+        self.assertIn('cmp "${out}/normal-${selector}.stdout"', runner)
+
 
 if __name__ == "__main__":
     unittest.main()
