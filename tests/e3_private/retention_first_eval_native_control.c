@@ -92,10 +92,12 @@ static void denied_wrong_gradient_state(owner *model, int64_t selector) {
   const uint32_t state = selector == 0 ? ET_F32_GRADIENT_PRESENT
                                        : ET_F32_GRADIENT_ABSENT;
   et_f32_parameter_test_set_metadata_v1(model->p[0], state,
-                                         selector == 0 ? 1u : 0u,
-                                         selector == 0 ? UINT32_C(0x3f800000) : 0);
+                                         (uint64_t)before.metadata[0][1],
+                                         (uint32_t)before.metadata[0][2]);
   snapshot(model, &wrong);
   CHECK(wrong.metadata[0][0] == state &&
+        wrong.metadata[0][1] == before.metadata[0][1] &&
+        wrong.metadata[0][2] == before.metadata[0][2] &&
         memcmp(&before, &wrong, sizeof(before)) != 0);
   denied_unchanged(model, model, selector);
   et_f32_parameter_test_set_metadata_v1(

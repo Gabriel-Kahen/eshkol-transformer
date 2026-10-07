@@ -223,6 +223,10 @@ printf '%s\\n' "$e3_tuple_kind"
                 self.assertIn(item, gradient_state)
         self.assertLess(gradient_state.index("snapshot(model, &before)"),
                         gradient_state.index("et_f32_parameter_test_set_metadata_v1(model->p[0], state"))
+        self.assertIn("(uint64_t)before.metadata[0][1]", gradient_state)
+        self.assertIn("(uint32_t)before.metadata[0][2]", gradient_state)
+        self.assertIn("wrong.metadata[0][1] == before.metadata[0][1]", gradient_state)
+        self.assertIn("wrong.metadata[0][2] == before.metadata[0][2]", gradient_state)
         self.assertLess(gradient_state.index("denied_unchanged(model, model, selector)"),
                         gradient_state.index("(uint32_t)before.metadata[0][0]"))
         self.assertIn("denied_wrong_owner_state(model, selector)", control)
