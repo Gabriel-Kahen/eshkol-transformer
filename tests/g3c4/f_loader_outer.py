@@ -164,7 +164,7 @@ def create_argv(decision: dict) -> list[str]:
     for key, target, readonly in (
             ("compiler", "/workspace", True), ("source", "/source", True),
             ("f_output", "/f-output", True), ("bundle", "/bundle", True),
-            ("candidate", "/candidate", False), ("out", "/out", False)):
+            ("candidate", "/stage", False), ("out", "/out", False)):
         spec = f"type=bind,src={decision[key]},dst={target}"
         argv += ["--mount", spec + (",readonly" if readonly else "")]
     argv += ["--env", "PATH=/usr/bin:/bin", "--env", "LC_ALL=C",
@@ -380,7 +380,7 @@ def inspect_owned(raw: bytes, decision: dict, cid: str,
     expected = {decision[key]: (target, read_only) for key, target, read_only in
                 (("compiler", "/workspace", True), ("source", "/source", True),
                  ("f_output", "/f-output", True), ("bundle", "/bundle", True),
-                 ("candidate", "/candidate", False), ("out", "/out", False))}
+                 ("candidate", "/stage", False), ("out", "/out", False))}
     mounts = {mount["Source"]: (mount["Destination"], not mount["RW"])
               for mount in row["Mounts"] if mount["Type"] == "bind"}
     require(mounts == expected and len(row["Mounts"]) == len(expected) and
@@ -393,7 +393,7 @@ def inspect_owned(raw: bytes, decision: dict, cid: str,
         for key, target, readonly in
         (("compiler", "/workspace", True), ("source", "/source", True),
          ("f_output", "/f-output", True), ("bundle", "/bundle", True),
-         ("candidate", "/candidate", False), ("out", "/out", False))]
+         ("candidate", "/stage", False), ("out", "/out", False))]
     require(row["HostConfig"]["Mounts"] == expected_host_mounts and
             row["HostConfig"]["Binds"] is None,
             "owned host mount options differ")
@@ -414,6 +414,33 @@ def guest_output(decision: dict) -> None:
             receipt["image_pins_sha256"] ==
             sha(ordinary(evidence / "loader/image-libraries.tsv")),
             "collector output identity mismatch")
+
+
+def stopped_exit(row: dict) -> int:
+    state = row["State"]
+    code = state["ExitCode"]
+    require(state["Status"] == "exited" and state["Running"] is False and
+            type(state["Pid"]) is int and state["Pid"] == 0 and
+            state["OOMKilled"] is False and state["Dead"] is False and
+            state["Error"] == "" and type(code) is int and 0 <= code <= 255,
+            "owned container is not authentically stopped")
+    return code
+
+
+def wait_exit(raw: bytes, expected: int) -> None:
+    require(re.fullmatch(rb"(?:0|[1-9][0-9]{0,2})\n", raw) is not None and
+            int(raw[:-1]) == expected,
+            "Docker wait contradicts stopped inspect")
+
+
+def never_started(row: dict) -> None:
+    state = row["State"]
+    require(state["Status"] == "created" and state["Running"] is False and
+            type(state["Pid"]) is int and state["Pid"] == 0 and
+            state["OOMKilled"] is False and state["Dead"] is False and
+            state["Error"] == "" and type(state["ExitCode"]) is int and
+            state["ExitCode"] == 0,
+            "unstarted container identity uncertain")
 
 
 def run_once(decision_path: Path, expected_sha: str, evidence: Path) -> None:
@@ -450,8 +477,9 @@ def run_once(decision_path: Path, expected_sha: str, evidence: Path) -> None:
         require(HEX64.fullmatch(created.decode().strip()) is not None,
                 "created CID malformed")
         cid = created.decode().strip()
-        inspect_owned(checked([str(DOCKER), "inspect", cid],
-                              evidence / "created"), decision, cid, False, image)
+        created_row = inspect_owned(checked([str(DOCKER), "inspect", cid],
+                                    evidence / "created"), decision, cid, False, image)
+        never_started(created_row)
         started = capture([str(DOCKER), "start", "--attach", cid],
                           evidence / "guest", PHASE_LIMIT)
         require(started["quiescent"] and started["returncode"] == 0 and
@@ -473,10 +501,18 @@ def run_once(decision_path: Path, expected_sha: str, evidence: Path) -> None:
                     raw = checked([str(DOCKER), "inspect", cid],
                                   evidence / "stopped")
                     row = inspect_owned(raw, decision, cid, False, image)
-                require(row["State"]["ExitCode"] is not None,
-                        "guest exit absent")
-                if row["State"]["ExitCode"] != 0:
-                    primary = primary or f"guest exit={row['State']['ExitCode']}"
+                if row["State"]["Status"] == "created":
+                    never_started(row)
+                    closure.append("guest never started; Docker wait unavailable")
+                else:
+                    code = stopped_exit(row)
+                    try:
+                        wait_exit(checked([str(DOCKER), "wait", cid],
+                                          evidence / "docker-wait"), code)
+                    except BaseException as error:
+                        closure.append(f"Docker wait uncertain: {type(error).__name__}: {error}")
+                    if code != 0:
+                        primary = primary or f"guest exit={code}"
                 checked([str(DOCKER), "rm", cid], evidence / "remove")
                 after = checked([str(DOCKER), "ps", "-a", "--no-trunc",
                                  "--format", "{{.ID}} {{.Names}}"],

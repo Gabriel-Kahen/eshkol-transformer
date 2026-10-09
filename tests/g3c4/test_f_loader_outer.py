@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -33,6 +35,11 @@ class OuterTests(unittest.TestCase):
                                                  '"--network", "host"'),
                                   guest, roadmap, original)
         with self.assertRaises(AssertionError):
+            source_check.validate(base, closure, source,
+                                  guest.replace('"--outer-stage-child"',
+                                                '"--unsupported-stage"'),
+                                  roadmap, original)
+        with self.assertRaises(AssertionError):
             source_check.validate(base, closure[:-1], source, guest,
                                   roadmap, original)
 
@@ -47,7 +54,8 @@ class OuterTests(unittest.TestCase):
                      ("compiler", "source", "f_output", "bundle", "candidate", "out")}
             for path in roots.values():
                 Path(path).mkdir()
-            decision = {**roots, "name": "g3c4-f-loader-owned"}
+            decision = {**roots, "name": "g3c4-f-loader-owned",
+                        "source_admission_sha256": "a" * 64}
             with patch.object(outer, "selected", return_value=decision):
                 with self.assertRaisesRegex(ValueError, "overlaps selected input"):
                     outer.run_once(root / "decision.json", "a" * 64,
@@ -68,6 +76,7 @@ class OuterTests(unittest.TestCase):
         self.assertEqual(argv[-2:], ["--source-admission-sha256", "a" * 64])
         self.assertIn("tests.g3c4.f_loader_guest", argv)
         self.assertEqual(argv[-4], "-m")
+        self.assertIn("type=bind,src=/five,dst=/stage", argv)
 
     def test_real_wait_and_raw_streams(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -108,13 +117,13 @@ class OuterTests(unittest.TestCase):
                   for key, dest, ro in
                   (("compiler", "/workspace", True), ("source", "/source", True),
                    ("f_output", "/f-output", True), ("bundle", "/bundle", True),
-                   ("candidate", "/candidate", False), ("out", "/out", False))]
+                   ("candidate", "/stage", False), ("out", "/out", False))]
         host_mounts = [{"Type": "bind", "Source": d[key], "Target": dest,
                         **({"ReadOnly": True} if ro else {})}
                        for key, dest, ro in
                        (("compiler", "/workspace", True), ("source", "/source", True),
                         ("f_output", "/f-output", True), ("bundle", "/bundle", True),
-                        ("candidate", "/candidate", False), ("out", "/out", False))]
+                        ("candidate", "/stage", False), ("out", "/out", False))]
         image = json.dumps([{"Id": outer.IMAGE,
                              "Config": {"Env": ["PATH=/usr/bin", "DEBIAN_FRONTEND=noninteractive"]}}]).encode()
         env = [f"{k}={v}" for k, v in outer.expected_env(image).items()]
@@ -180,6 +189,134 @@ class OuterTests(unittest.TestCase):
                     "format": "g3c4-F-image-loader-collector-v1",
                     "image_pins_sha256": outer.sha(b"lib\n")}))
                 outer.guest_output({"out": str(out)})
+
+    def test_real_fresh_stage_child_under_mounted_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            source = base / "source"
+            source.mkdir()
+            (source / "scripts").mkdir()
+            (source / "scripts/common.sh").write_bytes(b"test common\n")
+            (source / "x.txt").write_bytes(b"tracked\n")
+            for argv in (["git", "-C", str(source), "init", "-q"],
+                         ["git", "-C", str(source), "add", "."],
+                         ["git", "-C", str(source), "-c", "user.name=Test",
+                          "-c", "user.email=test@example.invalid", "commit", "-qm", "owned"]):
+                subprocess.run(argv, check=True, capture_output=True)
+            head, tree = subprocess.check_output(
+                ["git", "--no-optional-locks", "-C", str(source), "rev-parse",
+                 "HEAD", "HEAD^{tree}"], text=True).splitlines()
+            rows = "".join(f"{name}\t100644\t{hashlib.sha256((source/name).read_bytes()).hexdigest()}\n"
+                           for name in ("scripts/common.sh", "x.txt"))
+            decision = {"head": head, "tree": tree,
+                        "tracked_file_count": 2,
+                        "tracked_manifest_sha256": hashlib.sha256(rows.encode()).hexdigest(),
+                        "admission_sha256": "a" * 64}
+            stage = base / "stage"
+            stage.mkdir()
+            child = stage / "candidate"
+            with patch.object(outer.attest, "staged_common", side_effect=lambda raw: raw):
+                with self.assertRaisesRegex(ValueError, "destination must be fresh"):
+                    outer.attest.stage_project_copy(source, child, decision)
+                self.assertFalse(child.exists())
+                copied = outer.attest.stage_project_copy(source, child, decision,
+                                                          expected_candidate=child)
+                self.assertEqual(copied["head"], head)
+                self.assertEqual((child / "x.txt").read_bytes(), b"tracked\n")
+                with self.assertRaisesRegex(ValueError, "destination must be fresh"):
+                    outer.attest.stage_project_copy(source, child, decision,
+                                                     expected_candidate=child)
+
+    def test_stopped_state_and_exact_docker_wait(self) -> None:
+        state = {"Status": "exited", "Running": False, "Pid": 0,
+                 "OOMKilled": False, "Dead": False, "Error": "", "ExitCode": 17}
+        self.assertEqual(outer.stopped_exit({"State": state}), 17)
+        outer.wait_exit(b"17\n", 17)
+        for key, bad in (("Status", "created"), ("Running", True),
+                         ("Pid", 42), ("OOMKilled", True), ("Dead", True),
+                         ("Error", "failure"), ("ExitCode", None),
+                         ("ExitCode", True)):
+            with self.subTest(key=key, bad=bad):
+                mutated = dict(state)
+                mutated[key] = bad
+                with self.assertRaisesRegex(ValueError, "authentically stopped"):
+                    outer.stopped_exit({"State": mutated})
+        for raw in (b"", b"17", b"17\nextra", b"017\n", b"18\n", b"-1\n"):
+            with self.subTest(raw=raw):
+                with self.assertRaisesRegex(ValueError, "contradicts"):
+                    outer.wait_exit(raw, 17)
+        created = {**state, "Status": "created", "ExitCode": 0}
+        outer.never_started({"State": created})
+        for key, bad in (("Pid", True), ("OOMKilled", True),
+                         ("Dead", True), ("Error", "bad"),
+                         ("ExitCode", 1)):
+            with self.subTest(created_key=key):
+                altered = dict(created)
+                altered[key] = bad
+                with self.assertRaisesRegex(ValueError, "identity uncertain"):
+                    outer.never_started({"State": altered})
+
+    def test_mocked_one_shot_wait_precedes_remove_and_mismatch_denied(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            roots = {key: str(base / key) for key in
+                     ("compiler", "source", "f_output", "bundle", "candidate", "out")}
+            for path in roots.values():
+                Path(path).mkdir()
+            decision = {**roots, "name": "g3c4-f-loader-owned",
+                        "source_admission_sha256": "a" * 64}
+            image = json.dumps([{"Id": outer.IMAGE, "Config": {"Env": []}}]).encode()
+            state = {"Status": "exited", "Running": False, "Pid": 0,
+                     "OOMKilled": False, "Dead": False, "Error": "", "ExitCode": 0}
+            for answer, succeeds in ((b"0\n", True), (b"1\n", False)):
+                with self.subTest(answer=answer):
+                    calls = []
+                    evidence = base / ("success" if succeeds else "mismatch")
+
+                    def command(argv: list[str], phase: Path, timeout: int = 120) -> bytes:
+                        action = argv[1]
+                        calls.append(action)
+                        if action == "image":
+                            return image
+                        if action == "info":
+                            return b'["name=rootless"]\n'
+                        if action == "ps":
+                            return b""
+                        if action == "create":
+                            return ("b" * 64 + "\n").encode()
+                        if action == "wait":
+                            return answer
+                        return b"[]"
+
+                    def guest(argv: list[str], phase: Path,
+                              timeout: int = outer.PHASE_LIMIT) -> dict:
+                        phase.mkdir()
+                        (phase / "stderr.raw").write_bytes(b"")
+                        return {"quiescent": True, "returncode": 0, "failure": ""}
+
+                    inspect_count = [0]
+
+                    def inspect(*_args: object) -> dict:
+                        inspect_count[0] += 1
+                        if inspect_count[0] == 1:
+                            return {"State": {**state, "Status": "created"}}
+                        return {"State": state}
+
+                    with patch.object(outer, "selected", return_value=decision), \
+                         patch.object(outer, "checked", side_effect=command), \
+                         patch.object(outer, "capture", side_effect=guest), \
+                         patch.object(outer, "inspect_owned", side_effect=inspect), \
+                         patch.object(outer, "guest_output"):
+                        if succeeds:
+                            outer.run_once(base / "decision.json", "a" * 64, evidence)
+                        else:
+                            with self.assertRaisesRegex(ValueError, "closure uncertain"):
+                                outer.run_once(base / "decision.json", "a" * 64, evidence)
+                    self.assertLess(calls.index("wait"), calls.index("rm"))
+                    result = json.loads((evidence / "result.json").read_bytes())
+                    self.assertIs(result["success"], succeeds)
+                    if not succeeds:
+                        self.assertIn("Docker wait uncertain", result["closure"][0])
 
 
 if __name__ == "__main__":

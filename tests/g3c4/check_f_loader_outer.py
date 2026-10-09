@@ -23,7 +23,7 @@ UNCHANGED = {
     "tests/g3c4/f_image_loader_collect.py":
         "98cc07a939834466fe77e8c43283159e67f70318bdbdd90b28cd267ff219b0c9",
     "tests/g3c4/f_artifact_attest.py":
-        "9c36924e009359d2b5615c15ad057d1b9ea63214a85144f0bee2803f254c96ef",
+        "e1c4fafe10cbffa441cdc346a260fd09301ae0cc916d53e5840f821d9b70ec89",
     "scripts/common.sh":
         "2749689e6301cad6e489de4b23e0f9b1ec7c9627f47dd1c7007d9ed8e5955e83",
     "toolchain/eshkol.lock":
@@ -37,7 +37,9 @@ NEW = OLD + ("\n  An [inactive test-only F loader outer source](g3/G3_C4_F_LOADE
              "  specifies the exact f31 guest mounts and bounded owned Docker-client and\n"
              "  container closure path. Only a future immutable ROOT wrapper may pin its\n"
              "  external decision SHA and invoke it; no\n"
-             "  Docker launch, loader result, public package or sanitizer proof is claimed.\n")
+             "  Docker launch, loader result, public package or sanitizer proof is claimed.\n"
+             "  Its exact nested stage-child path and stopped-state/Docker-wait checks remain\n"
+             "  source-only; the accepted attester's default path is unchanged.\n")
 
 
 def validate(base: list[str], closure: list[str], source: str,
@@ -59,11 +61,19 @@ def validate(base: list[str], closure: list[str], source: str,
                    '"--memory", "4g"', '"--pids-limit", "128"',
                    '"--tmpfs"', '"--attach"', '"inspect"', '"rm"',
                    '"initial-absence"', '"closure-inspect"',
+                   '"docker-wait"', 'stopped_exit(', 'wait_exit(',
+                   '"candidate", "/stage", False',
                    '"source_admission_sha256"'):
         assert anchor in source, anchor
     for anchor in ('attest.main()', 'collector.collect(', '/out/build-off/eshkol-run',
-                   'collector.TOOL_PINS', 'collector.RUNTIME_PINS'):
+                   'collector.TOOL_PINS', 'collector.RUNTIME_PINS',
+                   '"--outer-stage-child"', '"/stage/candidate"'):
         assert anchor in guest or anchor in source, anchor
+    attester = (ROOT / "tests/g3c4/f_artifact_attest.py").read_text()
+    assert 'parser.add_argument("--outer-stage-child", action="store_true")' in attester
+    assert 'Path("/stage/candidate") if args.outer_stage_child' in attester
+    assert 'else Path("/candidate")' in attester
+    assert attester.count('decision, candidate_path)') == 5
 
 
 def main() -> None:

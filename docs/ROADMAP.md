@@ -2735,6 +2735,8 @@ publication, public G2 and continuation remain pending.
   container closure path. Only a future immutable ROOT wrapper may pin its
   external decision SHA and invoke it; no
   Docker launch, loader result, public package or sanitizer proof is claimed.
+  Its exact nested stage-child path and stopped-state/Docker-wait checks remain
+  source-only; the accepted attester's default path is unchanged.
 
 ## Wave 4 — practical pretraining and performance
 

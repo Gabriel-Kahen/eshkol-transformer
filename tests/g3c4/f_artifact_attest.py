@@ -656,6 +656,7 @@ def main() -> None:
     parser.add_argument("--candidate-lock", type=Path, required=True)
     parser.add_argument("--offline-review", type=Path, required=True)
     parser.add_argument("--project-source", type=Path, required=True)
+    parser.add_argument("--outer-stage-child", action="store_true")
     parser.add_argument("--project-checkout", type=Path, required=True)
     parser.add_argument("--project-admission", type=Path, required=True)
     parser.add_argument("--project-admission-sha256", required=True)
@@ -668,10 +669,12 @@ def main() -> None:
     parser.add_argument("--image-pins-sha256")
     parser.add_argument("--evidence", type=Path, required=True)
     args = parser.parse_args()
+    candidate_path = (Path("/stage/candidate") if args.outer_stage_child
+                      else Path("/candidate"))
     require(os.environ.get("ESHKOL_ALLOW_UNSUPPORTED_HOST", "0") == "0",
             "unsupported-host bypass forbidden")
     require(args.copy_build == Path("/out/build-off") and
-            args.project_source == Path("/candidate") and
+            args.project_source == candidate_path and
             args.evidence.is_absolute(),
             "F and project copy paths must match reviewed cache/profile")
     compiler = compiler_source(args.compiler_source)
@@ -692,12 +695,12 @@ def main() -> None:
                 "prepare requires fresh evidence and no loader observations")
         args.evidence.mkdir(mode=0o700)
         project = stage_project_copy(args.project_checkout, args.project_source,
-                                     decision)
+                                     decision, candidate_path)
         copied = copy_f_artifacts(args.f_output, args.copy_build)
         require(original_output(args.f_output) == original and
                 compiler_source(args.compiler_source) == compiler and
                 project_copy(args.project_checkout, args.project_source,
-                             decision) == project and
+                             decision, candidate_path) == project and
                 copied_artifacts(args.copy_build) == copied and
                 candidate_lock(args.candidate_lock, tracked_lock) == lock and
                 source_admission(args.project_admission,
@@ -715,7 +718,7 @@ def main() -> None:
              "loader_stderr", "image_pins", "image_pins_sha256")),
             "attest requires prepared evidence and complete image receipts")
     project = project_copy(args.project_checkout, args.project_source,
-                           decision)
+                           decision, candidate_path)
     copied = copied_artifacts(args.copy_build)
     verify_prepared(ordinary(args.evidence / "F-copy-prepared.json"),
                     prepared_payload(compiler, project, original, copied,
@@ -753,7 +756,7 @@ def main() -> None:
             copied_artifacts(args.copy_build) == copied and
             compiler_source(args.compiler_source) == compiler and
             project_copy(args.project_checkout, args.project_source,
-                         decision) == project and
+                         decision, candidate_path) == project and
             candidate_lock(args.candidate_lock, tracked_lock) == lock and
             source_admission(args.project_admission,
                              args.project_admission_sha256, forbidden) == decision and
@@ -773,7 +776,7 @@ def main() -> None:
             final_copied_artifacts(args.copy_build, digest(compat)) == copied and
             compiler_source(args.compiler_source) == compiler and
             project_copy(args.project_checkout, args.project_source,
-                         decision) == project and
+                         decision, candidate_path) == project and
             candidate_lock(args.candidate_lock, tracked_lock) == lock and
             source_admission(args.project_admission,
                              args.project_admission_sha256, forbidden) == decision and

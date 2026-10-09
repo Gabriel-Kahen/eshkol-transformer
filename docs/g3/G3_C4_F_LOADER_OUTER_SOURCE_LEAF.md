@@ -12,11 +12,15 @@ conditional compiled-gate design's historical source checkout.
 
 The decision must bind a clean exact compiler checkout, a clean public source
 checkout authenticated by its independent and ROOT source-admission reviews,
-the historical failed F output, a fresh candidate/output pair, the exact
+the historical failed F output, a fresh stage/output pair, the exact
 external 6803 lock, accepted f31 tool/runtime inventories, the accepted
 offline native-controls-only review, and the ordinary Docker client. The
-guest runs the accepted copied-F `prepare` phase and bounded loader collector
-at their fixed paths. It does not produce bootstrap provenance or execute the
+guest binds the empty stage root at `/stage`; the opt-in, exact
+`--outer-stage-child` attester route creates previously absent
+`/stage/candidate`. The attester's original `/candidate` default remains
+unchanged, and arbitrary destination paths still fail. The guest runs the
+accepted copied-F `prepare` phase and bounded loader collector at their fixed
+paths. It does not produce bootstrap provenance or execute the
 public G2 package. The four selected F artifacts are fresh ordinary copies;
 the ten generated LLVM links remain only in the original read-only inventory.
 
@@ -29,7 +33,10 @@ per-stream acquisition caps, actual `wait4` status and bounded writer closure.
 The container is identified by the exact created CID, label, name, image,
 effective entrypoint/command, user, environment, workdir, resource limits,
 host mount options and six bind rows before any cleanup; stopped inspect,
-owned removal and absence are required. Failed and partial receipts remain in the consumed
+an actual `docker wait` decimal result matching the stopped `ExitCode`, owned
+removal and absence are required. Stopped state must be exited, not running,
+PID zero and not OOM-killed; a genuine never-started state is cleanup-only.
+Failed and partial receipts remain in the consumed
 attempt. Any incomplete closure is a failed result, never permission to retry.
 
 Current tests exercise command shape, direct CLI denial, real owned child

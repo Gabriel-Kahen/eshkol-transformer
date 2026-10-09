@@ -21,7 +21,8 @@ def main() -> None:
             "/workspace", "--copy-build", "/out/build-off",
             "--candidate-lock", "/bundle/public-g2-6803.lock",
             "--offline-review", "/bundle/offline/SHA256SUMS-ROOT-REVIEW",
-            "--project-source", "/candidate", "--project-checkout", "/source",
+            "--project-source", "/stage/candidate", "--outer-stage-child",
+            "--project-checkout", "/source",
             "--project-admission", "/bundle/public-g2-source-admission.json",
             "--project-admission-sha256", args.source_admission_sha256,
             "--evidence", "/out/evidence"]
