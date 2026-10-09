@@ -25,6 +25,12 @@ objects stay there with the raw streams and exit. On success, the builder must
 copy its selected emissions and remove its scratch; the wrapper requires
 `tmp` empty before publishing the extraction bundle. The guest's ephemeral
 `/tmp` is never relied on for failure evidence.
+The wrapper checks each raw receipt write even under Bash's `if !` error
+handling. It creates the numeric child-exit receipt with an exclusive,
+no-follow open and syncs all four unique ordinary receipts before success;
+a missing, replaced, malformed, or unwritable receipt fails the extraction
+while retaining the stage. A receipt failure does not imply a different child
+exit or an accepted package.
 
 Actual normal and sanitizer emissions, exact source/symbol/object/ABI manifest
 derivation, two fresh reproducible builds, private-link denial, compiled fixture

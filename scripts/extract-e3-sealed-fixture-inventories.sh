@@ -33,6 +33,7 @@ inputs=(
   "${PROJECT_ROOT}/scripts/e3-private-native-inputs.sh"
   "${PROJECT_ROOT}/scripts/e3-sealed-fixture-generated-source-stage.sh"
   "${PROJECT_ROOT}/scripts/e3-sealed-fixture-extract-owned-tmp.sh"
+  "${PROJECT_ROOT}/scripts/e3-sealed-fixture-check-receipts.py"
   "${PROJECT_ROOT}/scripts/generate-e3-sealed-fixture-source.py"
   "${PROJECT_ROOT}/native/p1_identity.c"
   "${PROJECT_ROOT}/native/f32_tensor.c"

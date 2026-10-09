@@ -940,6 +940,8 @@ the ordinary fixture package still fails closed until those actual inventories
 are reviewed and committed. No compiler or fixture runtime ran for this route.
 The extraction scratch is owned under its persistent stage, so a failed guest
 run retains partial emissions rather than losing them with ephemeral `/tmp`.
+Checked raw-receipt writes and exclusive no-follow numeric-exit creation now
+deny apparent success when the persistent stage cannot retain genuine output.
 The tracked staged source lock still names `fe9dfd52…`; the reviewed native-F
 compiler is `6803dbe2…`. An accepted external-lock/staged-common route exists,
 but fresh E3 source, loader/provenance and heavy-slot admission are still

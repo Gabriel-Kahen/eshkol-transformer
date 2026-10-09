@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import importlib.util
 from pathlib import Path
 import subprocess
 import tempfile
@@ -13,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 BUILDER = ROOT / "scripts/build-e1b-consumer.sh"
 WRAPPER = ROOT / "scripts/extract-e3-sealed-fixture-inventories.sh"
 OWNED = ROOT / "scripts/e3-sealed-fixture-extract-owned-tmp.sh"
+RECEIPTS = ROOT / "scripts/e3-sealed-fixture-check-receipts.py"
 
 
 def source_boundary(body: str) -> None:
@@ -98,6 +100,7 @@ class ExtractionSource(unittest.TestCase):
         self.assertIn('! -e "${stage}/e3_sealed_fixture_package.o"', wrapper)
         self.assertIn('! -e "${stage}/e3_sealed_fixture_package.o.evidence"', wrapper)
         self.assertIn('compiler.exit.raw', OWNED.read_text())
+        self.assertIn(str(RECEIPTS.relative_to(ROOT)), wrapper)
         self.assertIn('E3_SEALED_FIXTURE_EXTRACT=1', wrapper)
         self.assertIn('e3_extract_owned_command "${stage}" /usr/bin/env', wrapper)
 
@@ -119,6 +122,59 @@ e3_extract_owned_command "$@"
             self.assertEqual((stage / "compiler.exit.raw").read_text(), "23\n")
             self.assertEqual((stage / "tmp/emitted/private.ll").read_bytes(), b"raw-private-ir")
             self.assertFalse((stage / "e3_sealed_fixture_package.o").exists())
+
+    def test_child_success_with_failed_status_write_is_not_success(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            stage = Path(temp) / "stage"
+            stage.mkdir(mode=0o700)
+            command = 'ln -s /dev/full "$1/compiler.exit.raw"; printf retained-stdout; exit 0'
+            script = 'set -euo pipefail; source "$1"; shift; e3_extract_owned_command "$@"'
+            result = subprocess.run(
+                ["/usr/bin/bash", "-c", script, "test", str(OWNED), str(stage),
+                 "/usr/bin/bash", "-c", command, "child", str(stage)],
+                cwd=ROOT, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual((stage / "compiler.stdout.raw").read_bytes(), b"retained-stdout")
+            self.assertTrue((stage / "compiler.exit.raw").is_symlink())
+            self.assertIn("compiler.exit.raw", result.stderr)
+
+    def test_receipt_checker_denies_foreign_status(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            paths = [Path(temp) / name for name in
+                     ("argv", "stdout", "stderr", "exit")]
+            for path in paths[:-1]:
+                path.write_bytes(b"raw")
+            paths[-1].write_bytes(b"23\n")
+            cmd = ["/usr/bin/python3", "-B", str(RECEIPTS), *(str(p) for p in paths)]
+            self.assertEqual(subprocess.run(cmd, capture_output=True).returncode, 0)
+            for bad in (b"23\nextra", b"256\n", b"+0\n"):
+                paths[-1].write_bytes(bad)
+                self.assertNotEqual(subprocess.run(cmd, capture_output=True).returncode, 0)
+            paths[-1].unlink()
+            paths[-1].symlink_to("/dev/full")
+            self.assertNotEqual(subprocess.run(cmd, capture_output=True).returncode, 0)
+            paths[-1].unlink()
+            paths[-1].write_bytes(b"0\n")
+            paths[1].unlink()
+            paths[1].symlink_to(paths[0])
+            self.assertNotEqual(subprocess.run(cmd, capture_output=True).returncode, 0)
+            paths[1].unlink()
+            os.link(paths[0], paths[1])
+            self.assertNotEqual(subprocess.run(cmd, capture_output=True).returncode, 0)
+            self.assertNotEqual(subprocess.run(cmd[:-1] + [str(paths[0])],
+                                              capture_output=True).returncode, 0)
+
+    def test_checked_receipt_write_rejects_full_device(self) -> None:
+        spec = importlib.util.spec_from_file_location("e3_receipts", RECEIPTS)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        fd = os.open("/dev/full", os.O_WRONLY)
+        try:
+            with self.assertRaises(OSError):
+                module._write_checked(fd, b"0\n")
+        finally:
+            os.close(fd)
 
 
 if __name__ == "__main__":
