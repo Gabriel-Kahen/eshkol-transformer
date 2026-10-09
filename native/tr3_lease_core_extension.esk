@@ -1058,7 +1058,7 @@
   (let ((issued '())
         (pending (vector #f))
         (tail (vector #f #f #f #f)))
-    ;; row: [capsule,trainer,record,originals,controls,epoch,phase,staged,spent]
+    ;; row: [capsule,trainer,record,originals,controls,epoch,phase,one-use-grant,spent]
     (let*
       ((fail (lambda (message)
                (tr3-lease-operation-fail 'invalid-state
@@ -1219,9 +1219,18 @@
                      (vector-copy (vector-ref o 10)))))
           ((eq? mode 'trainer) (vector-ref (live-row a) 1))
           ((eq? mode 'enter)
-           (let ((row (live-row a)))
+           (let* ((row (live-row a))
+                  (record (vector-ref row 2))
+                  (counts (vector (vector-ref record 19)
+                                  (vector-ref record 20)
+                                  (vector-ref record 21)))
+                  (current (copy-controls record counts)))
              (if (or (not (eq? (vector-ref row 6) 'idle))
                      (not (live-originals? row))
+                     (not (same-controls? (vector-ref row 4) current))
+                     (not (= (o2-optimizer-completed-updates-internal
+                               (vector-ref record 13))
+                             (vector-ref counts 1)))
                      (not (eq? (vector-ref (vector-ref row 2) 3) 'idle))
                      (not (eq? (tr3-lease-record-for-shell-internal
                                   (vector-ref row 1) 'g3r-controls-capsule)
@@ -1230,11 +1239,13 @@
              (if (not (or (eq? b 'step) (eq? b 'restore)
                           (eq? b 'release)))
                  (fail "unknown capsule operation"))
+             (vector-set! row 7 b)
              (vector-set! row 6 b)
              #t))
           ((eq? mode 'leave)
            (let ((row (live-row a)))
              (if (or (not (eq? (vector-ref row 6) b))
+                     (vector-ref row 7)
                      (vector-ref tail 0)
                      (not (eq? (vector-ref (vector-ref row 2) 3) 'idle))
                      (vector-ref (vector-ref row 2) 4))
@@ -1244,14 +1255,20 @@
           ((eq? mode 'guard)
            (let ((row (find-record a)))
              (if row
-                 (if (not (eq? (vector-ref row 6) b))
-                     (fail "direct mutation of an enrolled trainer")))
+                 (begin
+                   (if (or (not (eq? (vector-ref row 6) b))
+                           (not (eq? (vector-ref row 7) b)))
+                       (fail "direct mutation of an enrolled trainer"))
+                   ;; Lower admission consumes the sole grant. A nested direct
+                   ;; call in the same outer operation cannot reuse it.
+                   (vector-set! row 7 #f)))
              #t))
           ((eq? mode 'stage-step)
            (let ((row (find-record a)))
              (if row
                  (begin
                    (if (or (not (eq? (vector-ref row 6) 'step))
+                           (vector-ref row 7)
                            (vector-ref tail 0)
                            (not (live-originals? row)))
                        (fail "step capsule staging is stale"))
@@ -1270,6 +1287,7 @@
              (if row
                  (begin
                    (if (or (not (eq? (vector-ref row 6) 'restore))
+                           (vector-ref row 7)
                            (vector-ref tail 0)
                            (not (live-originals? row)))
                        (fail "restore capsule staging is stale"))
@@ -1297,6 +1315,7 @@
           ((eq? mode 'abort-staged)
            (let ((row (live-row a)))
              (if (eq? row (vector-ref tail 0)) (clear-tail!))
+             (vector-set! row 7 #f)
              #t))
           ((eq? mode 'check-controls)
            (let ((row (live-row a)))
@@ -1324,6 +1343,7 @@
            ;; The trainer shell is invalid now. Do not ask its registry for it.
            (let ((row (live-row a)))
              (if (or (not (eq? (vector-ref row 6) 'release))
+                     (vector-ref row 7)
                      (not (record-absent? (vector-ref row 2))))
                  (tr3-lease-fail-stop 134))
              (vector-set! row 1 #f)

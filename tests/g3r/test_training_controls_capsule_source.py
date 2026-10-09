@@ -9,6 +9,7 @@ CORE = ROOT / "native/tr3_lease_core_extension.esk"
 STEP = ROOT / "native/tr3_step_transaction_extension.esk"
 TAIL = ROOT / "native/tr3_step_commit_tail_extension.esk"
 RESTORE = ROOT / "native/tr3_c_joint_restore_extension.esk"
+TRAIN = ROOT / "native/tr3_public_train_extension.esk"
 WRAPPER = ROOT / "native/g3r_training_controls_extension.esk"
 AGGREGATE = ROOT / "native/g3r_training_controls_root.esk"
 MANIFEST = ROOT / "native/g3r_training_controls_source_closure.txt"
@@ -45,6 +46,14 @@ def branch(route, name):
     raise AssertionError(f"route mode {name} absent")
 
 
+def check_train_source(train):
+    entry = source_slice(train, "(define (tr3-train-run-internal", "(define (trainer-train!")
+    gate = entry.find("(tr3-controls-route 'guard record 'train")
+    begin = entry.find("(tr3-metrics-train-begin-internal!)")
+    if gate == -1 or begin == -1 or gate > begin:
+        raise ValueError("direct trainer-train metrics mutate before capsule denial")
+
+
 def check_source(core, step, tail, restore, wrapper, aggregate, manifest):
     f = parse(core)[-1]
     if f[:2] != ["define", "tr3-controls-route"] or f[2][0] != "let":
@@ -65,6 +74,16 @@ def check_source(core, step, tail, restore, wrapper, aggregate, manifest):
                 "retire"}
     for name in required:
         branch(route, name)
+    enter_text = str(branch(route, "enter"))
+    if not ("['same-controls?', ['vector-ref', 'row', '4'], 'current']" in enter_text
+            and "['o2-optimizer-completed-updates-internal'" in enter_text
+            and enter_text.find("['same-controls?'") <
+            enter_text.find("['vector-set!', 'row', '6', 'b']")):
+        raise ValueError("prior control journal not checked before capsule enter")
+    grant = str(branch(route, "guard"))
+    if not ("['vector-ref', 'row', '7']" in grant and
+            "['vector-set!', 'row', '7', '#f']" in grant):
+        raise ValueError("same-phase lower call grant is reusable")
     # A stale/copy shell is never admitted by its fields: only an issuer-list
     # exact identity search can find it. The source evaluator below exercises
     # this predicate with distinct but equal-shaped objects.
@@ -107,6 +126,7 @@ def check_source(core, step, tail, restore, wrapper, aggregate, manifest):
             raise ValueError(f"enrolled mutator guard moved after write: {gate}")
     if "(tr3-controls-route 'guard record 'evaluate" not in core:
         raise ValueError("enrolled evaluation bypass introduced")
+    check_train_source(TRAIN.read_text())
     step_pre = source_slice(tail, "(define (tr3-step-commit-with-epochs-and-precommit-internal!", "(define (tr3-step-commit-with-epochs-internal!")
     if not (step_pre.index("(precommit)") <
             step_pre.index("'stage-step") <
@@ -214,6 +234,11 @@ def eval_route_branch(name, env):
             for key, value in args[0]:
                 inner[key] = run(value, local)
             return run_sequence(args[1:], inner)
+        if op == "let*":
+            inner = dict(local)
+            for key, value in args[0]:
+                inner[key] = run(value, inner)
+            return run_sequence(args[1:], inner)
         if op == "if":
             return run(args[1], local) if run(args[0], local) else (
                 run(args[2], local) if len(args) > 2 else None)
@@ -221,17 +246,36 @@ def eval_route_branch(name, env):
             return run_sequence(args, local)
         if op == "or":
             return any(run(x, local) for x in args)
+        if op == "and":
+            return all(run(x, local) for x in args)
+        if op == "=":
+            return run(args[0], local) == run(args[1], local)
         if op == "not":
             return not run(args[0], local)
         if op == "eq?":
-            return run(args[0], local) is run(args[1], local)
+            left, right = run(args[0], local), run(args[1], local)
+            return left == right if isinstance(left, str) and isinstance(right, str) else left is right
         if op == "vector-ref":
             return run(args[0], local)[run(args[1], local)]
+        if op == "vector":
+            return [run(x, local) for x in args]
         if op == "vector-set!":
             run(args[0], local)[run(args[1], local)] = run(args[2], local)
             return None
         if op == "find-record":
             return local.get("registered") if run(args[0], local) is local["a"] else None
+        if op == "live-row":
+            return local["registered_row"] if run(args[0], local) is local["a"] else None
+        if op == "live-originals?":
+            return local["originals_ok"]
+        if op == "copy-controls":
+            return local["current_controls"]
+        if op == "same-controls?":
+            return run(args[0], local) == run(args[1], local)
+        if op == "o2-optimizer-completed-updates-internal":
+            return local["o2_updates"]
+        if op == "tr3-lease-record-for-shell-internal":
+            return local["record"] if run(args[0], local) is local["trainer"] else None
         if op == "clear-tail!":
             local["tail"][:] = [False, False, False, False]
             return None
@@ -276,14 +320,38 @@ class CapsuleSourceTests(unittest.TestCase):
         record, row = object(), [None] * 9
         for operation in ("step", "restore", "release"):
             row[6] = "idle"
+            row[7] = False
             with self.assertRaisesRegex(ValueError, "enrolled mutation"):
                 eval_route_branch("guard", {"a": record, "b": operation,
                                             "registered": row})
             row[6] = operation
+            row[7] = operation
             self.assertTrue(eval_route_branch("guard", {"a": record,
                 "b": operation, "registered": row}))
+            self.assertFalse(row[7])
+            with self.assertRaisesRegex(ValueError, "enrolled mutation"):
+                eval_route_branch("guard", {"a": record, "b": operation,
+                                            "registered": row})
         self.assertTrue(eval_route_branch("guard", {"a": record,
             "b": "step", "registered": None}))
+
+    def test_parsed_enter_rejects_idle_control_drift_before_grant(self):
+        shell, trainer, optimizer = object(), object(), object()
+        record = [None] * 22
+        record[3], record[4], record[13] = "idle", False, optimizer
+        record[19:22] = [4, 3, 2]
+        row = [shell, trainer, record, None, ["rng", "cursor", 4], 0,
+               "idle", False, False]
+        env = {"a": shell, "b": "step", "registered_row": row,
+               "record": record, "trainer": trainer, "originals_ok": True,
+               "current_controls": ["rng", "cursor", 4], "o2_updates": 3}
+        self.assertTrue(eval_route_branch("enter", env))
+        self.assertEqual((row[6], row[7]), ("step", "step"))
+        row[6], row[7] = "idle", False
+        env["current_controls"] = ["changed", "cursor", 4]
+        with self.assertRaisesRegex(ValueError, "enrolled mutation"):
+            eval_route_branch("enter", env)
+        self.assertEqual((row[6], row[7]), ("idle", False))
 
     def test_parsed_step_and_restore_tail_publish_exact_staged_epoch(self):
         record = object()
@@ -306,6 +374,28 @@ class CapsuleSourceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "guard"):
             check_source(CORE.read_text(), changed, TAIL.read_text(), RESTORE.read_text(),
                          WRAPPER.read_text(), AGGREGATE.read_text(), MANIFEST.read_text())
+
+    def test_mutant_train_gate_after_metrics(self):
+        train = TRAIN.read_text()
+        changed = train.replace("(tr3-controls-route 'guard record 'train #f #f #f)", "#t", 1)
+        with self.assertRaisesRegex(ValueError, "metrics mutate"):
+            check_train_source(changed)
+
+    def test_mutant_enter_without_prior_journal_check(self):
+        changed = CORE.read_text().replace(
+            "(not (same-controls? (vector-ref row 4) current))", "#f", 1)
+        with self.assertRaisesRegex(ValueError, "prior control journal"):
+            check_source(changed, STEP.read_text(), TAIL.read_text(),
+                         RESTORE.read_text(), WRAPPER.read_text(),
+                         AGGREGATE.read_text(), MANIFEST.read_text())
+
+    def test_mutant_reusable_same_phase_grant(self):
+        changed = CORE.read_text().replace(
+            "(vector-set! row 7 #f)))\n             #t))", "#t))\n             #t))", 1)
+        with self.assertRaisesRegex(ValueError, "same-phase"):
+            check_source(changed, STEP.read_text(), TAIL.read_text(),
+                         RESTORE.read_text(), WRAPPER.read_text(),
+                         AGGREGATE.read_text(), MANIFEST.read_text())
 
     def test_mutant_tail_allocation(self):
         changed = CORE.read_text().replace("(clear-tail!))))", "(cons a b) (clear-tail!))))", 1)

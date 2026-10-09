@@ -4,7 +4,11 @@
 and T2/D2 lineage admission. It returns a private capsule, not a trainer shell.
 `g3r-controls-step!` and `g3r-controls-restore!` use the existing trainer
 transactions; direct mutation of an enrolled trainer is denied before receiver
-writes. Fixed journal assignments occur only in the existing irreversible
+writes. Enter checks the live copied controls against the prior issuer journal
+before changing phase. The lower entry consumes one operation grant, so a
+reentrant direct call in the same phase cannot reuse it. Direct installed
+`trainer-train!` is denied before metrics staging. Fixed journal assignments
+occur only in the existing irreversible
 step and restore control tails, after their successors were copied and rooted.
 
 `g3r-controls-capture-release!` copies RNG, current/epoch cursor, tokenizer,

@@ -119,6 +119,8 @@
                              (tr3-lease-record-for-shell-internal
                                trainer 'g3r-controls-capsule))
                          (tr3-controls-route
+                           'abort-staged capsule #f #f #f #f)
+                         (tr3-controls-route
                            'leave capsule 'release #f #f #f)))
                    (raise caught))))
       ;; Install cleanup before either issuer lookup can fail.

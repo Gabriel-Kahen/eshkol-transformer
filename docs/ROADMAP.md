@@ -1770,6 +1770,9 @@ rows retain no owner references. This proves source ordering and control
 provenance only. Native F32 value and gradient storage can change under the
 same handles, so a later SAVE gate must establish and validate an independent
 same-handle parameter/gradient bit witness while holding the owner reservation.
+The focused source successor requires prior journal equality before each
+operation, consumes a one-use lower-entry grant, and denies direct installed
+training before metrics staging; generated behavior is still unrun.
 Compiled no-reentry, package linkage, full C2 SAVE, cold LOAD, and resumed
 equivalence remain open.
 
