@@ -1710,7 +1710,10 @@ marks the shell closed before native close. A fixed 64-row process limit
 denies unbounded retention and explicitly rejects further opens.
 Source-shape and mutation controls pass. This is not yet compiled or integrated
 with G3 construction, O2 adoption, C2 SAVE, or cold LOAD; generated package
-behavior and full lifecycle acceptance remain separate gates.
+behavior and full lifecycle acceptance remain separate gates. A later source
+audit found that the global completed-row list and row-held callback can be
+replaced to admit a forged ordinary D2 shell; that authority gap is held for
+a separate lexical-registry successor before G3 or SAVE may consume D2 lineage.
 
 An isolated private M3 construction source leaf now captures the exact original
 resolved X1 shell in the same call that constructs the model. A fixed private
@@ -1719,11 +1722,12 @@ keeps its two-argument behavior and creates no lineage. A source-private X1
 accessor retains the original registered resolved entry. The private row binds
 the returned model, authentic M3 entry and initializer, original X1 shell and
 entry, and canonical and fingerprint strings before the seal tail returns the
-shell. The construction core and ticket check share a lexical scope: the
-fixed private route issues a ticket, and no caller can pass a forged lineage
-to the core. An interrupted abort or seal fails closed. A lexical row witness
-rejects a copied row, an ordinary model, and an equal-byte
-alternate X1 shell. There is no live M3 retirement API, so completed rows
+shell. The construction core, pending ticket, completed-row registry, and
+issuer-held identity snapshot share one lexical scope. The fixed private route
+alone issues the ticket; source-state controls evaluate genuine preflight and
+reject forged, copied, stale, or rebound rows. Require returns only a checked
+boolean. An interrupted abort or seal fails closed. There is no live M3
+retirement API, so completed rows
 remain rooted with a fixed 64-row process limit. Source and failure-cut
 controls do not prove generated Eshkol behavior, no-reentry, native cleanup,
 G3/O2 lineage, C2 SAVE, cold LOAD, or resumed continuation.

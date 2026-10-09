@@ -1,41 +1,8 @@
 ;;; Private same-call original-X1/M3 witness. Load after the CLI3 model core.
-;;; Ordinary M3 creation has no lineage row and remains ineligible for SAVE.
-(define g3r-x1-model-lineage-registry m3t-model-lineage-registry)
-
+;;; The completed registry, issuer snapshot, and construction core stay lexical
+;;; in M3; neither route returns a mutable authority row.
 (define (g3r-x1-model-create config initializer)
   (m3t-model-create-route 'private config initializer))
 
 (define (g3r-x1-model-require model config)
-  (let ((operation 'g3r-x1-model-require))
-    (let search ((rows (vector-ref g3r-x1-model-lineage-registry 0)))
-      (cond
-        ((null? rows)
-         (m3t-fail 'invalid-argument operation
-                    "model has no creation-time X1 lineage"))
-        ((not (and (pair? rows) (vector? (car rows))
-                   (= (vector-length (car rows)) 9)))
-         (m3t-fail 'internal operation "X1 model lineage row malformed"))
-        ((eq? (vector-ref (car rows) 0) model)
-         (let* ((row (car rows))
-                (entry (m3t-entry model 'model operation #t))
-                (original (vector-ref row 2))
-                (x1-entry (vector-ref row 3))
-                (data (vector-ref entry 7))
-                (canonical (x1-private-config-canonical original))
-                (fingerprint (x1-private-config-fingerprint original)))
-           (if (not (and (eq? (vector-ref row 1) 'live)
-                         (eq? original config)
-                         (eq? (x1-private-resolved-entry original) x1-entry)
-                         (eq? (vector-ref row 8) (vector-ref entry 5))
-                         (eq? (vector-ref row 4) entry)
-                         (procedure? (vector-ref row 7))
-                         ((vector-ref row 7) row)
-                         (vector? data) (= (vector-length data) 2)
-                         (string=? (vector-ref row 5) canonical)
-                         (string=? (vector-ref row 6) fingerprint)
-                         (string=? (vector-ref data 0) canonical)
-                         (string=? (vector-ref data 1) fingerprint)))
-               (m3t-fail 'invalid-state operation
-                          "original X1 shell or M3 model changed"))
-           row))
-        (else (search (cdr rows)))))))
+  (m3t-model-create-route 'require model config))
