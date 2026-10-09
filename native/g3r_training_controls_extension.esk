@@ -1,0 +1,163 @@
+;;; Private diagnostic-C2 trainer controls; no installed/public SAVE facade.
+;;; The core lexical issuer is distinct from the caller-visible TR3 record.
+(define (g3r-controls-fail category message)
+  (et-e1b-private-raise category 'g3r-controls-capsule message '() #f))
+
+(define (g3r-controls-graph-check! roots)
+  (let* ((resolved (vector-ref roots 0))
+         (model (vector-ref roots 1))
+         (model-entry (vector-ref roots 2))
+         (optimizer (vector-ref roots 3))
+         (optimizer-entry (vector-ref roots 4))
+         (dataset (vector-ref roots 5))
+         (dataset-state (vector-ref roots 6))
+         (handles (vector-ref roots 7))
+         (carriers (vector-ref roots 8))
+         (tokenizer (vector-ref roots 9)))
+    (if (not (and (g3r-x1-model-require model resolved)
+                  (g3r-d2-lineage-require dataset tokenizer)
+                  (eq? (t2-private-entry tokenizer)
+                       (t1-private-entry tokenizer))
+                  (eq? (g3t-model-entry-live model
+                          'g3r-controls-capsule #f) model-entry)
+                  (eq? (o2-require-optimizer
+                          'g3r-controls-capsule optimizer)
+                       optimizer-entry)
+                  (eq? (d2-open-dataset-state
+                          dataset 'g3r-controls-capsule)
+                       dataset-state)
+                  (tr3-lease-vector-eq?
+                    (vector-ref model-entry 8) handles 14)
+                  (tr3-lease-vector-identical?
+                    handles (vector-ref optimizer-entry 5) 14)))
+        (g3r-controls-fail 'invalid-state
+          "original training graph changed"))
+    (tr3-lease-p1-status!
+      (tr3-p1-fixed-recheck-internal
+        model (vector-ref roots 10) handles carriers)
+      'g3r-controls-capsule)
+    (tr3-lease-m3-idle! model-entry 'g3r-controls-capsule)
+    (tr3-lease-d2-idle! dataset-state 'g3r-controls-capsule)
+    #t))
+
+(define (g3r-controls-trainer-create resolved tokenizer dataset model optimizer)
+  ;; All issuer inputs exist before the genuine five-argument constructor.
+  (if (not (and (g3r-x1-model-require model resolved)
+                (g3r-d2-lineage-require dataset tokenizer)))
+      (g3r-controls-fail 'invalid-argument
+        "trainer inputs lack original construction lineage"))
+  (let ((capsule #f))
+    (guard (caught
+             (#t (begin
+                   (if capsule
+                       (guard (cleanup (#t (tr3-lease-fail-stop 134)))
+                         (let ((trainer
+                                 (tr3-controls-route
+                                   'trainer capsule #f #f #f #f)))
+                           (tr3-controls-route
+                             'enter capsule 'release #f #f #f)
+                           (trainer-release! trainer)
+                           (tr3-controls-route
+                             'released capsule #f #f #f #f)
+                           (tr3-controls-route
+                             'retire capsule #f #f #f #f))))
+                   (raise caught))))
+      (set! capsule
+        (tr3-controls-route 'create resolved tokenizer dataset model
+                            optimizer))
+      (g3r-controls-graph-check!
+        (tr3-controls-route 'originals capsule #f #f #f #f))
+      capsule)))
+
+(define (g3r-controls-step! capsule)
+  (tr3-controls-route 'enter capsule 'step #f #f #f)
+  (guard (caught
+           (#t (begin
+                 (guard (cleanup (#t (tr3-lease-fail-stop 134)))
+                   (tr3-controls-route
+                     'abort-staged capsule #f #f #f #f)
+                   (tr3-controls-route 'leave capsule 'step #f #f #f))
+                 (raise caught))))
+    (let ((result
+            (trainer-step!
+              (tr3-controls-route 'trainer capsule #f #f #f #f))))
+      (tr3-controls-route 'leave capsule 'step #f #f #f)
+      result)))
+
+(define (g3r-controls-restore! capsule state)
+  (tr3-controls-route 'enter capsule 'restore #f #f #f)
+  (guard (caught
+           (#t (begin
+                 (guard (cleanup (#t (tr3-lease-fail-stop 134)))
+                   (tr3-controls-route
+                     'abort-staged capsule #f #f #f #f)
+                   (tr3-controls-route
+                     'leave capsule 'restore #f #f #f))
+                 (raise caught))))
+    (let ((result
+            (trainer-load-state!
+              (tr3-controls-route 'trainer capsule #f #f #f #f)
+              state)))
+      (tr3-controls-route 'leave capsule 'restore #f #f #f)
+      result)))
+
+(define (g3r-controls-capture-release! capsule)
+  (tr3-controls-route 'enter capsule 'release #f #f #f)
+  (let ((trainer #f)
+        (roots #f)
+        (released? #f))
+    (guard (caught
+             (#t (begin
+                   (if released?
+                       (guard (cleanup (#t (tr3-lease-fail-stop 134)))
+                         (tr3-controls-route
+                           'retire capsule #f #f #f #f))
+                       ;; A release exception is recoverable only if the exact
+                       ;; original trainer is still enrolled. No blind retry.
+                       (guard (uncertain (#t (tr3-lease-fail-stop 134)))
+                         (if trainer
+                             (tr3-lease-record-for-shell-internal
+                               trainer 'g3r-controls-capsule))
+                         (tr3-controls-route
+                           'leave capsule 'release #f #f #f)))
+                   (raise caught))))
+      ;; Install cleanup before either issuer lookup can fail.
+      (set! trainer (tr3-controls-route 'trainer capsule #f #f #f #f))
+      (set! roots (tr3-controls-route 'originals capsule #f #f #f #f))
+      (g3r-controls-graph-check! roots)
+      (let* ((record
+               (tr3-lease-record-for-shell-internal
+                 trainer 'g3r-controls-capsule))
+             (parent
+               (vector #f #f #f #f #f #f #f (make-vector 5 #f)))
+             (controls (tr3-c-snapshot-controls! record parent))
+             (epoch (tr3-controls-route
+                      'check-current capsule #f #f #f #f))
+             (current (vector-ref (vector-ref controls 2) 0))
+             (updates (vector-ref (vector-ref controls 4) 1)))
+        ;; All copies/validation are complete before trainer-unenroll.
+        (trainer-release! trainer)
+        (set! released? #t)
+        (tr3-controls-route 'released capsule #f #f #f #f)
+        ;; The trainer shell is dead. Recheck only the separately retained
+        ;; model, optimizer and dataset graph plus copied control bytes.
+        (g3r-controls-graph-check! roots)
+        (if (or (not (d2-core-bytes=?
+                       (d2-token-dataset-cursor (vector-ref roots 5))
+                       current))
+                (not (= (o2-optimizer-completed-updates-internal
+                          (vector-ref roots 3))
+                        updates)))
+            (g3r-controls-fail 'invalid-state
+              "postrelease live cursor or update count changed"))
+        (if (not (= epoch
+                    (tr3-controls-route 'epoch capsule #f #f #f #f)))
+            (g3r-controls-fail 'invalid-state
+              "capsule mutation epoch changed"))
+        (tr3-controls-route 'publish capsule #f #f #f #f)))))
+
+(define (g3r-controls-captured-copy capsule)
+  (tr3-controls-route 'snapshot capsule #f #f #f #f))
+
+(define (g3r-controls-retire! capsule)
+  (tr3-controls-route 'retire capsule #f #f #f #f))

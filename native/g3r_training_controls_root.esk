@@ -1,0 +1,3 @@
+;;; Private diagnostic-C2 training-controls capsule only.
+(load "g3r_g3_creation_lineage_root.esk")
+(load "g3r_training_controls_extension.esk")

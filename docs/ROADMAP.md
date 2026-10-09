@@ -1759,6 +1759,20 @@ uncertain close stops the process. Its lexical records have a 64-row process
 limit. Source controls alone do not prove compiled package behavior, no-reentry,
 C2 checkpoint bytes, post-prefill SAVE, cold LOAD, or resumed continuation.
 
+An isolated source-only private training-controls capsule now issues from the
+genuine five-input TR3 constructor, retains original graph identities in a
+lexical 64-row journal, and stages copied controls before actual step and C2
+restore commit tails. Enrolled direct step, restore, release, and evaluation
+routes deny before mutation; the private route captures RNG, cursors, config,
+tokenizer and counters before genuine trainer release, then checks live graph
+receivers before publishing a detached copy. Issued rows are finite and spent
+rows retain no owner references. This proves source ordering and control
+provenance only. Native F32 value and gradient storage can change under the
+same handles, so a later SAVE gate must establish and validate an independent
+same-handle parameter/gradient bit witness while holding the owner reservation.
+Compiled no-reentry, package linkage, full C2 SAVE, cold LOAD, and resumed
+equivalence remain open.
+
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
 diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use

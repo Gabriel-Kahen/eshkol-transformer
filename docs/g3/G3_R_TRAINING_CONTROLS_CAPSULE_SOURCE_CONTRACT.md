@@ -1,0 +1,23 @@
+# Private training-controls capsule source candidate
+
+`g3r-controls-trainer-create` takes the genuine five TR3 inputs after X1/M3
+and T2/D2 lineage admission. It returns a private capsule, not a trainer shell.
+`g3r-controls-step!` and `g3r-controls-restore!` use the existing trainer
+transactions; direct mutation of an enrolled trainer is denied before receiver
+writes. Fixed journal assignments occur only in the existing irreversible
+step and restore control tails, after their successors were copied and rooted.
+
+`g3r-controls-capture-release!` copies RNG, current/epoch cursor, tokenizer,
+configuration and counters while the genuine trainer is still live. It then
+releases that trainer and verifies only the separately retained live model,
+dataset and optimizer identities and control values before publishing.
+`g3r-controls-captured-copy` returns detached control bytes. The private row
+is finite (64 cumulative issuances); `g3r-controls-retire!` clears its owner
+references. A release whose completion cannot be authenticated stops the
+process. A failed ordinary operation retains its original error after cleanup.
+
+These are source-level ordering and provenance claims. Generated package
+behavior, callback reentry, no-work emitted tails and sanitizer cleanup remain
+unproved. In particular, the capsule does not authenticate same-handle F32
+parameter or gradient bits. The later native SAVE reservation must supply an
+independent bit witness under its held owner lease before C2 publication.

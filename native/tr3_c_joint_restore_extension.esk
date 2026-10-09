@@ -429,6 +429,7 @@
             (tr3-c-restore-o2-check-internal o2-ledger)
             (tr3-c-restore-i2-prepare-internal! i2-ledger)
             (vector-set! parent 3 'sealed)
+            (tr3-controls-route 'stage-restore record parent #f #f #f)
             #t))))))
 
 (define (tr3-c-joint-release-cell! cell)

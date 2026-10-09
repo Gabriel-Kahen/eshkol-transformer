@@ -108,6 +108,7 @@
     (vector-set! record 19 (vector-ref ledger 3))
     (vector-set! record 20 (vector-ref ledger 4))
     (vector-set! record 21 (vector-ref ledger 5))
+    (tr3-controls-route 'commit-tail record 'step #f #f #f)
     (vector-set! record 4 #f)
     (vector-set! record 3 'idle)
     (vector-set! frame 8 'dead)
@@ -136,7 +137,8 @@
     (guard (caught
              (#t (begin (set! tr3-step-operation-active? #f)
                         (raise caught))))
-      (precommit))
+      (precommit)
+      (tr3-controls-route 'stage-step (vector-ref ledger 1) ledger #f #f #f))
     ;; O2 can return a categorized pre-COMMITTING rejection; the frame remains
     ;; prepared for explicit abort. Once COMMITTING begins, O2 either succeeds
     ;; or fail-stops. The source tail below contains only staged primitives.
