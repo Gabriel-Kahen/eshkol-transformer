@@ -150,10 +150,10 @@ def selected(h, decision_path: Path, decision_sha: str, *, fresh: bool) -> dict[
     return decision
 
 
-def create_argv(h, decision: dict[str, Any]) -> list[str]:
+def create_argv(h, original_create, decision: dict[str, Any]) -> list[str]:
     """Retain the exact H Docker profile and six mounts; replace only Cmd."""
     prior = dict(decision, source_admission_sha256="0" * 64)
-    argv = h.create_argv(prior)
+    argv = original_create(prior)
     old = ["-B", "-m", "tests.g3c4.f_loader_guest",
            "--source-admission-sha256", "0" * 64]
     h.require(argv[-len(old):] == old, "H guest tail changed")
@@ -241,12 +241,13 @@ def bind_and_run(h, h_root: Path, decision_path: Path, decision_sha: str,
         raise ValueError("wrong H lifecycle module")
     replacements = {
         "selected": lambda path, pin, *, fresh: selected(h, path, pin, fresh=fresh),
-        "create_argv": lambda decision: create_argv(h, decision),
+        "create_argv": lambda decision: create_argv(h, original_create, decision),
         "inspect_owned": lambda raw, decision, cid, running, image: inspect_owned(
             h, raw, decision, cid, running, image),
         "guest_output": lambda decision: guest_output(h, decision),
     }
     old = {key: getattr(h, key) for key in replacements}
+    original_create = old["create_argv"]
     try:
         for key, replacement in replacements.items():
             setattr(h, key, replacement)

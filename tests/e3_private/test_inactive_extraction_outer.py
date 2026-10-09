@@ -10,6 +10,7 @@ import tempfile
 import types
 import unittest
 from copy import deepcopy
+from unittest.mock import patch
 
 from tests.e3_private import inactive_extraction_outer as outer
 from tests.e3_private import inactive_extraction_guest as guest
@@ -83,12 +84,56 @@ class Contract(unittest.TestCase):
                         "--source-admission-sha256", decision["source_admission_sha256"]]
 
         decision = {"source": "/selected", "e3_material_pins_sha256": "a" * 64}
-        result = outer.create_argv(H, decision)
+        result = outer.create_argv(H, H.create_argv, decision)
         self.assertEqual(result[:9], H.create_argv(dict(decision, source_admission_sha256="0" * 64))[:9])
         self.assertEqual(result[-4:], outer.GUEST + ["a" * 64])
         with self.assertRaisesRegex(ValueError, "H guest tail changed"):
-            outer.create_argv(types.SimpleNamespace(create_argv=lambda _: ["foreign"],
-                                                   require=H.require), decision)
+            outer.create_argv(types.SimpleNamespace(require=H.require),
+                              lambda _: ["foreign"], decision)
+
+    def test_actual_binding_calls_original_builder_and_restores_h(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "h-source"
+            module_path = source / "tests/g3c4/f_loader_outer.py"
+            module_path.parent.mkdir(parents=True)
+            module_path.write_bytes(b"source binding fixture")
+            decision_path = root / "decision.json"
+            decision = {"bundle": str(root), "source": "/selected",
+                        "e3_material_pins_sha256": "a" * 64}
+            raw = json.dumps(decision, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+            decision_path.write_bytes(raw)
+            prior_tail = ["-B", "-m", "tests.g3c4.f_loader_guest",
+                          "--source-admission-sha256", "0" * 64]
+            calls = []
+
+            def original_create(current):
+                calls.append(current["source_admission_sha256"])
+                return ["docker", "create", "--mount", current["source"]] + prior_tail
+
+            def require(ok, why):
+                if not ok:
+                    raise ValueError(why)
+
+            h = types.SimpleNamespace(
+                __file__=str(module_path), ordinary=Path.read_bytes,
+                require=require, create_argv=original_create,
+                selected=lambda *_args, **_kwargs: None,
+                inspect_owned=lambda *_args: None,
+                guest_output=lambda *_args: None)
+
+            def run_once(_path, _pin, _evidence, _monitor):
+                actual = h.create_argv(decision)
+                self.assertEqual(actual[:4], ["docker", "create", "--mount", "/selected"])
+                self.assertEqual(actual[-4:], outer.GUEST + ["a" * 64])
+
+            h.run_once = run_once
+            with patch.object(outer, "h_source") as authenticated:
+                outer.bind_and_run(h, source, decision_path, sha256(raw).hexdigest(),
+                                   root / "never-written", None)
+            authenticated.assert_called_once()
+            self.assertEqual(calls, ["0" * 64])
+            self.assertIs(h.create_argv, original_create)
 
     def test_inactive_no_authority_and_two_modes(self) -> None:
         plan = outer.contract()
