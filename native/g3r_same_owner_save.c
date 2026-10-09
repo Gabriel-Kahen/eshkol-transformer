@@ -7,6 +7,14 @@
 #include <string.h>
 
 enum { ET_G3R_SAVE_MAX_TOMBSTONES = 64 };
+enum {
+  ET_G3R_O2_UNISSUED,
+  ET_G3R_O2_ATTEMPTED,
+  ET_G3R_O2_PENDING,
+  ET_G3R_O2_CLAIMED,
+  ET_G3R_O2_CLEANUP_PENDING,
+  ET_G3R_O2_ENDED
+};
 typedef struct et_g3r_same_owner_hold {
   struct et_g3r_same_owner_hold *next;
   void *generator;
@@ -16,6 +24,8 @@ typedef struct et_g3r_same_owner_hold {
   void *parameters[14];
   const void *identities[14];
   et_g3r_same_owner_save_error_v1 first;
+  et_o2_optimizer_state *issued_state;
+  unsigned issue_phase;
   unsigned live;
 } et_g3r_same_owner_hold;
 static et_g3r_same_owner_hold *holds;
@@ -190,6 +200,11 @@ int64_t et_g3r_private_same_owner_save_o2_state_v1(
     coordinator_error(NULL, ET_G3R_SAVE_COORD_STALE);
     return -1;
   }
+  if (hold->issue_phase != ET_G3R_O2_UNISSUED) {
+    coordinator_error(hold, ET_G3R_SAVE_COORD_ISSUE);
+    return -1;
+  }
+  hold->issue_phase = ET_G3R_O2_ATTEMPTED;
   if (!destination || *destination) {
     coordinator_error(hold, ET_G3R_SAVE_COORD_ARGUMENT);
     return -1;
@@ -203,13 +218,120 @@ int64_t et_g3r_private_same_owner_save_o2_state_v1(
     o2_error(hold, &error);
     return -1;
   }
+  hold->issued_state = state;
+  hold->issue_phase = ET_G3R_O2_PENDING;
+  if (et_g3r_private_o2_save_issued_match_v1(
+          hold->o2_hold, state, &error) != 0) {
+    o2_error(hold, &error);
+    (void)et_g3r_private_same_owner_save_o2_cancel_v1(hold);
+    return -1;
+  }
   if (et_g3r_private_same_owner_save_check_v1(hold) != 0) {
-    if (et_o2_optimizer_state_release_v1(state, &error) != 0)
-      abort(); /* Detached new state has no external borrower. */
+    (void)et_g3r_private_same_owner_save_o2_cancel_v1(hold);
     return -1;
   }
   *destination = state;
   return 0;
+}
+
+static int64_t release_issued(et_g3r_same_owner_hold *hold) {
+  et_o2_error_v1 error;
+  et_o2_optimizer_state *state = hold->issued_state;
+  if (!state) return 0;
+  if (et_o2_optimizer_state_release_v1(state, &error) == 0) {
+    hold->issued_state = NULL;
+    hold->issue_phase = ET_G3R_O2_ATTEMPTED;
+    return 0;
+  }
+  o2_error(hold, &error); /* Preserve before lifecycle query changes O2 error. */
+  uint32_t lifecycle = 0;
+  if (et_o2_optimizer_state_lifecycle_v1(state, &lifecycle, &error) == 0 &&
+      lifecycle == ET_O2_OPTIMIZER_STATE_DEAD) {
+    hold->issued_state = NULL;
+    hold->issue_phase = ET_G3R_O2_ATTEMPTED;
+    return -1;
+  }
+  hold->issue_phase = ET_G3R_O2_CLEANUP_PENDING;
+  return -1;
+}
+
+int64_t et_g3r_private_same_owner_save_o2_claim_v1(
+    void *candidate, void *state) {
+  et_g3r_same_owner_hold *hold = admit(candidate);
+  if (!hold) {
+    clear_error();
+    coordinator_error(NULL, ET_G3R_SAVE_COORD_STALE);
+    return -1;
+  }
+  if (hold->issue_phase != ET_G3R_O2_PENDING ||
+      !state || state != hold->issued_state) {
+    coordinator_error(hold, ET_G3R_SAVE_COORD_ISSUE);
+    return -1;
+  }
+  et_o2_error_v1 error;
+  if (et_g3r_private_same_owner_save_check_v1(hold) != 0) return -1;
+  if (et_g3r_private_o2_save_issued_match_v1(
+          hold->o2_hold, (et_o2_optimizer_state *)state, &error) != 0) {
+    o2_error(hold, &error);
+    return -1;
+  }
+  hold->issued_state = NULL;
+  hold->issue_phase = ET_G3R_O2_CLAIMED;
+  return 0;
+}
+
+int64_t et_g3r_private_same_owner_save_o2_cancel_v1(void *candidate) {
+  et_g3r_same_owner_hold *hold = admit(candidate);
+  if (!hold) {
+    clear_error();
+    coordinator_error(NULL, ET_G3R_SAVE_COORD_STALE);
+    return -1;
+  }
+  if (hold->issue_phase == ET_G3R_O2_CLAIMED) {
+    coordinator_error(hold, ET_G3R_SAVE_COORD_ISSUE);
+    return -1;
+  }
+  if (hold->issue_phase == ET_G3R_O2_CLEANUP_PENDING) {
+    if (hold->first.source) last_error = hold->first;
+    return -1; /* Only the checked retry may revisit uncertain cleanup. */
+  }
+  if (hold->issue_phase == ET_G3R_O2_UNISSUED)
+    hold->issue_phase = ET_G3R_O2_ATTEMPTED;
+  if (hold->issue_phase == ET_G3R_O2_PENDING)
+    (void)release_issued(hold);
+  return hold->first.source ? -1 : 0;
+}
+
+int64_t et_g3r_private_same_owner_save_cleanup_retry_v1(void *candidate) {
+  et_g3r_same_owner_hold *hold = admit(candidate);
+  if (!hold) {
+    clear_error();
+    coordinator_error(NULL, ET_G3R_SAVE_COORD_STALE);
+    return -1;
+  }
+  if (hold->issue_phase != ET_G3R_O2_CLEANUP_PENDING ||
+      !hold->issued_state) {
+    coordinator_error(hold, ET_G3R_SAVE_COORD_ISSUE);
+    return -1;
+  }
+  et_o2_error_v1 error;
+  uint32_t lifecycle = 0;
+  if (et_o2_optimizer_state_lifecycle_v1(
+          hold->issued_state, &lifecycle, &error) != 0) {
+    o2_error(hold, &error);
+    return -1;
+  }
+  if (lifecycle == ET_O2_OPTIMIZER_STATE_DEAD) {
+    hold->issued_state = NULL;
+    hold->issue_phase = ET_G3R_O2_ATTEMPTED;
+  } else if (lifecycle == ET_O2_OPTIMIZER_STATE_LIVE) {
+    (void)release_issued(hold);
+  } else {
+    coordinator_error(hold, ET_G3R_SAVE_COORD_ISSUE);
+    return -1;
+  }
+  if (hold->issued_state) return -1;
+  return et_g3r_private_same_owner_save_end_v1(hold);
 }
 
 int64_t et_g3r_private_same_owner_save_end_v1(void *candidate) {
@@ -218,6 +340,13 @@ int64_t et_g3r_private_same_owner_save_end_v1(void *candidate) {
     clear_error();
     coordinator_error(NULL, ET_G3R_SAVE_COORD_STALE);
     return -1;
+  }
+  if (hold->issue_phase == ET_G3R_O2_PENDING)
+    (void)release_issued(hold);
+  if (hold->issued_state) {
+    if (hold->issue_phase != ET_G3R_O2_CLEANUP_PENDING)
+      coordinator_error(hold, ET_G3R_SAVE_COORD_ISSUE);
+    return -1; /* Keep both leases and the native state rooted for retry. */
   }
   (void)et_g3r_private_same_owner_save_check_v1(hold);
   if (et_g3r_private_g3t_save_end_v1(hold->g3_hold) != 0 &&
@@ -234,6 +363,7 @@ int64_t et_g3r_private_same_owner_save_end_v1(void *candidate) {
   memset(hold->parameters, 0, sizeof(hold->parameters));
   memset(hold->identities, 0, sizeof(hold->identities));
   hold->live = 0u; /* Retain inert shell, no pointer reuse into authority. */
+  hold->issue_phase = ET_G3R_O2_ENDED;
   if (hold->first.source) last_error = hold->first;
   return hold->first.source ? -1 : 0;
 }

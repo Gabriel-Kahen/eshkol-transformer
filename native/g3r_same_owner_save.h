@@ -18,7 +18,8 @@ enum {
   ET_G3R_SAVE_COORD_ARGUMENT = 1,
   ET_G3R_SAVE_COORD_STALE = 2,
   ET_G3R_SAVE_COORD_EXHAUSTED = 3,
-  ET_G3R_SAVE_COORD_ALLOCATION = 4
+  ET_G3R_SAVE_COORD_ALLOCATION = 4,
+  ET_G3R_SAVE_COORD_ISSUE = 5
 };
 typedef struct et_g3r_same_owner_save_error_v1 {
   int64_t source, domain, category, code;
@@ -46,6 +47,12 @@ int64_t et_g3r_private_same_owner_save_copy_v1(
     int64_t destination_bytes);
 int64_t et_g3r_private_same_owner_save_o2_state_v1(
     void *hold, void **state);
+/* One issued state per hold. Raw pointer aliases carry no separate authority. */
+int64_t et_g3r_private_same_owner_save_o2_claim_v1(
+    void *hold, void *state);
+int64_t et_g3r_private_same_owner_save_o2_cancel_v1(void *hold);
+/* Retains the original error and hold until pending native cleanup closes. */
+int64_t et_g3r_private_same_owner_save_cleanup_retry_v1(void *hold);
 int64_t et_g3r_private_same_owner_save_check_v1(void *hold);
 int64_t et_g3r_private_same_owner_save_end_v1(void *hold);
 int64_t et_g3r_private_same_owner_save_last_error_v1(

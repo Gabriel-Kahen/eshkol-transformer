@@ -1684,6 +1684,18 @@ optimizer, tokenizer, X1/D2 and handle graph across a copy. No C2 publication,
 cold LOAD, compiled package, public SAVE, or resumed-generation claim follows
 from this source-only prerequisite.
 
+A separate source-only private O2 adoption successor now restricts that
+reservation to one issued-state attempt for its lifetime. It checks the
+detached O2 state's registered ownership, config, update count, fourteen
+option records and all twenty-eight moment bitstrings against the held O2
+baselines before return and claim. An unclaimed state remains reservation
+owned; a claimed state is caller owned. Cancellation preserves the first typed
+error, and a live release failure retains the state and both leases for a
+checked cleanup retry. Focused host normal/sanitizer controls exercise those
+states and same-shape payload mutation. This does not establish the Eshkol
+construction shell, original X1/D2 lineage, C2 bytes/pair, compiled package,
+public SAVE, or cold LOAD.
+
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
 diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use

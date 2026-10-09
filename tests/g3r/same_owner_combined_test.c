@@ -156,6 +156,7 @@ int main(void) {
       hold, &words, sizeof(words)) == 0);
   CHECK(words.word[0] == 1 && words.word[8] == 1729 &&
         words.word[11] == 41 && words.word[17] == 1);
+  CHECK(et_g3r_private_same_owner_save_o2_claim_v1(hold, state) == 0);
   CHECK(et_o2_optimizer_state_release_v1(state, &o2) == 0);
   CHECK(et_g3r_private_same_owner_save_end_v1(hold) == 0);
   CHECK(et_g3r_private_same_owner_save_end_v1(hold) != 0);
@@ -217,6 +218,9 @@ int main(void) {
         first.category == ET_O2_STATUS_INTERNAL &&
         first.code == ET_O2_CODE_ALLOCATION_FAILED);
   et_o2_test_reset_failpoints_v1();
+  CHECK(et_g3r_private_same_owner_save_o2_state_v1(hold, &state) != 0);
+  CHECK(et_g3r_private_same_owner_save_last_error_v1(&observed) == 0 &&
+        memcmp(&observed, &first, sizeof(first)) == 0);
   CHECK(et_g3r_private_same_owner_save_end_v1(hold) != 0);
   CHECK(et_g3r_private_same_owner_save_last_error_v1(&observed) == 0 &&
         memcmp(&observed, &first, sizeof(first)) == 0);
@@ -261,6 +265,126 @@ int main(void) {
   hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
   CHECK(hold != NULL);
   CHECK(et_g3r_private_same_owner_save_end_v1(hold) == 0);
+  hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
+  CHECK(hold != NULL);
+  state = NULL;
+  CHECK(et_g3r_private_same_owner_save_o2_state_v1(hold, &state) == 0);
+  void *alias = state;
+  CHECK(et_g3r_private_same_owner_save_o2_claim_v1(hold, alias) == 0);
+  CHECK(et_g3r_private_same_owner_save_o2_claim_v1(hold, alias) != 0);
+  CHECK(et_o2_optimizer_state_release_v1(state, &o2) == 0);
+  CHECK(et_g3r_private_same_owner_save_end_v1(hold) != 0);
+  hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
+  CHECK(hold != NULL);
+  state = NULL;
+  CHECK(et_g3r_private_same_owner_save_o2_state_v1(hold, &state) == 0);
+  CHECK(et_g3r_private_same_owner_save_o2_cancel_v1(hold) == 0);
+  CHECK(et_g3r_private_same_owner_save_o2_state_v1(hold, &state) != 0);
+  CHECK(et_g3r_private_same_owner_save_end_v1(hold) != 0);
+  hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
+  CHECK(hold != NULL);
+  CHECK(et_g3r_private_same_owner_save_o2_state_v1(hold, NULL) != 0);
+  state = NULL;
+  CHECK(et_g3r_private_same_owner_save_o2_state_v1(hold, &state) != 0);
+  CHECK(state == NULL);
+  CHECK(et_g3r_private_same_owner_save_end_v1(hold) != 0);
+  hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
+  CHECK(hold != NULL);
+  state = NULL;
+  CHECK(et_g3r_private_same_owner_save_o2_state_v1(hold, &state) == 0);
+  CHECK(et_g3r_private_same_owner_save_o2_claim_v1(
+      hold, (void *)(uintptr_t)1u) != 0);
+  CHECK(et_g3r_private_same_owner_save_last_error_v1(&first) == 0);
+  CHECK(first.source == ET_G3R_SAVE_SOURCE_COORDINATOR &&
+        first.code == ET_G3R_SAVE_COORD_ISSUE);
+  CHECK(et_g3r_private_same_owner_save_end_v1(hold) != 0);
+  hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
+  CHECK(hold != NULL);
+  state = NULL;
+  CHECK(et_g3r_private_same_owner_save_o2_state_v1(hold, &state) == 0);
+  et_o2_optimizer_state *issued = state;
+  uint32_t original_option = issued->entries[0].options.learning_rate_bits;
+  issued->entries[0].options.learning_rate_bits ^= 1u;
+  CHECK(et_g3r_private_same_owner_save_o2_claim_v1(hold, issued) != 0);
+  CHECK(et_g3r_private_same_owner_save_last_error_v1(&first) == 0);
+  CHECK(first.source == ET_G3R_SAVE_SOURCE_O2 &&
+        first.code == ET_O2_CODE_OWNER_CONFLICT);
+  issued->entries[0].options.learning_rate_bits = original_option;
+  CHECK(et_g3r_private_same_owner_save_end_v1(hold) != 0);
+  CHECK(et_o2_optimizer_state_lifecycle_v1(issued,
+        (uint32_t[1]){0}, &o2) == 0);
+  hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
+  CHECK(hold != NULL);
+  state = NULL;
+  CHECK(et_g3r_private_same_owner_save_o2_state_v1(hold, &state) == 0);
+  issued = state;
+  et_f32_tensor *issued_moment = issued->owned_clones[0];
+  size_t issued_count = 0;
+  CHECK(et_f32_tensor_element_count_v1(
+      issued_moment, &issued_count, &f32) == 0);
+  CHECK(issued_count > 0 && issued_count <= 1192);
+  CHECK(et_f32_tensor_copy_bits_to_v1(
+      issued_moment, moment_bits, issued_count, &f32) == 0);
+  uint32_t issued_first = moment_bits[0];
+  moment_bits[0] ^= 1u;
+  CHECK(et_f32_tensor_copy_bits_from_v1(
+      issued_moment, moment_bits, issued_count, &f32) == 0);
+  CHECK(et_g3r_private_same_owner_save_check_v1(hold) == 0);
+  CHECK(et_g3r_private_same_owner_save_o2_claim_v1(hold, issued) != 0);
+  CHECK(et_g3r_private_same_owner_save_last_error_v1(&first) == 0);
+  CHECK(first.source == ET_G3R_SAVE_SOURCE_O2 &&
+        first.code == ET_O2_CODE_OWNER_CONFLICT);
+  moment_bits[0] = issued_first;
+  CHECK(et_f32_tensor_copy_bits_from_v1(
+      issued_moment, moment_bits, issued_count, &f32) == 0);
+  CHECK(et_g3r_private_same_owner_save_end_v1(hold) != 0);
+  hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
+  CHECK(hold != NULL);
+  state = NULL;
+  CHECK(et_g3r_private_same_owner_save_o2_state_v1(hold, &state) == 0);
+  et_o2_optimizer_state_handle *moment_handle = NULL;
+  et_o2_optimizer_state_borrow *state_borrow = NULL;
+  const et_kernel_tensor_view_v1 *state_view = NULL;
+  CHECK(et_o2_optimizer_state_moment_handle_v1(
+      state, 0, ET_O2_MOMENT_EXP_AVG, &moment_handle, &o2) == 0);
+  CHECK(et_o2_optimizer_state_borrow_begin_v1(
+      state, moment_handle, &state_borrow, &state_view, &o2) == 0);
+  CHECK(state_view != NULL);
+  CHECK(et_g3r_private_same_owner_save_end_v1(hold) != 0);
+  CHECK(optimizer->busy == 1 && c->save_hold != NULL);
+  CHECK(et_g3r_private_same_owner_save_cleanup_retry_v1(hold) != 0);
+  CHECK(optimizer->busy == 1 && c->save_hold != NULL);
+  CHECK(et_o2_optimizer_state_borrow_end_v1(&state_borrow, &o2) == 0);
+  CHECK(et_g3r_private_same_owner_save_cleanup_retry_v1(hold) != 0);
+  CHECK(optimizer->busy == 0 && c->save_hold == NULL);
+  hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
+  CHECK(hold != NULL);
+  state = NULL;
+  CHECK(et_g3r_private_same_owner_save_o2_state_v1(hold, &state) == 0);
+  et_o2_test_fail_release_after_v1(0);
+  CHECK(et_g3r_private_same_owner_save_end_v1(hold) != 0);
+  CHECK(et_g3r_private_same_owner_save_last_error_v1(&first) == 0);
+  CHECK(first.source == ET_G3R_SAVE_SOURCE_O2 &&
+        first.code == ET_O2_CODE_PROVIDER_DEFECT);
+  uint32_t lifecycle = 0;
+  CHECK(et_o2_optimizer_state_lifecycle_v1(
+      state, &lifecycle, &o2) == 0 &&
+      lifecycle == ET_O2_OPTIMIZER_STATE_DEAD);
+  CHECK(optimizer->busy == 0 && c->save_hold == NULL);
+  et_o2_test_reset_failpoints_v1();
+  hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
+  CHECK(hold != NULL);
+  state = NULL;
+  CHECK(et_g3r_private_same_owner_save_o2_state_v1(hold, &state) == 0);
+  ((et_o2_optimizer_state *)state)->lifecycle =
+      ET_O2_OPTIMIZER_STATE_RELEASING;
+  CHECK(et_g3r_private_same_owner_save_end_v1(hold) != 0);
+  CHECK(optimizer->busy == 1 && c->save_hold != NULL);
+  CHECK(et_g3r_private_same_owner_save_cleanup_retry_v1(hold) != 0);
+  CHECK(optimizer->busy == 1 && c->save_hold != NULL);
+  ((et_o2_optimizer_state *)state)->lifecycle = ET_O2_OPTIMIZER_STATE_LIVE;
+  CHECK(et_g3r_private_same_owner_save_cleanup_retry_v1(hold) != 0);
+  CHECK(optimizer->busy == 0 && c->save_hold == NULL);
   CHECK(et_g3t_private_call_acquire_v1(c, 0) == 0);
   CHECK(et_g3t_private_call_abort_v1(c) == 0);
   CHECK(et_g3t_private_generator_close_v1(c) == 0);

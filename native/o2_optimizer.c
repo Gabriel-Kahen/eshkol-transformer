@@ -2214,6 +2214,69 @@ int32_t et_g3r_private_o2_save_check_v1(
   return et_o2_success(error);
 }
 
+int32_t et_g3r_private_o2_save_issued_match_v1(
+    et_o2_g3r_save_hold *candidate, const et_o2_optimizer_state *issued,
+    et_o2_error_v1 *error) {
+  const char *operation = "g3r-save-o2-issued-match";
+  et_o2_g3r_save_hold *hold = et_o2_g3r_hold_admit(candidate);
+  et_o2_optimizer_state *state = et_o2_find_state(issued);
+  if (!hold || !state)
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                      ET_O2_CODE_INVALID_HANDLE, operation,
+                      "issued state or hold is not registered and live");
+  int32_t result = et_g3r_private_o2_save_check_v1(hold, error);
+  if (result != 0) return result;
+  result = et_o2_require_state_live(issued, operation, error);
+  if (result != 0) return result;
+  result = et_o2_validate_state_owner_ledger(
+      state, ET_O2_STATUS_INVALID_STATE, operation, error);
+  if (result != 0) return result;
+  const et_o2_config *left = &state->config, *right = &hold->config;
+  if (state->count != 14u || state->active_borrows != 0u ||
+      state->completed_updates != hold->completed_updates ||
+      left->clip_kind != right->clip_kind ||
+      left->clip_max_bits != right->clip_max_bits ||
+      left->schedule_kind != right->schedule_kind ||
+      left->minimum_ratio_bits != right->minimum_ratio_bits ||
+      left->warmup_updates != right->warmup_updates ||
+      left->total_updates != right->total_updates)
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                      ET_O2_CODE_OWNER_CONFLICT, operation,
+                      "issued state configuration or count differs");
+  for (size_t i = 0; i < 14u; ++i) {
+    const et_o2_options *actual = &state->entries[i].options;
+    const et_o2_options *expected = &hold->options[i];
+    if (actual->learning_rate_bits != expected->learning_rate_bits ||
+        actual->beta1_bits != expected->beta1_bits ||
+        actual->beta2_bits != expected->beta2_bits ||
+        actual->epsilon_bits != expected->epsilon_bits ||
+        actual->weight_decay_bits != expected->weight_decay_bits)
+      return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                        ET_O2_CODE_OWNER_CONFLICT, operation,
+                        "issued state option bits differ");
+    et_f32_tensor *moments[2] = {
+        state->entries[i].exp_avg, state->entries[i].exp_avg_sq};
+    for (size_t j = 0; j < 2u; ++j) {
+      int32_t equal = 0;
+      et_f32_tensor_error i2_error;
+      if (moments[j] != state->owned_clones[2u * i + j])
+        return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                          ET_O2_CODE_OWNER_CONFLICT, operation,
+                          "issued moment is not its exact owned clone");
+      if (et_f32_tensor_bits_equal_v1(
+              moments[j], hold->moment_baseline[2u * i + j], &equal,
+              &i2_error) != 0)
+        return et_o2_from_i2(&i2_error, error, operation,
+                             ET_O2_STATUS_INVALID_STATE);
+      if (!equal)
+        return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                          ET_O2_CODE_OWNER_CONFLICT, operation,
+                          "issued moment shape or bits differ");
+    }
+  }
+  return et_o2_success(error);
+}
+
 int32_t et_g3r_private_o2_save_end_v1(
     et_o2_g3r_save_hold **slot, et_o2_error_v1 *error) {
   const char *operation = "g3r-save-o2-end";

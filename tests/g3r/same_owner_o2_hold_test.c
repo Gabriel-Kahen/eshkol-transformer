@@ -1,8 +1,28 @@
 #define ET_G3R_SAME_OWNER_SAVE_PRIVATE 1
 #define ET_O2_TESTING 1
 #define ET_F32_TENSOR_TESTING 1
+#include "../../include/eshkol_transformer/f32_tensor.h"
+static int32_t injected_bits_equal(const et_f32_tensor *,
+                                   const et_f32_tensor *, int32_t *,
+                                   et_f32_tensor_error *);
+#define et_f32_tensor_bits_equal_v1 injected_bits_equal
 #include "../../native/o2_optimizer.c"
+#undef et_f32_tensor_bits_equal_v1
 #include <stdio.h>
+
+static size_t compare_calls;
+static int fault_issued_compare;
+static int32_t injected_bits_equal(const et_f32_tensor *left,
+                                   const et_f32_tensor *right, int32_t *equal,
+                                   et_f32_tensor_error *error) {
+  if (fault_issued_compare && ++compare_calls == 29u) {
+    memset(error, 0, sizeof(*error));
+    error->category = ET_F32_TENSOR_ERROR_INTERNAL;
+    error->code = ET_F32_TENSOR_CODE_PROVIDER_REJECTED;
+    return -1;
+  }
+  return et_f32_tensor_bits_equal_v1(left, right, equal, error);
+}
 
 static unsigned checks;
 #define CHECK(x) do { ++checks; if (!(x)) { fprintf(stderr, \
@@ -60,6 +80,46 @@ int main(void) {
   CHECK(et_g3r_private_o2_save_state_v1(hold, &state, &o2) == 0);
   CHECK(state != NULL && state->count == 14);
   CHECK(et_g3r_private_o2_save_check_v1(hold, &o2) == 0);
+  CHECK(et_g3r_private_o2_save_issued_match_v1(hold, state, &o2) == 0);
+  uint32_t *option_fields[5] = {
+      &state->entries[0].options.learning_rate_bits,
+      &state->entries[0].options.beta1_bits,
+      &state->entries[0].options.beta2_bits,
+      &state->entries[0].options.epsilon_bits,
+      &state->entries[0].options.weight_decay_bits};
+  for (size_t i = 0; i < 5; ++i) {
+    uint32_t before = *option_fields[i];
+    *option_fields[i] ^= 1u;
+    CHECK(et_g3r_private_o2_save_issued_match_v1(hold, state, &o2) != 0);
+    *option_fields[i] = before;
+  }
+  uint32_t before_clip = state->config.clip_kind;
+  state->config.clip_kind ^= 1u;
+  CHECK(et_g3r_private_o2_save_issued_match_v1(hold, state, &o2) != 0);
+  state->config.clip_kind = before_clip;
+  state->completed_updates++;
+  CHECK(et_g3r_private_o2_save_issued_match_v1(hold, state, &o2) != 0);
+  state->completed_updates--;
+  for (size_t kind = 0; kind < 2; ++kind) {
+    et_f32_tensor *issued = state->owned_clones[kind];
+    float *data = (float *)(uintptr_t)et_f32_tensor_test_data_storage_v1(issued);
+    uint32_t before = 0, changed;
+    CHECK(data != NULL);
+    memcpy(&before, data, sizeof(before));
+    changed = before ^ 1u;
+    memcpy(data, &changed, sizeof(changed));
+    CHECK(et_g3r_private_o2_save_check_v1(hold, &o2) == 0);
+    CHECK(et_g3r_private_o2_save_issued_match_v1(hold, state, &o2) != 0);
+    memcpy(data, &before, sizeof(before));
+  }
+  CHECK(et_g3r_private_o2_save_issued_match_v1(hold, state, &o2) == 0);
+  compare_calls = 0;
+  fault_issued_compare = 1;
+  CHECK(et_g3r_private_o2_save_issued_match_v1(hold, state, &o2) != 0);
+  CHECK(compare_calls == 29u && o2.category == ET_O2_STATUS_INTERNAL &&
+        o2.code == ET_F32_TENSOR_CODE_PROVIDER_REJECTED);
+  fault_issued_compare = 0;
+  CHECK(et_g3r_private_o2_save_issued_match_v1(hold, state, &o2) == 0);
   CHECK(et_o2_optimizer_state_release_v1(state, &o2) == 0);
   CHECK(et_g3r_private_o2_save_end_v1(&hold, &o2) == 0);
   CHECK(hold == NULL && optimizer->busy == 0);
