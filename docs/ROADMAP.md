@@ -910,6 +910,13 @@ from direct-provider-only cases and names the missing noninstalled model-control
 and stage-selective fault/observer seams for review. It provides no new runtime
 proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
 verdicts remain prerequisites before the full matrix is implemented and run.
+An isolated staged successor adds a separate real-M3 zero-control source tuple
+using the existing I2 14-parameter prepare/commit path before frame binding.
+It retains the staged numerical, retention, wrong-target and uniform controls.
+Pure fixture/source checks and C syntax do not validate emitted package/import
+inventories or compiled model behavior. The sanitized tuple inventories,
+authentic stale-handle and mutated-tie negatives, current-main union, and
+supported normal/repeat/sanitizer gate remain open; no N3 row is accepted.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each

@@ -1,6 +1,6 @@
 # E3 idle real-model control contract
 
-Status: approved design, repository integration pending; no implementation or compiled proof. Basis: numerical source `0476fe14ad3dc647655e539b8795b3b780f0774c` / tree `8f03d1e5febe89c02db7122ef9de4374ff1cfa5e`. The proposed control uses existing I2/M3 APIs only and adds no native setter or public ABI.
+Status: isolated staged source integration in progress; compiled package inventories, sanitizer imports, and numerical runtime proof remain pending. Basis: numerical source `0476fe14ad3dc647655e539b8795b3b780f0774c` / tree `8f03d1e5febe89c02db7122ef9de4374ff1cfa5e`. The proposed control uses existing I2/M3 APIs only and adds no native setter or public ABI. This source candidate retains the staged numerical, retention, and wrong-target controls; it does not establish current-main integration or N3 acceptance. Genuine stale M3 handle and mutated tie/owner metadata fixtures remain open.
 
 ## Available, authentic route
 

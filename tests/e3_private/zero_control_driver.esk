@@ -1,0 +1,303 @@
+;;; Exact noninstalled fixture: real registered M3, I2 load, D1/D2 and E3.
+;;; The canonical two-field e3-test-run remains defined by driver.esk.
+
+(extern i64 e3-zero-gradient-word-count ptr i64
+        :real et_e3_zero_gradient_word_count_v1)
+(extern i64 e3-zero-gradient-word ptr i64 i64
+        :real et_e3_zero_gradient_word_v1)
+(extern i64 e3-zero-gradient-metadata ptr i64 i64
+        :real et_e3_zero_gradient_metadata_v1)
+
+;; A sealed M3 model has no reviewed postconstruction release. Keep this root
+;; until process exit, including prebind failures. Every test process runs once.
+(define e3-zero-owner-root (vector #f))
+(define e3-zero-paths
+  '#(("blocks" "0" "attention" "key" "weight")
+     ("blocks" "0" "attention" "output" "weight")
+     ("blocks" "0" "attention" "query" "weight")
+     ("blocks" "0" "attention" "value" "weight")
+     ("blocks" "0" "ffn" "down" "weight")
+     ("blocks" "0" "ffn" "up" "weight")
+     ("blocks" "0" "norm1" "bias")
+     ("blocks" "0" "norm1" "weight")
+     ("blocks" "0" "norm2" "bias")
+     ("blocks" "0" "norm2" "weight")
+     ("head" "weight")
+     ("norm_final" "bias")
+     ("norm_final" "weight")
+     ("position_embedding" "weight")))
+(define e3-zero-shapes
+  '#((4 4) (4 4) (4 4) (4 4) (4 8) (8 4) (4) (4) (4) (4)
+     (256 4) (4) (4) (2 4)))
+(define e3-zero-counts
+  '#(16 16 16 16 32 32 4 4 4 4 1024 4 4 8))
+(define e3-zero-expected-paths
+  '(("blocks" "0" "attention" "key" "weight")
+    ("blocks" "0" "attention" "output" "weight")
+    ("blocks" "0" "attention" "query" "weight")
+    ("blocks" "0" "attention" "value" "weight")
+    ("blocks" "0" "ffn" "down" "weight")
+    ("blocks" "0" "ffn" "up" "weight")
+    ("blocks" "0" "norm1" "bias")
+    ("blocks" "0" "norm1" "weight")
+    ("blocks" "0" "norm2" "bias")
+    ("blocks" "0" "norm2" "weight")
+    ("head" "weight")
+    ("norm_final" "bias")
+    ("norm_final" "weight")
+    ("position_embedding" "weight")
+    ("token_embedding" "weight")))
+
+(define (e3-zero-invariant condition)
+  (if condition #t (e3-native-invariant-fail)))
+
+(define (e3-zero-release-sources! sources)
+  (let release ((index 0))
+    (if (= index 14) #t
+        (begin
+          (if (vector-ref sources index)
+              (begin
+                (i2-release-owned!
+                  (vector (vector-ref sources index) 'parameter
+                          'e3-zero-control #f))
+                (vector-set! sources index #f)))
+          (release (+ index 1))))))
+
+(define (e3-zero-check-tree model)
+  (let ((tree (module-parameters model)))
+    (e3-zero-invariant
+      (equal? (parameter-tree-paths tree) e3-zero-expected-paths))
+    (e3-zero-invariant
+      (equal? (parameter-tree-tie-groups tree)
+              '((("head" "weight") ("token_embedding" "weight")))))
+    (e3-zero-invariant
+      (eq? (parameter-tree-handle tree '("head" "weight"))
+           (parameter-tree-handle tree '("token_embedding" "weight"))))
+    tree))
+
+(define (e3-zero-stage! tree handles sources)
+  ;; All roots and slots already exist before the first owned-clone decode.
+  (guard (caught (#t (e3-zero-release-sources! sources) (raise caught)))
+    (let stage ((index 0))
+      (if (= index 14) #t
+          (let* ((handle
+                   (parameter-tree-handle tree (vector-ref e3-zero-paths index)))
+                 (shape (vector-ref e3-zero-shapes index))
+                 (count (vector-ref e3-zero-counts index)))
+            (e3-zero-invariant
+              (and (equal? (parameter-handle-shape handle) shape)
+                   (eq? (parameter-handle-dtype handle) 'f32)
+                   (eq? (parameter-handle-device handle) 'cpu)))
+            (let distinct ((prior 0))
+              (if (= prior index) #t
+                  (begin
+                    (e3-zero-invariant
+                      (not (eq? handle (vector-ref handles prior))))
+                    (distinct (+ prior 1)))))
+            (vector-set! handles index handle)
+            (let* ((request
+                     (vector (make-bytevector (* 4 count) 0) 'parameter
+                             shape 'f32 'cpu 'dense-row-major-contiguous
+                             'e3-zero-control #f))
+                   (decoded (i2-checkpoint-decode request)))
+              (vector-set! sources index (vector-ref decoded 7)))
+            (stage (+ index 1)))))))
+
+(define (e3-zero-assignments handles sources)
+  (let fill ((index 13) (result '()))
+    (if (< index 0) result
+        (fill (- index 1)
+          (cons (vector
+                  (parameter-handle-tensor-internal
+                    (vector-ref handles index))
+                  (vector-ref sources index) 'parameter)
+                result)))))
+
+(define (e3-zero-load! handles sources)
+  ;; A successful prepare pins every source/destination and has no public
+  ;; abort. Immediately pass its authentic inner plan to one-shot commit.
+  (let ((prepared
+          (guard (caught (#t (e3-zero-release-sources! sources)
+                             (raise caught)))
+            (i2-prepare-load
+              (vector (e3-zero-assignments handles sources)
+                      'e3-zero-control)))))
+    (i2-commit-load! (vector-ref prepared 0))
+    (e3-zero-release-sources! sources)
+    (vector-ref prepared 0)))
+
+(define (e3-zero-check-bytes! handles)
+  ;; Existing authenticated checkpoint encoder reads actual registered owners.
+  (let check ((index 0))
+    (if (= index 14) #t
+        (let* ((payload
+                 (i2-checkpoint-encode
+                   (vector
+                     (parameter-handle-tensor-internal
+                       (vector-ref handles index))
+                     'parameter (vector-ref e3-zero-shapes index)
+                     'f32 'cpu 'dense-row-major-contiguous
+                     'e3-zero-control)))
+               (expected (* 4 (vector-ref e3-zero-counts index))))
+          (e3-zero-invariant (= (bytevector-length payload) expected))
+          (let bits ((byte 0))
+            (if (= byte expected) #t
+                (begin
+                  (e3-zero-invariant (= (bytevector-u8-ref payload byte) 0))
+                  (bits (+ byte 1)))))
+          (check (+ index 1))))))
+
+(define (e3-zero-gradient-image model)
+  (let ((owner (vector-ref (m3t-entry model 'model 'e3-zero-control #t) 3))
+        (image (make-vector 14 #f)))
+    (let parameter ((index 0))
+      (if (= index 14) image
+          (let* ((state (e3-zero-gradient-metadata owner index 0))
+                 (count (e3-zero-gradient-metadata owner index 1))
+                 (weight (e3-zero-gradient-metadata owner index 2))
+                 (words (if (= state 0) (vector)
+                            (make-vector
+                              (e3-zero-gradient-word-count owner index) 0))))
+            (e3-zero-invariant (and (>= state 0) (>= count 0) (>= weight 0)))
+            (if (not (= state 0))
+                (let word ((offset 0))
+                  (if (= offset (vector-length words)) #t
+                      (begin
+                        (vector-set! words offset
+                          (e3-zero-gradient-word owner index offset))
+                        (word (+ offset 1))))))
+            (vector-set! image index (vector state count weight words))
+            (parameter (+ index 1)))))))
+
+(define (e3-zero-same-gradient? left right)
+  (let row ((index 0))
+    (if (= index 14) #t
+        (let ((a (vector-ref left index)) (b (vector-ref right index)))
+          (and (= (vector-ref a 0) (vector-ref b 0))
+               (= (vector-ref a 1) (vector-ref b 1))
+               (= (vector-ref a 2) (vector-ref b 2))
+               (let ((aw (vector-ref a 3)) (bw (vector-ref b 3)))
+                 (and (= (vector-length aw) (vector-length bw))
+                      (let word ((offset 0))
+                        (if (= offset (vector-length aw)) #t
+                            (and (= (vector-ref aw offset)
+                                    (vector-ref bw offset))
+                                 (word (+ offset 1)))))))
+               (row (+ index 1)))))))
+
+(define (e3-zero-modes model)
+  (let ((modules (vector-ref (m3t-entry model 'model 'e3-zero-control #t) 4))
+        (modes (make-vector 17 #f)))
+    (let fill ((index 0))
+      (if (= index 17) modes
+          (begin
+            (vector-set! modes index
+              (module-mode-internal (vector-ref modules index)))
+            (fill (+ index 1)))))))
+
+(define (e3-zero-same-modes? left right)
+  (let check ((index 0))
+    (if (= index 17) #t
+        (and (eq? (vector-ref left index) (vector-ref right index))
+             (check (+ index 1))))))
+
+(define (e3-zero-checked-scenario scenario)
+  (if (not (and (vector? scenario) (= (vector-length scenario) 1)
+                (boolean? (vector-ref scenario 0))))
+      (let ((unreachable
+             (et-e1b-private-raise 'invalid-argument
+               'e3-zero-control-run "expected #(gradient-present?)" '() #f)))
+        unreachable))
+  scenario)
+
+(define (e3-zero-control-run scenario corpus-path)
+  (e3-zero-invariant (not (vector-ref e3-zero-owner-root 0)))
+  (let* ((checked (e3-zero-checked-scenario scenario))
+         (config (e3-test-fixed-config))
+         (tokenizer (t1-private-tokenizer-byte config))
+         (initial (g3t-checked-m3t-initializer-state 1729))
+         (initial-words (m3t-public-initializer-words initial))
+         (model (g3t-checked-m3t-model-create config initial)))
+    (vector-set! e3-zero-owner-root 0 model)
+    (e3-zero-invariant (equal? initial-words '(1 1729 0 0)))
+    (e3-zero-invariant
+      (equal? initial-words (m3t-public-initializer-words initial)))
+    (let* ((tree (e3-zero-check-tree model))
+           (handles (make-vector 14 #f))
+           (sources (make-vector 14 #f)))
+      (e3-zero-stage! tree handles sources)
+      (let* ((prestate
+               (guard (caught
+                        (#t (e3-zero-release-sources! sources)
+                            (raise caught)))
+                 (if (vector-ref checked 0)
+                     (i2-parameter-accumulate-uniform-internal!
+                       (parameter-handle-tensor-internal
+                         (vector-ref handles 0))
+                       1065353216 0 1065353216))
+                 (let* ((image (e3-zero-gradient-image model))
+                        (initializer
+                          (m3t-public-initializer-words
+                            (m3t-public-model-initializer model)))
+                        (modes (e3-zero-modes model)))
+                   (e3-zero-invariant
+                     (equal? initial-words (m3t-public-initializer-words initial)))
+                   (e3-zero-invariant (equal? initializer '(1 1729 290 0)))
+                   (e3-zero-invariant
+                     (if (vector-ref checked 0)
+                         (and (= (vector-ref (vector-ref image 0) 0) 1)
+                              (= (vector-ref (vector-ref image 0) 1) 1)
+                              (= (vector-ref
+                                   (vector-ref (vector-ref image 0) 3) 0)
+                                 1065353216))
+                         (= (vector-ref (vector-ref image 0) 0) 0)))
+                   (vector image initializer modes))))
+             (gradients-before (vector-ref prestate 0))
+             (initializer-before (vector-ref prestate 1))
+             (modes-before (vector-ref prestate 2)))
+        (e3-zero-load! handles sources)
+        (e3-zero-check-bytes! handles)
+        (e3-zero-invariant
+          (e3-zero-same-gradient?
+            gradients-before (e3-zero-gradient-image model)))
+        (e3-zero-invariant
+          (equal? initializer-before
+            (m3t-public-initializer-words
+              (m3t-public-model-initializer model))))
+        (e3-zero-invariant
+          (equal? initial-words (m3t-public-initializer-words initial)))
+        (e3-zero-invariant
+          (e3-zero-same-modes? modes-before (e3-zero-modes model)))
+        (let ((destinations (e3-test-destinations-create)) (frame #f))
+          (guard (caught
+                   (#t
+                     (if (not frame)
+                         (e3-test-destinations-destroy! destinations))
+                     (raise caught)))
+            (set! frame (e3-frame-bind! model destinations))
+            (let ((dataset
+                    (d2-token-dataset-open
+                      (e3-test-dataset-config corpus-path #t) tokenizer)))
+              (guard (caught
+                       (#t (d2-token-dataset-close! dataset) (raise caught)))
+                (let ((before (d2-token-dataset-cursor dataset)))
+                  (with-region ('e3-zero-evaluation 262144)
+                    (e3-evaluate-into! model dataset frame))
+                  (let ((after (d2-token-dataset-cursor dataset)))
+                    (e3-zero-invariant
+                      (e3-zero-same-gradient?
+                        gradients-before (e3-zero-gradient-image model)))
+                    (e3-zero-invariant
+                      (equal? initializer-before
+                        (m3t-public-initializer-words
+                          (m3t-public-model-initializer model))))
+                    (e3-zero-invariant
+                      (equal? initial-words (m3t-public-initializer-words initial)))
+                    (e3-zero-invariant
+                      (e3-zero-same-modes?
+                        modes-before (e3-zero-modes model)))
+                    (e3-zero-check-bytes! handles)
+                    (let ((result
+                            (e3-test-output frame destinations before after)))
+                      (d2-token-dataset-close! dataset)
+                      result)))))))))))

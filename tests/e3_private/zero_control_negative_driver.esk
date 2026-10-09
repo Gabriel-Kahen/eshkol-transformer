@@ -1,0 +1,326 @@
+;;; Noninstalled preprepare I2/P1 rejection controls on an authentic idle M3.
+;;; All native controls are exact-tuple-only and admitted by the real M3 owner.
+
+(extern i64 e3-zero-control-anchor ptr i64 ptr
+        :real et_e3_zero_control_anchor_v1)
+(extern i64 e3-zero-control-unanchor ptr i64 ptr
+        :real et_e3_zero_control_unanchor_v1)
+(extern i64 e3-zero-control-borrow-begin ptr i64 ptr
+        :real et_e3_zero_control_borrow_begin_v1)
+(extern i64 e3-zero-control-borrow-end ptr i64 ptr
+        :real et_e3_zero_control_borrow_end_v1)
+(extern i64 e3-zero-control-pin-begin ptr i64 ptr
+        :real et_e3_zero_control_pin_begin_v1)
+(extern i64 e3-zero-control-pin-end ptr i64 ptr
+        :real et_e3_zero_control_pin_end_v1)
+(extern i64 e3-zero-control-fail-after ptr i64 i64
+        :real et_e3_zero_control_fail_after_v1)
+(extern i64 e3-zero-control-fail-reset ptr i64
+        :real et_e3_zero_control_fail_reset_v1)
+(extern i64 e3-zero-control-census ptr i64
+        :real et_e3_zero_control_census_v1)
+
+(define (e3-zero-negative-owner model)
+  (vector-ref (m3t-entry model 'model 'e3-zero-negative #t) 3))
+
+(define (e3-zero-negative-census model)
+  (let ((owner (e3-zero-negative-owner model))
+        (image (make-vector 10 #f)))
+    (let snapshot ((index 0))
+      (if (= index 10) image
+          (let ((value (e3-zero-control-census
+                         owner (if (= index 9) 10 index))))
+            (e3-zero-invariant (>= value 0))
+            (vector-set! image index value)
+            (snapshot (+ index 1)))))))
+
+(define (e3-zero-negative-same-census? left right)
+  (let compare ((index 0))
+    (if (= index 10) #t
+        (and (= (vector-ref left index) (vector-ref right index))
+             (compare (+ index 1))))))
+
+(define (e3-zero-negative-source-pointer source rooted)
+  (e3-zero-invariant (eq? source rooted))
+  (vector-ref (i2-carrier-preflight source 'parameter 'e3-zero-negative) 2))
+
+(define (e3-zero-negative-busy! model handles sources pin?)
+  (let* ((owner (e3-zero-negative-owner model))
+         (source (vector-ref sources 0))
+         (pointer (e3-zero-negative-source-pointer source
+                    (vector-ref sources 0)))
+         (baseline (e3-zero-negative-census model)))
+    (e3-zero-invariant (= (e3-zero-control-anchor owner 0 pointer) 0))
+    (let ((began #f))
+      (guard (caught
+               (#t
+                 (if began
+                     (if pin?
+                         (e3-zero-control-pin-end owner 0 pointer)
+                         (e3-zero-control-borrow-end owner 0 pointer)))
+                 (e3-zero-control-unanchor owner 0 pointer)
+                 (raise caught)))
+        (e3-zero-invariant
+          (= (if pin?
+                 (e3-zero-control-pin-begin owner 0 pointer)
+                 (e3-zero-control-borrow-begin owner 0 pointer)) 0))
+        (set! began #t)
+        (let ((rejected
+                (guard (caught (#t (transformer-error? caught)))
+                  (i2-prepare-load
+                    (vector (e3-zero-assignments handles sources)
+                            'e3-zero-negative))
+                  #f)))
+          (e3-zero-invariant
+            (= (if pin?
+                   (e3-zero-control-pin-end owner 0 pointer)
+                   (e3-zero-control-borrow-end owner 0 pointer)) 0))
+          (set! began #f)
+          (e3-zero-invariant (= (e3-zero-control-unanchor owner 0 pointer) 0))
+          (e3-zero-invariant
+            (e3-zero-negative-same-census?
+              baseline (e3-zero-negative-census model)))
+          rejected)))))
+
+(define (e3-zero-negative-fault! model handles sources domain decode?)
+  (let* ((owner (e3-zero-negative-owner model))
+         (baseline (e3-zero-negative-census model)))
+    (e3-zero-invariant (= (e3-zero-control-fail-after owner domain 0) 0))
+    (let ((rejected
+            (guard (caught (#t (transformer-error? caught)))
+              (if decode?
+                  (i2-checkpoint-decode
+                    (vector (make-bytevector 16 0) 'parameter '(4)
+                            'f32 'cpu 'dense-row-major-contiguous
+                            'e3-zero-negative #f))
+                  (i2-prepare-load
+                    (vector (e3-zero-assignments handles sources)
+                            'e3-zero-negative)))
+              #f)))
+      (if (= domain 2)
+          (e3-zero-invariant (= (e3-zero-control-census owner 9) 0)))
+      (e3-zero-invariant (= (e3-zero-control-fail-reset owner domain) 0))
+      (e3-zero-invariant
+        (e3-zero-negative-same-census?
+          baseline (e3-zero-negative-census model)))
+      rejected)))
+
+(define (e3-zero-negative-bytes=? left right)
+  (and (= (bytevector-length left) (bytevector-length right))
+       (let compare ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (compare (+ index 1)))))))
+
+(define (e3-zero-negative-parameters handles)
+  (let ((result (make-vector 14 #f)))
+    (let image ((index 0))
+      (if (= index 14) result
+          (begin
+            (vector-set! result index
+              (i2-checkpoint-encode
+                (vector
+                  (parameter-handle-tensor-internal
+                    (vector-ref handles index))
+                  'parameter (vector-ref e3-zero-shapes index)
+                  'f32 'cpu 'dense-row-major-contiguous
+                  'e3-zero-negative)))
+            (image (+ index 1)))))))
+
+(define (e3-zero-negative-same-parameters? left right)
+  (let compare ((index 0))
+    (if (= index 14) #t
+        (and (e3-zero-negative-bytes=?
+               (vector-ref left index) (vector-ref right index))
+             (compare (+ index 1))))))
+
+(define (e3-zero-negative-destinations destinations)
+  (vector (e3-test-u32-ref (vector-ref destinations 0))
+          (e3-test-u32-ref (vector-ref destinations 1))
+          (e3-test-u32-ref (vector-ref destinations 2))
+          (e3-test-u32-ref (vector-ref destinations 3))))
+
+(define (e3-zero-negative-same-destinations? left right)
+  (and (= (vector-ref left 0) (vector-ref right 0))
+       (= (vector-ref left 1) (vector-ref right 1))
+       (= (vector-ref left 2) (vector-ref right 2))
+       (= (vector-ref left 3) (vector-ref right 3))))
+
+(define (e3-zero-negative-fire name tree handles sources)
+  (let* ((destination
+           (parameter-handle-tensor-internal (vector-ref handles 0)))
+         (source (vector-ref sources 0))
+         (request
+           (lambda (assignments)
+             (i2-prepare-load (vector assignments 'e3-zero-negative)))))
+    (cond
+      ((string=? name "missing-path")
+       (parameter-tree-handle tree '("not-a-registered-path")))
+      ((string=? name "foreign-handle")
+       (parameter-handle-shape (vector 'not-a-p1-handle)))
+      ((string=? name "duplicate-destination")
+       (request (list (vector destination source 'parameter)
+                      (vector destination (vector-ref sources 1) 'parameter))))
+      ((string=? name "source-alias")
+       (request (list (vector destination destination 'parameter))))
+      ((string=? name "wrong-shape")
+       (request (list (vector destination (vector-ref sources 4) 'parameter))))
+      ((string=? name "wrong-kind")
+       (request (list (vector destination source 'buffer))))
+      ((string=? name "forged-source")
+       (request (list (vector destination (vector 'forged) 'parameter))))
+      ((string=? name "released-source")
+       (i2-release-owned!
+         (vector source 'parameter 'e3-zero-negative #f))
+       (vector-set! sources 0 #f)
+       (request (list (vector destination source 'parameter))))
+      ((string=? name "decode-short")
+       (i2-checkpoint-decode
+         (vector (make-bytevector 3 0) 'parameter '(4) 'f32 'cpu
+                 'dense-row-major-contiguous 'e3-zero-negative #f)))
+      ((string=? name "decode-extent")
+       (i2-checkpoint-decode
+         (vector (make-bytevector 16 0) 'parameter '(4 -1) 'f32 'cpu
+                 'dense-row-major-contiguous 'e3-zero-negative #f)))
+      ((string=? name "decode-role")
+       (i2-checkpoint-decode
+         (vector (make-bytevector 16 0) 'not-a-parameter '(4) 'f32 'cpu
+                 'dense-row-major-contiguous 'e3-zero-negative #f)))
+      (else (e3-native-invariant-fail)))))
+
+(define (e3-zero-negative-run scenario corpus-path)
+  (e3-zero-invariant
+    (and (vector? scenario) (= (vector-length scenario) 2)
+         (string? (vector-ref scenario 0))
+         (boolean? (vector-ref scenario 1))))
+  (e3-zero-invariant (not (vector-ref e3-zero-owner-root 0)))
+  (let* ((name (vector-ref scenario 0))
+         (gradient-present? (vector-ref scenario 1))
+         (config (e3-test-fixed-config))
+         (tokenizer (t1-private-tokenizer-byte config))
+         (initial (g3t-checked-m3t-initializer-state 1729))
+         (initial-words (m3t-public-initializer-words initial))
+         (model (g3t-checked-m3t-model-create config initial)))
+    (vector-set! e3-zero-owner-root 0 model)
+    (e3-zero-invariant (equal? initial-words '(1 1729 0 0)))
+    (let* ((tree (e3-zero-check-tree model))
+           (handles (make-vector 14 #f))
+           (sources (make-vector 14 #f))
+           (owned-before (i2-native-owned-clone-live-count)))
+      (e3-zero-invariant (>= owned-before 0))
+      (e3-zero-stage! tree handles sources)
+      ;; Installation of the decoded roots precedes the first fallible seed,
+      ;; observation or destination allocation. Preserve the original error.
+      (guard (caught
+               (#t
+                 (guard (cleanup-error (#t #f))
+                   (e3-zero-release-sources! sources))
+                 (raise caught)))
+      (if gradient-present?
+          (i2-parameter-accumulate-uniform-internal!
+            (parameter-handle-tensor-internal (vector-ref handles 0))
+            1065353216 0 1065353216))
+      (let ((first (vector-ref (e3-zero-gradient-image model) 0)))
+        (e3-zero-invariant
+          (if gradient-present?
+              (and (= (vector-ref first 0) 1)
+                   (= (vector-ref first 1) 1)
+                   (= (vector-ref (vector-ref first 3) 0) 1065353216))
+              (= (vector-ref first 0) 0))))
+      (let ((destinations (e3-test-destinations-create))
+            (dataset #f))
+        (guard (caught
+                 (#t
+                   (if dataset (d2-token-dataset-close! dataset))
+                   (e3-test-destinations-destroy! destinations)
+                   (e3-zero-release-sources! sources)
+                   (raise caught)))
+          (set! dataset
+            (d2-token-dataset-open
+              (e3-test-dataset-config corpus-path #t) tokenizer))
+          (let* ((completed-plan
+                   (if (string=? name "commit-reuse")
+                       (e3-zero-load! handles sources) #f))
+                 (parameters-before (e3-zero-negative-parameters handles))
+                 (gradient-before (e3-zero-gradient-image model))
+                 (modes-before (e3-zero-modes model))
+                 (successor-before
+                   (m3t-public-initializer-words
+                     (m3t-public-model-initializer model)))
+                 (destinations-before
+                   (e3-zero-negative-destinations destinations))
+                 (cursor-before (d2-token-dataset-cursor dataset))
+                 (rejected
+                   (cond
+                     ((string=? name "active-borrow")
+                      (e3-zero-negative-busy! model handles sources #f))
+                     ((string=? name "active-pin")
+                      (e3-zero-negative-busy! model handles sources #t))
+                     ((string=? name "alloc-i2-decode")
+                      (e3-zero-negative-fault! model handles sources 1 #t))
+                     ((string=? name "alloc-f32-decode")
+                      (e3-zero-negative-fault! model handles sources 2 #t))
+                     ((string=? name "alloc-i2-prepare")
+                      (e3-zero-negative-fault! model handles sources 1 #f))
+                     ((string=? name "alloc-f32-prepare")
+                      (e3-zero-negative-fault! model handles sources 2 #f))
+                     (else
+                       (guard (caught
+                                (#t (transformer-error? caught)))
+                         (if completed-plan
+                             (i2-commit-load! completed-plan)
+                             (e3-zero-negative-fire name tree handles sources))
+                         #f)))))
+            (e3-zero-invariant rejected)
+            (e3-zero-invariant
+              (e3-zero-negative-same-parameters?
+                parameters-before (e3-zero-negative-parameters handles)))
+            (e3-zero-invariant
+              (e3-zero-same-gradient?
+                gradient-before (e3-zero-gradient-image model)))
+            (e3-zero-invariant
+              (e3-zero-same-modes? modes-before (e3-zero-modes model)))
+            (e3-zero-invariant
+              (equal? initial-words (m3t-public-initializer-words initial)))
+            (e3-zero-invariant
+              (equal? successor-before
+                (m3t-public-initializer-words
+                  (m3t-public-model-initializer model))))
+            (e3-zero-invariant
+              (eq? (parameter-tree-handle tree '("head" "weight"))
+                   (parameter-tree-handle tree '("token_embedding" "weight"))))
+            (e3-zero-invariant
+              (e3-zero-negative-same-destinations?
+                destinations-before
+                (e3-zero-negative-destinations destinations)))
+            (e3-zero-invariant
+              (e3-zero-negative-bytes=?
+                cursor-before (d2-token-dataset-cursor dataset)))
+            (e3-zero-release-sources! sources)
+            (e3-zero-invariant
+              (= owned-before (i2-native-owned-clone-live-count)))
+            ;; A fresh same-authority batch additionally proves the rejected
+            ;; native builder did not poison the next complete load.
+            (let ((retry-handles (make-vector 14 #f))
+                  (retry-sources (make-vector 14 #f)))
+              (e3-zero-stage! tree retry-handles retry-sources)
+              (e3-zero-load! retry-handles retry-sources)
+              (e3-zero-check-bytes! retry-handles)
+              (e3-zero-invariant
+                (e3-zero-same-gradient?
+                  gradient-before (e3-zero-gradient-image model)))
+              (e3-zero-invariant
+                (e3-zero-same-modes? modes-before (e3-zero-modes model)))
+              (e3-zero-invariant
+                (equal? initial-words (m3t-public-initializer-words initial)))
+              (e3-zero-invariant
+                (equal? successor-before
+                  (m3t-public-initializer-words
+                    (m3t-public-model-initializer model)))))
+            (e3-zero-invariant
+              (= owned-before (i2-native-owned-clone-live-count)))
+            (d2-token-dataset-close! dataset)
+            (set! dataset #f)
+            (e3-test-destinations-destroy! destinations)
+            (vector 'e3-zero-negative-result-v1 name))))))))
