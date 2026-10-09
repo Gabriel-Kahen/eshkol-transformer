@@ -151,6 +151,28 @@ static et_f32_gradient_plan *retired_gradient_plans;
 static et_f32_gradient_reset_plan *retired_reset_plans;
 static f32_retired_index_node *f32_retired_index_root;
 
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+/* Witness shells remain retained after end so a stale address cannot regain
+ * authority. Protect every shell from caller output/error aliases as well. */
+enum { F32_SAVE_WITNESS_LIMIT = 14 * 64 };
+struct et_f32_parameter_save_witness {
+  struct et_f32_parameter_save_witness *next;
+  et_f32_parameter *parameter;
+  const void *identity;
+  et_f32_tensor *child[2], *baseline[2];
+  const void *data[2], *shape_storage[2], *stride_storage[2];
+  et_f32_tensor_borrow *value_pin;
+  size_t rank, bytes[2], count[2];
+  uint64_t shape[2];
+  size_t strides[2];
+  uint32_t state, weight_bits;
+  uint64_t contributions;
+  unsigned live;
+};
+static et_f32_parameter_save_witness *save_witnesses;
+static size_t save_witness_count;
+#endif
+
 #ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
 typedef struct f32_destroy_provenance {
   struct f32_destroy_provenance *next;
@@ -916,6 +938,11 @@ static int storage_aliases_live_reference(const void *storage, size_t bytes) {
       return 1;
     }
   }
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  for (const et_f32_parameter_save_witness *w = save_witnesses;
+       w != NULL; w = w->next)
+    if (ranges_overlap(storage, bytes, w, sizeof(*w))) return 1;
+#endif
   return f32_retired_control_overlaps(storage, bytes);
 }
 
@@ -2820,23 +2847,6 @@ static int parameter_metadata_valid(const et_f32_parameter *parameter) {
 #ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
 /* The G3 pin already owns each value's active_borrow sentinel. Its preflight
  * requires gradients unborrowed. These are detached bit baselines, not leases. */
-enum { F32_SAVE_WITNESS_LIMIT = 14 * 64 };
-struct et_f32_parameter_save_witness {
-  struct et_f32_parameter_save_witness *next;
-  et_f32_parameter *parameter;
-  const void *identity;
-  et_f32_tensor *child[2], *baseline[2];
-  const void *data[2], *shape_storage[2], *stride_storage[2];
-  et_f32_tensor_borrow *value_pin;
-  size_t rank, bytes[2], count[2];
-  uint64_t shape[2];
-  size_t strides[2];
-  uint32_t state, weight_bits;
-  uint64_t contributions;
-  unsigned live;
-};
-static et_f32_parameter_save_witness *save_witnesses;
-static size_t save_witness_count;
 #ifdef ET_F32_TENSOR_TESTING
 static size_t save_witness_fail_after = SIZE_MAX;
 void et_f32_parameter_save_witness_test_fail_after_v1(size_t captures) {
@@ -3033,8 +3043,11 @@ int32_t et_f32_parameter_save_witness_end_v1(
   if (ranges_overlap(error, sizeof(*error), w, sizeof(*w)))
     return ET_F32_TENSOR_ERROR_INVALID_ARGUMENT;
   et_f32_tensor_error cleanup;
-  for (size_t j = 2u; j > 0u; --j)
-    if (et_f32_tensor_destroy_v1(&w->baseline[j - 1u], &cleanup)) abort();
+  for (size_t j = 2u; j > 0u; --j) {
+    et_f32_tensor *baseline = w->baseline[j - 1u];
+    if (et_f32_tensor_destroy_v1(&baseline, &cleanup)) abort();
+    w->baseline[j - 1u] = NULL;
+  }
   w->parameter = NULL;
   w->identity = NULL;
   memset(w->child, 0, sizeof(w->child));

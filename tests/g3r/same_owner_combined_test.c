@@ -390,8 +390,14 @@ int main(void) {
   et_f32_test_live_counts_v1 during = {.struct_size = sizeof(during)};
   et_f32_test_live_counts_v1 after = {.struct_size = sizeof(after)};
   et_f32_test_live_counts_snapshot_v1(&before);
+  et_f32_tensor_test_fail_alloc_after_v1(SIZE_MAX);
   hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
   CHECK(hold != NULL);
+  const size_t complete_begin_allocations =
+      et_f32_tensor_test_successful_allocations_v1();
+  /* O2's 28 clones and fourteen witnesses each use four allocations per
+   * tensor; every witness also allocates one token. */
+  CHECK(complete_begin_allocations == 28u * 4u + 14u * 9u);
   et_f32_test_live_counts_snapshot_v1(&during);
   CHECK(during.tensors == before.tensors + 56 &&
         during.borrows == before.borrows);
@@ -419,10 +425,75 @@ int main(void) {
   CHECK(et_f32_parameter_save_witness_check_v1(extra, &f32) == 0);
   CHECK(et_f32_parameter_save_witness_check_v1(
       (void *)(uintptr_t)1u, &f32) != 0);
+  et_f32_parameter_save_witness *peer = NULL, *peer_link_before = NULL;
+  CHECK(et_f32_parameter_save_witness_begin_v1(
+      model->p[0], model->handles[0], 2, first_shape, &peer, &f32) == 0);
+  memcpy(&peer_link_before, peer, sizeof(peer_link_before));
+  CHECK(peer_link_before == extra);
+  et_f32_test_live_counts_v1 alias_before = {
+      .struct_size = sizeof(alias_before)};
+  et_f32_test_live_counts_snapshot_v1(&alias_before);
+  et_f32_parameter_save_witness **peer_link =
+      (et_f32_parameter_save_witness **)(void *)peer;
+  CHECK(et_f32_parameter_save_witness_end_v1(peer_link, &f32) != 0);
+  CHECK(et_f32_parameter_save_witness_begin_v1(
+      model->p[0], model->handles[0], 2, first_shape, peer_link, &f32) != 0);
+  CHECK(et_f32_parameter_save_witness_check_v1(
+      extra, (et_f32_tensor_error *)(void *)peer) != 0);
+  CHECK(et_f32_parameter_save_witness_end_v1(
+      &extra, (et_f32_tensor_error *)(void *)peer) != 0);
+  CHECK(et_f32_tensor_clone_v1(
+      value_owner, (et_f32_tensor **)(void *)peer, &f32) != 0);
+  et_f32_tensor *generic_clone = NULL;
+  CHECK(et_f32_tensor_clone_v1(
+      value_owner, &generic_clone,
+      (et_f32_tensor_error *)(void *)peer) != 0 &&
+      generic_clone == NULL);
+  et_f32_parameter_save_witness *peer_link_after = NULL;
+  memcpy(&peer_link_after, peer, sizeof(peer_link_after));
+  et_f32_test_live_counts_snapshot_v1(&after);
+  CHECK(peer_link_after == peer_link_before && extra != NULL &&
+        after.tensors == alias_before.tensors &&
+        after.borrows == alias_before.borrows &&
+        et_f32_parameter_save_witness_check_v1(peer, &f32) == 0 &&
+        et_f32_parameter_save_witness_check_v1(extra, &f32) == 0);
+  CHECK(et_f32_parameter_save_witness_end_v1(&peer, &f32) == 0 &&
+        peer == NULL);
   et_f32_parameter_save_witness *stale = extra;
   CHECK(et_f32_parameter_save_witness_end_v1(&extra, &f32) == 0 &&
         extra == NULL);
   CHECK(et_f32_parameter_save_witness_check_v1(stale, &f32) != 0);
+  et_f32_parameter_save_witness *retired_link_before = NULL;
+  memcpy(&retired_link_before, stale, sizeof(retired_link_before));
+  CHECK(et_f32_parameter_save_witness_begin_v1(
+      model->p[0], model->handles[0], 2, first_shape,
+      (et_f32_parameter_save_witness **)(void *)stale, &f32) != 0);
+  CHECK(et_f32_parameter_save_witness_check_v1(
+      peer_link_before, (et_f32_tensor_error *)(void *)stale) != 0);
+  CHECK(et_f32_tensor_clone_v1(
+      value_owner, (et_f32_tensor **)(void *)stale, &f32) != 0);
+  et_f32_parameter_save_witness *retired_link_after = NULL;
+  memcpy(&retired_link_after, stale, sizeof(retired_link_after));
+  CHECK(retired_link_after == retired_link_before);
+  et_f32_test_live_counts_v1 before_clone_cut = {
+      .struct_size = sizeof(before_clone_cut)};
+  et_f32_test_live_counts_snapshot_v1(&before_clone_cut);
+  et_f32_tensor_test_fail_alloc_after_v1(5u);
+  CHECK(et_f32_parameter_save_witness_begin_v1(
+      model->p[0], model->handles[0], 2, first_shape, &extra, &f32) != 0);
+  CHECK(extra == NULL &&
+        et_f32_tensor_test_successful_allocations_v1() == 5u &&
+        f32.category == ET_F32_TENSOR_ERROR_INTERNAL &&
+        f32.code == ET_F32_TENSOR_CODE_ALLOCATION_FAILED);
+  et_f32_tensor_test_reset_allocator_v1();
+  et_f32_test_live_counts_snapshot_v1(&after);
+  CHECK(after.tensors == before_clone_cut.tensors &&
+        after.borrows == before_clone_cut.borrows &&
+        optimizer->busy == 1u && c->save_hold != NULL &&
+        et_g3r_private_same_owner_save_check_v1(hold) == 0);
+  CHECK(et_f32_parameter_save_witness_begin_v1(
+      model->p[0], model->handles[0], 2, first_shape, &extra, &f32) == 0);
+  CHECK(et_f32_parameter_save_witness_end_v1(&extra, &f32) == 0);
   et_f32_gradient_reset_plan *reset = NULL;
   CHECK(et_f32_gradient_reset_plan_prepare_v1(
       1, &model->p[0], &reset, &f32) != 0 && reset == NULL);
@@ -441,6 +512,25 @@ int main(void) {
   et_f32_test_live_counts_snapshot_v1(&after);
   CHECK(after.tensors == before.tensors && after.borrows == before.borrows);
   et_f32_parameter_save_witness_test_fail_after_v1(SIZE_MAX);
+  /* Cut inside the second baseline clone of the first witness in the real
+   * combined begin path; O2/G3 leases and the first clone must be drained. */
+  const size_t clone_cut = complete_begin_allocations - 14u * 9u + 5u;
+  et_f32_tensor_test_fail_alloc_after_v1(clone_cut);
+  CHECK(et_g3r_private_same_owner_save_begin_v1(c, model, optimizer) == NULL);
+  CHECK(et_f32_tensor_test_successful_allocations_v1() == clone_cut);
+  CHECK(et_g3r_private_same_owner_save_last_error_v1(&first) == 0);
+  CHECK(first.source == ET_G3R_SAVE_SOURCE_F32 && first.domain == 3 &&
+        first.category == ET_F32_TENSOR_ERROR_INTERNAL &&
+        first.code == ET_F32_TENSOR_CODE_ALLOCATION_FAILED);
+  et_f32_tensor_test_reset_allocator_v1();
+  CHECK(optimizer->busy == 0 && c->save_hold == NULL);
+  et_f32_test_live_counts_snapshot_v1(&after);
+  CHECK(after.tensors == before.tensors && after.borrows == before.borrows);
+  et_g3t_model_pins_internal reacquired = {0};
+  CHECK(et_g3t_model_pins_begin_internal(
+      model->p, (const void *const *)model->handles, &reacquired, &f32) == 0);
+  CHECK(et_g3t_model_pins_check_internal(&reacquired, &f32) == 0);
+  et_g3t_model_pins_end_internal(&reacquired);
   hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
   CHECK(hold != NULL);
   CHECK(et_g3r_private_same_owner_save_end_v1(hold) == 0);

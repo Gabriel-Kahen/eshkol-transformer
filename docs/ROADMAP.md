@@ -1790,7 +1790,9 @@ per-parameter witness tokens, including inert stale-address tombstones, are
 admitted across the process; partial capture drains detached
 baselines before G3/O2 while retaining the first typed error. Focused normal
 and sanitizer host controls prove this native source behavior, P1 cloning under
-pins, and the one-issued-O2-state rule. This does not establish a serialized
+pins, actual partial-clone allocation cleanup, and the one-issued-O2-state
+rule. All live and retained witness shells are protected from F32 caller
+output/error aliases. This does not establish a serialized
 Eshkol SAVE caller, C2 bytes or pair publication, cold LOAD, a compiled
 package, or concurrent unsynchronized raw-pointer safety.
 
