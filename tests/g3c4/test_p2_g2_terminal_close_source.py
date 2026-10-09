@@ -20,12 +20,17 @@ class TerminalCloseSourceTests(unittest.TestCase):
         cls.source = checker.SOURCE.read_text(encoding="utf-8")
         cls.closure = checker.CLOSURE.read_text(encoding="utf-8").splitlines()
         cls.base = checker.BASE.read_text(encoding="utf-8").splitlines()
+        cls.dependencies = {name: (ROOT / name).read_bytes()
+                            for name in checker.DIRECT_DEPENDENCIES}
 
     def validate(self, source: str | None = None,
-                 closure: list[str] | None = None) -> None:
+                 closure: list[str] | None = None,
+                 dependencies: dict[str, bytes] | None = None) -> None:
         checker.validate(source if source is not None else self.source,
                          closure if closure is not None else self.closure,
-                         self.base)
+                         self.base,
+                         dependencies if dependencies is not None
+                         else self.dependencies)
 
     def test_current_source_and_exact_closure(self) -> None:
         self.validate()
@@ -104,6 +109,31 @@ class TerminalCloseSourceTests(unittest.TestCase):
             self.validate(closure=reordered)
         with self.assertRaises(AssertionError):
             self.validate(closure=self.closure + ["native/extra.esk"])
+
+    def test_direct_dependency_missing_and_byte_drift_rejected(self) -> None:
+        for name in checker.DIRECT_DEPENDENCIES:
+            with self.subTest(name=name):
+                with self.assertRaises(AssertionError):
+                    self.validate(closure=[member for member in self.closure
+                                           if member != name])
+                absent = self.dependencies.copy()
+                del absent[name]
+                with self.assertRaises(AssertionError):
+                    self.validate(dependencies=absent)
+                changed = self.dependencies.copy()
+                changed[name] += b"\n"
+                with self.assertRaises(AssertionError):
+                    self.validate(dependencies=changed)
+
+    def test_success_artifact_cleanup_and_missing_archive_rejected(self) -> None:
+        runner = (ROOT / "scripts/test-g3c4-p2g2-terminal-close.sh").read_text()
+        checker.validate_artifact_retention(runner)
+        with self.assertRaises(AssertionError):
+            checker.validate_artifact_retention(runner + '\nrm -rf -- "$tmp"\n')
+        with self.assertRaises(AssertionError):
+            checker.validate_artifact_retention(runner.replace(
+                '"$tmp/$mode/libg3c4_p2g2_terminal_close.a"',
+                '"$tmp/$mode/other.a"'))
 
 
 if __name__ == "__main__":

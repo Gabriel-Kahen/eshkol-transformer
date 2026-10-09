@@ -2650,9 +2650,12 @@ publication, public G2 and continuation remain pending.
   original-shell terminal publication, detached snapshot/copy and release.
   The initial private source/test candidate at `bd0f50b7` passed independent
   and root source review only. A separate proof-runner successor adds a genuine
-  prompt/mode/EOS transcript, test-only P2/P3/T4 and Philox references,
+  prompt/mode/EOS transcript, test-only native P2/P3/T4 parity references and
+  an independent Philox selection reference,
   original-owner and held-lease controls, and a native-zero allocation fence.
-  Its compiled same-call normal/repeat/sanitizer gate is unrun; exhaustive
+  Its P3/T4 forwards reuse the production math graph; an independent
+  mathematical C4 oracle is still required. Compiled artifacts are retained
+  for review, but the same-call normal/repeat/sanitizer gate is unrun; exhaustive
   failure cuts, emitted tail and exact symbol admission remain pending. The
   accepted contract and public dispatch are unchanged.
 

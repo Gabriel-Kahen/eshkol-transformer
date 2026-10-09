@@ -12,6 +12,8 @@ resolve_provenance_compilers cc cxx \
 eshkol_runner="$(eshkol_build_dir)/eshkol-run"
 evidence="${1:-$(project_build_dir)/g3c4-p2g2-terminal-close-test}"
 mkdir -p "$evidence"
+test ! -e "$evidence/compiled-path.txt" || \
+  die "P2/G2 terminal-close evidence already owns compiled artifacts"
 test -z "$(git --no-optional-locks -C "$PROJECT_ROOT" status --porcelain=v1)"
 git --no-optional-locks -C "$PROJECT_ROOT" rev-parse HEAD HEAD^{tree} \
   >"$evidence/source-git.pre"
@@ -37,8 +39,8 @@ bash "$PROJECT_ROOT/scripts/test-g3c4-p2g2-t1-prefix-coordinator.sh" \
   "$evidence/prefix-predecessor" >"$evidence/prefix-predecessor.stdout"
 
 tmp="$(mktemp -d "$evidence/build.XXXXXX")"
-trap 'status=$?; if (( status == 0 )); then rm -rf -- "$tmp"; else
-  printf "P2/G2 terminal-close failure retained: %s\n" "$tmp" >&2; fi' EXIT
+printf '%s\n' "$tmp" >"$evidence/compiled-path.txt"
+trap 'status=$?; printf "P2/G2 terminal-close compiled artifacts retained (status=%s): %s\n" "$status" "$tmp" >&2' EXIT
 
 compile_mode() {
   local mode=$1 directory="$tmp/$1" source
@@ -232,6 +234,14 @@ done <"$PROJECT_ROOT/native/g3c4_p2g2_terminal_close_source_closure.txt" \
   >"$evidence/source-closure.post.sha256"
 cmp "$evidence/source-closure.pre.sha256" \
     "$evidence/source-closure.post.sha256"
+for mode in normal sanitize; do
+  sha256sum "$tmp/$mode/libg3c4_p2g2_terminal_close.a" \
+    "$tmp/$mode/p2g2-terminal-feature-off" \
+    "$tmp/$mode/p2g2-terminal-protected" \
+    "$tmp/$mode"/objects/*.o
+done >"$evidence/compiled-artifacts.sha256"
+sha256sum -c "$evidence/compiled-artifacts.sha256" \
+  >"$evidence/compiled-artifacts-verify.stdout"
 git -C "$PROJECT_ROOT" diff --check
 sha256sum "$PROJECT_ROOT/native/g3c4_p2g2_terminal_close_source_closure.txt" \
   >"$evidence/closure.sha256"

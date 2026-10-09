@@ -31,12 +31,18 @@ EOS and no-EOS cases and at least one distinct second EOS. A test-only native
 witness captures actual selected IDs, 256 genuine P2/P3 logits, final RNG,
 full K/V and model value/gradient/metadata. Separate native P3 and T4 forwards
 provide the cache reference; a development-only Python Philox oracle checks
-every emitted draw and branch. The native-zero fence covers the wrapped arena
+every emitted draw and branch. The native forwards reuse the production C4
+math/kernel graph: they are a same-model parity reference, **not** an
+independent mathematical full-model oracle. That separate C4 oracle remains
+open. The source closure now includes the exact transitive test shim and
+Philox reference bytes, with missing/drift rejection. The native-zero fence
+covers the wrapped arena
 allocators, malloc and exception-handler push through the outer `m3-call`
 return. Prezero probes include original/equal-length/paired owner and ledger
 drift, native terminal rejection and genuine I1/A2 lease release/retry.
-The runner retains normal/sanitizer ELF symbols, disassembly and source/member
-hashes for later exact review; collection alone does not prove the emitted
+The runner retains its exact normal/sanitizer archives, objects and AOT
+executables on success as well as failure, plus ELF symbols, disassembly and
+source/member hashes for later exact review. Collection alone does not prove the emitted
 tail or public symbol closure.
 
 The compiled proof must still run and establish these claims. Exhaustive

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,7 +16,9 @@ ADDITIONS = [
     "tests/g3c4/p2_g2_terminal_close_feature_off_test.esk",
     "tests/g3c4/p2_g2_terminal_close_native.c",
     "tests/g3c4/terminal_close_allocation_shim.cpp",
+    "tests/g3c4/call_entry_allocation_shim.cpp",
     "tests/g3c4/check_p2_g2_terminal_close_oracle.py",
+    "tests/g3s/reference.py",
     "tests/g3c4/test_p2_g2_terminal_close_oracle.py",
     "tests/g3c4/test_p2_g2_terminal_close_source.py",
     "scripts/check-g3c4-p2g2-terminal-close.py",
@@ -23,6 +26,12 @@ ADDITIONS = [
     "docs/g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_SOURCE_LEAF.md",
     "native/g3c4_p2g2_terminal_close_source_closure.txt",
 ]
+DIRECT_DEPENDENCIES = {
+    "tests/g3c4/call_entry_allocation_shim.cpp":
+        "53fa37f63e1780437d9021e9f0752e4c35862e4d6db9950ff34182f544bf966f",
+    "tests/g3s/reference.py":
+        "dfef749ccf1aff32f268e2db7b981a993e2bd3023e27f0044aeb412fdbec53dd",
+}
 
 
 def forms(source: str) -> list[object]:
@@ -108,10 +117,33 @@ def calls(form: object, name: str) -> list[list[object]]:
     return [part for part in walk(form) if part and part[0] == name]
 
 
-def validate(source: str, closure: list[str], base: list[str]) -> None:
+def validate_artifact_retention(script: str) -> None:
+    assert "rm -rf" not in script, "compiled artifact cleanup returned"
+    for required in (
+        'printf \'%s\\n\' "$tmp" >"$evidence/compiled-path.txt"',
+        '"$tmp/$mode/libg3c4_p2g2_terminal_close.a"',
+        '"$tmp/$mode/p2g2-terminal-feature-off"',
+        '"$tmp/$mode/p2g2-terminal-protected"',
+        '"$tmp/$mode"/objects/*.o',
+        '"$evidence/compiled-artifacts.sha256"',
+    ):
+        assert required in script, required
+
+
+def validate(source: str, closure: list[str], base: list[str],
+             dependencies: dict[str, bytes] | None = None) -> None:
     assert closure == base + ADDITIONS
     assert len(closure) == len(set(closure))
     assert all((ROOT / item).is_file() for item in closure)
+    if dependencies is None:
+        dependencies = {name: (ROOT / name).read_bytes()
+                        for name in DIRECT_DEPENDENCIES}
+    assert set(dependencies) == set(DIRECT_DEPENDENCIES)
+    for name, digest in DIRECT_DEPENDENCIES.items():
+        assert name in closure
+        assert hashlib.sha256(dependencies[name]).hexdigest() == digest, name
+    validate_artifact_retention(
+        (ROOT / "scripts/test-g3c4-p2g2-terminal-close.sh").read_text())
     enabled = (ROOT / "tests/g3c4/p2_g2_terminal_close_test.esk").read_text()
     disabled = (ROOT / "tests/g3c4/p2_g2_terminal_close_feature_off_test.esk").read_text()
     enabled_forms = forms(enabled)
