@@ -205,7 +205,43 @@ class C4MathOracleTests(unittest.TestCase):
                 oracle.compare_observation(fixture, changed, frozen_sha256)
             changed = copy.deepcopy(observed)
             changed["models"][0]["successor_words"][2] = 293
-            with self.assertRaisesRegex(ValueError, "initializer"):
+            with self.assertRaisesRegex(ValueError, "successor word"):
+                oracle.compare_observation(fixture, changed, frozen_sha256)
+            for model_index, bad_seed in ((0, False), (0, 0.0),
+                                          (1, 1729.0), (2, 1 << 63)):
+                changed = copy.deepcopy(observed)
+                changed["models"][model_index]["seed"] = bad_seed
+                with self.subTest(model_seed=bad_seed), self.assertRaises(
+                        ValueError):
+                    oracle.compare_observation(fixture, changed, frozen_sha256)
+            for model_index, word_index, bad_word in (
+                (0, 0, True), (1, 1, 1729.0), (0, 2, 292.0),
+                (0, 3, False), (0, 2, 1 << 63),
+            ):
+                changed = copy.deepcopy(observed)
+                changed["models"][model_index]["successor_words"][word_index] = bad_word
+                with self.subTest(successor=(word_index, bad_word)), \
+                     self.assertRaisesRegex(ValueError, "successor"):
+                    oracle.compare_observation(fixture, changed, frozen_sha256)
+            for bad_token in (False, 0.0, 256, -1):
+                changed = copy.deepcopy(observed)
+                changed["cases"][0]["tokens"][0] = bad_token
+                with self.subTest(token=bad_token), self.assertRaisesRegex(
+                        ValueError, "prefix token"):
+                    oracle.compare_observation(fixture, changed, frozen_sha256)
+            for bad_seed in (False, 0.0, 1 << 63):
+                changed = copy.deepcopy(observed)
+                changed["cases"][0]["seed"] = bad_seed
+                with self.subTest(case_seed=bad_seed), self.assertRaisesRegex(
+                        ValueError, "model seed"):
+                    oracle.compare_observation(fixture, changed, frozen_sha256)
+            changed = copy.deepcopy(observed)
+            changed["models"][0]["parameters"]["shape"] = [1192.0]
+            with self.assertRaisesRegex(ValueError, "dtype/device/shape"):
+                oracle.compare_observation(fixture, changed, frozen_sha256)
+            changed = copy.deepcopy(observed)
+            changed["models"][0]["parameters"]["bits"].pop()
+            with self.assertRaisesRegex(ValueError, "truncated tensor"):
                 oracle.compare_observation(fixture, changed, frozen_sha256)
             changed = copy.deepcopy(observed)
             changed["cases"].pop()

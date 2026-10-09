@@ -431,6 +431,30 @@ def _words(row: dict, shape: list[int], dtype: str) -> list[float]:
     return values
 
 
+def _model_seed(value: object) -> int:
+    if type(value) is not int or value not in SEEDS:
+        raise ValueError("model seed type/range")
+    return value
+
+
+def _state_words(value: object, seed: int) -> tuple[int, int, int, int]:
+    if (type(value) is not list or len(value) != 4 or
+        any(type(word) is not int or not -(1 << 63) <= word < (1 << 63)
+            for word in value)):
+        raise ValueError("successor word type/range")
+    if value != [1, seed, 292, 0]:
+        raise ValueError("successor word identity")
+    return tuple(value)
+
+
+def _prefix(value: object) -> tuple[int, ...]:
+    if (type(value) is not list or not 1 <= len(value) <= 4 or
+        any(type(token) is not int or not 0 <= token < 256
+            for token in value)):
+        raise ValueError("prefix token type/range")
+    return tuple(value)
+
+
 def compare_observation(fixture: dict, observed: dict,
                         frozen_sha256: str) -> dict[str, float]:
     """Compare a future independently captured native transcript, fail closed."""
@@ -467,21 +491,23 @@ def compare_observation(fixture: dict, observed: dict,
     for expected, actual in zip(fixture["models"], observed["models"]):
         _exact_keys(expected, {"seed", "parameters", "successor_words"})
         _exact_keys(actual, {"seed", "parameters", "successor_words"})
-        if expected["seed"] != actual["seed"] or \
-           expected["successor_words"] != actual["successor_words"] or \
-           expected["parameters"] != actual["parameters"]:
-            raise ValueError("initializer image/state drift")
+        seed = _model_seed(expected["seed"])
+        if _model_seed(actual["seed"]) != seed:
+            raise ValueError("initializer seed identity drift")
+        _state_words(expected["successor_words"], seed)
+        _state_words(actual["successor_words"], seed)
         _words(expected["parameters"], [1192], "float32")
+        _words(actual["parameters"], [1192], "float32")
+        if expected["parameters"] != actual["parameters"]:
+            raise ValueError("initializer image/state drift")
     for expected, actual in zip(fixture["cases"], observed["cases"]):
         _exact_keys(expected, {"seed", "tokens", "logits", "keys", "values"})
         _exact_keys(actual, {"seed", "tokens", "logits", "keys", "values"})
-        if expected["seed"] != actual["seed"] or \
-           expected["tokens"] != actual["tokens"]:
+        seed = _model_seed(expected["seed"])
+        tokens = _prefix(expected["tokens"])
+        if _model_seed(actual["seed"]) != seed or \
+           _prefix(actual["tokens"]) != tokens:
             raise ValueError("case identity drift")
-        tokens = expected["tokens"]
-        if type(tokens) is not list or not 1 <= len(tokens) <= 4 or any(
-                type(i) is not int or not 0 <= i < 256 for i in tokens):
-            raise ValueError("invalid expected prefix")
         for name, shape in (("logits", [len(tokens), 256]),
                             ("keys", [1, 2, len(tokens), 2]),
                             ("values", [1, 2, len(tokens), 2])):
