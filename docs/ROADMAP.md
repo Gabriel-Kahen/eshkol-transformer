@@ -1654,6 +1654,17 @@ Hosted integration is pending. This private predicate does not authenticate a
 C2 SHA receipt or pair, reconstruct a candidate, replay history, or prove
 resumed generation.
 
+The private diagnostic-C2 G3-T committed-history ledger and idle snapshot
+are implemented in isolated source under `ET_G3R_G3T_SAVE_LEDGER_PRIVATE`.
+Native P1/P2/manual/G1 frame commits stage and publish a two-byte provenance
+ledger at their genuine A2 commit boundaries; a G1 request that fails after
+its first committed prefill retains that prompt/cache and cannot be saved as
+a complete request. The registered snapshot copies policy, ordered history,
+partition, terminal bit, cache length and all four RNG words into a checked
+144-byte host-only owner. Focused source C tests and macro-off equivalence do
+not establish compiled package behavior, C2 same-owner binding, pair writing,
+replay, public continuation, or full-request rollback. Those gates remain open.
+
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
 diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use

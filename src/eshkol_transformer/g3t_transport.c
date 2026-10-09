@@ -68,6 +68,17 @@
 #error "G3-R idle RNG equality requires the typed G3-T RNG constructor"
 #endif
 #endif
+#ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
+#if !defined(ET_G3T_PREFILL_SAMPLE_PRIVATE) || \
+    !defined(ET_G3T_FINAL_PUBLICATION_PRIVATE) || \
+    !defined(ET_G3T_ZERO_BUDGET_PRIVATE) || \
+    !defined(ET_G3T_P2_ZERO_BUDGET_PRIVATE) || \
+    !defined(ET_G3T_MANUAL_P1_PREFILL_PRIVATE) || \
+    !defined(ET_G3T_MANUAL_P2_PREFILL_PRIVATE) || \
+    !defined(ET_G3T_MANUAL_DECODE_PRIVATE)
+#error "G3-R save ledger requires the complete diagnostic G3-T transaction stack"
+#endif
+#endif
 #ifdef ET_G3T_RECORD_RNG_IMPORT_PRIVATE
 #ifndef ET_G3T_OUTPUT_RNG_CLONE_PRIVATE
 #error "G3-R word import requires kind-8 RNG clone ownership and release"
@@ -132,6 +143,9 @@ enum { G3T_GENERATOR = 1, G3T_INPUT = 2,
 #ifdef ET_G3T_OUTPUT_RNG_CLONE_PRIVATE
        G3T_RNG_CLONE = 8,
 #endif
+#ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
+       G3T_SAVE_SNAPSHOT = 9,
+#endif
        G3T_PENDING = 0, G3T_LIVE = 1, G3T_DEAD = -1 };
 enum { G3T_ARGUMENT = 1, G3T_STATE = 2, G3T_SHAPE = 3,
        G3T_INTERNAL = 5 };
@@ -142,6 +156,15 @@ typedef struct g3t_record {
   struct g3t_record *next;
   int kind, state, busy;
 } g3t_record;
+#ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
+typedef struct g3r_ledger {
+  int64_t ids[2], length, prompt, generated, manual, terminal, pending_g1;
+} g3r_ledger;
+typedef struct g3r_save_snapshot {
+  g3t_record h;
+  et_g3r_g3t_idle_snapshot_words_v1 value;
+} g3r_save_snapshot;
+#endif
 typedef struct g3t_frame {
   int active, kind, next_ordinal, prepared, end_prepared;
   int64_t token, prompt_length;
@@ -160,6 +183,10 @@ typedef struct g3t_frame {
   float fu[8], fg[8], fd[4], y[4], nf[4], z[256];
   const void *binding_identities[14];
   unsigned char binding_values[4736];
+#ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
+  g3r_ledger candidate_ledger;
+  int ledger_staged;
+#endif
 #ifdef ET_G3T_MANUAL_DECODE_PRIVATE
   uint32_t prefix_k[4], prefix_v[4];
 #endif
@@ -238,6 +265,9 @@ typedef struct g3t_context {
   unsigned char binding_values[4736];
   int binding_ready;
   int final_committed;
+#ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
+  g3r_ledger ledger;
+#endif
 } g3t_context;
 static g3t_record *g3t_registry;
 static int64_t g3t_error_domain, g3t_error_category, g3t_error_code;
@@ -254,6 +284,87 @@ static int64_t g3t_fail(int64_t domain, int64_t category, int64_t code) {
 static int64_t g3t_bad(int64_t category, int64_t code) {
   return g3t_fail(0, category, code);
 }
+#ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
+static int g3r_ledger_valid(const g3t_context *c, const g3r_ledger *l) {
+  if (l->length < 0 || l->length > 2 || l->prompt < 0 ||
+      l->prompt > 2 || l->generated < 0 || l->generated > 1 ||
+      l->manual < 0 || l->manual > 1 ||
+      l->prompt + l->generated + l->manual != l->length ||
+      (l->generated && l->manual) ||
+      (l->length == 2 && l->prompt != 2 && l->prompt != 1) ||
+      (l->generated && (l->prompt != 1 || c->policy[4] != 1)) ||
+      (l->manual && l->prompt != 1) ||
+      (l->pending_g1 != 0 && l->pending_g1 != 1) ||
+      (l->pending_g1 && (l->length != 1 || l->prompt != 1 ||
+                         l->generated || l->manual || c->policy[4] != 1)) ||
+      (l->terminal != 0 && l->terminal != 1) ||
+      l->terminal != (l->generated && c->policy[5] >= 0 &&
+                      l->ids[l->length - 1] == c->policy[5]) ||
+      (l->length == 0 && (l->prompt || l->generated || l->manual ||
+                          l->terminal || l->pending_g1)) ||
+      (l->length == 1 && l->prompt != 1)) return 0;
+  for (int64_t i = 0; i < 2; ++i)
+    if ((i < l->length && (l->ids[i] < 0 || l->ids[i] > 255)) ||
+        (i >= l->length && l->ids[i] != 0)) return 0;
+  return 1;
+}
+static int64_t g3r_ledger_derive(g3t_context *c, g3r_ledger *next) {
+  if (!c->frame.active || !g3r_ledger_valid(c, &c->ledger))
+    return g3t_bad(G3T_STATE, G3T_INVARIANT);
+  *next = c->ledger;
+  if (c->frame.kind == 1) {
+    if (c->ledger.length || c->frame.prompt_length < 1 ||
+        c->frame.prompt_length > 2 ||
+        (c->frame.prompt_length == 2 &&
+         c->frame.prompt_ids[0] != c->frame.token) ||
+        (c->call_kind != 0 && c->call_kind != 2) ||
+        (c->call_kind == 2 &&
+         c->frame.prompt_length + c->policy[4] > 2))
+      return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    next->length = next->prompt = c->frame.prompt_length;
+    next->ids[0] = c->frame.token;
+    if (next->length == 2) next->ids[1] = c->frame.prompt_ids[1];
+    next->pending_g1 = c->call_kind == 2 && c->policy[4] == 1;
+  } else if (c->frame.kind == 2) {
+    if (c->ledger.length != 1 || c->ledger.prompt != 1 ||
+        c->ledger.generated || c->ledger.manual ||
+        c->frame.token < 0 || c->frame.token > 255)
+      return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    next->ids[1] = c->frame.token;
+    next->length = 2;
+    if (c->call_kind == 1 && !c->ledger.pending_g1) {
+      next->manual = 1;
+    } else if (c->call_kind == 2 && c->ledger.pending_g1 &&
+               c->sampled && c->frame.token == c->sample_token) {
+      next->generated = 1;
+      next->pending_g1 = 0;
+      next->terminal = c->policy[5] >= 0 &&
+                       c->frame.token == c->policy[5];
+    } else {
+      return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    }
+  } else {
+    return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+  }
+  return g3r_ledger_valid(c, next) ? 0 :
+         g3t_bad(G3T_STATE, G3T_INVARIANT);
+}
+static int64_t g3r_ledger_stage(g3t_context *c) {
+  g3r_ledger next;
+  if (g3r_ledger_derive(c, &next)) return g3t_error_category;
+  c->frame.candidate_ledger = next;
+  c->frame.ledger_staged = 1;
+  return 0;
+}
+static int64_t g3r_ledger_check(g3t_context *c) {
+  g3r_ledger next;
+  if (!c->frame.ledger_staged || g3r_ledger_derive(c, &next))
+    return g3t_error_category ? g3t_error_category :
+           g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+  return memcmp(&next, &c->frame.candidate_ledger, sizeof(next)) == 0 ? 0 :
+         g3t_bad(G3T_STATE, G3T_TOPOLOGY);
+}
+#endif
 #ifdef ET_G3T_ZERO_BUDGET_PRIVATE
 static int g3t_zero_prompt(const g3t_context *c, const g3t_output *out) {
   if (!c || !out || out->P != c->frame.prompt_length) return 0;
@@ -609,6 +720,127 @@ int64_t et_g3t_private_idle_rng_words_equal_v1(
   return 0;
 }
 #endif
+#ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
+void *et_g3r_private_g3t_idle_snapshot_create_v1(void *generator) {
+  g3t_clear();
+  g3t_context *c = g3t_admit(generator, 0);
+  if (!c) return NULL;
+  owner *model = g3t_model(c->model);
+  if (!model) return NULL;
+  const g3r_ledger *ledger = &c->ledger;
+  if (c->h.busy || model->active || c->pins.held_mask || !c->cache ||
+      c->call_kind || c->final_committed || c->frame.active ||
+      c->frame.kind || c->frame.transaction || c->frame.candidate_cache ||
+      c->pending_output || c->pending_logits || !c->prefill_committed ||
+      !c->binding_ready || !g3t_policy_valid(
+          c->policy[0], c->policy[1], c->policy[2], c->policy[3],
+          c->policy[4], c->policy[5]) || !g3r_ledger_valid(c, ledger) ||
+      ledger->length < 1 || ledger->pending_g1) {
+    g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    return NULL;
+  }
+  et_a2_kv_cache_read_borrow *borrow = NULL;
+  const et_kernel_tensor_view_v1 *keys = NULL, *values = NULL;
+  const et_kernel_tensor_view_v1 *lengths = NULL, *mask = NULL;
+  et_kernel_error error;
+  if (g3t_capture_kernel(et_a2_kv_cache_read_borrow_begin_v1(
+          c->cache, &borrow, &error), &error)) return NULL;
+  int invalid = g3t_capture_kernel(et_a2_kv_cache_read_borrow_layer_v1(
+      borrow, 0, &keys, &values, &lengths, &mask, &error), &error);
+  if (!invalid) {
+    invalid = !keys || !values || !lengths || !mask ||
+        !keys->data || !values->data || !lengths->data || !mask->data ||
+        !keys->dtype || strcmp(keys->dtype, "f32") ||
+        !values->dtype || strcmp(values->dtype, "f32") ||
+        !lengths->dtype || strcmp(lengths->dtype, "i64") ||
+        !mask->dtype || strcmp(mask->dtype, "bool") ||
+        !keys->device || strcmp(keys->device, "cpu") ||
+        !values->device || strcmp(values->device, "cpu") ||
+        !lengths->device || strcmp(lengths->device, "cpu") ||
+        !mask->device || strcmp(mask->device, "cpu") ||
+        keys->layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR ||
+        values->layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR ||
+        lengths->layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR ||
+        mask->layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR ||
+        keys->offset_bytes || values->offset_bytes ||
+        lengths->offset_bytes || mask->offset_bytes ||
+        keys->rank != 4 || values->rank != 4 ||
+        !keys->shape || !values->shape ||
+        keys->shape[0] != 1 || keys->shape[1] != 2 ||
+        keys->shape[2] != 2 || keys->shape[3] != 2 ||
+        values->shape[0] != 1 || values->shape[1] != 2 ||
+        values->shape[2] != 2 || values->shape[3] != 2 ||
+        keys->byte_length != 32 || values->byte_length != 32 ||
+        lengths->rank != 1 || !lengths->shape || lengths->shape[0] != 1 ||
+        lengths->byte_length != sizeof(int64_t) ||
+        ((const int64_t *)lengths->data)[0] != ledger->length ||
+        mask->rank != 2 || !mask->shape || mask->shape[0] != 1 ||
+        mask->shape[1] != 2 || mask->byte_length != 2 ||
+        ((const uint8_t *)mask->data)[0] != 1 ||
+        ((const uint8_t *)mask->data)[1] != (ledger->length == 2);
+    if (invalid) g3t_bad(G3T_STATE, G3T_TOPOLOGY);
+  }
+  if (et_a2_kv_cache_read_borrow_end_v1(&borrow, &error)) abort();
+  if (invalid) return NULL;
+#ifdef ET_G3T_TESTING
+  if (g3t_allocations >= g3t_allocation_limit) {
+    g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
+    return NULL;
+  }
+#endif
+  g3r_save_snapshot *snapshot = calloc(1, sizeof(*snapshot));
+  if (!snapshot) {
+    g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
+    return NULL;
+  }
+#ifdef ET_G3T_TESTING
+  ++g3t_allocations;
+#endif
+  int64_t *word = snapshot->value.word;
+  word[0] = 1;
+  memcpy(word + 1, c->policy, sizeof(c->policy));
+  memcpy(word + 7, c->rng, sizeof(c->rng));
+  memcpy(word + 11, ledger->ids, sizeof(ledger->ids));
+  word[13] = ledger->prompt;
+  word[14] = ledger->generated;
+  word[15] = ledger->manual;
+  word[16] = ledger->terminal;
+  word[17] = ledger->length;
+  snapshot->h.kind = G3T_SAVE_SNAPSHOT;
+  snapshot->h.state = G3T_LIVE;
+  snapshot->h.next = g3t_registry;
+  g3t_registry = &snapshot->h;
+  return snapshot;
+}
+int64_t et_g3r_private_g3t_idle_snapshot_copy_v1(
+    void *candidate, et_g3r_g3t_idle_snapshot_words_v1 *destination,
+    int64_t destination_bytes) {
+  g3t_clear();
+  g3r_save_snapshot *snapshot = (g3r_save_snapshot *)g3t_admit_record(
+      candidate, G3T_SAVE_SNAPSHOT, 0);
+  if (!snapshot) return g3t_error_category;
+  if (!destination || destination_bytes != (int64_t)sizeof(*destination) ||
+      snapshot->h.busy)
+    return g3t_bad(G3T_ARGUMENT, G3T_IDENTITY);
+  uintptr_t target = (uintptr_t)destination;
+  uintptr_t source = (uintptr_t)snapshot;
+  if ((target >= source && target - source < sizeof(*snapshot)) ||
+      (source >= target && source - target < sizeof(*destination)))
+    return g3t_bad(G3T_ARGUMENT, G3T_IDENTITY);
+  memcpy(destination, &snapshot->value, sizeof(*destination));
+  return 0;
+}
+int64_t et_g3r_private_g3t_idle_snapshot_release_v1(void *candidate) {
+  g3t_clear();
+  g3r_save_snapshot *snapshot = (g3r_save_snapshot *)g3t_admit_record(
+      candidate, G3T_SAVE_SNAPSHOT, 0);
+  if (!snapshot) return g3t_error_category;
+  if (snapshot->h.busy) return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+  memset(&snapshot->value, 0, sizeof(snapshot->value));
+  snapshot->h.state = G3T_DEAD;
+  return 0;
+}
+#endif
 int64_t et_g3t_private_generator_close_v1(void *candidate) {
   g3t_clear();
   g3t_context *c = g3t_admit(candidate, 1);
@@ -621,6 +853,9 @@ int64_t et_g3t_private_generator_close_v1(void *candidate) {
   if (et_a2_kv_cache_destroy_v1(&c->cache, &error)) return g3t_a2_failure(&error);
   memset(c->policy, 0, sizeof(c->policy));
   memset(c->rng, 0, sizeof(c->rng));
+#ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
+  memset(&c->ledger, 0, sizeof(c->ledger));
+#endif
   memset(c->binding_identities, 0, sizeof(c->binding_identities));
   memset(c->binding_values, 0, sizeof(c->binding_values));
   c->binding_ready = 0;
@@ -1793,6 +2028,9 @@ int64_t et_g3t_private_frame_prepare_v1(
     }
     if (offset != sizeof(c->frame.binding_values))
       return g3t_bad(G3T_INTERNAL, G3T_INVARIANT);
+#ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
+    if (g3r_ledger_stage(c)) return g3t_error_category;
+#endif
     uint32_t bits[256];
     memcpy(bits,
 #ifdef ET_G3T_MANUAL_P2_PREFILL_PRIVATE
@@ -1819,6 +2057,9 @@ int64_t et_g3t_private_frame_prepare_v1(
         c->frame.prepared || !c->prefill_committed || !c->binding_ready)
       return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
     if (g3t_check_binding(c)) return g3t_error_category;
+#ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
+    if (g3r_ledger_stage(c)) return g3t_error_category;
+#endif
     uint32_t bits[256];
     memcpy(bits, c->frame.z, sizeof(bits));
     et_f32_tensor_error error;
@@ -1846,6 +2087,9 @@ int64_t et_g3t_private_frame_prepare_v1(
         out->ids_copied != 1 || out->text_ready != 1 ||
         c->frame.token != c->sample_token)
       return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+#ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
+    if (g3r_ledger_stage(c)) return g3t_error_category;
+#endif
     c->frame.prepared = 1;
     return 0;
 #else
@@ -1880,6 +2124,9 @@ int64_t et_g3t_private_frame_prepare_v1(
   }
   if (offset != sizeof(c->frame.binding_values))
     return g3t_bad(G3T_INTERNAL, G3T_INVARIANT);
+#ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
+  if (g3r_ledger_stage(c)) return g3t_error_category;
+#endif
   c->frame.prepared = 1;
   return 0;
 }
@@ -2259,6 +2506,9 @@ int64_t et_g3t_private_call_prepare_end_v1(void *candidate) {
     if (c->frame.end_prepared || c->final_committed)
       return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
     if (g3t_manual_p1_preflight(c)) return g3t_error_category;
+#ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
+    if (g3r_ledger_check(c)) return g3t_error_category;
+#endif
     c->frame.end_prepared = 1;
     return 0;
   }
@@ -2268,6 +2518,9 @@ int64_t et_g3t_private_call_prepare_end_v1(void *candidate) {
     if (c->frame.end_prepared || c->final_committed)
       return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
     if (g3t_manual_decode_preflight(c)) return g3t_error_category;
+#ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
+    if (g3r_ledger_check(c)) return g3t_error_category;
+#endif
     c->frame.end_prepared = 1;
     return 0;
   }
@@ -2276,6 +2529,9 @@ int64_t et_g3t_private_call_prepare_end_v1(void *candidate) {
       c->final_committed)
     return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
   if (g3t_final_preflight(c)) return g3t_error_category;
+#ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
+  if (g3r_ledger_check(c)) return g3t_error_category;
+#endif
   c->frame.end_prepared = 1;
   return 0;
 }
@@ -2289,6 +2545,9 @@ int64_t et_g3t_private_frame_commit_v1(void *candidate) {
     if (!c->frame.end_prepared || g3t_manual_p1_preflight(c))
       return g3t_error_category ?
           g3t_error_category : g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+#ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
+    if (g3r_ledger_check(c)) return g3t_error_category;
+#endif
     /* All recoverable checks end before the A2 commit and old-cache destroy. */
     et_kernel_error error;
     if (et_a2_kv_cache_transaction_commit_v1(
@@ -2313,6 +2572,9 @@ int64_t et_g3t_private_frame_commit_v1(void *candidate) {
     logits->h.busy = 0;
     c->pending_logits = NULL;
     c->final_committed = 1;
+#ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
+    memcpy(&c->ledger, &c->frame.candidate_ledger, sizeof(c->ledger));
+#endif
     memset(&c->frame, 0, sizeof(c->frame));
     return 0;
   }
@@ -2322,6 +2584,9 @@ int64_t et_g3t_private_frame_commit_v1(void *candidate) {
     if (!c->frame.end_prepared || g3t_manual_decode_preflight(c))
       return g3t_error_category ?
           g3t_error_category : g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+#ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
+    if (g3r_ledger_check(c)) return g3t_error_category;
+#endif
     et_kernel_error error;
     if (et_a2_kv_cache_transaction_commit_v1(
             &c->frame.transaction, &error)) abort();
@@ -2332,6 +2597,9 @@ int64_t et_g3t_private_frame_commit_v1(void *candidate) {
     logits->h.busy = 0;
     c->pending_logits = NULL;
     c->final_committed = 1;
+#ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
+    memcpy(&c->ledger, &c->frame.candidate_ledger, sizeof(c->ledger));
+#endif
     memset(&c->frame, 0, sizeof(c->frame));
     return 0;
   }
@@ -2348,6 +2616,9 @@ int64_t et_g3t_private_frame_commit_v1(void *candidate) {
     if (!c->frame.end_prepared || g3t_final_preflight(c))
       return g3t_error_category ?
           g3t_error_category : g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+#ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
+    if (g3r_ledger_check(c)) return g3t_error_category;
+#endif
     et_kernel_error error;
     if (et_a2_kv_cache_transaction_commit_v1(
             &c->frame.transaction, &error)) abort();
@@ -2371,6 +2642,9 @@ int64_t et_g3t_private_frame_commit_v1(void *candidate) {
     out->h.busy = 0;
     c->pending_output = NULL;
     c->final_committed = 1;
+#ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
+    memcpy(&c->ledger, &c->frame.candidate_ledger, sizeof(c->ledger));
+#endif
     memset(&c->frame, 0, sizeof(c->frame));
     return 0;
   }
@@ -2379,6 +2653,9 @@ int64_t et_g3t_private_frame_commit_v1(void *candidate) {
     if (!c->frame.end_prepared || g3t_final_preflight(c))
       return g3t_error_category ?
           g3t_error_category : g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+#ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
+    if (g3r_ledger_check(c)) return g3t_error_category;
+#endif
 #ifdef ET_G3T_TESTING
     memcpy(c->test_generated_logits, c->frame.z,
            sizeof(c->test_generated_logits));
@@ -2397,12 +2674,18 @@ int64_t et_g3t_private_frame_commit_v1(void *candidate) {
     out->h.busy = 0;
     c->pending_output = NULL;
     c->final_committed = 1;
+#ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
+    memcpy(&c->ledger, &c->frame.candidate_ledger, sizeof(c->ledger));
+#endif
     memset(&c->frame, 0, sizeof(c->frame));
     return 0;
   }
 #else
   if (c->frame.kind == 2)
     return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+#endif
+#ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
+  if (g3r_ledger_check(c)) return g3t_error_category;
 #endif
   et_kernel_error error;
   if (g3t_capture_kernel(et_a2_kv_cache_transaction_commit_v1(
@@ -2419,6 +2702,9 @@ int64_t et_g3t_private_frame_commit_v1(void *candidate) {
          sizeof(c->binding_values));
   c->binding_ready = 1;
   memcpy(c->last_logits, c->frame.z, sizeof(c->last_logits));
+#ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
+  memcpy(&c->ledger, &c->frame.candidate_ledger, sizeof(c->ledger));
+#endif
   memset(&c->frame, 0, sizeof(c->frame));
   c->prefill_committed = 1;
   return 0;

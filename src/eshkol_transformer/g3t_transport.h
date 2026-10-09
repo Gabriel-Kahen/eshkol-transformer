@@ -19,6 +19,17 @@ int64_t et_g3t_private_idle_rng_words_equal_v1(
     void *generator, int64_t version, int64_t seed,
     int64_t counter_low, int64_t counter_high);
 #endif
+#ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
+/* Private host snapshot, not the G3RCV1 wire record. */
+typedef struct et_g3r_g3t_idle_snapshot_words_v1 {
+  int64_t word[18];
+} et_g3r_g3t_idle_snapshot_words_v1;
+void *et_g3r_private_g3t_idle_snapshot_create_v1(void *generator);
+int64_t et_g3r_private_g3t_idle_snapshot_copy_v1(
+    void *snapshot, et_g3r_g3t_idle_snapshot_words_v1 *destination,
+    int64_t destination_bytes);
+int64_t et_g3r_private_g3t_idle_snapshot_release_v1(void *snapshot);
+#endif
 int64_t et_g3t_private_generator_close_v1(void *context);
 int64_t et_g3t_private_call_acquire_v1(void *context, int64_t call_kind);
 int64_t et_g3t_private_call_abort_v1(void *context);
