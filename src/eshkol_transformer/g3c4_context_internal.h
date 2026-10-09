@@ -34,6 +34,11 @@ int64_t et_g3c4_private_rng_release_v1(void *rng);
 #ifdef ET_G3C4_P2_G1_PUBLIC_RESULT_PRIVATE
 /* Registered, detached fixed-profile public result owners. */
 void *et_g3c4_private_result_tensor_create_v1(int64_t kind, int64_t value);
+#ifdef ET_G3C4_P2_G2_PUBLIC_RESULT_PRIVATE
+/* Distinct owned CPU-i64 [1|2] result for a terminal snapshot. */
+void *et_g3c4_private_terminal_result_tensor_create_v1(
+    int64_t kind, int64_t count, int64_t value0, int64_t value1);
+#endif
 int64_t et_g3c4_private_result_tensor_release_v1(void *result);
 void *et_g3c4_private_result_rng_create_v1(
     int64_t w0, int64_t w1, int64_t w2, int64_t w3);

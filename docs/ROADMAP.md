@@ -2672,6 +2672,14 @@ publication, public G2 and continuation remain pending.
   toolchain admission, numerical comparison, terminal same-call proof and public
   continuation remain pending.
 
+  A source-only private P2/G2 result-owner prerequisite adds an opt-in C4
+  constructor for a distinct CPU-i64 `[1|2]` terminal ID result and scalar
+  terminal length/cache results. It retains the existing P2/G1 scalar entry
+  and release ABI, checks the live I1 shape, dtype, device and every word,
+  and rejects a held I1 borrow before retirement. Its native negative test is
+  staged but not executed; compiled normal/repeat/sanitizer behavior, exact
+  symbol closure, the public G2 adapter and continuation remain pending.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
