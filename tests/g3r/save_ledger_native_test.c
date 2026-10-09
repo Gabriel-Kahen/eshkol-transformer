@@ -123,6 +123,86 @@ static int snapshot_ownership(void) {
   return 0;
 }
 #ifdef ET_G3R_AUTH_TEST
+static int stage_real_first_frame(g3t_context *c) {
+  int64_t count_data[1] = {1};
+  uint64_t count_shape[1] = {1}, kv_shape[4] = {1, 2, 1, 2};
+  float key_data[4] = {0}, value_data[4] = {0};
+  et_kernel_tensor_view_v1 count = g3t_view(
+      count_data, sizeof(count_data), "i64", 1, count_shape);
+  et_kernel_tensor_view_v1 key = g3t_view(
+      key_data, sizeof(key_data), "f32", 4, kv_shape);
+  et_kernel_tensor_view_v1 value = g3t_view(
+      value_data, sizeof(value_data), "f32", 4, kv_shape);
+  et_kernel_error error;
+  CHECK(et_a2_kv_cache_create_v1(1, 1, 2, 2, 2,
+                                &c->frame.candidate_cache, &error) == 0);
+  CHECK(et_a2_kv_cache_transaction_begin_v1(
+      c->frame.candidate_cache, 1, &count, &c->frame.transaction, &error) == 0);
+  CHECK(et_a2_kv_cache_transaction_stage_layer_v1(
+      c->frame.transaction, 0, &key, &value, &error) == 0);
+  c->frame.active = c->frame.prepared = 1;
+  c->frame.kind = 1;
+  c->frame.next_ordinal = 21;
+  c->frame.token = 41;
+  c->frame.prompt_length = 1;
+  CHECK(g3r_ledger_stage(c) == 0);
+  return 0;
+}
+static int authentic_first_commit(owner *model) {
+  et_kernel_error error;
+  g3t_context *c = et_g3t_private_generator_seed_v1(
+      model, 1729, 0, INT64_C(0x3f800000), 256,
+      INT64_C(0x3f800000), 1, -1);
+  CHECK(c != NULL);
+  CHECK(et_g3t_private_call_acquire_v1(c, 2) == 0);
+  CHECK(et_g3t_private_output_reserve_v1(c, 1) != NULL);
+  CHECK(stage_real_first_frame(c) == 0);
+  et_a2_kv_cache_transaction_view *held_view = NULL;
+  CHECK(et_a2_kv_cache_transaction_view_begin_v1(
+      c->frame.transaction, 0, &held_view, &error) == 0);
+  CHECK(et_g3t_private_frame_commit_v1(c) != 0);
+  CHECK(g3t_error_domain == 1);
+  CHECK(c->ledger.length == 0 && c->frame.transaction != NULL &&
+        c->frame.candidate_cache != NULL);
+  CHECK(et_a2_kv_cache_transaction_view_end_v1(&held_view, &error) == 0);
+  CHECK(et_g3t_private_frame_commit_v1(c) == 0);
+  CHECK(c->ledger.length == 1 && c->ledger.prompt == 1 &&
+        c->ledger.ids[0] == 41 && c->ledger.pending_g1 == 1 &&
+        c->frame.active == 0 && c->frame.candidate_cache == NULL);
+  et_a2_kv_cache_read_borrow *committed = NULL;
+  const et_kernel_tensor_view_v1 *keys = NULL, *values = NULL;
+  const et_kernel_tensor_view_v1 *lengths = NULL, *mask = NULL;
+  CHECK(et_a2_kv_cache_read_borrow_begin_v1(
+      c->cache, &committed, &error) == 0);
+  CHECK(et_a2_kv_cache_read_borrow_layer_v1(
+      committed, 0, &keys, &values, &lengths, &mask, &error) == 0);
+  CHECK(((const int64_t *)lengths->data)[0] == 1 &&
+        ((const uint8_t *)mask->data)[0] == 1 &&
+        ((const uint8_t *)mask->data)[1] == 0);
+  CHECK(et_a2_kv_cache_read_borrow_end_v1(&committed, &error) == 0);
+  CHECK(et_g3t_private_call_abort_v1(c) == 0);
+  CHECK(et_g3r_private_g3t_idle_snapshot_create_v1(c) == NULL);
+  CHECK(et_g3t_private_generator_close_v1(c) == 0);
+
+  c = et_g3t_private_generator_seed_v1(
+      model, 1729, 0, INT64_C(0x3f800000), 256,
+      INT64_C(0x3f800000), 1, -1);
+  CHECK(c != NULL);
+  CHECK(et_g3t_private_call_acquire_v1(c, 2) == 0);
+  CHECK(et_g3t_private_output_reserve_v1(c, 1) != NULL);
+  CHECK(stage_real_first_frame(c) == 0);
+  et_a2_kv_cache_read_borrow *held_old = NULL;
+  CHECK(et_a2_kv_cache_read_borrow_begin_v1(
+      c->cache, &held_old, &error) == 0);
+  CHECK(et_g3t_private_frame_commit_v1(c) != 0);
+  CHECK(g3t_error_domain == 1);
+  CHECK(c->ledger.length == 0 && c->frame.transaction == NULL &&
+        c->frame.candidate_cache != NULL && c->prefill_committed == 0);
+  CHECK(et_a2_kv_cache_read_borrow_end_v1(&held_old, &error) == 0);
+  CHECK(et_g3t_private_call_abort_v1(c) == 0);
+  CHECK(et_g3t_private_generator_close_v1(c) == 0);
+  return 0;
+}
 static int authentic_snapshot(void) {
   static unsigned char identities[14];
   initializer *initial = et_m3t_private_initializer_create_v1(1729);
@@ -195,6 +275,7 @@ static int authentic_snapshot(void) {
       snapshot, &words, sizeof(words)) == 0);
   CHECK(words.word[11] == 41 && words.word[17] == 1);
   CHECK(et_g3r_private_g3t_idle_snapshot_release_v1(snapshot) == 0);
+  CHECK(authentic_first_commit(model) == 0);
   return 0;
 }
 #endif
