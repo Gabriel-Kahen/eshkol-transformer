@@ -2729,6 +2729,13 @@ publication, public G2 and continuation remain pending.
   stages bounded readelf/loader raw receipts against the accepted f31 tool and
   runtime inventories. The actual image observation, ROOT pinning, package
   build, installed G2 execution and sanitizer close remain **unrun**.
+  A later E3 sealed-fixture extraction failed in its normal observation phase
+  with `ProcessLookupError` (`ESRCH`); its retained receipt has no throwing
+  traceback, so the exact origin remains unproved. A scoped source-only
+  collector successor treats only `ENOENT` and `ESRCH` while enumerating
+  `/proc` entries as a disappeared candidate. Leader/session/owner checks and
+  other I/O errors remain strict. This change has not been run in Docker and
+  does not accept the failed E3 result.
 
   An [inactive test-only F loader outer source](g3/G3_C4_F_LOADER_OUTER_SOURCE_LEAF.md)
   specifies the exact f31 guest mounts and bounded owned Docker-client and

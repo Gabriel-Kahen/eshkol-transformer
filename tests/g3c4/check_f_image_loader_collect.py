@@ -43,6 +43,7 @@ def validate(source: str, base: list[str], closure: list[str],
                    "attest.resolved_image_libs(", "image_state(",
                    "loader_rows(", "os.WNOWAIT", "os.wait4(",
                    "start_new_session=True", "signal_owned(",
+                   "errno.ENOENT, errno.ESRCH",
                    "unadmitted loader dependency", "collector post-publication"):
         assert anchor in source, anchor
     assert "subprocess.run(" not in source

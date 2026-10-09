@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import errno
 import json
 from pathlib import Path
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -29,11 +31,59 @@ class ImageCollectorTests(unittest.TestCase):
         source_check.validate(source, base, closure, originals)
         for changed in (source.replace("os.WNOWAIT", "0"),
                         source.replace("unadmitted loader dependency", "ignored", 1),
-                        source.replace('"--debug-dump=no-follow-links", ', "")):
+                        source.replace('"--debug-dump=no-follow-links", ', ""),
+                        source.replace("errno.ENOENT, errno.ESRCH", "errno.ENOENT")):
             with self.assertRaises(AssertionError):
                 source_check.validate(changed, base, closure, originals)
         with self.assertRaises(AssertionError):
             source_check.validate(source, base, closure[:-1], originals)
+
+    def test_proc_member_disappearance_is_only_enoent_or_esrch(self) -> None:
+        class Entry:
+            def __init__(self, pid: int, owner: int | OSError = 1000):
+                self.name, self.owner = str(pid), owner
+            def stat(self):
+                if isinstance(self.owner, OSError):
+                    raise self.owner
+                return SimpleNamespace(st_uid=self.owner)
+
+        def scan(entries, identities):
+            proc = SimpleNamespace(iterdir=lambda: entries)
+            def identity(pid):
+                row = identities[pid]
+                if isinstance(row, BaseException):
+                    raise row
+                return row
+            with patch.object(collect, "Path", return_value=proc), \
+                 patch.object(collect, "identity", side_effect=identity):
+                return collect.members(42, 1000)
+
+        live = (101, 101, 42, 1234, "S")
+        wrong_session = (102, 102, 99, 1235, "S")
+        for missing in (FileNotFoundError(errno.ENOENT, "vanished"),
+                        ProcessLookupError(errno.ESRCH, "vanished")):
+            with self.subTest(source="identity", error=type(missing).__name__):
+                self.assertEqual(scan([Entry(101), Entry(102)],
+                                      {101: missing, 102: wrong_session}), [])
+            with self.subTest(source="owner", error=type(missing).__name__):
+                self.assertEqual(scan([Entry(101, missing), Entry(102)],
+                                      {101: live, 102: wrong_session}), [])
+        self.assertEqual(scan([Entry(101), Entry(102)],
+                              {101: live, 102: wrong_session}), [live])
+        with self.assertRaisesRegex(ValueError, "foreign member"):
+            scan([Entry(101, 2000)], {101: live})
+        for error in (PermissionError(errno.EPERM, "denied"),
+                      OSError(errno.EIO, "unrelated")):
+            with self.subTest(error=error.errno):
+                with self.assertRaises(OSError) as caught:
+                    scan([Entry(101)], {101: error})
+                self.assertEqual(caught.exception.errno, error.errno)
+                with self.assertRaises(OSError) as caught:
+                    scan([Entry(101, error)], {101: live})
+                self.assertEqual(caught.exception.errno, error.errno)
+        with patch.object(collect, "identity", return_value=wrong_session):
+            with self.assertRaisesRegex(ValueError, "collector session identity changed"):
+                collect.signal_owned((102, 102, 42, 1235, "S"), 1000, collect.signal.SIGTERM)
 
     def test_actual_saved_f31_pin_sources(self) -> None:
         base = Path("/home/gabe/.codex/evidence/eshkol-transformer/"

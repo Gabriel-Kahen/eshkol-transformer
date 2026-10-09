@@ -6,6 +6,7 @@ The outer ROOT capsule, not this module, admits the f31 image and source.
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import json
 import os
@@ -123,8 +124,10 @@ def members(sid: int, uid: int) -> list[tuple[int, int, int, int, str]]:
         try:
             row = identity(int(path.name))
             owner = path.stat().st_uid
-        except FileNotFoundError:
-            continue
+        except OSError as error:
+            if error.errno in (errno.ENOENT, errno.ESRCH):
+                continue
+            raise
         if row[2] == sid and row[4] != "Z":
             require(owner == uid, "foreign member in collector session")
             found.append(row)
