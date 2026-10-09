@@ -2730,6 +2730,12 @@ publication, public G2 and continuation remain pending.
   runtime inventories. The actual image observation, ROOT pinning, package
   build, installed G2 execution and sanitizer close remain **unrun**.
 
+  An [inactive test-only F loader outer source](g3/G3_C4_F_LOADER_OUTER_SOURCE_LEAF.md)
+  specifies the exact f31 guest mounts and bounded owned Docker-client and
+  container closure path. Only a future immutable ROOT wrapper may pin its
+  external decision SHA and invoke it; no
+  Docker launch, loader result, public package or sanitizer proof is claimed.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
