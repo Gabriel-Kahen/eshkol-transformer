@@ -2692,6 +2692,14 @@ publication, public G2 and continuation remain pending.
   profile authority. Emitted tail, normal/repeat/sanitizer behavior, native
   object and symbol closure, and public G2 dispatch remain pending.
 
+  A separate [public G2 prezero ticket source candidate](g3/G3_C4_PUBLIC_G2_PREZERO_TICKET_SOURCE_LEAF.md)
+  now roots literal budget-two/EOS creator identity and issues a per-call ticket
+  only inside the public generate callable. A fixed private route binds exact
+  output/terminal authority before native zero; the existing P2/G1 adapter
+  remains unchanged. Source and mutation checks are staged. Public result
+  accessors, genuine AOT/normal/repeat/sanitizer and emitted zero-tail proof,
+  package/native symbol closure and continuation remain pending.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |

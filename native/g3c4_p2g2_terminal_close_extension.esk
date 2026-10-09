@@ -254,7 +254,8 @@
 ;;; Probes are private development hooks before native commit or during a
 ;;; rejected pre-zero abort. Neither can execute in the successful tail.
 (define (g3c4-p2g2-terminal-close-core-private
-          generator input before-terminal repair-lease origin-enabled)
+          generator input before-terminal repair-lease origin-enabled
+          public-ticket public-stage)
   (let* ((operation 'g3c4-p2g2-terminal-close-private)
          (original-generator generator)
          (original-input input)
@@ -333,6 +334,10 @@
              (old-origin-bindings
                (vector-ref g3c4-p2g2-terminal-origin-bindings 0))
              (origin-binding #f)
+             (public-row
+               (if public-ticket (vector-ref public-ticket 10) #f))
+             (public-anchor
+               (if public-ticket (vector-ref public-ticket 11) #f))
              (barrier (vector #f))
              (output #f)
              (selected-first -1)
@@ -341,6 +346,10 @@
         (if (not (and (eq? generator-entry original-generator-entry)
                       (or (eq? origin-enabled #t)
                           (eq? origin-enabled #f))
+                      (or (eq? public-ticket #f)
+                          (and origin-enabled
+                               (vector? public-ticket)
+                               (= (vector-length public-ticket) 21)))
                       (eq? (g3c4-input-entry-live
                              original-input operation)
                            original-input-entry)
@@ -396,6 +405,8 @@
                                       0 old-origin-anchors)
                          (vector-set! g3c4-p2g2-terminal-origin-bindings
                                       0 old-origin-bindings)))
+                   (if public-ticket
+                       (public-stage 'restore #f #f #f 0 -1 -1 operation))
                    (raise caught)))
           (vector-set! g3c4-registry 0
                        (cons call (vector-ref g3c4-registry 0)))
@@ -482,6 +493,8 @@
                                   bound-input-entry)))))
                   (vector-set! g3c4-p2g2-terminal-origin-bindings 0
                                (cons origin-binding old-origin-bindings)))))
+            (if public-ticket
+                (public-stage 'bind output row anchor 0 -1 -1 operation))
           (g3c4-p2g2-terminal-active-check
             call row anchor originals operation)
           (g3c4-native-check
@@ -575,6 +588,9 @@
                   original-generator
                   original-generator-entry original-input original-input-entry
                   row anchor count selected-first selected-second operation)))
+          (if public-ticket
+              (public-stage 'verify output row anchor count selected-first
+                            selected-second operation))
           (if (= (g3c4-p2g2-native-terminal
                    native (vector-ref output 3) first-raw 9
                    (if (= count 1) '() second-raw)
@@ -589,6 +605,11 @@
                     (begin
                       (vector-set! origin-row 9 'live)
                       (vector-set! origin-anchor 9 'live)))
+                (if public-ticket
+                    (begin
+                      (vector-set! public-ticket 12 'live)
+                      (vector-set! public-row 8 'live)
+                      (vector-set! public-anchor 8 'live)))
                 (vector-set! row 14 count)
                 (vector-set! anchor 14 count)
                 (vector-set! row 15 selected-first)
@@ -638,7 +659,7 @@
 (define (g3c4-p2g2-terminal-close-probed-private
           generator input before-terminal repair-lease)
   (g3c4-p2g2-terminal-close-core-private
-    generator input before-terminal repair-lease #f))
+    generator input before-terminal repair-lease #f #f #f))
 
 ;;; Single closed production entry. No caller body can run after commit.
 (define (g3c4-p2g2-terminal-close-private generator input)
@@ -655,7 +676,7 @@
     generator input
     (lambda (call row) #t)
     (lambda (call row) #f)
-    #t))
+    #t #f #f))
 
 (define (g3c4-p2g2-terminal-live shell operation)
   (let* ((entry (g3c4-registry-find shell operation))

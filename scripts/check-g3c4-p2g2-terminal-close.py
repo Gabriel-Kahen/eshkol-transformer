@@ -174,7 +174,7 @@ def validate(source: str, closure: list[str], base: list[str],
     probe = definition(parsed, "g3c4-p2g2-terminal-close-probed-private")
     assert calls(probe, "g3c4-p2g2-terminal-close-core-private") == [
         ["g3c4-p2g2-terminal-close-core-private", "generator", "input",
-         "before-terminal", "repair-lease", "#f"]]
+         "before-terminal", "repair-lease", "#f", "#f", "#f"]]
     published = definition(parsed, "g3c4-p2g2-terminal-close-private")
     assert calls(published, "g3c4-p2g2-terminal-close-probed-private") == [
         ["g3c4-p2g2-terminal-close-probed-private", "generator", "input",
@@ -184,7 +184,7 @@ def validate(source: str, closure: list[str], base: list[str],
     assert calls(origin, "g3c4-p2g2-terminal-close-core-private") == [
         ["g3c4-p2g2-terminal-close-core-private", "generator", "input",
          ["lambda", ["call", "row"], "#t"],
-         ["lambda", ["call", "row"], "#f"], "#t"]]
+         ["lambda", ["call", "row"], "#f"], "#t", "#f", "#f"]]
     origin_check = definition(parsed,
                               "g3c4-p2g2-terminal-origin-prezero-check")
     assert ["procedure?", ["cdr", "binding"]] in calls(

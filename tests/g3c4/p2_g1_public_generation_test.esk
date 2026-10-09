@@ -8,6 +8,15 @@
 (load "g3c4_public_generation_dispatch_extension.esk")
 (load "g3c4_p2g2_ownership_extension.esk")
 
+;;; Isolated P2/G1 AOT closure only. The installed aggregate loads the genuine
+;;; P2/G2 leaves; these fail-stop definitions are unreachable at budget one.
+(define (g3c4-p2g2-prefix-preflight generator input)
+  (exit 134))
+(define (g3c4-p2g2-terminal-close-core-private
+          generator input before-terminal repair-lease origin-enabled
+          public-ticket public-stage)
+  (exit 134))
+
 (extern i64 generator-rng-word ptr i64
         :real et_g3c4_coordinator_test_generator_rng_word_v1)
 (extern i64 owner-fail-after i64
