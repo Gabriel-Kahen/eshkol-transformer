@@ -230,4 +230,6 @@ tests/g3c4/f_loader_outer.py
 tests/g3c4/test_f_loader_outer.py
 tests/g3c4/check_f_loader_outer.py
 docs/g3/G3_C4_F_LOADER_OUTER_SOURCE_LEAF.md
+tests/g3c4/fixtures/f_loader_first_created/image.stdout.raw
+tests/g3c4/fixtures/f_loader_first_created/created.stdout.raw
 native/g3c4_public_g2_loader_outer_source_closure.txt

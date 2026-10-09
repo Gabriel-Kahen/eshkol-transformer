@@ -17,6 +17,33 @@ from tests.g3c4 import check_f_loader_outer as source_check
 
 
 class OuterTests(unittest.TestCase):
+    def test_first_actual_image_and_created_inspect_label_union(self) -> None:
+        fixture = Path(__file__).parent / "fixtures/f_loader_first_created"
+        image = (fixture / "image.stdout.raw").read_bytes()
+        created = (fixture / "created.stdout.raw").read_bytes()
+        self.assertEqual(hashlib.sha256(image).hexdigest(),
+                         "5110b38bb787512feb076ce27d0de79688edbf4ff3c5e1c5ac6b735d7c4754c1")
+        self.assertEqual(hashlib.sha256(created).hexdigest(),
+                         "0918c6df1efc5679f5a38537fff718669bb46b787bc5650db5b9f355f7c532d1")
+        row = json.loads(created)[0]
+        mounts = {entry["Target"]: entry["Source"]
+                  for entry in row["HostConfig"]["Mounts"]}
+        decision = {"name": row["Name"].removeprefix("/"),
+                    "source_admission_sha256": row["Config"]["Cmd"][-1],
+                    **{key: mounts[target] for key, target in (
+                        ("compiler", "/workspace"), ("source", "/source"),
+                        ("f_output", "/f-output"), ("bundle", "/bundle"),
+                        ("candidate", "/stage"), ("out", "/out"))}}
+        self.assertEqual(outer.expected_labels(image, decision["name"]),
+                         row["Config"]["Labels"])
+        self.assertEqual(outer.inspect_owned(created, decision, row["Id"],
+                                             False, image), row)
+        missing = copy.deepcopy(row)
+        del missing["Config"]["Labels"]["org.opencontainers.image.version"]
+        with self.assertRaisesRegex(ValueError, "owned container inspect mismatch"):
+            outer.inspect_owned(json.dumps([missing]).encode(), decision,
+                                row["Id"], False, image)
+
     def test_source_guard_denies_root_pin_and_profile_mutants(self) -> None:
         source = (source_check.ROOT / source_check.ADDED[1]).read_text()
         guest = (source_check.ROOT / source_check.ADDED[0]).read_text()
@@ -33,6 +60,12 @@ class OuterTests(unittest.TestCase):
             source_check.validate(base, closure,
                                   source.replace('"--network", "none"',
                                                  '"--network", "host"'),
+                                  guest, roadmap, original)
+        with self.assertRaises(AssertionError):
+            source_check.validate(base, closure,
+                                  source.replace(
+                                      'row["Config"]["Labels"] == expected_labels(image_raw, decision["name"])',
+                                      'row["Config"]["Labels"] == {"eshkol.gate": decision["name"]}'),
                                   guest, roadmap, original)
         with self.assertRaises(AssertionError):
             source_check.validate(base, closure, source,
@@ -145,11 +178,13 @@ class OuterTests(unittest.TestCase):
                         ("f_output", "/f-output", True), ("bundle", "/bundle", True),
                         ("candidate", "/stage", False), ("out", "/out", False))]
         image = json.dumps([{"Id": outer.IMAGE,
-                             "Config": {"Env": ["PATH=/usr/bin", "DEBIAN_FRONTEND=noninteractive"]}}]).encode()
+                             "Config": {"Env": ["PATH=/usr/bin", "DEBIAN_FRONTEND=noninteractive"],
+                                        "Labels": {"org.opencontainers.image.version": "22.04"}}}]).encode()
         env = [f"{k}={v}" for k, v in outer.expected_env(image).items()]
         row = {"Id": "b" * 64, "Name": "/" + d["name"],
                "Image": outer.IMAGE, "Config": {
-                   "Labels": {"eshkol.gate": d["name"]}, "User": "0:0",
+                   "Labels": {"org.opencontainers.image.version": "22.04",
+                              "eshkol.gate": d["name"]}, "User": "0:0",
                    "WorkingDir": "/source", "Entrypoint": ["/usr/bin/python3.10"],
                    "Cmd": ["-B", "-m", "tests.g3c4.f_loader_guest",
                            "--source-admission-sha256", "a" * 64], "Env": env},
@@ -163,6 +198,32 @@ class OuterTests(unittest.TestCase):
                               "Mounts": host_mounts, "Binds": None}}
         self.assertEqual(outer.inspect_owned(json.dumps([row]).encode(), d,
                                              "b" * 64, False, image), row)
+        self.assertEqual(outer.expected_labels(image, d["name"]),
+                         row["Config"]["Labels"])
+        inherited = copy.deepcopy(row)
+        del inherited["Config"]["Labels"]["org.opencontainers.image.version"]
+        with self.assertRaisesRegex(ValueError, "owned container inspect mismatch"):
+            outer.inspect_owned(json.dumps([inherited]).encode(), d,
+                                "b" * 64, False, image)
+        extra = copy.deepcopy(row)
+        extra["Config"]["Labels"]["unreviewed"] = "value"
+        with self.assertRaisesRegex(ValueError, "owned container inspect mismatch"):
+            outer.inspect_owned(json.dumps([extra]).encode(), d,
+                                "b" * 64, False, image)
+        conflict = json.dumps([{"Id": outer.IMAGE, "Config": {
+            "Env": [], "Labels": {"eshkol.gate": "foreign"}}}]).encode()
+        with self.assertRaisesRegex(ValueError, "image reserves gate label"):
+            outer.expected_labels(conflict, d["name"])
+        for inherited in (["not-a-map"], {"wrong": 7}, {"": "empty-key"}):
+            with self.subTest(inherited=inherited):
+                malformed = json.dumps([{"Id": outer.IMAGE, "Config": {
+                    "Env": [], "Labels": inherited}}]).encode()
+                with self.assertRaisesRegex(ValueError, "image labels malformed"):
+                    outer.expected_labels(malformed, d["name"])
+        label_free = json.dumps([{"Id": outer.IMAGE, "Config": {
+            "Env": [], "Labels": None}}]).encode()
+        self.assertEqual(outer.expected_labels(label_free, d["name"]),
+                         {"eshkol.gate": d["name"]})
         row["Mounts"].append({"Type": "bind", "Source": "/extra",
                               "Destination": "/extra", "RW": False,
                               "Mode": "", "Propagation": "rprivate"})

@@ -2752,6 +2752,12 @@ publication, public G2 and continuation remain pending.
   A source-only exact-name/CID/effective-profile recovery route now attempts
   owned cleanup after a failed create receipt; absent or foreign candidates
   remain quarantined failures, and no actual Docker recovery was run.
+  A first real collector attempt created a container but stopped before the
+  guest: the pinned image inherited an OCI version label absent from the old
+  inspect expectation. A source-only successor now checks the exact inherited
+  image label map plus its reserved gate label, with the failed first image
+  and created-inspect raw receipts pinned as fixtures. The attempt remains
+  failed; loader observation, attest, and public execution are unrun.
 
 ## Wave 4 — practical pretraining and performance
 

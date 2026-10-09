@@ -360,13 +360,29 @@ def expected_env(image_raw: bytes) -> dict[str, str]:
     return result
 
 
+def expected_labels(image_raw: bytes, name: str) -> dict[str, str]:
+    image = json.loads(image_raw)
+    require(type(image) is list and len(image) == 1 and
+            image[0]["Id"] == IMAGE, "image label source mismatch")
+    inherited = image[0]["Config"]["Labels"]
+    require(inherited is None or
+            (type(inherited) is dict and
+             all(type(key) is str and key and type(value) is str
+                 for key, value in inherited.items())),
+            "image labels malformed")
+    labels = {} if inherited is None else dict(inherited)
+    require("eshkol.gate" not in labels, "image reserves gate label")
+    labels["eshkol.gate"] = name
+    return labels
+
+
 def inspect_owned(raw: bytes, decision: dict, cid: str,
                   running: bool | None, image_raw: bytes) -> dict:
     data = json.loads(raw)
     require(type(data) is list and len(data) == 1, "inspect cardinality")
     row = data[0]
     require(row["Id"] == cid and row["Name"] == "/" + decision["name"] and
-            row["Config"]["Labels"] == {"eshkol.gate": decision["name"]} and
+            row["Config"]["Labels"] == expected_labels(image_raw, decision["name"]) and
             row["Image"] == IMAGE and
             (running is None or row["State"]["Running"] is running) and
             row["Config"]["User"] == "0:0" and

@@ -1,0 +1,56 @@
+[
+    {
+        "Id": "sha256:f31d1db76958339e6ebd2a2f667052cdb85aeb5229914ffb10ac4fcdc6db22e6",
+        "RepoTags": [
+            "eshkol-checked-promotion-llvm21:20260922"
+        ],
+        "RepoDigests": [
+            "eshkol-checked-promotion-llvm21@sha256:f31d1db76958339e6ebd2a2f667052cdb85aeb5229914ffb10ac4fcdc6db22e6"
+        ],
+        "Comment": "buildkit.dockerfile.v0",
+        "Created": "2026-09-22T11:25:00.649356815-04:00",
+        "Config": {
+            "Env": [
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "DEBIAN_FRONTEND=noninteractive"
+            ],
+            "Cmd": [
+                "/bin/bash"
+            ],
+            "Labels": {
+                "org.opencontainers.image.version": "22.04"
+            }
+        },
+        "Architecture": "amd64",
+        "Os": "linux",
+        "Size": 2081118065,
+        "RootFS": {
+            "Type": "layers",
+            "Layers": [
+                "sha256:ea16cace89338c84eb6bcb91a7efdfcae6838fff359efe951858227436486c34",
+                "sha256:5ef3a0f7c37c1e91eaf25f50ed9c318abd80e417aef95d9352435bb165eeb458"
+            ]
+        },
+        "Metadata": {
+            "LastTagTime": "2026-09-22T15:25:38.724635471Z"
+        },
+        "Descriptor": {
+            "mediaType": "application/vnd.oci.image.index.v1+json",
+            "digest": "sha256:f31d1db76958339e6ebd2a2f667052cdb85aeb5229914ffb10ac4fcdc6db22e6",
+            "size": 855
+        },
+        "Identity": {
+            "Pull": [
+                {
+                    "Repository": "docker.io/library/eshkol-checked-promotion-llvm21"
+                }
+            ],
+            "Build": [
+                {
+                    "Ref": "03h2l11tyleyrjkioma09xn0e",
+                    "CreatedAt": "2026-09-22T11:25:48.935525942-04:00"
+                }
+            ]
+        }
+    }
+]

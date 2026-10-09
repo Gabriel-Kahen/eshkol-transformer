@@ -1,0 +1,309 @@
+[
+    {
+        "Id": "0c0114ea4cec091f82dba117b9f4fff6b08661566171bbdc7b17728e1c07d93d",
+        "Created": "2026-10-09T11:55:50.933308804Z",
+        "Path": "/usr/bin/python3.10",
+        "Args": [
+            "-B",
+            "-m",
+            "tests.g3c4.f_loader_guest",
+            "--source-admission-sha256",
+            "3fcd6f7e8c84176027444f6fcd9b1c20907ace2e9efb6597dde455137d4a26cc"
+        ],
+        "State": {
+            "Status": "created",
+            "Running": false,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 0,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "0001-01-01T00:00:00Z",
+            "FinishedAt": "0001-01-01T00:00:00Z"
+        },
+        "Image": "sha256:f31d1db76958339e6ebd2a2f667052cdb85aeb5229914ffb10ac4fcdc6db22e6",
+        "ResolvConfPath": "",
+        "HostnamePath": "",
+        "HostsPath": "",
+        "LogPath": "",
+        "Name": "/g3c4-f-loader-root-20261009-a",
+        "RestartCount": 0,
+        "Driver": "overlayfs",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "",
+        "ExecIDs": null,
+        "HostConfig": {
+            "Binds": null,
+            "ContainerIDFile": "",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {}
+            },
+            "NetworkMode": "none",
+            "PortBindings": {},
+            "RestartPolicy": {
+                "Name": "no",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CapAdd": null,
+            "CapDrop": null,
+            "CgroupnsMode": "private",
+            "Dns": null,
+            "DnsOptions": [],
+            "DnsSearch": [],
+            "ExtraHosts": null,
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": true,
+            "SecurityOpt": null,
+            "Tmpfs": {
+                "/tmp": "rw,nosuid,nodev,size=268435456,mode=1777"
+            },
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 4294967296,
+            "NanoCpus": 2000000000,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": [],
+            "BlkioDeviceReadBps": [],
+            "BlkioDeviceWriteBps": [],
+            "BlkioDeviceReadIOps": [],
+            "BlkioDeviceWriteIOps": [],
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": [],
+            "DeviceCgroupRules": null,
+            "DeviceRequests": null,
+            "MemoryReservation": 0,
+            "MemorySwap": 4294967296,
+            "MemorySwappiness": null,
+            "OomKillDisable": false,
+            "PidsLimit": 128,
+            "Ulimits": [
+                {
+                    "Name": "fsize",
+                    "Hard": 134217728,
+                    "Soft": 134217728
+                }
+            ],
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "Mounts": [
+                {
+                    "Type": "bind",
+                    "Source": "/home/gabe/.codex/evidence/eshkol-transformer/g3c4-public-g2-f-loader-prepared-20261009-a/compiler",
+                    "Target": "/workspace",
+                    "ReadOnly": true
+                },
+                {
+                    "Type": "bind",
+                    "Source": "/home/gabe/.codex/evidence/eshkol-transformer/g3c4-public-g2-f-loader-prepared-20261009-a/source",
+                    "Target": "/source",
+                    "ReadOnly": true
+                },
+                {
+                    "Type": "bind",
+                    "Source": "/home/gabe/.codex/evidence/eshkol-transformer/e3-dual8-native-union-run-f-durable-evidence-20261009-a/output",
+                    "Target": "/f-output",
+                    "ReadOnly": true
+                },
+                {
+                    "Type": "bind",
+                    "Source": "/home/gabe/.codex/evidence/eshkol-transformer/g3c4-public-g2-f-loader-prepared-20261009-a/bundle",
+                    "Target": "/bundle",
+                    "ReadOnly": true
+                },
+                {
+                    "Type": "bind",
+                    "Source": "/home/gabe/.codex/evidence/eshkol-transformer/g3c4-public-g2-f-loader-prepared-20261009-a/candidate",
+                    "Target": "/stage"
+                },
+                {
+                    "Type": "bind",
+                    "Source": "/home/gabe/.codex/evidence/eshkol-transformer/g3c4-public-g2-f-loader-prepared-20261009-a/out",
+                    "Target": "/out"
+                }
+            ],
+            "MaskedPaths": [
+                "/proc/acpi",
+                "/proc/asound",
+                "/proc/interrupts",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/sys/devices/virtual/powercap",
+                "/sys/firmware"
+            ],
+            "ReadonlyPaths": [
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ]
+        },
+        "Storage": {
+            "RootFS": {
+                "Snapshot": {
+                    "Name": "overlayfs"
+                }
+            }
+        },
+        "Mounts": [
+            {
+                "Type": "bind",
+                "Source": "/home/gabe/.codex/evidence/eshkol-transformer/g3c4-public-g2-f-loader-prepared-20261009-a/bundle",
+                "Destination": "/bundle",
+                "Mode": "",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/gabe/.codex/evidence/eshkol-transformer/e3-dual8-native-union-run-f-durable-evidence-20261009-a/output",
+                "Destination": "/f-output",
+                "Mode": "",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/gabe/.codex/evidence/eshkol-transformer/g3c4-public-g2-f-loader-prepared-20261009-a/out",
+                "Destination": "/out",
+                "Mode": "",
+                "RW": true,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/gabe/.codex/evidence/eshkol-transformer/g3c4-public-g2-f-loader-prepared-20261009-a/source",
+                "Destination": "/source",
+                "Mode": "",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/gabe/.codex/evidence/eshkol-transformer/g3c4-public-g2-f-loader-prepared-20261009-a/candidate",
+                "Destination": "/stage",
+                "Mode": "",
+                "RW": true,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/gabe/.codex/evidence/eshkol-transformer/g3c4-public-g2-f-loader-prepared-20261009-a/compiler",
+                "Destination": "/workspace",
+                "Mode": "",
+                "RW": false,
+                "Propagation": "rprivate"
+            }
+        ],
+        "Config": {
+            "Hostname": "0c0114ea4cec",
+            "Domainname": "",
+            "User": "0:0",
+            "AttachStdin": false,
+            "AttachStdout": true,
+            "AttachStderr": true,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "GIT_CONFIG_VALUE_0=/workspace",
+                "TZ=UTC",
+                "PYTHONDONTWRITEBYTECODE=1",
+                "GIT_CONFIG_KEY_1=safe.directory",
+                "GIT_CONFIG_VALUE_1=/source",
+                "PATH=/usr/bin:/bin",
+                "LC_ALL=C",
+                "ESHKOL_ALLOW_UNSUPPORTED_HOST=0",
+                "GIT_CONFIG_COUNT=2",
+                "GIT_CONFIG_KEY_0=safe.directory",
+                "DEBIAN_FRONTEND=noninteractive"
+            ],
+            "Cmd": [
+                "-B",
+                "-m",
+                "tests.g3c4.f_loader_guest",
+                "--source-admission-sha256",
+                "3fcd6f7e8c84176027444f6fcd9b1c20907ace2e9efb6597dde455137d4a26cc"
+            ],
+            "Image": "sha256:f31d1db76958339e6ebd2a2f667052cdb85aeb5229914ffb10ac4fcdc6db22e6",
+            "Volumes": null,
+            "WorkingDir": "/source",
+            "Entrypoint": [
+                "/usr/bin/python3.10"
+            ],
+            "Labels": {
+                "eshkol.gate": "g3c4-f-loader-root-20261009-a",
+                "org.opencontainers.image.version": "22.04"
+            }
+        },
+        "NetworkSettings": {
+            "SandboxID": "",
+            "SandboxKey": "",
+            "Ports": {},
+            "Networks": {
+                "none": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": null,
+                    "DriverOpts": null,
+                    "GwPriority": 0,
+                    "NetworkID": "",
+                    "EndpointID": "",
+                    "Gateway": "",
+                    "IPAddress": "",
+                    "MacAddress": "",
+                    "IPPrefixLen": 0,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": null
+                }
+            }
+        },
+        "ImageManifestDescriptor": {
+            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+            "digest": "sha256:3649921cfd39ef9b2c4a54d0c6ca01cd6fc49768806297fe61e05a70648804fb",
+            "size": 676,
+            "platform": {
+                "architecture": "amd64",
+                "os": "linux"
+            }
+        }
+    }
+]

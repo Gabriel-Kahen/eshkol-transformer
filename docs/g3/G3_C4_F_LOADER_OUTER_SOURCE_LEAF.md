@@ -70,3 +70,14 @@ bytes with wrong-path and drift denials. Actual Docker image,
 rootless daemon, loader/library observation, source admission and physical
 container closure are **unrun**. The original F guest remains failed; full
 public G2, sanitizer/LSan, math, current-main union and Wave 3 remain open.
+
+The first actual ROOT-owned collector attempt created the selected container
+but stopped before its guest. The pinned image's actual `Config.Labels` contains
+`org.opencontainers.image.version=22.04`; the created container correctly
+inherited it and added `eshkol.gate`. The original sole-label inspect check
+rejected that genuine union. The source successor requires the exact image
+label dictionary plus the one selected gate label and rejects any image that
+already reserves the gate key. The exact first image and created-inspect raw
+receipts are pinned by SHA-256 in the test closure; owned tests deny missing,
+extra, malformed and conflicting labels. The original attempt remains failed,
+and this source change grants no retry or loader/native/public acceptance.

@@ -17,8 +17,14 @@ ADDED = (
     "tests/g3c4/test_f_loader_outer.py",
     "tests/g3c4/check_f_loader_outer.py",
     "docs/g3/G3_C4_F_LOADER_OUTER_SOURCE_LEAF.md",
+    "tests/g3c4/fixtures/f_loader_first_created/image.stdout.raw",
+    "tests/g3c4/fixtures/f_loader_first_created/created.stdout.raw",
     "native/g3c4_public_g2_loader_outer_source_closure.txt",
 )
+FIXTURE_PINS = {
+    ADDED[-3]: "5110b38bb787512feb076ce27d0de79688edbf4ff3c5e1c5ac6b735d7c4754c1",
+    ADDED[-2]: "0918c6df1efc5679f5a38537fff718669bb46b787bc5650db5b9f355f7c532d1",
+}
 UNCHANGED = {
     "tests/g3c4/f_image_loader_collect.py":
         "98cc07a939834466fe77e8c43283159e67f70318bdbdd90b28cd267ff219b0c9",
@@ -54,7 +60,13 @@ NEW = OLD + ("\n  An [inactive test-only F loader outer source](g3/G3_C4_F_LOADE
              "  retained; an ambiguous failed create still requires separate closure review.\n"
              "  A source-only exact-name/CID/effective-profile recovery route now attempts\n"
              "  owned cleanup after a failed create receipt; absent or foreign candidates\n"
-             "  remain quarantined failures, and no actual Docker recovery was run.\n")
+             "  remain quarantined failures, and no actual Docker recovery was run.\n"
+             "  A first real collector attempt created a container but stopped before the\n"
+             "  guest: the pinned image inherited an OCI version label absent from the old\n"
+             "  inspect expectation. A source-only successor now checks the exact inherited\n"
+             "  image label map plus its reserved gate label, with the failed first image\n"
+             "  and created-inspect raw receipts pinned as fixtures. The attempt remains\n"
+             "  failed; loader observation, attest, and public execution are unrun.\n")
 
 
 def validate(base: list[str], closure: list[str], source: str,
@@ -63,6 +75,8 @@ def validate(base: list[str], closure: list[str], source: str,
     assert len(closure) == len(set(closure))
     assert all((ROOT / name).is_file() for name in closure)
     for name, expected in UNCHANGED.items():
+        assert hashlib.sha256((ROOT / name).read_bytes()).hexdigest() == expected, name
+    for name, expected in FIXTURE_PINS.items():
         assert hashlib.sha256((ROOT / name).read_bytes()).hexdigest() == expected, name
     assert original_roadmap.count(OLD) == 1
     assert roadmap == original_roadmap.replace(OLD, NEW)
@@ -84,6 +98,8 @@ def validate(base: list[str], closure: list[str], source: str,
                    '"candidate", "/stage", False',
                    '"source_admission_sha256"'):
         assert anchor in source, anchor
+    assert 'row["Config"]["Labels"] == expected_labels(image_raw, decision["name"])' in source
+    assert '"eshkol.gate" not in labels' in source
     for anchor in ('attest.main()', 'collector.collect(', '/out/build-off/eshkol-run',
                    'collector.TOOL_PINS', 'collector.RUNTIME_PINS',
                    '"--outer-stage-child"', '"/stage/candidate"'):
