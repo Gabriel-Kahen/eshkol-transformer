@@ -1748,6 +1748,17 @@ authorize mutation or evade the O2 busy gate. This is
 only a private native prerequisite: no Eshkol original-shell binding,
 generated package link, G3 construction, C2 SAVE, or cold LOAD is accepted.
 
+A private G3 creation companion source candidate adds a six-object same-owner
+constructor for exact original X1/M3, T2/D2, generation policy and O2. The
+existing three-argument G3 constructor and public package remain unchanged.
+The companion preallocates and roots its identity record, hides the ordinary
+G3 shell during native O2-only begin/check/end, copies the first four native
+error words before cleanup, and publishes only after the hold drains and all
+original identities recheck. Failed construction closes the unexposed G3;
+uncertain close stops the process. Its lexical records have a 64-row process
+limit. Source controls alone do not prove compiled package behavior, no-reentry,
+C2 checkpoint bytes, post-prefill SAVE, cold LOAD, or resumed continuation.
+
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
 diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use
