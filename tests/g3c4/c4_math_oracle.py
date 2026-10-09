@@ -11,6 +11,7 @@ from pathlib import Path
 import struct
 import subprocess
 import sys
+import tempfile
 
 import torch
 from tests.g3s import reference as sampler_reference
@@ -25,6 +26,10 @@ BASE_TREE = "69a2c63303632449eb44352acb1bdc71207f5c73"
 BASE_ROADMAP_SHA = "7f8b7615bc3d06aede6231dee83e903997e759eab5540a027ec83db5e91f9032"
 NEXT_ROADMAP_SHA = "5df226a94bc765b5f0fd6d8a2f76f11b09eb49fa5a19efb5f8b04daba2fa2f10"
 ROADMAP_DELTA_SHA = "53651c815d8fd7a94377e052729f0c7f94f8538d9a4b0db045cc8bc703ccc9e2"
+C_COMMIT = "36f9c0b6d5636be850abbf63ef76312bde04dee1"
+C_TREE = "c5422ece29459c48308cda25f4fbf8a8a6724653"
+D_ROADMAP_SHA = "ae84df0371420ac9ff05a9ed70293bcad6ba78a61181528f3c5be44ee8274454"
+D_DELTA_SHA = "09fad9bc0df9f39920d90a64505b66c7b4a7f1b87b400ea196d413d89073ca19"
 PATHS = (
     "blocks/0/attention/key/weight", "blocks/0/attention/output/weight",
     "blocks/0/attention/query/weight", "blocks/0/attention/value/weight",
@@ -104,7 +109,7 @@ def check_source_pins(overrides: dict[str, bytes] | None = None,
         raise ValueError("original ROADMAP Git blob drift")
     actual_roadmap = (overrides or {}).get(
         roadmap_path, (ROOT / roadmap_path).read_bytes())
-    if _sha(actual_roadmap) != NEXT_ROADMAP_SHA:
+    if _sha(actual_roadmap) not in (NEXT_ROADMAP_SHA, D_ROADMAP_SHA):
         raise ValueError("successor ROADMAP drift")
     encoded_delta = (ROOT / "tests/g3c4/c4_math_roadmap_delta.hex").read_text()
     try:
@@ -118,10 +123,32 @@ def check_source_pins(overrides: dict[str, bytes] | None = None,
     if roadmap_delta is None:
         roadmap_delta = subprocess.run(
             ["git", "--no-optional-locks", "diff", "--no-ext-diff",
-             BASE_COMMIT, "--", roadmap_path], cwd=ROOT, check=True,
+             BASE_COMMIT, C_COMMIT, "--", roadmap_path], cwd=ROOT, check=True,
             capture_output=True, timeout=30).stdout
     if roadmap_delta != expected_delta:
-        raise ValueError("successor ROADMAP diff drift")
+        raise ValueError("historical B-to-C ROADMAP diff drift")
+    c_tree = subprocess.run(
+        ["git", "--no-optional-locks", "rev-parse", f"{C_COMMIT}^{{tree}}"],
+        cwd=ROOT, check=True, capture_output=True, timeout=30).stdout.decode().strip()
+    if c_tree != C_TREE:
+        raise ValueError("approved C Git tree drift")
+    c_roadmap = subprocess.run(
+        ["git", "--no-optional-locks", "show", f"{C_COMMIT}:{roadmap_path}"],
+        cwd=ROOT, check=True, capture_output=True, timeout=30).stdout
+    if _sha(c_roadmap) != NEXT_ROADMAP_SHA:
+        raise ValueError("approved C ROADMAP Git blob drift")
+    if _sha(actual_roadmap) == D_ROADMAP_SHA:
+        with tempfile.TemporaryDirectory(prefix="c4-roadmap-d-") as temporary:
+            path = Path(temporary)
+            (path / "ROADMAP-C.md").write_bytes(c_roadmap)
+            (path / "ROADMAP-D-CANDIDATE.md").write_bytes(actual_roadmap)
+            patch = subprocess.run(
+                ["git", "diff", "--no-index", "--",
+                 "ROADMAP-C.md", "ROADMAP-D-CANDIDATE.md"],
+                cwd=path, check=False, capture_output=True, timeout=30)
+        if (patch.returncode != 1 or patch.stderr or
+            _sha(patch.stdout) != D_DELTA_SHA):
+            raise ValueError("approved C-to-D ROADMAP diff drift")
     for digest, path in sources + members:
         if path == roadmap_path:
             continue

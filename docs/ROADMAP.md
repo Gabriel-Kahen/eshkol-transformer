@@ -2664,6 +2664,13 @@ publication, public G2 and continuation remain pending.
   prefix lengths 1–4, frozen fixture generation and fail-closed transcript
   comparison. Its source/negative tests do not supply native observations;
   compiled mathematical parity and all terminal/public gates remain pending.
+  A separate test-only native transcript capture source candidate observes the
+  real seeded 1192-f32 image, RNG292 successor and P1-P4 logits/K/V through
+  private routes, with active-prefix cache slicing and the intended T4 abort
+  witnessed separately from cleanup. Its strict raw parser, synthetic negatives
+  and pinned-Q0 runner are source-only. Two fresh native observations, supported
+  toolchain admission, numerical comparison, terminal same-call proof and public
+  continuation remain pending.
 
 ## Wave 4 — practical pretraining and performance
 

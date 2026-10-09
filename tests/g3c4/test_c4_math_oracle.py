@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 import torch
 
@@ -86,8 +87,27 @@ class C4MathOracleTests(unittest.TestCase):
             oracle.check_source_pins(overrides={
                 "docs/ROADMAP.md": (
                     oracle.ROOT / "docs/ROADMAP.md").read_bytes() + b"\n"})
-        with self.assertRaisesRegex(ValueError, "successor ROADMAP diff"):
+        with self.assertRaisesRegex(ValueError, "historical B-to-C ROADMAP diff"):
             oracle.check_source_pins(roadmap_delta=b"wrong diff")
+
+    def test_exact_c_or_d_roadmap_status_only(self) -> None:
+        historical_c = subprocess.run(
+            ["git", "--no-optional-locks", "show",
+             f"{oracle.C_COMMIT}:docs/ROADMAP.md"],
+            cwd=oracle.ROOT, check=True, capture_output=True).stdout
+        oracle.check_source_pins(overrides={"docs/ROADMAP.md": historical_c})
+        oracle.check_source_pins()
+        with mock.patch.object(oracle, "D_DELTA_SHA", "0" * 64):
+            with self.assertRaisesRegex(ValueError, "C-to-D ROADMAP diff"):
+                oracle.check_source_pins()
+        with mock.patch.object(oracle, "C_TREE", "0" * 40):
+            with self.assertRaisesRegex(ValueError, "C Git tree drift"):
+                oracle.check_source_pins()
+        changed = oracle.ROOT.joinpath("docs/ROADMAP.md").read_bytes().replace(
+            b"source-only. Two fresh native observations",
+            b"accepted. Two fresh native observations", 1)
+        with self.assertRaisesRegex(ValueError, "successor ROADMAP drift"):
+            oracle.check_source_pins(overrides={"docs/ROADMAP.md": changed})
 
     def test_philox_initializer_shape_tie_and_counter(self) -> None:
         self.assertEqual(oracle.philox(0, 0),
