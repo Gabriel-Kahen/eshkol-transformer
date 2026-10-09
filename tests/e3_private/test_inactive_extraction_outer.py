@@ -16,8 +16,11 @@ from tests.e3_private import inactive_extraction_outer as outer
 from tests.e3_private import inactive_extraction_guest as guest
 
 
-J_REPO = Path("/home/gabe/.codex/evidence/eshkol-transformer/g3c4-public-g2-f-loader-readelf-source-20261009-j/checkout")
+J_REPO = Path("/home/gabe/.codex/worktrees/g3c4-f-loader-proc-disappearance-k/eshkol-transformer")
 EVIDENCE = Path("/home/gabe/.codex/evidence/eshkol-transformer")
+K_SOURCE = EVIDENCE / "g3c4-f-loader-proc-disappearance-source-20261009-k/SHA256SUMS-SOURCE"
+K_ROOT = EVIDENCE / "g3c4-f-loader-proc-disappearance-root-source-review-20261009-k/SHA256SUMS-ROOT-SOURCE-REVIEW"
+K_IND = EVIDENCE / "g3c4-f-loader-proc-disappearance-independent-review-20261009-k/SHA256SUMS-INDEPENDENT-REVIEW"
 
 
 class Contract(unittest.TestCase):
@@ -38,7 +41,14 @@ class Contract(unittest.TestCase):
         self.assertNotEqual(outer.RECIPE_SHA,
                             "215346061c87c6cf2c3475fdd7f2cea4f88e3f30239bc1b8a987d079f683761d")
 
-    def test_actual_j_source_and_reviews(self) -> None:
+    def test_actual_k_source_and_reviews(self) -> None:
+        self.assertEqual(sha256(K_SOURCE.read_bytes()).hexdigest(), outer.J_SOURCE)
+        self.assertEqual(sha256(K_ROOT.read_bytes()).hexdigest(), outer.J_ROOT)
+        self.assertEqual(sha256(K_IND.read_bytes()).hexdigest(), outer.J_IND)
+        actual_head, actual_tree = subprocess.run(
+            ["git", "--no-optional-locks", "-C", str(J_REPO), "rev-parse",
+             "HEAD", "HEAD^{tree}"], check=True, capture_output=True, text=True).stdout.splitlines()
+        self.assertEqual((actual_head, actual_tree), (outer.J_HEAD, outer.J_TREE))
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             for relative in outer.J_FILES:
@@ -50,9 +60,9 @@ class Contract(unittest.TestCase):
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(data)
             for name, source in (
-                ("SHA256SUMS-SOURCE", EVIDENCE / "g3c4-public-g2-f-loader-readelf-source-20261009-j/SOURCE-EVIDENCE/SHA256SUMS-SOURCE"),
-                ("SHA256SUMS-ROOT-REVIEW", EVIDENCE / "g3c4-public-g2-f-loader-readelf-root-source-review-20261009-j/SHA256SUMS-ROOT-SOURCE-REVIEW"),
-                ("SHA256SUMS-INDEPENDENT-SOURCE-REVIEW", EVIDENCE / "g3c4-public-g2-f-loader-readelf-independent-review-20261009-j/SHA256SUMS-INDEPENDENT-REVIEW"),
+                ("SHA256SUMS-SOURCE", K_SOURCE),
+                ("SHA256SUMS-ROOT-REVIEW", K_ROOT),
+                ("SHA256SUMS-INDEPENDENT-SOURCE-REVIEW", K_IND),
             ):
                 (root / name).write_bytes(source.read_bytes())
             outer.h_source(root, Path.read_bytes)
@@ -68,8 +78,24 @@ class Contract(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "selected bytes changed"):
                 outer.h_source(root, Path.read_bytes)
             collector.write_bytes(original)
+            old_collector = subprocess.run(
+                ["git", "--no-optional-locks", "-C", str(J_REPO), "show",
+                 "07a2ae53cbdf5620fd10319b8c95bf0261dfeb51:tests/g3c4/f_image_loader_collect.py"],
+                check=True, capture_output=True).stdout
+            collector.write_bytes(old_collector)
+            with self.assertRaisesRegex(ValueError, "selected bytes changed"):
+                outer.h_source(root, Path.read_bytes)
+            collector.write_bytes(original)
+            (root / "SHA256SUMS-ROOT-REVIEW").write_bytes(K_ROOT.read_bytes() + b"forged\n")
+            with self.assertRaisesRegex(ValueError, "selected bytes changed"):
+                outer.h_source(root, Path.read_bytes)
+            (root / "SHA256SUMS-ROOT-REVIEW").write_bytes(K_ROOT.read_bytes())
+            (root / "SHA256SUMS-INDEPENDENT-SOURCE-REVIEW").write_bytes(K_IND.read_bytes() + b"forged\n")
+            with self.assertRaisesRegex(ValueError, "selected bytes changed"):
+                outer.h_source(root, Path.read_bytes)
+            (root / "SHA256SUMS-INDEPENDENT-SOURCE-REVIEW").write_bytes(K_IND.read_bytes())
             (root / "SHA256SUMS-SOURCE").write_bytes((
-                EVIDENCE / "g3c4-public-g2-f-loader-label-source-20261009-i/"
+                EVIDENCE / "g3c4-public-g2-f-loader-readelf-source-20261009-j/"
                 "SOURCE-EVIDENCE/SHA256SUMS-SOURCE").read_bytes())
             with self.assertRaisesRegex(ValueError, "selected bytes changed"):
                 outer.h_source(root, Path.read_bytes)

@@ -1,7 +1,7 @@
-"""Inactive E3 extraction adapter for the reviewed F-loader J lifecycle.
+"""Inactive E3 extraction adapter for the reviewed F-loader K source.
 
 There is deliberately no CLI or decision pin here. A later ROOT-reviewed
-wrapper must authenticate the exact J source, supply a one-use decision, and
+wrapper must authenticate the exact K source, supply a one-use decision, and
 own both locks for the complete Docker and physical-closure interval.
 """
 
@@ -18,15 +18,15 @@ from typing import Any
 from tests.e3_private import inactive_extraction_recipe as recipe
 
 
-J_HEAD = "07a2ae53cbdf5620fd10319b8c95bf0261dfeb51"
-J_TREE = "c5a3b90a2e4c9be388141531f1fb31579c4ea324"
-J_SOURCE = "70428fe98636c609a59e7c1385179dc88629f08e66376229004fc24171a60644"
-J_ROOT = "da1fd8d09b59002a6ab2c45a7781635207d979f51635163939fa6c754a3a67c9"
-J_IND = "c15b54878d3e70744b9a8e34add72dc0e45d329f13d12ef7f2b44462c8bb6a86"
+J_HEAD = "195275c35c0341c8d6c09214b323b37d28bc2578"
+J_TREE = "0294b99248199599b848a0589c75b29fb7dee786"
+J_SOURCE = "7cc288a2df0e98b31047ba4f3a15c884c8dcc3e0763e6695abcf3d5a1d7752a2"
+J_ROOT = "6c54c055327ffe47240b08fad59c980cf987ef4fad7444ec22c303aac24ab8c3"
+J_IND = "be6e01ffb52212b731b6ebce50d69be21185f251c2cdf44a3dd78c75906dc790"
 J_FILES = {
     "tests/g3c4/f_loader_outer.py": "73066210494ef0cf3f5bd824520fc70e73545f4176a6ae3eedabbe16d5a97360",
     "tests/g3c4/f_artifact_attest.py": "5aac55665ad5a1767c54591ec3530667cced310f07948257521f34ed43999e78",
-    "tests/g3c4/f_image_loader_collect.py": "8b92aabe7fb742b81dc5e1d8fcd57bf92b9f5b3ad702920e9c826ce8faafd101",
+    "tests/g3c4/f_image_loader_collect.py": "81b025e6391ecedadef576df9efc88153c463445c8b02b057ebc37a37877173f",
 }
 RECIPE_SHA = "c36001659fafebcaf48ecff4dccdc46c9ea2db4f639721d7dd59aa0f47ab36c6"
 MATERIAL = recipe.MATERIAL_NAMES
@@ -49,10 +49,10 @@ def exact_bytes(path: Path, expected: str, ordinary) -> bytes:
 
 
 def h_source(source: Path, ordinary) -> None:
-    """Authenticate reviewed J code and independent/root seals before import."""
+    """Authenticate reviewed K code and independent/root seals before import."""
     if not source.is_absolute() or not stat.S_ISDIR(source.lstat().st_mode) or \
             source.resolve(strict=True) != source:
-        raise ValueError("J source directory is not canonical")
+        raise ValueError("K source directory is not canonical")
     for name, expected in J_FILES.items():
         exact_bytes(source / name, expected, ordinary)
     exact_bytes(source / "SHA256SUMS-SOURCE", J_SOURCE, ordinary)
