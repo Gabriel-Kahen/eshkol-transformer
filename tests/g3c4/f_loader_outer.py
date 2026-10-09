@@ -134,7 +134,8 @@ def selected(decision_path: Path, expected_sha: str, *, fresh: bool) -> dict:
         bundle / "public-g2-source-admission.json",
         decision["source_admission_sha256"],
         tuple(root for root in roots if root != bundle.resolve()),
-        expected_path=bundle / "public-g2-source-admission.json")
+        expected_path=bundle / "public-g2-source-admission.json",
+        outer_bundle_root=bundle)
     source_state(source, admission)
     require(
             sha(ordinary(bundle / "accepted-tools.tsv")) == collector.TOOL_PINS_SHA and

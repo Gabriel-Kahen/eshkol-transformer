@@ -227,6 +227,60 @@ class OuterTests(unittest.TestCase):
                     outer.attest.stage_project_copy(source, child, decision,
                                                      expected_candidate=child)
 
+    def test_same_canonical_admission_on_host_and_guest_review_surfaces(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            roots = [base / "host-bundle", base / "guest-bundle"]
+            review_bytes = {"independent_review": b"independent seal\n",
+                            "root_review": b"root seal\n"}
+            refs = {
+                "independent_review": "/bundle/reviews/independent/SHA256SUMS-INDEPENDENT-SOURCE-REVIEW",
+                "root_review": "/bundle/reviews/root/SHA256SUMS-ROOT-REVIEW",
+            }
+            data = {"format": "g3c4-public-g2-source-admission-v1",
+                    "head": "a" * 40, "tree": "b" * 40,
+                    "tracked_manifest_sha256": "c" * 64,
+                    "tracked_file_count": 2}
+            for key, logical in refs.items():
+                data[key] = {"path": logical,
+                             "sha256": outer.sha(review_bytes[key])}
+            raw = outer.attest.canonical_json(data)
+            for root in roots:
+                for key, logical in refs.items():
+                    path = root / Path(logical).relative_to("/bundle")
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(review_bytes[key])
+                (root / "public-g2-source-admission.json").write_bytes(raw)
+            observations = []
+            for root in roots:
+                path = root / "public-g2-source-admission.json"
+                observations.append(outer.attest.source_admission(
+                    path, outer.sha(raw), (), expected_path=path,
+                    outer_bundle_root=root))
+            self.assertEqual(observations[0], observations[1])
+            with self.assertRaisesRegex(ValueError, "digest drift"):
+                outer.attest.source_admission(
+                    roots[0] / "public-g2-source-admission.json", "0" * 64, (),
+                    expected_path=roots[0] / "public-g2-source-admission.json",
+                    outer_bundle_root=roots[0])
+            wrong = copy.deepcopy(data)
+            wrong["root_review"]["path"] = "/bundle/reviews/other/SHA256SUMS-ROOT-REVIEW"
+            (roots[0] / "public-g2-source-admission.json").write_bytes(
+                outer.attest.canonical_json(wrong))
+            with self.assertRaisesRegex(ValueError, "logical review path"):
+                outer.attest.source_admission(
+                    roots[0] / "public-g2-source-admission.json",
+                    outer.sha(outer.attest.canonical_json(wrong)), (),
+                    expected_path=roots[0] / "public-g2-source-admission.json",
+                    outer_bundle_root=roots[0])
+            review = roots[1] / Path(refs["independent_review"]).relative_to("/bundle")
+            review.write_bytes(b"mutated seal\n")
+            with self.assertRaisesRegex(ValueError, "review reference drift"):
+                outer.attest.source_admission(
+                    roots[1] / "public-g2-source-admission.json", outer.sha(raw), (),
+                    expected_path=roots[1] / "public-g2-source-admission.json",
+                    outer_bundle_root=roots[1])
+
     def test_stopped_state_and_exact_docker_wait(self) -> None:
         state = {"Status": "exited", "Running": False, "Pid": 0,
                  "OOMKilled": False, "Dead": False, "Error": "", "ExitCode": 17}

@@ -146,7 +146,8 @@ def candidate_lock(path: Path, tracked: bytes,
 
 def source_admission(path: Path, expected_sha: str,
                      forbidden_roots: tuple[Path, ...],
-                     expected_path: Path = ADMISSION_PATH) -> dict:
+                     expected_path: Path = ADMISSION_PATH,
+                     *, outer_bundle_root: Path | None = None) -> dict:
     """An outer reviewed launcher must pin expected_sha, not a free CLI caller."""
     require(path == expected_path and path.is_absolute() and
             re.fullmatch(r"[0-9a-f]{64}", expected_sha) is not None and
@@ -181,6 +182,17 @@ def source_admission(path: Path, expected_sha: str,
             type(data["tracked_file_count"]) is int and
             data["tracked_file_count"] > 0,
             "source admission schema/identity malformed")
+    logical_reviews = {
+        "independent_review": Path(
+            "/bundle/reviews/independent/SHA256SUMS-INDEPENDENT-SOURCE-REVIEW"),
+        "root_review": Path("/bundle/reviews/root/SHA256SUMS-ROOT-REVIEW"),
+    }
+    if outer_bundle_root is not None:
+        require(outer_bundle_root.is_absolute() and
+                stat.S_ISDIR(outer_bundle_root.lstat().st_mode) and
+                outer_bundle_root.resolve(strict=True) == outer_bundle_root and
+                path == outer_bundle_root / "public-g2-source-admission.json",
+                "outer review bundle root is not exact")
     for key in ("independent_review", "root_review"):
         review = data[key]
         require(type(review) is dict and set(review) == {"path", "sha256"} and
@@ -189,6 +201,10 @@ def source_admission(path: Path, expected_sha: str,
                 re.fullmatch(r"[0-9a-f]{64}", review["sha256"]) is not None,
                 "source admission review reference malformed")
         review_path = Path(review["path"])
+        if outer_bundle_root is not None:
+            require(review_path == logical_reviews[key],
+                    "outer logical review path differs")
+            review_path = outer_bundle_root / review_path.relative_to("/bundle")
         require(review_path.is_absolute() and
                 review_path.name.startswith("SHA256SUMS-") and
                 digest(ordinary(review_path)) == review["sha256"],
@@ -685,7 +701,9 @@ def main() -> None:
     forbidden = (args.project_source, args.project_checkout, args.f_output,
                  args.copy_build, args.compiler_source)
     decision = source_admission(args.project_admission,
-                                args.project_admission_sha256, forbidden)
+                                args.project_admission_sha256, forbidden,
+                                outer_bundle_root=(Path("/bundle")
+                                                   if args.outer_stage_child else None))
     if args.phase == "prepare":
         require(not args.evidence.exists() and
                 all(getattr(args, name) is None for name in
@@ -704,7 +722,9 @@ def main() -> None:
                 copied_artifacts(args.copy_build) == copied and
                 candidate_lock(args.candidate_lock, tracked_lock) == lock and
                 source_admission(args.project_admission,
-                                 args.project_admission_sha256, forbidden) == decision and
+                                 args.project_admission_sha256, forbidden,
+                                 outer_bundle_root=(Path("/bundle")
+                                                    if args.outer_stage_child else None)) == decision and
                 offline_review(args.offline_review) == offline,
                 "prepare inputs drifted")
         prepared = prepared_payload(compiler, project, original, copied,
@@ -759,7 +779,9 @@ def main() -> None:
                          decision, candidate_path) == project and
             candidate_lock(args.candidate_lock, tracked_lock) == lock and
             source_admission(args.project_admission,
-                             args.project_admission_sha256, forbidden) == decision and
+                             args.project_admission_sha256, forbidden,
+                             outer_bundle_root=(Path("/bundle")
+                                                if args.outer_stage_child else None)) == decision and
             offline_review(args.offline_review) == offline and
             digest(ordinary(args.image_pins)) == args.image_pins_sha256 and
             compiler_binary_and_elf(args.copy_build / "eshkol-run",
@@ -779,7 +801,9 @@ def main() -> None:
                          decision, candidate_path) == project and
             candidate_lock(args.candidate_lock, tracked_lock) == lock and
             source_admission(args.project_admission,
-                             args.project_admission_sha256, forbidden) == decision and
+                             args.project_admission_sha256, forbidden,
+                             outer_bundle_root=(Path("/bundle")
+                                                if args.outer_stage_child else None)) == decision and
             offline_review(args.offline_review) == offline and
             digest(ordinary(args.image_pins)) == args.image_pins_sha256 and
             compiler_binary_and_elf(args.copy_build / "eshkol-run",

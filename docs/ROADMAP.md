@@ -2737,6 +2737,8 @@ publication, public G2 and continuation remain pending.
   Docker launch, loader result, public package or sanitizer proof is claimed.
   Its exact nested stage-child path and stopped-state/Docker-wait checks remain
   source-only; the accepted attester's default path is unchanged.
+  The same canonical source-admission JSON and two review seals are checked on
+  both host and guest bundle surfaces; the image loader is still unobserved.
 
 ## Wave 4 — practical pretraining and performance
 

@@ -23,6 +23,11 @@ accepted copied-F `prepare` phase and bounded loader collector at their fixed
 paths. It does not produce bootstrap provenance or execute the
 public G2 package. The four selected F artifacts are fresh ordinary copies;
 the ten generated LLVM links remain only in the original read-only inventory.
+The single canonical source-admission JSON names exactly the independent and
+ROOT seal files under `/bundle/reviews/`. In the guest those paths are real;
+the outer host verifier maps only those two logical paths into its selected
+ordinary bundle directory and checks the same file bytes and hashes. The
+default attester route and admission schema remain unchanged.
 
 The outer profile uses the exact f31 image ID, read-only root, no network,
 4 GiB memory/swap, 128 PIDs, two CPUs, 16 MiB file limit and a 256 MiB
@@ -40,7 +45,8 @@ Failed and partial receipts remain in the consumed
 attempt. Any incomplete closure is a failed result, never permission to retry.
 
 Current tests exercise command shape, direct CLI denial, real owned child
-status/overflow/timeout, and inspect mismatch. Actual Docker image,
+status/overflow/timeout, inspect mismatch, and matching two-surface review
+bytes with wrong-path and drift denials. Actual Docker image,
 rootless daemon, loader/library observation, source admission and physical
 container closure are **unrun**. The original F guest remains failed; full
 public G2, sanitizer/LSan, math, current-main union and Wave 3 remain open.

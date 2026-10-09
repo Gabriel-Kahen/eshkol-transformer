@@ -19,7 +19,7 @@ ADDED = (
 )
 UNCHANGED = {
     "tests/g3c4/f_artifact_attest.py":
-        "e1c4fafe10cbffa441cdc346a260fd09301ae0cc916d53e5840f821d9b70ec89",
+        "5aac55665ad5a1767c54591ec3530667cced310f07948257521f34ed43999e78",
     "tests/g3g_manual/public_g2_runtime.esk":
         "c9f92ca1af857694ecd56e4fe177b52e5183679e61f82accc99e841591aaca91",
     "scripts/common.sh":

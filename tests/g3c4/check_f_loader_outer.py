@@ -23,7 +23,7 @@ UNCHANGED = {
     "tests/g3c4/f_image_loader_collect.py":
         "98cc07a939834466fe77e8c43283159e67f70318bdbdd90b28cd267ff219b0c9",
     "tests/g3c4/f_artifact_attest.py":
-        "e1c4fafe10cbffa441cdc346a260fd09301ae0cc916d53e5840f821d9b70ec89",
+        "5aac55665ad5a1767c54591ec3530667cced310f07948257521f34ed43999e78",
     "scripts/common.sh":
         "2749689e6301cad6e489de4b23e0f9b1ec7c9627f47dd1c7007d9ed8e5955e83",
     "toolchain/eshkol.lock":
@@ -39,7 +39,9 @@ NEW = OLD + ("\n  An [inactive test-only F loader outer source](g3/G3_C4_F_LOADE
              "  external decision SHA and invoke it; no\n"
              "  Docker launch, loader result, public package or sanitizer proof is claimed.\n"
              "  Its exact nested stage-child path and stopped-state/Docker-wait checks remain\n"
-             "  source-only; the accepted attester's default path is unchanged.\n")
+             "  source-only; the accepted attester's default path is unchanged.\n"
+             "  The same canonical source-admission JSON and two review seals are checked on\n"
+             "  both host and guest bundle surfaces; the image loader is still unobserved.\n")
 
 
 def validate(base: list[str], closure: list[str], source: str,
@@ -74,6 +76,11 @@ def validate(base: list[str], closure: list[str], source: str,
     assert 'Path("/stage/candidate") if args.outer_stage_child' in attester
     assert 'else Path("/candidate")' in attester
     assert attester.count('decision, candidate_path)') == 5
+    for anchor in ('outer_bundle_root: Path | None = None',
+                   '"/bundle/reviews/independent/SHA256SUMS-INDEPENDENT-SOURCE-REVIEW"',
+                   '"/bundle/reviews/root/SHA256SUMS-ROOT-REVIEW"',
+                   'review_path.relative_to("/bundle")'):
+        assert anchor in attester, anchor
 
 
 def main() -> None:
