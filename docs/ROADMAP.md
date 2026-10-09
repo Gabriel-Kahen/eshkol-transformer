@@ -2725,6 +2725,11 @@ publication, public G2 and continuation remain pending.
   complete direct and transitive image dependency admission, emitted symbols,
   numerical parity and the full public G2 gate remain **unrun**.
 
+  A separate [source-only F image-loader collector](g3/G3_C4_F_IMAGE_LOADER_COLLECTOR_SOURCE_LEAF.md)
+  stages bounded readelf/loader raw receipts against the accepted f31 tool and
+  runtime inventories. The actual image observation, ROOT pinning, package
+  build, installed G2 execution and sanitizer close remain **unrun**.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
