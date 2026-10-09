@@ -4,19 +4,37 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 # Future compiled gate only: source review, supported toolchain and fresh ROOT
 # admission must precede invocation. This script never repins production.
+candidate_lock= candidate_profile_pre=
+if [[ "${1:-}" == --candidate-lock-test ]]; then
+  [[ "$#" -eq 4 && "$2" == /* && "${ESHKOL_SOURCE_DIR:-}" == /* &&
+     "${ESHKOL_BUILD_DIR:-}" == /* ]] || \
+    die 'test-only candidate lock needs absolute lock/source/build and two paths'
+  candidate_lock="$2"
+  shift 2
+  require_command python3
+  candidate_profile_pre="$(PYTHONDONTWRITEBYTECODE=1 \
+    timeout --signal=TERM --kill-after=5s 30s \
+    python3 "$PROJECT_ROOT/tests/g3c4/c4_toolchain_profile.py" \
+    "$candidate_lock" "$ESHKOL_SOURCE_DIR" "$ESHKOL_BUILD_DIR")"
+  LOCK_FILE="$candidate_lock"
+  export GIT_OPTIONAL_LOCKS=0
+fi
 verify_toolchain
 for command in ar cmp git nm python3 readelf realpath sha256sum timeout; do
   require_command "$command"
 done
 [[ "${Q0_PYTHON:-}" == /* && -x "${Q0_PYTHON:-}" ]] || \
   die 'absolute Q0_PYTHON is required (Python 3.14.6 / Torch 2.13.0+cpu)'
-[[ "${1:-}" == /* && "${2:-}" == /* ]] || \
+[[ "$#" -eq 2 && "${1:-}" == /* && "${2:-}" == /* ]] || \
   die 'usage: test-g3c4-c4-native-capture.sh /absolute/fresh-evidence /absolute/frozen-fixture'
 evidence="$1"
 fixture="$2"
 [[ -f "$fixture" ]] || die "missing frozen fixture: $fixture"
 test ! -e "$evidence" || die "capture evidence already exists: $evidence"
 mkdir -m 0700 "$evidence"
+if [[ -n "$candidate_lock" ]]; then
+  printf '%s\n' "$candidate_profile_pre" >"$evidence/candidate-profile.pre.json"
+fi
 q0_python="$Q0_PYTHON"
 q0_target="$(realpath -e "$q0_python")"
 cc= cxx=
@@ -41,8 +59,12 @@ PY
 }
 q0_identity >"$evidence/q0.pre"
 sha256sum "$q0_python" "$q0_target" "$cc" "$cxx" "$(command -v ar)" "$(command -v nm)" \
-  "$(command -v readelf)" "$PROJECT_ROOT/tests/q0/requirements-oracle.lock" \
+  "$(command -v readelf)" "$(command -v python3)" "$(command -v timeout)" \
+  "$PROJECT_ROOT/tests/q0/requirements-oracle.lock" \
   "$fixture" >"$evidence/inputs.pre.sha256"
+if [[ -n "$candidate_lock" ]]; then
+  sha256sum "$candidate_lock" >>"$evidence/inputs.pre.sha256"
+fi
 printf '%s\n' '2f3adec7636cebc39b735d7b6c461e2856e390ec1e9f12fccdc0c3074184f041' |
   cmp - <(sha256sum "$fixture" | cut -d' ' -f1)
 test -z "$(git --no-optional-locks -C "$PROJECT_ROOT" status --porcelain=v1)" || \
@@ -60,6 +82,7 @@ PYTHONDONTWRITEBYTECODE=1 timeout --signal=TERM --kill-after=5s 90s \
   python3 -m unittest -v \
   tests.g3c4.test_c4_native_transcript \
   tests.g3c4.test_c4_native_capture_source \
+  tests.g3c4.test_c4_toolchain_profile \
   >"$evidence/source-tests.stdout" 2>"$evidence/source-tests.stderr"
 PYTHONDONTWRITEBYTECODE=1 timeout --signal=TERM --kill-after=5s 30s \
   python3 -m unittest -v \
@@ -174,6 +197,14 @@ cmp "$evidence/normal/first.json" "$evidence/sanitize/first.json"
 q0_identity >"$evidence/q0.post"
 cmp "$evidence/q0.pre" "$evidence/q0.post"
 sha256sum -c "$evidence/inputs.pre.sha256" >"$evidence/inputs.verify.stdout"
+if [[ -n "$candidate_lock" ]]; then
+  PYTHONDONTWRITEBYTECODE=1 timeout --signal=TERM --kill-after=5s 30s \
+    python3 "$PROJECT_ROOT/tests/g3c4/c4_toolchain_profile.py" \
+    "$candidate_lock" "$ESHKOL_SOURCE_DIR" "$ESHKOL_BUILD_DIR" \
+    >"$evidence/candidate-profile.post.json"
+  cmp "$evidence/candidate-profile.pre.json" \
+      "$evidence/candidate-profile.post.json"
+fi
 while IFS= read -r member; do
   sha256sum "$PROJECT_ROOT/$member"
 done <"$PROJECT_ROOT/native/g3c4_c4_native_capture_source_closure.txt" \

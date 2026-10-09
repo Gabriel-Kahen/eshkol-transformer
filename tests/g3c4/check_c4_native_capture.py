@@ -12,6 +12,7 @@ CLOSURE = ROOT / "native/g3c4_c4_native_capture_source_closure.txt"
 OBSERVER = ROOT / "tests/g3c4/c4_native_capture.c"
 PARSER = ROOT / "tests/g3c4/c4_native_transcript.py"
 RUNNER = ROOT / "scripts/test-g3c4-c4-native-capture.sh"
+PROFILE = ROOT / "tests/g3c4/c4_toolchain_profile.py"
 BASE_SHA = "43f25cca40be7f18b2d5ff15f2806aa4b2d1e59a30ad0a905c15c62b033dc576"
 ADDITIONS = (
     "tests/g3c4/c4_math_oracle.py",
@@ -26,11 +27,14 @@ ADDITIONS = (
     "scripts/test-g3c4-c4-native-capture.sh",
     "native/g3c4_c4_native_capture_source_closure.txt",
     "tests/q0/requirements-oracle.lock",
+    "tests/g3c4/c4_toolchain_profile.py",
+    "tests/g3c4/test_c4_toolchain_profile.py",
 )
 
 
 def check(observer: str, parser: str, runner: str,
-          base: list[str], closure: list[str]) -> None:
+          base: list[str], closure: list[str], profile: str | None = None) -> None:
+    profile = PROFILE.read_text() if profile is None else profile
     assert len(base) == 198 and closure == base + list(ADDITIONS)
     assert len(set(closure)) == len(closure)
     assert all((ROOT / member).is_file() for member in closure)
@@ -85,14 +89,37 @@ def check(observer: str, parser: str, runner: str,
                     "timeout --signal=TERM --kill-after=5s 120s",
                     "--wrap=et_a2_kv_cache_transaction_abort_v1"):
         assert control in runner, control
-    assert "LOCK_FILE=" not in runner and "docker " not in runner.lower()
+    assert runner.count('LOCK_FILE="$candidate_lock"') == 1
+    assert runner.count("LOCK_FILE=") == 1
+    assert '[[ "${1:-}" == --candidate-lock-test ]]' in runner
+    assert runner.count("c4_toolchain_profile.py") == 2
+    assert "tests.g3c4.test_c4_toolchain_profile" in runner
+    assert 'candidate-profile.pre.json' in runner
+    assert 'candidate-profile.post.json' in runner
+    assert 'export GIT_OPTIONAL_LOCKS=0' in runner
+    assert runner.count('candidate-profile.pre.json') == 2
+    assert runner.count('candidate-profile.post.json') == 2
+    assert (runner.index('[[ "${1:-}" == --candidate-lock-test ]]') <
+            runner.index('LOCK_FILE="$candidate_lock"') <
+            runner.index("verify_toolchain\n"))
+    assert "docker " not in runner.lower()
+    for control in ("os.O_NOFOLLOW", "st_nlink == 1", "file_identity(path.parent)",
+                    "candidate lock must be outside the tracked C4 checkout",
+                    "unsupported-host bypass forbidden", "COMPILER_COMMIT",
+                    "COMPILER_TREE", "git(ROOT, \"status\"",
+                    "candidate lock differs from sole fe9-to-6803 replacement"):
+        assert control in profile, control
+    assert profile.count("st_nlink == 1") == 2
+    assert profile.count("COMPILER_TREE") == 2
+    assert "subprocess.run([\"git\", \"--no-optional-locks\"" in profile
 
 
 def main() -> None:
     if hashlib.sha256(BASE.read_bytes()).hexdigest() != BASE_SHA:
         raise AssertionError("accepted terminal closure drift")
     check(OBSERVER.read_text(), PARSER.read_text(), RUNNER.read_text(),
-          BASE.read_text().splitlines(), CLOSURE.read_text().splitlines())
+          BASE.read_text().splitlines(), CLOSURE.read_text().splitlines(),
+          PROFILE.read_text())
     print("C4 native capture source/closure PASS")
 
 

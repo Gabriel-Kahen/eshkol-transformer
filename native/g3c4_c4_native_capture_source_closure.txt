@@ -208,3 +208,5 @@ tests/g3c4/check_c4_native_capture.py
 scripts/test-g3c4-c4-native-capture.sh
 native/g3c4_c4_native_capture_source_closure.txt
 tests/q0/requirements-oracle.lock
+tests/g3c4/c4_toolchain_profile.py
+tests/g3c4/test_c4_toolchain_profile.py

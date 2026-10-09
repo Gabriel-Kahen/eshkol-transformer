@@ -20,15 +20,18 @@ class NativeCaptureSourceTests(unittest.TestCase):
         cls.observer = checker.OBSERVER.read_text()
         cls.parser = checker.PARSER.read_text()
         cls.runner = checker.RUNNER.read_text()
+        cls.profile = checker.PROFILE.read_text()
         cls.base = checker.BASE.read_text().splitlines()
         cls.closure = checker.CLOSURE.read_text().splitlines()
 
     def check(self, observer: str | None = None, parser: str | None = None,
-              runner: str | None = None, closure: list[str] | None = None) -> None:
+              runner: str | None = None, closure: list[str] | None = None,
+              profile: str | None = None) -> None:
         checker.check(observer if observer is not None else self.observer,
                       parser if parser is not None else self.parser,
                       runner if runner is not None else self.runner,
-                      self.base, closure if closure is not None else self.closure)
+                      self.base, closure if closure is not None else self.closure,
+                      profile if profile is not None else self.profile)
 
     def test_current_exact_closure(self) -> None:
         checker.main()
@@ -99,6 +102,32 @@ class NativeCaptureSourceTests(unittest.TestCase):
                     self.check(parser=self.parser.replace(original, "removed", 1))
         with self.assertRaises(AssertionError):
             self.check(parser=self.parser + "\nchild.poll()\n")
+
+    def test_external_lock_route_is_explicit_and_narrow(self) -> None:
+        for original in ('LOCK_FILE="$candidate_lock"',
+                         '[[ "${1:-}" == --candidate-lock-test ]]',
+                         'candidate-profile.post.json',
+                         'export GIT_OPTIONAL_LOCKS=0',
+                         'tests.g3c4.test_c4_toolchain_profile'):
+            with self.subTest(original=original):
+                self.assertIn(original, self.runner)
+                with self.assertRaises(AssertionError):
+                    self.check(runner=self.runner.replace(original, "removed", 1))
+        with self.assertRaises(AssertionError):
+            self.check(runner=self.runner + '\nLOCK_FILE="/unreviewed"\n')
+        late = self.runner.replace(
+            '  LOCK_FILE="$candidate_lock"\n  export GIT_OPTIONAL_LOCKS=0\nfi\nverify_toolchain\n',
+            '  export GIT_OPTIONAL_LOCKS=0\nfi\nverify_toolchain\nLOCK_FILE="$candidate_lock"\n', 1)
+        self.assertNotEqual(late, self.runner)
+        with self.assertRaises(AssertionError):
+            self.check(runner=late)
+        for original in ("os.O_NOFOLLOW", "st_nlink == 1",
+                         "candidate lock must be outside the tracked C4 checkout",
+                         "unsupported-host bypass forbidden", "COMPILER_TREE"):
+            with self.subTest(original=original):
+                self.assertIn(original, self.profile)
+                with self.assertRaises(AssertionError):
+                    self.check(profile=self.profile.replace(original, "removed", 1))
 
 
 if __name__ == "__main__":
