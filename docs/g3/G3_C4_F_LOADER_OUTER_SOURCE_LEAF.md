@@ -38,6 +38,14 @@ per-stream acquisition caps, actual `wait4` status and bounded writer closure.
 The 128 MiB `fsize` limit covers the measured largest preserved F file,
 `libeshkol-static.a` at 85,874,424 bytes; the historical 16 MiB profile
 would fail during that copy. This is a source-level correction, not a run.
+An optional ROOT-supplied monitor runs inside each owned client capture loop,
+including the guest attach loop, roughly once per 50 ms drain. Its exception
+denies the phase and terminates only the authenticated owned client session;
+the outer `finally` still inspects, kills if needed, genuinely waits for,
+removes and checks absence of the selected CID without invoking the failed
+monitor again. The future wrapper must measure its selected stage/output/control
+aggregate and emergency disk floor through this hook. Sampling may overshoot
+the threshold between checks, so it is not a hard disk quota.
 The container is identified by the exact created CID, label, name, image,
 effective entrypoint/command, user, environment, workdir, resource limits,
 host mount options and six bind rows before any cleanup; stopped inspect,
@@ -48,7 +56,8 @@ Failed and partial receipts remain in the consumed
 attempt. Any incomplete closure is a failed result, never permission to retry.
 
 Current tests exercise command shape, direct CLI denial, real owned child
-status/overflow/timeout, inspect mismatch, and matching two-surface review
+status/overflow/timeout/monitor denial, inspect mismatch, monitor-failed
+Docker closure, and matching two-surface review
 bytes with wrong-path and drift denials. Actual Docker image,
 rootless daemon, loader/library observation, source admission and physical
 container closure are **unrun**. The original F guest remains failed; full

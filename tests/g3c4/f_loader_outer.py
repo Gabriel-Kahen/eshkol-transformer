@@ -17,6 +17,7 @@ import signal
 import stat
 import subprocess
 import time
+from typing import Callable
 
 from tests.g3c4 import f_artifact_attest as attest
 from tests.g3c4 import f_image_loader_collect as collector
@@ -182,7 +183,8 @@ def create_argv(decision: dict) -> list[str]:
     return argv
 
 
-def capture(argv: list[str], output: Path, timeout: int = PHASE_LIMIT) -> dict:
+def capture(argv: list[str], output: Path, timeout: int = PHASE_LIMIT,
+            monitor: Callable[[], None] | None = None) -> dict:
     """Owned bounded subprocess; never use Popen.poll before session closure."""
     require(1 <= timeout <= PHASE_LIMIT and not output.exists(), "phase output exists")
     output.mkdir(mode=0o700)
@@ -234,6 +236,11 @@ def capture(argv: list[str], output: Path, timeout: int = PHASE_LIMIT) -> dict:
             exited = os.waitid(os.P_PID, child.pid,
                                os.WEXITED | os.WNOHANG | os.WNOWAIT)
             live = collector.members(child.pid, uid)
+            if monitor is not None and not failure:
+                try:
+                    monitor()
+                except BaseException as error:
+                    failure = f"monitor denied: {type(error).__name__}: {error}"
             if (exited and not selector.get_map() and
                     all(row[0] == child.pid for row in live)):
                 quiescent = True
@@ -317,8 +324,9 @@ def capture(argv: list[str], output: Path, timeout: int = PHASE_LIMIT) -> dict:
     return receipt
 
 
-def checked(argv: list[str], path: Path, timeout: int = 120) -> bytes:
-    receipt = capture(argv, path, timeout)
+def checked(argv: list[str], path: Path, timeout: int = 120,
+            monitor: Callable[[], None] | None = None) -> bytes:
+    receipt = capture(argv, path, timeout, monitor)
     require(receipt["returncode"] == 0 and receipt["quiescent"] and
             not receipt["failure"] and
             ordinary(path / "stderr.raw") == b"", "outer command failed")
@@ -445,7 +453,8 @@ def never_started(row: dict) -> None:
             "unstarted container identity uncertain")
 
 
-def run_once(decision_path: Path, expected_sha: str, evidence: Path) -> None:
+def run_once(decision_path: Path, expected_sha: str, evidence: Path,
+             monitor: Callable[[], None] | None = None) -> None:
     """Only a future immutable ROOT wrapper may supply the decision SHA."""
     decision = selected(decision_path, expected_sha, fresh=True)
     roots = [Path(decision[key]) for key in
@@ -463,26 +472,36 @@ def run_once(decision_path: Path, expected_sha: str, evidence: Path) -> None:
     cid = None
     primary = ""
     image = security = None
+    def active_checked(argv: list[str], path: Path, timeout: int = 120) -> bytes:
+        if monitor is None:
+            return checked(argv, path, timeout)
+        return checked(argv, path, timeout, monitor)
+
+    def active_capture(argv: list[str], path: Path, timeout: int) -> dict:
+        if monitor is None:
+            return capture(argv, path, timeout)
+        return capture(argv, path, timeout, monitor)
+
     try:
-        image = checked([str(DOCKER), "image", "inspect", IMAGE],
+        image = active_checked([str(DOCKER), "image", "inspect", IMAGE],
                         evidence / "image")
         require(json.loads(image)[0]["Id"] == IMAGE, "image identity")
         expected_env(image)
-        security = checked([str(DOCKER), "info", "--format",
+        security = active_checked([str(DOCKER), "info", "--format",
                             "{{json .SecurityOptions}}"], evidence / "daemon")
         require("rootless" in security.decode(), "daemon is not rootless")
-        absence = checked([str(DOCKER), "ps", "-a", "--no-trunc", "--format",
+        absence = active_checked([str(DOCKER), "ps", "-a", "--no-trunc", "--format",
                            "{{.ID}} {{.Names}}"], evidence / "initial-absence")
         require(decision["name"].encode() not in absence, "name already exists")
         selected(decision_path, expected_sha, fresh=False)
-        created = checked(create_argv(decision), evidence / "create")
+        created = active_checked(create_argv(decision), evidence / "create")
         require(HEX64.fullmatch(created.decode().strip()) is not None,
                 "created CID malformed")
         cid = created.decode().strip()
-        created_row = inspect_owned(checked([str(DOCKER), "inspect", cid],
+        created_row = inspect_owned(active_checked([str(DOCKER), "inspect", cid],
                                     evidence / "created"), decision, cid, False, image)
         never_started(created_row)
-        started = capture([str(DOCKER), "start", "--attach", cid],
+        started = active_capture([str(DOCKER), "start", "--attach", cid],
                           evidence / "guest", PHASE_LIMIT)
         require(started["quiescent"] and started["returncode"] == 0 and
                 not started["failure"] and

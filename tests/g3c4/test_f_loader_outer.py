@@ -110,6 +110,23 @@ class OuterTests(unittest.TestCase):
             self.assertIsNotNone(timed["wait_status"])
             self.assertTrue((path / "timeout/status.json").is_file())
 
+    def test_owned_monitor_denial_keeps_actual_wait_and_raw_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "monitored"
+            calls = [0]
+            def deny() -> None:
+                calls[0] += 1
+                raise ValueError("aggregate bound")
+            result = outer.capture([sys.executable, "-B", "-c",
+                                    "import time;time.sleep(10)"],
+                                   path, 5, deny)
+            self.assertGreater(calls[0], 0)
+            self.assertIn("monitor denied: ValueError: aggregate bound",
+                          result["failure"])
+            self.assertIsNotNone(result["wait_status"])
+            self.assertTrue(result["quiescent"])
+            self.assertTrue((path / "status.json").is_file())
+
     def test_inspect_requires_owned_exact_mounts(self) -> None:
         d = {"name": "g3c4-f-loader-owned", "compiler": "/one",
              "source": "/two", "f_output": "/three", "bundle": "/four",
@@ -376,6 +393,50 @@ class OuterTests(unittest.TestCase):
                     self.assertIs(result["success"], succeeds)
                     if not succeeds:
                         self.assertIn("Docker wait uncertain", result["closure"][0])
+
+    def test_monitor_failure_does_not_block_owned_docker_closure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            decision = {key: str(base / key) for key in
+                        ("compiler", "source", "f_output", "bundle", "candidate", "out")}
+            for path in decision.values():
+                Path(path).mkdir()
+            decision.update({"name": "g3c4-f-loader-owned",
+                             "source_admission_sha256": "a" * 64})
+            image = json.dumps([{"Id": outer.IMAGE, "Config": {"Env": []}}]).encode()
+            state = {"Status": "exited", "Running": False, "Pid": 0,
+                     "OOMKilled": False, "Dead": False, "Error": "", "ExitCode": 0}
+            calls = []
+            def command(argv, path, timeout=120, monitor=None):
+                action = argv[1]
+                calls.append((action, monitor is not None))
+                if action == "image": return image
+                if action == "info": return b'["name=rootless"]\n'
+                if action == "ps": return b""
+                if action == "create": return ("b" * 64 + "\n").encode()
+                if action == "wait": return b"0\n"
+                return b"[]"
+            def guest(argv, path, timeout=outer.PHASE_LIMIT, monitor=None):
+                self.assertIsNotNone(monitor)
+                monitor()
+            def inspect(*args):
+                return {"State": {**state, "Status": "created"}} if len(
+                    [action for action, _ in calls if action == "inspect"]) == 1 else {"State": state}
+            def deny(): raise ValueError("aggregate bound")
+            with patch.object(outer, "selected", return_value=decision), \
+                 patch.object(outer, "checked", side_effect=command), \
+                 patch.object(outer, "capture", side_effect=guest), \
+                 patch.object(outer, "inspect_owned", side_effect=inspect):
+                with self.assertRaisesRegex(ValueError, "outer observation failed"):
+                    outer.run_once(base / "decision.json", "a" * 64,
+                                   base / "evidence", deny)
+            self.assertLess([a for a, _ in calls].index("wait"),
+                            [a for a, _ in calls].index("rm"))
+            self.assertTrue(all(not watched for action, watched in calls
+                                if action in ("wait", "rm")))
+            result = json.loads((base / "evidence/result.json").read_bytes())
+            self.assertIn("aggregate bound", result["primary"])
+            self.assertEqual(result["closure"], [])
 
 
 if __name__ == "__main__":

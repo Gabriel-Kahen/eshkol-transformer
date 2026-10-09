@@ -2742,6 +2742,10 @@ publication, public G2 and continuation remain pending.
   A scoped source successor raises only the F loader profile's file-size cap
   from 16 MiB to 128 MiB, above the preserved 85,874,424-byte static archive;
   its actual container profile and copy remain unrun.
+  A further optional ROOT monitor seam samples the selected aggregate output
+  during owned capture and leaves physical Docker cleanup independent of a
+  monitor failure; source controls pass, while live overshoot and runtime
+  admission remain open.
 
 ## Wave 4 — practical pretraining and performance
 

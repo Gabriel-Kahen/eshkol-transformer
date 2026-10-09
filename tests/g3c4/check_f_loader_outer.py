@@ -44,7 +44,11 @@ NEW = OLD + ("\n  An [inactive test-only F loader outer source](g3/G3_C4_F_LOADE
              "  both host and guest bundle surfaces; the image loader is still unobserved.\n"
              "  A scoped source successor raises only the F loader profile's file-size cap\n"
              "  from 16 MiB to 128 MiB, above the preserved 85,874,424-byte static archive;\n"
-             "  its actual container profile and copy remain unrun.\n")
+             "  its actual container profile and copy remain unrun.\n"
+             "  A further optional ROOT monitor seam samples the selected aggregate output\n"
+             "  during owned capture and leaves physical Docker cleanup independent of a\n"
+             "  monitor failure; source controls pass, while live overshoot and runtime\n"
+             "  admission remain open.\n")
 
 
 def validate(base: list[str], closure: list[str], source: str,
@@ -65,6 +69,7 @@ def validate(base: list[str], closure: list[str], source: str,
                    '"--network", "none"', '"--read-only"',
                    '"--memory", "4g"', '"--pids-limit", "128"',
                    '"fsize=134217728:134217728"',
+                   '"monitor denied:', 'def active_capture(',
                    '"--tmpfs"', '"--attach"', '"inspect"', '"rm"',
                    '"initial-absence"', '"closure-inspect"',
                    '"docker-wait"', 'stopped_exit(', 'wait_exit(',
