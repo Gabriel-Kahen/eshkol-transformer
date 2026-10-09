@@ -951,7 +951,7 @@ reuses the reviewed copied-F three-string staging and exact external lock,
 and orders persistent normal then sanitizer emitted-inventory observations.
 It has no launcher or actual loader-result pin; source-only checks do not
 establish a copied compiler, emitted baselines, or native fixture execution.
-An inactive E3 outer adapter now names the accepted F-loader H lifecycle as
+An inactive E3 outer adapter now names the accepted F-loader I lifecycle as
 its Docker owner and supplies only E3 source/material, guest command, inspect,
 and nonpublishing phase predicates. The proposed guest retains normal then
 sanitizer raw receipts under persistent `/out`. A fixed ROOT decision, actual

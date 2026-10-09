@@ -16,26 +16,26 @@ from tests.e3_private import inactive_extraction_outer as outer
 from tests.e3_private import inactive_extraction_guest as guest
 
 
-H_REPO = Path("/home/gabe/.codex/worktrees/g3c4-public-g2-f-loader-launcher/eshkol-transformer")
+I_REPO = Path("/home/gabe/.codex/evidence/eshkol-transformer/g3c4-public-g2-f-loader-label-source-20261009-i/checkout")
 EVIDENCE = Path("/home/gabe/.codex/evidence/eshkol-transformer")
 
 
 class Contract(unittest.TestCase):
-    def test_actual_h_source_and_reviews(self) -> None:
+    def test_actual_i_source_and_reviews(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            for relative in outer.H_FILES:
+            for relative in outer.I_FILES:
                 data = subprocess.run(
-                    ["git", "--no-optional-locks", "-C", str(H_REPO), "show",
-                     f"{outer.H_HEAD}:{relative}"], check=True,
+                    ["git", "--no-optional-locks", "-C", str(I_REPO), "show",
+                     f"{outer.I_HEAD}:{relative}"], check=True,
                     capture_output=True).stdout
                 target = root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(data)
             for name, source in (
-                ("SHA256SUMS-SOURCE", EVIDENCE / "g3c4-public-g2-f-loader-monitor-source-20261009-h/SHA256SUMS-SOURCE"),
-                ("SHA256SUMS-ROOT-REVIEW", EVIDENCE / "g3c4-public-g2-f-loader-monitor-root-source-review-20261009-h/SHA256SUMS-ROOT-REVIEW"),
-                ("SHA256SUMS-INDEPENDENT-SOURCE-REVIEW", EVIDENCE / "g3c4-public-g2-f-loader-monitor-independent-source-review-20261009-h/SHA256SUMS-INDEPENDENT-SOURCE-REVIEW"),
+                ("SHA256SUMS-SOURCE", EVIDENCE / "g3c4-public-g2-f-loader-label-source-20261009-i/SOURCE-EVIDENCE/SHA256SUMS-SOURCE"),
+                ("SHA256SUMS-ROOT-REVIEW", EVIDENCE / "g3c4-public-g2-f-loader-label-root-source-review-20261009-i/SHA256SUMS-ROOT-SOURCE-REVIEW"),
+                ("SHA256SUMS-INDEPENDENT-SOURCE-REVIEW", EVIDENCE / "g3c4-public-g2-f-loader-label-independent-source-review-20261009-i/SHA256SUMS-INDEPENDENT-SOURCE-REVIEW"),
             ):
                 (root / name).write_bytes(source.read_bytes())
             outer.h_source(root, Path.read_bytes)
@@ -69,7 +69,7 @@ class Contract(unittest.TestCase):
                 outer.material(root, sha256(bad).hexdigest(), Path.read_bytes)
 
     def test_actual_flat_attester_precreate_pin(self) -> None:
-        source = H_REPO / "tests/g3c4/f_artifact_attest.py"
+        source = I_REPO / "tests/g3c4/f_artifact_attest.py"
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             candidate = root / "f_artifact_attest.py"
@@ -79,7 +79,7 @@ class Contract(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "selected bytes changed"):
                 outer.flat_attester(root, Path.read_bytes)
 
-    def test_h_profile_tail_only_and_stale_cmd_denial(self) -> None:
+    def test_i_profile_tail_only_and_stale_cmd_denial(self) -> None:
         class H:
             @staticmethod
             def require(ok, why):
@@ -149,11 +149,11 @@ class Contract(unittest.TestCase):
     def test_inactive_no_authority_and_two_modes(self) -> None:
         plan = outer.contract()
         self.assertEqual(plan["status"], "SOURCE_ONLY_INACTIVE")
-        self.assertEqual(plan["h_source_sha256"], outer.H_SOURCE)
+        self.assertEqual(plan["h_source_sha256"], outer.I_SOURCE)
         self.assertEqual([row[-1] for row in plan["guest_sequence"]], ["normal", "sanitize"])
         self.assertEqual(len(plan["missing_runtime_authority"]), 2)
         self.assertNotIn("if __name__", Path(outer.__file__).read_text())
-        self.assertEqual(outer.H_FILES, guest.H_FILES)
+        self.assertEqual(outer.I_FILES, guest.I_FILES)
         self.assertEqual(outer.RECIPE_SHA, guest.RECIPE_SHA)
         self.assertEqual(sha256(Path(outer.recipe.__file__).read_bytes()).hexdigest(),
                          outer.RECIPE_SHA)
