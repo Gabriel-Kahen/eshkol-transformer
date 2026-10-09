@@ -1704,8 +1704,10 @@ unexposed dataset before discarding the pending row; cleanup failure stops the
 process. Admission rejects an ordinary D2 dataset without that creation row,
 an equal-byte alternate tokenizer shell, a closed dataset, or changed cursor
 identity. A private retire operation unlinks and clears the exact row only
-after genuine D2 close; an ordinary D2 close retains a row until that private
-retire call, so a fixed 64-row process limit denies unbounded retention.
+after genuine D2 close. An ordinary D2 close bypasses that retirement and
+retains its row; it cannot later be safely pruned by this leaf because D2
+marks the shell closed before native close. A fixed 64-row process limit
+denies unbounded retention and explicitly rejects further opens.
 Source-shape and mutation controls pass. This is not yet compiled or integrated
 with G3 construction, O2 adoption, C2 SAVE, or cold LOAD; generated package
 behavior and full lifecycle acceptance remain separate gates.

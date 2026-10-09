@@ -69,11 +69,17 @@ def check_lineage(source: str, root: str, manifest: str) -> None:
         raise ValueError("identity, cursor, or failure cleanup differs")
     if "(vector-set! g3r-d2-lineage-registry 0 next)" in source[:positions[4]]:
         raise ValueError("dataset is published before D2 open")
+    quota = source[source.index("(define (g3r-d2-lineage-check-capacity"):
+                   source.index("(define (g3r-d2-lineage-byte-core")]
     if ("(define g3r-d2-lineage-maximum-rows 64)" not in source or
             source.index("(g3r-d2-lineage-check-capacity\n") > positions[4] or
-            "(= capacity 0)" not in source):
+            quota.index("((= capacity 0)") > quota.index("((null? remaining)")):
         raise ValueError("ordinary-close retention is unbounded")
     retire = source[source.index("(define (g3r-d2-lineage-retire!") :]
+    if ("(state (d2-open-dataset-state dataset operation))" not in retire or
+            "(#t (if (not (vector-ref state 2)) (exit 134))" not in retire or
+            "(if (vector-ref state 2) (exit 134))" not in retire):
+        raise ValueError("indeterminate native close could prune the row")
     retire_order = ["(next (append (reverse prefix) (cdr rows)))",
                     "(d2-token-dataset-close! dataset)",
                     "(vector-set! g3r-d2-lineage-registry 0 next)",
@@ -164,6 +170,21 @@ class D2LineageSource(unittest.TestCase):
             self.check(source=self.source.replace(
                 '(next (append (reverse prefix) (cdr rows)))',
                 '(next (cdr rows))'))
+        retire = self.source.index('(define (g3r-d2-lineage-retire!')
+        with self.assertRaises(ValueError):
+            self.check(source=self.source[:retire] + self.source[retire:].replace(
+                '(state (d2-open-dataset-state dataset operation))',
+                '(state (d2-dataset-state dataset operation))'))
+        with self.assertRaises(ValueError):
+            self.check(source=self.source.replace(
+                '(#t (if (not (vector-ref state 2)) (exit 134))',
+                '(#t (raise caught)'))
+
+    def test_exact_capacity_boundary(self) -> None:
+        with self.assertRaises(ValueError):
+            self.check(source=self.source.replace(
+                '((= capacity 0)\n',
+                '((null? remaining) #t)\n      ((= capacity 0)\n', 1))
 
 
 if __name__ == "__main__":
