@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
+import shlex
 import tempfile
 from pathlib import Path
 import unittest
@@ -117,9 +119,50 @@ class NativeTranscriptTests(unittest.TestCase):
                     receipt = root / f"{name}-receipt"
                     with self.assertRaises(ValueError):
                         capture.run_native(binary, b"", receipt, timeout_seconds=1)
-                    self.assertTrue(receipt.with_suffix(".json").is_file())
+                    self.assertTrue(receipt.with_suffix(".status.json").is_file())
                     self.assertTrue(receipt.with_suffix(".stdout").is_file())
                     self.assertTrue(receipt.with_suffix(".stderr").is_file())
+
+    def test_owned_raw_receipt_and_canonical_output_coexist(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture_path = root / "fixture.json"
+            fixture_bytes = capture.encode_observation(self.frozen)
+            fixture_path.write_bytes(fixture_bytes)
+            raw_path = root / "synthetic.raw"
+            raw_path.write_bytes(self.raw)
+            binary = root / "synthetic-child"
+            binary.write_text("#!/bin/sh\ncat " + shlex.quote(str(raw_path)) + "\n")
+            binary.chmod(0o700)
+            request = root / "request.txt"
+            request.write_bytes(capture.make_input(self.frozen))
+            with mock.patch.object(capture, "FIXTURE_SHA256",
+                                   hashlib.sha256(fixture_bytes).hexdigest()):
+                for name in ("first", "repeat"):
+                    with self.subTest(name=name):
+                        prefix = root / name
+                        with mock.patch("sys.argv", ["capture", "--fixture",
+                                                     str(fixture_path), "--binary",
+                                                     str(binary), "--request",
+                                                     str(request), "--evidence",
+                                                     str(prefix)]):
+                            capture.main()
+                        status_path = prefix.with_suffix(".status.json")
+                        canonical_path = prefix.with_suffix(".json")
+                        self.assertTrue(status_path.is_file())
+                        self.assertFalse(canonical_path.exists())
+                        self.assertEqual(json.loads(status_path.read_bytes())["returncode"], 0)
+                        with mock.patch("sys.argv", ["capture", "--fixture",
+                                                     str(fixture_path), "--raw",
+                                                     str(prefix.with_suffix(".stdout")),
+                                                     "--output", str(canonical_path)]):
+                            capture.main()
+                            with self.assertRaisesRegex(ValueError, "refusing to replace"):
+                                capture.main()
+                        self.assertEqual(canonical_path.read_bytes(),
+                                         capture.encode_observation(
+                                             capture.parse(self.raw, self.frozen)))
+                        self.assertTrue(status_path.is_file())
 
 
 if __name__ == "__main__":

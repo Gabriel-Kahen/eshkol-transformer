@@ -190,7 +190,7 @@ def run_native(binary: Path, request: bytes, evidence: Path,
         stream.write(stdout)
     with evidence.with_suffix(".stderr").open("xb") as stream:
         stream.write(stderr)
-    with evidence.with_suffix(".json").open("xb") as stream:
+    with evidence.with_suffix(".status.json").open("xb") as stream:
         stream.write(_canonical(receipt))
     if failure:
         raise ValueError(failure)

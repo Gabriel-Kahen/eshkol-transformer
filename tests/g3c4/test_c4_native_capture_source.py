@@ -70,6 +70,11 @@ class NativeCaptureSourceTests(unittest.TestCase):
                 with self.assertRaises(AssertionError):
                     self.check(runner=self.runner.replace(phrase, "removed"))
 
+    def test_status_receipt_does_not_collide_with_canonical_observation(self) -> None:
+        self.assertIn('.status.json', self.parser)
+        with self.assertRaises(AssertionError):
+            self.check(parser=self.parser.replace('.status.json', '.json', 1))
+
 
 if __name__ == "__main__":
     unittest.main()

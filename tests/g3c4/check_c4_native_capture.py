@@ -58,7 +58,8 @@ def check(observer: str, parser: str, runner: str,
     for control in ("noncanonical fixture", "case identity/order",
                     "intended T4 abort", "invalid/nonfinite f32 bit word",
                     "native child timeout", "native executable drift",
-                    "returncode", "stderr_bytes", "open(\"xb\")"):
+                    "returncode", "stderr_bytes", ".status.json",
+                    "open(\"xb\")"):
         assert control in parser, control
     for control in ("verify_toolchain", "resolve_provenance_compilers",
                     '[[ "${Q0_PYTHON:-}" == /*', "q0_identity",
