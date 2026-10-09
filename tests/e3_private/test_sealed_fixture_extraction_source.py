@@ -12,6 +12,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 BUILDER = ROOT / "scripts/build-e1b-consumer.sh"
 WRAPPER = ROOT / "scripts/extract-e3-sealed-fixture-inventories.sh"
+OWNED = ROOT / "scripts/e3-sealed-fixture-extract-owned-tmp.sh"
 
 
 def source_boundary(body: str) -> None:
@@ -96,8 +97,28 @@ class ExtractionSource(unittest.TestCase):
         self.assertIn('cmp -s "${stage}/inputs.before.sha256"', wrapper)
         self.assertIn('! -e "${stage}/e3_sealed_fixture_package.o"', wrapper)
         self.assertIn('! -e "${stage}/e3_sealed_fixture_package.o.evidence"', wrapper)
-        self.assertIn('compiler.exit.raw', wrapper)
+        self.assertIn('compiler.exit.raw', OWNED.read_text())
         self.assertIn('E3_SEALED_FIXTURE_EXTRACT=1', wrapper)
+        self.assertIn('e3_extract_owned_command "${stage}" /usr/bin/env', wrapper)
+
+    def test_mocked_failure_retains_builder_tmp_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            stage = Path(temp) / ".e3-sealed-fixture.ABC123"
+            stage.mkdir()
+            script = r'''
+set -euo pipefail
+source "$1"
+shift
+e3_extract_owned_command "$@"
+'''
+            child = 'mkdir "$TMPDIR/emitted"; printf raw-private-ir >"$TMPDIR/emitted/private.ll"; exit 23'
+            result = subprocess.run(["/usr/bin/bash", "-c", script, "test",
+                                     str(OWNED), str(stage), "/usr/bin/bash", "-c", child],
+                                    cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 23)
+            self.assertEqual((stage / "compiler.exit.raw").read_text(), "23\n")
+            self.assertEqual((stage / "tmp/emitted/private.ll").read_bytes(), b"raw-private-ir")
+            self.assertFalse((stage / "e3_sealed_fixture_package.o").exists())
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@
 # Inactive observation route. It cannot publish the normal fixture object.
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
+source "${PROJECT_ROOT}/scripts/e3-sealed-fixture-extract-owned-tmp.sh"
 [[ $# -eq 2 ]] || die "usage: $0 FRESH_EXTRACTION_DIRECTORY normal|sanitize"
 mode=$2
 [[ "${mode}" == normal || "${mode}" == sanitize ]] ||
@@ -31,6 +32,7 @@ inputs=(
   "${PROJECT_ROOT}/scripts/e3-private-package-policy.sh"
   "${PROJECT_ROOT}/scripts/e3-private-native-inputs.sh"
   "${PROJECT_ROOT}/scripts/e3-sealed-fixture-generated-source-stage.sh"
+  "${PROJECT_ROOT}/scripts/e3-sealed-fixture-extract-owned-tmp.sh"
   "${PROJECT_ROOT}/scripts/generate-e3-sealed-fixture-source.py"
   "${PROJECT_ROOT}/native/p1_identity.c"
   "${PROJECT_ROOT}/native/f32_tensor.c"
@@ -57,19 +59,17 @@ invocation=(
   "${PROJECT_ROOT}/internal/t1/lib" "${PROJECT_ROOT}/src"
   "${PROJECT_ROOT}/internal/d2/lib" "${PROJECT_ROOT}/internal/e3/lib"
 )
-printf '%q ' "${invocation[@]}" >"${stage}/compiler.argv.raw"
-printf '\n' >>"${stage}/compiler.argv.raw"
-if E3_SEALED_FIXTURE_EXTRACT=1 \
-   E3_SEALED_FIXTURE_SANITIZE="$([[ "${mode}" == sanitize ]] && printf 1 || printf 0)" \
-   E1B_COMPILER_TIMEOUT_SECONDS="${E3_COMPILER_TIMEOUT_SECONDS:-900}" \
-   "${invocation[@]}" >"${stage}/compiler.stdout.raw" \
-   2>"${stage}/compiler.stderr.raw"; then
-  printf '0\n' >"${stage}/compiler.exit.raw"
-else
-  result=$?
-  printf '%s\n' "${result}" >"${stage}/compiler.exit.raw"
+if ! e3_extract_owned_command "${stage}" /usr/bin/env \
+    E3_SEALED_FIXTURE_EXTRACT=1 \
+    E3_SEALED_FIXTURE_SANITIZE="$([[ "${mode}" == sanitize ]] && printf 1 || printf 0)" \
+    E1B_COMPILER_TIMEOUT_SECONDS="${E3_COMPILER_TIMEOUT_SECONDS:-900}" \
+    "${invocation[@]}"; then
   die "sealed-fixture extraction failed; raw stage preserved"
 fi
+[[ -d "${stage}/tmp" && ! -L "${stage}/tmp" ]] ||
+  die "sealed-fixture builder scratch escaped its owned stage"
+rmdir -- "${stage}/tmp" ||
+  die "sealed-fixture successful builder left unreviewed scratch"
 sha256sum -- "${inputs[@]}" >"${stage}/inputs.after.sha256"
 cmp -s "${stage}/inputs.before.sha256" "${stage}/inputs.after.sha256" ||
   die "sealed-fixture extraction inputs changed during emission"

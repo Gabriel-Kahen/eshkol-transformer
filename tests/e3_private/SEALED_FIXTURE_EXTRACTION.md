@@ -19,6 +19,12 @@ and a clearly marked **probe-only** archive/member listing. Sanitizer mode also
 retains rewritten private IR, rewrite provenance, and actual instrumentation
 imports. A failed extraction preserves its stage and raw streams. These bytes
 are inputs to independent review; their presence is not package acceptance.
+The wrapper creates a private `tmp` inside that same persistent stage and
+passes it as `TMPDIR` to the builder. On failure, partially emitted IR and
+objects stay there with the raw streams and exit. On success, the builder must
+copy its selected emissions and remove its scratch; the wrapper requires
+`tmp` empty before publishing the extraction bundle. The guest's ephemeral
+`/tmp` is never relied on for failure evidence.
 
 Actual normal and sanitizer emissions, exact source/symbol/object/ABI manifest
 derivation, two fresh reproducible builds, private-link denial, compiled fixture
