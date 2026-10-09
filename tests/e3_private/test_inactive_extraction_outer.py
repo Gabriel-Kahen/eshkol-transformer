@@ -21,6 +21,23 @@ EVIDENCE = Path("/home/gabe/.codex/evidence/eshkol-transformer")
 
 
 class Contract(unittest.TestCase):
+    def test_reviewed_recipe_e_source_and_denied_predecessor(self) -> None:
+        e = EVIDENCE / "e3-section9-sealed-fixture-inventory-recipe-source-20261009-e"
+        self.assertEqual(sha256((e / "SHA256SUMS-RECIPE-SOURCE").read_bytes()).hexdigest(),
+                         "aa854ebbd94a171f2081a6ca6b286ad9a3fb64671ce13d1c6fbfd79431bf039a")
+        self.assertEqual(sha256((EVIDENCE / "e3-section9-sealed-fixture-inventory-recipe-root-source-review-20261009-e/"
+                                  "SHA256SUMS-ROOT-RECIPE-REVIEW").read_bytes()).hexdigest(),
+                         "9d9724967f68ba3870a9ec98050a42b4c8a569c4e3c34d58c03005bf2530ca3a")
+        self.assertEqual(sha256((EVIDENCE / "e3-section9-sealed-fixture-inventory-recipe-independent-review-20261009-e/"
+                                  "SHA256SUMS-INDEPENDENT-REVIEW").read_bytes()).hexdigest(),
+                         "c8ca178e457a6f55107db03218010ba7cdfd3722e98d72d2918c525e79d915d9")
+        self.assertEqual(sha256((e / "source/tests/e3_private/inactive_extraction_recipe.py").read_bytes()).hexdigest(),
+                         outer.RECIPE_SHA)
+        self.assertEqual(outer.recipe.F_ATTEST_SHA,
+                         "2c57e29015a76e2ff733862bb3ef05fcf7a5c0dba284dfad8913b3c10d7e3433")
+        self.assertNotEqual(outer.RECIPE_SHA,
+                            "215346061c87c6cf2c3475fdd7f2cea4f88e3f30239bc1b8a987d079f683761d")
+
     def test_actual_j_source_and_reviews(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -82,7 +99,7 @@ class Contract(unittest.TestCase):
                 outer.material(root, sha256(bad).hexdigest(), Path.read_bytes)
 
     def test_actual_flat_attester_precreate_pin(self) -> None:
-        source = (EVIDENCE / "g3c4-public-g2-f-attester-flat-source-20261009-c/"
+        source = (EVIDENCE / "g3c4-public-g2-f-attest-lock-rebase-source-20261009-b/"
                   "f_artifact_attest.py")
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -93,6 +110,10 @@ class Contract(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "selected bytes changed"):
                 outer.flat_attester(root, Path.read_bytes)
             candidate.write_bytes((J_REPO / "tests/g3c4/f_artifact_attest.py").read_bytes())
+            with self.assertRaisesRegex(ValueError, "selected bytes changed"):
+                outer.flat_attester(root, Path.read_bytes)
+            candidate.write_bytes((EVIDENCE / "g3c4-public-g2-f-attester-flat-source-20261009-c/"
+                                   "f_artifact_attest.py").read_bytes())
             with self.assertRaisesRegex(ValueError, "selected bytes changed"):
                 outer.flat_attester(root, Path.read_bytes)
 

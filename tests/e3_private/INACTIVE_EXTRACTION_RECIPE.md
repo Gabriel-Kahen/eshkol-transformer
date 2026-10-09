@@ -13,7 +13,7 @@ No current loader result SHA, E3 admission SHA, or one-shot decision is guessed.
 The E3 package admission is `e3-sealed-fixture-source-admission-v1`, not the public-G2
 schema. It pins clean E3 commit `e7db77c6`, tree `fe3822da`, 2,391 tracked
 members and their full recorded hash. The reviewed flat F utility is loaded only
-from `/bundle/f_artifact_attest.py` at digest `1a7e5369`; its copied-binary
+from `/bundle/f_artifact_attest.py` at digest `2c57e290`; its copied-binary
 check uses the selected J collector's `readelf --debug-dump=no-follow-links -d`
 receipt and still requires exact raw equality and empty stderr. Its three exact
 `scripts/common.sh` transformations point at the separately pinned 477-byte
@@ -24,6 +24,14 @@ fresh full E3 tracked copy under `/stage/candidate` from the read-only
 artifacts into `/out/build-off`, and checks the genuine copied binary/ELF and
 the externally reviewed compatibility TSV. This is test-only provenance:
 historical F remains FAILED and no public installed package is produced.
+The reviewed lock-rebase utility's attestation v2 must carry the authentic
+`original_prepared_sha256` of the accepted J loader preparation
+(`1ff5f4d7...`) and a distinct well-formed staged-prepared SHA. A v1 receipt,
+missing lineage field, altered original digest, or additional field is denied.
+The accepted E attestation and 17-row provenance now pass a source control
+against their exact recorded bytes, including compiler digest `379143cd...`.
+Their complete result and reviews still require separate fixed E3 material
+pins before any preparation or extraction action.
 Preparation and both extraction phases share the same persistent `/out` mount;
 `ESHKOL_BUILD_DIR=/out/build-off` therefore identifies those exact copied
 artifacts. `/stage` is a fresh writable parent, so `/stage/candidate` is absent

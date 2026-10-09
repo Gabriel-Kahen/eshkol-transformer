@@ -16,7 +16,8 @@ from tests.e3_private import inactive_extraction_recipe as recipe
 
 
 E3 = Path("/home/gabe/.codex/worktrees/e3-section9-sealed-fixture-inventory-extraction-c/eshkol-transformer")
-F_ATTEST = Path("/home/gabe/.codex/evidence/eshkol-transformer/g3c4-public-g2-f-attester-flat-source-20261009-c/f_artifact_attest.py")
+F_ATTEST = Path("/home/gabe/.codex/evidence/eshkol-transformer/g3c4-public-g2-f-attest-lock-rebase-source-20261009-b/f_artifact_attest.py")
+F_ORIGINAL_PREPARED = Path("/home/gabe/.codex/evidence/eshkol-transformer/g3c4-public-g2-f-loader-prepared-j-20261009-c/out/evidence/F-copy-prepared.json")
 E3_MANIFEST = Path("/home/gabe/.codex/evidence/eshkol-transformer/e3-section9-sealed-fixture-inventory-extraction-source-20261009-c/SHA256SUMS-EXTRACTION-SOURCE")
 
 
@@ -24,6 +25,8 @@ class SourceRecipe(unittest.TestCase):
     def test_actual_accepted_source_and_copy_contract(self) -> None:
         self.assertEqual(sha256(E3_MANIFEST.read_bytes()).hexdigest(), recipe.E3_SOURCE_MANIFEST)
         self.assertEqual(sha256(F_ATTEST.read_bytes()).hexdigest(), recipe.F_ATTEST_SHA)
+        self.assertEqual(sha256(F_ORIGINAL_PREPARED.read_bytes()).hexdigest(),
+                         recipe.F_ORIGINAL_PREPARED_SHA)
         actual = subprocess.run(
             ["git", "--no-optional-locks", "-C", str(E3), "rev-parse", "HEAD", "HEAD^{tree}"],
             check=True, capture_output=True, text=True).stdout.splitlines()
@@ -72,12 +75,15 @@ class SourceRecipe(unittest.TestCase):
 
     def test_prepare_loads_reviewed_flat_attester_and_corrected_readelf(self) -> None:
         base = Path("/home/gabe/.codex/evidence/eshkol-transformer")
-        self.assertEqual(sha256((base / "g3c4-public-g2-f-attester-flat-source-20261009-c/"
+        self.assertEqual(sha256((base / "g3c4-public-g2-f-attest-lock-rebase-source-20261009-b/"
                                      "SHA256SUMS-SOURCE").read_bytes()).hexdigest(),
-                         "40b6f7bdcce6ba5eb089d94015ee6b7b84610785fb579501b13de0594e77d4fd")
-        self.assertEqual(sha256((base / "g3c4-public-g2-f-attester-flat-root-source-review-20261009-c/"
+                         "8fcc584357e9937bbaa673965f3d6e8e6268b1bfdeebdd177b45ebc0a0fa0fef")
+        self.assertEqual(sha256((base / "g3c4-public-g2-f-attest-lock-rebase-root-source-review-20261009-b/"
                                      "SHA256SUMS-ROOT-SOURCE-REVIEW").read_bytes()).hexdigest(),
-                         "5dc3d81a7d7123babd545720e82c33cc147b43c775ac05a0b14f62f40214ab95")
+                         "2d90f2d6c178c2bcd67001249671b37207c983d9c2e87909602aa1b2df0389cf")
+        self.assertEqual(sha256((base / "g3c4-public-g2-f-attest-lock-rebase-independent-review-20261009-b/"
+                                     "SHA256SUMS-INDEPENDENT-REVIEW").read_bytes()).hexdigest(),
+                         "43bb2146eaaae518d5d175e191b5242b69ce5d449fddaab0c5b1c1a7e136c116")
         material = {name: name.encode() for name in recipe.MATERIAL_NAMES}
         pins = {name: sha256(raw).hexdigest() for name, raw in material.items()}
         captured = {}
@@ -122,6 +128,12 @@ class SourceRecipe(unittest.TestCase):
                               stale if value == "/bundle/f_artifact_attest.py" else Path(value)):
                 with self.assertRaisesRegex(ValueError, "reviewed F attester bytes"):
                     recipe.accepted_attester(stale)
+            stale.write_bytes((base / "g3c4-public-g2-f-attester-flat-source-20261009-c/"
+                                    "f_artifact_attest.py").read_bytes())
+            with patch.object(recipe, "Path", side_effect=lambda value:
+                              stale if value == "/bundle/f_artifact_attest.py" else Path(value)):
+                with self.assertRaisesRegex(ValueError, "reviewed F attester bytes"):
+                    recipe.accepted_attester(stale)
 
     def test_e3_schema_and_exact_review_denials(self) -> None:
         data = {
@@ -153,7 +165,7 @@ class SourceRecipe(unittest.TestCase):
             "format_version": "1", "eshkol_repository": "https://github.com/Gabriel-Kahen/eshkol.git",
             "eshkol_commit": "6803dbe24fb65eaad2901767bf010787517946ef",
             "eshkol_source_dir": "/workspace",
-            "eshkol_binary_sha256": "379143cdb5385b3cc5f64473628adcca6f32e1386496d0f84bb11d397f23aa9",
+            "eshkol_binary_sha256": "379143cdb5385b3cc5f64473628adcca6f32e138649e6d0f84bb11d397f23aa9",
             "cc_path": "/usr/bin/clang-21", "cxx_path": "/usr/bin/clang++-21",
             **{key: "v" for key in ("llvm_version", "cc_version", "cxx_version",
                                         "cmake_version", "ninja_version", "make_version",
@@ -163,10 +175,16 @@ class SourceRecipe(unittest.TestCase):
         }
         compat = "".join(f"{key}\t{value}\n" for key, value in entries.items()).encode()
         receipt = {
-            "format": "g3c4-F-copy-test-attestation-v1",
+            "format": "g3c4-F-copy-test-attestation-v2",
             "origin": "new-test-only;historical-F-remains-failed",
             "compiler": {"head": "6803dbe24fb65eaad2901767bf010787517946ef",
                          "tree": "539d22b1b6a89c290aa13c91263982332b01b87b"},
+            "project": {}, "original": {}, "copied": {}, "lock": {},
+            "offline_review_sha256": "a" * 64,
+            "prepared_sha256": "b" * 64,
+            "original_prepared_sha256": recipe.F_ORIGINAL_PREPARED_SHA,
+            "image_libraries": [], "image_pins_sha256": "c" * 64,
+            "loader_stdout_sha256": "d" * 64,
             "compatibility_tsv_sha256": sha256(compat).hexdigest(), "elf": {"raw": "test"},
             "tool_versions": {key: "v" for key in ("llvm_version", "cc_version",
                                                     "cxx_version", "cmake_version",
@@ -185,6 +203,48 @@ class SourceRecipe(unittest.TestCase):
         with self.assertRaises(ValueError):
             recipe.loader_proof(bad, compat, readelf, sha256(bad).hexdigest(),
                                 sha256(compat).hexdigest(), sha256(readelf).hexdigest())
+        for changed in ({"format": "g3c4-F-copy-test-attestation-v1"},
+                        {"original_prepared_sha256": "0" * 64},
+                        {"prepared_sha256": "not-a-sha"},
+                        {"prepared_sha256": recipe.F_ORIGINAL_PREPARED_SHA}):
+            altered = dict(receipt, **changed)
+            bad = json.dumps(altered, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+            with self.assertRaises(ValueError):
+                recipe.loader_proof(bad, compat, readelf, sha256(bad).hexdigest(),
+                                    sha256(compat).hexdigest(), sha256(readelf).hexdigest())
+        missing = dict(receipt)
+        del missing["original_prepared_sha256"]
+        bad = json.dumps(missing, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+        with self.assertRaises(ValueError):
+            recipe.loader_proof(bad, compat, readelf, sha256(bad).hexdigest(),
+                                sha256(compat).hexdigest(), sha256(readelf).hexdigest())
+
+    def test_actual_accepted_v2_loader_material(self) -> None:
+        base = Path("/home/gabe/.codex/evidence/eshkol-transformer")
+        result = base / "g3c4-public-g2-f-attest-success-result-20261009-e/outputs"
+        staged = base / "g3c4-public-g2-f-attest-staged-20261009-e/out"
+        attestation = (result / "evidence/F-copy-attestation.json").read_bytes()
+        compatibility = (result / "build-off/eshkol-transformer-provenance.tsv").read_bytes()
+        readelf = (staged / "evidence/loader/readelf/stdout.raw").read_bytes()
+        self.assertEqual(sha256(attestation).hexdigest(),
+                         "05f26d035215ef2ce361a201a171c52ba360058badc579ded2543c87cdd59bca")
+        self.assertEqual(sha256(compatibility).hexdigest(),
+                         "1b381ce2e2400a3a841138ec39e1ec8e45ee55149ca7f6da3a21da0e93b18ae4")
+        self.assertEqual(sha256(readelf).hexdigest(),
+                         "08620deb9ee0cec55d50f0b9c2f067a9388c9eff46e7af5410aa2aa6f0dd19de")
+        pins = tuple(sha256(raw).hexdigest() for raw in
+                     (attestation, compatibility, readelf))
+        self.assertEqual(recipe.loader_proof(attestation, compatibility, readelf, *pins)
+                         ["compatibility_tsv_sha256"], pins[1])
+        stale = compatibility.replace(b"e138649e6d0f", b"e1386496d0f")
+        stale_receipt = json.loads(attestation)
+        stale_receipt["compatibility_tsv_sha256"] = sha256(stale).hexdigest()
+        stale_attestation = (json.dumps(stale_receipt, sort_keys=True,
+                                       separators=(",", ":")).encode() + b"\n")
+        with self.assertRaisesRegex(ValueError, "selected 17-row"):
+            recipe.loader_proof(stale_attestation, stale, readelf,
+                                sha256(stale_attestation).hexdigest(),
+                                sha256(stale).hexdigest(), pins[2])
 
     def test_preparation_uses_exact_reviewed_utility_order(self) -> None:
         calls = []

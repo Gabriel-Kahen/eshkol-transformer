@@ -17,17 +17,19 @@ The future wrapper must stage reviewed J bytes under `/bundle/h-source` and
 retain that root and the decision unchanged through physical closure.
 
 The selected bundle holds an exact canonical `e3-material-pins.json` with all
-nine recipe inputs, E3 guest and the reviewed recipe C source bytes, accepted tool/runtime
+nine recipe inputs, E3 guest and the reviewed recipe E source bytes, accepted tool/runtime
 tables, external 477-byte lock, and J source/review seals. The guest performs
 the reviewed E3 source/F-copy preparation with the separately pinned flat
-attester (`1a7e5369`), then runs normal followed by
+attester (`2c57e290`), then runs normal followed by
 sanitizer inventory extraction into `/out/emissions-{normal,sanitize}`. H's
 owned capture retains each raw argv/stream/numeric wait in `/out/phases` and
 the extraction-only result in `/out/evidence`. A failed or uncertain phase
 preserves its partial stage and does not publish a fixture object.
 
-Still required: actual accepted copied-F loader manifest, compatibility and
-reviews; full tracked E3 source admission; a current source/heavy lease and
+The accepted E copied-F loader result and its reviews now exist, but this
+inactive source does not bind their nine exact bytes to a ROOT decision.
+Still required: that fixed material decision, full tracked E3 source
+admission, a current source/heavy lease and
 host/image/tool admission; immutable bundle and decision; ROOT one-shot wrapper;
 and separate review of emitted inventories. This source does not establish
 native fixture, N3, sanitizer, or Section 9 acceptance.

@@ -18,7 +18,8 @@ E3_ROOT_REVIEW = "18872c984bdd38541a6e316d3527891815d5338f5ca47347f13c8b76e6ea2d
 E3_IND_REVIEW = "52b7a2fa6e2920d2b06511575496d36328829baa276caf00f03774d4e1df872a"
 E3_TRACKED_COUNT = 2391
 E3_TRACKED_SHA = "8ee9edddd39d481e0a8cb62843a645ab86014e1bf074e9e683428a00c2e3b2f3"
-F_ATTEST_SHA = "1a7e5369e622b208fe8786b74138ed96f65e6afa7669280b6ee1232aca6c9785"
+F_ATTEST_SHA = "2c57e29015a76e2ff733862bb3ef05fcf7a5c0dba284dfad8913b3c10d7e3433"
+F_ORIGINAL_PREPARED_SHA = "1ff5f4d7e8c841fad4f6464cba0f6179a99fbf67a9471b82ec8edaa9037bb692"
 COMMON_SHA = "2749689e6301cad6e489de4b23e0f9b1ec7c9627f47dd1c7007d9ed8e5955e83"
 EXTERNAL_LOCK_SHA = "b798822b18535405092b201248d8e37682d5ddb9555b6080ee32131659bfbea5"
 TRANSFORMS = (
@@ -107,16 +108,27 @@ def loader_proof(attestation: bytes, compatibility: bytes, readelf: bytes,
         data = json.loads(attestation)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ValueError("F loader attestation malformed") from error
-    if type(data) is not dict or type(data.get("compiler")) is not dict or \
+    v2_keys = {"format", "origin", "compiler", "project", "original", "copied",
+               "lock", "offline_review_sha256", "prepared_sha256",
+               "original_prepared_sha256", "image_libraries", "image_pins_sha256",
+               "loader_stdout_sha256", "elf", "tool_versions",
+               "compatibility_tsv_sha256"}
+    if type(data) is not dict or set(data) != v2_keys or \
+            any(type(data.get(key)) is not dict for key in
+                ("compiler", "project", "original", "copied", "lock",
+                 "elf", "tool_versions")) or \
+            type(data.get("image_libraries")) is not list or \
             attestation != json.dumps(data, sort_keys=True, separators=(",", ":")).encode() + b"\n" or \
-            data.get("format") != "g3c4-F-copy-test-attestation-v1" or \
+            data.get("format") != "g3c4-F-copy-test-attestation-v2" or \
             data.get("origin") != "new-test-only;historical-F-remains-failed" or \
+            data.get("original_prepared_sha256") != F_ORIGINAL_PREPARED_SHA or \
+            type(data.get("prepared_sha256")) is not str or \
+            re.fullmatch(r"[0-9a-f]{64}", data["prepared_sha256"]) is None or \
+            data["prepared_sha256"] == F_ORIGINAL_PREPARED_SHA or \
             data.get("compatibility_tsv_sha256") != expected_compatibility_sha or \
             data.get("compiler", {}).get("head") != "6803dbe24fb65eaad2901767bf010787517946ef" or \
             data.get("compiler", {}).get("tree") != "539d22b1b6a89c290aa13c91263982332b01b87b":
         raise ValueError("F loader result is not the reviewed copied-compiler contract")
-    if type(data.get("tool_versions")) is not dict or type(data.get("elf")) is not dict:
-        raise ValueError("F loader tool or ELF proof is absent")
     lines = compatibility.decode("utf-8").splitlines()
     rows = [line.split("\t", 1) for line in lines]
     versions = ("llvm_version", "cc_version", "cxx_version", "cmake_version",
@@ -131,7 +143,7 @@ def loader_proof(attestation: bytes, compatibility: bytes, readelf: bytes,
             rowmap.get("eshkol_repository") != "https://github.com/Gabriel-Kahen/eshkol.git" or \
             rowmap.get("eshkol_commit") != "6803dbe24fb65eaad2901767bf010787517946ef" or \
             rowmap.get("eshkol_source_dir") != "/workspace" or \
-            rowmap.get("eshkol_binary_sha256") != "379143cdb5385b3cc5f64473628adcca6f32e1386496d0f84bb11d397f23aa9" or \
+            rowmap.get("eshkol_binary_sha256") != "379143cdb5385b3cc5f64473628adcca6f32e138649e6d0f84bb11d397f23aa9" or \
             rowmap.get("cc_path") != "/usr/bin/clang-21" or \
             rowmap.get("cxx_path") != "/usr/bin/clang++-21" or \
             rowmap.get("feature_profile") != "run-f-off-RelWithDebInfo-testsON-test-only" or \
