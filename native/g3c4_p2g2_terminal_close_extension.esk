@@ -798,9 +798,11 @@
                   (origin-row (g3c4-p2g2-terminal-origin-row shell))
                   (origin-anchor
                     (g3c4-p2g2-terminal-origin-anchor shell))
+                  (origin-binding
+                    (g3c4-p2g2-terminal-origin-binding shell))
                   (native (vector-ref row 2))
                   (remaining-bindings #f))
-             (if (or origin-row origin-anchor)
+             (if (or origin-row origin-anchor origin-binding)
                  (begin
                    (g3c4-p2g2-terminal-origin-live shell operation)
                    (set! remaining-bindings

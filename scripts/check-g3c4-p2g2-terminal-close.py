@@ -319,6 +319,9 @@ def validate(source: str, closure: list[str], base: list[str],
     release = definition(parsed, "g3c4-p2g2-terminal-release-private!")
     assert len(calls(release, "g3c4-native-output-release")) == 1
     assert len(calls(release, "g3c4-p2g2-terminal-origin-live")) == 1
+    assert any(part[:2] == ["if", ["or", "origin-row", "origin-anchor",
+                                  "origin-binding"]]
+               for part in walk(release) if isinstance(part, list))
     assert ["vector-set!", "origin-row", "9", "'dead"] in calls(
         release, "vector-set!")
     assert ["vector-set!", "origin-anchor", "9", "'dead"] in calls(

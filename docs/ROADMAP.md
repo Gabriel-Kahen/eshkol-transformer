@@ -2685,7 +2685,8 @@ publication, public G2 and continuation remain pending.
   Its last prezero check binds the original identities; prezero abort restores
   all roots, and native-success tail only updates preallocated phase slots.
   A separate rooted closure captures original identities against coordinated
-  mutable row/anchor substitution and is retired after genuine release.
+  mutable row/anchor substitution and is retired after genuine release;
+  a binding left without its rows blocks native retirement.
   Staged AOT negatives cover paired forgery, held-lease release and native
   prezero fault rollback, but are unrun. This marker alone grants no public
   profile authority. Emitted tail, normal/repeat/sanitizer behavior, native

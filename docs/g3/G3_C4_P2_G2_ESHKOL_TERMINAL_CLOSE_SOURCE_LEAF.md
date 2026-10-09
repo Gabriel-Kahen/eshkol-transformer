@@ -31,6 +31,8 @@ Rejected prezero calls restore all three roots; a successful zero changes only
 their preallocated phase slots before returning the same shell. Private
 release authenticates the origin before native retirement, preserves it on
 a held-lease rejection and tombstones retained owner references afterward.
+Even if both origin row roots disappear while their closure binding remains,
+release rejects before touching the native owner.
 The existing probed and two-argument close entries retain their behavior.
 This private origin is not a public profile record and cannot authorize a
 public G2 accessor or dispatch by itself. A distinct creation-time public

@@ -392,6 +392,21 @@
       (vector-set! anchor 6 input-entry)
       (check "exact origin repair restores access"
              (eq? (g3c4-p2g2-terminal-origin-live shell 'test) row))
+      (let ((rooted-rows (vector-ref g3c4-p2g2-terminal-origin-rows 0))
+            (rooted-anchors
+              (vector-ref g3c4-p2g2-terminal-origin-anchors 0)))
+        (vector-set! g3c4-p2g2-terminal-origin-rows 0
+                     (cdr rooted-rows))
+        (vector-set! g3c4-p2g2-terminal-origin-anchors 0
+                     (cdr rooted-anchors))
+        (reject "binding-only origin denies destructive release"
+          (lambda () (g3c4-p2g2-terminal-release-private! shell)))
+        (check "rejected binding-only release preserves native owner"
+               (and (eq? (g3c4-p2g2-terminal-live shell 'test) terminal)
+                    (= (terminal-test-reference native (vector-ref entry 3)
+                                                expected-count) 0)))
+        (vector-set! g3c4-p2g2-terminal-origin-rows 0 rooted-rows)
+        (vector-set! g3c4-p2g2-terminal-origin-anchors 0 rooted-anchors))
       (check "hold origin terminal I1 lease"
              (= (terminal-test-ids-lease (vector-ref entry 3) 1) 0))
       (reject "held lease leaves origin live"

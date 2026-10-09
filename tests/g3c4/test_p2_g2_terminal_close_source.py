@@ -108,6 +108,13 @@ class TerminalCloseSourceTests(unittest.TestCase):
             self.validate(self.source.replace(marker,
                                               "(g3c4-p2g2-terminal-live shell operation)", 1))
 
+    def test_binding_only_origin_still_blocks_retirement(self) -> None:
+        marker = "(or origin-row origin-anchor origin-binding)"
+        self.assertIn(marker, self.source)
+        with self.assertRaises(AssertionError):
+            self.validate(self.source.replace(
+                marker, "(or origin-row origin-anchor)", 1))
+
     def test_barrier_must_precede_first_publication(self) -> None:
         marker = "(vector-set! barrier 0 #t)"
         self.assertIn(marker, self.source)
