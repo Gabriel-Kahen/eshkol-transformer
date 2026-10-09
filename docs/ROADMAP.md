@@ -951,6 +951,12 @@ reuses the reviewed copied-F three-string staging and exact external lock,
 and orders persistent normal then sanitizer emitted-inventory observations.
 It has no launcher or actual loader-result pin; source-only checks do not
 establish a copied compiler, emitted baselines, or native fixture execution.
+An inactive E3 outer adapter now names the accepted F-loader H lifecycle as
+its Docker owner and supplies only E3 source/material, guest command, inspect,
+and nonpublishing phase predicates. The proposed guest retains normal then
+sanitizer raw receipts under persistent `/out`. A fixed ROOT decision, actual
+copied-F loader result, locks, live admission and reviewed one-shot wrapper
+are still absent, so neither adapter nor guest has runtime authority.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each
