@@ -41,7 +41,10 @@ NEW = OLD + ("\n  An [inactive test-only F loader outer source](g3/G3_C4_F_LOADE
              "  Its exact nested stage-child path and stopped-state/Docker-wait checks remain\n"
              "  source-only; the accepted attester's default path is unchanged.\n"
              "  The same canonical source-admission JSON and two review seals are checked on\n"
-             "  both host and guest bundle surfaces; the image loader is still unobserved.\n")
+             "  both host and guest bundle surfaces; the image loader is still unobserved.\n"
+             "  A scoped source successor raises only the F loader profile's file-size cap\n"
+             "  from 16 MiB to 128 MiB, above the preserved 85,874,424-byte static archive;\n"
+             "  its actual container profile and copy remain unrun.\n")
 
 
 def validate(base: list[str], closure: list[str], source: str,
@@ -61,6 +64,7 @@ def validate(base: list[str], closure: list[str], source: str,
                    'os.WNOWAIT', 'os.wait4(', 'collector.signal_owned(',
                    '"--network", "none"', '"--read-only"',
                    '"--memory", "4g"', '"--pids-limit", "128"',
+                   '"fsize=134217728:134217728"',
                    '"--tmpfs"', '"--attach"', '"inspect"', '"rm"',
                    '"initial-absence"', '"closure-inspect"',
                    '"docker-wait"', 'stopped_exit(', 'wait_exit(',

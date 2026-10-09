@@ -30,11 +30,14 @@ ordinary bundle directory and checks the same file bytes and hashes. The
 default attester route and admission schema remain unchanged.
 
 The outer profile uses the exact f31 image ID, read-only root, no network,
-4 GiB memory/swap, 128 PIDs, two CPUs, 16 MiB file limit and a 256 MiB
+4 GiB memory/swap, 128 PIDs, two CPUs, 128 MiB file limit and a 256 MiB
 writable `/tmp`. Six selected binds distinguish read-only original compiler,
 public checkout, original F output and bundle from fresh writable candidate
 and output. Every Docker client phase has owned process-session, 16 MiB
 per-stream acquisition caps, actual `wait4` status and bounded writer closure.
+The 128 MiB `fsize` limit covers the measured largest preserved F file,
+`libeshkol-static.a` at 85,874,424 bytes; the historical 16 MiB profile
+would fail during that copy. This is a source-level correction, not a run.
 The container is identified by the exact created CID, label, name, image,
 effective entrypoint/command, user, environment, workdir, resource limits,
 host mount options and six bind rows before any cleanup; stopped inspect,

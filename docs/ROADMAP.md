@@ -2739,6 +2739,9 @@ publication, public G2 and continuation remain pending.
   source-only; the accepted attester's default path is unchanged.
   The same canonical source-admission JSON and two review seals are checked on
   both host and guest bundle surfaces; the image loader is still unobserved.
+  A scoped source successor raises only the F loader profile's file-size cap
+  from 16 MiB to 128 MiB, above the preserved 85,874,424-byte static archive;
+  its actual container profile and copy remain unrun.
 
 ## Wave 4 — practical pretraining and performance
 

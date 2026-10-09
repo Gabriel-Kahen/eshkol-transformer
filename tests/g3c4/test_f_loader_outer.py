@@ -73,6 +73,9 @@ class OuterTests(unittest.TestCase):
         self.assertEqual(argv[argv.index("--network") + 1], "none")
         self.assertEqual(argv[argv.index("--memory") + 1], "4g")
         self.assertEqual(argv[argv.index("--pids-limit") + 1], "128")
+        self.assertEqual(argv[argv.index("--ulimit") + 1],
+                         "fsize=134217728:134217728")
+        self.assertGreater(outer.FSIZE_LIMIT, 85_874_424)
         self.assertEqual(argv[-2:], ["--source-admission-sha256", "a" * 64])
         self.assertIn("tests.g3c4.f_loader_guest", argv)
         self.assertEqual(argv[-4], "-m")
@@ -138,8 +141,8 @@ class OuterTests(unittest.TestCase):
                               "Tmpfs": {"/tmp": "rw,nosuid,nodev,size=268435456,mode=1777"},
                               "Memory": 4 * 1024**3, "MemorySwap": 4 * 1024**3,
                               "PidsLimit": 128, "NanoCpus": 2_000_000_000,
-                              "Ulimits": [{"Name": "fsize", "Hard": 16_777_216,
-                                           "Soft": 16_777_216}],
+                              "Ulimits": [{"Name": "fsize", "Hard": outer.FSIZE_LIMIT,
+                                           "Soft": outer.FSIZE_LIMIT}],
                               "Mounts": host_mounts, "Binds": None}}
         self.assertEqual(outer.inspect_owned(json.dumps([row]).encode(), d,
                                              "b" * 64, False, image), row)
@@ -159,6 +162,8 @@ class OuterTests(unittest.TestCase):
             ("readonly", lambda r: r["HostConfig"].__setitem__("ReadonlyRootfs", False)),
             ("cpus", lambda r: r["HostConfig"].__setitem__("NanoCpus", 1_000_000_000)),
             ("fsize", lambda r: r["HostConfig"]["Ulimits"][0].__setitem__("Soft", 1)),
+            ("old_fsize", lambda r: r["HostConfig"]["Ulimits"].__setitem__(
+                0, {"Name": "fsize", "Hard": 16_777_216, "Soft": 16_777_216})),
             ("host_mount", lambda r: r["HostConfig"]["Mounts"][0].__setitem__("ReadOnly", False)),
             ("propagation", lambda r: r["Mounts"][0].__setitem__("Propagation", "shared")),
         ]

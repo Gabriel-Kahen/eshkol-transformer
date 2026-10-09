@@ -26,6 +26,7 @@ IMAGE = "sha256:f31d1db76958339e6ebd2a2f667052cdb85aeb5229914ffb10ac4fcdc6db22e6
 DOCKER = Path("/home/gabe/bin/docker")
 PHASE_LIMIT = 600
 STREAM_LIMIT = 16 * 1024 * 1024
+FSIZE_LIMIT = 128 * 1024 * 1024
 HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 
 
@@ -159,7 +160,7 @@ def create_argv(decision: dict) -> list[str]:
     argv = [str(DOCKER), "create", "--name", name,
             "--label", f"eshkol.gate={name}", "--read-only", "--network", "none",
             "--memory", "4g", "--memory-swap", "4g", "--pids-limit", "128",
-            "--cpus", "2", "--ulimit", "fsize=16777216:16777216",
+            "--cpus", "2", "--ulimit", "fsize=134217728:134217728",
             "--tmpfs", "/tmp:rw,nosuid,nodev,size=268435456,mode=1777",
             "--user", "0:0", "--workdir", "/source"]
     for key, target, readonly in (
@@ -376,7 +377,7 @@ def inspect_owned(raw: bytes, decision: dict, cid: str,
             row["HostConfig"]["PidsLimit"] == 128 and
             row["HostConfig"]["NanoCpus"] == 2_000_000_000 and
             row["HostConfig"]["Ulimits"] ==
-            [{"Name": "fsize", "Hard": 16_777_216, "Soft": 16_777_216}],
+            [{"Name": "fsize", "Hard": FSIZE_LIMIT, "Soft": FSIZE_LIMIT}],
             "owned container inspect mismatch")
     expected = {decision[key]: (target, read_only) for key, target, read_only in
                 (("compiler", "/workspace", True), ("source", "/source", True),
