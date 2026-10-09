@@ -7,10 +7,10 @@ the D ROADMAP status. No guest build or native numerical result has been run for
 this leaf.
 
 An outer ROOT-reviewed gate must first pin the exact new clean C4 HEAD/tree,
-the full 217-member source closure, the accepted E-b compiler result/physical
-closure, f31 image digest, mount identities, tools, runtime libraries, candidate
-lock, source/fixture paths, writable output, resource floor, and single-run
-ownership. The `guest` route takes those exact source HEAD/tree values as
+the full 217-member source closure, an accepted run-e activated E-c compiler
+result and physical closure, f31 image digest, mount identities, tools, runtime
+libraries, candidate lock, source/fixture paths, writable output, resource
+floor, and single-run ownership. The `guest` route takes those exact source HEAD/tree values as
 arguments and checks the actual clean Git revision, inherited accepted C4 base,
 source hashes, Python 3.10, Ubuntu 22.04, external ordinary candidate lock,
 selected tools/runtimes, and fixture before and after. The input source and pin
