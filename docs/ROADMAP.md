@@ -2746,6 +2746,9 @@ publication, public G2 and continuation remain pending.
   during owned capture and leaves physical Docker cleanup independent of a
   monitor failure; source controls pass, while live overshoot and runtime
   admission remain open.
+  The callback is deliberately suspended across the single Docker `create`
+  receipt after a pre-create check, then resumes only after a genuine CID is
+  retained; an ambiguous failed create still requires separate closure review.
 
 ## Wave 4 — practical pretraining and performance
 

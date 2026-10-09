@@ -48,7 +48,10 @@ NEW = OLD + ("\n  An [inactive test-only F loader outer source](g3/G3_C4_F_LOADE
              "  A further optional ROOT monitor seam samples the selected aggregate output\n"
              "  during owned capture and leaves physical Docker cleanup independent of a\n"
              "  monitor failure; source controls pass, while live overshoot and runtime\n"
-             "  admission remain open.\n")
+             "  admission remain open.\n"
+             "  The callback is deliberately suspended across the single Docker `create`\n"
+             "  receipt after a pre-create check, then resumes only after a genuine CID is\n"
+             "  retained; an ambiguous failed create still requires separate closure review.\n")
 
 
 def validate(base: list[str], closure: list[str], source: str,
@@ -70,6 +73,7 @@ def validate(base: list[str], closure: list[str], source: str,
                    '"--memory", "4g"', '"--pids-limit", "128"',
                    '"fsize=134217728:134217728"',
                    '"monitor denied:', 'def active_capture(',
+                   'created = checked(create_argv(decision), evidence / "create")',
                    '"--tmpfs"', '"--attach"', '"inspect"', '"rm"',
                    '"initial-absence"', '"closure-inspect"',
                    '"docker-wait"', 'stopped_exit(', 'wait_exit(',

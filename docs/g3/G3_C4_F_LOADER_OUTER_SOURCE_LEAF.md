@@ -46,6 +46,11 @@ removes and checks absence of the selected CID without invoking the failed
 monitor again. The future wrapper must measure its selected stage/output/control
 aggregate and emergency disk floor through this hook. Sampling may overshoot
 the threshold between checks, so it is not a hard disk quota.
+The monitor is checked immediately before Docker `create`, then suspended
+through that one bounded client receipt. Monitoring resumes only after its
+genuine CID has been parsed and retained for owned cleanup. If `create` itself
+fails without a CID, the container state is ambiguous and the attempt fails;
+this source does not infer physical closure from a missing receipt.
 The container is identified by the exact created CID, label, name, image,
 effective entrypoint/command, user, environment, workdir, resource limits,
 host mount options and six bind rows before any cleanup; stopped inspect,

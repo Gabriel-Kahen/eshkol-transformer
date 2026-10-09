@@ -410,19 +410,26 @@ class OuterTests(unittest.TestCase):
             def command(argv, path, timeout=120, monitor=None):
                 action = argv[1]
                 calls.append((action, monitor is not None))
+                if action == "inspect" and monitor is not None:
+                    monitor()
                 if action == "image": return image
                 if action == "info": return b'["name=rootless"]\n'
                 if action == "ps": return b""
-                if action == "create": return ("b" * 64 + "\n").encode()
+                if action == "create":
+                    self.assertIsNone(monitor)
+                    return ("b" * 64 + "\n").encode()
                 if action == "wait": return b"0\n"
                 return b"[]"
             def guest(argv, path, timeout=outer.PHASE_LIMIT, monitor=None):
-                self.assertIsNotNone(monitor)
-                monitor()
+                self.fail("guest attach must not start after created inspect denial")
             def inspect(*args):
                 return {"State": {**state, "Status": "created"}} if len(
                     [action for action, _ in calls if action == "inspect"]) == 1 else {"State": state}
-            def deny(): raise ValueError("aggregate bound")
+            monitor_calls = [0]
+            def deny():
+                monitor_calls[0] += 1
+                if monitor_calls[0] == 2:
+                    raise ValueError("aggregate bound")
             with patch.object(outer, "selected", return_value=decision), \
                  patch.object(outer, "checked", side_effect=command), \
                  patch.object(outer, "capture", side_effect=guest), \
@@ -437,6 +444,34 @@ class OuterTests(unittest.TestCase):
             result = json.loads((base / "evidence/result.json").read_bytes())
             self.assertIn("aggregate bound", result["primary"])
             self.assertEqual(result["closure"], [])
+
+    def test_precreate_monitor_denial_never_calls_docker_create(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            decision = {key: str(base / key) for key in
+                        ("compiler", "source", "f_output", "bundle", "candidate", "out")}
+            for path in decision.values():
+                Path(path).mkdir()
+            decision.update({"name": "g3c4-f-loader-owned",
+                             "source_admission_sha256": "a" * 64})
+            image = json.dumps([{"Id": outer.IMAGE, "Config": {"Env": []}}]).encode()
+            actions = []
+            def command(argv, path, timeout=120, monitor=None):
+                action = argv[1]
+                actions.append(action)
+                if action == "image": return image
+                if action == "info": return b'["name=rootless"]\n'
+                if action == "ps": return b""
+                self.fail(f"unexpected Docker action: {action}")
+            def deny(): raise ValueError("precreate aggregate bound")
+            with patch.object(outer, "selected", return_value=decision), \
+                 patch.object(outer, "checked", side_effect=command):
+                with self.assertRaisesRegex(ValueError, "outer observation failed"):
+                    outer.run_once(base / "decision.json", "a" * 64,
+                                   base / "evidence", deny)
+            self.assertNotIn("create", actions)
+            self.assertIn("precreate aggregate bound",
+                          json.loads((base / "evidence/result.json").read_bytes())["primary"])
 
 
 if __name__ == "__main__":

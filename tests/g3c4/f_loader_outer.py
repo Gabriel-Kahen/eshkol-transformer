@@ -494,7 +494,13 @@ def run_once(decision_path: Path, expected_sha: str, evidence: Path,
                            "{{.ID}} {{.Names}}"], evidence / "initial-absence")
         require(decision["name"].encode() not in absence, "name already exists")
         selected(decision_path, expected_sha, fresh=False)
-        created = active_checked(create_argv(decision), evidence / "create")
+        # A monitor denial after Docker created the container but before this
+        # receipt returned would leave cid unknown to the owned cleanup path.
+        # Check immediately before create, then acquire its CID without the
+        # monitor; resume monitoring only after cid has been assigned.
+        if monitor is not None:
+            monitor()
+        created = checked(create_argv(decision), evidence / "create")
         require(HEX64.fullmatch(created.decode().strip()) is not None,
                 "created CID malformed")
         cid = created.decode().strip()
