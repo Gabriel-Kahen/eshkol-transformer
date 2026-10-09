@@ -58,7 +58,7 @@ def check_source(core, step, tail, restore, wrapper, aggregate, manifest):
     f = parse(core)[-1]
     if f[:2] != ["define", "tr3-controls-route"] or f[2][0] != "let":
         raise ValueError("fixed core lexical issuer lost")
-    if [x[0] for x in f[2][1]] != ["issued", "pending", "tail"]:
+    if [x[0] for x in f[2][1]] != ["issued", "pending", "tail", "return-cell"]:
         raise ValueError("issuer or fixed-tail root is no longer lexical")
     if f[2][2][0] != "let*":
         raise ValueError("ordered private helpers changed")
@@ -70,7 +70,7 @@ def check_source(core, step, tail, restore, wrapper, aggregate, manifest):
         raise ValueError("issuer helper closure changed")
     route = f
     required = {"create", "guard", "stage-step", "stage-restore",
-                "commit-tail", "check-current", "released", "publish",
+                "commit-tail", "commit-return", "check-current", "released", "publish",
                 "retire"}
     for name in required:
         branch(route, name)
@@ -143,10 +143,23 @@ def check_source(core, step, tail, restore, wrapper, aggregate, manifest):
     if core.index("'commit-tail record 'restore") > core.index("(define (tr3-lease-restore-finish-tail-internal!"):
         raise ValueError("restore journal missed genuine fixed control tail")
     route_tail = branch(route, "commit-tail")
+    return_tail = branch(route, "commit-return")
+    for stage in ("stage-step", "stage-restore"):
+        staged = str(branch(route, stage))
+        if ("['tr3-lease-nonnegative-i64?', ['vector-ref', 'row', '5']]" not in staged
+                or "9223372036854775807" not in staged):
+            raise ValueError("journal epoch can overflow before native commit")
+    if not ("['vector-ref', 'return-cell', '0']" in str(route_tail)
+            and "['tr3-lease-fail-stop', '134']" in str(route_tail)
+            and "['vector-set!', ['vector-ref', 'tail', '0'], '6'" in str(route_tail)):
+        raise ValueError("missing enrolled stage did not fail stop after commit")
+    if "['tr3-lease-fail-stop', '134']" not in str(return_tail):
+        raise ValueError("postcommit return can throw ordinary error")
     illegal = {"make-vector", "vector", "cons", "append", "raise",
                "tr3-lease-authenticate", "d2-token-dataset-cursor",
                "o2-optimizer-completed-updates-internal"}
-    if any(list(descendants(route_tail, op)) for op in illegal):
+    if any(list(descendants(route_tail, op)) or
+           list(descendants(return_tail, op)) for op in illegal):
         raise ValueError("fallible or allocating operation entered fixed journal tail")
     if not all(x in wrapper for x in [
         "(g3r-x1-model-require model resolved)",
@@ -161,6 +174,15 @@ def check_source(core, step, tail, restore, wrapper, aggregate, manifest):
     ]):
         raise ValueError("original graph, copied controls, or failure closure changed")
     capture = source_slice(wrapper, "(define (g3r-controls-capture-release!", "(define (g3r-controls-captured-copy")
+    for operation in ("step", "restore"):
+        section = source_slice(wrapper,
+            f"(define (g3r-controls-{operation}!",
+            "(define (g3r-controls-capture-release!" if operation == "restore"
+            else "(define (g3r-controls-restore!")
+        if f"'commit-return capsule '{operation}" not in section:
+            raise ValueError("postcommit wrapper still uses fallible leave")
+        if section.rfind(f"'commit-return capsule '{operation}") < section.find("(trainer-"):
+            raise ValueError("postcommit return precedes actual trainer call")
     release_stages = [capture.find(marker) for marker in (
         "(let ((trainer #f)", "(guard (caught",
         "(set! trainer (tr3-controls-route 'trainer",
@@ -276,6 +298,9 @@ def eval_route_branch(name, env):
             return local["o2_updates"]
         if op == "tr3-lease-record-for-shell-internal":
             return local["record"] if run(args[0], local) is local["trainer"] else None
+        if op == "tr3-lease-nonnegative-i64?":
+            value = run(args[0], local)
+            return type(value) is int and 0 <= value <= 9223372036854775807
         if op == "clear-tail!":
             local["tail"][:] = [False, False, False, False]
             return None
@@ -344,7 +369,8 @@ class CapsuleSourceTests(unittest.TestCase):
                "idle", False, False]
         env = {"a": shell, "b": "step", "registered_row": row,
                "record": record, "trainer": trainer, "originals_ok": True,
-               "current_controls": ["rng", "cursor", 4], "o2_updates": 3}
+               "current_controls": ["rng", "cursor", 4], "o2_updates": 3,
+               "return-cell": [False, False, False]}
         self.assertTrue(eval_route_branch("enter", env))
         self.assertEqual((row[6], row[7]), ("step", "step"))
         row[6], row[7] = "idle", False
@@ -356,18 +382,52 @@ class CapsuleSourceTests(unittest.TestCase):
     def test_parsed_step_and_restore_tail_publish_exact_staged_epoch(self):
         record = object()
         for operation in ("step", "restore"):
-            row = [None, None, record, None, "old", 4, operation, None, False]
+            shell = object()
+            row = [shell, None, record, None, "old", 4, operation, False, False]
             successor = [operation, 5]
             tail = [row, record, successor, 5]
-            env = {"a": record, "b": operation, "tail": tail}
+            returning = [row, shell, operation]
+            env = {"a": record, "b": operation, "tail": tail,
+                   "return-cell": returning}
             self.assertTrue(eval_route_branch("commit-tail", env))
             self.assertIs(row[4], successor)
             self.assertEqual(row[5], 5)
+            self.assertEqual(row[6], "committed-" + operation)
             self.assertEqual(tail, [False] * 4)
+            record = [None] * 5
+            record[3], record[4] = "idle", False
+            row[2] = record
+            self.assertTrue(eval_route_branch("commit-return", {
+                "a": shell, "b": operation, "tail": tail,
+                "return-cell": returning}))
+            self.assertEqual(row[6], "idle")
+            self.assertEqual(returning, [False] * 3)
+            row[2] = record = object()
+            row[6] = operation
+            returning[:] = [row, shell, operation]
+            with self.assertRaises(SystemExit) as missing:
+                eval_route_branch("commit-tail", dict(env, a=record,
+                    tail=[False] * 4))
+            self.assertEqual(missing.exception.code, 134)
             wrong = [row, object(), successor, 6]
             with self.assertRaises(SystemExit) as failure:
-                eval_route_branch("commit-tail", dict(env, tail=wrong))
+                eval_route_branch("commit-tail", dict(env, a=record, tail=wrong))
             self.assertEqual(failure.exception.code, 134)
+            self.assertTrue(eval_route_branch("commit-tail", {
+                "a": object(), "b": operation, "tail": [False] * 4,
+                "return-cell": [False] * 3}))
+
+    def test_parsed_postcommit_divergence_fails_stop(self):
+        shell = object()
+        record = [None] * 5
+        record[3], record[4] = "committing", False
+        row = [shell, None, record, None, "staged", 1,
+               "committed-step", False, False]
+        with self.assertRaises(SystemExit) as failure:
+            eval_route_branch("commit-return", {"a": shell, "b": "step",
+                "tail": [False] * 4, "return-cell": [row, shell, "step"]})
+        self.assertEqual(failure.exception.code, 134)
+        self.assertEqual(row[6], "committed-step")
 
     def test_mutant_missing_step_gate(self):
         changed = STEP.read_text().replace("(tr3-controls-route 'guard record 'step #f #f #f)", "#t", 1)
@@ -398,7 +458,7 @@ class CapsuleSourceTests(unittest.TestCase):
                          AGGREGATE.read_text(), MANIFEST.read_text())
 
     def test_mutant_tail_allocation(self):
-        changed = CORE.read_text().replace("(clear-tail!))))", "(cons a b) (clear-tail!))))", 1)
+        changed = CORE.read_text().replace("(clear-tail!)))", "(cons a b) (clear-tail!)))", 1)
         with self.assertRaisesRegex(ValueError, "fixed journal tail"):
             check_source(changed, STEP.read_text(), TAIL.read_text(), RESTORE.read_text(),
                          WRAPPER.read_text(), AGGREGATE.read_text(), MANIFEST.read_text())

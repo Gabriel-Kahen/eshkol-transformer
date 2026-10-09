@@ -10,6 +10,11 @@ reentrant direct call in the same phase cannot reuse it. Direct installed
 `trainer-train!` is denied before metrics staging. Fixed journal assignments
 occur only in the existing irreversible
 step and restore control tails, after their successors were copied and rooted.
+Each staged journal epoch is checked below signed-i64 maximum before native
+commit. An active enrolled commit with no exact staged successor fails stop.
+After native commit, the source wrapper uses only a preallocated fixed return
+cell; impossible divergence fails stop, and no ordinary lookup or exception
+handler can report the committed mutation as a recoverable failure.
 
 `g3r-controls-capture-release!` copies RNG, current/epoch cursor, tokenizer,
 configuration and counters while the genuine trainer is still live. It then

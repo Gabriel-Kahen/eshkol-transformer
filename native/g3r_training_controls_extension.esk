@@ -81,7 +81,7 @@
     (let ((result
             (trainer-step!
               (tr3-controls-route 'trainer capsule #f #f #f #f))))
-      (tr3-controls-route 'leave capsule 'step #f #f #f)
+      (tr3-controls-route 'commit-return capsule 'step #f #f #f)
       result)))
 
 (define (g3r-controls-restore! capsule state)
@@ -98,7 +98,7 @@
             (trainer-load-state!
               (tr3-controls-route 'trainer capsule #f #f #f #f)
               state)))
-      (tr3-controls-route 'leave capsule 'restore #f #f #f)
+      (tr3-controls-route 'commit-return capsule 'restore #f #f #f)
       result)))
 
 (define (g3r-controls-capture-release! capsule)
