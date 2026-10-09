@@ -923,6 +923,15 @@ error and construction abort, then retries canonical creation in one process.
 Source controls pass; emitted inventories, two missing sanitizer symbol
 manifests, and supported compiled behavior remain unverified. Sealed-model
 stale-handle proof still requires reviewed P1/I2 graph and M3T retirement.
+An isolated, noninstalled sealed-fixture package source successor stages the
+reviewed P1/I2/M3 candidate overlay behind one exact private tuple. The
+retirement feature define is restricted to its boxed bridge,
+`m3_call_f32_integration.c`, and `e3_frame.c` translation units; the latter
+two include the feature-gated native readiness and owner implementations.
+Source controls cover tuple isolation, fresh generated leaves and a fail-closed
+missing-inventory gate. Emitted symbol/dependency inventories and normal,
+repeat, sanitizer and genuine stale-handle runtime results have not been
+collected, so this successor remains source-only and §9 acceptance is open.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each

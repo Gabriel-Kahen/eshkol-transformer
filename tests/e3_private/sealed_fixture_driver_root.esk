@@ -1,0 +1,3 @@
+;;; Exact noninstalled sealed-M3 fixture root; canonical private E3 is intact.
+(load "../../native/e3_private_driver_root.esk")
+(load "sealed_fixture_driver.esk")

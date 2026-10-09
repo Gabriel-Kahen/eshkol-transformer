@@ -14,6 +14,7 @@ e3_mode_graph_prefix="${PROJECT_ROOT}/tests/e3_mode_graph/package"
 e3_numerical_prefix="${PROJECT_ROOT}/tests/e3_private/numerical_package"
 e3_uniform_prefix="${PROJECT_ROOT}/tests/e3_private/uniform_package"
 e3_zero_prefix="${PROJECT_ROOT}/tests/e3_private/zero_control_package"
+e3_sealed_fixture_prefix="${PROJECT_ROOT}/tests/e3_private/sealed_fixture_package"
 e3_base_inputs=(
   "${PROJECT_ROOT}/native/e3_private_driver_root.esk"
   "${PROJECT_ROOT}/native/e3_private_bridge.c"
@@ -73,6 +74,12 @@ e3_zero_inputs=(
   "${PROJECT_ROOT}/tests/e3_private/zero_control_bridge.c"
   "${e3_zero_prefix}_private_renames.txt"
   "${e3_zero_prefix}_public_exports.txt"
+)
+e3_sealed_fixture_inputs=(
+  "${PROJECT_ROOT}/tests/e3_private/sealed_fixture_driver_root.esk"
+  "${PROJECT_ROOT}/tests/e3_private/sealed_fixture_bridge.c"
+  "${e3_sealed_fixture_prefix}_private_renames.txt"
+  "${e3_sealed_fixture_prefix}_public_exports.txt"
 )
 e3_prefix="${e3_base_prefix}"
 e3_inputs=("${e3_base_inputs[@]}")
@@ -163,6 +170,14 @@ for e3_raw in "${raw_private_root}" "${raw_package_bridge}" \
       e3_tuple_requested=1
     fi
   done
+  for e3_expected in "${e3_sealed_fixture_inputs[@]}"; do
+    if [[ "$(realpath -m -- "${e3_raw}")" == "${e3_expected}" ]]; then
+      [[ -z "${e3_tuple_kind}" || "${e3_tuple_kind}" == sealed-fixture ]] || \
+        die "E3 policy rejects mixed sealed-fixture and other tuples"
+      e3_tuple_kind=sealed-fixture
+      e3_tuple_requested=1
+    fi
+  done
 done
 
 if [[ "${e3_tuple_kind}" == diagnostic ]]; then
@@ -194,6 +209,9 @@ elif [[ "${e3_tuple_kind}" == uniform ]]; then
 elif [[ "${e3_tuple_kind}" == zero ]]; then
   e3_prefix="${e3_zero_prefix}"
   e3_inputs=("${e3_zero_inputs[@]}")
+elif [[ "${e3_tuple_kind}" == sealed-fixture ]]; then
+  e3_prefix="${e3_sealed_fixture_prefix}"
+  e3_inputs=("${e3_sealed_fixture_inputs[@]}")
 fi
 
 e3_check_repository_path() {
@@ -238,10 +256,19 @@ e3_normalize_source_dependencies() {
             "$(realpath -m -- "${dependency}")" == \
               "${e3_generated_source_root}/m3t_transport_extension.esk" ]]; then
       printf '@BUILD@/source/m3t_transport_extension.esk\n'
+    elif [[ "${e3_tuple_kind}" == sealed-fixture && \
+            "$(realpath -m -- "${dependency}")" == \
+              "${e3_generated_source_root}/m3t_transport_extension.esk" ]]; then
+      printf '@BUILD@/source/m3t_transport_extension.esk\n'
+    elif [[ "${e3_tuple_kind}" == sealed-fixture && \
+            "$(realpath -m -- "${dependency}")" == \
+              "${e3_generated_source_root}/i2_wave2_root.esk" ]]; then
+      printf '@BUILD@/source/i2_wave2_root.esk\n'
     elif [[ ( "${e3_tuple_kind}" == mode-graph ||
               "${e3_tuple_kind}" == retention ||
               "${e3_tuple_kind}" == retention-first-eval-mutant ||
-              "${e3_tuple_kind}" == retention-overflow ) && \
+              "${e3_tuple_kind}" == retention-overflow ||
+              "${e3_tuple_kind}" == sealed-fixture ) && \
             "$(realpath -m -- "${dependency}")" == \
               "${e3_generated_source_root}/transformer/module.esk" ]]; then
       printf '@BUILD@/source/transformer/module.esk\n'
