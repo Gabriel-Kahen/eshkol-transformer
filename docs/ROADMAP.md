@@ -951,16 +951,19 @@ reuses the reviewed copied-F three-string staging and exact external lock,
 and orders persistent normal then sanitizer emitted-inventory observations.
 It has no launcher or actual loader-result pin; source-only checks do not
 establish a copied compiler, emitted baselines, or native fixture execution.
-An inactive E3 outer adapter now names the accepted F-loader J lifecycle as
-its Docker owner and supplies only E3 source/material, guest command, inspect,
-and nonpublishing phase predicates. The proposed guest retains normal then
-sanitizer raw receipts under persistent `/out`. A fixed ROOT decision, actual
-copied-F loader result, locks, live admission and reviewed one-shot wrapper
-are still absent, so neither adapter nor guest has runtime authority.
-Its source-only successor binds the reviewed recipe E/flat attester v2
-dependency and checks the accepted copied-F attestation bytes. A current
-nine-material ROOT decision, emitted inventories and compiled E3 verdict
-remain absent.
+The inactive E3 outer adapter now binds the reviewed F-loader K source
+(`195275c3…`) and retains its J Docker lifecycle, while supplying only E3
+source/material, guest command, inspect and nonpublishing phase predicates.
+The K collector source accepts genuine `/proc` ENOENT/ESRCH disappearance;
+ownership and session checks remain. The first E3 extraction failed in its
+normal phase with `ProcessLookupError` errno 3, but the throwing line was not
+retained, so K is not a demonstrated runtime repair. That failed run and its
+consumed one-shot decision remain preserved. The recipe E/flat attester v2,
+copied-F attestation, nine-material decision, preparation and live admission
+were reviewed for that run. A fresh wrapper/launcher binding, current
+admission and one-shot decision are required before another extraction.
+Normal and sanitizer emitted inventories and a compiled E3 verdict remain
+absent; this K binding is source-only.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each
