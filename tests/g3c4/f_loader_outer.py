@@ -453,6 +453,32 @@ def never_started(row: dict) -> None:
             "unstarted container identity uncertain")
 
 
+def recover_failed_create(decision: dict, image: bytes, evidence: Path) -> str | None:
+    """Find only an exactly named, fully authenticated CID after client failure."""
+    name = decision["name"]
+    raw = checked([str(DOCKER), "ps", "-a", "--no-trunc", "--filter",
+                   f"name=^/{name}$", "--format", "{{.ID}} {{.Names}}"],
+                  evidence / "create-recovery-census")
+    lines = raw.decode("ascii").splitlines()
+    if not lines and raw == b"":
+        attest.exclusive_bytes(evidence / "create-recovery.json", canonical({
+            "name": name, "candidate_cid": None,
+            "finding": "selected name absent in one authentic census; create closure uncertain"}))
+        return None
+    require(len(lines) == 1, "failed create recovery cardinality uncertain")
+    parts = lines[0].split(" ")
+    require(len(parts) == 2 and HEX64.fullmatch(parts[0]) is not None and
+            parts[1] == name, "failed create recovery name/CID uncertain")
+    candidate = parts[0]
+    observed = checked([str(DOCKER), "inspect", candidate],
+                       evidence / "create-recovery-inspect")
+    inspect_owned(observed, decision, candidate, None, image)
+    attest.exclusive_bytes(evidence / "create-recovery.json", canonical({
+        "name": name, "candidate_cid": candidate,
+        "finding": "exact name/CID/effective profile authenticated for owned cleanup"}))
+    return candidate
+
+
 def run_once(decision_path: Path, expected_sha: str, evidence: Path,
              monitor: Callable[[], None] | None = None) -> None:
     """Only a future immutable ROOT wrapper may supply the decision SHA."""
@@ -470,6 +496,7 @@ def run_once(decision_path: Path, expected_sha: str, evidence: Path,
     attest.exclusive_bytes(evidence / "once.json", canonical({
         "decision_sha256": expected_sha, "state": "consumed-before-create"}))
     cid = None
+    create_attempted = False
     primary = ""
     image = security = None
     def active_checked(argv: list[str], path: Path, timeout: int = 120) -> bytes:
@@ -500,6 +527,7 @@ def run_once(decision_path: Path, expected_sha: str, evidence: Path,
         # monitor; resume monitoring only after cid has been assigned.
         if monitor is not None:
             monitor()
+        create_attempted = True
         created = checked(create_argv(decision), evidence / "create")
         require(HEX64.fullmatch(created.decode().strip()) is not None,
                 "created CID malformed")
@@ -518,6 +546,13 @@ def run_once(decision_path: Path, expected_sha: str, evidence: Path,
         primary = f"{type(error).__name__}: {error}"
     finally:
         closure = []
+        if cid is None and create_attempted:
+            try:
+                cid = recover_failed_create(decision, image, evidence)
+                if cid is None:
+                    closure.append("failed create: selected name absent once; physical closure uncertain")
+            except BaseException as error:
+                closure.append(f"failed create recovery uncertain: {type(error).__name__}: {error}")
         if cid is not None:
             try:
                 raw = checked([str(DOCKER), "inspect", cid],

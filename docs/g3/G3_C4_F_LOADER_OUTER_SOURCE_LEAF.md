@@ -49,8 +49,11 @@ the threshold between checks, so it is not a hard disk quota.
 The monitor is checked immediately before Docker `create`, then suspended
 through that one bounded client receipt. Monitoring resumes only after its
 genuine CID has been parsed and retained for owned cleanup. If `create` itself
-fails without a CID, the container state is ambiguous and the attempt fails;
-this source does not infer physical closure from a missing receipt.
+fails without a CID, an unmonitored exact-name census may recover a single
+candidate only after full CID, label, image, effective profile and mount
+authentication. That CID then enters the same owned cleanup. An absent name,
+multiple candidates or foreign profile remains a quarantined failed attempt;
+one absent census does not prove physical closure.
 The container is identified by the exact created CID, label, name, image,
 effective entrypoint/command, user, environment, workdir, resource limits,
 host mount options and six bind rows before any cleanup; stopped inspect,
@@ -62,7 +65,7 @@ attempt. Any incomplete closure is a failed result, never permission to retry.
 
 Current tests exercise command shape, direct CLI denial, real owned child
 status/overflow/timeout/monitor denial, inspect mismatch, monitor-failed
-Docker closure, and matching two-surface review
+Docker closure, failed-create recovery/absent/foreign denial, and matching two-surface review
 bytes with wrong-path and drift denials. Actual Docker image,
 rootless daemon, loader/library observation, source admission and physical
 container closure are **unrun**. The original F guest remains failed; full

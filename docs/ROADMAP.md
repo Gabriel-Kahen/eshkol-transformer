@@ -2749,6 +2749,9 @@ publication, public G2 and continuation remain pending.
   The callback is deliberately suspended across the single Docker `create`
   receipt after a pre-create check, then resumes only after a genuine CID is
   retained; an ambiguous failed create still requires separate closure review.
+  A source-only exact-name/CID/effective-profile recovery route now attempts
+  owned cleanup after a failed create receipt; absent or foreign candidates
+  remain quarantined failures, and no actual Docker recovery was run.
 
 ## Wave 4 — practical pretraining and performance
 

@@ -410,7 +410,7 @@ class OuterTests(unittest.TestCase):
             def command(argv, path, timeout=120, monitor=None):
                 action = argv[1]
                 calls.append((action, monitor is not None))
-                if action == "inspect" and monitor is not None:
+                if monitor is not None:
                     monitor()
                 if action == "image": return image
                 if action == "info": return b'["name=rootless"]\n'
@@ -428,7 +428,7 @@ class OuterTests(unittest.TestCase):
             monitor_calls = [0]
             def deny():
                 monitor_calls[0] += 1
-                if monitor_calls[0] == 2:
+                if monitor_calls[0] == 5:
                     raise ValueError("aggregate bound")
             with patch.object(outer, "selected", return_value=decision), \
                  patch.object(outer, "checked", side_effect=command), \
@@ -442,6 +442,7 @@ class OuterTests(unittest.TestCase):
             self.assertTrue(all(not watched for action, watched in calls
                                 if action in ("wait", "rm")))
             result = json.loads((base / "evidence/result.json").read_bytes())
+            self.assertEqual(monitor_calls[0], 5)
             self.assertIn("aggregate bound", result["primary"])
             self.assertEqual(result["closure"], [])
 
@@ -456,22 +457,128 @@ class OuterTests(unittest.TestCase):
                              "source_admission_sha256": "a" * 64})
             image = json.dumps([{"Id": outer.IMAGE, "Config": {"Env": []}}]).encode()
             actions = []
+            monitored = [0]
             def command(argv, path, timeout=120, monitor=None):
                 action = argv[1]
                 actions.append(action)
+                if monitor is not None:
+                    monitor()
                 if action == "image": return image
                 if action == "info": return b'["name=rootless"]\n'
                 if action == "ps": return b""
                 self.fail(f"unexpected Docker action: {action}")
-            def deny(): raise ValueError("precreate aggregate bound")
+            def deny():
+                monitored[0] += 1
+                if monitored[0] == 4:
+                    raise ValueError("precreate aggregate bound")
             with patch.object(outer, "selected", return_value=decision), \
                  patch.object(outer, "checked", side_effect=command):
                 with self.assertRaisesRegex(ValueError, "outer observation failed"):
                     outer.run_once(base / "decision.json", "a" * 64,
                                    base / "evidence", deny)
             self.assertNotIn("create", actions)
+            self.assertEqual(monitored[0], 4)
             self.assertIn("precreate aggregate bound",
                           json.loads((base / "evidence/result.json").read_bytes())["primary"])
+
+    def test_failed_create_exact_cid_recovery_enters_owned_cleanup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            decision = {key: str(base / key) for key in
+                        ("compiler", "source", "f_output", "bundle", "candidate", "out")}
+            for path in decision.values(): Path(path).mkdir()
+            decision.update({"name": "g3c4-f-loader-owned",
+                             "source_admission_sha256": "a" * 64})
+            image = json.dumps([{"Id": outer.IMAGE, "Config": {"Env": []}}]).encode()
+            cid = "b" * 64
+            state = {"Status": "exited", "Running": False, "Pid": 0,
+                     "OOMKilled": False, "Dead": False, "Error": "", "ExitCode": 0}
+            actions = []
+            def command(argv, path, timeout=120):
+                action = argv[1]
+                actions.append((action, path.name))
+                if action == "image": return image
+                if action == "info": return b'["name=rootless"]\n'
+                if action == "ps" and path.name == "create-recovery-census":
+                    return (cid + " " + decision["name"] + "\n").encode()
+                if action == "ps": return b""
+                if action == "create": raise ValueError("client receipt lost")
+                if action == "wait": return b"0\n"
+                return b"[]"
+            def authenticated(raw, selected, candidate, *_args):
+                self.assertEqual(selected, decision)
+                self.assertEqual(candidate, cid)
+                return {"State": state}
+            with patch.object(outer, "selected", return_value=decision), \
+                 patch.object(outer, "checked", side_effect=command), \
+                 patch.object(outer, "inspect_owned", side_effect=authenticated):
+                with self.assertRaisesRegex(ValueError, "outer observation failed"):
+                    outer.run_once(base / "decision.json", "a" * 64,
+                                   base / "evidence")
+            labels = [name for _, name in actions]
+            self.assertLess(labels.index("create-recovery-census"),
+                            labels.index("create-recovery-inspect"))
+            self.assertLess(labels.index("docker-wait"), labels.index("remove"))
+            result = json.loads((base / "evidence/result.json").read_bytes())
+            self.assertEqual(result["cid"], cid)
+            self.assertIn("client receipt lost", result["primary"])
+            self.assertEqual(result["closure"], [])
+
+    def test_failed_create_absent_or_foreign_never_signals_unknown_cid(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            decision = {key: str(base / key) for key in
+                        ("compiler", "source", "f_output", "bundle", "candidate", "out")}
+            for path in decision.values(): Path(path).mkdir()
+            decision.update({"name": "g3c4-f-loader-owned",
+                             "source_admission_sha256": "a" * 64})
+            image = json.dumps([{"Id": outer.IMAGE, "Config": {"Env": []}}]).encode()
+            for label, recovery in (("absent", b""),
+                                    ("blank", b"\n"),
+                                    ("foreign-name", ("b" * 64 + " other\n").encode()),
+                                    ("duplicate", ("b" * 64 + " g3c4-f-loader-owned\n").encode() * 2)):
+                actions = []
+                evidence = base / label
+                def command(argv, path, timeout=120):
+                    action = argv[1]
+                    actions.append(action)
+                    if action == "image": return image
+                    if action == "info": return b'["name=rootless"]\n'
+                    if action == "ps" and path.name == "create-recovery-census":
+                        return recovery
+                    if action == "ps": return b""
+                    if action == "create": raise ValueError("client receipt lost")
+                    self.fail(f"unknown container must not be touched: {action}")
+                with self.subTest(label=label), \
+                     patch.object(outer, "selected", return_value=decision), \
+                     patch.object(outer, "checked", side_effect=command):
+                    with self.assertRaisesRegex(ValueError, "closure uncertain"):
+                        outer.run_once(base / "decision.json", "a" * 64, evidence)
+                self.assertNotIn("kill", actions)
+                self.assertNotIn("rm", actions)
+                result = json.loads((evidence / "result.json").read_bytes())
+                self.assertIsNone(result["cid"])
+                self.assertTrue(result["closure"])
+
+    def test_failed_create_matching_name_with_foreign_profile_denied(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            evidence = Path(tmp)
+            decision = {"name": "g3c4-f-loader-owned"}
+            candidate = "b" * 64
+            calls = []
+            def command(argv, path, timeout=120):
+                calls.append(argv[1])
+                if argv[1] == "ps":
+                    return (candidate + " " + decision["name"] + "\n").encode()
+                if argv[1] == "inspect": return b"[]"
+                self.fail("unknown candidate action")
+            with patch.object(outer, "checked", side_effect=command), \
+                 patch.object(outer, "inspect_owned",
+                              side_effect=ValueError("foreign effective profile")):
+                with self.assertRaisesRegex(ValueError, "foreign effective profile"):
+                    outer.recover_failed_create(decision, b"[]", evidence)
+            self.assertEqual(calls, ["ps", "inspect"])
+            self.assertFalse((evidence / "create-recovery.json").exists())
 
 
 if __name__ == "__main__":
