@@ -76,6 +76,24 @@ int main(void) {
   CHECK(optimizer->busy == 1 && err(NULL, 0) == 2);
   optimizer->busy = 0;
 
+  /* Allow two genuine moment clones, then deny a later F32 allocation.
+   * O2 must drain those partial baselines before the bridge returns NULL. */
+  et_f32_test_live_counts_v1 partial_before = {.struct_size =
+                                                sizeof(partial_before)};
+  et_f32_test_live_counts_v1 partial_after = {.struct_size =
+                                               sizeof(partial_after)};
+  et_f32_test_live_counts_snapshot_v1(&partial_before);
+  et_f32_tensor_test_fail_alloc_after_v1(10);
+  CHECK(et_g3r_private_o2_creation_begin_v1(model, optimizer) == NULL);
+  CHECK(et_f32_tensor_test_successful_allocations_v1() == 10);
+  CHECK(optimizer->busy == 0 && err(NULL, 0) == 2 &&
+        err(NULL, 2) == ET_O2_STATUS_INTERNAL &&
+        err(NULL, 3) == ET_F32_TENSOR_CODE_ALLOCATION_FAILED);
+  et_f32_test_live_counts_snapshot_v1(&partial_after);
+  CHECK(partial_after.tensors == partial_before.tensors &&
+        partial_after.owned_clones == partial_before.owned_clones);
+  et_f32_tensor_test_reset_allocator_v1();
+
   /* The accepted O2 held reader permits a preexisting read-only value borrow;
    * it rejects conflicting writes and O2 busy instead. */
   et_f32_tensor_borrow *borrow = NULL;
