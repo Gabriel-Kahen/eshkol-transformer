@@ -3,7 +3,7 @@
 (define g3r-x1-model-lineage-registry m3t-model-lineage-registry)
 
 (define (g3r-x1-model-create config initializer)
-  ((vector-ref m3t-model-lineage-routes 1) config initializer))
+  (m3t-model-create-route 'private config initializer))
 
 (define (g3r-x1-model-require model config)
   (let ((operation 'g3r-x1-model-require))

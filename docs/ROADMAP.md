@@ -1719,8 +1719,9 @@ keeps its two-argument behavior and creates no lineage. A source-private X1
 accessor retains the original registered resolved entry. The private row binds
 the returned model, authentic M3 entry and initializer, original X1 shell and
 entry, and canonical and fingerprint strings before the seal tail returns the
-shell. A lexical ticket/current-pending check rejects a direct forged M3-core
-lineage; an interrupted abort or seal fails closed. A lexical row witness
+shell. The construction core and ticket check share a lexical scope: the
+fixed private route issues a ticket, and no caller can pass a forged lineage
+to the core. An interrupted abort or seal fails closed. A lexical row witness
 rejects a copied row, an ordinary model, and an equal-byte
 alternate X1 shell. There is no live M3 retirement API, so completed rows
 remain rooted with a fixed 64-row process limit. Source and failure-cut

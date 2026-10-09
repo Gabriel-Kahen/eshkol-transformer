@@ -36,32 +36,35 @@ def check(core: str, ext: str, root: str, manifest: str, x1: str) -> None:
             "(entry (x1-config-entry value))" not in x1 or
             "(eq? (car (cdr entry)) 'resolved)" not in x1):
         raise ValueError("registered resolved X1 entry authority differs")
-    if "(define (m3t-public-model-create config state)\n  (m3t-model-create-core config state #f))" not in core:
+    if "(define (m3t-public-model-create config state)\n  (m3t-model-create-route 'public config state))" not in core:
         raise ValueError("ordinary public constructor differs")
     if ("(define m3t-model-lineage-registry (vector '() #f))" not in core or
             "(define g3r-x1-model-lineage-limit 64)" not in core or
             "(define g3r-x1-model-lineage-registry m3t-model-lineage-registry)" not in ext):
         raise ValueError("canonical registry or finite retained-row quota differs")
-    if ("(define m3t-model-lineage-routes\n  (let ((secret" not in core or
+    if ("(define m3t-model-create-route\n  (let* ((secret" not in core or
             "(current (vector #f))" not in core or
-            "(lambda (lineage)" not in core or
+            "(core (lambda (config state lineage)" not in core or
+            "(private (lambda (config initializer)" not in core or
             "(eq? (vector-ref current 0) lineage)" not in core or
             "(eq? (vector-ref lineage 5) secret)" not in core or
-            "(lambda (config initializer)" not in core):
-        raise ValueError("lexical issuer or exact-current verifier differs")
+            "(lambda (mode config state)" not in core):
+        raise ValueError("lexical core, issuer, or exact-current verifier differs")
     routes = [form for form in parse(core) if isinstance(form, list) and
               len(form) == 3 and form[0] == "define" and
-              form[1] == "m3t-model-lineage-routes"]
-    if (len(routes) != 1 or routes[0][2][0] != "let" or
-            routes[0][2][2][0] != "vector" or
-            len(routes[0][2][2]) != 3 or
-            routes[0][2][2][1][0] != "lambda" or
-            routes[0][2][2][2][0] != "lambda"):
-        raise ValueError("secret or issuer route escaped lexical closure")
-    construction = core[core.index("(define (m3t-model-create-core"):
-                        core.index("(define (m3t-public-model-create")]
+              form[1] == "m3t-model-create-route"]
+    if (len(routes) != 1 or routes[0][2][0] != "let*" or
+            [binding[0] for binding in routes[0][2][1]] !=
+            ["secret", "current", "core", "private"] or
+            routes[0][2][2][0] != "lambda" or
+            any(isinstance(form, list) and len(form) > 1 and form[0] == "define" and
+                isinstance(form[1], list) and form[1][0] == "m3t-model-create-core"
+                for form in parse(core))):
+        raise ValueError("core, secret, or issuer escaped lexical closure")
+    construction = core[core.index("(core (lambda (config state lineage)"):
+                        core.index("(private (lambda (config initializer)")]
     ordered(construction, ["(config-data (m3t-config-check config initial operation))",
-                           "(m3t-model-lineage-preflight config initial config-data lineage operation)",
+                           "(m3t-model-lineage-preflight config initial config-data lineage operation secret current)",
                            "(entry (m3t-stage 'model))",
                            "(m3t-native-owner-create (vector-ref initial 3))",
                            "(if lineage (vector-set! (vector-ref lineage 1) 2 'building))",
@@ -77,14 +80,16 @@ def check(core: str, ext: str, root: str, manifest: str, x1: str) -> None:
     required_core = ["(= (vector-length lineage) 6)",
                      "(eq? (vector-ref lineage 0) m3t-model-lineage-registry)",
                      "(eq? (vector-ref m3t-model-lineage-registry 1) lineage)",
-                     "((vector-ref m3t-model-lineage-routes 0) lineage)",
+                     "(eq? (vector-ref current 0) lineage)",
+                     "(eq? (vector-ref lineage 5) secret)",
                      "(eq? (vector-ref (vector-ref lineage 2) 2) config)",
                      "(x1-private-resolved-entry config)",
                      "(eq? (vector-ref (vector-ref lineage 2) 8) initial)",
                      "(if (not (vector-ref cleanup 1))", "(raise caught)"]
     if any(part not in core for part in required_core):
         raise ValueError("direct core forgery or original abort is possible")
-    issuer = core[core.index("(define m3t-model-lineage-routes"):]
+    issuer = core[core.index("(private (lambda (config initializer)"):
+                  core.index("(lambda (mode config state)")]
     ordered(issuer, ["(g3r-x1-model-lineage-capacity",
                      "(x1-private-config-validate config)",
                      "(x1-resolved? config)",
@@ -94,7 +99,7 @@ def check(core: str, ext: str, root: str, manifest: str, x1: str) -> None:
                      "(lineage (vector m3t-model-lineage-registry pending row",
                      "(vector-set! m3t-model-lineage-registry 1 lineage)",
                      "(vector-set! current 0 lineage)",
-                     "(m3t-model-create-core config initializer lineage)",
+                     "(core config initializer lineage)",
                      "(vector-set! current 0 #f)\n            model"])
     quota = core[core.index("(define (g3r-x1-model-lineage-capacity"):
                  core.index("(define (m3t-model-lineage-preflight")]
@@ -113,7 +118,7 @@ def check(core: str, ext: str, root: str, manifest: str, x1: str) -> None:
                      "(raise caught)"]
     if any(part not in issuer for part in needed_issuer):
         raise ValueError("issuer identity, abort, or replay denial differs")
-    if "(define (g3r-x1-model-create config initializer)\n  ((vector-ref m3t-model-lineage-routes 1) config initializer))" not in ext:
+    if "(define (g3r-x1-model-create config initializer)\n  (m3t-model-create-route 'private config initializer))" not in ext:
         raise ValueError("private route can bypass lexical issuer")
     required_ext = ["(m3t-entry model 'model operation #t)",
                     "(eq? original config)",
@@ -147,17 +152,20 @@ class M3X1LineageSource(unittest.TestCase):
 
     def test_public_cannot_mint_lineage(self) -> None:
         with self.assertRaises(ValueError):
-            self.check(core=self.core.replace("m3t-model-create-core config state #f",
-                                               "m3t-model-create-core config state lineage"))
+            self.check(core=self.core.replace("m3t-model-create-route 'public config state",
+                                               "m3t-model-create-route 'private config state"))
 
     def test_direct_core_forged_or_foreign_pending_denied(self) -> None:
         for before in ["(eq? (vector-ref lineage 0) m3t-model-lineage-registry)",
                        "(eq? (vector-ref m3t-model-lineage-registry 1) lineage)",
-                       "((vector-ref m3t-model-lineage-routes 0) lineage)",
                        "(eq? (vector-ref current 0) lineage)",
                        "(eq? (vector-ref lineage 5) secret)"]:
             with self.subTest(before=before), self.assertRaises(ValueError):
                 self.check(core=self.core.replace(before, "#t"))
+        with self.assertRaises(ValueError):
+            self.check(core=self.core.replace(
+                "(core (lambda (config state lineage)",
+                "(forged (lambda (config state lineage)", 1))
 
     def test_no_retroactive_or_alternate_x1(self) -> None:
         for before, after in [("(eq? original config)", "(equal? original config)"),
@@ -189,7 +197,7 @@ class M3X1LineageSource(unittest.TestCase):
             with self.subTest(before=before), self.assertRaises(ValueError):
                 self.check(core=self.core.replace(before, after))
         with self.assertRaises(ValueError):
-            self.check(core=self.core.replace("(lineage-checked\n           (m3t-model-lineage-preflight config initial config-data lineage operation))",
+            self.check(core=self.core.replace("(lineage-checked\n           (m3t-model-lineage-preflight config initial config-data lineage operation secret current))",
                                                "(lineage-checked #t)"))
 
     def test_missing_source_or_route_denied(self) -> None:
@@ -200,7 +208,7 @@ class M3X1LineageSource(unittest.TestCase):
             self.check(root=self.root.replace("g3r_d2_lineage_root.esk",
                                               "g3g_manual_package_root.esk"))
         with self.assertRaises(ValueError):
-            self.check(ext=self.ext.replace("(vector-ref m3t-model-lineage-routes 1)",
+            self.check(ext=self.ext.replace("m3t-model-create-route 'private",
                                             "m3t-model-create-core"))
 
 

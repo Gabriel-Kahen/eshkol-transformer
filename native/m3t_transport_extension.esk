@@ -408,7 +408,7 @@
        (m3t-fail 'internal operation "X1 model lineage registry malformed"))
       (else (check (cdr remaining) (- capacity 1))))))
 
-(define (m3t-model-lineage-preflight config initial config-data lineage operation)
+(define (m3t-model-lineage-preflight config initial config-data lineage operation secret current)
   ;; Fixed private data only. A failed preflight cannot leave a staged M3 row.
   (if lineage
       (if (not (and (vector? lineage) (= (vector-length lineage) 6)
@@ -425,7 +425,8 @@
                     (= (vector-length (vector-ref lineage 4)) 2)
                     (eq? (vector-ref lineage 0) m3t-model-lineage-registry)
                     (eq? (vector-ref m3t-model-lineage-registry 1) lineage)
-                    ((vector-ref m3t-model-lineage-routes 0) lineage)
+                    (eq? (vector-ref current 0) lineage)
+                    (eq? (vector-ref lineage 5) secret)
                     (eq? (vector-ref (vector-ref lineage 0) 1)
                          (vector-ref lineage 1))
                     (eq? (vector-ref (vector-ref lineage 1) 0)
@@ -446,12 +447,18 @@
                      "private X1 creation lineage differs")))
   #t)
 
-(define (m3t-model-create-core config state lineage)
+;;; The core and ticket are lexical. A caller can invoke the genuine private
+;;; constructor, but cannot pass a fabricated lineage to the M3 core or swap
+;;; its verifier through a mutable route table.
+(define m3t-model-create-route
+  (let* ((secret (vector 'm3t-x1-lineage))
+         (current (vector #f))
+         (core (lambda (config state lineage)
   (let* ((operation 'diagnostic-model-create)
          (initial (m3t-entry state 'initializer operation #t))
          (config-data (m3t-config-check config initial operation))
          (lineage-checked
-           (m3t-model-lineage-preflight config initial config-data lineage operation))
+           (m3t-model-lineage-preflight config initial config-data lineage operation secret current))
          (entry (m3t-stage 'model))
          (successor (m3t-stage 'initializer))
          (handles (make-vector 14 #f))
@@ -540,19 +547,8 @@
                   (vector-set! row 1 'live)
                   (vector-set! registry 0 next)
                   (vector-set! registry 1 #f)))
-            root)))))))
-(define (m3t-public-model-create config state)
-  (m3t-model-create-core config state #f))
-;;; Only the actual private constructor closure issues a ticket. The verifier
-;;; shares its lexical secret/current identity; direct core calls cannot mint it.
-(define m3t-model-lineage-routes
-  (let ((secret (vector 'm3t-x1-lineage))
-        (current (vector #f)))
-    (vector
-      (lambda (lineage)
-        (and (eq? (vector-ref current 0) lineage)
-             (eq? (vector-ref lineage 5) secret)))
-      (lambda (config initializer)
+            root))))))))
+         (private (lambda (config initializer)
   (let ((operation 'g3r-x1-model-create))
     (if (vector-ref m3t-model-lineage-registry 1)
         (m3t-fail 'invalid-state operation
@@ -605,9 +601,18 @@
               (vector-set! row 7 #f)
               (vector-set! row 8 #f)
               (raise caught)))
-          (let ((model (m3t-model-create-core config initializer lineage)))
+          (let ((model (core config initializer lineage)))
             (vector-set! current 0 #f)
-            model)))))))))
+            model))))))))
+    (lambda (mode config state)
+      (cond
+        ((eq? mode 'public) (core config state #f))
+        ((eq? mode 'private) (private config state))
+        (else (m3t-fail 'invalid-argument 'diagnostic-model-create
+                        "unknown fixed construction route"))))))
+(define (m3t-public-model-create config state)
+  (m3t-model-create-route 'public config state))
+
 (define (m3t-public-model-profile model)
   (let ((entry (m3t-entry model 'model 'diagnostic-model-profile #t)))
     (vector-ref entry 11)))
