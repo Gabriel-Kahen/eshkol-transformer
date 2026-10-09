@@ -68,6 +68,8 @@ def check(observer: str, parser: str, runner: str,
                     "build_mode sanitize", "compiled-artifacts.sha256",
                     "libc4_native_capture.a", "archive-defined.symbols",
                     "archive-undefined.symbols", "objects/*.o",
+                    "timeout --signal=TERM --kill-after=5s 600s",
+                    "timeout --signal=TERM --kill-after=5s 120s",
                     "--wrap=et_a2_kv_cache_transaction_abort_v1"):
         assert control in runner, control
     assert "LOCK_FILE=" not in runner and "docker " not in runner.lower()

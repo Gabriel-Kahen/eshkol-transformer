@@ -63,7 +63,9 @@ class NativeCaptureSourceTests(unittest.TestCase):
 
     def test_q0_provenance_and_repeat_controls(self) -> None:
         for phrase in ("q0_identity", "3.14.6", "2.13.0+cpu",
-                       "normal/repeat.stdout", "source.post.sha256"):
+                       "normal/repeat.stdout", "source.post.sha256",
+                       "timeout --signal=TERM --kill-after=5s 600s",
+                       "timeout --signal=TERM --kill-after=5s 120s"):
             with self.subTest(phrase=phrase):
                 with self.assertRaises(AssertionError):
                     self.check(runner=self.runner.replace(phrase, "removed"))
