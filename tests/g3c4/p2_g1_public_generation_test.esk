@@ -193,6 +193,21 @@
        (g3c4-public-generator-close follow)
        (g3c4-public-generation-tensor-release! prompt-a)
        (g3c4-public-generation-tensor-release! prompt-b)))
+(check "authentic dead P2/G1 generator close stays idempotent"
+  (g3c4-public-generator-close greedy))
+(define dead-greedy-entry (g3c4-registry-find greedy 'test))
+(vector-set! dead-greedy-entry 7 (vector 'forged))
+(reject-public "malformed dead P2/G1 generator rejects"
+               'invalid-state 'generator-close!
+  (lambda () (g3c4-public-generator-close greedy)))
+(vector-set! dead-greedy-entry 7 #f)
+(vector-set! dead-greedy-entry 2 'pending)
+(reject-public "invalid phase P2/G1 generator rejects"
+               'invalid-state 'generator-close!
+  (lambda () (g3c4-public-generator-close greedy)))
+(vector-set! dead-greedy-entry 2 'dead)
+(check "restored dead P2/G1 generator closes without native action"
+  (g3c4-public-generator-close greedy))
 (display "G3-C4 P2/G1 public generation source-composed PASS: checks=")
 (display checks)
 (newline)

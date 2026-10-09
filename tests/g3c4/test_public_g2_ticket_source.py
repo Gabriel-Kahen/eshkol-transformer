@@ -19,8 +19,10 @@ class TicketSourceTest(unittest.TestCase):
         cls.inputs = dict(
             dispatch=read("native/g3c4_public_generation_dispatch_extension.esk"),
             terminal=read("native/g3c4_p2g2_terminal_close_extension.esk"),
+            call_entry=read("native/g3c4_call_entry_extension.esk"),
             adapter=(ROOT / "native/g3c4_public_output_adapter_extension.esk").read_bytes(),
             fixture=read("tests/g3c4/p2_g1_public_generation_test.esk"),
+            g2_close_fixture=read("tests/g3c4/p2_g2_public_ticket_close_test.esk"),
             package_root=read("native/g3g_manual_package_root.esk"),
             package_sources=read("native/g3g_manual_package_source_closure.txt").splitlines(),
             prefix_negative=read("tests/g3c4/p2_g1_g2_prefix_stub_negative_test.esk"),
@@ -52,6 +54,23 @@ class TicketSourceTest(unittest.TestCase):
         self.reject(dispatch=self.inputs["dispatch"].replace(
             "(if (= (vector-ref (vector-ref generator-entry 7) 5) 2)",
             "(if (= (vector-ref (vector-ref generator-entry 7) 5) 1)", 1))
+
+    def test_dead_generator_close_preserves_idempotence(self) -> None:
+        self.reject(dispatch=self.inputs["dispatch"].replace(
+            "(if (eq? (vector-ref member 2) 'dead)", "(if #f", 1))
+        self.reject(fixture=self.inputs["fixture"].replace(
+            "(check \"authentic dead P2/G1 generator close stays idempotent\"\n"
+            "  (g3c4-public-generator-close greedy))", "", 1))
+        self.reject(call_entry=self.inputs["call_entry"].replace(
+            "((g3c4-dead-entry? entry 'generator) #t)",
+            "((g3c4-dead-entry? entry 'generator)\n"
+            " (g3c4-native-generator-close (vector-ref entry 3)))", 1))
+        self.reject(g2_close_fixture=self.inputs["g2_close_fixture"].replace(
+            "authentic dead public G2 generator close stays idempotent",
+            "missing repeated close", 1))
+        self.reject(g2_close_fixture=self.inputs["g2_close_fixture"].replace(
+            "malformed dead public G2 generator rejects",
+            "missing malformed denial", 1))
 
     def test_creation_time_profile_required(self) -> None:
         self.reject(dispatch=self.inputs["dispatch"].replace(

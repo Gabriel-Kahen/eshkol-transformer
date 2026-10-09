@@ -204,5 +204,6 @@ scripts/check-g3c4-public-g2-ticket.py
 tests/g3c4/test_public_g2_ticket_source.py
 tests/g3c4/p2_g1_g2_prefix_stub_negative_test.esk
 tests/g3c4/p2_g1_g2_core_stub_negative_test.esk
+tests/g3c4/p2_g2_public_ticket_close_test.esk
 docs/g3/G3_C4_PUBLIC_G2_PREZERO_TICKET_SOURCE_LEAF.md
 native/g3c4_public_g2_ticket_source_closure.txt

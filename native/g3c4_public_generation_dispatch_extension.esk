@@ -512,16 +512,36 @@
 (define (g3c4-public-generator-close generator)
   (g3c4-public-boundary 'generator-close!
     (let ((member (g3c4-public-transport-member generator)))
-      (if (not (and member (eq? (vector-ref member 1) 'generator)))
+      (if (not (and (vector? member) (= (vector-length member) 12)
+                    (eq? (vector-ref member 1) 'generator)))
           (g3c4-fail 'invalid-argument 'generator-close!
                      "C4 identity is not a generator"))
-      (if (= (vector-ref (vector-ref member 7) 5) 2)
-          (let* ((row (g3c4-public-g2-profile-live
-                        generator 'generator-close!))
-                 (anchor (g3c4-public-g2-root-find
-                           g3c4-public-g2-generator-anchors generator)))
-            (g3c4-generator-close-internal! generator)
-            (vector-set! row 7 'dead)
-            (vector-set! anchor 7 'dead)
-            #t)
-          (g3c4-generator-close-internal! generator)))))
+      (if (eq? (vector-ref member 2) 'dead)
+          (begin
+            (if (not (and (eq? (vector-ref member 3) #f)
+                          (eq? (vector-ref member 4) #f)
+                          (eq? (vector-ref member 5) #f)
+                          (eq? (vector-ref member 6) #f)
+                          (eq? (vector-ref member 7) #f)
+                          (eq? (vector-ref member 8) #f)
+                          (eq? (vector-ref member 9) #f)
+                          (eq? (vector-ref member 10) #f)
+                          (eq? (vector-ref member 11) #f)))
+                (g3c4-fail 'invalid-state 'generator-close!
+                           "C4 dead generator fields changed"))
+            (g3c4-generator-close-internal! generator))
+          (begin
+            (if (not (eq? (vector-ref member 2) 'live))
+                (g3c4-fail 'invalid-state 'generator-close!
+                           "C4 generator phase is invalid"))
+            (g3c4-generator-entry-live generator 'generator-close!)
+            (if (= (vector-ref (vector-ref member 7) 5) 2)
+                (let* ((row (g3c4-public-g2-profile-live
+                              generator 'generator-close!))
+                       (anchor (g3c4-public-g2-root-find
+                                 g3c4-public-g2-generator-anchors generator)))
+                  (g3c4-generator-close-internal! generator)
+                  (vector-set! row 7 'dead)
+                  (vector-set! anchor 7 'dead)
+                  #t)
+                (g3c4-generator-close-internal! generator)))))))

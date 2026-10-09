@@ -22,6 +22,7 @@ ADDITIONS = [
     "tests/g3c4/test_public_g2_ticket_source.py",
     "tests/g3c4/p2_g1_g2_prefix_stub_negative_test.esk",
     "tests/g3c4/p2_g1_g2_core_stub_negative_test.esk",
+    "tests/g3c4/p2_g2_public_ticket_close_test.esk",
     "docs/g3/G3_C4_PUBLIC_G2_PREZERO_TICKET_SOURCE_LEAF.md",
     "native/g3c4_public_g2_ticket_source_closure.txt",
 ]
@@ -43,7 +44,8 @@ def top_define(forms: list[object], name: str) -> list[object]:
     return matches[0]
 
 
-def validate(dispatch: str, terminal: str, adapter: bytes, fixture: str,
+def validate(dispatch: str, terminal: str, call_entry: str, adapter: bytes,
+             fixture: str, g2_close_fixture: str,
              package_root: str, package_sources: list[str],
              prefix_negative: str, core_negative: str,
              closure: list[str], base: list[str]) -> None:
@@ -85,6 +87,19 @@ def validate(dispatch: str, terminal: str, adapter: bytes, fixture: str,
     assert len(parse.calls(budget_branches[0][2], "bridge")) == 1
     assert not parse.calls(budget_branches[0][3], "bridge")
     assert len(parse.calls(budget_branches[0][3], "g3c4-native-p2g1-preflight")) == 1
+    close = top_define(parsed, "g3c4-public-generator-close")
+    dead_branches = [part for part in parse.walk(close)
+                     if part and part[0] == "if" and len(part) >= 4
+                     and part[1] == ["eq?", ["vector-ref", "member", "2"], "'dead"]]
+    assert len(dead_branches) == 1
+    assert dead_branches[0][2][-1] == ["g3c4-generator-close-internal!", "generator"]
+    assert len(parse.calls(dead_branches[0][2], "g3c4-native-generator-close")) == 0
+    assert len(parse.calls(dead_branches[0][3], "g3c4-public-g2-profile-live")) == 1
+    assert len(parse.calls(dead_branches[0][3], "g3c4-generator-entry-live")) == 1
+    internal = top_define(parse.forms(call_entry), "g3c4-generator-close-internal!")
+    conditions = [part for part in parse.walk(internal) if part and part[0] == "cond"]
+    assert len(conditions) == 1
+    assert conditions[0][1] == [["g3c4-dead-entry?", "entry", "'generator"], "#t"]
     assert len(parse.calls(route, "g3c4-p2g2-terminal-close-core-private")) == 1
     assert len(parse.calls(route, "g3c4-p2g2-terminal-close-public-private")) == 1
     assert [part for part in parse.walk(route) if part[:2] == ["bridge", "'admit"]]
@@ -124,6 +139,13 @@ def validate(dispatch: str, terminal: str, adapter: bytes, fixture: str,
         item for item in package_sources if item in {f"native/{name}" for name in order}]
     assert all((ROOT / item).is_file() for item in package_sources)
     assert "g3c4-p2g2-prefix-preflight" in fixture
+    assert "(check \"authentic dead P2/G1 generator close stays idempotent\"\n  (g3c4-public-generator-close greedy))" in fixture
+    assert "malformed dead P2/G1 generator rejects" in fixture
+    assert "invalid phase P2/G1 generator rejects" in fixture
+    assert "authentic dead public G2 generator close stays idempotent" in g2_close_fixture
+    assert "malformed dead public G2 generator rejects" in g2_close_fixture
+    assert "missing public G2 profile root blocks live close" in g2_close_fixture
+    assert parse.forms(g2_close_fixture)[0] == ["load", '"g3g_manual_package_root.esk"']
     fixture_forms = parse.forms(fixture)
     for name, arguments in (
         ("g3c4-p2g2-prefix-preflight", ["generator", "input"]),
@@ -148,8 +170,10 @@ def main() -> None:
     validate(
         read("native/g3c4_public_generation_dispatch_extension.esk"),
         read("native/g3c4_p2g2_terminal_close_extension.esk"),
+        read("native/g3c4_call_entry_extension.esk"),
         (ROOT / "native/g3c4_public_output_adapter_extension.esk").read_bytes(),
         read("tests/g3c4/p2_g1_public_generation_test.esk"),
+        read("tests/g3c4/p2_g2_public_ticket_close_test.esk"),
         read("native/g3g_manual_package_root.esk"),
         read("native/g3g_manual_package_source_closure.txt").splitlines(),
         read("tests/g3c4/p2_g1_g2_prefix_stub_negative_test.esk"),
