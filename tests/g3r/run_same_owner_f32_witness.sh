@@ -27,6 +27,14 @@ sources=(tests/g3r/same_owner_combined_test.c native/g3r_same_owner_save.c
 
 cc -std=c11 -O0 -I. -Iinclude -Inative -Isrc "${defs[@]}" \
   "${sources[@]}" -lm -o "$out/normal"
+nm -g --defined-only "$out/normal" | awk '{print $3}' > "$out/defined-symbols"
+for symbol in et_g3r_private_same_owner_save_capture_v1 \
+  et_g3r_private_same_owner_save_snapshot_word_v1 \
+  et_g3r_private_same_owner_save_o2_issue_v1 \
+  et_g3r_private_same_owner_save_error_word_v1 \
+  et_g3r_private_same_owner_save_drain_state_v1; do
+  rg -q -x "$symbol" "$out/defined-symbols"
+done
 "$out/normal"
 cc -std=c11 -O0 -g -fsanitize=address,undefined -fno-omit-frame-pointer \
   -I. -Iinclude -Inative -Isrc "${defs[@]}" \

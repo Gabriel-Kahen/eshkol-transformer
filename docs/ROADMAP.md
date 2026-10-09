@@ -1796,6 +1796,16 @@ output/error aliases. This does not establish a serialized
 Eshkol SAVE caller, C2 bytes or pair publication, cold LOAD, a compiled
 package, or concurrent unsynchronized raw-pointer safety.
 
+The private same-owner SAVE scalar bridge now exposes one checked native-owned
+18-word snapshot capture, one held O2 state issue, pure typed-error words, and
+an address-first cleanup status over the retained hold. Status 2 proves the
+native hold drained without transferring an O2 state; status 3 proves native
+drain after a claim but does not authenticate the potentially live Eshkol O2
+shell. Uncertain state 1 retains the hold for checked cleanup retry. Focused
+normal and sanitizer host controls cover these native semantics. The Eshkol
+adoption shell, original graph binding, C2 publication, and cold LOAD remain
+unimplemented and unproved.
+
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
 diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use

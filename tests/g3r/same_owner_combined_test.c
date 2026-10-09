@@ -147,32 +147,90 @@ int main(void) {
         p1, c->pins.values[i], &equal, &f32) == 0 && equal);
     CHECK(et_f32_tensor_destroy_v1(&p1, &f32) == 0);
   }
-  void *state = NULL;
-  CHECK(et_g3r_private_same_owner_save_o2_state_v1(
-      hold, &state) == 0);
-  CHECK(state != NULL);
   et_g3r_g3t_idle_snapshot_words_v1 words = {0};
   CHECK(et_g3r_private_same_owner_save_copy_v1(
       hold, &words, sizeof(words)) == 0);
   CHECK(words.word[0] == 1 && words.word[8] == 1729 &&
         words.word[11] == 41 && words.word[17] == 1);
+  CHECK(et_g3r_private_same_owner_save_capture_v1(hold) == 0);
+  for (int64_t i = 0; i < 18; ++i)
+    CHECK(et_g3r_private_same_owner_save_snapshot_word_v1(
+        hold, i) == words.word[i]);
+  CHECK(et_g3r_private_same_owner_save_snapshot_word_v1(
+      hold, -1) == INT64_MIN);
+  CHECK(et_g3r_private_same_owner_save_snapshot_word_v1(
+      hold, 18) == INT64_MIN);
+  CHECK(et_g3r_private_same_owner_save_error_word_v1(hold, 0) == 0);
+  CHECK(et_g3r_private_same_owner_save_error_word_v1(hold, 4) == INT64_MIN);
+  const int64_t foreign_words[4] = {
+      ET_G3R_SAVE_SOURCE_COORDINATOR, 0, 1, ET_G3R_SAVE_COORD_STALE};
+  for (int64_t i = 0; i < 4; ++i)
+    CHECK(et_g3r_private_same_owner_save_error_word_v1(
+        (void *)(uintptr_t)1u, i) == foreign_words[i]);
+  CHECK(et_g3r_private_same_owner_save_error_word_v1(NULL, 0) == 0);
+  CHECK(et_g3r_private_same_owner_save_drain_state_v1(hold) == 0);
+  void *state = et_g3r_private_same_owner_save_o2_issue_v1(hold);
+  CHECK(state != NULL);
   CHECK(et_g3r_private_same_owner_save_o2_claim_v1(hold, state) == 0);
-  CHECK(et_o2_optimizer_state_release_v1(state, &o2) == 0);
   CHECK(et_g3r_private_same_owner_save_end_v1(hold) == 0);
+  CHECK(et_g3r_private_same_owner_save_drain_state_v1(hold) == 3);
+  uint32_t transferred_lifecycle = 0;
+  CHECK(et_o2_optimizer_state_lifecycle_v1(
+      state, &transferred_lifecycle, &o2) == 0 &&
+      transferred_lifecycle == ET_O2_OPTIMIZER_STATE_LIVE);
+  CHECK(et_o2_optimizer_state_release_v1(state, &o2) == 0);
+  CHECK(et_g3r_private_same_owner_save_error_word_v1(hold, 0) == 0);
   CHECK(et_g3r_private_same_owner_save_end_v1(hold) != 0);
+  CHECK(et_g3r_private_same_owner_save_error_word_v1(
+      NULL, 3) == ET_G3R_SAVE_COORD_STALE);
+  CHECK(et_g3r_private_same_owner_save_error_word_v1(NULL, 4) == INT64_MIN);
+  CHECK(et_g3r_private_same_owner_save_error_word_v1(
+      NULL, 3) == ET_G3R_SAVE_COORD_STALE);
+  CHECK(et_g3r_private_same_owner_save_error_word_v1(hold, 0) == 0);
+  CHECK(et_g3r_private_same_owner_save_snapshot_word_v1(
+      hold, 0) == INT64_MIN);
   CHECK(et_g3r_private_same_owner_save_check_v1(hold) != 0);
+  CHECK(et_g3r_private_same_owner_save_drain_state_v1(hold) == 3);
+  CHECK(et_g3r_private_same_owner_save_drain_state_v1(
+      (void *)(uintptr_t)1u) == -1);
   CHECK(et_a2_kv_cache_transaction_begin_v1(
       c->cache, 1, &count, &denied, &kernel) == 0);
   CHECK(et_a2_kv_cache_transaction_abort_v1(&denied, &kernel) == 0);
   hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
   CHECK(hold != NULL);
+  CHECK(et_g3r_private_same_owner_save_capture_v1(hold) == 0);
+  CHECK(et_g3r_private_same_owner_save_capture_v1(hold) != 0);
+  CHECK(et_g3r_private_same_owner_save_last_error_v1(&first) == 0);
+  CHECK(first.source == ET_G3R_SAVE_SOURCE_COORDINATOR &&
+        first.code == ET_G3R_SAVE_COORD_ISSUE);
+  const int64_t first_words[4] = {
+      first.source, first.domain, first.category, first.code};
+  for (int64_t i = 0; i < 4; ++i)
+    CHECK(et_g3r_private_same_owner_save_error_word_v1(
+        hold, i) == first_words[i]);
+  CHECK(et_g3r_private_same_owner_save_error_word_v1(hold, -1) == INT64_MIN);
+  CHECK(et_g3r_private_same_owner_save_last_error_v1(&observed) == 0 &&
+        memcmp(&observed, &first, sizeof(first)) == 0);
+  CHECK(et_g3r_private_same_owner_save_end_v1(hold) != 0);
+  CHECK(et_g3r_private_same_owner_save_drain_state_v1(hold) == 2);
+  CHECK(et_g3r_private_same_owner_save_error_word_v1(hold, 3) == first.code);
+  CHECK(et_g3r_private_same_owner_save_capture_v1(hold) != 0);
+  CHECK(et_g3r_private_same_owner_save_error_word_v1(
+      NULL, 3) == ET_G3R_SAVE_COORD_STALE);
+  CHECK(et_g3r_private_same_owner_save_error_word_v1(hold, 3) == first.code);
+  hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
+  CHECK(hold != NULL);
   CHECK(et_g3r_private_same_owner_save_copy_v1(
       hold, &words, sizeof(words) - 1) != 0);
+  CHECK(et_g3r_private_same_owner_save_capture_v1(hold) != 0);
+  CHECK(et_g3r_private_same_owner_save_snapshot_word_v1(
+      hold, 0) == INT64_MIN);
   CHECK(et_g3r_private_same_owner_save_last_error_v1(&first) == 0);
   CHECK(first.source == ET_G3R_SAVE_SOURCE_G3T && first.domain == 0 &&
         first.category == G3T_ARGUMENT && first.code == G3T_IDENTITY);
   CHECK(et_g3r_private_same_owner_save_check_v1(hold) != 0);
   CHECK(et_g3r_private_same_owner_save_end_v1(hold) != 0);
+  CHECK(et_g3r_private_same_owner_save_drain_state_v1(hold) == 2);
   CHECK(et_g3r_private_same_owner_save_last_error_v1(&observed) == 0 &&
         memcmp(&observed, &first, sizeof(first)) == 0);
   hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
@@ -195,6 +253,9 @@ int main(void) {
       &held_lengths, &held_mask, &kernel) == 0);
   unsigned char *held_bytes = (unsigned char *)(uintptr_t)held_keys->data;
   held_bytes[0] ^= 1u;
+  CHECK(et_g3r_private_same_owner_save_capture_v1(hold) != 0);
+  CHECK(et_g3r_private_same_owner_save_snapshot_word_v1(
+      hold, 0) == INT64_MIN);
   CHECK(et_g3r_private_same_owner_save_check_v1(hold) != 0);
   CHECK(et_g3r_private_same_owner_save_last_error_v1(&first) == 0);
   CHECK(first.source == ET_G3R_SAVE_SOURCE_G3T && first.domain == 0 &&
@@ -210,8 +271,7 @@ int main(void) {
   hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
   CHECK(hold != NULL);
   et_o2_test_fail_alloc_after_v1(0);
-  state = NULL;
-  CHECK(et_g3r_private_same_owner_save_o2_state_v1(hold, &state) != 0);
+  state = et_g3r_private_same_owner_save_o2_issue_v1(hold);
   CHECK(state == NULL);
   CHECK(et_g3r_private_same_owner_save_last_error_v1(&first) == 0);
   CHECK(first.source == ET_G3R_SAVE_SOURCE_O2 && first.domain == 0 &&
@@ -274,6 +334,7 @@ int main(void) {
   CHECK(et_g3r_private_same_owner_save_o2_claim_v1(hold, alias) != 0);
   CHECK(et_o2_optimizer_state_release_v1(state, &o2) == 0);
   CHECK(et_g3r_private_same_owner_save_end_v1(hold) != 0);
+  CHECK(et_g3r_private_same_owner_save_drain_state_v1(hold) == 3);
   hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
   CHECK(hold != NULL);
   state = NULL;
@@ -281,6 +342,7 @@ int main(void) {
   CHECK(et_g3r_private_same_owner_save_o2_cancel_v1(hold) == 0);
   CHECK(et_g3r_private_same_owner_save_o2_state_v1(hold, &state) != 0);
   CHECK(et_g3r_private_same_owner_save_end_v1(hold) != 0);
+  CHECK(et_g3r_private_same_owner_save_drain_state_v1(hold) == 2);
   hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
   CHECK(hold != NULL);
   CHECK(et_g3r_private_same_owner_save_o2_state_v1(hold, NULL) != 0);
@@ -352,11 +414,14 @@ int main(void) {
   CHECK(state_view != NULL);
   CHECK(et_g3r_private_same_owner_save_end_v1(hold) != 0);
   CHECK(optimizer->busy == 1 && c->save_hold != NULL);
+  CHECK(et_g3r_private_same_owner_save_drain_state_v1(hold) == 1);
   CHECK(et_g3r_private_same_owner_save_cleanup_retry_v1(hold) != 0);
   CHECK(optimizer->busy == 1 && c->save_hold != NULL);
+  CHECK(et_g3r_private_same_owner_save_drain_state_v1(hold) == 1);
   CHECK(et_o2_optimizer_state_borrow_end_v1(&state_borrow, &o2) == 0);
   CHECK(et_g3r_private_same_owner_save_cleanup_retry_v1(hold) != 0);
   CHECK(optimizer->busy == 0 && c->save_hold == NULL);
+  CHECK(et_g3r_private_same_owner_save_drain_state_v1(hold) == 2);
   hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
   CHECK(hold != NULL);
   state = NULL;
@@ -380,11 +445,13 @@ int main(void) {
       ET_O2_OPTIMIZER_STATE_RELEASING;
   CHECK(et_g3r_private_same_owner_save_end_v1(hold) != 0);
   CHECK(optimizer->busy == 1 && c->save_hold != NULL);
+  CHECK(et_g3r_private_same_owner_save_drain_state_v1(hold) == 1);
   CHECK(et_g3r_private_same_owner_save_cleanup_retry_v1(hold) != 0);
   CHECK(optimizer->busy == 1 && c->save_hold != NULL);
   ((et_o2_optimizer_state *)state)->lifecycle = ET_O2_OPTIMIZER_STATE_LIVE;
   CHECK(et_g3r_private_same_owner_save_cleanup_retry_v1(hold) != 0);
   CHECK(optimizer->busy == 0 && c->save_hold == NULL);
+  CHECK(et_g3r_private_same_owner_save_drain_state_v1(hold) == 2);
 #ifdef ET_F32_TENSOR_TESTING
   et_f32_test_live_counts_v1 before = {.struct_size = sizeof(before)};
   et_f32_test_live_counts_v1 during = {.struct_size = sizeof(during)};

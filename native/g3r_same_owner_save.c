@@ -6,6 +6,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+_Static_assert(sizeof(et_g3r_g3t_idle_snapshot_words_v1) ==
+                   18u * sizeof(int64_t),
+               "same-owner scalar snapshot must remain eighteen words");
+
 enum { ET_G3R_SAVE_MAX_TOMBSTONES = 64 };
 static const uint64_t save_parameter_shape[14][2] = {
     {4,4}, {4,4}, {4,4}, {4,4}, {4,8}, {8,4}, {4,0},
@@ -27,9 +31,10 @@ typedef struct et_g3r_same_owner_hold {
   void *parameters[14];
   const void *identities[14];
   et_f32_parameter_save_witness *witness[14];
+  et_g3r_g3t_idle_snapshot_words_v1 captured_words;
   et_g3r_same_owner_save_error_v1 first;
   et_o2_optimizer_state *issued_state;
-  unsigned issue_phase;
+  unsigned issue_phase, capture_attempted, capture_ready, claimed_once;
   unsigned live;
 } et_g3r_same_owner_hold;
 static et_g3r_same_owner_hold *holds;
@@ -90,6 +95,49 @@ static et_g3r_same_owner_hold *admit(const void *candidate) {
   for (et_g3r_same_owner_hold *hold = holds; hold; hold = hold->next)
     if (hold == candidate && hold->live) return hold;
   return NULL;
+}
+
+/* Retained shells are searched by address before any caller dereference. */
+static et_g3r_same_owner_hold *find_hold(const void *candidate) {
+  for (et_g3r_same_owner_hold *hold = holds; hold; hold = hold->next)
+    if (hold == candidate) return hold;
+  return NULL;
+}
+
+int64_t et_g3r_private_same_owner_save_error_word_v1(
+    void *candidate, int64_t index) {
+  if (index < 0 || index > 3) return INT64_MIN;
+  et_g3r_same_owner_hold *hold = candidate ? find_hold(candidate) : NULL;
+  const et_g3r_same_owner_save_error_v1 error = !candidate ? last_error
+      : hold ? hold->first
+             : (et_g3r_same_owner_save_error_v1){
+                   ET_G3R_SAVE_SOURCE_COORDINATOR, 0, 1,
+                   ET_G3R_SAVE_COORD_STALE};
+  const int64_t words[4] = {
+      error.source, error.domain, error.category, error.code};
+  return words[index];
+}
+
+int64_t et_g3r_private_same_owner_save_drain_state_v1(void *candidate) {
+  et_g3r_same_owner_hold *hold = candidate ? find_hold(candidate) : NULL;
+  if (!hold) return -1;
+  if (hold->live) {
+    if (!hold->o2_hold || !hold->g3_hold || !hold->generator ||
+        !hold->m3t_owner ||
+        ((hold->issue_phase == ET_G3R_O2_PENDING ||
+          hold->issue_phase == ET_G3R_O2_CLEANUP_PENDING) !=
+         (hold->issued_state != NULL))) abort();
+    for (size_t i = 0; i < 14u; ++i)
+      if (!hold->witness[i] || !hold->parameters[i] ||
+          !hold->identities[i]) abort();
+    return hold->issue_phase == ET_G3R_O2_CLEANUP_PENDING ? 1 : 0;
+  }
+  if (hold->issue_phase != ET_G3R_O2_ENDED || hold->issued_state ||
+      hold->o2_hold || hold->g3_hold || hold->generator ||
+      hold->m3t_owner || hold->capture_ready) abort();
+  for (size_t i = 0; i < 14u; ++i)
+    if (hold->witness[i] || hold->parameters[i] || hold->identities[i]) abort();
+  return hold->claimed_once ? 3 : 2;
 }
 
 void *et_g3r_private_same_owner_save_begin_v1(
@@ -236,6 +284,43 @@ int64_t et_g3r_private_same_owner_save_copy_v1(
   return et_g3r_private_same_owner_save_check_v1(hold);
 }
 
+int64_t et_g3r_private_same_owner_save_capture_v1(void *candidate) {
+  et_g3r_same_owner_hold *hold = admit(candidate);
+  if (!hold) {
+    clear_error();
+    coordinator_error(NULL, ET_G3R_SAVE_COORD_STALE);
+    return -1;
+  }
+  if (hold->capture_attempted) {
+    coordinator_error(hold, ET_G3R_SAVE_COORD_ISSUE);
+    return -1;
+  }
+  hold->capture_attempted = 1u;
+  et_g3r_g3t_idle_snapshot_words_v1 staged = {0};
+  if (et_g3r_private_same_owner_save_copy_v1(
+          hold, &staged, (int64_t)sizeof(staged)) != 0 ||
+      et_g3r_private_same_owner_save_check_v1(hold) != 0)
+    return -1;
+  hold->captured_words = staged;
+  hold->capture_ready = 1u;
+  return 0;
+}
+
+int64_t et_g3r_private_same_owner_save_snapshot_word_v1(
+    void *candidate, int64_t index) {
+  et_g3r_same_owner_hold *hold = admit(candidate);
+  if (!hold || !hold->capture_ready || index < 0 || index >= 18)
+    return INT64_MIN;
+  return hold->captured_words.word[index];
+}
+
+void *et_g3r_private_same_owner_save_o2_issue_v1(void *candidate) {
+  void *state = NULL;
+  if (et_g3r_private_same_owner_save_o2_state_v1(candidate, &state) != 0)
+    return NULL;
+  return state;
+}
+
 int64_t et_g3r_private_same_owner_save_o2_state_v1(
     void *candidate, void **destination) {
   et_g3r_same_owner_hold *hold = admit(candidate);
@@ -321,6 +406,7 @@ int64_t et_g3r_private_same_owner_save_o2_claim_v1(
   }
   hold->issued_state = NULL;
   hold->issue_phase = ET_G3R_O2_CLAIMED;
+  hold->claimed_once = 1u;
   return 0;
 }
 
@@ -406,6 +492,8 @@ int64_t et_g3r_private_same_owner_save_end_v1(void *candidate) {
     o2_error(hold, &error);
   if (hold->o2_hold != NULL) abort(); /* Must not lose the live O2 lease. */
   hold->g3_hold = NULL;
+  memset(&hold->captured_words, 0, sizeof(hold->captured_words));
+  hold->capture_ready = 0u;
   hold->generator = NULL;
   hold->m3t_owner = NULL;
   memset(hold->parameters, 0, sizeof(hold->parameters));

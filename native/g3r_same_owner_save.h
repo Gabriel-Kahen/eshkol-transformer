@@ -46,6 +46,12 @@ void *et_g3r_private_same_owner_save_begin_v1(
 int64_t et_g3r_private_same_owner_save_copy_v1(
     void *hold, et_g3r_g3t_idle_snapshot_words_v1 *destination,
     int64_t destination_bytes);
+/* Scalar-only Eshkol bridge. Capture publishes one checked native-owned
+ * 18-word image; its word getter does not confer a model/graph identity. */
+int64_t et_g3r_private_same_owner_save_capture_v1(void *hold);
+int64_t et_g3r_private_same_owner_save_snapshot_word_v1(
+    void *hold, int64_t index);
+void *et_g3r_private_same_owner_save_o2_issue_v1(void *hold);
 int64_t et_g3r_private_same_owner_save_o2_state_v1(
     void *hold, void **state);
 /* One issued state per hold. Raw pointer aliases carry no separate authority. */
@@ -58,6 +64,12 @@ int64_t et_g3r_private_same_owner_save_check_v1(void *hold);
 int64_t et_g3r_private_same_owner_save_end_v1(void *hold);
 int64_t et_g3r_private_same_owner_save_last_error_v1(
     et_g3r_same_owner_save_error_v1 *destination);
+/* Pure address-first scalar reads. drain: 0 held, 1 uncertain cleanup,
+ * 2 inert without claim, 3 inert after ownership transfer, -1 foreign.
+ * State 3 does not authenticate an Eshkol owner shell. */
+int64_t et_g3r_private_same_owner_save_error_word_v1(
+    void *hold_or_null, int64_t index);
+int64_t et_g3r_private_same_owner_save_drain_state_v1(void *hold);
 #ifdef __cplusplus
 }
 #endif
