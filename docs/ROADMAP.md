@@ -2721,7 +2721,8 @@ publication, public G2 and continuation remain pending.
   F's original guest result remains failed; an independently reviewed offline
   observation cannot replace its unrun result verifier. The attester's
   compatibility view is newly produced, not bootstrap provenance. Installed
-  AOT, native/sanitizer runs, image dependency admission, emitted symbols,
+  AOT, native/sanitizer runs, a ROOT-pinned external source admission decision,
+  image dependency admission, emitted symbols,
   numerical parity and the full public G2 gate remain **unrun**.
 
 ## Wave 4 — practical pretraining and performance

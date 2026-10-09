@@ -24,6 +24,7 @@ COMMON_SHA = "2749689e6301cad6e489de4b23e0f9b1ec7c9627f47dd1c7007d9ed8e5955e83"
 OLD_ROW = b"eshkol_commit\tfe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9\n"
 NEW_ROW = b"eshkol_commit\t6803dbe24fb65eaad2901767bf010787517946ef\n"
 LOCK_PATH = Path("/bundle/public-g2-6803.lock")
+ADMISSION_PATH = Path("/bundle/public-g2-source-admission.json")
 COMMON_TRANSFORMS = (
     (b'LOCK_FILE="${PROJECT_ROOT}/toolchain/eshkol.lock"',
      b'LOCK_FILE="/bundle/public-g2-6803.lock"'),
@@ -142,6 +143,58 @@ def candidate_lock(path: Path, tracked: bytes,
             "size": st.st_size}
 
 
+def source_admission(path: Path, expected_sha: str,
+                     forbidden_roots: tuple[Path, ...],
+                     expected_path: Path = ADMISSION_PATH) -> dict:
+    """An outer reviewed launcher must pin expected_sha, not a free CLI caller."""
+    require(path == expected_path and path.is_absolute() and
+            re.fullmatch(r"[0-9a-f]{64}", expected_sha) is not None and
+            all(path != root and root not in path.parents and
+                path not in root.parents for root in forbidden_roots),
+            "source admission path/hash is outside the reviewed boundary")
+    parent_before = path.parent.lstat()
+    require(stat.S_ISDIR(parent_before.st_mode) and
+            not stat.S_ISLNK(parent_before.st_mode),
+            "source admission parent is not ordinary")
+    raw = ordinary(path)
+    parent_after = path.parent.lstat()
+    require((parent_before.st_dev, parent_before.st_ino,
+             parent_before.st_uid, parent_before.st_mode) ==
+            (parent_after.st_dev, parent_after.st_ino,
+             parent_after.st_uid, parent_after.st_mode),
+            "source admission parent changed")
+    require(digest(raw) == expected_sha, "source admission digest drift")
+    try:
+        data = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("source admission JSON malformed") from exc
+    require(type(data) is dict and raw == canonical_json(data) and
+            set(data) == {"format", "head", "tree", "tracked_manifest_sha256",
+                          "tracked_file_count", "independent_review",
+                          "root_review"} and
+            data["format"] == "g3c4-public-g2-source-admission-v1" and
+            all(type(data[key]) is str and
+                re.fullmatch(f"[0-9a-f]{{{40 if key in ('head', 'tree') else 64}}}",
+                             data[key]) is not None
+                for key in ("head", "tree", "tracked_manifest_sha256")) and
+            type(data["tracked_file_count"]) is int and
+            data["tracked_file_count"] > 0,
+            "source admission schema/identity malformed")
+    for key in ("independent_review", "root_review"):
+        review = data[key]
+        require(type(review) is dict and set(review) == {"path", "sha256"} and
+                type(review["path"]) is str and
+                type(review["sha256"]) is str and
+                re.fullmatch(r"[0-9a-f]{64}", review["sha256"]) is not None,
+                "source admission review reference malformed")
+        review_path = Path(review["path"])
+        require(review_path.is_absolute() and
+                review_path.name.startswith("SHA256SUMS-") and
+                digest(ordinary(review_path)) == review["sha256"],
+                "source admission review reference drift")
+    return {**data, "admission_sha256": expected_sha}
+
+
 def staged_common(original: bytes) -> bytes:
     require(digest(original) == COMMON_SHA, "production common drift")
     staged = original
@@ -217,7 +270,7 @@ def original_output(output: Path) -> dict[str, str]:
         require(digest(ordinary(output / relative)) == expected,
                 f"F inventory member drift: {relative}")
     actual = {p.relative_to(output).as_posix() for p in output.rglob("*")
-              if p.is_file() and not p.is_symlink()}
+              if stat.S_ISREG(p.lstat().st_mode)}
     require(actual == listed | {"SHA256SUMS-RUN"},
             "F original ordinary-file membership drift")
     links = {}
@@ -227,7 +280,7 @@ def original_output(output: Path) -> dict[str, str]:
                 f"F generated symlink drift: {relative}")
         links[relative] = target
     actual_links = {p.relative_to(output).as_posix() for p in output.rglob("*")
-                    if p.is_symlink()}
+                    if stat.S_ISLNK(p.lstat().st_mode)}
     require(actual_links == set(GENERATED), "extra F symlink")
     directory_rows = ordinary(output / "directory-inventory.tsv").decode().splitlines()
     require(directory_rows and directory_rows[0] == "path_hex",
@@ -242,8 +295,11 @@ def original_output(output: Path) -> dict[str, str]:
                 "F directory inventory duplicate/traversal")
         directories.add(relative)
     actual_directories = {p.relative_to(output).as_posix() for p in output.rglob("*")
-                          if p.is_dir() and not p.is_symlink()}
+                          if stat.S_ISDIR(p.lstat().st_mode)}
     require(directories == actual_directories, "F directory membership drift")
+    all_nodes = {p.relative_to(output).as_posix() for p in output.rglob("*")}
+    require(all_nodes == actual | actual_links | actual_directories,
+            "F original contains an unclassified filesystem node")
     cache_fields(ordinary(output / "build-off/CMakeCache.txt"))
     receipts(output)
     return {"inventory_sha256": F_PINS["SHA256SUMS-RUN"],
@@ -356,14 +412,12 @@ def final_copied_artifacts(destination: Path, compatibility_sha: str,
 
 
 def project_copy(source: Path, candidate: Path,
-                 expected_head: str, expected_tree: str,
+                 decision: dict,
                  expected_candidate: Path = Path("/candidate")) -> dict[str, str]:
     require(candidate == expected_candidate and candidate.is_dir() and
             not candidate.is_symlink() and not (candidate / ".git").exists(),
             "candidate source path or metadata mismatch")
-    require(re.fullmatch(r"[0-9a-f]{40}", expected_head) is not None and
-            re.fullmatch(r"[0-9a-f]{40}", expected_tree) is not None,
-            "unreviewed source identity syntax")
+    expected_head, expected_tree = decision["head"], decision["tree"]
     observed = git(source, "rev-parse", "HEAD", "HEAD^{tree}").splitlines()
     require(observed == [expected_head, expected_tree] and
             git(source, "status", "--porcelain=v1", "--untracked-files=all") == "",
@@ -373,6 +427,7 @@ def project_copy(source: Path, candidate: Path,
                              capture_output=True, timeout=30).stdout
     names = set()
     common_sha = None
+    manifest_rows = []
     for entry in listing.rstrip(b"\0").split(b"\0"):
         metadata, raw_name = entry.split(b"\t", 1)
         mode, _, stage = metadata.decode().split()
@@ -384,6 +439,7 @@ def project_copy(source: Path, candidate: Path,
                 name not in names, "invalid tracked source path")
         names.add(name)
         original = ordinary(source / relative)
+        manifest_rows.append(f"{name}\t{mode}\t{digest(original)}\n")
         if name == "scripts/common.sh":
             original = staged_common(original)
             common_sha = digest(original)
@@ -395,22 +451,28 @@ def project_copy(source: Path, candidate: Path,
               if p.is_file() or p.is_symlink()}
     require(actual == names and common_sha is not None,
             "candidate source membership drift")
+    manifest_sha = digest("".join(manifest_rows).encode())
+    require(len(names) == decision["tracked_file_count"] and
+            manifest_sha == decision["tracked_manifest_sha256"],
+            "reviewed source content closure drift")
     require(git(source, "rev-parse", "HEAD", "HEAD^{tree}").splitlines() ==
             observed and git(source, "status", "--porcelain=v1",
                              "--untracked-files=all") == "",
             "source checkout drift during verification")
     return {"head": expected_head, "tree": expected_tree,
+            "admission_sha256": decision["admission_sha256"],
+            "tracked_manifest_sha256": manifest_sha,
             "staged_common_sha256": common_sha,
             "tracked_file_count": str(len(names))}
 
 
 def stage_project_copy(source: Path, candidate: Path,
-                       expected_head: str, expected_tree: str,
+                       decision: dict,
                        expected_candidate: Path = Path("/candidate")) -> dict[str, str]:
     require(candidate == expected_candidate and candidate.is_absolute() and
             not candidate.exists(), "project copy destination must be fresh")
     require(git(source, "rev-parse", "HEAD", "HEAD^{tree}").splitlines() ==
-            [expected_head, expected_tree] and
+            [decision["head"], decision["tree"]] and
             git(source, "status", "--porcelain=v1", "--untracked-files=all") == "",
             "project source is not the selected clean tree")
     listing = subprocess.run(["git", "--no-optional-locks", "-C", str(source),
@@ -431,7 +493,7 @@ def stage_project_copy(source: Path, candidate: Path,
         destination = candidate / relative
         destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         exclusive_bytes(destination, raw, 0o755 if mode == "100755" else 0o644)
-    return project_copy(source, candidate, expected_head, expected_tree,
+    return project_copy(source, candidate, decision,
                         expected_candidate)
 
 
@@ -570,8 +632,8 @@ def main() -> None:
     parser.add_argument("--offline-review", type=Path, required=True)
     parser.add_argument("--project-source", type=Path, required=True)
     parser.add_argument("--project-checkout", type=Path, required=True)
-    parser.add_argument("--project-head", required=True)
-    parser.add_argument("--project-tree", required=True)
+    parser.add_argument("--project-admission", type=Path, required=True)
+    parser.add_argument("--project-admission-sha256", required=True)
     parser.add_argument("--readelf-raw", type=Path)
     parser.add_argument("--loader-argv", type=Path)
     parser.add_argument("--loader-exit", type=Path)
@@ -592,6 +654,10 @@ def main() -> None:
     original = original_output(args.f_output)
     tracked_lock = ordinary(args.project_checkout / "toolchain/eshkol.lock")
     lock = candidate_lock(args.candidate_lock, tracked_lock)
+    forbidden = (args.project_source, args.project_checkout, args.f_output,
+                 args.copy_build, args.compiler_source)
+    decision = source_admission(args.project_admission,
+                                args.project_admission_sha256, forbidden)
     if args.phase == "prepare":
         require(not args.evidence.exists() and
                 all(getattr(args, name) is None for name in
@@ -601,14 +667,16 @@ def main() -> None:
                 "prepare requires fresh evidence and no loader observations")
         args.evidence.mkdir(mode=0o700)
         project = stage_project_copy(args.project_checkout, args.project_source,
-                                     args.project_head, args.project_tree)
+                                     decision)
         copied = copy_f_artifacts(args.f_output, args.copy_build)
         require(original_output(args.f_output) == original and
                 compiler_source(args.compiler_source) == compiler and
                 project_copy(args.project_checkout, args.project_source,
-                             args.project_head, args.project_tree) == project and
+                             decision) == project and
                 copied_artifacts(args.copy_build) == copied and
                 candidate_lock(args.candidate_lock, tracked_lock) == lock and
+                source_admission(args.project_admission,
+                                 args.project_admission_sha256, forbidden) == decision and
                 offline_review(args.offline_review) == offline,
                 "prepare inputs drifted")
         prepared = prepared_payload(compiler, project, original, copied,
@@ -622,7 +690,7 @@ def main() -> None:
              "loader_stderr", "image_pins", "image_pins_sha256")),
             "attest requires prepared evidence and complete image receipts")
     project = project_copy(args.project_checkout, args.project_source,
-                           args.project_head, args.project_tree)
+                           decision)
     copied = copied_artifacts(args.copy_build)
     verify_prepared(ordinary(args.evidence / "F-copy-prepared.json"),
                     prepared_payload(compiler, project, original, copied,
@@ -660,8 +728,10 @@ def main() -> None:
             copied_artifacts(args.copy_build) == copied and
             compiler_source(args.compiler_source) == compiler and
             project_copy(args.project_checkout, args.project_source,
-                         args.project_head, args.project_tree) == project and
+                         decision) == project and
             candidate_lock(args.candidate_lock, tracked_lock) == lock and
+            source_admission(args.project_admission,
+                             args.project_admission_sha256, forbidden) == decision and
             offline_review(args.offline_review) == offline and
             digest(ordinary(args.image_pins)) == args.image_pins_sha256 and
             compiler_binary_and_elf(args.copy_build / "eshkol-run",
@@ -678,8 +748,10 @@ def main() -> None:
             final_copied_artifacts(args.copy_build, digest(compat)) == copied and
             compiler_source(args.compiler_source) == compiler and
             project_copy(args.project_checkout, args.project_source,
-                         args.project_head, args.project_tree) == project and
+                         decision) == project and
             candidate_lock(args.candidate_lock, tracked_lock) == lock and
+            source_admission(args.project_admission,
+                             args.project_admission_sha256, forbidden) == decision and
             offline_review(args.offline_review) == offline and
             digest(ordinary(args.image_pins)) == args.image_pins_sha256 and
             compiler_binary_and_elf(args.copy_build / "eshkol-run",

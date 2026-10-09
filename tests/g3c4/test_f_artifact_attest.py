@@ -140,6 +140,11 @@ class FArtifactAttest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "extra F symlink"):
                     attest.original_output(output)
                 extra.unlink()
+                fifo = output / "build-off/unlisted-fifo"
+                os.mkfifo(fifo)
+                with self.assertRaisesRegex(ValueError, "unclassified filesystem node"):
+                    attest.original_output(output)
+                fifo.unlink()
                 (output / "build-off/libeshkol-static.a").write_bytes(b"drift")
                 with self.assertRaisesRegex(ValueError, "F sealed member drift"):
                     attest.original_output(output)
@@ -259,28 +264,94 @@ class FArtifactAttest(unittest.TestCase):
                             "-c", "user.email=codex@openai.com", "commit", "-qm",
                             "fixture"], check=True)
             head, tree = attest.git(source, "rev-parse", "HEAD", "HEAD^{tree}").splitlines()
+            listing = subprocess.run(["git", "--no-optional-locks", "-C",
+                                      str(source), "ls-files", "-s", "-z"],
+                                     check=True, capture_output=True).stdout
+            manifest = ""
+            for entry in listing.rstrip(b"\0").split(b"\0"):
+                metadata, raw_name = entry.split(b"\t", 1)
+                mode = metadata.decode().split()[0]
+                name = raw_name.decode()
+                manifest += f"{name}\t{mode}\t{sha((source / name).read_bytes())}\n"
+            decision = {"head": head, "tree": tree,
+                        "tracked_file_count": 2,
+                        "tracked_manifest_sha256": sha(manifest.encode()),
+                        "admission_sha256": "synthetic-owned-decision"}
             prepared = base / "prepared"
-            staged = attest.stage_project_copy(source, prepared, head, tree,
+            staged = attest.stage_project_copy(source, prepared, decision,
                                                prepared)
             self.assertEqual(staged["tracked_file_count"], "2")
             self.assertFalse((prepared / ".git").exists())
             with self.assertRaisesRegex(ValueError, "fresh"):
-                attest.stage_project_copy(source, prepared, head, tree, prepared)
+                attest.stage_project_copy(source, prepared, decision, prepared)
             candidate = base / "candidate"
             (candidate / "scripts").mkdir(parents=True)
             (candidate / "scripts/common.sh").write_bytes(attest.staged_common(
                 (source / "scripts/common.sh").read_bytes()))
             (candidate / "data.txt").write_text("reviewed\n")
-            self.assertEqual(attest.project_copy(source, candidate, head, tree,
+            self.assertEqual(attest.project_copy(source, candidate, decision,
                                                  candidate)["tracked_file_count"], "2")
             (candidate / "extra").write_text("unreviewed")
             with self.assertRaisesRegex(ValueError, "membership drift"):
-                attest.project_copy(source, candidate, head, tree, candidate)
+                attest.project_copy(source, candidate, decision, candidate)
             (candidate / "extra").unlink()
             (candidate / "scripts/common.sh").write_bytes(
                 (source / "scripts/common.sh").read_bytes())
             with self.assertRaisesRegex(ValueError, "candidate tracked source drift"):
-                attest.project_copy(source, candidate, head, tree, candidate)
+                attest.project_copy(source, candidate, decision, candidate)
+            (candidate / "scripts/common.sh").write_bytes(attest.staged_common(
+                (source / "scripts/common.sh").read_bytes()))
+            changed = dict(decision)
+            changed["tracked_manifest_sha256"] = "0" * 64
+            with self.assertRaisesRegex(ValueError, "reviewed source content closure drift"):
+                attest.project_copy(source, candidate, changed, candidate)
+            changed = dict(decision)
+            changed["tree"] = "0" * 40
+            with self.assertRaisesRegex(ValueError, "source checkout identity"):
+                attest.project_copy(source, candidate, changed, candidate)
+
+    def test_external_source_admission_authenticates_reviews_and_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reviews = []
+            for label in ("INDEPENDENT", "ROOT"):
+                path = root / f"SHA256SUMS-{label}"
+                path.write_text(f"owned {label} review\n")
+                reviews.append({"path": str(path), "sha256": sha(path.read_bytes())})
+            admission = root / "decision.json"
+            decision = {"format": "g3c4-public-g2-source-admission-v1",
+                        "head": "a" * 40, "tree": "b" * 40,
+                        "tracked_manifest_sha256": "c" * 64,
+                        "tracked_file_count": 2,
+                        "independent_review": reviews[0], "root_review": reviews[1]}
+            admission.write_bytes(attest.canonical_json(decision))
+            expected_sha = sha(admission.read_bytes())
+            self.assertEqual(attest.source_admission(
+                admission, expected_sha, (root / "candidate",), admission)["head"],
+                "a" * 40)
+            with self.assertRaisesRegex(ValueError, "digest drift"):
+                attest.source_admission(admission, "0" * 64, (), admission)
+            with self.assertRaisesRegex(ValueError, "outside the reviewed boundary"):
+                attest.source_admission(admission, expected_sha, (root,), admission)
+            with self.assertRaises(FileNotFoundError):
+                attest.source_admission(root / "missing", expected_sha, (),
+                                        root / "missing")
+            symlink = root / "symlink.json"
+            symlink.symlink_to(admission)
+            with self.assertRaises((ValueError, OSError)):
+                attest.source_admission(symlink, expected_sha, (), symlink)
+            changed = dict(decision)
+            changed["head"] = "z" * 40
+            admission.write_bytes(attest.canonical_json(changed))
+            with self.assertRaisesRegex(ValueError, "schema/identity malformed"):
+                attest.source_admission(admission, sha(admission.read_bytes()), (),
+                                        admission)
+            admission.write_bytes(attest.canonical_json(decision))
+            reviews[0]["sha256"] = "0" * 64
+            admission.write_bytes(attest.canonical_json(decision))
+            with self.assertRaisesRegex(ValueError, "review reference drift"):
+                attest.source_admission(admission, sha(admission.read_bytes()), (),
+                                        admission)
 
     def test_loader_and_compatibility_controls(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

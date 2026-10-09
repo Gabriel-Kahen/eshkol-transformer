@@ -67,10 +67,12 @@ def validate(fixture: str, attester: str, base: list[str],
     assert "historical-F-remains-failed" in attester
     for text in ("COMMON_TRANSFORMS", "original_output(", "project_copy(",
                  "copied_artifacts(", "final_copied_artifacts(",
-                 "resolved_image_libs(", "verify_prepared(",
+                 "resolved_image_libs(", "verify_prepared(", "source_admission(",
                  "candidate_lock(", "exclusive_bytes(",
                  "new-test-only-F-copy;not-bootstrap"):
         assert text in attester, text
+    assert "--project-head" not in attester and "--project-tree" not in attester
+    assert "unclassified filesystem node" in attester
     assert attester.count('"/bundle/public-g2-6803.lock"') >= 2
     assert "ESHKOL_ALLOW_UNSUPPORTED_HOST" in attester
 

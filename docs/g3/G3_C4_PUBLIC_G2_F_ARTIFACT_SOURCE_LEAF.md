@@ -14,9 +14,19 @@ configure/build argv and exit receipts, clean compiler commit/tree, one exact
 external fe9-to-6803 lock, a full copied project source inventory, the three
 exact `common.sh` substitutions, and actual image library resolution. It
 authenticates all ten original generated LLVM symlinks across five build
-directories and excludes the two selected build-off links from the copy. Missing
+directories, rejects every unclassified original filesystem node, and excludes
+the two selected build-off links from the copy. Missing
 image pins or loader receipts fail closed. Its compatibility TSV is explicitly
 new and test-only; F and `bootstrap-eshkol.sh` did not produce it.
+
+The attester requires a canonical ordinary external source-admission decision
+at `/bundle/public-g2-source-admission.json`: exact Git head/tree, complete
+tracked-content manifest digest/count, and independently authenticated review
+references. It rejects caller-provided raw head/tree values. The admission
+SHA is an input that a future independently reviewed immutable ROOT launcher
+must pin; an arbitrary standalone caller supplying its own SHA is not trusted
+admission. The decision and its reviews are authenticated before and after
+publication. No such future decision or launcher has been created here.
 
 The source checker and owned negative tests exercise wrong/missing identities,
 dirty source, changed cache/receipts, partial or altered copies, loader and
