@@ -1,0 +1,707 @@
+;;; Private fixed P2/G2 terminal coordinator. Load after the protected and
+;;; T1 prefix extensions. This is deliberately not a public generation path.
+
+(extern i64 g3c4-p2g2-native-eos-first ptr ptr ptr i64
+        :real et_g3c4_private_p2g2_eos_first_frame_carrier_v1)
+(extern i64 g3c4-p2g2-native-second ptr ptr ptr i64
+        :real et_g3c4_private_p2g2_second_frame_carrier_v1)
+(extern i64 g3c4-p2g2-native-terminal ptr ptr ptr i64 ptr i64
+        :real et_g3c4_private_p2g2_terminal_commit_v1)
+(extern i64 g3c4-p2g2-native-snapshot ptr ptr i64
+        :real et_g3c4_private_p2g2_terminal_snapshot_v1)
+(extern ptr g3c4-p2g2-native-ids-clone ptr
+        :real et_g3c4_private_p2g2_terminal_ids_clone_v1)
+(extern i64 g3c4-p2g2-native-ids-copy ptr i64 ptr i64
+        :real et_g3c4_private_p2g2_terminal_ids_clone_copy_v1)
+(extern i64 g3c4-p2g2-native-ids-release ptr
+        :real et_g3c4_private_p2g2_terminal_ids_clone_release_v1)
+
+;;; Independently rooted terminal rows survive the call and prefix stacks.
+;;; Row slots: shell, entry, native, first raw/stage, second raw/stage,
+;;; logical text[1]/text[2], input shell/entry/native, tokenizer core,
+;;; pending/live/dead phase, logical count, first/second IDs, original
+;;; pending raw/stage. The anchor duplicates all original identity slots;
+;;; only the row's phase/count/IDs may change after publication.
+(define g3c4-p2g2-terminal-rows (vector '()))
+(define g3c4-p2g2-terminal-anchors (vector '()))
+(define g3c4-p2g2-terminal-clones (vector '()))
+(define g3c4-p2g2-terminal-clone-anchors (vector '()))
+
+(define (g3c4-p2g2-terminal-row shell)
+  (let loop ((remaining (vector-ref g3c4-p2g2-terminal-rows 0)))
+    (cond ((null? remaining) #f)
+          ((eq? (vector-ref (car remaining) 0) shell) (car remaining))
+          (else (loop (cdr remaining))))))
+
+(define (g3c4-p2g2-terminal-anchor shell)
+  (let loop ((remaining (vector-ref g3c4-p2g2-terminal-anchors 0)))
+    (cond ((null? remaining) #f)
+          ((eq? (vector-ref (car remaining) 0) shell) (car remaining))
+          (else (loop (cdr remaining))))))
+
+(define (g3c4-p2g2-terminal-originals? row anchor)
+  (and (vector? row) (= (vector-length row) 19)
+       (vector? anchor) (= (vector-length anchor) 19)
+       (let loop ((index 0))
+         (if (= index 19) #t
+             (and (or (and (>= index 13) (<= index 16))
+                      (eq? (vector-ref row index)
+                           (vector-ref anchor index)))
+                  (loop (+ index 1)))))))
+
+(define (g3c4-p2g2-terminal-carriers? row)
+  (let ((first-raw (vector-ref row 3))
+        (first-stage (vector-ref row 4))
+        (second-raw (vector-ref row 5))
+        (second-stage (vector-ref row 6))
+        (text-one (vector-ref row 7))
+        (text-two (vector-ref row 8))
+        (pending-raw (vector-ref row 17))
+        (pending-stage (vector-ref row 18)))
+    (and (bytevector? first-raw) (= (bytevector-length first-raw) 1)
+         (bytevector? first-stage) (= (bytevector-length first-stage) 8)
+         (bytevector? second-raw) (= (bytevector-length second-raw) 1)
+         (bytevector? second-stage) (= (bytevector-length second-stage) 8)
+         (bytevector? text-one) (= (bytevector-length text-one) 1)
+         (bytevector? text-two) (= (bytevector-length text-two) 2)
+         (bytevector? pending-raw) (= (bytevector-length pending-raw) 2)
+         (bytevector? pending-stage)
+         (= (bytevector-length pending-stage) 16)
+         (let outer ((objects (list first-raw first-stage second-raw
+                                     second-stage text-one text-two
+                                     pending-raw pending-stage)))
+           (if (null? objects) #t
+               (and (let inner ((rest (cdr objects)))
+                      (if (null? rest) #t
+                          (and (not (eq? (car objects) (car rest)))
+                               (inner (cdr rest)))))
+                    (outer (cdr objects))))))))
+
+;;; The old prefix helper rejects committed-prefix phase. This checker
+;;; authenticates the original input in either genuine terminal phase.
+(define (g3c4-p2g2-terminal-active-check
+          call row anchor originals operation)
+  (let* ((record (g3c4-p2g2-protected-check call operation))
+         (input-anchor (g3c4-p2g2-prefix-anchor-for call))
+         (output (vector-ref record 6))
+         (input (vector-ref row 9))
+         (input-entry (vector-ref row 10)))
+    (if (not (and (g3c4-p2g2-terminal-originals? row anchor)
+                  (eq? (g3c4-p2g2-terminal-row (vector-ref row 0)) row)
+                  (eq? (g3c4-p2g2-terminal-anchor (vector-ref row 0))
+                       anchor)
+                  (pair? (vector-ref g3c4-p2g2-terminal-rows 0))
+                  (eq? (car (vector-ref g3c4-p2g2-terminal-rows 0)) row)
+                  (pair? (vector-ref g3c4-p2g2-terminal-anchors 0))
+                  (eq? (car (vector-ref g3c4-p2g2-terminal-anchors 0))
+                       anchor)
+                  (pair? (vector-ref g3c4-p2g2-prefix-input-anchors 0))
+                  (eq? (car (vector-ref
+                              g3c4-p2g2-prefix-input-anchors 0))
+                       input-anchor)
+                  input-anchor (eq? (vector-ref input-anchor 0) call)
+                  (eq? (vector-ref input-anchor 1) input)
+                  (eq? (vector-ref input-anchor 2) input-entry)
+                  (eq? (vector-ref input-anchor 3) (vector-ref row 11))
+                  (eq? (vector-ref input-anchor 4) (vector-ref record 1))
+                  (eq? (g3c4-input-entry-live input operation) input-entry)
+                  (eq? (vector-ref input-entry 3) (vector-ref row 11))
+                  (eq? (vector-ref record 4) (vector-ref row 12))
+                  (vector? originals) (= (vector-length originals) 15)
+                  (eq? (vector-ref row 9) (vector-ref originals 0))
+                  (eq? (vector-ref row 10) (vector-ref originals 1))
+                  (eq? (vector-ref row 11) (vector-ref originals 2))
+                  (eq? (vector-ref row 12) (vector-ref originals 3))
+                  (eq? (vector-ref row 3) (vector-ref originals 4))
+                  (eq? (vector-ref row 4) (vector-ref originals 5))
+                  (eq? (vector-ref row 5) (vector-ref originals 6))
+                  (eq? (vector-ref row 6) (vector-ref originals 7))
+                  (eq? (vector-ref row 7) (vector-ref originals 8))
+                  (eq? (vector-ref row 8) (vector-ref originals 9))
+                  (eq? (vector-ref row 17) (vector-ref originals 10))
+                  (eq? (vector-ref row 18) (vector-ref originals 11))
+                  (eq? (vector-ref row 0) (vector-ref originals 12))
+                  (eq? (vector-ref row 1) (vector-ref originals 13))
+                  (eq? (vector-ref row 2) (vector-ref originals 14))
+                  (eq? output (vector-ref row 1))
+                  (eq? (vector-ref output 0) (vector-ref row 0))
+                  (eq? (vector-ref output 3) (vector-ref row 2))
+                  (eq? (vector-ref record 11) (vector-ref row 3))
+                  (eq? (vector-ref record 12) (vector-ref row 4))
+                  (eq? (vector-ref record 9) (vector-ref row 17))
+                  (eq? (vector-ref record 10) (vector-ref row 18))
+                  (eq? (vector-ref row 13) 'pending)
+                  (or (and (eq? (vector-ref record 13) 'before-prefix)
+                           (eq? (vector-ref (vector-ref record 14) 3)
+                                'p2g2-protected))
+                      (and (eq? (vector-ref record 13) 'prefix-committed)
+                           (eq? (vector-ref (vector-ref record 14) 3)
+                                'p2g2-prefix-committed)))
+                  (g3c4-p2g2-terminal-carriers? row)))
+        (g3c4-fail 'invalid-state operation
+                   "P2/G2 terminal original input or carrier changed"))
+    record))
+
+(define (g3c4-p2g2-terminal-id row stage raw operation)
+  (if (not (and (bytevector? stage) (= (bytevector-length stage) 8)
+                (bytevector? raw) (= (bytevector-length raw) 1)
+                (let upper ((index 1))
+                  (if (= index 8) #t
+                      (and (= (bytevector-u8-ref stage index) 0)
+                           (upper (+ index 1)))))))
+      (g3c4-fail 'invalid-state operation
+                 "P2/G2 terminal selected ID is not V256"))
+  (let ((selected (bytevector-u8-ref stage 0)))
+    (if (not (= (bytevector-u8-ref raw 0) selected))
+        (g3c4-fail 'invalid-state operation
+                   "P2/G2 T1 raw differs from sampled ID"))
+    selected))
+
+(define (g3c4-p2g2-terminal-scrub! row)
+  (g3c4-p2g2-zero-bytes! (vector-ref row 3) 1)
+  (g3c4-p2g2-zero-bytes! (vector-ref row 4) 8)
+  (g3c4-p2g2-zero-bytes! (vector-ref row 5) 1)
+  (g3c4-p2g2-zero-bytes! (vector-ref row 6) 8)
+  (g3c4-p2g2-zero-bytes! (vector-ref row 7) 1)
+  (g3c4-p2g2-zero-bytes! (vector-ref row 8) 2)
+  (if (bytevector? (vector-ref row 17))
+      (g3c4-p2g2-zero-bytes! (vector-ref row 17) 2))
+  (if (bytevector? (vector-ref row 18))
+      (g3c4-p2g2-zero-bytes! (vector-ref row 18) 16)))
+
+;;; Probes are private development hooks before native commit or during a
+;;; rejected pre-zero abort. Neither can execute in the successful tail.
+(define (g3c4-p2g2-terminal-close-probed-private
+          generator input before-terminal repair-lease)
+  (let* ((operation 'g3c4-p2g2-terminal-close-private)
+         (original-generator generator)
+         (original-input input)
+         (original-input-entry
+           (g3c4-p2g2-prefix-preflight generator input))
+         (original-native-input (vector-ref original-input-entry 3))
+         (original-generator-entry
+           (g3c4-generator-entry-call-ready generator operation)))
+    (m3-call operation
+      (let* ((generator-entry
+               (g3c4-generator-entry-call-ready
+                 original-generator operation))
+             (model-entry (vector-ref generator-entry 5))
+             (tokenizer (vector-ref generator-entry 6))
+             (core (car (cdr (g3c4-baseline-tokenizer-entry
+                              tokenizer operation 'invalid-state
+                              'invalid-state))))
+             (native (vector-ref generator-entry 3))
+             (policy (vector-ref generator-entry 7))
+             (first-raw (make-bytevector 1 0))
+             (first-stage (make-bytevector 8 0))
+             (second-raw (make-bytevector 1 0))
+             (second-stage (make-bytevector 8 0))
+             (text-one (make-bytevector 1 0))
+             (text-two (make-bytevector 2 0))
+             (ledger (vector #f #f #f #f #f))
+             (call (vector (vector 'g3c4-call-private) 'call 'pending #f
+                           generator-entry model-entry tokenizer 2 #f #f
+                           ledger g3c4-model-profile))
+             (extent (vector 10 24 9 16))
+             (record (vector call generator-entry model-entry tokenizer
+                             core native #f #f #f #f #f first-raw
+                             first-stage 'before-prefix ledger policy extent
+                             (vector-ref call 0) #f
+                             (vector-ref model-entry 3)))
+             (protected-anchor
+               (vector call generator-entry model-entry tokenizer core native
+                       #f #f #f #f #f first-raw first-stage 'before-prefix
+                       ledger policy extent (vector-ref call 0) #f
+                       (vector-ref model-entry 3)))
+             (input-anchor (vector call original-input original-input-entry
+                                   original-native-input generator-entry))
+             (row (vector #f #f #f first-raw first-stage second-raw
+                          second-stage text-one text-two original-input
+                          original-input-entry original-native-input core
+                          'pending 0 -1 -1 #f #f))
+             (anchor (vector #f #f #f first-raw first-stage second-raw
+                             second-stage text-one text-two original-input
+                             original-input-entry original-native-input core
+                             'pending 0 -1 -1 #f #f))
+             (originals (vector original-input original-input-entry
+                                original-native-input core first-raw
+                                first-stage second-raw second-stage
+                                text-one text-two #f #f #f #f #f))
+             (old-records (vector-ref g3c4-p2g2-protected-records 0))
+             (old-protected (vector-ref g3c4-p2g2-protected-anchors 0))
+             (old-inputs (vector-ref g3c4-p2g2-prefix-input-anchors 0))
+             (old-rows (vector-ref g3c4-p2g2-terminal-rows 0))
+             (old-anchors (vector-ref g3c4-p2g2-terminal-anchors 0))
+             (barrier (vector #f))
+             (output #f)
+             (selected-first -1)
+             (selected-second -1)
+             (count 0))
+        (if (not (and (eq? generator-entry original-generator-entry)
+                      (eq? (g3c4-input-entry-live
+                             original-input operation)
+                           original-input-entry)
+                      (eq? (vector-ref original-input-entry 3)
+                           original-native-input)
+                      (vector-ref g3c4-p2g2-ownership-gate 0)
+                      (m3t-exact-i64? (vector-ref policy 6))
+                      (= (vector-ref policy 5) 2)
+                      (g3c4-call-tuple? 2 2)))
+            (g3c4-fail 'invalid-argument operation
+                       "P2/G2 terminal needs authentic EOS and P2 input"))
+        (guard (caught
+                 (#t
+                   (if (vector-ref barrier 0) (exit 134))
+                   (if (not (eq? (vector-ref call 2) 'dead))
+                       (guard (abort-failure (#t (exit 134)))
+                         (if (vector-ref ledger 0)
+                             (guard (abort-rejected
+                                      (#t
+                                        ;; An authentic held lease may reject
+                                        ;; abort without mutation. Its holder
+                                        ;; can release it in this same region.
+                                        ;; A forged row fails the recheck.
+                                        (guard (repair-failed
+                                                 (#t (exit 134)))
+                                          (g3c4-p2g2-terminal-active-check
+                                            call row anchor originals operation)
+                                          (repair-lease call row)
+                                          (g3c4-p2g2-terminal-active-check
+                                            call row anchor originals operation)
+                                          (g3c4-p2g2-protected-abort! call))))
+                               (g3c4-p2g2-protected-abort! call))
+                             (begin
+                               (g3c4-call-dead! call)
+                               (vector-set! g3c4-p2g2-protected-records
+                                            0 old-records)
+                               (vector-set! g3c4-p2g2-protected-anchors
+                                            0 old-protected)))))
+                   (g3c4-p2g2-terminal-scrub! row)
+                   (vector-set! row 13 'dead)
+                   (vector-set! g3c4-p2g2-prefix-input-anchors 0 old-inputs)
+                   (vector-set! g3c4-p2g2-terminal-rows 0 old-rows)
+                   (vector-set! g3c4-p2g2-terminal-anchors 0 old-anchors)
+                   (raise caught)))
+          (vector-set! g3c4-registry 0
+                       (cons call (vector-ref g3c4-registry 0)))
+          (vector-set! g3c4-p2g2-protected-records 0
+                       (cons record old-records))
+          (vector-set! g3c4-p2g2-protected-anchors 0
+                       (cons protected-anchor old-protected))
+          (vector-set! g3c4-p2g2-prefix-input-anchors 0
+                       (cons input-anchor old-inputs))
+          (vector-set! g3c4-p2g2-terminal-rows 0
+                       (cons row old-rows))
+          (vector-set! g3c4-p2g2-terminal-anchors 0
+                       (cons anchor old-anchors))
+          (g3c4-native-check (g3c4-native-call-acquire native 2 2)
+                             operation)
+          (vector-set! ledger 0 #t)
+          (vector-set! model-entry 10 call)
+          (vector-set! ledger 1 #t)
+          (vector-set! generator-entry 9 call)
+          (vector-set! ledger 2 #t)
+          (vector-set! call 2 'live)
+          (vector-set! ledger 3 'p2g2-protected)
+          (if (not (eq? (vector-ref m3-call-state 0) #t)) (exit 134))
+          (vector-set! m3-call-state 0 call)
+          (set! output (g3c4-p2g2-protected-reserve call))
+          (let ((auxiliary (vector-ref output 8)))
+            (vector-set! row 0 (vector-ref output 0))
+            (vector-set! anchor 0 (vector-ref output 0))
+            (vector-set! row 1 output)
+            (vector-set! anchor 1 output)
+            (vector-set! row 2 (vector-ref output 3))
+            (vector-set! anchor 2 (vector-ref output 3))
+            (vector-set! row 17 (vector-ref auxiliary 0))
+            (vector-set! anchor 17 (vector-ref auxiliary 0))
+            (vector-set! row 18 (vector-ref auxiliary 1))
+            (vector-set! anchor 18 (vector-ref auxiliary 1))
+            (vector-set! originals 10 (vector-ref auxiliary 0))
+            (vector-set! originals 11 (vector-ref auxiliary 1))
+            (vector-set! originals 12 (vector-ref output 0))
+            (vector-set! originals 13 output)
+            (vector-set! originals 14 (vector-ref output 3)))
+          (g3c4-p2g2-terminal-active-check
+            call row anchor originals operation)
+          (g3c4-native-check
+            (g3c4-p2g2-native-eos-first
+              native original-native-input first-stage 16) operation)
+          (g3c4-p2g2-terminal-active-check
+            call row anchor originals operation)
+          (t1-private-g3-decode-raw-into! tokenizer first-stage first-raw)
+          (g3c4-p2g2-terminal-active-check
+            call row anchor originals operation)
+          (set! selected-first
+                (g3c4-p2g2-terminal-id
+                  row first-stage first-raw operation))
+          (bytevector-u8-set! text-one 0 (bytevector-u8-ref first-raw 0))
+          (bytevector-u8-set! text-two 0 (bytevector-u8-ref first-raw 0))
+          (if (= selected-first (vector-ref policy 6))
+              (set! count 1)
+              (begin
+                (g3c4-p2g2-prefix-byte-check record selected-first
+                                               operation)
+                (g3c4-native-check
+                  (g3c4-p2g2-native-prefix-commit
+                    native (vector-ref output 3) first-raw)
+                  operation)
+                (vector-set! protected-anchor 13 'prefix-committed)
+                (vector-set! record 13 'prefix-committed)
+                (vector-set! ledger 3 'p2g2-prefix-committed)
+                (g3c4-p2g2-terminal-active-check
+                  call row anchor originals operation)
+                (g3c4-native-check
+                  (g3c4-p2g2-native-second
+                    native (vector-ref output 3) second-stage 16)
+                  operation)
+                (g3c4-p2g2-terminal-active-check
+                  call row anchor originals operation)
+                (t1-private-g3-decode-raw-into!
+                  tokenizer second-stage second-raw)
+                (g3c4-p2g2-terminal-active-check
+                  call row anchor originals operation)
+                (set! selected-second
+                      (g3c4-p2g2-terminal-id
+                        row second-stage second-raw operation))
+                (bytevector-u8-set! text-two 1
+                                    (bytevector-u8-ref second-raw 0))
+                (set! count 2)))
+          ;; All fallible Eshkol work and original-owner/extent validation
+          ;; precedes the native zero boundary. Final RNG is not inferred.
+          (before-terminal call row)
+          (g3c4-p2g2-terminal-active-check
+            call row anchor originals operation)
+          (if (not (and (= (bytevector-u8-ref text-one 0) selected-first)
+                        (= (bytevector-u8-ref text-two 0) selected-first)
+                        (or (and (= count 1)
+                                 (= selected-first (vector-ref policy 6))
+                                 (= (bytevector-u8-ref text-two 1) 0))
+                            (and (= count 2)
+                                 (not (= selected-first
+                                         (vector-ref policy 6)))
+                                 (= (bytevector-u8-ref text-two 1)
+                                    selected-second)))
+                        (eq? (vector-ref output 1) 'output)
+                        (eq? (vector-ref output 2) 'pending)
+                        (eq? (vector-ref ledger 4) output)
+                        (eq? (vector-ref row 0) (vector-ref output 0))
+                        (eq? (vector-ref row 1) output)
+                        (eq? (vector-ref row 2) (vector-ref output 3))))
+              (g3c4-fail 'invalid-state operation
+                         "P2/G2 terminal logical text or ledger changed"))
+          (if (= count 1)
+              (begin
+                (g3c4-p2g2-zero-bytes! second-raw 1)
+                (g3c4-p2g2-zero-bytes! second-stage 8)
+                (g3c4-p2g2-zero-bytes! text-two 2))
+              (g3c4-p2g2-zero-bytes! text-one 1))
+          (g3c4-p2g2-zero-bytes! first-stage 8)
+          (g3c4-p2g2-zero-bytes! second-stage 8)
+          (g3c4-p2g2-zero-bytes! (vector-ref row 17) 2)
+          (g3c4-p2g2-zero-bytes! (vector-ref row 18) 16)
+          (g3c4-p2g2-terminal-active-check
+            call row anchor originals operation)
+          (if (= (g3c4-p2g2-native-terminal
+                   native (vector-ref output 3) first-raw 9
+                   (if (= count 1) '() second-raw)
+                   (if (= count 1) 0 9)) 0)
+              (begin
+                (vector-set! barrier 0 #t)
+                ;; Fixed nonallocating tail: these operands and list
+                ;; successors were captured before the native invocation.
+                (vector-set! row 13 'live)
+                (vector-set! anchor 13 'live)
+                (vector-set! row 14 count)
+                (vector-set! row 15 selected-first)
+                (vector-set! row 16 selected-second)
+                (vector-set! output 1 'terminal-output)
+                (vector-set! output 2 'live)
+                (vector-set! output 4 #f)
+                (vector-set! output 5 #f)
+                (vector-set! output 6 #f)
+                (vector-set! output 7
+                             (if (= count 1) text-one text-two))
+                (vector-set! output 9 #f)
+                (vector-set! output 10 #f)
+                (vector-set! model-entry 10 #f)
+                (vector-set! generator-entry 9 #f)
+                (vector-set! ledger 4 #f)
+                (vector-set! call 3 #f)
+                (vector-set! call 4 #f)
+                (vector-set! call 5 #f)
+                (vector-set! call 6 #f)
+                (vector-set! call 7 #f)
+                (vector-set! call 8 #f)
+                (vector-set! call 9 #f)
+                (vector-set! call 10 #f)
+                (vector-set! call 11 #f)
+                (vector-set! call 2 'dead)
+                (bytevector-u8-set! first-raw 0 0)
+                (bytevector-u8-set! second-raw 0 0)
+                (vector-set! row 9 #f)
+                (vector-set! row 10 #f)
+                (vector-set! row 11 #f)
+                (vector-set! row 12 #f)
+                (vector-set! anchor 9 #f)
+                (vector-set! anchor 10 #f)
+                (vector-set! anchor 11 #f)
+                (vector-set! anchor 12 #f)
+                (vector-set! record 0 #f)
+                (vector-set! protected-anchor 0 #f)
+                (vector-set! g3c4-p2g2-protected-records 0 old-records)
+                (vector-set! g3c4-p2g2-protected-anchors 0 old-protected)
+                (vector-set! g3c4-p2g2-prefix-input-anchors 0 old-inputs)
+                (vector-ref output 0))
+              (g3c4-native-fail operation)))))))
+
+;;; Single closed production entry. No caller body can run after commit.
+(define (g3c4-p2g2-terminal-close-private generator input)
+  (g3c4-p2g2-terminal-close-probed-private
+    generator input
+    (lambda (call row) #t)
+    (lambda (call row) #f)))
+
+(define (g3c4-p2g2-terminal-live shell operation)
+  (let* ((entry (g3c4-registry-find shell operation))
+         (row (g3c4-p2g2-terminal-row shell))
+         (anchor (g3c4-p2g2-terminal-anchor shell)))
+    (if (not (and row anchor
+                  (g3c4-p2g2-terminal-originals? row anchor)
+                  (eq? (vector-ref row 0) shell)
+                  (eq? (vector-ref anchor 0) shell)
+                  (eq? (vector-ref row 1) entry)
+                  (eq? (vector-ref row 2) (vector-ref entry 3))
+                  (eq? (vector-ref row 13) 'live)
+                  (eq? (vector-ref anchor 13) 'live)
+                  (or (= (vector-ref row 14) 1)
+                      (= (vector-ref row 14) 2))
+                  (eq? (vector-ref entry 1) 'terminal-output)
+                  (eq? (vector-ref entry 2) 'live)
+                  (eq? (vector-ref entry 0) shell)
+                  (eq? (vector-ref entry 4) #f)
+                  (eq? (vector-ref entry 5) #f)
+                  (eq? (vector-ref entry 6) #f)
+                  (eq? (vector-ref entry 7)
+                       (if (= (vector-ref row 14) 1)
+                           (vector-ref row 7) (vector-ref row 8)))
+                  (eq? (vector-ref entry 9) #f)
+                  (eq? (vector-ref entry 10) #f)
+                  (eq? (vector-ref entry 11) g3c4-model-profile)
+                  (= (bytevector-u8-ref (vector-ref row 7) 0)
+                     (if (= (vector-ref row 14) 1)
+                         (vector-ref row 15) 0))
+                  (= (bytevector-u8-ref (vector-ref row 8) 0)
+                     (if (= (vector-ref row 14) 1) 0
+                         (vector-ref row 15)))
+                  (or (= (vector-ref row 14) 1)
+                      (= (bytevector-u8-ref (vector-ref row 8) 1)
+                         (vector-ref row 16)))))
+        (g3c4-fail 'invalid-state operation
+                   "P2/G2 terminal shell or surviving anchor changed"))
+    row))
+
+(define g3c4-p2g2-terminal-sign 9223372036854775808)
+(define g3c4-p2g2-terminal-modulus 18446744073709551616)
+
+(define (g3c4-p2g2-terminal-word bytes offset)
+  (let loop ((index 7) (value 0))
+    (if (< index 0)
+        (if (>= value g3c4-p2g2-terminal-sign)
+            (- value g3c4-p2g2-terminal-modulus) value)
+        (loop (- index 1)
+              (+ (* value 256)
+                 (bytevector-u8-ref bytes (+ offset index)))))))
+
+;;; The destination and its original allocation identity are local to this
+;;; later m3-call. Nothing is cached or published on a failed snapshot.
+(define (g3c4-p2g2-terminal-snapshot-private shell)
+  (let ((operation 'g3c4-p2g2-terminal-snapshot-private))
+    (m3-call operation
+      (let* ((row (g3c4-p2g2-terminal-live shell operation))
+             (native (vector-ref row 2))
+             (destination (make-bytevector 64 0))
+             (original-destination destination))
+        (if (not (and (eq? destination original-destination)
+                      (= (bytevector-length destination) 64)))
+            (g3c4-fail 'invalid-state operation
+                       "P2/G2 snapshot allocation extent changed"))
+        (g3c4-native-check
+          (g3c4-p2g2-native-snapshot native destination 72) operation)
+        (let* ((id0 (g3c4-p2g2-terminal-word destination 0))
+               (id1 (g3c4-p2g2-terminal-word destination 8))
+               (count (g3c4-p2g2-terminal-word destination 16))
+               (cache (g3c4-p2g2-terminal-word destination 24))
+               (rng0 (g3c4-p2g2-terminal-word destination 32))
+               (rng1 (g3c4-p2g2-terminal-word destination 40))
+               (rng2 (g3c4-p2g2-terminal-word destination 48))
+               (rng3 (g3c4-p2g2-terminal-word destination 56)))
+          (if (not (and (eq? row (g3c4-p2g2-terminal-live
+                                  shell operation))
+                        (eq? (vector-ref row 2) native)
+                        (eq? destination original-destination)
+                        (= (bytevector-length destination) 64)
+                        (= id0 (vector-ref row 15))
+                        (= count (vector-ref row 14))
+                        (= cache (+ count 2))
+                        (if (= count 1)
+                            (= id1 0)
+                            (= id1 (vector-ref row 16)))
+                        (= rng0 1) (>= rng1 0)))
+              (g3c4-fail 'invalid-state operation
+                         "P2/G2 snapshot disagrees with original text"))
+          (vector id0 id1 count cache rng0 rng1 rng2 rng3))))))
+
+(define (g3c4-p2g2-terminal-release-private! shell)
+  (let ((operation 'g3c4-p2g2-terminal-release-private!))
+    (m3-call operation
+      (let ((entry (g3c4-registry-find shell operation)))
+        (cond
+          ((g3c4-dead-entry? entry 'terminal-output) #t)
+          ((eq? (vector-ref entry 1) 'terminal-output)
+           (let* ((row (g3c4-p2g2-terminal-live shell operation))
+                  (anchor (g3c4-p2g2-terminal-anchor shell))
+                  (native (vector-ref row 2)))
+             ;; A genuine held I1 lease rejects this without mutation.
+             (g3c4-native-check
+               (g3c4-native-output-release native) operation)
+             (g3c4-p2g2-terminal-scrub! row)
+             (g3c4-entry-dead! entry)
+             (vector-set! row 13 'dead)
+             (vector-set! anchor 13 'dead)
+             (vector-set! row 0 #f)
+             (vector-set! anchor 0 #f)
+             #t))
+          (else
+            (g3c4-fail 'invalid-argument operation
+                       "C4 identity is not a private terminal output")))))))
+
+;;; Clone record: shell, native logical I1 owner, count, IDs, phase.
+;;; Its original native handle is duplicated in a separate rooted anchor.
+(define (g3c4-p2g2-terminal-clone-row shell)
+  (let loop ((remaining (vector-ref g3c4-p2g2-terminal-clones 0)))
+    (cond ((null? remaining) #f)
+          ((eq? (vector-ref (car remaining) 0) shell) (car remaining))
+          (else (loop (cdr remaining))))))
+
+(define (g3c4-p2g2-terminal-clone-anchor shell)
+  (let loop ((remaining (vector-ref g3c4-p2g2-terminal-clone-anchors 0)))
+    (cond ((null? remaining) #f)
+          ((eq? (vector-ref (car remaining) 0) shell) (car remaining))
+          (else (loop (cdr remaining))))))
+
+(define (g3c4-p2g2-terminal-ids-clone-private shell)
+  (let ((operation 'g3c4-p2g2-terminal-ids-clone-private))
+    (m3-call operation
+      (let* ((source (g3c4-p2g2-terminal-live shell operation))
+             (source-native (vector-ref source 2))
+             (clone-shell (vector 'g3c4-terminal-ids-private))
+             (clone-row (vector clone-shell #f (vector-ref source 14)
+                                (vector-ref source 15)
+                                (vector-ref source 16) 'pending))
+             (clone-anchor (vector clone-shell #f
+                                   (vector-ref source 14)
+                                   (vector-ref source 15)
+                                   (vector-ref source 16)))
+             (old-clones (vector-ref g3c4-p2g2-terminal-clones 0))
+             (old-anchors (vector-ref
+                            g3c4-p2g2-terminal-clone-anchors 0))
+             (native '()))
+        (guard (caught
+                 (#t
+                   (if (not (null? native))
+                       (if (not (= (g3c4-p2g2-native-ids-release native) 0))
+                           (exit 134)))
+                   (vector-set! g3c4-p2g2-terminal-clones 0 old-clones)
+                   (vector-set! g3c4-p2g2-terminal-clone-anchors 0
+                                old-anchors)
+                   (raise caught)))
+          (vector-set! g3c4-p2g2-terminal-clones 0
+                       (cons clone-row old-clones))
+          (vector-set! g3c4-p2g2-terminal-clone-anchors 0
+                       (cons clone-anchor old-anchors))
+          (set! native (g3c4-p2g2-native-ids-clone source-native))
+          (if (null? native) (g3c4-native-fail operation))
+          (if (not (and (eq? source (g3c4-p2g2-terminal-live
+                                     shell operation))
+                        (eq? (vector-ref source 2) source-native)))
+              (g3c4-fail 'invalid-state operation
+                         "P2/G2 clone source changed"))
+          (vector-set! clone-row 1 native)
+          (vector-set! clone-anchor 1 native)
+          (vector-set! clone-row 5 'live)
+          ;; The clone owns an independent native logical I1 and carries no
+          ;; source output pointer after this point.
+          clone-shell)))))
+
+(define (g3c4-p2g2-terminal-ids-clone-live shell operation)
+  (let ((row (g3c4-p2g2-terminal-clone-row shell))
+        (anchor (g3c4-p2g2-terminal-clone-anchor shell)))
+    (if (not (and row (vector? row) (= (vector-length row) 6)
+                  anchor (vector? anchor) (= (vector-length anchor) 5)
+                  (eq? (vector-ref anchor 0) shell)
+                  (eq? (vector-ref row 0) shell)
+                  (eq? (vector-ref row 5) 'live)
+                  (vector-ref row 1)
+                  (eq? (vector-ref row 1) (vector-ref anchor 1))
+                  (= (vector-ref row 2) (vector-ref anchor 2))
+                  (= (vector-ref row 3) (vector-ref anchor 3))
+                  (= (vector-ref row 4) (vector-ref anchor 4))
+                  (or (= (vector-ref row 2) 1)
+                      (= (vector-ref row 2) 2))
+                  (<= 0 (vector-ref row 3))
+                  (<= (vector-ref row 3) 255)
+                  (or (= (vector-ref row 2) 1)
+                      (and (<= 0 (vector-ref row 4))
+                           (<= (vector-ref row 4) 255)))))
+        (g3c4-fail 'invalid-state operation
+                   "P2/G2 logical I1 clone is not live"))
+    row))
+
+(define (g3c4-p2g2-terminal-ids-clone-copy-private shell)
+  (let ((operation 'g3c4-p2g2-terminal-ids-clone-copy-private))
+    (m3-call operation
+      (let* ((row (g3c4-p2g2-terminal-ids-clone-live shell operation))
+             (native (vector-ref row 1))
+             (count (vector-ref row 2))
+             (bytes (make-bytevector (* count 8) 0))
+             (original-bytes bytes))
+        (if (not (and (eq? bytes original-bytes)
+                      (= (bytevector-length bytes) (* count 8))))
+            (g3c4-fail 'invalid-state operation
+                       "P2/G2 clone-copy backing extent changed"))
+        (g3c4-native-check
+          (g3c4-p2g2-native-ids-copy native count bytes (+ 8 (* count 8)))
+          operation)
+        (if (not (and (eq? row (g3c4-p2g2-terminal-ids-clone-live
+                              shell operation))
+                      (eq? native (vector-ref row 1))
+                      (eq? bytes original-bytes)
+                      (= (bytevector-length bytes) (* count 8))
+                      (= (g3c4-p2g2-terminal-word bytes 0)
+                         (vector-ref row 3))
+                      (or (= count 1)
+                          (= (g3c4-p2g2-terminal-word bytes 8)
+                             (vector-ref row 4)))))
+            (g3c4-fail 'invalid-state operation
+                       "P2/G2 detached logical I1 copy differs"))
+        bytes))))
+
+(define (g3c4-p2g2-terminal-ids-clone-release-private! shell)
+  (let ((operation 'g3c4-p2g2-terminal-ids-clone-release-private!))
+    (m3-call operation
+      (let ((row (g3c4-p2g2-terminal-clone-row shell)))
+        (if (not row)
+            (g3c4-fail 'invalid-argument operation
+                       "P2/G2 clone shell is not registered"))
+        (if (eq? (vector-ref row 5) 'dead)
+            #t
+            (let ((live (g3c4-p2g2-terminal-ids-clone-live
+                          shell operation)))
+              (g3c4-native-check
+                (g3c4-p2g2-native-ids-release (vector-ref live 1))
+                operation)
+              (vector-set! live 1 #f)
+              (vector-set! live 5 'dead)
+              (vector-set! (g3c4-p2g2-terminal-clone-anchor shell) 1 #f)
+              #t))))))

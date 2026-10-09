@@ -1,0 +1,211 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+(load "g3c4_t1_output_decode_extension.esk")
+(load "g3c4_output_envelope_extension.esk")
+(load "g3c4_p2g2_ownership_extension.esk")
+(load "g3c4_p2g2_protected_scope_extension.esk")
+(load "g3c4_p2g2_t1_prefix_coordinator_extension.esk")
+(load "g3c4_p2g2_terminal_close_extension.esk")
+
+(extern i64 terminal-test-ids-lease ptr i64
+        :real et_g3c4_p2g2_coordinator_test_ids_lease_v1)
+(extern i64 terminal-test-fault i64
+        :real et_g3c4_p2g2_terminal_close_test_fault_v1)
+(extern i64 terminal-test-mark ptr i64 i64
+        :real et_g3c4_p2g2_coordinator_test_mark_v1)
+(extern i64 terminal-test-after-abort ptr i64
+        :real et_g3c4_p2g2_coordinator_test_after_abort_v1)
+(extern i64 terminal-test-observe ptr ptr i64 i64
+        :real et_g3c4_p2g2_coordinator_test_observe_v1)
+(extern i64 terminal-test-prefix ptr ptr i64
+        :real et_g3c4_p2g2_coordinator_test_prefix_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "P2/G2 terminal close FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label thunk)
+  (check label
+    (guard (caught (#t (transformer-error? caught)))
+      (thunk) #f)))
+(define (config sampling seed eos)
+  (list ':profile 'diagnostic-c4 ':sampling sampling
+        ':temperature-bits 1065353216
+        ':top-k (if (eq? sampling 'greedy) 256 17)
+        ':top-p-bits (if (eq? sampling 'greedy) 1065353216 1056964608)
+        ':max-new-tokens 2 ':eos eos ':seed seed))
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define model (g3c4-model-create-seeded-internal 1729))
+(define prompt-a
+  (g3c4-p2g2-owned-input-create
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255))))
+(define prompt-b
+  (g3c4-p2g2-owned-input-create
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 7 11))))
+
+;;; A genuine prefix call discovers the first ID, then aborts in-region.
+;;; No caller-provided ID or logits enter the terminal coordinator.
+(define (first-id input sampling seed)
+  (let* ((generator (g3c4-generator-create-internal
+                      model tokenizer (config sampling seed #f)))
+         (selected -1))
+    (g3c4-with-p2g2-prefix-call 'terminal-first-reference
+      generator input (call)
+      (g3c4-p2g2-protected-reserve call)
+      (set! selected (g3c4-p2g2-prefix-commit! call input))
+      (g3c4-p2g2-protected-abort! call))
+    (check "first reference is V256" (and (<= 0 selected)
+                                           (<= selected 255)))
+    (check "reference generator closes"
+           (g3c4-generator-close-internal! generator))
+    selected))
+
+(define (case-run input sampling seed eos expected-count first)
+  (let* ((generator (g3c4-generator-create-internal
+                      model tokenizer (config sampling seed eos)))
+         (shell (g3c4-p2g2-terminal-close-private generator input))
+         (entry (g3c4-registry-find shell 'test))
+         (row (g3c4-p2g2-terminal-live shell 'test))
+         (snapshot (g3c4-p2g2-terminal-snapshot-private shell))
+         (clone (g3c4-p2g2-terminal-ids-clone-private shell))
+         (bytes (g3c4-p2g2-terminal-ids-clone-copy-private clone)))
+    (check "original pending entry transitioned in place"
+           (and (eq? entry (vector-ref row 1))
+                (eq? (vector-ref entry 1) 'terminal-output)
+                (eq? (vector-ref entry 2) 'live)
+                (eq? (vector-ref entry 0) shell)
+                (eq? (vector-ref row 13) 'live)))
+    (check "logical count and cache length"
+           (and (= (vector-ref snapshot 2) expected-count)
+                (= (vector-ref snapshot 3) (+ expected-count 2))
+                (= (vector-ref snapshot 0) first)
+                (= (g3c4-p2g2-terminal-word bytes 0) first)
+                (= (bytevector-length bytes) (* expected-count 8))))
+    (if (= expected-count 1)
+        (check "first EOS has no second ID"
+               (and (= (vector-ref snapshot 1) 0)
+                    (= (vector-ref row 16) -1)))
+        (check "second ID is the same logical I1 owner"
+               (= (g3c4-p2g2-terminal-word bytes 8)
+                  (vector-ref snapshot 1))))
+    (reject "foreign output is not a terminal"
+      (lambda () (g3c4-p2g2-terminal-snapshot-private input)))
+    (check "hold genuine terminal I1 lease"
+           (= (terminal-test-ids-lease (vector-ref entry 3) 1) 0))
+    (reject "held I1 lease rejects source release without mutation"
+      (lambda () (g3c4-p2g2-terminal-release-private! shell)))
+    (check "rejected release leaves exact terminal live"
+           (eq? (g3c4-p2g2-terminal-live shell 'test) row))
+    (check "repair held I1 lease"
+           (= (terminal-test-ids-lease (vector-ref entry 3) 0) 0))
+    (check "source release succeeds"
+           (g3c4-p2g2-terminal-release-private! shell))
+    (check "same-owner repeated release is idempotent"
+           (g3c4-p2g2-terminal-release-private! shell))
+    (reject "released source cannot snapshot"
+      (lambda () (g3c4-p2g2-terminal-snapshot-private shell)))
+    (check "independent logical I1 survives source release"
+           (= (g3c4-p2g2-terminal-word
+                (g3c4-p2g2-terminal-ids-clone-copy-private clone) 0)
+              first))
+    (check "logical I1 clone release succeeds"
+           (g3c4-p2g2-terminal-ids-clone-release-private! clone))
+    (check "logical I1 repeated release is idempotent"
+           (g3c4-p2g2-terminal-ids-clone-release-private! clone))
+    (reject "released clone cannot copy"
+      (lambda () (g3c4-p2g2-terminal-ids-clone-copy-private clone)))
+    (check "terminal generator closes"
+           (g3c4-generator-close-internal! generator))
+    snapshot))
+
+(define first-a (first-id prompt-a 'greedy 7))
+(define first-b (first-id prompt-b 'categorical 1729))
+(define non-eos-a (if (= first-a 255) 0 255))
+(case-run prompt-a 'greedy 7 first-a 1 first-a)
+(define two-a (case-run prompt-a 'greedy 7 non-eos-a 2 first-a))
+(case-run prompt-b 'categorical 1729 first-b 1 first-b)
+(define two-b
+  (case-run prompt-b 'categorical 1729
+            (if (= first-b 255) 0 255) 2 first-b))
+
+(define (terminal-fault-case input sampling seed eos first-prompt
+                             second-prompt expected-cache)
+  (let* ((generator (g3c4-generator-create-internal
+                      model tokenizer (config sampling seed eos)))
+         (native (vector-ref
+                   (g3c4-generator-entry-call-ready generator 'test) 3)))
+    (check "mark original owner/cache/RNG before terminal rejection"
+           (= (terminal-test-mark native first-prompt second-prompt) 0))
+    (check "arm native pre-zero rejection" (= (terminal-test-fault 1) 0))
+    (reject "native terminal preflight error aborts in call region"
+      (lambda () (g3c4-p2g2-terminal-close-private generator input)))
+    (check "disarm terminal rejection" (= (terminal-test-fault 0) 0))
+    (check "native abort preserves full P2/P3 cache, RNG and model"
+           (= (terminal-test-after-abort native expected-cache) 0))
+    (check "pending terminal anchor removed after successful abort"
+           (and (null? (vector-ref g3c4-p2g2-terminal-rows 0))
+                (null? (vector-ref g3c4-p2g2-terminal-anchors 0))))
+    (check "failed terminal generator closes"
+           (g3c4-generator-close-internal! generator))))
+
+(terminal-fault-case prompt-a 'greedy 7 first-a 0 255 2)
+(terminal-fault-case prompt-a 'greedy 7 non-eos-a 0 255 3)
+
+(define (lease-abort-case eos expected-cache)
+  (let* ((generator (g3c4-generator-create-internal
+                      model tokenizer (config 'greedy 7 eos)))
+         (native (vector-ref
+                   (g3c4-generator-entry-call-ready generator 'test) 3)))
+    (check "mark owner before held-lease abort rejection"
+           (= (terminal-test-mark native 0 255) 0))
+    (reject "held I1 lease rejects native terminal and first abort"
+      (lambda ()
+        (g3c4-p2g2-terminal-close-probed-private generator prompt-a
+          (lambda (call row)
+            (check "capture authentic P2/P3 before held lease"
+                   (if (= expected-cache 2)
+                       (= (terminal-test-observe
+                            native (vector-ref row 2) 2 -1) 0)
+                       (= (terminal-test-prefix
+                            native (vector-ref row 2) first-a) 0)))
+            (check "hold genuine pending I1 lease"
+                   (= (terminal-test-ids-lease
+                        (vector-ref row 2) 1) 0)))
+          (lambda (call row)
+            (check "pending row retained for in-region repair"
+                   (and (eq? (vector-ref row 13) 'pending)
+                        (eq? (vector-ref call 2) 'live)))
+            (check "release I1 lease before retrying abort"
+                   (= (terminal-test-ids-lease
+                        (vector-ref row 2) 0) 0))))))
+    (check "held-lease retry preserved P2/P3 cache and RNG"
+           (= (terminal-test-after-abort native expected-cache) 0))
+    (check "repaired call leaves no pending terminal anchor"
+           (and (null? (vector-ref g3c4-p2g2-terminal-rows 0))
+                (null? (vector-ref g3c4-p2g2-terminal-anchors 0))))
+    (check "repaired generator closes"
+           (g3c4-generator-close-internal! generator))))
+
+(lease-abort-case first-a 2)
+(lease-abort-case non-eos-a 3)
+;;; At least one of these deterministic prompts must have a distinct second
+;;; ID, so its EOS policy proves a genuine second-token EOS branch.
+(if (not (= (vector-ref two-a 1) first-a))
+    (case-run prompt-a 'greedy 7 (vector-ref two-a 1) 2 first-a)
+    (if (not (= (vector-ref two-b 1) first-b))
+        (case-run prompt-b 'categorical 1729
+                  (vector-ref two-b 1) 2 first-b)
+        (check "second EOS fixture requires distinct IDs" #f)))
+(check "owned P2 inputs release after terminal cases"
+       (and (generation-tensor-release-internal! prompt-a)
+            (generation-tensor-release-internal! prompt-b)))
+(display "P2/G2 terminal close PASS: checks=")
+(display checks)
+(display " first-eos=1 second-eos=1 two-id=1 clone=1")
+(newline)

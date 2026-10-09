@@ -2645,6 +2645,13 @@ publication, public G2 and continuation remain pending.
   after native commit. Native terminal integration and logical I1 clone code
   are prerequisites; Eshkol implementation and compiled same-call proof remain
   pending. No public G2 or continuation acceptance is claimed.
+  A separate [source-only private coordinator candidate](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_SOURCE_LEAF.md)
+  now composes the merged native terminal and logical I1 clone entries with
+  original-shell terminal publication, detached snapshot/copy and release.
+  Its static zero-tail and closure checks are development evidence only;
+  independent source review, compiled same-call normal/repeat/sanitizer and
+  negative-cut gates, numerical references and exact symbol admission remain
+  pending. The accepted contract and public dispatch are unchanged.
 
 ## Wave 4 — practical pretraining and performance
 
