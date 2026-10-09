@@ -2680,6 +2680,15 @@ publication, public G2 and continuation remain pending.
   staged but not executed; compiled normal/repeat/sanitizer behavior, exact
   symbol closure, the public G2 adapter and continuation remain pending.
 
+  A further private source-only terminal-origin seam adds a fixed production
+  entry with independent original-generator/input and exact-output roots.
+  Its last prezero check binds the original identities; prezero abort restores
+  both roots, and native-success tail only updates preallocated phase slots.
+  Staged AOT negatives cover forged roots, held-lease release and native
+  prezero fault rollback, but are unrun. This marker alone grants no public
+  profile authority. Emitted tail, normal/repeat/sanitizer behavior, native
+  object and symbol closure, and public G2 dispatch remain pending.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |

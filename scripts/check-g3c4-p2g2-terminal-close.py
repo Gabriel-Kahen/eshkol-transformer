@@ -170,12 +170,53 @@ def validate(source: str, closure: list[str], base: list[str],
         "et_g3c4_private_p2g2_terminal_ids_clone_release_v1",
     ):
         assert source.count(":real " + symbol) == 1, symbol
-    close = definition(parsed, "g3c4-p2g2-terminal-close-probed-private")
+    close = definition(parsed, "g3c4-p2g2-terminal-close-core-private")
+    probe = definition(parsed, "g3c4-p2g2-terminal-close-probed-private")
+    assert calls(probe, "g3c4-p2g2-terminal-close-core-private") == [
+        ["g3c4-p2g2-terminal-close-core-private", "generator", "input",
+         "before-terminal", "repair-lease", "#f"]]
     published = definition(parsed, "g3c4-p2g2-terminal-close-private")
     assert calls(published, "g3c4-p2g2-terminal-close-probed-private") == [
         ["g3c4-p2g2-terminal-close-probed-private", "generator", "input",
          ["lambda", ["call", "row"], "#t"],
          ["lambda", ["call", "row"], "#f"]]]
+    origin = definition(parsed, "g3c4-p2g2-terminal-close-origin-private")
+    assert calls(origin, "g3c4-p2g2-terminal-close-core-private") == [
+        ["g3c4-p2g2-terminal-close-core-private", "generator", "input",
+         ["lambda", ["call", "row"], "#t"],
+         ["lambda", ["call", "row"], "#f"], "#t"]]
+    origin_check = definition(parsed,
+                              "g3c4-p2g2-terminal-origin-prezero-check")
+    for name in ("generator", "generator-entry", "input", "input-entry",
+                 "row", "anchor"):
+        assert ["eq?", ["vector-ref", "origin-row",
+                        {"generator": "3", "generator-entry": "4",
+                         "input": "5", "input-entry": "6", "row": "7",
+                         "anchor": "8"}[name]], name] in calls(origin_check, "eq?")
+    assert len(calls(close, "g3c4-p2g2-terminal-origin-prezero-check")) == 1
+    before_index = source.index("(before-terminal call row)")
+    assert before_index < source.index(
+        "(g3c4-p2g2-terminal-origin-prezero-check\n", before_index) < source.index(
+        "(if (= (g3c4-p2g2-native-terminal\n", before_index)
+    for root in ("rows", "anchors"):
+        symbol = "g3c4-p2g2-terminal-origin-" + root
+        assert ["vector-set!", symbol, "0", "old-origin-" + root] in calls(
+            close, "vector-set!")
+        assert ["vector-set!", symbol, "0",
+                ["cons", "origin-" + ("row" if root == "rows" else "anchor"),
+                 "old-origin-" + root]] in calls(close, "vector-set!")
+    origin_live = definition(parsed, "g3c4-p2g2-terminal-origin-live")
+    assert len(calls(origin_live, "g3c4-p2g2-terminal-live")) == 1
+    assert ["eq?", ["vector-ref", "row", "7"], "terminal"] in calls(
+        origin_live, "eq?")
+    assert ["eq?", ["vector-ref", "row", "9"], "'live"] in calls(
+        origin_live, "eq?")
+    for origin_slot, terminal_slot in (("10", "14"), ("11", "15"),
+                                       ("12", "16")):
+        for owner in ("row", "anchor"):
+            assert ["=", ["vector-ref", owner, origin_slot],
+                    ["vector-ref", "terminal", terminal_slot]] in calls(
+                origin_live, "=")
     assert len(calls(close, "m3-call")) == 1
     carriers = definition(parsed, "g3c4-p2g2-terminal-carriers?")
     extents = {"first-raw": "1", "first-stage": "8",
@@ -232,6 +273,10 @@ def validate(source: str, closure: list[str], base: list[str],
     assert ["vector-set!", "output", "1", "'terminal-output"] in tail
     assert ["vector-set!", "output", "2", "'live"] in tail
     assert ["vector-set!", "anchor", "13", "'live"] in tail
+    assert ["vector-set!", "origin-row", "9", "'live"] in calls(
+        tail, "vector-set!")
+    assert ["vector-set!", "origin-anchor", "9", "'live"] in calls(
+        tail, "vector-set!")
     for slot, value in (("14", "count"), ("15", "selected-first"),
                         ("16", "selected-second")):
         assert ["vector-set!", "anchor", slot, value] in tail
@@ -254,8 +299,19 @@ def validate(source: str, closure: list[str], base: list[str],
         ["g3c4-p2g2-native-ids-copy", "native", "count", "bytes",
          ["+", "8", ["*", "count", "8"]]]]
     assert calls(copy, "make-bytevector")
-    assert len(calls(definition(parsed, "g3c4-p2g2-terminal-release-private!"),
-                     "g3c4-native-output-release")) == 1
+    release = definition(parsed, "g3c4-p2g2-terminal-release-private!")
+    assert len(calls(release, "g3c4-native-output-release")) == 1
+    assert len(calls(release, "g3c4-p2g2-terminal-origin-live")) == 1
+    assert ["vector-set!", "origin-row", "9", "'dead"] in calls(
+        release, "vector-set!")
+    assert ["vector-set!", "origin-anchor", "9", "'dead"] in calls(
+        release, "vector-set!")
+    release_source = source[source.index(
+        "(define (g3c4-p2g2-terminal-release-private! shell)"):source.index(
+        ";;; Clone record:")]
+    assert release_source.index(
+        "(g3c4-p2g2-terminal-origin-live shell operation)") < release_source.index(
+        "(g3c4-native-output-release native)")
     assert len(calls(definition(parsed, "g3c4-p2g2-terminal-ids-clone-private"),
                      "g3c4-p2g2-native-ids-clone")) == 1
 

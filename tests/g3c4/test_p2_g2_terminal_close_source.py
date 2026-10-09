@@ -61,6 +61,40 @@ class TerminalCloseSourceTests(unittest.TestCase):
                                               marker + " (t1-private-g3-decode-raw-into! tokenizer first-stage first-raw)",
                                               1))
 
+    def test_origin_must_use_fixed_production_core(self) -> None:
+        marker = "    #t))\n\n(define (g3c4-p2g2-terminal-live"
+        self.assertIn(marker, self.source)
+        with self.assertRaises(AssertionError):
+            self.validate(self.source.replace(marker, "    #f))\n\n(define (g3c4-p2g2-terminal-live", 1))
+
+    def test_origin_last_prezero_recheck_required(self) -> None:
+        marker = "(g3c4-p2g2-terminal-origin-prezero-check\n"
+        self.assertEqual(self.source.count(marker), 2)
+        head, tail = self.source.rsplit(marker, 1)
+        with self.assertRaises(AssertionError):
+            self.validate(head + "(g3c4-p2g2-terminal-origin-forged-check\n"
+                          + tail)
+
+    def test_origin_abort_root_restoration_required(self) -> None:
+        marker = "0 old-origin-anchors)"
+        self.assertIn(marker, self.source)
+        with self.assertRaises(AssertionError):
+            self.validate(self.source.replace(marker, "0 '())", 1))
+
+    def test_origin_tail_must_remain_nonallocating(self) -> None:
+        marker = "(vector-set! origin-row 9 'live)"
+        self.assertIn(marker, self.source)
+        with self.assertRaises(AssertionError):
+            self.validate(self.source.replace(marker,
+                                              marker + " (make-vector 1)", 1))
+
+    def test_release_authenticates_origin_before_native_retirement(self) -> None:
+        marker = "(g3c4-p2g2-terminal-origin-live shell operation)"
+        self.assertIn(marker, self.source)
+        with self.assertRaises(AssertionError):
+            self.validate(self.source.replace(marker,
+                                              "(g3c4-p2g2-terminal-live shell operation)", 1))
+
     def test_barrier_must_precede_first_publication(self) -> None:
         marker = "(vector-set! barrier 0 #t)"
         self.assertIn(marker, self.source)

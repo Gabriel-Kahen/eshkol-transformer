@@ -18,6 +18,20 @@ the original output shell. The independently rooted terminal row remains
 live after the call scope and records logical count and selected IDs, not a
 fabricated precommit RNG value.
 
+A separate fixed `g3c4-p2g2-terminal-close-origin-private` entry now stages
+an independently rooted private production-origin row and anchor. They bind
+the original generator and P2 input entries to the exact pending output
+shell, entry, native owner and surviving terminal row/anchor. The final
+prezero recheck authenticates these identities and selected count/IDs.
+Rejected prezero calls restore both roots; a successful zero changes only
+their preallocated phase slots before returning the same shell. Private
+release authenticates the origin before native retirement, preserves it on
+a held-lease rejection and tombstones retained owner references afterward.
+The existing probed and two-argument close entries retain their behavior.
+This private origin is not a public profile record and cannot authorize a
+public G2 accessor or dispatch by itself. A distinct creation-time public
+profile root and adapter remain separate prerequisites.
+
 Separate private `m3-call` operations snapshot the terminal owner, create a
 native logical I1 clone, copy its exact `[1]` or `[2]` words, and release
 source or clone. The clone owns native storage independent of its source.

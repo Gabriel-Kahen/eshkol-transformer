@@ -324,6 +324,118 @@
 (lease-abort-case non-eos-a 3 'i1)
 (lease-abort-case first-a 2 'a2)
 (lease-abort-case non-eos-a 3 'a2)
+
+;;; Staged production-origin path: a private marker is independently rooted,
+;;; but this fixture supplies no public creation-time profile authority.
+(define (origin-case eos expected-count)
+  (let* ((generator (g3c4-generator-create-internal
+                      model tokenizer (config 'greedy 7 eos)))
+         (generator-entry
+           (g3c4-generator-entry-call-ready generator 'test))
+         (native (vector-ref generator-entry 3))
+         (input-entry (g3c4-input-entry-live prompt-a 'test)))
+    (check "origin owner marked before native call"
+           (= (terminal-test-mark native 0 255) 0))
+    (let* ((shell (g3c4-p2g2-terminal-close-origin-private
+                    generator prompt-a))
+           (row (g3c4-p2g2-terminal-origin-live shell 'test))
+           (anchor (g3c4-p2g2-terminal-origin-anchor shell))
+           (terminal (g3c4-p2g2-terminal-live shell 'test))
+           (entry (g3c4-registry-find shell 'test)))
+      (check "production origin binds original owner input and exact output"
+             (and (eq? (vector-ref row 0) shell)
+                  (eq? (vector-ref row 1) entry)
+                  (eq? (vector-ref row 2) (vector-ref entry 3))
+                  (eq? (vector-ref row 3) generator)
+                  (eq? (vector-ref row 4) generator-entry)
+                  (eq? (vector-ref row 5) prompt-a)
+                  (eq? (vector-ref row 6) input-entry)
+                  (eq? (vector-ref row 7) terminal)
+                  (eq? (vector-ref row 8)
+                       (g3c4-p2g2-terminal-anchor shell))
+                  (eq? (vector-ref row 9) 'live)
+                  (= (vector-ref row 10) expected-count)
+                  (eq? (vector-ref anchor 0) shell)))
+      (check "origin does not add a native draw"
+             (= (terminal-test-reference native (vector-ref entry 3)
+                                         expected-count) 0))
+      (vector-set! row 4 #f)
+      (reject "changed origin generator entry denied"
+        (lambda () (g3c4-p2g2-terminal-origin-live shell 'test)))
+      (vector-set! row 4 generator-entry)
+      (vector-set! anchor 8 #f)
+      (reject "changed independent origin anchor denied"
+        (lambda () (g3c4-p2g2-terminal-origin-live shell 'test)))
+      (vector-set! anchor 8 (g3c4-p2g2-terminal-anchor shell))
+      (check "exact origin repair restores access"
+             (eq? (g3c4-p2g2-terminal-origin-live shell 'test) row))
+      (check "hold origin terminal I1 lease"
+             (= (terminal-test-ids-lease (vector-ref entry 3) 1) 0))
+      (reject "held lease leaves origin live"
+        (lambda () (g3c4-p2g2-terminal-release-private! shell)))
+      (check "origin survives rejected release"
+             (eq? (g3c4-p2g2-terminal-origin-live shell 'test) row))
+      (check "release origin terminal I1 lease"
+             (= (terminal-test-ids-lease (vector-ref entry 3) 0) 0))
+      (check "origin release succeeds"
+             (g3c4-p2g2-terminal-release-private! shell))
+      (reject "released origin cannot authenticate"
+        (lambda () (g3c4-p2g2-terminal-origin-live shell 'test)))
+      (check "released origin tombstones retained owner references"
+             (and (eq? (vector-ref row 9) 'dead)
+                  (eq? (vector-ref anchor 9) 'dead)
+                  (eq? (vector-ref row 3) #f)
+                  (eq? (vector-ref anchor 6) #f)))
+      (check "origin generator closes"
+             (g3c4-generator-close-internal! generator)))))
+
+(origin-case first-a 1)
+(origin-case non-eos-a 2)
+
+(let* ((generator-a (g3c4-generator-create-internal
+                      model tokenizer (config 'greedy 7 first-a)))
+       (generator-b (g3c4-generator-create-internal
+                      model tokenizer (config 'greedy 7 non-eos-a)))
+       (shell-a (g3c4-p2g2-terminal-close-origin-private
+                  generator-a prompt-a))
+       (shell-b (g3c4-p2g2-terminal-close-origin-private
+                  generator-b prompt-a)))
+  (check "older independently rooted origin survives newer output"
+         (and (g3c4-p2g2-terminal-origin-live shell-a 'test)
+              (g3c4-p2g2-terminal-origin-live shell-b 'test)))
+  (check "older origin can release before newer"
+         (g3c4-p2g2-terminal-release-private! shell-a))
+  (check "newer origin remains live after older release"
+         (g3c4-p2g2-terminal-origin-live shell-b 'test))
+  (check "newer origin releases"
+         (g3c4-p2g2-terminal-release-private! shell-b))
+  (check "both origin generators close"
+         (and (g3c4-generator-close-internal! generator-a)
+              (g3c4-generator-close-internal! generator-b))))
+
+(let* ((generator (g3c4-generator-create-internal
+                    model tokenizer (config 'greedy 7 first-a)))
+       (native (vector-ref
+                 (g3c4-generator-entry-call-ready generator 'test) 3))
+       (old-origin-rows (vector-ref g3c4-p2g2-terminal-origin-rows 0))
+       (old-origin-anchors (vector-ref g3c4-p2g2-terminal-origin-anchors 0)))
+  (check "mark original owner for origin prezero failure"
+         (= (terminal-test-mark native 0 255) 0))
+  (check "arm origin prezero fault" (= (terminal-test-fault 1) 0))
+  (reject "origin prezero fault aborts in same call"
+    (lambda () (g3c4-p2g2-terminal-close-origin-private
+                 generator prompt-a)))
+  (check "disarm origin prezero fault" (= (terminal-test-fault 0) 0))
+  (check "origin prezero abort preserves native owner"
+         (= (terminal-test-after-abort native 2) 0))
+  (check "origin roots restored exactly after abort"
+         (and (eq? (vector-ref g3c4-p2g2-terminal-origin-rows 0)
+                   old-origin-rows)
+              (eq? (vector-ref g3c4-p2g2-terminal-origin-anchors 0)
+                   old-origin-anchors)))
+  (check "origin fault generator closes"
+         (g3c4-generator-close-internal! generator)))
+
 (check "deterministic matrix has genuine second-token EOS"
        (> second-eos-cases 0))
 (check "owned P2 inputs release after terminal cases"
