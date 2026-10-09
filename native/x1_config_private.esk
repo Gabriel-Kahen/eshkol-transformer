@@ -12,7 +12,7 @@
 (provide x1-private-config-parse x1-private-config-resolve
          x1-private-config-validate x1-private-config-canonical
          x1-private-config-fingerprint x1-private-config-ref
-         x1-resolved?)
+         x1-resolved? x1-private-resolved-entry)
 
 ;;; eshkol_sha256 is part of the pinned canonical hosted runtime even when the
 ;;; optional agent FFI is disabled.  This private declaration avoids importing
@@ -154,6 +154,14 @@
 
 (define (x1-resolved? value)
   (let ((result (x1-config-kind? value 'resolved))) result))
+
+;;; Source-private identity witness for same-call model construction. The
+;;; registered entry is never reconstructed from canonical or fingerprint bytes.
+(define (x1-private-resolved-entry value)
+  (let ((entry (x1-config-entry value)))
+    (if (and entry (eq? (car (cdr entry)) 'resolved))
+        entry
+        #f)))
 
 (define (x1-make-unresolved entries)
   (let ((result (x1-register-config 'unresolved entries '()))) result))

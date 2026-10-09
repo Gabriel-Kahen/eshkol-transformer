@@ -1712,6 +1712,20 @@ Source-shape and mutation controls pass. This is not yet compiled or integrated
 with G3 construction, O2 adoption, C2 SAVE, or cold LOAD; generated package
 behavior and full lifecycle acceptance remain separate gates.
 
+An isolated private M3 construction source leaf now captures the exact original
+resolved X1 shell in the same call that constructs the model. A fixed private
+route roots a pending row before M3 staging; the existing public constructor
+keeps its two-argument behavior and creates no lineage. A source-private X1
+accessor retains the original registered resolved entry. The private row binds
+the returned model, authentic M3 entry and initializer, original X1 shell and
+entry, and canonical and fingerprint strings before the seal tail returns the
+shell. A
+lexical witness rejects a copied row, an ordinary model, and an equal-byte
+alternate X1 shell. There is no live M3 retirement API, so completed rows
+remain rooted with a fixed 64-row process limit. Source and failure-cut
+controls do not prove generated Eshkol behavior, no-reentry, native cleanup,
+G3/O2 lineage, C2 SAVE, cold LOAD, or resumed continuation.
+
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
 diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use
