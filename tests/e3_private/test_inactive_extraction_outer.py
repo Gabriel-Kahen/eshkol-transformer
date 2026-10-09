@@ -68,6 +68,17 @@ class Contract(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "complete canonical"):
                 outer.material(root, sha256(bad).hexdigest(), Path.read_bytes)
 
+    def test_actual_flat_attester_precreate_pin(self) -> None:
+        source = H_REPO / "tests/g3c4/f_artifact_attest.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = root / "f_artifact_attest.py"
+            candidate.write_bytes(source.read_bytes())
+            outer.flat_attester(root, Path.read_bytes)
+            candidate.write_bytes(candidate.read_bytes() + b"# drift\n")
+            with self.assertRaisesRegex(ValueError, "selected bytes changed"):
+                outer.flat_attester(root, Path.read_bytes)
+
     def test_h_profile_tail_only_and_stale_cmd_denial(self) -> None:
         class H:
             @staticmethod
@@ -234,7 +245,8 @@ class Contract(unittest.TestCase):
                 return {"PATH": "/usr/bin:/bin"}
 
         row = {"Id": "c" * 64, "Name": "/" + decision["name"], "Image": H.IMAGE,
-               "Config": {"Labels": {"eshkol.gate": decision["name"]}, "User": "0:0",
+               "Config": {"Labels": {"org.opencontainers.image.version": "22.04",
+                                     "eshkol.gate": decision["name"]}, "User": "0:0",
                           "WorkingDir": "/source", "Entrypoint": ["/usr/bin/python3.10"],
                           "Cmd": outer.GUEST + ["a" * 64], "Env": ["PATH=/usr/bin:/bin"]},
                "State": {"Running": False}, "Mounts": mounts,
@@ -246,18 +258,25 @@ class Contract(unittest.TestCase):
                                            "Soft": H.FSIZE_LIMIT}],
                               "Mounts": host_mounts, "Binds": None}}
         raw = json.dumps([row]).encode()
-        self.assertEqual(outer.inspect_owned(H, raw, decision, "c" * 64, False, b"[]"), row)
+        image = json.dumps([{"Id": H.IMAGE,
+                             "Config": {"Labels": {"org.opencontainers.image.version": "22.04"}}}]).encode()
+        self.assertEqual(outer.inspect_owned(H, raw, decision, "c" * 64, False, image), row)
         for change in (lambda r: r["Config"].__setitem__("Cmd", ["-c", "foreign"]),
                        lambda r: r["HostConfig"].__setitem__("ReadonlyRootfs", False),
                        lambda r: r["Mounts"].append({"Type": "bind", "Source": "/foreign",
                                                       "Destination": "/foreign", "RW": False,
                                                       "Mode": "", "Propagation": "rprivate"}),
-                       lambda r: r["State"].__setitem__("Running", True)):
+                       lambda r: r["State"].__setitem__("Running", True),
+                       lambda r: r["Config"]["Labels"].update(foreign="x")):
             foreign = deepcopy(row)
             change(foreign)
             with self.assertRaises(ValueError):
                 outer.inspect_owned(H, json.dumps([foreign]).encode(), decision,
-                                    "c" * 64, False, b"[]")
+                                    "c" * 64, False, image)
+        changed_image = json.dumps([{"Id": H.IMAGE,
+                                     "Config": {"Labels": {"org.opencontainers.image.version": "22.05"}}}]).encode()
+        with self.assertRaisesRegex(ValueError, "immutable f31 image labels"):
+            outer.inspect_owned(H, raw, decision, "c" * 64, False, changed_image)
 
 
 if __name__ == "__main__":

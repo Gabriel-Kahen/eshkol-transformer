@@ -73,6 +73,11 @@ def material(bundle: Path, expected: str, ordinary) -> tuple[dict[str, bytes], d
     return bodies, pins
 
 
+def flat_attester(bundle: Path, ordinary) -> None:
+    """Pin the guest's separate flat F utility before Docker creation."""
+    exact_bytes(bundle / "f_artifact_attest.py", recipe.F_ATTEST_SHA, ordinary)
+
+
 def selected(h, decision_path: Path, decision_sha: str, *, fresh: bool) -> dict[str, Any]:
     """E3-specific admission; retain H's host/source and socket predicates."""
     if not HEX64.fullmatch(decision_sha):
@@ -134,6 +139,7 @@ def selected(h, decision_path: Path, decision_sha: str, *, fresh: bool) -> dict[
     h.attest.candidate_lock(bundle / "public-g2-6803.lock",
                              h.ordinary(Path(decision["source"]) / "toolchain/eshkol.lock"),
                              bundle / "public-g2-6803.lock")
+    flat_attester(bundle, h.ordinary)
     h.attest.original_output(Path(decision["f_output"]))
     bodies, pins = material(bundle, decision["e3_material_pins_sha256"], h.ordinary)
     admission = recipe.e3_admission(bodies["e3_admission"], pins["e3_admission"],
@@ -167,8 +173,17 @@ def inspect_owned(h, raw: bytes, decision: dict[str, Any], cid: str,
     h.require(type(data) is list and len(data) == 1, "inspect cardinality")
     row = data[0]
     config, host, state = row["Config"], row["HostConfig"], row["State"]
+    image_row = json.loads(image)
+    h.require(type(image_row) is list and len(image_row) == 1 and
+              image_row[0]["Id"] == h.IMAGE and
+              image_row[0]["Config"].get("Labels") ==
+              {"org.opencontainers.image.version": "22.04"},
+              "immutable f31 image labels changed")
+    labels = dict(image_row[0]["Config"]["Labels"])
+    h.require("eshkol.gate" not in labels, "image reserves selected gate label")
+    labels["eshkol.gate"] = decision["name"]
     h.require(row["Id"] == cid and row["Name"] == "/" + decision["name"] and
-              config["Labels"] == {"eshkol.gate": decision["name"]} and
+              config["Labels"] == labels and
               row["Image"] == h.IMAGE and
               (running is None or state["Running"] is running) and
               config["User"] == "0:0" and config["WorkingDir"] == "/source" and
