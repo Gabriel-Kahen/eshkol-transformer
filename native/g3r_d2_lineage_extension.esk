@@ -4,6 +4,20 @@
 ;;; Slot 0 retains completed rows. Slot 1 roots the one in-flight construction.
 (define g3r-d2-lineage-registry (vector '() #f))
 
+;;; Ordinary D2 close does not know this private companion. Its retained rows
+;;; are bounded even if a caller never invokes the private retirement path.
+(define g3r-d2-lineage-maximum-rows 64)
+
+(define (g3r-d2-lineage-check-capacity rows operation)
+  (let check ((remaining rows) (capacity g3r-d2-lineage-maximum-rows))
+    (cond
+      ((null? remaining) #t)
+      ((not (pair? remaining))
+       (d2-fail 'internal operation "D2 lineage registry is malformed"))
+      ((= capacity 0)
+       (d2-fail 'unsupported operation "D2 lineage row limit reached"))
+      (else (check (cdr remaining) (- capacity 1))))))
+
 (define (g3r-d2-lineage-byte-core tokenizer operation)
   (let ((entry (t2-private-entry tokenizer)))
     (if (not (and (pair? entry)
@@ -25,6 +39,8 @@
     (if (vector-ref g3r-d2-lineage-registry 1)
         (d2-fail 'invalid-state operation
                  "D2 lineage construction is already active"))
+    (g3r-d2-lineage-check-capacity
+     (vector-ref g3r-d2-lineage-registry 0) operation)
     (let* ((tokenizer-entry (g3r-d2-lineage-byte-core tokenizer operation))
            (fingerprint (t2-private-tokenizer-fingerprint tokenizer))
            (vocabulary (t2-private-tokenizer-vocab-size tokenizer))
@@ -49,7 +65,8 @@
                  (core (vector-ref state 6))
                  (witness
                    (lambda (candidate)
-                     (and (eq? (vector-ref candidate 0) shell)
+                     (and (eq? candidate row)
+                          (eq? (vector-ref candidate 0) shell)
                           (eq? (vector-ref candidate 2) tokenizer)
                           (eq? (vector-ref candidate 3) tokenizer-entry)
                           (eq? (vector-ref candidate 4) state)
@@ -112,3 +129,57 @@
                         "original D2/T2 lineage or live cursor changed"))
            row))
         (else (search (cdr rows)))))))
+
+(define (g3r-d2-lineage-retire! dataset tokenizer)
+  (let ((operation 'g3r-d2-lineage-retire!))
+    (if (vector-ref g3r-d2-lineage-registry 1)
+        (d2-fail 'invalid-state operation
+                 "D2 lineage construction is active"))
+    ;; Build the replacement before close. The close is the only fallible
+    ;; operation after authentication; failed close retains the original row.
+    (let search ((rows (vector-ref g3r-d2-lineage-registry 0))
+                 (prefix '()))
+      (cond
+        ((null? rows)
+         (d2-fail 'invalid-argument operation
+                  "dataset has no creation-time tokenizer lineage"))
+        ((not (and (pair? rows) (vector? (car rows))
+                   (= (vector-length (car rows)) 8)))
+         (d2-fail 'internal operation "D2 lineage registry is malformed"))
+        ((eq? (vector-ref (car rows) 0) dataset)
+         (let* ((row (car rows))
+                (state (d2-dataset-state dataset operation))
+                (original (vector-ref row 2))
+                (entry (g3r-d2-lineage-byte-core original operation))
+                (open? (vector-ref state 2))
+                (next (append (reverse prefix) (cdr rows))))
+           (if (not (and (eq? original tokenizer)
+                         (eq? (vector-ref row 1) 'live)
+                         (eq? (vector-ref row 3) entry)
+                         (eq? (vector-ref row 4) state)
+                         (procedure? (vector-ref row 7))
+                         ((vector-ref row 7) row)
+                         (or open?
+                             (and (eq? (vector-ref state 10) 'closed)
+                                  (not (vector-ref state 3))
+                                  (not (vector-ref state 4))
+                                  (not (vector-ref state 5))
+                                  (not (vector-ref state 6))
+                                  (not (vector-ref state 7))
+                                  (= (vector-ref state 17) 0)
+                                  (= (vector-ref state 18) 0)))))
+               (d2-fail 'invalid-state operation
+                        "original D2 lineage is not safely retireable"))
+           (if open? (g3r-d2-lineage-require dataset tokenizer))
+           (d2-token-dataset-close! dataset)
+           (vector-set! g3r-d2-lineage-registry 0 next)
+           (vector-set! row 0 #f)
+           (vector-set! row 1 'retired)
+           (vector-set! row 2 #f)
+           (vector-set! row 3 #f)
+           (vector-set! row 4 #f)
+           (vector-set! row 5 #f)
+           (vector-set! row 6 #f)
+           (vector-set! row 7 #f)
+           #t))
+        (else (search (cdr rows) (cons (car rows) prefix)))))))

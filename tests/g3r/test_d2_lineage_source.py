@@ -15,8 +15,9 @@ def check_lineage(source: str, root: str, manifest: str) -> None:
     names = [form[1][0] for form in forms if isinstance(form, list)
              and len(form) > 2 and form[0] == "define"
              and isinstance(form[1], list)]
-    if names != ["g3r-d2-lineage-byte-core", "g3r-d2-lineage-open",
-                 "g3r-d2-lineage-require"]:
+    if names != ["g3r-d2-lineage-check-capacity",
+                 "g3r-d2-lineage-byte-core", "g3r-d2-lineage-open",
+                 "g3r-d2-lineage-require", "g3r-d2-lineage-retire!"]:
         raise ValueError("private lineage entries differ")
     if parse(root) != [["load", '"cli3_generate_root.esk"'],
                        ["load", '"g3r_d2_lineage_extension.esk"']]:
@@ -53,6 +54,7 @@ def check_lineage(source: str, root: str, manifest: str) -> None:
     required = ["(d2-token-dataset-close! (vector-ref pending 2))",
                 "(guard (cleanup-failure (#t (exit 134)))",
                 "(raise caught)",
+                "(eq? candidate row)",
                 "(eq? (vector-ref candidate 2) tokenizer)",
                 "(eq? (vector-ref candidate 3) tokenizer-entry)",
                 "(eq? (vector-ref candidate 4) state)",
@@ -67,6 +69,19 @@ def check_lineage(source: str, root: str, manifest: str) -> None:
         raise ValueError("identity, cursor, or failure cleanup differs")
     if "(vector-set! g3r-d2-lineage-registry 0 next)" in source[:positions[4]]:
         raise ValueError("dataset is published before D2 open")
+    if ("(define g3r-d2-lineage-maximum-rows 64)" not in source or
+            source.index("(g3r-d2-lineage-check-capacity\n") > positions[4] or
+            "(= capacity 0)" not in source):
+        raise ValueError("ordinary-close retention is unbounded")
+    retire = source[source.index("(define (g3r-d2-lineage-retire!") :]
+    retire_order = ["(next (append (reverse prefix) (cdr rows)))",
+                    "(d2-token-dataset-close! dataset)",
+                    "(vector-set! g3r-d2-lineage-registry 0 next)",
+                    "(vector-set! row 2 #f)",
+                    "(vector-set! row 7 #f)"]
+    points = [retire.find(item) for item in retire_order]
+    if -1 in points or points != sorted(points):
+        raise ValueError("retirement publication or cleanup order differs")
     d2 = (ROOT / "internal/d2/lib/d2_dataset.esk").read_text()
     native = (ROOT / "native/d2_native.c").read_text()
     open_body = d2[d2.index("(define (d2-token-dataset-open config tokenizer)"):
@@ -119,6 +134,8 @@ class D2LineageSource(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.check(source=self.source.replace(
                 '((vector-ref row 7) row)', '#t'))
+        with self.assertRaises(ValueError):
+            self.check(source=self.source.replace('(eq? candidate row)', '#t'))
 
     def test_close_failure_cannot_be_swallowed(self) -> None:
         with self.assertRaises(ValueError):
@@ -132,6 +149,21 @@ class D2LineageSource(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.check(source=self.source.replace(
                 '(d2-core-state-identity=? core decoded)', '#t'))
+
+    def test_ordinary_close_is_bounded(self) -> None:
+        with self.assertRaises(ValueError):
+            self.check(source=self.source.replace(
+                '(define g3r-d2-lineage-maximum-rows 64)',
+                '(define g3r-d2-lineage-maximum-rows 999999)'))
+
+    def test_retire_only_after_real_close(self) -> None:
+        with self.assertRaises(ValueError):
+            self.check(source=self.source.replace(
+                '(d2-token-dataset-close! dataset)', '#t'))
+        with self.assertRaises(ValueError):
+            self.check(source=self.source.replace(
+                '(next (append (reverse prefix) (cdr rows)))',
+                '(next (cdr rows))'))
 
 
 if __name__ == "__main__":

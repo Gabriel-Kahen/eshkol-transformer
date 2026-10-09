@@ -1703,9 +1703,12 @@ row before returning the shell. Failed post-open construction closes the
 unexposed dataset before discarding the pending row; cleanup failure stops the
 process. Admission rejects an ordinary D2 dataset without that creation row,
 an equal-byte alternate tokenizer shell, a closed dataset, or changed cursor
-identity. Source-shape and mutation controls pass. This is not yet compiled
-or integrated with G3 construction, O2 adoption, C2 SAVE, or cold LOAD; live
-row retirement and generated package behavior remain separate gates.
+identity. A private retire operation unlinks and clears the exact row only
+after genuine D2 close; an ordinary D2 close retains a row until that private
+retire call, so a fixed 64-row process limit denies unbounded retention.
+Source-shape and mutation controls pass. This is not yet compiled or integrated
+with G3 construction, O2 adoption, C2 SAVE, or cold LOAD; generated package
+behavior and full lifecycle acceptance remain separate gates.
 
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
