@@ -27,8 +27,9 @@ public checkout, original F output and bundle from fresh writable candidate
 and output. Every Docker client phase has owned process-session, 16 MiB
 per-stream acquisition caps, actual `wait4` status and bounded writer closure.
 The container is identified by the exact created CID, label, name, image,
-host profile and six binds before any cleanup; stopped inspect, owned removal
-and absence are required. Failed and partial receipts remain in the consumed
+effective entrypoint/command, user, environment, workdir, resource limits,
+host mount options and six bind rows before any cleanup; stopped inspect,
+owned removal and absence are required. Failed and partial receipts remain in the consumed
 attempt. Any incomplete closure is a failed result, never permission to retry.
 
 Current tests exercise command shape, direct CLI denial, real owned child

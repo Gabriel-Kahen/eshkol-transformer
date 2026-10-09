@@ -49,7 +49,8 @@ def ordinary(path: Path) -> bytes:
 def directory(path: Path) -> None:
     require(path.is_absolute(), "relative selected directory")
     mode = path.lstat().st_mode
-    require(stat.S_ISDIR(mode) and not stat.S_ISLNK(mode),
+    require(stat.S_ISDIR(mode) and not stat.S_ISLNK(mode) and
+            path.resolve(strict=True) == path,
             f"selected directory is not ordinary: {path}")
 
 
@@ -78,6 +79,9 @@ def selected(decision_path: Path, expected_sha: str, *, fresh: bool) -> dict:
     """Caller must be a separately admitted ROOT wrapper with an exact pin."""
     require(type(expected_sha) is str and HEX64.fullmatch(expected_sha),
             "exact external ROOT decision pin missing")
+    require(decision_path.is_absolute() and
+            decision_path.resolve(strict=True) == decision_path,
+            "ROOT decision path is not canonical")
     data = ordinary(decision_path)
     require(sha(data) == expected_sha, "ROOT decision changed")
     decision = json.loads(data)
@@ -319,8 +323,35 @@ def checked(argv: list[str], path: Path, timeout: int = 120) -> bytes:
     return ordinary(path / "stdout.raw")
 
 
+def env_map(rows: list[str]) -> dict[str, str]:
+    require(type(rows) is list and all(type(row) is str and "=" in row
+                                       for row in rows), "effective env malformed")
+    result = {}
+    for row in rows:
+        key, value = row.split("=", 1)
+        require(key and key not in result, "effective env duplicate")
+        result[key] = value
+    return result
+
+
+def expected_env(image_raw: bytes) -> dict[str, str]:
+    image = json.loads(image_raw)
+    require(type(image) is list and len(image) == 1 and
+            image[0]["Id"] == IMAGE, "image env source mismatch")
+    result = env_map(image[0]["Config"]["Env"])
+    result.update({"PATH": "/usr/bin:/bin", "LC_ALL": "C", "TZ": "UTC",
+                   "PYTHONDONTWRITEBYTECODE": "1",
+                   "ESHKOL_ALLOW_UNSUPPORTED_HOST": "0",
+                   "GIT_CONFIG_COUNT": "2",
+                   "GIT_CONFIG_KEY_0": "safe.directory",
+                   "GIT_CONFIG_VALUE_0": "/workspace",
+                   "GIT_CONFIG_KEY_1": "safe.directory",
+                   "GIT_CONFIG_VALUE_1": "/source"})
+    return result
+
+
 def inspect_owned(raw: bytes, decision: dict, cid: str,
-                  running: bool | None) -> dict:
+                  running: bool | None, image_raw: bytes) -> dict:
     data = json.loads(raw)
     require(type(data) is list and len(data) == 1, "inspect cardinality")
     row = data[0]
@@ -328,22 +359,44 @@ def inspect_owned(raw: bytes, decision: dict, cid: str,
             row["Config"]["Labels"] == {"eshkol.gate": decision["name"]} and
             row["Image"] == IMAGE and
             (running is None or row["State"]["Running"] is running) and
+            row["Config"]["User"] == "0:0" and
+            row["Config"]["WorkingDir"] == "/source" and
+            row["Config"]["Entrypoint"] == ["/usr/bin/python3.10"] and
+            row["Config"]["Cmd"] ==
+            ["-B", "-m", "tests.g3c4.f_loader_guest",
+             "--source-admission-sha256", decision["source_admission_sha256"]] and
+            env_map(row["Config"]["Env"]) == expected_env(image_raw) and
             row["HostConfig"]["ReadonlyRootfs"] is True and
             row["HostConfig"]["NetworkMode"] == "none" and
             row["HostConfig"]["Tmpfs"] ==
             {"/tmp": "rw,nosuid,nodev,size=268435456,mode=1777"} and
             row["HostConfig"]["Memory"] == 4 * 1024**3 and
             row["HostConfig"]["MemorySwap"] == 4 * 1024**3 and
-            row["HostConfig"]["PidsLimit"] == 128,
+            row["HostConfig"]["PidsLimit"] == 128 and
+            row["HostConfig"]["NanoCpus"] == 2_000_000_000 and
+            row["HostConfig"]["Ulimits"] ==
+            [{"Name": "fsize", "Hard": 16_777_216, "Soft": 16_777_216}],
             "owned container inspect mismatch")
     expected = {decision[key]: (target, read_only) for key, target, read_only in
                 (("compiler", "/workspace", True), ("source", "/source", True),
                  ("f_output", "/f-output", True), ("bundle", "/bundle", True),
                  ("candidate", "/candidate", False), ("out", "/out", False))}
-    mounts = {row["Source"]: (row["Destination"], not row["RW"])
-              for row in row["Mounts"] if row["Type"] == "bind"}
-    require(mounts == expected and len(row["Mounts"]) == len(expected),
+    mounts = {mount["Source"]: (mount["Destination"], not mount["RW"])
+              for mount in row["Mounts"] if mount["Type"] == "bind"}
+    require(mounts == expected and len(row["Mounts"]) == len(expected) and
+            all(mount["Mode"] == "" and mount["Propagation"] == "rprivate"
+                for mount in row["Mounts"]),
             "owned mounts differ")
+    expected_host_mounts = [
+        {"Type": "bind", "Source": decision[key], "Target": target,
+         **({"ReadOnly": True} if readonly else {})}
+        for key, target, readonly in
+        (("compiler", "/workspace", True), ("source", "/source", True),
+         ("f_output", "/f-output", True), ("bundle", "/bundle", True),
+         ("candidate", "/candidate", False), ("out", "/out", False))]
+    require(row["HostConfig"]["Mounts"] == expected_host_mounts and
+            row["HostConfig"]["Binds"] is None,
+            "owned host mount options differ")
     return row
 
 
@@ -366,7 +419,15 @@ def guest_output(decision: dict) -> None:
 def run_once(decision_path: Path, expected_sha: str, evidence: Path) -> None:
     """Only a future immutable ROOT wrapper may supply the decision SHA."""
     decision = selected(decision_path, expected_sha, fresh=True)
-    require(evidence.is_absolute() and not evidence.exists(), "fresh outer evidence")
+    roots = [Path(decision[key]) for key in
+             ("compiler", "source", "f_output", "bundle", "candidate", "out")]
+    require(evidence.is_absolute() and not evidence.exists() and
+            evidence.parent.resolve(strict=True) == evidence.parent and
+            all(evidence != root and root not in evidence.parents and
+                evidence not in root.parents for root in roots) and
+            all(decision_path != root and root not in decision_path.parents and
+                decision_path not in root.parents for root in roots),
+            "fresh outer evidence/decision overlaps selected input")
     evidence.mkdir(mode=0o700)
     attest.exclusive_bytes(evidence / "once.json", canonical({
         "decision_sha256": expected_sha, "state": "consumed-before-create"}))
@@ -377,6 +438,7 @@ def run_once(decision_path: Path, expected_sha: str, evidence: Path) -> None:
         image = checked([str(DOCKER), "image", "inspect", IMAGE],
                         evidence / "image")
         require(json.loads(image)[0]["Id"] == IMAGE, "image identity")
+        expected_env(image)
         security = checked([str(DOCKER), "info", "--format",
                             "{{json .SecurityOptions}}"], evidence / "daemon")
         require("rootless" in security.decode(), "daemon is not rootless")
@@ -389,7 +451,7 @@ def run_once(decision_path: Path, expected_sha: str, evidence: Path) -> None:
                 "created CID malformed")
         cid = created.decode().strip()
         inspect_owned(checked([str(DOCKER), "inspect", cid],
-                              evidence / "created"), decision, cid, False)
+                              evidence / "created"), decision, cid, False, image)
         started = capture([str(DOCKER), "start", "--attach", cid],
                           evidence / "guest", PHASE_LIMIT)
         require(started["quiescent"] and started["returncode"] == 0 and
@@ -405,12 +467,12 @@ def run_once(decision_path: Path, expected_sha: str, evidence: Path) -> None:
             try:
                 raw = checked([str(DOCKER), "inspect", cid],
                               evidence / "closure-inspect")
-                row = inspect_owned(raw, decision, cid, None)
+                row = inspect_owned(raw, decision, cid, None, image)
                 if row["State"]["Running"]:
                     checked([str(DOCKER), "kill", cid], evidence / "owned-kill")
                     raw = checked([str(DOCKER), "inspect", cid],
                                   evidence / "stopped")
-                    row = inspect_owned(raw, decision, cid, False)
+                    row = inspect_owned(raw, decision, cid, False, image)
                 require(row["State"]["ExitCode"] is not None,
                         "guest exit absent")
                 if row["State"]["ExitCode"] != 0:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 import sys
@@ -39,6 +40,20 @@ class OuterTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "exact external ROOT decision pin"):
             outer.selected(Path("/missing"), "caller-selected", fresh=True)
 
+    def test_evidence_cannot_write_selected_input(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            roots = {key: str(root / key) for key in
+                     ("compiler", "source", "f_output", "bundle", "candidate", "out")}
+            for path in roots.values():
+                Path(path).mkdir()
+            decision = {**roots, "name": "g3c4-f-loader-owned"}
+            with patch.object(outer, "selected", return_value=decision):
+                with self.assertRaisesRegex(ValueError, "overlaps selected input"):
+                    outer.run_once(root / "decision.json", "a" * 64,
+                                   Path(roots["f_output"]) / "evidence")
+            self.assertFalse((Path(roots["f_output"]) / "evidence").exists())
+
     def test_create_profile_and_guest_route(self) -> None:
         d = {"name": "g3c4-f-loader-owned", "compiler": "/one",
              "source": "/two", "f_output": "/three", "bundle": "/four",
@@ -64,6 +79,10 @@ class OuterTests(unittest.TestCase):
             self.assertEqual(r["wait_status"], 0)
             self.assertEqual((path / "stdout.raw").read_bytes(), b"ok")
             self.assertEqual((path / "stderr.raw").read_bytes(), b"")
+            launch = json.loads((path / "argv.json").read_bytes())
+            self.assertEqual(launch["cwd"], "/")
+            self.assertEqual(launch["env"]["DOCKER_HOST"],
+                             f"unix:///run/user/{outer.os.getuid()}/docker.sock")
 
     def test_owned_overflow_and_timeout_are_failures(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, patch.object(outer, "STREAM_LIMIT", 32):
@@ -82,29 +101,65 @@ class OuterTests(unittest.TestCase):
     def test_inspect_requires_owned_exact_mounts(self) -> None:
         d = {"name": "g3c4-f-loader-owned", "compiler": "/one",
              "source": "/two", "f_output": "/three", "bundle": "/four",
-             "candidate": "/five", "out": "/six"}
+             "candidate": "/five", "out": "/six",
+             "source_admission_sha256": "a" * 64}
         mounts = [{"Type": "bind", "Source": d[key], "Destination": dest,
-                   "RW": not ro} for key, dest, ro in
+                   "RW": not ro, "Mode": "", "Propagation": "rprivate"}
+                  for key, dest, ro in
                   (("compiler", "/workspace", True), ("source", "/source", True),
                    ("f_output", "/f-output", True), ("bundle", "/bundle", True),
                    ("candidate", "/candidate", False), ("out", "/out", False))]
+        host_mounts = [{"Type": "bind", "Source": d[key], "Target": dest,
+                        **({"ReadOnly": True} if ro else {})}
+                       for key, dest, ro in
+                       (("compiler", "/workspace", True), ("source", "/source", True),
+                        ("f_output", "/f-output", True), ("bundle", "/bundle", True),
+                        ("candidate", "/candidate", False), ("out", "/out", False))]
+        image = json.dumps([{"Id": outer.IMAGE,
+                             "Config": {"Env": ["PATH=/usr/bin", "DEBIAN_FRONTEND=noninteractive"]}}]).encode()
+        env = [f"{k}={v}" for k, v in outer.expected_env(image).items()]
         row = {"Id": "b" * 64, "Name": "/" + d["name"],
-               "Image": outer.IMAGE, "Config": {"Labels": {"eshkol.gate": d["name"]}},
+               "Image": outer.IMAGE, "Config": {
+                   "Labels": {"eshkol.gate": d["name"]}, "User": "0:0",
+                   "WorkingDir": "/source", "Entrypoint": ["/usr/bin/python3.10"],
+                   "Cmd": ["-B", "-m", "tests.g3c4.f_loader_guest",
+                           "--source-admission-sha256", "a" * 64], "Env": env},
                "State": {"Running": False}, "Mounts": mounts,
                "HostConfig": {"ReadonlyRootfs": True, "NetworkMode": "none",
                               "Tmpfs": {"/tmp": "rw,nosuid,nodev,size=268435456,mode=1777"},
                               "Memory": 4 * 1024**3, "MemorySwap": 4 * 1024**3,
-                              "PidsLimit": 128}}
+                              "PidsLimit": 128, "NanoCpus": 2_000_000_000,
+                              "Ulimits": [{"Name": "fsize", "Hard": 16_777_216,
+                                           "Soft": 16_777_216}],
+                              "Mounts": host_mounts, "Binds": None}}
         self.assertEqual(outer.inspect_owned(json.dumps([row]).encode(), d,
-                                             "b" * 64, False), row)
+                                             "b" * 64, False, image), row)
         row["Mounts"].append({"Type": "bind", "Source": "/extra",
-                              "Destination": "/extra", "RW": False})
+                              "Destination": "/extra", "RW": False,
+                              "Mode": "", "Propagation": "rprivate"})
         with self.assertRaisesRegex(ValueError, "mounts differ"):
-            outer.inspect_owned(json.dumps([row]).encode(), d, "b" * 64, False)
+            outer.inspect_owned(json.dumps([row]).encode(), d, "b" * 64, False, image)
         row["Mounts"].pop()
-        row["HostConfig"]["ReadonlyRootfs"] = False
-        with self.assertRaisesRegex(ValueError, "inspect mismatch"):
-            outer.inspect_owned(json.dumps([row]).encode(), d, "b" * 64, False)
+        mutants = [
+            ("user", lambda r: r["Config"].__setitem__("User", "1:1")),
+            ("workdir", lambda r: r["Config"].__setitem__("WorkingDir", "/tmp")),
+            ("entrypoint", lambda r: r["Config"].__setitem__("Entrypoint", ["/bin/sh"])),
+            ("cmd", lambda r: r["Config"]["Cmd"].__setitem__(0, "-c")),
+            ("env", lambda r: r["Config"]["Env"].append("LD_PRELOAD=/evil")),
+            ("duplicate_env", lambda r: r["Config"]["Env"].append("PATH=/bin")),
+            ("readonly", lambda r: r["HostConfig"].__setitem__("ReadonlyRootfs", False)),
+            ("cpus", lambda r: r["HostConfig"].__setitem__("NanoCpus", 1_000_000_000)),
+            ("fsize", lambda r: r["HostConfig"]["Ulimits"][0].__setitem__("Soft", 1)),
+            ("host_mount", lambda r: r["HostConfig"]["Mounts"][0].__setitem__("ReadOnly", False)),
+            ("propagation", lambda r: r["Mounts"][0].__setitem__("Propagation", "shared")),
+        ]
+        for name, mutate in mutants:
+            with self.subTest(name=name):
+                bad = copy.deepcopy(row)
+                mutate(bad)
+                with self.assertRaises(ValueError):
+                    outer.inspect_owned(json.dumps([bad]).encode(), d,
+                                        "b" * 64, False, image)
 
     def test_guest_receipt_must_be_durable_and_bound_to_library_bytes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
