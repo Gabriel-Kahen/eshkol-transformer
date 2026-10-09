@@ -79,6 +79,11 @@
 #error "G3-R save ledger requires the complete diagnostic G3-T transaction stack"
 #endif
 #endif
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+#ifndef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
+#error "G3R same-owner hold requires the complete native ledger"
+#endif
+#endif
 #ifdef ET_G3T_RECORD_RNG_IMPORT_PRIVATE
 #ifndef ET_G3T_OUTPUT_RNG_CLONE_PRIVATE
 #error "G3-R word import requires kind-8 RNG clone ownership and release"
@@ -145,6 +150,9 @@ enum { G3T_GENERATOR = 1, G3T_INPUT = 2,
 #endif
 #ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
        G3T_SAVE_SNAPSHOT = 9,
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+       G3T_SAVE_HOLD = 10,
+#endif
 #endif
        G3T_PENDING = 0, G3T_LIVE = 1, G3T_DEAD = -1 };
 enum { G3T_ARGUMENT = 1, G3T_STATE = 2, G3T_SHAPE = 3,
@@ -164,6 +172,14 @@ typedef struct g3r_save_snapshot {
   g3t_record h;
   et_g3r_g3t_idle_snapshot_words_v1 value;
 } g3r_save_snapshot;
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+typedef struct g3r_save_hold {
+  g3t_record h;
+  void *context, *model, *cache;
+  et_g3r_g3t_idle_snapshot_words_v1 value;
+} g3r_save_hold;
+static size_t g3r_save_hold_tombstones;
+#endif
 #endif
 typedef struct g3t_frame {
   int active, kind, next_ordinal, prepared, end_prepared;
@@ -267,6 +283,9 @@ typedef struct g3t_context {
   int final_committed;
 #ifdef ET_G3R_G3T_SAVE_LEDGER_PRIVATE
   g3r_ledger ledger;
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  g3r_save_hold *save_hold;
+#endif
 #endif
 } g3t_context;
 static g3t_record *g3t_registry;
@@ -526,6 +545,12 @@ static g3t_context *g3t_admit(void *candidate, int allow_dead) {
 static g3t_context *g3t_active(void *candidate) {
   g3t_context *c = g3t_admit(candidate, 0);
   if (!c) return NULL;
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  if (c->save_hold) {
+    g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    return NULL;
+  }
+#endif
   if (!c->h.busy || !c->model || c->model->active != c ||
       c->pins.held_mask != UINT16_C(0x3fff)) {
     g3t_bad(G3T_STATE, G3T_LIFECYCLE);
@@ -840,6 +865,140 @@ int64_t et_g3r_private_g3t_idle_snapshot_release_v1(void *candidate) {
   snapshot->h.state = G3T_DEAD;
   return 0;
 }
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+void *et_g3r_private_g3t_save_begin_v1(
+    void *candidate, void *const parameters[14],
+    const void *const identities[14]) {
+  g3t_clear();
+  g3t_context *c = g3t_admit(candidate, 0);
+  if (!c) return NULL;
+  owner *o = g3t_model(c->model);
+  if (!o) return NULL;
+  if (!parameters || !identities || c->save_hold ||
+      g3r_save_hold_tombstones >= 64u) {
+    g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    return NULL;
+  }
+  for (size_t i = 0; i < 14; ++i)
+    if (o->p[i] != parameters[i] || o->handles[i] != identities[i]) {
+      g3t_bad(G3T_STATE, G3T_TOPOLOGY);
+      return NULL;
+    }
+  void *snapshot = et_g3r_private_g3t_idle_snapshot_create_v1(candidate);
+  if (!snapshot) return NULL;
+  et_g3r_g3t_idle_snapshot_words_v1 words;
+  if (et_g3r_private_g3t_idle_snapshot_copy_v1(
+          snapshot, &words, sizeof(words)) != 0)
+    abort();
+  if (et_g3r_private_g3t_idle_snapshot_release_v1(snapshot) != 0)
+    abort();
+  g3r_save_hold *hold = calloc(1, sizeof(*hold));
+  if (!hold) {
+    g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
+    return NULL;
+  }
+  et_f32_tensor_error error;
+  if (et_g3t_model_pins_begin_internal(
+          o->p, (const void *const *)o->handles, &c->pins, &error) != 0) {
+    free(hold);
+    g3t_f32_failure(&error);
+    return NULL;
+  }
+  if (g3t_check_binding(c) != 0) {
+    et_g3t_model_pins_end_internal(&c->pins);
+    free(hold);
+    return NULL;
+  }
+  hold->context = c;
+  hold->model = o;
+  hold->cache = c->cache;
+  hold->value = words;
+  hold->h.kind = G3T_SAVE_HOLD;
+  hold->h.state = G3T_LIVE;
+  hold->h.next = g3t_registry;
+  g3t_registry = &hold->h;
+  ++g3r_save_hold_tombstones;
+  c->save_hold = hold;
+  c->h.busy = 1;
+  o->active = c;
+  return hold;
+}
+
+int64_t et_g3r_private_g3t_save_check_v1(void *candidate) {
+  g3t_clear();
+  g3r_save_hold *hold = (g3r_save_hold *)g3t_admit_record(
+      candidate, G3T_SAVE_HOLD, 0);
+  if (!hold) return g3t_error_category;
+  g3t_context *c = hold->context;
+  owner *o = g3t_model(c->model);
+  if (!o) return g3t_error_category;
+  if (c->save_hold != hold || !c->h.busy || o != hold->model ||
+      o->active != c || c->cache != hold->cache ||
+      c->pins.held_mask != UINT16_C(0x3fff) || !c->binding_ready ||
+      c->call_kind || c->frame.active || c->pending_output ||
+      c->pending_logits || c->final_committed ||
+      !g3r_ledger_valid(c, &c->ledger) || c->ledger.pending_g1)
+    return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+  if (g3t_check_binding(c)) return g3t_error_category;
+  const int64_t *word = hold->value.word;
+  if (word[0] != 1 ||
+      memcmp(word + 1, c->policy, sizeof(c->policy)) ||
+      memcmp(word + 7, c->rng, sizeof(c->rng)) ||
+      memcmp(word + 11, c->ledger.ids, sizeof(c->ledger.ids)) ||
+      word[13] != c->ledger.prompt ||
+      word[14] != c->ledger.generated ||
+      word[15] != c->ledger.manual ||
+      word[16] != c->ledger.terminal ||
+      word[17] != c->ledger.length)
+    return g3t_bad(G3T_STATE, G3T_INVARIANT);
+  return 0;
+}
+
+int64_t et_g3r_private_g3t_save_copy_v1(
+    void *candidate, et_g3r_g3t_idle_snapshot_words_v1 *destination,
+    int64_t destination_bytes) {
+  g3t_clear();
+  g3r_save_hold *hold = (g3r_save_hold *)g3t_admit_record(
+      candidate, G3T_SAVE_HOLD, 0);
+  if (!hold) return g3t_error_category;
+  if (!destination || destination_bytes != (int64_t)sizeof(*destination) ||
+      destination == &hold->value)
+    return g3t_bad(G3T_ARGUMENT, G3T_IDENTITY);
+  if (et_g3r_private_g3t_save_check_v1(hold)) return g3t_error_category;
+  memcpy(destination, &hold->value, sizeof(*destination));
+  return 0;
+}
+
+int64_t et_g3r_private_g3t_save_end_v1(void *candidate) {
+  g3t_clear();
+  g3r_save_hold *hold = (g3r_save_hold *)g3t_admit_record(
+      candidate, G3T_SAVE_HOLD, 0);
+  if (!hold) return g3t_error_category;
+  int64_t first = et_g3r_private_g3t_save_check_v1(hold);
+  int64_t domain = g3t_error_domain, category = g3t_error_category;
+  int64_t code = g3t_error_code;
+  g3t_context *c = hold->context;
+  owner *o = hold->model;
+  if (c->save_hold != hold || o->active != c ||
+      c->pins.held_mask != UINT16_C(0x3fff))
+    abort();
+  et_g3t_model_pins_end_internal(&c->pins);
+  o->active = NULL;
+  c->h.busy = 0;
+  c->save_hold = NULL;
+  memset(&hold->value, 0, sizeof(hold->value));
+  hold->context = hold->model = hold->cache = NULL;
+  hold->h.state = G3T_DEAD;
+  if (first) {
+    g3t_error_domain = domain;
+    g3t_error_category = category;
+    g3t_error_code = code;
+    return first;
+  }
+  g3t_clear();
+  return 0;
+}
+#endif
 #endif
 int64_t et_g3t_private_generator_close_v1(void *candidate) {
   g3t_clear();
@@ -2812,6 +2971,9 @@ int64_t et_g3t_private_call_abort_v1(void *candidate) {
   g3t_context *c = g3t_admit(candidate, 0);
   if (!c) return g3t_error_category;
   if (!c->h.busy) return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  if (c->save_hold) return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+#endif
 #ifdef ET_G3T_FINAL_PUBLICATION_PRIVATE
   if (c->final_committed) return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
 #endif

@@ -167,6 +167,23 @@ static et_o2_optimizer_state_borrow *et_o2_borrows;
 static et_o2_optimizer_state_borrow *et_o2_retired_borrows;
 static et_o2_state_reconstruct_builder *et_o2_reconstruct_builders;
 static size_t et_o2_owned_state_clones;
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+enum { ET_G3R_O2_SAVE_MAX_TOMBSTONES = 64 };
+struct et_o2_g3r_save_hold {
+  struct et_o2_g3r_save_hold *next;
+  et_o2_optimizer *optimizer;
+  et_f32_parameter *parameters[14];
+  const void *identities[14];
+  et_f32_tensor *moment_owners[28];
+  et_f32_tensor *moment_baseline[28];
+  et_o2_options options[14];
+  et_o2_config config;
+  uint64_t completed_updates;
+  uint32_t live;
+};
+static et_o2_g3r_save_hold *et_o2_g3r_save_holds;
+static size_t et_o2_g3r_save_tombstones;
+#endif
 #ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
 static et_o2_retire_provenance *et_o2_retire_records;
 
@@ -2049,15 +2066,212 @@ static void et_o2_release_owned_state_prefix(et_o2_optimizer_state *state) {
   }
 }
 
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+static et_o2_g3r_save_hold *et_o2_g3r_hold_admit(
+    const et_o2_g3r_save_hold *candidate) {
+  for (et_o2_g3r_save_hold *hold = et_o2_g3r_save_holds;
+       hold != NULL; hold = hold->next)
+    if (hold == candidate && hold->live == 1u &&
+        et_o2_find_optimizer(hold->optimizer) == hold->optimizer &&
+        hold->optimizer->busy == 1u)
+      return hold;
+  return NULL;
+}
+
+static void et_o2_g3r_hold_drain(et_o2_g3r_save_hold *hold) {
+  for (size_t i = 0; i < 28; ++i) {
+    if (hold->moment_baseline[i] != NULL) {
+      et_f32_tensor_error error;
+      if (et_f32_tensor_destroy_v1(&hold->moment_baseline[i], &error) != 0)
+        abort(); /* Private baseline cannot have external borrowers. */
+    }
+  }
+  if (hold->optimizer != NULL && hold->optimizer->busy == 1u)
+    hold->optimizer->busy = 0u;
+}
+
+int32_t et_g3r_private_o2_save_begin_v1(
+    et_o2_optimizer *candidate, et_f32_parameter *const parameters[14],
+    const void *const identities[14], et_o2_g3r_save_hold **output,
+    et_o2_error_v1 *error) {
+  const char *operation = "g3r-save-o2-begin";
+  int32_t result;
+  if (!parameters || !identities || !output || *output != NULL)
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_ARGUMENT,
+                      ET_O2_CODE_NULL_ARGUMENT, operation,
+                      "expected complete roster and empty hold slot");
+  if ((result = et_o2_require_optimizer(candidate, operation, error)) != 0)
+    return result;
+  if (candidate->count != 14u)
+    return et_o2_fail(error, ET_O2_STATUS_SHAPE_MISMATCH,
+                      ET_O2_CODE_MISSING_PARAMETER, operation,
+                      "same-owner save requires fourteen parameters");
+  if (et_o2_g3r_save_tombstones >= ET_G3R_O2_SAVE_MAX_TOMBSTONES)
+    return et_o2_fail(error, ET_O2_STATUS_UNSUPPORTED,
+                      ET_O2_CODE_CONSUMED, operation,
+                      "same-owner hold tombstone limit reached");
+  for (size_t i = 0; i < 14; ++i) {
+    et_f32_tensor_error i2_error;
+    if (!parameters[i] || !identities[i] ||
+        candidate->entries[i].parameter != parameters[i] ||
+        candidate->entries[i].p1_handle != identities[i])
+      return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                        ET_O2_CODE_OWNER_CONFLICT, operation,
+                        "optimizer differs from authenticated M3T roster");
+    if (et_f32_parameter_validate_identity_v1(parameters[i], identities[i],
+                                              &i2_error) != 0)
+      return et_o2_from_i2(&i2_error, error, operation,
+                           ET_O2_STATUS_INVALID_STATE);
+  }
+  if ((result = et_o2_validate_absent_gradients(candidate, operation, error))
+      != 0)
+    return result;
+  et_o2_g3r_save_hold *hold = et_o2_calloc(1u, sizeof(*hold));
+  if (!hold)
+    return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
+                      ET_O2_CODE_ALLOCATION_FAILED, operation,
+                      "cannot allocate same-owner hold");
+  hold->optimizer = candidate;
+  hold->config = candidate->config;
+  hold->completed_updates = candidate->completed_updates;
+  memcpy(hold->parameters, parameters, sizeof(hold->parameters));
+  memcpy(hold->identities, identities, sizeof(hold->identities));
+  candidate->busy = 1u;
+  for (size_t i = 0; i < 14; ++i) {
+    hold->options[i] = candidate->entries[i].options;
+    et_f32_tensor *moments[2] = {
+        candidate->entries[i].exp_avg, candidate->entries[i].exp_avg_sq};
+    for (size_t j = 0; j < 2; ++j) {
+      et_f32_tensor_error i2_error;
+      hold->moment_owners[2 * i + j] = moments[j];
+      if (et_f32_tensor_clone_v1(
+              moments[j], &hold->moment_baseline[2 * i + j], &i2_error) != 0) {
+        result = et_o2_from_i2(&i2_error, error, operation,
+                               ET_O2_STATUS_INTERNAL);
+        et_o2_g3r_hold_drain(hold);
+        free(hold);
+        return result;
+      }
+    }
+  }
+  hold->live = 1u;
+  hold->next = et_o2_g3r_save_holds;
+  et_o2_g3r_save_holds = hold;
+  ++et_o2_g3r_save_tombstones;
+  *output = hold;
+  return et_o2_success(error);
+}
+
+int32_t et_g3r_private_o2_save_check_v1(
+    et_o2_g3r_save_hold *candidate, et_o2_error_v1 *error) {
+  const char *operation = "g3r-save-o2-check";
+  et_o2_g3r_save_hold *hold = et_o2_g3r_hold_admit(candidate);
+  if (!hold)
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                      ET_O2_CODE_INVALID_HANDLE, operation,
+                      "same-owner hold is foreign, stale, or inactive");
+  et_o2_optimizer *optimizer = hold->optimizer;
+  if (optimizer->count != 14u ||
+      optimizer->config.clip_kind != hold->config.clip_kind ||
+      optimizer->config.clip_max_bits != hold->config.clip_max_bits ||
+      optimizer->config.schedule_kind != hold->config.schedule_kind ||
+      optimizer->config.minimum_ratio_bits != hold->config.minimum_ratio_bits ||
+      optimizer->config.warmup_updates != hold->config.warmup_updates ||
+      optimizer->config.total_updates != hold->config.total_updates ||
+      optimizer->completed_updates != hold->completed_updates)
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                      ET_O2_CODE_OWNER_CONFLICT, operation,
+                      "optimizer configuration or update count changed");
+  int32_t result = et_o2_validate_absent_gradients(optimizer, operation, error);
+  if (result != 0) return result;
+  for (size_t i = 0; i < 14; ++i) {
+    et_o2_entry *entry = &optimizer->entries[i];
+    if (entry->parameter != hold->parameters[i] ||
+        entry->p1_handle != hold->identities[i] ||
+        memcmp(&entry->options, &hold->options[i], sizeof(entry->options)))
+      return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                        ET_O2_CODE_OWNER_CONFLICT, operation,
+                        "optimizer roster or options changed");
+    et_f32_tensor *moments[2] = {entry->exp_avg, entry->exp_avg_sq};
+    for (size_t j = 0; j < 2; ++j) {
+      et_f32_tensor_error i2_error;
+      int32_t equal = 0;
+      if (moments[j] != hold->moment_owners[2 * i + j])
+        return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                          ET_O2_CODE_OWNER_CONFLICT, operation,
+                          "optimizer moment owner changed");
+      if (et_f32_tensor_bits_equal_v1(
+              moments[j], hold->moment_baseline[2 * i + j], &equal,
+              &i2_error) != 0)
+        return et_o2_from_i2(&i2_error, error, operation,
+                             ET_O2_STATUS_INVALID_STATE);
+      if (!equal)
+        return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                          ET_O2_CODE_OWNER_CONFLICT, operation,
+                          "optimizer moment bits changed");
+    }
+  }
+  return et_o2_success(error);
+}
+
+int32_t et_g3r_private_o2_save_end_v1(
+    et_o2_g3r_save_hold **slot, et_o2_error_v1 *error) {
+  const char *operation = "g3r-save-o2-end";
+  et_o2_g3r_save_hold *hold =
+      slot == NULL ? NULL : et_o2_g3r_hold_admit(*slot);
+  if (!hold)
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                      ET_O2_CODE_INVALID_HANDLE, operation,
+                      "same-owner hold is foreign, stale, or inactive");
+  et_o2_error_v1 first;
+  int32_t result = et_g3r_private_o2_save_check_v1(hold, &first);
+  et_o2_g3r_hold_drain(hold);
+  hold->optimizer = NULL;
+  memset(hold->parameters, 0, sizeof(hold->parameters));
+  memset(hold->identities, 0, sizeof(hold->identities));
+  memset(hold->moment_owners, 0, sizeof(hold->moment_owners));
+  hold->live = 0u; /* Keep the registered shell; never reuse its address. */
+  *slot = NULL;
+  if (result != 0) {
+    if (error) *error = first;
+    return result;
+  }
+  return et_o2_success(error);
+}
+#endif
+
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+static int32_t et_o2_snapshot_core(
+    et_o2_optimizer *candidate, et_o2_optimizer_state **output,
+    et_o2_error_v1 *error, et_o2_g3r_save_hold *held) {
+#else
 int32_t et_o2_optimizer_state_snapshot_v1(et_o2_optimizer *candidate,
                                           et_o2_optimizer_state **output,
                                           et_o2_error_v1 *error) {
+#endif
   et_o2_optimizer *optimizer = et_o2_find_optimizer(candidate);
   et_o2_optimizer_state *state = NULL;
   size_t index;
   size_t handle_index;
   int32_t result = ET_O2_STATUS_INTERNAL;
   et_f32_tensor_error i2_error;
+ #ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  if (output == NULL || *output != NULL)
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_ARGUMENT,
+                      ET_O2_CODE_NULL_ARGUMENT, "optimizer-state",
+                      "state output must be a nonnull empty slot");
+  if (held != NULL) {
+    if (et_o2_g3r_hold_admit(held) != held || held->optimizer != optimizer)
+      return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                        ET_O2_CODE_INVALID_HANDLE, "optimizer-state",
+                        "held snapshot requires exact live same-owner token");
+  } else if ((result = et_o2_require_optimizer(
+                  candidate, "optimizer-state", error)) != 0) {
+    return result;
+  }
+  if (held == NULL)
+    optimizer->busy = 1u;
+ #else
   if (output == NULL || *output != NULL ||
       (result = et_o2_require_optimizer(candidate, "optimizer-state", error)) !=
           0) {
@@ -2069,6 +2283,7 @@ int32_t et_o2_optimizer_state_snapshot_v1(et_o2_optimizer *candidate,
     return result;
   }
   optimizer->busy = 1u;
+ #endif
   if ((result = et_o2_validate_absent_gradients(optimizer, "optimizer-state",
                                                 error)) != 0) {
     goto cleanup;
@@ -2166,9 +2381,43 @@ cleanup:
     free(state->entries);
     free(state);
   }
-  optimizer->busy = 0u;
+ #ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  if (held == NULL)
+ #endif
+    optimizer->busy = 0u;
   return result;
 }
+
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+int32_t et_o2_optimizer_state_snapshot_v1(et_o2_optimizer *candidate,
+                                          et_o2_optimizer_state **output,
+                                          et_o2_error_v1 *error) {
+  return et_o2_snapshot_core(candidate, output, error, NULL);
+}
+
+int32_t et_g3r_private_o2_save_state_v1(
+    et_o2_g3r_save_hold *hold, et_o2_optimizer_state **state,
+    et_o2_error_v1 *error) {
+  et_o2_error_v1 first;
+  int32_t result = et_g3r_private_o2_save_check_v1(hold, &first);
+  if (result != 0) {
+    if (error) *error = first;
+    return result;
+  }
+  result = et_o2_snapshot_core(hold->optimizer, state, error, hold);
+  if (result != 0) return result;
+  result = et_g3r_private_o2_save_check_v1(hold, &first);
+  if (result != 0) {
+    et_o2_error_v1 cleanup;
+    if (et_o2_optimizer_state_release_v1(*state, &cleanup) != 0)
+      abort(); /* New owned clone has no external borrower. */
+    *state = NULL;
+    if (error) *error = first;
+    return result;
+  }
+  return et_o2_success(error);
+}
+#endif
 
 int32_t et_o2_optimizer_load_state_v1(et_o2_optimizer *optimizer_candidate,
                                       et_o2_optimizer_state *state_candidate,

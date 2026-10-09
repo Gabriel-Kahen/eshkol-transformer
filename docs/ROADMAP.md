@@ -1665,6 +1665,20 @@ partition, terminal bit, cache length and all four RNG words into a checked
 not establish compiled package behavior, C2 same-owner binding, pair writing,
 replay, public continuation, or full-request rollback. Those gates remain open.
 
+An isolated private `ET_G3R_SAME_OWNER_SAVE_PRIVATE` source candidate now adds a
+typed sealed M3T fourteen-parameter roster and a bounded same-owner reservation
+over O2 and G3-T. The reservation holds O2 exclusive state and native model
+pins while P1 value clones, an O2 state clone, and the committed-history/RNG
+snapshot are copied. Its registered opaque tokens keep inert tombstones after
+release to reject stale, double-ended, and reused-address authority; after 64
+reservations per process this source leaf reports exhaustion. Host C controls
+exercise both holds, all fourteen value clones, reentrant write denial,
+allocation and changed-bit failures, reverse cleanup, and retry. The Eshkol
+coordinator still must authenticate and root the original generator, model,
+optimizer, tokenizer, X1/D2 and handle graph across a copy. No C2 publication,
+cold LOAD, compiled package, public SAVE, or resumed-generation claim follows
+from this source-only prerequisite.
+
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
 diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use

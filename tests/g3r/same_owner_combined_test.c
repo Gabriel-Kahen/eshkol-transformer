@@ -1,0 +1,156 @@
+/* Host-only same-owner native composition; no C2 state or file publication. */
+#include "src/eshkol_transformer/g3t_transport.c"
+#include "native/g3r_same_owner_save.h"
+#include "native/o2_optimizer_internal.h"
+#include <stdio.h>
+
+static unsigned checks;
+#define CHECK(x) do { ++checks; if (!(x)) { fprintf(stderr, \
+    "same-owner combined:%d: %s\n", __LINE__, #x); return 1; } } while (0)
+
+int main(void) {
+  static unsigned char identities[14];
+  initializer *initial = et_m3t_private_initializer_create_v1(1729);
+  CHECK(initial != NULL);
+  CHECK(et_m3t_private_initializer_seal_v1(initial) == 0);
+  owner *model = et_m3t_private_owner_create_v1(initial);
+  CHECK(model != NULL);
+  for (int64_t i = 0; i < 14; ++i)
+    CHECK(et_m3t_private_owner_bind_v1(
+        model, i, &identities[i]) == 0);
+  for (int64_t i = 0; i < 14; ++i)
+    CHECK(et_m3t_private_owner_initialize_v1(model, i) == 0);
+  CHECK(et_m3t_private_owner_seal_v1(model) == 0);
+  CHECK(et_m3t_private_initializer_seal_v1(model->successor) == 0);
+
+  et_o2_optimizer_builder *builder = NULL;
+  et_o2_optimizer *optimizer = NULL;
+  et_o2_error_v1 o2;
+  CHECK(et_o2_optimizer_builder_create_v1(
+      14, ET_O2_CLIP_NONE, 0, ET_O2_SCHEDULE_CONSTANT,
+      0, 0, UINT32_C(0x3f800000), &builder, &o2) == 0);
+  for (size_t i = 0; i < 14; ++i)
+    CHECK(et_o2_optimizer_builder_set_v1(
+        builder, i, model->p[i], model->handles[i],
+        UINT32_C(0x3ca3d70a), UINT32_C(0x3f4ccccd),
+        UINT32_C(0x3f7d70a4), UINT32_C(0x322bcc77), 0, &o2) == 0);
+  CHECK(et_o2_optimizer_builder_finish_v1(
+      &builder, &optimizer, &o2) == 0);
+
+  g3t_context *c = et_g3t_private_generator_seed_v1(
+      model, 1729, 0, INT64_C(0x3f800000), 256,
+      INT64_C(0x3f800000), 0, -1);
+  CHECK(c != NULL);
+  int64_t count_data[1] = {1};
+  uint64_t count_shape[1] = {1}, kv_shape[4] = {1, 2, 1, 2};
+  float key_data[4] = {0}, value_data[4] = {0};
+  et_kernel_tensor_view_v1 count =
+      g3t_view(count_data, sizeof(count_data), "i64", 1, count_shape);
+  et_kernel_tensor_view_v1 key =
+      g3t_view(key_data, sizeof(key_data), "f32", 4, kv_shape);
+  et_kernel_tensor_view_v1 value =
+      g3t_view(value_data, sizeof(value_data), "f32", 4, kv_shape);
+  et_a2_kv_cache_transaction *transaction = NULL;
+  et_kernel_error kernel;
+  CHECK(et_a2_kv_cache_transaction_begin_v1(
+      c->cache, 1, &count, &transaction, &kernel) == 0);
+  CHECK(et_a2_kv_cache_transaction_stage_layer_v1(
+      transaction, 0, &key, &value, &kernel) == 0);
+  CHECK(et_a2_kv_cache_transaction_commit_v1(
+      &transaction, &kernel) == 0);
+  c->ledger.ids[0] = 41;
+  c->ledger.length = c->ledger.prompt = 1;
+  c->prefill_committed = c->binding_ready = 1;
+  et_f32_tensor_error f32;
+  CHECK(et_g3t_model_pins_begin_internal(
+      model->p, (const void *const *)model->handles, &c->pins, &f32) == 0);
+  size_t offset = 0;
+  for (size_t i = 0; i < 14; ++i) {
+    const et_kernel_tensor_view_v1 *view = &c->pins.views[i];
+    CHECK(offset + view->byte_length <= sizeof(c->binding_values));
+    c->binding_identities[i] = model->handles[i];
+    memcpy(c->binding_values + offset, view->data, view->byte_length);
+    offset += view->byte_length;
+  }
+  CHECK(offset == sizeof(c->binding_values));
+  et_g3t_model_pins_end_internal(&c->pins);
+
+  void *roster_parameters[14] = {0};
+  const void *roster_identities[14] = {0};
+  CHECK(et_m3t_private_owner_save_roster_v1(
+      (void *)(uintptr_t)1u, roster_parameters, roster_identities) != 0);
+  CHECK(et_m3t_private_owner_save_roster_v1(
+      model, roster_parameters, roster_identities) == 0);
+  CHECK(roster_parameters[0] == model->p[0] &&
+        roster_identities[13] == model->handles[13]);
+  void *original_handle = model->handles[13];
+  model->handles[13] = NULL;
+  CHECK(et_m3t_private_owner_save_roster_v1(
+      model, roster_parameters, roster_identities) != 0);
+  model->handles[13] = original_handle;
+  et_a2_kv_cache_read_borrow *blocked = NULL;
+  CHECK(et_a2_kv_cache_read_borrow_begin_v1(
+      c->cache, &blocked, &kernel) == 0);
+  CHECK(et_g3r_private_same_owner_save_begin_v1(
+      c, model, optimizer) == NULL);
+  et_o2_optimizer_state *ordinary = NULL;
+  CHECK(et_o2_optimizer_state_snapshot_v1(
+      optimizer, &ordinary, &o2) == 0);
+  CHECK(et_o2_optimizer_state_release_v1(ordinary, &o2) == 0);
+  CHECK(et_a2_kv_cache_read_borrow_end_v1(&blocked, &kernel) == 0);
+
+  void *hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
+  CHECK(hold != NULL);
+  CHECK(et_g3r_private_same_owner_save_check_v1(hold) == 0);
+  CHECK(et_g3r_private_same_owner_save_check_v1((void *)(uintptr_t)1u) != 0);
+  CHECK(et_g3t_private_call_acquire_v1(c, 0) != 0);
+  CHECK(et_o2_optimizer_step_v1(optimizer, &o2) ==
+        ET_O2_STATUS_INVALID_STATE);
+  const et_f32_tensor *value_owner = NULL;
+  CHECK(et_f32_parameter_value_tensor_v1(
+      model->p[0], &value_owner, &f32) == 0);
+  uint32_t replacement[16] = {0};
+  CHECK(et_f32_tensor_copy_bits_from_v1(
+      (et_f32_tensor *)(uintptr_t)value_owner,
+      replacement, 16, &f32) == ET_F32_TENSOR_ERROR_INVALID_STATE);
+  for (size_t i = 0; i < 14; ++i) {
+    et_f32_tensor *p1 = NULL;
+    int32_t equal = 0;
+    CHECK(et_f32_parameter_validate_identity_v1(
+        model->p[i], model->handles[i], &f32) == 0);
+    CHECK(et_f32_parameter_value_snapshot_v1(model->p[i], &p1, &f32) == 0);
+    CHECK(et_f32_tensor_bits_equal_v1(
+        p1, c->pins.values[i], &equal, &f32) == 0 && equal);
+    CHECK(et_f32_tensor_destroy_v1(&p1, &f32) == 0);
+  }
+  void *state = NULL;
+  CHECK(et_g3r_private_same_owner_save_o2_state_v1(
+      hold, &state) == 0);
+  CHECK(state != NULL);
+  et_g3r_g3t_idle_snapshot_words_v1 words = {0};
+  CHECK(et_g3r_private_same_owner_save_copy_v1(
+      hold, &words, sizeof(words) - 1) != 0);
+  CHECK(et_g3r_private_same_owner_save_check_v1(hold) == 0);
+  CHECK(et_g3r_private_same_owner_save_copy_v1(
+      hold, &words, sizeof(words)) == 0);
+  CHECK(words.word[0] == 1 && words.word[8] == 1729 &&
+        words.word[11] == 41 && words.word[17] == 1);
+  CHECK(et_o2_optimizer_state_release_v1(state, &o2) == 0);
+  CHECK(et_g3r_private_same_owner_save_end_v1(hold) == 0);
+  CHECK(et_g3r_private_same_owner_save_end_v1(hold) != 0);
+  CHECK(et_g3r_private_same_owner_save_check_v1(hold) != 0);
+  hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
+  CHECK(hold != NULL);
+  c->rng[1]++;
+  CHECK(et_g3r_private_same_owner_save_check_v1(hold) != 0);
+  CHECK(et_g3r_private_same_owner_save_end_v1(hold) != 0);
+  c->rng[1]--;
+  hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
+  CHECK(hold != NULL);
+  CHECK(et_g3r_private_same_owner_save_end_v1(hold) == 0);
+  CHECK(et_g3t_private_call_acquire_v1(c, 0) == 0);
+  CHECK(et_g3t_private_call_abort_v1(c) == 0);
+  CHECK(et_g3t_private_generator_close_v1(c) == 0);
+  printf("same-owner combined PASS: %u checks\n", checks);
+  return 0;
+}

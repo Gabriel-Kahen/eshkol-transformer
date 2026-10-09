@@ -29,6 +29,18 @@ int64_t et_g3r_private_g3t_idle_snapshot_copy_v1(
     void *snapshot, et_g3r_g3t_idle_snapshot_words_v1 *destination,
     int64_t destination_bytes);
 int64_t et_g3r_private_g3t_idle_snapshot_release_v1(void *snapshot);
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+/* Roster operands are comparisons only; the private coordinator must obtain
+ * them from a freshly authenticated sealed M3T owner. */
+void *et_g3r_private_g3t_save_begin_v1(
+    void *generator, void *const parameters[14],
+    const void *const identities[14]);
+int64_t et_g3r_private_g3t_save_copy_v1(
+    void *hold, et_g3r_g3t_idle_snapshot_words_v1 *destination,
+    int64_t destination_bytes);
+int64_t et_g3r_private_g3t_save_check_v1(void *hold);
+int64_t et_g3r_private_g3t_save_end_v1(void *hold);
+#endif
 #endif
 int64_t et_g3t_private_generator_close_v1(void *context);
 int64_t et_g3t_private_call_acquire_v1(void *context, int64_t call_kind);
