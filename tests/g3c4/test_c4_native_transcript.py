@@ -110,6 +110,9 @@ class NativeTranscriptTests(unittest.TestCase):
                 "exit": "#!/bin/sh\nprintf failure >&2\nexit 7\n",
                 "timeout": "#!/bin/sh\nsleep 2\n",
                 "drift": "#!/bin/sh\nprintf x >> \"$0\"\nprintf C4CAP1\\n\n",
+                "stdout-overflow": "#!/bin/sh\nhead -c 2097153 /dev/zero\n",
+                "stderr-overflow": "#!/bin/sh\nhead -c 65537 /dev/zero >&2\n",
+                "descendant": "#!/bin/sh\nsleep 5 &\nexit 0\n",
             }
             for name, source in scripts.items():
                 with self.subTest(name=name):
@@ -119,9 +122,24 @@ class NativeTranscriptTests(unittest.TestCase):
                     receipt = root / f"{name}-receipt"
                     with self.assertRaises(ValueError):
                         capture.run_native(binary, b"", receipt, timeout_seconds=1)
-                    self.assertTrue(receipt.with_suffix(".status.json").is_file())
+                    status_path = receipt.with_suffix(".status.json")
+                    self.assertTrue(status_path.is_file())
                     self.assertTrue(receipt.with_suffix(".stdout").is_file())
                     self.assertTrue(receipt.with_suffix(".stderr").is_file())
+                    status = json.loads(status_path.read_bytes())
+                    self.assertIsNotNone(status["wait_status"])
+                    self.assertLessEqual(status["stdout_bytes"], capture.MAX_RAW_BYTES)
+                    self.assertLessEqual(status["stderr_bytes"], capture.MAX_STDERR_BYTES)
+                    if name.endswith("overflow"):
+                        channel = name.split("-")[0]
+                        limit = (capture.MAX_RAW_BYTES if channel == "stdout"
+                                 else capture.MAX_STDERR_BYTES)
+                        self.assertEqual(status["overflow"], channel)
+                        self.assertGreater(status[channel + "_seen"], limit)
+                    if name == "timeout":
+                        self.assertTrue(status["timed_out"])
+                    if name == "descendant":
+                        self.assertIn("descendants", status["failure"])
 
     def test_owned_raw_receipt_and_canonical_output_coexist(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -150,6 +168,7 @@ class NativeTranscriptTests(unittest.TestCase):
                         status_path = prefix.with_suffix(".status.json")
                         canonical_path = prefix.with_suffix(".json")
                         self.assertTrue(status_path.is_file())
+
                         self.assertFalse(canonical_path.exists())
                         self.assertEqual(json.loads(status_path.read_bytes())["returncode"], 0)
                         with mock.patch("sys.argv", ["capture", "--fixture",
@@ -163,6 +182,55 @@ class NativeTranscriptTests(unittest.TestCase):
                                          capture.encode_observation(
                                              capture.parse(self.raw, self.frozen)))
                         self.assertTrue(status_path.is_file())
+
+    def test_capture_exception_kills_owned_child_and_retains_wait(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            binary = root / "child"
+            binary.write_text("#!/bin/sh\nsleep 5\n")
+            binary.chmod(0o700)
+            prefix = root / "exception"
+            real_members = capture._members
+            calls = 0
+
+            def fail_once(sid: int, uid: int) -> list:
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    raise OSError("injected session census failure")
+                return real_members(sid, uid)
+
+            with mock.patch.object(capture, "_members", side_effect=fail_once):
+                with self.assertRaisesRegex(ValueError, "session census failure"):
+                    capture.run_native(binary, b"", prefix, timeout_seconds=1)
+            status = json.loads(prefix.with_suffix(".status.json").read_bytes())
+            self.assertTrue(status["quiescent"])
+            self.assertIsNotNone(status["wait_status"])
+            self.assertIn("cleanup: owned session SIGKILL", status["teardown"])
+
+    def test_interrupted_wait_retries_actual_child_status(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            binary = root / "child"
+            binary.write_text("#!/bin/sh\nprintf ok\n")
+            binary.chmod(0o700)
+            real_wait4 = capture.os.wait4
+            calls = 0
+
+            def interrupted_once(pid: int, options: int) -> tuple:
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    raise InterruptedError("injected wait interruption")
+                return real_wait4(pid, options)
+
+            prefix = root / "interrupted"
+            with mock.patch.object(capture.os, "wait4", side_effect=interrupted_once):
+                self.assertEqual(capture.run_native(binary, b"", prefix), b"ok")
+            status = json.loads(prefix.with_suffix(".status.json").read_bytes())
+            self.assertEqual(status["returncode"], 0)
+            self.assertIsNotNone(status["wait_status"])
+            self.assertIn("wait4 interrupted; retrying", status["teardown"])
 
 
 if __name__ == "__main__":

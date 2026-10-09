@@ -139,9 +139,8 @@ static et_g3c4_model_owner_internal *create_owner(int64_t seed, size_t slot) {
   return owner;
 }
 
-static void print_model(et_g3c4_model_owner_internal *owner, int64_t seed) {
-  uint32_t image[1192];
-  int64_t state[4];
+static void snapshot_model(et_g3c4_model_owner_internal *owner, int64_t seed,
+                           uint32_t image[1192], int64_t state[4]) {
   size_t offset = 0u;
   et_f32_tensor_error error;
   for (size_t index = 0u; index < 14u; index++) {
@@ -164,6 +163,20 @@ static void print_model(et_g3c4_model_owner_internal *owner, int64_t seed) {
   for (int64_t index = 0; index < 4; index++)
     state[(size_t)index] = et_g3c4_private_model_owner_word_v1(owner, index + 4);
   REQUIRE(state[0] == 1 && state[1] == seed && state[2] == 292 && state[3] == 0);
+}
+
+static void require_model_unchanged(et_g3c4_model_owner_internal *owner,
+                                    int64_t seed, const uint32_t image[1192],
+                                    const int64_t state[4]) {
+  uint32_t current_image[1192];
+  int64_t current_state[4];
+  snapshot_model(owner, seed, current_image, current_state);
+  REQUIRE(memcmp(current_image, image, 1192u * sizeof(uint32_t)) == 0);
+  REQUIRE(memcmp(current_state, state, 4u * sizeof(int64_t)) == 0);
+}
+
+static void print_model(int64_t seed, const uint32_t image[1192],
+                        const int64_t state[4]) {
   printf("MODEL %" PRId64 " %" PRId64 " %" PRId64 " %" PRId64 " %" PRId64 "\n",
          seed, state[0], state[1], state[2], state[3]);
   print_words("PARAMETERS", image, 1192u);
@@ -254,17 +267,22 @@ int main(void) {
   for (size_t model = 0u; model < 3u; model++) {
     int64_t seed;
     et_g3c4_model_owner_internal *owner;
+    uint32_t image[1192];
+    int64_t state[4];
     REQUIRE(scanf(" MODEL %" SCNd64 " %zu", &seed, &case_count) == 2);
     REQUIRE(seed == seeds[model] && case_count > 0u && case_count <= 32u);
     owner = create_owner(seed, model);
-    print_model(owner, seed);
+    snapshot_model(owner, seed, image, state);
+    print_model(seed, image, state);
     for (size_t row = 0u; row < case_count; row++) {
       size_t prefix;
       int64_t tokens[4] = {0, 0, 0, 0};
+      require_model_unchanged(owner, seed, image, state);
       REQUIRE(scanf(" CASE %zu", &prefix) == 1 && prefix >= 1u && prefix <= 4u);
       for (size_t index = 0u; index < prefix; index++)
         REQUIRE(scanf(" %" SCNd64, &tokens[index]) == 1);
       capture_case(owner, seed, prefix, tokens);
+      require_model_unchanged(owner, seed, image, state);
     }
   }
   REQUIRE(scanf(" %15s", end) == 1 && strcmp(end, "END") == 0);

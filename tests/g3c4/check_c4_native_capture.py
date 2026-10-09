@@ -40,6 +40,10 @@ def check(observer: str, parser: str, runner: str,
     assert "et_g3c4_private_model_owner_word_v1(owner, index + 4)" in observer
     assert "offset == 1192u" in observer
     assert "state[2] == 292" in observer
+    assert "snapshot_model(owner, seed, image, state);" in observer
+    assert observer.count("require_model_unchanged(owner, seed, image, state);") == 2
+    assert "memcmp(current_image, image, 1192u * sizeof(uint32_t)) == 0" in observer
+    assert "memcmp(current_state, state, 4u * sizeof(int64_t)) == 0" in observer
     assert "et_f32_parameter_value_borrow_begin_v1" in observer
     assert "check_view(view, \"f32\", rank, parameter_shapes[index]" in observer
     assert "mask[position] == (uint8_t)(position < (size_t)prefix)" in observer
@@ -59,8 +63,16 @@ def check(observer: str, parser: str, runner: str,
                     "intended T4 abort", "invalid/nonfinite f32 bit word",
                     "native child timeout", "native executable drift",
                     "returncode", "stderr_bytes", ".status.json",
+                    "MAX_STDERR_BYTES", "selector.select(0.05)",
+                    "start_new_session=True", "os.WNOWAIT", "os.wait4",
+                    "_signal_session(leader, uid, signal.SIGKILL)",
                     "open(\"xb\")"):
         assert control in parser, control
+    assert "MAX_STDERR_BYTES = 64 * 1024" in parser
+    assert parser.count("selector.select(0.05)") == 2
+    assert parser.count("os.WNOWAIT") == 2
+    assert parser.count("_signal_session(leader, uid, signal.SIGKILL)") == 2
+    assert "child.poll(" not in parser and "child.communicate(" not in parser
     for control in ("verify_toolchain", "resolve_provenance_compilers",
                     '[[ "${Q0_PYTHON:-}" == /*', "q0_identity",
                     "3.14.6", "2.13.0+cpu", "source.pre.sha256",

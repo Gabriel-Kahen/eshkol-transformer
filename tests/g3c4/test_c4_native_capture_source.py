@@ -75,6 +75,31 @@ class NativeCaptureSourceTests(unittest.TestCase):
         with self.assertRaises(AssertionError):
             self.check(parser=self.parser.replace('.status.json', '.json', 1))
 
+    def test_owner_image_and_rng_checked_before_and_after_each_case(self) -> None:
+        for original, wrong in (
+            ("require_model_unchanged(owner, seed, image, state);",
+             "/* owner comparison omitted */"),
+            ("memcmp(current_image, image, 1192u * sizeof(uint32_t)) == 0",
+             "memcmp(current_image, image, sizeof(uint32_t)) == 0"),
+            ("memcmp(current_state, state, 4u * sizeof(int64_t)) == 0",
+             "current_state[0] == state[0]"),
+        ):
+            with self.subTest(original=original):
+                self.assertIn(original, self.observer)
+                with self.assertRaises(AssertionError):
+                    self.check(observer=self.observer.replace(original, wrong, 1))
+
+    def test_bounded_owned_capture_controls(self) -> None:
+        for original in ("MAX_STDERR_BYTES", "selector.select(0.05)",
+                         "start_new_session=True", "os.WNOWAIT", "os.wait4",
+                         "_signal_session(leader, uid, signal.SIGKILL)"):
+            with self.subTest(original=original):
+                self.assertIn(original, self.parser)
+                with self.assertRaises(AssertionError):
+                    self.check(parser=self.parser.replace(original, "removed", 1))
+        with self.assertRaises(AssertionError):
+            self.check(parser=self.parser + "\nchild.poll()\n")
+
 
 if __name__ == "__main__":
     unittest.main()
