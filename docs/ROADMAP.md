@@ -2659,6 +2659,12 @@ publication, public G2 and continuation remain pending.
   failure cuts, emitted tail and exact symbol admission remain pending. The
   accepted contract and public dispatch are unchanged.
 
+  A separate [independent C4 prefix math oracle source leaf](g3/G3_C4_INDEPENDENT_PREFIX_MATH_ORACLE_LEAF.md)
+  adds pinned test-only Philox initialization, float64 CPU forward equations for
+  prefix lengths 1–4, frozen fixture generation and fail-closed transcript
+  comparison. Its source/negative tests do not supply native observations;
+  compiled mathematical parity and all terminal/public gates remain pending.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
