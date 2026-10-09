@@ -1807,6 +1807,19 @@ normal and sanitizer host controls cover these native semantics. The Eshkol
 adoption shell, original graph binding, C2 publication, and cold LOAD remain
 unimplemented and unproved.
 
+An isolated private Eshkol O2-adoption source leaf now stages an exact
+constructing shell and lexical issuance record under the combined native SAVE
+hold. It authenticates the original G3/model/tokenizer/dataset/optimizer and
+captured controls, copies the eighteen native snapshot words, checks O2
+metadata and the held state before its sole claim, and publishes the shell
+only after `end=0` and drain state 3. Failed adoption retains uncertain native
+or state cleanup roots for checked retry, and its finite registry admits at
+most 64 issued shells. Source-state and owned cleanup-cut tests pass; compiled
+Eshkol package linkage, emitted no-work tail, genuine native call behavior,
+C2 publication and cold LOAD remain open. Committed idle G3 publication
+clears temporary call/output links in the existing final/manual tails; no
+creation-lineage source change or executed post-prefill result is inferred.
+
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
 diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use

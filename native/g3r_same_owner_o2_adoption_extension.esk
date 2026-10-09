@@ -1,0 +1,404 @@
+;;; Private same-owner SAVE O2 adoption. This source is never installed alone.
+;;; The genuine scalar bridge is link-gated by ET_G3R_SAME_OWNER_SAVE_PRIVATE.
+(extern ptr g3r-save-begin ptr ptr ptr
+        :real et_g3r_private_same_owner_save_begin_v1)
+(extern i64 g3r-save-capture ptr
+        :real et_g3r_private_same_owner_save_capture_v1)
+(extern i64 g3r-save-word ptr i64
+        :real et_g3r_private_same_owner_save_snapshot_word_v1)
+(extern ptr g3r-save-issue ptr
+        :real et_g3r_private_same_owner_save_o2_issue_v1)
+(extern i64 g3r-save-claim ptr ptr
+        :real et_g3r_private_same_owner_save_o2_claim_v1)
+(extern i64 g3r-save-cancel ptr
+        :real et_g3r_private_same_owner_save_o2_cancel_v1)
+(extern i64 g3r-save-check ptr
+        :real et_g3r_private_same_owner_save_check_v1)
+(extern i64 g3r-save-end ptr
+        :real et_g3r_private_same_owner_save_end_v1)
+(extern i64 g3r-save-retry ptr
+        :real et_g3r_private_same_owner_save_cleanup_retry_v1)
+(extern i64 g3r-save-error-word ptr i64
+        :real et_g3r_private_same_owner_save_error_word_v1)
+(extern i64 g3r-save-drain ptr
+        :real et_g3r_private_same_owner_save_drain_state_v1)
+
+(define (g3r-save-o2-fail category code message)
+  (et-e1b-private-raise category 'g3r-save-o2-adoption message
+    (list (list 'source-domain 'g3r-save-o2-adoption)
+          (list 'source-code code)) #f))
+
+(define (g3r-save-o2-copy-first! first hold)
+  ;; Four pure scalar reads, with no cleanup or leaf call between them.
+  (if (not (vector-ref first 0))
+      (begin
+        (vector-set! first 1 (g3r-save-error-word hold 0))
+        (vector-set! first 2 (g3r-save-error-word hold 1))
+        (vector-set! first 3 (g3r-save-error-word hold 2))
+        (vector-set! first 4 (g3r-save-error-word hold 3))
+        (vector-set! first 0 #t))))
+
+(define (g3r-save-o2-native-category category)
+  (cond ((= category 1) 'invalid-argument)
+        ((= category 2) 'shape-mismatch)
+        ((= category 3) 'dtype-mismatch)
+        ((= category 4) 'device-mismatch)
+        ((= category 5) 'noncontiguous)
+        ((= category 6) 'unsupported)
+        ((= category 7) 'invalid-state)
+        ((= category 8) 'version-mismatch)
+        ((= category 10) 'corrupt-data)
+        ((= category 11) 'determinism-unavailable)
+        (else 'internal)))
+
+(define (g3r-save-o2-raise-first first)
+  (let* ((source (vector-ref first 1))
+         (domain (vector-ref first 2))
+         (category (vector-ref first 3))
+         (code (vector-ref first 4))
+         (mapped
+           (cond ((= source 1) (m3t-native-category domain category))
+                 ((or (= source 2) (= source 3) (= source 5))
+                  (g3r-save-o2-native-category category))
+                 ((= source 4)
+                  (cond ((= code 1) 'invalid-argument)
+                        ((= code 2) 'invalid-state)
+                        ((= code 3) 'unsupported)
+                        (else 'internal)))
+                 (else 'internal))))
+    (et-e1b-private-raise mapped 'g3r-save-o2-adoption
+      "same-owner native hold rejected O2 adoption"
+      (list (list 'source-domain source) (list 'native-domain domain)
+            (list 'native-category category) (list 'source-code code)) #f)))
+
+(define (g3r-save-o2-capacity records)
+  (let walk ((rest records) (left 64))
+    (cond ((= left 0)
+           (g3r-save-o2-fail 'unsupported 3 "adoption row limit reached"))
+          ((null? rest) #t)
+          ((not (pair? rest))
+           (g3r-save-o2-fail 'internal 10 "adoption registry changed"))
+          (else (walk (cdr rest) (- left 1))))))
+
+;;; roots: [generator,model,X1,T2,D2,O2,capsule,G3-entry,M3-entry,
+;;;         O2-entry,D2-state,original-controls,optimizer-native].
+(define (g3r-save-o2-check-roots roots)
+  (let* ((generator (vector-ref roots 0))
+         (model (vector-ref roots 1))
+         (resolved (vector-ref roots 2))
+         (tokenizer (vector-ref roots 3))
+         (dataset (vector-ref roots 4))
+         (optimizer (vector-ref roots 5))
+         (capsule (vector-ref roots 6))
+         (originals (tr3-controls-route 'originals capsule #f #f #f #f))
+         (controls (g3r-controls-captured-copy capsule))
+         (entry (g3t-generator-find generator 'g3r-save-o2-adoption))
+         (model-entry (g3t-model-entry-live
+                        model 'g3r-save-o2-adoption #f))
+         (optimizer-entry (o2-require-optimizer
+                            'g3r-save-o2-adoption optimizer))
+         (dataset-state (d2-open-dataset-state
+                          dataset 'g3r-save-o2-adoption)))
+    (g3r-generator-lineage-require
+      generator model resolved tokenizer dataset optimizer)
+    (if (not (and (eq? (vector-ref originals 0) resolved)
+                  (eq? (vector-ref originals 1) model)
+                  (eq? (vector-ref originals 2) model-entry)
+                  (eq? (vector-ref originals 3) optimizer)
+                  (eq? (vector-ref originals 4) optimizer-entry)
+                  (eq? (vector-ref originals 5) dataset)
+                  (eq? (vector-ref originals 6) dataset-state)
+                  (eq? (vector-ref originals 9) tokenizer)
+                  (eq? entry (vector-ref roots 7))
+                  (eq? model-entry (vector-ref roots 8))
+                  (eq? optimizer-entry (vector-ref roots 9))
+                  (eq? dataset-state (vector-ref roots 10))
+                  (equal? controls (vector-ref roots 11))
+                  (eq? (vector-ref optimizer-entry 1)
+                       (vector-ref roots 12))
+                  (eq? (vector-ref entry 5) model-entry)
+                  (tr3-lease-vector-eq?
+                    (vector-ref model-entry 8)
+                    (vector-ref originals 7) 14)))
+        (g3r-save-o2-fail 'invalid-state 2
+          "original same-owner graph or controls changed"))
+    (tr3-lease-d2-idle! dataset-state 'g3r-save-o2-adoption)
+    #t))
+
+;;; cell: [roots,hold,issued,shell,row,old-O2-head,O2-successor,words,
+;;;        first,phase,record,completed-count,completed-successor].
+;;; The exact row and independent record remain lexical; o2-states alone is
+;;; mutable and cannot prove issuance or native ownership.
+(define g3r-save-o2-adoption-route
+  (let ((issued '()) (pending #f) (quarantine #f))
+    (let*
+      ((release-claimed!
+         (lambda (cell)
+           (let ((state (vector-ref cell 2)))
+             (if (not state) (exit 134))
+             (let ((status (o2-native-optimizer-state-release state)))
+               (cond ((or (= status 0) (= status -2))
+                      (vector-set! cell 2 #f)
+                      (vector-set! (vector-ref cell 4) 1 'released)
+                      (vector-set! (vector-ref cell 4) 6 'dead)
+                      #t)
+                     ((= status -1)
+                      (vector-set! cell 9 'state-cleanup)
+                      #f)
+                     (else (exit 134)))))))
+       (drain-failed!
+         (lambda (cell)
+           (let* ((hold (vector-ref cell 1))
+                  (phase (vector-ref cell 9)))
+             (if (not hold) (exit 134))
+             (if (eq? phase 'pending) (g3r-save-cancel hold))
+             (if (not (or (eq? phase 'ended-claimed)
+                          (eq? phase 'hold-cleanup)))
+                 (g3r-save-end hold))
+             (let ((drain (g3r-save-drain hold)))
+               (cond ((= drain 1)
+                      (vector-set! cell 9 'hold-cleanup)
+                      (set! quarantine cell)
+                      #f)
+                     ((= drain 2)
+                      (if (or (eq? phase 'claimed)
+                              (eq? phase 'ended-claimed)) (exit 134))
+                      (vector-set! cell 1 #f)
+                      #t)
+                     ((= drain 3)
+                      (if (not (or (eq? phase 'claimed)
+                                   (eq? phase 'ended-claimed))) (exit 134))
+                      (vector-set! cell 1 #f)
+                      (if (release-claimed! cell) #t
+                          (begin (set! quarantine cell) #f)))
+                     (else (exit 134)))))))
+       (adopt
+         (lambda (generator model resolved tokenizer dataset optimizer
+                  capsule)
+           (if (or pending quarantine)
+               (g3r-save-o2-fail 'invalid-state 2
+                 "another adoption or cleanup remains active"))
+           (g3r-save-o2-capacity issued)
+           (g3r-generator-lineage-require
+             generator model resolved tokenizer dataset optimizer)
+           (let* ((controls (g3r-controls-captured-copy capsule))
+                  (entry (g3t-generator-find
+                           generator 'g3r-save-o2-adoption))
+                  (model-entry (g3t-model-entry-live
+                                 model 'g3r-save-o2-adoption #f))
+                  (optimizer-entry (o2-require-optimizer
+                                     'g3r-save-o2-adoption optimizer))
+                  (dataset-state (d2-open-dataset-state
+                                   dataset 'g3r-save-o2-adoption))
+                  (roots (vector generator model resolved tokenizer dataset
+                                 optimizer capsule entry model-entry
+                                 optimizer-entry dataset-state controls
+                                 (vector-ref optimizer-entry 1)))
+                  (first (vector #f 0 0 0 0))
+                  (cell (vector roots #f #f #f #f #f #f #f first 'held
+                                #f #f #f)))
+             (g3r-save-o2-check-roots roots)
+             (set! pending cell)
+             (guard
+               (caught
+                 (#t
+                   (if (vector-ref cell 1)
+                       (guard (cleanup (#t (exit 134)))
+                         (drain-failed! cell)))
+                   (set! pending #f)
+                   (if (vector-ref first 0)
+                       (g3r-save-o2-raise-first first)
+                       (raise caught))))
+               (let ((hold (g3r-save-begin
+                             (vector-ref entry 3)
+                             (vector-ref model-entry 3)
+                             (vector-ref optimizer-entry 1))))
+                 ;; First assignment after genuine native begin, even on NULL.
+                 (vector-set! cell 1 hold)
+                 (if (null? hold)
+                     (begin
+                       (g3r-save-o2-copy-first! first hold)
+                       (g3r-save-o2-raise-first first)))
+                 (g3r-save-o2-check-roots roots)
+                 ;; Every allocation and metadata copy remains under hold.
+                 (let* ((operation 'g3r-save-o2-adoption)
+                        (count (o2-optimizer-completed-updates-internal
+                                 optimizer))
+                        (config (o2-copy-config-data
+                                  operation (vector-ref optimizer-entry 2)))
+                        (paths (o2-copy-paths (vector-ref optimizer-entry 3)))
+                        (aliases (o2-copy-aliases
+                                   (vector-ref optimizer-entry 4)))
+                        (shell (o2-make-identity
+                                 "transformer.optimizer-state:v1"))
+                        (row (vector shell #f config paths aliases count
+                                     'constructing #f))
+                        (old-head o2-states)
+                        (next-o2 (cons row old-head))
+                        (words (make-vector 18 0))
+                        (record (vector shell row #f roots words controls
+                                        (o2-copy-config-data operation config)
+                                        (o2-copy-paths paths)
+                                        (o2-copy-aliases aliases) count))
+                        (next-issued (cons record issued)))
+                   (o2-state-projection-budget!
+                     operation config paths aliases
+                     (vector-ref optimizer-entry 5))
+                   (vector-set! cell 3 shell)
+                   (vector-set! cell 4 row)
+                   (vector-set! cell 5 old-head)
+                   (vector-set! cell 6 next-o2)
+                   (vector-set! cell 7 words)
+                   (vector-set! cell 10 record)
+                   (vector-set! cell 11 count)
+                   (vector-set! cell 12 next-issued)
+                   (g3r-save-o2-check-roots roots)
+                   (if (not (eq? old-head o2-states))
+                       (g3r-save-o2-fail 'invalid-state 2
+                         "O2 state registry changed before issue"))
+                   (if (not (= (g3r-save-capture hold) 0))
+                       (begin (g3r-save-o2-copy-first! first hold)
+                              (g3r-save-o2-raise-first first)))
+                   ;; Fixed 18 scalar reads after one native-owned capture.
+                   (let read ((index 0))
+                     (if (< index 18)
+                         (begin
+                           (vector-set! words index (g3r-save-word hold index))
+                           (read (+ index 1)))))
+                   (if (not (= (g3r-save-check hold) 0))
+                       (begin (g3r-save-o2-copy-first! first hold)
+                              (g3r-save-o2-raise-first first)))
+                   (let ((state (g3r-save-issue hold)))
+                     ;; First assignment after issue return, even on NULL.
+                     (vector-set! cell 2 state)
+                     (if (null? state)
+                         (begin (g3r-save-o2-copy-first! first hold)
+                                (g3r-save-o2-raise-first first)))
+                     (vector-set! cell 9 'pending)
+                     (g3r-save-o2-check-roots roots)
+                     (if (not (and (eq? old-head o2-states)
+                                   (= count
+                                      (o2-optimizer-completed-updates-internal
+                                        optimizer))
+                                   (equal? (vector-ref record 6) config)
+                                   (equal? (vector-ref record 7) paths)
+                                   (equal? (vector-ref record 8) aliases)
+                                   (equal? config (vector-ref row 2))
+                                   (equal? paths (vector-ref row 3))
+                                   (equal? aliases (vector-ref row 4))
+                                   (equal? config
+                                     (o2-copy-config-data operation
+                                       (vector-ref optimizer-entry 2)))
+                                   (equal? paths
+                                     (o2-copy-paths
+                                       (vector-ref optimizer-entry 3)))
+                                   (equal? aliases
+                                     (o2-copy-aliases
+                                       (vector-ref optimizer-entry 4)))
+                                   (eq? (vector-ref row 0) shell)
+                                   (eq? (vector-ref row 1) #f)
+                                   (eq? (vector-ref row 6) 'constructing)
+                                   (eq? (vector-ref record 1) row)
+                                   (eq? (vector-ref record 3) roots)
+                                   (eq? (car next-o2) row)
+                                   (eq? (car next-issued) record)
+                                   (= (g3r-save-check hold) 0)))
+                         (g3r-save-o2-fail 'invalid-state 2
+                           "constructing O2 state or original graph changed"))
+                     (if (not (= (g3r-save-claim hold state) 0))
+                         (begin (g3r-save-o2-copy-first! first hold)
+                                (g3r-save-o2-raise-first first)))
+                     (vector-set! cell 9 'claimed)
+                     (vector-set! row 1 state)
+                     (vector-set! record 2 state)
+                     ;; Native end may fail; its result is never confused with
+                     ;; transferred Eshkol-shell ownership.
+                     (let* ((status (g3r-save-end hold))
+                           (drain (g3r-save-drain hold)))
+                       (vector-set! cell 9 'ended-claimed)
+                       (if (not (and (= status 0) (= drain 3)))
+                           (begin (g3r-save-o2-copy-first! first hold)
+                                  (g3r-save-o2-raise-first first))))
+                     ;; All remaining writes are fixed, nonallocating and
+                     ;; nonreentrant. The lexical record proves shell owner.
+                     (vector-set! row 6 'live)
+                     (set! o2-states next-o2)
+                     (set! issued next-issued)
+                     (vector-set! cell 1 #f)
+                     (vector-set! cell 9 'published)
+                     (set! pending #f)
+                     shell)))))))
+       (require-owned
+         (lambda (shell)
+           (let search ((records issued))
+             (cond ((null? records)
+                    (g3r-save-o2-fail 'invalid-argument 1
+                      "O2 state lacks held same-owner issuance"))
+                   ((eq? (vector-ref (car records) 0) shell)
+                    (let* ((record (car records))
+                           (row (vector-ref record 1))
+                           (state (vector-ref record 2))
+                           (roots (vector-ref record 3)))
+                      (if (not (and (eq? row
+                                     (o2-find-identity shell o2-states))
+                                    (eq? (vector-ref row 0) shell)
+                                    (eq? (vector-ref row 1) state)
+                                    (equal? (vector-ref row 2)
+                                            (vector-ref record 6))
+                                    (equal? (vector-ref row 3)
+                                            (vector-ref record 7))
+                                    (equal? (vector-ref row 4)
+                                            (vector-ref record 8))
+                                    (= (vector-ref row 5)
+                                       (vector-ref record 9))
+                                    (eq? (vector-ref row 6) 'live)
+                                    (not (vector-ref row 7))))
+                          (g3r-save-o2-fail 'invalid-state 2
+                            "held O2 shell or registry was changed"))
+                      (g3r-save-o2-check-roots roots)
+                      #t))
+                   (else (search (cdr records)))))))
+       (retry
+         (lambda ()
+           (if (not quarantine)
+               (g3r-save-o2-fail 'invalid-state 2
+                 "no checked adoption cleanup remains"))
+           (let* ((cell quarantine)
+                  (hold (vector-ref cell 1))
+                  (phase (vector-ref cell 9)))
+             (guard (caught (#t (exit 134)))
+               (cond
+                 ((eq? phase 'hold-cleanup)
+                  (g3r-save-retry hold)
+                  (let ((drain (g3r-save-drain hold)))
+                    (cond ((= drain 1) #f)
+                          ((= drain 2)
+                           (vector-set! cell 1 #f)
+                           (set! quarantine #f)
+                           #t)
+                          ((= drain 3)
+                           (vector-set! cell 1 #f)
+                           (if (release-claimed! cell)
+                               (begin (set! quarantine #f) #t)
+                               #f))
+                          (else (exit 134)))))
+                 ((eq? phase 'state-cleanup)
+                  (if (release-claimed! cell)
+                      (begin (set! quarantine #f) #t)
+                      #f))
+                 (else (exit 134))))))))
+      (lambda (mode a b c d e f g)
+        (cond ((eq? mode 'adopt) (adopt a b c d e f g))
+              ((eq? mode 'require) (require-owned a))
+              ((eq? mode 'retry) (retry))
+              (else (g3r-save-o2-fail 'invalid-argument 1
+                      "unknown private O2 adoption route")))))))
+
+(define (g3r-save-o2-adopt-held-internal generator model resolved tokenizer
+                                          dataset optimizer controls-capsule)
+  (g3r-save-o2-adoption-route 'adopt generator model resolved tokenizer
+                              dataset optimizer controls-capsule))
+(define (g3r-save-o2-require-held-internal shell)
+  (g3r-save-o2-adoption-route 'require shell #f #f #f #f #f #f))
+(define (g3r-save-o2-cleanup-retry-internal!)
+  (g3r-save-o2-adoption-route 'retry #f #f #f #f #f #f #f))
