@@ -82,6 +82,14 @@ for g3g_raw_input in "${raw_private_root}" "${raw_package_bridge}" \
   esac
 done
 source "${PROJECT_ROOT}/scripts/e3-private-package-policy.sh"
+e3_sealed_fixture_extract=0
+if [[ "${E3_SEALED_FIXTURE_EXTRACT:-0}" != 0 ]]; then
+  [[ "${E3_SEALED_FIXTURE_EXTRACT}" == 1 &&
+     "${e3_tuple_kind}" == sealed-fixture &&
+     "${e3_tuple_requested}" == 1 ]] ||
+    die "E3 inventory extraction requires the exact private sealed-fixture tuple"
+  e3_sealed_fixture_extract=1
+fi
 if [[ "${e3_tuple_requested}" == 1 ]]; then
   m3_tuple_requested=0
   m3t_tuple_requested=0
@@ -451,10 +459,17 @@ e3_private_root="$(realpath -- "${e3_inputs[0]}")"
 e3_package_bridge="$(realpath -- "${e3_inputs[1]}")"
 e3_package_renames="$(realpath -- "${e3_inputs[2]}")"
 e3_public_exports="$(realpath -- "${e3_inputs[3]}")"
-e3_undefined_symbols="$(realpath -- "${e3_prefix}_undefined_symbols.txt")"
-e3_public_strings="$(realpath -- "${e3_prefix}_public_strings.txt")"
-e3_source_closure="$(realpath -- "${e3_prefix}_source_closure.txt")"
-e3_native_source_closure="$(realpath -- "${e3_prefix}_native_source_closure.txt")"
+if [[ "${e3_sealed_fixture_extract}" == 1 ]]; then
+  e3_undefined_symbols="$(realpath -m -- "${e3_prefix}_undefined_symbols.txt")"
+  e3_public_strings="$(realpath -m -- "${e3_prefix}_public_strings.txt")"
+  e3_source_closure="$(realpath -m -- "${e3_prefix}_source_closure.txt")"
+  e3_native_source_closure="$(realpath -m -- "${e3_prefix}_native_source_closure.txt")"
+else
+  e3_undefined_symbols="$(realpath -- "${e3_prefix}_undefined_symbols.txt")"
+  e3_public_strings="$(realpath -- "${e3_prefix}_public_strings.txt")"
+  e3_source_closure="$(realpath -- "${e3_prefix}_source_closure.txt")"
+  e3_native_source_closure="$(realpath -- "${e3_prefix}_native_source_closure.txt")"
+fi
 
 [[ -z "${E1B_PACKAGE_POLICY+x}" ]] || \
   die "E1B_PACKAGE_POLICY overrides are forbidden; package policy is derived from exact repository inputs"
@@ -1269,10 +1284,12 @@ e1b_clean_toolchain_env=(
   -u GCC_EXEC_PREFIX -u COMPILER_PATH -u LIBRARY_PATH
   -u CLANG_CONFIG_FILE -u CCC_OVERRIDE_OPTIONS -u CCC_CC -u CCC_CXX
 )
-[[ -f "${undefined_symbols}" ]] || \
-  die "E1B undefined-symbol allowlist not found: ${undefined_symbols}"
-[[ -s "${undefined_symbols}" ]] || \
-  die "E1B undefined-symbol allowlist must not be empty"
+if [[ "${e3_sealed_fixture_extract}" != 1 ]]; then
+  [[ -f "${undefined_symbols}" ]] || \
+    die "E1B undefined-symbol allowlist not found: ${undefined_symbols}"
+  [[ -s "${undefined_symbols}" ]] || \
+    die "E1B undefined-symbol allowlist must not be empty"
+fi
 e1b_timeout_seconds="${E1B_COMPILER_TIMEOUT_SECONDS:-120}"
 [[ "${e1b_timeout_seconds}" =~ ^[1-9][0-9]*$ ]] || \
   die "E1B_COMPILER_TIMEOUT_SECONDS must be a positive integer"
@@ -1323,6 +1340,12 @@ elif [[ "${package_policy}" == e3-private-aggregate &&
 fi
 
 e1b_tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-e1b.XXXXXX")"
+if [[ "${e3_sealed_fixture_extract}" == 1 ]]; then
+  # The caller retains this expanded command/previous-status stream as raw
+  # extraction evidence. It is never a production allowlist or acceptance.
+  PS4='+ previous_status=$? ${BASH_SOURCE}:${LINENO}: '
+  set -x
+fi
 e3_mode_graph_generated_owned=0
 e3_retention_generated_owned=0
 e3_overflow_generated_owned=0
@@ -1496,6 +1519,9 @@ if [[ "${package_policy}" == e3-private-aggregate &&
     --check || die "first-eval mutant driver differs from reviewed baseline"
 fi
 
+if [[ "${e3_sealed_fixture_extract}" == 1 ]]; then
+  : >"${e1b_tmp}/expected-undefined.txt"
+else
 awk '
   NF != 1 || $1 !~ /^[A-Za-z_][A-Za-z0-9_]*$/ { bad = 1 }
   END { if (bad) exit 1 }
@@ -1505,6 +1531,7 @@ LC_ALL=C sort -u "${undefined_symbols}" \
   >"${e1b_tmp}/expected-undefined.txt"
 cmp -s "${undefined_symbols}" "${e1b_tmp}/expected-undefined.txt" || \
   die "E1B undefined-symbol allowlist must already be byte-exact C-sorted unique text"
+fi
 
 export_pattern='^et_e1b_public_[a-z0-9_]+_v1$'
 if [[ "${package_policy}" == e3-private-aggregate ]]; then
@@ -1639,8 +1666,10 @@ if [[ -n "${package_source_closure}" ]]; then
       tr -s '[:space:]' '\n' | grep -F "${PROJECT_ROOT}/" | \
       sed "s#^${PROJECT_ROOT}/##" >"${e1b_tmp}/source-closure.txt"
   fi
-  cmp -s "${package_source_closure}" "${e1b_tmp}/source-closure.txt" || \
-    die "${package_policy} trusted Eshkol source closure drifted"
+  if [[ "${e3_sealed_fixture_extract}" != 1 ]]; then
+    cmp -s "${package_source_closure}" "${e1b_tmp}/source-closure.txt" || \
+      die "${package_policy} trusted Eshkol source closure drifted"
+  fi
 fi
 e1b_raise_attribute="$(
   awk '
@@ -1661,6 +1690,8 @@ if [[ "${e3_private_test_sanitize}" == 1 ]]; then
     die "E3 generated ASan IR is restricted to private test tuples"
   case "${e3_tuple_kind:-}" in
     retention|retention-first-eval-mutant|retention-overflow|mode-graph|numerical|uniform) ;;
+    sealed-fixture) [[ "${e3_sealed_fixture_extract}" == 1 ]] ||
+      die "E3 sealed-fixture sanitizer requires inventory extraction" ;;
     *) die "E3 generated ASan IR has no admitted test tuple" ;;
   esac
   require_command sha256sum
@@ -2142,9 +2173,11 @@ if [[ -n "${package_native_source_closure}" ]]; then
         if (!seen[path]++) print path
       }
     ' >"${e1b_tmp}/native-source-closure.txt"
-  cmp -s "${package_native_source_closure}" \
-    "${e1b_tmp}/native-source-closure.txt" || \
-    die "${package_policy} trusted native source closure drifted"
+  if [[ "${e3_sealed_fixture_extract}" != 1 ]]; then
+    cmp -s "${package_native_source_closure}" \
+      "${e1b_tmp}/native-source-closure.txt" || \
+      die "${package_policy} trusted native source closure drifted"
+  fi
 fi
 
 "${e1b_clean_toolchain_env[@]}" \
@@ -2166,12 +2199,76 @@ objcopy --localize-symbols="${e1b_tmp}/localize-symbols.txt" \
 
 nm -g --defined-only --format=posix "${e1b_tmp}/combined.o" | \
   awk '{ print $1 }' | LC_ALL=C sort >"${e1b_tmp}/global-defined.txt"
-cmp -s "${e1b_tmp}/expected-global-defined.txt" \
-  "${e1b_tmp}/global-defined.txt" || \
-  die "E1B final object differs from the exact public export allowlist"
+if [[ "${e3_sealed_fixture_extract}" != 1 ]]; then
+  cmp -s "${e1b_tmp}/expected-global-defined.txt" \
+    "${e1b_tmp}/global-defined.txt" || \
+    die "E1B final object differs from the exact public export allowlist"
+fi
 
 nm -u --format=posix "${e1b_tmp}/combined.o" | awk '{ print $1 }' | \
   LC_ALL=C sort -u >"${e1b_tmp}/undefined.txt"
+if [[ "${e3_sealed_fixture_extract}" == 1 ]]; then
+  # Observation stops here, before any expected-inventory or private-symbol
+  # acceptance. The ordinary object and evidence publication below stay closed.
+  require_command ar
+  extraction="${output_object}.extract"
+  [[ ! -e "${extraction}" && ! -L "${extraction}" ]] ||
+    die "sealed-fixture extraction output already exists"
+  mkdir -m 0700 -- "${extraction}"
+  for emitted in private.ll private.d source-closure.txt \
+      private.o bridge.o bridge.d package-bridge.o package-bridge.d \
+      combined.raw.o combined.o combined.map localize-symbols.txt \
+      global-defined.txt undefined.txt expected-global-defined.txt \
+      package-exports.txt renames.txt native-source-closure.txt \
+      e3-native-objects.txt d2-generation.json; do
+    [[ -f "${e1b_tmp}/${emitted}" && ! -L "${e1b_tmp}/${emitted}" ]] ||
+      die "sealed-fixture emission missing: ${emitted}"
+    cp -- "${e1b_tmp}/${emitted}" "${extraction}/${emitted}"
+  done
+  if [[ "${e3_private_test_sanitize}" == 1 ]]; then
+    for emitted in private.asan.ll private.asan.json \
+        private.asan-imports.txt private.asan-nm.stderr; do
+      [[ -f "${e1b_tmp}/${emitted}" && ! -L "${e1b_tmp}/${emitted}" ]] ||
+        die "sealed-fixture sanitizer emission missing: ${emitted}"
+      cp -- "${e1b_tmp}/${emitted}" "${extraction}/${emitted}"
+    done
+  fi
+  mkdir -m 0700 -- "${extraction}/native-objects" \
+      "${extraction}/native-depfiles" "${extraction}/generated-source"
+  for object in "${package_native_objects[@]}"; do
+    [[ -f "${object}" && ! -L "${object}" ]] ||
+      die "sealed-fixture native object missing"
+    cp -- "${object}" "${extraction}/native-objects/$(basename -- "${object}")"
+  done
+  for depfile in "${package_native_depfiles[@]}"; do
+    [[ -f "${depfile}" && ! -L "${depfile}" ]] ||
+      die "sealed-fixture native depfile missing"
+    cp -- "${depfile}" "${extraction}/native-depfiles/$(basename -- "${depfile}")"
+  done
+  for leaf in e3_d2_dataset.esk transformer/module.esk \
+      i2_wave2_root.esk m3t_transport_extension.esk; do
+    [[ -f "${e3_generated_source_root}/${leaf}" &&
+       ! -L "${e3_generated_source_root}/${leaf}" ]] ||
+      die "sealed-fixture generated leaf missing: ${leaf}"
+    mkdir -p -- "${extraction}/generated-source/$(dirname -- "${leaf}")"
+    cp -- "${e3_generated_source_root}/${leaf}" \
+      "${extraction}/generated-source/${leaf}"
+  done
+  nm -a "${e1b_tmp}/combined.raw.o" >"${extraction}/raw-nm.txt"
+  nm -g --defined-only --format=posix "${e1b_tmp}/combined.raw.o" \
+    >"${extraction}/raw-global-defined.posix"
+  nm -u --format=posix "${e1b_tmp}/combined.raw.o" \
+    >"${extraction}/raw-undefined.posix"
+  readelf --wide --syms "${e1b_tmp}/combined.o" \
+    >"${extraction}/localized-readelf-symbols.txt"
+  strings "${e1b_tmp}/combined.o" >"${extraction}/strings.txt"
+  ar rcsD "${extraction}/probe-only.a" "${e1b_tmp}/combined.o"
+  ar t "${extraction}/probe-only.a" >"${extraction}/probe-archive-members.txt"
+  printf '%s\n' 'EXTRACTION_ONLY: emitted bytes require separate review; no package admitted' \
+    >"${extraction}/STATUS"
+  printf 'E3 sealed-fixture extraction retained: %s\n' "${extraction}"
+  exit 0
+fi
 e3_retention_sanitizer_inventory_verified=0
 if [[ "${e3_private_test_sanitize}" == 1 ]]; then
   grep -E '^(__asan_|__ubsan_|__sanitizer_|__start_asan_globals$|__stop_asan_globals$)' \

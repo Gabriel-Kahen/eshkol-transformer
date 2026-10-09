@@ -932,6 +932,16 @@ Source controls cover tuple isolation, fresh generated leaves and a fail-closed
 missing-inventory gate. Emitted symbol/dependency inventories and normal,
 repeat, sanitizer and genuine stale-handle runtime results have not been
 collected, so this successor remains source-only and §9 acceptance is open.
+An inactive, nonpublishing inventory extraction source route now names the
+exact sealed-fixture tuple and retains actual private IR, depfiles, native
+objects, defined/undefined/local symbols and sanitizer imports for a later
+reviewed emission. It does not supply expected manifests or build authority;
+the ordinary fixture package still fails closed until those actual inventories
+are reviewed and committed. No compiler or fixture runtime ran for this route.
+The tracked staged source lock still names `fe9dfd52…`; the reviewed native-F
+compiler is `6803dbe2…`. An accepted external-lock/staged-common route exists,
+but fresh E3 source, loader/provenance and heavy-slot admission are still
+required before running this extractor in that profile.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each

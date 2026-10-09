@@ -14,8 +14,10 @@ e3_reviewed_objects=(
   a2/a2_attention_provider.o
 )
 printf '%s\n' "${e3_reviewed_objects[@]}" >"${e1b_tmp}/e3-native-objects.txt"
-cmp "${e3_prefix}_native_objects.txt" \
-  "${e1b_tmp}/e3-native-objects.txt" || die "E3 native object tuple drifted"
+if [[ "${e3_sealed_fixture_extract:-0}" != 1 ]]; then
+  cmp "${e3_prefix}_native_objects.txt" \
+    "${e1b_tmp}/e3-native-objects.txt" || die "E3 native object tuple drifted"
+fi
 for e3_object in "${e3_reviewed_objects[@]}"; do
   package_native_objects+=("${e1b_tmp}/providers/${e3_object}")
   package_native_depfiles+=("${e1b_tmp}/providers/${e3_object%.o}.d")
