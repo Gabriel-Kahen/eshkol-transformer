@@ -1778,6 +1778,7 @@ enrolled native commit, and gives step/restore a fixed fail-stop postcommit
 return; generated behavior is still unrun.
 Compiled no-reentry, package linkage, full C2 SAVE, cold LOAD, and resumed
 equivalence remain open.
+
 The isolated native same-owner F32 witness now adds exact detached value and
 absent-gradient bit baselines for the fourteen authenticated M3T parameters.
 It uses the existing G3 model pins as value mutation exclusion: those pins
