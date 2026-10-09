@@ -81,6 +81,16 @@
                 (eq? (vector-ref entry 2) 'live)
                 (eq? (vector-ref entry 0) shell)
                 (eq? (vector-ref row 13) 'live)))
+    (vector-set! row 14 (+ expected-count 1))
+    (reject "changed logical count cannot redefine terminal anchor"
+      (lambda () (g3c4-p2g2-terminal-snapshot-private shell)))
+    (vector-set! row 14 expected-count)
+    (vector-set! row 15 (+ first 1))
+    (reject "changed selected ID cannot redefine terminal anchor"
+      (lambda () (g3c4-p2g2-terminal-ids-clone-private shell)))
+    (vector-set! row 15 first)
+    (check "original terminal row restored"
+           (eq? (g3c4-p2g2-terminal-live shell 'test) row))
     (check "logical count and cache length"
            (and (= (vector-ref snapshot 2) expected-count)
                 (= (vector-ref snapshot 3) (+ expected-count 2))

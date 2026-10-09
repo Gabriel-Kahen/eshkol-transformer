@@ -83,6 +83,20 @@ class TerminalCloseSourceTests(unittest.TestCase):
         with self.assertRaises(AssertionError):
             self.validate(self.source.replace(original, "#t", 1))
 
+    def test_surviving_anchor_pins_logical_count_and_ids(self) -> None:
+        for original in (
+            "(vector-set! anchor 14 count)",
+            "(vector-set! anchor 15 selected-first)",
+            "(vector-set! anchor 16 selected-second)",
+            "(= (vector-ref row 14) (vector-ref anchor 14))",
+            "(= (vector-ref row 15) (vector-ref anchor 15))",
+            "(= (vector-ref row 16) (vector-ref anchor 16))",
+        ):
+            with self.subTest(original=original):
+                self.assertIn(original, self.source)
+                with self.assertRaises(AssertionError):
+                    self.validate(self.source.replace(original, "#t", 1))
+
     def test_closure_reordering_and_extra_member_rejected(self) -> None:
         reordered = self.closure.copy()
         reordered[-1], reordered[-2] = reordered[-2], reordered[-1]

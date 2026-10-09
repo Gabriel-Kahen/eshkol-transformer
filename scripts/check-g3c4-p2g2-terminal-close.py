@@ -186,10 +186,17 @@ def validate(source: str, closure: list[str], base: list[str]) -> None:
     assert ["vector-set!", "output", "1", "'terminal-output"] in tail
     assert ["vector-set!", "output", "2", "'live"] in tail
     assert ["vector-set!", "anchor", "13", "'live"] in tail
+    for slot, value in (("14", "count"), ("15", "selected-first"),
+                        ("16", "selected-second")):
+        assert ["vector-set!", "anchor", slot, value] in tail
     assert calls(tail, "bytevector-u8-set!") == [
         ["bytevector-u8-set!", "first-raw", "0", "0"],
         ["bytevector-u8-set!", "second-raw", "0", "0"]]
     assert ["vector-ref", "output", "0"] == tail[-1]
+    live = definition(parsed, "g3c4-p2g2-terminal-live")
+    for slot in ("14", "15", "16"):
+        assert ["=", ["vector-ref", "row", slot],
+                ["vector-ref", "anchor", slot]] in calls(live, "=")
 
     snapshot = definition(parsed, "g3c4-p2g2-terminal-snapshot-private")
     assert any(call[-2:] == ["destination", "72"]
