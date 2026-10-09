@@ -1672,7 +1672,10 @@ and an A2 cache read borrow while P1 value clones, an O2 state clone, and the
 committed-history/RNG snapshot are copied. Its registered opaque tokens keep
 inert tombstones after release to reject stale, double-ended, and
 reused-address authority. After 64 reservations per process this source leaf
-reports exhaustion. Host C controls
+reports exhaustion. A private four-word error record distinguishes M3T, O2,
+G3-T and coordinator failures and keeps the first error across reverse drain.
+The Eshkol caller will have to copy it into its own transaction record. Host C
+controls
 exercise both holds, all fourteen value clones, denied cache transaction and
 destroy, exact cache-bit recheck, reentrant write denial,
 allocation and changed-bit failures, reverse cleanup, and retry. The Eshkol
