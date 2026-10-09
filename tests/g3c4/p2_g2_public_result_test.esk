@@ -210,6 +210,10 @@
   (g3c4-p2g2-terminal-release-private! private-output))
 (check "private generator closes"
   (g3g-public-generator-close private-generator))
+(check "public G2 input owner releases"
+  (g3g-public-generation-tensor-release input))
+(check "private-origin input owner releases"
+  (g3g-public-generation-tensor-release private-input))
 
 (display "public G2 result staged PASS: checks=")
 (display checks)

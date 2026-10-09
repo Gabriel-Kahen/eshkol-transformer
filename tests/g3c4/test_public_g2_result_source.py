@@ -187,8 +187,14 @@ def validate(dispatch: bytes, result: str, manual: str, package_root: str,
         'same-native replacement RNG ledger rejects',
         'detached IDs release after source close',
         'detached RNG release after source close',
+        'public G2 input owner releases',
+        'private-origin input owner releases',
     ):
         assert marker in fixture
+    assert "(g3g-public-generation-tensor-release input))" in fixture
+    assert "(g3g-public-generation-tensor-release private-input))" in fixture
+    assert fixture.index('private generator closes') < fixture.index(
+        'public G2 input owner releases')
 
 
 class PublicG2ResultSource(unittest.TestCase):
@@ -263,6 +269,9 @@ class PublicG2ResultSource(unittest.TestCase):
         self.reject(fixture=self.inputs["fixture"].replace(
             "out-of-band private origin does not gain public access",
             "missing private denial", 1))
+        self.reject(fixture=self.inputs["fixture"].replace(
+            "(g3g-public-generation-tensor-release private-input))",
+            "#t)", 1))
 
     def test_wrong_tuple_and_partial_flags(self) -> None:
         self.reject(build=self.inputs["build"].replace(
