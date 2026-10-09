@@ -137,7 +137,8 @@
            (let ((state (vector-ref cell 13)))
              (if state
                  (guard (caught (#t (set! quarantine cell) (exit 134)))
-                   (if (not (state-dict-release! state)) (exit 134))
+                   (if (not (state-dict-release! state))
+                       (begin (set! quarantine cell) (exit 134)))
                    (vector-set! cell 13 #f))))))
        (release-claimed!
          (lambda (cell)
