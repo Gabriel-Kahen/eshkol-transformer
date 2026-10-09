@@ -16,31 +16,44 @@ from tests.e3_private import inactive_extraction_outer as outer
 from tests.e3_private import inactive_extraction_guest as guest
 
 
-I_REPO = Path("/home/gabe/.codex/evidence/eshkol-transformer/g3c4-public-g2-f-loader-label-source-20261009-i/checkout")
+J_REPO = Path("/home/gabe/.codex/evidence/eshkol-transformer/g3c4-public-g2-f-loader-readelf-source-20261009-j/checkout")
 EVIDENCE = Path("/home/gabe/.codex/evidence/eshkol-transformer")
 
 
 class Contract(unittest.TestCase):
-    def test_actual_i_source_and_reviews(self) -> None:
+    def test_actual_j_source_and_reviews(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            for relative in outer.I_FILES:
+            for relative in outer.J_FILES:
                 data = subprocess.run(
-                    ["git", "--no-optional-locks", "-C", str(I_REPO), "show",
-                     f"{outer.I_HEAD}:{relative}"], check=True,
+                    ["git", "--no-optional-locks", "-C", str(J_REPO), "show",
+                     f"{outer.J_HEAD}:{relative}"], check=True,
                     capture_output=True).stdout
                 target = root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(data)
             for name, source in (
-                ("SHA256SUMS-SOURCE", EVIDENCE / "g3c4-public-g2-f-loader-label-source-20261009-i/SOURCE-EVIDENCE/SHA256SUMS-SOURCE"),
-                ("SHA256SUMS-ROOT-REVIEW", EVIDENCE / "g3c4-public-g2-f-loader-label-root-source-review-20261009-i/SHA256SUMS-ROOT-SOURCE-REVIEW"),
-                ("SHA256SUMS-INDEPENDENT-SOURCE-REVIEW", EVIDENCE / "g3c4-public-g2-f-loader-label-independent-source-review-20261009-i/SHA256SUMS-INDEPENDENT-SOURCE-REVIEW"),
+                ("SHA256SUMS-SOURCE", EVIDENCE / "g3c4-public-g2-f-loader-readelf-source-20261009-j/SOURCE-EVIDENCE/SHA256SUMS-SOURCE"),
+                ("SHA256SUMS-ROOT-REVIEW", EVIDENCE / "g3c4-public-g2-f-loader-readelf-root-source-review-20261009-j/SHA256SUMS-ROOT-SOURCE-REVIEW"),
+                ("SHA256SUMS-INDEPENDENT-SOURCE-REVIEW", EVIDENCE / "g3c4-public-g2-f-loader-readelf-independent-review-20261009-j/SHA256SUMS-INDEPENDENT-REVIEW"),
             ):
                 (root / name).write_bytes(source.read_bytes())
             outer.h_source(root, Path.read_bytes)
             path = root / "tests/g3c4/f_loader_outer.py"
-            path.write_bytes(path.read_bytes() + b"# foreign\n")
+            original_loader = path.read_bytes()
+            path.write_bytes(original_loader + b"# foreign\n")
+            with self.assertRaisesRegex(ValueError, "selected bytes changed"):
+                outer.h_source(root, Path.read_bytes)
+            path.write_bytes(original_loader)
+            collector = root / "tests/g3c4/f_image_loader_collect.py"
+            original = collector.read_bytes()
+            collector.write_bytes(original + b"# stale collector\n")
+            with self.assertRaisesRegex(ValueError, "selected bytes changed"):
+                outer.h_source(root, Path.read_bytes)
+            collector.write_bytes(original)
+            (root / "SHA256SUMS-SOURCE").write_bytes((
+                EVIDENCE / "g3c4-public-g2-f-loader-label-source-20261009-i/"
+                "SOURCE-EVIDENCE/SHA256SUMS-SOURCE").read_bytes())
             with self.assertRaisesRegex(ValueError, "selected bytes changed"):
                 outer.h_source(root, Path.read_bytes)
 
@@ -69,7 +82,7 @@ class Contract(unittest.TestCase):
                 outer.material(root, sha256(bad).hexdigest(), Path.read_bytes)
 
     def test_actual_flat_attester_precreate_pin(self) -> None:
-        source = I_REPO / "tests/g3c4/f_artifact_attest.py"
+        source = J_REPO / "tests/g3c4/f_artifact_attest.py"
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             candidate = root / "f_artifact_attest.py"
@@ -149,11 +162,11 @@ class Contract(unittest.TestCase):
     def test_inactive_no_authority_and_two_modes(self) -> None:
         plan = outer.contract()
         self.assertEqual(plan["status"], "SOURCE_ONLY_INACTIVE")
-        self.assertEqual(plan["h_source_sha256"], outer.I_SOURCE)
+        self.assertEqual(plan["h_source_sha256"], outer.J_SOURCE)
         self.assertEqual([row[-1] for row in plan["guest_sequence"]], ["normal", "sanitize"])
         self.assertEqual(len(plan["missing_runtime_authority"]), 2)
         self.assertNotIn("if __name__", Path(outer.__file__).read_text())
-        self.assertEqual(outer.I_FILES, guest.I_FILES)
+        self.assertEqual(outer.J_FILES, guest.J_FILES)
         self.assertEqual(outer.RECIPE_SHA, guest.RECIPE_SHA)
         self.assertEqual(sha256(Path(outer.recipe.__file__).read_bytes()).hexdigest(),
                          outer.RECIPE_SHA)

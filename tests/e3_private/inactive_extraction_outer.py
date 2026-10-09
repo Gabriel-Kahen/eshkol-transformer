@@ -1,7 +1,7 @@
-"""Inactive E3 extraction adapter for the reviewed F-loader I lifecycle.
+"""Inactive E3 extraction adapter for the reviewed F-loader J lifecycle.
 
 There is deliberately no CLI or decision pin here. A later ROOT-reviewed
-wrapper must authenticate the exact I source, supply a one-use decision, and
+wrapper must authenticate the exact J source, supply a one-use decision, and
 own both locks for the complete Docker and physical-closure interval.
 """
 
@@ -18,15 +18,15 @@ from typing import Any
 from tests.e3_private import inactive_extraction_recipe as recipe
 
 
-I_HEAD = "29ee20f70cad5acdead332aad3c8aac84563ce69"
-I_TREE = "f1c55da1bf57e9b59b8aeed4af93d130487102c5"
-I_SOURCE = "186b56597ff5f28d1b699a5227a2ed11691276a7df3ee7753d69612f1ae07451"
-I_ROOT = "b8965daaebb565b2c583b44b4a41b57ec550f77bae74eeca4b2bf1ff01bbf9d5"
-I_IND = "10144529c1e7a677a7651e700dd1876cf896816fde269056105960ad604057da"
-I_FILES = {
+J_HEAD = "07a2ae53cbdf5620fd10319b8c95bf0261dfeb51"
+J_TREE = "c5a3b90a2e4c9be388141531f1fb31579c4ea324"
+J_SOURCE = "70428fe98636c609a59e7c1385179dc88629f08e66376229004fc24171a60644"
+J_ROOT = "da1fd8d09b59002a6ab2c45a7781635207d979f51635163939fa6c754a3a67c9"
+J_IND = "c15b54878d3e70744b9a8e34add72dc0e45d329f13d12ef7f2b44462c8bb6a86"
+J_FILES = {
     "tests/g3c4/f_loader_outer.py": "73066210494ef0cf3f5bd824520fc70e73545f4176a6ae3eedabbe16d5a97360",
     "tests/g3c4/f_artifact_attest.py": "5aac55665ad5a1767c54591ec3530667cced310f07948257521f34ed43999e78",
-    "tests/g3c4/f_image_loader_collect.py": "98cc07a939834466fe77e8c43283159e67f70318bdbdd90b28cd267ff219b0c9",
+    "tests/g3c4/f_image_loader_collect.py": "8b92aabe7fb742b81dc5e1d8fcd57bf92b9f5b3ad702920e9c826ce8faafd101",
 }
 RECIPE_SHA = "4661a73c6f921fd526469d8b3f0b834ccd679908fc488e1318552e67ef78f27f"
 MATERIAL = recipe.MATERIAL_NAMES
@@ -49,15 +49,15 @@ def exact_bytes(path: Path, expected: str, ordinary) -> bytes:
 
 
 def h_source(source: Path, ordinary) -> None:
-    """Authenticate reviewed I code and independent/root seals before import."""
+    """Authenticate reviewed J code and independent/root seals before import."""
     if not source.is_absolute() or not stat.S_ISDIR(source.lstat().st_mode) or \
             source.resolve(strict=True) != source:
-        raise ValueError("I source directory is not canonical")
-    for name, expected in I_FILES.items():
+        raise ValueError("J source directory is not canonical")
+    for name, expected in J_FILES.items():
         exact_bytes(source / name, expected, ordinary)
-    exact_bytes(source / "SHA256SUMS-SOURCE", I_SOURCE, ordinary)
-    exact_bytes(source / "SHA256SUMS-ROOT-REVIEW", I_ROOT, ordinary)
-    exact_bytes(source / "SHA256SUMS-INDEPENDENT-SOURCE-REVIEW", I_IND, ordinary)
+    exact_bytes(source / "SHA256SUMS-SOURCE", J_SOURCE, ordinary)
+    exact_bytes(source / "SHA256SUMS-ROOT-REVIEW", J_ROOT, ordinary)
+    exact_bytes(source / "SHA256SUMS-INDEPENDENT-SOURCE-REVIEW", J_IND, ordinary)
 
 
 def material(bundle: Path, expected: str, ordinary) -> tuple[dict[str, bytes], dict[str, str]]:
@@ -102,7 +102,7 @@ def selected(h, decision_path: Path, decision_sha: str, *, fresh: bool) -> dict[
                 "recipe_sha256"):
         h.require(type(decision[key]) is str and HEX64.fullmatch(decision[key]),
                   f"decision pin malformed: {key}")
-    h.require(decision["h_source_sha256"] == I_SOURCE and
+    h.require(decision["h_source_sha256"] == J_SOURCE and
               decision["recipe_sha256"] == RECIPE_SHA and
               decision["tool_pins_sha256"] == h.collector.TOOL_PINS_SHA and
               decision["runtime_pins_sha256"] == h.collector.RUNTIME33_SHA and
@@ -250,10 +250,10 @@ def bind_and_run(h, h_root: Path, decision_path: Path, decision_sha: str,
     h_source(h_root, h.ordinary)
     decision = json.loads(exact_bytes(decision_path, decision_sha, h.ordinary))
     if h_root != Path(decision["bundle"]) / "h-source":
-        raise ValueError("I source is not the selected read-only bundle")
+        raise ValueError("J source is not the selected read-only bundle")
     if Path(h.__file__).resolve(strict=True) != (
             h_root / "tests/g3c4/f_loader_outer.py").resolve(strict=True):
-        raise ValueError("wrong I lifecycle module")
+        raise ValueError("wrong J lifecycle module")
     replacements = {
         "selected": lambda path, pin, *, fresh: selected(h, path, pin, fresh=fresh),
         "create_argv": lambda decision: create_argv(h, original_create, decision),
@@ -273,8 +273,8 @@ def bind_and_run(h, h_root: Path, decision_path: Path, decision_sha: str,
 
 
 def contract() -> dict[str, object]:
-    return {"status": "SOURCE_ONLY_INACTIVE", "h_head": I_HEAD, "h_tree": I_TREE,
-            "h_source_sha256": I_SOURCE, "decision_format":
+    return {"status": "SOURCE_ONLY_INACTIVE", "h_head": J_HEAD, "h_tree": J_TREE,
+            "h_source_sha256": J_SOURCE, "decision_format":
             "e3-sealed-fixture-extraction-outer-v1", "mounts": recipe.MOUNTS,
             "guest_sequence": [recipe.guest_command("normal"),
                                recipe.guest_command("sanitize")],

@@ -11,10 +11,10 @@ import re
 import sys
 
 
-I_FILES = {
+J_FILES = {
     "tests/g3c4/f_loader_outer.py": "73066210494ef0cf3f5bd824520fc70e73545f4176a6ae3eedabbe16d5a97360",
     "tests/g3c4/f_artifact_attest.py": "5aac55665ad5a1767c54591ec3530667cced310f07948257521f34ed43999e78",
-    "tests/g3c4/f_image_loader_collect.py": "98cc07a939834466fe77e8c43283159e67f70318bdbdd90b28cd267ff219b0c9",
+    "tests/g3c4/f_image_loader_collect.py": "8b92aabe7fb742b81dc5e1d8fcd57bf92b9f5b3ad702920e9c826ce8faafd101",
 }
 RECIPE_SHA = "4661a73c6f921fd526469d8b3f0b834ccd679908fc488e1318552e67ef78f27f"
 
@@ -49,9 +49,9 @@ def load(path: Path, name: str):
 def run(expected_pins_sha256: str) -> None:
     if not re.fullmatch(r"[0-9a-f]{64}", expected_pins_sha256):
         raise ValueError("externally fixed material pins required")
-    for relative, expected in I_FILES.items():
+    for relative, expected in J_FILES.items():
         if sha256(ordinary(Path("/bundle/h-source") / relative)).hexdigest() != expected:
-            raise ValueError("reviewed I guest dependency changed")
+            raise ValueError("reviewed J guest dependency changed")
     if sha256(ordinary(Path("/bundle/e3_recipe.py"))).hexdigest() != RECIPE_SHA:
         raise ValueError("reviewed E3 recipe changed")
     sys.path.insert(0, "/bundle/h-source")
