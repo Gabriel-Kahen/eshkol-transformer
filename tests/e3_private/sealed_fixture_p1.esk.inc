@@ -1,6 +1,8 @@
 ;;; Generated zero-fixture tuple only. These operations are absent from the
 ;;; ordinary trusted P1 source and never exported by a production package.
+(define g3r-candidate-ready-root (vector #f #f #f))
 (define (g3r-construction-preflight identity root handles schedule)
+  (vector-set! g3r-candidate-ready-root 0 #f)
   (let* ((operation 'g3r-candidate-retire)
          (record (construction-record operation identity)))
     (if (or (not (eq? (vector-ref record 1) 'sealed))
@@ -27,14 +29,22 @@
                   (else (find (cdr entries)))))))
     (native-check operation
       (p1-native-candidate-graph-preflight native-context identity))
+    ;; Capture the exact record and shell spine before the final native M3
+    ;; ticket. The destructive tail cannot perform a fallible registry lookup.
+    (vector-set! g3r-candidate-ready-root 1 record)
+    (vector-set! g3r-candidate-ready-root 2 (shell-registry-current))
+    (vector-set! g3r-candidate-ready-root 0 identity)
     #t))
 
 (define (g3r-construction-revoke! identity)
   ;; All Eshkol/native membership scans have completed before the destructive
   ;; boundary. An unexpected native status is a contract defect, never a
   ;; recoverable error after any token has been revoked.
-  (let ((record (construction-record 'g3r-candidate-retire identity))
-        (entries (shell-registry-current)))
+  (let ((record (vector-ref g3r-candidate-ready-root 1))
+        (entries (vector-ref g3r-candidate-ready-root 2)))
+    (if (not (eq? (vector-ref g3r-candidate-ready-root 0) identity))
+        (p1-candidate-invariant-fail))
+    (vector-set! g3r-candidate-ready-root 0 #f)
     (if (not (= (p1-native-candidate-graph-revoke native-context identity) 0))
         (e3-native-invariant-fail))
     (let loop ((remaining entries))
@@ -51,5 +61,7 @@
             (loop (cdr remaining)))))
     (vector-set! record 1 'retired)
     (vector-set! record 3 #f)
-    (vector-set! record 4 #f))
+    (vector-set! record 4 #f)
+    (vector-set! g3r-candidate-ready-root 1 #f)
+    (vector-set! g3r-candidate-ready-root 2 #f))
   #t)

@@ -122,6 +122,29 @@ class FixtureSource(unittest.TestCase):
         ):
             self.assertIn(required, fixture)
 
+    def test_p1_revoke_uses_only_preflight_captured_roots(self) -> None:
+        source = MODULE.outputs()["transformer/module.esk"].decode()
+        preflight = source.split("(define (g3r-construction-preflight", 1)[1].split(
+            "(define (g3r-construction-revoke!", 1)[0]
+        tail = source.split("(define (g3r-construction-revoke!", 1)[1].split(
+            "(define p1-trusted-surface", 1)[0]
+        for captured in ("record", "(shell-registry-current)", "identity"):
+            self.assertIn("g3r-candidate-ready-root", preflight)
+            self.assertIn(captured, preflight)
+        self.assertIn("(eq? (vector-ref g3r-candidate-ready-root 0) identity)", tail)
+        self.assertIn("(vector-set! g3r-candidate-ready-root 0 #f)", tail)
+        self.assertIn("(p1-candidate-invariant-fail)", tail)
+
+        def assert_no_late_lookup(candidate: str) -> None:
+            for forbidden in ("construction-record", "shell-registry-current"):
+                self.assertNotIn(forbidden, candidate)
+
+        assert_no_late_lookup(tail)
+        with self.assertRaises(AssertionError):
+            assert_no_late_lookup(tail + "(construction-record operation identity)")
+        with self.assertRaises(AssertionError):
+            assert_no_late_lookup(tail + "(shell-registry-current)")
+
 
 if __name__ == "__main__":
     unittest.main()
