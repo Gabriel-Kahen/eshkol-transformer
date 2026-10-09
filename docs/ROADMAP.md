@@ -946,6 +946,11 @@ The tracked staged source lock still names `fe9dfd52…`; the reviewed native-F
 compiler is `6803dbe2…`. An accepted external-lock/staged-common route exists,
 but fresh E3 source, loader/provenance and heavy-slot admission are still
 required before running this extractor in that profile.
+An inactive test-only recipe now defines a distinct full-source E3 admission,
+reuses the reviewed copied-F three-string staging and exact external lock,
+and orders persistent normal then sanitizer emitted-inventory observations.
+It has no launcher or actual loader-result pin; source-only checks do not
+establish a copied compiler, emitted baselines, or native fixture execution.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each
