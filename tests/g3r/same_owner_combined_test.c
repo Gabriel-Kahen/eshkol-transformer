@@ -103,6 +103,23 @@ int main(void) {
   CHECK(hold != NULL);
   CHECK(et_g3r_private_same_owner_save_check_v1(hold) == 0);
   CHECK(et_g3r_private_same_owner_save_check_v1((void *)(uintptr_t)1u) != 0);
+  et_a2_kv_cache_transaction *denied = NULL;
+  CHECK(et_a2_kv_cache_transaction_begin_v1(
+      c->cache, 1, &count, &denied, &kernel) != 0);
+  CHECK(denied == NULL);
+  et_a2_kv_cache *cache_alias = c->cache;
+  CHECK(et_a2_kv_cache_destroy_v1(&cache_alias, &kernel) != 0);
+  CHECK(cache_alias == c->cache);
+  const et_kernel_tensor_view_v1 *held_keys = NULL, *held_values = NULL;
+  const et_kernel_tensor_view_v1 *held_lengths = NULL, *held_mask = NULL;
+  CHECK(et_a2_kv_cache_read_borrow_layer_v1(
+      c->save_hold->cache_borrow, 0, &held_keys, &held_values,
+      &held_lengths, &held_mask, &kernel) == 0);
+  unsigned char *held_bytes = (unsigned char *)(uintptr_t)held_keys->data;
+  held_bytes[0] ^= 1u;
+  CHECK(et_g3r_private_same_owner_save_check_v1(hold) != 0);
+  held_bytes[0] ^= 1u;
+  CHECK(et_g3r_private_same_owner_save_check_v1(hold) == 0);
   CHECK(et_g3t_private_call_acquire_v1(c, 0) != 0);
   CHECK(et_o2_optimizer_step_v1(optimizer, &o2) ==
         ET_O2_STATUS_INVALID_STATE);
@@ -139,6 +156,9 @@ int main(void) {
   CHECK(et_g3r_private_same_owner_save_end_v1(hold) == 0);
   CHECK(et_g3r_private_same_owner_save_end_v1(hold) != 0);
   CHECK(et_g3r_private_same_owner_save_check_v1(hold) != 0);
+  CHECK(et_a2_kv_cache_transaction_begin_v1(
+      c->cache, 1, &count, &denied, &kernel) == 0);
+  CHECK(et_a2_kv_cache_transaction_abort_v1(&denied, &kernel) == 0);
   hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
   CHECK(hold != NULL);
   c->rng[1]++;

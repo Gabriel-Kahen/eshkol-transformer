@@ -176,6 +176,10 @@ typedef struct g3r_save_snapshot {
 typedef struct g3r_save_hold {
   g3t_record h;
   void *context, *model, *cache;
+  et_a2_kv_cache_read_borrow *cache_borrow;
+  unsigned char key_bits[32], value_bits[32];
+  int64_t cache_length;
+  uint8_t keep_bits[2];
   et_g3r_g3t_idle_snapshot_words_v1 value;
 } g3r_save_hold;
 static size_t g3r_save_hold_tombstones;
@@ -866,6 +870,65 @@ int64_t et_g3r_private_g3t_idle_snapshot_release_v1(void *candidate) {
   return 0;
 }
 #ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+static int g3r_save_cache_check(g3r_save_hold *hold, int capture) {
+  const et_kernel_tensor_view_v1 *keys = NULL, *values = NULL;
+  const et_kernel_tensor_view_v1 *lengths = NULL, *mask = NULL;
+  et_kernel_error error;
+  if (g3t_capture_kernel(et_a2_kv_cache_read_borrow_layer_v1(
+          hold->cache_borrow, 0, &keys, &values, &lengths, &mask,
+          &error), &error)) return -1;
+  g3t_context *c = hold->context;
+  if (!keys || !values || !lengths || !mask ||
+      !keys->data || !values->data || !lengths->data || !mask->data ||
+      !keys->dtype || strcmp(keys->dtype, "f32") ||
+      !values->dtype || strcmp(values->dtype, "f32") ||
+      !lengths->dtype || strcmp(lengths->dtype, "i64") ||
+      !mask->dtype || strcmp(mask->dtype, "bool") ||
+      !keys->device || strcmp(keys->device, "cpu") ||
+      !values->device || strcmp(values->device, "cpu") ||
+      !lengths->device || strcmp(lengths->device, "cpu") ||
+      !mask->device || strcmp(mask->device, "cpu") ||
+      keys->layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR ||
+      values->layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR ||
+      lengths->layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR ||
+      mask->layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR ||
+      keys->offset_bytes || values->offset_bytes ||
+      lengths->offset_bytes || mask->offset_bytes ||
+      keys->rank != 4 || values->rank != 4 ||
+      !keys->shape || !values->shape ||
+      keys->shape[0] != 1 || keys->shape[1] != 2 ||
+      keys->shape[2] != 2 || keys->shape[3] != 2 ||
+      values->shape[0] != 1 || values->shape[1] != 2 ||
+      values->shape[2] != 2 || values->shape[3] != 2 ||
+      keys->byte_length != sizeof(hold->key_bits) ||
+      values->byte_length != sizeof(hold->value_bits) ||
+      lengths->rank != 1 || !lengths->shape || lengths->shape[0] != 1 ||
+      lengths->byte_length != sizeof(int64_t) ||
+      mask->rank != 2 || !mask->shape || mask->shape[0] != 1 ||
+      mask->shape[1] != 2 || mask->byte_length != sizeof(hold->keep_bits))
+    return g3t_bad(G3T_STATE, G3T_TOPOLOGY);
+  int64_t length;
+  memcpy(&length, lengths->data, sizeof(length));
+  if (length != c->ledger.length ||
+      ((const uint8_t *)mask->data)[0] != 1 ||
+      ((const uint8_t *)mask->data)[1] != (length == 2))
+    return g3t_bad(G3T_STATE, G3T_TOPOLOGY);
+  if (capture) {
+    hold->cache_length = length;
+    memcpy(hold->key_bits, keys->data, sizeof(hold->key_bits));
+    memcpy(hold->value_bits, values->data, sizeof(hold->value_bits));
+    memcpy(hold->keep_bits, mask->data, sizeof(hold->keep_bits));
+  } else if (length != hold->cache_length ||
+             memcmp(hold->key_bits, keys->data, sizeof(hold->key_bits)) ||
+             memcmp(hold->value_bits, values->data,
+                    sizeof(hold->value_bits)) ||
+             memcmp(hold->keep_bits, mask->data,
+                    sizeof(hold->keep_bits))) {
+    return g3t_bad(G3T_STATE, G3T_INVARIANT);
+  }
+  return 0;
+}
+
 void *et_g3r_private_g3t_save_begin_v1(
     void *candidate, void *const parameters[14],
     const void *const identities[14]) {
@@ -912,6 +975,20 @@ void *et_g3r_private_g3t_save_begin_v1(
   hold->context = c;
   hold->model = o;
   hold->cache = c->cache;
+  et_kernel_error cache_error;
+  if (g3t_capture_kernel(et_a2_kv_cache_read_borrow_begin_v1(
+          c->cache, &hold->cache_borrow, &cache_error), &cache_error)) {
+    et_g3t_model_pins_end_internal(&c->pins);
+    free(hold);
+    return NULL;
+  }
+  if (g3r_save_cache_check(hold, 1) != 0) {
+    if (et_a2_kv_cache_read_borrow_end_v1(
+            &hold->cache_borrow, &cache_error) != 0) abort();
+    et_g3t_model_pins_end_internal(&c->pins);
+    free(hold);
+    return NULL;
+  }
   hold->value = words;
   hold->h.kind = G3T_SAVE_HOLD;
   hold->h.state = G3T_LIVE;
@@ -951,6 +1028,7 @@ int64_t et_g3r_private_g3t_save_check_v1(void *candidate) {
       word[16] != c->ledger.terminal ||
       word[17] != c->ledger.length)
     return g3t_bad(G3T_STATE, G3T_INVARIANT);
+  if (g3r_save_cache_check(hold, 0) != 0) return g3t_error_category;
   return 0;
 }
 
@@ -982,11 +1060,18 @@ int64_t et_g3r_private_g3t_save_end_v1(void *candidate) {
   if (c->save_hold != hold || o->active != c ||
       c->pins.held_mask != UINT16_C(0x3fff))
     abort();
+  et_kernel_error cache_error;
+  if (et_a2_kv_cache_read_borrow_end_v1(
+          &hold->cache_borrow, &cache_error) != 0) abort();
   et_g3t_model_pins_end_internal(&c->pins);
   o->active = NULL;
   c->h.busy = 0;
   c->save_hold = NULL;
   memset(&hold->value, 0, sizeof(hold->value));
+  memset(hold->key_bits, 0, sizeof(hold->key_bits));
+  memset(hold->value_bits, 0, sizeof(hold->value_bits));
+  memset(hold->keep_bits, 0, sizeof(hold->keep_bits));
+  hold->cache_length = 0;
   hold->context = hold->model = hold->cache = NULL;
   hold->h.state = G3T_DEAD;
   if (first) {
