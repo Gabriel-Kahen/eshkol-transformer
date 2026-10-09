@@ -15,8 +15,11 @@ external fe9-to-6803 lock, a full copied project source inventory, the three
 exact `common.sh` substitutions, and actual image library resolution. It
 authenticates all ten original generated LLVM symlinks across five build
 directories, rejects every unclassified original filesystem node, and excludes
-the two selected build-off links from the copy. Missing
-image pins or loader receipts fail closed. Its compatibility TSV is explicitly
+the two selected build-off links from the copy. It checks every direct ELF
+dependency independently, then requires the complete observed loader closure,
+including transitive libraries and the loader itself, to match the externally
+pinned image path/hash inventory exactly. Missing, extra or mutated libraries
+fail closed. Its compatibility TSV is explicitly
 new and test-only; F and `bootstrap-eshkol.sh` did not produce it.
 
 The attester requires a canonical ordinary external source-admission decision
@@ -30,7 +33,9 @@ publication. No such future decision or launcher has been created here.
 
 The source checker and owned negative tests exercise wrong/missing identities,
 dirty source, changed cache/receipts, partial or altered copies, loader and
-library drift, wrong external lock, copied-source extras, and fixture closure.
+transitive-library drift, wrong external lock, copied-source extra directories
+and special nodes, and fixture closure. Cleanup retains the primary exception
+with bounded secondary facts using Python 3.10-compatible code.
 No Docker, native build, installed AOT, sanitizer, emitted symbol inventory,
 mathematical comparison, or heavy gate has run. ROOT must separately accept
 the offline F observation, exact image/input graph, source/test review,

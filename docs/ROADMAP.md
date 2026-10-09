@@ -2722,7 +2722,7 @@ publication, public G2 and continuation remain pending.
   observation cannot replace its unrun result verifier. The attester's
   compatibility view is newly produced, not bootstrap provenance. Installed
   AOT, native/sanitizer runs, a ROOT-pinned external source admission decision,
-  image dependency admission, emitted symbols,
+  complete direct and transitive image dependency admission, emitted symbols,
   numerical parity and the full public G2 gate remain **unrun**.
 
 ## Wave 4 — practical pretraining and performance

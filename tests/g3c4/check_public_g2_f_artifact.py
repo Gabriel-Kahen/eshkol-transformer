@@ -73,6 +73,10 @@ def validate(fixture: str, attester: str, base: list[str],
         assert text in attester, text
     assert "--project-head" not in attester and "--project-tree" not in attester
     assert "unclassified filesystem node" in attester
+    assert "needed <= set(observed)" in attester
+    assert "set(expected) == set(observed)" in attester
+    assert "primary.add_note" not in attester
+    assert "candidate source contains an unclassified filesystem node" in attester
     assert attester.count('"/bundle/public-g2-6803.lock"') >= 2
     assert "ESHKOL_ALLOW_UNSUPPORTED_HOST" in attester
 

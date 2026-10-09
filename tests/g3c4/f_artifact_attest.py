@@ -14,6 +14,7 @@ from pathlib import Path
 import re
 import stat
 import subprocess
+import sys
 
 
 COMPILER_HEAD = "6803dbe24fb65eaad2901767bf010787517946ef"
@@ -331,13 +332,14 @@ def resolved_image_libs(readelf_raw: bytes, loader_argv: bytes,
         else:
             match = re.match(r"\s*(/\S+) \(0x[0-9a-fA-F]+\)", line)
             if not match:
-                require("linux-vdso.so.1" in line, "unknown loader line")
+                require(re.fullmatch(r"\s*linux-vdso\.so\.1 \(0x[0-9a-fA-F]+\)",
+                                     line) is not None, "unknown loader line")
                 continue
             path = match.group(1)
             name = Path(path).name
         require(name not in observed, "duplicate loader dependency")
         observed[name] = path
-    require(set(observed) == needed, "loader and ELF dependencies differ")
+    require(needed <= set(observed), "direct ELF dependency missing from loader")
     expected = {}
     for line in expected_tsv.decode().splitlines():
         fields = line.split("\t")
@@ -345,9 +347,10 @@ def resolved_image_libs(readelf_raw: bytes, loader_argv: bytes,
                 re.fullmatch(r"[0-9a-f]{64}", fields[2]) is not None,
                 "image pin row malformed")
         expected[fields[0]] = (fields[1], fields[2])
-    require(set(expected) == needed, "image pin set differs from ELF")
+    require(set(expected) == set(observed),
+            "image pins differ from complete loader closure")
     result = []
-    for name in sorted(needed):
+    for name in sorted(observed):
         path, sha = expected[name]
         require(observed[name] == path and path.startswith("/") and
                 digest(ordinary(Path(path).resolve())) == sha,
@@ -447,10 +450,20 @@ def project_copy(source: Path, candidate: Path,
                 stat.S_IMODE((candidate / relative).stat().st_mode) ==
                 (0o755 if mode == "100755" else 0o644),
                 f"candidate tracked source drift: {name}")
-    actual = {p.relative_to(candidate).as_posix() for p in candidate.rglob("*")
-              if p.is_file() or p.is_symlink()}
+    members = list(candidate.rglob("*"))
+    actual = {p.relative_to(candidate).as_posix() for p in members
+              if stat.S_ISREG(p.lstat().st_mode)}
     require(actual == names and common_sha is not None,
             "candidate source membership drift")
+    expected_directories = {parent.as_posix() for name in names
+                            for parent in list(Path(name).parents)[:-1]}
+    actual_directories = {p.relative_to(candidate).as_posix() for p in members
+                          if stat.S_ISDIR(p.lstat().st_mode)}
+    require(actual_directories == expected_directories,
+            "candidate source directory membership drift")
+    require({p.relative_to(candidate).as_posix() for p in members} ==
+            actual | actual_directories,
+            "candidate source contains an unclassified filesystem node")
     manifest_sha = digest("".join(manifest_rows).encode())
     require(len(names) == decision["tracked_file_count"] and
             manifest_sha == decision["tracked_manifest_sha256"],
@@ -542,6 +555,18 @@ def compiler_binary_and_elf(binary: Path, recorded_readelf: bytes) -> dict[str, 
             "needed_count": str(len(needed)), "runpath": runpath}
 
 
+def retain_cleanup_error(primary: BaseException, error: OSError,
+                         location: str) -> None:
+    """Keep the primary error on guest Python 3.10, with bounded cleanup facts."""
+    fact = f"attestation {location} close failed: {error!s}"[:512]
+    try:
+        facts = getattr(primary, "_attestation_cleanup", ())
+        primary._attestation_cleanup = (*facts, fact)
+        sys.stderr.write(fact + "\n")
+    except BaseException:
+        pass
+
+
 def exclusive_bytes(path: Path, raw: bytes, mode: int = 0o400) -> None:
     require(not path.exists(), f"attestation output already exists: {path}")
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
@@ -567,7 +592,7 @@ def exclusive_bytes(path: Path, raw: bytes, mode: int = 0o400) -> None:
         except OSError as close_error:
             if primary is None:
                 raise
-            primary.add_note(f"attestation descriptor close failed: {close_error}")
+            retain_cleanup_error(primary, close_error, "descriptor")
     directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
     primary = None
     try:
@@ -581,7 +606,7 @@ def exclusive_bytes(path: Path, raw: bytes, mode: int = 0o400) -> None:
         except OSError as close_error:
             if primary is None:
                 raise
-            primary.add_note(f"attestation directory close failed: {close_error}")
+            retain_cleanup_error(primary, close_error, "directory")
 
 
 def compatibility_tsv(source: Path, binary_sha: str,

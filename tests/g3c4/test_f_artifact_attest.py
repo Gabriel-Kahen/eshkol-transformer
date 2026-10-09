@@ -249,6 +249,35 @@ class FArtifactAttest(unittest.TestCase):
                     attest.exclusive_bytes(bad, b"no false success\n")
             self.assertEqual(bad.read_bytes(), b"n")
 
+    def test_python310_cleanup_keeps_primary_and_partial(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            real_close = os.close
+            for close_index in (1, 2):
+                path = Path(tmp) / f"close-{close_index}.json"
+                closes = 0
+                syncs = 0
+                def failing_close(fd: int) -> None:
+                    nonlocal closes
+                    closes += 1
+                    real_close(fd)
+                    if closes == close_index:
+                        raise OSError("secondary close fault")
+                real_sync = os.fsync
+                def sync(fd: int) -> None:
+                    nonlocal syncs
+                    syncs += 1
+                    if syncs == close_index:
+                        raise OSError("primary fsync fault")
+                    real_sync(fd)
+                with patch("tests.g3c4.f_artifact_attest.os.fsync", side_effect=sync), \
+                     patch("tests.g3c4.f_artifact_attest.os.close",
+                           side_effect=failing_close):
+                    with self.assertRaisesRegex(OSError, "primary fsync fault") as caught:
+                        attest.exclusive_bytes(path, b"retained partial\n")
+                self.assertEqual(path.read_bytes(), b"retained partial\n")
+                self.assertIn("secondary close fault", " ".join(
+                    caught.exception._attestation_cleanup))
+
     def test_source_copy_rejects_extra_and_wrong_common(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
@@ -309,6 +338,16 @@ class FArtifactAttest(unittest.TestCase):
             changed["tree"] = "0" * 40
             with self.assertRaisesRegex(ValueError, "source checkout identity"):
                 attest.project_copy(source, candidate, changed, candidate)
+            extra_directory = candidate / "empty-extra"
+            extra_directory.mkdir()
+            with self.assertRaisesRegex(ValueError, "directory membership drift"):
+                attest.project_copy(source, candidate, decision, candidate)
+            extra_directory.rmdir()
+            extra_fifo = candidate / "unlisted-fifo"
+            os.mkfifo(extra_fifo)
+            with self.assertRaisesRegex(ValueError, "unclassified filesystem node"):
+                attest.project_copy(source, candidate, decision, candidate)
+            extra_fifo.unlink()
 
     def test_external_source_admission_authenticates_reviews_and_identity(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -356,20 +395,36 @@ class FArtifactAttest(unittest.TestCase):
     def test_loader_and_compatibility_controls(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             library = Path(tmp) / "libsample.so.1"
+            transitive = Path(tmp) / "libtransitive.so.2"
             library.write_bytes(b"actual-image-library")
+            transitive.write_bytes(b"actual-transitive-image-library")
             raw_elf = b" 0x1 (NEEDED) Shared library: [libsample.so.1]\n" \
                       b" 0x1 (RUNPATH) Library runpath: [/pinned]\n"
-            loader = f"\tlibsample.so.1 => {library} (0x0123)\n".encode()
-            pins = f"libsample.so.1\t{library}\t{sha(library.read_bytes())}\n".encode()
+            loader = (f"\tlibsample.so.1 => {library} (0x0123)\n"
+                      f"\tlibtransitive.so.2 => {transitive} (0x0456)\n").encode()
+            pins = (f"libsample.so.1\t{library}\t{sha(library.read_bytes())}\n"
+                    f"libtransitive.so.2\t{transitive}\t{sha(transitive.read_bytes())}\n").encode()
             argv = b"/lib64/ld-linux-x86-64.so.2\0--list\0/out/build-off/eshkol-run\0"
             with patch.object(attest, "ELF_NEEDED", frozenset({"libsample.so.1"})), \
                  patch.object(attest, "ELF_RUNPATH", "/pinned"):
                 self.assertEqual(len(attest.resolved_image_libs(raw_elf, argv, b"0\n",
-                                                                loader, b"", pins)), 1)
+                                                                loader, b"", pins)), 2)
+                omitted = loader.splitlines(keepends=True)[1]
+                with self.assertRaisesRegex(ValueError, "direct ELF dependency missing"):
+                    attest.resolved_image_libs(raw_elf, argv, b"0\n", omitted, b"", pins)
+                with self.assertRaisesRegex(ValueError, "complete loader closure"):
+                    attest.resolved_image_libs(raw_elf, argv, b"0\n", loader, b"",
+                                               pins.splitlines(keepends=True)[0])
+                extra = loader + f"\tlibunreviewed.so.3 => {transitive} (0x0789)\n".encode()
+                with self.assertRaisesRegex(ValueError, "complete loader closure"):
+                    attest.resolved_image_libs(raw_elf, argv, b"0\n", extra, b"", pins)
                 with self.assertRaisesRegex(ValueError, "image library identity"):
                     attest.resolved_image_libs(raw_elf, argv, b"0\n", loader, b"",
                                                pins.replace(sha(library.read_bytes()).encode(),
                                                             b"0" * 64))
+                transitive.write_bytes(b"post-pin mutation")
+                with self.assertRaisesRegex(ValueError, "image library identity"):
+                    attest.resolved_image_libs(raw_elf, argv, b"0\n", loader, b"", pins)
                 with self.assertRaisesRegex(ValueError, "loader receipt invalid"):
                     attest.resolved_image_libs(raw_elf, argv, b"1\n", loader, b"", pins)
             versions = {key: "21.1.8" for key in
