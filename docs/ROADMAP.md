@@ -1710,10 +1710,13 @@ marks the shell closed before native close. A fixed 64-row process limit
 denies unbounded retention and explicitly rejects further opens.
 Source-shape and mutation controls pass. This is not yet compiled or integrated
 with G3 construction, O2 adoption, C2 SAVE, or cold LOAD; generated package
-behavior and full lifecycle acceptance remain separate gates. A later source
-audit found that the global completed-row list and row-held callback can be
-replaced to admit a forged ordinary D2 shell; that authority gap is held for
-a separate lexical-registry successor before G3 or SAVE may consume D2 lineage.
+behavior and full lifecycle acceptance remain separate gates. A source-only
+successor addresses the later forged-row finding by keeping completed records
+and original T2/D2 identity snapshots in one lexical route. The private
+wrapper receives only a checked boolean from admission; no row callback or
+caller-visible registry authorizes a dataset. Source-state controls evaluate
+genuine, tampered, foreign, retired, and ordinary-shell cases. Generated
+package behavior and G3/SAVE consumption remain unproved.
 
 An isolated private M3 construction source leaf now captures the exact original
 resolved X1 shell in the same call that constructs the model. A fixed private

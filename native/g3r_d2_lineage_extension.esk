@@ -1,9 +1,6 @@
 ;;; Private original-T2/D2 identity seam. Load only after CLI3's T2 bridge and
 ;;; D2 in one source aggregate. It defines no public tokenizer or dataset API.
 
-;;; Slot 0 retains completed rows. Slot 1 roots the one in-flight construction.
-(define g3r-d2-lineage-registry (vector '() #f))
-
 ;;; Ordinary D2 close does not know this private companion. Its retained rows
 ;;; are bounded even if a caller never invokes the private retirement path.
 (define g3r-d2-lineage-maximum-rows 64)
@@ -34,148 +31,185 @@
                  "expected an exact raw V256 T2 tokenizer"))
     entry))
 
-(define (g3r-d2-lineage-open config tokenizer)
-  (let ((operation 'g3r-d2-lineage-open))
-    (if (vector-ref g3r-d2-lineage-registry 1)
-        (d2-fail 'invalid-state operation
-                 "D2 lineage construction is already active"))
-    (g3r-d2-lineage-check-capacity
-     (vector-ref g3r-d2-lineage-registry 0) operation)
-    (let* ((tokenizer-entry (g3r-d2-lineage-byte-core tokenizer operation))
-           (fingerprint (t2-private-tokenizer-fingerprint tokenizer))
-           (vocabulary (t2-private-tokenizer-vocab-size tokenizer))
-           (row (vector #f 'pending tokenizer tokenizer-entry
-                        #f fingerprint vocabulary #f))
-           (next (cons row (vector-ref g3r-d2-lineage-registry 0)))
-           (pending (vector row next #f)))
-      (vector-set! g3r-d2-lineage-registry 1 pending)
-      (guard
-        (caught
-          (#t
-            (if (vector-ref pending 2)
-                (guard (cleanup-failure (#t (exit 134)))
-                  (d2-token-dataset-close! (vector-ref pending 2))))
-            (vector-set! g3r-d2-lineage-registry 1 #f)
-            (raise caught)))
-        ;; D2's native open stores only the opaque shell; it invokes no user
-        ;; callback. The shell is lexical here until the row is published.
-        (let ((shell (d2-token-dataset-open config tokenizer)))
-          (vector-set! pending 2 shell)
-          (let* ((state (d2-open-dataset-state shell operation))
-                 (core (vector-ref state 6))
-                 (witness
-                   (lambda (candidate)
-                     (and (eq? candidate row)
-                          (eq? (vector-ref candidate 0) shell)
-                          (eq? (vector-ref candidate 2) tokenizer)
-                          (eq? (vector-ref candidate 3) tokenizer-entry)
-                          (eq? (vector-ref candidate 4) state)
-                          (string=? (vector-ref candidate 5) fingerprint)
-                          (= (vector-ref candidate 6) vocabulary)))))
-            (if (not (and (eq? (vector-ref state 1) shell)
-                          (eq? (t2-private-entry tokenizer) tokenizer-entry)
-                          (string=? (vector-ref core 2) fingerprint)
-                          (= (vector-ref core 3) vocabulary)))
-                (d2-fail 'invalid-state operation
-                         "new D2 state differs from the original T2 identity"))
-            ;; All allocation and fallible authentication precede this fixed
-            ;; publication tail. No caller has received shell yet.
-            (vector-set! row 0 shell)
-            (vector-set! row 4 state)
-            (vector-set! row 7 witness)
-            (vector-set! row 1 'live)
-            (vector-set! g3r-d2-lineage-registry 0 next)
-            (vector-set! g3r-d2-lineage-registry 1 #f)
-            shell))))))
-
-(define (g3r-d2-lineage-require dataset tokenizer)
-  (let ((operation 'g3r-d2-lineage-require))
-    (let search ((rows (vector-ref g3r-d2-lineage-registry 0)))
-      (cond
-        ((null? rows)
-         (d2-fail 'invalid-argument operation
-                  "dataset has no creation-time tokenizer lineage"))
-        ((not (pair? rows))
-         (d2-fail 'internal operation
-                  "D2 lineage registry is malformed"))
-        ((not (and (vector? (car rows))
-                   (= (vector-length (car rows)) 8)))
-         (d2-fail 'internal operation
-                  "D2 lineage row is malformed"))
-        ((eq? (vector-ref (car rows) 0) dataset)
-         (let* ((row (car rows))
-                (state (d2-open-dataset-state dataset operation))
-                (original (vector-ref row 2))
-                (tokenizer-entry (g3r-d2-lineage-byte-core original operation))
-                (core (vector-ref state 6))
-                (fingerprint (t2-private-tokenizer-fingerprint original))
-                (vocabulary (t2-private-tokenizer-vocab-size original))
-                (cursor (d2-core-cursor-snapshot core))
-                (decoded (d2-core-cursor-decode cursor)))
-           (if (not (and (eq? (vector-ref row 1) 'live)
-                         (eq? original tokenizer)
-                         (eq? (vector-ref row 3) tokenizer-entry)
-                         (eq? (vector-ref row 4) state)
-                         (procedure? (vector-ref row 7))
-                         ((vector-ref row 7) row)
-                         (string=? (vector-ref row 5) fingerprint)
-                         (= (vector-ref row 6) vocabulary)
-                         (string=? (vector-ref core 2) fingerprint)
-                         (= (vector-ref core 3) vocabulary)
-                         (d2-core-state-identity=? core decoded)
-                         (= (vector-ref decoded 15) (vector-ref core 15))
-                         (<= (vector-ref decoded 15) (vector-ref core 14))))
-               (d2-fail 'invalid-state operation
-                        "original D2/T2 lineage or live cursor changed"))
-           row))
-        (else (search (cdr rows)))))))
-
-(define (g3r-d2-lineage-retire! dataset tokenizer)
-  (let ((operation 'g3r-d2-lineage-retire!))
-    (if (vector-ref g3r-d2-lineage-registry 1)
-        (d2-fail 'invalid-state operation
-                 "D2 lineage construction is active"))
-    ;; Build the replacement before close. The close is the only fallible
-    ;; operation after authentication; failed close retains the original row.
-    (let search ((rows (vector-ref g3r-d2-lineage-registry 0))
-                 (prefix '()))
-      (cond
-        ((null? rows)
-         (d2-fail 'invalid-argument operation
-                  "dataset has no creation-time tokenizer lineage"))
-        ((not (and (pair? rows) (vector? (car rows))
-                   (= (vector-length (car rows)) 8)))
-         (d2-fail 'internal operation "D2 lineage registry is malformed"))
-        ((eq? (vector-ref (car rows) 0) dataset)
-         (let* ((row (car rows))
-                (state (d2-open-dataset-state dataset operation))
-                (original (vector-ref row 2))
-                (entry (g3r-d2-lineage-byte-core original operation))
-                (next (append (reverse prefix) (cdr rows))))
-           (if (not (and (eq? original tokenizer)
-                         (eq? (vector-ref row 1) 'live)
-                         (eq? (vector-ref row 3) entry)
-                         (eq? (vector-ref row 4) state)
-                         (procedure? (vector-ref row 7))
-                         ((vector-ref row 7) row)))
-               (d2-fail 'invalid-state operation
-                        "original D2 lineage is not safely retireable"))
-           (g3r-d2-lineage-require dataset tokenizer)
-           ;; D2 marks its state closed before the native close. A failure
-           ;; after that point is indeterminate and cannot authorize pruning.
-           (guard (caught
-                   (#t (if (not (vector-ref state 2)) (exit 134))
+(define g3r-d2-lineage-route
+  ;; The completed records and original identity snapshots never leave this
+  ;; lexical scope. Public callers receive only shells or checked booleans.
+  (let* ((registry (vector '() #f))
+         (open
+           (lambda (config tokenizer)
+             (let ((operation 'g3r-d2-lineage-open))
+               (if (vector-ref registry 1)
+                   (d2-fail 'invalid-state operation
+                            "D2 lineage construction is already active"))
+               (g3r-d2-lineage-check-capacity (vector-ref registry 0) operation)
+               (let* ((tokenizer-entry (g3r-d2-lineage-byte-core tokenizer operation))
+                      (fingerprint (t2-private-tokenizer-fingerprint tokenizer))
+                      (vocabulary (t2-private-tokenizer-vocab-size tokenizer))
+                      (row (vector #f 'pending tokenizer tokenizer-entry
+                                   #f fingerprint vocabulary #f))
+                      (snapshot (vector #f tokenizer tokenizer-entry
+                                        #f fingerprint vocabulary #f))
+                      (record (cons row snapshot))
+                      (next (cons record (vector-ref registry 0)))
+                      (pending (vector row next #f)))
+                 (vector-set! registry 1 pending)
+                 (guard
+                   (caught
+                     (#t
+                       (if (vector-ref pending 2)
+                           (guard (cleanup-failure (#t (exit 134)))
+                             (d2-token-dataset-close! (vector-ref pending 2))))
+                       (vector-set! registry 1 #f)
                        (raise caught)))
-             (d2-token-dataset-close! dataset))
-           (if (vector-ref state 2) (exit 134))
-           (vector-set! g3r-d2-lineage-registry 0 next)
-           (vector-set! row 0 #f)
-           (vector-set! row 1 'retired)
-           (vector-set! row 2 #f)
-           (vector-set! row 3 #f)
-           (vector-set! row 4 #f)
-           (vector-set! row 5 #f)
-           (vector-set! row 6 #f)
-           (vector-set! row 7 #f)
-           #t))
-        (else (search (cdr rows) (cons (car rows) prefix)))))))
+                   ;; D2's native open invokes no user callback. The shell is
+                   ;; still unpublished while the independent record is built.
+                   (let ((shell (d2-token-dataset-open config tokenizer)))
+                     (vector-set! pending 2 shell)
+                     (let* ((state (d2-open-dataset-state shell operation))
+                            (core (vector-ref state 6)))
+                       (if (not (and (eq? (vector-ref state 1) shell)
+                                     (eq? (t2-private-entry tokenizer)
+                                          tokenizer-entry)
+                                     (string=? (vector-ref core 2) fingerprint)
+                                     (= (vector-ref core 3) vocabulary)))
+                           (d2-fail 'invalid-state operation
+                                    "new D2 state differs from original T2"))
+                       ;; Every allocation and fallible check precedes this
+                       ;; fixed publication tail.
+                       (vector-set! row 0 shell)
+                       (vector-set! row 4 state)
+                       (vector-set! row 7 core)
+                       (vector-set! snapshot 0 shell)
+                       (vector-set! snapshot 3 state)
+                       (vector-set! snapshot 6 core)
+                       (vector-set! row 1 'live)
+                       (vector-set! registry 0 next)
+                       (vector-set! registry 1 #f)
+                       shell)))))))
+         (required
+           (lambda (dataset tokenizer)
+             (let ((operation 'g3r-d2-lineage-require))
+               (let search ((records (vector-ref registry 0)))
+                 (cond
+                   ((null? records)
+                    (d2-fail 'invalid-argument operation
+                             "dataset has no creation-time tokenizer lineage"))
+                   ((not (and (pair? records) (pair? (car records))
+                              (vector? (car (car records)))
+                              (= (vector-length (car (car records))) 8)
+                              (vector? (cdr (car records)))
+                              (= (vector-length (cdr (car records))) 7)))
+                    (d2-fail 'internal operation
+                             "D2 lineage record is malformed"))
+                   ((eq? (vector-ref (cdr (car records)) 0) dataset)
+                    (let* ((row (car (car records)))
+                           (snapshot (cdr (car records)))
+                           (state (d2-open-dataset-state dataset operation))
+                           (original (vector-ref snapshot 1))
+                           (tokenizer-entry
+                             (g3r-d2-lineage-byte-core original operation))
+                           (core (vector-ref state 6))
+                           (fingerprint
+                             (t2-private-tokenizer-fingerprint original))
+                           (vocabulary
+                             (t2-private-tokenizer-vocab-size original))
+                           (cursor (d2-core-cursor-snapshot core))
+                           (decoded (d2-core-cursor-decode cursor)))
+                      (if (not
+                            (and (eq? original tokenizer)
+                                 (eq? (vector-ref snapshot 2) tokenizer-entry)
+                                 (eq? (vector-ref snapshot 3) state)
+                                 (eq? (vector-ref snapshot 6) core)
+                                 (string=? (vector-ref snapshot 4) fingerprint)
+                                 (= (vector-ref snapshot 5) vocabulary)
+                                 (eq? (vector-ref row 0) dataset)
+                                 (eq? (vector-ref row 1) 'live)
+                                 (eq? (vector-ref row 2) original)
+                                 (eq? (vector-ref row 3) tokenizer-entry)
+                                 (eq? (vector-ref row 4) state)
+                                 (eq? (vector-ref row 7) core)
+                                 (string=? (vector-ref row 5)
+                                           (vector-ref snapshot 4))
+                                 (= (vector-ref row 6)
+                                    (vector-ref snapshot 5))
+                                 (string=? (vector-ref core 2) fingerprint)
+                                 (= (vector-ref core 3) vocabulary)
+                                 (d2-core-state-identity=? core decoded)
+                                 (= (vector-ref decoded 15)
+                                    (vector-ref core 15))
+                                 (<= (vector-ref decoded 15)
+                                     (vector-ref core 14))))
+                          (d2-fail 'invalid-state operation
+                                   "original D2/T2 lineage or cursor changed"))
+                      #t))
+                   (else (search (cdr records))))))))
+         (retire
+           (lambda (dataset tokenizer)
+             (let ((operation 'g3r-d2-lineage-retire!))
+               (if (vector-ref registry 1)
+                   (d2-fail 'invalid-state operation
+                            "D2 lineage construction is active"))
+               ;; Build the successor before close, then authenticate through
+               ;; the same lexical original snapshot used by require.
+               (let search ((records (vector-ref registry 0)) (prefix '()))
+                 (cond
+                   ((null? records)
+                    (d2-fail 'invalid-argument operation
+                             "dataset has no creation-time tokenizer lineage"))
+                   ((not (and (pair? records) (pair? (car records))
+                              (vector? (car (car records)))
+                              (= (vector-length (car (car records))) 8)
+                              (vector? (cdr (car records)))
+                              (= (vector-length (cdr (car records))) 7)))
+                    (d2-fail 'internal operation
+                             "D2 lineage record is malformed"))
+                   ((eq? (vector-ref (cdr (car records)) 0) dataset)
+                    (let* ((row (car (car records)))
+                           (snapshot (cdr (car records)))
+                           (state (d2-open-dataset-state dataset operation))
+                           (next (append (reverse prefix) (cdr records))))
+                      (required dataset tokenizer)
+                      (if (not (and (eq? (vector-ref snapshot 3) state)
+                                    (eq? (vector-ref row 4) state)))
+                          (d2-fail 'invalid-state operation
+                                   "D2 state changed before retirement"))
+                      ;; D2 marks closed before native close. If native close
+                      ;; fails after that point, pruning is indeterminate.
+                      (guard (caught
+                               (#t (if (not (vector-ref state 2)) (exit 134))
+                                   (raise caught)))
+                        (d2-token-dataset-close! dataset))
+                      (if (vector-ref state 2) (exit 134))
+                      (vector-set! registry 0 next)
+                      (vector-set! row 0 #f)
+                      (vector-set! row 1 'retired)
+                      (vector-set! row 2 #f)
+                      (vector-set! row 3 #f)
+                      (vector-set! row 4 #f)
+                      (vector-set! row 5 #f)
+                      (vector-set! row 6 #f)
+                      (vector-set! row 7 #f)
+                      (vector-set! snapshot 0 #f)
+                      (vector-set! snapshot 1 #f)
+                      (vector-set! snapshot 2 #f)
+                      (vector-set! snapshot 3 #f)
+                      (vector-set! snapshot 4 #f)
+                      (vector-set! snapshot 5 #f)
+                      (vector-set! snapshot 6 #f)
+                      #t))
+                   (else (search (cdr records)
+                                 (cons (car records) prefix)))))))))
+    (lambda (mode first second)
+      (cond
+        ((eq? mode 'open) (open first second))
+        ((eq? mode 'require) (required first second))
+        ((eq? mode 'retire) (retire first second))
+        (else (d2-fail 'invalid-argument 'g3r-d2-lineage-route
+                       "unknown fixed D2 lineage route"))))))
+
+(define (g3r-d2-lineage-open config tokenizer)
+  (g3r-d2-lineage-route 'open config tokenizer))
+(define (g3r-d2-lineage-require dataset tokenizer)
+  (g3r-d2-lineage-route 'require dataset tokenizer))
+(define (g3r-d2-lineage-retire! dataset tokenizer)
+  (g3r-d2-lineage-route 'retire dataset tokenizer))
