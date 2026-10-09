@@ -210,11 +210,13 @@
                               (raise caught))))
                  ;; The fixed constructor internally registers its row. Its
                  ;; shell remains unreachable until our companion commits.
-                 (let* ((shell (g3t-generator-create model tokenizer config))
-                        (entry (g3t-generator-find shell operation))
-                        (native (vector-ref entry 3))
-                        (policy (vector-ref entry 7)))
+                 (let ((shell (g3t-generator-create model tokenizer config)))
+                   ;; The first operation after constructor return registers
+                   ;; the exact shell for the enclosing cleanup guard.
                    (vector-set! pending 2 shell)
+                   (let* ((entry (g3t-generator-find shell operation))
+                          (native (vector-ref entry 3))
+                          (policy (vector-ref entry 7)))
                    (vector-set! roots 12 policy)
                    (vector-set! roots 13 native)
                    (if (not (equal? policy expected-policy))
@@ -246,7 +248,7 @@
                    (vector-set! row 2 entry)
                    (vector-set! registry 0 next)
                    (vector-set! registry 1 #f)
-                   shell)))))
+                   shell))))))
          (required
            (lambda (shell model original-x1 tokenizer dataset optimizer)
              (let search ((records (vector-ref registry 0)))

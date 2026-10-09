@@ -118,6 +118,105 @@ def check(source: str, aggregate: str, manifest: str) -> None:
         raise ValueError("upstream G3 constructor changed")
 
 
+def first_lookup_cut(source: str, fail_close: bool = False):
+    """Interpret only the parsed post-create/guard cut with owned stand-ins."""
+    form = next(f for f in parse(source) if isinstance(f, list) and f[:2] ==
+                ["define", "g3r-g3-creation-route"])
+    def find_guard(node):
+        if isinstance(node, list):
+            if node[:1] == ["guard"] and "g3t-generator-create" in str(node):
+                return node
+            for child in node:
+                result = find_guard(child)
+                if result is not None:
+                    return result
+        return None
+    guarded = find_guard(form)
+    if guarded is None:
+        raise ValueError("post-create guard disappeared")
+    shell = object()
+    fault = LookupError("first lookup fault")
+    closed = []
+    env = {"pending": [None, None, None, None],
+           "registry": [[], None], "first": [False, 0, 0, 0, 0],
+           "model": object(), "tokenizer": object(), "config": object(),
+           "operation": "creation"}
+
+    def run(expr, scope):
+        if not isinstance(expr, list):
+            if expr == "#f":
+                return False
+            if expr == "#t":
+                return True
+            if expr in scope:
+                return scope[expr]
+            if expr.lstrip("-").isdigit():
+                return int(expr)
+            return expr
+        op, *args = expr
+        if op == "guard":
+            try:
+                value = None
+                for part in args[1:]:
+                    value = run(part, scope)
+                return value
+            except Exception as caught:
+                inner = dict(scope, **{args[0][0]: caught})
+                value = None
+                for part in args[0][1][1:]:
+                    value = run(part, inner)
+                return value
+        if op in ("let", "let*"):
+            inner = dict(scope)
+            if op == "let":
+                values = [(binding[0], run(binding[1], scope))
+                          for binding in args[0]]
+                inner.update(values)
+            else:
+                for name, value in args[0]:
+                    inner[name] = run(value, inner)
+            result = None
+            for part in args[1:]:
+                result = run(part, inner)
+            return result
+        if op == "vector-ref":
+            return run(args[0], scope)[run(args[1], scope)]
+        if op == "vector-set!":
+            run(args[0], scope)[run(args[1], scope)] = run(args[2], scope)
+            return None
+        if op == "if":
+            if run(args[0], scope):
+                return run(args[1], scope)
+            return run(args[2], scope) if len(args) > 2 else None
+        if op == "g3t-generator-create":
+            return shell
+        if op == "g3t-generator-find":
+            raise fault
+        if op == "g3t-generator-close!":
+            value = run(args[0], scope)
+            closed.append(value)
+            if fail_close:
+                raise RuntimeError("uncertain native close")
+            return True
+        if op == "raise":
+            raise run(args[0], scope)
+        if op == "exit":
+            raise SystemExit(run(args[0], scope))
+        if op == "not":
+            return not run(args[0], scope)
+        if op == "or":
+            return any(run(arg, scope) for arg in args)
+        if op == "=":
+            return run(args[0], scope) == run(args[1], scope)
+        raise ValueError(f"unexpected cut expression: {op}")
+
+    try:
+        run(guarded, env)
+    except BaseException as caught:
+        return shell, fault, caught, closed, env
+    raise ValueError("first lookup fault was swallowed")
+
+
 class G3CreationLineageSource(unittest.TestCase):
     def setUp(self):
         self.source = EXT.read_text()
@@ -168,6 +267,22 @@ class G3CreationLineageSource(unittest.TestCase):
             self.assertIn(before, self.source)
             with self.subTest(before=before), self.assertRaises(ValueError):
                 self.verify(source=self.source.replace(before, after))
+
+    def test_first_post_create_lookup_fault_closes_exact_shell(self):
+        shell, fault, caught, closed, env = first_lookup_cut(self.source)
+        self.assertIs(caught, fault)
+        self.assertEqual(closed, [shell])
+        self.assertIs(env["pending"][2], shell)
+        self.assertIs(env["registry"][1], False)
+        with self.assertRaises(ValueError):
+            self.verify(source=self.source.replace(
+                "(vector-set! pending 2 shell)\n                   (let*",
+                "(let*"))
+        retry_shell, _, caught, closed, _ = first_lookup_cut(
+            self.source, fail_close=True)
+        self.assertIsInstance(caught, SystemExit)
+        self.assertEqual(caught.code, 134)
+        self.assertEqual(closed, [retry_shell])
 
 
 if __name__ == "__main__":
