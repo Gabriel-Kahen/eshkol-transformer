@@ -2648,10 +2648,13 @@ publication, public G2 and continuation remain pending.
   A separate [source-only private coordinator candidate](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_SOURCE_LEAF.md)
   now composes the merged native terminal and logical I1 clone entries with
   original-shell terminal publication, detached snapshot/copy and release.
-  Its static zero-tail and closure checks are development evidence only;
-  independent source review, compiled same-call normal/repeat/sanitizer and
-  negative-cut gates, numerical references and exact symbol admission remain
-  pending. The accepted contract and public dispatch are unchanged.
+  The initial private source/test candidate at `bd0f50b7` passed independent
+  and root source review only. A separate proof-runner successor adds a genuine
+  prompt/mode/EOS transcript, test-only P2/P3/T4 and Philox references,
+  original-owner and held-lease controls, and a native-zero allocation fence.
+  Its compiled same-call normal/repeat/sanitizer gate is unrun; exhaustive
+  failure cuts, emitted tail and exact symbol admission remain pending. The
+  accepted contract and public dispatch are unchanged.
 
 ## Wave 4 — practical pretraining and performance
 

@@ -14,6 +14,9 @@ ADDITIONS = [
     "tests/g3c4/p2_g2_terminal_close_test.esk",
     "tests/g3c4/p2_g2_terminal_close_feature_off_test.esk",
     "tests/g3c4/p2_g2_terminal_close_native.c",
+    "tests/g3c4/terminal_close_allocation_shim.cpp",
+    "tests/g3c4/check_p2_g2_terminal_close_oracle.py",
+    "tests/g3c4/test_p2_g2_terminal_close_oracle.py",
     "tests/g3c4/test_p2_g2_terminal_close_source.py",
     "scripts/check-g3c4-p2g2-terminal-close.py",
     "scripts/test-g3c4-p2g2-terminal-close.sh",
@@ -111,6 +114,17 @@ def validate(source: str, closure: list[str], base: list[str]) -> None:
     assert all((ROOT / item).is_file() for item in closure)
     enabled = (ROOT / "tests/g3c4/p2_g2_terminal_close_test.esk").read_text()
     disabled = (ROOT / "tests/g3c4/p2_g2_terminal_close_feature_off_test.esk").read_text()
+    enabled_forms = forms(enabled)
+    disabled_forms = forms(disabled)
+    for fixture in (enabled_forms, disabled_forms):
+        externs = [form[2] for form in fixture
+                   if isinstance(form, list) and len(form) >= 3
+                   and form[0] == "extern"]
+        assert len(externs) == len(set(externs)), "duplicate fixture ABI"
+    assert any(form[:3] == ["extern", "i64", "terminal-tail-disarm"]
+               for form in enabled_forms if isinstance(form, list))
+    assert any(form[:3] == ["extern", "i64", "terminal-test-reference"]
+               for form in enabled_forms if isinstance(form, list))
     gate_load = '(load "g3c4_p2g2_ownership_extension.esk")'
     assert gate_load in enabled and gate_load not in disabled
     parsed = forms(source)

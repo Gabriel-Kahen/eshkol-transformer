@@ -186,6 +186,9 @@ native/g3c4_p2g2_terminal_close_extension.esk
 tests/g3c4/p2_g2_terminal_close_test.esk
 tests/g3c4/p2_g2_terminal_close_feature_off_test.esk
 tests/g3c4/p2_g2_terminal_close_native.c
+tests/g3c4/terminal_close_allocation_shim.cpp
+tests/g3c4/check_p2_g2_terminal_close_oracle.py
+tests/g3c4/test_p2_g2_terminal_close_oracle.py
 tests/g3c4/test_p2_g2_terminal_close_source.py
 scripts/check-g3c4-p2g2-terminal-close.py
 scripts/test-g3c4-p2g2-terminal-close.sh

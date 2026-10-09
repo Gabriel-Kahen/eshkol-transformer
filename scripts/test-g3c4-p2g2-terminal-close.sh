@@ -3,7 +3,7 @@ set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 verify_toolchain
-for command in ar cmp env git grep nm python3 sha256sum timeout; do
+for command in ar cmp env git grep nm objdump python3 readelf sha256sum timeout; do
   require_command "$command"
 done
 cc= cxx=
@@ -12,6 +12,16 @@ resolve_provenance_compilers cc cxx \
 eshkol_runner="$(eshkol_build_dir)/eshkol-run"
 evidence="${1:-$(project_build_dir)/g3c4-p2g2-terminal-close-test}"
 mkdir -p "$evidence"
+test -z "$(git --no-optional-locks -C "$PROJECT_ROOT" status --porcelain=v1)"
+git --no-optional-locks -C "$PROJECT_ROOT" rev-parse HEAD HEAD^{tree} \
+  >"$evidence/source-git.pre"
+sha256sum "$cc" "$cxx" "$eshkol_runner" \
+  "$(command -v nm)" "$(command -v readelf)" \
+  "$(command -v objdump)" >"$evidence/tools.pre.sha256"
+while IFS= read -r member; do
+  sha256sum "$PROJECT_ROOT/$member"
+done <"$PROJECT_ROOT/native/g3c4_p2g2_terminal_close_source_closure.txt" \
+  >"$evidence/source-closure.pre.sha256"
 python3 "$PROJECT_ROOT/scripts/check-g3c4-p2g2-terminal-close.py" \
   >"$evidence/static.stdout"
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v \
@@ -71,7 +81,7 @@ compile_mode() {
     -fvisibility=hidden -fno-common -fstack-protector-all \
     "${optimization[@]}" -I "$(eshkol_source_dir)/inc" \
     -I "$(eshkol_source_dir)/lib/core" \
-    -c "$PROJECT_ROOT/tests/g3c4/call_entry_allocation_shim.cpp" \
+    -c "$PROJECT_ROOT/tests/g3c4/terminal_close_allocation_shim.cpp" \
     -o "$directory/objects/call_entry_allocation_shim.o"
   "$cc" "${common[@]}" "${optimization[@]}" -DET_P1_TRUSTED_BUILD=1 \
     -c "$PROJECT_ROOT/native/p1_identity.c" \
@@ -105,6 +115,13 @@ compile_mode() {
   nm -g --defined-only "$directory/objects/output_envelope_native.o" | \
     grep -E ' [TW] __wrap_et_i64_tensor_borrow_view_v1$' >/dev/null
   ar rcsD "$directory/libg3c4_p2g2_terminal_close.a" "$directory"/objects/*.o
+  nm -g --defined-only --format=posix \
+    "$directory/libg3c4_p2g2_terminal_close.a" \
+    >"$evidence/$mode.archive-defined-symbols"
+  nm -u --format=posix "$directory/libg3c4_p2g2_terminal_close.a" \
+    >"$evidence/$mode.archive-undefined-symbols"
+  sha256sum "$directory/libg3c4_p2g2_terminal_close.a" \
+    >"$evidence/$mode.archive.sha256"
   local sanitizer_link=
   [[ "$mode" == sanitize ]] && \
     sanitizer_link='-fsanitize=address,undefined -fno-omit-frame-pointer'
@@ -120,7 +137,8 @@ exec $(printf '%q' "$cxx") $sanitizer_link "\$@" \\
   -Wl,--wrap=et_g3c4_private_p2g2_first_frame_carrier_v1 \\
   -Wl,--wrap=et_g3c4_private_p2g2_prefix_commit_v1 \\
   -Wl,--wrap=et_g3c4_private_p2g2_terminal_commit_v1 \\
-  -Wl,--wrap=et_a2_kv_cache_transaction_commit_v1
+  -Wl,--wrap=et_a2_kv_cache_transaction_commit_v1 \\
+  -Wl,--wrap=et_a2_kv_cache_transaction_abort_v1
 WRAPPER
   chmod 0500 "$directory/cxx-wrap"
   local fixture prefix source expected log
@@ -147,12 +165,32 @@ WRAPPER
       "$source" -o "$directory/p2g2-terminal-$fixture" \
       >"$directory/${prefix}compile.stdout" \
       2>"$directory/${prefix}compile.stderr"
+    sha256sum "$directory/p2g2-terminal-$fixture" \
+      >"$evidence/$mode-$fixture.executable.pre.sha256"
     "${runtime[@]}" ESHKOL_ARENA_POISON=1 \
       timeout --foreground --signal=TERM --kill-after=5s 120s \
       "$directory/p2g2-terminal-$fixture" >"$directory/${prefix}run.stdout" \
       2>"$directory/${prefix}run.stderr"
     test ! -s "$directory/${prefix}run.stderr"
     grep -E "$expected" "$directory/${prefix}run.stdout" >/dev/null
+    nm -g --defined-only --format=posix \
+      "$directory/p2g2-terminal-$fixture" \
+      >"$evidence/$mode-$fixture.defined-symbols"
+    nm -u --format=posix "$directory/p2g2-terminal-$fixture" \
+      >"$evidence/$mode-$fixture.undefined-symbols"
+    readelf --wide --symbols "$directory/p2g2-terminal-$fixture" \
+      >"$evidence/$mode-$fixture.elf-symbols"
+    objdump -drwC "$directory/p2g2-terminal-$fixture" \
+      >"$evidence/$mode-$fixture.disassembly"
+    sha256sum "$directory/p2g2-terminal-$fixture" \
+      >"$evidence/$mode-$fixture.executable.post.sha256"
+    cmp "$evidence/$mode-$fixture.executable.pre.sha256" \
+        "$evidence/$mode-$fixture.executable.post.sha256"
+    if [[ "$fixture" == protected ]]; then
+      python3 "$PROJECT_ROOT/tests/g3c4/check_p2_g2_terminal_close_oracle.py" \
+        "$directory/run.stdout" >"$directory/oracle.stdout"
+      cp "$directory/oracle.stdout" "$evidence/$mode-oracle.stdout"
+    fi
     for log in compile.stdout compile.stderr run.stdout run.stderr; do
       cp "$directory/${prefix}$log" "$evidence/$mode-${prefix}$log"
     done
@@ -165,6 +203,12 @@ ESHKOL_ARENA_POISON=1 "$tmp/normal/p2g2-terminal-feature-off" \
   2>"$evidence/repeat-feature-off-run.stderr"
 ESHKOL_ARENA_POISON=1 "$tmp/normal/p2g2-terminal-protected" \
   >"$evidence/repeat-run.stdout" 2>"$evidence/repeat-run.stderr"
+for fixture in feature-off protected; do
+  sha256sum "$tmp/normal/p2g2-terminal-$fixture" \
+    >"$evidence/repeat-$fixture.executable.sha256"
+  cmp "$evidence/normal-$fixture.executable.post.sha256" \
+      "$evidence/repeat-$fixture.executable.sha256"
+done
 test ! -s "$evidence/repeat-feature-off-run.stderr"
 test ! -s "$evidence/repeat-run.stderr"
 compile_mode sanitize
@@ -174,6 +218,20 @@ cmp "$evidence/normal-feature-off-run.stdout" \
     "$evidence/sanitize-feature-off-run.stdout"
 cmp "$evidence/normal-run.stdout" "$evidence/repeat-run.stdout"
 cmp "$evidence/normal-run.stdout" "$evidence/sanitize-run.stdout"
+test -z "$(git --no-optional-locks -C "$PROJECT_ROOT" status --porcelain=v1)"
+git --no-optional-locks -C "$PROJECT_ROOT" rev-parse HEAD HEAD^{tree} \
+  >"$evidence/source-git.post"
+cmp "$evidence/source-git.pre" "$evidence/source-git.post"
+sha256sum "$cc" "$cxx" "$eshkol_runner" \
+  "$(command -v nm)" "$(command -v readelf)" \
+  "$(command -v objdump)" >"$evidence/tools.post.sha256"
+cmp "$evidence/tools.pre.sha256" "$evidence/tools.post.sha256"
+while IFS= read -r member; do
+  sha256sum "$PROJECT_ROOT/$member"
+done <"$PROJECT_ROOT/native/g3c4_p2g2_terminal_close_source_closure.txt" \
+  >"$evidence/source-closure.post.sha256"
+cmp "$evidence/source-closure.pre.sha256" \
+    "$evidence/source-closure.post.sha256"
 git -C "$PROJECT_ROOT" diff --check
 sha256sum "$PROJECT_ROOT/native/g3c4_p2g2_terminal_close_source_closure.txt" \
   >"$evidence/closure.sha256"

@@ -1,8 +1,8 @@
 # Private P2/G2 Eshkol terminal-close source candidate
 
-Status: source and test candidate only. The normal/repeat/sanitizer same-call
-gate, independent numerical references, exact symbol closure, and public G2
-admission remain pending. The accepted native terminal and logical I1 clone
+Status: private source and compiled-proof test candidate only. The
+normal/repeat/sanitizer same-call gate, emitted tail and exact symbol review,
+and public G2 admission remain pending. The accepted native terminal and logical I1 clone
 APIs are prerequisites; this leaf does not change those native sources or the
 nonterminal protected/prefix predecessors.
 
@@ -26,12 +26,25 @@ The source-only checker enforces exact dependency closure, original carrier
 comparisons, header extents, and a no-allocation/no-callback successful tail;
 its mutation tests exercise those guards. The compiled runner is a proposed
 future proof route and must be reviewed and admitted before execution.
-The runner includes pre-zero native-rejection and genuine I1 lease probes;
-their release/retry callback runs only while the original call is still live.
+The successor runner prepares a four prompt/mode matrix with genuine first
+EOS and no-EOS cases and at least one distinct second EOS. A test-only native
+witness captures actual selected IDs, 256 genuine P2/P3 logits, final RNG,
+full K/V and model value/gradient/metadata. Separate native P3 and T4 forwards
+provide the cache reference; a development-only Python Philox oracle checks
+every emitted draw and branch. The native-zero fence covers the wrapped arena
+allocators, malloc and exception-handler push through the outer `m3-call`
+return. Prezero probes include original/equal-length/paired owner and ledger
+drift, native terminal rejection and genuine I1/A2 lease release/retry.
+The runner retains normal/sanitizer ELF symbols, disassembly and source/member
+hashes for later exact review; collection alone does not prove the emitted
+tail or public symbol closure.
 
-The compiled proof must still establish first/second EOS and non-EOS for both
-prompts and both sampling modes, exact T1 text, independent Philox/P3/cache
-and model invariance, failure-cut rollback, held-lease release/retry, emitted
-code tail properties, source-release clone independence, normal/repeat and
-ASan/UBSan/LSan output identity, and exact private/public symbols. Failure
-to run that gate does not upgrade this source candidate to accepted behavior.
+The compiled proof must still run and establish these claims. Exhaustive
+allocation/decode/native cuts, fail-stop at postzero fault cuts, emitted-code
+nonallocation/nonthrow review, exact `'()` to C null ABI, and complete
+private/public symbol closure need further source controls or compiled
+observations. Failure to run that gate does not upgrade this source candidate
+to accepted behavior.
+The current Eshkol fixture uses initial Philox counters; Eshkol-level
+singleton, carry, final and exhausted-counter cases are still open even
+though native-only predecessors cover those boundaries.
