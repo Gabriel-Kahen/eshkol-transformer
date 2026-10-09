@@ -126,13 +126,20 @@
     #t))
 
 ;;; cell: [roots,hold,issued,shell,row,old-O2-head,O2-successor,words,
-;;;        first,phase,record,completed-count,completed-successor].
+;;;        first,phase,record,completed-count,completed-successor,P1].
 ;;; The exact row and independent record remain lexical; o2-states alone is
 ;;; mutable and cannot prove issuance or native ownership.
 (define g3r-save-o2-adoption-route
-  (let ((issued '()) (pending #f) (quarantine #f))
+  (let ((issued '()) (pending #f) (quarantine #f) (transfer-pending #f))
     (let*
-      ((release-claimed!
+      ((release-p1!
+         (lambda (cell)
+           (let ((state (vector-ref cell 13)))
+             (if state
+                 (guard (caught (#t (set! quarantine cell) (exit 134)))
+                   (if (not (state-dict-release! state)) (exit 134))
+                   (vector-set! cell 13 #f))))))
+       (release-claimed!
          (lambda (cell)
            (let ((state (vector-ref cell 2)))
              (if (or (not state) (null? state)) (exit 134))
@@ -164,18 +171,20 @@
                       (if (or (eq? phase 'claimed)
                               (eq? phase 'ended-claimed)) (exit 134))
                       (vector-set! cell 1 #f)
+                      (release-p1! cell)
                       #t)
                      ((= drain 3)
                       (if (not (or (eq? phase 'claimed)
                                    (eq? phase 'ended-claimed))) (exit 134))
                       (vector-set! cell 1 #f)
-                      (if (release-claimed! cell) #t
+                      (if (release-claimed! cell)
+                          (begin (release-p1! cell) #t)
                           (begin (set! quarantine cell) #f)))
                      (else (exit 134)))))))
        (adopt
          (lambda (generator model resolved tokenizer dataset optimizer
                   capsule)
-           (if (or pending quarantine)
+           (if (or pending quarantine transfer-pending)
                (g3r-save-o2-fail 'invalid-state 2
                  "another adoption or cleanup remains active"))
            (g3r-save-o2-capacity issued)
@@ -196,7 +205,7 @@
                                  (vector-ref optimizer-entry 1)))
                   (first (vector #f 0 0 0 0))
                   (cell (vector roots #f #f #f #f #f #f #f first 'held
-                                #f #f #f)))
+                                #f #f #f #f)))
              (g3r-save-o2-check-roots roots)
              (set! pending cell)
              (guard
@@ -221,6 +230,14 @@
                        (g3r-save-o2-copy-first! first hold)
                        (g3r-save-o2-raise-first first)))
                  (g3r-save-o2-check-roots roots)
+                 ;; The exact M3 shell is copied while G3/F32/O2 still pin it.
+                 ;; Only the rooted cleanup cell can reach this P1 candidate.
+                 (let ((p1 (module-state-dict model)))
+                   (vector-set! cell 13 p1)
+                   (g3r-save-o2-check-roots roots)
+                   (if (not (= (g3r-save-check hold) 0))
+                       (begin (g3r-save-o2-copy-first! first hold)
+                              (g3r-save-o2-raise-first first))))
                  ;; Every allocation and metadata copy remains under hold.
                  (let* ((operation 'g3r-save-o2-adoption)
                         (count (o2-optimizer-completed-updates-internal
@@ -237,10 +254,14 @@
                         (old-head o2-states)
                         (next-o2 (cons row old-head))
                         (words (make-vector 18 0))
+                        ;; This never escapes before the one-use C2 transfer.
+                        (bundle (vector (vector-ref cell 13) shell controls
+                                        words 'prepared))
                         (record (vector shell row #f roots words controls
                                         (o2-copy-config-data operation config)
                                         (o2-copy-paths paths)
-                                        (o2-copy-aliases aliases) count))
+                                        (o2-copy-aliases aliases) count
+                                        (vector-ref cell 13) 'issued bundle))
                         (next-issued (cons record issued)))
                    (o2-state-projection-budget!
                      operation config paths aliases
@@ -361,6 +382,43 @@
                       (g3r-save-o2-check-roots roots)
                       #t))
                    (else (search (cdr records)))))))
+       (take-for-c2
+         (lambda (shell)
+           (if (or pending quarantine transfer-pending)
+               (g3r-save-o2-fail 'invalid-state 2
+                 "same-owner transfer or cleanup is active"))
+           (set! transfer-pending #t)
+           (guard (caught (#t (set! transfer-pending #f) (raise caught)))
+             (require-owned shell)
+             (let search ((records issued))
+               (cond ((null? records)
+                      (g3r-save-o2-fail 'invalid-argument 1
+                        "O2 shell lacks a private C2 bundle"))
+                     ((eq? (vector-ref (car records) 0) shell)
+                      (let* ((record (car records))
+                             (p1 (vector-ref record 10))
+                             (bundle (vector-ref record 12)))
+                        (if (not (and (eq? (vector-ref record 11) 'issued)
+                                      (vector? bundle)
+                                      (= (vector-length bundle) 5)
+                                      (eq? (vector-ref bundle 0) p1)
+                                      (eq? (vector-ref bundle 1) shell)
+                                      (eq? (vector-ref bundle 2)
+                                           (vector-ref record 5))
+                                      (eq? (vector-ref bundle 3)
+                                           (vector-ref record 4))
+                                      (eq? (vector-ref bundle 4) 'prepared)))
+                            (g3r-save-o2-fail 'invalid-state 2
+                              "C2 bundle was spent or changed"))
+                        ;; The P1 shell was not exposed before this call. This
+                        ;; live-state check is the last fallible admission.
+                        (state-dict-c2-parameter-topology-internal
+                          p1 'g3r-save-o2-take-for-c2)
+                        (vector-set! record 11 'spent)
+                        (vector-set! bundle 4 'transferred)
+                        (set! transfer-pending #f)
+                        bundle))
+                     (else (search (cdr records))))))))
        (retry
          (lambda ()
            (if (not quarantine)
@@ -377,22 +435,26 @@
                     (cond ((= drain 1) #f)
                           ((= drain 2)
                            (vector-set! cell 1 #f)
+                           (release-p1! cell)
                            (set! quarantine #f)
                            #t)
                           ((= drain 3)
                            (vector-set! cell 1 #f)
                            (if (release-claimed! cell)
-                               (begin (set! quarantine #f) #t)
+                               (begin (release-p1! cell)
+                                      (set! quarantine #f) #t)
                                #f))
                           (else (exit 134)))))
                  ((eq? phase 'state-cleanup)
                   (if (release-claimed! cell)
-                      (begin (set! quarantine #f) #t)
+                      (begin (release-p1! cell)
+                             (set! quarantine #f) #t)
                       #f))
                  (else (exit 134))))))))
       (lambda (mode a b c d e f g)
         (cond ((eq? mode 'adopt) (adopt a b c d e f g))
               ((eq? mode 'require) (require-owned a))
+              ((eq? mode 'take-for-c2) (take-for-c2 a))
               ((eq? mode 'retry) (retry))
               (else (g3r-save-o2-fail 'invalid-argument 1
                       "unknown private O2 adoption route")))))))
@@ -403,5 +465,7 @@
                               dataset optimizer controls-capsule))
 (define (g3r-save-o2-require-held-internal shell)
   (g3r-save-o2-adoption-route 'require shell #f #f #f #f #f #f))
+(define (g3r-save-o2-take-for-c2-internal shell)
+  (g3r-save-o2-adoption-route 'take-for-c2 shell #f #f #f #f #f #f))
 (define (g3r-save-o2-cleanup-retry-internal!)
   (g3r-save-o2-adoption-route 'retry #f #f #f #f #f #f #f))

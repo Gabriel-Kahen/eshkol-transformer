@@ -1823,6 +1823,17 @@ The follow-up source gate also rejects a boxed-null native begin before any
 cleanup call and copies the four typed words when the final preclaim native
 check fails; owned source-state controls cover both failure cuts.
 
+A further isolated source-only prerequisite snapshots the exact M3 model into
+an owned P1 state while the combined G3/F32/O2 hold is live, before the sole
+O2 issue. Its lexical cleanup cell releases that P1 candidate only after a
+certain native drain, retaining uncertain roots for fail-stop or checked retry.
+One private authenticated take transfers the hidden P1, issued O2 shell,
+captured controls and eighteen words once; copied, changed and replayed bundle
+requests are denied before C2 ownership changes. The P1 snapshot is not
+exposed before that take. Parsed source-state tests pass, but compiled P1
+provider coexistence, complete C2 image and digest, pair publication, cold
+LOAD and full SAVE remain unproved.
+
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
 diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use

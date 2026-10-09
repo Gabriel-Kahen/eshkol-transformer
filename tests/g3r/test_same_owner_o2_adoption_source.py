@@ -51,7 +51,8 @@ def validate(source, aggregate, closure):
     route = next((f for f in forms if isinstance(f, list) and
                   f[:2] == ["define", "g3r-save-o2-adoption-route"]), None)
     if route is None or route[2][0] != "let" or route[2][1] != [
-        ["issued", ["quote", []]], ["pending", "#f"], ["quarantine", "#f"]]:
+        ["issued", ["quote", []]], ["pending", "#f"], ["quarantine", "#f"],
+        ["transfer-pending", "#f"]]:
         raise ValueError("issuance authority is no longer lexical")
     quota = section(source, "(define (g3r-save-o2-capacity", ";;; roots:")
     ordered(quota, ["((= left 0)", "((null? rest)"])
@@ -126,13 +127,15 @@ def validate(source, aggregate, closure):
             raise ValueError("lexical issued-row validation lost " + evidence)
 
 
-def failed_cut(source, phase, drain_state, release_ok=True, first=None):
+def failed_cut(source, phase, drain_state, release_ok=True, first=None,
+               p1_present=True):
     """Execute the parsed failure helper with owned native/registry stand-ins."""
     form = next(f for f in parse(source) if isinstance(f, list) and
                 f[:2] == ["define", "g3r-save-o2-adoption-route"])
     helper = next(x[1] for x in form[2][2][1] if x[0] == "drain-failed!")
     hold = object()
-    cell = [None, hold, object(), None, None, None, None, None, None, phase]
+    cell = [None, hold, object(), None, None, None, None, None, None, phase,
+            None, None, None, object() if p1_present else None]
     env = {"cell": cell, "hold": hold, "quarantine": None,
            "first": first}
     calls = []
@@ -195,6 +198,11 @@ def failed_cut(source, phase, drain_state, release_ok=True, first=None):
         if op == "g3r-save-drain":
             calls.append(op)
             return drain_state
+        if op == "release-p1!":
+            if scope["cell"][13] is not None:
+                calls.append(op)
+            scope["cell"][13] = None
+            return None
         if op == "release-claimed!":
             calls.append(op)
             return release_ok
@@ -219,8 +227,8 @@ def native_preclaim_cut(source):
             for child in node:
                 visit(child)
     visit(adopt)
-    if len(matches) != 2:
-        raise ValueError("expected capture and final preclaim native checks")
+    if len(matches) != 3:
+        raise ValueError("expected P1, capture and final preclaim native checks")
     branch = matches[-1]
     words = (5, 23, 7, 912)
     recorded = []
@@ -301,7 +309,7 @@ class AdoptionSource(unittest.TestCase):
         self.assertTrue(result)
         self.assertIsNone(quarantine)
         self.assertFalse(cell[1])
-        self.assertEqual(calls, ["g3r-save-cancel", "g3r-save-end", "g3r-save-drain"])
+        self.assertEqual(calls, ["g3r-save-cancel", "g3r-save-end", "g3r-save-drain", "release-p1!"])
         result, cell, quarantine, calls = failed_cut(self.source, "held", 1)
         self.assertFalse(result)
         self.assertIs(quarantine, cell)
@@ -315,7 +323,7 @@ class AdoptionSource(unittest.TestCase):
         result, cell, quarantine, calls = failed_cut(self.source, "ended-claimed", 3)
         self.assertTrue(result)
         self.assertIsNone(quarantine)
-        self.assertEqual(calls, ["g3r-save-drain", "release-claimed!"])
+        self.assertEqual(calls, ["g3r-save-drain", "release-claimed!", "release-p1!"])
         with self.assertRaises(SystemExit):
             failed_cut(self.source, "claimed", 2)
 
@@ -392,7 +400,7 @@ class AdoptionSource(unittest.TestCase):
         self.assertTrue(result)
         self.assertIsNone(quarantine)
         self.assertEqual(cleanup,
-                         ["g3r-save-cancel", "g3r-save-end", "g3r-save-drain"])
+                         ["g3r-save-cancel", "g3r-save-end", "g3r-save-drain", "release-p1!"])
         self.assertEqual(first, [True, *words])
 
 
