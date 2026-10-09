@@ -1154,14 +1154,25 @@ if [[ "${E3_MODE_GRAPH_SANITIZE:-0}" != 0 ]]; then
     die "E3 mode/graph sanitizer is allowed only for the exact test tuple"
   e3_private_test_sanitize=1
 fi
-e3_private_test_sanitize_flags=()
-e3_private_test_reloc_flags=()
-if [[ "${e3_private_test_sanitize}" == 1 ]]; then
-  e3_private_test_sanitize_flags=(-O1 -g -fsanitize=address,undefined
+g3g_manual_test_sanitize=0
+case "${G3G_MANUAL_SANITIZE:-0}" in
+  0) ;;
+  1)
+    [[ "${package_policy}" == g3g-manual-public-aggregate &&
+       "${e3_private_test_sanitize}" == 0 ]] ||
+      die "G3G manual sanitizer requires the exact installed manual tuple"
+    g3g_manual_test_sanitize=1 ;;
+  *) die "G3G_MANUAL_SANITIZE must be 0 or 1" ;;
+esac
+package_test_sanitize_flags=()
+package_test_reloc_flags=()
+if [[ "${e3_private_test_sanitize}" == 1 ||
+      "${g3g_manual_test_sanitize}" == 1 ]]; then
+  package_test_sanitize_flags=(-O1 -g -fsanitize=address,undefined
                                -fno-omit-frame-pointer)
   # Materialize ASan's COMMON registration cell before exact localization.
-  # Only the authenticated noninstalled mode/graph tuple reaches this path.
-  e3_private_test_reloc_flags=(-Wl,-d)
+  # Only the exact reviewed test tuples reach this path.
+  package_test_reloc_flags=(-Wl,-d)
 fi
 e3_mode_graph_mutant=${E3_MODE_GRAPH_MUTANT:-normal}
 if [[ -n "${E3_MODE_GRAPH_MUTANT+x}" ]]; then
@@ -1411,7 +1422,7 @@ grep -Eq "^attributes ${e1b_raise_attribute} = .*noreturn" \
   die "E1B fixed raise-only seam is not noreturn in generated IR"
 
 "${e1b_clean_toolchain_env[@]}" \
-  "${e1b_cc}" "${e3_private_test_sanitize_flags[@]}" -c -x ir "${e1b_tmp}/private.ll" \
+  "${e1b_cc}" "${package_test_sanitize_flags[@]}" -c -x ir "${e1b_tmp}/private.ll" \
   -o "${e1b_tmp}/private.o"
 
 {
@@ -1493,7 +1504,7 @@ objcopy --redefine-syms="${e1b_tmp}/renames.txt" \
 "${e1b_clean_toolchain_env[@]}" \
   "${e1b_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
   -fstack-protector-all \
-  "${e3_private_test_sanitize_flags[@]}" \
+  "${package_test_sanitize_flags[@]}" \
   -I "${e1b_source}/inc" -I "${PROJECT_ROOT}/native" \
   -MMD -MF "${e1b_tmp}/bridge.d" \
   -c "${PROJECT_ROOT}/native/e1b_error_consumer_bridge.c" \
@@ -1520,7 +1531,7 @@ if [[ "${package_policy}" == g3g-manual-public-aggregate ]]; then
 fi
 "${e1b_clean_toolchain_env[@]}" \
   "${e1b_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
-  "${e3_private_test_sanitize_flags[@]}" \
+  "${package_test_sanitize_flags[@]}" \
   "${package_bridge_flags[@]}" \
   -I "${e1b_source}/inc" -I "${PROJECT_ROOT}/include" \
   -I "${PROJECT_ROOT}/native" \
@@ -1536,7 +1547,7 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     -I "${PROJECT_ROOT}/include" -I "${PROJECT_ROOT}/native"
     -I "${PROJECT_ROOT}/src"
   )
-  package_native_cflags+=("${e3_private_test_sanitize_flags[@]}")
+  package_native_cflags+=("${package_test_sanitize_flags[@]}")
   if [[ "${package_policy}" == cli3-tr3-aggregate || \
       "${package_policy}" == cli3-c2-successor || \
     "${package_policy}" == e3-private-aggregate || \
@@ -1796,7 +1807,7 @@ if [[ -n "${package_native_source_closure}" ]]; then
 fi
 
 "${e1b_clean_toolchain_env[@]}" \
-  "${e1b_cxx}" -r "${e3_private_test_reloc_flags[@]}" \
+  "${e1b_cxx}" -r "${package_test_reloc_flags[@]}" \
   -Wl,-Map,"${e1b_tmp}/combined.map" \
   "${e1b_tmp}/private.o" "${e1b_tmp}/bridge.o" \
   "${e1b_tmp}/package-bridge.o" "${package_native_objects[@]}" \
@@ -1820,15 +1831,23 @@ cmp -s "${e1b_tmp}/expected-global-defined.txt" \
 
 nm -u --format=posix "${e1b_tmp}/combined.o" | awk '{ print $1 }' | \
   LC_ALL=C sort -u >"${e1b_tmp}/undefined.txt"
-if [[ "${e3_private_test_sanitize}" == 1 ]]; then
+if [[ "${e3_private_test_sanitize}" == 1 ||
+      "${g3g_manual_test_sanitize}" == 1 ]]; then
   grep -E '^(__asan_|__ubsan_|__sanitizer_|__start_asan_globals$|__stop_asan_globals$)' \
     "${e1b_tmp}/undefined.txt" >"${e1b_tmp}/sanitizer-undefined.txt" || \
     die "E3 private test sanitizer object has no instrumentation references"
   grep -Ev '^(__asan_|__ubsan_|__sanitizer_|__start_asan_globals$|__stop_asan_globals$)' \
     "${e1b_tmp}/undefined.txt" >"${e1b_tmp}/noninstrumentation-undefined.txt" || true
-  comm -13 "${e1b_tmp}/expected-undefined.txt" \
-    "${e1b_tmp}/noninstrumentation-undefined.txt" \
-    >"${e1b_tmp}/unexpected-undefined.txt"
+  if [[ "${g3g_manual_test_sanitize}" == 1 ]]; then
+    e1b_compare_exact_undefined_allowlist \
+      "${e1b_tmp}/expected-undefined.txt" \
+      "${e1b_tmp}/noninstrumentation-undefined.txt" || \
+      die "G3G installed sanitizer changed noninstrumentation imports"
+  else
+    comm -13 "${e1b_tmp}/expected-undefined.txt" \
+      "${e1b_tmp}/noninstrumentation-undefined.txt" \
+      >"${e1b_tmp}/unexpected-undefined.txt"
+  fi
   if [[ "${e3_tuple_kind:-}" == mode-graph ]]; then
     # Admit only the pinned imports of this noninstalled sanitizer tuple.
     # A driver semantic correction requires fresh own emission before repinning.
@@ -1837,7 +1856,7 @@ if [[ "${e3_private_test_sanitize}" == 1 ]]; then
       "${e1b_tmp}/expected-undefined.txt" \
       "${e1b_tmp}/noninstrumentation-undefined.txt" \
       "${e1b_tmp}/sanitizer-undefined.txt"
-  else
+  elif [[ "${e3_private_test_sanitize}" == 1 ]]; then
     [[ ! -s "${e1b_tmp}/unexpected-undefined.txt" ]] || \
       die "E3 sanitized private test object adds noninstrumentation imports"
   fi
@@ -2117,11 +2136,13 @@ cp "${e1b_tmp}/expected-undefined.txt" \
 # Keep the exact mode/graph IR on successful admission as well as failure;
 # its loop-resolution diagnostic must not infer IR semantics from nm alone.
 if [[ "${package_policy}" == e3-private-aggregate &&
-      "${e3_tuple_kind:-}" == mode-graph ]]; then
+      "${e3_tuple_kind:-}" == mode-graph ]] || \
+   [[ "${g3g_manual_test_sanitize}" == 1 ]]; then
   cp "${e1b_tmp}/private.ll" "${evidence_dir}.tmp.$$/private.ll"
 fi
 if [[ "${e3_private_test_sanitize}" == 1 && \
-      "${e3_tuple_kind:-}" == mode-graph ]]; then
+      "${e3_tuple_kind:-}" == mode-graph ]] || \
+   [[ "${g3g_manual_test_sanitize}" == 1 ]]; then
   cp "${e1b_tmp}/noninstrumentation-undefined.txt" \
     "${evidence_dir}.tmp.$$/noninstrumentation-undefined.txt"
   cp "${e1b_tmp}/sanitizer-undefined.txt" \

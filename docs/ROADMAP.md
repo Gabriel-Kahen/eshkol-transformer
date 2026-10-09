@@ -2764,6 +2764,13 @@ publication, public G2 and continuation remain pending.
   successor selects `--debug-dump=no-follow-links -d` for dynamic metadata;
   its guest behavior, complete loader closure, attest and public execution
   remain unproved pending a fresh ROOT-reviewed one-shot admission.
+  A source-only installed public G2 gate now selects an exact manual-package
+  sanitizer test tuple, instruments its LLVM, bridge and native object, and
+  stages normal/repeat and sanitizer executions of the installed API-only
+  first-EOS/two-byte caller. It records actual package imports and retains
+  the unchanged P2/G1 installed regression route. No compiled G2 result,
+  sanitizer leak close, emitted symbol inventory, numerical comparison or
+  continuation proof is claimed until the reviewed one-shot gate runs.
 
 ## Wave 4 — practical pretraining and performance
 
