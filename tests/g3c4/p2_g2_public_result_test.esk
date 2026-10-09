@@ -1,0 +1,216 @@
+;;; Staged installed-aggregate G2 result controls; no compiled claim.
+(load "g3g_manual_package_root.esk")
+
+(define checks 0)
+(define (check label truth)
+  (if truth (set! checks (+ checks 1))
+      (begin (display "public G2 result FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label thunk)
+  (check label
+    (guard (caught (#t (transformer-error? caught)))
+      (thunk) #f)))
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define model (g3c4-public-model-create-seeded 1729))
+(define input
+  (g3c4-public-generation-input-create
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255))))
+(define (config eos)
+  (list ':profile 'diagnostic-c4-p2g2 ':sampling 'greedy
+        ':temperature-bits 1065353216 ':top-k 256
+        ':top-p-bits 1065353216 ':max-new-tokens 2
+        ':eos eos ':seed 41))
+;;; A genuine aborted prefix call discovers the first ID before either
+;;; public terminal case. No caller-supplied ID enters production generation.
+(define (first-id)
+  (let ((probe (g3g-public-generator-create model tokenizer (config 0)))
+        (selected -1))
+    (g3c4-with-p2g2-prefix-call 'public-g2-first-reference
+      probe input (call)
+      (g3c4-p2g2-protected-reserve call)
+      (set! selected (g3c4-p2g2-prefix-commit! call input))
+      (g3c4-p2g2-protected-abort! call))
+    (check "authentic prefix reference is V256"
+      (and (<= 0 selected) (<= selected 255)))
+    (check "prefix reference owner closes" (g3g-public-generator-close probe))
+    selected))
+(define selected-first (first-id))
+(define non-eos (if (= selected-first 255) 0 255))
+(define generator
+  (g3g-public-generator-create model tokenizer (config selected-first)))
+(define output (g3g-public-generator-generate generator input))
+(define snapshot (g3c4-p2g2-terminal-snapshot-private output))
+(define count (vector-ref snapshot 2))
+(check "genuine first EOS stops at one ID"
+  (and (= count 1) (= (vector-ref snapshot 0) selected-first)))
+
+(define saved-public-rows (vector-ref g3c4-public-g2-output-rows 0))
+(vector-set! g3c4-public-g2-output-rows 0 (cdr saved-public-rows))
+(reject "missing public origin cannot fall back to C2"
+  (lambda () (g3g-public-generation-output-ids output)))
+(vector-set! g3c4-public-g2-output-rows 0 saved-public-rows)
+(define saved-private-bindings
+  (vector-ref g3c4-p2g2-terminal-origin-bindings 0))
+(vector-set! g3c4-p2g2-terminal-origin-bindings 0
+             (cdr saved-private-bindings))
+(reject "missing private origin cannot publish"
+  (lambda () (g3g-public-generation-output-text output)))
+(vector-set! g3c4-p2g2-terminal-origin-bindings 0
+             saved-private-bindings)
+
+(define public-row (car (vector-ref g3c4-public-g2-output-rows 0)))
+(define public-anchor (car (vector-ref g3c4-public-g2-output-anchors 0)))
+(define another-generator
+  (g3g-public-generator-create model tokenizer (config selected-first)))
+(vector-set! public-row 3 another-generator)
+(vector-set! public-anchor 3 another-generator)
+(reject "paired public creator substitution cannot forge authority"
+  (lambda () (g3g-public-generation-output-lengths output)))
+(vector-set! public-row 3 generator)
+(vector-set! public-anchor 3 generator)
+(check "alternate generator closes" (g3g-public-generator-close another-generator))
+
+(define ticket (car (vector-ref g3c4-public-g2-tickets 0)))
+(vector-set! ticket 12 'pending)
+(reject "reused pending ticket cannot publish"
+  (lambda () (g3g-public-generation-output-rng output)))
+(vector-set! ticket 12 'live)
+
+(define terminal-row (g3c4-p2g2-terminal-row output))
+(define first-text (vector-ref terminal-row 7))
+(define original-first-byte (bytevector-u8-ref first-text 0))
+(bytevector-u8-set! first-text 0
+  (if (= original-first-byte 255) 0 (+ original-first-byte 1)))
+(reject "changed first-EOS terminal text blocks public accessor"
+  (lambda () (g3g-public-generation-output-text output)))
+(bytevector-u8-set! first-text 0 original-first-byte)
+
+(define ids (car (g3g-public-generation-output-ids output)))
+(define lengths (g3g-public-generation-output-lengths output))
+(define caches (g3g-public-generation-output-cache-lengths output))
+(define text (car (g3g-public-generation-output-text output)))
+(define rng (g3g-public-generation-output-rng output))
+(check "detached text has logical count"
+  (= (bytevector-length text) count))
+(check "text matches native IDs"
+  (and (= (bytevector-u8-ref text 0) (vector-ref snapshot 0))
+       (or (= count 1)
+           (= (bytevector-u8-ref text 1) (vector-ref snapshot 1)))))
+(check "I1 IDs owner has genuine terminal kind"
+  (eq? (vector-ref (g3c4-registry-find ids 'test) 1) 'ids))
+(check "I1 length/cache values"
+  (and (= (vector-ref (g3c4-registry-find lengths 'test) 7) count)
+       (= (vector-ref (g3c4-registry-find caches 'test) 7)
+          (+ count 2))))
+(check "RNG words are detached"
+  (let ((words (vector-ref (g3c4-registry-find rng 'test) 7)))
+    (and (= (vector-ref words 1) (vector-ref snapshot 4))
+         (= (vector-ref words 2) (vector-ref snapshot 5))
+         (= (vector-ref words 3) (vector-ref snapshot 6))
+         (= (vector-ref words 4) (vector-ref snapshot 7)))))
+
+(define saved-result-bindings
+  (vector-ref g3c4-public-g2-result-bindings 0))
+(vector-set! g3c4-public-g2-result-bindings 0
+             (cdr saved-result-bindings))
+(reject "missing RNG owner binding blocks native retirement"
+  (lambda () (g3g-public-generation-rng-release rng)))
+(check "rejected RNG release retains its native owner"
+  (eq? (vector-ref (g3c4-registry-find rng 'test) 2) 'live))
+(vector-set! g3c4-public-g2-result-bindings 0 saved-result-bindings)
+(define rng-entry (g3c4-registry-find rng 'test))
+(define rng-ledger (vector-ref rng-entry 10))
+(vector-set! rng-entry 10 (vector (vector-ref rng-entry 3)))
+(reject "same-native replacement RNG ledger rejects"
+  (lambda () (g3g-public-generation-rng-release rng)))
+(vector-set! rng-entry 10 rng-ledger)
+
+(define saved-public-anchor (vector-ref g3c4-public-g2-output-anchors 0))
+(vector-set! g3c4-public-g2-output-anchors 0
+             (cdr saved-public-anchor))
+(reject "missing public anchor blocks native output release"
+  (lambda () (g3g-public-generation-output-release output)))
+(check "rejected release retains native output"
+  (eq? (vector-ref (g3c4-registry-find output 'test) 2) 'live))
+(vector-set! g3c4-public-g2-output-anchors 0 saved-public-anchor)
+(check "genuine output release" (g3g-public-generation-output-release output))
+(check "genuine repeated release" (g3g-public-generation-output-release output))
+(define old-ticket-root (vector-ref g3c4-public-g2-tickets 0))
+(vector-set! g3c4-public-g2-tickets 0
+             (cons (vector #f #f #f #f #f output) old-ticket-root))
+(reject "dead output with residual ticket root rejects"
+  (lambda () (g3g-public-generation-output-release output)))
+(vector-set! g3c4-public-g2-tickets 0 old-ticket-root)
+(reject "released output remains unavailable"
+  (lambda () (g3g-public-generation-output-text output)))
+(check "generator closes" (g3g-public-generator-close generator))
+(define ids-entry (g3c4-registry-find ids 'test))
+(define ids-native (vector-ref ids-entry 3))
+(check "detached IDs release after source close"
+  (g3g-public-generation-tensor-release ids))
+(vector-set! ids-entry 3 ids-native)
+(reject "dead I1 result with reused native pointer rejects"
+  (lambda () (g3g-public-generation-tensor-release ids)))
+(vector-set! ids-entry 3 #f)
+(vector-set! ids-entry 10 (vector ids-native))
+(reject "dead I1 result with reused ledger rejects"
+  (lambda () (g3g-public-generation-tensor-release ids)))
+(vector-set! ids-entry 10 #f)
+(vector-set! ids-entry 7 19)
+(reject "dead I1 result with changed owner value rejects"
+  (lambda () (g3g-public-generation-tensor-release ids)))
+(vector-set! ids-entry 7 #f)
+(check "restored dead I1 result remains idempotent"
+  (g3g-public-generation-tensor-release ids))
+(check "detached lengths release after source close"
+  (g3g-public-generation-tensor-release lengths))
+(check "detached caches release after source close"
+  (g3g-public-generation-tensor-release caches))
+(check "detached RNG release after source close"
+  (g3g-public-generation-rng-release rng))
+
+(define second-generator
+  (g3g-public-generator-create model tokenizer (config non-eos)))
+(define second-output
+  (g3g-public-generator-generate second-generator input))
+(define second-snapshot (g3c4-p2g2-terminal-snapshot-private second-output))
+(define second-row (g3c4-p2g2-terminal-row second-output))
+(define two-text (vector-ref second-row 8))
+(define original-second-byte (bytevector-u8-ref two-text 1))
+(bytevector-u8-set! two-text 1
+  (if (= original-second-byte 255) 0 (+ original-second-byte 1)))
+(reject "changed non-EOS terminal text blocks public accessor"
+  (lambda () (g3g-public-generation-output-text second-output)))
+(bytevector-u8-set! two-text 1 original-second-byte)
+(check "genuine non-EOS takes two IDs"
+  (and (= (vector-ref second-snapshot 2) 2)
+       (= (bytevector-length
+            (car (g3g-public-generation-output-text second-output))) 2)))
+(check "non-EOS output release"
+  (g3g-public-generation-output-release second-output))
+(check "non-EOS generator closes"
+  (g3g-public-generator-close second-generator))
+
+(define private-generator
+  (g3g-public-generator-create model tokenizer (config selected-first)))
+(define private-input
+  (g3c4-public-generation-input-create
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 7 11))))
+(define private-output
+  (g3c4-p2g2-terminal-close-origin-private
+    private-generator private-input))
+(reject "out-of-band private origin does not gain public access"
+  (lambda () (g3g-public-generation-output-ids private-output)))
+(reject "out-of-band private origin does not gain public release"
+  (lambda () (g3g-public-generation-output-release private-output)))
+(check "private origin release remains private"
+  (g3c4-p2g2-terminal-release-private! private-output))
+(check "private generator closes"
+  (g3g-public-generator-close private-generator))
+
+(display "public G2 result staged PASS: checks=")
+(display checks)
+(newline)

@@ -1,0 +1,451 @@
+;;; Installed-only public C4 P2/G2 result adapter. Load after dispatch.
+(extern ptr g3c4-native-terminal-result-create i64 i64 i64 i64
+        :real et_g3c4_private_terminal_result_tensor_create_v1)
+;;; Public output roots are distinct from the private terminal origin. A
+;;; private origin-D shell never acquires these records by its registry kind.
+(define g3c4-public-g2-released-outputs (vector '()))
+
+(define (g3c4-public-g2-output-unique root slot shell operation)
+  (let loop ((tail (vector-ref root 0)) (found #f))
+    (cond ((null? tail) found)
+          ((not (and (pair? tail) (vector? (car tail))
+                     (> (vector-length (car tail)) slot)))
+           (g3c4-fail 'invalid-state operation
+                      "C4 public G2 output root is malformed"))
+          ((eq? (vector-ref (car tail) slot) shell)
+           (if found
+               (g3c4-fail 'invalid-state operation
+                          "C4 public G2 output root is duplicated"))
+           (loop (cdr tail) (car tail)))
+          (else (loop (cdr tail) found)))))
+
+(define (g3c4-public-g2-output-without root slot shell operation)
+  (let loop ((tail (vector-ref root 0)))
+    (cond ((null? tail) '())
+          ((eq? (vector-ref (car tail) slot) shell) (cdr tail))
+          (else (cons (car tail) (loop (cdr tail)))))))
+
+(define (g3c4-public-g2-output-live shell operation)
+  (let* ((origin (g3c4-p2g2-terminal-origin-live shell operation))
+         (terminal (g3c4-p2g2-terminal-live shell operation))
+         (terminal-anchor (g3c4-p2g2-terminal-anchor shell))
+         (entry (g3c4-registry-find shell operation))
+         (row (g3c4-public-g2-output-unique
+                g3c4-public-g2-output-rows 0 shell operation))
+         (anchor (g3c4-public-g2-output-unique
+                   g3c4-public-g2-output-anchors 0 shell operation))
+         (binding (g3c4-public-g2-output-unique
+                    g3c4-public-g2-output-bindings 0 shell operation))
+         (ticket (g3c4-public-g2-output-unique
+                   g3c4-public-g2-tickets 5 shell operation)))
+    (if (not (and row anchor binding ticket
+                  (= (vector-length row) 12)
+                  (= (vector-length anchor) 12)
+                  (= (vector-length binding) 2)
+                  (= (vector-length ticket) 21)
+                  (procedure? (vector-ref binding 1))
+                  (eq? (vector-ref ticket 16) (vector-ref binding 1))
+                  (eq? (vector-ref ticket 10) row)
+                  (eq? (vector-ref ticket 11) anchor)
+                  (eq? (vector-ref ticket 12) 'live)
+                  (eq? (vector-ref row 8) 'live)
+                  (eq? (vector-ref anchor 8) 'live)
+                  (eq? (vector-ref row 0) shell)
+                  (eq? (vector-ref anchor 0) shell)
+                  (eq? (vector-ref row 1) entry)
+                  (eq? (vector-ref anchor 1) entry)
+                  (eq? (vector-ref row 2) (vector-ref entry 3))
+                  (eq? (vector-ref anchor 2) (vector-ref entry 3))
+                  (eq? (vector-ref row 3) (vector-ref origin 3))
+                  (eq? (vector-ref anchor 3) (vector-ref origin 3))
+                  (eq? (vector-ref row 4) (vector-ref origin 5))
+                  (eq? (vector-ref anchor 4) (vector-ref origin 5))
+                  (eq? (vector-ref row 5) (vector-ref ticket 3))
+                  (eq? (vector-ref anchor 5) (vector-ref ticket 3))
+                  (eq? (vector-ref row 6) terminal)
+                  (eq? (vector-ref anchor 6) terminal)
+                  (eq? (vector-ref row 7) terminal-anchor)
+                  (eq? (vector-ref anchor 7) terminal-anchor)
+                  (eq? (vector-ref ticket 1) (vector-ref row 3))
+                  (eq? (vector-ref ticket 2) (vector-ref row 4))
+                  (eq? (vector-ref ticket 4) (vector-ref origin 6))
+                  (eq? (vector-ref ticket 5) shell)
+                  (eq? (vector-ref ticket 6) entry)
+                  (eq? (vector-ref ticket 7) (vector-ref entry 3))
+                  (eq? (vector-ref ticket 8) terminal)
+                  (eq? (vector-ref ticket 9) terminal-anchor)
+                  ((vector-ref binding 1) 'verify row anchor entry
+                   terminal terminal-anchor)
+                  (eq? (g3c4-public-g2-profile-original
+                         (vector-ref row 3) operation)
+                       (vector-ref row 5))
+                  (= (vector-ref row 9) (vector-ref terminal 14))
+                  (= (vector-ref anchor 9) (vector-ref terminal 14))
+                  (= (vector-ref ticket 13) (vector-ref terminal 14))
+                  (= (vector-ref row 10) (vector-ref terminal 15))
+                  (= (vector-ref anchor 10) (vector-ref terminal 15))
+                  (= (vector-ref ticket 14) (vector-ref terminal 15))
+                  (= (vector-ref row 11) (vector-ref terminal 16))
+                  (= (vector-ref anchor 11) (vector-ref terminal 16))
+                  (= (vector-ref ticket 15) (vector-ref terminal 16))))
+        (g3c4-fail 'invalid-state operation
+                   "C4 public G2 output origin or creator changed"))
+    row))
+
+(define (g3c4-public-g2-output-release! shell operation)
+  (let ((entry (g3c4-registry-find shell operation)))
+    (if (g3c4-dead-entry? entry 'terminal-output)
+        (if (and (memq shell (vector-ref g3c4-public-g2-released-outputs 0))
+                 (eq? (vector-ref entry 0) shell)
+                 (eq? (vector-ref entry 3) #f)
+                 (eq? (vector-ref entry 4) #f)
+                 (eq? (vector-ref entry 5) #f)
+                 (eq? (vector-ref entry 6) #f)
+                 (eq? (vector-ref entry 7) #f)
+                 (eq? (vector-ref entry 8) #f)
+                 (eq? (vector-ref entry 9) #f)
+                 (eq? (vector-ref entry 10) #f)
+                 (eq? (vector-ref entry 11) #f)
+                 (not (g3c4-public-g2-output-unique
+                        g3c4-public-g2-output-rows 0 shell operation))
+                 (not (g3c4-public-g2-output-unique
+                        g3c4-public-g2-output-anchors 0 shell operation))
+                 (not (g3c4-public-g2-output-unique
+                        g3c4-public-g2-output-bindings 0 shell operation))
+                 (not (g3c4-public-g2-output-unique
+                        g3c4-public-g2-tickets 5 shell operation)))
+            #t
+            (g3c4-fail 'invalid-state operation
+                       "C4 released public G2 identity changed"))
+        (let* ((row (g3c4-public-g2-output-live shell operation))
+               (anchor (g3c4-public-g2-output-unique
+                         g3c4-public-g2-output-anchors 0 shell operation))
+               (ticket (g3c4-public-g2-output-unique
+                         g3c4-public-g2-tickets 5 shell operation))
+               (next-rows (g3c4-public-g2-output-without
+                            g3c4-public-g2-output-rows 0 shell operation))
+               (next-anchors (g3c4-public-g2-output-without
+                               g3c4-public-g2-output-anchors 0 shell operation))
+               (next-bindings (g3c4-public-g2-output-without
+                                g3c4-public-g2-output-bindings 0 shell operation))
+               (next-tickets (g3c4-public-g2-output-without
+                               g3c4-public-g2-tickets 5 shell operation))
+               (next-released
+                 (cons shell (vector-ref g3c4-public-g2-released-outputs 0))))
+          ;; This authentic private release rejects a held I1 lease before
+          ;; mutation. Everything after genuine success is a fixed scrub.
+          (g3c4-p2g2-terminal-release-private! shell)
+          (vector-set! row 8 'dead)
+          (vector-set! anchor 8 'dead)
+          (vector-set! ticket 12 'dead)
+          (vector-set! g3c4-public-g2-output-rows 0 next-rows)
+          (vector-set! g3c4-public-g2-output-anchors 0 next-anchors)
+          (vector-set! g3c4-public-g2-output-bindings 0 next-bindings)
+          (vector-set! g3c4-public-g2-tickets 0 next-tickets)
+          (vector-set! g3c4-public-g2-released-outputs 0 next-released)
+          #t))))
+
+;;; Detached G2 results have their own authority. The accepted scalar P2/G1
+;;; result records and isolated adapter do not acquire a terminal dependency.
+(define g3c4-public-g2-results (vector '()))
+(define g3c4-public-g2-result-bindings (vector '()))
+(define g3c4-public-g2-released-results (vector '()))
+
+(define (g3c4-public-g2-result-known? shell)
+  (or (g3c4-public-g2-output-unique
+        g3c4-public-g2-results 0 shell 'generation-tensor-release!)
+      (g3c4-public-g2-output-unique
+        g3c4-public-g2-released-results 0 shell
+        'generation-tensor-release!)))
+
+(define (g3c4-public-g2-result-live shell expected operation)
+  (let* ((entry (g3c4-registry-find shell operation))
+         (row (g3c4-public-g2-output-unique
+                g3c4-public-g2-results 0 shell operation))
+         (binding (g3c4-public-g2-output-unique
+                    g3c4-public-g2-result-bindings 0 shell operation)))
+    (if (not (and row binding
+                  (= (vector-length row) 10)
+                  (= (vector-length binding) 2)
+                  (procedure? (vector-ref binding 1))
+                  ((vector-ref binding 1) row entry)
+                  (eq? (vector-ref row 0) shell)
+                  (eq? (vector-ref row 1) entry)
+                  (eq? (vector-ref row 2) (vector-ref entry 3))
+                  (eq? (vector-ref row 3) expected)
+                  (eq? (vector-ref entry 1) expected)
+                  (eq? (vector-ref row 8) 'diagnostic-c4-p2g2)
+                  (eq? (vector-ref row 9) 'live)
+                  (eq? (vector-ref entry 2) 'live)
+                  (eq? (vector-ref entry 0) shell)
+                  (eq? (vector-ref entry 4) #f)
+                  (eq? (vector-ref entry 5) #f)
+                  (eq? (vector-ref entry 6) #f)
+                  (eq? (vector-ref entry 8) #f)
+                  (eq? (vector-ref entry 9) #f)
+                  (vector? (vector-ref entry 10))
+                  (= (vector-length (vector-ref entry 10)) 1)
+                  (eq? (vector-ref (vector-ref entry 10) 0)
+                       (vector-ref row 2))
+                  (eq? (vector-ref entry 11) g3c4-model-profile)
+                  (if (eq? expected 'result-rng)
+                      (and (g3c4-rng-snapshot? (vector-ref entry 7))
+                           (eq? (vector-ref entry 7) (vector-ref row 7)))
+                      (and (m3t-exact-i64? (vector-ref entry 7))
+                           (= (vector-ref entry 7) (vector-ref row 5))))))
+        (g3c4-fail 'invalid-state operation
+                   "C4 public G2 result identity changed"))
+    row))
+
+(define (g3c4-public-g2-result-release! shell expected operation)
+  (m3-call operation
+    (let ((entry (g3c4-registry-find shell operation)))
+      (if (not (eq? (vector-ref entry 1) expected))
+          (g3c4-fail 'invalid-argument operation
+                     "C4 public G2 result kind changed"))
+      (if (g3c4-dead-entry? entry expected)
+          (let ((tombstone (g3c4-public-g2-output-unique
+                             g3c4-public-g2-released-results 0
+                             shell operation)))
+            (if (and tombstone (= (vector-length tombstone) 2)
+                   (eq? (vector-ref tombstone 1) expected)
+                   (eq? (vector-ref entry 0) shell)
+                   (eq? (vector-ref entry 3) #f)
+                   (eq? (vector-ref entry 4) #f)
+                   (eq? (vector-ref entry 5) #f)
+                   (eq? (vector-ref entry 6) #f)
+                   (eq? (vector-ref entry 7) #f)
+                   (eq? (vector-ref entry 8) #f)
+                   (eq? (vector-ref entry 9) #f)
+                   (eq? (vector-ref entry 10) #f)
+                   (eq? (vector-ref entry 11) #f)
+                   (not (g3c4-public-g2-output-unique
+                          g3c4-public-g2-results 0 shell operation))
+                   (not (g3c4-public-g2-output-unique
+                          g3c4-public-g2-result-bindings 0 shell operation)))
+                #t
+                (g3c4-fail 'invalid-state operation
+                           "C4 released G2 result roots changed")))
+          (let* ((row (g3c4-public-g2-result-live
+                        shell expected operation))
+                 (next-rows (g3c4-public-g2-output-without
+                              g3c4-public-g2-results 0 shell operation))
+                 (next-bindings (g3c4-public-g2-output-without
+                                  g3c4-public-g2-result-bindings 0
+                                  shell operation))
+                 (next-released
+                   (cons (vector shell expected)
+                         (vector-ref g3c4-public-g2-released-results 0))))
+            (g3c4-native-check
+              (if (eq? expected 'result-rng)
+                  (g3c4-native-rng-release (vector-ref row 2))
+                  (g3c4-native-result-tensor-release (vector-ref row 2)))
+              operation)
+            (g3c4-entry-dead! entry)
+            (vector-set! row 2 #f)
+            (vector-set! row 9 'dead)
+            (vector-set! g3c4-public-g2-results 0 next-rows)
+            (vector-set! g3c4-public-g2-result-bindings 0 next-bindings)
+            (vector-set! g3c4-public-g2-released-results 0 next-released)
+            #t)))))
+
+(define (g3c4-public-g2-source-snapshot shell operation)
+  (g3c4-public-g2-output-live shell operation)
+  (g3c4-p2g2-terminal-snapshot-private shell))
+
+(define (g3c4-public-g2-snapshot-equal? first second)
+  (and (vector? first) (= (vector-length first) 8)
+       (vector? second) (= (vector-length second) 8)
+       (let loop ((index 0))
+         (if (= index 8) #t
+             (and (= (vector-ref first index) (vector-ref second index))
+                  (loop (+ index 1)))))))
+
+(define (g3c4-public-g2-resnapshot shell source native expected operation)
+  (let* ((bytes (make-bytevector 64 0))
+         (row (g3c4-public-g2-output-live shell operation)))
+    (if (not (and (eq? row source) (eq? (vector-ref row 2) native)))
+        (g3c4-fail 'invalid-state operation
+                   "C4 public G2 source changed before publication"))
+    (g3c4-native-check
+      (g3c4-p2g2-native-snapshot native bytes 72) operation)
+    (let ((current
+            (vector (g3c4-p2g2-terminal-word bytes 0)
+                    (g3c4-p2g2-terminal-word bytes 8)
+                    (g3c4-p2g2-terminal-word bytes 16)
+                    (g3c4-p2g2-terminal-word bytes 24)
+                    (g3c4-p2g2-terminal-word bytes 32)
+                    (g3c4-p2g2-terminal-word bytes 40)
+                    (g3c4-p2g2-terminal-word bytes 48)
+                    (g3c4-p2g2-terminal-word bytes 56))))
+      (if (not (and (g3c4-public-g2-snapshot-equal? current expected)
+                    (eq? source (g3c4-public-g2-output-live
+                                  shell operation))))
+          (g3c4-fail 'invalid-state operation
+                     "C4 public G2 native snapshot changed"))
+      #t)))
+
+(define (g3c4-public-g2-detached-ids shell snapshot operation)
+  ;; Each private clone operation owns a sibling m3-call scope.
+  (let ((clone (g3c4-p2g2-terminal-ids-clone-private shell))
+        (released #f))
+    (guard (caught
+             (#t
+               (if (not released)
+                   (guard (cleanup (#t (exit 134)))
+                     (g3c4-p2g2-terminal-ids-clone-release-private! clone)))
+               (raise caught)))
+      (let ((bytes (g3c4-p2g2-terminal-ids-clone-copy-private clone)))
+        (g3c4-p2g2-terminal-ids-clone-release-private! clone)
+        (set! released #t)
+        (if (not (and (= (bytevector-length bytes)
+                         (* (vector-ref snapshot 2) 8))
+                      (= (g3c4-p2g2-terminal-word bytes 0)
+                         (vector-ref snapshot 0))
+                      (or (= (vector-ref snapshot 2) 1)
+                          (= (g3c4-p2g2-terminal-word bytes 8)
+                             (vector-ref snapshot 1)))))
+            (g3c4-fail 'invalid-state operation
+                       "C4 public G2 detached I1 differs"))
+        bytes))))
+
+(define (g3c4-public-g2-result-publish shell snapshot kind operation)
+  (let ((ids (if (eq? kind 'ids)
+                 (g3c4-public-g2-detached-ids shell snapshot operation)
+                 #f)))
+    (m3-call operation
+      (let* ((source (g3c4-public-g2-output-live shell operation))
+             (source-native (vector-ref source 2))
+             (count (if (eq? kind 'ids) (vector-ref snapshot 2) 1))
+             (first (cond ((eq? kind 'ids) (vector-ref snapshot 0))
+                          ((eq? kind 'lengths) (vector-ref snapshot 2))
+                          ((eq? kind 'cache-lengths) (vector-ref snapshot 3))
+                          (else 0)))
+             (second (if (eq? kind 'ids) (vector-ref snapshot 1) 0))
+             (rng (vector g3c4-rng-algorithm
+                          (vector-ref snapshot 4) (vector-ref snapshot 5)
+                          (vector-ref snapshot 6) (vector-ref snapshot 7)))
+             (answer-shell (vector 'g3c4-g2-result-private))
+             (ledger (vector #f))
+             (entry (vector answer-shell kind 'pending #f #f #f #f #f
+                            #f #f ledger g3c4-model-profile))
+             (record (vector answer-shell entry #f kind count first second
+                             rng 'diagnostic-c4-p2g2 'pending))
+             (bound-native #f)
+             (binding
+               (vector answer-shell
+                 (lambda (candidate candidate-entry)
+                   (and bound-native
+                        (eq? candidate record)
+                        (eq? candidate-entry entry)
+                        (eq? (vector-ref candidate 0) answer-shell)
+                        (eq? (vector-ref candidate 1) entry)
+                        (eq? (vector-ref candidate 2) bound-native)
+                        (eq? (vector-ref candidate 3) kind)
+                        (= (vector-ref candidate 4) count)
+                        (= (vector-ref candidate 5) first)
+                        (= (vector-ref candidate 6) second)
+                        (eq? (vector-ref candidate 7) rng)
+                        (eq? (vector-ref candidate 8)
+                             'diagnostic-c4-p2g2)
+                        (= (vector-ref rng 1) (vector-ref snapshot 4))
+                        (= (vector-ref rng 2) (vector-ref snapshot 5))
+                        (= (vector-ref rng 3) (vector-ref snapshot 6))
+                        (= (vector-ref rng 4) (vector-ref snapshot 7))
+                        (eq? (vector-ref candidate-entry 3) bound-native)
+                        (eq? (vector-ref candidate-entry 10) ledger)
+                        (eq? (vector-ref candidate-entry 7)
+                             (if (eq? kind 'result-rng) rng first))))))
+             (old-registry (vector-ref g3c4-registry 0))
+             (old-results (vector-ref g3c4-public-g2-results 0))
+             (old-bindings (vector-ref g3c4-public-g2-result-bindings 0))
+             (next-registry (cons entry old-registry))
+             (next-results (cons record old-results))
+             (next-bindings
+               (cons binding old-bindings))
+             (answer (if (eq? kind 'ids) (list answer-shell) answer-shell))
+             (native '()))
+        (guard (caught
+                 (#t
+                   (if (not (null? native))
+                       (if (not (= (if (eq? kind 'result-rng)
+                                       (g3c4-native-rng-release native)
+                                       (g3c4-native-result-tensor-release
+                                         native)) 0))
+                           (exit 134)))
+                   (g3c4-entry-dead! entry)
+                   (vector-set! record 2 #f)
+                   (vector-set! record 9 'dead)
+                   (vector-set! g3c4-registry 0 old-registry)
+                   (vector-set! g3c4-public-g2-results 0 old-results)
+                   (vector-set! g3c4-public-g2-result-bindings 0
+                                old-bindings)
+                   (raise caught)))
+          (vector-set! g3c4-registry 0 next-registry)
+          (vector-set! g3c4-public-g2-results 0 next-results)
+          (vector-set! g3c4-public-g2-result-bindings 0 next-bindings)
+          (set! native
+            (if (eq? kind 'result-rng)
+                (g3c4-native-result-rng-create
+                  (vector-ref snapshot 4) (vector-ref snapshot 5)
+                  (vector-ref snapshot 6) (vector-ref snapshot 7))
+                (g3c4-native-terminal-result-create
+                  (cond ((eq? kind 'ids) 5)
+                        ((eq? kind 'lengths) 6) (else 7))
+                  count first second)))
+          (if (null? native) (g3c4-native-fail operation))
+          (set! bound-native native)
+          (vector-set! ledger 0 native)
+          (vector-set! entry 3 native)
+          (vector-set! entry 7 (if (eq? kind 'result-rng) rng first))
+          (vector-set! record 2 native)
+          (if (and ids
+                   (not (and (= (g3c4-p2g2-terminal-word ids 0) first)
+                             (or (= count 1)
+                                 (= (g3c4-p2g2-terminal-word ids 8)
+                                    second)))))
+              (g3c4-fail 'invalid-state operation
+                         "C4 public G2 copied IDs changed"))
+          (g3c4-public-g2-resnapshot
+            shell source source-native snapshot operation)
+          (vector-set! entry 2 'live)
+          (vector-set! record 9 'live)
+          answer)))))
+
+(define (g3c4-public-g2-output-access shell kind operation)
+  (let ((snapshot (g3c4-public-g2-source-snapshot shell operation)))
+    (if (not (and (= (vector-ref snapshot 4) 1)
+                  (>= (vector-ref snapshot 5) 0)))
+        (g3c4-fail 'invalid-state operation
+                   "C4 public G2 RNG snapshot is malformed"))
+    (if (eq? kind 'text)
+        (m3-call operation
+          (let* ((source (g3c4-public-g2-output-live shell operation))
+                 (terminal (g3c4-p2g2-terminal-live shell operation))
+                 (count (vector-ref snapshot 2))
+                 (original (if (= count 1) (vector-ref terminal 7)
+                               (vector-ref terminal 8)))
+                 (bytes (make-bytevector count 0))
+                 (native (vector-ref source 2)))
+            (if (not (and (eq? terminal (vector-ref source 6))
+                          (bytevector? original)
+                          (= (bytevector-length original) count)))
+                (g3c4-fail 'invalid-state operation
+                           "C4 public G2 terminal text changed"))
+            (let loop ((index 0))
+              (if (< index count)
+                  (begin
+                    (bytevector-u8-set! bytes index
+                      (bytevector-u8-ref original index))
+                    (loop (+ index 1)))))
+            (if (not (and (= (bytevector-u8-ref bytes 0)
+                             (vector-ref snapshot 0))
+                          (or (= count 1)
+                              (= (bytevector-u8-ref bytes 1)
+                                 (vector-ref snapshot 1)))))
+                (g3c4-fail 'invalid-state operation
+                           "C4 public G2 text differs"))
+            (g3c4-public-g2-resnapshot
+              shell source native snapshot operation)
+            (list bytes)))
+        (g3c4-public-g2-result-publish shell snapshot kind operation))))

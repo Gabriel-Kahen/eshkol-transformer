@@ -35,4 +35,5 @@
 (load "g3c4_p2g2_terminal_close_extension.esk")
 (load "g3c4_public_output_adapter_extension.esk")
 (load "g3c4_public_generation_dispatch_extension.esk")
+(load "g3c4_public_g2_result_extension.esk")
 (load "g3g_manual_public_extension.esk")

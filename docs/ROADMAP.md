@@ -2702,6 +2702,19 @@ publication, public G2 and continuation remain pending.
   accessors, genuine AOT/normal/repeat/sanitizer and emitted zero-tail proof,
   package/native symbol closure and continuation remain pending.
 
+  A [source-only public G2 result candidate](g3/G3_C4_PUBLIC_G2_RESULT_SOURCE_LEAF.md)
+  now routes exact terminal-output accessors through the public ticket and
+  private origin, takes a fresh native snapshot before publication, and uses
+  the private logical I1 clone for detached IDs. Its manual-only native flag
+  stack exposes the accepted terminal I1 owner constructor. One installed-only
+  G2 result leaf loads after the unchanged ticket dispatch; the old P2/G1
+  adapter, isolated fixture and existing relative load order stay unchanged.
+  Source controls and a staged installed-aggregate fixture pass syntax/shape
+  checks only. Genuine native
+  normal/repeat/sanitizer behavior, held-lease and failure cuts, emitted
+  imports/exports, public ABI closure, mathematical parity and continuation
+  remain **unrun**.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |

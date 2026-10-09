@@ -1682,6 +1682,9 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     elif [[ "${g3g_package_policy}" == 1 &&
             "${package_native_source}" == "${PROJECT_ROOT}/native/a2_kv_cache.c" ]]; then
       package_source_flags=(-DET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE)
+      if [[ "${package_policy}" == g3g-manual-public-aggregate ]]; then
+        package_source_flags+=(-DET_A2_KV_CACHE_TERMINAL_WITNESS_PRIVATE)
+      fi
     elif [[ "${package_policy}" == g3g-manual-public-aggregate &&
             "${package_native_source}" == "${PROJECT_ROOT}/src/eshkol_transformer/g3c4_model_owner.c" ]]; then
       package_source_flags=(
@@ -1708,6 +1711,15 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
         -DET_G3C4_P2_G1_COPYOUT_PRIVATE
         -DET_G3C4_P2_G1_COORDINATOR_PRIVATE
         -DET_G3C4_P2_G1_PUBLIC_RESULT_PRIVATE
+        -DET_G3C4_P2_G2_FIRST_FRAME_PRIVATE
+        -DET_G3C4_P2_G2_PREFIX_COMMIT_PRIVATE
+        -DET_G3C4_P2_G2_CARRIER_BRIDGE_PRIVATE
+        -DET_G3C4_P2_G2_EOS_FIRST_FRAME_PRIVATE
+        -DET_G3C4_P2_G2_SECOND_FRAME_PRIVATE
+        -DET_G3C4_P2_G2_TERMINAL_PRIVATE
+        -DET_G3C4_P2_G2_TERMINAL_IDS_CLONE_PRIVATE
+        -DET_G3C4_P2_G2_PUBLIC_RESULT_PRIVATE
+        -DET_A2_KV_CACHE_TERMINAL_WITNESS_PRIVATE
         -DET_I64_TENSOR_STORAGE_QUERY_PRIVATE
         -DET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE
         -DET_F32_TENSOR_STORAGE_QUERY_PRIVATE)

@@ -53,4 +53,5 @@ native/g3c4_p2g2_t1_prefix_coordinator_extension.esk
 native/g3c4_p2g2_terminal_close_extension.esk
 native/g3c4_public_output_adapter_extension.esk
 native/g3c4_public_generation_dispatch_extension.esk
+native/g3c4_public_g2_result_extension.esk
 native/g3g_manual_public_extension.esk

@@ -15,7 +15,7 @@ native_sources = read("native_source_closure")
 facades = read("facades")
 assert len(exports) == 105 and exports == sorted(set(exports))
 assert len(strings) == 111 and strings == sorted(set(strings))
-assert len(sources) == 56 and len(sources) == len(set(sources))
+assert len(sources) == 57 and len(sources) == len(set(sources))
 assert len(native_sources) == 59 and len(native_sources) == len(set(native_sources))
 assert len(read("native_objects")) == 6
 assert len(facades) == 8 and facades == sorted(set(facades))
@@ -34,7 +34,7 @@ assert {line.split()[1] for line in renames if line.startswith(("g3g-", "g3c4-pu
     for name in added | {name for name in exports if name.startswith("et_e1b_public_g3_")}
 }
 assert sources[0] == "native/g3g_manual_package_root.esk"
-assert sources[-17:] == [
+assert sources[-18:] == [
     f"native/{name}.esk" for name in (
         "g3c4_i2_construction_extension", "g3c4_p1_construction_extension",
         "g3c4_model_extension", "g3c4_call_entry_extension",
@@ -48,6 +48,7 @@ assert sources[-17:] == [
         "g3c4_p2g2_terminal_close_extension",
         "g3c4_public_output_adapter_extension",
         "g3c4_public_generation_dispatch_extension",
+        "g3c4_public_g2_result_extension",
         "g3g_manual_public_extension",
     )
 ]
@@ -61,7 +62,7 @@ assert (root / "scripts/build-e1b-consumer.sh").read_text().count(
 assert "native/i64_t1_pair_private.h" in native_sources
 assert "native/g3g_g0_package_bridge.c" not in native_sources
 package_root = (native / "g3g_manual_package_root.esk").read_text()
-for name in (name for name in sources[-17:]
+for name in (name for name in sources[-18:]
              if name != "native/g3c4_p1_construction_extension.esk"):
     assert package_root.count(f'(load "{Path(name).name}")') == 1
 bridge = (native / "g3g_manual_package_bridge.c").read_text()

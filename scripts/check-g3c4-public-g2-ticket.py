@@ -136,7 +136,7 @@ def validate(dispatch: str, terminal: str, call_entry: str, adapter: bytes,
     positions = [package_root.index(f'(load "{name}")') for name in order]
     assert positions == sorted(positions)
     assert all(package_root.count(f'(load "{name}")') == 1 for name in order)
-    assert len(package_sources) == 56 and len(package_sources) == len(set(package_sources))
+    assert len(package_sources) == 57 and len(package_sources) == len(set(package_sources))
     assert [f"native/{name}" for name in order] == [
         item for item in package_sources if item in {f"native/{name}" for name in order}]
     assert all((ROOT / item).is_file() for item in package_sources)
