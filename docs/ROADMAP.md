@@ -2735,7 +2735,9 @@ publication, public G2 and continuation remain pending.
   collector successor treats only `ENOENT` and `ESRCH` while enumerating
   `/proc` entries as a disappeared candidate. Leader/session/owner checks and
   other I/O errors remain strict. This change has not been run in Docker and
-  does not accept the failed E3 result.
+  does not accept the failed E3 result. The source-only overflow test allows
+  ten seconds for its 2.1 MiB writer after observed three-second test timeouts;
+  the collector's runtime limits and one-second timeout negative are unchanged.
 
   An [inactive test-only F loader outer source](g3/G3_C4_F_LOADER_OUTER_SOURCE_LEAF.md)
   specifies the exact f31 guest mounts and bounded owned Docker-client and

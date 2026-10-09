@@ -115,7 +115,7 @@ class ImageCollectorTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "stdout overflow"):
                 collect.capture([sys.executable, "-c",
                                  "import os;os.write(1,b'x'*2100000)"],
-                                base / "stdout-overflow", 3)
+                                base / "stdout-overflow", 10)
             self.assertEqual((base / "stdout-overflow/stdout.raw").stat().st_size,
                              collect.STDOUT_LIMIT)
             with self.assertRaisesRegex(ValueError, "stderr overflow"):
