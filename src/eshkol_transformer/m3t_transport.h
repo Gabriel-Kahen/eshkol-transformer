@@ -51,4 +51,15 @@ int64_t et_m3t_private_last_error_code_v1(void);
 /* Approved I2 construction observer; never installed or application-callable. */
 int32_t et_m3t_construction_parameter_preflight_internal(void *parameter,
     const void *exact_handle, et_f32_tensor_error *error);
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+/* Serialized, noninstalled candidate retirement. The caller proves its P1/I2
+ * ledger before the final native preflight and does no fallible work after it. */
+int64_t et_m3t_private_candidate_binding_preflight_v1(
+    void *owner, int64_t index, void *exact_parameter, void *exact_handle);
+int64_t et_m3t_private_candidate_retire_preflight_v1(
+    void *owner, void *exact_original, void *exact_successor);
+int64_t et_m3t_private_candidate_retire_commit_v1(void *owner);
+int64_t et_m3t_private_candidate_initializer_retire_preflight_v1(void *successor);
+int64_t et_m3t_private_candidate_initializer_retire_commit_v1(void *successor);
+#endif
 #endif

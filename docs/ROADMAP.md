@@ -1942,6 +1942,17 @@ parameter graph or live O2 witness; the candidate-aware I2/P1/M3T adapter
 and owner teardown
 remain dependent work.
 
+An isolated E3 native sealed-M3 retirement source candidate now adds a
+G3R-only exact-slot f32 destroy-readiness helper shared with destruction,
+creation-time indexed M3 parameter/handle rosters, successor-consumer
+admission, and one-use native owner/successor tombstone commits. Its focused
+native harness is written but the supported normal/repeat/sanitizer, feature-OFF
+byte and symbol parity, and Eshkol P1/I2 whole-graph producer gates remain
+**unrun**. It does not establish stale sealed-M3 behavior or Section 9
+acceptance; a reviewed Eshkol fixture must bind all fourteen indexed handles,
+quiesce consumers, revoke P1/I2 authority and call the native commits without
+fallible work after the one-use preflight.
+
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
 names would return newly owned authenticated CPU f32 `[1,256]` kind-3 shells,

@@ -49,6 +49,11 @@ typedef struct initializer {record r; int64_t words[4];} initializer;
 typedef struct owner {
   record r; initializer *original,*successor; et_f32_parameter *p[14];
   void *handles[14]; size_t initialized; void *active;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  initializer *original_origin,*successor_origin;
+  et_f32_parameter *parameter_origin[14]; void *handle_origin[14];
+  uint64_t retire_ticket; unsigned successor_ticket,successor_pending;
+#endif
 } owner;
 static owner *staged_owner;
 typedef struct input {record r;et_i64_tensor *tensor;} input;
@@ -136,11 +141,17 @@ void *et_m3t_private_owner_create_v1(void *p) {
  owner *o=allocate(sizeof(*o));if(!o)return NULL;
  o->successor=allocate(sizeof(*o->successor));if(!o->successor){free(o);return NULL;}
  memcpy(o->successor->words,s->words,sizeof(s->words));o->original=s;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+ o->original_origin=s;o->successor_origin=o->successor;
+#endif
  for(size_t i=0;i<14;i++) {
   et_f32_tensor *t=new_tensor(parameter_rank(i),parameter_shape[i]);et_f32_tensor_error e;
   if(!t)goto failed;
   int rc=et_f32_parameter_create_v1(t,&o->p[i],&e);destroy_f32(&t);
   if(f32_error(rc,&e))goto failed;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  o->parameter_origin[i]=o->p[i];
+#endif
  }
  enroll(&o->successor->r,INITIALIZER);enroll(&o->r,OWNER);staged_owner=o;return o;
 failed:
@@ -160,7 +171,13 @@ int64_t et_m3t_private_owner_bind_v1(void *p,int64_t i,void *handle) {
  for(size_t j=0;j<14;j++)if(o->handles[j]==handle)return bad(ET_M3T_INVALID_ARGUMENT,ET_M3T_CODE_TOPOLOGY);
  et_f32_tensor_error e;
  if(f32_error(et_f32_parameter_bind_identity_v1(o->p[i],handle,&e),&e))return error_category;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+ o->handles[i]=handle;
+ o->handle_origin[i]=handle;
+ return 0;
+#else
  o->handles[i]=handle;return 0;
+#endif
 }
 static et_kernel_tensor_view_v1 view(void *p,size_t bytes,const char *dtype,size_t rank,const uint64_t *shape) {
  return (et_kernel_tensor_view_v1){sizeof(et_kernel_tensor_view_v1),p,bytes,dtype,"cpu",ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR,0,rank,shape};
@@ -335,6 +352,106 @@ typedef struct workspace {
  record r;owner *model;et_f32_tensor *saved[14],*slots[SLOT_COUNT],*epsilon;
  et_i64_tensor *ids,*positions;unsigned char keep[4];unsigned char ready[SLOT_COUNT];int mode,busy;
 } workspace;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+static int candidate_consumers(owner *o) {
+ for(record *r=registry;r;r=r->next) {
+  if(r->kind==WORKSPACE && r->state>=0 && ((workspace*)r)->model==o)
+   return (int)bad(ET_M3T_INVALID_STATE,ET_M3T_CODE_LIFECYCLE);
+  if(r->kind==OWNER && r->state>=0 && r!=(record*)o) {
+   owner *other=(owner*)r;
+   if(other->original==o->successor || other->successor==o->successor)
+    return (int)bad(ET_M3T_INVALID_STATE,ET_M3T_CODE_TOPOLOGY);
+  }
+ }
+ return 0;
+}
+static int candidate_roster(owner *o,int check_binding) {
+ if(o->r.state!=1 || o==staged_owner || o->initialized!=14 || o->active ||
+    !o->original || !o->successor || o->original==o->successor ||
+    o->original!=o->original_origin || o->successor!=o->successor_origin)
+  return (int)bad(ET_M3T_INVALID_STATE,ET_M3T_CODE_LIFECYCLE);
+ if(admit(o->original,INITIALIZER,0)!=o->original ||
+    admit(o->successor,INITIALIZER,0)!=o->successor)return (int)error_category;
+ if(o->original->r.state!=1 || o->successor->r.state!=1)
+  return (int)bad(ET_M3T_INVALID_STATE,ET_M3T_CODE_LIFECYCLE);
+ if(candidate_consumers(o))return (int)error_category;
+ for(size_t i=0;i<14;i++) {
+  if(!o->p[i] || !o->handles[i] || o->p[i]!=o->parameter_origin[i] ||
+     o->handles[i]!=o->handle_origin[i])
+   return (int)bad(ET_M3T_INVALID_STATE,ET_M3T_CODE_TOPOLOGY);
+  for(size_t j=0;j<i;j++)if(o->p[i]==o->p[j] || o->handles[i]==o->handles[j])
+   return (int)bad(ET_M3T_INVALID_STATE,ET_M3T_CODE_TOPOLOGY);
+  et_f32_tensor_error e;
+  if(check_binding && f32_error(et_f32_parameter_validate_identity_v1(
+       o->p[i],o->handles[i],&e),&e))return (int)error_category;
+  if(f32_error(et_f32_parameter_private_destroy_ready_v1(&o->p[i],&e),&e))
+   return (int)error_category;
+ }
+ return 0;
+}
+int64_t et_m3t_private_candidate_binding_preflight_v1(
+    void *p,int64_t index,void *exact_parameter,void *exact_handle) {
+ clear();owner *o=admit(p,OWNER,0);if(!o)return error_category;
+ if(index<0 || index>=14 || !exact_parameter || !exact_handle)
+  return bad(ET_M3T_INVALID_ARGUMENT,ET_M3T_CODE_SELECTOR);
+ if(candidate_roster(o,1))return error_category;
+ size_t i=(size_t)index;
+ if(o->p[i]!=exact_parameter || o->handles[i]!=exact_handle)
+  return bad(ET_M3T_INVALID_ARGUMENT,ET_M3T_CODE_IDENTITY);
+ return 0;
+}
+int64_t et_m3t_private_candidate_initializer_retire_preflight_v1(void *p) {
+ clear();initializer *s=admit(p,INITIALIZER,0);if(!s)return error_category;
+ owner *found=NULL;
+ for(record *r=registry;r;r=r->next)if(r->kind==OWNER && r->state==1 &&
+     ((owner*)r)->successor==s) {
+  if(found)return bad(ET_M3T_INVALID_STATE,ET_M3T_CODE_TOPOLOGY);
+  found=(owner*)r;
+ }
+ if(!found || candidate_roster(found,1))
+  return error_category?error_category:bad(ET_M3T_INVALID_STATE,ET_M3T_CODE_IDENTITY);
+ if(found->successor_ticket)return bad(ET_M3T_INVALID_STATE,ET_M3T_CODE_LIFECYCLE);
+ found->successor_ticket=1;return 0;
+}
+int64_t et_m3t_private_candidate_retire_preflight_v1(
+    void *p,void *exact_original,void *exact_successor) {
+ clear();owner *o=admit(p,OWNER,0);if(!o)return error_category;
+ if(o->retire_ticket || !o->successor_ticket)
+  return bad(ET_M3T_INVALID_STATE,ET_M3T_CODE_LIFECYCLE);
+ if(o->original!=exact_original || o->successor!=exact_successor)
+  return bad(ET_M3T_INVALID_ARGUMENT,ET_M3T_CODE_IDENTITY);
+ if(candidate_roster(o,1))return error_category;
+ o->retire_ticket=1;return 0;
+}
+int64_t et_m3t_private_candidate_retire_commit_v1(void *p) {
+ clear();owner *o=admit(p,OWNER,1);if(!o)return error_category;
+ if(o->r.state!=1 || o->retire_ticket!=1)
+  return bad(ET_M3T_INVALID_STATE,ET_M3T_CODE_LIFECYCLE);
+ /* The caller has already revoked P1/I2. Native failure is terminal. */
+ if(candidate_roster(o,0))abort();
+ o->retire_ticket=0;
+ for(size_t i=0;i<14;i++) {
+  et_f32_tensor_error e;
+  if(et_f32_parameter_destroy_v1(&o->p[i],&e))abort();
+ }
+ o->r.state=-1;o->successor_pending=1;return 0;
+}
+int64_t et_m3t_private_candidate_initializer_retire_commit_v1(void *p) {
+ clear();initializer *s=admit(p,INITIALIZER,1);if(!s)return error_category;
+ owner *found=NULL;
+ for(record *r=registry;r;r=r->next)if(r->kind==OWNER &&
+    ((owner*)r)->successor==s && ((owner*)r)->successor_pending) {
+  if(found)abort();
+  found=(owner*)r;
+ }
+ if(!found)return bad(ET_M3T_INVALID_STATE,ET_M3T_CODE_LIFECYCLE);
+ if(found->r.state!=-1 || !found->successor_pending || !found->successor_ticket ||
+    found->successor!=found->successor_origin ||
+    found->original!=found->original_origin || s->r.state!=1 ||
+    candidate_consumers(found))abort();
+ found->successor_ticket=0;found->successor_pending=0;s->r.state=-1;return 0;
+}
+#endif
 static size_t slot_shape(size_t i,const uint64_t **shape) {
  if(i>=GKEY && i<=GPOS){*shape=parameter_shape[i-GKEY];return parameter_rank(i-GKEY);}
  if(i==GHEAD||i==GTOKEN){*shape=parameter_shape[10];return 2;}
