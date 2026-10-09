@@ -392,10 +392,26 @@
                  (distinct (+ previous 1)))))
          (loop (cdr rows) (+ index 1)))))))
 
+;;; The private companion may issue one pending creation at a time. Existing
+;;; aggregates retain an empty registry and cannot mint lineage via the public
+;;; two-argument constructor.
+(define m3t-model-lineage-registry (vector '() #f))
+(define g3r-x1-model-lineage-limit 64)
+
+(define (g3r-x1-model-lineage-capacity rows operation)
+  (let check ((remaining rows) (capacity g3r-x1-model-lineage-limit))
+    (cond
+      ((= capacity 0)
+       (m3t-fail 'unsupported operation "X1 model lineage row limit reached"))
+      ((null? remaining) #t)
+      ((not (pair? remaining))
+       (m3t-fail 'internal operation "X1 model lineage registry malformed"))
+      (else (check (cdr remaining) (- capacity 1))))))
+
 (define (m3t-model-lineage-preflight config initial config-data lineage operation)
   ;; Fixed private data only. A failed preflight cannot leave a staged M3 row.
   (if lineage
-      (if (not (and (vector? lineage) (= (vector-length lineage) 5)
+      (if (not (and (vector? lineage) (= (vector-length lineage) 6)
                     (vector? (vector-ref lineage 0))
                     (= (vector-length (vector-ref lineage 0)) 2)
                     (vector? (vector-ref lineage 1))
@@ -407,6 +423,9 @@
                          (vector-ref lineage 2))
                     (vector? (vector-ref lineage 4))
                     (= (vector-length (vector-ref lineage 4)) 2)
+                    (eq? (vector-ref lineage 0) m3t-model-lineage-registry)
+                    (eq? (vector-ref m3t-model-lineage-registry 1) lineage)
+                    ((vector-ref m3t-model-lineage-routes 0) lineage)
                     (eq? (vector-ref (vector-ref lineage 0) 1)
                          (vector-ref lineage 1))
                     (eq? (vector-ref (vector-ref lineage 1) 0)
@@ -449,6 +468,7 @@
           (begin (vector-set! entry 2 'dead) (vector-set! successor 2 'dead)
                  (m3t-native-fail operation)))
       (vector-set! entry 3 native)
+      (if lineage (vector-set! (vector-ref lineage 1) 2 'building))
       (m3t-boundary operation
         (guard (caught
                  (#t
@@ -460,7 +480,9 @@
                              (i2-construction-abort-internal! (vector-ref cleanup 0)))
                          (m3t-check (m3t-native-owner-abort native) operation)
                          (vector-set! entry 2 'dead)
-                         (vector-set! successor 2 'dead)))
+                         (vector-set! successor 2 'dead)
+                         (if lineage
+                             (vector-set! (vector-ref lineage 1) 2 'aborted))))
                    (raise caught)))
           (let ((construction (i2-construction-begin-internal)))
             (vector-set! cleanup 0 construction)
@@ -521,6 +543,71 @@
             root)))))))
 (define (m3t-public-model-create config state)
   (m3t-model-create-core config state #f))
+;;; Only the actual private constructor closure issues a ticket. The verifier
+;;; shares its lexical secret/current identity; direct core calls cannot mint it.
+(define m3t-model-lineage-routes
+  (let ((secret (vector 'm3t-x1-lineage))
+        (current (vector #f)))
+    (vector
+      (lambda (lineage)
+        (and (eq? (vector-ref current 0) lineage)
+             (eq? (vector-ref lineage 5) secret)))
+      (lambda (config initializer)
+  (let ((operation 'g3r-x1-model-create))
+    (if (vector-ref m3t-model-lineage-registry 1)
+        (m3t-fail 'invalid-state operation
+                   "X1 model lineage construction is active"))
+    (g3r-x1-model-lineage-capacity
+     (vector-ref m3t-model-lineage-registry 0) operation)
+    (x1-private-config-validate config)
+    (let* ((x1-entry (x1-private-resolved-entry config))
+           (initial (m3t-entry initializer 'initializer operation #t))
+           (canonical (x1-private-config-canonical config))
+           (fingerprint (x1-private-config-fingerprint config)))
+      (if (not (and x1-entry (x1-resolved? config)))
+          (m3t-fail 'invalid-argument operation
+                     "expected an exact resolved X1 configuration"))
+      (let* ((identity (vector #f #f))
+             (row (vector #f 'pending config x1-entry #f
+                          canonical fingerprint #f initial))
+             (witness
+               (lambda (candidate)
+                 (and (eq? candidate row)
+                      (eq? (vector-ref candidate 0) (vector-ref identity 0))
+                      (eq? (vector-ref candidate 2) config)
+                      (eq? (vector-ref candidate 3) x1-entry)
+                      (eq? (vector-ref candidate 4) (vector-ref identity 1))
+                      (eq? (vector-ref candidate 8) initial)
+                      (eq? (x1-private-resolved-entry config) x1-entry)
+                      (string=? (vector-ref candidate 5) canonical)
+                      (string=? (vector-ref candidate 6) fingerprint))))
+             (next (cons row (vector-ref m3t-model-lineage-registry 0)))
+             (pending (vector row next 'prestage))
+             (lineage (vector m3t-model-lineage-registry pending row
+                              next identity secret)))
+        (vector-set! row 7 witness)
+        (vector-set! m3t-model-lineage-registry 1 lineage)
+        (vector-set! current 0 lineage)
+        (guard
+          (caught
+            (#t
+              ;; M3's seal tail is irreversible. No model shell is returned
+              ;; on failure and an uncertain post-seal state must not escape.
+              (if (or (eq? (vector-ref pending 2) 'building)
+                      (eq? (vector-ref pending 2) 'sealing))
+                  (exit 134))
+              (vector-set! current 0 #f)
+              (vector-set! m3t-model-lineage-registry 1 #f)
+              (vector-set! row 2 #f)
+              (vector-set! row 3 #f)
+              (vector-set! row 5 #f)
+              (vector-set! row 6 #f)
+              (vector-set! row 7 #f)
+              (vector-set! row 8 #f)
+              (raise caught)))
+          (let ((model (m3t-model-create-core config initializer lineage)))
+            (vector-set! current 0 #f)
+            model)))))))))
 (define (m3t-public-model-profile model)
   (let ((entry (m3t-entry model 'model 'diagnostic-model-profile #t)))
     (vector-ref entry 11)))

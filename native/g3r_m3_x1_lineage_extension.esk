@@ -1,68 +1,9 @@
 ;;; Private same-call original-X1/M3 witness. Load after the CLI3 model core.
 ;;; Ordinary M3 creation has no lineage row and remains ineligible for SAVE.
-(define g3r-x1-model-lineage-registry (vector '() #f))
-(define g3r-x1-model-lineage-limit 64)
-
-(define (g3r-x1-model-lineage-capacity rows operation)
-  (let check ((remaining rows) (capacity g3r-x1-model-lineage-limit))
-    (cond
-      ((= capacity 0)
-       (m3t-fail 'unsupported operation "X1 model lineage row limit reached"))
-      ((null? remaining) #t)
-      ((not (pair? remaining))
-       (m3t-fail 'internal operation "X1 model lineage registry malformed"))
-      (else (check (cdr remaining) (- capacity 1))))))
+(define g3r-x1-model-lineage-registry m3t-model-lineage-registry)
 
 (define (g3r-x1-model-create config initializer)
-  (let ((operation 'g3r-x1-model-create))
-    (if (vector-ref g3r-x1-model-lineage-registry 1)
-        (m3t-fail 'invalid-state operation
-                   "X1 model lineage construction is active"))
-    (g3r-x1-model-lineage-capacity
-     (vector-ref g3r-x1-model-lineage-registry 0) operation)
-    (x1-private-config-validate config)
-    (let* ((x1-entry (x1-private-resolved-entry config))
-           (initial (m3t-entry initializer 'initializer operation #t))
-           (canonical (x1-private-config-canonical config))
-           (fingerprint (x1-private-config-fingerprint config)))
-      (if (not (and x1-entry (x1-resolved? config)))
-          (m3t-fail 'invalid-argument operation
-                     "expected an exact resolved X1 configuration"))
-      (let* ((identity (vector #f #f))
-             (row (vector #f 'pending config x1-entry #f
-                          canonical fingerprint #f initial))
-             (witness
-               (lambda (candidate)
-                 (and (eq? candidate row)
-                      (eq? (vector-ref candidate 0) (vector-ref identity 0))
-                      (eq? (vector-ref candidate 2) config)
-                      (eq? (vector-ref candidate 3) x1-entry)
-                      (eq? (vector-ref candidate 4) (vector-ref identity 1))
-                      (eq? (vector-ref candidate 8) initial)
-                      (eq? (x1-private-resolved-entry config) x1-entry)
-                      (string=? (vector-ref candidate 5) canonical)
-                      (string=? (vector-ref candidate 6) fingerprint))))
-             (next (cons row (vector-ref g3r-x1-model-lineage-registry 0)))
-             (pending (vector row next #f))
-             (lineage (vector g3r-x1-model-lineage-registry pending row
-                              next identity)))
-        (vector-set! row 7 witness)
-        (vector-set! g3r-x1-model-lineage-registry 1 pending)
-        (guard
-          (caught
-            (#t
-              ;; M3's seal tail is irreversible. No model shell is returned
-              ;; on failure and an uncertain post-seal state must not escape.
-              (if (vector-ref pending 2) (exit 134))
-              (vector-set! g3r-x1-model-lineage-registry 1 #f)
-              (vector-set! row 2 #f)
-              (vector-set! row 3 #f)
-              (vector-set! row 5 #f)
-              (vector-set! row 6 #f)
-              (vector-set! row 7 #f)
-              (vector-set! row 8 #f)
-              (raise caught)))
-          (m3t-model-create-core config initializer lineage))))))
+  ((vector-ref m3t-model-lineage-routes 1) config initializer))
 
 (define (g3r-x1-model-require model config)
   (let ((operation 'g3r-x1-model-require))
