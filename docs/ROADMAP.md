@@ -1696,6 +1696,17 @@ states and same-shape payload mutation. This does not establish the Eshkol
 construction shell, original X1/D2 lineage, C2 bytes/pair, compiled package,
 public SAVE, or cold LOAD.
 
+An isolated private D2 lineage source leaf now loads after the accepted CLI3
+T2-to-T1 bridge. Its same-call wrapper roots the original raw V256 T2 shell,
+opens D2, and binds the exact returned dataset shell and state in a companion
+row before returning the shell. Failed post-open construction closes the
+unexposed dataset before discarding the pending row; cleanup failure stops the
+process. Admission rejects an ordinary D2 dataset without that creation row,
+an equal-byte alternate tokenizer shell, a closed dataset, or changed cursor
+identity. Source-shape and mutation controls pass. This is not yet compiled
+or integrated with G3 construction, O2 adoption, C2 SAVE, or cold LOAD; live
+row retirement and generated package behavior remain separate gates.
+
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
 diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use

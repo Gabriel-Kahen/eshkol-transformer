@@ -1,0 +1,4 @@
+;;; Private diagnostic-C2 lineage composition. Keep the installed CLI3 root
+;;; and its T2-to-T1 bridge in their accepted relative order.
+(load "cli3_generate_root.esk")
+(load "g3r_d2_lineage_extension.esk")
