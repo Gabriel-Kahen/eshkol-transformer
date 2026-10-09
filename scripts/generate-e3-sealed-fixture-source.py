@@ -99,7 +99,7 @@ def p1() -> bytes:
 
 def i2() -> bytes:
     source = pinned("i2")
-    source = once(source, "((eq? route 'm3t)\n", 
+    source = once(source, "((eq? route 'm3t)\n",
                   "((or (eq? route 'm3t) (eq? route 'm3t-candidate))\n")
     source = once(source, "(define (i2-construction-begin-internal)",
                   "(define (i2-construction-begin-raw candidate?)")
