@@ -1819,6 +1819,9 @@ Eshkol package linkage, emitted no-work tail, genuine native call behavior,
 C2 publication and cold LOAD remain open. Committed idle G3 publication
 clears temporary call/output links in the existing final/manual tails; no
 creation-lineage source change or executed post-prefill result is inferred.
+The follow-up source gate also rejects a boxed-null native begin before any
+cleanup call and copies the four typed words when the final preclaim native
+check fails; owned source-state controls cover both failure cuts.
 
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished

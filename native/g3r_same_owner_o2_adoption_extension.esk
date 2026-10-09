@@ -135,7 +135,7 @@
       ((release-claimed!
          (lambda (cell)
            (let ((state (vector-ref cell 2)))
-             (if (not state) (exit 134))
+             (if (or (not state) (null? state)) (exit 134))
              (let ((status (o2-native-optimizer-state-release state)))
                (cond ((or (= status 0) (= status -2))
                       (vector-set! cell 2 #f)
@@ -150,7 +150,7 @@
          (lambda (cell)
            (let* ((hold (vector-ref cell 1))
                   (phase (vector-ref cell 9)))
-             (if (not hold) (exit 134))
+             (if (or (not hold) (null? hold)) (exit 134))
              (if (eq? phase 'pending) (g3r-save-cancel hold))
              (if (not (or (eq? phase 'ended-claimed)
                           (eq? phase 'hold-cleanup)))
@@ -202,7 +202,8 @@
              (guard
                (caught
                  (#t
-                   (if (vector-ref cell 1)
+                   (if (and (vector-ref cell 1)
+                            (not (null? (vector-ref cell 1))))
                        (guard (cleanup (#t (exit 134)))
                          (drain-failed! cell)))
                    (set! pending #f)
@@ -301,10 +302,12 @@
                                    (eq? (vector-ref record 1) row)
                                    (eq? (vector-ref record 3) roots)
                                    (eq? (car next-o2) row)
-                                   (eq? (car next-issued) record)
-                                   (= (g3r-save-check hold) 0)))
+                                   (eq? (car next-issued) record)))
                          (g3r-save-o2-fail 'invalid-state 2
                            "constructing O2 state or original graph changed"))
+                     (if (not (= (g3r-save-check hold) 0))
+                         (begin (g3r-save-o2-copy-first! first hold)
+                                (g3r-save-o2-raise-first first)))
                      (if (not (= (g3r-save-claim hold state) 0))
                          (begin (g3r-save-o2-copy-first! first hold)
                                 (g3r-save-o2-raise-first first)))

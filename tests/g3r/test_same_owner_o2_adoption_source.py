@@ -89,6 +89,14 @@ def validate(source, aggregate, closure):
                      "(g3r-save-check hold)"):
         if evidence not in claim:
             raise ValueError("preclaim authentication lost " + evidence)
+    ordered(claim, ["(g3r-save-o2-fail 'invalid-state 2",
+                    "(g3r-save-check hold)",
+                    "(g3r-save-o2-copy-first! first hold)",
+                    "(g3r-save-o2-raise-first first)"])
+    guard = section(adopt, "(guard\n", "(g3r-save-begin")
+    if "(and (vector-ref cell 1)" not in guard or \
+            "(not (null? (vector-ref cell 1)))" not in guard:
+        raise ValueError("boxed null begin can enter native cleanup")
     fixed = adopt[adopt.index(";; All remaining writes are fixed") :]
     for forbidden in ("cons", "make-vector", "o2-require-optimizer", "raise",
                       "g3r-save-check", "g3r-save-drain"):
@@ -118,14 +126,15 @@ def validate(source, aggregate, closure):
             raise ValueError("lexical issued-row validation lost " + evidence)
 
 
-def failed_cut(source, phase, drain_state, release_ok=True):
+def failed_cut(source, phase, drain_state, release_ok=True, first=None):
     """Execute the parsed failure helper with owned native/registry stand-ins."""
     form = next(f for f in parse(source) if isinstance(f, list) and
                 f[:2] == ["define", "g3r-save-o2-adoption-route"])
     helper = next(x[1] for x in form[2][2][1] if x[0] == "drain-failed!")
     hold = object()
     cell = [None, hold, object(), None, None, None, None, None, None, phase]
-    env = {"cell": cell, "hold": hold, "quarantine": None}
+    env = {"cell": cell, "hold": hold, "quarantine": None,
+           "first": first}
     calls = []
 
     def run(node, scope):
@@ -174,6 +183,8 @@ def failed_cut(source, phase, drain_state, release_ok=True):
             return None
         if op == "not":
             return not run(args[0], scope)
+        if op == "null?":
+            return run(args[0], scope) is None
         if op == "or":
             return any(run(item, scope) for item in args)
         if op in ("eq?", "="):
@@ -195,6 +206,54 @@ def failed_cut(source, phase, drain_state, release_ok=True):
     return result, cell, env["quarantine"], calls
 
 
+def native_preclaim_cut(source):
+    """Execute the actual parsed final preclaim failure branch with fake words."""
+    form = next(f for f in parse(source) if isinstance(f, list) and
+                f[:2] == ["define", "g3r-save-o2-adoption-route"])
+    adopt = next(x[1] for x in form[2][2][1] if x[0] == "adopt")
+    matches = []
+    def visit(node):
+        if isinstance(node, list):
+            if node[:1] == ["if"] and "['g3r-save-check', 'hold']" in str(node[1]):
+                matches.append(node)
+            for child in node:
+                visit(child)
+    visit(adopt)
+    if len(matches) != 2:
+        raise ValueError("expected capture and final preclaim native checks")
+    branch = matches[-1]
+    words = (5, 23, 7, 912)
+    recorded = []
+    class NativeError(Exception):
+        pass
+    def run(node):
+        if not isinstance(node, list):
+            return int(node) if node.lstrip("-").isdigit() else node
+        op, *args = node
+        if op == "g3r-save-check":
+            return -1
+        if op == "=":
+            return run(args[0]) == run(args[1])
+        if op == "not":
+            return not run(args[0])
+        if op == "begin":
+            for item in args:
+                run(item)
+            return None
+        if op == "g3r-save-o2-copy-first!":
+            recorded.append(words)
+            return None
+        if op == "g3r-save-o2-raise-first":
+            raise NativeError(recorded[0] if recorded else None)
+        raise ValueError("unexpected preclaim form " + op)
+    try:
+        if run(branch[1]):
+            run(branch[2])
+    except NativeError as error:
+        return error.args[0], recorded
+    raise ValueError("native preclaim failure was not raised")
+
+
 class AdoptionSource(unittest.TestCase):
     def setUp(self):
         self.source = SOURCE.read_text()
@@ -212,7 +271,10 @@ class AdoptionSource(unittest.TestCase):
             ("(equal? (vector-ref record 7) paths)", "#t"),
             ("(equal? (vector-ref record 8) aliases)", "#t"),
             ("(eq? old-head o2-states)", "#t"),
+            ("(not (null? (vector-ref cell 1)))", "#t"),
             ("(= (vector-ref row 5)", "(= (vector-ref record 9)"),
+            ("(g3r-save-o2-copy-first! first hold)\n                                (g3r-save-o2-raise-first first)))\n                     (if (not (= (g3r-save-claim",
+             "(g3r-save-o2-raise-first first))\n                     (if (not (= (g3r-save-claim"),
             ("(let* ((status (g3r-save-end hold))",
              "(let ((status (g3r-save-end hold))"),
             ("(vector-set! row 6 'live)", "(o2-require-optimizer 'late optimizer) (vector-set! row 6 'live)"),
@@ -256,6 +318,82 @@ class AdoptionSource(unittest.TestCase):
         self.assertEqual(calls, ["g3r-save-drain", "release-claimed!"])
         with self.assertRaises(SystemExit):
             failed_cut(self.source, "claimed", 2)
+
+    def test_boxed_null_begin_skips_cleanup(self):
+        form = next(f for f in parse(self.source) if isinstance(f, list) and
+                    f[:2] == ["define", "g3r-save-o2-adoption-route"])
+        adopt = next(x[1] for x in form[2][2][1] if x[0] == "adopt")
+        conditions = []
+        handlers = []
+        def visit(node):
+            if isinstance(node, list):
+                if node[:1] == ["if"] and "['drain-failed!', 'cell']" in str(node[2]):
+                    conditions.append(node[1])
+                if node[:1] == ["guard"] and "['drain-failed!', 'cell']" in str(node[1]):
+                    handlers.append(node[1][1][1:])
+                for child in node:
+                    visit(child)
+        visit(adopt)
+        self.assertEqual(len(conditions), 1)
+        self.assertEqual(len(handlers), 1)
+        class BoxedNull:
+            pass
+        null = BoxedNull()
+        live = object()
+        def evaluate(node, hold):
+            if isinstance(node, list):
+                op, *args = node
+                if op == "and":
+                    return all(evaluate(arg, hold) for arg in args)
+                if op == "not":
+                    return not evaluate(args[0], hold)
+                if op == "null?":
+                    return evaluate(args[0], hold) is null
+                if op == "vector-ref":
+                    self.assertEqual(args, ["cell", "1"])
+                    return hold
+                raise ValueError(op)
+            if node == "#t":
+                return True
+            return node
+        self.assertFalse(evaluate(conditions[0], null))
+        self.assertTrue(evaluate(conditions[0], live))
+        def caught_cut(hold):
+            cell = [None, hold]
+            first = [True, 5, 23, 7, 912]
+            pending = [True]
+            cleanup = []
+            for expression in handlers[0]:
+                if expression[0] == "if" and "drain-failed!" in str(expression):
+                    if evaluate(expression[1], cell[1]):
+                        cleanup.append("native-end")
+                elif expression[:2] == ["set!", "pending"]:
+                    pending[0] = False
+                elif expression[0] == "if" and expression[1] == \
+                        ["vector-ref", "first", "0"]:
+                    self.assertTrue(first[0])
+                    self.assertEqual(expression[2],
+                                     ["g3r-save-o2-raise-first", "first"])
+                    return cleanup, pending[0], tuple(first[1:])
+                else:
+                    raise ValueError("unexpected null-begin handler form")
+            raise ValueError("first native error was not rethrown")
+        self.assertEqual(caught_cut(null), ([], False, (5, 23, 7, 912)))
+        self.assertEqual(caught_cut(live), (["native-end"], False,
+                                            (5, 23, 7, 912)))
+
+    def test_final_native_check_copies_typed_error(self):
+        words, calls = native_preclaim_cut(self.source)
+        self.assertEqual(words, (5, 23, 7, 912))
+        self.assertEqual(calls, [words])
+        first = [True, *words]
+        result, cell, quarantine, cleanup = failed_cut(
+            self.source, "pending", 2, first=first)
+        self.assertTrue(result)
+        self.assertIsNone(quarantine)
+        self.assertEqual(cleanup,
+                         ["g3r-save-cancel", "g3r-save-end", "g3r-save-drain"])
+        self.assertEqual(first, [True, *words])
 
 
 if __name__ == "__main__":
