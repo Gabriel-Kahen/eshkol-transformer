@@ -75,6 +75,8 @@ def check_source(core, step, tail, restore, wrapper, aggregate, manifest):
     for name in required:
         branch(route, name)
     enter_text = str(branch(route, "enter"))
+    if "tr3-metrics" in enter_text:
+        raise ValueError("capsule enter mutates metrics before journal admission")
     if not ("['same-controls?', ['vector-ref', 'row', '4'], 'current']" in enter_text
             and "['o2-optimizer-completed-updates-internal'" in enter_text
             and enter_text.find("['same-controls?'") <
@@ -236,9 +238,11 @@ def identity_probe(shell, issued):
     return any(evaluate(predicate, row) for row in issued)
 
 
-def eval_route_branch(name, env):
+def eval_route_branch(name, env, core_text=None):
     """Run the parsed guard/fixed-tail branch over owned Python cells."""
-    item = branch(define(CORE, "tr3-controls-route"), name)
+    route = (define(CORE, "tr3-controls-route") if core_text is None
+             else parse(core_text)[-1])
+    item = branch(route, name)
     def run(node, local):
         if isinstance(node, str):
             if node == "#t":
@@ -373,11 +377,27 @@ class CapsuleSourceTests(unittest.TestCase):
                "return-cell": [False, False, False]}
         self.assertTrue(eval_route_branch("enter", env))
         self.assertEqual((row[6], row[7]), ("step", "step"))
+        # Busy-operation denial is a separate control, not evidence that a
+        # changed idle journal is compared to its original baseline.
+        with self.assertRaisesRegex(ValueError, "enrolled mutation"):
+            eval_route_branch("enter", env)
         row[6], row[7] = "idle", False
+        env["return-cell"][:] = [False, False, False]
         env["current_controls"] = ["changed", "cursor", 4]
+        journal_before, epoch_before = list(row[4]), row[5]
+        metrics_root = ["same staged metrics"]
+        env["tr3-metrics"] = metrics_root
         with self.assertRaisesRegex(ValueError, "enrolled mutation"):
             eval_route_branch("enter", env)
         self.assertEqual((row[6], row[7]), ("idle", False))
+        self.assertEqual(row[4], journal_before)
+        self.assertEqual(row[5], epoch_before)
+        self.assertEqual(metrics_root, ["same staged metrics"])
+        self.assertEqual(env["return-cell"], [False, False, False])
+        mutated = CORE.read_text().replace(
+            "(not (same-controls? (vector-ref row 4) current))", "#f", 1)
+        self.assertTrue(eval_route_branch("enter", env, mutated))
+        self.assertEqual((row[6], row[7]), ("step", "step"))
 
     def test_parsed_step_and_restore_tail_publish_exact_staged_epoch(self):
         record = object()
