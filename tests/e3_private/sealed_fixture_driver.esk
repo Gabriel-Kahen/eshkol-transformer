@@ -1,0 +1,74 @@
+;;; Source-only, noninstalled G3R fixture. Compiled proof is a separate gate.
+(define e3-g3r-fixture-root (vector #f))
+(define (e3-g3r-fixture-invariant condition)
+  (if condition #t (e3-native-invariant-fail)))
+(define (e3-g3r-fixture-reject thunk category operation)
+  (guard (caught
+           (#t
+             (e3-g3r-fixture-invariant
+               (and (transformer-error? caught)
+                    (eq? (transformer-error-category caught) category)
+                    (eq? (transformer-error-operation caught) operation)))
+             #t))
+    (thunk)
+    (e3-native-invariant-fail)))
+
+(define (e3-g3r-fixture-run)
+  (let* ((config (e3-test-fixed-config))
+         (initial (m3t-public-initializer-state 1729))
+         (original-words (m3t-public-initializer-words initial)))
+    ;; The accepted one-shot wrong-tie producer is consumed by the authentic
+    ;; P1 tied-registration path. Its first typed M3 schedule error must survive
+    ;; candidate P1/I2/native abort, after which a fresh construction succeeds.
+    (m3t-zero-test-wrong-tie-arm!)
+    (let ((caught
+            (guard (error (#t error))
+              (m3t-candidate-model-create config initial)
+              #f)))
+      (e3-g3r-fixture-invariant
+        (and (transformer-error? caught)
+             (eq? (transformer-error-category caught) 'internal)
+             (eq? (transformer-error-operation caught)
+                  'diagnostic-model-create)
+             (equal? (transformer-error-details caught)
+               '((source-domain m3t-transport) (source-code 10)
+                 (source-message "diagnostic tie schedule differs")
+                 (native-category 5)))
+             (not (vector-ref m3t-zero-test-wrong-tie-cell 0))
+             (equal? original-words (m3t-public-initializer-words initial)))))
+    (let ((model (m3t-candidate-model-create config initial)))
+    (vector-set! e3-g3r-fixture-root 0 model)
+    (let* ((tree (module-parameters model))
+           (head (parameter-tree-handle tree '("head" "weight")))
+           (tie (parameter-tree-handle tree '("token_embedding" "weight")))
+           (workspace (m3t-public-workspace-create model)))
+      (e3-g3r-fixture-invariant (eq? head tie))
+      ;; An authentic live owner blocks retirement without revoking a token.
+      (e3-g3r-fixture-reject
+        (lambda () (m3t-candidate-retire! model))
+        'invalid-state 'g3r-candidate-retire)
+      (e3-g3r-fixture-invariant
+        (equal? original-words (m3t-public-initializer-words initial)))
+      (m3t-public-workspace-release! workspace)
+      (m3t-candidate-retire! model)
+      (e3-g3r-fixture-reject
+        (lambda () (m3t-public-model-profile model))
+        'invalid-state 'diagnostic-model-profile)
+      (e3-g3r-fixture-reject
+        (lambda () (parameter-handle-tensor-internal head))
+        'invalid-state 'parameter-handle-tensor-internal)
+      (e3-g3r-fixture-invariant
+        (equal? original-words (m3t-public-initializer-words initial)))
+      ;; The same caller-owned original is live. This is a new, complete
+      ;; construction, not a resurrection of the retired model or successor.
+      (let* ((retry (m3t-candidate-model-create config initial))
+             (retry-tree (module-parameters retry)))
+        (vector-set! e3-g3r-fixture-root 0 retry)
+        (e3-g3r-fixture-invariant
+          (eq? (parameter-tree-handle retry-tree '("head" "weight"))
+               (parameter-tree-handle retry-tree
+                                      '("token_embedding" "weight"))))
+        (m3t-candidate-retire! retry)
+        (e3-g3r-fixture-invariant
+          (equal? original-words (m3t-public-initializer-words initial)))
+        #t)))))

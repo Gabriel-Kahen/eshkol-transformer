@@ -1953,6 +1953,16 @@ acceptance; a reviewed Eshkol fixture must bind all fourteen indexed handles,
 quiesce consumers, revoke P1/I2 authority and call the native commits without
 fallible work after the one-use preflight.
 
+An isolated, noninstalled E3 fixture source candidate now generates separate
+P1/I2/M3T overlays from pinned canonical bytes and retains the fourteen exact
+parameter, handle and carrier identities across seal. Its private retire path
+checks the sealed P1/I2 graph and native owner before a serialized revoke and
+tombstone tail; a source fixture records live-workspace rejection, stale model
+and handle expectations, and same-process reconstruction from the unchanged
+original. The fixed package builder does not yet register this tuple, and no
+compiled normal/repeat/sanitizer or feature-off object gate has run. It is a
+source-only dependency, not a proven sealed-M3 retirement or Section 9 result.
+
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
 names would return newly owned authenticated CPU f32 `[1,256]` kind-3 shells,
