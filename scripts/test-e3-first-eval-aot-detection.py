@@ -40,7 +40,9 @@ STAGED_LOCK = Path("/bundle/candidate-eshkol.lock")
 ORIGINAL_LOCK_LINE = b'LOCK_FILE="${PROJECT_ROOT}/toolchain/eshkol.lock"\n'
 STAGED_LOCK_LINE = b'LOCK_FILE="/bundle/candidate-eshkol.lock"\n'
 FE9_LINE = b'eshkol_commit\tfe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9\n'
-E7A_LINE = b'eshkol_commit\t7aa9df4cc078ca5c1cb0985ebe3cb43136b5a53d\n'
+E6803_LINE = b'eshkol_commit\t6803dbe24fb65eaad2901767bf010787517946ef\n'
+STAGED_COMMON_SHA256 = 'a55c60096a73991b13504ff70d88bd143891adc628894c1cf3f3c4198fc1a64a'
+STAGED_LOCK_SHA256 = 'b798822b18535405092b201248d8e37682d5ddb9555b6080ee32131659bfbea5'
 
 
 def digest(path: Path) -> str:
@@ -307,7 +309,7 @@ def git_bytes(*args: str) -> bytes:
 
 
 def source_observation(staged_toolchain: bool) -> tuple[dict[str, str], dict[str, object]]:
-    """Record actual source; admit only the reviewed one-line 7aa test staging."""
+    """Record actual source; admit only the reviewed one-line 6803 test staging."""
     status = git_bytes("status", "--porcelain=v1", "--untracked-files=all")
     expected_status = b" M scripts/common.sh\n" if staged_toolchain else b""
     require(status == expected_status,
@@ -315,7 +317,7 @@ def source_observation(staged_toolchain: bool) -> tuple[dict[str, str], dict[str
     files = git_bytes("ls-files", "-z").split(b"\0")
     hashes = {name.decode(): digest(ROOT / name.decode()) for name in files if name}
     admission: dict[str, object] = {
-        "mode": "staged-7aa-test-toolchain" if staged_toolchain else "clean",
+        "mode": "staged-6803-test-toolchain" if staged_toolchain else "clean",
         "git_status": status.decode(),
     }
     if staged_toolchain:
@@ -334,8 +336,12 @@ def source_observation(staged_toolchain: bool) -> tuple[dict[str, str], dict[str
         require(STAGED_LOCK.is_file() and not STAGED_LOCK.is_symlink(),
                 "staged test lock must be an ordinary file")
         candidate_lock = STAGED_LOCK.read_bytes()
-        require(candidate_lock == original_lock.replace(FE9_LINE, E7A_LINE),
-                "staged test lock differs from the sole fe9-to-7aa replacement")
+        require(candidate_lock == original_lock.replace(FE9_LINE, E6803_LINE),
+                "staged test lock differs from the sole fe9-to-6803 replacement")
+        if ROOT == Path(__file__).resolve().parent.parent:
+            require(hashlib.sha256(common).hexdigest() == STAGED_COMMON_SHA256 and
+                    hashlib.sha256(candidate_lock).hexdigest() == STAGED_LOCK_SHA256,
+                    "staged source or test lock differs from the reviewed 6803 bytes")
         for name, raw in (("original_common", original_common),
                           ("staged_common", common),
                           ("tracked_lock", tracked_lock),
@@ -355,11 +361,23 @@ def require_source_unchanged(staged_toolchain: bool,
             "source identity changed during detector run")
 
 
+def selected_provenance(path: Path, staged_toolchain: bool) -> dict[str, str]:
+    rows = [line.split("\t", 1) for line in path.read_text().splitlines()]
+    require(all(len(row) == 2 and row[0] and row[1] for row in rows) and
+            len({row[0] for row in rows}) == len(rows),
+            "selected toolchain provenance is malformed or duplicated")
+    values = dict(rows)
+    expected = E6803_LINE if staged_toolchain else FE9_LINE
+    require(values.get("eshkol_commit") == expected.split(b"\t", 1)[1].strip().decode(),
+            "selected toolchain build commit differs from the admitted lock")
+    return values
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path, help="fresh absolute evidence directory")
     parser.add_argument("--staged-toolchain-test", action="store_true",
-                        help="admit only the exact reviewed 7aa test-lock staging")
+               help="admit only the exact reviewed 6803 test-lock staging")
     args = parser.parse_args()
     out = args.output
     require(out.is_absolute() and not out.exists() and not out.is_symlink() and
@@ -378,7 +396,7 @@ def main() -> None:
     (out / "source-tree.txt").write_bytes(source_tree)
     provenance = Path(os.environ.get("ESHKOL_BUILD_DIR", ROOT / ".deps/eshkol-build")) / \
         "eshkol-transformer-provenance.tsv"
-    values = dict(line.split("\t", 1) for line in provenance.read_text().splitlines())
+    values = selected_provenance(provenance, args.staged_toolchain_test)
     cxx = values["cxx_path"]
     build = provenance.parent
     source = Path(os.environ.get("ESHKOL_SOURCE_DIR", ROOT / ".deps/eshkol-src"))

@@ -950,6 +950,11 @@ An opt-in detector test flag admits only the reviewed one-line staged
 still requires clean Git. The runner records actual staged source and lock
 bytes/hashes and rechecks them after all tuples. This source-only admission
 does not authorize a compiled gate or change the tracked production lock.
+An isolated successor retargets this opt-in test lock to exact compiler
+`6803dbe2`, checks its selected build provenance, and preserves the same
+default-clean and one-line staging rules. The tracked `fe9dfd52` production
+lock remains unchanged. This successor is source-only; neither the native
+union gate nor the E3 detector tuple is accepted by staging it.
 Its strict parser requires the complete `success-model-image` label and an
 actual SIGABRT after successful compile/link. Source parser controls pass; the
 compiled detector gate, separate closing LSan baselines and the §9 matrix remain

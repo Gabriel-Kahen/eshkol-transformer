@@ -48,7 +48,7 @@ def isolated_staged_source():
                         "source"], check=True)
         candidate = Path(temporary) / "candidate-eshkol.lock"
         candidate.write_bytes(lock.read_bytes().replace(module.FE9_LINE,
-                                                       module.E7A_LINE))
+                                                       module.E6803_LINE))
         with mock.patch.object(module, "ROOT", root), \
              mock.patch.object(module, "STAGED_LOCK", candidate):
             yield module, root, candidate
@@ -71,6 +71,7 @@ class FirstEvalVerdict(unittest.TestCase):
             observation = module.source_observation(True)
             hashes, admission = observation
             self.assertEqual(admission["git_status"], " M scripts/common.sh\n")
+            self.assertEqual(admission["mode"], "staged-6803-test-toolchain")
             self.assertEqual(bytes.fromhex(admission["original_common"]["hex"]),
                              module.git_bytes("show", "HEAD:scripts/common.sh"))
             self.assertEqual(bytes.fromhex(admission["staged_common"]["hex"]),
@@ -84,7 +85,7 @@ class FirstEvalVerdict(unittest.TestCase):
 
     def test_staged_source_rejects_near_misses_and_post_drift(self) -> None:
         changes = ("wrong-path", "multiline", "index", "untracked",
-                   "other-dirty", "wrong-lock", "tracked-lock")
+                   "other-dirty", "wrong-lock", "wrong-commit", "tracked-lock")
         for change in changes:
             with self.subTest(change=change), \
                  isolated_staged_source() as (module, root, candidate):
@@ -106,6 +107,10 @@ class FirstEvalVerdict(unittest.TestCase):
                     (root / "extra.txt").write_text("modified\n")
                 if change == "wrong-lock":
                     candidate.write_bytes(candidate.read_bytes() + b"extra\n")
+                if change == "wrong-commit":
+                    candidate.write_bytes(candidate.read_bytes().replace(
+                        module.E6803_LINE,
+                        b'eshkol_commit\t7aa9df4cc078ca5c1cb0985ebe3cb43136b5a53d\n'))
                 if change == "tracked-lock":
                     (root / "toolchain/eshkol.lock").write_bytes(
                         candidate.read_bytes())
@@ -128,6 +133,33 @@ class FirstEvalVerdict(unittest.TestCase):
                     common.write_bytes(common.read_bytes() + b"drift\n")
                 with self.assertRaises(ValueError):
                     module.require_source_unchanged(True, initial, commit, tree)
+
+    def test_exact_staged_pin_bytes_and_build_provenance(self) -> None:
+        module = runner()
+        lock = (ROOT / 'toolchain/eshkol.lock').read_bytes()
+        common = (ROOT / 'scripts/common.sh').read_bytes()
+        self.assertEqual(lock.count(module.FE9_LINE), 1)
+        self.assertEqual(common.count(module.ORIGINAL_LOCK_LINE), 1)
+        self.assertEqual(module.digest(ROOT / 'toolchain/eshkol.lock'),
+                         '8c168f5d560781245f6d4c73f695e72cbafa413b606d50bc7c36d2119acd9efe')
+        self.assertEqual(module.hashlib.sha256(lock.replace(
+            module.FE9_LINE, module.E6803_LINE)).hexdigest(),
+            module.STAGED_LOCK_SHA256)
+        self.assertEqual(module.hashlib.sha256(common.replace(
+            module.ORIGINAL_LOCK_LINE, module.STAGED_LOCK_LINE)).hexdigest(),
+            module.STAGED_COMMON_SHA256)
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'provenance.tsv'
+            path.write_text('eshkol_commit\t6803dbe24fb65eaad2901767bf010787517946ef\n'
+                            'cxx_path\t/usr/bin/clang++-21\n')
+            self.assertEqual(module.selected_provenance(path, True)['cxx_path'],
+                             '/usr/bin/clang++-21')
+            for malformed in ('eshkol_commit\t7aa9df4cc078ca5c1cb0985ebe3cb43136b5a53d\n',
+                              path.read_text() + 'eshkol_commit\t6803dbe24fb65eaad2901767bf010787517946ef\n',
+                              'eshkol_commit\n'):
+                path.write_text(malformed)
+                with self.assertRaises(ValueError):
+                    module.selected_provenance(path, True)
 
     def test_accepts_only_exact_signal_and_label(self) -> None:
         for selector, gradient in (("absent-to-present", "absent"),
