@@ -7,6 +7,9 @@
 #include <string.h>
 
 enum { ET_G3R_SAVE_MAX_TOMBSTONES = 64 };
+static const uint64_t save_parameter_shape[14][2] = {
+    {4,4}, {4,4}, {4,4}, {4,4}, {4,8}, {8,4}, {4,0},
+    {4,0}, {4,0}, {4,0}, {256,4}, {4,0}, {4,0}, {2,4}};
 enum {
   ET_G3R_O2_UNISSUED,
   ET_G3R_O2_ATTEMPTED,
@@ -23,6 +26,7 @@ typedef struct et_g3r_same_owner_hold {
   et_o2_g3r_save_hold *o2_hold;
   void *parameters[14];
   const void *identities[14];
+  et_f32_parameter_save_witness *witness[14];
   et_g3r_same_owner_save_error_v1 first;
   et_o2_optimizer_state *issued_state;
   unsigned issue_phase;
@@ -67,6 +71,12 @@ static void g3t_error(et_g3r_same_owner_hold *hold) {
       ET_G3R_SAVE_SOURCE_G3T, et_g3t_private_last_error_domain_v1(),
       et_g3t_private_last_error_category_v1(),
       et_g3t_private_last_error_code_v1()});
+}
+
+static void f32_save_error(et_g3r_same_owner_hold *hold,
+                           const et_f32_tensor_error *error) {
+  latch(hold, (et_g3r_same_owner_save_error_v1){
+      ET_G3R_SAVE_SOURCE_F32, 3, error->category, error->code});
 }
 
 int64_t et_g3r_private_same_owner_save_last_error_v1(
@@ -123,6 +133,33 @@ void *et_g3r_private_same_owner_save_begin_v1(
     free(hold);
     return NULL;
   }
+  if (et_g3r_private_g3t_save_check_v1(hold->g3_hold) != 0) {
+    g3t_error(NULL);
+    (void)et_g3r_private_g3t_save_end_v1(hold->g3_hold);
+    if (et_g3r_private_o2_save_end_v1(&hold->o2_hold, &error) != 0 &&
+        hold->o2_hold != NULL) abort();
+    free(hold);
+    return NULL;
+  }
+  et_f32_tensor_error f32_error;
+  size_t acquired = 0u;
+  for (; acquired < 14u; ++acquired) {
+    const size_t rank = save_parameter_shape[acquired][1] ? 2u : 1u;
+    if (et_f32_parameter_save_witness_begin_v1(
+            (et_f32_parameter *)parameters[acquired], identities[acquired],
+            rank, save_parameter_shape[acquired], &hold->witness[acquired],
+            &f32_error) != 0) {
+      f32_save_error(NULL, &f32_error); /* Save before other leaf cleanup. */
+      while (acquired > 0u)
+        if (et_f32_parameter_save_witness_end_v1(
+                &hold->witness[--acquired], &f32_error) != 0) abort();
+      (void)et_g3r_private_g3t_save_end_v1(hold->g3_hold);
+      if (et_g3r_private_o2_save_end_v1(&hold->o2_hold, &error) != 0 &&
+          hold->o2_hold != NULL) abort();
+      free(hold);
+      return NULL;
+    }
+  }
   hold->generator = generator;
   hold->m3t_owner = m3t_owner;
   memcpy(hold->parameters, parameters, sizeof(parameters));
@@ -166,6 +203,13 @@ int64_t et_g3r_private_same_owner_save_check_v1(void *candidate) {
     g3t_error(hold);
     return -1;
   }
+  et_f32_tensor_error f32_error;
+  for (size_t i = 0u; i < 14u; ++i)
+    if (et_f32_parameter_save_witness_check_v1(
+            hold->witness[i], &f32_error) != 0) {
+      f32_save_error(hold, &f32_error);
+      return -1;
+    }
   if (et_g3r_private_o2_save_check_v1(hold->o2_hold, &error) != 0) {
     o2_error(hold, &error);
     return -1;
@@ -349,6 +393,10 @@ int64_t et_g3r_private_same_owner_save_end_v1(void *candidate) {
     return -1; /* Keep both leases and the native state rooted for retry. */
   }
   (void)et_g3r_private_same_owner_save_check_v1(hold);
+  et_f32_tensor_error f32_error;
+  for (size_t i = 14u; i > 0u; --i)
+    if (et_f32_parameter_save_witness_end_v1(
+            &hold->witness[i - 1u], &f32_error) != 0) abort();
   if (et_g3r_private_g3t_save_end_v1(hold->g3_hold) != 0 &&
       !hold->first.source)
     g3t_error(hold);

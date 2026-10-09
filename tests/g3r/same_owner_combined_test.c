@@ -385,6 +385,144 @@ int main(void) {
   ((et_o2_optimizer_state *)state)->lifecycle = ET_O2_OPTIMIZER_STATE_LIVE;
   CHECK(et_g3r_private_same_owner_save_cleanup_retry_v1(hold) != 0);
   CHECK(optimizer->busy == 0 && c->save_hold == NULL);
+#ifdef ET_F32_TENSOR_TESTING
+  et_f32_test_live_counts_v1 before = {.struct_size = sizeof(before)};
+  et_f32_test_live_counts_v1 during = {.struct_size = sizeof(during)};
+  et_f32_test_live_counts_v1 after = {.struct_size = sizeof(after)};
+  et_f32_test_live_counts_snapshot_v1(&before);
+  hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
+  CHECK(hold != NULL);
+  et_f32_test_live_counts_snapshot_v1(&during);
+  CHECK(during.tensors == before.tensors + 56 &&
+        during.borrows == before.borrows);
+  uint64_t first_shape[2] = {4, 4};
+  et_f32_parameter_save_witness *extra = NULL;
+  CHECK(et_f32_parameter_save_witness_begin_v1(
+      model->p[0], model->handles[0], 2, first_shape, &extra, &f32) == 0);
+  CHECK(et_f32_parameter_save_witness_check_v1(extra, &f32) == 0);
+  const float *extra_value = et_f32_tensor_test_data_storage_v1(value_owner);
+  CHECK(extra_value != NULL);
+  ((unsigned char *)(uintptr_t)extra_value)[0] ^= 1u;
+  CHECK(et_f32_parameter_save_witness_check_v1(extra, &f32) != 0);
+  ((unsigned char *)(uintptr_t)extra_value)[0] ^= 1u;
+  CHECK(et_f32_parameter_save_witness_check_v1(extra, &f32) == 0);
+  et_f32_test_tensor_metadata_v1 extra_metadata = {
+      .struct_size = sizeof(extra_metadata)};
+  CHECK(et_f32_tensor_test_metadata_snapshot_v1(value_owner,
+                                                &extra_metadata) == 0);
+  CHECK(et_f32_tensor_test_metadata_corrupt_v1(
+      (et_f32_tensor *)(uintptr_t)value_owner,
+      ET_F32_TEST_TENSOR_METADATA_DATA, 0) == 0);
+  CHECK(et_f32_parameter_save_witness_check_v1(extra, &f32) != 0);
+  CHECK(et_f32_tensor_test_metadata_restore_v1(
+      (et_f32_tensor *)(uintptr_t)value_owner, &extra_metadata) == 0);
+  CHECK(et_f32_parameter_save_witness_check_v1(extra, &f32) == 0);
+  CHECK(et_f32_parameter_save_witness_check_v1(
+      (void *)(uintptr_t)1u, &f32) != 0);
+  et_f32_parameter_save_witness *stale = extra;
+  CHECK(et_f32_parameter_save_witness_end_v1(&extra, &f32) == 0 &&
+        extra == NULL);
+  CHECK(et_f32_parameter_save_witness_check_v1(stale, &f32) != 0);
+  et_f32_gradient_reset_plan *reset = NULL;
+  CHECK(et_f32_gradient_reset_plan_prepare_v1(
+      1, &model->p[0], &reset, &f32) != 0 && reset == NULL);
+  CHECK(et_g3r_private_same_owner_save_check_v1(hold) == 0);
+  CHECK(et_g3r_private_same_owner_save_end_v1(hold) == 0);
+  et_f32_test_live_counts_snapshot_v1(&after);
+  CHECK(after.tensors == before.tensors && after.borrows == before.borrows);
+
+  et_f32_parameter_save_witness_test_fail_after_v1(8);
+  CHECK(et_g3r_private_same_owner_save_begin_v1(c, model, optimizer) == NULL);
+  CHECK(et_g3r_private_same_owner_save_last_error_v1(&first) == 0);
+  CHECK(first.source == ET_G3R_SAVE_SOURCE_F32 && first.domain == 3 &&
+        first.category == ET_F32_TENSOR_ERROR_INTERNAL &&
+        first.code == ET_F32_TENSOR_CODE_ALLOCATION_FAILED);
+  CHECK(optimizer->busy == 0 && c->save_hold == NULL);
+  et_f32_test_live_counts_snapshot_v1(&after);
+  CHECK(after.tensors == before.tensors && after.borrows == before.borrows);
+  et_f32_parameter_save_witness_test_fail_after_v1(SIZE_MAX);
+  hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
+  CHECK(hold != NULL);
+  CHECK(et_g3r_private_same_owner_save_end_v1(hold) == 0);
+
+  hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
+  CHECK(hold != NULL);
+  const float *value_storage = et_f32_tensor_test_data_storage_v1(value_owner);
+  CHECK(value_storage != NULL);
+  uint32_t original_value_bits = 0;
+  memcpy(&original_value_bits, value_storage, sizeof(original_value_bits));
+  ((unsigned char *)(uintptr_t)value_storage)[0] ^= 1u;
+  CHECK(et_g3r_private_same_owner_save_check_v1(hold) != 0);
+  CHECK(et_g3r_private_same_owner_save_last_error_v1(&first) == 0 &&
+        first.source == ET_G3R_SAVE_SOURCE_G3T);
+  memcpy((void *)(uintptr_t)value_storage, &original_value_bits,
+         sizeof(original_value_bits));
+  CHECK(et_g3r_private_same_owner_save_end_v1(hold) != 0);
+  CHECK(et_g3r_private_same_owner_save_last_error_v1(&observed) == 0 &&
+        memcmp(&observed, &first, sizeof(first)) == 0);
+
+  hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
+  CHECK(hold != NULL);
+  et_f32_test_tensor_metadata_v1 value_metadata = {
+      .struct_size = sizeof(value_metadata)};
+  CHECK(et_f32_tensor_test_metadata_snapshot_v1(value_owner,
+                                                &value_metadata) == 0);
+  CHECK(et_f32_tensor_test_metadata_corrupt_v1(
+      (et_f32_tensor *)(uintptr_t)value_owner,
+      ET_F32_TEST_TENSOR_METADATA_SHAPE, 0) == 0);
+  CHECK(et_g3r_private_same_owner_save_check_v1(hold) != 0);
+  CHECK(et_f32_tensor_test_metadata_restore_v1(
+      (et_f32_tensor *)(uintptr_t)value_owner, &value_metadata) == 0);
+  CHECK(et_g3r_private_same_owner_save_end_v1(hold) != 0);
+
+  hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
+  CHECK(hold != NULL);
+  uint32_t altered_gradient[16] = {0};
+  altered_gradient[0] = UINT32_C(0x3f800000);
+  et_f32_parameter_test_set_gradient_bits_v1(
+      model->p[0], altered_gradient, 16);
+  CHECK(et_g3r_private_same_owner_save_check_v1(hold) != 0);
+  CHECK(et_g3r_private_same_owner_save_last_error_v1(&first) == 0);
+  CHECK(first.source == ET_G3R_SAVE_SOURCE_F32 && first.domain == 3 &&
+        first.category == ET_F32_TENSOR_ERROR_INVALID_STATE &&
+        first.code == ET_F32_TENSOR_CODE_INVALID_HANDLE);
+  CHECK(et_g3r_private_same_owner_save_end_v1(hold) != 0);
+  CHECK(et_g3r_private_same_owner_save_last_error_v1(&observed) == 0 &&
+        memcmp(&observed, &first, sizeof(first)) == 0);
+  altered_gradient[0] = 0;
+  et_f32_parameter_test_set_gradient_bits_v1(
+      model->p[0], altered_gradient, 16);
+  hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
+  CHECK(hold != NULL);
+  et_f32_parameter_test_set_metadata_v1(
+      model->p[0], ET_F32_GRADIENT_PRESENT, 1, UINT32_C(0x3f800000));
+  CHECK(et_g3r_private_same_owner_save_check_v1(hold) != 0);
+  CHECK(et_g3r_private_same_owner_save_last_error_v1(&first) == 0 &&
+        first.source == ET_G3R_SAVE_SOURCE_F32);
+  CHECK(et_g3r_private_same_owner_save_end_v1(hold) != 0);
+  et_f32_parameter_test_set_metadata_v1(
+      model->p[0], ET_F32_GRADIENT_ABSENT, 0, 0);
+  hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
+  CHECK(hold != NULL);
+  CHECK(et_g3r_private_same_owner_save_end_v1(hold) == 0);
+  hold = et_g3r_private_same_owner_save_begin_v1(c, model, optimizer);
+  CHECK(hold != NULL);
+  int exhausted = 0;
+  for (size_t attempt = 0u; attempt < 897u; ++attempt) {
+    extra = NULL;
+    if (et_f32_parameter_save_witness_begin_v1(
+            model->p[0], model->handles[0], 2, first_shape,
+            &extra, &f32) != 0) {
+      CHECK(extra == NULL && f32.category == ET_F32_TENSOR_ERROR_INVALID_STATE &&
+            f32.code == ET_F32_TENSOR_CODE_INVALID_HANDLE);
+      exhausted = 1;
+      break;
+    }
+    CHECK(et_f32_parameter_save_witness_end_v1(&extra, &f32) == 0);
+  }
+  CHECK(exhausted && et_g3r_private_same_owner_save_check_v1(hold) == 0);
+  CHECK(et_g3r_private_same_owner_save_end_v1(hold) == 0);
+#endif
   CHECK(et_g3t_private_call_acquire_v1(c, 0) == 0);
   CHECK(et_g3t_private_call_abort_v1(c) == 0);
   CHECK(et_g3t_private_generator_close_v1(c) == 0);

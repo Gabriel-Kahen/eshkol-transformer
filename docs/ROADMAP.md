@@ -1778,6 +1778,21 @@ enrolled native commit, and gives step/restore a fixed fail-stop postcommit
 return; generated behavior is still unrun.
 Compiled no-reentry, package linkage, full C2 SAVE, cold LOAD, and resumed
 equivalence remain open.
+The isolated native same-owner F32 witness now adds exact detached value and
+absent-gradient bit baselines for the fourteen authenticated M3T parameters.
+It uses the existing G3 model pins as value mutation exclusion: those pins
+already own the value borrow sentinel and require gradients unborrowed, so the
+witness adds no competing long-lived F32 borrow. It checks original child and
+backing identities, canonical shapes and strides, gradient metadata and all
+value/gradient bits under the O2/G3 hold; ordinary mutation and prepared
+gradient/reset plans are denied by the existing pins. At most 896 issued
+per-parameter witness tokens, including inert stale-address tombstones, are
+admitted across the process; partial capture drains detached
+baselines before G3/O2 while retaining the first typed error. Focused normal
+and sanitizer host controls prove this native source behavior, P1 cloning under
+pins, and the one-issued-O2-state rule. This does not establish a serialized
+Eshkol SAVE caller, C2 bytes or pair publication, cold LOAD, a compiled
+package, or concurrent unsynchronized raw-pointer safety.
 
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished

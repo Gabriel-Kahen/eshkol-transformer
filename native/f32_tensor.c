@@ -2817,6 +2817,237 @@ static int parameter_metadata_valid(const et_f32_parameter *parameter) {
          tensor_finite(parameter->gradient);
 }
 
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+/* The G3 pin already owns each value's active_borrow sentinel. Its preflight
+ * requires gradients unborrowed. These are detached bit baselines, not leases. */
+enum { F32_SAVE_WITNESS_LIMIT = 14 * 64 };
+struct et_f32_parameter_save_witness {
+  struct et_f32_parameter_save_witness *next;
+  et_f32_parameter *parameter;
+  const void *identity;
+  et_f32_tensor *child[2], *baseline[2];
+  const void *data[2], *shape_storage[2], *stride_storage[2];
+  et_f32_tensor_borrow *value_pin;
+  size_t rank, bytes[2], count[2];
+  uint64_t shape[2];
+  size_t strides[2];
+  uint32_t state, weight_bits;
+  uint64_t contributions;
+  unsigned live;
+};
+static et_f32_parameter_save_witness *save_witnesses;
+static size_t save_witness_count;
+#ifdef ET_F32_TENSOR_TESTING
+static size_t save_witness_fail_after = SIZE_MAX;
+void et_f32_parameter_save_witness_test_fail_after_v1(size_t captures) {
+  save_witness_fail_after = captures;
+}
+#endif
+
+static et_f32_parameter_save_witness *save_witness_admit(const void *candidate) {
+  for (et_f32_parameter_save_witness *w = save_witnesses; w; w = w->next)
+    if (w == candidate && w->live) return w;
+  return NULL;
+}
+
+static int32_t save_witness_mismatch(et_f32_tensor_error *error,
+                                     const char *detail) {
+  return set_error(error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+                   ET_F32_TENSOR_CODE_INVALID_HANDLE, "f32-save-witness",
+                   detail);
+}
+
+static int32_t save_witness_match(
+    const et_f32_parameter_save_witness *w, et_f32_tensor_error *error) {
+  et_f32_parameter *p = find_parameter(w->parameter);
+  if (!p || p->magic != ET_F32_PARAMETER_MAGIC || p->identity != w->identity ||
+      p->value != w->child[0] || p->gradient != w->child[1] ||
+      p->value == p->gradient || p->plan_pins != 1u ||
+      p->gradient_state != w->state ||
+      p->normalization_weight_bits != w->weight_bits ||
+      p->contribution_count != w->contributions ||
+      !valid_tensor(w->child[0]) || !valid_tensor(w->child[1]))
+    return save_witness_mismatch(error, "parameter identity or metadata changed");
+  if (p->gradient_state != ET_F32_GRADIENT_ABSENT ||
+      p->contribution_count || p->normalization_weight_bits ||
+      p->value->active_borrow != w->value_pin || !w->value_pin ||
+      p->gradient->active_borrow || p->value->plan_pins ||
+      p->gradient->plan_pins)
+    return save_witness_mismatch(error, "model pin or absent gradient changed");
+  for (size_t k = 0; k < 2; ++k) {
+    const et_f32_tensor *t = w->child[k];
+    if (t->rank != w->rank || t->element_count != w->count[k] ||
+        t->byte_length != w->bytes[k] || t->data != w->data[k] ||
+        t->shape != w->shape_storage[k] ||
+        t->strides != w->stride_storage[k] ||
+        !t->shape || !t->strides || !t->data)
+      return save_witness_mismatch(error, "child backing changed");
+    for (size_t d = 0; d < w->rank; ++d)
+      if (t->shape[d] != w->shape[d] || t->strides[d] != w->strides[d])
+        return save_witness_mismatch(error, "child shape or stride changed");
+    if (!valid_tensor(w->baseline[k]) ||
+        w->baseline[k]->byte_length != t->byte_length ||
+        memcmp(t->data, w->baseline[k]->data, t->byte_length))
+      return save_witness_mismatch(error, "child bits changed");
+  }
+  if (!tensor_exact_positive_zero(p->gradient))
+    return save_witness_mismatch(error, "absent gradient is not positive zero");
+  return success(error);
+}
+
+int32_t et_f32_parameter_save_witness_begin_v1(
+    et_f32_parameter *parameter, const void *identity, size_t rank,
+    const uint64_t *shape, et_f32_parameter_save_witness **output,
+    et_f32_tensor_error *error) {
+  int32_t preflight = preflight_output(
+      output, output == NULL ? 0u : sizeof(*output), error,
+      "f32-save-witness");
+  if (preflight) return preflight;
+  if (!error || !output || *output || !shape || !identity ||
+      (rank != 1u && rank != 2u))
+    return set_error(error, ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+                     ET_F32_TENSOR_CODE_INVALID_BUFFER, "f32-save-witness",
+                     "invalid witness operands");
+  if (save_witness_count >= F32_SAVE_WITNESS_LIMIT)
+    return set_error(error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+                     ET_F32_TENSOR_CODE_INVALID_HANDLE, "f32-save-witness",
+                     "finite witness token budget exhausted");
+  int32_t result = require_parameter(parameter, "f32-save-witness", error);
+  if (result) return result;
+  if (!aligned_pointer(shape, _Alignof(uint64_t)) ||
+      !pointer_span_fits(shape, rank * sizeof(*shape)) ||
+      ranges_overlap(shape, rank * sizeof(*shape), output, sizeof(*output)) ||
+      ranges_overlap(shape, rank * sizeof(*shape), error, sizeof(*error)))
+    return save_witness_mismatch(error, "expected shape storage aliases output");
+  if (parameter->identity != identity || !valid_tensor(parameter->value) ||
+      !valid_tensor(parameter->gradient) ||
+      parameter->value == parameter->gradient ||
+      parameter->gradient_state != ET_F32_GRADIENT_ABSENT ||
+      !parameter_metadata_valid(parameter) ||
+      parameter->plan_pins != 1u ||
+      parameter->value->active_borrow == NULL ||
+      parameter->gradient->active_borrow != NULL ||
+      parameter->value->plan_pins || parameter->gradient->plan_pins)
+    return save_witness_mismatch(error, "source parameter is not admissible");
+  et_f32_tensor *children[2] = {parameter->value, parameter->gradient};
+  if (shape[0] == 0u || shape[0] > SIZE_MAX ||
+      (rank == 2u && (shape[1] == 0u || shape[1] > SIZE_MAX)))
+    return save_witness_mismatch(error, "expected shape is invalid");
+  size_t count = (size_t)shape[0];
+  if (rank == 2u && count > SIZE_MAX / (size_t)shape[1])
+    return save_witness_mismatch(error, "expected shape is invalid");
+  if (rank == 2u) count *= (size_t)shape[1];
+  if (count > SIZE_MAX / sizeof(float))
+    return save_witness_mismatch(error, "expected byte length overflows");
+  for (size_t k = 0; k < 2; ++k) {
+    et_f32_tensor *t = children[k];
+    if (t->rank != rank || t->element_count != count ||
+        t->byte_length != count * sizeof(float) ||
+        !t->shape || !t->strides || !t->data ||
+        t->shape[0] != shape[0] ||
+        t->strides[rank - 1u] != sizeof(float) ||
+        (rank == 2u &&
+         (t->shape[1] != shape[1] ||
+          t->strides[0] != (size_t)shape[1] * sizeof(float))))
+      return save_witness_mismatch(error, "child has wrong canonical shape");
+  }
+#ifdef ET_F32_TENSOR_TESTING
+  if (save_witness_fail_after == 0u)
+    return set_error(error, ET_F32_TENSOR_ERROR_INTERNAL,
+                     ET_F32_TENSOR_CODE_ALLOCATION_FAILED, "f32-save-witness",
+                     "injected witness capture allocation failure");
+  if (save_witness_fail_after != SIZE_MAX) --save_witness_fail_after;
+#endif
+  et_f32_parameter_save_witness *w = f32_calloc(1u, sizeof(*w));
+  if (!w)
+    return set_error(error, ET_F32_TENSOR_ERROR_INTERNAL,
+                     ET_F32_TENSOR_CODE_ALLOCATION_FAILED, "f32-save-witness",
+                     "cannot allocate witness token");
+  w->parameter = parameter;
+  w->identity = identity;
+  w->rank = rank;
+  w->shape[0] = shape[0];
+  if (rank == 2u) w->shape[1] = shape[1];
+  w->state = parameter->gradient_state;
+  w->weight_bits = parameter->normalization_weight_bits;
+  w->contributions = parameter->contribution_count;
+  w->value_pin = parameter->value->active_borrow;
+  for (size_t k = 0; k < 2; ++k) {
+    et_f32_tensor *t = children[k];
+    w->child[k] = t;
+    w->data[k] = t->data;
+    w->shape_storage[k] = t->shape;
+    w->stride_storage[k] = t->strides;
+    w->bytes[k] = t->byte_length;
+    w->count[k] = t->element_count;
+  }
+  for (size_t d = 0; d < rank; ++d) w->strides[d] = children[0]->strides[d];
+  for (size_t k = 0; k < 2; ++k) {
+    result = et_f32_tensor_clone_v1(children[k], &w->baseline[k], error);
+    if (result) {
+      et_f32_tensor_error first = *error, cleanup;
+      for (size_t j = 2u; j > 0u; --j)
+        if (w->baseline[j - 1u] &&
+            et_f32_tensor_destroy_v1(&w->baseline[j - 1u], &cleanup)) abort();
+      free(w);
+      *error = first;
+      return result;
+    }
+  }
+  if (save_witness_match(w, error)) {
+    et_f32_tensor_error first = *error, cleanup;
+    for (size_t j = 2u; j > 0u; --j)
+      if (et_f32_tensor_destroy_v1(&w->baseline[j - 1u], &cleanup)) abort();
+    free(w);
+    *error = first;
+    return first.category;
+  }
+  w->live = 1u;
+  w->next = save_witnesses;
+  save_witnesses = w;
+  ++save_witness_count;
+  *output = w;
+  return success(error);
+}
+
+int32_t et_f32_parameter_save_witness_check_v1(
+    const et_f32_parameter_save_witness *candidate,
+    et_f32_tensor_error *error) {
+  if (preflight_error_operand(error, NULL, 0u))
+    return ET_F32_TENSOR_ERROR_INVALID_ARGUMENT;
+  et_f32_parameter_save_witness *w = save_witness_admit(candidate);
+  if (!w) return save_witness_mismatch(error, "witness is foreign or stale");
+  if (ranges_overlap(error, sizeof(*error), w, sizeof(*w)))
+    return ET_F32_TENSOR_ERROR_INVALID_ARGUMENT;
+  return save_witness_match(w, error);
+}
+
+int32_t et_f32_parameter_save_witness_end_v1(
+    et_f32_parameter_save_witness **slot, et_f32_tensor_error *error) {
+  if (preflight_output(slot, slot == NULL ? 0u : sizeof(*slot), error,
+                       "f32-save-witness-end"))
+    return ET_F32_TENSOR_ERROR_INVALID_ARGUMENT;
+  if (!error || !slot) return ET_F32_TENSOR_ERROR_INVALID_ARGUMENT;
+  et_f32_parameter_save_witness *w = save_witness_admit(*slot);
+  if (!w) return save_witness_mismatch(error, "witness is foreign or stale");
+  if (ranges_overlap(error, sizeof(*error), w, sizeof(*w)))
+    return ET_F32_TENSOR_ERROR_INVALID_ARGUMENT;
+  et_f32_tensor_error cleanup;
+  for (size_t j = 2u; j > 0u; --j)
+    if (et_f32_tensor_destroy_v1(&w->baseline[j - 1u], &cleanup)) abort();
+  w->parameter = NULL;
+  w->identity = NULL;
+  memset(w->child, 0, sizeof(w->child));
+  memset(w->data, 0, sizeof(w->data));
+  memset(w->shape_storage, 0, sizeof(w->shape_storage));
+  memset(w->stride_storage, 0, sizeof(w->stride_storage));
+  w->value_pin = NULL;
+  w->live = 0u;
+  *slot = NULL;
+  return success(error);
+}
+#endif
+
 static int f32_environment_admitted(uint32_t control) {
   /* x86-64 Clang evaluates scalar float arithmetic through SSE. Require
    * round-to-nearest-even, masked exceptions, and no DAZ/FTZ substitution. */
