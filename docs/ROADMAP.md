@@ -2696,7 +2696,9 @@ publication, public G2 and continuation remain pending.
   now roots literal budget-two/EOS creator identity and issues a per-call ticket
   only inside the public generate callable. A fixed private route binds exact
   output/terminal authority before native zero; the existing P2/G1 adapter
-  remains unchanged. Source and mutation checks are staged. Public result
+  remains unchanged. The callable has a library-init mutable value binding;
+  compiler/link execution of that binding remains unrun. Source and mutation
+  checks are staged. Public result
   accessors, genuine AOT/normal/repeat/sanitizer and emitted zero-tail proof,
   package/native symbol closure and continuation remain pending.
 

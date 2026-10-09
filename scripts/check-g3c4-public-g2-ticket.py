@@ -65,8 +65,10 @@ def validate(dispatch: str, terminal: str, call_entry: str, adapter: bytes,
     assert not any(isinstance(form, list) and form[:2] == ["define", "g3c4-public-g2-bridge"]
                    for form in parsed)
     generate = top_define(parsed, "g3c4-public-generator-generate")
-    assert generate == ["define", ["g3c4-public-generator-generate", "generator", "input"],
-                        ["exit", "134"]]
+    # A procedure-form define has no mutable global cell in compiler library
+    # mode; the private initializer must store into this callable value cell.
+    assert generate == ["define", "g3c4-public-generator-generate",
+                        ["lambda", ["generator", "input"], ["exit", "134"]]]
     route = top_define(parsed, "g3c4-p2g2-terminal-close-public-private")
     assert route[1] == "g3c4-p2g2-terminal-close-public-private"
     assert route[2][0] == "let"

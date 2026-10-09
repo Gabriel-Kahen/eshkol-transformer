@@ -245,8 +245,8 @@
 (define g3c4-public-g2-output-anchors (vector '()))
 (define g3c4-public-g2-output-bindings (vector '()))
 
-(define (g3c4-public-generator-generate generator input)
-  (exit 134))
+(define g3c4-public-generator-generate
+  (lambda (generator input) (exit 134)))
 (define g3c4-p2g2-terminal-close-public-private
   (let ((secret (vector 'g3c4-public-g2-call-secret)))
     (let ((bridge (lambda (action generator input ticket output terminal-row

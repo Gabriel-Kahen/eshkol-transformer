@@ -50,6 +50,13 @@ class TicketSourceTest(unittest.TestCase):
             "'admit generator input #f #f #f #f 0 -1 -1",
             1))
 
+    def test_public_callable_has_library_init_storage(self) -> None:
+        self.reject(dispatch=self.inputs["dispatch"].replace(
+            "(define g3c4-public-generator-generate\n"
+            "  (lambda (generator input) (exit 134)))",
+            "(define (g3c4-public-generator-generate generator input)\n"
+            "  (exit 134))", 1))
+
     def test_budget_one_cannot_reach_ticket(self) -> None:
         self.reject(dispatch=self.inputs["dispatch"].replace(
             "(if (= (vector-ref (vector-ref generator-entry 7) 5) 2)",
