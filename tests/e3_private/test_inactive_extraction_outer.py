@@ -82,7 +82,8 @@ class Contract(unittest.TestCase):
                 outer.material(root, sha256(bad).hexdigest(), Path.read_bytes)
 
     def test_actual_flat_attester_precreate_pin(self) -> None:
-        source = J_REPO / "tests/g3c4/f_artifact_attest.py"
+        source = (EVIDENCE / "g3c4-public-g2-f-attester-flat-source-20261009-c/"
+                  "f_artifact_attest.py")
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             candidate = root / "f_artifact_attest.py"
@@ -91,8 +92,11 @@ class Contract(unittest.TestCase):
             candidate.write_bytes(candidate.read_bytes() + b"# drift\n")
             with self.assertRaisesRegex(ValueError, "selected bytes changed"):
                 outer.flat_attester(root, Path.read_bytes)
+            candidate.write_bytes((J_REPO / "tests/g3c4/f_artifact_attest.py").read_bytes())
+            with self.assertRaisesRegex(ValueError, "selected bytes changed"):
+                outer.flat_attester(root, Path.read_bytes)
 
-    def test_i_profile_tail_only_and_stale_cmd_denial(self) -> None:
+    def test_j_profile_tail_only_and_stale_cmd_denial(self) -> None:
         class H:
             @staticmethod
             def require(ok, why):
@@ -170,6 +174,16 @@ class Contract(unittest.TestCase):
         self.assertEqual(outer.RECIPE_SHA, guest.RECIPE_SHA)
         self.assertEqual(sha256(Path(outer.recipe.__file__).read_bytes()).hexdigest(),
                          outer.RECIPE_SHA)
+        previous = subprocess.run(
+            ["git", "--no-optional-locks", "-C", str(Path(outer.__file__).parents[2]),
+             "show", "652e0c64b67f74f812ca275725a6b7419cbcd0fb:"
+             "tests/e3_private/inactive_extraction_recipe.py"],
+            check=True, capture_output=True).stdout
+        with tempfile.TemporaryDirectory() as tmp:
+            stale = Path(tmp) / "e3_recipe.py"
+            stale.write_bytes(previous)
+            with self.assertRaisesRegex(ValueError, "selected bytes changed"):
+                outer.exact_bytes(stale, outer.RECIPE_SHA, Path.read_bytes)
 
     def test_guest_input_nofollow_and_phase_receipt_denial(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

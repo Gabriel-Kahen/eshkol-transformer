@@ -17,9 +17,10 @@ The future wrapper must stage reviewed J bytes under `/bundle/h-source` and
 retain that root and the decision unchanged through physical closure.
 
 The selected bundle holds an exact canonical `e3-material-pins.json` with all
-nine recipe inputs, E3 guest and recipe source bytes, accepted tool/runtime
+nine recipe inputs, E3 guest and the reviewed recipe C source bytes, accepted tool/runtime
 tables, external 477-byte lock, and J source/review seals. The guest performs
-the reviewed E3 source/F-copy preparation, then runs normal followed by
+the reviewed E3 source/F-copy preparation with the separately pinned flat
+attester (`1a7e5369`), then runs normal followed by
 sanitizer inventory extraction into `/out/emissions-{normal,sanitize}`. H's
 owned capture retains each raw argv/stream/numeric wait in `/out/phases` and
 the extraction-only result in `/out/evidence`. A failed or uncertain phase

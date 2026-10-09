@@ -16,7 +16,7 @@ J_FILES = {
     "tests/g3c4/f_artifact_attest.py": "5aac55665ad5a1767c54591ec3530667cced310f07948257521f34ed43999e78",
     "tests/g3c4/f_image_loader_collect.py": "8b92aabe7fb742b81dc5e1d8fcd57bf92b9f5b3ad702920e9c826ce8faafd101",
 }
-RECIPE_SHA = "4661a73c6f921fd526469d8b3f0b834ccd679908fc488e1318552e67ef78f27f"
+RECIPE_SHA = "215346061c87c6cf2c3475fdd7f2cea4f88e3f30239bc1b8a987d079f683761d"
 
 
 def ordinary(path: Path) -> bytes:

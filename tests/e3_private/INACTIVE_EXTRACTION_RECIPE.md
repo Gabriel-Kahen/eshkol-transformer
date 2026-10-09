@@ -12,8 +12,10 @@ No current loader result SHA, E3 admission SHA, or one-shot decision is guessed.
 
 The E3 package admission is `e3-sealed-fixture-source-admission-v1`, not the public-G2
 schema. It pins clean E3 commit `e7db77c6`, tree `fe3822da`, 2,391 tracked
-members and their full recorded hash. The reviewed F utility is loaded only
-from `/bundle/f_artifact_attest.py` at its exact code digest. Its three exact
+members and their full recorded hash. The reviewed flat F utility is loaded only
+from `/bundle/f_artifact_attest.py` at digest `1a7e5369`; its copied-binary
+check uses the selected J collector's `readelf --debug-dump=no-follow-links -d`
+receipt and still requires exact raw equality and empty stderr. Its three exact
 `scripts/common.sh` transformations point at the separately pinned 477-byte
 `/bundle/public-g2-6803.lock` and match the copied-F CMake cache types. It
 authenticates the historical F failed output and compiler source, stages a

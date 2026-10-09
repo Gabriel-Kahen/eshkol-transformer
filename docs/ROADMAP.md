@@ -957,6 +957,8 @@ and nonpublishing phase predicates. The proposed guest retains normal then
 sanitizer raw receipts under persistent `/out`. A fixed ROOT decision, actual
 copied-F loader result, locks, live admission and reviewed one-shot wrapper
 are still absent, so neither adapter nor guest has runtime authority.
+Its source-only successor binds the reviewed recipe C/flat attester dependency;
+it still has no emitted inventory or compiled E3 verdict.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each

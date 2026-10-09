@@ -7,6 +7,8 @@ import importlib.util
 import json
 from pathlib import Path
 import subprocess
+import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -14,7 +16,7 @@ from tests.e3_private import inactive_extraction_recipe as recipe
 
 
 E3 = Path("/home/gabe/.codex/worktrees/e3-section9-sealed-fixture-inventory-extraction-c/eshkol-transformer")
-F_ATTEST = Path("/home/gabe/.codex/worktrees/g3c4-public-g2-f-loader-launcher/eshkol-transformer/tests/g3c4/f_artifact_attest.py")
+F_ATTEST = Path("/home/gabe/.codex/evidence/eshkol-transformer/g3c4-public-g2-f-attester-flat-source-20261009-c/f_artifact_attest.py")
 E3_MANIFEST = Path("/home/gabe/.codex/evidence/eshkol-transformer/e3-section9-sealed-fixture-inventory-extraction-source-20261009-c/SHA256SUMS-EXTRACTION-SOURCE")
 
 
@@ -67,6 +69,59 @@ class SourceRecipe(unittest.TestCase):
         self.assertNotIn("if __name__", Path(recipe.__file__).read_text())
         with self.assertRaisesRegex(ValueError, "authority is missing"):
             recipe.prepare({}, {})
+
+    def test_prepare_loads_reviewed_flat_attester_and_corrected_readelf(self) -> None:
+        base = Path("/home/gabe/.codex/evidence/eshkol-transformer")
+        self.assertEqual(sha256((base / "g3c4-public-g2-f-attester-flat-source-20261009-c/"
+                                     "SHA256SUMS-SOURCE").read_bytes()).hexdigest(),
+                         "40b6f7bdcce6ba5eb089d94015ee6b7b84610785fb579501b13de0594e77d4fd")
+        self.assertEqual(sha256((base / "g3c4-public-g2-f-attester-flat-root-source-review-20261009-c/"
+                                     "SHA256SUMS-ROOT-SOURCE-REVIEW").read_bytes()).hexdigest(),
+                         "5dc3d81a7d7123babd545720e82c33cc147b43c775ac05a0b14f62f40214ab95")
+        material = {name: name.encode() for name in recipe.MATERIAL_NAMES}
+        pins = {name: sha256(raw).hexdigest() for name, raw in material.items()}
+        captured = {}
+
+        def selected_path(value):
+            return F_ATTEST if value == "/bundle/f_artifact_attest.py" else Path(value)
+
+        def prepare_source(attester, admission, loader, compatibility, readelf):
+            captured["attester"] = attester
+            self.assertEqual((admission, loader), ({}, {"elf": "selected"}))
+            self.assertEqual((compatibility, readelf),
+                             (material["loader_compatibility"], material["loader_readelf"]))
+            return {"status": "PREPARED_FOR_EXTRACTION_ONLY"}
+
+        with patch.object(recipe, "Path", side_effect=selected_path), \
+                patch.object(recipe, "e3_admission", return_value={}), \
+                patch.object(recipe, "loader_proof", return_value={"elf": "selected"}), \
+                patch.object(recipe, "prepare_source_and_compiler", side_effect=prepare_source):
+            self.assertEqual(recipe.prepare(material, pins)["status"],
+                             "PREPARED_FOR_EXTRACTION_ONLY")
+        attester = captured["attester"]
+        binary = Path("/out/build-off/eshkol-run")
+        recorded = b"selected dynamic metadata\n"
+        with patch.object(attester, "ordinary", return_value=b"selected binary"), \
+                patch.object(attester, "version_output", return_value=
+                             "Eshkol Compiler v1.3.4-evolve\n"), \
+                patch.object(attester, "elf_members", return_value=({"libc.so.6"}, "$ORIGIN")), \
+                patch.dict(attester.F_PINS, {"build-off/eshkol-run":
+                           sha256(b"selected binary").hexdigest()}), \
+                patch.object(attester.subprocess, "run", return_value=SimpleNamespace(
+                    returncode=0, stdout=recorded, stderr=b"")) as run:
+            self.assertEqual(attester.compiler_binary_and_elf(binary, recorded)
+                             ["readelf_sha256"], sha256(recorded).hexdigest())
+            self.assertEqual(run.call_args.args[0],
+                             ["/usr/bin/readelf", "--debug-dump=no-follow-links",
+                              "-d", str(binary)])
+        with tempfile.TemporaryDirectory() as temporary:
+            stale = Path(temporary) / "f_artifact_attest.py"
+            stale.write_bytes((base / "g3c4-public-g2-f-loader-readelf-source-20261009-j/"
+                                    "checkout/tests/g3c4/f_artifact_attest.py").read_bytes())
+            with patch.object(recipe, "Path", side_effect=lambda value:
+                              stale if value == "/bundle/f_artifact_attest.py" else Path(value)):
+                with self.assertRaisesRegex(ValueError, "reviewed F attester bytes"):
+                    recipe.accepted_attester(stale)
 
     def test_e3_schema_and_exact_review_denials(self) -> None:
         data = {
