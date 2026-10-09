@@ -46,6 +46,9 @@ def validate(source: str, base: list[str], closure: list[str],
                    "unadmitted loader dependency", "collector post-publication"):
         assert anchor in source, anchor
     assert "subprocess.run(" not in source
+    assert ('capture([str(readelf), "--debug-dump=no-follow-links", "-d",\n'
+            '                           str(binary)], evidence / "readelf")') in source
+    assert 'capture([str(readelf), "-d", str(binary)]' not in source
     assert "--tool-pins" in source and "--runtime-pins" in source
     assert "args.tool_pins == TOOL_PINS" in source
     assert "args.runtime_pins == RUNTIME_PINS" in source

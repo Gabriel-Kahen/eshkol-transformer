@@ -27,7 +27,7 @@ FIXTURE_PINS = {
 }
 UNCHANGED = {
     "tests/g3c4/f_image_loader_collect.py":
-        "98cc07a939834466fe77e8c43283159e67f70318bdbdd90b28cd267ff219b0c9",
+        "8b92aabe7fb742b81dc5e1d8fcd57bf92b9f5b3ad702920e9c826ce8faafd101",
     "tests/g3c4/f_artifact_attest.py":
         "5aac55665ad5a1767c54591ec3530667cced310f07948257521f34ed43999e78",
     "scripts/common.sh":
@@ -66,7 +66,13 @@ NEW = OLD + ("\n  An [inactive test-only F loader outer source](g3/G3_C4_F_LOADE
              "  inspect expectation. A source-only successor now checks the exact inherited\n"
              "  image label map plus its reserved gate label, with the failed first image\n"
              "  and created-inspect raw receipts pinned as fixtures. The attempt remains\n"
-             "  failed; loader observation, attest, and public execution are unrun.\n")
+             "  failed; loader observation, attest, and public execution are unrun.\n"
+             "  The second real collector reached guest preparation but failed in pinned\n"
+             "  readelf: separate-debug DWARF diagnostics exceeded the unchanged 64 KiB\n"
+             "  stderr bound, with actual partial bytes and wait retained. A source-only\n"
+             "  successor selects `--debug-dump=no-follow-links -d` for dynamic metadata;\n"
+             "  its guest behavior, complete loader closure, attest and public execution\n"
+             "  remain unproved pending a fresh ROOT-reviewed one-shot admission.\n")
 
 
 def validate(base: list[str], closure: list[str], source: str,

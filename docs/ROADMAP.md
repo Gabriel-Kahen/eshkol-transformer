@@ -2758,6 +2758,12 @@ publication, public G2 and continuation remain pending.
   image label map plus its reserved gate label, with the failed first image
   and created-inspect raw receipts pinned as fixtures. The attempt remains
   failed; loader observation, attest, and public execution are unrun.
+  The second real collector reached guest preparation but failed in pinned
+  readelf: separate-debug DWARF diagnostics exceeded the unchanged 64 KiB
+  stderr bound, with actual partial bytes and wait retained. A source-only
+  successor selects `--debug-dump=no-follow-links -d` for dynamic metadata;
+  its guest behavior, complete loader closure, attest and public execution
+  remain unproved pending a fresh ROOT-reviewed one-shot admission.
 
 ## Wave 4 — practical pretraining and performance
 

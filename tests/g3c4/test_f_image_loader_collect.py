@@ -28,7 +28,8 @@ class ImageCollectorTests(unittest.TestCase):
                      for name in source_check.UNCHANGED}
         source_check.validate(source, base, closure, originals)
         for changed in (source.replace("os.WNOWAIT", "0"),
-                        source.replace("unadmitted loader dependency", "ignored", 1)):
+                        source.replace("unadmitted loader dependency", "ignored", 1),
+                        source.replace('"--debug-dump=no-follow-links", ', "")):
             with self.assertRaises(AssertionError):
                 source_check.validate(changed, base, closure, originals)
         with self.assertRaises(AssertionError):
@@ -128,7 +129,12 @@ class ImageCollectorTests(unittest.TestCase):
             loader = base / "ld-linux-x86-64.so.2"
             readelf = base / "readelf"
             elf = " 0x1 (NEEDED) Shared library: [libdirect.so.1]\\n 0x1 (RUNPATH) Library runpath: [/pinned]\\n"
-            readelf.write_text(f"#!/bin/sh\nprintf '{elf}'\n")
+            readelf.write_text(
+                "#!/bin/sh\n"
+                "test \"$1\" = --debug-dump=no-follow-links && "
+                "test \"$2\" = -d && test \"$3\" = "
+                f"'{binary}' || {{ printf 'wrong readelf argv\\n' >&2; exit 9; }}\n"
+                f"printf '{elf}'\n")
             loader.write_text(f"#!/bin/sh\nprintf '\\tlibdirect.so.1 => {direct} (0x0123)\\n\\t{loader} (0x0456)\\n'\n")
             readelf.chmod(0o700)
             loader.chmod(0o700)
@@ -153,10 +159,38 @@ class ImageCollectorTests(unittest.TestCase):
                     expected_tools=sha(tools.read_bytes()),
                     expected_runtimes=sha(runtimes.read_bytes()),
                     build=build, readelf=readelf, loader=loader)
+                readelf_status = json.loads(
+                    (base / "evidence/readelf/status.json").read_bytes())
+                self.assertEqual(readelf_status["argv"],
+                                 [str(readelf), "--debug-dump=no-follow-links",
+                                  "-d", str(binary)])
                 self.assertEqual([row["name"] for row in receipt["loader_closure"]],
                                  ["ld-linux-x86-64.so.2", "libdirect.so.1"])
                 self.assertEqual(len(receipt["direct_needed"]), 1)
                 self.assertEqual(len((base / "evidence/image-libraries.tsv").read_text().splitlines()), 2)
+                readelf.write_text("#!/bin/sh\nprintf 'pinned warning\\n' >&2\n"
+                                   f"printf '{elf}'\n")
+                tools.write_text(f"{readelf}\t{readelf}\t{sha(readelf.read_bytes())}\n")
+                with self.assertRaisesRegex(ValueError, "stderr=15"):
+                    collect.collect(binary, tools, runtimes, base / "warning",
+                                    expected_tools=sha(tools.read_bytes()),
+                                    expected_runtimes=sha(runtimes.read_bytes()),
+                                    build=build, readelf=readelf, loader=loader)
+                warning_status = json.loads(
+                    (base / "warning/readelf/status.json").read_bytes())
+                self.assertEqual((base / "warning/readelf/stderr.raw").read_bytes(),
+                                 b"pinned warning\n")
+                self.assertEqual(warning_status["returncode"], 0)
+                self.assertTrue(warning_status["quiescent"])
+                self.assertFalse((base / "warning/collector.json").exists())
+                self.assertFalse((base / "warning/loader").exists())
+                readelf.write_text(
+                    "#!/bin/sh\n"
+                    "test \"$1\" = --debug-dump=no-follow-links && "
+                    "test \"$2\" = -d && test \"$3\" = "
+                    f"'{binary}' || {{ printf 'wrong readelf argv\\n' >&2; exit 9; }}\n"
+                    f"printf '{elf}'\n")
+                tools.write_text(f"{readelf}\t{readelf}\t{sha(readelf.read_bytes())}\n")
                 extra = base / "unadmitted.so"
                 extra.write_bytes(b"unadmitted")
                 loader.write_text(f"#!/bin/sh\nprintf '\\tlibdirect.so.1 => {direct} (0x0123)\\n\\tlibunadmitted.so => {extra} (0x0234)\\n\\t{loader} (0x0456)\\n'\n")

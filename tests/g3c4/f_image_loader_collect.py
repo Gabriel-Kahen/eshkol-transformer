@@ -334,7 +334,8 @@ def collect(binary: Path, tools_path: Path, runtimes_path: Path,
     original = attest.copied_artifacts(build, build)
     before = image_state(tools, runtimes, readelf, loader)
     evidence.mkdir(mode=0o700)
-    readelf_raw = capture([str(readelf), "-d", str(binary)], evidence / "readelf")
+    readelf_raw = capture([str(readelf), "--debug-dump=no-follow-links", "-d",
+                           str(binary)], evidence / "readelf")
     require(len(readelf_raw) <= 65536, "readelf semantic receipt oversized")
     needed, _ = attest.elf_members(readelf_raw)
     loader_raw = capture([str(loader), "--list", str(binary)], evidence / "loader")

@@ -19,6 +19,18 @@ are denied. The resulting image-libraries TSV is new test-only evidence and
 must be pinned by a future immutable ROOT launcher before the F attester uses
 it. The collector cannot authenticate its own Docker image or grant launch.
 
+The first real label-corrected collector attempt failed at readelf before
+loader observation. The pinned GNU readelf followed separate DWARF links while
+handling `-d`, emitted diagnostics, exceeded the unchanged 64 KiB stderr
+limit, and was terminated with its actual wait and partial raw streams retained.
+For dynamic-section observation only, the next source route specifies
+`readelf --debug-dump=no-follow-links -d /out/build-off/eshkol-run`. This
+disables automatic separate-debug following; it does not suppress stderr,
+weaken error handling, strip the binary, or prove DWARF correctness. The
+pinned guest tool's actual behavior remains to be measured in a fresh gate.
+The separate test-only attester must match this exact recorded CLI before it
+can consume a future successful collector receipt.
+
 Readelf and loader run as owned child sessions with 120-second deadlines,
 2 MiB stdout and 64 KiB stderr acquisition limits, genuine `wait4` status,
 unreaped leader identity and bounded descendant/writer closure. Each phase
