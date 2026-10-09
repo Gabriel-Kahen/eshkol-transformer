@@ -1735,6 +1735,19 @@ remain rooted with a fixed 64-row process limit. Source and failure-cut
 controls do not prove generated Eshkol behavior, no-reentry, native cleanup,
 G3/O2 lineage, C2 SAVE, cold LOAD, or resumed continuation.
 
+An isolated native G3 creation O2-only bridge now takes a sealed M3T owner and
+its original O2 optimizer through native-owned fourteen-entry roster arrays.
+It checks O2's held baseline without requiring G3 prefill, retains a typed
+four-word first failure, and returns an inert address-stable tombstone after
+draining the O2 lease. The 64-hold process limit and macro-off absence are
+explicit. Host normal and sanitizer controls cover a genuine nonzero O2
+update, malformed ownership, busy/gradient denial, allocation faults,
+changed moment bits, first-error preservation, and 28-clone drain. An existing
+read-only F32 value borrow can coexist with O2's held snapshot; it does not
+authorize mutation or evade the O2 busy gate. This is
+only a private native prerequisite: no Eshkol original-shell binding,
+generated package link, G3 construction, C2 SAVE, or cold LOAD is accepted.
+
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
 diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use
