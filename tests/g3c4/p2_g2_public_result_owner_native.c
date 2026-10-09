@@ -51,7 +51,10 @@ static int inspect(void *candidate, int64_t count,
   memcpy(words, view->data, (size_t)count * sizeof(int64_t));
   CHECK(words[0] == value0 && (count == 1 || words[1] == value1));
   CHECK(et_g3c4_private_result_tensor_release_v1(candidate) ==
-        ET_G3C4_INVALID_STATE);
+        ET_I64_TENSOR_ERROR_INVALID_STATE);
+  CHECK(et_g3c4_private_last_error_domain_v1() == ET_G3C4_DOMAIN_I1 &&
+        et_g3c4_private_last_error_code_v1() ==
+            ET_I64_TENSOR_CODE_ACTIVE_BORROW);
   CHECK(owner->transport.state == ET_G3C4_CONTEXT_LIVE &&
         owner->tensor != NULL);
   CHECK(et_i64_tensor_borrow_end_v1(&borrow, &error) == 0);
@@ -111,6 +114,7 @@ int main(void) {
         == ET_G3C4_INVALID_ARGUMENT);
   CHECK(et_i64_tensor_copy_from_v1(owner->tensor, altered, 2u, &error) == 0);
   CHECK(et_g3c4_private_result_tensor_release_v1(owner) == ET_G3C4_INTERNAL);
+  CHECK(et_g3c4_private_last_error_domain_v1() == ET_G3C4_DOMAIN_C4);
   CHECK(owner->transport.state == ET_G3C4_CONTEXT_LIVE);
   CHECK(et_i64_tensor_copy_from_v1(owner->tensor, restored, 2u, &error) == 0);
   owner->words[1] = 12;
@@ -119,7 +123,8 @@ int main(void) {
   shape = (uint64_t *)et_i64_tensor_test_shape_storage_v1(owner->tensor);
   CHECK(shape != NULL);
   shape[0] = 1;
-  CHECK(et_g3c4_private_result_tensor_release_v1(owner) == ET_G3C4_INTERNAL);
+  CHECK(et_g3c4_private_result_tensor_release_v1(owner) != 0);
+  CHECK(et_g3c4_private_last_error_domain_v1() == ET_G3C4_DOMAIN_I1);
   shape[0] = 2;
   CHECK(et_g3c4_private_result_tensor_release_v1(owner) == 0);
   CHECK(et_g3c4_private_result_tensor_release_v1(owner) == 0);
