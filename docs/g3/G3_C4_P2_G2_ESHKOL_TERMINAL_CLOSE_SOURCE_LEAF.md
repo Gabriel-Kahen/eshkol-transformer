@@ -23,7 +23,11 @@ an independently rooted private production-origin row and anchor. They bind
 the original generator and P2 input entries to the exact pending output
 shell, entry, native owner and surviving terminal row/anchor. The final
 prezero recheck authenticates these identities and selected count/IDs.
-Rejected prezero calls restore both roots; a successful zero changes only
+An independently rooted prezero closure captures the original identities,
+so coordinated edits to both mutable origin copies cannot redefine the
+generator or input after commit. The closure is removed only after genuine
+native release; the successor list is prepared before that retirement.
+Rejected prezero calls restore all three roots; a successful zero changes only
 their preallocated phase slots before returning the same shell. Private
 release authenticates the origin before native retirement, preserves it on
 a held-lease rejection and tombstones retained owner references afterward.

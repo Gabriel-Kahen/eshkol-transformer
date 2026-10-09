@@ -81,6 +81,19 @@ class TerminalCloseSourceTests(unittest.TestCase):
         with self.assertRaises(AssertionError):
             self.validate(self.source.replace(marker, "0 '())", 1))
 
+    def test_origin_originals_require_closure_captured_authority(self) -> None:
+        for marker in (
+            "(eq? (vector-ref candidate-row 3) bound-generator)",
+            "(eq? (vector-ref candidate-anchor 4)\n                                  bound-generator-entry)",
+            "(eq? (vector-ref candidate-row 5) bound-input)",
+            "(eq? (vector-ref candidate-anchor 6)\n                                  bound-input-entry)",
+            "(vector-set! g3c4-p2g2-terminal-origin-bindings\n                                      0 old-origin-bindings)",
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, self.source)
+                with self.assertRaises(AssertionError):
+                    self.validate(self.source.replace(marker, "#t", 1))
+
     def test_origin_tail_must_remain_nonallocating(self) -> None:
         marker = "(vector-set! origin-row 9 'live)"
         self.assertIn(marker, self.source)

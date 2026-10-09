@@ -330,10 +330,15 @@
 (define (origin-case eos expected-count)
   (let* ((generator (g3c4-generator-create-internal
                       model tokenizer (config 'greedy 7 eos)))
+         (alternate-generator (g3c4-generator-create-internal
+                                model tokenizer (config 'greedy 9 eos)))
          (generator-entry
            (g3c4-generator-entry-call-ready generator 'test))
+         (alternate-entry
+           (g3c4-generator-entry-call-ready alternate-generator 'test))
          (native (vector-ref generator-entry 3))
-         (input-entry (g3c4-input-entry-live prompt-a 'test)))
+         (input-entry (g3c4-input-entry-live prompt-a 'test))
+         (alternate-input-entry (g3c4-input-entry-live prompt-b 'test)))
     (check "origin owner marked before native call"
            (= (terminal-test-mark native 0 255) 0))
     (let* ((shell (g3c4-p2g2-terminal-close-origin-private
@@ -367,6 +372,24 @@
       (reject "changed independent origin anchor denied"
         (lambda () (g3c4-p2g2-terminal-origin-live shell 'test)))
       (vector-set! anchor 8 (g3c4-p2g2-terminal-anchor shell))
+      (vector-set! row 3 alternate-generator)
+      (vector-set! anchor 3 alternate-generator)
+      (vector-set! row 4 alternate-entry)
+      (vector-set! anchor 4 alternate-entry)
+      (vector-set! row 5 prompt-b)
+      (vector-set! anchor 5 prompt-b)
+      (vector-set! row 6 alternate-input-entry)
+      (vector-set! anchor 6 alternate-input-entry)
+      (reject "coordinated authentic generator/input substitution denied"
+        (lambda () (g3c4-p2g2-terminal-origin-live shell 'test)))
+      (vector-set! row 3 generator)
+      (vector-set! anchor 3 generator)
+      (vector-set! row 4 generator-entry)
+      (vector-set! anchor 4 generator-entry)
+      (vector-set! row 5 prompt-a)
+      (vector-set! anchor 5 prompt-a)
+      (vector-set! row 6 input-entry)
+      (vector-set! anchor 6 input-entry)
       (check "exact origin repair restores access"
              (eq? (g3c4-p2g2-terminal-origin-live shell 'test) row))
       (check "hold origin terminal I1 lease"
@@ -387,7 +410,8 @@
                   (eq? (vector-ref row 3) #f)
                   (eq? (vector-ref anchor 6) #f)))
       (check "origin generator closes"
-             (g3c4-generator-close-internal! generator)))))
+             (and (g3c4-generator-close-internal! generator)
+                  (g3c4-generator-close-internal! alternate-generator))))))
 
 (origin-case first-a 1)
 (origin-case non-eos-a 2)
@@ -418,7 +442,8 @@
        (native (vector-ref
                  (g3c4-generator-entry-call-ready generator 'test) 3))
        (old-origin-rows (vector-ref g3c4-p2g2-terminal-origin-rows 0))
-       (old-origin-anchors (vector-ref g3c4-p2g2-terminal-origin-anchors 0)))
+       (old-origin-anchors (vector-ref g3c4-p2g2-terminal-origin-anchors 0))
+       (old-origin-bindings (vector-ref g3c4-p2g2-terminal-origin-bindings 0)))
   (check "mark original owner for origin prezero failure"
          (= (terminal-test-mark native 0 255) 0))
   (check "arm origin prezero fault" (= (terminal-test-fault 1) 0))
@@ -432,7 +457,9 @@
          (and (eq? (vector-ref g3c4-p2g2-terminal-origin-rows 0)
                    old-origin-rows)
               (eq? (vector-ref g3c4-p2g2-terminal-origin-anchors 0)
-                   old-origin-anchors)))
+                   old-origin-anchors)
+              (eq? (vector-ref g3c4-p2g2-terminal-origin-bindings 0)
+                   old-origin-bindings)))
   (check "origin fault generator closes"
          (g3c4-generator-close-internal! generator)))
 

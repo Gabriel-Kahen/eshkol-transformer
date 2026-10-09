@@ -26,6 +26,7 @@
 (define g3c4-p2g2-terminal-anchors (vector '()))
 (define g3c4-p2g2-terminal-origin-rows (vector '()))
 (define g3c4-p2g2-terminal-origin-anchors (vector '()))
+(define g3c4-p2g2-terminal-origin-bindings (vector '()))
 (define g3c4-p2g2-terminal-clones (vector '()))
 (define g3c4-p2g2-terminal-clone-anchors (vector '()))
 
@@ -57,8 +58,23 @@
           ((eq? (vector-ref (car remaining) 0) shell) (car remaining))
           (else (loop (cdr remaining))))))
 
+;;; Each association carries a prezero closure over the actual originals.
+;;; The closure's lexical identities cannot be rewritten by paired row/anchor
+;;; edits. The association is removed on authentic release.
+(define (g3c4-p2g2-terminal-origin-binding shell)
+  (let loop ((remaining (vector-ref g3c4-p2g2-terminal-origin-bindings 0)))
+    (cond ((null? remaining) #f)
+          ((eq? (car (car remaining)) shell) (car remaining))
+          (else (loop (cdr remaining))))))
+
+(define (g3c4-p2g2-terminal-origin-without-binding shell)
+  (let loop ((remaining (vector-ref g3c4-p2g2-terminal-origin-bindings 0)))
+    (cond ((null? remaining) '())
+          ((eq? (car (car remaining)) shell) (cdr remaining))
+          (else (cons (car remaining) (loop (cdr remaining)))))))
+
 (define (g3c4-p2g2-terminal-origin-prezero-check
-          origin-row origin-anchor output generator generator-entry
+          origin-row origin-anchor binding output generator generator-entry
           input input-entry row anchor count first second operation)
   (if (not (and (vector? origin-row) (= (vector-length origin-row) 13)
                 (vector? origin-anchor) (= (vector-length origin-anchor) 13)
@@ -72,6 +88,12 @@
                      origin-row)
                 (eq? (g3c4-p2g2-terminal-origin-anchor (vector-ref output 0))
                      origin-anchor)
+                (pair? binding)
+                (eq? (g3c4-p2g2-terminal-origin-binding
+                       (vector-ref output 0)) binding)
+                (eq? (car binding) (vector-ref output 0))
+                (procedure? (cdr binding))
+                ((cdr binding) origin-row origin-anchor)
                 (let loop ((index 0))
                   (if (= index 13) #t
                       (and (or (>= index 10)
@@ -308,6 +330,9 @@
                (vector-ref g3c4-p2g2-terminal-origin-rows 0))
              (old-origin-anchors
                (vector-ref g3c4-p2g2-terminal-origin-anchors 0))
+             (old-origin-bindings
+               (vector-ref g3c4-p2g2-terminal-origin-bindings 0))
+             (origin-binding #f)
              (barrier (vector #f))
              (output #f)
              (selected-first -1)
@@ -368,7 +393,9 @@
                          (vector-set! g3c4-p2g2-terminal-origin-rows
                                       0 old-origin-rows)
                          (vector-set! g3c4-p2g2-terminal-origin-anchors
-                                      0 old-origin-anchors)))
+                                      0 old-origin-anchors)
+                         (vector-set! g3c4-p2g2-terminal-origin-bindings
+                                      0 old-origin-bindings)))
                    (raise caught)))
           (vector-set! g3c4-registry 0
                        (cons call (vector-ref g3c4-registry 0)))
@@ -417,13 +444,44 @@
             (vector-set! originals 13 output)
             (vector-set! originals 14 (vector-ref output 3))
             (if origin-enabled
-                (begin
-                  (vector-set! origin-row 0 (vector-ref output 0))
-                  (vector-set! origin-anchor 0 (vector-ref output 0))
-                  (vector-set! origin-row 1 output)
-                  (vector-set! origin-anchor 1 output)
-                  (vector-set! origin-row 2 (vector-ref output 3))
-                  (vector-set! origin-anchor 2 (vector-ref output 3)))))
+                (let ((bound-shell (vector-ref output 0))
+                      (bound-output output)
+                      (bound-native (vector-ref output 3))
+                      (bound-generator original-generator)
+                      (bound-generator-entry original-generator-entry)
+                      (bound-input original-input)
+                      (bound-input-entry original-input-entry)
+                      (bound-row row)
+                      (bound-anchor anchor))
+                  (vector-set! origin-row 0 bound-shell)
+                  (vector-set! origin-anchor 0 bound-shell)
+                  (vector-set! origin-row 1 bound-output)
+                  (vector-set! origin-anchor 1 bound-output)
+                  (vector-set! origin-row 2 bound-native)
+                  (vector-set! origin-anchor 2 bound-native)
+                  (set! origin-binding
+                    (cons bound-shell
+                      (lambda (candidate-row candidate-anchor)
+                        (and (eq? (vector-ref candidate-row 0) bound-shell)
+                             (eq? (vector-ref candidate-row 1) bound-output)
+                             (eq? (vector-ref candidate-row 2) bound-native)
+                             (eq? (vector-ref candidate-row 3) bound-generator)
+                             (eq? (vector-ref candidate-row 4)
+                                  bound-generator-entry)
+                             (eq? (vector-ref candidate-row 5) bound-input)
+                             (eq? (vector-ref candidate-row 6)
+                                  bound-input-entry)
+                             (eq? (vector-ref candidate-row 7) bound-row)
+                             (eq? (vector-ref candidate-row 8) bound-anchor)
+                             (eq? (vector-ref candidate-anchor 3)
+                                  bound-generator)
+                             (eq? (vector-ref candidate-anchor 4)
+                                  bound-generator-entry)
+                             (eq? (vector-ref candidate-anchor 5) bound-input)
+                             (eq? (vector-ref candidate-anchor 6)
+                                  bound-input-entry)))))
+                  (vector-set! g3c4-p2g2-terminal-origin-bindings 0
+                               (cons origin-binding old-origin-bindings)))))
           (g3c4-p2g2-terminal-active-check
             call row anchor originals operation)
           (g3c4-native-check
@@ -513,7 +571,8 @@
                 (vector-set! origin-row 12 selected-second)
                 (vector-set! origin-anchor 12 selected-second)
                 (g3c4-p2g2-terminal-origin-prezero-check
-                  origin-row origin-anchor output original-generator
+                  origin-row origin-anchor origin-binding output
+                  original-generator
                   original-generator-entry original-input original-input-entry
                   row anchor count selected-first selected-second operation)))
           (if (= (g3c4-p2g2-native-terminal
@@ -643,11 +702,16 @@
 (define (g3c4-p2g2-terminal-origin-live shell operation)
   (let* ((terminal (g3c4-p2g2-terminal-live shell operation))
          (row (g3c4-p2g2-terminal-origin-row shell))
-         (anchor (g3c4-p2g2-terminal-origin-anchor shell)))
+         (anchor (g3c4-p2g2-terminal-origin-anchor shell))
+         (binding (g3c4-p2g2-terminal-origin-binding shell)))
     (if (not (and (vector? row) (= (vector-length row) 13)
                   (vector? anchor) (= (vector-length anchor) 13)
                   (pair? (vector-ref g3c4-p2g2-terminal-origin-rows 0))
                   (pair? (vector-ref g3c4-p2g2-terminal-origin-anchors 0))
+                  (pair? binding)
+                  (eq? (car binding) shell)
+                  (procedure? (cdr binding))
+                  ((cdr binding) row anchor)
                   (let loop ((index 0))
                     (if (= index 13) #t
                         (and (or (>= index 10)
@@ -734,9 +798,13 @@
                   (origin-row (g3c4-p2g2-terminal-origin-row shell))
                   (origin-anchor
                     (g3c4-p2g2-terminal-origin-anchor shell))
-                  (native (vector-ref row 2)))
+                  (native (vector-ref row 2))
+                  (remaining-bindings #f))
              (if (or origin-row origin-anchor)
-                 (g3c4-p2g2-terminal-origin-live shell operation))
+                 (begin
+                   (g3c4-p2g2-terminal-origin-live shell operation)
+                   (set! remaining-bindings
+                     (g3c4-p2g2-terminal-origin-without-binding shell))))
              ;; A genuine held I1 lease rejects this without mutation.
              (g3c4-native-check
                (g3c4-native-output-release native) operation)
@@ -759,7 +827,9 @@
                    (vector-set! origin-row 5 #f)
                    (vector-set! origin-anchor 5 #f)
                    (vector-set! origin-row 6 #f)
-                   (vector-set! origin-anchor 6 #f)))
+                   (vector-set! origin-anchor 6 #f)
+                   (vector-set! g3c4-p2g2-terminal-origin-bindings
+                                0 remaining-bindings)))
              #t))
           (else
             (g3c4-fail 'invalid-argument operation

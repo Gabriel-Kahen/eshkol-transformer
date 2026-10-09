@@ -37,7 +37,8 @@
        (null? (vector-ref g3c4-p2g2-terminal-rows 0)))
 (check "no production origin enrolled"
        (and (null? (vector-ref g3c4-p2g2-terminal-origin-rows 0))
-            (null? (vector-ref g3c4-p2g2-terminal-origin-anchors 0))))
+            (null? (vector-ref g3c4-p2g2-terminal-origin-anchors 0))
+            (null? (vector-ref g3c4-p2g2-terminal-origin-bindings 0))))
 (check "feature-off input releases"
        (generation-tensor-release-internal! input))
 (display "P2/G2 terminal off PASS: checks=")

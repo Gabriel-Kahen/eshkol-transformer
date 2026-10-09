@@ -187,6 +187,9 @@ def validate(source: str, closure: list[str], base: list[str],
          ["lambda", ["call", "row"], "#f"], "#t"]]
     origin_check = definition(parsed,
                               "g3c4-p2g2-terminal-origin-prezero-check")
+    assert ["procedure?", ["cdr", "binding"]] in calls(
+        origin_check, "procedure?")
+    assert ["cdr", "binding"] in calls(origin_check, "cdr")
     for name in ("generator", "generator-entry", "input", "input-entry",
                  "row", "anchor"):
         assert ["eq?", ["vector-ref", "origin-row",
@@ -205,8 +208,22 @@ def validate(source: str, closure: list[str], base: list[str],
         assert ["vector-set!", symbol, "0",
                 ["cons", "origin-" + ("row" if root == "rows" else "anchor"),
                  "old-origin-" + root]] in calls(close, "vector-set!")
+    assert ["vector-set!", "g3c4-p2g2-terminal-origin-bindings", "0",
+            "old-origin-bindings"] in calls(close, "vector-set!")
+    assert ["vector-set!", "g3c4-p2g2-terminal-origin-bindings", "0",
+            ["cons", "origin-binding", "old-origin-bindings"]] in calls(
+        close, "vector-set!")
+    for slot, bound in (("3", "bound-generator"),
+                        ("4", "bound-generator-entry"),
+                        ("5", "bound-input"),
+                        ("6", "bound-input-entry")):
+        for owner in ("candidate-row", "candidate-anchor"):
+            assert ["eq?", ["vector-ref", owner, slot], bound] in calls(
+                close, "eq?")
     origin_live = definition(parsed, "g3c4-p2g2-terminal-origin-live")
     assert len(calls(origin_live, "g3c4-p2g2-terminal-live")) == 1
+    assert ["procedure?", ["cdr", "binding"]] in calls(
+        origin_live, "procedure?")
     assert ["eq?", ["vector-ref", "row", "7"], "terminal"] in calls(
         origin_live, "eq?")
     assert ["eq?", ["vector-ref", "row", "9"], "'live"] in calls(
@@ -312,6 +329,10 @@ def validate(source: str, closure: list[str], base: list[str],
     assert release_source.index(
         "(g3c4-p2g2-terminal-origin-live shell operation)") < release_source.index(
         "(g3c4-native-output-release native)")
+    assert release_source.index(
+        "(g3c4-p2g2-terminal-origin-without-binding shell)") < release_source.index(
+        "(g3c4-native-output-release native)") < release_source.index(
+        "(vector-set! g3c4-p2g2-terminal-origin-bindings")
     assert len(calls(definition(parsed, "g3c4-p2g2-terminal-ids-clone-private"),
                      "g3c4-p2g2-native-ids-clone")) == 1
 
