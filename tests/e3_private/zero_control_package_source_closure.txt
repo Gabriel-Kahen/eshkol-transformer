@@ -16,7 +16,7 @@ internal/p1/lib/transformer/module.esk
 internal/c1/lib/transformer/persistence_policy_internal.esk
 internal/c1/lib/transformer/checkpoint_internal.esk
 internal/c1/lib/c1_sha256.esk
-native/m3t_transport_extension.esk
+@BUILD@/source/m3t_transport_extension.esk
 native/m3_schedule.esk
 native/m3_model_extension.esk
 native/m3_call_adapters.esk

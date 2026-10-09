@@ -56,8 +56,11 @@ for variant in a b; do
     die "zero-control observer is absent from ${variant}"
   object="${out}/package-${variant}/e3_zero_control_package.o"
   strings -a "${object}" | \
-    grep -Fx "${out}/.e3-zero-control-generated/source/e3_d2_dataset.esk" \
+  grep -Fx "${out}/.e3-zero-control-generated/source/e3_d2_dataset.esk" \
     >/dev/null || die "zero-control object omitted stable source filename"
+  strings -a "${object}" | \
+  grep -Fx "${out}/.e3-zero-control-generated/source/m3t_transport_extension.esk" \
+    >/dev/null || die "zero-control object omitted the test-only M3T source"
   if strings -a "${object}" | grep -F '/eshkol-transformer-e1b.' >/dev/null; then
     die "zero-control object retained a random generated source filename"
   fi
@@ -204,7 +207,7 @@ for case_name in all-correct all-wrong; do
         "${out}/transcript-${case_name}-${gradient}-sanitize-b.json"
   done
 done
-for case_name in missing-path foreign-handle duplicate-destination \
+for case_name in wrong-tie-owner missing-path foreign-handle duplicate-destination \
     source-alias wrong-shape wrong-kind forged-source released-source \
     decode-short decode-extent decode-role commit-reuse active-borrow active-pin \
     alloc-i2-decode alloc-f32-decode alloc-i2-prepare alloc-f32-prepare; do

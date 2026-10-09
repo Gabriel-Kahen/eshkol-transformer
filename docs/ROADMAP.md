@@ -917,6 +917,12 @@ Pure fixture/source checks and C syntax do not validate emitted package/import
 inventories or compiled model behavior. The sanitized tuple inventories,
 authentic stale-handle and mutated-tie negatives, current-main union, and
 supported normal/repeat/sanitizer gate remain open; no N3 row is accepted.
+The isolated zero tuple now generates a pinned M3T variant that registers a
+genuine same-tree wrong tie before publication, checks the first typed schedule
+error and construction abort, then retries canonical creation in one process.
+Source controls pass; emitted inventories, two missing sanitizer symbol
+manifests, and supported compiled behavior remain unverified. Sealed-model
+stale-handle proof still requires reviewed P1/I2 graph and M3T retirement.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each

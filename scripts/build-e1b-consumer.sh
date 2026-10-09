@@ -1410,6 +1410,16 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     cmp "${e1b_tmp}/mode-graph-generation.txt" \
         "${e1b_tmp}/mode-graph-check.txt"
   fi
+  if [[ "${e3_tuple_kind}" == zero ]]; then
+    python3 -B "${PROJECT_ROOT}/scripts/generate-e3-zero-wrong-tie-source.py" \
+      --output "${e3_generated_source_root}/m3t_transport_extension.esk" \
+      >"${e1b_tmp}/zero-m3t-generation.txt"
+    python3 -B "${PROJECT_ROOT}/scripts/generate-e3-zero-wrong-tie-source.py" \
+      --output "${e3_generated_source_root}/m3t_transport_extension.esk" --check \
+      >"${e1b_tmp}/zero-m3t-check.txt"
+    cmp "${e1b_tmp}/zero-m3t-generation.txt" \
+        "${e1b_tmp}/zero-m3t-check.txt"
+  fi
   if [[ "${e3_overflow_mutant}" == clamp ]]; then
     [[ "${e3_overflow_generated_owned}" == 1 &&
        "${#package_native_sources[@]}" == 11 &&
@@ -1539,6 +1549,7 @@ done
 if [[ "${package_policy}" == e3-private-aggregate ]]; then
   include_args+=(-I "${e3_generated_source_root}")
   if [[ "${e3_tuple_kind}" == mode-graph ||
+        "${e3_tuple_kind}" == zero ||
         "${e3_tuple_kind}" == retention ||
         "${e3_tuple_kind}" == retention-first-eval-mutant ||
         "${e3_tuple_kind}" == retention-overflow ]]; then

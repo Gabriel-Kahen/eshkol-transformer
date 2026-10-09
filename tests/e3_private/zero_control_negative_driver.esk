@@ -189,6 +189,33 @@
                  'dense-row-major-contiguous 'e3-zero-negative #f)))
       (else (e3-native-invariant-fail)))))
 
+(define (e3-zero-negative-wrong-tie! config initial)
+  (let ((initial-before (m3t-public-initializer-words initial))
+        (p1-before (native-live-count 'e3-zero-negative))
+        (clones-before (i2-native-owned-clone-live-count)))
+    (m3t-zero-test-wrong-tie-arm!)
+    (let ((caught
+            (guard (error (#t error))
+              (g3t-checked-m3t-model-create config initial)
+              #f)))
+      ;; The first M3 schedule error must survive P1/I2/native abort intact.
+      ;; A preceding P1 rejection is a different result, not this witness.
+      (e3-zero-invariant
+        (and (transformer-error? caught)
+             (eq? (transformer-error-category caught) 'internal)
+             (eq? (transformer-error-operation caught)
+                  'diagnostic-model-create)
+             (equal? (transformer-error-details caught)
+               '((source-domain m3t-transport) (source-code 10)
+                 (source-message "diagnostic tie schedule differs")
+                 (native-category 5)))))
+      (e3-zero-invariant
+        (and (not (vector-ref m3t-zero-test-wrong-tie-cell 0))
+             (equal? initial-before (m3t-public-initializer-words initial))
+             (= p1-before (native-live-count 'e3-zero-negative))
+             (= clones-before (i2-native-owned-clone-live-count))))
+      #t)))
+
 (define (e3-zero-negative-run scenario corpus-path)
   (e3-zero-invariant
     (and (vector? scenario) (= (vector-length scenario) 2)
@@ -201,6 +228,9 @@
          (tokenizer (t1-private-tokenizer-byte config))
          (initial (g3t-checked-m3t-initializer-state 1729))
          (initial-words (m3t-public-initializer-words initial))
+         (wrong-tie? (string=? name "wrong-tie-owner"))
+         (wrong-tie-rejected?
+           (if wrong-tie? (e3-zero-negative-wrong-tie! config initial) #f))
          (model (g3t-checked-m3t-model-create config initial)))
     (vector-set! e3-zero-owner-root 0 model)
     (e3-zero-invariant (equal? initial-words '(1 1729 0 0)))
@@ -253,6 +283,7 @@
                  (cursor-before (d2-token-dataset-cursor dataset))
                  (rejected
                    (cond
+                     (wrong-tie? wrong-tie-rejected?)
                      ((string=? name "active-borrow")
                       (e3-zero-negative-busy! model handles sources #f))
                      ((string=? name "active-pin")

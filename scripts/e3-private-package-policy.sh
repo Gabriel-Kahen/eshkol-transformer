@@ -234,6 +234,10 @@ e3_normalize_source_dependencies() {
     [[ -n "${dependency}" ]] || continue
     if [[ "$(realpath -m -- "${dependency}")" == "${generated}" ]]; then
       printf '@BUILD@/source/e3_d2_dataset.esk\n'
+    elif [[ "${e3_tuple_kind}" == zero && \
+            "$(realpath -m -- "${dependency}")" == \
+              "${e3_generated_source_root}/m3t_transport_extension.esk" ]]; then
+      printf '@BUILD@/source/m3t_transport_extension.esk\n'
     elif [[ ( "${e3_tuple_kind}" == mode-graph ||
               "${e3_tuple_kind}" == retention ||
               "${e3_tuple_kind}" == retention-first-eval-mutant ||
