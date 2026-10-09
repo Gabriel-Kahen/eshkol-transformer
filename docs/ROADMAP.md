@@ -2715,6 +2715,15 @@ publication, public G2 and continuation remain pending.
   imports/exports, public ABI closure, mathematical parity and continuation
   remain **unrun**.
 
+  A [source-only installed G2 caller and conditional F-artifact attester](g3/G3_C4_PUBLIC_G2_F_ARTIFACT_SOURCE_LEAF.md)
+  now stage public-facade one-/two-byte terminal checks and an exact test-only
+  provenance boundary for a fresh copy of the historical F compiler artifact.
+  F's original guest result remains failed; an independently reviewed offline
+  observation cannot replace its unrun result verifier. The attester's
+  compatibility view is newly produced, not bootstrap provenance. Installed
+  AOT, native/sanitizer runs, image dependency admission, emitted symbols,
+  numerical parity and the full public G2 gate remain **unrun**.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |

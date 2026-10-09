@@ -1,0 +1,92 @@
+(require transformer.config)
+(require transformer.module)
+(require transformer.tokenizer)
+(require transformer.diagnostic_transport)
+(require transformer.generation)
+(require transformer.error_public)
+
+;;; Installed-facade G2 witness. The private root-loading fault fixture is separate.
+(define (check label truth)
+  (if truth #t
+      (begin (display "public G2 FAIL: ") (display label) (newline) (exit 1))))
+(define (reject label thunk)
+  (check label
+    (guard (caught (#t (transformer-error? caught)))
+      (thunk) #f)))
+(define config
+  (config-resolve
+    (config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define model (diagnostic-c4-model-create-seeded 1729))
+(check "eval mode" (module-eval! model))
+(define tokenizer (tokenizer-byte config))
+(define prompt
+  (generation-c4-input-create
+    (tokenizer-encode tokenizer (bytevector 0 255))))
+(define (policy eos)
+  (list ':profile 'diagnostic-c4-p2g2 ':sampling 'greedy
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens 2
+        ':eos eos ':seed 41))
+(reject "G2 requires a byte EOS"
+  (lambda () (generator-create model tokenizer (policy #f))))
+(define probe (generator-create model tokenizer (policy 0)))
+(define probe-output (generator-generate! probe prompt))
+(define probe-text (car (generation-output-text probe-output)))
+(check "probe has a genuine first raw byte"
+  (and (bytevector? probe-text) (<= 1 (bytevector-length probe-text))
+       (<= (bytevector-length probe-text) 2)))
+(define first-id (bytevector-u8-ref probe-text 0))
+(check "probe cleanup"
+  (and (generation-output-release! probe-output)
+       (generator-close! probe)))
+
+(define eos-generator (generator-create model tokenizer (policy first-id)))
+(define eos-output (generator-generate! eos-generator prompt))
+(define eos-text (car (generation-output-text eos-output)))
+(define eos-ids (car (generation-output-ids eos-output)))
+(define eos-lengths (generation-output-lengths eos-output))
+(define eos-cache (generation-output-cache-lengths eos-output))
+(define eos-rng (generation-output-rng eos-output))
+(check "first EOS has one raw byte"
+  (and (= (bytevector-length eos-text) 1)
+       (= (bytevector-u8-ref eos-text 0) first-id)))
+(check "G2 detached owners differ"
+  (and (not (eq? eos-ids eos-lengths))
+       (not (eq? eos-lengths eos-cache))
+       (not (eq? eos-cache eos-rng))))
+(check "first EOS source closes"
+  (and (generation-output-release! eos-output)
+       (generator-close! eos-generator)))
+(check "first EOS text survives source close"
+  (= (bytevector-u8-ref eos-text 0) first-id))
+(reject "released source does not expose text"
+  (lambda () (generation-output-text eos-output)))
+(check "first EOS detached owners release"
+  (and (generation-tensor-release! eos-ids)
+       (generation-tensor-release! eos-lengths)
+       (generation-tensor-release! eos-cache)
+       (generation-rng-release! eos-rng)))
+
+(define other-eos (if (= first-id 255) 0 255))
+(define two-generator (generator-create model tokenizer (policy other-eos)))
+(define two-output (generator-generate! two-generator prompt))
+(define two-text (car (generation-output-text two-output)))
+(define two-ids (car (generation-output-ids two-output)))
+(define two-lengths (generation-output-lengths two-output))
+(define two-cache (generation-output-cache-lengths two-output))
+(define two-rng (generation-output-rng two-output))
+(check "non-EOS has two raw bytes"
+  (and (= (bytevector-length two-text) 2)
+       (= (bytevector-u8-ref two-text 0) first-id)))
+(check "non-EOS source closes"
+  (and (generation-output-release! two-output)
+       (generator-close! two-generator)))
+(check "non-EOS detached owners release"
+  (and (generation-tensor-release! two-ids)
+       (generation-tensor-release! two-lengths)
+       (generation-tensor-release! two-cache)
+       (generation-rng-release! two-rng)
+       (generation-tensor-release! prompt)))
+(display "G3G-MANUAL-PUBLIC-G2-PASS") (newline)
