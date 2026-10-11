@@ -5,6 +5,7 @@ This does not substitute for compiled native and public runtime fault cuts.
 
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
+from copy import deepcopy
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -15,6 +16,66 @@ parse = SourceFileLoader(
 
 def source(name: str) -> str:
     return (ROOT / name).read_text()
+
+
+def final_predicate(text: str) -> list:
+    return next(form for form in parse.forms(text)
+                if isinstance(form, list) and form[0] == "define"
+                and isinstance(form[1], list)
+                and form[1][0] == "g3c4-public-p2g2-history-final?")[2]
+
+
+def eval_fixed(node, env):
+    """Execute the actual fixed predicate AST; no source text substitutions."""
+    if isinstance(node, str):
+        if node in env:
+            return env[node]
+        if node.startswith("'"):
+            return node[1:]
+        return int(node)
+    verb = node[0]
+    if verb == "and":
+        return all(eval_fixed(child, env) for child in node[1:])
+    args = [eval_fixed(child, env) for child in node[1:]]
+    if verb == "vector?":
+        return isinstance(args[0], list)
+    if verb == "vector-length":
+        return len(args[0])
+    if verb == "vector-ref":
+        return args[0][args[1]]
+    if verb == "memq":
+        return any(item is args[0] for item in args[1])
+    if verb == "eq?":
+        return args[0] is args[1] or (
+            isinstance(args[0], str) and args[0] == args[1])
+    if verb == "=":
+        return args[0] == args[1]
+    raise AssertionError(f"unexpected predicate operation {verb}")
+
+
+def final_fixture(first: int, second: int, count: int, eos: int):
+    generator, input_shell, output = object(), object(), object()
+    model, tokenizer, native, entry = object(), object(), object(), object()
+    source_row, ticket = [None] * 12, [None] * 21
+    source_row[0], source_row[1] = output, entry
+    source_row[3], source_row[4], source_row[8] = generator, input_shell, "live"
+    source_row[9:12] = [count, first, second]
+    ticket[1], ticket[2], ticket[5], ticket[6] = generator, input_shell, output, entry
+    ticket[10], ticket[12] = source_row, "live"
+    ticket[13:16] = [count, first, second]
+    generator_row, input_entry = [None] * 8, [None] * 12
+    generator_row[3], generator_row[4], generator_row[5], generator_row[7] = (
+        model, tokenizer, [None] * 6 + [eos], "live")
+    input_entry[2], input_entry[3] = "live", native
+    snapshot = [first, second, count, count + 2, 1, 2, 3, 4]
+    env = dict(source=source_row, ticket=ticket, **{
+        "generator-row": generator_row, "input-entry": input_entry,
+        "model": model, "tokenizer": tokenizer, "generator": generator,
+        "input": input_shell, "output": output, "eos": eos,
+        "snapshot": snapshot, "g3c4-public-g2-output-rows": [[source_row]],
+        "g3c4-public-g2-tickets": [[ticket]],
+    })
+    return env
 
 
 class HistorySource(unittest.TestCase):
@@ -183,6 +244,42 @@ class HistorySource(unittest.TestCase):
         with self.assertRaises((AssertionError, ValueError)):
             self.validate(history=self.history.replace(final_read,
                 "(final-snapshot snapshot)", 1))
+
+    def test_actual_fixed_predicate_eos_and_two_generation_slot_map(self) -> None:
+        predicate = final_predicate(self.history)
+        eos = final_fixture(first=7, second=0, count=1, eos=7)
+        two = final_fixture(first=41, second=92, count=2, eos=7)
+        self.assertNotEqual(eos["snapshot"][0], eos["snapshot"][3])
+        self.assertNotEqual(two["snapshot"][0], two["snapshot"][3])
+        self.assertTrue(eval_fixed(predicate, eos))
+        self.assertTrue(eval_fixed(predicate, two))
+        two["source"][11] = 93
+        two["ticket"][15] = 93
+        self.assertFalse(eval_fixed(predicate, two))
+        two["source"][11] = 92
+        two["ticket"][15] = 92
+        self.assertTrue(eval_fixed(predicate, two))  # valid retry
+        two["source"][10] = 44
+        two["ticket"][14] = 44
+        self.assertFalse(eval_fixed(predicate, two))
+
+    def test_fixed_predicate_slot_swap_and_omission_mutants(self) -> None:
+        original = final_predicate(self.history)
+        good = final_fixture(first=41, second=92, count=2, eos=7)
+        bad = deepcopy(original)
+        for comparison in bad[1:]:
+            if (comparison[0] == "=" and comparison[1] ==
+                    ["vector-ref", "source", "10"]):
+                comparison[2][2] = "3"
+        self.assertFalse(eval_fixed(bad, good))
+        changed = final_fixture(first=41, second=92, count=2, eos=7)
+        changed["source"][11] = 93
+        changed["ticket"][15] = 93
+        dropped = [original[0]] + [item for item in original[1:]
+            if item[1] not in (["vector-ref", "source", "11"],
+                               ["vector-ref", "ticket", "15"])]
+        self.assertTrue(eval_fixed(dropped, changed))
+        self.assertFalse(eval_fixed(original, changed))
 
 
 if __name__ == "__main__":

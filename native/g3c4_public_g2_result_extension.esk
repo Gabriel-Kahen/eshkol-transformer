@@ -489,9 +489,11 @@
        (eq? (vector-ref generator-row 7) 'live)
        (= (vector-ref (vector-ref generator-row 5) 6) eos)
        (= (vector-ref source 9) (vector-ref snapshot 2))
-       (= (vector-ref source 10) (vector-ref snapshot 3))
+       (= (vector-ref source 10) (vector-ref snapshot 0))
+       (= (vector-ref source 11) (vector-ref snapshot 1))
        (= (vector-ref ticket 13) (vector-ref snapshot 2))
-       (= (vector-ref ticket 14) (vector-ref snapshot 3))))
+       (= (vector-ref ticket 14) (vector-ref snapshot 0))
+       (= (vector-ref ticket 15) (vector-ref snapshot 1))))
 
 (define g3c4-public-p2g2-history-route
   (let ((input-issuers '()) (history-issuers '())

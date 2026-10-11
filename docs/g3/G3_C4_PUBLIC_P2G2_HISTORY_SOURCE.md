@@ -19,7 +19,9 @@ through `g3c4-public-p2g2-history-admit-once-internal!` rechecks the owners,
 terminal IDs, count, cache and terminal-output RNG, and spends the issuer
 once. Both routes perform input-provider work before their final terminal
 snapshot, then check captured origin and ticket cells without callback calls
-before the fixed publication tail. The returned detached vector is mutable and is **not** independent
+before the fixed publication tail. The public source/ticket count, first ID,
+and second ID are checked against terminal snapshot slots 2, 0, and 1;
+snapshot slot 3 is cache length. The returned detached vector is mutable and is **not** independent
 authority for a later writer. There is no generator-current-RNG getter or
 same-handle model parameter-bit witness in this leaf.
 

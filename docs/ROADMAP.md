@@ -2786,7 +2786,10 @@ publication, public G2 and continuation remain pending.
   identity and exact public terminal/ticket provenance in a one-use Eshkol
   issuer. The D source review held post-creation T1 rereads and provider work
   after the last output check; the focused E successor removes those reads and
-  moves the callback-free terminal check to the publication tail. Focused
+  moves the callback-free terminal check to the publication tail. Independent
+  E review then found the final public-row comparison using cache length for
+  the first generated ID and omitting the second ID; F aligns all three
+  count/first/second fields with the typed terminal snapshot. Focused
   parsed-source tests pass. Native compilation, both public G1-EOS/G2 runtime
   paths, same-handle model-bit evidence, the checksummed pair format, SAVE,
   cold LOAD and continuation equivalence remain unrun and unaccepted.
