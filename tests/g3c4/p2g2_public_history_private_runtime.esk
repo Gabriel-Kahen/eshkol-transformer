@@ -62,18 +62,25 @@
                (and (<= 0 (vector-ref before 1))
                     (<= (vector-ref before 1) 255))))
     (if (eq? fault-mode 'late)
-        (begin
+        (let ((snapshot-calls 0))
           (set! g3c4-p2g2-terminal-snapshot-private
             (lambda (shell)
+              (set! snapshot-calls (+ snapshot-calls 1))
               (let ((current (snapshot-provider shell)))
-                (vector-set! ticket 15
-                  (if (= (vector-ref current 1) 255) 0
-                      (+ (vector-ref current 1) 1)))
+                ;; Initial source snapshot stays authentic. Only the second,
+                ;; final provider read changes the ticket before the fixed tail.
+                (if (= snapshot-calls 2)
+                    (vector-set! ticket 15
+                      (if (= (vector-ref current 1) 255) 0
+                          (+ (vector-ref current 1) 1)))
+                    #t)
                 current)))
-          (reject "capture late ticket mutation denies issuance"
+          (reject "capture final snapshot mutation denies issuance"
             (lambda ()
               (g3c4-public-p2g2-history-capture-internal!
                 generator input output)))
+          (check "capture used initial and final snapshot exactly once"
+                 (= snapshot-calls 2))
           (set! g3c4-p2g2-terminal-snapshot-private snapshot-provider)
           (vector-set! ticket 15 (vector-ref before 1)))
         #t)
@@ -151,6 +158,8 @@
            (= (vector-ref descriptor 8) (vector-ref before 6))
            (= (vector-ref descriptor 9) (vector-ref before 7))
            (= (vector-ref descriptor 10) eos)
+           (eq? (vector-ref descriptor 11) model)
+           (eq? (vector-ref descriptor 12) tokenizer)
            (eq? (vector-ref descriptor 13) generator)
            (eq? (vector-ref descriptor 14) input)
            (eq? (vector-ref descriptor 15) output)))

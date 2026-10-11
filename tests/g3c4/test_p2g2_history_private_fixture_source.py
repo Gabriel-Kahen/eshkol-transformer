@@ -41,7 +41,8 @@ def validate(text: str) -> None:
     assert "(run-case non-eos 2 'late)" in text
     assert "(if (= selected-first 255) 0 255)" in text
     for label in ("copied history is not issued",
-                  "capture late ticket mutation denies issuance",
+                  "capture final snapshot mutation denies issuance",
+                  "capture used initial and final snapshot exactly once",
                   "foreign generator cannot consume genuine history",
                   "private catch retains original raised #f",
                   "last provider mutation denies before spend",
@@ -55,11 +56,15 @@ def validate(text: str) -> None:
     assert 0 <= mutation < denial < repair < reentry
     capture_mutation = text.find("(vector-set! ticket 15")
     capture_denial = text.find(
-        '"capture late ticket mutation denies issuance"')
+        '"capture final snapshot mutation denies issuance"')
     capture_repair = text.find(
         "(vector-set! ticket 15 (vector-ref before 1))")
     authentic_capture = text.find("(set! history")
     assert 0 <= capture_mutation < capture_denial < capture_repair < authentic_capture
+    assert "(set! snapshot-calls (+ snapshot-calls 1))" in text
+    assert "(if (= snapshot-calls 2)" in text
+    assert "(= snapshot-calls 2))" in text
+    assert text.index("(if (= snapshot-calls 2)") < capture_mutation
     assert text.index('"private catch retains original raised #f"') < (
         text.index("(set! g3c4-p2g2-terminal-snapshot-private snapshot-provider)",
                    text.index('"private catch retains original raised #f"')))
@@ -74,7 +79,8 @@ def validate(text: str) -> None:
             "(vector-ref before 4)", "(vector-ref before 5)",
             "(vector-ref before 6)", "(vector-ref before 7)", "eos")):
         assert f"(= (vector-ref descriptor {index}) {expected})" in text
-    for index, owner in ((13, "generator"), (14, "input"), (15, "output")):
+    for index, owner in ((11, "model"), (12, "tokenizer"),
+                         (13, "generator"), (14, "input"), (15, "output")):
         assert f"(eq? (vector-ref descriptor {index}) {owner})" in text
     assert "(if (= index 8) #t" in text
     assert "(= (vector-ref before index) (vector-ref after index))" in text
@@ -95,7 +101,7 @@ class FixtureSource(unittest.TestCase):
     def test_last_provider_restore_and_reentry_omissions(self):
         text = source()
         for needle in ('"last provider mutation denies before spend"',
-                       '"capture late ticket mutation denies issuance"',
+                       '"capture final snapshot mutation denies issuance"',
                        '(vector-set! ticket 14 (vector-ref before 0))',
                        '(vector-set! ticket 15 (vector-ref before 1))',
                        '"reentrant admit denied while outer owns phase"'):
@@ -116,6 +122,25 @@ class FixtureSource(unittest.TestCase):
         ):
             with self.assertRaises(AssertionError):
                 validate(text.replace(old, new, 1))
+        for old, new in (
+            ("(eq? (vector-ref descriptor 11) model)",
+             "(eq? (vector-ref descriptor 11) tokenizer)"),
+            ("(eq? (vector-ref descriptor 12) tokenizer)",
+             "(eq? (vector-ref descriptor 12) model)"),
+        ):
+            with self.assertRaises(AssertionError):
+                validate(text.replace(old, new, 1))
+            with self.assertRaises(AssertionError):
+                validate(text.replace(old, "#t", 1))
+
+    def test_final_only_capture_fault_control(self):
+        text = source()
+        with self.assertRaises(AssertionError):
+            validate(text.replace("(if (= snapshot-calls 2)",
+                                  "(if (= snapshot-calls 1)", 1))
+        with self.assertRaises(AssertionError):
+            validate(text.replace("(= snapshot-calls 2))",
+                                  "(= snapshot-calls 1))", 1))
 
     def test_root_and_t1_lifecycle_controls(self):
         text = source()

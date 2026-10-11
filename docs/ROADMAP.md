@@ -2796,8 +2796,9 @@ publication, public G2 and continuation remain pending.
   A separate test-only one-root private fixture now stages authentic public
   P2/G1-EOS and G2 outputs through the F history capture/admit route. Focused
   parsed-source controls cover copied/foreign/one-use history, exact two prompt
-  and terminal IDs, ticket mutation at capture and admission, reentry, and
-  original raised `#f` with certain retry. This fixture has not been compiled
+  and terminal IDs, all 16 descriptor slots including model/tokenizer,
+  ticket mutation only at the second/final capture snapshot and at admission,
+  reentry, and original raised `#f` with certain retry. This fixture has not been compiled
   or run. It makes no sealed-T1 release claim: the current native T1 abort
   refuses sealed shells, so a genuine post-creation release test still needs
   a reviewed lifecycle or test-only seam. The installed public exports stay
