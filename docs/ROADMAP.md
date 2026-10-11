@@ -787,6 +787,12 @@ The [N1 raw receipt acquisition plan](e3/E3_N1_RAW_RECEIPT_ACQUISITION.md)
 records retained F bytes and the missing image-specific producer, provider,
 loader, header and argv evidence; its only verifier change binds raw record
 paths in reviewed claims.
+The [N1 raw capture preflight](e3/E3_N1_RAW_CAPTURE_PREFLIGHT.md) is an inert,
+noninstalled source candidate. It fixes F object hashes and mount routes,
+checks a future reviewed f31 OCI/file/host-input pin and structurally checks
+39-call raw receipts. Its reviewed plan pin is intentionally absent, no
+capture or loader execution is enabled, and source review plus exact OCI bytes
+are required before any heavy run.
 It changes no import policy; N1/M1 and the fresh supported numerical gate
 remain open.
 The exact `5d642a2` fe9/f31 numerical gate built the normal and mutant
