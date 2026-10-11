@@ -2835,6 +2835,14 @@ publication, public G2 and continuation remain pending.
   pin drift. Its embedded launch digest is empty and it has no child route;
   native closure, owned staging, emitted-symbol review and resource-enforced
   launch remain HOLD.
+  Independent review of `2e8ba2b2` held the route because the decision digest
+  named its own successor tree and checked live paths had no owned staging. A
+  source-only successor pins the prior reviewed source basis plus the exact
+  runner projection and preflight bytes, and stages authenticated selected files
+  and reviewed source bytes into a private owner tree; command construction
+  requires those staged paths. The digest remains
+  empty and every compiler, loader, Docker and native child remains HOLD until
+  external pins, closure, limits, receipts and independent approval exist.
 
 ## Wave 4 — practical pretraining and performance
 

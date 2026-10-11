@@ -115,12 +115,7 @@ def one_root(raw: bytes, name: str) -> None:
             f"{name} mixes an installed package with its private root")
 
 
-def source_topology(root: Path) -> None:
-    require(git(root, "merge-base", "--is-ancestor", BASE, "HEAD") == b"",
-            "reviewed source base is not an ancestor")
-    require(git(root, "status", "--porcelain=v1", "--untracked-files=all") == b"",
-            "source checkout is dirty")
-    # Compare the reviewed source union bytes, including modes through Git.
+def source_names(root: Path) -> set[str]:
     names = set(FIXED)
     for manifest in MANIFESTS[:2]:
         # The reviewed closure also names generated Eshkol headers under
@@ -128,6 +123,16 @@ def source_topology(root: Path) -> None:
         names.update(name for name in closure(ordinary(root, manifest))
                      if not name.startswith(".deps/"))
     require(set(TUPLE).issubset(names), "fixed package tuple omitted")
+    return names
+
+
+def source_topology(root: Path) -> None:
+    require(git(root, "merge-base", "--is-ancestor", BASE, "HEAD") == b"",
+            "reviewed source base is not an ancestor")
+    require(git(root, "status", "--porcelain=v1", "--untracked-files=all") == b"",
+            "source checkout is dirty")
+    # Compare the reviewed source union bytes, including modes through Git.
+    names = source_names(root)
     fixed_manifest(ordinary(root, MANIFESTS[2]), PROVIDERS)
     fixed_manifest(ordinary(root, MANIFESTS[3]),
                    ("g3g_manual_package.o",))

@@ -37,16 +37,31 @@ history/T1 AOT argv shape from the existing private fault runner: strict types,
 optimization level zero, no standard library, the four ordered trusted roots,
 `lib` and `native`, and one private archive per fixture and mode. The archive
 must be independently built and pinned; the installed package archive is
-excluded. A canonical launch decision must bind the exact source commit/tree,
+excluded. A canonical launch decision must bind the immutable reviewed
+source-basis commit/tree (`2e8ba2b2`/`5debf4e`),
 accepted image, root review, every selected file's path/bytes/mode/owner,
 symbol and closure inventories, owned slot receipt, and nine positive resource
 bounds. The gate rejects missing or duplicate rows, dirty source, root
-duplication, and pin drift before constructing a command.
+duplication, and pin drift before constructing a command. The source basis
+predates any successor that might embed an approved decision digest, so the
+decision does not need to hash its own successor. Admission checks that the
+current clean checkout descends from that basis. The decision must also pin
+the exact runner code projection (with only the embedded digest value erased)
+and the exact preflight bytes. A future root approval must independently
+review that projection, the full external pin decision, and any later child
+route; ancestry alone cannot approve arbitrary successor code.
+
+The source candidate copies authenticated selected pins and reviewed source
+inputs into a fresh owner-only directory. Pin bytes and metadata are checked
+from the same opened descriptor, and copied bytes are verified in the owned
+tree. AOT argv construction requires the staged source root and staged tool
+and archive paths. Live path replacement after staging cannot change those bytes.
 
 The embedded approved decision digest is intentionally empty. No decision
 file or private archive is supplied here, and this revision has no child
 launch path. A reviewed successor must bind the actual full decision, build
-the separate native closures without duplicate registries, stage owned inputs
-against source-to-use races, enforce limits, recheck immediately before every
-child, and inspect emitted symbols and receipts. The AOT argv candidate alone
+the separate native closures without duplicate registries, complete the
+generated-header/runtime staging and loader closure, enforce limits, recheck
+immediately before every child, and inspect emitted symbols and receipts. The
+AOT argv candidate alone
 does not establish any compiled behavior.
