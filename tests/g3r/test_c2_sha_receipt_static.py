@@ -138,6 +138,9 @@ def verify_fault_bindings(source: str) -> None:
 def verify_pair_admission(source: str) -> None:
     parse(source)
     required = (
+        "(let ((borrow-cell (vector #f)) (digest-cell (vector #f)))",
+        "(if (vector-ref borrow-cell 0)",
+        "(if (vector-ref digest-cell 0)",
         "g3r-c2-receipt-borrow-begin-internal",
         "g3r-c2-receipt-borrow-sha-internal",
         "g3r-record-decode!",
@@ -151,13 +154,14 @@ def verify_pair_admission(source: str) -> None:
     body = source[source.index("(define (g3r-c2-pair-decode-internal!"):]
     success = body[body.index("(g3r-record-decode!"):]
     if not (success.index("(g3r-record-decode!")
-            < success.index("(g3r-c2-receipt-borrow-end-internal! borrow)")
-            < success.index("(set! borrow #f)")
-            < success.index("(g3r-c2-sha-zero! digest)")
-            < success.index("(set! digest #f)")
+            < success.index("(g3r-c2-receipt-borrow-end-internal! (vector-ref borrow-cell 0))")
+            < success.index("(vector-set! borrow-cell 0 #f)")
+            < success.index("(g3r-c2-sha-zero! (vector-ref digest-cell 0))")
+            < success.index("(vector-set! digest-cell 0 #f)")
             < success.index("(vector-copy! destination")):
         raise ValueError("pair publication order differs")
-    if "(g3r-c2-receipt-borrow-sha-internal borrow 'checkpoint-load)" not in body:
+    if ("(g3r-c2-receipt-borrow-sha-internal\n"
+            "          (vector-ref borrow-cell 0) 'checkpoint-load)" not in body):
         raise ValueError("pair digest did not come from exact receipt borrow")
 
 
@@ -194,10 +198,18 @@ def verify_race_assertions(source: str) -> None:
           "(native-flat?)")),
         (("borrow end restores one live C2 owner",
           "(= (vector-ref counts-after-borrow-end 0) (+ owners-before 1))"),
-         ("borrow end restores prior busy C2 count",
+        ("borrow end restores prior busy C2 count",
           "(= (vector-ref counts-after-borrow-end 1) busy-before)"),
          ("borrow end restores live receipt status",
-          "(eq? (vector-ref record 1) 'live)")),
+          "(eq? (vector-ref record 1) 'live)"),
+         ("wrong pair keeps destination untouched",
+          "(unchanged-vector? untouched-pair)"),
+         ("wrong pair restores live receipt status",
+          "(eq? (vector-ref record 1) 'live)"),
+         ("wrong pair restores one live C2 owner",
+          "(= (vector-ref counts-after-wrong-pair 0) (+ owners-before 1))"),
+         ("wrong pair restores prior busy C2 count",
+          "(= (vector-ref counts-after-wrong-pair 1) busy-before)")),
     )
     checks = {}
     for index, node in enumerate(forms):
@@ -222,6 +234,17 @@ def verify_race_assertions(source: str) -> None:
                 raise ValueError(f"receipt race check differs: {label}")
             if not start < match[0][0] < end:
                 raise ValueError(f"receipt race phase order differs: {label}")
+    wrong_start = position("reject-any", '"other valid C2 digest cannot enter live receipt"')
+    wrong_end = position("define", "torn-pair")
+    wrong_labels = [f'"{name}"' for name in (
+        "wrong pair keeps destination untouched",
+        "wrong pair restores live receipt status",
+        "wrong pair restores one live C2 owner",
+        "wrong pair restores prior busy C2 count")]
+    if not (wrong_start < position("define", "counts-after-wrong-pair") < wrong_end
+            and all(wrong_start < checks[name][0][0] < wrong_end
+                    for name in wrong_labels)):
+        raise ValueError("wrong pair assertion order differs")
 
 
 class C2ShaReceiptStaticTest(unittest.TestCase):
@@ -283,14 +306,14 @@ class C2ShaReceiptStaticTest(unittest.TestCase):
                 "(define (g3r-c2-receipt-identity)\n  (begin", 1))
         with self.assertRaisesRegex(ValueError, "digest did not come"):
             verify_pair_admission(PAIR.read_text().replace(
-                "g3r-c2-receipt-borrow-sha-internal borrow 'checkpoint-load",
-                "g3r-c2-receipt-borrow-sha-internal receipt 'checkpoint-load"))
+                "(vector-ref borrow-cell 0) 'checkpoint-load)",
+                "receipt 'checkpoint-load)"))
         with self.assertRaisesRegex(ValueError, "publication order"):
             verify_pair_admission(PAIR.read_text().replace(
-                "        (g3r-c2-receipt-borrow-end-internal! borrow)\n"
-                "        (set! borrow #f)",
-                "        (set! borrow #f)\n"
-                "        (g3r-c2-receipt-borrow-end-internal! borrow)", 1))
+                "        (g3r-c2-receipt-borrow-end-internal! (vector-ref borrow-cell 0))\n"
+                "        (vector-set! borrow-cell 0 #f)",
+                "        (vector-set! borrow-cell 0 #f)\n"
+                "        (g3r-c2-receipt-borrow-end-internal! (vector-ref borrow-cell 0))", 1))
 
     def test_race_assertion_near_misses_reject(self) -> None:
         source = FIXTURE.read_text()
@@ -301,6 +324,10 @@ class C2ShaReceiptStaticTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "stored receipt SHA"):
             verify_race_assertions(source.replace(
                 "(bytes=? sha-copy expected-b)", "#t", 1))
+        with self.assertRaisesRegex(ValueError, "wrong pair restores prior busy C2 count"):
+            verify_race_assertions(source.replace(
+                "(= (vector-ref counts-after-wrong-pair 1) busy-before)",
+                "#t", 1))
         late = ('(check "borrow end restores one live C2 owner"\n'
                 '  (= (vector-ref counts-after-borrow-end 0) (+ owners-before 1)))')
         with self.assertRaisesRegex(ValueError, "receipt race phase order"):

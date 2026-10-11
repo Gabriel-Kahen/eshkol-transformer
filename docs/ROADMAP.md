@@ -1645,8 +1645,13 @@ eight decoded data-only fields to the caller. The source fixture covers a
 same-image pair, an independently valid wrong-image digest, torn companion,
 short destination, and busy, forged and dead receipts. Source/static checks
 pass. Independent source/test review found no implementation defect and its
-one static order-check gap was repaired with a mutation case. Compiled
-normal/repeat/sanitizer evidence remains pending root coordination. This is
+one static order-check gap was repaired with a mutation case. The first
+compiled normal mode reached the valid wrong-pair rejection but failed the
+combined destination/receipt state check; repeat and sanitizer did not run.
+The bounded repair stores borrow and digest cleanup authority in preallocated
+cells across the exception handler and separates destination, receipt status,
+and C2 live/busy count checks. Source checks pass; a fresh immutable compiled
+normal/repeat/sanitizer gate remains pending root coordination. This is
 in-memory pair admission only: it neither reads or publishes
 the companion file nor authenticates live model/tokenizer identity, restores
 parameters or replays a generator.

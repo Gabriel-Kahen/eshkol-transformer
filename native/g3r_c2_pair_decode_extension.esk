@@ -2,26 +2,30 @@
 ;;; expected digest; decoded fields grant no model, tokenizer or RNG authority.
 
 (define (g3r-c2-pair-decode-internal! receipt record destination)
-  (let ((borrow #f) (digest #f))
+  ;; Keep cleanup authority in cells that survive the guard's longjmp path.
+  (let ((borrow-cell (vector #f)) (digest-cell (vector #f)))
     (guard (caught
              (#t
-               (if borrow
+               (if (vector-ref borrow-cell 0)
                    (guard (cleanup-defect
                             (#t (g3r-c2-sha-fail-stop 134)))
-                     (g3r-c2-receipt-borrow-end-internal! borrow)))
-               (if digest (g3r-c2-sha-zero! digest))
+                     (g3r-c2-receipt-borrow-end-internal!
+                       (vector-ref borrow-cell 0))))
+               (if (vector-ref digest-cell 0)
+                   (g3r-c2-sha-zero! (vector-ref digest-cell 0)))
                (raise caught)))
-      (set! borrow
+      (vector-set! borrow-cell 0
         (g3r-c2-receipt-borrow-begin-internal receipt 'checkpoint-load))
-      (set! digest
-        (g3r-c2-receipt-borrow-sha-internal borrow 'checkpoint-load))
+      (vector-set! digest-cell 0
+        (g3r-c2-receipt-borrow-sha-internal
+          (vector-ref borrow-cell 0) 'checkpoint-load))
       (let ((staged (make-vector 8 #f)))
-        (g3r-record-decode! record digest staged)
+        (g3r-record-decode! record (vector-ref digest-cell 0) staged)
         ;; Close the C2 lease before publishing any decoded caller slots.
-        (g3r-c2-receipt-borrow-end-internal! borrow)
-        (set! borrow #f)
-        (g3r-c2-sha-zero! digest)
-        (set! digest #f)
+        (g3r-c2-receipt-borrow-end-internal! (vector-ref borrow-cell 0))
+        (vector-set! borrow-cell 0 #f)
+        (g3r-c2-sha-zero! (vector-ref digest-cell 0))
+        (vector-set! digest-cell 0 #f)
         ;; The pinned runtime promotes the entire range before its first write.
         (vector-copy! destination 0 staged 0 8)
         destination))))
