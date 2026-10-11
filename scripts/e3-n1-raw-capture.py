@@ -15,6 +15,7 @@ import stat
 import sys
 import tarfile
 import time
+import zlib
 from pathlib import Path, PurePosixPath
 
 # F's image ID names an OCI index in the local content store.
@@ -106,51 +107,153 @@ def rss_check(cap):
     need(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024 <= cap, "rss-cap")
 
 
-def scan_selected_layers(paths, selected, byte_cap, deadline, rss_cap=2 * 1024**3):
+def gzip_chunks(path, descriptor, diff_id, byte_cap, deadline, rss_cap):
+    """Yield one gzip member, checking both compressed and expanded identities."""
+    compressed = hashlib.sha256()
+    expanded = hashlib.sha256()
+    compressed_size = expanded_size = 0
+    decoder = zlib.decompressobj(31)
+    with open(path, "rb") as source:
+        while block := source.read(64 * 1024):
+            need(time.monotonic() <= deadline, "time-cap")
+            rss_check(rss_cap)
+            need(not decoder.eof, "gzip-trailing")
+            compressed.update(block)
+            compressed_size += len(block)
+            need(compressed_size <= descriptor["size"], "gzip-compressed-size")
+            pending = block
+            while True:
+                maximum = min(CHUNK, byte_cap - expanded_size + 1)
+                try:
+                    output = decoder.decompress(pending, maximum)
+                except zlib.error as error:
+                    raise Hold("gzip-corrupt") from error
+                tail = decoder.unconsumed_tail
+                need(not decoder.unused_data, "gzip-trailing")
+                if output:
+                    expanded_size += len(output)
+                    need(expanded_size <= byte_cap, "gzip-expanded-byte-cap")
+                    expanded.update(output)
+                    yield output
+                if decoder.eof:
+                    need(not tail, "gzip-trailing")
+                    break
+                if tail:
+                    need(output or len(tail) < len(pending), "gzip-stalled")
+                    pending = tail
+                elif output and len(output) == maximum:
+                    pending = b""
+                else:
+                    break
+                need(time.monotonic() <= deadline, "time-cap")
+                rss_check(rss_cap)
+    need(decoder.eof, "gzip-short")
+    need(compressed_size == descriptor["size"] and
+         compressed.hexdigest() == digest(descriptor["digest"]), "gzip-compressed-drift")
+    need(expanded.hexdigest() == digest(diff_id), "gzip-diffid-drift")
+
+
+class ChunkReader:
+    def __init__(self, chunks):
+        self.chunks = iter(chunks)
+        self.pending = b""
+        self.expanded_size = 0
+
+    def read(self, size):
+        need(0 <= size <= CHUNK, "gzip-read-cap")
+        result = bytearray()
+        while len(result) < size:
+            if not self.pending:
+                try:
+                    self.pending = next(self.chunks)
+                    self.expanded_size += len(self.pending)
+                except StopIteration:
+                    break
+            count = min(size - len(result), len(self.pending))
+            result.extend(self.pending[:count])
+            self.pending = self.pending[count:]
+        return bytes(result)
+
+    def drain(self):
+        while self.read(CHUNK):
+            pass
+
+    def close(self):
+        close = getattr(self.chunks, "close", None)
+        if close:
+            close()
+
+
+def scan_selected_layers(paths, selected, byte_cap, deadline, rss_cap=2 * 1024**3,
+                         layers=None, uncompressed_cap=8 * 1024**3,
+                         total_uncompressed_cap=16 * 1024**3):
     """Read tar entries only; reject whiteouts/hardlinks and ambiguous selected paths."""
     targets = {safe_guest_path(s["path"]): s for s in selected}
     need(len(targets) == len(selected), "duplicate-selected-path")
     seen = {}
     read_count = 0
+    total_uncompressed = 0
+    need(layers is None or len(layers) == len(paths), "oci-layer-count")
     for layer_number, path in enumerate(paths):
-        with open(path, "rb") as raw, tarfile.open(fileobj=raw, mode="r|*") as archive:
-            for member in archive:
-                need(time.monotonic() <= deadline, "time-cap")
-                rss_check(rss_cap)
-                name = member.name
-                while name.startswith("./"):
-                    name = name[2:]
-                if name.startswith("/") or ".." in PurePosixPath(name).parts:
-                    raise Hold("unsafe-oci-entry")
-                if name.startswith(".wh.") or "/.wh." in name:
-                    base = name.rsplit("/", 1)
-                    parent = base[0] if len(base) == 2 else ""
-                    whiteout = (parent + "/" if parent else "") + base[-1][4:]
-                    need(not any(t == whiteout or t.startswith(whiteout + "/")
-                                 or base[-1] == ".wh..wh..opq" and
-                                 (not parent or t.startswith(parent + "/")) for t in targets),
-                         "selected-whiteout")
-                if name not in targets:
-                    continue
-                need(member.isfile() or member.issym(), "selected-unsupported-entry")
-                entry = {"layer": layer_number, "path": "/" + name,
-                         "kind": "symlink" if member.issym() else "file",
-                         "mode": member.mode & 0o7777}
-                if member.issym():
-                    entry["target"] = member.linkname
-                else:
-                    stream = archive.extractfile(member)
-                    need(stream is not None, "selected-unreadable")
-                    h = hashlib.sha256()
-                    size = 0
-                    while chunk := stream.read(CHUNK):
-                        size += len(chunk)
-                        read_count += len(chunk)
-                        need(read_count <= byte_cap, "selected-byte-cap")
-                        need(time.monotonic() <= deadline, "time-cap")
-                        h.update(chunk)
-                    entry.update({"sha256": h.hexdigest(), "size": size})
-                seen[name] = entry
+        layer = layers[layer_number] if layers is not None else None
+        gzip_layer = layer is not None and layer["descriptor"]["mediaType"].endswith("+gzip")
+        if gzip_layer:
+            raw = ChunkReader(gzip_chunks(path, layer["descriptor"], layer["diff_id"],
+                                          min(uncompressed_cap,
+                                              total_uncompressed_cap - total_uncompressed),
+                                          deadline, rss_cap))
+        else:
+            layer_size = path.stat().st_size
+            need(layer_size <= uncompressed_cap and
+                 total_uncompressed + layer_size <= total_uncompressed_cap,
+                 "uncompressed-byte-cap")
+            raw = open(path, "rb")
+        try:
+            with tarfile.open(fileobj=raw, mode="r|") as archive:
+                for member in archive:
+                    need(time.monotonic() <= deadline, "time-cap")
+                    rss_check(rss_cap)
+                    name = member.name
+                    while name.startswith("./"):
+                        name = name[2:]
+                    if name.startswith("/") or ".." in PurePosixPath(name).parts:
+                        raise Hold("unsafe-oci-entry")
+                    if name.startswith(".wh.") or "/.wh." in name:
+                        base = name.rsplit("/", 1)
+                        parent = base[0] if len(base) == 2 else ""
+                        whiteout = (parent + "/" if parent else "") + base[-1][4:]
+                        need(not any(t == whiteout or t.startswith(whiteout + "/")
+                                     or base[-1] == ".wh..wh..opq" and
+                                     (not parent or t.startswith(parent + "/")) for t in targets),
+                             "selected-whiteout")
+                    if name not in targets:
+                        continue
+                    need(member.isfile() or member.issym(), "selected-unsupported-entry")
+                    entry = {"layer": layer_number, "path": "/" + name,
+                             "kind": "symlink" if member.issym() else "file",
+                             "mode": member.mode & 0o7777}
+                    if member.issym():
+                        entry["target"] = member.linkname
+                    else:
+                        stream = archive.extractfile(member)
+                        need(stream is not None, "selected-unreadable")
+                        h = hashlib.sha256()
+                        size = 0
+                        while chunk := stream.read(CHUNK):
+                            size += len(chunk)
+                            read_count += len(chunk)
+                            need(read_count <= byte_cap, "selected-byte-cap")
+                            need(time.monotonic() <= deadline, "time-cap")
+                            h.update(chunk)
+                        entry.update({"sha256": h.hexdigest(), "size": size})
+                    seen[name] = entry
+            if gzip_layer:
+                raw.drain()
+                total_uncompressed += raw.expanded_size
+            else:
+                total_uncompressed += layer_size
+        finally:
+            raw.close()
     need(set(seen) == set(targets), "missing-selected-guest-file")
     for name, entry in seen.items():
         need(entry == {k: v for k, v in targets[name].items() if k != "role"},
@@ -265,14 +368,20 @@ def validate_oci(plan, deadline, expected_image=F_IMAGE):
     need(config.get("architecture") == "amd64" and config.get("os") == "linux", "image-platform-drift")
     need(config.get("rootfs", {}).get("diff_ids") == plan["diff_ids"], "oci-diffid-drift")
     need(len(plan["layers"]) == len(plan["diff_ids"]), "oci-layer-count")
-    need(all(layer["mediaType"] == "application/vnd.oci.image.layer.v1.tar"
-             and layer["digest"] == diff_id
+    need(all(layer["mediaType"] in {
+        "application/vnd.oci.image.layer.v1.tar",
+        "application/vnd.oci.image.layer.v1.tar+gzip",
+    } and (layer["mediaType"].endswith("+gzip") or layer["digest"] == diff_id)
              for layer, diff_id in zip(plan["layers"], plan["diff_ids"])),
-         "compressed-or-unmatched-layer-unsupported")
+         "layer-format-or-diffid-unsupported")
     paths = [blob(layout, layer, max_blob, deadline) for layer in plan["layers"]]
     return scan_selected_layers(paths, plan["selected_guest_files"],
                                 plan["limits"]["max_selected_bytes"], deadline,
-                                plan["limits"]["max_rss_bytes"])
+                                plan["limits"]["max_rss_bytes"],
+                                layers=[{"descriptor": layer, "diff_id": diff_id}
+                                        for layer, diff_id in zip(plan["layers"], plan["diff_ids"])],
+                                uncompressed_cap=plan["limits"]["max_uncompressed_layer_bytes"],
+                                total_uncompressed_cap=plan["limits"]["max_total_uncompressed_bytes"])
 
 
 def validate_capture_receipt(receipt_path, plan, deadline):
@@ -329,6 +438,8 @@ def preflight(plan_path, receipt_path=None, reviewed_pin=REVIEWED_PLAN_SHA256,
     need(all(type(limits.get(k)) is int and 0 < limits[k] <= ceiling for k, ceiling in {
         "seconds": 1800, "max_blob_bytes": 8 * 1024**3,
         "max_selected_bytes": 2 * 1024**3,
+        "max_uncompressed_layer_bytes": 8 * 1024**3,
+        "max_total_uncompressed_bytes": 16 * 1024**3,
         "max_raw_record_bytes": 2 * 1024**3,
         "max_output_bytes": 2 * 1024**3,
         "max_rss_bytes": 2 * 1024**3,

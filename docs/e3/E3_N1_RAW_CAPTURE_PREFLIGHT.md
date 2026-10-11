@@ -15,12 +15,13 @@ indexed manifest descriptor, config descriptor, ordered layer descriptors and
 uncompressed diff IDs. It hashes each blob while streaming and checks the
 selected guest tool, interpreter, loader, provider and header file entries
 against final layer entries, including modes, symlink targets and selected
-file bytes. Uncompressed OCI tar layers alone are supported in this candidate;
-gzip/zstd layers fail closed pending a reviewed streaming implementation.
+file bytes. Uncompressed OCI tar and bounded gzip tar layers are supported in
+the source-only [gzip scanner successor](E3_N1_GZIP_SCANNER.md); zstd fails
+closed.
 The local f31 content store has an amd64 manifest with a distinct config digest
-and two gzip layers. The preflight therefore remains unable to scan the actual
-image-selected bytes, even though it can authenticate index/manifest/config
-metadata. The local content store is not itself a reviewed OCI export.
+and two gzip layers. The successor scanner has only synthetic tests; the actual
+image-selected bytes remain unscanned pending independent source review and a
+reviewed OCI export. The local content store is not itself a reviewed export.
 Selected guest symlink targets must also appear in the pinned selection.
 Whiteouts affecting a selected path fail closed. This scanner does not claim
 a complete overlay filesystem reconstruction or actual dynamic-loader

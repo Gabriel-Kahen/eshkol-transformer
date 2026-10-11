@@ -1,6 +1,7 @@
 """Synthetic-only negatives for the inert E3 N1 capture preflight."""
 
 import importlib.util
+import gzip
 import io
 import json
 import subprocess
@@ -160,7 +161,9 @@ class PreflightTests(unittest.TestCase):
                     "layers": [layer_desc], "diff_ids": [layer_desc["digest"]],
                     "selected_guest_files": [selected],
                     "limits": {"max_blob_bytes": 1024 * 1024,
-                               "max_selected_bytes": 1024, "max_rss_bytes": 2 * 1024**3}}
+                               "max_selected_bytes": 1024, "max_rss_bytes": 2 * 1024**3,
+                               "max_uncompressed_layer_bytes": 1024 * 1024,
+                               "max_total_uncompressed_bytes": 1024 * 1024}}
             self.assertNotEqual("sha256:" + index_hash, config_desc["digest"])
             self.assertEqual(mod.validate_oci(plan, time.monotonic() + 5,
                                               expected_image="sha256:" + index_hash), 1)
@@ -173,6 +176,131 @@ class PreflightTests(unittest.TestCase):
             with self.assertRaisesRegex(mod.Hold, "oci-amd64-manifest-drift"):
                 mod.validate_oci(wrong_platform, time.monotonic() + 5,
                                  expected_image="sha256:" + index_hash)
+
+            gzip_desc = store(gzip.compress(layer.read_bytes(), mtime=0),
+                              "application/vnd.oci.image.layer.v1.tar+gzip")
+            gzip_manifest = store(json.dumps({"config": config_desc, "layers": [gzip_desc]}
+                                             ).encode(), "application/vnd.oci.image.manifest.v1+json")
+            gzip_manifest["platform"] = {"architecture": "amd64", "os": "linux"}
+            gzip_index = json.dumps({"manifests": [gzip_manifest]}).encode()
+            (layout / "index.json").write_bytes(gzip_index)
+            gzip_index_hash = mod.hashlib.sha256(gzip_index).hexdigest()
+            plan.update(index_sha256=gzip_index_hash, manifest=gzip_manifest,
+                        layers=[gzip_desc])
+            self.assertEqual(mod.validate_oci(plan, time.monotonic() + 5,
+                                              expected_image="sha256:" + gzip_index_hash), 1)
+
+    def test_gzip_layer_integrity_and_resource_negatives(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "layer.tar.gz"
+            tar = io.BytesIO()
+            with tarfile.open(fileobj=tar, mode="w") as archive:
+                payload = b"pinned guest tool"
+                entry = tarfile.TarInfo("usr/bin/tool")
+                entry.mode = 0o755
+                entry.size = len(payload)
+                archive.addfile(entry, io.BytesIO(payload))
+            raw = tar.getvalue()
+            packed = gzip.compress(raw, mtime=0)
+            selected = [{"path": "/usr/bin/tool", "layer": 0, "kind": "file",
+                         "mode": 0o755, "sha256": mod.hashlib.sha256(payload).hexdigest(),
+                         "size": len(payload)}]
+
+            def check(data, *, expanded_cap=1024 * 1024, diff_id=None,
+                      compressed_digest=None, declared_size=None, deadline=None,
+                      chosen=None):
+                path.write_bytes(data)
+                descriptor = {"mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                              "digest": "sha256:" + (compressed_digest or mod.hashlib.sha256(data).hexdigest()),
+                              "size": len(data) if declared_size is None else declared_size}
+                layer = {"descriptor": descriptor,
+                         "diff_id": diff_id or "sha256:" + mod.hashlib.sha256(raw).hexdigest()}
+                return mod.scan_selected_layers([path], chosen or selected, 1024,
+                                                deadline or time.monotonic() + 5,
+                                                layers=[layer], uncompressed_cap=expanded_cap,
+                                                total_uncompressed_cap=expanded_cap)
+
+            self.assertEqual(check(packed), 1)
+            with self.assertRaisesRegex(mod.Hold, "gzip-compressed-drift"):
+                check(packed, compressed_digest="0" * 64)
+            with self.assertRaisesRegex(mod.Hold, "gzip-compressed-size"):
+                check(packed, declared_size=len(packed) - 1)
+            with self.assertRaisesRegex(mod.Hold, "gzip-diffid-drift"):
+                check(packed, diff_id="sha256:" + "0" * 64)
+            with self.assertRaisesRegex(mod.Hold, "gzip-short"):
+                check(packed[:-8])
+            with self.assertRaisesRegex(mod.Hold, "gzip-trailing"):
+                check(packed + b"trailing")
+            with self.assertRaisesRegex(mod.Hold, "gzip-trailing"):
+                check(packed + packed)
+            with self.assertRaisesRegex(mod.Hold, "gzip-corrupt"):
+                check(packed[:-1] + bytes([packed[-1] ^ 1]))
+            with self.assertRaisesRegex(mod.Hold, "gzip-expanded-byte-cap"):
+                check(packed, expanded_cap=16)
+            layer = {"descriptor": {
+                "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                "digest": "sha256:" + mod.hashlib.sha256(packed).hexdigest(),
+                "size": len(packed)},
+                "diff_id": "sha256:" + mod.hashlib.sha256(raw).hexdigest()}
+            with self.assertRaisesRegex(mod.Hold, "gzip-expanded-byte-cap"):
+                mod.scan_selected_layers([path, path], selected, 1024,
+                                         time.monotonic() + 5, layers=[layer, layer],
+                                         uncompressed_cap=1024 * 1024,
+                                         total_uncompressed_cap=len(raw) + 16)
+            with self.assertRaisesRegex(mod.Hold, "time-cap"):
+                check(packed, deadline=time.monotonic() - 1)
+            changed = [dict(selected[0], mode=0o700)]
+            with self.assertRaisesRegex(mod.Hold, "selected-guest-drift"):
+                check(packed, chosen=changed)
+
+    def test_gzip_whiteout_and_symlink_negatives(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            paths = []
+            layers = []
+            for index, name in enumerate(("usr/bin/tool", "usr/bin/.wh.tool")):
+                tar = io.BytesIO()
+                with tarfile.open(fileobj=tar, mode="w") as archive:
+                    entry = tarfile.TarInfo(name)
+                    entry.size = 0
+                    archive.addfile(entry, io.BytesIO())
+                raw = tar.getvalue()
+                packed = gzip.compress(raw, mtime=0)
+                path = root / f"layer-{index}.gz"
+                path.write_bytes(packed)
+                paths.append(path)
+                layers.append({"descriptor": {
+                    "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                    "digest": "sha256:" + mod.hashlib.sha256(packed).hexdigest(),
+                    "size": len(packed)},
+                    "diff_id": "sha256:" + mod.hashlib.sha256(raw).hexdigest()})
+            selected = [{"path": "/usr/bin/tool", "layer": 0, "kind": "file",
+                         "mode": 0o644, "size": 0,
+                         "sha256": mod.hashlib.sha256(b"").hexdigest()}]
+            with self.assertRaisesRegex(mod.Hold, "selected-whiteout"):
+                mod.scan_selected_layers(paths, selected, 1024, time.monotonic() + 5,
+                                         layers=layers, uncompressed_cap=1024 * 1024,
+                                         total_uncompressed_cap=2 * 1024 * 1024)
+
+            tar = io.BytesIO()
+            with tarfile.open(fileobj=tar, mode="w") as archive:
+                entry = tarfile.TarInfo("usr/bin/tool")
+                entry.type = tarfile.SYMTYPE
+                entry.linkname = "missing"
+                entry.mode = 0o777
+                archive.addfile(entry)
+            raw = tar.getvalue()
+            packed = gzip.compress(raw, mtime=0)
+            paths[0].write_bytes(packed)
+            layers[0]["descriptor"].update(digest="sha256:" + mod.hashlib.sha256(packed).hexdigest(),
+                                            size=len(packed))
+            layers[0]["diff_id"] = "sha256:" + mod.hashlib.sha256(raw).hexdigest()
+            selected = [{"path": "/usr/bin/tool", "layer": 0, "kind": "symlink",
+                         "mode": 0o777, "target": "missing"}]
+            with self.assertRaisesRegex(mod.Hold, "symlink-target-unpinned"):
+                mod.scan_selected_layers(paths[:1], selected, 1024, time.monotonic() + 5,
+                                         layers=layers[:1], uncompressed_cap=1024 * 1024,
+                                         total_uncompressed_cap=1024 * 1024)
 
     def test_capture_receipt_requires_39_and_f_parity(self):
         with tempfile.TemporaryDirectory() as temp:
