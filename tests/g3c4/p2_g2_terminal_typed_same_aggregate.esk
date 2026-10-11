@@ -2,12 +2,36 @@
 ;;; independent numerical/fault acceptance gate. Never install this root.
 (load "g3c4_p2g2_terminal_typed_private_root.esk")
 
+(extern i64 typed-physical-shape ptr i64 i64 i64 i64
+        :real et_g3c4_p2g2_typed_aggregate_shape_v1)
+(extern i64 typed-fault i64
+        :real et_g3c4_p2g2_typed_aggregate_fault_v1)
+(extern i64 typed-fault-pending
+        :real et_g3c4_p2g2_typed_aggregate_fault_pending_v1)
+(extern i64 typed-i1-cut i64
+        :real et_g3c4_p2g2_typed_aggregate_i1_cut_v1)
+(extern i64 typed-lease ptr i64
+        :real et_g3c4_p2g2_typed_aggregate_lease_v1)
+(extern i64 aggregate-oracle-mark ptr i64 i64 i64
+        :real et_g3c4_p2g2_aggregate_oracle_mark_v1)
+(extern i64 aggregate-oracle-verify ptr ptr i64
+        :real et_g3c4_p2g2_aggregate_oracle_verify_v1)
+
 (define checks 0)
 (define (check label condition)
   (if condition
       (set! checks (+ checks 1))
       (begin (display "P2/G2 typed aggregate FAIL: ")
              (display label) (newline) (exit 1))))
+(define (reject label thunk)
+  (check label
+    (guard (caught (#t (transformer-error? caught)))
+      (thunk) #f)))
+(define (snapshot-equal left right)
+  (let loop ((index 0))
+    (if (= index 8) #t
+        (and (= (vector-ref left index) (vector-ref right index))
+             (loop (+ index 1))))))
 
 (define tokenizer
   (t1-private-register-core
@@ -17,11 +41,12 @@
   (g3c4-p2g2-owned-input-create
     (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255))))
 
-(define (config eos)
-  (list ':profile 'diagnostic-c4 ':sampling 'greedy
-        ':temperature-bits 1065353216 ':top-k 256
-        ':top-p-bits 1065353216 ':max-new-tokens 2
-        ':eos eos ':seed 7))
+(define (config eos sampling seed)
+  (list ':profile 'diagnostic-c4 ':sampling sampling
+        ':temperature-bits 1065353216
+        ':top-k (if (eq? sampling 'categorical) 17 256)
+        ':top-p-bits (if (eq? sampling 'categorical) 1056964608 1065353216)
+        ':max-new-tokens 2 ':eos eos ':seed seed))
 
 (define (typed-check tuple snapshot)
   (let* ((ids (vector-ref tuple 0))
@@ -49,7 +74,13 @@
                 (= (g3c4-p2g2-terminal-typed-value lengths 0 operation)
                    count)
                 (= (g3c4-p2g2-terminal-typed-value cache 0 operation)
-                   (+ count 2))))))
+                   (+ count 2))))
+    (check "native rank, shape, stride and elements"
+           (and (= (typed-physical-shape ids 10 count
+                                          (vector-ref snapshot 0)
+                                          (vector-ref snapshot 1)) 0)
+                (= (typed-physical-shape lengths 11 1 count 0) 0)
+                (= (typed-physical-shape cache 12 1 (+ count 2) 0) 0)))))
 
 (define (release-tuple tuple)
   (check "release cache owner"
@@ -59,14 +90,42 @@
   (check "release IDs owner"
          (= (g3c4-p2g2-native-typed-release (vector-ref tuple 0)) 0)))
 
-(define (run-case eos expected-count)
+(define (fault-check output snapshot selector)
+  (check "arm one recoverable native cut" (= (typed-fault selector) 0))
+  (reject "native cut rejects without publication"
+    (lambda ()
+      (if (<= selector 2)
+          (g3c4-p2g2-terminal-snapshot-internal output)
+          (g3c4-p2g2-terminal-typed-create-internal output))))
+  (check "native cut consumed" (= (typed-fault-pending) 0))
+  (check "source unchanged after native cut"
+         (snapshot-equal
+           (g3c4-p2g2-terminal-snapshot-internal output) snapshot)))
+
+(define (i1-cut-check output snapshot cut)
+  (check "arm typed IDs I1 allocation cut" (= (typed-i1-cut cut) 0))
+  (reject "typed IDs I1 allocation cut rejects"
+    (lambda () (g3c4-p2g2-terminal-typed-create-internal output)))
+  (check "I1 allocation cut consumed" (= (typed-fault-pending) 0))
+  (check "source unchanged after I1 cut"
+         (snapshot-equal
+           (g3c4-p2g2-terminal-snapshot-internal output) snapshot)))
+
+(define (run-case eos expected-count case-id sampling seed)
   (let* ((generator (g3c4-generator-create-internal
-                      model tokenizer (config eos)))
+                      model tokenizer (config eos sampling seed)))
+         (native (vector-ref
+                   (g3c4-generator-entry-call-ready generator 'test) 3)))
+    (check "mark independent same-call oracle"
+           (= (aggregate-oracle-mark native case-id 0 255) 0))
+    (let* (
          (output (g3c4-p2g2-terminal-generate-internal generator input))
          (snapshot (g3c4-p2g2-terminal-snapshot-internal output))
-         (text (vector-ref (g3c4-p2g2-terminal-output-live output 'test) 8))
-         (first (g3c4-p2g2-terminal-typed-create-internal output))
-         (second (g3c4-p2g2-terminal-typed-create-internal output)))
+         (text (vector-ref (g3c4-p2g2-terminal-output-live output 'test) 8)))
+    (check "independent same-call RNG and A2 oracle"
+           (= (aggregate-oracle-verify native (vector-ref
+                 (g3c4-p2g2-terminal-output-live output 'test) 3)
+                 expected-count) 0))
     (check "logical count and cache"
            (and (= (vector-ref snapshot 2) expected-count)
                 (= (vector-ref snapshot 3) (+ 2 expected-count))))
@@ -76,30 +135,53 @@
                 (if (= expected-count 1) #t
                     (= (bytevector-u8-ref text 1)
                        (vector-ref snapshot 1)))))
-    (check "two tuples have distinct IDs owners"
-           (not (eq? (vector-ref first 0) (vector-ref second 0))))
-    (typed-check first snapshot)
-    (typed-check second snapshot)
-    (check "source release"
-           (g3c4-p2g2-terminal-output-release-internal! output))
-    (typed-check first snapshot)
-    (typed-check second snapshot)
-    (release-tuple second)
-    (release-tuple first)
+    (reject "wrong terminal owner rejected"
+      (lambda () (g3c4-p2g2-terminal-typed-create-internal #f)))
+    (if (= expected-count 2)
+        (begin
+          (let fault-loop ((selector 1))
+            (if (<= selector 7)
+                (begin (fault-check output snapshot selector)
+                       (fault-loop (+ selector 1)))))
+          (let i1-loop ((cut 0))
+            (if (< cut 7)
+                (begin (i1-cut-check output snapshot cut)
+                       (i1-loop (+ cut 1)))))))
+    (let ((first (g3c4-p2g2-terminal-typed-create-internal output))
+          (second (g3c4-p2g2-terminal-typed-create-internal output)))
+      (check "two tuples have distinct IDs owners"
+             (not (eq? (vector-ref first 0) (vector-ref second 0))))
+      (typed-check first snapshot)
+      (typed-check second snapshot)
+      (check "source release"
+             (g3c4-p2g2-terminal-output-release-internal! output))
+      (typed-check first snapshot)
+      (typed-check second snapshot)
+      (check "hold typed IDs lease"
+             (= (typed-lease (vector-ref first 0) 1) 0))
+      (check "held lease rejects owner release"
+             (not (= (g3c4-p2g2-native-typed-release
+                       (vector-ref first 0)) 0)))
+      (check "release typed IDs lease"
+             (= (typed-lease (vector-ref first 0) 0) 0))
+      (typed-check first snapshot)
+      (release-tuple second)
+      (release-tuple first))
     (check "generator close" (g3c4-generator-close-internal! generator))
-    snapshot))
+    snapshot)))
 
-(define baseline (run-case #f 2))
+(define baseline (run-case #f 2 0 'greedy 7))
 ;;; The first supported compile must establish this deterministic fixture fact.
 (check "distinct non-EOS IDs required for the EOS probes"
        (not (= (vector-ref baseline 0) (vector-ref baseline 1))))
-(define first-eos (run-case (vector-ref baseline 0) 1))
-(define second-eos (run-case (vector-ref baseline 1) 2))
+(define first-eos (run-case (vector-ref baseline 0) 1 1 'greedy 7))
+(define second-eos (run-case (vector-ref baseline 1) 2 2 'greedy 7))
 (check "first EOS identity" (= (vector-ref first-eos 0)
                                (vector-ref baseline 0)))
 (check "second EOS identity"
        (and (= (vector-ref second-eos 0) (vector-ref baseline 0))
             (= (vector-ref second-eos 1) (vector-ref baseline 1))))
+(run-case #f 2 3 'categorical 1729)
 (check "input release" (generation-tensor-release-internal! input))
 (display "P2/G2 typed same-aggregate smoke PASS: checks=")
 (display checks)

@@ -2684,11 +2684,18 @@ publication, public G2 and continuation remain pending.
   G3-G root and derives three independent I1 owners from an authenticated
   terminal snapshot and logical clone. Its focused source gate passes 14
   tests. A private same-aggregate smoke fixture now covers the planned
-  first/second EOS and two non-EOS paths plus two typed tuples after source
-  release, but remains uncompiled. The exact fe9/f31 dependencies are pinned;
-  compiled same-call, independent RNG/A2 oracles, rank/shape, fault,
-  ownership, feature-off and supported review gates remain pending. Public
-  P2/G2 dispatch stays disabled.
+  first/second EOS and two non-EOS paths, two typed tuples after source
+  release, native I1 rank/shape/stride/value inspection, recoverable
+  snapshot/clone/typed-owner faults, seven IDs allocation cuts, and held-lease
+  release/retry. A test-only native helper captures the actual call's IDs,
+  RNG and A2 cache, then computes separate P2/P3/T4 native references; a
+  focused Python checker uses independent G3-S/Philox sampling reference code.
+  A source-only f31 archive recipe records member and symbol inventories plus
+  final link maps and invokes the typed feature-off native gate. The 14 source
+  checks and host syntax checks pass; this fixture, oracle and archive remain
+  uncompiled. Exact fe9/f31 dependencies are pinned; compiled same-call
+  RNG/A2 parity, feature-off execution and supported integration review remain
+  pending. Public P2/G2 dispatch stays disabled.
 
 ## Wave 4 — practical pretraining and performance
 
