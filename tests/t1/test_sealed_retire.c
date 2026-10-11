@@ -68,7 +68,7 @@ int main(void) {
   void *second;
   void *successor;
   void *wrong_length;
-  const void *storage;
+  uintptr_t storage_address;
   CHECK(unsealed != NULL);
   CHECK(et_t1_i64_shell_test_release_sealed_v1(NULL) ==
         ET_T1_I64_SHELL_STATUS_INVALID_ARGUMENT);
@@ -102,12 +102,12 @@ int main(void) {
   CHECK(et_t1_i64_shell_test_restore_v1(first) == 0);
   CHECK(et_t1_i64_shell_test_live_count_v1() == baseline + 3);
   CHECK(et_t1_i64_shell_read_v1(first, 1) == 255);
-  storage = et_t1_i64_shell_test_storage_v1(first);
-  CHECK(storage != NULL);
-  CHECK(et_i64_tensor_private_storage_overlap_v1(storage, 1) == 1);
+  storage_address = (uintptr_t)et_t1_i64_shell_test_storage_v1(first);
+  CHECK(storage_address != 0u);
+  CHECK(et_i64_tensor_private_data_address_live_v1(storage_address) == 1);
   CHECK(et_t1_i64_shell_test_release_sealed_v1(first) == 0);
   CHECK(et_t1_i64_shell_test_live_count_v1() == baseline + 2);
-  CHECK(et_i64_tensor_private_storage_overlap_v1(storage, 1) == 0);
+  CHECK(et_i64_tensor_private_data_address_live_v1(storage_address) == 0);
   CHECK(et_t1_i64_shell_test_storage_v1(first) == NULL);
   CHECK(et_t1_i64_shell_test_release_sealed_v1(first) ==
         ET_T1_I64_SHELL_STATUS_INVALID_ARGUMENT);

@@ -22,8 +22,13 @@ return permits the allocation-free registry swap. It creates a genuine C4 P2
 input from `[0,255]` before retirement, then checks that native/T1 access
 fails and C4-owned history still captures and admits EOS and non-EOS G2
 branches with their original IDs, terminal words, cache, and RNG. The C test
-`tests/t1/test_sealed_retire.c` covers native refusal, live I1 storage removal,
-raw-pointer ABA, and a separate fail-stop child at the post-borrow cut.
+`tests/t1/test_sealed_retire.c` covers native refusal, live I1 data-registry
+removal through a pre-free integer address snapshot, raw-pointer ABA, and a
+separate fail-stop child at the post-borrow cut. The Eshkol fixture also
+registers an exact one-entry sealed length-one shell: native preflight refuses
+it while Eshkol list identity/count and native live count remain unchanged.
+That wrong-length shell, like the C test's wrong-length shell, is deliberately
+retained until process exit; resource claims exclude those retained owners.
 
 The next gate is independent source/tests review, then an immutable bounded
 normal/sanitizer launch plan that pins exact package topology, toolchain,

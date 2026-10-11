@@ -2796,6 +2796,9 @@ publication, public G2 and continuation remain pending.
   A separate [test-only T1 postcreation retirement source candidate](g3/G3_C4_T1_POSTCREATION_RETIRE_TEST_SEAM.md)
   stages real sealed-shell I1 borrow/tensor cleanup and tombstone admission,
   with a one-root private C4 history fixture and a post-borrow fail-stop child.
+  Its focused B successor uses a pre-free integer address to test I1 data
+  deregistration and a one-entry registered wrong-length native-refusal cut;
+  both wrong-length shells are deliberately retained until process exit.
   The source-only tests do not establish compiled release or production T1
   reclamation; the public process-lifetime contract remains unchanged.
 

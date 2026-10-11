@@ -69,6 +69,29 @@
     selected))
 (define selected-first (first-id))
 
+;;; Exactly one Eshkol admission reaches native preflight and is refused.
+;;; The sealed length-one shell is intentionally retained until process exit.
+(define wrong-length (t1-shell-create 1))
+(check "wrong-length shell created" (not (null? wrong-length)))
+(check "wrong-length shell written" (= (t1-shell-write wrong-length 0 7) 0))
+(check "wrong-length shell sealed" (= (t1-shell-seal wrong-length) 0))
+(define saved-registry t1-wave1-tensor-registry)
+(set! t1-wave1-tensor-registry (cons (vector wrong-length) '()))
+(define wrong-registry t1-wave1-tensor-registry)
+(define wrong-native (test-t1-live-count))
+(check "registered sealed wrong-length reaches native refusal"
+  (and (= (t1-test-list-length wrong-registry) 1)
+       (eq? (vector-ref (car wrong-registry) 0) wrong-length)
+       (not (retire-authentic-t1! wrong-length))
+       (= (t1-shell-last-status) 2)))
+(check "native refusal preserves singleton registry identity and owner"
+  (and (eq? t1-wave1-tensor-registry wrong-registry)
+       (= (t1-test-list-length t1-wave1-tensor-registry) 1)
+       (eq? (vector-ref (car t1-wave1-tensor-registry) 0) wrong-length)
+       (= (test-t1-live-count) wrong-native)
+       (= (t1-shell-length wrong-length) 1)))
+(set! t1-wave1-tensor-registry saved-registry)
+
 (define before-native (test-t1-live-count))
 (define before-aggregate (t1-test-list-length t1-wave1-tensor-registry))
 (check "absent admission refuses without native cleanup"

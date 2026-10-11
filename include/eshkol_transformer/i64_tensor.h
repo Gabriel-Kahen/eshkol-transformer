@@ -157,6 +157,10 @@ int32_t et_i64_tensor_borrow_end_v1(et_i64_tensor_borrow **borrow,
  * overlaps any live I1 control, metadata, element, or borrow allocation. */
 int32_t et_i64_tensor_private_storage_overlap_v1(
     const void *pointer, size_t bytes);
+#ifdef ET_T1_SEALED_RELEASE_TEST_ONLY
+/* Test-only integer-address witness; never reconstructs a freed pointer. */
+int32_t et_i64_tensor_private_data_address_live_v1(uintptr_t address);
+#endif
 #endif
 
 /* Returned provider metadata is static and immutable for process lifetime. */
