@@ -1637,6 +1637,13 @@ Hosted integration checks, merge and public acceptance remain pending. This
 private receipt does not implement a G3-R pair loader, live replay or resumed
 continuation.
 
+The proposed [receipt-to-fresh-M3T restore boundary](g3/G3_R_C2_RECEIPT_M3T_RESTORE_CONTRACT.md)
+records the C2 ownership gap: the receipt lends a C2 borrow, whereas TR3
+restore requires its owned shell and starts its own borrow. It pins the fixed
+14-path bit/alias/eval gate and rejects C4's incompatible position shape.
+The private receipt-to-TR3 bridge and complete candidate teardown remain
+pending; this documentation adds no accepted restore or G3-R continuation.
+
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
 checks the authentic idle generator's four RNG words without allocation,
