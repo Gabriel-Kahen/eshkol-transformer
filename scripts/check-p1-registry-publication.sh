@@ -353,7 +353,8 @@ def local_writes(lines, local, end):
 
 def kind_slot_routes(lines, selection_index, selection, name):
     # Match the ordered cond CFG, rather than trusting cond_then suffixes in
-    # the phi. Every branch predicate must depend on the captured kind.
+    # the phi. Admit only the narrow direct-comparison shape modeled by the
+    # source regression; exact compiler symbol lowering remains unverified.
     incoming = re.findall(r", %([-A-Za-z0-9_.]+) \]", selection)
     starts = [(i, match.group(1)) for i, line in enumerate(lines)
               if (match := re.match(r"^([-A-Za-z0-9_.]+):", line))]
@@ -370,22 +371,8 @@ def kind_slot_routes(lines, selection_index, selection, name):
                 "\n".join(lines[slice(*spans[label])])):
             raise SystemExit(f"IR proof failed: {name} slot phi predecessor changed")
 
-    definitions = {match.group(1): line for line in lines[:selection_index]
-                   if (match := re.match(r"\s*(%[-A-Za-z0-9_.]+) = ", line))}
-    def from_kind(value, seen=None):
-        seen = set() if seen is None else seen
-        if value in seen or value not in definitions:
-            return False
-        seen.add(value)
-        definition = definitions[value]
-        if re.search(r"load %eshkol_tagged_value, ptr %kind(?:_cap)?,",
-                     definition):
-            return True
-        return any(from_kind(dep, seen) for dep in re.findall(
-            r"%[-A-Za-z0-9_.]+", definition.split(" = ", 1)[1]))
-
     source = None
-    for branch_number, target in enumerate(incoming[:3]):
+    for branch_number, (target, expected) in enumerate(zip(incoming[:3], (0, 1, 4))):
         matches = []
         for label, (start, end) in spans.items():
             if start >= selection_index:
@@ -395,12 +382,28 @@ def kind_slot_routes(lines, selection_index, selection, name):
                 r"label %([-A-Za-z0-9_.]+)$",
                 "\n".join(lines[start:end]).rstrip())
             if branch:
-                matches.append((label, branch.group(1), branch.group(2)))
+                matches.append((label, start, end, branch.group(1), branch.group(2)))
         if len(matches) != 1 or (source is not None and matches[0][0] != source):
             raise SystemExit(f"IR proof failed: {name} slot kind branch changed")
-        _, predicate, source = matches[0]
-        if not from_kind(predicate):
-            raise SystemExit(f"IR proof failed: {name} slot branch bypasses kind")
+        _, start, end, predicate, source = matches[0]
+        predicate_index, predicate_line = ssa_definition(lines, predicate, name)
+        compare = re.fullmatch(
+            rf"\s*{re.escape(predicate)} = icmp eq i64 "
+            rf"(%[-A-Za-z0-9_.]+), {expected}", predicate_line)
+        if compare is None or not start < predicate_index < end:
+            raise SystemExit(f"IR proof failed: {name} wrong kind comparison")
+        bits_index, bits_line = ssa_definition(lines, compare.group(1), name)
+        bits = re.fullmatch(
+            rf"\s*{re.escape(compare.group(1))} = extractvalue "
+            r"%eshkol_tagged_value (%[-A-Za-z0-9_.]+), 4", bits_line)
+        if bits is None or not start < bits_index < predicate_index:
+            raise SystemExit(f"IR proof failed: {name} kind comparison source changed")
+        load_index, load_line = ssa_definition(lines, bits.group(1), name)
+        if (not start < load_index < bits_index or not re.fullmatch(
+                rf"\s*{re.escape(bits.group(1))} = load "
+                r"%eshkol_tagged_value, ptr %kind_cap, align [0-9]+",
+                load_line)):
+            raise SystemExit(f"IR proof failed: {name} kind comparison bypasses capture")
     if source != incoming[3]:
         raise SystemExit(f"IR proof failed: {name} slot fallback branch changed")
 

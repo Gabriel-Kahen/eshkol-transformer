@@ -2914,6 +2914,13 @@ publication, public G2 and continuation remain pending.
   source-only CFG shape does not establish the compiler's symbol-comparison
   lowering or prove that its actual emitted IR matches. Independent/ROOT source
   review and supported exact-IR proof remain HOLD before native C4 evidence.
+  ROOT found G still accepted a state-slot branch testing the synthetic module
+  kind constant. Source candidate H restricts each modeled branch to a direct
+  captured-kind load, field-4 extraction, and equality comparison with the
+  corresponding synthetic 0/1/4 value; wrong, swapped, unrelated and constant-
+  false predicates reject. Those modeled values are not established compiler
+  symbol encodings. Exact emitted-IR inspection must determine whether this
+  conservative shape applies; C4 admission remains HOLD.
   Source review and compiled runtime/ABI proof are still required before
   claiming this as a C4 witness.
   Compiled normal/repeat/sanitizer tests, allocation/callback instrumentation,

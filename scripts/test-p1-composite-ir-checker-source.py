@@ -230,6 +230,45 @@ wrong_branch_input = [line.replace(
 rejects(lambda: namespace["checked_pair_root_value"](
     wrong_branch_input, len(wrong_branch_input) - 1,
     "branch-bypasses-kind"))
+for index, branch, expected, wrong in ((0, "state", 0, 1),
+                                       (1, "module", 1, 0),
+                                       (2, "tensor", 4, 9)):
+    wrong_kind_constant = [line.replace(
+        f"%kind.{branch} = icmp eq i64 %kind.bits{index}, {expected}",
+        f"%kind.{branch} = icmp eq i64 %kind.bits{index}, {wrong}")
+        for line in pair_publication]
+    rejects(lambda lines=wrong_kind_constant: namespace["checked_pair_root_value"](
+        lines, len(lines) - 1, f"wrong-{branch}-kind-constant"))
+swapped_kind_constants = [line.replace(
+    "%kind.state = icmp eq i64 %kind.bits0, 0",
+    "%kind.state = icmp eq i64 %kind.bits0, 1").replace(
+    "%kind.module = icmp eq i64 %kind.bits1, 1",
+    "%kind.module = icmp eq i64 %kind.bits1, 0")
+    for line in pair_publication]
+rejects(lambda: namespace["checked_pair_root_value"](
+    swapped_kind_constants, len(swapped_kind_constants) - 1,
+    "swapped-kind-comparisons"))
+false_kind_predicate = [line.replace(
+    "%kind.state = icmp eq i64 %kind.bits0, 0",
+    "%kind.state = and i1 %kind.unrelated, false")
+    for line in pair_publication]
+rejects(lambda: namespace["checked_pair_root_value"](
+    false_kind_predicate, len(false_kind_predicate) - 1,
+    "false-kind-predicate"))
+wrong_kind_capture = [line.replace(
+    "%kind.load0 = load %eshkol_tagged_value, ptr %kind_cap,",
+    "%kind.load0 = load %eshkol_tagged_value, ptr %other_cap,")
+    for line in pair_publication]
+rejects(lambda: namespace["checked_pair_root_value"](
+    wrong_kind_capture, len(wrong_kind_capture) - 1,
+    "wrong-kind-capture"))
+wrong_kind_bits = [line.replace(
+    "%kind.state = icmp eq i64 %kind.bits0, 0",
+    "%kind.state = icmp eq i64 %unrelated.bits, 0")
+    for line in pair_publication]
+rejects(lambda: namespace["checked_pair_root_value"](
+    wrong_kind_bits, len(wrong_kind_bits) - 1,
+    "wrong-kind-bits"))
 alias_slot = pair_publication.copy()
 alias_slot[alias_slot.index(
     "  %active-slot.load = load %eshkol_tagged_value, ptr %active-slot, align 8"):
