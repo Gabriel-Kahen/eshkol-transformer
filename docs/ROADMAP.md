@@ -1637,6 +1637,16 @@ Hosted integration checks, merge and public acceptance remain pending. This
 private receipt does not implement a G3-R pair loader, live replay or resumed
 continuation.
 
+A source-only [G3-R private file-pair admission candidate](g3/G3_R_FILE_PAIR_ADMISSION_LEAF.md)
+now composes the accepted receipt and codec behind an exact 288-byte companion
+read. It compares the record SHA and raw-V256 fingerprint with the same loaded
+C2 receipt's SHA and tokenizer controls, then publishes one receipt and eight
+data-only fields through a checked whole-vector copy. Orphan, torn, extended,
+mismatched and publication-fault fixtures are written; local source and native
+reader checks passed. The new Eshkol fixture has not run because the local
+`eshkol-run` binary is unavailable. Independent review and the supported
+runtime gate remain pending; no live model restore or continuation is claimed.
+
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
 checks the authentic idle generator's four RNG words without allocation,
