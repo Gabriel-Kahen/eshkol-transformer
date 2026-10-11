@@ -1976,6 +1976,14 @@ compiler depfiles, emitted symbol/object inventories, normal/repeat/sanitizer
 and feature-off gates remain unrun. No sealed-M3 retirement or Section 9
 acceptance follows from this source work.
 
+The bounded [sealed-fixture gate preparation](e3/E3_SEALED_FIXTURE_GATE_PREPARATION.md)
+now supplies a one-use compiler depfile capture and a separate read-only
+emitted-object inventory extractor. Source-only tests check depfile ordering,
+generated-path normalization, duplicates, foreign paths and missing object
+evidence. The expected 32 rows remain a hypothesis until a pinned f31/fe9
+compile emits them; object manifests, feature-off parity, normal/repeat,
+sanitizer and Section 9 runtime acceptance remain pending.
+
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
 names would return newly owned authenticated CPU f32 `[1,256]` kind-3 shells,
