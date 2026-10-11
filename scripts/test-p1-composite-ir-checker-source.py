@@ -10,7 +10,7 @@ anchor = "python3 - \"${tmp}/aot/registry-proof.ll\" \"${tmp}/publication-witnes
 body = checker.split(anchor, 1)[1].split("\nPY\n", 1)[0]
 parsed = ast.parse(body)
 names = {"ssa_definition", "local_writes", "vector_ref_local",
-         "staged_pair_readback", "pair_fields",
+         "kind_slot_routes", "staged_pair_readback", "pair_fields",
          "checked_pair_root_value", "checked_witness_store"}
 helpers = ast.Module(
     body=[node for node in parsed.body
@@ -88,6 +88,32 @@ rejects(lambda: namespace["pair_fields"](
                   "%next-registry.load, ptr %slot1") for line in pair], "synthetic"))
 pair_publication = pair + [
     "  %active-record-stage.load = load %eshkol_tagged_value, ptr %active-record-stage_cap, align 8",
+    "  %active-slot = alloca %eshkol_tagged_value, align 16",
+    "  br label %cond_check_state",
+    "cond_check_state:",
+    "  %kind.load0 = load %eshkol_tagged_value, ptr %kind_cap, align 8",
+    "  %kind.bits0 = extractvalue %eshkol_tagged_value %kind.load0, 4",
+    "  %kind.state = icmp eq i64 %kind.bits0, 0",
+    "  br i1 %kind.state, label %cond_then, label %cond_next",
+    "cond_next:",
+    "  %kind.load1 = load %eshkol_tagged_value, ptr %kind_cap, align 8",
+    "  %kind.bits1 = extractvalue %eshkol_tagged_value %kind.load1, 4",
+    "  %kind.module = icmp eq i64 %kind.bits1, 1",
+    "  br i1 %kind.module, label %cond_then1, label %cond_next2",
+    "cond_next2:",
+    "  %kind.load2 = load %eshkol_tagged_value, ptr %kind_cap, align 8",
+    "  %kind.bits2 = extractvalue %eshkol_tagged_value %kind.load2, 4",
+    "  %kind.tensor = icmp eq i64 %kind.bits2, 4",
+    "  br i1 %kind.tensor, label %cond_then2, label %cond_next3",
+    "cond_then:",
+    "  br label %cond_done",
+    "cond_then1:",
+    "  br label %cond_done",
+    "cond_then2:",
+    "  br label %cond_done",
+    "cond_next3:",
+    "  br label %cond_done",
+    "cond_done:",
     "  %cond_result = phi %eshkol_tagged_value [ { i8 1, i8 16, i16 0, i32 0, i64 0 }, %cond_then ], [ { i8 1, i8 16, i16 0, i32 0, i64 1 }, %cond_then1 ], [ { i8 1, i8 16, i16 0, i32 0, i64 4 }, %cond_then2 ], [ { i8 3, i8 0, i16 0, i32 0, i64 0 }, %cond_next3 ]",
     "  store %eshkol_tagged_value %cond_result, ptr %active-slot, align 8",
     "  %active-slot.load = load %eshkol_tagged_value, ptr %active-slot, align 8",
@@ -190,6 +216,30 @@ wrong_slot_case = [line.replace(
     for line in pair_publication]
 rejects(lambda: namespace["checked_pair_root_value"](
     wrong_slot_case, len(wrong_slot_case) - 1, "wrong-slot-case"))
+swapped_case_predecessors = [line.replace(
+    "i64 0 }, %cond_then ], [ { i8 1, i8 16, i16 0, i32 0, i64 1 }, %cond_then1",
+    "i64 0 }, %cond_then1 ], [ { i8 1, i8 16, i16 0, i32 0, i64 1 }, %cond_then")
+    for line in pair_publication]
+rejects(lambda: namespace["checked_pair_root_value"](
+    swapped_case_predecessors, len(swapped_case_predecessors) - 1,
+    "swapped-kind-predecessors"))
+wrong_branch_input = [line.replace(
+    "extractvalue %eshkol_tagged_value %kind.load0, 4",
+    "extractvalue %eshkol_tagged_value %unrelated, 4")
+    for line in pair_publication]
+rejects(lambda: namespace["checked_pair_root_value"](
+    wrong_branch_input, len(wrong_branch_input) - 1,
+    "branch-bypasses-kind"))
+alias_slot = pair_publication.copy()
+alias_slot[alias_slot.index(
+    "  %active-slot.load = load %eshkol_tagged_value, ptr %active-slot, align 8"):
+    alias_slot.index(
+    "  %active-slot.load = load %eshkol_tagged_value, ptr %active-slot, align 8")] = [
+    "  %active-slot.alias = getelementptr i8, ptr %active-slot, i64 0",
+    "  store %eshkol_tagged_value { i8 1, i8 16, i16 0, i32 0, i64 9 }, ptr %active-slot.alias, align 8",
+]
+rejects(lambda: namespace["checked_pair_root_value"](
+    alias_slot, len(alias_slot) - 1, "alias-slot-overwrite"))
 overwritten_slot = pair_publication.copy()
 overwritten_slot.insert(overwritten_slot.index(
     "  %active-slot.load = load %eshkol_tagged_value, ptr %active-slot, align 8"),

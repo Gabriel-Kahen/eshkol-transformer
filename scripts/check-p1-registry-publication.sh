@@ -351,6 +351,59 @@ def local_writes(lines, local, end):
     return [(i, line) for i, line in enumerate(lines[:end])
             if re.search(rf"^\s*store .*?, ptr {re.escape(local)},", line)]
 
+def kind_slot_routes(lines, selection_index, selection, name):
+    # Match the ordered cond CFG, rather than trusting cond_then suffixes in
+    # the phi. Every branch predicate must depend on the captured kind.
+    incoming = re.findall(r", %([-A-Za-z0-9_.]+) \]", selection)
+    starts = [(i, match.group(1)) for i, line in enumerate(lines)
+              if (match := re.match(r"^([-A-Za-z0-9_.]+):", line))]
+    spans = {label: (start, starts[n + 1][0] if n + 1 < len(starts)
+                           else len(lines))
+             for n, (start, label) in enumerate(starts)}
+    owner = next((label for start, label in reversed(starts)
+                  if start < selection_index), None)
+    if len(incoming) != 4 or len(set(incoming)) != 4 or owner is None:
+        raise SystemExit(f"IR proof failed: {name} slot phi CFG absent")
+    for label in incoming:
+        if label not in spans or not re.search(
+                rf"br label %{re.escape(owner)}$",
+                "\n".join(lines[slice(*spans[label])])):
+            raise SystemExit(f"IR proof failed: {name} slot phi predecessor changed")
+
+    definitions = {match.group(1): line for line in lines[:selection_index]
+                   if (match := re.match(r"\s*(%[-A-Za-z0-9_.]+) = ", line))}
+    def from_kind(value, seen=None):
+        seen = set() if seen is None else seen
+        if value in seen or value not in definitions:
+            return False
+        seen.add(value)
+        definition = definitions[value]
+        if re.search(r"load %eshkol_tagged_value, ptr %kind(?:_cap)?,",
+                     definition):
+            return True
+        return any(from_kind(dep, seen) for dep in re.findall(
+            r"%[-A-Za-z0-9_.]+", definition.split(" = ", 1)[1]))
+
+    source = None
+    for branch_number, target in enumerate(incoming[:3]):
+        matches = []
+        for label, (start, end) in spans.items():
+            if start >= selection_index:
+                continue
+            branch = re.search(
+                rf"br i1 (%[-A-Za-z0-9_.]+), label %{re.escape(target)}, "
+                r"label %([-A-Za-z0-9_.]+)$",
+                "\n".join(lines[start:end]).rstrip())
+            if branch:
+                matches.append((label, branch.group(1), branch.group(2)))
+        if len(matches) != 1 or (source is not None and matches[0][0] != source):
+            raise SystemExit(f"IR proof failed: {name} slot kind branch changed")
+        _, predicate, source = matches[0]
+        if not from_kind(predicate):
+            raise SystemExit(f"IR proof failed: {name} slot branch bypasses kind")
+    if source != incoming[3]:
+        raise SystemExit(f"IR proof failed: {name} slot fallback branch changed")
+
 def vector_ref_local(lines, result, local, slot, name):
     # Follow the vector arm of the compiler's checked vector-ref, including
     # the exact element index and the tagged local supplying its base pointer.
@@ -459,6 +512,16 @@ def staged_pair_readback(lines, value, initial_store, canonical_store, name,
                 rf"\s*{re.escape(selected.group(1))} = phi "
                 rf"%eshkol_tagged_value {', '.join(slot_cases)}", selection)):
             raise SystemExit(f"IR proof failed: {name} active-slot cases changed")
+        kind_slot_routes(lines, selection_index, selection, name)
+        allocation = [(i, line) for i, line in enumerate(lines[:call_index])
+                      if re.match(r"\s*%active-slot = alloca "
+                                  r"%eshkol_tagged_value,", line)]
+        allowed = ({allocation[0][0], slot_writes[0][0], slot_index}
+                   if len(allocation) == len(slot_writes) == 1 else set())
+        references = {i for i, line in enumerate(lines[:call_index])
+                      if re.search(r"%active-slot(?![-A-Za-z0-9_.])", line)}
+        if not allowed or references != allowed:
+            raise SystemExit(f"IR proof failed: {name} active-slot alias or extra write")
     elif role == "state-entry-shell":
         if slot_value != "{ i8 1, i8 16, i16 0, i32 0, i64 5 }":
             raise SystemExit(f"IR proof failed: {name} stage slot is not five")

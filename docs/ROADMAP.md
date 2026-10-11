@@ -2906,6 +2906,14 @@ publication, public G2 and continuation remain pending.
   must pass tagged literal 5. Pair-in-both-positions, unrelated slot,
   overwritten selection, and wrong state slot mutants reject. These are
   source-only emitted-shape predicates; exact compiled IR remains unverified.
+  Independent F review held two remaining near misses: exchanged phi incoming
+  kind-block labels and a zero-offset alias write to `active-slot`. Source
+  candidate G requires the phi cases to follow the ordered kind-dependent
+  conditional branch chain and rejects every unproved pointer use or extra
+  pre-call write to the slot local; both review mutants now reject. This
+  source-only CFG shape does not establish the compiler's symbol-comparison
+  lowering or prove that its actual emitted IR matches. Independent/ROOT source
+  review and supported exact-IR proof remain HOLD before native C4 evidence.
   Source review and compiled runtime/ABI proof are still required before
   claiming this as a C4 witness.
   Compiled normal/repeat/sanitizer tests, allocation/callback instrumentation,
