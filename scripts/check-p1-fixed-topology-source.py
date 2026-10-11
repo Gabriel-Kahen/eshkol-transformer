@@ -63,12 +63,19 @@ for action in ("detached-module", "detached-handle", "duplicate-shell",
 assert "(reject (car actions)" in fixture
 assert "native identity restored same-root retry" in fixture
 assert "native module restored same-root retry" in fixture
-assert probe.count("(vector-ref shell-registry-root 0) 0") == 4
+assert probe.count("(vector-ref shell-registry-root 0) 0") == 5
 assert "(vector-ref shell-registry-root 0) 1" not in probe
 assert "(p1-fixed-test-without-witness" not in probe
-assert "(shell-entry handle-shell) 0 unwitnessed-shell" in probe
-assert "(mutate-fixed 'missing-witness root original-handle-0)" in fixture
-assert "(vector-set! handles 0 unwitnessed-shell)" in fixture
+assert "(p1-fixed-test-swap-entry-shells" in probe
+missing_witness = probe.split("((eq? action 'missing-witness)", 1)[1].split(
+    "((eq? action 'scope-drift)", 1)[0]
+assert "(p1-fixed-test-swap-entry-shells" in missing_witness
+assert "(vector-ref shell-registry-root 0) 0" in missing_witness
+assert "(p1-native-" not in missing_witness
+assert "(mutate-fixed 'missing-witness root" in fixture
+assert "(vector original-handle-0 original-handle-1)" in fixture
+assert "(vector-set! handles 0 original-handle-1)" in fixture
+assert "(vector-set! handles 1 original-handle-0)" in fixture
 assert "failed-and-aborted" in probe
 assert "native-success prepublication fault" in fixture
 assert "clean new-construction retry" in fixture

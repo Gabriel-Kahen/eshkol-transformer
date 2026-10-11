@@ -52,6 +52,18 @@
           (cdr entries)
           (cons (car entries)
                 (p1-fixed-test-without-shell (cdr entries) shell)))))
+(define (p1-fixed-test-swap-entry-shells entries first second)
+  (if (null? entries) '()
+      (let* ((entry (car entries))
+             (shell (vector-ref entry 0))
+             (changed (if (or (eq? shell first) (eq? shell second))
+                          (vector (if (eq? shell first) second first)
+                                  (vector-ref entry 1) (vector-ref entry 2)
+                                  (vector-ref entry 3))
+                          entry)))
+        (cons changed
+              (p1-fixed-test-swap-entry-shells (cdr entries)
+                                               first second)))))
 (define p1-fixed-test-prepublication (vector #f #f #f))
 (define (p1-fixed-test-shell-present? entries shell slot)
   (if (null? entries) #f
@@ -80,7 +92,8 @@
   (let* ((record (p1-fixed-sealed-record root-shell))
          (scope (vector-ref record 0))
          (root (p1-fixed-shell-raw root-shell 'module scope))
-         (handle (p1-fixed-shell-raw handle-shell 'handle scope))
+         (handle (if (eq? action 'missing-witness) #f
+                     (p1-fixed-shell-raw handle-shell 'handle scope)))
          (provider (vector-ref root 6)))
     (cond
       ((eq? action 'detached-module)
@@ -119,14 +132,13 @@
          (p1-fixed-test-without-shell
            (shell-registry-current) handle-shell)))
       ((eq? action 'missing-witness)
-       ;; A live, same-kind shell has no issuance witness for this scope/raw.
-       ;; Only the registry entry changes; the witness spine is inaccessible.
-       (native-check 'p1-fixed-test
-                     (p1-native-handle-create native-context))
-       (let ((unwitnessed-shell (p1-native-result-ptr native-context)))
-         (p1-fixed-test-change!
-           (shell-entry handle-shell) 0 unwitnessed-shell)
-         unwitnessed-shell))
+       ;; Exchange two scoped live shells only in the registry spine. Both
+       ;; source tuples become unwitnessed; neither immutable witness changes.
+       (p1-fixed-test-change!
+         (vector-ref shell-registry-root 0) 0
+         (p1-fixed-test-swap-entry-shells
+           (shell-registry-current)
+           (vector-ref handle-shell 0) (vector-ref handle-shell 1))))
       ((eq? action 'scope-drift)
        (p1-fixed-test-change! (shell-entry handle-shell) 3 #f))
       ((eq? action 'raw-drift)

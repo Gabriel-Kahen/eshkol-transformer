@@ -94,6 +94,7 @@
   (verify-fixed root fixed-trie handles))
 
 (define original-handle-0 (vector-ref handles 0))
+(define original-handle-1 (vector-ref handles 1))
 (vector-set! handles 0 (vector-ref handles 1))
 (reject "wrong supplied handle"
   (lambda () (verify-fixed root fixed-trie handles)))
@@ -115,17 +116,19 @@
           (verify-fixed root fixed-trie handles))
         (mutations (cdr actions)))))
 
-;;; Preserve the descriptor's shell lookup while giving its registry entry a
-;;; live handle shell that was never witnessed for this construction.
-(let ((unwitnessed-shell
-        (mutate-fixed 'missing-witness root original-handle-0)))
-  (vector-set! handles 0 unwitnessed-shell)
-  (reject "missing-witness"
-    (lambda () (verify-fixed root fixed-trie handles)))
-  (vector-set! handles 0 original-handle-0)
-  (restore-fixed)
-  (check "missing-witness restored same-root retry"
-    (verify-fixed root fixed-trie handles)))
+;;; Keep all shells live, kind-correct and scoped while the registry's two
+;;; shell/raw tuples no longer match their immutable issuance witnesses.
+(mutate-fixed 'missing-witness root
+              (vector original-handle-0 original-handle-1))
+(vector-set! handles 0 original-handle-1)
+(vector-set! handles 1 original-handle-0)
+(reject "missing-witness"
+  (lambda () (verify-fixed root fixed-trie handles)))
+(vector-set! handles 0 original-handle-0)
+(vector-set! handles 1 original-handle-1)
+(restore-fixed)
+(check "missing-witness restored same-root retry"
+  (verify-fixed root fixed-trie handles))
 
 ;;; Keep source registry and supplied handle vector mutually consistent while
 ;;; substituting a wrong-kind or tombstoned native token. Both must fail.

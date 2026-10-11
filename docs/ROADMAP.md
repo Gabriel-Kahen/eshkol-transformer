@@ -2882,6 +2882,16 @@ publication, public G2 and continuation remain pending.
   with the supplied handle kept consistent, leaving the witness spine
   inaccessible as Contract D requires. Source checks pass; independent and
   ROOT source review, supported IR/runtime proof and retention remain HOLD.
+  Independent C review held on two remaining SSA lineage gaps and duplicated
+  unscoped-token coverage. Source candidate D traces canonical pair readback
+  through checked stage[0], its captured stage call and fresh pair argument;
+  witness target readback must use the final local store derived from pair
+  slot 1. Mutants cover each stage, pair, witness, target and barrier link.
+  Its distinct missing-witness negative swaps two already-scoped live handle
+  shells only in the registry and adjusts supplied handles; both immutable
+  witness tuples then lack matching entries. The generic vector-ref/car
+  branch shape and exact emitted IR remain unverified until the supported
+  compile gate; independent and ROOT source review remain HOLD.
   Source review and compiled runtime/ABI proof are still required before
   claiming this as a C4 witness.
   Compiled normal/repeat/sanitizer tests, allocation/callback instrumentation,
