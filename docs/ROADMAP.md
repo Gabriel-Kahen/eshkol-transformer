@@ -2856,6 +2856,13 @@ publication, public G2 and continuation remain pending.
   proof covers only the registry publication tail. Scoped handles also bypass
   that staging path. Review a source/runtime contract for both stores or a
   separately approved single-publication storage design before implementation.
+  A bounded inert composite-root source candidate now stages a distinct
+  issuance-witness spine with the registry spine under the existing one-slot
+  holder. It captures each scoped construction before native creation, stages
+  handles as well as modules, carries witnesses through state-entry publication,
+  and checks original shell/raw/scope/kind tuples in both slot-73 directions.
+  The source-only checks pass; the revised IR, failure-atomic publication,
+  supported runtime, retention, and C4 admission evidence are still HOLD.
   Source review and compiled runtime/ABI proof are still required before
   claiming this as a C4 witness.
   Compiled normal/repeat/sanitizer tests, allocation/callback instrumentation,

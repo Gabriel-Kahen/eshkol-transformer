@@ -94,7 +94,8 @@
 (check "supplied handle retry" (verify-fixed root fixed-trie handles))
 
 (let mutations ((actions '(detached-module detached-handle duplicate-shell
-                            duplicate-record wrong-parent wrong-shape
+                            duplicate-record missing-entry scope-drift raw-drift
+                            wrong-parent wrong-shape
                             wrong-device wrong-counter-type wrong-tie)))
   (if (null? actions) #t
       (begin
@@ -108,7 +109,9 @@
 
 ;;; Keep source registry and supplied handle vector mutually consistent while
 ;;; substituting a wrong-kind or tombstoned native token. Both must fail.
-(let native-mutations ((actions '(native-wrong-kind native-tombstone)))
+(let native-mutations
+    ((actions '(native-wrong-kind native-tombstone
+                native-same-kind-unscoped native-same-kind-other-scope)))
   (if (null? actions) #t
       (let ((replacement
               (mutate-fixed (car actions) root original-handle-0)))
@@ -121,7 +124,9 @@
           (verify-fixed root fixed-trie handles))
         (native-mutations (cdr actions)))))
 (let module-native-mutations
-    ((actions '(native-module-wrong-kind native-module-tombstone)))
+    ((actions '(native-module-wrong-kind native-module-tombstone
+                native-module-same-kind-unscoped
+                native-module-same-kind-other-scope)))
   (if (null? actions) #t
       (begin
         (mutate-fixed (car actions) root original-handle-0)

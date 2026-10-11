@@ -21,6 +21,8 @@ for required in (
     "shell-registry-current", "p1-fixed-count?",
     "p1-fixed-native-shell?", "p1-fixed-native-token-kind",
     "p1-fixed-native-token-live",
+    "p1-fixed-scoped-witnesses?", "p1-fixed-witness-match-count",
+    "p1-fixed-registry-witness-count", "p1-fixed-construction-root?",
 ):
     assert required in verifier, required
 for forbidden in ("(extern ", "(cons ", "(make-vector ", "(vector-set! ",
@@ -39,21 +41,29 @@ for manifest in ("p1_identity_public_symbols.txt",
     assert symbols.count("et_p1_public_token_kind_v1") == 1
     assert symbols.count("et_p1_public_token_live_v1") == 1
 assert "(p1-fixed-native-shell? (vector-ref entry 0) kind)" in verifier
+assert "(p1-fixed-scoped-witnesses? modules root handles scope)" in verifier
+assert "(p1-fixed-witness-match-count" in verifier
 assert "(if (eq? kind 'module) 2 3)" in verifier
 for slot, expected in ((9, 15), (10, 17), (11, 4), (12, 5)):
     assert verifier.count(
         f"(p1-fixed-count? (vector-ref root {slot}) {expected})") == 1
 assert source.count("Append-only P1-only sealed current-root verifier, slot 73") == 1
 for action in ("detached-module", "detached-handle", "duplicate-shell",
-               "duplicate-record", "wrong-parent", "wrong-shape",
+               "duplicate-record", "missing-entry", "scope-drift",
+               "raw-drift", "wrong-parent", "wrong-shape",
                "wrong-device", "wrong-counter-type", "wrong-tie",
                "native-wrong-kind", "native-tombstone",
-               "native-module-wrong-kind", "native-module-tombstone"):
+               "native-same-kind-unscoped", "native-same-kind-other-scope",
+               "native-module-wrong-kind", "native-module-tombstone",
+               "native-module-same-kind-unscoped",
+               "native-module-same-kind-other-scope"):
     assert f"(eq? action '{action})" in probe
     assert action in fixture
 assert "(reject (car actions)" in fixture
 assert "native identity restored same-root retry" in fixture
 assert "native module restored same-root retry" in fixture
+assert probe.count("(vector-ref shell-registry-root 0) 0") == 4
+assert "(vector-ref shell-registry-root 0) 1" not in probe
 
 anchor = "\n(vector\n  (lambda (module)"
 assert source.count(anchor) == 1

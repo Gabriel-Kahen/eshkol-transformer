@@ -31,11 +31,13 @@ require_exact_count() {
 }
 
 for source in "${template}" "${generated}"; do
-  require_exact_count 1 "(define shell-registry-root (vector '()))" "${source}"
+  require_exact_count 1 "(define shell-registry-root (vector (vector '() '())))" "${source}"
   require_exact_count 1 "(define active-record-root (vector '() '() #t #f '() '()))" "${source}"
-  require_exact_count 1 "(vector-ref shell-registry-root 0)" "${source}"
+  require_exact_count 2 "(vector-ref shell-registry-root 0)" "${source}"
   require_exact_count 2 \
-    "(vector-set! shell-registry-root 0 next-registry)" "${source}"
+    "(vector-set! shell-registry-root 0 next-pair)" "${source}"
+  require_exact_count 1 "(define (issuance-witness-current)" "${source}"
+  require_exact_count 1 "(vector-set! witness 3 shell)" "${source}"
   require_exact_count 2 \
     "(vector-ref (car (shell-registry-current)) 0)" "${source}"
   require_exact_count 1 \
@@ -73,12 +75,16 @@ publication = source.split("(define (shell-for-raw kind raw)", 1)[1].split(
     "(define (state-entry-shell-for-raw", 1)[0]
 ordered = (
     "(shell-for-raw 'state (vector-ref raw 1))",
+    "(construction (active-construction))",
+    "(witness (if scoped?",
     "(next-registry (cons entry (shell-registry-current)))",
-    "(active-record-stage active-slot next-registry)",
-    "(native-create-shell kind raw)",
+    "(next-pair (vector next-registry next-witnesses))",
+    "(active-record-stage active-slot next-pair)",
+    "(native-create-shell kind raw construction)",
     "(vector-set! entry 0 shell)",
+    "(vector-set! witness 3 shell)",
     "(vector-set! active-record-root 2 #f)",
-    "(vector-set! shell-registry-root 0 next-registry)",
+    "(vector-set! shell-registry-root 0 next-pair)",
     "(vector-set! active-record-root\n",
     "(vector-set! active-record-root 2 (vector-ref stage 2))",
 )
@@ -89,11 +95,12 @@ entry = source.split("(define (state-entry-shell-for-raw", 1)[1].split(
     "(define (raw-for-shell", 1)[0]
 entry_ordered = (
     "(active-record-source 5)",
-    "(active-record-stage 5 next-registry)",
+    "(next-pair (vector next-registry (issuance-witness-current)))",
+    "(active-record-stage 5 next-pair)",
     "(p1-native-state-entry-create native-context state-shell)",
     "(vector-set! record 0 shell)",
     "(vector-set! active-record-root 2 #f)",
-    "(vector-set! shell-registry-root 0 next-registry)",
+    "(vector-set! shell-registry-root 0 next-pair)",
     "(vector-set! active-record-root 5 (vector-ref stage 1))",
     "(vector-set! active-record-root 2 (vector-ref stage 2))",
 )
@@ -308,7 +315,10 @@ for ordinal, function in enumerate(publication_functions, 1):
     roles.add(role)
     barriers = [i for i, line in enumerate(lines)
                 if "call i32 @eshkol_region_write_barrier_checked_v1" in line]
-    expected_barriers = 7
+    # The generic publication has one additional checked canonical witness
+    # shell store. State-entry publication carries the existing spine through
+    # the pair and retains its seven checked stores.
+    expected_barriers = 8 if role == "generic-shell" else 7
     if len(barriers) != expected_barriers:
         raise SystemExit(
             f"IR proof failed: {name} has {len(barriers)} write barriers, "
@@ -345,7 +355,7 @@ for ordinal, function in enumerate(publication_functions, 1):
     for index in barriers:
         prior = "\n".join(lines[max(0, index - 3):index])
         slot_match = re.search(
-            r"store %eshkol_tagged_value %next-registry\.load[0-9]*, "
+            r"store %eshkol_tagged_value %next-pair\.load[0-9]*, "
             r"ptr (%[-A-Za-z0-9_.]+)", prior)
         if (slot_match and slot_match.group(1) in lines[index]
                 and any(pointer in lines[index] for pointer in root_pointers)):
@@ -353,7 +363,7 @@ for ordinal, function in enumerate(publication_functions, 1):
             break
     if root_barrier is None:
         raise SystemExit(
-            f"IR proof failed: {name} lacks a root-vector next-registry barrier")
+            f"IR proof failed: {name} lacks a root-vector next-pair barrier")
     entry_barrier = barriers[1]
     if entry_barrier >= root_barrier:
         raise SystemExit(f"IR proof failed: {name} root publication ordering changed")
@@ -374,9 +384,13 @@ for ordinal, function in enumerate(publication_functions, 1):
     # publication. Their three checked stores follow the registry store.
     # Each has the normal checked success/failure control flow, and the
     # caller still returns a registry-read shell after that tail.
-    if barriers[3] != root_barrier:
+    root_ordinal = 4 if role == "generic-shell" else 3
+    if barriers[root_ordinal] != root_barrier:
         raise SystemExit(f"IR proof failed: {name} active tail ordering changed")
-    for index in barriers[4:]:
+    if role == "generic-shell" and not (
+            entry_barrier < barriers[2] < root_barrier):
+        raise SystemExit(f"IR proof failed: {name} witness store is not before root")
+    for index in barriers[root_ordinal + 1:]:
         if not any("ptr %active-record-root_cap" in line
                    for line in lines[max(0, index - 256):index]):
             raise SystemExit(f"IR proof failed: {name} active tail lost its root")

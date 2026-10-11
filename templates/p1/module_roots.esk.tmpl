@@ -358,7 +358,7 @@
 ;;; Publishing a newly allocated registry graph through vector-set! invokes the
 ;;; region write barrier; every read then starts from the canonical promoted
 ;;; graph stored back into this holder.
-(define shell-registry-root (vector '()))
+(define shell-registry-root (vector (vector '() '())))
 (define shell-identity-index (make-hash-table))
 ;;; Advisory heads hold exact, promoted shell-registry records. Slot 2 is false
 ;;; from the start of a publication until its allocation-free active-list link.
@@ -366,15 +366,19 @@
 (define active-record-root (vector '() '() #t #f '() '()))
 
 (define (shell-registry-current)
-  (vector-ref shell-registry-root 0))
+  (vector-ref (vector-ref shell-registry-root 0) 0))
+(define (issuance-witness-current)
+  (vector-ref (vector-ref shell-registry-root 0) 1))
 (define (active-record-source slot)
   (if (vector-ref active-record-root 2)
       (vector-ref active-record-root slot)
       (shell-registry-current)))
-(define (active-record-stage slot next-registry)
-  (let ((stage (vector next-registry
-                       (cons (car next-registry)
-                             (vector-ref active-record-root slot))
+(define (active-record-stage slot next-pair)
+  (let ((stage (vector next-pair
+                       (if slot
+                           (cons (car (vector-ref next-pair 0))
+                                 (vector-ref active-record-root slot))
+                           #f)
                        (vector-ref active-record-root 2))))
     (vector-set! active-record-root 3 stage)
     (vector-ref active-record-root 3)))
@@ -586,7 +590,7 @@
             "P1 private identity capability is unavailable" '())
       native-context))
 
-(define (native-create-shell kind raw)
+(define (native-create-shell kind raw construction)
   (require-native-context 'p1-native-create-shell)
   (native-check
     'p1-native-create-shell
@@ -596,12 +600,12 @@
          (p1-native-provider-create native-context name
                                     (string-byte-length name))))
       ((eq? kind 'module)
-       (if (active-construction)
-           (p1-native-construction-module-create native-context (active-construction))
+       (if construction
+           (p1-native-construction-module-create native-context construction)
            (p1-native-module-create native-context)))
       ((eq? kind 'handle)
-       (if (active-construction)
-           (p1-native-construction-handle-create native-context (active-construction))
+       (if construction
+           (p1-native-construction-handle-create native-context construction)
            (p1-native-handle-create native-context)))
       ((eq? kind 'tree) (p1-native-tree-create native-context))
       ((eq? kind 'state) (p1-native-state-create native-context))
@@ -651,39 +655,49 @@
        ;; cannot be dropped or replace this entry's pending stage.
        (if (eq? kind 'state-tensor)
            (shell-for-raw 'state (vector-ref raw 1)) #t)
-       (let* ((entry (if (or (eq? kind 'module) (eq? kind 'handle))
-                         (vector #f kind raw (active-construction))
+       (let* ((construction (active-construction))
+              (scoped? (and construction
+                            (or (eq? kind 'module) (eq? kind 'handle))))
+              (entry (if (or (eq? kind 'module) (eq? kind 'handle))
+                         (vector #f kind raw construction)
                          (vector #f kind raw)))
+              (witness (if scoped?
+                           (vector construction raw kind #f)
+                           #f))
               (next-registry (cons entry (shell-registry-current)))
+              (next-witnesses (if witness
+                                  (cons witness (issuance-witness-current))
+                                  (issuance-witness-current)))
+              (next-pair (vector next-registry next-witnesses))
               (active-slot (cond ((eq? kind 'state) 0)
-                                 ((eq? kind 'module) 1)
+                                 ((or (eq? kind 'module) (eq? kind 'handle)) 1)
                                  ((eq? kind 'state-tensor) 4)
                                  (else #f)))
               (stage #f)
               (shell
-                (if active-slot
-                    (guard (caught
-                             (#t
-                               (vector-set! active-record-root 3 #f)
-                               (raise caught)))
-                      (set! stage (active-record-stage active-slot next-registry))
-                      (native-create-shell kind raw))
-                    (native-create-shell kind raw))))
-         ;; The stage holder promoted both the registry spine and active node.
-         ;; All subsequent pointer writes store root-owned values or a token.
-         (if stage
-             (begin
-               (set! next-registry (vector-ref stage 0))
-               (set! entry (car next-registry))))
+                (guard (caught
+                         (#t
+                           (vector-set! active-record-root 3 #f)
+                           (raise caught)))
+                  (set! stage (active-record-stage active-slot next-pair))
+                  (native-create-shell kind raw construction))))
+         ;; The stage has promoted both spines and the optional active node.
+         ;; Only canonical root-owned fields and a native token are stored
+         ;; between native success and the single composite publication.
+         (set! next-pair (vector-ref stage 0))
+         (set! next-registry (vector-ref next-pair 0))
+         (set! entry (car next-registry))
+         (if witness (set! witness (car (vector-ref next-pair 1))))
          (vector-set! entry 0 shell)
-         (if stage (vector-set! active-record-root 2 #f))
-         (vector-set! shell-registry-root 0 next-registry)
-         (if stage
+         (if witness (vector-set! witness 3 shell))
+         (if active-slot (vector-set! active-record-root 2 #f))
+         (vector-set! shell-registry-root 0 next-pair)
+         (if active-slot
              (begin
                (vector-set! active-record-root
                             active-slot (vector-ref stage 1))
-               (vector-set! active-record-root 3 #f)
                (vector-set! active-record-root 2 (vector-ref stage 2))))
+         (vector-set! active-record-root 3 #f)
          (index-published-shell!
            (canonical-published-shell (car (shell-registry-current)))
            (car (shell-registry-current)))
@@ -707,23 +721,25 @@
           ((null? records)
            (let* ((record (vector #f 'entry raw state))
                   (next-registry (cons record (shell-registry-current)))
+                  (next-pair (vector next-registry (issuance-witness-current)))
                   (stage #f)
                   (shell
                     (guard (caught
                              (#t
                                (vector-set! active-record-root 3 #f)
                                (raise caught)))
-                      (set! stage (active-record-stage 5 next-registry))
+                      (set! stage (active-record-stage 5 next-pair))
                       (require-native-context 'state-entry-shell-for-raw)
                       (native-check
                         'state-entry-shell-for-raw
                         (p1-native-state-entry-create native-context state-shell))
                       (p1-native-result-ptr native-context))))
-             (set! next-registry (vector-ref stage 0))
+             (set! next-pair (vector-ref stage 0))
+             (set! next-registry (vector-ref next-pair 0))
              (set! record (car next-registry))
              (vector-set! record 0 shell)
              (vector-set! active-record-root 2 #f)
-             (vector-set! shell-registry-root 0 next-registry)
+             (vector-set! shell-registry-root 0 next-pair)
              (vector-set! active-record-root 5 (vector-ref stage 1))
              (vector-set! active-record-root 3 #f)
              (vector-set! active-record-root 2 (vector-ref stage 2))
@@ -4531,13 +4547,13 @@
                                (eq? (vector-ref entry 1) 'handle))
                            (eq? (vector-ref entry 3) identity))
                       (begin
-                        (if (eq? (vector-ref entry 1) 'module)
-                            (active-record-unlink! 1 (vector-ref entry 2)))
+                        (active-record-unlink! 1 (vector-ref entry 2))
                         (vector-set! entry 2 dead-construction-raw)))
                   (loop (cdr remaining)))))
           (vector-set! record 1 'aborted)
           (vector-set! record 3 #f)
           (vector-set! record 4 #f)
+          (vector-set! record 5 #f)
           (vector-set! construction-registry-root 1 #f)
           #t))))
 (define (construction-begin provider-name)
@@ -4547,7 +4563,7 @@
       (fail 'invalid-state 'module-construction-begin-internal "nested construction" '()))
   ;; Publish/promote the complete Eshkol ledger graph before native begin.
   ;; Until its native identity is installed it is an inert aborted record.
-  (let* ((record (vector #f 'aborted provider-name #f #f))
+  (let* ((record (vector #f 'aborted provider-name #f #f #f))
          (next (cons record (vector-ref construction-registry-root 0))))
     (vector-set! construction-registry-root 0 next)
     (let ((canonical (car (vector-ref construction-registry-root 0))))
@@ -4570,9 +4586,15 @@
           (let ((root (shell-for-raw 'module
                         (module-create-with-provider-internal provider-name))))
             ;; Shell publication can promote the rooted ledger graph.
-            (vector-set!
-              (construction-record 'module-construction-begin-internal identity)
-              3 root)
+            (let* ((canonical
+                     (construction-record 'module-construction-begin-internal identity))
+                   (raw (p1-fixed-shell-raw root 'module identity)))
+              (if (not (and (module-value? raw)
+                            (p1-fixed-root-witness? identity root raw)))
+                  (fail 'invalid-state 'module-construction-begin-internal
+                        "root issuance witness differs" '()))
+              (vector-set! canonical 3 root)
+              (vector-set! canonical 5 raw))
             identity))))))
 (define (construction-parameters identity)
   (let* ((record (construction-open 'module-construction-parameters-internal identity))
@@ -4609,6 +4631,8 @@
          (updates (canonical-path-updates (sort-entries (flatten-parameters root '())))))
     (if (or (not schedule) (not (construction-schedule-equal? actual schedule)))
         (fail 'invalid-state operation "construction changed after parameter schedule" '()))
+    (if (not (p1-fixed-construction-root? record))
+        (fail 'invalid-state operation "root issuance witness differs" '()))
     (let scan ((remaining (shell-registry-current)))
       (if (null? remaining) #t
           (let ((entry (car remaining)))
@@ -4650,6 +4674,8 @@
     (if (or (not schedule) (not (construction-schedule-equal? actual schedule)))
         (fail 'invalid-state operation
               "construction changed after parameter schedule" '()))
+    (if (not (p1-fixed-construction-root? record))
+        (fail 'invalid-state operation "root issuance witness differs" '()))
     (let scan ((remaining (shell-registry-current)))
       (if (null? remaining) #t
           (let ((entry (car remaining)))
@@ -4696,6 +4722,8 @@
     ;; Complete every recoverable preflight before entering the guard-free tail.
     (let* ((record (construction-prepared operation identity))
            (root-shell (vector-ref record 3)))
+      (if (not (p1-fixed-construction-root? record))
+          (fail 'invalid-state operation "root issuance witness differs" '()))
       (set! construction-busy? #t)
       (let ((status
               (p1-native-construction-commit-prepared
@@ -5672,6 +5700,43 @@
                          (eq? (vector-ref entry 0) shell))
                     (+ count 1) count)))))))
 
+(define (p1-fixed-witness-match-count scope raw kind shell)
+  (let loop ((witnesses (issuance-witness-current)) (count 0))
+    (if (null? witnesses) count
+        (if (not (pair? witnesses)) -1
+            (let ((witness (car witnesses)))
+              (if (not (p1-fixed-vector? witness 4)) -1
+                  (loop (cdr witnesses)
+                        (if (and (eq? (vector-ref witness 0) scope)
+                                 (eq? (vector-ref witness 1) raw)
+                                 (eq? (vector-ref witness 2) kind)
+                                 (eq? (vector-ref witness 3) shell))
+                            (+ count 1) count))))))))
+
+(define (p1-fixed-witness-shell-count shell)
+  (let loop ((witnesses (issuance-witness-current)) (count 0))
+    (if (null? witnesses) count
+        (if (not (pair? witnesses)) -1
+            (let ((witness (car witnesses)))
+              (if (not (p1-fixed-vector? witness 4)) -1
+                  (loop (cdr witnesses)
+                        (if (eq? (vector-ref witness 3) shell)
+                            (+ count 1) count))))))))
+
+(define (p1-fixed-root-witness? scope shell raw)
+  (and (= (p1-fixed-witness-match-count scope raw 'module shell) 1)
+       (= (p1-fixed-witness-shell-count shell) 1)
+       (eq? (p1-fixed-shell-raw shell 'module scope) raw)
+       (= (p1-fixed-raw-registry-count raw 'module scope) 1)
+       (= (p1-fixed-shell-registry-count shell) 1)))
+
+(define (p1-fixed-construction-root? record)
+  (let ((scope (vector-ref record 0))
+        (shell (vector-ref record 3))
+        (raw (vector-ref record 5)))
+    (and scope shell (module-value? raw)
+         (p1-fixed-root-witness? scope shell raw))))
+
 (define (p1-fixed-native-shell? shell kind)
   (guard (caught (#t #f))
     (and (= (p1-fixed-native-token-kind shell)
@@ -5756,9 +5821,9 @@
         (let ((record (car records)))
           (if (and (vector? record) (>= (vector-length record) 4)
                    (eq? (vector-ref record 3) root-shell))
-              (if (or found (not (p1-fixed-vector? record 5))
+              (if (or found (not (p1-fixed-vector? record 6))
                       (not (eq? (vector-ref record 1) 'sealed))
-                      (not (vector-ref record 0))) #f
+                      (not (p1-fixed-construction-root? record))) #f
                   (loop (cdr records) record))
               (loop (cdr records) found)))))))
 
@@ -5777,6 +5842,48 @@
                              (vector-ref handles index) 'handle scope))
                       (+ count 1) count))))))
 
+(define (p1-fixed-scoped-witnesses? modules root handles scope)
+  (let loop ((witnesses (issuance-witness-current))
+             (modules-seen 0) (handles-seen 0))
+    (if (null? witnesses)
+        (and (= modules-seen 17) (= handles-seen 14))
+        (if (not (pair? witnesses)) #f
+            (let ((witness (car witnesses)))
+              (if (not (p1-fixed-vector? witness 4)) #f
+                  (if (eq? (vector-ref witness 0) scope)
+                      (let ((raw (vector-ref witness 1))
+                            (kind (vector-ref witness 2))
+                            (shell (vector-ref witness 3)))
+                        (if (and (or (eq? kind 'module) (eq? kind 'handle))
+                                 (= (p1-fixed-witness-match-count
+                                      scope raw kind shell) 1)
+                                 (= (p1-fixed-witness-shell-count shell) 1)
+                                 (= (p1-fixed-registry-witness-count
+                                      scope raw kind shell) 1)
+                                 (= (p1-fixed-expected-member-count
+                                      raw kind modules root handles scope) 1)
+                                 (p1-fixed-native-shell? shell kind))
+                            (loop (cdr witnesses)
+                                  (if (eq? kind 'module) (+ modules-seen 1)
+                                      modules-seen)
+                                  (if (eq? kind 'handle) (+ handles-seen 1)
+                                      handles-seen))
+                            #f))
+                      (loop (cdr witnesses) modules-seen handles-seen))))))))
+
+(define (p1-fixed-registry-witness-count scope raw kind shell)
+  (let loop ((entries (shell-registry-current)) (count 0))
+    (if (null? entries) count
+        (if (not (pair? entries)) -1
+            (let ((entry (car entries)))
+              (loop (cdr entries)
+                    (if (and (p1-fixed-vector? entry 4)
+                             (eq? (vector-ref entry 0) shell)
+                             (eq? (vector-ref entry 1) kind)
+                             (eq? (vector-ref entry 2) raw)
+                             (eq? (vector-ref entry 3) scope))
+                        (+ count 1) count)))))))
+
 (define (p1-fixed-scoped-registry? modules root handles scope)
   (let loop ((entries (shell-registry-current)) (modules-seen 0)
              (handles-seen 0))
@@ -5793,6 +5900,10 @@
                          (p1-fixed-native-shell? (vector-ref entry 0) kind)
                          (= (p1-fixed-expected-member-count
                               raw kind modules root handles scope) 1)
+                         (= (p1-fixed-witness-match-count
+                              scope raw kind (vector-ref entry 0)) 1)
+                         (= (p1-fixed-witness-shell-count
+                              (vector-ref entry 0)) 1)
                          (= (p1-fixed-raw-registry-count raw kind scope) 1)
                          (= (p1-fixed-shell-registry-count
                               (vector-ref entry 0)) 1))
@@ -5817,6 +5928,7 @@
          (provider (if (module-value? root) (vector-ref root 6) #f)))
     (if (not (and scope (module-value? root)
                   (tensor-provider-value? provider)
+                  (eq? (vector-ref record 5) root)
                   (eq? (vector-ref record 2) (vector-ref trie 2))
                   (eq? (tensor-provider-name provider) (vector-ref trie 2))
                   (eq? provider (tensor-provider-find (vector-ref trie 2)))
@@ -5868,6 +5980,8 @@
                 (p1-fixed-seal-fail))
             (handles-loop (+ index 1)))))
     (if (not (p1-fixed-scoped-registry? modules root handles scope))
+        (p1-fixed-seal-fail))
+    (if (not (p1-fixed-scoped-witnesses? modules root handles scope))
         (p1-fixed-seal-fail))
     #t))
 

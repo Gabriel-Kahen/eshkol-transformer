@@ -32,6 +32,26 @@
       (native-check 'p1-fixed-test
                     (p1-native-construction-abort native-context identity))
       stale-shell)))
+(define (p1-fixed-test-other-scope-token kind)
+  (native-check 'p1-fixed-test
+                (p1-native-construction-begin native-context))
+  (let ((identity (p1-native-result-ptr native-context)))
+    (native-check 'p1-fixed-test
+                  (if (eq? kind 'module)
+                      (p1-native-construction-module-create
+                        native-context identity)
+                      (p1-native-construction-handle-create
+                        native-context identity)))
+    (let ((shell (p1-native-result-ptr native-context)))
+      (native-check 'p1-fixed-test
+                    (p1-native-construction-seal native-context identity))
+      shell)))
+(define (p1-fixed-test-without-shell entries shell)
+  (if (null? entries) '()
+      (if (eq? (vector-ref (car entries) 0) shell)
+          (cdr entries)
+          (cons (car entries)
+                (p1-fixed-test-without-shell (cdr entries) shell)))))
 (define (p1-fixed-test-mutate! action root-shell handle-shell)
   (let* ((record (p1-fixed-sealed-record root-shell))
          (scope (vector-ref record 0))
@@ -42,7 +62,7 @@
       ((eq? action 'detached-module)
        (native-check 'p1-fixed-test (p1-native-module-create native-context))
        (p1-fixed-test-change!
-         shell-registry-root 0
+         (vector-ref shell-registry-root 0) 0
          (cons
            (vector (p1-native-result-ptr native-context) 'module
                    (vector module-tag 'eval '() '() '() #f provider
@@ -52,7 +72,7 @@
       ((eq? action 'detached-handle)
        (native-check 'p1-fixed-test (p1-native-handle-create native-context))
        (p1-fixed-test-change!
-         shell-registry-root 0
+         (vector-ref shell-registry-root 0) 0
          (cons
            (vector (p1-native-result-ptr native-context) 'handle
                    (vector parameter-handle-tag root '("detached") '(4)
@@ -61,14 +81,23 @@
            (shell-registry-current))))
       ((eq? action 'duplicate-shell)
        (p1-fixed-test-change!
-         shell-registry-root 0
+         (vector-ref shell-registry-root 0) 0
          (cons (vector root-shell 'module root scope)
                (shell-registry-current))))
       ((eq? action 'duplicate-record)
        (p1-fixed-test-change!
          construction-registry-root 0
-         (cons (vector scope 'sealed 'fixture-v1 root-shell #f)
+         (cons (vector scope 'sealed 'fixture-v1 root-shell #f root)
                (vector-ref construction-registry-root 0))))
+      ((eq? action 'missing-entry)
+       (p1-fixed-test-change!
+         (vector-ref shell-registry-root 0) 0
+         (p1-fixed-test-without-shell
+           (shell-registry-current) handle-shell)))
+      ((eq? action 'scope-drift)
+       (p1-fixed-test-change! (shell-entry handle-shell) 3 #f))
+      ((eq? action 'raw-drift)
+       (p1-fixed-test-change! (shell-entry handle-shell) 2 #f))
       ((eq? action 'wrong-parent)
        (p1-fixed-test-change! (p1-fixed-child root "blocks") 5 #f))
       ((eq? action 'wrong-shape)
@@ -92,6 +121,15 @@
        (let ((stale-shell (p1-fixed-test-dead-token 'handle)))
          (p1-fixed-test-change! (shell-entry handle-shell) 0 stale-shell)
          stale-shell))
+      ((eq? action 'native-same-kind-unscoped)
+       (native-check 'p1-fixed-test (p1-native-handle-create native-context))
+       (let ((foreign-shell (p1-native-result-ptr native-context)))
+         (p1-fixed-test-change! (shell-entry handle-shell) 0 foreign-shell)
+         foreign-shell))
+      ((eq? action 'native-same-kind-other-scope)
+       (let ((foreign-shell (p1-fixed-test-other-scope-token 'handle)))
+         (p1-fixed-test-change! (shell-entry handle-shell) 0 foreign-shell)
+         foreign-shell))
       ((eq? action 'native-module-wrong-kind)
        (native-check 'p1-fixed-test (p1-native-state-create native-context))
        (p1-fixed-test-change!
@@ -101,4 +139,13 @@
        (p1-fixed-test-change!
          (shell-entry (shell-for-raw 'module (p1-fixed-child root "blocks")))
          0 (p1-fixed-test-dead-token 'module)))
+      ((eq? action 'native-module-same-kind-unscoped)
+       (native-check 'p1-fixed-test (p1-native-module-create native-context))
+       (p1-fixed-test-change!
+         (shell-entry (shell-for-raw 'module (p1-fixed-child root "blocks")))
+         0 (p1-native-result-ptr native-context)))
+      ((eq? action 'native-module-same-kind-other-scope)
+       (p1-fixed-test-change!
+         (shell-entry (shell-for-raw 'module (p1-fixed-child root "blocks")))
+         0 (p1-fixed-test-other-scope-token 'module)))
       (else (exit 1)))))
