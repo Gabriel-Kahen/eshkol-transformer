@@ -1862,6 +1862,19 @@ exposed before that take. Parsed source-state tests pass, but compiled P1
 provider coexistence, complete C2 image and digest, pair publication, cold
 LOAD and full SAVE remain unproved.
 
+The bounded private fixed-index caller now composes the reviewed same-owner
+adoption leaf with the accepted C2 detached-owner constructor. Before C2
+claims either child, it reauthenticates the lexical one-use bundle, exact
+fourteen-primary P1 roster and tied alias, captured control envelope and
+epoch, fixed G3 policy words, and an independent hold-era copy of all eighteen
+scalar words. The caller passes only the five-field trainer controls to C2,
+retains both detached children through compose refusal, and releases O2 then
+P1 on certain failure; cleanup uncertainty fails stop. Its output is a private
+detached owner plus G3 words and epoch, not a C2 image or SAVE publication.
+Focused parsed source and negative-word tests cover this exact source leaf.
+Compiled native/Eshkol coexistence, actual partial-claim failure cuts, C2
+image/digest, pair publication, cold LOAD, and public SAVE remain open.
+
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
 diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use

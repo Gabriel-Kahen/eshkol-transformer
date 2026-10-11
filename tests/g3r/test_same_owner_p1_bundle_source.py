@@ -49,6 +49,8 @@ def take_once(source, records, shell, authenticated=True, topology_ok=True,
             left, right = evaluate(args[0], scope), evaluate(args[1], scope)
             return left == right if isinstance(left, str) and isinstance(right, str) \
                 else left is right
+        if op == "equal?":
+            return evaluate(args[0], scope) == evaluate(args[1], scope)
         if op == "=":
             return evaluate(args[0], scope) == evaluate(args[1], scope)
         if op == "vector?":
@@ -159,10 +161,11 @@ class PrivateP1Bundle(unittest.TestCase):
             mutated.index("(let ((p1 (module-state-dict model)))")
 
     def test_one_use_authentication_and_no_spend_on_refusal(self):
-        shell, p1, controls, words = object(), object(), object(), object()
+        shell, p1, controls, words = object(), object(), object(), list(range(18))
         bundle = [p1, shell, controls, words, "prepared"]
         record = [shell, object(), object(), object(), words, controls,
-                  object(), object(), object(), 7, p1, "issued", bundle]
+                  object(), object(), object(), 7, p1, "issued", bundle,
+                  words.copy()]
         output, state, events = take_once(self.source, [record], shell)
         self.assertIs(output, bundle)
         self.assertEqual((record[11], bundle[4]), ("spent", "transferred"))
@@ -187,6 +190,11 @@ class PrivateP1Bundle(unittest.TestCase):
         self.assertIsNone(output)
         self.assertEqual(record[11], "issued")
         bundle[0] = p1
+        words[7] ^= 1
+        output, _, _ = take_once(self.source, [record], shell)
+        self.assertIsNone(output)
+        self.assertEqual(record[11], "issued")
+        words[7] ^= 1
         output, _, _ = take_once(self.source, [record], shell, pending=True)
         self.assertIsNone(output)
         self.assertEqual(record[11], "issued")

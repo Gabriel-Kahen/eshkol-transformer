@@ -262,7 +262,7 @@
                                         (o2-copy-config-data operation config)
                                         (o2-copy-paths paths)
                                         (o2-copy-aliases aliases) count
-                                        (vector-ref cell 13) 'issued bundle))
+                                        (vector-ref cell 13) 'issued bundle #f))
                         (next-issued (cons record issued)))
                    (o2-state-projection-budget!
                      operation config paths aliases
@@ -291,6 +291,9 @@
                    (if (not (= (g3r-save-check hold) 0))
                        (begin (g3r-save-o2-copy-first! first hold)
                               (g3r-save-o2-raise-first first)))
+                   ;; The returned bundle aliases words. Keep an unexposed
+                   ;; value copy while the original native hold is live.
+                   (vector-set! record 13 (vector-copy words))
                    (let ((state (g3r-save-issue hold)))
                      ;; First assignment after issue return, even on NULL.
                      (vector-set! cell 2 state)
@@ -408,6 +411,10 @@
                                            (vector-ref record 5))
                                       (eq? (vector-ref bundle 3)
                                            (vector-ref record 4))
+                                      (vector? (vector-ref record 13))
+                                      (= (vector-length (vector-ref record 13)) 18)
+                                      (equal? (vector-ref bundle 3)
+                                              (vector-ref record 13))
                                       (eq? (vector-ref bundle 4) 'prepared)))
                             (g3r-save-o2-fail 'invalid-state 2
                               "C2 bundle was spent or changed"))
@@ -420,6 +427,70 @@
                         (set! transfer-pending #f)
                         bundle))
                      (else (search (cdr records))))))))
+       (authenticate-bundle
+         (lambda (shell bundle)
+           (if (or pending quarantine transfer-pending)
+               (g3r-save-o2-fail 'invalid-state 2
+                 "same-owner transfer or cleanup is active"))
+           (require-owned shell)
+           (let search ((records issued))
+             (cond ((null? records)
+                    (g3r-save-o2-fail 'invalid-argument 1
+                      "same-owner bundle has no issued record"))
+                   ((eq? (vector-ref (car records) 0) shell)
+                    (let ((record (car records)))
+                      (if (not (and (eq? (vector-ref record 11) 'spent)
+                                    (eq? (vector-ref record 12) bundle)
+                                    (vector? bundle)
+                                    (= (vector-length bundle) 5)
+                                    (eq? (vector-ref bundle 0)
+                                         (vector-ref record 10))
+                                    (eq? (vector-ref bundle 1) shell)
+                                    (eq? (vector-ref bundle 2)
+                                         (vector-ref record 5))
+                                    (eq? (vector-ref bundle 3)
+                                         (vector-ref record 4))
+                                    (eq? (vector-ref bundle 4) 'transferred)
+                                    (vector? (vector-ref record 13))
+                                    (= (vector-length (vector-ref record 13)) 18)
+                                    (equal? (vector-ref bundle 3)
+                                            (vector-ref record 13))))
+                          (g3r-save-o2-fail 'invalid-state 2
+                            "same-owner bundle changed after transfer"))
+                      ;; The capsule returns a fresh deep control copy. This
+                      ;; checks nested bytes as well as the saved epoch.
+                      (g3r-save-o2-check-roots (vector-ref record 3))
+                      (state-dict-c2-parameter-topology-internal
+                        (vector-ref record 10)
+                        'g3r-save-o2-authenticate-bundle)
+                      #t))
+                   (else (search (cdr records)))))))
+       (abandon
+         (lambda (shell)
+           ;; Called only by the private caller after an unconsumed take or
+           ;; a C2 compose refusal. The lexical record, not bundle slots,
+           ;; identifies both detached owners. Uncertain cleanup fails stop.
+           (let search ((records issued))
+             (cond ((null? records) (exit 134))
+                   ((eq? (vector-ref (car records) 0) shell)
+                    (let* ((record (car records))
+                           (p1 (vector-ref record 10)))
+                      (if (not (and (or (eq? (vector-ref record 11) 'issued)
+                                       (eq? (vector-ref record 11) 'spent))
+                                    p1 (eq? (vector-ref record 2)
+                                            (vector-ref (vector-ref record 1) 1))))
+                          (exit 134))
+                      (guard (caught (#t (exit 134)))
+                        (if (not (o2-public-optimizer-state-release! shell))
+                            (exit 134))
+                        (if (not (state-dict-release! p1)) (exit 134)))
+                      (vector-set! record 11 'retired)
+                      (vector-set! record 10 #f)
+                      (vector-set! record 13 #f)
+                      (vector-set! (vector-ref record 12) 0 #f)
+                      (vector-set! (vector-ref record 12) 4 'retired)
+                      #t))
+                   (else (search (cdr records)))))))
        (retry
          (lambda ()
            (if (not quarantine)
@@ -456,6 +527,8 @@
         (cond ((eq? mode 'adopt) (adopt a b c d e f g))
               ((eq? mode 'require) (require-owned a))
               ((eq? mode 'take-for-c2) (take-for-c2 a))
+              ((eq? mode 'authenticate-bundle) (authenticate-bundle a b))
+              ((eq? mode 'abandon) (abandon a))
               ((eq? mode 'retry) (retry))
               (else (g3r-save-o2-fail 'invalid-argument 1
                       "unknown private O2 adoption route")))))))
@@ -468,5 +541,10 @@
   (g3r-save-o2-adoption-route 'require shell #f #f #f #f #f #f))
 (define (g3r-save-o2-take-for-c2-internal shell)
   (g3r-save-o2-adoption-route 'take-for-c2 shell #f #f #f #f #f #f))
+(define (g3r-save-o2-authenticate-bundle-internal shell bundle)
+  (g3r-save-o2-adoption-route 'authenticate-bundle shell bundle
+                              #f #f #f #f #f))
+(define (g3r-save-o2-abandon-internal! shell)
+  (g3r-save-o2-adoption-route 'abandon shell #f #f #f #f #f #f))
 (define (g3r-save-o2-cleanup-retry-internal!)
   (g3r-save-o2-adoption-route 'retry #f #f #f #f #f #f #f))

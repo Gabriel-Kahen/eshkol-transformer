@@ -26,12 +26,14 @@ def validate(source, aggregate, closure):
     if parse(aggregate) != [
         ["load", '"g3r_training_controls_root.esk"'],
         ["load", '"g3r_same_owner_o2_adoption_extension.esk"'],
+        ["load", '"g3r_same_owner_save_caller_extension.esk"'],
     ]:
         raise ValueError("private aggregate changed")
     expected = ["native/g3r_same_owner_o2_adoption_root.esk",
                 *(ROOT / "native/g3r_training_controls_source_closure.txt")
                 .read_text().splitlines(),
-                "native/g3r_same_owner_o2_adoption_extension.esk"]
+                "native/g3r_same_owner_o2_adoption_extension.esk",
+                "native/g3r_same_owner_save_caller_extension.esk"]
     if closure.splitlines() != expected or len(set(expected)) != len(expected):
         raise ValueError("recursive source closure changed")
     actual = [(f[1], f[2], f[-1]) for f in forms
