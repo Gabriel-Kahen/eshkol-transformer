@@ -2678,6 +2678,12 @@ publication, public G2 and continuation remain pending.
   live/dead control-tail alias walkers and exact feature symbol delta;
   independent review and supported integration remain pending. Existing
   public P2/G1 remains capped at one token with EOS off.
+  The [typed I1 public adapter gate](g3/G3_C4_P2_G2_TYPED_I1_ADAPTER_BLOCKER.md)
+  records the source-level integration blocker at `8d44e3c5`: the installed
+  aggregate contains neither terminal/detached Eshkol source nor the typed
+  native feature, so no authentic terminal owner reaches a public accessor.
+  Source prerequisite suites pass 2/4/5 tests; same-aggregate compiled terminal,
+  fault, ownership and feature-off evidence must precede adapter admission.
 
 ## Wave 4 — practical pretraining and performance
 
