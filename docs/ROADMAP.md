@@ -2653,9 +2653,13 @@ publication, public G2 and continuation remain pending.
   original-allocation anchor and the guarded native-zero tail. A precommit
   diagnostic hook permits repair/retry of an injected genuine lease while the
   call stays live; the fixed production entry has no lease-repair callback and
-  fail-stops if an external lease unexpectedly persists. The detached native
-  snapshot and logical I1 clone Eshkol adapters, compiled same-call oracle and
-  fault proof, and public G2 review remain pending. No public G2 or
+  fail-stops if an external lease unexpectedly persists. A separate private
+  Eshkol source adapter now reads and validates the 72-byte detached native
+  snapshot, and publishes an independently rooted logical I1 clone after
+  exact 16/24-byte copyout and T1 parity checks. Its copy and release entries
+  remain private. Bounded source checks cover identity/extent guards and
+  cleanup ordering; compiled same-call oracle, lease/fault proof, prerequisite
+  integration, and public G2 review remain pending. No public G2 or
   continuation acceptance is claimed.
 
 ## Wave 4 — practical pretraining and performance

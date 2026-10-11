@@ -1,0 +1,451 @@
+;;; Source-private detached P2/G2 snapshot and logical I1 owner.
+;;; Load after g3c4_p2g2_terminal_close_extension.esk in the same registry.
+;;; This file adds no installed or public G2 route.
+
+(extern i64 g3c4-p2g2-native-terminal-snapshot ptr ptr i64
+        :real et_g3c4_private_p2g2_terminal_snapshot_v1)
+(extern ptr g3c4-p2g2-native-terminal-ids-clone ptr
+        :real et_g3c4_private_p2g2_terminal_ids_clone_v1)
+(extern i64 g3c4-p2g2-native-terminal-ids-clone-copy ptr i64 ptr i64
+        :real et_g3c4_private_p2g2_terminal_ids_clone_copy_v1)
+(extern i64 g3c4-p2g2-native-terminal-ids-clone-release ptr
+        :real et_g3c4_private_p2g2_terminal_ids_clone_release_v1)
+
+;;; The lexical root retains allocation-time identities. No mutable registry
+;;; slot, including a paired equal-length replacement, can redefine them.
+(define g3c4-p2g2-terminal-ids-original-authority
+  (let ((root '()))
+    (lambda (action shell payload)
+      (let find ((remaining root))
+        (cond
+          ((null? remaining)
+           (if (eq? action 'register)
+               (let ((token (vector 'terminal-ids-token)))
+                 (set! root (cons (vector shell payload token) root))
+                 token)
+               #f))
+          ((eq? (vector-ref (car remaining) 0) shell)
+           (let ((original (car remaining)))
+             (cond
+               ((eq? action 'check)
+                ((vector-ref original 1) payload))
+               ((eq? action 'remove)
+                (if (and (eq? remaining root)
+                         (eq? (vector-ref original 2) payload))
+                    (begin (set! root (cdr root)) #t)
+                    #f))
+               (else #f))))
+          (else (find (cdr remaining))))))))
+
+(define (g3c4-p2g2-detached-word bytes offset)
+  (let loop ((index 7) (value 0))
+    (if (< index 0)
+        (if (>= value 9223372036854775808)
+            (- value 18446744073709551616)
+            value)
+        (loop (- index 1)
+              (+ (* value 256)
+                 (bytevector-u8-ref bytes (+ offset index)))))))
+
+;;; A private snapshot is a value descriptor, never a replacement I1 owner.
+;;; Its eight words are ID0, ID1, logical count, cache length, RNG[0..3].
+(define (g3c4-p2g2-terminal-snapshot-internal shell)
+  (let ((operation 'g3c4-p2g2-terminal-snapshot-internal))
+    (m3-call operation
+      (let* ((source (g3c4-p2g2-terminal-output-live shell operation))
+             (anchor (g3c4-p2g2-terminal-anchor-for shell))
+             (native (vector-ref source 3))
+             (text (vector-ref source 8))
+             (count (vector-ref anchor 5))
+             (raw-one (vector-ref anchor 8))
+             (raw-two (vector-ref anchor 9))
+             (destination (make-bytevector 64 0))
+             (original-destination destination))
+        (guard (caught
+                 (#t (g3c4-p2g2-zero-bytes! original-destination 64)
+                     (raise caught)))
+          ;; Native ptr denotes the header; the original Eshkol allocation is
+          ;; exactly 8 header bytes plus 64 payload bytes.
+          (if (not (and (eq? destination original-destination)
+                        (bytevector? original-destination)
+                        (= (bytevector-length original-destination) 64)
+                        (eq? source
+                             (g3c4-p2g2-terminal-output-live shell operation))
+                        (eq? anchor (g3c4-p2g2-terminal-anchor-for shell))
+                        (eq? native (vector-ref source 3))))
+              (g3c4-fail 'invalid-state operation
+                         "terminal snapshot original allocation changed"))
+          (g3c4-native-check
+            (g3c4-p2g2-native-terminal-snapshot
+              native original-destination 72)
+            operation)
+          (if (not (and (eq? destination original-destination)
+                        (bytevector? original-destination)
+                        (= (bytevector-length original-destination) 64)
+                        (eq? source
+                             (g3c4-p2g2-terminal-output-live shell operation))
+                        (eq? anchor (g3c4-p2g2-terminal-anchor-for shell))
+                        (eq? native (vector-ref source 3))
+                        (eq? text (vector-ref source 8))
+                        (eq? raw-one (vector-ref anchor 8))
+                        (eq? raw-two (vector-ref anchor 9))))
+              (g3c4-fail 'invalid-state operation
+                         "terminal snapshot source or destination changed"))
+          (let* ((id-zero (g3c4-p2g2-detached-word destination 0))
+                 (id-one (g3c4-p2g2-detached-word destination 8))
+                 (logical (g3c4-p2g2-detached-word destination 16))
+                 (cache (g3c4-p2g2-detached-word destination 24))
+                 (rng-zero (g3c4-p2g2-detached-word destination 32))
+                 (rng-one (g3c4-p2g2-detached-word destination 40))
+                 (rng-two (g3c4-p2g2-detached-word destination 48))
+                 (rng-three (g3c4-p2g2-detached-word destination 56)))
+            (if (not (and (= logical count) (= cache (+ 2 count))
+                          (<= 0 id-zero) (<= id-zero 255)
+                          (= id-zero (bytevector-u8-ref raw-one 0))
+                          (= id-zero (bytevector-u8-ref text 0))
+                          (if (= count 1)
+                              (= id-one 0)
+                              (and (<= 0 id-one) (<= id-one 255)
+                                   (= id-one (bytevector-u8-ref raw-two 0))
+                                   (= id-one (bytevector-u8-ref text 1))))
+                          (= rng-zero 1) (>= rng-one 0)))
+                (g3c4-fail 'invalid-state operation
+                           "terminal snapshot disagrees with original text"))
+            (g3c4-p2g2-zero-bytes! original-destination 64)
+            (vector id-zero id-one logical cache rng-zero rng-one
+                    rng-two rng-three)))))))
+
+;;; Each owner record is rooted independently of its source terminal output.
+;;; Slots: shell, entry, native, logical count, authenticated snapshot, state.
+(define g3c4-p2g2-terminal-ids-owners (vector '()))
+
+(define (g3c4-p2g2-terminal-ids-owner-for shell)
+  (let find ((remaining (vector-ref g3c4-p2g2-terminal-ids-owners 0)))
+    (cond ((null? remaining) #f)
+          ((eq? (vector-ref (car remaining) 0) shell) (car remaining))
+          (else (find (cdr remaining))))))
+
+(define (g3c4-p2g2-terminal-ids-entry shell operation allow-dead)
+  (let* ((entry (g3c4-registry-find shell operation))
+         (owner (g3c4-p2g2-terminal-ids-owner-for shell)))
+    (if (not (and owner (vector? owner) (= (vector-length owner) 6)
+                  (eq? (vector-ref owner 0) shell)
+                  (eq? (vector-ref owner 1) entry)
+                  (g3c4-p2g2-terminal-ids-original-authority
+                    'check shell owner)
+                  (vector? entry) (= (vector-length entry) 12)
+                  (eq? (vector-ref entry 0) shell)
+                  (eq? (vector-ref entry 1) 'terminal-ids)
+                  (eq? (vector-ref entry 2)
+                       (vector-ref owner 5))
+                  (or (eq? (vector-ref owner 5) 'live)
+                      (and allow-dead (eq? (vector-ref owner 5) 'dead)))
+                  (eq? (vector-ref entry 3)
+                       (if (eq? (vector-ref owner 5) 'live)
+                           (vector-ref owner 2) #f))
+                  (m3t-exact-i64? (vector-ref owner 3))
+                  (or (= (vector-ref owner 3) 1)
+                      (= (vector-ref owner 3) 2))
+                  (vector? (vector-ref owner 4))
+                  (= (vector-length (vector-ref owner 4)) 8)
+                  (= (vector-ref (vector-ref owner 4) 2)
+                     (vector-ref owner 3))
+                  (eq? (vector-ref entry 4) #f)
+                  (eq? (vector-ref entry 5) #f)
+                  (eq? (vector-ref entry 6) #f)
+                  (eq? (vector-ref entry 7) #f)
+                  (eq? (vector-ref entry 8) #f)
+                  (eq? (vector-ref entry 9) #f)
+                  (eq? (vector-ref entry 10) #f)
+                  (eq? (vector-ref entry 11)
+                       (if (eq? (vector-ref owner 5) 'live)
+                           g3c4-model-profile #f))))
+        (g3c4-fail 'invalid-state operation
+                   "terminal I1 original owner or shell changed"))
+    entry))
+
+(define (g3c4-p2g2-terminal-snapshot-matches-source
+          source-shell source anchor snapshot operation)
+  (let ((count (vector-ref snapshot 2))
+        (text (vector-ref source 8)))
+    (and (eq? source
+              (g3c4-p2g2-terminal-output-live source-shell operation))
+         (eq? anchor (g3c4-p2g2-terminal-anchor-for source-shell))
+         (= count (vector-ref anchor 5))
+         (= (vector-ref snapshot 3) (+ 2 count))
+         (= (vector-ref snapshot 0)
+            (bytevector-u8-ref (vector-ref anchor 8) 0))
+         (= (vector-ref snapshot 0) (bytevector-u8-ref text 0))
+         (if (= count 1)
+             (= (vector-ref snapshot 1) 0)
+             (and (= (vector-ref snapshot 1)
+                     (bytevector-u8-ref (vector-ref anchor 9) 0))
+                  (= (vector-ref snapshot 1)
+                     (bytevector-u8-ref text 1))))))
+
+(define (g3c4-p2g2-terminal-ids-clone-probed-internal
+          source-shell after-clone repair-clone)
+  ;; Sibling m3-call scopes: snapshot completes before clone publication.
+  (let ((snapshot (g3c4-p2g2-terminal-snapshot-internal source-shell))
+        (operation 'g3c4-p2g2-terminal-ids-clone-internal))
+    (m3-call operation
+      (let* ((source (g3c4-p2g2-terminal-output-live
+                       source-shell operation))
+             (source-anchor (g3c4-p2g2-terminal-anchor-for source-shell))
+             (source-native (vector-ref source 3))
+             (count (vector-ref snapshot 2))
+             (id-zero (vector-ref snapshot 0))
+             (id-one (vector-ref snapshot 1))
+             (cache (vector-ref snapshot 3))
+             (rng-zero (vector-ref snapshot 4))
+             (rng-one (vector-ref snapshot 5))
+             (rng-two (vector-ref snapshot 6))
+             (rng-three (vector-ref snapshot 7))
+             (shell (vector 'g3c4-terminal-ids-private))
+             (answer (list shell))
+             (entry (vector shell 'terminal-ids 'pending #f #f #f #f
+                            #f #f #f #f g3c4-model-profile))
+             (owner (vector shell entry #f count snapshot 'pending))
+             (original-registry (vector-ref g3c4-registry 0))
+             (original-owners (vector-ref g3c4-p2g2-terminal-ids-owners 0))
+             (entry-node (cons entry original-registry))
+             (owner-node (cons owner original-owners))
+             (destination (make-bytevector (* 8 count) 0))
+             (original-destination destination)
+             (native '()) (token #f) (rooted #f) (published #f)
+             (original-check
+               (lambda (candidate)
+                 (and (eq? candidate owner)
+                      (eq? (vector-ref owner 0) shell)
+                      (eq? (vector-ref owner 1) entry)
+                      (eq? (vector-ref owner 2)
+                           (if (null? native) #f native))
+                      (= (vector-ref owner 3) count)
+                      (eq? (vector-ref owner 4) snapshot)
+                      (= (vector-ref snapshot 0) id-zero)
+                      (= (vector-ref snapshot 1) id-one)
+                      (= (vector-ref snapshot 2) count)
+                      (= (vector-ref snapshot 3) cache)
+                      (= (vector-ref snapshot 4) rng-zero)
+                      (= (vector-ref snapshot 5) rng-one)
+                      (= (vector-ref snapshot 6) rng-two)
+                      (= (vector-ref snapshot 7) rng-three)
+                      (eq? (vector-ref entry 0) shell)
+                      (eq? (vector-ref entry 1) 'terminal-ids)
+                      (or (eq? (vector-ref owner 5) 'pending)
+                          (eq? (vector-ref owner 5) 'live)
+                          (eq? (vector-ref owner 5) 'dead))))))
+        (guard (caught
+                 (#t
+                   (if (and rooted (not published))
+                       (begin
+                         (if token
+                             (guard (audit-failure (#t (exit 134)))
+                               (if (not (and
+                                          (g3c4-p2g2-terminal-ids-original-authority
+                                            'check shell owner)
+                                          (eq? (vector-ref owner 5) 'pending)
+                                          (eq? (vector-ref entry 2) 'pending)
+                                          (eq? (vector-ref entry 3) #f)))
+                                   (exit 134))))
+                         ;; A held genuine clone lease rejects native release.
+                         ;; Repair is supplied only by a diagnostic that owns
+                         ;; the genuine lease; retain the pending root until
+                         ;; native release has actually succeeded.
+                         (if (not (null? native))
+                             (if (not (= (g3c4-p2g2-native-terminal-ids-clone-release
+                                           native) 0))
+                                 (if (and (repair-clone native)
+                                          (eq? (vector-ref g3c4-registry 0)
+                                               entry-node)
+                                          (eq? (vector-ref
+                                                 g3c4-p2g2-terminal-ids-owners
+                                                 0)
+                                               owner-node)
+                                          (g3c4-p2g2-terminal-ids-original-authority
+                                            'check shell owner)
+                                          (= (g3c4-p2g2-native-terminal-ids-clone-release
+                                               native) 0))
+                                     #t
+                                     (exit 134))))
+                         (if (not (and (eq? (vector-ref g3c4-registry 0)
+                                            entry-node)
+                                       (eq? (cdr entry-node)
+                                            original-registry)
+                                       (eq? (vector-ref
+                                              g3c4-p2g2-terminal-ids-owners
+                                              0)
+                                            owner-node)
+                                       (eq? (cdr owner-node)
+                                            original-owners)))
+                             (exit 134))
+                         (g3c4-entry-dead! entry)
+                         (vector-set! g3c4-registry 0 original-registry)
+                         (vector-set! g3c4-p2g2-terminal-ids-owners 0
+                                      original-owners)
+                         (if token
+                             (if (not (g3c4-p2g2-terminal-ids-original-authority
+                                        'remove shell token))
+                                 (exit 134)))))
+                   (g3c4-p2g2-zero-bytes! original-destination (* 8 count))
+                   (raise caught)))
+          (if (not (and (or (= count 1) (= count 2))
+                        (g3c4-p2g2-terminal-snapshot-matches-source
+                          source-shell source source-anchor snapshot operation)
+                        (eq? source (g3c4-p2g2-terminal-output-live
+                                      source-shell operation))
+                        (eq? source-anchor
+                             (g3c4-p2g2-terminal-anchor-for source-shell))
+                        (eq? source-native (vector-ref source 3))
+                        (eq? destination original-destination)
+                        (bytevector? original-destination)
+                        (= (bytevector-length original-destination)
+                           (* 8 count))))
+              (g3c4-fail 'invalid-state operation
+                         "terminal clone source or allocation changed"))
+          (vector-set! g3c4-registry 0 entry-node)
+          (vector-set! g3c4-p2g2-terminal-ids-owners 0 owner-node)
+          (set! rooted #t)
+          (set! token (g3c4-p2g2-terminal-ids-original-authority
+                        'register shell original-check))
+          (if (not token)
+              (g3c4-fail 'invalid-state operation
+                         "terminal clone shell already rooted"))
+          (set! native
+                (g3c4-p2g2-native-terminal-ids-clone source-native))
+          (if (null? native) (g3c4-native-fail operation))
+          (vector-set! owner 2 native)
+          (after-clone native)
+          (if (not (and (eq? source
+                             (g3c4-p2g2-terminal-output-live
+                               source-shell operation))
+                        (g3c4-p2g2-terminal-snapshot-matches-source
+                          source-shell source source-anchor snapshot operation)
+                        (eq? source-anchor
+                             (g3c4-p2g2-terminal-anchor-for source-shell))
+                        (eq? source-native (vector-ref source 3))
+                        (eq? (g3c4-registry-find shell operation) entry)
+                        (eq? (g3c4-p2g2-terminal-ids-owner-for shell) owner)
+                        (g3c4-p2g2-terminal-ids-original-authority
+                          'check shell owner)
+                        (eq? destination original-destination)
+                        (bytevector? original-destination)
+                        (= (bytevector-length original-destination)
+                           (* 8 count))))
+              (g3c4-fail 'invalid-state operation
+                         "terminal clone pending owner changed"))
+          ;; The original bytevector allocation has 16 or 24 total bytes.
+          (g3c4-native-check
+            (g3c4-p2g2-native-terminal-ids-clone-copy
+              native count original-destination (+ 8 (* 8 count)))
+            operation)
+          (if (not (and (eq? source
+                             (g3c4-p2g2-terminal-output-live
+                               source-shell operation))
+                        (g3c4-p2g2-terminal-snapshot-matches-source
+                          source-shell source source-anchor snapshot operation)
+                        (eq? source-anchor
+                             (g3c4-p2g2-terminal-anchor-for source-shell))
+                        (eq? source-native (vector-ref source 3))
+                        (eq? (g3c4-registry-find shell operation) entry)
+                        (eq? (g3c4-p2g2-terminal-ids-owner-for shell) owner)
+                        (g3c4-p2g2-terminal-ids-original-authority
+                          'check shell owner)
+                        (eq? destination original-destination)
+                        (bytevector? original-destination)
+                        (= (bytevector-length original-destination)
+                           (* 8 count))
+                        (= (g3c4-p2g2-detached-word destination 0)
+                           (vector-ref snapshot 0))
+                        (if (= count 1)
+                            #t
+                            (= (g3c4-p2g2-detached-word destination 8)
+                               (vector-ref snapshot 1)))))
+              (g3c4-fail 'invalid-state operation
+                         "terminal clone copy disagrees with snapshot"))
+          (g3c4-p2g2-zero-bytes! original-destination (* 8 count))
+          (vector-set! entry 3 native)
+          (vector-set! entry 2 'live)
+          (vector-set! owner 5 'live)
+          (set! published #t)
+          answer))))))
+
+(define (g3c4-p2g2-terminal-ids-clone-internal source-shell)
+  (g3c4-p2g2-terminal-ids-clone-probed-internal
+    source-shell (lambda (native) #t) (lambda (native) #f)))
+
+(define (g3c4-p2g2-terminal-ids-copy-internal shell)
+  (let ((operation 'g3c4-p2g2-terminal-ids-copy-internal))
+    (m3-call operation
+      (let* ((entry (g3c4-p2g2-terminal-ids-entry shell operation #f))
+             (owner (g3c4-p2g2-terminal-ids-owner-for shell))
+             (native (vector-ref owner 2))
+             (count (vector-ref owner 3))
+             (snapshot (vector-ref owner 4))
+             (destination (make-bytevector (* 8 count) 0))
+             (original-destination destination))
+        (guard (caught
+                 (#t (g3c4-p2g2-zero-bytes! original-destination
+                                             (* 8 count))
+                     (raise caught)))
+          (if (not (and (eq? destination original-destination)
+                        (bytevector? original-destination)
+                        (= (bytevector-length original-destination)
+                           (* 8 count))
+                        (eq? entry
+                             (g3c4-p2g2-terminal-ids-entry
+                               shell operation #f))
+                        (eq? owner (g3c4-p2g2-terminal-ids-owner-for shell))
+                        (eq? native (vector-ref entry 3))))
+              (g3c4-fail 'invalid-state operation
+                         "terminal I1 copy allocation or owner changed"))
+          (g3c4-native-check
+            (g3c4-p2g2-native-terminal-ids-clone-copy
+              native count original-destination (+ 8 (* 8 count)))
+            operation)
+          (if (not (and (eq? destination original-destination)
+                        (bytevector? original-destination)
+                        (= (bytevector-length original-destination)
+                           (* 8 count))
+                        (eq? entry
+                             (g3c4-p2g2-terminal-ids-entry
+                               shell operation #f))
+                        (eq? owner (g3c4-p2g2-terminal-ids-owner-for shell))
+                        (eq? native (vector-ref entry 3))
+                        (= (g3c4-p2g2-detached-word destination 0)
+                           (vector-ref snapshot 0))
+                        (if (= count 1)
+                            #t
+                            (= (g3c4-p2g2-detached-word destination 8)
+                               (vector-ref snapshot 1)))))
+              (g3c4-fail 'invalid-state operation
+                         "terminal I1 copy changed or differs from source"))
+          (let ((result (make-bytevector count 0)))
+            (bytevector-u8-set! result 0 (vector-ref snapshot 0))
+            (if (= count 2)
+                (bytevector-u8-set! result 1 (vector-ref snapshot 1)))
+            (g3c4-p2g2-zero-bytes! original-destination (* 8 count))
+            result))))))
+
+(define (g3c4-p2g2-terminal-ids-release-internal! shell)
+  (let ((operation 'g3c4-p2g2-terminal-ids-release-internal!))
+    (m3-call operation
+      (let* ((entry (g3c4-p2g2-terminal-ids-entry shell operation #t))
+             (owner (g3c4-p2g2-terminal-ids-owner-for shell))
+             (barrier (vector #f)))
+        (if (eq? (vector-ref owner 5) 'dead)
+            #t
+            (let ((native (vector-ref owner 2)))
+              ;; Native held-I1 rejection is recoverable and leaves LIVE intact.
+              (guard (caught
+                       (#t (if (vector-ref barrier 0) (exit 134))
+                           (raise caught)))
+                (let ((status
+                        (g3c4-p2g2-native-terminal-ids-clone-release native)))
+                  (if (= status 0)
+                      (begin
+                        (vector-set! barrier 0 #t)
+                        (g3c4-entry-dead! entry)
+                        (vector-set! owner 5 'dead)
+                        #t)
+                      (g3c4-native-check status operation))))))))))
