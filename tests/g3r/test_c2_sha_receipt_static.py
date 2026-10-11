@@ -136,7 +136,18 @@ def verify_fault_bindings(source: str) -> None:
 
 
 def verify_pair_admission(source: str) -> None:
-    parse(source)
+    pair = definition({"pair": parse(source)}, "g3r-c2-pair-decode-internal!")
+    cleanup = form("""(caught
+      (#t
+        (if (vector-ref borrow-cell 0)
+            (guard (cleanup-defect (#t (g3r-c2-sha-fail-stop 134)))
+              (g3r-c2-receipt-borrow-end-internal!
+                (vector-ref borrow-cell 0))))
+        (if (vector-ref digest-cell 0)
+            (g3r-c2-sha-zero! (vector-ref digest-cell 0)))
+        (raise caught)))""")
+    if pair[2][2][1] != cleanup:
+        raise ValueError("pair negative cleanup order differs")
     required = (
         "(let ((borrow-cell (vector #f)) (digest-cell (vector #f)))",
         "(if (vector-ref borrow-cell 0)",
@@ -198,7 +209,7 @@ def verify_race_assertions(source: str) -> None:
           "(native-flat?)")),
         (("borrow end restores one live C2 owner",
           "(= (vector-ref counts-after-borrow-end 0) (+ owners-before 1))"),
-        ("borrow end restores prior busy C2 count",
+         ("borrow end restores prior busy C2 count",
           "(= (vector-ref counts-after-borrow-end 1) busy-before)"),
          ("borrow end restores live receipt status",
           "(eq? (vector-ref record 1) 'live)"),
@@ -314,6 +325,14 @@ class C2ShaReceiptStaticTest(unittest.TestCase):
                 "        (vector-set! borrow-cell 0 #f)",
                 "        (vector-set! borrow-cell 0 #f)\n"
                 "        (g3r-c2-receipt-borrow-end-internal! (vector-ref borrow-cell 0))", 1))
+        with self.assertRaisesRegex(ValueError, "negative cleanup order"):
+            verify_pair_admission(PAIR.read_text().replace(
+                "               (if (vector-ref digest-cell 0)\n"
+                "                   (g3r-c2-sha-zero! (vector-ref digest-cell 0)))\n"
+                "               (raise caught)",
+                "               (raise caught)\n"
+                "               (if (vector-ref digest-cell 0)\n"
+                "                   (g3r-c2-sha-zero! (vector-ref digest-cell 0)))", 1))
 
     def test_race_assertion_near_misses_reject(self) -> None:
         source = FIXTURE.read_text()
