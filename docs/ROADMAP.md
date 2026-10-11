@@ -2683,8 +2683,12 @@ publication, public G2 and continuation remain pending.
   now loads the terminal, detached and typed extensions in one isolated
   G3-G root and derives three independent I1 owners from an authenticated
   terminal snapshot and logical clone. Its focused source gate passes 14
-  tests. Compiled same-call, fault, ownership, feature-off and independent
-  review gates remain pending; public P2/G2 dispatch stays disabled.
+  tests. A private same-aggregate smoke fixture now covers the planned
+  first/second EOS and two non-EOS paths plus two typed tuples after source
+  release, but remains uncompiled. The exact fe9/f31 dependencies are pinned;
+  compiled same-call, independent RNG/A2 oracles, rank/shape, fault,
+  ownership, feature-off and supported review gates remain pending. Public
+  P2/G2 dispatch stays disabled.
 
 ## Wave 4 — practical pretraining and performance
 

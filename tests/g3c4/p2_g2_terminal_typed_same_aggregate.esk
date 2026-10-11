@@ -1,0 +1,106 @@
+;;; Private same-registry smoke fixture. This is a prerequisite probe, not the
+;;; independent numerical/fault acceptance gate. Never install this root.
+(load "g3c4_p2g2_terminal_typed_private_root.esk")
+
+(define checks 0)
+(define (check label condition)
+  (if condition
+      (set! checks (+ checks 1))
+      (begin (display "P2/G2 typed aggregate FAIL: ")
+             (display label) (newline) (exit 1))))
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define model (g3c4-model-create-seeded-internal 1729))
+(define input
+  (g3c4-p2g2-owned-input-create
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255))))
+
+(define (config eos)
+  (list ':profile 'diagnostic-c4 ':sampling 'greedy
+        ':temperature-bits 1065353216 ':top-k 256
+        ':top-p-bits 1065353216 ':max-new-tokens 2
+        ':eos eos ':seed 7))
+
+(define (typed-check tuple snapshot)
+  (let* ((ids (vector-ref tuple 0))
+         (lengths (vector-ref tuple 1))
+         (cache (vector-ref tuple 2))
+         (count (vector-ref snapshot 2))
+         (operation 'p2g2-typed-aggregate-test))
+    (check "independent owner handles"
+           (and (not (eq? ids lengths)) (not (eq? ids cache))
+                (not (eq? lengths cache))))
+    (check "typed kinds"
+           (and (= (g3c4-p2g2-terminal-typed-kind ids operation) 10)
+                (= (g3c4-p2g2-terminal-typed-kind lengths operation) 11)
+                (= (g3c4-p2g2-terminal-typed-kind cache operation) 12)))
+    (check "typed logical lengths"
+           (and (= (g3c4-p2g2-terminal-typed-length ids operation) count)
+                (= (g3c4-p2g2-terminal-typed-length lengths operation) 1)
+                (= (g3c4-p2g2-terminal-typed-length cache operation) 1)))
+    (check "typed values"
+           (and (= (g3c4-p2g2-terminal-typed-value ids 0 operation)
+                   (vector-ref snapshot 0))
+                (if (= count 1) #t
+                    (= (g3c4-p2g2-terminal-typed-value ids 1 operation)
+                       (vector-ref snapshot 1)))
+                (= (g3c4-p2g2-terminal-typed-value lengths 0 operation)
+                   count)
+                (= (g3c4-p2g2-terminal-typed-value cache 0 operation)
+                   (+ count 2))))))
+
+(define (release-tuple tuple)
+  (check "release cache owner"
+         (= (g3c4-p2g2-native-typed-release (vector-ref tuple 2)) 0))
+  (check "release length owner"
+         (= (g3c4-p2g2-native-typed-release (vector-ref tuple 1)) 0))
+  (check "release IDs owner"
+         (= (g3c4-p2g2-native-typed-release (vector-ref tuple 0)) 0)))
+
+(define (run-case eos expected-count)
+  (let* ((generator (g3c4-generator-create-internal
+                      model tokenizer (config eos)))
+         (output (g3c4-p2g2-terminal-generate-internal generator input))
+         (snapshot (g3c4-p2g2-terminal-snapshot-internal output))
+         (text (vector-ref (g3c4-p2g2-terminal-output-live output 'test) 8))
+         (first (g3c4-p2g2-terminal-typed-create-internal output))
+         (second (g3c4-p2g2-terminal-typed-create-internal output)))
+    (check "logical count and cache"
+           (and (= (vector-ref snapshot 2) expected-count)
+                (= (vector-ref snapshot 3) (+ 2 expected-count))))
+    (check "raw T1 bytes"
+           (and (= (bytevector-length text) expected-count)
+                (= (bytevector-u8-ref text 0) (vector-ref snapshot 0))
+                (if (= expected-count 1) #t
+                    (= (bytevector-u8-ref text 1)
+                       (vector-ref snapshot 1)))))
+    (check "two tuples have distinct IDs owners"
+           (not (eq? (vector-ref first 0) (vector-ref second 0))))
+    (typed-check first snapshot)
+    (typed-check second snapshot)
+    (check "source release"
+           (g3c4-p2g2-terminal-output-release-internal! output))
+    (typed-check first snapshot)
+    (typed-check second snapshot)
+    (release-tuple second)
+    (release-tuple first)
+    (check "generator close" (g3c4-generator-close-internal! generator))
+    snapshot))
+
+(define baseline (run-case #f 2))
+;;; The first supported compile must establish this deterministic fixture fact.
+(check "distinct non-EOS IDs required for the EOS probes"
+       (not (= (vector-ref baseline 0) (vector-ref baseline 1))))
+(define first-eos (run-case (vector-ref baseline 0) 1))
+(define second-eos (run-case (vector-ref baseline 1) 2))
+(check "first EOS identity" (= (vector-ref first-eos 0)
+                               (vector-ref baseline 0)))
+(check "second EOS identity"
+       (and (= (vector-ref second-eos 0) (vector-ref baseline 0))
+            (= (vector-ref second-eos 1) (vector-ref baseline 1))))
+(check "input release" (generation-tensor-release-internal! input))
+(display "P2/G2 typed same-aggregate smoke PASS: checks=")
+(display checks)
+(newline)
