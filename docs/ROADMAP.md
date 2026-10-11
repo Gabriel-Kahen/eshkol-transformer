@@ -2820,6 +2820,11 @@ publication, public G2 and continuation remain pending.
   The reviewed public-history and T1 test-only sources are composed on current
   main for source checks only. Their combined compiled behavior, normal and
   sanitizer runtime proof, and public continuation remain pending.
+  An [inert one-root compiled union gate plan](g3/G3_C4_PUBLIC_HISTORY_T1_COMPILED_UNION_PLAN.md)
+  names the exact installed and private root/runner candidates and the
+  independent-review, immutable-pin, negative-preflight, bounded-runtime and
+  symbol-inventory gates. It ran no compiler, native, loader or Docker phase;
+  broad lineage, compiled union and continuation stay OPEN/HOLD.
 
 ## Wave 4 — practical pretraining and performance
 
