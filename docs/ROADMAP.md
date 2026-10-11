@@ -803,6 +803,12 @@ held its late selected-entry comparison/symlink return edge. The C candidate
 checks deadline and RSS after both validations and adds full-scanner generated-
 gzip late-limit negatives. Independent and root review remain required. Actual
 f31 layers and admission remain untested.
+The [exact N1 input plan](e3/E3_N1_EXACT_INPUT_PLAN.md) fixes the sealed
+index/amd64-manifest/config descriptor chain and the two ordered gzip layer
+descriptors, then specifies a conditional guest selection, host-route,
+resource and review sequence. It contains no reviewed OCI export, verified
+layer/diffID/guest bytes, capture recipe or admission pin; real-layer scan,
+capture and N1/M1 remain HOLD pending independent and root review.
 It changes no import policy; N1/M1 and the fresh supported numerical gate
 remain open.
 The exact `5d642a2` fe9/f31 numerical gate built the normal and mutant
