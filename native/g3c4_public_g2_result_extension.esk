@@ -463,6 +463,36 @@
     (vector (g3c4-p2g2-terminal-word bytes 0)
             (g3c4-p2g2-terminal-word bytes 8))))
 
+(define (g3c4-public-p2g2-history-final?
+          source ticket generator-row input-entry model tokenizer
+          generator input output eos snapshot)
+  ;; This is the fixed, callback-free check after the last typed snapshot.
+  ;; All provider, registry and issuer procedures have already completed.
+  (and (vector? source) (= (vector-length source) 12)
+       (vector? ticket) (= (vector-length ticket) 21)
+       (memq source (vector-ref g3c4-public-g2-output-rows 0))
+       (memq ticket (vector-ref g3c4-public-g2-tickets 0))
+       (eq? (vector-ref source 0) output)
+       (eq? (vector-ref source 3) generator)
+       (eq? (vector-ref source 4) input)
+       (eq? (vector-ref source 8) 'live)
+       (eq? (vector-ref ticket 1) generator)
+       (eq? (vector-ref ticket 2) input)
+       (eq? (vector-ref ticket 5) output)
+       (eq? (vector-ref ticket 6) (vector-ref source 1))
+       (eq? (vector-ref ticket 10) source)
+       (eq? (vector-ref ticket 12) 'live)
+       (eq? (vector-ref input-entry 2) 'live)
+       (vector-ref input-entry 3)
+       (eq? (vector-ref generator-row 3) model)
+       (eq? (vector-ref generator-row 4) tokenizer)
+       (eq? (vector-ref generator-row 7) 'live)
+       (= (vector-ref (vector-ref generator-row 5) 6) eos)
+       (= (vector-ref source 9) (vector-ref snapshot 2))
+       (= (vector-ref source 10) (vector-ref snapshot 3))
+       (= (vector-ref ticket 13) (vector-ref snapshot 2))
+       (= (vector-ref ticket 14) (vector-ref snapshot 3))))
+
 (define g3c4-public-p2g2-history-route
   (let ((input-issuers '()) (history-issuers '())
         (issued-outputs '())
@@ -493,37 +523,34 @@
                           "P2 input issuance is not public-constructor bound"))
            (let* ((encoded first) (input second)
                   (entry (g3c4-input-entry-live input operation))
-                  (native (vector-ref entry 3))
-                  (ids (g3c4-public-p2g2-native-input-ids native operation))
-                  (id0 (vector-ref ids 0)) (id1 (vector-ref ids 1)))
+                  (native (vector-ref entry 3)))
              (if (or (>= input-count 64)
                      (not (t1-wave1-tensor-admitted? encoded))
                      (not (= (t1-shell-length encoded) 2))
                      (not (= (t1-shell-last-status) 0))
-                     (let ((current (t1-shell-read encoded 0)))
-                       (or (not (= (t1-shell-last-status) 0))
-                           (not (= current id0))))
-                     (let ((current (t1-shell-read encoded 1)))
-                       (or (not (= (t1-shell-last-status) 0))
-                           (not (= current id1))))
                      (let loop ((tail input-issuers))
                        (and (pair? tail)
                             (or (eq? (car (car tail)) input)
                                 (loop (cdr tail))))))
                  (g3c4-fail 'invalid-state operation
                             "P2 input issuance or original T1 changed"))
+             (let* ((id0 (t1-shell-read encoded 0))
+                    (status0 (t1-shell-last-status))
+                    (id1 (t1-shell-read encoded 1))
+                    (status1 (t1-shell-last-status))
+                    (ids (g3c4-public-p2g2-native-input-ids
+                           native operation)))
+               (if (not (and (= status0 0) (= status1 0)
+                             (t1-wave1-tensor-admitted? encoded)
+                             (= id0 (vector-ref ids 0))
+                             (= id1 (vector-ref ids 1))))
+                   (g3c4-fail 'invalid-state operation
+                              "P2 creation IDs changed before issuance"))
              (let ((authority
                      (lambda (candidate candidate-entry candidate-native)
                        (and (eq? candidate input)
                             (eq? candidate-entry entry)
                             (eq? candidate-native native)
-                            (t1-wave1-tensor-admitted? encoded)
-                            (= (t1-shell-length encoded) 2)
-                            (= (t1-shell-last-status) 0)
-                            (= (t1-shell-read encoded 0) id0)
-                            (= (t1-shell-last-status) 0)
-                            (= (t1-shell-read encoded 1) id1)
-                            (= (t1-shell-last-status) 0)
                             (eq? (g3c4-input-entry-live input operation)
                                  entry)
                             (let ((current
@@ -531,10 +558,12 @@
                                       native operation)))
                               (and (= (vector-ref current 0) id0)
                                    (= (vector-ref current 1) id1)))))))
+               ;; The pair retains the original T1 identity, without
+               ;; requiring its post-creation liveness or rereading it.
                (set! input-issuers
-                 (cons (cons input authority) input-issuers))
+                 (cons (cons input (cons encoded authority)) input-issuers))
                (set! input-count (+ input-count 1))
-               #t)))
+               #t))))
           ((eq? action 'capture)
            (let* ((generator first) (input second) (output third)
                   (input-issuer (assq input input-issuers))
@@ -562,7 +591,7 @@
                            (eq? (vector-ref source 4) input)
                            (eq? (vector-ref ticket 6)
                                 (vector-ref source 1))
-                           ((cdr input-issuer) input input-entry
+                           ((cdr (cdr input-issuer)) input input-entry
                             (vector-ref input-entry 3))
                            (= (vector-ref snapshot 3)
                               (+ 2 (vector-ref snapshot 2)))
@@ -580,6 +609,11 @@
                     (prompt
                       (g3c4-public-p2g2-native-input-ids
                         (vector-ref input-entry 3) operation))
+                    ;; The final terminal read follows every input provider.
+                    ;; Its native/I1 path has no user callback. Publication
+                    ;; below performs only fixed cell checks and writes.
+                    (final-snapshot
+                      (g3c4-p2g2-terminal-snapshot-private output))
                     (p0 (vector-ref prompt 0))
                     (p1 (vector-ref prompt 1))
                     (g1 (vector-ref snapshot 0))
@@ -639,13 +673,12 @@
                           (eq? (g3c4-public-g2-output-unique
                                  g3c4-public-g2-tickets 5 output operation)
                                ticket)
-                          ((cdr input-issuer) input input-entry
+                          ((cdr (cdr input-issuer)) input input-entry
                            (vector-ref input-entry 3))))
                             (g3c4-fail 'invalid-state operation
                                        "P2/G2 issuer roots changed"))
                         (let ((current
-                                (g3c4-public-g2-source-snapshot
-                                  output operation)))
+                                (g3c4-p2g2-terminal-snapshot-private output)))
                           (if (not (and
                             (= (vector-ref current 0) g1)
                             (= (vector-ref current 1) g2)
@@ -654,7 +687,11 @@
                             (= (vector-ref current 4) r0)
                             (= (vector-ref current 5) r1)
                             (= (vector-ref current 6) r2)
-                            (= (vector-ref current 7) r3)))
+                            (= (vector-ref current 7) r3)
+                            (g3c4-public-p2g2-history-final?
+                              source ticket generator-row input-entry
+                              model tokenizer generator input output eos
+                              current)))
                               (g3c4-fail 'invalid-state operation
                                          "P2/G2 terminal bytes changed")))
                         (if (eq? verb 'admit)
@@ -662,11 +699,6 @@
                               (if (not (and (eq? candidate-generator generator)
                                             (eq? candidate-input input)
                                             (eq? candidate-output output)
-                                            (eq? source
-                                                 (g3c4-public-g2-output-live
-                                                   output operation))
-                                            ((cdr input-issuer) input input-entry
-                                             (vector-ref input-entry 3))
                                             (eq? (vector-ref descriptor 13)
                                                  generator)
                                             (eq? (vector-ref descriptor 14)
@@ -682,9 +714,18 @@
                (let ((next-history
                        (cons (cons shell authority) history-issuers))
                      (next-outputs (cons output issued-outputs)))
-                 (if (memq output issued-outputs)
+                 (if (not (and
+                       (let loop ((index 0))
+                         (if (= index 8) #t
+                             (and (= (vector-ref snapshot index)
+                                     (vector-ref final-snapshot index))
+                                  (loop (+ index 1)))))
+                       (g3c4-public-p2g2-history-final?
+                         source ticket generator-row input-entry model
+                         tokenizer generator input output eos final-snapshot)
+                       (not (memq output issued-outputs))))
                      (g3c4-fail 'invalid-state operation
-                                "P2/G2 output already has a history issuer"))
+                                "P2/G2 final source changed before issuance"))
                  (set! history-issuers next-history)
                  (set! issued-outputs next-outputs)
                  (set! history-count (+ history-count 1))

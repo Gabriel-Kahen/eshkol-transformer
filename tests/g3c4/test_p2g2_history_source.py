@@ -90,8 +90,31 @@ class HistorySource(unittest.TestCase):
             assert required in route, required
         for index in range(8):
             assert f"(= (vector-ref current {index}) " in route
-        assert route.index("(set! phase 'admitting)") < route.index(
-            "(g3c4-public-g2-source-snapshot\n                                  output operation)")
+        issue = route[route.index("((eq? action 'input-issue)"):
+                      route.index("((eq? action 'capture)")]
+        issuer = issue[issue.index("(lambda (candidate candidate-entry"):
+                       issue.index(";; The pair retains")]
+        assert "t1-shell-" not in issuer
+        assert "t1-wave1-tensor-admitted?" not in issuer
+        assert "(cons input (cons encoded authority))" in issue
+        assert issue.index("(t1-shell-read encoded 1)") < issue.index(
+            "(ids (g3c4-public-p2g2-native-input-ids")
+        capture = route[route.index("((eq? action 'capture)"):
+                        route.index("((eq? action 'admit)")]
+        final_read = "(final-snapshot\n                      (g3c4-p2g2-terminal-snapshot-private output))"
+        assert capture.index("((cdr (cdr input-issuer)) input input-entry") < capture.index(final_read)
+        assert capture.index(final_read) < capture.index("(set! history-issuers next-history)")
+        admitted = capture[capture.index("(let ((current\n                                (g3c4-p2g2-terminal-snapshot-private output)))"):
+                           capture.index("(set! phase 'spent)")]
+        for forbidden in ("g3c4-public-g2-output-live", "g3c4-public-g2-source-snapshot",
+                          "(cdr (cdr input-issuer))", "g3c4-public-p2g2-native-input-ids",
+                          "t1-shell-"):
+            assert forbidden not in admitted, forbidden
+        final = history[history.index("(define (g3c4-public-p2g2-history-final?"):
+                        history.index("(define g3c4-public-p2g2-history-route")]
+        for forbidden in ("g3c4-public-g2-output-live", "g3c4-p2g2-terminal-snapshot-private",
+                          "g3c4-public-p2g2-native-input-ids", "t1-shell-"):
+            assert forbidden not in final, forbidden
         assert route.index("(set! created") < route.index(
             "'input-issue encoded created secret #f")
         assert route.index("(descriptor\n                      (vector p0 p1") < route.index(
@@ -141,6 +164,25 @@ class HistorySource(unittest.TestCase):
         with self.assertRaises(AssertionError):
             self.validate(build=self.build.replace(
                 "-DET_G3C4_P2_ORIGINAL_SNAPSHOT_PRIVATE", "", 1))
+
+    def test_post_creation_t1_release_is_not_an_admission_gate(self) -> None:
+        # Native original IDs, not T1 liveness, authenticate later history.
+        marker = "(eq? (g3c4-input-entry-live input operation)\n                                 entry)"
+        bad = self.history.replace(marker,
+            "(= (t1-shell-read encoded 0) id0)\n                            " + marker, 1)
+        with self.assertRaises(AssertionError):
+            self.validate(history=bad)
+
+    def test_no_late_input_provider_after_terminal_validation(self) -> None:
+        # The D source ordering allowed a late provider to change output.
+        spend = "(set! phase 'spent)"
+        late = "((cdr (cdr input-issuer)) input input-entry (vector-ref input-entry 3))\n                              "
+        with self.assertRaises(AssertionError):
+            self.validate(history=self.history.replace(spend, late + spend, 1))
+        final_read = "(final-snapshot\n                      (g3c4-p2g2-terminal-snapshot-private output))"
+        with self.assertRaises((AssertionError, ValueError)):
+            self.validate(history=self.history.replace(final_read,
+                "(final-snapshot snapshot)", 1))
 
 
 if __name__ == "__main__":

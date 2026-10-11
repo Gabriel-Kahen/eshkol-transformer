@@ -2782,8 +2782,11 @@ publication, public G2 and continuation remain pending.
   continuation proof is claimed until the reviewed one-shot gate runs.
   The bounded P2/G1–G2 full-history source candidate now records the genuine
   P2 constructor's original two IDs in the private native input, checks its
-  live owned bits through a typed 16-byte snapshot, and roots original T1 and
-  exact public terminal/ticket provenance in a one-use Eshkol issuer. Focused
+  live owned bits through a typed 16-byte snapshot, and roots original T1
+  identity and exact public terminal/ticket provenance in a one-use Eshkol
+  issuer. The D source review held post-creation T1 rereads and provider work
+  after the last output check; the focused E successor removes those reads and
+  moves the callback-free terminal check to the publication tail. Focused
   parsed-source tests pass. Native compilation, both public G1-EOS/G2 runtime
   paths, same-handle model-bit evidence, the checksummed pair format, SAVE,
   cold LOAD and continuation equivalence remain unrun and unaccepted.

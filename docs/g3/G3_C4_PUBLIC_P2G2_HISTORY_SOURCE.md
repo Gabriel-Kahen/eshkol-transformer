@@ -9,13 +9,17 @@ two little-endian i64 IDs. The getter authenticates the live input address,
 owned dense CPU-i64 `[1,2]` tensor, original IDs and absence of an active I1
 borrow before writing. Certain release clears the marker and IDs.
 
-The existing public input constructor enrolls its T1 shell and native input
-in a lexical issuer. The private capture entry
+The existing public input constructor enrolls its T1 shell identity and
+native input in a lexical issuer. The original T1 shell may then be released;
+capture and admission use the native exact-P2 getter, without rereading T1.
+The private capture entry
 `g3c4-public-p2g2-history-capture-internal!` joins that issuer to one exact
 public G2 output, ticket, model, tokenizer and creation policy. Admission
 through `g3c4-public-p2g2-history-admit-once-internal!` rechecks the owners,
 terminal IDs, count, cache and terminal-output RNG, and spends the issuer
-once. The returned detached vector is mutable and is **not** independent
+once. Both routes perform input-provider work before their final terminal
+snapshot, then check captured origin and ticket cells without callback calls
+before the fixed publication tail. The returned detached vector is mutable and is **not** independent
 authority for a later writer. There is no generator-current-RNG getter or
 same-handle model parameter-bit witness in this leaf.
 
