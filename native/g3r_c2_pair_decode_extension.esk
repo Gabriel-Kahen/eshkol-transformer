@@ -1,0 +1,27 @@
+;;; Private data-only pair admission. A live C2/SHA receipt supplies the
+;;; expected digest; decoded fields grant no model, tokenizer or RNG authority.
+
+(define (g3r-c2-pair-decode-internal! receipt record destination)
+  (let ((borrow #f) (digest #f))
+    (guard (caught
+             (#t
+               (if borrow
+                   (guard (cleanup-defect
+                            (#t (g3r-c2-sha-fail-stop 134)))
+                     (g3r-c2-receipt-borrow-end-internal! borrow)))
+               (if digest (g3r-c2-sha-zero! digest))
+               (raise caught)))
+      (set! borrow
+        (g3r-c2-receipt-borrow-begin-internal receipt 'checkpoint-load))
+      (set! digest
+        (g3r-c2-receipt-borrow-sha-internal borrow 'checkpoint-load))
+      (let ((staged (make-vector 8 #f)))
+        (g3r-record-decode! record digest staged)
+        ;; Close the C2 lease before publishing any decoded caller slots.
+        (g3r-c2-receipt-borrow-end-internal! borrow)
+        (set! borrow #f)
+        (g3r-c2-sha-zero! digest)
+        (set! digest #f)
+        ;; The pinned runtime promotes the entire range before its first write.
+        (vector-copy! destination 0 staged 0 8)
+        destination))))

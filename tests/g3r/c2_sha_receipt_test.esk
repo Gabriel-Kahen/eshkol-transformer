@@ -31,6 +31,15 @@
     (guard (raised (#t (set! caught? #t) (set! caught raised)))
       (thunk))
     (check label (and caught? (eq? caught #f)))))
+(define (reject-any label thunk)
+  (let ((caught? #f))
+    (guard (raised (#t (set! caught? #t))) (thunk))
+    (check label caught?)))
+(define (unchanged-vector? values)
+  (let loop ((index 0))
+    (if (= index 8) #t
+        (and (eq? (vector-ref values index) 'untouched)
+             (loop (+ index 1))))))
 (define (bytes=? left right)
   (and (bytevector? left) (bytevector? right)
        (= (bytevector-length left) (bytevector-length right))
@@ -282,6 +291,63 @@
   (= (vector-ref counts-after-borrow-end 1) busy-before))
 (check "borrow end restores live receipt status"
   (eq? (vector-ref record 1) 'live))
+(define pair-policy (vector 0 1065353216 256 1065353216 1 -1))
+(define pair-rng (vector 1 1729 -1 -9223372036854775808))
+(define pair-history (bytevector 7))
+(define pair-fingerprint
+  (string->utf8
+    "sha256:eshkol-byte-tokenizer-v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+(define pair-image (make-bytevector 288 0))
+(g3r-record-encode! pair-image pair-policy pair-rng pair-history 1 0 0
+                    pair-fingerprint expected-b)
+(define pair-fields (make-vector 8 'untouched))
+(check "live receipt admits exact in-memory pair"
+  (eq? (g3r-c2-pair-decode-internal! receipt pair-image pair-fields)
+       pair-fields))
+(check "pair admission retains exact policy RNG history and authoritative SHA"
+  (and (equal? (vector-ref pair-fields 0) pair-policy)
+       (equal? (vector-ref pair-fields 1) pair-rng)
+       (bytes=? (vector-ref pair-fields 2) pair-history)
+       (bytes=? (vector-ref pair-fields 7) expected-b)
+       (not (eq? (vector-ref pair-fields 7) (vector-ref record 3)))))
+(check "pair admission closes its receipt borrow"
+  (and (eq? (vector-ref record 1) 'live)
+       (= (vector-ref (c2-load-owner-counts-internal) 0)
+          (+ owners-before 1))
+       (= (vector-ref (c2-load-owner-counts-internal) 1) busy-before)))
+(define wrong-pair (make-bytevector 288 0))
+(g3r-record-encode! wrong-pair pair-policy pair-rng pair-history 1 0 0
+                    pair-fingerprint expected-a)
+(define untouched-pair (make-vector 8 'untouched))
+(reject-any "other valid C2 digest cannot enter live receipt"
+  (lambda ()
+    (g3r-c2-pair-decode-internal! receipt wrong-pair untouched-pair)))
+(check "wrong pair keeps destination and receipt unchanged"
+  (and (unchanged-vector? untouched-pair)
+       (eq? (vector-ref record 1) 'live)))
+(define torn-pair (bytevector-copy pair-image 0 288))
+(bytevector-u8-set! torn-pair 120 8)
+(reject-any "torn companion rejects without publication"
+  (lambda ()
+    (g3r-c2-pair-decode-internal! receipt torn-pair untouched-pair)))
+(check "torn companion closes borrow and preserves destination"
+  (and (unchanged-vector? untouched-pair)
+       (eq? (vector-ref record 1) 'live)))
+(reject-any "short destination rejects after private decode"
+  (lambda ()
+    (g3r-c2-pair-decode-internal! receipt pair-image
+                                  (make-vector 7 'untouched))))
+(check "destination failure closes receipt borrow"
+  (eq? (vector-ref record 1) 'live))
+(define pair-busy
+  (g3r-c2-receipt-borrow-begin-internal receipt 'checkpoint-load))
+(reject "busy receipt cannot admit pair" 'invalid-state
+  (lambda ()
+    (g3r-c2-pair-decode-internal! receipt pair-image untouched-pair)))
+(g3r-c2-receipt-borrow-end-internal! pair-busy)
+(reject "forged receipt cannot admit pair" 'invalid-argument
+  (lambda ()
+    (g3r-c2-pair-decode-internal! (vector 'forged) pair-image untouched-pair)))
 (reject "stale borrow cannot read SHA" 'invalid-argument
   (lambda ()
     (g3r-c2-receipt-borrow-sha-internal
@@ -294,6 +360,9 @@
        (zero-sha? authoritative-digest)))
 (check "receipt release is idempotent"
   (g3r-c2-receipt-release-internal! receipt))
+(reject "dead receipt cannot admit pair" 'invalid-state
+  (lambda ()
+    (g3r-c2-pair-decode-internal! receipt pair-image untouched-pair)))
 (reject "dead receipt cannot borrow" 'invalid-state
   (lambda ()
     (g3r-c2-receipt-borrow-begin-internal receipt 'checkpoint-load)))

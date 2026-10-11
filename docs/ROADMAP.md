@@ -1637,6 +1637,20 @@ Hosted integration checks, merge and public acceptance remain pending. This
 private receipt does not implement a G3-R pair loader, live replay or resumed
 continuation.
 
+An isolated source candidate now composes that exact live C2/SHA receipt with
+the accepted in-memory G3RCV1 decoder. Its private
+`g3r-c2-pair-decode-internal!` borrows the receipt, supplies only its copied
+same-image SHA to the codec, closes the borrow, then atomically copies the
+eight decoded data-only fields to the caller. The source fixture covers a
+same-image pair, an independently valid wrong-image digest, torn companion,
+short destination, and busy, forged and dead receipts. Source/static checks
+pass. Independent source/test review found no implementation defect and its
+one static order-check gap was repaired with a mutation case. Compiled
+normal/repeat/sanitizer evidence remains pending root coordination. This is
+in-memory pair admission only: it neither reads or publishes
+the companion file nor authenticates live model/tokenizer identity, restores
+parameters or replays a generator.
+
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
 checks the authentic idle generator's four RNG words without allocation,

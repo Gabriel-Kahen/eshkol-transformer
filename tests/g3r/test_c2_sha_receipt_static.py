@@ -8,6 +8,7 @@ from tests.c2.test_handler_order import (consecutive, definition, form, handler,
 
 ROOT = Path(__file__).resolve().parents[2]
 RECEIPT = ROOT / "native/g3r_c2_sha_receipt_extension.esk"
+PAIR = ROOT / "native/g3r_c2_pair_decode_extension.esk"
 STAGE = ROOT / "native/g3r_c2_sha_stage_extension.esk"
 ROOT_FILE = ROOT / "native/g3r_c2_sha_receipt_root.esk"
 MANIFEST = ROOT / "native/g3r_c2_sha_receipt_source_closure.txt"
@@ -32,7 +33,8 @@ LOADS = [
     "c2_o2_reconstruct_extension.esk", "c2_x1_canonical_extension.esk",
     "c2_training_state_extension.esk", "c2_persistence_policy_extension.esk",
     "c2_checkpoint_load_extension.esk", "g3r_c2_sha_stage_extension.esk",
-    "g3r_c2_sha_receipt_extension.esk",
+    "g3r_c2_sha_receipt_extension.esk", "g3r_record_codec_extension.esk",
+    "g3r_c2_pair_decode_extension.esk",
 ]
 
 
@@ -47,6 +49,8 @@ def verify_root_and_closure(root: str, closure: str, predecessor: str) -> None:
     expected.insert(expected.index("native/o2_wave2_extension.esk") + 1,
                     "native/k2_wave2_extension.esk")
     expected.append("native/g3r_c2_sha_receipt_extension.esk")
+    expected.append("native/g3r_record_codec_extension.esk")
+    expected.append("native/g3r_c2_pair_decode_extension.esk")
     if closure.splitlines() != expected or len(set(expected)) != len(expected):
         raise ValueError("private receipt source closure differs")
 
@@ -131,6 +135,32 @@ def verify_fault_bindings(source: str) -> None:
             raise ValueError("receipt fault helper needs a mutable binding")
 
 
+def verify_pair_admission(source: str) -> None:
+    parse(source)
+    required = (
+        "g3r-c2-receipt-borrow-begin-internal",
+        "g3r-c2-receipt-borrow-sha-internal",
+        "g3r-record-decode!",
+        "g3r-c2-receipt-borrow-end-internal!",
+        "g3r-c2-sha-zero!",
+        "vector-copy! destination 0 staged 0 8",
+        "g3r-c2-sha-fail-stop 134",
+    )
+    if any(item not in source for item in required):
+        raise ValueError("pair admission source closure differs")
+    body = source[source.index("(define (g3r-c2-pair-decode-internal!"):]
+    success = body[body.index("(g3r-record-decode!"):]
+    if not (success.index("(g3r-record-decode!")
+            < success.index("(g3r-c2-receipt-borrow-end-internal! borrow)")
+            < success.index("(set! borrow #f)")
+            < success.index("(g3r-c2-sha-zero! digest)")
+            < success.index("(set! digest #f)")
+            < success.index("(vector-copy! destination")):
+        raise ValueError("pair publication order differs")
+    if "(g3r-c2-receipt-borrow-sha-internal borrow 'checkpoint-load)" not in body:
+        raise ValueError("pair digest did not come from exact receipt borrow")
+
+
 def verify_race_assertions(source: str) -> None:
     forms = parse(source)
     phases = (
@@ -202,6 +232,7 @@ class C2ShaReceiptStaticTest(unittest.TestCase):
         verify_root_and_closure(ROOT_FILE.read_text(), MANIFEST.read_text(),
                                 STAGE_MANIFEST.read_text())
         verify_handoff(RECEIPT.read_text())
+        verify_pair_admission(PAIR.read_text())
         verify_fault_bindings(RECEIPT.read_text())
         verify_runner(RUNNER.read_text())
         parse(STAGE.read_text())
@@ -250,6 +281,16 @@ class C2ShaReceiptStaticTest(unittest.TestCase):
             verify_fault_bindings(source.replace(
                 "(define g3r-c2-receipt-identity\n  (lambda ()",
                 "(define (g3r-c2-receipt-identity)\n  (begin", 1))
+        with self.assertRaisesRegex(ValueError, "digest did not come"):
+            verify_pair_admission(PAIR.read_text().replace(
+                "g3r-c2-receipt-borrow-sha-internal borrow 'checkpoint-load",
+                "g3r-c2-receipt-borrow-sha-internal receipt 'checkpoint-load"))
+        with self.assertRaisesRegex(ValueError, "publication order"):
+            verify_pair_admission(PAIR.read_text().replace(
+                "        (g3r-c2-receipt-borrow-end-internal! borrow)\n"
+                "        (set! borrow #f)",
+                "        (set! borrow #f)\n"
+                "        (g3r-c2-receipt-borrow-end-internal! borrow)", 1))
 
     def test_race_assertion_near_misses_reject(self) -> None:
         source = FIXTURE.read_text()
