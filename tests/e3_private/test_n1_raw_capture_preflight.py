@@ -122,6 +122,58 @@ class PreflightTests(unittest.TestCase):
             with self.assertRaisesRegex(mod.Hold, "symlink-target-unpinned"):
                 mod.scan_selected_layers([symlink], selected_link, 1024, time.monotonic() + 5)
 
+    def test_oci_image_identity_is_index_not_config(self):
+        with tempfile.TemporaryDirectory() as temp:
+            layout = Path(temp)
+            (layout / "oci-layout").write_text('{"imageLayoutVersion":"1.0.0"}')
+            blobs = layout / "blobs" / "sha256"
+            blobs.mkdir(parents=True)
+
+            def store(data, media_type):
+                digest = mod.hashlib.sha256(data).hexdigest()
+                (blobs / digest).write_bytes(data)
+                return {"mediaType": media_type, "digest": "sha256:" + digest,
+                        "size": len(data)}
+
+            data = b"selected tool"
+            layer = layout / "layer.tar"
+            with tarfile.open(layer, "w") as out:
+                info = tarfile.TarInfo("usr/bin/tool")
+                info.mode = 0o755
+                info.size = len(data)
+                out.addfile(info, io.BytesIO(data))
+            layer_desc = store(layer.read_bytes(), "application/vnd.oci.image.layer.v1.tar")
+            config_desc = store(json.dumps({"architecture": "amd64", "os": "linux",
+                                           "rootfs": {"diff_ids": [layer_desc["digest"]]}}
+                                          ).encode(), "application/vnd.oci.image.config.v1+json")
+            manifest_desc = store(json.dumps({"config": config_desc, "layers": [layer_desc]}
+                                             ).encode(), "application/vnd.oci.image.manifest.v1+json")
+            manifest_desc["platform"] = {"architecture": "amd64", "os": "linux"}
+            index = json.dumps({"manifests": [manifest_desc]}).encode()
+            (layout / "index.json").write_bytes(index)
+            index_hash = mod.hashlib.sha256(index).hexdigest()
+            selected = {"path": "/usr/bin/tool", "layer": 0, "kind": "file",
+                        "mode": 0o755, "sha256": mod.hashlib.sha256(data).hexdigest(),
+                        "size": len(data), "role": "tool"}
+            plan = {"oci_layout": str(layout), "index_sha256": index_hash,
+                    "manifest": manifest_desc, "config": config_desc,
+                    "layers": [layer_desc], "diff_ids": [layer_desc["digest"]],
+                    "selected_guest_files": [selected],
+                    "limits": {"max_blob_bytes": 1024 * 1024,
+                               "max_selected_bytes": 1024, "max_rss_bytes": 2 * 1024**3}}
+            self.assertNotEqual("sha256:" + index_hash, config_desc["digest"])
+            self.assertEqual(mod.validate_oci(plan, time.monotonic() + 5,
+                                              expected_image="sha256:" + index_hash), 1)
+            with self.assertRaisesRegex(mod.Hold, "oci-index-drift"):
+                mod.validate_oci(plan, time.monotonic() + 5,
+                                 expected_image=config_desc["digest"])
+            wrong_platform = dict(plan)
+            wrong_platform["manifest"] = dict(manifest_desc,
+                                              platform={"architecture": "unknown", "os": "unknown"})
+            with self.assertRaisesRegex(mod.Hold, "oci-amd64-manifest-drift"):
+                mod.validate_oci(wrong_platform, time.monotonic() + 5,
+                                 expected_image="sha256:" + index_hash)
+
     def test_capture_receipt_requires_39_and_f_parity(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

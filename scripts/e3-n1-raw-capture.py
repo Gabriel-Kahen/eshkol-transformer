@@ -17,6 +17,7 @@ import tarfile
 import time
 from pathlib import Path, PurePosixPath
 
+# F's image ID names an OCI index in the local content store.
 F_IMAGE = "sha256:f31d1db76958339e6ebd2a2f667052cdb85aeb5229914ffb10ac4fcdc6db22e6"
 F_SOURCE = "94b8fecd2d187ba990128c44884dc35a40d130e9"
 F_TREE = "d28cffc1a9a8de3c78b2a1cbd9ea27d1cb5fdd1e"
@@ -240,23 +241,25 @@ def validate_capture_recipe(plan):
              "capture-command-cap")
 
 
-def validate_oci(plan, deadline):
+def validate_oci(plan, deadline, expected_image=F_IMAGE):
     layout = Path(plan["oci_layout"])
     need(layout.is_absolute() and layout.is_dir() and not layout.is_symlink(), "missing-oci-layout")
     need(read_json(layout / "oci-layout", MAX_JSON) == {"imageLayoutVersion": "1.0.0"},
          "oci-layout-version")
     index = layout / "index.json"
     index_hash, _ = sha256_file(index, MAX_JSON, deadline)
-    need(index_hash == plan["index_sha256"], "oci-index-drift")
+    need(index_hash == plan["index_sha256"] and index_hash == digest(expected_image),
+         "oci-index-drift")
     indices = read_json(index, MAX_JSON)["manifests"]
     manifest_desc = plan["manifest"]
-    need(manifest_desc in indices, "oci-manifest-not-indexed")
+    amd64 = [item for item in indices if item.get("platform") ==
+             {"architecture": "amd64", "os": "linux"}]
+    need(len(amd64) == 1 and manifest_desc == amd64[0], "oci-amd64-manifest-drift")
     max_blob = plan["limits"]["max_blob_bytes"]
     manifest_path = blob(layout, manifest_desc, MAX_JSON, deadline)
     manifest = read_json(manifest_path, MAX_JSON)
     need(manifest["config"] == plan["config"] and manifest["layers"] == plan["layers"],
          "oci-descriptor-drift")
-    need(manifest["config"]["digest"] == F_IMAGE, "image-id-drift")
     config_path = blob(layout, manifest["config"], MAX_JSON, deadline)
     config = read_json(config_path, MAX_JSON)
     need(config.get("architecture") == "amd64" and config.get("os") == "linux", "image-platform-drift")

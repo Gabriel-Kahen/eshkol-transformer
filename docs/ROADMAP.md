@@ -793,6 +793,10 @@ checks a future reviewed f31 OCI/file/host-input pin and structurally checks
 39-call raw receipts. Its reviewed plan pin is intentionally absent, no
 capture or loader execution is enabled, and source review plus exact OCI bytes
 are required before any heavy run.
+The local f31 blob is an OCI index with a distinct amd64 config and two gzip
+layers. Index identity is corrected; gzip selected-byte capture remains HOLD.
+The [local pin acquisition](e3/E3_N1_LOCAL_PIN_ACQUISITION.md) seals the small
+index/manifest/config bytes and host-only candidates; guest bytes remain absent.
 It changes no import policy; N1/M1 and the fresh supported numerical gate
 remain open.
 The exact `5d642a2` fe9/f31 numerical gate built the normal and mutant

@@ -8,7 +8,7 @@ SHA-256 is deliberately `None`; every production invocation writes a bounded
 `HOLD` receipt and exits nonzero. N1/M1 remain HOLD.
 
 The preflight binds the exact failed F source head/tree, fe9 compiler commit,
-f31 image config digest, failed seal hash and F private/native object hashes.
+f31 OCI **index** digest, failed seal hash and F private/native object hashes.
 It requires a separately reviewed JSON plan whose SHA-256 must later be
 compiled into the source. The plan must contain OCI layout path, index SHA-256,
 indexed manifest descriptor, config descriptor, ordered layer descriptors and
@@ -17,6 +17,10 @@ selected guest tool, interpreter, loader, provider and header file entries
 against final layer entries, including modes, symlink targets and selected
 file bytes. Uncompressed OCI tar layers alone are supported in this candidate;
 gzip/zstd layers fail closed pending a reviewed streaming implementation.
+The local f31 content store has an amd64 manifest with a distinct config digest
+and two gzip layers. The preflight therefore remains unable to scan the actual
+image-selected bytes, even though it can authenticate index/manifest/config
+metadata. The local content store is not itself a reviewed OCI export.
 Selected guest symlink targets must also appear in the pinned selection.
 Whiteouts affecting a selected path fail closed. This scanner does not claim
 a complete overlay filesystem reconstruction or actual dynamic-loader
