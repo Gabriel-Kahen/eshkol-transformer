@@ -2844,12 +2844,14 @@ publication, public G2 and continuation remain pending.
   source identities; focused source/overlay negatives cover drift and retry.
   A source successor guards all four cached root counts as exact integers
   before comparison and includes wrong-type rejection with same-root retry.
-  The overlay also demonstrates the remaining native-authority gap: a live P1
-  state token relabeled as a handle in the source registry can pass slot 73.
-  P1 native already exposes retained-token kind/live queries; slot 73 has not
-  bound or called them. A separate reviewed P1 verifier binding and admission
-  to that existing native authority is required before claiming tombstone or
-  wrong-kind rejection or using this as a C4 witness.
+  A bounded P1-only native-authority successor now binds the existing retained
+  token kind/live queries and checks each scoped registry shell against its
+  expected module or handle kind and live state. The test-only overlay turns
+  the former live-state-token-as-handle counterexample into a rejection and
+  adds wrong-kind and tombstoned module/handle rejections, each with restored
+  same-root retry.
+  Source review and compiled runtime/ABI proof are still required before
+  claiming this as a C4 witness.
   Compiled normal/repeat/sanitizer tests, allocation/callback instrumentation,
   C4 descriptor and owner binding, aggregate exclusion, and supported ABI
   checks remain OPEN/HOLD.

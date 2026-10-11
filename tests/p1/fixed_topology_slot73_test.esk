@@ -106,15 +106,29 @@
           (verify-fixed root fixed-trie handles))
         (mutations (cdr actions)))))
 
-;;; Known open dependency: a valid state token relabeled in the source shell
-;;; registry as handle 0 remains source-consistent. A future P1 native kind/
-;;; liveness validator must make this an invalid-state rejection instead.
-(define foreign-state-token
-  (mutate-fixed 'native-kind-gap root original-handle-0))
-(vector-set! handles 0 foreign-state-token)
-(check "native kind remains unverified" (verify-fixed root fixed-trie handles))
-(vector-set! handles 0 original-handle-0)
-(restore-fixed)
-(check "native-kind counterexample restored"
-  (verify-fixed root fixed-trie handles))
+;;; Keep source registry and supplied handle vector mutually consistent while
+;;; substituting a wrong-kind or tombstoned native token. Both must fail.
+(let native-mutations ((actions '(native-wrong-kind native-tombstone)))
+  (if (null? actions) #t
+      (let ((replacement
+              (mutate-fixed (car actions) root original-handle-0)))
+        (vector-set! handles 0 replacement)
+        (reject (car actions)
+          (lambda () (verify-fixed root fixed-trie handles)))
+        (vector-set! handles 0 original-handle-0)
+        (restore-fixed)
+        (check "native identity restored same-root retry"
+          (verify-fixed root fixed-trie handles))
+        (native-mutations (cdr actions)))))
+(let module-native-mutations
+    ((actions '(native-module-wrong-kind native-module-tombstone)))
+  (if (null? actions) #t
+      (begin
+        (mutate-fixed (car actions) root original-handle-0)
+        (reject (car actions)
+          (lambda () (verify-fixed root fixed-trie handles)))
+        (restore-fixed)
+        (check "native module restored same-root retry"
+          (verify-fixed root fixed-trie handles))
+        (module-native-mutations (cdr actions)))))
 (display "P1 fixed topology PASS: ") (display checks) (newline)

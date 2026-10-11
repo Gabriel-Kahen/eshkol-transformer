@@ -127,6 +127,15 @@ def check():
     require(without_leaf.count(p1_slot73_append) == 1,
             "P1-only slot73 append is missing or duplicated")
     without_leaf = without_leaf.replace(p1_slot73_append, "")
+    for p1_slot73_extern in (
+        "(extern i64 p1-fixed-native-token-kind ptr\n"
+        "        :real et_p1_public_token_kind_v1)\n",
+        "(extern i64 p1-fixed-native-token-live ptr\n"
+        "        :real et_p1_public_token_live_v1)\n",
+    ):
+        require(without_leaf.count(p1_slot73_extern) == 1,
+                "P1 slot73 native extern is missing or duplicated")
+        without_leaf = without_leaf.replace(p1_slot73_extern, "")
     successor_tail = ("\n         module-construction-parameters-internal"
                       "\n         p1-trusted-surface)")
     require(without_leaf.count(successor_tail) == 1,

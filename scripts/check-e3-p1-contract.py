@@ -128,8 +128,17 @@ def check():
     ]
     require(sum(signature(n) in g3c4_externs for n in externs(nodes)) == 3,
             "G3-C4 native extern delta is missing or duplicated")
+    p1_fixed_externs = [
+        ["extern", "i64", "p1-fixed-native-token-kind", "ptr",
+         ":real", "et_p1_public_token_kind_v1"],
+        ["extern", "i64", "p1-fixed-native-token-live", "ptr",
+         ":real", "et_p1_public_token_live_v1"],
+    ]
+    require([signature(n) for n in externs(nodes)
+             if signature(n) in p1_fixed_externs] == p1_fixed_externs,
+            "P1 slot73 native identity externs are missing or duplicated")
     top_level = [n for n in nodes if n is not surface
-                 and signature(n) not in g3c4_externs]
+                 and signature(n) not in g3c4_externs + p1_fixed_externs]
     inherited_forms = []
     for node in top_level:
         source = text[node[0]:node[1]]
@@ -145,7 +154,7 @@ def check():
             "505b1c59f9f2734e4ce457423129ca426fd300c748076e0fac03c9d84762d34f",
             "P1 top-level authority/provides/wrappers changed from accepted #121 base")
     require(digest(text, (n for n in externs(nodes)
-                          if signature(n) not in g3c4_externs)) ==
+                          if signature(n) not in g3c4_externs + p1_fixed_externs)) ==
             "616535438e9ebcb1b5adc240d96a6f837e4d32f45de1ee59983c1b91dd05518e",
             "P1 native extern authority changed from accepted #121 base")
     for path, expected in {

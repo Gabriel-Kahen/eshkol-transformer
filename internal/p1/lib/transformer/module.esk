@@ -70,6 +70,10 @@
         :real et_p1_private_live_entry_count_v1)
 (extern i64 p1-native-tombstone-count ptr
         :real et_p1_private_tombstone_count_v1)
+(extern i64 p1-fixed-native-token-kind ptr
+        :real et_p1_public_token_kind_v1)
+(extern i64 p1-fixed-native-token-live ptr
+        :real et_p1_public_token_live_v1)
 
 (provide module-parameters module-buffers module-state-dict
          module-load-state-dict! module-train! module-eval! module-zero-grad!
@@ -5333,7 +5337,8 @@
 ;;; #(modules leaves provider-name), with 17 #(parent-index child-name) rows
 ;;; and 15 #(module-index parameter-name handle-index shape-vector) rows.
 ;;; Leaf rows 0..13 name distinct handles; row 14 ties handle 10. No callback,
-;;; shell publication, schedule projection, or C4 symbol is used here.
+;;; shell publication, schedule projection, or C4 symbol is used here. Each
+;;; scoped shell is checked through retained P1 native kind/live authority.
 (define (p1-fixed-seal-fail)
   (fail 'invalid-state 'module-sealed-fixed-topology-verify-internal!
         "sealed P1 topology or scoped identity changed" '()))
@@ -5461,6 +5466,12 @@
                          (eq? (vector-ref entry 0) shell))
                     (+ count 1) count)))))))
 
+(define (p1-fixed-native-shell? shell kind)
+  (guard (caught (#t #f))
+    (and (= (p1-fixed-native-token-kind shell)
+            (if (eq? kind 'module) 2 3))
+         (= (p1-fixed-native-token-live shell) 1))))
+
 (define (p1-fixed-shape? actual expected)
   (let loop ((remaining actual) (index 0))
     (if (= index (vector-length expected)) (null? remaining)
@@ -5573,6 +5584,7 @@
                     (raw (vector-ref entry 2)))
                 (if (and (= (vector-length entry) 4)
                          (or (eq? kind 'module) (eq? kind 'handle))
+                         (p1-fixed-native-shell? (vector-ref entry 0) kind)
                          (= (p1-fixed-expected-member-count
                               raw kind modules root handles scope) 1)
                          (= (p1-fixed-raw-registry-count raw kind scope) 1)
