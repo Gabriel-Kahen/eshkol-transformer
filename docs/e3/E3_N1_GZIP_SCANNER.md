@@ -17,14 +17,20 @@ symlink, mode and path checks apply to gzip tar members. Zstd remains
 unsupported. All requested guest entries must still be selected and pinned;
 the scanner does not prove a full image overlay or dynamic-loader resolution.
 
-Ten focused synthetic tests pass, including an OCI index→manifest→gzip layer
+The first scanner candidate was held in independent and root review because
+the final decompression output could bypass RSS and deadline checks. This
+successor samples both limits after every decompression call, after hashing
+each output, when a yielded output resumes, after final identity hashes and
+after the selected-layer drain. Eleven focused synthetic tests pass, including
+delayed final-output RSS/deadline violations through the full selected scanner
+and post-hash/drain resource-boundary violations, plus an OCI index→manifest→gzip layer
 path and compressed hash, diffID, short, corrupt, trailing, concatenated,
 decompression-cap, time, selected mode, whiteout and symlink negatives. These
 tests use tiny generated layers. **Neither real f31 gzip layer was opened or
 hashed for this change.** No reviewed plan SHA has been installed; the CLI
 still rejects `--capture`, emits HOLD and never runs Docker or a target.
 
-Next gate: independent and root source review of this scanner, then an exact
+Next gate: independent and root source review of this successor, then an exact
 reviewed OCI export and selected guest input plan. Only after separate capture
 runner/resource review may a bounded real layer scan be considered. A raw
 receipt still needs semantic producer, ABI, provider, loader and header review

@@ -107,6 +107,11 @@ def rss_check(cap):
     need(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024 <= cap, "rss-cap")
 
 
+def resource_check(deadline, rss_cap):
+    need(time.monotonic() <= deadline, "time-cap")
+    rss_check(rss_cap)
+
+
 def gzip_chunks(path, descriptor, diff_id, byte_cap, deadline, rss_cap):
     """Yield one gzip member, checking both compressed and expanded identities."""
     compressed = hashlib.sha256()
@@ -115,8 +120,7 @@ def gzip_chunks(path, descriptor, diff_id, byte_cap, deadline, rss_cap):
     decoder = zlib.decompressobj(31)
     with open(path, "rb") as source:
         while block := source.read(64 * 1024):
-            need(time.monotonic() <= deadline, "time-cap")
-            rss_check(rss_cap)
+            resource_check(deadline, rss_cap)
             need(not decoder.eof, "gzip-trailing")
             compressed.update(block)
             compressed_size += len(block)
@@ -128,13 +132,16 @@ def gzip_chunks(path, descriptor, diff_id, byte_cap, deadline, rss_cap):
                     output = decoder.decompress(pending, maximum)
                 except zlib.error as error:
                     raise Hold("gzip-corrupt") from error
+                resource_check(deadline, rss_cap)
                 tail = decoder.unconsumed_tail
                 need(not decoder.unused_data, "gzip-trailing")
                 if output:
                     expanded_size += len(output)
                     need(expanded_size <= byte_cap, "gzip-expanded-byte-cap")
                     expanded.update(output)
+                    resource_check(deadline, rss_cap)
                     yield output
+                    resource_check(deadline, rss_cap)
                 if decoder.eof:
                     need(not tail, "gzip-trailing")
                     break
@@ -145,12 +152,12 @@ def gzip_chunks(path, descriptor, diff_id, byte_cap, deadline, rss_cap):
                     pending = b""
                 else:
                     break
-                need(time.monotonic() <= deadline, "time-cap")
-                rss_check(rss_cap)
+                resource_check(deadline, rss_cap)
     need(decoder.eof, "gzip-short")
     need(compressed_size == descriptor["size"] and
          compressed.hexdigest() == digest(descriptor["digest"]), "gzip-compressed-drift")
     need(expanded.hexdigest() == digest(diff_id), "gzip-diffid-drift")
+    resource_check(deadline, rss_cap)
 
 
 class ChunkReader:
@@ -249,6 +256,7 @@ def scan_selected_layers(paths, selected, byte_cap, deadline, rss_cap=2 * 1024**
                     seen[name] = entry
             if gzip_layer:
                 raw.drain()
+                resource_check(deadline, rss_cap)
                 total_uncompressed += raw.expanded_size
             else:
                 total_uncompressed += layer_size

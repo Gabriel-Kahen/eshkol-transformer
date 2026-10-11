@@ -11,6 +11,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts/e3-n1-raw-capture.py"
@@ -252,6 +253,106 @@ class PreflightTests(unittest.TestCase):
             changed = [dict(selected[0], mode=0o700)]
             with self.assertRaisesRegex(mod.Hold, "selected-guest-drift"):
                 check(packed, chosen=changed)
+
+    def test_gzip_final_output_and_finalization_resource_boundaries(self):
+        tar = io.BytesIO()
+        with tarfile.open(fileobj=tar, mode="w") as archive:
+            payload = b"guest tool"
+            entry = tarfile.TarInfo("usr/bin/tool")
+            entry.mode = 0o755
+            entry.size = len(payload)
+            archive.addfile(entry, io.BytesIO(payload))
+            padding = b"A" * (2 * 1024 * 1024)
+            entry = tarfile.TarInfo("unselected-padding")
+            entry.size = len(padding)
+            archive.addfile(entry, io.BytesIO(padding))
+        raw = tar.getvalue()
+        packed = gzip.compress(raw, mtime=0)
+        diff_id = "sha256:" + mod.hashlib.sha256(raw).hexdigest()
+        layer = {"descriptor": {
+            "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+            "digest": "sha256:" + mod.hashlib.sha256(packed).hexdigest(),
+            "size": len(packed)}, "diff_id": diff_id}
+        selected = [{"path": "/usr/bin/tool", "layer": 0, "kind": "file",
+                     "mode": 0o755, "sha256": mod.hashlib.sha256(payload).hexdigest(),
+                     "size": len(payload)}]
+
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "layer.tar.gz"
+            path.write_bytes(packed)
+
+            def scan():
+                return mod.scan_selected_layers(
+                    [path], selected, 1024, time.monotonic() + 5, layers=[layer],
+                    uncompressed_cap=4 * 1024 * 1024,
+                    total_uncompressed_cap=4 * 1024 * 1024)
+
+            original_decoder = mod.zlib.decompressobj
+            state = {"final_output": False}
+
+            class TrackedDecoder:
+                def __init__(self):
+                    self.inner = original_decoder(31)
+
+                def decompress(self, pending, maximum):
+                    output = self.inner.decompress(pending, maximum)
+                    if output and self.inner.eof:
+                        state["final_output"] = True
+                    return output
+
+                def __getattr__(self, name):
+                    return getattr(self.inner, name)
+
+            def delayed_rss(_cap):
+                if state["final_output"]:
+                    raise mod.Hold("rss-cap")
+
+            with mock.patch.object(mod.zlib, "decompressobj", side_effect=lambda *_: TrackedDecoder()), \
+                 mock.patch.object(mod, "rss_check", side_effect=delayed_rss):
+                with self.assertRaisesRegex(mod.Hold, "rss-cap"):
+                    scan()
+            self.assertTrue(state["final_output"])
+
+            state["final_output"] = False
+            with mock.patch.object(mod.zlib, "decompressobj", side_effect=lambda *_: TrackedDecoder()), \
+                 mock.patch.object(mod.time, "monotonic",
+                                   side_effect=lambda: 11 if state["final_output"] else 0):
+                with self.assertRaisesRegex(mod.Hold, "time-cap"):
+                    scan()
+            self.assertTrue(state["final_output"])
+
+            original_digest = mod.digest
+            state = {"final_hash": False}
+
+            def tracked_digest(value):
+                result = original_digest(value)
+                if value == diff_id:
+                    state["final_hash"] = True
+                return result
+
+            def final_hash_rss(_cap):
+                if state["final_hash"]:
+                    raise mod.Hold("rss-cap")
+
+            with mock.patch.object(mod, "digest", side_effect=tracked_digest), \
+                 mock.patch.object(mod, "rss_check", side_effect=final_hash_rss):
+                with self.assertRaisesRegex(mod.Hold, "rss-cap"):
+                    scan()
+            self.assertTrue(state["final_hash"])
+
+            original_drain = mod.ChunkReader.drain
+            state = {"drained": False}
+
+            def delayed_drain(reader):
+                original_drain(reader)
+                state["drained"] = True
+
+            with mock.patch.object(mod.ChunkReader, "drain", delayed_drain), \
+                 mock.patch.object(mod.time, "monotonic",
+                                   side_effect=lambda: 11 if state["drained"] else 0):
+                with self.assertRaisesRegex(mod.Hold, "time-cap"):
+                    scan()
+            self.assertTrue(state["drained"])
 
     def test_gzip_whiteout_and_symlink_negatives(self):
         with tempfile.TemporaryDirectory() as temp:

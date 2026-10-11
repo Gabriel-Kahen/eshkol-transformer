@@ -797,8 +797,10 @@ The local f31 blob is an OCI index with a distinct amd64 config and two gzip
 layers. Index identity is corrected; gzip selected-byte capture remains HOLD.
 The [local pin acquisition](e3/E3_N1_LOCAL_PIN_ACQUISITION.md) seals the small
 index/manifest/config bytes and host-only candidates; guest bytes remain absent.
-The [bounded gzip scanner](e3/E3_N1_GZIP_SCANNER.md) has synthetic integrity and
-resource negatives only; actual f31 layers and admission remain untested.
+The [bounded gzip scanner](e3/E3_N1_GZIP_SCANNER.md) A source was held for a
+final-output resource-check bypass. Its B successor adds post-output and
+finalization RSS/deadline checks with synthetic negatives; independent and
+root review remain required. Actual f31 layers and admission remain untested.
 It changes no import policy; N1/M1 and the fresh supported numerical gate
 remain open.
 The exact `5d642a2` fe9/f31 numerical gate built the normal and mutant
