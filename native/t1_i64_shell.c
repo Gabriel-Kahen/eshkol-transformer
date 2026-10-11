@@ -11,6 +11,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(ET_T1_SEALED_RELEASE_TEST_ONLY) && \
+    (!defined(ET_T1_I64_SHELL_TESTING) || \
+     !defined(ET_G3C4_T1_I1_EXACT_PAIR_PRIVATE))
+#error "sealed T1 retirement requires the private test and exact-pair gates"
+#endif
+
 #define ET_T1_I64_SHELL_MAGIC UINT64_C(0x455454315348454c)
 
 typedef struct et_t1_i64_shell {
@@ -42,6 +48,10 @@ typedef struct et_t1_i64_shell {
 
 static et_t1_i64_shell *et_t1_i64_shell_registry;
 static int64_t et_t1_i64_shell_last_status;
+#ifdef ET_T1_SEALED_RELEASE_TEST_ONLY
+static et_t1_i64_shell *et_t1_i64_shell_retired;
+static int et_t1_i64_shell_fail_after_borrow_end;
+#endif
 
 enum {
   ET_T1_I64_SHELL_TEST_FAIL_NONE_INTERNAL = 0,
@@ -387,6 +397,63 @@ int64_t et_t1_i64_shell_abort_v1(void *candidate) {
   et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_OK;
   return et_t1_i64_shell_last_status;
 }
+
+#ifdef ET_T1_SEALED_RELEASE_TEST_ONLY
+void et_t1_i64_shell_test_fail_after_borrow_end_v1(int64_t enabled) {
+  et_t1_i64_shell_fail_after_borrow_end = enabled != 0;
+}
+
+const void *et_t1_i64_shell_test_storage_v1(const void *candidate) {
+  const et_t1_i64_shell *shell = et_t1_i64_shell_admit(candidate);
+  return shell != NULL && shell->sealed && !shell->test_corrupted &&
+                 shell->view == shell->birth_view
+             ? shell->birth_data
+             : NULL;
+}
+
+int64_t et_t1_i64_shell_test_release_sealed_v1(void *candidate) {
+  et_t1_i64_shell *shell = et_t1_i64_shell_admit(candidate);
+  et_t1_i64_shell **link;
+  et_i64_tensor_error error = {0};
+  if (shell == NULL) {
+    et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_INVALID_ARGUMENT;
+    return et_t1_i64_shell_last_status;
+  }
+  if (!shell->sealed || shell->test_corrupted || shell->length != 2 ||
+      shell->length != shell->birth_length ||
+      shell->tensor == NULL || shell->tensor != shell->birth_tensor ||
+      shell->borrow == NULL || shell->borrow != shell->birth_borrow ||
+      shell->view == NULL || shell->view != shell->birth_view ||
+      et_i64_tensor_private_t1_pair_validate_v1(
+          shell->birth_tensor, shell->birth_borrow, shell->birth_view,
+          shell->birth_length) != ET_I64_T1_PAIR_OK ||
+      shell->view->data != shell->birth_data ||
+      shell->view->shape != shell->birth_shape) {
+    et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_INVALID_STATE;
+    return et_t1_i64_shell_last_status;
+  }
+  /* A refusal after this point cannot roll back the ended I1 borrow. */
+  if (et_i64_tensor_borrow_end_v1(&shell->borrow, &error) != 0) abort();
+  if (et_t1_i64_shell_fail_after_borrow_end) abort();
+  et_i64_tensor_error_clear_v1(&error);
+  if (et_i64_tensor_destroy_v1(&shell->tensor, &error) != 0) abort();
+  link = &et_t1_i64_shell_registry;
+  while (*link != shell) link = &(*link)->registry_next;
+  *link = shell->registry_next;
+  shell->view = NULL;
+  shell->birth_tensor = NULL;
+  shell->birth_borrow = NULL;
+  shell->birth_view = NULL;
+  shell->birth_data = NULL;
+  shell->birth_shape = NULL;
+  shell->magic = 0u;
+  /* Keep the address allocated so a stale raw pointer cannot be re-admitted. */
+  shell->registry_next = et_t1_i64_shell_retired;
+  et_t1_i64_shell_retired = shell;
+  et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_OK;
+  return et_t1_i64_shell_last_status;
+}
+#endif
 
 int64_t et_t1_i64_shell_last_status_v1(void) {
   return et_t1_i64_shell_last_status;

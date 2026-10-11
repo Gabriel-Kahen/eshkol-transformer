@@ -58,6 +58,12 @@ enum {
 };
 void et_t1_i64_shell_test_fail_stage_v1(int64_t stage);
 int64_t et_t1_i64_shell_test_live_count_v1(void);
+#ifdef ET_T1_SEALED_RELEASE_TEST_ONLY
+/* Private fixture only: retires an exact sealed P2 shell and its I1 owner. */
+int64_t et_t1_i64_shell_test_release_sealed_v1(void *candidate);
+void et_t1_i64_shell_test_fail_after_borrow_end_v1(int64_t enabled);
+const void *et_t1_i64_shell_test_storage_v1(const void *candidate);
+#endif
 #ifdef ET_G3C4_T1_I1_EXACT_PAIR_PRIVATE
 enum {
   ET_T1_TEST_CORRUPT_RANK = 1,
