@@ -1,6 +1,8 @@
 """Static exact-tuple and compiled-mutant boundary checks."""
 
 from pathlib import Path
+import math
+import re
 import shutil
 import subprocess
 import tempfile
@@ -8,6 +10,11 @@ import unittest
 
 from tests.e3_private.parse_numerical_observation import ROLE_NAMES, parse
 from tests.c2.test_handler_order import parse as parse_source
+from tests.e3_reference.corpus import materialize
+from tests.e3_reference.transcript import (
+    TranscriptError, f32_bits, validate_observed_case,
+)
+from tests.e3_metrics.reference_probe import accumulate, divide, finalize, reduce_bool
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -230,7 +237,7 @@ printf '%s\\n' "$e3_tuple_kind"
         self.assertIn("-DET_E3_NUMERICAL_SECOND_NORMALIZATION", builder)
         self.assertIn("wrong-vocab-axis) package_native_cflags+=(-DET_E3_NUMERICAL_WRONG_VOCAB_AXIS)", builder)
         self.assertIn("second-normalization", (ROOT / "scripts/test-e3-numerical-transcript.sh").read_text())
-        self.assertIn("#ifdef ET_E3_NUMERICAL_TESTING", frame)
+        self.assertIn("#if defined(ET_E3_NUMERICAL_TESTING)", frame)
         self.assertIn("#ifdef ET_E3_NUMERICAL_WRONG_TARGET", frame)
         self.assertIn("#ifdef ET_E3_NUMERICAL_MEAN_OF_MEANS", metrics)
         self.assertIn("#ifdef ET_E3_NUMERICAL_SECOND_NORMALIZATION", metrics)
@@ -256,7 +263,7 @@ printf '%s\\n' "$e3_tuple_kind"
         self.assertEqual(admitted.returncode, 0, admitted.stderr)
         selector = (ROOT / "scripts/build-e3-numerical-test.sh").read_text()
         runner = (ROOT / "scripts/test-e3-correctness-cases.sh").read_text()
-        self.assertIn("wrong-vocab-axis|sanitize", selector)
+        self.assertIn("wrong-vocab-axis|physical-capacity|sanitize", selector)
         self.assertIn('wrong_vocab_axis_rejection.py" run', runner)
         self.assertIn('wrong_vocab_axis_rejection.py" check', runner)
         self.assertIn('verify-wrong-vocab-axis-all-correct.exit', runner)
@@ -287,6 +294,103 @@ printf '%s\\n' "$e3_tuple_kind"
                                     ("e3-private-aggregate", "numerical", "wrong-vocab-axes")):
             with self.subTest(policy=policy, kind=kind, value=value):
                 self.assertEqual(select(policy, kind, value).returncode, 77)
+
+    def test_physical_capacity_selector_and_padded_witness(self) -> None:
+        builder = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
+        selector = builder.split("e3_numerical_mutant=${E3_NUMERICAL_MUTANT:-normal}", 1)[1]
+        selector = "e3_numerical_mutant=${E3_NUMERICAL_MUTANT:-normal}" + selector.split(
+            "require_command awk", 1)[0]
+        shell = ("set -euo pipefail\npackage_policy=$1\ne3_tuple_kind=$2\n"
+                 "die() { printf '%s\\n' \"$*\" >&2; exit 77; }\n"
+                 + selector + "printf '%s\\n' \"$e3_numerical_mutant\"\n")
+        def select(policy: str, kind: str, value: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                ["bash", "-c", shell, "bash", policy, kind],
+                env={"E3_NUMERICAL_MUTANT": value}, capture_output=True,
+                text=True, check=False,
+            )
+        accepted = select("e3-private-aggregate", "numerical", "physical-capacity")
+        self.assertEqual((accepted.returncode, accepted.stdout),
+                         (0, "physical-capacity\n"), accepted.stderr)
+        for policy, kind, value in (("e3-private-aggregate", "base", "physical-capacity"),
+                                    ("e3-private-aggregate", "mode-graph", "physical-capacity"),
+                                    ("other", "numerical", "physical-capacity"),
+                                    ("e3-private-aggregate", "numerical", "physical-capacities")):
+            with self.subTest(policy=policy, kind=kind, value=value):
+                self.assertEqual(select(policy, kind, value).returncode, 77)
+
+        with tempfile.TemporaryDirectory(prefix="e3-m2-physical-witness-") as temporary:
+            cases = {case["name"]: case for case in materialize(Path(temporary) / "corpus")["cases"]}
+        masks = [row["mask"] for row in cases["packed-single"]["batches"]]
+        self.assertEqual(masks, [[True, True], [True, True], [True, False]])
+        self.assertEqual(sum(sum(mask) for mask in masks), 5)
+        self.assertEqual(sum(sum((True, True)) for _ in masks), 6)
+        genuine = reduce_bool((0x3f800000, 0x40000000), tuple(masks[-1]))
+        mutant = reduce_bool((0x3f800000, 0x40000000), (True, True))
+        self.assertEqual((genuine[1], mutant[1]), (0x3f800000, 0x40000000))
+
+        frame = (ROOT / "src/eshkol_transformer/e3_frame.c").read_text()
+        self.assertIn("(unsigned)frame->mask[0], (unsigned)frame->mask[1]", frame)
+        for begin, end in (("int64_t et_e3_private_reduce_v1", "int64_t et_e3_private_correct_v1"),
+                           ("int64_t et_e3_private_correct_v1", "static int64_t e3_accumulate_dispatch")):
+            body = frame.split(begin, 1)[1].split(end, 1)[0]
+            self.assertIn("frame->mask[0] == 1u && frame->mask[1] == 0u", body)
+            self.assertIn("metric_mask, sizeof(frame->mask)", body)
+            self.assertIsNone(re.search(r"frame->mask\[[01]\]\s*=(?!=)", body))
+        runner = (ROOT / "scripts/test-e3-numerical-transcript.sh").read_text()
+        self.assertIn("batches[2].reduction_f32", runner)
+        self.assertIn("physical-capacity", (ROOT / "scripts/build-e3-numerical-test.sh").read_text())
+
+    def test_physical_capacity_macro_requires_private_numerical_tuple(self) -> None:
+        if shutil.which("clang") is None:
+            self.skipTest("Clang unavailable")
+        source = ROOT / "src/eshkol_transformer/e3_frame.c"
+        base = ["clang", "-std=c11", "-Werror", "-fsyntax-only",
+                "-I", str(ROOT / "include"), "-I", str(ROOT / "src"),
+                "-I", str(ROOT / "src/eshkol_transformer")]
+        for flags, success in (([], True),
+                               (["-DET_E3_NUMERICAL_PHYSICAL_CAPACITY"], False),
+                               (["-DET_E3_NUMERICAL_TESTING",
+                                 "-DET_E3_NUMERICAL_PHYSICAL_CAPACITY"], True)):
+            with self.subTest(flags=flags):
+                run = subprocess.run(base + flags + [str(source)],
+                                     capture_output=True, text=True, check=False)
+                self.assertEqual(run.returncode == 0, success, run.stderr)
+                if not success:
+                    self.assertIn("requires the private numerical test tuple", run.stderr)
+
+    def test_physical_capacity_synthetic_comparator_fails_at_reduction(self) -> None:
+        # Comparator sensitivity only: compiled M3/D2 evidence remains open.
+        ce = f32_bits(math.log(256.0))
+        ce_bits = int(ce, 16)
+        numerator, weight = reduce_bool((ce_bits, ce_bits), (True, False))
+        state = accumulate((0, 0, 0, 0, 0), (numerator, weight, 0, 1))
+        final = finalize(state)
+        observed = {
+            "batches": [{
+                "ce_f32": [ce, ce], "correct_f32": "00000000",
+                "counters": [1, 1], "inputs": [7, 0],
+                "logits_f32": ["00000000"] * 512, "mask": [True, False],
+                "ordinal": 0, "reduction_f32": [f"{numerator:08x}", f"{weight:08x}",
+                                                f"{divide(numerator, weight):08x}"],
+                "state_f32": [f"{word:08x}" for word in state[:3]],
+                "targets": [7, 0],
+            }],
+            "final": {"counters": [1, 1],
+                      "metrics_f32": [f"{word:08x}" for word in final]},
+            "kind": "synthetic-observation",
+            "profile": "e3-private-n1-t2-v256-d4-v1",
+        }
+        expected = ({"inputs": [7, 0], "targets": [7, 0],
+                     "mask": [True, False]},)
+        validate_observed_case(observed, expected)
+        bad_n, bad_w = reduce_bool((ce_bits, ce_bits), (True, True))
+        observed["batches"][0]["reduction_f32"] = [
+            f"{bad_n:08x}", f"{bad_w:08x}", f"{divide(bad_n, bad_w):08x}",
+        ]
+        self.assertEqual((weight, bad_w), (0x3f800000, 0x40000000))
+        with self.assertRaisesRegex(TranscriptError, r"batches\[0\]\.reduction_f32"):
+            validate_observed_case(observed, expected)
 
     def test_native_provider_mode_tracks_both_test_sanitizers(self) -> None:
         policy = ROOT / "scripts/e3-private-native-inputs.sh"

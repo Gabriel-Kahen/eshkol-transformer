@@ -910,6 +910,12 @@ from direct-provider-only cases and names the missing noninstalled model-control
 and stage-selective fault/observer seams for review. It provides no new runtime
 proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
 verdicts remain prerequisites before the full matrix is implemented and run.
+An isolated M2 source successor adds a test-only physical-capacity mutant to
+the exact numerical tuple. On the authentic padded `10` D2 row, it supplies a
+local `11` mask to both private reduction and correctness dispatch while leaving
+the D2/frame mask unchanged. Source and fixture checks can establish selector
+isolation and the first expected `W_b` mismatch; compiled admission, a genuine
+value kill, current-main union and §9 acceptance remain open behind N1 custody.
 An isolated staged successor adds a separate real-M3 zero-control source tuple
 using the existing I2 14-parameter prepare/commit path before frame binding.
 It retains the staged numerical, retention, wrong-target and uniform controls.

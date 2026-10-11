@@ -13,6 +13,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(ET_E3_NUMERICAL_PHYSICAL_CAPACITY) && !defined(ET_E3_NUMERICAL_TESTING)
+#error "physical-capacity mutation requires the private numerical test tuple"
+#endif
+
 #if defined(ET_E3_NUMERICAL_TESTING) || defined(ET_E3_ZERO_CONTROL_TESTING)
 #include <inttypes.h>
 #include <stdio.h>
@@ -1097,8 +1101,16 @@ int64_t et_e3_private_reduce_v1(void *pointer) {
   if (frame->phase != E3_CE_READY || frame->next_role != 22 ||
       frame->cleanup_ready)
     return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
+#ifdef ET_E3_NUMERICAL_PHYSICAL_CAPACITY
+  /* Test-only: count the padded slot without changing the genuine D2 row. */
+  unsigned char physical_mask[2] = {1u, 1u};
+  unsigned char *metric_mask = frame->mask[0] == 1u && frame->mask[1] == 0u ?
+      physical_mask : frame->mask;
+#else
+  unsigned char *metric_mask = frame->mask;
+#endif
   et_kernel_tensor_view_v1 mask = e3_native_view(
-      frame->mask, sizeof(frame->mask), "bool", 2, e3_shape_pair);
+      metric_mask, sizeof(frame->mask), "bool", 2, e3_shape_pair);
   e3_operand inputs[] = {e3_tensor_operand(frame->ce), e3_view_operand(&mask)};
   et_f32_tensor *outputs[] = {frame->batch[0], frame->batch[1], frame->batch[2]};
   int64_t rc = e3_dispatch(frame, E3_RUNTIME_L3S,
@@ -1117,8 +1129,16 @@ int64_t et_e3_private_correct_v1(void *pointer) {
     return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
   et_kernel_tensor_view_v1 targets = e3_native_view(
       frame->targets, sizeof(frame->targets), "i64", 2, e3_shape_pair);
+#ifdef ET_E3_NUMERICAL_PHYSICAL_CAPACITY
+  /* Keep K1 active count consistent with the deliberately wrong L3S weight. */
+  unsigned char physical_mask[2] = {1u, 1u};
+  unsigned char *metric_mask = frame->mask[0] == 1u && frame->mask[1] == 0u ?
+      physical_mask : frame->mask;
+#else
+  unsigned char *metric_mask = frame->mask;
+#endif
   et_kernel_tensor_view_v1 mask = e3_native_view(
-      frame->mask, sizeof(frame->mask), "bool", 2, e3_shape_pair);
+      metric_mask, sizeof(frame->mask), "bool", 2, e3_shape_pair);
   et_kernel_tensor_view_v1 active = e3_native_view(
       &frame->active, sizeof(frame->active), "i64", 0, NULL);
   et_f32_tensor *float_output[] = {frame->batch[3]};

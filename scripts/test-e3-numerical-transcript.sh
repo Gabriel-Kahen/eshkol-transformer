@@ -44,7 +44,7 @@ if grep -F 'E3ROW' \
 fi
 
 prefix="${PROJECT_ROOT}/tests/e3_private/numerical_package"
-for variant in a b wrong-target mean-of-means second-normalization sanitized; do
+for variant in a b wrong-target mean-of-means second-normalization physical-capacity sanitized; do
   mode="${variant}"
   case "${variant}" in a|b) mode=normal ;; sanitized) mode=sanitize ;; esac
   "${PROJECT_ROOT}/scripts/build-e3-numerical-test.sh" \
@@ -94,7 +94,7 @@ chmod 0500 "${out}/cxx-sanitized"
 compiler_timeout="${E3_COMPILER_TIMEOUT_SECONDS:-900}"
 [[ "${compiler_timeout}" =~ ^[1-9][0-9]*$ ]] || \
   die "E3 numerical compiler timeout must be positive"
-for variant in a b wrong-target mean-of-means second-normalization sanitized; do
+for variant in a b wrong-target mean-of-means second-normalization physical-capacity sanitized; do
   cxx_selected="${cxx}"
   if [[ "${variant}" == sanitized ]]; then
     cxx_selected="${out}/cxx-sanitized"
@@ -209,10 +209,10 @@ if baseline["batches"] == changed["batches"] or baseline["final"] == changed["fi
 PY
 done
 
-for variant in wrong-target mean-of-means second-normalization; do
+for variant in wrong-target mean-of-means second-normalization physical-capacity; do
   run_case "${variant}" packed-single 3
 done
-for variant in wrong-target mean-of-means second-normalization; do
+for variant in wrong-target mean-of-means second-normalization physical-capacity; do
   if ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "${q0_python}" \
     -B -m tests.e3_native_parity.verify_observation \
     --reference "${out}/reference-a.json" --case packed-single \
@@ -231,4 +231,6 @@ grep -F 'state_f32' "${out}/verify-mean-of-means.stderr" >/dev/null || \
   die "mean-of-means mutant failed outside the accumulator value assertion"
 grep -F 'final.metrics_f32' "${out}/verify-second-normalization.stderr" >/dev/null || \
   die "second-normalization mutant failed outside the final loss value assertion"
-printf 'E3 compiled five-case private numerical transcripts and three mutants passed\n'
+grep -F 'batches[2].reduction_f32' "${out}/verify-physical-capacity.stderr" >/dev/null || \
+  die "physical-capacity mutant failed outside the padded-row reduction value assertion"
+printf 'E3 compiled five-case private numerical transcripts and four mutants passed\n'
