@@ -1553,7 +1553,8 @@ identified the discarded P1/P2 and manual-decode provenance. The bounded
 feature-gated two-ID transcript to the G3-T kind-1 generator and updates it
 in manual P1/P2, manual decode, G0 and both G1 commit tails. It also adds an
 idle source-private native read of policy, owner RNG and transcript. The
-focused source/core gate passes; a same-aggregate Eshkol save admission,
+focused owner/core, controlled native commit/abort/snapshot and source-routing
+gate passes; full feature-on Eshkol runtime, same-aggregate save admission,
 A2 cache-length cross-check, writer and replay are still pending.
 
 The [private G3-R fixed-record codec leaf](g3/G3_R_RECORD_CODEC_LEAF.md)

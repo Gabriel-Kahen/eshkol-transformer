@@ -263,7 +263,7 @@ static int g3t_history_valid(const g3t_context *c) {
       (n && !p) || ((n > 0) != c->prefill_committed) ||
       (c->history_generated_eos_terminal != 0 &&
        c->history_generated_eos_terminal != 1) ||
-      (g && (p != 1 || n != 2 || m)) ||
+      (g && (c->policy[4] != 1 || p != 1 || n != 2 || m)) ||
       (m && (p != 1 || n != 2 || g)))
     return 0;
   for (int64_t i = 0; i < n; ++i)

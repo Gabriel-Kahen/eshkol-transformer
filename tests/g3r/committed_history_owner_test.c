@@ -59,6 +59,7 @@ int main(void) {
   c.frame.prompt_length = 1;
   c.frame.token = 66;
   g3t_history_commit_prompt(&c);
+  c.policy[4] = 1;
   c.frame.kind = 2;
   c.frame.token = 65;
   assert(!g3t_history_append_preflight(&c));
@@ -66,6 +67,9 @@ int main(void) {
   assert(g3t_history_valid(&c));
   assert(c.history_generated_count == 1 && !c.history_manual_count);
   assert(c.history_generated_eos_terminal == 1);
+  c.policy[4] = 0;
+  assert(!g3t_history_valid(&c));
+  c.policy[4] = 1;
   c.history_generated_eos_terminal = 0;
   assert(!g3t_history_valid(&c));
   c.history_generated_eos_terminal = 1;

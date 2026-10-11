@@ -41,9 +41,12 @@ publishing data-only staging. No file writer, replay, checkpoint format or
 public generation API is added here.
 
 Focused local evidence: `scripts/test-g3r-committed-history-owner.sh` compiles
-the feature-gated native source and executes a direct owner-core test for P1,
-P2, manual versus generated EOS, malformed range and phase, then checks the
-native commit hooks and same-aggregate Eshkol wrapper routing to them. It
-does not execute full P1/P2/manual/G0/G1 Eshkol runtime under the new gate,
-or establish Eshkol SAVE admission and A2 cache-length snapshot equivalence.
-Those remain downstream gates.
+the feature-gated native source, runs the owner-core P1/P2/manual/generated
+partition and EOS test, then exercises the actual native G1 prefill commit,
+abort, idle snapshot, detached output release and close functions with
+controlled model/tensor/A2 stubs. It injects a recoverable A2 commit rejection
+and an I1 borrow allocation cut before a G0 commit. A source check maps the
+native hooks and same-aggregate Eshkol wrapper routing. The controlled stubs
+do not prove real A2, model pins, or full P1/P2/manual/G0/G1 Eshkol runtime
+under the new gate. Eshkol SAVE admission and A2 cache-length snapshot
+equivalence remain downstream gates.
