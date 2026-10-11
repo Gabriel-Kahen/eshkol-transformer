@@ -2899,6 +2899,13 @@ publication, public G2 and continuation remain pending.
   and missing-argument mutants reject. The zero-argument witness-carry call
   and three-pointer barriers already have exact signature checks. Emitted
   IR and runtime proof remain HOLD pending independent and ROOT source review.
+  Independent E review found that the first tagged stage argument could still
+  be the pair or an unrelated SSA. Source candidate F binds that argument
+  by role: generic publication must load the final `active-slot` local
+  selection with the source's 0/1/4/false cases, while state-entry publication
+  must pass tagged literal 5. Pair-in-both-positions, unrelated slot,
+  overwritten selection, and wrong state slot mutants reject. These are
+  source-only emitted-shape predicates; exact compiled IR remains unverified.
   Source review and compiled runtime/ABI proof are still required before
   claiming this as a C4 witness.
   Compiled normal/repeat/sanitizer tests, allocation/callback instrumentation,

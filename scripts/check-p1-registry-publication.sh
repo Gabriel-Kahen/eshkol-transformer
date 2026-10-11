@@ -84,6 +84,12 @@ if source.count(stage_contract) != 1:
     raise SystemExit("active-record-stage no longer returns rooted pair in slot 0")
 publication = source.split("(define (shell-for-raw kind raw)", 1)[1].split(
     "(define (state-entry-shell-for-raw", 1)[0]
+slot_contract = """(active-slot (cond ((eq? kind 'state) 0)
+                                 ((or (eq? kind 'module) (eq? kind 'handle)) 1)
+                                 ((eq? kind 'state-tensor) 4)
+                                 (else #f)))"""
+if publication.count(slot_contract) != 1:
+    raise SystemExit("generic active-slot selection changed")
 if (publication.count("(set! stage (active-record-stage active-slot next-pair))") != 1 or
         publication.count("(set! next-pair (vector-ref stage 0))") != 1 or
         publication.count("(if witness (set! witness (car (vector-ref next-pair 1))))") != 1):
@@ -123,6 +129,8 @@ if publication.index("(if (and scoped? shell)") > \
     raise SystemExit("prepublication native success lost scoped abort guard")
 entry = source.split("(define (state-entry-shell-for-raw", 1)[1].split(
     "(define (raw-for-shell", 1)[0]
+if entry.count("(active-record-stage 5 next-pair)") != 1:
+    raise SystemExit("state-entry stage slot changed")
 entry_ordered = (
     "(active-record-source 5)",
     "(next-pair (vector next-registry (issuance-witness-current)))",
@@ -381,7 +389,8 @@ def vector_ref_local(lines, result, local, slot, name):
         raise SystemExit(f"IR proof failed: {name} vector-ref source changed")
     return index
 
-def staged_pair_readback(lines, value, initial_store, canonical_store, name):
+def staged_pair_readback(lines, value, initial_store, canonical_store, name,
+                         role):
     stage_load_index = vector_ref_local(lines, value, "%stage", 0, name)
     writes = local_writes(lines, "%stage", stage_load_index)
     staged = (re.search(r"store %eshkol_tagged_value "
@@ -419,12 +428,43 @@ def staged_pair_readback(lines, value, initial_store, canonical_store, name):
     # The two source parameters precede any lowered closure-capture pointers.
     # A fresh pair in the slot position cannot establish the returned stage[0].
     stage_args = re.fullmatch(
-        r"%eshkol_tagged_value %[-A-Za-z0-9_.]+, "
+        r"%eshkol_tagged_value "
+        r"(%[-A-Za-z0-9_.]+|\{ i8 1, i8 16, i16 0, i32 0, i64 5 \}), "
         r"%eshkol_tagged_value (%next-pair\.load[0-9]*)"
         r"(?:, ptr %[-A-Za-z0-9_.]+)*", arguments.group(2))
     if stage_args is None:
         raise SystemExit(f"IR proof failed: {name} stage call slot/pair signature changed")
-    pair_index, pair_line = ssa_definition(lines, stage_args.group(1), name)
+    slot_value = stage_args.group(1)
+    if role == "generic-shell":
+        if not re.fullmatch(r"%active-slot\.load[0-9]*", slot_value):
+            raise SystemExit(f"IR proof failed: {name} stage slot is not active-slot")
+        slot_index, slot_line = ssa_definition(lines, slot_value, name)
+        slot_writes = local_writes(lines, "%active-slot", call_index)
+        selected = (re.search(r"store %eshkol_tagged_value "
+                              r"(%cond_result[0-9]*), ptr %active-slot,",
+                              slot_writes[-1][1]) if slot_writes else None)
+        if (not re.search(r"load %eshkol_tagged_value, ptr %active-slot,",
+                          slot_line) or
+                not slot_writes or selected is None or
+                not slot_writes[-1][0] < slot_index < call_index):
+            raise SystemExit(f"IR proof failed: {name} active-slot selection changed")
+        selection_index, selection = ssa_definition(lines, selected.group(1), name)
+        slot_cases = (
+            r"\[ \{ i8 1, i8 16, i16 0, i32 0, i64 0 \}, %cond_then[0-9]* \]",
+            r"\[ \{ i8 1, i8 16, i16 0, i32 0, i64 1 \}, %cond_then[0-9]* \]",
+            r"\[ \{ i8 1, i8 16, i16 0, i32 0, i64 4 \}, %cond_then[0-9]* \]",
+            r"\[ \{ i8 3, i8 0, i16 0, i32 0, i64 0 \}, %cond_next[0-9]* \]",
+        )
+        if (not selection_index < slot_writes[-1][0] or not re.fullmatch(
+                rf"\s*{re.escape(selected.group(1))} = phi "
+                rf"%eshkol_tagged_value {', '.join(slot_cases)}", selection)):
+            raise SystemExit(f"IR proof failed: {name} active-slot cases changed")
+    elif role == "state-entry-shell":
+        if slot_value != "{ i8 1, i8 16, i16 0, i32 0, i64 5 }":
+            raise SystemExit(f"IR proof failed: {name} stage slot is not five")
+    else:
+        raise SystemExit(f"IR proof failed: {name} unknown stage role")
+    pair_index, pair_line = ssa_definition(lines, stage_args.group(2), name)
     if (not initial_store < pair_index < call_index < writes[-1][0] <
             stage_load_index < canonical_store or
             not re.search(r"load %eshkol_tagged_value, ptr %next-pair,",
@@ -484,7 +524,7 @@ def pair_fields(lines, name):
         raise SystemExit(f"IR proof failed: {name} pair spines alias in SSA")
     return values
 
-def checked_pair_root_value(lines, barrier, name):
+def checked_pair_root_value(lines, barrier, name, role="generic-shell"):
     # The initial allocation is staged, then its canonical stage[0] readback
     # replaces the local. The root barrier must load that final local value.
     call = re.search(r"@eshkol_region_write_barrier_checked_v1\("
@@ -523,7 +563,7 @@ def checked_pair_root_value(lines, barrier, name):
     if not stores[0][0] < canonical_index < stores[-1][0]:
         raise SystemExit(f"IR proof failed: {name} staged pair SSA order changed")
     staged_pair_readback(lines, values[-1].group(1), stores[0][0],
-                         stores[-1][0], name)
+                         stores[-1][0], name, role)
     if any(re.search(r"^\s*store .*?, ptr %next-pair,", line)
            for line in lines[load_index + 1:barrier]):
         raise SystemExit(f"IR proof failed: {name} pair local changes after root load")
@@ -741,7 +781,7 @@ for ordinal, function in enumerate(publication_functions, 1):
     if root_barrier is None:
         raise SystemExit(
             f"IR proof failed: {name} lacks a root-vector next-pair barrier")
-    checked_pair_root_value(lines, root_barrier, name)
+    checked_pair_root_value(lines, root_barrier, name, role)
     entry_barrier = barriers[1]
     if entry_barrier >= root_barrier:
         raise SystemExit(f"IR proof failed: {name} root publication ordering changed")

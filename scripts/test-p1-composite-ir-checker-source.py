@@ -88,6 +88,8 @@ rejects(lambda: namespace["pair_fields"](
                   "%next-registry.load, ptr %slot1") for line in pair], "synthetic"))
 pair_publication = pair + [
     "  %active-record-stage.load = load %eshkol_tagged_value, ptr %active-record-stage_cap, align 8",
+    "  %cond_result = phi %eshkol_tagged_value [ { i8 1, i8 16, i16 0, i32 0, i64 0 }, %cond_then ], [ { i8 1, i8 16, i16 0, i32 0, i64 1 }, %cond_then1 ], [ { i8 1, i8 16, i16 0, i32 0, i64 4 }, %cond_then2 ], [ { i8 3, i8 0, i16 0, i32 0, i64 0 }, %cond_next3 ]",
+    "  store %eshkol_tagged_value %cond_result, ptr %active-slot, align 8",
     "  %active-slot.load = load %eshkol_tagged_value, ptr %active-slot, align 8",
     "  %next-pair.load0 = load %eshkol_tagged_value, ptr %next-pair, align 8",
     "  %stage.fn.bits = extractvalue %eshkol_tagged_value %active-record-stage.load, 4",
@@ -109,6 +111,22 @@ pair_publication = pair + [
 ]
 root_barrier = len(pair_publication) - 1
 namespace["checked_pair_root_value"](pair_publication, root_barrier, "synthetic")
+state_entry_publication = [line.replace(
+    "%eshkol_tagged_value %active-slot.load, %eshkol_tagged_value %next-pair.load0)",
+    "%eshkol_tagged_value { i8 1, i8 16, i16 0, i32 0, i64 5 }, %eshkol_tagged_value %next-pair.load0)")
+    for line in pair_publication]
+namespace["checked_pair_root_value"](
+    state_entry_publication, len(state_entry_publication) - 1,
+    "state-entry", "state-entry-shell")
+rejects(lambda: namespace["checked_pair_root_value"](
+    pair_publication, root_barrier, "generic-as-state-entry",
+    "state-entry-shell"))
+wrong_state_slot = [line.replace("i64 5 }, %eshkol_tagged_value %next-pair.load0)",
+                                 "i64 4 }, %eshkol_tagged_value %next-pair.load0)")
+                    for line in state_entry_publication]
+rejects(lambda: namespace["checked_pair_root_value"](
+    wrong_state_slot, len(wrong_state_slot) - 1,
+    "wrong-state-slot", "state-entry-shell"))
 wrong_stage = [line.replace("ptr %stage.slot0, align 8",
                             "ptr %unrelated_slot0, align 8")
                for line in pair_publication]
@@ -142,6 +160,42 @@ wrong_position = [line.replace(
     for line in pair_publication]
 rejects(lambda: namespace["checked_pair_root_value"](
     wrong_position, len(wrong_position) - 1, "pair-in-slot-position"))
+pair_both = [line.replace(
+    "%eshkol_tagged_value %active-slot.load, %eshkol_tagged_value %next-pair.load0)",
+    "%eshkol_tagged_value %next-pair.load0, %eshkol_tagged_value %next-pair.load0)")
+    for line in pair_publication]
+rejects(lambda: namespace["checked_pair_root_value"](
+    pair_both, len(pair_both) - 1, "pair-in-both-positions"))
+wrong_first_slot = [line.replace(
+    "%eshkol_tagged_value %active-slot.load, %eshkol_tagged_value %next-pair.load0)",
+    "%eshkol_tagged_value %wrong-slot.load, %eshkol_tagged_value %next-pair.load0)")
+    for line in pair_publication]
+rejects(lambda: namespace["checked_pair_root_value"](
+    wrong_first_slot, len(wrong_first_slot) - 1, "unrelated-first-slot"))
+wrong_slot_load = [line.replace(
+    "%active-slot.load = load %eshkol_tagged_value, ptr %active-slot,",
+    "%active-slot.load = load %eshkol_tagged_value, ptr %other-slot,")
+    for line in pair_publication]
+rejects(lambda: namespace["checked_pair_root_value"](
+    wrong_slot_load, len(wrong_slot_load) - 1, "wrong-slot-load"))
+wrong_slot_selection = [line.replace(
+    "store %eshkol_tagged_value %cond_result, ptr %active-slot,",
+    "store %eshkol_tagged_value %wrong-slot, ptr %active-slot,")
+    for line in pair_publication]
+rejects(lambda: namespace["checked_pair_root_value"](
+    wrong_slot_selection, len(wrong_slot_selection) - 1,
+    "wrong-slot-selection"))
+wrong_slot_case = [line.replace(
+    "i64 4 }, %cond_then2", "i64 9 }, %cond_then2")
+    for line in pair_publication]
+rejects(lambda: namespace["checked_pair_root_value"](
+    wrong_slot_case, len(wrong_slot_case) - 1, "wrong-slot-case"))
+overwritten_slot = pair_publication.copy()
+overwritten_slot.insert(overwritten_slot.index(
+    "  %active-slot.load = load %eshkol_tagged_value, ptr %active-slot, align 8"),
+    "  store %eshkol_tagged_value %wrong-slot, ptr %active-slot, align 8")
+rejects(lambda: namespace["checked_pair_root_value"](
+    overwritten_slot, len(overwritten_slot) - 1, "overwritten-slot"))
 extra_argument = [line.replace(
     "%eshkol_tagged_value %next-pair.load0)",
     "%eshkol_tagged_value %next-pair.load0, %eshkol_tagged_value %wrong_pair)")
