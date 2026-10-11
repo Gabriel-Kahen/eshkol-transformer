@@ -286,17 +286,13 @@ def copy_layer(source_pin, descriptor_pin, temp_path, limits, deadline, hashes, 
         os.close(source)
 
 
-def seal(stage, hashes, status, reason, pin_sha):
+def seal(stage, stage_fd, hashes, status, reason, pin_sha):
     record = {"schema": 1, "status": status, "reason": reason, "pin_sha256": pin_sha}
     name = "ACQUISITION.json" if status == "VERIFIED" else "HOLD.json"
     write_new(stage / name, canonical_json(record), hashes)
     rows = [f"{digest}  {Path(path).relative_to(stage)}\n" for path, (digest, _) in sorted(hashes.items())]
     write_new(stage / "SHA256SUMS-ACQUISITION", "".join(rows).encode(), {})
-    dfd = os.open(stage, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-    try:
-        os.fsync(dfd)
-    finally:
-        os.close(dfd)
+    os.fsync(stage_fd)
 
 
 def rename_noreplace(parent_fd, source_name, target_name):
@@ -371,11 +367,14 @@ def run(pin_path):
     try:
         check_named_parent(dest, parent_fd)
         stage_name = create_stage(parent_fd)
+        stage_fd = os.open(stage_name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                           dir_fd=parent_fd)
     except Exception:
         os.close(parent_fd)
         raise
-    stage = Path(f"/proc/self/fd/{parent_fd}/{stage_name}")
-    stage_st = os.lstat(stage)
+    # This fd continues to identify the same directory if its name is moved.
+    stage = Path(f"/proc/self/fd/{stage_fd}")
+    stage_st = os.fstat(stage_fd)
     stage_identity = (stage_st.st_dev, stage_st.st_ino)
     hashes = {}
     try:
@@ -407,10 +406,11 @@ def run(pin_path):
         sample(deadline, limits["max_rss_bytes"])
         check_named_parent(dest, parent_fd)
         need(not os.path.lexists(dest["path"]) and
-             not os.path.lexists(os.path.join(str(stage.parent), os.path.basename(dest["path"]))),
+             not os.path.lexists(os.path.join(f"/proc/self/fd/{parent_fd}",
+                                                os.path.basename(dest["path"]))),
              "destination-drift")
         reserve.unlink()
-        seal(stage, hashes, "VERIFIED", None, pin_sha)
+        seal(stage, stage_fd, hashes, "VERIFIED", None, pin_sha)
         sample(deadline, limits["max_rss_bytes"])
         os.fsync(parent_fd)
         target_name = os.path.basename(dest["path"])
@@ -422,18 +422,13 @@ def run(pin_path):
             try:
                 rename_noreplace(parent_fd, target_name, stage_name)
             except Exception:
-                # Keep any still-present anchored target out of VERIFIED state.
-                previous_stage = stage
-                stage = Path(f"/proc/self/fd/{parent_fd}/{target_name}")
-                hashes = {str(stage / Path(path).relative_to(previous_stage)): value
-                          for path, value in hashes.items()}
+                # The retained stage fd still reaches the published directory,
+                # even if another actor moved it to a different name.
+                pass
             raise Hold("destination-parent-drift") from error
         return dest["path"]
     except Exception as error:
-        try:
-            current = os.lstat(stage)
-        except OSError:
-            raise Hold("publication-retraction-failed") from error
+        current = os.fstat(stage_fd)
         if not stat.S_ISDIR(current.st_mode) or (current.st_dev, current.st_ino) != stage_identity:
             raise Hold("publication-retraction-failed") from error
         reserve = stage / ".hold-reserve"
@@ -445,9 +440,10 @@ def run(pin_path):
             (stage / "ACQUISITION.json").unlink()
             hashes.pop(str(stage / "ACQUISITION.json"), None)
         reason = str(error) if isinstance(error, Hold) else type(error).__name__
-        seal(stage, hashes, "HOLD", reason[:120], pin_sha)
+        seal(stage, stage_fd, hashes, "HOLD", reason[:120], pin_sha)
         raise
     finally:
+        os.close(stage_fd)
         os.close(parent_fd)
 
 

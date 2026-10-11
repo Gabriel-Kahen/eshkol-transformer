@@ -269,6 +269,39 @@ class AcquisitionTests(unittest.TestCase):
                 if root.is_symlink():
                     root.unlink()
                     moved.rename(root)
+
+    def test_moved_published_target_is_marked_hold_through_retained_fd(self):
+        for replace_with_symlink in (False, True):
+            with self.subTest(replace_with_symlink=replace_with_symlink), \
+                 tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                pin, expected, _ = fixture(root)
+                actual_rename = mod.rename_noreplace
+                moved = False
+
+                def move_after_publish(parent_fd, source_name, target_name):
+                    nonlocal moved
+                    result = actual_rename(parent_fd, source_name, target_name)
+                    if target_name == "export" and not moved:
+                        (root / "export").rename(root / "escaped-export")
+                        if replace_with_symlink:
+                            (root / "export").symlink_to(root / "escaped-export",
+                                                          target_is_directory=True)
+                        moved = True
+                    return result
+
+                with mock.patch.object(mod, "rename_noreplace", side_effect=move_after_publish):
+                    with self.assertRaisesRegex(mod.Hold, "destination-parent-drift"):
+                        acquire(root, pin, expected)
+                self.assertTrue(moved)
+                self.assertFalse(os.path.lexists(root / "export"))
+                escaped = root / "escaped-export"
+                self.assertEqual(json.loads((escaped / "HOLD.json").read_text())["status"], "HOLD")
+                self.assertFalse((escaped / "ACQUISITION.json").exists())
+                for line in (escaped / "SHA256SUMS-ACQUISITION").read_text().splitlines():
+                    digest, name = line.split("  ", 1)
+                    self.assertEqual(sha((escaped / name).read_bytes()), digest)
+
     def assert_hold_partial(self, root):
         self.assertFalse((root / "export").exists())
         stages = list(root.glob(".e3-n1-HOLD-*"))

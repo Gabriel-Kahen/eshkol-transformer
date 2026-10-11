@@ -811,10 +811,12 @@ reviewed bounded export acquisition before the first real layer read. The
 [OCI export acquisition candidate](e3/E3_N1_OCI_EXPORT_ACQUISITION.md) adds
 an inert exact-chain, metadata-pin-gated bounded copy and atomic publication
 source with generated tiny-blob tests. Independent and ROOT review held its A
-head `4dcb5268` for an absolute-rename parent-swap race. The B candidate
-anchors staging and atomic no-replace rename to a pinned parent fd, then
-checks the named destination and retracts to sealed HOLD on drift; a generated
-parent-swap negative covers the reported boundary. Its production release pin is absent;
+head `4dcb5268` for an absolute-rename parent-swap race. B anchored publication
+to a pinned parent fd but independent review held it because a same-UID actor
+could move the just-published target before readback, leaving a VERIFIED record
+after failed retraction. The C candidate retains a directory fd across rename
+to mark that moved inode HOLD and adds the exact moved-target negative alongside
+the parent-swap checks. Its production release pin is absent;
 independent and ROOT source/pin review and a separately sealed read-only
 export remain pending. A full
 export seal and its verified layer hashes follow acquisition; guest discovery

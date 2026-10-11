@@ -39,11 +39,14 @@ every written byte. Only after both exact compressed sizes and hashes pass
 does it create the OCI layout and rename the private directory to a fresh
 target using Linux `renameat2(RENAME_NOREPLACE)` relative to one pinned,
 component-wise no-follow parent directory fd. Staging also stays anchored to
-that fd. The named parent and target identities are rechecked after rename;
-drift retracts the target into the private directory and changes its record
-to HOLD. If retraction itself fails, the still-anchored target is changed to
-HOLD before an error is returned; a vanished target reports a separate
-retraction failure. Any staged failure writes
+that fd, and C retains a separate directory fd for the staging inode through
+publication. The named parent and target identities are rechecked after rename;
+drift retracts the target into the private directory when possible. If another
+same-UID actor moves the published directory before retraction, the retained
+fd still reaches that directory and changes its record from VERIFIED to HOLD
+before the error is returned. This protects the failure-state transition from
+path renames; it does not make a same-UID writable directory immutable after
+the acquisition process exits. Any staged failure writes
 `HOLD.json` and `SHA256SUMS-ACQUISITION` beside the retained partial files.
 A successful directory contains `ACQUISITION.json` and the checksum list.
 This is an acquisition artifact only; its read-only evidence seal and guest
@@ -51,6 +54,6 @@ selection are separate gates in the exact-input plan.
 
 Generated tiny-blob tests exercise exact publication, release absence,
 malformed pins, byte and disk caps, symlink and inode swaps, mutation during
-read, late time HOLD, second-blob hash failure and a parent symlink swap at
-the actual atomic-rename boundary. They never open an f31
+read, late time HOLD, second-blob hash failure, a parent symlink swap and a
+published-target move at the actual atomic-rename boundary. They never open an f31
 layer, invoke Docker, run a guest tool, scan gzip or authorize capture.
