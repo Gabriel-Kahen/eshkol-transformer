@@ -1,0 +1,177 @@
+;;; Test-only, one-root aggregate fixture. Never install or load beside the
+;;; installed public package: that would create a second issuer universe.
+(load "g3g_manual_package_root.esk")
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "private P2/G2 history FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label thunk)
+  (check label
+    (guard (caught (#t (transformer-error? caught)))
+      (thunk) #f)))
+(define (config eos)
+  (list ':profile 'diagnostic-c4-p2g2 ':sampling 'greedy
+        ':temperature-bits 1065353216 ':top-k 256
+        ':top-p-bits 1065353216 ':max-new-tokens 2
+        ':eos eos ':seed 41))
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define model (g3c4-public-model-create-seeded 1729))
+(define original-t1
+  (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255)))
+(define input (g3c4-public-generation-input-create original-t1))
+(define (first-id)
+  (let ((probe (g3g-public-generator-create model tokenizer (config 0)))
+        (selected -1))
+    (g3c4-with-p2g2-prefix-call 'private-history-first-reference
+      probe input (call)
+      (g3c4-p2g2-protected-reserve call)
+      (set! selected (g3c4-p2g2-prefix-commit! call input))
+      (g3c4-p2g2-protected-abort! call))
+    (check "genuine first ID is V256"
+           (and (<= 0 selected) (<= selected 255)))
+    (check "probe closes" (g3g-public-generator-close probe))
+    selected))
+(define selected-first (first-id))
+(define non-eos (if (= selected-first 255) 0 255))
+(define snapshot-provider g3c4-p2g2-terminal-snapshot-private)
+
+(define (run-case eos expected-count fault-mode)
+  (let* ((generator
+           (g3g-public-generator-create model tokenizer (config eos)))
+         (output (g3g-public-generator-generate generator input))
+         (before (snapshot-provider output))
+         (history #f)
+         (source (g3c4-public-g2-output-live output 'history-test))
+         (ticket (g3c4-public-g2-output-unique
+                   g3c4-public-g2-tickets 5 output 'history-test))
+         (foreign-generator
+           (g3g-public-generator-create model tokenizer (config eos)))
+         (descriptor #f))
+    (check "exact generation count and cache"
+           (and (= (vector-ref before 2) expected-count)
+                (= (vector-ref before 3) (+ expected-count 2))
+                (= (vector-ref before 0) selected-first)))
+    (if (= expected-count 1)
+        (check "G1 EOS has no G2" (= (vector-ref before 1) 0))
+        (check "non-EOS has two valid IDs"
+               (and (<= 0 (vector-ref before 1))
+                    (<= (vector-ref before 1) 255))))
+    (if (eq? fault-mode 'late)
+        (begin
+          (set! g3c4-p2g2-terminal-snapshot-private
+            (lambda (shell)
+              (let ((current (snapshot-provider shell)))
+                (vector-set! ticket 15
+                  (if (= (vector-ref current 1) 255) 0
+                      (+ (vector-ref current 1) 1)))
+                current)))
+          (reject "capture late ticket mutation denies issuance"
+            (lambda ()
+              (g3c4-public-p2g2-history-capture-internal!
+                generator input output)))
+          (set! g3c4-p2g2-terminal-snapshot-private snapshot-provider)
+          (vector-set! ticket 15 (vector-ref before 1)))
+        #t)
+    (set! history
+      (g3c4-public-p2g2-history-capture-internal!
+        generator input output))
+    (reject "copied history is not issued"
+      (lambda ()
+        (g3c4-public-p2g2-history-admit-once-internal!
+          (vector 'g3c4-p2g2-history-private) generator input output)))
+    (reject "foreign generator cannot consume genuine history"
+      (lambda ()
+        (g3c4-public-p2g2-history-admit-once-internal!
+          history foreign-generator input output)))
+    (check "foreign generator closes"
+           (g3g-public-generator-close foreign-generator))
+    (if (eq? fault-mode 'false)
+        (begin
+          (set! g3c4-p2g2-terminal-snapshot-private
+            (lambda (shell) (raise #f)))
+          (let ((observed 'not-raised))
+            (guard (caught (#t (set! observed caught)))
+              (g3c4-public-p2g2-history-admit-once-internal!
+                history generator input output))
+            (check "private catch retains original raised #f"
+                   (eq? observed #f)))
+          (set! g3c4-p2g2-terminal-snapshot-private snapshot-provider))
+        #t)
+    (if (eq? fault-mode 'late)
+        (begin
+          (set! g3c4-p2g2-terminal-snapshot-private
+            (lambda (shell)
+              (let ((current (snapshot-provider shell)))
+                (vector-set! ticket 14
+                  (if (= (vector-ref current 0) 255) 0
+                      (+ (vector-ref current 0) 1)))
+                current)))
+          (reject "last provider mutation denies before spend"
+            (lambda ()
+              (g3c4-public-p2g2-history-admit-once-internal!
+                history generator input output)))
+          (set! g3c4-p2g2-terminal-snapshot-private snapshot-provider)
+          (vector-set! ticket 14 (vector-ref before 0)))
+        #t)
+    (if (eq? fault-mode 'late)
+        (let ((nested-denied #f))
+          (set! g3c4-p2g2-terminal-snapshot-private
+            (lambda (shell)
+              (set! g3c4-p2g2-terminal-snapshot-private snapshot-provider)
+              (set! nested-denied
+                (guard (caught (#t (transformer-error? caught)))
+                  (g3c4-public-p2g2-history-admit-once-internal!
+                    history generator input output)
+                  #f))
+              (snapshot-provider shell)))
+          (set! descriptor
+            (g3c4-public-p2g2-history-admit-once-internal!
+              history generator input output))
+          (check "reentrant admit denied while outer owns phase"
+                 nested-denied))
+        (set! descriptor
+          (g3c4-public-p2g2-history-admit-once-internal!
+            history generator input output)))
+    (set! g3c4-p2g2-terminal-snapshot-private snapshot-provider)
+    (check "descriptor preserves full P2/G1-G2 history"
+      (and (= (vector-length descriptor) 16)
+           (= (vector-ref descriptor 0) 0)
+           (= (vector-ref descriptor 1) 255)
+           (= (vector-ref descriptor 2) (vector-ref before 0))
+           (= (vector-ref descriptor 3) (vector-ref before 1))
+           (= (vector-ref descriptor 4) expected-count)
+           (= (vector-ref descriptor 5) (+ expected-count 2))
+           (= (vector-ref descriptor 6) (vector-ref before 4))
+           (= (vector-ref descriptor 7) (vector-ref before 5))
+           (= (vector-ref descriptor 8) (vector-ref before 6))
+           (= (vector-ref descriptor 9) (vector-ref before 7))
+           (= (vector-ref descriptor 10) eos)
+           (eq? (vector-ref descriptor 13) generator)
+           (eq? (vector-ref descriptor 14) input)
+           (eq? (vector-ref descriptor 15) output)))
+    (let ((after (snapshot-provider output)))
+      (check "capture/admit did not change terminal RNG or IDs"
+        (let loop ((index 0))
+          (if (= index 8) #t
+              (and (= (vector-ref before index) (vector-ref after index))
+                   (loop (+ index 1)))))))
+    (reject "one-use history cannot admit twice"
+      (lambda ()
+        (g3c4-public-p2g2-history-admit-once-internal!
+          history generator input output)))
+    (check "output releases" (g3g-public-generation-output-release output))
+    (check "generator closes" (g3g-public-generator-close generator))))
+
+(run-case selected-first 1 'false)
+(run-case non-eos 2 'late)
+(check "input releases" (g3g-public-generation-tensor-release input))
+;;; The original sealed T1 shell has no supported release API. This fixture
+;;; proves later history admission avoids T1 reads, not native T1 retirement.
+(display "PRIVATE-P2G2-HISTORY-PASS checks=")
+(display checks)
+(newline)
