@@ -2832,6 +2832,11 @@ publication, public G2 and continuation remain pending.
   under aggregate serialization. The current P1 topology verifier, I2
   carrier admission, aggregate exclusion, history/SAVE integration and
   supported runtime/ABI gates remain OPEN/HOLD.
+  A focused compatibility gate now compiles the opt-in owner and I2 bridge as
+  separate translation units, compares feature-off/on private symbol deltas,
+  links their unresolved helper edge, and executes sealed-owner copy and
+  wrong-binding/extent/alias negatives. This does not replace the supported
+  installed aggregate or public export inventory gate.
 
 ## Wave 4 — practical pretraining and performance
 
