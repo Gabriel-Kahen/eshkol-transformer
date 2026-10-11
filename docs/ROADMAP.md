@@ -1968,9 +1968,13 @@ parameter, handle and carrier identities across seal. Its private retire path
 checks the sealed P1/I2 graph and native owner before a serialized revoke and
 tombstone tail; a source fixture records live-workspace rejection, stale model
 and handle expectations, and same-process reconstruction from the unchanged
-original. The fixed package builder does not yet register this tuple, and no
-compiled normal/repeat/sanitizer or feature-off object gate has run. It is a
-source-only dependency, not a proven sealed-M3 retirement or Section 9 result.
+original. The reviewed noninstalled package source at `9c53b702` now
+registers the exact tuple and stages all three generated overlays. Its
+fixture-specific same-aggregate root and expected 32-row Eshkol source
+closure have static drift checks. The closure is a source candidate: actual
+compiler depfiles, emitted symbol/object inventories, normal/repeat/sanitizer
+and feature-off gates remain unrun. No sealed-M3 retirement or Section 9
+acceptance follows from this source work.
 
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
