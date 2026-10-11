@@ -78,13 +78,20 @@
     (module-construction-seal-prepared-internal! construction)
     (vector root handles)))
 
+(define prepublication-control (vector-ref p1-trusted-surface 76))
+(check "arm native-success fault" (prepublication-control 'arm))
+(reject "native-success prepublication fault"
+  (lambda () (build-fixed)))
+(check "failed construction aborted and token retired"
+  (prepublication-control 'failed-and-aborted))
 (define built (build-fixed))
 (define root (vector-ref built 0))
 (define handles (vector-ref built 1))
 (define verify-fixed (vector-ref p1-trusted-surface 73))
 (define mutate-fixed (vector-ref p1-trusted-surface 74))
 (define restore-fixed (vector-ref p1-trusted-surface 75))
-(check "sealed fixed root" (verify-fixed root fixed-trie handles))
+(check "clean new-construction retry"
+  (verify-fixed root fixed-trie handles))
 
 (define original-handle-0 (vector-ref handles 0))
 (vector-set! handles 0 (vector-ref handles 1))
@@ -94,7 +101,8 @@
 (check "supplied handle retry" (verify-fixed root fixed-trie handles))
 
 (let mutations ((actions '(detached-module detached-handle duplicate-shell
-                            duplicate-record missing-entry scope-drift raw-drift
+                            duplicate-record missing-entry missing-witness
+                            scope-drift raw-drift
                             wrong-parent wrong-shape
                             wrong-device wrong-counter-type wrong-tie)))
   (if (null? actions) #t

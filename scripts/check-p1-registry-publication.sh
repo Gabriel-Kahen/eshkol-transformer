@@ -81,6 +81,9 @@ ordered = (
     "(next-pair (vector next-registry next-witnesses))",
     "(active-record-stage active-slot next-pair)",
     "(native-create-shell kind raw construction)",
+    "(set! next-pair (vector-ref stage 0))",
+    "(set! next-registry (vector-ref next-pair 0))",
+    "(if witness (set! witness (car (vector-ref next-pair 1))))",
     "(vector-set! entry 0 shell)",
     "(vector-set! witness 3 shell)",
     "(vector-set! active-record-root 2 #f)",
@@ -91,6 +94,13 @@ ordered = (
 positions = [publication.index(witness) for witness in ordered]
 if positions != sorted(positions):
     raise SystemExit("active-record staging/publication order changed")
+if "((or (eq? kind 'module) (eq? kind 'handle)) 1)" not in publication:
+    raise SystemExit("scoped handle lost active-root pre-native stage")
+if publication.index("(if (and scoped? shell)") > \
+        publication.index("(set! stage (active-record-stage") or \
+        publication.index("(construction-abort! construction)") > \
+        publication.index("(set! stage (active-record-stage"):
+    raise SystemExit("prepublication native success lost scoped abort guard")
 entry = source.split("(define (state-entry-shell-for-raw", 1)[1].split(
     "(define (raw-for-shell", 1)[0]
 entry_ordered = (
@@ -98,6 +108,8 @@ entry_ordered = (
     "(next-pair (vector next-registry (issuance-witness-current)))",
     "(active-record-stage 5 next-pair)",
     "(p1-native-state-entry-create native-context state-shell)",
+    "(set! next-pair (vector-ref stage 0))",
+    "(set! next-registry (vector-ref next-pair 0))",
     "(vector-set! record 0 shell)",
     "(vector-set! active-record-root 2 #f)",
     "(vector-set! shell-registry-root 0 next-pair)",
@@ -300,6 +312,117 @@ def checked_barrier_flow(lines, index, name):
         "successor": successor_lines,
     }
 
+def ssa_definition(lines, value, name):
+    matches = [(i, line) for i, line in enumerate(lines)
+               if line.lstrip().startswith(value + " = ")]
+    if len(matches) != 1:
+        raise SystemExit(f"IR proof failed: {name} has no unique {value} definition")
+    return matches[0]
+
+def pair_fields(lines, name):
+    # The pre-native pair is a fresh length-two vector. Follow its actual
+    # tagged pointer to both element stores; SSA names alone are insufficient.
+    initial = [re.search(
+        r"store %eshkol_tagged_value (%[-A-Za-z0-9_.]+), ptr %next-pair,", line)
+        for line in lines]
+    initial = [match.group(1) for match in initial if match]
+    if not initial:
+        raise SystemExit(f"IR proof failed: {name} has no initial pair store")
+    tag = initial[0]
+    _, tag_line = ssa_definition(lines, tag, name)
+    pointer = re.search(r"insertvalue %eshkol_tagged_value .* i64 "
+                        r"(%[-A-Za-z0-9_.]+), 4", tag_line)
+    if pointer is None:
+        raise SystemExit(f"IR proof failed: {name} pair is not tagged vector")
+    _, pointer_line = ssa_definition(lines, pointer.group(1), name)
+    allocation = re.search(r"ptrtoint ptr (%[-A-Za-z0-9_.]+) to i64",
+                           pointer_line)
+    if allocation is None:
+        raise SystemExit(f"IR proof failed: {name} pair pointer is not allocated")
+    allocated = allocation.group(1)
+    _, allocation_line = ssa_definition(lines, allocated, name)
+    if not re.search(r"call ptr @arena_allocate_vector_with_header\("
+                     r"ptr %[-A-Za-z0-9_.]+, i64 2\)", allocation_line):
+        raise SystemExit(f"IR proof failed: {name} pair is not length two")
+    bases = [re.match(r"\s*(%[-A-Za-z0-9_.]+) = getelementptr i8, "
+                      rf"ptr {re.escape(allocated)}, i64 8$", line)
+             for line in lines]
+    bases = [match.group(1) for match in bases if match]
+    if len(bases) != 1:
+        raise SystemExit(f"IR proof failed: {name} pair has no unique data base")
+    values = []
+    for slot in (0, 1):
+        slot_pointers = [re.match(
+            r"\s*(%[-A-Za-z0-9_.]+) = getelementptr %eshkol_tagged_value, "
+            rf"ptr {re.escape(bases[0])}, i64 {slot}$", line)
+            for line in lines]
+        slot_pointers = [match.group(1) for match in slot_pointers if match]
+        if len(slot_pointers) != 1:
+            raise SystemExit(f"IR proof failed: {name} pair slot {slot} is ambiguous")
+        stores = [re.search(
+            r"store %eshkol_tagged_value (%[-A-Za-z0-9_.]+), "
+            rf"ptr {re.escape(slot_pointers[0])},", line)
+            for line in lines]
+        stores = [match.group(1) for match in stores if match]
+        if len(stores) != 1:
+            raise SystemExit(f"IR proof failed: {name} pair slot {slot} store is ambiguous")
+        values.append(stores[0])
+    if values[0] == values[1]:
+        raise SystemExit(f"IR proof failed: {name} pair spines alias in SSA")
+    return values
+
+def checked_witness_store(lines, barrier, flow, name):
+    call = re.search(r"@eshkol_region_write_barrier_checked_v1\("
+                     r"ptr %[-A-Za-z0-9_.]+, ptr (%[-A-Za-z0-9_.]+), "
+                     r"ptr (%[-A-Za-z0-9_.]+)\)", lines[barrier])
+    if call is None:
+        raise SystemExit(f"IR proof failed: {name} witness barrier arguments absent")
+    target, value_slot = call.groups()
+    before = lines[:barrier]
+    values = [re.search(
+        r"store %eshkol_tagged_value (%shell\.load[0-9]*), "
+        rf"ptr {re.escape(value_slot)},", line)
+        for line in before[-8:]]
+    if not any(values):
+        raise SystemExit(f"IR proof failed: {name} witness barrier value is not shell")
+    shell_value = next(match.group(1) for match in values if match)
+    _, shell_load = ssa_definition(lines, shell_value, name)
+    if not re.search(r"load %eshkol_tagged_value, ptr %shell,", shell_load):
+        raise SystemExit(f"IR proof failed: {name} witness value is not native shell")
+    target_sources = [re.search(
+        r"(%[-A-Za-z0-9_.]+) = inttoptr i64 "
+        r"(%[-A-Za-z0-9_.]+) to ptr", line)
+        for line in before]
+    target_sources = [match for match in target_sources
+                      if match and match.group(1) == target]
+    if len(target_sources) != 1:
+        raise SystemExit(f"IR proof failed: {name} witness target pointer absent")
+    _, extracted = ssa_definition(lines, target_sources[0].group(2), name)
+    tagged = re.search(r"extractvalue %eshkol_tagged_value "
+                       r"(%witness\.load[0-9]*), 4", extracted)
+    if tagged is None:
+        raise SystemExit(f"IR proof failed: {name} barrier target is not witness")
+    _, witness_load = ssa_definition(lines, tagged.group(1), name)
+    if not re.search(r"load %eshkol_tagged_value, ptr %witness,", witness_load):
+        raise SystemExit(f"IR proof failed: {name} target is not canonical witness")
+    # A checked success must commit the returned value to witness field 3.
+    success_block = lines[flow["success_index"]:flow["successor_index"]]
+    committed = [re.search(r"store %eshkol_tagged_value %wb_result[0-9]*, "
+                           r"ptr (%[-A-Za-z0-9_.]+),", line)
+                 for line in success_block]
+    committed = [match.group(1) for match in committed if match]
+    if len(committed) != 1:
+        raise SystemExit(f"IR proof failed: {name} witness checked commit absent")
+    _, slot_line = ssa_definition(lines, committed[0], name)
+    slot = re.search(r"getelementptr %eshkol_tagged_value, ptr "
+                     r"(%[-A-Za-z0-9_.]+), i64 3$", slot_line)
+    if slot is None:
+        raise SystemExit(f"IR proof failed: {name} witness commit is not field 3")
+    _, base_line = ssa_definition(lines, slot.group(1), name)
+    if not re.search(rf"getelementptr i8, ptr {re.escape(target)}, i64 8$",
+                     base_line):
+        raise SystemExit(f"IR proof failed: {name} witness field has wrong base")
+
 for ordinal, function in enumerate(publication_functions, 1):
     lines = [line for _, line in function]
     numbers = [number for number, _ in function]
@@ -326,6 +449,49 @@ for ordinal, function in enumerate(publication_functions, 1):
     barrier_flows = {
         index: checked_barrier_flow(lines, index, name) for index in barriers
     }
+    registry_spine, witness_spine = pair_fields(lines, name)
+    _, registry_def = ssa_definition(lines, registry_spine, name)
+    if not re.search(r"load %eshkol_tagged_value, ptr %next-registry,",
+                     registry_def):
+        raise SystemExit(f"IR proof failed: {name} pair slot 0 is not registry")
+    if role == "generic-shell":
+        _, witness_def = ssa_definition(lines, witness_spine, name)
+        if not re.search(r"load %eshkol_tagged_value, ptr %next-witnesses,",
+                         witness_def):
+            raise SystemExit(f"IR proof failed: {name} pair slot 1 is not witness spine")
+    else:
+        # The carried witness is the exact return SSA of the captured
+        # issuance-witness-current closure, including the as-is call branch.
+        _, carry_phi = ssa_definition(lines, witness_spine, name)
+        captured = [re.match(
+            r"\s*(%[-A-Za-z0-9_.]+) = load %eshkol_tagged_value, "
+            r"ptr %issuance-witness-current_cap,", line)
+            for line in lines]
+        captured = [match.group(1) for match in captured if match]
+        if (len(captured) != 1 or
+                not re.search(r"= phi %eshkol_tagged_value", carry_phi) or
+                not re.search(rf"\[ {re.escape(captured[0])}, %return_as_is[0-9]* \]",
+                              carry_phi)):
+            raise SystemExit(f"IR proof failed: {name} lost witness carry SSA identity")
+        direct = re.search(r"\[ (%[-A-Za-z0-9_.]+), %do_direct_call[0-9]* \]",
+                           carry_phi)
+        if direct is None:
+            raise SystemExit(f"IR proof failed: {name} witness call path absent")
+        _, direct_call = ssa_definition(lines, direct.group(1), name)
+        called = re.search(r"call %eshkol_tagged_value "
+                           r"(%[-A-Za-z0-9_.]+)\(\)$", direct_call)
+        if called is None:
+            raise SystemExit(f"IR proof failed: {name} witness carry is not call result")
+        _, called_pointer = ssa_definition(lines, called.group(1), name)
+        bits = re.search(r"inttoptr i64 (%[-A-Za-z0-9_.]+) to ptr$",
+                         called_pointer)
+        if bits is None:
+            raise SystemExit(f"IR proof failed: {name} witness call pointer absent")
+        _, bits_line = ssa_definition(lines, bits.group(1), name)
+        if not re.search(
+                rf"extractvalue %eshkol_tagged_value "
+                rf"{re.escape(captured[0])}, 4$", bits_line):
+            raise SystemExit(f"IR proof failed: {name} witness call source changed")
 
     root_loads = set()
     for line in lines:
@@ -364,6 +530,21 @@ for ordinal, function in enumerate(publication_functions, 1):
     if root_barrier is None:
         raise SystemExit(
             f"IR proof failed: {name} lacks a root-vector next-pair barrier")
+    pair_load = re.search(r"store %eshkol_tagged_value "
+                          r"(%next-pair\.load[0-9]*), ptr %[-A-Za-z0-9_.]+",
+                          "\n".join(lines[max(0, root_barrier - 3):root_barrier]))
+    if pair_load is None:
+        raise SystemExit(f"IR proof failed: {name} root value is not pair SSA")
+    _, pair_load_def = ssa_definition(lines, pair_load.group(1), name)
+    if not re.search(r"load %eshkol_tagged_value, ptr %next-pair,",
+                     pair_load_def):
+        raise SystemExit(f"IR proof failed: {name} root value bypasses pair local")
+    canonical_pair_stores = [i for i, line in enumerate(lines[:root_barrier])
+                             if re.search(r"store %eshkol_tagged_value "
+                                          r"%vref_result[0-9]*, ptr %next-pair,",
+                                          line)]
+    if len(canonical_pair_stores) != 1:
+        raise SystemExit(f"IR proof failed: {name} lacks staged canonical pair")
     entry_barrier = barriers[1]
     if entry_barrier >= root_barrier:
         raise SystemExit(f"IR proof failed: {name} root publication ordering changed")
@@ -387,9 +568,16 @@ for ordinal, function in enumerate(publication_functions, 1):
     root_ordinal = 4 if role == "generic-shell" else 3
     if barriers[root_ordinal] != root_barrier:
         raise SystemExit(f"IR proof failed: {name} active tail ordering changed")
-    if role == "generic-shell" and not (
-            entry_barrier < barriers[2] < root_barrier):
-        raise SystemExit(f"IR proof failed: {name} witness store is not before root")
+    if role == "generic-shell":
+        if not entry_barrier < barriers[2] < root_barrier:
+            raise SystemExit(f"IR proof failed: {name} witness store is not before root")
+        checked_witness_store(lines, barriers[2], barrier_flows[barriers[2]], name)
+        witness_local_stores = [i for i, line in enumerate(lines[:barriers[2]])
+                                if re.search(r"store %eshkol_tagged_value "
+                                             r"%[-A-Za-z0-9_.]+, ptr %witness,",
+                                             line)]
+        if len(witness_local_stores) < 2:
+            raise SystemExit(f"IR proof failed: {name} witness target was not staged")
     for index in barriers[root_ordinal + 1:]:
         if not any("ptr %active-record-root_cap" in line
                    for line in lines[max(0, index - 256):index]):

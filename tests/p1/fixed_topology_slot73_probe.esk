@@ -52,6 +52,36 @@
           (cdr entries)
           (cons (car entries)
                 (p1-fixed-test-without-shell (cdr entries) shell)))))
+(define (p1-fixed-test-without-witness witnesses shell)
+  (if (null? witnesses) '()
+      (if (eq? (vector-ref (car witnesses) 3) shell)
+          (cdr witnesses)
+          (cons (car witnesses)
+                (p1-fixed-test-without-witness (cdr witnesses) shell)))))
+(define p1-fixed-test-prepublication (vector #f #f #f))
+(define (p1-fixed-test-shell-present? entries shell slot)
+  (if (null? entries) #f
+      (if (eq? (vector-ref (car entries) slot) shell) #t
+          (p1-fixed-test-shell-present? (cdr entries) shell slot))))
+(define (p1-fixed-test-prepublication-control! mode)
+  (cond ((eq? mode 'arm)
+         (vector-set! p1-fixed-test-prepublication 0 #t)
+         #t)
+        ((eq? mode 'failed-and-aborted)
+         (let ((identity (vector-ref p1-fixed-test-prepublication 1))
+               (shell (vector-ref p1-fixed-test-prepublication 2)))
+           (and identity shell
+                (not (active-construction))
+                (not (vector-ref active-record-root 3))
+                (not (p1-fixed-test-shell-present?
+                       (shell-registry-current) shell 0))
+                (not (p1-fixed-test-shell-present?
+                       (issuance-witness-current) shell 3))
+                (eq? (vector-ref
+                       (construction-record 'p1-fixed-test identity) 1)
+                     'aborted)
+                (= (p1-fixed-native-token-live shell) 0))))
+        (else #f)))
 (define (p1-fixed-test-mutate! action root-shell handle-shell)
   (let* ((record (p1-fixed-sealed-record root-shell))
          (scope (vector-ref record 0))
@@ -94,6 +124,11 @@
          (vector-ref shell-registry-root 0) 0
          (p1-fixed-test-without-shell
            (shell-registry-current) handle-shell)))
+      ((eq? action 'missing-witness)
+       (p1-fixed-test-change!
+         (vector-ref shell-registry-root 0) 1
+         (p1-fixed-test-without-witness
+           (issuance-witness-current) handle-shell)))
       ((eq? action 'scope-drift)
        (p1-fixed-test-change! (shell-entry handle-shell) 3 #f))
       ((eq? action 'raw-drift)

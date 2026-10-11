@@ -674,24 +674,26 @@
                                  ((eq? kind 'state-tensor) 4)
                                  (else #f)))
               (stage #f)
-              (shell
-                (guard (caught
-                         (#t
-                           (vector-set! active-record-root 3 #f)
-                           (raise caught)))
-                  (set! stage (active-record-stage active-slot next-pair))
-                  (native-create-shell kind raw construction))))
+              (shell #f))
          ;; The stage has promoted both spines and the optional active node.
          ;; Only canonical root-owned fields and a native token are stored
          ;; between native success and the single composite publication.
-         (set! next-pair (vector-ref stage 0))
-         (set! next-registry (vector-ref next-pair 0))
-         (set! entry (car next-registry))
-         (if witness (set! witness (car (vector-ref next-pair 1))))
-         (vector-set! entry 0 shell)
-         (if witness (vector-set! witness 3 shell))
-         (if active-slot (vector-set! active-record-root 2 #f))
-         (vector-set! shell-registry-root 0 next-pair)
+         (guard (caught
+                  (#t
+                    (vector-set! active-record-root 3 #f)
+                    (if (and scoped? shell)
+                        (construction-abort! construction) #t)
+                    (raise caught)))
+           (set! stage (active-record-stage active-slot next-pair))
+           (set! shell (native-create-shell kind raw construction))
+           (set! next-pair (vector-ref stage 0))
+           (set! next-registry (vector-ref next-pair 0))
+           (set! entry (car next-registry))
+           (if witness (set! witness (car (vector-ref next-pair 1))))
+           (vector-set! entry 0 shell)
+           (if witness (vector-set! witness 3 shell))
+           (if active-slot (vector-set! active-record-root 2 #f))
+           (vector-set! shell-registry-root 0 next-pair))
          (if active-slot
              (begin
                (vector-set! active-record-root

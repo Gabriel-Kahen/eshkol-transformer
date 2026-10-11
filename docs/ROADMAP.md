@@ -2863,6 +2863,16 @@ publication, public G2 and continuation remain pending.
   and checks original shell/raw/scope/kind tuples in both slot-73 directions.
   The source-only checks pass; the revised IR, failure-atomic publication,
   supported runtime, retention, and C4 admission evidence are still HOLD.
+  Follow-up source candidate B tightens the pending IR checker to trace the
+  actual checked witness field-3 target/value, fresh pair slots 0/1, canonical
+  staged pair root value, and state-entry witness carry SSA. Its test-only
+  overlay removes one witness and injects a recoverable fault after native
+  success but before pair publication. A guard armed before native issuance
+  clears the stage and aborts scoped native tokens on that path; the fixture
+  checks retirement, absence from the current pair, and a
+  clean new-construction retry. These are source-only changes: the CachyOS
+  toolchain gate still prevents compiled or runtime evidence. Independent
+  source/tests review and ROOT review remain required before diagnostic compile.
   Source review and compiled runtime/ABI proof are still required before
   claiming this as a C4 witness.
   Compiled normal/repeat/sanitizer tests, allocation/callback instrumentation,

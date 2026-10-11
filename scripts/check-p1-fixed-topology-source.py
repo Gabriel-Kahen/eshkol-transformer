@@ -49,7 +49,8 @@ for slot, expected in ((9, 15), (10, 17), (11, 4), (12, 5)):
         f"(p1-fixed-count? (vector-ref root {slot}) {expected})") == 1
 assert source.count("Append-only P1-only sealed current-root verifier, slot 73") == 1
 for action in ("detached-module", "detached-handle", "duplicate-shell",
-               "duplicate-record", "missing-entry", "scope-drift",
+               "duplicate-record", "missing-entry", "missing-witness",
+               "scope-drift",
                "raw-drift", "wrong-parent", "wrong-shape",
                "wrong-device", "wrong-counter-type", "wrong-tie",
                "native-wrong-kind", "native-tombstone",
@@ -63,11 +64,33 @@ assert "(reject (car actions)" in fixture
 assert "native identity restored same-root retry" in fixture
 assert "native module restored same-root retry" in fixture
 assert probe.count("(vector-ref shell-registry-root 0) 0") == 4
-assert "(vector-ref shell-registry-root 0) 1" not in probe
+assert probe.count("(vector-ref shell-registry-root 0) 1") == 1
+assert "failed-and-aborted" in probe
+assert "native-success prepublication fault" in fixture
+assert "clean new-construction retry" in fixture
 
 anchor = "\n(vector\n  (lambda (module)"
 assert source.count(anchor) == 1
 overlay = source.replace(anchor, "\n" + probe + anchor, 1)
+prepublication_anchor = (
+    "           (set! shell (native-create-shell kind raw construction))\n"
+    "           (set! next-pair (vector-ref stage 0))\n")
+assert overlay.count(prepublication_anchor) == 1
+overlay = overlay.replace(
+    prepublication_anchor,
+    "           (set! shell (native-create-shell kind raw construction))\n"
+    "           ;; Test-only recoverable fault after native success and before\n"
+    "           ;; any registry or witness shell publication.\n"
+    "           (if (vector-ref p1-fixed-test-prepublication 0)\n"
+    "               (begin\n"
+    "                 (vector-set! p1-fixed-test-prepublication 0 #f)\n"
+    "                 (vector-set! p1-fixed-test-prepublication 1 construction)\n"
+    "                 (vector-set! p1-fixed-test-prepublication 2 shell)\n"
+    "                 (fail 'invalid-state 'p1-fixed-test\n"
+    "                       \"injected prepublication fault\" '())) #t)\n"
+    "           (set! next-pair (vector-ref stage 0))\n",
+    1,
+)
 tail = ("  ;; Append-only P1-only sealed current-root verifier, slot 73.\n"
         "  (lambda (root-shell expected-trie expected-handles)\n"
         "    (p1-fixed-sealed-topology!\n"
@@ -77,10 +100,11 @@ assert overlay.count(tail) == 1
 overlay = overlay.replace(
     tail, tail.replace(
         "  )))",
-        "  ;; Test-only mutation and restoration, slots 74..75.\n"
+        "  ;; Test-only mutation, restoration and fault control, slots 74..76.\n"
         "  (lambda (action root-shell handle-shell)\n"
         "    (p1-fixed-test-mutate! action root-shell handle-shell))\n"
         "  (lambda () (p1-fixed-test-restore!))\n"
+        "  (lambda (mode) (p1-fixed-test-prepublication-control! mode))\n"
         "  )))"),
     1,
 )
