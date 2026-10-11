@@ -88,10 +88,11 @@ rejects(lambda: namespace["pair_fields"](
                   "%next-registry.load, ptr %slot1") for line in pair], "synthetic"))
 pair_publication = pair + [
     "  %active-record-stage.load = load %eshkol_tagged_value, ptr %active-record-stage_cap, align 8",
+    "  %active-slot.load = load %eshkol_tagged_value, ptr %active-slot, align 8",
     "  %next-pair.load0 = load %eshkol_tagged_value, ptr %next-pair, align 8",
     "  %stage.fn.bits = extractvalue %eshkol_tagged_value %active-record-stage.load, 4",
     "  %stage.fn = inttoptr i64 %stage.fn.bits to ptr",
-    "  %stage.call = call %eshkol_tagged_value %stage.fn(%eshkol_tagged_value %next-pair.load0)",
+    "  %stage.call = call %eshkol_tagged_value %stage.fn(%eshkol_tagged_value %active-slot.load, %eshkol_tagged_value %next-pair.load0)",
     "  %call_result = phi %eshkol_tagged_value [ %active-record-stage.load, %return_as_is ], [ %stage.call, %do_direct_call ]",
     "  store %eshkol_tagged_value %call_result, ptr %stage, align 8",
     "  %stage.load = load %eshkol_tagged_value, ptr %stage, align 8",
@@ -135,6 +136,37 @@ wrong_stage_call = [line.replace("%eshkol_tagged_value %next-pair.load0)",
                     for line in pair_publication]
 rejects(lambda: namespace["checked_pair_root_value"](
     wrong_stage_call, len(wrong_stage_call) - 1, "unrelated-stage-call"))
+wrong_position = [line.replace(
+    "%eshkol_tagged_value %active-slot.load, %eshkol_tagged_value %next-pair.load0)",
+    "%eshkol_tagged_value %next-pair.load0, %eshkol_tagged_value %wrong_pair)")
+    for line in pair_publication]
+rejects(lambda: namespace["checked_pair_root_value"](
+    wrong_position, len(wrong_position) - 1, "pair-in-slot-position"))
+extra_argument = [line.replace(
+    "%eshkol_tagged_value %next-pair.load0)",
+    "%eshkol_tagged_value %next-pair.load0, %eshkol_tagged_value %wrong_pair)")
+    for line in pair_publication]
+rejects(lambda: namespace["checked_pair_root_value"](
+    extra_argument, len(extra_argument) - 1, "extra-stage-argument"))
+missing_argument = [line.replace(
+    "%eshkol_tagged_value %active-slot.load, %eshkol_tagged_value %next-pair.load0)",
+    "%eshkol_tagged_value %next-pair.load0)")
+    for line in pair_publication]
+rejects(lambda: namespace["checked_pair_root_value"](
+    missing_argument, len(missing_argument) - 1, "missing-slot-argument"))
+capture_argument = [line.replace(
+    "%eshkol_tagged_value %next-pair.load0)",
+    "%eshkol_tagged_value %next-pair.load0, ptr %cap_ptr_0)")
+    for line in pair_publication]
+namespace["checked_pair_root_value"](
+    capture_argument, len(capture_argument) - 1, "stage-with-capture")
+capture_before_pair = [line.replace(
+    "%eshkol_tagged_value %next-pair.load0)",
+    "ptr %cap_ptr_0, %eshkol_tagged_value %next-pair.load0)")
+    for line in pair_publication]
+rejects(lambda: namespace["checked_pair_root_value"](
+    capture_before_pair, len(capture_before_pair) - 1,
+    "capture-before-pair"))
 overwritten_pair = pair_publication.copy()
 overwritten_pair[-3:-3] = [
     "  %wrong = load %eshkol_tagged_value, ptr %other, align 8",

@@ -2892,6 +2892,13 @@ publication, public G2 and continuation remain pending.
   witness tuples then lack matching entries. The generic vector-ref/car
   branch shape and exact emitted IR remain unverified until the supported
   compile gate; independent and ROOT source review remain HOLD.
+  Independent D review found that the IR checker accepted a fresh pair in
+  the first argument of the two-parameter stage call. Source candidate E
+  requires the exact lowered slot/pair argument order and arity, allowing
+  only trailing closure-capture pointers; wrong-position, extra-argument,
+  and missing-argument mutants reject. The zero-argument witness-carry call
+  and three-pointer barriers already have exact signature checks. Emitted
+  IR and runtime proof remain HOLD pending independent and ROOT source review.
   Source review and compiled runtime/ABI proof are still required before
   claiming this as a C4 witness.
   Compiled normal/repeat/sanitizer tests, allocation/callback instrumentation,

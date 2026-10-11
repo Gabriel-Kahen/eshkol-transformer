@@ -416,11 +416,15 @@ def staged_pair_readback(lines, value, initial_store, canonical_store, name):
     if not re.search(rf"extractvalue %eshkol_tagged_value "
                      rf"{re.escape(captured[0])}, 4$", bits_line):
         raise SystemExit(f"IR proof failed: {name} stage call target changed")
-    pair_args = re.findall(r"%eshkol_tagged_value (%next-pair\.load[0-9]*)",
-                           arguments.group(2))
-    if len(pair_args) != 1:
-        raise SystemExit(f"IR proof failed: {name} stage call lacks pair argument")
-    pair_index, pair_line = ssa_definition(lines, pair_args[0], name)
+    # The two source parameters precede any lowered closure-capture pointers.
+    # A fresh pair in the slot position cannot establish the returned stage[0].
+    stage_args = re.fullmatch(
+        r"%eshkol_tagged_value %[-A-Za-z0-9_.]+, "
+        r"%eshkol_tagged_value (%next-pair\.load[0-9]*)"
+        r"(?:, ptr %[-A-Za-z0-9_.]+)*", arguments.group(2))
+    if stage_args is None:
+        raise SystemExit(f"IR proof failed: {name} stage call slot/pair signature changed")
+    pair_index, pair_line = ssa_definition(lines, stage_args.group(1), name)
     if (not initial_store < pair_index < call_index < writes[-1][0] <
             stage_load_index < canonical_store or
             not re.search(r"load %eshkol_tagged_value, ptr %next-pair,",
