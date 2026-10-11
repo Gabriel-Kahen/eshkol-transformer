@@ -28,6 +28,9 @@ candidate exits HOLD. The synthetic tests supply an isolated anchor only to
 check drift rejection. This checker certifies the anchored F object, call,
 import and depfile inventory; it cannot certify ABI/provider safety until
 independent raw-record review and a later explicit source pin.
+The [image-specific acquisition plan](E3_N1_RAW_RECEIPT_ACQUISITION.md)
+enumerates the missing bytes and capture order. Reviewed claims now bind raw
+record paths as well as hashes.
 
 The separate immutable candidate record at
 /home/gabe/.codex/evidence/eshkol-transformer/e3-section9-n1-receipt-candidate-20261011-a/candidate.json

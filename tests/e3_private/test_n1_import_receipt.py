@@ -172,6 +172,12 @@ class ReceiptTests(unittest.TestCase):
                                     "changed noninstrumentation_imports bytes"):
             self.check(self.receipt)
 
+    def test_same_byte_raw_path_substitution(self):
+        alternate = self.root / "argv-copy.txt"
+        alternate.write_bytes(self.files["argv.txt"].read_bytes())
+        self.rejects(lambda x: x["evidence"]["argv"].update(path=str(alternate)),
+                     "claims differ from reviewed anchor")
+
     def test_provider_and_link_drift(self):
         self.rejects(lambda x: x["provider"]["puts"].update(symbol_version=""),
                      "symbol_version")

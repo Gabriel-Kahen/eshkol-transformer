@@ -137,8 +137,9 @@ def reviewed_claims(data):
         "provider": data["provider"],
         "provider_files": data["provider_files"],
         "headers": data["headers"],
-        "raw_evidence_sha256": {
-            name: data["evidence"][name]["sha256"] for name in
+        "raw_evidence": {
+            name: {field: data["evidence"][name][field] for field in ("path", "sha256")}
+            for name in
             ("argv", "environment", "relocations", "disassembly", "optimized_ir",
              "source_mapping", "declarations", "provider_symbols",
              "resolved_link_map", "loader_search", "needed_closure",
