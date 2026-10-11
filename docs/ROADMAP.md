@@ -56,6 +56,12 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 | TR3 | Trainer state machine and exact resume | M3, L2, O2, D2, C2, E3 | One-batch overfit and interrupted/resumed equivalence | planned |
 | CLI3 | Corpus, tokenizer, pretrain, evaluate, generate and inspect CLIs | T2, TR3, G3, X1 | End-to-end command tests and actionable diagnostics | planned |
 
+## OFF parity audit gate
+
+| ID | Workstream | Depends on | Acceptance evidence | Status |
+|---|---|---|---|---|
+| OFF-LB | [Protected OFF inventory launcher B and Runner I candidate](../tools/off_inventory_launcher_b/PLAN.md) | Runner H source review, launcher A HOLD | Source-only Runner I seal `f59779e33af754ca053872a617e870b69f02bf000197db0e63867b0eb01ca208` and launcher B2 seal `974e2902745a547c0d38ce86df5d52959946c230851c4a0cfea2f7efe81428b6`; synthetic output/ledger/handoff negatives pass; independent/ROOT I and B review, protected installation, external binding, runtime ROOT RELEASE, and F/G product parity remain absent | review |
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
