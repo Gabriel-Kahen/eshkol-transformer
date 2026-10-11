@@ -210,6 +210,65 @@ class AcquisitionTests(unittest.TestCase):
                     acquire(root, pin, expected)
             self.assert_hold_partial(root)
 
+    def test_parent_swap_at_actual_rename_retracts_verified_export(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            pin, expected, _ = fixture(root)
+            moved = root.with_name(root.name + "-moved")
+            actual_rename = mod.rename_noreplace
+            swapped = False
+
+            def swap_at_rename(parent_fd, source_name, target_name):
+                nonlocal swapped
+                if target_name == "export" and not swapped:
+                    root.rename(moved)
+                    root.symlink_to(moved, target_is_directory=True)
+                    swapped = True
+                return actual_rename(parent_fd, source_name, target_name)
+
+            try:
+                with mock.patch.object(mod, "rename_noreplace", side_effect=swap_at_rename):
+                    with self.assertRaisesRegex(mod.Hold, "destination-parent-drift"):
+                        acquire(root, pin, expected)
+                self.assertTrue(swapped)
+                self.assertFalse((moved / "export").exists())
+                self.assert_hold_partial(moved)
+            finally:
+                if root.is_symlink():
+                    root.unlink()
+                    moved.rename(root)
+
+    def test_parent_drift_with_retraction_error_marks_anchored_target_hold(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            pin, expected, _ = fixture(root)
+            moved = root.with_name(root.name + "-moved")
+            actual_rename = mod.rename_noreplace
+            calls = 0
+
+            def fail_retraction(parent_fd, source_name, target_name):
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    root.rename(moved)
+                    root.symlink_to(moved, target_is_directory=True)
+                    return actual_rename(parent_fd, source_name, target_name)
+                raise OSError("synthetic rollback failure")
+
+            try:
+                with mock.patch.object(mod, "rename_noreplace", side_effect=fail_retraction):
+                    with self.assertRaisesRegex(mod.Hold, "destination-parent-drift"):
+                        acquire(root, pin, expected)
+                self.assertEqual(calls, 2)
+                self.assertEqual(json.loads((moved / "export" / "HOLD.json").read_text())["status"], "HOLD")
+                self.assertFalse((moved / "export" / "ACQUISITION.json").exists())
+                for line in (moved / "export" / "SHA256SUMS-ACQUISITION").read_text().splitlines():
+                    digest, name = line.split("  ", 1)
+                    self.assertEqual(sha((moved / "export" / name).read_bytes()), digest)
+            finally:
+                if root.is_symlink():
+                    root.unlink()
+                    moved.rename(root)
     def assert_hold_partial(self, root):
         self.assertFalse((root / "export").exists())
         stages = list(root.glob(".e3-n1-HOLD-*"))

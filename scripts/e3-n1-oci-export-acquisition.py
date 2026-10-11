@@ -11,8 +11,8 @@ import hashlib
 import json
 import os
 import resource
+import secrets
 import stat
-import tempfile
 import time
 from pathlib import Path
 
@@ -89,18 +89,31 @@ def metadata(st):
             "inode": st.st_ino, "mtime_ns": st.st_mtime_ns, "ctime_ns": st.st_ctime_ns}
 
 
-def open_regular(path):
-    """Walk every component without following a symlink, including parents."""
+def open_directory(path):
+    """Anchor a directory through no-follow opens of every component."""
     path = absolute(path)
-    parts = Path(path).parts[1:]
-    need(bool(parts), "invalid-path")
     directory = os.open("/", os.O_RDONLY | os.O_DIRECTORY)
     try:
-        for part in parts[:-1]:
+        for part in Path(path).parts[1:]:
             following = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory)
             os.close(directory)
             directory = following
-        fd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+        result = directory
+        directory = None
+        return result
+    finally:
+        if directory is not None:
+            os.close(directory)
+
+
+def open_regular(path):
+    """Walk every component without following a symlink, including parents."""
+    path = absolute(path)
+    need(path != "/", "invalid-path")
+    directory = open_directory(os.path.dirname(path))
+    try:
+        fd = os.open(os.path.basename(path), os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                     dir_fd=directory)
         need(stat.S_ISREG(os.fstat(fd).st_mode), "nonregular-source")
         return fd
     finally:
@@ -286,13 +299,48 @@ def seal(stage, hashes, status, reason, pin_sha):
         os.close(dfd)
 
 
-def rename_noreplace(source, target):
+def rename_noreplace(parent_fd, source_name, target_name):
+    need("/" not in source_name and "/" not in target_name and source_name and target_name,
+         "rename-name")
     libc = ctypes.CDLL(None, use_errno=True)
     function = libc.renameat2
     function.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
-    result = function(-100, os.fsencode(source), -100, os.fsencode(target), 1)
+    result = function(parent_fd, os.fsencode(source_name), parent_fd, os.fsencode(target_name), 1)
     if result != 0:
-        raise OSError(ctypes.get_errno(), os.strerror(ctypes.get_errno()), target)
+        raise OSError(ctypes.get_errno(), os.strerror(ctypes.get_errno()), target_name)
+
+
+def check_named_parent(dest, parent_fd, target_name=None, stage_identity=None):
+    """Require the requested path still to name the anchored parent and target."""
+    parent = dest["parent"]
+    need(os.path.realpath(parent) == parent, "destination-parent-drift")
+    named = os.lstat(parent)
+    anchored = os.fstat(parent_fd)
+    need(stat.S_ISDIR(named.st_mode) and named.st_mode == dest["parent_mode"] and
+         named.st_dev == dest["parent_device"] and named.st_ino == dest["parent_inode"] and
+         (named.st_dev, named.st_ino) == (anchored.st_dev, anchored.st_ino),
+         "destination-parent-drift")
+    if target_name is not None:
+        visible = os.lstat(dest["path"])
+        held = os.stat(target_name, dir_fd=parent_fd, follow_symlinks=False)
+        need(stat.S_ISDIR(visible.st_mode) and
+             (visible.st_dev, visible.st_ino) == (held.st_dev, held.st_ino) == stage_identity,
+             "destination-target-drift")
+        final_parent = os.lstat(parent)
+        need(os.path.realpath(parent) == parent and stat.S_ISDIR(final_parent.st_mode) and
+             (final_parent.st_dev, final_parent.st_ino) == (anchored.st_dev, anchored.st_ino),
+             "destination-parent-drift")
+
+
+def create_stage(parent_fd):
+    for _ in range(8):
+        name = ".e3-n1-HOLD-" + secrets.token_hex(12)
+        try:
+            os.mkdir(name, mode=0o700, dir_fd=parent_fd)
+            return name
+        except FileExistsError:
+            continue
+    raise Hold("stage-name-collision")
 
 
 def run(pin_path):
@@ -319,7 +367,16 @@ def run(pin_path):
     except (TypeError, KeyError, IndexError, ValueError) as error:
         raise Hold("invalid-pin") from error
     dest = pin["destination"]
-    stage = Path(tempfile.mkdtemp(prefix=".e3-n1-HOLD-", dir=dest["parent"]))
+    parent_fd = open_directory(dest["parent"])
+    try:
+        check_named_parent(dest, parent_fd)
+        stage_name = create_stage(parent_fd)
+    except Exception:
+        os.close(parent_fd)
+        raise
+    stage = Path(f"/proc/self/fd/{parent_fd}/{stage_name}")
+    stage_st = os.lstat(stage)
+    stage_identity = (stage_st.st_dev, stage_st.st_ino)
     hashes = {}
     try:
         reserve = stage / ".hold-reserve"
@@ -348,33 +405,50 @@ def run(pin_path):
         write_new(stage / "index.json", small["index"], hashes)
         write_new(stage / "oci-layout", b'{"imageLayoutVersion":"1.0.0"}\n', hashes)
         sample(deadline, limits["max_rss_bytes"])
-        need(not os.path.lexists(dest["path"]) and os.path.realpath(dest["parent"]) == dest["parent"],
+        check_named_parent(dest, parent_fd)
+        need(not os.path.lexists(dest["path"]) and
+             not os.path.lexists(os.path.join(str(stage.parent), os.path.basename(dest["path"]))),
              "destination-drift")
-        parent_st = os.lstat(dest["parent"])
-        need(stat.S_ISDIR(parent_st.st_mode) and parent_st.st_mode == dest["parent_mode"] and
-             parent_st.st_dev == dest["parent_device"] and parent_st.st_ino == dest["parent_inode"],
-             "destination-parent-drift")
         reserve.unlink()
         seal(stage, hashes, "VERIFIED", None, pin_sha)
         sample(deadline, limits["max_rss_bytes"])
-        parent_fd = os.open(dest["parent"], os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        os.fsync(parent_fd)
+        target_name = os.path.basename(dest["path"])
+        rename_noreplace(parent_fd, stage_name, target_name)
         try:
             os.fsync(parent_fd)
-        finally:
-            os.close(parent_fd)
-        rename_noreplace(stage, dest["path"])
+            check_named_parent(dest, parent_fd, target_name, stage_identity)
+        except Exception as error:
+            try:
+                rename_noreplace(parent_fd, target_name, stage_name)
+            except Exception:
+                # Keep any still-present anchored target out of VERIFIED state.
+                previous_stage = stage
+                stage = Path(f"/proc/self/fd/{parent_fd}/{target_name}")
+                hashes = {str(stage / Path(path).relative_to(previous_stage)): value
+                          for path, value in hashes.items()}
+            raise Hold("destination-parent-drift") from error
         return dest["path"]
     except Exception as error:
+        try:
+            current = os.lstat(stage)
+        except OSError:
+            raise Hold("publication-retraction-failed") from error
+        if not stat.S_ISDIR(current.st_mode) or (current.st_dev, current.st_ino) != stage_identity:
+            raise Hold("publication-retraction-failed") from error
         reserve = stage / ".hold-reserve"
         if reserve.exists():
             reserve.unlink()
         if (stage / "SHA256SUMS-ACQUISITION").exists():
             (stage / "SHA256SUMS-ACQUISITION").unlink()
+        if (stage / "ACQUISITION.json").exists():
             (stage / "ACQUISITION.json").unlink()
             hashes.pop(str(stage / "ACQUISITION.json"), None)
         reason = str(error) if isinstance(error, Hold) else type(error).__name__
         seal(stage, hashes, "HOLD", reason[:120], pin_sha)
         raise
+    finally:
+        os.close(parent_fd)
 
 
 def main():
