@@ -1547,6 +1547,20 @@ publication transaction. Full G3-R still requires a separately admitted larger
 repeated-decode and later-EOS continuation profile. No persistence implementation
 or save/reload equivalence is claimed.
 
+The private G3-R SAVE witness contract is blocked at upstream source admission
+(ref audit 2026-10-11). The reachable committed-history owner
+`0714cac5` exposes an idle native policy/RNG/history snapshot, but its own
+contract leaves same-aggregate Eshkol generator/model/T1 authentication,
+stable leases and A2 cache-length verification to a later SAVE wrapper. The
+reachable receipt-to-M3T restore proposal `83a8fb10` requires exact restored
+f32 value bits, unchanged gradient values/counts and tied-head handle/storage
+identity; it says the typed copyout/comparison witness still needs review and
+is not merged into main. No accepted exact source commits and independent
+review seals for G3-R SAVE admission controls and that f32 parameter/gradient
+comparison are reachable in the fetched refs. Do not derive
+same-handle SAVE semantics or static tests from the detached C2/TR3 paths;
+repin and review both prerequisites before specifying that dependent contract.
+
 The [private G3-R fixed-record codec leaf](g3/G3_R_RECORD_CODEC_LEAF.md)
 stages an in-memory 288-byte encoder/decoder using the existing C1 SHA-256.
 It validates the exact policy, G3-S words, history/EOS partition, T1
