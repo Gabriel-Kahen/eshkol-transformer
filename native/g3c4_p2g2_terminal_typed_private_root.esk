@@ -1,0 +1,8 @@
+;;; Isolated source-private P2/G2 composition. Never install this root.
+(load "g3g_manual_package_root.esk")
+(load "g3c4_p2g2_ownership_extension.esk")
+(load "g3c4_p2g2_protected_scope_extension.esk")
+(load "g3c4_p2g2_t1_prefix_coordinator_extension.esk")
+(load "g3c4_p2g2_terminal_close_extension.esk")
+(load "g3c4_p2g2_terminal_detached_extension.esk")
+(load "g3c4_p2g2_terminal_typed_extension.esk")

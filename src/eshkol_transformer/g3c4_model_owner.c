@@ -9090,6 +9090,24 @@ int64_t et_g3c4_private_p2g2_typed_length_v1(void *candidate) {
   return length;
 }
 
+int64_t et_g3c4_private_p2g2_typed_kind_v1(void *candidate) {
+  et_g3c4_typed_result_internal *result;
+  int64_t words[2] = {0, 0};
+  uint32_t kind;
+  et_g3c4_error_reset_internal();
+  result = et_g3c4_typed_admit(candidate, 0);
+  if (result == NULL) return -1;
+  kind = result->transport.kind;
+  if (et_g3c4_typed_read(result, words) != 0) return -1;
+  result = et_g3c4_typed_admit(candidate, 0);
+  if (result == NULL) return -1;
+  if (result->transport.kind != kind) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return -1;
+  }
+  return (int64_t)kind;
+}
+
 int64_t et_g3c4_private_p2g2_typed_element_v1(
     void *candidate, int64_t index, int64_t *value) {
   et_g3c4_typed_result_internal *result;
@@ -9118,6 +9136,15 @@ int64_t et_g3c4_private_p2g2_typed_element_v1(
     return et_g3c4_error_state.category;
   *value = words[index];
   return 0;
+}
+
+int64_t et_g3c4_private_p2g2_typed_value_v1(
+    void *candidate, int64_t index) {
+  int64_t value = -1;
+  if (et_g3c4_private_p2g2_typed_element_v1(
+          candidate, index, &value) != 0)
+    return -1;
+  return value;
 }
 
 int64_t et_g3c4_private_p2g2_typed_release_v1(void *candidate) {

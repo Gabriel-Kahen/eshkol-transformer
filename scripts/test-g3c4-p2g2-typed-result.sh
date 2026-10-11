@@ -60,9 +60,11 @@ comm -13 "$out/owner-off.symbols" "$out/owner-on.symbols" \
 printf '%s\n' \
   et_g3c4_private_p2g2_typed_element_v1 \
   et_g3c4_private_p2g2_typed_ids_create_v1 \
+  et_g3c4_private_p2g2_typed_kind_v1 \
   et_g3c4_private_p2g2_typed_length_v1 \
   et_g3c4_private_p2g2_typed_release_v1 \
   et_g3c4_private_p2g2_typed_scalar_create_v1 \
+  et_g3c4_private_p2g2_typed_value_v1 \
   >"$out/typed-expected.symbols"
 cmp "$out/typed-expected.symbols" "$out/typed-only.symbols"
 if "$cc" "${flags[@]}" -DET_G3C4_P2_G2_TYPED_RESULT_PRIVATE \

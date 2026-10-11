@@ -262,8 +262,12 @@ int64_t et_g3c4_private_p2g2_terminal_ids_clone_release_v1(void *clone);
 void *et_g3c4_private_p2g2_typed_ids_create_v1(void *logical_clone);
 void *et_g3c4_private_p2g2_typed_scalar_create_v1(int64_t kind, int64_t value);
 int64_t et_g3c4_private_p2g2_typed_length_v1(void *owner);
+int64_t et_g3c4_private_p2g2_typed_kind_v1(void *owner);
 int64_t et_g3c4_private_p2g2_typed_element_v1(
     void *owner, int64_t index, int64_t *value);
+/* Eshkol-safe scalar readback; valid typed values are nonnegative, so -1
+ * reports the preserved C4 error without exposing a writable pointer. */
+int64_t et_g3c4_private_p2g2_typed_value_v1(void *owner, int64_t index);
 int64_t et_g3c4_private_p2g2_typed_release_v1(void *owner);
 #endif
 

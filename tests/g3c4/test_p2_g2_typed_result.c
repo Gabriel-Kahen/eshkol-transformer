@@ -110,14 +110,21 @@ static void typed_case(et_g3c4_model_owner_internal *model, int first_eos) {
   CHECK(et_g3c4_private_p2g2_typed_length_v1(ids) == length);
   CHECK(et_g3c4_private_p2g2_typed_length_v1(lengths) == 1);
   CHECK(et_g3c4_private_p2g2_typed_length_v1(cache) == 1);
+  CHECK(et_g3c4_private_p2g2_typed_kind_v1(ids) == 10);
+  CHECK(et_g3c4_private_p2g2_typed_kind_v1(lengths) == 11);
+  CHECK(et_g3c4_private_p2g2_typed_kind_v1(cache) == 12);
   for (int64_t index = 0; index < length; index++) {
     OK(et_g3c4_private_p2g2_typed_element_v1(ids, index, &value));
     CHECK(value == expected[index]);
+    CHECK(et_g3c4_private_p2g2_typed_value_v1(ids, index) == expected[index]);
   }
   OK(et_g3c4_private_p2g2_typed_element_v1(lengths, 0, &value));
   CHECK(value == length);
   OK(et_g3c4_private_p2g2_typed_element_v1(cache, 0, &value));
   CHECK(value == 2 + length);
+  CHECK(et_g3c4_private_p2g2_typed_value_v1(lengths, 0) == length);
+  CHECK(et_g3c4_private_p2g2_typed_value_v1(cache, 0) == 2 + length);
+  CHECK(et_g3c4_private_p2g2_typed_value_v1(ids, length) == -1);
   value = -99;
   CHECK(et_g3c4_private_p2g2_typed_element_v1(ids, length, &value) != 0);
   CHECK(value == -99);

@@ -1,0 +1,133 @@
+;;; Source-private terminal-to-typed-I1 bridge. Load after the detached
+;;; extension in the same registry. No public profile or dispatch is added.
+
+(extern ptr g3c4-p2g2-native-typed-ids-create ptr
+        :real et_g3c4_private_p2g2_typed_ids_create_v1)
+(extern ptr g3c4-p2g2-native-typed-scalar-create i64 i64
+        :real et_g3c4_private_p2g2_typed_scalar_create_v1)
+(extern i64 g3c4-p2g2-native-typed-release ptr
+        :real et_g3c4_private_p2g2_typed_release_v1)
+(extern i64 g3c4-p2g2-native-typed-length ptr
+        :real et_g3c4_private_p2g2_typed_length_v1)
+(extern i64 g3c4-p2g2-native-typed-kind ptr
+        :real et_g3c4_private_p2g2_typed_kind_v1)
+(extern i64 g3c4-p2g2-native-typed-value ptr i64
+        :real et_g3c4_private_p2g2_typed_value_v1)
+
+(define (g3c4-p2g2-terminal-typed-source-check
+          source-shell shell entry owner native snapshot operation)
+  (let ((current (g3c4-p2g2-terminal-snapshot-internal source-shell))
+        (copy (g3c4-p2g2-terminal-ids-copy-internal shell))
+        (count (vector-ref snapshot 2)))
+    (let loop ((index 0))
+      (if (< index 8)
+          (if (= (vector-ref current index) (vector-ref snapshot index))
+              (loop (+ index 1))
+              (g3c4-fail 'invalid-state operation
+                         "terminal snapshot changed during typed copy"))))
+    (if (not (and (eq? entry
+                       (g3c4-p2g2-terminal-ids-entry shell operation #f))
+                  (eq? owner (g3c4-p2g2-terminal-ids-owner-for shell))
+                  (eq? entry (vector-ref owner 1))
+                  (eq? native (vector-ref owner 2))
+                  (eq? native (vector-ref entry 3))
+                  (= (vector-ref owner 3) count)
+                  (= (vector-ref snapshot 3) (+ 2 count))
+                  (= (bytevector-length copy) count)
+                  (= (bytevector-u8-ref copy 0) (vector-ref snapshot 0))
+                  (if (= count 1)
+                      (= (vector-ref snapshot 1) 0)
+                      (= (bytevector-u8-ref copy 1)
+                         (vector-ref snapshot 1)))))
+        (g3c4-fail 'invalid-state operation
+                   "terminal typed clone disagrees with snapshot"))))
+
+(define (g3c4-p2g2-terminal-typed-value owner index operation)
+  (let ((value (g3c4-p2g2-native-typed-value owner index)))
+    (if (< value 0) (g3c4-native-fail operation))
+    value))
+
+(define (g3c4-p2g2-terminal-typed-length owner operation)
+  (let ((length (g3c4-p2g2-native-typed-length owner)))
+    (if (< length 0) (g3c4-native-fail operation))
+    length))
+
+(define (g3c4-p2g2-terminal-typed-kind owner operation)
+  (let ((kind (g3c4-p2g2-native-typed-kind owner)))
+    (if (< kind 0) (g3c4-native-fail operation))
+    kind))
+
+;;; Returns three independent native owners: IDs I1 [G], length I1 [1],
+;;; and cache length I1 [1]. This private tuple is not a public tensor shell.
+;;; Snapshot and clone each complete their own m3-call before this function
+;;; accesses the native clone. Every failure releases only newly made owners.
+(define (g3c4-p2g2-terminal-typed-create-internal source-shell)
+  (let ((snapshot (g3c4-p2g2-terminal-snapshot-internal source-shell))
+        (clone-shell #f) (ids '()) (lengths '()) (cache-lengths '()))
+    (guard (caught
+             (#t
+               (if (not (null? cache-lengths))
+                   (if (not (= (g3c4-p2g2-native-typed-release
+                                  cache-lengths) 0)) (exit 134)))
+               (if (not (null? lengths))
+                   (if (not (= (g3c4-p2g2-native-typed-release
+                                  lengths) 0)) (exit 134)))
+               (if (not (null? ids))
+                   (if (not (= (g3c4-p2g2-native-typed-release ids) 0))
+                       (exit 134)))
+               (if clone-shell
+                   (guard (release-failure (#t (exit 134)))
+                     (g3c4-p2g2-terminal-ids-release-internal! clone-shell)))
+               (raise caught)))
+      (let* ((created (g3c4-p2g2-terminal-ids-clone-internal source-shell))
+             (shell (car created)))
+        (set! clone-shell shell)
+        (let* ((operation 'g3c4-p2g2-terminal-typed-create-internal)
+             (entry (g3c4-p2g2-terminal-ids-entry shell operation #f))
+             (owner (g3c4-p2g2-terminal-ids-owner-for shell))
+             (native (vector-ref entry 3))
+             (count (vector-ref snapshot 2))
+             (cache (vector-ref snapshot 3)))
+        (g3c4-p2g2-terminal-typed-source-check
+          source-shell shell entry owner native snapshot operation)
+        (set! ids (g3c4-p2g2-native-typed-ids-create native))
+        (if (null? ids) (g3c4-native-fail operation))
+        (g3c4-p2g2-terminal-typed-source-check
+          source-shell shell entry owner native snapshot operation)
+        (set! lengths (g3c4-p2g2-native-typed-scalar-create 11 count))
+        (if (null? lengths) (g3c4-native-fail operation))
+        (g3c4-p2g2-terminal-typed-source-check
+          source-shell shell entry owner native snapshot operation)
+        (set! cache-lengths
+              (g3c4-p2g2-native-typed-scalar-create 12 cache))
+        (if (null? cache-lengths) (g3c4-native-fail operation))
+        (g3c4-p2g2-terminal-typed-source-check
+          source-shell shell entry owner native snapshot operation)
+        (if (not (and (= (g3c4-p2g2-terminal-typed-kind ids operation) 10)
+                      (= (g3c4-p2g2-terminal-typed-kind lengths operation)
+                         11)
+                      (= (g3c4-p2g2-terminal-typed-kind
+                           cache-lengths operation) 12)
+                      (= (g3c4-p2g2-terminal-typed-length ids operation)
+                         count)
+                      (= (g3c4-p2g2-terminal-typed-length lengths operation)
+                         1)
+                      (= (g3c4-p2g2-terminal-typed-length
+                           cache-lengths operation) 1)
+                      (= (g3c4-p2g2-terminal-typed-value ids 0 operation)
+                         (vector-ref snapshot 0))
+                      (if (= count 1)
+                          #t
+                          (= (g3c4-p2g2-terminal-typed-value ids 1 operation)
+                             (vector-ref snapshot 1)))
+                      (= (g3c4-p2g2-terminal-typed-value
+                           lengths 0 operation) count)
+                      (= (g3c4-p2g2-terminal-typed-value
+                           cache-lengths 0 operation) cache)))
+            (g3c4-fail 'invalid-state operation
+                       "terminal typed I1 differs from authenticated clone"))
+        (g3c4-p2g2-terminal-typed-source-check
+          source-shell shell entry owner native snapshot operation)
+        (g3c4-p2g2-terminal-ids-release-internal! shell)
+        (set! clone-shell #f)
+        (vector ids lengths cache-lengths))))))

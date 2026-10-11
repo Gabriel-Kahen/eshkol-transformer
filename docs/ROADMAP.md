@@ -2673,11 +2673,18 @@ publication, public G2 and continuation remain pending.
   authenticated logical clone into an independent dense CPU-i64 I1 `[G]`,
   while length/cache scalar I1 `[1]` stores `G=1/2` or `2+G=3/4`. Native
   length/element inspection and exact-owner release reject wrong kinds,
-  malformed storage and held leases. Focused normal/repeat/ASan+UBSan runs
+  malformed storage and held leases. On the accepted typed predecessor,
+  focused normal/repeat/ASan+UBSan runs
   each pass 383 checks, including all four I1 create cuts, copy failures,
   live/dead control-tail alias walkers and exact feature symbol delta;
   independent review and supported integration remain pending. Existing
   public P2/G1 remains capped at one token with EOS off.
+  A [private same-registry terminal-to-typed source candidate](g3/G3_C4_P2_G2_TERMINAL_TYPED_COMPOSITION_GATE.md)
+  now loads the terminal, detached and typed extensions in one isolated
+  G3-G root and derives three independent I1 owners from an authenticated
+  terminal snapshot and logical clone. Its focused source gate passes 14
+  tests. Compiled same-call, fault, ownership, feature-off and independent
+  review gates remain pending; public P2/G2 dispatch stays disabled.
 
 ## Wave 4 — practical pretraining and performance
 
