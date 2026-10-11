@@ -30,6 +30,20 @@ parser_spec.loader.exec_module(parser)
 
 
 class RunnerTest(unittest.TestCase):
+    def test_caller_owned_completion_modes_are_reversible(self):
+        # Runner J's final chmod does not authenticate caller-owned output.
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / 'caller-owned-output'
+            output.mkdir(mode=0o700)
+            result = output / 'RESULT.json'
+            result.write_text('original\n')
+            result.chmod(0o444)
+            output.chmod(0o555)
+            output.chmod(0o700)
+            result.chmod(0o600)
+            result.write_text('forged\n')
+            self.assertEqual(result.read_text(), 'forged\n')
+
     def test_plain_python_exec_resets_nondumpable_state(self):
         # An in-launcher PR_SET_DUMPABLE(0) does not protect inherited FD3
         # after the current ordinary-Python exec. This is a kernel contract
