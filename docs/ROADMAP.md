@@ -2662,6 +2662,15 @@ publication, public G2 and continuation remain pending.
   integration, and public G2 review remain pending. No public G2 or
   continuation acceptance is claimed.
 
+- **Fixed public C4 P2/G2 contract proposal:**
+  [profile, producer dispatch, typed result and release gate](g3/G3_C4_P2_G2_PUBLIC_CONTRACT_PROPOSAL.md)
+  specifies a distinct `diagnostic-c4-p2g2` profile with exact budget two
+  and optional byte EOS. It is documentation for independent review, not an
+  installed API. Private compiled same-call/integration proof, a reviewed
+  public logical-I1 element-access or typed-constructor path, public adapter
+  and producer implementation, and supported end-to-end evidence remain
+  blockers. Existing public P2/G1 remains capped at one token with EOS off.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
