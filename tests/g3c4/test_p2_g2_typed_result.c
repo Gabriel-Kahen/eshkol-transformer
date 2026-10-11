@@ -14,6 +14,22 @@ static size_t typed_live_count(void) {
   return count;
 }
 
+static void typed_alias_walkers(
+    et_g3c4_model_owner_internal *model,
+    et_g3c4_typed_result_internal *result) {
+  et_g3c4_context_internal *context = create_generator(model);
+  const void *tail = &result->values[1];
+  unsigned char before[sizeof(*result)];
+  memcpy(before, result, sizeof(before));
+  CHECK(et_g3c4_copyout_carrier_preflight(tail, 8u) ==
+        ET_G3C4_INVALID_ARGUMENT);
+  CHECK(et_g3c4_output_decode_owned_alias(context, tail, 8u) != 0);
+  CHECK(et_g3c4_p2g2_carrier_owned_alias(context, tail, 8u) != 0);
+  CHECK(et_g3c4_terminal_snapshot_alias(tail, 8u) != 0);
+  CHECK(memcmp(before, result, sizeof(before)) == 0);
+  OK(et_g3c4_private_generator_close_v1(context));
+}
+
 static void typed_case(et_g3c4_model_owner_internal *model, int first_eos) {
   int64_t expected[2] = {0, 0}, value = -99;
   et_g3c4_output_internal *output =
@@ -26,10 +42,47 @@ static void typed_case(et_g3c4_model_owner_internal *model, int first_eos) {
   CHECK(et_g3c4_private_p2g2_typed_ids_create_v1(clone) == NULL);
   CHECK(typed_live_count() == before);
   et_g3c4_context_allocation_limit = SIZE_MAX;
-  for (size_t cut = 0; cut < 2u; cut++) {
+  for (size_t cut = 0; cut < 7u; cut++) {
     et_i64_tensor_test_fail_alloc_after_v1(cut);
     CHECK(et_g3c4_private_p2g2_typed_ids_create_v1(clone) == NULL);
     et_i64_tensor_test_reset_allocator_v1();
+    CHECK(et_g3c4_private_last_error_domain_v1() == ET_G3C4_DOMAIN_I1);
+    CHECK(et_g3c4_private_last_error_category_v1() ==
+          ET_I64_TENSOR_ERROR_INTERNAL);
+    CHECK(et_g3c4_private_last_error_code_v1() ==
+          ET_I64_TENSOR_CODE_ALLOCATION_FAILED);
+    CHECK(typed_live_count() == before);
+  }
+  fail_terminal_copy = 1;
+  CHECK(et_g3c4_private_p2g2_typed_ids_create_v1(clone) == NULL);
+  CHECK(et_g3c4_private_last_error_domain_v1() == ET_G3C4_DOMAIN_I1);
+  CHECK(et_g3c4_private_last_error_code_v1() ==
+        ET_I64_TENSOR_CODE_PROVIDER_REJECTED);
+  fail_terminal_copy = 0;
+  CHECK(typed_live_count() == before);
+  const int64_t length = first_eos ? 1 : 2;
+  for (int64_t kind = 11; kind <= 12; kind++) {
+    const int64_t scalar = kind == 11 ? length : 2 + length;
+    et_g3c4_context_allocation_limit =
+        et_g3c4_context_successful_allocations;
+    CHECK(et_g3c4_private_p2g2_typed_scalar_create_v1(kind, scalar) == NULL);
+    et_g3c4_context_allocation_limit = SIZE_MAX;
+    CHECK(typed_live_count() == before);
+    for (size_t cut = 0; cut < 4u; cut++) {
+      et_i64_tensor_test_fail_alloc_after_v1(cut);
+      CHECK(et_g3c4_private_p2g2_typed_scalar_create_v1(kind, scalar) == NULL);
+      et_i64_tensor_test_reset_allocator_v1();
+      CHECK(et_g3c4_private_last_error_domain_v1() == ET_G3C4_DOMAIN_I1);
+      CHECK(et_g3c4_private_last_error_code_v1() ==
+            ET_I64_TENSOR_CODE_ALLOCATION_FAILED);
+      CHECK(typed_live_count() == before);
+    }
+    fail_terminal_copy = 1;
+    CHECK(et_g3c4_private_p2g2_typed_scalar_create_v1(kind, scalar) == NULL);
+    CHECK(et_g3c4_private_last_error_domain_v1() == ET_G3C4_DOMAIN_I1);
+    CHECK(et_g3c4_private_last_error_code_v1() ==
+          ET_I64_TENSOR_CODE_PROVIDER_REJECTED);
+    fail_terminal_copy = 0;
     CHECK(typed_live_count() == before);
   }
   et_i64_tensor_error error;
@@ -41,10 +94,10 @@ static void typed_case(et_g3c4_model_owner_internal *model, int first_eos) {
   OK(et_i64_tensor_borrow_end_v1(&lease, &error));
   void *ids = et_g3c4_private_p2g2_typed_ids_create_v1(clone);
   void *ids_again = et_g3c4_private_p2g2_typed_ids_create_v1(clone);
-  const int64_t length = first_eos ? 1 : 2;
   void *lengths = et_g3c4_private_p2g2_typed_scalar_create_v1(11, length);
   void *cache = et_g3c4_private_p2g2_typed_scalar_create_v1(12, 2 + length);
   CHECK(ids && ids_again && lengths && cache && ids != ids_again);
+  typed_alias_walkers(model, ids);
   uint64_t extent = 0;
   OK(et_i64_tensor_shape_at_v1(
       ((et_g3c4_typed_result_internal *)ids)->tensor, 0u,
@@ -100,6 +153,7 @@ static void typed_case(et_g3c4_model_owner_internal *model, int first_eos) {
   CHECK(value == expected[0]);
   OK(et_g3c4_private_p2g2_typed_release_v1(ids));
   OK(et_g3c4_private_p2g2_typed_release_v1(ids));
+  typed_alias_walkers(model, ids);
   CHECK(et_g3c4_private_p2g2_typed_element_v1(ids_again, 0,
         &((et_g3c4_typed_result_internal *)ids)->length) != 0);
   CHECK(et_g3c4_private_p2g2_typed_length_v1(ids) == -1);

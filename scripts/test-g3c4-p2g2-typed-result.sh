@@ -22,6 +22,58 @@ sources=("$root/tests/g3c4/test_p2_g2_typed_result.c"
   "$root/native/g3n_primitives_provider.c"
   "$root/native/n2_primitives_provider.c"
   "$root/native/a2_kv_cache.c")
+owner_macros=(-DET_G3C4_CONTEXT_PRIVATE -DET_G3C4_NATIVE_PINS_PRIVATE
+  -DET_G3C4_ACTIVE_CALL_PRIVATE -DET_G3C4_GENERATOR_PRIVATE
+  -DET_G3C4_PROMPT_T1_BORROW_PRIVATE -DET_G3C4_PROVIDER_ROUTES_PRIVATE
+  -DET_G3C4_FULL_PREFIX_FORWARD_PRIVATE -DET_G3C4_SAMPLER_TRANSPORT_PRIVATE
+  -DET_G3C4_TOKEN_FRAME_PRIVATE -DET_G3C4_TOKEN_FORWARD_PRIVATE
+  -DET_G3C4_PREFILL3_PRIVATE -DET_G3C4_PREFILL1_PRIVATE
+  -DET_G3C4_PREFILL2_PRIVATE -DET_G3C4_PROMPT_PREFILL_PRIVATE
+  -DET_G3C4_OUTPUT_RESERVATION_PRIVATE -DET_G3C4_LAST_LOGIT_FRAME_PRIVATE
+  -DET_G3C4_OUTPUT_PREPARE_PRIVATE -DET_G3C4_OUTPUT_DECODE_IDS_PRIVATE
+  -DET_G3C4_OUTPUT_TEXT_PRIVATE -DET_G3C4_P2_G1_PENDING_PRIVATE
+  -DET_G3C4_P2_G1_PUBLICATION_PRIVATE -DET_G3C4_P2_G1_COPYOUT_PRIVATE
+  -DET_G3C4_P2_G1_PUBLIC_RESULT_PRIVATE
+  -DET_G3C4_P2_G2_FIRST_FRAME_PRIVATE -DET_G3C4_P2_G2_PREFIX_COMMIT_PRIVATE
+  -DET_G3C4_P2_G2_CARRIER_BRIDGE_PRIVATE
+  -DET_G3C4_P2_G2_EOS_FIRST_FRAME_PRIVATE
+  -DET_G3C4_P2_G2_SECOND_FRAME_PRIVATE
+  -DET_G3C4_P2_G2_TERMINAL_PRIVATE
+  -DET_G3C4_P2_G2_TERMINAL_IDS_CLONE_PRIVATE)
+for feature in off on; do
+  enabled=()
+  if [[ "$feature" == on ]]; then
+    enabled=(-DET_G3C4_P2_G2_TYPED_RESULT_PRIVATE)
+  fi
+  "$cc" "${flags[@]}" "${owner_macros[@]}" "${enabled[@]}" \
+    -O2 -c "$root/src/eshkol_transformer/g3c4_model_owner.c" \
+    -o "$out/owner-$feature.o" \
+    >"$out/owner-$feature.compile.stdout" \
+    2>"$out/owner-$feature.compile.stderr"
+  test ! -s "$out/owner-$feature.compile.stderr"
+  nm -g --defined-only --format=posix "$out/owner-$feature.o" |
+    awk 'NF >= 2 {print $1}' | LC_ALL=C sort -u \
+    >"$out/owner-$feature.symbols"
+done
+comm -13 "$out/owner-off.symbols" "$out/owner-on.symbols" \
+  >"$out/typed-only.symbols"
+printf '%s\n' \
+  et_g3c4_private_p2g2_typed_element_v1 \
+  et_g3c4_private_p2g2_typed_ids_create_v1 \
+  et_g3c4_private_p2g2_typed_length_v1 \
+  et_g3c4_private_p2g2_typed_release_v1 \
+  et_g3c4_private_p2g2_typed_scalar_create_v1 \
+  >"$out/typed-expected.symbols"
+cmp "$out/typed-expected.symbols" "$out/typed-only.symbols"
+if "$cc" "${flags[@]}" -DET_G3C4_P2_G2_TYPED_RESULT_PRIVATE \
+    -c "$root/src/eshkol_transformer/g3c4_model_owner.c" \
+    -o "$out/isolated.o" >"$out/isolated.stdout" \
+    2>"$out/isolated.stderr"; then
+  echo 'isolated typed feature unexpectedly compiled' >&2
+  exit 1
+fi
+grep -F 'typed P2/G2 results require the logical I1 clone prerequisite' \
+  "$out/isolated.stderr" >/dev/null
 wraps=(-Wl,--wrap=et_kernel_runtime_dispatch
   -Wl,--wrap=et_i64_tensor_borrow_view_v1
   -Wl,--wrap=et_a2_kv_cache_transaction_view_end_v1

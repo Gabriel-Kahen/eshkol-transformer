@@ -2674,8 +2674,10 @@ publication, public G2 and continuation remain pending.
   while length/cache scalar I1 `[1]` stores `G=1/2` or `2+G=3/4`. Native
   length/element inspection and exact-owner release reject wrong kinds,
   malformed storage and held leases. Focused normal/repeat/ASan+UBSan runs
-  each pass 197 checks; independent review and supported integration remain
-  pending. Existing public P2/G1 remains capped at one token with EOS off.
+  each pass 383 checks, including all four I1 create cuts, copy failures,
+  live/dead control-tail alias walkers and exact feature symbol delta;
+  independent review and supported integration remain pending. Existing
+  public P2/G1 remains capped at one token with EOS off.
 
 ## Wave 4 — practical pretraining and performance
 
