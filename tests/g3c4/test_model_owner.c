@@ -1,6 +1,7 @@
 #define ET_F32_TENSOR_TESTING 1
 #define ET_G3C4_NATIVE_OWNER_PRIVATE 1
 #define ET_G3C4_NATIVE_OWNER_TESTING 1
+#define ET_G3C4_MODEL_BIT_PRIVATE 1
 
 #include "../../src/eshkol_transformer/m3t_f32_integration.c"
 #include "../../src/eshkol_transformer/g3c4_model_owner.c"
@@ -530,6 +531,82 @@ static void test_prepare_and_commit(void) {
         owner->parameters[13]);
 }
 
+static void test_private_bit_copy(void) {
+  et_g3c4_model_owner_internal *owner = create_initialized(4, 53);
+  unsigned char destination[1192u * 4u];
+  unsigned char unchanged[sizeof(destination)];
+  size_t offset = 0u;
+  et_f32_tensor_error error;
+  OK(et_g3c4_private_model_owner_prepare_seal_v1(owner));
+  OK(et_g3c4_private_model_owner_commit_seal_v1(owner));
+  memset(destination, 0xa5, sizeof(destination));
+  memcpy(unchanged, destination, sizeof(destination));
+  CHECK(et_g3c4_private_model_owner_copy_bits_v1(
+      owner, destination, sizeof(destination) - 1u));
+  CHECK(memcmp(destination, unchanged, sizeof(destination)) == 0);
+  CHECK(et_g3c4_private_model_owner_copy_bits_v1(
+      owner, owner->parameters[0]->value->data, sizeof(destination)));
+  CHECK(memcmp(destination, unchanged, sizeof(destination)) == 0);
+  owner->active = owner;
+  CHECK(et_g3c4_private_model_owner_copy_bits_v1(
+      owner, destination, sizeof(destination)));
+  owner->active = NULL;
+  CHECK(memcmp(destination, unchanged, sizeof(destination)) == 0);
+  CHECK(et_g3c4_private_model_owner_binding_matches_v1(
+      owner, 0, owner->handles[1], owner->parameters[0]));
+  CHECK(et_g3c4_private_model_owner_binding_matches_v1(
+      owner, 0, owner->handles[0], owner->parameters[1]));
+  for (size_t index = 0u; index < 14u; index++)
+    OK(et_g3c4_private_model_owner_binding_matches_v1(
+        owner, (int64_t)index, owner->handles[index],
+        owner->parameters[index]));
+  et_f32_tensor_test_fail_alloc_after_v1(0u);
+  et_g3c4_allocation_limit = 0u;
+  et_g3c4_successful_allocations = 0u;
+  OK(et_g3c4_private_model_owner_copy_bits_v1(
+      owner, destination, sizeof(destination)));
+  CHECK(et_f32_tensor_test_successful_allocations_v1() == 0u);
+  CHECK(et_g3c4_successful_allocations == 0u);
+  et_f32_tensor_test_reset_allocator_v1();
+  et_g3c4_allocation_limit = SIZE_MAX;
+  for (size_t index = 0u; index < 14u; index++) {
+    const size_t count = et_g3c4_parameter_elements(index);
+    uint32_t bits[1024];
+    OK(et_f32_tensor_copy_bits_to_v1(
+        owner->parameters[index]->value, bits, count, &error));
+    for (size_t word = 0u; word < count; word++) {
+      for (unsigned shift = 0u; shift < 4u; shift++)
+        CHECK(destination[4u * (offset + word) + shift] ==
+              (unsigned char)(bits[word] >> (8u * shift)));
+    }
+    offset += count;
+  }
+  CHECK(offset == 1192u);
+  memcpy(unchanged, destination, sizeof(destination));
+  et_f32_test_tensor_metadata_v1 metadata = {.struct_size = sizeof(metadata)};
+  CHECK(et_f32_tensor_test_metadata_snapshot_v1(
+      owner->parameters[7]->value, &metadata) == 0);
+  CHECK(et_f32_tensor_test_metadata_corrupt_v1(
+      owner->parameters[7]->value,
+      ET_F32_TEST_TENSOR_METADATA_ELEMENT_COUNT, 0u) == 0);
+  CHECK(et_g3c4_private_model_owner_copy_bits_v1(
+      owner, destination, sizeof(destination)));
+  CHECK(memcmp(destination, unchanged, sizeof(destination)) == 0);
+  CHECK(et_f32_tensor_test_metadata_restore_v1(
+      owner->parameters[7]->value, &metadata) == 0);
+  et_f32_tensor_borrow *borrow = NULL;
+  OK(et_f32_tensor_borrow_begin_v1(
+      owner->parameters[7]->value, &borrow, &error));
+  CHECK(et_g3c4_private_model_owner_binding_matches_v1(
+      owner, 7, owner->handles[7], owner->parameters[7]));
+  CHECK(et_g3c4_private_model_owner_copy_bits_v1(
+      owner, destination, sizeof(destination)));
+  CHECK(memcmp(destination, unchanged, sizeof(destination)) == 0);
+  OK(et_f32_tensor_borrow_end_v1(&borrow, &error));
+  OK(et_g3c4_private_model_owner_copy_bits_v1(
+      owner, destination, sizeof(destination)));
+}
+
 int main(void) {
   test_error_snapshot();
   test_allocation_rollback();
@@ -537,6 +614,7 @@ int main(void) {
   test_values_and_schedule();
   test_atomic_preflight();
   test_prepare_and_commit();
+  test_private_bit_copy();
   printf("G3-C4 seeded native owner: %zu checks\n", checks);
   return 0;
 }

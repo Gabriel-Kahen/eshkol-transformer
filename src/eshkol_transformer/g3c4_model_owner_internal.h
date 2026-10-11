@@ -63,6 +63,15 @@ int64_t et_g3c4_private_model_owner_word_v1(
     void *owner, int64_t index);
 int64_t et_g3c4_private_model_owner_prepare_seal_v1(void *owner);
 int64_t et_g3c4_private_model_owner_commit_seal_v1(void *owner);
+#ifdef ET_G3C4_MODEL_BIT_PRIVATE
+int64_t et_g3c4_private_model_owner_binding_matches_v1(
+    const void *owner, int64_t index, const void *exact_handle,
+    const void *exact_parameter);
+/* Caller owns an accessible writable 4,768-byte buffer and holds the
+ * aggregate exclusion interval. On failure no destination byte changes. */
+int64_t et_g3c4_private_model_owner_copy_bits_v1(
+    const void *owner, void *destination, int64_t byte_length);
+#endif
 int64_t et_g3c4_private_model_owner_abort_v1(void *owner);
 
 int32_t et_g3c4_construction_parameter_preflight_internal(

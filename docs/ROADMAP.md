@@ -2825,6 +2825,13 @@ publication, public G2 and continuation remain pending.
   independent-review, immutable-pin, negative-preflight, bounded-runtime and
   symbol-inventory gates. It ran no compiler, native, loader or Docker phase;
   broad lineage, compiled union and continuation stay OPEN/HOLD.
+  A separate, opt-in C4 model-bit native prerequisite now adds a sealed/idle
+  owner-index binding predicate and a complete 1,192-word little-endian copy.
+  It stages all words before writing, rejects I2-owned aliases and active
+  parameters, and requires the caller to prove a writable 4,768-byte extent
+  under aggregate serialization. The current P1 topology verifier, I2
+  carrier admission, aggregate exclusion, history/SAVE integration and
+  supported runtime/ABI gates remain OPEN/HOLD.
 
 ## Wave 4 — practical pretraining and performance
 

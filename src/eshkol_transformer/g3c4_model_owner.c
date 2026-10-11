@@ -728,6 +728,119 @@ int64_t et_g3c4_private_model_owner_commit_seal_v1(void *candidate) {
   return 0;
 }
 
+#ifdef ET_G3C4_MODEL_BIT_PRIVATE
+#ifndef ET_G3C4_NATIVE_OWNER_PRIVATE
+#error "C4 model bits require the native owner and I2 private preflight"
+#endif
+
+int64_t et_g3c4_private_model_owner_binding_matches_v1(
+    const void *candidate, int64_t index, const void *exact_handle,
+    const void *exact_parameter) {
+  et_g3c4_model_owner_internal *owner;
+  et_f32_tensor_error error;
+  et_g3c4_error_reset_internal();
+  owner = et_g3c4_admit_owner(candidate, 0);
+  if (owner == NULL) return et_g3c4_error_state.category;
+  if (owner->state != ET_G3C4_OWNER_SEALED || owner->active != NULL)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (index < 0 || index >= 14 || exact_handle == NULL ||
+      exact_parameter == NULL)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
+  if (owner->handles[index] != exact_handle ||
+      owner->parameters[index] != exact_parameter)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_STALE_BINDING);
+  if (et_g3c4_capture_f32(
+          et_f32_parameter_validate_identity_v1(
+              owner->parameters[index], exact_handle, &error), &error))
+    return et_g3c4_error_state.category;
+  if (et_g3c4_capture_f32(
+          et_f32_parameter_idle_preflight_internal(
+              owner->parameters[index], &error), &error))
+    return et_g3c4_error_state.category;
+  return 0;
+}
+
+int64_t et_g3c4_private_model_owner_copy_bits_v1(
+    const void *candidate, void *destination, int64_t byte_length) {
+  enum { WORDS = 1192, BYTES = WORDS * 4 };
+  et_g3c4_model_owner_internal *owner;
+  et_f32_tensor_error error;
+  uint32_t staged[WORDS];
+  size_t offset = 0u;
+  et_g3c4_error_reset_internal();
+  owner = et_g3c4_admit_owner(candidate, 0);
+  if (owner == NULL) return et_g3c4_error_state.category;
+  if (owner->state != ET_G3C4_OWNER_SEALED || owner->active != NULL ||
+      owner->initialized != 14u || !owner->successor_ready)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (destination == NULL || byte_length != BYTES ||
+      (uintptr_t)destination > UINTPTR_MAX - BYTES)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
+  for (et_g3c4_model_owner_internal *entry = et_g3c4_owner_registry;
+       entry != NULL; entry = entry->registry_next) {
+    const uintptr_t start = (uintptr_t)destination;
+    const uintptr_t other = (uintptr_t)entry;
+    if (other <= UINTPTR_MAX - sizeof(*entry) &&
+        start < other + sizeof(*entry) && other < start + BYTES)
+      return et_g3c4_fail(
+          ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_ALIAS);
+  }
+  if (!et_f32_private_output_span_disjoint_internal(destination, BYTES))
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_ALIAS);
+  if (et_g3c4_owner_idle_preflight(owner, &error) != 0)
+    return et_g3c4_error_state.category;
+  for (size_t index = 0u; index < 14u; index++) {
+    const et_f32_tensor *value = NULL;
+    const size_t count = et_g3c4_parameter_elements(index);
+    if (!et_g3c4_parameter_shape_valid(owner, index)) {
+      if (et_g3c4_error_state.category == 0)
+        (void)et_g3c4_fail(ET_G3C4_SHAPE_MISMATCH, ET_G3C4_CODE_SHAPE);
+      return et_g3c4_error_state.category;
+    }
+    if (offset > WORDS || count > WORDS - offset)
+      return et_g3c4_fail(
+          ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    if (et_g3c4_capture_f32(
+            et_f32_parameter_value_tensor_v1(
+                owner->parameters[index], &value, &error), &error) ||
+        et_g3c4_capture_f32(
+            et_f32_tensor_copy_bits_to_v1(
+                value, staged + offset, count, &error), &error))
+      return et_g3c4_error_state.category;
+    for (size_t prior = 0u; prior < index; prior++) {
+      const et_f32_tensor *prior_value = NULL;
+      int32_t identical = 0;
+      if (et_g3c4_capture_f32(
+              et_f32_parameter_value_tensor_v1(
+                  owner->parameters[prior], &prior_value, &error), &error) ||
+          et_g3c4_capture_f32(
+              et_f32_tensor_storage_identical_v1(
+                  value, prior_value, &identical, &error), &error))
+        return et_g3c4_error_state.category;
+      if (identical)
+        return et_g3c4_fail(
+            ET_G3C4_INVALID_STATE, ET_G3C4_CODE_TOPOLOGY);
+    }
+    offset += count;
+  }
+  if (offset != WORDS)
+    return et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+  unsigned char *bytes = (unsigned char *)destination;
+  for (size_t word = 0u; word < WORDS; word++) {
+    const uint32_t bits = staged[word];
+    for (unsigned shift = 0u; shift < 4u; shift++)
+      bytes[4u * word + shift] = (unsigned char)(bits >> (8u * shift));
+  }
+  return 0;
+}
+#endif
+
 int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
   et_g3c4_model_owner_internal *owner;
   et_f32_tensor_error error;

@@ -42,6 +42,15 @@ int32_t et_f32_tensor_scoped_end_internal(et_f32_scoped_guard_internal *guard) {
 }
 
 #ifdef ET_G3C4_NATIVE_OWNER_PRIVATE
+#ifdef ET_G3C4_MODEL_BIT_PRIVATE
+int32_t et_f32_private_output_span_disjoint_internal(
+    const void *destination, size_t bytes) {
+  return destination != NULL && bytes != 0u &&
+         pointer_span_fits(destination, bytes) &&
+         !storage_aliases_live_reference(destination, bytes);
+}
+#endif
+
 int32_t et_f32_parameter_idle_preflight_internal(
     et_f32_parameter *parameter, et_f32_tensor_error *error) {
   int32_t rc = require_parameter(

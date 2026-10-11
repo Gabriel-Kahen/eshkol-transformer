@@ -17,6 +17,12 @@ int32_t et_f32_tensor_scoped_end_internal(et_f32_scoped_guard_internal *);
  * ordinary and predecessor aggregates. */
 int32_t et_f32_parameter_idle_preflight_internal(
     et_f32_parameter *, et_f32_tensor_error *);
+#ifdef ET_G3C4_MODEL_BIT_PRIVATE
+/* The caller proves accessibility and writability. This checks arithmetic
+ * and disjointness from all live I2 control and backing storage. */
+int32_t et_f32_private_output_span_disjoint_internal(
+    const void *destination, size_t bytes);
+#endif
 #endif
 /* Read-only abort preflight, used only with the fixed M3T owner collection. */
 int32_t et_m3t_f32_parameter_preflight_internal(et_f32_parameter *, et_f32_tensor_error *);
