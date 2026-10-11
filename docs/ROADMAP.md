@@ -1645,11 +1645,44 @@ eight decoded data-only fields to the caller. The source fixture covers a
 same-image pair, an independently valid wrong-image digest, torn companion,
 short destination, and busy, forged and dead receipts. Source/static checks
 pass. Independent source/test review found no implementation defect and its
-one static order-check gap was repaired with a mutation case. Compiled
-normal/repeat/sanitizer evidence remains pending root coordination. This is
-in-memory pair admission only: it neither reads or publishes
+one static order-check gap was repaired with a mutation case. A one-use
+compiled run on exact C2 source `99315549` exited 1 in normal mode at
+`wrong pair keeps destination and receipt unchanged`; repeat and sanitizer
+did not run. C2 compiled admission is on hold pending separate diagnosis.
+This is in-memory pair admission only: it neither reads or publishes
 the companion file nor authenticates live model/tokenizer identity, restores
 parameters or replays a generator.
+
+A source-only [G3-R private file-pair admission candidate](g3/G3_R_FILE_PAIR_ADMISSION_LEAF.md)
+now composes the accepted receipt and codec behind an exact 288-byte companion
+read. It compares the record SHA and raw-V256 fingerprint with the same loaded
+C2 receipt's SHA and tokenizer controls, then publishes one receipt and eight
+data-only fields through a checked whole-vector copy. Orphan, torn, extended,
+mismatched and publication-fault fixtures are written; local source and native
+reader checks passed. The new Eshkol fixture has not run because the local
+`eshkol-run` binary is unavailable. Independent source/tests review accepted
+exact `91dc1540` / tree `3c746694` with no blocking source finding; its seal is
+`g3r-file-pair-20261011-review/SHA256SUMS-RUN`
+(`f7a30a56bd52ffac3ff9aed329533e9c9ee4b6552f019e3b096523760e9b7c07`).
+The supported compiled runtime gate and all-path ownership remain unaccepted;
+no live model restore or continuation is claimed.
+
+A source-only [private checked-pair to typed RNG bridge candidate](g3/G3_R_PAIR_RNG_BRIDGE_LEAF.md)
+now consumes a newly admitted file pair through private scratch and publishes
+its live C2/SHA receipt with an independent same-aggregate G3-T kind-8 RNG
+owner in one ten-slot result. The pair fault hook receives no checked mutable
+payload, closing a post-validation receipt/RNG rewrite path. Malformed-pair,
+allocation, hook-mutation and publication-failure fixtures are present; local
+source checks only have run. Independent source/tests review found no blocking
+finding. A supported compiled normal/repeat/sanitizer gate and aggregate
+load/symbol closure remain pending. This bridge does not restore a model, bind a
+live tokenizer, replay history or prove continuation.
+
+The C2 pair, file-pair and typed RNG bridge sources now share one root load
+graph: the receipt root loads the record codec once before either pair leaf.
+Local transitive source checks pass on this union. The source union has not
+passed a supported compiled aggregate gate; each leaf retains its separate
+runtime and ownership admission requirements.
 
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
