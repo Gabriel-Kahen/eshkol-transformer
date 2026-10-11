@@ -2825,6 +2825,11 @@ publication, public G2 and continuation remain pending.
   independent-review, immutable-pin, negative-preflight, bounded-runtime and
   symbol-inventory gates. It ran no compiler, native, loader or Docker phase;
   broad lineage, compiled union and continuation stay OPEN/HOLD.
+  The [private one-root source preflight](g3/G3_C4_PRIVATE_UNION_RUNNER_HOLD.md)
+  now rejects fixed-input, manifest, fixture-root and filesystem drift, then
+  returns HOLD without launching. The existing private fault runner is not a
+  reviewed native closure for either union fixture; full external pins, loader
+  closure, package resource bounds and independent runner review remain open.
 
 ## Wave 4 — practical pretraining and performance
 
