@@ -30,6 +30,137 @@ parser_spec.loader.exec_module(parser)
 
 
 class RunnerTest(unittest.TestCase):
+    def test_child_handoff_parent_output_and_stale_duplicate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            output = base / (r.STEM + 'inventory-run-synthetic')
+            output.mkdir(mode=0o700)
+            st = output.stat()
+            binding = 'b' * 64
+            parent = os.getppid()
+            start = r.process_starttime(parent)
+
+            def handoff(pid=parent, started=start, ino=st.st_ino):
+                raw = (f'eshkol-off-inventory-handoff-v2\n{binding}\n'
+                       f'{os.getuid()}\n{pid}\n{started}\n{st.st_dev}\n'
+                       f'{ino}\n{"a" * 32}\n').encode()
+                fd = os.memfd_create('synthetic-child-handoff', os.MFD_ALLOW_SEALING)
+                os.fchmod(fd, 0o600)
+                os.write(fd, raw)
+                fcntl.fcntl(fd, fcntl.F_ADD_SEALS, fcntl.F_SEAL_WRITE |
+                            fcntl.F_SEAL_GROW | fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_SEAL)
+                return fd
+
+            with mock.patch.object(r, 'BASE', base), mock.patch.object(
+                    r, 'protected_handoff_stat', return_value=True):
+                for fd, reason in ((handoff(pid=parent + 1), 'parent drift'),
+                                   (handoff(started='0'), 'parent drift'),
+                                   (handoff(ino=0), 'output inode drift')):
+                    try:
+                        with self.assertRaisesRegex(r.Hold, reason):
+                            r.consume_child_handoff(output, binding, fd)
+                    finally:
+                        os.close(fd)
+                fd = handoff()
+                duplicate = os.dup(fd)
+                self.assertEqual(r.consume_child_handoff(output, binding, fd),
+                                 (st.st_dev, st.st_ino))
+                with self.assertRaises(OSError):
+                    os.fstat(fd)
+                try:
+                    # A copy in an unrelated caller cannot claim the live run parent.
+                    with mock.patch.object(r.os, 'getppid', return_value=parent + 1):
+                        with self.assertRaisesRegex(r.Hold, 'parent drift'):
+                            r.consume_child_handoff(output, binding, duplicate)
+                finally:
+                    os.close(duplicate)
+
+    def test_direct_child_requires_fd_before_release_or_product(self):
+        argv = ['/usr/bin/python3', '-I', '-S', str(here / 'RUNNER.py'), '--child',
+                'fb', 'object', 'unit.o', '/definitely/missing.o',
+                '/definitely/missing.receipt.json', '/definitely/missing-release.json',
+                'b' * 64, '3']
+        result = subprocess.run(argv, capture_output=True, text=True, close_fds=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('Bad file descriptor', result.stderr)
+        self.assertNotIn('missing-release', result.stderr)
+
+    def test_inherited_fd3_matches_live_parent_in_real_subprocess(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            output = base / (r.STEM + 'inventory-run-synthetic')
+            output.mkdir(mode=0o700)
+            st = output.stat()
+            binding = 'b' * 64
+            raw = (f'eshkol-off-inventory-handoff-v2\n{binding}\n'
+                   f'{os.getuid()}\n{os.getpid()}\n{r.process_starttime()}\n'
+                   f'{st.st_dev}\n{st.st_ino}\n{"a" * 32}\n').encode()
+            fd = os.memfd_create('synthetic-fd3', os.MFD_ALLOW_SEALING)
+            try:
+                os.fchmod(fd, 0o600)
+                os.write(fd, raw)
+                fcntl.fcntl(fd, fcntl.F_ADD_SEALS, fcntl.F_SEAL_WRITE |
+                            fcntl.F_SEAL_GROW | fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_SEAL)
+                code = ("import importlib.util,sys; from pathlib import Path; "
+                        f"p=Path({str(here / 'RUNNER.py')!r}); "
+                        "s=importlib.util.spec_from_file_location('synthetic_runner',p); "
+                        "r=importlib.util.module_from_spec(s); s.loader.exec_module(r); "
+                        f"r.BASE=Path({str(base)!r}); "
+                        "r.protected_handoff_stat=lambda st: True; "
+                        f"print(r.consume_child_handoff(Path({str(output)!r}),"
+                        f"{binding!r},3))")
+                result = subprocess.run(['/usr/bin/python3', '-I', '-S', '-c', code],
+                                        pass_fds=(fd,), preexec_fn=lambda: os.dup2(fd, 3),
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn(str(st.st_ino), result.stdout)
+                # A copied descriptor in a caller-created grandchild has a
+                # different live parent and cannot reuse the launch record.
+                nested = ("import subprocess; c=" + repr(code) + "; "
+                          "p=subprocess.run(['/usr/bin/python3','-I','-S','-c',c],"
+                          "pass_fds=(3,),capture_output=True,text=True); "
+                          "print(p.returncode); print(p.stderr)")
+                replay = subprocess.run(['/usr/bin/python3', '-I', '-S', '-c', nested],
+                                        pass_fds=(fd,), preexec_fn=lambda: os.dup2(fd, 3),
+                                        capture_output=True, text=True)
+                self.assertEqual(replay.returncode, 0, replay.stderr)
+                self.assertIn('child handoff parent drift or replay', replay.stdout)
+            finally:
+                os.close(fd)
+
+    def test_direct_child_admitted_synthetic_product_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            run_root = base / 'synthetic-run'
+            (run_root / 'build').mkdir(parents=True)
+            raw = fixtures.elf64()
+            product_path = run_root / 'build/unit.o'
+            product_path.write_bytes(raw)
+            product = {'path': 'unit.o', 'bytes': len(raw), 'sha256': r.sha_bytes(raw)}
+            seal = run_root / 'SHA256SUMS-RUN'
+            seal.write_text(f'{product["sha256"]}  build/unit.o\n')
+            output = base / (r.STEM + 'inventory-run-synthetic')
+            output.mkdir(mode=0o700)
+            receipt = output / 'fb-unit.o.receipt.json'
+            argv = ['RUNNER.py', '--child', 'fb', 'object', 'unit.o',
+                    str(product_path), str(receipt), str(base / 'RELEASE.json'),
+                    'b' * 64, '3']
+            sides = {'fb': ([product],), 'gb': ([],)}
+            with mock.patch.object(r, 'BASE', base), mock.patch.dict(
+                    r.RUN, {'fb': run_root}), mock.patch.dict(
+                    r.ROOT_SHA, {'fb': r.sha_file(seal)}), mock.patch.object(
+                    r, 'consume_child_handoff') as handoff, mock.patch.object(
+                    r, 'review_gate') as review, mock.patch.object(
+                    r, 'authenticate_metadata', return_value=(None, [
+                        {'path': 'unit.o', 'kind': 'object'}], None, sides)), mock.patch.object(
+                    r, 'verify_tools'), mock.patch.object(r, 'child_parse') as parse:
+                r.main(argv)
+                handoff.assert_called_once_with(output, 'b' * 64, 3)
+                review.assert_called_once()
+                parse.assert_called_once()
+                self.assertEqual(parse.call_args.args[3]['sha256'], product['sha256'])
+                self.assertEqual(parse.call_args.args[3]['kind'], 'object')
+
     def test_precreated_output_sealed_handoff_binds_inode_and_process(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
@@ -294,8 +425,9 @@ class RunnerTest(unittest.TestCase):
                      'gb': ([],)}
             argv = ['RUNNER.py', '--child', 'fb', 'object', 'unit.o',
                     str(root / 'arbitrary.o'), str(root / 'receipt.json'),
-                    str(root / 'RELEASE.json'), 'a' * 64]
-            with mock.patch.object(r, 'review_gate'), mock.patch.object(
+                    str(root / 'RELEASE.json'), 'a' * 64, '3']
+            with mock.patch.object(r, 'consume_child_handoff'), mock.patch.object(
+                    r, 'review_gate'), mock.patch.object(
                     r, 'authenticate_metadata', return_value=(None, pairs, None, sides)), mock.patch.object(
                     r, 'verify_tools'), mock.patch.object(r, 'child_parse') as parse:
                 with self.assertRaisesRegex(r.Hold, 'not canonical'):
@@ -745,10 +877,16 @@ class RunnerTest(unittest.TestCase):
             r.RUN['fb'] = root
             class Exit:
                 returncode = -9
-            r.subprocess.run = lambda *args, **kwargs: Exit()
+            launches = []
+            def synthetic_child(*args, **kwargs):
+                launches.append((args, kwargs))
+                return Exit()
+            r.subprocess.run = synthetic_child
             try:
                 with self.assertRaisesRegex(r.Hold, 'child failed'):
                     r.run_child('fb', product, output, root / 'release.json', 'a' * 64)
+                self.assertEqual(launches[0][0][0][-1], '3')
+                self.assertEqual(launches[0][1]['pass_fds'], (3,))
                 child = json.loads((output / 'fb-unit.o.child.json').read_text())
                 self.assertEqual(child['exit_code'], -9)
                 self.assertEqual(child['signal'], 9)

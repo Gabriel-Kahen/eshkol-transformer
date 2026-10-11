@@ -95,14 +95,14 @@ CPU_SECONDS = 300
 WALL_SECONDS = 360
 AS_BYTES = 4 * 1024 ** 3
 FSIZE_BYTES = 1024 ** 3
-RELEASE_ROOT = BASE / (STEM + 'inventory-runner-release-20261011-i')
+RELEASE_ROOT = BASE / (STEM + 'inventory-runner-release-20261011-j')
 RELEASE_PATH = RELEASE_ROOT / 'RELEASE.json'
 EXCEPTION_SEAL = RELEASE_ROOT / 'SHA256SUMS-EXCEPTIONS'
-BINDING_PATH = BASE / (STEM + 'inventory-runner-root-binding-20261011-i') / 'PINS.json'
+BINDING_PATH = BASE / (STEM + 'inventory-runner-root-binding-20261011-j') / 'PINS.json'
 REVIEW_AUTHORITY = {
-    'independent': BASE / (STEM + 'inventory-runner-independent-review-20261011-i') /
+    'independent': BASE / (STEM + 'inventory-runner-independent-review-20261011-j') /
                    'SHA256SUMS-REVIEW',
-    'root': BASE / (STEM + 'inventory-runner-root-review-20261011-i') /
+    'root': BASE / (STEM + 'inventory-runner-root-review-20261011-j') /
             'SHA256SUMS-ROOT-REVIEW',
 }
 _OWN_MANIFEST = None
@@ -903,12 +903,12 @@ def run_child(side, product, output, release_path, binding_sha):
     with stdout_path.open('xb') as out, stderr_path.open('xb') as err:
         argv = ['/usr/bin/python3', '-I', '-S', str(Path(__file__).resolve()), '--child',
                 side, product['kind'], product['path'], str(input_path),
-                str(receipt_path), str(release_path), binding_sha]
+                str(receipt_path), str(release_path), binding_sha, '3']
         try:
             proc = subprocess.run(argv, stdout=out, stderr=err, timeout=WALL_SECONDS,
                                   cwd='/', env={'LC_ALL': 'C', 'LANG': 'C', 'PATH': '/usr/bin:/bin',
                                                 'HOME': '/nonexistent', 'PYTHONNOUSERSITE': '1'},
-                                  preexec_fn=child_limits, check=False)
+                                  preexec_fn=child_limits, pass_fds=(3,), check=False)
         except subprocess.TimeoutExpired:
             timed_out = True
             proc = None
@@ -976,7 +976,7 @@ def write_result_and_parent_completion(output, result):
         'address_space_bytes': AS_BYTES, 'status': 'COMPLETE'}, sort_keys=True) + '\n')
 
 
-def precreated_output_identity(output):
+def output_identity(output, fresh):
     require(output.is_absolute() and output.parent == BASE and
             output.name.startswith(STEM + 'inventory-run-'),
             'output outside launcher-created namespace')
@@ -990,7 +990,8 @@ def precreated_output_identity(output):
             require(stat.S_ISDIR(st.st_mode) and st.st_uid == os.getuid() and
                     st.st_gid == os.getgid() and stat.S_IMODE(st.st_mode) == 0o700 and
                     (st.st_dev, st.st_ino) == (at_name.st_dev, at_name.st_ino) and
-                    not os.listdir(output_fd), 'launcher output identity or freshness drift')
+                    (not fresh or not os.listdir(output_fd)),
+                    'launcher output identity or freshness drift')
             return st.st_dev, st.st_ino
         finally:
             os.close(output_fd)
@@ -998,8 +999,12 @@ def precreated_output_identity(output):
         os.close(base_fd)
 
 
-def consume_launcher_handoff(output, binding_sha, ledger_fd):
-    """Accept only this launcher's immutable handoff before release work."""
+def precreated_output_identity(output):
+    return output_identity(output, True)
+
+
+def launcher_handoff_fields(binding_sha, ledger_fd):
+    """Read the root-created immutable authority; argv digest is not authority."""
     require(ledger_fd >= 3 and os.getuid() == os.geteuid() != 0,
             'launcher handoff privilege or descriptor drift')
     st = os.fstat(ledger_fd)
@@ -1013,18 +1018,38 @@ def consume_launcher_handoff(output, binding_sha, ledger_fd):
     require(len(raw) <= 512 and raw.endswith(b'\n') and len(fields) == 8 and
             fields[0] == 'eshkol-off-inventory-handoff-v2' and
             fields[1] == binding_sha and fields[2] == str(os.getuid()) and
-            fields[3] == str(os.getpid()) and fields[4] == process_starttime() and
             re.fullmatch(r'[0-9a-f]{32}', fields[7]) is not None,
+            'launcher handoff record drift or replay')
+    return fields
+
+
+def consume_launcher_handoff(output, binding_sha, ledger_fd):
+    """Accept the one-use launcher record and retain FD3 for admitted children."""
+    fields = launcher_handoff_fields(binding_sha, ledger_fd)
+    require(fields[3] == str(os.getpid()) and fields[4] == process_starttime(),
             'launcher handoff record drift or replay')
     output_identity = precreated_output_identity(output)
     require(fields[5:7] == [str(x) for x in output_identity],
             'launcher output inode drift')
-    os.close(ledger_fd)
     return output_identity
 
 
-def process_starttime():
-    tail = Path('/proc/self/stat').read_text().rsplit(')', 1)[1].split()
+def consume_child_handoff(output, binding_sha, ledger_fd):
+    """A parser child must be a live child of the authorized run process."""
+    fields = launcher_handoff_fields(binding_sha, ledger_fd)
+    parent_pid = os.getppid()
+    require(fields[3] == str(parent_pid) and fields[4] == process_starttime(parent_pid),
+            'child handoff parent drift or replay')
+    actual = output_identity(output, False)
+    require(fields[5:7] == [str(x) for x in actual],
+            'child handoff output inode drift')
+    os.close(ledger_fd)
+    return actual
+
+
+def process_starttime(pid=None):
+    selected = '/proc/self/stat' if pid is None else f'/proc/{pid}/stat'
+    tail = Path(selected).read_text().rsplit(')', 1)[1].split()
     require(len(tail) >= 20 and tail[19].isdigit(), 'process start identity unavailable')
     return tail[19]
 
@@ -1158,7 +1183,9 @@ def run(release_path, output, binding_sha, output_identity):
 
 
 def main(argv):
-    if len(argv) == 9 and argv[1] == '--child':
+    if len(argv) == 10 and argv[1] == '--child':
+        require(argv[9] == '3', 'child descriptor argument drift')
+        consume_child_handoff(Path(argv[6]).parent, argv[8], 3)
         review_gate(Path(argv[7]), argv[8])
         _, pairs, _, sides = authenticate_metadata()
         verify_tools()
@@ -1174,7 +1201,10 @@ def main(argv):
         require(argv[5] == '3', 'launcher descriptor argument drift')
         output = Path(argv[3])
         identity = consume_launcher_handoff(output, argv[4], 3)
-        run(Path(argv[2]), output, argv[4], identity)
+        try:
+            run(Path(argv[2]), output, argv[4], identity)
+        finally:
+            os.close(3)
     else:
         raise Hold('usage: launcher-only RUNNER.py --run RELEASE.json '
                    'PRECREATED_OUTPUT_DIR BINDING_SHA256 LEDGER_FD')

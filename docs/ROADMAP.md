@@ -60,7 +60,7 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
-| OFF-LB | [Protected OFF inventory launcher B and Runner I candidate](../tools/off_inventory_launcher_b/PLAN.md) | Runner H source review, launcher A HOLD | Source-only Runner I seal `f59779e33af754ca053872a617e870b69f02bf000197db0e63867b0eb01ca208` and launcher B2 seal `974e2902745a547c0d38ce86df5d52959946c230851c4a0cfea2f7efe81428b6`; synthetic output/ledger/handoff negatives pass; independent/ROOT I and B review, protected installation, external binding, runtime ROOT RELEASE, and F/G product parity remain absent | review |
+| OFF-LB | [Protected OFF inventory launcher B2 and Runner J source candidate](../tools/off_inventory_launcher_b/PLAN.md) | Runner H source review, launcher A HOLD | Immutable Runner I seal `f59779e33af754ca053872a617e870b69f02bf000197db0e63867b0eb01ca208` and launcher B2 seal `974e2902745a547c0d38ce86df5d52959946c230851c4a0cfea2f7efe81428b6` are preserved. J requires the sealed launcher FD3 and a matching live parent/output identity before any `--child` product admission; direct missing/stale-FD synthetic negatives pass. B2 still pins I. J independent/ROOT review, protected installation, same-UID ptrace exclusion, external binding, runtime ROOT RELEASE, and F/G product parity remain HOLD | review |
 
 ## Wave 4 — practical pretraining and performance
 
