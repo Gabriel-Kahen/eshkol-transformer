@@ -61,8 +61,17 @@
   (display (token-corpus-summary-shard-token-limit summary))
   (display " bytes=")
   (display (token-corpus-summary-total-shard-bytes summary))
-  (display " fingerprint=")
-  (display (token-corpus-summary-tokenizer-fingerprint summary))
+  (display " fingerprint_hex=")
+  (let* ((bytes (string->utf8
+                 (token-corpus-summary-tokenizer-fingerprint summary)))
+         (digits "0123456789abcdef"))
+    (let loop ((index 0))
+      (if (= index (bytevector-length bytes))
+          #t
+          (let ((value (bytevector-u8-ref bytes index)))
+            (display (string-ref digits (quotient value 16)))
+            (display (string-ref digits (modulo value 16)))
+            (loop (+ index 1))))))
   (newline))
 
 (define (cli3-report-error error)

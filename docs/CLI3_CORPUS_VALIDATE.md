@@ -19,18 +19,22 @@ must raise these limits explicitly for a larger corpus.
 Success exits 0, writes no stderr, and writes exactly one stdout line:
 
 ```text
-shards=N tokens=N vocab=N limit=N bytes=N fingerprint=TEXT
+shards=N tokens=N vocab=N limit=N bytes=N fingerprint_hex=LOWERCASE_HEX
 ```
 
 Fields come from the six public D1 summary accessors; `bytes` is the sum of shard
-file bytes, not the manifest size. No summary is printed until every shard validates.
+file bytes, not the manifest size. `fingerprint_hex` encodes the opaque UTF-8
+fingerprint bytes, so even a fingerprint containing newline or control characters
+remains on one output line. No summary is printed until every shard validates.
 
 Argument errors exit 64 with empty stdout and two stderr lines: `error: MESSAGE`
 and the usage line. A structured D1 failure exits 2 with empty stdout and one
 stderr line: `error: category=CATEGORY operation=OPERATION message=MESSAGE`.
 Missing or unreadable manifest files have category `io`; corrupt shards and stored
-files exceeding a supplied policy limit have category `corrupt-data`. An unexpected
-non-transformer condition exits 70 with empty stdout and one stderr line.
+files exceeding a supplied policy limit have category `corrupt-data`. Unknown
+manifest versions have category `version-mismatch`, and unknown required features
+have category `unsupported`. An unexpected non-transformer condition exits 70
+with empty stdout and one stderr line.
 
 The command calls only public `token-corpus-validate`, its summary accessors, and
 public error accessors. It requires the reviewed D1 archive. The D1-only staged
@@ -44,6 +48,8 @@ Compiled gate, once the exact pinned toolchain and D1 archive are available:
 scripts/test-cli3-corpus-validate.sh
 ```
 
-The gate covers a valid corpus, missing manifest, corrupt shard, all three
-exceeded limits, and invalid command arguments. It must run with a D1 archive
-built from the same pinned toolchain and source as the command.
+The gate rebuilds the D1 archive from the exact tree, checks its actual exported
+symbols and evidence, and compiles from a staged public facade with depfile
+boundary checks. It covers a valid corpus, opaque newline fingerprint, missing
+manifest, corrupt shard, version and feature categories, all three exceeded
+limits, and invalid command arguments.

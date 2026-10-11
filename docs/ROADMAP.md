@@ -54,7 +54,7 @@ parallel in isolated worktrees. Contracts merge before downstream implementation
 | E3 | Loss, perplexity, token accuracy and validation runner | M3, L2, D2 | Deterministic held-out metrics | planned |
 | G3 | Greedy, temperature, top-k/top-p generation with KV cache | M3, T1, A2 | Seeded sampling and cache/no-cache parity | planned |
 | TR3 | Trainer state machine and exact resume | M3, L2, O2, D2, C2, E3 | One-batch overfit and interrupted/resumed equivalence | planned |
-| CLI3 | Corpus, tokenizer, pretrain, evaluate, generate and inspect CLIs | T2, TR3, G3, X1 | [D1 corpus validate source and command tests](CLI3_CORPUS_VALIDATE.md) added; compiled gate pending; remaining commands depend on upstream workstreams | in progress |
+| CLI3 | Corpus, tokenizer, pretrain, evaluate, generate and inspect CLIs | T2, TR3, G3, X1 | [D1 corpus validate source and command tests](CLI3_CORPUS_VALIDATE.md) added; compiled gate pending; remaining commands depend on upstream workstreams | active |
 
 ## Wave 4 — practical pretraining and performance
 
