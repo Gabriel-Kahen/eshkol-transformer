@@ -15,7 +15,31 @@ The read-only seal
 (`feec372c6bd36787be0f30aea2f7ce9ad4ae969bf5bc26c42238349930969ff3`)
 authenticates these three copied small JSON blobs. Its `INVENTORY.json`
 records the local layer **descriptors and sizes**, not their verified bytes.
-The later export must have a regular, non-symlink `oci-layout` containing
+Before any layer read, seal a **metadata-only acquisition input**: the exact
+three small JSON bytes, the two ordered expected descriptors, each local
+content-store candidate's absolute/resolved path, `lstat` type/mode, size and
+file identity, the fresh export destination and measured free space. A path or
+matching size is a candidate, not proof of a layer digest. Independently and
+ROOT-review a separate bounded export-acquisition procedure and those pins
+before it opens either gzip blob. The procedure must stream each source once
+into a private temporary regular file, count and hash bytes against its ordered
+descriptor, reject source identity/size drift and symlinks, enforce per-blob
+512 MiB and combined 512 MiB byte caps plus positive time/RSS/disk caps,
+and publish the export only after both exact hashes and sizes pass. A failure
+leaves an explicitly marked partial HOLD record, never a published export.
+This procedure itself must be reviewed for source stability and atomic
+publication; this document supplies no executor or permission to start it.
+It must not invoke Docker, extract a layer, execute a guest file or use the
+historical F `/out` route.
+
+The two currently reported source candidates are
+`/home/gabe/.local/share/docker/containerd/daemon/io.containerd.content.v1.content/blobs/sha256/<layer digest>`
+using the ordered digests below. The small inventory reports presence and
+descriptor-matching sizes; it does not record verified layer hashes or the
+full pre-read file identity required above.
+
+Only **after that separately reviewed acquisition** can a full OCI export be
+sealed and reviewed. It must have a regular, non-symlink `oci-layout` containing
 `{"imageLayoutVersion":"1.0.0"}`, a regular `index.json`, and regular blobs
 at `blobs/sha256/<digest>` on a read-only, separately sealed path. Freeze
 absolute export path, resolved path, type, mode, size, SHA-256, creation method
@@ -133,32 +157,38 @@ records and independent semantic review.
 
 ## Admission sequence and stop rules
 
-1. Independent reviewer and root accept scanner C source/tests on its exact
-   head/tree. Seal a full, read-only OCI export and finite guest path
-   candidates, host routes and proposed capture recipe. Review the exact
-   export and a bounded discovery procedure (if guest-entry hashes are still
-   absent) **before** opening either real gzip layer.
-2. After that review, acquire and seal selected guest-entry hashes under the
-   bounded discovery procedure. Review and freeze the complete selection and
-   a scan-only invocation, then use C to verify the
+1. Scanner C has independent and ROOT source-only acceptance on its exact
+   head/tree. Seal the metadata-only source-path/descriptor candidates,
+   destination and resource measurements. Independently and ROOT-review the
+   exact bounded export-acquisition procedure and pins **before the first
+   real gzip read**. This review is still pending.
+2. Only under that reviewed procedure, stream/copy/hash the two layers, reject
+   drift and cap breaches, publish and seal the full OCI export, then review
+   its actual path/mode/size/hash chain. Freeze finite guest path candidates,
+   host routes and a proposed capture recipe. The full export's verified
+   layer hashes are post-acquisition evidence, not a pre-read prerequisite.
+3. Independently and ROOT-review bounded guest-entry discovery if hashes are
+   still absent. After that review, acquire and seal selected guest-entry
+   hashes; review and freeze the complete selection and a scan-only invocation.
+   Then use C to verify the
    index→manifest→config→ordered gzip chain, compressed/expanded identities
    and selected entries. Review overlay/symlink disposition. Any mismatch,
    unsupported format, cap hit or ambiguous selection is HOLD; no partial
    scan is admission.
-3. Independently review a capture runner and its actual guest tool/loader
+4. Independently review a capture runner and its actual guest tool/loader
    binding before any Docker, loader or provider use. Capture the raw 39-call,
    provider, header and argv records under that runner; verify F object parity
    and seal every raw path/hash/size. A loader trace from host tools alone is
    insufficient.
-4. Independently review semantic producer, ABI, declaration, provider,
+5. Independently review semantic producer, ABI, declaration, provider,
    version, header and loader claims and pin their immutable claims hash in a
    separate verifier source change. Only then consider a tuple-scoped import
    policy change and a fresh full Numerical F gate. N1/M1 require their own
    acceptance verdicts.
 
-At this document's head, steps 1–4 remain conditional. There is no approved
-OCI export path, reviewed plan hash, complete guest selection, real-layer scan,
-reviewed discovery/scan-only procedure, capture runner or raw image-specific
-receipt. Stop at the first absent or
+At this document's head, steps 1–5 remain conditional. There is no reviewed
+export-acquisition procedure, approved OCI export path, reviewed plan hash,
+complete guest selection, real-layer scan, reviewed discovery/scan-only
+procedure, capture runner or raw image-specific receipt. Stop at the first absent or
 changed pin, ambiguous file/overlay/loader path, unproven F parity or resource
 breach. Leave F evidence and scanner C's worktree immutable.
