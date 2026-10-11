@@ -2850,6 +2850,12 @@ publication, public G2 and continuation remain pending.
   the former live-state-token-as-handle counterexample into a rejection and
   adds wrong-kind and tombstoned module/handle rejections, each with restored
   same-root retry.
+  The narrow F1 issuance-witness successor is HOLD at publication atomicity.
+  The current registry publishes through one rooted slot; an independent
+  witness root would need a second checked store, while the pinned region IR
+  proof covers only the registry publication tail. Scoped handles also bypass
+  that staging path. Review a source/runtime contract for both stores or a
+  separately approved single-publication storage design before implementation.
   Source review and compiled runtime/ABI proof are still required before
   claiming this as a C4 witness.
   Compiled normal/repeat/sanitizer tests, allocation/callback instrumentation,
