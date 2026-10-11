@@ -51,7 +51,7 @@ ar t "${g3g_artifact}/libeshkol_transformer_g3g_manual.a" \
   >"${g3g_evidence}/archive-members.txt"
 cmp "${g3g_prefix}_archive_members.txt" "${g3g_evidence}/archive-members.txt"
 if nm -g --defined-only "${g3g_artifact}/g3g_manual_package.o" | \
-    grep -E 'et_g3t_test_|et_e1b_private_|g3m-generate|et_t1_i64_shell_private_c4_read_v1|et_i64_tensor_private_t1_pair_validate_v1|et_g3c4_private_input_from_t1_p2_v1'; then
+    grep -E 'et_g3t_test_|et_e1b_private_|g3m-generate|et_t1_i64_shell_private_c4_read_v1|et_i64_tensor_private_t1_pair_validate_v1|et_g3c4_private_input_from_t1_p2_v1|et_g3c4_private_input_p2_original_snapshot_v1'; then
   die "G3-G manual production package exported a private or test seam"
 fi
 g3g_provenance="$(eshkol_build_dir)/eshkol-transformer-provenance.tsv"
@@ -80,7 +80,7 @@ if nm -u --format=posix "${g3g_evidence}/g3c4-feature-off.o" | \
   die "C4 owner feature-off path requires exact-pair authority"
 fi
 if nm -g --defined-only "${g3g_evidence}/g3c4-feature-off.o" | \
-    grep -E 'et_g3c4_private_(input_from_t1_p2|p2g1_(preflight|run)|result_(tensor|rng)_create|output_device_state)_v1'; then
+    grep -E 'et_g3c4_private_(input_from_t1_p2|input_p2_original_snapshot|p2g1_(preflight|run)|result_(tensor|rng)_create|output_device_state)_v1'; then
   die "C4 owner feature-off path exposed a gated public P2/G1 dependency"
 fi
 g3g_compile() {
