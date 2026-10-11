@@ -1548,14 +1548,13 @@ repeated-decode and later-EOS continuation profile. No persistence implementatio
 or save/reload equivalence is claimed.
 
 The proposed [G3-R committed-history owner prerequisite](g3/G3_R_COMMITTED_HISTORY_OWNER_PREREQUISITE.md)
-records a source blocker to the private save snapshot: the current G3-T
-kind-1 generator keeps policy and four RNG words but discards P1/P2 and
-manual-decode token provenance at frame commit. Detached outputs and their
-successor RNG clones cannot supply the complete ordered history or its
-prompt/generated/manual partition. A reviewed same-owner transcript and
-atomic commit-tail updates are required before any save snapshot or writer.
-This is documentation only; no implementation, test gate or persistence
-acceptance is claimed.
+identified the discarded P1/P2 and manual-decode provenance. The bounded
+[native owner leaf](g3/G3_R_COMMITTED_HISTORY_OWNER_LEAF.md) now adds a
+feature-gated two-ID transcript to the G3-T kind-1 generator and updates it
+in manual P1/P2, manual decode, G0 and both G1 commit tails. It also adds an
+idle source-private native read of policy, owner RNG and transcript. The
+focused source/core gate passes; a same-aggregate Eshkol save admission,
+A2 cache-length cross-check, writer and replay are still pending.
 
 The [private G3-R fixed-record codec leaf](g3/G3_R_RECORD_CODEC_LEAF.md)
 stages an in-memory 288-byte encoder/decoder using the existing C1 SHA-256.
