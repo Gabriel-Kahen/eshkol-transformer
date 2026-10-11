@@ -30,6 +30,20 @@ parser_spec.loader.exec_module(parser)
 
 
 class RunnerTest(unittest.TestCase):
+    def test_plain_python_exec_resets_nondumpable_state(self):
+        # An in-launcher PR_SET_DUMPABLE(0) does not protect inherited FD3
+        # after the current ordinary-Python exec. This is a kernel contract
+        # diagnostic, not a claim that the synthetic runner is installed.
+        child = ('import ctypes, os, sys; '
+                 'prctl = ctypes.CDLL(None).prctl; '
+                 'assert prctl(4, 0, 0, 0, 0) == 0; '
+                 'assert prctl(3, 0, 0, 0, 0) == 0; '
+                 'os.execv(sys.executable, [sys.executable, "-I", "-S", "-c", '
+                 '"import ctypes; print(ctypes.CDLL(None).prctl(3, 0, 0, 0, 0))"])')
+        result = subprocess.run(['/usr/bin/python3', '-I', '-S', '-c', child],
+                                capture_output=True, text=True, check=True)
+        self.assertEqual(result.stdout.strip(), '1')
+
     def test_child_handoff_parent_output_and_stale_duplicate(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)

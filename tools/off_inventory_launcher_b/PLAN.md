@@ -25,3 +25,34 @@ process defeats in-process handoff enforcement. The protected installation
 and anti-ptrace or separate-UID authority gate must be designed and reviewed
 before J could claim replay exclusion. No source-only test here proves that
 runtime boundary.
+
+## Same-UID authority boundary: current-host HOLD
+
+The bounded J handoff cannot be made replay-safe by changing only Python or
+launcher-local process flags on this host. B2 drops all real/effective/saved
+IDs to the invoking UID, then execs ordinary `/usr/bin/python3` with FD3 open.
+Linux resets dumpability to 1 for that exec (confirmed by the synthetic
+`test_plain_python_exec_resets_nondumpable_state`), so a `PR_SET_DUMPABLE(0)`
+before exec is lost. Calling it in Python leaves the interpreter startup
+window. The invoking process is an ancestor under this host's Yama
+`ptrace_scope=1`; a synthetic ancestor `PTRACE_ATTACH` succeeded here. The
+`pidfd_getfd` permission check also uses ptrace attach rights, though other
+host controls may deny that syscall. Ptrace control of the runner can alter
+its flow or spawn an admitted child, defeating the in-process lineage check;
+a copied FD3 alone does not pass that check. The same gap recurs when
+`run_child` execs ordinary Python with `pass_fds=(3,)`.
+
+The one-use root ledger still limits *launcher admissions*, but it cannot
+make the exposed descriptor exclusive to the admitted Python processes.
+No source-only test establishes a protected runtime. A defensible next
+candidate must cover both runner and parser children: for example, a
+root-verified Yama `ptrace_scope>=2` installation gate (with privileged
+ptrace actors in the trusted base), or a separately identified worker UID
+with reviewed input access and output handoff. Neither condition exists in
+the current installed evidence tree; B2 also still pins Runner I. Do not
+issue external binding or ROOT RELEASE on J from this source candidate.
+
+The output child is owned by the invoker during execution. That invoker can
+modify or remove files there even if ptrace is excluded, so a future release
+must either protect work products until completion or explicitly exclude
+caller-controlled output bytes from its authority claim.
