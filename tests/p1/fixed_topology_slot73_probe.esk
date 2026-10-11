@@ -1,0 +1,75 @@
+;;; Inserted only into a test copy of the trusted P1 root before its vector.
+(define p1-fixed-test-change (vector #f #f #f #f))
+(define (p1-fixed-test-change! target slot replacement)
+  (if (vector-ref p1-fixed-test-change 0) (exit 1) #t)
+  (vector-set! p1-fixed-test-change 0 #t)
+  (vector-set! p1-fixed-test-change 1 target)
+  (vector-set! p1-fixed-test-change 2 slot)
+  (vector-set! p1-fixed-test-change 3 (vector-ref target slot))
+  (vector-set! target slot replacement)
+  #t)
+(define (p1-fixed-test-restore!)
+  (if (not (vector-ref p1-fixed-test-change 0)) (exit 1) #t)
+  (vector-set! (vector-ref p1-fixed-test-change 1)
+               (vector-ref p1-fixed-test-change 2)
+               (vector-ref p1-fixed-test-change 3))
+  (vector-set! p1-fixed-test-change 0 #f)
+  (vector-set! p1-fixed-test-change 1 #f)
+  (vector-set! p1-fixed-test-change 2 #f)
+  (vector-set! p1-fixed-test-change 3 #f)
+  #t)
+(define (p1-fixed-test-mutate! action root-shell handle-shell)
+  (let* ((record (p1-fixed-sealed-record root-shell))
+         (scope (vector-ref record 0))
+         (root (p1-fixed-shell-raw root-shell 'module scope))
+         (handle (p1-fixed-shell-raw handle-shell 'handle scope))
+         (provider (vector-ref root 6)))
+    (cond
+      ((eq? action 'detached-module)
+       (native-check 'p1-fixed-test (p1-native-module-create native-context))
+       (p1-fixed-test-change!
+         shell-registry-root 0
+         (cons
+           (vector (p1-native-result-ptr native-context) 'module
+                   (vector module-tag 'eval '() '() '() #f provider
+                           #t #f 0 1 0 0)
+                   scope)
+           (shell-registry-current))))
+      ((eq? action 'detached-handle)
+       (native-check 'p1-fixed-test (p1-native-handle-create native-context))
+       (p1-fixed-test-change!
+         shell-registry-root 0
+         (cons
+           (vector (p1-native-result-ptr native-context) 'handle
+                   (vector parameter-handle-tag root '("detached") '(4)
+                           'f32 'cpu (vector 'fake) provider)
+                   scope)
+           (shell-registry-current))))
+      ((eq? action 'duplicate-shell)
+       (p1-fixed-test-change!
+         shell-registry-root 0
+         (cons (vector root-shell 'module root scope)
+               (shell-registry-current))))
+      ((eq? action 'duplicate-record)
+       (p1-fixed-test-change!
+         construction-registry-root 0
+         (cons (vector scope 'sealed 'fixture-v1 root-shell #f)
+               (vector-ref construction-registry-root 0))))
+      ((eq? action 'wrong-parent)
+       (p1-fixed-test-change! (p1-fixed-child root "blocks") 5 #f))
+      ((eq? action 'wrong-shape)
+       (p1-fixed-test-change! handle 3 '(9)))
+      ((eq? action 'wrong-device)
+       (p1-fixed-test-change! handle 5 'gpu))
+      ((eq? action 'wrong-tie)
+       (p1-fixed-test-change!
+         (car (vector-ref (p1-fixed-child root "token_embedding") 2))
+         2 handle))
+      ((eq? action 'native-kind-gap)
+       ;; Deliberate counterexample: the source registry can label a live
+       ;; native state token as a handle. Slot 73 has no native kind query.
+       (native-check 'p1-fixed-test (p1-native-state-create native-context))
+       (let ((foreign-shell (p1-native-result-ptr native-context)))
+         (p1-fixed-test-change! (shell-entry handle-shell) 0 foreign-shell)
+         foreign-shell))
+      (else (exit 1)))))

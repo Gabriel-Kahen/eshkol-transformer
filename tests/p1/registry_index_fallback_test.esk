@@ -1,4 +1,4 @@
-;;; Test-only trusted-root overlay exposes a diagnostic control in slot 73.
+;;; Test-only trusted-root overlay exposes a diagnostic control in slot 74.
 ;;; Production module source and its public ABI have no such control.
 (require transformer.module)
 (require p1_test.tensor_provider)

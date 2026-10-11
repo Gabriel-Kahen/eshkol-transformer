@@ -5535,6 +5535,327 @@
                         (tr3-fixed-recheck-handles
                           modules handles carriers provider)))))))))))
 
+;;; Slot 73 is P1-only. The caller retains a fixed descriptor:
+;;; #(modules leaves provider-name), with 17 #(parent-index child-name) rows
+;;; and 15 #(module-index parameter-name handle-index shape-vector) rows.
+;;; Leaf rows 0..13 name distinct handles; row 14 ties handle 10. No callback,
+;;; shell publication, schedule projection, or C4 symbol is used here.
+(define (p1-fixed-seal-fail)
+  (fail 'invalid-state 'module-sealed-fixed-topology-verify-internal!
+        "sealed P1 topology or scoped identity changed" '()))
+
+(define (p1-fixed-vector? value size)
+  (and (vector? value) (= (vector-length value) size)))
+
+(define (p1-fixed-index? value bound)
+  (and (integer? value) (exact? value) (>= value 0) (< value bound)))
+
+(define (p1-fixed-descriptor? trie handles)
+  (and (p1-fixed-vector? trie 3) (p1-fixed-vector? handles 14)
+       (p1-fixed-vector? (vector-ref trie 0) 17)
+       (p1-fixed-vector? (vector-ref trie 1) 15)
+       (symbol? (vector-ref trie 2))
+       (let ((modules (vector-ref trie 0)) (leaves (vector-ref trie 1)))
+         (let module-rows ((index 0))
+           (if (= index 17)
+               (let leaf-rows ((leaf 0))
+                 (if (= leaf 15) #t
+                     (let ((row (vector-ref leaves leaf)))
+                       (and (p1-fixed-vector? row 4)
+                            (p1-fixed-index? (vector-ref row 0) 17)
+                            (string? (vector-ref row 1))
+                            (p1-fixed-index? (vector-ref row 2) 14)
+                            (= (vector-ref row 2)
+                               (if (= leaf 14) 10 leaf))
+                            (let ((shape (vector-ref row 3)))
+                              (and (vector? shape)
+                                   (or (= (vector-length shape) 1)
+                                       (= (vector-length shape) 2))
+                                   (let dimensions ((dimension 0))
+                                     (if (= dimension (vector-length shape)) #t
+                                         (and (integer? (vector-ref shape dimension))
+                                              (exact? (vector-ref shape dimension))
+                                              (> (vector-ref shape dimension) 0)
+                                              (dimensions (+ dimension 1)))))))
+                            (leaf-rows (+ leaf 1))))))
+               (let ((row (vector-ref modules index)))
+                 (and (p1-fixed-vector? row 2)
+                      (if (= index 0)
+                          (and (integer? (vector-ref row 0))
+                               (exact? (vector-ref row 0))
+                               (= (vector-ref row 0) -1)
+                               (not (vector-ref row 1)))
+                          (and (p1-fixed-index? (vector-ref row 0) index)
+                               (string? (vector-ref row 1))))
+                      (module-rows (+ index 1)))))))))
+
+(define (p1-fixed-list-length? items expected)
+  (if (= expected 0) (null? items)
+      (and (pair? items)
+           (p1-fixed-list-length? (cdr items) (- expected 1)))))
+
+(define (p1-fixed-child-count modules parent)
+  (let loop ((index 1) (count 0))
+    (if (= index 17) count
+        (loop (+ index 1)
+              (if (= (vector-ref (vector-ref modules index) 0) parent)
+                  (+ count 1) count)))))
+
+(define (p1-fixed-leaf-count leaves module-index)
+  (let loop ((index 0) (count 0))
+    (if (= index 15) count
+        (loop (+ index 1)
+              (if (= (vector-ref (vector-ref leaves index) 0) module-index)
+                  (+ count 1) count)))))
+
+(define (p1-fixed-child parent name)
+  (let loop ((children (vector-ref parent 4)) (found #f))
+    (if (null? children) found
+        (if (not (pair? children)) #f
+        (let ((binding (car children)))
+          (if (and (p1-fixed-vector? binding 3)
+                   (eq? (vector-ref binding 0) 'child-binding)
+                   (string? (vector-ref binding 1))
+                   (module-value? (vector-ref binding 2)))
+              (if (string=? (vector-ref binding 1) name)
+                  (if found #f
+                      (loop (cdr children) (vector-ref binding 2)))
+                  (loop (cdr children) found))
+              #f))))))
+
+(define (p1-fixed-module modules root index)
+  (if (= index 0) root
+      (let* ((row (vector-ref modules index))
+             (parent (p1-fixed-module modules root (vector-ref row 0))))
+        (if parent (p1-fixed-child parent (vector-ref row 1)) #f))))
+
+(define (p1-fixed-shell-raw shell kind scope)
+  (let loop ((entries (shell-registry-current)) (found #f))
+    (if (null? entries) found
+        (if (not (pair? entries)) #f
+        (let ((entry (car entries)))
+          (if (and (vector? entry) (= (vector-length entry) 4)
+                   (eq? (vector-ref entry 0) shell))
+              (if (and (not found) (eq? (vector-ref entry 1) kind)
+                       (eq? (vector-ref entry 3) scope))
+                  (loop (cdr entries) (vector-ref entry 2))
+                  #f)
+              (loop (cdr entries) found)))))))
+
+(define (p1-fixed-raw-registry-count raw kind scope)
+  (let loop ((entries (shell-registry-current)) (count 0))
+    (if (null? entries) count
+        (if (not (pair? entries)) 0
+        (let ((entry (car entries)))
+          (loop (cdr entries)
+                (if (and (vector? entry) (= (vector-length entry) 4)
+                         (eq? (vector-ref entry 1) kind)
+                         (eq? (vector-ref entry 2) raw)
+                         (eq? (vector-ref entry 3) scope))
+                    (+ count 1) count)))))))
+
+(define (p1-fixed-shell-registry-count shell)
+  (let loop ((entries (shell-registry-current)) (count 0))
+    (if (null? entries) count
+        (if (not (pair? entries)) 0
+        (let ((entry (car entries)))
+          (loop (cdr entries)
+                (if (and (vector? entry) (> (vector-length entry) 0)
+                         (eq? (vector-ref entry 0) shell))
+                    (+ count 1) count)))))))
+
+(define (p1-fixed-shape? actual expected)
+  (let loop ((remaining actual) (index 0))
+    (if (= index (vector-length expected)) (null? remaining)
+        (and (pair? remaining)
+             (tr3-fixed-dimension=? (car remaining)
+                                    (vector-ref expected index))
+             (loop (cdr remaining) (+ index 1))))))
+
+(define (p1-fixed-prefix-rest modules index path)
+  (if (= index 0) path
+      (let* ((row (vector-ref modules index))
+             (remaining
+               (p1-fixed-prefix-rest modules (vector-ref row 0) path)))
+        (if (and (pair? remaining) (string? (car remaining))
+                 (string=? (car remaining) (vector-ref row 1)))
+            (cdr remaining) #f))))
+
+(define (p1-fixed-handle-path? modules row path)
+  (let ((remaining (p1-fixed-prefix-rest modules (vector-ref row 0) path)))
+    (and (pair? remaining) (string? (car remaining))
+         (string=? (car remaining) (vector-ref row 1))
+         (null? (cdr remaining)))))
+
+(define (p1-fixed-leaf-match? row module raw handles scope)
+  (let ((handle
+          (p1-fixed-shell-raw (vector-ref handles (vector-ref row 2))
+                              'handle scope)))
+    (and (handle-value? handle) (eq? raw handle)
+         (eq? (vector-ref handle 1) module)
+         (p1-fixed-shape? (vector-ref handle 3) (vector-ref row 3))
+         (eq? (vector-ref handle 4) 'f32)
+         (eq? (vector-ref handle 5) 'cpu)
+         (vector-ref handle 6)
+         (not (null? (vector-ref handle 6))))))
+
+(define (p1-fixed-module-bindings? modules leaves handles root scope index)
+  (let ((module (p1-fixed-module modules root index)))
+    (and (module-value? module)
+         (p1-fixed-list-length? (vector-ref module 4)
+                                (p1-fixed-child-count modules index))
+         (p1-fixed-list-length? (vector-ref module 2)
+                                (p1-fixed-leaf-count leaves index))
+         (null? (vector-ref module 3))
+         (let child-rows ((child 1))
+           (if (= child 17) #t
+               (if (= (vector-ref (vector-ref modules child) 0) index)
+                   (and (p1-fixed-module modules root child)
+                        (child-rows (+ child 1)))
+                   (child-rows (+ child 1)))))
+         (let leaf-rows ((leaf 0))
+           (if (= leaf 15) #t
+               (let ((row (vector-ref leaves leaf)))
+                 (if (= (vector-ref row 0) index)
+                     (let scan ((bindings (vector-ref module 2)) (found 0))
+                       (if (null? bindings)
+                           (and (= found 1) (leaf-rows (+ leaf 1)))
+                           (let ((binding (car bindings)))
+                             (and (p1-fixed-vector? binding 3)
+                                  (eq? (vector-ref binding 0)
+                                       'parameter-binding)
+                                  (string? (vector-ref binding 1))
+                                  (if (string=? (vector-ref binding 1)
+                                                (vector-ref row 1))
+                                      (and (p1-fixed-leaf-match?
+                                             row module (vector-ref binding 2)
+                                             handles scope)
+                                           (scan (cdr bindings) (+ found 1)))
+                                      (scan (cdr bindings) found)))))
+                     (leaf-rows (+ leaf 1))))))))))
+
+(define (p1-fixed-sealed-record root-shell)
+  (let loop ((records (vector-ref construction-registry-root 0))
+             (found #f))
+    (if (null? records) found
+        (if (not (pair? records)) #f
+        (let ((record (car records)))
+          (if (and (vector? record) (>= (vector-length record) 4)
+                   (eq? (vector-ref record 3) root-shell))
+              (if (or found (not (p1-fixed-vector? record 5))
+                      (not (eq? (vector-ref record 1) 'sealed))
+                      (not (vector-ref record 0))) #f
+                  (loop (cdr records) record))
+              (loop (cdr records) found)))))))
+
+(define (p1-fixed-expected-member-count raw kind modules root handles scope)
+  (if (eq? kind 'module)
+      (let loop ((index 0) (count 0))
+        (if (= index 17) count
+            (loop (+ index 1)
+                  (if (eq? raw (p1-fixed-module modules root index))
+                      (+ count 1) count))))
+      (let loop ((index 0) (count 0))
+        (if (= index 14) count
+            (loop (+ index 1)
+                  (if (eq? raw
+                           (p1-fixed-shell-raw
+                             (vector-ref handles index) 'handle scope))
+                      (+ count 1) count))))))
+
+(define (p1-fixed-scoped-registry? modules root handles scope)
+  (let loop ((entries (shell-registry-current)) (modules-seen 0)
+             (handles-seen 0))
+    (if (null? entries)
+        (and (= modules-seen 17) (= handles-seen 14))
+        (if (not (pair? entries)) #f
+        (let ((entry (car entries)))
+          (if (and (vector? entry) (>= (vector-length entry) 4)
+                   (eq? (vector-ref entry 3) scope))
+              (let ((kind (vector-ref entry 1))
+                    (raw (vector-ref entry 2)))
+                (if (and (= (vector-length entry) 4)
+                         (or (eq? kind 'module) (eq? kind 'handle))
+                         (= (p1-fixed-expected-member-count
+                              raw kind modules root handles scope) 1)
+                         (= (p1-fixed-raw-registry-count raw kind scope) 1)
+                         (= (p1-fixed-shell-registry-count
+                              (vector-ref entry 0)) 1))
+                    (loop (cdr entries)
+                          (if (eq? kind 'module) (+ modules-seen 1)
+                              modules-seen)
+                          (if (eq? kind 'handle) (+ handles-seen 1)
+                              handles-seen))
+                    #f))
+              (loop (cdr entries) modules-seen handles-seen)))))))
+
+(define (p1-fixed-sealed-topology! root-shell trie handles)
+  (if (or (active-construction) construction-busy?
+          protected-storage-comparison-active?
+          (not (p1-fixed-descriptor? trie handles)))
+      (p1-fixed-seal-fail))
+  (let* ((record (p1-fixed-sealed-record root-shell))
+         (scope (if record (vector-ref record 0) #f))
+         (modules (vector-ref trie 0))
+         (leaves (vector-ref trie 1))
+         (root (if scope (p1-fixed-shell-raw root-shell 'module scope) #f))
+         (provider (if (module-value? root) (vector-ref root 6) #f)))
+    (if (not (and scope (module-value? root)
+                  (tensor-provider-value? provider)
+                  (eq? (vector-ref record 2) (vector-ref trie 2))
+                  (eq? (tensor-provider-name provider) (vector-ref trie 2))
+                  (eq? provider (tensor-provider-find (vector-ref trie 2)))
+                  (eq? (vector-ref root 5) #f)
+                  (eq? (vector-ref root 8) 'cpu)
+                  (= (vector-ref root 9) 15)
+                  (= (vector-ref root 10) 17)
+                  (= (vector-ref root 11) 4)
+                  (= (vector-ref root 12) 5)))
+        (p1-fixed-seal-fail))
+    (let modules-loop ((index 0))
+      (if (= index 17) #t
+          (let* ((module (p1-fixed-module modules root index))
+                 (parent-index (vector-ref (vector-ref modules index) 0))
+                 (parent (if (= index 0) #f
+                             (p1-fixed-module modules root parent-index))))
+            (if (not (and (module-value? module)
+                          (eq? (vector-ref module 1) 'eval)
+                          (eq? (vector-ref module 5) parent)
+                          (eq? (vector-ref module 6) provider)
+                          (eq? (vector-ref module 7) #t)
+                          (eq? (vector-ref module 8)
+                               (if (= index 0) 'cpu #f))
+                          (= (p1-fixed-raw-registry-count
+                               module 'module scope) 1)
+                          (p1-fixed-module-bindings?
+                            modules leaves handles root scope index)))
+                (p1-fixed-seal-fail))
+            (modules-loop (+ index 1)))))
+    (let handles-loop ((index 0))
+      (if (= index 14) #t
+          (let* ((shell (vector-ref handles index))
+                 (raw (p1-fixed-shell-raw shell 'handle scope))
+                 (row (vector-ref leaves index))
+                 (module (p1-fixed-module modules root (vector-ref row 0))))
+            (if (not (and (handle-value? raw)
+                          (eq? (vector-ref raw 1) module)
+                          (p1-fixed-handle-path? modules row
+                                                 (vector-ref raw 2))
+                          (p1-fixed-shape? (vector-ref raw 3)
+                                           (vector-ref row 3))
+                          (eq? (vector-ref raw 4) 'f32)
+                          (eq? (vector-ref raw 5) 'cpu)
+                          (vector-ref raw 6)
+                          (not (null? (vector-ref raw 6)))
+                          (eq? (vector-ref raw 7) provider)
+                          (= (p1-fixed-raw-registry-count
+                               raw 'handle scope) 1)))
+                (p1-fixed-seal-fail))
+            (handles-loop (+ index 1)))))
+    (if (not (p1-fixed-scoped-registry? modules root handles scope))
+        (p1-fixed-seal-fail))
+    #t))
+
 
 (vector
   (lambda (module)
@@ -6038,6 +6359,10 @@
     (construction-prepare-eval-guarded! identity))
   (lambda (identity)
     (construction-seal-prepared! identity))
+  ;; Append-only P1-only sealed current-root verifier, slot 73.
+  (lambda (root-shell expected-trie expected-handles)
+    (p1-fixed-sealed-topology!
+      root-shell expected-trie expected-handles))
   )))
 
 (define (module-parameters module)

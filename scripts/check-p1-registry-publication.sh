@@ -469,13 +469,21 @@ inject("  ;; Append-only source-private G3-C4 construction split, slots 71..72.\
        "    (construction-prepare-eval-guarded! identity))\n"
        "  (lambda (identity)\n"
        "    (construction-seal-prepared! identity))\n"
+       "  ;; Append-only P1-only sealed current-root verifier, slot 73.\n"
+       "  (lambda (root-shell expected-trie expected-handles)\n"
+       "    (p1-fixed-sealed-topology!\n"
+       "      root-shell expected-trie expected-handles))\n"
        "  )))",
        "  ;; Append-only source-private G3-C4 construction split, slots 71..72.\n"
        "  (lambda (identity)\n"
        "    (construction-prepare-eval-guarded! identity))\n"
        "  (lambda (identity)\n"
        "    (construction-seal-prepared! identity))\n"
-       "  ;; Test-only slot 73 models failed advisory linkage.\n"
+       "  ;; Append-only P1-only sealed current-root verifier, slot 73.\n"
+       "  (lambda (root-shell expected-trie expected-handles)\n"
+       "    (p1-fixed-sealed-topology!\n"
+       "      root-shell expected-trie expected-handles))\n"
+       "  ;; Test-only slot 74 models failed advisory linkage.\n"
        "  (lambda (mode)\n"
        "    (cond ((eq? mode 'fail-stage)\n"
        "           (set! p1-index-test-fail-stage? #t) #t)\n"
@@ -490,7 +498,7 @@ inject("  ;; Append-only source-private G3-C4 construction split, slots 71..72.\
        "          (else #f)))\n"
        "  )))")
 source += "\n(define (p1-index-test-control! mode)\n"
-source += "  ((vector-ref p1-trusted-surface 73) mode))\n"
+source += "  ((vector-ref p1-trusted-surface 74) mode))\n"
 Path(sys.argv[2]).write_text(source)
 PY
 

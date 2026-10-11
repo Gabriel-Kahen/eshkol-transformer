@@ -85,7 +85,8 @@ def check():
 
     leaf_start = text.index(";;; TR3 fixed-profile read-only validators.")
     leaf_end = text.index("\n\n(vector\n", leaf_start)
-    leaf = text[leaf_start:leaf_end]
+    p1_slot73_start = text.index(";;; Slot 73 is P1-only.", leaf_start)
+    leaf = text[leaf_start:p1_slot73_start]
     for forbidden in (
         "shell-for-raw", "raw-for-shell", "finalization-plan",
         "module-parameters", "parameter-tree", "construction-begin",
@@ -118,6 +119,14 @@ def check():
             "TR3 P1 surface append is missing or duplicated")
     without_leaf = text[:leaf_start] + "\n" + text[leaf_end + 2:]
     without_leaf = without_leaf.replace(vector_append, "")
+    p1_slot73_append = (
+        "  ;; Append-only P1-only sealed current-root verifier, slot 73.\n"
+        "  (lambda (root-shell expected-trie expected-handles)\n"
+        "    (p1-fixed-sealed-topology!\n"
+        "      root-shell expected-trie expected-handles))\n")
+    require(without_leaf.count(p1_slot73_append) == 1,
+            "P1-only slot73 append is missing or duplicated")
+    without_leaf = without_leaf.replace(p1_slot73_append, "")
     successor_tail = ("\n         module-construction-parameters-internal"
                       "\n         p1-trusted-surface)")
     require(without_leaf.count(successor_tail) == 1,

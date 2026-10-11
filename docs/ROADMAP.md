@@ -2837,6 +2837,18 @@ publication, public G2 and continuation remain pending.
   links their unresolved helper edge, and executes sealed-owner copy and
   wrong-binding/extent/alias negatives. This does not replace the supported
   installed aggregate or public export inventory gate.
+  A bounded P1-only slot-73 current-root topology verifier is now source-staged
+  on an isolated branch. It checks one sealed source construction record,
+  exact rooted 17-module/15-binding/14-handle eval topology and complete
+  scoped shell-registry closure, including detached entries and duplicate
+  source identities; focused source/overlay negatives cover drift and retry.
+  The overlay also demonstrates the remaining native-authority gap: a live P1
+  state token relabeled as a handle in the source registry can pass slot 73.
+  A separate reviewed P1-private native kind/liveness validator is therefore
+  required before claiming tombstone rejection or using this as a C4 witness.
+  Compiled normal/repeat/sanitizer tests, allocation/callback instrumentation,
+  C4 descriptor and owner binding, aggregate exclusion, and supported ABI
+  checks remain OPEN/HOLD.
 
 ## Wave 4 — practical pretraining and performance
 

@@ -7,8 +7,8 @@
 (define (schedule handle shape)
   (vector (list (vector '("weight") handle shape 'f32 'cpu)) '()))
 
-(define compare-schedules (vector-ref p1-trusted-surface 73))
-(define create-handle (vector-ref p1-trusted-surface 74))
+(define compare-schedules (vector-ref p1-trusted-surface 74))
+(define create-handle (vector-ref p1-trusted-surface 75))
 (define first-handle (create-handle))
 (check "first native handle" (not (null? first-handle)))
 (define second-handle (create-handle))

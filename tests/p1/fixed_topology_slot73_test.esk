@@ -1,0 +1,120 @@
+;;; Test-only trusted P1 root. The descriptor has the C4 fixed topology but
+;;; uses the inert P1 fixture provider; slot 73 itself remains provider-neutral.
+(require transformer.module)
+(require p1_test.tensor_provider)
+(load "g3c4_p1_construction_extension.esk")
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "P1 fixed topology FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught)
+                           'invalid-state))))
+      (thunk) #f)))
+
+(define fixed-trie
+  (vector
+    '#(#(-1 #f) #(0 "blocks") #(1 "0") #(2 "attention")
+       #(3 "key") #(3 "output") #(3 "query") #(3 "value")
+       #(2 "ffn") #(8 "down") #(8 "up") #(2 "norm1")
+       #(2 "norm2") #(0 "head") #(0 "norm_final")
+       #(0 "position_embedding") #(0 "token_embedding"))
+    '#(#(4 "weight" 0 #(4 4)) #(5 "weight" 1 #(4 4))
+       #(6 "weight" 2 #(4 4)) #(7 "weight" 3 #(4 4))
+       #(9 "weight" 4 #(4 8)) #(10 "weight" 5 #(8 4))
+       #(11 "bias" 6 #(4)) #(11 "weight" 7 #(4))
+       #(12 "bias" 8 #(4)) #(12 "weight" 9 #(4))
+       #(13 "weight" 10 #(256 4)) #(14 "bias" 11 #(4))
+       #(14 "weight" 12 #(4)) #(15 "weight" 13 #(4 4))
+       #(16 "weight" 10 #(256 4)))
+    'fixture-v1))
+
+(define (leaf-shape index)
+  (cond ((= index 4) '(4 8)) ((= index 5) '(8 4))
+        ((= index 10) '(256 4))
+        ((or (= index 6) (= index 7) (= index 8) (= index 9)
+             (= index 11) (= index 12)) '(4))
+        (else '(4 4))))
+
+(define (build-fixed)
+  (let* ((construction (module-construction-begin-internal 'fixture-v1))
+         (root (module-construction-root-internal construction))
+         (modules (make-vector 17 #f))
+         (handles (make-vector 14 #f))
+         (module-rows (vector-ref fixed-trie 0))
+         (leaves (vector-ref fixed-trie 1)))
+    (vector-set! modules 0 root)
+    (let create ((index 1))
+      (if (= index 17) #t
+          (let* ((row (vector-ref module-rows index))
+                 (child (module-create-with-provider-internal 'fixture-v1)))
+            (module-register-child-internal!
+              (vector-ref modules (vector-ref row 0))
+              (vector-ref row 1) child)
+            (vector-set! modules index child)
+            (create (+ index 1)))))
+    (let register ((index 0))
+      (if (= index 15) #t
+          (let* ((row (vector-ref leaves index))
+                 (module (vector-ref modules (vector-ref row 0)))
+                 (name (vector-ref row 1)))
+            (if (= index 14)
+                (module-register-tied-parameter-internal!
+                  module name (vector-ref handles 10))
+                (vector-set! handles index
+                  (module-register-parameter-internal!
+                    module name
+                    (fixture-tensor-internal
+                      (leaf-shape index) 'f32 'cpu
+                      (vector index 'bits)))))
+            (register (+ index 1)))))
+    (module-construction-parameters-internal construction)
+    (module-construction-prepare-eval-internal! construction)
+    (module-construction-seal-prepared-internal! construction)
+    (vector root handles)))
+
+(define built (build-fixed))
+(define root (vector-ref built 0))
+(define handles (vector-ref built 1))
+(define verify-fixed (vector-ref p1-trusted-surface 73))
+(define mutate-fixed (vector-ref p1-trusted-surface 74))
+(define restore-fixed (vector-ref p1-trusted-surface 75))
+(check "sealed fixed root" (verify-fixed root fixed-trie handles))
+
+(define original-handle-0 (vector-ref handles 0))
+(vector-set! handles 0 (vector-ref handles 1))
+(reject "wrong supplied handle"
+  (lambda () (verify-fixed root fixed-trie handles)))
+(vector-set! handles 0 original-handle-0)
+(check "supplied handle retry" (verify-fixed root fixed-trie handles))
+
+(let mutations ((actions '(detached-module detached-handle duplicate-shell
+                            duplicate-record wrong-parent wrong-shape
+                            wrong-device wrong-tie)))
+  (if (null? actions) #t
+      (begin
+        (mutate-fixed (car actions) root (vector-ref handles 0))
+        (reject (car actions)
+          (lambda () (verify-fixed root fixed-trie handles)))
+        (restore-fixed)
+        (check "restored same-root retry"
+          (verify-fixed root fixed-trie handles))
+        (mutations (cdr actions)))))
+
+;;; Known open dependency: a valid state token relabeled in the source shell
+;;; registry as handle 0 remains source-consistent. A future P1 native kind/
+;;; liveness validator must make this an invalid-state rejection instead.
+(define foreign-state-token
+  (mutate-fixed 'native-kind-gap root original-handle-0))
+(vector-set! handles 0 foreign-state-token)
+(check "native kind remains unverified" (verify-fixed root fixed-trie handles))
+(vector-set! handles 0 original-handle-0)
+(restore-fixed)
+(check "native-kind counterexample restored"
+  (verify-fixed root fixed-trie handles))
+(display "P1 fixed topology PASS: ") (display checks) (newline)
