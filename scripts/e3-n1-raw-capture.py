@@ -279,6 +279,7 @@ def scan_selected_layers(paths, selected, byte_cap, deadline, rss_cap=2 * 1024**
             elif part != ".":
                 parts.append(part)
         need("/".join(parts) in seen, "symlink-target-unpinned")
+    resource_check(deadline, rss_cap)
     return len(seen)
 
 

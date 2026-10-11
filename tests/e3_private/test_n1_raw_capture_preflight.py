@@ -403,6 +403,122 @@ class PreflightTests(unittest.TestCase):
                                          layers=layers[:1], uncompressed_cap=1024 * 1024,
                                          total_uncompressed_cap=1024 * 1024)
 
+    def test_gzip_final_selected_comparison_rechecks_deadline_and_rss(self):
+        payload = b"guest tool"
+        tar = io.BytesIO()
+        with tarfile.open(fileobj=tar, mode="w") as archive:
+            entry = tarfile.TarInfo("usr/bin/tool")
+            entry.mode = 0o755
+            entry.size = len(payload)
+            archive.addfile(entry, io.BytesIO(payload))
+        raw = tar.getvalue()
+        packed = gzip.compress(raw, mtime=0)
+        layer = {"descriptor": {
+            "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+            "digest": "sha256:" + mod.hashlib.sha256(packed).hexdigest(),
+            "size": len(packed)},
+            "diff_id": "sha256:" + mod.hashlib.sha256(raw).hexdigest()}
+        original_drain = mod.ChunkReader.drain
+
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "layer.tar.gz"
+            path.write_bytes(packed)
+
+            def scan(selected, deadline):
+                return mod.scan_selected_layers(
+                    [path], selected, 1024, deadline, layers=[layer],
+                    uncompressed_cap=1024 * 1024,
+                    total_uncompressed_cap=1024 * 1024)
+
+            state = {"drained": False, "late": False, "now": 0}
+
+            class LateSelected(dict):
+                def items(self):
+                    if state["drained"]:
+                        state["late"] = True
+                        state["now"] = 2
+                    return super().items()
+
+            selected = [LateSelected(path="/usr/bin/tool", layer=0, kind="file",
+                                     mode=0o755,
+                                     sha256=mod.hashlib.sha256(payload).hexdigest(),
+                                     size=len(payload))]
+
+            def mark_drain(reader):
+                original_drain(reader)
+                state["drained"] = True
+
+            with mock.patch.object(mod.ChunkReader, "drain", mark_drain), \
+                 mock.patch.object(mod.time, "monotonic", side_effect=lambda: state["now"]):
+                with self.assertRaisesRegex(mod.Hold, "time-cap"):
+                    scan(selected, 1)
+            self.assertTrue(state["late"])
+
+            state = {"drained": False, "late": False, "now": 0}
+
+            def late_rss(_cap):
+                if state["late"]:
+                    raise mod.Hold("rss-cap")
+
+            with mock.patch.object(mod.ChunkReader, "drain", mark_drain), \
+                 mock.patch.object(mod, "rss_check", side_effect=late_rss):
+                with self.assertRaisesRegex(mod.Hold, "rss-cap"):
+                    scan(selected, time.monotonic() + 5)
+            self.assertTrue(state["late"])
+
+    def test_gzip_final_symlink_resolution_rechecks_deadline(self):
+        payload = b"guest tool"
+        tar = io.BytesIO()
+        with tarfile.open(fileobj=tar, mode="w") as archive:
+            file_entry = tarfile.TarInfo("usr/bin/tool")
+            file_entry.mode = 0o755
+            file_entry.size = len(payload)
+            archive.addfile(file_entry, io.BytesIO(payload))
+            link_entry = tarfile.TarInfo("usr/bin/link")
+            link_entry.type = tarfile.SYMTYPE
+            link_entry.linkname = "/usr/bin/tool"
+            link_entry.mode = 0o777
+            archive.addfile(link_entry)
+        raw = tar.getvalue()
+        packed = gzip.compress(raw, mtime=0)
+        layer = {"descriptor": {
+            "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+            "digest": "sha256:" + mod.hashlib.sha256(packed).hexdigest(),
+            "size": len(packed)},
+            "diff_id": "sha256:" + mod.hashlib.sha256(raw).hexdigest()}
+        selected = [
+            {"path": "/usr/bin/tool", "layer": 0, "kind": "file", "mode": 0o755,
+             "sha256": mod.hashlib.sha256(payload).hexdigest(), "size": len(payload)},
+            {"path": "/usr/bin/link", "layer": 0, "kind": "symlink",
+             "mode": 0o777, "target": "/usr/bin/tool"},
+        ]
+        original_path = mod.PurePosixPath
+        original_drain = mod.ChunkReader.drain
+        state = {"drained": False, "resolved": False, "now": 0}
+
+        def mark_drain(reader):
+            original_drain(reader)
+            state["drained"] = True
+
+        def mark_resolution(value):
+            if state["drained"] and value == "usr/bin/tool":
+                state["resolved"] = True
+                state["now"] = 2
+            return original_path(value)
+
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "layer.tar.gz"
+            path.write_bytes(packed)
+            with mock.patch.object(mod.ChunkReader, "drain", mark_drain), \
+                 mock.patch.object(mod, "PurePosixPath", side_effect=mark_resolution), \
+                 mock.patch.object(mod.time, "monotonic", side_effect=lambda: state["now"]):
+                with self.assertRaisesRegex(mod.Hold, "time-cap"):
+                    mod.scan_selected_layers(
+                        [path], selected, 1024, 1, layers=[layer],
+                        uncompressed_cap=1024 * 1024,
+                        total_uncompressed_cap=1024 * 1024)
+        self.assertTrue(state["resolved"])
+
     def test_capture_receipt_requires_39_and_f_parity(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
