@@ -1,0 +1,12 @@
+;;; Private pair/RNG aggregate: reuse the one D2/T2/I2 identity root.
+(load "g3r_file_pair_root.esk")
+(load "m3t_transport_extension.esk")
+(load "m3_schedule.esk")
+(load "m3_model_extension.esk")
+(load "m3_call_adapters.esk")
+(load "g3t_model_admission_extension.esk")
+(load "g3t_generator_constructor_extension.esk")
+(load "g3t_prefill_sample_extension.esk")
+(load "g3t_rng_owner_extension.esk")
+(load "g3r_rng_import_extension.esk")
+(load "g3r_pair_rng_bridge_extension.esk")

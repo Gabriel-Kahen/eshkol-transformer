@@ -55,6 +55,32 @@
 (reject "prepublication fault releases owner" c2-path good-path policy report)
 (set! g3r-file-pair-before-publish-internal original-before-publish)
 
+;;; The fault hook may raise, but cannot relabel checked decoded fields.
+(define hook-saw-vector #f)
+(define hook-mutated #f)
+(set! g3r-file-pair-before-publish-internal
+  (lambda (payload)
+    (set! hook-saw-vector (vector? payload))
+    (guard (caught (#t #t))
+      (vector-set! payload 0 (vector 'forged-receipt))
+      (set! hook-mutated #t))
+    (guard (caught (#t #t))
+      (vector-set! payload 2 (vector 1 7 -1 -1))
+      (set! hook-mutated #t))))
+(let ((slots (make-vector 9 'untouched))
+      (before (live-c2)))
+  (g3r-file-pair-admit-internal c2-path good-path policy report slots)
+  (check "fault hook cannot mutate checked receipt or RNG"
+    (and (not hook-saw-vector) (not hook-mutated)
+         (vector? (vector-ref slots 2))
+         (= (vector-ref (vector-ref slots 2) 2) 0)
+         (= (vector-ref (vector-ref slots 2) 3) 0)
+         (= (live-c2) (+ before 1))))
+  (check "hook-proof receipt releases"
+    (and (g3r-c2-receipt-release-internal! (vector-ref slots 0))
+         (= (live-c2) before))))
+(set! g3r-file-pair-before-publish-internal original-before-publish)
+
 (let ((numeric #(77 77 77 77 77 77 77 77 77))
       (before (live-c2))
       (caught #f))

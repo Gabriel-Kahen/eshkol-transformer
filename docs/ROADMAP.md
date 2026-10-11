@@ -1651,6 +1651,17 @@ exact `91dc1540` / tree `3c746694` with no blocking source finding; its seal is
 The supported compiled runtime gate and all-path ownership remain unaccepted;
 no live model restore or continuation is claimed.
 
+A source-only [private checked-pair to typed RNG bridge candidate](g3/G3_R_PAIR_RNG_BRIDGE_LEAF.md)
+now consumes a newly admitted file pair through private scratch and publishes
+its live C2/SHA receipt with an independent same-aggregate G3-T kind-8 RNG
+owner in one ten-slot result. The pair fault hook receives no checked mutable
+payload, closing a post-validation receipt/RNG rewrite path. Malformed-pair,
+allocation, hook-mutation and publication-failure fixtures are present; local
+source checks only have run. Independent source/tests review found no blocking
+finding. A supported compiled normal/repeat/sanitizer gate and aggregate
+load/symbol closure remain pending. This bridge does not restore a model, bind a
+live tokenizer, replay history or prove continuation.
+
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
 checks the authentic idle generator's four RNG words without allocation,
