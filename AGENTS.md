@@ -24,6 +24,11 @@ This project is being developed through coordinated Codex tasks.
   the orchestrator before merging.
 - Preserve user and other-agent changes. Never reset or overwrite unrelated work.
 - Make focused commits with tests and update the relevant status in `docs/ROADMAP.md`.
+- Push committed work promptly to an upstream `codex/*` branch so progress is
+  tracked on GitHub. Publication does not establish validation or admission;
+  retain the existing review and validation gates before merging.
+- Preserve divergent remote history: publish under a separate branch name rather
+  than force-pushing. Include the published branch and commit in handoffs.
 
 ## Engineering standards
 
