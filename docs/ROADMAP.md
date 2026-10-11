@@ -2644,7 +2644,15 @@ publication, public G2 and continuation remain pending.
   authentic T1/EOS/second-token composition, and a preflighted no-failure close
   after native commit. Native terminal integration and logical I1 clone code
   are prerequisites; Eshkol implementation and compiled same-call proof remain
-  pending. No public G2 or continuation acceptance is claimed.
+  pending. A source prerequisite audit at base `7291ef8` confirms the gated
+  native terminal commit/snapshot and logical I1 clone/copy/release signatures
+  are present in `g3c4_context_internal.h` and `g3c4_model_owner.c`. The current
+  Eshkol protected wrapper still mandates abort and returns `#t`, while its
+  prefix input checker admits only `before-prefix`; neither can serve as the
+  separate same-call terminal entry. The next source gate is that dedicated
+  entry, including a surviving terminal anchor, genuine EOS/second-frame T1
+  path, authenticated rollback, irreversible zero tail and detached adapters.
+  No public G2 or continuation acceptance is claimed.
 
 ## Wave 4 — practical pretraining and performance
 
