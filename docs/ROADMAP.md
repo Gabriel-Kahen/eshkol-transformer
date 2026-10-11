@@ -820,7 +820,14 @@ failure path because it left an unmarked empty directory. The D candidate
 removes and syncs that empty stage on descriptor-open failure when cleanup
 succeeds, and reports a distinct HOLD error if cleanup fails, with an injected
 negative alongside the moved-target and parent-swap checks. Its production
-release pin is absent;
+release pin is absent. Independent D review and a separate feasibility audit
+HOLD D: with unrestricted same-UID parent edits, the stage can be moved between
+`mkdirat` and `openat`, leaving an unmarked original; cleanup failure can also
+leave an unmarked stage. The [stage custody proposal](e3/E3_N1_EXPORT_STAGE_CUSTODY_PROPOSAL.md)
+specifies a separate-UID protected broker, precommitted HOLD intent, retained
+stage fd, and explicit storage-failure limits. It is a design candidate, not an
+accepted release contract; ROOT must resolve the exact-input plan's literal
+failure-artifact requirement before broker implementation or layer read;
 independent and ROOT source/pin review and a separately sealed read-only
 export remain pending. A full
 export seal and its verified layer hashes follow acquisition; guest discovery
