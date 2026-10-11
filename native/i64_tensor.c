@@ -308,6 +308,17 @@ int32_t et_i64_tensor_private_storage_overlap_v1(
   }
   return storage_aliases_live_i1(pointer, bytes) ? 1 : 0;
 }
+#ifdef ET_T1_SEALED_RELEASE_TEST_ONLY
+int32_t et_i64_tensor_private_data_address_live_v1(uintptr_t address) {
+  const et_i64_tensor *tensor;
+  if (address == 0u) return -1;
+  for (tensor = live_tensors; tensor != NULL;
+       tensor = tensor->registry_next) {
+    if ((uintptr_t)tensor->data == address) return 1;
+  }
+  return 0;
+}
+#endif
 #endif
 
 static int error_aliases_live_i1(const et_i64_tensor_error *error) {

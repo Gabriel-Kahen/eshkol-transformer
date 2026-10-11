@@ -2806,12 +2806,20 @@ publication, public G2 and continuation remain pending.
   Source tests now require same- and different-output nested denial at first,
   final and input-provider cuts, plus original-`#f` retry. Parsed AST checks
   also expose and repair previously balanced but misplaced capture/admit and
-  shell-`let*` parentheses. This successor is source-only pending independent
-  review; neither the fixture nor changed route has been compiled or run.
-  It makes no sealed-T1 release claim: the current native T1 abort
-  refuses sealed shells, so a genuine post-creation release test still needs
-  a reviewed lifecycle or test-only seam. The installed public exports stay
-  unchanged.
+  shell-`let*` parentheses. The exact successor passed independent and root
+  source review; neither the fixture nor changed route has been compiled or
+  run. The installed public exports stay unchanged.
+  A separate [test-only T1 postcreation retirement source candidate](g3/G3_C4_T1_POSTCREATION_RETIRE_TEST_SEAM.md)
+  stages real sealed-shell I1 borrow/tensor cleanup and tombstone admission,
+  with a one-root private C4 history fixture and a post-borrow fail-stop child.
+  Its focused B successor uses a pre-free integer address to test I1 data
+  deregistration and a one-entry registered wrong-length native-refusal cut;
+  both wrong-length shells are deliberately retained until process exit.
+  The source-only tests do not establish compiled release or production T1
+  reclamation; the public process-lifetime contract remains unchanged.
+  The reviewed public-history and T1 test-only sources are composed on current
+  main for source checks only. Their combined compiled behavior, normal and
+  sanitizer runtime proof, and public continuation remain pending.
 
 ## Wave 4 — practical pretraining and performance
 
