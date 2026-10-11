@@ -2873,6 +2873,15 @@ publication, public G2 and continuation remain pending.
   clean new-construction retry. These are source-only changes: the CachyOS
   toolchain gate still prevents compiled or runtime evidence. Independent
   source/tests review and ROOT review remain required before diagnostic compile.
+  Source candidate C closes the two B reviewer checker counterexamples by
+  requiring the final pre-root `%next-pair` write to be the canonical staged
+  value, the root barrier value slot's last write to be that loaded pair, and
+  the witness barrier value slot's last pre-call write to be the native shell;
+  focused typed and non-tagged overwrite mutants now reject.
+  The `missing-witness` overlay uses a live registry-only shell substitution
+  with the supplied handle kept consistent, leaving the witness spine
+  inaccessible as Contract D requires. Source checks pass; independent and
+  ROOT source review, supported IR/runtime proof and retention remain HOLD.
   Source review and compiled runtime/ABI proof are still required before
   claiming this as a C4 witness.
   Compiled normal/repeat/sanitizer tests, allocation/callback instrumentation,

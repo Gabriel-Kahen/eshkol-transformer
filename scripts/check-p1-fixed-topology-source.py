@@ -64,7 +64,11 @@ assert "(reject (car actions)" in fixture
 assert "native identity restored same-root retry" in fixture
 assert "native module restored same-root retry" in fixture
 assert probe.count("(vector-ref shell-registry-root 0) 0") == 4
-assert probe.count("(vector-ref shell-registry-root 0) 1") == 1
+assert "(vector-ref shell-registry-root 0) 1" not in probe
+assert "(p1-fixed-test-without-witness" not in probe
+assert "(shell-entry handle-shell) 0 unwitnessed-shell" in probe
+assert "(mutate-fixed 'missing-witness root original-handle-0)" in fixture
+assert "(vector-set! handles 0 unwitnessed-shell)" in fixture
 assert "failed-and-aborted" in probe
 assert "native-success prepublication fault" in fixture
 assert "clean new-construction retry" in fixture

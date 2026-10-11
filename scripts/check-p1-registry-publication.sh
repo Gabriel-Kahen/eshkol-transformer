@@ -371,6 +371,49 @@ def pair_fields(lines, name):
         raise SystemExit(f"IR proof failed: {name} pair spines alias in SSA")
     return values
 
+def checked_pair_root_value(lines, barrier, name):
+    # The initial allocation is staged, then its canonical stage[0] readback
+    # replaces the local. The root barrier must load that final local value.
+    call = re.search(r"@eshkol_region_write_barrier_checked_v1\("
+                     r"ptr %[-A-Za-z0-9_.]+, ptr %[-A-Za-z0-9_.]+, "
+                     r"ptr (%[-A-Za-z0-9_.]+)\)", lines[barrier])
+    if call is None:
+        raise SystemExit(f"IR proof failed: {name} root barrier arguments absent")
+    value_slot = call.group(1)
+    slot_writes = [(i, line) for i, line in enumerate(lines[:barrier])
+                   if re.search(
+                       rf"^\s*store .*?, ptr {re.escape(value_slot)},", line)]
+    pair_load = (re.search(
+        r"store %eshkol_tagged_value (%next-pair\.load[0-9]*), "
+        rf"ptr {re.escape(value_slot)},", slot_writes[-1][1])
+        if slot_writes else None)
+    if (pair_load is None or barrier - slot_writes[-1][0] > 3):
+        raise SystemExit(f"IR proof failed: {name} root value is not pair SSA")
+    load_index, pair_load_def = ssa_definition(lines, pair_load.group(1), name)
+    if (load_index >= barrier or not re.search(
+            r"load %eshkol_tagged_value, ptr %next-pair,", pair_load_def)):
+        raise SystemExit(f"IR proof failed: {name} root value bypasses pair local")
+    stores = [(i, line) for i, line in enumerate(lines[:load_index])
+              if re.search(r"^\s*store .*?, ptr %next-pair,", line)]
+    values = [re.search(
+        r"store %eshkol_tagged_value (%[-A-Za-z0-9_.]+), "
+        r"ptr %next-pair,", line) for _, line in stores]
+    if (len(stores) != 2 or
+            not all(values) or
+            not re.fullmatch(r"%vref_result[0-9]*", values[-1].group(1))):
+        raise SystemExit(
+            f"IR proof failed: {name} pair local has no final canonical stage value")
+    _, initial = ssa_definition(lines, values[0].group(1), name)
+    if not re.search(r"insertvalue %eshkol_tagged_value .* i64 "
+                     r"%[-A-Za-z0-9_.]+, 4", initial):
+        raise SystemExit(f"IR proof failed: {name} initial pair is not fresh vector")
+    canonical_index, _ = ssa_definition(lines, values[-1].group(1), name)
+    if not stores[0][0] < canonical_index < stores[-1][0]:
+        raise SystemExit(f"IR proof failed: {name} staged pair SSA order changed")
+    if any(re.search(r"^\s*store .*?, ptr %next-pair,", line)
+           for line in lines[load_index + 1:barrier]):
+        raise SystemExit(f"IR proof failed: {name} pair local changes after root load")
+
 def checked_witness_store(lines, barrier, flow, name):
     call = re.search(r"@eshkol_region_write_barrier_checked_v1\("
                      r"ptr %[-A-Za-z0-9_.]+, ptr (%[-A-Za-z0-9_.]+), "
@@ -379,13 +422,17 @@ def checked_witness_store(lines, barrier, flow, name):
         raise SystemExit(f"IR proof failed: {name} witness barrier arguments absent")
     target, value_slot = call.groups()
     before = lines[:barrier]
-    values = [re.search(
+    value_writes = [(i, line) for i, line in enumerate(before)
+                    if re.search(
+                        rf"^\s*store .*?, ptr {re.escape(value_slot)},", line)]
+    final_value = (re.search(
         r"store %eshkol_tagged_value (%shell\.load[0-9]*), "
-        rf"ptr {re.escape(value_slot)},", line)
-        for line in before[-8:]]
-    if not any(values):
-        raise SystemExit(f"IR proof failed: {name} witness barrier value is not shell")
-    shell_value = next(match.group(1) for match in values if match)
+        rf"ptr {re.escape(value_slot)},", value_writes[-1][1])
+        if value_writes else None)
+    if (not value_writes or barrier - value_writes[-1][0] > 8 or
+            final_value is None):
+        raise SystemExit(f"IR proof failed: {name} witness barrier last value is not shell")
+    shell_value = final_value.group(1)
     _, shell_load = ssa_definition(lines, shell_value, name)
     if not re.search(r"load %eshkol_tagged_value, ptr %shell,", shell_load):
         raise SystemExit(f"IR proof failed: {name} witness value is not native shell")
@@ -530,21 +577,7 @@ for ordinal, function in enumerate(publication_functions, 1):
     if root_barrier is None:
         raise SystemExit(
             f"IR proof failed: {name} lacks a root-vector next-pair barrier")
-    pair_load = re.search(r"store %eshkol_tagged_value "
-                          r"(%next-pair\.load[0-9]*), ptr %[-A-Za-z0-9_.]+",
-                          "\n".join(lines[max(0, root_barrier - 3):root_barrier]))
-    if pair_load is None:
-        raise SystemExit(f"IR proof failed: {name} root value is not pair SSA")
-    _, pair_load_def = ssa_definition(lines, pair_load.group(1), name)
-    if not re.search(r"load %eshkol_tagged_value, ptr %next-pair,",
-                     pair_load_def):
-        raise SystemExit(f"IR proof failed: {name} root value bypasses pair local")
-    canonical_pair_stores = [i for i, line in enumerate(lines[:root_barrier])
-                             if re.search(r"store %eshkol_tagged_value "
-                                          r"%vref_result[0-9]*, ptr %next-pair,",
-                                          line)]
-    if len(canonical_pair_stores) != 1:
-        raise SystemExit(f"IR proof failed: {name} lacks staged canonical pair")
+    checked_pair_root_value(lines, root_barrier, name)
     entry_barrier = barriers[1]
     if entry_barrier >= root_barrier:
         raise SystemExit(f"IR proof failed: {name} root publication ordering changed")

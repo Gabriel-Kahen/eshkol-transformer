@@ -52,12 +52,6 @@
           (cdr entries)
           (cons (car entries)
                 (p1-fixed-test-without-shell (cdr entries) shell)))))
-(define (p1-fixed-test-without-witness witnesses shell)
-  (if (null? witnesses) '()
-      (if (eq? (vector-ref (car witnesses) 3) shell)
-          (cdr witnesses)
-          (cons (car witnesses)
-                (p1-fixed-test-without-witness (cdr witnesses) shell)))))
 (define p1-fixed-test-prepublication (vector #f #f #f))
 (define (p1-fixed-test-shell-present? entries shell slot)
   (if (null? entries) #f
@@ -125,10 +119,14 @@
          (p1-fixed-test-without-shell
            (shell-registry-current) handle-shell)))
       ((eq? action 'missing-witness)
-       (p1-fixed-test-change!
-         (vector-ref shell-registry-root 0) 1
-         (p1-fixed-test-without-witness
-           (issuance-witness-current) handle-shell)))
+       ;; A live, same-kind shell has no issuance witness for this scope/raw.
+       ;; Only the registry entry changes; the witness spine is inaccessible.
+       (native-check 'p1-fixed-test
+                     (p1-native-handle-create native-context))
+       (let ((unwitnessed-shell (p1-native-result-ptr native-context)))
+         (p1-fixed-test-change!
+           (shell-entry handle-shell) 0 unwitnessed-shell)
+         unwitnessed-shell))
       ((eq? action 'scope-drift)
        (p1-fixed-test-change! (shell-entry handle-shell) 3 #f))
       ((eq? action 'raw-drift)
