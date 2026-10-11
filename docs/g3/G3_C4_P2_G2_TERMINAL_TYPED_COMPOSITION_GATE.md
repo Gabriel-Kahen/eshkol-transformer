@@ -53,3 +53,27 @@ public dispatch.
 Only the static source gate in step 1 ran for this candidate. Steps 2–4 are
 required integration evidence; no compiled same-aggregate, public G2, or
 end-to-end acceptance is claimed here.
+
+## Compiled-gate preparation on `53f95259`
+
+`tests/g3c4/p2_g2_terminal_typed_same_aggregate.esk` is a private smoke
+fixture. It loads the one registry-owning root, generates a real two-token
+baseline, then uses its selected IDs as first- and second-EOS policies. It
+checks raw text, logical count/cache, native typed kinds and lengths, owner
+independence, values after source release, and two independently released
+tuples. Its baseline requires distinct selected IDs; that fact has not yet
+been observed in a supported compiled run. Native rank/shape metadata,
+independent RNG/A2 oracles, fault and lease cuts, and feature-off runtime
+remain separate required tests. The fixture is not an acceptance gate.
+
+The accepted local terminal gate plan pins Ubuntu 22.04/LLVM 21.1.8 image
+`sha256:f31d1db76958339e6ebd2a2f667052cdb85aeb5229914ffb10ac4fcdc6db22e6`
+and Eshkol `fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9` (tree
+`66c21f7ec19b1b4a42199fa30ed8e0e9727021bf`). The local image ID,
+compiler source, runner and archives match those accepted pins. The local
+runner cannot start outside the image because `libLLVM.so.21.1` and
+`libopenblas.so.0` are unavailable. No Docker container was launched for
+this preparation. A one-use compiled bundle must first add the exact native
+archive/link recipe and independent same-call oracle/fault fixture, then run
+normal, repeat, sanitizer and feature-off under the pinned image. Do not
+promote this smoke fixture or its source-only checks as that compiled proof.
