@@ -1644,8 +1644,12 @@ C2 receipt's SHA and tokenizer controls, then publishes one receipt and eight
 data-only fields through a checked whole-vector copy. Orphan, torn, extended,
 mismatched and publication-fault fixtures are written; local source and native
 reader checks passed. The new Eshkol fixture has not run because the local
-`eshkol-run` binary is unavailable. Independent review and the supported
-runtime gate remain pending; no live model restore or continuation is claimed.
+`eshkol-run` binary is unavailable. Independent source/tests review accepted
+exact `91dc1540` / tree `3c746694` with no blocking source finding; its seal is
+`g3r-file-pair-20261011-review/SHA256SUMS-RUN`
+(`f7a30a56bd52ffac3ff9aed329533e9c9ee4b6552f019e3b096523760e9b7c07`).
+The supported compiled runtime gate and all-path ownership remain unaccepted;
+no live model restore or continuation is claimed.
 
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry

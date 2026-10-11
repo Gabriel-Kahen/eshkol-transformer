@@ -45,5 +45,10 @@ controls. It does not prove same-aggregate live T1 tokenizer identity, exact
 M3T model/schema and parameter restoration, no-draw replay, or continuation.
 The predecessor receipt's published evidence covers native sanitizer
 instrumentation and a narrow compiled private path; all-path Eshkol ownership
-and this new composition remain unaccepted pending a supported runtime gate
-and independent review.
+and this new composition remain unaccepted pending a supported runtime gate.
+Independent source/tests review accepted exact `91dc154016f40b309cd5095bfa757b307529b9a9`
+(tree `3c746694b328f6a064108adc9147ce53af0e88e0`) with no blocking source
+finding. Its seal is `g3r-file-pair-20261011-review/SHA256SUMS-RUN`
+(SHA-256 `f7a30a56bd52ffac3ff9aed329533e9c9ee4b6552f019e3b096523760e9b7c07`).
+The review did not run the Eshkol fixture, generated-code ownership paths,
+sanitizers or the supported normal/repeat gate.
