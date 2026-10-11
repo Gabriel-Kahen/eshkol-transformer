@@ -95,7 +95,7 @@
 
 (let mutations ((actions '(detached-module detached-handle duplicate-shell
                             duplicate-record wrong-parent wrong-shape
-                            wrong-device wrong-tie)))
+                            wrong-device wrong-counter-type wrong-tie)))
   (if (null? actions) #t
       (begin
         (mutate-fixed (car actions) root (vector-ref handles 0))

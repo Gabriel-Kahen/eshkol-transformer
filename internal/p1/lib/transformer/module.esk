@@ -5344,6 +5344,9 @@
 (define (p1-fixed-index? value bound)
   (and (integer? value) (exact? value) (>= value 0) (< value bound)))
 
+(define (p1-fixed-count? value expected)
+  (and (integer? value) (exact? value) (= value expected)))
+
 (define (p1-fixed-descriptor? trie handles)
   (and (p1-fixed-vector? trie 3) (p1-fixed-vector? handles 14)
        (p1-fixed-vector? (vector-ref trie 0) 17)
@@ -5601,10 +5604,10 @@
                   (eq? provider (tensor-provider-find (vector-ref trie 2)))
                   (eq? (vector-ref root 5) #f)
                   (eq? (vector-ref root 8) 'cpu)
-                  (= (vector-ref root 9) 15)
-                  (= (vector-ref root 10) 17)
-                  (= (vector-ref root 11) 4)
-                  (= (vector-ref root 12) 5)))
+                  (p1-fixed-count? (vector-ref root 9) 15)
+                  (p1-fixed-count? (vector-ref root 10) 17)
+                  (p1-fixed-count? (vector-ref root 11) 4)
+                  (p1-fixed-count? (vector-ref root 12) 5)))
         (p1-fixed-seal-fail))
     (let modules-loop ((index 0))
       (if (= index 17) #t

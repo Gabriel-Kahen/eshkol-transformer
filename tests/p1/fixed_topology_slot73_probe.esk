@@ -61,6 +61,8 @@
        (p1-fixed-test-change! handle 3 '(9)))
       ((eq? action 'wrong-device)
        (p1-fixed-test-change! handle 5 'gpu))
+      ((eq? action 'wrong-counter-type)
+       (p1-fixed-test-change! root 9 'not-a-count))
       ((eq? action 'wrong-tie)
        (p1-fixed-test-change!
          (car (vector-ref (p1-fixed-child root "token_embedding") 2))

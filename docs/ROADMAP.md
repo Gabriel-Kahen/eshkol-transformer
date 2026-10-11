@@ -2842,10 +2842,14 @@ publication, public G2 and continuation remain pending.
   exact rooted 17-module/15-binding/14-handle eval topology and complete
   scoped shell-registry closure, including detached entries and duplicate
   source identities; focused source/overlay negatives cover drift and retry.
+  A source successor guards all four cached root counts as exact integers
+  before comparison and includes wrong-type rejection with same-root retry.
   The overlay also demonstrates the remaining native-authority gap: a live P1
   state token relabeled as a handle in the source registry can pass slot 73.
-  A separate reviewed P1-private native kind/liveness validator is therefore
-  required before claiming tombstone rejection or using this as a C4 witness.
+  P1 native already exposes retained-token kind/live queries; slot 73 has not
+  bound or called them. A separate reviewed P1 verifier binding and admission
+  to that existing native authority is required before claiming tombstone or
+  wrong-kind rejection or using this as a C4 witness.
   Compiled normal/repeat/sanitizer tests, allocation/callback instrumentation,
   C4 descriptor and owner binding, aggregate exclusion, and supported ABI
   checks remain OPEN/HOLD.

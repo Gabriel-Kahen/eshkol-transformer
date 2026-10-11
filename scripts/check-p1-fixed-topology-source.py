@@ -17,7 +17,7 @@ for required in (
     "p1-fixed-expected-member-count", "p1-fixed-shell-registry-count",
     "p1-fixed-handle-path?", "p1-fixed-shape?",
     "p1-fixed-list-length?", "construction-registry-root",
-    "shell-registry-current",
+    "shell-registry-current", "p1-fixed-count?",
 ):
     assert required in verifier, required
 for forbidden in ("(extern ", "(cons ", "(make-vector ", "(vector-set! ",
@@ -25,10 +25,15 @@ for forbidden in ("(extern ", "(cons ", "(make-vector ", "(vector-set! ",
                   "(tensor-provider-call ", "(set-cdr! ",
                   "(hash-table-set! "):
     assert forbidden not in verifier, forbidden
+assert "(and (integer? value) (exact? value) (= value expected))" in verifier
+for slot, expected in ((9, 15), (10, 17), (11, 4), (12, 5)):
+    assert verifier.count(
+        f"(p1-fixed-count? (vector-ref root {slot}) {expected})") == 1
 assert source.count("Append-only P1-only sealed current-root verifier, slot 73") == 1
 for action in ("detached-module", "detached-handle", "duplicate-shell",
                "duplicate-record", "wrong-parent", "wrong-shape",
-               "wrong-device", "wrong-tie", "native-kind-gap"):
+               "wrong-device", "wrong-counter-type", "wrong-tie",
+               "native-kind-gap"):
     assert f"(eq? action '{action})" in probe
     assert action in fixture
 assert '(check "native kind remains unverified"' in fixture
