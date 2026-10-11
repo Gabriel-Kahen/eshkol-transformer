@@ -29,3 +29,24 @@ source-plan seal are not a current launch decision. An independent source/tests
 review, immutable full pin decision, negative drift preflight before every
 child, and measured resource bounds are required before implementing a launch
 path. The combined compiled gate and current-main integration remain OPEN.
+
+## Decision-gated AOT route candidate
+
+`scripts/run-g3c4-public-t1-private-union.py` defines the exact private
+history/T1 AOT argv shape from the existing private fault runner: strict types,
+optimization level zero, no standard library, the four ordered trusted roots,
+`lib` and `native`, and one private archive per fixture and mode. The archive
+must be independently built and pinned; the installed package archive is
+excluded. A canonical launch decision must bind the exact source commit/tree,
+accepted image, root review, every selected file's path/bytes/mode/owner,
+symbol and closure inventories, owned slot receipt, and nine positive resource
+bounds. The gate rejects missing or duplicate rows, dirty source, root
+duplication, and pin drift before constructing a command.
+
+The embedded approved decision digest is intentionally empty. No decision
+file or private archive is supplied here, and this revision has no child
+launch path. A reviewed successor must bind the actual full decision, build
+the separate native closures without duplicate registries, stage owned inputs
+against source-to-use races, enforce limits, recheck immediately before every
+child, and inspect emitted symbols and receipts. The AOT argv candidate alone
+does not establish any compiled behavior.

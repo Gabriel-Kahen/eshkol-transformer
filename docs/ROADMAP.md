@@ -2830,6 +2830,11 @@ publication, public G2 and continuation remain pending.
   returns HOLD without launching. The existing private fault runner is not a
   reviewed native closure for either union fixture; full external pins, loader
   closure, package resource bounds and independent runner review remain open.
+  A [decision-gated private AOT route candidate](g3/G3_C4_PRIVATE_UNION_RUNNER_HOLD.md)
+  now fixes one-root argv construction and tests synthetic decision, root and
+  pin drift. Its embedded launch digest is empty and it has no child route;
+  native closure, owned staging, emitted-symbol review and resource-enforced
+  launch remain HOLD.
 
 ## Wave 4 — practical pretraining and performance
 
