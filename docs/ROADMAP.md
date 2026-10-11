@@ -777,6 +777,12 @@ mutants are compiled test variants. Independent source-and-test review approved
 `30579532`/tree `44b8fbdb`. The combined tree still requires bounded
 composition review and supported exact-tree execution; the other E3 §9
 numerical, failure and resource obligations remain open.
+The [N1 import receipt verifier](e3/E3_N1_IMPORT_RECEIPT.md) is a noninstalled
+pre-admission source candidate for the failed Numerical F tuple. Its exact F
+object/call/depfile inventory is partial: final producer and per-call ABI,
+actual provider/link closure and complete system-header bytes are unavailable.
+It changes no import policy; N1/M1 and the fresh supported numerical gate
+remain open.
 The exact `5d642a2` fe9/f31 numerical gate built the normal and mutant
 packages but failed before runtime at sanitized export isolation: the ASan
 registration COMMON cell remained global after objcopy. Its 308-file failed
