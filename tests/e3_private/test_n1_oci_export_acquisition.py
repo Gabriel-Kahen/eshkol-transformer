@@ -302,6 +302,24 @@ class AcquisitionTests(unittest.TestCase):
                     digest, name = line.split("  ", 1)
                     self.assertEqual(sha((escaped / name).read_bytes()), digest)
 
+    def test_stage_fd_open_failure_removes_empty_stage(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            pin, expected, _ = fixture(root)
+            real_open = os.open
+
+            def fail_stage_open(path, flags, *args, **kwargs):
+                if isinstance(path, str) and path.startswith(".e3-n1-HOLD-") and \
+                   kwargs.get("dir_fd") is not None:
+                    raise PermissionError("synthetic stage open failure")
+                return real_open(path, flags, *args, **kwargs)
+
+            with mock.patch.object(mod.os, "open", side_effect=fail_stage_open):
+                with self.assertRaisesRegex(PermissionError, "synthetic stage open failure"):
+                    acquire(root, pin, expected)
+            self.assertFalse(list(root.glob(".e3-n1-HOLD-*")))
+            self.assertFalse(os.path.lexists(root / "export"))
+
     def assert_hold_partial(self, root):
         self.assertFalse((root / "export").exists())
         stages = list(root.glob(".e3-n1-HOLD-*"))

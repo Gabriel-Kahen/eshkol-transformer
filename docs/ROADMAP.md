@@ -815,8 +815,12 @@ head `4dcb5268` for an absolute-rename parent-swap race. B anchored publication
 to a pinned parent fd but independent review held it because a same-UID actor
 could move the just-published target before readback, leaving a VERIFIED record
 after failed retraction. The C candidate retains a directory fd across rename
-to mark that moved inode HOLD and adds the exact moved-target negative alongside
-the parent-swap checks. Its production release pin is absent;
+to mark that moved inode HOLD. Independent C review held its stage-fd-open
+failure path because it left an unmarked empty directory. The D candidate
+removes and syncs that empty stage on descriptor-open failure when cleanup
+succeeds, and reports a distinct HOLD error if cleanup fails, with an injected
+negative alongside the moved-target and parent-swap checks. Its production
+release pin is absent;
 independent and ROOT source/pin review and a separately sealed read-only
 export remain pending. A full
 export seal and its verified layer hashes follow acquisition; guest discovery

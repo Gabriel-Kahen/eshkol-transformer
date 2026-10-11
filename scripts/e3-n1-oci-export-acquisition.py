@@ -367,8 +367,16 @@ def run(pin_path):
     try:
         check_named_parent(dest, parent_fd)
         stage_name = create_stage(parent_fd)
-        stage_fd = os.open(stage_name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
-                           dir_fd=parent_fd)
+        try:
+            stage_fd = os.open(stage_name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                               dir_fd=parent_fd)
+        except Exception:
+            try:
+                os.rmdir(stage_name, dir_fd=parent_fd)
+                os.fsync(parent_fd)
+            except OSError as cleanup_error:
+                raise Hold("stage-acquisition-cleanup-failed") from cleanup_error
+            raise
     except Exception:
         os.close(parent_fd)
         raise

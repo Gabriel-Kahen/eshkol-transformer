@@ -46,7 +46,10 @@ same-UID actor moves the published directory before retraction, the retained
 fd still reaches that directory and changes its record from VERIFIED to HOLD
 before the error is returned. This protects the failure-state transition from
 path renames; it does not make a same-UID writable directory immutable after
-the acquisition process exits. Any staged failure writes
+the acquisition process exits. If the initial stage directory fd cannot be
+opened, the source removes the still-empty stage and syncs the parent before
+returning the open error; failed cleanup reports a distinct HOLD error. Any
+later staged failure writes
 `HOLD.json` and `SHA256SUMS-ACQUISITION` beside the retained partial files.
 A successful directory contains `ACQUISITION.json` and the checksum list.
 This is an acquisition artifact only; its read-only evidence seal and guest
@@ -55,5 +58,6 @@ selection are separate gates in the exact-input plan.
 Generated tiny-blob tests exercise exact publication, release absence,
 malformed pins, byte and disk caps, symlink and inode swaps, mutation during
 read, late time HOLD, second-blob hash failure, a parent symlink swap and a
-published-target move at the actual atomic-rename boundary. They never open an f31
+published-target move at the actual atomic-rename boundary, plus stage-fd-open
+failure cleanup. They never open an f31
 layer, invoke Docker, run a guest tool, scan gzip or authorize capture.
