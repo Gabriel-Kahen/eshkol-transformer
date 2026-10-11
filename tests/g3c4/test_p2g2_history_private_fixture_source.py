@@ -101,25 +101,46 @@ def validate(text: str) -> None:
         assert expected in text[start:start + 260], label
     assert "(g3g-public-generation-output-release foreign-output)" in text
     assert "(g3g-public-generation-tensor-release foreign-input)" in text
-    nested = text[text.index("(define (run-nested-capture)"):]
-    assert "(run-nested-capture)" in text
-    assert "(if (= snapshot-calls 2)" in nested
-    assert "(set! inner-history" in nested
-    for label in ("outer capture denies after nested sole issuance",
-                  "outer capture reached final snapshot exactly once",
-                  "nested capture retained its issued shell",
-                  "same output cannot issue a second history",
-                  "nested sole issue retains exact output and prompt",
-                  "nested capture did not change terminal state",
-                  "nested issued history spends once"):
-        assert f'"{label}"' in nested
-    assert nested.index("(set! inner-history") < nested.index(
-        '"outer capture denies after nested sole issuance"')
-    assert nested.index(
-        "(set! g3c4-p2g2-terminal-snapshot-private snapshot-provider)"
-    ) < nested.index("(set! inner-history")
-    assert nested.index('"same output cannot issue a second history"') < (
-        nested.index("(let* ((descriptor"))
+    nested = text[text.index("(define (run-nested-capture trigger"):
+                  text.index("(define (run-capture-false-retry trigger)")]
+    for call in ("(run-nested-capture 'first #f)",
+                 "(run-nested-capture 'first #t)",
+                 "(run-nested-capture 'final #f)",
+                 "(run-nested-capture 'final #t)",
+                 "(run-nested-capture 'input #f)",
+                 "(run-nested-capture 'input #t)"):
+        assert call in text
+    for label in ("strict nested capture was attempted and denied",
+                  "nested input getter never ran",
+                  "nested terminal provider never ran",
+                  "outer capture alone issued one history",
+                  "strict nested outer history spends once",
+                  "capture rollback preserves original raised #f",
+                  "capture retry after certain failure succeeds"):
+        assert f'"{label}"' in text
+    assert "(if (and (not attempted)" in nested
+    assert "(= snapshot-calls (if (eq? trigger 'first) 1 2))" in nested
+    assert "(if (eq? trigger 'input)" in nested
+    assert nested.index("(set! nested-denied") < nested.index("(set! history")
+    assert nested.index('"strict nested capture was attempted and denied"') < (
+        nested.index('"outer capture alone issued one history"'))
+    assert "(= prompt-calls 2)" in nested
+    assert "(= snapshot-calls 2)" in nested
+    retry = text[text.index("(define (run-capture-false-retry trigger)"):]
+    assert retry.index("(raise #f)") < retry.index(
+        '"capture rollback preserves original raised #f"') < retry.index(
+        '"capture retry after certain failure succeeds"')
+    assert retry.index("(set! g3c4-p2g2-terminal-snapshot-private snapshot-provider)") < (
+        retry.index("(let ((history"))
+    for trigger in ("'first", "'final", "'input"):
+        assert f"(run-capture-false-retry {trigger})" in retry
+    propagated = retry[retry.index("(define (run-propagated-nested-retry)"):]
+    assert "(run-propagated-nested-retry)" in propagated
+    assert '"propagated nested denial allows authentic retry"' in propagated
+    assert propagated.index(
+        '"propagated nested denial rolls outer capture back"') < (
+        propagated.index('"propagated nested denial allows authentic retry"'))
+    assert "(= snapshot-calls 1)" in propagated
     for index, expected in enumerate((
             "0", "255", "(vector-ref before 0)", "(vector-ref before 1)",
             "expected-count", "(+ expected-count 2)",
@@ -205,9 +226,12 @@ class FixtureSource(unittest.TestCase):
             '"wrong live output cannot capture genuine origin"',
             '"wrong live input cannot consume genuine history"',
             '"wrong live output cannot consume genuine history"',
-            '"same output cannot issue a second history"',
-            '(set! inner-history',
-            '"nested issued history spends once"',
+            '"strict nested capture was attempted and denied"',
+            '"nested terminal provider never ran"',
+            '"nested input getter never ran"',
+            '"strict nested outer history spends once"',
+            '"capture rollback preserves original raised #f"',
+            '"propagated nested denial allows authentic retry"',
         ):
             with self.assertRaises(AssertionError):
                 validate(text.replace(needle, "omitted", 1))
@@ -227,10 +251,20 @@ class FixtureSource(unittest.TestCase):
             at = text.index(old, start)
             with self.assertRaises(AssertionError):
                 validate(text[:at] + new + text[at + len(old):])
-        nested = text.index("(define (run-nested-capture)")
-        with self.assertRaises(AssertionError):
-            validate(text[:nested] + text[nested:].replace(
-                "(if (= snapshot-calls 2)", "(if (= snapshot-calls 1)", 1))
+        for old, new in (
+            ("(run-nested-capture 'first #f)",
+             "(run-nested-capture 'final #f)"),
+            ("(run-nested-capture 'first #t)",
+             "(run-nested-capture 'final #t)"),
+            ("(run-nested-capture 'input #f)",
+             "(run-nested-capture 'final #f)"),
+            ("(run-nested-capture 'input #t)",
+             "(run-nested-capture 'final #t)"),
+            ("(= prompt-calls 2)", "(= prompt-calls 3)"),
+            ("(= snapshot-calls 2)", "(= snapshot-calls 3)"),
+        ):
+            with self.assertRaises(AssertionError):
+                validate(text.replace(old, new, 1))
 
 
 if __name__ == "__main__":

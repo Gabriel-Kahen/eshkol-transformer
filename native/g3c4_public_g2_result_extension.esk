@@ -498,7 +498,7 @@
 (define g3c4-public-p2g2-history-route
   (let ((input-issuers '()) (history-issuers '())
         (issued-outputs '())
-        (input-count 0) (history-count 0)
+        (input-count 0) (history-count 0) (capture-busy #f)
         (secret (vector 'g3c4-public-p2g2-input-creator)))
     (set! g3c4-public-p2g2-input-create-authority
       (lambda (encoded)
@@ -567,18 +567,37 @@
                (set! input-count (+ input-count 1))
                #t))))
           ((eq? action 'capture)
-           (let* ((generator first) (input second) (output third)
-                  (input-issuer (assq input input-issuers))
-                  (input-entry (g3c4-input-entry-live input operation))
-                  (generator-row
-                    (g3c4-public-g2-profile-live generator operation))
-                  (source (g3c4-public-g2-output-live output operation))
-                  (ticket (g3c4-public-g2-output-unique
-                            g3c4-public-g2-tickets 5 output operation))
-                  (snapshot
-                    (g3c4-public-g2-source-snapshot output operation))
-                  (policy (vector-ref generator-row 5))
-                  (eos (vector-ref policy 6)))
+           ;; Reserve before any live-row or native provider can reenter.
+           (if capture-busy
+               (g3c4-fail 'invalid-state operation
+                          "P2/G2 history capture is busy"))
+           (if (or (>= history-count 64)
+                   (memq third issued-outputs))
+               (g3c4-fail 'invalid-state operation
+                          "P2/G2 history already issued or full"))
+           (let ((token (vector 'g3c4-p2g2-capture-busy))
+                 (capture-phase 'ready))
+             (guard (caught
+                      (#t (if (not (eq? capture-phase 'reserved)) (exit 134))
+                          (cond ((eq? capture-busy token)
+                                 (set! capture-busy #f))
+                                ((eq? capture-busy #f) #t)
+                                (else (exit 134)))
+                          (raise caught)))
+               (set! capture-phase 'reserved)
+               (set! capture-busy token)
+               (let* ((generator first) (input second) (output third)
+                      (input-issuer (assq input input-issuers))
+                      (input-entry (g3c4-input-entry-live input operation))
+                      (generator-row
+                        (g3c4-public-g2-profile-live generator operation))
+                      (source (g3c4-public-g2-output-live output operation))
+                      (ticket (g3c4-public-g2-output-unique
+                                g3c4-public-g2-tickets 5 output operation))
+                      (snapshot
+                        (g3c4-public-g2-source-snapshot output operation))
+                      (policy (vector-ref generator-row 5))
+                      (eos (vector-ref policy 6)))
              (if (not (and (< history-count 64) input-issuer
                            (not (memq output issued-outputs))
                            (g3c4-generator-entry-call-ready
@@ -712,10 +731,11 @@
                               (set! phase 'spent)
                               descriptor)
                             (g3c4-fail 'invalid-argument operation
-                                       "P2/G2 history verb is invalid"))))))
+                                       "P2/G2 history verb is invalid")))))))
                (let ((next-history
                        (cons (cons shell authority) history-issuers))
-                     (next-outputs (cons output issued-outputs)))
+                     (next-outputs (cons output issued-outputs))
+                     (next-count (+ history-count 1)))
                  (if (not (and
                        (let loop ((index 0))
                          (if (= index 8) #t
@@ -725,13 +745,20 @@
                        (g3c4-public-p2g2-history-final?
                          source ticket generator-row input-entry model
                          tokenizer generator input output eos final-snapshot)
-                       (not (memq output issued-outputs))))
+                       (not (memq output issued-outputs))
+                       (< history-count 64)
+                       (eq? capture-busy token)
+                       (eq? capture-phase 'reserved)))
                      (g3c4-fail 'invalid-state operation
                                 "P2/G2 final source changed before issuance"))
+                 ;; Only fixed assignments follow the irreversible boundary.
+                 (set! capture-phase 'committing)
                  (set! history-issuers next-history)
                  (set! issued-outputs next-outputs)
-                 (set! history-count (+ history-count 1))
-                 shell))))
+                 (set! history-count next-count)
+                 (set! capture-busy #f)
+                 (set! capture-phase 'done)
+                 shell))))))
           ((eq? action 'admit)
            (let ((issuer (assq first history-issuers)))
              (if (not issuer)
@@ -744,7 +771,7 @@
                             (raise caught)))
                  ((cdr issuer) 'begin second third fourth)
                  (set! begun #t)
-                 ((cdr issuer) 'admit second third fourth))))))
+                 ((cdr issuer) 'admit second third fourth)))))
           (else (g3c4-fail 'invalid-argument operation
                            "P2/G2 history action is invalid")))))))
 

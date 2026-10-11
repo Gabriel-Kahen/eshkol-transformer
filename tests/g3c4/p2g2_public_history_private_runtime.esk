@@ -199,67 +199,174 @@
     (check "output releases" (g3g-public-generation-output-release output))
     (check "generator closes" (g3g-public-generator-close generator))))
 
-(define (run-nested-capture)
+(define prompt-provider g3c4-public-p2g2-native-input-ids)
+
+(define (run-nested-capture trigger different-output?)
   (let* ((generator
            (g3g-public-generator-create model tokenizer
                                         (config selected-first)))
          (output (g3g-public-generator-generate generator input))
+         (other-generator
+           (g3g-public-generator-create model tokenizer
+                                        (config selected-first)))
+         (other-output
+           (g3g-public-generator-generate other-generator input))
          (before (snapshot-provider output))
+         (nested-output (if different-output? other-output output))
+         (nested-generator (if different-output? other-generator generator))
          (snapshot-calls 0)
-         (inner-history #f))
-    ;; F has no pre-provider capture-busy phase. The inner call may issue;
-    ;; the outer must then reject at its final duplicate-output check.
-    (set! g3c4-p2g2-terminal-snapshot-private
-      (lambda (shell)
-        (set! snapshot-calls (+ snapshot-calls 1))
-        (if (= snapshot-calls 2)
-            (begin
-              (set! g3c4-p2g2-terminal-snapshot-private snapshot-provider)
-              (set! inner-history
-                (g3c4-public-p2g2-history-capture-internal!
-                  generator input output)))
-            #t)
-        (snapshot-provider shell)))
-    (reject "outer capture denies after nested sole issuance"
-      (lambda ()
-        (g3c4-public-p2g2-history-capture-internal!
-          generator input output)))
+         (prompt-calls 0)
+         (attempted #f)
+         (nested-denied #f)
+         (history #f))
+    ;; A nested invocation must stop before its own snapshot or prompt getter.
+    (if (eq? trigger 'input)
+        (set! g3c4-public-p2g2-native-input-ids
+          (lambda (native operation)
+            (set! prompt-calls (+ prompt-calls 1))
+            (if (not attempted)
+                (begin
+                  (set! attempted #t)
+                  (set! nested-denied
+                    (guard (caught (#t (transformer-error? caught)))
+                      (g3c4-public-p2g2-history-capture-internal!
+                        nested-generator input nested-output)
+                      #f))))
+            (prompt-provider native operation)))
+        (set! g3c4-p2g2-terminal-snapshot-private
+          (lambda (shell)
+            (set! snapshot-calls (+ snapshot-calls 1))
+            (if (and (not attempted)
+                     (= snapshot-calls (if (eq? trigger 'first) 1 2)))
+                (begin
+                  (set! attempted #t)
+                  (set! nested-denied
+                    (guard (caught (#t (transformer-error? caught)))
+                      (g3c4-public-p2g2-history-capture-internal!
+                        nested-generator input nested-output)
+                      #f))))
+            (snapshot-provider shell))))
+    (set! history
+      (g3c4-public-p2g2-history-capture-internal!
+        generator input output))
     (set! g3c4-p2g2-terminal-snapshot-private snapshot-provider)
-    (check "outer capture reached final snapshot exactly once"
-           (= snapshot-calls 2))
-    (check "nested capture retained its issued shell"
-           (vector? inner-history))
-    (reject "same output cannot issue a second history"
+    (set! g3c4-public-p2g2-native-input-ids prompt-provider)
+    (check "strict nested capture was attempted and denied"
+           (and attempted nested-denied))
+    (if (eq? trigger 'input)
+        (check "nested input getter never ran" (= prompt-calls 2))
+        (check "nested terminal provider never ran" (= snapshot-calls 2)))
+    (check "outer capture alone issued one history" (vector? history))
+    (reject "nested output remains fresh after denial"
       (lambda ()
         (g3c4-public-p2g2-history-capture-internal!
           generator input output)))
     (let* ((descriptor
-            (g3c4-public-p2g2-history-admit-once-internal!
-              inner-history generator input output))
-          (after (snapshot-provider output)))
-      (check "nested sole issue retains exact output and prompt"
+             (g3c4-public-p2g2-history-admit-once-internal!
+               history generator input output))
+           (after (snapshot-provider output)))
+      (check "strict nested denial preserves output and prompt"
              (and (= (vector-ref descriptor 0) 0)
                   (= (vector-ref descriptor 1) 255)
                   (eq? (vector-ref descriptor 13) generator)
                   (eq? (vector-ref descriptor 14) input)
                   (eq? (vector-ref descriptor 15) output)))
-      (check "nested capture did not change terminal state"
+      (check "strict nested denial does not change terminal state"
         (let loop ((index 0))
           (if (= index 8) #t
               (and (= (vector-ref before index) (vector-ref after index))
                    (loop (+ index 1)))))))
-    (reject "nested issued history spends once"
+    (reject "strict nested outer history spends once"
       (lambda ()
         (g3c4-public-p2g2-history-admit-once-internal!
-          inner-history generator input output)))
-    (check "nested output releases"
+          history generator input output)))
+    (check "strict nested output releases"
            (g3g-public-generation-output-release output))
-    (check "nested generator closes"
+    (check "strict nested generator closes"
+           (g3g-public-generator-close generator))
+    (check "strict nested other output releases"
+           (g3g-public-generation-output-release other-output))
+    (check "strict nested other generator closes"
+           (g3g-public-generator-close other-generator))))
+
+(define (run-capture-false-retry trigger)
+  (let* ((generator
+           (g3g-public-generator-create model tokenizer
+                                        (config selected-first)))
+         (output (g3g-public-generator-generate generator input))
+         (snapshot-calls 0)
+         (observed 'not-raised))
+    (if (eq? trigger 'input)
+        (set! g3c4-public-p2g2-native-input-ids
+          (lambda (native operation) (raise #f)))
+        (set! g3c4-p2g2-terminal-snapshot-private
+          (lambda (shell)
+            (set! snapshot-calls (+ snapshot-calls 1))
+            (if (= snapshot-calls (if (eq? trigger 'first) 1 2))
+                (raise #f))
+            (snapshot-provider shell))))
+    (guard (caught (#t (set! observed caught)))
+      (g3c4-public-p2g2-history-capture-internal!
+        generator input output))
+    (set! g3c4-p2g2-terminal-snapshot-private snapshot-provider)
+    (set! g3c4-public-p2g2-native-input-ids prompt-provider)
+    (check "capture rollback preserves original raised #f"
+           (eq? observed #f))
+    (let ((history
+            (g3c4-public-p2g2-history-capture-internal!
+              generator input output)))
+      (check "capture retry after certain failure succeeds"
+             (vector? history))
+      (g3c4-public-p2g2-history-admit-once-internal!
+        history generator input output))
+    (check "capture retry output releases"
+           (g3g-public-generation-output-release output))
+    (check "capture retry generator closes"
+           (g3g-public-generator-close generator))))
+
+(define (run-propagated-nested-retry)
+  (let* ((generator
+           (g3g-public-generator-create model tokenizer
+                                        (config selected-first)))
+         (output (g3g-public-generator-generate generator input))
+         (snapshot-calls 0))
+    (set! g3c4-p2g2-terminal-snapshot-private
+      (lambda (shell)
+        (set! snapshot-calls (+ snapshot-calls 1))
+        (g3c4-public-p2g2-history-capture-internal!
+          generator input output)
+        (snapshot-provider shell)))
+    (reject "propagated nested denial rolls outer capture back"
+      (lambda ()
+        (g3c4-public-p2g2-history-capture-internal!
+          generator input output)))
+    (set! g3c4-p2g2-terminal-snapshot-private snapshot-provider)
+    (check "propagated nested denial entered one provider only"
+           (= snapshot-calls 1))
+    (let ((history
+            (g3c4-public-p2g2-history-capture-internal!
+              generator input output)))
+      (check "propagated nested denial allows authentic retry"
+             (vector? history))
+      (g3c4-public-p2g2-history-admit-once-internal!
+        history generator input output))
+    (check "propagated nested retry output releases"
+           (g3g-public-generation-output-release output))
+    (check "propagated nested retry generator closes"
            (g3g-public-generator-close generator))))
 
 (run-case selected-first 1 'false)
 (run-case non-eos 2 'late)
-(run-nested-capture)
+(run-nested-capture 'first #f)
+(run-nested-capture 'first #t)
+(run-nested-capture 'final #f)
+(run-nested-capture 'final #t)
+(run-nested-capture 'input #f)
+(run-nested-capture 'input #t)
+(run-capture-false-retry 'first)
+(run-capture-false-retry 'final)
+(run-capture-false-retry 'input)
+(run-propagated-nested-retry)
 (check "input releases" (g3g-public-generation-tensor-release input))
 (check "foreign input releases"
        (g3g-public-generation-tensor-release foreign-input))

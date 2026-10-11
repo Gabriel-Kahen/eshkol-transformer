@@ -2799,10 +2799,15 @@ publication, public G2 and continuation remain pending.
   and terminal IDs, all 16 descriptor slots including model/tokenizer,
   ticket mutation only at the second/final capture snapshot and at admission,
   wrong live input/output for capture/admission, and original raised `#f` with
-  certain retry. A nested capture may issue the inner shell; the outer must
-  deny and the one inner issue remains usable and one-use. This does not prove
-  nested-call denial: a pre-provider capture-busy phase is absent and requires
-  separate production review. The fixture has not been compiled or run.
+  certain retry. The accepted C fixture records the previous behavior: an
+  inner capture may issue while the outer later denies. A scoped successor
+  proposes one private route-wide busy token before every capture provider,
+  with exact-token rollback before commit and fail-stop after issuance starts.
+  Source tests now require same- and different-output nested denial at first,
+  final and input-provider cuts, plus original-`#f` retry. Parsed AST checks
+  also expose and repair previously balanced but misplaced capture/admit and
+  shell-`let*` parentheses. This successor is source-only pending independent
+  review; neither the fixture nor changed route has been compiled or run.
   It makes no sealed-T1 release claim: the current native T1 abort
   refuses sealed shells, so a genuine post-creation release test still needs
   a reviewed lifecycle or test-only seam. The installed public exports stay
