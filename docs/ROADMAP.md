@@ -2667,9 +2667,15 @@ publication, public G2 and continuation remain pending.
   specifies a distinct `diagnostic-c4-p2g2` profile with exact budget two
   and optional byte EOS. It is documentation for independent review, not an
   installed API. Private compiled same-call/integration proof, a reviewed
-  public logical-I1 element-access or typed-constructor path, public adapter
-  and producer implementation, and supported end-to-end evidence remain
-  blockers. Existing public P2/G1 remains capped at one token with EOS off.
+  public typed-result integration, public adapter and producer implementation,
+  and supported end-to-end evidence remain blockers. A source-only candidate
+  supplies separate feature-gated C4 typed kinds 10/11/12: IDs copy the
+  authenticated logical clone into an independent dense CPU-i64 I1 `[G]`,
+  while length/cache scalar I1 `[1]` stores `G=1/2` or `2+G=3/4`. Native
+  length/element inspection and exact-owner release reject wrong kinds,
+  malformed storage and held leases. Focused normal/repeat/ASan+UBSan runs
+  each pass 197 checks; independent review and supported integration remain
+  pending. Existing public P2/G1 remains capped at one token with EOS off.
 
 ## Wave 4 — practical pretraining and performance
 

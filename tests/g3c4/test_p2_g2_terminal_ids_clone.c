@@ -297,7 +297,10 @@ static void clone_failure_matrix(et_g3c4_model_owner_internal *owner) {
   OK(et_g3c4_private_output_release_v1(output));
 }
 
-int main(void) {
+#ifndef ET_G3C4_P2_G2_CLONE_TEST_MAIN
+#define ET_G3C4_P2_G2_CLONE_TEST_MAIN main
+#endif
+int ET_G3C4_P2_G2_CLONE_TEST_MAIN(void) {
   et_g3c4_model_owner_internal *owner = create_owner();
   prepared_output pending = make_prepared(owner, 0);
   CHECK(et_g3c4_private_p2g2_terminal_ids_clone_v1(pending.output) == NULL);
