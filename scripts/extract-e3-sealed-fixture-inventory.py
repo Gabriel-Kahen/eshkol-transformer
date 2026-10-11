@@ -23,8 +23,14 @@ def source_closure(repo: Path, generated: Path, depfile: Path) -> bytes:
     rows = []
     for word in words:
         path = Path(word)
-        if not path.is_absolute() or path.is_symlink():
-            raise ValueError(f"nonabsolute or symlinked depfile input: {word}")
+        if not path.is_absolute() or any(part in ("", ".", "..")
+                                         for part in word.split("/")[1:]):
+            raise ValueError(f"noncanonical depfile input: {word}")
+        current = Path("/")
+        for part in path.parts[1:]:
+            current /= part
+            if current.is_symlink():
+                raise ValueError(f"symlinked depfile input: {word}")
         if path in substitutions:
             rows.append(substitutions[path])
         else:

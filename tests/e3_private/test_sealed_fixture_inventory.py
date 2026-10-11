@@ -46,6 +46,20 @@ class Inventory(unittest.TestCase):
                 TOOL.object_inventory(evidence, output)
             self.assertFalse(output.exists())
 
+    def test_parent_escape_and_symlinked_ancestor_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory(dir=ROOT) as temp:
+            gate = Path(temp)
+            depfile = gate / "private.d"
+            depfile.write_text(f"private: {ROOT}/../outside.esk\n")
+            with self.assertRaisesRegex(ValueError, "noncanonical"):
+                TOOL.source_closure(ROOT, gate / "source", depfile)
+            target = gate / "outside"
+            target.mkdir()
+            (gate / "alias").symlink_to(target, target_is_directory=True)
+            depfile.write_text(f"private: {gate}/alias/outside.esk\n")
+            with self.assertRaisesRegex(ValueError, "symlinked"):
+                TOOL.source_closure(ROOT, gate / "source", depfile)
+
 
 if __name__ == "__main__":
     unittest.main()
