@@ -2798,8 +2798,12 @@ publication, public G2 and continuation remain pending.
   parsed-source controls cover copied/foreign/one-use history, exact two prompt
   and terminal IDs, all 16 descriptor slots including model/tokenizer,
   ticket mutation only at the second/final capture snapshot and at admission,
-  reentry, and original raised `#f` with certain retry. This fixture has not been compiled
-  or run. It makes no sealed-T1 release claim: the current native T1 abort
+  wrong live input/output for capture/admission, and original raised `#f` with
+  certain retry. A nested capture may issue the inner shell; the outer must
+  deny and the one inner issue remains usable and one-use. This does not prove
+  nested-call denial: a pre-provider capture-busy phase is absent and requires
+  separate production review. The fixture has not been compiled or run.
+  It makes no sealed-T1 release claim: the current native T1 abort
   refuses sealed shells, so a genuine post-creation release test still needs
   a reviewed lifecycle or test-only seam. The installed public exports stay
   unchanged.

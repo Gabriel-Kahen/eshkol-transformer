@@ -24,6 +24,9 @@
 (define original-t1
   (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255)))
 (define input (g3c4-public-generation-input-create original-t1))
+(define foreign-input
+  (g3c4-public-generation-input-create
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 7 11))))
 (define (first-id)
   (let ((probe (g3g-public-generator-create model tokenizer (config 0)))
         (selected -1))
@@ -51,6 +54,8 @@
                    g3c4-public-g2-tickets 5 output 'history-test))
          (foreign-generator
            (g3g-public-generator-create model tokenizer (config eos)))
+         (foreign-output
+           (g3g-public-generator-generate foreign-generator input))
          (descriptor #f))
     (check "exact generation count and cache"
            (and (= (vector-ref before 2) expected-count)
@@ -61,6 +66,14 @@
         (check "non-EOS has two valid IDs"
                (and (<= 0 (vector-ref before 1))
                     (<= (vector-ref before 1) 255))))
+    (reject "wrong live input cannot capture genuine output"
+      (lambda ()
+        (g3c4-public-p2g2-history-capture-internal!
+          generator foreign-input output)))
+    (reject "wrong live output cannot capture genuine origin"
+      (lambda ()
+        (g3c4-public-p2g2-history-capture-internal!
+          generator input foreign-output)))
     (if (eq? fault-mode 'late)
         (let ((snapshot-calls 0))
           (set! g3c4-p2g2-terminal-snapshot-private
@@ -95,6 +108,16 @@
       (lambda ()
         (g3c4-public-p2g2-history-admit-once-internal!
           history foreign-generator input output)))
+    (reject "wrong live input cannot consume genuine history"
+      (lambda ()
+        (g3c4-public-p2g2-history-admit-once-internal!
+          history generator foreign-input output)))
+    (reject "wrong live output cannot consume genuine history"
+      (lambda ()
+        (g3c4-public-p2g2-history-admit-once-internal!
+          history generator input foreign-output)))
+    (check "foreign output releases"
+           (g3g-public-generation-output-release foreign-output))
     (check "foreign generator closes"
            (g3g-public-generator-close foreign-generator))
     (if (eq? fault-mode 'false)
@@ -176,9 +199,70 @@
     (check "output releases" (g3g-public-generation-output-release output))
     (check "generator closes" (g3g-public-generator-close generator))))
 
+(define (run-nested-capture)
+  (let* ((generator
+           (g3g-public-generator-create model tokenizer
+                                        (config selected-first)))
+         (output (g3g-public-generator-generate generator input))
+         (before (snapshot-provider output))
+         (snapshot-calls 0)
+         (inner-history #f))
+    ;; F has no pre-provider capture-busy phase. The inner call may issue;
+    ;; the outer must then reject at its final duplicate-output check.
+    (set! g3c4-p2g2-terminal-snapshot-private
+      (lambda (shell)
+        (set! snapshot-calls (+ snapshot-calls 1))
+        (if (= snapshot-calls 2)
+            (begin
+              (set! g3c4-p2g2-terminal-snapshot-private snapshot-provider)
+              (set! inner-history
+                (g3c4-public-p2g2-history-capture-internal!
+                  generator input output)))
+            #t)
+        (snapshot-provider shell)))
+    (reject "outer capture denies after nested sole issuance"
+      (lambda ()
+        (g3c4-public-p2g2-history-capture-internal!
+          generator input output)))
+    (set! g3c4-p2g2-terminal-snapshot-private snapshot-provider)
+    (check "outer capture reached final snapshot exactly once"
+           (= snapshot-calls 2))
+    (check "nested capture retained its issued shell"
+           (vector? inner-history))
+    (reject "same output cannot issue a second history"
+      (lambda ()
+        (g3c4-public-p2g2-history-capture-internal!
+          generator input output)))
+    (let* ((descriptor
+            (g3c4-public-p2g2-history-admit-once-internal!
+              inner-history generator input output))
+          (after (snapshot-provider output)))
+      (check "nested sole issue retains exact output and prompt"
+             (and (= (vector-ref descriptor 0) 0)
+                  (= (vector-ref descriptor 1) 255)
+                  (eq? (vector-ref descriptor 13) generator)
+                  (eq? (vector-ref descriptor 14) input)
+                  (eq? (vector-ref descriptor 15) output)))
+      (check "nested capture did not change terminal state"
+        (let loop ((index 0))
+          (if (= index 8) #t
+              (and (= (vector-ref before index) (vector-ref after index))
+                   (loop (+ index 1)))))))
+    (reject "nested issued history spends once"
+      (lambda ()
+        (g3c4-public-p2g2-history-admit-once-internal!
+          inner-history generator input output)))
+    (check "nested output releases"
+           (g3g-public-generation-output-release output))
+    (check "nested generator closes"
+           (g3g-public-generator-close generator))))
+
 (run-case selected-first 1 'false)
 (run-case non-eos 2 'late)
+(run-nested-capture)
 (check "input releases" (g3g-public-generation-tensor-release input))
+(check "foreign input releases"
+       (g3g-public-generation-tensor-release foreign-input))
 ;;; The original sealed T1 shell has no supported release API. This fixture
 ;;; proves later history admission avoids T1 reads, not native T1 retirement.
 (display "PRIVATE-P2G2-HISTORY-PASS checks=")
