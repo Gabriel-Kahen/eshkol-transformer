@@ -807,10 +807,15 @@ remain untested.
 The [exact N1 input plan](e3/E3_N1_EXACT_INPUT_PLAN.md) fixes the sealed
 index/amd64-manifest/config descriptor chain and the two ordered gzip layer
 descriptors, then specifies a metadata-only pre-read pin and a separately
-reviewed bounded export acquisition before the first real layer read. A full
+reviewed bounded export acquisition before the first real layer read. The
+[OCI export acquisition candidate](e3/E3_N1_OCI_EXPORT_ACQUISITION.md) adds
+an inert exact-chain, metadata-pin-gated bounded copy and atomic publication
+source with generated tiny-blob tests. Its production release pin is absent;
+independent and ROOT source/pin review and a separately sealed read-only
+export remain pending. A full
 export seal and its verified layer hashes follow acquisition; guest discovery
 and the C scan-only verifier require later review. There is no reviewed export
-procedure, export, verified layer/diffID/guest bytes, capture recipe or
+procedure release, export, verified layer/diffID/guest bytes, capture recipe or
 admission pin; real-layer reads, capture and N1/M1 remain HOLD.
 It changes no import policy; N1/M1 and the fresh supported numerical gate
 remain open.
