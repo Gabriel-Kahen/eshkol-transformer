@@ -35,9 +35,12 @@ def _pair(raw: str, *, mask: bool = False) -> list[int] | list[bool]:
     return values
 
 
-def parse(raw: bytes, batch_count: int) -> tuple[dict[str, object], bytes]:
+def parse(raw: bytes, batch_count: int, *, physical_capacity: bool = False
+          ) -> tuple[dict[str, object], bytes]:
     if type(batch_count) is not int or batch_count not in (2, 3):
         raise ValueError("numerical batch count must be two or three")
+    if physical_capacity and batch_count != 3:
+        raise ValueError("physical-capacity observation requires three batches")
     try:
         lines = raw.decode("ascii").splitlines()
     except UnicodeDecodeError as error:
@@ -120,7 +123,10 @@ def parse(raw: bytes, batch_count: int) -> tuple[dict[str, object], bytes]:
         ids, targets, mask = batch["row"]
         reduction, active = batch["batch"]
         state, counters = batch["state"]
-        if active != sum(mask):
+        if physical_capacity and ordinal == 2:
+            if mask != [True, False] or active != 2:
+                raise ValueError("physical-capacity padded row must retain 10 and report active 2")
+        elif active != sum(mask):
             raise ValueError("numerical frame active count differs from mask")
         z = roles[ordinal * len(ROLE_NAMES) + 20].split("\t")[3].split(",")
         observed.append({
@@ -140,10 +146,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--stdout", required=True, type=Path)
     parser.add_argument("--batch-count", required=True, type=int, choices=(2, 3))
+    parser.add_argument("--physical-capacity", action="store_true",
+                        help="admit only the test-only padded 10 row with K1 active count 2")
     parser.add_argument("--observed", required=True, type=Path)
     parser.add_argument("--roles", required=True, type=Path)
     args = parser.parse_args()
-    payload, roles = parse(args.stdout.read_bytes(), args.batch_count)
+    payload, roles = parse(args.stdout.read_bytes(), args.batch_count,
+                           physical_capacity=args.physical_capacity)
     args.observed.write_bytes(canonical(payload))
     args.roles.write_bytes(roles)
 

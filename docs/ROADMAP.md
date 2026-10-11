@@ -916,6 +916,11 @@ local `11` mask to both private reduction and correctness dispatch while leaving
 the D2/frame mask unchanged. Source and fixture checks can establish selector
 isolation and the first expected `W_b` mismatch; compiled admission, a genuine
 value kill, current-main union and §9 acceptance remain open behind N1 custody.
+A [one-use M2 compiled gate recipe](e3/E3_M2_PHYSICAL_CAPACITY_ONE_USE_GATE.md)
+is prepared in a separate test-only descendant. It pins the exact reviewed
+source checkout and adds an opt-in parser route for the mutant's intentional
+active-count mismatch, so a future supported run can test the first numerical
+failure. The recipe has not been launched; compiled M2 proof remains HOLD.
 An isolated staged successor adds a separate real-M3 zero-control source tuple
 using the existing I2 14-parameter prepare/commit path before frame binding.
 It retains the staged numerical, retention, wrong-target and uniform controls.

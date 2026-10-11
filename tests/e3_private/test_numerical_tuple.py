@@ -392,6 +392,25 @@ printf '%s\\n' "$e3_tuple_kind"
         with self.assertRaisesRegex(TranscriptError, r"batches\[0\]\.reduction_f32"):
             validate_observed_case(observed, expected)
 
+    def test_physical_capacity_parser_mode_is_exact_and_default_stays_strict(self) -> None:
+        raw = frame_lines(3)
+        row = raw.index("E3ROW\t2\t3,197\t197,0\t1,1")
+        raw[row] = "E3ROW\t2\t3,197\t197,0\t1,0"
+        mutant = frame_bytes(raw)
+        with self.assertRaisesRegex(ValueError, "active count differs from mask"):
+            parse(mutant, 3)
+        observed, roles = parse(mutant, 3, physical_capacity=True)
+        self.assertEqual([batch["mask"] for batch in observed["batches"]],
+                         [[True, True], [True, True], [True, False]])
+        self.assertEqual(len(roles.splitlines()), 63)
+        with self.assertRaisesRegex(ValueError, "requires three batches"):
+            parse(mutant, 2, physical_capacity=True)
+        wrong_active = frame_bytes([line.rsplit("\t", 1)[0] + "\t1"
+                                    if line.startswith("E3BATCH\t2\t")
+                                    else line for line in raw])
+        with self.assertRaisesRegex(ValueError, "padded row must retain 10"):
+            parse(wrong_active, 3, physical_capacity=True)
+
     def test_native_provider_mode_tracks_both_test_sanitizers(self) -> None:
         policy = ROOT / "scripts/e3-private-native-inputs.sh"
         with tempfile.TemporaryDirectory(prefix="e3-native-mode-") as temporary:
