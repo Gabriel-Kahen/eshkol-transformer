@@ -781,6 +781,8 @@ The [N1 import receipt verifier](e3/E3_N1_IMPORT_RECEIPT.md) is a noninstalled
 pre-admission source candidate for the failed Numerical F tuple. Its exact F
 object/call/depfile inventory is partial: final producer and per-call ABI,
 actual provider/link closure and complete system-header bytes are unavailable.
+The B successor anchors all 17 depfile hashes to the sealed F forensic record
+and fails closed without a separately reviewed ABI/provider claims anchor.
 It changes no import policy; N1/M1 and the fresh supported numerical gate
 remain open.
 The exact `5d642a2` fe9/f31 numerical gate built the normal and mutant

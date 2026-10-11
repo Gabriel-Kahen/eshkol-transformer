@@ -2,6 +2,7 @@
 
 import copy
 import importlib.util
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -63,7 +64,8 @@ class ReceiptTests(unittest.TestCase):
             "provider_files": [{"name": "libc", "file": file("libc.so")}],
             "provider": {
                 symbol: {"file": "libc", "symbol_type": "FUNC",
-                         "symbol_version": "GLIBC_2.2.5", "soname": "libc.so.6"}
+                         "symbol_version": "GLIBC_2.2.5", "soname": "libc.so.6",
+                         "binding": "GLOBAL", "visibility": "DEFAULT"}
                 for symbol in ("bcmp", "puts")
             } | {
                 "symlink_chain": [{"path": str(self.root / "libc.so.6"),
@@ -88,18 +90,41 @@ class ReceiptTests(unittest.TestCase):
             path.write_text("\n".join(lines) + "\n")
             self.receipt["evidence"][name]["sha256"] = (
                 VERIFIER.hashlib.sha256(path.read_bytes()).hexdigest())
+        depfile_anchor = {
+            "dependencies": {"depfile_sha256": {
+                record["name"]: record["file"]["sha256"]
+                for record in self.receipt["depfiles"]
+            }}
+        }
+        anchor_file = self.files["depfile_anchor.txt"]
+        anchor_file.write_text(json.dumps(depfile_anchor, sort_keys=True))
+        self.receipt["evidence"]["depfile_anchor"]["sha256"] = (
+            VERIFIER.hashlib.sha256(anchor_file.read_bytes()).hexdigest())
+        claims_file = self.files["reviewed_claims.txt"]
+        claims_file.write_text(json.dumps(VERIFIER.reviewed_claims(self.receipt),
+                                         sort_keys=True))
+        self.receipt["evidence"]["reviewed_claims"]["sha256"] = (
+            VERIFIER.hashlib.sha256(claims_file.read_bytes()).hexdigest())
         self.expected_pins = copy.deepcopy(self.receipt["pins"])
         self.expected_objects = {name: record["sha256"] for name, record in
                                  self.receipt["objects"].items()}
         self.expected_calls = VERIFIER.call_roster_hash(self.receipt["calls"])
         self.expected_imports = {name: self.receipt["evidence"][name]["sha256"]
                                  for name in VERIFIER.F_IMPORTS}
+        self.expected_depfile_anchor = self.receipt["evidence"]["depfile_anchor"]["sha256"]
+        self.expected_depfile_paths = {
+            record["name"]: record["file"]["path"] for record in self.receipt["depfiles"]
+        }
+        self.expected_claims = self.receipt["evidence"]["reviewed_claims"]["sha256"]
 
     def check(self, candidate):
         return VERIFIER.check_receipt(
             candidate, expected_pins=self.expected_pins,
             expected_objects=self.expected_objects,
-            expected_calls=self.expected_calls, expected_imports=self.expected_imports)
+            expected_calls=self.expected_calls, expected_imports=self.expected_imports,
+            expected_depfile_anchor=self.expected_depfile_anchor,
+            expected_depfile_paths=self.expected_depfile_paths,
+            expected_claims=self.expected_claims)
 
     def rejects(self, change, phrase):
         candidate = copy.deepcopy(self.receipt)
@@ -109,6 +134,15 @@ class ReceiptTests(unittest.TestCase):
 
     def test_complete_synthetic_structure(self):
         self.assertIn("independent", self.check(self.receipt))
+        with self.assertRaisesRegex(
+                VERIFIER.ReceiptError, "no independently accepted.*claims anchor"):
+            VERIFIER.check_receipt(
+                self.receipt, expected_pins=self.expected_pins,
+                expected_objects=self.expected_objects,
+                expected_calls=self.expected_calls,
+                expected_imports=self.expected_imports,
+                expected_depfile_anchor=self.expected_depfile_anchor,
+                expected_depfile_paths=self.expected_depfile_paths)
 
     def test_missing_producer_or_abi(self):
         self.rejects(lambda x: x["calls"][14]["producer"].update(final_mapping=""),
@@ -117,6 +151,12 @@ class ReceiptTests(unittest.TestCase):
                      "ABI arguments")
         self.rejects(lambda x: x["calls"][14]["abi"].update(calling_convention=""),
                      "calling_convention")
+        self.rejects(lambda x: x["calls"][14]["abi"].update(calling_convention="stdcall"),
+                     "claims differ")
+        self.rejects(lambda x: x["calls"][14].update(provider="other-library"),
+                     "call provider differs")
+        self.rejects(lambda x: x["calls"][14].update(declaration="other.h:9"),
+                     "claims differ")
 
     def test_relocation_and_inventory_drift(self):
         self.rejects(lambda x: x["calls"][0].update(offset=x["calls"][1]["offset"]),
@@ -135,9 +175,32 @@ class ReceiptTests(unittest.TestCase):
     def test_provider_and_link_drift(self):
         self.rejects(lambda x: x["provider"]["puts"].update(symbol_version=""),
                      "symbol_version")
+        self.rejects(lambda x: x["provider"]["puts"].update(symbol_version="GLIBC_99.0"),
+                     "call ABI version differs")
+        self.rejects(lambda x: x["provider"]["puts"].update(symbol_type="OBJECT"),
+                     "claims differ")
+        self.rejects(lambda x: x["provider"]["puts"].update(binding="WEAK"),
+                     "claims differ")
+        altered = copy.deepcopy(self.receipt)
+        altered["provider"]["puts"]["symbol_version"] = "GLIBC_99.0"
+        for call in altered["calls"]:
+            if call["symbol"] == "puts":
+                call["abi"]["version"] = "GLIBC_99.0"
+        claims_file = self.files["reviewed_claims.txt"]
+        claims_file.write_text(json.dumps(VERIFIER.reviewed_claims(altered),
+                                         sort_keys=True))
+        altered["evidence"]["reviewed_claims"]["sha256"] = (
+            VERIFIER.hashlib.sha256(claims_file.read_bytes()).hexdigest())
+        with self.assertRaisesRegex(VERIFIER.ReceiptError,
+                                    "reviewed claims anchor changed"):
+            self.check(altered)
+        claims_file.write_text(json.dumps(VERIFIER.reviewed_claims(self.receipt),
+                                         sort_keys=True))
         self.rejects(lambda x: x["provider"]["puts"].update(file="other"),
                      "unlisted.*provider")
         self.rejects(lambda x: x["provider"].update(loader_path=[]), "loader_path")
+        self.rejects(lambda x: x["provider"].update(loader_path=["/tmp/other"]),
+                     "claims differ")
         self.rejects(lambda x: x["provider"]["symlink_chain"][0].update(target="other"),
                      "changed provider symlink")
         self.rejects(lambda x: x["evidence"].pop("resolved_link_map"),
@@ -149,6 +212,21 @@ class ReceiptTests(unittest.TestCase):
     def test_header_depfile_object_and_image_drift(self):
         self.rejects(lambda x: x["headers"].clear(), "missing headers")
         self.rejects(lambda x: x["depfiles"].pop(), "missing or extra F depfiles")
+        substitute = self.root / "private-copy.d"
+        substitute.write_bytes(self.files["private.d"].read_bytes())
+        self.rejects(
+            lambda x: next(row for row in x["depfiles"]
+                           if row["name"] == "private.d")["file"].update(path=str(substitute)),
+            "path differs from sealed F depfile")
+        changed = copy.deepcopy(self.receipt)
+        depfile = next(row for row in changed["depfiles"] if row["name"] == "private.d")
+        self.files["private.d"].write_bytes(b"changed direct dependency")
+        depfile["file"]["sha256"] = VERIFIER.hashlib.sha256(
+            self.files["private.d"].read_bytes()).hexdigest()
+        with self.assertRaisesRegex(VERIFIER.ReceiptError,
+                                    "differs from sealed F depfile"):
+            self.check(changed)
+        self.files["private.d"].write_bytes(b"private.d")
         self.rejects(lambda x: x["headers"][0].update(name="/missing.h"),
                      "missing or extra traced header")
         self.rejects(lambda x: x["pins"].update(image_id="sha256:" + "0" * 63),

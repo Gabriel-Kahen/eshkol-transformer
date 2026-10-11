@@ -13,9 +13,21 @@ relocation, disassembly, optimized IR, source, header, provider-symbol and
 loader/link evidence; all 17 F depfiles; a sorted complete header trace with
 matching SHA-256 bytes; and pinned provider files and closure. It rejects
 duplicate JSON keys, missing or changed bytes, changed pins/calls, unresolved
-file symlinks and incomplete provider records. A structurally complete receipt
-still needs independent semantic review of the raw evidence before any
-tuple-scoped source admission.
+file symlinks and incomplete provider records. The 17 depfile paths and hashes are now
+compared against the independently sealed F forensic receipt
+(SHA-256 0b47f72d89d770975d5583a26964e8a36424f59ebeb674d4d9acef5abae6ef16);
+changing a depfile and updating its candidate hash is rejected.
+
+Candidate A's independent/root review held its broader verifier claim: nonempty
+ABI/provider/version changes and self-rehashed depfiles could pass. The B
+successor compares all per-call producer, ABI, declaration, provider, header
+and loader claims against a separate reviewed-claims record. Its production
+anchor is deliberately absent because no image-specific raw provider/ABI
+receipt has been accepted. Thus even a structurally complete production
+candidate exits HOLD. The synthetic tests supply an isolated anchor only to
+check drift rejection. This checker certifies the anchored F object, call,
+import and depfile inventory; it cannot certify ABI/provider safety until
+independent raw-record review and a later explicit source pin.
 
 The separate immutable candidate record at
 /home/gabe/.codex/evidence/eshkol-transformer/e3-section9-n1-receipt-candidate-20261011-a/candidate.json
@@ -30,7 +42,9 @@ Synthetic negative tests run with:
 
     python3 -m unittest tests.e3_private.test_n1_import_receipt -v
 
-These tests exercise the checker's structure and drift rejection. They do not
+These tests exercise the checker's structure and drift rejection, including
+nonempty calling-convention, declaration, provider version/binding, loader
+path and self-rehashed or substituted depfile mutations. They do not
 execute a compiler, linker, loader, Docker, provider or numerical gate, and
 their complete synthetic fixture is not an N1 admission receipt. The next
 gate is actual image/candidate producer, ABI, provider and complete dependency

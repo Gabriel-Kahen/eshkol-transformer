@@ -23,6 +23,7 @@ EVIDENCE = {
     "source_mapping", "declarations", "provider_symbols", "resolved_link_map",
     "loader_search", "needed_closure", "depfile_inventory", "full_header_trace",
     "normal_imports", "noninstrumentation_imports", "sanitizer_imports",
+    "depfile_anchor", "reviewed_claims",
 }
 DEPFILES = {
     "private.d", "bridge.d", "package-bridge.d",
@@ -52,6 +53,15 @@ F_OBJECTS = {
     "private.o": "ad1fd0ae2363a44fcb35092f5aa625d9831ee24c4fc82d53a5572abe86c27007",
 }
 F_CALLS_SHA256 = "e75cbc6316b90626709bea0016eebfd71cbcb2eff50f0d23989ea24e0241c3ef"
+F_DEPFILE_ANCHOR_SHA256 = "0b47f72d89d770975d5583a26964e8a36424f59ebeb674d4d9acef5abae6ef16"
+F_DEPFILE_ROOT = (
+    "/home/gabe/e3-numerical-transcript-94b8fec-fe9-f31-20261002-prepared-f/"
+    "scratch/eshkol-transformer-e1b.AWHfVe"
+)
+F_DEPFILE_PATHS = {name: f"{F_DEPFILE_ROOT}/{name}" for name in DEPFILES}
+# No image-specific ABI/provider/declaration/loader claims have been accepted.
+# A later independently reviewed source change must supply the exact anchor.
+F_REVIEWED_CLAIMS_SHA256 = None
 F_IMPORTS = {
     "normal_imports": "e9a317029e27da0a9e9a07d416727b33c837a8be04d6c912c97f47273f94bae2",
     "noninstrumentation_imports": "a84ba743537bc2d3c1cd50ad74b8195464338f80f15b591276b8dd58e112eb28",
@@ -115,8 +125,33 @@ def call_roster_hash(calls):
     return hashlib.sha256(json.dumps(rows, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
+def reviewed_claims(data):
+    """Projection checked against a separately reviewed immutable raw receipt."""
+    return {
+        "calls": [
+            {name: call[name] for name in
+             ("object", "section", "offset", "symbol", "producer", "abi",
+              "declaration", "provider")}
+            for call in data["calls"]
+        ],
+        "provider": data["provider"],
+        "provider_files": data["provider_files"],
+        "headers": data["headers"],
+        "raw_evidence_sha256": {
+            name: data["evidence"][name]["sha256"] for name in
+            ("argv", "environment", "relocations", "disassembly", "optimized_ir",
+             "source_mapping", "declarations", "provider_symbols",
+             "resolved_link_map", "loader_search", "needed_closure",
+             "full_header_trace")
+        },
+    }
+
+
 def check_receipt(data, *, expected_pins=F_PINS, expected_objects=F_OBJECTS,
-                  expected_calls=F_CALLS_SHA256, expected_imports=F_IMPORTS):
+                  expected_calls=F_CALLS_SHA256, expected_imports=F_IMPORTS,
+                  expected_depfile_anchor=F_DEPFILE_ANCHOR_SHA256,
+                  expected_depfile_paths=F_DEPFILE_PATHS,
+                  expected_claims=F_REVIEWED_CLAIMS_SHA256):
     need(isinstance(data, dict), "receipt must be an object")
     need(data.get("schema") == "e3-n1-import-receipt-v1", "wrong receipt schema")
     need(data.get("status") == "candidate-for-independent-review",
@@ -148,7 +183,16 @@ def check_receipt(data, *, expected_pins=F_PINS, expected_objects=F_OBJECTS,
             need(isinstance(evidence[name], dict) and
                  evidence[name].get("sha256") == expected_imports[name],
                  f"candidate {name} hash changed")
+        if name == "depfile_anchor":
+            need(isinstance(evidence[name], dict) and
+                 evidence[name].get("sha256") == expected_depfile_anchor,
+                 "candidate depfile anchor changed")
         pinned_file(evidence[name], name)
+    depfile_anchor = json.loads(Path(evidence["depfile_anchor"]["path"]).read_text(),
+                                object_pairs_hook=pairs_unique)
+    anchored_depfiles = depfile_anchor.get("dependencies", {}).get("depfile_sha256")
+    need(isinstance(anchored_depfiles, dict) and set(anchored_depfiles) == DEPFILES,
+         "incomplete anchored F depfile inventory")
     inventories = {}
     for name in expected_imports:
         lines = Path(evidence[name]["path"]).read_text().splitlines()
@@ -224,9 +268,16 @@ def check_receipt(data, *, expected_pins=F_PINS, expected_objects=F_OBJECTS,
             entry = nonempty(record["name"], f"{name} name")
             need(entry not in names, f"duplicate {name} name")
             names.add(entry)
+            if name == "depfiles":
+                need(isinstance(record["file"], dict) and
+                     record["file"].get("path") == expected_depfile_paths.get(entry),
+                     f"candidate {entry} path differs from sealed F depfile")
             pinned_file(record["file"], f"{name} {entry}")
         if name == "depfiles":
             need(names == DEPFILES, "missing or extra F depfiles")
+            for record in records:
+                need(record["file"]["sha256"] == anchored_depfiles[record["name"]],
+                     f"candidate {record['name']} differs from sealed F depfile")
         if name == "headers":
             trace = Path(evidence["full_header_trace"]["path"]).read_text().splitlines()
             need(trace == sorted(set(trace)) and bool(trace),
@@ -242,13 +293,20 @@ def check_receipt(data, *, expected_pins=F_PINS, expected_objects=F_OBJECTS,
          "missing provider closure")
     for symbol in ("bcmp", "puts"):
         need(isinstance(provider[symbol], dict) and set(provider[symbol]) ==
-             {"file", "symbol_type", "symbol_version", "soname"},
+             {"file", "symbol_type", "symbol_version", "soname",
+              "binding", "visibility"},
              f"incomplete {symbol} provider")
         for field in provider[symbol]:
             nonempty(provider[symbol][field], f"{symbol} provider {field}")
         need(provider[symbol]["file"] in
              {item["name"] for item in data["provider_files"]},
              f"unlisted {symbol} provider file")
+    for call in calls:
+        selected = provider[call["symbol"]]
+        need(call["provider"] == selected["file"],
+             "call provider differs from provider-symbol record")
+        need(call["abi"]["version"] == selected["symbol_version"],
+             "call ABI version differs from provider-symbol record")
     for field in ("symlink_chain", "loader_path", "transitive_closure"):
         need(isinstance(provider[field], list) and bool(provider[field]),
              f"missing provider {field}")
@@ -268,6 +326,14 @@ def check_receipt(data, *, expected_pins=F_PINS, expected_objects=F_OBJECTS,
              f"changed provider symlink: {path}")
         need(os.path.realpath(path) in resolved_files,
              f"unlisted provider symlink target: {path}")
+    need(expected_claims is not None,
+         "no independently accepted ABI/provider/declaration/loader claims anchor")
+    need(evidence["reviewed_claims"]["sha256"] == expected_claims,
+         "reviewed claims anchor changed")
+    claims = json.loads(Path(evidence["reviewed_claims"]["path"]).read_text(),
+                        object_pairs_hook=pairs_unique)
+    need(claims == reviewed_claims(data),
+         "ABI/provider/declaration/loader claims differ from reviewed anchor")
     return "complete byte-integrity candidate; independent ABI/provider review required"
 
 
