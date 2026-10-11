@@ -372,6 +372,7 @@ def kind_slot_routes(lines, selection_index, selection, name):
             raise SystemExit(f"IR proof failed: {name} slot phi predecessor changed")
 
     source = None
+    kind_loads = []
     for branch_number, (target, expected) in enumerate(zip(incoming[:3], (0, 1, 4))):
         matches = []
         for label, (start, end) in spans.items():
@@ -404,8 +405,17 @@ def kind_slot_routes(lines, selection_index, selection, name):
                 r"%eshkol_tagged_value, ptr %kind_cap, align [0-9]+",
                 load_line)):
             raise SystemExit(f"IR proof failed: {name} kind comparison bypasses capture")
+        kind_loads.append(load_index)
     if source != incoming[3]:
         raise SystemExit(f"IR proof failed: {name} slot fallback branch changed")
+    # kind_cap is the incoming closure capture. No store, GEP alias, or escape
+    # may interpose before the three reads used by the branch chain.
+    references = {i for i, line in enumerate(lines[:selection_index])
+                  if re.search(r"%kind_cap(?![-A-Za-z0-9_.])", line)}
+    if (not re.search(r"^define .*\bptr %kind_cap(?:[,)]|$)", lines[0]) or
+            len(set(kind_loads)) != 3 or
+            references != {0, *kind_loads}):
+        raise SystemExit(f"IR proof failed: {name} kind capture alias or write")
 
 def vector_ref_local(lines, result, local, slot, name):
     # Follow the vector arm of the compiler's checked vector-ref, including

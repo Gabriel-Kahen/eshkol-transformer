@@ -2921,6 +2921,13 @@ publication, public G2 and continuation remain pending.
   false predicates reject. Those modeled values are not established compiler
   symbol encodings. Exact emitted-IR inspection must determine whether this
   conservative shape applies; C4 admission remains HOLD.
+  Independent H review found that a write to the captured `kind_cap` before
+  the branch chain could redirect all three reads. Source candidate I permits
+  only the incoming capture parameter and the three checked loads before the
+  slot selection; direct overwrite, zero-offset GEP alias/store, and wrong
+  capture-parameter mutants reject. This syntactic rule does not prove
+  non-aliasing of distinct runtime pointer parameters or the actual compiler's
+  symbol comparison/handle-OR lowering. Exact IR and C4 admission remain HOLD.
   Source review and compiled runtime/ABI proof are still required before
   claiming this as a C4 witness.
   Compiled normal/repeat/sanitizer tests, allocation/callback instrumentation,

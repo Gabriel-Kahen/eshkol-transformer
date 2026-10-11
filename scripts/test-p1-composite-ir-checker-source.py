@@ -86,7 +86,9 @@ rejects(lambda: namespace["pair_fields"](
 rejects(lambda: namespace["pair_fields"](
     [line.replace("%next-witnesses.load, ptr %slot1",
                   "%next-registry.load, ptr %slot1") for line in pair], "synthetic"))
-pair_publication = pair + [
+pair_publication = [
+    "define %eshkol_tagged_value @synthetic(ptr %kind_cap) {",
+] + pair + [
     "  %active-record-stage.load = load %eshkol_tagged_value, ptr %active-record-stage_cap, align 8",
     "  %active-slot = alloca %eshkol_tagged_value, align 16",
     "  br label %cond_check_state",
@@ -269,6 +271,30 @@ wrong_kind_bits = [line.replace(
 rejects(lambda: namespace["checked_pair_root_value"](
     wrong_kind_bits, len(wrong_kind_bits) - 1,
     "wrong-kind-bits"))
+kind_load0 = "  %kind.load0 = load %eshkol_tagged_value, ptr %kind_cap, align 8"
+overwritten_kind_capture = pair_publication.copy()
+overwritten_kind_capture.insert(
+    overwritten_kind_capture.index(kind_load0),
+    "  store %eshkol_tagged_value { i8 1, i8 16, i16 0, i32 0, i64 9 }, ptr %kind_cap, align 8")
+rejects(lambda: namespace["checked_pair_root_value"](
+    overwritten_kind_capture, len(overwritten_kind_capture) - 1,
+    "overwritten-kind-capture"))
+kind_load2 = "  %kind.load2 = load %eshkol_tagged_value, ptr %kind_cap, align 8"
+aliased_kind_capture = pair_publication.copy()
+aliased_kind_capture[aliased_kind_capture.index(kind_load2):
+                     aliased_kind_capture.index(kind_load2)] = [
+    "  %kind.alias = getelementptr i8, ptr %kind_cap, i64 0",
+    "  store %eshkol_tagged_value { i8 1, i8 16, i16 0, i32 0, i64 9 }, ptr %kind.alias, align 8",
+]
+rejects(lambda: namespace["checked_pair_root_value"](
+    aliased_kind_capture, len(aliased_kind_capture) - 1,
+    "aliased-kind-capture"))
+wrong_kind_parameter = [line.replace(
+    "@synthetic(ptr %kind_cap)", "@synthetic(ptr %other_cap)")
+    for line in pair_publication]
+rejects(lambda: namespace["checked_pair_root_value"](
+    wrong_kind_parameter, len(wrong_kind_parameter) - 1,
+    "wrong-kind-parameter"))
 alias_slot = pair_publication.copy()
 alias_slot[alias_slot.index(
     "  %active-slot.load = load %eshkol_tagged_value, ptr %active-slot, align 8"):
