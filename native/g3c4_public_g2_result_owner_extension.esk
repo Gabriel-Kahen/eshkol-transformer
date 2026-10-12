@@ -52,4 +52,4 @@
           operation)
         (vector-set! entry 2 'live)
         (vector-set! entry 10 #f)
-        answer)))))
+        answer))))
