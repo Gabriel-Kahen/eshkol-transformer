@@ -2712,6 +2712,12 @@ publication, public G2 and continuation remain pending.
   prerequisites. The source-only dependency checker establishes those current
   boundaries, not public G2 behavior or admission. G3-R SAVE/continuation is
   a separate workstream.
+  An isolated feature-gated public result-owner prerequisite candidate now
+  supplies native logical `[1]`/`[2]` CPU-I1 ownership, matching scalar
+  length/cache values, exact native inspection, and an uninstalled Eshkol
+  publication seam. Focused normal/sanitizer and feature-off source tests
+  pass. This is not compiled Eshkol facade validation or public G2 admission;
+  private terminal acceptance and package-closure gates remain open.
 
 ## Wave 4 — practical pretraining and performance
 

@@ -35,6 +35,16 @@ int64_t et_g3c4_private_rng_release_v1(void *rng);
 /* Registered, detached fixed-profile public result owners. */
 void *et_g3c4_private_result_tensor_create_v1(int64_t kind, int64_t value);
 int64_t et_g3c4_private_result_tensor_release_v1(void *result);
+#ifdef ET_G3C4_P2_G2_PUBLIC_RESULT_PRIVATE
+/* Detached CPU-i64 rank-one owner: IDs are [1] or [2]; scalar values are [1].
+ * The unused second word must be zero. No terminal/clone authority is retained. */
+void *et_g3c4_private_result_tensor_create_rank1_v1(
+    int64_t kind, int64_t logical_count, int64_t value0, int64_t value1);
+/* Verify exact native kind, logical shape, dtype/device, byte count and values. */
+int64_t et_g3c4_private_result_tensor_inspect_rank1_v1(
+    void *result, int64_t kind, int64_t logical_count,
+    int64_t value0, int64_t value1);
+#endif
 void *et_g3c4_private_result_rng_create_v1(
     int64_t w0, int64_t w1, int64_t w2, int64_t w3);
 /* 0 exact CPU view, 1 current live view's device differs, -1 typed error. */

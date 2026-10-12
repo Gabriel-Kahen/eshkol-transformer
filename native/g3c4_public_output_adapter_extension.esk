@@ -11,6 +11,9 @@
 
 ;;; Record: exact registry entry, native control, kind, scalar/words, shell.
 (define g3c4-public-result-records (vector '()))
+;;; A separately loaded G2 prerequisite may install a native rank-one verifier.
+;;; The installed P2/G1 package leaves this cell empty.
+(define g3c4-public-rank1-inspector (vector #f))
 (define (g3c4-public-result-record shell)
   (let loop ((tail (vector-ref g3c4-public-result-records 0)))
     (cond ((null? tail) #f)
@@ -45,8 +48,24 @@
                                  (and (= (vector-ref (vector-ref entry 7) index)
                                          (vector-ref (vector-ref record 3) index))
                                       (check-words (+ index 1))))))
-                      (and (m3t-exact-i64? (vector-ref entry 7))
-                           (= (vector-ref entry 7) (vector-ref record 3))))))
+                      (let ((protected (vector-ref record 3)))
+                        (if (vector? protected)
+                            (and (= (vector-length protected) 3)
+                                 (eq? (vector-ref entry 7) protected)
+                                 (m3t-exact-i64? (vector-ref protected 0))
+                                 (m3t-exact-i64? (vector-ref protected 1))
+                                 (m3t-exact-i64? (vector-ref protected 2))
+                                 (procedure? (vector-ref g3c4-public-rank1-inspector 0))
+                                 (= ((vector-ref g3c4-public-rank1-inspector 0)
+                                       (vector-ref entry 3)
+                                       (cond ((eq? kind 'ids) 5)
+                                             ((eq? kind 'lengths) 6)
+                                             (else 7))
+                                       (vector-ref protected 0)
+                                       (vector-ref protected 1)
+                                       (vector-ref protected 2)) 0))
+                            (and (m3t-exact-i64? (vector-ref entry 7))
+                                 (= (vector-ref entry 7) protected)))))))
         (g3c4-fail 'invalid-state operation
                    "C4 result identity or protected clone link changed"))
     entry))
