@@ -306,8 +306,15 @@ cmp "$out/pre-fixture-check.stdout" "$out/post-fixture-check.stdout"
 verify_toolchain
 pin_source "$out/post-source-pins.tsv"
 cmp "$out/pre-source-pins.tsv" "$out/post-source-pins.tsv"
-(cd "$out" &&
+reject_evidence_symlinks() {
+  local found
+  found="$(find . -type l -print -quit)" || die "cannot scan gate evidence for symlinks"
+  [[ -z "$found" ]] || die "gate evidence contains a symlink"
+}
+(cd "$out" || exit 1
+  reject_evidence_symlinks
   find . -type f ! -path ./SHA256SUMS-RUN -print0 | LC_ALL=C sort -z | \
-    xargs -0 sha256sum >SHA256SUMS-RUN &&
-  sha256sum -c SHA256SUMS-RUN >/dev/null)
+    xargs -0 sha256sum >SHA256SUMS-RUN
+  sha256sum -c SHA256SUMS-RUN >/dev/null
+  reject_evidence_symlinks)
 printf 'G3-R file pair PASS: normal/repeat/sanitize\n'

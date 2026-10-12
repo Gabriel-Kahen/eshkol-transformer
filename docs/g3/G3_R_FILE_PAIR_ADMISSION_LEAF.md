@@ -80,5 +80,6 @@ the exact 14-check file-pair result, exact feature-off output, empty build and
 run stderr, and byte-identical mode outputs. The gate retains native depfiles,
 linked/IR symbols, and compiler provenance for review. Its native sanitizer
 mode does not establish generated Eshkol instrumentation or all-path owner
-correctness. On success it writes and verifies `SHA256SUMS-RUN` over retained
-evidence. The separately accepted predecessor receipt gate is not rerun.
+correctness. On success it rejects any symlink in the evidence tree before
+and after writing and verifying `SHA256SUMS-RUN` over retained evidence. The
+separately accepted predecessor receipt gate is not rerun.

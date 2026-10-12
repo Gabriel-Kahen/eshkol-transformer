@@ -43,6 +43,7 @@ class FilePairGateSourceTest(unittest.TestCase):
             'fixture-sha256.txt', 'verify_fixtures "$out/pre-fixture-check.stdout"',
             'verify_fixtures "$out/post-fixture-check.stdout"',
             'cmp "$out/pre-fixture-check.stdout" "$out/post-fixture-check.stdout"',
+            'found="$(find . -type l -print -quit)" || die',
             'find . -type f ! -path ./SHA256SUMS-RUN -print0 | LC_ALL=C sort -z',
             'sha256sum -c SHA256SUMS-RUN',
             'prepare_checkpoint_load_fixtures.py',
@@ -57,6 +58,14 @@ class FilePairGateSourceTest(unittest.TestCase):
         self.assertEqual(recipe.count('build_mode normal'), 1)
         self.assertEqual(recipe.count('build_mode repeat'), 1)
         self.assertEqual(recipe.count('build_mode sanitize'), 1)
+        self.assertEqual(recipe.count('  reject_evidence_symlinks'), 2)
+        first_check = recipe.index('  reject_evidence_symlinks\n')
+        manifest = recipe.index('    xargs -0 sha256sum >SHA256SUMS-RUN')
+        verification = recipe.index('  sha256sum -c SHA256SUMS-RUN >/dev/null')
+        second_check = recipe.rindex('  reject_evidence_symlinks)')
+        self.assertLess(first_check, manifest)
+        self.assertLess(manifest, verification)
+        self.assertLess(verification, second_check)
 
     def test_gate_modes_and_fixtures_are_complete(self):
         recipe = RUNNER.read_text()
