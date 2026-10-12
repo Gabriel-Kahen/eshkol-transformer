@@ -13,8 +13,8 @@ therefore selected its same-directory ordinary M3T source even with the overlay
 staged first. Both the source-capture and package builder compile this fixture
 root, whose generated I2/M3T names are absent beside it and resolve through
 the staged include root. The P1 `require` still resolves the generated module.
-The 28-row expected source closure is a hypothesis until a fresh compiled
-depfile verifies the routing.
+The consumed J capture on `fb31fac3` emitted a depfile whose 28-row source
+closure matches the checked-in list. This proves source routing only.
 
 The candidate P1 construction begins with the existing native candidate
 entrypoint and retains its sealed token roster. I2 retains exact construction
@@ -42,7 +42,7 @@ live-workspace rejection, one sealed retirement, stale model and head-handle
 typed errors, and canonical reconstruction and retirement from the unchanged
 original. The source checker exercises exact
 predecessor pins, generation, stale source rejection and fixture routing.
-Fresh compiler composition, generated source and native object inventories,
+The J source compile passed; native and final E1B object inventories,
 normal/repeat/sanitizer execution, feature-off object/symbol parity, and
 first-failure construction cuts are **unrun**. This source candidate must not
 be described as a runnable Section 9 gate or accepted stale-M3 proof.

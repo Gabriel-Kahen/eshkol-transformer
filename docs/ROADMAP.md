@@ -1970,9 +1970,9 @@ tombstone tail; a source fixture records live-workspace rejection, stale model
 and handle expectations, and same-process reconstruction from the unchanged
 original. The reviewed noninstalled package source at `9c53b702` now
 registers the exact tuple and stages all three generated overlays. Its
-fixture-specific same-aggregate root and expected 32-row Eshkol source
-closure have static drift checks. The closure is a source candidate: actual
-compiler depfiles, emitted symbol/object inventories, normal/repeat/sanitizer
+fixture-specific same-aggregate root and 28-row Eshkol source
+closure have static drift checks. The consumed J compiled depfile matches that
+closure; emitted symbol/object inventories, normal/repeat/sanitizer
 and feature-off gates remain unrun. No sealed-M3 retirement or Section 9
 acceptance follows from this source work.
 
@@ -1980,8 +1980,12 @@ The bounded [sealed-fixture gate preparation](e3/E3_SEALED_FIXTURE_GATE_PREPARAT
 now supplies a one-use compiler depfile capture and a separate read-only
 emitted-object inventory extractor. Source-only tests check depfile ordering,
 generated-path normalization, duplicates, foreign paths and missing object
-evidence. The expected 32 rows remain a hypothesis until a pinned f31/fe9
-compile emits them; object manifests, feature-off parity, normal/repeat,
+evidence. J on `fb31fac3`/tree `5ca77e7` emitted the exact 28-row closure;
+ROOT accepted compiled source capture only. A one-use IR-derived `private.o`
+capture is prepared with ROOT/run-manifest hash-chain verification, before/after
+J input checks and raw object/shared-library symbol records. It has not run.
+The localized E1B `OUTPUT.o.evidence` remains the final symbol authority;
+object manifests, feature-off parity, normal/repeat,
 sanitizer and Section 9 runtime acceptance remain pending.
 
 The one-use emitted-inventory G attempt on source `582c6c7` (tree
@@ -2010,9 +2014,10 @@ I2 compilation but stopped before depfile or IR emission: its fixture-only
 preflight called `length` twice and `memq` once under `--no-stdlib`. Raw stderr
 is retained in `e3-section9-gate-prep-f31-fe9-run-ccad812-20261012-i/`.
 A source-only successor reuses I2's bounded-list and identity-membership
-helpers, guarding invalid counts before arithmetic. A fresh one-use capture
-on the reviewed successor is the next gate; the 28-row closure and Section 9
-acceptance remain unverified.
+helpers, guarding invalid counts before arithmetic. The reviewed J capture
+on `fb31fac3` emitted the 28-row depfile and IR; ROOT's sealed result is
+`e3-section9-j-orchestrator-root-result-fb31-20261012-a/SHA256SUMS-ROOT`.
+Object/symbol inventories and Section 9 acceptance remain unverified.
 
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
