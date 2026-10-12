@@ -653,6 +653,14 @@ The test is registered after the production generate gate in the required
 CLI3 CI suite. Its compiled gate has not run; registration does not change
 the CLI3 command API or establish validation.
 
+The first exact `a43d1f3` CLI3 union gate compiled the bootstrap package but
+stopped while checking native depfiles: the CLI3 path policy rejected an
+authentic pinned Eshkol header outside the repository before the existing
+runtime-source normalization could admit it. An isolated source-only policy
+repair admits dependencies under that exact authenticated runtime root while
+preserving traversal and symlink rejection for each root. Focused policy tests
+pass; fresh exact-source compiled CLI3 and cross-command evidence remain open.
+
 The test-only CLI3/G3-G checkpoint-to-generation prerequisite has passed its
 exact fe9/f31 supported linked/runtime gate at `ab479f5`/tree `1102384`.
 Its single registry composes the accepted CLI3/TR3 C2 root with the public
