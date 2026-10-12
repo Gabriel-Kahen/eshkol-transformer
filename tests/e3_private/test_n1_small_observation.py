@@ -107,9 +107,9 @@ class ObservationTests(unittest.TestCase):
                 observation.observe_synthetic(self.destination, **options)
         self.assertFalse(self.destination.exists())
 
-    def test_synthetic_destination_cannot_target_repository_or_content_store(self):
+    def test_synthetic_destination_requires_tmp_root(self):
         with self.assertRaisesRegex(observation.Hold, "synthetic-tmp-only"):
-            observation.observe_synthetic(Path(__file__).parent / "would-write")
+            observation.observe_synthetic(Path("/var/tmp/e3-n1-would-write"))
 
     def test_reaped_leader_with_escaped_pipe_holder_is_never_signaled(self):
         program = ("import os,sys,time\n"
