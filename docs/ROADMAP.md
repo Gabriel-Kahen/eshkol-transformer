@@ -2703,6 +2703,16 @@ publication, public G2 and continuation remain pending.
   This private candidate supplies no public
   G2, data-only continuation, or Wave 3 completion claim.
 
+- **Public C4 P2/G2 facade dependency contract:**
+  [proposed source-grounded contract](g3/G3_C4_P2_G2_PUBLIC_FACADE_CONTRACT.md)
+  pins the existing public arities and private terminal/clone symbols. The
+  installed C4 producer and result adapter remain P2/G1 scalar-only; a
+  reviewed public logical `[1]`/`[2]` I1 owner, matching length/cache owners,
+  private terminal compiled gate, and same-aggregate package closure are
+  prerequisites. The source-only dependency checker establishes those current
+  boundaries, not public G2 behavior or admission. G3-R SAVE/continuation is
+  a separate workstream.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
