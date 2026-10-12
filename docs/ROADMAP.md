@@ -669,6 +669,13 @@ stopped before installed runtime: the pinned Eshkol runner does not emit a
 depfile for executable output. The source-only repair obtains each app or
 standalone command import graph from an object-mode compile before producing
 its executable. Exact-head hosted and compiled validation remain pending.
+Run `38270239683` at `d17e1961` passed topology and built the source-composed
+CLI3 package, then its command job failed after the build without identifying
+the failing assertion: the production-generate driver retained redirected
+output only on the runner. A bounded diagnostic follow-up reports each phase,
+the failing status, and at most 4096 bytes from each current stdout/stderr
+evidence file. It changes no command or oracle; a fresh exact-head hosted run
+must identify the failure before a behavior repair can be reviewed.
 
 The isolated CLI3 cross-command test script `scripts/test-cli3-cross-command-chain.sh`
 is prepared for a fresh production-root build. It creates one byte tokenizer,
