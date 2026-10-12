@@ -33,6 +33,11 @@ interpreter and loader bytes, and explicit positive time, blob, selected-byte,
 raw-record, output and RSS caps. Preflight reserves twice the maximum output
 size in free disk space. It streams retained F objects and raw records;
 resource and partial-failure conditions emit `HOLD`, never a truncated pass.
+The source-only scanner checks Linux `/proc/self/status` `VmHWM` as the
+current process image's peak RSS. Missing, malformed or over-cap measurements
+fail closed. This avoids a host-observed `getrusage(RUSAGE_SELF).ru_maxrss`
+value inherited from before Python exec, while retaining the same configured
+RSS ceiling. It is not a 256-MiB whole-attempt resource proof.
 The reviewed plan must spell out direct argv arrays, environment, per-command
 time/output caps and a pinned guest tool for call relocations, final producer,
 ABI/declarations, provider ELF and symlinks, loader observation, system

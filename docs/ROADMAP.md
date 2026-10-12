@@ -854,6 +854,9 @@ generated diagnostics, private candidate tools, tests, and custody contracts
 onto the current main/CLI lineage. It remains **HOLD** for protected custody,
 real source read, 30-second and 256-MiB attempt proof, and E3 §9 acceptance.
 No compiled, installed, or CLI behavior is admitted by this union.
+The source-only N1 successor moves generated metadata fixtures off shared
+`/tmp` and checks raw-capture peak RSS through fail-closed Linux `VmHWM`;
+neither change opens the protected read or whole-attempt resource gates.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.

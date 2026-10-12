@@ -9,7 +9,6 @@ import argparse
 import hashlib
 import json
 import os
-import resource
 import shutil
 import stat
 import sys
@@ -103,8 +102,31 @@ def safe_guest_path(value):
     return value.lstrip("/")
 
 
+def _vm_hwm_bytes(raw):
+    lines = [line.split() for line in raw.splitlines() if line.startswith(b"VmHWM:")]
+    need(len(lines) == 1 and len(lines[0]) == 3 and lines[0][0] == b"VmHWM:" and
+         lines[0][1].isdigit() and len(lines[0][1]) <= 20 and
+         lines[0][2] == b"kB" and
+         int(lines[0][1]) > 0, "rss-measurement-unavailable")
+    return int(lines[0][1]) * 1024
+
+
+def peak_rss_bytes():
+    """Linux current-mm high-water mark; fail closed if it cannot be read."""
+    try:
+        fd = os.open("/proc/self/status", os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        try:
+            raw = os.read(fd, 65537)
+        finally:
+            os.close(fd)
+    except OSError as error:
+        raise Hold("rss-measurement-unavailable") from error
+    need(len(raw) <= 65536, "rss-measurement-unavailable")
+    return _vm_hwm_bytes(raw)
+
+
 def rss_check(cap):
-    need(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024 <= cap, "rss-cap")
+    need(peak_rss_bytes() <= cap, "rss-cap")
 
 
 def resource_check(deadline, rss_cap):

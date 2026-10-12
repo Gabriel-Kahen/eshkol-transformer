@@ -42,7 +42,9 @@ def identity(path):
 
 class SmallMetadataTests(unittest.TestCase):
     def setUp(self):
-        temp = tempfile.TemporaryDirectory()
+        # Keep the generated source chain off shared /tmp; its changing
+        # directory timestamps must still fail closed when pinned explicitly.
+        temp = tempfile.TemporaryDirectory(prefix="e3-n1-metadata-", dir=Path.home())
         self.addCleanup(temp.cleanup)
         self.home = Path(temp.name)
         self.config = {"os": "linux", "architecture": "amd64",
@@ -187,6 +189,12 @@ class SmallMetadataTests(unittest.TestCase):
         self.candidate["index_digest"] = sha(duplicate)
         request = self.request("index", self.index_path, duplicate)
         self.assert_hold(request)
+
+    def test_changed_ancestor_metadata_fails_closed(self):
+        request = self.request("index", self.index_path, self.index_raw)
+        (self.home / "unrelated").write_bytes(b"generated")
+        with self.assertRaisesRegex(MODULE.Hold, "source-identity-drift"):
+            self.acquire(request)
 
     def test_prior_review_and_selection_negatives(self):
         _, prior = self.index_evidence()

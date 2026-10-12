@@ -21,6 +21,23 @@ spec.loader.exec_module(mod)
 
 
 class PreflightTests(unittest.TestCase):
+    def test_linux_peak_rss_measurement_fails_closed(self):
+        self.assertGreater(mod.peak_rss_bytes(), 0)
+        self.assertEqual(mod._vm_hwm_bytes(b"VmRSS:\t9 kB\nVmHWM:\t123 kB\n"),
+                         123 * 1024)
+        for raw in (b"VmRSS:\t9 kB\n", b"VmHWM:\tn/a kB\n",
+                    b"VmHWM:\t12 MB\n", b"VmHWM:\t12 kB\nVmHWM:\t13 kB\n",
+                    b"VmHWM:\t" + b"9" * 4301 + b" kB\n"):
+            with self.subTest(raw=raw), self.assertRaisesRegex(
+                    mod.Hold, "rss-measurement-unavailable"):
+                mod._vm_hwm_bytes(raw)
+        with mock.patch.object(mod.os, "open", side_effect=OSError("missing")):
+            with self.assertRaisesRegex(mod.Hold, "rss-measurement-unavailable"):
+                mod.peak_rss_bytes()
+        with mock.patch.object(mod, "peak_rss_bytes", return_value=2 * 1024**3 + 1):
+            with self.assertRaisesRegex(mod.Hold, "rss-cap"):
+                mod.rss_check(2 * 1024**3)
+
     def test_production_has_no_reviewed_pin(self):
         self.assertIsNone(mod.REVIEWED_PLAN_SHA256)
         with self.assertRaisesRegex(mod.Hold, "reviewed-plan-pin-absent"):

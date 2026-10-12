@@ -9,9 +9,14 @@ N1-specific paths from `a632c80ffa531ea4537b5ff963c4e31246472f7e`:
 `tests/e3_n1_broker/*`, and N1-specific `tests/e3_private/*`. The generated
 attempt contract corrects the setup worker's phase-pipe EOF description;
 the outer observer checks setup report EOF. The small-observation
-destination-negative test now uses an explicit `/var/tmp` path. The remaining
-53 carried N1 files retain their source-commit bytes. The prior failed
-evidence and source branch remain preserved; neither is replaced by this union.
+destination-negative test now uses an explicit `/var/tmp` path. The N1
+raw-capture scanner and its test now use the current process image's Linux
+`VmHWM` peak in place of process-lifetime `ru_maxrss`; the synthetic metadata
+test fixture now lives under the caller's home instead of shared `/tmp`.
+The raw-capture contract records the measurement change. The other 49 carried
+N1 files retain their source-commit bytes. The prior
+failed evidence and source branch remain preserved; neither is replaced by
+this union.
 
 The older N1 lineage conflicts with current main/CLI changes in
 `docs/ROADMAP.md`, `scripts/build-e1b-consumer.sh`,
@@ -24,19 +29,16 @@ checksum manifest. This is a source/docs/tests union, not a compiled package
 or CLI integration.
 
 The source-only tests use generated fixtures and do not open OCI/Docker input.
-The broker suite passes 24 tests. A filtered N1 private run under an isolated
-nested `TMPDIR` passed 97 tests with one environment-prerequisite skip. An
-unfiltered 98-test run passed in an exact archive unpacked under `/tmp` after
-correcting a destination assertion whose fixture path changed with checkout
-location. The test now names an explicit non-`/tmp` destination to exercise
-the actual synthetic-only boundary. The large synthetic metadata test can
-still fail closed with `source-identity-drift` when unrelated activity changes
-a shared `/tmp` ancestor's mtime/ctime between pin and read. That test race remains
-unresolved; the identity comparison is unchanged. A raw-capture
-`-m unittest` run observed a `ru_maxrss` above the fixed 2-GiB cap and had
-seven failures/errors; an isolated stdin runner passed its 13 tests. That
-high-water measurement is runner-sensitive. No RSS cap was relaxed, and
-these runs are not admission evidence.
+The broker suite passes 24 tests. Earlier direct raw-capture `-m unittest`
+runs had seven failures/errors because this host reported a 2.14-GiB
+`ru_maxrss` while `/proc/self/status` reported an approximately 12-MiB
+`VmHWM` for the same Python process. The direct suite now passes 14 tests;
+missing/malformed and over-cap `VmHWM` cases still HOLD. The metadata fixture
+no longer has shared `/tmp` as an ancestor when the caller's home is outside
+`/tmp`: 16 tests passed during 23,533 unrelated `/tmp` changes. A deliberate
+fixture-ancestor change still returns `source-identity-drift`; the production
+identity comparison is unchanged. These test-path fixes do not establish
+protected custody or the 30-second/256-MiB whole-attempt predicate.
 
 Protected pre-read custody, trusted actor graph closure, v3 receipt/seal
 authority, actual OCI read, the 30-second/268,435,456-byte attempt predicate,
