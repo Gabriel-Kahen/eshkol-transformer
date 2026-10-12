@@ -1,12 +1,20 @@
 # E3 M2 physical-capacity one-use compiled gate
 
-Status: **prepared, not launched**. This gate is a test-only descendant of the
+Status: **B failed; C repair prepared, not launched**. The B invocation of the
+original recipe exited 1 after the mutant emitted all three authentic rows,
+`E3FINAL` with counters `(6,3)`, and `E3-NUMERICAL-FAIL: result`. The shared
+runtime driver expected normal `(5,3)`, so the mutant never reached the parser
+or independent rational comparator. The consumed B bundle is preserved at
+`/home/gabe/.codex/evidence/eshkol-transformer/`
+`e3-m2-physical-capacity-f31-one-use-313a38d-20261012-prepared-b`.
+
+The C repair is a test-only descendant of the
 independently source-approved `f666f7a6a29a96f63693126e130a5199337cfd8b`
 (tree `af52d5fd6b30ff35361d9893c665c05667235556`). The independent ACCEPT
 seal is `e3-m2-physical-capacity-independent-review-f666f7a6-20261011-a/`
 `SHA256SUMS-REVIEW`, SHA-256
 `2295b9d6fc2162f39f9029e2150664e29b7e0e29eeb7b5e21a38a657c4acd7b2`.
-That seal covers the candidate, not this gate descendant. The gate requires a
+That seal covers the candidate, not this gate descendant. The repair requires a
 separate, clean checkout at the exact candidate commit and tree. It builds
 packages and optimized AOT executables only from that checkout.
 
@@ -16,6 +24,10 @@ descendant adds an opt-in `--physical-capacity` parser mode. It admits exactly
 three batches and only the third-row `10`/active-2 pair; the default parser
 still rejects that mismatch. It preserves raw stdout and the actual active
 count. It does not replace, normalize or synthesize the observed row.
+The C repair adds a separate test-only mutant runtime driver. It differs from
+the normal driver only by expecting `(6,3)` for `packed-single`; normal A/B use
+the original strict `(5,3)` driver. Both drivers require the result tag, vector
+shape, byte equivalence and successful completion before emitting PASS.
 
 In the supported Ubuntu 22.04/LLVM 21, pinned f31 environment, with absolute
 `Q0_PYTHON` set to Python 3.14.6/PyTorch 2.13.0+cpu, run the gate script once:
@@ -47,8 +59,8 @@ independent verifier and fail first and exactly at
 publishing a mutant transcript. The normal final counters are `(5,3)` and the
 mutant's `(6,3)`; neither substitutes for the required first value failure.
 
-This one-use gate has **not run** and therefore supplies no compiled AOT
-admission, mutant kill, sanitizer result or E3 §9 M2 acceptance. It covers the
+The C repair has **not run** and therefore supplies no compiled AOT admission,
+mutant kill, sanitizer result or E3 §9 M2 acceptance. It covers the
 single packed `10` physical-capacity denominator mutant. Other M2 mutations,
 five-layout numerical parity, poison/sanitizer, current-main union, N3 model
 controls, edge cases, rollback and complete §9 acceptance remain separate.

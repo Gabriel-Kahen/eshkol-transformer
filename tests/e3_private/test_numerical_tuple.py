@@ -51,7 +51,8 @@ def frame_bytes(records: list[str]) -> bytes:
 class NumericalTupleTest(unittest.TestCase):
     def test_runtime_drivers_parse_completely_and_reject_extra_close(self) -> None:
         # A stray close previously stopped the supported gate before runtime.
-        for name in ("numerical_runtime.esk", "correctness_runtime.esk"):
+        for name in ("numerical_runtime.esk", "numerical_physical_capacity_runtime.esk",
+                     "correctness_runtime.esk"):
             with self.subTest(driver=name):
                 source = (ROOT / "tests/e3_private" / name).read_text()
                 forms = parse_source(source)
@@ -410,6 +411,69 @@ printf '%s\\n' "$e3_tuple_kind"
                                     else line for line in raw])
         with self.assertRaisesRegex(ValueError, "padded row must retain 10"):
             parse(wrong_active, 3, physical_capacity=True)
+
+    def test_physical_capacity_gate_driver_and_comparator_path(self) -> None:
+        ordinary = (ROOT / "tests/e3_private/numerical_runtime.esk").read_text()
+        mutant = (ROOT / "tests/e3_private/numerical_physical_capacity_runtime.esk").read_text()
+        old = '(if (string=? name "packed-single") (vector #t 0 5 3)'
+        new = '(if (string=? name "packed-single") (vector #t 0 6 3)'
+        self.assertEqual(ordinary.count(old), 1)
+        self.assertEqual(mutant, ordinary.replace(old, new))
+        gate = (ROOT / "scripts/test-e3-m2-physical-capacity-one-use.sh").read_text()
+        self.assertIn('runtime_source="${source_root}/tests/e3_private/numerical_runtime.esk"', gate)
+        self.assertIn('runtime_source="${gate_root}/tests/e3_private/numerical_physical_capacity_runtime.esk"', gate)
+        self.assertIn('if [[ "${variant}" == physical-capacity ]]; then\n    runtime_source=', gate)
+        self.assertIn('grep -Fx \'E3-NUMERICAL-RUNTIME-PASS\'', gate)
+        self.assertIn('exact rational reduction mismatch', gate)
+
+        # A complete synthetic three-row frame reaches the independent
+        # comparator only when its terminal PASS and exact record shape hold.
+        ce = f32_bits(math.log(256.0))
+        ce_bits = int(ce, 16)
+        expected = tuple({"inputs": [7, 8], "targets": [7, 8],
+                          "mask": [True, True] if index < 2 else [True, False]}
+                         for index in range(3))
+
+        def records(physical: bool) -> list[str]:
+            rows: list[str] = []
+            state = (0, 0, 0, 0, 0)
+            for index, row in enumerate(expected):
+                mask = row["mask"]
+                numerical_mask = [True, True] if physical and index == 2 else mask
+                rows.append(f'E3ROW\t{index}\t7,8\t7,8\t{int(mask[0])},{int(mask[1])}')
+                for name in ROLE_NAMES:
+                    shape = "1,2,256" if name == "Z" else "1"
+                    words = ",".join(["00000000"] * (512 if name == "Z" else 1))
+                    rows.append(f'E3ROLE\t{index}\t{name}\t{shape}\t{words}')
+                numerator, weight = reduce_bool((ce_bits, ce_bits), tuple(numerical_mask))
+                state = accumulate(state, (numerator, weight, 0, sum(numerical_mask)))
+                rows.extend((
+                    f'E3CE\t{index}\t{ce},{ce}',
+                    f'E3BATCH\t{index}\t{numerator:08x},{weight:08x},'
+                    f'{divide(numerator, weight):08x},00000000\t{sum(numerical_mask)}',
+                    f'E3STATE\t{index}\t' + ",".join(f'{word:08x}' for word in state[:3])
+                    + f'\t{state[3]},{state[4]}',
+                ))
+            rows.append('E3FINAL\t' + ",".join(f'{word:08x}' for word in finalize(state))
+                        + f'\t{state[3]},{state[4]}')
+            rows.append("E3-NUMERICAL-RUNTIME-PASS")
+            return rows
+
+        normal, _ = parse(frame_bytes(records(False)), 3)
+        validate_observed_case(normal, expected)
+        physical_raw = frame_bytes(records(True))
+        with self.assertRaisesRegex(ValueError, "active count differs from mask"):
+            parse(physical_raw, 3)
+        physical_observed, roles = parse(physical_raw, 3, physical_capacity=True)
+        self.assertEqual((physical_observed["final"]["counters"], len(roles.splitlines())),
+                         ([6, 3], 63))
+        with self.assertRaisesRegex(TranscriptError,
+                                    r"batches\[2\]\.reduction_f32: exact rational reduction mismatch"):
+            validate_observed_case(physical_observed, expected)
+        for broken in (physical_raw.replace(b"E3-NUMERICAL-RUNTIME-PASS\n", b""),
+                       physical_raw.replace(b"E3-NUMERICAL-RUNTIME-PASS", b"E3-NUMERICAL-FAIL: result")):
+            with self.assertRaisesRegex(ValueError, "did not complete"):
+                parse(broken, 3, physical_capacity=True)
 
     def test_native_provider_mode_tracks_both_test_sanitizers(self) -> None:
         policy = ROOT / "scripts/e3-private-native-inputs.sh"

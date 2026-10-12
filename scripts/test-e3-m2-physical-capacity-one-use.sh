@@ -37,10 +37,12 @@ review_sha=2295b9d6fc2162f39f9029e2150664e29b7e0e29eeb7b5e21a38a657c4acd7b2
 }
 gate_commit="$(git -C "${gate_root}" rev-parse HEAD)"
 gate_tree="$(git -C "${gate_root}" rev-parse HEAD^{tree})"
-[[ "$(git -C "${gate_root}" rev-parse HEAD^)" == "${candidate}" ]] || {
-  echo "gate commit must descend directly from the reviewed candidate" >&2; exit 1;
+base_gate=313a38dbc2d2cfb8eba7c4357885798234291d45
+[[ "$(git -C "${gate_root}" rev-parse HEAD^)" == "${base_gate}" &&
+   "$(git -C "${gate_root}" rev-parse "${base_gate}^")" == "${candidate}" ]] || {
+  echo "gate repair must descend directly from the pinned gate and candidate" >&2; exit 1;
 }
-expected_changes=$'docs/ROADMAP.md\ndocs/e3/E3_M2_PHYSICAL_CAPACITY_ONE_USE_GATE.md\nscripts/test-e3-m2-physical-capacity-one-use.sh\ntests/e3_private/parse_numerical_observation.py\ntests/e3_private/test_numerical_tuple.py'
+expected_changes=$'docs/ROADMAP.md\ndocs/e3/E3_M2_PHYSICAL_CAPACITY_ONE_USE_GATE.md\nscripts/test-e3-m2-physical-capacity-one-use.sh\ntests/e3_private/numerical_physical_capacity_runtime.esk\ntests/e3_private/parse_numerical_observation.py\ntests/e3_private/test_numerical_tuple.py'
 [[ "$(git -C "${gate_root}" diff --name-only "${candidate}" HEAD)" == "${expected_changes}" ]] || {
   echo "gate descendant changed files outside the reviewed test-only recipe" >&2; exit 1;
 }
@@ -156,6 +158,10 @@ diff -r "${out}/package-a/e3_numerical_package.o.evidence/native-depfiles" \
 runner="$(eshkol_build_dir)/eshkol-run"
 cxx="$(tsv_value "$(eshkol_build_dir)/eshkol-transformer-provenance.tsv" cxx_path)"
 for variant in a b physical-capacity; do
+  runtime_source="${source_root}/tests/e3_private/numerical_runtime.esk"
+  if [[ "${variant}" == physical-capacity ]]; then
+    runtime_source="${gate_root}/tests/e3_private/numerical_physical_capacity_runtime.esk"
+  fi
   env -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH \
     -u DEPENDENCIES_OUTPUT -u SUNPRO_DEPENDENCIES -u GCC_EXEC_PREFIX \
     -u COMPILER_PATH -u LIBRARY_PATH -u CLANG_CONFIG_FILE \
@@ -166,7 +172,7 @@ for variant in a b physical-capacity; do
     timeout --foreground --signal=TERM --kill-after=5s 900s \
     "${runner}" --strict-types --no-stdlib -O 2 \
       -L "${out}/package-${variant}" --lib eshkol_transformer_e3_numerical \
-      "${source_root}/tests/e3_private/numerical_runtime.esk" \
+      "${runtime_source}" \
       -o "${out}/runtime-${variant}" \
       >"${out}/compile-${variant}.stdout" 2>"${out}/compile-${variant}.stderr"
 done

@@ -917,10 +917,13 @@ the D2/frame mask unchanged. Source and fixture checks can establish selector
 isolation and the first expected `W_b` mismatch; compiled admission, a genuine
 value kill, current-main union and §9 acceptance remain open behind N1 custody.
 A [one-use M2 compiled gate recipe](e3/E3_M2_PHYSICAL_CAPACITY_ONE_USE_GATE.md)
-is prepared in a separate test-only descendant. It pins the exact reviewed
-source checkout and adds an opt-in parser route for the mutant's intentional
-active-count mismatch, so a future supported run can test the first numerical
-failure. The recipe has not been launched; compiled M2 proof remains HOLD.
+pins the exact reviewed source checkout and adds an opt-in parser route for the
+mutant's intentional active-count mismatch. Its consumed B run stopped after
+the authentic mutant emitted `(6,3)`: the shared runtime driver required normal
+`(5,3)` and exited before parsing. A separate test-only C driver now expects
+`(6,3)` only for the mutant's `packed-single` case while retaining the strict
+normal A/B check and terminal PASS requirement. C is prepared but has no
+supported compiled run; the M2 value kill and §9 acceptance remain HOLD.
 An isolated staged successor adds a separate real-M3 zero-control source tuple
 using the existing I2 14-parameter prepare/commit path before frame binding.
 It retains the staged numerical, retention, wrong-target and uniform controls.
