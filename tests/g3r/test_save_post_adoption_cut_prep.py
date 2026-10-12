@@ -49,6 +49,8 @@ class PostAdoptionPreparation(unittest.TestCase):
             runtime = (destination / "source/tests/g3r/save_post_adoption_cut_runtime.esk").read_text()
             self.assertIn("(g3m-prefill-p1! generator input)", runtime)
             self.assertNotIn("g3t-with-call", runtime)
+            self.assertIn("'((source-code 77)\n                        "
+                          "(source-domain g3r-save-o2-adoption))", runtime)
             with self.assertRaises(ValueError):
                 prepare(destination)
 

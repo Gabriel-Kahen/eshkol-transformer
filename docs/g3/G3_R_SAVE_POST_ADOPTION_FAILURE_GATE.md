@@ -24,8 +24,9 @@ The generated root loads the genuine P1, O2, C2, controls and adoption
 source leaves; its fixture creates one original X1/T2/D2/M3/O2 graph, a G3
 generator with a committed manual P1 token and no pending G1, then a genuine
 captured/released trainer
-capsule. It checks the exact typed failure, exact returned shell, one abandon,
-real O2-then-P1 release order, unchanged controls/cursor, no C2 registry
+capsule. It checks the exact typed failure (including source-code 77, details,
+and cause), exact returned shell, one abandon, real O2-then-P1 release order,
+unchanged controls/cursor, no C2 registry
 publication, and denial of a second take from the retired shell. The fixture
 and these assertions are source-prepared only. The native C object/archive
 closure and the compiled behavior have **not** been validated. A supported

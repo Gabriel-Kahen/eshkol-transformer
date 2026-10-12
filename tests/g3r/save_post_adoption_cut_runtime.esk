@@ -9,7 +9,11 @@
            (#t (and (transformer-error? caught)
                     (eq? category (transformer-error-category caught))
                     (eq? operation (transformer-error-operation caught))
-                    (string=? message (transformer-error-message caught)))))
+                    (string=? message (transformer-error-message caught))
+                    (equal? (transformer-error-details caught)
+                      '((source-code 77)
+                        (source-domain g3r-save-o2-adoption)))
+                    (eq? (transformer-error-cause caught) #f))))
     (thunk) #f))
 
 (define resolved
