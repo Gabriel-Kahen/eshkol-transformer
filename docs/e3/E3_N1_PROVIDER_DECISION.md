@@ -58,7 +58,7 @@ specified order; no whitespace; schema-restricted string bytes `0x20` through
 `0x7e` except quote and backslash, without escapes; and unsigned decimal
 integers from zero through `2^64-1` without leading zeros. Reject
 floats, NaN, duplicate/unknown keys, alternate escapes and noncanonical
-re-encoding. Bound body and envelope sizes before allocation. Raw evidence
+re-encoding. Raw evidence
 and the separately reviewed release descriptor retain their own bytes and
 SHA-256; signed bodies bind those digests rather than reserializing evidence.
 
@@ -78,11 +78,12 @@ exact fields are
 `schema`, `release_sha256`, `image_id`, `attempt`, `target`, `device`, `inode`,
 `files`, and `verified_record_sha256`. The seal body's exact fields are
 `schema`, `release_sha256`, `image_id`, `attempt`, `broker_key_sha256`,
-`seal_key_sha256`, `receipt_sha256`, `commit_sha256`,
-`issuance_token_sha256`, `snapshot_path`, `snapshot_device`,
+`seal_key_sha256`, `receipt_envelope_sha256`, `commit_record_sha256`,
+`commit_device`, `commit_inode`, `issuance_token_sha256`,
+`snapshot_path`, `snapshot_device`,
 `snapshot_inode`, `snapshot_custody_sha256`, and `files`. Each `files` entry
-has exactly `path`, `size`, and `sha256`, in the frozen source order. Schema
-body schema strings are respectively `eshkol-e3-n1-receipt-v3` and
+has exactly `path`, `size`, and `sha256`, in the frozen source order. Body
+schema strings are respectively `eshkol-e3-n1-receipt-v3` and
 `eshkol-e3-n1-export-seal-v3`; digests and image ID use lowercase SHA-256
 hex, attempt is exactly 32 lowercase hex characters, and path/target values
 must match the frozen release. `device`, `inode`, and `size` are unsigned
@@ -94,14 +95,62 @@ ordered files. The token itself stays in the separate delivery channel.
 An envelope never chooses a trusted key; its
 algorithm and key hash must match the frozen role-specific release values.
 
-The release contains both actual raw public keys (lowercase hex) and their
-SHA-256 digests and is authenticated by a separately reviewed immutable trust
-anchor. A key ID alone is insufficient. Broker and seal private keys remain
-in different authorities with reviewed UIDs, ACLs, mounts, `/proc` and fd
-isolation. Replacing either key, verifier/provider pin, trust anchor or
-custody pin creates a new release digest with new attempts, receipts and
-seals. An old release can be checked only as that exact separately pinned
-release; there is no silent alternate-key retry.
+## Durable v3 file identity and size limits
+
+This is a proposed **v3 source change**; the v2 receipt wrapper and commit
+files remain untouched. The broker publishes `receipt-<attempt>.json` as the
+exact canonical signed receipt **envelope bytes** above, with no extra outer
+wrapper. The externally delivered receipt must equal that file byte for byte.
+`signed_receipt_sha256` means SHA-256 of those exact file bytes, including
+the signature; it never means a reserialized body or a v2 wrapper.
+
+The broker next publishes `commit-<attempt>.json` as one exact canonical JSON
+record with only `schema` = `eshkol-e3-n1-receipt-commit-v3`,
+`release_sha256`, `attempt`, `signed_receipt_sha256`, `receipt_device`,
+`receipt_inode`, and `issuance_token_sha256`. The receipt device/inode come
+from the checked opened receipt file. The token is a fresh 32-byte out-of-band
+value; the commit stores only its SHA-256. The broker uses protected
+attempt-keyed no-replace publication, checked write/readback and parent sync
+for both files, and returns the receipt and token only after checked commit
+completion. A readable file after an uncertain step does not establish
+issuance. The release freezes the protected receipt-store path and ancestor
+chain; the commit does not select a new store.
+
+The sealer verifies the exact receipt envelope bytes and checks the commit
+record, release, token hash, receipt file device/inode and protected store.
+Only then may it publish its seal by checked no-replace write, readback and
+parent sync in the separately pinned seal store. `receipt_envelope_sha256`
+in the seal is SHA-256 of the exact receipt file bytes;
+`commit_record_sha256` is SHA-256 of the exact checked commit file bytes.
+`commit_device` and `commit_inode` are the opened protected commit file's
+identity after publication. The consumer requires these values, the external
+receipt bytes and token, the checked commit bytes and both protected store
+path/ancestor pins to match. The reference chain is acyclic: release pins
+stores and keys; signed receipt binds release; commit binds signed receipt;
+seal binds receipt and commit. No object in this chain hashes or contains a
+later object.
+
+Reject sizes above these **inclusive byte caps before allocation**, with no
+truncation or partial parse: exact raw v3 release descriptor 65,536; each
+receipt or seal body 16,384; each signed envelope, receipt file or seal file
+32,768; and commit file 4,096. Check encoded size before publication and
+`fstat` plus bounded read before parsing; a cap hit, short read, extra byte,
+overflow or changed size is HOLD. Any later source implementation must retain
+these caps or undergo a new reviewed contract revision.
+
+The v3 verifier receives the exact frozen release descriptor digest and both
+actual raw public keys (lowercase hex), with their SHA-256 digests, through an
+independently reviewed protected release channel. It checks the descriptor's
+raw bytes against that pinned digest before using either key. The production
+bootstrap digest and channel are not provisioned, so verification remains
+HOLD. A key ID alone is insufficient; no caller, envelope or environment may
+inject or replace keys or release authority. Broker and seal private keys
+remain in different authorities with reviewed UIDs, ACLs, mounts, `/proc` and
+fd isolation. Replacing either key, verifier/provider pin, trust anchor or
+custody pin requires a newly reviewed descriptor digest and a new attempt
+namespace, with new receipts and seals. An old release can be checked only
+under its own exact pinned digest; there is no implicit overlap or
+alternate-key retry.
 
 ## Remaining gates
 
@@ -115,9 +164,11 @@ reconciliation is read-only and cannot mint missing authority.
 Generated tiny OCI negatives must reject role/domain/key swaps, a shared key,
 malformed or noncanonical signatures/bodies, unknown algorithm, foreign
 release/image, provider substitution/failure, forged seal references, drift
-and duplicate attempts. Inject receipt/commit/seal write, rename, readback,
-sync, delivery and crash faults, including readable bytes before checked
-return. Check post-seal same-inode mutation and replacement before and during
-consumer use. The live cross-UID and immutable-custody gates in the seal
-contract remain required; no real f31 layer, Docker or deployed key is used
+and duplicate attempts. Also reject oversized/truncated release, body,
+envelope, receipt, commit and seal bytes; mismatched exact external receipt,
+token hash, receipt/commit digest or inode. Inject receipt/commit/seal write,
+rename, readback, sync, delivery and crash faults, including readable bytes
+before checked return. Check post-seal same-inode mutation and replacement
+before and during consumer use. The live cross-UID and immutable-custody gates
+in the seal contract remain required; no real f31 layer, Docker or deployed key is used
 by this docs-only decision.
