@@ -1,0 +1,22 @@
+{
+  "kind": "e3-n5-private-observer-v1",
+  "package": "mode-graph-noninstalled",
+  "compile_guard": "ET_E3_RETENTION_TESTING",
+  "probe_symbol": "et_e3_test_retention_probe_v1",
+  "selectors": [
+    {"selector": 29, "counter": "e3_n5_acquire_calls", "native_entry": "et_e3_private_acquire_v1", "failure_delta": 0, "retry_delta": 1},
+    {"selector": 30, "counter": "e3_n5_stage_calls", "native_entry": "et_e3_private_stage_inputs_v1", "failure_delta": 0, "retry_delta": 3},
+    {"selector": 31, "counter": "e3_n5_forward_calls", "native_entry": "et_e3_private_forward_role_v1", "failure_delta": 0, "retry_delta": 63},
+    {"selector": 32, "counter": "e3_n5_ce_calls", "native_entry": "et_e3_private_ce_v1", "failure_delta": 0, "retry_delta": 3}
+  ],
+  "package_manifests": [
+    "tests/e3_mode_graph/package_defined_symbols.txt",
+    "tests/e3_mode_graph/package_public_exports.txt",
+    "tests/e3_mode_graph/package_public_strings.txt",
+    "tests/e3_mode_graph/package_undefined_symbols.txt",
+    "tests/e3_mode_graph/package_source_closure.txt",
+    "tests/e3_mode_graph/package_native_source_closure.txt",
+    "tests/e3_mode_graph/package_native_objects.txt",
+    "tests/e3_mode_graph/package_archive_members.txt"
+  ]
+}

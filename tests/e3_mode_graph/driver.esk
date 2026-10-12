@@ -165,7 +165,7 @@
       (e3-mg-report label before)
       #t)))
 
-(define (e3-mode-graph-dispatch scenario corpus-path)
+(define (e3-mg-original-dispatch scenario corpus-path)
   (e3-mg-check 'scenario
     (and (vector? scenario) (= (vector-length scenario) 1)
          (boolean? (vector-ref scenario 0))))
@@ -226,3 +226,114 @@
      (d2-token-dataset-close! dataset)
      (g3t-checked-m3t-input-release! input)
      #t)))
+
+;;; The N5 scenario is a separate one-over preflight case in this noninstalled
+;;; tuple. It reuses the authentic M3/frame fixture and the test-only mode and
+;;; native entry probes; the normal mode/graph trajectory above is unchanged.
+(define (e3-n5-native-entries)
+  (vector (e3-mg-retention-probe 29) (e3-mg-retention-probe 30)
+          (e3-mg-retention-probe 31) (e3-mg-retention-probe 32)))
+
+(define (e3-n5-error-detail details key)
+  (cond ((null? details) #f)
+        ((eq? (car (car details)) key) (cadr (car details)))
+        (else (e3-n5-error-detail (cdr details) key))))
+
+(define (e3-n5-run paths)
+  (e3-mg-check 'n5-paths
+    (and (vector? paths) (= (vector-length paths) 2)
+         (string? (vector-ref paths 0)) (string? (vector-ref paths 1))))
+  (let* ((fixture (e3-test-fixture))
+         (model (vector-ref fixture 0))
+         (tokenizer (vector-ref fixture 1))
+         (destinations (vector-ref fixture 2))
+         (frame (vector-ref fixture 3))
+         (entry (e3-frame-entry-internal frame))
+         (token (vector-ref entry 6))
+         (input (g3t-checked-m3t-input-create))
+         (large (d2-token-dataset-open
+                 (e3-test-dataset-config (vector-ref paths 0) #t) tokenizer)))
+    (guard
+     (caught (#t (d2-token-dataset-close! large)
+                  (g3t-checked-m3t-input-release! input) (raise caught)))
+     (e3-mg-check 'n5-fixed-mixed (= (p1-e3-test-fixed-mixed! token) 0))
+     (e3-mg-check 'n5-input-copy
+       (g3t-checked-m3t-input-copy! input '(3 197)))
+     (e3-mode-graph-arm! model frame input)
+     (e3-mode-graph-clear-observations!)
+     (let* ((cursor (d2-token-dataset-cursor large))
+            (model-image (e3-mg-model-image model))
+            (rng (m3t-public-initializer-words
+                  (m3t-public-model-initializer model)))
+            (modes (p1-e3-test-mode-mask token))
+            (publication (e3-mg-publication frame destinations))
+            (events (e3-mg-events))
+            (native (e3-n5-native-entries))
+            (probes (e3-mg-probes))
+            (failed
+             (with-region ('e3-n5-one-over 262144)
+               (guard (caught (#t caught))
+                 (e3-evaluate-into! model large frame)
+                 #f))))
+       (e3-mg-check 'n5-typed-stage-two
+         (and (transformer-error? failed)
+              (eq? (transformer-error-category failed) 'unsupported)
+              (eq? (transformer-error-operation failed) 'e3-evaluate-into!)
+              (string=? (transformer-error-message failed)
+                        "evaluation dataset preparation failed")
+              (let ((details (transformer-error-details failed)))
+                (and (eq? (e3-n5-error-detail details 'source-domain)
+                          'e3-evaluation)
+                     (= (e3-n5-error-detail details 'source-code) 2)))
+              (= (vector-ref (vector-ref entry 12) 0) 2)))
+       (e3-mg-check 'n5-cursor
+         (d2-core-bytes=? cursor (d2-token-dataset-cursor large)))
+       (e3-mg-check 'n5-modes (= modes (p1-e3-test-mode-mask token)))
+       (e3-mg-check 'n5-six-output
+         (equal? publication (e3-mg-publication frame destinations)))
+       (e3-mg-check 'n5-no-native-entry
+         (equal? native (e3-n5-native-entries)))
+       (e3-mg-check 'n5-no-graph-entry (equal? events (e3-mg-events)))
+       (e3-mg-check 'n5-model (e3-mg-model=? model model-image))
+       (e3-mg-check 'n5-rng
+         (equal? rng (m3t-public-initializer-words
+                       (m3t-public-model-initializer model))))
+       (e3-mg-check 'n5-owners (e3-mg-owner-controls-restored? probes))
+       (e3-mg-check 'n5-idle-frame (= (e3-mg-retention-probe 20) 0))
+       (e3-mg-check 'n5-no-live-batch
+         (and (= (e3-mg-retention-probe 23) 0)
+              (= (e3-mg-retention-probe 24) 0)))
+       (d2-token-dataset-close! large)
+       (let* ((small (d2-token-dataset-open
+                      (e3-test-dataset-config (vector-ref paths 1) #t)
+                      tokenizer))
+              (small-cursor (d2-token-dataset-cursor small)))
+         (guard (caught (#t (d2-token-dataset-close! small) (raise caught)))
+           (with-region ('e3-n5-small-retry 262144)
+             (e3-evaluate-into! model small frame))
+           (e3-mg-check 'n5-retry-cursor
+             (d2-core-bytes=? small-cursor (d2-token-dataset-cursor small)))
+           (e3-mg-check 'n5-retry-output
+             (equal? (e3-mg-publication frame destinations)
+                     (vector 1085366897 1084227584 1132430055 0 5 3)))
+           (e3-mg-check 'n5-retry-same-model
+             (and (e3-mg-model=? model model-image)
+                  (equal? rng (m3t-public-initializer-words
+                                (m3t-public-model-initializer model)))))
+           (e3-mg-check 'n5-retry-modes
+             (= modes (p1-e3-test-mode-mask token)))
+           (let ((after (e3-n5-native-entries)))
+             (e3-mg-check 'n5-observer-positive-control
+               (and (= (- (vector-ref after 0) (vector-ref native 0)) 1)
+                    (= (- (vector-ref after 1) (vector-ref native 1)) 3)
+                    (= (- (vector-ref after 2) (vector-ref native 2)) 63)
+                    (= (- (vector-ref after 3) (vector-ref native 3)) 3))))
+           (d2-token-dataset-close! small)))
+       (g3t-checked-m3t-input-release! input)
+       #t))))
+
+(define (e3-mode-graph-dispatch scenario corpus-path)
+  (if (and (vector? scenario) (= (vector-length scenario) 1)
+           (eq? (vector-ref scenario 0) 'n5-8193))
+      (e3-n5-run corpus-path)
+      (e3-mg-original-dispatch scenario corpus-path)))

@@ -80,6 +80,12 @@ struct et_e3_frame_internal {
 static et_e3_frame_internal *e3_registry;
 static int64_t e3_last_domain, e3_last_category, e3_last_code;
 
+#ifdef ET_E3_RETENTION_TESTING
+/* Noninstalled N5 probes count entry, including rejected native calls. */
+static int64_t e3_n5_acquire_calls, e3_n5_stage_calls;
+static int64_t e3_n5_forward_calls, e3_n5_ce_calls;
+#endif
+
 #ifdef ET_E3_TESTING
 static size_t e3_test_frame_alloc_remaining = SIZE_MAX;
 void et_e3_test_frame_fail_alloc_after_v1(size_t count) {
@@ -633,6 +639,9 @@ static int64_t e3_zero_tensor(et_f32_tensor *tensor) {
 }
 
 int64_t et_e3_private_acquire_v1(void *pointer) {
+#ifdef ET_E3_RETENTION_TESTING
+  ++e3_n5_acquire_calls;
+#endif
   e3_clear();
   et_e3_frame_internal *frame = e3_admit(pointer);
   if (!frame) return e3_last_domain ?
@@ -747,6 +756,9 @@ static int64_t e3_stage_view(et_e3_frame_internal *frame,
 
 int64_t et_e3_private_stage_inputs_v1(
     void *pointer, const et_kernel_tensor_view_v1 *view) {
+#ifdef ET_E3_RETENTION_TESTING
+  ++e3_n5_stage_calls;
+#endif
   e3_clear();
   et_e3_frame_internal *frame = e3_admit(pointer);
   if (!frame) return e3_last_domain ?
@@ -868,6 +880,9 @@ static int64_t e3_dispatch(et_e3_frame_internal *frame, size_t runtime,
 }
 
 int64_t et_e3_private_forward_role_v1(void *pointer, int64_t role) {
+#ifdef ET_E3_RETENTION_TESTING
+  ++e3_n5_forward_calls;
+#endif
   e3_clear();
   et_e3_frame_internal *frame = e3_admit(pointer);
   if (!frame) return e3_last_domain ?
@@ -975,6 +990,9 @@ int64_t et_e3_private_forward_role_v1(void *pointer, int64_t role) {
 }
 
 int64_t et_e3_private_ce_v1(void *pointer) {
+#ifdef ET_E3_RETENTION_TESTING
+  ++e3_n5_ce_calls;
+#endif
   e3_clear();
   et_e3_frame_internal *frame = e3_admit(pointer);
   if (!frame) return e3_last_domain ?
@@ -1408,6 +1426,10 @@ int64_t et_e3_test_retention_probe_v1(int64_t selector) {
     case 26: return et_d2_exact_read_test_fd_live_count_v1();
     case 27: return et_d2_exact_read_test_fd_peak_count_v1();
     case 28: return (int64_t)et_f32_tensor_test_borrow_bytes_v1();
+    case 29: return e3_n5_acquire_calls;
+    case 30: return e3_n5_stage_calls;
+    case 31: return e3_n5_forward_calls;
+    case 32: return e3_n5_ce_calls;
     default: return -1;
   }
 }

@@ -792,6 +792,14 @@ and stage-selective fault/observer seams for review. It provides no new runtime
 proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
 verdicts remain prerequisites before the full matrix is implemented and run.
 
+The [E3 N5 private 8,193-row preflight candidate](e3/E3_N5_PRIVATE_8193_PREFLIGHT.md)
+adds a deterministic checksummed raw-T1/V256 corpus, independent packed-D2
+row count, test-only native entry observers, exact stage-2 E1 assertion and
+same-model three-row retry to the noninstalled mode/graph tuple. Source tests
+pass; its pinned compiled normal/poison/sanitizer gate and evidence review
+remain pending. This is not §9 acceptance or a replacement for the earlier
+8,192 traversal horizon.
+
 The [E3 idle real-model control contract](e3/E3_IDLE_REAL_MODEL_CONTROL_CONTRACT.md)
 specifies a test-only use of existing I2 checkpoint decode and whole-batch load
 for all 14 authentic M3 parameter owners before frame binding. It preserves the
