@@ -25,10 +25,21 @@ before it opens either gzip blob. The procedure must stream each source once
 into a private temporary regular file, count and hash bytes against its ordered
 descriptor, reject source identity/size drift and symlinks, enforce per-blob
 512 MiB and combined 512 MiB byte caps plus positive time/RSS/disk caps,
-and publish the export only after both exact hashes and sizes pass. A failure
-leaves an explicitly marked partial HOLD record, never a published export.
-This procedure itself must be reviewed for source stability and atomic
-publication; this document supplies no executor or permission to start it.
+and publish the export only after both exact hashes and sizes pass. The
+[export custody contract candidate](E3_N1_EXPORT_CUSTODY_CONTRACT.md) requires
+a separate-UID protected parent, a durable broker-owned pre-stage HOLD intent,
+and a stage marker synced before any layer read. On ordinary failure, preserve
+and mark partial bytes when storage permits. If marker write/sync, cleanup, or
+post-rename retraction fails, keep the attempt INDETERMINATE and broker-owned;
+a visible target is quarantined, never admitted. Only an authenticated
+post-check/post-sync VERIFIED receipt bound to the exact target identity,
+together with an independently verified read-only export seal, can release an
+export. Directory presence or readable VERIFIED bytes cannot release it. This
+corrects the previous literal promise of a marker beside every partial file
+and no visible target after arbitrary storage failure, which cannot be
+guaranteed. The broker protocol, source stability, receipt, custody, and
+publication must be independently and ROOT-reviewed; this document supplies
+no executor or permission to start it.
 It must not invoke Docker, extract a layer, execute a guest file or use the
 historical F `/out` route.
 
@@ -160,11 +171,13 @@ records and independent semantic review.
 1. Scanner C has independent and ROOT source-only acceptance on its exact
    head/tree. Seal the metadata-only source-path/descriptor candidates,
    destination and resource measurements. Independently and ROOT-review the
-   exact bounded export-acquisition procedure and pins **before the first
-   real gzip read**. This review is still pending.
+   broker custody contract, deployed separate-UID authority, exact bounded
+   export-acquisition source and pins **before the first real gzip read**.
+   This review is still pending; exporter D remains HOLD.
 2. Only under that reviewed procedure, stream/copy/hash the two layers, reject
-   drift and cap breaches, publish and seal the full OCI export, then review
-   its actual path/mode/size/hash chain. Freeze finite guest path candidates,
+   drift and cap breaches, then require the authenticated VERIFIED receipt and
+   independent read-only seal before export admission. Review the actual
+   path/mode/size/hash chain. Freeze finite guest path candidates,
    host routes and a proposed capture recipe. The full export's verified
    layer hashes are post-acquisition evidence, not a pre-read prerequisite.
 3. Independently and ROOT-review bounded guest-entry discovery if hashes are
@@ -186,8 +199,9 @@ records and independent semantic review.
    policy change and a fresh full Numerical F gate. N1/M1 require their own
    acceptance verdicts.
 
-At this document's head, steps 1–5 remain conditional. There is no reviewed
-export-acquisition procedure, approved OCI export path, reviewed plan hash,
+At this document's head, steps 1–5 remain conditional. There is no accepted
+broker custody contract, deployed broker, reviewed export-acquisition
+procedure, authenticated receipt, approved OCI export path, reviewed plan hash,
 complete guest selection, real-layer scan, reviewed discovery/scan-only
 procedure, capture runner or raw image-specific receipt. Stop at the first absent or
 changed pin, ambiguous file/overlay/loader path, unproven F parity or resource

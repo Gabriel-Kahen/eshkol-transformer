@@ -812,6 +812,15 @@ export seal and its verified layer hashes follow acquisition; guest discovery
 and the C scan-only verifier require later review. There is no reviewed export
 procedure, export, verified layer/diffID/guest bytes, capture recipe or
 admission pin; real-layer reads, capture and N1/M1 remain HOLD.
+The [export custody contract candidate](e3/E3_N1_EXPORT_CUSTODY_CONTRACT.md)
+corrects the internal plan's impossible universal stage-marker/no-visible-target
+failure promise. It proposes a separate-UID broker with protected ancestors,
+durable pre-stage HOLD intent, post-sync authenticated VERIFIED receipt as sole
+release authority, and INDETERMINATE quarantine after marker, sync, cleanup, or
+retraction failure. Exporter D `a416db2` remains independently HOLD; this
+document-only candidate authorizes no real layer read or admission. Its next
+gate is independent and ROOT contract review, then isolated broker source and
+synthetic fault/authority tests before any production pin.
 It changes no import policy; N1/M1 and the fresh supported numerical gate
 remain open.
 The exact `5d642a2` fe9/f31 numerical gate built the normal and mutant
