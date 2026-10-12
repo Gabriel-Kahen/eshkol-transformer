@@ -24,6 +24,7 @@
            (record (vector entry #f kind protected shell))
            (next (cons entry (vector-ref g3c4-registry 0)))
            (record-next (cons record (vector-ref g3c4-public-result-records 0)))
+           (answer (if (eq? kind 'ids) (list shell) shell))
            (native '()))
       (guard (caught
                (#t
@@ -51,4 +52,4 @@
           operation)
         (vector-set! entry 2 'live)
         (vector-set! entry 10 #f)
-        (if (eq? kind 'ids) (list shell) shell)))))
+        answer)))))
