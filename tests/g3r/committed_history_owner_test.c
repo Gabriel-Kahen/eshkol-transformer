@@ -37,22 +37,30 @@ int main(void) {
   assert(g3t_history_valid(&c));
   assert(c.history_manual_count == 1 && !c.history_generated_count);
   assert(!c.history_generated_eos_terminal);
+  assert(c.history_ids[0] == 65 && c.history_ids[1] == 65);
 
+  /* A new manual P2 commit replaces P1 plus manual append. */
   c.call_kind = 0;
   c.frame.kind = 1;
   c.frame.prompt_length = 2;
   c.frame.token = 66;
   c.frame.prompt_ids[0] = 66;
+  c.frame.prompt_ids[1] = 256;
+  assert(g3t_history_prompt_preflight(&c));
+  assert(c.history_ids[0] == 65 && c.history_ids[1] == 65);
+  assert(c.history_manual_count == 1 && c.history_prompt_length == 1);
   c.frame.prompt_ids[1] = 65;
   assert(!g3t_history_prompt_preflight(&c));
   g3t_history_commit_prompt(&c);
   assert(g3t_history_valid(&c));
   assert(c.history_ids[0] == 66 && c.history_ids[1] == 65);
-  assert(c.history_prompt_length == 2 && !c.history_manual_count);
+  assert(c.history_length == 2 && c.history_prompt_length == 2);
+  assert(!c.history_generated_count && !c.history_manual_count);
   assert(!c.history_generated_eos_terminal);
   c.frame.prompt_ids[1] = 256;
   assert(g3t_history_prompt_preflight(&c));
   assert(c.history_ids[0] == 66 && c.history_ids[1] == 65);
+  assert(c.history_prompt_length == 2 && !c.history_manual_count);
   c.frame.prompt_ids[1] = 65;
   c.frame.kind = 2;
   assert(g3t_history_append_preflight(&c));

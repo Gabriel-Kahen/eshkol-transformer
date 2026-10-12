@@ -10,14 +10,15 @@ logits and output release; close zeroes it before leaving the dead identity
 tombstone. The gate is `ET_G3R_COMMITTED_HISTORY_PRIVATE` and requires the
 accepted final-publication, manual P2 and manual decode native routes.
 
-Each P1/P2 manual prefill records the frame's authenticated prompt. The
-existing old-cache preflight requires an empty prior cache; this leaf does not
-admit replacement after a committed prefill. G0 and G1's first frame
+Each P1/P2 manual prefill replaces the transcript with the frame's
+authenticated prompt, including after a committed manual cache. The accepted
+manual old-cache preflight borrows and checks cache length `0..2` before
+replacement. Pending G1 provenance remains excluded. G0 and G1's first frame
 also record the frame prompt. P1 uses `frame.token`; P2 uses the frame's
 verified `prompt_ids[0..1]`. Manual decode appends `frame.token` as manual;
 G1's second frame appends it as generated and clears pending provenance. Only
-that generated append can set
-the terminal bit, by comparison with `policy[5]`. Every path preflights byte
+that generated append can set the terminal bit, by comparison with
+`policy[5]`. Every path preflights byte
 range, capacity, partition, phase and EOS provenance before A2 commit. The
 record mutation is allocation-free inside the established no-failure tail,
 before frame clearing. Failed preparation or aborted frames leave the last
