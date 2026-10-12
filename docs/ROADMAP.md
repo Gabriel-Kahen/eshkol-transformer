@@ -1700,7 +1700,13 @@ The first one-use union gate on `bac0092c` failed before runtime: both
 `file_pair` compile passes rejected `list-ref` under `--no-stdlib`; a later
 `nm` error obscured the compile failure. The test fixtures now use a private
 `car`/`cdr` argument accessor. A corrected fail-fast gate with the same
-no-stdlib source closure is being prepared; compiled admission remains HOLD.
+no-stdlib source closure was prepared as D on `087d9a4`. D stopped at its
+first normal `file_pair` executable link: its archive included both plain
+`i64_tensor.o` and `m3_i64_integration.o`, which includes the I1 translation
+unit and owns M3's I1 registry. The resulting duplicate `et_i64_tensor_*`
+definitions prevented runtime tests. The scoped successor removes only the
+plain archive member and adds single-provider/owner-closure checks; compiled
+admission remains HOLD pending the successor gate and independent review.
 
 A separate source-only C2 compose rollback repair now installs both claim and
 rollback-defect handlers before P1 claims. An O2 claim failure with a certain
