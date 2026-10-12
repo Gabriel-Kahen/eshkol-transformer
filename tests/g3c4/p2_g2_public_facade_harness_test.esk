@@ -169,12 +169,14 @@
   (if (> seed 64) #f
       (let* ((generator (g3c4-public-generator-create
                           model tokenizer (policy 'categorical seed #f)))
+             (marked (= (public-mark (native generator) 0 255) 0))
              (output (g3c4-public-generator-generate generator prompt))
              (text (car (g3c4-public-generation-output-text output)))
              (id0 (bytevector-u8-ref text 0))
              (id1 (bytevector-u8-ref text 1)))
         (check "release bounded witness probe"
-               (and (g3c4-public-generation-output-release! output)
+               (and marked
+                    (g3c4-public-generation-output-release! output)
                     (g3c4-public-generator-close generator)))
         (if (= id0 id1)
             (find-distinct-second (+ seed 1))
@@ -193,8 +195,10 @@
 (define (read-fault-case cut)
   (let* ((generator (g3c4-public-generator-create
                       model tokenizer (policy 'greedy 7 #f)))
+         (marked (= (public-mark (native generator) 0 255) 0))
          (output (g3c4-public-generator-generate generator prompt))
          (live-before (public-clone-count 1)))
+    (check "mark read-fault generator" marked)
     (check "arm public accessor native read cut" (= (public-read-fault cut) 0))
     (reject-public "public accessor fault is translated"
                    (if (= cut 3) 'shape-mismatch 'invalid-state)
