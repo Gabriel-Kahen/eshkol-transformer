@@ -67,3 +67,23 @@ literal `printf` calls to `puts`. The bounded numerical-sanitized-only repair
 pins both the exact added and absent import sets against the unchanged normal
 manifest; sanitizer references and canonical/normal inventories retain their
 checks. No numerical acceptance follows from this failed gate.
+
+## Five-layout N2 successor
+
+The isolated `4d7ed8d0` successor extends the same noninstalled, authentic
+private evaluator tuple to the frozen packed-single, packed-sharded,
+packed-suffix, unpacked-three and unpacked-pairs D2 cases. It does not add a
+model parameter control or a new numerical provider. The runner requires
+ordered, complete 21-role observations per emitted batch and checks each
+case's inputs, next-token targets, mask, CE, L3S state and final metrics against
+the independent reference. The boxed result must agree with the native final
+publication; its six outputs and both exact D2 cursor bytevectors are checked
+against the independently generated corpus. Packed repartition requires equal
+emitted rows and outputs. Unpacked boundaries require separately derived rows
+and outputs. The two existing compiled mutants remain scoped to packed-single.
+
+Focused local parser, source-policy and reference tests pass. No five-layout
+compiled run or independent N2 source approval is recorded here. The supported
+exact-tree normal/repeat/poison/sanitizer AOT gate and current-main integration
+remain required. The accepted M3, N2/N3K, L2 and L3S gradient checks are
+predecessor evidence; E3's evaluator exposes no differentiable output or VJP.
