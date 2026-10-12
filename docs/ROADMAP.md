@@ -829,6 +829,14 @@ selected descriptors remain unknown/HOLD. Before any real index read, an
 independently reviewed bounded stdout/stderr capture and external preservation
 procedure must receive a separate source pin. The source reads no layers and
 grants no export or admission authority.
+The separate [one-use small-metadata capture candidate](e3/E3_N1_F32_SMALL_CAPTURE.md)
+now retains bounded synthetic child output and HOLD failure records under a
+fresh same-UID directory, with an in-process 30-second timer, 8-MiB stdout cap,
+and direct-child `wait4` peak-RSS observation. An external hard deadline and
+whole-procedure RSS proof remain unimplemented. Its tests use no real OCI byte.
+The wrapper's public run gate is false and the distinct CLI capture pin remains
+absent; same-UID files have no protected
+custody or admission authority.
 The [local pin acquisition](e3/E3_N1_LOCAL_PIN_ACQUISITION.md) seals the small
 index/manifest/config bytes and host-only candidates; guest bytes remain absent.
 The [bounded gzip scanner](e3/E3_N1_GZIP_SCANNER.md) A source was held for a

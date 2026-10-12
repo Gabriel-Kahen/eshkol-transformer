@@ -63,6 +63,13 @@ failure handling, and external preservation of the complete canonical HOLD
 evidence. Its exact reviewed contract SHA-256 must be compiled as the distinct
 capture pin. This source writes only stdout after a successful acquisition;
 it creates no evidence file, immutable snapshot or custody authority.
+The separate [one-use capture candidate](E3_N1_F32_SMALL_CAPTURE.md) now
+implements a synthetic-tested HOLD capture procedure, but its source,
+destination and custody have not passed that review gate. Its in-process
+timer and direct-child RSS observation also leave the external hard deadline
+and whole-procedure current-RSS proof open. Its public run gate is false. The
+capture pin
+therefore remains `None`.
 
 Each synthetic success emits canonical, checksummed
 `e3-n1-small-metadata-v1` **HOLD** evidence containing bounded base64 raw
