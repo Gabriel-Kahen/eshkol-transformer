@@ -812,6 +812,13 @@ independently accepted with unchanged pre/post pins and launcher/Docker 0/0.
 This accepts the bounded three-batch numerical transcript and two mutants;
 zero-model controls, mode/gradient preservation, failure/resource horizons,
 current-main integration and full E3 section 9 acceptance remain open.
+The isolated E3 §9 N2 five-layout observer source slice extends that same
+noninstalled boxed tuple across the frozen packed-single, packed-sharded,
+packed-suffix, unpacked-three and unpacked-pairs cases. Its tagged transcript
+requires ordered complete 21-role rows, CE, serial metric state, six boxed
+outputs and exact D2 cursor bytes; focused source/parser/reference checks are
+local only. N1 supported exact-tree execution, independent N2 review, supported
+N2 runtime evidence and current-main integration remain pending.
 
 The [E3 in-call mode and graph observation contract](e3/E3_MODE_GRAPH_OBSERVATION_CONTRACT.md)
 is a design-only next leaf for §9. Its corrected P1-owned test variant keys a

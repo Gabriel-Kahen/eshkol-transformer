@@ -114,62 +114,65 @@ for variant in a b wrong-target mean-of-means sanitized; do
       2>"${out}/compile-${variant}.stderr"
 done
 cmp "${out}/runtime-a" "${out}/runtime-b"
-for variant in a b wrong-target mean-of-means sanitized; do
-  if [[ "${variant}" == sanitized ]]; then
+cases=(packed-single packed-sharded packed-suffix unpacked-three unpacked-pairs)
+for variant in a b poison sanitized wrong-target mean-of-means; do
+  selected=("${cases[@]}")
+  [[ "${variant}" != wrong-target && "${variant}" != mean-of-means ]] || selected=(packed-single)
+  for name in "${selected[@]}"; do
+    executable="${out}/runtime-${variant}"
+    [[ "${variant}" != poison ]] || executable="${out}/runtime-a"
+    poison=0
+    [[ "${variant}" != poison && "${variant}" != sanitized ]] || poison=1
     ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
-      UBSAN_OPTIONS=halt_on_error=1 \
-      ESHKOL_ARENA_POISON=1 \
+      UBSAN_OPTIONS=halt_on_error=1 ESHKOL_ARENA_POISON="${poison}" \
       timeout --foreground --signal=TERM --kill-after=5s 900s \
-      "${out}/runtime-${variant}" "${out}/corpus-a/packed-single" \
-      >"${out}/run-${variant}.stdout" 2>"${out}/run-${variant}.stderr"
-  else
-    ESHKOL_ARENA_POISON=0 \
-      timeout --foreground --signal=TERM --kill-after=5s 900s \
-      "${out}/runtime-${variant}" "${out}/corpus-a/packed-single" \
-      >"${out}/run-${variant}.stdout" 2>"${out}/run-${variant}.stderr"
-  fi
-  grep -Fx 'E3-NUMERICAL-RUNTIME-PASS' "${out}/run-${variant}.stdout" \
-    >/dev/null || die "compiled numerical ${variant} did not complete"
-  [[ ! -s "${out}/run-${variant}.stderr" ]] || \
-    die "compiled numerical ${variant} emitted runtime diagnostics"
-  python3 -m tests.e3_private.parse_numerical_observation \
-    --stdout "${out}/run-${variant}.stdout" \
-    --observed "${out}/observed-${variant}.json" \
-    --roles "${out}/roles-${variant}.tsv"
+      "${executable}" "${name}" "${out}/corpus-a/${name}" \
+      >"${out}/run-${variant}-${name}.stdout" \
+      2>"${out}/run-${variant}-${name}.stderr"
+    grep -Fx 'E3-NUMERICAL-RUNTIME-PASS' "${out}/run-${variant}-${name}.stdout" \
+      >/dev/null || die "compiled numerical ${variant}/${name} did not complete"
+    [[ ! -s "${out}/run-${variant}-${name}.stderr" ]] || \
+      die "compiled numerical ${variant}/${name} emitted runtime diagnostics"
+    count=3
+    [[ "${name}" != packed-suffix && "${name}" != unpacked-three ]] || count=2
+    python3 -m tests.e3_private.parse_numerical_observation \
+      --stdout "${out}/run-${variant}-${name}.stdout" \
+      --observed "${out}/observed-${variant}-${name}.json" \
+      --roles "${out}/roles-${variant}-${name}.tsv" \
+      --result "${out}/result-${variant}-${name}.json" --batches "${count}"
+  done
 done
-ESHKOL_ARENA_POISON=1 \
-  timeout --foreground --signal=TERM --kill-after=5s 900s \
-  "${out}/runtime-a" "${out}/corpus-a/packed-single" \
-  >"${out}/run-poison.stdout" 2>"${out}/run-poison.stderr"
-cmp "${out}/run-a.stdout" "${out}/run-poison.stdout"
-[[ ! -s "${out}/run-poison.stderr" ]] || \
-  die "poisoned numerical runtime emitted diagnostics"
-python3 -m tests.e3_private.parse_numerical_observation \
-  --stdout "${out}/run-poison.stdout" \
-  --observed "${out}/observed-poison.json" \
-  --roles "${out}/roles-poison.tsv"
-cmp "${out}/run-a.stdout" "${out}/run-b.stdout"
+for name in "${cases[@]}"; do
+  cmp "${out}/run-a-${name}.stdout" "${out}/run-b-${name}.stdout"
+  cmp "${out}/run-a-${name}.stdout" "${out}/run-poison-${name}.stdout"
+  for variant in a b poison sanitized; do
+    ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "${q0_python}" \
+      -m tests.e3_native_parity.verify_observation \
+      --reference "${out}/reference-a.json" --case "${name}" \
+      --observed "${out}/observed-${variant}-${name}.json" \
+      --roles "${out}/roles-${variant}-${name}.tsv" \
+      --transcript "${out}/transcript-${variant}-${name}.json" \
+      >"${out}/verify-${variant}-${name}.stdout" \
+      2>"${out}/verify-${variant}-${name}.stderr"
+  done
+  cmp "${out}/transcript-a-${name}.json" "${out}/transcript-b-${name}.json"
+done
 for variant in a b poison sanitized; do
-  ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "${q0_python}" \
-    -m tests.e3_native_parity.verify_observation \
-    --reference "${out}/reference-a.json" --case packed-single \
-    --observed "${out}/observed-${variant}.json" \
-    --roles "${out}/roles-${variant}.tsv" \
-    --transcript "${out}/transcript-${variant}.json" \
-    >"${out}/verify-${variant}.stdout" 2>"${out}/verify-${variant}.stderr"
+  python3 -m tests.e3_private.verify_numerical_result \
+    --corpus "${out}/corpus-a/corpus-reference.json" --results "${out}" \
+    --variant "${variant}"
 done
-cmp "${out}/transcript-a.json" "${out}/transcript-b.json"
 for variant in wrong-target mean-of-means; do
   if ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "${q0_python}" \
     -m tests.e3_native_parity.verify_observation \
     --reference "${out}/reference-a.json" --case packed-single \
-    --observed "${out}/observed-${variant}.json" \
-    --roles "${out}/roles-${variant}.tsv" \
-    --transcript "${out}/transcript-${variant}.json" \
+    --observed "${out}/observed-${variant}-packed-single.json" \
+    --roles "${out}/roles-${variant}-packed-single.tsv" \
+    --transcript "${out}/transcript-${variant}-packed-single.json" \
     >"${out}/verify-${variant}.stdout" 2>"${out}/verify-${variant}.stderr"; then
     die "compiled numerical ${variant} mutant survived"
   fi
-  [[ ! -e "${out}/transcript-${variant}.json" ]] || \
+  [[ ! -e "${out}/transcript-${variant}-packed-single.json" ]] || \
     die "failed numerical mutant published a transcript"
 done
 grep -F 'ce_f32' "${out}/verify-wrong-target.stderr" >/dev/null || \
