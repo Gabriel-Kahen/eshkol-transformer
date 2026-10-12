@@ -1,16 +1,17 @@
-# P2/G2 terminal active-call held-lease production HOLD
+# P2/G2 terminal held-lease authority boundary
 
 This audit starts from test-only head `f31ec2f35752767b83326e5ac19b046c03bcc3c5`
-(tree `4fe1d4eef5b7cc801bedd27178f3e41cf5e4e899`). It does not
-change the accepted [terminal-close contract](G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md),
-production composer, or irreversible zero-return tail.
+(tree `4fe1d4eef5b7cc801bedd27178f3e41cf5e4e899`). Its successor
+proposes a scoped correction to the
+[terminal-close contract](G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md).
+It does not change the production composer or irreversible zero-return tail.
 
 ## Existing authority
 
-The accepted contract requires a held genuine pending-output I1 or A2 lease
-to reject abort without mutation, retain the live pending terminal anchor
-and protected record, and allow owner release and abort retry inside the
-same call region. The composer entry takes only `(generator input)` at
+The native terminal and extensible protected-scope contracts require a held
+genuine pending-output I1 or A2 lease to reject abort without mutation, and
+permit its holder to release and retry inside the protected body. The fixed
+composer entry takes only `(generator input)` at
 `native/g3c4_p2g2_terminal_composer_extension.esk:188`; it creates `call`,
 `ledger`, and `terminal` in that lexical invocation (`:195-226`, `:309-330`).
 Its prezero caught path calls `g3c4-p2g2-terminal-abort-clean!`, then exits
@@ -40,37 +41,71 @@ to the existing outer guard. Its `#f` negative is a mismatched output
 argument; it is not a live foreign owner. Its G2 READY/P3 cases remain
 source-reviewed and compiled-runtime unproved.
 
-## Required upstream decision
+## Supported holder reachability
+
+The pending I1 is newly created by native output reservation inside an active
+call (`src/eshkol_transformer/g3c4_model_owner.c:3045-3103`), and the pending
+lookup is `static` (`:2133-2155`). The source-private context ABI returns an
+opaque output handle, not its I1 or A2 transaction
+(`src/eshkol_transformer/g3c4_context_internal.h:137-144`). The Eshkol
+reservation enrolls its pending entry in the private global `g3c4-registry`
+and retains the local reference
+(`native/g3c4_output_envelope_extension.esk:134-162`); the fixed serialized
+invocation has no supported callback or yield exposing it to another caller.
+The composer returns only the terminal shell after close. Snapshot and logical clone
+authenticate a published terminal output, so they cannot expose the pending
+handle (`native/g3c4_p2g2_terminal_composer_extension.esk:513-540,623-640`).
+
+An idle token frame has no transaction
+(`src/eshkol_transformer/g3c4_model_owner.c:1496-1504`). A committed A2 read
+lease present before generation blocks native call acquire's idle-cache
+preflight (`:7995-8011`); while the frame transaction exists, A2 refuses a
+new committed read lease (`native/a2_kv_cache.c:804-818`). The native
+prefix/terminal helper's temporary I1 borrows and A2 views are ended before
+return on success and failure (`src/eshkol_transformer/g3c4_model_owner.c:7077-7130,7250-7297,7352-7391,7452-7533,8355-8392`).
+The raw V256 T1 decoder has no user callback
+(`native/g3c4_t1_output_decode_extension.esk:1-52`). Native C4 operations
+require external serialization
+(`docs/g3/G3_C4_NATIVE_OWNER_LEAF_CONTRACT.md:43`,
+`docs/g3/G3_C4_ACTIVE_CALL_STEP5_CONTRACT.md:157-163`), and `m3-call`
+rejects reentry while busy (`native/m3_model_extension.esk:18-30`). Thus no
+supported caller obtains and retains a genuine pending I1 borrow or READY A2
+view across this fixed entry's prezero abort. Direct private-struct access,
+concurrent unsynchronized C calls, and same-aggregate test injection are
+outside that supported boundary.
+
+## Contract correction and future decision
 
 No accepted production API identifies a cooperative holder, transfers its
 captured release authority into this lexical call, or invokes that holder
-after typed native abort rejection while `m3-call` stays live. Adding such
-an API here would invent an upstream ownership contract. Choose one of:
+after typed native abort rejection while `m3-call` stays live. The revised
+terminal-close contract therefore keeps native and protected-body held-lease
+requirements but does not demand an unreachable production external-holder
+retry from this fixed entry. Its test-only overlay still proves the same-call
+mechanism when the test shim owns and releases the captured pointer. On an
+unsupported injected persistent lease, protected/terminal records remain
+unchanged up to fail-stop; no recoverable return is claimed.
 
-1. Specify and review a private, call-bound cooperative holder capability.
-   It must identify the exact pending I1/A2 lease and original holder,
-   permit only that holder to end its captured pointer, and offer a prezero
-   in-region release point. Then a bounded retry can reauthenticate the
-   original call, ledger, terminal/protected/prefix root identities, native
-   pending output, staged cache and RNG before retrying protected abort.
-   Scrub and unlink only after abort succeeds. A missing/mismatched release
-   retains fail-stop. No callback or native readback may run after terminal
-   zero.
-2. Narrow the accepted held-lease clause only after proving that no genuine
-   external holder can survive across this fixed coordinator's prezero
-   abort point. The current source establishes no intentional retained
-   holder; that alone is not a proof against every supported caller/alias.
+If a future supported caller is permitted to hold a lease across this call,
+first review a private call-bound ownership contract. It must define exact
+authority transfer and original holder, a prezero release point while the
+original call is live, typed busy discrimination, reauthentication of the
+call/ledger/root identities/native pending/cache/RNG before one bounded
+abort retry, and fail-stop for missing/mismatched release. It must forbid
+foreign-pointer release and any callback or native readback after terminal
+zero. No implementation API is proposed or admitted by this document.
 
 ## Finite completion gate
 
-After the upstream ownership decision, review the exact contract and source
-before implementation. If option 1 is accepted, test genuine I1 and A2
+Review the contract correction and exact source/return-shape proof. If a
+future holder interface is accepted, test genuine I1 and A2
 leases with a second live foreign owner negative, first native abort's exact
 typed busy result, byte/identity preservation of pending output, cache, RNG,
 and all Eshkol root cons cells, captured-holder release, and one successful
 retry in the original `m3-call`. Test missing release, wrong holder, repeated
 busy, P2 and P3 rollback, and postzero fail-stop; normal/repeat/sanitizer,
 fault overlays, feature-off and predecessor gates must pass on exact pins.
-Preserve failed evidence. Until then, the published test overlay establishes
-a diagnostic possibility only, and the production held-lease clause remains
-unproved. No compiled gate or Docker run was performed for this audit.
+Preserve failed evidence. The published test overlay establishes a diagnostic
+possibility only; it does not establish production external-holder support.
+The fixed composer compiled close gate remains pending, and no Docker run was
+performed for this authority audit.

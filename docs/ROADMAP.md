@@ -2703,9 +2703,10 @@ publication, public G2 and continuation remain pending.
   constructor emergency in `g3c4-p2g2-eshkol-terminal-composer-dbf66f8-fe9-f31-20261003-prepared-e/SHA256SUMS-FAILED`,
   and feature-off admission in
   `g3c4-p2g2-eshkol-terminal-composer-4e07c9f-fe9-f31-20261003-prepared-f/`.
-  The active pre-tail abort path still fail-stops if a genuine native I1/A2
-  lease rejects abort; in-region release/retry coverage is unresolved and
-  remains a contract acceptance blocker on the published composer tree.
+  The active pre-tail abort path fail-stops if an injected genuine native
+  I1/A2 lease rejects cleanup; its Eshkol pending links remain intact until
+  that rejection. The native terminal ABI and extensible protected body retain
+  their held-lease rejection and owner-release/retry requirements.
   The separate `codex/g3-p2g2-held-lease-retry-test` branch stages a test-only
   exact-source overlay for genuine owner-held
   pending I1 and READY A2 lease rejection, owner release, and retry within the
@@ -2713,12 +2714,15 @@ publication, public G2 and continuation remain pending.
   holder does not add automatic release of an external production lease, and
   it does not alter the production zero-return tail.
   The [production held-lease audit](g3/G3_C4_P2_G2_HELD_LEASE_PRODUCTION_HOLD.md)
-  confirms that the fixed two-argument composer has no accepted
-  cooperative holder/release capability inside its live `m3-call`.
-  Genuine release needs the holder's captured I1/A2 pointer; the test shim
-  supplies one only for diagnostic G2 READY/P3 cases. An upstream ownership
-  contract or a source-proved narrowing of the held-lease clause is required
-  before claiming production retry or running the compiled close gate.
+  now traces the fixed entry's return shape, private registry, native
+  acquire/cache lease exclusions, raw T1 decoder, and external serialization.
+  It proposes narrowing only the fixed Eshkol entry's unreachable external
+  holder/retry obligation in the
+  [terminal-close contract](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md).
+  Independent contract review is pending; no production API or zero tail
+  changed. A future supported holder needs a separate call-bound ownership
+  contract. The compiled normal/sanitizer, emitted-code and launcher gates
+  still block full terminal acceptance.
 
 ## Wave 4 — practical pretraining and performance
 
