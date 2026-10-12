@@ -12,7 +12,7 @@ leaves on one original generator/model/optimizer/capsule graph.
 copies the accepted recursive Eshkol closure into a read-only source tree and
 generates one test-only caller. It rejects any change to the accepted caller
 or any file in its 96-file recursive closure except the exact pinned lease
-guard syntax repair. It adds the two accepted manual
+guard syntax repair and D2 lineage list-fold repair. It adds the two accepted manual
 P1 prefill helpers and verifies both fixture files against committed HEAD
 before copying. The fixture stages an identical, checksummed
 `native/e3_d2_restore.esk` load alias for the accepted
@@ -77,6 +77,15 @@ image comparison covers the four RNG words, ordered committed history and
 counts, and fixed policy words. This observation is also unrun in compiled
 Eshkol. Complete journal/token count, one-use grant replay and fresh recovery,
 abandon fail-stop and C2 partial claim remain separate gate obligations.
+
+The first successor I normal build from `6bb7b4c4` stopped before execution:
+`native/g3r_d2_lineage_extension.esk:170` called unsupported generic `append`.
+The bounded source repair constructs the retained registry with `null?`,
+`car`, `cdr` and `cons`, preserving the same records and list order, then
+pins its source hash in preparation. Parsed source tests check head, middle,
+tail and 63-record retirement cases. This repair has not passed a compiled
+gate; the I failure evidence remains sealed at
+`/home/gabe/.codex/evidence/eshkol-transformer/g3r-save-post-adoption-idle-6bb7-20261012-prepared-i`.
 
 ## One-use post-adoption cut
 

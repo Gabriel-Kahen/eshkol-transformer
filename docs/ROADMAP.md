@@ -1899,6 +1899,13 @@ The feature-gated test bridge checks destination bounds and releases the
 snapshot before copying its policy, RNG and committed-history words to the
 fixture. Focused negative C controls cover malformed destinations and native
 snapshot failures. Compiled execution and the remaining SAVE cuts are open.
+The first successor I normal build at `6bb7b4c4` failed before execution on
+unsupported generic `append` in private D2 lineage retirement. Its sealed
+failure is `g3r-save-post-adoption-idle-6bb7-20261012-prepared-i`. A bounded
+source repair replaces the retirement splice with a checked order-preserving
+`cons` fold and pins its bytes in the fixture preparer. Focused source and
+preparation tests pass; compiled execution remains pending independent review
+and a fresh one-use gate.
 Compiled native/Eshkol coexistence, actual partial-claim failure cuts, C2
 image/digest, pair publication, cold LOAD, and public SAVE remain open.
 

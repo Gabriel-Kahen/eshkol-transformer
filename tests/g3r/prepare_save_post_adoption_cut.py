@@ -18,6 +18,8 @@ CLOSURE = "native/g3r_same_owner_o2_adoption_source_closure.txt"
 CLOSURE_SHA256 = "096f6e8470fb56017333ba25c03e1bd53515a5f3eec5d22afa6598592608ecf8"
 REPAIRED_CORE = "native/tr3_lease_core_extension.esk"
 REPAIRED_CORE_SHA256 = "973cdcef35102734cd3b9e76d29c36fec9c4341b07757ebe11c5127526bab059"
+REPAIRED_LINEAGE = "native/g3r_d2_lineage_extension.esk"
+REPAIRED_LINEAGE_SHA256 = "c7e4ca5e3b9a8507df4aa8c2cc850991fdfed5d5caf6dae079751c09167ed1de"
 E3_LOAD_SOURCE = "internal/e3/lib/e3_d2_restore.esk"
 E3_LOAD_ALIAS = "native/e3_d2_restore.esk"
 MANUAL_PREFILL = ("native/g3t_manual_p1_extension.esk",
@@ -78,10 +80,12 @@ def prepare(output: Path) -> None:
     changed = subprocess.run(["git", "diff", "--name-only", BASE, "--",
                               *files, *MANUAL_PREFILL, LEDGER_HEADER],
                              cwd=ROOT, check=True, capture_output=True, text=True)
-    if set(changed.stdout.splitlines()) != {REPAIRED_CORE}:
+    if set(changed.stdout.splitlines()) != {REPAIRED_CORE, REPAIRED_LINEAGE}:
         raise ValueError("production Eshkol closure differs from accepted base")
     if sha256((ROOT / REPAIRED_CORE).read_bytes()) != REPAIRED_CORE_SHA256:
         raise ValueError("repaired lease core changed")
+    if sha256((ROOT / REPAIRED_LINEAGE).read_bytes()) != REPAIRED_LINEAGE_SHA256:
+        raise ValueError("repaired D2 lineage changed")
     if len(files) != len(set(files)) or not files or files[0] != \
             "native/g3r_same_owner_o2_adoption_root.esk":
         raise ValueError("invalid recursive Eshkol source closure")
@@ -147,6 +151,7 @@ def prepare(output: Path) -> None:
         ("source_commit", commit), ("source_tree", tree),
         ("accepted_caller_commit", BASE), ("accepted_caller_sha256", CALLER_SHA256),
         ("repaired_lease_core_sha256", REPAIRED_CORE_SHA256),
+        ("repaired_d2_lineage_sha256", REPAIRED_LINEAGE_SHA256),
         ("e3_load_alias_source", E3_LOAD_SOURCE),
         ("compiler_commit", FE9), ("compiler_runner_sha256", FE9_RUNNER_SHA256),
         ("runtime_archive_sha256", FE9_RUNTIME_SHA256),

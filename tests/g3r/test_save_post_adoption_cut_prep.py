@@ -66,6 +66,8 @@ class PostAdoptionPreparation(unittest.TestCase):
                           (destination / "PREPARED.tsv").read_text())
             self.assertIn("repaired_lease_core_sha256\t" + prep.REPAIRED_CORE_SHA256,
                           (destination / "PREPARED.tsv").read_text())
+            self.assertIn("repaired_d2_lineage_sha256\t" + prep.REPAIRED_LINEAGE_SHA256,
+                          (destination / "PREPARED.tsv").read_text())
             root = (destination / "source/tests/g3r/save_post_adoption_cut_root.esk").read_text()
             self.assertIn('(load "g3r_training_controls_root.esk")', root)
             self.assertIn('(load "g3m_prefill_p1_extension.esk")', root)
@@ -115,6 +117,12 @@ class PostAdoptionPreparation(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="g3r-cut-pin-") as directory:
             with mock.patch.object(prep, "REPAIRED_CORE_SHA256", "0" * 64):
                 with self.assertRaisesRegex(ValueError, "repaired lease core changed"):
+                    prepare(Path(directory) / "prepared")
+
+    def test_repaired_lineage_pin_rejects_changed_bytes(self):
+        with tempfile.TemporaryDirectory(prefix="g3r-cut-lineage-pin-") as directory:
+            with mock.patch.object(prep, "REPAIRED_LINEAGE_SHA256", "0" * 64):
+                with self.assertRaisesRegex(ValueError, "repaired D2 lineage changed"):
                     prepare(Path(directory) / "prepared")
 
     def test_supported_runtime_pins_match_existing_gate(self):

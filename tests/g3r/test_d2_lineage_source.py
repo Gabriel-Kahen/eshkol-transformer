@@ -78,6 +78,49 @@ def eval_pure(expr, env):
     raise ValueError(f"unexpected source predicate: {op}")
 
 
+def retired_successor(source):
+    bindings = [form[1] for form in descendants(route(source), "let*")
+                if isinstance(form[1], list) and
+                [binding[0] for binding in form[1]] ==
+                ["row", "snapshot", "state", "next"]]
+    if len(bindings) != 1:
+        raise ValueError("missing retirement successor")
+    return bindings[0][-1][1]
+
+
+def pair_list(values, tail=None):
+    for value in reversed(values):
+        tail = (value, tail)
+    return tail
+
+
+def eval_successor(expr, env):
+    """Evaluate the source's bounded cons fold over identity-bearing pairs."""
+    if isinstance(expr, str):
+        return env[expr]
+    op, *args = expr
+    if op == "let":
+        name, bindings, body = args
+        def loop(*values):
+            local = dict(env, **dict(zip((b[0] for b in bindings), values)))
+            local[name] = loop
+            return eval_successor(body, local)
+        return loop(*(eval_successor(b[1], env) for b in bindings))
+    if op == "if":
+        return eval_successor(args[1 if eval_successor(args[0], env) else 2], env)
+    if op == "null?":
+        return eval_successor(args[0], env) is None
+    if op == "car":
+        return eval_successor(args[0], env)[0]
+    if op == "cdr":
+        return eval_successor(args[0], env)[1]
+    if op == "cons":
+        return (eval_successor(args[0], env), eval_successor(args[1], env))
+    if op in env and callable(env[op]):
+        return env[op](*(eval_successor(arg, env) for arg in args))
+    raise ValueError(f"unsupported successor operation: {op}")
+
+
 def completed_state():
     dataset, tokenizer, tokenizer_entry, state = (object() for _ in range(4))
     fingerprint, vocabulary = "original-fingerprint", 256
@@ -183,7 +226,7 @@ def check_lineage(source: str, root: str, manifest: str) -> None:
             "\n                      #t))\n                   (else (search (cdr records))))))))" not in source):
         raise ValueError("forged ordinary row or returned authority permitted")
     retire = source[source.index("(retire\n") : source.index("    (lambda (mode first second)")]
-    order = ["(next (append (reverse prefix) (cdr records)))",
+    order = ["(next\n                             (let build ((remaining prefix)",
              "(required dataset tokenizer)",
              "(d2-token-dataset-close! dataset)",
              "(vector-set! registry 0 next)",
@@ -195,6 +238,17 @@ def check_lineage(source: str, root: str, manifest: str) -> None:
             "(#t (if (not (vector-ref state 2)) (exit 134))" not in retire or \
             "(if (vector-ref state 2) (exit 134))" not in retire:
         raise ValueError("retirement can prune failed/foreign row")
+    kept_before, target, kept_after = object(), object(), object()
+    successor = eval_successor(retired_successor(source), {
+        "prefix": pair_list([kept_before]),
+        "records": (target, pair_list([kept_after])),
+    })
+    if (not isinstance(successor, tuple) or
+            successor[0] is not kept_before or
+            not isinstance(successor[1], tuple) or
+            successor[1][0] is not kept_after or
+            successor[1][1] is not None):
+        raise ValueError("retirement changes retained record identity or order")
     d2 = (ROOT / "internal/d2/lib/d2_dataset.esk").read_text()
     native = (ROOT / "native/d2_native.c").read_text()
     opened = d2[d2.index("(define (d2-token-dataset-open config tokenizer)"):
@@ -290,13 +344,41 @@ class D2LineageSource(unittest.TestCase):
     def test_retire_requires_genuine_close_and_snapshot(self):
         for before, after in (
             ("(required dataset tokenizer)", "#t"),
-            ("(next (append (reverse prefix) (cdr records)))",
-             "(next (cdr records))"),
+            ("(cons (car remaining) suffix)", "suffix"),
             ("(d2-token-dataset-close! dataset)", "#t"),
             ("(vector-set! snapshot 0 #f)", "#t"),
         ):
             with self.subTest(before=before), self.assertRaises(ValueError):
                 self.check(source=self.source.replace(before, after))
+
+    def test_retirement_successor_preserves_order_identity_and_tail(self):
+        expr = retired_successor(self.source)
+        self.assertNotIn("append", str(expr))
+        self.assertNotIn("reverse", str(expr))
+        for before_count, after_count in ((0, 2), (1, 2), (2, 0), (63, 0)):
+            with self.subTest(before=before_count, after=after_count):
+                before = [object() for _ in range(before_count)]
+                target = object()
+                after = [object() for _ in range(after_count)]
+                suffix = pair_list(after)
+                result = eval_successor(expr, {
+                    "prefix": pair_list(list(reversed(before))),
+                    "records": (target, suffix),
+                })
+                for original in before + after:
+                    self.assertIs(result[0], original)
+                    result = result[1]
+                self.assertIsNone(result)
+                retained = eval_successor(expr, {
+                    "prefix": pair_list(list(reversed(before))),
+                    "records": (target, suffix),
+                })
+                for _ in before:
+                    retained = retained[1]
+                self.assertIs(retained, suffix)
+        broken = self.source.replace("(cons (car remaining) suffix)", "suffix")
+        with self.assertRaises(ValueError):
+            self.check(source=broken)
 
     def test_capacity_boundary_and_cursor(self):
         with self.assertRaises(ValueError):

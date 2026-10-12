@@ -167,7 +167,12 @@
                     (let* ((row (car (car records)))
                            (snapshot (cdr (car records)))
                            (state (d2-open-dataset-state dataset operation))
-                           (next (append (reverse prefix) (cdr records))))
+                           (next
+                             (let build ((remaining prefix)
+                                         (suffix (cdr records)))
+                               (if (null? remaining) suffix
+                                   (build (cdr remaining)
+                                          (cons (car remaining) suffix))))))
                       (required dataset tokenizer)
                       (if (not (and (eq? (vector-ref snapshot 3) state)
                                     (eq? (vector-ref row 4) state)))
