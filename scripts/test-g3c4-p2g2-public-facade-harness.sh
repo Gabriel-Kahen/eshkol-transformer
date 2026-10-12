@@ -131,7 +131,9 @@ WRAPPER
 }
 
 compile_mode normal
-ESHKOL_ARENA_POISON=1 "$tmp/normal/public-g2-harness" \
+ESHKOL_ARENA_POISON=1 \
+  timeout --foreground --signal=TERM --kill-after=5s 120s \
+  "$tmp/normal/public-g2-harness" \
   >"$evidence/repeat-run.stdout" 2>"$evidence/repeat-run.stderr"
 test ! -s "$evidence/repeat-run.stderr"
 cmp "$evidence/normal-run.stdout" "$evidence/repeat-run.stdout"
