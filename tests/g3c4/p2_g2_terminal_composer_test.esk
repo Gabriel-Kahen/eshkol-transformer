@@ -1,0 +1,407 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+(load "g3c4_t1_output_decode_extension.esk")
+(load "g3c4_output_envelope_extension.esk")
+(load "g3c4_p2g2_ownership_extension.esk")
+(load "g3c4_p2g2_protected_scope_extension.esk")
+(load "g3c4_p2g2_t1_prefix_coordinator_extension.esk")
+(load "g3c4_p2g2_terminal_composer_extension.esk")
+
+(extern i64 composer-source-lease ptr i64
+        :real et_g3c4_p2g2_composer_test_source_lease_v1)
+(extern i64 composer-clone-lease ptr i64
+        :real et_g3c4_p2g2_composer_test_clone_lease_v1)
+(extern i64 composer-terminal-fault i64
+        :real et_g3c4_p2g2_composer_test_fault_v1)
+(extern i64 composer-read-fault i64
+        :real et_g3c4_p2g2_composer_test_read_fault_v1)
+(extern i64 composer-counter ptr i64
+        :real et_g3c4_p2g2_composer_test_counter_v1)
+(extern i64 composer-exhausted
+        :real et_g3c4_p2g2_composer_test_exhausted_v1)
+(extern i64 composer-clone-count i64
+        :real et_g3c4_p2g2_composer_test_clone_count_v1)
+(extern i64 composer-mark ptr i64 i64
+        :real et_g3c4_p2g2_coordinator_test_mark_v1)
+(extern i64 composer-after-abort ptr i64
+        :real et_g3c4_p2g2_coordinator_test_after_abort_v1)
+(extern i64 composer-after-abort-any ptr
+        :real et_g3c4_p2g2_composer_test_after_abort_v1)
+(extern i64 composer-reference
+        :real et_g3c4_p2g2_coordinator_test_reference_v1)
+(extern i64 composer-full-prefix ptr i64 i64 i64 i64 i64
+        :real et_g3c4_p2g2_composer_test_full_prefix_v1)
+(extern i64 composer-second-oracle ptr i64
+        :real et_g3c4_p2g2_composer_test_second_oracle_v1)
+(extern i64 composer-allocation-arm i64 i64
+        :real et_g3c4_call_entry_alloc_arm_v1)
+(extern i64 composer-allocation-consumed
+        :real et_g3c4_call_entry_alloc_consumed_v1)
+(extern i64 composer-allocation-disarm
+        :real et_g3c4_call_entry_alloc_disarm_v1)
+(extern i64 composer-emergency-raise i64
+        :real et_g3c4_composer_emergency_raise_v1)
+(extern i64 composer-emergency-capture
+        :real et_g3c4_composer_emergency_capture_v1)
+(extern i64 composer-emergency-exact
+        :real et_g3c4_composer_emergency_exact_v1)
+
+(define checks 0)
+(define (check label good)
+  (if good (set! checks (+ checks 1))
+      (begin (display "G3-C4 P2/G2 Eshkol terminal FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label thunk)
+  (check label
+    (guard (caught (#t (transformer-error? caught)))
+      (thunk) #f)))
+(define (config sampling seed eos)
+  (list ':profile 'diagnostic-c4
+        ':sampling (if (eq? sampling 'categorical-singleton)
+                       'categorical sampling)
+        ':temperature-bits 1065353216
+        ':top-k (if (eq? sampling 'greedy) 256
+                    (if (eq? sampling 'categorical-singleton) 1 17))
+        ':top-p-bits (if (eq? sampling 'greedy) 1065353216 1056964608)
+        ':max-new-tokens 2 ':eos eos ':seed seed))
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define model (g3c4-model-create-seeded-internal 1729))
+(define prompt-a
+  (g3c4-p2g2-owned-input-create
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255))))
+(define prompt-b
+  (g3c4-p2g2-owned-input-create
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 7 11))))
+
+(define (case-run input first second sampling seed eos expected-count counter-case)
+  (let* ((generator
+           (g3c4-generator-create-internal
+             model tokenizer (config sampling seed eos)))
+         (native (vector-ref
+                   (g3c4-generator-entry-call-ready generator 'test) 3))
+         (counter-ready (= (composer-counter native counter-case) 0))
+         (marked (= (composer-mark native first second) 0))
+         (output (g3c4-p2g2-terminal-generate-internal generator input))
+         (snapshot-probe
+           (begin
+             (check "arm recoverable detached snapshot failure"
+                    (= (composer-read-fault 1) 0))
+             (reject "snapshot error leaves terminal usable"
+               (lambda () (g3c4-p2g2-terminal-snapshot-internal output)))
+             #t))
+         (snapshot (g3c4-p2g2-terminal-snapshot-internal output))
+         (count (vector-ref snapshot 2))
+         (source-entry (g3c4-registry-find output 'test))
+         (old-clone-records (vector-ref g3c4-p2g2-terminal-ids-records 0))
+         (old-clone-anchors (vector-ref g3c4-p2g2-terminal-ids-anchors 0))
+         (old-live (composer-clone-count 1))
+         (old-dead (composer-clone-count 2))
+         (clone-fault-probe
+           (begin
+             (check "hold authentic source I1 before native clone"
+                    (= (composer-source-lease (vector-ref source-entry 3) 1) 0))
+             (reject "Eshkol clone rejects held source I1"
+               (lambda () (g3c4-p2g2-terminal-ids-clone-internal output)))
+             (check "foreign owner cannot end held source I1 lease"
+                    (= (composer-source-lease native 0) -1))
+             (check "release held source I1 for retry"
+                    (= (composer-source-lease (vector-ref source-entry 3) 0) 0))
+             (check "clone failure leaves no Eshkol enrollment or native owner"
+                    (and (eq? old-clone-records
+                              (vector-ref g3c4-p2g2-terminal-ids-records 0))
+                         (eq? old-clone-anchors
+                              (vector-ref g3c4-p2g2-terminal-ids-anchors 0))
+                         (= old-live (composer-clone-count 1))
+                         (= old-dead (composer-clone-count 2))))
+             (check "arm authentic native clone copy preflight failure"
+                    (= (composer-read-fault 3) 0))
+             (reject "native copy rejects malformed declared extent"
+               (lambda () (g3c4-p2g2-terminal-ids-clone-internal output)))
+             (check "copy failure removes enrollment and releases native I1"
+                    (and (eq? old-clone-records
+                              (vector-ref g3c4-p2g2-terminal-ids-records 0))
+                         (eq? old-clone-anchors
+                              (vector-ref g3c4-p2g2-terminal-ids-anchors 0))
+                         (= old-live (composer-clone-count 1))
+                         (= (+ old-dead 1) (composer-clone-count 2))))
+             #t))
+         (clone (g3c4-p2g2-terminal-ids-clone-internal output))
+         (copy-probe
+           (begin
+             (check "arm recoverable detached I1 copy failure"
+                    (= (composer-read-fault 2) 0))
+             (reject "clone copy error leaves owner usable"
+               (lambda () (g3c4-p2g2-terminal-ids-copy-internal clone)))
+             #t))
+         (copy (g3c4-p2g2-terminal-ids-copy-internal clone))
+         (entry source-entry)
+         (anchor (g3c4-p2g2-terminal-for-output entry))
+         (clone-shell (car clone))
+         (clone-record (g3c4-p2g2-terminal-ids-record clone-shell 'test)))
+    (check "capture authentic native counter and original reference"
+           (and counter-ready marked))
+    (check "detached read and clone failures were injected"
+           (and snapshot-probe clone-fault-probe copy-probe))
+    (check "terminal shell original and independently live"
+           (and (vector? output) (= (vector-length output) 1)
+                (eq? (vector-ref (g3c4-registry-find output 'test) 1)
+                     'terminal-output)
+                (null? (vector-ref g3c4-p2g2-protected-records 0))
+                (null? (vector-ref g3c4-p2g2-prefix-input-anchors 0))))
+    (check "authentic logical count and cache"
+           (and (= count expected-count)
+                (= (vector-ref snapshot 3) (+ 2 count))
+                (= (bytevector-length copy) (* 8 count))
+                (= (g3c4-p2g2-terminal-word copy 0)
+                   (vector-ref snapshot 0))
+                (or (= count 1)
+                    (= (g3c4-p2g2-terminal-word copy 8)
+                       (vector-ref snapshot 1)))))
+    (check "actual P3/T4 cache equals independent direct prefix"
+           (= (composer-full-prefix
+                native first second (vector-ref snapshot 0)
+                (vector-ref snapshot 1) count) 0))
+    (if (= count 2)
+        (check "independent P3 prefix logits and K/V reference"
+               (= (composer-reference) 0)))
+    (if (= count 2)
+        (check "emit actual second-logit and RNG oracle row"
+               (= (composer-second-oracle native (vector-ref snapshot 1)) 0)))
+    (reject "foreign terminal shell rejected"
+      (lambda () (g3c4-p2g2-terminal-snapshot-internal
+                   (vector 'g3c4-output-private))))
+    (let ((original-shell (vector-ref entry 0)))
+      (vector-set! entry 0 (vector 'equal-shape-forgery))
+      (reject "paired terminal entry substitution rejected"
+        (lambda () (g3c4-p2g2-terminal-snapshot-internal output)))
+      (vector-set! entry 0 original-shell))
+    (let ((original-text (vector-ref entry 8)))
+      (vector-set! entry 8 (make-bytevector count 0))
+      (reject "equal-length terminal text substitution rejected"
+        (lambda () (g3c4-p2g2-terminal-snapshot-internal output)))
+      (vector-set! entry 8 original-text))
+    (check "held source I1 lease"
+           (= (composer-source-lease (vector-ref entry 3) 1) 0))
+    (reject "held source I1 prevents terminal release"
+      (lambda () (g3c4-p2g2-terminal-release-internal! output)))
+    (check "terminal remains live after lease rejection"
+           (eq? (vector-ref anchor 0) 'live))
+    (check "source lease release and retry"
+           (= (composer-source-lease (vector-ref entry 3) 0) 0))
+    (check "held clone I1 lease"
+           (= (composer-clone-lease (vector-ref clone-record 2) 1) 0))
+    (let* ((other-clone
+             (g3c4-p2g2-terminal-ids-clone-internal output))
+           (other-record
+             (g3c4-p2g2-terminal-ids-record (car other-clone) 'test)))
+      (check "foreign live clone cannot end held clone I1 lease"
+             (= (composer-clone-lease (vector-ref other-record 2) 0) -1))
+      (reject "held clone still rejects release after foreign end"
+        (lambda () (g3c4-p2g2-terminal-ids-release-internal! clone)))
+      (check "independent foreign clone releases"
+             (g3c4-p2g2-terminal-ids-release-internal! other-clone)))
+    (reject "held clone I1 prevents clone release"
+      (lambda () (g3c4-p2g2-terminal-ids-release-internal! clone)))
+    (check "clone remains live after lease rejection"
+           (eq? (vector-ref clone-record 1) 'live))
+    (check "clone lease release and retry"
+           (= (composer-clone-lease (vector-ref clone-record 2) 0) 0))
+    (let ((original-copy (vector-ref clone-record 4)))
+      (vector-set! clone-record 4 (make-bytevector (* 8 count) 0))
+      (reject "equal-length clone readback substitution rejected"
+        (lambda () (g3c4-p2g2-terminal-ids-copy-internal clone)))
+      (vector-set! clone-record 4 original-copy))
+    (check "source terminal release"
+           (g3c4-p2g2-terminal-release-internal! output))
+    (check "detached native I1 survives source release"
+           (let ((later (g3c4-p2g2-terminal-ids-copy-internal clone)))
+             (and (= (bytevector-length later) (* 8 count))
+                  (= (g3c4-p2g2-terminal-word later 0)
+                     (vector-ref snapshot 0)))))
+    (let ((original-anchor (vector-ref anchor 14)))
+      (vector-set! anchor 14 #f)
+      (reject "dead terminal original anchor substitution rejected"
+        (lambda () (g3c4-p2g2-terminal-release-internal! output)))
+      (vector-set! anchor 14 original-anchor))
+    (check "same-owner terminal release idempotent"
+           (g3c4-p2g2-terminal-release-internal! output))
+    (reject "released terminal cannot snapshot"
+      (lambda () (g3c4-p2g2-terminal-snapshot-internal output)))
+    (reject "released terminal cannot issue another clone"
+      (lambda () (g3c4-p2g2-terminal-ids-clone-internal output)))
+    (check "typed clone release and idempotence"
+           (and (g3c4-p2g2-terminal-ids-release-internal! clone)
+                (g3c4-p2g2-terminal-ids-release-internal! clone)))
+    (let* ((clone-anchor
+             (g3c4-p2g2-terminal-ids-anchor clone-record 'test))
+           (original-copy (vector-ref clone-anchor 4)))
+      (vector-set! clone-anchor 4 (make-bytevector (* 8 count) 0))
+      (reject "dead clone original readback substitution rejected"
+        (lambda () (g3c4-p2g2-terminal-ids-release-internal! clone)))
+      (vector-set! clone-anchor 4 original-copy))
+    (reject "released clone cannot copy"
+      (lambda () (g3c4-p2g2-terminal-ids-copy-internal clone)))
+    (check "generator closes after terminal"
+           (g3c4-generator-close-internal! generator))
+    (display "ESH_TERMINAL ")
+    (display (if (eq? sampling 'greedy) "greedy" "categorical"))
+    (display " ") (display count)
+    (display " ") (display (vector-ref snapshot 0))
+    (display " ") (display (vector-ref snapshot 1))
+    (display " ") (display (vector-ref snapshot 3))
+    (newline)
+    snapshot))
+
+(define first-a (case-run prompt-a 0 255 'greedy 7 #f 2 0))
+(case-run prompt-a 0 255 'greedy 7 (vector-ref first-a 0) 1 0)
+(define first-b (case-run prompt-b 7 11 'categorical 1729 #f 2 0))
+(case-run prompt-b 7 11 'categorical 1729 (vector-ref first-b 0) 1 0)
+(check "one sampled second token differs from its first token"
+       (or (not (= (vector-ref first-a 0) (vector-ref first-a 1)))
+           (not (= (vector-ref first-b 0) (vector-ref first-b 1)))))
+(if (not (= (vector-ref first-a 0) (vector-ref first-a 1)))
+    (case-run prompt-a 0 255 'greedy 7 (vector-ref first-a 1) 2 0)
+    (case-run prompt-b 7 11 'categorical 1729
+              (vector-ref first-b 1) 2 0))
+(case-run prompt-a 0 255 'categorical-singleton 7 #f 2 0)
+(case-run prompt-a 0 255 'categorical 7 #f 2 1)
+(case-run prompt-a 0 255 'categorical 7 #f 2 2)
+
+(let* ((generator
+         (g3c4-generator-create-internal
+           model tokenizer (config 'categorical 7 #f)))
+       (native (vector-ref
+                 (g3c4-generator-entry-call-ready generator 'test) 3))
+       ;; Released terminals retain dead history for authenticated idempotence.
+       (entry-terminals (vector-ref g3c4-p2g2-terminal-anchors 0))
+       (entry-originals (vector-ref g3c4-p2g2-terminal-originals 0))
+       (entry-protected (vector-ref g3c4-p2g2-protected-records 0))
+       (entry-prefixes (vector-ref g3c4-p2g2-prefix-input-anchors 0)))
+  (check "arm genuine exhausted native Philox counter"
+         (= (composer-counter native 3) 0))
+  (check "capture exhausted-entry owner and RNG"
+         (= (composer-mark native 0 255) 0))
+  (reject "exhausted first draw aborts without terminal publication"
+    (lambda () (g3c4-p2g2-terminal-generate-internal generator prompt-a)))
+  (check "exhaustion reached real first sampler after P2"
+         (= (composer-exhausted) 1))
+  (check "exhausted draw publishes no new terminal history"
+         (and (eq? (vector-ref g3c4-p2g2-terminal-anchors 0) entry-terminals)
+              (eq? (vector-ref g3c4-p2g2-terminal-originals 0) entry-originals)))
+  (check "exhausted first draw restores full P2/cache/RNG"
+         (= (composer-after-abort native 2) 0))
+  (check "exhausted draw restores protected and prefix ledger identities"
+         (and (eq? (vector-ref g3c4-p2g2-protected-records 0) entry-protected)
+              (eq? (vector-ref g3c4-p2g2-prefix-input-anchors 0) entry-prefixes)))
+  (check "exhausted generator closes" (g3c4-generator-close-internal! generator)))
+
+(define (fault-case mode cache-length)
+  (let* ((generator
+           (g3c4-generator-create-internal
+             model tokenizer (config 'greedy 7 #f)))
+         (native (vector-ref
+                   (g3c4-generator-entry-call-ready generator 'test) 3))
+         (entry-terminals (vector-ref g3c4-p2g2-terminal-anchors 0))
+         (entry-originals (vector-ref g3c4-p2g2-terminal-originals 0))
+         (entry-protected (vector-ref g3c4-p2g2-protected-records 0))
+         (entry-prefixes (vector-ref g3c4-p2g2-prefix-input-anchors 0)))
+    (check "capture independent rollback reference"
+           (= (composer-mark native 0 255) 0))
+    (check "arm one native pre-tail rejection"
+           (= (composer-terminal-fault mode) 0))
+    (reject "native rejection aborts same call without publication"
+      (lambda () (g3c4-p2g2-terminal-generate-internal
+                   generator prompt-a)))
+    (check "native rejection publishes no new terminal history"
+           (and (eq? (vector-ref g3c4-p2g2-terminal-anchors 0) entry-terminals)
+                (eq? (vector-ref g3c4-p2g2-terminal-originals 0) entry-originals)))
+    (check "P2/P3 cache and original/first RNG survive abort"
+           (= (composer-after-abort native cache-length) 0))
+    (check "native rejection restores protected and prefix ledger identities"
+           (and (eq? (vector-ref g3c4-p2g2-protected-records 0) entry-protected)
+                (eq? (vector-ref g3c4-p2g2-prefix-input-anchors 0) entry-prefixes)))
+    (check "generator closes after rollback"
+           (g3c4-generator-close-internal! generator))))
+(fault-case 1 0)
+(fault-case 2 3)
+(fault-case 3 3)
+(check "calibrate exact pinned runtime allocation emergency"
+       (guard (caught (#t (= (composer-emergency-capture) 1)))
+         (composer-emergency-raise 5) #f))
+(check "different runtime emergency is not condition 5"
+       (guard (caught (#t (= (composer-emergency-exact) 0)))
+         (composer-emergency-raise 4) #f))
+(define (no-pending-terminal?)
+  (let loop ((remaining (vector-ref g3c4-p2g2-terminal-anchors 0)))
+    (if (null? remaining) #t
+        (and (not (eq? (vector-ref (car remaining) 0) 'pending))
+             (loop (cdr remaining))))))
+(define (allocation-sweep kind)
+  (let loop ((index 0))
+    (if (> index 96) (exit 2))
+    (let* ((generator
+             (g3c4-generator-create-internal
+               model tokenizer (config 'greedy 7 #f)))
+           (native (vector-ref
+                     (g3c4-generator-entry-call-ready generator 'test) 3))
+           (entry-records (vector-ref g3c4-p2g2-protected-records 0))
+           (entry-anchors (vector-ref g3c4-p2g2-protected-anchors 0))
+           (entry-prefixes (vector-ref g3c4-p2g2-prefix-input-anchors 0))
+           (entry-terminals (vector-ref g3c4-p2g2-terminal-anchors 0))
+           (entry-originals (vector-ref g3c4-p2g2-terminal-originals 0))
+           (caught #f) (caught-condition5 #f) (output #f))
+      (check "capture allocation-cut original native owner"
+             (= (composer-mark native 0 255) 0))
+      (guard (condition (#t
+                          (set! caught-condition5
+                                (= (composer-emergency-exact) 1))
+                          (set! caught condition)))
+        (composer-allocation-arm kind index)
+        (set! output (g3c4-p2g2-terminal-generate-internal
+                       generator prompt-a)))
+      (if (= (composer-allocation-consumed) 1)
+          (begin
+            (check "injected constructor cut raises exact runtime condition 5"
+                   (and caught caught-condition5))
+            (check "allocation cut leaves no live call or pending owner"
+                   (and (not (vector-ref m3-call-state 0))
+                        (eq? (vector-ref g3c4-p2g2-protected-records 0)
+                             entry-records)
+                        (eq? (vector-ref g3c4-p2g2-protected-anchors 0)
+                             entry-anchors)
+                        (eq? (vector-ref g3c4-p2g2-prefix-input-anchors 0)
+                             entry-prefixes)
+                        (eq? (vector-ref g3c4-p2g2-terminal-anchors 0)
+                             entry-terminals)
+                        (eq? (vector-ref g3c4-p2g2-terminal-originals 0)
+                             entry-originals)
+                        (no-pending-terminal?)))
+            (check "allocation cut retains exact P0/P2/P3 cache and RNG"
+                   (= (composer-after-abort-any native) 0))
+            (composer-allocation-disarm)
+            (check "generator closes after constructor rollback"
+                   (g3c4-generator-close-internal! generator))
+            (loop (+ index 1)))
+          (begin
+            (check "exhausted constructor cuts reach terminal success"
+                   (and (not caught) output))
+            (composer-allocation-disarm)
+            (check "successful sweep output and generator release"
+                   (and (g3c4-p2g2-terminal-release-internal! output)
+                        (g3c4-generator-close-internal! generator)))
+            (check "constructor sweep exercises at least one cut"
+                   (> index 0)))))))
+(allocation-sweep 1)
+(allocation-sweep 2)
+(allocation-sweep 3)
+(check "owned P2 inputs release after terminal cases"
+       (and (generation-tensor-release-internal! prompt-a)
+            (generation-tensor-release-internal! prompt-b)))
+(display "G3-C4 P2/G2 Eshkol terminal PASS: checks=")
+(display checks)
+(newline)

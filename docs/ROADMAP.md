@@ -2690,9 +2690,21 @@ publication, public G2 and continuation remain pending.
   [accepted same-call ownership contract](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md)
   specifies one original pending output entry, a surviving terminal anchor,
   authentic T1/EOS/second-token composition, and a preflighted no-failure close
-  after native commit. Native terminal integration and logical I1 clone code
-  are prerequisites; Eshkol implementation and compiled same-call proof remain
-  pending. No public G2 or continuation acceptance is claimed.
+  after native commit. The native terminal commit/snapshot and logical I1
+  clone/copy/release APIs are present on this main tree. The private Eshkol
+  composer is source-staged on `codex/g3-p2g2-terminal-composer-main-union`;
+  independent review and a pinned normal/repeat/sanitizer, fault-overlay and
+  predecessor gate remain pending. No public G2 or continuation acceptance is
+  claimed. Earlier failed composer gates remain retained: held-source lease
+  retry in `g3c4-p2g2-eshkol-terminal-composer-cf5a20d5-fe9-f31-20261002-prepared-b/SHA256SUMS-FAILED`,
+  dead-history assertion in `g3c4-p2g2-eshkol-terminal-composer-3a76086-fe9-f31-20261003-prepared-c/SHA256SUMS-FAILED`,
+  allocation rollback in `g3c4-p2g2-eshkol-terminal-composer-cf225dc-fe9-f31-20261003-prepared-d/SHA256SUMS-FAILED`,
+  constructor emergency in `g3c4-p2g2-eshkol-terminal-composer-dbf66f8-fe9-f31-20261003-prepared-e/SHA256SUMS-FAILED`,
+  and feature-off admission in
+  `g3c4-p2g2-eshkol-terminal-composer-4e07c9f-fe9-f31-20261003-prepared-f/`.
+  The active pre-tail abort path still fail-stops if a genuine native I1/A2
+  lease rejects abort; in-region release/retry coverage is unresolved and
+  remains a contract acceptance blocker.
 
 ## Wave 4 — practical pretraining and performance
 

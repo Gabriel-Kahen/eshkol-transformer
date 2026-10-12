@@ -2,6 +2,7 @@
 """Fast structural checks for the accepted G3-C4 Step 4a context/cache leaf."""
 
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -22,26 +23,60 @@ def ordered(text, fragments, label):
 
 
 def without_conditional_feature(text, macro):
-    """Remove source regions compiled only when a later feature is enabled."""
+    """Project exact feature-off arms; retain unknown expressions for scanning."""
     kept = []
     depth = 0
+    baseline = False
     for line in text.splitlines(keepends=True):
-        directive = line.lstrip()
-        opens = (directive.startswith("#if ") or
-                 directive.startswith("#ifdef ") or
-                 directive.startswith("#ifndef "))
+        directive = line.strip()
+        opens = bool(re.match(r"#(?:if|ifdef|ifndef)\b", directive))
         if depth:
             if opens:
                 depth += 1
+            elif directive == "#else" and depth == 1:
+                baseline = not baseline
+                continue
+            elif directive.startswith("#elif") and depth == 1:
+                raise ValueError(f"unsupported later-feature #elif: {macro}")
             elif directive.startswith("#endif"):
                 depth -= 1
+                if depth == 0:
+                    baseline = False
+                    continue
+            if baseline:
+                kept.append(line)
             continue
-        if opens and macro in directive:
+        enabled = (f"#ifdef {macro}", f"#if defined({macro})")
+        disabled = (f"#ifndef {macro}", f"#if !defined({macro})")
+        if directive in enabled or directive in disabled:
             depth = 1
+            baseline = directive in disabled
             continue
+        # Compound or unknown expressions remain visible to the forbidden
+        # surface scan; they cannot authorize hiding their bodies.
         kept.append(line)
     require(depth == 0, f"unterminated conditional feature block: {macro}")
     return "".join(kept)
+
+
+def step4_context_surface(block):
+    for macro in (
+        "ET_G3C4_ACTIVE_CALL_PRIVATE",
+        "ET_G3C4_GENERATOR_PRIVATE",
+        "ET_G3C4_P2_G2_TERMINAL_PRIVATE",
+        "ET_G3C4_P2_G2_TERMINAL_IDS_CLONE_PRIVATE",
+    ):
+        block = without_conditional_feature(block, macro)
+    return block
+
+
+def check_deferred_surface(block):
+    for forbidden in (
+        "et_g3c4_model_pins", "generator_seed", "generator_rng",
+        "policy", "sampler", "forward", "owner->active =",
+    ):
+        require(forbidden not in block,
+                f"Step 4a reaches deferred surface: {forbidden}")
 
 
 def check():
@@ -59,10 +94,7 @@ def check():
     require(source.count("#ifdef ET_G3C4_CONTEXT_PRIVATE") == 1,
             "context implementation feature block changed")
     block = source[source.index("#ifdef ET_G3C4_CONTEXT_PRIVATE"):]
-    step4_block = without_conditional_feature(
-        block, "ET_G3C4_ACTIVE_CALL_PRIVATE")
-    step4_block = without_conditional_feature(
-        step4_block, "ET_G3C4_GENERATOR_PRIVATE")
+    step4_block = step4_context_surface(block)
     require(source.index("#ifdef ET_G3C4_CONTEXT_PRIVATE") >
             source.index("et_g3c4_private_model_owner_abort_v1"),
             "context block no longer follows accepted owner implementation")
@@ -77,12 +109,7 @@ def check():
         "registry_next", "magic", "kind", "state", "busy", "owner", "cache",
     ]:
         require(field in block, f"context record omits {field}")
-    for forbidden in [
-        "et_g3c4_model_pins", "generator_seed", "generator_rng",
-        "policy", "sampler", "forward", "owner->active =",
-    ]:
-        require(forbidden not in step4_block,
-                f"Step 4a reaches deferred surface: {forbidden}")
+    check_deferred_surface(step4_block)
 
     ordered(block, [
         "owner = et_g3c4_admit_owner(candidate, 0)",
