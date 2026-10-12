@@ -873,6 +873,9 @@ and SHA checks; synthetic cross-process exclusive-marker fault/concurrency
 checks do not authorize a build or prove power-loss durability. The marker
 primitive is not a protected production launcher; final named-ancestor
 revalidation and protected review/nonce custody remain open.
+Inventory and candidate publication now reject preexisting files/symlinks
+through checked no-replace writes in a `0700` evidence directory; the earlier
+sealed evidence remains untouched and a new candidate is sealed separately.
 Real build, verifier, release, cross-UID and N1/M1 gates remain HOLD.
 The exact `5d642a2` fe9/f31 numerical gate built the normal and mutant
 packages but failed before runtime at sanitized export isolation: the ASan

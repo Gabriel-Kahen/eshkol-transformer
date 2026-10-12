@@ -25,7 +25,12 @@ canonical external inventory has SHA-256
 `0d2f2150d13d33cc098609af39a15022b631a0dfbe33d378704a536d4ff5b764`.
 
 The canonical external input **candidate** has SHA-256
-`e8c8d4987315bbfd71edd55a2d91ca1b2360bb4256aadd36b6703ab5a5952a41`.
+`92012f2f1a6c6f1fb0e6224da37bd71dbc6d73476650ec7b7efc03205de3b3ad`
+in the new `e3-n1-openssl-source-prep-20261012-b/` evidence directory. The
+earlier directory remains untouched. Inventory and candidate outputs are
+published only into a pinned owner-only `0700` directory using nofollow
+`O_EXCL` creation, full write, file sync, exact readback and parent sync.
+Preexisting files or symlinks cause HOLD without replacement.
 It binds accepted base `39f3b41`/tree `eb3d877`, the source/signature/certificate
 bytes and verification, inventory, and exact `toolchain/eshkol.lock` bytes. The
 source, signature and certificate are copied into a `0700` private snapshot

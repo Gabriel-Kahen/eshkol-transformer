@@ -70,6 +70,64 @@ def file_entry(path, role):
             "size": info.st_size, "sha256": file_hash(path)}
 
 
+def private_evidence_directory(parent):
+    parent = Path(parent)
+    if not parent.is_absolute():
+        raise Hold("output-path")
+    current = Path(parent.anchor)
+    for part in (None, *parent.parts[1:]):
+        if part is not None:
+            current /= part
+        info = os.lstat(current)
+        if not stat.S_ISDIR(info.st_mode):
+            raise Hold("output-ancestor-kind")
+    pinned = os.lstat(parent)
+    if stat.S_IMODE(pinned.st_mode) != 0o700 or pinned.st_uid != os.geteuid():
+        raise Hold("output-directory-custody")
+    return pinned
+
+
+def publish_new(path, data):
+    """No-replace, durable write in one pinned private evidence directory."""
+    path = Path(path)
+    if not path.is_absolute() or path.name in ("", ".", ".."):
+        raise Hold("output-path")
+    parent = path.parent
+    pinned = private_evidence_directory(parent)
+    parent_fd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        if not os.path.samestat(pinned, os.fstat(parent_fd)):
+            raise Hold("output-directory-drift")
+        try:
+            fd = os.open(path.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
+                         0o600, dir_fd=parent_fd)
+        except FileExistsError as exc:
+            raise Hold("output-preexisting") from exc
+        try:
+            view = memoryview(data)
+            while view:
+                written = os.write(fd, view)
+                if written <= 0:
+                    raise Hold("output-short-write")
+                view = view[written:]
+            os.fsync(fd)
+            created = os.fstat(fd)
+        finally:
+            os.close(fd)
+        reader = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC,
+                         dir_fd=parent_fd)
+        try:
+            if not os.path.samestat(created, os.fstat(reader)) or os.read(reader, len(data) + 1) != data:
+                raise Hold("output-readback")
+        finally:
+            os.close(reader)
+        os.fsync(parent_fd)
+        if not os.path.samestat(pinned, os.lstat(parent)):
+            raise Hold("output-directory-drift")
+    finally:
+        os.close(parent_fd)
+
+
 def private_snapshot(source_path, directory, expected_hash=None):
     """Copy once into a 0700 evidence directory; verify source and copy identities."""
     source_path = Path(source_path)
@@ -288,7 +346,8 @@ def verify_signature(archive, signature, certificate, gpg="gpg"):
 def observed_source(archive, signature, certificate, inventory_path, *, gpg="/usr/bin/gpg",
                     after_verify=None):
     archive, signature, certificate = map(Path, (archive, signature, certificate))
-    snapshot_dir = Path(inventory_path).parent / "source-snapshot"
+    private_evidence_directory(Path(inventory_path).absolute().parent)
+    snapshot_dir = Path(inventory_path).absolute().parent / "source-snapshot"
     archive = private_snapshot(archive, snapshot_dir, SOURCE_SHA256)
     signature = private_snapshot(signature, snapshot_dir)
     certificate = private_snapshot(certificate, snapshot_dir)
@@ -303,7 +362,7 @@ def observed_source(archive, signature, certificate, inventory_path, *, gpg="/us
             (archive, "source-archive"), (signature, "detached-signature"),
             (certificate, "trusted-certificate"))]:
         raise Hold("source-changed-during-verification")
-    Path(inventory_path).write_bytes(inventory)
+    publish_new(Path(inventory_path).absolute(), inventory)
     return {"archive": {"url": ARCHIVE_URL, **before[0]},
             "signature": {"url": SIGNATURE_URL, **before[1]},
             "certificate": {"url": CERTIFICATE_URL, **before[2]},
@@ -488,9 +547,11 @@ def main():
     parser.add_argument("--inventory", required=True)
     parser.add_argument("--candidate", required=True)
     args = parser.parse_args()
+    if Path(args.inventory).absolute().parent != Path(args.candidate).absolute().parent:
+        raise Hold("output-directory-mismatch")
     source = observed_source(args.archive, args.signature, args.certificate, args.inventory)
     output = canonical(candidate(source, Path(__file__).resolve().parents[1] / "toolchain/eshkol.lock"))
-    Path(args.candidate).write_bytes(output)
+    publish_new(Path(args.candidate).absolute(), output)
     print(sha256(output), args.candidate)
     print("HOLD: supported image/tools/headers/paths/argv/env and ROOT review absent")
 

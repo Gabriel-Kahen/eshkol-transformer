@@ -115,6 +115,27 @@ class PrebuildTests(unittest.TestCase):
                     mod.observed_source(archive, signature, certificate, root / "inventory.json",
                                         after_verify=swap)
 
+    def test_no_replace_evidence_output(self):
+        with tempfile.TemporaryDirectory() as temp:
+            private = Path(temp) / "evidence"
+            private.mkdir(mode=0o700)
+            output = private / "inventory.json"
+            output.write_bytes(b"sealed-old")
+            with self.assertRaisesRegex(mod.Hold, "output-preexisting"):
+                mod.publish_new(output, b"new")
+            self.assertEqual(output.read_bytes(), b"sealed-old")
+            target = Path(temp) / "unrelated"
+            target.write_bytes(b"untouched")
+            link = private / "candidate.json"
+            link.symlink_to(target)
+            with self.assertRaisesRegex(mod.Hold, "output-preexisting"):
+                mod.publish_new(link, b"new")
+            self.assertEqual(target.read_bytes(), b"untouched")
+            fresh = private / "fresh.json"
+            mod.publish_new(fresh, b"canonical\n")
+            self.assertEqual(fresh.read_bytes(), b"canonical\n")
+            self.assertEqual(fresh.stat().st_mode & 0o777, 0o600)
+
     def test_prepared_pin_replay_and_marker_fail_closed(self):
         digest = "a" * 64
         nonce = "b" * 64
