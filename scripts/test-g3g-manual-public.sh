@@ -80,7 +80,7 @@ if nm -u --format=posix "${g3g_evidence}/g3c4-feature-off.o" | \
   die "C4 owner feature-off path requires exact-pair authority"
 fi
 if nm -g --defined-only "${g3g_evidence}/g3c4-feature-off.o" | \
-    grep -E 'et_g3c4_private_(input_from_t1_p2|p2g1_(preflight|run)|result_(tensor|rng)_create|output_device_state)_v1'; then
+    grep -E 'et_g3c4_private_(input_from_t1_p2|p2g1_(preflight|run)|p2g2_(first|second|terminal|prompt|prefix)|result_(tensor|rng)_create|result_tensor_(create|inspect)_rank1|output_device_state)_v1'; then
   die "C4 owner feature-off path exposed a gated public P2/G1 dependency"
 fi
 g3g_compile() {
@@ -96,7 +96,7 @@ g3g_compile() {
     "${g3g_runner}" --strict-types --no-stdlib \
     -I "${g3g_artifact}/facades" "$@"
 }
-for g3g_source in compile_api public_runtime; do
+for g3g_source in compile_api public_runtime public_g2_runtime; do
   g3g_compile --compile-only --emit-depfile "${g3g_evidence}/${g3g_source}.d" \
     "${PROJECT_ROOT}/tests/g3g_manual/${g3g_source}.esk" \
     -o "${g3g_evidence}/${g3g_source}.o" \
@@ -131,9 +131,25 @@ for g3g_mode in normal repeat; do
   grep -Fx 'G3G-MANUAL-PUBLIC-PASS' "${g3g_evidence}/${g3g_mode}.stdout" >/dev/null
 done
 cmp "${g3g_evidence}/normal.stdout" "${g3g_evidence}/repeat.stdout"
+g3g_compile -O 0 -L "${g3g_artifact}" --lib eshkol_transformer_g3g_manual \
+  "${PROJECT_ROOT}/tests/g3g_manual/public_g2_runtime.esk" \
+  -o "${g3g_evidence}/public-g2-runtime" \
+  >"${g3g_evidence}/public-g2.compile.stdout" \
+  2>"${g3g_evidence}/public-g2.compile.stderr"
+for g3g_mode in normal repeat; do
+  ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 180s \
+    "${g3g_evidence}/public-g2-runtime" \
+    >"${g3g_evidence}/g2-${g3g_mode}.stdout" \
+    2>"${g3g_evidence}/g2-${g3g_mode}.stderr"
+  test ! -s "${g3g_evidence}/g2-${g3g_mode}.stderr"
+  grep -Fx 'G3G-MANUAL-PUBLIC-G2-PASS' \
+    "${g3g_evidence}/g2-${g3g_mode}.stdout" >/dev/null
+done
+cmp "${g3g_evidence}/g2-normal.stdout" "${g3g_evidence}/g2-repeat.stdout"
 if git -C "${PROJECT_ROOT}" rev-parse --is-inside-work-tree \
     >/dev/null 2>&1; then
   git -C "${PROJECT_ROOT}" diff --check
 fi
 cat "${g3g_evidence}/static.stdout"
 cat "${g3g_evidence}/normal.stdout"
+cat "${g3g_evidence}/g2-normal.stdout"

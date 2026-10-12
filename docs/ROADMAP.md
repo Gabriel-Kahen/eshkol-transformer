@@ -2718,6 +2718,13 @@ publication, public G2 and continuation remain pending.
   publication seam. Focused normal/sanitizer and feature-off source tests
   pass. This is not compiled Eshkol facade validation or public G2 admission;
   private terminal acceptance and package-closure gates remain open.
+  A source-composed `diagnostic-c4-p2g2` candidate now branches the diagnostic
+  manual aggregate to the private same-call terminal, verifies the detached
+  terminal snapshot and logical clone, and publishes independent rank-one
+  IDs/length/cache and RNG/text results. Its focused Eshkol acceptance fixture
+  is uncompiled; private terminal compiled proof, public facade normal/repeat/
+  sanitizer runs, predecessor parity and installed-package closure remain
+  required before admission. The C2/G0 aggregate remains separate.
 
 ## Wave 4 — practical pretraining and performance
 

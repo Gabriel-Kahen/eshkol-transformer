@@ -1,13 +1,16 @@
 # Public C4 P2/G2 generation facade contract
 
-Status: **source-only proposal, not an approved API contract or admitted public
-route**. Source basis is `c7e6ff3c8a3d860af6df88219f41b68743e9f070` /
-tree `865f40584938a93bcf8c9bbd9049ebd648eb5cd1`. The private same-call
-terminal source is a candidate; its current-main compiled, repeat, sanitizer,
-emitted-tail and predecessor gates remain open. This contract does not authorize
-installed dispatch or imply G3-R SAVE/continuation support.
+Status: **source-composed candidate, not an admitted public route**. Source
+basis is private terminal `c7e6ff3c8a3d860af6df88219f41b68743e9f070`,
+dependency map `f4f3086ab63cef51758bff9ce690a0fab184c2f5`, and rank-one
+owner `a7626257762815c003d902b439de07ae871a4d78`. The diagnostic manual
+aggregate now composes the explicit `diagnostic-c4-p2g2` branch and detached
+result adapter. The private current-main compiled, repeat, sanitizer,
+emitted-tail and predecessor gates remain open; the compiled facade and
+installed-package closure gates have not run. This candidate does not imply
+G3-R SAVE/continuation support.
 
-## Existing symbols and missing bridge
+## Existing symbols and source bridge
 
 The public names and arities already exist in `lib/transformer/generation.esk`:
 `generator-create(model, tokenizer, config)`, `generator-generate!(generator,
@@ -16,18 +19,18 @@ and generator release operations. The installed diagnostic manual aggregate
 `g3g_manual_package_root.esk` loads
 `g3g_manual_public_extension.esk`,
 `g3c4_public_generation_dispatch_extension.esk` and
-`g3c4_public_output_adapter_extension.esk`; its public C4 route admits only
-P2/G1, budget one and EOS disabled. The separate older C2/G0 aggregate
-`g3g_g0_package_root.esk` has no C4 route. Neither loads the private
-P2/G2 terminal candidate. The C4 public result constructor
+`g3c4_public_output_adapter_extension.esk`; the new candidate also loads the
+private P2/G2 terminal and rank-one result adapter in that same aggregate.
+Its P2/G1 route remains budget one and EOS disabled. The separate older C2/G0
+aggregate `g3g_g0_package_root.esk` has no C4 route. The original C4 public result constructor
 `et_g3c4_private_result_tensor_create_v1(kind, value)` creates only scalar
 `i64[1]`; IDs, lengths and cache lengths are fixed to ID 0..255, 1 and 3.
 The authentic public C4 model and owned P2 input constructors are also
 manual-package-specific: `diagnostic-c4-model-create-seeded` is in
 `native/g3g_manual_facades/transformer/diagnostic_transport.esk`, and
 `generation-c4-input-create` is in
-`native/g3g_manual_facades/transformer/generation.esk`. A G2 public route
-must compose those exact constructors in the same installed aggregate; the
+`native/g3g_manual_facades/transformer/generation.esk`. The G2 public source
+composes those exact constructors in the same diagnostic manual aggregate; the
 ordinary `lib/transformer/generation.esk` and older C2/G0 root cannot
 provide a public C4 P2 input.
 
@@ -91,15 +94,13 @@ terminal output release and generator close. Releasing one result leaves
 other results and the output unchanged; a second exact-owner release is
 idempotent. A caller mutation of returned text cannot change later reads.
 
-The private kind-9 clone may be used as an authenticated source during an
+The private kind-9 clone is used as an authenticated source during an
 accessor, followed by checked copy and release on both success and every
 recoverable failure. No failure may leave a live unpublished clone or partial
 public owner. It must not be returned as
-the public IDs owner or cast to one. A reviewed native public length-2 I1
-constructor/adapter and scalar result constructors for values 2 and 4 are
-therefore prerequisites. Their implementation must prove exact kind, shape,
-storage, lease, error, and release semantics; the current scalar constructor
-does not meet this contract. Snapshot and copy must complete before source
+the public IDs owner or cast to one. The reviewed rank-one constructor supplies
+exact `[1]`/`[2]` I1 IDs and scalar length/cache results for values 2 and 4;
+the prior scalar constructor remains P2/G1-only. Snapshot and copy must complete before source
 release; the public result must survive both terminal and private clone
 release. No accessor may manufacture a public result by relabeling a C2
 owner or publishing the capacity-two native buffer on G1.

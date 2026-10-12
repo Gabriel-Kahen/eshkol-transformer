@@ -1,0 +1,132 @@
+(require transformer.config)
+(require transformer.tokenizer)
+(require transformer.diagnostic_transport)
+(require transformer.generation)
+(require transformer.error_public)
+
+(define (check label good)
+  (if good #t
+      (begin (display "G3-G public G2 FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label category operation thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category)
+                      (eq? (transformer-error-operation caught) operation)
+                      (eq? (transformer-error-cause caught) #f))))
+      (thunk) #f)))
+(define config
+  (config-resolve
+    (config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define tokenizer (tokenizer-byte config))
+(define model (diagnostic-c4-model-create-seeded 1729))
+(define encoded (tokenizer-encode tokenizer (bytevector 0 255)))
+(define input (generation-c4-input-create encoded))
+(define (policy mode seed eos)
+  (list ':profile 'diagnostic-c4-p2g2 ':sampling mode
+        ':temperature-bits #x3f800000
+        ':top-k (if (eq? mode 'greedy) 256 17)
+        ':top-p-bits (if (eq? mode 'greedy) #x3f800000 #x3f000000)
+        ':max-new-tokens 2 ':eos eos ':seed seed))
+
+(define generator (generator-create model tokenizer (policy 'greedy 41 #f)))
+(define output (generator-generate! generator input))
+(define text-a (car (generation-output-text output)))
+(define text-b (car (generation-output-text output)))
+(check "G2 text has two bytes" (= (bytevector-length text-a) 2))
+(check "independent text copies" (not (eq? text-a text-b)))
+(define ids-a (car (generation-output-ids output)))
+(define ids-b (car (generation-output-ids output)))
+(define lengths (generation-output-lengths output))
+(define cache (generation-output-cache-lengths output))
+(define rng (generation-output-rng output))
+(check "independent IDs and scalar owners"
+       (and (not (eq? ids-a ids-b))
+            (not (eq? ids-a lengths)) (not (eq? lengths cache))))
+(define first (bytevector-u8-ref text-b 0))
+(bytevector-u8-set! text-a 0 99)
+(check "text mutation leaves source unchanged"
+       (= (bytevector-u8-ref (car (generation-output-text output)) 0)
+          first))
+(check "output release and generator close"
+       (and (generation-output-release! output)
+            (generator-close! generator)))
+(reject "dead terminal read" 'invalid-state 'generation-output-text
+  (lambda () (generation-output-text output)))
+(check "detached owners survive source release"
+       (and (generation-tensor-release! ids-a)
+            (generation-tensor-release! ids-b)
+            (generation-tensor-release! lengths)
+            (generation-tensor-release! cache)
+            (generation-rng-release! rng)))
+(check "exact release is idempotent"
+       (and (generation-output-release! output)
+            (generation-rng-release! rng)))
+
+(define eos-generator
+  (generator-create model tokenizer (policy 'greedy 41 first)))
+(define eos-output (generator-generate! eos-generator input))
+(define eos-text (car (generation-output-text eos-output)))
+(check "first EOS exposes only one byte"
+       (and (= (bytevector-length eos-text) 1)
+            (= (bytevector-u8-ref eos-text 0) first)))
+(define eos-id (car (generation-output-ids eos-output)))
+(define eos-length (generation-output-lengths eos-output))
+(define eos-cache (generation-output-cache-lengths eos-output))
+(check "first EOS result owners"
+       (and (generation-output-release! eos-output)
+            (generator-close! eos-generator)
+            (generation-tensor-release! eos-id)
+            (generation-tensor-release! eos-length)
+            (generation-tensor-release! eos-cache)))
+
+(define categorical-generator
+  (generator-create model tokenizer (policy 'categorical 97 #f)))
+(define categorical-output
+  (generator-generate! categorical-generator input))
+(check "categorical G2 has two bytes"
+       (= (bytevector-length
+            (car (generation-output-text categorical-output))) 2))
+(define categorical-rng (generation-output-rng categorical-output))
+(check "categorical detached RNG and source release"
+       (and (generation-output-release! categorical-output)
+            (generator-close! categorical-generator)
+            (generation-rng-release! categorical-rng)))
+
+(reject "foreign output" 'invalid-argument 'generation-output-ids
+  (lambda () (generation-output-ids (vector 'foreign-output))))
+(reject "model wrong output kind" 'invalid-argument 'generation-output-text
+  (lambda () (generation-output-text model)))
+(reject "P1 C4 input" 'shape-mismatch 'generation-c4-input-create
+  (lambda ()
+    (generation-c4-input-create
+      (tokenizer-encode tokenizer (bytevector 7)))))
+(reject "P3 C4 input" 'shape-mismatch 'generation-c4-input-create
+  (lambda ()
+    (generation-c4-input-create
+      (tokenizer-encode tokenizer (bytevector 7 8 9)))))
+
+(reject "G2 budget one rejected" 'invalid-argument 'generator-create
+  (lambda ()
+    (generator-create model tokenizer
+      (list ':profile 'diagnostic-c4-p2g2 ':sampling 'greedy
+            ':temperature-bits #x3f800000 ':top-k 256
+            ':top-p-bits #x3f800000 ':max-new-tokens 1
+            ':eos #f ':seed 41))))
+(reject "G1 budget two rejected" 'invalid-argument 'generator-create
+  (lambda ()
+    (generator-create model tokenizer
+      (list ':profile 'diagnostic-c4-p2g1 ':sampling 'greedy
+            ':temperature-bits #x3f800000 ':top-k 256
+            ':top-p-bits #x3f800000 ':max-new-tokens 2
+            ':eos #f ':seed 41))))
+(reject "malformed config precedes foreign tokenizer" 'invalid-argument
+  'generator-create
+  (lambda ()
+    (generator-create model (vector 'foreign-tokenizer)
+      (list ':profile 'diagnostic-c4-p2g2 ':sampling 'greedy))))
+(check "owned input release" (generation-tensor-release! input))
+(display "G3G-MANUAL-PUBLIC-G2-PASS\n")

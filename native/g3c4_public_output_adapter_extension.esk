@@ -156,17 +156,23 @@
         (vector-set! entry 10 #f)
         answer))))
 (define (g3c4-public-output-access shell kind operation)
-  (let ((copy (g3c4-public-output-copy shell operation)))
-    (guard (caught
-             (#t (if (and (vector? copy) (bytevector? (vector-ref copy 0)))
-                     (g3c4-p2g1-zero-bytes! (vector-ref copy 0) 1))
-                 (raise caught)))
-      (if (eq? kind 'text)
-          (m3-call operation
-            (g3c4-p2g1-output-entry-live shell operation)
-            (g3c4-public-copy-valid copy operation)
-            (list (vector-ref copy 0)))
-          (g3c4-public-result-publish shell copy kind operation)))))
+  (let ((member (g3c4-public-transport-member shell)))
+    (if (and member (eq? (vector-ref member 1) 'terminal-output))
+        (g3c4-public-g2-output-access shell kind operation)
+        (let ((copy (g3c4-public-output-copy shell operation)))
+          (guard (caught
+                   (#t (if (and (vector? copy)
+                                (bytevector? (vector-ref copy 0)))
+                           (g3c4-p2g1-zero-bytes!
+                             (vector-ref copy 0) 1))
+                       (raise caught)))
+            (if (eq? kind 'text)
+                (m3-call operation
+                  (g3c4-p2g1-output-entry-live shell operation)
+                  (g3c4-public-copy-valid copy operation)
+                  (list (vector-ref copy 0)))
+                (g3c4-public-result-publish
+                  shell copy kind operation)))))))
 (define (g3c4-public-result-release! shell expected operation)
   (m3-call operation
     (let* ((entry (g3c4-registry-find shell operation))
@@ -209,10 +215,13 @@
 (define (g3c4-public-generation-output-release! output)
   (g3c4-public-boundary 'generation-output-release!
     (let ((entry (g3c4-public-transport-member output)))
-      (if (not (and entry (eq? (vector-ref entry 1) 'output)))
+      (if (not (and entry (or (eq? (vector-ref entry 1) 'output)
+                              (eq? (vector-ref entry 1) 'terminal-output))))
           (g3c4-fail 'invalid-argument 'generation-output-release!
                      "C4 identity is not an output"))
-      (g3c4-p2g1-output-release-internal! output))))
+      (if (eq? (vector-ref entry 1) 'terminal-output)
+          (g3c4-p2g2-terminal-release-internal! output)
+          (g3c4-p2g1-output-release-internal! output)))))
 (define (g3c4-public-generation-tensor-release! tensor)
   (g3c4-public-boundary 'generation-tensor-release!
     (let ((entry (g3c4-public-transport-member tensor)))

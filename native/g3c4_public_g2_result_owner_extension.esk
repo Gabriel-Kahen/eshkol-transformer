@@ -6,16 +6,28 @@
         :real et_g3c4_private_result_tensor_inspect_rank1_v1)
 (vector-set! g3c4-public-rank1-inspector 0
              g3c4-native-rank1-result-inspect)
+;;; The terminal adapter installs this only in the same owning aggregate.
+;;; Keeping the hook empty preserves the standalone reviewed owner seam.
+(define g3c4-public-g2-source-checker (vector #f))
+(define (g3c4-public-g2-check-source source operation)
+  (if source
+      (let ((checker (vector-ref g3c4-public-g2-source-checker 0)))
+        (if (not (procedure? checker))
+            (g3c4-fail 'invalid-state operation
+                       "C4 terminal source checker is unavailable"))
+        (checker source operation))))
 
 ;;; Values must already be authenticated by the future output accessor. This
 ;;; seam owns only a detached result and never accepts a terminal/clone owner.
-(define (g3c4-public-g2-result-publish kind logical-count value0 value1 operation)
+(define (g3c4-public-g2-result-publish-checked
+          kind logical-count value0 value1 operation source)
   (m3-call operation
     (if (not (and (or (eq? kind 'ids) (eq? kind 'lengths)
                       (eq? kind 'cache-lengths))
                   (m3t-exact-i64? logical-count)
                   (m3t-exact-i64? value0) (m3t-exact-i64? value1)))
         (g3c4-fail 'invalid-argument operation "invalid C4 result values"))
+    (g3c4-public-g2-check-source source operation)
     (let* ((protected (vector logical-count value0 value1))
            (shell (vector 'g3c4-result-private))
            (ledger (vector #f))
@@ -50,6 +62,13 @@
             native (cond ((eq? kind 'ids) 5) ((eq? kind 'lengths) 6) (else 7))
             logical-count value0 value1)
           operation)
+        (g3c4-public-g2-check-source source operation)
         (vector-set! entry 2 'live)
         (vector-set! entry 10 #f)
         answer))))
+
+;;; Preserve the reviewed detached-result constructor for its prerequisite
+;;; tests. The public terminal adapter uses the checked variant above.
+(define (g3c4-public-g2-result-publish kind logical-count value0 value1 operation)
+  (g3c4-public-g2-result-publish-checked
+    kind logical-count value0 value1 operation #f))

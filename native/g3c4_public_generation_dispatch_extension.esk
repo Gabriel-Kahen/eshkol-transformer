@@ -3,10 +3,18 @@
 ;;; both C4 registries. A published result RNG remains independently owned;
 ;;; the native constructor copies its words into the new generator.
 
+(define g3c4-public-g2-generators (vector '()))
+(define (g3c4-public-g2-generator? shell)
+  (let find ((tail (vector-ref g3c4-public-g2-generators 0)))
+    (cond ((null? tail) #f)
+          ((eq? (vector-ref (car tail) 0) shell) #t)
+          (else (find (cdr tail))))))
+
 (define (g3c4-public-profile-config config operation)
   (let ((slots (make-vector 16 #f))
         (has-rng #f)
-        (rng-shell #f))
+        (rng-shell #f)
+        (profile #f))
     (let walk ((tail config) (index 0))
       (if (= index 16)
           (if (not (null? tail))
@@ -17,7 +25,8 @@
                          "C4 config must be a proper flat list")
               (let ((key (car tail)) (value (car (cdr tail))))
                 (if (and (eq? key ':profile)
-                         (not (eq? value 'diagnostic-c4-p2g1)))
+                         (not (or (eq? value 'diagnostic-c4-p2g1)
+                                  (eq? value 'diagnostic-c4-p2g2))))
                     (g3c4-fail 'invalid-argument operation
                                "C4 public profile is invalid"))
                 (vector-set! slots index
@@ -28,6 +37,7 @@
                         (else value)))
                 (if (eq? key ':rng)
                     (begin (set! has-rng #t) (set! rng-shell value)))
+                (if (eq? key ':profile) (set! profile value))
                 (walk (cdr (cdr tail)) (+ index 2))))))
     (vector
       (list (vector-ref slots 0) (vector-ref slots 1)
@@ -38,7 +48,7 @@
             (vector-ref slots 10) (vector-ref slots 11)
             (vector-ref slots 12) (vector-ref slots 13)
             (vector-ref slots 14) (vector-ref slots 15))
-      has-rng rng-shell)))
+      has-rng rng-shell profile)))
 
 (define (g3c4-public-result-rng-entry rng operation)
   (let ((record (g3c4-public-result-record rng)))
@@ -63,25 +73,37 @@
            (policy (vector-ref normalized 0))
            (has-rng (vector-ref parsed 1))
            (rng-shell (vector-ref parsed 2))
+           (profile (vector-ref parsed 3))
            (rng-entry (if has-rng
                           (g3c4-public-result-rng-entry
                             rng-shell 'generator-create)
                           #f))
            (source (if has-rng
                        (vector policy 'rng rng-entry)
-                       normalized)))
-      (if (not (and (= (vector-ref policy 5) 1)
-                    (eq? (vector-ref policy 6) #f)))
+                       normalized))
+           (g2-record (vector #f))
+           (g2-next (cons g2-record
+                          (vector-ref g3c4-public-g2-generators 0))))
+      (if (not (if (eq? profile 'diagnostic-c4-p2g2)
+                   (= (vector-ref policy 5) 2)
+                   (and (= (vector-ref policy 5) 1)
+                        (eq? (vector-ref policy 6) #f))))
           (g3c4-fail 'invalid-argument 'generator-create
-                     "C4 public profile requires one token and no EOS"))
-      (g3c4-generator-create-with-source
-        model tokenizer 'generator-create
-        (lambda () source)
-        (lambda (entry)
-          (or (not has-rng)
-              (eq? entry
-                   (g3c4-public-result-rng-entry
-                     rng-shell 'generator-create))))))))
+                     "C4 public profile has an invalid budget or EOS"))
+      (let ((created
+              (g3c4-generator-create-with-source
+                model tokenizer 'generator-create
+                (lambda () source)
+                (lambda (entry)
+                  (or (not has-rng)
+                      (eq? entry
+                           (g3c4-public-result-rng-entry
+                             rng-shell 'generator-create)))))))
+        (if (eq? profile 'diagnostic-c4-p2g2)
+            (begin
+              (vector-set! g2-record 0 created)
+              (vector-set! g3c4-public-g2-generators 0 g2-next)))
+        created))))
 
 (define (g3c4-public-generator-generate generator input)
   (g3c4-public-boundary 'generator-generate!
@@ -96,16 +118,29 @@
                (g3c4-generator-entry-call-ready
                  generator 'generator-generate!))
              (input-entry
-               (g3c4-input-entry-live input 'generator-generate!)))
-        (g3c4-native-check
-          (g3c4-native-p2g1-preflight
-            (vector-ref generator-entry 3) (vector-ref input-entry 3))
-          'generator-generate!))
-      ;; Installed archives do not execute the pending extension's top-level
-      ;; initializer. Activate its existing private P2/G1 gate only on this
-      ;; exact C4 route before the output envelope checks P+G=3.
-      (vector-set! g3t-p2g1-pending-gate 0 #t)
-      (g3c4-p2g1-generate-internal generator input))))
+               (g3c4-input-entry-live input 'generator-generate!))
+             (budget (vector-ref (vector-ref generator-entry 7) 5)))
+        (if (= budget 2)
+            (begin
+              (if (not (g3c4-public-g2-generator? generator))
+                  (g3c4-fail 'invalid-argument 'generator-generate!
+                             "C4 generator lacks public G2 provenance"))
+              (g3c4-native-check
+                (g3c4-p2g2-native-prefill-preflight
+                  (vector-ref generator-entry 3)
+                  (vector-ref input-entry 3) 2)
+                'generator-generate!)
+              (g3c4-p2g2-terminal-generate-internal generator input))
+            (begin
+              (g3c4-native-check
+                (g3c4-native-p2g1-preflight
+                  (vector-ref generator-entry 3)
+                  (vector-ref input-entry 3))
+                'generator-generate!)
+              ;; Installed archives do not execute the pending extension's
+              ;; top-level initializer; enable it for the exact G1 route.
+              (vector-set! g3t-p2g1-pending-gate 0 #t)
+              (g3c4-p2g1-generate-internal generator input)))))))
 
 (define (g3c4-public-generator-close generator)
   (g3c4-public-boundary 'generator-close!

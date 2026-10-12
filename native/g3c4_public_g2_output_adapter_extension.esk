@@ -1,0 +1,162 @@
+;;; Public terminal-output adapter. The private clone never escapes this file.
+;;; Load after the terminal coordinator and rank-one result owner.
+(vector-set! g3c4-public-g2-source-checker 0
+             g3c4-p2g2-terminal-entry-live)
+
+(define (g3c4-public-g2-copy-valid copy operation)
+  (if (not (and (vector? copy) (= (vector-length copy) 6)
+                (bytevector? (vector-ref copy 0))
+                (m3t-exact-i64? (vector-ref copy 1))
+                (m3t-exact-i64? (vector-ref copy 2))
+                (m3t-exact-i64? (vector-ref copy 3))
+                (m3t-exact-i64? (vector-ref copy 4))
+                (or (= (vector-ref copy 3) 1) (= (vector-ref copy 3) 2))
+                (= (vector-ref copy 4) (+ 2 (vector-ref copy 3)))
+                (= (bytevector-length (vector-ref copy 0))
+                   (vector-ref copy 3))
+                (<= 0 (vector-ref copy 1) 255)
+                (<= 0 (vector-ref copy 2) 255)
+                (or (= (vector-ref copy 3) 2) (= (vector-ref copy 2) 0))
+                (= (bytevector-u8-ref (vector-ref copy 0) 0)
+                   (vector-ref copy 1))
+                (or (= (vector-ref copy 3) 1)
+                    (= (bytevector-u8-ref (vector-ref copy 0) 1)
+                       (vector-ref copy 2)))
+                (g3c4-rng-snapshot? (vector-ref copy 5))))
+      (g3c4-fail 'invalid-state operation
+                 "C4 terminal detached copy is malformed"))
+  copy)
+
+(define (g3c4-public-g2-output-copy shell operation)
+  (let ((clone #f) (ids-copy #f) (text-copy #f))
+    (guard (caught
+             (#t
+               (if (bytevector? ids-copy)
+                   (g3c4-p2g2-zero-bytes!
+                     ids-copy (bytevector-length ids-copy)))
+               (if (bytevector? text-copy)
+                   (g3c4-p2g2-zero-bytes!
+                     text-copy (bytevector-length text-copy)))
+               (if clone
+                   (g3c4-p2g2-terminal-ids-release-internal! clone))
+               (raise caught)))
+      ;; Each private operation is a sibling m3-call scope. There is no
+      ;; enclosing m3-call around the terminal snapshot or clone.
+      (let* ((snapshot (g3c4-p2g2-terminal-snapshot-internal shell))
+             (source (g3c4-p2g2-terminal-entry-live shell operation))
+             (count (vector-ref snapshot 2))
+             (text-source (vector-ref source 8)))
+        (set! text-copy (make-bytevector count 0))
+        (set! clone (g3c4-p2g2-terminal-ids-clone-internal shell))
+        (set! ids-copy (g3c4-p2g2-terminal-ids-copy-internal clone))
+        (let ()
+          (if (not (and (bytevector? ids-copy)
+                        (= (bytevector-length ids-copy) (* 8 count))
+                        (= (g3c4-p2g2-terminal-word ids-copy 0)
+                           (vector-ref snapshot 0))
+                        (or (= count 1)
+                            (= (g3c4-p2g2-terminal-word ids-copy 8)
+                               (vector-ref snapshot 1)))
+                        (eq? source
+                             (g3c4-p2g2-terminal-entry-live shell operation))
+                        (eq? text-source (vector-ref source 8))
+                        (= (bytevector-length text-source) count)))
+              (g3c4-fail 'invalid-state operation
+                         "C4 terminal clone or text changed"))
+          (let copy ((index 0))
+            (if (< index count)
+                (begin
+                  (bytevector-u8-set! text-copy index
+                                      (bytevector-u8-ref text-source index))
+                  (copy (+ index 1)))))
+          (if (not (and (= (bytevector-u8-ref text-copy 0)
+                           (vector-ref snapshot 0))
+                        (or (= count 1)
+                            (= (bytevector-u8-ref text-copy 1)
+                               (vector-ref snapshot 1)))))
+              (g3c4-fail 'invalid-state operation
+                         "C4 terminal T1 bytes differ from IDs"))
+          (let ((result
+                  (g3c4-public-g2-copy-valid
+                    (vector text-copy (vector-ref snapshot 0)
+                            (vector-ref snapshot 1) count
+                            (vector-ref snapshot 3)
+                            (vector g3c4-rng-algorithm
+                                    (vector-ref snapshot 4)
+                                    (vector-ref snapshot 5)
+                                    (vector-ref snapshot 6)
+                                    (vector-ref snapshot 7)))
+                    operation)))
+            (g3c4-p2g2-terminal-ids-release-internal! clone)
+            (set! clone #f)
+            (g3c4-p2g2-zero-bytes! ids-copy (* 8 count))
+            result))))))
+
+(define (g3c4-public-g2-rng-publish source copy operation)
+  (m3-call operation
+    (let* ((checked (g3c4-public-g2-copy-valid copy operation))
+           (source-entry
+             (g3c4-p2g2-terminal-entry-live source operation))
+           (words (vector-ref checked 5))
+           (protected (vector g3c4-rng-algorithm
+                              (vector-ref words 1) (vector-ref words 2)
+                              (vector-ref words 3) (vector-ref words 4)))
+           (shell (vector 'g3c4-result-private))
+           (ledger (vector #f))
+           (entry (vector shell 'result-rng 'pending #f #f #f #f #f #f #f
+                          ledger g3c4-model-profile))
+           (record (vector entry #f 'result-rng protected shell))
+           (next (cons entry (vector-ref g3c4-registry 0)))
+           (record-next (cons record (vector-ref g3c4-public-result-records 0)))
+           (native '()))
+      (guard (caught
+               (#t
+                 (if (not (null? native))
+                     (if (not (= (g3c4-native-rng-release native) 0))
+                         (exit 134)))
+                 (g3c4-entry-dead! entry)
+                 (vector-set! record 1 #f)
+                 (raise caught)))
+        (vector-set! g3c4-registry 0 next)
+        (vector-set! g3c4-public-result-records 0 record-next)
+        (set! native
+          (g3c4-native-result-rng-create
+            (vector-ref words 1) (vector-ref words 2)
+            (vector-ref words 3) (vector-ref words 4)))
+        (if (null? native) (g3c4-native-fail operation))
+        (vector-set! ledger 0 native)
+        (vector-set! record 1 native)
+        (vector-set! entry 3 native)
+        (vector-set! entry 7 protected)
+        (if (not (eq? source-entry
+                      (g3c4-p2g2-terminal-entry-live source operation)))
+            (g3c4-fail 'invalid-state operation
+                       "C4 terminal source changed before RNG publication"))
+        (vector-set! entry 2 'live)
+        (vector-set! entry 10 #f)
+        shell))))
+
+(define (g3c4-public-g2-output-access shell kind operation)
+  (let* ((copy (g3c4-public-g2-output-copy shell operation))
+         (count (vector-ref copy 3)))
+    (guard (caught
+             (#t (g3c4-p2g2-zero-bytes! (vector-ref copy 0) count)
+                 (raise caught)))
+      (let ((answer
+              (cond ((eq? kind 'text) (list (vector-ref copy 0)))
+                    ((eq? kind 'ids)
+                     (g3c4-public-g2-result-publish-checked
+                       'ids count (vector-ref copy 1) (vector-ref copy 2)
+                       operation shell))
+                    ((eq? kind 'lengths)
+                     (g3c4-public-g2-result-publish-checked
+                       'lengths 1 count 0 operation shell))
+                    ((eq? kind 'cache-lengths)
+                     (g3c4-public-g2-result-publish-checked
+                       'cache-lengths 1 (vector-ref copy 4) 0
+                       operation shell))
+                    (else (g3c4-public-g2-rng-publish
+                            shell copy operation)))))
+        (if (not (eq? kind 'text))
+            (g3c4-p2g2-zero-bytes! (vector-ref copy 0) count))
+        answer))))
