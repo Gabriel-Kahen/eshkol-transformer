@@ -13,8 +13,9 @@ TR3 = (ROOT / "native/tr3_c_joint_restore_source_closure.txt").read_text().split
 D2_BASE = (ROOT / "native/tr3_c_d2_restore_source_closure.txt").read_text().splitlines()
 DEPENDENCY = re.compile(r'^\s*\((load|require)\s+(?:"([^"]+)"|([^\s)]+))\)',
                         re.MULTILINE)
-INCLUDE_DIRS = ("internal/p1/lib", "internal/c1/lib", "internal/t2/lib",
-                "internal/t1/lib", "internal/d2/lib", "src", "lib", "native")
+INCLUDE_DIRS = ("native", "internal/p1/lib", "internal/c1/lib",
+                "internal/t2/lib", "internal/t1/lib", "internal/d2/lib",
+                "src", "lib")
 
 
 def function(name):
