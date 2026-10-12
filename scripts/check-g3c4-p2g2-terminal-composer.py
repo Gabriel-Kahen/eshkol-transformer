@@ -156,6 +156,8 @@ assert "et_g3c4_p2g2_composer_test_lease_rejected_v1" in native_fixture
 assert "ET_I64_TENSOR_CODE_ACTIVE_BORROW" in native_fixture
 assert "ET_KERNEL_CODE_PROVIDER_REJECTED" in native_fixture
 assert "composer_lease_cache_snapshot" in native_fixture
+assert "composer_lease_pending_zero(pending, kind)" in native_fixture
+assert "composer_lease_i1, &view, &error" in native_fixture
 assert "composer_lease_calls != 2" in native_fixture
 assert "--wrap=et_g3c4_private_call_abort_v1" in runner
 assert "(overlay-lease-end" in overlay_generator

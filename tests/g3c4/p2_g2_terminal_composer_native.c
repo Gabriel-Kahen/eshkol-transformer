@@ -206,6 +206,20 @@ typedef struct composer_lease_cache_image {
 } composer_lease_cache_image;
 static composer_lease_cache_image composer_lease_image;
 
+static int composer_lease_pending_zero(
+    et_g3c4_output_internal *pending, int64_t kind) {
+  const et_kernel_tensor_view_v1 *view = NULL;
+  et_i64_tensor_error error;
+  if (kind == 2) return coordinator_pending_zero(pending);
+  if (kind != 1 || composer_lease_i1 == NULL ||
+      et_i64_tensor_borrow_view_v1(
+          composer_lease_i1, &view, &error) != 0) return 0;
+  return view != NULL && view->rank == 1u && view->shape != NULL &&
+         view->shape[0] == 2u && view->byte_length == 16u &&
+         view->data != NULL &&
+         memcmp(view->data, (const int64_t[2]){0, 0}, 16u) == 0;
+}
+
 static int composer_lease_cache_snapshot(
     et_a2_kv_cache_transaction *transaction,
     et_a2_kv_cache_transaction_view *held,
@@ -317,7 +331,8 @@ int64_t et_g3c4_p2g2_composer_test_lease_rejected_v1(
       et_g3c4_admit_active_call(context_candidate) != context ||
       et_g3c4_pending_output_lookup(context, &pending) != 0 ||
       pending != composer_lease_output || pending->ids != composer_lease_ids ||
-      pending->transport.state != 0u || !coordinator_pending_zero(pending) ||
+      pending->transport.state != 0u ||
+      !composer_lease_pending_zero(pending, kind) ||
       context->cache != composer_lease_cache ||
       context->token_frame_transaction != composer_lease_transaction ||
       context->token_frame_state != composer_lease_frame_state ||
