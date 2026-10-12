@@ -1685,6 +1685,18 @@ pair admission does not read or publish the companion file, authenticate live
 model/tokenizer identity, restore parameters, replay a generator, or discharge
 the remaining G3-R C2/SAVE and Wave 3 obligations.
 
+The private [G3-R file-pair admission source candidate](g3/G3_R_FILE_PAIR_ADMISSION_LEAF.md)
+composes that merged receipt/pair source with an exact 288-byte companion read.
+It checks record SHA and raw-V256 tokenizer controls against the same loaded
+C2 receipt, then publishes one live receipt and eight data-only fields through
+one checked nine-slot copy. The current-main union preserves the merged pair
+cleanup repair and uses guarded return handoffs plus heap cells for file-pair
+cleanup authority across the exception handler. Focused source checks and the
+native exact-reader test pass. Independent source/tests review found no
+remaining source-level blocker; compiled normal/repeat/sanitizer/fault/
+feature-off proof remains a separate admission gate. No public LOAD, model
+restore, replay or continuation is claimed.
+
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
 checks the authentic idle generator's four RNG words without allocation,
