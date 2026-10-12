@@ -837,6 +837,14 @@ whole-procedure RSS proof remain unimplemented. Its tests use no real OCI byte.
 The wrapper's public run gate is false and the distinct CLI capture pin remains
 absent; same-UID files have no protected
 custody or admission authority.
+The [strict supervisor feasibility review](e3/E3_N1_F32_STRICT_SUPERVISOR_BLOCKER.md)
+keeps both gates closed: cgroup v2 `memory.max` permits transient overrun and
+accounts more than RSS, while systemd/cgroup termination and uninterruptible
+kernel waits cannot prove completed stop at an exact 30-second wall deadline.
+These absolute guarantees are stronger than the frozen proposal's predeclared,
+unmeasured caps. An external observation and post-run proof for one completed
+attempt needs separate ROOT review. No supervisor source or real acquisition
+was added.
 The [local pin acquisition](e3/E3_N1_LOCAL_PIN_ACQUISITION.md) seals the small
 index/manifest/config bytes and host-only candidates; guest bytes remain absent.
 The [bounded gzip scanner](e3/E3_N1_GZIP_SCANNER.md) A source was held for a

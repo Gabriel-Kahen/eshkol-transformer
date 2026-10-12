@@ -79,3 +79,11 @@ request.
 Synthetic tests cover valid HOLD output, stdout/stderr overflow, timeout with partial
 output, nonzero child, malformed output, occupied destination, result seal
 failure, and child RSS excess. No Docker or heavy gate is involved.
+
+The subsequent [strict supervisor feasibility review](E3_N1_F32_STRICT_SUPERVISOR_BLOCKER.md)
+found no source-backed way to guarantee an instantaneous 256-MiB whole-procedure
+RSS ceiling and hard 30-second completion with the available cgroup, systemd,
+signal and timer semantics. Those guarantees are stronger than the frozen
+proposal's predeclared, unmeasured caps. A bounded external observation and
+post-run proof for one completed attempt needs separate ROOT review. Both
+public gates remain closed before any real read.
