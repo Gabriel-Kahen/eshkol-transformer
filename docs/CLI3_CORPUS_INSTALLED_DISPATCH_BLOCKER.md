@@ -2,7 +2,9 @@
 
 Status: source-only integration audit on `29d0db2`. The standalone D1 command
 in `cli/eshkol-transformer.esk` is not part of the installed production CLI3
-binary. No compiled or hosted gate has been run for this union.
+binary at that historical head. The later [public D1 link and dispatch
+candidate](CLI3_PUBLIC_D1_LINK_CONTRACT.md) addresses these source blockers;
+its compiled and hosted gates remain pending.
 
 ## Source boundary
 

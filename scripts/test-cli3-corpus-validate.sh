@@ -221,7 +221,7 @@ for source in src/eshkol_transformer/token_shard.esk \
 done
 cli3_public="${cli3_tmp}/public"
 mkdir -p "${cli3_public}/transformer" "${cli3_tmp}/cache"
-for module in error_consumer error_public; do
+for module in error_consumer error_public cli3_corpus_validate; do
   cp "${PROJECT_ROOT}/lib/transformer/${module}.esk" \
     "${cli3_public}/transformer/${module}.esk"
 done
@@ -287,6 +287,9 @@ cli3_compile() {
 cli3_step compile-command cli3_compile \
   "${PROJECT_ROOT}/cli/eshkol-transformer.esk" \
   "${cli3_tmp}/eshkol-transformer"
+grep -F "${cli3_public}/transformer/cli3_corpus_validate.esk" \
+  "${cli3_tmp}/eshkol-transformer.d" >/dev/null || \
+  die "standalone command did not import the shared public D1 handler"
 cli3_step compile-corpus-writer cli3_compile \
   "${PROJECT_ROOT}/tests/d1/corpus_tool.esk" \
   "${cli3_tmp}/corpus-tool"

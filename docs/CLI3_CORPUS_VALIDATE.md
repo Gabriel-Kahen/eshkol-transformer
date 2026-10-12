@@ -1,8 +1,9 @@
 # CLI3 corpus validate slice
 
-Status: source and command tests added; pinned-toolchain compilation and runtime
-verification remain pending. This is the D1-only part of CLI3, not acceptance of the
-full CLI3 workstream.
+Status: shared standalone/installed source and command tests added;
+pinned-toolchain compilation and runtime verification of this exact tree remain
+pending. This is the D1-only part of CLI3, not acceptance of the full CLI3
+workstream.
 
 ## Command contract
 
@@ -36,11 +37,15 @@ manifest versions have category `version-mismatch`, and unknown required feature
 have category `unsupported`. An unexpected non-transformer condition exits 70
 with empty stdout and one stderr line.
 
-The command calls only public `token-corpus-validate`, its summary accessors, and
-public error accessors. It requires the reviewed D1 archive. The D1-only staged
-facade in `scripts/test-cli3-corpus-validate.sh` is extracted from the same markers
-as `scripts/test-d1.sh`; no D2 wrapper or private D1 API is linked. The command is
-Eshkol-native. Python is used only for command-level tests and fixture mutation.
+The shared `transformer.cli3_corpus_validate` handler calls only public
+`token-corpus-validate`, its summary accessors, and public error accessors.
+The standalone command requires the reviewed D1 archive. Its D1-only staged
+facade in `scripts/test-cli3-corpus-validate.sh` is extracted from the same
+markers as `scripts/test-d1.sh`; no D2 wrapper or private D1 API is linked.
+The installed entry intercepts only `corpus validate` before existing CLI3
+dispatch and imports the shared handler beside its read-only staged D1 facade.
+The command is Eshkol-native. Python is used only for command-level tests and
+fixture mutation.
 
 Compiled gate, once the exact pinned toolchain is available:
 
@@ -70,6 +75,13 @@ symbols and evidence, and compiles from a staged public facade with depfile
 boundary checks. It covers a valid corpus, opaque newline fingerprint, missing
 manifest, corrupt shard, version and feature categories, all three exceeded
 limits, and invalid command arguments.
+
+The required `scripts/test-cli3-production-generate.sh` gate also runs
+`tests/cli3/test_installed_corpus_validate.py` against the installed CLI3 binary
+and a corpus built by that binary, then runs the existing CLI3 command suite.
+It covers exact plain output, bounded options, invalid and duplicate options,
+signed-64 overflow, missing/corrupt/version/feature corpus cases, policy limits,
+and old-command dispatch. This installed gate has not yet run on this tree.
 
 The lightweight `tests/cli3/test_gate_evidence.py` checks occupied-path rejection
 and retained metadata, logs, and status on toolchain failure. It rejects direct

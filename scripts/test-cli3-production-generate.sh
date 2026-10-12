@@ -37,6 +37,14 @@ mkdir "${scratch}/train"
   --tokenizer "${scratch}/byte.t1" --document "${scratch}/train.txt" \
   --output-directory "${scratch}/train" --shard-token-limit 4 \
   >"${evidence}/corpus.json"
+(cd "${PROJECT_ROOT}" && env \
+  CLI3_INSTALLED_BINARY="${scratch}/eshkol-transformer" \
+  CLI3_INSTALLED_CORPUS="${scratch}/train" \
+  CLI3_INSTALLED_CORPUS_JSON="${evidence}/corpus.json" \
+  PYTHONDONTWRITEBYTECODE=1 \
+  python3 -m unittest -v tests.cli3.test_installed_corpus_validate) \
+  >"${evidence}/installed-corpus-validate.stdout" \
+  2>"${evidence}/installed-corpus-validate.stderr"
 "${scratch}/eshkol-transformer" pretrain \
   --config "${scratch}/config.json" --tokenizer "${scratch}/byte.t1" \
   --train-corpus "${scratch}/train" --checkpoint "${scratch}/first.c2" \

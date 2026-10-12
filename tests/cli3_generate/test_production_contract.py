@@ -124,6 +124,27 @@ class ProductionGenerateContract(unittest.TestCase):
         self.assertEqual(positions, sorted(positions))
         self.assertIn('(if owned-trainer', production)
 
+    def test_installed_validate_uses_shared_public_handler(self):
+        standalone = (ROOT / 'cli/eshkol-transformer.esk').read_text()
+        self.assertEqual(standalone, (
+            ';;; Standalone public-D1 corpus validation entry.\n'
+            '(require transformer.cli3_corpus_validate)\n\n'
+            '(cli3-corpus-validate-command (cdr (command-line)))\n'))
+        handler = (ROOT / 'lib/transformer/cli3_corpus_validate.esk').read_text()
+        self.assertIn('(require transformer.data)', handler)
+        self.assertIn('(provide cli3-corpus-validate-command)', handler)
+        self.assertIn('(token-corpus-validate directory', handler)
+        self.assertNotIn('et-d1-private-', handler)
+        self.assertNotIn('et_e1b_public_d2_', handler)
+        entry = (ROOT / 'src/eshkol_transformer/cli.esk').read_text()
+        self.assertLess(entry.index('(cli3-corpus-validate-command arguments)'),
+                        entry.index('(cli3-dispatch (vector arguments) output)'))
+        self.assertIn('(require transformer.cli3_corpus_validate)', entry)
+        build = (ROOT / 'scripts/build-cli3.sh').read_text()
+        self.assertIn('"${public_dir}/transformer/cli3_corpus_validate.esk"', build)
+        production = (ROOT / 'scripts/test-cli3-production-generate.sh').read_text()
+        self.assertIn('tests.cli3.test_installed_corpus_validate', production)
+
 
 if __name__ == '__main__':
     unittest.main()

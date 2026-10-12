@@ -2,6 +2,7 @@
 
 ;;; The app imports only a checked read-only projection of the public D1 facade.
 (require transformer.data)
+(require transformer.cli3_corpus_validate)
 
 (extern void cli3-dispatch ptr ptr :real et_e1b_public_cli3_dispatch_v1)
 (extern i64 cli3-static-fallback
@@ -17,13 +18,21 @@
         ((= status 14) (exit 14))
         (else (exit 70))))
 
-(guard
- (raised (#t (cli3-exit (cli3-static-fallback))))
- (let ((output (vector #f)))
-   (cli3-dispatch (vector (cdr (command-line))) output)
-   (let* ((result (vector-ref output 0))
-          (status (vector-ref result 0))
-          (stderr-text (vector-ref result 2)))
-     (if (> (string-length stderr-text) 0)
-         (display stderr-text (current-error-port)))
-     (cli3-exit status))))
+(let ((arguments (cdr (command-line))))
+  (if (and (pair? arguments)
+           (string=? (car arguments) "corpus")
+           (pair? (cdr arguments))
+           (string=? (car (cdr arguments)) "validate"))
+      (begin
+        (cli3-corpus-validate-command arguments)
+        (exit 0))
+      (guard
+       (raised (#t (cli3-exit (cli3-static-fallback))))
+       (let ((output (vector #f)))
+         (cli3-dispatch (vector arguments) output)
+         (let* ((result (vector-ref output 0))
+                (status (vector-ref result 0))
+                (stderr-text (vector-ref result 2)))
+           (if (> (string-length stderr-text) 0)
+               (display stderr-text (current-error-port)))
+           (cli3-exit status))))))

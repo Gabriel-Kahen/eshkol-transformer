@@ -646,16 +646,17 @@ generation, and Wave 3 remains incomplete.
 The [D1 corpus validate command slice](CLI3_CORPUS_VALIDATE.md) is staged from
 `93ea6258` on this current-main source union. It adds a standalone Eshkol-native
 `corpus validate` executable and a retained-evidence gate with source,
-toolchain, and checkout pins. The installed production CLI3 root does not yet
-dispatch this command; the [installed-dispatch source audit](CLI3_CORPUS_INSTALLED_DISPATCH_BLOCKER.md)
-records the public D1 package and command-contract blocker. A
-[source-only public D1 link seam](CLI3_PUBLIC_D1_LINK_CONTRACT.md) stages the
-validator and six read-only summary accessors for the installed app; its exact
-compiled package, app import, old-command, and hosted gates remain pending.
-Source-only tests
-cover evidence-path and dirty checkout
-rejection. The exact composed head has not passed the compiled D1 and command
-gate; this does not establish full CLI3 acceptance. The required CLI3 suite's
+toolchain, and checkout pins. The [installed-dispatch source audit](CLI3_CORPUS_INSTALLED_DISPATCH_BLOCKER.md)
+identified the former public D1 package and command-contract blocker. A
+[source-only public D1 link and dispatch candidate](CLI3_PUBLIC_D1_LINK_CONTRACT.md)
+stages the validator, six read-only summary accessors, and one shared public
+command handler for the installed app. The installed entry intercepts only
+`corpus validate`; the required production-generate gate now checks its
+command contract and the existing commands. Exact-tree compiled package,
+installed runtime, and hosted gates remain pending. Source-only tests cover
+evidence-path and dirty checkout rejection. The exact composed head has not
+passed the compiled D1 and command gate; this does not establish full CLI3
+acceptance. The required CLI3 suite's
 production-generate and cross-command gates now retain evidence in separate
 directories so their identically named output files cannot overwrite each other.
 

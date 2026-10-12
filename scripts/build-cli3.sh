@@ -20,6 +20,8 @@ python3 "${PROJECT_ROOT}/scripts/stage-cli3-d1-readonly.py" \
   "${public_dir}/transformer/data.esk"
 cp "${PROJECT_ROOT}/lib/transformer/error_consumer.esk" \
   "${public_dir}/transformer/error_consumer.esk"
+cp "${PROJECT_ROOT}/lib/transformer/cli3_corpus_validate.esk" \
+  "${public_dir}/transformer/cli3_corpus_validate.esk"
 
 E1B_COMPILER_TIMEOUT_SECONDS="${CLI3_COMPILER_TIMEOUT_SECONDS:-900}" \
   /usr/bin/bash "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
@@ -60,6 +62,9 @@ grep -F "${public_dir}/transformer/data.esk" \
 grep -F "${public_dir}/transformer/error_consumer.esk" \
   "${temporary_dir}/eshkol-transformer.d" >/dev/null || \
   die "CLI3 app did not import the staged error facade"
+grep -F "${public_dir}/transformer/cli3_corpus_validate.esk" \
+  "${temporary_dir}/eshkol-transformer.d" >/dev/null || \
+  die "CLI3 app did not import the public D1 command handler"
 if grep -F "${PROJECT_ROOT}/lib/transformer/data.esk" \
     "${temporary_dir}/eshkol-transformer.d" >/dev/null; then
   die "CLI3 app imported the full D1/D2 facade"
@@ -73,6 +78,8 @@ fi
 
 mkdir -p "${artifact_dir}"
 cp "${public_dir}/transformer/data.esk" "${artifact_dir}/d1-readonly-data.esk"
+cp "${public_dir}/transformer/cli3_corpus_validate.esk" \
+  "${artifact_dir}/cli3-corpus-validate.esk"
 cp "${temporary_dir}/eshkol-transformer.d" "${artifact_dir}/eshkol-transformer.d"
 rm -rf -- "${artifact_dir}/cli3.o.evidence"
 mv "${temporary_dir}/cli3.o.evidence" "${artifact_dir}/cli3.o.evidence"
