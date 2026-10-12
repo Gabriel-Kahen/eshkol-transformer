@@ -647,9 +647,10 @@ The isolated CLI3 cross-command test script `scripts/test-cli3-cross-command-cha
 is prepared for a fresh production-root build. It creates one byte tokenizer,
 training and held-out D1 corpora, and a new fixed-profile C2 checkpoint, then
 inspects, evaluates, and generates from that same checkpoint in separate
-processes. It checks shared identities, unchanged checkpoint bytes, and
-mismatched-tokenizer and corrupt-checkpoint diagnostics. This test-only source
-has not run its compiled gate or changed the CLI3 command API.
+processes. It checks exact X1/T1/C2 identities, unchanged checkpoint bytes,
+fixed-profile and cross-config rejection, and corrupt-checkpoint diagnostics.
+This test-only source has not run its compiled gate or changed the CLI3
+command API.
 
 The test-only CLI3/G3-G checkpoint-to-generation prerequisite has passed its
 exact fe9/f31 supported linked/runtime gate at `ab479f5`/tree `1102384`.

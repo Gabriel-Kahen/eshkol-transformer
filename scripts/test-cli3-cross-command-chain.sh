@@ -57,6 +57,10 @@ import sys
 root = Path(sys.argv[1])
 (root / 'train.txt').write_bytes(bytes((3, 197, 41, 7, 11, 19)))
 (root / 'heldout.txt').write_bytes(bytes((20, 21, 22, 23, 24, 25)))
+config = (root / 'config.json').read_text()
+assert config.count('"run.seed":1729') == 1
+(root / 'other-config.json').write_text(
+    config.replace('"run.seed":1729', '"run.seed":1730'))
 PY
 
 run_ok tokenizer-create "${binary}" tokenizer byte \
@@ -97,7 +101,7 @@ run_ok generate "${binary}" generate \
   --prompt-hex 41 --sampling greedy --seed 1729
 cmp "${scratch}/first-before.c2" "${scratch}/first.c2"
 
-# A valid byte-BPE artifact with the same vocabulary size is not the C2's T1.
+# This valid 256-token BPE is rejected by the fixed byte-profile admission.
 run_ok other-tokenizer-create "${binary}" tokenizer train-bpe \
   --document "${scratch}/train.txt" --maximum-merges 0 \
   --minimum-frequency 2 --utf8-policy raw \
@@ -114,6 +118,24 @@ run_rejected generate-mismatched-tokenizer 11 unsupported \
   --tokenizer "${scratch}/other.t1" --train-corpus "${scratch}/train" \
   --checkpoint "${scratch}/first.c2" --prompt-hex 41 \
   --sampling greedy --seed 1729
+
+# The alternate config passes the fixed profile and differs only in run.seed.
+# Restore must reject its identity against the C2 produced above.
+run_rejected evaluate-config-identity 14 invalid-state \
+  "${binary}" evaluate --config "${scratch}/other-config.json" \
+  --tokenizer "${scratch}/byte.t1" --train-corpus "${scratch}/train" \
+  --validation-corpus "${scratch}/heldout" \
+  --checkpoint "${scratch}/first.c2"
+run_rejected generate-config-identity 14 invalid-state \
+  "${binary}" generate --config "${scratch}/other-config.json" \
+  --tokenizer "${scratch}/byte.t1" --train-corpus "${scratch}/train" \
+  --checkpoint "${scratch}/first.c2" --prompt-hex 41 \
+  --sampling greedy --seed 1729
+for name in evaluate-config-identity generate-config-identity; do
+  grep -F 'operation="trainer-load-state!" message="detached controls fail cross-state validation"' \
+    "${evidence}/${name}.stderr" >/dev/null || \
+    die "${name}: expected checkpoint/config cross-state diagnostic"
+done
 
 python3 - "${scratch}" <<'PY'
 from pathlib import Path
@@ -173,17 +195,30 @@ assert other['artifact'] == 'tokenizer' and other['family'] == 'byte-bpe'
 assert other['vocabulary_size'] == 256
 assert other['fingerprint'] != tokenizer['fingerprint']
 for corpus in (train, heldout):
+    assert set(corpus) == {'artifact', 'shard_count', 'shard_token_limit',
+                           'tokenizer_fingerprint', 'total_shard_bytes',
+                           'total_tokens', 'vocabulary_size'}
     assert corpus['artifact'] == 'token-corpus'
     assert corpus['tokenizer_fingerprint'] == tokenizer['fingerprint']
     assert corpus['vocabulary_size'] == tokenizer['vocabulary_size']
     assert corpus['total_tokens'] == 6
     assert corpus['shard_count'] == 2 and corpus['shard_token_limit'] == 4
+assert train['total_shard_bytes'] == heldout['total_shard_bytes'] > 0
 assert pretrain['artifact'] == checkpoint['artifact'] == 'checkpoint'
 assert pretrain['checkpoint'] == str(scratch / 'first.c2')
 assert pretrain['updates'] == 1 and pretrain['tokens'] == 4
+assert set(checkpoint) == {
+    'api_version', 'artifact', 'checksum_algorithm', 'config_fingerprint',
+    'config_schema_version', 'format_id', 'format_version', 'payload_bytes',
+    'required_features', 'tensor_count', 'tokenizer_fingerprint',
+}
 assert checkpoint['tokenizer_fingerprint'] == tokenizer['fingerprint']
-assert re.fullmatch(r'sha256:eshkol-config-json-v1:[0-9a-f]{64}',
-                    checkpoint['config_fingerprint'])
+# Independent X1 canonical-manifest SHA-256 oracle: exact input provenance,
+# default CPU/f32/KV heads/determinism, derived head size, and final LF.
+assert checkpoint['config_fingerprint'] == (
+    'sha256:eshkol-config-json-v1:'
+    '2c78042e68cc6bf3e328f68b5cce471e4b164df2ada4c6b8ca393dd286919449'
+)
 assert checkpoint['format_id'] == 'eshkol-training-state'
 assert checkpoint['format_version'] == [1, 0]
 assert checkpoint['config_schema_version'] == [1, 0]
