@@ -877,6 +877,9 @@ reaps/peaks, pipe EOF and an empty actor scope; other invocations may HOLD
 before placement. Same-UID setup and caller-owned namespace IDs cannot establish
 protected pre-read custody; no source is opened, no receipt or seal issued,
 and resource proof and both real-read gates remain HOLD.
+The [authority host gate](e3/E3_N1_AUTHORITY_HOST_GATE.md) identifies the
+missing real-UID privilege and finite launcher, protected v3 signing/stores,
+handoff and whole-attempt accounting; it deploys nothing and retains HOLD.
 The [local pin acquisition](e3/E3_N1_LOCAL_PIN_ACQUISITION.md) seals the small
 index/manifest/config bytes and host-only candidates; guest bytes remain absent.
 The [bounded gzip scanner](e3/E3_N1_GZIP_SCANNER.md) A source was held for a
