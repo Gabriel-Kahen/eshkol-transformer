@@ -342,7 +342,7 @@ def validate_p1_scratch(sources):
 # These effects are also independently moved outside protection by mutation tests.
 TARGETS = (
     ("state-dict-release-owned!", P1, "(vector-set! lifecycle 1 'released)", 1),
-    ("c2-training-state-compose-internal", None, "(c2-training-state-claim-p1! p1 owner-token)", 1),
+    ("c2-training-state-compose-internal", None, "(c2-training-state-claim-p1! p1 owner-token)", 2),
     ("c2-training-state-borrow-begin-internal", None, "(vector-set! state 7 borrow)", 1),
     ("c2-training-state-borrow-begin-internal", None,
      "(c2-training-state-activate-p1-borrow! (vector-ref state 1) active-owner-token active-access-token active-borrow operation)", 2),
@@ -405,11 +405,16 @@ def validate(sources):
              "(if (not (eq? (vector-ref release-outcome 0) 'started)) (raise caught))")
 
     compose = definition(sources, "c2-training-state-compose-internal")
-    guards = protected(compose, "(c2-training-state-claim-p1! p1 owner-token)", 1,
+    guards = protected(compose, "(c2-training-state-claim-p1! p1 owner-token)", 2,
                        "(c2-training-state-rollback-p1! p1 owner-token)")
-    consecutive(guards[-1], "(c2-training-state-claim-p1! p1 owner-token)",
-                "(vector-set! claim-progress 0 #t)", "(c2-training-state-claim-o2! o2 owner-token)")
-    contains(handler(guards[-1]), "(if (vector-ref claim-progress 0) (begin (c2-training-state-rollback-p1! p1 owner-token) (vector-set! claim-progress 0 #f)))")
+    consecutive(guards[-1],
+                "(if (not (eq? (c2-training-state-claim-p1! p1 owner-token) #t)) (exit 134))",
+                "(vector-set! claim-progress 0 #t)",
+                "(if (not (eq? (c2-training-state-claim-o2! o2 owner-token) #t)) (exit 134))")
+    contains(handler(guards[-1]),
+             "(if (vector-ref claim-progress 0) (begin (if (not (eq? (c2-training-state-rollback-p1! p1 owner-token) #t)) (exit 134)) (vector-set! claim-progress 0 #f)))")
+    contains(handler(guards[0]), "(exit 134)")
+    contains(compose, "(if (not (vector-ref claim-outcome 0)) (raise (vector-ref claim-outcome 1)))")
     borrow = definition(sources, "c2-training-state-borrow-begin-internal")
     call = "(c2-training-state-activate-p1-borrow! (vector-ref state 1) active-owner-token active-access-token active-borrow operation)"
     guards = unique(borrow, call)[1]

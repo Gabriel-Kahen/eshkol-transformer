@@ -1697,6 +1697,14 @@ negatives for lexical cleanup regressions. The corrected C2 compiled gate is
 still pending/HOLD, and the union has not passed a supported compiled aggregate
 gate; each leaf retains its separate runtime and ownership admission gates.
 
+A separate source-only C2 compose rollback repair now installs both claim and
+rollback-defect handlers before P1 claims. An O2 claim failure with a certain
+P1 rollback rethrows the exact original value, including `#f`; a rollback
+throw or non-`#t` result fail-stops with status 134 while the request output
+remains unpublished. Exact `#t` claim results are required before transfer.
+Focused parsed-source and handler-order tests pass. This does not establish a
+compiled C2 gate or admission of the future pair coordinator.
+
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
 checks the authentic idle generator's four RNG words without allocation,
