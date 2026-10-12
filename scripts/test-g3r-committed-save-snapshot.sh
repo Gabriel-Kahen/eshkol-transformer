@@ -8,8 +8,8 @@ cc -std=c11 -O0 -Wall -Wextra -Werror -Wno-misleading-indentation \
   -I "$root/include" -I "$root/native" -I "$root/src" \
   -I "$root/src/eshkol_transformer" \
   -c "$root/src/eshkol_transformer/g3t_transport.c" -o "$out/off.o"
-if nm -g --defined-only "$out/off.o" | grep -Fq \
-    et_g3t_private_committed_save_copy_v1; then
+if nm -g --defined-only "$out/off.o" | grep -Eq \
+    'et_g3t_private_committed_save_(copy|hold_begin|hold_copy|hold_end)_v1'; then
   echo "G3-R save snapshot escaped feature-off object" >&2
   exit 1
 fi

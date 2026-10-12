@@ -111,6 +111,12 @@
 #error "G3-R save copy requires history and A2/I2 storage queries"
 #endif
 #endif
+#ifdef ET_G3R_COMMITTED_SAVE_HOLD_PRIVATE
+#if !defined(ET_G3R_COMMITTED_SAVE_SNAPSHOT_PRIVATE) || \
+    !defined(ET_I64_TENSOR_STORAGE_QUERY_PRIVATE)
+#error "G3-R held save requires snapshot and I64 storage query"
+#endif
+#endif
 #ifdef ET_G3T_INPUT_FROM_T1_PRIVATE
 #ifndef ET_G3T_PREFILL_SAMPLE_PRIVATE
 #error "G3-T T1 input requires private input transport"
@@ -259,7 +265,25 @@ typedef struct g3t_context {
   unsigned char binding_values[4736];
   int binding_ready;
   int final_committed;
+#ifdef ET_G3R_COMMITTED_SAVE_HOLD_PRIVATE
+  struct g3t_save_hold *save_hold;
+#endif
 } g3t_context;
+#ifdef ET_G3R_COMMITTED_SAVE_HOLD_PRIVATE
+typedef struct g3t_save_hold {
+  struct g3t_save_hold *next;
+  int64_t token;
+  g3t_context *context;
+  owner *model;
+  et_a2_kv_cache *cache;
+  et_g3t_model_pins_internal pins;
+  et_a2_kv_cache_read_borrow *cache_borrow;
+  et_g3r_committed_save_capture_v1 baseline;
+  int baseline_ready;
+} g3t_save_hold;
+static g3t_save_hold *g3t_save_holds;
+static int64_t g3t_save_next_token = 1;
+#endif
 static int64_t g3t_bad(int64_t category, int64_t code);
 #ifdef ET_G3R_COMMITTED_HISTORY_PRIVATE
 static int g3t_history_valid(const g3t_context *c) {
@@ -496,7 +520,15 @@ static g3t_record *g3t_admit_record(void *candidate, int kind, int allow_dead) {
   return r;
 }
 static g3t_context *g3t_admit(void *candidate, int allow_dead) {
-  return (g3t_context *)g3t_admit_record(candidate, G3T_GENERATOR, allow_dead);
+  g3t_context *c = (g3t_context *)g3t_admit_record(
+      candidate, G3T_GENERATOR, allow_dead);
+#ifdef ET_G3R_COMMITTED_SAVE_HOLD_PRIVATE
+  if (c && c->save_hold) {
+    g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    return NULL;
+  }
+#endif
+  return c;
 }
 #ifdef ET_G3T_PREFILL_SAMPLE_PRIVATE
 static g3t_context *g3t_active(void *candidate) {
@@ -840,6 +872,210 @@ int64_t et_g3t_private_committed_save_copy_v1(
     return status;
   }
   et_g3t_model_pins_end_internal(&pins);
+  return status;
+}
+#endif
+#ifdef ET_G3R_COMMITTED_SAVE_HOLD_PRIVATE
+_Static_assert(sizeof(et_g3r_committed_save_capture_v1) == 136u + 4736u,
+               "G3-R held capture layout changed");
+
+static g3t_save_hold *g3t_save_admit(int64_t candidate) {
+  for (g3t_save_hold *hold = g3t_save_holds; hold; hold = hold->next)
+    if (hold->token == candidate) return hold;
+  return NULL;
+}
+
+static void g3t_save_fill(g3t_context *c,
+                          et_g3r_committed_save_capture_v1 *capture) {
+  memset(capture, 0, sizeof(*capture));
+  memcpy(capture->snapshot.policy, c->policy, sizeof(c->policy));
+  memcpy(capture->snapshot.rng, c->rng, sizeof(c->rng));
+  memcpy(capture->snapshot.ids, c->history_ids, sizeof(c->history_ids));
+  capture->snapshot.length = c->history_length;
+  capture->snapshot.prompt_length = c->history_prompt_length;
+  capture->snapshot.generated_count = c->history_generated_count;
+  capture->snapshot.manual_count = c->history_manual_count;
+  capture->snapshot.generated_eos_terminal = c->history_generated_eos_terminal;
+  memcpy(capture->model_bits, c->binding_values,
+         sizeof(capture->model_bits));
+}
+
+/* The cache and all model parameters remain borrowed during every check. */
+static int64_t g3t_save_check(g3t_save_hold *hold) {
+  g3t_context *c = hold->context;
+  if (g3t_admit_record(c, G3T_GENERATOR, 0) != &c->h ||
+      c->save_hold != hold || !c->h.busy || c->call_kind ||
+      c->model != hold->model || hold->model->active != c ||
+      c->pins.held_mask || !hold->cache_borrow ||
+      c->cache != hold->cache ||
+      c->frame.active || c->frame.kind || c->frame.transaction ||
+      c->frame.candidate_cache || c->final_committed || c->pending_output
+#ifdef ET_G3T_MANUAL_LOGITS_PRIVATE
+      || c->pending_logits
+#endif
+      ) return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+  if (g3t_model(hold->model) != hold->model)
+    return g3t_error_category;
+  if (!g3t_policy_valid(c->policy[0], c->policy[1], c->policy[2],
+                        c->policy[3], c->policy[4], c->policy[5]) ||
+      c->rng[0] != 1 || c->rng[1] < 0 || !g3t_history_valid(c) ||
+      c->history_pending_g1 || c->history_length < 1 ||
+      c->history_length > 2 || !c->binding_ready)
+    return g3t_bad(G3T_STATE, G3T_INVARIANT);
+  et_f32_tensor_error f32_error;
+  if (et_g3t_model_pins_check_internal(&hold->pins, &f32_error))
+    return g3t_f32_failure(&f32_error);
+  size_t offset = 0;
+  for (size_t i = 0; i < 14; ++i) {
+    const et_kernel_tensor_view_v1 *view = &hold->pins.views[i];
+    if (hold->model->p[i] != hold->pins.parameters[i] ||
+        hold->model->handles[i] != hold->pins.identities[i] ||
+        c->binding_identities[i] != hold->pins.identities[i] ||
+        !view->data || view->byte_length > sizeof(c->binding_values) - offset ||
+        memcmp(c->binding_values + offset, view->data, view->byte_length))
+      return g3t_bad(G3T_STATE, G3T_TOPOLOGY);
+    offset += view->byte_length;
+  }
+  if (offset != sizeof(c->binding_values))
+    return g3t_bad(G3T_STATE, G3T_TOPOLOGY);
+  const et_kernel_tensor_view_v1 *keys = NULL, *values = NULL;
+  const et_kernel_tensor_view_v1 *lengths = NULL, *mask = NULL;
+  et_kernel_error error;
+  if (g3t_capture_kernel(et_a2_kv_cache_read_borrow_layer_v1(
+          hold->cache_borrow, 0, &keys, &values, &lengths, &mask, &error),
+          &error)) return g3t_error_category;
+  if (!lengths || lengths->struct_size != sizeof(*lengths) ||
+      !lengths->data || !lengths->shape || lengths->rank != 1 ||
+      lengths->shape[0] != 1 || lengths->byte_length != sizeof(int64_t) ||
+      !lengths->dtype || strcmp(lengths->dtype, "i64") ||
+      !lengths->device || strcmp(lengths->device, "cpu") ||
+      lengths->layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR ||
+      lengths->offset_bytes ||
+      ((const int64_t *)lengths->data)[0] != c->history_length)
+    return g3t_bad(G3T_STATE, G3T_INVARIANT);
+  if (hold->baseline_ready) {
+    et_g3r_committed_save_capture_v1 current;
+    g3t_save_fill(c, &current);
+    if (memcmp(&current, &hold->baseline, sizeof(current)))
+      return g3t_bad(G3T_STATE, G3T_INVARIANT);
+  }
+  return 0;
+}
+
+int64_t et_g3t_private_committed_save_hold_begin_v1(
+    void *generator, void *expected_model) {
+  g3t_clear();
+  g3t_context *c = g3t_admit(generator, 0);
+  if (!c) return 0;
+  owner *o = g3t_model(expected_model);
+  if (!o) return 0;
+  if (!g3t_save_next_token) {
+    g3t_bad(G3T_STATE, G3T_ALLOCATION);
+    return 0;
+  }
+  if (c->model != o || o->active || c->h.busy || c->pins.held_mask ||
+      c->save_hold || !c->cache || c->call_kind || c->final_committed ||
+      c->frame.active || c->frame.kind || c->frame.transaction ||
+      c->frame.candidate_cache || c->pending_output
+#ifdef ET_G3T_MANUAL_LOGITS_PRIVATE
+      || c->pending_logits
+#endif
+      ) { g3t_bad(G3T_STATE, G3T_LIFECYCLE); return 0; }
+  if (!g3t_policy_valid(c->policy[0], c->policy[1], c->policy[2],
+                        c->policy[3], c->policy[4], c->policy[5]) ||
+      c->rng[0] != 1 || c->rng[1] < 0 || !g3t_history_valid(c) ||
+      c->history_pending_g1 || c->history_length < 1 ||
+      c->history_length > 2 || !c->binding_ready) {
+    g3t_bad(G3T_STATE, G3T_INVARIANT);
+    return 0;
+  }
+  g3t_save_hold *hold = calloc(1, sizeof(*hold));
+  if (!hold) { g3t_bad(G3T_INTERNAL, G3T_ALLOCATION); return 0; }
+  et_f32_tensor_error f32_error;
+  if (et_g3t_model_pins_begin_internal(o->p,
+          (const void *const *)o->handles, &hold->pins, &f32_error)) {
+    g3t_f32_failure(&f32_error);
+    free(hold);
+    return 0;
+  }
+  et_kernel_error error;
+  if (g3t_capture_kernel(et_a2_kv_cache_read_borrow_begin_v1(
+          c->cache, &hold->cache_borrow, &error), &error)) {
+    et_g3t_model_pins_end_internal(&hold->pins);
+    free(hold);
+    return 0;
+  }
+  hold->context = c;
+  hold->model = o;
+  hold->cache = c->cache;
+  c->save_hold = hold;
+  c->h.busy = 1;
+  o->active = c;
+  if (g3t_save_check(hold)) {
+    if (et_a2_kv_cache_read_borrow_end_v1(&hold->cache_borrow, &error)) abort();
+    et_g3t_model_pins_end_internal(&hold->pins);
+    o->active = NULL;
+    c->h.busy = 0;
+    c->save_hold = NULL;
+    free(hold);
+    return 0;
+  }
+  g3t_save_fill(c, &hold->baseline);
+  hold->baseline_ready = 1;
+  hold->token = g3t_save_next_token;
+  g3t_save_next_token = hold->token == INT64_MAX ? 0 : hold->token + 1;
+  hold->next = g3t_save_holds;
+  g3t_save_holds = hold;
+  return hold->token;
+}
+
+int64_t et_g3t_private_committed_save_hold_copy_v1(
+    int64_t candidate, et_g3r_committed_save_capture_v1 *destination) {
+  g3t_clear();
+  g3t_save_hold *hold = g3t_save_admit(candidate);
+  if (!hold) return g3t_bad(G3T_ARGUMENT, G3T_IDENTITY);
+  if (!destination) return g3t_bad(G3T_ARGUMENT, G3T_IDENTITY);
+  const uintptr_t first = (uintptr_t)destination;
+  if (first > UINTPTR_MAX - sizeof(*destination))
+    return g3t_bad(G3T_ARGUMENT, G3T_IDENTITY);
+  const uintptr_t last = first + sizeof(*destination);
+  for (g3t_save_hold *current = g3t_save_holds; current;
+       current = current->next)
+    if (g3r_save_overlap(first, last, current, sizeof(*current)))
+      return g3t_bad(G3T_ARGUMENT, G3T_IDENTITY);
+  if (g3r_save_overlap(first, last, hold->context, sizeof(*hold->context)) ||
+      g3r_save_overlap(first, last, hold->model, sizeof(*hold->model)) ||
+      et_a2_kv_cache_private_storage_overlap_v1(destination,
+          sizeof(*destination)) != 0 ||
+      et_f32_tensor_private_storage_overlap_v1(destination,
+          sizeof(*destination)) != 0 ||
+      et_i64_tensor_private_storage_overlap_v1(destination,
+          sizeof(*destination)) != 0)
+    return g3t_bad(G3T_ARGUMENT, G3T_IDENTITY);
+  if (g3t_save_check(hold)) return g3t_error_category;
+  memcpy(destination, &hold->baseline, sizeof(*destination));
+  return 0;
+}
+
+int64_t et_g3t_private_committed_save_hold_end_v1(int64_t candidate) {
+  g3t_clear();
+  g3t_save_hold *hold = g3t_save_admit(candidate);
+  if (!hold) return g3t_bad(G3T_ARGUMENT, G3T_IDENTITY);
+  int64_t status = g3t_save_check(hold);
+  g3t_context *c = hold->context;
+  owner *o = hold->model;
+  et_kernel_error error;
+  if (et_a2_kv_cache_read_borrow_end_v1(&hold->cache_borrow, &error)) abort();
+  et_g3t_model_pins_end_internal(&hold->pins);
+  if (c->save_hold != hold || o->active != c || !c->h.busy) abort();
+  o->active = NULL;
+  c->h.busy = 0;
+  c->save_hold = NULL;
+  g3t_save_hold **link = &g3t_save_holds;
+  while (*link && *link != hold) link = &(*link)->next;
+  if (*link != hold) abort();
+  *link = hold->next;
+  free(hold);
   return status;
 }
 #endif

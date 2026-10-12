@@ -1753,6 +1753,15 @@ admits LOAD only and is absent from this source branch. This prerequisite is
 documentation on the `97aec234` candidate
 ancestry, with no writer, source union, or SAVE admission.
 
+The [held native save capture candidate](g3/G3_R_HELD_SAVE_CAPTURE_LEAF.md)
+adds a feature-gated reservation over the same G3-T generator, its 14 pinned
+parameter values and its A2 cache. A monotonic token protects the hold from
+stale release; checked copy returns the 136-byte committed record plus 4,736
+model bytes, and end drains both leases. Focused controlled native normal,
+repeat, sanitizer and feature-off gates pass locally. The M3T/P1/O2 identity
+bridge, compiled Eshkol aggregate, same-image C2 digest and pair writer
+remain downstream; this candidate is not admitted SAVE.
+
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
 diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use

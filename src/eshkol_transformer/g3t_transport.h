@@ -36,6 +36,19 @@ int64_t et_g3t_private_committed_save_copy_v1(
     void *generator, void *expected_model, void *destination_header,
     void *staging_header);
 #endif
+#ifdef ET_G3R_COMMITTED_SAVE_HOLD_PRIVATE
+/* Source-private, serialized reservation. The returned token identifies one
+ * live hold and is never reused. The caller owns disjoint storage. */
+typedef struct et_g3r_committed_save_capture_v1 {
+  et_g3r_committed_history_snapshot_v1 snapshot;
+  unsigned char model_bits[4736];
+} et_g3r_committed_save_capture_v1;
+int64_t et_g3t_private_committed_save_hold_begin_v1(
+    void *generator, void *expected_model);
+int64_t et_g3t_private_committed_save_hold_copy_v1(
+    int64_t hold, et_g3r_committed_save_capture_v1 *destination);
+int64_t et_g3t_private_committed_save_hold_end_v1(int64_t hold);
+#endif
 #endif
 int64_t et_g3t_private_generator_close_v1(void *context);
 int64_t et_g3t_private_call_acquire_v1(void *context, int64_t call_kind);

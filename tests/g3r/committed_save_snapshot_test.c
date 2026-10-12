@@ -1,4 +1,5 @@
 #define ET_G3R_COMMITTED_SAVE_SNAPSHOT_PRIVATE 1
+#define ET_G3R_COMMITTED_SAVE_HOLD_PRIVATE 1
 #define ET_G3R_COMMITTED_HISTORY_PRIVATE 1
 #define ET_G3T_MANUAL_DECODE_PRIVATE 1
 #define ET_G3T_MANUAL_P2_PREFILL_PRIVATE 1
@@ -23,6 +24,7 @@ static int64_t cache_length;
 static int pin_active, cache_active, fail_pin, fail_cache, fail_layer;
 static int malformed_lengths;
 static int fake_overlap;
+static int fake_i64_overlap;
 static unsigned char model_bits[4736];
 static int64_t lengths_data[1];
 static uint64_t lengths_shape[1] = {1};
@@ -42,6 +44,7 @@ int32_t et_g3t_model_pins_begin_internal(
   pins->self = pins;
   pins->held_mask = UINT16_C(0x3fff);
   for (size_t i = 0; i < 14; ++i) {
+    pins->parameters[i] = p[i];
     pins->identities[i] = identities[i];
     pins->views[i].data = model_bits;
     pins->views[i].byte_length = i == 13 ? sizeof(model_bits) : 0;
@@ -97,6 +100,41 @@ int32_t et_a2_kv_cache_private_storage_overlap_v1(const void *p, size_t n) {
 }
 int32_t et_f32_tensor_private_storage_overlap_v1(const void *p, size_t n) {
   (void)p; (void)n; return fake_overlap;
+}
+int32_t et_i64_tensor_private_storage_overlap_v1(const void *p, size_t n) {
+  (void)p; (void)n; return fake_i64_overlap;
+}
+#define UNUSED(...) do { (void)sizeof(#__VA_ARGS__); } while (0)
+int32_t et_a2_kv_cache_destroy_v1(
+    et_a2_kv_cache **cache, et_kernel_error *error) {
+  UNUSED(error); *cache = NULL; return 0;
+}
+int32_t et_a2_kv_cache_transaction_abort_v1(
+    et_a2_kv_cache_transaction **transaction, et_kernel_error *error) {
+  UNUSED(error); *transaction = NULL; return 0;
+}
+int32_t et_m3_private_i64_unborrowed_v1(
+    const et_i64_tensor *tensor, et_i64_tensor_error *error) {
+  UNUSED(tensor, error); return 0;
+}
+int32_t et_i64_tensor_destroy_v1(
+    et_i64_tensor **tensor, et_i64_tensor_error *error) {
+  UNUSED(error); *tensor = NULL; return 0;
+}
+int32_t et_f32_tensor_destroy_v1(
+    et_f32_tensor **tensor, et_f32_tensor_error *error) {
+  UNUSED(error); *tensor = NULL; return 0;
+}
+int32_t et_f32_tensor_scoped_begin_internal(
+    et_f32_tensor *tensor, et_f32_scoped_guard_internal *guard,
+    et_f32_tensor_error *error) {
+  UNUSED(tensor, guard);
+  error->category = ET_F32_TENSOR_ERROR_INVALID_STATE;
+  error->code = ET_F32_TENSOR_CODE_INVALID_HANDLE;
+  return error->category;
+}
+int32_t et_f32_tensor_scoped_end_internal(et_f32_scoped_guard_internal *guard) {
+  UNUSED(guard); return 0;
 }
 
 static g3t_context c;
@@ -175,6 +213,119 @@ int main(void) {
   positive(66, 65, 2, 1, 1, 0, 1);
   c.rng[3] = -1;
   positive(66, 65, 2, 1, 1, 0, 1);
+  et_g3r_committed_save_capture_v1 held;
+  memset(&held, 0x5a, sizeof(held));
+  int64_t hold = et_g3t_private_committed_save_hold_begin_v1(&c, &model);
+  assert(hold && pin_active && cache_active && c.save_hold &&
+         c.save_hold->token == hold &&
+         c.h.busy && model.active == &c);
+  assert(et_g3t_private_call_abort_v1(&c));
+  assert(et_g3t_private_call_acquire_v1(&c, 2));
+  assert(!g3t_active(&c));
+  assert(et_g3t_private_generator_close_v1(&c));
+  assert(et_g3t_private_committed_save_copy_v1(
+      &c, &model, &destination, &staging));
+  assert(c.save_hold && c.save_hold->token == hold &&
+         pin_active && cache_active &&
+         c.history_length == 2 && c.rng[3] == -1);
+  assert(!et_g3t_private_committed_save_hold_copy_v1(hold, &held));
+  assert(held.snapshot.ids[0] == 66 && held.snapshot.ids[1] == 65 &&
+         held.snapshot.prompt_length == 1 &&
+         held.snapshot.generated_count == 1 &&
+         held.snapshot.generated_eos_terminal == 1 &&
+         held.snapshot.rng[2] == -1 && held.snapshot.rng[3] == -1 &&
+         !memcmp(held.model_bits, model_bits, sizeof(model_bits)));
+  et_g3r_committed_save_capture_v1 saved = held;
+  assert(et_g3t_private_committed_save_hold_copy_v1(
+      hold, (et_g3r_committed_save_capture_v1 *)&c));
+  fake_overlap = 1;
+  assert(et_g3t_private_committed_save_hold_copy_v1(hold, &held));
+  fake_overlap = 0;
+  fake_i64_overlap = 1;
+  assert(et_g3t_private_committed_save_hold_copy_v1(hold, &held));
+  fake_i64_overlap = 0;
+  g3t_save_hold other = {0};
+  other.next = g3t_save_holds;
+  g3t_save_holds = &other;
+  assert(et_g3t_private_committed_save_hold_copy_v1(
+      hold, (et_g3r_committed_save_capture_v1 *)&other));
+  g3t_save_holds = other.next;
+  assert(!memcmp(&held, &saved, sizeof(held)));
+  model_bits[0] = 1;
+  assert(et_g3t_private_committed_save_hold_copy_v1(hold, &held));
+  assert(!memcmp(&held, &saved, sizeof(held)));
+  model_bits[0] = 0;
+  assert(!et_g3t_private_committed_save_hold_end_v1(hold));
+  assert(!pin_active && !cache_active && !c.save_hold && !c.h.busy &&
+         !model.active);
+  assert(et_g3t_private_committed_save_hold_copy_v1(hold, &held));
+  assert(et_g3t_private_committed_save_hold_end_v1(hold));
+  int64_t successor = et_g3t_private_committed_save_hold_begin_v1(&c, &model);
+  assert(successor && successor != hold &&
+         et_g3t_private_committed_save_hold_end_v1(hold) &&
+         c.save_hold && c.save_hold->token == successor &&
+         pin_active && cache_active);
+  assert(!et_g3t_private_committed_save_hold_end_v1(successor));
+  fail_pin = 1;
+  assert(!et_g3t_private_committed_save_hold_begin_v1(&c, &model));
+  fail_pin = 0;
+  assert(!pin_active && !cache_active && !c.save_hold);
+  fail_cache = 1;
+  assert(!et_g3t_private_committed_save_hold_begin_v1(&c, &model));
+  fail_cache = 0;
+  assert(!pin_active && !cache_active && !c.save_hold);
+  cache_length = 1;
+  assert(!et_g3t_private_committed_save_hold_begin_v1(&c, &model));
+  cache_length = 2;
+  assert(!pin_active && !cache_active && !c.save_hold && !model.active);
+  assert(!et_g3t_private_committed_save_hold_begin_v1(&c, &foreign));
+  c.history_pending_g1 = 1;
+  assert(!et_g3t_private_committed_save_hold_begin_v1(&c, &model));
+  c.history_pending_g1 = 0;
+  successor = et_g3t_private_committed_save_hold_begin_v1(&c, &model);
+  assert(successor);
+  c.binding_values[0] ^= 1u;
+  assert(et_g3t_private_committed_save_hold_end_v1(successor));
+  c.binding_values[0] ^= 1u;
+  assert(!pin_active && !cache_active && !c.save_hold && !model.active &&
+         !g3t_save_holds);
+  successor = et_g3t_private_committed_save_hold_begin_v1(&c, &model);
+  assert(successor);
+  et_a2_kv_cache *original_cache = c.cache;
+  c.cache = (et_a2_kv_cache *)&parameters[1];
+  assert(et_g3t_private_committed_save_hold_copy_v1(successor, &held));
+  assert(et_g3t_private_committed_save_hold_end_v1(successor));
+  c.cache = original_cache;
+  assert(!pin_active && !cache_active && !c.save_hold && !model.active &&
+         !g3t_save_holds);
+  successor = et_g3t_private_committed_save_hold_begin_v1(&c, &model);
+  assert(successor);
+  c.rng[2] = 0;
+  assert(g3t_history_valid(&c));
+  assert(et_g3t_private_committed_save_hold_copy_v1(successor, &held));
+  assert(!memcmp(&held, &saved, sizeof(held)));
+  assert(et_g3t_private_committed_save_hold_end_v1(successor));
+  c.rng[2] = -1;
+  successor = et_g3t_private_committed_save_hold_begin_v1(&c, &model);
+  assert(successor);
+  c.policy[0] = 0;
+  assert(g3t_history_valid(&c));
+  assert(et_g3t_private_committed_save_hold_copy_v1(successor, &held));
+  assert(!memcmp(&held, &saved, sizeof(held)));
+  assert(et_g3t_private_committed_save_hold_end_v1(successor));
+  c.policy[0] = 1;
+  successor = et_g3t_private_committed_save_hold_begin_v1(&c, &model);
+  assert(successor);
+  c.history_ids[1] = 64;
+  c.history_generated_eos_terminal = 0;
+  assert(g3t_history_valid(&c));
+  assert(et_g3t_private_committed_save_hold_copy_v1(successor, &held));
+  assert(!memcmp(&held, &saved, sizeof(held)));
+  assert(et_g3t_private_committed_save_hold_end_v1(successor));
+  c.history_ids[1] = 65;
+  c.history_generated_eos_terminal = 1;
+  assert(!pin_active && !cache_active && !c.save_hold && !model.active &&
+         !g3t_save_holds);
   c.policy[0] = 0; c.rng[3] = 7;
   c.policy[4] = 0;
   positive(65, 0, 1, 1, 0, 0, 0);
