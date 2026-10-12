@@ -66,7 +66,8 @@ def scan_text(name: str, source: str) -> list[str]:
                 continue
             if START.search(part):
                 findings.append(f'{name}:{line_number}: unwrapped external command')
-        continued = line.rstrip().endswith('\\') and not line.rstrip().endswith('| \\')
+        continued = line.rstrip().endswith('\\') and not re.search(
+            r'(?:\|\||&&|[|;])\s*\\$', line)
     return findings
 
 

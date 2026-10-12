@@ -35,6 +35,12 @@ class SourceAuditTests(unittest.TestCase):
             with self.subTest(line=line):
                 self.assertTrue(SOURCE.scan_text("runner.sh", line))
 
+    def test_operator_continuation_starts_new_command(self):
+        for operator in ('&&', '||', ';', '|'):
+            with self.subTest(operator=operator):
+                line = 'proof_command nm f ' + operator + ' \\\nsort -u'
+                self.assertTrue(SOURCE.scan_text('runner.sh', line))
+
 
 class ReceiptPostflightTests(unittest.TestCase):
     def setUp(self):
