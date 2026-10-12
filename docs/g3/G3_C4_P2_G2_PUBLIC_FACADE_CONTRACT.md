@@ -149,6 +149,11 @@ API has been added for these observations.
 
 The harness has passed C syntax and source checks only. Its Eshkol binary,
 normal/repeat/sanitizer runs and oracle transcript have not been produced.
+The second-EOS fixture uses a bounded categorical seed search if the greedy
+IDs match; its witness remains unpinned until a compiled run. The native
+malformed clone-copy cut returns `shape-mismatch` from the declared byte
+extent check, but the facade's public error mapping remains unverified at
+runtime.
 Its C4 registry is source-composed without the full manual G3-T root, so even
 a passing C4 harness cannot prove `g3g-public-*` dispatch or installed archive
 closure. The private terminal compiled gate and exact emitted

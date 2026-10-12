@@ -8,6 +8,7 @@
 #include "p2_g2_terminal_close_native.c"
 
 static et_i64_tensor_borrow *public_result_borrow;
+static et_g3c4_result_tensor_internal *public_result_borrow_owner;
 
 int64_t et_g3c4_p2g2_public_test_result_borrow_v1(
     void *candidate, int64_t active) {
@@ -15,11 +16,20 @@ int64_t et_g3c4_p2g2_public_test_result_borrow_v1(
       et_g3c4_admit_result(candidate, 0);
   et_i64_tensor_error error;
   if (result == NULL) return -1;
-  if (active == 1 && public_result_borrow == NULL)
-    return et_i64_tensor_borrow_begin_v1(
-        result->tensor, &public_result_borrow, &error);
-  if (active == 0 && public_result_borrow != NULL)
-    return et_i64_tensor_borrow_end_v1(&public_result_borrow, &error);
+  if (active == 1 && public_result_borrow == NULL) {
+    if (et_i64_tensor_borrow_begin_v1(
+          result->tensor, &public_result_borrow, &error) != 0)
+      return -1;
+    public_result_borrow_owner = result;
+    return 0;
+  }
+  if (active == 0 && public_result_borrow != NULL &&
+      public_result_borrow_owner == result) {
+    if (et_i64_tensor_borrow_end_v1(&public_result_borrow, &error) != 0)
+      return -1;
+    public_result_borrow_owner = NULL;
+    return 0;
+  }
   return -1;
 }
 

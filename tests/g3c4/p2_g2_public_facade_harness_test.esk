@@ -141,6 +141,8 @@
         (begin
           (check "hold authentic public ID I1 lease"
                  (= (public-result-borrow (native ids) 1) 0))
+          (check "foreign public ID cannot end held lease"
+                 (= (public-result-borrow (native ids-again) 0) -1))
           (reject-public "held lease rejects public tensor release"
                          'invalid-state 'generation-tensor-release!
             (lambda () (g3c4-public-generation-tensor-release! ids)))
@@ -163,14 +165,25 @@
 (define first (vector-ref (vector-ref baseline 0) 0))
 (define second (vector-ref (vector-ref baseline 0) 1))
 (run-case 'greedy 7 first 1 #f #f)
+(define (find-distinct-second seed)
+  (if (> seed 64) #f
+      (let* ((generator (g3c4-public-generator-create
+                          model tokenizer (policy 'categorical seed #f)))
+             (output (g3c4-public-generator-generate generator prompt))
+             (text (car (g3c4-public-generation-output-text output)))
+             (id0 (bytevector-u8-ref text 0))
+             (id1 (bytevector-u8-ref text 1)))
+        (check "release bounded witness probe"
+               (and (g3c4-public-generation-output-release! output)
+                    (g3c4-public-generator-close generator)))
+        (if (= id0 id1)
+            (find-distinct-second (+ seed 1))
+            (vector 'categorical seed id1)))))
 (define witness
   (if (not (= first second))
       (vector 'greedy 7 second)
-      (let* ((categorical (run-case 'categorical 1729 #f 2 #f #f))
-             (ids (vector-ref categorical 0)))
-        (check "distinct second EOS reference witness"
-               (not (= (vector-ref ids 0) (vector-ref ids 1))))
-        (vector 'categorical 1729 (vector-ref ids 1)))))
+      (find-distinct-second 1)))
+(check "bounded distinct second EOS witness" witness)
 (run-case (vector-ref witness 0) (vector-ref witness 1)
           (vector-ref witness 2) 2 #f #f)
 (run-case 'categorical 97 #f 2 #f #f)
