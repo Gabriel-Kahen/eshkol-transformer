@@ -7,6 +7,7 @@ from pathlib import Path
 from tests.d2.reference import ReferenceConfig, ReferenceDataset
 from tests.d2.test_resources import load_d1_resource
 from tests.e3_n5.generate import ROWS, SHARD_TOKENS, TOTAL_TOKENS, materialize
+from tests.e3_n5.evidence import fixture_digest
 from tests.e3_reference.corpus import FINGERPRINT, VOCAB_SIZE
 
 
@@ -16,6 +17,10 @@ class N5CorpusTests(unittest.TestCase):
             roots = [Path(temporary) / name for name in ("a", "b")]
             records = [materialize(root) for root in roots]
             self.assertEqual(records[0], records[1])
+            self.assertEqual(
+                fixture_digest(roots[0]),
+                "54300ebc7fed784858cf4d5749ba5313b1a4347690c4391c80bdf611dc093935",
+            )
             for relative in sorted(path.relative_to(roots[0]) for path in roots[0].rglob("*")):
                 if (roots[0] / relative).is_file():
                     self.assertEqual((roots[0] / relative).read_bytes(),

@@ -798,7 +798,9 @@ row count, test-only native entry observers, exact stage-2 E1 assertion and
 same-model three-row retry to the noninstalled mode/graph tuple. Source tests
 pass; its pinned compiled normal/poison/sanitizer gate and evidence review
 remain pending. This is not §9 acceptance or a replacement for the earlier
-8,192 traversal horizon.
+8,192 traversal horizon. The gate-prep successor requires reviewed exact
+source/toolchain/compiler/fixture pins and seals partial failure evidence with
+a complete no-symlink inventory; no compiled run has been launched.
 
 The [E3 idle real-model control contract](e3/E3_IDLE_REAL_MODEL_CONTROL_CONTRACT.md)
 specifies a test-only use of existing I2 checkpoint decode and whole-batch load

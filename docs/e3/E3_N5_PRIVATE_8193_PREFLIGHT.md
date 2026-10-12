@@ -58,13 +58,33 @@ the production ABI and private evaluator interface do not change.
 
 ## Deferred compiled gate
 
-The gate script requires `N5_SOURCE_COMMIT` equal to the clean checkout HEAD
-and a fresh output directory. It checks the source contracts, generates two
+The gate script requires an absolute canonical fresh output directory outside
+the checkout, with no symlink ancestor. It rejects the unsupported-host
+compatibility override. The orchestrator must supply and review these exact
+launch pins before running it:
+
+| Variable | Required identity |
+| --- | --- |
+| `N5_SOURCE_COMMIT`, `N5_SOURCE_TREE` | Full Git commit and tree IDs of the clean source checkout |
+| `N5_LOCK_SHA256` | SHA-256 of `toolchain/eshkol.lock`; this source tree yields `8c168f5d560781245f6d4c73f695e72cbafa413b606d50bc7c36d2119acd9efe` |
+| `N5_PROVENANCE_SHA256` | SHA-256 of the supported Eshkol build provenance TSV |
+| `N5_RUNNER_SHA256` | SHA-256 of the pinned `eshkol-run` executable |
+| `N5_CC_SHA256`, `N5_CXX_SHA256` | SHA-256 of the compilers named by that provenance |
+| `N5_CORPUS_INVENTORY_SHA256` | SHA-256 of sorted `sha256  ./relative-path` rows for every generated corpus file; current generator yields `54300ebc7fed784858cf4d5749ba5313b1a4347690c4391c80bdf611dc093935` |
+
+The script validates source and toolchain pins before builds and at exit. It
+validates both generated fixture inventories before builds and at exit. The
+toolchain lock/provenance are copied into the output before compilation. It
+checks the source contracts, generates two
 byte-equal corpora, builds two fresh normal packages and one sanitized package,
 compares exact manifests, objects, archives and depfiles, compiles normal and
 sanitized optimized AOT callers, then runs normal, poisoned and
 ASan/UBSan/LSan cases. It requires identical stdout and empty runtime stderr
-and records elapsed time/peak RSS for each mode. The generated output must be
-sealed with SHA-256 and reviewed before any acceptance claim. The accepted
+and records elapsed time/peak RSS for each mode. Its exit handler preserves
+and seals partial output on failure, recording the failing stage and status.
+`INVENTORY.jsonl` lists every directory, regular file, symlink and nonregular
+entry; symlinks and nonregular entries reject success. `SHA256SUMS` seals the
+regular files and inventory. The sealed output needs independent review before
+any acceptance claim. The accepted
 8,192 single-invocation horizon and five-layout final-output evidence remain
 separate; neither proves this N5 case.
