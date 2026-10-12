@@ -77,6 +77,16 @@ class PostAdoptionPreparation(unittest.TestCase):
             self.assertEqual((destination / "source" / E3_LOAD_ALIAS).read_bytes(),
                              (destination / "source" / E3_LOAD_SOURCE).read_bytes())
             self.assertIn(f"source/{E3_LOAD_ALIAS}", sums.read_text())
+            expected = destination / "expected-eshkol-closure.txt"
+            closure = expected.read_text().splitlines()
+            self.assertEqual(len(closure), 99)
+            self.assertEqual(closure, sorted(set(closure)))
+            self.assertIn(E3_LOAD_ALIAS, closure)
+            self.assertNotIn(E3_LOAD_SOURCE, closure)
+            self.assertNotIn(prep.CALLER, closure)
+            self.assertNotIn("native/g3r_same_owner_o2_adoption_root.esk", closure)
+            self.assertIn("tests/g3r/g3r_same_owner_save_cut_caller.esk", closure)
+            self.assertIn("expected-eshkol-closure.txt", sums.read_text())
             self.assertIn('(load "e3_d2_restore.esk")',
                           (destination / "source/native/tr3_public_installed_root.esk").read_text())
             self.assertTrue((destination / "source/tests/g3r/save_model_bits_bridge.c").is_file())

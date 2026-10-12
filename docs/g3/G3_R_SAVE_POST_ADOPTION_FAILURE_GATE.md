@@ -24,6 +24,10 @@ root-cell publication, and a counted wrapper around the real abandon call.
 The original caller and adoption leaf stay unchanged. `SOURCE-SHA256SUMS`
 and `PREPARED.tsv` record the copied bytes, exact source commit/tree, and
 the f31 image and fe9 runner/runtime pins. Preparation performs no build.
+It also writes a checksummed `expected-eshkol-closure.txt` for the successor
+gate: the pinned production closure with the production root and caller
+replaced by the test root and caller, the manual P1 helpers and runtime
+fixture added, and the E3 source path replaced by the staged native alias.
 
 The generated root loads the genuine P1, O2, C2, controls and adoption
 source leaves; its fixture creates one original X1/T2/D2/M3/O2 graph, a G3
@@ -46,6 +50,9 @@ parsed into its handler clause; the E3 source was present in the fixture but
 the H launcher did not include its directory. The repaired guard and fixture
 alias require a new one-use prepared H run. The failed run remains sealed at
 `/home/gabe/.codex/evidence/eshkol-transformer/g3r-save-post-adoption-idle-c9bad736-20261012-prepared-h`.
+The sealed H gate's expected depfile still names the original E3 path. The
+successor gate must use the prepared `expected-eshkol-closure.txt`; H remains
+a failed, immutable result.
 
 The source-only bit-image successor reads fourteen original gradient backing
 images through a test-only exact-owner bridge after trainer capsule release.

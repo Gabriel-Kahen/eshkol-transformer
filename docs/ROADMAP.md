@@ -1881,6 +1881,10 @@ first one-use H normal build from `c9bad736` stopped before execution: the
 lease construction guard had no parsed body, and the launcher omitted the E3
 restore load directory. The focused source/fixture repair closes these two
 compile blockers; a fresh prepared H compile and execution remain pending.
+The source preparer now emits a checksummed expected compiler depfile closure
+for the successor fixture, replacing the internal E3 path with its staged
+native load alias. The sealed H gate retained the internal path and cannot
+admit this successor; an independently reviewed new bundle/run is required.
 A bounded source-only successor adds pre/post fault exact-owner witnesses for
 all fourteen original value and gradient bit images and the tied head/token
 handle. It uses the existing I2 value encoder and a feature-gated test bridge

@@ -128,6 +128,16 @@ def prepare(output: Path) -> None:
     generated.write_text(frozen_caller((ROOT / CALLER).read_text()))
     copied.append(generated)
 
+    # The compiler resolves this load through the staged native alias. Keep
+    # the successor depfile expectation tied to the pinned production closure.
+    expected = output / "expected-eshkol-closure.txt"
+    compiled_files = (set(files) - {files[0], CALLER, E3_LOAD_SOURCE}) | {
+        E3_LOAD_ALIAS, *MANUAL_PREFILL, *FIXTURES,
+        generated.relative_to(source_root).as_posix(),
+    }
+    expected.write_text("\n".join(sorted(compiled_files)) + "\n")
+    copied.append(expected)
+
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"],
                                      cwd=ROOT, text=True).strip()
     tree = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"],
