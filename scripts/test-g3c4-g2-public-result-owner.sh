@@ -42,3 +42,24 @@ if nm -g --defined-only "$tmp/off.o" | \
   exit 1
 fi
 echo 'G3-C4 G2 result owner feature-off PASS'
+python3 - "$root" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+source = (root / "native/g3c4_public_g2_result_owner_extension.esk").read_text()
+depth = 0
+quoted = False
+escaped = False
+for char in source:
+    if char == '"' and not escaped:
+        quoted = not quoted
+    if not quoted:
+        depth += (char == "(") - (char == ")")
+    escaped = char == "\\" and not escaped
+assert depth == 0
+assert source.index("(answer (if") < source.index("(g3c4-native-rank1-result-create")
+assert source.index("(g3c4-native-rank1-result-create") < source.index("(vector-set! entry 2 'live)")
+assert source.index("(vector-set! entry 2 'live)") < source.rindex("answer))))")
+print("G3-C4 G2 result owner Eshkol publication order PASS (source only)")
+PY
