@@ -2818,6 +2818,14 @@ publication, public G2 and continuation remain pending.
   regression test. Focused source tests pass; independent source review and a
   fresh one-use compiled gate are pending. The failed G-b evidence remains at
   `/home/gabe/.codex/evidence/eshkol-transformer/wave3-f-t1-compiled-gate-run-90b884e0-20261012-g-b`.
+  The G-e compiled gate on `591cf598` then reached the public-launch normal
+  build, where Eshkol rejected `memq` and `assq` in the public G2 result
+  extension. The bounded source repair replaces the boolean identity checks
+  and pair-returning identity lookups with local `eq?` list walkers. Focused
+  parsed-source tests pass, including distinct equal-looking rows and issuer
+  pairs. Independent review and a fresh compiled/public runtime gate remain
+  pending; no public F/T1 runtime acceptance is claimed. The failed G-e run is
+  retained at `/home/gabe/.codex/evidence/eshkol-transformer/wave3-f-t1-compiled-gate-run-591cf598-20261012-g-e`.
 
 ## Wave 4 — practical pretraining and performance
 

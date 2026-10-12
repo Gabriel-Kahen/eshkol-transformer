@@ -25,26 +25,61 @@ def final_predicate(text: str) -> list:
                 and form[1][0] == "g3c4-public-p2g2-history-final?")[2]
 
 
+def eq_walkers(text: str) -> dict:
+    names = {"g3c4-public-g2-eq-member?", "g3c4-public-g2-eq-assoc"}
+    return {form[1][0]: (form[1][1:], form[2])
+            for form in parse.forms(text)
+            if isinstance(form, list) and form[0] == "define"
+            and isinstance(form[1], list) and form[1][0] in names}
+
+
 def eval_fixed(node, env):
-    """Execute the actual fixed predicate AST; no source text substitutions."""
+    """Execute the fixed predicate and its local eq? walkers from parsed AST."""
     if isinstance(node, str):
         if node in env:
             return env[node]
+        if node == "#t":
+            return True
+        if node == "#f":
+            return False
         if node.startswith("'"):
             return node[1:]
         return int(node)
     verb = node[0]
     if verb == "and":
         return all(eval_fixed(child, env) for child in node[1:])
+    if verb == "not":
+        return not eval_fixed(node[1], env)
+    if verb == "cond":
+        for clause in node[1:]:
+            if clause[0] == "else" or eval_fixed(clause[0], env):
+                return eval_fixed(clause[1], env)
+        return False
+    if verb == "let":
+        name, bindings, body = node[1:]
+        local = env.copy()
+        local.update({key: eval_fixed(value, env) for key, value in bindings})
+        local[name] = lambda *args: eval_fixed(
+            body, {**local, **dict(zip((key for key, _ in bindings), args))})
+        return eval_fixed(body, local)
     args = [eval_fixed(child, env) for child in node[1:]]
+    if verb in env.get("__helpers__", {}):
+        names, body = env["__helpers__"][verb]
+        return eval_fixed(body, {**env, **dict(zip(names, args))})
+    if verb in env and callable(env[verb]):
+        return env[verb](*args)
+    if verb == "null?":
+        return not args[0]
+    if verb == "car":
+        return args[0][0]
+    if verb == "cdr":
+        return args[0][1:]
     if verb == "vector?":
         return isinstance(args[0], list)
     if verb == "vector-length":
         return len(args[0])
     if verb == "vector-ref":
         return args[0][args[1]]
-    if verb == "memq":
-        return any(item is args[0] for item in args[1])
     if verb == "eq?":
         return args[0] is args[1] or (
             isinstance(args[0], str) and args[0] == args[1])
@@ -74,6 +109,7 @@ def final_fixture(first: int, second: int, count: int, eos: int):
         "input": input_shell, "output": output, "eos": eos,
         "snapshot": snapshot, "g3c4-public-g2-output-rows": [[source_row]],
         "g3c4-public-g2-tickets": [[ticket]],
+        "__helpers__": eq_walkers(source("native/g3c4_public_g2_result_extension.esk")),
     })
     return env
 
@@ -170,8 +206,9 @@ class HistorySource(unittest.TestCase):
             "(g3c4-public-g2-source-snapshot output operation)",
             "(g3c4-public-p2g2-native-input-ids",
             "(t1-shell-read encoded 0)", "(t1-shell-read encoded 1)",
-            "(not (memq output issued-outputs))",
-            "(raise caught)", "(assq first history-issuers)",
+            "(not (g3c4-public-g2-eq-member? output issued-outputs))",
+            "(raise caught)",
+            "(g3c4-public-g2-eq-assoc first history-issuers)",
             "(= (vector-ref snapshot 0) eos)",
             "(not (= (vector-ref snapshot 0) eos))",
         ):
@@ -216,6 +253,38 @@ class HistorySource(unittest.TestCase):
     def test_actual_source(self) -> None:
         self.validate()
 
+    def test_local_eq_walkers_preserve_identity_and_association_pair(self) -> None:
+        helpers = eq_walkers(self.history)
+        self.assertEqual(set(helpers), {"g3c4-public-g2-eq-member?",
+                                        "g3c4-public-g2-eq-assoc"})
+        self.assertNotIn("memq", self.history)
+        self.assertNotIn("assq", self.history)
+        first, equal_copy = [1], [1]
+        env = {"__helpers__": helpers, "value": first,
+               "entries": [equal_copy, first]}
+        member = ["g3c4-public-g2-eq-member?", "value", "entries"]
+        self.assertTrue(eval_fixed(member, env))
+        env["entries"] = [equal_copy]
+        self.assertFalse(eval_fixed(member, env))
+        env["entries"] = []
+        self.assertFalse(eval_fixed(member, env))
+        pair = [first, object()]
+        env["entries"] = [[equal_copy, object()], pair]
+        assoc = ["g3c4-public-g2-eq-assoc", "value", "entries"]
+        self.assertIs(eval_fixed(assoc, env), pair)
+        env["entries"] = [[equal_copy, object()]]
+        self.assertFalse(eval_fixed(assoc, env))
+
+    def test_fixed_predicate_rejects_equal_but_unrooted_rows(self) -> None:
+        predicate = final_predicate(self.history)
+        env = final_fixture(first=41, second=92, count=2, eos=7)
+        self.assertTrue(eval_fixed(predicate, env))
+        env["g3c4-public-g2-output-rows"] = [[deepcopy(env["source"])]]
+        self.assertFalse(eval_fixed(predicate, env))
+        env["g3c4-public-g2-output-rows"] = [[env["source"]]]
+        env["g3c4-public-g2-tickets"] = [[deepcopy(env["ticket"])]]
+        self.assertFalse(eval_fixed(predicate, env))
+
     def test_capture_publication_is_not_a_let_binding(self) -> None:
         malformed = self.history.replace(
             '"P2/G2 history verb is invalid")))))))',
@@ -248,10 +317,10 @@ class HistorySource(unittest.TestCase):
 
     def test_spend_and_output_origin_controls(self) -> None:
         for old in ("(set! phase 'admitting)", "(set! phase 'spent)",
-                    "(not (memq output issued-outputs))",
+                    "(not (g3c4-public-g2-eq-member? output issued-outputs))",
                     "g3c4-public-g2-tickets 5 output operation",
                     "(= (vector-ref current 7) r3)",
-                    "(assq first history-issuers)"):
+                    "(g3c4-public-g2-eq-assoc first history-issuers)"):
             with self.assertRaises(AssertionError):
                 prefix, route = self.history.split(
                     "(define g3c4-public-p2g2-history-route", 1)

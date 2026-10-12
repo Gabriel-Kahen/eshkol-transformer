@@ -5,6 +5,18 @@
 ;;; private origin-D shell never acquires these records by its registry kind.
 (define g3c4-public-g2-released-outputs (vector '()))
 
+(define (g3c4-public-g2-eq-member? value entries)
+  (let loop ((remaining entries))
+    (cond ((null? remaining) #f)
+          ((eq? value (car remaining)) #t)
+          (else (loop (cdr remaining))))))
+
+(define (g3c4-public-g2-eq-assoc value entries)
+  (let loop ((remaining entries))
+    (cond ((null? remaining) #f)
+          ((eq? value (car (car remaining))) (car remaining))
+          (else (loop (cdr remaining))))))
+
 (define (g3c4-public-g2-output-unique root slot shell operation)
   (let loop ((tail (vector-ref root 0)) (found #f))
     (cond ((null? tail) found)
@@ -95,7 +107,8 @@
 (define (g3c4-public-g2-output-release! shell operation)
   (let ((entry (g3c4-registry-find shell operation)))
     (if (g3c4-dead-entry? entry 'terminal-output)
-        (if (and (memq shell (vector-ref g3c4-public-g2-released-outputs 0))
+        (if (and (g3c4-public-g2-eq-member?
+                   shell (vector-ref g3c4-public-g2-released-outputs 0))
                  (eq? (vector-ref entry 0) shell)
                  (eq? (vector-ref entry 3) #f)
                  (eq? (vector-ref entry 4) #f)
@@ -470,8 +483,8 @@
   ;; All provider, registry and issuer procedures have already completed.
   (and (vector? source) (= (vector-length source) 12)
        (vector? ticket) (= (vector-length ticket) 21)
-       (memq source (vector-ref g3c4-public-g2-output-rows 0))
-       (memq ticket (vector-ref g3c4-public-g2-tickets 0))
+       (g3c4-public-g2-eq-member? source (vector-ref g3c4-public-g2-output-rows 0))
+       (g3c4-public-g2-eq-member? ticket (vector-ref g3c4-public-g2-tickets 0))
        (eq? (vector-ref source 0) output)
        (eq? (vector-ref source 3) generator)
        (eq? (vector-ref source 4) input)
@@ -568,7 +581,7 @@
                #t))))
           ((eq? action 'capture)
            (let* ((generator first) (input second) (output third)
-                  (input-issuer (assq input input-issuers))
+                  (input-issuer (g3c4-public-g2-eq-assoc input input-issuers))
                   (input-entry (g3c4-input-entry-live input operation))
                   (generator-row
                     (g3c4-public-g2-profile-live generator operation))
@@ -580,7 +593,7 @@
                   (policy (vector-ref generator-row 5))
                   (eos (vector-ref policy 6)))
              (if (not (and (< history-count 64) input-issuer
-                           (not (memq output issued-outputs))
+                           (not (g3c4-public-g2-eq-member? output issued-outputs))
                            (g3c4-generator-entry-call-ready
                              generator operation)
                            (g3c4-model-entry-live
@@ -725,7 +738,7 @@
                        (g3c4-public-p2g2-history-final?
                          source ticket generator-row input-entry model
                          tokenizer generator input output eos final-snapshot)
-                       (not (memq output issued-outputs))))
+                       (not (g3c4-public-g2-eq-member? output issued-outputs))))
                      (g3c4-fail 'invalid-state operation
                                 "P2/G2 final source changed before issuance"))
                  (set! history-issuers next-history)
@@ -733,7 +746,7 @@
                  (set! history-count (+ history-count 1))
                  shell))))
           ((eq? action 'admit)
-           (let ((issuer (assq first history-issuers)))
+           (let ((issuer (g3c4-public-g2-eq-assoc first history-issuers)))
              (if (not issuer)
                  (g3c4-fail 'invalid-argument operation
                             "P2/G2 history shell is not issued"))
