@@ -871,9 +871,10 @@ generated detached pipe holder, collect both actor peaks and verify pipe EOF;
 its deadline path signals by pidfd. It adds no cgroup confinement or custody,
 keeps `resource_proof=HOLD`, and leaves both real-read gates closed.
 The [generated scope/custody probe](e3/E3_N1_F32_SCOPE_CUSTODY_PROBE.md)
-observes direct `clone3` placement of fixed broker/sealer marker actors in a
-delegated user cgroup, individual reaps/peaks, pipe EOF and an empty actor
-scope. Same-UID setup and caller-owned namespace IDs cannot establish
+has one committed local witness of direct `clone3` placement of fixed
+broker/sealer marker actors in a delegated user cgroup, individual
+reaps/peaks, pipe EOF and an empty actor scope; other invocations may HOLD
+before placement. Same-UID setup and caller-owned namespace IDs cannot establish
 protected pre-read custody; no source is opened, no receipt or seal issued,
 and resource proof and both real-read gates remain HOLD.
 The [local pin acquisition](e3/E3_N1_LOCAL_PIN_ACQUISITION.md) seals the small

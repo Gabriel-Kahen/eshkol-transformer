@@ -6,10 +6,35 @@ path. Its only actor output is generated role/cgroup text. It does not open
 f32, OCI or Docker data, issue a broker receipt or seal, or change the public
 `CAPTURE_RUN_ENABLED = False` and `REVIEWED_CAPTURE_SHA256 = None` gates.
 
-## What the supported host actually exercised
+## Recorded local witness
 
-On this host, a transient user `systemd-run --scope -p Delegate=yes` unit
-provided a writable cgroup v2 subtree. A finite setup worker created a child
+The generated-only result in
+[`E3_N1_F32_SCOPE_CUSTODY_WITNESS.json`](E3_N1_F32_SCOPE_CUSTODY_WITNESS.json)
+was captured from this worktree on 2026-10-12 with:
+
+```sh
+python3 -I -B tests/e3_private/e3_n1_scope_custody_probe.py probe > docs/e3/E3_N1_F32_SCOPE_CUSTODY_WITNESS.json
+sha256sum docs/e3/E3_N1_F32_SCOPE_CUSTODY_WITNESS.json
+```
+
+The file SHA-256 is
+`e92b1f2ef87dbea41598867548069d829b2f3931814628d0b6311479690a72ed`.
+The local invocation used UID 1000, x86_64, Python 3.14.7, systemd 262,
+`XDG_RUNTIME_DIR=/run/user/1000`, and cgroup v2
+membership `0::/user.slice/user-1000.slice/user@1000.service/app.slice/app-org.chromium.Chromium-122839.scope`.
+Its broker and sealer markers each exited zero with pipe EOF and reported
+direct placement in the same `codex-e3-n1-scope-1c30914ec31d48c7.scope/n1-generated-actors`
+cgroup. Their individual `wait4` peak RSS values were 10,854,400 and
+10,883,072 bytes; the worker reported `actor_scope_empty=true` after
+reading `cgroup.events` and removing the child cgroup. The outer elapsed
+time was 51,784,935 ns. These are observations from that invocation, not
+guarantees for another host or run. A skipped live test or
+`scope-worker-unverified` result gives no direct-placement witness for that
+invocation.
+
+In the recorded invocation, a transient user
+`systemd-run --scope -p Delegate=yes` unit provided a writable cgroup v2
+subtree. A finite setup worker created a child
 cgroup and used Linux `clone3(CLONE_INTO_CGROUP | CLONE_PIDFD)` to place two
 fixed marker actors directly into it. The actors are named `broker` and
 `sealer` solely to test the planned finite graph; neither performs a custody
