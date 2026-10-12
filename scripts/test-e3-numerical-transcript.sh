@@ -179,4 +179,4 @@ grep -F 'ce_f32' "${out}/verify-wrong-target.stderr" >/dev/null || \
   die "wrong-target mutant failed outside the CE value assertion"
 grep -F 'state_f32' "${out}/verify-mean-of-means.stderr" >/dev/null || \
   die "mean-of-means mutant failed outside the accumulator value assertion"
-printf 'E3 compiled three-batch numerical transcript and two mutants passed\n'
+printf 'E3 compiled five-layout numerical transcripts and two mutants passed\n'
