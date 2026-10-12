@@ -853,9 +853,11 @@ The [distinct N1 seal-authority successor contract](e3/E3_N1_SEAL_AUTHORITY_CONT
 requires a protected sealer, non-minting verification of both receipt and seal,
 frozen release/image/key/custody pins, and explicit issuance, crash, and
 read-only reconciliation gates. Current v2 HMAC configuration gives the broker
-seal-minting material; no asymmetric verifier or trusted verification RPC is
-pinned. This document-only successor remains HOLD for implementation, live
-cross-UID proof, real-layer acquisition, and N1/M1 admission.
+seal-minting material. The [docs-only N1 provider decision](e3/E3_N1_PROVIDER_DECISION.md)
+selects OpenSSL 3.5.9 LTS PureEd25519 EVP and pins its upstream source
+checksum and proposed v3 byte/role contract; built provider/verifier bytes,
+keys and deployment remain unpinned. This successor remains HOLD for
+implementation, live cross-UID proof, real-layer acquisition, and N1/M1 admission.
 The exact `5d642a2` fe9/f31 numerical gate built the normal and mutant
 packages but failed before runtime at sanitized export isolation: the ASan
 registration COMMON cell remained global after objcopy. Its 308-file failed

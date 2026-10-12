@@ -36,12 +36,13 @@ independently verifiable broker receipts and seals, or a separately reviewed
 trusted receipt-verification boundary that does not expose receipt-minting
 material to the sealer or consumer. The receipt and seal authorities, their
 non-minting verification interfaces, and failure behavior must be specified
-and tested before either can release admission. No asymmetric verifier or
-trusted signing/verification RPC is pinned in this tree's N1 dependencies:
-the N1 Python modules use the standard library, while the available Python
-lockfiles cover development reference/oracle tests. Algorithm, library/service,
-exact API, and key provisioning remain HOLD; this document does not select or
-pretend to provide them. The frozen release must carry the actual public
+and tested before either can release admission. The
+[docs-only provider decision](E3_N1_PROVIDER_DECISION.md) selects OpenSSL
+3.5.9 PureEd25519 EVP as a v3 candidate and pins its upstream source
+artifact, role-separated messages, and verification API. Built provider and
+verifier bytes, deployment, keys and live authority proof remain HOLD; the v2
+Python modules still use standard-library HMAC and cannot implement that
+decision. The frozen release must carry the actual public
 verification key bytes and their digest (or an immutable verifier trust
 anchor), not a key ID alone. If a trusted service is selected, pin its exact
 endpoint, transport trust root, deployed service binary/config identity, and
