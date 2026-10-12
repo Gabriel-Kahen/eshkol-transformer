@@ -1872,6 +1872,11 @@ retains both detached children through compose refusal, and releases O2 then
 P1 on certain failure; cleanup uncertainty fails stop. Its output is a private
 detached owner plus G3 words and epoch, not a C2 image or SAVE publication.
 Focused parsed source and negative-word tests cover this exact source leaf.
+The guarded adoption return now publishes its shell into a preallocated heap
+cell before any post-adoption operation, so cleanup reads stable authority
+after Eshkol longjmp. Parsed negative ordering tests cover this repair;
+the [compiled post-adoption and one-use gate](g3/G3_R_SAVE_POST_ADOPTION_FAILURE_GATE.md)
+is prepared but has not run.
 Compiled native/Eshkol coexistence, actual partial-claim failure cuts, C2
 image/digest, pair publication, cold LOAD, and public SAVE remain open.
 

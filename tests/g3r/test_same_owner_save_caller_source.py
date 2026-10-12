@@ -17,6 +17,30 @@ def definition(source, name):
                 if isinstance(form, list) and form[:2] == ["define", name])
 
 
+def validate_cleanup_root(caller):
+    """Require a rooted adoption return before any post-adoption operation."""
+    outer = caller[2]
+    assert outer[0] == "let"
+    assert ["shell-cell", ["vector", "#f"]] in outer[1]
+    assert len(outer[2:]) == 1
+    guard = outer[2]
+    assert guard[0] == "guard"
+    assert guard[1] == ["caught", ["#t",
+        ["let", [["owned-shell", ["vector-ref", "shell-cell", "0"]]],
+         ["if", "owned-shell",
+          ["guard", ["cleanup", ["#t", ["exit", "134"]]],
+           ["g3r-save-o2-abandon-internal!", "owned-shell"]]]],
+        ["raise", "caught"]]]
+    assert len(guard[2:]) == 2
+    publish, continuation = guard[2:]
+    assert publish == ["vector-set!", "shell-cell", "0",
+        ["g3r-save-o2-adopt-held-internal", "generator", "model",
+         "resolved", "tokenizer", "dataset", "optimizer", "capsule"]]
+    assert continuation[0:2] == ["let", [["shell", ["vector-ref", "shell-cell", "0"]]]]
+    assert continuation[2] == ["set!", "bundle",
+                               ["g3r-save-o2-take-for-c2-internal", "shell"]]
+
+
 def check_words(source, words, policy):
     body = definition(source, ["g3r-save-fixed-words!", "words", "generator"])[2:]
 
@@ -323,7 +347,7 @@ class SameOwnerCaller(unittest.TestCase):
         positions = [text.index(marker) for marker in markers]
         self.assertEqual(positions, sorted(positions))
         self.assertIn("(vector-ref (vector-ref bundle 2) 0)", text)
-        self.assertIn("(g3r-save-o2-abandon-internal! shell)", text)
+        self.assertIn("(g3r-save-o2-abandon-internal! owned-shell)", text)
         self.assertIn("(equal? (vector-ref result 1) (vector-ref bundle 3))", text)
 
     def test_private_record_holds_independent_words_and_reverse_cleanup(self):
@@ -366,12 +390,33 @@ class SameOwnerCaller(unittest.TestCase):
                             ["g3r-save-c2-capture-internal", "generator",
                              "model", "resolved", "tokenizer", "dataset",
                              "optimizer", "capsule"])
-        guard = str(caller).split("['guard',", 1)[1]
-        # The parsed handler has one lexical cleanup call and rethrows the
-        # original caught value, independent of cleanup's later errors.
-        self.assertEqual(guard.count("'g3r-save-o2-abandon-internal!'"), 1)
-        self.assertLess(guard.index("'g3r-save-o2-abandon-internal!'"),
-                        guard.index("'raise', 'caught'"))
+        validate_cleanup_root(caller)
+        # The parsed handler has one lexical cleanup call, preserves the
+        # original caught value, and fails stop if cleanup itself fails.
+        guard = caller[2][2]
+        self.assertEqual(str(guard).count("'g3r-save-o2-abandon-internal!'"), 1)
+        self.assertLess(str(guard).index("'g3r-save-o2-abandon-internal!'"),
+                        str(guard).index("'raise', 'caught'"))
+
+    def test_cleanup_root_rejects_stale_or_late_publication(self):
+        caller = definition(self.caller,
+                            ["g3r-save-c2-capture-internal", "generator",
+                             "model", "resolved", "tokenizer", "dataset",
+                             "optimizer", "capsule"])
+        stale = deepcopy(caller)
+        stale[2][2][1][1][1][1][0][1] = "shell"
+        with self.assertRaises(AssertionError):
+            validate_cleanup_root(stale)
+
+        late = deepcopy(caller)
+        late[2][2][2:4] = late[2][2][3:1:-1]
+        with self.assertRaises(AssertionError):
+            validate_cleanup_root(late)
+
+        unrooted = deepcopy(caller)
+        unrooted[2][1][0][1] = "#f"
+        with self.assertRaises(AssertionError):
+            validate_cleanup_root(unrooted)
 
 
 if __name__ == "__main__":

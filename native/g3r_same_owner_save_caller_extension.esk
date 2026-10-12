@@ -97,35 +97,40 @@
                                        dataset optimizer capsule)
   ;; The adoption leaf owns its hold, 14 native F32 witnesses, P1 clone and
   ;; O2 clone until take. After take this caller owns both detached children.
-  (let ((shell #f) (bundle #f)
+  (let ((shell-cell (vector #f)) (bundle #f)
         (request #f) (result (vector #f #f #f)))
     (guard (caught
              (#t
-               (if shell
-                   (guard (cleanup (#t (exit 134)))
-                     (g3r-save-o2-abandon-internal! shell)))
+               (let ((owned-shell (vector-ref shell-cell 0)))
+                 (if owned-shell
+                     (guard (cleanup (#t (exit 134)))
+                       (g3r-save-o2-abandon-internal! owned-shell))))
                (raise caught)))
-      (set! shell
+      ;; The adoption leaf cleans up its own failures. Publish its successful
+      ;; return in a preallocated cell before any fallible post-adoption work;
+      ;; the handler must not read a mutable local across Eshkol longjmp.
+      (vector-set! shell-cell 0
         (g3r-save-o2-adopt-held-internal
           generator model resolved tokenizer dataset optimizer capsule))
-      (set! bundle (g3r-save-o2-take-for-c2-internal shell))
-      (g3r-save-o2-authenticate-bundle-internal shell bundle)
-      (g3r-save-fixed-topology! (vector-ref bundle 0))
-      (g3r-save-fixed-controls! (vector-ref bundle 2))
-      (g3r-save-fixed-words! (vector-ref bundle 3) generator)
-      ;; Prepare every result allocation before C2 claims either child.
-      (vector-set! result 1 (vector-copy (vector-ref bundle 3)))
-      (vector-set! result 2 (vector-ref (vector-ref bundle 2) 1))
-      (set! request
-        (vector c2-training-state-compose-tag
-                (vector-ref bundle 0) shell
-                (vector-ref (vector-ref bundle 2) 0)
-                'g3r-save-fixed-capture #f))
-      (g3r-save-o2-authenticate-bundle-internal shell bundle)
-      (if (not (equal? (vector-ref result 1) (vector-ref bundle 3)))
-          (g3r-save-fixed-fail "G3 words changed before C2 compose"))
-      (c2-training-state-compose-internal request)
-      ;; C2's successful transfer is assignment-only. No fallible work
-      ;; follows this point, and the C2 owner is the sole child authority.
-      (vector-set! result 0 (vector-ref request 5))
-      result)))
+      (let ((shell (vector-ref shell-cell 0)))
+        (set! bundle (g3r-save-o2-take-for-c2-internal shell))
+        (g3r-save-o2-authenticate-bundle-internal shell bundle)
+        (g3r-save-fixed-topology! (vector-ref bundle 0))
+        (g3r-save-fixed-controls! (vector-ref bundle 2))
+        (g3r-save-fixed-words! (vector-ref bundle 3) generator)
+        ;; Prepare every result allocation before C2 claims either child.
+        (vector-set! result 1 (vector-copy (vector-ref bundle 3)))
+        (vector-set! result 2 (vector-ref (vector-ref bundle 2) 1))
+        (set! request
+          (vector c2-training-state-compose-tag
+                  (vector-ref bundle 0) shell
+                  (vector-ref (vector-ref bundle 2) 0)
+                  'g3r-save-fixed-capture #f))
+        (g3r-save-o2-authenticate-bundle-internal shell bundle)
+        (if (not (equal? (vector-ref result 1) (vector-ref bundle 3)))
+            (g3r-save-fixed-fail "G3 words changed before C2 compose"))
+        (c2-training-state-compose-internal request)
+        ;; C2's successful transfer is assignment-only. No fallible work
+        ;; follows this point, and the C2 owner is the sole child authority.
+        (vector-set! result 0 (vector-ref request 5))
+        result))))
