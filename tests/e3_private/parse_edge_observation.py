@@ -10,7 +10,7 @@ import re
 
 from tests.e3_private.parse_numerical_observation import parse as parse_numerical
 from tests.e3_reference.edge_corpus import validate
-from tests.e3_reference.transcript import canonical, validate_observed_case
+from tests.e3_reference.transcript import canonical, validate_mathematical_case
 
 
 LINE = re.compile(rb"E3EDGE\t([a-z-]+)\t(success|invalid-state)\t"
@@ -56,24 +56,28 @@ def parse(raw: bytes, root: Path, manifest: dict[str, object], name: str,
         if before != [0] * 6 or oracle is None:
             raise ValueError("N5 success lacks independent oracle or clean outputs")
         observed, _ = parse_numerical(prefix + b"E3-NUMERICAL-RUNTIME-PASS\n", 2)
-        validate_observed_case(observed, tuple(case["batches"]))
-        last = observed["batches"][-1]
-        for field in ("inputs", "targets", "mask", "logits_f32", "ce_f32",
-                      "reduction_f32", "state_f32"):
-            if last[field] != oracle.get(field):
-                raise ValueError(f"N5 final one-token {field} differs from Q0")
         if (oracle.get("kind") != "e3-edge-oracle-v1"
                 or oracle.get("case") != name or oracle.get("cursor") != cursor
+                or oracle.get("model_seed") != 1729
+                or oracle.get("python") != "3.14.6"
+                or oracle.get("torch") != "2.13.0+cpu"
                 or oracle.get("corpus_sha256") != hashlib.sha256(
-                    (root / "edge-corpus.json").read_bytes()).hexdigest()):
+                    (root / "edge-corpus.json").read_bytes()).hexdigest()
+                or oracle.get("m3_reference_sha256") != hashlib.sha256(
+                    (Path(__file__).resolve().parents[1] / "m3/reference.py").read_bytes()).hexdigest()
+                or oracle.get("q0_lock_sha256") != hashlib.sha256(
+                    (Path(__file__).resolve().parents[1] / "q0/requirements-oracle.lock").read_bytes()).hexdigest()):
             raise ValueError("N5 oracle identity differs")
-        if observed["final"]["metrics_f32"] != oracle.get("final_f32"):
-            raise ValueError("N5 final metric words differ from Q0")
-        if observed["final"]["counters"] != oracle.get("counters"):
-            raise ValueError("N5 final counters differ from Q0")
-        expected = [int(word, 16) for word in oracle["final_f32"]] + oracle["counters"]
+        mathematical = oracle.get("mathematical")
+        mathematical_loss = oracle.get("mathematical_loss_f64")
+        if not isinstance(mathematical, list) or not isinstance(mathematical_loss, str):
+            raise ValueError("N5 mathematical oracle schema differs")
+        validate_mathematical_case(
+            observed, mathematical, tuple(case["batches"]), mathematical_loss)
+        expected = ([int(word, 16) for word in observed["final"]["metrics_f32"]]
+                    + observed["final"]["counters"])
         if after != expected:
-            raise ValueError("N5 six published outputs differ from Q0")
+            raise ValueError("N5 six published outputs differ from observed frame")
     return {"kind": "e3-edge-result-v1", "case": name,
             "status": status.decode(), "before": before, "after": after,
             "cursor_before": cursor, "cursor_after": end}

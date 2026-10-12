@@ -23,7 +23,7 @@ def build(root: Path, manifest: dict[str, object]) -> dict[str, object]:
     m3.setup()
     parameters, _ = m3.parameters(1729)
     case = manifest["cases"][3]
-    synthetic, mathematical, _ = _synthetic_case(case["batches"], parameters)
+    synthetic, mathematical, mathematical_loss = _synthetic_case(case["batches"], parameters)
     validate_observed_case(synthetic, tuple(case["batches"]))
     if [batch["mask"] for batch in case["batches"]] != [[True, True], [True, False]]:
         raise AssertionError("one-valid-final D2 masks changed")
@@ -40,9 +40,15 @@ def build(root: Path, manifest: dict[str, object]) -> dict[str, object]:
         "state_f32": last["state_f32"],
         "final_f32": synthetic["final"]["metrics_f32"],
         "counters": synthetic["final"]["counters"],
+        "mathematical": mathematical,
+        "mathematical_loss_f64": mathematical_loss,
         "model_seed": 1729,
         "corpus_sha256": hashlib.sha256((root / "edge-corpus.json").read_bytes()).hexdigest(),
         "python": platform.python_version(), "torch": m3.torch.__version__,
+        "m3_reference_sha256": hashlib.sha256(
+            (Path(__file__).resolve().parents[1] / "m3/reference.py").read_bytes()).hexdigest(),
+        "q0_lock_sha256": hashlib.sha256(
+            (Path(__file__).resolve().parents[1] / "q0/requirements-oracle.lock").read_bytes()).hexdigest(),
     }
     if len(result["logits_f32"]) != 512 or result["counters"] != [3, 2]:
         raise AssertionError("one-valid-final numerical shape/count changed")
