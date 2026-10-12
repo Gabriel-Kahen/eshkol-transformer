@@ -9,6 +9,10 @@ import tempfile
 import unittest
 
 from tests.e3_private.parse_numerical_observation import ROLE_NAMES, parse
+from tests.e3_private.check_m2_verifier_stderr import (
+    ERROR as M2_ERROR, MUTANT_TRACEBACK as M2_TRACEBACK,
+    NUMPY_WARNING as M2_NUMPY_WARNING, check as check_m2_stderr,
+)
 from tests.c2.test_handler_order import parse as parse_source
 from tests.e3_reference.corpus import materialize
 from tests.e3_reference.transcript import (
@@ -424,7 +428,7 @@ printf '%s\\n' "$e3_tuple_kind"
         self.assertIn('runtime_source="${gate_root}/tests/e3_private/numerical_physical_capacity_runtime.esk"', gate)
         self.assertIn('if [[ "${variant}" == physical-capacity ]]; then\n    runtime_source=', gate)
         self.assertIn('grep -Fx \'E3-NUMERICAL-RUNTIME-PASS\'', gate)
-        self.assertIn('exact rational reduction mismatch', gate)
+        self.assertIn('check_m2_verifier_stderr.py', gate)
 
         # A complete synthetic three-row frame reaches the independent
         # comparator only when its terminal PASS and exact record shape hold.
@@ -474,6 +478,27 @@ printf '%s\\n' "$e3_tuple_kind"
                        physical_raw.replace(b"E3-NUMERICAL-RUNTIME-PASS", b"E3-NUMERICAL-FAIL: result")):
             with self.assertRaisesRegex(ValueError, "did not complete"):
                 parse(broken, 3, physical_capacity=True)
+
+    def test_m2_verifier_stderr_admits_only_pinned_warning_and_rejection(self) -> None:
+        trace = M2_TRACEBACK
+        self.assertTrue(trace.endswith(M2_ERROR))
+        for normal in (b"", M2_NUMPY_WARNING):
+            check_m2_stderr(normal, mutant=False)
+        for accepted in (trace, M2_NUMPY_WARNING + trace):
+            check_m2_stderr(accepted, mutant=True)
+        for bad in (b"unrelated warning\n", M2_NUMPY_WARNING * 2,
+                    M2_NUMPY_WARNING + b"extra stderr\n"):
+            with self.subTest(normal=bad), self.assertRaises(ValueError):
+                check_m2_stderr(bad, mutant=False)
+        for bad in (b"", b"unrelated warning\n" + trace,
+                    M2_NUMPY_WARNING * 2 + trace,
+                    trace + b"extra stderr\n",
+                    trace + trace,
+                    trace.replace(b"    main()\n", b"    main()\nnoise\n"),
+                    trace.replace(M2_ERROR, b"RuntimeError: other failure\n"),
+                    trace.replace(b"in validate_observed_case", b"in other_function")):
+            with self.subTest(mutant=bad), self.assertRaises(ValueError):
+                check_m2_stderr(bad, mutant=True)
 
     def test_native_provider_mode_tracks_both_test_sanitizers(self) -> None:
         policy = ROOT / "scripts/e3-private-native-inputs.sh"

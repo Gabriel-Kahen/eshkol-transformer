@@ -920,9 +920,11 @@ A [one-use M2 compiled gate recipe](e3/E3_M2_PHYSICAL_CAPACITY_ONE_USE_GATE.md)
 pins the exact reviewed source checkout and adds an opt-in parser route for the
 mutant's intentional active-count mismatch. Its consumed B run stopped after
 the authentic mutant emitted `(6,3)`: the shared runtime driver required normal
-`(5,3)` and exited before parsing. A separate test-only C driver now expects
-`(6,3)` only for the mutant's `packed-single` case while retaining the strict
-normal A/B check and terminal PASS requirement. C is prepared but has no
+`(5,3)` and exited before parsing. Offline normal replay also exposed an exact
+pinned missing-NumPy warning on verifier stderr that the first C recipe would
+reject. The C successor now uses a mutant-only `(6,3)` runtime driver and
+admits only that exact warning or empty normal stderr and one exact rational
+mutant traceback. Normal A/B and terminal PASS remain strict. C has no
 supported compiled run; the M2 value kill and §9 acceptance remain HOLD.
 An isolated staged successor adds a separate real-M3 zero-control source tuple
 using the existing I2 14-parameter prepare/commit path before frame binding.

@@ -38,11 +38,13 @@ review_sha=2295b9d6fc2162f39f9029e2150664e29b7e0e29eeb7b5e21a38a657c4acd7b2
 gate_commit="$(git -C "${gate_root}" rev-parse HEAD)"
 gate_tree="$(git -C "${gate_root}" rev-parse HEAD^{tree})"
 base_gate=313a38dbc2d2cfb8eba7c4357885798234291d45
-[[ "$(git -C "${gate_root}" rev-parse HEAD^)" == "${base_gate}" &&
+counter_repair=2fbd5e003ffca670034f16cd1b140bcb95e2ab98
+[[ "$(git -C "${gate_root}" rev-parse HEAD^)" == "${counter_repair}" &&
+   "$(git -C "${gate_root}" rev-parse "${counter_repair}^")" == "${base_gate}" &&
    "$(git -C "${gate_root}" rev-parse "${base_gate}^")" == "${candidate}" ]] || {
-  echo "gate repair must descend directly from the pinned gate and candidate" >&2; exit 1;
+  echo "gate repair must descend from the pinned counter repair, gate and candidate" >&2; exit 1;
 }
-expected_changes=$'docs/ROADMAP.md\ndocs/e3/E3_M2_PHYSICAL_CAPACITY_ONE_USE_GATE.md\nscripts/test-e3-m2-physical-capacity-one-use.sh\ntests/e3_private/numerical_physical_capacity_runtime.esk\ntests/e3_private/parse_numerical_observation.py\ntests/e3_private/test_numerical_tuple.py'
+expected_changes=$'docs/ROADMAP.md\ndocs/e3/E3_M2_PHYSICAL_CAPACITY_ONE_USE_GATE.md\nscripts/test-e3-m2-physical-capacity-one-use.sh\ntests/e3_private/check_m2_verifier_stderr.py\ntests/e3_private/numerical_physical_capacity_runtime.esk\ntests/e3_private/parse_numerical_observation.py\ntests/e3_private/test_numerical_tuple.py'
 [[ "$(git -C "${gate_root}" diff --name-only "${candidate}" HEAD)" == "${expected_changes}" ]] || {
   echo "gate descendant changed files outside the reviewed test-only recipe" >&2; exit 1;
 }
@@ -204,7 +206,8 @@ ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "${q0_python}" \
   --observed "${out}/observed-a.json" --roles "${out}/roles-a.tsv" \
   --transcript "${out}/transcript-a.json" \
   >"${out}/verify-a.stdout" 2>"${out}/verify-a.stderr"
-[[ ! -s "${out}/verify-a.stderr" ]]
+python3 -B "${gate_root}/tests/e3_private/check_m2_verifier_stderr.py" \
+  normal "${out}/verify-a.stderr"
 python3 -B - "${out}" <<'PY'
 import json, pathlib, sys
 root = pathlib.Path(sys.argv[1])
@@ -231,8 +234,9 @@ if ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "${q0_python}" \
   echo "physical-capacity mutant survived the independent comparator" >&2; exit 1
 fi
 [[ ! -e "${out}/transcript-physical-capacity.json" ]]
-[[ "$(tail -n 1 "${out}/verify-physical-capacity.stderr")" == \
-  'tests.e3_reference.transcript.TranscriptError: batches[2].reduction_f32: exact rational reduction mismatch' ]]
+[[ ! -s "${out}/verify-physical-capacity.stdout" ]]
+python3 -B "${gate_root}/tests/e3_private/check_m2_verifier_stderr.py" \
+  mutant "${out}/verify-physical-capacity.stderr"
 [[ "$(git -C "${source_root}" rev-parse HEAD)" == "${candidate}" &&
    "$(git -C "${source_root}" rev-parse HEAD^{tree})" == "${candidate_tree}" &&
    -z "$(git -C "${source_root}" status --porcelain --untracked-files=all)" &&
