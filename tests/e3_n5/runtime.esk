@@ -1,13 +1,14 @@
-;;; Compiled N5 one-over preflight and same-model three-row retry.
+;;; Compiled N5 one-over, same-model retry and exact-limit failure/success.
 (extern void e3-n5-run ptr ptr ptr :real et_e3_mode_graph_run_v1)
 
 (define args (cdr (command-line)))
 (if (not (and (pair? args) (pair? (cdr args))
-              (null? (cdr (cdr args)))))
+              (pair? (cdr (cdr args)))
+              (null? (cdr (cdr (cdr args))))))
     (exit 2))
 (define output (vector #f))
 (e3-n5-run (vector (vector 'n5-8193))
-           (vector (car args) (cadr args)) output)
+           (vector (car args) (cadr args) (car (cdr (cdr args)))) output)
 (if (not (eq? (vector-ref output 0) #t)) (exit 1))
-(display "E3-N5-PRIVATE-PASS rows=8193 stage=2 category=unsupported retry=3")
+(display "E3-N5-PRIVATE-PASS rows=8193 stage=2 category=unsupported retry=3 exact=8192 active=16383 final=255/0/1/0")
 (newline)

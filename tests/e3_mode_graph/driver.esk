@@ -239,10 +239,107 @@
         ((eq? (car (car details)) key) (cadr (car details)))
         (else (e3-n5-error-detail (cdr details) key))))
 
+(define (e3-n5-last-row)
+  (vector (e3-mg-retention-probe 33) (e3-mg-retention-probe 34)
+          (e3-mg-retention-probe 35) (e3-mg-retention-probe 36)))
+
+(define (e3-n5-exact-limit path model frame destinations tokenizer token)
+  (let* ((dataset (d2-token-dataset-open
+                   (e3-test-dataset-config path #t) tokenizer))
+         (cursor (d2-token-dataset-cursor dataset))
+         (publication (e3-mg-publication frame destinations))
+         (image (e3-mg-model-image model))
+         (rng (m3t-public-initializer-words
+               (m3t-public-model-initializer model)))
+         (modes (p1-e3-test-mode-mask token))
+         (probes (e3-mg-probes))
+         (events (e3-mg-events))
+         (native (e3-n5-native-entries))
+         (last-row (e3-n5-last-row)))
+    (guard
+     (caught
+      (#t (e3-mg-read-fail-stage 0)
+          (vector-set! e3-mode-graph-cell 9 #f)
+          (d2-token-dataset-close! dataset)
+          (raise caught)))
+     ;; Only this long N5 call may exceed the ordinary four-note witness.
+     (vector-set! e3-mode-graph-cell 9 #t)
+     (e3-mode-graph-clear-observations!)
+     (e3-mg-read-fail-stage 1)
+     (let ((failed
+            (with-region ('e3-n5-exact-first-failure 262144)
+              (guard (caught (#t caught))
+                (e3-evaluate-into! model dataset frame)
+                #f))))
+       (e3-mg-read-fail-stage 0)
+       (e3-mg-check 'n5-exact-first-read-failure
+         (and (transformer-error? failed)
+              (eq? (transformer-error-category failed) 'io)
+              (eq? (transformer-error-operation failed) 'e3-evaluate-into!)))
+       (e3-mg-check 'n5-exact-first-no-partial-output
+         (equal? publication (e3-mg-publication frame destinations)))
+       (e3-mg-check 'n5-exact-first-cursor
+         (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset)))
+       (let ((after (e3-n5-native-entries)))
+         (e3-mg-check 'n5-exact-first-no-staged-batch
+           (and (= (- (vector-ref after 0) (vector-ref native 0)) 1)
+                (= (vector-ref after 1) (vector-ref native 1))
+                (= (vector-ref after 2) (vector-ref native 2))
+                (= (vector-ref after 3) (vector-ref native 3)))))
+       (e3-mg-check 'n5-exact-first-no-last-row
+         (equal? last-row (e3-n5-last-row)))
+       (e3-mg-check 'n5-exact-first-note
+         (= (vector-ref e3-mode-graph-cell 3) 1))
+       (e3-mg-check 'n5-exact-first-owner
+         (e3-mg-owner-controls-restored? probes))
+       (e3-mg-check 'n5-exact-first-model (e3-mg-model=? model image))
+       (e3-mg-check 'n5-exact-first-modes
+         (= modes (p1-e3-test-mode-mask token)))
+       (e3-mg-check 'n5-exact-first-graph (equal? events (e3-mg-events))))
+     (e3-mode-graph-clear-observations!)
+     (let ((before (e3-n5-native-entries)))
+       (with-region ('e3-n5-exact-success 262144)
+         (e3-evaluate-into! model dataset frame))
+       (let ((result (e3-mg-publication frame destinations))
+             (after (e3-n5-native-entries)))
+         (e3-mg-check 'n5-exact-counts
+           (and (= (vector-ref result 1) 1182792704)
+                (= (vector-ref result 4) 16383)
+                (= (vector-ref result 5) 8192)))
+         (e3-mg-check 'n5-exact-last-row
+           (equal? (e3-n5-last-row) (vector 255 0 1 0)))
+         (e3-mg-check 'n5-exact-native-entries
+           (and (= (- (vector-ref after 0) (vector-ref before 0)) 1)
+                (= (- (vector-ref after 1) (vector-ref before 1)) 8192)
+                (= (- (vector-ref after 2) (vector-ref before 2)) 172032)
+                (= (- (vector-ref after 3) (vector-ref before 3)) 8192)))
+         (e3-mg-check 'n5-exact-notes
+           (= (vector-ref e3-mode-graph-cell 3) 8193))
+         (e3-mg-check 'n5-exact-cursor
+           (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset)))
+         (e3-mg-check 'n5-exact-owner
+           (e3-mg-owner-controls-restored? probes))
+         (e3-mg-check 'n5-exact-model (e3-mg-model=? model image))
+         (e3-mg-check 'n5-exact-rng
+           (equal? rng (m3t-public-initializer-words
+                         (m3t-public-model-initializer model))))
+         (e3-mg-check 'n5-exact-modes
+           (= modes (p1-e3-test-mode-mask token)))
+         (e3-mg-check 'n5-exact-graph (equal? events (e3-mg-events)))
+         (e3-mg-check 'n5-exact-idle-frame
+           (= (e3-mg-retention-probe 20) 0))
+         (e3-mg-check 'n5-exact-no-live-batch
+           (and (= (e3-mg-retention-probe 23) 0)
+                (= (e3-mg-retention-probe 24) 0)))))
+     (vector-set! e3-mode-graph-cell 9 #f)
+     (d2-token-dataset-close! dataset)
+     #t)))
+
 (define (e3-n5-run paths)
   (e3-mg-check 'n5-paths
-    (and (vector? paths) (= (vector-length paths) 2)
-         (string? (vector-ref paths 0)) (string? (vector-ref paths 1))))
+    (and (vector? paths) (= (vector-length paths) 3)
+         (string? (vector-ref paths 0)) (string? (vector-ref paths 1))
+         (string? (vector-ref paths 2))))
   (let* ((fixture (e3-test-fixture))
          (model (vector-ref fixture 0))
          (tokenizer (vector-ref fixture 1))
@@ -329,6 +426,8 @@
                     (= (- (vector-ref after 2) (vector-ref native 2)) 63)
                     (= (- (vector-ref after 3) (vector-ref native 3)) 3))))
            (d2-token-dataset-close! small)))
+       (e3-n5-exact-limit (vector-ref paths 2) model frame destinations
+                          tokenizer token)
        (g3t-checked-m3t-input-release! input)
        #t))))
 

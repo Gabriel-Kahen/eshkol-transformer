@@ -803,8 +803,10 @@ source/toolchain/compiler/fixture pins and seals partial failure evidence with
 a complete no-symlink inventory. The seal is one-use: reserved-name collisions
 preserve existing evidence, and bounded strict checksum plus complete inventory
 checks follow creation. No compiled run has been launched.
-The deterministic source corpus now also prepares the exact 8,192-row limit
-with one valid final position; compiled evaluation of that case remains pending.
+The deterministic exact 8,192-row/one-valid-final-position corpus is now wired
+into the N5 compiled source with an injected first-read failure, unchanged
+publication and cursor checks, and test-only last-target/mask observers. Its
+normal/poison/sanitizer execution remains pending.
 
 The [E3 idle real-model control contract](e3/E3_IDLE_REAL_MODEL_CONTROL_CONTRACT.md)
 specifies a test-only use of existing I2 checkpoint decode and whole-batch load

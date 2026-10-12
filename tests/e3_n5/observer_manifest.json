@@ -9,6 +9,12 @@
     {"selector": 31, "counter": "e3_n5_forward_calls", "native_entry": "et_e3_private_forward_role_v1", "failure_delta": 0, "retry_delta": 63},
     {"selector": 32, "counter": "e3_n5_ce_calls", "native_entry": "et_e3_private_ce_v1", "failure_delta": 0, "retry_delta": 3}
   ],
+  "last_row_selectors": [
+    {"selector": 33, "field": "target[0]", "exact_limit_value": 255},
+    {"selector": 34, "field": "target[1]", "exact_limit_value": 0},
+    {"selector": 35, "field": "mask[0]", "exact_limit_value": 1},
+    {"selector": 36, "field": "mask[1]", "exact_limit_value": 0}
+  ],
   "package_manifests": [
     "tests/e3_mode_graph/package_defined_symbols.txt",
     "tests/e3_mode_graph/package_public_exports.txt",

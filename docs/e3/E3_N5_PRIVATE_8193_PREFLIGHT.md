@@ -11,8 +11,7 @@ reviews the exact source/toolchain pins and the active hosted run is complete.
 from the six-byte sequence `03 c5 00 ff 07 07`, repeated to 16,387 tokens.
 Eight shards contain 2,048 tokens and the final shard contains three. A separate
 16,384-token exact-limit case emits 8,192 rows, with one valid position in its
-last row. This source fixture is prepared and checksummed but has no compiled
-evaluation verdict. The independent packed D2 equation
+last row. The independent packed D2 equation
 `ceil((16,387-1)/2)` gives exactly 8,193
 full `[1,2]` rows and 16,386 active target positions. The generator also
 creates the original six-byte three-row corpus for a later retry. Its
@@ -32,6 +31,13 @@ source-code 2. The specified byte and owner invariants must match afterward.
 The same model/frame then
 evaluates the three-row corpus and must publish the six accepted words
 `(1085366897 1084227584 1132430055 0 5 3)` with cursor restored.
+Finally, the exact-limit dataset first has an injected first-read failure; the
+previous six output words and counters, cursor, model, modes, graph state,
+native staging and last-row observation must remain unchanged. Its clean retry
+must publish exact-f32 mask weight 16,383 (`1182792704`), 16,383 active
+positions and 8,192 batches. A test-only native
+observer must report the final staged targets `(255 0)` and mask `(1 0)`.
+No compiled verdict has been obtained for this successor.
 
 ## Package and observer manifest
 
@@ -58,6 +64,11 @@ pinned source order in `internal/e3/lib/e3_d2_restore.esk` and
 `native/e3_private_extension.esk` place this rejection before native acquire,
 P1 mode enter, D2 traversal and provider routing. The counter is test-only;
 the production ABI and private evaluator interface do not change.
+Selectors 33--36 record the last successfully staged target pair and mask pair
+under the same test-only guard. The exact-limit first-read fault must leave
+those four values unchanged; the clean retry must end at `(255 0 1 0)`.
+The mode/graph source generator permits more than four in-call notes only while
+this N5 exact-limit case is armed; the ordinary four-note limit remains intact.
 
 ## Deferred compiled gate
 
@@ -82,7 +93,8 @@ checks the source contracts, generates two
 byte-equal corpora, builds two fresh normal packages and one sanitized package,
 compares exact manifests, objects, archives and depfiles, compiles normal and
 sanitized optimized AOT callers, then runs normal, poisoned and
-ASan/UBSan/LSan cases. It requires identical stdout and empty runtime stderr
+ASan/UBSan/LSan cases. Each runtime is bounded at 3,600 seconds and must emit
+exactly one expected success line. It requires identical stdout and empty runtime stderr
 and records elapsed time/peak RSS for each mode. Its exit handler preserves
 and seals partial output on failure, recording the failing stage and status.
 `INVENTORY.jsonl` lists every directory, regular file, symlink and nonregular

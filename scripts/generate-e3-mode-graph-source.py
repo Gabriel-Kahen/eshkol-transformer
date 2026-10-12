@@ -21,19 +21,19 @@ PINS = {
 OUTPUT_DIGESTS = {
     "normal": (
         "f909e79420850f228f88965e4cfa3a328c54b463fbac1f124cd61942c8ba05c6",
-        "11ac65012eb02ca855e19a3123cc3d0108585dbdd05031e02aae8295f5b90fb9",
+        "45efb742b8b00481f46c0392725c3f0ad4663d84b246acf5dd728addfae6281a",
     ),
     "missed-child": (
         "c620d8c6235334c4ea0aa95ec81b2852db8925f4f068d08e5e7267e9d200e8f3",
-        "11ac65012eb02ca855e19a3123cc3d0108585dbdd05031e02aae8295f5b90fb9",
+        "45efb742b8b00481f46c0392725c3f0ad4663d84b246acf5dd728addfae6281a",
     ),
     "enter-write-only": (
         "e7f8a0068b63e57e5f1ff70d2411f95cf6350491bcd34299680bf5f51c8b8ea0",
-        "11ac65012eb02ca855e19a3123cc3d0108585dbdd05031e02aae8295f5b90fb9",
+        "45efb742b8b00481f46c0392725c3f0ad4663d84b246acf5dd728addfae6281a",
     ),
     "graph-create": (
         "f909e79420850f228f88965e4cfa3a328c54b463fbac1f124cd61942c8ba05c6",
-        "8b0059c99b84eb43abd37f085379ee27d46fb474493dc4f6920673652061c57e",
+        "47198fdf7bff84f8d80bf394b1a733dbaa31afdb22d96aaa3657ff50e2240ff2",
     ),
 }
 
@@ -66,7 +66,7 @@ MODE_SEAM = '''
 (extern i64 e3-test-graph-event i64 :real et_e3_test_graph_event_v1)
 (define e3-mode-graph-cell
   (vector #f #f #f 0 (make-vector 4 -1) (make-vector 4 -1)
-          (make-vector 4 -1) (make-vector 4 -1) (make-vector 4 -1)))
+          (make-vector 4 -1) (make-vector 4 -1) (make-vector 4 -1) #f))
 
 (define (e3-mode-graph-arm! model frame input)
   (let* ((entry (e3-frame-entry-live frame 'e3-mode-graph-arm!))
@@ -101,18 +101,22 @@ MODE_SEAM = '''
     (if (or (not (eq? entry (vector-ref e3-mode-graph-cell 0)))
             (not (= (vector-ref entry 1) 2))
             (not (e3-entry-bit? entry 8))
-            (< ordinal 0) (>= ordinal 4))
+            (< ordinal 0)
+            (and (>= ordinal 4) (not (vector-ref e3-mode-graph-cell 9))))
         (e3-native-invariant-fail))
-    (vector-set! (vector-ref e3-mode-graph-cell 4) ordinal
-                 (p1-e3-test-mode-mask (vector-ref entry 6)))
-    (vector-set! (vector-ref e3-mode-graph-cell 5) ordinal
-                 (e3-test-graph-event 0))
-    (vector-set! (vector-ref e3-mode-graph-cell 6) ordinal
-                 (e3-test-graph-event 1))
-    (vector-set! (vector-ref e3-mode-graph-cell 7) ordinal
-                 (e3-test-graph-event 2))
-    (vector-set! (vector-ref e3-mode-graph-cell 8) ordinal
-                 (e3-test-graph-event 3))
+    (if (< ordinal 4)
+        (begin
+          (vector-set! (vector-ref e3-mode-graph-cell 4) ordinal
+                       (p1-e3-test-mode-mask (vector-ref entry 6)))
+          (vector-set! (vector-ref e3-mode-graph-cell 5) ordinal
+                       (e3-test-graph-event 0))
+          (vector-set! (vector-ref e3-mode-graph-cell 6) ordinal
+                       (e3-test-graph-event 1))
+          (vector-set! (vector-ref e3-mode-graph-cell 7) ordinal
+                       (e3-test-graph-event 2))
+          (vector-set! (vector-ref e3-mode-graph-cell 8) ordinal
+                       (e3-test-graph-event 3)))
+        #t)
     (vector-set! e3-mode-graph-cell 3 (+ ordinal 1))
     #t))
 

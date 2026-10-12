@@ -84,6 +84,7 @@ static int64_t e3_last_domain, e3_last_category, e3_last_code;
 /* Noninstalled N5 probes count entry, including rejected native calls. */
 static int64_t e3_n5_acquire_calls, e3_n5_stage_calls;
 static int64_t e3_n5_forward_calls, e3_n5_ce_calls;
+static int64_t e3_n5_last_targets[2], e3_n5_last_mask[2];
 #endif
 
 #ifdef ET_E3_TESTING
@@ -815,6 +816,12 @@ int64_t et_e3_private_stage_mask_v1(
   if (mask[0] > 1 || mask[1] > 1 || (mask[0] == 0 && mask[1] == 0))
     return e3_fail(E3_INVALID_ARGUMENT, E3_CODE_PROFILE);
   memcpy(frame->mask, mask, sizeof(frame->mask));
+#ifdef ET_E3_RETENTION_TESTING
+  e3_n5_last_targets[0] = frame->targets[0];
+  e3_n5_last_targets[1] = frame->targets[1];
+  e3_n5_last_mask[0] = frame->mask[0];
+  e3_n5_last_mask[1] = frame->mask[1];
+#endif
   frame->stage_plane = 3;
   frame->next_role = 0;
   frame->phase = E3_FORWARD;
@@ -1430,6 +1437,10 @@ int64_t et_e3_test_retention_probe_v1(int64_t selector) {
     case 30: return e3_n5_stage_calls;
     case 31: return e3_n5_forward_calls;
     case 32: return e3_n5_ce_calls;
+    case 33: return e3_n5_last_targets[0];
+    case 34: return e3_n5_last_targets[1];
+    case 35: return e3_n5_last_mask[0];
+    case 36: return e3_n5_last_mask[1];
     default: return -1;
   }
 }

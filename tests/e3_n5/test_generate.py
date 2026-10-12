@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from tests.d2.reference import ReferenceConfig, ReferenceDataset
-from tests.d2.test_resources import load_d1_resource
+from tests.d2.test_resources import ResourceError, load_d1_resource
 from tests.e3_n5.generate import (EXACT_ROWS, EXACT_TOKENS, ROWS, SHARD_TOKENS,
                                   TOTAL_TOKENS, materialize)
 from tests.e3_n5.evidence import fixture_digest
@@ -13,6 +13,22 @@ from tests.e3_reference.corpus import FINGERPRINT, VOCAB_SIZE
 
 
 class N5CorpusTests(unittest.TestCase):
+    def test_exact_final_target_corruption_rejects_source_fixture(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "corpus"
+            materialize(root)
+            original = fixture_digest(root)
+            shard = sorted((root / "exact-limit").glob("shard-*.ets"))[-1]
+            data = bytearray(shard.read_bytes())
+            self.assertEqual(data[-40], 255)
+            data[-40] ^= 1  # The last valid target; leave the D1 checksum stale.
+            shard.write_bytes(data)
+            self.assertNotEqual(fixture_digest(root), original)
+            with self.assertRaisesRegex(ResourceError, "corrupt-data"):
+                load_d1_resource(root / "exact-limit",
+                                 expected_fingerprint=FINGERPRINT,
+                                 expected_vocab=VOCAB_SIZE)
+
     def test_exact_boundary_one_over_and_repeated_generation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             roots = [Path(temporary) / name for name in ("a", "b")]

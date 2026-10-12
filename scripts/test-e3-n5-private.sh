@@ -235,12 +235,13 @@ for variant in normal poison sanitize; do
     UBSAN_OPTIONS=halt_on_error=1 ESHKOL_ARENA_POISON="${poison}" \
     /usr/bin/time -f 'elapsed_seconds=%e peak_rss_kib=%M' \
       -o "${out}/run-${variant}.time" \
-    timeout --foreground --signal=TERM --kill-after=5s 300s \
+    timeout --foreground --signal=TERM --kill-after=5s 3600s \
       "${executable}" "${out}/corpus-a/one-over" \
-      "${out}/corpus-a/retry-small" \
+      "${out}/corpus-a/retry-small" "${out}/corpus-a/exact-limit" \
       >"${out}/run-${variant}.stdout" 2>"${out}/run-${variant}.stderr"
-  grep -Fx 'E3-N5-PRIVATE-PASS rows=8193 stage=2 category=unsupported retry=3' \
-    "${out}/run-${variant}.stdout" >/dev/null
+  printf '%s\n' \
+    'E3-N5-PRIVATE-PASS rows=8193 stage=2 category=unsupported retry=3 exact=8192 active=16383 final=255/0/1/0' | \
+    cmp - "${out}/run-${variant}.stdout"
   [[ ! -s "${out}/run-${variant}.stderr" ]] || \
     die "N5 ${variant} emitted runtime diagnostics"
 done
