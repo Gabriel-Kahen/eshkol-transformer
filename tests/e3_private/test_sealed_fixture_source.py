@@ -19,6 +19,25 @@ SPEC.loader.exec_module(MODULE)
 
 
 class FixtureSource(unittest.TestCase):
+    def assert_i2_preflight_uses_available_helpers(self, source: str) -> None:
+        preflight = source.split(
+            "(define (i2-candidate-construction-preflight! record triples)", 1
+        )[1].split("(define (i2-candidate-construction-unlink! record)", 1)[0]
+        self.assertNotRegex(preflight, r"\((?:length|memq)\s")
+        for required in (
+            "(i2-bounded-list-length (vector-ref record 4)\n"
+            "                                                  i2-max-batch)",
+            "(i2-bounded-list-length (vector-ref record 5) 14)",
+            "(i2-identity-member? carrier (vector-ref record 5))",
+        ):
+            self.assertIn(required, preflight)
+        self.assertIn("(not membership-count)", preflight)
+        self.assertIn("(not carrier-count)", preflight)
+        self.assertLess(preflight.index("(not membership-count)"),
+                        preflight.index("(+ (vector-ref record 7) membership-count)"))
+        self.assertLess(preflight.index("(not carrier-count)"),
+                        preflight.index("(not (= carrier-count 14))"))
+
     @staticmethod
     def nesting_depth(source: str, offset: int) -> int:
         depth = 0
@@ -102,6 +121,22 @@ class FixtureSource(unittest.TestCase):
         self.assertLess(m3t.index("m3t-native-candidate-retire-preflight\n"),
                         m3t.index("module-candidate-construction-revoke-internal! construction"))
         self.assertNotIn("candidate", (ROOT / "native/m3t_transport_extension.esk").read_text())
+
+    def test_i2_preflight_has_no_ambient_stdlib_calls(self) -> None:
+        source = MODULE.outputs()["i2_wave2_root.esk"].decode()
+        self.assert_i2_preflight_uses_available_helpers(source)
+        for old, new in (
+            ("(not membership-count)", "#f"),
+            ("(not carrier-count)", "#f"),
+            ("(i2-identity-member? carrier (vector-ref record 5))", "#t"),
+            ("(i2-identity-member? carrier (vector-ref record 5))",
+             "(memq carrier (vector-ref record 5))"),
+        ):
+            with self.subTest(mutation=new):
+                self.assertEqual(source.count(old), 1)
+                with self.assertRaises(AssertionError):
+                    self.assert_i2_preflight_uses_available_helpers(
+                        source.replace(old, new, 1))
 
     def test_generator_detects_wrong_source_and_missing_anchor(self) -> None:
         original = MODULE.INPUTS["p1"]

@@ -14,13 +14,18 @@
     root))
 
 (define (i2-candidate-construction-preflight! record triples)
-  (let ((operation 'g3r-candidate-retire))
+  (let ((operation 'g3r-candidate-retire)
+        (membership-count (i2-bounded-list-length (vector-ref record 4)
+                                                  i2-max-batch))
+        (carrier-count (i2-bounded-list-length (vector-ref record 5) 14)))
     (if (or (not (eq? (vector-ref record 9) 'm3t-candidate))
             (not (eq? (vector-ref record 3) 'sealed))
             (not (eq? (i2-modules-current) (vector-ref record 10)))
+            (not membership-count)
             (not (= i2-module-count
-                    (+ (vector-ref record 7) (length (vector-ref record 4)))))
-            (not (= (length (vector-ref record 5)) 14))
+                    (+ (vector-ref record 7) membership-count)))
+            (not carrier-count)
+            (not (= carrier-count 14))
             (not (= (vector-length triples) 14)))
         (i2-fail 'invalid-state operation
                  "candidate I2 membership or carrier ledger changed"))
@@ -38,7 +43,7 @@
       (if (= index 14) #t
           (let* ((triple (vector-ref triples index))
                  (carrier (vector-ref triple 2)))
-            (if (or (not (memq carrier (vector-ref record 5)))
+            (if (or (not (i2-identity-member? carrier (vector-ref record 5)))
                     (not (eq? (vector-ref carrier 2) (vector-ref triple 0)))
                     (not (eq? (vector-ref carrier 3) (vector-ref triple 1))))
                 (i2-fail 'invalid-state operation

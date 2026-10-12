@@ -2005,6 +2005,15 @@ fixture root directly through generated I2/M3T, retaining canonical M3/E3
 extension order; its expected closure is now 28 rows. This remains a static
 hypothesis pending independent review and a fresh one-use source capture.
 
+The first one-use I capture on `ccad8126`/tree `660e8007` reached generated
+I2 compilation but stopped before depfile or IR emission: its fixture-only
+preflight called `length` twice and `memq` once under `--no-stdlib`. Raw stderr
+is retained in `e3-section9-gate-prep-f31-fe9-run-ccad812-20261012-i/`.
+A source-only successor reuses I2's bounded-list and identity-membership
+helpers, guarding invalid counts before arithmetic. A fresh one-use capture
+on the reviewed successor is the next gate; the 28-row closure and Section 9
+acceptance remain unverified.
+
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
 names would return newly owned authenticated CPU f32 `[1,256]` kind-3 shells,
