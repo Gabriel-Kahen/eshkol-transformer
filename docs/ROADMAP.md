@@ -1726,7 +1726,8 @@ and ASan/UBSan runs each pass 180 focused checks; feature-off transport object
 bytes match `779fddd`. This is a read-only native prerequisite only. It cannot
 authenticate the Eshkol candidate ledger or P1/I2 graph, prove exclusive
 initializer ownership, retire payloads, or establish candidate cleanup.
-Independent review, supported pinned compilation and composition remain pending.
+Independent source-and-tests review accepted `84c207b`/tree `ffb15e27` with
+no blocking finding. Supported pinned compilation and composition remain pending.
 
 The proposed [O2 error-span provenance prerequisite](g3/G3_R_O2_ERROR_SPAN_PROVENANCE_PREREQUISITE.md)
 records a concrete gap before native O2 retirement acceptance: the existing
