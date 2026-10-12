@@ -9,20 +9,24 @@ The prepared evidence directory contains `source.bundle`, `pins.tsv`,
 `inside.sh`, `launch.sh`, and `SHA256SUMS-PREPARED`. `launch.sh
 --verify-prepared` authenticates those files and the referenced frozen fe9
 dependency directory, including every entry in its parent manifest, without
-invoking Docker. The immutable f31 image ID and
-every dependency hash are in `pins.tsv`. The dependency directory is shared
+invoking Docker. The immutable f31 image ID and dependency inventory hash
+are in `pins.tsv`. The dependency directory is shared
 read-only with another prepared gate; it must remain present and unchanged.
 
 ## Root prelaunch admission
 
-Wait until PR #201 run `38233893150` is complete and the sole heavy build slot
-is free. Recheck the prepared manifest, pinned dependency files, host resources,
+Wait until PR #201 run `38243445414` at exact head
+`570fc05023ad4d2c1a1c7815c5830d23f5e37b7a` is complete with a success
+conclusion and the sole heavy build slot is free. Recheck the prepared manifest,
+pinned dependency files, host resources,
 and supported Docker image. Create exactly one sibling
 `<bundle>.admission.tsv` containing these tab-separated records:
 
 ```text
-pr201_run	38233893150
+pr201_run	38243445414
+pr201_head	570fc05023ad4d2c1a1c7815c5830d23f5e37b7a
 pr201_status	completed
+pr201_conclusion	success
 sole_heavy_slot	confirmed
 ```
 
@@ -46,7 +50,10 @@ time, and exit status. The host retains clone, Docker, source identity,
 admission, and failure-stage evidence; its exit trap writes `overall.status`
 and `SHA256SUMS-RUN` even after a failed child or timeout. The sealed
 `host-command-exit.status` retains the original Docker or timeout status
-before aggregate failure classification. A missing run seal
+before aggregate failure classification. Docker writes its CID outside the
+guest-mounted result; cleanup requires a full CID and one bounded inspection
+matching the host-assigned name, image and labels before removing only that
+container. Ambiguous ownership fails the gate and retains evidence. A missing run seal
 is itself a failed handoff.
 
 Preparation and source review do not constitute compiled or installed runtime

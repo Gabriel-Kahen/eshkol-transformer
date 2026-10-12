@@ -5,6 +5,9 @@ bundle="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 pins="${bundle}/pins.tsv"
 result="${bundle}.result"
 admission="${bundle}.admission.tsv"
+cidfile="${result}.container.cid"
+bundle_manifest_sha=''
+container_name=''
 
 value() {
   awk -F '\t' -v key="$2" '$1 == key { value=$2; count++ }
@@ -50,12 +53,56 @@ fi
 mkdir -- "${result}" || die "one-use result directory already exists: ${result}"
 
 finalize() {
-  local status=$? name first=complete
+  local status=$? name first=complete cid image cid_bytes
+  local -a fields=()
   trap - EXIT
   set +e
   printf '%s\n' "${status}" >"${result}/host-command-exit.status"
-  if [[ -s "${result}/container.cid" ]]; then
-    docker rm -f "$(cat "${result}/container.cid")" >/dev/null 2>&1 || true
+  if [[ -e "${cidfile}" || -L "${cidfile}" ]]; then
+    cp -- "${cidfile}" "${result}/host-container.cid" || status=1
+    cid="$(cat -- "${cidfile}" 2>/dev/null)"
+    cid_bytes="$(wc -c <"${cidfile}" 2>/dev/null)"
+    if [[ ! -f "${cidfile}" || -L "${cidfile}" ||
+          ! "${cid}" =~ ^[0-9a-f]{64}$ ||
+          ( "${cid_bytes}" != 64 && "${cid_bytes}" != 65 ) ]]; then
+      printf 'invalid-host-cid\n' >"${result}/container-cleanup.status"
+      status=1
+    elif timeout 20s docker container inspect --format \
+        '{{.Id}}
+{{.Name}}
+{{.Image}}
+{{index .Config.Labels "org.eshkol.cli3.gate"}}
+{{index .Config.Labels "org.eshkol.cli3.target"}}' "${cid}" \
+        >"${result}/container-inspect.stdout" \
+        2>"${result}/container-inspect.stderr"; then
+      mapfile -t fields <"${result}/container-inspect.stdout"
+      image="$(pin image_id)"
+      if [[ "${#fields[@]}" == 5 && "${fields[0]:-}" == "${cid}" &&
+            "${fields[1]:-}" == "/${container_name}" &&
+            "${fields[2]:-}" == "${image}" &&
+            "${fields[3]:-}" == "${bundle_manifest_sha}" &&
+            "${fields[4]:-}" == "$(pin target_commit)" ]]; then
+        if timeout 20s docker rm -f -- "${cid}" \
+            >"${result}/container-remove.stdout" \
+            2>"${result}/container-remove.stderr"; then
+          printf 'removed-owned-container\n' >"${result}/container-cleanup.status"
+        else
+          printf 'owned-container-removal-failed\n' >"${result}/container-cleanup.status"
+          status=1
+        fi
+      else
+        printf 'ownership-mismatch\n' >"${result}/container-cleanup.status"
+        status=1
+      fi
+    else
+      printf 'ownership-inspection-failed\n' >"${result}/container-cleanup.status"
+      status=1
+    fi
+  elif [[ -e "${result}/container.stdout" ]]; then
+    printf 'host-cid-missing\n' >"${result}/container-cleanup.status"
+    status=1
+  else
+    printf 'container-not-started\n' >"${result}/container-cleanup.status"
   fi
   if [[ -d "${result}/source/.git" ]]; then
     git -C "${result}/source" rev-parse HEAD >"${result}/final-head.txt" 2>&1 || status=1
@@ -102,9 +149,11 @@ trap 'exit 143' TERM
 verify_bundle >"${result}/bundle-verify.stdout" 2>"${result}/bundle-verify.stderr"
 [[ -r "${admission}" ]] || die "ROOT resource-admission record is missing: ${admission}"
 [[ "$(value "${admission}" pr201_run)" == "$(pin pr201_run)" &&
+   "$(value "${admission}" pr201_head)" == "$(pin pr201_head)" &&
    "$(value "${admission}" pr201_status)" == completed &&
+   "$(value "${admission}" pr201_conclusion)" == success &&
    "$(value "${admission}" sole_heavy_slot)" == confirmed ]] || \
-  die "PR201 completion and sole heavy slot have not been admitted"
+  die "exact PR201 successful completion and sole heavy slot have not been admitted"
 cp -- "${admission}" "${result}/admission.tsv"
 
 for command in docker flock git timeout /usr/bin/time; do
@@ -141,12 +190,23 @@ mkdir "${result}/source/.deps"
 chmod -R a-w "${result}/source"
 mkdir -p "${result}/steps" "${result}/tmp" "${result}/cache" "${result}/home"
 deps="$(pin deps_root)"
+[[ ! -e "${cidfile}" && ! -L "${cidfile}" ]] || \
+  die "host-private container CID path already exists: ${cidfile}"
+bundle_manifest_sha="$(hash "${bundle}/SHA256SUMS-PREPARED")"
+target_commit="$(pin target_commit)"
+container_name="eshkol-cli3-${target_commit:0:12}-${bundle_manifest_sha:0:12}"
+printf 'name\t%s\nimage\t%s\ngate_manifest_sha256\t%s\ntarget_commit\t%s\n' \
+  "${container_name}" "${image}" "${bundle_manifest_sha}" "${target_commit}" \
+  >"${result}/container-identity.tsv"
 
 timeout --foreground --signal=TERM --kill-after=30s \
   "$(pin outer_timeout_seconds)s" \
-  docker run --rm --network none --cpus=2 --memory=12g --memory-swap=12g \
+  docker run --network none --cpus=2 --memory=12g --memory-swap=12g \
     --pids-limit=1024 --user "$(id -u):$(id -g)" \
-    --cidfile "${result}/container.cid" \
+    --name "${container_name}" \
+    --label "org.eshkol.cli3.gate=${bundle_manifest_sha}" \
+    --label "org.eshkol.cli3.target=${target_commit}" \
+    --cidfile "${cidfile}" \
     -v "${result}/source:/workspace:ro" \
     -v "${deps}:/workspace/.deps:ro" \
     -v "${bundle}:/gate:ro" -v "${result}:/out" -w /workspace \

@@ -665,8 +665,9 @@ one-use, source-only harness for accepted installed-validator source
 `adb51279`/tree `f397b148`, pinned fe9/LLVM 21 and f31 image. It retains
 standalone D1, production package, installed command, archive/symbol/depfile,
 old-command and cross-command evidence with host failure sealing. The bundle
-is prepared but not launched; PR #201 completion, sole heavy-slot admission,
-the supported image check and independent final review precede the compiled
+is prepared but not launched; PR #201 exact `570fc050` run `38243445414`
+success, sole heavy-slot admission, the supported image check and independent
+final review precede the compiled
 gate. Compiled and hosted acceptance remain pending.
 
 The isolated CLI3 cross-command test script `scripts/test-cli3-cross-command-chain.sh`
