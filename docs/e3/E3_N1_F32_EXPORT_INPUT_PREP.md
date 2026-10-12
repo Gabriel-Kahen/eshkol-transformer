@@ -54,7 +54,10 @@ The plan rejects duplicate blob names and source paths.
 Positive bounded inputs include per-blob and combined byte caps, output cap,
 seconds, RSS, and measured free space of at least twice the output cap. The
 proposed ceilings are 512 MiB per blob and combined, 2 GiB output/RSS and
-1,800 seconds. These are structural ceilings, not measured workload results.
+1,800 seconds. The `oci-layout`, index, manifest and config JSON bytes are
+separately capped at 2 MiB to match the accepted OCI byte verifier's
+`JSON_CAP`; the 512 MiB layer ceiling does not override this. These are
+structural ceilings, not measured workload results.
 An exact complete plan needs separately reviewed positive limits chosen for
 the actual f32 descriptors and source filesystem.
 
@@ -62,7 +65,8 @@ the actual f32 descriptors and source filesystem.
 protected output, intent, receipt and one-use stores; separately sealer-owned
 seal store and immutable-target parent; named ancestor identities and ACL
 evidence; exact target basename; a unique broker-owned stage and durable
-pre-stage HOLD policy. It requires two distinct role-specific PureEd25519-v3
+pre-stage HOLD policy. The consumer UID must differ from both minting
+authorities. It requires two distinct role-specific PureEd25519-v3
 **public** verification anchors, their raw 32-byte public keys/digests,
 verifier-binary path pins with expected size and SHA-256, and separate
 trust-evidence references. It also requires

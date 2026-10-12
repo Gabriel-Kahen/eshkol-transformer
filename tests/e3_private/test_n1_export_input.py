@@ -196,6 +196,10 @@ class ExportInputTests(unittest.TestCase):
         plan = complete_plan()
         plan["custody"]["seal_store"]["uid"] = plan["custody"]["broker_uid"]
         mutations.append(plan)
+        for minting_role in ("broker_uid", "sealer_uid"):
+            plan = complete_plan()
+            plan["custody"]["consumer_uid"] = plan["custody"][minting_role]
+            mutations.append(plan)
         for case in mutations:
             with self.subTest(case=case):
                 self.assert_hold_error(case)
@@ -213,6 +217,20 @@ class ExportInputTests(unittest.TestCase):
         self.assert_hold_error(plan)
         plan["oci"]["layout"] = {"sha256": sha(b"synthetic"), "size": 1}
         self.assert_hold_error(plan)
+
+    def test_small_oci_json_cap_matches_downstream_verifier(self):
+        plan = complete_plan()
+        too_large = 3 * 1024 * 1024
+        plan["oci"]["index_size"] = too_large
+        plan["source_pins"][1]["lstat_size"] = too_large
+        plan["limits"].update({"max_blob_bytes": 4 * 1024 * 1024,
+                               "max_combined_blob_bytes": 4 * 1024 * 1024,
+                               "max_output_bytes": 4 * 1024 * 1024,
+                               "measured_free_bytes": 8 * 1024 * 1024})
+        result = self.run_plan(plan)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, b"")
+        self.assertIn(b"small-json-cap", result.stderr)
 
     def test_input_symlink_holds(self):
         target = self.input.parent / "target.json"

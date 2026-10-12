@@ -15,6 +15,7 @@ CONFIG_TYPE = "application/vnd.oci.image.config.v1+json"
 TAR_TYPE = "application/vnd.oci.image.layer.v1.tar"
 GZIP_TYPE = TAR_TYPE + "+gzip"
 MAX_INPUT = 2 * 1024 * 1024
+OCI_JSON_CAP = 2 * 1024 * 1024  # Matches e3_n1_oci_evidence.py JSON_CAP.
 MAX_LAYERS = 32
 MAX_BLOB = 512 * 1024**2
 MAX_TOTAL = 512 * 1024**2
@@ -171,13 +172,16 @@ def validate_complete(plan):
     oci = plan["oci"]
     fields(oci["layout"], ("sha256", "size"), "layout-fields")
     digest(oci["layout"]["sha256"])
-    integer(oci["layout"]["size"], MAX_BLOB, "layout-size")
-    integer(oci["index_size"], MAX_BLOB, "index-size")
+    integer(oci["layout"]["size"], OCI_JSON_CAP, "small-json-cap")
+    integer(oci["index_size"], OCI_JSON_CAP, "small-json-cap")
     fields(oci["manifest"], ("descriptor", "platform"), "manifest-fields")
     descriptor(oci["manifest"]["descriptor"], {MANIFEST_TYPE})
+    need(oci["manifest"]["descriptor"]["size"] <= OCI_JSON_CAP,
+         "small-json-cap")
     need(oci["manifest"]["platform"] == {"os": "linux", "architecture": "amd64"},
          "platform")
     descriptor(oci["config"], {CONFIG_TYPE})
+    need(oci["config"]["size"] <= OCI_JSON_CAP, "small-json-cap")
     need(type(oci["layers"]) is list and 0 < len(oci["layers"]) <= MAX_LAYERS,
          "layers")
     need(type(oci["diff_ids"]) is list and
@@ -235,6 +239,9 @@ def validate_complete(plan):
         integer(custody[key], 2**32 - 1, "custody-uid", allow_zero=True)
     need(len({custody["caller_uid"], custody["broker_uid"],
               custody["sealer_uid"]}) == 3, "authority-uid-separation")
+    need(custody["consumer_uid"] not in
+         (custody["broker_uid"], custody["sealer_uid"]),
+         "consumer-minting-uid")
     store_names = ("output_parent", "intent_store", "receipt_store",
                    "seal_store", "one_use_store", "immutable_target_parent")
     for key in store_names:
