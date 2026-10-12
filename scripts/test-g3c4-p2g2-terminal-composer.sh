@@ -33,8 +33,10 @@ tmp="$(mktemp -d "$evidence/build.XXXXXX")"
 if (( retain_emitted )); then
   printf '%s\n' "$tmp" >"$evidence/build-path.txt"
 fi
-trap 'status=$?; if (( status == 0 && retain_emitted == 0 )); then rm -rf -- "$tmp"; else
-  printf "P2/G2 terminal composer failure retained: %s\n" "$tmp" >&2; fi' EXIT
+trap 'status=$?; if (( status == 0 )); then
+  if (( retain_emitted == 0 )); then rm -rf -- "$tmp"; else
+    printf "P2/G2 terminal composer emitted evidence retained: %s\n" "$tmp" >&2; fi
+else printf "P2/G2 terminal composer failure retained: %s\n" "$tmp" >&2; fi' EXIT
 
 compile_mode() {
   local mode=$1 directory="$tmp/$1" source
