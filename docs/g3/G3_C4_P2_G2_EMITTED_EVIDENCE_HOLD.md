@@ -18,6 +18,17 @@ The generated files, native objects/depfiles/archive, linked executables,
 overlays, and source-before/after hashes survive a successful opt-in run.
 The ordinary runner retains its previous cleanup behavior.
 
+The terminal runner now writes one command receipt per direct toolchain
+check, static/Q0 checker, native compile/archive, Eshkol compile/link,
+fixture run, overlay generation, oracle, repeat, and parity/closure command.
+Each receipt has NUL-separated argv, entry cwd, numeric exit, and separate
+raw stdout/stderr, including nonzero outcomes. The generated C++ wrapper
+records each actual linker invocation in a collision-safe child receipt and
+replays its raw streams to Eshkol. Missing `exit` or either raw stream after
+interruption is an incomplete receipt, never a pass. Predecessor scripts are
+recorded as aggregate commands; their nested compilers/tests remain outside
+this bounded inventory and block a claim of complete per-command gate proof.
+
 The mechanical checker requires all 11 fixture artifacts, 17 native
 objects, archive members, reviewed native/Eshkol depfile sets, unchanged
 source hashes, exact ASan IR receipt, and an ASan-instrumented object. The
@@ -79,8 +90,8 @@ teardown, atomically consume one-use claim under that lock before mutable
 preflight or child start, and never retry after claim. It must authenticate
 the guest command and owned container identity without `--rm`, enforce a
 finite outer wall clock (the repeat stage has none). Reviewed runner
-instrumentation must record **each internal** compiler/link/test command
-with exact argv, cwd, numeric exit, raw stdout and stderr; the launcher
+instrumentation must extend into the predecessor script subtrees before a
+**complete** internal compiler/link/test inventory can be claimed; the launcher
 must capture the top-level streams and prove signed child wait, both pipe
 EOFs, descendant/named
 writer quiescence, and owned-container absence. Preserve all failed

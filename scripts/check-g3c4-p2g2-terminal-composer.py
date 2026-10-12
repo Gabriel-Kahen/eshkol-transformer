@@ -27,6 +27,9 @@ additions = [
     "tests/g3c4/p2_g2_terminal_emitted_dependencies.json",
     "tests/g3c4/p2_g2_terminal_historical_dynamic_imports.txt",
     "docs/g3/G3_C4_P2_G2_EMITTED_EVIDENCE_HOLD.md",
+    "scripts/g3c4_terminal_command_receipt.sh",
+    "tests/g3c4/check_terminal_command_receipts.py",
+    "tests/g3c4/test_terminal_command_receipt.py",
     "native/g3c4_p2g2_terminal_composer_source_closure.txt",
 ]
 closure = (root / additions[-1]).read_text().splitlines()
@@ -36,6 +39,8 @@ assert all((root / path).is_file() for path in closure)
 assert "G3C4_TERMINAL_RETAIN_EMITTED" in (
     root / "scripts/test-g3c4-p2g2-terminal-composer.sh").read_text()
 assert "--emit-object --dump-ir" in (
+    root / "scripts/test-g3c4-p2g2-terminal-composer.sh").read_text()
+assert "terminal_record_command" in (
     root / "scripts/test-g3c4-p2g2-terminal-composer.sh").read_text()
 source = (root / "native/g3c4_p2g2_terminal_composer_extension.esk").read_text()
 fixture = (root / "tests/g3c4/p2_g2_terminal_composer_test.esk").read_text()

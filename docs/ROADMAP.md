@@ -2731,6 +2731,12 @@ publication, public G2 and continuation remain pending.
   no-allocation and full linked closure on HOLD pending path-sensitive IR
   proof, manual emitted-artifact review and a separately reviewed sole-slot
   launcher with complete raw command/exit and teardown evidence.
+  A bounded successor records terminal-runner commands with exact argv/cwd,
+  numeric exits and separate raw streams, including actual nested C++ linker
+  invocations and failure paths. Source-only receipt controls pass. The two
+  predecessor scripts are still aggregate receipts; their internal command
+  inventory, outer lifecycle/one-use admission, compiled artifact review and
+  successful-zero emitted-code proof remain open.
 
 ## Wave 4 — practical pretraining and performance
 

@@ -203,4 +203,7 @@ tests/g3c4/test_terminal_emitted_evidence.py
 tests/g3c4/p2_g2_terminal_emitted_dependencies.json
 tests/g3c4/p2_g2_terminal_historical_dynamic_imports.txt
 docs/g3/G3_C4_P2_G2_EMITTED_EVIDENCE_HOLD.md
+scripts/g3c4_terminal_command_receipt.sh
+tests/g3c4/check_terminal_command_receipts.py
+tests/g3c4/test_terminal_command_receipt.py
 native/g3c4_p2g2_terminal_composer_source_closure.txt

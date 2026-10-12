@@ -1,11 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
-verify_toolchain
-cc= cxx=
-resolve_provenance_compilers cc cxx \
-  "${CC:-$(lock_value supported_cc)}" "${CXX:-$(lock_value supported_cxx)}"
-runner="$(eshkol_build_dir)/eshkol-run"
 evidence="${1:-$(project_build_dir)/g3c4-p2g2-terminal-composer-test}"
 retain_emitted="${G3C4_TERMINAL_RETAIN_EMITTED:-0}"
 [[ "$retain_emitted" == 0 || "$retain_emitted" == 1 ]] || {
@@ -13,22 +8,33 @@ retain_emitted="${G3C4_TERMINAL_RETAIN_EMITTED:-0}"
   exit 2
 }
 mkdir -p "$evidence"
-python3 "$PROJECT_ROOT/scripts/check-g3c4-p2g2-terminal-composer.py" \
-  >"$evidence/static.stdout"
-python3 "$PROJECT_ROOT/tests/g3c4/test_context_cache_checker.py" \
-  >"$evidence/step4-regression.stdout" \
-  2>"$evidence/step4-regression.stderr"
-python3 "$PROJECT_ROOT/tests/g3c4/test_active_call_checker.py" \
-  >"$evidence/step5-regression.stdout" \
-  2>"$evidence/step5-regression.stderr"
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v \
-  tests.q0.test_python_isolation \
-  >"$evidence/q0.stdout" 2>"$evidence/q0.stderr"
-bash "$PROJECT_ROOT/scripts/test-g3c4-p2g2-t1-prefix-coordinator.sh" \
-  "$evidence/prefix-predecessor" >"$evidence/prefix-predecessor.stdout"
-bash "$PROJECT_ROOT/scripts/test-g3c4-p2g2-terminal-ids-clone.sh" \
-  "$evidence/native-terminal-clone-predecessor" \
-  >"$evidence/native-terminal-clone-predecessor.stdout"
+source "$PROJECT_ROOT/scripts/g3c4_terminal_command_receipt.sh"
+terminal_command_index=0
+terminal_commands_root=$(mktemp -d "$evidence/commands.XXXXXX")
+printf '%s\n' "$terminal_commands_root" >"$evidence/commands-path.txt"
+terminal_record_command toolchain-verify - - -- \
+  bash -c 'source "$1"; verify_toolchain' bash "$PROJECT_ROOT/scripts/common.sh"
+terminal_restore_toolchain_export
+cc= cxx=
+resolve_provenance_compilers cc cxx \
+  "${CC:-$(lock_value supported_cc)}" "${CXX:-$(lock_value supported_cxx)}"
+runner="$(eshkol_build_dir)/eshkol-run"
+terminal_record_command static static.stdout static.stderr -- \
+  python3 "$PROJECT_ROOT/scripts/check-g3c4-p2g2-terminal-composer.py"
+terminal_record_command step4-regression step4-regression.stdout step4-regression.stderr -- \
+  python3 "$PROJECT_ROOT/tests/g3c4/test_context_cache_checker.py"
+terminal_record_command step5-regression step5-regression.stdout step5-regression.stderr -- \
+  python3 "$PROJECT_ROOT/tests/g3c4/test_active_call_checker.py"
+terminal_record_command q0 q0.stdout q0.stderr -- \
+  env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v \
+  tests.q0.test_python_isolation
+terminal_record_command prefix-predecessor prefix-predecessor.stdout prefix-predecessor.stderr -- \
+  bash "$PROJECT_ROOT/scripts/test-g3c4-p2g2-t1-prefix-coordinator.sh" \
+  "$evidence/prefix-predecessor"
+terminal_record_command native-terminal-clone-predecessor \
+  native-terminal-clone-predecessor.stdout native-terminal-clone-predecessor.stderr -- \
+  bash "$PROJECT_ROOT/scripts/test-g3c4-p2g2-terminal-ids-clone.sh" \
+  "$evidence/native-terminal-clone-predecessor"
 tmp="$(mktemp -d "$evidence/build.XXXXXX")"
 if (( retain_emitted )); then
   printf '%s\n' "$tmp" >"$evidence/build-path.txt"
@@ -54,7 +60,8 @@ compile_mode() {
     -I "$PROJECT_ROOT/include" -I "$PROJECT_ROOT/native"
     -I "$PROJECT_ROOT/src" -I "$PROJECT_ROOT/src/eshkol_transformer"
     -I "$(eshkol_source_dir)/inc")
-  "$cc" "${common[@]}" "${optimization[@]}" \
+  terminal_record_command "$mode-native-composer" - - -- \
+    "$cc" "${common[@]}" "${optimization[@]}" \
     -DET_A2_KV_CACHE_TESTING -DET_A2_KV_CACHE_TERMINAL_WITNESS_PRIVATE \
     -DET_G3C4_P2_G1_PENDING_PRIVATE \
     -DET_G3C4_P2_G2_FIRST_FRAME_PRIVATE \
@@ -67,19 +74,22 @@ compile_mode() {
     -MMD -MF "$directory/objects/composer_native.d" \
     -MT "$directory/objects/composer_native.o" \
     -o "$directory/objects/composer_native.o"
-  "$cc" "${common[@]}" "${optimization[@]}" \
+  terminal_record_command "$mode-native-kernel-fail-allocator" - - -- \
+    "$cc" "${common[@]}" "${optimization[@]}" \
     -c "$PROJECT_ROOT/tests/m3t/kernel_fail_allocator.c" \
     -MMD -MF "$directory/objects/kernel_fail_allocator.d" \
     -MT "$directory/objects/kernel_fail_allocator.o" \
     -o "$directory/objects/kernel_fail_allocator.o"
-  "$cc" "${common[@]}" "${optimization[@]}" \
+  terminal_record_command "$mode-native-i2-helpers" - - -- \
+    "$cc" "${common[@]}" "${optimization[@]}" \
     -DET_I2_NATIVE_HELPERS_ONLY -DET_G3C4_I2_CONSTRUCTION_PRIVATE \
     -DET_G3C4_NATIVE_OWNER_PRIVATE \
     -c "$PROJECT_ROOT/native/i2_wave2_package_bridge.c" \
     -MMD -MF "$directory/objects/i2_native_helpers.d" \
     -MT "$directory/objects/i2_native_helpers.o" \
     -o "$directory/objects/i2_native_helpers.o"
-  "$cxx" -std=c++17 -Wall -Wextra -Werror -Wpedantic -fPIC \
+  terminal_record_command "$mode-native-call-entry-shim" - - -- \
+    "$cxx" -std=c++17 -Wall -Wextra -Werror -Wpedantic -fPIC \
     -fvisibility=hidden -fno-common -fstack-protector-all \
     "${optimization[@]}" -I "$(eshkol_source_dir)/inc" \
     -I "$(eshkol_source_dir)/lib/core" \
@@ -87,7 +97,8 @@ compile_mode() {
     -MMD -MF "$directory/objects/call_entry_allocation_shim.d" \
     -MT "$directory/objects/call_entry_allocation_shim.o" \
     -o "$directory/objects/call_entry_allocation_shim.o"
-  "$cc" "${common[@]}" "${optimization[@]}" -DET_P1_TRUSTED_BUILD=1 \
+  terminal_record_command "$mode-native-p1-identity" - - -- \
+    "$cc" "${common[@]}" "${optimization[@]}" -DET_P1_TRUSTED_BUILD=1 \
     -c "$PROJECT_ROOT/native/p1_identity.c" \
     -MMD -MF "$directory/objects/p1_identity.d" \
     -MT "$directory/objects/p1_identity.o" \
@@ -96,7 +107,8 @@ compile_mode() {
       g3n_primitives_provider n2_primitives_provider \
       g3c4_primitives_provider g3s_sampling_provider \
       a2_attention_provider a2_kv_cache; do
-    "$cc" "${common[@]}" "${optimization[@]}" \
+    terminal_record_command "$mode-native-$source" - - -- \
+      "$cc" "${common[@]}" "${optimization[@]}" \
       -DET_A2_KV_CACHE_TESTING -DET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE \
       -DET_A2_KV_CACHE_TERMINAL_WITNESS_PRIVATE \
       -c "$PROJECT_ROOT/native/$source.c" \
@@ -104,32 +116,41 @@ compile_mode() {
       -MT "$directory/objects/$source.o" \
       -o "$directory/objects/$source.o"
   done
-  "$cc" "${common[@]}" "${optimization[@]}" \
+  terminal_record_command "$mode-native-t1-shell" - - -- \
+    "$cc" "${common[@]}" "${optimization[@]}" \
     -DET_G3C4_T1_I1_EXACT_PAIR_PRIVATE -DET_T1_I64_SHELL_TESTING \
     -c "$PROJECT_ROOT/native/t1_i64_shell.c" \
     -MMD -MF "$directory/objects/t1_i64_shell.d" \
     -MT "$directory/objects/t1_i64_shell.o" \
     -o "$directory/objects/t1_i64_shell.o"
-  "$cc" "${common[@]}" "${optimization[@]}" -DET_I64_TENSOR_TESTING \
+  terminal_record_command "$mode-native-m3-i64" - - -- \
+    "$cc" "${common[@]}" "${optimization[@]}" -DET_I64_TENSOR_TESTING \
     -DET_G3C4_T1_I1_EXACT_PAIR_PRIVATE \
     -DET_I64_TENSOR_STORAGE_QUERY_PRIVATE -DET_M3_TESTING \
     -c "$PROJECT_ROOT/src/eshkol_transformer/m3_i64_integration.c" \
     -MMD -MF "$directory/objects/m3_i64_integration.d" \
     -MT "$directory/objects/m3_i64_integration.o" \
     -o "$directory/objects/m3_i64_integration.o"
-  "$cc" "${common[@]}" "${optimization[@]}" \
+  terminal_record_command "$mode-native-m3-model" - - -- \
+    "$cc" "${common[@]}" "${optimization[@]}" \
     -c "$PROJECT_ROOT/src/eshkol_transformer/m3_model.c" \
     -MMD -MF "$directory/objects/m3_model.d" \
     -MT "$directory/objects/m3_model.o" \
     -o "$directory/objects/m3_model.o"
-  ar rcsD "$directory/libg3c4_p2g2_terminal_composer.a" \
+  terminal_record_command "$mode-native-archive" - - -- \
+    ar rcsD "$directory/libg3c4_p2g2_terminal_composer.a" \
     "$directory"/objects/*.o
   local sanitizer_link=
   [[ "$mode" == sanitize ]] && \
     sanitizer_link='-fsanitize=address,undefined -fno-omit-frame-pointer'
   cat >"$directory/cxx-wrap" <<WRAPPER
 #!/usr/bin/env bash
-exec $(printf '%q' "$cxx") $sanitizer_link "\$@" \\
+set -euo pipefail
+evidence=$(printf '%q' "$evidence")
+terminal_commands_root=$(printf '%q' "$terminal_commands_root")
+source $(printf '%q' "$PROJECT_ROOT/scripts/g3c4_terminal_command_receipt.sh")
+terminal_record_nested_link "\${G3C4_TERMINAL_RECEIPT_LABEL:?}" \\
+  $(printf '%q' "$cxx") $sanitizer_link "\$@" \\
   -Wl,--wrap=arena_allocate_vector_with_header \\
   -Wl,--wrap=arena_allocate_with_header \\
   -Wl,--wrap=arena_allocate_cons_with_header \\
@@ -163,42 +184,44 @@ WRAPPER
       ESHKOL_LIB_DIR="$PROJECT_ROOT/lib")
     if (( retain_emitted )); then
       raw="$directory/generated/$fixture.raw.o"
-      sha256sum "$fixture_source" >"$evidence/$label-source.before"
-      "${env_args[@]}" timeout --foreground --signal=TERM --kill-after=5s 600s \
+      terminal_record_command "$label-source-before" "$label-source.before" - -- \
+        sha256sum "$fixture_source"
+      terminal_record_command "$label-compile" "$label-compile.stdout" "$label-compile.stderr" -- \
+        "${env_args[@]}" G3C4_TERMINAL_RECEIPT_LABEL="$label-compile" \
+        timeout --foreground --signal=TERM --kill-after=5s 600s \
         "$runner" "${eshkol_args[@]}" --emit-object --dump-ir \
         --emit-depfile "$directory/generated/$fixture.d" \
-        "$fixture_source" -o "$raw" \
-        >"$evidence/$label-compile.stdout" \
-        2>"$evidence/$label-compile.stderr"
-      test -s "$raw" && test -s "$raw.bc" && test -s "$raw.ll"
-      test -s "$directory/generated/$fixture.d"
+        "$fixture_source" -o "$raw"
+      terminal_record_command "$label-raw-artifacts" - - -- \
+        bash -c 'for path do test -s "$path" || exit; done' bash \
+        "$raw" "$raw.bc" "$raw.ll" "$directory/generated/$fixture.d"
       object="$raw"
       if [[ "$mode" == sanitize ]]; then
-        python3 "$PROJECT_ROOT/tests/g3c4/prepare_terminal_asan_ir.py" \
+        terminal_record_command "$label-asan-prepare" "$label-asan-prepare.stdout" "$label-asan-prepare.stderr" -- \
+          python3 "$PROJECT_ROOT/tests/g3c4/prepare_terminal_asan_ir.py" \
           "$raw.ll" "$directory/generated/$fixture.asan.ll" \
-          "$directory/generated/$fixture.asan.json" \
-          >"$evidence/$label-asan-prepare.stdout" \
-          2>"$evidence/$label-asan-prepare.stderr"
-        "$cc" -O0 -g -fPIC -fsanitize=address -fno-omit-frame-pointer \
+          "$directory/generated/$fixture.asan.json"
+        terminal_record_command "$label-asan-compile" "$label-asan-compile.stdout" "$label-asan-compile.stderr" -- \
+          "$cc" -O0 -g -fPIC -fsanitize=address -fno-omit-frame-pointer \
           -c -x ir "$directory/generated/$fixture.asan.ll" \
-          -o "$directory/generated/$fixture.asan.o" \
-          >"$evidence/$label-asan-compile.stdout" \
-          2>"$evidence/$label-asan-compile.stderr"
+          -o "$directory/generated/$fixture.asan.o"
         object="$directory/generated/$fixture.asan.o"
       fi
-      "${env_args[@]}" timeout --foreground --signal=TERM --kill-after=5s 600s \
+      terminal_record_command "$label-link" "$label-link.stdout" "$label-link.stderr" -- \
+        "${env_args[@]}" G3C4_TERMINAL_RECEIPT_LABEL="$label-link" \
+        timeout --foreground --signal=TERM --kill-after=5s 600s \
         "$runner" "${eshkol_args[@]}" "$object" \
-        -o "$directory/composer-$fixture" \
-        >"$evidence/$label-link.stdout" \
-        2>"$evidence/$label-link.stderr"
-      sha256sum "$fixture_source" >"$evidence/$label-source.after"
-      cmp "$evidence/$label-source.before" "$evidence/$label-source.after"
+        -o "$directory/composer-$fixture"
+      terminal_record_command "$label-source-after" "$label-source.after" - -- \
+        sha256sum "$fixture_source"
+      terminal_record_command "$label-source-match" - - -- \
+        cmp "$evidence/$label-source.before" "$evidence/$label-source.after"
     else
-      "${env_args[@]}" timeout --foreground --signal=TERM --kill-after=5s 600s \
+      terminal_record_command "$label-compile" "$label-compile.stdout" "$label-compile.stderr" -- \
+        "${env_args[@]}" G3C4_TERMINAL_RECEIPT_LABEL="$label-compile" \
+        timeout --foreground --signal=TERM --kill-after=5s 600s \
         "$runner" "${eshkol_args[@]}" "$fixture_source" \
-        -o "$directory/composer-$fixture" \
-        >"$evidence/$label-compile.stdout" \
-        2>"$evidence/$label-compile.stderr"
+        -o "$directory/composer-$fixture"
     fi
   }
   local fixture label expected fixture_source
@@ -212,87 +235,107 @@ WRAPPER
       fixture_source="$PROJECT_ROOT/tests/g3c4/p2_g2_terminal_composer_feature_off_test.esk"
     fi
     compile_fixture "$fixture" "$label" "$fixture_source"
-    "${runtime[@]}" ESHKOL_ARENA_POISON=1 \
+    terminal_record_command "$label-run" "$label-run.stdout" "$label-run.stderr" -- \
+      "${runtime[@]}" ESHKOL_ARENA_POISON=1 \
       timeout --foreground --signal=TERM --kill-after=5s 120s \
-      "$directory/composer-$fixture" >"$evidence/$label-run.stdout" \
-      2>"$evidence/$label-run.stderr"
-    test ! -s "$evidence/$label-run.stderr"
-    grep -E "$expected" "$evidence/$label-run.stdout" >/dev/null
+      "$directory/composer-$fixture"
+    terminal_record_command "$label-no-stderr" - - -- \
+      test ! -s "$evidence/$label-run.stderr"
+    terminal_record_command "$label-pass-marker" - - -- \
+      grep -E "$expected" "$evidence/$label-run.stdout"
   done
 
-  python3 "$PROJECT_ROOT/tests/g3c4/generate_p2_g2_terminal_fault_overlays.py" \
-    "$directory/overlays" >"$evidence/$mode-overlay-generation.stdout"
-  (cd "$directory/overlays" && sha256sum -c SHA256SUMS) \
-    >"$evidence/$mode-overlay-identity.stdout"
-  cp "$directory/overlays/SHA256SUMS" "$evidence/$mode-overlay-SHA256SUMS"
+  terminal_record_command "$mode-overlay-generation" "$mode-overlay-generation.stdout" "$mode-overlay-generation.stderr" -- \
+    python3 "$PROJECT_ROOT/tests/g3c4/generate_p2_g2_terminal_fault_overlays.py" \
+    "$directory/overlays"
+  terminal_record_command "$mode-overlay-identity" \
+    "$mode-overlay-identity.stdout" "$mode-overlay-identity.stderr" -- \
+    bash -c 'cd -- "$1" && sha256sum -c SHA256SUMS' bash "$directory/overlays"
+  terminal_record_command "$mode-overlay-manifest-copy" - - -- \
+    cp "$directory/overlays/SHA256SUMS" "$evidence/$mode-overlay-SHA256SUMS"
   for fixture in parity-original parity-overlay unmarked decode-first decode-second \
       precommit postzero lease-i1 lease-a2; do
     compile_fixture "$fixture" "$mode-$fixture" \
       "$directory/overlays/$fixture.esk"
-    local exit_status=0
-    "${runtime[@]}" ESHKOL_ARENA_POISON=1 \
+    local exit_status=0 marker
+    terminal_record_command "$mode-$fixture-run" "$mode-$fixture-run.stdout" "$mode-$fixture-run.stderr" -- \
+      "${runtime[@]}" ESHKOL_ARENA_POISON=1 \
       timeout --foreground --signal=TERM --kill-after=5s 120s \
       "$directory/composer-$fixture" \
-      3>"$evidence/$mode-$fixture.marker" \
-      >"$evidence/$mode-$fixture-run.stdout" \
-      2>"$evidence/$mode-$fixture-run.stderr" || exit_status=$?
+      3>"$evidence/$mode-$fixture.marker" || exit_status=$?
     if [[ "$fixture" == postzero ]]; then
-      test "$exit_status" -eq 134
-      test "$(cat "$evidence/$mode-$fixture.marker")" = Z
-      ! grep -Eq 'ILLEGAL_TERMINAL_RETURN|OVERLAY_PARITY|OVERLAY_ABORT|ESH_TERMINAL' \
+      terminal_record_command "$mode-$fixture-exit-check" - - -- test "$exit_status" -eq 134
+      marker=$(<"$evidence/$mode-$fixture.marker")
+      terminal_record_command "$mode-$fixture-marker-check" - - -- test "$marker" = Z
+      ! terminal_record_command "$mode-$fixture-no-return" - - -- \
+        grep -Eq 'ILLEGAL_TERMINAL_RETURN|OVERLAY_PARITY|OVERLAY_ABORT|ESH_TERMINAL' \
         "$evidence/$mode-$fixture-run.stdout"
     else
-      test "$exit_status" -eq 0
-      test ! -s "$evidence/$mode-$fixture.marker"
-      test ! -s "$evidence/$mode-$fixture-run.stderr"
+      terminal_record_command "$mode-$fixture-exit-check" - - -- test "$exit_status" -eq 0
+      terminal_record_command "$mode-$fixture-no-marker" - - -- \
+        test ! -s "$evidence/$mode-$fixture.marker"
+      terminal_record_command "$mode-$fixture-no-stderr" - - -- \
+        test ! -s "$evidence/$mode-$fixture-run.stderr"
       if [[ "$fixture" == parity-* ]]; then
-        grep -Eq '^OVERLAY_PARITY [0-9]+ [0-9]+ 4$' \
+        terminal_record_command "$mode-$fixture-parity-marker" - - -- \
+          grep -Eq '^OVERLAY_PARITY [0-9]+ [0-9]+ 4$' \
           "$evidence/$mode-$fixture-run.stdout"
       elif [[ "$fixture" == unmarked ]]; then
-        grep -Fx OVERLAY_UNMARKED \
-          "$evidence/$mode-$fixture-run.stdout" >/dev/null
+        terminal_record_command "$mode-$fixture-unmarked-marker" - - -- \
+          grep -Fx OVERLAY_UNMARKED "$evidence/$mode-$fixture-run.stdout"
       else
-        grep -Fx "OVERLAY_ABORT ${fixture#decode-}" \
-          "$evidence/$mode-$fixture-run.stdout" >/dev/null
+        terminal_record_command "$mode-$fixture-abort-marker" - - -- \
+          grep -Fx "OVERLAY_ABORT ${fixture#decode-}" \
+          "$evidence/$mode-$fixture-run.stdout"
       fi
     fi
     printf '%s %s\n' "$fixture" "$exit_status" \
       >>"$evidence/$mode-overlay-exits.txt"
   done
-  cmp "$evidence/$mode-parity-original-run.stdout" \
+  terminal_record_command "$mode-parity-match" - - -- \
+    cmp "$evidence/$mode-parity-original-run.stdout" \
       "$evidence/$mode-parity-overlay-run.stdout"
   if (( retain_emitted )); then
-    python3 "$PROJECT_ROOT/tests/g3c4/check_p2_g2_terminal_emitted_evidence.py" \
-      "$directory" "$evidence" "$mode" \
-      >"$evidence/$mode-emitted-check.stdout" \
-      2>"$evidence/$mode-emitted-check.stderr"
+    terminal_record_command "$mode-emitted-check" "$mode-emitted-check.stdout" "$mode-emitted-check.stderr" -- \
+      python3 "$PROJECT_ROOT/tests/g3c4/check_p2_g2_terminal_emitted_evidence.py" \
+      "$directory" "$evidence" "$mode"
   fi
 }
 
 compile_mode normal
-awk '/^COORD_ORACLE / { if (++rows > 2) next } { print }' \
-  "$evidence/normal-run.stdout" >"$evidence/prefix-oracle-input.stdout"
-python3 "$PROJECT_ROOT/tests/g3c4/check_p2_g2_t1_prefix_oracle.py" \
-  "$evidence/prefix-oracle-input.stdout" >"$evidence/oracle.stdout"
-python3 "$PROJECT_ROOT/tests/g3c4/check_p2_g2_terminal_composer_oracle.py" \
-  "$evidence/normal-run.stdout" >"$evidence/second-oracle.stdout"
-ESHKOL_ARENA_POISON=1 "$tmp/normal/composer-terminal" \
-  >"$evidence/repeat-run.stdout" 2>"$evidence/repeat-run.stderr"
-ESHKOL_ARENA_POISON=1 "$tmp/normal/composer-feature-off" \
-  >"$evidence/repeat-feature-off-run.stdout" \
-  2>"$evidence/repeat-feature-off-run.stderr"
-test ! -s "$evidence/repeat-run.stderr"
-test ! -s "$evidence/repeat-feature-off-run.stderr"
+terminal_record_command prefix-oracle-input prefix-oracle-input.stdout prefix-oracle-input.stderr -- \
+  awk '/^COORD_ORACLE / { if (++rows > 2) next } { print }' \
+  "$evidence/normal-run.stdout"
+terminal_record_command prefix-oracle oracle.stdout oracle.stderr -- \
+  python3 "$PROJECT_ROOT/tests/g3c4/check_p2_g2_t1_prefix_oracle.py" \
+  "$evidence/prefix-oracle-input.stdout"
+terminal_record_command second-oracle second-oracle.stdout second-oracle.stderr -- \
+  python3 "$PROJECT_ROOT/tests/g3c4/check_p2_g2_terminal_composer_oracle.py" \
+  "$evidence/normal-run.stdout"
+terminal_record_command repeat-run repeat-run.stdout repeat-run.stderr -- \
+  env ESHKOL_ARENA_POISON=1 "$tmp/normal/composer-terminal"
+terminal_record_command repeat-feature-off-run repeat-feature-off-run.stdout repeat-feature-off-run.stderr -- \
+  env ESHKOL_ARENA_POISON=1 "$tmp/normal/composer-feature-off"
+terminal_record_command repeat-no-stderr - - -- test ! -s "$evidence/repeat-run.stderr"
+terminal_record_command repeat-feature-off-no-stderr - - -- \
+  test ! -s "$evidence/repeat-feature-off-run.stderr"
 compile_mode sanitize
-cmp "$evidence/normal-run.stdout" "$evidence/repeat-run.stdout"
-cmp "$evidence/normal-run.stdout" "$evidence/sanitize-run.stdout"
-cmp "$evidence/normal-feature-off-run.stdout" \
+terminal_record_command normal-repeat-match - - -- \
+  cmp "$evidence/normal-run.stdout" "$evidence/repeat-run.stdout"
+terminal_record_command normal-sanitize-match - - -- \
+  cmp "$evidence/normal-run.stdout" "$evidence/sanitize-run.stdout"
+terminal_record_command feature-off-repeat-match - - -- \
+  cmp "$evidence/normal-feature-off-run.stdout" \
     "$evidence/repeat-feature-off-run.stdout"
-cmp "$evidence/normal-feature-off-run.stdout" \
+terminal_record_command feature-off-sanitize-match - - -- \
+  cmp "$evidence/normal-feature-off-run.stdout" \
     "$evidence/sanitize-feature-off-run.stdout"
-git -C "$PROJECT_ROOT" diff --check
-sha256sum "$PROJECT_ROOT/native/g3c4_p2g2_terminal_composer_source_closure.txt" \
-  >"$evidence/closure.sha256"
+terminal_record_command git-diff-check - - -- git -C "$PROJECT_ROOT" diff --check
+terminal_record_command closure-hash closure.sha256 - -- \
+  sha256sum "$PROJECT_ROOT/native/g3c4_p2g2_terminal_composer_source_closure.txt"
+terminal_record_command receipts-verify receipts-verify.stdout receipts-verify.stderr -- \
+  python3 "$PROJECT_ROOT/tests/g3c4/check_terminal_command_receipts.py" \
+  "$evidence" --allow-current
 if (( retain_emitted )); then
   printf '%s\n' 'HOLD: compiler artifacts and imports retained; successful-zero no-allocation and complete launcher lifecycle remain unproved' \
     >"$evidence/emitted-acceptance.status"
