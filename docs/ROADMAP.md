@@ -1647,8 +1647,13 @@ reentry during restore, and requires a certainty proof before any cleanup
 failure can be treated as retryable. Its three-argument sketch covers only
 ownership; candidate-control admission still needs a same-reservation input
 contract before full composition or publication.
-The private receipt-to-TR3 bridge and complete candidate teardown remain
-pending; this documentation adds no accepted restore or G3-R continuation.
+The proposed [same-reservation input/restore transaction](g3/G3_R_SAME_RESERVATION_RESTORE_CONTRACT.md)
+refines that bridge: X1/T1/D2 and fixed-profile checks must share the receipt
+reservation with TR3, and any receipt borrow-end exception is fail-stop until
+an exact per-owner C2/P1/O2 consumption witness is reviewed. Its checked-pair
+input and candidate ledger remain prerequisites, not installed APIs. The
+private transaction and complete candidate teardown remain pending; this
+documentation adds no accepted restore or G3-R continuation.
 
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
