@@ -25,19 +25,32 @@ canonical external inventory has SHA-256
 `0d2f2150d13d33cc098609af39a15022b631a0dfbe33d378704a536d4ff5b764`.
 
 The canonical external input **candidate** has SHA-256
-`daef020d95f09fefc2df8ee1a2f201d6211ee9aa94be05cec87eddfc97632a69`.
+`e8c8d4987315bbfd71edd55a2d91ca1b2360bb4256aadd36b6703ab5a5952a41`.
 It binds accepted base `39f3b41`/tree `eb3d877`, the source/signature/certificate
-bytes and verification, inventory, and exact `toolchain/eshkol.lock` bytes. Its
+bytes and verification, inventory, and exact `toolchain/eshkol.lock` bytes. The
+source, signature and certificate are copied into a `0700` private snapshot
+directory before verification; the snapshot file bytes and full path identities
+are rechecked after signature verification and member scanning. A changed
+same-inode file or path replacement is HOLD. Each existing source/inventory/
+lock entry records role, absolute path, regular kind, mode, UID/GID, symlink
+chain, ancestor identity chain, size, and SHA-256. These are local acquisition
+identities, not supported build-lane closure or immutable production custody. Its
 supported image, build tools and existing headers, protected build paths,
 Configure/build/test/install and verifier argv, and complete explicit
 environment are `null`/HOLD. The acquisition ran on a CachyOS host, not the
 Ubuntu 22.04/Clang 21.1.8 build lane; its GPG path/hash is acquisition evidence
 only. No ambient host environment is serialized. The validator checks canonical
 bytes and source pins and can reverify the raw files; `plan_gate` rejects this
-candidate before marker creation. `consume_once` is a low-level synthetic-test
-primitive with exclusive, nofollow, readback and sync behavior, not a production
-CLI. A future ROOT-reviewed complete input and protected-channel nonce/digest
-binding must precede any live one-use build attempt. No extraction, build,
+candidate before marker creation. `consume_once` is only a synthetic-test
+primitive with exclusive, nofollow, readback and sync behavior. It accepts a
+caller-supplied expected chain and does not revalidate the final named ancestor
+after publication; rename/replacement could orphan its marker. It is **not** a
+protected production launcher. The hard-exit test proves replay rejection when
+a marker remains visible, not power-loss durability. An uncertain nonce remains
+spent/HOLD even if a marker is absent after a crash. A future ROOT-reviewed
+complete input, protected-channel nonce/digest binding, protected custody and
+named-ancestor revalidation at commit and launch must precede any live one-use
+build attempt. No extraction, build,
 marker consumption, verifier, or admission occurred.
 
 ## Source and later build recipe

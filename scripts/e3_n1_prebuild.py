@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import re
+import shutil
 import stat
 import subprocess
 import tempfile
@@ -26,6 +27,8 @@ CERTIFICATE_URL = "https://www.openssl-library.org/source/pubkeys.asc"
 MAX_MEMBERS = 100000
 MAX_EXPANDED = 4 * 1024**3
 MAX_INPUT = 65536
+FILE_FIELDS = {"role", "path", "kind", "mode", "owner_uid", "owner_gid",
+               "symlink_chain", "ancestor_chain", "size", "sha256"}
 
 
 class Hold(ValueError):
@@ -42,6 +45,66 @@ def file_hash(path):
         while chunk := source.read(1024 * 1024):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def file_entry(path, role):
+    path = Path(path)
+    if not path.is_absolute():
+        raise Hold("evidence-path-not-absolute")
+    chain = []
+    current = Path(path.anchor)
+    for part in (None, *path.parts[1:]):
+        if part is not None:
+            current /= part
+        info = os.lstat(current)
+        if stat.S_ISLNK(info.st_mode):
+            raise Hold("evidence-symlink")
+        chain.append([str(current), info.st_dev, info.st_ino, info.st_mode,
+                      info.st_uid, info.st_gid])
+    info = os.lstat(path)
+    if not stat.S_ISREG(info.st_mode):
+        raise Hold("evidence-kind")
+    return {"role": role, "path": str(path), "kind": "regular",
+            "mode": stat.S_IMODE(info.st_mode), "owner_uid": info.st_uid,
+            "owner_gid": info.st_gid, "symlink_chain": [], "ancestor_chain": chain[:-1],
+            "size": info.st_size, "sha256": file_hash(path)}
+
+
+def private_snapshot(source_path, directory, expected_hash=None):
+    """Copy once into a 0700 evidence directory; verify source and copy identities."""
+    source_path = Path(source_path)
+    directory = Path(directory)
+    directory.mkdir(mode=0o700, exist_ok=True)
+    if stat.S_IMODE(os.lstat(directory).st_mode) != 0o700 or os.lstat(directory).st_uid != os.geteuid():
+        raise Hold("snapshot-directory-custody")
+    target = directory / source_path.name
+    before = file_entry(source_path, "acquisition-source")
+    if expected_hash is not None and before["sha256"] != expected_hash:
+        raise Hold("source-sha256")
+    if not target.exists():
+        source_fd = os.open(source_path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        target_fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
+                            0o600)
+        try:
+            with os.fdopen(source_fd, "rb", closefd=False) as source, os.fdopen(target_fd, "wb", closefd=False) as output:
+                shutil.copyfileobj(source, output, 1024 * 1024)
+                output.flush()
+                os.fsync(target_fd)
+        finally:
+            os.close(source_fd)
+            os.close(target_fd)
+        directory_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    after = file_entry(source_path, "acquisition-source")
+    snapshot = file_entry(target, "private-snapshot")
+    if before != after or snapshot["sha256"] != before["sha256"] or snapshot["size"] != before["size"]:
+        raise Hold("snapshot-source-drift")
+    if stat.S_IMODE(os.lstat(target).st_mode) != 0o600:
+        raise Hold("snapshot-file-permissions")
+    return target
 
 
 def canonical(value):
@@ -222,30 +285,36 @@ def verify_signature(archive, signature, certificate, gpg="gpg"):
                 "result": "VALIDSIG"}
 
 
-def observed_source(archive, signature, certificate, inventory_path, *, gpg="/usr/bin/gpg"):
+def observed_source(archive, signature, certificate, inventory_path, *, gpg="/usr/bin/gpg",
+                    after_verify=None):
     archive, signature, certificate = map(Path, (archive, signature, certificate))
-    if file_hash(archive) != SOURCE_SHA256:
-        raise Hold("source-sha256")
+    snapshot_dir = Path(inventory_path).parent / "source-snapshot"
+    archive = private_snapshot(archive, snapshot_dir, SOURCE_SHA256)
+    signature = private_snapshot(signature, snapshot_dir)
+    certificate = private_snapshot(certificate, snapshot_dir)
+    before = [file_entry(path, role) for path, role in (
+        (archive, "source-archive"), (signature, "detached-signature"),
+        (certificate, "trusted-certificate"))]
     proof = verify_signature(archive, signature, certificate, gpg)
+    if after_verify is not None:
+        after_verify(archive)
     inventory = canonical(scan_archive(archive))
+    if before != [file_entry(path, role) for path, role in (
+            (archive, "source-archive"), (signature, "detached-signature"),
+            (certificate, "trusted-certificate"))]:
+        raise Hold("source-changed-during-verification")
     Path(inventory_path).write_bytes(inventory)
-    return {"archive": {"url": ARCHIVE_URL, "path": str(archive.resolve()), "size": archive.stat().st_size,
-                        "sha256": SOURCE_SHA256},
-            "signature": {"url": SIGNATURE_URL, "path": str(signature.resolve()), "size": signature.stat().st_size,
-                          "sha256": file_hash(signature)},
-            "certificate": {"url": CERTIFICATE_URL, "path": str(certificate.resolve()), "size": certificate.stat().st_size,
-                            "sha256": file_hash(certificate)},
+    return {"archive": {"url": ARCHIVE_URL, **before[0]},
+            "signature": {"url": SIGNATURE_URL, **before[1]},
+            "certificate": {"url": CERTIFICATE_URL, **before[2]},
             "verification": proof,
-            "inventory": {"path": str(Path(inventory_path).resolve()),
-                          "size": len(inventory), "sha256": sha256(inventory),
+            "inventory": {**file_entry(Path(inventory_path).absolute(), "member-inventory"),
                           "members": len(json.loads(inventory)["members"])}}
 
 
 def candidate(source, lock_path):
-    lock = Path(lock_path).read_bytes()
     return {"schema": SCHEMA, "status": "HOLD", "base": {"commit": BASE_COMMIT, "tree": BASE_TREE},
-            "source": source, "toolchain_lock": {"path": "toolchain/eshkol.lock",
-                                                  "size": len(lock), "sha256": sha256(lock)},
+            "source": source, "toolchain_lock": file_entry(Path(lock_path).absolute(), "toolchain-lock"),
             "supported_build": None, "tools": None, "existing_headers": None,
             "protected_paths": None, "configure_build_test_install_argv": None,
             "verifier_source_abi_and_argv": None, "complete_environment": None,
@@ -263,29 +332,39 @@ def recheck_source(source):
     if set(source) != {"archive", "signature", "certificate", "verification", "inventory"}:
         raise Hold("source-evidence-fields")
     paths = {}
+    roles = {"archive": "source-archive", "signature": "detached-signature",
+             "certificate": "trusted-certificate", "inventory": "member-inventory"}
     for name in ("archive", "signature", "certificate", "inventory"):
         entry = source[name]
-        if set(entry) != ({"path", "size", "sha256", "members"} if name == "inventory"
-                          else {"url", "path", "size", "sha256"}):
+        if set(entry) != (FILE_FIELDS | ({"members"} if name == "inventory" else {"url"})):
             raise Hold("source-file-fields")
+        if entry["role"] != roles[name]:
+            raise Hold("source-role-drift")
         if name != "inventory" and entry["url"] != {
                 "archive": ARCHIVE_URL, "signature": SIGNATURE_URL,
                 "certificate": CERTIFICATE_URL}[name]:
             raise Hold("source-url-drift")
         path = Path(entry["path"])
-        if not path.is_absolute() or not stat.S_ISREG(os.lstat(path).st_mode):
-            raise Hold("source-file-kind")
-        if path.stat().st_size != entry["size"] or file_hash(path) != entry["sha256"]:
+        expected = {key: value for key, value in entry.items() if key not in ("url", "members")}
+        if file_entry(path, expected["role"]) != expected:
             raise Hold("source-file-drift")
         paths[name] = path
     if source["archive"]["sha256"] != SOURCE_SHA256:
         raise Hold("source-sha256")
+    before = [file_entry(paths[name], source[name]["role"]) for name in
+              ("archive", "signature", "certificate")]
     proof = verify_signature(paths["archive"], paths["signature"], paths["certificate"],
                              source["verification"]["gpg_path"])
     if proof != source["verification"]:
         raise Hold("signature-proof-drift")
     inventory = canonical(scan_archive(paths["archive"]))
-    if inventory != paths["inventory"].read_bytes() or len(json.loads(inventory)["members"]) != source["inventory"]["members"]:
+    if before != [file_entry(paths[name], source[name]["role"]) for name in
+                  ("archive", "signature", "certificate")]:
+        raise Hold("source-changed-during-verification")
+    if (inventory != paths["inventory"].read_bytes() or
+            file_entry(paths["inventory"], "member-inventory") != {
+                key: value for key, value in source["inventory"].items() if key != "members"} or
+            len(json.loads(inventory)["members"]) != source["inventory"]["members"]):
         raise Hold("inventory-drift")
 
 

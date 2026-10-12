@@ -1,7 +1,6 @@
 """Synthetic SOURCE/PREP and one-use marker negatives; no build or real marker."""
 
 import concurrent.futures
-import gzip
 import importlib.util
 import io
 import json
@@ -11,6 +10,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+from unittest import mock
 
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts/e3_n1_prebuild.py"
@@ -96,6 +96,25 @@ class PrebuildTests(unittest.TestCase):
             with self.assertRaisesRegex(mod.Hold, "tar-link-or-unsupported-kind"):
                 mod.scan_archive(path)
 
+    def test_archive_swap_between_signature_and_scan_is_hold(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            archive = root / "openssl-3.5.9.tar.gz"
+            replacement = root / "replacement.tar.gz"
+            fixture_tar(archive, ["openssl-3.5.9/", "openssl-3.5.9/first"])
+            fixture_tar(replacement, ["openssl-3.5.9/", "openssl-3.5.9/second"])
+            signature = root / "openssl-3.5.9.tar.gz.asc"
+            certificate = root / "pubkeys.asc"
+            signature.write_bytes(b"synthetic signature")
+            certificate.write_bytes(b"synthetic certificate")
+            def swap(snapshot):
+                snapshot.write_bytes(replacement.read_bytes())
+            with mock.patch.object(mod, "SOURCE_SHA256", mod.file_hash(archive)), \
+                 mock.patch.object(mod, "verify_signature", return_value={"result": "synthetic"}):
+                with self.assertRaisesRegex(mod.Hold, "source-changed-during-verification"):
+                    mod.observed_source(archive, signature, certificate, root / "inventory.json",
+                                        after_verify=swap)
+
     def test_prepared_pin_replay_and_marker_fail_closed(self):
         digest = "a" * 64
         nonce = "b" * 64
@@ -162,6 +181,30 @@ m.consume_once(m.prepared_record('e'*64,'f'*64,'e'*64),sys.argv[2],m.path_chain(
             self.assertEqual(len(list(directory.iterdir())), 1)
             with self.assertRaisesRegex(mod.Hold, "marker-spent"):
                 mod.consume_once(record, directory, mod.path_chain(directory))
+
+    def test_two_processes_one_marker(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp) / "protected"
+            directory.mkdir(mode=0o700)
+            start = Path(temp) / "start"
+            code = """import importlib.util, pathlib, sys, time
+spec=importlib.util.spec_from_file_location('n1',sys.argv[1])
+m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+while not pathlib.Path(sys.argv[3]).exists(): time.sleep(.001)
+r=m.prepared_record('a'*64,'b'*64,'a'*64)
+try: m.consume_once(r,sys.argv[2],m.path_chain(sys.argv[2]))
+except m.Hold as e: sys.exit(73 if str(e)=='marker-spent' else 74)
+sys.exit(0)
+"""
+            commands = [sys.executable, "-c", code, str(SCRIPT), str(directory), str(start)]
+            children = [subprocess.Popen(commands, stdout=subprocess.PIPE,
+                                         stderr=subprocess.PIPE) for _ in range(2)]
+            start.write_bytes(b"go")
+            codes = []
+            for child in children:
+                child.communicate(timeout=10)
+                codes.append(child.returncode)
+            self.assertEqual(sorted(codes), [0, 73])
 
     @staticmethod
     def _consume(record, directory, chain):

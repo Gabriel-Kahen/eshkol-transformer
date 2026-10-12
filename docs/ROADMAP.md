@@ -868,7 +868,11 @@ detached signature under the accepted primary fingerprint, and streams a safe
 canonical checksummed input candidate binds those bytes and the exact accepted
 base/lock but explicitly holds unsupported build-lane image, tools, headers,
 paths, argv and environment. The read-only plan gate cannot consume a marker;
-synthetic exclusive-marker fault/concurrency checks do not authorize a build.
+source signature/scanning now use one private snapshot with pre/post identity
+and SHA checks; synthetic cross-process exclusive-marker fault/concurrency
+checks do not authorize a build or prove power-loss durability. The marker
+primitive is not a protected production launcher; final named-ancestor
+revalidation and protected review/nonce custody remain open.
 Real build, verifier, release, cross-UID and N1/M1 gates remain HOLD.
 The exact `5d642a2` fe9/f31 numerical gate built the normal and mutant
 packages but failed before runtime at sanitized export isolation: the ASan
