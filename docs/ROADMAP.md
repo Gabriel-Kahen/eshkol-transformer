@@ -795,6 +795,13 @@ capture or loader execution is enabled, and source review plus exact OCI bytes
 are required before any heavy run.
 The local f31 blob is an OCI index with a distinct amd64 config and two gzip
 layers. Index identity is corrected; gzip selected-byte capture remains HOLD.
+The [offline OCI byte-evidence source candidate](e3/E3_N1_OCI_EVIDENCE_SOURCE.md)
+adds a generic, read-only index→selected manifest→config→ordered layer/diffID
+verifier and derived ChainID with mandatory explicit OS/tool/package/header/
+path/environment observation states. Its canonical checksummed output always
+reports HOLD; only tiny synthetic layouts are tested. The two local f31 layer
+candidates remain metadata-only, and no complete input manifest or real layer
+read is authorized by this source.
 The [local pin acquisition](e3/E3_N1_LOCAL_PIN_ACQUISITION.md) seals the small
 index/manifest/config bytes and host-only candidates; guest bytes remain absent.
 The [bounded gzip scanner](e3/E3_N1_GZIP_SCANNER.md) A source was held for a
