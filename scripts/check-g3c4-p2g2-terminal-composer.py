@@ -30,6 +30,7 @@ additions = [
     "scripts/g3c4_terminal_command_receipt.sh",
     "tests/g3c4/check_terminal_command_receipts.py",
     "tests/g3c4/test_terminal_command_receipt.py",
+    "docs/g3/G3_C4_P2_G2_PREDECESSOR_COMMAND_INVENTORY.md",
     "native/g3c4_p2g2_terminal_composer_source_closure.txt",
 ]
 closure = (root / additions[-1]).read_text().splitlines()
