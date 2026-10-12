@@ -162,6 +162,9 @@ assert "composer_lease_calls != 2" in native_fixture
 assert "--wrap=et_g3c4_private_call_abort_v1" in runner
 assert "(overlay-lease-end" in overlay_generator
 assert "native #f kind) -1" in overlay_generator
+for root_name in ("terminal-head", "terminal-original-head", "record-head",
+                  "protected-head", "prefix-head"):
+    assert overlay_generator.count(root_name) == 2, root_name
 assert "decode-first decode-second" in runner
 assert "test \"$exit_status\" -eq 134" in runner
 assert "cmp \"$evidence/$mode-parity-original-run.stdout\"" in runner
