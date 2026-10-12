@@ -6,7 +6,16 @@ if [[ "$#" != 1 || "$1" != /* ]]; then
   printf 'usage: %s /absolute/new/evidence-directory\n' "$0" >&2
   exit 64
 fi
+require_command realpath
 cli3_evidence_dir=$1
+cli3_project_real=$(realpath -m -- "${PROJECT_ROOT}")
+cli3_evidence_real=$(realpath -m -- "${cli3_evidence_dir}")
+if [[ "${cli3_evidence_real}" == "${cli3_project_real}" ||
+      "${cli3_evidence_real}" == "${cli3_project_real}/"* ]]; then
+  printf 'error: evidence directory must be outside the project checkout: %s\n' \
+    "${cli3_evidence_dir}" >&2
+  exit 64
+fi
 if [[ -e "${cli3_evidence_dir}" || -L "${cli3_evidence_dir}" ]]; then
   printf 'error: evidence directory already exists: %s\n' "${cli3_evidence_dir}" >&2
   exit 64

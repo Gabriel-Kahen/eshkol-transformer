@@ -41,6 +41,26 @@ class EvidenceDirectoryTests(unittest.TestCase):
         self.assertEqual([path.name for path in occupied.iterdir()], ["sentinel"])
         self.assertIn("evidence directory already exists", result.stderr)
 
+    def test_checkout_paths_are_rejected_before_creation(self) -> None:
+        alias = self.root / "checkout-alias"
+        alias.symlink_to(PROJECT, target_is_directory=True)
+        for candidate in (
+            PROJECT / f".cli3-evidence-test-{os.getpid()}",
+            alias / f".cli3-evidence-test-{os.getpid()}",
+        ):
+            with self.subTest(candidate=candidate):
+                self.assertFalse(candidate.exists())
+                result = self.run_gate(candidate)
+                self.assertEqual(result.returncode, 64, result.stdout + result.stderr)
+                self.assertIn("outside the project checkout", result.stderr)
+                self.assertFalse(candidate.exists())
+        self.assertEqual(
+            subprocess.check_output(
+                ["git", "-C", str(PROJECT), "status", "--porcelain"], text=True
+            ),
+            "",
+        )
+
     def test_prebuild_failure_retains_logs_and_exit(self) -> None:
         evidence = self.root / "failed-run"
         env = os.environ.copy()
