@@ -1709,8 +1709,10 @@ EOS terminal state. The source-private output clone is detached and cannot
 authenticate that missing history. The next bounded source slice must review
 an exact same-owner copyout or registered snapshot contract and maintain the
 history at prefill, manual-decode and final-generation commit boundaries under
-stable leases. This is documentation only: no snapshot entry, save writer,
-file-pair publication or resumed continuation is accepted.
+stable leases, including explicit rejection or rollback of an idle G1 call
+aborted after its P1 prefill cache commit. This is documentation only: no
+snapshot entry, save writer, file-pair publication or resumed continuation is
+accepted.
 
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished

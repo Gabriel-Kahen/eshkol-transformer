@@ -27,6 +27,13 @@ entry in `native/g3t_generator_constructor_extension.esk` retains policy and
 model/tokenizer roots, not this missing history. No caller-supplied history or
 detached output may be promoted to same-owner save authority.
 
+There is also a partial-commit trap: one-token generation commits its P1
+prefill cache before sampling. `et_g3t_private_call_abort_v1` clears the frame,
+pending output and sample scratch after a later recoverable failure, but does
+not undo `prefill_committed` or that cache. The resulting idle generator is
+not a completed generation and has no publishable save history. Idle alone is
+therefore insufficient snapshot admission.
+
 The existing `et_g3t_private_idle_rng_words_equal_v1` checks a live, idle
 generator against **caller-provided** four words. It proves replay did not
 draw once the record is independently authenticated; it cannot copy or
@@ -46,7 +53,8 @@ public G3 API or C2/G3RCV1 wire change. An API that accepts history or RNG words
 from the caller as truth is insufficient.
 
 The same generator owner must track committed events at these exact mutation
-boundaries, with no state change on preparation or abort:
+boundaries. Preparation or abort must not publish ledger history, although an
+aborted G1 call can retain its native P1 prefill cache:
 
 1. Manual P1/P2 prefill commits (`call_kind == 0`): copy the authenticated
    input IDs in order as origin prompt; set origin length one or two, generated
@@ -65,10 +73,18 @@ boundaries, with no state change on preparation or abort:
    because that frame is erased before sampling. Commit its origin ID and
    generated ID atomically at final commit.
 
+A post-prefill G1 abort must leave explicit partial/aborted provenance and
+make the idle generator unsaveable, or a separately reviewed rollback must
+restore the exact pre-call cache and provenance. A subsequent save must never
+mistake its P1 cache for a completed origin-only state. Successful final
+commit may clear provisional provenance only while publishing the exact
+origin/generated ledger together with the successor RNG.
+
 Before exposing a snapshot, authenticate the exact Eshkol generator entry,
 native G3-T registry record, model and tokenizer in one aggregate. Require a
-live idle generator with no active call/frame, pending output/logits, model
-link or pins. Hold stable model/cache and generator leases across the entire
+live idle generator with no active call/frame, pending output/logits, active
+model call link, pins or partial/aborted provenance; its authentic `c->model`
+remains live. Hold stable model/cache and generator leases across the entire
 copy, and compare the committed policy, ordered IDs, partition, terminal
 classification and all four RNG words from **that owner**. Admit only the
 G3RCV1 capacity-two partition and exact diagnostic-C2 policy constraints;
@@ -87,9 +103,12 @@ companion last; this snapshot prerequisite alone grants no file authority.
   malformed partition, with destination unchanged. A valid full P2 history
   remains savable; a later generation request rejects its full context.
 - Inject failures before commit and abort, then prove history/RNG/terminal
-  unchanged; inject copyout allocation or lease failures and prove no owner
-  mutation, escaped lease or partial destination publication. An impossible
-  failure after the A2 commit remains fail-stop.
+  unchanged; specifically abort G1 after its P1 prefill commit and reject an
+  idle snapshot. The poisoned generator needs exact reviewed rollback or
+  reconstruction, or closure; a later manual decode cannot launder the erased
+  staged origin ID. Inject copyout allocation or lease failures and prove no
+  owner mutation, escaped lease or partial destination publication. An
+  impossible failure after the A2 commit remains fail-stop.
 - Keep feature-off and existing G3-T callers unchanged. Require independent
   source/tests review and supported normal, repeat and sanitizer gates on the
   exact source head before using the snapshot in a G3-R save writer.
@@ -97,3 +116,11 @@ companion last; this snapshot prerequisite alone grants no file authority.
 Full G3-R still needs file-pair save/publication, fresh candidate retirement,
 model/tokenizer restoration, no-draw history replay and the separately admitted
 larger repeated-decode profile. This document supplies no such proof.
+
+The restore compositor must also preserve the authenticated G3RCV1 partition:
+manual P2 prefill of a saved P1-plus-generated or P1-plus-manual history
+reproduces cache/logits but would classify both IDs as origin under the fresh
+commit ledger above. Candidate-only reconstruction must transfer the checked
+partition and terminal classification before publication, without accepting an
+unverified caller-supplied partition. That transfer is a separate reviewed
+restore contract, not save snapshot authority.
