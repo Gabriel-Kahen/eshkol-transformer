@@ -72,7 +72,8 @@ unchanged. `release_descriptor(config, image_id, compiler_head, compiler_tree,
 source_head, source_tree)` freezes the ordered source paths, resolved paths,
 device/inode/mode chain, sizes, SHA-256 values, caps, target, parent and its
 ancestor device/inode/mode chain, seal key
-identity and the five release identifiers. The canonical JSON SHA-256 must
+identity, the receipt-store absolute path and ancestor device/inode/mode
+chain, and the five release identifiers. The canonical JSON SHA-256 must
 equal `config.pin`. This v2 candidate accepts only explicitly `synthetic:`
 identifiers. It cannot accidentally treat an arbitrary 64-hex request pin or
 invented f31/compiler identity as an admitted release.
@@ -95,7 +96,9 @@ issuance token, matching durable receipt/commit and a caller-provided path,
 SHA-256 and device/inode pin for a separately stored seal. It reads that seal
 with nofollow and calls the existing v1 reconciliation, including its HMAC
 check against the frozen verifier identity. Missing, stale, replaced or
-unreadable evidence remains HOLD. A visible commit after a process crash
+unreadable evidence remains HOLD. A copied receipt store with a rewritten
+commit inode also remains HOLD because the store path and opened directory
+inode must match the frozen release descriptor. A visible commit after a process crash
 before final sync/return cannot promote without the unreturned token.
 
 This is a synthetic consistency protocol, not independent seal authority.

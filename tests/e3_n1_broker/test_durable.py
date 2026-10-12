@@ -16,24 +16,28 @@ import e3_n1_durable as durable
 from test_reconcile import fixture, seal
 
 
+def synthetic_case(root):
+    original = fixture(root)
+    store = root / "out-of-export-receipts"
+    store.mkdir(mode=0o700)
+    release = durable.release_descriptor(
+        original, receipt_store=store, image_id="synthetic:image-only",
+        compiler_head="synthetic:compiler", compiler_tree="synthetic:compiler-tree",
+        source_head="synthetic:source", source_tree="synthetic:source-tree")
+    config = replace(original, pin=durable.release_pin(release))
+    issued = broker.Broker(config).attempt(config.pin, config.target)
+    assert issued.state == "VERIFIED"
+    return config, release, store, issued
+
+
 class DurableTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         root = Path(self.temp.name)
-        original = fixture(root)
-        self.release = durable.release_descriptor(
-            original, image_id="synthetic:image-only", compiler_head="synthetic:compiler",
-            compiler_tree="synthetic:compiler-tree", source_head="synthetic:source",
-            source_tree="synthetic:source-tree")
-        self.config = replace(original, pin=durable.release_pin(self.release))
-        self.store = root / "out-of-export-receipts"
-        self.store.mkdir(mode=0o700)
+        self.config, self.release, self.store, self.issued = synthetic_case(root)
         self.seal_dir = root / "external-seal-custody"
         self.seal_dir.mkdir(mode=0o700)
-        self.issued = broker.Broker(self.config).attempt(self.config.pin,
-                                                         self.config.target)
-        self.assertEqual(self.issued.state, "VERIFIED")
         self.token = None
 
     def external_seal(self, receipt=None):
@@ -68,22 +72,28 @@ class DurableTest(unittest.TestCase):
         preexisting_seal = self.external_seal()
         for label in labels:
             with self.subTest(label=label), tempfile.TemporaryDirectory() as temp:
-                store = Path(temp)
+                config, release, store, issued = synthetic_case(Path(temp))
+                seal_path = Path(temp) / "preexisting-seal.json"
+                seal_path.write_bytes(seal(issued.receipt))
+                info = seal_path.stat()
+                preexisting_seal = durable.SealRef(seal_path,
+                    hashlib.sha256(seal_path.read_bytes()).hexdigest(),
+                    info.st_dev, info.st_ino)
                 pid = os.fork()
                 if pid == 0:
                     def crash(name):
                         if name.startswith(label):
                             os._exit(77)
-                    durable.issue(self.config, self.release, self.issued, store, crash)
+                    durable.issue(config, release, issued, store, crash)
                     os._exit(78)
                 _, status = os.waitpid(pid, 0)
                 self.assertEqual(os.waitstatus_to_exitcode(status), 77)
-                result = durable.reconcile_durable(self.config, self.release,
-                    self.issued.attempt, store, None, None, None)
+                result = durable.reconcile_durable(config, release,
+                    issued.attempt, store, None, None, None)
                 self.assertEqual(result.state, "HOLD")
                 # Even an external receipt cannot compensate for a missing seal.
-                self.assertEqual(durable.reconcile_durable(self.config, self.release,
-                    self.issued.attempt, store, self.issued.receipt, None,
+                self.assertEqual(durable.reconcile_durable(config, release,
+                    issued.attempt, store, issued.receipt, None,
                     preexisting_seal).state, "HOLD")
 
     def test_faults_and_replacement_deny(self):
@@ -91,14 +101,14 @@ class DurableTest(unittest.TestCase):
                       "sync-dir:receipt-", "write:commit-", "sync-file:commit-",
                       "publish:commit-", "sync-dir:commit-"):
             with self.subTest(label=label), tempfile.TemporaryDirectory() as temp:
-                store = Path(temp)
+                config, release, store, issued = synthetic_case(Path(temp))
                 def fail(name):
                     if name.startswith(label):
                         raise OSError("injected")
-                self.assertEqual(durable.issue(self.config, self.release,
-                    self.issued, store, fail).state, "HOLD")
-                self.assertEqual(durable.reconcile_durable(self.config, self.release,
-                    self.issued.attempt, store, self.issued.receipt, None,
+                self.assertEqual(durable.issue(config, release,
+                    issued, store, fail).state, "HOLD")
+                self.assertEqual(durable.reconcile_durable(config, release,
+                    issued.attempt, store, issued.receipt, None,
                     self.external_seal()).state, "HOLD")
         result = durable.issue(self.config, self.release, self.issued, self.store)
         self.assertEqual(result.state, "DURABLE")
@@ -148,22 +158,41 @@ class DurableTest(unittest.TestCase):
                          "target-files-mismatch")
 
     def test_foreign_store_duplicate_target_and_non_synthetic_release_deny(self):
-        self.assertEqual(durable.issue(self.config, self.release, self.issued,
-                                       self.store).state, "DURABLE")
+        result = durable.issue(self.config, self.release, self.issued, self.store)
+        self.assertEqual(result.state, "DURABLE")
         good = self.external_seal()
         token = json.loads((self.store / ("commit-" + self.issued.attempt +
                                           ".json")).read_bytes())
         self.assertEqual(token["schema"], "eshkol-e3-n1-receipt-commit-v2")
         self.assertEqual(durable.reconcile_durable(self.config, self.release,
             self.issued.attempt, self.seal_dir, self.issued.receipt,
-            b"x" * 32, good).state, "HOLD")
+            result.token, good).state, "HOLD")
+        clone = self.store.parent / "cloned-receipts"
+        shutil.copytree(self.store, clone)
+        copied = clone / ("receipt-" + self.issued.attempt + ".json")
+        copied_info = copied.stat()
+        commit = clone / ("commit-" + self.issued.attempt + ".json")
+        copied_commit = json.loads(commit.read_bytes())
+        copied_commit["device"] = copied_info.st_dev
+        copied_commit["inode"] = copied_info.st_ino
+        commit.write_bytes(broker._encoded(copied_commit))
+        self.assertEqual(durable.reconcile_durable(self.config, self.release,
+            self.issued.attempt, clone, self.issued.receipt,
+            result.token, good).state, "HOLD")
+        moved = self.store.parent / "old-receipts"
+        self.store.rename(moved)
+        shutil.copytree(clone, self.store)
+        self.assertEqual(durable.reconcile_durable(self.config, self.release,
+            self.issued.attempt, self.store, self.issued.receipt,
+            result.token, good).state, "HOLD")
         shutil.copytree(self.config.parent / self.config.target,
                         self.config.parent / "duplicate")
         with tempfile.TemporaryDirectory() as another:
             self.assertEqual(durable.issue(self.config, self.release, self.issued,
                 Path(another)).state, "HOLD")
         with self.assertRaises(ValueError):
-            durable.release_descriptor(self.config, image_id="sha256:unreviewed",
+            durable.release_descriptor(self.config, receipt_store=self.store,
+                image_id="sha256:unreviewed",
                 compiler_head="synthetic:compiler", compiler_tree="synthetic:compiler-tree",
                 source_head="synthetic:source", source_tree="synthetic:source-tree")
 
@@ -171,7 +200,9 @@ class DurableTest(unittest.TestCase):
         first = durable.issue(self.config, self.release, self.issued, self.store)
         self.assertEqual(first.state, "DURABLE")
         second_base = replace(self.config, target="export2")
-        second_release = durable.release_descriptor(second_base,
+        second_store = self.store.parent / "other-receipts"
+        second_store.mkdir()
+        second_release = durable.release_descriptor(second_base, receipt_store=second_store,
             image_id="synthetic:image-only", compiler_head="synthetic:compiler",
             compiler_tree="synthetic:compiler-tree", source_head="synthetic:source",
             source_tree="synthetic:source-tree")
@@ -179,8 +210,6 @@ class DurableTest(unittest.TestCase):
         second_outcome = broker.Broker(second_config).attempt(second_config.pin,
                                                                second_config.target)
         self.assertEqual(second_outcome.state, "VERIFIED")
-        second_store = self.store.parent / "other-receipts"
-        second_store.mkdir()
         second = durable.issue(second_config, second_release, second_outcome,
                                second_store)
         self.assertEqual(second.state, "DURABLE")

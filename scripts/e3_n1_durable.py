@@ -32,7 +32,7 @@ def _parent_chain(path):
     return chain
 
 
-def release_descriptor(config, *, image_id, compiler_head, compiler_tree,
+def release_descriptor(config, *, receipt_store: Path, image_id, compiler_head, compiler_tree,
                        source_head, source_tree):
     """Freeze exact release inputs; synthetic callers must identify fake pins."""
     config.validate()
@@ -46,6 +46,8 @@ def release_descriptor(config, *, image_id, compiler_head, compiler_tree,
             "compiler_tree": compiler_tree, "source_head": source_head,
             "source_tree": source_tree, "target": config.target,
             "parent": str(config.parent), "parent_chain": _parent_chain(config.parent),
+            "receipt_store": str(receipt_store),
+            "receipt_store_chain": _parent_chain(receipt_store),
             "byte_cap": config.byte_cap,
             "seconds": config.seconds, "rss_cap": config.rss_cap,
             "seal_key_id": config.seal_key_id,
@@ -60,16 +62,32 @@ def release_pin(release):
     return _hash(broker._encoded(release))
 
 
-def _validate_release(config, release):
+def _validate_release(config, release, store):
     if not isinstance(release, dict) or set(release) != {
             "schema", "image_id", "compiler_head", "compiler_tree",
             "source_head", "source_tree", "target", "parent", "byte_cap",
-            "seconds", "rss_cap", "seal_key_id", "sources", "parent_chain"}:
+            "seconds", "rss_cap", "seal_key_id", "sources", "parent_chain",
+            "receipt_store", "receipt_store_chain"}:
         raise ValueError("release-fields")
-    expected = release_descriptor(config, **{name: release[name] for name in (
+    expected = release_descriptor(config, receipt_store=store,
+        **{name: release[name] for name in (
         "image_id", "compiler_head", "compiler_tree", "source_head", "source_tree")})
     if release != expected or release_pin(release) != config.pin:
         raise ValueError("release-pin-mismatch")
+
+
+def _open_pinned_store(release, store):
+    fd = os.open(store, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        info = os.fstat(fd)
+        if ([info.st_dev, info.st_ino, info.st_mode] !=
+                release["receipt_store_chain"][-1] or
+                _parent_chain(store) != release["receipt_store_chain"]):
+            raise ValueError("receipt-store-inode-drift")
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
 
 
 def _read_exact(fd, name, limit=65536):
@@ -121,7 +139,7 @@ def issue(config, release, outcome, store: Path, checkpoint=lambda name: None):
     """Publish an attempt-keyed receipt outside export, then its commit record."""
     attempt = outcome.attempt
     try:
-        _validate_release(config, release)
+        _validate_release(config, release, store)
         if (outcome.state != "VERIFIED" or not outcome.receipt or
                 len(attempt) != 32 or any(c not in "0123456789abcdef" for c in attempt)):
             raise ValueError("no-verified-outcome")
@@ -160,7 +178,7 @@ def issue(config, release, outcome, store: Path, checkpoint=lambda name: None):
                 os.close(target)
         finally:
             os.close(parent)
-        fd = os.open(store, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        fd = _open_pinned_store(release, store)
         try:
             name = "receipt-" + attempt + ".json"
             commit = "commit-" + attempt + ".json"
@@ -200,14 +218,14 @@ def reconcile_durable(config, release, attempt, store: Path, receipt: bytes | No
     """Cross-check externally held receipt and seal against durable evidence."""
     hold = lambda reason: reconciler.Reconciliation("HOLD", reason, attempt)
     try:
-        _validate_release(config, release)
+        _validate_release(config, release, store)
         if len(attempt) != 32 or any(c not in "0123456789abcdef" for c in attempt):
             return hold("invalid-attempt")
         if receipt is None:
             return hold("external-receipt-absent")
         if not isinstance(token, bytes) or len(token) != 32:
             return hold("issuance-token-absent")
-        fd = os.open(store, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        fd = _open_pinned_store(release, store)
         try:
             raw, info = _read_exact(fd, "receipt-" + attempt + ".json")
             committed, _ = _read_exact(fd, "commit-" + attempt + ".json")

@@ -840,7 +840,8 @@ real release pins, a separate UID/ACL boundary, or independent seal custody.
 N1/M1 and real-layer acquisition remain HOLD pending those gates.
 The isolated [v2 synthetic durable receipt successor](e3/E3_N1_BROKER_CANDIDATE.md)
 adds an attempt-keyed out-of-export receipt/commit, exact synthetic release
-descriptor digest, post-sync issuance token and read-only reconciliation of
+descriptor digest including receipt-store path/inode chain, post-sync issuance
+token and read-only reconciliation of
 external receipt plus pinned seal. Generated fault/crash tests cover receipt
 and commit write/sync/publication, including a readable commit before return.
 It preserves the v1 broker and reconciler. The seal reference and host
