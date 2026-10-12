@@ -36,14 +36,15 @@ class N5CorpusTests(unittest.TestCase):
             self.assertEqual(records[0], records[1])
             self.assertEqual(
                 fixture_digest(roots[0]),
-                "5ab32b6f5098c6cbb020ba00ddc66f54090c63f8303e68ab026540f1cd0bc360",
+                "97a5359116173246a205b980842917889fbd8ac6b52676c92f525494569d541e",
             )
             for relative in sorted(path.relative_to(roots[0]) for path in roots[0].rglob("*")):
                 if (roots[0] / relative).is_file():
                     self.assertEqual((roots[0] / relative).read_bytes(),
                                      (roots[1] / relative).read_bytes())
             cases = {case["name"]: case for case in records[0]["cases"]}
-            self.assertEqual(set(cases), {"one-over", "exact-limit", "retry-small"})
+            self.assertEqual(set(cases), {"one-over", "exact-limit", "retry-small",
+                                          "empty", "singleton"})
             one_over = cases["one-over"]
             self.assertEqual(one_over["expected_rows"], ROWS)
             self.assertEqual(one_over["active_positions"], 2 * ROWS)
@@ -89,6 +90,65 @@ class N5CorpusTests(unittest.TestCase):
             self.assertTrue(all(row.loss_mask == (True, True)
                                 for row in exact_rows[:-1]))
             self.assertEqual(exact_rows[-1].loss_mask, (True, False))
+
+    def test_zero_row_resources_and_exhausted_nonzero_cursor(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "corpus"
+            records = materialize(root)
+            cases = {case["name"]: case for case in records["cases"]}
+            config = ReferenceConfig(1, 2, None, 1, True)
+            for name, expected_tokens, expected_shards in (
+                ("empty", 0, ()), ("singleton", 1, (1,))
+            ):
+                case = cases[name]
+                self.assertEqual((case["tokens"], case["expected_rows"],
+                                  case["active_positions"], case["rows"]),
+                                 (expected_tokens, 0, 0, []))
+                shards, digest = load_d1_resource(
+                    root / name, expected_fingerprint=FINGERPRINT,
+                    expected_vocab=VOCAB_SIZE,
+                )
+                self.assertEqual(tuple(map(len, shards)), expected_shards)
+                dataset = ReferenceDataset(
+                    shards, config, manifest_digest=digest,
+                    tokenizer_fingerprint=FINGERPRINT, vocab_size=VOCAB_SIZE,
+                )
+                initial = dataset.snapshot()
+                self.assertIsNone(dataset.next_batch())
+                self.assertIsNone(dataset.next_batch())
+                self.assertEqual(dataset.snapshot(), initial)
+
+            shards, digest = load_d1_resource(
+                root / "retry-small", expected_fingerprint=FINGERPRINT,
+                expected_vocab=VOCAB_SIZE,
+            )
+            dataset = ReferenceDataset(
+                shards, config, manifest_digest=digest,
+                tokenizer_fingerprint=FINGERPRINT, vocab_size=VOCAB_SIZE,
+            )
+            initial = dataset.snapshot()
+            self.assertEqual(len(dataset.rows), 3)
+            for _ in range(3):
+                self.assertIsNotNone(dataset.next_batch())
+            exhausted = dataset.snapshot()
+            self.assertNotEqual(initial, exhausted)
+            self.assertIsNone(dataset.next_batch())
+            self.assertEqual(dataset.snapshot(), exhausted)
+
+    def test_zero_row_resource_corruption_rejects_before_evaluation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "corpus"
+            materialize(root)
+            for name, filename in (("empty", "manifest.etm"),
+                                   ("singleton", "shard-0000000000000000.ets")):
+                path = root / name / filename
+                data = bytearray(path.read_bytes())
+                data[-1] ^= 1
+                path.write_bytes(data)
+                with self.assertRaisesRegex(ResourceError, "corrupt-data"):
+                    load_d1_resource(root / name,
+                                     expected_fingerprint=FINGERPRINT,
+                                     expected_vocab=VOCAB_SIZE)
 
 
 if __name__ == "__main__":

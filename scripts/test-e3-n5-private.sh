@@ -238,9 +238,10 @@ for variant in normal poison sanitize; do
     timeout --foreground --signal=TERM --kill-after=5s 3600s \
       "${executable}" "${out}/corpus-a/one-over" \
       "${out}/corpus-a/retry-small" "${out}/corpus-a/exact-limit" \
+      "${out}/corpus-a/empty" "${out}/corpus-a/singleton" \
       >"${out}/run-${variant}.stdout" 2>"${out}/run-${variant}.stderr"
   printf '%s\n' \
-    'E3-N5-PRIVATE-PASS rows=8193 stage=2 category=unsupported retry=3 exact=8192 active=16383 final=255/0/1/0' | \
+    'E3-N5-PRIVATE-PASS rows=8193 stage=2 category=unsupported retry=3 exact=8192 active=16383 final=255/0/1/0 empty=invalid-state singleton=invalid-state entry-eos=invalid-state' | \
     cmp - "${out}/run-${variant}.stdout"
   [[ ! -s "${out}/run-${variant}.stderr" ]] || \
     die "N5 ${variant} emitted runtime diagnostics"

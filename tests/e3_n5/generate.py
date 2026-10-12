@@ -1,4 +1,4 @@
-"""Generate authentic raw-T1/V256 D1 resources for the E3 N5 one-over gate."""
+"""Generate authentic raw-T1/V256 D1 resources for the E3 N5 gate."""
 
 from __future__ import annotations
 
@@ -35,7 +35,8 @@ def materialize(root: Path) -> dict[str, object]:
     cases = []
     for name, count in (("one-over", TOTAL_TOKENS),
                         ("exact-limit", EXACT_TOKENS),
-                        ("retry-small", len(SOURCE_BYTES))):
+                        ("retry-small", len(SOURCE_BYTES)),
+                        ("empty", 0), ("singleton", 1)):
         values = tuple(SOURCE_BYTES[i % len(SOURCE_BYTES)] for i in range(count))
         shards = tuple(values[start:start + SHARD_TOKENS]
                        for start in range(0, count, SHARD_TOKENS))
@@ -50,9 +51,10 @@ def materialize(root: Path) -> dict[str, object]:
             loaded, config, manifest_digest=digest,
             tokenizer_fingerprint=FINGERPRINT, vocab_size=VOCAB_SIZE,
         )
-        independent_count = (count - 1 + WIDTH - 1) // WIDTH
+        active_positions = max(0, count - 1)
+        independent_count = (active_positions + WIDTH - 1) // WIDTH
         assert len(reference.rows) == independent_count
-        assert sum(sum(row.loss_mask) for row in reference.rows) == count - 1
+        assert sum(sum(row.loss_mask) for row in reference.rows) == active_positions
         emitted = []
         for ordinal in range(independent_count):
             start = ordinal * WIDTH
@@ -79,12 +81,14 @@ def materialize(root: Path) -> dict[str, object]:
             assert reference.rows[-1].inputs == (values[-2], 0)
             assert reference.rows[-1].targets == (values[-1], 0)
             assert reference.rows[-1].loss_mask == (True, False)
-        else:
+        elif name == "retry-small":
             assert independent_count == 3
+        else:
+            assert independent_count == 0 and reference.next_batch() is None
         cases.append({
             "name": name, "source_bytes": bytes(values).hex(),
             "tokens": count, "expected_rows": independent_count,
-            "active_positions": count - 1,
+            "active_positions": active_positions,
             "d2": {"batch_size": 1, "sequence_length": 2,
                    "shuffle_seed": None, "shuffle_window_rows": 1,
                    "packing": True, "start_cursor": reference.snapshot().hex()},

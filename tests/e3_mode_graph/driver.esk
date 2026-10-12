@@ -335,11 +335,75 @@
      (d2-token-dataset-close! dataset)
      #t)))
 
+(define (e3-n5-terminal-case label path skip-count model frame
+                              destinations tokenizer token)
+  (let* ((dataset (d2-token-dataset-open
+                   (e3-test-dataset-config path #t) tokenizer))
+         (initial-cursor (d2-token-dataset-cursor dataset)))
+    (guard
+     (caught (#t (d2-token-dataset-close! dataset) (raise caught)))
+     (e3-test-skip! dataset skip-count)
+     (let* ((cursor (d2-token-dataset-cursor dataset))
+            (publication (e3-mg-publication frame destinations))
+            (image (e3-mg-model-image model))
+            (rng (m3t-public-initializer-words
+                  (m3t-public-model-initializer model)))
+            (modes (p1-e3-test-mode-mask token))
+            (events (e3-mg-events))
+            (probes (e3-mg-probes))
+            (native (e3-n5-native-entries))
+            (last-row (e3-n5-last-row)))
+       (e3-mg-check label
+         (and (if (= skip-count 0)
+                  (d2-core-bytes=? initial-cursor cursor)
+                  (not (d2-core-bytes=? initial-cursor cursor)))
+              (d2-token-dataset-end? (d2-token-dataset-next-batch dataset))))
+       (e3-mode-graph-clear-observations!)
+       (let ((failed
+              (with-region ('e3-n5-terminal 262144)
+                (guard (caught (#t caught))
+                  (e3-evaluate-into! model dataset frame)
+                  #f))))
+         (e3-mg-check label
+           (and (transformer-error? failed)
+                (eq? (transformer-error-category failed) 'invalid-state)
+                (eq? (transformer-error-operation failed) 'e3-evaluate-into!)
+                (string=? (transformer-error-message failed)
+                          "evaluation finalization or publication failed")
+                (eq? (e3-n5-error-detail
+                       (transformer-error-details failed) 'source-domain)
+                     'e3-evaluation)
+                (= (e3-n5-error-detail
+                     (transformer-error-details failed) 'source-code) 12)))
+         (e3-mg-check label
+           (and (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset))
+                (equal? publication (e3-mg-publication frame destinations))
+                (e3-mg-model=? model image)
+                (equal? rng (m3t-public-initializer-words
+                              (m3t-public-model-initializer model)))
+                (= modes (p1-e3-test-mode-mask token))
+                (equal? events (e3-mg-events))
+                (equal? last-row (e3-n5-last-row))
+                (e3-mg-owner-controls-restored? probes)
+                (= (vector-ref e3-mode-graph-cell 3) 1)
+                (= (e3-mg-retention-probe 20) 0)
+                (= (e3-mg-retention-probe 23) 0)
+                (= (e3-mg-retention-probe 24) 0)))
+         (let ((after (e3-n5-native-entries)))
+           (e3-mg-check label
+             (and (= (- (vector-ref after 0) (vector-ref native 0)) 1)
+                  (= (vector-ref after 1) (vector-ref native 1))
+                  (= (vector-ref after 2) (vector-ref native 2))
+                  (= (vector-ref after 3) (vector-ref native 3))))))
+       (d2-token-dataset-close! dataset)
+       #t))))
+
 (define (e3-n5-run paths)
   (e3-mg-check 'n5-paths
-    (and (vector? paths) (= (vector-length paths) 3)
+    (and (vector? paths) (= (vector-length paths) 5)
          (string? (vector-ref paths 0)) (string? (vector-ref paths 1))
-         (string? (vector-ref paths 2))))
+         (string? (vector-ref paths 2)) (string? (vector-ref paths 3))
+         (string? (vector-ref paths 4))))
   (let* ((fixture (e3-test-fixture))
          (model (vector-ref fixture 0))
          (tokenizer (vector-ref fixture 1))
@@ -428,6 +492,12 @@
            (d2-token-dataset-close! small)))
        (e3-n5-exact-limit (vector-ref paths 2) model frame destinations
                           tokenizer token)
+       (e3-n5-terminal-case 'n5-empty (vector-ref paths 3) 0 model frame
+                            destinations tokenizer token)
+       (e3-n5-terminal-case 'n5-singleton (vector-ref paths 4) 0 model frame
+                            destinations tokenizer token)
+       (e3-n5-terminal-case 'n5-entry-eos (vector-ref paths 1) 3 model frame
+                            destinations tokenizer token)
        (g3t-checked-m3t-input-release! input)
        #t))))
 

@@ -807,6 +807,11 @@ The deterministic exact 8,192-row/one-valid-final-position corpus is now wired
 into the N5 compiled source with an injected first-read failure, unchanged
 publication and cursor checks, and test-only last-target/mask observers. Its
 normal/poison/sanitizer execution remains pending.
+The same private compiled source now wires authentic empty and singleton D1
+resources plus nonzero-cursor entry EOS from the existing three-row D2 corpus.
+All three assert the current finalizer's typed stage-12 `invalid-state` and
+unchanged publication/cursor/owner state after exact-limit success. Source
+tests pass; the pinned compiled and independent evidence gates remain pending.
 
 The [E3 idle real-model control contract](e3/E3_IDLE_REAL_MODEL_CONTROL_CONTRACT.md)
 specifies a test-only use of existing I2 checkpoint decode and whole-batch load

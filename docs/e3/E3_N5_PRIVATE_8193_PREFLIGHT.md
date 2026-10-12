@@ -15,6 +15,9 @@ last row. The independent packed D2 equation
 `ceil((16,387-1)/2)` gives exactly 8,193
 full `[1,2]` rows and 16,386 active target positions. The generator also
 creates the original six-byte three-row corpus for a later retry. Its
+zero-row successors are an empty D1 manifest and a one-token D1 shard. Both
+emit no D2 rows. The existing six-byte corpus also supplies an entry-EOS case
+after its three rows are consumed, yielding a nonzero current cursor. The
 versioned manifest records tokenizer identity, every file length/SHA-256,
 D2 configuration, starting cursor, token count and expected row count.
 It also records every expected input, target and mask row from direct token
@@ -38,6 +41,14 @@ must publish exact-f32 mask weight 16,383 (`1182792704`), 16,383 active
 positions and 8,192 batches. A test-only native
 observer must report the final staged targets `(255 0)` and mask `(1 0)`.
 No compiled verdict has been obtained for this successor.
+After that success, the same model/frame/output owners evaluate each zero-row
+case. The current E3 finalizer requires positive token and batch counts, so
+each must raise E1 `invalid-state` at stage 12. The witness checks the exact
+error envelope, unchanged six outputs, current cursor bytes, model, RNG,
+modes, graph, last staged row and owner controls; native acquire increments
+once while staging/forward/CE do not. The entry-EOS cursor is proved different
+from the initial cursor before evaluation. These are source-wired expectations,
+not compiled results.
 
 ## Package and observer manifest
 
@@ -84,7 +95,7 @@ launch pins before running it:
 | `N5_PROVENANCE_SHA256` | SHA-256 of the supported Eshkol build provenance TSV |
 | `N5_RUNNER_SHA256` | SHA-256 of the pinned `eshkol-run` executable |
 | `N5_CC_SHA256`, `N5_CXX_SHA256` | SHA-256 of the compilers named by that provenance |
-| `N5_CORPUS_INVENTORY_SHA256` | SHA-256 of sorted `sha256  ./relative-path` rows for every generated corpus file; current generator yields `5ab32b6f5098c6cbb020ba00ddc66f54090c63f8303e68ab026540f1cd0bc360` |
+| `N5_CORPUS_INVENTORY_SHA256` | SHA-256 of sorted `sha256  ./relative-path` rows for every generated corpus file; current generator yields `97a5359116173246a205b980842917889fbd8ac6b52676c92f525494569d541e` |
 
 The script validates source and toolchain pins before builds and at exit. It
 validates both generated fixture inventories before builds and at exit. The

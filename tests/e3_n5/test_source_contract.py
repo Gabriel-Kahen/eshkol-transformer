@@ -62,7 +62,7 @@ class N5SourceContractTests(unittest.TestCase):
         runtime = (ROOT / "tests/e3_n5/runtime.esk").read_text()
         gate = (ROOT / "scripts/test-e3-n5-private.sh").read_text()
         generator = (ROOT / "scripts/generate-e3-mode-graph-source.py").read_text()
-        self.assertIn("(vector-length paths) 3", driver)
+        self.assertIn("(vector-length paths) 5", driver)
         self.assertLess(driver.index("'n5-exact-first-no-partial-output"),
                         driver.index("'n5-exact-counts"))
         self.assertIn("(equal? publication (e3-mg-publication frame destinations))",
@@ -79,6 +79,37 @@ class N5SourceContractTests(unittest.TestCase):
         self.assertIn('"${out}/corpus-a/exact-limit"', gate)
         self.assertIn('cmp - "${out}/run-${variant}.stdout"', gate)
         self.assertNotIn("grep -Fx 'E3-N5-PRIVATE-PASS", gate)
+
+    def test_zero_row_terminal_contract_uses_existing_d2_and_e3(self) -> None:
+        driver = (ROOT / "tests/e3_mode_graph/driver.esk").read_text()
+        runtime = (ROOT / "tests/e3_n5/runtime.esk").read_text()
+        gate = (ROOT / "scripts/test-e3-n5-private.sh").read_text()
+        extension = (ROOT / "native/e3_private_extension.esk").read_text()
+        frame = (ROOT / "src/eshkol_transformer/e3_frame.c").read_text()
+        self.assertIn("(e3-test-skip! dataset skip-count)", driver)
+        self.assertIn("(d2-token-dataset-end? (d2-token-dataset-next-batch dataset))",
+                      driver)
+        self.assertIn("(e3-evaluate-into! model dataset frame)", driver)
+        self.assertIn("(transformer-error-category failed) 'invalid-state", driver)
+        self.assertIn("'source-code) 12", driver)
+        self.assertIn("(equal? publication (e3-mg-publication frame destinations))",
+                      driver)
+        self.assertIn("(d2-core-bytes=? cursor (d2-token-dataset-cursor dataset))",
+                      driver)
+        self.assertIn("(equal? last-row (e3-n5-last-row))", driver)
+        self.assertIn("(vector-ref after 1) (vector-ref native 1)", driver)
+        self.assertLess(driver.index("(e3-n5-exact-limit (vector-ref paths 2)"),
+                        driver.index("(e3-n5-terminal-case 'n5-empty"))
+        self.assertIn("(e3-n5-terminal-case 'n5-singleton", driver)
+        self.assertIn("(e3-n5-terminal-case 'n5-entry-eos (vector-ref paths 1) 3",
+                      driver)
+        self.assertIn("(e3-stage-set! entry 12)", extension)
+        self.assertIn("frame->counts[bank][1] <= 0 || frame->counts[bank][0] <= 0",
+                      frame)
+        for name in ("empty", "singleton"):
+            self.assertIn(f'"${{out}}/corpus-a/{name}"', gate)
+        self.assertIn("empty=invalid-state singleton=invalid-state ", runtime)
+        self.assertIn("entry-eos=invalid-state", runtime)
 
 
 if __name__ == "__main__":
