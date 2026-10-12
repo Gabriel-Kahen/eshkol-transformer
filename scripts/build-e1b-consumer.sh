@@ -2517,7 +2517,9 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
         e3_required_private+=(et_e3_private_r1_source_retry_run_cabi_v1
                               et_e3_test_preinvoke_arm_v1
                               et_e3_private_r1_d2_batch_retry_run_cabi_v1
-                              et_d2_batch_test_fail_stage_v1)
+                              et_d2_batch_test_fail_stage_v1
+                              et_d2_batch_test_fail_occurrence_v1
+                              et_d2_batch_test_occurrences_seen_v1)
       fi
       if [[ "${e3_tuple_kind}" == retention-overflow ]]; then
         e3_required_private+=(et_e3_private_overflow_dispatch_cabi_v1

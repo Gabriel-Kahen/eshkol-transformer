@@ -54,9 +54,13 @@ for mode in a b sanitized; do
   grep -E '[[:space:]]LOCAL[[:space:]].*[[:space:]]et_e3_test_preinvoke_arm_v1$' \
     "$evidence/readelf-symbols.txt" >/dev/null ||
     die "R1 preinvoke arm is absent or externally exported"
-  grep -E '[[:space:]]LOCAL[[:space:]].*[[:space:]]et_d2_batch_test_fail_stage_v1$' \
-    "$evidence/readelf-symbols.txt" >/dev/null ||
-    die "D2 batch fault selector is absent or externally exported"
+  for symbol in et_d2_batch_test_fail_stage_v1 \
+      et_d2_batch_test_fail_occurrence_v1 \
+      et_d2_batch_test_occurrences_seen_v1; do
+    grep -E "[[:space:]]LOCAL[[:space:]].*[[:space:]]${symbol}$" \
+      "$evidence/readelf-symbols.txt" >/dev/null ||
+      die "D2 batch fault selector is absent or externally exported: $symbol"
+  done
   mkdir "$out/link-$mode"
   ar p "$out/private-$mode/libeshkol_transformer_e3_r1_d2_batch_retry.a" \
     e3_retention_package.o >"$out/link-$mode/package.o"

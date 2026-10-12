@@ -16,12 +16,24 @@ def source_errors(source: str) -> list[str]:
         "authentic fixture": "(e3-test-fixture)",
         "authentic D2": "(d2-token-dataset-open",
         "existing native selector": ":real et_d2_batch_test_fail_stage_v1",
+        "one-shot selector": ":real et_d2_batch_test_fail_occurrence_v1",
+        "occurrence observer": ":real et_d2_batch_test_occurrences_seen_v1",
         "all seven construction stages":
             "(let stage-loop ((stage 1))\n         (if (= stage 8) #t\n"
             "             (begin\n"
-            "               (e3-r1-d2-batch-cut-retry! model dataset frame destinations stage)\n"
+            "               (e3-r1-d2-batch-cut-retry! model dataset frame destinations\n"
+            "                                           stage 1)\n"
             "               (stage-loop (+ stage 1)))))",
+        "all seven late-batch stages":
+            "(let late-stage-loop ((stage 1))\n"
+            "         (if (= stage 8) #t\n"
+            "             (begin\n"
+            "               (e3-r1-d2-batch-cut-retry! model dataset frame destinations\n"
+            "                                           stage 2)\n"
+            "               (late-stage-loop (+ stage 1)))))",
         "real E3 call": "(e3-evaluate-into! model dataset frame)",
+        "late arm": "(e3-r1-d2-batch-fail-occurrence stage occurrence)",
+        "late exact count": "(= (e3-r1-d2-batch-occurrences-seen) 2)",
         "selector cleared": "(e3-r1-d2-batch-fail-stage 0)",
         "first mapped E1": "(eq? caught (vector-ref entry 11))",
         "stage five": "(= (vector-ref (vector-ref entry 12) 0) 5)",
@@ -37,7 +49,8 @@ def source_errors(source: str) -> list[str]:
     errors = [name for name, fragment in required.items()
               if fragment not in (source if name in {
                   "authentic fixture", "authentic D2", "existing native selector",
-                  "all seven construction stages"} else cut)]
+                  "all seven construction stages", "all seven late-batch stages",
+                  "one-shot selector", "occurrence observer"} else cut)]
     arm = cut.find("(e3-r1-d2-batch-fail-stage stage)")
     call = cut.find("(e3-evaluate-into! model dataset frame)", arm)
     clear = cut.find("(e3-r1-d2-batch-fail-stage 0)", call)
@@ -63,6 +76,14 @@ class R1D2BatchRetryTest(unittest.TestCase):
         self.assertIn("(d2-token-dataset-next-batch dataset)", e3)
         self.assertIn("void et_d2_batch_test_fail_stage_v1(int64_t stage)", native)
         self.assertIn("#ifdef ET_D2_NATIVE_TESTING\nvoid et_d2_batch_test_fail_stage_v1", native)
+        self.assertIn("int64_t et_d2_batch_test_fail_occurrence_v1(", native)
+        self.assertIn("fail_occurrences_seen < fail_occurrence_target", native)
+        self.assertIn("fail_occurrences_seen == fail_occurrence_target", native)
+        self.assertIn("fail_occurrence_active = fail_occurrence_stage", native)
+        self.assertIn("if (fail_occurrence_active == stage)", native)
+        self.assertIn("if (fail_occurrence_active != 0) {", native)
+        self.assertIn("fail_occurrence_stage = 0;", native)
+        self.assertIn("int64_t et_d2_batch_test_occurrences_seen_v1(void)", native)
         self.assertIn("(d2-native-batch-create dataset batch-size sequence-length", dataset)
         for seam in ("ET_D2_TEST_FAIL_CONTROL", "ET_D2_TEST_FAIL_MASK",
                      "ET_D2_TEST_FAIL_BEFORE_PUBLISH"):
@@ -83,6 +104,11 @@ class R1D2BatchRetryTest(unittest.TestCase):
         mutants = [
             source.replace("(if (= stage 8) #t", "(if (= stage 7) #t", 1),
             source.replace("(stage-loop (+ stage 1))", "(stage-loop (+ stage 2))", 1),
+            source.replace("(late-stage-loop (+ stage 1))", "(late-stage-loop (+ stage 2))", 1),
+            source.replace("stage 2)", "stage 1)", 1),
+            source.replace("(= (e3-r1-d2-batch-occurrences-seen) 2)", "#t", 1),
+            source.replace("(e3-r1-d2-batch-fail-occurrence stage occurrence)",
+                           "(e3-r1-d2-batch-fail-occurrence stage 1)", 1),
             source.replace("(e3-r1-d2-batch-fail-stage 0)", "#t", 1),
             source.replace("(eq? caught (vector-ref entry 11))", "#t", 1),
             source.replace("(e3-r1-output=? frame destinations outputs)", "#t", 1),

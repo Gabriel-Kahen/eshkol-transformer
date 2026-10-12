@@ -1,9 +1,14 @@
-;;; Exercise the existing D2 native batch-construction fault through real E3.
-;;; The selector is persistent until cleared, so each run clears it before retry.
+;;; Exercise first and later D2 native batch-construction faults through real E3.
+;;; The legacy selector is persistent; both selectors are cleared before retry.
 (extern void e3-r1-d2-batch-fail-stage i64
         :real et_d2_batch_test_fail_stage_v1)
+(extern i64 e3-r1-d2-batch-fail-occurrence i64 i64
+        :real et_d2_batch_test_fail_occurrence_v1)
+(extern i64 e3-r1-d2-batch-occurrences-seen
+        :real et_d2_batch_test_occurrences_seen_v1)
 
-(define (e3-r1-d2-batch-cut-retry! model dataset frame destinations stage)
+(define (e3-r1-d2-batch-cut-retry! model dataset frame destinations stage
+                                      occurrence)
   (let* ((entry (e3-frame-entry-live frame 'e3-r1-d2-batch-cut-retry!))
          (cursor (d2-token-dataset-cursor dataset))
          (modes (e3-test-retention-modes frame))
@@ -14,12 +19,18 @@
          (probes (e3-test-retention-probes)))
     (e3-test-retention-check 'd2-precut-output
       (e3-test-retention-output=? frame destinations))
-    (e3-r1-d2-batch-fail-stage stage)
+    (if (= occurrence 1)
+        (e3-r1-d2-batch-fail-stage stage)
+        (e3-test-retention-check 'd2-late-selector-admitted
+          (= (e3-r1-d2-batch-fail-occurrence stage occurrence) 1)))
     (let ((caught
            (with-region ('e3-r1-d2-batch-failure 262144)
              (guard (failure (#t failure))
                (e3-evaluate-into! model dataset frame)
                #f))))
+      (if (= occurrence 2)
+          (e3-test-retention-check 'd2-late-occurrence-reached
+            (= (e3-r1-d2-batch-occurrences-seen) 2)))
       (e3-r1-d2-batch-fail-stage 0)
       (e3-test-retention-check 'd2-typed-failure
         (and caught (transformer-error? caught)
@@ -88,7 +99,14 @@
        (let stage-loop ((stage 1))
          (if (= stage 8) #t
              (begin
-               (e3-r1-d2-batch-cut-retry! model dataset frame destinations stage)
+               (e3-r1-d2-batch-cut-retry! model dataset frame destinations
+                                           stage 1)
                (stage-loop (+ stage 1)))))
+       (let late-stage-loop ((stage 1))
+         (if (= stage 8) #t
+             (begin
+               (e3-r1-d2-batch-cut-retry! model dataset frame destinations
+                                           stage 2)
+               (late-stage-loop (+ stage 1)))))
        (d2-token-dataset-close! dataset)
        #t))))

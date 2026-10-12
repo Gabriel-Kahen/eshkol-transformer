@@ -967,6 +967,13 @@ checked in a supported build; no compiled rollback verdict is claimed.
 The staged runtime gate now separates unpoisoned normal A/B/repeat from
 poisoned normal and poisoned sanitizer runs, with exact output, stderr and
 status comparisons. This is a source correction, not a runtime verdict.
+The staged D2 successor adds a test-only one-shot, 1-based batch-create
+occurrence selector after native admission. The separate E3 fixture now
+requests occurrence two at all seven construction stages, verifies that the
+second create was reached, and reuses the first-diagnostic, full rollback and
+same-authority retry checks. Native test source also covers invalid selectors,
+pre-admission calls and one-shot disarming. Source tests and C syntax pass;
+compiled package/runtime validation and R1 acceptance remain open.
 An isolated staged successor adds a separate real-M3 zero-control source tuple
 using the existing I2 14-parameter prepare/commit path before frame binding.
 It retains the staged numerical, retention, wrong-target and uniform controls.

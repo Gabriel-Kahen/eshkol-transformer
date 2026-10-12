@@ -102,7 +102,11 @@ printf '%s\n' "$e3_tuple_kind"
         self.assertNotIn("r1_d2_batch_retry",
                          (ROOT / "native/e3_private_driver_root.esk").read_text())
         script = (ROOT / "scripts/test-e3-r1-d2-batch-retry.sh").read_text()
-        self.assertIn("et_d2_batch_test_fail_stage_v1$", script)
+        for symbol in ("et_d2_batch_test_fail_stage_v1",
+                       "et_d2_batch_test_fail_occurrence_v1",
+                       "et_d2_batch_test_occurrences_seen_v1"):
+            self.assertIn(symbol, builder)
+            self.assertIn(symbol, script)
         self.assertIn("E3-R1-D2-BATCH-RETRY-PASS", script)
 
     def test_only_declared_retention_supplement_is_unresolved(self) -> None:
