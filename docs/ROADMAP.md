@@ -2739,6 +2739,12 @@ publication, public G2 and continuation remain pending.
   identifies the missing internal receipts. Outer lifecycle/one-use admission,
   compiled artifact review and
   successful-zero emitted-code proof remain open.
+  A [source-only first-frame leaf receipt successor](g3/G3_C4_P2_G2_FIRST_FRAME_COMMAND_RECEIPTS.md)
+  records its direct checker, compiler, symbol, fixture, oracle and predicate
+  commands with ordered raw streams and exits. Five corruption controls pass;
+  compiled leaf execution and transitive nested-checker/predecessor receipts
+  remain open. The source closure adds only changed leaf files, not a complete
+  transitive runner-input closure.
 
 ## Wave 4 — practical pretraining and performance
 

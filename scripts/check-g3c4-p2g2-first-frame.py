@@ -63,7 +63,8 @@ if "(= (vector-ref policy 5) 1)" not in public or \
         "(<= (vector-ref policy 5) 1)" not in private_config:
     raise SystemExit("public/private Eshkol one-token admission changed")
 if "check_p2_g1_oracle.py" not in runner or \
-        "cmp \"$tmp/off.symbols\" \"$tmp/on.symbols\"" not in runner:
+        'terminal_record_command symbol-parity - - -- \\' not in runner or \
+        'cmp "$evidence/off.symbols" "$evidence/on.symbols"' not in runner:
     raise SystemExit("P2/G2 first-frame oracle or feature-off symbol gate missing")
 
 print("G3-C4 P2/G2 first-frame static PASS: private native transcript only")

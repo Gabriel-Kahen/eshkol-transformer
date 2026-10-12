@@ -31,6 +31,11 @@ additions = [
     "tests/g3c4/check_terminal_command_receipts.py",
     "tests/g3c4/test_terminal_command_receipt.py",
     "docs/g3/G3_C4_P2_G2_PREDECESSOR_COMMAND_INVENTORY.md",
+    "scripts/test-g3c4-p2g2-first-frame.sh",
+    "scripts/check-g3c4-p2g2-first-frame.py",
+    "tests/g3c4/check_first_frame_command_receipts.py",
+    "tests/g3c4/test_first_frame_command_receipts.py",
+    "docs/g3/G3_C4_P2_G2_FIRST_FRAME_COMMAND_RECEIPTS.md",
     "native/g3c4_p2g2_terminal_composer_source_closure.txt",
 ]
 closure = (root / additions[-1]).read_text().splitlines()
