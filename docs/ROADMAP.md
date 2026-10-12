@@ -838,6 +838,14 @@ replacement key. Independent review of this repair remains pending.
 This is source-only and does not supply external issuance or durable custody,
 real release pins, a separate UID/ACL boundary, or independent seal custody.
 N1/M1 and real-layer acquisition remain HOLD pending those gates.
+The isolated [v2 synthetic durable receipt successor](e3/E3_N1_BROKER_CANDIDATE.md)
+adds an attempt-keyed out-of-export receipt/commit, exact synthetic release
+descriptor digest, post-sync issuance token and read-only reconciliation of
+external receipt plus pinned seal. Generated fault/crash tests cover receipt
+and commit write/sync/publication, including a readable commit before return.
+It preserves the v1 broker and reconciler. The seal reference and host
+boundary remain synthetic; authentic f31 pins, independent custody and N1/M1
+admission remain HOLD pending source review and deployment evidence.
 The exact `5d642a2` fe9/f31 numerical gate built the normal and mutant
 packages but failed before runtime at sanitized export isolation: the ASan
 registration COMMON cell remained global after objcopy. Its 308-file failed

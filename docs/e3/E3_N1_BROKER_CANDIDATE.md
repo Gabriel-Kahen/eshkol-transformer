@@ -65,6 +65,48 @@ including after readable VERIFIED bytes and the last parent sync but before
 receipt return; missing intent/marker, duplicate target, changed target inode,
 and changed file checksums all remain HOLD. No real f31 bytes are read.
 
+## Source-only durable receipt successor (v2)
+
+`scripts/e3_n1_durable.py` leaves the broker and reconciler v1 contracts
+unchanged. `release_descriptor(config, image_id, compiler_head, compiler_tree,
+source_head, source_tree)` freezes the ordered source paths, resolved paths,
+device/inode/mode chain, sizes, SHA-256 values, caps, target, parent and its
+ancestor device/inode/mode chain, seal key
+identity and the five release identifiers. The canonical JSON SHA-256 must
+equal `config.pin`. This v2 candidate accepts only explicitly `synthetic:`
+identifiers. It cannot accidentally treat an arbitrary 64-hex request pin or
+invented f31/compiler identity as an admitted release.
+
+After `Broker.attempt` has returned VERIFIED with its out-of-band receipt,
+`issue(config, release, outcome, store)` checks the signed receipt, protected
+intent, live target identity, exact marker and ordered file hashes. It uses
+attempt-keyed no-replace names in an out-of-export receipt directory. It
+writes and fsyncs the receipt file and directory, reads it back, then writes
+and fsyncs a commit record bound to that file's SHA-256 and device/inode. A
+fresh 32-byte issuance token is returned only after the commit readback and
+directory sync. The commit stores only its SHA-256. Pending temp files from
+write/sync faults remain quarantine evidence and never count as a receipt.
+An uncertain write or sync returns HOLD without a token. No recovery process
+manufactures a token from a visible receipt or marker.
+
+`reconcile_durable(config, release, attempt, store, receipt, token, seal_ref)`
+is read-only. It requires the exact externally held broker receipt, returned
+issuance token, matching durable receipt/commit and a caller-provided path,
+SHA-256 and device/inode pin for a separately stored seal. It reads that seal
+with nofollow and calls the existing v1 reconciliation, including its HMAC
+check against the frozen verifier identity. Missing, stale, replaced or
+unreadable evidence remains HOLD. A visible commit after a process crash
+before final sync/return cannot promote without the unreturned token.
+
+This is a synthetic consistency protocol, not independent seal authority.
+`SealRef` can be constructed by the same login, and v1 `Config` still holds
+symmetric HMAC verification bytes. No separate UID, read-only seal custody,
+protected ancestors, `/proc`/fd isolation, crash-safe external delivery, or
+real f31 release descriptor has been established. A production successor
+needs those independently reviewed boundaries and authentic image/compiler/
+source identities before N1/M1 admission. The generated fixture tests use
+tiny files only; no Docker or real OCI layer is read.
+
 Before any real acquisition, independently review this source and tests;
 freeze the exact release config, source device/inode, resolved path, ancestor
 policy and bounds; deploy a
