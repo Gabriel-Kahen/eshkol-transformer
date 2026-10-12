@@ -9,20 +9,25 @@ leaves source path/identity and limits `null`. The selected manifest/config
 descriptors are unknown. No f32 metadata or layer byte was read.
 
 `tests/e3_private/e3_n1_small_metadata.py` implements one read-only small-JSON
-stage per invocation. Its public CLI has `REVIEWED_REQUEST_SHA256 = None` and
-returns `HOLD: production-request-pin-absent` **before opening any request
-source**. No CLI flag, request field, or caller-supplied digest bypasses that
-gate. A later source-reviewed exact request SHA-256 must be compiled in before
-real acquisition can be considered. Internal tests inject a different,
+stage per invocation. The exact 2,743-byte
+[proposed index request](eshkol-f32-quantum-llvm21-20260925.proposed-index-request.json)
+is now compiled as `REVIEWED_REQUEST_SHA256 =
+sha256:f0835b216f2d3f2594e31069b70338219865c961fff0ece7a8c3562d8d75316e`.
+This is a **request-source pin only**. `REVIEWED_CAPTURE_SHA256 = None` keeps
+the production CLI and direct production `acquire` call at
+`HOLD: capture-contract-pin-absent` before opening any request source. No CLI
+flag, request field, or caller-supplied digest bypasses either gate. Internal
+tests inject a different,
 synthetic index digest and tiny files; that override rejects the actual f32
 digest and is not exposed by the CLI.
 
 ## Separate stage gates
 
-1. **Index.** A separately reviewed canonical request must freeze the reported
+1. **Index.** The pinned canonical request freezes the reported
    f32 index SHA-256, expected raw size, absolute source path, exact resolved
    regular-file identity, every ancestor directory identity, positive caps,
-   and review pin. The stage checks the raw index SHA-256, version/media type,
+   and source review pin. Once a separate capture procedure is reviewed and
+   pinned, the stage can check the raw index SHA-256, version/media type,
    and unique exact `linux/amd64` manifest descriptor. It does not read that
    manifest. The reported digest alone is insufficient to supply the path or
    authorize a read.
@@ -50,13 +55,22 @@ to opened fds, caps bytes/time/current Linux resident memory, and rechecks the
 named route after reading. The result is a **read-time identity**, not
 immutable custody: a later same-inode write or replacement remains possible.
 The separate export broker, protected immutable handoff, receipt and seal
-contracts still control any later production use.
+contracts still control any later production use. Before enabling a real index
+read, a separate procedure must define and independently review bounded
+stdout/stderr capture, a 30-second end-to-end deadline (including request
+read), a 268,435,456-byte current-RSS cap, an 8-MiB evidence-output ceiling,
+failure handling, and external preservation of the complete canonical HOLD
+evidence. Its exact reviewed contract SHA-256 must be compiled as the distinct
+capture pin. This source writes only stdout after a successful acquisition;
+it creates no evidence file, immutable snapshot or custody authority.
 
 Each synthetic success emits canonical, checksummed
 `e3-n1-small-metadata-v1` **HOLD** evidence containing bounded base64 raw
 bytes, exact raw hash/size, read-time identity and stage claims. Its encoded
 size is capped at 8 MiB so the next stage can read it; OCI JSON input is capped
-at 2 MiB, current RSS at 2 GiB, and stage time at 60 seconds. `/proc/self/statm`
+at 2 MiB, current RSS at 2 GiB, and stage time at 60 seconds as generic source
+ceilings. The pinned f32 request narrows those to 4,096 source bytes,
+268,435,456 current-RSS bytes and 30 total seconds. `/proc/self/statm`
 is parsed fail-closed per read chunk for current RSS, avoiding inherited
 high-water `ru_maxrss`. These are source limits, not f32 measurements. The
 tool publishes no file or snapshot. A later reviewed procedure must capture,

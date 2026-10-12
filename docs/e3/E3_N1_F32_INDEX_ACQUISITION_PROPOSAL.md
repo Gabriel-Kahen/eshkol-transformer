@@ -9,7 +9,9 @@ freeze a metadata-only candidate for the **index stage** of the existing
 2,743 bytes have SHA-256
 `f0835b216f2d3f2594e31069b70338219865c961fff0ece7a8c3562d8d75316e`.
 That is the **request hash**, not a verified index hash or an approval pin.
-`REVIEWED_REQUEST_SHA256` stays `None`; the CLI remains disabled.
+At this proposal commit, `REVIEWED_REQUEST_SHA256` was `None` and the CLI was
+disabled. The later source-pin candidate compiles the exact request hash but
+retains a separate absent capture-contract pin, so the CLI remains disabled.
 
 ## Frozen candidate
 
@@ -53,5 +55,5 @@ complete canonical evidence before a separately pinned manifest request.
 
 No real index, manifest, config, metadata or layer bytes were read for this
 proposal. It creates no evidence seal, receipt, export, marker or custody
-authority; it does not enable N1/M1, a supported numerical run, or any
-compiled `REVIEWED_REQUEST_SHA256`.
+authority; it does not enable N1/M1 or a supported numerical run. The later
+source pin does not turn this proposal into verified index evidence.

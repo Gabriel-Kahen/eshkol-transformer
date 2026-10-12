@@ -11,8 +11,10 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 SCRIPT = Path(__file__).with_name("e3_n1_small_metadata.py")
+PROPOSED_REQUEST = SCRIPT.parents[2] / "docs/e3/eshkol-f32-quantum-llvm21-20260925.proposed-index-request.json"
 SPEC = importlib.util.spec_from_file_location("e3_n1_small_metadata", SCRIPT)
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
@@ -139,13 +141,38 @@ class SmallMetadataTests(unittest.TestCase):
         # No layer file exists in the fixture.
         self.assertFalse((self.home / self.layer_desc["digest"][7:]).exists())
 
-    def test_public_cli_has_no_pin_and_cannot_read(self):
+    def test_exact_f32_request_is_pinned_but_capture_is_not(self):
+        proposed = PROPOSED_REQUEST.read_bytes()
+        self.assertEqual(len(proposed), MODULE.REVIEWED_REQUEST_SIZE)
+        self.assertEqual(sha(proposed), MODULE.REVIEWED_REQUEST_SHA256)
+        self.assertEqual(MODULE.parse(proposed, require_canonical=True)["stage"], "index")
+        self.assertIsNone(MODULE.REVIEWED_CAPTURE_SHA256)
+
+    def test_public_cli_capture_gate_precedes_request_open(self):
         result = subprocess.run([sys.executable, str(SCRIPT),
                                  str(self.home / "does-not-exist.json")],
                                 capture_output=True, check=False)
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(result.stdout, b"")
-        self.assertIn(b"production-request-pin-absent", result.stderr)
+        self.assertIn(b"capture-contract-pin-absent", result.stderr)
+
+    def test_production_entry_rejects_before_real_source_open(self):
+        proposed = PROPOSED_REQUEST.read_bytes()
+        with mock.patch.object(MODULE, "read_pinned", side_effect=AssertionError("source opened")):
+            with self.assertRaisesRegex(MODULE.Hold, "capture-contract-pin-absent"):
+                MODULE.acquire(proposed, MODULE.REVIEWED_REQUEST_SHA256)
+
+            changed = proposed.replace(b'"stage":"index"', b'"stage":"config"', 1)
+            with self.assertRaisesRegex(MODULE.Hold, "unreviewed-request"):
+                MODULE.acquire(changed, MODULE.REVIEWED_REQUEST_SHA256)
+
+            with self.assertRaisesRegex(MODULE.Hold, "unreviewed-request"):
+                MODULE.acquire(proposed, sha(b"caller-selected-pin"))
+
+    def test_bounded_request_read_checks_deadline_before_open(self):
+        with mock.patch.object(MODULE, "open_nofollow", side_effect=AssertionError("opened")):
+            with self.assertRaisesRegex(MODULE.Hold, "read-time-cap"):
+                MODULE.read_pinned(str(self.index_path), 4096, deadline=0)
 
     def test_index_identity_and_platform_negatives(self):
         request = self.request("index", self.index_path, self.index_raw)

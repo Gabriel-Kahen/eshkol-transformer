@@ -816,14 +816,19 @@ plans for structural review readiness but
 never reads an image, issues custody authority or enables an export.
 The [f32 small-metadata acquisition source](e3/E3_N1_F32_SMALL_METADATA.md)
 adds three separately pinned, one-JSON-at-a-time index→manifest→config stages
-with read-time source identity and preserved raw-byte evidence. Its production
-request pin is absent; only tiny synthetic fixtures run. A separate
+with read-time source identity and preserved raw-byte evidence. The exact
+2,743-byte f32 index request SHA-256 is now compiled as a source pin; the
+separate capture-contract pin remains absent, so the production CLI and direct
+production entry still HOLD before opening the request. Only tiny synthetic
+fixtures run. A separate
 [metadata-only index acquisition proposal](e3/E3_N1_F32_INDEX_ACQUISITION_PROPOSAL.md)
 records the candidate local path, full `lstat` ancestor/file identities,
 expected 855-byte size, finite caps and exact canonical request digest for
 ROOT review. The reported f32 digest and real bytes remain unverified, and
-selected descriptors remain unknown/HOLD. The source reads
-no layers and grants no export or admission authority.
+selected descriptors remain unknown/HOLD. Before any real index read, an
+independently reviewed bounded stdout/stderr capture and external preservation
+procedure must receive a separate source pin. The source reads no layers and
+grants no export or admission authority.
 The [local pin acquisition](e3/E3_N1_LOCAL_PIN_ACQUISITION.md) seals the small
 index/manifest/config bytes and host-only candidates; guest bytes remain absent.
 The [bounded gzip scanner](e3/E3_N1_GZIP_SCANNER.md) A source was held for a

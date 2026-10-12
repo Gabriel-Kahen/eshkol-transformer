@@ -14,7 +14,11 @@ import time
 
 F32_INDEX = "sha256:f568a6c2f1f11decd3bdf89034bb95f5a313185851d51c80764c79f12c56394d"
 F32_NAME = "eshkol-f32-quantum-llvm21:20260925"
-REVIEWED_REQUEST_SHA256 = None  # A later source review must pin exact request bytes.
+REVIEWED_REQUEST_SHA256 = "sha256:f0835b216f2d3f2594e31069b70338219865c961fff0ece7a8c3562d8d75316e"
+REVIEWED_REQUEST_SIZE = 2743
+REVIEWED_MAX_SECONDS = 30
+REVIEWED_MAX_RSS_BYTES = 268435456
+REVIEWED_CAPTURE_SHA256 = None  # Separate bounded stdout capture review gate.
 INDEX_TYPE = "application/vnd.oci.image.index.v1+json"
 MANIFEST_TYPE = "application/vnd.oci.image.manifest.v1+json"
 CONFIG_TYPE = "application/vnd.oci.image.config.v1+json"
@@ -22,7 +26,6 @@ TAR_TYPE = "application/vnd.oci.image.layer.v1.tar"
 GZIP_TYPE = TAR_TYPE + "+gzip"
 JSON_CAP = 2 * 1024 * 1024
 EVIDENCE_CAP = 8 * 1024 * 1024
-REQUEST_CAP = 1024 * 1024
 CHUNK = 64 * 1024
 
 
@@ -134,6 +137,10 @@ def open_nofollow(path):
 
 
 def read_pinned(path, cap, expected_identity=None, deadline=None, rss_cap=None):
+    if deadline is not None:
+        need(time.monotonic() <= deadline, "read-time-cap")
+    if rss_cap is not None:
+        need(current_rss_bytes() <= rss_cap, "read-rss-cap")
     before = identity(os.lstat(path))
     fd, chain = open_nofollow(path)
     try:
@@ -145,7 +152,7 @@ def read_pinned(path, cap, expected_identity=None, deadline=None, rss_cap=None):
                  "source-identity-drift")
         chunks = []
         count = 0
-        while block := os.read(fd, CHUNK):
+        while block := os.read(fd, min(CHUNK, cap - count + 1)):
             count += len(block)
             need(count <= cap, "read-byte-cap")
             if deadline is not None:
@@ -164,6 +171,10 @@ def read_pinned(path, cap, expected_identity=None, deadline=None, rss_cap=None):
              identity(os.lstat(path)) == opened, "source-path-drift")
     finally:
         os.close(after_fd)
+    if deadline is not None:
+        need(time.monotonic() <= deadline, "read-time-cap")
+    if rss_cap is not None:
+        need(current_rss_bytes() <= rss_cap, "read-rss-cap")
     return b"".join(chunks), {"file": opened, "ancestors": chain}
 
 
@@ -296,13 +307,14 @@ def prior_bytes(prior, request, stage, deadline, rss_cap):
     return parsed
 
 
-def acquire(raw_request, reviewed_pin, test_only_index_digest=None):
+def acquire(raw_request, reviewed_pin, test_only_index_digest=None, started_at=None):
     request_digest = "sha256:" + hashlib.sha256(raw_request).hexdigest()
     need(type(reviewed_pin) is str and reviewed_pin == request_digest,
          "unreviewed-request")
     if test_only_index_digest is None:
         need(REVIEWED_REQUEST_SHA256 is not None and
              reviewed_pin == REVIEWED_REQUEST_SHA256, "production-request-pin-absent")
+        need(REVIEWED_CAPTURE_SHA256 is not None, "capture-contract-pin-absent")
     else:
         digest(test_only_index_digest)
         need(test_only_index_digest != F32_INDEX, "synthetic-override-real-index")
@@ -322,7 +334,8 @@ def acquire(raw_request, reviewed_pin, test_only_index_digest=None):
     positive(limits["max_bytes"], JSON_CAP, "byte-limit")
     positive(limits["max_seconds"], 60, "time-limit")
     positive(limits["max_rss_bytes"], 2 * 1024**3, "rss-limit")
-    deadline = time.monotonic() + limits["max_seconds"]
+    deadline = (time.monotonic() if started_at is None else started_at) + limits["max_seconds"]
+    need(time.monotonic() <= deadline, "stage-time-cap")
     source = request["source"]
     fields(source, ("path", "expected_digest", "expected_size", "identity"),
            "source-fields")
@@ -390,9 +403,13 @@ def main():
     parser.add_argument("request")
     args = parser.parse_args()
     try:
-        need(REVIEWED_REQUEST_SHA256 is not None, "production-request-pin-absent")
-        raw, _ = read_pinned(args.request, REQUEST_CAP)
-        result = acquire(raw, REVIEWED_REQUEST_SHA256)
+        need(REVIEWED_CAPTURE_SHA256 is not None, "capture-contract-pin-absent")
+        started = time.monotonic()
+        raw, _ = read_pinned(args.request, REVIEWED_REQUEST_SIZE,
+                             deadline=started + REVIEWED_MAX_SECONDS,
+                             rss_cap=REVIEWED_MAX_RSS_BYTES)
+        need(len(raw) == REVIEWED_REQUEST_SIZE, "production-request-size")
+        result = acquire(raw, REVIEWED_REQUEST_SHA256, started_at=started)
     except (Hold, OSError) as error:
         print("HOLD: " + str(error), file=sys.stderr)
         return 1
