@@ -1,5 +1,4 @@
-;;; The exact noninstalled three-batch E3 numerical entry. Native test hooks
-;;; emit each completed frame role and final published result on this tuple.
+;;; Noninstalled five-layout entry through the ordinary boxed private runner.
 (extern void e3-private-test-run ptr ptr ptr :real et_e3_test_run_v1)
 
 (define (check label value)
@@ -7,24 +6,50 @@
       (begin (display "E3-NUMERICAL-FAIL: ") (display label)
              (newline) (exit 1))))
 
-(define (bytes=? left right)
-  (and (bytevector? left) (bytevector? right)
-       (= (bytevector-length left) (bytevector-length right))
-       (let loop ((index 0))
-         (if (= index (bytevector-length left)) #t
-             (and (= (bytevector-u8-ref left index)
-                     (bytevector-u8-ref right index))
-                  (loop (+ index 1)))))))
+(define (emit-bytes value)
+  (let loop ((index 0))
+    (if (< index (bytevector-length value))
+        (begin
+          (if (> index 0) (display ","))
+          (display (bytevector-u8-ref value index))
+          (loop (+ index 1))))))
 
 (define args (command-line))
 (check 'arguments
-  (and (pair? args) (pair? (cdr args)) (null? (cdr (cdr args)))))
+  (and (pair? args) (pair? (cdr args)) (pair? (cdr (cdr args)))
+       (null? (cdr (cdr (cdr args))))))
+(define name (list-ref args 1))
+(define packed?
+  (or (string=? name "packed-single")
+      (string=? name "packed-sharded")
+      (string=? name "packed-suffix")))
+(check 'case (or packed? (string=? name "unpacked-three")
+                 (string=? name "unpacked-pairs")))
+(define skipped (if (string=? name "packed-suffix") 1 0))
 (define output (vector #f))
-(e3-private-test-run (vector (vector #t 0)) (vector (car (cdr args))) output)
+(e3-private-test-run (vector (vector packed? skipped))
+                     (vector (list-ref args 2)) output)
 (define result (vector-ref output 0))
 (check 'result
   (and (vector? result) (= (vector-length result) 9)
        (eq? (vector-ref result 0) 'e3-private-result-v1)
-       (= (vector-ref result 5) 5) (= (vector-ref result 6) 3)
-       (bytes=? (vector-ref result 7) (vector-ref result 8))))
+       (= (vector-ref result 5)
+          (if (string=? name "packed-suffix") 3
+              (if (string=? name "unpacked-three") 4
+                  (if (string=? name "unpacked-pairs") 3 5))))
+       (= (vector-ref result 6)
+          (if (or (string=? name "packed-suffix")
+                  (string=? name "unpacked-three")) 2 3))
+       (bytevector? (vector-ref result 7))
+       (bytevector? (vector-ref result 8))))
+(display "E3RESULT\t")
+(let loop ((index 1))
+  (if (< index 7)
+      (begin
+        (if (> index 1) (display ","))
+        (display (vector-ref result index))
+        (loop (+ index 1)))))
+(display "\t") (emit-bytes (vector-ref result 7))
+(display "\t") (emit-bytes (vector-ref result 8))
+(newline)
 (display "E3-NUMERICAL-RUNTIME-PASS") (newline)

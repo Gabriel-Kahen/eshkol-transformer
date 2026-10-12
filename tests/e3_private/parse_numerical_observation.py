@@ -35,71 +35,85 @@ def _pair(raw: str, *, mask: bool = False) -> list[int] | list[bool]:
     return values
 
 
-def parse(raw: bytes) -> tuple[dict[str, object], bytes]:
+def _integers(raw: str, count: int | None = None, maximum: int = (1 << 63) - 1) -> list[int]:
+    parts = raw.split(",")
+    if (count is not None and len(parts) != count) or not parts or any(
+        not part or not part.isascii() or not part.isdecimal() or
+        str(int(part)) != part or int(part) > maximum for part in parts
+    ):
+        raise ValueError("numerical frame emitted malformed integer words")
+    return [int(part) for part in parts]
+
+
+def parse(raw: bytes, expected_batches: int = 3) -> tuple[dict[str, object], bytes, dict[str, object]]:
     try:
         lines = raw.decode("ascii").splitlines()
     except UnicodeDecodeError as error:
         raise ValueError("numerical stdout is not ASCII") from error
     if not raw.endswith(b"\n") or lines[-1:] != ["E3-NUMERICAL-RUNTIME-PASS"]:
         raise ValueError("compiled numerical runtime did not complete")
-    batches = [dict() for _ in range(3)]
+    if expected_batches not in (2, 3):
+        raise ValueError("numerical expected batch count is invalid")
+    batches = [dict() for _ in range(expected_batches)]
     roles: list[str] = []
-    final: dict[str, object] | None = None
-    for line in lines[:-1]:
-        fields = line.split("\t")
-        tag = fields[0]
-        if tag == "E3FINAL":
-            if len(fields) != 3 or final is not None:
-                raise ValueError("missing or duplicate final publication")
-            final = {"metrics_f32": _words(fields[1], 4),
-                     "counters": _pair(fields[2])}
-            continue
-        if tag not in {"E3ROW", "E3ROLE", "E3CE", "E3BATCH", "E3STATE"}:
-            raise ValueError("unexpected compiled numerical stdout")
-        if len(fields) < 3 or not fields[1].isascii() or not fields[1].isdecimal():
-            raise ValueError("numerical batch ordinal is malformed")
-        ordinal = int(fields[1])
-        if ordinal not in range(3):
-            raise ValueError("numerical batch ordinal is out of range")
-        batch = batches[ordinal]
-        if tag == "E3ROLE":
-            if len(fields) != 5:
-                raise ValueError("numerical role line is malformed")
-            name, shape_raw, words_raw = fields[2:]
-            role_index = len(roles) - ordinal * len(ROLE_NAMES)
-            if role_index not in range(len(ROLE_NAMES)) or name != ROLE_NAMES[role_index]:
+    cursor = 0
+    def take(tag: str, ordinal: int | None = None) -> list[str]:
+        nonlocal cursor
+        if cursor >= len(lines) - 1:
+            raise ValueError("numerical frame omitted an observation")
+        fields = lines[cursor].split("\t")
+        cursor += 1
+        if fields[0] != tag or (ordinal is not None and
+                (len(fields) < 2 or fields[1] != str(ordinal))):
+            raise ValueError("numerical observation is missing, duplicate, or reordered")
+        return fields
+
+    for ordinal, batch in enumerate(batches):
+        fields = take("E3ROW", ordinal)
+        if len(fields) != 5:
+            raise ValueError("numerical row line is malformed")
+        batch["row"] = (_pair(fields[2]), _pair(fields[3]),
+                        _pair(fields[4], mask=True))
+        for name in ROLE_NAMES:
+            fields = take("E3ROLE", ordinal)
+            if len(fields) != 5 or fields[2] != name:
                 raise ValueError("numerical role order differs from fixed schedule")
-            shape = [int(value) for value in shape_raw.split(",")]
+            shape = _integers(fields[3])
+            if not 1 <= len(shape) <= 4 or 0 in shape:
+                raise ValueError("numerical role shape is empty")
             count = 1
             for dimension in shape:
-                if dimension < 1:
-                    raise ValueError("numerical role shape is empty")
                 count *= dimension
-            _words(words_raw, count)
-            roles.append("\t".join((str(ordinal), name, shape_raw, words_raw)))
-            continue
-        key = tag[2:].lower()
-        if key in batch:
-            raise ValueError("duplicate numerical batch field")
-        if tag == "E3ROW":
-            if len(fields) != 5:
-                raise ValueError("numerical row line is malformed")
-            batch[key] = (_pair(fields[2]), _pair(fields[3]),
-                          _pair(fields[4], mask=True))
-        elif tag == "E3CE":
-            if len(fields) != 3:
-                raise ValueError("numerical CE line is malformed")
-            batch[key] = _words(fields[2], 2)
-        elif tag == "E3BATCH":
-            if len(fields) != 4 or not fields[3].isascii() or not fields[3].isdecimal():
-                raise ValueError("numerical L3S line is malformed")
-            batch[key] = (_words(fields[2], 4), int(fields[3]))
-        elif tag == "E3STATE":
-            if len(fields) != 4:
-                raise ValueError("numerical state line is malformed")
-            batch[key] = (_words(fields[2], 3), _pair(fields[3]))
-    if final is None or len(roles) != 3 * len(ROLE_NAMES):
-        raise ValueError("numerical frame omitted final or roles")
+            _words(fields[4], count)
+            roles.append("\t".join((str(ordinal), name, fields[3], fields[4])))
+        fields = take("E3CE", ordinal)
+        if len(fields) != 3:
+            raise ValueError("numerical CE line is malformed")
+        batch["ce"] = _words(fields[2], 2)
+        fields = take("E3BATCH", ordinal)
+        if len(fields) != 4:
+            raise ValueError("numerical L3S line is malformed")
+        batch["batch"] = (_words(fields[2], 4), _integers(fields[3], 1)[0])
+        fields = take("E3STATE", ordinal)
+        if len(fields) != 4:
+            raise ValueError("numerical state line is malformed")
+        batch["state"] = (_words(fields[2], 3), _pair(fields[3]))
+    fields = take("E3FINAL")
+    if len(fields) != 3:
+        raise ValueError("missing or duplicate final publication")
+    final = {"metrics_f32": _words(fields[1], 4), "counters": _pair(fields[2])}
+    fields = take("E3RESULT")
+    if len(fields) != 4 or cursor != len(lines) - 1:
+        raise ValueError("numerical result is missing, duplicate, or reordered")
+    values = _integers(fields[1], 6, (1 << 32) - 1)
+    before = _integers(fields[2], maximum=255)
+    after = _integers(fields[3], maximum=255)
+    if len(before) < 168 or len(after) != len(before):
+        raise ValueError("numerical cursor bytes are malformed")
+    result = {"outputs": values, "cursor_before": bytes(before).hex(),
+              "cursor_after": bytes(after).hex()}
+    if [f"{word:08x}" for word in values[:4]] != final["metrics_f32"] or values[4:] != final["counters"]:
+        raise ValueError("boxed outputs differ from native final publication")
     observed = []
     for ordinal, batch in enumerate(batches):
         if set(batch) != {"row", "ce", "batch", "state"}:
@@ -120,7 +134,7 @@ def parse(raw: bytes) -> tuple[dict[str, object], bytes]:
         "kind": "observed-f32", "profile": "e3-private-n1-t2-v256-d4-v1",
         "batches": observed, "final": final,
     }
-    return payload, ("\n".join(roles) + "\n").encode("ascii")
+    return payload, ("\n".join(roles) + "\n").encode("ascii"), result
 
 
 def main() -> None:
@@ -128,10 +142,13 @@ def main() -> None:
     parser.add_argument("--stdout", required=True, type=Path)
     parser.add_argument("--observed", required=True, type=Path)
     parser.add_argument("--roles", required=True, type=Path)
+    parser.add_argument("--result", required=True, type=Path)
+    parser.add_argument("--batches", required=True, type=int)
     args = parser.parse_args()
-    payload, roles = parse(args.stdout.read_bytes())
+    payload, roles, result = parse(args.stdout.read_bytes(), args.batches)
     args.observed.write_bytes(canonical(payload))
     args.roles.write_bytes(roles)
+    args.result.write_bytes(canonical(result))
 
 
 if __name__ == "__main__":

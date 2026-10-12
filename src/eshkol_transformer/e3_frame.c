@@ -301,8 +301,8 @@ static void e3_scope_end(et_f32_scoped_guard_internal *guard) {
 }
 
 #ifdef ET_E3_NUMERICAL_TESTING
-/* Exact noninstalled tuple only. Read each completed role before the next D2
- * batch reuses the frame; no value is fabricated from the reference bundle. */
+/* Exact noninstalled five-layout tuple only. Read each completed role before
+ * the next D2 batch reuses the frame; no reference values enter this observer. */
 static const char *const e3_numerical_role_names[21] = {
   "ET", "EP", "X", "N1", "QT", "KT", "VT", "QH", "KH", "VH", "AH",
   "AT", "AO", "R", "N2", "FU", "FG", "FD", "Y", "NF", "Z"

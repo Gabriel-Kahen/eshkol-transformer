@@ -1,12 +1,16 @@
 """Static exact-tuple and compiled-mutant boundary checks."""
 
 from pathlib import Path
+import copy
 import shutil
 import subprocess
 import tempfile
 import unittest
 
 from tests.e3_private.parse_numerical_observation import ROLE_NAMES, parse
+from tests.e3_private.verify_numerical_result import verify_layouts
+from tests.e3_reference.corpus import materialize
+from tests.d2.reference import decode_reference_cursor, encode_reference_cursor
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -19,6 +23,36 @@ def lines(prefix: Path, suffix: str) -> list[str]:
 
 
 class NumericalTupleTest(unittest.TestCase):
+    def test_five_layout_boxed_cursor_and_boundary_contract(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="e3-layouts-") as temporary:
+            cases = materialize(Path(temporary) / "corpus")
+            results = {}
+            for index, case in enumerate(cases["cases"]):
+                before = case["start_cursor"]
+                fields = decode_reference_cursor(bytes.fromhex(before))
+                after = encode_reference_cursor(
+                    fields.manifest_digest, fields.tokenizer_fingerprint,
+                    fields.vocab_size, fields.config, case["total_rows"],
+                    case["total_rows"],
+                )
+                results[case["name"]] = {
+                    "outputs": [1 if index < 2 else index, 0, 0, 0, 0, 0],
+                    "cursor_before": before, "cursor_after": after.hex(),
+                }
+            verify_layouts(cases, results)
+            malformed = copy.deepcopy(results)
+            malformed["packed-suffix"]["cursor_before"] = results["packed-single"]["cursor_before"]
+            with self.assertRaisesRegex(ValueError, "starting cursor"):
+                verify_layouts(cases, malformed)
+            malformed = copy.deepcopy(results)
+            malformed["packed-sharded"]["outputs"][0] = 9
+            with self.assertRaisesRegex(ValueError, "packed repartition"):
+                verify_layouts(cases, malformed)
+            malformed = copy.deepcopy(results)
+            malformed["unpacked-three"]["cursor_after"] = results["unpacked-three"]["cursor_before"]
+            with self.assertRaisesRegex(ValueError, "end cursor"):
+                verify_layouts(cases, malformed)
+
     def test_private_generated_source_stage_is_stable_and_fresh(self) -> None:
         helper = ROOT / "scripts/e3-generated-source-stage.sh"
         with tempfile.TemporaryDirectory(prefix="e3-numerical-gate-") as temporary:
@@ -232,7 +266,7 @@ source "$5"
     def test_incomplete_compiled_stdout_cannot_become_observation(self) -> None:
         with self.assertRaisesRegex(ValueError, "did not complete"):
             parse(b"E3ROW\t0\t3,197\t197,0\t1,1\n")
-        with self.assertRaisesRegex(ValueError, "unexpected"):
+        with self.assertRaisesRegex(ValueError, "missing, duplicate, or reordered"):
             parse(b"reference JSON instead of native frame\n"
                   b"E3-NUMERICAL-RUNTIME-PASS\n")
 
@@ -250,14 +284,38 @@ source "$5"
                 f"E3STATE\t{ordinal}\t40400000,40000000,00000000\t{2 * (ordinal + 1)},{ordinal + 1}",
             ))
         lines.extend(("E3FINAL\t3f800000,40000000,40400000,00000000\t6,3",
+                      "E3RESULT\t1065353216,1073741824,1077936128,0,6,3\t"
+                      + ",".join(["0"] * 200) + "\t" + ",".join(["1"] * 200),
                       "E3-NUMERICAL-RUNTIME-PASS"))
-        payload, roles = parse(("\n".join(lines) + "\n").encode("ascii"))
+        raw = ("\n".join(lines) + "\n").encode("ascii")
+        payload, roles, result = parse(raw)
         self.assertEqual(payload["batches"][0]["inputs"], [3, 197])
         self.assertEqual(payload["batches"][2]["targets"], [197, 0])
         self.assertEqual(payload["batches"][1]["ce_f32"],
                          ["3f800000", "40000000"])
         self.assertEqual(payload["final"]["metrics_f32"][0], "3f800000")
         self.assertEqual(len(roles.splitlines()), 63)
+        self.assertEqual(result["outputs"][4:], [6, 3])
+        self.assertEqual(len(bytes.fromhex(result["cursor_before"])), 200)
+        for malformed in (
+            lines[:1] + lines[2:],                         # missing role
+            lines[:2] + lines[1:],                         # duplicate role
+            lines[:2] + [lines[3], lines[2]] + lines[4:], # reordered roles
+            lines[:-2] + lines[-1:],                       # missing boxed result
+            lines[:-1] + [lines[-2], lines[-1]],           # duplicate boxed result
+            lines[:-2] + [lines[-2].replace(",0,6,3", ",1,6,3")] + lines[-1:],
+        ):
+            with self.assertRaises(ValueError):
+                parse(("\n".join(malformed) + "\n").encode("ascii"))
+        suffix = lines[25:75] + lines[-3:]
+        suffix = ["\t".join([parts[0], str(int(parts[1]) - 1), *parts[2:]])
+                  if line.startswith(("E3ROW\t", "E3ROLE\t", "E3CE\t",
+                                      "E3BATCH\t", "E3STATE\t")) else line
+                  for line in suffix for parts in [line.split("\t")]]
+        suffix_payload, suffix_roles, _ = parse(
+            ("\n".join(suffix) + "\n").encode("ascii"), 2)
+        self.assertEqual((len(suffix_payload["batches"]), len(suffix_roles.splitlines())),
+                         (2, 42))
         with self.assertRaisesRegex(ValueError, "duplicate"):
             parse(("\n".join(lines[:-1] + [lines[0], lines[-1]]) + "\n").encode("ascii"))
 
