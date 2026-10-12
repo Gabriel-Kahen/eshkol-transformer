@@ -27,6 +27,6 @@ post-restore comparison, candidate-retirement, or replay evidence exists for
 this source candidate. Until those gates pass it is not an admitted runtime or
 G3-R continuation path. The closure manifest is a source inventory, not a
 link or symbol proof.
-The inherited TR3 source manifest also names absent
-`native/d2_semantic_core.esk` on this base; a later aggregate must resolve its
-actual D2 source variant before attempting a compile.
+The closure uses `internal/d2/lib/d2_semantic_core.esk`, the D2 root's actual
+load target on this base. Source checks verify every listed path exists and
+the checked-pair, receipt, TR3, D2 and T2 load and require chains are present.

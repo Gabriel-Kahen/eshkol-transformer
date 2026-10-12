@@ -1,12 +1,17 @@
 """Bounded source contract for the private G3-R receipt/TR3 bridge."""
 
 from pathlib import Path
+import re
 import unittest
 
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = (ROOT / "native/g3r_same_reservation_extension.esk").read_text()
 CLOSURE = (ROOT / "native/g3r_same_reservation_source_closure.txt").read_text().splitlines()
+CHECKED = (ROOT / "native/g3r_checked_pair_source_closure.txt").read_text().splitlines()
+TR3 = (ROOT / "native/tr3_c_joint_restore_source_closure.txt").read_text().splitlines()
+D2_BASE = (ROOT / "native/tr3_c_d2_restore_source_closure.txt").read_text().splitlines()
+LOAD = re.compile(r'^\(load "([^"]+)"\)', re.MULTILINE)
 
 
 def function(name):
@@ -18,8 +23,17 @@ def function(name):
 class SameReservationSourceTest(unittest.TestCase):
     def test_private_predecessor_inventory(self):
         self.assertEqual(len(CLOSURE), len(set(CLOSURE)))
-        self.assertEqual({path for path in CLOSURE if not (ROOT / path).is_file()},
-                         {"native/d2_semantic_core.esk"})
+        self.assertEqual([path for path in CLOSURE if not (ROOT / path).is_file()], [])
+        self.assertEqual(TR3[:len(D2_BASE) - 1], D2_BASE[:-1])
+        new = {"native/g3r_same_reservation_extension.esk",
+               "native/g3r_same_reservation_source_closure.txt",
+               "tests/g3r/test_same_reservation_source.py",
+               "docs/g3/G3_R_SAME_RESERVATION_SOURCE_GATE.md"}
+        self.assertEqual(set(CLOSURE), set(CHECKED) | set(TR3) | new)
+        for parent in (CHECKED, TR3):
+            self.assertEqual([path for path in CLOSURE if path in parent], parent)
+        self.assertIn("internal/d2/lib/d2_semantic_core.esk", CLOSURE)
+        self.assertNotIn("native/d2_semantic_core.esk", CLOSURE)
         self.assertIn("native/g3r_checked_pair_extension.esk", CLOSURE)
         self.assertIn("native/tr3_c_joint_restore_extension.esk", CLOSURE)
         self.assertIn("native/g3r_same_reservation_extension.esk", CLOSURE)
@@ -27,6 +41,45 @@ class SameReservationSourceTest(unittest.TestCase):
                         CLOSURE.index("native/g3r_same_reservation_extension.esk"))
         self.assertLess(CLOSURE.index("native/tr3_c_joint_restore_extension.esk"),
                         CLOSURE.index("native/g3r_same_reservation_extension.esk"))
+
+    def test_transitive_root_loads_are_in_closure(self):
+        special = {"eshkol_transformer/token_shard.esk":
+                   "src/eshkol_transformer/token_shard.esk",
+                   "transformer/tokenizer_internal.esk":
+                   "internal/t2/lib/transformer/tokenizer_internal.esk",
+                   "t2_d1_bridge.esk": "internal/t2/lib/t2_d1_bridge.esk",
+                   "t1_tokenizer_core.esk": "internal/t1/lib/t1_tokenizer_core.esk",
+                   "t2_bpe_core.esk": "internal/t2/lib/t2_bpe_core.esk",
+                   "d2_semantic_core.esk": "internal/d2/lib/d2_semantic_core.esk",
+                   "d2_dataset.esk": "internal/d2/lib/d2_dataset.esk"}
+        for root in ("native/g3r_checked_pair_root.esk",
+                     "native/g3r_c2_sha_receipt_root.esk",
+                     "native/tr3_c_joint_restore_root.esk",
+                     "native/d2_wave2_root.esk", "native/t2_wave2_root.esk",
+                     "internal/t2/lib/transformer/tokenizer_internal.esk"):
+            with self.subTest(root=root):
+                for load in LOAD.findall((ROOT / root).read_text()):
+                    target = special.get(load, f"native/{load}")
+                    self.assertIn(target, CLOSURE, (root, load))
+        requires = {
+            "native/t2_wave2_root.esk": {
+                "e1b_error_consumer_private": "native/e1b_error_consumer_private.esk",
+                "x1_config_private": "native/x1_config_private.esk",
+                "transformer.module": "internal/p1/lib/transformer/module.esk",
+                "transformer.persistence_policy_internal":
+                    "internal/c1/lib/transformer/persistence_policy_internal.esk"},
+            "native/e1b_error_consumer_private.esk": {
+                "transformer.error_internal": "lib/transformer/error_internal.esk"},
+            "lib/transformer/error_internal.esk": {
+                "transformer.error_core": "lib/transformer/error_core.esk"},
+            "native/i2_wave2_extension.esk": {
+                "transformer.checkpoint_internal":
+                    "internal/c1/lib/transformer/checkpoint_internal.esk"}}
+        for source, modules in requires.items():
+            body = (ROOT / source).read_text()
+            for module, target in modules.items():
+                self.assertIn(f"(require {module})", body)
+                self.assertIn(target, CLOSURE)
 
     def test_candidate_uses_registered_exact_tuple(self):
         enroll = function("g3r-same-reservation-enroll-internal")

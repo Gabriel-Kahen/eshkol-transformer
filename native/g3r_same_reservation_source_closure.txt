@@ -35,9 +35,6 @@ tests/g3r/test_checked_pair_static.py
 scripts/test-g3r-checked-pair.sh
 docs/g3/G3_R_CHECKED_PAIR_LEAF.md
 native/g3r_checked_pair_source_closure.txt
-native/t1_wave1_root.esk
-internal/t1/lib/transformer/tokenizer_internal.esk
-native/d2_semantic_core.esk
 native/m3t_transport_extension.esk
 native/m3_schedule.esk
 native/m3_model_extension.esk
