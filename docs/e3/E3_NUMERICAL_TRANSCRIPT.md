@@ -82,8 +82,9 @@ against the independently generated corpus. Packed repartition requires equal
 emitted rows and outputs. Unpacked boundaries require separately derived rows
 and outputs. The two existing compiled mutants remain scoped to packed-single.
 
-Focused local parser, source-policy and reference tests pass. No five-layout
-compiled run or independent N2 source approval is recorded here. The supported
-exact-tree normal/repeat/poison/sanitizer AOT gate and current-main integration
-remain required. The accepted M3, N2/N3K, L2 and L3S gradient checks are
+Focused local parser, source-policy and reference tests pass. Independent N2
+source/tests review at `4d7ed8d0` found no blocking issue. No five-layout
+compiled run is recorded. The supported exact-tree normal/repeat/poison/sanitizer
+AOT gate and current-main integration remain required. The accepted M3,
+N2/N3K, L2 and L3S gradient checks are
 predecessor evidence; E3's evaluator exposes no differentiable output or VJP.
