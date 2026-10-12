@@ -1,0 +1,117 @@
+;;; CLI3 corpus validation. This command uses only the public D1 facade.
+(require transformer.data)
+
+(define cli3-usage
+  "usage: eshkol-transformer corpus validate DIR [--max-manifest-bytes N] [--max-shard-bytes N] [--max-total-tokens N]")
+
+(define (cli3-usage-error message)
+  (let ((port (current-error-port)))
+    (display "error: " port) (display message port) (newline port)
+    (display cli3-usage port) (newline port))
+  (exit 64))
+
+(define (cli3-decimal-limit text allow-zero)
+  (if (or (not (string? text)) (= (string-length text) 0))
+      (cli3-usage-error "limit must be a decimal signed-64-bit integer")
+      (let loop ((index 0) (value 0))
+        (if (= index (string-length text))
+            (if (and (not allow-zero) (= value 0))
+                (cli3-usage-error "byte limit must be positive")
+                value)
+            (let ((digit (- (char->integer (string-ref text index)) 48)))
+              (if (or (< digit 0) (> digit 9)
+                      (> value (quotient (- 9223372036854775807 digit) 10)))
+                  (cli3-usage-error "limit must be a decimal signed-64-bit integer")
+                  (loop (+ index 1) (+ (* value 10) digit))))))))
+
+(define (cli3-parse-options values manifest shard total seen-manifest
+                            seen-shard seen-total)
+  (if (null? values)
+      (list manifest shard total)
+      (if (null? (cdr values))
+          (cli3-usage-error "option requires a value")
+          (let ((option (car values)) (raw (car (cdr values)))
+                (remaining (cdr (cdr values))))
+            (cond
+              ((string=? option "--max-manifest-bytes")
+               (if seen-manifest (cli3-usage-error "duplicate option")
+                   (cli3-parse-options
+                    remaining (cli3-decimal-limit raw #f) shard total
+                    #t seen-shard seen-total)))
+              ((string=? option "--max-shard-bytes")
+               (if seen-shard (cli3-usage-error "duplicate option")
+                   (cli3-parse-options
+                    remaining manifest (cli3-decimal-limit raw #f) total
+                    seen-manifest #t seen-total)))
+              ((string=? option "--max-total-tokens")
+               (if seen-total (cli3-usage-error "duplicate option")
+                   (cli3-parse-options
+                    remaining manifest shard (cli3-decimal-limit raw #t)
+                    seen-manifest seen-shard #t)))
+              (else (cli3-usage-error "unknown option")))))))
+
+(define (cli3-print-summary summary)
+  (display "shards=")
+  (display (token-corpus-summary-shard-count summary))
+  (display " tokens=")
+  (display (token-corpus-summary-total-tokens summary))
+  (display " vocab=")
+  (display (token-corpus-summary-vocab-size summary))
+  (display " limit=")
+  (display (token-corpus-summary-shard-token-limit summary))
+  (display " bytes=")
+  (display (token-corpus-summary-total-shard-bytes summary))
+  (display " fingerprint_hex=")
+  (let* ((bytes (string->utf8
+                 (token-corpus-summary-tokenizer-fingerprint summary)))
+         (digits "0123456789abcdef"))
+    (let loop ((index 0))
+      (if (= index (bytevector-length bytes))
+          #t
+          (let ((value (bytevector-u8-ref bytes index)))
+            (display (string-ref digits (quotient value 16)))
+            (display (string-ref digits (modulo value 16)))
+            (loop (+ index 1))))))
+  (newline))
+
+(define (cli3-report-error error)
+  (let ((port (current-error-port)))
+    (if (transformer-error? error)
+        (begin
+          (display "error: category=" port)
+          (display (transformer-error-category error) port)
+          (display " operation=" port)
+          (display (transformer-error-operation error) port)
+          (display " message=" port)
+          (display (transformer-error-message error) port)
+          (newline port)
+          (exit 2))
+        (begin
+          (display "error: unexpected non-transformer condition" port)
+          (newline port)
+          (exit 70)))))
+
+(define cli3-arguments (cdr (command-line)))
+(if (or (null? cli3-arguments)
+        (not (string=? (car cli3-arguments) "corpus"))
+        (null? (cdr cli3-arguments))
+        (not (string=? (car (cdr cli3-arguments)) "validate"))
+        (null? (cdr (cdr cli3-arguments))))
+    (cli3-usage-error "expected corpus validate DIR")
+    #t)
+
+(define cli3-directory (car (cdr (cdr cli3-arguments))))
+(if (= (string-length cli3-directory) 0)
+    (cli3-usage-error "directory must be nonempty")
+    #t)
+
+;;; Defaults bound each file and the declared total before D1 reads shards.
+(define cli3-limits
+  (cli3-parse-options (cdr (cdr (cdr cli3-arguments)))
+                      67108864 67108864 1000000000 #f #f #f))
+(guard (error (#t (cli3-report-error error)))
+  (cli3-print-summary
+   (token-corpus-validate cli3-directory
+                          (car cli3-limits)
+                          (car (cdr cli3-limits))
+                          (car (cdr (cdr cli3-limits))))))
