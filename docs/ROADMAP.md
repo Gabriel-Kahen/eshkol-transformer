@@ -858,6 +858,10 @@ selects OpenSSL 3.5.9 LTS PureEd25519 EVP and pins its upstream source
 checksum and proposed v3 byte/role contract; built provider/verifier bytes,
 keys and deployment remain unpinned. This successor remains HOLD for
 implementation, live cross-UID proof, real-layer acquisition, and N1/M1 admission.
+The [OpenSSL 3.5.9 SOURCE/PREP recipe](e3/E3_N1_OPENSSL_BUILD_PREP.md) specifies
+the later isolated build inputs, complete header/provider/ELF evidence manifest,
+one-use prepared gate, and synthetic fault matrix. It builds or admits nothing;
+all binary, loader, verifier, key, and deployment pins remain HOLD.
 The exact `5d642a2` fe9/f31 numerical gate built the normal and mutant
 packages but failed before runtime at sanitized export isolation: the ASan
 registration COMMON cell remained global after objcopy. Its 308-file failed
