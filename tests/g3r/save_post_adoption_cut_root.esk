@@ -7,6 +7,8 @@
 ;;; same-owner SAVE roster before each read-only absent-gradient bit copy.
 (extern i64 g3r-save-cut-gradient-copy ptr i64 ptr i64
         :real et_g3r_test_save_gradient_copy_v1)
+(extern i64 g3r-save-cut-idle-ledger-copy ptr ptr i64
+        :real et_g3r_test_save_idle_ledger_copy_v1)
 
 ;;; [returned shell, abandon calls, reverse release order, in abandon?].
 (define g3r-save-cut-state (vector #f 0 '() #f))

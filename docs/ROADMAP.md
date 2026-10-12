@@ -1887,6 +1887,12 @@ absent-gradient positive-zero backing bits. A narrow F32 test-only accessor
 exposes that backing storage; the fixture does not seed gradients.
 The source contract and feature-off checks do not establish compiled linkage
 or runtime bit preservation; the remaining SAVE failure cuts are still open.
+A further source-only post-adoption fixture now snapshots the same original
+G3 generator's 18-word native idle ledger before and after the injected cut.
+The feature-gated test bridge checks destination bounds and releases the
+snapshot before copying its policy, RNG and committed-history words to the
+fixture. Focused negative C controls cover malformed destinations and native
+snapshot failures. Compiled execution and the remaining SAVE cuts are open.
 Compiled native/Eshkol coexistence, actual partial-claim failure cuts, C2
 image/digest, pair publication, cold LOAD, and public SAVE remain open.
 

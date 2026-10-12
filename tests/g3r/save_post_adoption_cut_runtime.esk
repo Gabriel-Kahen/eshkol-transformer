@@ -51,6 +51,13 @@
   (vector-ref (m3t-entry model 'model 'g3r-save-bit-witness #t) 8))
 (define gradient-byte-lengths
   '#(64 64 64 64 128 128 16 16 16 16 4096 16 16 32))
+(define (capture-original-idle-ledger)
+  (let* ((entry (g3t-generator-find generator 'g3r-save-cut-idle-ledger))
+         (image (make-bytevector 144 0)))
+    (check "original idle G3 ledger copy"
+      (= 0 (g3r-save-cut-idle-ledger-copy
+             (vector-ref entry 3) image 144)))
+    image))
 (define (capture-value-images)
   (let ((images (make-vector 14 #f)))
     (let loop ((index 0))
@@ -112,6 +119,7 @@
 (check "original tied alias before cut" (original-tie?))
 (define value-images-before (capture-value-images))
 (define gradient-images-before (capture-gradient-images))
+(define idle-ledger-before (capture-original-idle-ledger))
 (define original-cursor (d2-token-dataset-cursor dataset))
 (define original-controls (g3r-controls-captured-copy capsule))
 (define c2-head c2-training-state-states)
@@ -135,6 +143,8 @@
   (same-images? value-images-before (capture-value-images)))
 (check "fourteen original gradient bit images unchanged"
   (same-images? gradient-images-before (capture-gradient-images)))
+(check "original G3 RNG and committed history unchanged"
+  (d2-core-bytes=? idle-ledger-before (capture-original-idle-ledger)))
 (check "original tied alias after cut" (original-tie?))
 (check "retired shell cannot take bundle again"
   (guard (caught (#t (and (transformer-error? caught)

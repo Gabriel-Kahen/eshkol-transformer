@@ -44,14 +44,25 @@ class PostAdoptionPreparation(unittest.TestCase):
             self.assertIn('(load "g3m_prefill_p1_extension.esk")', root)
             self.assertIn('(load "g3r_same_owner_o2_adoption_extension.esk")', root)
             self.assertIn('(load "g3r_same_owner_save_cut_caller.esk")', root)
+            self.assertIn(":real et_g3r_test_save_idle_ledger_copy_v1", root)
             self.assertTrue((destination / "source/native/c2_training_state_extension.esk").is_file())
             self.assertTrue((destination / "source/internal/p1/lib/transformer/module.esk").is_file())
             self.assertTrue((destination / "source/tests/g3r/save_model_bits_bridge.c").is_file())
+            self.assertTrue((destination / "source/tests/g3r/save_idle_ledger_bridge.c").is_file())
+            self.assertEqual(
+                (destination / "source/src/eshkol_transformer/g3t_transport.h").read_bytes(),
+                (ROOT / "src/eshkol_transformer/g3t_transport.h").read_bytes())
             for name in ("native/f32_parameter_internal.h", "native/f32_tensor.c"):
                 self.assertEqual((destination / "source" / name).read_bytes(),
                                  (ROOT / name).read_bytes())
             runtime = (destination / "source/tests/g3r/save_post_adoption_cut_runtime.esk").read_text()
             self.assertIn("(g3m-prefill-p1! generator input)", runtime)
+            self.assertLess(runtime.index("(define idle-ledger-before"),
+                            runtime.index('"typed post-adoption failure"'))
+            self.assertLess(runtime.index('"typed post-adoption failure"'),
+                            runtime.index('"original G3 RNG and committed history unchanged"'))
+            self.assertIn("(vector-ref entry 3) image 144", runtime)
+            self.assertIn("d2-core-bytes=? idle-ledger-before (capture-original-idle-ledger)", runtime)
             self.assertNotIn("g3t-with-call", runtime)
             self.assertIn("'((source-code 77)\n                        "
                           "(source-domain g3r-save-o2-adoption))", runtime)

@@ -46,9 +46,16 @@ also needs `ET_G3R_SAME_OWNER_SAVE_PRIVATE`. The fixture independently encodes f
 through I2 and checks both complete image sets plus the original tied
 head/token handle before and after the injected failure. The bridge is
 feature-gated and adds no public training API. These assertions remain
-unexecuted in compiled Eshkol. G3 RNG/history, complete journal/token count,
-one-use grant replay and fresh recovery, abandon fail-stop and C2 partial
-claim remain separate gate obligations.
+unexecuted in compiled Eshkol.
+
+A further source-only fixture copies the original native generator's 18-word
+idle snapshot before and after the cut. Its test-only bridge calls the
+accepted G3-R ledger create/copy/release API, checks the exact 144-byte
+destination, and publishes the image only after successful release. The full
+image comparison covers the four RNG words, ordered committed history and
+counts, and fixed policy words. This observation is also unrun in compiled
+Eshkol. Complete journal/token count, one-use grant replay and fresh recovery,
+abandon fail-stop and C2 partial claim remain separate gate obligations.
 
 ## One-use post-adoption cut
 
