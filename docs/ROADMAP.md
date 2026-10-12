@@ -682,8 +682,16 @@ negative cases passed. The formatter fixture still built the older two-export
 archive and imported the full D1/D2 facade while linking the current app.
 Its source-only repair keeps the same private formatter assertions, admits
 exactly the installed read-only D1 public exports in that fixture archive,
-and stages the same checked D1 projection for its app compile. A new
-exact-head hosted run and compiled CLI3 gate remain pending.
+and stages the same checked D1 projection for its app compile. The subsequent
+hosted result is recorded below.
+Run `38294256092` at `f44cec54` passed the CLI3 command suite, including the
+formatter fixture. Its separate model-composition job then rejected a changed
+SHA-256 of `scripts/build-e1b-consumer.sh`, whose bytes are pinned by M3's
+predecessor-source contract. A bounded follow-up restores that builder byte
+for byte and links the unchanged two-export formatter archive to a test-only
+dispatch entry. The installed app and its D1 command are already exercised
+before this private formatter fixture; the same formatter assertions and
+`--version` oracle remain. Exact-head hosted validation is pending.
 
 The isolated CLI3 cross-command test script `scripts/test-cli3-cross-command-chain.sh`
 is prepared for a fresh production-root build. It creates one byte tokenizer,

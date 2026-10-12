@@ -268,9 +268,6 @@ if [[ "${cli3_tuple_requested}" == 1 ]]; then
   cli3_requested_lexical_bridge="${cli3_lexical_bridge}"
   cli3_requested_lexical_renames="${cli3_lexical_renames}"
   cli3_requested_lexical_exports="${cli3_lexical_exports}"
-  if [[ "${raw_private_root}" == "${cli3_lexical_formatter_root}" ]]; then
-    cli3_requested_lexical_exports="${cli3_lexical_production_exports}"
-  fi
   cli3_requested_lexical_public_strings="${cli3_lexical_public_strings}"
   cli3_requested_lexical_native_closure="${cli3_lexical_native_source_closure}"
   cli3_requested_lexical_undefined="${cli3_lexical_undefined}"
@@ -594,8 +591,6 @@ elif [[ "${private_root}" == "${cli3_private_root}" || \
       cli3_selected_lexical_root="${cli3_lexical_formatter_root}"
       cli3_selected_lexical_source_closure="${cli3_lexical_formatter_source_closure}"
       cli3_selected_source_closure="${cli3_formatter_source_closure}"
-      cli3_lexical_exports="${cli3_lexical_production_exports}"
-      cli3_public_exports="$(realpath -- "${cli3_lexical_production_exports}")"
     fi
     if [[ "${private_root}" == "$(realpath -- "${cli3_lexical_generate_root}")" ]]; then
       cli3_generate_fixture=1

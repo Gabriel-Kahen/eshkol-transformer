@@ -59,24 +59,29 @@ class ProductionGenerateContract(unittest.TestCase):
                     self.assertNotEqual(rejected.returncode, 0)
                     self.assertIn('policy requires', rejected.stderr)
 
-    def test_formatter_fixture_uses_installed_readonly_exports(self):
+    def test_formatter_fixture_keeps_predecessor_builder_and_private_oracle(self):
         formatter = [
             ROOT / 'tests/cli3/formatter_private_root.esk',
             NATIVE / 'cli3_package_bridge.c',
             NATIVE / 'cli3_private_renames.txt',
-            NATIVE / 'cli3_generate_public_exports.txt',
+            NATIVE / 'cli3_public_exports.txt',
         ]
         accepted = policy(formatter)
         self.assertEqual((accepted.returncode, accepted.stdout.strip()),
                          (0, '0 0 0 0 1'), accepted.stderr)
-        obsolete = policy([*formatter[:3], NATIVE / 'cli3_public_exports.txt'])
-        self.assertNotEqual(obsolete.returncode, 0)
-        self.assertIn('policy requires', obsolete.stderr)
+        wider = policy([*formatter[:3], NATIVE / 'cli3_generate_public_exports.txt'])
+        self.assertNotEqual(wider.returncode, 0)
+        self.assertIn('policy requires', wider.stderr)
         gate = (ROOT / 'scripts/test-cli3.sh').read_text()
-        self.assertIn('native/cli3_generate_defined_symbols.txt', gate)
-        self.assertIn('tests/cli3/stage-cli3-d1-readonly.py', gate)
-        self.assertIn('ESHKOL_LIB_DIR="${formatter_public_dir}"', gate)
-        self.assertNotIn('ESHKOL_LIB_DIR="${PROJECT_ROOT}/lib"', gate)
+        self.assertIn('native/cli3_defined_symbols.txt', gate)
+        self.assertIn('tests/cli3/formatter_link_entry.esk', gate)
+        self.assertIn('run_exact formatter-boundaries 0', gate)
+        entry = (ROOT / 'tests/cli3/formatter_link_entry.esk').read_text()
+        self.assertIn('et_e1b_public_cli3_dispatch_v1', entry)
+        self.assertIn('(cdr (command-line))', entry)
+        self.assertNotIn('transformer.data', entry)
+        fixture = (ROOT / 'tests/cli3/formatter_private_root.esk').read_text()
+        self.assertIn('(load "formatter_private.esk")', fixture)
 
     def test_readonly_d1_exports_and_reviewed_closures(self):
         exports = (NATIVE / 'cli3_generate_public_exports.txt').read_text().splitlines()
