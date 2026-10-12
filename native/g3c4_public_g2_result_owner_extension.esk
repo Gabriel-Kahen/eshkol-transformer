@@ -1,0 +1,54 @@
+;;; Uninstalled G2 result-owner prerequisite. Load after the P2/G1 adapter in
+;;; a registry-owning aggregate only after the public G2 facade is reviewed.
+(extern ptr g3c4-native-rank1-result-create i64 i64 i64 i64
+        :real et_g3c4_private_result_tensor_create_rank1_v1)
+(extern i64 g3c4-native-rank1-result-inspect ptr i64 i64 i64 i64
+        :real et_g3c4_private_result_tensor_inspect_rank1_v1)
+(vector-set! g3c4-public-rank1-inspector 0
+             g3c4-native-rank1-result-inspect)
+
+;;; Values must already be authenticated by the future output accessor. This
+;;; seam owns only a detached result and never accepts a terminal/clone owner.
+(define (g3c4-public-g2-result-publish kind logical-count value0 value1 operation)
+  (m3-call operation
+    (if (not (and (or (eq? kind 'ids) (eq? kind 'lengths)
+                      (eq? kind 'cache-lengths))
+                  (m3t-exact-i64? logical-count)
+                  (m3t-exact-i64? value0) (m3t-exact-i64? value1)))
+        (g3c4-fail 'invalid-argument operation "invalid C4 result values"))
+    (let* ((protected (vector logical-count value0 value1))
+           (shell (vector 'g3c4-result-private))
+           (ledger (vector #f))
+           (entry (vector shell kind 'pending #f #f #f #f #f #f #f
+                          ledger g3c4-model-profile))
+           (record (vector entry #f kind protected shell))
+           (next (cons entry (vector-ref g3c4-registry 0)))
+           (record-next (cons record (vector-ref g3c4-public-result-records 0)))
+           (native '()))
+      (guard (caught
+               (#t
+                 (if (not (null? native))
+                     (if (not (= (g3c4-native-result-tensor-release native) 0))
+                         (exit 134)))
+                 (g3c4-entry-dead! entry)
+                 (vector-set! record 1 #f)
+                 (raise caught)))
+        (vector-set! g3c4-registry 0 next)
+        (vector-set! g3c4-public-result-records 0 record-next)
+        (set! native
+          (g3c4-native-rank1-result-create
+            (cond ((eq? kind 'ids) 5) ((eq? kind 'lengths) 6) (else 7))
+            logical-count value0 value1))
+        (if (null? native) (g3c4-native-fail operation))
+        (vector-set! ledger 0 native)
+        (vector-set! record 1 native)
+        (vector-set! entry 3 native)
+        (vector-set! entry 7 protected)
+        (g3c4-native-check
+          (g3c4-native-rank1-result-inspect
+            native (cond ((eq? kind 'ids) 5) ((eq? kind 'lengths) 6) (else 7))
+            logical-count value0 value1)
+          operation)
+        (vector-set! entry 2 'live)
+        (vector-set! entry 10 #f)
+        (if (eq? kind 'ids) (list shell) shell)))))

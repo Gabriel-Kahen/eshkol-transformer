@@ -1,0 +1,47 @@
+;;; Source-composed prerequisite test; no G2 output producer or public dispatch.
+(load "p2_g1_shell_test_common.esk")
+(load "g3c4_public_model_input_extension.esk")
+(load "g3c4_p2g1_copyout_extension.esk")
+(load "g3c4_p2g1_coordinator_extension.esk")
+(load "g3c4_public_output_adapter_extension.esk")
+(load "g3c4_public_g2_result_owner_extension.esk")
+
+(extern i64 result-test-borrow ptr i64
+        :real et_g3c4_result_test_borrow_v1)
+(define (native shell)
+  (vector-ref (g3c4-registry-find shell 'test) 3))
+(define g1 (car (g3c4-public-g2-result-publish 'ids 1 17 0 'test)))
+(define g2 (car (g3c4-public-g2-result-publish 'ids 2 19 23 'test)))
+(define length (g3c4-public-g2-result-publish 'lengths 1 2 0 'test))
+(define cache (g3c4-public-g2-result-publish 'cache-lengths 1 4 0 'test))
+(check "independent public result shells"
+       (and (not (eq? g1 g2)) (not (eq? g2 length))
+            (not (eq? length cache))))
+(check "native logical shape and values"
+       (and (= (g3c4-native-rank1-result-inspect (native g1) 5 1 17 0) 0)
+            (= (g3c4-native-rank1-result-inspect (native g2) 5 2 19 23) 0)
+            (= (g3c4-native-rank1-result-inspect (native length) 6 1 2 0) 0)
+            (= (g3c4-native-rank1-result-inspect (native cache) 7 1 4 0) 0)))
+(check "borrow held" (= (result-test-borrow (native g2) 1) 0))
+(reject "held rank-one lease rejects release" 'invalid-state
+  (lambda () (g3c4-public-generation-tensor-release! g2)))
+(check "borrow ends" (= (result-test-borrow (native g2) 0) 0))
+(check "rank-one owner survives lease retry"
+       (eq? (g3c4-public-result-entry-live g2 'test)
+            (g3c4-registry-find g2 'test)))
+(define protected (vector-ref (g3c4-registry-find g2 'test) 7))
+(vector-set! protected 2 24)
+(reject "protected second word rejects release" 'invalid-state
+  (lambda () (g3c4-public-generation-tensor-release! g2)))
+(vector-set! protected 2 23)
+(check "protected word restoration works"
+       (eq? (g3c4-public-result-entry-live g2 'test)
+            (g3c4-registry-find g2 'test)))
+(g3c4-public-generation-tensor-release! g1)
+(g3c4-public-generation-tensor-release! g1)
+(check "peer result survives release"
+       (= (g3c4-native-rank1-result-inspect (native g2) 5 2 19 23) 0))
+(g3c4-public-generation-tensor-release! g2)
+(g3c4-public-generation-tensor-release! length)
+(g3c4-public-generation-tensor-release! cache)
+(display "G3-C4 G2 result-owner Eshkol seam PASS\n")

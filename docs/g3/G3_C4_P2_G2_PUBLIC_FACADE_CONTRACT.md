@@ -128,3 +128,29 @@ owner/config/shape, failure cuts, feature-off and unchanged C2/P2-G1 cases.
 Only an installed-package runtime and symbol/source-closure gate can admit
 the public facade. No G3-R SAVE or data-only continuation format is defined
 here.
+
+## Isolated result-owner prerequisite candidate
+
+`ET_G3C4_P2_G2_PUBLIC_RESULT_PRIVATE` adds an uninstalled native constructor
+`et_g3c4_private_result_tensor_create_rank1_v1(kind, logical_count, value0,
+value1)` and exact inspector. Kind 5 admits byte IDs with logical count 1 or
+2; count 1 requires the unused second argument to be zero. Kinds 6 and 7
+admit scalar count 1 with values 1/2 and 3/4 respectively, also requiring a
+zero unused argument. Each owner has a new dense CPU-i64 tensor of rank one,
+shape `[logical_count]`, and exactly that many copied values. The inspector
+checks registered kind, protected count and words, dtype, device, rank,
+shape, byte length and live storage values. The existing strict
+`et_g3c4_private_result_tensor_create_v1(kind,value)` continues to admit
+only P2/G1 values. Both forms use the same typed release, including lease
+rejection, retry and idempotent exact-owner release.
+
+`native/g3c4_public_g2_result_owner_extension.esk` is an uninstalled Eshkol
+publication seam for already authenticated detached words. It creates a
+fresh public shell and registry entry, verifies its native owner before
+publication, and uses the native inspector on later live reads/releases.
+It cannot read or authenticate a terminal output and is not a public G2
+accessor. The C4 manual package root and public dispatch do not load it.
+The focused native test exercises typed storage, malformed values and shape,
+allocation/copy failure, lease/retry, feature-off and sanitizer behavior.
+Compiled Eshkol seam validation, private terminal acceptance, and the full
+public facade/package gates above remain open.
