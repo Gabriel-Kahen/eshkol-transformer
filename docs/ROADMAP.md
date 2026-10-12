@@ -1637,24 +1637,32 @@ Hosted integration checks, merge and public acceptance remain pending. This
 private receipt does not implement a G3-R pair loader, live replay or resumed
 continuation.
 
-An isolated source candidate now composes that exact live C2/SHA receipt with
-the accepted in-memory G3RCV1 decoder. Its private
+The private pair candidate at exact
+`c27ebb66ba1b0f030c8bd306cda7506fa4c93b8f`/tree
+`b53110d7787c54aeb31b601c40841246d33cf482` composes that
+live C2/SHA receipt with the accepted in-memory G3RCV1 decoder. Its private
 `g3r-c2-pair-decode-internal!` borrows the receipt, supplies only its copied
 same-image SHA to the codec, closes the borrow, then atomically copies the
 eight decoded data-only fields to the caller. The source fixture covers a
 same-image pair, an independently valid wrong-image digest, torn companion,
 short destination, and busy, forged and dead receipts. Source/static checks
 pass. Independent source/test review found no implementation defect and its
-one static order-check gap was repaired with a mutation case. The first
-compiled normal mode reached the valid wrong-pair rejection but failed the
-combined destination/receipt state check; repeat and sanitizer did not run.
-The bounded repair stores borrow and digest cleanup authority in preallocated
-cells across the exception handler and separates destination, receipt status,
-and C2 live/busy count checks. Source checks pass; a fresh immutable compiled
-normal/repeat/sanitizer gate remains pending root coordination. This is
-in-memory pair admission only: it neither reads or publishes
-the companion file nor authenticates live model/tokenizer identity, restores
-parameters or replays a generator.
+one static order-check gap was repaired with a mutation case. The earlier
+`99315549` compiled gate failed its combined wrong-pair state assertion; that
+failure remains preserved. The repair stores borrow and digest cleanup
+authority in preallocated cells across the exception handler and separates
+destination, receipt status, and C2 live/busy count checks. Its exact-head
+pinned fe9/f31 compiled gate passed normal, repeat and native sanitizer modes:
+64 identical checks per mode with empty run/build stderr, plus 563 native
+predecessor checks and 7/7 static checks. Root and independent review accepted
+the bounded source and sealed result at
+`g3r-c2-pair-gate-c27ebb66-20261011-prepared-a/SHA256SUMS-RUN`
+(SHA-256 `236739e914a29f6f5d7f7e5a4c2e0b71674197e4c8505956e0f0c07b832921ba`).
+Native sanitizer coverage does not establish generated Eshkol instrumentation.
+Hosted exact-head checks and integration remain pending. This private in-memory
+pair admission does not read or publish the companion file, authenticate live
+model/tokenizer identity, restore parameters, replay a generator, or discharge
+the remaining G3-R C2/SAVE and Wave 3 obligations.
 
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
