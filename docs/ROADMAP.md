@@ -1742,6 +1742,17 @@ symbol absence and Q0 isolation also pass. Independent review and
 current-main union remain gates before admission. No SAVE writer, file-pair
 publication or resumed continuation is provided.
 
+The [same-owner G3-R SAVE writer prerequisite](g3/G3_R_SAME_OWNER_SAVE_WRITER_PREREQUISITE.md)
+records the next source boundary. The committed copyout is detached data;
+ordinary C2 SAVE accepts a separate detached training-state owner, and its
+published path does not return the immutable encoded image or whole-image
+SHA needed by G3RCV1. A reviewed bridge must capture exact live
+generator/M3T/T1/P1/O2/controls into one C2 owner, then bind the companion
+to the very C2 image published first. The separately pinned file-pair gate
+admits LOAD only and is absent from this source branch. This prerequisite is
+documentation on the `97aec234` candidate
+ancestry, with no writer, source union, or SAVE admission.
+
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
 diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use
