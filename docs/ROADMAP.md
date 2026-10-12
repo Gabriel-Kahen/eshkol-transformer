@@ -902,8 +902,15 @@ for audit. This b20 gate cannot establish a current-main verdict. The source
 union of current main `09f7ed52`, exact CLI PR #202 head `b98321ef`, and N2
 `b20c81f1` preserves CLI3's 21-suite, 36-command topology and installed D1
 assertions. Independent source/tests review found no blocking source issue;
-21 N2 tests and seven runnable CLI3 source tests passed. The installed CLI
-tests require a binary, and the exact-union AOT/sanitizer rerun remains open.
+21 N2 tests and twelve runnable CLI3 source tests passed. The installed CLI
+tests require a binary. The exact union `17069817`/tree `c7a08f85` has an
+independently released one-use fe9/f31 prelaunch recipe at
+`e3-n2-observer-union-170698-fe9-f31-20261012-prepared-c` (prepared seal
+SHA-256 `5f574bf191f61b18759656d906bb702f353019d69b0917591ea28f9e74e5a429`).
+It authenticates separate b20 leaf, independent union and ROOT union source
+reviews. Read-only pins, seven fake-daemon lifecycle tests and the synthetic
+seal test pass. Hosted CLI run 38304110383 was still in progress at the last
+check, so Docker and the exact-union AOT/sanitizer gate remain unrun.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
