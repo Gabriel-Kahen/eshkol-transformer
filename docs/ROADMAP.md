@@ -865,6 +865,11 @@ peak-RSS accounting, a suspend-inclusive interval through final protected
 seal and verified cessation, and fail-closed synthetic gates. It is a
 docs-only HOLD contract; no Linux scope or custody service is deployed, no
 resource cap is proven, and both real-read gates remain closed.
+The [finite synthetic closure probe](e3/E3_N1_F32_FINITE_CLOSURE_PROBE.md)
+uses a network-filtered Linux subreaper and pidfds to observe/reap a fixed
+generated detached pipe holder, collect both actor peaks and verify pipe EOF;
+its deadline path signals by pidfd. It adds no cgroup confinement or custody,
+keeps `resource_proof=HOLD`, and leaves both real-read gates closed.
 The [local pin acquisition](e3/E3_N1_LOCAL_PIN_ACQUISITION.md) seals the small
 index/manifest/config bytes and host-only candidates; guest bytes remain absent.
 The [bounded gzip scanner](e3/E3_N1_GZIP_SCANNER.md) A source was held for a
