@@ -1696,6 +1696,11 @@ static/fixture checks pass on this corrected union, including mutation
 negatives for lexical cleanup regressions. The corrected C2 compiled gate is
 still pending/HOLD, and the union has not passed a supported compiled aggregate
 gate; each leaf retains its separate runtime and ownership admission gates.
+The first one-use union gate on `bac0092c` failed before runtime: both
+`file_pair` compile passes rejected `list-ref` under `--no-stdlib`; a later
+`nm` error obscured the compile failure. The test fixtures now use a private
+`car`/`cdr` argument accessor. A corrected fail-fast gate with the same
+no-stdlib source closure is being prepared; compiled admission remains HOLD.
 
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry

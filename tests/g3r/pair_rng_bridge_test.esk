@@ -38,12 +38,16 @@
            (same-c2-counts? before-c2)
            (= before-rng (g3r-test-live-rng-clones))))))
 
+(define (g3r-test-arg values index)
+  (if (= index 0) (car values)
+      (g3r-test-arg (cdr values) (- index 1))))
+
 (define args (cdr (command-line)))
-(define c2-path (list-ref args 0))
-(define good-path (list-ref args 1))
-(define short-path (list-ref args 2))
-(define torn-path (list-ref args 4))
-(define mismatched-path (list-ref args 5))
+(define c2-path (g3r-test-arg args 0))
+(define good-path (g3r-test-arg args 1))
+(define short-path (g3r-test-arg args 2))
+(define torn-path (g3r-test-arg args 4))
+(define mismatched-path (g3r-test-arg args 5))
 (define policy
   (c2-persistence-policy-internal 1048576 1048576 1048576 16 'cpu))
 (define report (k2-public-capability-discover))
