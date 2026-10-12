@@ -89,6 +89,30 @@ class EvidenceDirectoryTests(unittest.TestCase):
         self.assertFalse((steps / "build-d1.status").exists())
         self.assertFalse((evidence / "artifacts" / "eshkol-transformer").exists())
 
+    def test_dirty_index_is_rejected_before_toolchain_without_repo_mutation(self) -> None:
+        evidence = self.root / "dirty-index"
+        env = os.environ.copy()
+        env["GIT_INDEX_FILE"] = str(self.root / "absent-alternate-index")
+        result = self.run_gate(evidence, env)
+        self.assertNotEqual(result.returncode, 0)
+        metadata = dict(
+            line.split("\t", 1)
+            for line in (evidence / "metadata.tsv").read_text(encoding="utf-8").splitlines()
+        )
+        self.assertEqual(metadata["project_clean"], "false")
+        self.assertGreater((evidence / "initial-git-status.txt").stat().st_size, 0)
+        self.assertNotEqual(
+            (evidence / "steps" / "check-project-pin.status").read_text().strip(), "0"
+        )
+        self.assertFalse((evidence / "steps" / "verify-toolchain.status").exists())
+        self.assertFalse((self.root / "absent-alternate-index").exists())
+        self.assertEqual(
+            subprocess.check_output(
+                ["git", "-C", str(PROJECT), "status", "--porcelain"], text=True
+            ),
+            "",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

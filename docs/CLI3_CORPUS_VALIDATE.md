@@ -71,5 +71,6 @@ manifest, corrupt shard, version and feature categories, all three exceeded
 limits, and invalid command arguments.
 
 The lightweight `tests/cli3/test_gate_evidence.py` checks occupied-path rejection
-and retained metadata, logs, and status on toolchain failure without building D1
-or compiling code.
+and retained metadata, logs, and status on toolchain failure. It also checks dirty
+checkout rejection with an alternate Git index, without changing repository files.
+These tests do not build D1 or compile code.
