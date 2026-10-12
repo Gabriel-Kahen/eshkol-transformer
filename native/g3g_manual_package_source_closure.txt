@@ -17,6 +17,7 @@ internal/c1/lib/c1_sha256.esk
 native/m3t_transport_extension.esk
 native/m3_schedule.esk
 native/m3_model_extension.esk
+native/t1_published_release_private.esk
 native/m3_call_adapters.esk
 native/g3t_model_admission_extension.esk
 native/g3t_generator_constructor_extension.esk

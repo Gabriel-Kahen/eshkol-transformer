@@ -2799,6 +2799,12 @@ publication, public G2 and continuation remain pending.
   repeat release. Its focused source/native normal and sanitizer checks pass;
   private aggregate compilation, F continuation, public runtime, and package
   gates remain pending.
+  The bounded F/T1 source successor now loads that release seam in the manual
+  private aggregate with the exact native feature gate and stages a genuine
+  post-copy, post-issuer release fixture. Source checks cover dead T1 reads,
+  stale decode rejection, native-ID EOS/two-ID continuation, and one-time
+  history admission. This successor remains source-only pending independent
+  review and the immutable compiled aggregate gate; no runtime claim is made.
 
 ## Wave 4 — practical pretraining and performance
 

@@ -1,0 +1,98 @@
+;;; Source fixture for the next immutable compiled private-aggregate gate.
+;;; It deliberately loads the real manual aggregate, not a second T1 root.
+(load "g3g_manual_package_root.esk")
+
+(define checks 0)
+(define (check label truth)
+  (if truth (set! checks (+ checks 1))
+      (begin (display "P2/G2 release history FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label thunk)
+  (check label
+    (guard (caught (#t (transformer-error? caught)))
+      (thunk) #f)))
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define model (g3c4-public-model-create-seeded 1729))
+(reject "foreign T1 release rejects"
+  (lambda () (t1-private-published-release! (vector 'foreign))))
+(define short-encoded
+  (t1-wave1-tokenizer-encode tokenizer (bytevector 7)))
+(reject "P1 shape cannot issue P2 input"
+  (lambda () (g3c4-public-generation-input-create short-encoded)))
+(check "negative-shape T1 owner releases"
+  (t1-private-published-release! short-encoded))
+(define encoded
+  (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255)))
+(define input (g3c4-public-generation-input-create encoded))
+;;; The constructor has returned: native I1 copy and lexical issuer enrollment
+;;; are complete. Its source T1 shell is no longer needed by C4.
+(check "private physical release" (t1-private-published-release! encoded))
+(check "withdrawn T1 admission" (not (t1-wave1-tensor-admitted? encoded)))
+(check "dead native length rejects"
+  (and (< (t1-shell-length encoded) 0)
+       (not (= (t1-shell-last-status) 0))))
+(check "dead native read rejects"
+  (begin (t1-shell-read encoded 0)
+         (not (= (t1-shell-last-status) 0))))
+(reject "stale decode rejects"
+  (lambda () (t1-wave1-tokenizer-decode tokenizer encoded)))
+(check "exact dead identity releases twice"
+  (t1-private-published-release! encoded))
+(define native-ids
+  (g3c4-public-p2g2-native-input-ids
+    (vector-ref (g3c4-input-entry-live input 'test) 3) 'test))
+(check "copied native IDs survived source release"
+  (and (= (vector-ref native-ids 0) 0)
+       (= (vector-ref native-ids 1) 255)))
+
+(define (config eos)
+  (list ':profile 'diagnostic-c4-p2g2 ':sampling 'greedy
+        ':temperature-bits 1065353216 ':top-k 256
+        ':top-p-bits 1065353216 ':max-new-tokens 2
+        ':eos eos ':seed 41))
+(define (first-id-after-release)
+  (let ((probe (g3g-public-generator-create model tokenizer (config 0)))
+        (selected -1))
+    (g3c4-with-p2g2-prefix-call 'history-release-prefix
+      probe input (call)
+      (g3c4-p2g2-protected-reserve call)
+      (set! selected (g3c4-p2g2-prefix-commit! call input))
+      (g3c4-p2g2-protected-abort! call))
+    (check "post-release prefix is V256"
+      (and (<= 0 selected) (<= selected 255)))
+    (check "prefix probe closes" (g3g-public-generator-close probe))
+    selected))
+(define first-id (first-id-after-release))
+
+(define (exercise eos expected-count)
+  (let* ((generator (g3g-public-generator-create model tokenizer (config eos)))
+         (output (g3g-public-generator-generate generator input))
+         (snapshot (g3c4-p2g2-terminal-snapshot-private output))
+         (history (g3c4-public-p2g2-history-capture-internal!
+                    generator input output))
+         (record (g3c4-public-p2g2-history-admit-once-internal!
+                   history generator input output)))
+    (check "terminal count after source release"
+      (= (vector-ref snapshot 2) expected-count))
+    (check "history prompt comes from independent native IDs"
+      (and (= (vector-ref record 0) (vector-ref native-ids 0))
+           (= (vector-ref record 1) (vector-ref native-ids 1))))
+    (check "history terminal IDs and cache"
+      (and (= (vector-ref record 2) (vector-ref snapshot 0))
+           (= (vector-ref record 3) (vector-ref snapshot 1))
+           (= (vector-ref record 4) expected-count)
+           (= (vector-ref record 5) (vector-ref snapshot 3))))
+    (reject "history is admitted once"
+      (lambda () (g3c4-public-p2g2-history-admit-once-internal!
+                   history generator input output)))
+    (check "terminal output releases" (g3g-public-generation-output-release output))
+    (check "generator closes" (g3g-public-generator-close generator))))
+
+(exercise first-id 1)
+(exercise (if (= first-id 255) 0 255) 2)
+(check "input releases" (g3g-public-generation-tensor-release input))
+(display "P2G2-HISTORY-RELEASE-PRIVATE-PASS: checks=")
+(display checks)
+(newline)

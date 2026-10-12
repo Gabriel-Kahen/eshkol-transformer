@@ -1689,7 +1689,8 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
       fi
     elif [[ "${package_policy}" == g3g-manual-public-aggregate &&
             "${package_native_source}" == "${PROJECT_ROOT}/native/t1_i64_shell.c" ]]; then
-      package_source_flags=(-DET_G3C4_T1_I1_EXACT_PAIR_PRIVATE)
+      package_source_flags=(-DET_G3C4_T1_I1_EXACT_PAIR_PRIVATE
+                            -DET_T1_PUBLISHED_RELEASE_PRIVATE)
     elif [[ "${g3g_package_policy}" == 1 &&
             "${package_native_source}" == "${PROJECT_ROOT}/native/a2_kv_cache.c" ]]; then
       package_source_flags=(-DET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE)

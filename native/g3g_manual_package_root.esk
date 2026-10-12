@@ -1,5 +1,6 @@
 ;;; Trusted installed G3-G diagnostic-C2 manual aggregate; never install this source.
 (load "m3_package_root.esk")
+(load "t1_published_release_private.esk")
 (load "m3_call_adapters.esk")
 (load "g3t_model_admission_extension.esk")
 (load "g3t_generator_constructor_extension.esk")
