@@ -731,7 +731,7 @@
                  (set! history-issuers next-history)
                  (set! issued-outputs next-outputs)
                  (set! history-count (+ history-count 1))
-                 shell)))
+                 shell))))
           ((eq? action 'admit)
            (let ((issuer (assq first history-issuers)))
              (if (not issuer)
@@ -744,7 +744,7 @@
                             (raise caught)))
                  ((cdr issuer) 'begin second third fourth)
                  (set! begun #t)
-                 ((cdr issuer) 'admit second third fourth))))))
+                 ((cdr issuer) 'admit second third fourth)))))
           (else (g3c4-fail 'invalid-argument operation
                            "P2/G2 history action is invalid")))))))
 

@@ -142,6 +142,18 @@ class HistorySource(unittest.TestCase):
         assert capture_let[2][0] == "let"
         assert [binding[0] for binding in capture_let[2][1]] == [
             "next-history", "next-outputs"]
+        dispatch = next(form for form in parse.walk(parsed_route)
+                        if isinstance(form, list) and form and
+                        form[0] == "cond" and any(
+                            isinstance(clause, list) and clause and
+                            isinstance(clause[0], list) and
+                            clause[0][:2] == ["eq?", "action"]
+                            for clause in form[1:]))
+        assert [clause[0] for clause in dispatch[1:]] == [
+            ["eq?", "action", "'input-issue"],
+            ["eq?", "action", "'capture"],
+            ["eq?", "action", "'admit"], "else"]
+        assert [len(clause) for clause in dispatch[1:]] == [3, 2, 2, 2]
         route = history[history.index("(define g3c4-public-p2g2-history-route"):]
         for required in (
             "(let ((input-issuers '()) (history-issuers '())",
@@ -208,7 +220,16 @@ class HistorySource(unittest.TestCase):
         malformed = self.history.replace(
             '"P2/G2 history verb is invalid")))))))',
             '"P2/G2 history verb is invalid"))))))', 1).replace(
-                '                 shell)))\n', '                 shell))))\n', 1)
+                "                 ((cdr issuer) 'admit second third fourth)))))",
+                "                 ((cdr issuer) 'admit second third fourth))))))", 1)
+        with self.assertRaises(AssertionError):
+            self.validate(history=malformed)
+
+    def test_admit_is_a_peer_dispatch_clause(self) -> None:
+        malformed = self.history.replace(
+            '                 shell))))\n', '                 shell)))\n', 1).replace(
+                "                 ((cdr issuer) 'admit second third fourth)))))",
+                "                 ((cdr issuer) 'admit second third fourth))))))", 1)
         with self.assertRaises(AssertionError):
             self.validate(history=malformed)
 
