@@ -60,6 +60,8 @@ class R1SourceRetryTests(unittest.TestCase):
     def test_missing_cut_or_rollback_assertion_is_rejected(self) -> None:
         source = DRIVER.read_text()
         mutants = [
+            source.replace("(e3-r1-cut-retry! model dataset frame destinations 7 0)",
+                           "#t", 1),
             source.replace("(e3-r1-cut-retry! model dataset frame destinations 10 -1)",
                            "#t", 1),
             source.replace("(e3-r1-cut-retry! model dataset frame destinations 7 20)",
@@ -69,6 +71,8 @@ class R1SourceRetryTests(unittest.TestCase):
             source.replace("(e3-r1-cut-retry! model dataset frame destinations 9 -1)",
                            "#t", 1),
             source.replace("(e3-r1-cut-retry! model dataset frame destinations 12 -1)",
+                           "#t", 1),
+            source.replace("(e3-r1-cut-retry! model dataset frame destinations 11 -1)",
                            "#t", 1),
             source.replace("(e3-test-retention-model=? model model-image)", "#t", 1),
             source.replace("(eq? caught (vector-ref entry 11))", "#t", 1),
