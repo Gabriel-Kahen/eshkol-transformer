@@ -2823,8 +2823,9 @@ publication, public G2 and continuation remain pending.
   extension. The bounded source repair replaces the boolean identity checks
   and pair-returning identity lookups with local `eq?` list walkers. Focused
   parsed-source tests pass, including distinct equal-looking rows and issuer
-  pairs. Independent review and a fresh compiled/public runtime gate remain
-  pending; no public F/T1 runtime acceptance is claimed. The failed G-e run is
+  pairs. Independent source/tests review accepted `a1324dd8`; a fresh
+  compiled/public runtime gate remains pending. No public F/T1 runtime
+  acceptance is claimed. The failed G-e run is
   retained at `/home/gabe/.codex/evidence/eshkol-transformer/wave3-f-t1-compiled-gate-run-591cf598-20261012-g-e`.
 
 ## Wave 4 — practical pretraining and performance
