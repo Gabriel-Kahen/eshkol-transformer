@@ -373,6 +373,31 @@ class ReceiptTests(unittest.TestCase):
         with self.assertRaisesRegex(VERIFIER.ReceiptError, "duplicate JSON key"):
             VERIFIER.json.loads('{"a":1,"a":2}', object_pairs_hook=VERIFIER.pairs_unique)
 
+    def test_provider_symlink_own_location_cannot_escape_image(self):
+        for path in (self.root / "image/../source/escape-link",
+                     self.root / "image/portal/escape-link"):
+            with self.subTest(path=path):
+                candidate = copy.deepcopy(self.receipt)
+                if "portal" in path.parts:
+                    (self.root / "image/portal").symlink_to(self.root / "source")
+                actual = self.root / "source/escape-link"
+                actual.symlink_to(self.files["image/libc.so"])
+                candidate["provider"]["symlink_chain"][0] = {
+                    "path": str(path), "target": str(self.files["image/libc.so"])}
+                claims = self.files["reviewed_claims.txt"]
+                claims.write_text(json.dumps(VERIFIER.reviewed_claims(candidate),
+                                             sort_keys=True))
+                candidate["evidence"]["reviewed_claims"]["sha256"] = (
+                    VERIFIER.hashlib.sha256(claims.read_bytes()).hexdigest())
+                candidate["evidence"]["reviewed_claims"]["size"] = claims.stat().st_size
+                self.expected_claims = candidate["evidence"]["reviewed_claims"]["sha256"]
+                try:
+                    with self.assertRaisesRegex(VERIFIER.ReceiptError,
+                                                "host provider symlink"):
+                        self.check(candidate)
+                finally:
+                    actual.unlink()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -488,7 +488,10 @@ def check_receipt(data, *, expected_pins=F_PINS, expected_objects=F_OBJECTS,
              "invalid provider symlink chain")
         path = nonempty(link["path"], "provider symlink path")
         target = nonempty(link["target"], "provider symlink target")
-        need(in_root(path, "image"), f"host provider symlink: {path}")
+        own_location = os.path.join(os.path.realpath(os.path.dirname(path)),
+                                    os.path.basename(path))
+        need(os.path.normpath(path) == path and in_root(own_location, "image"),
+             f"host provider symlink: {path}")
         need(os.path.islink(path) and os.readlink(path) == target,
              f"changed provider symlink: {path}")
         need(os.path.realpath(path) in resolved_files,

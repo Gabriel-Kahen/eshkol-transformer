@@ -45,6 +45,10 @@ checker cannot derive the full system-header graph or call safety from MMD
 depfiles or synthetic records: an independent reviewer must compare the full
 header trace, object roster, call ABI, provider, and loader claims against
 captured raw image-specific evidence.
+Provider symlink records require a normalized path whose own parent resolves
+inside the pinned image root. An image/../source path or a symlinked image
+directory leading into the host source tree fails even when the link target is
+a pinned image provider and synthetic reviewed claims are freshly anchored.
 
 The separate immutable candidate record at
 /home/gabe/.codex/evidence/eshkol-transformer/e3-section9-n1-receipt-candidate-20261011-a/candidate.json

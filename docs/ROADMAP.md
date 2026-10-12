@@ -792,6 +792,9 @@ file modes/sizes, explicit source/include/dependency paths, image-root provider
 and loader confinement, tuple identity and nonempty sanitizer imports using
 synthetic drift tests. No production reviewed-claims anchor or actual F image
 provider/header capture exists; N1/M1 source admission remains HOLD.
+The provider symlink own-location check now rejects path and symlinked-parent
+escapes from the pinned image root, including freshly anchored synthetic
+claims. This source repair does not change the N1/M1 HOLD.
 It changes no import policy; N1/M1 and the fresh supported numerical gate
 remain open.
 The exact `5d642a2` fe9/f31 numerical gate built the normal and mutant
