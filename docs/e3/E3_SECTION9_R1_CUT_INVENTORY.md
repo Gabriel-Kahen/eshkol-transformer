@@ -1,8 +1,10 @@
 # E3 §9 R1 source cut inventory
 
-Status: **source inventory only** on `582c6c7792e7d31ab9bfc66ae140a3a66299574b`.
-No row is compiled §9 proof. The E3 call is `e3-evaluate-into!` on a bound
-frame, authentic model and D2 dataset. A cut is eligible only if the real call
+Status: reviewed source inventory originating at
+`582c6c7792e7d31ab9bfc66ae140a3a66299574b`, with a narrow test-only
+native preinvoke successor below. No row is compiled §9 proof. The E3 call is
+`e3-evaluate-into!` on a bound frame, authentic model and D2 dataset. A cut
+is eligible only if the real call
 can reach it before a fallible provider invocation or publication. A hook in a
 predecessor or a direct provider test does not establish that reachability.
 
@@ -31,9 +33,9 @@ one-shot cut has been demonstrated through this genuine E3 path.
 | batch-allocation | 5 | Real next-batch crosses D2 native batch allocation. | D2 | `native/d2_native.c::et_d2_batch_test_fail_stage_v1` | partial | Native stage hook exists; prove each stage is reached from E3 after an earlier completed batch and retry. |
 | late-shard-read | 5 | Later D2 next-batch can read a real shard after completed batches. | D2 | `native/d2_native.c::et_d2_exact_read_test_fail_stage_v1` | partial | Retention driver reaches this hook; require a specifically late read, first IO stage, exact rollback and same-authority retry. |
 | batch-copy | 6 | Three D2 views feed fixed input/target/mask copies. | E3/D2 | `internal/e3/lib/e3_d2_restore.esk::e3-stage-batch!` | gap | No independently selectable copy cut; target each copy before its write and prove borrow release. |
-| provider-preflight-common | 7–9,12 | Role, CE, reduction and finalize use the common E3 K1 dispatch helper. | E3/K1/provider | `src/eshkol_transformer/e3_frame.c::e3_dispatch` | gap | No E3-selectable preinvoke hook; prove each common-path stage before validated invoke and rollback. |
-| correct-preflight | 10 | Correct uses its own direct K1 dispatch after output/input scope acquisition. | E3/K1/provider | `src/eshkol_transformer/e3_frame.c::et_e3_private_correct_v1` | gap | No one-shot preinvoke hook at this direct call site; test scoped-view release and rollback. |
-| accumulate-preflight | 11 | Accumulate uses a second direct K1 dispatch after nine scoped guards. | E3/K1/provider | `src/eshkol_transformer/e3_frame.c::e3_accumulate_dispatch` | gap | No one-shot preinvoke hook at this direct call site; test all nine guards and rollback. |
+| provider-preflight-common | 7–9,12 | Role, CE, reduction and finalize use the common E3 K1 dispatch helper. | E3/K1/provider | `src/eshkol_transformer/e3_frame.c::e3_dispatch` | partial | Test-only one-shot preinvoke cut now exists; genuine source-composed E3 rollback and retry remain unproved. |
+| correct-preflight | 10 | Correct uses its own direct K1 dispatch after output/input scope acquisition. | E3/K1/provider | `src/eshkol_transformer/e3_frame.c::et_e3_private_correct_v1` | partial | Test-only direct-site cut now exists; compiled E3 scoped-view rollback and retry remain unproved. |
+| accumulate-preflight | 11 | Accumulate uses a second direct K1 dispatch after nine scoped guards. | E3/K1/provider | `src/eshkol_transformer/e3_frame.c::e3_accumulate_dispatch` | partial | Test-only direct-site cut now exists; compiled E3 nine-guard rollback and retry remain unproved. |
 | post-provider | 7–11 | Source batch schedule resumes after each completed provider call. | E3 | `native/e3_private_extension.esk::e3-run-one-batch!` | gap | No one-shot orchestration cut after completed invoke; retain named role/stage and whole-call rollback. |
 | finalize | 12 | Genuine traversal reaches metric finalization before publication. | E3/provider | `src/eshkol_transformer/e3_frame.c::et_e3_private_finalize_v1` | gap | No private final-metric overflow/preflight cut demonstrated; assert no destination write. |
 | final-publication | 12 | After D2/mode restore, native publish preflights eight scopes then writes four words and two counters. | E3/I2 | `src/eshkol_transformer/e3_frame.c::et_e3_private_publish_v1` | gap | No destination-scope/late publication cut; fail before first write, assert six-output byte atomicity and retry. |
@@ -44,5 +46,23 @@ The existing late-read failure/retry driver is partial evidence only; it does
 not close the allocation, copy, pin, provider, or final publication rows.
 Source planning must keep controls noninstalled and one-shot, and must not
 fabricate logits, CE values, or an alternate owner. The next gate is independent
-review of these reachability/gap dispositions before implementing any hook or
-claiming compiled R1 coverage.
+review of the test-only preinvoke source/native candidate, then source-composed
+E3 failure/retry proof before claiming compiled R1 coverage.
+
+### Test-only native preinvoke candidate
+
+`ET_E3_R1_PREFLIGHT_TESTING` alone enables
+`et_e3_test_preinvoke_arm_v1(frame, stage, role)`. It authenticates an exact
+live idle frame. Stage 7 accepts roles 0–20; stages 8–12 require role `-1`.
+Invalid selectors, active frames and double arm reject without changing the
+pending cut. Nonmatching stages leave it pending. A match clears it exactly
+once after local scoped-view acquisition, immediately before the corresponding
+K1 dispatch. It returns local `internal`/test code 10; the source transaction
+maps its own stage through the existing E1 table. The same path releases its
+scoped views without allocation or callback. K1's validated invoke is never
+entered on that cut and remains nonfailing.
+
+The candidate adds no installed declaration or feature-off symbol. Focused
+native tests cover all 21 role selectors and stages 8–12, wrong selectors,
+double arm, unchanged output/owner counts, and same-frame retry. They do not
+run the genuine Eshkol/P1/D2 transaction or establish §9 failure atomicity.

@@ -917,6 +917,12 @@ source/row guard and inventory passed independent source/tests review at
 `95ae6ae`/tree `b91a8096`. One-shot cut implementation, review of those future
 hooks, and compiled failure/retry evidence remain open. Public D2 seek is
 outside the E3 restore tail and validated K1 invoke remains nonfailing.
+An isolated `ET_E3_R1_PREFLIGHT_TESTING` native candidate now arms one exact
+idle frame for a single stage/role cut before K1 dispatch in the common,
+correct and accumulate paths. Focused local native normal/sanitizer and static
+feature-off checks pass. This is test-only source/native evidence; independent
+review, genuine source-composed E3 rollback/retry, pinned supported gates and
+the rest of R1 remain open.
 An isolated staged successor adds a separate real-M3 zero-control source tuple
 using the existing I2 14-parameter prepare/commit path before frame binding.
 It retains the staged numerical, retention, wrong-target and uniform controls.
