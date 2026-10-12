@@ -1154,7 +1154,8 @@ if [[ "${E3_RETENTION_SANITIZE:-0}" != 0 ]]; then
   [[ "${E3_RETENTION_SANITIZE}" == 1 &&
      "${package_policy}" == e3-private-aggregate &&
      ( "${e3_tuple_kind}" == retention ||
-       "${e3_tuple_kind}" == r1-source-retry ) ]] ||
+       "${e3_tuple_kind}" == r1-source-retry ||
+       "${e3_tuple_kind}" == r1-d2-batch-retry ) ]] ||
     die "E3 retention sanitizer is allowed only for the exact test tuple"
   e3_private_test_sanitize=1
 fi
@@ -1293,6 +1294,7 @@ if [[ "${package_policy}" == e3-private-aggregate &&
 elif [[ "${package_policy}" == e3-private-aggregate &&
         ( "${e3_tuple_kind}" == retention ||
           "${e3_tuple_kind}" == r1-source-retry ||
+          "${e3_tuple_kind}" == r1-d2-batch-retry ||
           "${e3_tuple_kind}" == retention-first-eval-mutant ) ]]; then
   source "${PROJECT_ROOT}/scripts/e3-mode-graph-stage-cleanup.sh"
   e3_retention_generated_dir="$(e3_retention_generated_stage "${output_object}")" ||
@@ -1412,6 +1414,7 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
   e3_generated_source_root="${e3_generated_dir}/source"
     if [[ "${e3_tuple_kind}" == retention ||
           "${e3_tuple_kind}" == r1-source-retry ||
+          "${e3_tuple_kind}" == r1-d2-batch-retry ||
         "${e3_tuple_kind}" == retention-first-eval-mutant ||
         "${e3_tuple_kind}" == retention-overflow ]]; then
     python3 "${PROJECT_ROOT}/scripts/generate-e3-p1-mode-test-variant.py" \
@@ -1517,9 +1520,12 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
       export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
     elif [[ "${e3_tuple_kind}" == retention ||
             "${e3_tuple_kind}" == r1-source-retry ||
+            "${e3_tuple_kind}" == r1-d2-batch-retry ||
             "${e3_tuple_kind}" == retention-first-eval-mutant ]]; then
       if [[ "${e3_tuple_kind}" == r1-source-retry ]]; then
         export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1|et_e3_r1_source_retry_run_v1)$'
+      elif [[ "${e3_tuple_kind}" == r1-d2-batch-retry ]]; then
+        export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1|et_e3_r1_source_retry_run_v1|et_e3_r1_d2_batch_retry_run_v1)$'
       else
         export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1)$'
       fi
@@ -1604,6 +1610,7 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
         "${e3_tuple_kind}" == sealed-fixture ||
         "${e3_tuple_kind}" == retention ||
         "${e3_tuple_kind}" == r1-source-retry ||
+        "${e3_tuple_kind}" == r1-d2-batch-retry ||
         "${e3_tuple_kind}" == retention-first-eval-mutant ||
         "${e3_tuple_kind}" == retention-overflow ]]; then
     include_args=(-I "${e3_generated_source_root}" "${include_args[@]}")
@@ -1669,7 +1676,7 @@ if [[ "${e3_private_test_sanitize}" == 1 ]]; then
   [[ "${package_policy}" == e3-private-aggregate ]] || \
     die "E3 generated ASan IR is restricted to private test tuples"
   case "${e3_tuple_kind:-}" in
-    retention|r1-source-retry|retention-first-eval-mutant|retention-overflow|mode-graph|numerical|uniform) ;;
+    retention|r1-source-retry|r1-d2-batch-retry|retention-first-eval-mutant|retention-overflow|mode-graph|numerical|uniform) ;;
     *) die "E3 generated ASan IR has no admitted test tuple" ;;
   esac
   require_command sha256sum
@@ -1869,6 +1876,7 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
   if [[ "${package_policy}" == e3-private-aggregate &&
         ( "${e3_tuple_kind}" == retention ||
           "${e3_tuple_kind}" == r1-source-retry ||
+          "${e3_tuple_kind}" == r1-d2-batch-retry ||
           "${e3_tuple_kind}" == retention-first-eval-mutant ) ]]; then
     package_native_cflags+=(-DET_E3_RETENTION_TESTING)
   fi
@@ -1914,6 +1922,7 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
           ( "${e3_tuple_kind}" == mode-graph ||
             "${e3_tuple_kind}" == retention ||
             "${e3_tuple_kind}" == r1-source-retry ||
+            "${e3_tuple_kind}" == r1-d2-batch-retry ||
             "${e3_tuple_kind}" == retention-first-eval-mutant ||
             "${e3_tuple_kind}" == retention-overflow ) ]]; then
       case "${package_native_source}" in
@@ -1921,7 +1930,8 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
           package_source_flags+=(-DET_F32_TENSOR_TESTING) ;;
         "${PROJECT_ROOT}/src/eshkol_transformer/e3_frame.c")
           package_source_flags+=(-DET_F32_TENSOR_TESTING -DET_D2_NATIVE_TESTING)
-          if [[ "${e3_tuple_kind}" == r1-source-retry ]]; then
+          if [[ "${e3_tuple_kind}" == r1-source-retry ||
+                "${e3_tuple_kind}" == r1-d2-batch-retry ]]; then
             package_source_flags+=(-DET_E3_R1_PREFLIGHT_TESTING)
           fi ;;
         "${PROJECT_ROOT}/tests/e3_private/retention_first_eval_frame.c")
@@ -2197,7 +2207,8 @@ if [[ "${e3_private_test_sanitize}" == 1 ]]; then
     "${e1b_tmp}/noninstrumentation-undefined.txt" \
     >"${e1b_tmp}/unexpected-undefined.txt"
   if [[ "${e3_tuple_kind:-}" == retention ||
-        "${e3_tuple_kind:-}" == r1-source-retry ]]; then
+        "${e3_tuple_kind:-}" == r1-source-retry ||
+        "${e3_tuple_kind:-}" == r1-d2-batch-retry ]]; then
     source "${PROJECT_ROOT}/scripts/e3-retention-sanitizer-import-policy.sh"
     e3_retention_verify_sanitizer_imports \
       "${e1b_tmp}/expected-undefined.txt" \
@@ -2482,6 +2493,7 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     )
     if [[ "${e3_tuple_kind}" == retention ||
           "${e3_tuple_kind}" == r1-source-retry ||
+          "${e3_tuple_kind}" == r1-d2-batch-retry ||
           "${e3_tuple_kind}" == retention-first-eval-mutant ||
           "${e3_tuple_kind}" == retention-overflow ]]; then
       e3_required_private+=(
@@ -2501,6 +2513,11 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
       if [[ "${e3_tuple_kind}" == r1-source-retry ]]; then
         e3_required_private+=(et_e3_private_r1_source_retry_run_cabi_v1
                               et_e3_test_preinvoke_arm_v1)
+      elif [[ "${e3_tuple_kind}" == r1-d2-batch-retry ]]; then
+        e3_required_private+=(et_e3_private_r1_source_retry_run_cabi_v1
+                              et_e3_test_preinvoke_arm_v1
+                              et_e3_private_r1_d2_batch_retry_run_cabi_v1
+                              et_d2_batch_test_fail_stage_v1)
       fi
       if [[ "${e3_tuple_kind}" == retention-overflow ]]; then
         e3_required_private+=(et_e3_private_overflow_dispatch_cabi_v1
@@ -2580,6 +2597,7 @@ if [[ "${package_policy}" == e3-private-aggregate &&
       ( "${e3_tuple_kind:-}" == mode-graph ||
         "${e3_tuple_kind:-}" == retention ||
         "${e3_tuple_kind:-}" == r1-source-retry ||
+        "${e3_tuple_kind:-}" == r1-d2-batch-retry ||
         "${e3_tuple_kind:-}" == retention-first-eval-mutant ||
         "${e3_tuple_kind:-}" == retention-overflow ||
         "${e3_tuple_kind:-}" == numerical ||
@@ -2662,9 +2680,12 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
       public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
     elif [[ "${e3_tuple_kind}" == retention ||
             "${e3_tuple_kind}" == r1-source-retry ||
+            "${e3_tuple_kind}" == r1-d2-batch-retry ||
             "${e3_tuple_kind}" == retention-first-eval-mutant ]]; then
       if [[ "${e3_tuple_kind}" == r1-source-retry ]]; then
         public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1|et_e3_r1_source_retry_run_v1)$'
+      elif [[ "${e3_tuple_kind}" == r1-d2-batch-retry ]]; then
+        public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1|et_e3_r1_source_retry_run_v1|et_e3_r1_d2_batch_retry_run_v1)$'
       else
         public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1)$'
       fi

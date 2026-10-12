@@ -7,6 +7,8 @@ e3_retention_verify_sanitizer_imports() {
     retention) prefix="${PROJECT_ROOT}/tests/e3_private/retention_package_sanitized" ;;
     r1-source-retry)
       prefix="${PROJECT_ROOT}/tests/e3_private/r1_source_retry_package_sanitized" ;;
+    r1-d2-batch-retry)
+      prefix="${PROJECT_ROOT}/tests/e3_private/r1_d2_batch_retry_package_sanitized" ;;
     retention-first-eval-mutant)
       prefix="${PROJECT_ROOT}/tests/e3_private/retention_first_eval_mutant_package_sanitized" ;;
     *) die "E3 retention sanitizer policy rejects unrelated tuple" ;;

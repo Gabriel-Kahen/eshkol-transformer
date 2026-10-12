@@ -9,6 +9,7 @@ e3_diagnostic_prefix="${PROJECT_ROOT}/native/e3_diagnostic_private_package"
 e3_public_prefix="${PROJECT_ROOT}/native/e3_diagnostic_public_package"
 e3_retention_prefix="${PROJECT_ROOT}/tests/e3_private/retention_package"
 e3_r1_source_retry_prefix="${PROJECT_ROOT}/tests/e3_private/r1_source_retry_package"
+e3_r1_d2_batch_retry_prefix="${PROJECT_ROOT}/tests/e3_private/r1_d2_batch_retry_package"
 e3_first_eval_mutant_prefix="${PROJECT_ROOT}/tests/e3_private/retention_first_eval_mutant_package"
 e3_overflow_prefix="${PROJECT_ROOT}/tests/e3_private/overflow_package"
 e3_mode_graph_prefix="${PROJECT_ROOT}/tests/e3_mode_graph/package"
@@ -45,6 +46,12 @@ e3_r1_source_retry_inputs=(
   "${PROJECT_ROOT}/tests/e3_private/r1_source_retry_bridge.c"
   "${e3_r1_source_retry_prefix}_private_renames.txt"
   "${e3_r1_source_retry_prefix}_public_exports.txt"
+)
+e3_r1_d2_batch_retry_inputs=(
+  "${PROJECT_ROOT}/tests/e3_private/r1_d2_batch_retry_driver_root.esk"
+  "${PROJECT_ROOT}/tests/e3_private/r1_d2_batch_retry_bridge.c"
+  "${e3_r1_d2_batch_retry_prefix}_private_renames.txt"
+  "${e3_r1_d2_batch_retry_prefix}_public_exports.txt"
 )
 e3_first_eval_mutant_inputs=(
   "${PROJECT_ROOT}/tests/e3_private/retention_first_eval_mutant_driver_root.esk"
@@ -136,6 +143,14 @@ for e3_raw in "${raw_private_root}" "${raw_package_bridge}" \
       e3_tuple_requested=1
     fi
   done
+  for e3_expected in "${e3_r1_d2_batch_retry_inputs[@]}"; do
+    if [[ "$(realpath -m -- "${e3_raw}")" == "${e3_expected}" ]]; then
+      [[ -z "${e3_tuple_kind}" || "${e3_tuple_kind}" == r1-d2-batch-retry ]] || \
+        die "E3 policy rejects mixed R1 D2 batch retry tuples"
+      e3_tuple_kind=r1-d2-batch-retry
+      e3_tuple_requested=1
+    fi
+  done
   for e3_expected in "${e3_first_eval_mutant_inputs[@]}"; do
     if [[ "$(realpath -m -- "${e3_raw}")" == "${e3_expected}" ]]; then
       [[ -z "${e3_tuple_kind}" ||
@@ -209,6 +224,9 @@ elif [[ "${e3_tuple_kind}" == retention ]]; then
 elif [[ "${e3_tuple_kind}" == r1-source-retry ]]; then
   e3_prefix="${e3_r1_source_retry_prefix}"
   e3_inputs=("${e3_r1_source_retry_inputs[@]}")
+elif [[ "${e3_tuple_kind}" == r1-d2-batch-retry ]]; then
+  e3_prefix="${e3_r1_d2_batch_retry_prefix}"
+  e3_inputs=("${e3_r1_d2_batch_retry_inputs[@]}")
 elif [[ "${e3_tuple_kind}" == retention-first-eval-mutant ]]; then
   e3_prefix="${e3_first_eval_mutant_prefix}"
   e3_inputs=("${e3_first_eval_mutant_inputs[@]}")
@@ -285,6 +303,7 @@ e3_normalize_source_dependencies() {
     elif [[ ( "${e3_tuple_kind}" == mode-graph ||
               "${e3_tuple_kind}" == retention ||
               "${e3_tuple_kind}" == r1-source-retry ||
+              "${e3_tuple_kind}" == r1-d2-batch-retry ||
               "${e3_tuple_kind}" == retention-first-eval-mutant ||
               "${e3_tuple_kind}" == retention-overflow ||
               "${e3_tuple_kind}" == sealed-fixture ) && \

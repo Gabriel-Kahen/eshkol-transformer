@@ -8,6 +8,7 @@ e3_reject_unresolved_private() {
     [[ "${symbol}" =~ ^et_(e3|d2|l2|l3s|m3|m3t|n2|n3k|a2|f32|i64|p1|kernel)_ ]] ||
       continue
     if [[ ( "${tuple_kind}" == retention ||
+            "${tuple_kind}" == r1-d2-batch-retry ||
             "${tuple_kind}" == retention-first-eval-mutant ||
             "${tuple_kind}" == retention-overflow ) &&
           "${symbol}" == et_e3_retention_region_used_v1 ]] &&

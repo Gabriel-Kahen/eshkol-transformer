@@ -958,6 +958,12 @@ and six-output rollback, native owner census, then clears the persistent
 selector and retries with the same authorities. Static mutation checks guard
 its source. It is not an admitted package tuple or compiled R1 evidence;
 late-batch occurrence selection and the other R1 boundaries remain open.
+The separate D2 batch source candidate has a proposed noninstalled package
+tuple with exact root/bridge admission, the existing D2 test macro restricted
+to the private native object, and source, native, symbol, export and sanitizer
+inventories. A normal/repeat/sanitizer gate script is staged. These manifests
+are source predictions until emitted depfiles and object inventories are
+checked in a supported build; no compiled rollback verdict is claimed.
 An isolated staged successor adds a separate real-M3 zero-control source tuple
 using the existing I2 14-parameter prepare/commit path before frame binding.
 It retains the staged numerical, retention, wrong-target and uniform controls.

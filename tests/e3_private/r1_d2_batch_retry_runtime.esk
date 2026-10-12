@@ -1,0 +1,9 @@
+;;; Noninstalled genuine E3 R1 failure/retry entry.
+(extern void e3-r1-d2-batch-run ptr ptr :real et_e3_r1_d2_batch_retry_run_v1)
+(define args (command-line))
+(if (not (and (pair? args) (pair? (cdr args)) (null? (cdr (cdr args)))))
+    (exit 2))
+(define output (vector #f))
+(e3-r1-d2-batch-run (vector (car (cdr args))) output)
+(if (not (eq? (vector-ref output 0) #t)) (exit 1))
+(display "E3-R1-D2-BATCH-RETRY-PASS") (newline)
