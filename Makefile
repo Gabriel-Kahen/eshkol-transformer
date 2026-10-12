@@ -8,6 +8,7 @@ SHELL := /usr/bin/bash
 	test test-after-build test-acceptance-predecessors-after-build \
 	test-acceptance-c2-after-build test-ci-core-after-build \
 	test-ci-optimizer-after-build \
+	test-ci-cli3-after-build \
 	test-ci-contracts-after-build test-ci-checkpoint-after-build \
 	test-ci-parameters-after-build test-ci-tokenizer-byte-after-build \
 	test-ci-tokenizer-bpe-after-build \
@@ -131,6 +132,7 @@ test-after-build:
 	/usr/bin/bash scripts/test-tr3b.sh
 	/usr/bin/bash scripts/test-g3n.sh
 	/usr/bin/bash scripts/test-g3c4.sh
+	/usr/bin/bash scripts/test-cli3-ci.sh
 
 test-acceptance-predecessors-after-build:
 	/usr/bin/bash scripts/test.sh
@@ -167,6 +169,7 @@ test-acceptance-predecessors-after-build:
 	/usr/bin/bash scripts/test-tr3b.sh
 	/usr/bin/bash scripts/test-g3n.sh
 	/usr/bin/bash scripts/test-g3c4.sh
+	/usr/bin/bash scripts/test-cli3-ci.sh
 
 test-acceptance-c2-after-build:
 	/usr/bin/bash scripts/test-c2.sh
@@ -188,6 +191,9 @@ test-ci-core-after-build:
 test-ci-optimizer-after-build:
 	/usr/bin/bash scripts/test-o2.sh
 	/usr/bin/bash scripts/test-tr3-o.sh
+
+test-ci-cli3-after-build:
+	/usr/bin/bash scripts/test-cli3-ci.sh
 
 test-ci-contracts-after-build:
 	/usr/bin/bash scripts/check_a0_api_contract.sh

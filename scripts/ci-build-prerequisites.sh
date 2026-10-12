@@ -61,7 +61,7 @@ for suite in "$@"; do
       # A0 and D1 read the canonical D1 archive; X1 builds into a temporary.
       select_producers d1
       ;;
-    checkpoint-io|parameter-state|bpe-tokenizer|c2-format|c2-state|c2-save|c2-load|c2-operational)
+    cli3-commands|checkpoint-io|parameter-state|bpe-tokenizer|c2-format|c2-state|c2-save|c2-load|c2-operational)
       # These suites build test-local artifacts and only need configuration.
       ;;
     byte-tokenizer)

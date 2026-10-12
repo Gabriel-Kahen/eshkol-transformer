@@ -125,6 +125,7 @@ class BuildPrerequisitesTests(unittest.TestCase):
             "g3s-sampling": ["k1", "i1", "i2", "g3s"],
             "diagnostic-transport": ["i2", "m3t"],
             "model-composition": ["i2", "m3"],
+            "cli3-commands": [],
             "g3n-forward": ["k1", "a2", "i1", "i2", "n2", "n3k", "g3n", "g3c4"],
             "checkpoint-io": [],
             "parameter-state": [],

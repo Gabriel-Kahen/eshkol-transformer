@@ -1,18 +1,22 @@
 #!/usr/bin/env bash
 
 # Resolve compiler-emitted C dependency spellings without admitting an alias or
-# a traversal outside the trusted repository tree.
+# a traversal outside either authenticated source root.
 cli3_canonical_native_dependency_path() {
-  local raw=$1 current="${PROJECT_ROOT}" resolved part depth=0
+  local raw=$1 root current resolved part depth=0
   local -a parts
-  [[ "${raw}" == "${PROJECT_ROOT}/"* ]] || \
-    die "CLI3 native depfile path is outside the repository"
-  IFS=/ read -r -a parts <<<"${raw#"${PROJECT_ROOT}/"}"
+  case "${raw}" in
+    "${PROJECT_ROOT}/"*) root=${PROJECT_ROOT} ;;
+    "${e1b_source}/"*) root=${e1b_source} ;;
+    *) die "CLI3 native depfile path is outside reviewed source roots" ;;
+  esac
+  current=${root}
+  IFS=/ read -r -a parts <<<"${raw#"${root}/"}"
   for part in "${parts[@]}"; do
     case "${part}" in
       ''|.) continue ;;
       ..)
-        (( depth > 0 )) || die "CLI3 native depfile path escapes the repository"
+        (( depth > 0 )) || die "CLI3 native depfile path escapes its reviewed source root"
         depth=$((depth - 1))
         current="${current%/*}"
         ;;
@@ -24,7 +28,7 @@ cli3_canonical_native_dependency_path() {
     esac
   done
   resolved="$(realpath -- "${raw}")" || die "CLI3 native depfile path is unavailable"
-  [[ "${resolved}" == "${PROJECT_ROOT}/"* ]] || \
-    die "CLI3 native depfile resolves outside the repository"
+  [[ "${resolved}" == "${root}/"* ]] || \
+    die "CLI3 native depfile resolves outside its reviewed source root"
   printf '%s\n' "${resolved}"
 }
