@@ -30,6 +30,17 @@ for cache in a b; do
 done
 diff -r "${out}/corpus-a" "${out}/corpus-b"
 cmp "${out}/reference-a.json" "${out}/reference-b.json"
+python3 - "${out}/corpus-a" "${out}/reference-a.json" <<'PY'
+from pathlib import Path
+import sys
+from tests.e3_reference.join import validate_five_case_join
+from tests.e3_reference.transcript import decode
+
+corpus_root, reference_path = map(Path, sys.argv[1:])
+corpus = decode((corpus_root / "corpus-reference.json").read_bytes())
+reference = decode(reference_path.read_bytes())
+validate_five_case_join(corpus_root, corpus, reference)
+PY
 
 # The ordinary private package is built independently and its object must not
 # contain the frame emitter. The numerical tuple keeps its own exact manifests.
@@ -159,7 +170,8 @@ for name in "${cases[@]}"; do
 done
 for variant in a b poison sanitized; do
   python3 -m tests.e3_private.verify_numerical_result \
-    --corpus "${out}/corpus-a/corpus-reference.json" --results "${out}" \
+    --corpus-root "${out}/corpus-a" \
+    --reference "${out}/reference-a.json" --results "${out}" \
     --variant "${variant}"
 done
 for variant in wrong-target mean-of-means; do

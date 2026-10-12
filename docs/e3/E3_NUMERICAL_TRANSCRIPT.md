@@ -66,3 +66,21 @@ literal `printf` calls to `puts`. The bounded numerical-sanitized-only repair
 pins both the exact added and absent import sets against the unchanged normal
 manifest; sanitizer references and canonical/normal inventories retain their
 checks. No numerical acceptance follows from this failed gate.
+
+## Five-layout composition (source preparation)
+
+The N2 composition combines the guarded numerical frame observer with the
+frozen five-case physical D1/D2/M3 join. Before AOT, the gate regenerates the
+corpus and mathematical bundle twice, compares their bytes, authenticates the
+frozen envelope digests, and checks the physical T1 artifact, D1 shards, D2
+rows and cursor endpoints. The compiled observer supplies each actual row,
+all 21 forward roles, CE, reduction, correct count, and serial state. The Q0
+parity verifier checks those observations against the independent reference for
+each layout; the final join checks six boxed outputs and the evaluator's
+restored entry cursor. It also compares actual packed repartition rows and
+roles, and the packed suffix against the corresponding full-run rows and roles.
+Unpacked layouts retain their distinct D2 boundaries.
+
+This composition has passed source-only checks. Its exact-source AOT and
+sanitized executions remain pending; the earlier numerical gate failures do
+not establish an N2 verdict for this tree.

@@ -8,9 +8,7 @@ import tempfile
 import unittest
 
 from tests.e3_private.parse_numerical_observation import ROLE_NAMES, parse
-from tests.e3_private.verify_numerical_result import verify_layouts
-from tests.e3_reference.corpus import materialize
-from tests.d2.reference import decode_reference_cursor, encode_reference_cursor
+from tests.e3_private.verify_numerical_result import verify_transcript_relations
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -23,35 +21,30 @@ def lines(prefix: Path, suffix: str) -> list[str]:
 
 
 class NumericalTupleTest(unittest.TestCase):
-    def test_five_layout_boxed_cursor_and_boundary_contract(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="e3-layouts-") as temporary:
-            cases = materialize(Path(temporary) / "corpus")
-            results = {}
-            for index, case in enumerate(cases["cases"]):
-                before = case["start_cursor"]
-                fields = decode_reference_cursor(bytes.fromhex(before))
-                after = encode_reference_cursor(
-                    fields.manifest_digest, fields.tokenizer_fingerprint,
-                    fields.vocab_size, fields.config, case["total_rows"],
-                    case["total_rows"],
-                )
-                results[case["name"]] = {
-                    "outputs": [1 if index < 2 else index, 0, 0, 0, 0, 0],
-                    "cursor_before": before, "cursor_after": after.hex(),
-                }
-            verify_layouts(cases, results)
-            malformed = copy.deepcopy(results)
-            malformed["packed-suffix"]["cursor_before"] = results["packed-single"]["cursor_before"]
-            with self.assertRaisesRegex(ValueError, "starting cursor"):
-                verify_layouts(cases, malformed)
-            malformed = copy.deepcopy(results)
-            malformed["packed-sharded"]["outputs"][0] = 9
-            with self.assertRaisesRegex(ValueError, "packed repartition"):
-                verify_layouts(cases, malformed)
-            malformed = copy.deepcopy(results)
-            malformed["unpacked-three"]["cursor_after"] = results["unpacked-three"]["cursor_before"]
-            with self.assertRaisesRegex(ValueError, "end cursor"):
-                verify_layouts(cases, malformed)
+    def test_compiled_packed_rows_and_roles_require_exact_replay(self) -> None:
+        names = ("packed-single", "packed-sharded", "packed-suffix",
+                 "unpacked-three", "unpacked-pairs")
+        rows = [dict(inputs=[1, 2], targets=[2, 3], mask=[True, True],
+                     logits_f32=["00000000"], ce_f32=["3f800000"],
+                     reduction_f32=["40000000"], correct_f32="00000000")
+                for _ in range(3)]
+        observed = {name: {"batches": copy.deepcopy(rows[1:] if name == "packed-suffix"
+                                                 else rows)} for name in names}
+        roles = {name: tuple((role, "1,2,4", "00000000")
+                             for _ in range(2 if name == "packed-suffix" else 3)
+                             for role in ROLE_NAMES) for name in names}
+        verify_transcript_relations(observed, roles)
+        changed = copy.deepcopy(observed)
+        changed["packed-suffix"]["batches"][0]["ce_f32"] = ["40000000"]
+        with self.assertRaisesRegex(ValueError, "suffix row words"):
+            verify_transcript_relations(changed, roles)
+        changed_roles = dict(roles)
+        changed_roles["packed-sharded"] = tuple(
+            ("ET", "1,2,4", "3f800000") if index == 0 else row
+            for index, row in enumerate(roles["packed-sharded"])
+        )
+        with self.assertRaisesRegex(ValueError, "repartition rows or roles"):
+            verify_transcript_relations(observed, changed_roles)
 
     def test_private_generated_source_stage_is_stable_and_fresh(self) -> None:
         helper = ROOT / "scripts/e3-generated-source-stage.sh"

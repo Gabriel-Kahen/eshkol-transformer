@@ -810,6 +810,16 @@ mutants are compiled test variants. Only source/static checks have run;
 independent review and supported exact-tree execution remain pending, and the
 other E3 §9 numerical, failure and resource obligations remain open.
 
+The N2 five-layout composition on `codex/e3-n2-observer-composition-20261012`
+combines the guarded numerical tuple with the frozen physical D1/D2/M3 join.
+The gate now authenticates both independently generated corpus/reference
+envelopes before AOT, checks actual rows, 21 roles, CE and serial state for
+each layout, then compares six boxed outputs and the restored entry cursor.
+Packed repartition and suffix rows/roles receive exact compiled comparisons;
+unpacked boundaries use separate independent D2 rows. This is source-only
+preparation. A supported exact-source compiled run, source/tuple review,
+mode/retention prerequisites and the other §9 rows remain open.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
