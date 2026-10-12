@@ -845,8 +845,10 @@ token and read-only reconciliation of
 external receipt plus pinned seal. Generated fault/crash tests cover receipt
 and commit write/sync/publication, including a readable commit before return.
 It preserves the v1 broker and reconciler. The seal reference and host
-boundary remain synthetic; authentic f31 pins, independent custody and N1/M1
-admission remain HOLD pending source review and deployment evidence.
+boundary remain synthetic; independent source/tests review ACCEPTS only v2
+synthetic consistency at `05452baf` (`/home/gabe/.codex/evidence/eshkol-transformer/e3-n1-durable-receipt-independent-source-review-05452baf-20261012-a/SHA256SUMS-REVIEW`,
+SHA-256 `506b07cf25cc645128457ce106cd1494bbac5aebb63a27fce9b028de83916d6e`),
+while authentic f31 pins, independent custody and real N1/M1 admission remain HOLD.
 The exact `5d642a2` fe9/f31 numerical gate built the normal and mutant
 packages but failed before runtime at sanitized export isolation: the ASan
 registration COMMON cell remained global after objcopy. Its 308-file failed
