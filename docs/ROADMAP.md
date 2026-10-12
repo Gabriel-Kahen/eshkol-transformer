@@ -2726,10 +2726,15 @@ publication, public G2 and continuation remain pending.
   sanitizer runs, predecessor parity and installed-package closure remain
   required before admission. The C2/G0 aggregate remains separate.
   The queued installed public fixture now includes a bounded second-EOS
-  witness. Direct facade-result I1 shape/value inspection, held-lease retry,
-  and fault/abort cuts still need a compiled same-aggregate test harness with
-  test-only native hooks; the public result API is opaque. Exact emitted
-  symbol manifests remain unchanged pending that compiled review.
+  witness. A source-composed C4 harness candidate now exercises exact public
+  result shapes/values, held-I1 lease/retry, terminal read/abort cuts, and
+  first/second-draw independent oracle transcripts using test-only hooks.
+  Only C syntax and source checks have run; its compiled Eshkol normal/repeat/
+  sanitizer and oracle gates remain open. It does not yet call the manual
+  `g3g-public-*` wrapper or prove installed dispatch. The test C translation
+  unit includes the C4 owner, so a manual aggregate test must replace the
+  ordinary owner instead of linking a duplicate. Exact emitted symbol
+  manifests remain unchanged pending compiled review.
 
 ## Wave 4 — practical pretraining and performance
 

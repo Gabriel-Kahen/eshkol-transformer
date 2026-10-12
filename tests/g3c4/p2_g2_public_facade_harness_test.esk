@@ -1,0 +1,229 @@
+;;; Source-composed C4 public facade over the terminal test native aggregate.
+;;; The installed G3-G package and its opaque public facade have a separate gate.
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+(load "g3c4_t1_output_decode_extension.esk")
+(load "g3c4_output_envelope_extension.esk")
+(load "g3c4_p2g1_pending_extension.esk")
+(load "g3c4_p2g1_shell_publication_extension.esk")
+(load "g3c4_p2g1_copyout_extension.esk")
+(load "g3c4_p2g1_coordinator_extension.esk")
+(load "g3c4_p2g2_ownership_extension.esk")
+(load "g3c4_p2g2_protected_scope_extension.esk")
+(load "g3c4_p2g2_t1_prefix_coordinator_extension.esk")
+(load "g3c4_p2g2_terminal_close_extension.esk")
+(load "g3c4_public_model_input_extension.esk")
+(load "g3c4_public_output_adapter_extension.esk")
+(load "g3c4_public_g2_result_owner_extension.esk")
+(load "g3c4_public_g2_output_adapter_extension.esk")
+(load "g3c4_public_generation_dispatch_extension.esk")
+
+(extern i64 public-result-borrow ptr i64
+        :real et_g3c4_p2g2_public_test_result_borrow_v1)
+(extern i64 public-first-oracle ptr i64
+        :real et_g3c4_p2g2_public_test_first_oracle_v1)
+(extern i64 public-second-oracle ptr i64
+        :real et_g3c4_p2g2_composer_test_second_oracle_v1)
+(extern i64 public-mark ptr i64 i64
+        :real et_g3c4_p2g2_coordinator_test_mark_v1)
+(extern i64 public-terminal-fault i64
+        :real et_g3c4_p2g2_composer_test_fault_v1)
+(extern i64 public-read-fault i64
+        :real et_g3c4_p2g2_composer_test_read_fault_v1)
+(extern i64 public-after-abort ptr i64
+        :real et_g3c4_p2g2_coordinator_test_after_abort_v1)
+(extern i64 public-clone-count i64
+        :real et_g3c4_p2g2_composer_test_clone_count_v1)
+
+(define checks 0)
+(define (check label good)
+  (if good (set! checks (+ checks 1))
+      (begin (display "G3-C4 public G2 harness FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject-public label category operation thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category)
+                      (eq? (transformer-error-operation caught) operation)
+                      (eq? (transformer-error-cause caught) #f))))
+      (thunk) #f)))
+(define (policy mode seed eos)
+  (list ':profile 'diagnostic-c4-p2g2 ':sampling mode
+        ':temperature-bits #x3f800000
+        ':top-k (if (eq? mode 'greedy) 256 17)
+        ':top-p-bits (if (eq? mode 'greedy) #x3f800000 #x3f000000)
+        ':max-new-tokens 2 ':eos eos ':seed seed))
+(define (native shell)
+  (vector-ref (g3c4-registry-find shell 'test) 3))
+(define (rank1? shell kind count first second)
+  (= (g3c4-native-rank1-result-inspect
+       (native shell) kind count first second) 0))
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define model (g3c4-public-model-create-seeded 1729))
+(define prompt
+  (g3c4-public-generation-input-create
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255))))
+
+(define (run-case mode seed eos expected-count keep-id lease?)
+  (let* ((generator (g3c4-public-generator-create
+                      model tokenizer (policy mode seed eos)))
+         (context (native generator))
+         (marked (= (public-mark context 0 255) 0))
+         (output (g3c4-public-generator-generate generator prompt))
+         (snapshot (g3c4-p2g2-terminal-snapshot-internal output))
+         (count (vector-ref snapshot 2))
+         (id0 (vector-ref snapshot 0))
+         (id1 (vector-ref snapshot 1))
+         (cache (vector-ref snapshot 3))
+         (text (car (g3c4-public-generation-output-text output)))
+         (ids (car (g3c4-public-generation-output-ids output)))
+         (ids-again (car (g3c4-public-generation-output-ids output)))
+         (lengths (g3c4-public-generation-output-lengths output))
+         (caches (g3c4-public-generation-output-cache-lengths output))
+         (rng (g3c4-public-generation-output-rng output))
+         (rng-words (vector-ref (g3c4-registry-find rng 'test) 7)))
+    (check "authentic marked generator" marked)
+    (check "logical terminal count/cache" (and (= count expected-count)
+                                               (= cache (+ 2 count))))
+    (check "public text is exact raw T1 bytes"
+           (and (= (bytevector-length text) count)
+                (= (bytevector-u8-ref text 0) id0)
+                (if (= count 1)
+                    (= id1 0)
+                    (= (bytevector-u8-ref text 1) id1))))
+    (check "fresh public ID owners have exact rank-one shape and values"
+           (and (not (eq? ids ids-again))
+                (rank1? ids 5 count id0 id1)
+                (rank1? ids-again 5 count id0 id1)))
+    (check "length/cache are independent exact scalar rank-one owners"
+           (and (rank1? lengths 6 1 count 0)
+                (rank1? caches 7 1 cache 0)
+                (not (eq? lengths caches))))
+    (check "detached public RNG matches terminal snapshot"
+           (and (= (vector-ref rng-words 1) (vector-ref snapshot 4))
+                (= (vector-ref rng-words 2) (vector-ref snapshot 5))
+                (= (vector-ref rng-words 3) (vector-ref snapshot 6))
+                (= (vector-ref rng-words 4) (vector-ref snapshot 7))))
+    (check "fresh P2 first-draw oracle transcript"
+           (= (public-first-oracle context id0) 0))
+    (if (= count 2)
+        (check "actual second-draw oracle transcript"
+               (= (public-second-oracle context id1) 0)))
+    (display "PUBLIC_CASE ") (display mode)
+    (display " ") (display seed)
+    (display " ") (display (if eos eos -1))
+    (display " ") (display count)
+    (display " ") (display id0)
+    (display " ") (display id1)
+    (display " ") (display cache)
+    (display " ") (display (bytevector-u8-ref text 0))
+    (display " ") (display (if (= count 1) -1
+                              (bytevector-u8-ref text 1)))
+    (let emit ((index 4))
+      (if (< index 8)
+          (begin (display " ") (display (vector-ref snapshot index))
+                 (emit (+ index 1)))))
+    (newline)
+    (check "terminal output release and generator close"
+           (and (g3c4-public-generation-output-release! output)
+                (g3c4-public-generator-close generator)))
+    (check "detached values survive terminal and generator"
+           (and (rank1? ids 5 count id0 id1)
+                (rank1? lengths 6 1 count 0)
+                (rank1? caches 7 1 cache 0)))
+    (if lease?
+        (begin
+          (check "hold authentic public ID I1 lease"
+                 (= (public-result-borrow (native ids) 1) 0))
+          (reject-public "held lease rejects public tensor release"
+                         'invalid-state 'generation-tensor-release!
+            (lambda () (g3c4-public-generation-tensor-release! ids)))
+          (check "rejected release retains exact ID result"
+                 (eq? (vector-ref (g3c4-registry-find ids 'test) 2) 'live))
+          (check "end held I1 lease" (= (public-result-borrow (native ids) 0) 0))
+          (check "retry sees exact unchanged result"
+                 (rank1? ids 5 count id0 id1))))
+    (check "release detached result owners"
+           (and (g3c4-public-generation-tensor-release! ids-again)
+                (g3c4-public-generation-tensor-release! lengths)
+                (g3c4-public-generation-tensor-release! caches)
+                (g3c4-public-generation-rng-release! rng)))
+    (if (not keep-id)
+        (check "release final ID owner"
+               (g3c4-public-generation-tensor-release! ids)))
+    (vector snapshot (if keep-id ids #f))))
+
+(define baseline (run-case 'greedy 7 #f 2 #t #t))
+(define first (vector-ref (vector-ref baseline 0) 0))
+(define second (vector-ref (vector-ref baseline 0) 1))
+(run-case 'greedy 7 first 1 #f #f)
+(define witness
+  (if (not (= first second))
+      (vector 'greedy 7 second)
+      (let* ((categorical (run-case 'categorical 1729 #f 2 #f #f))
+             (ids (vector-ref categorical 0)))
+        (check "distinct second EOS reference witness"
+               (not (= (vector-ref ids 0) (vector-ref ids 1))))
+        (vector 'categorical 1729 (vector-ref ids 1)))))
+(run-case (vector-ref witness 0) (vector-ref witness 1)
+          (vector-ref witness 2) 2 #f #f)
+(run-case 'categorical 97 #f 2 #f #f)
+
+(define stable (vector-ref baseline 1))
+(define (stable-live?) (rank1? stable 5 2 first second))
+(define (read-fault-case cut)
+  (let* ((generator (g3c4-public-generator-create
+                      model tokenizer (policy 'greedy 7 #f)))
+         (output (g3c4-public-generator-generate generator prompt))
+         (live-before (public-clone-count 1)))
+    (check "arm public accessor native read cut" (= (public-read-fault cut) 0))
+    (reject-public "public accessor fault is translated"
+                   (if (= cut 3) 'shape-mismatch 'invalid-state)
+                   'generation-output-ids
+      (lambda () (g3c4-public-generation-output-ids output)))
+    (check "fault leaves no live private clone or damage to prior owner"
+           (and (= (public-clone-count 1) live-before)
+                (stable-live?)))
+    (let* ((snapshot (g3c4-p2g2-terminal-snapshot-internal output))
+           (ids (car (g3c4-public-generation-output-ids output))))
+      (check "source output and retry result remain authentic"
+             (rank1? ids 5 (vector-ref snapshot 2)
+                     (vector-ref snapshot 0) (vector-ref snapshot 1)))
+      (check "release retry result and terminal"
+             (and (g3c4-public-generation-tensor-release! ids)
+                  (g3c4-public-generation-output-release! output)
+                  (g3c4-public-generator-close generator))))))
+(read-fault-case 1)
+(read-fault-case 2)
+(read-fault-case 3)
+
+(define (terminal-fault-case cut cache-length)
+  (let* ((generator (g3c4-public-generator-create
+                      model tokenizer (policy 'greedy 7 #f)))
+         (context (native generator))
+         (terminals (vector-ref g3c4-p2g2-terminal-anchors 0)))
+    (check "mark authentic public generator" (= (public-mark context 0 255) 0))
+    (check "arm same-call terminal cut" (= (public-terminal-fault cut) 0))
+    (reject-public "public generate propagates terminal abort"
+                   'invalid-state 'generator-generate!
+      (lambda () (g3c4-public-generator-generate generator prompt)))
+    (check "abort has no public terminal or detached-owner mutation"
+           (and (eq? (vector-ref g3c4-p2g2-terminal-anchors 0) terminals)
+                (= (public-after-abort context cache-length) 0)
+                (stable-live?)))
+    (check "close aborted generator" (g3c4-public-generator-close generator))))
+(terminal-fault-case 1 0)
+(terminal-fault-case 2 3)
+(terminal-fault-case 3 3)
+(check "release surviving detached destination"
+       (g3c4-public-generation-tensor-release! stable))
+(check "release owned P2 input"
+       (g3c4-public-generation-tensor-release! prompt))
+(display "G3-C4 PUBLIC G2 HARNESS PASS: checks=")
+(display checks) (newline)

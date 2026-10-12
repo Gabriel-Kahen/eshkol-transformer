@@ -133,17 +133,31 @@ here.
 The queued installed public fixture covers non-EOS, first EOS, second EOS,
 categorical output, detached text/owner release, malformed config, and C2/P2-G1
 predecessor parity through the existing manual-package runner. It has not run.
-The public tensor API intentionally exposes opaque result owners, so direct
-rank-one shape/value reference checks and a held-I1-lease/retry on a result
-created by this facade require a compiled same-aggregate test harness with
-reviewed test-only native inspection/borrow hooks. The separate rank-one
-owner native normal/sanitizer test checks those mechanics without proving
-the facade's value wiring. Public fault/abort cuts likewise require compiled
-terminal fault hooks; private terminal source tests alone do not prove public
-error-boundary behavior. Exact emitted defined/undefined/public-string symbol
-manifests must be regenerated and reviewed from that compiled package before
-the installed closure gate can pass. No source checker stands in for these
-runtime and manifest gates.
+The public tensor API intentionally exposes opaque result owners. The new
+source-composed C4 harness candidate
+`tests/g3c4/p2_g2_public_facade_harness_test.esk` therefore reads the native
+control only through the test aggregate's exact C4 registry entry, then calls
+the existing rank-one native inspector on facade-produced IDs, lengths and
+cache lengths. A test-only result-I1 borrow hook follows the reviewed native
+lease/retry pattern. Terminal test hooks inject snapshot/copy and pre-tail
+abort cuts; a prior detached result must survive them. A fresh authentic P2
+prefill in the test native aggregate emits first-draw logits, including first
+EOS, and the existing terminal hook emits second-draw logits. The Python
+development oracle checks both draws against independent G3-S/Philox logic
+and compares public text with raw T1 ID bytes. No production or installed
+API has been added for these observations.
+
+The harness has passed C syntax and source checks only. Its Eshkol binary,
+normal/repeat/sanitizer runs and oracle transcript have not been produced.
+Its C4 registry is source-composed without the full manual G3-T root, so even
+a passing C4 harness cannot prove `g3g-public-*` dispatch or installed archive
+closure. The private terminal compiled gate and exact emitted
+defined/undefined/public-string symbol manifests remain open. The native test
+translation unit includes the C4 owner, whereas the manual package compiles
+that owner separately; linking both would duplicate authority. A separate
+same-aggregate manual test build must replace, rather than add to, that C4
+owner and preserve the reviewed package tuple. No source checker stands in
+for these runtime and manifest gates.
 
 ## Isolated result-owner prerequisite candidate
 
@@ -165,7 +179,8 @@ publication seam for already authenticated detached words. It creates a
 fresh public shell and registry entry, verifies its native owner before
 publication, and uses the native inspector on later live reads/releases.
 It cannot read or authenticate a terminal output and is not a public G2
-accessor. The C4 manual package root and public dispatch do not load it.
+accessor. The source-composed C4 manual root and public dispatch load it, but
+the installed package has not passed its exact emitted-symbol gate.
 The focused native test exercises typed storage, malformed values and shape,
 allocation/copy failure, lease/retry, feature-off and sanitizer behavior.
 Compiled Eshkol seam validation, private terminal acceptance, and the full
