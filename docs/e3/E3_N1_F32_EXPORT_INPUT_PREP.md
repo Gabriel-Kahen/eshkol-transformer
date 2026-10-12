@@ -17,7 +17,9 @@ and HOLD. No f31 descriptor or failed-F parity claim transfers to this image.
 `READY_FOR_REVIEW` means only that supplied fields pass structural checks.
 Malformed, noncanonical, duplicate-key, inconsistent or over-cap input exits
 nonzero with `HOLD:` and no assessment. The CLI reads only its input file. It
-does **not** open source paths, image blobs, output stores, evidence refs or
+opens that input through a nofollow walk of every path component and compares
+pre-open, opened and post-read file identity. It does **not** open source paths,
+image blobs, output stores, evidence refs or
 keys. Capture and seal stdout separately if it is used in a later review.
 
 ## Required pre-read input

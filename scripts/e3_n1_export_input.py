@@ -79,6 +79,22 @@ def absolute(path):
          "absolute-path")
 
 
+def open_input_nofollow(path):
+    absolute(path)
+    parts = path.split("/")[1:]
+    need(bool(parts), "input-path")
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
+    parent = os.open("/", flags | os.O_DIRECTORY)
+    try:
+        for part in parts[:-1]:
+            child = os.open(part, flags | os.O_DIRECTORY, dir_fd=parent)
+            os.close(parent)
+            parent = child
+        return os.open(parts[-1], flags, dir_fd=parent)
+    finally:
+        os.close(parent)
+
+
 def basename(value):
     need(type(value) is str and 0 < len(value) <= 128 and value not in (".", "..")
          and "/" not in value and "\x00" not in value, "basename")
@@ -295,7 +311,7 @@ def main():
         before = os.lstat(args.input_manifest)
         need(stat.S_ISREG(before.st_mode) and before.st_size <= MAX_INPUT,
              "input-kind-or-size")
-        fd = os.open(args.input_manifest, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        fd = open_input_nofollow(args.input_manifest)
         try:
             opened = os.fstat(fd)
             identity = lambda info: (info.st_dev, info.st_ino, info.st_mode,

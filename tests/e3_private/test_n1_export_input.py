@@ -217,6 +217,19 @@ class ExportInputTests(unittest.TestCase):
         self.assertEqual(result.stdout, b"")
         self.assertIn(b"HOLD:", result.stderr)
 
+    def test_input_ancestor_symlink_holds(self):
+        real_parent = self.input.parent / "real"
+        real_parent.mkdir()
+        (real_parent / "input.json").write_bytes(raw(complete_plan()))
+        link_parent = self.input.parent / "link"
+        link_parent.symlink_to(real_parent, target_is_directory=True)
+        result = subprocess.run([sys.executable, str(SCRIPT),
+                                 str(link_parent / "input.json")],
+                                capture_output=True, check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, b"")
+        self.assertIn(b"HOLD:", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
