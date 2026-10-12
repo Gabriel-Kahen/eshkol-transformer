@@ -1,0 +1,3 @@
+;;; Separate, noninstalled stage-5 candidate; the accepted role tuple is unchanged.
+(load "r1_source_retry_driver_root.esk")
+(load "r1_d2_batch_retry_driver.esk")

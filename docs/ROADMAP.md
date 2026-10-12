@@ -951,6 +951,13 @@ the same one-shot preinvoke control, requesting full-call rollback and
 same-authority retry checks for each selector. Static mutation checks reject a
 shortened or skipped role loop. This extends the staged test tuple only;
 compiled execution and the remaining R1 boundaries remain open.
+A separate source-only stage-5 candidate uses D2's existing native
+batch-construction selector at its seven reviewed stages. It requests the real
+E3 call, first mapped E1 stage/category, exact cursor/mode/model/gradient/RNG
+and six-output rollback, native owner census, then clears the persistent
+selector and retries with the same authorities. Static mutation checks guard
+its source. It is not an admitted package tuple or compiled R1 evidence;
+late-batch occurrence selection and the other R1 boundaries remain open.
 An isolated staged successor adds a separate real-M3 zero-control source tuple
 using the existing I2 14-parameter prepare/commit path before frame binding.
 It retains the staged numerical, retention, wrong-target and uniform controls.

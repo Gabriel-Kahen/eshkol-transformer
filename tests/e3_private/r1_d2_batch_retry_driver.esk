@@ -1,0 +1,94 @@
+;;; Exercise the existing D2 native batch-construction fault through real E3.
+;;; The selector is persistent until cleared, so each run clears it before retry.
+(extern void e3-r1-d2-batch-fail-stage i64
+        :real et_d2_batch_test_fail_stage_v1)
+
+(define (e3-r1-d2-batch-cut-retry! model dataset frame destinations stage)
+  (let* ((entry (e3-frame-entry-live frame 'e3-r1-d2-batch-cut-retry!))
+         (cursor (d2-token-dataset-cursor dataset))
+         (modes (e3-test-retention-modes frame))
+         (model-image (e3-test-retention-model-snapshot model))
+         (rng (m3t-public-initializer-words
+               (m3t-public-model-initializer model)))
+         (outputs (e3-r1-output-image frame destinations))
+         (probes (e3-test-retention-probes)))
+    (e3-test-retention-check 'd2-precut-output
+      (e3-test-retention-output=? frame destinations))
+    (e3-r1-d2-batch-fail-stage stage)
+    (let ((caught
+           (with-region ('e3-r1-d2-batch-failure 262144)
+             (guard (failure (#t failure))
+               (e3-evaluate-into! model dataset frame)
+               #f))))
+      (e3-r1-d2-batch-fail-stage 0)
+      (e3-test-retention-check 'd2-typed-failure
+        (and caught (transformer-error? caught)
+             (eq? (transformer-error-category caught) 'internal)
+             (eq? (transformer-error-operation caught) 'e3-evaluate-into!)))
+      (e3-test-retention-check 'd2-first-diagnostic
+        (and (eq? caught (vector-ref entry 11))
+             (= (vector-ref entry 15)
+                (+ (* 5 12) (e3-error-category-index 'internal)))
+             (= (vector-ref (vector-ref entry 12) 0) 5)
+             (= (vector-ref (vector-ref entry 12) 1) 0)
+             (= (vector-ref (vector-ref entry 12) 2) 5)
+             (= (vector-ref (vector-ref entry 12) 3) 9))))
+    (e3-test-retention-check 'd2-source-idle
+      (and (= (vector-ref entry 1) 1)
+           (= (vector-ref entry 10) 0)
+           (not (vector-ref (vector-ref entry 3) 10))))
+    (with-region ('e3-r1-d2-batch-rollback 262144)
+      (e3-test-retention-check 'd2-failure-cursor
+        (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset)))
+      (e3-test-retention-check 'd2-failure-six-outputs
+        (e3-r1-output=? frame destinations outputs))
+      (e3-test-retention-check 'd2-failure-modes
+        (e3-test-retention-modes=? frame modes))
+      (e3-test-retention-check 'd2-failure-model-and-gradients
+        (e3-test-retention-model=? model model-image))
+      (e3-test-retention-check 'd2-failure-rng
+        (equal? rng (m3t-public-initializer-words
+                     (m3t-public-model-initializer model))))
+      (let check ((index 0))
+        (if (= index 29) #t
+            (begin
+              (if (or (<= index 6) (and (>= index 17) (<= index 26)))
+                  (e3-test-retention-check 'd2-failure-native-owners
+                    (= (vector-ref probes index)
+                       (e3-test-retention-probe index))))
+              (check (+ index 1)))))
+      #t)
+    (e3-test-retention-call! model dataset frame destinations cursor modes
+                             model-image)
+    (e3-test-retention-check 'd2-retry-six-outputs
+      (e3-r1-output=? frame destinations outputs))
+    #t))
+
+(define (e3-r1-d2-batch-retry-run corpus-path)
+  (let* ((fixture (e3-test-fixture))
+         (model (vector-ref fixture 0))
+         (tokenizer (vector-ref fixture 1))
+         (destinations (vector-ref fixture 2))
+         (frame (vector-ref fixture 3))
+         (dataset (d2-token-dataset-open
+                   (e3-test-dataset-config corpus-path #t) tokenizer)))
+    (guard
+     (failure (#t (e3-r1-d2-batch-fail-stage 0)
+                  (d2-token-dataset-close! dataset) (raise failure)))
+     (e3-test-retention-set-mixed! frame)
+     (e3-test-retention-check 'd2-seed-present-gradient
+       (= (e3-test-seed-gradient
+            (vector-ref (m3t-entry model 'model 'e3-r1-d2-batch-retry-run #t)
+                        3)) 0))
+     (let ((cursor (d2-token-dataset-cursor dataset))
+           (modes (e3-test-retention-modes frame))
+           (model-image (e3-test-retention-model-snapshot model)))
+       (e3-test-retention-call! model dataset frame destinations cursor modes
+                                model-image)
+       (let stage-loop ((stage 1))
+         (if (= stage 8) #t
+             (begin
+               (e3-r1-d2-batch-cut-retry! model dataset frame destinations stage)
+               (stage-loop (+ stage 1)))))
+       (d2-token-dataset-close! dataset)
+       #t))))
