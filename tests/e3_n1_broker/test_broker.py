@@ -29,7 +29,7 @@ class BrokerTest(unittest.TestCase):
             path = source_dir / str(i)
             path.write_bytes(content)
             sources.append(broker.Source(path, relative, hashlib.sha256(content).hexdigest(),
-                                         len(content)))
+                                         len(content), path.resolve(), broker._path_inodes(path)))
         self.config = broker.Config(self.parent, "a" * 64, "export", tuple(sources),
                                     4096, 5, 2**40, b"broker-only-test-key")
 
@@ -111,6 +111,9 @@ class BrokerTest(unittest.TestCase):
         self.assertTrue((stage / source.relative).exists())
         self.assertEqual(json.loads((stage / "HOLD.json").read_bytes())["body"]["state"],
                          "HOLD")
+        partial = json.loads((stage / "HOLD.json").read_bytes())["body"]["files"]
+        self.assertEqual(partial[-1], {"path": source.relative, "size": 10,
+                                       "sha256": hashlib.sha256(b"evil layer").hexdigest()})
         self.assertFalse(self.verify(result))
 
     def test_partial_marker_sync_fault_is_indeterminate(self):
@@ -179,6 +182,16 @@ class BrokerTest(unittest.TestCase):
         self.assertEqual(result.state, "HOLD")
         self.assertIsNone(result.receipt)
 
+    def test_same_bytes_different_source_inode_rejected_before_read(self):
+        source = self.config.sources[2]
+        replacement = source.path.with_name("replacement")
+        replacement.write_bytes(source.path.read_bytes())
+        os.replace(replacement, source.path)
+        result, seen = self.run_attempt()
+        self.assertEqual(result.state, "HOLD")
+        self.assertFalse(any(name == "read-chunk:" + source.relative for name in seen))
+        self.assertIsNone(result.receipt)
+
     def test_unreviewed_request_and_bad_seal(self):
         result = broker.Broker(self.config).attempt("b" * 64, "export")
         self.assertEqual((result.state, result.attempt), ("HOLD", ""))
@@ -188,6 +201,20 @@ class BrokerTest(unittest.TestCase):
         seal[-3] ^= 1
         self.assertFalse(self.verify(result, bytes(seal)))
         self.assertFalse(self.verify(result, self.seal(result.receipt) + b"corrupt"))
+
+    def test_readable_but_wrong_verified_record_denied(self):
+        result, _ = self.run_attempt()
+        seal = self.seal(result.receipt)
+        marker = self.parent / "export" / "VERIFIED.json"
+        original = json.loads(marker.read_bytes())["body"]
+        for changes in ({"state": "HOLD"}, {"pin": "b" * 64},
+                        {"target": "wrong"}, {"device": 0}, {"inode": 0},
+                        {"reason": "failed"}):
+            with self.subTest(changes=changes):
+                marker.write_bytes(broker._record(dict(original, **changes)))
+                self.assertFalse(self.verify(result, seal))
+        marker.write_bytes(broker._record(original))
+        self.assertTrue(self.verify(result, seal))
 
 
 if __name__ == "__main__":

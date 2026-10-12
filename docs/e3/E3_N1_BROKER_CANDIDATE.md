@@ -8,16 +8,21 @@ mount, `/proc`, inherited-fd, or immutable target boundary.
 
 The broker constructor takes a frozen `Config`: protected parent, reviewed pin
 digest, target basename, ordered `Source` descriptors, positive byte/time/RSS
-caps, and a private receipt key. `attempt(pin, target)` accepts only that exact
-pin and basename. It creates a unique checksummed `HOLD` intent, fsyncs record
+caps, a private receipt key, each source's reviewed resolved path, and the
+device/inode/mode chain from filesystem root through the source. The tiny test
+fixture freezes these values locally; **no production source identities or
+ancestor policy have been reviewed**. `attempt(pin, target)` accepts only that
+exact pin and basename. It creates a unique checksummed `HOLD` intent, fsyncs record
 and parent before stage creation, opens and compares the stage inode, then
 fsyncs an initial stage `HOLD.json` before the first source read. Each source
-must be a nonsymlink regular file whose opened fd and path identity remain
-stable; copied bytes must meet its exact size and SHA-256. The broker retains
+must be a nonsymlink regular file whose pinned path chain, pre-open `lstat`,
+opened `fstat`, and post-read path/fd identity agree; copied bytes must meet
+its exact size and SHA-256. A same-byte inode replacement is rejected. The broker retains
 the stage fd through no-replace publication, target readback and final sync.
 
 An ordinary copy or no-replace failure keeps the broker-owned partial stage
-and checksummed `HOLD.json`. Marker/sync/cleanup/retraction faults produce an
+and checksummed `HOLD.json` with observed sizes and SHA-256 for every present
+copied file. Marker/sync/cleanup/retraction faults produce an
 `INDETERMINATE` result without a receipt. A failed retraction may leave a
 visible broker-owned target. A verified target receives a checksummed
 `VERIFIED.json`; only after that and its parent sync does the broker return a
@@ -34,7 +39,8 @@ the seal's read-only custody and key separation; HMAC bytes alone do not make
 a writable target immutable. There is no automated recovery promotion.
 
 Before any real acquisition, independently review this source and tests;
-freeze the exact release config, source path/identity and bounds; deploy a
+freeze the exact release config, source device/inode, resolved path, ancestor
+policy and bounds; deploy a
 broker under a distinct UID; prove parent and all writable ancestors reject
 caller rename/unlink/write, including ACL and mount behavior; prove `/proc`
 and inherited fd isolation; and review receipt key custody plus an independent

@@ -72,6 +72,22 @@ class Source:
     relative: str
     sha256: str
     size: int
+    resolved: Path
+    path_inodes: tuple[tuple[int, int, int], ...]
+
+
+def _path_inodes(path):
+    parts = [Path(path.anchor)]
+    for part in path.parts[1:]:
+        parts.append(parts[-1] / part)
+    result = []
+    for index, item in enumerate(parts):
+        info = os.lstat(item)
+        if not (stat.S_ISREG(info.st_mode) if index == len(parts) - 1
+                else stat.S_ISDIR(info.st_mode)):
+            raise ValueError("source-path-kind")
+        result.append((info.st_dev, info.st_ino, info.st_mode))
+    return tuple(result)
 
 
 @dataclass(frozen=True)
@@ -97,7 +113,9 @@ class Config:
             valid = name in ("oci-layout", "index.json") or (
                 name.startswith("blobs/sha256/") and len(name) == 77 and
                 all(c in "0123456789abcdef" for c in name[13:]))
-            if (not valid or name in names or source.size < 0 or
+            if (not source.path.is_absolute() or not source.resolved.is_absolute() or
+                    len(source.path_inodes) != len(source.path.parts) or
+                    not valid or name in names or source.size < 0 or
                     len(source.sha256) != 64 or
                     any(c not in "0123456789abcdef" for c in source.sha256) or
                     name.startswith("blobs/sha256/") and name[13:] != source.sha256):
@@ -158,6 +176,9 @@ class Broker:
         hashes = []
         for source in self.config.sources:
             self.checkpoint("before-read:" + source.relative)
+            if (source.path.resolve(strict=True) != source.resolved or
+                    _path_inodes(source.path) != source.path_inodes):
+                raise ValueError("source-pin-drift")
             before = os.stat(source.path, follow_symlinks=False)
             if not stat.S_ISREG(before.st_mode) or before.st_size != source.size:
                 raise ValueError("source-kind-or-size")
@@ -203,7 +224,9 @@ class Broker:
                     for fd in reversed(opened):
                         os.close(fd)
                 after = os.stat(source.path, follow_symlinks=False)
-                if (_identity(before) != _identity(after) or
+                if (source.path.resolve(strict=True) != source.resolved or
+                        _path_inodes(source.path) != source.path_inodes or
+                        _identity(before) != _identity(after) or
                         _identity(before) != _identity(os.fstat(src)) or
                         after.st_size != source.size or count != source.size or
                         digest.hexdigest() != source.sha256):
@@ -282,7 +305,15 @@ class Broker:
                         indeterminate = True
                 if stage is not None and marked and not renamed:
                     try:
-                        self._write(stage, "HOLD.json", _record(dict(body, reason=reason)))
+                        partial = []
+                        for source in self.config.sources:
+                            try:
+                                partial.append(self._stage_file(stage, source.relative))
+                            except FileNotFoundError:
+                                pass
+                        self._write(stage, "HOLD.json", _record(dict(
+                            body, reason=reason, files=partial)))
+                        self._sync(parent, "sync-partial-parent")
                     except Exception:
                         indeterminate = True
                 if created and stage is None:
@@ -298,10 +329,15 @@ class Broker:
             os.close(parent)
 
     def _readback(self, stage, item):
+        actual = self._stage_file(stage, item["path"])
+        if actual != item:
+            raise ValueError("target-readback")
+
+    def _stage_file(self, stage, path):
         directory = stage
         opened = []
         try:
-            parts = item["path"].split("/")
+            parts = path.split("/")
             for part in parts[:-1]:
                 directory = os.open(part, os.O_RDONLY | os.O_DIRECTORY |
                                     os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory)
@@ -310,12 +346,13 @@ class Broker:
                          dir_fd=directory)
             try:
                 info = os.fstat(fd)
+                if not stat.S_ISREG(info.st_mode):
+                    raise ValueError("stage-file-kind")
                 digest = hashlib.sha256()
                 while block := os.read(fd, 65536):
                     digest.update(block)
-                if (not stat.S_ISREG(info.st_mode) or info.st_size != item["size"] or
-                        digest.hexdigest() != item["sha256"]):
-                    raise ValueError("target-readback")
+                return {"path": path, "size": info.st_size,
+                        "sha256": digest.hexdigest()}
             finally:
                 os.close(fd)
         finally:
@@ -347,7 +384,13 @@ def verify_receipt(config, receipt, seal, seal_key):
                 if (info.st_dev, info.st_ino) != (body["device"], body["inode"]):
                     return False
                 verified = _read_record(target, "VERIFIED.json")
-                if verified["attempt"] != body["attempt"] or verified["files"] != body["files"]:
+                expected = {"attempt": body["attempt"], "pin": body["pin"],
+                            "target": body["target"],
+                            "stage": ".stage-" + body["attempt"],
+                            "state": "VERIFIED", "reason": "checked",
+                            "device": body["device"], "inode": body["inode"],
+                            "files": body["files"]}
+                if verified != expected:
                     return False
                 for file in body["files"]:
                     path = file["path"]
