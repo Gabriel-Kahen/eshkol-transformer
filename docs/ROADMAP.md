@@ -714,6 +714,29 @@ preserving traversal and symlink rejection for each root. Focused policy tests
 and the compiled J production-generate/cross-command gates pass on repaired
 source `18693b4`; composed-head compiled and hosted exact-head checks remain open.
 
+The isolated E3 §9 N2 development join on
+`codex/e3-n2-transcript-join-20261012` checks the five physical T1/D1 resources,
+independent D2 rows and cursor endpoints, 21-role reference records, CE and
+metric state, packed equality and unpacked differences. Frozen canonical corpus
+and bundle SHA-256 pins bind role words and the model parameter digest; the
+source tests alone do not regenerate the pinned M3 oracle. It is source-only;
+independent source-and-test review passed at `8d68e1a`/tree `debf998`
+(`e3-n2-join-review-8d68e1a-20261012/SHA256SUMS`, SHA-256 `900d9fba...`).
+A genuine compiled-private five-layout transcript remains the N2 completion gate.
+
+The follow-on N2 source leaf adds a strict five-case boxed-result join to the
+existing private runtime gate. Its driver aligns the D2 maximum-batch-bytes
+cursor identity with the frozen reference, and the runtime emits case-labeled
+six-output and before/after cursor words. The verifier joins those words to the
+frozen physical D1/D2 reference, checks exact restored start cursors,
+weight/accuracy/counters, packed equality and unpacked publication differences,
+and checks perplexity against independent Decimal exp at the published loss.
+Published loss is checked only by the runtime's existing exact regression
+words, not independently against frozen CE; the other exact final words remain
+regression controls too. This source-only leaf has no compiled result yet; the
+separate numerical observer must be composed and run with reviewed pins to
+prove N2 per-row roles, CE and state. N2 and full §9 acceptance remain open.
+
 The test-only CLI3/G3-G checkpoint-to-generation prerequisite has passed its
 exact fe9/f31 supported linked/runtime gate at `ab479f5`/tree `1102384`.
 Its single registry composes the accepted CLI3/TR3 C2 root with the public
@@ -848,6 +871,25 @@ for all 14 authentic M3 parameter owners before frame binding. It preserves the
 current two-field private scenario, the single tied head/token-embedding owner,
 and immediate commit after successful prepare. Integration and compiled proof
 remain pending; this contract does not discharge any §9 numerical or rollback row.
+
+The separate [E3 compiled numerical transcript candidate](e3/E3_NUMERICAL_TRANSCRIPT.md)
+adds an exact noninstalled test tuple over the genuine three-batch D2/E3
+private evaluator. Guarded native observations carry all 21 role words,
+IDs/targets/masks, CE, L3S, serial states and published metrics into the
+independent frozen development comparator. Wrong-target and mean-of-means
+mutants are compiled test variants. Only source/static checks have run;
+independent review and supported exact-tree execution remain pending, and the
+other E3 §9 numerical, failure and resource obligations remain open.
+
+The N2 five-layout composition on `codex/e3-n2-observer-composition-20261012`
+combines the guarded numerical tuple with the frozen physical D1/D2/M3 join.
+The gate now authenticates both independently generated corpus/reference
+envelopes before AOT, checks actual rows, 21 roles, CE and serial state for
+each layout, then compares six boxed outputs and the restored entry cursor.
+Packed repartition and suffix rows/roles receive exact compiled comparisons;
+unpacked boundaries use separate independent D2 rows. This is source-only
+preparation. A supported exact-source compiled run, source/tuple review,
+mode/retention prerequisites and the other §9 rows remain open.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.

@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Sourced only by E1B. This admits the base private E3 tuple, its exact
 # source-private diagnostic successor, the installed diagnostic tuple, or the
-# separate noninstalled mode/graph test successor.
+# separate noninstalled mode/graph and numerical test successors.
 # Mixed and partial tuples are rejected.
 e3_base_prefix="${PROJECT_ROOT}/native/e3_private_package"
 e3_diagnostic_prefix="${PROJECT_ROOT}/native/e3_diagnostic_private_package"
 e3_public_prefix="${PROJECT_ROOT}/native/e3_diagnostic_public_package"
 e3_mode_graph_prefix="${PROJECT_ROOT}/tests/e3_mode_graph/package"
+e3_numerical_prefix="${PROJECT_ROOT}/tests/e3_private/numerical_package"
 e3_base_inputs=(
   "${PROJECT_ROOT}/native/e3_private_driver_root.esk"
   "${PROJECT_ROOT}/native/e3_private_bridge.c"
@@ -30,6 +31,12 @@ e3_mode_graph_inputs=(
   "${PROJECT_ROOT}/tests/e3_mode_graph/bridge.c"
   "${e3_mode_graph_prefix}_private_renames.txt"
   "${e3_mode_graph_prefix}_public_exports.txt"
+)
+e3_numerical_inputs=(
+  "${PROJECT_ROOT}/tests/e3_private/numerical_driver_root.esk"
+  "${PROJECT_ROOT}/tests/e3_private/numerical_bridge.c"
+  "${e3_numerical_prefix}_private_renames.txt"
+  "${e3_numerical_prefix}_public_exports.txt"
 )
 e3_prefix="${e3_base_prefix}"
 e3_inputs=("${e3_base_inputs[@]}")
@@ -71,6 +78,14 @@ for e3_raw in "${raw_private_root}" "${raw_package_bridge}" \
       e3_tuple_requested=1
     fi
   done
+  for e3_expected in "${e3_numerical_inputs[@]}"; do
+    if [[ "$(realpath -m -- "${e3_raw}")" == "${e3_expected}" ]]; then
+      [[ -z "${e3_tuple_kind}" || "${e3_tuple_kind}" == numerical ]] || \
+        die "E3 policy rejects mixed numerical and canonical tuples"
+      e3_tuple_kind=numerical
+      e3_tuple_requested=1
+    fi
+  done
 done
 
 if [[ "${e3_tuple_kind}" == diagnostic ]]; then
@@ -84,6 +99,9 @@ elif [[ "${e3_tuple_kind}" == public ]]; then
 elif [[ "${e3_tuple_kind}" == mode-graph ]]; then
   e3_prefix="${e3_mode_graph_prefix}"
   e3_inputs=("${e3_mode_graph_inputs[@]}")
+elif [[ "${e3_tuple_kind}" == numerical ]]; then
+  e3_prefix="${e3_numerical_prefix}"
+  e3_inputs=("${e3_numerical_inputs[@]}")
 fi
 
 e3_check_repository_path() {

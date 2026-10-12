@@ -1143,10 +1143,8 @@ if [[ "${package_policy}" == g3g-public-aggregate || "${package_policy}" == g3g-
   g3g_package_policy=1
 fi
 e3_private_test_sanitize=0
-[[ "${E3_RETENTION_SANITIZE:-0}" == 0 &&
-   "${E3_NUMERICAL_SANITIZE:-0}" == 0 &&
-   -z "${E3_NUMERICAL_MUTANT+x}" ]] ||
-  die "noninstalled E3 retention/numerical tuples are absent from this source"
+[[ "${E3_RETENTION_SANITIZE:-0}" == 0 ]] ||
+  die "noninstalled E3 retention tuple is absent from this source"
 if [[ "${E3_MODE_GRAPH_SANITIZE:-0}" != 0 ]]; then
   [[ "${E3_MODE_GRAPH_SANITIZE}" == 1 && \
      "${package_policy}" == e3-private-aggregate && \
@@ -1154,13 +1152,22 @@ if [[ "${E3_MODE_GRAPH_SANITIZE:-0}" != 0 ]]; then
     die "E3 mode/graph sanitizer is allowed only for the exact test tuple"
   e3_private_test_sanitize=1
 fi
+if [[ "${E3_NUMERICAL_SANITIZE:-0}" != 0 ]]; then
+  [[ "${E3_NUMERICAL_SANITIZE}" == 1 && \
+     "${package_policy}" == e3-private-aggregate && \
+     "${e3_tuple_kind}" == numerical && \
+     "${e3_private_test_sanitize}" == 0 ]] || \
+    die "E3 numerical sanitizer is allowed only for the exact test tuple"
+  e3_private_test_sanitize=1
+fi
 e3_private_test_sanitize_flags=()
 e3_private_test_reloc_flags=()
 if [[ "${e3_private_test_sanitize}" == 1 ]]; then
   e3_private_test_sanitize_flags=(-O1 -g -fsanitize=address,undefined
                                -fno-omit-frame-pointer)
-  # Materialize ASan's COMMON registration cell before exact localization.
-  # Only the authenticated noninstalled mode/graph tuple reaches this path.
+  # ASan's registration cell is COMMON. objcopy cannot localize COMMON;
+  # materialize it inside this exact noninstalled sanitized aggregate first.
+  # The unchanged final export allowlist still rejects any exposed extra name.
   e3_private_test_reloc_flags=(-Wl,-d)
 fi
 e3_mode_graph_mutant=${E3_MODE_GRAPH_MUTANT:-normal}
@@ -1172,6 +1179,16 @@ fi
 case "${e3_mode_graph_mutant}" in
   normal|missed-child|enter-write-only|graph-create) ;;
   *) die "unknown E3 mode/graph mutation: ${e3_mode_graph_mutant}" ;;
+esac
+e3_numerical_mutant=${E3_NUMERICAL_MUTANT:-normal}
+if [[ -n "${E3_NUMERICAL_MUTANT+x}" ]]; then
+  [[ "${package_policy}" == e3-private-aggregate &&
+     "${e3_tuple_kind}" == numerical ]] || \
+    die "E3 numerical mutation is allowed only for the exact test tuple"
+fi
+case "${e3_numerical_mutant}" in
+  normal|wrong-target|mean-of-means) ;;
+  *) die "unknown E3 numerical mutation: ${e3_numerical_mutant}" ;;
 esac
 
 require_command awk
@@ -1206,16 +1223,21 @@ e1b_timeout_seconds="${E1B_COMPILER_TIMEOUT_SECONDS:-120}"
 [[ "${e1b_timeout_seconds}" =~ ^[1-9][0-9]*$ ]] || \
   die "E1B_COMPILER_TIMEOUT_SECONDS must be a positive integer"
 
-e3_mode_graph_generated_dir=
-if [[ "${package_policy}" == e3-private-aggregate &&
-      "${e3_tuple_kind}" == mode-graph ]]; then
-  source "${PROJECT_ROOT}/scripts/e3-mode-graph-stage-cleanup.sh"
-  e3_mode_graph_generated_dir="$(e3_mode_graph_generated_stage "${output_object}")" ||
-    die "E3 mode/graph generated source requires a fresh private gate stage"
+e3_gate_generated_dir=
+if [[ "${package_policy}" == e3-private-aggregate ]]; then
+  if [[ "${e3_tuple_kind}" == mode-graph ]]; then
+    source "${PROJECT_ROOT}/scripts/e3-mode-graph-stage-cleanup.sh"
+    e3_gate_generated_dir="$(e3_mode_graph_generated_stage "${output_object}")" ||
+      die "E3 mode/graph generated source requires a fresh private gate stage"
+  elif [[ "${e3_tuple_kind}" == numerical ]]; then
+    source "${PROJECT_ROOT}/scripts/e3-generated-source-stage.sh"
+    e3_gate_generated_dir="$(e3_numerical_generated_stage "${output_object}")" ||
+      die "E3 numerical generated source requires a fresh private gate stage"
+  fi
 fi
 
 e1b_tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-e1b.XXXXXX")"
-e3_mode_graph_generated_owned=0
+e3_gate_generated_owned=0
 e1b_cleanup() {
   local status=$?
   if [[ "${status}" != 0 && \
@@ -1228,29 +1250,29 @@ e1b_cleanup() {
   else
     rm -rf -- "${e1b_tmp}"
   fi
-  if [[ "${status}" == 0 && "${e3_mode_graph_generated_owned}" == 1 ]]; then
-    rm -rf -- "${e3_mode_graph_generated_dir}"
+  if [[ "${status}" == 0 && "${e3_gate_generated_owned}" == 1 ]]; then
+    rm -rf -- "${e3_gate_generated_dir}"
   fi
   return "${status}"
 }
 trap e1b_cleanup EXIT
-if [[ -n "${e3_mode_graph_generated_dir}" ]]; then
+if [[ -n "${e3_gate_generated_dir}" ]]; then
   trap 'exit 143' TERM
   trap 'exit 130' INT
 fi
 mkdir -p "${e1b_tmp}/cache" "$(dirname -- "${output_object}")"
 if [[ "${package_policy}" == e3-private-aggregate ]]; then
   require_command python3
-  if [[ -n "${e3_mode_graph_generated_dir}" ]]; then
-    mkdir -m 0700 -- "${e3_mode_graph_generated_dir}" ||
-      die "E3 mode/graph generated source path was claimed concurrently"
-    e3_mode_graph_generated_owned=1
+  if [[ -n "${e3_gate_generated_dir}" ]]; then
+    mkdir -m 0700 -- "${e3_gate_generated_dir}" ||
+      die "E3 generated source path was claimed concurrently"
+    e3_gate_generated_owned=1
   else
-    e3_mode_graph_generated_dir="${e1b_tmp}/generated"
+    e3_gate_generated_dir="${e1b_tmp}/generated"
   fi
   python3 "${PROJECT_ROOT}/scripts/generate-e3-d2-source.py" \
-    --output-dir "${e3_mode_graph_generated_dir}" >"${e1b_tmp}/d2-generation.json"
-  e3_generated_source_root="${e3_mode_graph_generated_dir}/source"
+    --output-dir "${e3_gate_generated_dir}" >"${e1b_tmp}/d2-generation.json"
+  e3_generated_source_root="${e3_gate_generated_dir}/source"
   if [[ "${e3_tuple_kind}" == mode-graph ]]; then
     python3 "${PROJECT_ROOT}/scripts/generate-e3-mode-graph-source.py" \
       --output-dir "${e3_generated_source_root}" \
@@ -1570,6 +1592,14 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     package_native_cflags+=(-DET_E3_RETENTION_TESTING
                             -DET_E3_MODE_GRAPH_TESTING)
   fi
+  if [[ "${package_policy}" == e3-private-aggregate &&
+        "${e3_tuple_kind}" == numerical ]]; then
+    package_native_cflags+=(-DET_E3_NUMERICAL_TESTING -fno-builtin-printf)
+    case "${e3_numerical_mutant}" in
+      wrong-target) package_native_cflags+=(-DET_E3_NUMERICAL_WRONG_TARGET) ;;
+      mean-of-means) package_native_cflags+=(-DET_E3_NUMERICAL_MEAN_OF_MEANS) ;;
+    esac
+  fi
   native_index=0
   for package_native_source in "${package_native_sources[@]}"; do
     package_native_object="${e1b_tmp}/package-native-${native_index}.o"
@@ -1825,6 +1855,25 @@ if [[ "${e3_private_test_sanitize}" == 1 ]]; then
       "${e1b_tmp}/expected-undefined.txt" \
       "${e1b_tmp}/noninstrumentation-undefined.txt" \
       "${e1b_tmp}/sanitizer-undefined.txt"
+  elif [[ "${e3_tuple_kind:-}" == numerical ]]; then
+    # Clang O1 on the exact sanitized tuple lowers native memcmp to bcmp and
+    # generated literal printf to puts. Pin both sides of the complete delta;
+    # the normal object's exact undefined-symbol manifest is unchanged.
+    numerical_added="${PROJECT_ROOT}/tests/e3_private/numerical_package_sanitized_added_undefined_symbols.txt"
+    numerical_absent="${PROJECT_ROOT}/tests/e3_private/numerical_package_sanitized_absent_undefined_symbols.txt"
+    for numerical_manifest in "${numerical_added}" "${numerical_absent}"; do
+      [[ -s "${numerical_manifest}" ]] || die "E3 numerical sanitizer delta manifest is empty"
+      LC_ALL=C sort -u "${numerical_manifest}" | \
+        cmp -s "${numerical_manifest}" - || \
+        die "E3 numerical sanitizer delta manifest is not sorted unique text"
+    done
+    cmp -s "${numerical_added}" "${e1b_tmp}/unexpected-undefined.txt" || \
+      die "E3 numerical sanitizer added imports differ from exact delta"
+    comm -23 "${e1b_tmp}/expected-undefined.txt" \
+      "${e1b_tmp}/noninstrumentation-undefined.txt" \
+      >"${e1b_tmp}/absent-undefined.txt"
+    cmp -s "${numerical_absent}" "${e1b_tmp}/absent-undefined.txt" || \
+      die "E3 numerical sanitizer absent imports differ from exact delta"
   else
     [[ ! -s "${e1b_tmp}/unexpected-undefined.txt" ]] || \
       die "E3 sanitized private test object adds noninstrumentation imports"

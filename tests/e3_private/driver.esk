@@ -83,7 +83,7 @@
 (define (e3-test-dataset-config directory packing?)
   (list ':directory directory ':batch-size 1 ':sequence-length 2
         ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
-        ':maximum-total-tokens 65536 ':maximum-batch-bytes 34
+        ':maximum-total-tokens 65536 ':maximum-batch-bytes 1048576
         ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? packing?))
 
 (define (e3-test-skip! dataset count)
