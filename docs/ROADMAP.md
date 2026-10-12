@@ -849,6 +849,12 @@ current two-field private scenario, the single tied head/token-embedding owner,
 and immediate commit after successful prepare. Integration and compiled proof
 remain pending; this contract does not discharge any §9 numerical or rollback row.
 
+The [E3 N1 source-only union](e3/E3_N1_B983_UNION.md) carries the bounded
+generated diagnostics, private candidate tools, tests, and custody contracts
+onto the current main/CLI lineage. It remains **HOLD** for protected custody,
+real source read, 30-second and 256-MiB attempt proof, and E3 §9 acceptance.
+No compiled, installed, or CLI behavior is admitted by this union.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
