@@ -14,6 +14,24 @@ def rows(kind: str, name: str) -> list[str]:
     return (DIR / f"{kind}_package_{name}.txt").read_text().splitlines()
 
 
+def runtime_matrix_errors(source: str) -> list[str]:
+    required = (
+        "for mode in normal-a normal-b normal-repeat poison sanitized; do",
+        "normal-a|normal-repeat) binary=a; poison=0 ;;",
+        "normal-b) binary=b; poison=0 ;;",
+        "poison) binary=a; poison=1 ;;",
+        "sanitized) binary=sanitized; poison=1 ;;",
+        '*) die "unknown R1 runtime mode: $mode" ;;',
+        'capture "runtime-$mode" 900 env ESHKOL_ARENA_POISON="$poison"',
+        '[[ ! -s "$out/runtime-$mode.stderr" ]]',
+        "for mode in normal-b normal-repeat poison sanitized; do",
+        'cmp "$out/runtime-normal-a.stdout" "$out/runtime-$mode.stdout"',
+        'cmp "$out/runtime-normal-a.stderr" "$out/runtime-$mode.stderr"',
+        'cmp "$out/runtime-normal-a.exit" "$out/runtime-$mode.exit"',
+    )
+    return [item for item in required if source.count(item) != 1]
+
+
 class R1D2BatchTuple(unittest.TestCase):
     def test_predicted_exact_delta(self) -> None:
         old, new = "r1_source_retry", "r1_d2_batch_retry"
@@ -112,6 +130,20 @@ e3_reject_unresolved_private "$2" "$3" "$4"
                                    [observer, "et_d2_private_cursor_v1"],
                                    [observer, "et_d2_private_cursor_v1"]), 77)
             self.assertEqual(check("base", [observer], [observer]), 77)
+
+    def test_normal_repeat_poison_sanitizer_matrix(self) -> None:
+        source = (ROOT / "scripts/test-e3-r1-d2-batch-retry.sh").read_text()
+        self.assertEqual(runtime_matrix_errors(source), [])
+        for old, new in (
+            ("normal-a normal-b normal-repeat poison sanitized", "normal-a normal-b normal-repeat sanitized"),
+            ("normal-a|normal-repeat) binary=a; poison=0", "normal-a|normal-repeat) binary=a; poison=1"),
+            ("normal-b) binary=b; poison=0", "normal-b) binary=b; poison=1"),
+            ("poison) binary=a; poison=1", "poison) binary=a; poison=0"),
+            ("sanitized) binary=sanitized; poison=1", "sanitized) binary=sanitized; poison=0"),
+            ('cmp "$out/runtime-normal-a.exit" "$out/runtime-$mode.exit"', ":"),
+            ('[[ ! -s "$out/runtime-$mode.stderr" ]]', ":"),
+        ):
+            self.assertTrue(runtime_matrix_errors(source.replace(old, new, 1)), old)
 
 
 if __name__ == "__main__":

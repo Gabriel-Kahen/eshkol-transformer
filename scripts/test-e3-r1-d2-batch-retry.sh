@@ -119,15 +119,26 @@ for mode in a b sanitized; do
   fi
 done
 cmp "$out/runtime-a" "$out/runtime-b"
-for mode in a b a-repeat sanitized; do
-  binary=${mode%-repeat}
-  capture "runtime-$mode" 900 env ESHKOL_ARENA_POISON=1 \
+for mode in normal-a normal-b normal-repeat poison sanitized; do
+  case "$mode" in
+    normal-a|normal-repeat) binary=a; poison=0 ;;
+    normal-b) binary=b; poison=0 ;;
+    poison) binary=a; poison=1 ;;
+    sanitized) binary=sanitized; poison=1 ;;
+    *) die "unknown R1 runtime mode: $mode" ;;
+  esac
+  capture "runtime-$mode" 900 env ESHKOL_ARENA_POISON="$poison" \
     ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
     UBSAN_OPTIONS=halt_on_error=1 \
     "$out/runtime-$binary" "$corpus"
   [[ "$(cat "$out/runtime-$mode.stdout")" == E3-R1-D2-BATCH-RETRY-PASS ]] ||
     die "R1 runtime pass marker differs"
+  [[ ! -s "$out/runtime-$mode.stderr" ]] ||
+    die "R1 runtime emitted stderr"
 done
-cmp "$out/runtime-a.stdout" "$out/runtime-b.stdout"
-cmp "$out/runtime-a.stdout" "$out/runtime-a-repeat.stdout"
+for mode in normal-b normal-repeat poison sanitized; do
+  cmp "$out/runtime-normal-a.stdout" "$out/runtime-$mode.stdout"
+  cmp "$out/runtime-normal-a.stderr" "$out/runtime-$mode.stderr"
+  cmp "$out/runtime-normal-a.exit" "$out/runtime-$mode.exit"
+done
 printf 'E3-R1-COMPILED-GATE-PASS\n'

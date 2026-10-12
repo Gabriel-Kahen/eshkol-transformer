@@ -964,6 +964,9 @@ to the private native object, and source, native, symbol, export and sanitizer
 inventories. A normal/repeat/sanitizer gate script is staged. These manifests
 are source predictions until emitted depfiles and object inventories are
 checked in a supported build; no compiled rollback verdict is claimed.
+The staged runtime gate now separates unpoisoned normal A/B/repeat from
+poisoned normal and poisoned sanitizer runs, with exact output, stderr and
+status comparisons. This is a source correction, not a runtime verdict.
 An isolated staged successor adds a separate real-M3 zero-control source tuple
 using the existing I2 14-parameter prepare/commit path before frame binding.
 It retains the staged numerical, retention, wrong-target and uniform controls.
