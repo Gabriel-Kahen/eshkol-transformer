@@ -1,0 +1,281 @@
+;;; Source-private diagnostic-C2 restore gate. Load once after the checked
+;;; pair and TR3-C joint restore in one aggregate. No public facade or replay.
+;;; A row is [shell, phase, receipt, pair, trainer, resolved, tokenizer,
+;;; dataset, model, optimizer, source-bits]. The trainer registry is the
+;;; candidate tuple authority; the row pins its exact identities.
+
+(define g3r-same-reservation-rows '())
+(define g3r-same-reservation-operation 'checkpoint-load)
+
+(define (g3r-same-reservation-fail category message)
+  (c2-load-fail category g3r-same-reservation-operation message '()))
+
+(define (g3r-same-reservation-find shell)
+  (let loop ((rows g3r-same-reservation-rows))
+    (cond ((null? rows) #f)
+          ((eq? (vector-ref (car rows) 0) shell) (car rows))
+          (else (loop (cdr rows))))))
+
+(define (g3r-same-reservation-overlap? receipt trainer)
+  (let loop ((rows g3r-same-reservation-rows))
+    (if (null? rows) #f
+        (let ((row (car rows)))
+          (or (eq? receipt (vector-ref row 2))
+              (eq? trainer (vector-ref row 4))
+              (loop (cdr rows)))))))
+
+(define (g3r-same-reservation-reverse values)
+  (let loop ((remaining values) (result '()))
+    (if (null? remaining) result
+        (loop (cdr remaining) (cons (car remaining) result)))))
+
+(define (g3r-same-reservation-trainer! row)
+  (let* ((trainer (vector-ref row 4))
+         (record (tr3-lease-record-for-shell-internal
+                   trainer g3r-same-reservation-operation)))
+    (if (or (not (eq? (vector-ref record 3) 'idle))
+            (vector-ref record 4)
+            (not (eq? (vector-ref record 6) (vector-ref row 5)))
+            (not (eq? (vector-ref record 8) (vector-ref row 8)))
+            (not (eq? (vector-ref record 13) (vector-ref row 9)))
+            (not (eq? (vector-ref record 15) (vector-ref row 7)))
+            (not (eq? (d2-open-dataset-state (vector-ref row 7)
+                                              g3r-same-reservation-operation)
+                      (vector-ref record 16)))
+            (not (eq? (m3t-entry (vector-ref row 8) 'model
+                                  g3r-same-reservation-operation #t)
+                      (vector-ref record 9)))
+            (not (eq? (o2-require-optimizer
+                        g3r-same-reservation-operation (vector-ref row 9))
+                      (vector-ref record 14)))
+            (not (tr3-lease-e3-byte-profile? (vector-ref row 6)))
+            (not (equal? (d2-tokenizer-identity (vector-ref row 6))
+                         (vector (vector-ref (vector-ref record 7) 0)
+                                 (vector-ref (vector-ref record 7) 1)))))
+        (g3r-same-reservation-fail 'invalid-state
+                                   "candidate trainer tuple changed"))
+    record))
+
+;;; Enroll only a fresh, idle trainer's already-registered exact tuple.
+;;; A caller cannot supply a replacement model, optimizer or dataset.
+(define (g3r-same-reservation-enroll-internal receipt pair trainer tokenizer)
+  (let* ((receipt-record (g3r-c2-receipt-find receipt))
+         (trainer-record
+           (tr3-lease-record-for-shell-internal
+             trainer g3r-same-reservation-operation))
+         (identity (d2-tokenizer-identity tokenizer))
+         (shell (list 'g3r-same-reservation-v1)))
+    (if (or (not receipt-record)
+            (not (eq? (vector-ref receipt-record 1) 'live))
+            (not (eq? (vector-ref trainer-record 3) 'idle))
+            (vector-ref trainer-record 4)
+            (g3r-same-reservation-overlap? receipt trainer)
+            (not (equal? (vector-ref trainer-record 7)
+                         (vector (vector-ref identity 0)
+                                 (vector-ref identity 1) #t)))
+            (not (tr3-lease-e3-byte-profile? tokenizer)))
+        (g3r-same-reservation-fail 'invalid-argument
+                                   "expected exact fresh diagnostic candidate"))
+    (g3r-checked-pair-recheck-internal pair receipt)
+    (let* ((row (vector shell 'idle receipt pair trainer
+                        (vector-ref trainer-record 6) tokenizer
+                        (vector-ref trainer-record 15)
+                        (vector-ref trainer-record 8)
+                        (vector-ref trainer-record 13) #f))
+           (next (cons row g3r-same-reservation-rows)))
+      (set! g3r-same-reservation-rows next)
+      shell)))
+
+(define (g3r-same-reservation-source-bits! p1 token entries)
+  (let loop ((remaining entries) (index 0) (copied '()))
+    (if (= index 14) (g3r-same-reservation-reverse copied)
+        (let* ((entry (car remaining))
+               (carrier
+                 (state-dict-c2-owned-tensor-borrow-begin-internal
+                   p1 token entry g3r-same-reservation-operation))
+               (payload
+                 (guard (caught
+                          (#t
+                            (guard (end-defect
+                                     (#t (g3r-c2-sha-fail-stop 134)))
+                              (state-dict-c2-owned-tensor-borrow-end-internal
+                                p1 token entry g3r-same-reservation-operation))
+                            (raise caught)))
+                   (i2-checkpoint-encode
+                     (vector carrier 'parameter
+                             (state-entry-shape-internal entry) 'f32 'cpu
+                             'dense-row-major-contiguous
+                             g3r-same-reservation-operation)))))
+          (guard (end-defect (#t (g3r-c2-sha-fail-stop 134)))
+            (state-dict-c2-owned-tensor-borrow-end-internal
+              p1 token entry g3r-same-reservation-operation))
+          (loop (cdr remaining) (+ index 1) (cons payload copied))))))
+
+(define (g3r-same-reservation-verify! row borrow)
+  (let* ((receipt (vector-ref row 2))
+         (pair (vector-ref row 3))
+         (fields (make-vector 8 #f))
+         (c2-borrow (g3r-c2-receipt-borrow-c2-internal
+                      borrow g3r-same-reservation-operation))
+         (digest (g3r-c2-receipt-borrow-sha-internal
+                   borrow g3r-same-reservation-operation))
+         (projection (c2-training-state-borrow-projection-internal c2-borrow))
+         (token (c2-training-state-borrow-owner-token-internal
+                  c2-borrow g3r-same-reservation-operation))
+         (controls (c2-training-state-controls-copy
+                     g3r-same-reservation-operation
+                     (vector-ref projection 2)))
+         (trainer (g3r-same-reservation-trainer! row))
+         (resolved (vector-ref row 5))
+         (source-x1 (vector-ref controls 3))
+         (source-t1 (vector-ref controls 1))
+         (cursor (vector-ref controls 2))
+         (dataset-state (vector-ref trainer 16))
+         (p1 (vector-ref projection 0))
+         (p1-projection
+           (state-dict-c2-owned-projection-internal
+             p1 token g3r-same-reservation-operation))
+         (entries (tr3-c-joint-fixed-source!
+                    p1 p1-projection (vector-ref projection 3)))
+         (o2 (o2-require-c2-owned-state
+               g3r-same-reservation-operation
+               (vector-ref projection 1) (vector-ref c2-borrow 4)))
+         (cursor-request
+           (vector (vector-ref cursor 3) (vector-ref cursor 4)
+                   (vector-ref source-t1 0) (vector-ref source-t1 1)
+                   g3r-same-reservation-operation #f)))
+    (g3r-checked-pair-copy-fields-internal! pair receipt fields)
+    (c2-d2-cursor-pair-internal cursor-request)
+    (if (or (not (g3r-bytes=? digest 0 (vector-ref fields 7) 0 32))
+            (not (g3r-bytes=?
+                   (string->utf8 (vector-ref source-t1 0)) 0
+                   (vector-ref fields 6) 0 96))
+            (not (= (vector-ref source-t1 1) 256))
+            (not (equal? (vector-ref source-t1 0)
+                         (vector-ref (vector-ref trainer 7) 0)))
+            (not (= (vector-ref source-t1 1)
+                    (vector-ref (vector-ref trainer 7) 1)))
+            (not (equal? (vector-ref source-x1 0)
+                         (string->utf8 (x1-private-config-canonical resolved))))
+            (not (equal? (vector-ref source-x1 1)
+                         (x1-private-config-fingerprint resolved)))
+            (not (equal? (vector-ref source-x1 2)
+                         (vector-ref
+                           (let ((request
+                                   (vector
+                                     (string->utf8
+                                       (x1-private-config-canonical resolved))
+                                     (x1-private-config-fingerprint resolved)
+                                     g3r-same-reservation-operation #f)))
+                             (x1-canonical-inspect-internal request)
+                             request)
+                           3)))
+            (not (= (x1-private-config-ref resolved 'model.context-length) 2))
+            (not (= (x1-private-config-ref resolved 'model.hidden-size) 4))
+            (not (= (x1-private-config-ref resolved 'model.layer-count) 1))
+            (not (= (x1-private-config-ref resolved 'model.query-head-count) 2))
+            (not (= (x1-private-config-ref resolved 'model.kv-head-count) 2))
+            (not (= (x1-private-config-ref resolved 'model.head-size) 2))
+            (not (= (x1-private-config-ref resolved 'model.vocabulary-size) 256))
+            (not (eq? (x1-private-config-ref resolved 'model.dtype) 'f32))
+            (not (eq? (x1-private-config-ref resolved 'model.device) 'cpu))
+            (not (x1-private-config-ref resolved 'run.deterministic))
+            (not (= (vector-ref (d2-core-cursor-decode
+                                  (vector-ref cursor 3)) 4) 1))
+            (not (= (vector-ref (d2-core-cursor-decode
+                                  (vector-ref cursor 3)) 5) 2))
+            (not (d2-core-state-identity=?
+                   (vector-ref dataset-state 6)
+                   (d2-core-cursor-decode (vector-ref cursor 3))))
+            (not (d2-core-state-identity=?
+                   (vector-ref dataset-state 6)
+                   (d2-core-cursor-decode (vector-ref cursor 4))))
+            (not (equal? (vector-ref o2 3)
+                         (vector-ref (vector-ref projection 3) 0)))
+            (not (equal? (vector-ref o2 4)
+                         (vector-ref (vector-ref projection 3) 2)))
+            (not (equal? (vector-ref o2 2)
+                         (vector-ref (o2-require-optimizer
+                                       g3r-same-reservation-operation
+                                       (vector-ref row 9)) 2)))
+            (not (= (vector-ref o2 5) (vector-ref (vector-ref controls 4) 1))))
+        (g3r-same-reservation-fail 'invalid-argument
+                                   "pair, controls, corpus or profile mismatch"))
+    ;; All mutable source images retained after the borrow are private copies.
+    (vector-set! row 10 (g3r-same-reservation-source-bits! p1 token entries))
+    #t))
+
+;;; Borrow-end has returned normally, and TR3 has not started. A provider
+;;; callback may have changed the pair or candidate. Return the receipt to
+;;; live only with an exact live C2 witness; otherwise quarantine the process.
+(define (g3r-same-reservation-before-tr3! row receipt owner)
+  (guard (caught
+           (#t
+             (let ((state (c2-training-state-find owner)))
+               (if (not (and (eq? (vector-ref row 1) 'restoring)
+                             (eq? (vector-ref receipt 1) 'restoring)
+                             (not (vector-ref receipt 4))
+                             (eq? (vector-ref receipt 2) owner)
+                             state (eq? (vector-ref state 7) 'live)))
+                   (g3r-c2-sha-fail-stop 134))
+               (vector-set! receipt 1 'live)
+               (vector-set! row 1 'idle)
+               (raise caught))))
+    (g3r-checked-pair-recheck-internal (vector-ref row 3)
+                                       (vector-ref row 2))
+    (g3r-same-reservation-trainer! row)
+    (let ((state (c2-training-state-find owner)))
+      (if (not (and (eq? owner (vector-ref receipt 2))
+                    (not (vector-ref receipt 4))
+                    state (eq? (vector-ref state 7) 'live)))
+          (g3r-same-reservation-fail 'invalid-state
+                                     "receipt owner is not live before TR3")))
+    #t))
+
+(define (g3r-same-reservation-restore-internal! shell)
+  (let* ((row (g3r-same-reservation-find shell))
+         (receipt (and row (g3r-c2-receipt-find (vector-ref row 2)))))
+    (if (or (not row) (not receipt)
+            (not (eq? (vector-ref row 1) 'idle))
+            (not (eq? (vector-ref receipt 1) 'live)))
+        (g3r-same-reservation-fail 'invalid-state
+                                   "restore row or receipt is not idle"))
+    (let ((borrow-cell (vector #f))
+          (source-owner (vector-ref receipt 2)))
+      (if (not (= (c2-runtime-reserve-exception-handlers 8) 0))
+          (g3r-same-reservation-fail 'internal "handler reserve failed"))
+      (vector-set! row 1 'verifying)
+      (guard (caught
+               (#t
+                 (if (eq? (vector-ref row 1) 'restoring)
+                     (g3r-c2-sha-fail-stop 134))
+                 (if (vector-ref borrow-cell 0)
+                     (guard (end-defect (#t (g3r-c2-sha-fail-stop 134)))
+                       (g3r-c2-receipt-borrow-end-internal!
+                         (vector-ref borrow-cell 0))))
+                 (vector-set! row 1 'idle)
+                 (raise caught)))
+        (let ((borrow
+                (g3r-c2-receipt-borrow-begin-internal
+                  (vector-ref row 2) g3r-same-reservation-operation)))
+          (vector-set! borrow-cell 0 borrow)
+          (g3r-same-reservation-verify! row borrow)
+          ;; Any exception inside end has unknown C2/P1/O2 consumption.
+          (guard (end-defect (#t (g3r-c2-sha-fail-stop 134)))
+            (g3r-c2-receipt-borrow-end-internal! borrow))
+          (vector-set! borrow-cell 0 #f)
+          (vector-set! receipt 1 'restoring)
+          (vector-set! row 1 'restoring)
+          ;; Borrow-end may invoke providers; recheck every retained identity.
+          (g3r-same-reservation-before-tr3! row receipt source-owner)
+          ;; TR3 may replace a first error with a cleanup error. Until its
+          ;; cleanup witness is composed, any returned error is fail-stop.
+          (guard (tr3-error (#t (g3r-c2-sha-fail-stop 134)))
+            (tr3-c-joint-restore-internal! (vector-ref row 4) source-owner))
+          (g3r-same-reservation-trainer! row)
+          (if (not (eq? (vector-ref
+                          (c2-training-state-find source-owner) 7) 'live))
+              (g3r-c2-sha-fail-stop 134))
+          (vector-set! receipt 1 'live)
+          (vector-set! row 1 'restored)
+          #t)))))

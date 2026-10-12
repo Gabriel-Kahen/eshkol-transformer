@@ -1655,6 +1655,13 @@ input and candidate ledger remain prerequisites, not installed APIs. The
 private transaction and complete candidate teardown remain pending; this
 documentation adds no accepted restore or G3-R continuation.
 
+The [same-reservation source gate](g3/G3_R_SAME_RESERVATION_SOURCE_GATE.md)
+adds a private receipt/checked-pair/trainer-tuple candidate with one C2 borrow,
+source tensor copyout and an exact-owner TR3 handoff. It conservatively exits
+134 on borrow-end or TR3 uncertainty. Source tests cover ordering and identity
+contracts; compiled aggregate, runtime negatives, post-restore bit checks and
+candidate retirement remain pending. No continuation admission follows.
+
 A source-private checked-pair candidate now copies and validates exact G3RCV1
 bytes under an active owning C2/SHA receipt borrow, then keeps a registry
 shell with the full-record SHA, complete-image SHA and exact receipt/C2 owner
