@@ -176,7 +176,7 @@
          (staging (t1-private-tokenizer-encode-staging tokenizer input))
          (count (t1-tokenizer-core-encoded-count staging))
          ;; All Eshkol allocation needed for admission precedes native create.
-         (admission (vector #f))
+         (admission (vector #f 'pending))
          (old-registry t1-wave1-tensor-registry)
          (next-registry (cons admission old-registry))
          (shell (t1-shell-create count)))
@@ -189,7 +189,7 @@
             (set! t1-wave1-tensor-registry next-registry)
             (let ((status (t1-shell-seal shell)))
               (if (= status 0)
-                  shell
+                  (begin (vector-set! admission 1 'live) shell)
                   (begin
                     ;; Rollback and abort are allocation-free.
                     (set! t1-wave1-tensor-registry old-registry)
@@ -208,7 +208,8 @@
 (define (t1-wave1-tensor-admitted? value)
   (let loop ((remaining t1-wave1-tensor-registry))
     (cond ((null? remaining) #f)
-          ((eq? value (vector-ref (car remaining) 0)) #t)
+          ((eq? value (vector-ref (car remaining) 0))
+           (eq? (vector-ref (car remaining) 1) 'live))
           (else (loop (cdr remaining))))))
 
 (define (t1-wave1-decode-staging count operation)

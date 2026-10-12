@@ -1,4 +1,5 @@
 #include "t1_i64_shell.h"
+#include "t1_published_release_private.h"
 
 #include "eshkol_transformer/i64_tensor.h"
 #ifdef ET_G3C4_T1_I1_EXACT_PAIR_PRIVATE
@@ -21,6 +22,10 @@ typedef struct et_t1_i64_shell {
   const et_kernel_tensor_view_v1 *view;
   int64_t length;
   int sealed;
+#ifdef ET_T1_PUBLISHED_RELEASE_PRIVATE
+  int release_pending;
+  int released;
+#endif
 #ifdef ET_G3C4_T1_I1_EXACT_PAIR_PRIVATE
   et_i64_tensor *birth_tensor;
   et_i64_tensor_borrow *birth_borrow;
@@ -52,6 +57,13 @@ enum {
 
 #ifdef ET_T1_I64_SHELL_TESTING
 static int64_t et_t1_i64_shell_fail_stage;
+#ifdef ET_T1_PUBLISHED_RELEASE_PRIVATE
+static int et_t1_i64_shell_fail_release_after_borrow;
+
+void et_t1_i64_shell_test_fail_release_after_borrow_v1(int enabled) {
+  et_t1_i64_shell_fail_release_after_borrow = enabled != 0;
+}
+#endif
 
 void et_t1_i64_shell_test_fail_stage_v1(int64_t stage) {
   et_t1_i64_shell_fail_stage = stage;
@@ -61,7 +73,11 @@ int64_t et_t1_i64_shell_test_live_count_v1(void) {
   int64_t count = 0;
   const et_t1_i64_shell *entry = et_t1_i64_shell_registry;
   while (entry != NULL) {
+#ifdef ET_T1_PUBLISHED_RELEASE_PRIVATE
+    if (!entry->released) ++count;
+#else
     ++count;
+#endif
     entry = entry->registry_next;
   }
   return count;
@@ -97,6 +113,10 @@ int32_t et_t1_i64_shell_private_c4_read_v1(const void *candidate,
   const int64_t *data;
   int64_t words[2] = {0, 0};
   if (shell == NULL || output == NULL) return ET_T1_C4_READ_INVALID_ARGUMENT;
+#ifdef ET_T1_PUBLISHED_RELEASE_PRIVATE
+  if (shell->release_pending || shell->released)
+    return ET_T1_C4_READ_INVALID_STATE;
+#endif
   if (!shell->sealed || shell->tensor != shell->birth_tensor ||
       shell->borrow != shell->birth_borrow || shell->view != shell->birth_view ||
       shell->length != shell->birth_length)
@@ -132,6 +152,9 @@ int32_t et_t1_i64_shell_test_corrupt_v1(void *candidate, int32_t field,
   et_t1_i64_shell *other = NULL;
   et_kernel_tensor_view_v1 *view;
   if (shell == NULL || !shell->sealed || shell->test_corrupted ||
+#ifdef ET_T1_PUBLISHED_RELEASE_PRIVATE
+      shell->release_pending || shell->released ||
+#endif
       shell->birth_view == NULL || shell->birth_shape == NULL)
     return -1;
   if (field < ET_T1_TEST_CORRUPT_RANK ||
@@ -306,6 +329,12 @@ int64_t et_t1_i64_shell_length_v1(const void *candidate) {
     et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_INVALID_ARGUMENT;
     return -1;
   }
+#ifdef ET_T1_PUBLISHED_RELEASE_PRIVATE
+  if (shell->release_pending || shell->released) {
+    et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_INVALID_STATE;
+    return -1;
+  }
+#endif
   et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_OK;
   return shell->length;
 }
@@ -318,6 +347,12 @@ int64_t et_t1_i64_shell_write_v1(void *candidate, int64_t index,
     et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_INVALID_ARGUMENT;
     return et_t1_i64_shell_last_status;
   }
+#ifdef ET_T1_PUBLISHED_RELEASE_PRIVATE
+  if (shell->release_pending || shell->released) {
+    et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_INVALID_STATE;
+    return et_t1_i64_shell_last_status;
+  }
+#endif
   if (shell->sealed) {
     et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_INVALID_STATE;
     return et_t1_i64_shell_last_status;
@@ -339,6 +374,12 @@ int64_t et_t1_i64_shell_read_v1(const void *candidate, int64_t index) {
     et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_INVALID_ARGUMENT;
     return INT64_MIN;
   }
+#ifdef ET_T1_PUBLISHED_RELEASE_PRIVATE
+  if (shell->release_pending || shell->released) {
+    et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_INVALID_STATE;
+    return INT64_MIN;
+  }
+#endif
   if (!shell->sealed) {
     et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_INVALID_STATE;
     return INT64_MIN;
@@ -358,6 +399,12 @@ int64_t et_t1_i64_shell_seal_v1(void *candidate) {
     et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_INVALID_ARGUMENT;
     return et_t1_i64_shell_last_status;
   }
+#ifdef ET_T1_PUBLISHED_RELEASE_PRIVATE
+  if (shell->release_pending || shell->released) {
+    et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_INVALID_STATE;
+    return et_t1_i64_shell_last_status;
+  }
+#endif
   if (shell->sealed) {
     et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_INVALID_STATE;
     return et_t1_i64_shell_last_status;
@@ -374,6 +421,12 @@ int64_t et_t1_i64_shell_abort_v1(void *candidate) {
     et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_INVALID_ARGUMENT;
     return et_t1_i64_shell_last_status;
   }
+#ifdef ET_T1_PUBLISHED_RELEASE_PRIVATE
+  if (shell->release_pending || shell->released) {
+    et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_INVALID_STATE;
+    return et_t1_i64_shell_last_status;
+  }
+#endif
   if (shell->sealed) {
     et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_INVALID_STATE;
     return et_t1_i64_shell_last_status;
@@ -391,3 +444,91 @@ int64_t et_t1_i64_shell_abort_v1(void *candidate) {
 int64_t et_t1_i64_shell_last_status_v1(void) {
   return et_t1_i64_shell_last_status;
 }
+
+#ifdef ET_T1_PUBLISHED_RELEASE_PRIVATE
+int64_t et_t1_i64_shell_private_release_preflight_v1(void *candidate) {
+  et_t1_i64_shell *shell = et_t1_i64_shell_admit(candidate);
+  et_i64_tensor_error error = {0};
+  const et_kernel_tensor_view_v1 *view = NULL;
+  if (shell == NULL) {
+    et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_INVALID_ARGUMENT;
+    return et_t1_i64_shell_last_status;
+  }
+  if (!shell->sealed || shell->released || shell->tensor == NULL) {
+    et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_INVALID_STATE;
+    return et_t1_i64_shell_last_status;
+  }
+  if (!shell->release_pending) {
+    if (shell->borrow == NULL || shell->view == NULL)
+      goto invalid_state;
+#ifdef ET_G3C4_T1_I1_EXACT_PAIR_PRIVATE
+    if (shell->tensor != shell->birth_tensor ||
+        shell->borrow != shell->birth_borrow ||
+        shell->view != shell->birth_view ||
+        shell->length != shell->birth_length)
+      goto invalid_state;
+#ifdef ET_T1_I64_SHELL_TESTING
+    if (shell->test_corrupted) goto invalid_state;
+#endif
+#endif
+    if (et_i64_tensor_borrow_view_v1(shell->borrow, &view, &error) != 0 ||
+        view != shell->view)
+      goto invalid_state;
+  }
+  et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_OK;
+  return et_t1_i64_shell_last_status;
+
+invalid_state:
+  et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_INVALID_STATE;
+  return et_t1_i64_shell_last_status;
+}
+
+int64_t et_t1_i64_shell_private_release_v1(void *candidate) {
+  et_t1_i64_shell *shell = et_t1_i64_shell_admit(candidate);
+  et_i64_tensor_error error = {0};
+  if (shell == NULL) {
+    et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_INVALID_ARGUMENT;
+    return et_t1_i64_shell_last_status;
+  }
+  if (shell->released) {
+    et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_OK;
+    return et_t1_i64_shell_last_status;
+  }
+  if (et_t1_i64_shell_private_release_preflight_v1(candidate) != 0)
+    return et_t1_i64_shell_last_status;
+  if (!shell->release_pending) {
+    if (et_i64_tensor_borrow_end_v1(&shell->borrow, &error) != 0)
+      goto invalid_state;
+    shell->release_pending = 1;
+    shell->view = NULL;
+#ifdef ET_T1_I64_SHELL_TESTING
+    if (et_t1_i64_shell_fail_release_after_borrow) {
+      et_t1_i64_shell_fail_release_after_borrow = 0;
+      et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_INTERNAL;
+      return et_t1_i64_shell_last_status;
+    }
+#endif
+  }
+  et_i64_tensor_error_clear_v1(&error);
+  if (et_i64_tensor_destroy_v1(&shell->tensor, &error) != 0) {
+    et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_INTERNAL;
+    return et_t1_i64_shell_last_status;
+  }
+  shell->length = 0;
+#ifdef ET_G3C4_T1_I1_EXACT_PAIR_PRIVATE
+  shell->birth_tensor = NULL;
+  shell->birth_borrow = NULL;
+  shell->birth_view = NULL;
+  shell->birth_data = NULL;
+  shell->birth_shape = NULL;
+  shell->birth_length = 0;
+#endif
+  shell->released = 1;
+  et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_OK;
+  return et_t1_i64_shell_last_status;
+
+invalid_state:
+  et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_INVALID_STATE;
+  return et_t1_i64_shell_last_status;
+}
+#endif

@@ -2793,6 +2793,12 @@ publication, public G2 and continuation remain pending.
   parsed-source tests pass. Native compilation, both public G1-EOS/G2 runtime
   paths, same-handle model-bit evidence, the checksummed pair format, SAVE,
   cold LOAD and continuation equivalence remain unrun and unaccepted.
+  The [private published T1 release source candidate](T1_PUBLISHED_RELEASE_PRIVATE.md)
+  adds authenticated Eshkol withdrawal, checked native borrow/I1 teardown,
+  dead nonreusable shell identity, retry after partial teardown, and exact
+  repeat release. Its focused source/native normal and sanitizer checks pass;
+  private aggregate compilation, F continuation, public runtime, and package
+  gates remain pending.
 
 ## Wave 4 — practical pretraining and performance
 

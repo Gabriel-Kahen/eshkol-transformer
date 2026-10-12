@@ -241,6 +241,10 @@ path for these values. Failed operations before publication do not register a
 tokenizer or policy, and unpublished encoded shells are aborted and destroyed, but
 successful published values remain live until process exit.
 
+A separately gated [private published-shell release source candidate](T1_PUBLISHED_RELEASE_PRIVATE.md)
+defines explicit owner withdrawal for the P2/G2 continuation work. It is not
+part of this public T1 contract or its accepted aggregate.
+
 Registry mutation and lookup are not synchronized, and concurrent or reentrant use
 is unverified. Callers must serialize T1 construction, load/save, encode/decode, and
 accessor calls. Long-running code should construct a policy once, construct or load a

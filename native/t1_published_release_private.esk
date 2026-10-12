@@ -1,0 +1,28 @@
+;;; Load after t1_wave1_root.esk only in a private aggregate that links
+;;; t1_i64_shell.c with ET_T1_PUBLISHED_RELEASE_PRIVATE.
+(extern i64 t1-private-shell-release ptr
+        :real et_t1_i64_shell_private_release_v1)
+(extern i64 t1-private-shell-release-preflight ptr
+        :real et_t1_i64_shell_private_release_preflight_v1)
+
+(define (t1-private-published-release! candidate)
+  (let* ((operation 't1-private-published-release!)
+         (entry (t1-wave1-find candidate t1-wave1-tensor-registry)))
+    (if (not entry)
+        (t1-wave1-fail 'invalid-argument operation
+                       "expected aggregate encoded tensor"))
+    (if (eq? (vector-ref entry 1) 'dead)
+        #t
+        (begin
+          (if (eq? (vector-ref entry 1) 'live)
+              (let ((status (t1-private-shell-release-preflight candidate)))
+                (if (not (= status 0))
+                    (t1-wave1-native-fail operation status))))
+          ;; Withdraw admission before touching native storage. A failed native
+          ;; release remains retryable but cannot authorize a stale read.
+          (vector-set! entry 1 'releasing)
+          (let ((status (t1-private-shell-release candidate)))
+            (if (not (= status 0))
+                (t1-wave1-native-fail operation status))
+            (vector-set! entry 1 'dead)
+            #t)))))
