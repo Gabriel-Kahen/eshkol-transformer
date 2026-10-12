@@ -1997,6 +1997,14 @@ before its final slot vector. This source-only successor passed independent
 source/tests review; a fresh one-use compiled source gate remains pending.
 No E3 runtime or Section 9 claim follows from this repair.
 
+The next one-use H capture on `a9363f5`/tree `91e53e5` failed at compiler IR:
+the fixture driver could not resolve its candidate M3T and wrong-tie names.
+The canonical `native/m3t_package_root.esk` loaded its same-directory M3T
+source before the generated `-I` overlay. A source-only successor routes the
+fixture root directly through generated I2/M3T, retaining canonical M3/E3
+extension order; its expected closure is now 28 rows. This remains a static
+hypothesis pending independent review and a fresh one-use source capture.
+
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
 names would return newly owned authenticated CPU f32 `[1,256]` kind-3 shells,

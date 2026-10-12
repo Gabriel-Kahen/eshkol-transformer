@@ -30,7 +30,7 @@ and `4b2e87315b91dd27f6453862a4c4ebcd9fa1f577619d3bfa6ceca92964a9824c`.
    an executable-mode depfile is not assumed. It is not package admission.
 3. Compare `observed-source-closure.txt` bytewise with
    `tests/e3_private/sealed_fixture_package_source_closure.txt`. The checked-in
-   32 rows are a static hypothesis derived from the zero-control list, never
+   28 rows are a static hypothesis derived from the zero-control list, never
    emitted proof. A difference is a source gate failure: retain the raw
    depfile and diagnose actual loaded paths before editing any expected list.
 4. Obtain native and final object inventories from a separate **retained**

@@ -4,11 +4,17 @@
 M3T source overlays from pinned canonical bytes. The ordinary constructors,
 installed library, public API and default-off native objects are untouched.
 This tuple requires `ET_G3R_CANDIDATE_RETIRE_PRIVATE` on its private native
-objects; it is not currently registered in the fixed E3 package builder.
-There is no runnable aggregate root yet: the canonical E3 root loads the
-ordinary P1/I2/M3T sources, so loading this driver through that root would
-not select the generated overlays. A later reviewed package composition must
-bind all three generated members and their exact native objects together.
+objects; the fixture tuple is registered in the private E3 package builder,
+with emitted inventories still pending.
+The fixture root flattens the canonical M3T/M3/E3 load order and loads staged
+I2 and M3T directly from its own directory. The pinned compiler searches the
+requiring file's directory before `-I`; the canonical `native/m3t_package_root.esk`
+therefore selected its same-directory ordinary M3T source even with the overlay
+staged first. Both the source-capture and package builder compile this fixture
+root, whose generated I2/M3T names are absent beside it and resolve through
+the staged include root. The P1 `require` still resolves the generated module.
+The 28-row expected source closure is a hypothesis until a fresh compiled
+depfile verifies the routing.
 
 The candidate P1 construction begins with the existing native candidate
 entrypoint and retains its sealed token roster. I2 retains exact construction
@@ -36,7 +42,7 @@ live-workspace rejection, one sealed retirement, stale model and head-handle
 typed errors, and canonical reconstruction and retirement from the unchanged
 original. The source checker exercises exact
 predecessor pins, generation, stale source rejection and fixture routing.
-Actual compiler composition, generated source and native object inventories,
+Fresh compiler composition, generated source and native object inventories,
 normal/repeat/sanitizer execution, feature-off object/symbol parity, and
 first-failure construction cuts are **unrun**. This source candidate must not
 be described as a runnable Section 9 gate or accepted stale-M3 proof.

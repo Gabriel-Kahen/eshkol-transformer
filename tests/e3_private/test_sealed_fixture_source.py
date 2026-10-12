@@ -149,6 +149,20 @@ class FixtureSource(unittest.TestCase):
         ):
             self.assertIn(required, fixture)
 
+    def test_generated_m3t_fixture_bindings_are_top_level(self) -> None:
+        source = MODULE.outputs()["m3t_transport_extension.esk"].decode()
+        for binding in ("(define m3t-zero-test-wrong-tie-cell ",
+                        "(define (m3t-zero-test-wrong-tie-arm!",
+                        "(define (m3t-candidate-model-create ",
+                        "(define (m3t-candidate-retire! "):
+            with self.subTest(binding=binding):
+                self.assertEqual(source.count(binding), 1)
+                self.assertEqual(self.nesting_depth(source, source.index(binding)), 0)
+        nested = "(let ()\n" + source + ")\n"
+        self.assertTrue(self.balanced(nested))
+        self.assertEqual(self.nesting_depth(nested, nested.index(
+            "(define (m3t-candidate-model-create ")), 1)
+
     def test_p1_revoke_uses_only_preflight_captured_roots(self) -> None:
         source = MODULE.outputs()["transformer/module.esk"].decode()
         preflight = source.split("(define (g3r-construction-preflight", 1)[1].split(

@@ -1,8 +1,4 @@
 tests/e3_private/sealed_fixture_driver_root.esk
-native/e3_private_driver_root.esk
-native/e3_private_root.esk
-native/m3_package_root.esk
-native/m3t_package_root.esk
 @BUILD@/source/i2_wave2_root.esk
 native/t1_wave1_root.esk
 src/eshkol_transformer/token_shard.esk

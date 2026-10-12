@@ -1,3 +1,18 @@
-;;; Exact noninstalled sealed-M3 fixture root; canonical private E3 is intact.
-(load "../../native/e3_private_driver_root.esk")
+;;; Exact noninstalled sealed-M3 fixture root. Load the generated I2/M3T
+;;; siblings from -I before entering the canonical M3 and E3 extensions.
+;;; A native/ root would resolve its same-directory M3T source first.
+(load "i2_wave2_root.esk")
+(load "m3t_transport_extension.esk")
+(load "../../native/m3_schedule.esk")
+(load "../../native/m3_model_extension.esk")
+(load "../../native/m3_call_adapters.esk")
+(load "../../native/e3_p1_modes_extension.esk")
+(load "../../native/e3_errors_extension.esk")
+(load "d2_semantic_core.esk")
+(load "e3_d2_identity.esk")
+(load "e3_d2_dataset.esk")
+(load "../../native/e3_private_extension.esk")
+(load "e3_d2_restore.esk")
+(load "../../native/e3_forward_schedule.esk")
+(load "driver.esk")
 (load "sealed_fixture_driver.esk")
