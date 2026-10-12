@@ -1729,6 +1729,19 @@ native normal/repeat/sanitizer and feature-off checks pass; independent review,
 compiled Eshkol aggregate and current-main union remain pending. This is no
 SAVE admission, file writer or replay proof.
 
+The follow-on private aggregate candidate on `codex/g3r-committed-save-aggregate`
+loads that wrapper with the exact M3/G3-T/G3-M route. A real seeded P1/G1
+commit produces the same owner's policy, RNG, ordered raw history and
+prompt/generated partition; the fixture checks the 136-byte destination
+record against the detached result. Held A2 borrow, busy call, live foreign
+model, changed policy/tokenizer, forged and stale owners, short destination,
+and idle post-P1 G1 abort all reject without changing the destination.
+Pinned fe9dfd Eshkol/LLVM 21 normal, repeat and ASan+UBSan+LSan runs pass 30
+checks with identical stdout and empty compiler/runtime stderr; feature-off
+symbol absence and Q0 isolation also pass. Independent review and
+current-main union remain gates before admission. No SAVE writer, file-pair
+publication or resumed continuation is provided.
+
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
 diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use
