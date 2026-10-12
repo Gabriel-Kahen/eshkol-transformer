@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
-[[ $# -le 2 ]] || die "usage: $0 [ARTIFACT_DIR] [normal|wrong-target|mean-of-means|sanitize]"
+[[ $# -le 2 ]] || die "usage: $0 [ARTIFACT_DIR] [NUMERICAL_MODE]"
 verify_toolchain
 for command in ar cmp; do require_command "${command}"; done
 artifact="${1:-$(project_build_dir)/e3-numerical-test}"
 mode="${2:-normal}"
-case "${mode}" in normal|wrong-target|mean-of-means|sanitize) ;; *) die "unknown E3 numerical mode: ${mode}" ;; esac
+case "${mode}" in
+  normal|wrong-target|mean-of-means|capacity-denominator|padded-count|missing-batch|doubled-batch|second-normalization|exp-before-aggregate|sanitize) ;;
+  *) die "unknown E3 numerical mode: ${mode}" ;;
+esac
 mkdir -p "$(dirname -- "${artifact}")"
 staging="$(mktemp -d "$(dirname -- "${artifact}")/.e3-numerical.XXXXXX")"
 numerical_stage_cleanup() {

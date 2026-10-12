@@ -1187,7 +1187,7 @@ if [[ -n "${E3_NUMERICAL_MUTANT+x}" ]]; then
     die "E3 numerical mutation is allowed only for the exact test tuple"
 fi
 case "${e3_numerical_mutant}" in
-  normal|wrong-target|mean-of-means) ;;
+  normal|wrong-target|mean-of-means|capacity-denominator|padded-count|missing-batch|doubled-batch|second-normalization|exp-before-aggregate) ;;
   *) die "unknown E3 numerical mutation: ${e3_numerical_mutant}" ;;
 esac
 
@@ -1598,6 +1598,12 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     case "${e3_numerical_mutant}" in
       wrong-target) package_native_cflags+=(-DET_E3_NUMERICAL_WRONG_TARGET) ;;
       mean-of-means) package_native_cflags+=(-DET_E3_NUMERICAL_MEAN_OF_MEANS) ;;
+      capacity-denominator) package_native_cflags+=(-DET_E3_NUMERICAL_CAPACITY_DENOMINATOR) ;;
+      padded-count) package_native_cflags+=(-DET_E3_NUMERICAL_PADDED_COUNT) ;;
+      missing-batch) package_native_cflags+=(-DET_E3_NUMERICAL_MISSING_BATCH) ;;
+      doubled-batch) package_native_cflags+=(-DET_E3_NUMERICAL_DOUBLED_BATCH) ;;
+      second-normalization) package_native_cflags+=(-DET_E3_NUMERICAL_SECOND_NORMALIZATION) ;;
+      exp-before-aggregate) package_native_cflags+=(-DET_E3_NUMERICAL_EXP_BEFORE_AGGREGATE) ;;
     esac
   fi
   native_index=0

@@ -41,6 +41,9 @@ corpus = decode((corpus_root / "corpus-reference.json").read_bytes())
 reference = decode(reference_path.read_bytes())
 validate_five_case_join(corpus_root, corpus, reference)
 PY
+python3 -m tests.e3_private.verify_numerical_mutants \
+  --reference "${out}/reference-a.json" \
+  >"${out}/mutant-witness.stdout" 2>"${out}/mutant-witness.stderr"
 
 # The ordinary private package is built independently and its object must not
 # contain the frame emitter. The numerical tuple keeps its own exact manifests.
@@ -54,7 +57,9 @@ if grep -F 'E3ROW' \
 fi
 
 prefix="${PROJECT_ROOT}/tests/e3_private/numerical_package"
-for variant in a b wrong-target mean-of-means sanitized; do
+mutants=(wrong-target mean-of-means capacity-denominator padded-count
+         missing-batch doubled-batch second-normalization exp-before-aggregate)
+for variant in a b "${mutants[@]}" sanitized; do
   mode="${variant}"
   case "${variant}" in a|b) mode=normal ;; sanitized) mode=sanitize ;; esac
   "${PROJECT_ROOT}/scripts/build-e3-numerical-test.sh" \
@@ -104,7 +109,7 @@ chmod 0500 "${out}/cxx-sanitized"
 compiler_timeout="${E3_COMPILER_TIMEOUT_SECONDS:-900}"
 [[ "${compiler_timeout}" =~ ^[1-9][0-9]*$ ]] || \
   die "E3 numerical compiler timeout must be positive"
-for variant in a b wrong-target mean-of-means sanitized; do
+for variant in a b "${mutants[@]}" sanitized; do
   cxx_selected="${cxx}"
   if [[ "${variant}" == sanitized ]]; then
     cxx_selected="${out}/cxx-sanitized"
@@ -126,10 +131,8 @@ for variant in a b wrong-target mean-of-means sanitized; do
 done
 cmp "${out}/runtime-a" "${out}/runtime-b"
 cases=(packed-single packed-sharded packed-suffix unpacked-three unpacked-pairs)
-for variant in a b poison sanitized wrong-target mean-of-means; do
-  selected=("${cases[@]}")
-  [[ "${variant}" != wrong-target && "${variant}" != mean-of-means ]] || selected=(packed-single)
-  for name in "${selected[@]}"; do
+for variant in a b poison sanitized; do
+  for name in "${cases[@]}"; do
     executable="${out}/runtime-${variant}"
     [[ "${variant}" != poison ]] || executable="${out}/runtime-a"
     poison=0
@@ -174,7 +177,46 @@ for variant in a b poison sanitized; do
     --reference "${out}/reference-a.json" --results "${out}" \
     --variant "${variant}"
 done
-for variant in wrong-target mean-of-means; do
+for variant in "${mutants[@]}"; do
+  name=packed-single
+  ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+    UBSAN_OPTIONS=halt_on_error=1 ESHKOL_ARENA_POISON=0 \
+    timeout --foreground --signal=TERM --kill-after=5s 900s \
+    "${out}/runtime-${variant}" "${name}" "${out}/corpus-a/${name}" \
+    >"${out}/run-${variant}-${name}.stdout" \
+    2>"${out}/run-${variant}-${name}.stderr"
+  grep -Fx 'E3-NUMERICAL-RUNTIME-PASS' "${out}/run-${variant}-${name}.stdout" \
+    >/dev/null || die "compiled numerical ${variant}/${name} did not complete"
+  [[ ! -s "${out}/run-${variant}-${name}.stderr" ]] || \
+    die "compiled numerical ${variant}/${name} emitted runtime diagnostics"
+  python3 -m tests.e3_private.verify_numerical_mutants \
+    --reference "${out}/reference-a.json" \
+    --baseline "${out}/run-a-${name}.stdout" \
+    --mutant "${out}/run-${variant}-${name}.stdout" --mode "${variant}" \
+    >"${out}/first-difference-${variant}.stdout" \
+    2>"${out}/first-difference-${variant}.stderr"
+  if [[ "${variant}" == padded-count ]]; then
+    if python3 -m tests.e3_private.parse_numerical_observation \
+      --stdout "${out}/run-${variant}-${name}.stdout" \
+      --observed "${out}/observed-${variant}-${name}.json" \
+      --roles "${out}/roles-${variant}-${name}.tsv" \
+      --result "${out}/result-${variant}-${name}.json" --batches 3 \
+      >"${out}/verify-${variant}.stdout" 2>"${out}/verify-${variant}.stderr"; then
+      die "compiled numerical padded-count mutant survived"
+    fi
+    grep -F 'active count differs from mask' "${out}/verify-${variant}.stderr" \
+      >/dev/null || die "padded-count failed outside the active-count assertion"
+    [[ ! -e "${out}/observed-${variant}-${name}.json" &&
+       ! -e "${out}/roles-${variant}-${name}.tsv" &&
+       ! -e "${out}/result-${variant}-${name}.json" ]] || \
+      die "padded-count parser published a partial observation"
+    continue
+  fi
+  python3 -m tests.e3_private.parse_numerical_observation \
+    --stdout "${out}/run-${variant}-${name}.stdout" \
+    --observed "${out}/observed-${variant}-${name}.json" \
+    --roles "${out}/roles-${variant}-${name}.tsv" \
+    --result "${out}/result-${variant}-${name}.json" --batches 3
   if ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "${q0_python}" \
     -m tests.e3_native_parity.verify_observation \
     --reference "${out}/reference-a.json" --case packed-single \
@@ -187,8 +229,15 @@ for variant in wrong-target mean-of-means; do
   [[ ! -e "${out}/transcript-${variant}-packed-single.json" ]] || \
     die "failed numerical mutant published a transcript"
 done
-grep -F 'ce_f32' "${out}/verify-wrong-target.stderr" >/dev/null || \
-  die "wrong-target mutant failed outside the CE value assertion"
-grep -F 'state_f32' "${out}/verify-mean-of-means.stderr" >/dev/null || \
-  die "mean-of-means mutant failed outside the accumulator value assertion"
-printf 'E3 compiled five-layout numerical transcripts and two mutants passed\n'
+for variant in wrong-target mean-of-means capacity-denominator missing-batch \
+    doubled-batch second-normalization exp-before-aggregate; do
+  case "${variant}" in
+    wrong-target) assertion=ce_f32 ;;
+    capacity-denominator) assertion=reduction_f32 ;;
+    second-normalization) assertion=exponential ;;
+    *) assertion=state_f32 ;;
+  esac
+  grep -F "${assertion}" "${out}/verify-${variant}.stderr" >/dev/null || \
+    die "${variant} mutant failed outside its named value assertion"
+done
+printf 'E3 compiled five-layout numerical transcripts and eight mutants passed\n'

@@ -148,6 +148,9 @@ static int evaluate(const et_kernel_call_v1 *c, enum operation op, float result[
   if (!isfinite(w)) return 0;
   w = w + m[1];
   if (!isfinite(w) || w <= 0.0f) return 0;
+#ifdef ET_E3_NUMERICAL_CAPACITY_DENOMINATOR
+  if (reduce && boolean) w = 2.0f;
+#endif
   if (reduce) {
     const float p0 = m[0] * ce[0];
     const float p1 = m[1] * ce[1];

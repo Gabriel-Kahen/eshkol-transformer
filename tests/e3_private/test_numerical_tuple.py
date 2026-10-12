@@ -9,6 +9,7 @@ import unittest
 
 from tests.e3_private.parse_numerical_observation import ROLE_NAMES, parse
 from tests.e3_private.verify_numerical_result import verify_transcript_relations
+from tests.e3_private.verify_numerical_mutants import EXPECT, first_change
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -211,7 +212,27 @@ printf '%s\\n' "$e3_tuple_kind"
         self.assertIn("#ifdef ET_E3_NUMERICAL_TESTING", frame)
         self.assertIn("#ifdef ET_E3_NUMERICAL_WRONG_TARGET", frame)
         self.assertIn("#ifdef ET_E3_NUMERICAL_MEAN_OF_MEANS", metrics)
+        self.assertEqual(set(EXPECT), {
+            "wrong-target", "mean-of-means", "capacity-denominator",
+            "padded-count", "missing-batch", "doubled-batch",
+            "second-normalization", "exp-before-aggregate",
+        })
+        for mode in EXPECT:
+            self.assertIn(mode, builder)
+            self.assertIn(mode, (ROOT / "scripts/test-e3-numerical-transcript.sh").read_text())
         self.assertNotIn("E3ROW", (ROOT / "tests/e3_private/driver.esk").read_text())
+
+    def test_first_mutant_difference_is_named_and_ordered(self) -> None:
+        baseline = (b"E3ROW\t0\t3,197\t197,0\t1,1\n"
+                    b"E3BATCH\t2\t41000000,3f800000,41000000,00000000\t1\n"
+                    b"E3-NUMERICAL-RUNTIME-PASS\n")
+        changed = baseline.replace(b"3f800000", b"40000000")
+        self.assertIn("E3BATCH row 2 field 2 word 1",
+                      first_change(baseline, changed, "capacity-denominator"))
+        with self.assertRaisesRegex(ValueError, "first change was"):
+            first_change(baseline, changed, "second-normalization")
+        with self.assertRaisesRegex(ValueError, "survived"):
+            first_change(baseline, baseline, "capacity-denominator")
 
     def test_native_provider_mode_tracks_both_test_sanitizers(self) -> None:
         policy = ROOT / "scripts/e3-private-native-inputs.sh"

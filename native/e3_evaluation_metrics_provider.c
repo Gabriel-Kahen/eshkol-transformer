@@ -191,7 +191,11 @@ static int32_t evaluate_correct(const et_kernel_call_v1 *c, union results *resul
   correct = correct + p0;
   correct = correct + p1;
   result->correct.correct = correct;
+#ifdef ET_E3_NUMERICAL_PADDED_COUNT
+  result->correct.active = 2;
+#else
   result->correct.active = (int64_t)mask[0] + (int64_t)mask[1];
+#endif
   return 0;
 }
 static int32_t evaluate_accumulate(const et_kernel_call_v1 *c, union results *result,
@@ -220,7 +224,9 @@ static int32_t evaluate_accumulate(const et_kernel_call_v1 *c, union results *re
   if (correct > w || !integral_bounded(correct)) return domain(e,op);
 #endif
   if (batches == 0 && n != 0.0f) return domain(e,op);
+#if !defined(ET_E3_NUMERICAL_CAPACITY_DENOMINATOR) && !defined(ET_E3_NUMERICAL_PADDED_COUNT)
   if (wb != (float)active) return domain(e,op);
+#endif
   if (cb > wb || !integral_bounded(cb)) return domain(e,op);
   if (tokens > INT64_MAX-active || batches == INT64_MAX)
     return fail(e, ET_KERNEL_ERROR_INVALID_ARGUMENT, ET_KERNEL_CODE_INTEGER_OVERFLOW,
@@ -231,7 +237,11 @@ static int32_t evaluate_accumulate(const et_kernel_call_v1 *c, union results *re
 #ifdef ET_E3_NUMERICAL_MEAN_OF_MEANS
   const float next_n = n + nb / wb;
 #else
+#ifdef ET_E3_NUMERICAL_EXP_BEFORE_AGGREGATE
+  const float next_n = n + wb * expf(nb / wb);
+#else
   const float next_n = n + nb;
+#endif
 #endif
   if (!isfinite(next_n)) return domain(e,op);
 #ifdef ET_E3_NUMERICAL_MEAN_OF_MEANS
@@ -264,7 +274,13 @@ static int32_t evaluate_finalize(const et_kernel_call_v1 *c, union results *resu
   if (!isfinite(loss)) return domain(e,op);
   const float accuracy = correct / w;
   if (!isfinite(accuracy)) return domain(e,op);
+#ifdef ET_E3_NUMERICAL_SECOND_NORMALIZATION
+  const float perplexity = expf(loss / w);
+#elif defined(ET_E3_NUMERICAL_EXP_BEFORE_AGGREGATE)
+  const float perplexity = loss;
+#else
   const float perplexity = expf(loss);
+#endif
   if (!isfinite(perplexity)) return domain(e,op);
   result->finalize.loss = positive_zero(loss);
   result->finalize.weight = w;

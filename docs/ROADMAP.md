@@ -881,6 +881,15 @@ mutants are compiled test variants. Only source/static checks have run;
 independent review and supported exact-tree execution remain pending, and the
 other E3 §9 numerical, failure and resource obligations remain open.
 
+The bounded E3 §9 M2 source extension adds six noninstalled private numerical
+variants for capacity denominator, padded count, missing/doubled final batch,
+second normalization and exp before global aggregation. The gate proves the
+frozen authentic packed `11,11,10` witness before builds, admits each mutant
+compilation, locates its first changed compiled row/word, and requires the
+named independent value assertion after the normal tuple passes. Focused
+source/static tests pass; no compiled M2 kill or §9 acceptance is claimed yet.
+Tie, axis, overflow and reorder rows remain open pending genuine reachability.
+
 The N2 five-layout composition on `codex/e3-n2-observer-composition-20261012`
 combines the guarded numerical tuple with the frozen physical D1/D2/M3 join.
 The gate now authenticates both independently generated corpus/reference

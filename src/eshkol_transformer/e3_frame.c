@@ -78,6 +78,9 @@ struct et_e3_frame_internal {
   unsigned char keep[4], mask[2];
   int64_t counts[2][2], active, staged_counts[2], published_counts[2];
   uint32_t sum_bank, committed, cleanup_ready, published_valid;
+#ifdef ET_E3_NUMERICAL_TESTING
+  uint32_t observed_batches;
+#endif
   et_kernel_runtime *runtime[6];
 };
 
@@ -324,7 +327,7 @@ static void e3_numerical_words(et_f32_tensor *tensor, size_t expected) {
 
 static void e3_numerical_batch(et_e3_frame_internal *frame) {
   const size_t bank = frame->sum_bank;
-  const int64_t ordinal = frame->counts[bank][1] - 1;
+  const int64_t ordinal = frame->observed_batches++;
   if (ordinal < 0 || ordinal >= 3) abort();
   printf("E3ROW\t%" PRId64 "\t%" PRId64 ",%" PRId64
          "\t%" PRId64 ",%" PRId64 "\t%u,%u\n", ordinal,
@@ -734,6 +737,9 @@ int64_t et_e3_private_acquire_v1(void *pointer) {
   frame->active = 0;
   memset(frame->staged_counts, 0, sizeof(frame->staged_counts));
   frame->sum_bank = 0;
+#ifdef ET_E3_NUMERICAL_TESTING
+  frame->observed_batches = 0;
+#endif
   frame->committed = 0;
   frame->next_role = 0;
   frame->stage_plane = 0;
@@ -1198,9 +1204,25 @@ int64_t et_e3_private_accumulate_v1(void *pointer) {
       e3_dependency_status(e3_last_domain, e3_last_category) : e3_last_category;
   if (frame->phase != E3_CORRECTED || frame->cleanup_ready)
     return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
-  int64_t rc = e3_accumulate_dispatch(frame);
+  int64_t rc = 0;
+#ifdef ET_E3_NUMERICAL_MISSING_BATCH
+  if (frame->observed_batches != 2)
+#endif
+    rc = e3_accumulate_dispatch(frame);
   if (!rc) {
+#ifndef ET_E3_NUMERICAL_MISSING_BATCH
     frame->sum_bank ^= 1u;
+#endif
+#ifdef ET_E3_NUMERICAL_MISSING_BATCH
+    if (frame->observed_batches != 2) frame->sum_bank ^= 1u;
+#endif
+#ifdef ET_E3_NUMERICAL_DOUBLED_BATCH
+    if (frame->observed_batches == 2) {
+      rc = e3_accumulate_dispatch(frame);
+      if (rc) return rc;
+      frame->sum_bank ^= 1u;
+    }
+#endif
 #ifdef ET_E3_NUMERICAL_TESTING
     e3_numerical_batch(frame);
 #endif

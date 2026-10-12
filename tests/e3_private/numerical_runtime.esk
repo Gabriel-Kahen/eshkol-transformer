@@ -33,13 +33,8 @@
 (check 'result
   (and (vector? result) (= (vector-length result) 9)
        (eq? (vector-ref result 0) 'e3-private-result-v1)
-       (= (vector-ref result 5)
-          (if (string=? name "packed-suffix") 3
-              (if (string=? name "unpacked-three") 4
-                  (if (string=? name "unpacked-pairs") 3 5))))
-       (= (vector-ref result 6)
-          (if (or (string=? name "packed-suffix")
-                  (string=? name "unpacked-three")) 2 3))
+       (integer? (vector-ref result 5))
+       (integer? (vector-ref result 6))
        (bytevector? (vector-ref result 7))
        (bytevector? (vector-ref result 8))))
 (display "E3RESULT\t")

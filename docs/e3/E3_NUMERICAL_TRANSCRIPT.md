@@ -35,6 +35,22 @@ accumulator value assertions, respectively. They are test-only compile modes;
 the canonical private, diagnostic, installed and retention tuples never define
 these macros.
 
+The bounded M2 source extension adds six further one-at-a-time noninstalled
+variants: physical-capacity denominator, padded active count, missing final
+batch, doubled final batch, second normalization, and exp before global
+aggregation. The existing three-batch packed D2 rows are `11,11,10` with
+unequal positive losses. Before compiling, the gate checks those frozen
+independent rows and confirms that exp ordering is distinguishable. After a
+normal transcript has passed its independent parity and boxed-result checks,
+each mutant must complete the evaluator, produce the expected first changed
+tag/row/word against that baseline, and fail its named CE, reduction, active,
+state, or final exponential assertion. Each variant retains the exact
+noninstalled package manifests. No tie, axis, overflow, or rounding-reorder
+private kill is claimed without a genuine reachable witness.
+
+This M2 extension currently has source/static test evidence only. The
+compiled exact-tree normal, poisoned, sanitized, and mutant runs remain open.
+
 `scripts/test-e3-numerical-transcript.sh` checks exact manifests, canonical
 observer absence, two fresh numerical source/object/archive builds and raw
 depfiles, two independent AOT caches and byte-identical runtime stdout. It
