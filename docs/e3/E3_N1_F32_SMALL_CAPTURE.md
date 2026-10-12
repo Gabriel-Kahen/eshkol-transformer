@@ -87,3 +87,8 @@ signal and timer semantics. Those guarantees are stronger than the frozen
 proposal's predeclared, unmeasured caps. A bounded external observation and
 post-run proof for one completed attempt needs separate ROOT review. Both
 public gates remain closed before any real read.
+
+The later [synthetic external observation diagnostic](E3_N1_F32_SMALL_OBSERVATION.md)
+records nested `wait4` peaks and a monotonic interval for expected generated
+actors, but does not prove whole-procedure RSS, completed timing, or protected
+custody. It does not change this wrapper's public gate.

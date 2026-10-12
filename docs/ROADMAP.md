@@ -845,6 +845,13 @@ These absolute guarantees are stronger than the frozen proposal's predeclared,
 unmeasured caps. An external observation and post-run proof for one completed
 attempt needs separate ROOT review. No supervisor source or real acquisition
 was added.
+The [synthetic external observation diagnostic](e3/E3_N1_F32_SMALL_OBSERVATION.md)
+records nested Linux `wait4` peaks for expected observer/worker/direct-child
+actors and a monotonic interval through observer cessation. It does not prove
+whole-procedure caps: the witness's final result seal is later, runtime
+confinement of escaped descendants is absent, and the witness's RSS is excluded.
+Resource proof and protected preservation remain HOLD; both public real-read
+gates remain closed, and no OCI/Docker bytes were opened.
 The [local pin acquisition](e3/E3_N1_LOCAL_PIN_ACQUISITION.md) seals the small
 index/manifest/config bytes and host-only candidates; guest bytes remain absent.
 The [bounded gzip scanner](e3/E3_N1_GZIP_SCANNER.md) A source was held for a
