@@ -2,16 +2,40 @@
 """Static boundary checks for the native-only C4 P2/G2 first-frame leaf."""
 
 from pathlib import Path
+import os
 import subprocess
 import sys
+import tempfile
 
 root = Path(__file__).resolve().parents[1]
+child_root_value = os.environ.get("G3C4_FIRST_FRAME_STATIC_CHILD_ROOT")
+child_root = Path(child_root_value) if child_root_value else None
+if child_root is not None and (not child_root.is_absolute() or
+                               child_root.is_symlink() or not child_root.is_dir()):
+    raise SystemExit("unsafe first-frame static child receipt root")
 for predecessor in (
     "check-g3c4-output-reservation.py",
     "check-g3c4-p2g1-pending.py",
 ):
-    subprocess.run([sys.executable, str(root / "scripts" / predecessor)],
-                   cwd=root, check=True, stdout=subprocess.DEVNULL)
+    argv = [sys.executable, str(root / "scripts" / predecessor)]
+    if child_root is None:
+        subprocess.run(argv, cwd=root, check=True, stdout=subprocess.DEVNULL)
+    else:
+        label = predecessor.removeprefix("check-g3c4-").removesuffix(".py")
+        receipt = Path(tempfile.mkdtemp(prefix=f"static-{label}.", dir=child_root))
+        (receipt / "label").write_text(label + "\n")
+        (receipt / "cwd").write_text(str(root.resolve()) + "\n")
+        (receipt / "argv.nul").write_bytes(b"".join(os.fsencode(arg) + b"\0" for arg in argv))
+        result = subprocess.run(argv, cwd=root, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, check=False)
+        (receipt / "stdout.raw").write_bytes(result.stdout)
+        (receipt / "stderr.raw").write_bytes(result.stderr)
+        (receipt / "exit").write_text(
+            str(result.returncode if result.returncode >= 0 else
+                128 - result.returncode) + "\n")
+        sys.stderr.buffer.write(result.stderr)
+        sys.stderr.buffer.flush()
+        result.check_returncode()
 
 owner = (root / "src/eshkol_transformer/g3c4_model_owner.c").read_text()
 fixture = (root / "tests/g3c4/test_p2_g2_first_frame.c").read_text()

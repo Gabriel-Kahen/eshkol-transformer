@@ -2741,8 +2741,10 @@ publication, public G2 and continuation remain pending.
   successful-zero emitted-code proof remain open.
   A [source-only first-frame leaf receipt successor](g3/G3_C4_P2_G2_FIRST_FRAME_COMMAND_RECEIPTS.md)
   records its direct checker, compiler, symbol, fixture, oracle and predicate
-  commands with ordered raw streams and exits. Five corruption controls pass;
-  compiled leaf execution and transitive nested-checker/predecessor receipts
+  commands with ordered raw streams and exits. A bounded successor adds opt-in
+  first-frame child receipts for toolchain/resolver and static-checker calls,
+  plus failure-prefix HOLD inventory; source-only corruption/process controls
+  pass. Compiled leaf execution, deeper nested-checker and predecessor receipts
   remain open. The source closure adds only changed leaf files, not a complete
   transitive runner-input closure.
 

@@ -8,6 +8,47 @@ source "$PROJECT_ROOT/scripts/g3c4_terminal_command_receipt.sh"
 terminal_command_index=0
 terminal_commands_root=$(mktemp -d "$evidence/commands.XXXXXX")
 printf '%s\n' "$terminal_commands_root" >"$evidence/commands-path.txt"
+tmp=
+cleanup() {
+  local status=$? audit_status=0
+  trap - EXIT
+  set +e
+  if (( status != 0 )); then
+    terminal_record_command postfailure-audit postfailure-audit.stdout \
+      postfailure-audit.stderr -- \
+      python3 "$PROJECT_ROOT/tests/g3c4/check_first_frame_command_receipts.py" \
+        "$evidence" --prefix || audit_status=$?
+    printf '%s\n' "$audit_status" >"$evidence/postfailure-audit.exit"
+    if [[ -n "$tmp" ]]; then
+      printf 'G3-C4 P2/G2 first-frame failure retained: %s\n' "$tmp" >&2
+    else
+      printf 'G3-C4 P2/G2 first-frame early failure receipts retained: %s\n' \
+        "$terminal_commands_root" >&2
+    fi
+  elif [[ -n "$tmp" ]]; then
+    rm -rf -- "$tmp"
+  fi
+  exit "$status"
+}
+trap cleanup EXIT
+terminal_nested_root=$(mktemp -d "$evidence/nested.XXXXXX")
+printf '%s\n' "$terminal_nested_root" >"$evidence/nested-path.txt"
+cc_choice=${CC:-clang-21}
+cxx_choice=${CXX:-clang++-21}
+llvm_choice=${LLVM_CONFIG_EXECUTABLE:-llvm-config-21}
+cc_found=$(command -v "$cc_choice" 2>/dev/null || true)
+cxx_found=$(command -v "$cxx_choice" 2>/dev/null || true)
+cc_relative=0 cxx_relative=0
+[[ $cc_found == */* && $cc_found != /* ]] && cc_relative=1
+[[ $cxx_found == */* && $cxx_found != /* ]] && cxx_relative=1
+printf 'cc_default\t%s\ncxx_default\t%s\ncc_program\t%s\ncxx_program\t%s\nllvm_program\t%s\ncc_relative\t%s\ncxx_relative\t%s\n' \
+  "$([[ -z ${CC:-} ]] && printf 1 || printf 0)" \
+  "$([[ -z ${CXX:-} ]] && printf 1 || printf 0)" \
+  "${cc_choice##*/}" "${cxx_choice##*/}" "${llvm_choice##*/}" \
+  "$cc_relative" "$cxx_relative" \
+  >"$evidence/nested-profile.tsv"
+export G3C4_FIRST_FRAME_RECEIPT_MODE=1
+export G3C4_FIRST_FRAME_NESTED_ROOT="$terminal_nested_root"
 terminal_record_command toolchain-verify - - -- \
   bash -c 'source "$1"; verify_toolchain' bash "$PROJECT_ROOT/scripts/common.sh"
 terminal_restore_toolchain_export
@@ -15,8 +56,13 @@ for command in cmp git grep nm python3 sha256sum sort awk; do require_command "$
 cc= cxx=
 resolve_provenance_compilers cc cxx \
   "${CC:-$(lock_value supported_cc)}" "${CXX:-$(lock_value supported_cxx)}"
+unset G3C4_FIRST_FRAME_RECEIPT_MODE G3C4_FIRST_FRAME_NESTED_ROOT
+terminal_static_child_root=$(mktemp -d "$evidence/static-nested.XXXXXX")
+printf '%s\n' "$terminal_static_child_root" >"$evidence/static-nested-path.txt"
+export G3C4_FIRST_FRAME_STATIC_CHILD_ROOT="$terminal_static_child_root"
 terminal_record_command static static.stdout static.stderr -- \
   python3 "$PROJECT_ROOT/scripts/check-g3c4-p2g2-first-frame.py"
+unset G3C4_FIRST_FRAME_STATIC_CHILD_ROOT
 
 first_receipt_stdout() {
   printf '%s/%04d-%s/stdout.raw\n' \
@@ -52,13 +98,6 @@ native_sources=(
   "$PROJECT_ROOT/native/a2_kv_cache.c")
 
 tmp="$(mktemp -d "$evidence/build.XXXXXX")"
-cleanup() {
-  local status=$?
-  if (( status == 0 )); then rm -rf -- "$tmp"; else
-    printf 'G3-C4 P2/G2 first-frame failure retained: %s\n' "$tmp" >&2
-  fi
-}
-trap cleanup EXIT
 
 for mode in off on; do
   macros=("${owner_macros[@]}")
