@@ -47,7 +47,7 @@ class PairRngBridgeSourceTest(unittest.TestCase):
         positions = [form.index(part) for part in order]
         self.assertEqual(positions, sorted(positions))
         release_rng = "(g3t-generation-rng-release! (vector-ref rng-owner-cell 0))"
-        release_receipt = "(g3r-c2-receipt-release-internal! (vector-ref receipt-cell 0))"
+        release_receipt = "(g3r-c2-receipt-release-internal! (if (vector-ref receipt-cell 0)"
         self.assertIn(release_rng, form)
         self.assertIn(release_receipt, form)
         self.assertLess(form.index(release_rng), form.index(release_receipt))

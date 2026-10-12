@@ -1687,6 +1687,9 @@ The corrected C2 pair, file-pair and typed RNG bridge sources now share one
 root load graph: the receipt root loads the record codec once before either
 pair leaf. The file-pair and bridge cleanup paths hold receipt, borrow,
 copied digest and RNG authority in preallocated cells across guard longjmp;
+the bridge also retains scratch receipt authority and protects native RNG
+return-to-cell enrollment with an immutable local cleanup guard. Its scratch
+receipt slot is cleared on successful whole-range publication;
 their fixtures compare live and busy C2 counts at rejection and release cuts,
 and the bridge also compares the native RNG clone count. The source-only
 static/fixture checks pass on this corrected union, including mutation

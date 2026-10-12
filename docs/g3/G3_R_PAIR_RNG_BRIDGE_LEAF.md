@@ -19,7 +19,9 @@ or RNG after validation. It remains available for raise-based failure cuts.
 
 All file checks, C2/receipt operations and RNG allocation precede one checked
 ten-slot publication. Preallocated cells retain both owners across guard
-longjmp. On import or publication failure the bridge releases the new RNG
+longjmp. The nine-slot scratch remains receipt authority until receipt-cell
+enrollment, and an immutable native owner binding has its own enrollment
+cleanup guard. On import or publication failure the bridge releases the new RNG
 owner, then the receipt; a cleanup defect fails stop. The accepted
 fe9 whole-vector promotion rule leaves caller slots unchanged on failed copy.
 The candidate requires serialized access to these private registries and to

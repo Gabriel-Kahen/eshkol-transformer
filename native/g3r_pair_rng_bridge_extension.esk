@@ -20,17 +20,34 @@
                  (if (vector-ref rng-owner-cell 0)
                      (g3t-generation-rng-release!
                        (vector-ref rng-owner-cell 0)))
-                 (if (vector-ref receipt-cell 0)
+                 ;; The pair's preallocated slot is authority until the
+                 ;; receipt cell has enrolled it. Release exactly once.
+                 (if (or (vector-ref receipt-cell 0)
+                         (vector-ref pair 0))
                      (g3r-c2-receipt-release-internal!
-                       (vector-ref receipt-cell 0))))
+                       (if (vector-ref receipt-cell 0)
+                           (vector-ref receipt-cell 0)
+                           (vector-ref pair 0)))))
                (raise caught)))
       (g3r-file-pair-admit-internal c2-path companion-path policy report pair)
       (vector-set! receipt-cell 0 (vector-ref pair 0))
       (let ((words (vector-ref pair 2)))
-        (vector-set! rng-owner-cell 0
-          (g3r-rng-owner-from-checked-words
-            (vector-ref words 0) (vector-ref words 1)
-            (vector-ref words 2) (vector-ref words 3))))
+        ;; A returned native owner remains in this immutable binding until
+        ;; cell enrollment. If that write fails, release it here; the outer
+        ;; guard still owns the receipt through the pair/cell authority.
+        (let ((fresh-owner
+                (g3r-rng-owner-from-checked-words
+                  (vector-ref words 0) (vector-ref words 1)
+                  (vector-ref words 2) (vector-ref words 3))))
+          (guard (enrollment-caught
+                   (#t
+                     (guard (cleanup-defect
+                              (#t (g3r-c2-sha-fail-stop 134)))
+                       (if (not (eq? (vector-ref rng-owner-cell 0)
+                                     fresh-owner))
+                           (g3t-generation-rng-release! fresh-owner)))
+                     (raise enrollment-caught)))
+            (vector-set! rng-owner-cell 0 fresh-owner))))
       (let ((staged
               (vector (vector-ref receipt-cell 0)
                       (vector-ref rng-owner-cell 0) (vector-ref pair 1)
@@ -40,6 +57,7 @@
                       (vector-ref pair 8))))
         ;; Pinned fe9 checks/promotes the whole tagged range before any write.
         (vector-copy! destination 0 staged 0 10)
+        (vector-set! pair 0 #f)
         (vector-set! rng-owner-cell 0 #f)
         (vector-set! receipt-cell 0 #f)
         destination))))

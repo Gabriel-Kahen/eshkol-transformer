@@ -44,10 +44,12 @@ def verify_bridge(source: str) -> None:
     bridge = require(source, "g3r-pair-rng-admit-internal", (
         "(receipt-cell (vector #f)) (rng-owner-cell (vector #f))",
         "(if (vector-ref rng-owner-cell 0) (g3t-generation-rng-release! (vector-ref rng-owner-cell 0)))",
-        "(if (vector-ref receipt-cell 0) (g3r-c2-receipt-release-internal! (vector-ref receipt-cell 0)))",
+        "(if (or (vector-ref receipt-cell 0) (vector-ref pair 0)) (g3r-c2-receipt-release-internal!",
         "(vector-set! receipt-cell 0 (vector-ref pair 0))",
-        "(vector-set! rng-owner-cell 0 (g3r-rng-owner-from-checked-words",
-        "(vector-copy! destination 0 staged 0 10) (vector-set! rng-owner-cell 0 #f) (vector-set! receipt-cell 0 #f)",
+        "(let ((fresh-owner (g3r-rng-owner-from-checked-words",
+        "(if (not (eq? (vector-ref rng-owner-cell 0) fresh-owner)) (g3t-generation-rng-release! fresh-owner))",
+        "(vector-set! rng-owner-cell 0 fresh-owner)",
+        "(vector-copy! destination 0 staged 0 10) (vector-set! pair 0 #f) (vector-set! rng-owner-cell 0 #f) (vector-set! receipt-cell 0 #f)",
     ))
     if "(set! receipt " in bridge or "(set! rng-owner " in bridge:
         raise ValueError("bridge lexical owner reintroduced")
