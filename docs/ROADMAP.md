@@ -823,6 +823,10 @@ gate is independent and ROOT contract review, then isolated broker source and
 synthetic fault/authority tests before any production pin.
 It changes no import policy; N1/M1 and the fresh supported numerical gate
 remain open.
+The [synthetic broker candidate](e3/E3_N1_BROKER_CANDIDATE.md) implements a
+broker-owned intent/stage/receipt protocol and tiny generated OCI fault tests
+in an isolated branch. Its UID/ACL/ancestor/fd boundary and independent
+read-only seal are not deployed or proven; real-layer acquisition remains HOLD.
 The exact `5d642a2` fe9/f31 numerical gate built the normal and mutant
 packages but failed before runtime at sanitized export isolation: the ASan
 registration COMMON cell remained global after objcopy. Its 308-file failed
