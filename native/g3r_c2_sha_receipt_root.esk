@@ -10,3 +10,5 @@
 (load "c2_checkpoint_load_extension.esk")
 (load "g3r_c2_sha_stage_extension.esk")
 (load "g3r_c2_sha_receipt_extension.esk")
+(load "g3r_record_codec_extension.esk")
+(load "g3r_c2_pair_decode_extension.esk")

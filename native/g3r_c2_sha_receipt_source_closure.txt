@@ -27,3 +27,5 @@ native/c2_persistence_policy_extension.esk
 native/c2_checkpoint_load_extension.esk
 native/g3r_c2_sha_stage_extension.esk
 native/g3r_c2_sha_receipt_extension.esk
+native/g3r_record_codec_extension.esk
+native/g3r_c2_pair_decode_extension.esk
