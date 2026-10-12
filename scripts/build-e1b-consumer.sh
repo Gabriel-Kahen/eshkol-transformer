@@ -1143,10 +1143,8 @@ if [[ "${package_policy}" == g3g-public-aggregate || "${package_policy}" == g3g-
   g3g_package_policy=1
 fi
 e3_private_test_sanitize=0
-[[ "${E3_RETENTION_SANITIZE:-0}" == 0 &&
-   "${E3_NUMERICAL_SANITIZE:-0}" == 0 &&
-   -z "${E3_NUMERICAL_MUTANT+x}" ]] ||
-  die "noninstalled E3 retention/numerical tuples are absent from this source"
+[[ "${E3_RETENTION_SANITIZE:-0}" == 0 ]] ||
+  die "noninstalled E3 retention tuple is absent from this source"
 if [[ "${E3_MODE_GRAPH_SANITIZE:-0}" != 0 ]]; then
   [[ "${E3_MODE_GRAPH_SANITIZE}" == 1 && \
      "${package_policy}" == e3-private-aggregate && \
@@ -1154,13 +1152,22 @@ if [[ "${E3_MODE_GRAPH_SANITIZE:-0}" != 0 ]]; then
     die "E3 mode/graph sanitizer is allowed only for the exact test tuple"
   e3_private_test_sanitize=1
 fi
+if [[ "${E3_NUMERICAL_SANITIZE:-0}" != 0 ]]; then
+  [[ "${E3_NUMERICAL_SANITIZE}" == 1 && \
+     "${package_policy}" == e3-private-aggregate && \
+     "${e3_tuple_kind}" == numerical && \
+     "${e3_private_test_sanitize}" == 0 ]] || \
+    die "E3 numerical sanitizer is allowed only for the exact test tuple"
+  e3_private_test_sanitize=1
+fi
 e3_private_test_sanitize_flags=()
 e3_private_test_reloc_flags=()
 if [[ "${e3_private_test_sanitize}" == 1 ]]; then
   e3_private_test_sanitize_flags=(-O1 -g -fsanitize=address,undefined
                                -fno-omit-frame-pointer)
-  # Materialize ASan's COMMON registration cell before exact localization.
-  # Only the authenticated noninstalled mode/graph tuple reaches this path.
+  # ASan's registration cell is COMMON. objcopy cannot localize COMMON;
+  # materialize it inside this exact noninstalled sanitized aggregate first.
+  # The unchanged final export allowlist still rejects any exposed extra name.
   e3_private_test_reloc_flags=(-Wl,-d)
 fi
 e3_mode_graph_mutant=${E3_MODE_GRAPH_MUTANT:-normal}
@@ -1172,6 +1179,16 @@ fi
 case "${e3_mode_graph_mutant}" in
   normal|missed-child|enter-write-only|graph-create) ;;
   *) die "unknown E3 mode/graph mutation: ${e3_mode_graph_mutant}" ;;
+esac
+e3_numerical_mutant=${E3_NUMERICAL_MUTANT:-normal}
+if [[ -n "${E3_NUMERICAL_MUTANT+x}" ]]; then
+  [[ "${package_policy}" == e3-private-aggregate &&
+     "${e3_tuple_kind}" == numerical ]] || \
+    die "E3 numerical mutation is allowed only for the exact test tuple"
+fi
+case "${e3_numerical_mutant}" in
+  normal|wrong-target|mean-of-means) ;;
+  *) die "unknown E3 numerical mutation: ${e3_numerical_mutant}" ;;
 esac
 
 require_command awk
@@ -1569,6 +1586,14 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     # Shared probes are needed by the mode/graph test; other tuples keep old code.
     package_native_cflags+=(-DET_E3_RETENTION_TESTING
                             -DET_E3_MODE_GRAPH_TESTING)
+  fi
+  if [[ "${package_policy}" == e3-private-aggregate &&
+        "${e3_tuple_kind}" == numerical ]]; then
+    package_native_cflags+=(-DET_E3_NUMERICAL_TESTING -fno-builtin-printf)
+    case "${e3_numerical_mutant}" in
+      wrong-target) package_native_cflags+=(-DET_E3_NUMERICAL_WRONG_TARGET) ;;
+      mean-of-means) package_native_cflags+=(-DET_E3_NUMERICAL_MEAN_OF_MEANS) ;;
+    esac
   fi
   native_index=0
   for package_native_source in "${package_native_sources[@]}"; do
