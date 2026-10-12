@@ -1,6 +1,6 @@
-# E3 compiled three-batch numerical transcript candidate
+# E3 compiled five-layout numerical transcript candidate
 
-This noninstalled test tuple targets the three-batch numerical portion of
+This noninstalled test tuple targets the five-layout numerical portion of
 [E3 §9](../E3_EVALUATION_PROPOSAL.md). It is not a public evaluator or a
 replacement for the separate complete-call retention, failure, and broader
 numerical boundary gates. Independent source review and a supported exact-tree
@@ -9,7 +9,7 @@ run are required before its observations can be accepted.
 The exact `numerical_driver_root.esk` loads the unchanged private E3 driver.
 The ordinary boxed `et_e3_test_run_v1` entry constructs the genuine fixed M3
 model, T1 tokenizer, D2 dataset, frame, and four I2 destinations, then calls
-the compiled evaluator on the packed-single D1/D2 corpus. Only the numerical
+the compiled evaluator on the selected D1/D2 corpus. Only the numerical
 tuple compiles `ET_E3_NUMERICAL_TESTING`. At each successful native accumulate,
 its guarded observer reads the staged D2 IDs, next-token targets, bool mask,
 all 21 forward tensors, CE, L3S outputs, correct count, and selected
@@ -24,7 +24,8 @@ model and D2 reference twice under pinned Q0 Python/PyTorch. The existing
 `tests/e3_native_parity/verify_observation.py` checks every role against that
 reference, authentic D2 rows/targets/masks, CE versus the actual logits and
 targets, exact binary32 L3S and serial accumulator words, final metrics and
-counts. The three rows include repeated/boundary IDs and active counts 2,2,1.
+counts. The packed-single case has three rows with repeated/boundary IDs and
+active counts 2,2,1.
 
 Two distinct compiled test mutants use the same tuple. `wrong-target` feeds
 input IDs to the native CE dispatch instead of next-token targets;
