@@ -1904,8 +1904,10 @@ unsupported generic `append` in private D2 lineage retirement. Its sealed
 failure is `g3r-save-post-adoption-idle-6bb7-20261012-prepared-i`. A bounded
 source repair replaces the retirement splice with a checked order-preserving
 `cons` fold and pins its bytes in the fixture preparer. Focused source and
-preparation tests pass; compiled execution remains pending independent review
-and a fresh one-use gate.
+preparation tests pass. Independent source/fixture review accepted `d844a142`
+at tree `ebe0baf0` with no material findings; its sealed result is
+`g3r-save-idle-append-source-review-d844-20261012/REVIEW.tsv`. Compiled
+execution remains pending a fresh one-use gate.
 Compiled native/Eshkol coexistence, actual partial-claim failure cuts, C2
 image/digest, pair publication, cold LOAD, and public SAVE remain open.
 
