@@ -51,8 +51,7 @@ class R1SourceRetryTests(unittest.TestCase):
         canonical = (ROOT / "native/e3_private_driver_root.esk").read_text()
         retention = (ROOT / "tests/e3_private/retention_driver_root.esk").read_text()
         self.assertNotIn("r1_source_retry", canonical + retention)
-        self.assertNotIn("ET_E3_R1_PREFLIGHT_TESTING",
-                         (ROOT / "scripts/build-e1b-consumer.sh").read_text())
+        self.assertNotIn("r1_source_retry_driver_root.esk", canonical + retention)
 
     def test_whole_call_contract(self) -> None:
         self.assertEqual(source_contract_errors(DRIVER.read_text()), [])

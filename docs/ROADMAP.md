@@ -933,6 +933,13 @@ same model, frame, dataset, and destinations. Focused static and missing-cut /
 missing-assertion mutation checks guard the source. The new root is not yet an
 admitted package tuple, so compiled execution, rollback proof, and R1 acceptance
 remain open.
+An isolated R1 source-retry test tuple is now staged for a one-use supported
+fe9/f31 compiled gate. Its ordered source/native, export/import and sanitizer
+manifests are predictions derived from the accepted retention tuple; they must
+match actual compiler depfiles and object inventories before any runtime verdict
+is admitted. The gate is prepared without Docker execution. Normal/repeat and
+sanitizer whole-call outcomes, independent emitted-closure verification, and
+R1 acceptance remain open.
 An isolated staged successor adds a separate real-M3 zero-control source tuple
 using the existing I2 14-parameter prepare/commit path before frame binding.
 It retains the staged numerical, retention, wrong-target and uniform controls.
