@@ -692,6 +692,12 @@ for byte and links the unchanged two-export formatter archive to a test-only
 dispatch entry. The installed app and its D1 command are already exercised
 before this private formatter fixture; the same formatter assertions and
 `--version` oracle remain. Exact-head hosted validation is pending.
+The later exact `b98321e` run `38304110383` passed all 24 required hosted
+checks. ROOT and an independent reviewer accepted matching one-use normal and
+repeat compiled D1 archive/CLI bytes and command outcomes; [PR #202](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/202)
+merged as `1590fcd9`. D1 sanitizer remains unsupported in this production
+tuple. This closes only the bounded installed D1 addition; the
+[full CLI3 gap map](CLI3_FINAL_ACCEPTANCE_GAPS.md) remains open.
 
 The isolated CLI3 cross-command test script `scripts/test-cli3-cross-command-chain.sh`
 is prepared for a fresh production-root build. It creates one byte tokenizer,
@@ -1751,6 +1757,11 @@ accepted the 30-file seal
 Hosted integration is pending. This private predicate does not authenticate a
 C2 SHA receipt or pair, reconstruct a candidate, replay history, or prove
 resumed generation.
+The [source-only private Eshkol idle RNG admission leaf](g3/G3_R_IDLE_RNG_ESHKOL_LEAF.md)
+uses that accepted native predicate with exact live same-registry G3-T, M3T and
+T1 checks. Focused static source/mutation checks pass. Its owning aggregate,
+compiled normal/repeat/sanitizer gate, authenticated pair-derived inputs and
+no-draw replay remain pending; no public or continuation claim follows.
 
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished

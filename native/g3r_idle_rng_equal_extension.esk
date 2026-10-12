@@ -1,0 +1,44 @@
+;;; Private G3-R no-draw replay check. Load after the G3-T constructor and
+;;; prefill extensions in the same owning aggregate. Scalar words are not
+;;; file authority; the restore caller must supply checked G3RCV1/C2 words.
+
+(extern i64 g3r-native-idle-rng-equal ptr i64 i64 i64 i64
+        :real et_g3t_private_idle_rng_words_equal_v1)
+
+(define (g3r-idle-rng-words-equal-internal! generator version seed
+                                            counter-low counter-high)
+  (let ((operation 'g3r-idle-rng-words-equal-internal!))
+    (m3-call operation
+      (if (not (and (m3t-exact-i64? version) (= version 1)
+                    (m3t-exact-i64? seed) (>= seed 0)
+                    (m3t-exact-i64? counter-low)
+                    (m3t-exact-i64? counter-high)))
+          (g3t-fail-raw 'invalid-argument operation 3
+                        "G3-R idle RNG comparison needs checked signed i64 words"))
+      (let* ((entry (g3t-prefill-entry generator 'generator operation))
+             (model-entry (vector-ref entry 5))
+             (tokenizer (vector-ref entry 6)))
+        (if (not (and (eq? (vector-ref entry 2) 'live)
+                      (not (null? (vector-ref entry 3)))
+                      (eq? (vector-ref entry 4) #f)
+                      (eq? (vector-ref entry 8) #f)
+                      (eq? (vector-ref entry 9) #f)
+                      (eq? (vector-ref entry 10) #f)
+                      (eq? (vector-ref entry 11) 'diagnostic-c2)
+                      (vector? model-entry)
+                      (= (vector-length model-entry) 12)
+                      (eq? (g3t-model-entry-live
+                             (vector-ref model-entry 0) operation #f)
+                           model-entry)
+                      (let ((tokenizer-entry (t1-private-entry tokenizer)))
+                        (and (pair? tokenizer-entry)
+                             (eq? (car tokenizer-entry) tokenizer)
+                             (pair? (cdr tokenizer-entry))
+                             (null? (cdr (cdr tokenizer-entry)))))))
+            (g3t-fail-raw 'invalid-state operation 2
+                          "G3-R requires an exact idle generator and roots"))
+        (if (not (= 0 (g3r-native-idle-rng-equal
+                        (vector-ref entry 3) version seed
+                        counter-low counter-high)))
+            (g3t-native-fail-raw operation))
+        #t))))
