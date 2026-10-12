@@ -32,6 +32,20 @@ The [image-specific acquisition plan](E3_N1_RAW_RECEIPT_ACQUISITION.md)
 enumerates the missing bytes and capture order. Reviewed claims now bind raw
 record paths as well as hashes.
 
+The C successor requires a named numerical-F tuple, a pinned inventory for
+both normal and sanitized build objects, and a dependency graph with resolved
+source/header paths, source/build/image roots, include roots, depfile members,
+and direct/transitive include edges. Every file record includes SHA-256, size,
+and mode; provider and loader paths must remain within the recorded image
+root. Each retained F depfile is parsed and its raw paths must resolve exactly
+to the claimed members. The sanitizer import inventory must be nonempty.
+The complete normal/sanitized object roster and all dependency claims require
+separate reviewed source anchors, which remain absent in production. The
+checker cannot derive the full system-header graph or call safety from MMD
+depfiles or synthetic records: an independent reviewer must compare the full
+header trace, object roster, call ABI, provider, and loader claims against
+captured raw image-specific evidence.
+
 The separate immutable candidate record at
 /home/gabe/.codex/evidence/eshkol-transformer/e3-section9-n1-receipt-candidate-20261011-a/candidate.json
 holds the exact F pins, object hashes, 39 observed relocations and 17 depfile

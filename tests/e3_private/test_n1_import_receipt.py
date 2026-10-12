@@ -4,6 +4,7 @@ import copy
 import importlib.util
 import json
 from pathlib import Path
+import stat
 import tempfile
 import unittest
 
@@ -20,12 +21,15 @@ class ReceiptTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.files = {}
+        for directory in ("image/include", "source", "build"):
+            (self.root / directory).mkdir(parents=True)
 
         def file(name):
             path = self.root / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(name.encode())
-            record = {"path": str(path), "sha256": VERIFIER.hashlib.sha256(path.read_bytes()).hexdigest()}
+            record = {"path": str(path), "sha256": VERIFIER.hashlib.sha256(path.read_bytes()).hexdigest(),
+                      "mode": stat.S_IMODE(path.stat().st_mode), "size": path.stat().st_size}
             self.files[name] = path
             return record
 
@@ -54,31 +58,62 @@ class ReceiptTests(unittest.TestCase):
                 "image_id": "sha256:" + "c" * 64,
                 "compiler_commit": "d" * 40, "builder_sha256": "e" * 64,
                 "target_triple": "x86_64-unknown-linux-gnu",
+                "candidate_kind": "e3-numerical-f",
             },
             "objects": {name: file(name) for name in sorted(VERIFIER.OBJECTS)},
             "evidence": {name: file(name + ".txt") for name in sorted(VERIFIER.EVIDENCE)},
             "calls": calls,
             "depfiles": [{"name": name, "file": file(name)} for name in
                          sorted(VERIFIER.DEPFILES)],
-            "headers": [{"name": str(self.root / "header.h"), "file": file("header.h")}],
-            "provider_files": [{"name": "libc", "file": file("libc.so")}],
+            "headers": [{"name": str(self.root / "image/include/header.h"),
+                         "file": file("image/include/header.h")}],
+            "provider_files": [{"name": "libc", "file": file("image/libc.so")}],
             "provider": {
                 symbol: {"file": "libc", "symbol_type": "FUNC",
                          "symbol_version": "GLIBC_2.2.5", "soname": "libc.so.6",
                          "binding": "GLOBAL", "visibility": "DEFAULT"}
                 for symbol in ("bcmp", "puts")
             } | {
-                "symlink_chain": [{"path": str(self.root / "libc.so.6"),
+                "symlink_chain": [{"path": str(self.root / "image/libc.so.6"),
                                    "target": "libc.so"}],
-                "loader_path": [str(self.root)],
+                "loader_path": [str(self.root / "image")],
                 "transitive_closure": ["libc"],
             },
         }
-        (self.root / "libc.so.6").symlink_to("libc.so")
+        (self.root / "image/libc.so.6").symlink_to("libc.so")
+        source = file("source/fixture.c")
+        header = str(self.root / "image/include/header.h")
+        self.receipt["dependencies"] = {
+            "roots": {name: str(self.root / name) for name in ("image", "source", "build")},
+            "include_roots": [str(self.root / "image/include")],
+            "sources": [{"name": source["path"], "origin": "source", "file": source}],
+            "header_origins": {header: "image"},
+            "depfile_members": {name: sorted([source["path"], header])
+                                for name in VERIFIER.DEPFILES},
+            "depfile_path_map": {source["path"]: source["path"], header: header},
+            "include_edges": [{"from": source["path"], "to": header}],
+        }
+        for name in VERIFIER.DEPFILES:
+            path = self.files[name]
+            path.write_text(f"/build/{name[:-2]}.o: {source['path']} {header}\n")
+            record = next(row["file"] for row in self.receipt["depfiles"]
+                          if row["name"] == name)
+            record["sha256"] = VERIFIER.hashlib.sha256(path.read_bytes()).hexdigest()
+            record["size"] = path.stat().st_size
+        self.receipt["build_objects"] = [
+            {"variant": variant, "name": "private.o", "file": file(f"build/{variant}.o")}
+            for variant in ("normal", "sanitized")
+        ]
+        inventory = self.files["object_inventory.txt"]
+        inventory.write_text(json.dumps(self.receipt["build_objects"], sort_keys=True))
+        self.receipt["evidence"]["object_inventory"]["sha256"] = (
+            VERIFIER.hashlib.sha256(inventory.read_bytes()).hexdigest())
+        self.receipt["evidence"]["object_inventory"]["size"] = inventory.stat().st_size
         trace = self.files["full_header_trace.txt"]
-        trace.write_text(str(self.root / "header.h") + "\n")
+        trace.write_text(header + "\n")
         self.receipt["evidence"]["full_header_trace"]["sha256"] = (
             VERIFIER.hashlib.sha256(trace.read_bytes()).hexdigest())
+        self.receipt["evidence"]["full_header_trace"]["size"] = trace.stat().st_size
         inventories = {
             "normal_imports": ["eshkol_ad_seed_flag", "eshkol_runtime_fatal",
                                "eshkol_taylor_lift_ad_node", "memcmp"],
@@ -90,6 +125,7 @@ class ReceiptTests(unittest.TestCase):
             path.write_text("\n".join(lines) + "\n")
             self.receipt["evidence"][name]["sha256"] = (
                 VERIFIER.hashlib.sha256(path.read_bytes()).hexdigest())
+            self.receipt["evidence"][name]["size"] = path.stat().st_size
         depfile_anchor = {
             "dependencies": {"depfile_sha256": {
                 record["name"]: record["file"]["sha256"]
@@ -100,11 +136,13 @@ class ReceiptTests(unittest.TestCase):
         anchor_file.write_text(json.dumps(depfile_anchor, sort_keys=True))
         self.receipt["evidence"]["depfile_anchor"]["sha256"] = (
             VERIFIER.hashlib.sha256(anchor_file.read_bytes()).hexdigest())
+        self.receipt["evidence"]["depfile_anchor"]["size"] = anchor_file.stat().st_size
         claims_file = self.files["reviewed_claims.txt"]
         claims_file.write_text(json.dumps(VERIFIER.reviewed_claims(self.receipt),
                                          sort_keys=True))
         self.receipt["evidence"]["reviewed_claims"]["sha256"] = (
             VERIFIER.hashlib.sha256(claims_file.read_bytes()).hexdigest())
+        self.receipt["evidence"]["reviewed_claims"]["size"] = claims_file.stat().st_size
         self.expected_pins = copy.deepcopy(self.receipt["pins"])
         self.expected_objects = {name: record["sha256"] for name, record in
                                  self.receipt["objects"].items()}
@@ -116,6 +154,8 @@ class ReceiptTests(unittest.TestCase):
             record["name"]: record["file"]["path"] for record in self.receipt["depfiles"]
         }
         self.expected_claims = self.receipt["evidence"]["reviewed_claims"]["sha256"]
+        self.expected_build_roster = sorted((item["variant"], item["name"])
+                                            for item in self.receipt["build_objects"])
 
     def check(self, candidate):
         return VERIFIER.check_receipt(
@@ -124,7 +164,8 @@ class ReceiptTests(unittest.TestCase):
             expected_calls=self.expected_calls, expected_imports=self.expected_imports,
             expected_depfile_anchor=self.expected_depfile_anchor,
             expected_depfile_paths=self.expected_depfile_paths,
-            expected_claims=self.expected_claims)
+            expected_claims=self.expected_claims,
+            expected_build_roster=self.expected_build_roster)
 
     def rejects(self, change, phrase):
         candidate = copy.deepcopy(self.receipt)
@@ -142,7 +183,8 @@ class ReceiptTests(unittest.TestCase):
                 expected_calls=self.expected_calls,
                 expected_imports=self.expected_imports,
                 expected_depfile_anchor=self.expected_depfile_anchor,
-                expected_depfile_paths=self.expected_depfile_paths)
+                expected_depfile_paths=self.expected_depfile_paths,
+                expected_build_roster=self.expected_build_roster)
 
     def test_missing_producer_or_abi(self):
         self.rejects(lambda x: x["calls"][14]["producer"].update(final_mapping=""),
@@ -169,7 +211,7 @@ class ReceiptTests(unittest.TestCase):
                      "39 call rows")
         self.files["noninstrumentation_imports.txt"].write_text("bcmp\nputs\nstrcpy\n")
         with self.assertRaisesRegex(VERIFIER.ReceiptError,
-                                    "changed noninstrumentation_imports bytes"):
+                                    "changed noninstrumentation_imports (size|bytes)"):
             self.check(self.receipt)
 
     def test_same_byte_raw_path_substitution(self):
@@ -197,6 +239,7 @@ class ReceiptTests(unittest.TestCase):
                                          sort_keys=True))
         altered["evidence"]["reviewed_claims"]["sha256"] = (
             VERIFIER.hashlib.sha256(claims_file.read_bytes()).hexdigest())
+        altered["evidence"]["reviewed_claims"]["size"] = claims_file.stat().st_size
         with self.assertRaisesRegex(VERIFIER.ReceiptError,
                                     "reviewed claims anchor changed"):
             self.check(altered)
@@ -206,12 +249,12 @@ class ReceiptTests(unittest.TestCase):
                      "unlisted.*provider")
         self.rejects(lambda x: x["provider"].update(loader_path=[]), "loader_path")
         self.rejects(lambda x: x["provider"].update(loader_path=["/tmp/other"]),
-                     "claims differ")
+                     "host or unresolved loader search directory")
         self.rejects(lambda x: x["provider"]["symlink_chain"][0].update(target="other"),
                      "changed provider symlink")
         self.rejects(lambda x: x["evidence"].pop("resolved_link_map"),
                      "evidence records")
-        self.files["libc.so"].write_bytes(b"swapped")
+        self.files["image/libc.so"].write_bytes(b"swapped")
         with self.assertRaisesRegex(VERIFIER.ReceiptError, "changed provider_files libc"):
             self.check(self.receipt)
 
@@ -226,25 +269,105 @@ class ReceiptTests(unittest.TestCase):
             "path differs from sealed F depfile")
         changed = copy.deepcopy(self.receipt)
         depfile = next(row for row in changed["depfiles"] if row["name"] == "private.d")
+        original = self.files["private.d"].read_bytes()
         self.files["private.d"].write_bytes(b"changed direct dependency")
         depfile["file"]["sha256"] = VERIFIER.hashlib.sha256(
             self.files["private.d"].read_bytes()).hexdigest()
+        depfile["file"]["size"] = self.files["private.d"].stat().st_size
         with self.assertRaisesRegex(VERIFIER.ReceiptError,
                                     "differs from sealed F depfile"):
             self.check(changed)
-        self.files["private.d"].write_bytes(b"private.d")
+        self.files["private.d"].write_bytes(original)
         self.rejects(lambda x: x["headers"][0].update(name="/missing.h"),
                      "missing or extra traced header")
         self.rejects(lambda x: x["pins"].update(image_id="sha256:" + "0" * 63),
                      "image ID")
         self.files["private.o"].write_bytes(b"drift")
-        with self.assertRaisesRegex(VERIFIER.ReceiptError, "changed private.o bytes"):
+        with self.assertRaisesRegex(VERIFIER.ReceiptError, "changed private.o (size|bytes)"):
             self.check(self.receipt)
 
+    def test_dependency_closure_and_host_drift(self):
+        header = str(self.root / "image/include/header.h")
+        self.rejects(lambda x: x["dependencies"]["include_edges"].clear(),
+                     "missing direct/transitive includes")
+        self.rejects(lambda x: x["dependencies"]["header_origins"].update({header: "source"}),
+                     "host or unresolved header")
+        self.rejects(lambda x: x["dependencies"]["depfile_members"].pop("private.d"),
+                     "missing or extra depfile members")
+        self.rejects(lambda x: x["dependencies"]["depfile_members"]["private.d"].remove(header),
+                     "private.d members differ from pinned depfile")
+        self.rejects(lambda x: x["dependencies"]["depfile_path_map"].pop(header),
+                     "members differ from pinned depfile")
+        self.rejects(lambda x: x["provider_files"][0]["file"].update(
+            path=str(self.root / "source/fixture.c")), "changed provider_files libc")
+        self.rejects(lambda x: x["pins"].update(candidate_kind="other-tuple"),
+                     "candidate source/image/compiler/flags pins changed")
+        self.files["image/include/header.h"].chmod(0o600)
+        with self.assertRaisesRegex(VERIFIER.ReceiptError, "changed headers.*mode"):
+            self.check(self.receipt)
+
+    def test_empty_sanitizer_inventory(self):
+        path = self.files["sanitizer_imports.txt"]
+        path.write_text("")
+        candidate = copy.deepcopy(self.receipt)
+        candidate["evidence"]["sanitizer_imports"]["sha256"] = (
+            VERIFIER.hashlib.sha256(path.read_bytes()).hexdigest())
+        candidate["evidence"]["sanitizer_imports"]["size"] = 0
+        expected = dict(self.expected_imports)
+        expected["sanitizer_imports"] = candidate["evidence"]["sanitizer_imports"]["sha256"]
+        with self.assertRaisesRegex(VERIFIER.ReceiptError, "invalid sanitizer_imports inventory"):
+            VERIFIER.check_receipt(
+                candidate, expected_pins=self.expected_pins,
+                expected_objects=self.expected_objects,
+                expected_calls=self.expected_calls, expected_imports=expected,
+                expected_depfile_anchor=self.expected_depfile_anchor,
+                expected_depfile_paths=self.expected_depfile_paths,
+                expected_claims=self.expected_claims,
+                expected_build_roster=self.expected_build_roster)
+
+    def test_normal_sanitized_object_inventory_drift(self):
+        self.rejects(lambda x: x["build_objects"].pop(),
+                     "missing normal/sanitized object variant")
+        self.rejects(lambda x: x["build_objects"][1]["file"].update(
+            sha256="0" * 64), "changed build object sanitized/private.o bytes")
+        path = self.files["build/sanitized.o"]
+        path.chmod(0o600)
+        with self.assertRaisesRegex(VERIFIER.ReceiptError,
+                                    "changed build object sanitized/private.o mode"):
+            self.check(self.receipt)
+
+    def test_missing_roster_and_malformed_anchor(self):
+        with self.assertRaisesRegex(VERIFIER.ReceiptError,
+                                    "no independently accepted.*object roster"):
+            VERIFIER.check_receipt(
+                self.receipt, expected_pins=self.expected_pins,
+                expected_objects=self.expected_objects,
+                expected_calls=self.expected_calls,
+                expected_imports=self.expected_imports,
+                expected_depfile_anchor=self.expected_depfile_anchor,
+                expected_depfile_paths=self.expected_depfile_paths,
+                expected_claims=self.expected_claims)
+        anchor = self.files["depfile_anchor.txt"]
+        anchor.write_text('{"dependencies": []}')
+        candidate = copy.deepcopy(self.receipt)
+        candidate["evidence"]["depfile_anchor"]["sha256"] = (
+            VERIFIER.hashlib.sha256(anchor.read_bytes()).hexdigest())
+        candidate["evidence"]["depfile_anchor"]["size"] = anchor.stat().st_size
+        with self.assertRaisesRegex(VERIFIER.ReceiptError, "invalid depfile anchor"):
+            VERIFIER.check_receipt(
+                candidate, expected_pins=self.expected_pins,
+                expected_objects=self.expected_objects,
+                expected_calls=self.expected_calls,
+                expected_imports=self.expected_imports,
+                expected_depfile_anchor=candidate["evidence"]["depfile_anchor"]["sha256"],
+                expected_depfile_paths=self.expected_depfile_paths,
+                expected_claims=self.expected_claims,
+                expected_build_roster=self.expected_build_roster)
+
     def test_symlink_and_duplicate_json_key(self):
-        original = self.files["libc.so"]
+        original = self.files["image/libc.so"]
         original.unlink()
-        original.symlink_to(self.files["header.h"])
+        original.symlink_to(self.files["image/include/header.h"])
         with self.assertRaisesRegex(VERIFIER.ReceiptError, "unresolved.*symlink"):
             self.check(self.receipt)
         with self.assertRaisesRegex(VERIFIER.ReceiptError, "duplicate JSON key"):

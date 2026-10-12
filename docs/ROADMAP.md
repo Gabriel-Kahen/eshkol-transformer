@@ -787,6 +787,11 @@ The [N1 raw receipt acquisition plan](e3/E3_N1_RAW_RECEIPT_ACQUISITION.md)
 records retained F bytes and the missing image-specific producer, provider,
 loader, header and argv evidence; its only verifier change binds raw record
 paths in reviewed claims.
+The C verifier successor additionally checks normal/sanitized object inventory,
+file modes/sizes, explicit source/include/dependency paths, image-root provider
+and loader confinement, tuple identity and nonempty sanitizer imports using
+synthetic drift tests. No production reviewed-claims anchor or actual F image
+provider/header capture exists; N1/M1 source admission remains HOLD.
 It changes no import policy; N1/M1 and the fresh supported numerical gate
 remain open.
 The exact `5d642a2` fe9/f31 numerical gate built the normal and mutant
