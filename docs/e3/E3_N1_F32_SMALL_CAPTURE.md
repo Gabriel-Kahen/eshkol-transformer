@@ -80,6 +80,13 @@ Synthetic tests cover valid HOLD output, stdout/stderr overflow, timeout with pa
 output, nonzero child, malformed output, occupied destination, result seal
 failure, and child RSS excess. No Docker or heavy gate is involved.
 
+The targeted child-reap safety successor signals the child process group on
+deadline or stream overflow only while its owned leader is unreaped. If a pipe
+remains open after `wait4` reaps the leader, the attempt remains HOLD and does
+not call `killpg` with a numeric PGID that may have been reused. Synthetic
+tests force a detached pipe holder for both paths; they grant no process-tree
+closure or custody authority.
+
 The subsequent [strict supervisor feasibility review](E3_N1_F32_STRICT_SUPERVISOR_BLOCKER.md)
 found no source-backed way to guarantee an instantaneous 256-MiB whole-procedure
 RSS ceiling and hard 30-second completion with the available cgroup, systemd,

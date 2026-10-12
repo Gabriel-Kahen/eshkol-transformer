@@ -130,7 +130,8 @@ def _pump(command, directory, child_deadline, hard_deadline,
             remaining = child_deadline - time.monotonic()
             if remaining <= 0 and reason is None:
                 reason = "deadline"
-                _kill_group(process.pid)
+                if status is None:
+                    _kill_group(process.pid)
             hard_remaining = hard_deadline - time.monotonic()
             if hard_remaining <= 0:
                 break
@@ -147,7 +148,8 @@ def _pump(command, directory, child_deadline, hard_deadline,
                 if len(block) > remaining_bytes:
                     stream["truncated"] = True
                     reason = reason or key.data + "-cap"
-                    _kill_group(process.pid)
+                    if status is None:
+                        _kill_group(process.pid)
         if status is None:
             reason = (reason + "-child-not-reaped") if reason else "child-not-reaped"
             _kill_group(process.pid)

@@ -9,6 +9,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -159,6 +160,60 @@ class CaptureTests(unittest.TestCase):
         result = self.run_capture(self.child(self.valid), rss_cap=1)
         self.assertEqual(result["reason"], "child-rss-cap")
         self.assertGreater(result["child_peak_rss_bytes"], 1)
+
+    def test_reaped_child_with_detached_pipe_holder_is_not_signaled(self):
+        program = ("import os,sys,time\n"
+                   "holder = os.fork()\n"
+                   "if holder == 0:\n"
+                   "    os.setsid()\n"
+                   "    while not os.path.exists(sys.argv[1]):\n"
+                   "        time.sleep(0.01)\n"
+                   "    open(sys.argv[3], 'w').close()\n"
+                   "    os._exit(0)\n"
+                   "if sys.argv[2] == 'overflow':\n"
+                   "    os.write(1, b'x' * 65)\n"
+                   "os._exit(0)\n")
+        real_popen = capture.subprocess.Popen
+
+        def after_child_exit(*args, **kwargs):
+            process = real_popen(*args, **kwargs)
+            os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT)
+            return process
+
+        for case, expected in (("deadline", "deadline"), ("overflow", "stdout-cap")):
+            with self.subTest(case=case):
+                case_dir = self.root / case
+                case_dir.mkdir()
+                directory = os.open(case_dir, os.O_RDONLY | os.O_DIRECTORY)
+                release = self.root / (case + ".release")
+                done = self.root / (case + ".done")
+                command = [sys.executable, "-c", program, str(release), case,
+                           str(done)]
+                now = time.monotonic()
+                try:
+                    with (mock.patch.object(capture.subprocess, "Popen",
+                                            side_effect=after_child_exit),
+                          mock.patch.object(capture, "_kill_group") as kill):
+                        child_deadline = now + (0.2 if case == "deadline" else 1.0)
+                        hard_deadline = now + (0.4 if case == "deadline" else 1.2)
+                        result = capture._pump(command, directory, child_deadline,
+                                               hard_deadline, 64, 64)
+                    self.assertTrue(result[1])  # leader reaped
+                    self.assertEqual(result[3], expected)
+                    kill.assert_not_called()
+                    if case == "overflow":
+                        self.assertEqual(result[4], b"x" * 64)
+                        self.assertEqual((case_dir / "stdout.bin").read_bytes(), b"x" * 64)
+                    else:
+                        self.assertTrue((case_dir / "stdout.bin").exists())
+                        self.assertTrue((case_dir / "stderr.bin").exists())
+                finally:
+                    os.close(directory)
+                    release.touch()
+                    stop = time.monotonic() + 1
+                    while not done.exists() and time.monotonic() < stop:
+                        time.sleep(0.01)
+                    self.assertTrue(done.exists())
 
 
 if __name__ == "__main__":

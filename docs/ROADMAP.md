@@ -837,6 +837,9 @@ whole-procedure RSS proof remain unimplemented. Its tests use no real OCI byte.
 The wrapper's public run gate is false and the distinct CLI capture pin remains
 absent; same-UID files have no protected
 custody or admission authority.
+The capture safety successor guards deadline and stream-cap `killpg` calls
+after `wait4` reaps the child leader; a detached held pipe remains HOLD rather
+than risking a signal to a reused numeric process group.
 The [strict supervisor feasibility review](e3/E3_N1_F32_STRICT_SUPERVISOR_BLOCKER.md)
 keeps both gates closed: cgroup v2 `memory.max` permits transient overrun and
 accounts more than RSS, while systemd/cgroup termination and uninterruptible
