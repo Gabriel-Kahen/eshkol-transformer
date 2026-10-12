@@ -6,6 +6,30 @@ run must still prove that a failure after adoption reaches the same shell
 through the guard after longjmp. It must use the real adoption, P1, O2 and C2
 leaves on one original generator/model/optimizer/capsule graph.
 
+## Prepared bounded fixture
+
+`tests/g3r/prepare_save_post_adoption_cut.py --output ABSOLUTE_FRESH_DIR`
+copies the accepted recursive Eshkol closure into a read-only source tree and
+generates one test-only caller. It rejects any change to the accepted caller
+or any file in its 96-file recursive closure. The generated caller differs
+only at two sites: one call to the test failure hook immediately after the
+root-cell publication, and a counted wrapper around the real abandon call.
+The original caller and adoption leaf stay unchanged. `SOURCE-SHA256SUMS`
+and `PREPARED.tsv` record the copied bytes, exact source commit/tree, and
+the f31 image and fe9 runner/runtime pins. Preparation performs no build.
+
+The generated root loads the genuine P1, O2, C2, controls and adoption
+source leaves; its fixture creates one original X1/T2/D2/M3/O2 graph, a G3
+generator with a committed token, then a genuine captured/released trainer
+capsule. It checks the exact typed failure, exact returned shell, one abandon,
+real O2-then-P1 release order, unchanged controls/cursor, no C2 registry
+publication, and denial of a second take from the retired shell. The fixture
+and these assertions are source-prepared only. The native C object/archive
+closure and the compiled behavior have **not** been validated. A supported
+launcher must use the prepared read-only tree, verify the fe9/f31 pins live,
+build the genuine native G3/M3/P1/O2/C2 union, retain compiler/runtime and
+source-closure logs, and seal its outputs before this gate can pass.
+
 ## One-use post-adoption cut
 
 In a test-only build of the exact production caller, insert a typed failure

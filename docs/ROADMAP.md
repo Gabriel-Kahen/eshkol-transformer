@@ -1876,7 +1876,9 @@ The guarded adoption return now publishes its shell into a preallocated heap
 cell before any post-adoption operation, so cleanup reads stable authority
 after Eshkol longjmp. Parsed negative ordering tests cover this repair;
 the [compiled post-adoption and one-use gate](g3/G3_R_SAVE_POST_ADOPTION_FAILURE_GATE.md)
-is prepared but has not run.
+has a pinned test-only Eshkol fixture and immutable source preparation. Its
+native archive closure and compiled execution remain pending; no Docker gate
+has run.
 Compiled native/Eshkol coexistence, actual partial-claim failure cuts, C2
 image/digest, pair publication, cold LOAD, and public SAVE remain open.
 

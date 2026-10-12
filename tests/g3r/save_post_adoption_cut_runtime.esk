@@ -1,0 +1,94 @@
+;;; A single authentic same-owner graph. This fixture has no public SAVE path.
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3-R post-adoption FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (error-at? category operation message thunk)
+  (guard (caught
+           (#t (and (transformer-error? caught)
+                    (eq? category (transformer-error-category caught))
+                    (eq? operation (transformer-error-operation caught))
+                    (string=? message (transformer-error-message caught)))))
+    (thunk) #f))
+
+(define resolved
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define tokenizer (t2-wave2-tokenizer-byte resolved))
+(define corpus-directory (car (cdr (command-line))))
+(define dataset
+  (g3r-d2-lineage-open
+    (list ':directory corpus-directory ':batch-size 1 ':sequence-length 2
+          ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+          ':maximum-total-tokens 4 ':maximum-batch-bytes 34
+          ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #t)
+    tokenizer))
+(define model
+  (g3r-x1-model-create resolved (m3t-public-initializer-state 1729)))
+(define handles (vector-ref (m3t-entry model 'model 'trainer-create #t) 8))
+(define (handle-paths index)
+  (if (= index 14) '()
+      (cons (parameter-handle-path (vector-ref handles index))
+            (handle-paths (+ index 1)))))
+(define optimizer
+  (o2-public-optimizer-create
+    (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+          '(none) '(constant)
+          (list (list 'group (handle-paths 0)
+                      "3dcccccd" "3f000000" "3f000000"
+                      "3a83126f" "00000000")))
+    (module-parameters model)))
+(check "model eval" (module-eval! model))
+(define generator
+  (g3r-generator-create-from-sources
+    model resolved tokenizer
+    (list ':profile 'diagnostic-c2 ':sampling 'greedy
+          ':temperature-bits #x3f800000 ':top-k 256
+          ':top-p-bits #x3f800000 ':max-new-tokens 1
+          ':eos #f ':seed 1729)
+    dataset optimizer))
+(define input (g3t-generation-token-input-create 65))
+(g3t-with-call 'g3r-save-cut-prefill generator (call)
+  (g3t-frame-begin call input 1)
+  (let role ((index 0))
+    (if (< index 21)
+        (begin (g3t-role-step call index) (role (+ index 1)))))
+  (g3t-frame-prepare call #f)
+  (g3t-frame-commit call))
+(check "input release" (g3t-generation-tensor-release! input))
+
+(define capsule
+  (g3r-controls-trainer-create resolved tokenizer dataset model optimizer))
+(g3r-controls-capture-release! capsule)
+(define original-cursor (d2-token-dataset-cursor dataset))
+(define original-controls (g3r-controls-captured-copy capsule))
+(define c2-head c2-training-state-states)
+(check "typed post-adoption failure"
+  (error-at? 'invalid-state 'g3r-save-o2-adoption
+             "test-only post-adoption failure"
+    (lambda ()
+      (g3r-save-c2-capture-internal
+        generator model resolved tokenizer dataset optimizer capsule))))
+(check "exact returned shell and one abandon"
+  (and (vector-ref g3r-save-cut-state 0)
+       (= (vector-ref g3r-save-cut-state 1) 1)))
+(check "O2 then P1 release exactly once"
+  (equal? (vector-ref g3r-save-cut-state 2) '(p1 o2)))
+(check "no C2 owner publication"
+  (eq? c2-head c2-training-state-states))
+(check "original controls and D2 cursor unchanged"
+  (and (equal? original-controls (g3r-controls-captured-copy capsule))
+       (equal? original-cursor (d2-token-dataset-cursor dataset))))
+(check "retired shell cannot take bundle again"
+  (guard (caught (#t (and (transformer-error? caught)
+                           (eq? 'invalid-state
+                                (transformer-error-category caught)))))
+    (g3r-save-o2-take-for-c2-internal
+      (vector-ref g3r-save-cut-state 0))
+    #f))
+(display "G3-R post-adoption cut PASS: checks=")
+(display checks)
+(newline)
