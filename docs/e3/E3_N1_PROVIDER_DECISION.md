@@ -134,7 +134,7 @@ Reject sizes above these **inclusive byte caps before allocation**, with no
 truncation or partial parse: exact raw v3 release descriptor 65,536; each
 receipt or seal body 16,384; each signed envelope, receipt file or seal file
 32,768; and commit file 4,096. Check encoded size before publication and
-`fstat` plus bounded read before parsing; a cap hit, short read, extra byte,
+`fstat` plus bounded read before parsing; a cap exceeded, short read, extra byte,
 overflow or changed size is HOLD. Any later source implementation must retain
 these caps or undergo a new reviewed contract revision.
 
