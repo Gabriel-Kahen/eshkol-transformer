@@ -38,6 +38,26 @@ walks. This is a synthetic consumer check. A deployment must separately prove
 the seal's read-only custody and key separation; HMAC bytes alone do not make
 a writable target immutable. There is no automated recovery promotion.
 
+`scripts/e3_n1_reconcile.py` adds a read-only synthetic crash check.
+`reconcile(config, attempt, receipt=None, seal=None, seal_key=None)` returns
+`Reconciliation(state, reason, attempt)`, where `state` is `HOLD` or `MATCHED`.
+It checks the protected intent, named stage/target inode at open, checksummed
+HOLD/VERIFIED markers, complete ordered source hashes and target layout, and
+duplicate VERIFIED targets for the attempt. `MATCHED` requires the out-of-band
+broker HMAC receipt and separately keyed matching seal. Missing or unreadable
+evidence remains HOLD. It never writes, repairs, issues a receipt, or promotes
+a crash state from marker bytes alone. The stage's original inode is not
+durably pinned in the intent, so a stage replacement cannot be proven from
+this record alone; such an attempt remains HOLD regardless. This source does
+not establish external receipt issuance, durable receipt custody, separate UID
+or ACLs, real release pins, or independent read-only seal custody. `MATCHED`
+is only a synthetic consistency result, not N1 admission.
+
+Generated tiny fixtures test hard exits at 15 publication checkpoints,
+including after readable VERIFIED bytes and the last parent sync but before
+receipt return; missing intent/marker, duplicate target, changed target inode,
+and changed file checksums all remain HOLD. No real f31 bytes are read.
+
 Before any real acquisition, independently review this source and tests;
 freeze the exact release config, source device/inode, resolved path, ancestor
 policy and bounds; deploy a

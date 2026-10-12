@@ -286,6 +286,7 @@ class Broker:
                 self._write(stage, "VERIFIED.json", _record(verified))
                 self._sync(stage, "sync-verified-stage")
                 self._sync(parent, "sync-verified-parent")
+                self.checkpoint("before-receipt")
                 receipt_body = {"schema": 1, "attempt": attempt, "target": target,
                                 "pin": pin, "device": verified["device"],
                                 "inode": verified["inode"], "files": hashes}
