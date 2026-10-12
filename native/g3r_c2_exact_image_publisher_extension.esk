@@ -1,0 +1,88 @@
+;;; Source-private C2/G3RCV1 pair publisher. Load after the C2 SAVE owner,
+;;; C1 SHA-256, G3-R record codec and committed-save snapshot in one aggregate.
+;;; The G3 fields are detached input data; this entry does not authenticate
+;;; their generator.
+
+(define g3r-pair-write-internal c1-native-atomic-write)
+
+(define (g3r-pair-publish-fail category message)
+  (c2-save-fail-raw category message '() #f))
+
+(define (g3r-pair-publish-fields-copy fields)
+  (if (not (and (vector? fields) (= (vector-length fields) 7)))
+      (g3r-pair-publish-fail 'invalid-argument
+                             "expected seven detached G3-R fields"))
+  (let* ((policy (vector-ref fields 0))
+         (rng (vector-ref fields 1))
+         (history (vector-ref fields 2))
+         (prompt (vector-ref fields 3))
+         (generated (vector-ref fields 4))
+         (manual (vector-ref fields 5))
+         (fingerprint (vector-ref fields 6))
+         (zero-sha (make-bytevector 32 0)))
+    (if (not (and
+               (g3r-record-fields? policy rng history prompt generated manual
+                                   fingerprint zero-sha)
+               (string=? (utf8->string fingerprint)
+                         g3r-save-tokenizer-fingerprint)))
+        (g3r-pair-publish-fail 'invalid-argument
+                               "invalid bounded G3-R record fields"))
+    ;; The callback only reads these copies; no caller-owned mutable field is
+    ;; handed to the encoder after the C2 borrow begins.
+    (vector (vector-copy policy) (vector-copy rng)
+            (bytevector-copy history 0 (bytevector-length history))
+            prompt generated manual
+            (bytevector-copy fingerprint 0 (bytevector-length fingerprint)))))
+
+(define (g3r-pair-publish-encoded-image-internal! bytes c2-path companion-path
+                                                  fields)
+  ;; Called synchronously inside C2's parent scratch region. Never return or
+  ;; retain `bytes`: it ceases to be live when c2-save-with-owner-borrow exits.
+  (let* ((sha (c1-sha256 bytes))
+         (record (make-bytevector g3r-record-size 0))
+         (roundtrip (make-vector 8 #f)))
+    (g3r-record-encode!
+      record (vector-ref fields 0) (vector-ref fields 1)
+      (vector-ref fields 2) (vector-ref fields 3)
+      (vector-ref fields 4) (vector-ref fields 5)
+      (vector-ref fields 6) sha)
+    (g3r-record-decode! record sha roundtrip)
+    ;; Both exact images have passed validation before the first write. C1's
+    ;; no-overwrite writer publishes a complete C2 image before the companion.
+    ;; Any failure leaves no success result; a first-file orphan may remain.
+    (let ((c2-status
+            (g3r-pair-write-internal
+              c2-path bytes (bytevector-length bytes) 0)))
+      (if (not (= c2-status 0))
+          (c1-native-fail 'checkpoint-save!
+                          "atomic C2 image publication failed" c2-status)))
+    (let ((record-status
+            (g3r-pair-write-internal
+              companion-path record g3r-record-size 0)))
+      (if (not (= record-status 0))
+          (c1-native-fail 'checkpoint-save!
+                          "atomic G3-R companion publication failed"
+                          record-status)))
+    #t))
+
+(define (g3r-c2-exact-image-pair-publish-internal! state c2-path
+                                                    companion-path policy fields)
+  (if (not (and (c1-valid-file-path? c2-path)
+                (c1-valid-file-path? companion-path)
+                (not (string=? c2-path companion-path))))
+      (g3r-pair-publish-fail 'invalid-argument
+                             "G3-R pair paths must be distinct valid paths"))
+  ;; Early rejection is useful to callers; the native no-overwrite writes
+  ;; remain the authority if the directory changes after this check.
+  (if (or (file-exists? c2-path) (file-exists? companion-path))
+      (g3r-pair-publish-fail 'invalid-state
+                             "G3-R pair target already exists"))
+  (let* ((copied (g3r-pair-publish-fields-copy fields))
+         (limits (c2-policy-limits-internal 'checkpoint-save! policy))
+         (subpolicy (c2-policy-c1-subpolicy-internal 'checkpoint-save! policy)))
+    (c2-save-with-owner-borrow
+      state limits (c2-save-effective-model-policy limits subpolicy)
+      c2-save-stage-components-internal
+      (lambda (bytes)
+        (g3r-pair-publish-encoded-image-internal!
+          bytes c2-path companion-path copied)))))

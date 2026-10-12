@@ -1797,6 +1797,14 @@ partitions and EOS rely on controlled native tests. Current-main combined-tree
 build and runtime validation remain gates before admission. No SAVE writer,
 file-pair publication, restore, replay or resumed continuation is provided.
 
+The [private exact-C2-image pair publisher candidate](g3/G3_R_C2_EXACT_IMAGE_PUBLISHER_LEAF.md)
+uses C2's synchronous validated-image callback to hash the exact bytes that
+its no-overwrite writer receives. It validates the G3RCV1 record before
+publishing the C2 image and then its companion. Focused source and mutation
+checks pass; compiled aggregate, filesystem failpoints and same-owner capture
+integration remain pending. Its detached G3 input fields are unauthenticated,
+so no G3-R SAVE or continuation is admitted.
+
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
 diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use
