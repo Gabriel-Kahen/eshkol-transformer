@@ -224,6 +224,26 @@ class SmallMetadataTests(unittest.TestCase):
         with self.assertRaisesRegex(MODULE.Hold, "prior-byte-limit"):
             self.acquire(request)
 
+    def test_prior_recorded_read_identity_and_limit_consistency(self):
+        cases = (
+            (lambda record: record["read_time_identity"]["file"].update(size=1),
+             "prior-identity-size"),
+            (lambda record: record["read_time_identity"]["file"].update(mode=0),
+             "prior-identity-mode"),
+            (lambda record: record["read_time_identity"]["ancestors"][0].update(path="/wrong"),
+             "prior-identity-route"),
+            (lambda record: record["limits"].update(max_bytes=1),
+             "prior-limit-size"),
+        )
+        for change, reason in cases:
+            with self.subTest(reason=reason):
+                evidence, prior = self.index_evidence()
+                self.rewrite_prior(evidence, prior, change)
+                request = self.request("manifest", self.manifest_path,
+                                       self.manifest_raw, prior, self.manifest_desc)
+                with self.assertRaisesRegex(MODULE.Hold, reason):
+                    self.acquire(request)
+
     def test_symlink_and_config_shape_negatives(self):
         link = self.home / "link.json"
         link.symlink_to(self.index_path)

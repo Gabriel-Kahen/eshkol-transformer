@@ -212,7 +212,7 @@ def config_claims(config, count):
     return rootfs["diff_ids"]
 
 
-def evidence_identity(value):
+def evidence_identity(value, source_path):
     fields(value, ("file", "ancestors"), "prior-identity-fields")
     need(type(value["ancestors"]) is list and value["ancestors"],
          "prior-identity-ancestors")
@@ -220,12 +220,19 @@ def evidence_identity(value):
     fields(value["file"], stat_fields, "prior-identity-stat-fields")
     for item in value["ancestors"]:
         fields(item, ("path", *stat_fields), "prior-identity-stat-fields")
-        if item["path"] != "/":
-            absolute(item["path"])
-    need(value["ancestors"][0]["path"] == "/", "prior-identity-root")
     for item in [value["file"], *value["ancestors"]]:
         need(all(type(item[key]) is int and item[key] >= 0 for key in stat_fields),
              "prior-identity-stat")
+    need(stat.S_ISREG(value["file"]["mode"]) and
+         all(stat.S_ISDIR(item["mode"]) for item in value["ancestors"]),
+         "prior-identity-mode")
+    expected_paths = ["/"]
+    parent = ""
+    for part in source_path.split("/")[1:-1]:
+        parent += "/" + part
+        expected_paths.append(parent)
+    need([item["path"] for item in value["ancestors"]] == expected_paths,
+         "prior-identity-route")
 
 
 def prior_bytes(prior, request, stage, deadline, rss_cap):
@@ -248,7 +255,7 @@ def prior_bytes(prior, request, stage, deadline, rss_cap):
          "prior-evidence-scope")
     digest(record["request_sha256"])
     absolute(record["source_path"])
-    evidence_identity(record["read_time_identity"])
+    evidence_identity(record["read_time_identity"], record["source_path"])
     fields(record["limits"], ("max_bytes", "max_seconds", "max_rss_bytes"),
            "prior-limits-fields")
     positive(record["limits"]["max_bytes"], JSON_CAP, "prior-byte-limit")
@@ -270,6 +277,10 @@ def prior_bytes(prior, request, stage, deadline, rss_cap):
          record.get("raw_sha256"), "prior-raw-drift")
     need(type(record["raw_size"]) is int and record["raw_size"] == len(raw),
          "prior-raw-size")
+    need(record["read_time_identity"]["file"]["size"] == record["raw_size"],
+         "prior-identity-size")
+    need(record["raw_size"] <= record["limits"]["max_bytes"],
+         "prior-limit-size")
     need(base64.b64encode(raw).decode("ascii") == record["raw_base64"],
          "prior-raw-noncanonical")
     need(time.monotonic() <= deadline and current_rss_bytes() <= rss_cap,

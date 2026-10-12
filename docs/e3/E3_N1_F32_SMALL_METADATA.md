@@ -30,7 +30,8 @@ digest and is not exposed by the CLI.
    first. A new exact request must pin the prior evidence file SHA-256, prior
    raw index SHA-256, selected manifest descriptor and its source path and
    identity. The stage checks the prior evidence schema, checksum, raw size and
-   hash, and recomputes the selected descriptor from the preserved raw index
+   hash, recorded regular-file size and directory route, and prior byte cap;
+   it recomputes the selected descriptor from the preserved raw index
    bytes before reading only the pinned manifest JSON. It records
    the config descriptor and ordered layer **claims**; it does not read config
    or layers.
