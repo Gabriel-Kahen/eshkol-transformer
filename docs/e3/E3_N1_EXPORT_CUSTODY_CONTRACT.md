@@ -57,10 +57,12 @@ limits, and expected F descriptors remain frozen by the reviewed release.
    `O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC`, and compare the named inode to `fstat`.
    Keep this fd until the attempt is complete. Write and sync an initial
    `HOLD.json` in the stage before copying bytes. Do not start a layer read
-   until both the protected intent and initial marker are durable. If opening
-   or marking the stage fails, attempt cleanup through the parent fd and keep
-   the intent at HOLD. Any remaining stage is quarantined under the broker,
-   never eligible for admission or reuse. No stage name or fd is reused.
+   until both the protected intent and initial marker are durable. A stage-open
+   failure followed by checked cleanup leaves the attempt at HOLD. A marker
+   write/sync or cleanup failure leaves the attempt INDETERMINATE and
+   quarantined, while the protected intent remains HOLD for admission. Any
+   remaining stage is broker-owned, never eligible for admission or reuse. No
+   stage name or fd is reused.
 3. Copy and hash against the exact ordered descriptors using broker-owned
    regular files and existing caps. On a failure, preserve partial files,
    replace the initial marker with a checked final HOLD record and checksum
@@ -113,7 +115,8 @@ Inability to read evidence is itself HOLD, never inferred success.
 | --- | --- |
 | Intent write or parent sync failure | No stage, no receipt, HOLD. |
 | Caller-UID parent/ancestor rename, pre-open stage move/replacement, or marker deletion | Denied by actual authority boundary; otherwise contract failure and HOLD. |
-| Stage open, initial marker write/sync, or cleanup failure | No layer read; protected intent HOLD; remaining inode quarantined. |
+| Stage open with checked cleanup | No layer read or receipt; protected intent and attempt HOLD. |
+| Initial marker write/sync or cleanup failure | No layer read or receipt; attempt INDETERMINATE and quarantined, protected intent HOLD for admission. |
 | Late source drift, wrong hash/size, or time/RSS/disk cap | No receipt; partial bytes quarantined; final HOLD marker if storage permits. |
 | Partial marker/checksum write or sync failure | INDETERMINATE quarantine; never claim a sealed partial stage. |
 | Duplicate target or no-replace rename failure | No receipt; attempt HOLD; existing target never adopted. |
