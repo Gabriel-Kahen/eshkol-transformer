@@ -195,4 +195,12 @@ tests/g3c4/check_p2_g2_terminal_close_oracle.py
 scripts/check-g3c4-p2g2-terminal-close.py
 scripts/test-g3c4-p2g2-terminal-close.sh
 tests/g3c4/p2_g2_terminal_close_allocation_shim.cpp
+scripts/g3c4_proof_command.sh
+scripts/g3c4_proof_command.py
+tests/g3c4/test_g3c4_proof_command.py
+scripts/check-g3c4-proof-receipts.py
+scripts/check-g3c4-proof-emitted.py
+scripts/check-g3c4-proof-source.py
+tests/g3c4/test_g3c4_proof_postflight.py
+docs/g3/G3_C4_P2_G2_PROOF_INSTRUMENTATION.md
 native/g3c4_p2g2_terminal_close_source_closure.txt

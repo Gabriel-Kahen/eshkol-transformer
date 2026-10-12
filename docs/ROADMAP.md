@@ -2700,6 +2700,10 @@ publication, public G2 and continuation remain pending.
   in-region active-check probes for owner, tokenizer core, ledger, and paired
   equal-length raw/staging carrier drift. Current-main compiled normal,
   repeat, sanitizer, emitted-tail, and predecessor gates remain pending.
+  A c7e-derived proof instrumentation branch adds opt-in command receipts and
+  emitted object/IR/depfile/link-map capture. It remains source-only and unrun
+  until the exact source pin, binary equivalence, lifecycle, and compiled
+  evidence receive independent review.
   This private candidate supplies no public
   G2, data-only continuation, or Wave 3 completion claim.
 

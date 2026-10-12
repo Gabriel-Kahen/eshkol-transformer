@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/g3c4_proof_command.sh"
+if [[ -n ${G3C4_PROOF_RECEIPTS:-} ]]; then
+  export G3C4_PROOF_SCRIPT="${BASH_SOURCE[0]##*/}"
+fi
 
 verify_toolchain
 cc= cxx=
 resolve_provenance_compilers cc cxx \
   "${CC:-$(lock_value supported_cc)}" "${CXX:-$(lock_value supported_cxx)}"
 evidence="${1:-$(project_build_dir)/g3c4-p2g2-carrier-bridge-test}"
-mkdir -p "$evidence"
-python3 "$PROJECT_ROOT/scripts/check-g3c4-p2g2-carrier-bridge.py" \
+proof_command mkdir -p "$evidence"
+proof_command python3 "$PROJECT_ROOT/scripts/check-g3c4-p2g2-carrier-bridge.py" \
   >"$evidence/static.stdout"
-bash "$PROJECT_ROOT/scripts/test-g3c4-p2g2-prefix-commit.sh" \
+proof_command bash "$PROJECT_ROOT/scripts/test-g3c4-p2g2-prefix-commit.sh" \
   "$evidence/prefix-commit" >"$evidence/predecessor.stdout"
 
 flags=(-std=c11 -Wall -Wextra -Werror -Wpedantic -fstack-protector-all
@@ -42,32 +46,32 @@ sources=("$PROJECT_ROOT/tests/g3c4/test_p2_g2_carrier_bridge.c"
   "$PROJECT_ROOT/native/g3n_primitives_provider.c"
   "$PROJECT_ROOT/native/n2_primitives_provider.c"
   "$PROJECT_ROOT/native/a2_kv_cache.c")
-tmp="$(mktemp -d "$evidence/build.XXXXXX")"
-trap 'status=$?; if (( status == 0 )); then rm -rf -- "$tmp"; else
+tmp="$(proof_command mktemp -d "$evidence/build.XXXXXX")"
+trap 'status=$?; if (( status == 0 )) && [[ -z ${G3C4_PROOF_RECEIPTS:-} ]]; then rm -rf -- "$tmp"; else
   printf "P2/G2 carrier bridge failure retained: %s\n" "$tmp" >&2; fi' EXIT
 for mode in off on; do
   macros=("${owner_macros[@]}")
   if [[ "$mode" == on ]]; then
     macros+=(-DET_G3C4_P2_G2_CARRIER_BRIDGE_PRIVATE)
   fi
-  "$cc" "${flags[@]}" -O2 "${macros[@]}" -c \
+  proof_command "$cc" "${flags[@]}" -O2 "${macros[@]}" -c \
     "$PROJECT_ROOT/src/eshkol_transformer/g3c4_model_owner.c" \
     -o "$tmp/$mode.o"
-  nm -g --defined-only --format=posix "$tmp/$mode.o" |
-    awk 'NF >= 2 {print $1}' | LC_ALL=C sort -u >"$tmp/$mode.symbols"
+  proof_command nm -g --defined-only --format=posix "$tmp/$mode.o" |
+    proof_command awk 'NF >= 2 {print $1}' | LC_ALL=C proof_command sort -u >"$tmp/$mode.symbols"
 done
-comm -3 "$tmp/off.symbols" "$tmp/on.symbols" \
+proof_command comm -3 "$tmp/off.symbols" "$tmp/on.symbols" \
   >"$tmp/symbols.diff"
 printf '\tet_g3c4_private_p2g2_first_frame_carrier_v1\n' \
   >"$tmp/expected.symbols.diff"
-cmp "$tmp/expected.symbols.diff" "$tmp/symbols.diff"
-if "$cc" "${flags[@]}" -O2 -DET_G3C4_P2_G2_CARRIER_BRIDGE_PRIVATE \
+proof_command cmp "$tmp/expected.symbols.diff" "$tmp/symbols.diff"
+if proof_command "$cc" "${flags[@]}" -O2 -DET_G3C4_P2_G2_CARRIER_BRIDGE_PRIVATE \
     -c "$PROJECT_ROOT/src/eshkol_transformer/g3c4_model_owner.c" \
     -o "$tmp/isolated.o" >"$tmp/isolated.stdout" \
     2>"$tmp/isolated.stderr"; then
   printf 'isolated P2/G2 bridge macro compiled\n' >&2; exit 1
 fi
-grep -F 'C4 P2/G2 carrier bridge requires prefix commit and private f32 storage inspection' \
+proof_command grep -F 'C4 P2/G2 carrier bridge requires prefix commit and private f32 storage inspection' \
   "$tmp/isolated.stderr" >/dev/null
 printf 'G3-C4 P2/G2 bridge symbol and feature closure PASS\n' \
   >"$evidence/symbols.stdout"
@@ -79,21 +83,21 @@ for mode in normal sanitize; do
     runtime=(env ASAN_OPTIONS=detect_leaks=1:halt_on_error=1
                  UBSAN_OPTIONS=halt_on_error=1)
   fi
-  "$cc" "${flags[@]}" "${optimization[@]}" "${sources[@]}" \
+  proof_command "$cc" "${flags[@]}" "${optimization[@]}" "${sources[@]}" \
     -Wl,--wrap=et_kernel_runtime_dispatch \
     -Wl,--wrap=et_i64_tensor_borrow_view_v1 \
     -lm -o "$tmp/$mode"
-  "${runtime[@]}" "$tmp/$mode" >"$evidence/$mode.stdout" \
+  proof_command "${runtime[@]}" "$tmp/$mode" >"$evidence/$mode.stdout" \
     2>"$evidence/$mode.stderr"
   test ! -s "$evidence/$mode.stderr"
-  grep -E '^G3-C4 P2/G2 carrier bridge PASS: checks=[1-9][0-9]*$' \
+  proof_command grep -E '^G3-C4 P2/G2 carrier bridge PASS: checks=[1-9][0-9]*$' \
     "$evidence/$mode.stdout" >/dev/null
 done
-python3 "$PROJECT_ROOT/tests/g3c4/check_p2_g1_oracle.py" \
+proof_command python3 "$PROJECT_ROOT/tests/g3c4/check_p2_g1_oracle.py" \
   "$evidence/normal.stdout" >"$evidence/oracle.stdout"
-"$tmp/normal" >"$evidence/repeat.stdout" 2>"$evidence/repeat.stderr"
+proof_command "$tmp/normal" >"$evidence/repeat.stdout" 2>"$evidence/repeat.stderr"
 test ! -s "$evidence/repeat.stderr"
-cmp "$evidence/normal.stdout" "$evidence/repeat.stdout"
-cmp "$evidence/normal.stdout" "$evidence/sanitize.stdout"
+proof_command cmp "$evidence/normal.stdout" "$evidence/repeat.stdout"
+proof_command cmp "$evidence/normal.stdout" "$evidence/sanitize.stdout"
 printf 'G3-C4 P2/G2 carrier bridge normal/repeat/sanitizer PASS\n' \
   >"$evidence/gate.stdout"
