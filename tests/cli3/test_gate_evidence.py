@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import subprocess
 import tempfile
@@ -10,6 +11,7 @@ from pathlib import Path
 
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "test-cli3-corpus-validate.sh"
+PROJECT = SCRIPT.parents[1]
 
 
 class EvidenceDirectoryTests(unittest.TestCase):
@@ -48,6 +50,31 @@ class EvidenceDirectoryTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertTrue(evidence.is_dir())
         steps = evidence / "steps"
+        metadata = dict(
+            line.split("\t", 1)
+            for line in (evidence / "metadata.tsv").read_text(encoding="utf-8").splitlines()
+        )
+        head = subprocess.check_output(
+            ["git", "-C", str(PROJECT), "rev-parse", "HEAD"], text=True
+        ).strip()
+        tree = subprocess.check_output(
+            ["git", "-C", str(PROJECT), "rev-parse", "HEAD^{tree}"], text=True
+        ).strip()
+        self.assertEqual(metadata["project_head"], head)
+        self.assertEqual(metadata["project_tree"], tree)
+        self.assertEqual(metadata["project_clean"], "true")
+        self.assertEqual(
+            metadata["lock_sha256"],
+            hashlib.sha256((PROJECT / "toolchain" / "eshkol.lock").read_bytes()).hexdigest(),
+        )
+        self.assertEqual(metadata["compiler_sha256"], "missing")
+        self.assertEqual(metadata["compiler_provenance_commit"], "missing")
+        self.assertEqual((evidence / "initial-git-status.txt").read_text(), "")
+        self.assertEqual((evidence / "final-project-head.txt").read_text().strip(), head)
+        self.assertEqual((evidence / "final-project-tree.txt").read_text().strip(), tree)
+        self.assertEqual((evidence / "final-git-status.txt").read_text(), "")
+        self.assertEqual((steps / "capture-metadata.status").read_text().strip(), "0")
+        self.assertEqual((steps / "check-project-pin.status").read_text().strip(), "0")
         self.assertEqual(
             int((steps / "verify-toolchain.status").read_text(encoding="utf-8")),
             result.returncode,

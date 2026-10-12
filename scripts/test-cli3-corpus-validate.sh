@@ -12,7 +12,26 @@ if [[ -e "${cli3_evidence_dir}" || -L "${cli3_evidence_dir}" ]]; then
   exit 64
 fi
 mkdir -- "${cli3_evidence_dir}"
-trap 'printf "%s\n" "$?" >"${cli3_evidence_dir}/overall.status"' EXIT
+cli3_finish() {
+  local status=$?
+  trap - EXIT
+  git -C "${PROJECT_ROOT}" rev-parse HEAD \
+    >"${cli3_evidence_dir}/final-project-head.txt" 2>"${cli3_evidence_dir}/final-git.stderr" || status=1
+  git -C "${PROJECT_ROOT}" rev-parse 'HEAD^{tree}' \
+    >"${cli3_evidence_dir}/final-project-tree.txt" 2>>"${cli3_evidence_dir}/final-git.stderr" || status=1
+  git -C "${PROJECT_ROOT}" status --porcelain --untracked-files=all \
+    >"${cli3_evidence_dir}/final-git-status.txt" 2>>"${cli3_evidence_dir}/final-git.stderr" || status=1
+  if [[ -f "${cli3_evidence_dir}/initial-project-head.txt" ]]; then
+    cmp -s "${cli3_evidence_dir}/initial-project-head.txt" \
+      "${cli3_evidence_dir}/final-project-head.txt" || status=1
+    cmp -s "${cli3_evidence_dir}/initial-project-tree.txt" \
+      "${cli3_evidence_dir}/final-project-tree.txt" || status=1
+  fi
+  [[ ! -s "${cli3_evidence_dir}/final-git-status.txt" ]] || status=1
+  printf '%s\n' "${status}" >"${cli3_evidence_dir}/overall.status"
+  exit "${status}"
+}
+trap cli3_finish EXIT
 mkdir -p "${cli3_evidence_dir}/steps" "${cli3_evidence_dir}/artifacts/cache"
 cli3_tmp="${cli3_evidence_dir}/artifacts"
 
@@ -29,6 +48,96 @@ cli3_step() {
   return "${status}"
 }
 
+cli3_optional_tsv_value() {
+  local file=$1 key=$2
+  if [[ -r "${file}" ]]; then
+    awk -F '\t' -v key="${key}" \
+      '$1 == key { value = $2; count++ } END { if (count == 1) print value; else print "missing" }' \
+      "${file}"
+  else
+    printf '%s\n' missing
+  fi
+}
+
+cli3_hash_or_missing() {
+  if [[ -r "$1" ]]; then
+    sha256sum "$1" | awk '{ print $1 }'
+  else
+    printf '%s\n' missing
+  fi
+}
+
+cli3_capture_metadata() {
+  local runner provenance clean
+  runner="$(eshkol_build_dir)/eshkol-run"
+  provenance="$(eshkol_build_dir)/eshkol-transformer-provenance.tsv"
+  git -C "${PROJECT_ROOT}" rev-parse HEAD \
+    >"${cli3_evidence_dir}/initial-project-head.txt"
+  git -C "${PROJECT_ROOT}" rev-parse 'HEAD^{tree}' \
+    >"${cli3_evidence_dir}/initial-project-tree.txt"
+  git -C "${PROJECT_ROOT}" status --porcelain --untracked-files=all \
+    >"${cli3_evidence_dir}/initial-git-status.txt"
+  clean=false
+  [[ ! -s "${cli3_evidence_dir}/initial-git-status.txt" ]] && clean=true
+  {
+    printf 'format_version\t1\n'
+    printf 'project_head\t%s\n' "$(cat "${cli3_evidence_dir}/initial-project-head.txt")"
+    printf 'project_tree\t%s\n' "$(cat "${cli3_evidence_dir}/initial-project-tree.txt")"
+    printf 'project_clean\t%s\n' "${clean}"
+    printf 'lock_sha256\t%s\n' "$(cli3_hash_or_missing "${LOCK_FILE}")"
+    printf 'lock_eshkol_repository\t%s\n' "$(lock_value eshkol_repository)"
+    printf 'lock_eshkol_commit\t%s\n' "$(lock_value eshkol_commit)"
+    printf 'compiler_path\t%s\n' "${runner}"
+    printf 'compiler_sha256\t%s\n' "$(cli3_hash_or_missing "${runner}")"
+    printf 'compiler_provenance_path\t%s\n' "${provenance}"
+    printf 'compiler_provenance_sha256\t%s\n' "$(cli3_hash_or_missing "${provenance}")"
+    printf 'compiler_provenance_repository\t%s\n' \
+      "$(cli3_optional_tsv_value "${provenance}" eshkol_repository)"
+    printf 'compiler_provenance_commit\t%s\n' \
+      "$(cli3_optional_tsv_value "${provenance}" eshkol_commit)"
+    printf 'compiler_provenance_binary_sha256\t%s\n' \
+      "$(cli3_optional_tsv_value "${provenance}" eshkol_binary_sha256)"
+    printf 'compiler_provenance_llvm_version\t%s\n' \
+      "$(cli3_optional_tsv_value "${provenance}" llvm_version)"
+  } >"${cli3_evidence_dir}/metadata.tsv"
+}
+
+cli3_check_project_pin() {
+  [[ "$(tsv_value "${cli3_evidence_dir}/metadata.tsv" project_clean)" == true ]] || \
+    die "project checkout is dirty; see initial-git-status.txt"
+  [[ "$(cat "${cli3_evidence_dir}/initial-project-head.txt")" == \
+     "$(git -C "${PROJECT_ROOT}" rev-parse HEAD)" ]] || die "project HEAD changed"
+  [[ "$(cat "${cli3_evidence_dir}/initial-project-tree.txt")" == \
+     "$(git -C "${PROJECT_ROOT}" rev-parse 'HEAD^{tree}')" ]] || \
+    die "project tree changed"
+  [[ -z "$(git -C "${PROJECT_ROOT}" status --porcelain --untracked-files=all)" ]] || \
+    die "project checkout changed after metadata capture"
+  [[ "$(tsv_value "${cli3_evidence_dir}/metadata.tsv" lock_sha256)" == \
+     "$(cli3_hash_or_missing "${LOCK_FILE}")" ]] || die "toolchain lock changed"
+}
+
+cli3_check_runtime_pin() {
+  local metadata="${cli3_evidence_dir}/metadata.tsv" runner provenance
+  runner="$(tsv_value "${metadata}" compiler_path)"
+  provenance="$(tsv_value "${metadata}" compiler_provenance_path)"
+  [[ "$(tsv_value "${metadata}" compiler_sha256)" != missing ]] || \
+    die "compiler was unavailable at metadata capture"
+  [[ "$(tsv_value "${metadata}" compiler_sha256)" == \
+     "$(cli3_hash_or_missing "${runner}")" ]] || die "compiler changed"
+  [[ "$(tsv_value "${metadata}" compiler_provenance_sha256)" == \
+     "$(cli3_hash_or_missing "${provenance}")" ]] || die "compiler provenance changed"
+  [[ "$(tsv_value "${metadata}" compiler_sha256)" == \
+     "$(tsv_value "${metadata}" compiler_provenance_binary_sha256)" ]] || \
+    die "compiler hash differs from provenance"
+  [[ "$(tsv_value "${metadata}" lock_eshkol_repository)" == \
+     "$(tsv_value "${metadata}" compiler_provenance_repository)" ]] || \
+    die "compiler repository differs from lock"
+  [[ "$(tsv_value "${metadata}" lock_eshkol_commit)" == \
+     "$(tsv_value "${metadata}" compiler_provenance_commit)" ]] || \
+    die "compiler revision differs from lock"
+  cli3_check_project_pin
+}
+
 require_command ar
 require_command awk
 require_command cat
@@ -41,10 +150,14 @@ require_command nm
 require_command python3
 require_command readelf
 require_command sed
+require_command sha256sum
 require_command sort
 require_command timeout
 require_command wc
+cli3_step capture-metadata cli3_capture_metadata
+cli3_step check-project-pin cli3_check_project_pin
 cli3_step verify-toolchain verify_toolchain
+cli3_step check-runtime-pin cli3_check_runtime_pin
 
 cli3_archive="$(project_build_dir)/d1/libeshkol_transformer_d1.a"
 # Rebuild from this exact tree. An older archive can satisfy the sidecar manifests

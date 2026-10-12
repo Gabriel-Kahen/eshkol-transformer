@@ -48,9 +48,16 @@ Compiled gate, once the exact pinned toolchain is available:
 scripts/test-cli3-corpus-validate.sh /absolute/new/evidence-directory
 ```
 
-The evidence path must be absolute and must not already exist. The gate creates
+The evidence path must be absolute, outside the project checkout, and must not
+already exist. The gate creates
 it before toolchain verification, refuses to overwrite an occupied path, and
-never removes it. `overall.status` records the gate exit. Each build, compile,
+never removes it. `metadata.tsv` records the initial project HEAD/tree/clean state,
+lock hash, compiler hash, and compiler provenance identity. The gate rejects a
+dirty or changed project checkout and validates the compiler hash and provenance
+against the lock before building D1. Final HEAD/tree/status files expose source
+drift during a long gate and turn that run into a failure. Metadata remains in the
+evidence directory even when toolchain verification fails. `overall.status`
+records the gate exit. Each build, compile,
 and command-test step writes `steps/NAME.stdout`, `steps/NAME.stderr`, and
 `steps/NAME.status` on success or failure. `artifacts/` retains the command and
 fixture executables, their depfiles, staged public facade, cache, and a copy of
@@ -64,4 +71,5 @@ manifest, corrupt shard, version and feature categories, all three exceeded
 limits, and invalid command arguments.
 
 The lightweight `tests/cli3/test_gate_evidence.py` checks occupied-path rejection
-and retained evidence on toolchain failure without building D1 or compiling code.
+and retained metadata, logs, and status on toolchain failure without building D1
+or compiling code.
