@@ -268,4 +268,5 @@ for horizon in 1024 8192; do
     done
   done
 done
+python3 -m tests.e3_private.verify_retention_evidence --directory "${out}"
 printf 'E3 complete-call retention passed: %s\n' "${out}"

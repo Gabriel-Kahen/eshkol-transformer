@@ -12,6 +12,13 @@ gradients absent and present. The affected mode/graph gate also needs proof on
 this combined build recipe. None of those runs is implied by the earlier
 source approval.
 
+The separate R2 evidence verifier checks all 20 completed runtime, RSS and
+timing records as one set. It rejects missing or malformed records, conflicting
+profiles, unreconciled I2 borrow controls, RSS samples above reported process
+peak, and a changed retained arena baseline between 1,024 and 8,192 calls.
+Its fixture tests run without compiling Eshkol. The verifier adds no runtime
+measurement or acceptance claim; the supported exact-tree gate remains required.
+
 This test-only successor addresses the separate repeated-complete-call horizon
 in [E3 §9](../E3_EVALUATION_PROPOSAL.md). The merged single-invocation witness
 counts 1,024/8,192 batches inside one call; it does not exercise this path.
