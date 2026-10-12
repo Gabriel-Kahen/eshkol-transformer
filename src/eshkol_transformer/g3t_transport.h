@@ -29,6 +29,13 @@ typedef struct et_g3r_committed_history_snapshot_v1 {
 } et_g3r_committed_history_snapshot_v1;
 int64_t et_g3t_private_committed_history_snapshot_v1(
     void *generator, et_g3r_committed_history_snapshot_v1 *destination);
+#ifdef ET_G3R_COMMITTED_SAVE_SNAPSHOT_PRIVATE
+/* Eshkol bytevector headers: original destination >= 136 bytes, staging
+ * exactly 136 bytes. Only staging is written, after all leases are released. */
+int64_t et_g3t_private_committed_save_copy_v1(
+    void *generator, void *expected_model, void *destination_header,
+    void *staging_header);
+#endif
 #endif
 int64_t et_g3t_private_generator_close_v1(void *context);
 int64_t et_g3t_private_call_acquire_v1(void *context, int64_t call_kind);

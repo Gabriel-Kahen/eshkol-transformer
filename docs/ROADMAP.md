@@ -1719,6 +1719,16 @@ Focused native source/core/controlled-transport tests pass locally. It does
 not add Eshkol same-aggregate leases or a SAVE writer, and no file-pair
 publication or resumed continuation is accepted.
 
+The bounded [private committed-save snapshot candidate](g3/G3_R_COMMITTED_SAVE_SNAPSHOT_LEAF.md)
+adds a feature-gated native same-owner copy helper and source-private Eshkol
+wrapper on the accepted owner ancestry. It authenticates the registered
+generator/model/raw V256 T1 aggregate, pins model parameters, borrows the A2
+cache, compares committed length and policy, rejects pending G1 provenance,
+and publishes only detached data after checked 136-byte staging. Focused
+native normal/repeat/sanitizer and feature-off checks pass; independent review,
+compiled Eshkol aggregate and current-main union remain pending. This is no
+SAVE admission, file writer or replay proof.
+
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
 diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use

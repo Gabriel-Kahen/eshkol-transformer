@@ -104,6 +104,13 @@
 #error "G3-R history requires final G3-T P1/P2 and manual decode commits"
 #endif
 #endif
+#ifdef ET_G3R_COMMITTED_SAVE_SNAPSHOT_PRIVATE
+#if !defined(ET_G3R_COMMITTED_HISTORY_PRIVATE) || \
+    !defined(ET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE) || \
+    !defined(ET_F32_TENSOR_STORAGE_QUERY_PRIVATE)
+#error "G3-R save copy requires history and A2/I2 storage queries"
+#endif
+#endif
 #ifdef ET_G3T_INPUT_FROM_T1_PRIVATE
 #ifndef ET_G3T_PREFILL_SAMPLE_PRIVATE
 #error "G3-T T1 input requires private input transport"
@@ -731,6 +738,111 @@ int64_t et_g3t_private_committed_history_snapshot_v1(
   memcpy(destination, &snapshot, sizeof(snapshot));
   return 0;
 }
+#ifdef ET_G3R_COMMITTED_SAVE_SNAPSHOT_PRIVATE
+_Static_assert(sizeof(et_g3r_committed_history_snapshot_v1) == 136,
+               "G3-R committed snapshot must have 17 i64 words");
+static int g3r_save_span(const void *header, int64_t minimum,
+                         int exact, uintptr_t *first, uintptr_t *last) {
+  if (!header || (uintptr_t)header > UINTPTR_MAX - 8u) return 0;
+  int64_t length = 0;
+  memcpy(&length, header, sizeof(length));
+  if (length < minimum || (exact && length != minimum) ||
+      (uint64_t)length > UINTPTR_MAX - (uintptr_t)header - 8u) return 0;
+  *first = (uintptr_t)header;
+  *last = *first + 8u + (uintptr_t)length;
+  return 1;
+}
+static int g3r_save_overlap(uintptr_t first, uintptr_t last,
+                            const void *other, size_t bytes) {
+  uintptr_t start = (uintptr_t)other;
+  return !other || start > UINTPTR_MAX - bytes ||
+         (first < start + bytes && start < last);
+}
+int64_t et_g3t_private_committed_save_copy_v1(
+    void *generator, void *expected_model, void *destination_header,
+    void *staging_header) {
+  g3t_clear();
+  g3t_context *c = g3t_admit(generator, 0);
+  if (!c) return g3t_error_category;
+  owner *o = g3t_model(expected_model);
+  if (!o) return g3t_error_category;
+  if (c->model != o || o->active || c->pins.held_mask)
+    return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+  uintptr_t d0, d1, s0, s1;
+  if (!g3r_save_span(destination_header, 136, 0, &d0, &d1) ||
+      !g3r_save_span(staging_header, 136, 1, &s0, &s1) ||
+      (d0 < s1 && s0 < d1) ||
+      g3r_save_overlap(d0, d1, c, sizeof(*c)) ||
+      g3r_save_overlap(s0, s1, c, sizeof(*c)) ||
+      g3r_save_overlap(d0, d1, o, sizeof(*o)) ||
+      g3r_save_overlap(s0, s1, o, sizeof(*o)) ||
+      et_a2_kv_cache_private_storage_overlap_v1((void *)d0, d1 - d0) != 0 ||
+      et_a2_kv_cache_private_storage_overlap_v1((void *)s0, s1 - s0) != 0 ||
+      et_f32_tensor_private_storage_overlap_v1((void *)d0, d1 - d0) != 0 ||
+      et_f32_tensor_private_storage_overlap_v1((void *)s0, s1 - s0) != 0)
+    return g3t_bad(G3T_ARGUMENT, G3T_IDENTITY);
+  et_g3t_model_pins_internal pins = {0};
+  et_f32_tensor_error f32_error;
+  if (et_g3t_model_pins_begin_internal(o->p,
+          (const void *const *)o->handles, &pins, &f32_error))
+    return g3t_f32_failure(&f32_error);
+  et_a2_kv_cache_read_borrow *borrow = NULL;
+  et_kernel_error error;
+  int64_t status = 0;
+  if (g3t_capture_kernel(et_a2_kv_cache_read_borrow_begin_v1(
+          c->cache, &borrow, &error), &error)) {
+    status = g3t_error_category;
+  } else {
+    const et_kernel_tensor_view_v1 *keys = NULL, *values = NULL;
+    const et_kernel_tensor_view_v1 *lengths = NULL, *mask = NULL;
+    et_g3r_committed_history_snapshot_v1 snapshot = {0};
+    if (g3t_capture_kernel(et_a2_kv_cache_read_borrow_layer_v1(
+            borrow, 0, &keys, &values, &lengths, &mask, &error), &error))
+      status = g3t_error_category;
+    else if (!lengths || lengths->struct_size != sizeof(*lengths) ||
+             !lengths->data || !lengths->shape ||
+             lengths->rank != 1 || lengths->shape[0] != 1 ||
+             lengths->byte_length != sizeof(int64_t) ||
+             !lengths->dtype || strcmp(lengths->dtype, "i64") ||
+             !lengths->device || strcmp(lengths->device, "cpu") ||
+             lengths->layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR ||
+             lengths->offset_bytes != 0 ||
+             !c->binding_ready)
+      status = g3t_bad(G3T_STATE, G3T_INVARIANT);
+    else if (et_g3t_model_pins_check_internal(&pins, &f32_error))
+      status = g3t_f32_failure(&f32_error);
+    else {
+      size_t offset = 0;
+      for (size_t i = 0; i < 14; ++i) {
+        const et_kernel_tensor_view_v1 *view = &pins.views[i];
+        if (!view->data || c->binding_identities[i] != pins.identities[i] ||
+            view->byte_length > sizeof(c->binding_values) - offset ||
+            memcmp(c->binding_values + offset, view->data, view->byte_length)) {
+          status = g3t_bad(G3T_STATE, G3T_TOPOLOGY);
+          break;
+        }
+        offset += view->byte_length;
+      }
+      if (!status && offset != sizeof(c->binding_values))
+        status = g3t_bad(G3T_STATE, G3T_TOPOLOGY);
+    }
+    if (!status) {
+      status = et_g3t_private_committed_history_snapshot_v1(c, &snapshot);
+      if (!status && (((const int64_t *)lengths->data)[0] != snapshot.length ||
+                      snapshot.length < 1 || snapshot.length > 2))
+        status = g3t_bad(G3T_STATE, G3T_INVARIANT);
+    }
+    if (et_a2_kv_cache_read_borrow_end_v1(&borrow, &error)) abort();
+    if (!status && et_g3t_model_pins_check_internal(&pins, &f32_error))
+      status = g3t_f32_failure(&f32_error);
+    et_g3t_model_pins_end_internal(&pins);
+    if (!status) memcpy((unsigned char *)staging_header + 8, &snapshot, 136);
+    return status;
+  }
+  et_g3t_model_pins_end_internal(&pins);
+  return status;
+}
+#endif
 #endif
 int64_t et_g3t_private_generator_close_v1(void *candidate) {
   g3t_clear();
