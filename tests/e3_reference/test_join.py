@@ -6,16 +6,21 @@ import json
 import math
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from tests.e3_metrics.reference_probe import accumulate, divide, finalize, reduce_bool
 from tests.e3_reference.corpus import PROFILE, materialize
 from tests.e3_reference.join import ROLE_NAMES, ROOT, validate_five_case_join
-from tests.e3_reference.transcript import TranscriptError, decode, f32_bits, f64_bits
+from tests.e3_reference.transcript import TranscriptError, decode, encode, f32_bits, f64_bits
 
 
 def _sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _record_sha(payload: dict[str, object]) -> str:
+    return hashlib.sha256(encode(payload)).hexdigest()
 
 
 def _case(source: dict[str, object]) -> dict[str, object]:
@@ -116,11 +121,14 @@ class FiveCaseJoinTests(unittest.TestCase):
         corpus = copy.deepcopy(self.corpus)
         bundle = copy.deepcopy(self.bundle)
         mutation(corpus, bundle)
-        with self.assertRaisesRegex((TranscriptError, ValueError), message):
+        with patch("tests.e3_reference.join.FROZEN_CORPUS_SHA256", _record_sha(corpus)), \
+             patch("tests.e3_reference.join.FROZEN_BUNDLE_SHA256", _record_sha(bundle)), \
+             self.assertRaisesRegex((TranscriptError, ValueError), message):
             validate_five_case_join(self.root, corpus, bundle)
 
     def test_five_physical_cases_join_and_return_exact_endpoints(self) -> None:
-        joined = validate_five_case_join(self.root, self.corpus, self.bundle)
+        with patch("tests.e3_reference.join.FROZEN_BUNDLE_SHA256", _record_sha(self.bundle)):
+            joined = validate_five_case_join(self.root, self.corpus, self.bundle)
         self.assertEqual([item["name"] for item in joined],
                          ["packed-single", "packed-sharded", "packed-suffix",
                           "unpacked-three", "unpacked-pairs"])
@@ -166,11 +174,31 @@ class FiveCaseJoinTests(unittest.TestCase):
         raw = bytearray(path.read_bytes())
         raw[90] ^= 1
         path.write_bytes(raw)
-        with self.assertRaisesRegex(TranscriptError, "physical D1"):
+        with patch("tests.e3_reference.join.FROZEN_BUNDLE_SHA256", _record_sha(self.bundle)), \
+             self.assertRaisesRegex(TranscriptError, "physical D1"):
             validate_five_case_join(self.root, self.corpus, self.bundle)
         with self.assertRaisesRegex(TranscriptError, "duplicate JSON key"):
             decode(b'{"format":"eshkol-e3-development-transcript",'
                    b'"format":"eshkol-e3-development-transcript"}\n')
+
+    def test_frozen_bundle_rejects_consistent_role_and_parameter_tampering(self) -> None:
+        frozen = _record_sha(self.bundle)
+        changed = copy.deepcopy(self.bundle)
+        for index in (0, 1):
+            changed["cases"][index]["mathematical"][0]["roles"][0]["values_f64"][0] = (
+                f64_bits(123.0)
+            )
+        changed["model"]["parameter_f32_sha256"] = "f" * 64
+        with patch("tests.e3_reference.join.FROZEN_BUNDLE_SHA256", frozen), \
+             self.assertRaisesRegex(TranscriptError, "frozen reference bundle"):
+            validate_five_case_join(self.root, self.corpus, changed)
+
+    def test_frozen_corpus_rejects_rewritten_file_digest(self) -> None:
+        changed = copy.deepcopy(self.corpus)
+        changed["cases"][0]["corpus"]["files"][0]["sha256"] = "f" * 64
+        with patch("tests.e3_reference.join.FROZEN_BUNDLE_SHA256", _record_sha(self.bundle)), \
+             self.assertRaisesRegex(TranscriptError, "frozen corpus reference"):
+            validate_five_case_join(self.root, changed, self.bundle)
 
 
 if __name__ == "__main__":

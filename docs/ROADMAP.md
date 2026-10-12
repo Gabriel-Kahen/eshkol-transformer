@@ -646,7 +646,9 @@ generation, and Wave 3 remains incomplete.
 The isolated E3 §9 N2 development join on
 `codex/e3-n2-transcript-join-20261012` checks the five physical T1/D1 resources,
 independent D2 rows and cursor endpoints, 21-role reference records, CE and
-metric state, packed equality and unpacked differences. It is source-only;
+metric state, packed equality and unpacked differences. Frozen canonical corpus
+and bundle SHA-256 pins bind role words and the model parameter digest; the
+source tests alone do not regenerate the pinned M3 oracle. It is source-only;
 independent review and a genuine compiled-private five-layout transcript remain
 the N2 completion gates.
 

@@ -15,7 +15,7 @@ from tests.e3_reference.corpus import (
     CASES, FINGERPRINT, PROFILE, SOURCE_BYTES, VOCAB_SIZE, validate_payload,
 )
 from tests.e3_reference.transcript import (
-    TranscriptError, bits_f64, canonical, validate_mathematical_case,
+    TranscriptError, bits_f64, canonical, encode, validate_mathematical_case,
     validate_observed_case,
 )
 
@@ -25,6 +25,11 @@ ROLE_NAMES = (
     "AT", "AO", "R", "N2", "FU", "FG", "FD", "Y", "NF", "Z",
 )
 ROOT = Path(__file__).resolve().parents[2]
+# Canonical envelopes from the pinned five-case Q0 output. A changed oracle
+# needs a separately reviewed re-pin; source hashes alone cannot authenticate
+# intermediate role values or the initialized parameter image.
+FROZEN_CORPUS_SHA256 = "97f4652b1cf5eed34c54cdbabcb33451b8e43e274a4478143dfe2b3483e9bacb"
+FROZEN_BUNDLE_SHA256 = "2bc7b75821bc757830b2733d9147abeb166dbb7f25f028bcd46aed0503f820ee"
 MODEL_FIELDS = {
     "initializer_seed", "initializer_successor", "parameter_f32_sha256",
     "reference_manifest_sha256",
@@ -102,6 +107,8 @@ def validate_five_case_join(
     """
 
     validate_payload(corpus_payload)
+    _require(hashlib.sha256(encode(corpus_payload)).hexdigest() == FROZEN_CORPUS_SHA256,
+             "frozen corpus reference digest mismatch")
     _require(isinstance(bundle, dict) and set(bundle) == {
         "cases", "kind", "model", "profile", "provenance"
     } and bundle["kind"] == "reference-bundle", "bundle fields/kind mismatch")
@@ -133,6 +140,8 @@ def validate_five_case_join(
     _require(provenance["python"] == "3.14.6" and
              provenance["torch"] == "2.13.0+cpu",
              "bundle Q0 runtime provenance mismatch")
+    _require(hashlib.sha256(encode(bundle)).hexdigest() == FROZEN_BUNDLE_SHA256,
+             "frozen reference bundle digest mismatch")
     for field, path in {
         "corpus_source_sha256": ROOT / "tests/e3_reference/corpus.py",
         "generator_source_sha256": ROOT / "tests/e3_reference/reference.py",

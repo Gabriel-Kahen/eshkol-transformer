@@ -25,10 +25,16 @@ T1/D1 files and independent D2 traversal. `validate_five_case_join(root, corpus,
 bundle)` returns each case's exact start/end cursor, digest, rows, roles, CE,
 state and final expectations. It checks packed repartition equality, suffix
 replay and unpacked boundary differences. Decode both canonical envelopes with
-`transcript.decode` first; that rejects duplicate JSON keys. The lightweight
-join tests use a controlled zero-logit oracle and do not need PyTorch. The
-pinned M3 generator and its separate test still require Q0. Neither source
-test establishes a compiled-private N2 verdict.
+`transcript.decode` first; that rejects duplicate JSON keys. The join pins the
+canonical corpus and reference-bundle envelope SHA-256 values from
+`e3-private-composition-aa0adbf-package/{corpus/corpus-reference.json,reference.json}`.
+Those pins bind the intermediate role words and model parameter digest, which
+the structural and mathematical checks alone cannot authenticate. The
+lightweight semantic tests use controlled zero-logit records with patched pins;
+the unpatched checker was also exercised against the existing pinned output.
+The pinned M3 generator and its separate test still require Q0. A re-pin needs
+fresh Q0 generation and review. None of this establishes a compiled-private
+N2 verdict.
 
 Focused commands from the repository root:
 
