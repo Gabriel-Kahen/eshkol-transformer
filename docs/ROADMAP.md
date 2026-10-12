@@ -1791,6 +1791,14 @@ parameter graph or live O2 witness; the candidate-aware I2/P1/M3T adapter
 and owner teardown
 remain dependent work.
 
+The [authenticated G3-R candidate retirement ledger design](g3/G3_R_AUTHENTICATED_CANDIDATE_RETIREMENT_LEDGER.md)
+pins one source-private candidate identity, whole-graph preflight and the
+O2 → P1/I2 → M3T irreversible order on the current native O2/P1/f32
+primitives. It is design only. Candidate-aware Eshkol construction enrollment,
+Eshkol O2/P1/I2 revocation, M3T owner/initializer retirement and a composed
+normal/repeat/sanitizer gate remain pending; receipt-to-TR3 same-reservation
+work is tracked separately.
+
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
 names would return newly owned authenticated CPU f32 `[1,256]` kind-3 shells,
