@@ -256,7 +256,7 @@ E1B_COMPILER_TIMEOUT_SECONDS="${CLI3_COMPILER_TIMEOUT_SECONDS:-900}" \
     "${PROJECT_ROOT}/tests/cli3/formatter_private_root.esk" \
     "${PROJECT_ROOT}/native/cli3_package_bridge.c" \
     "${PROJECT_ROOT}/native/cli3_private_renames.txt" \
-    "${PROJECT_ROOT}/native/cli3_public_exports.txt" \
+    "${PROJECT_ROOT}/native/cli3_generate_public_exports.txt" \
     "${formatter_dir}/cli3-formatter.o" \
     "${PROJECT_ROOT}/internal/p1/lib" \
     "${PROJECT_ROOT}/internal/c1/lib" \
@@ -265,18 +265,27 @@ E1B_COMPILER_TIMEOUT_SECONDS="${CLI3_COMPILER_TIMEOUT_SECONDS:-900}" \
     "${PROJECT_ROOT}/internal/d2/lib" \
     "${PROJECT_ROOT}/internal/e3/lib" \
     "${PROJECT_ROOT}/src"
-cmp "${PROJECT_ROOT}/native/cli3_defined_symbols.txt" \
+cmp "${PROJECT_ROOT}/native/cli3_generate_defined_symbols.txt" \
   "${formatter_dir}/cli3-formatter.o.evidence/global-defined.txt"
 ar rcsD "${formatter_dir}/libeshkol_transformer_cli3_formatter.a" \
   "${formatter_dir}/cli3-formatter.o"
+formatter_public_dir="${formatter_dir}/public"
+mkdir -p "${formatter_public_dir}/transformer"
+python3 "${PROJECT_ROOT}/tests/cli3/stage-cli3-d1-readonly.py" \
+  "${PROJECT_ROOT}/lib/transformer/data.esk" \
+  "${formatter_public_dir}/transformer/data.esk"
+cp "${PROJECT_ROOT}/lib/transformer/error_consumer.esk" \
+  "${formatter_public_dir}/transformer/error_consumer.esk"
+cp "${PROJECT_ROOT}/lib/transformer/cli3_corpus_validate.esk" \
+  "${formatter_public_dir}/transformer/cli3_corpus_validate.esk"
 runner="$(eshkol_build_dir)/eshkol-run"
 cxx="$(tsv_value "$(eshkol_build_dir)/eshkol-transformer-provenance.tsv" cxx_path)"
 env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR \
   ESHKOL_JIT_CACHE=0 \
   XDG_CACHE_HOME="${formatter_dir}/app-cache" \
-  ESHKOL_LIB_DIR="${PROJECT_ROOT}/lib" \
+  ESHKOL_LIB_DIR="${formatter_public_dir}" \
   ESHKOL_CXX_COMPILER="${cxx}" \
-  "${runner}" --strict-types --no-stdlib -I "${PROJECT_ROOT}/lib" \
+  "${runner}" --strict-types --no-stdlib -I "${formatter_public_dir}" \
     -L "${formatter_dir}" --lib eshkol_transformer_cli3_formatter \
     "${PROJECT_ROOT}/src/eshkol_transformer/cli.esk" \
     -o "${formatter_dir}/eshkol-transformer"

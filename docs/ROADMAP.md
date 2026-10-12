@@ -676,6 +676,14 @@ output only on the runner. A bounded diagnostic follow-up reports each phase,
 the failing status, and at most 4096 bytes from each current stdout/stderr
 evidence file. It changes no command or oracle; a fresh exact-head hosted run
 must identify the failure before a behavior repair can be reviewed.
+That run identified the `six-command-suite` formatter-private link as the
+failure, after the installed D1 validator, pretrain, generation oracles, and
+negative cases passed. The formatter fixture still built the older two-export
+archive and imported the full D1/D2 facade while linking the current app.
+Its source-only repair keeps the same private formatter assertions, admits
+exactly the installed read-only D1 public exports in that fixture archive,
+and stages the same checked D1 projection for its app compile. A new
+exact-head hosted run and compiled CLI3 gate remain pending.
 
 The isolated CLI3 cross-command test script `scripts/test-cli3-cross-command-chain.sh`
 is prepared for a fresh production-root build. It creates one byte tokenizer,
