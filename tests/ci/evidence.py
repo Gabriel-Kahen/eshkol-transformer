@@ -31,6 +31,7 @@ SUITES = (
     "native-optimizer",
     "diagnostic-transport",
     "model-composition",
+    "cli3-commands",
     "g3n-forward",
     "g3s-sampling",
     "contracts-data",
