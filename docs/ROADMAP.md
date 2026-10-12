@@ -821,14 +821,16 @@ preparation. A supported exact-source compiled run, source/tuple review,
 mode/retention prerequisites and the other §9 rows remain open.
 
 The exact `b20c81f1` N2 source candidate has a separately sealed one-use
-fe9/f31 prelaunch bundle (`e3-n2-observer-b20-fe9-f31-20261012-prepared-a`,
-prepared seal SHA-256 `ad9afbb91b60afac705144cdfc9d90a0e195bfda29159cc4d5e67275c32519b2`).
-Its read-only preflight passes. The supported AOT and sanitizer run is still
-unexecuted; the prepared launcher
-checks that run's completion and the shared heavy-Docker slot before starting.
-The bundle retains raw failures and requires a final evidence seal and
-independent raw review. CLI PR #202 overlaps the E1B builder/package policy;
-current-main union review and rerun remain separate integration gates.
+fe9/f31 prelaunch bundle (`e3-n2-observer-b20-fe9-f31-20261012-prepared-d`,
+prepared seal SHA-256 `b489c57b2b2bbd0c292ccfcb83adb9dc9e12a0b1d829c8deab5601a05a611a39`).
+Its read-only preflight and adversarial lifecycle tests pass. An absent
+daemon-issued container ID quarantines the run, including when a stale object
+has the matching label. The supported AOT and sanitizer run remains unexecuted.
+The earlier prepared-a through prepared-c bundles are superseded and preserved
+for audit. This b20 gate cannot establish a current-main verdict: current main
+`09f7ed52` retains CLI3 full-CI topology, and CLI PR #202 adds installed D1
+assertions. Their source union, independent review and exact-source rerun are
+separate integration gates.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
