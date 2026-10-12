@@ -20,6 +20,7 @@
 #include <stdio.h>
 
 typedef struct bytes136 { int64_t length; unsigned char data[136]; } bytes136;
+typedef struct bytes4872 { int64_t length; unsigned char data[4872]; } bytes4872;
 static int64_t cache_length;
 static int pin_active, cache_active, fail_pin, fail_cache, fail_layer;
 static int malformed_lengths;
@@ -236,13 +237,29 @@ int main(void) {
          held.snapshot.rng[2] == -1 && held.snapshot.rng[3] == -1 &&
          !memcmp(held.model_bits, model_bits, sizeof(model_bits)));
   et_g3r_committed_save_capture_v1 saved = held;
+  bytes4872 encoded = {.length = sizeof(encoded.data)};
+  memset(encoded.data, 0x5a, sizeof(encoded.data));
+  assert(!et_g3t_private_committed_save_hold_copy_bytes_v1(hold, &encoded));
+  assert(!memcmp(encoded.data, &saved, sizeof(saved)));
+  memset(encoded.data, 0x5a, sizeof(encoded.data));
+  encoded.length = sizeof(encoded.data) - 1;
+  assert(et_g3t_private_committed_save_hold_copy_bytes_v1(hold, &encoded));
+  encoded.length = sizeof(encoded.data) + 1;
+  assert(et_g3t_private_committed_save_hold_copy_bytes_v1(hold, &encoded));
+  encoded.length = sizeof(encoded.data);
+  assert(et_g3t_private_committed_save_hold_copy_bytes_v1(0, &encoded));
+  unsigned char sentinel[sizeof(encoded.data)];
+  memset(sentinel, 0x5a, sizeof(sentinel));
+  assert(!memcmp(encoded.data, sentinel, sizeof(sentinel)));
   assert(et_g3t_private_committed_save_hold_copy_v1(
       hold, (et_g3r_committed_save_capture_v1 *)&c));
   fake_overlap = 1;
   assert(et_g3t_private_committed_save_hold_copy_v1(hold, &held));
+  assert(et_g3t_private_committed_save_hold_copy_bytes_v1(hold, &encoded));
   fake_overlap = 0;
   fake_i64_overlap = 1;
   assert(et_g3t_private_committed_save_hold_copy_v1(hold, &held));
+  assert(et_g3t_private_committed_save_hold_copy_bytes_v1(hold, &encoded));
   fake_i64_overlap = 0;
   g3t_save_hold other = {0};
   other.next = g3t_save_holds;
@@ -250,9 +267,18 @@ int main(void) {
   assert(et_g3t_private_committed_save_hold_copy_v1(
       hold, (et_g3r_committed_save_capture_v1 *)&other));
   g3t_save_holds = other.next;
+  struct { int64_t length; g3t_save_hold record; } header_overlap = {0};
+  header_overlap.length = sizeof(encoded.data);
+  header_overlap.record.next = g3t_save_holds;
+  g3t_save_holds = &header_overlap.record;
+  assert(et_g3t_private_committed_save_hold_copy_bytes_v1(
+      hold, &header_overlap));
+  g3t_save_holds = header_overlap.record.next;
   assert(!memcmp(&held, &saved, sizeof(held)));
   model_bits[0] = 1;
   assert(et_g3t_private_committed_save_hold_copy_v1(hold, &held));
+  assert(et_g3t_private_committed_save_hold_copy_bytes_v1(hold, &encoded));
+  assert(!memcmp(encoded.data, sentinel, sizeof(sentinel)));
   assert(!memcmp(&held, &saved, sizeof(held)));
   model_bits[0] = 0;
   assert(!et_g3t_private_committed_save_hold_end_v1(hold));
@@ -260,6 +286,7 @@ int main(void) {
          !model.active);
   assert(et_g3t_private_committed_save_hold_copy_v1(hold, &held));
   assert(et_g3t_private_committed_save_hold_end_v1(hold));
+  assert(et_g3t_private_committed_save_hold_copy_bytes_v1(hold, &encoded));
   int64_t successor = et_g3t_private_committed_save_hold_begin_v1(&c, &model);
   assert(successor && successor != hold &&
          et_g3t_private_committed_save_hold_end_v1(hold) &&
@@ -303,6 +330,9 @@ int main(void) {
   c.rng[2] = 0;
   assert(g3t_history_valid(&c));
   assert(et_g3t_private_committed_save_hold_copy_v1(successor, &held));
+  assert(et_g3t_private_committed_save_hold_copy_bytes_v1(
+      successor, &encoded));
+  assert(!memcmp(encoded.data, sentinel, sizeof(sentinel)));
   assert(!memcmp(&held, &saved, sizeof(held)));
   assert(et_g3t_private_committed_save_hold_end_v1(successor));
   c.rng[2] = -1;

@@ -47,6 +47,9 @@ int64_t et_g3t_private_committed_save_hold_begin_v1(
     void *generator, void *expected_model);
 int64_t et_g3t_private_committed_save_hold_copy_v1(
     int64_t hold, et_g3r_committed_save_capture_v1 *destination);
+/* Exact Eshkol bytevector header followed by 4,872 writable data bytes. */
+int64_t et_g3t_private_committed_save_hold_copy_bytes_v1(
+    int64_t hold, void *destination_header);
 int64_t et_g3t_private_committed_save_hold_end_v1(int64_t hold);
 #endif
 #endif

@@ -1057,6 +1057,37 @@ int64_t et_g3t_private_committed_save_hold_copy_v1(
   return 0;
 }
 
+int64_t et_g3t_private_committed_save_hold_copy_bytes_v1(
+    int64_t candidate, void *destination_header) {
+  g3t_clear();
+  g3t_save_hold *hold = g3t_save_admit(candidate);
+  if (!hold) return g3t_bad(G3T_ARGUMENT, G3T_IDENTITY);
+  uintptr_t first, last;
+  if (!g3r_save_span(destination_header,
+                     sizeof(et_g3r_committed_save_capture_v1), 1,
+                     &first, &last))
+    return g3t_bad(G3T_ARGUMENT, G3T_IDENTITY);
+  for (g3t_save_hold *current = g3t_save_holds; current;
+       current = current->next)
+    if (g3r_save_overlap(first, last, current, sizeof(*current)))
+      return g3t_bad(G3T_ARGUMENT, G3T_IDENTITY);
+  if (g3r_save_overlap(first, last, hold->context, sizeof(*hold->context)) ||
+      g3r_save_overlap(first, last, hold->model, sizeof(*hold->model)) ||
+      et_a2_kv_cache_private_storage_overlap_v1((void *)first,
+          last - first) != 0 ||
+      et_f32_tensor_private_storage_overlap_v1((void *)first,
+          last - first) != 0 ||
+      et_i64_tensor_private_storage_overlap_v1((void *)first,
+          last - first) != 0)
+    return g3t_bad(G3T_ARGUMENT, G3T_IDENTITY);
+  et_g3r_committed_save_capture_v1 capture;
+  if (et_g3t_private_committed_save_hold_copy_v1(candidate, &capture))
+    return g3t_error_category;
+  memcpy((unsigned char *)destination_header + sizeof(int64_t),
+         &capture, sizeof(capture));
+  return 0;
+}
+
 int64_t et_g3t_private_committed_save_hold_end_v1(int64_t candidate) {
   g3t_clear();
   g3t_save_hold *hold = g3t_save_admit(candidate);

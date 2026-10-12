@@ -1762,6 +1762,14 @@ repeat, sanitizer and feature-off gates pass locally. The M3T/P1/O2 identity
 bridge, compiled Eshkol aggregate, same-image C2 digest and pair writer
 remain downstream; this candidate is not admitted SAVE.
 
+The [held bytevector FFI prerequisite](g3/G3_R_HELD_BYTEVECTOR_FFI_LEAF.md)
+adds an exact 4,872-byte destination to that native hold without changing its
+typed API. It checks the full bytevector span and copies only after the same
+owner baseline passes; controlled native normal, repeat, sanitizer and
+feature-off cases pass locally. The current lineage has no authenticated
+G3-to-trainer edge for P1/O2/controls. An Eshkol adapter and compiled
+aggregate witness remain required before an owner bridge or SAVE claim.
+
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
 diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use
