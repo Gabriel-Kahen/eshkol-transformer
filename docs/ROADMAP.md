@@ -1659,8 +1659,8 @@ The [same-reservation source gate](g3/G3_R_SAME_RESERVATION_SOURCE_GATE.md)
 adds a private receipt/checked-pair/trainer-tuple candidate with one C2 borrow,
 source tensor copyout and an exact-owner TR3 handoff. It conservatively exits
 134 on borrow-end or TR3 uncertainty. Source tests cover ordering, identity,
-existing closure paths and the root load chain. The D2 closure entry now names
-`internal/d2/lib/d2_semantic_core.esk`; compiled aggregate, runtime negatives,
+existing closure paths and transitive root dependencies. The D2 closure entry
+now names `internal/d2/lib/d2_semantic_core.esk`; compiled aggregate, runtime negatives,
 post-restore bit checks and candidate retirement remain pending. No
 continuation admission follows.
 

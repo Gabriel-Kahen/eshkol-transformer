@@ -11,7 +11,10 @@ CLOSURE = (ROOT / "native/g3r_same_reservation_source_closure.txt").read_text().
 CHECKED = (ROOT / "native/g3r_checked_pair_source_closure.txt").read_text().splitlines()
 TR3 = (ROOT / "native/tr3_c_joint_restore_source_closure.txt").read_text().splitlines()
 D2_BASE = (ROOT / "native/tr3_c_d2_restore_source_closure.txt").read_text().splitlines()
-LOAD = re.compile(r'^\(load "([^"]+)"\)', re.MULTILINE)
+DEPENDENCY = re.compile(r'^\s*\((load|require)\s+(?:"([^"]+)"|([^\s)]+))\)',
+                        re.MULTILINE)
+INCLUDE_DIRS = ("internal/p1/lib", "internal/c1/lib", "internal/t2/lib",
+                "internal/t1/lib", "internal/d2/lib", "src", "lib", "native")
 
 
 def function(name):
@@ -43,43 +46,51 @@ class SameReservationSourceTest(unittest.TestCase):
                         CLOSURE.index("native/g3r_same_reservation_extension.esk"))
 
     def test_transitive_root_loads_are_in_closure(self):
-        special = {"eshkol_transformer/token_shard.esk":
-                   "src/eshkol_transformer/token_shard.esk",
-                   "transformer/tokenizer_internal.esk":
-                   "internal/t2/lib/transformer/tokenizer_internal.esk",
-                   "t2_d1_bridge.esk": "internal/t2/lib/t2_d1_bridge.esk",
-                   "t1_tokenizer_core.esk": "internal/t1/lib/t1_tokenizer_core.esk",
-                   "t2_bpe_core.esk": "internal/t2/lib/t2_bpe_core.esk",
-                   "d2_semantic_core.esk": "internal/d2/lib/d2_semantic_core.esk",
-                   "d2_dataset.esk": "internal/d2/lib/d2_dataset.esk"}
-        for root in ("native/g3r_checked_pair_root.esk",
-                     "native/g3r_c2_sha_receipt_root.esk",
-                     "native/tr3_c_joint_restore_root.esk",
-                     "native/d2_wave2_root.esk", "native/t2_wave2_root.esk",
-                     "internal/t2/lib/transformer/tokenizer_internal.esk"):
-            with self.subTest(root=root):
-                for load in LOAD.findall((ROOT / root).read_text()):
-                    target = special.get(load, f"native/{load}")
-                    self.assertIn(target, CLOSURE, (root, load))
-        requires = {
-            "native/t2_wave2_root.esk": {
-                "e1b_error_consumer_private": "native/e1b_error_consumer_private.esk",
-                "x1_config_private": "native/x1_config_private.esk",
-                "transformer.module": "internal/p1/lib/transformer/module.esk",
-                "transformer.persistence_policy_internal":
-                    "internal/c1/lib/transformer/persistence_policy_internal.esk"},
-            "native/e1b_error_consumer_private.esk": {
-                "transformer.error_internal": "lib/transformer/error_internal.esk"},
-            "lib/transformer/error_internal.esk": {
-                "transformer.error_core": "lib/transformer/error_core.esk"},
-            "native/i2_wave2_extension.esk": {
-                "transformer.checkpoint_internal":
-                    "internal/c1/lib/transformer/checkpoint_internal.esk"}}
-        for source, modules in requires.items():
-            body = (ROOT / source).read_text()
-            for module, target in modules.items():
-                self.assertIn(f"(require {module})", body)
-                self.assertIn(target, CLOSURE)
+        roots = ("native/g3r_checked_pair_root.esk",
+                 "native/tr3_c_joint_restore_root.esk")
+        pending, seen = list(roots), set()
+        while pending:
+            source = pending.pop()
+            if source in seen:
+                continue
+            seen.add(source)
+            for kind, load, module in DEPENDENCY.findall((ROOT / source).read_text()):
+                name = load if kind == "load" else module.replace(".", "/") + ".esk"
+                matches = [f"{directory}/{name}" for directory in INCLUDE_DIRS
+                           if (ROOT / directory / name).is_file()]
+                self.assertTrue(matches, (source, kind, name))
+                target = matches[0]
+                self.assertIn(target, CLOSURE, (source, kind, name))
+                pending.append(target)
+        self.assertIn("internal/c1/lib/c1_sha256.esk", seen)
+        self.assertIn("internal/p1/lib/transformer/module.esk", seen)
+        self.assertIn("internal/t2/lib/transformer/tokenizer_internal.esk", seen)
+        self.assertIn("internal/d2/lib/d2_semantic_core.esk", seen)
+
+        expected_loads = {
+            roots[0]: ("g3r_c2_sha_receipt_root.esk", "g3r_record_codec_extension.esk",
+                       "g3r_checked_pair_extension.esk"),
+            "native/d2_wave2_root.esk":
+                ("t2_wave2_root.esk", "i2_wave2_extension.esk",
+                 "d2_semantic_core.esk", "d2_dataset.esk"),
+            "native/t2_wave2_root.esk":
+                ("eshkol_transformer/token_shard.esk",
+                 "transformer/tokenizer_internal.esk", "t2_d1_bridge.esk"),
+            roots[1]:
+                ("d2_wave2_root.esk", "c2_d2_cursor_pair_extension.esk",
+                 "o2_wave2_extension.esk", "c2_o2_reconstruct_extension.esk",
+                 "c2_x1_canonical_extension.esk", "c2_training_state_extension.esk",
+                 "m3t_transport_extension.esk", "m3_schedule.esk",
+                 "m3_model_extension.esk", "tr3_p1_fixed_set_extension.esk",
+                 "tr3_lease_core_extension.esk", "tr3_lease_public_gates_extension.esk",
+                 "tr3_c_d2_restore_extension.esk",
+                 "tr3_c_restore_bindings_extension.esk",
+                 "tr3_c_joint_restore_extension.esk")}
+        for source, expected in expected_loads.items():
+            actual = [load for kind, load, _ in
+                      DEPENDENCY.findall((ROOT / source).read_text())
+                      if kind == "load"]
+            self.assertEqual(tuple(actual), expected, source)
 
     def test_candidate_uses_registered_exact_tuple(self):
         enroll = function("g3r-same-reservation-enroll-internal")
