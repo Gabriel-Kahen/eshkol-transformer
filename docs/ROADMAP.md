@@ -924,6 +924,15 @@ feature-off checks pass. Independent source/native/tests review accepted the
 exact `dcbc30ee`/tree `77e2e0d9` candidate. This is test-only evidence;
 genuine source-composed E3 rollback/retry, pinned supported gates and the rest
 of R1 remain open.
+A noninstalled source candidate now composes the existing real M3/T1/D2/I2
+retention fixture with the test-only one-shot preinvoke arm. It specifies
+stage 7 role 0, stage 10, and stage 11 whole-call failure, checks source cursor,
+P1 modes, all 14 M3 value/gradient images and metadata, six published outputs,
+RNG, native owner probes, and the first typed diagnostic, then retries on the
+same model, frame, dataset, and destinations. Focused static and missing-cut /
+missing-assertion mutation checks guard the source. The new root is not yet an
+admitted package tuple, so compiled execution, rollback proof, and R1 acceptance
+remain open.
 An isolated staged successor adds a separate real-M3 zero-control source tuple
 using the existing I2 14-parameter prepare/commit path before frame binding.
 It retains the staged numerical, retention, wrong-target and uniform controls.
