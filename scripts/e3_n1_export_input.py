@@ -291,6 +291,8 @@ def evaluate(raw):
         value = plan[root][field] if field else plan[root]
         if value is None:
             missing.append(slot)
+    need(not missing or len(missing) == len(TOP_SLOTS),
+         "partial-plan-unreviewed")
     if not missing:
         validate_complete(plan)
     payload = {"schema": "e3-n1-export-input-assessment-v1", "status": "HOLD",

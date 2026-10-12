@@ -207,6 +207,13 @@ class ExportInputTests(unittest.TestCase):
                                                      b'"schema":"duplicate","schema":', 1))
         self.assert_hold_error(data=b'{"schema":1e999}\n')
 
+    def test_partial_supplied_fields_hold(self):
+        plan = json.loads(CANDIDATE_FILE.read_bytes())
+        plan["oci"]["layout"] = {"sha256": "bad", "size": 1}
+        self.assert_hold_error(plan)
+        plan["oci"]["layout"] = {"sha256": sha(b"synthetic"), "size": 1}
+        self.assert_hold_error(plan)
+
     def test_input_symlink_holds(self):
         target = self.input.parent / "target.json"
         target.write_bytes(raw(complete_plan()))

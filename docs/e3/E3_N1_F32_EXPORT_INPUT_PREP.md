@@ -15,6 +15,8 @@ and HOLD. No f31 descriptor or failed-F parity claim transfers to this image.
 `e3-n1-export-input-assessment-v1` line to stdout. Every output has
 `status: HOLD`. `INCOMPLETE` lists missing top-level slots;
 `READY_FOR_REVIEW` means only that supplied fields pass structural checks.
+The only accepted incomplete form has every unknown slot `null`; a partly
+populated plan is rejected until all supplied claims can be checked together.
 Malformed, noncanonical, duplicate-key, inconsistent or over-cap input exits
 nonzero with `HOLD:` and no assessment. The CLI reads only its input file. It
 opens that input through a nofollow walk of every path component and compares
