@@ -114,7 +114,7 @@
 
 (define (admit-raw-test-source raw)
   (set! t1-wave1-tensor-registry
-        (cons (vector raw) t1-wave1-tensor-registry)))
+        (cons (vector raw 'live) t1-wave1-tensor-registry)))
 (define raw-registry-before t1-wave1-tensor-registry)
 (define unsealed (t1-shell-create 2))
 (check (not (null? unsealed)))

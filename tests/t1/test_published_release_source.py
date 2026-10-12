@@ -33,6 +33,11 @@ class PublishedReleaseSource(unittest.TestCase):
         self.assertGreaterEqual(source.count("shell->release_pending || shell->released"), 6)
         self.assertIn("if (!entry->released) ++count", source)
 
+    def test_existing_exact_pair_fixture_uses_current_admission_shape(self):
+        fixture = (ROOT / "tests/g3c4/t1_i1_exact_pair_linked.esk").read_text()
+        self.assertIn("(cons (vector raw 'live) t1-wave1-tensor-registry)",
+                      fixture)
+
 
 if __name__ == "__main__":
     unittest.main()
