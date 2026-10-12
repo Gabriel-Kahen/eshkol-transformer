@@ -2804,8 +2804,13 @@ publication, public G2 and continuation remain pending.
   post-copy, post-issuer release fixture. Source checks cover dead T1 reads,
   stale decode rejection, native-ID EOS/two-ID continuation, and one-time
   history admission. Independent source/tests review accepted exact
-  `150f61c6`/tree `145439a6`; the immutable compiled aggregate gate remains
-  pending, and no aggregate runtime claim is made.
+  `150f61c6`/tree `145439a6`. The one-use F compiled gate on `6d37bf54`
+  stopped at source tests: the package closure correctly has 58 entries after
+  T1 release insertion, but the older G2 ticket checker and result-source test
+  still required 57. Its sealed failed run is
+  `wave3-f-t1-compiled-gate-run-6d37bf54-20261012-f`; the bounded source-pin
+  repair is pending independent review and a fresh one-use compiled gate. No
+  aggregate runtime claim is made.
 
 ## Wave 4 — practical pretraining and performance
 

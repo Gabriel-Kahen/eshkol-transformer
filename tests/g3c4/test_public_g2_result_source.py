@@ -65,11 +65,11 @@ def validate(dispatch: bytes, result: str, manual: str, package_root: str,
         "native/g3c4_public_g2_result_extension.esk",
         "native/g3g_manual_public_extension.esk",
     ]
-    assert len(package_sources) == 57
-    assert "len(sources) == 57" in package_checker
+    assert len(package_sources) == 58
+    assert "len(sources) == 58" in package_checker
     assert "sources[-18:]" in package_checker
     assert '"g3c4_public_g2_result_extension"' in package_checker
-    assert "len(package_sources) == 57" in ticket_checker
+    assert "len(package_sources) == 58" in ticket_checker
     order = [f'(load "{Path(member).name}")' for member in package_sources[-3:]]
     assert all(package_root.count(item) == 1 for item in order)
     assert [package_root.index(item) for item in order] == sorted(
@@ -301,9 +301,9 @@ class PublicG2ResultSource(unittest.TestCase):
         self.reject(p2g1_fixture=self.inputs["p2g1_fixture"] + b"\n;; drift\n")
         self.reject(package_sources=self.inputs["package_sources"][:-1])
         self.reject(package_checker=self.inputs["package_checker"].replace(
-            "len(sources) == 57", "len(sources) == 56", 1))
+            "len(sources) == 58", "len(sources) == 57", 1))
         self.reject(ticket_checker=self.inputs["ticket_checker"].replace(
-            "len(package_sources) == 57", "len(package_sources) == 56", 1))
+            "len(package_sources) == 58", "len(package_sources) == 57", 1))
         self.reject(package_root=self.inputs["package_root"].replace(
             '(load "g3c4_public_g2_result_extension.esk")\n', "", 1))
 
