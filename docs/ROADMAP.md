@@ -1752,6 +1752,17 @@ Hosted integration is pending. This private predicate does not authenticate a
 C2 SHA receipt or pair, reconstruct a candidate, replay history, or prove
 resumed generation.
 
+The [G3-R trainer-to-generator handoff audit](g3/G3_R_TRAINER_HANDOFF_PREREQUISITE.md)
+on exact main `1590fcd9` identifies the first current callable training
+owner graph in TR3's enrolled lease and C2 snapshot. The combined CLI3 native
+aggregate shares its M3 owner with G3-T, but production CLI3 releases the
+trainer before switching that model from train to eval and creating a G3
+generator. No registered handoff survives that boundary to bind P1/O2,
+controls, cursor and tokenizer to the later G3 hold; TR3's enrolled record
+retains tokenizer identity but not the original tokenizer shell. Published
+held native capture candidates `4fe964ed` and `e80ff5e1` remain divergent
+from main; this source-only audit adds no SAVE API or acceptance claim.
+
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
 diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use
