@@ -8,16 +8,21 @@ The default path calls each original command directly. In capture mode each
 wrapped external command keeps its argv and cwd, records numeric exit and
 monotonic wall interval, hashes argv/environment/raw streams, and relays both
 streams. A raw stream over 16 MiB terminates the command and fails with exit
-86. Shell builtins, command substitutions in `common.sh`, and subprocesses
-inside Python/Eshkol programs are not individually wrapped. Generated C++
-link wrappers are wrapped.
+86. Shell builtins are outside per-process capture. The `common.sh` toolchain
+probes are individually wrapped. In capture mode a Python startup hook wraps
+supported `subprocess.run` calls and rejects direct spawn routes and unsupported
+options. The required Q0, clone, and predecessor checker child sites are
+validated. Generated C++ link wrappers are wrapped. Native Eshkol children
+have no exhaustive exec trace, so total per-process completeness remains on
+HOLD.
 `check-g3c4-proof-source.py` rejects known unwrapped external forms in the
-nine runner scripts. Each receipt carries its Bash file:line site, and
+nine runner scripts and known `common.sh` probes. Each receipt carries its
+Bash file:line site, and
 `check-g3c4-proof-receipts.py` requires every listed wrapper site and every
-nested predecessor invocation after a full run. This is a conservative shell
-audit, not an exhaustive Bash parser; `common.sh` toolchain probes and Python
-subprocess internals remain outside it and keep total per-process completeness
-on HOLD.
+nested predecessor invocation plus known Python child sites after a full run.
+This is a conservative shell audit, not an exhaustive Bash parser. The known
+Eshkol linker child is captured through the generated C++ wrapper, but any
+other native internal child requires an independently verified exec inventory.
 
 Set `G3C4_PROOF_EMIT=1` for emitted artifacts. Every normal and sanitizer
 fixture, including feature-off and overlays, receives a separate

@@ -21,6 +21,7 @@ additions = [
     "tests/g3c4/p2_g2_terminal_close_allocation_shim.cpp",
     "scripts/g3c4_proof_command.sh",
     "scripts/g3c4_proof_command.py",
+    "scripts/g3c4_proof_python/sitecustomize.py",
     "tests/g3c4/test_g3c4_proof_command.py",
     "scripts/check-g3c4-proof-receipts.py",
     "scripts/check-g3c4-proof-emitted.py",

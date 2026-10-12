@@ -2,8 +2,21 @@
 
 set -euo pipefail
 
-PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+common_script_dir=${BASH_SOURCE[0]}
+[[ $common_script_dir == */* ]] && common_script_dir=${common_script_dir%/*} || common_script_dir=.
+PROJECT_ROOT="$(cd -- "$common_script_dir/.." && pwd)"
 LOCK_FILE="${PROJECT_ROOT}/toolchain/eshkol.lock"
+
+# The terminal proof runner sources this file before installing proof_command.
+# Dispatch each later external probe through its command receipt in capture mode.
+common_probe() {
+  if [[ -n ${G3C4_PROOF_RECEIPTS:-} ]]; then
+    declare -F proof_command >/dev/null || die "proof capture helper unavailable"
+    G3C4_PROOF_SITE_OVERRIDE="common.sh:${BASH_LINENO[0]}" proof_command "$@"
+  else
+    "$@"
+  fi
+}
 
 die() {
   printf 'error: %s\n' "$*" >&2
@@ -12,9 +25,9 @@ die() {
 
 lock_value() {
   local key="$1" value count
-  count="$(awk -F '\t' -v key="${key}" '$1 == key { count++ } END { print count + 0 }' "${LOCK_FILE}")"
+  count="$(common_probe awk -F '\t' -v key="${key}" '$1 == key { count++ } END { print count + 0 }' "${LOCK_FILE}")"
   [[ "${count}" == 1 ]] || die "expected exactly one '${key}' entry in ${LOCK_FILE}; found ${count}"
-  value="$(awk -F '\t' -v key="${key}" '$1 == key { print $2 }' "${LOCK_FILE}")"
+  value="$(common_probe awk -F '\t' -v key="${key}" '$1 == key { print $2 }' "${LOCK_FILE}")"
   [[ -n "${value}" ]] || die "empty '${key}' entry in ${LOCK_FILE}"
   printf '%s\n' "${value}"
 }
@@ -31,7 +44,7 @@ resolve_executable_into() {
   [[ -n "${resolved}" && -x "${resolved}" ]] || \
     die "${description} is not executable or not found on PATH: ${configured}"
   if [[ "${resolved}" != /* ]]; then
-    resolved="$(cd -- "$(dirname -- "${resolved}")" && pwd -P)/$(basename -- "${resolved}")"
+    resolved="$(cd -- "${resolved%/*}" && pwd -P)/${resolved##*/}"
   fi
   printf -v "${output_name}" '%s' "${resolved}"
 }
@@ -64,10 +77,10 @@ resolve_provenance_compilers() {
   [[ "${resolved_cxx}" == "${expected_cxx}" ]] || \
     die "configured C++ compiler ${resolved_cxx} does not match Eshkol provenance ${expected_cxx}"
 
-  actual_cc_version="$("${resolved_cc}" --version | \
-    sed -n '1s/.*version \([0-9][0-9.]*\).*/\1/p')"
-  actual_cxx_version="$("${resolved_cxx}" --version | \
-    sed -n '1s/.*version \([0-9][0-9.]*\).*/\1/p')"
+  actual_cc_version="$(common_probe "${resolved_cc}" --version | \
+    common_probe sed -n '1s/.*version \([0-9][0-9.]*\).*/\1/p')"
+  actual_cxx_version="$(common_probe "${resolved_cxx}" --version | \
+    common_probe sed -n '1s/.*version \([0-9][0-9.]*\).*/\1/p')"
   [[ -n "${actual_cc_version}" && -n "${actual_cxx_version}" ]] || \
     die "could not determine configured Clang compiler versions"
   recorded_cc_version="$(tsv_value "${provenance}" cc_version)"
@@ -96,26 +109,26 @@ check_supported_version() {
 
 check_minimum_version() {
   local name="$1" actual="$2" minimum="$3" first
-  first="$(printf '%s\n%s\n' "${minimum}" "${actual}" | sort -V | head -n 1)"
+  first="$(printf '%s\n%s\n' "${minimum}" "${actual}" | common_probe sort -V | common_probe head -n 1)"
   [[ "${first}" == "${minimum}" ]] || \
     die "unsupported ${name} version: need at least ${minimum}, got ${actual}"
 }
 
 tsv_value() {
   local file="$1" key="$2" value count
-  count="$(awk -F '\t' -v key="${key}" '$1 == key { count++ } END { print count + 0 }' "${file}")"
+  count="$(common_probe awk -F '\t' -v key="${key}" '$1 == key { count++ } END { print count + 0 }' "${file}")"
   [[ "${count}" == 1 ]] || die "expected exactly one '${key}' entry in ${file}; found ${count}"
-  value="$(awk -F '\t' -v key="${key}" '$1 == key { print $2 }' "${file}")"
+  value="$(common_probe awk -F '\t' -v key="${key}" '$1 == key { print $2 }' "${file}")"
   [[ -n "${value}" ]] || die "empty '${key}' entry in ${file}"
   printf '%s\n' "${value}"
 }
 
 e1b_compare_exact_undefined_allowlist() {
   local expected="$1" actual="$2"
-  if ! cmp -s "${expected}" "${actual}"; then
+  if ! common_probe cmp -s "${expected}" "${actual}"; then
     printf 'E1B undefined-symbol allowlist difference (expected-only, actual-only):\n' \
       >&2
-    comm -3 "${expected}" "${actual}" >&2
+    common_probe comm -3 "${expected}" "${actual}" >&2
     return 1
   fi
 }
@@ -140,8 +153,8 @@ verify_supported_host() {
   local expected_os actual_os actual_version expected_arch actual_arch
   expected_os="$(lock_value supported_os)"
   expected_arch="$(lock_value supported_arch)"
-  actual_arch="$(uname -m)"
-  [[ "$(uname -s)" == Linux ]] || die "unsupported operating system: expected Linux"
+  actual_arch="$(common_probe uname -m)"
+  [[ "$(common_probe uname -s)" == Linux ]] || die "unsupported operating system: expected Linux"
   [[ "${actual_arch}" == "${expected_arch}" ]] || die "unsupported architecture: expected ${expected_arch}, got ${actual_arch}"
   [[ -r /etc/os-release ]] || die "cannot identify Linux release: /etc/os-release is unavailable"
   actual_os="$(. /etc/os-release; printf '%s' "${ID:-unknown}")"
@@ -158,7 +171,7 @@ verify_llvm() {
   command="$(llvm_config)"
   expected="$(lock_value llvm_version)"
   require_command "${command}"
-  actual="$("${command}" --version)"
+  actual="$(common_probe "${command}" --version)"
   check_supported_version LLVM "${actual}" "${expected}"
 }
 
@@ -167,9 +180,9 @@ verify_eshkol_checkout() {
   source_dir="$(eshkol_source_dir)"
   expected="$(lock_value eshkol_commit)"
   [[ -d "${source_dir}/.git" ]] || die "Eshkol source checkout not found at ${source_dir}; run 'make toolchain'"
-  actual="$(git -C "${source_dir}" rev-parse HEAD 2>/dev/null || true)"
+  actual="$(common_probe git -C "${source_dir}" rev-parse HEAD 2>/dev/null || true)"
   [[ "${actual}" == "${expected}" ]] || die "unsupported Eshkol revision at ${source_dir}: expected ${expected}, got ${actual:-unreadable}"
-  dirty="$(git -C "${source_dir}" status --porcelain --untracked-files=all 2>/dev/null || true)"
+  dirty="$(common_probe git -C "${source_dir}" status --porcelain --untracked-files=all 2>/dev/null || true)"
   [[ -z "${dirty}" ]] || \
     die "pinned Eshkol checkout at ${source_dir} contains tracked, staged, or untracked changes; use a clean checkout before building"
 }
@@ -179,7 +192,7 @@ verify_eshkol_binary() {
   binary="$(eshkol_build_dir)/eshkol-run"
   expected="$(lock_value eshkol_version)"
   [[ -x "${binary}" ]] || die "pinned Eshkol compiler not built at ${binary}; run 'make toolchain'"
-  actual="$("${binary}" --version 2>&1)"
+  actual="$(common_probe "${binary}" --version 2>&1)"
   [[ "${actual}" == "Eshkol Compiler v${expected}" ]] || \
     die "unsupported Eshkol compiler identity: expected 'Eshkol Compiler v${expected}', got '${actual}'"
 }
@@ -191,24 +204,24 @@ verify_eshkol_provenance() {
   [[ -r "${file}" ]] || die "Eshkol build provenance not found at ${file}; run 'make toolchain'"
   [[ "$(tsv_value "${file}" eshkol_commit)" == "$(lock_value eshkol_commit)" ]] || \
     die "Eshkol provenance commit does not match toolchain lock"
-  source_dir="$(readlink -f "$(eshkol_source_dir)")"
+  source_dir="$(common_probe readlink -f "$(eshkol_source_dir)")"
   [[ "$(tsv_value "${file}" eshkol_source_dir)" == "${source_dir}" ]] || \
     die "Eshkol provenance source directory does not match ${source_dir}"
   cache_file="$(eshkol_build_dir)/CMakeCache.txt"
   [[ -r "${cache_file}" ]] || die "Eshkol CMake cache not found at ${cache_file}; run 'make toolchain'"
-  cache_home="$(awk -F= '$1 == "CMAKE_HOME_DIRECTORY:INTERNAL" { print $2 }' "${cache_file}")"
-  [[ "$(readlink -f "${cache_home}")" == "${source_dir}" ]] || \
+  cache_home="$(common_probe awk -F= '$1 == "CMAKE_HOME_DIRECTORY:INTERNAL" { print $2 }' "${cache_file}")"
+  [[ "$(common_probe readlink -f "${cache_home}")" == "${source_dir}" ]] || \
     die "Eshkol CMake cache is bound to ${cache_home}, not ${source_dir}"
-  cache_cc="$(awk -F= '$1 == "CMAKE_C_COMPILER:FILEPATH" { print $2 }' "${cache_file}")"
-  cache_cxx="$(awk -F= '$1 == "CMAKE_CXX_COMPILER:FILEPATH" { print $2 }' "${cache_file}")"
+  cache_cc="$(common_probe awk -F= '$1 == "CMAKE_C_COMPILER:FILEPATH" { print $2 }' "${cache_file}")"
+  cache_cxx="$(common_probe awk -F= '$1 == "CMAKE_CXX_COMPILER:FILEPATH" { print $2 }' "${cache_file}")"
   [[ -x "${cache_cc}" && -x "${cache_cxx}" ]] || \
     die "Eshkol CMake cache does not identify executable C and C++ compilers"
-  [[ "$(readlink -f "$(tsv_value "${file}" cc_path)")" == "$(readlink -f "${cache_cc}")" ]] || \
+  [[ "$(common_probe readlink -f "$(tsv_value "${file}" cc_path)")" == "$(common_probe readlink -f "${cache_cc}")" ]] || \
     die "Eshkol provenance C compiler does not match its CMake cache"
-  [[ "$(readlink -f "$(tsv_value "${file}" cxx_path)")" == "$(readlink -f "${cache_cxx}")" ]] || \
+  [[ "$(common_probe readlink -f "$(tsv_value "${file}" cxx_path)")" == "$(common_probe readlink -f "${cache_cxx}")" ]] || \
     die "Eshkol provenance C++ compiler does not match its CMake cache"
   expected_hash="$(tsv_value "${file}" eshkol_binary_sha256)"
-  actual_hash="$(sha256sum "${binary}" | awk '{ print $1 }')"
+  actual_hash="$(common_probe sha256sum "${binary}" | common_probe awk '{ print $1 }')"
   [[ "${actual_hash}" == "${expected_hash}" ]] || \
     die "Eshkol compiler hash differs from its build provenance; run 'make toolchain'"
   check_supported_version LLVM "$(tsv_value "${file}" llvm_version)" "$(lock_value llvm_version)"

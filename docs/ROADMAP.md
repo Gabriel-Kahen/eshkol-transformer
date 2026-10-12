@@ -2701,9 +2701,11 @@ publication, public G2 and continuation remain pending.
   equal-length raw/staging carrier drift. Current-main compiled normal,
   repeat, sanitizer, emitted-tail, and predecessor gates remain pending.
   A c7e-derived proof instrumentation branch adds opt-in command receipts and
-  emitted object/IR/depfile/link-map capture. It remains source-only and unrun
-  until the exact source pin, binary equivalence, lifecycle, and compiled
-  evidence receive independent review.
+  emitted object/IR/depfile/link-map capture. Its successor covers common.sh
+  toolchain probes and supported recursive Python subprocess.run sites;
+  complete native Eshkol-child tracing,
+  exact-tree binary equivalence, successful-zero address/provider analysis,
+  private cgroup delegation/lifecycle and the compiled run remain pending.
   This private candidate supplies no public
   G2, data-only continuation, or Wave 3 completion claim.
 

@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
-source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
-source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/g3c4_proof_command.sh"
+script_dir=${BASH_SOURCE[0]}
+[[ $script_dir == */* ]] && script_dir=${script_dir%/*} || script_dir=.
+source "$(cd -- "$script_dir" && pwd)/common.sh"
+source "$(cd -- "$script_dir" && pwd)/g3c4_proof_command.sh"
 if [[ -n ${G3C4_PROOF_RECEIPTS:-} ]]; then
   export G3C4_PROOF_SCRIPT="${BASH_SOURCE[0]##*/}"
 fi

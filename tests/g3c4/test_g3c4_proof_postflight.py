@@ -2,11 +2,13 @@
 import hashlib
 import importlib.util
 import json
+import os
 from collections import Counter
 from pathlib import Path
 import shutil
 import tempfile
 import unittest
+import subprocess
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -40,6 +42,13 @@ class SourceAuditTests(unittest.TestCase):
             with self.subTest(operator=operator):
                 line = 'proof_command nm f ' + operator + ' \\\nsort -u'
                 self.assertTrue(SOURCE.scan_text('runner.sh', line))
+
+    def test_unwrapped_common_probe_rejected(self):
+        for command in ('awk -F x file', 'git -C repo status',
+                        'readlink -f path', 'sha256sum binary'):
+            with self.subTest(command=command):
+                self.assertIsNotNone(SOURCE.COMMON_EXTERNAL.search(f'value="$({command})"'))
+                self.assertIsNone(SOURCE.COMMON_EXTERNAL.search(f'value="$(common_probe {command})"'))
 
 
 class ReceiptPostflightTests(unittest.TestCase):
@@ -123,6 +132,31 @@ class ReceiptPostflightTests(unittest.TestCase):
         path.write_text(json.dumps(meta))
         with self.assertRaisesRegex(ValueError, "missing command receipt.*sort"):
             RECEIPTS.verify(self.root, expected)
+
+    def test_common_and_q0_are_required_source_sites(self):
+        calls = RECEIPTS.source_calls()
+        self.assertIn(RECEIPTS.Q0_SITE, calls)
+        self.assertTrue(any(site.startswith("common.sh:") for site in calls))
+
+    def test_common_probe_records_call_site(self):
+        env = dict(os.environ, G3C4_PROOF_RECEIPTS=str(self.root),
+                   G3C4_PROOF_SCRIPT=RECEIPTS.SCRIPTS[0])
+        command = "source scripts/common.sh; source scripts/g3c4_proof_command.sh; lock_value supported_cc >/dev/null"
+        subprocess.run(["bash", "-c", command], cwd=ROOT, env=env, check=True)
+        sites = {json.loads(path.read_text())["site"] for path in self.root.glob("command.*/receipt.json")}
+        self.assertIn(next(site for site in RECEIPTS.source_calls()
+                           if site.startswith("common.sh:") and RECEIPTS.source_calls()[site]["awk"]), sites)
+
+    def test_q0_python_git_child_is_receipted(self):
+        env = dict(os.environ, G3C4_PROOF_RECEIPTS=str(self.root),
+                   G3C4_PROOF_SCRIPT=RECEIPTS.SCRIPTS[0])
+        helper = ROOT / "scripts/g3c4_proof_command.py"
+        run = subprocess.run(["python3", str(helper), str(self.root), "--",
+                              "python3", "-m", "unittest", "-q",
+                              "tests.q0.test_python_isolation"],
+                             cwd=ROOT, env=env, capture_output=True)
+        self.assertEqual(run.returncode, 0, run.stderr)
+        RECEIPTS.verify(self.root, {RECEIPTS.Q0_SITE: Counter({"git": 1})})
 
 
 class EmittedPostflightTests(unittest.TestCase):

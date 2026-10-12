@@ -24,12 +24,23 @@ def run(root: Path, argv: list[str]) -> int:
     if requested_ms <= 0 or requested_ms > 7_200_000:
         return 86
     command_limit_ns = min(COMMAND_LIMIT_NS, requested_ms * 1_000_000)
+    child_env = os.environ.copy()
+    # Receipt metadata belongs to the target. Shell/Python site markers belong
+    # only to this wrapper and must not leak into nested runners.
+    child_env.pop("G3C4_PROOF_SITE", None)
+    child_env.pop("G3C4_PROOF_SITE_OVERRIDE", None)
+    child_env.pop("G3C4_PROOF_HELPER", None)
+    child_env["G3C4_PROOF_RECEIPTS"] = str(root)
+    hook = str(Path(__file__).resolve().parent / "g3c4_proof_python")
+    inherited_pythonpath = child_env.get("PYTHONPATH")
+    child_env["PYTHONPATH"] = (hook + os.pathsep + inherited_pythonpath
+                               if inherited_pythonpath else hook)
     receipt = Path(tempfile.mkdtemp(prefix="command.", dir=root))
     start_ns = time.monotonic_ns()
     (receipt / "cwd").write_bytes(os.fsencode(os.getcwd()) + b"\n")
     (receipt / "argv.nul").write_bytes(b"\0".join(os.fsencode(x) for x in argv) + b"\0")
     (receipt / "environment.sha256").write_text(hashlib.sha256(
-        b"\0".join(os.fsencode(k + "=" + v) for k, v in sorted(os.environ.items()))
+        b"\0".join(os.fsencode(k + "=" + v) for k, v in sorted(child_env.items()))
     ).hexdigest() + "\n")
     streams = [open(receipt / "stdout.raw", "wb"), open(receipt / "stderr.raw", "wb")]
     sizes = [0, 0]
@@ -40,7 +51,8 @@ def run(root: Path, argv: list[str]) -> int:
     try:
         # Preserve caller-owned marker fds, including fd 3 used by overlays.
         child = subprocess.Popen(argv, stdout=subprocess.PIPE,
-                                 stderr=subprocess.PIPE, close_fds=False)
+                                 stderr=subprocess.PIPE, close_fds=False,
+                                 env=child_env)
         selector = selectors.DefaultSelector()
         for i, pipe in enumerate((child.stdout, child.stderr)):
             os.set_blocking(pipe.fileno(), False)

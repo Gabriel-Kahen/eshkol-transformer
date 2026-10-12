@@ -20,9 +20,25 @@ SCRIPTS = (
 )
 
 
+def python_site(name: str, fragment: str) -> str:
+    project = Path(__file__).resolve().parents[1]
+    source = project / ("tests/q0" if name == "test_python_isolation.py" else "scripts")
+    matches = [number for number, line in enumerate((source / name).read_text().splitlines(), 1)
+               if fragment in line]
+    require(len(matches) == 1, f"ambiguous Python child site: {name} {fragment}")
+    return f"{name}:{matches[0]}"
+
+
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise ValueError(message)
+
+
+Q0_SITE = python_site("test_python_isolation.py", "tracked = subprocess.run(")
+CLONE_CC_SITE = python_site("check-g3c4-p2g2-terminal-ids-clone.py",
+                            "return subprocess.run(command,")
+CLONE_GIT_SITE = python_site("check-g3c4-p2g2-terminal-ids-clone.py",
+                             "old.write_bytes(subprocess.run(")
 
 
 def unique_object(pairs: list[tuple[str, object]]) -> dict:
@@ -38,6 +54,10 @@ def expected_program(token: str) -> str:
         '"$cc"': 'clang-21', '"$cxx"': 'clang++-21',
         '"$runner"': 'eshkol-run', '"$eshkol_runner"': 'eshkol-run',
         '"${runtime[@]}"': 'env',
+        '"${resolved_cc}"': 'clang-21',
+        '"${resolved_cxx}"': 'clang++-21',
+        '"${command}"': 'llvm-config-21',
+        '"${binary}"': 'eshkol-run',
     }.get(token, '*' if token.startswith('"$') else token)
 
 
@@ -50,6 +70,32 @@ def source_calls() -> dict[str, Counter]:
             programs = re.findall(r"\bproof_command\s+(\S+)", line)
             if programs:
                 calls[f"{name}:{number}"] = Counter(map(expected_program, programs))
+    # These common.sh sites are on every supported terminal-close path. The
+    # diagnostic-only e1b allowlist branch is outside this proof invocation.
+    for number, line in enumerate((source / "common.sh").read_text().splitlines(), 1):
+        if "common_probe" not in line or "common_probe()" in line:
+            continue
+        if "cmp -s" in line or "comm -3" in line:
+            continue
+        programs = re.findall(r"\bcommon_probe\s+(\S+)", line)
+        if programs:
+            calls[f"common.sh:{number}"] = Counter(map(expected_program, programs))
+    calls[Q0_SITE] = Counter({"git": 1})
+    calls[CLONE_CC_SITE] = Counter({"clang-21": 4})
+    calls[CLONE_GIT_SITE] = Counter({"git": 2})
+    for name, fragment, count in (
+        ("check-g3c4-p2g2-t1-prefix-coordinator.py", "subprocess.run([sys.executable,", 1),
+        ("check-g3c4-p2g2-protected-scope.py", "subprocess.run([sys.executable,", 1),
+        ("check-g3c4-p2g2-ownership.py", "subprocess.run([sys.executable,", 3),
+        ("check-g3c4-p2g2-carrier-bridge.py", "subprocess.run(", 1),
+        ("check-g3c4-p2g2-prefix-commit.py", "subprocess.run([sys.executable,", 1),
+        ("check-g3c4-p2g2-first-frame.py", "subprocess.run([sys.executable,", 2),
+    ):
+        calls[python_site(name, fragment)] = Counter({"@python3": count})
+    calls[python_site("check-g3c4-p2g2-terminal.py",
+                      "return subprocess.run(command,")] = Counter({"clang-21": 8})
+    calls[python_site("check-g3c4-p2g2-terminal.py",
+                      "old.write_bytes(subprocess.run(")] = Counter({"git": 4})
     return calls
 
 
@@ -91,6 +137,10 @@ def verify(root: Path, expected_sites: set[str] | dict[str, Counter] | None = No
                 f"bad argv: {path}")
         require(hashlib.sha256(argv_raw).hexdigest() == meta["argv_sha256"],
                 f"argv hash mismatch: {path}")
+        environment_hash = path / "environment.sha256"
+        require(environment_hash.is_file() and not environment_hash.is_symlink() and
+                re.fullmatch(r"[0-9a-f]{64}\n", environment_hash.read_text()),
+                f"bad environment hash: {path}")
         argv = [x.decode("utf-8", "surrogateescape") for x in argv_raw[:-1].split(b"\0")]
         for stream in ("stdout", "stderr"):
             data_path = path / f"{stream}.raw"
@@ -113,7 +163,13 @@ def verify(root: Path, expected_sites: set[str] | dict[str, Counter] | None = No
     for site, required in expected_sites.items():
         actual = observed_programs[site]
         for program, count in required.items():
-            found = sum(actual.values()) if program == '*' else actual[program]
+            if program == '*':
+                found = sum(actual.values())
+            elif program == '@python3':
+                found = sum(number for name, number in actual.items()
+                            if re.fullmatch(r'python3(?:\.[0-9]+)?', name))
+            else:
+                found = actual[program]
             require(found >= count, f"missing command receipt: {site} {program}")
     return {"receipts": len(paths), "scripts": sorted(scripts),
             "source_sites": len(expected_sites)}
