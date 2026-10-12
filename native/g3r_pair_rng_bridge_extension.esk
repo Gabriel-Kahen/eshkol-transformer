@@ -1,0 +1,45 @@
+;;; Source-private checked-pair to independent G3-T RNG ownership bridge.
+;;; Load in one aggregate after the file-pair and typed RNG import sources.
+;;; No caller-supplied decoded vector is accepted as file authority.
+
+(define (g3r-pair-rng-admit-internal c2-path companion-path policy report
+                                      destination)
+  (if (not (and (vector? destination) (= (vector-length destination) 10)))
+      (c2-load-fail 'invalid-argument 'checkpoint-load
+                    "expected ten pair/RNG destination slots" '()))
+  (if (not (= (c2-runtime-reserve-exception-handlers 18) 0))
+      (c2-load-fail 'internal 'checkpoint-load
+                    "handler reserve returned invalid status" '()))
+  ;; Preallocated cells survive the guard's longjmp and own both resources
+  ;; until the whole destination range has been published.
+  (let ((pair (make-vector 9 #f))
+        (receipt-cell (vector #f)) (rng-owner-cell (vector #f)))
+    (guard (caught
+             (#t
+               (guard (defect (#t (g3r-c2-sha-fail-stop 134)))
+                 (if (vector-ref rng-owner-cell 0)
+                     (g3t-generation-rng-release!
+                       (vector-ref rng-owner-cell 0)))
+                 (if (vector-ref receipt-cell 0)
+                     (g3r-c2-receipt-release-internal!
+                       (vector-ref receipt-cell 0))))
+               (raise caught)))
+      (g3r-file-pair-admit-internal c2-path companion-path policy report pair)
+      (vector-set! receipt-cell 0 (vector-ref pair 0))
+      (let ((words (vector-ref pair 2)))
+        (vector-set! rng-owner-cell 0
+          (g3r-rng-owner-from-checked-words
+            (vector-ref words 0) (vector-ref words 1)
+            (vector-ref words 2) (vector-ref words 3))))
+      (let ((staged
+              (vector (vector-ref receipt-cell 0)
+                      (vector-ref rng-owner-cell 0) (vector-ref pair 1)
+                      (vector-ref pair 2) (vector-ref pair 3)
+                      (vector-ref pair 4) (vector-ref pair 5)
+                      (vector-ref pair 6) (vector-ref pair 7)
+                      (vector-ref pair 8))))
+        ;; Pinned fe9 checks/promotes the whole tagged range before any write.
+        (vector-copy! destination 0 staged 0 10)
+        (vector-set! rng-owner-cell 0 #f)
+        (vector-set! receipt-cell 0 #f)
+        destination))))

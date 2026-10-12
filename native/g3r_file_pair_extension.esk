@@ -1,0 +1,97 @@
+;;; Private data-only pair admission. A live C2/SHA receipt and eight decoded
+;;; fields cross the caller boundary in one checked whole-vector publication.
+;;; No model, tokenizer, RNG, generator, or cache is reconstructed here.
+
+(define g3r-file-pair-after-receipt-internal (lambda (receipt) #t))
+(define g3r-file-pair-before-publish-internal (lambda (staged) #t))
+
+(define (g3r-file-pair-read-record-internal path)
+  (if (not (c1-valid-file-path? path))
+      (c2-load-fail 'invalid-argument 'checkpoint-load
+                    "invalid G3-R companion path" '()))
+  ;; C1's native exact reader opens a regular file without following a final
+  ;; symlink, checks size and EOF on the opened descriptor, stages the bytes,
+  ;; and copies only after the read and close succeed.
+  (let* ((bytes (make-bytevector g3r-record-size 0))
+         (status (c1-native-read-exact
+                   path bytes g3r-record-size g3r-record-size)))
+    (if (not (= status 0))
+        (c1-native-fail 'checkpoint-load
+                        "checked G3-R companion read failed" status))
+    bytes))
+
+(define (g3r-file-pair-cleanup! receipt-cell borrow-cell digest-cell)
+  (if (vector-ref borrow-cell 0)
+      (g3r-c2-receipt-borrow-end-internal! (vector-ref borrow-cell 0)))
+  (if (vector-ref digest-cell 0)
+      (g3r-c2-sha-zero! (vector-ref digest-cell 0)))
+  (if (vector-ref receipt-cell 0)
+      (g3r-c2-receipt-release-internal! (vector-ref receipt-cell 0)))
+  #t)
+
+;;; destination is an exact nine-slot mutable general vector. On success:
+;;; [live C2/SHA receipt, policy[6], RNG words[4], history, prompt length,
+;;; generated count, manual count, T1 fingerprint[96], C2 SHA[32]]. The caller
+;;; owns the receipt and must release it through the accepted receipt API.
+(define (g3r-file-pair-admit-internal c2-path companion-path policy report
+                                     destination)
+  (if (not (and (vector? destination) (= (vector-length destination) 9)))
+      (c2-load-fail 'invalid-argument 'checkpoint-load
+                    "expected nine pair destination slots" '()))
+  (if (not (= (c2-runtime-reserve-exception-handlers 16) 0))
+      (c2-load-fail 'internal 'checkpoint-load
+                    "handler reserve returned invalid status" '()))
+  ;; These cells retain cleanup authority after a guard longjmp.
+  (let ((receipt-cell (vector #f)) (borrow-cell (vector #f))
+        (digest-cell (vector #f)))
+    (guard (caught
+             (#t
+               ;; A cleanup defect cannot return a partially owned candidate.
+               (guard (defect (#t (g3r-c2-sha-fail-stop 134)))
+                 (g3r-file-pair-cleanup!
+                   receipt-cell borrow-cell digest-cell))
+               (raise caught)))
+      ;; The owning C2 path supplies the only authoritative digest. The
+      ;; companion's bytes are read after C2 validation and reconstruction.
+      (vector-set! receipt-cell 0
+        (g3r-c2-load-with-sha-internal c2-path policy report))
+      (g3r-file-pair-after-receipt-internal (vector-ref receipt-cell 0))
+      (vector-set! borrow-cell 0
+        (g3r-c2-receipt-borrow-begin-internal
+          (vector-ref receipt-cell 0) 'checkpoint-load))
+      (vector-set! digest-cell 0
+        (g3r-c2-receipt-borrow-sha-internal
+          (vector-ref borrow-cell 0) 'checkpoint-load))
+      (let* ((record (g3r-file-pair-read-record-internal companion-path))
+             (fields (make-vector 8 #f)))
+        (g3r-record-decode! record (vector-ref digest-cell 0) fields)
+        (let* ((c2-borrow
+                 (g3r-c2-receipt-borrow-c2-internal
+                   (vector-ref borrow-cell 0) 'checkpoint-load))
+               (controls
+                 (vector-ref
+                   (c2-training-state-borrow-projection-internal c2-borrow)
+                   2))
+               (tokenizer (vector-ref controls 1)))
+          (if (not (and (= (vector-ref tokenizer 1) 256)
+                        (string=? (vector-ref tokenizer 0)
+                                  (utf8->string (vector-ref fields 6)))))
+              (c2-load-fail 'corrupt-data 'checkpoint-load
+                            "G3-R tokenizer fingerprint differs from C2"
+                            '())))
+        (g3r-c2-receipt-borrow-end-internal! (vector-ref borrow-cell 0))
+        (vector-set! borrow-cell 0 #f)
+        (g3r-c2-sha-zero! (vector-ref digest-cell 0))
+        (vector-set! digest-cell 0 #f)
+        (let ((staged
+                (vector (vector-ref receipt-cell 0)
+                        (vector-ref fields 0) (vector-ref fields 1)
+                        (vector-ref fields 2) (vector-ref fields 3)
+                        (vector-ref fields 4) (vector-ref fields 5)
+                        (vector-ref fields 6) (vector-ref fields 7))))
+          ;; Fault injection has no access to the checked, mutable payload.
+          (g3r-file-pair-before-publish-internal #f)
+          ;; Pinned fe9 stages every tagged promotion before writing slot 0.
+          (vector-copy! destination 0 staged 0 9)
+          (vector-set! receipt-cell 0 #f)
+          destination)))))

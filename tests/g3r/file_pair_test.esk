@@ -1,0 +1,120 @@
+(load "g3r_file_pair_root.esk")
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3-R file pair FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (untouched? slots)
+  (let loop ((index 0))
+    (if (= index 9) #t
+        (and (eq? (vector-ref slots index) 'untouched)
+             (loop (+ index 1))))))
+(define (live-c2)
+  (vector-ref (c2-load-owner-counts-internal) 0))
+(define (same-c2-counts? before)
+  (let ((after (c2-load-owner-counts-internal)))
+    (and (= (vector-ref after 0) (vector-ref before 0))
+         (= (vector-ref after 1) (vector-ref before 1)))))
+(define (reject label c2-path companion-path policy report)
+  (let ((slots (make-vector 9 'untouched))
+        (before (c2-load-owner-counts-internal))
+        (caught #f))
+    (guard (raised (#t (set! caught #t)))
+      (g3r-file-pair-admit-internal c2-path companion-path policy report slots))
+    (check label (and caught (untouched? slots) (same-c2-counts? before)))))
+
+(define args (cdr (command-line)))
+(define c2-path (list-ref args 0))
+(define good-path (list-ref args 1))
+(define short-path (list-ref args 2))
+(define long-path (list-ref args 3))
+(define torn-path (list-ref args 4))
+(define mismatched-path (list-ref args 5))
+(define missing-c2 (list-ref args 6))
+(define missing-record (list-ref args 7))
+(define wrong-tokenizer-path (list-ref args 8))
+(define policy
+  (c2-persistence-policy-internal 1048576 1048576 1048576 16 'cpu))
+(define report (k2-public-capability-discover))
+
+(reject "orphan C2 image" c2-path missing-record policy report)
+(reject "orphan companion" missing-c2 good-path policy report)
+(reject "short companion" c2-path short-path policy report)
+(reject "extended companion" c2-path long-path policy report)
+(reject "torn companion checksum" c2-path torn-path policy report)
+(reject "other C2 digest" c2-path mismatched-path policy report)
+(reject "record tokenizer differs from loaded C2"
+        c2-path wrong-tokenizer-path policy report)
+
+(define original-after-receipt g3r-file-pair-after-receipt-internal)
+(set! g3r-file-pair-after-receipt-internal
+  (lambda (receipt) (raise #f)))
+(reject "post-receipt fault releases owner" c2-path good-path policy report)
+(set! g3r-file-pair-after-receipt-internal original-after-receipt)
+
+(define original-before-publish g3r-file-pair-before-publish-internal)
+(set! g3r-file-pair-before-publish-internal
+  (lambda (staged) (raise #f)))
+(reject "prepublication fault releases owner" c2-path good-path policy report)
+(set! g3r-file-pair-before-publish-internal original-before-publish)
+
+;;; The fault hook may raise, but cannot relabel checked decoded fields.
+(define hook-saw-vector #f)
+(define hook-mutated #f)
+(set! g3r-file-pair-before-publish-internal
+  (lambda (payload)
+    (set! hook-saw-vector (vector? payload))
+    (guard (caught (#t #t))
+      (vector-set! payload 0 (vector 'forged-receipt))
+      (set! hook-mutated #t))
+    (guard (caught (#t #t))
+      (vector-set! payload 2 (vector 1 7 -1 -1))
+      (set! hook-mutated #t))))
+(let ((slots (make-vector 9 'untouched))
+      (before (c2-load-owner-counts-internal)))
+  (g3r-file-pair-admit-internal c2-path good-path policy report slots)
+  (check "fault hook cannot mutate checked receipt or RNG"
+    (and (not hook-saw-vector) (not hook-mutated)
+         (vector? (vector-ref slots 2))
+         (= (vector-ref (vector-ref slots 2) 2) 0)
+         (= (vector-ref (vector-ref slots 2) 3) 0)
+         (= (live-c2) (+ (vector-ref before 0) 1))
+         (= (vector-ref (c2-load-owner-counts-internal) 1)
+            (vector-ref before 1))))
+  (check "hook-proof receipt releases"
+    (and (g3r-c2-receipt-release-internal! (vector-ref slots 0))
+         (same-c2-counts? before))))
+(set! g3r-file-pair-before-publish-internal original-before-publish)
+
+(let ((numeric #(77 77 77 77 77 77 77 77 77))
+      (before (c2-load-owner-counts-internal))
+      (caught #f))
+  (guard (raised (#t (set! caught #t)))
+    (g3r-file-pair-admit-internal c2-path good-path policy report numeric))
+  (check "failed whole-vector promotion leaves numeric destination intact"
+    (and caught (same-c2-counts? before)
+         (let loop ((index 0))
+           (if (= index 9) #t
+               (and (= (vector-ref numeric index) 77)
+                    (loop (+ index 1))))))))
+
+(let ((slots (make-vector 9 'untouched))
+      (before (c2-load-owner-counts-internal)))
+  (check "exact pair admits in one publication"
+    (eq? slots
+         (g3r-file-pair-admit-internal c2-path good-path policy report slots)))
+  (check "published fields and receipt are exact"
+    (and (= (live-c2) (+ (vector-ref before 0) 1))
+         (= (vector-ref (c2-load-owner-counts-internal) 1)
+            (vector-ref before 1))
+         (vector? (vector-ref slots 1))
+         (= (vector-ref slots 4) 2)
+         (= (vector-ref slots 5) 0)
+         (= (vector-ref slots 6) 0)
+         (= (bytevector-length (vector-ref slots 8)) 32)))
+  (check "caller releases exact admitted receipt"
+    (and (g3r-c2-receipt-release-internal! (vector-ref slots 0))
+         (same-c2-counts? before))))
+
+(display "G3-R file pair PASS: checks=") (display checks) (newline)

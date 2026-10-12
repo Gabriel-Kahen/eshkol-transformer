@@ -1,0 +1,170 @@
+(load "g3r_pair_rng_bridge_root.esk")
+
+(extern i64 g3r-test-live-rng-clones
+        :real et_g3t_test_live_rng_clones_v1)
+(extern i64 g3r-test-rng-clone-word ptr i64
+        :real et_g3t_test_rng_clone_word_v1)
+(extern i64 g3r-test-generator-rng-word ptr i64
+        :real et_g3t_test_rng_word_v1)
+(extern i64 g3r-test-fail-alloc-after i64
+        :real et_g3t_test_fail_alloc_after_v1)
+
+(define checks 0)
+(define (check label good)
+  (if good (set! checks (+ checks 1))
+      (begin (display "G3-R pair/RNG FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (live-c2)
+  (vector-ref (c2-load-owner-counts-internal) 0))
+(define (same-c2-counts? before)
+  (let ((after (c2-load-owner-counts-internal)))
+    (and (= (vector-ref after 0) (vector-ref before 0))
+         (= (vector-ref after 1) (vector-ref before 1)))))
+(define (untouched? destination)
+  (let loop ((index 0))
+    (if (= index 10) #t
+        (and (eq? (vector-ref destination index) 'untouched)
+             (loop (+ index 1))))))
+(define (reject label c2-path companion-path policy report)
+  (let ((destination (make-vector 10 'untouched))
+        (before-c2 (c2-load-owner-counts-internal))
+        (before-rng (g3r-test-live-rng-clones))
+        (caught #f))
+    (guard (raised (#t (set! caught #t)))
+      (g3r-pair-rng-admit-internal
+        c2-path companion-path policy report destination))
+    (check label
+      (and caught (untouched? destination)
+           (same-c2-counts? before-c2)
+           (= before-rng (g3r-test-live-rng-clones))))))
+
+(define args (cdr (command-line)))
+(define c2-path (list-ref args 0))
+(define good-path (list-ref args 1))
+(define short-path (list-ref args 2))
+(define torn-path (list-ref args 4))
+(define mismatched-path (list-ref args 5))
+(define policy
+  (c2-persistence-policy-internal 1048576 1048576 1048576 16 'cpu))
+(define report (k2-public-capability-discover))
+
+(reject "short companion creates no owner"
+        c2-path short-path policy report)
+(reject "torn checksum creates no owner"
+        c2-path torn-path policy report)
+(reject "wrong C2 digest creates no owner"
+        c2-path mismatched-path policy report)
+
+(check "arm native RNG allocation cut"
+       (= 0 (g3r-test-fail-alloc-after 0)))
+(reject "RNG allocation cut releases checked receipt"
+        c2-path good-path policy report)
+(check "disarm native RNG allocation cut"
+       (= 0 (g3r-test-fail-alloc-after 9223372036854775807)))
+
+;;; The numeric destination fails only after the pair and kind-8 owner exist.
+(let ((destination #(77 77 77 77 77 77 77 77 77 77))
+      (before-c2 (c2-load-owner-counts-internal))
+      (before-rng (g3r-test-live-rng-clones))
+      (caught #f))
+  (guard (raised (#t (set! caught #t)))
+    (g3r-pair-rng-admit-internal
+      c2-path good-path policy report destination))
+  (check "failed ten-slot promotion releases both owners"
+    (and caught (same-c2-counts? before-c2)
+         (= before-rng (g3r-test-live-rng-clones))
+         (let loop ((index 0))
+           (if (= index 10) #t
+               (and (= (vector-ref destination index) 77)
+                    (loop (+ index 1))))))))
+
+(define hook-saw-vector #f)
+(define hook-mutated #f)
+(define original-hook g3r-file-pair-before-publish-internal)
+(set! g3r-file-pair-before-publish-internal
+  (lambda (payload)
+    (set! hook-saw-vector (vector? payload))
+    (guard (caught (#t #t))
+      (vector-set! payload 0 (vector 'forged-receipt))
+      (set! hook-mutated #t))
+    (guard (caught (#t #t))
+      (vector-set! payload 2 (vector 1 7 -1 -1))
+      (set! hook-mutated #t))))
+(let ((destination (make-vector 10 'untouched))
+      (before-c2 (c2-load-owner-counts-internal))
+      (before-rng (g3r-test-live-rng-clones)))
+  (g3r-pair-rng-admit-internal
+    c2-path good-path policy report destination)
+  (check "hook cannot relabel receipt or imported RNG"
+    (and (not hook-saw-vector) (not hook-mutated)
+         (= (live-c2) (+ (vector-ref before-c2 0) 1))
+         (= (vector-ref (c2-load-owner-counts-internal) 1)
+            (vector-ref before-c2 1))
+         (= (g3r-test-live-rng-clones) (+ before-rng 1))
+         (vector? (vector-ref destination 3))
+         (= (vector-ref (vector-ref destination 3) 0) 1)
+         (= (vector-ref (vector-ref destination 3) 1) 7)
+         (= (vector-ref (vector-ref destination 3) 2) 0)
+         (= (vector-ref (vector-ref destination 3) 3) 0)))
+  (let ((borrow
+          (g3r-c2-receipt-borrow-begin-internal
+            (vector-ref destination 0) 'checkpoint-load)))
+    (check "checked receipt remains authentic"
+           (= (bytevector-length
+                (g3r-c2-receipt-borrow-sha-internal
+                  borrow 'checkpoint-load)) 32))
+    (g3r-c2-receipt-borrow-end-internal! borrow))
+  (let* ((rng (vector-ref destination 1))
+         (native (vector-ref (g3t-prefill-entry rng 'rng 'checkpoint-load) 3)))
+    (check "raw words vector is not typed RNG owner"
+      (guard (raised (#t #t))
+        (g3t-prefill-entry (vector-ref destination 3) 'rng
+                          'checkpoint-load)
+        #f))
+    (vector-set! (vector-ref destination 3) 2 -1)
+    (check "native owner is independent of decoded vector"
+      (and (= (g3r-test-rng-clone-word native 0) 1)
+           (= (g3r-test-rng-clone-word native 1) 7)
+           (= (g3r-test-rng-clone-word native 2) 0)
+           (= (g3r-test-rng-clone-word native 3) 0)))
+    (check "receipt release preserves independent RNG owner"
+      (and (g3r-c2-receipt-release-internal! (vector-ref destination 0))
+           (same-c2-counts? before-c2)
+           (= (g3r-test-live-rng-clones) (+ before-rng 1))))
+    (let* ((config
+             (x1-private-config-resolve
+               (x1-private-config-parse
+                 "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+               '()))
+           (initial (g3t-checked-m3t-initializer-state 1729))
+           (model
+             (with-region ('g3r-pair-rng-model 65536)
+               (g3t-checked-m3t-model-create config initial)))
+           (tokenizer (t1-private-tokenizer-byte config)))
+      (check "real M3T model enters eval" (module-eval! model))
+      (let* ((generator
+               (g3t-generator-create
+                 model tokenizer
+                 (list ':profile 'diagnostic-c2 ':sampling 'greedy
+                       ':temperature-bits #x3f800000 ':top-k 256
+                       ':top-p-bits #x3f800000 ':max-new-tokens 1
+                       ':eos #f ':rng rng)))
+             (generator-native
+               (vector-ref (g3t-generator-find generator 'checkpoint-load) 3)))
+        (check "bridge owner consumed by same-aggregate :rng constructor"
+          (and (= (g3r-test-generator-rng-word generator-native 0) 1)
+               (= (g3r-test-generator-rng-word generator-native 1) 7)
+               (= (g3r-test-generator-rng-word generator-native 2) 0)
+               (= (g3r-test-generator-rng-word generator-native 3) 0)))
+        (check "typed RNG release leaves copied generator RNG live"
+          (and (g3t-generation-rng-release! rng)
+               (= (g3r-test-live-rng-clones) before-rng)
+               (= (g3r-test-generator-rng-word generator-native 0) 1)
+               (= (g3r-test-generator-rng-word generator-native 1) 7)
+               (= (g3r-test-generator-rng-word generator-native 2) 0)
+               (= (g3r-test-generator-rng-word generator-native 3) 0)))
+        (check "generator closes independently"
+               (g3t-generator-close! generator))))))
+(set! g3r-file-pair-before-publish-internal original-hook)
+(display "G3-R pair/RNG bridge PASS: checks=")
+(display checks) (newline)
