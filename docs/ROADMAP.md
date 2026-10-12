@@ -659,6 +659,11 @@ passed the compiled D1 and command gate; this does not establish full CLI3
 acceptance. The required CLI3 suite's
 production-generate and cross-command gates now retain evidence in separate
 directories so their identically named output files cannot overwrite each other.
+Draft PR #202's first hosted run `38256561519` stopped at Q0 Python isolation
+because the D1 facade staging helper was under `scripts/`. The unchanged
+development-only helper now resides under `tests/cli3/`, with its build and
+source-test references updated. Focused Q0/CLI3 source tests and CI topology
+pass; the revised exact-head hosted and compiled gates remain pending.
 
 The isolated CLI3 cross-command test script `scripts/test-cli3-cross-command-chain.sh`
 is prepared for a fresh production-root build. It creates one byte tokenizer,

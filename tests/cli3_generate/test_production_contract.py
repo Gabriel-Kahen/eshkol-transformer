@@ -103,7 +103,8 @@ class ProductionGenerateContract(unittest.TestCase):
         self.assertIn('native/cli3_generate_root.esk',
                       (ROOT / 'scripts/build-cli3.sh').read_text())
         build = (ROOT / 'scripts/build-cli3.sh').read_text()
-        self.assertIn('stage-cli3-d1-readonly.py', build)
+        self.assertIn('tests/cli3/stage-cli3-d1-readonly.py', build)
+        self.assertNotIn('scripts/stage-cli3-d1-readonly.py', build)
         self.assertIn('ESHKOL_LIB_DIR="${public_dir}"', build)
         self.assertIn('"${public_dir}/transformer/data.esk"', build)
         self.assertIn('--emit-depfile', build)

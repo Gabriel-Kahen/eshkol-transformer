@@ -9,7 +9,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = ROOT / "scripts" / "stage-cli3-d1-readonly.py"
+SCRIPT = ROOT / "tests" / "cli3" / "stage-cli3-d1-readonly.py"
 SOURCE = ROOT / "lib" / "transformer" / "data.esk"
 EXPORTS = {
     name for name in (ROOT / "native" / "d1_e1b_public_exports.txt").read_text().splitlines()

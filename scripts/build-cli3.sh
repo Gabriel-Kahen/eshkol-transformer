@@ -15,7 +15,7 @@ temporary_dir="$(mktemp -d "${parent_dir}/.cli3-build.XXXXXX")"
 trap 'rm -rf -- "${temporary_dir}"' EXIT
 public_dir="${temporary_dir}/public"
 mkdir -p "${public_dir}/transformer"
-python3 "${PROJECT_ROOT}/scripts/stage-cli3-d1-readonly.py" \
+python3 "${PROJECT_ROOT}/tests/cli3/stage-cli3-d1-readonly.py" \
   "${PROJECT_ROOT}/lib/transformer/data.esk" \
   "${public_dir}/transformer/data.esk"
 cp "${PROJECT_ROOT}/lib/transformer/error_consumer.esk" \
