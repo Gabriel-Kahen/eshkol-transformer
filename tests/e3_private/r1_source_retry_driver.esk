@@ -103,8 +103,11 @@
            (model-image (e3-test-retention-model-snapshot model)))
        (e3-test-retention-call! model dataset frame destinations cursor modes
                                 model-image)
-       (e3-r1-cut-retry! model dataset frame destinations 7 0)
-       (e3-r1-cut-retry! model dataset frame destinations 7 20)
+       (let role-loop ((role 0))
+         (if (= role 21) #t
+             (begin
+               (e3-r1-cut-retry! model dataset frame destinations 7 role)
+               (role-loop (+ role 1)))))
        (e3-r1-cut-retry! model dataset frame destinations 8 -1)
        (e3-r1-cut-retry! model dataset frame destinations 9 -1)
        (e3-r1-cut-retry! model dataset frame destinations 10 -1)

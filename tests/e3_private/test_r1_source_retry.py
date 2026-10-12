@@ -28,8 +28,14 @@ def source_contract_errors(source: str) -> list[str]:
     errors = [name for name, fragment in required.items() if fragment not in cut]
     if source.count(":real et_e3_test_preinvoke_arm_v1") != 1:
         errors.append("test-only native arm")
-    for stage, role in ((7, 0), (7, 20), (8, -1), (9, -1),
-                        (10, -1), (11, -1), (12, -1)):
+    role_loop = ("(let role-loop ((role 0))\n"
+                 "         (if (= role 21) #t\n"
+                 "             (begin\n"
+                 "               (e3-r1-cut-retry! model dataset frame destinations 7 role)\n"
+                 "               (role-loop (+ role 1)))))")
+    if source.count(role_loop) != 1:
+        errors.append("all 21 forward roles")
+    for stage, role in ((8, -1), (9, -1), (10, -1), (11, -1), (12, -1)):
         if len(re.findall(rf"\(e3-r1-cut-retry! model dataset frame destinations {stage} {role}\)",
                           source)) != 1:
             errors.append(f"stage {stage}/{role}")
@@ -60,11 +66,11 @@ class R1SourceRetryTests(unittest.TestCase):
     def test_missing_cut_or_rollback_assertion_is_rejected(self) -> None:
         source = DRIVER.read_text()
         mutants = [
-            source.replace("(e3-r1-cut-retry! model dataset frame destinations 7 0)",
+            source.replace("(if (= role 21) #t", "(if (= role 20) #t", 1),
+            source.replace("(role-loop (+ role 1))", "(role-loop (+ role 2))", 1),
+            source.replace("(e3-r1-cut-retry! model dataset frame destinations 7 role)",
                            "#t", 1),
             source.replace("(e3-r1-cut-retry! model dataset frame destinations 10 -1)",
-                           "#t", 1),
-            source.replace("(e3-r1-cut-retry! model dataset frame destinations 7 20)",
                            "#t", 1),
             source.replace("(e3-r1-cut-retry! model dataset frame destinations 8 -1)",
                            "#t", 1),
