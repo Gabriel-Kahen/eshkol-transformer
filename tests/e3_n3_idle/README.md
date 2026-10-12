@@ -10,16 +10,21 @@ field seeds one real nonzero gradient before the load. The old two-field
 retained in a bounded eight-slot process root because M3T has no reviewed
 postconstruction release.
 
-**HOLD: this source is not AOT reachable yet.** `scripts/e3-private-package-policy.sh`
-admits only its current exact tuples; `scripts/build-e1b-consumer.sh` exposes
-test-only parameter/gradient observers only for the mode/graph tuple. The next
-dependency is an independently reviewed exact N3 tuple with source and native
-closure, objects, imports/exports/strings, private rename, test-only native
-observer flags, and near-match rejection. The candidate bridge and root are
-deliberately not added to canonical package manifests or installed exports.
+**HOLD: this source is not AOT reachable yet.** The N3 tuple now has exact
+lexical selection and near-match rejection in the E3 package policy. Its
+noninstalled `package_*` files propose the source/native closure, reviewed
+object names, local entry rename, and export/string expectations from the
+existing E3 package and N3 root. E1B has the test-only native observer flags,
+but stops this tuple before toolchain access because the N3 compiled undefined
+symbol inventory has not been emitted and reviewed. The source/native closure
+ordering and export/string expectations also require exact compiled comparison;
+the proposal files alone are not compiled proof. No `package_undefined_symbols.txt`
+placeholder is supplied. Canonical private and installed exports are unchanged.
 
 Source guards: `python3 -B -m unittest tests.e3_n3_idle.test_source_contract`.
-They establish source order and tuple isolation only. The generated AOT path,
+They establish source order, lexical tuple isolation, and explicit admission
+HOLD only. Independent source approval and ROOT exact source/pin review precede
+the bounded import-inventory compile. The generated AOT path,
 preprepare negative/fault cases, full 17-mode and typed RNG observations,
 role/logit transcript comparison, and §9 rollback/retention gates remain open.
 The absent `tests/e3_private/retention_driver.esk` must not be treated as an

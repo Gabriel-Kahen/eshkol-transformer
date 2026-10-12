@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Sourced only by E1B. This admits the base private E3 tuple, its exact
-# source-private diagnostic successor, the installed diagnostic tuple, or the
-# separate noninstalled mode/graph test successor.
+# Sourced only by E1B. The N3 idle-model tuple is registered for exact lexical
+# checks but remains blocked in E1B until its compiled imports are reviewed.
+# Base, diagnostic, installed, and mode/graph tuples retain existing admission.
 # Mixed and partial tuples are rejected.
 e3_base_prefix="${PROJECT_ROOT}/native/e3_private_package"
 e3_diagnostic_prefix="${PROJECT_ROOT}/native/e3_diagnostic_private_package"
 e3_public_prefix="${PROJECT_ROOT}/native/e3_diagnostic_public_package"
 e3_mode_graph_prefix="${PROJECT_ROOT}/tests/e3_mode_graph/package"
+e3_n3_prefix="${PROJECT_ROOT}/tests/e3_n3_idle/package"
 e3_base_inputs=(
   "${PROJECT_ROOT}/native/e3_private_driver_root.esk"
   "${PROJECT_ROOT}/native/e3_private_bridge.c"
@@ -30,6 +31,12 @@ e3_mode_graph_inputs=(
   "${PROJECT_ROOT}/tests/e3_mode_graph/bridge.c"
   "${e3_mode_graph_prefix}_private_renames.txt"
   "${e3_mode_graph_prefix}_public_exports.txt"
+)
+e3_n3_inputs=(
+  "${PROJECT_ROOT}/tests/e3_n3_idle/driver_root.esk"
+  "${PROJECT_ROOT}/tests/e3_n3_idle/bridge.c"
+  "${e3_n3_prefix}_private_renames.txt"
+  "${e3_n3_prefix}_public_exports.txt"
 )
 e3_prefix="${e3_base_prefix}"
 e3_inputs=("${e3_base_inputs[@]}")
@@ -71,6 +78,14 @@ for e3_raw in "${raw_private_root}" "${raw_package_bridge}" \
       e3_tuple_requested=1
     fi
   done
+  for e3_expected in "${e3_n3_inputs[@]}"; do
+    if [[ "$(realpath -m -- "${e3_raw}")" == "${e3_expected}" ]]; then
+      [[ -z "${e3_tuple_kind}" || "${e3_tuple_kind}" == n3-idle ]] || \
+        die "E3 policy rejects mixed N3 and other tuples"
+      e3_tuple_kind=n3-idle
+      e3_tuple_requested=1
+    fi
+  done
 done
 
 if [[ "${e3_tuple_kind}" == diagnostic ]]; then
@@ -84,6 +99,9 @@ elif [[ "${e3_tuple_kind}" == public ]]; then
 elif [[ "${e3_tuple_kind}" == mode-graph ]]; then
   e3_prefix="${e3_mode_graph_prefix}"
   e3_inputs=("${e3_mode_graph_inputs[@]}")
+elif [[ "${e3_tuple_kind}" == n3-idle ]]; then
+  e3_prefix="${e3_n3_prefix}"
+  e3_inputs=("${e3_n3_inputs[@]}")
 fi
 
 e3_check_repository_path() {
@@ -155,7 +173,6 @@ if [[ "${e3_tuple_requested}" == 1 ]]; then
     die "E3 policy requires exact ordered trusted include roots"
   for e3_path in "${e3_inputs[@]}" "${raw_include_dirs[@]}" \
       "${e3_prefix}_defined_symbols.txt" \
-      "${e3_prefix}_undefined_symbols.txt" \
       "${e3_prefix}_public_strings.txt" \
       "${e3_prefix}_native_objects.txt" \
       "${e3_prefix}_archive_members.txt" \
@@ -163,6 +180,9 @@ if [[ "${e3_tuple_requested}" == 1 ]]; then
       "${e3_prefix}_native_source_closure.txt"; do
     e3_check_repository_path "${e3_path}"
   done
+  if [[ "${e3_tuple_kind}" != n3-idle ]]; then
+    e3_check_repository_path "${e3_prefix}_undefined_symbols.txt"
+  fi
   if [[ "${e3_public_tuple}" == 1 ]]; then
     e3_check_repository_path "${e3_prefix}_facades.txt"
   fi

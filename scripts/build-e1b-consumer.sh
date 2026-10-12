@@ -82,6 +82,9 @@ for g3g_raw_input in "${raw_private_root}" "${raw_package_bridge}" \
   esac
 done
 source "${PROJECT_ROOT}/scripts/e3-private-package-policy.sh"
+if [[ "${e3_tuple_kind}" == n3-idle ]]; then
+  die "E3 N3 idle tuple HOLD: exact compiled undefined-symbol inventory is not reviewed"
+fi
 if [[ "${e3_tuple_requested}" == 1 ]]; then
   m3_tuple_requested=0
   m3t_tuple_requested=0
@@ -1283,6 +1286,8 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
       export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
     elif [[ "${e3_tuple_kind}" == mode-graph ]]; then
       export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_mode_graph_run_v1)$'
+    elif [[ "${e3_tuple_kind}" == n3-idle ]]; then
+      export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_n3_zero_test_run_v1)$'
     fi
   fi
 fi
@@ -1565,10 +1570,12 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     package_native_cflags+=("${package_native_define}")
   fi
   if [[ "${package_policy}" == e3-private-aggregate &&
-        "${e3_tuple_kind}" == mode-graph ]]; then
-    # Shared probes are needed by the mode/graph test; other tuples keep old code.
-    package_native_cflags+=(-DET_E3_RETENTION_TESTING
-                            -DET_E3_MODE_GRAPH_TESTING)
+        ( "${e3_tuple_kind}" == mode-graph || "${e3_tuple_kind}" == n3-idle ) ]]; then
+    # The two noninstalled tuples use the existing test-only model observers.
+    package_native_cflags+=(-DET_E3_RETENTION_TESTING)
+    if [[ "${e3_tuple_kind}" == mode-graph ]]; then
+      package_native_cflags+=(-DET_E3_MODE_GRAPH_TESTING)
+    fi
   fi
   native_index=0
   for package_native_source in "${package_native_sources[@]}"; do
@@ -1576,7 +1583,7 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     package_native_depfile="${e1b_tmp}/package-native-${native_index}.d"
     package_source_flags=()
     if [[ "${package_policy}" == e3-private-aggregate &&
-          "${e3_tuple_kind}" == mode-graph ]]; then
+          ( "${e3_tuple_kind}" == mode-graph || "${e3_tuple_kind}" == n3-idle ) ]]; then
       case "${package_native_source}" in
         "${PROJECT_ROOT}/src/eshkol_transformer/m3_call_f32_integration.c")
           package_source_flags+=(-DET_F32_TENSOR_TESTING) ;;
@@ -2074,6 +2081,14 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
         et_e3_test_seed_gradient_v1
         et_d2_exact_read_test_fail_stage_v1
       )
+    elif [[ "${e3_tuple_kind}" == n3-idle ]]; then
+      e3_required_private+=(
+        et_e3_n3_zero_test_run_cabi_v1
+        et_e3_test_model_word_count_v1
+        et_e3_test_model_word_v1
+        et_e3_test_gradient_metadata_v1
+        et_e3_test_seed_gradient_v1
+      )
     fi
   fi
   for privileged in "${e3_required_private[@]}"; do
@@ -2157,6 +2172,8 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
       public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
     elif [[ "${e3_tuple_kind}" == mode-graph ]]; then
       public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_mode_graph_run_v1)$'
+    elif [[ "${e3_tuple_kind}" == n3-idle ]]; then
+      public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_n3_zero_test_run_v1)$'
     fi
   fi
 fi

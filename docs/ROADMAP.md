@@ -799,9 +799,12 @@ current two-field private scenario, the single tied head/token-embedding owner,
 and immediate commit after successful prepare. Integration and compiled proof
 remain pending; this contract does not discharge any §9 numerical or rollback row.
 The separate [N3 source candidate](../tests/e3_n3_idle/README.md) stages the
-authentic idle load and native parameter/gradient observation. It is held at
-exact noninstalled tuple admission and has source-only checks; no AOT or §9
-claim follows from this candidate.
+authentic idle load and native parameter/gradient observation. Its isolated
+tuple proposal now has exact lexical selection, near-match rejection, source
+and native closure candidates, and test-only observer flag wiring. E1B still
+holds N3 before toolchain access pending independently reviewed exact imports,
+source/native closure and pin evidence. Source-only checks do not prove AOT or
+any §9 row.
 
 The [standalone N3 zero-model reference](../tests/e3_reference/README.md)
 generates four genuine D1/D2 all-correct, all-wrong and padded cases, with
