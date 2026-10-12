@@ -345,7 +345,21 @@ def validate(payload: dict[str, object]) -> None:
         }:
             raise ValueError("zero-model oracle schema differs")
         prediction = oracle["predicted_f32"]
+        if not isinstance(prediction, dict) or prediction.get("kind") != "synthetic-observation":
+            raise ValueError("zero-model prediction kind differs")
         validate_observed_case(prediction, tuple(expected_rows))
+        if not isinstance(oracle["mathematical"], list):
+            raise ValueError("zero-model mathematical rows differ")
+        for batch in oracle["mathematical"]:
+            if not isinstance(batch, dict) or set(batch) != {
+                "ce_f64", "inputs", "mask", "ordinal", "roles", "targets"
+            } or not isinstance(batch["roles"], list):
+                raise ValueError("zero-model mathematical row schema differs")
+            for role in batch["roles"]:
+                if not isinstance(role, dict) or set(role) != {
+                    "name", "shape", "values_f64"
+                }:
+                    raise ValueError("zero-model role schema differs")
         validate_mathematical_case(
             prediction, oracle["mathematical"], tuple(expected_rows),
             oracle["mathematical_loss_f64"],

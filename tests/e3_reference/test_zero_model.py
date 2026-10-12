@@ -83,6 +83,15 @@ class ZeroModelReferenceTests(unittest.TestCase):
         wrong["cases"][0]["oracle"]["mathematical"][0]["roles"][0]["shape"] = [1, 1, 8]
         mutations.append((wrong, ValueError))
         wrong = copy.deepcopy(self.first)
+        wrong["cases"][0]["oracle"]["predicted_f32"]["kind"] = "observed-f32"
+        mutations.append((wrong, ValueError))
+        wrong = copy.deepcopy(self.first)
+        wrong["cases"][0]["oracle"]["mathematical"][0]["unreviewed_extra"] = 1
+        mutations.append((wrong, ValueError))
+        wrong = copy.deepcopy(self.first)
+        wrong["cases"][0]["oracle"]["mathematical"][0]["roles"][0]["unreviewed_extra"] = 1
+        mutations.append((wrong, ValueError))
+        wrong = copy.deepcopy(self.first)
         wrong["cases"][0]["oracle"]["predicted_f32"]["batches"][0]["correct_f32"] = "00000000"
         mutations.append((wrong, TranscriptError))
         wrong = copy.deepcopy(self.first)
