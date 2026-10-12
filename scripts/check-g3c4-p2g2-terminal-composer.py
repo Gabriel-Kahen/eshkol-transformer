@@ -21,12 +21,22 @@ additions = [
     "scripts/check-g3c4-p2g2-terminal-composer.py",
     "scripts/test-g3c4-p2g2-terminal-composer.sh",
     "tests/g3c4/call_entry_allocation_shim.cpp",
+    "tests/g3c4/prepare_terminal_asan_ir.py",
+    "tests/g3c4/check_p2_g2_terminal_emitted_evidence.py",
+    "tests/g3c4/test_terminal_emitted_evidence.py",
+    "tests/g3c4/p2_g2_terminal_emitted_dependencies.json",
+    "tests/g3c4/p2_g2_terminal_historical_dynamic_imports.txt",
+    "docs/g3/G3_C4_P2_G2_EMITTED_EVIDENCE_HOLD.md",
     "native/g3c4_p2g2_terminal_composer_source_closure.txt",
 ]
 closure = (root / additions[-1]).read_text().splitlines()
 assert closure == base + additions
 assert len(closure) == len(set(closure))
 assert all((root / path).is_file() for path in closure)
+assert "G3C4_TERMINAL_RETAIN_EMITTED" in (
+    root / "scripts/test-g3c4-p2g2-terminal-composer.sh").read_text()
+assert "--emit-object --dump-ir" in (
+    root / "scripts/test-g3c4-p2g2-terminal-composer.sh").read_text()
 source = (root / "native/g3c4_p2g2_terminal_composer_extension.esk").read_text()
 fixture = (root / "tests/g3c4/p2_g2_terminal_composer_test.esk").read_text()
 native_fixture = (root / "tests/g3c4/p2_g2_terminal_composer_native.c").read_text()

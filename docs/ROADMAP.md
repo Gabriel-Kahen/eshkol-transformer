@@ -2723,6 +2723,14 @@ publication, public G2 and continuation remain pending.
   Admission/integration, compiled normal/sanitizer, emitted-code and launcher
   gates remain pending. No production API or zero tail changed. A future
   supported holder needs a separate call-bound ownership contract.
+  A separate [emitted-evidence source-only successor](g3/G3_C4_P2_G2_EMITTED_EVIDENCE_HOLD.md)
+  adds opt-in retention of exact compiler IR/bitcode/objects, linked fixtures,
+  depfiles and import inventories for the terminal, feature-off and all nine
+  overlays in normal/sanitizer modes. Its source-only negative controls pass;
+  no compiled gate ran. The checker deliberately leaves successful-zero
+  no-allocation and full linked closure on HOLD pending path-sensitive IR
+  proof, manual emitted-artifact review and a separately reviewed sole-slot
+  launcher with complete raw command/exit and teardown evidence.
 
 ## Wave 4 — practical pretraining and performance
 

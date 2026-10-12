@@ -197,4 +197,10 @@ tests/g3c4/test_active_call_checker.py
 scripts/check-g3c4-p2g2-terminal-composer.py
 scripts/test-g3c4-p2g2-terminal-composer.sh
 tests/g3c4/call_entry_allocation_shim.cpp
+tests/g3c4/prepare_terminal_asan_ir.py
+tests/g3c4/check_p2_g2_terminal_emitted_evidence.py
+tests/g3c4/test_terminal_emitted_evidence.py
+tests/g3c4/p2_g2_terminal_emitted_dependencies.json
+tests/g3c4/p2_g2_terminal_historical_dynamic_imports.txt
+docs/g3/G3_C4_P2_G2_EMITTED_EVIDENCE_HOLD.md
 native/g3c4_p2g2_terminal_composer_source_closure.txt
