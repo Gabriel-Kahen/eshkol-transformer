@@ -107,7 +107,10 @@ class ProductionGenerateContract(unittest.TestCase):
         self.assertNotIn('scripts/stage-cli3-d1-readonly.py', build)
         self.assertIn('ESHKOL_LIB_DIR="${public_dir}"', build)
         self.assertIn('"${public_dir}/transformer/data.esk"', build)
-        self.assertIn('--emit-depfile', build)
+        self.assertIn('compile_app --emit-object --emit-depfile', build)
+        self.assertIn('[[ -s "${temporary_dir}/eshkol-transformer.d" ]]', build)
+        self.assertLess(build.index('compile_app --emit-object --emit-depfile'),
+                        build.index('compile_app "${app_source}" -o'))
         self.assertIn('cli3_generate_defined_symbols.txt', build)
         self.assertIn('(require transformer.data)',
                       (ROOT / 'src/eshkol_transformer/cli.esk').read_text())

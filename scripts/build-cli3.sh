@@ -46,16 +46,21 @@ cmp "${PROJECT_ROOT}/native/cli3_generate_defined_symbols.txt" \
 runner="$(eshkol_build_dir)/eshkol-run"
 cxx="$(tsv_value "$(eshkol_build_dir)/eshkol-transformer-provenance.tsv" cxx_path)"
 mkdir -p "${temporary_dir}/app-cache"
-env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR \
-  ESHKOL_JIT_CACHE=0 \
-  XDG_CACHE_HOME="${temporary_dir}/app-cache" \
-  ESHKOL_LIB_DIR="${public_dir}" \
-  ESHKOL_CXX_COMPILER="${cxx}" \
-  "${runner}" --strict-types --no-stdlib -I "${public_dir}" \
-    -L "${temporary_dir}" --lib eshkol_transformer_cli3 \
-    --emit-depfile "${temporary_dir}/eshkol-transformer.d" \
-    "${PROJECT_ROOT}/src/eshkol_transformer/cli.esk" \
-    -o "${temporary_dir}/eshkol-transformer"
+compile_app() {
+  env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR \
+    ESHKOL_JIT_CACHE=0 \
+    XDG_CACHE_HOME="${temporary_dir}/app-cache" \
+    ESHKOL_LIB_DIR="${public_dir}" \
+    ESHKOL_CXX_COMPILER="${cxx}" \
+    "${runner}" --strict-types --no-stdlib -I "${public_dir}" \
+      -L "${temporary_dir}" --lib eshkol_transformer_cli3 \
+      "$@"
+}
+app_source="${PROJECT_ROOT}/src/eshkol_transformer/cli.esk"
+compile_app --emit-object --emit-depfile "${temporary_dir}/eshkol-transformer.d" \
+  "${app_source}" -o "${temporary_dir}/eshkol-transformer.depcheck.o"
+[[ -s "${temporary_dir}/eshkol-transformer.d" ]] || \
+  die "CLI3 app object-mode depfile is missing"
 grep -F "${public_dir}/transformer/data.esk" \
   "${temporary_dir}/eshkol-transformer.d" >/dev/null || \
   die "CLI3 app did not import the staged read-only D1 facade"
@@ -69,6 +74,7 @@ if grep -F "${PROJECT_ROOT}/lib/transformer/data.esk" \
     "${temporary_dir}/eshkol-transformer.d" >/dev/null; then
   die "CLI3 app imported the full D1/D2 facade"
 fi
+compile_app "${app_source}" -o "${temporary_dir}/eshkol-transformer"
 nm -u "${temporary_dir}/eshkol-transformer" \
   >"${temporary_dir}/eshkol-transformer.undefined.txt"
 if grep -E 'et_e1b_public_(d1_token_corpus_write|d2_)' \

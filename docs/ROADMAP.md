@@ -664,6 +664,11 @@ because the D1 facade staging helper was under `scripts/`. The unchanged
 development-only helper now resides under `tests/cli3/`, with its build and
 source-test references updated. Focused Q0/CLI3 source tests and CI topology
 pass; the revised exact-head hosted and compiled gates remain pending.
+The next hosted run `38259465352` passed Q0 topology but its CLI3 command job
+stopped before installed runtime: the pinned Eshkol runner does not emit a
+depfile for executable output. The source-only builder repair obtains the
+same app import graph from an object-mode compile before producing the
+executable. Exact-head hosted and compiled validation remain pending.
 
 The isolated CLI3 cross-command test script `scripts/test-cli3-cross-command-chain.sh`
 is prepared for a fresh production-root build. It creates one byte tokenizer,

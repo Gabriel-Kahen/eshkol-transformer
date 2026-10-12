@@ -24,6 +24,10 @@ projected facade, handler, and app depfile with the artifact and rejects
 unresolved public D1-writer/D2 references. These are source and build-time
 controls, not a compiled result.
 
+The pinned Eshkol runner writes `--emit-depfile` only for object or shared-library
+output. The builder therefore checks the app import graph with an object-mode
+compile, then compiles the executable from the same source and import settings.
+
 The installed entry intercepts only the `corpus validate` argument prefix
 before its existing native dispatch and fallback guard. The standalone command
 and installed entry call the same Eshkol handler, which uses the public D1
