@@ -649,8 +649,9 @@ training and held-out D1 corpora, and a new fixed-profile C2 checkpoint, then
 inspects, evaluates, and generates from that same checkpoint in separate
 processes. It checks exact X1/T1/C2 identities, unchanged checkpoint bytes,
 fixed-profile and cross-config rejection, and corrupt-checkpoint diagnostics.
-This test-only source has not run its compiled gate or changed the CLI3
-command API.
+The test is registered after the production generate gate in the required
+CLI3 CI suite. Its compiled gate has not run; registration does not change
+the CLI3 command API or establish validation.
 
 The test-only CLI3/G3-G checkpoint-to-generation prerequisite has passed its
 exact fe9/f31 supported linked/runtime gate at `ab479f5`/tree `1102384`.
