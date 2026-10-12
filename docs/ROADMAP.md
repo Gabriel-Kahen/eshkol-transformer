@@ -814,6 +814,12 @@ distinct verification authorities and limits. The separate source-only
 validator at `tests/e3_private/e3_n1_export_input.py` checks complete synthetic
 plans for structural review readiness but
 never reads an image, issues custody authority or enables an export.
+The [f32 small-metadata acquisition source](e3/E3_N1_F32_SMALL_METADATA.md)
+adds three separately pinned, one-JSON-at-a-time index→manifest→config stages
+with read-time source identity and preserved raw-byte evidence. Its production
+request pin is absent; only tiny synthetic fixtures run, and the reported f32
+index path, selected descriptors and real bytes remain unknown/HOLD. It reads
+no layers and grants no export or admission authority.
 The [local pin acquisition](e3/E3_N1_LOCAL_PIN_ACQUISITION.md) seals the small
 index/manifest/config bytes and host-only candidates; guest bytes remain absent.
 The [bounded gzip scanner](e3/E3_N1_GZIP_SCANNER.md) A source was held for a
