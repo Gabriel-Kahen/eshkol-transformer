@@ -63,7 +63,7 @@ fixture_check() {
   [[ "${actual}" == "${N5_CORPUS_INVENTORY_SHA256}" ]]
 }
 finalize() {
-  local status=$? seal_status=0 pin_status fixture_status copy
+  local status=$? seal_status=0 verify_status=0 pin_status fixture_status copy
   trap - EXIT INT TERM
   set +e
   check_pins >"${out}/postflight-pins.tsv" 2>"${out}/postflight-pins.stderr"
@@ -97,7 +97,27 @@ finalize() {
   PYTHONPATH="${PROJECT_ROOT}" PYTHONDONTWRITEBYTECODE=1 \
     python3 -m tests.e3_n5.evidence seal "${out}" "${status}" "${stage}"
   seal_status=$?
-  [[ ${status} -ne 0 ]] || status=${seal_status}
+  if [[ -e "${out}/SEAL-COLLISION.json" || -L "${out}/SEAL-COLLISION.json" ]]; then
+    printf 'N5 seal collision after gate status %d; reserved evidence was preserved\n' \
+      "${status}" >&2
+    status=73
+  elif [[ ! -f "${out}/SHA256SUMS" || -L "${out}/SHA256SUMS" ]]; then
+    printf 'N5 seal was not completed after gate status %d (seal status %d)\n' \
+      "${status}" "${seal_status}" >&2
+    status=74
+  else
+    [[ ${status} -ne 0 ]] || status=${seal_status}
+    (cd "${out}" && timeout --foreground --signal=TERM --kill-after=5s 300s \
+      bash -c 'sha256sum -c --strict --status SHA256SUMS && \
+        PYTHONPATH="$1" PYTHONDONTWRITEBYTECODE=1 \
+        python3 -m tests.e3_n5.evidence verify-inventory .' _ "${PROJECT_ROOT}")
+    verify_status=$?
+    if [[ ${verify_status} -ne 0 ]]; then
+      printf 'N5 post-seal checksum/inventory verification failed (status %d)\n' \
+        "${verify_status}" >&2
+      status=74
+    fi
+  fi
   if [[ ${status} -eq 0 ]]; then
     printf 'E3 N5 private compiled gate passed: %s\n' "${out}"
   else

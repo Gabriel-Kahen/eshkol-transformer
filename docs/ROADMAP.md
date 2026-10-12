@@ -800,7 +800,9 @@ pass; its pinned compiled normal/poison/sanitizer gate and evidence review
 remain pending. This is not §9 acceptance or a replacement for the earlier
 8,192 traversal horizon. The gate-prep successor requires reviewed exact
 source/toolchain/compiler/fixture pins and seals partial failure evidence with
-a complete no-symlink inventory; no compiled run has been launched.
+a complete no-symlink inventory. The seal is one-use: reserved-name collisions
+preserve existing evidence, and bounded strict checksum plus complete inventory
+checks follow creation. No compiled run has been launched.
 
 The [E3 idle real-model control contract](e3/E3_IDLE_REAL_MODEL_CONTROL_CONTRACT.md)
 specifies a test-only use of existing I2 checkpoint decode and whole-batch load

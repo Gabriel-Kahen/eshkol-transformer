@@ -84,7 +84,14 @@ and records elapsed time/peak RSS for each mode. Its exit handler preserves
 and seals partial output on failure, recording the failing stage and status.
 `INVENTORY.jsonl` lists every directory, regular file, symlink and nonregular
 entry; symlinks and nonregular entries reject success. `SHA256SUMS` seals the
-regular files and inventory. The sealed output needs independent review before
+regular files and inventory. The four seal files are created once with exclusive
+creation; any pre-existing reserved file or symlink stops sealing without
+altering it. `SEAL-COLLISION.json` records the collision when it can be created
+exclusively; it is diagnostic, not a valid seal. A bounded post-seal strict
+`sha256sum -c` plus complete inventory reconciliation checks the seal without
+writing into the output tree; failure prevents gate success. `exit.status`
+records the pre-verification gate verdict; the shell exit is authoritative if
+post-seal verification fails. The sealed output needs independent review before
 any acceptance claim. The accepted
 8,192 single-invocation horizon and five-layout final-output evidence remain
 separate; neither proves this N5 case.
