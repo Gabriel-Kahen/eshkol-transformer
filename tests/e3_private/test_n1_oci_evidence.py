@@ -195,6 +195,39 @@ class OciEvidenceTests(unittest.TestCase):
         self.rebuild()
         self.assert_hold()
 
+    def test_total_cap_preempts_later_gzip_error(self):
+        # A corrupt tail would fail later; the total cap must stop the first
+        # layer before the decoder reaches it.
+        large = tar_bytes("large", b"x" * 150000)
+        damaged = gzip.compress(large, compresslevel=0, mtime=0)[:-4]
+        self.manifest["layers"][0] = self.blob(damaged, TAR + "+gzip")
+        self.plan["limits"]["max_blob_bytes"] = 300000
+        self.plan["limits"]["max_expanded_layer_bytes"] = 300000
+        self.plan["limits"]["max_total_expanded_bytes"] = 4096
+        self.rebuild()
+        result = self.run_cli()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, b"")
+        self.assertIn(b"total-expanded-cap", result.stderr)
+
+    def test_non_utf8_oci_json_holds(self):
+        (self.layout / "oci-layout").write_bytes(
+            json.dumps({"imageLayoutVersion": "1.0.0"}).encode("utf-16"))
+        self.assert_hold()
+        self.index_bytes = json.dumps(self.index).encode("utf-16")
+        (self.layout / "index.json").write_bytes(self.index_bytes)
+        self.plan["index_digest"] = digest(self.index_bytes)
+        (self.layout / "oci-layout").write_bytes(raw({"imageLayoutVersion": "1.0.0"}))
+        self.assert_hold()
+
+    def test_unpaired_surrogate_and_numeric_overflow_hold(self):
+        self.manifest_desc["annotations"] = {"synthetic": "\ud800"}
+        self.index_bytes = raw(self.index)
+        (self.layout / "index.json").write_bytes(self.index_bytes)
+        self.plan["index_digest"] = digest(self.index_bytes)
+        self.assert_hold()
+        self.assert_hold(input_bytes=b'{"schema":1e999}\n')
+
 
 if __name__ == "__main__":
     unittest.main()

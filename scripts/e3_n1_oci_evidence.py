@@ -4,6 +4,7 @@
 import argparse
 import hashlib
 import json
+import math
 import os
 import resource
 import stat
@@ -37,8 +38,11 @@ def need(ok, reason):
 
 
 def canonical(value):
-    return (json.dumps(value, sort_keys=True, separators=(",", ":"),
-                       ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
+    try:
+        return (json.dumps(value, sort_keys=True, separators=(",", ":"),
+                           ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
+    except (UnicodeEncodeError, ValueError, TypeError, RecursionError) as error:
+        raise Hold("noncanonical-json-value") from error
 
 
 def parse_json(raw, canonical_required=False):
@@ -49,11 +53,30 @@ def parse_json(raw, canonical_required=False):
             result[key] = value
         return result
 
+    def finite_float(text):
+        value = float(text)
+        need(math.isfinite(value), "nonfinite-json")
+        return value
+
     try:
-        value = json.loads(raw, object_pairs_hook=pairs,
-                           parse_constant=lambda _: need(False, "nonfinite-json"))
-    except (UnicodeDecodeError, ValueError, TypeError) as error:
+        value = json.loads(raw.decode("utf-8"), object_pairs_hook=pairs,
+                           parse_constant=lambda _: need(False, "nonfinite-json"),
+                           parse_float=finite_float)
+    except (UnicodeDecodeError, ValueError, TypeError, RecursionError) as error:
         raise Hold("invalid-json") from error
+    stack = [value]
+    while stack:
+        item = stack.pop()
+        if type(item) is dict:
+            stack.extend(item.keys())
+            stack.extend(item.values())
+        elif type(item) is list:
+            stack.extend(item)
+        elif type(item) is str:
+            try:
+                item.encode("utf-8")
+            except UnicodeEncodeError as error:
+                raise Hold("malformed-unicode") from error
     if canonical_required:
         need(raw == canonical(value), "noncanonical-input")
     return value
@@ -165,7 +188,7 @@ def verified_json_blob(root, desc, deadline, rss_cap):
     return parse_json(raw)
 
 
-def verified_layer(root, desc, diff_id, limits, deadline):
+def verified_layer(root, desc, diff_id, limits, remaining_total, deadline):
     fd = blob_fd(root, desc)
     compressed = hashlib.sha256()
     expanded = hashlib.sha256()
@@ -183,6 +206,7 @@ def verified_layer(root, desc, diff_id, limits, deadline):
                 expanded_size += len(block)
                 need(expanded_size <= limits["max_expanded_layer_bytes"],
                      "expanded-byte-cap")
+                need(expanded_size <= remaining_total, "total-expanded-cap")
                 expanded.update(block)
             else:
                 need(not decoder.eof, "gzip-trailing")
@@ -197,6 +221,7 @@ def verified_layer(root, desc, diff_id, limits, deadline):
                         expanded_size += len(output)
                         need(expanded_size <= limits["max_expanded_layer_bytes"],
                              "expanded-byte-cap")
+                        need(expanded_size <= remaining_total, "total-expanded-cap")
                         expanded.update(output)
                     tail = decoder.unconsumed_tail
                     check_budget(deadline, limits["max_rss_bytes"])
@@ -318,7 +343,9 @@ def verify(input_path):
         for desc, diff_id in zip(manifest["layers"], diff_ids):
             descriptor(desc, {TAR_TYPE, GZIP_TYPE})
             need(desc["size"] <= limits["max_blob_bytes"], "blob-byte-cap")
-            expanded_size = verified_layer(root, desc, diff_id, limits, deadline)
+            expanded_size = verified_layer(
+                root, desc, diff_id, limits,
+                limits["max_total_expanded_bytes"] - total, deadline)
             total += expanded_size
             need(total <= limits["max_total_expanded_bytes"], "total-expanded-cap")
             layers.append({"descriptor": desc, "diff_id": diff_id,

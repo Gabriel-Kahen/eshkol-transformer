@@ -42,7 +42,9 @@ The verifier requires a unique exact requested OS/architecture descriptor
 from `index.json`, a version-2 OCI manifest, a matching OCI config with
 `rootfs.type=layers`, and exact ordered layer/diffID count. It streams regular,
 nofollow gzip or uncompressed tar blobs under positive capped time, RSS,
-compressed and expanded byte limits. It rejects short, extra-member and
+compressed and expanded byte limits; the per-layer and combined expanded caps
+are enforced on every output chunk. It requires UTF-8 OCI JSON and rejects
+nonfinite numbers or malformed Unicode. It rejects short, extra-member and
 trailing gzip input. The config digest is the OCI ImageID; the index digest
 identifies the index and is kept separately. The output's `chain_id` applies
 the v1.1.1 recursion to the **verified ordered diffIDs**; it is labelled
