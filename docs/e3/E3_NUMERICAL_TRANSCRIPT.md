@@ -85,3 +85,17 @@ Unpacked layouts retain their distinct D2 boundaries.
 This composition has passed source-only checks. Its exact-source AOT and
 sanitized executions remain pending; the earlier numerical gate failures do
 not establish an N2 verdict for this tree.
+
+The accepted source-only composition is pinned at `b20c81f1`/tree
+`56d9b6ee`. A separate one-use supported fe9/f31 prelaunch bundle at
+`/home/gabe/.codex/evidence/eshkol-transformer/e3-n2-observer-b20-fe9-f31-20261012-prepared-d`
+has a read-only `launch.sh --check`, exact Q0 and frozen-reference inventories,
+the five-layout gate, raw exit/log retention, and a post-run seal verifier.
+Its `SHA256SUMS-PREPARED` SHA-256 is
+`b489c57b2b2bbd0c292ccfcb83adb9dc9e12a0b1d829c8deab5601a05a611a39`.
+The read-only preflight, seven fake-daemon lifecycle tests and synthetic seal
+test pass; Docker and the compiled gate have not run. Prepared-a through
+prepared-c are superseded and retained for audit. The launcher waits for hosted
+CLI run 38304110383 to finish. The b20 source predates current main's CLI3
+topology and CLI PR #202's installed D1 assertions. A current-main union,
+independent review and exact-source rerun are required before integration.
