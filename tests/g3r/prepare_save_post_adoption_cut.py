@@ -21,6 +21,7 @@ MANUAL_PREFILL = ("native/g3t_manual_p1_extension.esk",
 FIXTURES = ("tests/g3r/save_post_adoption_cut_root.esk",
             "tests/g3r/save_post_adoption_cut_runtime.esk")
 NATIVE_FIXTURE = "tests/g3r/save_model_bits_bridge.c"
+NATIVE_TEST_SEAM = ("native/f32_parameter_internal.h", "native/f32_tensor.c")
 FE9 = "fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9"
 FE9_RUNNER_SHA256 = "7dd254bab761fe41142a0e3777338f41b3b9f03a5ce4c0bba419f1e2b22a99aa"
 FE9_RUNTIME_SHA256 = "32cd446a3aeaa2e78bbe49b0c04cda961b8e1eeb7bb0ea53ec5e55c11f0c183e"
@@ -83,7 +84,7 @@ def prepare(output: Path) -> None:
                 "native/g3r_training_controls_extension.esk"}
     if not required.issubset(files):
         raise ValueError("real P1/O2/C2/adoption leaves are missing")
-    for name in (*FIXTURES, NATIVE_FIXTURE):
+    for name in (*FIXTURES, NATIVE_FIXTURE, *NATIVE_TEST_SEAM):
         committed = subprocess.check_output(["git", "show", f"HEAD:{name}"],
                                             cwd=ROOT)
         if (ROOT / name).read_bytes() != committed:
@@ -100,7 +101,7 @@ def prepare(output: Path) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / relative, target)
         copied.append(target)
-    for name in (*FIXTURES, NATIVE_FIXTURE):
+    for name in (*FIXTURES, NATIVE_FIXTURE, *NATIVE_TEST_SEAM):
         target = source_root / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / name, target)

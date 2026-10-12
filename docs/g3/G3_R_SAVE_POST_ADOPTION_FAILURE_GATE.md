@@ -14,7 +14,7 @@ generates one test-only caller. It rejects any change to the accepted caller
 or any file in its 96-file recursive closure. It adds the two accepted manual
 P1 prefill helpers and verifies both fixture files against committed HEAD
 before copying. A source-only successor also copies the committed test-only
-native bit observer. The generated caller differs
+native bit observer and the two committed F32 test-seam files. The generated caller differs
 only at two sites: one call to the test failure hook immediately after the
 root-cell publication, and a counted wrapper around the real abandon call.
 The original caller and adoption leaf stay unchanged. `SOURCE-SHA256SUMS`

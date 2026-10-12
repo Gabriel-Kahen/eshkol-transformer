@@ -47,6 +47,9 @@ class PostAdoptionPreparation(unittest.TestCase):
             self.assertTrue((destination / "source/native/c2_training_state_extension.esk").is_file())
             self.assertTrue((destination / "source/internal/p1/lib/transformer/module.esk").is_file())
             self.assertTrue((destination / "source/tests/g3r/save_model_bits_bridge.c").is_file())
+            for name in ("native/f32_parameter_internal.h", "native/f32_tensor.c"):
+                self.assertEqual((destination / "source" / name).read_bytes(),
+                                 (ROOT / name).read_bytes())
             runtime = (destination / "source/tests/g3r/save_post_adoption_cut_runtime.esk").read_text()
             self.assertIn("(g3m-prefill-p1! generator input)", runtime)
             self.assertNotIn("g3t-with-call", runtime)
