@@ -880,6 +880,10 @@ and resource proof and both real-read gates remain HOLD.
 The [authority host gate](e3/E3_N1_AUTHORITY_HOST_GATE.md) identifies the
 missing real-UID privilege and finite launcher, protected v3 signing/stores,
 handoff and whole-attempt accounting; it deploys nothing and retains HOLD.
+The [generated finite-attempt diagnostic](e3/E3_N1_GENERATED_ATTEMPT.md)
+tests same-UID HOLD-before-reader ordering, receipt/seal stubs, finite
+setup/role peaks, a BOOTTIME interval and failure cuts; its active observer,
+unprotected pipes/stores and caller cgroup leave all proof gates HOLD.
 The [local pin acquisition](e3/E3_N1_LOCAL_PIN_ACQUISITION.md) seals the small
 index/manifest/config bytes and host-only candidates; guest bytes remain absent.
 The [bounded gzip scanner](e3/E3_N1_GZIP_SCANNER.md) A source was held for a
