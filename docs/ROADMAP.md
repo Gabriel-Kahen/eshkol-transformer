@@ -2693,8 +2693,9 @@ publication, public G2 and continuation remain pending.
   after native commit. The native terminal commit/snapshot and logical I1
   clone/copy/release APIs are present on this main tree. The private Eshkol
   composer is source-staged on `codex/g3-p2g2-terminal-composer-main-union`;
-  independent review and a pinned normal/repeat/sanitizer, fault-overlay and
-  predecessor gate remain pending. No public G2 or continuation acceptance is
+  independent source/tests review passed at `aa9e661f` (tree `457db3cd`).
+  A pinned normal/repeat/sanitizer, fault-overlay and predecessor gate remains
+  pending. No public G2 or continuation acceptance is
   claimed. Earlier failed composer gates remain retained: held-source lease
   retry in `g3c4-p2g2-eshkol-terminal-composer-cf5a20d5-fe9-f31-20261002-prepared-b/SHA256SUMS-FAILED`,
   dead-history assertion in `g3c4-p2g2-eshkol-terminal-composer-3a76086-fe9-f31-20261003-prepared-c/SHA256SUMS-FAILED`,
