@@ -280,18 +280,33 @@
                         owner-token 'constructing #f))
          (next-registry (cons state c2-training-state-states))
          ;; Cleanup progress only. Exact P1 state plus owner-token identity
-         ;; remains the rollback authority.
-         (claim-progress (vector #f)))
-    (guard (caught
-             (#t
-               (if (vector-ref claim-progress 0)
-                   (begin
-                     (c2-training-state-rollback-p1! p1 owner-token)
-                     (vector-set! claim-progress 0 #f)))
-               (raise caught)))
-      (c2-training-state-claim-p1! p1 owner-token)
-      (vector-set! claim-progress 0 #t)
-      (c2-training-state-claim-o2! o2 owner-token))
+         ;; remains the rollback authority. Keep the original raised value in
+         ;; a separate cell because #f is also a valid raised value.
+         (claim-progress (vector #f))
+         (claim-outcome (vector #t #f)))
+    ;; Both handlers are installed before either claim can consume authority.
+    ;; An uncertain rollback cannot escape as an ordinary prepublication error.
+    (guard (rollback-defect (#t (exit 134)))
+      (guard (caught
+               (#t
+                 (vector-set! claim-outcome 0 #f)
+                 (vector-set! claim-outcome 1 caught)
+                 (if (vector-ref claim-progress 0)
+                     (begin
+                       (if (not (eq?
+                                  (c2-training-state-rollback-p1!
+                                    p1 owner-token)
+                                  #t))
+                           (exit 134))
+                       (vector-set! claim-progress 0 #f)))
+                 #f))
+        (if (not (eq? (c2-training-state-claim-p1! p1 owner-token) #t))
+            (exit 134))
+        (vector-set! claim-progress 0 #t)
+        (if (not (eq? (c2-training-state-claim-o2! o2 owner-token) #t))
+            (exit 134))))
+    (if (not (vector-ref claim-outcome 0))
+        (raise (vector-ref claim-outcome 1)))
     ;; The transfer tail is assignment-only and non-failing.
     (vector-set! state 7 'live)
     (set! c2-training-state-states next-registry)
