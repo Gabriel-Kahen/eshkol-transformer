@@ -44,7 +44,10 @@ independent rows and confirms that exp ordering is distinguishable. After a
 normal transcript has passed its independent parity and boxed-result checks,
 each mutant must complete the evaluator, produce the expected first changed
 tag/row/word against that baseline, and fail its named CE, reduction, active,
-state, or final exponential assertion. Each variant retains the exact
+state, or final exponential assertion. The same gate also checks the later
+batch counters and final boxed words: capacity changes final W only; padded
+count changes tokens only; missing/doubled third batches change both counters;
+and exp ordering changes published perplexity. Each variant retains the exact
 noninstalled package manifests. No tie, axis, overflow, or rounding-reorder
 private kill is claimed without a genuine reachable witness.
 

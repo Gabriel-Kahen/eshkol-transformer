@@ -9,7 +9,7 @@ import unittest
 
 from tests.e3_private.parse_numerical_observation import ROLE_NAMES, parse
 from tests.e3_private.verify_numerical_result import verify_transcript_relations
-from tests.e3_private.verify_numerical_mutants import EXPECT, first_change
+from tests.e3_private.verify_numerical_mutants import EXPECT, downstream, first_change
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -233,6 +233,37 @@ printf '%s\\n' "$e3_tuple_kind"
             first_change(baseline, changed, "second-normalization")
         with self.assertRaisesRegex(ValueError, "survived"):
             first_change(baseline, baseline, "capacity-denominator")
+
+    def test_downstream_mutant_counters_and_publication(self) -> None:
+        def raw(third_weight: str = "3f800000", third_active: int = 1,
+                third_state: str = "40400000,40a00000,00000000",
+                third_counts: str = "5,3", final_weight: str = "40a00000",
+                final_counts: str = "5,3", final_perplexity: str = "40000000") -> bytes:
+            metrics = f"3f000000,{final_weight},{final_perplexity},00000000"
+            outputs = [str(int(word, 16)) for word in metrics.split(",")]
+            return ("E3BATCH\t0\t3f800000,40000000,3f000000,00000000\t2\n"
+                    "E3STATE\t0\t3f800000,40000000,00000000\t2,1\n"
+                    "E3BATCH\t1\t3f800000,40000000,3f000000,00000000\t2\n"
+                    "E3STATE\t1\t40000000,40800000,00000000\t4,2\n"
+                    f"E3BATCH\t2\t3f800000,{third_weight},3f800000,00000000\t{third_active}\n"
+                    f"E3STATE\t2\t{third_state}\t{third_counts}\n"
+                    f"E3FINAL\t{metrics}\t{final_counts}\n"
+                    f"E3RESULT\t{','.join(outputs)},{final_counts}\t0\t0\n"
+                    "E3-NUMERICAL-RUNTIME-PASS\n").encode("ascii")
+
+        baseline = raw()
+        downstream(baseline, raw(third_weight="40000000",
+                                 third_state="40400000,40c00000,00000000",
+                                 final_weight="40c00000"), "capacity-denominator")
+        downstream(baseline, raw(third_active=2, third_counts="6,3",
+                                 final_counts="6,3"), "padded-count")
+        downstream(baseline, raw(third_state="40000000,40800000,00000000",
+                                 third_counts="4,2", final_weight="40800000",
+                                 final_counts="4,2"), "missing-batch")
+        with self.assertRaisesRegex(ValueError, "downstream"):
+            downstream(baseline, raw(third_active=2), "padded-count")
+        with self.assertRaisesRegex(ValueError, "publication"):
+            downstream(baseline, raw(final_counts="6,3"), "wrong-target")
 
     def test_native_provider_mode_tracks_both_test_sanitizers(self) -> None:
         policy = ROOT / "scripts/e3-private-native-inputs.sh"
