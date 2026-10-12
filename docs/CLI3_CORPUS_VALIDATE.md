@@ -42,14 +42,26 @@ facade in `scripts/test-cli3-corpus-validate.sh` is extracted from the same mark
 as `scripts/test-d1.sh`; no D2 wrapper or private D1 API is linked. The command is
 Eshkol-native. Python is used only for command-level tests and fixture mutation.
 
-Compiled gate, once the exact pinned toolchain and D1 archive are available:
+Compiled gate, once the exact pinned toolchain is available:
 
 ```text
-scripts/test-cli3-corpus-validate.sh
+scripts/test-cli3-corpus-validate.sh /absolute/new/evidence-directory
 ```
+
+The evidence path must be absolute and must not already exist. The gate creates
+it before toolchain verification, refuses to overwrite an occupied path, and
+never removes it. `overall.status` records the gate exit. Each build, compile,
+and command-test step writes `steps/NAME.stdout`, `steps/NAME.stderr`, and
+`steps/NAME.status` on success or failure. `artifacts/` retains the command and
+fixture executables, their depfiles, staged public facade, cache, and a copy of
+the rebuilt D1 archive with its evidence. An early failure retains all completed
+step records; later steps have no record because they were not run.
 
 The gate rebuilds the D1 archive from the exact tree, checks its actual exported
 symbols and evidence, and compiles from a staged public facade with depfile
 boundary checks. It covers a valid corpus, opaque newline fingerprint, missing
 manifest, corrupt shard, version and feature categories, all three exceeded
 limits, and invalid command arguments.
+
+The lightweight `tests/cli3/test_gate_evidence.py` checks occupied-path rejection
+and retained evidence on toolchain failure without building D1 or compiling code.

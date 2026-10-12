@@ -2,6 +2,33 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
+if [[ "$#" != 1 || "$1" != /* ]]; then
+  printf 'usage: %s /absolute/new/evidence-directory\n' "$0" >&2
+  exit 64
+fi
+cli3_evidence_dir=$1
+if [[ -e "${cli3_evidence_dir}" || -L "${cli3_evidence_dir}" ]]; then
+  printf 'error: evidence directory already exists: %s\n' "${cli3_evidence_dir}" >&2
+  exit 64
+fi
+mkdir -- "${cli3_evidence_dir}"
+trap 'printf "%s\n" "$?" >"${cli3_evidence_dir}/overall.status"' EXIT
+mkdir -p "${cli3_evidence_dir}/steps" "${cli3_evidence_dir}/artifacts/cache"
+cli3_tmp="${cli3_evidence_dir}/artifacts"
+
+cli3_step() {
+  local name=$1 status
+  shift
+  if ( "$@" ) >"${cli3_evidence_dir}/steps/${name}.stdout" \
+      2>"${cli3_evidence_dir}/steps/${name}.stderr"; then
+    status=0
+  else
+    status=$?
+  fi
+  printf '%s\n' "${status}" >"${cli3_evidence_dir}/steps/${name}.status"
+  return "${status}"
+}
+
 require_command ar
 require_command awk
 require_command cat
@@ -17,15 +44,19 @@ require_command sed
 require_command sort
 require_command timeout
 require_command wc
-verify_toolchain
+cli3_step verify-toolchain verify_toolchain
 
 cli3_archive="$(project_build_dir)/d1/libeshkol_transformer_d1.a"
 # Rebuild from this exact tree. An older archive can satisfy the sidecar manifests
 # while carrying an incompatible Eshkol runtime ABI.
-"${PROJECT_ROOT}/scripts/build-d1.sh" "$(dirname -- "${cli3_archive}")"
+cli3_step build-d1 "${PROJECT_ROOT}/scripts/build-d1.sh" \
+  "$(dirname -- "${cli3_archive}")"
 [[ -r "${cli3_archive}" ]] || die "fresh D1 archive is missing"
-[[ "$(ar t "${cli3_archive}")" == stdlib.o ]] || die "unexpected D1 archive members"
 cli3_evidence="${cli3_archive}.evidence"
+mkdir -p "${cli3_tmp}/d1"
+cli3_step retain-d1 cp -a "${cli3_archive}" "${cli3_evidence}" \
+  "${cli3_tmp}/d1/"
+[[ "$(ar t "${cli3_archive}")" == stdlib.o ]] || die "unexpected D1 archive members"
 for evidence in package-exports.txt global-defined.txt undefined.txt \
     expected-undefined.txt readelf-symbols.txt private.d; do
   [[ -r "${cli3_evidence}/${evidence}" ]] || die "missing D1 evidence: ${evidence}"
@@ -37,8 +68,6 @@ cmp -s "${PROJECT_ROOT}/native/d1_e1b_undefined_symbols.txt" \
 cmp -s "${cli3_evidence}/undefined.txt" \
   "${cli3_evidence}/expected-undefined.txt" || die "D1 undefined evidence differs"
 
-cli3_tmp=$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-cli3.XXXXXX")
-trap 'rm -rf -- "${cli3_tmp}"' EXIT
 {
   printf '%s\n' \
     et_e1b_error_category_v1 \
@@ -133,13 +162,17 @@ cli3_compile() {
   done
 }
 
-cli3_compile "${PROJECT_ROOT}/cli/eshkol-transformer.esk" \
+cli3_step compile-command cli3_compile \
+  "${PROJECT_ROOT}/cli/eshkol-transformer.esk" \
   "${cli3_tmp}/eshkol-transformer"
-cli3_compile "${PROJECT_ROOT}/tests/d1/corpus_tool.esk" \
+cli3_step compile-corpus-writer cli3_compile \
+  "${PROJECT_ROOT}/tests/d1/corpus_tool.esk" \
   "${cli3_tmp}/corpus-tool"
-cli3_compile "${PROJECT_ROOT}/tests/cli3/newline_corpus_writer.esk" \
+cli3_step compile-newline-writer cli3_compile \
+  "${PROJECT_ROOT}/tests/cli3/newline_corpus_writer.esk" \
   "${cli3_tmp}/newline-corpus-writer"
-CLI3_CORPUS_VALIDATE_BINARY="${cli3_tmp}/eshkol-transformer" \
+cli3_step command-tests env \
+  CLI3_CORPUS_VALIDATE_BINARY="${cli3_tmp}/eshkol-transformer" \
   D1_CORPUS_TOOL="${cli3_tmp}/corpus-tool" \
   CLI3_NEWLINE_WRITER="${cli3_tmp}/newline-corpus-writer" \
   PYTHONDONTWRITEBYTECODE=1 \
