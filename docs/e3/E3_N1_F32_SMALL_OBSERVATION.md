@@ -49,8 +49,11 @@ peak, failed/late reap, nonzero exit, malformed canonical report, child capture
 failure, overflow, or elapsed/peak-sum excess makes that nominal field false.
 Every result has `resource_proof=HOLD` and no custody/admission authority.
 
-The witness bounds each pipe at 64 KiB, retains its prefix in exclusive files,
-and kills the direct process group at timeout or overflow. The underlying
+The witness bounds each pipe at 64 KiB and retains its prefix in exclusive
+files. On timeout or overflow it signals the direct process group **only while
+its owned leader remains unreaped**. Once `wait4` reaps that leader, a lingering
+pipe yields diagnostic HOLD without `killpg`: the numeric PGID may be reused
+even though another process still holds the pipe. The underlying
 capture retains its 8-MiB stdout and 1-MiB stderr bounds. No timeout result
 is a positive proof: uninterruptible work can stop late, and a failed
 ancestor may leave descendant state uncertain. Intent and already-written

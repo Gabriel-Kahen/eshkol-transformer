@@ -1,8 +1,10 @@
 """Only generated synthetic metadata; no OCI or Docker access."""
 
 import json
+import os
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -108,6 +110,54 @@ class ObservationTests(unittest.TestCase):
     def test_synthetic_destination_cannot_target_repository_or_content_store(self):
         with self.assertRaisesRegex(observation.Hold, "synthetic-tmp-only"):
             observation.observe_synthetic(Path(__file__).parent / "would-write")
+
+    def test_reaped_leader_with_escaped_pipe_holder_is_never_signaled(self):
+        program = ("import os,sys,time\n"
+                   "holder = os.fork()\n"
+                   "if holder == 0:\n"
+                   "    os.setsid()\n"
+                   "    while not os.path.exists(sys.argv[1]):\n"
+                   "        time.sleep(0.01)\n"
+                   "    open(sys.argv[3], 'w').close()\n"
+                   "    os._exit(0)\n"
+                   "if sys.argv[2] == 'overflow':\n"
+                   "    os.write(1, b'x' * 65)\n"
+                   "os._exit(0)\n")
+        self.destination.mkdir()
+        directory = os.open(self.destination, os.O_RDONLY | os.O_DIRECTORY)
+        self.addCleanup(os.close, directory)
+        real_popen = observation.subprocess.Popen
+
+        def after_leader_exit(*args, **kwargs):
+            process = real_popen(*args, **kwargs)
+            os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT)
+            return process
+
+        for case, expected in (("deadline", "deadline"), ("overflow", "stdout-cap")):
+            with self.subTest(case=case):
+                release = self.destination / (case + ".release")
+                done = self.destination / (case + ".done")
+                command = [sys.executable, "-c", program, str(release), case,
+                           str(done)]
+                deadline = time.monotonic_ns() + (200_000_000 if case == "deadline"
+                                                  else 1_000_000_000)
+                try:
+                    with (mock.patch.object(observation.subprocess, "Popen",
+                                            side_effect=after_leader_exit),
+                          mock.patch.object(observation, "_kill") as kill,
+                          mock.patch.object(observation, "PIPE_CAP", 64)):
+                        result = observation._run(command, directory, case, deadline)
+                    self.assertTrue(result["reaped"])
+                    self.assertEqual(result["reason"], expected)
+                    kill.assert_not_called()
+                    if case == "overflow":
+                        self.assertEqual(result["stdout"], b"x" * 64)
+                finally:
+                    release.touch()
+                    stop = time.monotonic() + 1
+                    while not done.exists() and time.monotonic() < stop:
+                        time.sleep(0.01)
+                    self.assertTrue(done.exists())
 
 
 if __name__ == "__main__":

@@ -852,6 +852,9 @@ whole-procedure caps: the witness's final result seal is later, runtime
 confinement of escaped descendants is absent, and the witness's RSS is excluded.
 Resource proof and protected preservation remain HOLD; both public real-read
 gates remain closed, and no OCI/Docker bytes were opened.
+Its focused safety successor skips numeric process-group signaling once the
+observer's direct leader has been reaped; held-pipe deadline and overflow
+still yield diagnostic HOLD.
 The [local pin acquisition](e3/E3_N1_LOCAL_PIN_ACQUISITION.md) seals the small
 index/manifest/config bytes and host-only candidates; guest bytes remain absent.
 The [bounded gzip scanner](e3/E3_N1_GZIP_SCANNER.md) A source was held for a

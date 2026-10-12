@@ -86,7 +86,8 @@ def _run(argv, directory, prefix, deadline_ns):
                 break
             if time.monotonic_ns() >= deadline_ns:
                 reason = "deadline"
-                _kill(process.pid)
+                if not reaped:
+                    _kill(process.pid)
                 break
             for key, _ in selector.select(min(0.02, max(0, (deadline_ns - time.monotonic_ns()) / 1e9))):
                 stream = streams[key.data]
@@ -101,7 +102,8 @@ def _run(argv, directory, prefix, deadline_ns):
                 if len(block) > remaining:
                     stream["truncated"] = True
                     reason = key.data + "-cap"
-                    _kill(process.pid)
+                    if not reaped:
+                        _kill(process.pid)
                     break
             if reason:
                 break
