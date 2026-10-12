@@ -29,8 +29,9 @@ digest and is not exposed by the CLI.
 2. **Manifest.** Review and externally preserve the complete index evidence
    first. A new exact request must pin the prior evidence file SHA-256, prior
    raw index SHA-256, selected manifest descriptor and its source path and
-   identity. The stage rechecks the prior evidence checksum/raw bytes and
-   descriptor selection, then reads only the pinned manifest JSON. It records
+   identity. The stage checks the prior evidence schema, checksum, raw size and
+   hash, and recomputes the selected descriptor from the preserved raw index
+   bytes before reading only the pinned manifest JSON. It records
    the config descriptor and ordered layer **claims**; it does not read config
    or layers.
 3. **Config.** Review and externally preserve complete manifest evidence
@@ -38,7 +39,8 @@ digest and is not exposed by the CLI.
    and source identity. The stage rechecks the manifest evidence/selection,
    then reads only the pinned config JSON. It records `linux/amd64`,
    `rootfs.type=layers`, and ordered diffID **claims** matching layer count.
-   It does not verify any compressed layer, expanded diffID, unpacked rootfs,
+   It recomputes the config and ordered layer descriptors from the preserved
+   raw manifest bytes. It does not verify any compressed layer, expanded diffID, unpacked rootfs,
    selected guest path or loader/provider behavior.
 
 Each source read walks absolute path components with `O_DIRECTORY|O_NOFOLLOW`,

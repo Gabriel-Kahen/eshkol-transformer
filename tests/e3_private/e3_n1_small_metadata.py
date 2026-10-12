@@ -212,6 +212,22 @@ def config_claims(config, count):
     return rootfs["diff_ids"]
 
 
+def evidence_identity(value):
+    fields(value, ("file", "ancestors"), "prior-identity-fields")
+    need(type(value["ancestors"]) is list and value["ancestors"],
+         "prior-identity-ancestors")
+    stat_fields = ("dev", "ino", "mode", "uid", "gid", "size", "mtime_ns", "ctime_ns")
+    fields(value["file"], stat_fields, "prior-identity-stat-fields")
+    for item in value["ancestors"]:
+        fields(item, ("path", *stat_fields), "prior-identity-stat-fields")
+        if item["path"] != "/":
+            absolute(item["path"])
+    need(value["ancestors"][0]["path"] == "/", "prior-identity-root")
+    for item in [value["file"], *value["ancestors"]]:
+        need(all(type(item[key]) is int and item[key] >= 0 for key in stat_fields),
+             "prior-identity-stat")
+
+
 def prior_bytes(prior, request, stage, deadline, rss_cap):
     fields(prior, ("path", "evidence_sha256", "raw_sha256"), "prior-fields")
     digest(prior["evidence_sha256"])
@@ -221,9 +237,24 @@ def prior_bytes(prior, request, stage, deadline, rss_cap):
     need("sha256:" + hashlib.sha256(raw_evidence).hexdigest() ==
          prior["evidence_sha256"], "prior-evidence-drift")
     record = parse(raw_evidence, require_canonical=True)
-    need(type(record) is dict and record.get("schema") == "e3-n1-small-metadata-v1"
+    fields(record, ("schema", "status", "stage", "candidate", "request_sha256",
+                    "raw_sha256", "raw_size", "raw_base64", "source_path",
+                    "read_time_identity", "claims", "limits", "scope",
+                    "checksum_sha256"), "prior-evidence-fields")
+    need(record.get("schema") == "e3-n1-small-metadata-v1"
          and record.get("stage") == stage and record.get("status") == "HOLD" and
          record.get("candidate") == request["candidate"], "prior-evidence-schema")
+    need(record["scope"] == "small-json-read-only;no-layer-or-custody-authority",
+         "prior-evidence-scope")
+    digest(record["request_sha256"])
+    absolute(record["source_path"])
+    evidence_identity(record["read_time_identity"])
+    fields(record["limits"], ("max_bytes", "max_seconds", "max_rss_bytes"),
+           "prior-limits-fields")
+    positive(record["limits"]["max_bytes"], JSON_CAP, "prior-byte-limit")
+    positive(record["limits"]["max_seconds"], 60, "prior-time-limit")
+    positive(record["limits"]["max_rss_bytes"], 2 * 1024**3,
+             "prior-rss-limit")
     checksum = record.get("checksum_sha256")
     digest(checksum)
     body = {key: value for key, value in record.items() if key != "checksum_sha256"}
@@ -237,11 +268,21 @@ def prior_bytes(prior, request, stage, deadline, rss_cap):
     need(len(raw) <= JSON_CAP and
          "sha256:" + hashlib.sha256(raw).hexdigest() == prior["raw_sha256"] ==
          record.get("raw_sha256"), "prior-raw-drift")
+    need(type(record["raw_size"]) is int and record["raw_size"] == len(raw),
+         "prior-raw-size")
     need(base64.b64encode(raw).decode("ascii") == record["raw_base64"],
          "prior-raw-noncanonical")
     need(time.monotonic() <= deadline and current_rss_bytes() <= rss_cap,
          "prior-resource-cap")
-    return parse(raw)
+    parsed = parse(raw)
+    if stage == "index":
+        need(record["claims"] == {"selected_manifest": selected_manifest(parsed)},
+             "prior-index-claims")
+    else:
+        config, layers = manifest_config(parsed)
+        need(record["claims"] == {"config": config, "ordered_layers": layers},
+             "prior-manifest-claims")
+    return parsed
 
 
 def acquire(raw_request, reviewed_pin, test_only_index_digest=None):

@@ -99,6 +99,16 @@ class SmallMetadataTests(unittest.TestCase):
         return result, {"path": str(path), "evidence_sha256": sha(result),
                         "raw_sha256": sha(self.manifest_raw)}
 
+    def rewrite_prior(self, evidence, prior, change):
+        record = json.loads(evidence)
+        change(record)
+        body = dict(record)
+        body.pop("checksum_sha256")
+        record["checksum_sha256"] = sha(MODULE.canonical(body))
+        changed = MODULE.canonical(record)
+        Path(prior["path"]).write_bytes(changed)
+        prior["evidence_sha256"] = sha(changed)
+
     def assert_hold(self, request):
         with self.assertRaises((MODULE.Hold, OSError)):
             self.acquire(request)
@@ -167,17 +177,52 @@ class SmallMetadataTests(unittest.TestCase):
 
     def test_malformed_prior_base64_holds(self):
         evidence, prior = self.index_evidence()
-        record = json.loads(evidence)
-        record["raw_base64"] = ["not", "base64"]
-        body = dict(record)
-        body.pop("checksum_sha256")
-        record["checksum_sha256"] = sha(MODULE.canonical(body))
-        changed = MODULE.canonical(record)
-        Path(prior["path"]).write_bytes(changed)
-        prior["evidence_sha256"] = sha(changed)
+        self.rewrite_prior(evidence, prior,
+                           lambda record: record.update(raw_base64=["not", "base64"]))
         request = self.request("manifest", self.manifest_path,
                                self.manifest_raw, prior, self.manifest_desc)
         self.assert_hold(request)
+
+    def test_prior_raw_size_and_claims_must_match_raw_bytes(self):
+        evidence, prior = self.index_evidence()
+        self.rewrite_prior(evidence, prior,
+                           lambda record: record.update(raw_size=1))
+        request = self.request("manifest", self.manifest_path,
+                               self.manifest_raw, prior, self.manifest_desc)
+        with self.assertRaisesRegex(MODULE.Hold, "prior-raw-size"):
+            self.acquire(request)
+
+        evidence, prior = self.index_evidence()
+        self.rewrite_prior(evidence, prior, lambda record: record["claims"]["selected_manifest"].update(size=1))
+        request = self.request("manifest", self.manifest_path,
+                               self.manifest_raw, prior, self.manifest_desc)
+        with self.assertRaisesRegex(MODULE.Hold, "prior-index-claims"):
+            self.acquire(request)
+
+        evidence, prior = self.manifest_evidence()
+        self.rewrite_prior(evidence, prior,
+                           lambda record: record["claims"]["config"].update(size=1))
+        request = self.request("config", self.config_path,
+                               self.config_raw, prior, self.config_desc)
+        with self.assertRaisesRegex(MODULE.Hold, "prior-manifest-claims"):
+            self.acquire(request)
+
+    def test_prior_schema_fields_and_types_hold(self):
+        evidence, prior = self.index_evidence()
+        self.rewrite_prior(evidence, prior,
+                           lambda record: record.update(unexpected=True))
+        request = self.request("manifest", self.manifest_path,
+                               self.manifest_raw, prior, self.manifest_desc)
+        with self.assertRaisesRegex(MODULE.Hold, "prior-evidence-fields"):
+            self.acquire(request)
+
+        evidence, prior = self.index_evidence()
+        self.rewrite_prior(evidence, prior,
+                           lambda record: record["limits"].update(max_bytes=True))
+        request = self.request("manifest", self.manifest_path,
+                               self.manifest_raw, prior, self.manifest_desc)
+        with self.assertRaisesRegex(MODULE.Hold, "prior-byte-limit"):
+            self.acquire(request)
 
     def test_symlink_and_config_shape_negatives(self):
         link = self.home / "link.json"
