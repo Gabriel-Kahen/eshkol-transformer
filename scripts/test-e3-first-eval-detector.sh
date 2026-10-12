@@ -73,6 +73,7 @@ for variant in a b sanitized; do
   if [[ "${variant}" != sanitized ]]; then
     cmp "${prefix}_undefined_symbols.txt" "${evidence}/undefined.txt"
   else
+    e3_tuple_kind=retention-first-eval-mutant
     source "${PROJECT_ROOT}/scripts/e3-retention-sanitizer-import-policy.sh"
     e3_retention_verify_sanitizer_imports \
       "${prefix}_undefined_symbols.txt" \
@@ -164,6 +165,8 @@ for selector in absent-to-present seeded-bit seeded-metadata; do
     [[ "$(cat "${out}/${stem}.exit")" == 134 && \
        "$(cat "${out}/${stem}.raw-exit")" == -6 ]] ||
       die "mutant did not produce authentic SIGABRT: ${stem}"
+    [[ ! -s "${out}/${stem}.stderr" ]] ||
+      die "mutant emitted unexpected diagnostics: ${stem}"
     python3 -B - "${out}/${stem}.stdout" <<'PY'
 from pathlib import Path
 import sys
