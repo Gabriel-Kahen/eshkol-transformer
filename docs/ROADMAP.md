@@ -2719,10 +2719,10 @@ publication, public G2 and continuation remain pending.
   It proposes narrowing only the fixed Eshkol entry's unreachable external
   holder/retry obligation in the
   [terminal-close contract](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md).
-  Independent contract review is pending; no production API or zero tail
-  changed. A future supported holder needs a separate call-bound ownership
-  contract. The compiled normal/sanitizer, emitted-code and launcher gates
-  still block full terminal acceptance.
+  Independent source-only review passed at `e1af2568` (tree `fe67469d`).
+  Admission/integration, compiled normal/sanitizer, emitted-code and launcher
+  gates remain pending. No production API or zero tail changed. A future
+  supported holder needs a separate call-bound ownership contract.
 
 ## Wave 4 — practical pretraining and performance
 
