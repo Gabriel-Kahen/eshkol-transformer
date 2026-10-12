@@ -13,6 +13,15 @@ The current-main `5520dfe` union changes no enrolled package source or
 depfile input; hosted CI and merge remain pending. No retention, numerical,
 full E3 §9 or public-path result follows.
 
+The bounded current-main `09f7ed52` plus hosted CLI3 `b98321ef` source
+union retains the exact mode/graph generator, tuple, inventories, and test
+script from the independently reviewed R2 B10 source `72489cb2`. It also
+replays that source's three retention commits (`402fc323`, `ebd504ca`,
+`72489cb2`) without changing the CLI3 command implementation. This is a
+new source tree: B10's static review and earlier compiled observations do not
+admit its runtime result. A fresh immutable one-use gate and ROOT review are
+required before a compiled run.
+
 `generate-e3-mode-graph-source.py` pins the canonical P1 and E3 roots and
 extension, checks the small checked-in E3 test root, and emits two build-private
 sources with fixed SHA-256 digests. The original P1 73-slot trusted surface is
