@@ -1,0 +1,5 @@
+;;; Candidate separate noninstalled E3 N3 source root. Package admission is
+;;; held until an exact source/object/import tuple is reviewed and pinned.
+(load "../../native/e3_private_root.esk")
+(load "../e3_private/driver.esk")
+(load "driver.esk")

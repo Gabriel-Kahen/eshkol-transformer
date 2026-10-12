@@ -1,0 +1,309 @@
+;;; Noninstalled N3 control: load an authentic idle M3 model before E3 binding.
+;;; This source is deliberately separate from tests/e3_private/driver.esk.
+(extern i64 e3-n3-model-count ptr i64 i64
+        :real et_e3_test_model_word_count_v1)
+(extern i64 e3-n3-model-word ptr i64 i64 i64
+        :real et_e3_test_model_word_v1)
+(extern i64 e3-n3-gradient-metadata ptr i64 i64
+        :real et_e3_test_gradient_metadata_v1)
+(extern i64 e3-n3-seed-gradient ptr
+        :real et_e3_test_seed_gradient_v1)
+
+(define e3-n3-operation 'e3-n3-zero-model)
+;; M3T has no reviewed postconstruction model release. Bound the number of
+;; fresh models per process and retain each before any fallible observation.
+(define e3-n3-model-roots (make-vector 8 #f))
+(define e3-n3-model-root-count 0)
+
+(define e3-n3-paths
+  '(("blocks" "0" "attention" "key" "weight")
+    ("blocks" "0" "attention" "output" "weight")
+    ("blocks" "0" "attention" "query" "weight")
+    ("blocks" "0" "attention" "value" "weight")
+    ("blocks" "0" "ffn" "down" "weight")
+    ("blocks" "0" "ffn" "up" "weight")
+    ("blocks" "0" "norm1" "bias")
+    ("blocks" "0" "norm1" "weight")
+    ("blocks" "0" "norm2" "bias")
+    ("blocks" "0" "norm2" "weight")
+    ("head" "weight")
+    ("norm_final" "bias")
+    ("norm_final" "weight")
+    ("position_embedding" "weight")))
+(define e3-n3-shapes
+  '((4 4) (4 4) (4 4) (4 4) (4 8) (8 4)
+    (4) (4) (4) (4) (256 4) (4) (4) (2 4)))
+(define e3-n3-all-paths
+  '(("blocks" "0" "attention" "key" "weight")
+    ("blocks" "0" "attention" "output" "weight")
+    ("blocks" "0" "attention" "query" "weight")
+    ("blocks" "0" "attention" "value" "weight")
+    ("blocks" "0" "ffn" "down" "weight")
+    ("blocks" "0" "ffn" "up" "weight")
+    ("blocks" "0" "norm1" "bias")
+    ("blocks" "0" "norm1" "weight")
+    ("blocks" "0" "norm2" "bias")
+    ("blocks" "0" "norm2" "weight")
+    ("head" "weight")
+    ("norm_final" "bias")
+    ("norm_final" "weight")
+    ("position_embedding" "weight")
+    ("token_embedding" "weight")))
+
+(define (e3-n3-check condition)
+  (if condition #t (e3-native-invariant-fail)))
+
+(define (e3-n3-elements shape)
+  (if (null? shape) 1 (* (car shape) (e3-n3-elements (cdr shape)))))
+
+(define (e3-n3-owner model)
+  (vector-ref (m3t-entry model 'model e3-n3-operation #t) 3))
+
+(define (e3-n3-image model)
+  (let ((owner (e3-n3-owner model))
+        (image (make-vector 14 #f)))
+    (let parameter ((index 0))
+      (if (= index 14) image
+          (let ((fields (make-vector 5 #f)))
+            (let kind ((which 0))
+              (if (= which 2) #t
+                  (let ((count (e3-n3-model-count owner index which)))
+                    (e3-n3-check (and (> count 0) (<= count 1024)))
+                    (let ((words (make-vector count 0)))
+                      (let word ((offset 0))
+                        (if (= offset count) #t
+                            (begin
+                              (vector-set! words offset
+                                (e3-n3-model-word owner index which offset))
+                              (word (+ offset 1)))))
+                      (vector-set! fields which words)
+                      (kind (+ which 1))))))
+            (let metadata ((field 0))
+              (if (= field 3) #t
+                  (begin
+                    (vector-set! fields (+ field 2)
+                      (e3-n3-gradient-metadata owner index field))
+                    (metadata (+ field 1)))))
+            (vector-set! image index fields)
+            (parameter (+ index 1)))))))
+
+(define (e3-n3-gradient-image image)
+  (let ((result (make-vector 14 #f)))
+    (let loop ((index 0))
+      (if (= index 14) result
+          (let ((row (vector-ref image index)))
+            (vector-set! result index
+              (vector (vector-ref row 1) (vector-ref row 2)
+                      (vector-ref row 3) (vector-ref row 4)))
+            (loop (+ index 1)))))))
+
+(define (e3-n3-check-gradient-case image seeded?)
+  (let loop ((index 0))
+    (if (= index 14) #t
+        (let ((row (vector-ref image index)))
+          (e3-n3-check
+            (= (vector-ref row 2) (if (and seeded? (= index 0)) 1 0)))
+          (if (and seeded? (= index 0))
+              (begin
+                (e3-n3-check (= (vector-ref (vector-ref row 1) 0)
+                                1056964608))
+                (e3-n3-check (= (vector-ref row 3) 1))
+                (e3-n3-check (= (vector-ref row 4) 1065353216))))
+          (loop (+ index 1))))))
+
+(define (e3-n3-zero-image? image)
+  (let parameter ((index 0))
+    (if (= index 14) #t
+        (let ((words (vector-ref (vector-ref image index) 0)))
+          (and
+            (let word ((offset 0))
+              (if (= offset (vector-length words)) #t
+                  (and (= (vector-ref words offset) 0)
+                       (word (+ offset 1)))))
+            (parameter (+ index 1)))))))
+
+(define (e3-n3-tree-handles model)
+  (let* ((tree (module-parameters model))
+         (handles (make-vector 14 #f)))
+    (e3-n3-check (equal? (parameter-tree-paths tree) e3-n3-all-paths))
+    (e3-n3-check
+      (equal? (parameter-tree-tie-groups tree)
+              '((("head" "weight") ("token_embedding" "weight")))))
+    (let loop ((paths e3-n3-paths) (shapes e3-n3-shapes) (index 0)
+               (elements 0))
+      (if (= index 14)
+          (begin
+            (e3-n3-check (= elements 1184))
+            (e3-n3-check
+              (eq? (vector-ref handles 10)
+                   (parameter-tree-handle tree '("token_embedding" "weight"))))
+            handles)
+          (let* ((path (car paths))
+                 (shape (car shapes))
+                 (handle (parameter-tree-handle tree path))
+                 (carrier (parameter-handle-tensor-internal handle))
+                 (description
+                   (i2-describe (vector carrier 'parameter e3-n3-operation))))
+            (e3-n3-check (equal? (parameter-handle-path handle) path))
+            (e3-n3-check (equal? (parameter-handle-shape handle) shape))
+            (e3-n3-check (eq? (parameter-handle-dtype handle) 'f32))
+            (e3-n3-check (eq? (parameter-handle-device handle) 'cpu))
+            (e3-n3-check
+              (equal? description
+                      (vector shape 'f32 'cpu 'dense-row-major-contiguous)))
+            (e3-n3-check
+              (eq? carrier (parameter-handle-tensor-identity-internal handle)))
+            (let distinct ((previous 0))
+              (if (= previous index) #t
+                  (begin
+                    (e3-n3-check (not (eq? handle (vector-ref handles previous))))
+                    (e3-n3-check
+                      (not (eq? carrier
+                                (parameter-handle-tensor-internal
+                                  (vector-ref handles previous)))))
+                    (distinct (+ previous 1)))))
+            (vector-set! handles index handle)
+            (loop (cdr paths) (cdr shapes) (+ index 1)
+                  (+ elements (e3-n3-elements shape))))))))
+
+(define (e3-n3-release-sources! sources)
+  (let loop ((index 0))
+    (if (= index 14) #t
+        (begin
+          (if (vector-ref sources index)
+              (begin
+                (i2-release-owned!
+                  (vector (vector-ref sources index) 'parameter
+                          e3-n3-operation #f))
+                (vector-set! sources index #f)))
+          (loop (+ index 1))))))
+
+(define (e3-n3-zero-load! model handles)
+  (let ((sources (make-vector 14 #f))
+        (assignments (make-vector 14 #f)))
+    ;; This guard covers only the fallible source and assignment construction.
+    (let ((rows
+            (guard
+              (caught
+               (#t (e3-n3-release-sources! sources) (raise caught)))
+              (let decode ((index 0))
+                (if (= index 14) #t
+                    (let* ((handle (vector-ref handles index))
+                           (shape (parameter-handle-shape handle))
+                           (carrier (parameter-handle-tensor-internal handle))
+                           (image (i2-checkpoint-encode
+                                    (vector carrier 'parameter shape 'f32 'cpu
+                                            'dense-row-major-contiguous
+                                            e3-n3-operation)))
+                           (bytes (bytevector-length image)))
+                      (e3-n3-check (= bytes (* 4 (e3-n3-elements shape))))
+                      (let* ((payload (make-bytevector bytes 0))
+                             (decoded (i2-checkpoint-decode
+                                        (vector payload 'parameter shape 'f32
+                                                'cpu 'dense-row-major-contiguous
+                                                e3-n3-operation #f)))
+                             (source (vector-ref decoded 7)))
+                        (vector-set! sources index source)
+                        (vector-set! assignments index
+                                     (vector carrier source 'parameter))
+                        (decode (+ index 1))))))
+              ;; Gather the full batch before native prepare can pin a carrier.
+              (let gather ((index 13) (result '()))
+                (if (< index 0) result
+                    (gather (- index 1)
+                            (cons (vector-ref assignments index) result)))))))
+      ;; Prepare owns abort on its own failure. The caller then releases the
+      ;; decoded sources. A returned plan has no recoverable cleanup interval.
+      (let ((plan
+              (guard
+                (caught
+                 (#t (e3-n3-release-sources! sources) (raise caught)))
+                (i2-prepare-load (vector rows e3-n3-operation)))))
+        (i2-commit-load! (vector-ref plan 0))))
+      (e3-n3-release-sources! sources)))
+
+(define (e3-n3-scenario scenario)
+  (e3-n3-check
+    (and (vector? scenario) (= (vector-length scenario) 3)
+         (boolean? (vector-ref scenario 0))
+         (integer? (vector-ref scenario 1))
+         (exact? (vector-ref scenario 1))
+         (>= (vector-ref scenario 1) 0)
+         (<= (vector-ref scenario 1) 8192)
+         (boolean? (vector-ref scenario 2))))
+  scenario)
+
+(define (e3-n3-zero-test-run scenario corpus-path)
+  (let* ((checked (e3-n3-scenario scenario))
+         (slot e3-n3-model-root-count))
+    (e3-n3-check (< slot 8))
+    (let* ((config (e3-test-fixed-config))
+           (tokenizer (t1-private-tokenizer-byte config))
+           (initial (g3t-checked-m3t-initializer-state 1729))
+           (model (g3t-checked-m3t-model-create config initial)))
+      (vector-set! e3-n3-model-roots slot model)
+      (set! e3-n3-model-root-count (+ slot 1))
+      (let ((destinations (vector #f #f #f #f))
+            (frame #f))
+        (guard
+          (caught
+           (#t
+            (if frame
+                (begin (e3-frame-unbind! frame) (set! frame #f)))
+            (e3-test-destinations-destroy! destinations)
+            (set! destinations #f)
+            (raise caught)))
+          (e3-n3-check
+            (equal? (m3t-public-initializer-words initial) '(1 1729 0 0)))
+          (let* ((successor (m3t-public-model-initializer model))
+                 (rng (m3t-public-initializer-words successor))
+                 (handles (e3-n3-tree-handles model)))
+            (e3-n3-check (equal? rng '(1 1729 290 0)))
+            (if (vector-ref checked 2)
+                (e3-n3-check (= (e3-n3-seed-gradient (e3-n3-owner model)) 0)))
+            (let ((before (e3-n3-image model))
+                  (mode (module-mode-internal model)))
+              (e3-n3-check-gradient-case before (vector-ref checked 2))
+              (e3-n3-zero-load! model handles)
+              (let ((loaded (e3-n3-image model)))
+                (e3-n3-check (e3-n3-zero-image? loaded))
+                (e3-n3-check
+                  (equal? (e3-n3-gradient-image before)
+                          (e3-n3-gradient-image loaded)))
+                (e3-n3-check
+                  (equal? rng (m3t-public-initializer-words successor)))
+                (e3-n3-check (eq? (module-mode-internal model) mode))
+                (let ((after-handles (e3-n3-tree-handles model)))
+                  (let check ((index 0))
+                    (if (= index 14) #t
+                        (begin
+                          (e3-n3-check
+                            (eq? (vector-ref handles index)
+                                 (vector-ref after-handles index)))
+                          (check (+ index 1))))))
+                (set! destinations (e3-test-destinations-create))
+                (set! frame (e3-frame-bind! model destinations))
+                (let ((dataset
+                        (d2-token-dataset-open
+                          (e3-test-dataset-config corpus-path
+                                                  (vector-ref checked 0))
+                          tokenizer)))
+                  (guard
+                    (caught
+                     (#t (d2-token-dataset-close! dataset) (raise caught)))
+                    (e3-test-skip! dataset (vector-ref checked 1))
+                    (let ((cursor (d2-token-dataset-cursor dataset)))
+                      (with-region ('e3-n3-zero-evaluation 262144)
+                        (e3-evaluate-into! model dataset frame))
+                      (let* ((after (d2-token-dataset-cursor dataset))
+                             (output (e3-test-output frame destinations
+                                                     cursor after)))
+                        (e3-n3-check (equal? loaded (e3-n3-image model)))
+                        (e3-n3-check
+                          (equal? rng (m3t-public-initializer-words successor)))
+                        (d2-token-dataset-close! dataset)
+                        (e3-frame-unbind! frame)
+                        (set! frame #f)
+                        (e3-test-destinations-destroy! destinations)
+                        (set! destinations #f)
+                        (vector 'e3-n3-zero-result-v1 output before loaded)))))))))))))

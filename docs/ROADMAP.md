@@ -798,6 +798,10 @@ for all 14 authentic M3 parameter owners before frame binding. It preserves the
 current two-field private scenario, the single tied head/token-embedding owner,
 and immediate commit after successful prepare. Integration and compiled proof
 remain pending; this contract does not discharge any §9 numerical or rollback row.
+The separate [N3 source candidate](../tests/e3_n3_idle/README.md) stages the
+authentic idle load and native parameter/gradient observation. It is held at
+exact noninstalled tuple admission and has source-only checks; no AOT or §9
+claim follows from this candidate.
 
 The [standalone N3 zero-model reference](../tests/e3_reference/README.md)
 generates four genuine D1/D2 all-correct, all-wrong and padded cases, with
