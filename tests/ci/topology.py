@@ -279,9 +279,12 @@ def check(root, overrides=None):
     assert "set -euo pipefail" in cli3_ci
     assert "|| true" not in cli3_ci
     assert 'mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/eshkol-cli3-ci.XXXXXX"' in cli3_ci
-    assert cli3_ci.splitlines()[-2:] == [
-        '/usr/bin/bash "${PROJECT_ROOT}/scripts/test-cli3-production-generate.sh" "${evidence}"',
-        '/usr/bin/bash "${PROJECT_ROOT}/scripts/test-cli3-cross-command-chain.sh" "${evidence}"',
+    cli3_tail = [line.strip().rstrip("\\").strip() for line in cli3_ci.splitlines()[-4:]]
+    assert cli3_tail == [
+        '/usr/bin/bash "${PROJECT_ROOT}/scripts/test-cli3-production-generate.sh"',
+        '"${evidence}/production-generate"',
+        '/usr/bin/bash "${PROJECT_ROOT}/scripts/test-cli3-cross-command-chain.sh"',
+        '"${evidence}/cross-command-chain"',
     ]
     assert targets["test-after-build"] == FULL
     assert targets["test-ci-clean-build-after-build"] == ["$(MAKE) smoke-after-build benchmark-after-build"]
