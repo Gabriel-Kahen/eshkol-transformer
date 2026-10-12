@@ -75,6 +75,8 @@ symbols and evidence, and compiles from a staged public facade with depfile
 boundary checks. It covers a valid corpus, opaque newline fingerprint, missing
 manifest, corrupt shard, version and feature categories, all three exceeded
 limits, and invalid command arguments.
+The pinned Eshkol runner emits depfiles for object output; each standalone
+command therefore gets an object-mode import check before its executable build.
 
 The required `scripts/test-cli3-production-generate.sh` gate also runs
 `tests/cli3/test_installed_corpus_validate.py` against the installed CLI3 binary

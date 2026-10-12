@@ -256,8 +256,7 @@ fi
 
 cli3_runner="$(eshkol_build_dir)/eshkol-run"
 cli3_cxx="$(tsv_value "$(eshkol_build_dir)/eshkol-transformer-provenance.tsv" cxx_path)"
-cli3_compile() {
-  local source=$1 output=$2
+cli3_run() {
   (
     cd -- "${cli3_public}"
     env XDG_CACHE_HOME="${cli3_tmp}/cache" ESHKOL_CXX_COMPILER="${cli3_cxx}" \
@@ -265,9 +264,13 @@ cli3_compile() {
       timeout --foreground --signal=TERM --kill-after=5s 120s \
         "${cli3_runner}" --strict-types --no-stdlib \
         -I "${cli3_public}" -L "$(dirname -- "${cli3_archive}")" \
-        --lib eshkol_transformer_d1 --emit-depfile "${output}.d" \
-        "${source}" -o "${output}"
+        --lib eshkol_transformer_d1 "$@"
   )
+}
+cli3_compile() {
+  local source=$1 output=$2
+  cli3_run --emit-object --emit-depfile "${output}.d" \
+    "${source}" -o "${output}.depcheck.o"
   [[ -s "${output}.d" ]] || die "CLI3 depfile missing for ${source}"
   for public_module in data error_consumer; do
     grep -F "${cli3_public}/transformer/${public_module}.esk" \
@@ -282,6 +285,7 @@ cli3_compile() {
       die "CLI3 depfile crossed D1 public boundary: ${forbidden}"
     fi
   done
+  cli3_run "${source}" -o "${output}"
 }
 
 cli3_step compile-command cli3_compile \
