@@ -2712,6 +2712,13 @@ publication, public G2 and continuation remain pending.
   same `m3-call`; its compiled normal/sanitizer gate is pending. This diagnostic
   holder does not add automatic release of an external production lease, and
   it does not alter the production zero-return tail.
+  The [production held-lease audit](g3/G3_C4_P2_G2_HELD_LEASE_PRODUCTION_HOLD.md)
+  confirms that the fixed two-argument composer has no accepted
+  cooperative holder/release capability inside its live `m3-call`.
+  Genuine release needs the holder's captured I1/A2 pointer; the test shim
+  supplies one only for diagnostic G2 READY/P3 cases. An upstream ownership
+  contract or a source-proved narrowing of the held-lease clause is required
+  before claiming production retry or running the compiled close gate.
 
 ## Wave 4 — practical pretraining and performance
 
