@@ -858,6 +858,13 @@ gates remain closed, and no OCI/Docker bytes were opened.
 Its focused safety successor skips numeric process-group signaling once the
 observer's direct leader has been reaped; held-pipe deadline and overflow
 still yield diagnostic HOLD.
+The [protected attempt and process-scope prerequisite](e3/E3_N1_F32_ATTEMPT_BOUNDARY.md)
+fixes the missing integration boundary for a future small-index read: a
+pre-read distinct-UID HOLD intent, a closed measured actor set, per-process
+peak-RSS accounting, a suspend-inclusive interval through final protected
+seal and verified cessation, and fail-closed synthetic gates. It is a
+docs-only HOLD contract; no Linux scope or custody service is deployed, no
+resource cap is proven, and both real-read gates remain closed.
 The [local pin acquisition](e3/E3_N1_LOCAL_PIN_ACQUISITION.md) seals the small
 index/manifest/config bytes and host-only candidates; guest bytes remain absent.
 The [bounded gzip scanner](e3/E3_N1_GZIP_SCANNER.md) A source was held for a
