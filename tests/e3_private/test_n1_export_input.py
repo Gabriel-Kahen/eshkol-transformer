@@ -11,7 +11,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = ROOT / "scripts/e3_n1_export_input.py"
+SCRIPT = ROOT / "tests/e3_private/e3_n1_export_input.py"
 CANDIDATE_FILE = ROOT / "docs/e3/eshkol-f32-quantum-llvm21-20260925.export-input.json"
 MANIFEST = "application/vnd.oci.image.manifest.v1+json"
 CONFIG = "application/vnd.oci.image.config.v1+json"

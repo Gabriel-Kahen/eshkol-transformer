@@ -10,7 +10,8 @@ selected manifest, config,
 ordered layers/diffIDs, source path pins, custody and limits. It is incomplete
 and HOLD. No f31 descriptor or failed-F parity claim transfers to this image.
 
-`scripts/e3_n1_export_input.py` accepts one canonical UTF-8
+`tests/e3_private/e3_n1_export_input.py` is a development-only checker. It
+accepts one canonical UTF-8
 `e3-n1-export-input-v1` JSON file and emits a canonical, checksummed
 `e3-n1-export-input-assessment-v1` line to stdout. Every output has
 `status: HOLD`. `INCOMPLETE` lists missing top-level slots;

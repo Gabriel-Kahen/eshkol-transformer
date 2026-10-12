@@ -807,7 +807,8 @@ selects only the reported `eshkol-f32-quantum-llvm21:20260925` index digest as
 a new metadata-only candidate. Its canonical candidate manifest explicitly
 HOLDs the unknown descriptor chain, source path identities, protected stores,
 distinct verification authorities and limits. The separate source-only
-validator checks complete synthetic plans for structural review readiness but
+validator at `tests/e3_private/e3_n1_export_input.py` checks complete synthetic
+plans for structural review readiness but
 never reads an image, issues custody authority or enables an export.
 The [local pin acquisition](e3/E3_N1_LOCAL_PIN_ACQUISITION.md) seals the small
 index/manifest/config bytes and host-only candidates; guest bytes remain absent.
