@@ -2803,8 +2803,9 @@ publication, public G2 and continuation remain pending.
   private aggregate with the exact native feature gate and stages a genuine
   post-copy, post-issuer release fixture. Source checks cover dead T1 reads,
   stale decode rejection, native-ID EOS/two-ID continuation, and one-time
-  history admission. This successor remains source-only pending independent
-  review and the immutable compiled aggregate gate; no runtime claim is made.
+  history admission. Independent source/tests review accepted exact
+  `150f61c6`/tree `145439a6`; the immutable compiled aggregate gate remains
+  pending, and no aggregate runtime claim is made.
 
 ## Wave 4 — practical pretraining and performance
 
