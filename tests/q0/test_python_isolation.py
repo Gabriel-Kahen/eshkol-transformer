@@ -53,6 +53,7 @@ G3C4_DEVELOPMENT_SCRIPTS = frozenset({
         "check-g3c4-p2g2-terminal-close.py",
         "g3c4_proof_command.py",
         "check-g3c4-proof-receipts.py",
+        "g3c4_native_trace_receipt.py",
         "check-g3c4-proof-emitted.py",
         "check-g3c4-proof-source.py",
         "check-g3c4-prompt-prefill.py",
@@ -65,6 +66,7 @@ G3C4_DEVELOPMENT_SCRIPTS = frozenset({
     )
 })
 DEVELOPMENT_SCRIPTS = frozenset({
+    ROOT / "tools/g3c4_native_trace/tests/test_trace.py",
     ROOT / "scripts" / "generate-e3-d2-source.py",
     ROOT / "scripts" / "generate-e3-p1-mode-test-variant.py",
     ROOT / "scripts" / "generate-e3-mode-graph-source.py",

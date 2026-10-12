@@ -76,6 +76,32 @@ class ReceiptPostflightTests(unittest.TestCase):
     def test_complete_graph(self):
         self.assertEqual(RECEIPTS.verify(self.root, set())["receipts"], 9)
 
+    def test_native_log_seam_requires_every_command_image(self):
+        log = self.root / "native-events.log"
+        events = ["g3c4-native-exec-v1"]
+        digest = "0" * 64
+
+        def exec_event(pid, parent, argv):
+            return (f"exec\t1\t{pid}\t{parent}\t1\t1\t1\t{argv.hex()}\t"
+                    f"{b'/bin/bash'.hex()}\t{b'/tmp'.hex()}\t{digest}")
+
+        argv = [(self.root / f"command.{i}" / "argv.nul").read_bytes()
+                for i in range(9)]
+        events.append(exec_event(100, 0, argv[0]))
+        for i in range(1, 9):
+            events.extend((f"spawn\t1\t100\t{100+i}\tfork",
+                           exec_event(100+i, 100, argv[i]),
+                           f"exit\t1\t{100+i}\t0\t0"))
+        events.extend(("exit\t2\t100\t0\t0", "complete\t2\t100\t0\t8\t9\t9\t0"))
+        log.write_text("\n".join(events) + "\n")
+        summary = RECEIPTS.verify(self.root, set(), log)
+        self.assertEqual(summary["matched_receipts"], 9)
+        self.assertEqual(summary["unmatched_native_execs"], 0)
+        log.write_text("\n".join(events[:-1] +
+                                 [events[-1].replace("\t8\t9\t9\t0", "\t8\t8\t9\t0")]) + "\n")
+        with self.assertRaisesRegex(ValueError, "event count mismatch"):
+            RECEIPTS.verify(self.root, set(), log)
+
     def test_missing_nested_receipt(self):
         path = self.root / "command.8" / "receipt.json"
         path.unlink()

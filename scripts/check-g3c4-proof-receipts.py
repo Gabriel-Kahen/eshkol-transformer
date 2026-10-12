@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 """Fail-closed offline validator for the terminal-close nested command graph."""
 import hashlib
+import importlib.util
 import json
 from collections import Counter
 from pathlib import Path
 import re
 import sys
+
+_trace_spec = importlib.util.spec_from_file_location(
+    "g3c4_native_trace_receipt", Path(__file__).with_name("g3c4_native_trace_receipt.py"))
+g3c4_native_trace_receipt = importlib.util.module_from_spec(_trace_spec)
+_trace_spec.loader.exec_module(g3c4_native_trace_receipt)
 
 SCRIPTS = (
     "test-g3c4-p2g2-terminal-close.sh",
@@ -103,7 +109,8 @@ def source_sites() -> set[str]:
     return set(source_calls())
 
 
-def verify(root: Path, expected_sites: set[str] | dict[str, Counter] | None = None) -> dict:
+def verify(root: Path, expected_sites: set[str] | dict[str, Counter] | None = None,
+           native_log: Path | None = None) -> dict:
     require(root.is_dir() and not root.is_symlink(), "receipt root missing or symlink")
     if expected_sites is None:
         expected_sites = source_calls()
@@ -115,6 +122,7 @@ def verify(root: Path, expected_sites: set[str] | dict[str, Counter] | None = No
     invoked = set()
     observed_sites = set()
     observed_programs = {}
+    native_receipts = []
     for path in paths:
         require(path.is_dir() and not path.is_symlink(), f"bad receipt directory: {path}")
         meta_path = path / "receipt.json"
@@ -127,7 +135,9 @@ def verify(root: Path, expected_sites: set[str] | dict[str, Counter] | None = No
         require(type(meta["exit"]) is int and 0 <= meta["exit"] <= 255,
                 f"bad numeric exit: {path}")
         require(meta["exit"] != 86, f"capture failure: {path}")
-        require(type(meta["wall_ns"]) is int and meta["wall_ns"] >= 0 and
+        require(all(type(meta[field]) is int for field in
+                    ("wall_ns", "start_monotonic_ns", "end_monotonic_ns")) and
+                meta["wall_ns"] >= 0 and
                 meta["end_monotonic_ns"] - meta["start_monotonic_ns"] == meta["wall_ns"],
                 f"bad wall interval: {path}")
         cwd = (path / "cwd").read_bytes()
@@ -137,6 +147,8 @@ def verify(root: Path, expected_sites: set[str] | dict[str, Counter] | None = No
                 f"bad argv: {path}")
         require(hashlib.sha256(argv_raw).hexdigest() == meta["argv_sha256"],
                 f"argv hash mismatch: {path}")
+        native_receipts.append((argv_raw, meta["start_monotonic_ns"],
+                                meta["end_monotonic_ns"]))
         environment_hash = path / "environment.sha256"
         require(environment_hash.is_file() and not environment_hash.is_symlink() and
                 re.fullmatch(r"[0-9a-f]{64}\n", environment_hash.read_text()),
@@ -171,13 +183,20 @@ def verify(root: Path, expected_sites: set[str] | dict[str, Counter] | None = No
             else:
                 found = actual[program]
             require(found >= count, f"missing command receipt: {site} {program}")
-    return {"receipts": len(paths), "scripts": sorted(scripts),
-            "source_sites": len(expected_sites)}
+    result = {"receipts": len(paths), "scripts": sorted(scripts),
+              "source_sites": len(expected_sites)}
+    if native_log is not None:
+        result.update(g3c4_native_trace_receipt.verify(native_log, native_receipts))
+    return result
 
 
 if __name__ == "__main__":
     try:
-        print(json.dumps(verify(Path(sys.argv[1])), sort_keys=True))
+        require(len(sys.argv) in (2, 4) and
+                (len(sys.argv) == 2 or sys.argv[2] == "--native-log"),
+                "usage: check-g3c4-proof-receipts.py ROOT [--native-log LOG]")
+        native_log = Path(sys.argv[3]) if len(sys.argv) == 4 else None
+        print(json.dumps(verify(Path(sys.argv[1]), native_log=native_log), sort_keys=True))
     except (IndexError, OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"proof receipts HOLD: {exc}", file=sys.stderr)
         raise SystemExit(86)

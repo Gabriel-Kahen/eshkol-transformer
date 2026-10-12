@@ -1,8 +1,14 @@
 # G3/P2G2 C7g native trace prototype — UNADMITTED
 
 This directory contains a source prototype with host tests. It is not part of
-the sealed C7d bundle or an enabled G3 gate. The container calibration and
-integration into the receipt validator remain pending.
+the sealed C7d bundle or an enabled G3 gate. Container calibration and live
+launcher integration remain pending.
+
+An opt-in source-only validator is now available through
+`check-g3c4-proof-receipts.py ROOT --native-log EVENTS`. It validates the
+native task ledger and correlates each C7f command receipt with a distinct
+native `exec` by exact argv and monotonic interval, reporting extra native
+images. This does not enable a live gate or replace the exact-image canary.
 
 ## Contract under test
 
@@ -53,12 +59,13 @@ From the repository root:
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/g3c4_native_trace/tests -v
 ```
 
-The nine tests compile from source with strict warnings and cover 32 rapid
+The ten tests compile from source with strict warnings and cover 32 rapid
 fork/exec children, `posix_spawn`/vfork, `system()` descendants, a thread
 clone, nonleader thread exec/TID reassignment, an ignored attempt at an
 untraced clone, an injected supervisor failure that kills a stopped root and
-subtree before either can write a marker, and an existing-log collision. They run on
-the host only and create no Docker container.
+subtree before either can write a marker, an existing-log collision, and exact
+argv/time receipt correlation with tampered-log negatives. They run on the host
+only and create no Docker container.
 
 ## Remaining gate
 

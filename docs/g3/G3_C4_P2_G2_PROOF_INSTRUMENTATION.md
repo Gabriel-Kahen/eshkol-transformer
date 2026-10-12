@@ -24,6 +24,16 @@ This is a conservative shell audit, not an exhaustive Bash parser. The known
 Eshkol linker child is captured through the generated C++ wrapper, but any
 other native internal child requires an independently verified exec inventory.
 
+The optional `--native-log EVENTS` postflight input accepts the C7g
+`g3c4-native-exec-v1` log. It requires a complete, ordered root-zero process
+ledger, validates spawn/exec/exit/merge lineage and footer counts, and matches
+each command receipt to a distinct native `exec` with exact NUL argv and an
+exec timestamp inside the receipt interval. Its JSON result reports unmatched
+native exec images so they can be reviewed. This is an offline source seam;
+the launcher does not yet produce a calibrated native log inside the pinned
+container/cgroup. A passing postflight does not establish failed-exec attempt
+coverage or per-native-child output attribution.
+
 Set `G3C4_PROOF_EMIT=1` for emitted artifacts. Every normal and sanitizer
 fixture, including feature-off and overlays, receives a separate
 `--emit-object --dump-ir --emit-depfile` compile, raw object/bitcode/IR/depfile,

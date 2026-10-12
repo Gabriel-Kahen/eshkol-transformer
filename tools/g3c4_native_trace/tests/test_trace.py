@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """Host-only canaries for the unsealed native trace prototype."""
 import hashlib
+import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT.parents[1] / "scripts"))
+import g3c4_native_trace_receipt as receipt_trace
 CC = ["cc", "-std=c11", "-Wall", "-Wextra", "-Werror", "-Wpedantic", "-O2"]
 ENV = {"PATH": "/usr/bin:/bin", "G3C4_CANARY": "fixed"}
 
@@ -150,6 +154,51 @@ class NativeTraceTest(unittest.TestCase):
             self.assertIn(b"forbidden clone route", result.stderr)
             self.assertFalse(marker.exists())
             self.assertFalse(any(event[0] == "complete" for event in events))
+
+    def test_real_command_receipt_matches_native_exec_and_tampering_holds(self):
+        with tempfile.TemporaryDirectory(prefix="g3c4-native-receipt-") as place:
+            root = Path(place)
+            log = root / "events.log"
+            helper = ROOT.parents[1] / "scripts/g3c4_proof_command.py"
+            result = subprocess.run(
+                [str(self.trace), "--log", str(log), "--", sys.executable,
+                 str(helper), str(root), "--", "/bin/true"],
+                env=ENV, capture_output=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            command = next(root.glob("command.*/receipt.json"))
+            meta = json.loads(command.read_text())
+            rows = [(command.parent.joinpath("argv.nul").read_bytes(),
+                     meta["start_monotonic_ns"], meta["end_monotonic_ns"])]
+            summary = receipt_trace.verify(log, rows)
+            self.assertEqual(summary["matched_receipts"], 1)
+            self.assertEqual(summary["unmatched_native_execs"], 1)
+            original = log.read_text()
+            lines = original.splitlines()
+            footer = lines[-1].split("\t")
+            footer[5] = str(int(footer[5]) + 1)
+            bad_count = "\n".join(lines[:-1] + ["\t".join(footer)]) + "\n"
+            exec_line = next(i for i, line in enumerate(lines) if line.startswith("exec\t") and i > 1)
+            bad_lineage = lines.copy()
+            fields = bad_lineage[exec_line].split("\t")
+            fields[3] = "99999999"
+            bad_lineage[exec_line] = "\t".join(fields)
+            for changed, reason in (
+                (original.replace("complete\t", "missing\t"), "unknown event"),
+                ("\n".join(lines[:-1]) + "\n", "completion"),
+                (bad_count, "event count mismatch"),
+                ("\n".join(bad_lineage) + "\n", "invalid exec lineage"),
+            ):
+                with self.subTest(reason=reason):
+                    log.write_text(changed)
+                    with self.assertRaisesRegex(ValueError, reason):
+                        receipt_trace.verify(log, rows)
+                    log.write_text(original)
+            wrong = [(b"/bin/false\0", rows[0][1], rows[0][2])]
+            with self.assertRaisesRegex(ValueError, "no traced exec"):
+                receipt_trace.verify(log, wrong)
+            late = [(rows[0][0], rows[0][2] + 1, rows[0][2] + 2)]
+            with self.assertRaisesRegex(ValueError, "no traced exec"):
+                receipt_trace.verify(log, late)
 
 
 if __name__ == "__main__":
