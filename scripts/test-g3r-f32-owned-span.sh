@@ -36,7 +36,8 @@ nm -g --defined-only --format=posix "$out/base/on.o" | cut -d' ' -f1 | \
 nm -g --defined-only --format=posix "$out/on/f32.o" | cut -d' ' -f1 | \
   sort >"$out/on/names"
 comm -13 "$out/base/on.names" "$out/on/names" >"$out/on/delta"
-printf '%s\n' et_f32_tensor_private_owned_span_overlap_v1 \
+printf '%s\n' et_f32_parameter_private_destroy_ready_v1 \
+  et_f32_tensor_private_owned_span_overlap_v1 \
   >"$out/on/expected.delta"
 cmp "$out/on/expected.delta" "$out/on/delta"
 

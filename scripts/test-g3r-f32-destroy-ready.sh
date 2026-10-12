@@ -26,6 +26,7 @@ cmp "$out/base/f32_tensor.o" "$out/candidate/f32_tensor.o"
 nm -g --defined-only --format=posix "$out/candidate/f32_tensor.o" \
   >"$out/candidate/off.symbols"
 ! grep -F 'et_f32_tensor_private_destroy_ready_v1 ' "$out/candidate/off.symbols"
+! grep -F 'et_f32_parameter_private_destroy_ready_v1 ' "$out/candidate/off.symbols"
 
 for mode in normal repeat san; do
   mode_flags=("${flags[@]}" -DET_F32_TENSOR_TESTING
@@ -41,6 +42,7 @@ for mode in normal repeat san; do
   nm -g --defined-only --format=posix "$out/$mode/test" \
     >"$out/$mode/on.symbols"
   grep -F 'et_f32_tensor_private_destroy_ready_v1 ' "$out/$mode/on.symbols" >/dev/null
+  grep -F 'et_f32_parameter_private_destroy_ready_v1 ' "$out/$mode/on.symbols" >/dev/null
   set +e
   ASAN_OPTIONS=detect_leaks=1 timeout --foreground --signal=TERM --kill-after=5s \
     90s "$out/$mode/test" >"$out/$mode/run.stdout" 2>"$out/$mode/run.stderr"

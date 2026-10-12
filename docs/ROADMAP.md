@@ -1705,6 +1705,18 @@ retains that reviewed tree. O2 pointer admission alone cannot prove the closed
 Eshkol ledger or 14 M3T/P1 associations. The O2 retire path and candidate
 cleanup remain pending.
 
+The bounded next producer adds a feature-gated, read-only f32 **parameter**
+destroy-readiness check using the same exact-slot admission as destruction.
+It rejects stale/foreign parameter identities, aliased error records, swapped
+live children, child backing corruption,
+and held borrows or plan pins without consuming the parameter. This is only a
+native M3T retirement prerequisite; it does not retire a candidate or close
+the receipt-to-TR3 composition. A nonmutating M3T owner preflight and an
+authenticated O2/P1/I2/M3T commit order still need a composed ledger gate.
+Host Clang 22 normal/repeat/sanitizer runs report 503 readiness checks and
+104 owned-span checks per mode; feature-off object parity passes. Supported
+pinned compilation, same-aggregate admission and integration remain pending.
+
 The proposed [O2 error-span provenance prerequisite](g3/G3_R_O2_ERROR_SPAN_PROVENANCE_PREREQUISITE.md)
 records a concrete gap before native O2 retirement acceptance: the existing
 f32 storage-overlap query follows mutable tensor descriptors and can miss a

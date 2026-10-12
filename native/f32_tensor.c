@@ -162,6 +162,8 @@ typedef struct f32_destroy_provenance {
   size_t count;
   size_t bytes;
   uint32_t ownership_kind;
+  const et_f32_parameter *parameter_owner;
+  uint32_t parameter_role;
   uint64_t dimensions[ET_KERNEL_MAX_RANK];
   size_t pitches[ET_KERNEL_MAX_RANK];
 } f32_destroy_provenance;
@@ -2492,6 +2494,15 @@ int32_t et_f32_parameter_create_v1(const et_f32_tensor *initial,
   }
   parameter->value = value;
   parameter->gradient = gradient;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  f32_destroy_provenance *value_record = f32_destroy_record_find(value);
+  f32_destroy_provenance *gradient_record = f32_destroy_record_find(gradient);
+  if (value_record == NULL || gradient_record == NULL) abort();
+  value_record->parameter_owner = parameter;
+  value_record->parameter_role = 1u;
+  gradient_record->parameter_owner = parameter;
+  gradient_record->parameter_role = 2u;
+#endif
   parameter->magic = ET_F32_PARAMETER_MAGIC;
   parameter->registry_next = live_parameters;
   live_parameters = parameter;
@@ -2499,16 +2510,14 @@ int32_t et_f32_parameter_create_v1(const et_f32_tensor *initial,
   return success(error);
 }
 
-int32_t et_f32_parameter_destroy_v1(et_f32_parameter **slot,
-                                    et_f32_tensor_error *error) {
-  et_f32_parameter **cursor;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+static int32_t parameter_destroy_admission(et_f32_parameter **slot,
+                                           et_f32_tensor_error *error) {
   et_f32_parameter *parameter;
   int32_t result;
-#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
   if (f32_destroy_error_aliases(error)) {
     return ET_F32_TENSOR_ERROR_INVALID_ARGUMENT;
   }
-#endif
   result = preflight_output(slot, slot == NULL ? 0u : sizeof(*slot), error,
                             "f32-parameter-destroy");
   if (result != 0) {
@@ -2527,7 +2536,6 @@ int32_t et_f32_parameter_destroy_v1(et_f32_parameter **slot,
   if (result != 0) {
     return result;
   }
-#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
   if (parameter->value == NULL || parameter->gradient == NULL ||
       find_tensor(parameter->value) != parameter->value ||
       find_tensor(parameter->gradient) != parameter->gradient ||
@@ -2538,7 +2546,19 @@ int32_t et_f32_parameter_destroy_v1(et_f32_parameter **slot,
                               ET_F32_TENSOR_CODE_PROVIDER_REJECTED,
                               "parameter child identity is unproved");
   }
-#endif
+  const f32_destroy_provenance *value_record =
+      f32_destroy_record_find(parameter->value);
+  const f32_destroy_provenance *gradient_record =
+      f32_destroy_record_find(parameter->gradient);
+  if (value_record == NULL || gradient_record == NULL ||
+      value_record->parameter_owner != parameter ||
+      value_record->parameter_role != 1u ||
+      gradient_record->parameter_owner != parameter ||
+      gradient_record->parameter_role != 2u) {
+    return f32_destroy_report(error, ET_F32_TENSOR_ERROR_INTERNAL,
+                              ET_F32_TENSOR_CODE_PROVIDER_REJECTED,
+                              "parameter child provenance is unproved");
+  }
   if (parameter->plan_pins != 0u ||
       parameter->value->active_borrow != NULL ||
       parameter->gradient->active_borrow != NULL ||
@@ -2548,12 +2568,61 @@ int32_t et_f32_parameter_destroy_v1(et_f32_parameter **slot,
                      ET_F32_TENSOR_CODE_INVALID_HANDLE,
                      "f32-parameter-destroy", "parameter is borrowed or pinned");
   }
-#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
   if (!f32_destroy_backing_safe(parameter->gradient) ||
       !f32_destroy_backing_safe(parameter->value)) {
     return f32_destroy_report(error, ET_F32_TENSOR_ERROR_INTERNAL,
                               ET_F32_TENSOR_CODE_PROVIDER_REJECTED,
                               "parameter backing provenance is unproved");
+  }
+  return success(error);
+}
+
+int32_t et_f32_parameter_private_destroy_ready_v1(
+    et_f32_parameter **exact_slot, et_f32_tensor_error *error) {
+  int32_t result = parameter_destroy_admission(exact_slot, error);
+  if (result != 0 || exact_slot == NULL || *exact_slot != NULL) return result;
+  return set_error(error, ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+                   ET_F32_TENSOR_CODE_NULL_ARGUMENT,
+                   "f32-parameter-destroy-ready", "parameter slot is empty");
+}
+#endif
+
+int32_t et_f32_parameter_destroy_v1(et_f32_parameter **slot,
+                                    et_f32_tensor_error *error) {
+  et_f32_parameter **cursor;
+  et_f32_parameter *parameter;
+  int32_t result;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  result = parameter_destroy_admission(slot, error);
+  if (result != 0 || *slot == NULL) return result;
+  parameter = *slot;
+#else
+  result = preflight_output(slot, slot == NULL ? 0u : sizeof(*slot), error,
+                            "f32-parameter-destroy");
+  if (result != 0) {
+    return result;
+  }
+  if (slot == NULL) {
+    return set_error(error, ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+                     ET_F32_TENSOR_CODE_NULL_ARGUMENT,
+                     "f32-parameter-destroy", "parameter slot is null");
+  }
+  parameter = *slot;
+  if (parameter == NULL) {
+    return success(error);
+  }
+  result = require_parameter(parameter, "f32-parameter-destroy", error);
+  if (result != 0) {
+    return result;
+  }
+  if (parameter->plan_pins != 0u ||
+      parameter->value->active_borrow != NULL ||
+      parameter->gradient->active_borrow != NULL ||
+      parameter->value->plan_pins != 0u ||
+      parameter->gradient->plan_pins != 0u) {
+    return set_error(error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+                     ET_F32_TENSOR_CODE_INVALID_HANDLE,
+                     "f32-parameter-destroy", "parameter is borrowed or pinned");
   }
 #endif
   cursor = &live_parameters;

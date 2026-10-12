@@ -427,6 +427,86 @@ static void null_parameter_child_preflight(void) {
   release(&source);
 }
 
+static void parameter_destroy_readiness(void) {
+  et_f32_tensor *source = make_tensor(4u);
+  et_f32_tensor *peer = make_tensor(4u);
+  et_f32_parameter *parameter = NULL;
+  et_f32_tensor_error error;
+  const et_f32_tensor *value = NULL;
+  et_f32_tensor_borrow *borrow = NULL;
+  et_f32_tensor_copy_plan *plan = NULL;
+  int foreign = 0;
+  CHECK(et_f32_parameter_create_v1(source, &parameter, &error) == 0);
+  CHECK(et_f32_parameter_value_tensor_v1(parameter, &value, &error) == 0);
+  const et_f32_test_live_counts_v1 baseline = live_counts();
+  size_t allocations = et_f32_tensor_test_successful_allocations_v1();
+  CHECK(et_f32_parameter_private_destroy_ready_v1(&parameter, &error) == 0);
+  CHECK(et_f32_parameter_private_destroy_ready_v1(&parameter, &error) == 0);
+  CHECK(et_f32_tensor_test_successful_allocations_v1() == allocations);
+  CHECK(live_counts().parameters == baseline.parameters);
+  CHECK(live_counts().tensors == baseline.tensors);
+  CHECK(et_f32_parameter_private_destroy_ready_v1(NULL, &error) ==
+        ET_F32_TENSOR_ERROR_INVALID_ARGUMENT);
+  et_f32_parameter *empty = NULL;
+  CHECK(et_f32_parameter_private_destroy_ready_v1(&empty, &error) ==
+        ET_F32_TENSOR_ERROR_INVALID_ARGUMENT);
+  et_f32_parameter *unregistered = (et_f32_parameter *)(void *)&foreign;
+  CHECK(et_f32_parameter_private_destroy_ready_v1(&unregistered, &error) ==
+        ET_F32_TENSOR_ERROR_INVALID_STATE);
+  CHECK(et_f32_parameter_private_destroy_ready_v1(
+            &parameter, (et_f32_tensor_error *)(void *)parameter) ==
+        ET_F32_TENSOR_ERROR_INVALID_ARGUMENT);
+  CHECK(parameter != NULL);
+  CHECK(et_f32_parameter_value_borrow_begin_v1(parameter, &borrow, &error) == 0);
+  CHECK(et_f32_parameter_private_destroy_ready_v1(&parameter, &error) ==
+        ET_F32_TENSOR_ERROR_INVALID_STATE);
+  CHECK(et_f32_tensor_borrow_end_v1(&borrow, &error) == 0);
+  et_f32_tensor_copy_assignment_v1 assignment = {
+      .struct_size = sizeof(assignment), .destination = peer, .source = value};
+  CHECK(et_f32_tensor_copy_plan_prepare_v1(1u, &assignment, &plan, &error) == 0);
+  CHECK(et_f32_parameter_private_destroy_ready_v1(&parameter, &error) ==
+        ET_F32_TENSOR_ERROR_INVALID_STATE);
+  CHECK(et_f32_tensor_copy_plan_release_v1(&plan, &error) == 0);
+  for (uint32_t child = 0u; child < 2u; ++child) {
+    et_f32_tensor *original_child = (et_f32_tensor *)(child == 0u ? value :
+        et_f32_parameter_test_gradient_tensor_v1(parameter));
+    CHECK(et_f32_parameter_test_replace_child_v1(parameter, child, source) == 0);
+    CHECK(et_f32_parameter_private_destroy_ready_v1(&parameter, &error) ==
+          ET_F32_TENSOR_ERROR_INTERNAL);
+    CHECK(et_f32_parameter_destroy_v1(&parameter, &error) ==
+          ET_F32_TENSOR_ERROR_INTERNAL);
+    CHECK(parameter != NULL);
+    CHECK(live_counts().parameters == baseline.parameters);
+    CHECK(live_counts().tensors == baseline.tensors);
+    CHECK(et_f32_parameter_test_replace_child_v1(parameter, child,
+                                                   original_child) == 0);
+    CHECK(et_f32_parameter_private_destroy_ready_v1(&parameter, &error) == 0);
+  }
+  et_f32_test_tensor_metadata_v1 original = {.struct_size = sizeof(original)};
+  et_f32_test_tensor_metadata_v1 corrupt = {.struct_size = sizeof(corrupt)};
+  CHECK(et_f32_tensor_test_metadata_snapshot_v1(value, &original) == 0);
+  corrupt = original;
+  corrupt.data_storage = (float *)et_f32_tensor_test_data_storage_v1(peer);
+  CHECK(et_f32_tensor_test_metadata_restore_v1((et_f32_tensor *)value,
+                                               &corrupt) == 0);
+  CHECK(et_f32_parameter_private_destroy_ready_v1(&parameter, &error) ==
+        ET_F32_TENSOR_ERROR_INTERNAL);
+  CHECK(et_f32_tensor_test_metadata_restore_v1((et_f32_tensor *)value,
+                                               &original) == 0);
+  CHECK(et_f32_parameter_private_destroy_ready_v1(&parameter, &error) == 0);
+  et_f32_parameter *stale = parameter;
+  CHECK(et_f32_parameter_destroy_v1(&parameter, &error) == 0);
+  CHECK(parameter == NULL);
+  CHECK(et_f32_parameter_private_destroy_ready_v1(&stale, &error) ==
+        ET_F32_TENSOR_ERROR_INVALID_STATE);
+  CHECK(et_f32_parameter_destroy_v1(&stale, &error) ==
+        ET_F32_TENSOR_ERROR_INVALID_STATE);
+  CHECK(et_f32_parameter_private_destroy_ready_v1(&parameter, &error) ==
+        ET_F32_TENSOR_ERROR_INVALID_ARGUMENT);
+  release(&peer);
+  release(&source);
+}
+
 int main(void) {
   basic_and_lifetime();
   associations_and_aliases();
@@ -435,6 +515,7 @@ int main(void) {
   corrupt_peer_release_preflight();
   associated_release_preflight();
   null_parameter_child_preflight();
+  parameter_destroy_readiness();
   if (failures != 0u) return 1;
   printf("G3R f32 destroy readiness PASS: %u checks\n", checks);
   return 0;

@@ -54,11 +54,23 @@ class F32DestroyReadinessStaticTests(unittest.TestCase):
                         ordinary.index("destroy_tensor_admitted(tensor)"))
         parameter = source.split("int32_t et_f32_parameter_destroy_v1(", 1)[1]
         parameter = parameter.split("int32_t et_f32_parameter_bind_identity_v1(", 1)[0]
-        self.assertLess(parameter.index("parameter->value == NULL || parameter->gradient == NULL"),
-                        parameter.index("find_tensor(parameter->value)"))
+        admission = source.split("static int32_t parameter_destroy_admission(", 1)[1]
+        admission = admission.split("int32_t et_f32_parameter_private_destroy_ready_v1(", 1)[0]
+        self.assertLess(admission.index("parameter->value == NULL || parameter->gradient == NULL"),
+                        admission.index("find_tensor(parameter->value)"))
         for child in ("gradient", "value"):
-            self.assertLess(parameter.index(f"f32_destroy_backing_safe(parameter->{child})"),
-                            parameter.index("*cursor = parameter->registry_next"))
+            self.assertIn(f"f32_destroy_backing_safe(parameter->{child})", admission)
+        self.assertLess(parameter.index("parameter_destroy_admission(slot, error)"),
+                        parameter.index("*cursor = parameter->registry_next"))
+
+    def test_parameter_query_is_guarded_and_reuses_destroy_admission(self) -> None:
+        source = (ROOT / "native/f32_tensor.c").read_text()
+        header = (ROOT / "native/f32_parameter_internal.h").read_text()
+        self.assertIn("et_f32_parameter_private_destroy_ready_v1", header)
+        query = source.split("int32_t et_f32_parameter_private_destroy_ready_v1(", 1)[1]
+        query = query.split("\n#endif", 1)[0]
+        self.assertIn("parameter_destroy_admission(exact_slot, error)", query)
+        self.assertNotIn("retire_parameter(", query)
 
 
 if __name__ == "__main__":
