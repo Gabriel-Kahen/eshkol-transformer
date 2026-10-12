@@ -649,8 +649,9 @@ independent D2 rows and cursor endpoints, 21-role reference records, CE and
 metric state, packed equality and unpacked differences. Frozen canonical corpus
 and bundle SHA-256 pins bind role words and the model parameter digest; the
 source tests alone do not regenerate the pinned M3 oracle. It is source-only;
-independent review and a genuine compiled-private five-layout transcript remain
-the N2 completion gates.
+independent source-and-test review passed at `8d68e1a`/tree `debf998`
+(`e3-n2-join-review-8d68e1a-20261012/SHA256SUMS`, SHA-256 `900d9fba...`).
+A genuine compiled-private five-layout transcript remains the N2 completion gate.
 
 The test-only CLI3/G3-G checkpoint-to-generation prerequisite has passed its
 exact fe9/f31 supported linked/runtime gate at `ab479f5`/tree `1102384`.
