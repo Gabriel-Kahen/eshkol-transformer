@@ -1,6 +1,7 @@
 """Source-only N3 control checks; package admission and AOT are still held."""
 
 from pathlib import Path
+import hashlib
 import os
 import re
 import subprocess
@@ -63,10 +64,10 @@ class IdleModelSourceTest(unittest.TestCase):
             r"\(i2-commit-load! \(vector-ref plan 0\)\)\)\)\s*"
             r"\(e3-n3-release-sources! sources\)\s*#t\)\)\s*$"))
 
-    def test_exact_tuple_policy_and_pending_import_gate(self) -> None:
+    def test_exact_tuple_policy_and_continuing_runtime_hold(self) -> None:
         builder = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
         self.assertIn('"${e3_tuple_kind}" == n3-idle', builder)
-        self.assertIn("exact compiled undefined-symbol inventory is not reviewed",
+        self.assertIn("private AOT/runtime and section 9 are not reviewed",
                       builder)
         self.assertIn("-DET_E3_RETENTION_TESTING", builder)
         self.assertIn("-DET_F32_TENSOR_TESTING", builder)
@@ -120,8 +121,8 @@ printf '%s\\n' "$e3_tuple_kind"
                 env=env, capture_output=True, text=True,
             )
             self.assertNotEqual(build.returncode, 0)
-            self.assertIn("E3 N3 idle tuple HOLD: exact compiled undefined-symbol "
-                          "inventory is not reviewed", build.stderr)
+            self.assertIn("E3 N3 idle tuple HOLD: private AOT/runtime and "
+                          "section 9 are not reviewed", build.stderr)
             self.assertNotIn("pinned Eshkol compiler not built", build.stderr)
             self.assertFalse(artifact.exists())
             self.assertFalse(Path(f"{artifact}.evidence").exists())
@@ -145,7 +146,36 @@ printf '%s\\n' "$e3_tuple_kind"
                                        "tests/e3_n3_idle/driver.esk"])
         self.assertIn("tests/e3_n3_idle/bridge.c",
                       lines(prefix, "native_source_closure"))
-        self.assertFalse(Path(f"{prefix}_undefined_symbols.txt").exists())
+        policy = (ROOT / "scripts/e3-private-package-policy.sh").read_text()
+        self.assertIn('"${e3_prefix}_undefined_symbols.txt" \\', policy)
+        self.assertNotIn('"${e3_tuple_kind}" != n3-idle', policy)
+
+    def test_reviewed_published_object_imports_are_exact_and_reject_drift(self) -> None:
+        manifest = (ROOT / "tests/e3_n3_idle/package_undefined_symbols.txt").read_bytes()
+        base = (ROOT / "native/e3_private_package_undefined_symbols.txt").read_bytes()
+        expected_sha256 = "d30c79bb134f8d86684654c2ac95462d9e59e2ecb2545aab63cbd1f857611961"
+
+        def matches_reviewed_inventory(data: bytes) -> bool:
+            try:
+                names = data.decode("ascii").splitlines(keepends=True)
+            except UnicodeDecodeError:
+                return False
+            return (hashlib.sha256(data).hexdigest() == expected_sha256
+                    and len(names) == 172
+                    and names == sorted(set(names))
+                    and all(name.endswith("\n") for name in names)
+                    and b"eshkol_tail_transfer_slot\n" not in data.splitlines(keepends=True))
+
+        self.assertTrue(matches_reviewed_inventory(manifest))
+        self.assertEqual(manifest, base)
+        self.assertFalse(matches_reviewed_inventory(
+            manifest + b"eshkol_tail_transfer_slot\n"))
+        self.assertFalse(matches_reviewed_inventory(
+            manifest.replace(b"eshkol_sha256\n", b"eshkol_tail_transfer_slot\n")))
+        self.assertFalse(matches_reviewed_inventory(
+            manifest.replace(b"eshkol_sha256\n", b"")))
+        self.assertFalse(matches_reviewed_inventory(
+            b"".join(reversed(manifest.splitlines(keepends=True)))))
 
 
 if __name__ == "__main__":

@@ -83,7 +83,7 @@ for g3g_raw_input in "${raw_private_root}" "${raw_package_bridge}" \
 done
 source "${PROJECT_ROOT}/scripts/e3-private-package-policy.sh"
 if [[ "${e3_tuple_kind}" == n3-idle ]]; then
-  die "E3 N3 idle tuple HOLD: exact compiled undefined-symbol inventory is not reviewed"
+  die "E3 N3 idle tuple HOLD: private AOT/runtime and section 9 are not reviewed"
 fi
 if [[ "${e3_tuple_requested}" == 1 ]]; then
   m3_tuple_requested=0

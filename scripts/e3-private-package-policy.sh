@@ -176,13 +176,11 @@ if [[ "${e3_tuple_requested}" == 1 ]]; then
       "${e3_prefix}_public_strings.txt" \
       "${e3_prefix}_native_objects.txt" \
       "${e3_prefix}_archive_members.txt" \
+      "${e3_prefix}_undefined_symbols.txt" \
       "${e3_prefix}_source_closure.txt" \
       "${e3_prefix}_native_source_closure.txt"; do
     e3_check_repository_path "${e3_path}"
   done
-  if [[ "${e3_tuple_kind}" != n3-idle ]]; then
-    e3_check_repository_path "${e3_prefix}_undefined_symbols.txt"
-  fi
   if [[ "${e3_public_tuple}" == 1 ]]; then
     e3_check_repository_path "${e3_prefix}_facades.txt"
   fi

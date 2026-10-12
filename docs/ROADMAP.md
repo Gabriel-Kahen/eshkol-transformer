@@ -806,13 +806,17 @@ The separate [N3 source candidate](../tests/e3_n3_idle/README.md) stages the
 authentic idle load and native parameter/gradient observation. Its isolated
 tuple proposal now has exact lexical selection, near-match rejection, source
 and native closure candidates, and test-only observer flag wiring. E1B still
-holds N3 before toolchain access pending independently reviewed exact imports,
-source/native closure and pin evidence. Source-only checks do not prove AOT or
-any §9 row.
+holds N3 before toolchain access pending private AOT/runtime and §9 review.
+Source-only checks do not prove AOT or any §9 row.
 The isolated `3da5806` import inventory exposed one additional runtime
 `eshkol_tail_transfer_slot` dependency from a tail-position N3 source-release
 call. The source now releases before returning `#t`; the exact import manifest
-and AOT admission remain held pending a fresh compile and independent review.
+and AOT admission remained held pending a fresh compile and independent review.
+The corrected-source E diagnostic at `ae2a2a0` has since passed ROOT and
+independent raw published-object review: exactly 172 imports, no tail-transfer
+slot, source/native closure and 89 exports plus six error globals. The
+pre-localization raw object was absent after cleanup. A separate exact 172-name
+manifest is now source-staged; it does not lift the E1B HOLD or admit N3 runtime.
 
 The [standalone N3 zero-model reference](../tests/e3_reference/README.md)
 generates four genuine D1/D2 all-correct, all-wrong and padded cases, with
