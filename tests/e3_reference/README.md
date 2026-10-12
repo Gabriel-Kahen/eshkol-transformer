@@ -20,10 +20,20 @@ comparisons use mathematical tolerances, while reduction, accumulation, accuracy
 counters, loss and weight use exact rational binary32 arithmetic. Perplexity uses
 the accepted independent Decimal reference with a two-ULP bound.
 
+`join.py` checks the five decoded corpus/reference records against the physical
+T1/D1 files and independent D2 traversal. `validate_five_case_join(root, corpus,
+bundle)` returns each case's exact start/end cursor, digest, rows, roles, CE,
+state and final expectations. It checks packed repartition equality, suffix
+replay and unpacked boundary differences. Decode both canonical envelopes with
+`transcript.decode` first; that rejects duplicate JSON keys. The lightweight
+join tests use a controlled zero-logit oracle and do not need PyTorch. The
+pinned M3 generator and its separate test still require Q0. Neither source
+test establishes a compiled-private N2 verdict.
+
 Focused commands from the repository root:
 
 ```bash
-python3 -m unittest tests.e3_reference.test_corpus \
+python3 -m unittest tests.e3_reference.test_join tests.e3_reference.test_corpus \
   tests.e3_reference.test_transcript tests.e3_reference.test_isolation -v
 
 ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "$Q0_PYTHON" \
