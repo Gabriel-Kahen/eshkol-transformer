@@ -1,0 +1,4 @@
+;;; Receipt and in-memory codec remain available without file-pair admission.
+(load "g3r_c2_sha_receipt_root.esk")
+(display "G3-R file pair off PASS: checks=1")
+(newline)

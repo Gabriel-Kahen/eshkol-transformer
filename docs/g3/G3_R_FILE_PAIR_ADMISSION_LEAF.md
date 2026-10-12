@@ -58,3 +58,27 @@ the earlier review and seal do not cover it. Independent review of the new
 source and tests found no remaining source-level ownership blocker after the
 guarded handoff repair. The normal/repeat/sanitizer/fault/feature-off compiled
 gate remains pending before admission.
+
+## Prepared compiled gate
+
+`scripts/test-g3r-file-pair.sh` is a source-reviewed recipe, not a completed
+runtime result. It requires a caller-supplied full immutable commit and tree
+plus a fresh evidence directory outside the checkout:
+
+```sh
+bash scripts/test-g3r-file-pair.sh EXPECTED_COMMIT EXPECTED_TREE /fresh/evidence
+```
+
+The runner rejects a dirty or mismatched source checkout before and after the
+gate. It verifies the locked fe9 Eshkol checkout/compiler provenance, records
+the Eshkol runner and C/C++ compiler hashes, and records deterministic C2 and
+G3RCV1 fixture hashes. The exact object-mode dependency closure must match
+`native/g3r_file_pair_source_closure.txt` in each mode. Feature-off compiles
+the receipt root without the new file-pair root and requires no file-pair
+symbols. Normal, repeat and native ASan+UBSan+LSan modes must each produce
+the exact 14-check file-pair result, exact feature-off output, empty build and
+run stderr, and byte-identical mode outputs. The gate retains native depfiles,
+linked/IR symbols, and compiler provenance for review. Its native sanitizer
+mode does not establish generated Eshkol instrumentation or all-path owner
+correctness. On success it writes and verifies `SHA256SUMS-RUN` over retained
+evidence. The separately accepted predecessor receipt gate is not rerun.

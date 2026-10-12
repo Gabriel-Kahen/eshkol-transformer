@@ -1694,8 +1694,12 @@ cleanup repair and uses guarded return handoffs plus heap cells for file-pair
 cleanup authority across the exception handler. Focused source checks and the
 native exact-reader test pass. Independent source/tests review found no
 remaining source-level blocker; compiled normal/repeat/sanitizer/fault/
-feature-off proof remains a separate admission gate. No public LOAD, model
-restore, replay or continuation is claimed.
+feature-off proof remains a separate admission gate. A source-only exact-head
+compiled recipe now pins the clean Git commit/tree and fe9 compiler/runtime
+inputs before and after, compares the file-pair depfile closure, and retains
+normal/repeat/native-sanitizer, fault and feature-off evidence. Its source tests
+pass; the compiled recipe has not run. No public LOAD, model restore, replay or
+continuation is claimed.
 
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
