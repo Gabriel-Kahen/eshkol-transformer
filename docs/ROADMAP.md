@@ -831,6 +831,10 @@ The read-only synthetic reconciler checks protected intents, stage/target
 identity, markers, ordered hashes, duplicate targets, and authenticated
 receipt plus seal. Hard-exit tests cover 15 publication checkpoints, including
 readable VERIFIED without a receipt; all receiptless crashes remain HOLD.
+The synthetic verifier now pins an independent seal key and key identity in
+the reviewed frozen config. A broker-key seal, mismatched identity, or shared
+broker/seal key cannot yield MATCHED; reconciliation callers cannot supply a
+replacement key. Independent review of this repair remains pending.
 This is source-only and does not supply external issuance or durable custody,
 real release pins, a separate UID/ACL boundary, or independent seal custody.
 N1/M1 and real-layer acquisition remain HOLD pending those gates.

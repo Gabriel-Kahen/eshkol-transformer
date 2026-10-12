@@ -100,11 +100,20 @@ class Config:
     seconds: float
     rss_cap: int
     signing_key: bytes
+    seal_key_id: str
+    seal_verification_key: bytes
 
     def validate(self):
         if (len(self.pin) != 64 or any(c not in "0123456789abcdef" for c in self.pin)
                 or not self.target or "/" in self.target or self.target in (".", "..")
-                or not self.sources or not self.signing_key or
+                or not self.sources or not isinstance(self.signing_key, bytes)
+                or not isinstance(self.seal_verification_key, bytes)
+                or not self.signing_key or not self.seal_verification_key
+                or hmac.compare_digest(self.signing_key, self.seal_verification_key)
+                or not isinstance(self.seal_key_id, str)
+                or not 1 <= len(self.seal_key_id) <= 64
+                or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789-"
+                       for c in self.seal_key_id) or
                 min(self.byte_cap, self.seconds, self.rss_cap) <= 0):
             raise ValueError("invalid-frozen-config")
         names = set()
@@ -361,9 +370,10 @@ class Broker:
                 os.close(fd)
 
 
-def verify_receipt(config, receipt, seal, seal_key):
-    """Consumer admission; seal is separately signed over the exact file list."""
+def verify_receipt(config, receipt, seal):
+    """Synthetic consumer check using the verifier pinned in reviewed Config."""
     try:
+        config.validate()
         value = json.loads(receipt)
         body = value["body"]
         if (not hmac.compare_digest(value["hmac_sha256"], hmac.digest(
@@ -371,8 +381,12 @@ def verify_receipt(config, receipt, seal, seal_key):
                 body["pin"] != config.pin or body["target"] != config.target):
             return False
         seal_value = json.loads(seal)
-        if (not hmac.compare_digest(seal_value["hmac_sha256"], hmac.digest(
-                seal_key, _encoded(seal_value["body"]), "sha256").hex()) or
+        if (set(seal_value) != {"key_id", "body", "hmac_sha256"} or
+                seal_value["key_id"] != config.seal_key_id or
+                not hmac.compare_digest(seal_value["hmac_sha256"], hmac.digest(
+                    config.seal_verification_key,
+                    _encoded({"key_id": seal_value["key_id"],
+                              "body": seal_value["body"]}), "sha256").hex()) or
                 seal_value["body"] != body):
             return False
         parent = os.open(config.parent, os.O_RDONLY | os.O_DIRECTORY |

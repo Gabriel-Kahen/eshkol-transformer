@@ -31,7 +31,8 @@ class BrokerTest(unittest.TestCase):
             sources.append(broker.Source(path, relative, hashlib.sha256(content).hexdigest(),
                                          len(content), path.resolve(), broker._path_inodes(path)))
         self.config = broker.Config(self.parent, "a" * 64, "export", tuple(sources),
-                                    4096, 5, 2**40, b"broker-only-test-key")
+                                    4096, 5, 2**40, b"broker-only-test-key",
+                                    "synthetic-seal-v1", b"independent-seal-key")
 
     def run_attempt(self, fault=None):
         seen = []
@@ -52,12 +53,13 @@ class BrokerTest(unittest.TestCase):
 
     def seal(self, receipt):
         body = json.loads(receipt)["body"]
-        return broker._encoded({"body": body, "hmac_sha256": hmac.digest(
-            b"independent-seal-key", broker._encoded(body), "sha256").hex()})
+        signed = {"key_id": self.config.seal_key_id, "body": body}
+        return broker._encoded(dict(signed, hmac_sha256=hmac.digest(
+            self.config.seal_verification_key, broker._encoded(signed), "sha256").hex()))
 
     def verify(self, result, seal=None):
         return broker.verify_receipt(self.config, result.receipt or b"{}",
-                                     seal or b"{}", b"independent-seal-key")
+                                     seal or b"{}")
 
     def test_success_requires_both_authorities_and_live_identity(self):
         result, seen = self.run_attempt()

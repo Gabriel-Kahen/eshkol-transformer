@@ -6,6 +6,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
@@ -14,6 +15,7 @@ import e3_n1_reconcile as reconcile
 
 
 SEAL_KEY = b"independent-synthetic-seal-key"
+SEAL_KEY_ID = "synthetic-seal-v1"
 
 
 def fixture(root):
@@ -32,13 +34,15 @@ def fixture(root):
         sources.append(broker.Source(path, relative, hashlib.sha256(content).hexdigest(),
                                      len(content), path.resolve(), broker._path_inodes(path)))
     return broker.Config(parent, "a" * 64, "export", tuple(sources),
-                         4096, 5, 2**40, b"synthetic-broker-key")
+                         4096, 5, 2**40, b"synthetic-broker-key",
+                         SEAL_KEY_ID, SEAL_KEY)
 
 
-def seal(receipt):
+def seal(receipt, key=SEAL_KEY, key_id=SEAL_KEY_ID):
     body = json.loads(receipt)["body"]
-    return broker._encoded({"body": body, "hmac_sha256": hmac.digest(
-        SEAL_KEY, broker._encoded(body), "sha256").hex()})
+    signed = {"key_id": key_id, "body": body}
+    return broker._encoded(dict(signed, hmac_sha256=hmac.digest(
+        key, broker._encoded(signed), "sha256").hex()))
 
 
 def attempt_id(parent):
@@ -112,8 +116,8 @@ class ReconcileTest(unittest.TestCase):
                                          (target.stat().st_dev, target.stat().st_ino))
                     self.assertEqual(result.reason, "evidence-unreadable" if
                                      boundary in unverified_target else "receipt-absent")
-                    self.assertEqual(reconcile.reconcile(config, attempt, b"{}", b"{}",
-                                    SEAL_KEY).state, "HOLD")
+                    self.assertEqual(reconcile.reconcile(config, attempt, b"{}", b"{}").state,
+                                     "HOLD")
 
     def test_receipt_seal_intent_and_live_checksums(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -122,10 +126,21 @@ class ReconcileTest(unittest.TestCase):
             self.assertEqual(issued.state, "VERIFIED")
             good_seal = seal(issued.receipt)
             check = lambda receipt=None, signed=None: reconcile.reconcile(
-                config, issued.attempt, receipt, signed, SEAL_KEY)
+                config, issued.attempt, receipt, signed)
             self.assertEqual(check().reason, "receipt-absent")
             self.assertEqual(check(issued.receipt).reason, "seal-absent")
             self.assertEqual(check(issued.receipt, good_seal).state, "MATCHED")
+            self.assertEqual(check(issued.receipt,
+                                   seal(issued.receipt, config.signing_key)).state, "HOLD")
+            self.assertEqual(check(issued.receipt,
+                                   seal(issued.receipt, key_id="other-seal")).state, "HOLD")
+            self.assertEqual(reconcile.reconcile(
+                replace(config, seal_verification_key=config.signing_key),
+                issued.attempt, issued.receipt, good_seal).state, "HOLD")
+            with self.assertRaises(TypeError):
+                reconcile.reconcile(config, issued.attempt, issued.receipt,
+                                    seal(issued.receipt, b"caller-chosen-key"),
+                                    seal_key=b"caller-chosen-key")
             forged = json.loads(issued.receipt)
             forged["body"]["attempt"] = "f" * 32
             self.assertEqual(check(broker._encoded(forged), good_seal).state, "HOLD")
@@ -149,7 +164,7 @@ class ReconcileTest(unittest.TestCase):
                     os.rename(target, config.parent / "old-target")
                     shutil.copytree(config.parent / "old-target", target)
                 result = reconcile.reconcile(config, issued.attempt, issued.receipt,
-                                             seal(issued.receipt), SEAL_KEY)
+                                             seal(issued.receipt))
                 self.assertEqual(result.state, "HOLD")
                 if damage == "duplicate":
                     self.assertEqual(result.reason, "duplicate-target")
@@ -176,7 +191,7 @@ class ReconcileTest(unittest.TestCase):
             issued = broker.Broker(config).attempt(config.pin, config.target)
             (config.parent / "export" / "extra").write_bytes(b"unexpected")
             self.assertEqual(reconcile.reconcile(config, issued.attempt,
-                             issued.receipt, seal(issued.receipt), SEAL_KEY).reason,
+                             issued.receipt, seal(issued.receipt)).reason,
                              "target-layout-mismatch")
             self.assertEqual(reconcile.reconcile(config, "../export").reason,
                              "invalid-attempt")

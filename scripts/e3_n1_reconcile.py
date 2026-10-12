@@ -114,7 +114,7 @@ def _exact_target_tree(target, config):
             os.close(fd)
 
 
-def reconcile(config, attempt, receipt=None, seal=None, seal_key=None):
+def reconcile(config, attempt, receipt=None, seal=None):
     """Compare protected local evidence; MATCHED needs an external receipt and seal.
 
     This does not issue receipts, repair stages, establish durable receipt custody,
@@ -171,11 +171,11 @@ def reconcile(config, attempt, receipt=None, seal=None, seal_key=None):
                 return hold("duplicate-target")
             if receipt is None:
                 return hold("receipt-absent")
-            if seal is None or seal_key is None:
+            if seal is None:
                 return hold("seal-absent")
             body = json.loads(receipt)["body"]
             if body.get("attempt") != attempt or not broker.verify_receipt(
-                    config, receipt, seal, seal_key):
+                    config, receipt, seal):
                 return hold("receipt-or-seal-mismatch")
             return Reconciliation("MATCHED", "synthetic-evidence-matched", attempt)
         finally:

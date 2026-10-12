@@ -8,7 +8,8 @@ mount, `/proc`, inherited-fd, or immutable target boundary.
 
 The broker constructor takes a frozen `Config`: protected parent, reviewed pin
 digest, target basename, ordered `Source` descriptors, positive byte/time/RSS
-caps, a private receipt key, each source's reviewed resolved path, and the
+caps, a private receipt key, an independent seal verifier key and its identity,
+each source's reviewed resolved path, and the
 device/inode/mode chain from filesystem root through the source. The tiny test
 fixture freezes these values locally; **no production source identities or
 ancestor policy have been reviewed**. `attempt(pin, target)` accepts only that
@@ -31,20 +32,26 @@ file list. The receipt is returned out of band and is **not** stored in the
 export; a crash before return has no consumer authority. The protected intent
 stays HOLD for recovery and cannot itself promote a target.
 
-`verify_receipt(config, receipt, seal, seal_key)` requires the HMAC receipt and
-a separately keyed seal over the same body, then checks the live target inode,
+`verify_receipt(config, receipt, seal)` requires the HMAC receipt and a seal
+authenticated with the verifier key pinned in `Config`. The seal signs its
+key identity and the exact receipt body. Configuration validation rejects a
+missing verifier or a verifier key equal to the broker receipt key. Verification
+then checks the live target inode,
 checksummed VERIFIED record and every file's hash/size through nofollow fd
 walks. This is a synthetic consumer check. A deployment must separately prove
 the seal's read-only custody and key separation; HMAC bytes alone do not make
 a writable target immutable. There is no automated recovery promotion.
 
 `scripts/e3_n1_reconcile.py` adds a read-only synthetic crash check.
-`reconcile(config, attempt, receipt=None, seal=None, seal_key=None)` returns
+`reconcile(config, attempt, receipt=None, seal=None)` returns
 `Reconciliation(state, reason, attempt)`, where `state` is `HOLD` or `MATCHED`.
 It checks the protected intent, named stage/target inode at open, checksummed
 HOLD/VERIFIED markers, complete ordered source hashes and target layout, and
 duplicate VERIFIED targets for the attempt. `MATCHED` requires the out-of-band
-broker HMAC receipt and separately keyed matching seal. Missing or unreadable
+broker HMAC receipt and separately keyed matching seal. A reconciliation caller
+cannot choose a seal key; only the reviewed frozen config identifies the trusted
+verifier. A seal made with the broker key, a different seal identity, or a config
+that reuses the broker key remains HOLD. Missing or unreadable
 evidence remains HOLD. It never writes, repairs, issues a receipt, or promotes
 a crash state from marker bytes alone. The stage's original inode is not
 durably pinned in the intent, so a stage replacement cannot be proven from
