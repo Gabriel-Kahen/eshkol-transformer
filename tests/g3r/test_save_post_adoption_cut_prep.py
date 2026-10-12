@@ -41,10 +41,14 @@ class PostAdoptionPreparation(unittest.TestCase):
                           (destination / "PREPARED.tsv").read_text())
             root = (destination / "source/tests/g3r/save_post_adoption_cut_root.esk").read_text()
             self.assertIn('(load "g3r_training_controls_root.esk")', root)
+            self.assertIn('(load "g3m_prefill_p1_extension.esk")', root)
             self.assertIn('(load "g3r_same_owner_o2_adoption_extension.esk")', root)
             self.assertIn('(load "g3r_same_owner_save_cut_caller.esk")', root)
             self.assertTrue((destination / "source/native/c2_training_state_extension.esk").is_file())
             self.assertTrue((destination / "source/internal/p1/lib/transformer/module.esk").is_file())
+            runtime = (destination / "source/tests/g3r/save_post_adoption_cut_runtime.esk").read_text()
+            self.assertIn("(g3m-prefill-p1! generator input)", runtime)
+            self.assertNotIn("g3t-with-call", runtime)
             with self.assertRaises(ValueError):
                 prepare(destination)
 

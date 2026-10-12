@@ -16,6 +16,10 @@ CALLER = "native/g3r_same_owner_save_caller_extension.esk"
 CALLER_SHA256 = "01a14412f39fbe83413938a5536eec89900a9cf8e1bd541d488103dfca91bdef"
 CLOSURE = "native/g3r_same_owner_o2_adoption_source_closure.txt"
 CLOSURE_SHA256 = "096f6e8470fb56017333ba25c03e1bd53515a5f3eec5d22afa6598592608ecf8"
+MANUAL_PREFILL = ("native/g3t_manual_p1_extension.esk",
+                  "native/g3m_prefill_p1_extension.esk")
+FIXTURES = ("tests/g3r/save_post_adoption_cut_root.esk",
+            "tests/g3r/save_post_adoption_cut_runtime.esk")
 FE9 = "fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9"
 FE9_RUNNER_SHA256 = "7dd254bab761fe41142a0e3777338f41b3b9f03a5ce4c0bba419f1e2b22a99aa"
 FE9_RUNTIME_SHA256 = "32cd446a3aeaa2e78bbe49b0c04cda961b8e1eeb7bb0ea53ec5e55c11f0c183e"
@@ -63,7 +67,8 @@ def prepare(output: Path) -> None:
             raise ValueError(f"pinned {name} changed")
 
     files = (ROOT / CLOSURE).read_text().splitlines()
-    changed = subprocess.run(["git", "diff", "--name-only", BASE, "--", *files],
+    changed = subprocess.run(["git", "diff", "--name-only", BASE, "--",
+                              *files, *MANUAL_PREFILL],
                              cwd=ROOT, check=True, capture_output=True, text=True)
     if changed.stdout:
         raise ValueError("production Eshkol closure differs from accepted base")
@@ -77,11 +82,16 @@ def prepare(output: Path) -> None:
                 "native/g3r_training_controls_extension.esk"}
     if not required.issubset(files):
         raise ValueError("real P1/O2/C2/adoption leaves are missing")
+    for name in FIXTURES:
+        committed = subprocess.check_output(["git", "show", f"HEAD:{name}"],
+                                            cwd=ROOT)
+        if (ROOT / name).read_bytes() != committed:
+            raise ValueError(f"uncommitted fixture bytes: {name}")
 
     output.mkdir(parents=True)
     source_root = output / "source"
     copied = []
-    for name in files:
+    for name in [*files, *MANUAL_PREFILL]:
         relative = Path(name)
         if relative.is_absolute() or ".." in relative.parts or not name.endswith(".esk"):
             raise ValueError("unsafe Eshkol closure path")
@@ -89,11 +99,10 @@ def prepare(output: Path) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / relative, target)
         copied.append(target)
-    for name in ("save_post_adoption_cut_root.esk",
-                 "save_post_adoption_cut_runtime.esk"):
-        target = source_root / "tests/g3r" / name
+    for name in FIXTURES:
+        target = source_root / name
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(ROOT / "tests/g3r" / name, target)
+        shutil.copyfile(ROOT / name, target)
         copied.append(target)
     generated = source_root / "tests/g3r/g3r_same_owner_save_cut_caller.esk"
     generated.write_text(frozen_caller((ROOT / CALLER).read_text()))

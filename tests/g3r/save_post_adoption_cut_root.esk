@@ -1,5 +1,7 @@
 ;;; Test-only root: all production leaves are loaded from the pinned closure.
 (load "g3r_training_controls_root.esk")
+(load "g3t_manual_p1_extension.esk")
+(load "g3m_prefill_p1_extension.esk")
 
 ;;; [returned shell, abandon calls, reverse release order, in abandon?].
 (define g3r-save-cut-state (vector #f 0 '() #f))

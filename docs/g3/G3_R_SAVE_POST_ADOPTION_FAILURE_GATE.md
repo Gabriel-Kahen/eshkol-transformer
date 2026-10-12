@@ -11,7 +11,9 @@ leaves on one original generator/model/optimizer/capsule graph.
 `tests/g3r/prepare_save_post_adoption_cut.py --output ABSOLUTE_FRESH_DIR`
 copies the accepted recursive Eshkol closure into a read-only source tree and
 generates one test-only caller. It rejects any change to the accepted caller
-or any file in its 96-file recursive closure. The generated caller differs
+or any file in its 96-file recursive closure. It adds the two accepted manual
+P1 prefill helpers and verifies both fixture files against committed HEAD
+before copying. The generated caller differs
 only at two sites: one call to the test failure hook immediately after the
 root-cell publication, and a counted wrapper around the real abandon call.
 The original caller and adoption leaf stay unchanged. `SOURCE-SHA256SUMS`
@@ -20,7 +22,8 @@ the f31 image and fe9 runner/runtime pins. Preparation performs no build.
 
 The generated root loads the genuine P1, O2, C2, controls and adoption
 source leaves; its fixture creates one original X1/T2/D2/M3/O2 graph, a G3
-generator with a committed token, then a genuine captured/released trainer
+generator with a committed manual P1 token and no pending G1, then a genuine
+captured/released trainer
 capsule. It checks the exact typed failure, exact returned shell, one abandon,
 real O2-then-P1 release order, unchanged controls/cursor, no C2 registry
 publication, and denial of a second take from the retired shell. The fixture

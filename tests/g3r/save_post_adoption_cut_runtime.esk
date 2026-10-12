@@ -51,13 +51,8 @@
           ':eos #f ':seed 1729)
     dataset optimizer))
 (define input (g3t-generation-token-input-create 65))
-(g3t-with-call 'g3r-save-cut-prefill generator (call)
-  (g3t-frame-begin call input 1)
-  (let role ((index 0))
-    (if (< index 21)
-        (begin (g3t-role-step call index) (role (+ index 1)))))
-  (g3t-frame-prepare call #f)
-  (g3t-frame-commit call))
+(define logits (g3m-prefill-p1! generator input))
+(check "manual logits release" (g3t-generation-tensor-release! logits))
 (check "input release" (g3t-generation-tensor-release! input))
 
 (define capsule
