@@ -2705,7 +2705,13 @@ publication, public G2 and continuation remain pending.
   `g3c4-p2g2-eshkol-terminal-composer-4e07c9f-fe9-f31-20261003-prepared-f/`.
   The active pre-tail abort path still fail-stops if a genuine native I1/A2
   lease rejects abort; in-region release/retry coverage is unresolved and
-  remains a contract acceptance blocker.
+  remains a contract acceptance blocker on the published composer tree.
+  The separate `codex/g3-p2g2-held-lease-retry-test` branch stages a test-only
+  exact-source overlay for genuine owner-held
+  pending I1 and READY A2 lease rejection, owner release, and retry within the
+  same `m3-call`; its compiled normal/sanitizer gate is pending. This diagnostic
+  holder does not add automatic release of an external production lease, and
+  it does not alter the production zero-return tail.
 
 ## Wave 4 — practical pretraining and performance
 

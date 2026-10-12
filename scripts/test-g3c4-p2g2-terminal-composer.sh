@@ -114,6 +114,7 @@ exec $(printf '%q' "$cxx") $sanitizer_link "\$@" \\
   -Wl,--wrap=et_g3c4_private_p2g2_terminal_commit_v1 \\
   -Wl,--wrap=et_g3c4_private_p2g2_terminal_snapshot_v1 \\
   -Wl,--wrap=et_g3c4_private_p2g2_terminal_ids_clone_copy_v1 \\
+  -Wl,--wrap=et_g3c4_private_call_abort_v1 \\
   -Wl,--wrap=et_a2_kv_cache_transaction_abort_v1 \\
   -Wl,--wrap=et_a2_kv_cache_transaction_commit_v1
 WRAPPER
@@ -157,7 +158,7 @@ WRAPPER
     >"$evidence/$mode-overlay-identity.stdout"
   cp "$directory/overlays/SHA256SUMS" "$evidence/$mode-overlay-SHA256SUMS"
   for fixture in parity-original parity-overlay unmarked decode-first decode-second \
-      precommit postzero; do
+      precommit postzero lease-i1 lease-a2; do
     mkdir -p "$directory/cache/$fixture"
     env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
       XDG_CACHE_HOME="$directory/cache/$fixture" \
