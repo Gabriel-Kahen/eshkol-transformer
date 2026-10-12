@@ -97,5 +97,7 @@ The read-only preflight, seven fake-daemon lifecycle tests and synthetic seal
 test pass; Docker and the compiled gate have not run. Prepared-a through
 prepared-c are superseded and retained for audit. The launcher waits for hosted
 CLI run 38304110383 to finish. The b20 source predates current main's CLI3
-topology and CLI PR #202's installed D1 assertions. A current-main union,
-independent review and exact-source rerun are required before integration.
+topology and CLI PR #202's installed D1 assertions. Their reviewed source
+union preserves 21 CI suites and the 36-command FULL gate. Its 21 N2 tests,
+seven runnable CLI3 source tests, and topology check pass. Installed CLI tests
+require a binary; the exact-union compiled and sanitizer rerun is pending.

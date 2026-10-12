@@ -898,10 +898,12 @@ Its read-only preflight and adversarial lifecycle tests pass. An absent
 daemon-issued container ID quarantines the run, including when a stale object
 has the matching label. The supported AOT and sanitizer run remains unexecuted.
 The earlier prepared-a through prepared-c bundles are superseded and preserved
-for audit. This b20 gate cannot establish a current-main verdict: current main
-`09f7ed52` retains CLI3 full-CI topology, and CLI PR #202 adds installed D1
-assertions. Their source union, independent review and exact-source rerun are
-separate integration gates.
+for audit. This b20 gate cannot establish a current-main verdict. The source
+union of current main `09f7ed52`, exact CLI PR #202 head `b98321ef`, and N2
+`b20c81f1` preserves CLI3's 21-suite, 36-command topology and installed D1
+assertions. Independent source/tests review found no blocking source issue;
+21 N2 tests and seven runnable CLI3 source tests passed. The installed CLI
+tests require a binary, and the exact-union AOT/sanitizer rerun remains open.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
