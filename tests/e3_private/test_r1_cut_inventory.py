@@ -8,13 +8,23 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 INVENTORY = ROOT / "docs/e3/E3_SECTION9_R1_CUT_INVENTORY.md"
 EXPECTED = {
-    "admission", "p1-prepare", "d2-prepare", "frame-allocation",
+    "admission", "invocation-envelope", "p1-prepare", "d2-prepare", "frame-allocation",
     "tensor-allocation", "provider-discovery", "epsilon-copy",
-    "acquisition-pin", "p1-enter", "batch-allocation", "late-shard-read",
-    "batch-copy", "provider-preflight", "post-provider", "finalize",
+    "acquisition-pin", "p1-enter", "batch-envelope", "d2-source-allocation",
+    "batch-allocation", "late-shard-read", "batch-copy",
+    "provider-preflight-common", "correct-preflight", "accumulate-preflight",
+    "post-provider", "finalize",
     "final-publication", "public-seek", "k1-invoke",
 }
 DISPOSITIONS = {"existing", "partial", "gap", "excluded"}
+PINNED_SEAMS = {
+    "invocation-envelope": "native/e3_private_extension.esk::e3-evaluate-into!",
+    "batch-envelope": "native/e3_private_extension.esk::e3-run-one-batch!",
+    "d2-source-allocation": "internal/d2/lib/d2_dataset.esk::d2-token-dataset-next-batch",
+    "provider-preflight-common": "src/eshkol_transformer/e3_frame.c::e3_dispatch",
+    "correct-preflight": "src/eshkol_transformer/e3_frame.c::et_e3_private_correct_v1",
+    "accumulate-preflight": "src/eshkol_transformer/e3_frame.c::e3_accumulate_dispatch",
+}
 
 
 def inventory_errors(document: str) -> list[str]:
@@ -45,6 +55,8 @@ def inventory_errors(document: str) -> list[str]:
             errors.append(f"{cut}: missing source seam")
             continue
         path, symbol = match.groups()
+        if cut in PINNED_SEAMS and f"{path}::{symbol}" != PINNED_SEAMS[cut]:
+            errors.append(f"{cut}: wrong call-site seam")
         source_path = ROOT / path
         if ".." in Path(path).parts or not source_path.is_file():
             errors.append(f"{cut}: missing source file {path}")
@@ -81,6 +93,34 @@ class R1CutInventoryTest(unittest.TestCase):
             line for line in original.splitlines()
             if not line.startswith("| epsilon-copy |"))
         self.assertTrue(inventory_errors(without_row))
+
+    def test_invocation_allocations_and_all_three_k1_dispatch_sites(self) -> None:
+        source = (ROOT / "native/e3_private_extension.esk").read_text()
+        entry = source.split("(define (e3-evaluate-into!", 1)[1].split(
+            "(define (e3-publish!", 1)[0]
+        batch = source.split("(define (e3-run-one-batch!", 1)[1].split(
+            "(define (e3-traverse!", 1)[0]
+        traverse = source.split("(define (e3-traverse!", 1)[1].split(
+            "(define (e3-evaluate-closed!", 1)[0]
+        d2 = (ROOT / "internal/d2/lib/d2_dataset.esk").read_text()
+        next_batch = d2.split("(define (d2-token-dataset-next-batch", 1)[1].split(
+            "(define (d2-token-dataset-cursor", 1)[0]
+        self.assertIn("(cons #f '())", entry)
+        self.assertIn("(vector #f 0 #f (cons #f '()))", batch)
+        self.assertIn("(d2-token-dataset-next-batch dataset)", batch)
+        self.assertIn("(with-region ('e3-evaluation-batch 65536)", traverse)
+        self.assertIn("(batch-cap (vector", next_batch)
+        self.assertIn("(boundary-input (make-bytevector", next_batch)
+
+        frame = (ROOT / "src/eshkol_transformer/e3_frame.c").read_text()
+        sites = (
+            ("static int64_t e3_dispatch(", "int64_t et_e3_private_forward_role_v1("),
+            ("int64_t et_e3_private_correct_v1(", "static int64_t e3_accumulate_dispatch("),
+            ("static int64_t e3_accumulate_dispatch(", "int64_t et_e3_private_accumulate_v1("),
+        )
+        for begin, end in sites:
+            body = frame.split(begin, 1)[1].split(end, 1)[0]
+            self.assertEqual(body.count("et_kernel_runtime_dispatch("), 1, begin)
 
 
 if __name__ == "__main__":
