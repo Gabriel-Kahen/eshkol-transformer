@@ -97,6 +97,13 @@
 #error "G3-T manual decode requires manual logits and owned token input"
 #endif
 #endif
+#ifdef ET_G3R_COMMITTED_HISTORY_PRIVATE
+#if !defined(ET_G3T_FINAL_PUBLICATION_PRIVATE) || \
+    !defined(ET_G3T_MANUAL_P2_PREFILL_PRIVATE) || \
+    !defined(ET_G3T_MANUAL_DECODE_PRIVATE)
+#error "G3-R history requires final G3-T P1/P2 and manual decode commits"
+#endif
+#endif
 #ifdef ET_G3T_INPUT_FROM_T1_PRIVATE
 #ifndef ET_G3T_PREFILL_SAMPLE_PRIVATE
 #error "G3-T T1 input requires private input transport"
@@ -220,6 +227,13 @@ typedef struct g3t_context {
   owner *model;
   et_a2_kv_cache *cache;
   int64_t policy[6], rng[4];
+#ifdef ET_G3R_COMMITTED_HISTORY_PRIVATE
+  int64_t history_ids[2];
+  int64_t history_length, history_prompt_length;
+  int64_t history_generated_count, history_manual_count;
+  int64_t history_generated_eos_terminal;
+  int history_pending_g1;
+#endif
   et_g3t_model_pins_internal pins;
 #ifdef ET_G3T_MANUAL_LOGITS_PRIVATE
   g3t_logits *pending_logits;
@@ -239,6 +253,72 @@ typedef struct g3t_context {
   int binding_ready;
   int final_committed;
 } g3t_context;
+static int64_t g3t_bad(int64_t category, int64_t code);
+#ifdef ET_G3R_COMMITTED_HISTORY_PRIVATE
+static int g3t_history_valid(const g3t_context *c) {
+  const int64_t n = c->history_length, p = c->history_prompt_length;
+  const int64_t g = c->history_generated_count;
+  const int64_t m = c->history_manual_count;
+  if (n < 0 || n > 2 || p < 0 || p > 2 || g < 0 || g > 1 ||
+      m < 0 || m > 1 || p + g + m != n ||
+      (n && !p) || ((n > 0) != c->prefill_committed) ||
+      (c->history_generated_eos_terminal != 0 &&
+       c->history_generated_eos_terminal != 1) ||
+      (c->history_pending_g1 != 0 && c->history_pending_g1 != 1) ||
+      (c->history_pending_g1 &&
+       (n != 1 || p != 1 || g || m || c->policy[4] != 1)) ||
+      (g && (c->policy[4] != 1 || p != 1 || n != 2 || m)) ||
+      (m && (p != 1 || n != 2 || g)))
+    return 0;
+  for (int64_t i = 0; i < n; ++i)
+    if (c->history_ids[i] < 0 || c->history_ids[i] > 255) return 0;
+  if (n < 2 && c->history_ids[1] != 0) return 0;
+  if (!n && c->history_ids[0] != 0) return 0;
+  return c->history_generated_eos_terminal ==
+         (g == 1 && c->policy[5] >= 0 &&
+          c->history_ids[n - 1] == c->policy[5]);
+}
+static int64_t g3t_history_prompt_preflight(g3t_context *c) {
+  const g3t_frame *f = &c->frame;
+  if (!g3t_history_valid(c) || c->history_pending_g1 || f->kind != 1 ||
+      (f->prompt_length != 1 && f->prompt_length != 2) ||
+      f->token < 0 || f->token > 255 ||
+      (f->prompt_length == 2 &&
+       (f->prompt_ids[0] != f->token ||
+        f->prompt_ids[1] < 0 || f->prompt_ids[1] > 255)))
+    return g3t_bad(G3T_STATE, G3T_INVARIANT);
+  return 0;
+}
+static int64_t g3t_history_append_preflight(g3t_context *c) {
+  if (!g3t_history_valid(c) || c->history_length != 1 ||
+      c->history_prompt_length != 1 ||
+      c->history_generated_count || c->history_manual_count ||
+      c->history_generated_eos_terminal || c->frame.kind != 2 ||
+      !((c->call_kind == 1 && !c->history_pending_g1) ||
+        (c->call_kind == 2 && c->history_pending_g1)) ||
+      c->frame.token < 0 || c->frame.token > 255)
+    return g3t_bad(G3T_STATE, G3T_INVARIANT);
+  return 0;
+}
+static void g3t_history_commit_prompt(g3t_context *c) {
+  c->history_ids[0] = c->frame.token;
+  c->history_ids[1] = c->frame.prompt_length == 2 ?
+      c->frame.prompt_ids[1] : 0;
+  c->history_length = c->history_prompt_length = c->frame.prompt_length;
+  c->history_generated_count = c->history_manual_count = 0;
+  c->history_generated_eos_terminal = 0;
+  c->history_pending_g1 = c->call_kind == 2 && c->policy[4] == 1;
+}
+static void g3t_history_commit_append(g3t_context *c, int generated) {
+  c->history_ids[1] = c->frame.token;
+  c->history_length = 2;
+  c->history_generated_count = generated;
+  c->history_manual_count = !generated;
+  c->history_pending_g1 = 0;
+  c->history_generated_eos_terminal =
+      generated && c->policy[5] >= 0 && c->frame.token == c->policy[5];
+}
+#endif
 static g3t_record *g3t_registry;
 static int64_t g3t_error_domain, g3t_error_category, g3t_error_code;
 
@@ -609,6 +689,49 @@ int64_t et_g3t_private_idle_rng_words_equal_v1(
   return 0;
 }
 #endif
+#ifdef ET_G3R_COMMITTED_HISTORY_PRIVATE
+int64_t et_g3t_private_committed_history_snapshot_v1(
+    void *generator, et_g3r_committed_history_snapshot_v1 *destination) {
+  g3t_clear();
+  g3t_context *c = g3t_admit(generator, 0);
+  if (!c) return g3t_error_category;
+  if (!destination) return g3t_bad(G3T_ARGUMENT, G3T_IDENTITY);
+  const uintptr_t first = (uintptr_t)destination;
+  const uintptr_t last = first + sizeof(*destination);
+  const uintptr_t owner_first = (uintptr_t)c;
+  const uintptr_t owner_last = owner_first + sizeof(*c);
+  if (last < first || (first < owner_last && owner_first < last))
+    return g3t_bad(G3T_ARGUMENT, G3T_IDENTITY);
+  if (!c->model || !c->cache || c->h.busy || c->call_kind ||
+      c->final_committed || c->frame.active || c->frame.kind ||
+      c->frame.transaction || c->frame.candidate_cache ||
+      c->pins.held_mask || c->pending_output
+#ifdef ET_G3T_MANUAL_LOGITS_PRIVATE
+      || c->pending_logits
+#endif
+      ) return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+  owner *model = g3t_model(c->model);
+  if (!model) return g3t_error_category;
+  if (model->active) return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+  if (!g3t_policy_valid(c->policy[0], c->policy[1], c->policy[2],
+                        c->policy[3], c->policy[4], c->policy[5]) ||
+      c->rng[0] != 1 || c->rng[1] < 0 || !g3t_history_valid(c) ||
+      c->history_pending_g1 ||
+      (c->prefill_committed != (c->history_length > 0)))
+    return g3t_bad(G3T_STATE, G3T_INVARIANT);
+  et_g3r_committed_history_snapshot_v1 snapshot = {0};
+  memcpy(snapshot.policy, c->policy, sizeof(snapshot.policy));
+  memcpy(snapshot.rng, c->rng, sizeof(snapshot.rng));
+  memcpy(snapshot.ids, c->history_ids, sizeof(snapshot.ids));
+  snapshot.length = c->history_length;
+  snapshot.prompt_length = c->history_prompt_length;
+  snapshot.generated_count = c->history_generated_count;
+  snapshot.manual_count = c->history_manual_count;
+  snapshot.generated_eos_terminal = c->history_generated_eos_terminal;
+  memcpy(destination, &snapshot, sizeof(snapshot));
+  return 0;
+}
+#endif
 int64_t et_g3t_private_generator_close_v1(void *candidate) {
   g3t_clear();
   g3t_context *c = g3t_admit(candidate, 1);
@@ -621,6 +744,13 @@ int64_t et_g3t_private_generator_close_v1(void *candidate) {
   if (et_a2_kv_cache_destroy_v1(&c->cache, &error)) return g3t_a2_failure(&error);
   memset(c->policy, 0, sizeof(c->policy));
   memset(c->rng, 0, sizeof(c->rng));
+#ifdef ET_G3R_COMMITTED_HISTORY_PRIVATE
+  memset(c->history_ids, 0, sizeof(c->history_ids));
+  c->history_length = c->history_prompt_length = 0;
+  c->history_generated_count = c->history_manual_count = 0;
+  c->history_generated_eos_terminal = 0;
+  c->history_pending_g1 = 0;
+#endif
   memset(c->binding_identities, 0, sizeof(c->binding_identities));
   memset(c->binding_values, 0, sizeof(c->binding_values));
   c->binding_ready = 0;
@@ -1886,6 +2016,11 @@ int64_t et_g3t_private_frame_prepare_v1(
 #ifdef ET_G3T_FINAL_PUBLICATION_PRIVATE
 #ifdef ET_G3T_ZERO_BUDGET_PRIVATE
 static int64_t g3t_zero_preflight(g3t_context *c) {
+#ifdef ET_G3R_COMMITTED_HISTORY_PRIVATE
+  if (g3t_history_prompt_preflight(c) || c->history_length != 0)
+    return g3t_error_category ? g3t_error_category :
+        g3t_bad(G3T_STATE, G3T_INVARIANT);
+#endif
   g3t_output *out = c->pending_output;
   if (!out || c->policy[4] != 0 || !c->frame.active ||
       c->frame.kind != 1 || c->frame.next_ordinal != 21 ||
@@ -1982,6 +2117,9 @@ old_end:
  * proves the sole layer is staged and that no nested view exists. */
 #ifdef ET_G3T_MANUAL_P1_PREFILL_PRIVATE
 static int64_t g3t_manual_p1_preflight(g3t_context *c) {
+#ifdef ET_G3R_COMMITTED_HISTORY_PRIVATE
+  if (g3t_history_prompt_preflight(c)) return g3t_error_category;
+#endif
   g3t_logits *logits = c->pending_logits;
   if (c->call_kind != 0 || !logits || c->pending_output ||
       logits->parent_ctx != c || logits->h.state != G3T_PENDING ||
@@ -2094,6 +2232,9 @@ old_end: {
 #endif
 #ifdef ET_G3T_MANUAL_DECODE_PRIVATE
 static int64_t g3t_manual_decode_preflight(g3t_context *c) {
+#ifdef ET_G3R_COMMITTED_HISTORY_PRIVATE
+  if (g3t_history_append_preflight(c)) return g3t_error_category;
+#endif
   g3t_logits *logits = c->pending_logits;
   if (c->call_kind != 1 || !logits || c->pending_output ||
       logits->parent_ctx != c || logits->h.state != G3T_PENDING ||
@@ -2167,6 +2308,9 @@ decode_view_end: {
 static int64_t g3t_final_preflight(g3t_context *c) {
 #ifdef ET_G3T_ZERO_BUDGET_PRIVATE
   if (c->policy[4] == 0) return g3t_zero_preflight(c);
+#endif
+#ifdef ET_G3R_COMMITTED_HISTORY_PRIVATE
+  if (g3t_history_append_preflight(c)) return g3t_error_category;
 #endif
   g3t_output *out = c->pending_output;
   if (!out || !c->frame.active || c->frame.kind != 2 ||
@@ -2307,6 +2451,9 @@ int64_t et_g3t_private_frame_commit_v1(void *candidate) {
 #endif
            c->frame.z, sizeof(c->last_logits));
     c->prefill_committed = 1;
+#ifdef ET_G3R_COMMITTED_HISTORY_PRIVATE
+    g3t_history_commit_prompt(c);
+#endif
     g3t_logits *logits = c->pending_logits;
     logits->parent_ctx = NULL;
     logits->h.state = G3T_LIVE;
@@ -2326,6 +2473,9 @@ int64_t et_g3t_private_frame_commit_v1(void *candidate) {
     if (et_a2_kv_cache_transaction_commit_v1(
             &c->frame.transaction, &error)) abort();
     memcpy(c->last_logits, c->frame.z, sizeof(c->last_logits));
+#ifdef ET_G3R_COMMITTED_HISTORY_PRIVATE
+    g3t_history_commit_append(c, 0);
+#endif
     g3t_logits *logits = c->pending_logits;
     logits->parent_ctx = NULL;
     logits->h.state = G3T_LIVE;
@@ -2365,6 +2515,9 @@ int64_t et_g3t_private_frame_commit_v1(void *candidate) {
 #endif
            c->frame.z, sizeof(c->last_logits));
     c->prefill_committed = 1;
+#ifdef ET_G3R_COMMITTED_HISTORY_PRIVATE
+    g3t_history_commit_prompt(c);
+#endif
     g3t_output *out = c->pending_output;
     out->parent_ctx = NULL;
     out->h.state = G3T_LIVE;
@@ -2391,6 +2544,9 @@ int64_t et_g3t_private_frame_commit_v1(void *candidate) {
             &c->frame.transaction, &error)) abort();
     g3t_output *out = c->pending_output;
     memcpy(c->rng, c->successor_rng, sizeof(c->rng));
+#ifdef ET_G3R_COMMITTED_HISTORY_PRIVATE
+    g3t_history_commit_append(c, 1);
+#endif
     out->parent_ctx = NULL;
     memset(out->staged_id, 0, sizeof(out->staged_id));
     out->h.state = G3T_LIVE;
@@ -2405,6 +2561,11 @@ int64_t et_g3t_private_frame_commit_v1(void *candidate) {
     return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
 #endif
   et_kernel_error error;
+#ifdef ET_G3R_COMMITTED_HISTORY_PRIVATE
+  if (g3t_history_prompt_preflight(c) || c->history_length != 0)
+    return g3t_error_category ? g3t_error_category :
+        g3t_bad(G3T_STATE, G3T_INVARIANT);
+#endif
   if (g3t_capture_kernel(et_a2_kv_cache_transaction_commit_v1(
           &c->frame.transaction, &error), &error)) return g3t_error_category;
   /* The old cache is empty and unborrowed. A failed destroy retains the
@@ -2419,6 +2580,9 @@ int64_t et_g3t_private_frame_commit_v1(void *candidate) {
          sizeof(c->binding_values));
   c->binding_ready = 1;
   memcpy(c->last_logits, c->frame.z, sizeof(c->last_logits));
+#ifdef ET_G3R_COMMITTED_HISTORY_PRIVATE
+  g3t_history_commit_prompt(c);
+#endif
   memset(&c->frame, 0, sizeof(c->frame));
   c->prefill_committed = 1;
   return 0;

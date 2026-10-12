@@ -1710,9 +1710,14 @@ authenticate that missing history. The next bounded source slice must review
 an exact same-owner copyout or registered snapshot contract and maintain the
 history at prefill, manual-decode and final-generation commit boundaries under
 stable leases, including explicit rejection or rollback of an idle G1 call
-aborted after its P1 prefill cache commit. This is documentation only: no
-snapshot entry, save writer, file-pair publication or resumed continuation is
-accepted.
+aborted after its P1 prefill cache commit. The bounded
+[native committed-history owner leaf](g3/G3_R_COMMITTED_HISTORY_OWNER_LEAF.md)
+is now ported onto this branch from the independent `0714cac5` source. It
+adds feature-gated inline history and policy/RNG copyout, with pending-G1
+provenance that rejects an idle post-prefill abort and manual-decode laundering.
+Focused native source/core/controlled-transport tests pass locally. It does
+not add Eshkol same-aggregate leases or a SAVE writer, and no file-pair
+publication or resumed continuation is accepted.
 
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished

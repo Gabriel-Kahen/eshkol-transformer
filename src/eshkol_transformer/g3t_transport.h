@@ -19,6 +19,17 @@ int64_t et_g3t_private_idle_rng_words_equal_v1(
     void *generator, int64_t version, int64_t seed,
     int64_t counter_low, int64_t counter_high);
 #endif
+#ifdef ET_G3R_COMMITTED_HISTORY_PRIVATE
+/* Source-private native owner read. The caller supplies a valid disjoint
+ * destination; a later Eshkol admission must authenticate the aggregate. */
+typedef struct et_g3r_committed_history_snapshot_v1 {
+  int64_t policy[6], rng[4], ids[2];
+  int64_t length, prompt_length, generated_count, manual_count;
+  int64_t generated_eos_terminal;
+} et_g3r_committed_history_snapshot_v1;
+int64_t et_g3t_private_committed_history_snapshot_v1(
+    void *generator, et_g3r_committed_history_snapshot_v1 *destination);
+#endif
 int64_t et_g3t_private_generator_close_v1(void *context);
 int64_t et_g3t_private_call_acquire_v1(void *context, int64_t call_kind);
 int64_t et_g3t_private_call_abort_v1(void *context);

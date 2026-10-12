@@ -1,7 +1,9 @@
 # G3-R committed-save snapshot prerequisite
 
-**Documentation-only dependency on main `09f7ed52`; no snapshot entry, save
-writer, continuation, or acceptance is implemented here.** This is the first
+**Source-gap analysis of main `09f7ed52`.** The bounded descendant
+[native owner leaf](G3_R_COMMITTED_HISTORY_OWNER_LEAF.md) now adds a private
+inline ledger and idle copyout, including G1 partial-commit denial. It adds
+no Eshkol save authority, file writer, continuation, or acceptance. This is the first
 missing same-owner save step in the bounded CPU-f32 `diagnostic-c2` G3-R
 [data-only continuation contract](G3_R_DATA_ONLY_CONTINUATION_CONTRACT.md).
 The accepted G3RCV1 codec and typed G3-T RNG import can encode and reconstruct
@@ -10,7 +12,7 @@ history.
 
 ## Source finding
 
-`src/eshkol_transformer/g3t_transport.c`'s `g3t_context` owns `policy[6]`,
+On main `09f7ed52`, `src/eshkol_transformer/g3t_transport.c`'s `g3t_context` owns `policy[6]`,
 `rng[4]`, cache, last logits and transient call flags. It has no committed
 ordered IDs, origin-prompt/generated/manual counts, or latched EOS state.
 `g3t_frame` holds P2 prompt IDs or one frame token only while a frame is
@@ -41,16 +43,14 @@ authenticate the generator's current words for a new save. Its model-registry,
 busy, pin and pending-pointer checks are a useful read-side preflight, not a
 save snapshot lease. The current native test word reader is test-only.
 
-## Next bounded source contract to review
+## Bounded source contract and remaining admission
 
-First choose and review a private same-owner snapshot API and owning sidecar.
-Two viable shapes are an authenticated native copyout into fixed caller storage,
-or a new registered snapshot owner with a typed copyout. **Neither signature is
-selected or admitted by this document.** The choice must specify exact
-bytevector backing checks, alias rules, failure status, lifetime, registry
-identity, stable lease order and release behavior before code. It must add no
-public G3 API or C2/G3RCV1 wire change. An API that accepts history or RNG words
-from the caller as truth is insufficient.
+The native leaf chooses a guarded fixed-struct copyout from the exact G3-T
+generator. It does not provide an Eshkol owning sidecar or stable model/cache
+lease. Those still need exact bytevector backing checks, alias rules, failure
+status, lifetime, registry identity, lease order and release behavior before
+same-aggregate SAVE composition. An API that accepts history or RNG words from
+the caller as truth is insufficient.
 
 The same generator owner must track committed events at these exact mutation
 boundaries. Preparation or abort must not publish ledger history, although an
@@ -65,13 +65,13 @@ aborted G1 call can retain its native P1 prefill cache:
 3. Zero-budget generation prefill commit (`call_kind == 2`, `max_new == 0`):
    commit its P1/P2 origin IDs and zero generated count. Budget completion
    must not invent an emitted EOS.
-4. Sampled generation final commit (`call_kind == 2`, frame kind 2): append the
+4. One-token generation P1 prefill commit (`call_kind == 2`, frame kind 1):
+   record the authenticated origin ID and mark G1 pending. This is a partial
+   state and cannot be snapshotted after an abort.
+5. Sampled generation final commit (`call_kind == 2`, frame kind 2): append the
    committed sampled ID, increment generated count, copy the successor four
    RNG words, and latch emitted-EOS terminal iff that ID equals configured
-   EOS. The prefill frame of a one-token generation is not an independent save
-   point; its authenticated origin ID needs private, abort-cleared staging
-   because that frame is erased before sampling. Commit its origin ID and
-   generated ID atomically at final commit.
+   EOS. Clear pending G1 provenance only in this successful final tail.
 
 A post-prefill G1 abort must leave explicit partial/aborted provenance and
 make the idle generator unsaveable, or a separately reviewed rollback must
@@ -103,7 +103,8 @@ companion last; this snapshot prerequisite alone grants no file authority.
   malformed partition, with destination unchanged. A valid full P2 history
   remains savable; a later generation request rejects its full context.
 - Inject failures before commit and abort, then prove history/RNG/terminal
-  unchanged; specifically abort G1 after its P1 prefill commit and reject an
+  unchanged except for the genuine committed P1 prefill; specifically abort
+  G1 after that prefill and reject an
   idle snapshot. The poisoned generator needs exact reviewed rollback or
   reconstruction, or closure; a later manual decode cannot launder the erased
   staged origin ID. Inject copyout allocation or lease failures and prove no
