@@ -274,11 +274,10 @@ cxx="$(tsv_value "$(eshkol_build_dir)/eshkol-transformer-provenance.tsv" cxx_pat
 env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR \
   ESHKOL_JIT_CACHE=0 \
   XDG_CACHE_HOME="${formatter_dir}/app-cache" \
-  ESHKOL_LIB_DIR="${PROJECT_ROOT}/lib" \
   ESHKOL_CXX_COMPILER="${cxx}" \
-  "${runner}" --strict-types --no-stdlib -I "${PROJECT_ROOT}/lib" \
+  "${runner}" --strict-types --no-stdlib \
     -L "${formatter_dir}" --lib eshkol_transformer_cli3_formatter \
-    "${PROJECT_ROOT}/src/eshkol_transformer/cli.esk" \
+    "${PROJECT_ROOT}/tests/cli3/formatter_link_entry.esk" \
     -o "${formatter_dir}/eshkol-transformer"
 run_exact formatter-boundaries 0 \
   "${formatter_dir}/eshkol-transformer" --version
