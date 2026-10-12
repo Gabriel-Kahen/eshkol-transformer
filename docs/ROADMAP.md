@@ -910,6 +910,10 @@ from direct-provider-only cases and names the missing noninstalled model-control
 and stage-selective fault/observer seams for review. It provides no new runtime
 proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
 verdicts remain prerequisites before the full matrix is implemented and run.
+The [R1 noninstalled fault-seam proposal](e3/E3_R1_FAULT_SEAM_PROPOSAL.md)
+maps the existing setup, pin, D2 copy, provider and post-provider boundaries to
+stage-specific cuts and cleanup/observer obligations. It is a root-decision
+candidate only; no hook, source-composed tuple or compiled failure proof exists.
 An isolated staged successor adds a separate real-M3 zero-control source tuple
 using the existing I2 14-parameter prepare/commit path before frame binding.
 It retains the staged numerical, retention, wrong-target and uniform controls.
