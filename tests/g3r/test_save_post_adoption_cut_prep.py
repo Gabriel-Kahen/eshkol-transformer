@@ -46,6 +46,7 @@ class PostAdoptionPreparation(unittest.TestCase):
             self.assertIn('(load "g3r_same_owner_save_cut_caller.esk")', root)
             self.assertTrue((destination / "source/native/c2_training_state_extension.esk").is_file())
             self.assertTrue((destination / "source/internal/p1/lib/transformer/module.esk").is_file())
+            self.assertTrue((destination / "source/tests/g3r/save_model_bits_bridge.c").is_file())
             runtime = (destination / "source/tests/g3r/save_post_adoption_cut_runtime.esk").read_text()
             self.assertIn("(g3m-prefill-p1! generator input)", runtime)
             self.assertNotIn("g3t-with-call", runtime)

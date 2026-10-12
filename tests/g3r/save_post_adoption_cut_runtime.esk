@@ -45,6 +45,53 @@
                       "3dcccccd" "3f000000" "3f000000"
                       "3a83126f" "00000000")))
     (module-parameters model)))
+(define model-native
+  (vector-ref (m3t-entry model 'model 'g3r-save-bit-witness #t) 3))
+(define model-handles
+  (vector-ref (m3t-entry model 'model 'g3r-save-bit-witness #t) 8))
+(define gradient-byte-lengths
+  '#(64 64 64 64 128 128 16 16 16 16 4096 16 16 32))
+(define (capture-value-images)
+  (let ((images (make-vector 14 #f)))
+    (let loop ((index 0))
+      (if (= index 14) images
+          (let ((handle (vector-ref model-handles index)))
+            (vector-set! images index
+              (i2-checkpoint-encode
+                (vector (parameter-handle-tensor-internal handle)
+                        'parameter (parameter-handle-shape handle)
+                        'f32 'cpu 'dense-row-major-contiguous
+                        'g3r-save-bit-witness)))
+            (loop (+ index 1)))))))
+(define (capture-gradient-images)
+  (let ((images (make-vector 14 #f)))
+    (let loop ((index 0))
+      (if (= index 14) images
+          (let* ((bytes (vector-ref gradient-byte-lengths index))
+                 (image (make-bytevector bytes 0)))
+            (check "exact-owner gradient copy"
+              (= 0 (g3r-save-cut-gradient-copy
+                     model-native index image bytes)))
+            (vector-set! images index image)
+            (loop (+ index 1)))))))
+(define (same-images? before after)
+  (and (= (vector-length before) 14)
+       (= (vector-length after) 14)
+       (let loop ((index 0))
+         (if (= index 14) #t
+             (and (d2-core-bytes=? (vector-ref before index)
+                                    (vector-ref after index))
+                  (loop (+ index 1)))))))
+(define (original-tie?)
+  (let ((tree (module-parameters model)))
+    (and (equal? (parameter-tree-tie-groups tree)
+                 '((("head" "weight")
+                    ("token_embedding" "weight"))))
+         (eq? (parameter-tree-handle tree '("head" "weight"))
+              (parameter-tree-handle tree
+                '("token_embedding" "weight")))
+         (eq? (parameter-tree-handle tree '("head" "weight"))
+              (vector-ref model-handles 10)))))
 (check "model eval" (module-eval! model))
 (define generator
   (g3r-generator-create-from-sources
@@ -62,6 +109,11 @@
 (define capsule
   (g3r-controls-trainer-create resolved tokenizer dataset model optimizer))
 (g3r-controls-capture-release! capsule)
+(check "original tied alias before cut" (original-tie?))
+(check "seed fourteen distinct gradient images"
+  (= 0 (g3r-save-cut-seed-gradients model-native)))
+(define value-images-before (capture-value-images))
+(define gradient-images-before (capture-gradient-images))
 (define original-cursor (d2-token-dataset-cursor dataset))
 (define original-controls (g3r-controls-captured-copy capsule))
 (define c2-head c2-training-state-states)
@@ -81,6 +133,11 @@
 (check "original controls and D2 cursor unchanged"
   (and (equal? original-controls (g3r-controls-captured-copy capsule))
        (equal? original-cursor (d2-token-dataset-cursor dataset))))
+(check "fourteen original value bit images unchanged"
+  (same-images? value-images-before (capture-value-images)))
+(check "fourteen original gradient bit images unchanged"
+  (same-images? gradient-images-before (capture-gradient-images)))
+(check "original tied alias after cut" (original-tie?))
 (check "retired shell cannot take bundle again"
   (guard (caught (#t (and (transformer-error? caught)
                            (eq? 'invalid-state

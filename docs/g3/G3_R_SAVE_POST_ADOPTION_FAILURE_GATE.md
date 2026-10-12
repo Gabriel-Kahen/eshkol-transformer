@@ -13,7 +13,8 @@ copies the accepted recursive Eshkol closure into a read-only source tree and
 generates one test-only caller. It rejects any change to the accepted caller
 or any file in its 96-file recursive closure. It adds the two accepted manual
 P1 prefill helpers and verifies both fixture files against committed HEAD
-before copying. The generated caller differs
+before copying. A source-only successor also copies the committed test-only
+native bit observer. The generated caller differs
 only at two sites: one call to the test failure hook immediately after the
 root-cell publication, and a counted wrapper around the real abandon call.
 The original caller and adoption leaf stay unchanged. `SOURCE-SHA256SUMS`
@@ -33,6 +34,18 @@ closure and the compiled behavior have **not** been validated. A supported
 launcher must use the prepared read-only tree, verify the fe9/f31 pins live,
 build the genuine native G3/M3/P1/O2/C2 union, retain compiler/runtime and
 source-closure logs, and seal its outputs before this gate can pass.
+
+The source-only bit-image successor seeds fourteen distinct finite gradient
+images through a test-only exact-owner bridge after trainer capsule release.
+The bridge authenticates the native M3T SAVE roster on every call, checks
+each gradient's metadata, and copies raw binary32 words from a live gradient
+snapshot. The fixture independently encodes fourteen original value images
+through I2 and checks both complete image sets plus the original tied
+head/token handle before and after the injected failure. The bridge is
+feature-gated and adds no public training API. These assertions remain
+unexecuted in compiled Eshkol. G3 RNG/history, complete journal/token count,
+one-use grant replay and fresh recovery, abandon fail-stop and C2 partial
+claim remain separate gate obligations.
 
 ## One-use post-adoption cut
 

@@ -1879,6 +1879,12 @@ the [compiled post-adoption and one-use gate](g3/G3_R_SAVE_POST_ADOPTION_FAILURE
 has a pinned test-only Eshkol fixture and immutable source preparation. Its
 native archive closure and compiled execution remain pending; no Docker gate
 has run.
+A bounded source-only successor adds pre/post fault exact-owner witnesses for
+all fourteen original value and gradient bit images and the tied head/token
+handle. It uses the existing I2 value encoder and a feature-gated test bridge
+that authenticates the native M3T SAVE roster before copying gradient bits.
+The source contract and feature-off checks do not establish compiled linkage
+or runtime bit preservation; the remaining SAVE failure cuts are still open.
 Compiled native/Eshkol coexistence, actual partial-claim failure cuts, C2
 image/digest, pair publication, cold LOAD, and public SAVE remain open.
 
