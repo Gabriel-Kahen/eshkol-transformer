@@ -940,6 +940,12 @@ match actual compiler depfiles and object inventories before any runtime verdict
 is admitted. The gate is prepared without Docker execution. Normal/repeat and
 sanitizer whole-call outcomes, independent emitted-closure verification, and
 R1 acceptance remain open.
+The R1 source-retry tuple now also requests the last forward role (7/20), CE
+(8), reduction (9), and finalization (12) through the same one-shot preinvoke
+control. Each request reuses the existing first-error, complete rollback, and
+same-authority retry assertions. Focused source mutation checks cover all seven
+selectors. This is source-only coverage; the supported compiled gate and R1
+acceptance remain pending.
 An isolated staged successor adds a separate real-M3 zero-control source tuple
 using the existing I2 14-parameter prepare/commit path before frame binding.
 It retains the staged numerical, retention, wrong-target and uniform controls.

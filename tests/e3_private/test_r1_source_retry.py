@@ -28,7 +28,8 @@ def source_contract_errors(source: str) -> list[str]:
     errors = [name for name, fragment in required.items() if fragment not in cut]
     if source.count(":real et_e3_test_preinvoke_arm_v1") != 1:
         errors.append("test-only native arm")
-    for stage, role in ((7, 0), (10, -1), (11, -1)):
+    for stage, role in ((7, 0), (7, 20), (8, -1), (9, -1),
+                        (10, -1), (11, -1), (12, -1)):
         if len(re.findall(rf"\(e3-r1-cut-retry! model dataset frame destinations {stage} {role}\)",
                           source)) != 1:
             errors.append(f"stage {stage}/{role}")
@@ -60,6 +61,14 @@ class R1SourceRetryTests(unittest.TestCase):
         source = DRIVER.read_text()
         mutants = [
             source.replace("(e3-r1-cut-retry! model dataset frame destinations 10 -1)",
+                           "#t", 1),
+            source.replace("(e3-r1-cut-retry! model dataset frame destinations 7 20)",
+                           "#t", 1),
+            source.replace("(e3-r1-cut-retry! model dataset frame destinations 8 -1)",
+                           "#t", 1),
+            source.replace("(e3-r1-cut-retry! model dataset frame destinations 9 -1)",
+                           "#t", 1),
+            source.replace("(e3-r1-cut-retry! model dataset frame destinations 12 -1)",
                            "#t", 1),
             source.replace("(e3-test-retention-model=? model model-image)", "#t", 1),
             source.replace("(eq? caught (vector-ref entry 11))", "#t", 1),
