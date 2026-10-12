@@ -1984,6 +1984,19 @@ evidence. The expected 32 rows remain a hypothesis until a pinned f31/fe9
 compile emits them; object manifests, feature-off parity, normal/repeat,
 sanitizer and Section 9 runtime acceptance remain pending.
 
+The one-use emitted-inventory G attempt on source `582c6c7` (tree
+`6f62fc7`) is consumed and failed during P1 generated-source compilation:
+the private candidate fragment was emitted before `p1-trusted-surface`, while
+its `construction-record`, schedule, registry and dead-token helpers live
+inside that surface's lexical `let`. It produced no `private.d`, `private.ll`
+or observed source closure. The retained raw compiler stderr and independently
+verified result are under `e3-section9-gate-prep-f31-fe9-run-582c6c7-20261011-c/`
+and `e3-section9-gate-prep-g-independent-failed-result-582c6c7-20261012-a/`.
+An isolated source-only successor moves the fragment inside the trusted `let`
+before its final slot vector. This source-only successor passed independent
+source/tests review; a fresh one-use compiled source gate remains pending.
+No E3 runtime or Section 9 claim follows from this repair.
+
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
 names would return newly owned authenticated CPU f32 `[1,256]` kind-3 shells,

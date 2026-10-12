@@ -77,7 +77,9 @@ def p1() -> bytes:
         "  (construction-begin-raw provider-name #t))\n"
         "(define (construction-parameters identity)")
     fragment = (ROOT / "tests/e3_private/sealed_fixture_p1.esk.inc").read_text()
-    source = once(source, "(define p1-trusted-surface\n", fragment + "\n(define p1-trusted-surface\n")
+    # The candidate helpers use bindings private to p1-trusted-surface's let.
+    # The final slot vector is the sole standalone vector form in that let.
+    source = once(source, "\n(vector\n", "\n" + fragment + "\n(vector\n")
     source = once(source,
         "  (lambda (identity)\n    (construction-seal-prepared! identity))\n  )))",
         "  (lambda (identity)\n    (construction-seal-prepared! identity))\n"

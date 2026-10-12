@@ -20,6 +20,33 @@ SPEC.loader.exec_module(MODULE)
 
 class FixtureSource(unittest.TestCase):
     @staticmethod
+    def nesting_depth(source: str, offset: int) -> int:
+        depth = 0
+        quoted = escaped = comment = False
+        for char in source[:offset]:
+            if char == "\n":
+                comment = False
+                continue
+            if comment:
+                continue
+            if quoted:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == '"':
+                    quoted = False
+            elif char == ";":
+                comment = True
+            elif char == '"':
+                quoted = True
+            elif char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+        return depth
+
+    @staticmethod
     def balanced(source: str) -> bool:
         depth = 0
         quoted = False
@@ -127,7 +154,7 @@ class FixtureSource(unittest.TestCase):
         preflight = source.split("(define (g3r-construction-preflight", 1)[1].split(
             "(define (g3r-construction-revoke!", 1)[0]
         tail = source.split("(define (g3r-construction-revoke!", 1)[1].split(
-            "(define p1-trusted-surface", 1)[0]
+            "\n(vector\n", 1)[0]
         for captured in ("record", "(shell-registry-current)", "identity"):
             self.assertIn("g3r-candidate-ready-root", preflight)
             self.assertIn(captured, preflight)
@@ -144,6 +171,34 @@ class FixtureSource(unittest.TestCase):
             assert_no_late_lookup(tail + "(construction-record operation identity)")
         with self.assertRaises(AssertionError):
             assert_no_late_lookup(tail + "(shell-registry-current)")
+
+    def test_p1_candidate_helpers_share_trusted_lexical_scope(self) -> None:
+        source = MODULE.outputs()["transformer/module.esk"].decode()
+
+        def assert_scope(candidate: str) -> None:
+            surface = candidate.index("(define p1-trusted-surface\n  (let ()")
+            slot_vector = candidate.index("\n(vector\n", surface) + 1
+            for binding in ("(define (construction-record ",
+                            "(define (construction-schedule-equal? ",
+                            "(define (shell-registry-current)",
+                            "(define dead-construction-raw ",
+                            "(define g3r-candidate-ready-root ",
+                            "(define (g3r-construction-preflight ",
+                            "(define (g3r-construction-revoke! "):
+                offset = candidate.index(binding)
+                self.assertLess(surface, offset)
+                self.assertLess(offset, slot_vector)
+                self.assertEqual(self.nesting_depth(candidate, offset), 2)
+            self.assertEqual(self.nesting_depth(candidate, slot_vector), 2)
+
+        assert_scope(source)
+        start = source.index(";;; Generated zero-fixture tuple only.")
+        end = source.index("\n(vector\n", start)
+        displaced = source[:start] + source[end:]
+        displaced = source[start:end] + "\n" + displaced
+        self.assertTrue(self.balanced(displaced))
+        with self.assertRaises(AssertionError):
+            assert_scope(displaced)
 
 
 if __name__ == "__main__":
