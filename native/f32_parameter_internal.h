@@ -167,9 +167,13 @@ int32_t et_f32_gradient_reset_plan_release_v1(
     et_f32_gradient_reset_plan **plan, et_f32_tensor_error *error);
 
 #ifdef ET_F32_TENSOR_TESTING
-#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+#if defined(ET_G3R_CANDIDATE_RETIRE_PRIVATE) || \
+    defined(ET_G3R_SAVE_BIT_WITNESS_TESTING)
+/* Test-only read of live backing storage, including an absent gradient. */
 const et_f32_tensor *et_f32_parameter_test_gradient_tensor_v1(
     const et_f32_parameter *parameter);
+#endif
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
 /* Test-only: 0 replaces value, 1 replaces gradient. */
 int32_t et_f32_parameter_test_replace_child_v1(
     et_f32_parameter *parameter, uint32_t child, et_f32_tensor *replacement);

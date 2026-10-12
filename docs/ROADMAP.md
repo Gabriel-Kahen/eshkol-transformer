@@ -1882,7 +1882,9 @@ has run.
 A bounded source-only successor adds pre/post fault exact-owner witnesses for
 all fourteen original value and gradient bit images and the tied head/token
 handle. It uses the existing I2 value encoder and a feature-gated test bridge
-that authenticates the native M3T SAVE roster before copying gradient bits.
+that authenticates the native M3T SAVE roster before reading unchanged,
+absent-gradient positive-zero backing bits. A narrow F32 test-only accessor
+exposes that backing storage; the fixture does not seed gradients.
 The source contract and feature-off checks do not establish compiled linkage
 or runtime bit preservation; the remaining SAVE failure cuts are still open.
 Compiled native/Eshkol coexistence, actual partial-claim failure cuts, C2

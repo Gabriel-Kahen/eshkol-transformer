@@ -35,11 +35,14 @@ launcher must use the prepared read-only tree, verify the fe9/f31 pins live,
 build the genuine native G3/M3/P1/O2/C2 union, retain compiler/runtime and
 source-closure logs, and seal its outputs before this gate can pass.
 
-The source-only bit-image successor seeds fourteen distinct finite gradient
+The source-only bit-image successor reads fourteen original gradient backing
 images through a test-only exact-owner bridge after trainer capsule release.
-The bridge authenticates the native M3T SAVE roster on every call, checks
-each gradient's metadata, and copies raw binary32 words from a live gradient
-snapshot. The fixture independently encodes fourteen original value images
+The bridge authenticates the native M3T SAVE roster on every call, requires
+absent gradient metadata with zero count and weight, and copies raw binary32
+words from live gradient storage while requiring positive-zero bits. It never
+seeds or changes gradients. The native F32 object and bridge need
+`ET_F32_TENSOR_TESTING` and `ET_G3R_SAVE_BIT_WITNESS_TESTING`; only the bridge
+also needs `ET_G3R_SAME_OWNER_SAVE_PRIVATE`. The fixture independently encodes fourteen original value images
 through I2 and checks both complete image sets plus the original tied
 head/token handle before and after the injected failure. The bridge is
 feature-gated and adds no public training API. These assertions remain

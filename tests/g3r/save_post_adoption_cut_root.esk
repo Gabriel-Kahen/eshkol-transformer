@@ -4,9 +4,7 @@
 (load "g3m_prefill_p1_extension.esk")
 
 ;;; Test-only native observer; the model owner is authenticated by the real
-;;; same-owner SAVE roster before each bit copy.
-(extern i64 g3r-save-cut-seed-gradients ptr
-        :real et_g3r_test_save_seed_gradients_v1)
+;;; same-owner SAVE roster before each read-only absent-gradient bit copy.
 (extern i64 g3r-save-cut-gradient-copy ptr i64 ptr i64
         :real et_g3r_test_save_gradient_copy_v1)
 

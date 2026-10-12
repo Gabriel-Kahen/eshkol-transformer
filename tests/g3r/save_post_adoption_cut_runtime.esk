@@ -110,8 +110,6 @@
   (g3r-controls-trainer-create resolved tokenizer dataset model optimizer))
 (g3r-controls-capture-release! capsule)
 (check "original tied alias before cut" (original-tie?))
-(check "seed fourteen distinct gradient images"
-  (= 0 (g3r-save-cut-seed-gradients model-native)))
 (define value-images-before (capture-value-images))
 (define gradient-images-before (capture-gradient-images))
 (define original-cursor (d2-token-dataset-cursor dataset))

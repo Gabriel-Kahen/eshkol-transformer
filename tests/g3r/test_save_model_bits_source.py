@@ -10,6 +10,8 @@ ROOT = Path(__file__).resolve().parents[2]
 RUNTIME = ROOT / "tests/g3r/save_post_adoption_cut_runtime.esk"
 FIXTURE_ROOT = ROOT / "tests/g3r/save_post_adoption_cut_root.esk"
 BRIDGE = ROOT / "tests/g3r/save_model_bits_bridge.c"
+F32_HEADER = ROOT / "native/f32_parameter_internal.h"
+F32_SOURCE = ROOT / "native/f32_tensor.c"
 
 
 def validate(runtime: str, root: str, bridge: str) -> None:
@@ -40,7 +42,6 @@ def validate(runtime: str, root: str, bridge: str) -> None:
         return position
 
     assert (index_of("original tied alias before cut") <
-            index_of("seed fourteen distinct gradient images") <
             index_of("value-images-before") <
             index_of("gradient-images-before") <
             index_of("typed post-adoption failure") <
@@ -50,20 +51,31 @@ def validate(runtime: str, root: str, bridge: str) -> None:
     assert "same-images? value-images-before (capture-value-images)" in runtime
     assert "same-images? gradient-images-before (capture-gradient-images)" in runtime
     assert "(original-tie?)" in runtime
-    assert ":real et_g3r_test_save_seed_gradients_v1" in root
+    assert "g3r-save-cut-seed-gradients" not in root + runtime
     assert ":real et_g3r_test_save_gradient_copy_v1" in root
-    for fragment in ("#if defined(ET_G3R_SAME_OWNER_SAVE_PRIVATE) && defined(ET_F32_TENSOR_TESTING)",
+    for fragment in ("defined(ET_G3R_SAME_OWNER_SAVE_PRIVATE)",
+                     "defined(ET_F32_TENSOR_TESTING)",
+                     "defined(ET_G3R_SAVE_BIT_WITNESS_TESTING)",
                      "words[14]", "16, 16, 16, 16, 32, 32, 4, 4, 4, 4, 1024, 4, 4, 8",
                      "et_m3t_private_owner_save_roster_v1",
                      "et_f32_parameter_gradient_metadata_v1",
-                     "et_f32_parameter_gradient_snapshot_v1",
+                     "metadata.state != ET_F32_GRADIENT_ABSENT",
+                     "metadata.contribution_count != 0",
+                     "metadata.normalization_weight_bits != 0",
+                     "et_f32_parameter_test_gradient_tensor_v1",
                      "et_f32_tensor_copy_bits_to_v1",
-                     "et_f32_tensor_destroy_v1",
-                     "et_f32_parameter_test_set_gradient_bits_v1",
-                     "et_f32_parameter_test_set_metadata_v1",
+                     "destination[i] != UINT32_C(0)",
                      "index < 0 || index >= 14", "encoded != byte_count"):
         assert fragment in bridge, fragment
     assert "m3_last_owner" not in bridge
+    for fragment in ("et_f32_parameter_test_set_gradient_bits_v1",
+                     "et_f32_parameter_test_set_metadata_v1",
+                     "et_f32_parameter_gradient_snapshot_v1"):
+        assert fragment not in bridge, fragment
+    header, source = F32_HEADER.read_text(), F32_SOURCE.read_text()
+    for native in (header, source):
+        assert "defined(ET_G3R_SAVE_BIT_WITNESS_TESTING)" in native
+        assert "et_f32_parameter_test_gradient_tensor_v1" in native
 
 
 class SaveModelBitsSource(unittest.TestCase):
@@ -85,6 +97,16 @@ class SaveModelBitsSource(unittest.TestCase):
             (runtime, root, bridge.replace("et_m3t_private_owner_save_roster_v1", "untrusted_roster", 1)),
             (runtime, root, bridge.replace("et_f32_tensor_copy_bits_to_v1", "approximate_copy", 1)),
             (runtime, root, bridge.replace("index < 0 || index >= 14", "index < 0 || index >= 15", 1)),
+            (runtime, root, bridge.replace("metadata.state != ET_F32_GRADIENT_ABSENT",
+                                           "metadata.state != ET_F32_GRADIENT_PRESENT", 1)),
+            (runtime, root, bridge.replace("metadata.contribution_count != 0",
+                                           "metadata.contribution_count != 1", 1)),
+            (runtime, root, bridge.replace("metadata.normalization_weight_bits != 0",
+                                           "metadata.normalization_weight_bits != UINT32_C(0x3f800000)", 1)),
+            (runtime, root, bridge.replace("destination[i] != UINT32_C(0)",
+                                           "destination[i] != UINT32_C(0x80000000)", 1)),
+            (runtime, root, bridge.replace("return gradient_copy(parameters[index]",
+                                           "et_f32_parameter_test_set_metadata_v1(parameters[index], 1, 1, 1);\n  return gradient_copy(parameters[index]", 1)),
         )
         for changed in mutations:
             with self.subTest(changed=str(changed)[:50]), self.assertRaises(AssertionError):

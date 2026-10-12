@@ -3560,12 +3560,15 @@ int32_t et_f32_gradient_reset_plan_release_v1(
 }
 
 #ifdef ET_F32_TENSOR_TESTING
-#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+#if defined(ET_G3R_CANDIDATE_RETIRE_PRIVATE) || \
+    defined(ET_G3R_SAVE_BIT_WITNESS_TESTING)
 const et_f32_tensor *et_f32_parameter_test_gradient_tensor_v1(
     const et_f32_parameter *candidate) {
   et_f32_parameter *parameter = find_parameter(candidate);
   return parameter == NULL ? NULL : parameter->gradient;
 }
+#endif
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
 
 int32_t et_f32_parameter_test_replace_child_v1(
     et_f32_parameter *candidate, uint32_t child, et_f32_tensor *replacement) {
