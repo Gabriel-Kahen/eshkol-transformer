@@ -109,10 +109,12 @@ for case_name in all-correct all-wrong; do
     fi
     stdout="${out}/run-${variant}-${case_name}.stdout"
     [[ ! -s "${out}/run-${variant}-${case_name}.stderr" ]] || die "${variant}-${case_name}: runtime diagnostics"
-    python3 -B -m tests.e3_private.parse_numerical_observation \
-      --stdout "${stdout}" --batch-count 3 \
+    python3 -B -m tests.e3_private.parse_correctness_observation \
+      --stdout "${stdout}" --manifest "${out}/corpus-a/correctness-manifest.json" \
+      --case "${case_name}" \
       --observed "${out}/observed-${variant}-${case_name}.json" \
-      --roles "${out}/roles-${variant}-${case_name}.tsv"
+      --roles "${out}/roles-${variant}-${case_name}.tsv" \
+      --result "${out}/result-${variant}-${case_name}.json"
     ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "${q0_python}" -B \
       -m tests.e3_native_parity.verify_observation \
       --reference "${out}/reference-a.json" --case "${case_name}" \
@@ -130,6 +132,7 @@ for case_name in all-correct all-wrong; do
   for variant in b poison; do
     cmp "${out}/run-a-${case_name}.stdout" "${out}/run-${variant}-${case_name}.stdout"
     cmp "${out}/transcript-a-${case_name}.json" "${out}/transcript-${variant}-${case_name}.json"
+    cmp "${out}/result-a-${case_name}.json" "${out}/result-${variant}-${case_name}.json"
   done
 done
 ESHKOL_ARENA_POISON=0 timeout --foreground --signal=TERM --kill-after=5s 900s \
@@ -138,10 +141,12 @@ ESHKOL_ARENA_POISON=0 timeout --foreground --signal=TERM --kill-after=5s 900s \
   2>"${out}/run-wrong-vocab-axis-all-correct.stderr"
 [[ ! -s "${out}/run-wrong-vocab-axis-all-correct.stderr" ]] || \
   die "wrong-vocab-axis: runtime diagnostics"
-python3 -B -m tests.e3_private.parse_numerical_observation \
-  --stdout "${out}/run-wrong-vocab-axis-all-correct.stdout" --batch-count 3 \
+python3 -B -m tests.e3_private.parse_correctness_observation \
+  --stdout "${out}/run-wrong-vocab-axis-all-correct.stdout" \
+  --manifest "${out}/corpus-a/correctness-manifest.json" --case all-correct \
   --observed "${out}/observed-wrong-vocab-axis-all-correct.json" \
-  --roles "${out}/roles-wrong-vocab-axis-all-correct.tsv"
+  --roles "${out}/roles-wrong-vocab-axis-all-correct.tsv" \
+  --result "${out}/result-wrong-vocab-axis-all-correct.json"
 cmp "${out}/roles-a-all-correct.tsv" \
     "${out}/roles-wrong-vocab-axis-all-correct.tsv"
 python3 -B - "${out}/observed-a-all-correct.json" \
@@ -173,6 +178,21 @@ require(normal["final"]["metrics_f32"][:3] == mutant["final"]["metrics_f32"][:3]
         "final loss/weight/perplexity")
 require(normal["final"]["metrics_f32"][3] == "3f800000", "normal accuracy")
 require(mutant["final"]["metrics_f32"][3] == "00000000", "mutant accuracy")
+PY
+python3 -B - "${out}/result-a-all-correct.json" \
+  "${out}/result-wrong-vocab-axis-all-correct.json" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+normal, mutant = (json.loads(Path(path).read_bytes()) for path in sys.argv[1:])
+if (normal["cursor_before"] != mutant["cursor_before"]
+        or normal["cursor_after"] != mutant["cursor_after"]
+        or normal["outputs_u32"][:3] != mutant["outputs_u32"][:3]
+        or normal["outputs_u32"][4:] != mutant["outputs_u32"][4:]
+        or normal["outputs_u32"][3] != 0x3f800000
+        or mutant["outputs_u32"][3] != 0):
+    raise SystemExit("wrong-vocab-axis did not isolate published accuracy")
 PY
 set +e
 ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE \

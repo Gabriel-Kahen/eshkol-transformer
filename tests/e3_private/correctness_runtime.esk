@@ -15,6 +15,15 @@
                      (bytevector-u8-ref right index))
                   (loop (+ index 1)))))))
 
+(define (print-cursor bytes)
+  (let ((digits "0123456789abcdef"))
+    (let loop ((index 0))
+      (if (= index (bytevector-length bytes)) #t
+          (let ((byte (bytevector-u8-ref bytes index)))
+            (display (string-ref digits (quotient byte 16)))
+            (display (string-ref digits (remainder byte 16)))
+            (loop (+ index 1)))))))
+
 (define args (command-line))
 (check 'arguments
   (and (pair? args) (pair? (cdr args)) (pair? (cdr (cdr args)))
@@ -32,4 +41,17 @@
        (= (vector-ref result 5) 5)
        (= (vector-ref result 6) 3)
        (bytes=? (vector-ref result 7) (vector-ref result 8))))
+(display "E3RESULT\t")
+(let loop ((index 1))
+  (if (= index 7) #t
+      (begin
+        (if (> index 1) (display ",") #t)
+        (display (vector-ref result index))
+        (loop (+ index 1)))))
+(newline)
+(display "E3CURSOR\t")
+(print-cursor (vector-ref result 7))
+(display "\t")
+(print-cursor (vector-ref result 8))
+(newline)
 (display "E3-NUMERICAL-RUNTIME-PASS") (newline)

@@ -10,9 +10,10 @@ import signal
 import subprocess
 
 
-def capture(prefix: Path, command: list[str]) -> int:
+def capture(prefix: Path, command: list[str], timeout: int = 135) -> int:
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-    if not command or not prefix.is_absolute() or prefix.parent.is_symlink():
+    if (not command or not prefix.is_absolute() or prefix.parent.is_symlink()
+            or timeout <= 0):
         raise ValueError("expected an absolute fresh abort evidence prefix")
     paths = [prefix.with_name(prefix.name + suffix)
              for suffix in (".stdout", ".stderr", ".exit", ".raw-exit")]
@@ -22,7 +23,7 @@ def capture(prefix: Path, command: list[str]) -> int:
         process = subprocess.Popen(command, stdout=stdout, stderr=stderr,
                                    start_new_session=True)
         try:
-            raw = process.wait(timeout=135)
+            raw = process.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
             os.killpg(process.pid, signal.SIGKILL)
             process.wait()
@@ -38,10 +39,11 @@ def capture(prefix: Path, command: list[str]) -> int:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--prefix", required=True, type=Path)
+    parser.add_argument("--timeout", type=int, default=135)
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
-    if capture(args.prefix, command) != 134:
+    if capture(args.prefix, command, args.timeout) != 134:
         raise SystemExit("expected only canonical SIGABRT status 134")
 
 

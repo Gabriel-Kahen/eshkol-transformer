@@ -948,6 +948,16 @@ the symbol tool itself to succeed. This harness is source-only and has not
 been compiled or executed; its native and first-evaluator verdicts remain open.
 Malformed gradient-tensor geometry is not fabricated through a new private
 setter: the sealed fixed M3 owner exposes no reviewed geometry mutation seam.
+The composed source now includes current main `09f7ed52`, accepted first-call
+control `948b8067`, and the four exact correctness-control blobs from
+`78604fa`. `scripts/test-e3-first-eval-detector.sh` stages a fresh one-use
+supported gate: it requires the independent correctness, unmodified 1024/8192
+retention, and native-owner controls, then builds and compares normal A/B and
+sanitized noninstalled mutant packages and AOT images. For all three one-shot
+gradient mutations it requires failure at the first post-evaluation
+`success-model-image` comparison under normal, repeat, poisoned and sanitizer
+profiles, retaining raw streams, exit codes, hashes and toolchain provenance.
+This is source preparation only; no compiled result or §9 proof is claimed.
 
 The [E3 idle real-model control contract](e3/E3_IDLE_REAL_MODEL_CONTROL_CONTRACT.md)
 specifies a test-only use of existing I2 checkpoint decode and whole-batch load
