@@ -817,8 +817,10 @@ noninstalled boxed tuple across the frozen packed-single, packed-sharded,
 packed-suffix, unpacked-three and unpacked-pairs cases. Its tagged transcript
 requires ordered complete 21-role rows, CE, serial metric state, six boxed
 outputs and exact D2 cursor bytes; focused source/parser/reference checks are
-local only. N1 supported exact-tree execution, independent N2 review, supported
-N2 runtime evidence and current-main integration remain pending.
+local only. The three-batch N1 predecessor has the separately accepted H gate
+above. Independent N2 source/tests review found no blocking issue at `4d7ed8d0`;
+supported N2 exact-tree runtime evidence and current-main integration remain
+pending.
 
 The [E3 in-call mode and graph observation contract](e3/E3_MODE_GRAPH_OBSERVATION_CONTRACT.md)
 is a design-only next leaf for §9. Its corrected P1-owned test variant keys a
