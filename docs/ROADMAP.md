@@ -849,6 +849,13 @@ boundary remain synthetic; independent source/tests review ACCEPTS only v2
 synthetic consistency at `05452baf` (`/home/gabe/.codex/evidence/eshkol-transformer/e3-n1-durable-receipt-independent-source-review-05452baf-20261012-a/SHA256SUMS-REVIEW`,
 SHA-256 `506b07cf25cc645128457ce106cd1494bbac5aebb63a27fce9b028de83916d6e`),
 while authentic f31 pins, independent custody and real N1/M1 admission remain HOLD.
+The [distinct N1 seal-authority successor contract](e3/E3_N1_SEAL_AUTHORITY_CONTRACT.md)
+requires a protected sealer, non-minting verification of both receipt and seal,
+frozen release/image/key/custody pins, and explicit issuance, crash, and
+read-only reconciliation gates. Current v2 HMAC configuration gives the broker
+seal-minting material; no asymmetric verifier or trusted verification RPC is
+pinned. This document-only successor remains HOLD for implementation, live
+cross-UID proof, real-layer acquisition, and N1/M1 admission.
 The exact `5d642a2` fe9/f31 numerical gate built the normal and mutant
 packages but failed before runtime at sanitized export isolation: the ASan
 registration COMMON cell remained global after objcopy. Its 308-file failed
