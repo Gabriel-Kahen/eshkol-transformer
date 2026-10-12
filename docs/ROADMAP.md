@@ -1640,7 +1640,13 @@ continuation.
 The proposed [receipt-to-fresh-M3T restore boundary](g3/G3_R_C2_RECEIPT_M3T_RESTORE_CONTRACT.md)
 records the C2 ownership gap: the receipt lends a C2 borrow, whereas TR3
 restore requires its owned shell and starts its own borrow. It pins the fixed
-14-path bit/alias/eval gate and rejects C4's incompatible position shape.
+14-path bit/alias/eval gate and rejects C4's incompatible position shape. Its
+closed bridge proposal keeps the receipt as sole shell owner, ends its C2
+inspection borrow before TR3's exclusive borrow, reserves the receipt against
+reentry during restore, and requires a certainty proof before any cleanup
+failure can be treated as retryable. Its three-argument sketch covers only
+ownership; candidate-control admission still needs a same-reservation input
+contract before full composition or publication.
 The private receipt-to-TR3 bridge and complete candidate teardown remain
 pending; this documentation adds no accepted restore or G3-R continuation.
 

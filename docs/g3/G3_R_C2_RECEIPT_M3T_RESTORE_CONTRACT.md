@@ -32,6 +32,82 @@ stop. This is a proposed source-private seam, not an existing callable API.
 No reopened path, second LOAD, unattached SHA copy, raw owner escape, or
 public LOAD/TR3 ABI change is allowed.
 
+## Proposed closed ownership bridge
+
+The existing interfaces do **not** suffice as a caller composition API. The
+receipt's `g3r-c2-receipt-borrow-c2-internal` returns its active C2 borrow,
+while `tr3-c-joint-restore-internal!` immediately calls
+`c2-training-state-borrow-begin-internal` on its `source` argument. C2 permits
+one active borrow: it changes the exact registered owner's phase from `live`
+to that borrow before provider callbacks and rejects another borrow or release
+until the first ends (`native/c2_training_state_extension.esk:346-405,477-512,
+632-643`). The private receipt keeps the exact owner in record slot 2 and
+rejects another receipt borrow or release while its phase is not `live`
+(`native/g3r_c2_sha_receipt_extension.esk:167-170,226-266`). Thus a direct
+call with a receipt shell or its borrow is invalid, and extracting slot 2 in a
+caller would bypass the receipt's ownership authority.
+
+Propose one feature-local, unexported **ownership-only** operation, with this
+bounded signature sketch to review before implementation:
+
+```scheme
+(g3r-c2-receipt-restore-m3t-internal!
+  receipt expected-image-sha trainer) -> #t
+```
+
+`receipt` must be an exact live receipt from the same owning aggregate;
+`expected-image-sha` is the exact 32-byte digest from an already validated
+G3RCV1 companion, not a standalone authority; `trainer` is a fresh,
+unpublished, idle M3T/TR3 candidate. The bridge checks the digest against a
+copy obtained under its own exact receipt borrow. It may copy C2 controls
+while that borrow is active, but may not retain a projection, owner token,
+P1/O2 child, or borrowed pointer after the borrow ends. The three arguments
+cannot establish the candidate's X1/T1/D2/schema/capability identity against
+the receipt; therefore this bridge alone cannot admit or publish a resumed
+candidate. The full candidate compositor needs a separately reviewed exact
+input/witness contract that performs those comparisons under this same
+reserved receipt authority before TR3 enters. No caller-side precheck followed
+by this three-argument call is claimed to close that identity gap.
+
+Preallocate the exception/cleanup record and reserve the required handler
+capacity before changing receipt phase. After the last successful C2 borrow
+end, publish a private `restoring` phase into the exact receipt record with an
+assignment-only transition; no fallible call or callback may occur between
+ending that borrow and publishing the phase. Only then pass the lexically read
+record-slot-2 **owner shell** to the existing joint restore. The bridge never
+transfers shell ownership: the receipt remains the sole owner before, during
+and after TR3, while TR3 owns its temporary C2 borrow and receiver
+transaction (`native/tr3_c_joint_restore_extension.esk:230-280,613-641`).
+Receipt borrow/release and reentrant restore must reject during `restoring`.
+No new public getter, second C2 LOAD, path reopen, or raw-shell result is
+permitted. Same-aggregate feature-on source closure must prove that the
+bridge sees these exact registries and TR3 implementation.
+
+On successful TR3 return, its C2 borrow is closed and trainer lease is idle;
+the bridge changes the receipt back to `live` by assignment and returns `#t`.
+On a recoverable TR3 failure, TR3 first performs its own abort and closes its
+C2 borrow (`native/tr3_c_joint_restore_extension.esk:457-559,619-635`); the
+bridge then restores the receipt to `live` and rethrows the original error.
+The caller's candidate ledger retains the receipt and releases it exactly
+once through `g3r-c2-receipt-release-internal!` after any required C2-bit
+comparison, on both success and failure. That release uses the receipt's
+existing C2 release record and zeros the copied SHA
+(`native/g3r_c2_sha_receipt_extension.esk:257-288`). A pre-admission failure
+may leave the receipt live for an explicit caller retry; after the caller
+abandons the candidate, its ledger releases it. The bridge must never
+silently consume a receipt that the ledger still owns.
+
+If a borrow-end or TR3 cleanup raises after ownership may have been consumed,
+the bridge must determine exact C2 and trainer phases before treating the
+failure as recoverable. An uncertain phase, second cleanup defect or failure
+after TR3's irreversible tail is fail-stop (exit 134); it may not publish a
+retryable receipt, call borrow-end twice on spent authority, or replace the
+first error with a cleanup error. The existing receipt borrow-end updates its
+own phase only after C2 end returns (`native/g3r_c2_sha_receipt_extension.esk:
+250-255`), so its post-consumption failure case needs an explicit reviewed
+certainty witness before implementation. A simple outer `guard` that blindly
+sets `live` is insufficient.
+
 ## Fresh candidate and bit identity
 
 Before TR3 restore, compare the companion digest, profile, canonical
@@ -107,3 +183,22 @@ and tied identity, check unchanged gradients/counts and eval mode, and exercise
 wrong-schema, forged, busy, borrowed and corrupt negatives with rollback/retry
 under allocation/provider cuts. Run supported normal, repeat, sanitizer and
 source/symbol-closure gates. Replay, pair publication and full G3-R follow.
+
+For the bounded ownership bridge gate, first prove exact pair SHA and one
+same-registry receipt with a real C2 image; compare the digest before one
+fresh M3T restore. Assert one C2 borrow at a time, no borrow at return,
+receipt still owning the same shell, and exact 14 value bits/tied alias with
+unchanged gradients. Negative cases must include wrong 32-byte digest,
+malformed digest length, forged/cross-aggregate/dead receipt, forged or busy
+trainer, receipt already borrowed or restoring, direct TR3 call with a receipt
+or C2 borrow, nested callback attempts to release/borrow/restore, wrong C4
+position shape, and fault cuts before/after the receipt reservation and at
+TR3 stage/abort. Each recoverable case preserves the existing caller and
+permits a valid retry; each receipt is then released once and its SHA cleared.
+Test the uncertain borrow-end and post-commit cleanup paths as explicit
+fail-stop subprocesses. Until complete candidate retirement is accepted,
+these remain contract/source checks rather than a claimed reusable compiled
+candidate gate: an idle trainer release alone leaves model/O2 payloads live.
+The later full-composition gate adds same-reservation control/schema
+authentication before restore; no result of the ownership bridge by itself
+proves that authentication.
