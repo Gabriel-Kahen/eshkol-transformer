@@ -45,8 +45,20 @@ class R1PreflightSourceTest(unittest.TestCase):
         source = FRAME.read_text()
         self.assertEqual(cut_site_errors(source), [])
         self.assertIn("#ifdef ET_E3_R1_PREFLIGHT_TESTING\n/* Noninstalled", HEADER.read_text())
-        self.assertNotIn("ET_E3_R1_PREFLIGHT_TESTING",
-                         (ROOT / "scripts/build-e1b-consumer.sh").read_text())
+        build = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
+        self.assertEqual(build.count("-DET_E3_R1_PREFLIGHT_TESTING"), 1)
+        native_flags = build.split("    package_source_flags=()\n", 1)[1].split(
+            '    if [[ "${package_policy}" == e3-private-aggregate &&\n'
+            '          "${e3_tuple_kind}" == zero ]]; then', 1)[0]
+        self.assertRegex(
+            native_flags,
+            r'(?s)^    if \[\[ "\$\{package_policy\}" == e3-private-aggregate &&'
+            r'(?:(?!\]\]; then).)*"\$\{e3_tuple_kind\}" == r1-source-retry'
+            r'.*?\]\]; then\s+case "\$\{package_native_source\}" in'
+            r'.*?"\$\{PROJECT_ROOT\}/src/eshkol_transformer/e3_frame\.c"\)'
+            r'(?:(?!;;).)*if \[\[ "\$\{e3_tuple_kind\}" == r1-source-retry \]\]; then'
+            r'\s+package_source_flags\+=\(-DET_E3_R1_PREFLIGHT_TESTING\)',
+        )
         self.assertIn("frame->preinvoke_armed = 0;", source)
         self.assertIn("return e3_fail(E3_INTERNAL, E3_CODE_TEST_PREFLIGHT);", source)
         mutant = source.replace("e3_test_preinvoke_cut(frame, 11, -1)", "0", 1)
