@@ -51,4 +51,10 @@ int64_t et_m3t_private_last_error_code_v1(void);
 /* Approved I2 construction observer; never installed or application-callable. */
 int32_t et_m3t_construction_parameter_preflight_internal(void *parameter,
     const void *exact_handle, et_f32_tensor_error *error);
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+/* Read-only admission for one sealed native owner and its exact initializers.
+ * This does not authenticate the P1/I2 graph or a candidate ledger. */
+int64_t et_m3t_private_candidate_retire_preflight_v1(
+    void *owner, void *exact_original, void *exact_successor);
+#endif
 #endif

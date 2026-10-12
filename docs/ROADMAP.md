@@ -1717,6 +1717,17 @@ Host Clang 22 normal/repeat/sanitizer runs report 503 readiness checks and
 104 owned-span checks per mode; feature-off object parity passes. Supported
 pinned compilation, same-aggregate admission and integration remain pending.
 
+An isolated feature-gated M3T owner preflight candidate uses the accepted
+exact-slot f32 parameter readiness producer. It checks registry-admitted sealed
+owner/original/successor identities, their construction-time association, all
+14 original parameter and bound-handle identities, and rejects active or idle
+live workspaces before testing every parameter. Host Clang 22 normal, repeat
+and ASan/UBSan runs each pass 180 focused checks; feature-off transport object
+bytes match `779fddd`. This is a read-only native prerequisite only. It cannot
+authenticate the Eshkol candidate ledger or P1/I2 graph, prove exclusive
+initializer ownership, retire payloads, or establish candidate cleanup.
+Independent review, supported pinned compilation and composition remain pending.
+
 The proposed [O2 error-span provenance prerequisite](g3/G3_R_O2_ERROR_SPAN_PROVENANCE_PREREQUISITE.md)
 records a concrete gap before native O2 retirement acceptance: the existing
 f32 storage-overlap query follows mutable tensor descriptors and can miss a

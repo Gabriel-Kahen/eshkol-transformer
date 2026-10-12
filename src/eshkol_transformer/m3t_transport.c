@@ -49,6 +49,11 @@ typedef struct initializer {record r; int64_t words[4];} initializer;
 typedef struct owner {
   record r; initializer *original,*successor; et_f32_parameter *p[14];
   void *handles[14]; size_t initialized; void *active;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  initializer *created_original,*created_successor;
+  et_f32_parameter *created_parameters[14];
+  void *bound_handles[14];
+#endif
 } owner;
 static owner *staged_owner;
 typedef struct input {record r;et_i64_tensor *tensor;} input;
@@ -136,11 +141,17 @@ void *et_m3t_private_owner_create_v1(void *p) {
  owner *o=allocate(sizeof(*o));if(!o)return NULL;
  o->successor=allocate(sizeof(*o->successor));if(!o->successor){free(o);return NULL;}
  memcpy(o->successor->words,s->words,sizeof(s->words));o->original=s;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+ o->created_original=s;o->created_successor=o->successor;
+#endif
  for(size_t i=0;i<14;i++) {
   et_f32_tensor *t=new_tensor(parameter_rank(i),parameter_shape[i]);et_f32_tensor_error e;
   if(!t)goto failed;
   int rc=et_f32_parameter_create_v1(t,&o->p[i],&e);destroy_f32(&t);
   if(f32_error(rc,&e))goto failed;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  o->created_parameters[i]=o->p[i];
+#endif
  }
  enroll(&o->successor->r,INITIALIZER);enroll(&o->r,OWNER);staged_owner=o;return o;
 failed:
@@ -160,7 +171,11 @@ int64_t et_m3t_private_owner_bind_v1(void *p,int64_t i,void *handle) {
  for(size_t j=0;j<14;j++)if(o->handles[j]==handle)return bad(ET_M3T_INVALID_ARGUMENT,ET_M3T_CODE_TOPOLOGY);
  et_f32_tensor_error e;
  if(f32_error(et_f32_parameter_bind_identity_v1(o->p[i],handle,&e),&e))return error_category;
- o->handles[i]=handle;return 0;
+ o->handles[i]=handle;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+ o->bound_handles[i]=handle;
+#endif
+ return 0;
 }
 static et_kernel_tensor_view_v1 view(void *p,size_t bytes,const char *dtype,size_t rank,const uint64_t *shape) {
  return (et_kernel_tensor_view_v1){sizeof(et_kernel_tensor_view_v1),p,bytes,dtype,"cpu",ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR,0,rank,shape};
@@ -335,6 +350,42 @@ typedef struct workspace {
  record r;owner *model;et_f32_tensor *saved[14],*slots[SLOT_COUNT],*epsilon;
  et_i64_tensor *ids,*positions;unsigned char keep[4];unsigned char ready[SLOT_COUNT];int mode,busy;
 } workspace;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+int64_t et_m3t_private_candidate_retire_preflight_v1(
+    void *p, void *exact_original, void *exact_successor) {
+  clear();
+  owner *o=admit(p,OWNER,0);if(!o)return error_category;
+  /* Admit all supplied identities through the registry before reading them. */
+  initializer *original=admit(exact_original,INITIALIZER,0);
+  if(!original)return error_category;
+  initializer *successor=admit(exact_successor,INITIALIZER,0);
+  if(!successor)return error_category;
+  if(o->r.state!=1 || o->initialized!=14 || o->active ||
+     original->r.state!=1 || successor->r.state!=1 ||
+     original==successor || o->original!=original ||
+     o->successor!=successor || o->created_original!=original ||
+     o->created_successor!=successor)
+    return bad(ET_M3T_INVALID_STATE,ET_M3T_CODE_LIFECYCLE);
+  for(record *r=registry;r;r=r->next)
+    if(r->kind==WORKSPACE && r->state>=0 && ((workspace*)r)->model==o)
+      return bad(ET_M3T_INVALID_STATE,ET_M3T_CODE_LIFECYCLE);
+  for(size_t i=0;i<14;i++) {
+    if(!o->handles[i] || !o->p[i] ||
+       o->handles[i]!=o->bound_handles[i] ||
+       o->p[i]!=o->created_parameters[i])
+      return bad(ET_M3T_INVALID_STATE,ET_M3T_CODE_TOPOLOGY);
+    for(size_t j=0;j<i;j++)
+      if(o->handles[i]==o->handles[j] || o->p[i]==o->p[j])
+        return bad(ET_M3T_INVALID_STATE,ET_M3T_CODE_TOPOLOGY);
+    et_f32_tensor_error e;
+    if(f32_error(et_f32_parameter_validate_identity_v1(
+          o->p[i],o->handles[i],&e),&e))return error_category;
+    if(f32_error(et_f32_parameter_private_destroy_ready_v1(
+          &o->p[i],&e),&e))return error_category;
+  }
+  return 0;
+}
+#endif
 static size_t slot_shape(size_t i,const uint64_t **shape) {
  if(i>=GKEY && i<=GPOS){*shape=parameter_shape[i-GKEY];return parameter_rank(i-GKEY);}
  if(i==GHEAD||i==GTOKEN){*shape=parameter_shape[10];return 2;}
