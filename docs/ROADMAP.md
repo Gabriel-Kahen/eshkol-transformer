@@ -2747,6 +2747,13 @@ publication, public G2 and continuation remain pending.
   pass. Compiled leaf execution, deeper nested-checker and predecessor receipts
   remain open. The source closure adds only changed leaf files, not a complete
   transitive runner-input closure.
+  An [exact-e3e prelaunch source successor](g3/G3_C4_P2_G2_PRELAUNCH_E3E_SOURCE.md)
+  adds a one-use, guardian-held heavy slot, private-cgroup CLI containment,
+  daemon CID/config checks and recovery quarantine with source-only controls.
+  Its detached target is exact `e3ebca2d`/tree `38963dbc`; external recipe
+  and live image/compiled gate still require separate review. No Docker
+  dispatch or real claim was made. Predecessor/deeper command inventory and
+  successful-zero emitted-code proof remain HOLD.
 
 ## Wave 4 — practical pretraining and performance
 
