@@ -9,6 +9,37 @@ v3 bytes, verification ABI, and the source archive; it does not pin executable
 bytes. The [seal authority contract](E3_N1_SEAL_AUTHORITY_CONTRACT.md) still
 requires separate receipt and seal authorities and immutable export custody.
 
+## Observed SOURCE/PREP candidate on 2026-10-12
+
+`scripts/e3_n1_prebuild.py` obtained the official archive, detached `.asc`, and
+the OpenSSL site's `pubkeys.asc` into external evidence
+`/home/gabe/.codex/evidence/eshkol-transformer/e3-n1-openssl-source-prep-20261012/`.
+The raw archive SHA-256 matches the source pin above. The signature verifies
+with subkey `C46ED3F2CBEFDA1FDAADA44264ED7B1DCCE71CB2` certified under the
+separately accepted primary fingerprint below. The raw-header scanner accepts
+6,078 unique effective paths (5,779 files and 299 directories), one reviewed
+global PAX comment, no links, and no implicit parent. It hashes each regular
+member and rejects duplicate paths, duplicate/unreviewed PAX keys, unsafe
+paths, links, malformed headers, and trailing nonzero bytes. The 2,449,054-byte
+canonical external inventory has SHA-256
+`0d2f2150d13d33cc098609af39a15022b631a0dfbe33d378704a536d4ff5b764`.
+
+The canonical external input **candidate** has SHA-256
+`daef020d95f09fefc2df8ee1a2f201d6211ee9aa94be05cec87eddfc97632a69`.
+It binds accepted base `39f3b41`/tree `eb3d877`, the source/signature/certificate
+bytes and verification, inventory, and exact `toolchain/eshkol.lock` bytes. Its
+supported image, build tools and existing headers, protected build paths,
+Configure/build/test/install and verifier argv, and complete explicit
+environment are `null`/HOLD. The acquisition ran on a CachyOS host, not the
+Ubuntu 22.04/Clang 21.1.8 build lane; its GPG path/hash is acquisition evidence
+only. No ambient host environment is serialized. The validator checks canonical
+bytes and source pins and can reverify the raw files; `plan_gate` rejects this
+candidate before marker creation. `consume_once` is a low-level synthetic-test
+primitive with exclusive, nofollow, readback and sync behavior, not a production
+CLI. A future ROOT-reviewed complete input and protected-channel nonce/digest
+binding must precede any live one-use build attempt. No extraction, build,
+marker consumption, verifier, or admission occurred.
+
 ## Source and later build recipe
 
 The sole source candidate is the official `openssl-3.5.9.tar.gz`, SHA-256
