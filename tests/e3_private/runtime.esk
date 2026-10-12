@@ -25,6 +25,26 @@
                      (bytevector-u8-ref right index))
                   (loop (+ index 1)))))))
 
+(define (emit-bytes value)
+  (let loop ((index 0))
+    (if (< index (bytevector-length value))
+        (begin
+          (if (> index 0) (display ","))
+          (display (bytevector-u8-ref value index))
+          (loop (+ index 1))))))
+
+(define (emit-result name result)
+  (display "E3RESULT\t") (display name)
+  (let loop ((index 1))
+    (if (< index 7)
+        (begin
+          (display (if (= index 1) "\t" ","))
+          (display (vector-ref result index))
+          (loop (+ index 1)))))
+  (display "\t") (emit-bytes (vector-ref result 7))
+  (display "\t") (emit-bytes (vector-ref result 8))
+  (newline))
+
 (define (run-case name packing? skipped path expected)
   (let ((output (vector #f)))
     (e3-private-test-run (vector (vector packing? skipped))
@@ -43,7 +63,8 @@
                   (bytes=? (vector-ref actual 7) (vector-ref actual 8)))))
         (if matches? #t
             (begin (display "ACTUAL: ") (display actual) (newline)))
-        (check name matches?)))))
+        (check name matches?)
+        (emit-result name actual)))))
 
 (let ((args (command-line)))
   (check "five corpus paths" (= (argument-count args) 6))

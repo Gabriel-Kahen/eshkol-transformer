@@ -72,4 +72,9 @@ ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 600s \
   "${e3_corpus}/unpacked-pairs" \
   >"${e3_output}/runtime.stdout" 2>"${e3_output}/runtime.stderr"
 grep -Fx "E3-PRIVATE-RUNTIME-PASS" "${e3_output}/runtime.stdout" >/dev/null
+[[ ! -s "${e3_output}/runtime.stderr" ]] || \
+  die "E3 private runtime emitted diagnostics"
+python3 -m tests.e3_private.verify_layout_results \
+  --corpus-root "${e3_corpus}" --reference "${e3_reference}" \
+  --stdout "${e3_output}/runtime.stdout"
 printf 'E3 private package runtime passed: %s\n' "${e3_output}/runtime"

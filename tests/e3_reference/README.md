@@ -36,6 +36,18 @@ The pinned M3 generator and its separate test still require Q0. A re-pin needs
 fresh Q0 generation and review. None of this establishes a compiled-private
 N2 verdict.
 
+`tests/e3_private/verify_layout_results.py` is a separate private-runtime
+result join. It requires the actual AOT runtime's five ordered `E3RESULT` lines,
+then binds each case's six boxed outputs and cursor bytes to this frozen join.
+The E3 transaction restores the starting D2 cursor after success, so the
+compiled post-call cursor must equal `start_cursor`; `end_cursor` describes the
+independent D2 traversal and differs for these nonempty cases. The driver uses
+the reference's `maximum-batch-bytes` config so cursor identity is bytewise
+comparable. The join checks exact weight/accuracy/counters and Decimal exp of
+published loss. It does not independently validate published loss; that still
+needs authentic row/role/CE/state evidence. The existing private runtime loss
+word serves as a regression control only.
+
 Focused commands from the repository root:
 
 ```bash

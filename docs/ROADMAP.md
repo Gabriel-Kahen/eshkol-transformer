@@ -653,6 +653,19 @@ independent source-and-test review passed at `8d68e1a`/tree `debf998`
 (`e3-n2-join-review-8d68e1a-20261012/SHA256SUMS`, SHA-256 `900d9fba...`).
 A genuine compiled-private five-layout transcript remains the N2 completion gate.
 
+The follow-on N2 source leaf adds a strict five-case boxed-result join to the
+existing private runtime gate. Its driver aligns the D2 maximum-batch-bytes
+cursor identity with the frozen reference, and the runtime emits case-labeled
+six-output and before/after cursor words. The verifier joins those words to the
+frozen physical D1/D2 reference, checks exact restored start cursors,
+weight/accuracy/counters, packed equality and unpacked publication differences,
+and checks perplexity against independent Decimal exp at the published loss.
+Published loss is checked only by the runtime's existing exact regression
+words, not independently against frozen CE; the other exact final words remain
+regression controls too. This source-only leaf has no compiled result yet; the
+separate numerical observer must be composed and run with reviewed pins to
+prove N2 per-row roles, CE and state. N2 and full §9 acceptance remain open.
+
 The test-only CLI3/G3-G checkpoint-to-generation prerequisite has passed its
 exact fe9/f31 supported linked/runtime gate at `ab479f5`/tree `1102384`.
 Its single registry composes the accepted CLI3/TR3 C2 root with the public
