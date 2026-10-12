@@ -22,6 +22,9 @@ verify_bundle() {
   [[ "$(hash "$(pin deps_parent_manifest)")" == \
      "$(pin deps_parent_manifest_sha256)" ]] || \
     die "frozen dependency inventory changed"
+  (cd "$(dirname -- "$(pin deps_parent_manifest)")" && \
+    sha256sum -c --quiet "$(basename -- "$(pin deps_parent_manifest)")") || \
+    die "frozen dependency inventory entries changed"
   local deps
   deps="$(pin deps_root)"
   [[ "$(git -C "${deps}/eshkol-src" rev-parse HEAD)" == "$(pin eshkol_commit)" &&
@@ -50,6 +53,7 @@ finalize() {
   local status=$? name first=complete
   trap - EXIT
   set +e
+  printf '%s\n' "${status}" >"${result}/host-command-exit.status"
   if [[ -s "${result}/container.cid" ]]; then
     docker rm -f "$(cat "${result}/container.cid")" >/dev/null 2>&1 || true
   fi

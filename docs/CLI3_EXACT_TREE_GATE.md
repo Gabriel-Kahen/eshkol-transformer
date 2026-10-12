@@ -8,7 +8,8 @@ separate from that target. It does not modify the target source bundle.
 The prepared evidence directory contains `source.bundle`, `pins.tsv`,
 `inside.sh`, `launch.sh`, and `SHA256SUMS-PREPARED`. `launch.sh
 --verify-prepared` authenticates those files and the referenced frozen fe9
-dependency directory without invoking Docker. The immutable f31 image ID and
+dependency directory, including every entry in its parent manifest, without
+invoking Docker. The immutable f31 image ID and
 every dependency hash are in `pins.tsv`. The dependency directory is shared
 read-only with another prepared gate; it must remain present and unchanged.
 
@@ -43,7 +44,9 @@ installed gate covers positive, negative, and exit behavior for `corpus
 validate` and reruns the old CLI suite. Each step retains stdout, stderr,
 time, and exit status. The host retains clone, Docker, source identity,
 admission, and failure-stage evidence; its exit trap writes `overall.status`
-and `SHA256SUMS-RUN` even after a failed child or timeout. A missing run seal
+and `SHA256SUMS-RUN` even after a failed child or timeout. The sealed
+`host-command-exit.status` retains the original Docker or timeout status
+before aggregate failure classification. A missing run seal
 is itself a failed handoff.
 
 Preparation and source review do not constitute compiled or installed runtime
