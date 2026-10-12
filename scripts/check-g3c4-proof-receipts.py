@@ -2,6 +2,7 @@
 """Fail-closed offline validator for the terminal-close nested command graph."""
 import hashlib
 import json
+from collections import Counter
 from pathlib import Path
 import re
 import sys
@@ -32,26 +33,42 @@ def unique_object(pairs: list[tuple[str, object]]) -> dict:
     return result
 
 
-def source_sites() -> set[str]:
+def expected_program(token: str) -> str:
+    return {
+        '"$cc"': 'clang-21', '"$cxx"': 'clang++-21',
+        '"$runner"': 'eshkol-run', '"$eshkol_runner"': 'eshkol-run',
+        '"${runtime[@]}"': 'env',
+    }.get(token, '*' if token.startswith('"$') else token)
+
+
+def source_calls() -> dict[str, Counter]:
     source = Path(__file__).resolve().parents[1] / "scripts"
-    sites = set()
+    calls = {}
     for name in SCRIPTS:
         lines = (source / name).read_text().splitlines()
         for number, line in enumerate(lines, 1):
-            if re.search(r"\bproof_command\s+", line):
-                sites.add(f"{name}:{number}")
-    return sites
+            programs = re.findall(r"\bproof_command\s+(\S+)", line)
+            if programs:
+                calls[f"{name}:{number}"] = Counter(map(expected_program, programs))
+    return calls
 
 
-def verify(root: Path, expected_sites: set[str] | None = None) -> dict:
+def source_sites() -> set[str]:
+    return set(source_calls())
+
+
+def verify(root: Path, expected_sites: set[str] | dict[str, Counter] | None = None) -> dict:
     require(root.is_dir() and not root.is_symlink(), "receipt root missing or symlink")
     if expected_sites is None:
-        expected_sites = source_sites()
+        expected_sites = source_calls()
+    elif isinstance(expected_sites, set):
+        expected_sites = {site: Counter({'*': 1}) for site in expected_sites}
     paths = sorted(root.glob("command.*"))
     require(len(paths) >= len(SCRIPTS), "missing command receipts")
     scripts = set()
     invoked = set()
     observed_sites = set()
+    observed_programs = {}
     for path in paths:
         require(path.is_dir() and not path.is_symlink(), f"bad receipt directory: {path}")
         meta_path = path / "receipt.json"
@@ -86,12 +103,18 @@ def verify(root: Path, expected_sites: set[str] | None = None) -> dict:
                     f"stream mismatch: {path}/{stream}")
         scripts.add(meta["script"])
         observed_sites.add(meta["site"])
+        observed_programs.setdefault(meta["site"], Counter())[Path(argv[0]).name] += 1
         if len(argv) >= 2 and Path(argv[0]).name == "bash":
             invoked.add(Path(argv[1]).name)
     require(set(SCRIPTS) <= scripts, "nested script command receipts missing")
     require(set(SCRIPTS[1:]) <= invoked, "nested predecessor invocation missing")
-    require(expected_sites <= observed_sites,
-            f"unexecuted command sites: {sorted(expected_sites - observed_sites)}")
+    require(set(expected_sites) <= observed_sites,
+            f"unexecuted command sites: {sorted(set(expected_sites) - observed_sites)}")
+    for site, required in expected_sites.items():
+        actual = observed_programs[site]
+        for program, count in required.items():
+            found = sum(actual.values()) if program == '*' else actual[program]
+            require(found >= count, f"missing command receipt: {site} {program}")
     return {"receipts": len(paths), "scripts": sorted(scripts),
             "source_sites": len(expected_sites)}
 

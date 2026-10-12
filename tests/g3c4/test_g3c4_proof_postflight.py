@@ -2,7 +2,9 @@
 import hashlib
 import importlib.util
 import json
+from collections import Counter
 from pathlib import Path
+import shutil
 import tempfile
 import unittest
 
@@ -27,7 +29,9 @@ class SourceAuditTests(unittest.TestCase):
         self.assertEqual(SOURCE.audit(ROOT), [])
 
     def test_unwrapped_direct_pipeline_and_substitution(self):
-        for line in ("if grep -q x file", "nm file | sort -u", 'tmp="$(mktemp -d /tmp/x)"'):
+        for line in ("if grep -q x file", "nm file | sort -u",
+                     "proof_command nm file | sort -u",
+                     'tmp="$(mktemp -d /tmp/x)"'):
             with self.subTest(line=line):
                 self.assertTrue(SOURCE.scan_text("runner.sh", line))
 
@@ -93,6 +97,26 @@ class ReceiptPostflightTests(unittest.TestCase):
     def test_unexecuted_site(self):
         with self.assertRaisesRegex(ValueError, "unexecuted command sites"):
             RECEIPTS.verify(self.root, {"test-g3c4-p2g2-terminal-close.sh:999"})
+
+    def test_same_line_pipeline_requires_both_programs(self):
+        site = "test-g3c4-p2g2-terminal-close.sh:77"
+        for number, program in ((9, "awk"), (10, "sort")):
+            path = self.root / f"command.{number}"
+            shutil.copytree(self.root / "command.0", path)
+            argv = f"{program}\0x\0".encode()
+            (path / "argv.nul").write_bytes(argv)
+            meta = json.loads((path / "receipt.json").read_text())
+            meta["argv_sha256"] = hashlib.sha256(argv).hexdigest()
+            meta["site"] = site
+            (path / "receipt.json").write_text(json.dumps(meta))
+        expected = {site: Counter({"awk": 1, "sort": 1})}
+        RECEIPTS.verify(self.root, expected)
+        path = self.root / "command.10" / "receipt.json"
+        meta = json.loads(path.read_text())
+        meta["site"] = "other:1"
+        path.write_text(json.dumps(meta))
+        with self.assertRaisesRegex(ValueError, "missing command receipt.*sort"):
+            RECEIPTS.verify(self.root, expected)
 
 
 class EmittedPostflightTests(unittest.TestCase):

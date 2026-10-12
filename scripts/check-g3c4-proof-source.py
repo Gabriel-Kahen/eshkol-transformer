@@ -16,12 +16,38 @@ NAMES = (
     "test-g3c4-p2g2-terminal.sh",
 )
 EXTERNAL = r'(?:python3|bash|env|ar|nm|awk|grep|comm|cmp|sha256sum|sort|cp|cat|git|mkdir|chmod|mktemp|"\$(?:cc|cxx|runner|eshkol_runner)"|"\$\{runtime\[@\]\}"|"\$(?:tmp|directory)/[^" ]+")'
-START = re.compile(rf'(?:^|[;&|])\s*(?:if\s+|!\s+|LC_ALL=C\s+|[A-Z_][A-Z_0-9]*=\S+\s+)*({EXTERNAL})\b')
+START = re.compile(rf'(?:^|[;&|])\s*(?:if\s+|!\s+|LC_ALL=C\s+|[A-Z_][A-Z_0-9]*=\S+\s+)*({EXTERNAL})(?=\s|$)')
+
+
+def segments(line: str) -> list[str]:
+    result = []
+    quote = None
+    escaped = False
+    start = 0
+    for index, char in enumerate(line):
+        if escaped:
+            escaped = False
+            continue
+        if char == '\\' and quote != "'":
+            escaped = True
+            continue
+        if quote:
+            if char == quote:
+                quote = None
+            continue
+        if char in ("'", '"'):
+            quote = char
+        elif char in '|;&':
+            result.append(line[start:index])
+            start = index + 1
+    result.append(line[start:])
+    return result
 
 
 def scan_text(name: str, source: str) -> list[str]:
     findings = []
     heredoc = False
+    continued = False
     for line_number, line in enumerate(source.splitlines(), 1):
         if '<<WRAPPER' in line:
             heredoc = True
@@ -31,10 +57,16 @@ def scan_text(name: str, source: str) -> list[str]:
             continue
         if '$(mktemp ' in line:
             findings.append(f'{name}:{line_number}: unwrapped mktemp')
-        if re.search(r'\bproof_command\s+', line):
-            continue
-        if START.search(line):
-            findings.append(f'{name}:{line_number}: unwrapped external command')
+        parts = segments(line)
+        for index, part in enumerate(parts):
+            if continued and index == 0:
+                continue
+            part = re.sub(r'^\s*(?:if\s+|!\s+|LC_ALL=C\s+|[A-Z_][A-Z_0-9]*=\S+\s+)*', '', part)
+            if re.match(r'^proof_command\s+', part):
+                continue
+            if START.search(part):
+                findings.append(f'{name}:{line_number}: unwrapped external command')
+        continued = line.rstrip().endswith('\\') and not line.rstrip().endswith('| \\')
     return findings
 
 
