@@ -127,6 +127,21 @@ class HistorySource(unittest.TestCase):
         assert "(lambda (encoded) (exit 134))" in input_source
         forms = parse.forms(history)
         assert forms and forms[-1][0] == "define"
+        parsed_route = next(form for form in forms
+                            if isinstance(form, list) and form[:2] ==
+                            ["define", "g3c4-public-p2g2-history-route"])
+        capture_let = next(form for form in parse.walk(parsed_route)
+                           if isinstance(form, list) and form and
+                           form[0] == "let*" and len(form) > 1 and
+                           isinstance(form[1], list) and form[1] and
+                           isinstance(form[1][0], list) and
+                           form[1][0][0] == "shell")
+        assert [binding[0] for binding in capture_let[1][-2:]] == [
+            "descriptor", "authority"]
+        assert len(capture_let) == 3
+        assert capture_let[2][0] == "let"
+        assert [binding[0] for binding in capture_let[2][1]] == [
+            "next-history", "next-outputs"]
         route = history[history.index("(define g3c4-public-p2g2-history-route"):]
         for required in (
             "(let ((input-issuers '()) (history-issuers '())",
@@ -188,6 +203,14 @@ class HistorySource(unittest.TestCase):
 
     def test_actual_source(self) -> None:
         self.validate()
+
+    def test_capture_publication_is_not_a_let_binding(self) -> None:
+        malformed = self.history.replace(
+            '"P2/G2 history verb is invalid")))))))',
+            '"P2/G2 history verb is invalid"))))))', 1).replace(
+                '                 shell)))\n', '                 shell))))\n', 1)
+        with self.assertRaises(AssertionError):
+            self.validate(history=malformed)
 
     def test_constructor_kind_and_same_handle_drift_controls(self) -> None:
         for old in ("input->exact_p2_constructor = 1u;",

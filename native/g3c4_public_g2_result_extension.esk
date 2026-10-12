@@ -712,7 +712,7 @@
                               (set! phase 'spent)
                               descriptor)
                             (g3c4-fail 'invalid-argument operation
-                                       "P2/G2 history verb is invalid"))))))
+                                       "P2/G2 history verb is invalid")))))))
                (let ((next-history
                        (cons (cons shell authority) history-issuers))
                      (next-outputs (cons output issued-outputs)))
@@ -731,7 +731,7 @@
                  (set! history-issuers next-history)
                  (set! issued-outputs next-outputs)
                  (set! history-count (+ history-count 1))
-                 shell))))
+                 shell)))
           ((eq? action 'admit)
            (let ((issuer (assq first history-issuers)))
              (if (not issuer)

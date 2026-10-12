@@ -2811,6 +2811,13 @@ publication, public G2 and continuation remain pending.
   `wave3-f-t1-compiled-gate-run-6d37bf54-20261012-f`; the bounded source-pin
   repair is pending independent review and a fresh one-use compiled gate. No
   aggregate runtime claim is made.
+  The subsequent G-b compiled gate on `90b884e0` reached Eshkol compilation
+  and rejected the public G2 result extension: a missing close parenthesis
+  made the publication `let` part of the `authority` binding list. The bounded
+  source repair restores the lexical body and adds a parsed-structure
+  regression test. Focused source tests pass; independent source review and a
+  fresh one-use compiled gate are pending. The failed G-b evidence remains at
+  `/home/gabe/.codex/evidence/eshkol-transformer/wave3-f-t1-compiled-gate-run-90b884e0-20261012-g-b`.
 
 ## Wave 4 — practical pretraining and performance
 
