@@ -11,6 +11,7 @@ SUITES = [
     ("native-optimizer", "test-ci-optimizer-after-build", 105),
     ("diagnostic-transport", "test-ci-m3t-after-build", 105),
     ("model-composition", "test-ci-m3-after-build", 105),
+    ("cli3-commands", "test-ci-cli3-after-build", 240),
     ("g3n-forward", "test-ci-g3n-after-build", 75),
     ("g3s-sampling", "test-ci-g3s-after-build", 75),
     ("contracts-data", "test-ci-contracts-after-build", 75),
@@ -28,7 +29,7 @@ FULL = ["/usr/bin/bash scripts/" + name for name in (
     "test-k2.sh", "test-n2.sh", "test-n3k.sh", "test-g3s.sh", "test-o2.sh", "test-tr3-o.sh",
     "test-x1.sh",
     "test-p1.sh", "test-d1.sh", "test-d2.sh", "test-e3-d2.sh", "test-c1.sh", "test-c2.sh",
-    "test-t1.sh", "test-t2.sh --runtime-only", "test-t2-boundary.sh", "test-q0.sh", "test-m3t.sh", "test-m3.sh", "test-tr3b.sh", "test-g3n.sh", "test-g3c4.sh",
+    "test-t1.sh", "test-t2.sh --runtime-only", "test-t2-boundary.sh", "test-q0.sh", "test-m3t.sh", "test-m3.sh", "test-tr3b.sh", "test-g3n.sh", "test-g3c4.sh", "test-cli3-ci.sh",
 )]
 CHECKOUT = "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"
 
@@ -272,6 +273,19 @@ def check(root, overrides=None):
         "/usr/bin/bash scripts/test-g3n.sh", "/usr/bin/bash scripts/test-g3c4.sh"]
     assert targets["test-ci-g3s-after-build"] == [
         "/usr/bin/bash scripts/test-g3s.sh"]
+    assert targets["test-ci-cli3-after-build"] == [
+        "/usr/bin/bash scripts/test-cli3-ci.sh"]
+    cli3_ci = read("scripts/test-cli3-ci.sh")
+    assert "set -euo pipefail" in cli3_ci
+    assert "|| true" not in cli3_ci
+    assert 'mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/eshkol-cli3-ci.XXXXXX"' in cli3_ci
+    cli3_tail = [line.strip().rstrip("\\").strip() for line in cli3_ci.splitlines()[-4:]]
+    assert cli3_tail == [
+        '/usr/bin/bash "${PROJECT_ROOT}/scripts/test-cli3-production-generate.sh"',
+        '"${evidence}/production-generate"',
+        '/usr/bin/bash "${PROJECT_ROOT}/scripts/test-cli3-cross-command-chain.sh"',
+        '"${evidence}/cross-command-chain"',
+    ]
     assert targets["test-after-build"] == FULL
     assert targets["test-ci-clean-build-after-build"] == ["$(MAKE) smoke-after-build benchmark-after-build"]
     assert targets["test-acceptance-predecessors-after-build"] == [c for c in FULL if c != "/usr/bin/bash scripts/test-c2.sh"]
