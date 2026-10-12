@@ -1655,6 +1655,15 @@ input and candidate ledger remain prerequisites, not installed APIs. The
 private transaction and complete candidate teardown remain pending; this
 documentation adds no accepted restore or G3-R continuation.
 
+A source-private checked-pair candidate now copies and validates exact G3RCV1
+bytes under an active owning C2/SHA receipt borrow, then keeps a registry
+shell with the full-record SHA, complete-image SHA and exact receipt/C2 owner
+identity. Its recheck rejects caller mutation or a foreign/dead receipt, and
+exact-shell retirement scrubs the record, hashes and C2 owner reference. This
+is a bounded memory-level prerequisite under review; there is still no
+companion-file admission, candidate ledger, same-reservation restore or G3-R
+continuation. See [the checked-pair leaf](g3/G3_R_CHECKED_PAIR_LEAF.md).
+
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
 checks the authentic idle generator's four RNG words without allocation,

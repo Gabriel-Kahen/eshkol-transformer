@@ -1,0 +1,112 @@
+;;; Source-private G3RCV1 authority. Load after the codec and C2/SHA receipt.
+;;; Admission requires the receipt's exact active borrow, never a path hash or
+;;; a caller-supplied expected digest. The shell exposes no mutable pair bytes.
+
+(define g3r-checked-pairs '())
+
+(define (g3r-checked-pair-find shell)
+  (let loop ((entries g3r-checked-pairs))
+    (cond ((null? entries) #f)
+          ((eq? (vector-ref (car entries) 0) shell) (car entries))
+          (else (loop (cdr entries))))))
+
+(define (g3r-checked-pair-fail category message)
+  (c2-load-fail category 'checkpoint-load message '()))
+
+;;; Registry record: [opaque shell, exact receipt, exact C2 owner,
+;;; copied 288-byte record, SHA256 of all 288 bytes, copied C2-image SHA,
+;;; live/dead]. Only the shell survives retirement.
+(define (g3r-checked-pair-admit-internal source receipt-borrow)
+  (let* ((receipt
+           (g3r-c2-receipt-borrow-find receipt-borrow 'checkpoint-load))
+         (owner (vector-ref receipt 2))
+         (image-sha (g3r-c2-receipt-borrow-sha-internal
+                      receipt-borrow 'checkpoint-load)))
+    (if (not (and (bytevector? source)
+                  (= (bytevector-length source) g3r-record-size)))
+        (g3r-checked-pair-fail 'invalid-argument
+                               "expected exact 288-byte G3RCV1 record"))
+    (let* ((owned (bytevector-copy source 0 g3r-record-size))
+           (fields (make-vector 8 #f)))
+      (g3r-record-decode! owned image-sha fields)
+      (if (not (and (eq? receipt
+                         (g3r-c2-receipt-borrow-find
+                           receipt-borrow 'checkpoint-load))
+                    (eq? owner (vector-ref receipt 2))
+                    (g3r-bytes=? image-sha 0 (vector-ref receipt 3) 0 32)))
+          (g3r-checked-pair-fail 'invalid-state
+                                 "C2 receipt changed during pair admission"))
+      (let* ((record-sha (c1-sha256 owned))
+             (shell (list 'g3r-checked-pair-v1))
+             (entry (vector shell (vector-ref receipt 0)
+                            owner owned record-sha image-sha 'live))
+             (next (cons entry g3r-checked-pairs)))
+        (set! g3r-checked-pairs next)
+        shell))))
+
+;;; Reauthenticate after arbitrary caller/provider activity, including receipt
+;;; borrow-end. The future compositor must call this inside its reservation
+;;; immediately before TR3 and retain this exact shell as replay authority.
+(define (g3r-checked-pair-recheck-internal shell receipt-shell)
+  (let* ((entry (g3r-checked-pair-find shell))
+         (receipt (g3r-c2-receipt-find receipt-shell)))
+    (if (not (and entry receipt
+                  (eq? (vector-ref entry 6) 'live)
+                  (eq? (vector-ref entry 1) receipt-shell)
+                  (vector-ref entry 2)
+                  (eq? (vector-ref entry 2) (vector-ref receipt 2))
+                  (or (and (or (eq? (vector-ref receipt 1) 'live)
+                               (eq? (vector-ref receipt 1) 'restoring))
+                           (not (vector-ref receipt 4)))
+                      (and (not (symbol? (vector-ref receipt 1)))
+                           (vector-ref receipt 4)))
+                  (bytevector? (vector-ref entry 3))
+                  (= (bytevector-length (vector-ref entry 3)) g3r-record-size)
+                  (bytevector? (vector-ref entry 4))
+                  (= (bytevector-length (vector-ref entry 4)) 32)
+                  (bytevector? (vector-ref entry 5))
+                  (= (bytevector-length (vector-ref entry 5)) 32)
+                  (bytevector? (vector-ref receipt 3))
+                  (= (bytevector-length (vector-ref receipt 3)) 32)
+                  (g3r-bytes=? (vector-ref entry 4) 0
+                                (c1-sha256 (vector-ref entry 3)) 0 32)
+                  (g3r-bytes=? (vector-ref entry 3) 224
+                                (vector-ref entry 5) 0 32)
+                  (g3r-bytes=? (vector-ref entry 5) 0
+                                (vector-ref receipt 3) 0 32)))
+        (g3r-checked-pair-fail 'invalid-argument
+                               "expected exact intact G3RCV1/C2 pair"))
+    #t))
+
+;;; Copyout is data only. The returned mutable vector is never replay authority.
+(define (g3r-checked-pair-copy-fields-internal! shell receipt-shell destination)
+  (g3r-checked-pair-recheck-internal shell receipt-shell)
+  (let ((entry (g3r-checked-pair-find shell)))
+    (g3r-record-decode! (vector-ref entry 3) (vector-ref entry 5)
+                        destination)))
+
+(define (g3r-checked-pair-zero! bytes)
+  (let loop ((index 0))
+    (if (< index (bytevector-length bytes))
+        (begin (bytevector-u8-set! bytes index 0)
+               (loop (+ index 1))))))
+
+;;; The exact shell is idempotently tombstoned. No caller can use it again;
+;;; its registry entry retains no C2 owner or replay bytes after this call.
+(define (g3r-checked-pair-retire-internal! shell)
+  (let ((entry (g3r-checked-pair-find shell)))
+    (if (not entry)
+        (g3r-checked-pair-fail 'invalid-argument
+                               "expected exact checked pair shell"))
+    (if (eq? (vector-ref entry 6) 'live)
+        (begin
+          (vector-set! entry 6 'dead)
+          (g3r-checked-pair-zero! (vector-ref entry 3))
+          (g3r-checked-pair-zero! (vector-ref entry 4))
+          (g3r-checked-pair-zero! (vector-ref entry 5))
+          (vector-set! entry 1 #f)
+          (vector-set! entry 2 #f)
+          (vector-set! entry 3 #f)
+          (vector-set! entry 4 #f)
+          (vector-set! entry 5 #f)))
+    #t))

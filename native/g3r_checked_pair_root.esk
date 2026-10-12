@@ -1,0 +1,4 @@
+;;; Private source composition: exact C2/SHA receipt plus G3RCV1 codec.
+(load "g3r_c2_sha_receipt_root.esk")
+(load "g3r_record_codec_extension.esk")
+(load "g3r_checked_pair_extension.esk")
