@@ -27,6 +27,9 @@ jobs:
           - suite: model-composition
             test_target: test-ci-m3-after-build
             timeout: 105
+          - suite: cli3-commands
+            test_target: test-ci-cli3-after-build
+            timeout: 240
           - suite: g3n-forward
             test_target: test-ci-g3n-after-build
             timeout: 75
