@@ -820,6 +820,16 @@ unpacked boundaries use separate independent D2 rows. This is source-only
 preparation. A supported exact-source compiled run, source/tuple review,
 mode/retention prerequisites and the other §9 rows remain open.
 
+The exact `b20c81f1` N2 source candidate has a separately sealed one-use
+fe9/f31 prelaunch bundle (`e3-n2-observer-b20-fe9-f31-20261012-prepared-a`,
+prepared seal SHA-256 `ad9afbb91b60afac705144cdfc9d90a0e195bfda29159cc4d5e67275c32519b2`).
+Its read-only preflight passes. The supported AOT and sanitizer run is still
+unexecuted; the prepared launcher
+checks that run's completion and the shared heavy-Docker slot before starting.
+The bundle retains raw failures and requires a final evidence seal and
+independent raw review. CLI PR #202 overlaps the E1B builder/package policy;
+current-main union review and rerun remain separate integration gates.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
