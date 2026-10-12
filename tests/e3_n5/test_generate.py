@@ -6,26 +6,29 @@ from pathlib import Path
 
 from tests.d2.reference import ReferenceConfig, ReferenceDataset
 from tests.d2.test_resources import load_d1_resource
-from tests.e3_n5.generate import ROWS, SHARD_TOKENS, TOTAL_TOKENS, materialize
+from tests.e3_n5.generate import (EXACT_ROWS, EXACT_TOKENS, ROWS, SHARD_TOKENS,
+                                  TOTAL_TOKENS, materialize)
 from tests.e3_n5.evidence import fixture_digest
 from tests.e3_reference.corpus import FINGERPRINT, VOCAB_SIZE
 
 
 class N5CorpusTests(unittest.TestCase):
-    def test_one_over_and_repeated_generation(self) -> None:
+    def test_exact_boundary_one_over_and_repeated_generation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             roots = [Path(temporary) / name for name in ("a", "b")]
             records = [materialize(root) for root in roots]
             self.assertEqual(records[0], records[1])
             self.assertEqual(
                 fixture_digest(roots[0]),
-                "54300ebc7fed784858cf4d5749ba5313b1a4347690c4391c80bdf611dc093935",
+                "5ab32b6f5098c6cbb020ba00ddc66f54090c63f8303e68ab026540f1cd0bc360",
             )
             for relative in sorted(path.relative_to(roots[0]) for path in roots[0].rglob("*")):
                 if (roots[0] / relative).is_file():
                     self.assertEqual((roots[0] / relative).read_bytes(),
                                      (roots[1] / relative).read_bytes())
-            one_over = records[0]["cases"][0]
+            cases = {case["name"]: case for case in records[0]["cases"]}
+            self.assertEqual(set(cases), {"one-over", "exact-limit", "retry-small"})
+            one_over = cases["one-over"]
             self.assertEqual(one_over["expected_rows"], ROWS)
             self.assertEqual(one_over["active_positions"], 2 * ROWS)
             self.assertEqual(one_over["tokens"], TOTAL_TOKENS)
@@ -48,6 +51,28 @@ class N5CorpusTests(unittest.TestCase):
             ).rows
             self.assertEqual(len(rows), ROWS)
             self.assertTrue(all(row.loss_mask == (True, True) for row in rows))
+            exact = cases["exact-limit"]
+            self.assertEqual(exact["tokens"], EXACT_TOKENS)
+            self.assertEqual(exact["expected_rows"], EXACT_ROWS)
+            self.assertEqual(exact["active_positions"], EXACT_TOKENS - 1)
+            self.assertEqual(len(exact["rows"]), EXACT_ROWS)
+            self.assertEqual(exact["rows"][-1],
+                             {"inputs": [0, 0], "targets": [255, 0],
+                              "mask": [True, False]})
+            exact_shards, exact_digest = load_d1_resource(
+                roots[0] / "exact-limit", expected_fingerprint=FINGERPRINT,
+                expected_vocab=VOCAB_SIZE,
+            )
+            self.assertEqual(tuple(map(len, exact_shards)), (SHARD_TOKENS,) * 8)
+            exact_rows = ReferenceDataset(
+                exact_shards, ReferenceConfig(1, 2, None, 1, True),
+                manifest_digest=exact_digest, tokenizer_fingerprint=FINGERPRINT,
+                vocab_size=VOCAB_SIZE,
+            ).rows
+            self.assertEqual(len(exact_rows), EXACT_ROWS)
+            self.assertTrue(all(row.loss_mask == (True, True)
+                                for row in exact_rows[:-1]))
+            self.assertEqual(exact_rows[-1].loss_mask, (True, False))
 
 
 if __name__ == "__main__":

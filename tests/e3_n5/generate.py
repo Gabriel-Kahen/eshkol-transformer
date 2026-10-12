@@ -14,8 +14,10 @@ from tests.t1.reference import encode_artifact, encode_bytes
 
 WIDTH = 2
 ROWS = 8193
+EXACT_ROWS = ROWS - 1
 SHARD_TOKENS = 2048
 TOTAL_TOKENS = 2 * ROWS + 1
+EXACT_TOKENS = 2 * EXACT_ROWS
 
 
 def _digest(path: Path) -> dict[str, object]:
@@ -31,7 +33,9 @@ def materialize(root: Path) -> dict[str, object]:
     tokenizer.write_bytes(encode_artifact(IDENTITY))
     config = ReferenceConfig(1, WIDTH, None, 1, True)
     cases = []
-    for name, count in (("one-over", TOTAL_TOKENS), ("retry-small", len(SOURCE_BYTES))):
+    for name, count in (("one-over", TOTAL_TOKENS),
+                        ("exact-limit", EXACT_TOKENS),
+                        ("retry-small", len(SOURCE_BYTES))):
         values = tuple(SOURCE_BYTES[i % len(SOURCE_BYTES)] for i in range(count))
         shards = tuple(values[start:start + SHARD_TOKENS]
                        for start in range(0, count, SHARD_TOKENS))
@@ -69,6 +73,12 @@ def materialize(root: Path) -> dict[str, object]:
             assert len(shards) == 9 and len(shards[-1]) == 3
             assert reference.rows[-1].inputs == values[-3:-1]
             assert reference.rows[-1].targets == values[-2:]
+        elif name == "exact-limit":
+            assert independent_count == EXACT_ROWS
+            assert len(shards) == 8 and len(shards[-1]) == SHARD_TOKENS
+            assert reference.rows[-1].inputs == (values[-2], 0)
+            assert reference.rows[-1].targets == (values[-1], 0)
+            assert reference.rows[-1].loss_mask == (True, False)
         else:
             assert independent_count == 3
         cases.append({

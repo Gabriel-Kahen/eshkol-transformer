@@ -9,8 +9,11 @@ reviews the exact source/toolchain pins and the active hosted run is complete.
 
 `tests/e3_n5/generate.py` writes canonical checksummed raw-T1/V256 D1 bytes
 from the six-byte sequence `03 c5 00 ff 07 07`, repeated to 16,387 tokens.
-Eight shards contain 2,048 tokens and the final shard contains three. The
-independent packed D2 equation `ceil((16,387-1)/2)` gives exactly 8,193
+Eight shards contain 2,048 tokens and the final shard contains three. A separate
+16,384-token exact-limit case emits 8,192 rows, with one valid position in its
+last row. This source fixture is prepared and checksummed but has no compiled
+evaluation verdict. The independent packed D2 equation
+`ceil((16,387-1)/2)` gives exactly 8,193
 full `[1,2]` rows and 16,386 active target positions. The generator also
 creates the original six-byte three-row corpus for a later retry. Its
 versioned manifest records tokenizer identity, every file length/SHA-256,
@@ -70,7 +73,7 @@ launch pins before running it:
 | `N5_PROVENANCE_SHA256` | SHA-256 of the supported Eshkol build provenance TSV |
 | `N5_RUNNER_SHA256` | SHA-256 of the pinned `eshkol-run` executable |
 | `N5_CC_SHA256`, `N5_CXX_SHA256` | SHA-256 of the compilers named by that provenance |
-| `N5_CORPUS_INVENTORY_SHA256` | SHA-256 of sorted `sha256  ./relative-path` rows for every generated corpus file; current generator yields `54300ebc7fed784858cf4d5749ba5313b1a4347690c4391c80bdf611dc093935` |
+| `N5_CORPUS_INVENTORY_SHA256` | SHA-256 of sorted `sha256  ./relative-path` rows for every generated corpus file; current generator yields `5ab32b6f5098c6cbb020ba00ddc66f54090c63f8303e68ab026540f1cd0bc360` |
 
 The script validates source and toolchain pins before builds and at exit. It
 validates both generated fixture inventories before builds and at exit. The
