@@ -102,6 +102,12 @@ class DurableTest(unittest.TestCase):
                       "publish:commit-", "sync-dir:commit-"):
             with self.subTest(label=label), tempfile.TemporaryDirectory() as temp:
                 config, release, store, issued = synthetic_case(Path(temp))
+                seal_path = Path(temp) / "preexisting-seal.json"
+                seal_path.write_bytes(seal(issued.receipt))
+                info = seal_path.stat()
+                valid_seal = durable.SealRef(seal_path,
+                    hashlib.sha256(seal_path.read_bytes()).hexdigest(),
+                    info.st_dev, info.st_ino)
                 def fail(name):
                     if name.startswith(label):
                         raise OSError("injected")
@@ -109,7 +115,7 @@ class DurableTest(unittest.TestCase):
                     issued, store, fail).state, "HOLD")
                 self.assertEqual(durable.reconcile_durable(config, release,
                     issued.attempt, store, issued.receipt, None,
-                    self.external_seal()).state, "HOLD")
+                    valid_seal).state, "HOLD")
         result = durable.issue(self.config, self.release, self.issued, self.store)
         self.assertEqual(result.state, "DURABLE")
         self.token = result.token
