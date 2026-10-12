@@ -913,9 +913,10 @@ verdicts remain prerequisites before the full matrix is implemented and run.
 The bounded [R1 source cut inventory](e3/E3_SECTION9_R1_CUT_INVENTORY.md)
 maps genuine E3 reachability, source owners and existing hooks for allocation,
 copy, pin, provider preflight, late read and final publication. Its static
-source/row guard is local only; one-shot cut implementation, independent review
-and compiled failure/retry evidence remain open. Public D2 seek is outside the
-E3 restore tail and validated K1 invoke remains nonfailing.
+source/row guard and inventory passed independent source/tests review at
+`95ae6ae`/tree `b91a8096`. One-shot cut implementation, review of those future
+hooks, and compiled failure/retry evidence remain open. Public D2 seek is
+outside the E3 restore tail and validated K1 invoke remains nonfailing.
 An isolated staged successor adds a separate real-M3 zero-control source tuple
 using the existing I2 14-parameter prepare/commit path before frame binding.
 It retains the staged numerical, retention, wrong-target and uniform controls.
