@@ -2,7 +2,7 @@
 
 Status: **inert, noninstalled, HOLD**. This source is a preflight and raw
 receipt structure checker, not a Docker launcher or a semantic ABI review.
-`scripts/e3-n1-raw-capture.py` never starts a subprocess, executes a guest
+`tests/e3_private/e3-n1-raw-capture.py` never starts a subprocess, executes a guest
 file, calls a provider, or changes import admission. Its source-reviewed plan
 SHA-256 is deliberately `None`; every production invocation writes a bounded
 `HOLD` receipt and exits nonzero. N1/M1 remain HOLD.

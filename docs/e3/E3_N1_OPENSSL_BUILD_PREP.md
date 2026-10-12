@@ -11,7 +11,7 @@ requires separate receipt and seal authorities and immutable export custody.
 
 ## Observed SOURCE/PREP candidate on 2026-10-12
 
-`scripts/e3_n1_prebuild.py` obtained the official archive, detached `.asc`, and
+`tests/e3_private/e3_n1_prebuild.py` obtained the official archive, detached `.asc`, and
 the OpenSSL site's `pubkeys.asc` into external evidence
 `/home/gabe/.codex/evidence/eshkol-transformer/e3-n1-openssl-source-prep-20261012/`.
 The raw archive SHA-256 matches the source pin above. The signature verifies

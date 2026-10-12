@@ -6,7 +6,7 @@ C `3796c7bbca22d9a934cbabdb42b3682f7897d35a`/tree
 `f94a9863dbc4663263548fb0be1a6529b51b58e0`. It is a conditional plan,
 not a `schema: 1` preflight input: the image-selected guest bytes and final
 capture recipe are unknown. `REVIEWED_PLAN_SHA256` in
-`scripts/e3-n1-raw-capture.py` stays `None`; `--capture` remains disabled.
+`tests/e3_private/e3-n1-raw-capture.py` stays `None`; `--capture` remains disabled.
 
 ## Immutable identity chain
 

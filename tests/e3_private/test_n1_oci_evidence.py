@@ -12,7 +12,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-SCRIPT = Path(__file__).resolve().parents[2] / "scripts/e3_n1_oci_evidence.py"
+SCRIPT = Path(__file__).resolve().with_name("e3_n1_oci_evidence.py")
 INDEX = "application/vnd.oci.image.index.v1+json"
 MANIFEST = "application/vnd.oci.image.manifest.v1+json"
 CONFIG = "application/vnd.oci.image.config.v1+json"

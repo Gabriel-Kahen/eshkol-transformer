@@ -9,7 +9,7 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "e3_private"))
 import e3_n1_broker as broker
 import e3_n1_reconcile as reconcile
 

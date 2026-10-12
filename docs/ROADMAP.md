@@ -783,6 +783,10 @@ object/call/depfile inventory is partial: final producer and per-call ABI,
 actual provider/link closure and complete system-header bytes are unavailable.
 The B successor anchors all 17 depfile hashes to the sealed F forensic record
 and fails closed without a separately reviewed ABI/provider claims anchor.
+Seven N1 Python source candidates and their test callers now reside in
+`tests/e3_private/`, with the synthetic broker tests in `tests/e3_n1_broker/`.
+Q0 Python isolation passes without adding a production-path exception; this
+source placement does not admit capture, export, a provider build, N1 or M1.
 The [N1 raw receipt acquisition plan](e3/E3_N1_RAW_RECEIPT_ACQUISITION.md)
 records retained F bytes and the missing image-specific producer, provider,
 loader, header and argv evidence; its only verifier change binds raw record

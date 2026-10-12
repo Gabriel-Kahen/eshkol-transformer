@@ -1,6 +1,6 @@
 # E3 N1 offline OCI byte-evidence candidate
 
-Status: **SOURCE only; HOLD**. `scripts/e3_n1_oci_evidence.py` is a generic,
+Status: **SOURCE only; HOLD**. `tests/e3_private/e3_n1_oci_evidence.py` is a generic,
 read-only offline verifier. It does not pull an image, run Docker, extract a
 layer, launch a build, create a marker/key/release, or grant N1/M1 admission.
 Its tests generate tiny OCI layouts. Neither of the two local f31 gzip layer
@@ -29,7 +29,7 @@ categories, records without their file, duplicate subjects, changed bytes,
 symlinks, noncanonical input and unsupported media types HOLD. The input
 manifest must be separately reviewed and sealed before any production use.
 
-Run `python scripts/e3_n1_oci_evidence.py /absolute/input.json` against a
+Run `python tests/e3_private/e3_n1_oci_evidence.py /absolute/input.json` against a
 separately obtained local OCI layout. On success it prints one canonical
 `e3-n1-oci-evidence-v1` JSON line to stdout, with `status: HOLD`, the exact
 input SHA-256, descriptor chain, ordered compressed size/hash and expanded

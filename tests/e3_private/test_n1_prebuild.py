@@ -13,7 +13,7 @@ import unittest
 from unittest import mock
 
 
-SCRIPT = Path(__file__).resolve().parents[2] / "scripts/e3_n1_prebuild.py"
+SCRIPT = Path(__file__).resolve().with_name("e3_n1_prebuild.py")
 spec = importlib.util.spec_from_file_location("e3_n1_prebuild", SCRIPT)
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
@@ -37,7 +37,7 @@ class PrebuildTests(unittest.TestCase):
     def test_canonical_and_pins(self):
         source = {"archive": {"sha256": mod.SOURCE_SHA256},
                   "verification": {"primary_fingerprint": mod.PRIMARY_FINGERPRINT}}
-        value = mod.candidate(source, SCRIPT.parents[1] / "toolchain/eshkol.lock")
+        value = mod.candidate(source, SCRIPT.parents[2] / "toolchain/eshkol.lock")
         data = mod.canonical(value)
         self.assertEqual(mod.validate_candidate(data, mod.sha256(data)), value)
         with self.assertRaisesRegex(mod.Hold, "candidate-digest-drift"):

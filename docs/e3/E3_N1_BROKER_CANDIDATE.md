@@ -1,6 +1,6 @@
 # E3 N1 synthetic broker candidate
 
-Status: **source-only HOLD**. `scripts/e3_n1_broker.py` is a noninstalled
+Status: **source-only HOLD**. `tests/e3_private/e3_n1_broker.py` is a noninstalled
 library with no CLI, service, production pin, or real F layer route. It
 implements the separate-UID broker's proposed attempt protocol against tiny
 generated source files. It does not establish an actual UID, ACL, ancestor,
@@ -42,7 +42,7 @@ walks. This is a synthetic consumer check. A deployment must separately prove
 the seal's read-only custody and key separation; HMAC bytes alone do not make
 a writable target immutable. There is no automated recovery promotion.
 
-`scripts/e3_n1_reconcile.py` adds a read-only synthetic crash check.
+`tests/e3_private/e3_n1_reconcile.py` adds a read-only synthetic crash check.
 `reconcile(config, attempt, receipt=None, seal=None)` returns
 `Reconciliation(state, reason, attempt)`, where `state` is `HOLD` or `MATCHED`.
 It checks the protected intent, named stage/target inode at open, checksummed
@@ -67,7 +67,7 @@ and changed file checksums all remain HOLD. No real f31 bytes are read.
 
 ## Source-only durable receipt successor (v2)
 
-`scripts/e3_n1_durable.py` leaves the broker and reconciler v1 contracts
+`tests/e3_private/e3_n1_durable.py` leaves the broker and reconciler v1 contracts
 unchanged. `release_descriptor(config, receipt_store, image_id, compiler_head,
 compiler_tree, source_head, source_tree)` freezes the ordered source paths,
 resolved paths, device/inode/mode chain, sizes, SHA-256 values, caps, target,

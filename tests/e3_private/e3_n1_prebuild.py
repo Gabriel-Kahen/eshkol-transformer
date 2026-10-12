@@ -438,7 +438,7 @@ def validate_candidate(data, expected_digest=None, *, recheck=False):
         raise Hold("source-pin-drift")
     if value.get("source", {}).get("verification", {}).get("primary_fingerprint") != PRIMARY_FINGERPRINT:
         raise Hold("trust-anchor-drift")
-    if value != candidate(value["source"], Path(__file__).resolve().parents[1] / "toolchain/eshkol.lock"):
+    if value != candidate(value["source"], Path(__file__).resolve().parents[2] / "toolchain/eshkol.lock"):
         raise Hold("candidate-field-drift")
     if recheck:
         recheck_source(value["source"])
@@ -550,7 +550,7 @@ def main():
     if Path(args.inventory).absolute().parent != Path(args.candidate).absolute().parent:
         raise Hold("output-directory-mismatch")
     source = observed_source(args.archive, args.signature, args.certificate, args.inventory)
-    output = canonical(candidate(source, Path(__file__).resolve().parents[1] / "toolchain/eshkol.lock"))
+    output = canonical(candidate(source, Path(__file__).resolve().parents[2] / "toolchain/eshkol.lock"))
     publish_new(Path(args.candidate).absolute(), output)
     print(sha256(output), args.candidate)
     print("HOLD: supported image/tools/headers/paths/argv/env and ROOT review absent")

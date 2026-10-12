@@ -14,7 +14,7 @@ from pathlib import Path
 from unittest import mock
 
 
-SCRIPT = Path(__file__).resolve().parents[2] / "scripts/e3-n1-raw-capture.py"
+SCRIPT = Path(__file__).resolve().with_name("e3-n1-raw-capture.py")
 spec = importlib.util.spec_from_file_location("e3_n1_raw_capture", SCRIPT)
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)

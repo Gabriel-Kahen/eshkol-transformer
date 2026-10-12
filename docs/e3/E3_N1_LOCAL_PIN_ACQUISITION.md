@@ -10,7 +10,7 @@ The two layer descriptors and local sizes are recorded, but their large bytes
 and uncompressed diff IDs were not checked. This content store is not a
 reviewed OCI-layout export, and no image-selected guest file has been proven.
 
-The bounded successor corrects `scripts/e3-n1-raw-capture.py` to authenticate
+The bounded successor corrects `tests/e3_private/e3-n1-raw-capture.py` to authenticate
 F's ID against the OCI index SHA-256 and select the sole linux/amd64 manifest.
 The prior config-digest comparison could not accept this authentic index.
 The scanner still deliberately rejects gzip layers; capture remains disabled,

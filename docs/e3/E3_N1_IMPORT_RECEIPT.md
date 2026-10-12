@@ -5,7 +5,7 @@ not change the E1B import policy, the numerical package, or the evaluator.
 Numerical F at 94b8fecd/tree d28cffc1 failed before AOT/runtime when the
 sanitized object added bcmp and puts. N1 and M1 remain open.
 
-The script scripts/verify-e3-n1-import-receipt.py pins F's source tree,
+The script tests/e3_private/verify-e3-n1-import-receipt.py pins F's source tree,
 image, compiler, builder, six retained object/IR hashes, and exact 39-call
 relocation roster (14 bcmp, 25 puts). It requires per-call final producer,
 ABI, declaration and provider fields; immutable raw argv/environment,

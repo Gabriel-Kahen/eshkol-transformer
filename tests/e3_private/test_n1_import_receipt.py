@@ -8,7 +8,7 @@ import tempfile
 import unittest
 
 
-SOURCE = Path(__file__).resolve().parents[2] / "scripts/verify-e3-n1-import-receipt.py"
+SOURCE = Path(__file__).resolve().with_name("verify-e3-n1-import-receipt.py")
 SPEC = importlib.util.spec_from_file_location("n1_receipt", SOURCE)
 VERIFIER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(VERIFIER)
