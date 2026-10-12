@@ -51,7 +51,9 @@ unexecuted in compiled Eshkol.
 A further source-only fixture copies the original native generator's 18-word
 idle snapshot before and after the cut. Its test-only bridge calls the
 accepted G3-R ledger create/copy/release API, checks the exact 144-byte
-destination, and publishes the image only after successful release. The full
+destination, and publishes the image only after successful release. The bridge
+requires `ET_G3R_G3T_SAVE_LEDGER_PRIVATE` and the test-only
+`ET_G3R_SAVE_IDLE_LEDGER_TESTING` define. The full
 image comparison covers the four RNG words, ordered committed history and
 counts, and fixed policy words. This observation is also unrun in compiled
 Eshkol. Complete journal/token count, one-use grant replay and fresh recovery,
