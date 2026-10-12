@@ -51,13 +51,14 @@ public generation API is added here.
 
 Focused local evidence: `scripts/test-g3r-committed-history-owner.sh` compiles
 the feature-gated native source, runs the owner-core P1/P2/manual/generated
-partition and EOS test, then exercises the actual native G1 prefill commit,
-abort, denied idle snapshot, detached output release and close functions with
-controlled model/tensor/A2 stubs. It injects a recoverable A2 commit rejection
-and an I1 borrow allocation cut before a G0 commit. A helper-built completed-G1
-ledger and detached output release remain snapshot-positive; the sampled native
-final commit and `call_finish_v1` are not exercised by that positive. A source check maps the
-native hooks and same-aggregate Eshkol wrapper routing. The controlled stubs
-do not prove real A2, model pins, or full P1/P2/manual/G0/G1 Eshkol runtime
-under the new gate. Eshkol SAVE admission and A2 cache-length snapshot
+partition and EOS test, then exercises real native G1 prefill and sampled-final
+frame commits, `call_finish_v1`, same-owner idle snapshots, detached output
+release and close with controlled model/I1/A2 stubs. It also tests a
+recoverable A2 commit rejection, an I1 borrow allocation cut before G0
+commit, an aborted G1 prefill with denied idle snapshot, and a rejected
+successor RNG before G1 final commit that leaves the pending ledger unchanged.
+A source check maps the native hooks and same-aggregate Eshkol wrapper routing.
+The controlled sampled token and I1/A2 views do not prove a real G3-S draw,
+provider, A2 transaction, model pins, or full P1/P2/manual/G0/G1 Eshkol
+runtime under the new gate. Eshkol SAVE admission and A2 cache-length snapshot
 equivalence remain downstream gates.

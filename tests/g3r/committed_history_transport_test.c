@@ -17,6 +17,21 @@
 #include <stdio.h>
 
 static int fail_commit;
+static int final_mode;
+static int64_t final_id = 65, final_length = 2;
+static uint8_t final_mask[2] = {1, 1}, final_dummy;
+static uint64_t final_id_shape[1] = {1}, final_length_shape[1] = {1};
+static uint64_t final_mask_shape[2] = {1, 2};
+static et_kernel_tensor_view_v1 final_id_view = {
+    .data = &final_id, .rank = 1, .shape = final_id_shape,
+    .byte_length = sizeof(final_id)};
+static et_kernel_tensor_view_v1 final_length_view = {
+    .data = &final_length, .rank = 1, .shape = final_length_shape,
+    .byte_length = sizeof(final_length)};
+static et_kernel_tensor_view_v1 final_mask_view = {
+    .data = final_mask, .rank = 2, .shape = final_mask_shape,
+    .byte_length = sizeof(final_mask)};
+static et_kernel_tensor_view_v1 final_data_view = {.data = &final_dummy};
 int32_t et_a2_kv_cache_transaction_commit_v1(
     et_a2_kv_cache_transaction **transaction, et_kernel_error *error) {
   if (fail_commit) {
@@ -55,16 +70,21 @@ int32_t et_f32_parameter_validate_identity_v1(
 #define UNUSED(...) do { (void)sizeof(#__VA_ARGS__); } while (0)
 int32_t et_i64_tensor_borrow_begin_v1(et_i64_tensor *t,
     et_i64_tensor_borrow **b, et_i64_tensor_error *e) {
+  if (final_mode) { *b = (et_i64_tensor_borrow *)t; return 0; }
   UNUSED(t, b);
   e->category = 7;
   return 7;
 }
 int32_t et_i64_tensor_borrow_view_v1(const et_i64_tensor_borrow *b,
     const et_kernel_tensor_view_v1 **v, et_i64_tensor_error *e) {
+  if (final_mode) { UNUSED(b, e); *v = &final_id_view; return 0; }
   UNUSED(b, v, e); return 1;
 }
 int32_t et_i64_tensor_borrow_end_v1(et_i64_tensor_borrow **b,
-    et_i64_tensor_error *e) { UNUSED(b, e); return 1; }
+    et_i64_tensor_error *e) {
+  if (final_mode) { UNUSED(e); *b = NULL; return 0; }
+  UNUSED(b, e); return 1;
+}
 int32_t et_i64_tensor_destroy_v1(et_i64_tensor **t,
     et_i64_tensor_error *e) { UNUSED(e); *t = NULL; return 0; }
 int32_t et_m3_private_i64_unborrowed_v1(const et_i64_tensor *t,
@@ -81,6 +101,9 @@ int32_t et_f32_tensor_destroy_v1(et_f32_tensor **t,
 int32_t et_a2_kv_cache_transaction_view_begin_v1(
     et_a2_kv_cache_transaction *t, uint64_t layer,
     et_a2_kv_cache_transaction_view **v, et_kernel_error *e) {
+  if (final_mode) {
+    UNUSED(layer, e); *v = (et_a2_kv_cache_transaction_view *)t; return 0;
+  }
   UNUSED(t, layer, v, e); return 1;
 }
 int32_t et_a2_kv_cache_transaction_view_tensors_v1(
@@ -89,10 +112,18 @@ int32_t et_a2_kv_cache_transaction_view_tensors_v1(
     const et_kernel_tensor_view_v1 **values,
     const et_kernel_tensor_view_v1 **lengths,
     const et_kernel_tensor_view_v1 **mask, et_kernel_error *e) {
+  if (final_mode) {
+    UNUSED(v, e);
+    *k = *values = &final_data_view;
+    *lengths = &final_length_view;
+    *mask = &final_mask_view;
+    return 0;
+  }
   UNUSED(v, k, values, lengths, mask, e); return 1;
 }
 int32_t et_a2_kv_cache_transaction_view_end_v1(
     et_a2_kv_cache_transaction_view **v, et_kernel_error *e) {
+  if (final_mode) { UNUSED(e); *v = NULL; return 0; }
   UNUSED(v, e); return 1;
 }
 int32_t et_a2_kv_cache_read_borrow_begin_v1(et_a2_kv_cache *c,
@@ -278,7 +309,7 @@ int main(void) {
   assert(!c.history_pending_g1);
   assert(c.h.state == G3T_DEAD);
 
-  /* A completed G1 append clears pending provenance. */
+  /* A real G1 final commit clears pending provenance and publishes RNG. */
   g3t_context complete = {0};
   complete.h.kind = G3T_GENERATOR;
   complete.h.state = G3T_LIVE;
@@ -288,32 +319,79 @@ int main(void) {
   complete.cache = (et_a2_kv_cache *)&parameters[0];
   memcpy(complete.policy, result.policy, sizeof(complete.policy));
   memcpy(complete.rng, result.rng, sizeof(complete.rng));
+  complete.h.busy = 1;
   complete.call_kind = 2;
-  complete.frame.kind = 1;
-  complete.frame.prompt_length = 1;
-  complete.frame.token = 66;
-  g3t_history_commit_prompt(&complete);
-  complete.prefill_committed = 1;
-  assert(complete.history_pending_g1);
-  complete.frame.kind = 2;
-  complete.frame.token = 65;
-  assert(!g3t_history_append_preflight(&complete));
-  g3t_history_commit_append(&complete, 1);
-  complete.call_kind = 0;
-  memset(&complete.frame, 0, sizeof(complete.frame));
-  assert(!complete.history_pending_g1);
-  assert(!et_g3t_private_committed_history_snapshot_v1(&complete, &result));
-  assert(result.length == 2 && result.ids[0] == 66 && result.ids[1] == 65);
-  assert(result.generated_count == 1 && result.generated_eos_terminal == 1);
+  model.active = &complete;
+  complete.pins.held_mask = UINT16_C(0x3fff);
+  for (int i = 0; i < 14; ++i) {
+    complete.pins.views[i].data = binding;
+    complete.pins.views[i].byte_length = i == 13 ? sizeof(binding) : 0;
+    complete.pins.identities[i] = &handles[i];
+    complete.frame.binding_identities[i] = &handles[i];
+  }
   g3t_output completed_output = {0};
   completed_output.h.kind = G3T_OUTPUT;
-  completed_output.h.state = G3T_LIVE;
+  completed_output.h.state = G3T_PENDING;
+  completed_output.h.busy = 1;
   completed_output.h.next = g3t_registry;
   g3t_registry = &completed_output.h;
+  completed_output.parent_ctx = &complete;
   completed_output.ids = (et_i64_tensor *)&parameters[4];
+  complete.pending_output = &completed_output;
+  complete.frame.active = complete.frame.kind = 1;
+  complete.frame.prompt_length = 1;
+  complete.frame.token = 66;
+  complete.frame.next_ordinal = 21;
+  complete.frame.prepared = 1;
+  complete.frame.transaction = (et_a2_kv_cache_transaction *)&parameters[1];
+  complete.frame.candidate_cache = (et_a2_kv_cache *)&parameters[2];
+  assert(!et_g3t_private_frame_commit_v1(&complete));
+  assert(complete.history_length == 1 && complete.history_ids[0] == 66);
+  assert(complete.history_pending_g1);
+  complete.sampled = 1;
+  complete.sample_token = 65;
+  memcpy(complete.successor_rng, complete.rng, sizeof(complete.rng));
+  complete.successor_rng[2] = 0;
+  complete.successor_rng[3] = 8;
+  completed_output.P = completed_output.G = completed_output.length = 1;
+  completed_output.cache_length = 2;
+  completed_output.numeric_ready = completed_output.ids_copied =
+      completed_output.text_ready = 1;
+  completed_output.staged_id[0] = 65;
+  memcpy(completed_output.rng, complete.successor_rng,
+         sizeof(completed_output.rng));
+  complete.frame.active = 1;
+  complete.frame.kind = 2;
+  complete.frame.token = 65;
+  complete.frame.next_ordinal = 21;
+  complete.frame.prepared = 1;
+  complete.frame.transaction = (et_a2_kv_cache_transaction *)&parameters[1];
+  completed_output.rng[2] = -1;
+  assert(et_g3t_private_call_prepare_end_v1(&complete));
+  assert(complete.history_length == 1 && complete.history_pending_g1 &&
+         complete.rng[2] == -1 && !complete.frame.end_prepared &&
+         complete.pending_output == &completed_output);
+  completed_output.rng[2] = 0;
+  final_mode = 1;
+  assert(!et_g3t_private_call_prepare_end_v1(&complete));
+  assert(!et_g3t_private_frame_commit_v1(&complete));
+  assert(!complete.history_pending_g1);
+  assert(complete.final_committed && !complete.pending_output &&
+         completed_output.h.state == G3T_LIVE &&
+         !completed_output.parent_ctx && !completed_output.staged_id[0]);
+  assert(!et_g3t_private_call_finish_v1(&complete));
+  assert(!complete.h.busy && !complete.call_kind && !model.active);
+  assert(!et_g3t_private_committed_history_snapshot_v1(&complete, &result));
+  assert(result.length == 2 && result.ids[0] == 66 && result.ids[1] == 65);
+  assert(result.prompt_length == 1 && result.generated_count == 1 &&
+         !result.manual_count && result.generated_eos_terminal == 1);
+  assert(!memcmp(result.policy, complete.policy, sizeof(result.policy)) &&
+         result.rng[0] == 1 && result.rng[1] == 1729 &&
+         result.rng[2] == 0 && result.rng[3] == 8);
+  sentinel = result;
   assert(!et_g3t_private_output_release_v1(&completed_output));
   assert(!et_g3t_private_committed_history_snapshot_v1(&complete, &result));
-  assert(result.length == 2 && result.generated_count == 1);
+  assert(!memcmp(&result, &sentinel, sizeof(result)));
   assert(!et_g3t_private_generator_close_v1(&complete));
   puts("G3-R committed history native transport PASS");
   return 0;
