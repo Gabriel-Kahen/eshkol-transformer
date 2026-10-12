@@ -16,6 +16,10 @@ CALLER = "native/g3r_same_owner_save_caller_extension.esk"
 CALLER_SHA256 = "01a14412f39fbe83413938a5536eec89900a9cf8e1bd541d488103dfca91bdef"
 CLOSURE = "native/g3r_same_owner_o2_adoption_source_closure.txt"
 CLOSURE_SHA256 = "096f6e8470fb56017333ba25c03e1bd53515a5f3eec5d22afa6598592608ecf8"
+REPAIRED_CORE = "native/tr3_lease_core_extension.esk"
+REPAIRED_CORE_SHA256 = "973cdcef35102734cd3b9e76d29c36fec9c4341b07757ebe11c5127526bab059"
+E3_LOAD_SOURCE = "internal/e3/lib/e3_d2_restore.esk"
+E3_LOAD_ALIAS = "native/e3_d2_restore.esk"
 MANUAL_PREFILL = ("native/g3t_manual_p1_extension.esk",
                   "native/g3m_prefill_p1_extension.esk")
 FIXTURES = ("tests/g3r/save_post_adoption_cut_root.esk",
@@ -74,18 +78,23 @@ def prepare(output: Path) -> None:
     changed = subprocess.run(["git", "diff", "--name-only", BASE, "--",
                               *files, *MANUAL_PREFILL, LEDGER_HEADER],
                              cwd=ROOT, check=True, capture_output=True, text=True)
-    if changed.stdout:
+    if set(changed.stdout.splitlines()) != {REPAIRED_CORE}:
         raise ValueError("production Eshkol closure differs from accepted base")
+    if sha256((ROOT / REPAIRED_CORE).read_bytes()) != REPAIRED_CORE_SHA256:
+        raise ValueError("repaired lease core changed")
     if len(files) != len(set(files)) or not files or files[0] != \
             "native/g3r_same_owner_o2_adoption_root.esk":
         raise ValueError("invalid recursive Eshkol source closure")
-    required = {CALLER, "native/g3r_same_owner_o2_adoption_extension.esk",
+    required = {CALLER, REPAIRED_CORE,
+                "native/g3r_same_owner_o2_adoption_extension.esk",
                 "native/c2_training_state_extension.esk",
                 "internal/p1/lib/transformer/module.esk",
                 "native/o2_wave2_extension.esk",
                 "native/g3r_training_controls_extension.esk"}
     if not required.issubset(files):
         raise ValueError("real P1/O2/C2/adoption leaves are missing")
+    if E3_LOAD_SOURCE not in files or E3_LOAD_ALIAS in files:
+        raise ValueError("E3 load source or alias closure changed")
     for name in (*FIXTURES, NATIVE_FIXTURE, LEDGER_FIXTURE,
                  *NATIVE_TEST_SEAM, LEDGER_HEADER):
         committed = subprocess.check_output(["git", "show", f"HEAD:{name}"],
@@ -104,6 +113,11 @@ def prepare(output: Path) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / relative, target)
         copied.append(target)
+    # The installed root loads this basename from native. Stage identical
+    # bytes there so the frozen fixture resolves it without a launcher flag.
+    alias = source_root / E3_LOAD_ALIAS
+    shutil.copyfile(source_root / E3_LOAD_SOURCE, alias)
+    copied.append(alias)
     for name in (*FIXTURES, NATIVE_FIXTURE, LEDGER_FIXTURE,
                  *NATIVE_TEST_SEAM, LEDGER_HEADER):
         target = source_root / name
@@ -122,6 +136,8 @@ def prepare(output: Path) -> None:
     manifest.write_text("".join(f"{key}\t{value}\n" for key, value in (
         ("source_commit", commit), ("source_tree", tree),
         ("accepted_caller_commit", BASE), ("accepted_caller_sha256", CALLER_SHA256),
+        ("repaired_lease_core_sha256", REPAIRED_CORE_SHA256),
+        ("e3_load_alias_source", E3_LOAD_SOURCE),
         ("compiler_commit", FE9), ("compiler_runner_sha256", FE9_RUNNER_SHA256),
         ("runtime_archive_sha256", FE9_RUNTIME_SHA256),
         ("container_digest", F31),

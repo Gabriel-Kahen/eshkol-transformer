@@ -11,9 +11,13 @@ leaves on one original generator/model/optimizer/capsule graph.
 `tests/g3r/prepare_save_post_adoption_cut.py --output ABSOLUTE_FRESH_DIR`
 copies the accepted recursive Eshkol closure into a read-only source tree and
 generates one test-only caller. It rejects any change to the accepted caller
-or any file in its 96-file recursive closure. It adds the two accepted manual
+or any file in its 96-file recursive closure except the exact pinned lease
+guard syntax repair. It adds the two accepted manual
 P1 prefill helpers and verifies both fixture files against committed HEAD
-before copying. A source-only successor also copies the committed test-only
+before copying. The fixture stages an identical, checksummed
+`native/e3_d2_restore.esk` load alias for the accepted
+`internal/e3/lib/e3_d2_restore.esk` because the installed root loads that
+basename. A source-only successor also copies the committed test-only
 native bit observer and the two committed F32 test-seam files. The generated caller differs
 only at two sites: one call to the test failure hook immediately after the
 root-cell publication, and a counted wrapper around the real abandon call.
@@ -34,6 +38,14 @@ closure and the compiled behavior have **not** been validated. A supported
 launcher must use the prepared read-only tree, verify the fe9/f31 pins live,
 build the genuine native G3/M3/P1/O2/C2 union, retain compiler/runtime and
 source-closure logs, and seal its outputs before this gate can pass.
+
+The first H run from `c9bad736` failed in the normal compiler before runtime:
+`tr3_lease_core_extension.esk:1212` reported an empty guard body, and
+`e3_d2_restore.esk` was unresolved. The guard's construction expression was
+parsed into its handler clause; the E3 source was present in the fixture but
+the H launcher did not include its directory. The repaired guard and fixture
+alias require a new one-use prepared H run. The failed run remains sealed at
+`/home/gabe/.codex/evidence/eshkol-transformer/g3r-save-post-adoption-idle-c9bad736-20261012-prepared-h`.
 
 The source-only bit-image successor reads fourteen original gradient backing
 images through a test-only exact-owner bridge after trainer capsule release.

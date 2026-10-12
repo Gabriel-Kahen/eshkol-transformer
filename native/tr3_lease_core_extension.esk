@@ -1183,7 +1183,7 @@
                                          (#t (tr3-lease-fail-stop 134)))
                                   (tr3-lease-unenroll-internal! trainer)))
                           (vector-set! pending 0 #f)
-                          (raise caught)))
+                          (raise caught))))
                ;; The first operation after genuine construction is the rooted
                ;; shell assignment. Every later lookup/copy may fail safely.
                (let ((trainer (tr3-lease-create-internal a b c d e)))
@@ -1209,7 +1209,7 @@
                    (vector-set! row 6 'idle)
                    (set! issued next)
                    (vector-set! pending 0 #f)
-                   shell))))))
+                   shell)))))
           ((eq? mode 'originals)
            (let* ((row (live-row a)) (o (vector-ref row 3)))
              (vector (vector-ref o 0) (vector-ref o 1)

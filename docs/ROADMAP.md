@@ -1876,9 +1876,11 @@ The guarded adoption return now publishes its shell into a preallocated heap
 cell before any post-adoption operation, so cleanup reads stable authority
 after Eshkol longjmp. Parsed negative ordering tests cover this repair;
 the [compiled post-adoption and one-use gate](g3/G3_R_SAVE_POST_ADOPTION_FAILURE_GATE.md)
-has a pinned test-only Eshkol fixture and immutable source preparation. Its
-native archive closure and compiled execution remain pending; no Docker gate
-has run.
+has a pinned test-only Eshkol fixture and immutable source preparation. The
+first one-use H normal build from `c9bad736` stopped before execution: the
+lease construction guard had no parsed body, and the launcher omitted the E3
+restore load directory. The focused source/fixture repair closes these two
+compile blockers; a fresh prepared H compile and execution remain pending.
 A bounded source-only successor adds pre/post fault exact-owner witnesses for
 all fourteen original value and gradient bit images and the tied head/token
 handle. It uses the existing I2 value encoder and a feature-gated test bridge

@@ -2,15 +2,40 @@
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from tests.c2.test_handler_order import parse
+from tests.g3r import prepare_save_post_adoption_cut as prep
 from tests.g3r.prepare_save_post_adoption_cut import (
     ROOT, CALLER, ADOPTION_RETURN, ABANDON, F31, FE9,
-    FE9_RUNNER_SHA256, FE9_RUNTIME_SHA256, frozen_caller, prepare,
+    FE9_RUNNER_SHA256, FE9_RUNTIME_SHA256, E3_LOAD_ALIAS, E3_LOAD_SOURCE,
+    REPAIRED_CORE, frozen_caller, prepare,
 )
+from tests.g3r.test_training_controls_capsule_source import branch, descendants
 
 
 class PostAdoptionPreparation(unittest.TestCase):
+    def test_lease_create_guard_has_handler_and_body(self):
+        source = (ROOT / REPAIRED_CORE).read_text()
+        def construction_guard(text):
+            route = parse(text)[-1]
+            create = branch(route, "create")
+            return next(g for g in descendants(create, "guard")
+                        if "tr3-lease-unenroll-internal!" in str(g[1]))
+        guard = construction_guard(source)
+        self.assertEqual(len(guard), 3)
+        self.assertEqual(guard[1][0], "caught")
+        self.assertIn("['vector-set!', 'pending', '0', '#f']", str(guard[1]))
+        self.assertIn("['raise', 'caught']", str(guard[1]))
+        self.assertEqual(guard[2][0], "let")
+        self.assertIn("['tr3-lease-create-internal', 'a', 'b', 'c', 'd', 'e']",
+                      str(guard[2]))
+        broken = source.replace("(raise caught))))\n               ;; The first operation",
+                                "(raise caught)))\n               ;; The first operation", 1)
+        broken = broken.replace("                   shell)))))\n          ((eq? mode 'originals)",
+                                "                   shell))))))\n          ((eq? mode 'originals)", 1)
+        self.assertEqual(len(construction_guard(broken)), 2)
+
     def test_generated_cut_preserves_real_caller_and_one_cleanup(self):
         original = (ROOT / CALLER).read_text()
         generated = frozen_caller(original)
@@ -39,6 +64,8 @@ class PostAdoptionPreparation(unittest.TestCase):
             self.assertTrue(sums.is_file())
             self.assertIn("source-prepared; compiled gate not run",
                           (destination / "PREPARED.tsv").read_text())
+            self.assertIn("repaired_lease_core_sha256\t" + prep.REPAIRED_CORE_SHA256,
+                          (destination / "PREPARED.tsv").read_text())
             root = (destination / "source/tests/g3r/save_post_adoption_cut_root.esk").read_text()
             self.assertIn('(load "g3r_training_controls_root.esk")', root)
             self.assertIn('(load "g3m_prefill_p1_extension.esk")', root)
@@ -47,6 +74,11 @@ class PostAdoptionPreparation(unittest.TestCase):
             self.assertIn(":real et_g3r_test_save_idle_ledger_copy_v1", root)
             self.assertTrue((destination / "source/native/c2_training_state_extension.esk").is_file())
             self.assertTrue((destination / "source/internal/p1/lib/transformer/module.esk").is_file())
+            self.assertEqual((destination / "source" / E3_LOAD_ALIAS).read_bytes(),
+                             (destination / "source" / E3_LOAD_SOURCE).read_bytes())
+            self.assertIn(f"source/{E3_LOAD_ALIAS}", sums.read_text())
+            self.assertIn('(load "e3_d2_restore.esk")',
+                          (destination / "source/native/tr3_public_installed_root.esk").read_text())
             self.assertTrue((destination / "source/tests/g3r/save_model_bits_bridge.c").is_file())
             self.assertTrue((destination / "source/tests/g3r/save_idle_ledger_bridge.c").is_file())
             self.assertEqual(
@@ -68,6 +100,12 @@ class PostAdoptionPreparation(unittest.TestCase):
                           "(source-domain g3r-save-o2-adoption))", runtime)
             with self.assertRaises(ValueError):
                 prepare(destination)
+
+    def test_repaired_core_pin_rejects_changed_bytes(self):
+        with tempfile.TemporaryDirectory(prefix="g3r-cut-pin-") as directory:
+            with mock.patch.object(prep, "REPAIRED_CORE_SHA256", "0" * 64):
+                with self.assertRaisesRegex(ValueError, "repaired lease core changed"):
+                    prepare(Path(directory) / "prepared")
 
     def test_supported_runtime_pins_match_existing_gate(self):
         candidate = (ROOT / "tests/tr3_lease/runtime_candidate.tsv").read_text()
