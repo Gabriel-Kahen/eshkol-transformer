@@ -47,6 +47,7 @@
        (and (not (eq? ids-a ids-b))
             (not (eq? ids-a lengths)) (not (eq? lengths cache))))
 (define first (bytevector-u8-ref text-b 0))
+(define second (bytevector-u8-ref text-b 1))
 (bytevector-u8-set! text-a 0 99)
 (check "text mutation leaves source unchanged"
        (= (bytevector-u8-ref (car (generation-output-text output)) 0)
@@ -82,6 +83,57 @@
             (generation-tensor-release! eos-id)
             (generation-tensor-release! eos-length)
             (generation-tensor-release! eos-cache)))
+
+;;; A second EOS requires distinct first and second IDs. Prefer the fixed
+;;; greedy witness; find a bounded categorical witness if they happen to match.
+(define (find-distinct-second seed)
+  (if (> seed 64) #f
+      (let* ((candidate-generator
+               (generator-create model tokenizer
+                 (policy 'categorical seed #f)))
+             (candidate-output
+               (generator-generate! candidate-generator input))
+             (candidate-text
+               (car (generation-output-text candidate-output)))
+             (id0 (bytevector-u8-ref candidate-text 0))
+             (id1 (bytevector-u8-ref candidate-text 1)))
+        (generation-output-release! candidate-output)
+        (generator-close! candidate-generator)
+        (if (= id0 id1)
+            (find-distinct-second (+ seed 1))
+            (vector 'categorical seed id0 id1)))))
+(define second-witness
+  (if (= first second)
+      (find-distinct-second 1)
+      (vector 'greedy 41 first second)))
+(check "distinct second EOS witness" second-witness)
+(define second-eos-generator
+  (generator-create model tokenizer
+    (policy (vector-ref second-witness 0)
+            (vector-ref second-witness 1)
+            (vector-ref second-witness 3))))
+(define second-eos-output
+  (generator-generate! second-eos-generator input))
+(define second-eos-text
+  (car (generation-output-text second-eos-output)))
+(check "second EOS remains a logical G2 result"
+       (and (= (bytevector-length second-eos-text) 2)
+            (= (bytevector-u8-ref second-eos-text 0)
+               (vector-ref second-witness 2))
+            (= (bytevector-u8-ref second-eos-text 1)
+               (vector-ref second-witness 3))))
+(define second-eos-id
+  (car (generation-output-ids second-eos-output)))
+(define second-eos-length
+  (generation-output-lengths second-eos-output))
+(define second-eos-cache
+  (generation-output-cache-lengths second-eos-output))
+(check "second EOS result owners release after source"
+       (and (generation-output-release! second-eos-output)
+            (generator-close! second-eos-generator)
+            (generation-tensor-release! second-eos-id)
+            (generation-tensor-release! second-eos-length)
+            (generation-tensor-release! second-eos-cache)))
 
 (define categorical-generator
   (generator-create model tokenizer (policy 'categorical 97 #f)))

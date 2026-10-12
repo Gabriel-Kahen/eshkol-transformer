@@ -2725,6 +2725,11 @@ publication, public G2 and continuation remain pending.
   is uncompiled; private terminal compiled proof, public facade normal/repeat/
   sanitizer runs, predecessor parity and installed-package closure remain
   required before admission. The C2/G0 aggregate remains separate.
+  The queued installed public fixture now includes a bounded second-EOS
+  witness. Direct facade-result I1 shape/value inspection, held-lease retry,
+  and fault/abort cuts still need a compiled same-aggregate test harness with
+  test-only native hooks; the public result API is opaque. Exact emitted
+  symbol manifests remain unchanged pending that compiled review.
 
 ## Wave 4 — practical pretraining and performance
 

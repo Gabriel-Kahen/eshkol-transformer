@@ -102,6 +102,7 @@ assert g2_adapter.index("g3c4-p2g2-terminal-ids-copy-internal") < g2_adapter.rin
 assert "g3c4-p2g2-terminal-entry-live source operation" in g2_adapter
 assert "public_g2_runtime.esk" in source("scripts/test-g3g-manual-public.sh")
 assert "G3G-MANUAL-PUBLIC-G2-PASS" in source("tests/g3g_manual/public_g2_runtime.esk")
+assert "second EOS remains a logical G2 result" in source("tests/g3g_manual/public_g2_runtime.esk")
 assert "g3c4-public-transport-member generator" in manual_facade
 assert "g3c4-public-model-member generator" in manual_facade
 assert "(g3c4-public-generator-generate generator input)" in manual_facade

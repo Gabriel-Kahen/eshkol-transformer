@@ -130,6 +130,21 @@ Only an installed-package runtime and symbol/source-closure gate can admit
 the public facade. No G3-R SAVE or data-only continuation format is defined
 here.
 
+The queued installed public fixture covers non-EOS, first EOS, second EOS,
+categorical output, detached text/owner release, malformed config, and C2/P2-G1
+predecessor parity through the existing manual-package runner. It has not run.
+The public tensor API intentionally exposes opaque result owners, so direct
+rank-one shape/value reference checks and a held-I1-lease/retry on a result
+created by this facade require a compiled same-aggregate test harness with
+reviewed test-only native inspection/borrow hooks. The separate rank-one
+owner native normal/sanitizer test checks those mechanics without proving
+the facade's value wiring. Public fault/abort cuts likewise require compiled
+terminal fault hooks; private terminal source tests alone do not prove public
+error-boundary behavior. Exact emitted defined/undefined/public-string symbol
+manifests must be regenerated and reviewed from that compiled package before
+the installed closure gate can pass. No source checker stands in for these
+runtime and manifest gates.
+
 ## Isolated result-owner prerequisite candidate
 
 `ET_G3C4_P2_G2_PUBLIC_RESULT_PRIVATE` adds an uninstalled native constructor
