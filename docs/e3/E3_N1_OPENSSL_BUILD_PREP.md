@@ -73,21 +73,32 @@ part of the environment, but its value alone does not establish a different
 default-provider implementation. No host OpenSSL, alternate provider, HMAC,
 or implicit fallback is allowed.
 
-## Immutable evidence manifest required before a prepared gate
+## Frozen prebuild inputs and postbuild closure evidence
 
-Produce a versioned, canonical, checksummed, non-executable manifest rooted in
-one reviewed build-input digest. Each path entry records its role, absolute
-path, file kind, mode, owner, symlink chain, byte size and SHA-256. Record
-`UNMEASURED/HOLD` for an unavailable value; do not copy a candidate hash into
-an observation field. The reviewed manifest and sealed raw evidence must bind:
+Before the one-use prepared gate, ROOT reviews a versioned, canonical,
+checksummed, non-executable **input manifest**. It freezes the source archive,
+detached signature and trusted fingerprint; build image and exact toolchain,
+tools and existing headers; protected paths, proposed link/config policy,
+complete build and verifier argv/environment; candidate header/dependency
+inventory; and the approved discovery and rejection procedure. Each existing
+path entry records its role, absolute path, kind, mode, owner, symlink chain,
+size and SHA-256. Candidate paths are labeled as candidates, never as observed
+closure. The input digest is fixed before Configure or compilation.
 
-| Closure | Required exact evidence |
+The later build emits a separate, versioned, checksummed **output/closure
+manifest**, bound to that exact input digest and one-use nonce. It records the
+actual generated and read headers, built binaries, provider and loader
+observations, and command/test evidence below. Its bytes require independent
+review before any release descriptor can use them. Every unmeasured output is
+`UNMEASURED/HOLD`; a candidate hash cannot fill an observation field.
+
+| Area | Prebuild input and postbuild output evidence |
 | --- | --- |
-| Source/build tools | Archive URL, raw digest, detached signature and independently trusted signing fingerprint; extracted tree inventory; image/OS/architecture digest; exact `toolchain/eshkol.lock`; `Configure`, Perl and `Text::Template`, Make, Clang/C++ driver, linker, assembler, archiver and `pkg-config` paths, versions and hashes; all build argv/env; `configdata.pm`, generated `Makefile`, flags and complete command log. |
-| Headers | Actual compiler include search order and every direct/transitive header read for each OpenSSL and verifier translation unit, including generated OpenSSL, installed OpenSSL, compiler resource, libc and other development/system headers. Cross-check depfiles against a full include/file-open trace; hash bytes and symlink chains. A package/version list or host candidate is insufficient. |
-| Installed binaries | `libcrypto.so.3` bytes, SHA-256, ELF build ID, SONAME, architecture, exported and consumed symbol versions; `libssl` and `openssl` if produced; installed generated headers and any module bytes. Record the exact verifier source/tree, compile/link argv, executable bytes/build ID, ABI (public key and signature lengths, signed message construction, return semantics), undefined symbols, relocations, and resolved symbol providers. |
-| Provider/config | Source-backed built-in default-provider proof plus runtime provider name, explicit load/fetch results and actual `provider=default` selection. Pin `OPENSSL_CONF`, `OPENSSL_MODULES`, config file bytes/ancestry, module search policy and any attempted module loads, property query, `OPENSSL_CONF_INCLUDE`, `OPENSSL_ENGINES`, and all other relevant environment. Missing or ambiguous provider resolution is HOLD. |
-| ELF/loader | Interpreter and loader bytes/build IDs, all `DT_NEEDED`, `RPATH`/`RUNPATH`, `ld.so` configuration/cache and search order, direct/transitive dependency paths, hashes, modes, symlinks and symbol resolution. Preserve a controlled actual loader observation and process maps, separately from `readelf` candidates. Pin `LD_LIBRARY_PATH`, `LD_PRELOAD`, `LD_AUDIT` and namespace/mount routes; reject unreviewed preload or dependency substitution. |
+| Source/build tools | Input: archive URL/raw digest/signature/trusted fingerprint, extracted tree inventory, image/OS/architecture digest, exact `toolchain/eshkol.lock`, `Configure`, Perl and `Text::Template`, Make, Clang/C++ driver, linker, assembler, archiver and `pkg-config` paths/versions/hashes, and frozen argv/env/flags. Output: `configdata.pm`, generated `Makefile`, complete command log and test results. |
+| Headers | Input: existing compiler-resource, libc and development-header candidates plus exact include-trace/depfile discovery method. Output: actual include search order and every direct/transitive header read for each OpenSSL and verifier translation unit, including generated and installed OpenSSL headers. Cross-check depfiles against a full include/file-open trace; hash bytes and symlink chains. A package/version list or host candidate is insufficient. |
+| Installed binaries | Input: verifier source/tree, ABI contract (public key and signature lengths, signed message construction, return semantics), proposed compile/link argv and link mode. Output: `libcrypto.so.3` SHA-256/build ID/SONAME/architecture, exported and consumed symbol versions; `libssl`/`openssl` if produced; installed headers and module bytes; verifier executable bytes/build ID, undefined symbols, relocations and resolved symbol providers. |
+| Provider/config | Input: source-backed built-in default-provider proof; `OPENSSL_CONF`, `OPENSSL_MODULES`, config bytes/ancestry, module search policy, property query, `OPENSSL_CONF_INCLUDE`, `OPENSSL_ENGINES` and other relevant environment. Output: runtime provider name, explicit load/fetch results, actual `provider=default` selection and attempted module loads. Missing or ambiguous provider resolution is HOLD. |
+| ELF/loader | Input: interpreter and loader candidates, `ld.so` configuration/cache, search policy, `LD_LIBRARY_PATH`, `LD_PRELOAD`, `LD_AUDIT`, and namespace/mount routes. Output: actual interpreter/loader bytes/build IDs, `DT_NEEDED`, `RPATH`/`RUNPATH`, direct/transitive dependency paths, hashes, modes, symlinks, symbol resolution, controlled loader observation and process maps. Reject unreviewed preload or dependency substitution. |
 
 The later evidence collector must compare discovery to the frozen input plan
 and fail on missing, duplicate, added or changed paths, unknown provider loads,
@@ -100,8 +111,8 @@ pins are currently **HOLD**.
 
 ## One-use prepared execution gate (design only)
 
-ROOT reviews the complete source/build-input manifest and supplies a fresh
-unpredictable nonce through a protected channel. The later preparer binds
+ROOT reviews only the complete frozen **prebuild input manifest** and supplies
+a fresh unpredictable nonce through a protected channel. The later preparer binds
 `(schema, accepted base commit/tree, source SHA-256, build-input manifest
 SHA-256, nonce, authorized next step)` in a canonical prepared record in a
 protected directory. A separate exact-attempt `O_EXCL`/no-replace consumption
@@ -112,6 +123,8 @@ After a crash or uncertain consumption it remains spent/HOLD; a new nonce and
 review are needed. No marker or nonce is created or consumed by this document.
 Prepared means only that one exact build attempt may start; it conveys no
 receipt issuance, seal authority, release admission, or N1/M1 status.
+The resulting output/closure manifest binds the consumed nonce and input
+digest, and must pass separate review before release use.
 
 ## Subsequent synthetic and negative gates
 
