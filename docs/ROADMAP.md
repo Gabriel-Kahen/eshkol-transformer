@@ -2690,9 +2690,15 @@ publication, public G2 and continuation remain pending.
   [accepted same-call ownership contract](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md)
   specifies one original pending output entry, a surviving terminal anchor,
   authentic T1/EOS/second-token composition, and a preflighted no-failure close
-  after native commit. Native terminal integration and logical I1 clone code
-  are prerequisites; Eshkol implementation and compiled same-call proof remain
-  pending. No public G2 or continuation acceptance is claimed.
+  after native commit. The scoped
+  `native/g3c4_p2g2_terminal_close_extension.esk` candidate now composes
+  the accepted native terminal and logical I1 clone symbols on exact main
+  `09f7ed52`, with one same-call EOS/second-token route, lexical original
+  allocation witnesses, a surviving terminal anchor, and detached snapshot
+  and clone adapters. Its focused source checker and fault fixtures are
+  staged; current-main compiled normal/repeat/sanitizer, emitted-tail and
+  predecessor gates remain pending. This private candidate supplies no public
+  G2, data-only continuation, or Wave 3 completion claim.
 
 ## Wave 4 — practical pretraining and performance
 
