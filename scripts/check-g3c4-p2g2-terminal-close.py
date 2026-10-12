@@ -109,6 +109,19 @@ for phrase in (
     "held pending lease rejects abort without mutation",
     "held pending lease rejects native terminal preflight",
     "same-region terminal retry after held lease",
+    "terminal generator owner drift rejected",
+    "terminal model owner drift rejected",
+    "terminal tokenizer core drift rejected",
+    "terminal child ledger drift rejected",
+    "terminal phase ledger drift rejected",
+    "paired equal-length terminal first raw substitution rejected",
+    "paired equal-length terminal first staging substitution rejected",
+    "equal-length terminal second raw substitution rejected",
+    "equal-length terminal second staging substitution rejected",
+    "paired equal-length terminal second raw/staging substitution rejected",
+    "paired equal-length terminal pending raw substitution rejected",
+    "paired equal-length terminal pending staging substitution rejected",
+    "terminal original owner and carriers repaired in-region",
     "dead terminal original anchor substitution rejected",
     "dead clone original readback substitution rejected",
     "P2/P3 cache and original/first RNG survive abort",
@@ -151,6 +164,10 @@ assert "COMPOSER_SECOND " in native_fixture
 assert "et_g3c4_p2g2_coordinator_test_prefix_v1(" in native_fixture
 assert "et_g3c4_p2g2_coordinator_test_observe_v1(" in native_fixture
 assert "reference.philox" in oracle and "reference.literal" in oracle
+assert "def advance_rng(entry, draws):" in oracle
+assert "terminal row must include four detached snapshot RNG words" in oracle
+assert "actual == expected" in oracle and "snapshot-rng=8" in oracle
+assert "(vector-ref snapshot index)" in fixture
 assert "normal-run.stdout" in runner and "sanitize-run.stdout" in runner
 overlay_generator = (root / additions[8]).read_text()
 assert "T1_SHA =" in overlay_generator and "COMPOSER_SHA =" in overlay_generator

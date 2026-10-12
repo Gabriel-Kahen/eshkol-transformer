@@ -276,6 +276,11 @@
     (display " ") (display (vector-ref snapshot 0))
     (display " ") (display (vector-ref snapshot 1))
     (display " ") (display (vector-ref snapshot 3))
+    (let emit-rng ((index 4))
+      (if (< index 8)
+          (begin
+            (display " ") (display (vector-ref snapshot index))
+            (emit-rng (+ index 1)))))
     (newline)
     snapshot))
 
@@ -293,6 +298,117 @@
 (case-run prompt-a 0 255 'categorical-singleton 7 #f 2 0)
 (case-run prompt-a 0 255 'categorical 7 #f 2 1)
 (case-run prompt-a 0 255 'categorical 7 #f 2 2)
+
+(define (terminal-drift-probes call terminal)
+  (let* ((record (g3c4-p2g2-protected-for call))
+         (scope-anchor (g3c4-p2g2-anchor-for call))
+         (prefix (g3c4-p2g2-prefix-anchor-for call))
+         (generator-entry (vector-ref record 1))
+         (model-entry (vector-ref record 2))
+         (token-entry (t1-private-entry (vector-ref record 3)))
+         (ledger (vector-ref record 14))
+         (output (vector-ref terminal 2))
+         (auxiliary (vector-ref output 8))
+         (authenticate
+           (lambda ()
+             (g3c4-p2g2-terminal-active-check
+               call (vector-ref prefix 1) (vector-ref prefix 2)
+               (vector-ref prefix 3) terminal 'terminal-drift-probe))))
+    (let ((owner (vector-ref generator-entry 9)))
+      (vector-set! generator-entry 9 #f)
+      (reject "terminal generator owner drift rejected" authenticate)
+      (vector-set! generator-entry 9 owner))
+    (let ((owner (vector-ref model-entry 10)))
+      (vector-set! model-entry 10 #f)
+      (reject "terminal model owner drift rejected" authenticate)
+      (vector-set! model-entry 10 owner))
+    (let ((core (car (cdr token-entry))))
+      (set-car! (cdr token-entry) #f)
+      (reject "terminal tokenizer core drift rejected" authenticate)
+      (set-car! (cdr token-entry) core))
+    (let ((original (vector-ref ledger 4)))
+      (vector-set! ledger 4 #f)
+      (reject "terminal child ledger drift rejected" authenticate)
+      (vector-set! ledger 4 original))
+    (let ((phase (vector-ref ledger 3)))
+      (vector-set! ledger 3 'wrong-phase)
+      (reject "terminal phase ledger drift rejected" authenticate)
+      (vector-set! ledger 3 phase))
+    (let ((original (vector-ref terminal 4)))
+      (let ((replacement
+              (bytevector-copy original 0 (bytevector-length original))))
+        (vector-set! record 11 replacement)
+        (vector-set! scope-anchor 11 replacement)
+        (vector-set! terminal 4 replacement)
+        (check "paired first raw passes predecessor scope"
+               (eq? (g3c4-p2g2-protected-check call 'test) record))
+        (reject "paired equal-length terminal first raw substitution rejected"
+          authenticate)
+        (vector-set! terminal 4 original)
+        (vector-set! scope-anchor 11 original)
+        (vector-set! record 11 original)))
+    (let ((original (vector-ref terminal 5)))
+      (let ((replacement
+              (bytevector-copy original 0 (bytevector-length original))))
+        (vector-set! record 12 replacement)
+        (vector-set! scope-anchor 12 replacement)
+        (vector-set! terminal 5 replacement)
+        (check "paired first staging passes predecessor scope"
+               (eq? (g3c4-p2g2-protected-check call 'test) record))
+        (reject "paired equal-length terminal first staging substitution rejected"
+          authenticate)
+        (vector-set! terminal 5 original)
+        (vector-set! scope-anchor 12 original)
+        (vector-set! record 12 original)))
+    (let ((raw (vector-ref terminal 6))
+          (staging (vector-ref terminal 7)))
+      (vector-set! terminal 6 (bytevector-copy raw 0 (bytevector-length raw)))
+      (reject "equal-length terminal second raw substitution rejected"
+        authenticate)
+      (vector-set! terminal 6 raw)
+      (vector-set! terminal 7
+                   (bytevector-copy staging 0 (bytevector-length staging)))
+      (reject "equal-length terminal second staging substitution rejected"
+        authenticate)
+      (vector-set! terminal 7 staging)
+      (vector-set! terminal 6 (bytevector-copy raw 0 (bytevector-length raw)))
+      (vector-set! terminal 7
+                   (bytevector-copy staging 0 (bytevector-length staging)))
+      (reject "paired equal-length terminal second raw/staging substitution rejected"
+        authenticate)
+      (vector-set! terminal 7 staging)
+      (vector-set! terminal 6 raw))
+    (let ((raw (vector-ref terminal 10))
+          (staging (vector-ref terminal 11)))
+      (let ((raw-copy (bytevector-copy raw 0 (bytevector-length raw)))
+            (staging-copy
+              (bytevector-copy staging 0 (bytevector-length staging))))
+        (vector-set! auxiliary 0 raw-copy)
+        (vector-set! record 9 raw-copy)
+        (vector-set! scope-anchor 9 raw-copy)
+        (vector-set! terminal 10 raw-copy)
+        (check "paired pending raw passes predecessor scope"
+               (eq? (g3c4-p2g2-protected-check call 'test) record))
+        (reject "paired equal-length terminal pending raw substitution rejected"
+          authenticate)
+        (vector-set! terminal 10 raw)
+        (vector-set! scope-anchor 9 raw)
+        (vector-set! record 9 raw)
+        (vector-set! auxiliary 0 raw)
+        (vector-set! auxiliary 1 staging-copy)
+        (vector-set! record 10 staging-copy)
+        (vector-set! scope-anchor 10 staging-copy)
+        (vector-set! terminal 11 staging-copy)
+        (check "paired pending staging passes predecessor scope"
+               (eq? (g3c4-p2g2-protected-check call 'test) record))
+        (reject "paired equal-length terminal pending staging substitution rejected"
+          authenticate)
+        (vector-set! terminal 11 staging)
+        (vector-set! scope-anchor 10 staging)
+        (vector-set! record 10 staging)
+        (vector-set! auxiliary 1 staging)))
+    (check "terminal original owner and carriers repaired in-region"
+           (eq? (authenticate) record))))
 
 (define (pending-lease-case kind)
   (let* ((generator
@@ -334,6 +450,8 @@
                                   terminal)))
                  (check "release genuine lease for same-region retry"
                         (= (lease 0) 0))
+                 (if (eq? kind 'ids)
+                     (terminal-drift-probes call terminal))
                  (set! saw-rejection #t))))))
     (check "same-region terminal retry after held lease"
            (and saw-rejection

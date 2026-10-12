@@ -2695,9 +2695,12 @@ publication, public G2 and continuation remain pending.
   the accepted native terminal and logical I1 clone symbols on exact main
   `09f7ed52`, with one same-call EOS/second-token route, lexical original
   allocation witnesses, a surviving terminal anchor, and detached snapshot
-  and clone adapters. Its focused source checker and fault fixtures are
-  staged; current-main compiled normal/repeat/sanitizer, emitted-tail and
-  predecessor gates remain pending. This private candidate supplies no public
+  and clone adapters. Its focused source checker and fault fixtures now include
+  independent Philox checks for all eight detached snapshot RNG tuples and
+  in-region active-check probes for owner, tokenizer core, ledger, and paired
+  equal-length raw/staging carrier drift. Current-main compiled normal,
+  repeat, sanitizer, emitted-tail, and predecessor gates remain pending.
+  This private candidate supplies no public
   G2, data-only continuation, or Wave 3 completion claim.
 
 ## Wave 4 — practical pretraining and performance
