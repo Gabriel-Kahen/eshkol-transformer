@@ -59,9 +59,19 @@ class ProductionGenerateContract(unittest.TestCase):
                     self.assertNotEqual(rejected.returncode, 0)
                     self.assertIn('policy requires', rejected.stderr)
 
-    def test_two_export_dispatch_and_reviewed_closures(self):
-        self.assertEqual((NATIVE / 'cli3_generate_public_exports.txt').read_bytes(),
-                         (NATIVE / 'cli3_public_exports.txt').read_bytes())
+    def test_readonly_d1_exports_and_reviewed_closures(self):
+        exports = (NATIVE / 'cli3_generate_public_exports.txt').read_text().splitlines()
+        base = (NATIVE / 'cli3_public_exports.txt').read_text().splitlines()
+        d1 = (NATIVE / 'd1_e1b_public_exports.txt').read_text().splitlines()
+        readonly = [name for name in d1 if name !=
+                    'et_e1b_public_d1_token_corpus_write_v1']
+        self.assertEqual(exports, sorted(set(base) | set(readonly)))
+        self.assertEqual(len(exports), 9)
+        self.assertFalse(any(name.startswith('et_e1b_public_d2_') for name in exports))
+        errors = [name for name in (NATIVE / 'cli3_defined_symbols.txt').read_text().splitlines()
+                  if name.startswith('et_e1b_error_')]
+        self.assertEqual((NATIVE / 'cli3_generate_defined_symbols.txt').read_text().splitlines(),
+                         sorted(set(errors) | set(exports)))
         self.assertEqual((NATIVE / 'cli3_generate_public_strings.txt').read_bytes(),
                          (NATIVE / 'cli3_public_strings.txt').read_bytes())
         self.assertEqual((NATIVE / 'cli3_generate_undefined_symbols.txt').read_bytes(),
@@ -92,6 +102,14 @@ class ProductionGenerateContract(unittest.TestCase):
         self.assertNotIn('et_e1b_public_g3_', bridge)
         self.assertIn('native/cli3_generate_root.esk',
                       (ROOT / 'scripts/build-cli3.sh').read_text())
+        build = (ROOT / 'scripts/build-cli3.sh').read_text()
+        self.assertIn('stage-cli3-d1-readonly.py', build)
+        self.assertIn('ESHKOL_LIB_DIR="${public_dir}"', build)
+        self.assertIn('"${public_dir}/transformer/data.esk"', build)
+        self.assertIn('--emit-depfile', build)
+        self.assertIn('cli3_generate_defined_symbols.txt', build)
+        self.assertIn('(require transformer.data)',
+                      (ROOT / 'src/eshkol_transformer/cli.esk').read_text())
 
     def test_command_retains_reviewed_ownership_order(self):
         production = (NATIVE / 'cli3_generate_extension.esk').read_text()

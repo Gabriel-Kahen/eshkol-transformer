@@ -648,7 +648,11 @@ The [D1 corpus validate command slice](CLI3_CORPUS_VALIDATE.md) is staged from
 `corpus validate` executable and a retained-evidence gate with source,
 toolchain, and checkout pins. The installed production CLI3 root does not yet
 dispatch this command; the [installed-dispatch source audit](CLI3_CORPUS_INSTALLED_DISPATCH_BLOCKER.md)
-records the public D1 package and command-contract blocker. Source-only tests
+records the public D1 package and command-contract blocker. A
+[source-only public D1 link seam](CLI3_PUBLIC_D1_LINK_CONTRACT.md) stages the
+validator and six read-only summary accessors for the installed app; its exact
+compiled package, app import, old-command, and hosted gates remain pending.
+Source-only tests
 cover evidence-path and dirty checkout
 rejection. The exact composed head has not passed the compiled D1 and command
 gate; this does not establish full CLI3 acceptance. The required CLI3 suite's

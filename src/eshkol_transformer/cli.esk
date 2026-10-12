@@ -1,5 +1,8 @@
 ;;; Thin Eshkol-native executable entry. The CLI3 aggregate owns all dispatch.
 
+;;; The app imports only a checked read-only projection of the public D1 facade.
+(require transformer.data)
+
 (extern void cli3-dispatch ptr ptr :real et_e1b_public_cli3_dispatch_v1)
 (extern i64 cli3-static-fallback
         :real et_e1b_public_cli3_dispatch_fallback_v1)
