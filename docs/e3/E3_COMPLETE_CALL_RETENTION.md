@@ -15,7 +15,9 @@ source approval.
 The separate R2 evidence verifier checks all 20 completed runtime, RSS and
 timing records as one set. It rejects missing or malformed records, conflicting
 profiles, unreconciled I2 borrow controls, RSS samples above reported process
-peak, and a changed retained arena baseline between 1,024 and 8,192 calls.
+peak, and changed retained arena or region baselines between 1,024 and 8,192
+calls. A measured peak above the proposed 512 MiB operational ceiling fails
+the gate pending root disposition.
 Its fixture tests run without compiling Eshkol. The verifier adds no runtime
 measurement or acceptance claim; the supported exact-tree gate remains required.
 
