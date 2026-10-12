@@ -799,6 +799,13 @@ current two-field private scenario, the single tied head/token-embedding owner,
 and immediate commit after successful prepare. Integration and compiled proof
 remain pending; this contract does not discharge any §9 numerical or rollback row.
 
+The [standalone N3 zero-model reference](../tests/e3_reference/README.md)
+generates four genuine D1/D2 all-correct, all-wrong and padded cases, with
+fixed14 zero parameter identity, all 21 mathematical role words, f32 CE and
+serial metric predictions, exact cursor bytes, and pinned-Q0 byte-repeat and
+negative tests. It remains development-only: the idle real-model state load,
+compiled private traversal and §9 N3 comparison are still open.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained

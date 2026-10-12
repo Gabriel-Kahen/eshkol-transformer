@@ -41,3 +41,32 @@ provider-only case and `00` cannot successfully finalize. Packed repartitioning
 may preserve rows; unpacked shard boundaries deliberately change them. Synthetic
 records test this development comparator only and make no native traversal,
 transaction, lifetime, publication or public-evaluator claim.
+
+`zero_model.py` adds the bounded §9 N3 development oracle. It builds four genuine
+checksummed D1 corpora and derives their `11`/`10` rows and exact start/end cursor
+bytes through the independent D2 reference. Fourteen distinct zero f32 parameter
+owners (1,184 values/4,736 bytes) are independently shaped, with one logical
+head/token-embedding tie. Both M3 forward equations run for every row; the
+record stores all 21 role shapes and f64 words, f32 logits and CE, serial
+`N/W/C` with token/batch counts, final four metric words, and D1/T1 provenance.
+Its f32 transcript is explicitly a **prediction**, not a compiled observation.
+Uniform logits make all next-zero targets correct and all next-nonzero targets
+wrong; a mixed corpus and one-valid-token padded row exercise counts and masks.
+They cannot witness a nonuniform target-offset mutation.
+
+Run the focused reference gate under the pinned Q0 environment:
+
+```bash
+ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "$Q0_PYTHON" \
+  -m unittest tests.e3_reference.test_zero_model -v
+ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "$Q0_PYTHON" \
+  -m tests.e3_reference.zero_model --output build/e3-reference/zero-model
+```
+
+The test generates two independent output trees and compares every file byte.
+`load(output)` checks the canonical checksummed record plus T1/D1 physical bytes;
+negative tests reject altered model metadata, D2 rows/cursors, roles,
+accuracy, duplicate JSON fields, and a corrupt shard. Keep generated trees
+under an ignored build or temporary directory. A real idle-model state-load
+driver, parameter/tie/gradient/RNG observer, private AOT comparison and source
+review are still required before the N3 compiled-private row can close.
