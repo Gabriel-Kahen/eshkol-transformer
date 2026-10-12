@@ -45,9 +45,10 @@ one-shot cut has been demonstrated through this genuine E3 path.
 The existing late-read failure/retry driver is partial evidence only; it does
 not close the allocation, copy, pin, provider, or final publication rows.
 Source planning must keep controls noninstalled and one-shot, and must not
-fabricate logits, CE values, or an alternate owner. The next gate is independent
-review of the test-only preinvoke source/native candidate, then source-composed
-E3 failure/retry proof before claiming compiled R1 coverage.
+fabricate logits, CE values, or an alternate owner. Independent review accepted
+the test-only preinvoke source/native candidate at `dcbc30ee`/tree `77e2e0d9`.
+The next gate is source-composed E3 failure/retry proof before claiming compiled
+R1 coverage.
 
 ### Test-only native preinvoke candidate
 

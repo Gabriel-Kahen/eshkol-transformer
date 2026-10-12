@@ -914,15 +914,16 @@ The bounded [R1 source cut inventory](e3/E3_SECTION9_R1_CUT_INVENTORY.md)
 maps genuine E3 reachability, source owners and existing hooks for allocation,
 copy, pin, provider preflight, late read and final publication. Its static
 source/row guard and inventory passed independent source/tests review at
-`95ae6ae`/tree `b91a8096`. One-shot cut implementation, review of those future
-hooks, and compiled failure/retry evidence remain open. Public D2 seek is
+`95ae6ae`/tree `b91a8096`. Other R1 one-shot cuts and compiled
+failure/retry evidence remain open. Public D2 seek is
 outside the E3 restore tail and validated K1 invoke remains nonfailing.
 An isolated `ET_E3_R1_PREFLIGHT_TESTING` native candidate now arms one exact
 idle frame for a single stage/role cut before K1 dispatch in the common,
 correct and accumulate paths. Focused local native normal/sanitizer and static
-feature-off checks pass. This is test-only source/native evidence; independent
-review, genuine source-composed E3 rollback/retry, pinned supported gates and
-the rest of R1 remain open.
+feature-off checks pass. Independent source/native/tests review accepted the
+exact `dcbc30ee`/tree `77e2e0d9` candidate. This is test-only evidence;
+genuine source-composed E3 rollback/retry, pinned supported gates and the rest
+of R1 remain open.
 An isolated staged successor adds a separate real-M3 zero-control source tuple
 using the existing I2 14-parameter prepare/commit path before frame binding.
 It retains the staged numerical, retention, wrong-target and uniform controls.
