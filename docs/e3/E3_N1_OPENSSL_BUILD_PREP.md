@@ -21,12 +21,15 @@ signing-certificate primary fingerprint
 signature using a key fetched alongside the tarball without an independently
 accepted fingerprint does not establish authenticity. Record the exact
 signature and certificate bytes, signing subkey, verification tool/argv and
-result; if trust or signature cannot be established, HOLD. A later isolated,
-network-disabled build must compare the **raw archive bytes** with the digest,
-verify that detached signature, and reject any mismatch, unsafe member path,
-link escape, or unexpected archive top-level name before extraction. A Git
+result; if trust or signature cannot be established, HOLD. Before the one-use
+gate, verify the raw archive SHA-256 and signature and freeze a safely parsed
+member inventory (paths, kinds, sizes, link targets and per-member hashes where
+determinable), rejecting unsafe paths, link escapes and unexpected top-level
+names. The later isolated, network-disabled build rechecks those exact bytes
+and the signature before extraction. A Git
 checkout, distro `libssl-dev`, or another OpenSSL version is not a substitute.
-Record the archive and extracted source inventory hashes before configuration.
+Record the actual extracted source-tree inventory and compare it exactly to
+the frozen member inventory before configuration.
 
 The build lane is the `toolchain/eshkol.lock` Ubuntu 22.04 x86-64 lane with
 LLVM/Clang 21.1.8. It needs the OpenSSL 3.5.9
@@ -48,8 +51,9 @@ After ROOT freezes those inputs, the **later** build gate executes this fixed
 order in a fresh protected stage; each step records exact argv, environment,
 exit status, stdout/stderr hashes, and input/output identities:
 
-1. Verify archive SHA-256 and detached signature against the separately trusted
-   fingerprint, check safe extraction, then record source inventory.
+1. Reverify archive SHA-256 and detached signature against the separately
+   trusted fingerprint; extract safely and compare the actual source-tree
+   inventory with the frozen archive-member inventory.
 2. Invoke `./Configure linux-x86_64 shared --prefix=<frozen-prefix>
    --openssldir=<frozen-openssldir> --libdir=lib` with the frozen compiler,
    flags, feature options, and environment. Preserve `configdata.pm`, generated
@@ -80,7 +84,8 @@ checksummed, non-executable **input manifest**. It freezes the source archive,
 detached signature and trusted fingerprint; build image and exact toolchain,
 tools and existing headers; protected paths, proposed link/config policy,
 complete build and verifier argv/environment; candidate header/dependency
-inventory; and the approved discovery and rejection procedure. Each existing
+inventory and safe archive-member inventory; and the approved discovery and
+rejection procedure. Each existing
 path entry records its role, absolute path, kind, mode, owner, symlink chain,
 size and SHA-256. Candidate paths are labeled as candidates, never as observed
 closure. The input digest is fixed before Configure or compilation.
@@ -94,7 +99,7 @@ review before any release descriptor can use them. Every unmeasured output is
 
 | Area | Prebuild input and postbuild output evidence |
 | --- | --- |
-| Source/build tools | Input: archive URL/raw digest/signature/trusted fingerprint, extracted tree inventory, image/OS/architecture digest, exact `toolchain/eshkol.lock`, `Configure`, Perl and `Text::Template`, Make, Clang/C++ driver, linker, assembler, archiver and `pkg-config` paths/versions/hashes, and frozen argv/env/flags. Output: `configdata.pm`, generated `Makefile`, complete command log and test results. |
+| Source/build tools | Input: archive URL/raw digest/signature/trusted fingerprint, expected safe archive-member inventory, image/OS/architecture digest, exact `toolchain/eshkol.lock`, `Configure`, Perl and `Text::Template`, Make, Clang/C++ driver, linker, assembler, archiver and `pkg-config` paths/versions/hashes, and frozen argv/env/flags. Output: actual extracted source-tree inventory and exact comparison, `configdata.pm`, generated `Makefile`, complete command log and test results. |
 | Headers | Input: existing compiler-resource, libc and development-header candidates plus exact include-trace/depfile discovery method. Output: actual include search order and every direct/transitive header read for each OpenSSL and verifier translation unit, including generated and installed OpenSSL headers. Cross-check depfiles against a full include/file-open trace; hash bytes and symlink chains. A package/version list or host candidate is insufficient. |
 | Installed binaries | Input: verifier source/tree, ABI contract (public key and signature lengths, signed message construction, return semantics), proposed compile/link argv and link mode. Output: `libcrypto.so.3` SHA-256/build ID/SONAME/architecture, exported and consumed symbol versions; `libssl`/`openssl` if produced; installed headers and module bytes; verifier executable bytes/build ID, undefined symbols, relocations and resolved symbol providers. |
 | Provider/config | Input: source-backed built-in default-provider proof; `OPENSSL_CONF`, `OPENSSL_MODULES`, config bytes/ancestry, module search policy, property query, `OPENSSL_CONF_INCLUDE`, `OPENSSL_ENGINES` and other relevant environment. Output: runtime provider name, explicit load/fetch results, actual `provider=default` selection and attempted module loads. Missing or ambiguous provider resolution is HOLD. |
