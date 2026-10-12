@@ -15,6 +15,7 @@ import re
 HORIZONS = (1024, 8192)
 GRADIENTS = ("absent", "present")
 PROFILES = ("normal-a", "normal-b", "poisoned-a", "poisoned-b", "sanitized")
+MAX_PEAK_RSS_KIB = 512 * 1024
 NUMBER = r"(?:0|[1-9][0-9]*)"
 FIELDS = (
     "arena_used", "arena_total", "arena_blocks", "caller_region_used",
@@ -71,6 +72,11 @@ def verify(directory: Path) -> dict[str, int]:
                     raise ValueError(f"invalid elapsed time: {stem}") from error
                 if min(before, after, peak) <= 0 or peak < max(before, after) or elapsed <= 0:
                     raise ValueError(f"inconsistent process resource measurement: {stem}")
+                if peak > MAX_PEAK_RSS_KIB:
+                    raise ValueError(
+                        f"peak RSS {peak} KiB exceeds proposed 512 MiB ceiling; "
+                        f"root disposition required: {stem}"
+                    )
                 if _read(Path(f"{stem}.stderr")):
                     raise ValueError(f"retention runtime wrote stderr: {stem}")
                 maximum_peak = max(maximum_peak, peak)
@@ -98,7 +104,7 @@ def verify(directory: Path) -> dict[str, int]:
         short = records[1024, gradient]
         long = records[8192, gradient]
         for field in ("arena_used", "arena_total", "arena_blocks", "caller_region_used",
-                      "retry_region_used", "d2_live_allocations"):
+                      "failure_region_used", "retry_region_used", "d2_live_allocations"):
             if short[field] != long[field]:
                 raise ValueError(f"retained baseline changes with horizon: {gradient}/{field}")
         if long["borrow_begins"] <= short["borrow_begins"]:

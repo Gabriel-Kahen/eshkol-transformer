@@ -73,6 +73,14 @@ class RetentionEvidenceTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "baseline changes"):
             verify(self.directory)
 
+    def test_failure_region_growth_is_not_flat_retention(self) -> None:
+        for profile in PROFILES:
+            path = self.directory / f"8192-absent-{profile}.stdout"
+            path.write_text(path.read_text().replace(
+                " failure_region_used=256", " failure_region_used=257"))
+        with self.assertRaisesRegex(ValueError, "baseline changes.*failure_region_used"):
+            verify(self.directory)
+
     def test_borrow_accounting_must_reconcile(self) -> None:
         for profile in PROFILES:
             path = self.directory / f"1024-absent-{profile}.stdout"
@@ -85,6 +93,17 @@ class RetentionEvidenceTest(unittest.TestCase):
         path = self.directory / "1024-absent-normal-a.time"
         path.write_text("elapsed_seconds=0.10 peak_rss_kib=999\n")
         with self.assertRaisesRegex(ValueError, "resource measurement"):
+            verify(self.directory)
+
+    def test_proposed_peak_ceiling_boundary(self) -> None:
+        path = self.directory / "1024-absent-normal-a.time"
+        path.write_text("elapsed_seconds=0.10 peak_rss_kib=524288\n")
+        self.assertEqual(verify(self.directory)["maximum_peak_rss_kib"], 524288)
+
+    def test_over_ceiling_requires_root_disposition(self) -> None:
+        path = self.directory / "1024-absent-normal-a.time"
+        path.write_text("elapsed_seconds=0.10 peak_rss_kib=600000\n")
+        with self.assertRaisesRegex(ValueError, "exceeds proposed 512 MiB ceiling"):
             verify(self.directory)
 
 
