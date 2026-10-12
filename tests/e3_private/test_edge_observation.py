@@ -15,8 +15,9 @@ from tests.e3_reference.transcript import f64_bits
 from tests.e3_metrics.reference_probe import accumulate, divide, finalize, reduce_bool
 
 
-def failure_line(name: str, cursor: str, *, after: str = "0,0,0,0,0,0") -> bytes:
-    return (f"E3EDGE\t{name}\tinvalid-state\t0,0,0,0,0,0\t{after}"
+def failure_line(name: str, cursor: str, *, stage: int = 12,
+                 after: str = "0,0,0,0,0,0") -> bytes:
+    return (f"E3EDGE\t{name}\tinvalid-state\t{stage}\t0,0,0,0,0,0\t{after}"
             f"\t{cursor}\t{cursor}\nE3-EDGE-RUNTIME-PASS\n").encode()
 
 
@@ -65,7 +66,7 @@ def success_control(root: Path, manifest: dict[str, object]) -> tuple[bytes, dic
                  + f"\t{state[3]},{state[4]}")
     after = ",".join(map(str, (*final, state[3], state[4])))
     cursor = case["start_cursor"]
-    lines.append(f"E3EDGE\tone-valid-final\tsuccess\t0,0,0,0,0,0\t"
+    lines.append(f"E3EDGE\tone-valid-final\tsuccess\t-1\t0,0,0,0,0,0\t"
                  f"{after}\t{cursor}\t{cursor}")
     lines.append("E3-EDGE-RUNTIME-PASS")
     oracle = {
@@ -91,7 +92,10 @@ class EdgeObservationTests(unittest.TestCase):
                 name, cursor = case["name"], case["start_cursor"]
                 result = parse(failure_line(name, cursor), root, manifest, name)
                 self.assertEqual(result["status"], "invalid-state")
+                self.assertEqual(result["stage"], 12)
                 self.assertEqual(result["before"], result["after"])
+                with self.subTest(name=name), self.assertRaisesRegex(ValueError, "stage"):
+                    parse(failure_line(name, cursor, stage=0), root, manifest, name)
                 with self.subTest(name=name), self.assertRaises(ValueError):
                     parse(failure_line(name, cursor, after="0,0,0,0,1,0"),
                           root, manifest, name)
@@ -108,6 +112,7 @@ class EdgeObservationTests(unittest.TestCase):
             raw, oracle = success_control(root, manifest)
             result = parse(raw, root, manifest, "one-valid-final", oracle)
             self.assertEqual(result["status"], "success")
+            self.assertEqual(result["stage"], -1)
             self.assertEqual(result["after"][-2:], [3, 2])
             with self.assertRaisesRegex(ValueError, "oracle"):
                 parse(raw, root, manifest, "one-valid-final")
@@ -123,9 +128,9 @@ class EdgeObservationTests(unittest.TestCase):
                 parse(raw, root, manifest, "one-valid-final", bad)
             lines = raw.splitlines(keepends=True)
             fields = lines[-2].split(b"\t")
-            words = fields[4].split(b",")
+            words = fields[5].split(b",")
             words[4] = b"4"
-            fields[4] = b",".join(words)
+            fields[5] = b",".join(words)
             lines[-2] = b"\t".join(fields)
             changed = b"".join(lines)
             with self.assertRaisesRegex(ValueError, "six published outputs"):

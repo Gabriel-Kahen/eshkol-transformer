@@ -43,14 +43,21 @@
       (let ((cursor (d2-token-dataset-cursor dataset))
             (before (e3-edge-six frame destinations))
             (category #f)
+            (stage -1)
             (success #f))
         (with-region ('e3-edge-call 262144)
           (guard (caught
                    (#t
                     (if (and (transformer-error? caught)
+                             (eq? (transformer-error-category caught) 'invalid-state)
                              (eq? (transformer-error-operation caught)
-                                  'e3-evaluate-into!))
-                        (set! category (transformer-error-category caught))
+                                  'e3-evaluate-into!)
+                             (eq? caught (e3-error-table-ref 12 'invalid-state))
+                             (equal? (transformer-error-details caught)
+                                     (transformer-error-details
+                                       (e3-error-table-ref 12 'invalid-state))))
+                        (begin (set! category 'invalid-state)
+                               (set! stage 12))
                         (raise caught))))
             (set! success (e3-evaluate-into! model dataset frame))))
         (let ((after (e3-edge-six frame destinations))
@@ -61,4 +68,5 @@
           (if (and success category) (e3-native-invariant-fail))
           (d2-token-dataset-close! dataset)
           (vector 'e3-edge-result-v1
-                  (if success 'success category) before after cursor end))))))
+                  (if success 'success category) stage
+                  before after cursor end))))))

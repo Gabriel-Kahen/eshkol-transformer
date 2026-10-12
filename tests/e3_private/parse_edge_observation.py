@@ -13,7 +13,7 @@ from tests.e3_reference.edge_corpus import validate
 from tests.e3_reference.transcript import canonical, validate_mathematical_case
 
 
-LINE = re.compile(rb"E3EDGE\t([a-z-]+)\t(success|invalid-state)\t"
+LINE = re.compile(rb"E3EDGE\t([a-z-]+)\t(success|invalid-state)\t(-?[0-9]+)\t"
                   rb"(-?[0-9]+(?:,-?[0-9]+){5})\t"
                   rb"(-?[0-9]+(?:,-?[0-9]+){5})\t"
                   rb"([0-9a-f]{2,800})\t([0-9a-f]{2,800})\n\Z")
@@ -40,10 +40,13 @@ def parse(raw: bytes, root: Path, manifest: dict[str, object], name: str,
     match = LINE.fullmatch(head[index:])
     if match is None:
         raise ValueError("N5 result malformed")
-    observed_name, status, before_raw, after_raw, cursor_raw, end_raw = match.groups()
+    observed_name, status, stage_raw, before_raw, after_raw, cursor_raw, end_raw = match.groups()
     case = cases[name]
     if observed_name.decode() != name or status.decode() != case["outcome"]:
         raise ValueError("N5 case or typed outcome differs")
+    stage = int(stage_raw)
+    if stage != (12 if status == b"invalid-state" else -1):
+        raise ValueError("N5 zero-weight finalization stage differs")
     before, after = _six(before_raw), _six(after_raw)
     cursor, end = cursor_raw.decode(), end_raw.decode()
     if len(cursor) % 2 or cursor != case["start_cursor"] or end != cursor:
@@ -79,7 +82,8 @@ def parse(raw: bytes, root: Path, manifest: dict[str, object], name: str,
         if after != expected:
             raise ValueError("N5 six published outputs differ from observed frame")
     return {"kind": "e3-edge-result-v1", "case": name,
-            "status": status.decode(), "before": before, "after": after,
+            "status": status.decode(), "stage": stage,
+            "before": before, "after": after,
             "cursor_before": cursor, "cursor_after": end}
 
 

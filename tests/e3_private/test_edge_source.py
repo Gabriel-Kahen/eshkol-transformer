@@ -12,6 +12,8 @@ class EdgeObserverSourceTests(unittest.TestCase):
         self.assertIn("(e3-edge-six=? before after)", source)
         self.assertIn("(e3-edge-cursor=? cursor end)", source)
         self.assertIn("(transformer-error-category caught)", source)
+        self.assertIn("(e3-error-table-ref 12 'invalid-state)", source)
+        self.assertIn("(transformer-error-details caught)", source)
         self.assertIn("et_e3_test_published_counter_raw_v1", source)
         self.assertIn("(d2-token-dataset-close! dataset)", source)
         self.assertNotIn("(set! success #t)", source)

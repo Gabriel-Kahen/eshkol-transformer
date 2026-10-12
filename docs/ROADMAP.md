@@ -913,9 +913,10 @@ verdicts remain prerequisites before the full matrix is implemented and run.
 The isolated N5 edge corpus source slice generates authentic empty, singleton,
 entry-EOS and one-valid-final D1 resources with independent D2 rows, manifest
 digests and caller/traversal cursors. Its separate private observer calls
-`e3-evaluate-into!`, checks typed zero-weight failures against the six caller
-outputs and saved cursor, and exposes the one-token final result for a pinned
-Q0 CE/state/final-word oracle. Focused source tests and twice-byte-identical
+`e3-evaluate-into!`, binds zero-weight `invalid-state` to the stage-12 error
+table detail, checks the six caller outputs and saved cursor, and exposes the
+one-token final result for a pinned Q0 CE/state/final-word oracle. Focused
+source tests and twice-byte-identical
 generation cover the fixture and malformed schema/cursor/manifest negatives.
 The separate compiled tuple, emitted numerical observation and supported
 normal/sanitizer gate have not run; the N5 §9 row remains open.
