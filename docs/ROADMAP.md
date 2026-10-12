@@ -809,6 +809,10 @@ and native closure candidates, and test-only observer flag wiring. E1B still
 holds N3 before toolchain access pending independently reviewed exact imports,
 source/native closure and pin evidence. Source-only checks do not prove AOT or
 any §9 row.
+The isolated `3da5806` import inventory exposed one additional runtime
+`eshkol_tail_transfer_slot` dependency from a tail-position N3 source-release
+call. The source now releases before returning `#t`; the exact import manifest
+and AOT admission remain held pending a fresh compile and independent review.
 
 The [standalone N3 zero-model reference](../tests/e3_reference/README.md)
 generates four genuine D1/D2 all-correct, all-wrong and padded cases, with

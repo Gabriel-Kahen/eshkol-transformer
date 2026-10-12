@@ -52,6 +52,17 @@ class IdleModelSourceTest(unittest.TestCase):
         self.assertLess(source.rindex("(e3-frame-unbind! frame)"),
                         source.rindex("(e3-test-destinations-destroy! destinations)"))
 
+    def test_zero_load_release_is_not_external_tail_call(self) -> None:
+        source = DRIVER.read_text()
+        release = source.split("(define (e3-n3-release-sources! sources)", 1)[1].split(
+            "(define (e3-n3-zero-load!", 1)[0]
+        load = source.split("(define (e3-n3-zero-load! model handles)", 1)[1].split(
+            "(define (e3-n3-scenario", 1)[0]
+        self.assertIn("(if (= index 14) #t", release)
+        self.assertRegex(load, re.compile(
+            r"\(i2-commit-load! \(vector-ref plan 0\)\)\)\)\s*"
+            r"\(e3-n3-release-sources! sources\)\s*#t\)\)\s*$"))
+
     def test_exact_tuple_policy_and_pending_import_gate(self) -> None:
         builder = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
         self.assertIn('"${e3_tuple_kind}" == n3-idle', builder)

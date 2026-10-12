@@ -21,6 +21,12 @@ ordering and export/string expectations also require exact compiled comparison;
 the proposal files alone are not compiled proof. No `package_undefined_symbols.txt`
 placeholder is supplied. Canonical private and installed exports are unchanged.
 
+The isolated inventory build at `3da5806` found one extra import,
+`eshkol_tail_transfer_slot`, from the zero-load helper's tail-position source
+release. The helper now releases sources before returning `#t`, preserving its
+result and removing that external tail-call site. The HOLD remains
+until a fresh exact-source compile confirms the corrected import inventory.
+
 Source guards: `python3 -B -m unittest tests.e3_n3_idle.test_source_contract`.
 They establish source order, lexical tuple isolation, and explicit admission
 HOLD only. Independent source approval and ROOT exact source/pin review precede

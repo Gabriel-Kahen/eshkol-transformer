@@ -220,7 +220,8 @@
                  (#t (e3-n3-release-sources! sources) (raise caught)))
                 (i2-prepare-load (vector rows e3-n3-operation)))))
         (i2-commit-load! (vector-ref plan 0))))
-      (e3-n3-release-sources! sources)))
+      (e3-n3-release-sources! sources)
+      #t))
 
 (define (e3-n3-scenario scenario)
   (e3-n3-check
