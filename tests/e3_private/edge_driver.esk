@@ -1,0 +1,64 @@
+;;; Source-only N5 observer. A compiled tuple must enable ET_E3_OVERFLOW_TESTING
+;;; and provide the exact native raw-counter helper before this can run.
+(extern i64 e3-edge-counter-raw ptr i64
+        :real et_e3_test_published_counter_raw_v1)
+
+(define (e3-edge-six frame destinations)
+  (let ((native (vector-ref (e3-frame-entry-internal frame) 4)))
+    (vector (e3-test-u32-ref (vector-ref destinations 0))
+            (e3-test-u32-ref (vector-ref destinations 1))
+            (e3-test-u32-ref (vector-ref destinations 2))
+            (e3-test-u32-ref (vector-ref destinations 3))
+            (e3-edge-counter-raw native 0)
+            (e3-edge-counter-raw native 1))))
+
+(define (e3-edge-six=? left right)
+  (let loop ((index 0))
+    (if (= index 6) #t
+        (and (= (vector-ref left index) (vector-ref right index))
+             (loop (+ index 1))))))
+
+(define (e3-edge-cursor=? left right)
+  (and (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+
+;;; scenario is the existing #(packing? skipped-batches) contract. One case
+;;; per fresh process prevents a prior successful publication masking failures.
+(define (e3-edge-run scenario corpus-path)
+  (let* ((checked (e3-test-scenario scenario))
+         (fixture (e3-test-fixture))
+         (model (vector-ref fixture 0))
+         (tokenizer (vector-ref fixture 1))
+         (destinations (vector-ref fixture 2))
+         (frame (vector-ref fixture 3))
+         (dataset
+           (d2-token-dataset-open
+             (e3-test-dataset-config corpus-path (vector-ref checked 0)) tokenizer)))
+    (guard (caught (#t (d2-token-dataset-close! dataset) (raise caught)))
+      (e3-test-skip! dataset (vector-ref checked 1))
+      (let ((cursor (d2-token-dataset-cursor dataset))
+            (before (e3-edge-six frame destinations))
+            (category #f)
+            (success #f))
+        (with-region ('e3-edge-call 262144)
+          (guard (caught
+                   (#t
+                    (if (and (transformer-error? caught)
+                             (eq? (transformer-error-operation caught)
+                                  'e3-evaluate-into!))
+                        (set! category (transformer-error-category caught))
+                        (raise caught))))
+            (set! success (e3-evaluate-into! model dataset frame))))
+        (let ((after (e3-edge-six frame destinations))
+              (end (d2-token-dataset-cursor dataset)))
+          (if (not (e3-edge-cursor=? cursor end)) (e3-native-invariant-fail))
+          (if (and category (not (e3-edge-six=? before after)))
+              (e3-native-invariant-fail))
+          (if (and success category) (e3-native-invariant-fail))
+          (d2-token-dataset-close! dataset)
+          (vector 'e3-edge-result-v1
+                  (if success 'success category) before after cursor end))))))

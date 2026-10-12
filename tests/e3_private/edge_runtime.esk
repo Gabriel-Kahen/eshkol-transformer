@@ -1,0 +1,45 @@
+;;; Test-only AOT entry for the separate edge tuple. One case per process.
+(extern void e3-edge-private-run ptr ptr ptr :real et_e3_edge_run_v1)
+
+(define (edge-check value)
+  (if value #t (begin (display "E3-EDGE-FAIL") (newline) (exit 1))))
+
+(define (edge-hex bytes)
+  (let ((digits "0123456789abcdef"))
+    (let loop ((index 0))
+      (if (= index (bytevector-length bytes)) #t
+          (let ((value (bytevector-u8-ref bytes index)))
+            (display (string-ref digits (quotient value 16)))
+            (display (string-ref digits (remainder value 16)))
+            (loop (+ index 1)))))))
+
+(define (edge-six-print words)
+  (let loop ((index 0))
+    (if (= index 6) #t
+        (begin
+          (if (> index 0) (display ",") #t)
+          (display (vector-ref words index))
+          (loop (+ index 1))))))
+
+(define args (command-line))
+(edge-check (= (length args) 3))
+(define name (list-ref args 1))
+(edge-check (or (string=? name "empty") (string=? name "singleton")
+                (string=? name "entry-eos")
+                (string=? name "one-valid-final")))
+(define skip (if (string=? name "entry-eos") 1 0))
+(define output (vector #f))
+(e3-edge-private-run (vector (vector #t skip)) (vector (list-ref args 2)) output)
+(define result (vector-ref output 0))
+(edge-check (and (vector? result) (= (vector-length result) 6)
+                 (eq? (vector-ref result 0) 'e3-edge-result-v1)))
+(edge-check (eq? (vector-ref result 1)
+                 (if (string=? name "one-valid-final") 'success 'invalid-state)))
+(display "E3EDGE\t")
+(display name) (display "\t")
+(display (vector-ref result 1)) (display "\t")
+(edge-six-print (vector-ref result 2)) (display "\t")
+(edge-six-print (vector-ref result 3)) (display "\t")
+(edge-hex (vector-ref result 4)) (display "\t")
+(edge-hex (vector-ref result 5)) (newline)
+(display "E3-EDGE-RUNTIME-PASS") (newline)

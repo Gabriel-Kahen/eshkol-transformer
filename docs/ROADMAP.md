@@ -910,6 +910,15 @@ from direct-provider-only cases and names the missing noninstalled model-control
 and stage-selective fault/observer seams for review. It provides no new runtime
 proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
 verdicts remain prerequisites before the full matrix is implemented and run.
+The isolated N5 edge corpus source slice generates authentic empty, singleton,
+entry-EOS and one-valid-final D1 resources with independent D2 rows, manifest
+digests and caller/traversal cursors. Its separate private observer calls
+`e3-evaluate-into!`, checks typed zero-weight failures against the six caller
+outputs and saved cursor, and exposes the one-token final result for a pinned
+Q0 CE/state/final-word oracle. Focused source tests and twice-byte-identical
+generation cover the fixture and malformed schema/cursor/manifest negatives.
+The separate compiled tuple, emitted numerical observation and supported
+normal/sanitizer gate have not run; the N5 §9 row remains open.
 An isolated staged successor adds a separate real-M3 zero-control source tuple
 using the existing I2 14-parameter prepare/commit path before frame binding.
 It retains the staged numerical, retention, wrong-target and uniform controls.
