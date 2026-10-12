@@ -1,6 +1,43 @@
 # E3 idle real-model control contract
 
-Status: approved design, repository integration pending; no implementation or compiled proof. Basis: numerical source `0476fe14ad3dc647655e539b8795b3b780f0774c` / tree `8f03d1e5febe89c02db7122ef9de4374ff1cfa5e`. The proposed control uses existing I2/M3 APIs only and adds no native setter or public ABI.
+Status: approved design with a held, noninstalled N3 source candidate at `4d301a92826f05a5cbcf57529668b63de0344e61`; package admission and compiled proof remain open. Basis: numerical source `0476fe14ad3dc647655e539b8795b3b780f0774c` / tree `8f03d1e5febe89c02db7122ef9de4374ff1cfa5e`. The proposed control uses existing I2/M3 APIs only and adds no native setter or public ABI.
+
+## Registered state-dict route finding
+
+The existing `module-state-dict` / `module-load-state-dict!` pair can restore a
+previously valid M3 snapshot. The snapshot deep-copies parameter values and
+records 15 logical paths and the one head/token-embedding alias group. On load,
+P1 validates exact paths, tensor geometry, dtype and device against the
+destination leaves. It validates incoming layout against each source tensor;
+the fixed I2 provider admits dense row-major storage. P1 also checks tied
+payload equality and the alias graph before its one-shot provider
+prepare/commit. The loader skips the second tied destination, so it writes
+the 14 existing parameter carriers without replacing their handle or tie
+identities
+(`internal/p1/lib/transformer/module.esk:4089–4153`). The M3T runtime uses
+this route to load a second initialized model's state and then restore the
+original (`tests/m3t/public_runtime.esk:139–140,208–211`). That runtime check
+is a restoration witness, not a zero-model witness.
+
+The pair cannot produce the N3 zero/uniform control from a nonzero seed-1729
+model. `module-state-dict` copies existing bytes; `state-dict-paths` and
+`state-dict-alias-groups` return data, while `state-dict-tensor` returns a
+read-only state-backed handle with a scoped borrow, not writable storage
+(`docs/P1_MODULE_STATE.md`, logical state dictionary 1.0). Loading another
+seeded snapshot only substitutes that snapshot's values. Manufacturing a new
+state through the private C1 decode/adoption machinery would require a separate
+trusted construction and ownership review; it is not an operation supplied by
+the registered snapshot/load pair. No public state-dict setter is proposed.
+
+ROOT review should therefore assess the already staged separate N3 test-only
+route below: decode 14 real zero I2 source carriers, verify the fixed M3 tree,
+then perform one full-batch prepare/commit on the 14 authentic idle model
+destinations before E3 frame binding. Its source candidate and lexical tuple
+policy do not establish compiled reachability. Typed RNG bits, recoverable
+preprepare rollback with exact source cleanup, and the independent M3/E3 oracle
+comparison remain open gates, as do the tuple's exact compiled import inventory
+and supported AOT execution. No E3 rollback row follows from a fixture-load
+failure.
 
 ## Available, authentic route
 

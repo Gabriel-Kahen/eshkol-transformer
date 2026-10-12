@@ -798,6 +798,10 @@ for all 14 authentic M3 parameter owners before frame binding. It preserves the
 current two-field private scenario, the single tied head/token-embedding owner,
 and immediate commit after successful prepare. Integration and compiled proof
 remain pending; this contract does not discharge any §9 numerical or rollback row.
+Its source review finds that registered P1 state-dict snapshot/load can restore
+an existing 14-owner/one-tie state but cannot create zero values from the
+nonzero seed; the separate I2 test-only route still needs ROOT review, typed
+RNG and preprepare rollback evidence, and a compiled independent-oracle gate.
 The separate [N3 source candidate](../tests/e3_n3_idle/README.md) stages the
 authentic idle load and native parameter/gradient observation. Its isolated
 tuple proposal now has exact lexical selection, near-match rejection, source
