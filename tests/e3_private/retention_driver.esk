@@ -1,0 +1,339 @@
+;;; Test-only complete-call driver; absent from the canonical private package.
+(extern i64 e3-test-retention-probe i64
+        :real et_e3_test_retention_probe_v1)
+(extern i64 e3-test-model-word-count ptr i64 i64
+        :real et_e3_test_model_word_count_v1)
+(extern i64 e3-test-model-word ptr i64 i64 i64
+        :real et_e3_test_model_word_v1)
+(extern i64 e3-test-gradient-metadata ptr i64 i64
+        :real et_e3_test_gradient_metadata_v1)
+(extern i64 e3-test-seed-gradient ptr
+        :real et_e3_test_seed_gradient_v1)
+(extern void e3-test-read-fail-stage i64
+        :real et_d2_exact_read_test_fail_stage_v1)
+(extern i64 e3-test-region-used :real et_e3_retention_region_used_v1)
+
+(define e3-test-retention-root (vector #f))
+
+;;; The retention path is only reachable through the separate noninstalled retention driver. One
+;;; root-stable D2 dataset, model, frame, and four destinations survive all
+;;; complete evaluator calls. Only each invocation's transient work is regional.
+(define (e3-test-retention-check label condition)
+  (if condition #t
+      (begin (display "E3-RETENTION-FAIL: ") (display label) (newline)
+             (e3-native-invariant-fail))))
+
+(define (e3-test-retention-probes)
+  (let ((result (make-vector 29 0)))
+    (let fill ((index 0))
+      (if (= index 29) result
+          (begin (vector-set! result index (e3-test-retention-probe index))
+                 (fill (+ index 1)))))))
+
+(define (e3-test-retention-mode-token frame)
+  (vector-ref (e3-frame-entry-live frame 'e3-test-retention-modes) 6))
+
+(define (e3-test-retention-modes frame)
+  (let ((mask (p1-e3-test-mode-mask
+                (e3-test-retention-mode-token frame))))
+    (e3-test-retention-check 'authentic-mixed17-mask (= mask 43690))
+    mask))
+
+(define (e3-test-retention-modes=? frame expected)
+  (= (p1-e3-test-mode-mask (e3-test-retention-mode-token frame)) expected))
+
+(define (e3-test-retention-set-mixed! frame)
+  (e3-test-retention-check 'fixed-mixed17
+    (= (p1-e3-test-fixed-mixed! (e3-test-retention-mode-token frame)) 0)))
+
+(define (e3-test-retention-model-snapshot model)
+  (let* ((owner (vector-ref (m3t-entry model 'model 'e3-test-run #t) 3))
+         (result (make-vector 14 #f)))
+    (let parameters ((parameter 0))
+      (if (= parameter 14) result
+          (let ((images (make-vector 5 #f)))
+            (let images-loop ((gradient 0))
+              (if (= gradient 2) #t
+                  (let* ((count
+                          (e3-test-model-word-count owner parameter gradient)))
+                    (e3-test-retention-check 'model-word-count
+                                             (and (> count 0) (<= count 1024)))
+                    (let ((words (make-vector count 0)))
+                    (let words-loop ((index 0))
+                      (if (= index count) #t
+                          (begin
+                            (vector-set! words index
+                              (e3-test-model-word owner parameter gradient index))
+                            (words-loop (+ index 1)))))
+                    (vector-set! images gradient words)
+                    (images-loop (+ gradient 1))))))
+            (let metadata ((field 0))
+              (if (= field 3) #t
+                  (begin
+                    (vector-set! images (+ field 2)
+                      (e3-test-gradient-metadata owner parameter field))
+                    (metadata (+ field 1)))))
+            (vector-set! result parameter images)
+            (parameters (+ parameter 1)))))))
+
+(define (e3-test-retention-model=? model expected)
+  (let ((owner (vector-ref (m3t-entry model 'model 'e3-test-run #t) 3)))
+    (let parameters ((parameter 0))
+      (if (= parameter 14) #t
+          (let ((images (vector-ref expected parameter)))
+            (and
+             (let gradients ((gradient 0))
+               (if (= gradient 2) #t
+                   (let ((words (vector-ref images gradient)))
+                     (and (= (e3-test-model-word-count owner parameter gradient)
+                             (vector-length words))
+                          (let compare ((index 0))
+                            (if (= index (vector-length words)) #t
+                                (and (= (e3-test-model-word owner parameter
+                                                           gradient index)
+                                        (vector-ref words index))
+                                     (compare (+ index 1)))))
+                          (gradients (+ gradient 1))))))
+             (let metadata ((field 0))
+               (if (= field 3) #t
+                   (and (= (e3-test-gradient-metadata owner parameter field)
+                           (vector-ref images (+ field 2)))
+                        (metadata (+ field 1)))))
+             (parameters (+ parameter 1))))))))
+
+(define (e3-test-retention-output=? frame destinations)
+  (and (= (e3-test-u32-ref (vector-ref destinations 0)) 1085366897)
+       (= (e3-test-u32-ref (vector-ref destinations 1)) 1084227584)
+       (= (e3-test-u32-ref (vector-ref destinations 2)) 1132430055)
+       (= (e3-test-u32-ref (vector-ref destinations 3)) 0)
+       (= (e3-counter-ref frame 0) 5)
+       (= (e3-counter-ref frame 1) 3)))
+
+(define (e3-test-retention-call! model dataset frame destinations cursor modes
+                                 model-image)
+  (let ((region-bytes
+         (with-region ('e3-retention-call 262144)
+           (let ((region-before (e3-test-region-used)))
+             (e3-evaluate-into! model dataset frame)
+             (e3-test-retention-check 'cursor
+               (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset)))
+             (e3-test-retention-check 'metrics
+               (e3-test-retention-output=? frame destinations))
+             (e3-test-retention-check 'mixed17
+               (e3-test-retention-modes=? frame modes))
+             (- (e3-test-region-used) region-before)))))
+    ;; Keep the evaluator's region-byte measurement unchanged. Every completed
+    ;; call, including the first warmup, checks the original pre-call image.
+    (with-region ('e3-retention-model-check 262144)
+      (e3-test-retention-check 'success-model-image
+        (e3-test-retention-model=? model model-image)))
+    region-bytes))
+
+(define (e3-test-retention-fail-retry! model dataset frame destinations
+                                       cursor modes model-image rng probes record)
+  (e3-test-read-fail-stage 1)
+  (let ((failure-region-bytes
+         (with-region ('e3-retention-failure 262144)
+           (let ((region-before (e3-test-region-used)))
+             (let ((failed?
+                    (guard
+                     (caught
+                      (#t (and (transformer-error? caught)
+                               (eq? (transformer-error-category caught) 'io)
+                               (eq? (transformer-error-operation caught)
+                                    'e3-evaluate-into!))))
+                     (e3-evaluate-into! model dataset frame)
+                     #f)))
+               (e3-test-retention-check 'injected-read-failure failed?)
+               (- (e3-test-region-used) region-before))))))
+    (e3-test-read-fail-stage 0)
+    (e3-test-retention-check 'failure-region-budget
+      (and (>= failure-region-bytes 0) (<= failure-region-bytes 262144)))
+    (vector-set! record 15 failure-region-bytes)
+    (with-region ('e3-retention-failure-check 262144)
+      (e3-test-retention-check 'failure-cursor
+        (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset)))
+      (e3-test-retention-check 'failure-output
+        (e3-test-retention-output=? frame destinations))
+      (e3-test-retention-check 'failure-modes
+        (e3-test-retention-modes=? frame modes))
+      (e3-test-retention-check 'failure-model-image
+        (e3-test-retention-model=? model model-image))
+      (e3-test-retention-check 'failure-rng
+        (equal? rng (m3t-public-initializer-words
+                     (m3t-public-model-initializer model))))
+      (let check ((index 0))
+        (if (= index 29) #t
+            (begin
+              (if (or (<= index 6) (and (>= index 17) (<= index 26)))
+                  (e3-test-retention-check 'failure-live
+                    (= (vector-ref probes index)
+                       (e3-test-retention-probe index))))
+              (check (+ index 1)))))
+      #t)
+    (vector-set! record 16
+      (e3-test-retention-call! model dataset frame destinations cursor modes
+                               model-image))
+    #t))
+
+(define (e3-test-retention-reconcile! before after)
+  (let unchanged ((index 0))
+    (if (= index 29) #t
+        (begin
+          (if (or (<= index 8) (and (>= index 10) (<= index 12))
+                  (and (>= index 17) (<= index 26)) (= index 28))
+              (e3-test-retention-check 'fixed-native-control
+                (= (vector-ref before index) (vector-ref after index))))
+          (unchanged (+ index 1)))))
+  (e3-test-retention-check 'zero-graph-owners (= (vector-ref after 21) 0))
+  (e3-test-retention-check 'idle-frame (= (vector-ref after 20) 0))
+  (e3-test-retention-check 'zero-batch-view-fd
+    (and (= (vector-ref after 3) 0) (= (vector-ref after 23) 0)
+         (= (vector-ref after 24) 0) (= (vector-ref after 26) 0)))
+  (let ((begins (- (vector-ref after 14) (vector-ref before 14)))
+        (views (- (vector-ref after 15) (vector-ref before 15)))
+        (ends (- (vector-ref after 16) (vector-ref before 16)))
+        (retired-borrows (- (vector-ref after 9) (vector-ref before 9)))
+        (retained-bytes (- (vector-ref after 13) (vector-ref before 13)))
+        (fd-peak-growth (- (vector-ref after 27) (vector-ref before 27))))
+    (e3-test-retention-check 'balanced-i2-views-pins
+      (and (> begins 0) (= begins ends) (>= views begins)))
+    (e3-test-retention-check 'reconciled-retired-borrows
+      (and (= retired-borrows ends)
+           (= retained-bytes (* retired-borrows (vector-ref before 28)))))
+    (e3-test-retention-check 'fd-peak-growth
+      (>= fd-peak-growth 0))
+    (vector begins views ends retired-borrows retained-bytes
+            fd-peak-growth)))
+
+(define (e3-test-retention-prepare horizon present? corpus-path)
+  (e3-test-retention-check 'horizon (or (= horizon 1024) (= horizon 8192)))
+  (e3-test-retention-check 'gradient-choice (boolean? present?))
+  (e3-test-retention-check 'fresh-retention-root
+    (not (vector-ref e3-test-retention-root 0)))
+  (let* ((fixture (e3-test-fixture))
+         (model (vector-ref fixture 0))
+         (tokenizer (vector-ref fixture 1))
+         (destinations (vector-ref fixture 2))
+         (frame (vector-ref fixture 3))
+         (dataset (d2-token-dataset-open
+                    (e3-test-dataset-config corpus-path #t) tokenizer)))
+    (e3-test-retention-set-mixed! frame)
+    (if present?
+        (e3-test-retention-check 'seed-present-gradient
+          (= (e3-test-seed-gradient
+               (vector-ref (m3t-entry model 'model 'e3-test-run #t) 3)) 0)))
+    (let* ((cursor (d2-token-dataset-cursor dataset))
+           (modes (e3-test-retention-modes frame))
+           (model-image (e3-test-retention-model-snapshot model)))
+      (e3-test-retention-check 'gradient-state
+        (= (vector-ref (vector-ref model-image 0) 2)
+           (if present? 1 0)))
+      (if present?
+          (e3-test-retention-check 'nonzero-gradient
+            (= (vector-ref (vector-ref (vector-ref model-image 0) 1) 0)
+               1056964608)))
+      ;; Warm up lazy setup, then measure a separate steady-state complete call.
+      (e3-test-retention-call! model dataset frame destinations cursor modes
+                               model-image)
+      (let* ((calibrated-region-bytes
+               (e3-test-retention-call! model dataset frame destinations
+                                        cursor modes model-image))
+             (rng (m3t-public-initializer-words
+                    (m3t-public-model-initializer model)))
+             (before (e3-test-retention-probes))
+             (record (vector model destinations frame dataset cursor modes
+                             model-image rng before horizon present? 0 0 #f
+                             calibrated-region-bytes 0 0)))
+        (e3-test-retention-check 'calibrated-region-budget
+          (and (>= calibrated-region-bytes 0)
+               (<= calibrated-region-bytes 262144)))
+        (vector-set! e3-test-retention-root 0 record)
+        (vector-set! record 11 (__arena-used))
+        #t))))
+
+(define (e3-test-retention-execute horizon present?)
+  (let* ((record (vector-ref e3-test-retention-root 0)))
+    (e3-test-retention-check 'prepared-identity
+      (and (vector? record) (= (vector-ref record 9) horizon)
+           (eq? (vector-ref record 10) present?)
+           (not (vector-ref record 13))))
+    (let ((model (vector-ref record 0))
+          (destinations (vector-ref record 1))
+          (frame (vector-ref record 2))
+          (dataset (vector-ref record 3))
+          (cursor (vector-ref record 4))
+          (modes (vector-ref record 5))
+          (model-image (vector-ref record 6))
+          (rng (vector-ref record 7))
+          (before (vector-ref record 8))
+          (arena-before (vector-ref record 11))
+          (region-before (vector-ref record 14)))
+      (e3-test-retention-check 'entry-arena-byte-equality
+        (= (__arena-used) arena-before))
+      (let loop ((index 0))
+        (if (= index horizon) #t
+            (begin
+              (if (= index (quotient horizon 2))
+                  (begin
+                    (e3-test-retention-fail-retry!
+                      model dataset frame destinations cursor modes
+                      model-image rng before record)
+                    (e3-test-retention-check 'retry-region-byte-equality
+                      (= (vector-ref record 16) region-before))
+                    (e3-test-retention-check 'failure-arena-bytes
+                      (= (__arena-used) arena-before)))
+                  (e3-test-retention-check 'success-region-byte-equality
+                    (= (e3-test-retention-call! model dataset frame destinations
+                                                cursor modes model-image)
+                       region-before)))
+              (loop (+ index 1)))))
+      (vector-set! record 12 (__arena-used))
+      (e3-test-retention-check 'retained-arena-byte-equality
+        (= arena-before (vector-ref record 12)))
+      (e3-test-retention-check 'final-model-image
+        (e3-test-retention-model=? model model-image))
+      (e3-test-retention-check 'final-modes
+        (e3-test-retention-modes=? frame modes))
+      (e3-test-retention-check 'final-rng
+        (with-region ('e3-retention-rng 4096)
+          (equal? rng (m3t-public-initializer-words
+                       (m3t-public-model-initializer model)))))
+      (vector-set! record 13 #t)
+      #t)))
+
+(define (e3-test-retention-report horizon present?)
+  (let ((record (vector-ref e3-test-retention-root 0)))
+    (e3-test-retention-check 'completed-identity
+      (and (vector? record) (= (vector-ref record 9) horizon)
+           (eq? (vector-ref record 10) present?)
+           (vector-ref record 13)))
+    (let* ((before (vector-ref record 8))
+           (after (e3-test-retention-probes))
+           (growth (e3-test-retention-reconcile! before after))
+           (dataset (vector-ref record 3)))
+      (d2-token-dataset-close! dataset)
+      (vector-set! e3-test-retention-root 0 #f)
+      (e3-test-retention-check 'dataset-close
+        (= (e3-test-retention-probe 22) 0))
+      (vector 'e3-retention-result-v1 horizon present?
+              (vector-ref record 11) (vector-ref record 12)
+              before after growth (vector-ref record 14)
+              (vector-ref record 15) (vector-ref record 16)))))
+
+(define (e3-test-retention-run phase horizon present? corpus-path)
+  (cond ((eq? phase 'prepare)
+         (e3-test-retention-prepare horizon present? corpus-path))
+        ((eq? phase 'execute)
+         (e3-test-retention-execute horizon present?))
+        ((eq? phase 'report)
+         (e3-test-retention-report horizon present?))
+        (else (e3-test-retention-check 'phase #f))))
+
+(define (e3-test-retention-dispatch scenario corpus-path)
+  (e3-test-retention-check 'scenario
+    (and (vector? scenario) (= (vector-length scenario) 4)
+         (eq? (vector-ref scenario 0) 'retention)))
+  (e3-test-retention-run (vector-ref scenario 1)
+                         (vector-ref scenario 2)
+                         (vector-ref scenario 3) corpus-path))

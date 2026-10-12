@@ -380,6 +380,41 @@ static void test_unpublished_cleanup(void) {
   et_d2_batch_test_fail_stage_v1(ET_D2_TEST_FAIL_NONE);
 }
 
+static void test_later_batch_occurrence(void) {
+  int owner = 0;
+  int foreign_owner = 0;
+  int64_t stage;
+  open_dataset(&owner);
+  CHECK(et_d2_batch_test_fail_occurrence_v1(0, 2) == 0);
+  CHECK(et_d2_batch_test_fail_occurrence_v1(8, 2) == 0);
+  CHECK(et_d2_batch_test_fail_occurrence_v1(1, 0) == 0);
+  for (stage = ET_D2_TEST_FAIL_CONTROL;
+       stage <= ET_D2_TEST_FAIL_BEFORE_PUBLISH; stage++) {
+    int64_t generation;
+    CHECK(et_d2_batch_test_fail_occurrence_v1(stage, 2) == 1);
+    CHECK(et_d2_batch_create_v1(&foreign_owner, 1, 1, 17) == 0);
+    CHECK(et_d2_batch_test_occurrences_seen_v1() == 0);
+    generation = et_d2_batch_create_v1(&owner, 1, 1, 17);
+    CHECK(generation > 0);
+    CHECK(et_d2_batch_test_occurrences_seen_v1() == 1);
+    CHECK(et_d2_batch_release_v1(&owner, generation) == 0);
+    CHECK(et_d2_batch_create_v1(&owner, 1, 1, 17) == 0);
+    CHECK(et_d2_batch_last_status_v1() ==
+          ET_D2_NATIVE_STATUS_ALLOCATION_FAILED);
+    CHECK(et_d2_batch_test_occurrences_seen_v1() == 2);
+    CHECK(et_d2_batch_test_live_count_v1() == 0);
+    generation = et_d2_batch_create_v1(&owner, 1, 1, 17);
+    CHECK(generation > 0);
+    CHECK(et_d2_batch_release_v1(&owner, generation) == 0);
+    CHECK(et_d2_batch_test_occurrences_seen_v1() == 2);
+  }
+  CHECK(et_d2_batch_test_fail_occurrence_v1(1, INT64_MAX) == 1);
+  et_d2_batch_test_fail_stage_v1(0);
+  CHECK(et_d2_batch_test_occurrences_seen_v1() == 0);
+  close_dataset(&owner);
+  CHECK(et_d2_test_owned_allocation_count_v1() == 0);
+}
+
 static void test_i1_allocation_failures(void) {
   int owners[16] = {0};
   size_t allowed;
@@ -697,6 +732,7 @@ int main(void) {
   test_shell_factory_identity();
   test_exact_read();
   test_unpublished_cleanup();
+  test_later_batch_occurrence();
   test_i1_allocation_failures();
   test_dataset_lifetime();
   test_batch_lifetime();

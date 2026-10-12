@@ -1,0 +1,117 @@
+;;; Test-only whole-call rollback/retry over the genuine E3 source transaction.
+;;; This file requires ET_E3_R1_PREFLIGHT_TESTING on e3_frame.c and is not in
+;;; any installed or currently admitted E1B aggregate.
+(extern i64 e3-r1-preinvoke-arm ptr i64 i64
+        :real et_e3_test_preinvoke_arm_v1)
+
+(define (e3-r1-output-image frame destinations)
+  (vector (e3-test-u32-ref (vector-ref destinations 0))
+          (e3-test-u32-ref (vector-ref destinations 1))
+          (e3-test-u32-ref (vector-ref destinations 2))
+          (e3-test-u32-ref (vector-ref destinations 3))
+          (e3-counter-ref frame 0) (e3-counter-ref frame 1)))
+
+(define (e3-r1-output=? frame destinations image)
+  (let ((current (e3-r1-output-image frame destinations)))
+    (let compare ((index 0))
+      (if (= index 6) #t
+          (and (= (vector-ref current index) (vector-ref image index))
+               (compare (+ index 1)))))))
+
+(define (e3-r1-cut-retry! model dataset frame destinations stage role)
+  (let* ((entry (e3-frame-entry-live frame 'e3-r1-cut-retry!))
+         (cursor (d2-token-dataset-cursor dataset))
+         (modes (e3-test-retention-modes frame))
+         (model-image (e3-test-retention-model-snapshot model))
+         (rng (m3t-public-initializer-words
+               (m3t-public-model-initializer model)))
+         (outputs (e3-r1-output-image frame destinations))
+         (probes (e3-test-retention-probes))
+         (caught #f))
+    (e3-test-retention-check 'precut-output
+      (e3-test-retention-output=? frame destinations))
+    (e3-test-retention-check 'arm-one-idle-frame
+      (= (e3-r1-preinvoke-arm (vector-ref entry 4) stage role) 0))
+    (with-region ('e3-r1-source-failure 262144)
+      (guard
+       (failure (#t (set! caught failure) #t))
+       (e3-evaluate-into! model dataset frame)))
+    (e3-test-retention-check 'typed-preinvoke-failure
+      (and caught (transformer-error? caught)
+           (eq? (transformer-error-category caught) 'internal)
+           (eq? (transformer-error-operation caught) 'e3-evaluate-into!)))
+    ;; The source ledger retains the first failure across cleanup. Checking
+    ;; object identity detects a later cleanup error replacing that diagnostic.
+    (e3-test-retention-check 'first-diagnostic
+      (and (eq? caught (vector-ref entry 11))
+           (= (vector-ref entry 15)
+              (+ (* stage 12) (e3-error-category-index 'internal)))
+           (= (vector-ref (vector-ref entry 12) 0) stage)
+           (= (vector-ref (vector-ref entry 12) 1) 0)
+           (= (vector-ref (vector-ref entry 12) 2) 5)
+           (= (vector-ref (vector-ref entry 12) 3) 10)))
+    (e3-test-retention-check 'source-idle
+      (and (= (vector-ref entry 1) 1)
+           (= (vector-ref entry 10) 0)
+           (not (vector-ref (vector-ref entry 3) 10))))
+    (with-region ('e3-r1-source-rollback 262144)
+      (e3-test-retention-check 'failure-cursor
+        (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset)))
+      (e3-test-retention-check 'failure-six-outputs
+        (e3-r1-output=? frame destinations outputs))
+      (e3-test-retention-check 'failure-mode
+        (e3-test-retention-modes=? frame modes))
+      (e3-test-retention-check 'failure-model-and-gradients
+        (e3-test-retention-model=? model model-image))
+      (e3-test-retention-check 'failure-rng
+        (equal? rng (m3t-public-initializer-words
+                     (m3t-public-model-initializer model))))
+      (let check ((index 0))
+        (if (= index 29) #t
+            (begin
+              (if (or (<= index 6) (and (>= index 17) (<= index 26)))
+                  (e3-test-retention-check 'failure-native-owners
+                    (= (vector-ref probes index)
+                       (e3-test-retention-probe index))))
+              (check (+ index 1)))))
+      #t)
+    ;; No rebind, reopen, reseed, or new frame: the accepted one-shot arm has
+    ;; been consumed and the same authorities must complete a genuine call.
+    (e3-test-retention-call! model dataset frame destinations cursor modes
+                             model-image)
+    (e3-test-retention-check 'retry-six-outputs
+      (e3-r1-output=? frame destinations outputs))
+    #t))
+
+(define (e3-r1-source-retry-run corpus-path)
+  (let* ((fixture (e3-test-fixture))
+         (model (vector-ref fixture 0))
+         (tokenizer (vector-ref fixture 1))
+         (destinations (vector-ref fixture 2))
+         (frame (vector-ref fixture 3))
+         (dataset (d2-token-dataset-open
+                   (e3-test-dataset-config corpus-path #t) tokenizer)))
+    (guard
+     (failure (#t (d2-token-dataset-close! dataset) (raise failure)))
+     (e3-test-retention-set-mixed! frame)
+     (e3-test-retention-check 'seed-present-gradient
+       (= (e3-test-seed-gradient
+            (vector-ref (m3t-entry model 'model 'e3-r1-source-retry-run #t)
+                        3)) 0))
+     (let ((cursor (d2-token-dataset-cursor dataset))
+           (modes (e3-test-retention-modes frame))
+           (model-image (e3-test-retention-model-snapshot model)))
+       (e3-test-retention-call! model dataset frame destinations cursor modes
+                                model-image)
+       (let role-loop ((role 0))
+         (if (= role 21) #t
+             (begin
+               (e3-r1-cut-retry! model dataset frame destinations 7 role)
+               (role-loop (+ role 1)))))
+       (e3-r1-cut-retry! model dataset frame destinations 8 -1)
+       (e3-r1-cut-retry! model dataset frame destinations 9 -1)
+       (e3-r1-cut-retry! model dataset frame destinations 10 -1)
+       (e3-r1-cut-retry! model dataset frame destinations 11 -1)
+       (e3-r1-cut-retry! model dataset frame destinations 12 -1))
+     (d2-token-dataset-close! dataset)
+     #t)))

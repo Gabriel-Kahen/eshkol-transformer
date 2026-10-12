@@ -842,6 +842,15 @@ and stage-selective fault/observer seams for review. It provides no new runtime
 proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
 verdicts remain prerequisites before the full matrix is implemented and run.
 
+The R1 source-only union on the current-main plus CLI3 `b98321ef` lineage
+stages the previously reviewed private retention and source-retry prerequisites, the
+test-only E3 preinvoke cuts, and the D2 batch-construction retry candidate.
+Its D2 selector can request the second admitted batch create at each of seven
+construction stages, then check the first diagnostic, complete rollback and
+same-authority retry. The old-branch package inventories are provisional on
+this new lineage. Exact current-head package/runtime, sanitizer and acceptance
+gates remain pending; this source staging does not admit E3 §9 R1.
+
 The [E3 idle real-model control contract](e3/E3_IDLE_REAL_MODEL_CONTROL_CONTRACT.md)
 specifies a test-only use of existing I2 checkpoint decode and whole-batch load
 for all 14 authentic M3 parameter owners before frame binding. It preserves the

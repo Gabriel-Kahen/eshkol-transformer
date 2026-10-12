@@ -75,6 +75,10 @@ struct et_e3_frame_internal {
   int64_t counts[2][2], active, staged_counts[2], published_counts[2];
   uint32_t sum_bank, committed, cleanup_ready, published_valid;
   et_kernel_runtime *runtime[6];
+#ifdef ET_E3_R1_PREFLIGHT_TESTING
+  int64_t preinvoke_stage, preinvoke_role;
+  uint32_t preinvoke_armed;
+#endif
 };
 
 static et_e3_frame_internal *e3_registry;
@@ -113,6 +117,18 @@ static int64_t e3_fail(int64_t status, int64_t code) {
   e3_last_code = code;
   return status;
 }
+
+#ifdef ET_E3_R1_PREFLIGHT_TESTING
+enum { E3_CODE_TEST_PREFLIGHT = 10 };
+
+static int64_t e3_test_preinvoke_cut(et_e3_frame_internal *frame,
+                                     int64_t stage, int64_t role) {
+  if (!frame->preinvoke_armed || frame->preinvoke_stage != stage ||
+      frame->preinvoke_role != role) return 0;
+  frame->preinvoke_armed = 0;
+  return e3_fail(E3_INTERNAL, E3_CODE_TEST_PREFLIGHT);
+}
+#endif
 
 static int64_t e3_dependency_status(int64_t domain, int64_t category) {
   if (domain == 1) {
@@ -412,6 +428,26 @@ static int64_t e3_storage_check(et_e3_frame_internal *frame, int require_runtime
       if (!frame->runtime[i]) return e3_fail(E3_INTERNAL, E3_CODE_INVARIANT);
   return 0;
 }
+
+#ifdef ET_E3_R1_PREFLIGHT_TESTING
+int64_t et_e3_test_preinvoke_arm_v1(void *pointer, int64_t stage,
+                                    int64_t role) {
+  e3_clear();
+  et_e3_frame_internal *frame = e3_admit(pointer);
+  if (!frame) return e3_last_category;
+  if ((stage == 7 ? role < 0 || role > 20 :
+       stage < 8 || stage > 12 || role != -1))
+    return e3_fail(E3_INVALID_ARGUMENT, E3_CODE_PHASE);
+  if (frame->phase != E3_IDLE || frame->preinvoke_armed)
+    return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
+  int64_t rc = e3_storage_check(frame, 1);
+  if (rc) return rc;
+  frame->preinvoke_stage = stage;
+  frame->preinvoke_role = role;
+  frame->preinvoke_armed = 1;
+  return 0;
+}
+#endif
 
 static const et_kernel_provider_v1 *e3_resolver(void *context,
                                                  const char *symbol) {
@@ -827,8 +863,13 @@ static e3_operand e3_view_operand(const et_kernel_tensor_view_v1 *view) {
 static int64_t e3_dispatch(et_e3_frame_internal *frame, size_t runtime,
                            const char *capability, const char *operation,
                            size_t rank, const uint64_t *shape,
+                           int64_t stage, int64_t role,
                            const e3_operand *inputs, size_t input_count,
                            et_f32_tensor *const *outputs, size_t output_count) {
+#ifndef ET_E3_R1_PREFLIGHT_TESTING
+  (void)stage;
+  (void)role;
+#endif
   et_f32_scoped_guard_internal guards[14] = {{0}};
   et_kernel_tensor_view_v1 input_views[9];
   et_kernel_tensor_view_v1 output_views[5];
@@ -860,6 +901,11 @@ static int64_t e3_dispatch(et_e3_frame_internal *frame, size_t runtime,
       output_views
     };
     et_kernel_error error;
+#ifdef ET_E3_R1_PREFLIGHT_TESTING
+    if (e3_test_preinvoke_cut(frame, stage, role))
+      rc = e3_last_category;
+    else
+#endif
     if (et_kernel_runtime_dispatch(frame->runtime[runtime], &call, &error) != 0)
       rc = e3_kernel_error(&error);
   }
@@ -967,6 +1013,7 @@ int64_t et_e3_private_forward_role_v1(void *pointer, int64_t role) {
 #undef VIEW_INPUT
 #undef PIN_INPUT
   int64_t rc = e3_dispatch(frame, runtime, capability, operation, rank, shape,
+                           7, role,
                            in, count, out, 1);
   if (rc) return rc;
   ++frame->next_role;
@@ -989,7 +1036,7 @@ int64_t et_e3_private_ce_v1(void *pointer) {
   et_f32_tensor *outputs[] = {frame->ce};
   int64_t rc = e3_dispatch(frame, E3_RUNTIME_L2,
       "kernel.indexed-cross-entropy", "indexed-cross-entropy.forward",
-      3, e3_shape_logits, inputs, 2, outputs, 1);
+      3, e3_shape_logits, 8, -1, inputs, 2, outputs, 1);
   if (!rc) frame->next_role = 22;
   return rc;
 }
@@ -1008,7 +1055,7 @@ int64_t et_e3_private_reduce_v1(void *pointer) {
   et_f32_tensor *outputs[] = {frame->batch[0], frame->batch[1], frame->batch[2]};
   int64_t rc = e3_dispatch(frame, E3_RUNTIME_L3S,
       "l3s.masked-objective", "l3s.masked-objective.reduce.bool",
-      2, e3_shape_pair, inputs, 2, outputs, 3);
+      2, e3_shape_pair, 9, -1, inputs, 2, outputs, 3);
   if (!rc) frame->phase = E3_REDUCED;
   return rc;
 }
@@ -1045,6 +1092,11 @@ int64_t et_e3_private_correct_v1(void *pointer) {
         3, sizeof(input_views[0]), sizeof(input_views), input_views,
         2, sizeof(outputs[0]), sizeof(outputs), outputs};
       et_kernel_error error;
+#ifdef ET_E3_R1_PREFLIGHT_TESTING
+      if (e3_test_preinvoke_cut(frame, 10, -1))
+        rc = e3_last_category;
+      else
+#endif
       if (et_kernel_runtime_dispatch(frame->runtime[E3_RUNTIME_METRICS],
                                      &call, &error) != 0)
         rc = e3_kernel_error(&error);
@@ -1093,6 +1145,11 @@ static int64_t e3_accumulate_dispatch(et_e3_frame_internal *frame) {
       9, sizeof(inputs[0]), sizeof(inputs), inputs,
       5, sizeof(outputs[0]), sizeof(outputs), outputs};
     et_kernel_error error;
+#ifdef ET_E3_R1_PREFLIGHT_TESTING
+    if (e3_test_preinvoke_cut(frame, 11, -1))
+      rc = e3_last_category;
+    else
+#endif
     if (et_kernel_runtime_dispatch(frame->runtime[E3_RUNTIME_METRICS],
                                    &call, &error) != 0)
       rc = e3_kernel_error(&error);
@@ -1136,7 +1193,7 @@ int64_t et_e3_private_finalize_v1(void *pointer) {
                               frame->result[2], frame->result[3]};
   int64_t rc = e3_dispatch(frame, E3_RUNTIME_METRICS,
       "e3.evaluation-metrics", "e3.evaluation-metrics.finalize",
-      3, e3_shape_logits, inputs, 3, outputs, 4);
+      3, e3_shape_logits, 12, -1, inputs, 3, outputs, 4);
   if (!rc) {
     frame->staged_counts[0] = frame->counts[bank][0];
     frame->staged_counts[1] = frame->counts[bank][1];

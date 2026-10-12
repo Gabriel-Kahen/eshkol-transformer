@@ -161,6 +161,12 @@ enum {
 
 #ifdef ET_D2_NATIVE_TESTING
 void et_d2_batch_test_fail_stage_v1(int64_t stage);
+/* One-shot fault on the 1-based batch-create occurrence after owner, shape,
+ * state, and generation admission, stages 1..7. Invalid input disarms and
+ * returns zero; legacy stage faults remain persistent. */
+int64_t et_d2_batch_test_fail_occurrence_v1(int64_t stage,
+                                            int64_t occurrence);
+int64_t et_d2_batch_test_occurrences_seen_v1(void);
 void et_d2_exact_read_test_fail_stage_v1(int64_t stage);
 int64_t et_d2_dataset_test_live_count_v1(void);
 int64_t et_d2_batch_test_live_count_v1(void);

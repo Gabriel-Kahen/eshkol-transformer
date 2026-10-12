@@ -46,6 +46,11 @@ int64_t et_e3_private_last_error_code_v1(void);
 #ifdef ET_E3_TESTING
 void et_e3_test_frame_fail_alloc_after_v1(size_t count);
 #endif
+#ifdef ET_E3_R1_PREFLIGHT_TESTING
+/* Noninstalled, exact-frame one-shot cut: stage 7 uses role 0..20;
+ * stages 8..12 require role -1. Arm only while the frame is idle. */
+int64_t et_e3_test_preinvoke_arm_v1(void *frame, int64_t stage, int64_t role);
+#endif
 
 #ifdef __cplusplus
 }

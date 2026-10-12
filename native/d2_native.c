@@ -86,6 +86,10 @@ _Static_assert(offsetof(et_d2_eshkol_closure, func_ptr) == 0u,
 
 #ifdef ET_D2_NATIVE_TESTING
 static int64_t fail_stage;
+static int64_t fail_occurrence_stage;
+static int64_t fail_occurrence_target;
+static int64_t fail_occurrences_seen;
+static int64_t fail_occurrence_active;
 static int64_t read_fail_stage;
 static int64_t owned_allocations;
 static int64_t exact_read_fd_live;
@@ -484,13 +488,46 @@ int64_t et_d2_shuffle_window_load_v1(const void *owner, int64_t index) {
 }
 
 #ifdef ET_D2_NATIVE_TESTING
-void et_d2_batch_test_fail_stage_v1(int64_t stage) { fail_stage = stage; }
+void et_d2_batch_test_fail_stage_v1(int64_t stage) {
+  fail_stage = stage;
+  fail_occurrence_stage = 0;
+  fail_occurrence_target = 0;
+  fail_occurrences_seen = 0;
+  fail_occurrence_active = 0;
+}
+
+int64_t et_d2_batch_test_fail_occurrence_v1(int64_t stage,
+                                            int64_t occurrence) {
+  et_d2_batch_test_fail_stage_v1(0);
+  if (stage < ET_D2_TEST_FAIL_CONTROL ||
+      stage > ET_D2_TEST_FAIL_BEFORE_PUBLISH || occurrence < 1) {
+    return 0;
+  }
+  fail_occurrence_stage = stage;
+  fail_occurrence_target = occurrence;
+  return 1;
+}
+
+int64_t et_d2_batch_test_occurrences_seen_v1(void) {
+  return fail_occurrences_seen;
+}
 
 void et_d2_exact_read_test_fail_stage_v1(int64_t stage) {
   read_fail_stage = stage;
 }
 
-static int should_fail(int64_t stage) { return fail_stage == stage; }
+static int should_fail(int64_t stage) {
+  if (fail_stage == stage) {
+    return 1;
+  }
+  if (fail_occurrence_active == stage) {
+    fail_occurrence_active = 0;
+    fail_occurrence_stage = 0;
+    fail_occurrence_target = 0;
+    return 1;
+  }
+  return 0;
+}
 
 static int should_fail_read(int64_t stage) {
   return read_fail_stage == stage;
@@ -739,6 +776,21 @@ int64_t et_d2_batch_create_v1(const void *owner, int64_t rows_value,
     (void)status(ET_D2_NATIVE_STATUS_UNSUPPORTED);
     return 0;
   }
+#ifdef ET_D2_NATIVE_TESTING
+  /* A selected stage cannot spill into the next admitted create. */
+  if (fail_occurrence_active != 0) {
+    fail_occurrence_stage = 0;
+    fail_occurrence_target = 0;
+    fail_occurrence_active = 0;
+  }
+  if (fail_occurrence_stage != 0 &&
+      fail_occurrences_seen < fail_occurrence_target) {
+    fail_occurrences_seen++;
+    if (fail_occurrences_seen == fail_occurrence_target) {
+      fail_occurrence_active = fail_occurrence_stage;
+    }
+  }
+#endif
   if (should_fail(ET_D2_TEST_FAIL_CONTROL)) {
     (void)status(ET_D2_NATIVE_STATUS_ALLOCATION_FAILED);
     return 0;
