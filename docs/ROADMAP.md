@@ -972,7 +972,9 @@ and all compiled gates remain pending. PR #206's hosted run `38445613534`
 stopped at Q0 Python isolation because the pinned, noninstalled zero P1 overlay
 generator was missing from the exact development-script allowlist. The focused
 Q0 and zero-control source tests pass after its exact path and near-miss checks
-were added; a fresh exact-head hosted run remains pending.
+were added. The fresh exact-head PR #206 hosted run `38459515386` passed its
+required checks, and PR #206 merged as `c60779bb`/tree `e49eb998`. This
+does not supply the separate E3 §9 compiled-private evidence.
 
 A separate noninstalled E3 overflow tuple is a source candidate for a genuine
 stage-12 finalization boundary. It loads a checksummed C1 state into one fresh
@@ -1029,6 +1031,58 @@ from direct-provider-only cases and names the missing noninstalled model-control
 and stage-selective fault/observer seams for review. It provides no new runtime
 proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
 verdicts remain prerequisites before the full matrix is implemented and run.
+The bounded development-only [genuine three-batch M2 sum-order witness](../tests/e3_reference/sum_order_witness_v1.json)
+uses packed raw-V256 D2 rows and the registered seed-1729 M3/f32 CE reference.
+Its first witness in a 64-candidate SHA-256 domain has serial numerator
+`41dcde81` and regrouped numerator `41dcde80`; physical D1, D2 rows, all
+21 M3 roles, CE and numerator inputs are reproducibly pinned. A rational RN-even
+oracle and negative comparator mutation validate the source fixture. This is
+reachability evidence only; a compiled private M2 mutant gate remains open.
+The [noninstalled sum-order mutant source](e3/E3_SUM_ORDER_MUTANT_SOURCE.md)
+now prepares an exact packed D1 resource, a test-only third-batch K1 operand
+regrouping, and a private AOT gate that requires the first actual difference
+at `state_f32[0]` with no rejected transcript. Focused source-only and static
+checks pass; independent review remains pending. No optimized runtime, poison or sanitizer verdict is
+claimed, and the M2 compiled-private row stays open.
+The merged PR #206 source-test repair keeps the exact zero-control and sum-order source
+contracts while aligning older assertions with the admitted zero ASan tuple,
+the conditional undefined-symbol comparison, the test-only sum-order frame
+guard, and the single frozen JSON witness. The E3 private (96), E3 reference
+(27), and Q0/M3CG focused (15) source checks pass on the pinned Python 3.14.6
+oracle. Independent review and supported compiled gates remain pending.
+
+The N5 source prerequisite now generates independently counted authentic 8,193
+packed D2 rows and checks that the private D2-core remaining-row guard runs at
+stage 2 before native acquisition/traversal. The compiled private one-over
+failure, unchanged caller state and six outputs, and measured normal/poison/
+sanitizer resource bounds remain open.
+An isolated [private N5 compiled-gate candidate](e3/E3_N5_PRIVATE_PREFLIGHT_GATE.md)
+now extends the existing noninstalled retention test aggregate with a genuine
+8,192 pass and 8,193 stage-2 rejection under one model/frame authority. Its
+runner records exact D1 payload, independent D2 cursor, four destination words,
+two counters, model/gradient/mode/RNG and native owner state, plus normal,
+poisoned and sanitized peak RSS. Source and shell checks alone do not promote
+this candidate to compiled-private evidence; the supported run is pending.
+An isolated [private E3 edge-gate source candidate](e3/E3_EDGE_PRIVATE_GATE.md)
+adds authentic empty, singleton, entry-EOS and padded one-token-tail D1/D2
+cases to that noninstalled retention aggregate. The zero-row paths require
+stage-12 `invalid-state` and byte-atomic six outputs; the real padded tail
+requires three active tokens, two batches and exact accuracy one from the
+independent seed-1729 M3 all-correct selection proof. Independent D2 cursor/row
+fixtures, a fourth-output mutation control, source/unit/shell checks and a
+proposed normal/poison/sanitizer
+runner are staged. Independent review and the compiled supported result remain
+pending; this does not close §9 or replace the separate N5 8,192/8,193 gate.
+The edge-parent source-suite repair updates two retention-driver digest pins to
+the accepted fourth-output driver and regenerates the private first-evaluation
+mutant mechanically from that same N5/edge baseline. The E3-private, E3-reference
+and horizon source suites pass on this isolated tree. Independent review and
+the compiled private gates remain pending; these source checks do not establish
+edge, mutant or §9 runtime acceptance.
+The repaired E3 source union `cc0f6fe`/tree `cda29424` retains both reviewed
+parent repairs and passed independent source-composition review. Its composition
+with current main `c60779bb` still requires independent whole-tree review;
+the supported compiled E3 §9 gates remain pending.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
-[[ $# -le 2 ]] || die "usage: $0 [ARTIFACT_DIR] [normal|wrong-target|mean-of-means|second-normalization|wrong-vocab-axis|sanitize]"
+[[ $# -le 2 ]] || die "usage: $0 [ARTIFACT_DIR] [normal|wrong-target|mean-of-means|second-normalization|wrong-vocab-axis|sum-order|sanitize|sum-order-sanitize]"
 verify_toolchain
 for command in ar cmp; do require_command "${command}"; done
 artifact="${1:-$(project_build_dir)/e3-numerical-test}"
 mode="${2:-normal}"
-case "${mode}" in normal|wrong-target|mean-of-means|second-normalization|wrong-vocab-axis|sanitize) ;; *) die "unknown E3 numerical mode: ${mode}" ;; esac
+case "${mode}" in normal|wrong-target|mean-of-means|second-normalization|wrong-vocab-axis|sum-order|sanitize|sum-order-sanitize) ;; *) die "unknown E3 numerical mode: ${mode}" ;; esac
 mkdir -p "$(dirname -- "${artifact}")"
 staging="$(mktemp -d "$(dirname -- "${artifact}")/.e3-numerical.XXXXXX")"
 numerical_stage_cleanup() {
@@ -25,6 +25,7 @@ prefix="${PROJECT_ROOT}/tests/e3_private/numerical_package"
 mutant="${mode}"
 sanitize=0
 if [[ "${mode}" == sanitize ]]; then mutant=normal; sanitize=1; fi
+if [[ "${mode}" == sum-order-sanitize ]]; then mutant=sum-order; sanitize=1; fi
 E1B_COMPILER_TIMEOUT_SECONDS="${E3_COMPILER_TIMEOUT_SECONDS:-900}" \
   E3_NUMERICAL_MUTANT="${mutant}" E3_NUMERICAL_SANITIZE="${sanitize}" \
   /usr/bin/bash "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \

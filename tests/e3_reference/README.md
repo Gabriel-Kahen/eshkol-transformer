@@ -7,8 +7,8 @@ artifact or CI registration.
 `corpus.py` creates a canonical raw/empty V256 T1 artifact and tiny checksummed D1
 resources at a fresh output path. It derives packed, unpacked and nonzero-cursor
 emissions through the accepted carrier-neutral D2 reference. All binary resources
-and JSON transcripts are generated under a temporary or ignored build directory;
-none is checked in.
+and JSON transcripts are generated under a temporary or ignored build directory.
+The single checked-in JSON file is the frozen sum-order witness described below.
 
 `reference.py` requires the existing pinned Python 3.14.6 / PyTorch 2.13.0+cpu
 development environment with `ATEN_CPU_CAPABILITY=default` and
@@ -41,3 +41,18 @@ provider-only case and `00` cannot successfully finalize. Packed repartitioning
 may preserve rows; unpacked shard boundaries deliberately change them. Synthetic
 records test this development comparator only and make no native traversal,
 transaction, lifetime, publication or public-evaluator claim.
+
+`sum_order_witness.py` performs a finite, single-threaded search of exactly 64
+SHA-256-derived six-byte raw V256 corpora. Each candidate yields three actual
+packed D2 batches; the registered seed-1729 M3 equations and f32 CE produce the
+batch numerator words. The first genuine serial-versus-grouped RN-even
+counterexample is frozen in `sum_order_witness_v1.json`, with exact source,
+physical D1, D2 rows, parameter, 21-role-trace, Q0-lock, CE and numerator
+checksums/words. The rational oracle recomputes both groupings from those words.
+This is still a development reference; it does not prove native E3 traversal or
+compiled-private M2 acceptance. Run the bounded source gate with a 30-second cap:
+
+```bash
+ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE timeout 30s "$Q0_PYTHON" \
+  -m unittest tests.e3_reference.test_sum_order_witness -v
+```

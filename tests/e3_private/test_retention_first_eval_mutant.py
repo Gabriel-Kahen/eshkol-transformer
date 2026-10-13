@@ -49,7 +49,7 @@ class FirstEvaluationMutantTuple(unittest.TestCase):
     def test_exact_driver_inverse_and_first_call_boundary(self) -> None:
         base, mutant = BASE.read_text(), MUTANT.read_text()
         self.assertEqual(sha(BASE),
-                         "44d64a8bd96d48ae3faea18d437fb5ee4934016da7f75a3011c666bd0a35be09")
+                         "a62186336f2fad5496756902f426409e088017c6f1823f7e21a3a5690bfc9ed7")
         self.assertEqual(transform(base), mutant)
         self.assertEqual(transform(mutant, reverse=True), base)
         measured = mutant.index("(- (e3-test-region-used) region-before)")
@@ -67,7 +67,10 @@ class FirstEvaluationMutantTuple(unittest.TestCase):
 
     def test_normal_inputs_unchanged_and_manifests_exact(self) -> None:
         self.assertEqual(sha(ROOT / "src/eshkol_transformer/e3_frame.c"),
-                         "8d238ed79b0b14d74b8ed454e328bcc22da46e766e4d70a59482763ef18b8857")
+                         "6a4c0165fe18aa310f0d4cdecc3ac4647b5b0c1630291e5528dd7aeabd80773e")
+        frame = (ROOT / "src/eshkol_transformer/e3_frame.c").read_text()
+        self.assertIn('#if defined(ET_E3_NUMERICAL_SUM_ORDER) && !defined(ET_E3_NUMERICAL_TESTING)', frame)
+        self.assertNotIn("et_e3_test_first_eval_corrupt_v1", frame)
         digest = hashlib.sha256()
         originals = sorted(PRIVATE.glob("retention_package_*.txt"))
         self.assertEqual(len(originals), 11)

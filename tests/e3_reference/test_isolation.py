@@ -15,11 +15,13 @@ class DevelopmentIsolationTests(unittest.TestCase):
         ):
             self.assertNotIn("e3_reference", (ROOT / relative).read_text())
 
-    def test_directory_contains_source_and_documentation_only(self) -> None:
+    def test_directory_contains_source_docs_and_frozen_witness_only(self) -> None:
         allowed = {".md", ".py"}
         files = [path for path in Path(__file__).parent.iterdir() if path.is_file()]
         self.assertTrue(files)
-        self.assertTrue(all(path.suffix in allowed for path in files))
+        self.assertTrue(all(path.suffix in allowed or
+                            path.name == "sum_order_witness_v1.json"
+                            for path in files))
 
 
 if __name__ == "__main__":
