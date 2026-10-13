@@ -1,0 +1,27 @@
+;;; One isolated recoverable preprepare control per process.
+(extern void e3-zero-negative-run ptr ptr ptr
+        :real et_e3_zero_negative_run_v1)
+
+(define (check condition)
+  (if condition #t
+      (begin (display "E3-ZERO-NEGATIVE-FAIL") (newline) (exit 1))))
+
+(define args (command-line))
+(check (and (pair? args) (pair? (cdr args))
+            (pair? (cdr (cdr args)))
+            (pair? (cdr (cdr (cdr args))))
+            (null? (cdr (cdr (cdr (cdr args)))))))
+(define corpus (car (cdr args)))
+(define case-name (car (cdr (cdr args))))
+(define gradient-name (car (cdr (cdr (cdr args)))))
+(check (or (string=? gradient-name "absent")
+           (string=? gradient-name "present")))
+(define output (vector #f))
+(e3-zero-negative-run
+  (vector case-name (string=? gradient-name "present"))
+  (vector corpus) output)
+(define result (vector-ref output 0))
+(check (and (vector? result) (= (vector-length result) 2)
+            (eq? (vector-ref result 0) 'e3-zero-negative-result-v1)
+            (string=? (vector-ref result 1) case-name)))
+(display "E3-ZERO-NEGATIVE-RUNTIME-PASS") (newline)

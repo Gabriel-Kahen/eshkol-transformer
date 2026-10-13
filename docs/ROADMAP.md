@@ -930,6 +930,17 @@ independent source review, and supported normal/repeat, poison and sanitizer
 execution remain pending. This supplies no §9 N3/M2 compiled acceptance or
 target-offset, wrong-axis, finite-boundary or overflow proof.
 
+The separate E3 N3 zero-model source candidate on the exact `a64caf9a7`
+union uses the registered M3 tree's 14 unique CPU/f32 owners and one
+head/embedding tie. A noninstalled root decodes 4,736 zero bytes through I2,
+immediately unwraps and commits the returned plan before E3 frame binding,
+then observes genuine D1/D2 all-correct, all-wrong and mixed target streams.
+The two-field ordinary E3 driver remains unchanged. Focused offline source
+tests pass; pinned Q0 oracle generation, emitted package inventories,
+generated AOT postprepare review, normal/repeat/poisoned and sanitizer runtime
+gates, and independent source review remain pending. This candidate does not
+establish N3 or E3 §9 compiled acceptance.
+
 A separate noninstalled E3 overflow tuple is a source candidate for a genuine
 stage-12 finalization boundary. It loads a checksummed C1 state into one fresh
 model before its authentic frame bind, uses the fixed D1 `0304`/D2 padded row,
