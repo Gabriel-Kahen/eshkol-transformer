@@ -13,7 +13,7 @@ source and offline checks before the orchestration root releases a host run.
 | Accepted adapter tree | `eda477c449c520223165644150a6c4fda69d1335` |
 | Recipe checkout | Exact full HEAD/tree in the separately reviewed ROOT release-pin file; its SHA-256 comes from the same immutable handoff. The file is created after this recipe commit is published. |
 | Host | Ubuntu 22.04 x86-64, Clang/LLVM 21.1.8 |
-| Eshkol | `toolchain/eshkol.lock` at the accepted adapter tree: `90cbd7130f47b8184bcc77b8d5c1b0026da980de` |
+| Eshkol toolchain lock | `toolchain/eshkol.lock` at the accepted adapter tree: Git blob `0743c71a1ce749aa70eea3f8cc043148ee4e06be`; file SHA-256 `8c168f5d560781245f6d4c73f695e72cbafa413b606d50bc7c36d2119acd9efe` |
 | Oracle Python | 3.14.6, as in the supported hosted acceptance workflow |
 
 The accepted tree includes the exact `tests/g3r/snapshot_codec_adapter_aggregate_test.esk`
