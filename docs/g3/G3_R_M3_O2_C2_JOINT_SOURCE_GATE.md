@@ -3,7 +3,8 @@
 **Noninstalled candidate; integration HOLD.** The source candidate at
 `20e86b192c23e59149f47c1bb0814918b19b41d7` started at the accepted
 O2-issued C2 fixture `098368be` and ported the feature-gated M3T roster from
-`513f50af`. The current-main union starts at `6f6ef9ada4c586573d495c40283ad4b9410d0957`.
+`513f50af`. The current-main union starts at `6f6ef9ada4c586573d495c40283ad4b9410d0957`;
+the independently reviewed C source was `a2babc6767ee921b10f65d574e5cd729aec9be58`.
 Its M3T source, header, native test, and prerequisite document already match
 the candidate blobs exactly; this union retains the main F32 witness, G3/A2
 17-word held owner, C2 operational changes, and predecessor pins. It adds no
@@ -22,7 +23,7 @@ matches. No caller-supplied parameter list can authorize the hold.
 After the same-owner hold issues one native O2 state, the existing private
 adoption wrapper registers that exact pointer. The existing C2 compose claims
 it together with the M3 model's P1 state dictionary. The inherited test covers
-foreign/equal-bit O2 states, duplicate adoption, counter and P1 mismatches,
+foreign/equal-bit O2 states, duplicate adoption, counter and P1 alias mismatches,
 second-claim rollback, same-owner retry, and C2-only retirement. The joint
 extension calls the existing private C2 SAVE writer after the O2 hold ends;
 it checks an invalid path and deterministic file bytes from two AOT builds.
@@ -46,6 +47,19 @@ This source-only successor binds that existing T1 name to the T2 root's exact
 same-aggregate admission predicate before loading M3T, as the accepted TR3
 private aggregates already do. A focused closure test checks the upstream
 predicate and rejects a missing, late, or second-registry binding. The
-separately released C executor has no runtime result in this source gate.
+separately released C executor reached joint runtime and failed at the P1
+alias negative. Its same-configuration foreign M3T model had the same fourteen
+paths, shapes, and tied alias group, so C2 found no structural mismatch. The
+sealed C report produced no accepted joint runtime or SAVE bytes.
+
+The repaired noninstalled fixture drops the secondary token-embedding entry
+and tied alias group, then clones the remaining fourteen foreign P1 entries
+under the I2 provider with independent tensor ownership. Before compose it
+asserts equal canonical paths and shapes, the original tie, and the
+missing tie. After the expected `shape-mismatch/checkpoint-load`, it checks
+unchanged request slots, C2 registry, live O2 issued pointer and hold, then
+releases the independent P1 state. This checks structural rejection only; it
+does not claim C2 rejects a foreign P1 owner with identical topology.
+Independent source review and a fresh supported one-use runtime gate are next.
 The combined M3/F32/G3/A2/O2/P1/C2 state, pre/post transfer bit checks,
 error cleanup, and file-pair publication remain unproved.

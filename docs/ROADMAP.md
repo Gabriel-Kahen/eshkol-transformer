@@ -1852,10 +1852,18 @@ onto exact main `6f6ef9ada4c586573d495c40283ad4b9410d0957`. The already
 identical M3 roster blobs are retained from main, as are
 the F32 bit witness, G3/A2 17-word held owner, C2 operational changes, and
 current predecessor pins. The earlier one-use B joint AOT failed before
-runtime on the missing predicate; the source successor and separately released
-C executor have no accepted joint runtime result here. Independent exact-union
-review, supported C runtime, combined M3/F32/G3/A2/O2/P1/C2 fault cuts, and
-SAVE file-pair/restore gates remain open. This is no continuation admission.
+runtime on the missing predicate. The independently reviewed C source at
+`a2babc6767ee921b10f65d574e5cd729aec9be58` reached runtime but failed its
+P1 alias negative: a same-configuration foreign M3T owner had identical paths,
+shapes, and alias group, so C2 had no structural reason to reject it. A focused
+noninstalled successor drops the secondary token-embedding entry and tie,
+then clones a P1 state candidate with the same fourteen canonical paths and
+shapes. Its runtime assertions cover that topology delta and preclaim
+request/owner atomicity. This is a fixture repair,
+not a C2 owner-provenance contract or accepted C runtime. Independent source
+review, a fresh supported one-use gate, combined M3/F32/G3/A2/O2/P1/C2 fault
+cuts, and SAVE file-pair/restore gates remain open. This is no continuation
+admission.
 
 The [current-main private provider union gate](g3/G3_R_CURRENT_PRIVATE_UNION_GATE.md)
 now has one independently accepted supported-host C run on exact source

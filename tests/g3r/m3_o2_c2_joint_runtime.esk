@@ -244,12 +244,64 @@
             (not (eq? issued-a issued-b))))
 (define adopted-b
   (o2-g3r-adopt-issued-state-internal optimizer hold-b issued-b))
-(define wrong-alias-p1 (module-state-dict foreign-model))
+(define foreign-p1 (module-state-dict foreign-model))
+;;; Clone genuine M3T entries into an independently owned test-only P1 state,
+;;; omitting the secondary token-embedding entry and its tied alias group.
+(define (without-token-embedding entries)
+  (if (null? entries) '()
+      (if (equal? (state-entry-path-internal (car entries))
+                  '("token_embedding" "weight"))
+          (without-token-embedding (cdr entries))
+          (cons (car entries) (without-token-embedding (cdr entries))))))
+(define untied-entries
+  (without-token-embedding (state-dict-entries-internal foreign-p1)))
+(check "test P1 drops exactly the secondary token-embedding entry"
+       (and (= (i2-bounded-list-length
+                 (state-dict-entries-internal foreign-p1) 16) 15)
+            (= (i2-bounded-list-length untied-entries 16) 14)))
+(define wrong-alias-p1
+  (state-dict-create-unsafe-internal
+    (state-dict-format-internal foreign-p1) 1 0 '()
+    (state-dict-adapter-internal foreign-p1)
+    untied-entries '()))
+(state-dict-bind-provider-internal! wrong-alias-p1 i2-provider-name)
+(check "foreign source P1 releases after independent clone"
+       (state-dict-release! foreign-p1))
+(define p1-b (module-state-dict model))
+(define matching-topology
+  (state-dict-c2-parameter-topology-internal p1-b 'checkpoint-load))
+(define wrong-alias-topology
+  (state-dict-c2-parameter-topology-internal
+    wrong-alias-p1 'checkpoint-load))
+(check "alias negative preserves fourteen canonical paths and shapes"
+       (and (= (i2-bounded-list-length (vector-ref matching-topology 0) 15)
+               14)
+            (equal? (vector-ref matching-topology 0)
+                    (vector-ref wrong-alias-topology 0))
+            (equal? (vector-ref matching-topology 1)
+                    (vector-ref wrong-alias-topology 1))))
+(check "alias negative removes only M3T head/token-embedding tie"
+       (and (equal? (vector-ref matching-topology 2)
+                    '((("head" "weight")
+                       ("token_embedding" "weight"))))
+            (null? (vector-ref wrong-alias-topology 2))))
+(define wrong-alias-request
+  (vector c2-training-state-compose-tag wrong-alias-p1 adopted-b
+          (controls 0) 'checkpoint-load #f))
+(define c2-before-alias c2-training-state-states)
 (expect-error "P1 alias mismatch rejects before claim" 'shape-mismatch
               'checkpoint-load
-  (lambda () (compose wrong-alias-p1 adopted-b 0)))
+  (lambda () (c2-training-state-compose-internal wrong-alias-request)))
+(check "alias rejection preserves request, C2 registry, and O2 hold"
+       (and (eq? (vector-ref wrong-alias-request 1) wrong-alias-p1)
+            (eq? (vector-ref wrong-alias-request 2) adopted-b)
+            (eq? (vector-ref wrong-alias-request 5) #f)
+            (eq? c2-training-state-states c2-before-alias)
+            (eq? (vector-ref
+                   (o2-require-live-state 'g3r-save-o2-adopt adopted-b) 1)
+                 issued-b)
+            (= (g3r-test-hold-match hold-b issued-b) 0)))
 (check "alias negative P1 releases" (state-dict-release! wrong-alias-p1))
-(define p1-b (module-state-dict model))
 (define saved-claim c2-training-state-claim-o2!)
 (set! c2-training-state-claim-o2!
   (lambda (state token)
