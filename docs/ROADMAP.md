@@ -985,6 +985,13 @@ bindings and reads rollback's setup box from that entry. Its focused offline
 source regression checks the binding shape. Compiler-only causation and a
 passing sanitizer result remain unproven; independent source review, compiled
 IR inspection and a fresh authorized one-use gate precede §9 acceptance.
+The separate N scratch compiler run on exact `f7ebcd6d` built its sanitized
+archive but failed its [IR inspector](e3/E3_N_IR_INSPECTOR_DIAGNOSIS.md): the
+compiler retained immutable `model` in SSA, while the inspector required a
+stack store. Offline review of the sealed N IR finds no old-model borrow check
+or post-readback use and confirms P1 consumes canonical root bindings. A
+corrected inspector candidate passes N's saved IR and rejects M's borrow-check
+IR; no first-evaluation or sanitizer acceptance follows from this diagnosis.
 The separate [host-monitor first-error candidate](e3/E3_HOST_MONITOR_FIRST_ERROR.md)
 records a bounded guest-relative cause for a transient unsafe-output scan;
 its successor now uses no-follow descriptor traversal, postscan identity
