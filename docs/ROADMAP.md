@@ -1797,6 +1797,14 @@ partitions and EOS rely on controlled native tests. Current-main combined-tree
 build and runtime validation remain gates before admission. No SAVE writer,
 file-pair publication, restore, replay or resumed continuation is provided.
 
+The [same-owner O2 issued-state to C2 owner binding contract](g3/G3_R_O2_ISSUED_C2_BINDING_CONTRACT.md)
+defines the missing private adoption and transaction order for a future
+current-main F32/M3/G3/A2/O2/C2 union. It is documentation only: the accepted
+O2 `073e9be7` native state must become the exact registered Eshkol O2 owner
+claimed by C2, not a second public optimizer snapshot. The compiled union,
+partial-claim rollback, original-owner release, writer failure and later
+G3RCV1 pair gates remain open; no SAVE or continuation is admitted.
+
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
 diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use
