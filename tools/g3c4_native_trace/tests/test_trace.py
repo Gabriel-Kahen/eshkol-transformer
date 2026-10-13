@@ -17,7 +17,7 @@ ENV = {"PATH": "/usr/bin:/bin", "G3C4_CANARY": "fixed"}
 
 def read_events(path):
     lines = path.read_text(encoding="ascii").splitlines()
-    if not lines or lines[0] != "g3c4-native-exec-v1":
+    if not lines or lines[0] != "g3c4-native-exec-v2":
         raise AssertionError("missing exact event log header")
     events = [line.split("\t") for line in lines[1:]]
     if any(not event or event[0] not in {"spawn", "exec", "exit", "merge", "complete"}

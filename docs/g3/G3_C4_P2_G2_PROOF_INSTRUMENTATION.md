@@ -25,8 +25,9 @@ Eshkol linker child is captured through the generated C++ wrapper, but any
 other native internal child requires an independently verified exec inventory.
 
 The optional `--native-log EVENTS` postflight input accepts the C7g
-`g3c4-native-exec-v1` log. It requires a complete, ordered root-zero process
-ledger, validates spawn/exec/exit/merge lineage and footer counts, and matches
+`g3c4-native-exec-v2` log. It requires a complete, ordered root-zero process
+ledger, validates child thread-group/start-tick provenance, merge-followed-by-exec
+lineage and footer counts, and matches
 each command receipt to a distinct native `exec` with exact NUL argv and an
 exec timestamp inside the receipt interval. Its JSON result reports unmatched
 native exec images so they can be reviewed. This is an offline source seam;

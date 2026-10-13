@@ -115,11 +115,36 @@ static unsigned long long start_ticks(pid_t pid) {
     char *save=NULL,*word=strtok_r((char*)end+2," ",&save);
     for(unsigned i=3;i<22 && word;++i) word=strtok_r(NULL," ",&save);
     if(!word) { errno=EINVAL;fail("missing proc starttime"); }
-    errno=0;unsigned long long value=strtoull(word,NULL,10);
-    if(errno) fail("parse proc starttime");
+    char *tail=NULL;errno=0;unsigned long long value=strtoull(word,&tail,10);
+    if(errno || !tail || *tail || value==0) { errno=EINVAL;fail("parse proc starttime"); }
     free(stat);return value;
 }
+static pid_t status_tgid(pid_t pid) {
+    size_t length;unsigned char *status=read_proc(pid,"status",&length);
+    (void)length;
+    long observed_pid=0,tgid=0;
+    for(char *save=NULL,*line=strtok_r((char*)status,"\n",&save);
+        line;line=strtok_r(NULL,"\n",&save)) {
+        long *value=NULL;
+        if(!strncmp(line,"Pid:",4)) { value=&observed_pid;line+=4; }
+        else if(!strncmp(line,"Tgid:",5)) { value=&tgid;line+=5; }
+        if(!value) continue;
+        while(*line==' ' || *line=='\t') ++line;
+        char *tail=NULL;errno=0;long parsed=strtol(line,&tail,10);
+        while(tail && (*tail==' ' || *tail=='\t')) ++tail;
+        if(errno || !tail || *tail || parsed<=0 || parsed>INT_MAX || *value) {
+            errno=EINVAL;fail("malformed proc task identity");
+        }
+        *value=parsed;
+    }
+    free(status);
+    if(observed_pid!=pid || tgid<=0) { errno=EINVAL;fail("proc task identity mismatch"); }
+    return (pid_t)tgid;
+}
 static void record_exec(task *item) {
+    if(status_tgid(item->pid)!=item->pid) {
+        errno=EINVAL;fail("exec thread-group identity mismatch");
+    }
     size_t argv_length,env_length;
     unsigned char *argv=read_proc(item->pid,"cmdline",&argv_length);
     unsigned char *env=read_proc(item->pid,"environ",&env_length);
@@ -202,8 +227,16 @@ static void trace_loop(void) {
             add_task((pid_t)child,pid,true);
             const char *kind=event==PTRACE_EVENT_FORK?"fork":
                              event==PTRACE_EVENT_VFORK?"vfork":"clone";
-            logf_checked("spawn\t%llu\t%ld\t%ld\t%s\n",
-                         (unsigned long long)now_ns(),(long)pid,(long)child,kind);
+            pid_t tgid=status_tgid((pid_t)child);
+            pid_t parent_tgid=status_tgid(pid);
+            if((event!=PTRACE_EVENT_CLONE && tgid!=(pid_t)child) ||
+               (event==PTRACE_EVENT_CLONE && tgid!=(pid_t)child && tgid!=parent_tgid)) {
+                errno=EINVAL;fail("spawn thread-group identity mismatch");
+            }
+            unsigned long long started=start_ticks((pid_t)child);
+            logf_checked("spawn\t%llu\t%ld\t%ld\t%s\t%ld\t%llu\n",
+                         (unsigned long long)now_ns(),(long)pid,(long)child,
+                         kind,(long)tgid,started);
             ++spawn_count;
             resume(pid,0);continue;
         }
@@ -244,7 +277,7 @@ int main(int argc,char **argv) {
     if(!log_path || !command_index) return 86;
     log_fd=open(log_path,O_WRONLY|O_CREAT|O_EXCL|O_CLOEXEC|O_NOFOLLOW,0600);
     if(log_fd<0) fail("create private event log");
-    static const char header[]="g3c4-native-exec-v1\n";
+    static const char header[]="g3c4-native-exec-v2\n";
     log_bytes(header,sizeof(header)-1);
     root_pid=fork();
     if(root_pid<0) fail("fork root tracee");

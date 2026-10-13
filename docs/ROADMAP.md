@@ -2707,11 +2707,14 @@ publication, public G2 and continuation remain pending.
   exact-tree binary equivalence, successful-zero address/provider analysis,
   private cgroup delegation/lifecycle and the compiled run remain pending.
   A separate [C7g native process-image tracing prototype](../tools/g3c4_native_trace/README.md)
-  passes ten host canaries, including rapid descendants, thread exec,
+  passed ten host canaries on its v1 source, including rapid descendants, thread exec,
   untraced-clone rejection, and supervisor failure. It is not in the sealed
   recipe. An opt-in offline postflight now checks its complete event ledger
   and matches each C7f command receipt to an exact native argv image inside
-  the receipt interval. Extra native images are reported for review.
+  the receipt interval. The successor v2 log records child thread-group and
+  start-tick identity; postflight rejects fork-child merges and merges without
+  an immediate destination exec. This v2 source has not had a ptrace rerun.
+  Extra native images are reported for review.
   Exact-image descendant calibration, failed-exec attempt receipts, and
   per-child output attribution remain pending.
   This private candidate supplies no public

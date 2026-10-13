@@ -21,9 +21,12 @@ supervisor error returns `86`; `PTRACE_O_EXITKILL` kills its tracees if the
 supervisor exits. The gate must treat any nonzero status or incomplete log as
 HOLD and independently kill and reap its private cgroup.
 
-The tab-separated `g3c4-native-exec-v1` log has:
+The tab-separated `g3c4-native-exec-v2` log has:
 
-- `spawn`: monotonic nanoseconds, parent PID, child PID, fork/vfork/clone.
+- `spawn`: monotonic nanoseconds, parent PID, child PID, fork/vfork/clone,
+  observed child thread-group ID and `/proc` start ticks. Missing or malformed
+  child process identity fails closed. Fork/vfork must create a new group;
+  clone may create a process or a member of its parent's group.
 - `exec`: monotonic nanoseconds, PID, traced parent PID, `/proc` start ticks,
   executable device and inode, hex-encoded NUL-separated argv, hex-encoded
   `/proc` executable path, hex-encoded cwd, SHA-256 of raw `/proc/PID/environ`.
@@ -31,6 +34,9 @@ The tab-separated `g3c4-native-exec-v1` log has:
   status (`128 + signal` for signaled exit).
 - `merge`: monotonic nanoseconds, former thread TID, new process PID after a
   nonleader thread execs and Linux changes its TID to the thread-group leader.
+  The former TID must be a live same-group clone, and the next event must be
+  the destination PID's exec. Its start ticks must follow the former TID's
+  observed identity. Version 1 logs are rejected by the receipt postflight.
 - `complete`: monotonic nanoseconds, root PID, root status (zero), then
   spawn/exec/exit/merge counts. It is
   written only after all traced tasks exit and the root status is zero. A
@@ -59,13 +65,15 @@ From the repository root:
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/g3c4_native_trace/tests -v
 ```
 
-The ten tests compile from source with strict warnings and cover 32 rapid
+The ten host canaries previously passed on the v1 prototype. They compile
+from source with strict warnings and cover 32 rapid
 fork/exec children, `posix_spawn`/vfork, `system()` descendants, a thread
 clone, nonleader thread exec/TID reassignment, an ignored attempt at an
 untraced clone, an injected supervisor failure that kills a stopped root and
 subtree before either can write a marker, an existing-log collision, and exact
 argv/time receipt correlation with tampered-log negatives. They run on the host
-only and create no Docker container.
+only and create no Docker container. The v2 tracer has passed source-only
+syntax and postflight tests; its ptrace behavior has not been rerun.
 
 ## Remaining gate
 

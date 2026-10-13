@@ -78,7 +78,7 @@ class ReceiptPostflightTests(unittest.TestCase):
 
     def test_native_log_seam_requires_every_command_image(self):
         log = self.root / "native-events.log"
-        events = ["g3c4-native-exec-v1"]
+        events = ["g3c4-native-exec-v2"]
         digest = "0" * 64
 
         def exec_event(pid, parent, argv):
@@ -89,7 +89,7 @@ class ReceiptPostflightTests(unittest.TestCase):
                 for i in range(9)]
         events.append(exec_event(100, 0, argv[0]))
         for i in range(1, 9):
-            events.extend((f"spawn\t1\t100\t{100+i}\tfork",
+            events.extend((f"spawn\t1\t100\t{100+i}\tfork\t{100+i}\t1",
                            exec_event(100+i, 100, argv[i]),
                            f"exit\t1\t{100+i}\t0\t0"))
         events.extend(("exit\t2\t100\t0\t0", "complete\t2\t100\t0\t8\t9\t9\t0"))
@@ -101,6 +101,43 @@ class ReceiptPostflightTests(unittest.TestCase):
                                  [events[-1].replace("\t8\t9\t9\t0", "\t8\t8\t9\t0")]) + "\n")
         with self.assertRaisesRegex(ValueError, "event count mismatch"):
             RECEIPTS.verify(self.root, set(), log)
+
+    def test_thread_merge_needs_group_provenance_and_following_exec(self):
+        log = self.root / "native-events.log"
+        argv = b"/bin/true\0"
+        digest = "0" * 64
+
+        def exec_event(when, ticks):
+            return (f"exec\t{when}\t100\t0\t{ticks}\t1\t1\t{argv.hex()}\t"
+                    f"{b'/bin/true'.hex()}\t{b'/tmp'.hex()}\t{digest}")
+
+        def check(kind, tgid, following, *, next_ticks=2):
+            events = ["g3c4-native-exec-v2", exec_event(1, 1),
+                      f"spawn\t2\t100\t101\t{kind}\t{tgid}\t2",
+                      "merge\t3\t101\t100"]
+            if following:
+                events.append(exec_event(4, next_ticks))
+            events.extend(("exit\t5\t100\t0\t0",
+                           f"complete\t6\t100\t0\t1\t{1+int(following)}\t1\t1"))
+            log.write_text("\n".join(events) + "\n")
+            return RECEIPTS.g3c4_native_trace_receipt.verify(log, [(argv, 0, 5)])
+
+        self.assertEqual(check("clone", 100, True)["unmatched_native_execs"], 1)
+        with self.assertRaisesRegex(ValueError, "invalid thread merge provenance"):
+            check("fork", 101, False)
+        with self.assertRaisesRegex(ValueError, "invalid thread merge provenance"):
+            check("clone", 101, True)
+        with self.assertRaisesRegex(ValueError, "invalid spawn thread group"):
+            check("fork", 100, True)
+        with self.assertRaisesRegex(ValueError, "merge lacks immediate destination exec"):
+            check("clone", 100, False)
+        with self.assertRaisesRegex(ValueError, "invalid exec lineage or task identity"):
+            check("clone", 100, True, next_ticks=99)
+        check("clone", 100, True)
+        log.write_text(log.read_text().replace("g3c4-native-exec-v2",
+                                               "g3c4-native-exec-v1", 1))
+        with self.assertRaisesRegex(ValueError, "bad header"):
+            RECEIPTS.g3c4_native_trace_receipt.verify(log, [(argv, 0, 5)])
 
     def test_missing_nested_receipt(self):
         path = self.root / "command.8" / "receipt.json"

@@ -3,7 +3,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 import re
 
-HEADER = "g3c4-native-exec-v1"
+HEADER = "g3c4-native-exec-v2"
 MAX_LOG = 32 * 1024 * 1024
 HEX = re.compile(r"(?:[0-9a-f]{2})+")
 SHA256 = re.compile(r"[0-9a-f]{64}")
@@ -43,17 +43,22 @@ def verify(log_path: Path, receipts: list[tuple[bytes, int, int]]) -> dict:
     root = None
     root_status = None
     last_time = 0
+    pending_merge = None
     require(len(lines) >= 3, "missing exec or completion")
     for index, line in enumerate(lines[1:], 1):
         fields = line.split("\t")
         kind = fields[0]
         require(kind in {"spawn", "exec", "exit", "merge", "complete"},
                 f"unknown event at line {index + 1}")
-        widths = {"spawn": 5, "exec": 11, "exit": 5, "merge": 4, "complete": 8}
+        widths = {"spawn": 7, "exec": 11, "exit": 5, "merge": 4, "complete": 8}
         require(len(fields) == widths[kind], f"bad {kind} width")
         when = number(fields[1], "event time", minimum=1)
         require(when >= last_time, "event time reversed")
         last_time = when
+        if pending_merge is not None:
+            require(kind == "exec" and number(fields[2], "merged exec pid", minimum=1)
+                    == pending_merge, "merge lacks immediate destination exec")
+            pending_merge = None
         if kind == "complete":
             require(index == len(lines) - 1, "completion is not last")
             require(root is not None and not live, "live task at completion")
@@ -72,17 +77,27 @@ def verify(log_path: Path, receipts: list[tuple[bytes, int, int]]) -> dict:
             child = number(fields[3], "spawn child", minimum=1)
             require(root is not None and parent in live and child not in live and
                     child != parent, "invalid spawn lineage")
-            require(fields[4] in {"fork", "vfork", "clone"}, "bad spawn kind")
-            live[child] = parent
+            kind_name = fields[4]
+            require(kind_name in {"fork", "vfork", "clone"}, "bad spawn kind")
+            tgid = number(fields[5], "spawn tgid", minimum=1)
+            started = number(fields[6], "spawn start ticks", minimum=1)
+            parent_tgid = live[parent][1]
+            require((kind_name == "clone" and tgid in (child, parent_tgid)) or
+                    (kind_name in ("fork", "vfork") and tgid == child),
+                    "invalid spawn thread group")
+            provenance = "thread" if tgid == parent_tgid else kind_name
+            live[child] = (parent, tgid, started, provenance)
         elif kind == "exec":
             pid = number(fields[2], "exec pid", minimum=1)
             parent = number(fields[3], "exec parent")
+            started = number(fields[4], "start ticks", minimum=1)
             if root is None:
                 require(index == 1 and parent == 0, "root exec missing")
                 root = pid
-                live[pid] = 0
-            require(live.get(pid) == parent, "invalid exec lineage")
-            for value, label in zip(fields[4:7], ("start ticks", "device", "inode")):
+                live[pid] = (0, pid, started, "root")
+            require(pid in live and live[pid][0] == parent and
+                    live[pid][2] == started, "invalid exec lineage or task identity")
+            for value, label in zip(fields[5:7], ("device", "inode")):
                 number(value, label, minimum=1)
             argv = hex_bytes(fields[7], "exec argv")
             require(argv.endswith(b"\0") and argv != b"\0", "bad exec argv")
@@ -104,9 +119,13 @@ def verify(log_path: Path, receipts: list[tuple[bytes, int, int]]) -> dict:
         else:
             former = number(fields[2], "former tid", minimum=1)
             pid = number(fields[3], "merged pid", minimum=1)
-            require(former != pid and former in live and pid in live,
-                    "invalid thread merge")
+            require(former != pid and former in live and pid in live and
+                    live[former][3] == "thread" and live[former][1] == pid and
+                    live[pid][1] == pid, "invalid thread merge provenance")
+            parent, tgid, _, provenance = live[pid]
+            live[pid] = (parent, tgid, live[former][2], provenance)
             del live[former]
+            pending_merge = pid
         counts[kind] += 1
     require(lines[-1].startswith("complete\t"), "missing completion")
     unmatched = sum(map(len, execs.values()))
