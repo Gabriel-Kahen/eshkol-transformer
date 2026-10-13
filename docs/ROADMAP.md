@@ -843,8 +843,140 @@ The expected abort diagnostic appears in Docker stderr; ordinary/sanitized
 compile and runtime stderr is empty. Its current-main `5520dfe` union changes
 only unrelated G3 RNG code/tests and documentation outside the seven package
 source/native closures and depfiles; hosted CI and merge remain pending.
-Retention, numerical, other §9 and public-path acceptance remain pending; the
-separate retention and numerical test candidates are not included here.
+The supported mode/graph gate did not include retention or numerical test
+candidates. A scoped source integration adds the separate complete-call
+retention tuple and strict 1,024/8,192-call normal A/B, poison A/B and
+sanitizer runner with gradients absent/present. The frozen `091461f2` prepared
+retention J gate was not run. The supported retention attempt on frozen
+`d9328ce` built its packages but stopped at the first strict-AOT executable:
+under `--no-stdlib`, the private `retention_runtime.esk` used unavailable
+`length` and `list-ref` functions. This isolated successor reuses the existing
+private runtime's `car`/`cdr` argument traversal while preserving the retention
+assertions and full 20-case matrix. Its sanitizer manifests are still
+provisional pending fresh actual compiler diagnostics; the earlier retained
+readelf DWARF warnings have no clean-stderr or runtime acceptance claim.
+Fresh supported retention and affected mode/graph gates on this exact composed
+tree remain required. A further [numerical transcript source
+candidate](e3/E3_NUMERICAL_TRANSCRIPT.md) composes the authentic three-batch
+observer and two accepted compiled mutants onto that combined source, and
+adds a third final-loss second-normalization mutant. Its source and static
+tests require independent review, then a fresh supported numerical gate.
+The changed native frame, metrics provider and shared builder also require
+full affected mode/graph and 20-run retention gates on the exact integrated
+tree. The prior 75-file numerical seal applies only to `8dafe8cb`; broader
+§9 and public-path acceptance remain pending. A separate five-case private
+numerical transcript source candidate extends the noninstalled runtime and
+strict parser to all five existing authentic D2 layouts, with independent
+role/CE/state/final verification and byte equality for identical packed
+emissions. Its three compiled mutants remain on packed-single. Local parser
+and shell checks do not substitute for independent source/test review or a
+fresh supported compiled gate; this extension has no runtime evidence yet.
+An isolated all-correct/all-wrong source candidate adds two fixed raw V256
+six-byte D1 corpora, authentic packed D2 rows, seed-1729 M3 selection proof,
+and a separate two-case private numerical runner. The new versioned manifest
+checks exact IDs, physical hashes, cursor identity, row/mask/count and declared
+class; the compiled gate is scoped to these two cases across normal A/B,
+poison and sanitizer with 21 roles, CE, exact accumulation, six final outputs
+and accuracy 1.0/0.0. The existing five-case corpus, schema and transcripts
+are unchanged. Independent source review and a supported compiled run are
+pending; the local mathematical reference is not compiled E3 evidence.
+An isolated test-only wrong-vocabulary-axis candidate adds one numerical-tuple
+mutant that reads the existing `[1,2,256]` binary32 logits at `[V,T]` stride 2
+instead of `[T,V]` stride 256. The exact all-correct D2 rows include final
+padding input `[31,0]`; the corrected two-repeat mathematical audit yields
+normal accuracy 5/5 and wrong-stride accuracy 0/5. The candidate's private
+compiled runner requires all 63 role records, unchanged logits/CE/reduction
+and counters, then rejection at the strict `correct_f32` check with no mutant
+transcript publication. A test-only negative classifier now requires canonical
+exit 1, empty validator stdout, exact expected diagnostics (with only the
+pinned two-line NumPy warning admitted), retained raw traceback/source context,
+and absent transcript; timeouts, crashes, extra output and other exceptions
+fail closed. The production/default profile and frozen corpora are
+unchanged. Independent source review and a supported compiled mutant run are
+pending; mathematical reachability alone is not a compiled mutant kill.
+The isolated E3 private sanitizer source candidate reuses the reviewed
+streaming, reversible ASan IR helper byte-for-byte. Only exact noninstalled
+retention, mode/graph and numerical sanitizer tuples select the derived IR;
+normal and public/default builds retain the original compile input. The
+source-pinned helper and verifier compare the raw and derived IR, retain both
+with a receipt, and require generated-object `__asan_report` imports before
+native linking. This is address instrumentation of Eshkol IR, not evidence of
+Eshkol frontend UBSan coverage. Actual emitted sanitizer imports and the
+existing exact test manifests still need a fresh supported diagnostic run and
+independent review before any sanitizer or §9 acceptance claim.
+
+The pinned `32484f6` numerical compiler diagnostic stopped before runtime on
+the exact sanitizer import delta. Its retained Clang 21 objects replace
+`memcpy`, `memmove`, and `memset` imports with the corresponding `__asan_mem*`
+interceptors; raw and derived IR retain the LLVM memory intrinsics. Independent
+discovery review accepted the attribution, and a bounded manifest correction
+adds these three absent names with a real compiler-lowering regression probe.
+The 112-file discovery seal is
+`e3-streaming-asan-imports-32484f6-fe9-f31-20261004-prepared-b/SHA256SUMS-DISCOVERY`
+(`5cfc20c6...`). This is compiler discovery only. Exact source review and a fresh
+supported compiled runtime gate remain required; no sanitizer acceptance is
+claimed, and the independent upstream foreign-pointer repair remains pending.
+
+An isolated E3 uniform-tie source candidate uses a checksummed C1 zero-state
+container for the real seed-1729 M3 model before frame binding. Its dedicated
+noninstalled tuple retains the ordinary E3 entry and compares all 21 emitted
+roles, CE, state, four metrics, counts and saved D2 cursor against a separate
+six-zero-byte D1/D2 reference. The `>=` last-tie mutant and five I2 fault/census
+hooks are confined to the test build. Checksum, provider, shape and tie
+rejection plus an authentic copy-builder preparation allocation failure must
+preserve original parameter identities, values and owners before a successful
+zero-state retry. Local Q0/static controls pass; exact emitted tuple manifests,
+independent source review, and supported normal/repeat, poison and sanitizer
+execution remain pending. This supplies no §9 N3/M2 compiled acceptance or
+target-offset, wrong-axis, finite-boundary or overflow proof.
+
+A separate noninstalled E3 overflow tuple is a source candidate for a genuine
+stage-12 finalization boundary. It loads a checksummed C1 state into one fresh
+model before its authentic frame bind, uses the fixed D1 `0304`/D2 padded row,
+and checks finite gamma 22.125 against overflow gamma 22.25 in separate process
+invocations. The overflow invocation repeats rejection on its unchanged model,
+frame and corpus authority while checking six caller outputs, cursor, mixed
+17-mode token, all 14 model/gradient owners, initializer, 29 retention probes,
+arena and dataset closure. The ordinary retention entry and its 20 cases are
+unchanged. Local fixture and transcript-classifier tests do not prove compiled
+reachability, rollback or §9 acceptance; supported normal/repeat/sanitizer
+execution, emitted import closure and full IR review remain pending.
+An isolated test-only clamp-overlay successor pins the production E3 metrics
+finalizer hash and changes only its `expf` overflow rejection to `FLT_MAX` in
+an owned generated translation unit for the noninstalled overflow tuple. A
+strict parser requires the full numerical trace, `E3FINAL`, the fixture's
+stage-12 failure marker and canonical abort; the finite control must match
+the ordinary tuple byte for byte. Local hash, selector, closure and classifier
+controls do not establish a compiled mutant kill. The alternate binary64
+calculation with binary32 conversion and the same post-conversion finite
+check is observationally equivalent at this boundary. Supported fe9 runtime,
+unbuffered-output, import, sanitizer and ordinary-object parity proofs remain
+pending.
+
+The current-main source composition from `391f67ea` combines the scoped
+retention/numerical, generated-ASan import, uniform-tie, overflow and
+clamp candidates with the merged mode/graph source. Its uniform
+sanitizer absent-import manifest mirrors the reviewed numerical
+Clang 21 memory-intrinsic delta only as a strict candidate; actual
+uniform fe9 emission must match or fail closed. The combined metrics
+source has rederived exact clamp source/derived hashes; independent whole-tree
+source review and supported normal/repeat/sanitizer/runtime gates remain
+pending. The overflow tuple also admits only the exact declared retention
+region observer supplied by its separately linked test object; other private
+imports and tuple near misses remain rejected. This source correction has no
+compiled acceptance yet. The upstream typed
+foreign-pointer prerequisite remains unresolved; no generated-ASan,
+ordinary-object-parity or E3 §9 acceptance is claimed for this union.
+
+The frozen five-case gate at `2b74b534` built its package variants but
+stopped at the first runtime compile on an extra closing parenthesis in the
+argument check; no numerical runtime or mutant verdict was produced. The same
+syntax defect exists in the correctness driver. An isolated test-only successor
+removes that one character from each driver and checks complete source parsing
+with malformed-close controls. The frozen failed evidence is preserved at
+`e3-numerical-five-case-2b74b53-fe9-f31-20261004-prepared-a/SHA256SUMS-FAILED`
+(`cdb4d3cd...`). Independent source review and a fresh supported compile/runtime
+gate remain required; static parsing does not prove E3 numerical acceptance.
 
 The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
 is a docs-only candidate for the remaining private numerical, compiled-mutant,
@@ -853,6 +985,101 @@ from direct-provider-only cases and names the missing noninstalled model-control
 and stage-selective fault/observer seams for review. It provides no new runtime
 proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
 verdicts remain prerequisites before the full matrix is implemented and run.
+The test-only retention driver now snapshots all 14 parameter value and gradient
+word arrays plus three metadata fields before its first evaluator call, after
+optional fixed gradient seeding, and compares that original image after each
+completed warmup, calibration, success and retry call. The evaluator's measured
+region-byte interval is unchanged. Source mutation controls check the baseline
+order and comparison topology; a compiled first-call bit-mutation witness and
+supported complete-call gate remain pending, so this is not §9 acceptance.
+An isolated noninstalled first-evaluation mutant tuple now derives a private
+driver mechanically from that baseline and replaces only the E3 frame test
+object with a feature-gated, fixed one-shot helper. Source controls cover
+absent-to-present, seeded gradient-bit and metadata changes, tuple isolation,
+the prehook baseline check, and readback before the first comparison. Its
+normal and sanitizer manifests are candidate inputs; no mutant has been
+compiled or run, so first-call detection, manifest closure, normal/repeat,
+poison and sanitizer results remain pending independent review and a fresh
+supported gate. The original retention tuple and production sources remain
+unchanged.
+An additional test-owned native harness now specifies real M3 owner creation,
+stale/foreign/active/owner-state/gradient-state/contribution-count denials,
+unchanged full-model images on denied calls, a successful one-shot mutation
+and second-call denial, plus a feature-off object-symbol check that requires
+the symbol tool itself to succeed. This harness is source-only and has not
+been compiled or executed; its native and first-evaluator verdicts remain open.
+Malformed gradient-tensor geometry is not fabricated through a new private
+setter: the sealed fixed M3 owner exposes no reviewed geometry mutation seam.
+The composed source now includes current main `09f7ed52`, accepted first-call
+control `948b8067`, and the four exact correctness-control blobs from
+`78604fa`. `scripts/test-e3-first-eval-detector.sh` stages a fresh one-use
+supported gate: it requires the independent correctness, unmodified 1024/8192
+retention, and native-owner controls, then builds and compares normal A/B and
+sanitized noninstalled mutant packages and AOT images. For all three one-shot
+gradient mutations it requires failure at the first post-evaluation
+`success-model-image` comparison under normal, repeat, poisoned and sanitizer
+profiles, retaining raw streams, exit codes, hashes and toolchain provenance.
+This is source preparation only; no compiled result or §9 proof is claimed.
+The sealed K first-evaluation run at `268ab285` failed its first correctness
+parser gate because the reference cursor encoded the D2 default
+`maximum_batch_bytes=1048576` while the compiled driver requested `34`.
+The observed caller cursor was restored byte-for-byte. The isolated source
+repair sets the correctness reference to `34` and tests both manifest cursor
+identity and rejection of the old-default mismatch by the strict compiled
+result parser. A fresh independent source review and distinct one-use compiled
+gate remain required; K is retained as failed evidence, not numerical proof.
+The sealed L one-use run at `73226322` passed normal A/B three-batch correctness
+but failed sanitized correctness during P1 provider registration in module
+initialization, before E3 evaluation. Its generated borrow check read seven
+bytes before a native P1 token when the active-shell guard held a raw pointer.
+The isolated [source diagnosis and repair](e3/E3_L_SANITIZER_DIAGNOSIS.md)
+stores that pointer inside a managed vector. The deterministic noninstalled P1
+mode variant and all four mode-graph outputs are repinned to that source; their
+12 source/negative tests and focused P1 checks pass, but no new compiled or
+sanitizer execution has run. L remains failed evidence and the
+first-evaluation detector and E3 §9 verdicts remain open.
+The sealed M one-use run at `da18af73` failed sanitized all-correct setup in
+`e3-frame-bind!`, before first evaluation: ASan observed a one-byte read seven
+bytes before an opaque P1 token during canonical model readback. Generated IR
+shows a borrow check on the old `model` binding for `set! model`; the new
+isolated source candidate reads the canonical entry into fresh lexical
+bindings and reads rollback's setup box from that entry. Its focused offline
+source regression checks the binding shape. Compiler-only causation and a
+passing sanitizer result remain unproven; independent source review, compiled
+IR inspection and a fresh authorized one-use gate precede §9 acceptance.
+The sealed N one-use run at `f7ebcd6d` passed the correctness gate but exited
+74 before retention began: the detector invoked
+`scripts/test-e3-complete-call-retention.sh` directly while Git recorded that
+script as nonexecutable (`100644`), producing exit 126. The retained run seal is
+`e3-section9-first-eval-oneuse-f7eb-20261013-n/run/SHA256SUMS-RUN`
+(SHA256 `a1ac2bfc9f5ffe2acbcfcfb6a22cfab57bdf127d869c264868312bd8b1d26ed6`).
+This isolated source repair marks the retention script executable and checks
+its mode before the detector begins the expensive controls. N remains failed
+evidence; independent review and a fresh one-use runtime gate precede §9
+acceptance.
+A bounded source-only E3 union on current main `6f6ef9ad` replays the reviewed
+`efe11be7` delta while retaining main's CLI3/G3-R work and the original E3
+corpus. The Q0 allowlist and M3CG predecessor manifest are combined from the
+actual tree; nine affected source checksum gates and focused offline source
+checks pass. Three stale E3 test assertions were refreshed to match the
+existing first-evaluation tuple. The pinned PyTorch-dependent reference test,
+independent source review, supported compiled/sanitizer gates, and §9 matrix
+remain open; this source union does not establish E3 admission.
+The separate [host-monitor first-error candidate](e3/E3_HOST_MONITOR_FIRST_ERROR.md)
+records a bounded guest-relative cause for a transient unsafe-output scan;
+its successor now uses no-follow descriptor traversal, postscan identity
+checks, and fail-closed Linux move watches on the root path and subtree.
+Eighteen offline tests reject the
+sealed symlink and persistent/transient move-out negatives, but no one-use
+launcher has consumed this source. It is not an atomic snapshot or general
+proof against concurrent mutation; L's sealed failure and prerequisite remain.
+A separate Q0 isolation successor admits only the exact noninstalled
+`generate-e3-overflow-clamp-overlay.py` development helper, correcting the
+inherited missing allowlist entry. All four isolation tests pass with added
+suffix, sibling, nested and runtime-directory rejection cases; the existing
+clamp overlay source/negative tests also pass. Independent review remains the
+integration gate. This does not change the monitor or establish compiled,
+sanitizer or E3 §9 acceptance.
 
 The [E3 idle real-model control contract](e3/E3_IDLE_REAL_MODEL_CONTROL_CONTRACT.md)
 specifies a test-only use of existing I2 checkpoint decode and whole-batch load
