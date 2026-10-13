@@ -1,6 +1,11 @@
 """Source admission for the pending compiled held-holder gate."""
 from pathlib import Path
+import json
+import os
 import re
+import subprocess
+import tempfile
+import textwrap
 import unittest
 
 from tests.c2.test_handler_order import parse
@@ -9,6 +14,7 @@ from tests.c2.test_handler_order import parse
 ROOT = Path(__file__).resolve().parents[2]
 DRIVER = ROOT / "tests/g3c4/p2_g2_held_holder_compiled_test.esk"
 SCRIPT = ROOT / "scripts/test-g3c4-p2g2-held-holder-compiled.sh"
+COMPILE_HELPER = ROOT / "scripts/g3c4-held-holder-eshkol-compile.sh"
 SHIM = ROOT / "tests/g3c4/p2_g2_held_holder_compiled_native.c"
 DEPS = ROOT / "native/g3c4_p2g2_held_holder_compiled_eshkol_deps.txt"
 
@@ -61,7 +67,8 @@ class HeldHolderCompiledSource(unittest.TestCase):
         source = SCRIPT.read_text()
         self.assertLess(source.index("G3C4_HELD_SOURCE_ONLY"),
                         source.index("verify_toolchain"))
-        self.assertIn("--emit-depfile", source)
+        self.assertIn("g3c4-held-holder-eshkol-compile.sh", source)
+        self.assertIn("--emit-depfile", COMPILE_HELPER.read_text())
         self.assertIn("g3c4_p2g2_held_holder_compiled_eshkol_deps.txt", source)
         self.assertIn("g3c4_p2g2_terminal_held_holder_source_closure.txt", source)
         self.assertIn("check-g3c4-p2g2-held-holder-symbols.py", source)
@@ -71,6 +78,74 @@ class HeldHolderCompiledSource(unittest.TestCase):
         self.assertIn("-Wl,--wrap=et_g3c4_private_p2g2_holder_abort_attempt_v1", source)
         self.assertIn("ESHKOL_ARENA_POISON=1", source)
         self.assertIn('test "$status" -eq 134', source)
+
+    def test_depfile_requires_object_mode_and_fails_closed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            runner = base / "runner"
+            runner.write_text(textwrap.dedent("""\
+                #!/usr/bin/env python3
+                import json
+                import os
+                from pathlib import Path
+                import sys
+
+                args = sys.argv[1:]
+                with Path(os.environ['CALL_LOG']).open('a') as log:
+                    log.write(json.dumps(args) + '\\n')
+                output = Path(args[args.index('-o') + 1])
+                output.write_bytes(b'object' if '--compile-only' in args else b'executable')
+                if '--compile-only' in args and os.environ.get('DEPFILE_MODE') != 'missing':
+                    depfile = Path(args[args.index('--emit-depfile') + 1])
+                    depfile.write_text('' if os.environ.get('DEPFILE_MODE') == 'empty'
+                                       else 'object: fixture.esk\\n')
+                """))
+            runner.chmod(0o700)
+
+            for depfile_mode, fixture in (("normal", "on"), ("normal", "off"),
+                                          ("missing", "on"), ("empty", "on")):
+                with self.subTest(depfile_mode=depfile_mode, fixture=fixture):
+                    directory = base / f"{depfile_mode}-{fixture}"
+                    evidence = directory / "evidence"
+                    evidence.mkdir(parents=True)
+                    call_log = directory / "calls.jsonl"
+                    env = {**os.environ, "CALL_LOG": str(call_log),
+                           "DEPFILE_MODE": depfile_mode}
+                    result = subprocess.run(
+                        ["bash", "-ec", 'source "$1"; compile_eshkol_fixture '
+                         '"$2" "$3" "$4" "$5" normal "$6" /bin/true "$7"',
+                         "bash", str(COMPILE_HELPER), fixture,
+                         str(base / "fixture.esk"), str(directory), str(evidence),
+                         str(runner), str(ROOT)],
+                        env=env, capture_output=True, text=True, check=False)
+                    calls = [json.loads(line) for line in call_log.read_text().splitlines()]
+                    if depfile_mode == "normal":
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        self.assertEqual(len(calls), 2)
+                        object_call, executable_call = calls
+                        self.assertIn("--compile-only", object_call)
+                        self.assertIn("--emit-depfile", object_call)
+                        self.assertNotIn("--compile-only", executable_call)
+                        self.assertNotIn("--emit-depfile", executable_call)
+
+                        def common(arguments):
+                            result = list(arguments)
+                            if "--compile-only" in result:
+                                result.remove("--compile-only")
+                            if "--emit-depfile" in result:
+                                offset = result.index("--emit-depfile")
+                                del result[offset:offset + 2]
+                            offset = result.index("-o")
+                            del result[offset:offset + 2]
+                            return result
+
+                        self.assertEqual(common(object_call), common(executable_call))
+                        self.assertTrue((directory / f"{fixture}.d").stat().st_size)
+                        self.assertTrue((directory / f"held-{fixture}").stat().st_size)
+                    else:
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertEqual(len(calls), 1)
+                        self.assertFalse((directory / f"held-{fixture}").exists())
 
     def test_compiled_link_wraps_terminal_calls_used_by_native_shim(self):
         script = SCRIPT.read_text()

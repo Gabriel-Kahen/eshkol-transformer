@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
+source "$PROJECT_ROOT/scripts/g3c4-held-holder-eshkol-compile.sh"
 
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
   tests.g3c4.test_p2_g2_held_holder_eshkol_source \
@@ -144,22 +145,8 @@ WRAPPER
     local input="$PROJECT_ROOT/tests/g3c4/p2_g2_terminal_composer_feature_off_test.esk"
     [[ "$fixture" == on ]] && \
       input="$PROJECT_ROOT/tests/g3c4/p2_g2_held_holder_compiled_test.esk"
-    mkdir -p "$directory/cache/$fixture"
-    env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
-      XDG_CACHE_HOME="$directory/cache/$fixture" \
-      ESHKOL_CXX_COMPILER="$directory/cxx-wrap" \
-      ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
-      timeout --foreground --signal=TERM --kill-after=5s 600s \
-      "$runner" --strict-types --optimize 0 --no-stdlib \
-      --emit-depfile "$directory/$fixture.d" \
-      -I "$PROJECT_ROOT/internal/p1/lib" -I "$PROJECT_ROOT/internal/c1/lib" \
-      -I "$PROJECT_ROOT/internal/t1/lib" -I "$PROJECT_ROOT/src" \
-      -I "$PROJECT_ROOT/lib" -I "$PROJECT_ROOT/native" \
-      -L "$directory" --lib "g3c4_held_$fixture" \
-      "$input" -o "$directory/held-$fixture" \
-      >"$evidence/$mode-$fixture-compile.stdout" \
-      2>"$evidence/$mode-$fixture-compile.stderr"
-    test ! -s "$evidence/$mode-$fixture-compile.stderr"
+    compile_eshkol_fixture "$fixture" "$input" "$directory" "$evidence" \
+      "$mode" "$runner" "$cxx" "$PROJECT_ROOT"
   done
   python3 - "$PROJECT_ROOT" "$directory/on.d" "$directory/off.d" "$evidence" "$mode" <<'PY'
 from pathlib import Path

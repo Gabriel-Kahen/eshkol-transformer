@@ -3208,8 +3208,16 @@ publication, public G2 and continuation remain pending.
   unresolved `__real_et_g3c4_private_p2g2_terminal_snapshot_v1` and
   `__real_et_g3c4_private_p2g2_terminal_ids_clone_copy_v1`; no executable or
   runtime result was reached. The compiled-gate linker wrapper now includes
-  both corresponding `--wrap` flags, with a source regression check. A fresh
-  exact-head compiled matrix and independent review remain pending.
+  both corresponding `--wrap` flags, with a source regression check. At exact
+  `327c1a37`, the supported gate passed 12 source checks and emitted normal
+  feature-on/off AOT executables, then stopped before runtime: the pinned
+  runner ignores `--emit-depfile` in executable mode, so `on.d` and `off.d`
+  were absent. This gate candidate now generates each depfile in a separate
+  object-mode compile and fails closed on missing or empty objects/depfiles;
+  executable compilation retains the same source and import/link arguments.
+  Source regression tests cover the mode split and missing/empty depfiles.
+  A fresh exact-head compiled normal/repeat/sanitizer matrix and independent
+  review remain pending. Public G2 and continuation acceptance remain unproved.
 
 ## Wave 4 — practical pretraining and performance
 
