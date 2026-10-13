@@ -13,6 +13,11 @@ void *et_m3t_private_initializer_create_v1(int64_t seed);
 int64_t et_m3t_private_initializer_word_v1(void *initializer, int64_t index);
 void *et_m3t_private_owner_create_v1(void *initializer);
 void *et_m3t_private_owner_parameter_v1(void *owner, int64_t index);
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+/* Registry-backed parameter and identity roster for same-owner SAVE checks. */
+int64_t et_m3t_private_owner_save_roster_v1(
+    void *owner, void *parameters[14], const void *identities[14]);
+#endif
 int64_t et_m3t_private_owner_bind_v1(void *owner, int64_t index, void *handle);
 int64_t et_m3t_private_owner_initialize_v1(void *owner, int64_t index);
 void *et_m3t_private_owner_successor_v1(void *owner);
