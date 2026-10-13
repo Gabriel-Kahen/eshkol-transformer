@@ -1,5 +1,7 @@
 """Source-only checks for the future compiled same-owner failure cut."""
 from pathlib import Path
+import os
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -48,6 +50,7 @@ class PostAdoptionPreparation(unittest.TestCase):
             self.assertIn("closure_count\t96", manifest)
             self.assertIn("supported_llvm_clang\t21.1.8", manifest)
             self.assertIn("post-adoption longjmp and fail-stop abandon only", manifest)
+            self.assertIn("fail_stop_expected_exit\t134", manifest)
             root = (destination / "source/tests/g3r/save_post_adoption_cut_root.esk").read_text()
             self.assertIn('(load "g3r_training_controls_root.esk")', root)
             self.assertIn('(load "g3m_prefill_p1_extension.esk")', root)
@@ -58,6 +61,9 @@ class PostAdoptionPreparation(unittest.TestCase):
             runtime = (destination / "source/tests/g3r/save_post_adoption_cut_runtime.esk").read_text()
             self.assertIn("(g3m-prefill-p1! generator input)", runtime)
             self.assertNotIn("g3t-with-call", runtime)
+            self.assertIn('"fail-stop"', runtime)
+            self.assertIn("G3-R post-adoption RECOVERED ERROR", runtime)
+            self.assertIn("G3-R post-adoption RETURNED", runtime)
             self.assertIn("(= (vector-length words) 17)",
                           (ROOT / CALLER).read_text())
             self.assertIn("'((source-code 77)\n                        "
@@ -100,6 +106,34 @@ class PostAdoptionPreparation(unittest.TestCase):
 
     def test_source_guard_accepts_exact_contract(self):
         self.assertEqual(len(validate_source()), 96)
+
+    def test_fail_stop_reaches_real_release_and_isolated_exit_gate(self):
+        root = (ROOT / "tests/g3r/save_post_adoption_cut_root.esk").read_text()
+        adoption = (ROOT / "native/g3r_same_owner_o2_adoption_extension.esk").read_text()
+        caller = (ROOT / CALLER).read_text()
+        launcher = ROOT / "scripts/prepare-g3r-post-adoption-cut.sh"
+        release = root.index("(g3r-save-cut-real-o2-release shell)")
+        fault = root.index("(raise 'g3r-save-test-o2-release-failure)")
+        self.assertLess(release, fault)
+        self.assertIn("(eq? (vector-ref g3r-save-cut-state 5)\n"
+                      "                             c2-training-state-states)", root)
+        self.assertIn("(if (not (o2-public-optimizer-state-release! shell))", adoption)
+        self.assertIn("(guard (caught (#t (exit 134)))", adoption)
+        self.assertIn("(guard (cleanup (#t (exit 134)))", caller)
+        launcher_source = launcher.read_text()
+        self.assertIn('"$(cat "$evidence/fail-stop.status")" == 134', launcher_source)
+        self.assertIn('grep -Fxq \'G3-R post-adoption O2 release fault injected\'',
+                      launcher_source)
+        self.assertIn('RECOVERED ERROR|RETURNED|cut PASS', launcher_source)
+        denied = subprocess.run([str(launcher), "--verify-runtime", "/missing",
+                                 "/missing", "/missing", "/missing"],
+                                cwd=ROOT,
+                                env={**os.environ,
+                                     "G3R_POST_ADOPTION_RUNTIME_RELEASE": "0"},
+                                capture_output=True, text=True)
+        self.assertEqual(denied.returncode, 74)
+        self.assertIn("explicit post-adoption runtime release is required",
+                      denied.stderr)
 
 
 if __name__ == "__main__":

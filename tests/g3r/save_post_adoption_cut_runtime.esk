@@ -16,6 +16,13 @@
                     (eq? (transformer-error-cause caught) #f))))
     (thunk) #f))
 
+(define fail-stop-arguments (cdr (cdr (command-line))))
+(define fail-stop-mode?
+  (and (pair? fail-stop-arguments)
+       (string=? (car fail-stop-arguments) "fail-stop")
+       (null? (cdr fail-stop-arguments))))
+(if (and (pair? fail-stop-arguments) (not fail-stop-mode?)) (exit 74))
+
 (define resolved
   (x1-private-config-resolve
     (x1-private-config-parse
@@ -65,29 +72,43 @@
 (define original-cursor (d2-token-dataset-cursor dataset))
 (define original-controls (g3r-controls-captured-copy capsule))
 (define c2-head c2-training-state-states)
-(check "typed post-adoption failure"
-  (error-at? 'invalid-state 'g3r-save-o2-adoption
-             "test-only post-adoption failure"
-    (lambda ()
+(vector-set! g3r-save-cut-state 4 fail-stop-mode?)
+(vector-set! g3r-save-cut-state 5 c2-head)
+(if fail-stop-mode?
+    (begin
+      ;; An outer handler makes a recoverable error visibly fail the cut.
+      ;; The release wrapper checks the rooted shell, real release success,
+      ;; one abandon call, and unchanged C2 registry before throwing.
+      (guard (caught
+               (#t (display "G3-R post-adoption RECOVERED ERROR")
+                   (newline) (exit 95)))
       (g3r-save-c2-capture-internal
-        generator model resolved tokenizer dataset optimizer capsule))))
-(check "exact returned shell and one abandon"
-  (and (vector-ref g3r-save-cut-state 0)
-       (= (vector-ref g3r-save-cut-state 1) 1)))
-(check "O2 then P1 release exactly once"
-  (equal? (vector-ref g3r-save-cut-state 2) '(p1 o2)))
-(check "no C2 owner publication"
-  (eq? c2-head c2-training-state-states))
-(check "original controls and D2 cursor unchanged"
-  (and (equal? original-controls (g3r-controls-captured-copy capsule))
-       (equal? original-cursor (d2-token-dataset-cursor dataset))))
-(check "retired shell cannot take bundle again"
-  (guard (caught (#t (and (transformer-error? caught)
-                           (eq? 'invalid-state
-                                (transformer-error-category caught)))))
-    (g3r-save-o2-take-for-c2-internal
-      (vector-ref g3r-save-cut-state 0))
-    #f))
-(display "G3-R post-adoption cut PASS: checks=")
-(display checks)
-(newline)
+        generator model resolved tokenizer dataset optimizer capsule))
+      (display "G3-R post-adoption RETURNED") (newline) (exit 96))
+    (begin
+      (check "typed post-adoption failure"
+        (error-at? 'invalid-state 'g3r-save-o2-adoption
+                   "test-only post-adoption failure"
+          (lambda ()
+            (g3r-save-c2-capture-internal
+              generator model resolved tokenizer dataset optimizer capsule))))
+      (check "exact returned shell and one abandon"
+        (and (vector-ref g3r-save-cut-state 0)
+             (= (vector-ref g3r-save-cut-state 1) 1)))
+      (check "O2 then P1 release exactly once"
+        (equal? (vector-ref g3r-save-cut-state 2) '(p1 o2)))
+      (check "no C2 owner publication"
+        (eq? c2-head c2-training-state-states))
+      (check "original controls and D2 cursor unchanged"
+        (and (equal? original-controls (g3r-controls-captured-copy capsule))
+             (equal? original-cursor (d2-token-dataset-cursor dataset))))
+      (check "retired shell cannot take bundle again"
+        (guard (caught (#t (and (transformer-error? caught)
+                                 (eq? 'invalid-state
+                                      (transformer-error-category caught)))))
+          (g3r-save-o2-take-for-c2-internal
+            (vector-ref g3r-save-cut-state 0))
+          #f))
+      (display "G3-R post-adoption cut PASS: checks=")
+      (display checks)
+      (newline)))

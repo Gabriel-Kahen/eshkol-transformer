@@ -3,8 +3,9 @@
 (load "g3t_manual_p1_extension.esk")
 (load "g3m_prefill_p1_extension.esk")
 
-;;; [returned shell, abandon calls, reverse release order, in abandon?].
-(define g3r-save-cut-state (vector #f 0 '() #f))
+;;; [returned shell, abandon calls, reverse release order, in abandon?,
+;;;  inject release failure?, original C2 registry]. Separate processes.
+(define g3r-save-cut-state (vector #f 0 '() #f #f #f))
 (define (g3r-save-cut-note! kind)
   (if (vector-ref g3r-save-cut-state 3)
       (vector-set! g3r-save-cut-state 2
@@ -14,7 +15,22 @@
 (define g3r-save-cut-real-o2-release o2-public-optimizer-state-release!)
 (define (o2-public-optimizer-state-release! shell)
   (g3r-save-cut-note! 'o2)
-  (g3r-save-cut-real-o2-release shell))
+  (let ((released (g3r-save-cut-real-o2-release shell)))
+    (if (and (vector-ref g3r-save-cut-state 3)
+             (vector-ref g3r-save-cut-state 4))
+        (begin
+          (if (not (and released
+                        (eq? shell (vector-ref g3r-save-cut-state 0))
+                        (= (vector-ref g3r-save-cut-state 1) 1)
+                        (eq? (vector-ref g3r-save-cut-state 5)
+                             c2-training-state-states)))
+              (exit 93))
+          (display "G3-R post-adoption O2 release fault injected")
+          (newline)
+          ;; Real O2 release has happened. Its test-only wrapper now throws
+          ;; inside production abandon; that guard must exit 134.
+          (raise 'g3r-save-test-o2-release-failure)))
+    released))
 (define g3r-save-cut-real-p1-release state-dict-release!)
 (define (state-dict-release! state)
   (g3r-save-cut-note! 'p1)

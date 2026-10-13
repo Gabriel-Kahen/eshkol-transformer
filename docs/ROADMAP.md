@@ -1844,9 +1844,10 @@ partial-claim, current-main union, and failure gates remain HOLD. The
 private O2 hold/state outputs now reject full or partial error-record overlap
 before owner mutation; focused normal and ASan/UBSan cuts pass 262 checks.
 No capture to pair bridge, public SAVE, restore, replay or continuation is admitted.
-An exact-tree post-adoption longjmp/fail-stop abandon fixture and guarded
-LLVM21 source-preparation manifest are available for review; no compiled run
-has occurred, and the separate partial-claim cut remains HOLD.
+An exact-tree post-adoption fixture now has separate successful-abandon and
+O2-release-fault modes plus a guarded exit-134 result verifier. The LLVM21
+source-preparation manifest is reviewable; neither mode has been compiled or
+run, and the separate partial-claim cut remains HOLD.
 
 The [private M3 owner-roster prerequisite](g3/G3_R_M3_OWNER_ROSTER_PREREQUISITE.md)
 ports the feature-gated registry-backed fourteen-parameter/identity roster
