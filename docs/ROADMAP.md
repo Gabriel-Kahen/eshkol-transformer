@@ -3120,9 +3120,80 @@ publication, public G2 and continuation remain pending.
   [accepted same-call ownership contract](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md)
   specifies one original pending output entry, a surviving terminal anchor,
   authentic T1/EOS/second-token composition, and a preflighted no-failure close
-  after native commit. Native terminal integration and logical I1 clone code
-  are prerequisites; Eshkol implementation and compiled same-call proof remain
-  pending. No public G2 or continuation acceptance is claimed.
+  after native commit. The native terminal commit/snapshot and logical I1
+  clone/copy/release APIs are present on this main tree. The private Eshkol
+  composer is source-staged on `codex/g3-p2g2-terminal-composer-main-union`;
+  independent source/tests review passed at `aa9e661f` (tree `457db3cd`).
+  A pinned normal/repeat/sanitizer, fault-overlay and predecessor gate remains
+  pending. No public G2 or continuation acceptance is
+  claimed. Earlier failed composer gates remain retained: held-source lease
+  retry in `g3c4-p2g2-eshkol-terminal-composer-cf5a20d5-fe9-f31-20261002-prepared-b/SHA256SUMS-FAILED`,
+  dead-history assertion in `g3c4-p2g2-eshkol-terminal-composer-3a76086-fe9-f31-20261003-prepared-c/SHA256SUMS-FAILED`,
+  allocation rollback in `g3c4-p2g2-eshkol-terminal-composer-cf225dc-fe9-f31-20261003-prepared-d/SHA256SUMS-FAILED`,
+  constructor emergency in `g3c4-p2g2-eshkol-terminal-composer-dbf66f8-fe9-f31-20261003-prepared-e/SHA256SUMS-FAILED`,
+  and feature-off admission in
+  `g3c4-p2g2-eshkol-terminal-composer-4e07c9f-fe9-f31-20261003-prepared-f/`.
+  The active pre-tail abort path still fail-stops if a genuine native I1/A2
+  lease rejects abort; in-region release/retry coverage is unresolved and
+  remains a contract acceptance blocker on the published composer tree.
+  The current-main diagnostic composition carries the exact-source test-only
+  overlay from `f31ec2f` for genuine owner-held pending I1 and READY A2
+  lease rejection, preservation of all five anchor/record heads, holder
+  release, and retry within the same `m3-call`. Focused source controls pass;
+  its compiled normal/sanitizer gate has not run. The production zero-return
+  tail and fixed two-argument entry are unchanged.
+  The [production held-lease audit](g3/G3_C4_P2_G2_HELD_LEASE_PRODUCTION_HOLD.md)
+  confirms that this entry has no accepted cooperative holder/release
+  capability inside its live `m3-call`. Genuine release needs the holder's
+  captured I1/A2 pointer; the test shim supplies one only for diagnostic G2
+  READY/P3 cases. An upstream ownership contract or a source-proved narrowing
+  of the held-lease clause is required before claiming production retry or
+  running the compiled close gate.
+  A separate `codex/g3-p2g2-held-holder-native-20261013` source candidate now
+  adds a feature-gated private C holder/witness capability in the native owner
+  translation unit, with exact pending output binding, original I1/A2 lease
+  slots, typed first-busy capture, one-use release and retry, and disposal.
+  Its focused unsupported-host Clang 22 source probe passes 714 checks in
+  normal, repeat and ASan/UBSan runs (LeakSanitizer unavailable under this
+  executor), plus feature-off symbol and dependency checks; the pinned
+  Clang 21 gate and independent source/tests review remain pending. A2's
+  terminal transaction predicate requires no active view, so the HELD witness
+  uses the captured holder view and bound identities; the predicate runs before
+  acquisition and after ending the lease. The focused negative test asserts
+  that the predicate rejects a held view while the holder witness passes.
+  Stable tombstone slots use a fixed 1,048,576-token, 16 MiB registry and are
+  never reused; disposal frees the witness body. The source test uses a
+  32-slot registry and verifies stale tokens and exhaustion, which returns
+  C4 INTERNAL/ALLOCATION. Lifetime exhaustion and 16 MiB reservation remain
+  explicit production limitations pending review and supported-host evidence.
+  This C leaf does not wire the Eshkol root, protected abort path, or public G2;
+  production same-call release/retry remains unproved.
+  A separate feature-only Eshkol holder composer candidate on
+  `codex/g3-p2g2-held-holder-eshkol-20261013` now composes that exact C ABI
+  inside one live `m3-call`. It preserves the ordinary two-argument producer,
+  captures at P2 or P3 after the corresponding carrier, closes P2 before the
+  first-EOS/count branch and P3 before terminal commit, and routes a typed
+  first-busy rejection through owned lease end and one abort retry. Its source
+  checks pass locally; compiled feature-on behavior, exact-head independent
+  review and supported-host validation remain pending. It does not admit
+  public G2 or continuation.
+  A separate compiled held-holder gate candidate exercises the feature-only
+  three-argument Eshkol entry with genuine I1/A2 holder acquisition at P2 and
+  P3, both first-EOS P2 paths, wrong generation, typed first-busy end/retry,
+  repeated-busy and postzero fail-stop cuts, and the unchanged feature-off
+  entry. Source-only parser/syntax checks pass; the pinned compiled
+  normal/repeat/sanitizer matrix remains pending. Independent source review
+  held the first candidate because its fault preceded the Eshkol HELD state
+  and its depfile check mixed Eshkol loads with native/docs sources; the
+  successor moves the fault to the HELD witness and checks those closures
+  separately. Successor independent review is pending, so no
+  behavioral admission or public G2 claim follows from this gate preparation.
+  A prospective source composition of the reviewed PR #206 head `ca36a66b`
+  and held-holder head `205c8960` preserves both source lines on a separate
+  branch. Focused zero-control, Q0/M3CG and held-holder source checks pass;
+  two older G3 deferred-surface checker tests still fail on `generator_rng`
+  on the unchanged held-holder head. The compiled gate and current-main
+  admission remain held until PR #206 completes and the union is rechecked.
 
 ## Wave 4 — practical pretraining and performance
 

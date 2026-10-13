@@ -5,6 +5,7 @@
 #include "g3c4_model_owner_internal.h"
 #include "m3t_f32_scoped.h"
 #include "eshkol_transformer/i64_tensor.h"
+#include "g3c4_p2g2_holder_private.h"
 #ifdef ET_G3C4_P2_G1_PUBLIC_RESULT_PRIVATE
 #include "../../native/i64_t1_pair_private.h"
 #endif
@@ -32,6 +33,14 @@
      !defined(ET_G3C4_PROMPT_T1_BORROW_PRIVATE) || \
      !defined(ET_I64_TENSOR_STORAGE_QUERY_PRIVATE))
 #error "C4 P2/G2 logical IDs clone requires terminal output and private I1 ownership"
+#endif
+
+#if defined(ET_G3C4_P2_G2_HELD_HOLDER_PRIVATE) && \
+    (!defined(ET_G3C4_P2_G2_TERMINAL_PRIVATE) || \
+     !defined(ET_G3C4_OUTPUT_RESERVATION_PRIVATE) || \
+     !defined(ET_G3C4_PROMPT_T1_BORROW_PRIVATE) || \
+     !defined(ET_A2_KV_CACHE_TERMINAL_WITNESS_PRIVATE))
+#error "P2/G2 held holder requires terminal, pending I1 and A2 witness"
 #endif
 
 #include <limits.h>
@@ -9041,5 +9050,432 @@ fail:
     abort();
   et_g3c4_error_restore_internal(first);
   return -1;
+}
+#endif
+
+#ifdef ET_G3C4_P2_G2_HELD_HOLDER_PRIVATE
+/* This source-private capability lives in the native owner TU so its context
+ * and pending-output admission use the original registry, not a parallel ABI. */
+enum et_g3c4_holder_stage {
+  ET_G3C4_HOLDER_NEW, ET_G3C4_HOLDER_BOUND, ET_G3C4_HOLDER_HELD,
+  ET_G3C4_HOLDER_FIRST_ABORT, ET_G3C4_HOLDER_ENDED_BUSY,
+  ET_G3C4_HOLDER_NORMAL_ENDED, ET_G3C4_HOLDER_ABORTED,
+  ET_G3C4_HOLDER_FAILED
+};
+
+typedef struct et_g3c4_holder_image {
+  const void *owner, *parent, *ids, *cache, *transaction, *pins_self;
+  uint32_t output_state, numeric_ready, ids_copied, text_ready;
+  uint32_t frame_state, prefix_committed, second_frame, acquired_mask;
+  uint32_t pins_held_mask;
+  int64_t prompt_length, generated_length, output_length, output_cache_length;
+  int64_t frame_position, candidate, prefix_token;
+  unsigned char prefix_raw;
+  int64_t output_rng[4], generator_rng[4], successor[4];
+  unsigned char ids_bytes[16], keys[64], values[64], lengths[8], mask[4];
+  unsigned char frame_keys[64], frame_values[64];
+} et_g3c4_holder_image;
+
+typedef struct et_g3c4_holder_token {
+  int64_t generation;
+  struct et_g3c4_p2g2_holder *live;
+} et_g3c4_holder_token;
+
+typedef struct et_g3c4_p2g2_holder {
+  et_g3c4_holder_token *token;
+  int64_t generation, kind, phase, first_status;
+  int attempts;
+  enum et_g3c4_holder_stage stage;
+  et_g3c4_error_state_internal first_error;
+  et_g3c4_context_internal *context;
+  et_g3c4_output_internal *output;
+  et_i64_tensor_borrow *i1;
+  et_a2_kv_cache_transaction_view *a2;
+  et_g3c4_holder_image image;
+} et_g3c4_p2g2_holder;
+
+/* Tokens are never reused: an old void * cannot regain authority by address
+ * recycling, including through generation_v1. The large witness body is
+ * released at disposal. Exhaustion is an explicit creation failure. */
+#ifndef ET_G3C4_HOLDER_TOKEN_CAPACITY
+#define ET_G3C4_HOLDER_TOKEN_CAPACITY 1048576u
+#endif
+_Static_assert(ET_G3C4_HOLDER_TOKEN_CAPACITY > 0u &&
+               ET_G3C4_HOLDER_TOKEN_CAPACITY <= INT64_MAX,
+               "holder token capacity must fit the generation ABI");
+static et_g3c4_holder_token
+    et_g3c4_holder_tokens[ET_G3C4_HOLDER_TOKEN_CAPACITY];
+static size_t et_g3c4_holder_token_count;
+
+static int64_t et_g3c4_holder_reject(void) {
+  return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+}
+
+static et_g3c4_holder_token *et_g3c4_holder_token_find(
+    const void *candidate) {
+  const uintptr_t base = (uintptr_t)et_g3c4_holder_tokens;
+  const uintptr_t address = (uintptr_t)candidate;
+  const uintptr_t offset = address - base;
+  const size_t index = (size_t)(offset / sizeof(et_g3c4_holder_token));
+  if (address < base || offset >= sizeof(et_g3c4_holder_tokens) ||
+      offset % sizeof(et_g3c4_holder_token) != 0u ||
+      index >= et_g3c4_holder_token_count) return NULL;
+  return &et_g3c4_holder_tokens[index];
+}
+
+static et_g3c4_p2g2_holder *et_g3c4_holder_find(
+    const void *candidate, int64_t generation) {
+  et_g3c4_holder_token *token = et_g3c4_holder_token_find(candidate);
+  return token != NULL && token->generation == generation ? token->live : NULL;
+}
+
+static int et_g3c4_holder_bound(et_g3c4_p2g2_holder *holder,
+                                void *context_candidate, void *output_candidate) {
+  et_g3c4_context_internal *context;
+  et_g3c4_output_internal *output;
+  et_g3c4_output_internal *pending = NULL;
+  if (holder->context != context_candidate ||
+      holder->output != output_candidate) return 0;
+  context = et_g3c4_admit_active_call(context_candidate);
+  output = et_g3c4_admit_output(output_candidate, 0);
+  if (context == NULL || output == NULL ||
+      et_g3c4_pending_output_lookup(context, &pending) != 0 ||
+      pending != output || output->transport.state != 0u ||
+      output->parent_ctx != context || output->ids == NULL ||
+      output->prompt_length != 2 || output->generated_length != 2 ||
+      context->call_kind != 2 || context->budget != 2 ||
+      context->generator_policy[4] != 2)
+    return 0;
+  return 1;
+}
+
+/* The A2 terminal predicate requires active_view == NULL. During a held A2
+ * lease the original view supplies the full image; verify the predicate
+ * before acquisition and again after release. */
+static int et_g3c4_holder_ready(const et_g3c4_p2g2_holder *holder) {
+  const et_g3c4_context_internal *context = holder->context;
+  return context->token_frame_state == ET_G3C4_TOKEN_FRAME_READY &&
+         context->token_frame_position == holder->phase &&
+         context->token_frame_transaction != NULL &&
+         context->p2g2_prefix_committed ==
+             (uint32_t)(holder->phase == 3) &&
+         context->p2g2_second_frame == (uint32_t)(holder->phase == 3);
+}
+
+static int et_g3c4_holder_image_read(et_g3c4_p2g2_holder *holder,
+                                      et_g3c4_holder_image *image) {
+  et_g3c4_context_internal *context = holder->context;
+  et_g3c4_output_internal *output = holder->output;
+  const et_kernel_tensor_view_v1 *ids = NULL, *keys = NULL, *values = NULL;
+  const et_kernel_tensor_view_v1 *lengths = NULL, *mask = NULL;
+  et_a2_kv_cache_transaction_view *temporary = NULL;
+  et_a2_kv_cache_transaction_view *view = holder->a2;
+  et_i64_tensor_error i1_error;
+  et_kernel_error a2_error;
+  int64_t words[2] = {0, 0};
+  int valid = 0;
+  const int64_t prior = holder->phase;
+  const unsigned char expected_mask[2][4] = {
+      {1u, 1u, 1u, 0u}, {1u, 1u, 1u, 1u}};
+  memset(image, 0, sizeof(*image));
+  if (!et_g3c4_holder_bound(holder, context, output) ||
+      !et_g3c4_holder_ready(holder)) return 0;
+  if (view == NULL && !et_a2_kv_cache_private_terminal_transaction_witness_v1(
+                          context->token_frame_transaction, context->cache,
+                          prior)) return 0;
+  if (holder->i1 != NULL) {
+    if (et_i64_tensor_borrow_view_v1(holder->i1, &ids, &i1_error) != 0 ||
+        ids == NULL || ids->rank != 1u || ids->shape == NULL ||
+        ids->shape[0] != 2u || ids->byte_length != 16u ||
+        ids->data == NULL) return 0;
+    memcpy(image->ids_bytes, ids->data, 16u);
+  } else {
+    if (et_i64_tensor_copy_to_v1(output->ids, words, 2u, &i1_error) != 0)
+      return 0;
+    memcpy(image->ids_bytes, words, 16u);
+  }
+  if (view == NULL) {
+    if (et_a2_kv_cache_transaction_view_begin_v1(
+            context->token_frame_transaction, 0u, &temporary, &a2_error) != 0)
+      return 0;
+    view = temporary;
+  }
+  if (et_a2_kv_cache_transaction_view_tensors_v1(
+          view, &keys, &values, &lengths, &mask, &a2_error) != 0 ||
+      keys == NULL || values == NULL || lengths == NULL || mask == NULL ||
+      keys->data == NULL || values->data == NULL || lengths->data == NULL ||
+      mask->data == NULL || keys->byte_length != 64u ||
+      values->byte_length != 64u || lengths->byte_length != 8u ||
+      mask->byte_length != 4u || keys->rank != 4u || values->rank != 4u ||
+      lengths->rank != 1u || mask->rank != 2u ||
+      keys->shape == NULL || values->shape == NULL ||
+      lengths->shape == NULL || mask->shape == NULL ||
+      memcmp(keys->shape, (const uint64_t[4]){1u, 2u, 4u, 2u},
+             4u * sizeof(uint64_t)) != 0 ||
+      memcmp(values->shape, (const uint64_t[4]){1u, 2u, 4u, 2u},
+             4u * sizeof(uint64_t)) != 0 ||
+      lengths->shape[0] != 1u || mask->shape[0] != 1u ||
+      mask->shape[1] != 4u ||
+      *(const int64_t *)lengths->data != prior + 1 ||
+      memcmp(mask->data, expected_mask[prior - 2], 4u) != 0)
+    goto finish;
+  memcpy(image->keys, keys->data, 64u);
+  memcpy(image->values, values->data, 64u);
+  memcpy(image->lengths, lengths->data, 8u);
+  memcpy(image->mask, mask->data, 4u);
+  if (memcmp(image->keys, context->p2g2_frame_keys, 64u) != 0 ||
+      memcmp(image->values, context->p2g2_frame_values, 64u) != 0)
+    goto finish;
+  image->owner = context->owner;
+  image->parent = output->parent_ctx;
+  image->ids = output->ids;
+  image->cache = context->cache;
+  image->transaction = context->token_frame_transaction;
+  image->pins_self = context->pins.self;
+  image->pins_held_mask = context->pins.held_mask;
+  image->output_state = output->transport.state;
+  image->numeric_ready = output->numeric_ready;
+  image->ids_copied = output->ids_copied;
+  image->text_ready = output->text_ready;
+  image->frame_state = context->token_frame_state;
+  image->prefix_committed = context->p2g2_prefix_committed;
+  image->second_frame = context->p2g2_second_frame;
+  image->acquired_mask = context->acquired_mask;
+  image->prompt_length = output->prompt_length;
+  image->generated_length = output->generated_length;
+  image->output_length = output->length;
+  image->output_cache_length = output->cache_length;
+  image->frame_position = context->token_frame_position;
+  image->candidate = context->token_frame_candidate;
+  image->prefix_token = context->p2g2_prefix_token;
+  image->prefix_raw = context->p2g2_prefix_raw;
+  memcpy(image->output_rng, output->rng, sizeof(image->output_rng));
+  memcpy(image->generator_rng, context->generator_rng_words,
+         sizeof(image->generator_rng));
+  memcpy(image->successor, context->token_frame_successor,
+         sizeof(image->successor));
+  memcpy(image->frame_keys, context->p2g2_frame_keys,
+         sizeof(image->frame_keys));
+  memcpy(image->frame_values, context->p2g2_frame_values,
+         sizeof(image->frame_values));
+  valid = 1;
+finish:
+  if (temporary != NULL &&
+      et_a2_kv_cache_transaction_view_end_v1(&temporary, &a2_error) != 0)
+    abort();
+  return valid;
+}
+
+static int et_g3c4_holder_end_slot(et_g3c4_p2g2_holder *holder) {
+  if (holder->kind == 1) {
+    et_i64_tensor_error error;
+    return holder->i1 != NULL &&
+           et_i64_tensor_borrow_end_v1(&holder->i1, &error) == 0;
+  }
+  et_kernel_error error;
+  return holder->a2 != NULL &&
+         et_a2_kv_cache_transaction_view_end_v1(&holder->a2, &error) == 0;
+}
+
+void *et_g3c4_private_p2g2_holder_new_v1(int64_t kind, int64_t phase) {
+  et_g3c4_p2g2_holder *holder;
+  et_g3c4_error_reset_internal();
+  if ((kind != 1 && kind != 2) || (phase != 2 && phase != 3)) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return NULL;
+  }
+  if (et_g3c4_holder_token_count == ET_G3C4_HOLDER_TOKEN_CAPACITY) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_ALLOCATION);
+    return NULL;
+  }
+  holder = calloc(1u, sizeof(*holder));
+  if (holder == NULL) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_ALLOCATION);
+    return NULL;
+  }
+  holder->token = &et_g3c4_holder_tokens[et_g3c4_holder_token_count];
+  holder->generation = (int64_t)(++et_g3c4_holder_token_count);
+  holder->token->generation = holder->generation;
+  holder->token->live = holder;
+  holder->kind = kind;
+  holder->phase = phase;
+  holder->stage = ET_G3C4_HOLDER_NEW;
+  return holder->token;
+}
+
+int64_t et_g3c4_private_p2g2_holder_generation_v1(void *candidate) {
+  et_g3c4_holder_token *token;
+  et_g3c4_error_reset_internal();
+  token = et_g3c4_holder_token_find(candidate);
+  if (token != NULL && token->live != NULL) return token->generation;
+  (void)et_g3c4_holder_reject();
+  return 0;
+}
+
+int64_t et_g3c4_private_p2g2_holder_bind_v1(
+    void *candidate, int64_t generation, void *context, void *pending) {
+  et_g3c4_p2g2_holder *holder =
+      et_g3c4_holder_find(candidate, generation);
+  et_g3c4_error_reset_internal();
+  if (holder == NULL || holder->stage != ET_G3C4_HOLDER_NEW)
+    return et_g3c4_holder_reject();
+  holder->context = context;
+  holder->output = pending;
+  if (!et_g3c4_holder_bound(holder, context, pending)) {
+    holder->context = NULL;
+    holder->output = NULL;
+    return et_g3c4_holder_reject();
+  }
+  holder->stage = ET_G3C4_HOLDER_BOUND;
+  return 0;
+}
+
+int64_t et_g3c4_private_p2g2_holder_begin_capture_v1(
+    void *candidate, int64_t generation, void *context, void *pending) {
+  et_g3c4_p2g2_holder *holder =
+      et_g3c4_holder_find(candidate, generation);
+  et_g3c4_holder_image image;
+  et_g3c4_error_reset_internal();
+  if (holder == NULL || holder->stage != ET_G3C4_HOLDER_BOUND ||
+      !et_g3c4_holder_bound(holder, context, pending) ||
+      !et_g3c4_holder_ready(holder) ||
+      !et_a2_kv_cache_private_terminal_transaction_witness_v1(
+          holder->context->token_frame_transaction, holder->context->cache,
+          holder->phase)) return et_g3c4_holder_reject();
+  if (holder->kind == 1) {
+    et_i64_tensor_error error;
+    if (et_i64_tensor_borrow_begin_v1(
+            holder->output->ids, &holder->i1, &error) != 0)
+      return et_g3c4_holder_reject();
+  } else {
+    et_kernel_error error;
+    if (et_a2_kv_cache_transaction_view_begin_v1(
+            holder->context->token_frame_transaction, 0u, &holder->a2,
+            &error) != 0) return et_g3c4_holder_reject();
+  }
+  if (!et_g3c4_holder_image_read(holder, &image)) {
+    if (!et_g3c4_holder_end_slot(holder)) abort();
+    return et_g3c4_holder_reject();
+  }
+  holder->image = image;
+  holder->stage = ET_G3C4_HOLDER_HELD;
+  return 0;
+}
+
+int64_t et_g3c4_private_p2g2_holder_witness_v1(
+    void *candidate, int64_t generation, void *context, void *pending) {
+  et_g3c4_p2g2_holder *holder =
+      et_g3c4_holder_find(candidate, generation);
+  et_g3c4_holder_image current;
+  et_g3c4_error_reset_internal();
+  if (holder == NULL || (holder->stage != ET_G3C4_HOLDER_HELD &&
+      holder->stage != ET_G3C4_HOLDER_FIRST_ABORT &&
+      holder->stage != ET_G3C4_HOLDER_ENDED_BUSY &&
+      holder->stage != ET_G3C4_HOLDER_NORMAL_ENDED) ||
+      !et_g3c4_holder_bound(holder, context, pending) ||
+      !et_g3c4_holder_image_read(holder, &current) ||
+      memcmp(&current, &holder->image, sizeof(current)) != 0)
+    return et_g3c4_holder_reject();
+  return 0;
+}
+
+int64_t et_g3c4_private_p2g2_holder_normal_close_v1(
+    void *candidate, int64_t generation, void *context, void *pending) {
+  et_g3c4_p2g2_holder *holder =
+      et_g3c4_holder_find(candidate, generation);
+  et_g3c4_error_reset_internal();
+  if (holder == NULL || holder->stage != ET_G3C4_HOLDER_HELD ||
+      et_g3c4_private_p2g2_holder_witness_v1(
+          candidate, generation, context, pending) != 0)
+    return et_g3c4_holder_reject();
+  if (!et_g3c4_holder_end_slot(holder)) {
+    holder->stage = ET_G3C4_HOLDER_FAILED;
+    abort();
+  }
+  holder->stage = ET_G3C4_HOLDER_NORMAL_ENDED;
+  if (et_g3c4_private_p2g2_holder_witness_v1(
+          candidate, generation, context, pending) != 0) abort();
+  return 0;
+}
+
+int64_t et_g3c4_private_p2g2_holder_abort_attempt_v1(
+    void *candidate, int64_t generation, void *context, void *pending,
+    int64_t ordinal) {
+  et_g3c4_p2g2_holder *holder =
+      et_g3c4_holder_find(candidate, generation);
+  int64_t status;
+  et_g3c4_error_reset_internal();
+  if (holder == NULL || !et_g3c4_holder_bound(holder, context, pending) ||
+      !((ordinal == 1 && holder->stage == ET_G3C4_HOLDER_HELD &&
+         holder->attempts == 0) ||
+        (ordinal == 2 && holder->stage == ET_G3C4_HOLDER_ENDED_BUSY &&
+         holder->attempts == 1))) return et_g3c4_holder_reject();
+  if (et_g3c4_private_p2g2_holder_witness_v1(
+          candidate, generation, context, pending) != 0)
+    return et_g3c4_holder_reject();
+  status = et_g3c4_private_call_abort_v1(context);
+  holder->attempts++;
+  if (ordinal == 1) {
+    holder->first_status = status;
+    holder->first_error = et_g3c4_error_snapshot_internal();
+    holder->stage = ET_G3C4_HOLDER_FIRST_ABORT;
+    if (status == 0) holder->stage = ET_G3C4_HOLDER_FAILED;
+  } else {
+    holder->stage = status == 0 ? ET_G3C4_HOLDER_ABORTED :
+                                  ET_G3C4_HOLDER_FAILED;
+  }
+  return status;
+}
+
+int64_t et_g3c4_private_p2g2_holder_end_after_busy_v1(
+    void *candidate, int64_t generation, void *context, void *pending) {
+  et_g3c4_p2g2_holder *holder =
+      et_g3c4_holder_find(candidate, generation);
+  int64_t expected_domain, expected_category, expected_code;
+  et_g3c4_error_reset_internal();
+  if (holder == NULL || holder->stage != ET_G3C4_HOLDER_FIRST_ABORT ||
+      holder->attempts != 1) return et_g3c4_holder_reject();
+  expected_domain = holder->kind == 1 ? ET_G3C4_DOMAIN_I1 :
+                                         ET_G3C4_DOMAIN_K1;
+  expected_category = holder->kind == 1 ?
+      ET_I64_TENSOR_ERROR_INVALID_STATE : ET_KERNEL_ERROR_INVALID_ARGUMENT;
+  expected_code = holder->kind == 1 ? ET_I64_TENSOR_CODE_ACTIVE_BORROW :
+                                      ET_KERNEL_CODE_PROVIDER_REJECTED;
+  if (holder->first_status != expected_category ||
+      holder->first_error.domain != expected_domain ||
+      holder->first_error.category != expected_category ||
+      holder->first_error.code != expected_code) abort();
+  if (et_g3c4_private_p2g2_holder_witness_v1(
+          candidate, generation, context, pending) != 0)
+    return et_g3c4_holder_reject();
+  if (!et_g3c4_holder_end_slot(holder)) {
+    holder->stage = ET_G3C4_HOLDER_FAILED;
+    abort();
+  }
+  holder->stage = ET_G3C4_HOLDER_ENDED_BUSY;
+  if (et_g3c4_private_p2g2_holder_witness_v1(
+          candidate, generation, context, pending) != 0) abort();
+  return 0;
+}
+
+int64_t et_g3c4_private_p2g2_holder_dispose_v1(
+    void *candidate, int64_t generation) {
+  et_g3c4_p2g2_holder *holder =
+      et_g3c4_holder_find(candidate, generation);
+  et_g3c4_error_reset_internal();
+  if (holder == NULL || holder->i1 != NULL || holder->a2 != NULL ||
+      (holder->stage != ET_G3C4_HOLDER_NEW &&
+       holder->stage != ET_G3C4_HOLDER_BOUND &&
+       holder->stage != ET_G3C4_HOLDER_NORMAL_ENDED &&
+       holder->stage != ET_G3C4_HOLDER_ABORTED))
+    return et_g3c4_holder_reject();
+  if (holder->stage == ET_G3C4_HOLDER_BOUND &&
+      et_g3c4_admit_active_call(holder->context) != NULL)
+    return et_g3c4_holder_reject();
+  et_g3c4_error_reset_internal();
+  holder->token->live = NULL;
+  memset(holder, 0, sizeof(*holder));
+  free(holder);
+  return 0;
 }
 #endif

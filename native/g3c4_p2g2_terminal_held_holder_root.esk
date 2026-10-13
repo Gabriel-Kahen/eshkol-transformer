@@ -1,0 +1,11 @@
+;;; Feature-only P2/G2 held-holder composition; no public G2 facade.
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+(load "g3c4_t1_output_decode_extension.esk")
+(load "g3c4_output_envelope_extension.esk")
+(load "g3c4_p2g2_ownership_extension.esk")
+(load "g3c4_p2g2_protected_scope_extension.esk")
+(load "g3c4_p2g2_t1_prefix_coordinator_extension.esk")
+(load "g3c4_p2g2_terminal_held_holder_extension.esk")

@@ -7,6 +7,7 @@
 #include "arena_memory.h"
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 extern "C" void *__real_malloc(size_t);
 extern "C" void *__real_arena_allocate_vector_with_header(arena_t *, size_t);
@@ -14,6 +15,8 @@ extern "C" void *__real_arena_allocate_cons_with_header(arena_t *);
 extern "C" void *__real_arena_allocate_with_header(
     arena_t *, size_t, uint8_t, uint8_t);
 extern "C" void __real_eshkol_push_exception_handler(void *);
+extern "C" void eshkol_runtime_emergency_raise_v1(int32_t);
+extern "C" void eshkol_get_raised_value(eshkol_tagged_value_t *);
 
 static int allocation_kind;
 static int64_t allocation_before;
@@ -27,6 +30,7 @@ static int handler_fresh;
 static int handler_armed;
 static int handler_in_push;
 static int64_t handler_pushes;
+static eshkol_exception_t *allocation_condition5;
 
 static void require(bool condition, const char *message) {
   if (!condition) {
@@ -38,6 +42,43 @@ static void require(bool condition, const char *message) {
                  (long long)handler_pushes);
     std::abort();
   }
+}
+
+// Test-only exact-identity witness. The pinned compiler raises static condition
+// 5 for a failed generated arena constructor; it is not an E1 error shell.
+extern "C" int64_t et_g3c4_composer_emergency_raise_v1(int64_t condition) {
+  require(!allocation_kind && !handler_armed &&
+              (condition == 4 || condition == 5),
+          "calibrate an unarmed runtime emergency");
+  eshkol_runtime_emergency_raise_v1((int32_t)condition);
+  std::abort();
+}
+
+extern "C" int64_t et_g3c4_composer_emergency_capture_v1(void) {
+  eshkol_tagged_value_t raised{};
+  eshkol_get_raised_value(&raised);
+  require(raised.type == ESHKOL_VALUE_HEAP_PTR && !raised.flags &&
+              !raised.reserved && raised.data.ptr_val != 0,
+          "condition 5 has a canonical raised tag");
+  auto *candidate = reinterpret_cast<eshkol_exception_t *>(raised.data.ptr_val);
+  require(candidate == g_current_exception && candidate->message &&
+              !std::strcmp(candidate->message,
+                           "object or exception-handler allocation failed"),
+          "calibrated exact runtime condition 5");
+  allocation_condition5 = candidate;
+  return 1;
+}
+
+extern "C" int64_t et_g3c4_composer_emergency_exact_v1(void) {
+  eshkol_tagged_value_t raised{};
+  eshkol_get_raised_value(&raised);
+  return allocation_condition5 && raised.type == ESHKOL_VALUE_HEAP_PTR &&
+                 !raised.flags && !raised.reserved &&
+                 raised.data.ptr_val ==
+                     reinterpret_cast<uintptr_t>(allocation_condition5) &&
+                 g_current_exception == allocation_condition5
+             ? 1
+             : 0;
 }
 
 extern "C" int64_t et_g3c4_call_entry_alloc_arm_v1(
