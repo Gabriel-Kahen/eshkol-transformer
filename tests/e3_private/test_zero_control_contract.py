@@ -5,6 +5,8 @@ from __future__ import annotations
 import subprocess
 import tempfile
 import unittest
+import hashlib
+import importlib.util
 from copy import deepcopy
 from math import log
 from pathlib import Path
@@ -62,6 +64,7 @@ class ZeroControlContract(unittest.TestCase):
                                "et_e3_zero_negative_run_v1"},
             "native_source_closure": {"tests/e3_private/zero_control_bridge.c"},
             "source_closure": {
+                "@BUILD@/source/transformer/module.esk",
                 "tests/e3_private/zero_control_driver_root.esk",
                 "tests/e3_private/zero_control_driver.esk",
                 "tests/e3_private/zero_control_negative_driver.esk",
@@ -75,7 +78,11 @@ class ZeroControlContract(unittest.TestCase):
                 current = (zero.with_name(zero.name + "_" + suffix + ".txt")
                            .read_text().splitlines())
                 self.assertEqual(set(current) - set(previous), added)
-                self.assertFalse(set(previous) - set(current))
+                self.assertEqual(
+                    set(previous) - set(current),
+                    {"internal/p1/lib/transformer/module.esk"}
+                    if suffix == "source_closure" else set(),
+                )
                 self.assertEqual(len(current), len(set(current)))
 
     def test_observer_requires_complete_ordered_actual_roles(self) -> None:
@@ -269,6 +276,177 @@ class ZeroControlContract(unittest.TestCase):
                         fire.index('(parameter-handle-tensor-internal'))
         self.assertIn('(if (string=? name "stale-handle")', fire)
         self.assertIn('stale-handle', runner)
+
+    def test_zero_p1_overlay_is_one_pinned_insertion(self) -> None:
+        path = ROOT / "scripts/generate-e3-zero-p1-topology-overlay.py"
+        spec = importlib.util.spec_from_file_location("zero_p1_overlay", path)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        source = module.CANONICAL.read_bytes()
+        emitted = module.compose(source)
+        module.verify_manifest()
+        self.assertEqual(hashlib.sha256(source).hexdigest(), module.SOURCE_SHA256)
+        self.assertEqual(hashlib.sha256(emitted).hexdigest(), module.EMITTED_SHA256)
+        self.assertEqual(emitted.count(module.INSERTION), 1)
+        self.assertEqual(emitted.replace(module.INSERTION, b"", 1), source)
+        self.assertIn("Zero-control-only P1 projection",
+                      form(emitted.decode("utf-8"), "(define p1-trusted-surface"))
+        self.assertIn(b"(lambda (model modules handles carriers selector)",
+                      module.INSERTION)
+        self.assertNotIn(b"(module-parameters", module.INSERTION)
+        for phrase in (b"'path-10", b"'shape-10", b"'tie-10",
+                       b"'throw-path-10", b"(vector-set! target field original)",
+                       b"(tr3-fixed-recheck!"):
+            self.assertIn(phrase, module.INSERTION)
+
+        def rollback_control(body: bytes) -> bool:
+            return (
+                body.count(b"(vector-set! target field original)") == 2
+                and body.count(b"(vector-set! target field replacement)") == 1
+                and body.count(b"(raise 'e3-zero-topology-test-marker)") == 1
+                and body.count(b"(if (not (= mismatch 4))") == 1
+                and body.count(b"(if (not (eq? (vector-ref target field) original))") == 2
+                and b"(module-parameters" not in body
+                and body.index(b"(guard (caught") <
+                    body.index(b"(vector-set! target field replacement)") <
+                    body.rindex(b"(vector-set! target field original)")
+            )
+
+        self.assertTrue(rollback_control(module.INSERTION))
+        for damaged in (
+            module.INSERTION.replace(b"(vector-set! target field original)",
+                                     b"(begin #t)", 1),
+            module.INSERTION.replace(b"(if (not (= mismatch 4))",
+                                     b"(if (not (= mismatch 3))", 1),
+            module.INSERTION.replace(b"(raise 'e3-zero-topology-test-marker)",
+                                     b"(begin #t)", 1),
+            module.INSERTION.replace(b"(vector-set! target field replacement)",
+                                     b"(module-parameters model)\n"
+                                     b"                        (vector-set! target field replacement)", 1),
+        ):
+            self.assertFalse(rollback_control(damaged))
+        with self.assertRaises(ValueError):
+            module.compose(source + b"\n")
+        original_sha = module.EMITTED_SHA256
+        try:
+            module.EMITTED_SHA256 = "0" * 64
+            with self.assertRaises(ValueError):
+                module.compose(source)
+        finally:
+            module.EMITTED_SHA256 = original_sha
+        with tempfile.TemporaryDirectory() as temporary:
+            damaged_manifest = Path(temporary) / "manifest.json"
+            damaged_manifest.write_text('{"kind":"forged"}\n')
+            actual_manifest = module.MANIFEST
+            try:
+                module.MANIFEST = damaged_manifest
+                with self.assertRaises(ValueError):
+                    module.verify_manifest()
+            finally:
+                module.MANIFEST = actual_manifest
+            output = Path(temporary) / "source/transformer/module.esk"
+            command = ["python3", "-B", str(path), "--output", str(output)]
+            self.assertEqual(subprocess.run(command, capture_output=True).returncode, 0)
+            self.assertEqual(subprocess.run(command + ["--check"],
+                                            capture_output=True).returncode, 0)
+            self.assertNotEqual(subprocess.run(
+                ["python3", "-B", str(path), "--output",
+                 f"{output.parent}/./module.esk", "--check"],
+                capture_output=True).returncode, 0)
+            output.write_bytes(emitted + b"\n")
+            self.assertNotEqual(subprocess.run(command + ["--check"],
+                                               capture_output=True).returncode, 0)
+            output.unlink()
+            output.symlink_to(module.CANONICAL)
+            self.assertNotEqual(subprocess.run(command + ["--check"],
+                                               capture_output=True).returncode, 0)
+
+    def test_zero_overlay_policy_rejects_other_tuples_and_aliases(self) -> None:
+        generator = ROOT / "scripts/generate-e3-zero-p1-topology-overlay.py"
+        policy = ROOT / "scripts/e3-private-package-policy.sh"
+        with tempfile.TemporaryDirectory() as temporary:
+            stage = Path(temporary) / "source"
+            overlay = stage / "transformer/module.esk"
+            subprocess.run(["python3", "-B", str(generator), "--output",
+                            str(overlay)], check=True, capture_output=True)
+            script = '''
+              set -o pipefail
+              die() { printf '%s\\n' "$*" >&2; exit 41; }
+              PROJECT_ROOT=$1
+              raw_private_root=$2
+              raw_package_bridge=$3
+              raw_package_renames=$4
+              raw_public_exports=$5
+              raw_include_dirs=("$PROJECT_ROOT/internal/p1/lib"
+                "$PROJECT_ROOT/internal/c1/lib" "$PROJECT_ROOT/internal/t1/lib"
+                "$PROJECT_ROOT/src" "$PROJECT_ROOT/internal/d2/lib"
+                "$PROJECT_ROOT/internal/e3/lib")
+              if [[ "${10}" == forged ]]; then
+                raw_include_dirs+=("$8")
+              fi
+              source "$6"
+              e3_tuple_kind=$7
+              e3_generated_source_root=$8
+              printf '%s\\n' "$9" | e3_normalize_source_dependencies
+            '''
+
+            def check(kind: str, dependency: Path | str,
+                      *, mixed: bool = False,
+                      forged_include: bool = False) -> subprocess.CompletedProcess[str]:
+                zero = ROOT / "tests/e3_private/zero_control_package"
+                inputs = [ROOT / "tests/e3_private/zero_control_driver_root.esk",
+                          ROOT / "tests/e3_private/zero_control_bridge.c",
+                          Path(str(zero) + "_private_renames.txt"),
+                          Path(str(zero) + "_public_exports.txt")]
+                if mixed:
+                    inputs[1] = ROOT / "native/e3_private_bridge.c"
+                return subprocess.run(
+                    ["bash", "-c", script, "policy-check", str(ROOT),
+                     *(str(item) for item in inputs), str(policy), kind,
+                     str(stage), str(dependency),
+                     "forged" if forged_include else "exact"],
+                    capture_output=True, text=True, check=False,
+                )
+
+            self.assertEqual(check("zero", overlay).stdout.strip(),
+                             "@BUILD@/source/transformer/module.esk")
+            for kind in ("base", "diagnostic", "public", "retention",
+                         "retention-first-eval-mutant", "retention-overflow",
+                         "mode-graph", "numerical", "uniform", "partial"):
+                with self.subTest(kind=kind):
+                    self.assertNotEqual(check(kind, overlay).returncode, 0)
+            self.assertNotEqual(check("zero", f"{overlay.parent}/./module.esk").returncode, 0)
+            self.assertNotEqual(check("zero", overlay, mixed=True).returncode, 0)
+            self.assertNotEqual(check("zero", overlay,
+                                      forged_include=True).returncode, 0)
+            authentic = Path(temporary) / "authentic-module.esk"
+            authentic.write_bytes(overlay.read_bytes())
+            overlay.unlink()
+            overlay.symlink_to(authentic)
+            self.assertNotEqual(check("zero", overlay).returncode, 0)
+
+    def test_topology_probe_restores_before_observing_tree(self) -> None:
+        negative = (ROOT / "tests/e3_private/zero_control_negative_driver.esk").read_text()
+        runner = (ROOT / "scripts/test-e3-zero-control.sh").read_text()
+        build = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
+        probe = negative.split('(define (e3-zero-negative-topology! model handles name)', 1)[1].split(
+            '(define (e3-zero-negative-fire', 1)[0]
+        self.assertIn('(e3-zero-negative-p1-shell-census)', negative)
+        self.assertIn('(e3-zero-negative-topology-shells? model modules)', probe)
+        self.assertIn('(e3-zero-negative-topology-pairs? model retained carriers)', probe)
+        self.assertLess(probe.index('(vector-ref p1-trusted-surface 69)'),
+                        probe.index('(vector-ref p1-trusted-surface 73)'))
+        self.assertLess(probe.index('(vector-ref p1-trusted-surface 73)'),
+                        probe.index('(e3-zero-check-tree model)'))
+        for name in ("topology-path-10", "topology-shape-10",
+                     "topology-tie-10", "topology-throw-path-10"):
+            self.assertIn(name, negative)
+            self.assertIn(name, runner)
+        self.assertIn('scripts/generate-e3-zero-p1-topology-overlay.py', build)
+        self.assertIn('if [[ "${e3_tuple_kind}" == zero ]]; then\n'
+                      '    include_args=(-I "${e3_generated_source_root}"', build)
 
     def test_prebind_source_cleanup_precedes_seed_and_destination_allocation(self) -> None:
         driver = (ROOT / "tests/e3_private/zero_control_negative_driver.esk").read_text()

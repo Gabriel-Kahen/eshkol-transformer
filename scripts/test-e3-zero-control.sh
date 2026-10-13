@@ -205,7 +205,8 @@ for case_name in all-correct all-wrong mixed; do
   done
 done
 for case_name in missing-path foreign-handle foreign-tree stale-handle \
-    duplicate-tied-head \
+    duplicate-tied-head topology-path-10 topology-shape-10 topology-tie-10 \
+    topology-throw-path-10 \
     source-alias wrong-shape wrong-rank wrong-f32-geometry wrong-kind \
     forged-source released-source decode-short decode-extent decode-role \
     decode-request-length decode-payload decode-shape decode-rank-limit \

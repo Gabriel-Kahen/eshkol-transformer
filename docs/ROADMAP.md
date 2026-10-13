@@ -946,8 +946,14 @@ variants; offline numeric and prepare/cleanup mutation tests pass. A further
 test-only negative now aborts an unpublished I2/P1 staged construction and
 passes its authentic tombstoned handle through the zero input admission's P1
 shape accessor before any carrier lookup or I2 prepare. This is a stale P1
-construction handle, not a retired sealed-M3 handle. A separately constructed
-unexpected active P1 topology remains unproven. The exact sanitizer import
+construction handle, not a retired sealed-M3 handle. An additional zero-only,
+one-insertion P1 source overlay now exercises path, shape and tied-binding
+projection mismatch through private slot 70, including a deliberate thrown
+condition. It pins canonical and emitted hashes, restores the exact old raw
+object before any model observer, and rechecks the full P1 projection before
+the ordinary unchanged-state and fresh-load retry. This is source-only P1
+projection evidence, not native M3 graph or rollback proof; independent review
+and compiled witnesses remain pending. The exact sanitizer import
 manifests are still absent and its build fails closed. Pinned Q0 oracle
 generation, emitted package inventories, generated AOT postprepare review,
 fresh normal/repeat/poisoned and sanitizer runtime gates, and renewed

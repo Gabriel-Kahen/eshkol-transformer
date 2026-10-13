@@ -1410,6 +1410,15 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     cmp "${e1b_tmp}/mode-graph-generation.txt" \
         "${e1b_tmp}/mode-graph-check.txt"
   fi
+  if [[ "${e3_tuple_kind}" == zero ]]; then
+    python3 -B "${PROJECT_ROOT}/scripts/generate-e3-zero-p1-topology-overlay.py" \
+      --output "${e3_generated_source_root}/transformer/module.esk" \
+      >"${e1b_tmp}/zero-p1-generation.txt"
+    python3 -B "${PROJECT_ROOT}/scripts/generate-e3-zero-p1-topology-overlay.py" \
+      --output "${e3_generated_source_root}/transformer/module.esk" --check \
+      >"${e1b_tmp}/zero-p1-check.txt"
+    cmp "${e1b_tmp}/zero-p1-generation.txt" "${e1b_tmp}/zero-p1-check.txt"
+  fi
   if [[ "${e3_overflow_mutant}" == clamp ]]; then
     [[ "${e3_overflow_generated_owned}" == 1 &&
        "${#package_native_sources[@]}" == 11 &&
@@ -1537,7 +1546,11 @@ for include_dir in "${canonical_include_dirs[@]}"; do
   include_args+=(-I "${include_dir}")
 done
 if [[ "${package_policy}" == e3-private-aggregate ]]; then
-  include_args+=(-I "${e3_generated_source_root}")
+  if [[ "${e3_tuple_kind}" == zero ]]; then
+    include_args=(-I "${e3_generated_source_root}" "${include_args[@]}")
+  else
+    include_args+=(-I "${e3_generated_source_root}")
+  fi
   if [[ "${e3_tuple_kind}" == mode-graph ||
         "${e3_tuple_kind}" == retention ||
         "${e3_tuple_kind}" == retention-first-eval-mutant ||
@@ -2501,6 +2514,16 @@ if [[ "${e3_retention_sanitizer_inventory_verified}" == 1 ]]; then
   cp "${e1b_tmp}/sanitizer-undefined.txt" \
     "${evidence_dir}.tmp.$$/sanitizer-undefined.txt"
 fi
+
+if [[ "${package_policy}" == e3-private-aggregate &&
+      "${e3_tuple_kind}" == zero ]]; then
+  python3 -B "${PROJECT_ROOT}/scripts/generate-e3-zero-p1-topology-overlay.py" \
+    --output "${e3_generated_source_root}/transformer/module.esk" --check \
+    >"${e1b_tmp}/zero-p1-postcheck.txt" ||
+    die "E3 zero P1 overlay changed during compilation"
+  cmp "${e1b_tmp}/zero-p1-generation.txt" \
+      "${e1b_tmp}/zero-p1-postcheck.txt"
+fi
 if [[ -n "${package_source_closure}" ]]; then
   cp "${e1b_tmp}/source-closure.txt" \
     "${evidence_dir}.tmp.$$/source-closure.txt"
@@ -2512,6 +2535,14 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     "${evidence_dir}.tmp.$$/e3_d2_dataset.esk"
   cp "${e3_generated_source_root}/e3_d2_source_provenance.json" \
     "${evidence_dir}.tmp.$$/e3_d2_source_provenance.json"
+  if [[ "${e3_tuple_kind}" == zero ]]; then
+    cp "${e3_generated_source_root}/transformer/module.esk" \
+      "${evidence_dir}.tmp.$$/e3_zero_p1_topology_module.esk"
+    cp "${e1b_tmp}/zero-p1-generation.txt" \
+       "${e1b_tmp}/zero-p1-check.txt" \
+       "${e1b_tmp}/zero-p1-postcheck.txt" \
+       "${evidence_dir}.tmp.$$/"
+  fi
   if [[ "${e3_overflow_mutant}" == clamp ]]; then
     cp "${e3_overflow_clamp_source}" \
       "${evidence_dir}.tmp.$$/e3_overflow_clamp_provider.c"

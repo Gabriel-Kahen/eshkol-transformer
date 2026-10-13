@@ -216,7 +216,122 @@
               (e3-zero-invariant (= (e3-zero-stale-owner-abort owner) 0))
               (e3-native-invariant-fail))))))))
 
-(define (e3-zero-negative-fire name config tree handles sources)
+(define (e3-zero-negative-topology-pairs? model handles carriers)
+  (let ((owner (e3-zero-negative-owner model)))
+    (let pair ((index 0))
+      (if (= index 14) #t
+          (and (eq? (vector-ref handles index)
+                    (vector-ref
+                      (vector-ref
+                        (m3t-entry model 'model 'e3-zero-negative #t) 8)
+                      index))
+               (eq? (vector-ref carriers index)
+                    (parameter-handle-tensor-internal
+                      (vector-ref handles index)))
+               (eq? (vector-ref
+                      (i2-carrier-preflight (vector-ref carriers index)
+                        'parameter 'e3-zero-negative) 2)
+                    (m3t-native-owner-parameter owner index))
+               (pair (+ index 1)))))))
+
+(define (e3-zero-negative-topology-shells? model modules)
+  (let ((registered
+          (vector-ref (m3t-entry model 'model 'e3-zero-negative #t) 4)))
+    (let shell ((index 0))
+      (if (= index 17) #t
+          (and (eq? (vector-ref modules index)
+                    (vector-ref registered index))
+               (shell (+ index 1)))))))
+
+(define (e3-zero-negative-p1-shell-census)
+  ;; Count rooted P1 module/handle shells and construction tombstones. This
+  ;; read-only projection census does not claim native P1 record-hook coverage.
+  (let count ((remaining (shell-registry-current)) (live 0) (dead 0))
+    (if (null? remaining) (vector live dead)
+        (let ((entry (car remaining)))
+          (if (and (vector? entry) (= (vector-length entry) 4)
+                   (or (eq? (vector-ref entry 1) 'module)
+                       (eq? (vector-ref entry 1) 'handle)))
+              (if (eq? (vector-ref entry 2) dead-construction-raw)
+                  (count (cdr remaining) live (+ dead 1))
+                  (count (cdr remaining) (+ live 1) dead))
+              (count (cdr remaining) live dead))))))
+
+(define (e3-zero-negative-topology-idle? model)
+  (let ((census (e3-zero-negative-census model)))
+    (and (= (vector-ref census 5) 14)
+         (let idle ((index 0))
+           (if (= index 10) #t
+               (and (or (= index 5) (= (vector-ref census index) 0))
+                    (idle (+ index 1))))))))
+
+(define (e3-zero-negative-topology! model handles name)
+  (let* ((selector
+           (cond ((string=? name "topology-path-10") 'path-10)
+                 ((string=? name "topology-shape-10") 'shape-10)
+                 ((string=? name "topology-tie-10") 'tie-10)
+                 ((string=? name "topology-throw-path-10")
+                  'throw-path-10)
+                 (else (e3-native-invariant-fail))))
+         (modules (make-vector 17 #f))
+         (retained (make-vector 14 #f))
+         (carriers (make-vector 14 #f))
+         (p1-before (e3-zero-negative-p1-shell-census)))
+    (e3-zero-invariant (e3-zero-negative-topology-idle? model))
+    (e3-zero-invariant
+      (= ((vector-ref p1-trusted-surface 69)
+           model handles modules retained carriers) 0))
+    (e3-zero-invariant
+      (and (eq? (vector-ref modules 0) model)
+           (e3-zero-negative-topology-shells? model modules)
+           (e3-zero-negative-topology-pairs? model retained carriers)
+           (= ((vector-ref p1-trusted-surface 70)
+                model modules retained carriers) 0)))
+    (let ((status
+            (if (eq? selector 'throw-path-10)
+                (guard (caught
+                         (#t
+                           (if (eq? caught 'e3-zero-topology-test-marker)
+                               'e3-zero-topology-test-marker
+                               (e3-native-invariant-fail))))
+                  ((vector-ref p1-trusted-surface 73)
+                    model modules retained carriers selector)
+                  'e3-zero-topology-unexpected-return)
+                (guard (caught (#t (e3-native-invariant-fail)))
+                  ((vector-ref p1-trusted-surface 73)
+                    model modules retained carriers selector)))))
+      (e3-zero-invariant
+        (if (eq? selector 'throw-path-10)
+            (eq? status 'e3-zero-topology-test-marker)
+            (= status 4))))
+    (e3-zero-invariant
+      (= ((vector-ref p1-trusted-surface 70)
+           model modules retained carriers) 0))
+    (e3-zero-invariant (e3-zero-negative-topology-shells? model modules))
+    (e3-zero-invariant (e3-zero-negative-topology-pairs? model retained carriers))
+    (e3-zero-invariant (e3-zero-negative-topology-idle? model))
+    (let ((p1-after (e3-zero-negative-p1-shell-census)))
+      (e3-zero-invariant
+        (and (= (vector-ref p1-before 0) (vector-ref p1-after 0))
+             (= (vector-ref p1-before 1) (vector-ref p1-after 1)))))
+    (let ((tree (e3-zero-check-tree model)))
+      (let path ((index 0))
+        (if (= index 14) #t
+            (begin
+              (e3-zero-invariant
+                (eq? (parameter-tree-handle tree
+                       (vector-ref e3-zero-paths index))
+                     (vector-ref handles index)))
+              (path (+ index 1))))))
+    (et-e1b-private-raise 'invalid-argument 'e3-zero-negative
+      "restored P1 projection rejected the fixed topology probe" '() #f)))
+
+(define (e3-zero-negative-fire name config model tree handles sources)
+  (if (or (string=? name "topology-path-10")
+          (string=? name "topology-shape-10")
+          (string=? name "topology-tie-10")
+          (string=? name "topology-throw-path-10"))
+      (e3-zero-negative-topology! model handles name)
   (if (string=? name "stale-handle")
       (e3-zero-negative-stale! tree)
   (let* ((destination
@@ -331,7 +446,7 @@
        (i2-checkpoint-decode
          (vector (make-bytevector 16 0) 'parameter '(4) 'f32 'cpu
                  'dense-row-major-contiguous 0 #f)))
-      (else (e3-native-invariant-fail))))))
+      (else (e3-native-invariant-fail)))))))
 
 (define (e3-zero-negative-run scenario corpus-path)
   (e3-zero-invariant
@@ -415,7 +530,7 @@
                                 (#t (transformer-error? caught)))
                          (if completed-plan
                              (i2-commit-load! completed-plan)
-                             (e3-zero-negative-fire name config tree handles sources))
+                             (e3-zero-negative-fire name config model tree handles sources))
                          #f)))))
             (e3-zero-invariant rejected)
             (e3-zero-invariant
