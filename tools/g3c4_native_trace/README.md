@@ -91,3 +91,7 @@ children and injected failure inside the actual cgroup/container profile,
 validate event ordering/lineage and cgroup cleanup, then review the integration
 into the C7f receipt/validator contracts. Until that calibration, native
 descendant receipt completeness and gate enablement remain HOLD.
+
+The [source-prepared one-use v2 calibration recipe](calibration/README.md)
+pins the C7i source and f31 image for that micro-canary. It is launch-disabled
+and unrun pending its own review and the shared heavy-slot handoff.

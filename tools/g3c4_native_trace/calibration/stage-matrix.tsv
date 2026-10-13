@@ -1,0 +1,8 @@
+stage	status
+exact-c7i-v2-source-and-f31-image	SOURCE_PINNED_IMAGE_LIVE_UNVERIFIED
+fork-and-posix-spawn-descendants	UNRUN
+clone-thread-and-nonleader-exec-merge	UNRUN
+supervisor-failure-and-untraced-clone-closure	UNRUN
+one-use-cgroup-daemon-cid-wait-eof-seal	UNRUN
+failed-exec-attempts-and-per-child-output	HOLD_OUT_OF_SCOPE
+terminal-eshkol-public-generation	HOLD_OUT_OF_SCOPE

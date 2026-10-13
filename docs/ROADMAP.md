@@ -2715,6 +2715,9 @@ publication, public G2 and continuation remain pending.
   start-tick identity; postflight rejects fork-child merges and merges without
   an immediate destination exec. This v2 source has not had a ptrace rerun.
   Extra native images are reported for review.
+  A [source-prepared one-use v2 calibration recipe](../tools/g3c4_native_trace/calibration/README.md)
+  pins the C7i source and f31 image for causal fork, clone, nonleader-exec and
+  failure-closure canaries. It remains launch-disabled and unrun.
   Exact-image descendant calibration, failed-exec attempt receipts, and
   per-child output attribution remain pending.
   This private candidate supplies no public

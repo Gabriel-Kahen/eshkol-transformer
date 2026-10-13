@@ -67,6 +67,10 @@ G3C4_DEVELOPMENT_SCRIPTS = frozenset({
 })
 DEVELOPMENT_SCRIPTS = frozenset({
     ROOT / "tools/g3c4_native_trace/tests/test_trace.py",
+    ROOT / "tools/g3c4_native_trace/calibration/bootstrap.py",
+    ROOT / "tools/g3c4_native_trace/calibration/launcher.py",
+    ROOT / "tools/g3c4_native_trace/calibration/postflight.py",
+    ROOT / "tools/g3c4_native_trace/calibration/test_offline.py",
     ROOT / "scripts" / "generate-e3-d2-source.py",
     ROOT / "scripts" / "generate-e3-p1-mode-test-variant.py",
     ROOT / "scripts" / "generate-e3-mode-graph-source.py",
