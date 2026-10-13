@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import errno
 import importlib.util
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 import os
 import sys
@@ -152,8 +152,186 @@ class BoundedRunTest(unittest.TestCase):
                 return original_scandir(fd)
 
             with mock.patch.object(monitor.os, "scandir", side_effect=swap_after_open):
-                self.assertEqual(monitor.output_bytes(output), 0)
+                with self.assertRaises(monitor.OutputScanFault) as caught:
+                    monitor.output_bytes(output)
             self.assertTrue(swapped)
+            self.assertEqual(caught.exception.code, "directory-open-error")
+
+    def test_open_ancestor_moved_out_before_child_scan_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            output = base / "output"
+            child = output / "a" / "b"
+            child.mkdir(parents=True)
+            moved = base / "moved"
+            original_open = os.open
+            injected = False
+
+            def move_before_child_open(path, flags, *args, **kwargs):
+                nonlocal injected
+                if path == "b" and flags & os.O_DIRECTORY and not injected:
+                    (output / "a").rename(moved)
+                    (moved / "b" / "outside-only").write_bytes(b"X" * 17)
+                    injected = True
+                return original_open(path, flags, *args, **kwargs)
+
+            with mock.patch.object(monitor.os, "open", side_effect=move_before_child_open):
+                with self.assertRaises(monitor.OutputScanFault) as caught:
+                    monitor.output_bytes(output)
+            self.assertTrue(injected)
+            self.assertFalse(list(output.iterdir()))
+            self.assertEqual(caught.exception.code, "directory-open-error")
+            self.assertEqual(monitor.safe_scan_detail(caught.exception, "live")[3], "a")
+
+    def test_transient_move_out_and_back_is_rejected_by_watch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            output = base / "output"
+            child = output / "a" / "b"
+            child.mkdir(parents=True)
+            moved = base / "moved"
+            original_open = os.open
+            injected = False
+
+            def move_out_and_back(path, flags, *args, **kwargs):
+                nonlocal injected
+                if path == "b" and flags & os.O_DIRECTORY and not injected:
+                    (output / "a").rename(moved)
+                    outside = moved / "b" / "outside-only"
+                    outside.write_bytes(b"X" * 17)
+                    outside.unlink()
+                    moved.rename(output / "a")
+                    injected = True
+                return original_open(path, flags, *args, **kwargs)
+
+            with mock.patch.object(monitor.os, "open", side_effect=move_out_and_back):
+                with self.assertRaises(monitor.OutputScanFault) as caught:
+                    monitor.output_bytes(output)
+            self.assertTrue(injected)
+            self.assertEqual(caught.exception.code, "tree-moved")
+            self.assertNotIn(str(moved), "\t".join(monitor.safe_scan_detail(caught.exception, "live")))
+
+    def test_regular_file_move_out_and_back_is_rejected_by_watch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            output = base / "output"
+            output.mkdir()
+            source = output / "sample"
+            source.write_bytes(b"X" * 17)
+            moved = base / "moved"
+            original_open = os.open
+            injected = False
+
+            def move_file_before_metadata(path, flags, *args, **kwargs):
+                nonlocal injected
+                if path == "sample" and flags & os.O_PATH and not injected:
+                    source.rename(moved)
+                    moved.rename(source)
+                    injected = True
+                return original_open(path, flags, *args, **kwargs)
+
+            with mock.patch.object(monitor.os, "open", side_effect=move_file_before_metadata):
+                with self.assertRaises(monitor.OutputScanFault) as caught:
+                    monitor.output_bytes(output)
+            self.assertTrue(injected)
+            self.assertEqual(caught.exception.code, "tree-moved")
+
+    def test_output_root_moved_during_descriptor_scan_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            output = base / "output"
+            output.mkdir()
+            moved = base / "moved"
+            inode = output.stat().st_ino
+            original_scandir = os.scandir
+            injected = False
+
+            def move_root(fd):
+                nonlocal injected
+                if isinstance(fd, int) and os.fstat(fd).st_ino == inode and not injected:
+                    output.rename(moved)
+                    (moved / "outside-only").write_bytes(b"X" * 17)
+                    injected = True
+                return original_scandir(fd)
+
+            with mock.patch.object(monitor.os, "scandir", side_effect=move_root):
+                with self.assertRaises(monitor.OutputScanFault) as caught:
+                    monitor.output_bytes(output)
+            self.assertTrue(injected)
+            self.assertEqual(caught.exception.code, "directory-open-error")
+
+    def test_output_ancestor_move_out_and_back_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            parent = base / "parent"
+            output = parent / "output"
+            output.mkdir(parents=True)
+            moved = base / "moved"
+            unrelated = base / "unrelated"
+            unrelated.mkdir()
+            inode = output.stat().st_ino
+            original_scandir = os.scandir
+            injected = False
+
+            @contextmanager
+            def move_ancestor_during_scan(fd):
+                nonlocal injected
+                if isinstance(fd, int) and os.fstat(fd).st_ino == inode and not injected:
+                    unrelated.rename(base / "other")
+                    parent.rename(moved)
+                    outside = moved / "output" / "outside-only"
+                    outside.write_bytes(b"X" * 17)
+                    injected = True
+                    try:
+                        with original_scandir(fd) as entries:
+                            yield entries
+                    finally:
+                        outside.unlink()
+                        moved.rename(parent)
+                else:
+                    with original_scandir(fd) as entries:
+                        yield entries
+
+            with mock.patch.object(monitor.os, "scandir", side_effect=move_ancestor_during_scan):
+                with self.assertRaises(monitor.OutputScanFault) as caught:
+                    monitor.output_bytes(output)
+            self.assertTrue(injected)
+            self.assertFalse(list(output.iterdir()))
+            self.assertEqual(caught.exception.code, "tree-moved")
+
+    def test_unrelated_move_in_ancestor_directory_is_ignored(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            parent = base / "parent"
+            output = parent / "output"
+            output.mkdir(parents=True)
+            unrelated = base / "unrelated"
+            unrelated.mkdir()
+            inode = output.stat().st_ino
+            original_scandir = os.scandir
+            injected = False
+
+            def move_unrelated(fd):
+                nonlocal injected
+                if isinstance(fd, int) and os.fstat(fd).st_ino == inode and not injected:
+                    unrelated.rename(base / "other")
+                    injected = True
+                return original_scandir(fd)
+
+            with mock.patch.object(monitor.os, "scandir", side_effect=move_unrelated):
+                self.assertEqual(monitor.output_bytes(output), 0)
+            self.assertTrue(injected)
+
+    def test_unavailable_move_watch_fails_closed_with_fixed_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            with mock.patch.object(monitor, "MoveWatch", side_effect=OSError(errno.ENOSPC, "SECRET", "/host/private")):
+                with self.assertRaises(monitor.OutputScanFault) as caught:
+                    monitor.output_bytes(output)
+            detail = monitor.safe_scan_detail(caught.exception, "live")
+            self.assertEqual(detail[2], "watch-error")
+            self.assertNotIn("SECRET", "\t".join(detail))
+            self.assertNotIn("/host/private", "\t".join(detail))
 
     def test_queued_directory_replacement_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

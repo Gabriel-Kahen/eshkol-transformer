@@ -5,7 +5,8 @@ scan failed with `unsafe-guest-output` and stopped the Docker client, but the
 monitor row discarded the first `OSError` or `ValueError`. A later clean final
 scan cannot identify a transient offending entry. The source-only successor
 candidate is [`tests/e3_host_monitor/bounded_run.py`](../../tests/e3_host_monitor/bounded_run.py),
-copied from L's bounded runner and changed only to retain a safe first fault.
+derived from L's bounded runner to retain a safe first fault and reject
+unsafe live output traversal.
 It is not part of an executed one-use launcher or an E3 acceptance result.
 
 The monitor retains the first live scan fault, or the final scan fault if no
@@ -32,11 +33,25 @@ no path-based fallback. The sealed synthetic swap reproducer is represented
 by offline tests that replace a queued directory with a symlink before open,
 with a different directory before open, and with a symlink after open.
 
+The `cfa89137` candidate could still count bytes in a directory moved outside
+the output root after its ancestor descriptor opened. This successor reopens
+the named root and every scanned directory after traversal and checks each
+device/inode. It also keeps Linux inotify move watches on every root-path
+ancestor, filtered to the next path component, and on each scanned directory.
+A move-out/back of an ancestor or entry, or an unavailable watch, fails closed
+with a fixed diagnostic. Unrelated moves beside the root path are ignored.
+Watch events contain no raw guest path in the receipt. Inotify and revalidation detect the tested
+rename races during one scan, but this is not an atomic filesystem snapshot or
+proof of continuous ancestry under every concurrent mutation. A supported-host
+one-use run and independent review must establish whether this conservative
+policy is operationally usable before any acceptance claim.
+
 The prior 50,000-entry, 32-level, two-second traversal bounds, stream/guest-
 output/wall caps, group termination, final scan, and exit-74 failure policy
-remain. Eleven offline tests cover these swaps, root and ancestor symlinks, a
+remain. Eighteen offline tests cover these swaps, persistent and transient
+directory moves, root reparenting, root and ancestor symlinks, a
 transient symlink removed before the final scan, a guest-relative control-
 character path, OS errors with secret text/host paths, hardlink/FIFO refusal,
-bounds, successful completion, and stream/guest-output/wall caps. The future one-use recipe must
-copy and pin this reviewed candidate as a new component; it must not edit or
+bounds, successful completion, and stream/guest-output/wall caps. The future
+one-use recipe must copy and pin this candidate after review; it must not edit or
 replay L. Independent review and a fresh one-use run remain separate gates.

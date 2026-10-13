@@ -4,10 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
 import os
 from pathlib import Path
 import signal
 import stat
+import struct
 import subprocess
 import sys
 import threading
@@ -19,6 +21,8 @@ SCAN_MESSAGES = {
     "traversal-bound": "guest output traversal bound exceeded",
     "directory-open-error": "guest output directory could not be opened without following links",
     "directory-replaced": "guest output directory identity changed during traversal",
+    "watch-error": "guest output move watch could not be established or read",
+    "tree-moved": "guest output tree moved during traversal",
     "scandir-error": "guest output directory scan failed",
     "stat-error": "guest output entry stat failed",
     "symlink-entry": "guest output contains a symlink",
@@ -32,6 +36,15 @@ SCAN_MESSAGES = {
 # or blocking on a FIFO, and O_NOFOLLOW keeps symlinks as entries to reject.
 DIRECTORY_OPEN_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 ENTRY_OPEN_FLAGS = os.O_PATH | os.O_NOFOLLOW | os.O_CLOEXEC
+
+# Structural moves of regular files or directories can invalidate a live
+# measurement even when opened descriptors retain the expected inode.
+MOVE_MASK = 0x00000040 | 0x00000080 | 0x00000400 | 0x00000800
+LIBC = ctypes.CDLL(None, use_errno=True)
+LIBC.inotify_init1.argtypes = (ctypes.c_int,)
+LIBC.inotify_init1.restype = ctypes.c_int
+LIBC.inotify_add_watch.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_uint32)
+LIBC.inotify_add_watch.restype = ctypes.c_int
 
 
 class OutputScanFault(ValueError):
@@ -89,7 +102,75 @@ def open_directory_parts(anchor_fd: int, parts: tuple[str, ...]) -> int:
         raise
 
 
-def open_output_root(root: Path) -> int:
+class MoveWatchError(OSError):
+    """A move watch could not be established without weakening the scan."""
+
+
+class MoveWatch:
+    """Keep Linux move watches on every directory seen in one bounded scan."""
+
+    def __init__(self):
+        self.fd = LIBC.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
+        if self.fd < 0:
+            number = ctypes.get_errno()
+            raise MoveWatchError(number, os.strerror(number))
+        self.watches = {}
+
+    def add(self, directory_fd: int, parts: tuple[str, ...],
+            child: str | None = None) -> None:
+        # The proc-fd magic link identifies an already opened inode. It is
+        # never a traversal path or a source of guest path text.
+        path = f"/proc/self/fd/{directory_fd}".encode("ascii")
+        watch = LIBC.inotify_add_watch(self.fd, path, MOVE_MASK)
+        if watch < 0:
+            number = ctypes.get_errno()
+            raise MoveWatchError(number, os.strerror(number))
+        # None means every structural move in this output directory matters.
+        # Root-path ancestor watches care only about the next component.
+        old = self.watches.get(watch)
+        if old is None and watch in self.watches:
+            return
+        if child is None:
+            self.watches[watch] = (parts, None)
+        else:
+            names = set() if old is None else set(old[1])
+            names.add(os.fsencode(child))
+            self.watches[watch] = (parts, names)
+
+    def first_move(self) -> tuple[str, ...] | None:
+        consumed = 0
+        while consumed <= 65536:
+            try:
+                event = os.read(self.fd, 4096)
+            except BlockingIOError:
+                return None
+            if not event:
+                raise OSError("move watch unexpectedly closed")
+            consumed += len(event)
+            offset = 0
+            while offset < len(event):
+                if len(event) - offset < 16:
+                    raise OSError("move watch event truncated")
+                watch, mask, _, length = struct.unpack_from("iIII", event, offset)
+                offset += 16
+                if offset + length > len(event):
+                    raise OSError("move watch name truncated")
+                name = event[offset:offset + length].split(b"\0", 1)[0]
+                offset += length
+                if watch == -1 or watch not in self.watches:
+                    return ()
+                parts, names = self.watches[watch]
+                if mask & (0x00000400 | 0x00000800 | 0x00004000 | 0x00008000):
+                    return parts
+                if names is None or name in names:
+                    return parts
+        raise OSError("move watch event bound exceeded")
+
+    def close(self) -> None:
+        os.close(self.fd)
+
+
+def open_output_root(root: Path, watcher: MoveWatch | None = None) -> int:
     # Walk every root component without following an ancestor symlink. The
     # returned descriptor, not the path string, is the traversal authority.
     parts = root.parts
@@ -98,7 +179,20 @@ def open_output_root(root: Path) -> int:
         parts = parts[1:]
     anchor_fd = os.open(anchor, DIRECTORY_OPEN_FLAGS)
     try:
-        return open_directory_parts(anchor_fd, parts)
+        current = os.dup(anchor_fd)
+        try:
+            for part in parts:
+                if not part or part in (".", "..") or "/" in part:
+                    raise ValueError("invalid directory component")
+                if watcher is not None:
+                    watcher.add(current, (), child=part)
+                child = os.open(part, DIRECTORY_OPEN_FLAGS, dir_fd=current)
+                os.close(current)
+                current = child
+            return current
+        except BaseException:
+            os.close(current)
+            raise
     finally:
         os.close(anchor_fd)
 
@@ -109,14 +203,28 @@ def output_bytes(root: Path, max_entries: int = 50000,
     count = 0
     deadline = time.monotonic() + max_seconds
     try:
-        root_fd = open_output_root(root)
+        watcher = MoveWatch()
+    except OSError as error:
+        raise OutputScanFault("watch-error", (), "OSError", error.errno) from error
+    try:
+        root_fd = open_output_root(root, watcher)
+    except MoveWatchError as error:
+        watcher.close()
+        raise OutputScanFault("watch-error", (), "OSError", error.errno) from error
     except (OSError, ValueError) as error:
+        watcher.close()
         error_class = "OSError" if isinstance(error, OSError) else "ValueError"
         raise OutputScanFault("directory-open-error", (), error_class,
                               getattr(error, "errno", None)) from error
     try:
         root_info = os.fstat(root_fd)
+        root_identity = (root_info.st_dev, root_info.st_ino)
+        try:
+            watcher.add(root_fd, ())
+        except OSError as error:
+            raise OutputScanFault("watch-error", (), "OSError", error.errno) from error
         pending = [((), 0, (root_info.st_dev, root_info.st_ino))]
+        seen = []
         while pending:
             parts, depth, expected_identity = pending.pop()
             if depth > max_depth or time.monotonic() > deadline:
@@ -131,6 +239,13 @@ def output_bytes(root: Path, max_entries: int = 50000,
                 opened = os.fstat(directory_fd)
                 if (opened.st_dev, opened.st_ino) != expected_identity:
                     raise OutputScanFault("directory-replaced", parts)
+                if parts:
+                    try:
+                        watcher.add(directory_fd, parts)
+                    except OSError as error:
+                        raise OutputScanFault("watch-error", parts, "OSError",
+                                              error.errno) from error
+                seen.append((parts, expected_identity))
                 try:
                     with os.scandir(directory_fd) as entries:
                         for entry in entries:
@@ -166,7 +281,44 @@ def output_bytes(root: Path, max_entries: int = 50000,
                     ) from error
             finally:
                 os.close(directory_fd)
+        # Held directory descriptors can be reparented after opening. Verify
+        # the named root and all scanned directories still identify the same
+        # inodes, then reject even a transient move-out/move-back event.
+        try:
+            fresh_root = open_output_root(root)
+        except (OSError, ValueError) as error:
+            error_class = "OSError" if isinstance(error, OSError) else "ValueError"
+            raise OutputScanFault("directory-open-error", (), error_class,
+                                  getattr(error, "errno", None)) from error
+        try:
+            info = os.fstat(fresh_root)
+            if (info.st_dev, info.st_ino) != root_identity:
+                raise OutputScanFault("directory-replaced", ())
+            for parts, expected_identity in seen:
+                if time.monotonic() > deadline:
+                    raise OutputScanFault("traversal-bound", parts)
+                try:
+                    directory_fd = open_directory_parts(fresh_root, parts)
+                except (OSError, ValueError) as error:
+                    error_class = "OSError" if isinstance(error, OSError) else "ValueError"
+                    raise OutputScanFault("directory-open-error", parts, error_class,
+                                          getattr(error, "errno", None)) from error
+                try:
+                    info = os.fstat(directory_fd)
+                    if (info.st_dev, info.st_ino) != expected_identity:
+                        raise OutputScanFault("directory-replaced", parts)
+                finally:
+                    os.close(directory_fd)
+        finally:
+            os.close(fresh_root)
+        try:
+            moved = watcher.first_move()
+        except OSError as error:
+            raise OutputScanFault("watch-error", (), "OSError", error.errno) from error
+        if moved is not None:
+            raise OutputScanFault("tree-moved", moved)
     finally:
+        watcher.close()
         os.close(root_fd)
     return total
 
