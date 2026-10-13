@@ -1806,9 +1806,11 @@ now accompanies merged main. Its first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
 ports exact value and absent-gradient bit baselines under the existing
 fixed14 model pins. Focused normal/repeat/sanitizer and feature-off checks
-pass locally. Independent source review, sealed M3T roster, O2 hold, current
-G3/A2 held 17-word snapshot, compiled union and failure cuts remain gates;
-this leaf adds no same-owner writer, SAVE or continuation admission.
+pass locally. F32 source/tests review is accepted (receipt SHA-256
+`2f84442a3c600056f51cdf7497b438a40e3220941fa085635401581da6abfe76`).
+The separately reviewed M3T roster and G3/A2 held 17-word snapshot are also
+source/tests accepted; O2 repair, a compiled private union and failure cuts
+remain gates. This leaf adds no same-owner writer, SAVE or continuation admission.
 
 The [current-history G3/A2 held-owner leaf](g3/G3_R_CURRENT_HISTORY_HELD_OWNER_LEAF.md)
 adds source-private original-owner pins and cache borrow with a checked 17-word
@@ -1816,18 +1818,24 @@ committed-history image. Focused native feature-off, normal, repeat and
 ASan+UBSan cuts pass. A held-copy alias repair now rejects overlap with M3
 graph/logits controls and separately rostered workspace metadata as well as
 foreign model owners, while admitting disjoint output; focused causal and
-sanitizer cuts pass. Independent source/tests
-review remains open. The O2 prerequisite has an unresolved alias finding and
-is excluded from this branch.
+sanitizer cuts pass. Independent G3/A2 source/tests review is accepted
+(receipt SHA-256 `da6b77bfe5227713e55c01da40a8213ce6622ee29e30cbf5adca54efbc74557c`).
+The exact `57a8e80a` private F32/M3/G3 source union is accepted with
+integration HOLD (`g3r-current-main-57a8-union-independent-review-20261013-a/SHA256SUMS-REVIEW`,
+manifest SHA-256 `cf7dce7a0a0f1059576904bc693b1506cd9e4bb865d385dbe9a0725f534bcb81`).
+The O2 prerequisite has an unresolved alias finding and is excluded from this branch.
 Coordinator, post-adoption and partial-O2-claim cuts remain integration gates;
 there is no SAVE or continuation admission.
 
 The [private M3 owner-roster prerequisite](g3/G3_R_M3_OWNER_ROSTER_PREREQUISITE.md)
 ports the feature-gated registry-backed fourteen-parameter/identity roster
 to current main. It rejects unsealed, stale, foreign, incomplete or inconsistent
-owners before copying any output. Source and focused native checks are pending
-independent review; the roster alone does not pin value/gradient bits, hold O2,
-or authorize a G3-R SAVE capture.
+owners before copying any output. Independent M3 source/tests review is accepted
+(receipt SHA-256 `c30e5c26ee68e7b51fb0779fc1e8e86d002e94d486fae818271f9fe79f9a438c`);
+the native transport fixture passed normal and ASan+UBSan with leak checking
+disabled, while the supported M3 script stopped at its Ubuntu 22.04 host gate.
+The roster alone does not pin value/gradient bits, hold O2, or authorize a
+G3-R SAVE capture.
 
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished

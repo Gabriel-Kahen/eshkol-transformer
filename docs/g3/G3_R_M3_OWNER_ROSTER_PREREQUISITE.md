@@ -23,6 +23,12 @@ fourteen-slot roster, null and foreign owners, null outputs, a corrupted
 identity binding, and unchanged output arrays after rejection. It also rejects
 identical and shifted overlapping outputs and
 owner-backed output storage without changing the sealed roster. Final
-integration requires independent source/tests review, feature-off absence,
-and supported compiled union validation before this private roster can be
-used by the joint capture coordinator.
+integration still requires supported compiled union validation before this
+private roster can be used by the joint capture coordinator. Independent
+source/tests review is accepted at `57a8e80a`/tree `8c5fcf94` (receipt
+SHA-256 `c30e5c26ee68e7b51fb0779fc1e8e86d002e94d486fae818271f9fe79f9a438c`).
+The direct native fixture passed normal and ASan+UBSan with leak checking
+disabled; the supported M3 script stopped at its Ubuntu 22.04 host gate on
+CachyOS. The private F32/M3/G3 source union is accepted with integration HOLD
+(`g3r-current-main-57a8-union-independent-review-20261013-a/SHA256SUMS-REVIEW`,
+manifest SHA-256 `cf7dce7a0a0f1059576904bc693b1506cd9e4bb865d385dbe9a0725f534bcb81`).

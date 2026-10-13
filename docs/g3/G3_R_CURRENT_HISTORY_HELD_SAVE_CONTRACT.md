@@ -1,6 +1,6 @@
 # G3-R current-history held SAVE: proposed private contract
 
-**Reviewed proposal, not a held API or SAVE admission.** This contract was
+**Reviewed historical proposal; no SAVE admission.** This contract was
 published at `07638286`/tree `9250179d` and is carried onto merged main
 `86f4eb36` (tree `10e48904`), which includes the committed-history snapshot
 candidate from PR #203. That candidate returns
@@ -8,6 +8,10 @@ detached data after releasing its M3T pins and A2 read borrow. A joint C2/model
 capture needs those original-owner leases to remain live across P1 cloning,
 O2 issue/claim, and the final comparison. Calling the existing 136-byte
 copyout before or after those steps cannot establish one state.
+The bounded source-private G3/A2 held API has since been implemented and
+independently source/tests accepted at `57a8e80a`/tree `8c5fcf94`; this
+proposal remains the contract for a later joint capture, not that API's
+admission into a SAVE writer or coordinator.
 
 ## Source conflict and migration boundary
 
@@ -34,7 +38,9 @@ current-main implementation by this proposal.
 
 ## Proposed held native owner contract
 
-The implementation must choose names and ABI only after independent review.
+At proposal time, names and ABI awaited independent review; the bounded
+private `et_g3r_private_g3t_save_*_v1` leaf now covers the G3/A2 hold.
+The later joint capture remains subject to the following owner contract.
 Acquisition takes the exact registered original generator and model plus the
 coordinator's fourteen freshly authenticated parameter handles/identities;
 caller-supplied history, RNG, or copied tensor bytes confer no authority. It
@@ -92,11 +98,15 @@ obligations, not implemented here.
 
 ## Required next gates
 
-1. Independent source/contract review of the current-history native hold:
-   ownership order, exact 17-word comparisons, pending-G1 denial, unchanged
-   original graph and first-error/fail-stop rules. Then implement it on the
-   current branch without importing the divergent ledger.
-2. Focused native normal/repeat/sanitizer and compiled Eshkol aggregate cuts:
+1. The current-history native G3/A2 hold has independent source/tests
+   acceptance (receipt SHA-256
+   `da6b77bfe5227713e55c01da40a8213ce6622ee29e30cbf5adca54efbc74557c`).
+   The private F32/M3/G3 source union is also accepted with integration HOLD
+   (`g3r-current-main-57a8-union-independent-review-20261013-a/SHA256SUMS-REVIEW`,
+   manifest SHA-256 `cf7dce7a0a0f1059576904bc693b1506cd9e4bb865d385dbe9a0725f534bcb81`).
+   A joint coordinator and O2 repair remain separate gates.
+2. Focused native normal/repeat/sanitizer cuts pass for the G3/A2 leaf;
+   compiled Eshkol aggregate and remaining failure cuts must cover:
    P1/P2/manual/generated/EOS, pending G1, changed policy/RNG/history,
    fourteen value/gradient bits, foreign/stale owners, lease conflicts,
    allocation failures, post-adoption longjmp, partial O2 claim, and release

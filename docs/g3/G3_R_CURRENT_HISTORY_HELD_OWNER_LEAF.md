@@ -35,6 +35,10 @@ partial-owner/transport aliases reject without changing bytes or releasing the
 active hold; an enrolled M3 graph does not reject disjoint output. LSan is
 unavailable in the ptraced local runner and was disabled for the sanitizer
 cut. Independent source/tests
-review, repaired O2 review,
-post-adoption cleanup, true partial-O2-claim rollback, and compiled aggregate
-cuts remain gates before any held SAVE integration.
+review is accepted at `57a8e80a`/tree `8c5fcf94` (receipt SHA-256
+`da6b77bfe5227713e55c01da40a8213ce6622ee29e30cbf5adca54efbc74557c`).
+The independent private F32/M3/G3 source union is also accepted with
+integration HOLD (`g3r-current-main-57a8-union-independent-review-20261013-a/SHA256SUMS-REVIEW`,
+manifest SHA-256 `cf7dce7a0a0f1059576904bc693b1506cd9e4bb865d385dbe9a0725f534bcb81`).
+Repaired O2 review, post-adoption cleanup, true partial-O2-claim rollback,
+and compiled aggregate cuts remain gates before any held SAVE integration.
