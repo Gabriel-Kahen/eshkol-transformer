@@ -86,6 +86,7 @@
   (let* ((record (tr3-lease-record-for-shell-internal
                    trainer 'trainer-train!))
          (limits (tr3-stop-policy-validate-internal stop-policy)))
+    (tr3-controls-route 'guard record 'train #f #f #f)
     (if (and predicate (not (procedure? predicate)))
         (tr3-train-fail 'invalid-argument
           "interrupt predicate must be a procedure"))

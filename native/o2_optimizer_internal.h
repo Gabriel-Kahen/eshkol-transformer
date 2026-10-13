@@ -176,6 +176,26 @@ et_o2_optimizer_schedule_factor_bits_v1(const et_o2_optimizer *optimizer,
 int32_t et_o2_optimizer_state_snapshot_v1(et_o2_optimizer *optimizer,
                                           et_o2_optimizer_state **state,
                                           et_o2_error_v1 *error);
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+typedef struct et_o2_g3r_save_hold et_o2_g3r_save_hold;
+/* Fixed private same-owner admission. The caller must supply a roster just
+ * authenticated by the registered sealed M3T owner. */
+int32_t et_g3r_private_o2_save_begin_v1(
+    et_o2_optimizer *optimizer, et_f32_parameter *const parameters[14],
+    const void *const identities[14], et_o2_g3r_save_hold **hold,
+    et_o2_error_v1 *error);
+int32_t et_g3r_private_o2_save_state_v1(
+    et_o2_g3r_save_hold *hold, et_o2_optimizer_state **state,
+    et_o2_error_v1 *error);
+int32_t et_g3r_private_o2_save_check_v1(
+    et_o2_g3r_save_hold *hold, et_o2_error_v1 *error);
+/* Compare the exact issued state against the held pre-snapshot authority. */
+int32_t et_g3r_private_o2_save_issued_match_v1(
+    et_o2_g3r_save_hold *hold, const et_o2_optimizer_state *state,
+    et_o2_error_v1 *error);
+int32_t et_g3r_private_o2_save_end_v1(
+    et_o2_g3r_save_hold **hold, et_o2_error_v1 *error);
+#endif
 int32_t et_o2_optimizer_load_state_v1(et_o2_optimizer *optimizer,
                                       et_o2_optimizer_state *state,
                                       et_o2_error_v1 *error);

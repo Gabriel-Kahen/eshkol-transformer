@@ -1,0 +1,4 @@
+;;; Private diagnostic-C2 original-X1 model construction. The accepted CLI3
+;;; T2/D2 aggregate remains loaded in its exact order.
+(load "g3r_d2_lineage_root.esk")
+(load "g3r_m3_x1_lineage_extension.esk")

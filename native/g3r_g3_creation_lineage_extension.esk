@@ -1,0 +1,287 @@
+;;; Original X1/T2/D2/M3/O2 graph bound before an unpublished G3 shell escapes.
+;;; This leaf requires ET_G3R_SAME_OWNER_SAVE_PRIVATE and the D2 idle probe.
+(extern ptr g3r-creation-o2-begin ptr ptr
+        :real et_g3r_private_o2_creation_begin_v1)
+(extern i64 g3r-creation-o2-check ptr
+        :real et_g3r_private_o2_creation_check_v1)
+(extern i64 g3r-creation-o2-end ptr
+        :real et_g3r_private_o2_creation_end_v1)
+(extern i64 g3r-creation-o2-error-word ptr i64
+        :real et_g3r_private_o2_creation_error_word_v1)
+
+(define g3r-g3-creation-limit 64)
+
+(define (g3r-g3-creation-fail category code message)
+  (et-e1b-private-raise category 'g3r-generator-create-from-sources message
+    (list (list 'source-domain 'g3r-g3-creation)
+          (list 'source-code code) (list 'source-message message)) #f))
+
+(define (g3r-g3-creation-capacity records)
+  (let walk ((tail records) (left g3r-g3-creation-limit))
+    (cond ((= left 0)
+           (g3r-g3-creation-fail 'unsupported 4
+             "G3 creation lineage limit reached"))
+          ((null? tail) #t)
+          ((not (pair? tail))
+           (g3r-g3-creation-fail 'internal 10 "lineage list changed"))
+          (else (walk (cdr tail) (- left 1))))))
+
+(define (g3r-g3-creation-copy-error! first hold)
+  ;; Copy immediately, before end/close can change native latest status.
+  (if (not (vector-ref first 0))
+      (begin
+        (vector-set! first 1 (g3r-creation-o2-error-word hold 0))
+        (vector-set! first 2 (g3r-creation-o2-error-word hold 1))
+        (vector-set! first 3 (g3r-creation-o2-error-word hold 2))
+        (vector-set! first 4 (g3r-creation-o2-error-word hold 3))
+        (vector-set! first 0 #t))))
+
+(define (g3r-g3-creation-raise-error first)
+  (let* ((source (vector-ref first 1))
+         (domain (vector-ref first 2))
+         (category (vector-ref first 3))
+         (code (vector-ref first 4))
+         (mapped
+           (cond ((= source 1) (m3t-native-category domain category))
+                 ((= source 2)
+                  (cond ((= category 1) 'invalid-argument)
+                        ((= category 2) 'shape-mismatch)
+                        ((= category 3) 'dtype-mismatch)
+                        ((= category 4) 'device-mismatch)
+                        ((= category 5) 'noncontiguous)
+                        ((= category 6) 'unsupported)
+                        ((= category 7) 'invalid-state)
+                        ((= category 8) 'version-mismatch)
+                        ((= category 10) 'corrupt-data)
+                        ((= category 11) 'determinism-unavailable)
+                        (else 'internal)))
+                 ((= source 4)
+                  (cond ((= code 1) 'invalid-argument)
+                        ((= code 2) 'invalid-state)
+                        ((= code 3) 'unsupported)
+                        (else 'internal)))
+                 (else 'internal))))
+    (et-e1b-private-raise mapped 'g3r-generator-create-from-sources
+      "private G3 creation O2 hold rejected the request"
+      (list (list 'source-domain source) (list 'native-domain domain)
+            (list 'native-category category) (list 'source-code code)) #f)))
+
+(define (g3r-g3-creation-check-roots roots shell entry)
+  (let* ((model (vector-ref roots 0))
+         (original-x1 (vector-ref roots 1))
+         (tokenizer (vector-ref roots 2))
+         (dataset (vector-ref roots 3))
+         (optimizer (vector-ref roots 4))
+         (model-entry (vector-ref roots 5))
+         (tokenizer-entry (vector-ref roots 6))
+         (dataset-state (vector-ref roots 7))
+         (optimizer-entry (vector-ref roots 8))
+         (optimizer-native (vector-ref roots 9))
+         (handles (vector-ref roots 10))
+         (updates (vector-ref roots 11))
+         (policy (vector-ref roots 12))
+         (saved-handles (vector-ref roots 14))
+         (expected-policy (vector-ref roots 16)))
+    (if (not (and (g3r-x1-model-require model original-x1)
+                  (g3r-d2-lineage-require dataset tokenizer)
+                  (eq? (g3t-model-entry-live model
+                          'g3r-generator-create-from-sources #f) model-entry)
+                  (eq? (t2-private-entry tokenizer) tokenizer-entry)
+                  (eq? (t1-private-entry tokenizer) tokenizer-entry)
+                  (eq? (d2-open-dataset-state dataset
+                          'g3r-generator-create-from-sources) dataset-state)
+                  (eq? (o2-require-optimizer
+                          'g3r-generator-create-from-sources optimizer)
+                       optimizer-entry)
+                  (eq? (vector-ref optimizer-entry 1) optimizer-native)
+                  (eq? (vector-ref model-entry 8) handles)
+                  (eq? (vector-ref optimizer-entry 5)
+                       (vector-ref roots 15))
+                  (= (o2-optimizer-completed-updates-internal optimizer)
+                     updates)
+                  (eq? (g3t-generator-find shell
+                          'g3r-generator-create-from-sources) entry)
+                  (eq? (vector-ref entry 2) 'live)
+                  (eq? (vector-ref entry 3) (vector-ref roots 13))
+                  (eq? (vector-ref entry 5) model-entry)
+                  (eq? (vector-ref entry 6) tokenizer)
+                  (eq? (vector-ref entry 7) policy)
+                  (equal? policy expected-policy)
+                  (eq? (vector-ref entry 4) #f)
+                  (eq? (vector-ref entry 8) #f)
+                  (eq? (vector-ref entry 9) #f)
+                  (eq? (vector-ref entry 10) #f)
+                  (eq? (vector-ref entry 11) 'diagnostic-c2)))
+        (g3r-g3-creation-fail 'invalid-state 2
+          "original construction graph changed"))
+    (tr3-lease-d2-idle! dataset-state
+      'g3r-generator-create-from-sources)
+    (let loop ((index 0) (assignments (vector-ref optimizer-entry 5)))
+      (if (= index 14)
+          (if (not (null? assignments))
+              (g3r-g3-creation-fail 'invalid-state 2
+                "optimizer has extra assignments"))
+          (if (not (and (pair? assignments)
+                        (eq? (vector-ref handles index)
+                             (vector-ref saved-handles index))
+                        (eq? (car assignments)
+                             (vector-ref handles index))))
+              (g3r-g3-creation-fail 'invalid-state 2
+                "optimizer/model handle order changed")
+              (loop (+ index 1) (cdr assignments)))))
+    #t))
+
+(define g3r-g3-creation-route
+  ;; Neither completed records nor the independent original graph snapshots
+  ;; escape this lexical scope. The only issuer is the fixed create branch.
+  (let* ((registry (vector '() #f))
+         (create
+           (lambda (model original-x1 tokenizer config dataset optimizer)
+             (if (vector-ref registry 1)
+                 (g3r-g3-creation-fail 'invalid-state 2
+                   "G3 creation is already active"))
+             (g3r-g3-creation-capacity (vector-ref registry 0))
+             (let* ((operation 'g3r-generator-create-from-sources)
+                    (model-entry (g3t-model-entry-live model operation #f))
+                    (tokenizer-entry (t2-private-entry tokenizer))
+                    (dataset-state (d2-open-dataset-state dataset operation))
+                    (optimizer-entry (o2-require-optimizer operation optimizer))
+                    (optimizer-native (vector-ref optimizer-entry 1))
+                    (handles (vector-ref model-entry 8))
+                    (updates (o2-optimizer-completed-updates-internal optimizer))
+                    (normalized (g3t-seed-config config operation))
+                    (expected-policy (vector-ref normalized 0))
+                    (saved-handles (make-vector 14 #f))
+                    (row (vector #f 'pending #f))
+                    (roots (vector model original-x1 tokenizer dataset optimizer
+                                   model-entry tokenizer-entry dataset-state
+                                   optimizer-entry optimizer-native handles updates
+                                   #f #f saved-handles
+                                   (vector-ref optimizer-entry 5) expected-policy))
+                    (record (cons row roots))
+                    (next (cons record (vector-ref registry 0)))
+                    (pending (vector row next #f #f))
+                    (first (vector #f 0 0 0 0)))
+               (if (not (and (g3r-x1-model-require model original-x1)
+                             (g3r-d2-lineage-require dataset tokenizer)
+                             (eq? (t1-private-entry tokenizer)
+                                  tokenizer-entry)
+                             (not (null? optimizer-native))
+                             (vector? handles) (= (vector-length handles) 14)
+                             (eq? (module-mode-internal model) 'eval)))
+                   (g3r-g3-creation-fail 'invalid-argument 1
+                     "original G3 creation graph is not admitted"))
+               (tr3-lease-d2-idle! dataset-state operation)
+               (let check-handles ((index 0)
+                                   (assignments (vector-ref optimizer-entry 5)))
+                 (if (= index 14)
+                     (if (not (null? assignments))
+                         (g3r-g3-creation-fail 'invalid-argument 1
+                           "optimizer assignment count differs"))
+                     (if (not (and (pair? assignments)
+                                   (eq? (car assignments)
+                                        (vector-ref handles index))))
+                         (g3r-g3-creation-fail 'invalid-argument 1
+                           "optimizer handle order differs")
+                         (begin
+                           (vector-set! saved-handles index
+                                        (vector-ref handles index))
+                           (check-handles (+ index 1) (cdr assignments))))))
+               (vector-set! registry 1 pending)
+               (guard (caught
+                        (#t
+                          (if (vector-ref pending 3)
+                              (let ((status
+                                      (g3r-creation-o2-end
+                                        (vector-ref pending 3))))
+                                ;; The caught Eshkol error predates cleanup.
+                                ;; A drained-but-poisoned end must not replace
+                                ;; that error; a previously copied native first
+                                ;; remains in the rooted cell.
+                                (if (not (or (= status 0) (= status -1)))
+                                    (exit 134))
+                                (vector-set! pending 3 #f)))
+                          (if (vector-ref pending 2)
+                              (guard (close-failure (#t (exit 134)))
+                                (g3t-generator-close! (vector-ref pending 2))))
+                          (vector-set! registry 1 #f)
+                          (if (vector-ref first 0)
+                              (g3r-g3-creation-raise-error first)
+                              (raise caught))))
+                 ;; The fixed constructor internally registers its row. Its
+                 ;; shell remains unreachable until our companion commits.
+                 (let ((shell (g3t-generator-create model tokenizer config)))
+                   ;; The first operation after constructor return registers
+                   ;; the exact shell for the enclosing cleanup guard.
+                   (vector-set! pending 2 shell)
+                   (let* ((entry (g3t-generator-find shell operation))
+                          (native (vector-ref entry 3))
+                          (policy (vector-ref entry 7)))
+                   (vector-set! roots 12 policy)
+                   (vector-set! roots 13 native)
+                   (if (not (equal? policy expected-policy))
+                       (g3r-g3-creation-fail 'invalid-state 2
+                         "created G3 policy differs"))
+                   (g3r-g3-creation-check-roots roots shell entry)
+                   (let ((hold (g3r-creation-o2-begin
+                                 (vector-ref model-entry 3)
+                                 optimizer-native)))
+                     (if (null? hold)
+                         (begin (g3r-g3-creation-copy-error! first hold)
+                                (g3r-g3-creation-raise-error first)))
+                     (vector-set! pending 3 hold)
+                     (if (not (= (g3r-creation-o2-check hold) 0))
+                         (begin (g3r-g3-creation-copy-error! first hold)
+                                (g3r-g3-creation-raise-error first)))
+                     (g3r-g3-creation-check-roots roots shell entry)
+                     (let ((status (g3r-creation-o2-end hold)))
+                       (if (not (= status 0))
+                           (begin
+                             (g3r-g3-creation-copy-error! first hold)
+                             (vector-set! pending 3 #f)
+                             (g3r-g3-creation-raise-error first))))
+                     (vector-set! pending 3 #f))
+                   (g3r-g3-creation-check-roots roots shell entry)
+                   ;; All fallible work is complete. Publish prebuilt cells.
+                   (vector-set! row 0 shell)
+                   (vector-set! row 1 'live)
+                   (vector-set! row 2 entry)
+                   (vector-set! registry 0 next)
+                   (vector-set! registry 1 #f)
+                   shell))))))
+         (required
+           (lambda (shell model original-x1 tokenizer dataset optimizer)
+             (let search ((records (vector-ref registry 0)))
+               (cond ((null? records)
+                      (g3r-g3-creation-fail 'invalid-argument 1
+                        "generator lacks original graph lineage"))
+                     ((eq? (vector-ref (car (car records)) 0) shell)
+                      (let* ((row (car (car records)))
+                             (roots (cdr (car records)))
+                             (entry (vector-ref row 2)))
+                        (if (not (and (eq? (vector-ref row 1) 'live)
+                                      (eq? (vector-ref roots 0) model)
+                                      (eq? (vector-ref roots 1) original-x1)
+                                      (eq? (vector-ref roots 2) tokenizer)
+                                      (eq? (vector-ref roots 3) dataset)
+                                      (eq? (vector-ref roots 4) optimizer)))
+                            (g3r-g3-creation-fail 'invalid-state 2
+                              "original G3 construction identities changed"))
+                        (g3r-g3-creation-check-roots roots shell entry)
+                        #t))
+                     (else (search (cdr records))))))))
+    (lambda (mode a b c d e f)
+      (cond ((eq? mode 'create) (create a b c d e f))
+            ((eq? mode 'require) (required a b c d e f))
+            (else (g3r-g3-creation-fail 'invalid-argument 1
+                    "unknown private G3 creation route"))))))
+
+(define (g3r-generator-create-from-sources model original-x1 tokenizer
+                                            config dataset optimizer)
+  (g3r-g3-creation-route 'create model original-x1 tokenizer
+                         config dataset optimizer))
+
+(define (g3r-generator-lineage-require generator model original-x1 tokenizer
+                                       dataset optimizer)
+  (g3r-g3-creation-route 'require generator model original-x1 tokenizer
+                         dataset optimizer))

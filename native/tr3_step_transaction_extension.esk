@@ -80,6 +80,7 @@
                (tr3-lease-record-for-shell-internal
                  trainer tr3-step-operation))
              (token (vector-ref record 5)))
+        (tr3-controls-route 'guard record 'step #f #f #f)
         (if (or (not (eq? (vector-ref record 3) 'idle))
                 (vector-ref record 4))
             (tr3-step-fail 'invalid-state "trainer is not idle"))

@@ -1,0 +1,8 @@
+;;; Private same-call original-X1/M3 witness. Load after the CLI3 model core.
+;;; The completed registry, issuer snapshot, and construction core stay lexical
+;;; in M3; neither route returns a mutable authority row.
+(define (g3r-x1-model-create config initializer)
+  (m3t-model-create-route 'private config initializer))
+
+(define (g3r-x1-model-require model config)
+  (m3t-model-create-route 'require model config))

@@ -1,0 +1,4 @@
+;;; Private same-owner O2 adoption only; no public SAVE or C2 publication.
+(load "g3r_training_controls_root.esk")
+(load "g3r_same_owner_o2_adoption_extension.esk")
+(load "g3r_same_owner_save_caller_extension.esk")
