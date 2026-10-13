@@ -1197,6 +1197,37 @@ if [[ "${E3_ZERO_CONTROL_SANITIZE:-0}" != 0 ]]; then
     die "E3 zero-control sanitizer requires its exact test tuple"
   e3_private_test_sanitize=1
 fi
+e3_zero_discovery=0
+if [[ -n "${E3_ZERO_CONTROL_DISCOVERY+x}" ]]; then
+  [[ "${E3_ZERO_CONTROL_DISCOVERY}" == 1 &&
+     "${package_policy}" == e3-private-aggregate &&
+     "${e3_tuple_kind}" == zero &&
+     -n "${RUNNER_TEMP:-}" ]] ||
+    die "E3 zero discovery requires its exact tuple and RUNNER_TEMP"
+  e3_zero_discovery=1
+  e3_zero_discovery_mode=normal
+  [[ "${e3_private_test_sanitize}" == 0 ]] || e3_zero_discovery_mode=sanitize
+  e3_zero_discovery_gate="${RUNNER_TEMP}/e3-n3-zero-discovery/${e3_zero_discovery_mode}"
+  [[ "$(dirname -- "$(dirname -- "${output_object}")")" == "${e3_zero_discovery_gate}" &&
+     "${raw_private_root}" == "${PROJECT_ROOT}/tests/e3_private/zero_control_driver_root.esk" &&
+     "${raw_package_bridge}" == "${PROJECT_ROOT}/tests/e3_private/zero_control_bridge.c" &&
+     "${raw_package_renames}" == "${PROJECT_ROOT}/tests/e3_private/zero_control_package_private_renames.txt" &&
+     "${raw_public_exports}" == "${PROJECT_ROOT}/tests/e3_private/zero_control_package_public_exports.txt" &&
+     "${#raw_include_dirs[@]}" == 6 &&
+     "${raw_include_dirs[0]}" == "${PROJECT_ROOT}/internal/p1/lib" &&
+     "${raw_include_dirs[1]}" == "${PROJECT_ROOT}/internal/c1/lib" &&
+     "${raw_include_dirs[2]}" == "${PROJECT_ROOT}/internal/t1/lib" &&
+     "${raw_include_dirs[3]}" == "${PROJECT_ROOT}/src" &&
+     "${raw_include_dirs[4]}" == "${PROJECT_ROOT}/internal/d2/lib" &&
+     "${raw_include_dirs[5]}" == "${PROJECT_ROOT}/internal/e3/lib" ]] ||
+    die "E3 zero discovery arguments differ from the exact test tuple"
+  e3_zero_discovery_dir="${e3_zero_discovery_gate}/evidence"
+  [[ -d "${e3_zero_discovery_dir}" && ! -L "${e3_zero_discovery_dir}" &&
+     -O "${e3_zero_discovery_dir}" ]] ||
+    die "E3 zero discovery evidence directory is not fresh owned storage"
+  source "${PROJECT_ROOT}/scripts/e3-zero-discovery-evidence.sh"
+  e3_zero_discovery_phase=preflight
+fi
 e3_private_test_sanitize_flags=()
 e3_private_test_reloc_flags=()
 if [[ "${e3_private_test_sanitize}" == 1 ]]; then
@@ -1317,6 +1348,10 @@ e3_uniform_generated_owned=0
 e3_zero_generated_owned=0
 e1b_cleanup() {
   local status=$?
+  if [[ "${e3_zero_discovery}" == 1 && "${status}" != 0 ]]; then
+    e3_zero_discovery_capture failure "${status}" ||
+      printf 'E3 zero discovery partial evidence copy failed\n' >&2
+  fi
   if [[ "${status}" != 0 && \
         ( "${package_policy}" == cli3-tr3-aggregate || \
           "${package_policy}" == m3-model-aggregate || \
@@ -1576,6 +1611,7 @@ if [[ "${package_policy}" == e3-private-aggregate || \
   include_args+=(-I "${PROJECT_ROOT}/lib" -I "${PROJECT_ROOT}/native")
 fi
 
+if [[ "${e3_zero_discovery}" == 1 ]]; then e3_zero_discovery_phase=eshkol-aot; fi
 (
   cd "${e1b_tmp}"
   run_compiler --strict-types --no-stdlib "${include_args[@]}" \
@@ -1597,8 +1633,10 @@ if [[ -n "${package_source_closure}" ]]; then
       tr -s '[:space:]' '\n' | grep -F "${PROJECT_ROOT}/" | \
       sed "s#^${PROJECT_ROOT}/##" >"${e1b_tmp}/source-closure.txt"
   fi
-  cmp -s "${package_source_closure}" "${e1b_tmp}/source-closure.txt" || \
-    die "${package_policy} trusted Eshkol source closure drifted"
+  if [[ "${e3_zero_discovery}" != 1 ]]; then
+    cmp -s "${package_source_closure}" "${e1b_tmp}/source-closure.txt" || \
+      die "${package_policy} trusted Eshkol source closure drifted"
+  fi
 fi
 e1b_raise_attribute="$(
   awk '
@@ -1614,6 +1652,7 @@ grep -Eq "^attributes ${e1b_raise_attribute} = .*noreturn" \
   die "E1B fixed raise-only seam is not noreturn in generated IR"
 
 e1b_private_compile_ir="${e1b_tmp}/private.ll"
+if [[ "${e3_zero_discovery}" == 1 ]]; then e3_zero_discovery_phase=ir-object; fi
 if [[ "${e3_private_test_sanitize}" == 1 ]]; then
   [[ "${package_policy}" == e3-private-aggregate ]] || \
     die "E3 generated ASan IR is restricted to private test tuples"
@@ -1772,6 +1811,7 @@ fi
   -MMD -MF "${e1b_tmp}/package-bridge.d" \
   -c "${package_bridge}" -o "${e1b_tmp}/package-bridge.o"
 
+if [[ "${e3_zero_discovery}" == 1 ]]; then e3_zero_discovery_phase=native-objects; fi
 package_native_objects=()
 package_native_depfiles=("${e1b_tmp}/bridge.d" "${e1b_tmp}/package-bridge.d")
 if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
@@ -2084,11 +2124,14 @@ if [[ -n "${package_native_source_closure}" ]]; then
         if (!seen[path]++) print path
       }
     ' >"${e1b_tmp}/native-source-closure.txt"
-  cmp -s "${package_native_source_closure}" \
-    "${e1b_tmp}/native-source-closure.txt" || \
-    die "${package_policy} trusted native source closure drifted"
+  if [[ "${e3_zero_discovery}" != 1 ]]; then
+    cmp -s "${package_native_source_closure}" \
+      "${e1b_tmp}/native-source-closure.txt" || \
+      die "${package_policy} trusted native source closure drifted"
+  fi
 fi
 
+if [[ "${e3_zero_discovery}" == 1 ]]; then e3_zero_discovery_phase=relocatable-link; fi
 "${e1b_clean_toolchain_env[@]}" \
   "${e1b_cxx}" -r "${e3_private_test_reloc_flags[@]}" \
   -Wl,-Map,"${e1b_tmp}/combined.map" \
@@ -2112,6 +2155,7 @@ cmp -s "${e1b_tmp}/expected-global-defined.txt" \
   "${e1b_tmp}/global-defined.txt" || \
   die "E1B final object differs from the exact public export allowlist"
 
+if [[ "${e3_zero_discovery}" == 1 ]]; then e3_zero_discovery_phase=imports; fi
 nm -u --format=posix "${e1b_tmp}/combined.o" | awk '{ print $1 }' | \
   LC_ALL=C sort -u >"${e1b_tmp}/undefined.txt"
 e3_retention_sanitizer_inventory_verified=0
@@ -2171,22 +2215,26 @@ if [[ "${e3_private_test_sanitize}" == 1 ]]; then
       "${e1b_tmp}/noninstrumentation-undefined.txt" \
       "${e1b_tmp}/sanitizer-undefined.txt"
   elif [[ "${e3_tuple_kind:-}" == zero ]]; then
-    cmp -s "${e3_prefix}_sanitized_noninstrumentation_undefined_symbols.txt" \
-      "${e1b_tmp}/noninstrumentation-undefined.txt" ||
-      die "E3 zero-control sanitizer noninstrumentation imports differ"
-    cmp -s "${e3_prefix}_sanitized_instrumentation_undefined_symbols.txt" \
-      "${e1b_tmp}/sanitizer-undefined.txt" ||
-      die "E3 zero-control sanitizer instrumentation imports differ"
+    if [[ "${e3_zero_discovery}" != 1 ]]; then
+      cmp -s "${e3_prefix}_sanitized_noninstrumentation_undefined_symbols.txt" \
+        "${e1b_tmp}/noninstrumentation-undefined.txt" ||
+        die "E3 zero-control sanitizer noninstrumentation imports differ"
+      cmp -s "${e3_prefix}_sanitized_instrumentation_undefined_symbols.txt" \
+        "${e1b_tmp}/sanitizer-undefined.txt" ||
+        die "E3 zero-control sanitizer instrumentation imports differ"
+    fi
   else
     [[ ! -s "${e1b_tmp}/unexpected-undefined.txt" ]] || \
       die "E3 sanitized private test object adds noninstrumentation imports"
   fi
 else
-  if ! e1b_compare_exact_undefined_allowlist \
-      "${e1b_tmp}/expected-undefined.txt" "${e1b_tmp}/undefined.txt"; then
+  if [[ "${e3_zero_discovery}" != 1 ]] &&
+     ! e1b_compare_exact_undefined_allowlist \
+       "${e1b_tmp}/expected-undefined.txt" "${e1b_tmp}/undefined.txt"; then
     die "E1B final object differs from the exact undefined-symbol allowlist"
   fi
 fi
+if [[ "${e3_zero_discovery}" == 1 ]]; then e3_zero_discovery_phase=authority; fi
 if grep -E 'et_e1b|e1(-internal-dispatch|_2Dinternal_2Ddispatch)|transformer(-error-(make|raise|wrap-foreign)|_2Derror_2D(make|raise|wrap_2Dforeign))' \
     "${e1b_tmp}/undefined.txt" >/dev/null; then
   die "E1B final object retains an unresolved privileged reference"
@@ -2462,6 +2510,7 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
   done
 fi
 
+if [[ "${e3_zero_discovery}" == 1 ]]; then e3_zero_discovery_phase=postchecks; fi
 evidence_dir="${output_object}.evidence"
 temporary_output="${output_object}.tmp.$$"
 rm -rf -- "${evidence_dir}.tmp.$$"
@@ -2602,6 +2651,14 @@ if [[ -n "${package_public_strings}" ]]; then
   cmp -s "${package_public_strings}" \
     "${evidence_dir}.tmp.$$/public-strings.txt" || \
     die "${package_policy} object differs from its exact public string manifest"
+fi
+if [[ "${e3_zero_discovery}" == 1 ]]; then
+  e3_zero_discovery_phase=copy-evidence
+  e3_zero_discovery_capture success 0 ||
+    die "E3 zero discovery could not seal emitted evidence"
+  rm -rf -- "${evidence_dir}.tmp.$$"
+  printf 'E3 zero discovery emitted inventories without package admission\n'
+  exit 0
 fi
 cp "${e1b_tmp}/combined.o" "${temporary_output}"
 rm -rf -- "${evidence_dir}"

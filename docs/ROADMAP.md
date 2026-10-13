@@ -952,13 +952,19 @@ projection mismatch through private slot 70, including a deliberate thrown
 condition. It pins canonical and emitted hashes, restores the exact old raw
 object before any model observer, and rechecks the full P1 projection before
 the ordinary unchanged-state and fresh-load retry. This is source-only P1
-projection evidence, not native M3 graph or rollback proof; independent review
-and compiled witnesses remain pending. The exact sanitizer import
+projection evidence, not native M3 graph or rollback proof; bounded source
+review accepted it, while compiled witnesses remain pending. The exact sanitizer import
 manifests are still absent and its build fails closed. Pinned Q0 oracle
 generation, emitted package inventories, generated AOT postprepare review,
-fresh normal/repeat/poisoned and sanitizer runtime gates, and renewed
-independent source review remain pending. This candidate does not establish
-N3 or E3 §9 compiled acceptance.
+fresh normal/repeat/poisoned and sanitizer runtime gates remain pending. This candidate does not establish
+N3 or E3 §9 compiled acceptance. A dedicated, manually dispatched
+Ubuntu-22.04/LLVM-21 zero-only inventory-discovery harness is source-staged:
+it retains the ordinary package authority checks, emits actual compiler
+closure and normal/sanitized import inventories into checksummed evidence, and
+never publishes an admitted object. Focused offline policy tests pass. No hosted
+discovery has run; the exact sanitizer manifests remain absent, and independent
+source review, immutable root evidence release, manifest review/pinning, Q0 and
+all compiled gates remain pending.
 
 A separate noninstalled E3 overflow tuple is a source candidate for a genuine
 stage-12 finalization boundary. It loads a checksummed C1 state into one fresh
