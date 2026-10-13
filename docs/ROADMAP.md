@@ -711,6 +711,12 @@ training and held-out D1 corpora, and a new fixed-profile C2 checkpoint, then
 inspects, evaluates, and generates from that same checkpoint in separate
 processes. It checks exact X1/T1/C2 identities, unchanged checkpoint bytes,
 fixed-profile and cross-config rejection, and corrupt-checkpoint diagnostics.
+An exact-main source follow-up adds a fixed-profile cross-command resume witness:
+one update resumed for one further update must produce the same complete C2
+bytes as two uninterrupted updates. Separate-process evaluation and generation
+must return identical JSON from those C2 images; reads and wrong-config,
+wrong-tokenizer, and corrupt-image rejections must preserve the checkpoint bytes.
+This extension is source-only until its compiled and hosted gates pass.
 The test is registered after the production generate gate in the required
 CLI3 CI suite. The accepted J result (`/home/gabe/.codex/evidence/eshkol-transformer/cli3-union-j-result-independent-review-20261012-a/VERDICT.md`)
 validates both compiled gates on exact source `18693b4` (tree `3a7f76e5`)
