@@ -930,6 +930,50 @@ independent source review, and supported normal/repeat, poison and sanitizer
 execution remain pending. This supplies no §9 N3/M2 compiled acceptance or
 target-offset, wrong-axis, finite-boundary or overflow proof.
 
+The separate E3 N3 zero-model source candidate on the exact `a64caf9a7`
+union uses the registered M3 tree's 14 unique CPU/f32 owners and one
+head/embedding tie. A noninstalled root decodes 4,736 zero bytes through I2,
+immediately unwraps and commits the returned plan before E3 frame binding,
+then observes genuine D1/D2 all-correct, all-wrong and mixed target streams.
+The two-field ordinary E3 driver remains unchanged. Focused offline source
+tests pass. The first independent exact-head review held source acceptance:
+its negative driver used a forged foreign handle and an ordinary duplicate
+destination, and host tests missed numeric and cleanup mutants. A focused
+source repair now uses a second real rooted M3 owner for foreign handle/tree
+checks, both authentic tied head paths with distinct I2 sources for duplicate
+destination, same-byte-count wrong rank/geometry and malformed decoder
+variants; offline numeric and prepare/cleanup mutation tests pass. A further
+test-only negative now aborts an unpublished I2/P1 staged construction and
+passes its authentic tombstoned handle through the zero input admission's P1
+shape accessor before any carrier lookup or I2 prepare. This is a stale P1
+construction handle, not a retired sealed-M3 handle. An additional zero-only,
+one-insertion P1 source overlay now exercises path, shape and tied-binding
+projection mismatch through private slot 70, including a deliberate thrown
+condition. It pins canonical and emitted hashes, restores the exact old raw
+object before any model observer, and rechecks the full P1 projection before
+the ordinary unchanged-state and fresh-load retry. This is source-only P1
+projection evidence, not native M3 graph or rollback proof; bounded source
+review accepted it, while compiled witnesses remain pending. The exact sanitizer import
+manifests are still absent and its build fails closed. Pinned Q0 oracle
+generation, emitted package inventories, generated AOT postprepare review,
+fresh normal/repeat/poisoned and sanitizer runtime gates remain pending. This candidate does not establish
+N3 or E3 §9 compiled acceptance. A dedicated, manually dispatched
+Ubuntu-22.04/LLVM-21 zero-only inventory-discovery harness is source-staged:
+it retains the ordinary package authority checks, emits actual compiler
+closure and normal/sanitized import inventories into checksummed evidence, and
+never publishes an admitted object. Focused offline policy tests pass, and
+independent source/tests review accepted the exact `c4978ee` candidate. This
+current-main source merge includes the reviewed E3 PR #205 roadmap update; it
+does not add emitted inventories or change the zero model/driver sources. No
+hosted discovery has run. The workflow is absent from default-branch main, so
+manual dispatch remains HOLD until the reviewed workflow lands there. Exact
+sanitizer manifests, immutable root evidence release, manifest review/pinning,
+and all compiled gates remain pending. PR #206's hosted run `38445613534`
+stopped at Q0 Python isolation because the pinned, noninstalled zero P1 overlay
+generator was missing from the exact development-script allowlist. The focused
+Q0 and zero-control source tests pass after its exact path and near-miss checks
+were added; a fresh exact-head hosted run remains pending.
+
 A separate noninstalled E3 overflow tuple is a source candidate for a genuine
 stage-12 finalization boundary. It loads a checksummed C1 state into one fresh
 model before its authentic frame bind, uses the fixed D1 `0304`/D2 padded row,

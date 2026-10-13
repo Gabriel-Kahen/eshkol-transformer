@@ -1189,6 +1189,45 @@ if [[ "${E3_UNIFORM_SANITIZE:-0}" != 0 ]]; then
     die "E3 uniform sanitizer is allowed only for the exact test tuple"
   e3_private_test_sanitize=1
 fi
+if [[ "${E3_ZERO_CONTROL_SANITIZE:-0}" != 0 ]]; then
+  [[ "${E3_ZERO_CONTROL_SANITIZE}" == 1 &&
+     "${package_policy}" == e3-private-aggregate &&
+     "${e3_tuple_kind}" == zero &&
+     "${e3_private_test_sanitize}" == 0 ]] ||
+    die "E3 zero-control sanitizer requires its exact test tuple"
+  e3_private_test_sanitize=1
+fi
+e3_zero_discovery=0
+if [[ -n "${E3_ZERO_CONTROL_DISCOVERY+x}" ]]; then
+  [[ "${E3_ZERO_CONTROL_DISCOVERY}" == 1 &&
+     "${package_policy}" == e3-private-aggregate &&
+     "${e3_tuple_kind}" == zero &&
+     -n "${RUNNER_TEMP:-}" ]] ||
+    die "E3 zero discovery requires its exact tuple and RUNNER_TEMP"
+  e3_zero_discovery=1
+  e3_zero_discovery_mode=normal
+  [[ "${e3_private_test_sanitize}" == 0 ]] || e3_zero_discovery_mode=sanitize
+  e3_zero_discovery_gate="${RUNNER_TEMP}/e3-n3-zero-discovery/${e3_zero_discovery_mode}"
+  [[ "$(dirname -- "$(dirname -- "${output_object}")")" == "${e3_zero_discovery_gate}" &&
+     "${raw_private_root}" == "${PROJECT_ROOT}/tests/e3_private/zero_control_driver_root.esk" &&
+     "${raw_package_bridge}" == "${PROJECT_ROOT}/tests/e3_private/zero_control_bridge.c" &&
+     "${raw_package_renames}" == "${PROJECT_ROOT}/tests/e3_private/zero_control_package_private_renames.txt" &&
+     "${raw_public_exports}" == "${PROJECT_ROOT}/tests/e3_private/zero_control_package_public_exports.txt" &&
+     "${#raw_include_dirs[@]}" == 6 &&
+     "${raw_include_dirs[0]}" == "${PROJECT_ROOT}/internal/p1/lib" &&
+     "${raw_include_dirs[1]}" == "${PROJECT_ROOT}/internal/c1/lib" &&
+     "${raw_include_dirs[2]}" == "${PROJECT_ROOT}/internal/t1/lib" &&
+     "${raw_include_dirs[3]}" == "${PROJECT_ROOT}/src" &&
+     "${raw_include_dirs[4]}" == "${PROJECT_ROOT}/internal/d2/lib" &&
+     "${raw_include_dirs[5]}" == "${PROJECT_ROOT}/internal/e3/lib" ]] ||
+    die "E3 zero discovery arguments differ from the exact test tuple"
+  e3_zero_discovery_dir="${e3_zero_discovery_gate}/evidence"
+  [[ -d "${e3_zero_discovery_dir}" && ! -L "${e3_zero_discovery_dir}" &&
+     -O "${e3_zero_discovery_dir}" ]] ||
+    die "E3 zero discovery evidence directory is not fresh owned storage"
+  source "${PROJECT_ROOT}/scripts/e3-zero-discovery-evidence.sh"
+  e3_zero_discovery_phase=preflight
+fi
 e3_private_test_sanitize_flags=()
 e3_private_test_reloc_flags=()
 if [[ "${e3_private_test_sanitize}" == 1 ]]; then
@@ -1266,6 +1305,7 @@ e3_retention_generated_dir=
 e3_overflow_generated_dir=
 e3_numerical_generated_dir=
 e3_uniform_generated_dir=
+e3_zero_generated_dir=
 if [[ "${package_policy}" == e3-private-aggregate &&
       "${e3_tuple_kind}" == mode-graph ]]; then
   source "${PROJECT_ROOT}/scripts/e3-mode-graph-stage-cleanup.sh"
@@ -1292,6 +1332,11 @@ elif [[ "${package_policy}" == e3-private-aggregate &&
   source "${PROJECT_ROOT}/scripts/e3-generated-source-stage.sh"
   e3_uniform_generated_dir="$(e3_uniform_generated_stage "${output_object}")" ||
     die "E3 uniform generated source requires a fresh private gate stage"
+elif [[ "${package_policy}" == e3-private-aggregate &&
+        "${e3_tuple_kind}" == zero ]]; then
+  source "${PROJECT_ROOT}/scripts/e3-zero-generated-source-stage.sh"
+  e3_zero_generated_dir="$(e3_zero_generated_stage "${output_object}")" ||
+    die "E3 zero-control generated source requires a fresh private gate stage"
 fi
 
 e1b_tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-e1b.XXXXXX")"
@@ -1300,8 +1345,13 @@ e3_retention_generated_owned=0
 e3_overflow_generated_owned=0
 e3_numerical_generated_owned=0
 e3_uniform_generated_owned=0
+e3_zero_generated_owned=0
 e1b_cleanup() {
   local status=$?
+  if [[ "${e3_zero_discovery}" == 1 && "${status}" != 0 ]]; then
+    e3_zero_discovery_capture failure "${status}" ||
+      printf 'E3 zero discovery partial evidence copy failed\n' >&2
+  fi
   if [[ "${status}" != 0 && \
         ( "${package_policy}" == cli3-tr3-aggregate || \
           "${package_policy}" == m3-model-aggregate || \
@@ -1327,10 +1377,13 @@ e1b_cleanup() {
   if [[ "${status}" == 0 && "${e3_uniform_generated_owned}" == 1 ]]; then
     rm -rf -- "${e3_uniform_generated_dir}"
   fi
+  if [[ "${status}" == 0 && "${e3_zero_generated_owned}" == 1 ]]; then
+    rm -rf -- "${e3_zero_generated_dir}"
+  fi
   return "${status}"
 }
 trap e1b_cleanup EXIT
-if [[ -n "${e3_mode_graph_generated_dir}${e3_retention_generated_dir}${e3_overflow_generated_dir}${e3_numerical_generated_dir}${e3_uniform_generated_dir}" ]]; then
+if [[ -n "${e3_mode_graph_generated_dir}${e3_retention_generated_dir}${e3_overflow_generated_dir}${e3_numerical_generated_dir}${e3_uniform_generated_dir}${e3_zero_generated_dir}" ]]; then
   trap 'exit 143' TERM
   trap 'exit 130' INT
 fi
@@ -1357,10 +1410,14 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     mkdir -m 0700 -- "${e3_uniform_generated_dir}" ||
       die "E3 uniform generated source path was claimed concurrently"
     e3_uniform_generated_owned=1
+  elif [[ -n "${e3_zero_generated_dir}" ]]; then
+    mkdir -m 0700 -- "${e3_zero_generated_dir}" ||
+      die "E3 zero-control generated source path was claimed concurrently"
+    e3_zero_generated_owned=1
   else
     e3_mode_graph_generated_dir="${e1b_tmp}/generated"
   fi
-  e3_generated_dir="${e3_uniform_generated_dir:-${e3_numerical_generated_dir:-${e3_overflow_generated_dir:-${e3_retention_generated_dir:-${e3_mode_graph_generated_dir}}}}}"
+  e3_generated_dir="${e3_zero_generated_dir:-${e3_uniform_generated_dir:-${e3_numerical_generated_dir:-${e3_overflow_generated_dir:-${e3_retention_generated_dir:-${e3_mode_graph_generated_dir}}}}}}"
   python3 "${PROJECT_ROOT}/scripts/generate-e3-d2-source.py" \
     --output-dir "${e3_generated_dir}" >"${e1b_tmp}/d2-generation.json"
   e3_generated_source_root="${e3_generated_dir}/source"
@@ -1387,6 +1444,15 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
       >"${e1b_tmp}/mode-graph-check.txt"
     cmp "${e1b_tmp}/mode-graph-generation.txt" \
         "${e1b_tmp}/mode-graph-check.txt"
+  fi
+  if [[ "${e3_tuple_kind}" == zero ]]; then
+    python3 -B "${PROJECT_ROOT}/scripts/generate-e3-zero-p1-topology-overlay.py" \
+      --output "${e3_generated_source_root}/transformer/module.esk" \
+      >"${e1b_tmp}/zero-p1-generation.txt"
+    python3 -B "${PROJECT_ROOT}/scripts/generate-e3-zero-p1-topology-overlay.py" \
+      --output "${e3_generated_source_root}/transformer/module.esk" --check \
+      >"${e1b_tmp}/zero-p1-check.txt"
+    cmp "${e1b_tmp}/zero-p1-generation.txt" "${e1b_tmp}/zero-p1-check.txt"
   fi
   if [[ "${e3_overflow_mutant}" == clamp ]]; then
     [[ "${e3_overflow_generated_owned}" == 1 &&
@@ -1446,6 +1512,8 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
       export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1|et_e3_overflow_run_v1)$'
     elif [[ "${e3_tuple_kind}" == mode-graph ]]; then
       export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_mode_graph_run_v1)$'
+    elif [[ "${e3_tuple_kind}" == zero ]]; then
+      export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_zero_(control|negative)_run_v1)$'
     fi
   fi
 fi
@@ -1513,7 +1581,11 @@ for include_dir in "${canonical_include_dirs[@]}"; do
   include_args+=(-I "${include_dir}")
 done
 if [[ "${package_policy}" == e3-private-aggregate ]]; then
-  include_args+=(-I "${e3_generated_source_root}")
+  if [[ "${e3_tuple_kind}" == zero ]]; then
+    include_args=(-I "${e3_generated_source_root}" "${include_args[@]}")
+  else
+    include_args+=(-I "${e3_generated_source_root}")
+  fi
   if [[ "${e3_tuple_kind}" == mode-graph ||
         "${e3_tuple_kind}" == retention ||
         "${e3_tuple_kind}" == retention-first-eval-mutant ||
@@ -1539,6 +1611,7 @@ if [[ "${package_policy}" == e3-private-aggregate || \
   include_args+=(-I "${PROJECT_ROOT}/lib" -I "${PROJECT_ROOT}/native")
 fi
 
+if [[ "${e3_zero_discovery}" == 1 ]]; then e3_zero_discovery_phase=eshkol-aot; fi
 (
   cd "${e1b_tmp}"
   run_compiler --strict-types --no-stdlib "${include_args[@]}" \
@@ -1560,8 +1633,10 @@ if [[ -n "${package_source_closure}" ]]; then
       tr -s '[:space:]' '\n' | grep -F "${PROJECT_ROOT}/" | \
       sed "s#^${PROJECT_ROOT}/##" >"${e1b_tmp}/source-closure.txt"
   fi
-  cmp -s "${package_source_closure}" "${e1b_tmp}/source-closure.txt" || \
-    die "${package_policy} trusted Eshkol source closure drifted"
+  if [[ "${e3_zero_discovery}" != 1 ]]; then
+    cmp -s "${package_source_closure}" "${e1b_tmp}/source-closure.txt" || \
+      die "${package_policy} trusted Eshkol source closure drifted"
+  fi
 fi
 e1b_raise_attribute="$(
   awk '
@@ -1577,11 +1652,12 @@ grep -Eq "^attributes ${e1b_raise_attribute} = .*noreturn" \
   die "E1B fixed raise-only seam is not noreturn in generated IR"
 
 e1b_private_compile_ir="${e1b_tmp}/private.ll"
+if [[ "${e3_zero_discovery}" == 1 ]]; then e3_zero_discovery_phase=ir-object; fi
 if [[ "${e3_private_test_sanitize}" == 1 ]]; then
   [[ "${package_policy}" == e3-private-aggregate ]] || \
     die "E3 generated ASan IR is restricted to private test tuples"
   case "${e3_tuple_kind:-}" in
-    retention|retention-first-eval-mutant|retention-overflow|mode-graph|numerical|uniform) ;;
+    retention|retention-first-eval-mutant|retention-overflow|mode-graph|numerical|uniform|zero) ;;
     *) die "E3 generated ASan IR has no admitted test tuple" ;;
   esac
   require_command sha256sum
@@ -1735,6 +1811,7 @@ fi
   -MMD -MF "${e1b_tmp}/package-bridge.d" \
   -c "${package_bridge}" -o "${e1b_tmp}/package-bridge.o"
 
+if [[ "${e3_zero_discovery}" == 1 ]]; then e3_zero_discovery_phase=native-objects; fi
 package_native_objects=()
 package_native_depfiles=("${e1b_tmp}/bridge.d" "${e1b_tmp}/package-bridge.d")
 if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
@@ -1806,6 +1883,11 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
       package_native_cflags+=(-DET_E3_UNIFORM_LAST_TIE_TEST)
     fi
   fi
+  if [[ "${package_policy}" == e3-private-aggregate &&
+        "${e3_tuple_kind}" == zero ]]; then
+    package_native_cflags+=(-DET_E3_NUMERICAL_TESTING
+                            -DET_E3_ZERO_CONTROL_TESTING -fno-builtin-printf)
+  fi
   native_index=0
   for package_native_source in "${package_native_sources[@]}"; do
     package_native_object="${e1b_tmp}/package-native-${native_index}.o"
@@ -1826,6 +1908,14 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
                                  -DET_E3_FIRST_EVAL_MUTATION_TESTING) ;;
         "${PROJECT_ROOT}/native/e3_d2_native.c")
           package_source_flags+=(-DET_D2_NATIVE_TESTING) ;;
+      esac
+    fi
+    if [[ "${package_policy}" == e3-private-aggregate &&
+          "${e3_tuple_kind}" == zero ]]; then
+      case "${package_native_source}" in
+        "${PROJECT_ROOT}/src/eshkol_transformer/m3_call_f32_integration.c"|"${PROJECT_ROOT}/src/eshkol_transformer/e3_frame.c")
+          package_source_flags+=(-DET_F32_TENSOR_TESTING
+                                 -DET_I2_PRIVATE_OWNED_CLONE_MATCH) ;;
       esac
     fi
     if [[ "${package_policy}" == cli3-tr3-aggregate ]]; then
@@ -2034,11 +2124,14 @@ if [[ -n "${package_native_source_closure}" ]]; then
         if (!seen[path]++) print path
       }
     ' >"${e1b_tmp}/native-source-closure.txt"
-  cmp -s "${package_native_source_closure}" \
-    "${e1b_tmp}/native-source-closure.txt" || \
-    die "${package_policy} trusted native source closure drifted"
+  if [[ "${e3_zero_discovery}" != 1 ]]; then
+    cmp -s "${package_native_source_closure}" \
+      "${e1b_tmp}/native-source-closure.txt" || \
+      die "${package_policy} trusted native source closure drifted"
+  fi
 fi
 
+if [[ "${e3_zero_discovery}" == 1 ]]; then e3_zero_discovery_phase=relocatable-link; fi
 "${e1b_clean_toolchain_env[@]}" \
   "${e1b_cxx}" -r "${e3_private_test_reloc_flags[@]}" \
   -Wl,-Map,"${e1b_tmp}/combined.map" \
@@ -2062,6 +2155,7 @@ cmp -s "${e1b_tmp}/expected-global-defined.txt" \
   "${e1b_tmp}/global-defined.txt" || \
   die "E1B final object differs from the exact public export allowlist"
 
+if [[ "${e3_zero_discovery}" == 1 ]]; then e3_zero_discovery_phase=imports; fi
 nm -u --format=posix "${e1b_tmp}/combined.o" | awk '{ print $1 }' | \
   LC_ALL=C sort -u >"${e1b_tmp}/undefined.txt"
 e3_retention_sanitizer_inventory_verified=0
@@ -2120,16 +2214,27 @@ if [[ "${e3_private_test_sanitize}" == 1 ]]; then
       "${e1b_tmp}/expected-undefined.txt" \
       "${e1b_tmp}/noninstrumentation-undefined.txt" \
       "${e1b_tmp}/sanitizer-undefined.txt"
+  elif [[ "${e3_tuple_kind:-}" == zero ]]; then
+    if [[ "${e3_zero_discovery}" != 1 ]]; then
+      cmp -s "${e3_prefix}_sanitized_noninstrumentation_undefined_symbols.txt" \
+        "${e1b_tmp}/noninstrumentation-undefined.txt" ||
+        die "E3 zero-control sanitizer noninstrumentation imports differ"
+      cmp -s "${e3_prefix}_sanitized_instrumentation_undefined_symbols.txt" \
+        "${e1b_tmp}/sanitizer-undefined.txt" ||
+        die "E3 zero-control sanitizer instrumentation imports differ"
+    fi
   else
     [[ ! -s "${e1b_tmp}/unexpected-undefined.txt" ]] || \
       die "E3 sanitized private test object adds noninstrumentation imports"
   fi
 else
-  if ! e1b_compare_exact_undefined_allowlist \
-      "${e1b_tmp}/expected-undefined.txt" "${e1b_tmp}/undefined.txt"; then
+  if [[ "${e3_zero_discovery}" != 1 ]] &&
+     ! e1b_compare_exact_undefined_allowlist \
+       "${e1b_tmp}/expected-undefined.txt" "${e1b_tmp}/undefined.txt"; then
     die "E1B final object differs from the exact undefined-symbol allowlist"
   fi
 fi
+if [[ "${e3_zero_discovery}" == 1 ]]; then e3_zero_discovery_phase=authority; fi
 if grep -E 'et_e1b|e1(-internal-dispatch|_2Dinternal_2Ddispatch)|transformer(-error-(make|raise|wrap-foreign)|_2Derror_2D(make|raise|wrap_2Dforeign))' \
     "${e1b_tmp}/undefined.txt" >/dev/null; then
   die "E1B final object retains an unresolved privileged reference"
@@ -2378,6 +2483,13 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
         e3_required_private+=(et_e3_private_overflow_dispatch_cabi_v1
                               et_e3_test_published_counter_raw_v1)
       fi
+    elif [[ "${e3_tuple_kind}" == zero ]]; then
+      e3_required_private+=(
+        et_e3_private_zero_control_run_cabi_v1
+        et_e3_private_zero_negative_run_cabi_v1
+        et_e3_zero_gradient_metadata_v1
+        et_e3_zero_control_census_v1
+      )
     elif [[ "${e3_tuple_kind}" == mode-graph ]]; then
       e3_required_private+=(
         et_e3_mode_graph_dispatch_cabi_v1
@@ -2398,6 +2510,7 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
   done
 fi
 
+if [[ "${e3_zero_discovery}" == 1 ]]; then e3_zero_discovery_phase=postchecks; fi
 evidence_dir="${output_object}.evidence"
 temporary_output="${output_object}.tmp.$$"
 rm -rf -- "${evidence_dir}.tmp.$$"
@@ -2424,7 +2537,8 @@ if [[ "${package_policy}" == e3-private-aggregate &&
         "${e3_tuple_kind:-}" == retention-first-eval-mutant ||
         "${e3_tuple_kind:-}" == retention-overflow ||
         "${e3_tuple_kind:-}" == numerical ||
-        "${e3_tuple_kind:-}" == uniform ) ]]; then
+        "${e3_tuple_kind:-}" == uniform ||
+        "${e3_tuple_kind:-}" == zero ) ]]; then
   cp "${e1b_tmp}/private.ll" "${evidence_dir}.tmp.$$/private.ll"
 fi
 if [[ "${e3_private_test_sanitize}" == 1 ]]; then
@@ -2436,7 +2550,8 @@ if [[ "${e3_private_test_sanitize}" == 1 ]]; then
     "${evidence_dir}.tmp.$$/private.asan-nm.stderr"
 fi
 if [[ "${e3_private_test_sanitize}" == 1 &&
-      "${e3_tuple_kind:-}" == mode-graph ]]; then
+      ( "${e3_tuple_kind:-}" == mode-graph ||
+        "${e3_tuple_kind:-}" == zero ) ]]; then
   cp "${e1b_tmp}/noninstrumentation-undefined.txt" \
     "${evidence_dir}.tmp.$$/noninstrumentation-undefined.txt"
   cp "${e1b_tmp}/sanitizer-undefined.txt" \
@@ -2447,6 +2562,16 @@ if [[ "${e3_retention_sanitizer_inventory_verified}" == 1 ]]; then
     "${evidence_dir}.tmp.$$/noninstrumentation-undefined.txt"
   cp "${e1b_tmp}/sanitizer-undefined.txt" \
     "${evidence_dir}.tmp.$$/sanitizer-undefined.txt"
+fi
+
+if [[ "${package_policy}" == e3-private-aggregate &&
+      "${e3_tuple_kind}" == zero ]]; then
+  python3 -B "${PROJECT_ROOT}/scripts/generate-e3-zero-p1-topology-overlay.py" \
+    --output "${e3_generated_source_root}/transformer/module.esk" --check \
+    >"${e1b_tmp}/zero-p1-postcheck.txt" ||
+    die "E3 zero P1 overlay changed during compilation"
+  cmp "${e1b_tmp}/zero-p1-generation.txt" \
+      "${e1b_tmp}/zero-p1-postcheck.txt"
 fi
 if [[ -n "${package_source_closure}" ]]; then
   cp "${e1b_tmp}/source-closure.txt" \
@@ -2459,6 +2584,14 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     "${evidence_dir}.tmp.$$/e3_d2_dataset.esk"
   cp "${e3_generated_source_root}/e3_d2_source_provenance.json" \
     "${evidence_dir}.tmp.$$/e3_d2_source_provenance.json"
+  if [[ "${e3_tuple_kind}" == zero ]]; then
+    cp "${e3_generated_source_root}/transformer/module.esk" \
+      "${evidence_dir}.tmp.$$/e3_zero_p1_topology_module.esk"
+    cp "${e1b_tmp}/zero-p1-generation.txt" \
+       "${e1b_tmp}/zero-p1-check.txt" \
+       "${e1b_tmp}/zero-p1-postcheck.txt" \
+       "${evidence_dir}.tmp.$$/"
+  fi
   if [[ "${e3_overflow_mutant}" == clamp ]]; then
     cp "${e3_overflow_clamp_source}" \
       "${evidence_dir}.tmp.$$/e3_overflow_clamp_provider.c"
@@ -2506,6 +2639,8 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
       public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1|et_e3_overflow_run_v1)$'
     elif [[ "${e3_tuple_kind}" == mode-graph ]]; then
       public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_mode_graph_run_v1)$'
+    elif [[ "${e3_tuple_kind}" == zero ]]; then
+      public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_zero_(control|negative)_run_v1)$'
     fi
   fi
 fi
@@ -2516,6 +2651,14 @@ if [[ -n "${package_public_strings}" ]]; then
   cmp -s "${package_public_strings}" \
     "${evidence_dir}.tmp.$$/public-strings.txt" || \
     die "${package_policy} object differs from its exact public string manifest"
+fi
+if [[ "${e3_zero_discovery}" == 1 ]]; then
+  e3_zero_discovery_phase=copy-evidence
+  e3_zero_discovery_capture success 0 ||
+    die "E3 zero discovery could not seal emitted evidence"
+  rm -rf -- "${evidence_dir}.tmp.$$"
+  printf 'E3 zero discovery emitted inventories without package admission\n'
+  exit 0
 fi
 cp "${e1b_tmp}/combined.o" "${temporary_output}"
 rm -rf -- "${evidence_dir}"

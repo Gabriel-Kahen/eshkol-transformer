@@ -13,6 +13,7 @@ e3_overflow_prefix="${PROJECT_ROOT}/tests/e3_private/overflow_package"
 e3_mode_graph_prefix="${PROJECT_ROOT}/tests/e3_mode_graph/package"
 e3_numerical_prefix="${PROJECT_ROOT}/tests/e3_private/numerical_package"
 e3_uniform_prefix="${PROJECT_ROOT}/tests/e3_private/uniform_package"
+e3_zero_prefix="${PROJECT_ROOT}/tests/e3_private/zero_control_package"
 e3_base_inputs=(
   "${PROJECT_ROOT}/native/e3_private_driver_root.esk"
   "${PROJECT_ROOT}/native/e3_private_bridge.c"
@@ -66,6 +67,12 @@ e3_uniform_inputs=(
   "${PROJECT_ROOT}/tests/e3_private/uniform_bridge.c"
   "${e3_uniform_prefix}_private_renames.txt"
   "${e3_uniform_prefix}_public_exports.txt"
+)
+e3_zero_inputs=(
+  "${PROJECT_ROOT}/tests/e3_private/zero_control_driver_root.esk"
+  "${PROJECT_ROOT}/tests/e3_private/zero_control_bridge.c"
+  "${e3_zero_prefix}_private_renames.txt"
+  "${e3_zero_prefix}_public_exports.txt"
 )
 e3_prefix="${e3_base_prefix}"
 e3_inputs=("${e3_base_inputs[@]}")
@@ -148,6 +155,14 @@ for e3_raw in "${raw_private_root}" "${raw_package_bridge}" \
       e3_tuple_requested=1
     fi
   done
+  for e3_expected in "${e3_zero_inputs[@]}"; do
+    if [[ "$(realpath -m -- "${e3_raw}")" == "${e3_expected}" ]]; then
+      [[ -z "${e3_tuple_kind}" || "${e3_tuple_kind}" == zero ]] || \
+        die "E3 policy rejects mixed zero-control and other tuples"
+      e3_tuple_kind=zero
+      e3_tuple_requested=1
+    fi
+  done
 done
 
 if [[ "${e3_tuple_kind}" == diagnostic ]]; then
@@ -176,6 +191,9 @@ elif [[ "${e3_tuple_kind}" == numerical ]]; then
 elif [[ "${e3_tuple_kind}" == uniform ]]; then
   e3_prefix="${e3_uniform_prefix}"
   e3_inputs=("${e3_uniform_inputs[@]}")
+elif [[ "${e3_tuple_kind}" == zero ]]; then
+  e3_prefix="${e3_zero_prefix}"
+  e3_inputs=("${e3_zero_inputs[@]}")
 fi
 
 e3_check_repository_path() {
@@ -207,21 +225,52 @@ e3_check_native_dependency_path() {
   done
 }
 
+e3_check_zero_generated_dependency() {
+  local raw=$1 expected="${e3_generated_source_root}/transformer/module.esk"
+  local current=/ part
+  local -a parts
+  [[ "${e3_tuple_kind}" == zero && "${raw}" == "${expected}" &&
+     "${raw}" == /* ]] || die "E3 zero P1 overlay requires its exact lexical path"
+  IFS=/ read -r -a parts <<<"${raw}"
+  for part in "${parts[@]}"; do
+    [[ -n "${part}" ]] || continue
+    [[ "${part}" != . && "${part}" != .. ]] ||
+      die "E3 zero P1 overlay rejects path aliases"
+    current="${current%/}/${part}"
+    [[ ! -L "${current}" ]] ||
+      die "E3 zero P1 overlay rejects symlink aliases"
+  done
+  [[ -f "${expected}" ]] || die "E3 zero P1 overlay is absent"
+  [[ "$(sha256sum -- "${expected}" | cut -d' ' -f1)" == \
+     06f0d533f2ea1c1188ba939709ab814ba36e01391f91b434f7ca80a058c680c8 ]] ||
+    die "E3 zero P1 overlay hash differs from the reviewed insertion"
+}
+
 e3_normalize_source_dependencies() {
-  local dependency generated
+  local dependency generated zero_p1
   [[ -n "${e3_generated_source_root:-}" ]] || \
     die "E3 private generated source was not initialized"
   generated="${e3_generated_source_root}/e3_d2_dataset.esk"
+  zero_p1="${e3_generated_source_root}/transformer/module.esk"
   while IFS= read -r dependency; do
     [[ -n "${dependency}" ]] || continue
     if [[ "$(realpath -m -- "${dependency}")" == "${generated}" ]]; then
       printf '@BUILD@/source/e3_d2_dataset.esk\n'
+    elif [[ "${e3_tuple_kind}" == zero && "${dependency}" == "${zero_p1}" ]]; then
+      e3_check_zero_generated_dependency "${dependency}"
+      printf '@BUILD@/source/transformer/module.esk\n'
+    elif [[ "${e3_tuple_kind}" == zero &&
+            "$(realpath -m -- "${dependency}")" == "${zero_p1}" ]]; then
+      die "E3 zero P1 overlay rejects aliased generated dependencies"
     elif [[ ( "${e3_tuple_kind}" == mode-graph ||
               "${e3_tuple_kind}" == retention ||
               "${e3_tuple_kind}" == retention-first-eval-mutant ||
               "${e3_tuple_kind}" == retention-overflow ) && \
             "$(realpath -m -- "${dependency}")" == \
               "${e3_generated_source_root}/transformer/module.esk" ]]; then
+      [[ "$(sha256sum -- "${dependency}" 2>/dev/null | cut -d' ' -f1)" != \
+         06f0d533f2ea1c1188ba939709ab814ba36e01391f91b434f7ca80a058c680c8 ]] ||
+        die "E3 zero P1 overlay is forbidden for another tuple"
       printf '@BUILD@/source/transformer/module.esk\n'
     elif [[ "${e3_tuple_kind}" == mode-graph && \
             "$(realpath -m -- "${dependency}")" == \
@@ -260,5 +309,12 @@ if [[ "${e3_tuple_requested}" == 1 ]]; then
   done
   if [[ "${e3_public_tuple}" == 1 ]]; then
     e3_check_repository_path "${e3_prefix}_facades.txt"
+  fi
+  if [[ "${e3_tuple_kind}" == zero &&
+        "${E3_ZERO_CONTROL_SANITIZE:-0}" == 1 ]]; then
+    e3_check_repository_path \
+      "${e3_prefix}_sanitized_noninstrumentation_undefined_symbols.txt"
+    e3_check_repository_path \
+      "${e3_prefix}_sanitized_instrumentation_undefined_symbols.txt"
   fi
 fi
