@@ -9,13 +9,13 @@ from unittest.mock import patch
 from tests.c2.test_handler_order import parse
 from tests.g3r import prepare_capture_partial_claim_cut as preparation
 from tests.g3r.prepare_capture_partial_claim_cut import (
-    ROOT, BASE, TREE, EXTRA, BYTE_FINGERPRINT, verify, prepare,
+    ROOT, BASE, TREE, EXTRA, BYTE_FINGERPRINT, git, verify, verify_file, prepare,
 )
 
 
 class PartialClaimSource(unittest.TestCase):
     def test_exact_approved_closure_and_runtime_hooks(self):
-        self.assertEqual(len(verify()), 96)
+        self.assertEqual(len(verify(git("rev-parse", "HEAD"))), 96)
         root = (ROOT / EXTRA[2]).read_text()
         runtime = (ROOT / EXTRA[3]).read_text()
         self.assertTrue(parse(root))
@@ -43,11 +43,13 @@ class PartialClaimSource(unittest.TestCase):
     def test_changed_closure_and_old_source_fail_closed(self):
         with patch.dict(preparation.PINS, {preparation.CLOSURE: "0" * 64}):
             with self.assertRaisesRegex(ValueError, "pinned source changed"):
-                verify()
+                verify(git("rev-parse", "HEAD"))
         with patch.object(preparation, "BASE",
                           "ac0ac36e5da6ec4e7bc19c4f4dc91c78cbfc9f5e"):
             with self.assertRaisesRegex(ValueError, "approved commit/tree pair"):
-                verify()
+                verify(git("rev-parse", "HEAD"))
+        with self.assertRaisesRegex(ValueError, "fixture HEAD differs"):
+            verify("0" * 40)
         held = subprocess.run(
             ["bash", "scripts/test-g3r-capture-partial-claim.sh", "--run"],
             cwd=ROOT, capture_output=True, text=True, check=False,
@@ -58,7 +60,7 @@ class PartialClaimSource(unittest.TestCase):
     def test_staged_files_are_pinned_and_read_only(self):
         with tempfile.TemporaryDirectory(prefix="g3r-partial-source-") as scratch:
             output = Path(scratch) / "prepared"
-            prepare(output)
+            prepare(output, git("rev-parse", "HEAD"))
             contents = (output / "PREPARED.tsv").read_text()
             self.assertIn(f"approved_commit\t{BASE}\n", contents)
             self.assertIn(f"approved_tree\t{TREE}\n", contents)
@@ -71,7 +73,28 @@ class PartialClaimSource(unittest.TestCase):
                 self.assertEqual(path.read_bytes(), (ROOT / name).read_bytes())
                 self.assertEqual(path.stat().st_mode & 0o222, 0)
             with self.assertRaises(ValueError):
-                prepare(output)
+                prepare(output, git("rev-parse", "HEAD"))
+
+    def test_isolated_fixture_and_same_line_pin_drift_rejected(self):
+        head = git("rev-parse", "HEAD")
+        with tempfile.TemporaryDirectory(prefix="g3r-partial-drift-") as scratch:
+            for name, suffix in (
+                (EXTRA[3], b"# appended 34-byte fixture drift!!\n"),
+                ("toolchain/eshkol.lock", b"# same expected line; drift\n"),
+                ("tests/tr3_lease/runtime_candidate.tsv",
+                 b"# same expected line; drift\n"),
+                ("tests/g3r/prepare_capture_partial_claim_cut.py",
+                 b"# dirty preparer\n"),
+                ("tests/g3r/test_capture_partial_claim_cut_source.py",
+                 b"# dirty source test\n"),
+                ("scripts/test-g3r-capture-partial-claim.sh",
+                 b"# dirty launcher\n"),
+            ):
+                with self.subTest(name=name):
+                    candidate = Path(scratch) / Path(name).name
+                    candidate.write_bytes((ROOT / name).read_bytes() + suffix)
+                    with self.assertRaises(ValueError):
+                        verify_file(name, head, candidate)
 
 
 if __name__ == "__main__":

@@ -23,6 +23,14 @@ BYTE_FINGERPRINT = (
 CLOSURE = "native/g3r_same_owner_o2_adoption_source_closure.txt"
 MANIFEST = "native/g3r_same_owner_capture_main_source.sha256"
 PINS = {
+    "toolchain/eshkol.lock": "8c168f5d560781245f6d4c73f695e72cbafa413b606d50bc7c36d2119acd9efe",
+    "tests/tr3_lease/runtime_candidate.tsv": "46097980f65a6fee1643590e7dd983cfebf91983a0d8487832a7cacafebd8b99",
+    "tests/d2/test_resources.py": "0de1f3326b663c16e45d7fed5efc43e49a30b4fa540b13df5adc2c67ab2ee26d",
+    "tests/c2/test_handler_order.py": "f100005dc13ecf7a01868ef107b02a276b87bda105abe080cddb82883097057d",
+    "scripts/test-g3r-capture-partial-claim.sh": "2a1e7b0c7fc8e69b25b13c82a761705d927118688b865140774b9436ad70eade",
+    "tests/g3r/capture_partial_claim_cut_root.esk": "a974d60b46fa43ed4e4fd9f8f3951359c08173def624b244d5083445ec01ecfa",
+    "tests/g3r/capture_partial_claim_cut_runtime.esk": "c9bee87c65270cb336433ec2ecce0fe3c98de6a4f9e352b2a99ff74a6240dfdb",
+    "tests/g3r/capture_partial_claim_cut_bridge.c": "83de21c7a6007df3170869bf0ec63fd2c6133d3de498cca71ade331b5c70923c",
     CLOSURE: "096f6e8470fb56017333ba25c03e1bd53515a5f3eec5d22afa6598592608ecf8",
     MANIFEST: "950d967f30691934d6ff86b69fe78df2a7b877c0e24f60d62fd7a58fbbd5609f",
     "native/c2_training_state_extension.esk": "130a4e4d6de5abe3ae7bcb0fb14eb631b80b7834037b938fed00c25343454dab",
@@ -38,6 +46,18 @@ EXTRA = (
     "tests/g3r/capture_partial_claim_cut_runtime.esk",
     "tests/g3r/capture_partial_claim_cut_bridge.c",
 )
+TOOLS = (
+    "tests/g3r/prepare_capture_partial_claim_cut.py",
+    "tests/g3r/test_capture_partial_claim_cut_source.py",
+    "scripts/test-g3r-capture-partial-claim.sh",
+    "tests/d2/test_resources.py",
+    "tests/c2/test_handler_order.py",
+    "toolchain/eshkol.lock",
+    "tests/tr3_lease/runtime_candidate.tsv",
+)
+ALLOWED_DELTA = set(EXTRA[2:]) | set(TOOLS[:3]) | {
+    "docs/g3/G3_R_CAPTURE_PARTIAL_CLAIM_GATE.md",
+}
 
 
 def digest(path: Path) -> str:
@@ -48,7 +68,27 @@ def git(*args: str) -> str:
     return subprocess.check_output(("git", *args), cwd=ROOT, text=True).strip()
 
 
-def verify() -> list[str]:
+def committed_bytes(revision: str, name: str) -> bytes:
+    return subprocess.check_output(("git", "show", f"{revision}:{name}"), cwd=ROOT)
+
+
+def verify_file(name: str, revision: str, path: Path | None = None) -> None:
+    path = path or ROOT / name
+    if path.is_symlink() or not path.is_file():
+        raise ValueError(f"missing or linked source: {name}")
+    raw = path.read_bytes()
+    if name in PINS and sha256(raw).hexdigest() != PINS[name]:
+        raise ValueError(f"pinned source changed: {name}")
+    if raw != committed_bytes(revision, name):
+        raise ValueError(f"working source differs from {revision}: {name}")
+
+
+def verify(expected_head: str) -> list[str]:
+    head = git("rev-parse", "HEAD")
+    if head != expected_head:
+        raise ValueError("fixture HEAD differs from explicit source commit")
+    if git("status", "--porcelain=v1", "--untracked-files=all"):
+        raise ValueError("fixture worktree is not clean")
     lock = (ROOT / "toolchain/eshkol.lock").read_text()
     candidate = (ROOT / "tests/tr3_lease/runtime_candidate.tsv").read_text()
     if f"eshkol_commit\t{FE9}\n" not in lock or \
@@ -59,9 +99,13 @@ def verify() -> list[str]:
     if subprocess.run(("git", "merge-base", "--is-ancestor", BASE, "HEAD"),
                       cwd=ROOT, check=False).returncode:
         raise ValueError("old or divergent source history")
+    delta = set(git("diff", "--name-only", BASE, head).splitlines())
+    if not delta.issubset(ALLOWED_DELTA):
+        raise ValueError("fixture HEAD changes unapproved source paths")
     for name, expected in PINS.items():
-        if digest(ROOT / name) != expected:
-            raise ValueError(f"pinned source changed: {name}")
+        verify_file(name, BASE if name not in ALLOWED_DELTA else head)
+    for name in TOOLS:
+        verify_file(name, head)
     paths = (ROOT / CLOSURE).read_text().splitlines()
     if len(paths) != 96 or len(set(paths)) != 96 or paths[0] != \
             "native/g3r_same_owner_o2_adoption_root.esk":
@@ -73,25 +117,25 @@ def verify() -> list[str]:
         if Path(name).is_absolute() or ".." in Path(name).parts or \
                 not name.endswith(".esk") or digest(ROOT / name) != expected:
             raise ValueError(f"production closure byte mismatch: {name}")
-        if git("show", f"{BASE}:{name}") != (ROOT / name).read_text().rstrip("\n"):
-            raise ValueError(f"closure differs from approved commit: {name}")
+        verify_file(name, BASE)
     for name in EXTRA[:2]:
-        if git("show", f"{BASE}:{name}") != (ROOT / name).read_text().rstrip("\n"):
-            raise ValueError(f"manual prefill differs from approved commit: {name}")
+        verify_file(name, BASE)
+    for name in EXTRA[2:]:
+        verify_file(name, head)
     return paths
 
 
-def prepare(output: Path) -> None:
+def prepare(output: Path, expected_head: str) -> None:
     if not output.is_absolute() or output.exists() or output.is_symlink():
         raise ValueError("output must be a fresh absolute path")
-    paths = verify()
+    paths = verify(expected_head)
     output.mkdir(parents=True)
     staged = output / "source"
     copied: list[Path] = []
     for name in (*paths, *EXTRA):
         target = staged / name
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(ROOT / name, target)
+        target.write_bytes(committed_bytes(expected_head, name))
         copied.append(target)
     # The installed root asks for this basename, although the pinned closure
     # records its source in internal/e3/lib.
@@ -113,8 +157,8 @@ def prepare(output: Path) -> None:
     manifest.write_text(
         f"approved_commit\t{BASE}\n"
         f"approved_tree\t{TREE}\n"
-        f"fixture_commit\t{git('rev-parse', 'HEAD')}\n"
-        f"fixture_tree\t{git('rev-parse', 'HEAD^{tree}')}\n"
+        f"fixture_commit\t{expected_head}\n"
+        f"fixture_tree\t{git('rev-parse', expected_head + '^{tree}')}\n"
         f"compiler_commit\t{FE9}\n"
         f"container_digest\t{F31}\n"
         "status\tsource-prepared; compiled gate HOLD\n"
@@ -131,4 +175,6 @@ def prepare(output: Path) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
-    prepare(parser.parse_args().output)
+    parser.add_argument("--head", required=True)
+    args = parser.parse_args()
+    prepare(args.output, args.head)

@@ -23,7 +23,9 @@ rollback and uncertain abandon are separate negative modes; uncertain
 cleanup exits 134.
 
 `scripts/test-g3r-capture-partial-claim.sh --check` runs only source
-predicates. `--prepare ABSOLUTE_FRESH_OUTPUT` writes the sealed inputs.
+predicates. `--prepare EXPECTED_HEAD ABSOLUTE_FRESH_OUTPUT` verifies exact
+HEAD, committed fixture/tool bytes, and whole-file lock/candidate pins before
+writing the sealed inputs from that immutable commit.
 `--run` deliberately exits 74 until an independently reviewed exact
 current-main native union and supported compiled runner are approved. No
 compiled behavior, runtime capacity, or integration is claimed. The
