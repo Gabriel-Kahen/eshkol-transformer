@@ -111,6 +111,32 @@ replay equivalence. The aggregate compilation, runtime fault cuts and
 independent review are still gates before an original-owner C2 claim is
 accepted.
 
+## Bounded original Scheme owner and control binding
+
+`native/g3r_joint_original_owner_binding_extension.esk` checks the exact
+registered G3 generator, live M3T model, raw V256 T1 tokenizer and Scheme O2
+optimizer shell against the native joint hold's original generator/model/O2
+pointer triple. The native `owner_match` rejects a foreign or DEAD joint before
+rechecking both holds. It copies C2 controls through the existing validator,
+then requires the C2 tokenizer fingerprint/vocabulary to match the registered
+T1 raw tokenizer and the C2 X1 canonical bytes/fingerprint to match the
+original M3T model's retained config. Its wrapper passes those copied controls
+and the exact joint-issued ledger into the earlier private C2 claim helper.
+This is a source-only original-owner identity and two-control binding; it
+does not derive or authenticate the detached P1 state.
+
+The accepted live TR3 trainer cannot supply the remaining original controls
+for this same G3 model without another reviewed mode contract. G3 admission
+requires `module-mode-internal model` to be `eval` in
+`native/g3t_model_admission_extension.esk:57-59`, while the trusted TR3 fixed
+module recheck requires `e3-mode-train` in
+`internal/p1/lib/transformer/module.esk:5251-5260`. The TR3 snapshot lease
+therefore cannot be presented as a same-owner trainer-control witness for an
+already-live G3 generator. T1 and TR3's T2 tokenizer shells are separate
+identities; matching fingerprint values does not claim they are the same
+shell. D2 cursor pair, trainer RNG, counters, P1 provenance, paired receipt
+and replay all remain open. No mode contract was changed here.
+
 ## Bounded adopter source leaf
 
 `native/g3r_held_o2_adopter_extension.esk` defines `g3r-held-o2-adopt!` for a

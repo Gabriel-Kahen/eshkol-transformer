@@ -2146,6 +2146,14 @@ partial O2 claim; and moves exact issued native custody to a verified C2 child
 before draining O2 then G3. Its bounded source mutation and strict C syntax
 checks pass locally. No aggregate loads it yet, and no original P1/controls
 binding, receipt, pair, replay or accepted runtime claim follows.
+The next source-only binding checks exact registered G3 generator/M3T model/T1
+tokenizer/O2 optimizer shells against one LIVE native joint owner, then compares
+validated C2 tokenizer and X1 config controls with that original T1/model.
+It still cannot bind a TR3 trainer to the same live G3 model: G3 requires eval
+mode (`g3t_model_admission_extension.esk:57-59`), while TR3 fixed recheck
+requires train mode (`module.esk:5251-5260`). D2 cursors, trainer RNG and
+counters, detached P1 provenance, pair/receipt and replay remain open; no
+compiled or runtime admission follows this source leaf.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),

@@ -23,6 +23,11 @@ int64_t et_g3r_joint_hold_check_v1(et_g3r_joint_hold *hold);
  * optimizer held by this joint record, then recheck both original holds. */
 int64_t et_g3r_joint_hold_optimizer_match_v1(
     et_g3r_joint_hold *hold, const et_o2_optimizer *optimizer);
+/* Authenticate the exact registered original generator, sealed model and O2
+ * optimizer pointers against one still-LIVE joint hold. */
+int64_t et_g3r_joint_hold_owner_match_v1(
+    et_g3r_joint_hold *hold, const void *generator,
+    const void *sealed_model, const et_o2_optimizer *optimizer);
 et_o2_optimizer_state *et_g3r_joint_hold_issue_v1(et_g3r_joint_hold *hold);
 int64_t et_g3r_joint_hold_issued_match_v1(
     et_g3r_joint_hold *hold, const et_o2_optimizer_state *candidate);

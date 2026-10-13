@@ -140,6 +140,18 @@ int64_t et_g3r_joint_hold_optimizer_match_v1(
   return et_g3r_joint_hold_check_v1(hold);
 }
 
+int64_t et_g3r_joint_hold_owner_match_v1(
+    et_g3r_joint_hold *candidate, const void *generator,
+    const void *sealed_model, const et_o2_optimizer *optimizer) {
+  et_g3r_joint_hold *hold = joint_find(candidate);
+  joint_clear();
+  if (!hold || !generator || !sealed_model || !optimizer ||
+      generator != hold->generator || sealed_model != hold->model ||
+      optimizer != hold->optimizer)
+    return joint_invalid();
+  return et_g3r_joint_hold_check_v1(hold);
+}
+
 et_o2_optimizer_state *et_g3r_joint_hold_issue_v1(
     et_g3r_joint_hold *candidate) {
   et_g3r_joint_hold *hold = joint_find(candidate);
