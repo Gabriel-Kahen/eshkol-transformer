@@ -1752,6 +1752,51 @@ Hosted integration is pending. This private predicate does not authenticate a
 C2 SHA receipt or pair, reconstruct a candidate, replay history, or prove
 resumed generation.
 
+The [G3-R committed-save snapshot prerequisite](g3/G3_R_COMMITTED_SAVE_SNAPSHOT_PREREQUISITE.md)
+records the current-main source gap: the live G3-T owner retains policy and RNG
+but no committed ordered history, origin/generated/manual partition or latched
+EOS terminal state. The source-private output clone is detached and cannot
+authenticate that missing history. The next bounded source slice must review
+an exact same-owner copyout or registered snapshot contract and maintain the
+history at prefill, manual-decode and final-generation commit boundaries under
+stable leases, including explicit rejection or rollback of an idle G1 call
+aborted after its P1 prefill cache commit. The bounded
+[native committed-history owner leaf](g3/G3_R_COMMITTED_HISTORY_OWNER_LEAF.md)
+is now ported onto this branch from the independent `0714cac5` source. It
+adds feature-gated inline history and policy/RNG copyout, with pending-G1
+provenance that rejects an idle post-prefill abort and manual-decode laundering.
+Focused native source/core/controlled-transport tests pass locally. It does
+not add Eshkol same-aggregate leases or a SAVE writer, and no file-pair
+publication or resumed continuation is accepted.
+
+The bounded [private committed-save snapshot candidate](g3/G3_R_COMMITTED_SAVE_SNAPSHOT_LEAF.md)
+adds a feature-gated native same-owner copy helper and source-private Eshkol
+wrapper on the accepted owner ancestry. It authenticates the registered
+generator/model/raw V256 T1 aggregate, pins model parameters, borrows the A2
+cache, compares committed length and policy, rejects pending G1 provenance,
+and publishes only detached data after checked 136-byte staging. Focused
+native normal/repeat/sanitizer and feature-off checks pass. Independent review
+and the exact-`97aec234` compiled Eshkol aggregate have also passed their
+bounded gates. Current-main union validation remains pending. This is no SAVE
+admission, file writer or replay proof.
+
+The follow-on private aggregate candidate on `codex/g3r-committed-save-aggregate`
+loads that wrapper with the exact M3/G3-T/G3-M route. A real seeded P1/G1
+commit produces the same owner's policy, RNG, ordered raw history and
+prompt/generated partition; the fixture checks the 136-byte destination
+record against the detached result. Held A2 borrow, busy call, live foreign
+model, changed policy/tokenizer, forged and stale owners, short destination,
+and idle post-P1 G1 abort all reject without changing the destination.
+Pinned fe9dfd Eshkol/LLVM 21 normal, repeat and ASan+UBSan+LSan runs pass 30
+checks with identical stdout and empty compiler/runtime stderr; feature-off
+symbol absence and Q0 isolation also pass. Independent source/tests review
+found no blocker at `97aec234`/tree `fbda548f`; sealed evidence is
+`g3r-committed-save-aggregate-97aec234-fe9-f31-20261012-prepared-a/SHA256SUMS-RUN`
+(`cc3c5f2e...`). The real aggregate's positive route covers P1/G1; other
+partitions and EOS rely on controlled native tests. Current-main combined-tree
+build and runtime validation remain gates before admission. No SAVE writer,
+file-pair publication, restore, replay or resumed continuation is provided.
+
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
 diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use
