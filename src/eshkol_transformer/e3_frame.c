@@ -748,6 +748,14 @@ int64_t et_e3_private_acquire_v1(void *pointer) {
     return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
   int64_t rc = e3_storage_check(frame, 1);
   if (rc) return rc;
+#ifdef ET_E3_TESTING
+  /* The one-shot pin preinvoke cut must precede all invocation writes.  An
+   * admitted failure can then retry this exact idle frame and its scratch. */
+  if (e3_test_pin_preinvoke_armed) {
+    e3_test_pin_preinvoke_armed = 0;
+    return e3_fail(E3_INTERNAL, E3_CODE_TEST_PIN_PREINVOKE);
+  }
+#endif
   for (size_t bank = 0; bank < 2; ++bank)
     for (size_t i = 0; i < 3; ++i)
       if ((rc = e3_zero_tensor(frame->sum[bank][i])) != 0) return rc;
@@ -763,13 +771,6 @@ int64_t et_e3_private_acquire_v1(void *pointer) {
   frame->next_role = 0;
   frame->stage_plane = 0;
   et_f32_tensor_error error;
-#ifdef ET_E3_TESTING
-  /* Consume only after idle-frame admission, at the actual pin boundary. */
-  if (e3_test_pin_preinvoke_armed) {
-    e3_test_pin_preinvoke_armed = 0;
-    return e3_fail(E3_INTERNAL, E3_CODE_TEST_PIN_PREINVOKE);
-  }
-#endif
   if (et_g3t_model_pins_begin_internal(frame->model->p,
                                        (const void *const *)frame->model->handles,
                                        &frame->pins, &error) != 0)

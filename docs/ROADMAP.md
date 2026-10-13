@@ -1058,13 +1058,14 @@ and stage-selective fault/observer seams for review. It provides no new runtime
 proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
 verdicts remain prerequisites before the full matrix is implemented and run.
 A bounded R1 source prerequisite adds one test-only one-shot pin-preinvoke cut
-to the native frame acquire path. The native source test checks that rejected
-admission does not consume it and that the admitted cut leaves pins and model
-active ownership idle, preserves four destination words and published counts,
-then permits same-frame reacquire. The production object must lack the test
-symbol. This does not establish compiled-private rollback: acquire clears
-scratch before the cut, and exact original cursor, modes, model/gradient/RNG,
-six outputs, owners and arena still need the full failure/retry proof.
+to the native frame acquire path. The successor moves that cut after idle/storage
+admission but before invocation-owned scratch writes. Its native test checks
+that rejected admission does not consume it and that the admitted cut preserves
+the exact frame/model images, six sum scratch words, four destination words,
+published counters and f32 live-owner counts, then permits same-frame reacquire.
+The production object must lack the test symbol. This is native source evidence
+only; exact original D2 cursor, P1 modes, gradients, RNG, arena and all six
+compiled-private outputs still need the authenticated failure/retry matrix.
 The bounded development-only [genuine three-batch M2 sum-order witness](../tests/e3_reference/sum_order_witness_v1.json)
 uses packed raw-V256 D2 rows and the registered seed-1729 M3/f32 CE reference.
 Its first witness in a 64-candidate SHA-256 domain has serial numerator

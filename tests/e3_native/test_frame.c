@@ -351,12 +351,32 @@ static void test_pin_preinvoke_cut(owner *model,
   et_e3_frame_internal *frame = et_e3_private_frame_create_v1(
       model, destination[0], destination[1], destination[2], destination[3]);
   CHECK(frame != NULL);
+  /* The idle frame can retain prior invocation scratch and published output.
+   * Every byte of that pre-call state must survive the admitted cut. */
+  const uint32_t scratch[2][3] = {
+      {UINT32_C(0x3f100001), UINT32_C(0x3f200002), UINT32_C(0x3f300003)},
+      {UINT32_C(0x3f400004), UINT32_C(0x3f500005), UINT32_C(0x3f600006)}};
+  for (size_t bank = 0; bank < 2; ++bank)
+    for (size_t i = 0; i < 3; ++i)
+      write_scalar(frame->sum[bank][i], scratch[bank][i]);
+  frame->counts[0][0] = 3;
+  frame->counts[0][1] = 2;
+  frame->counts[1][0] = 5;
+  frame->counts[1][1] = 4;
+  frame->active = 7;
+  frame->staged_counts[0] = 8;
+  frame->staged_counts[1] = 9;
+  frame->sum_bank = 1;
+  frame->committed = 1;
+  frame->next_role = 20;
+  frame->stage_plane = 2;
+  frame->published_counts[0] = 11;
+  frame->published_counts[1] = 12;
+  frame->published_valid = 1;
   const uint32_t sentinels[4] = {
       UINT32_C(0x3f800000), UINT32_C(0x40000000),
       UINT32_C(0x40400000), UINT32_C(0x40800000)};
   for (size_t i = 0; i < 4; ++i) write_scalar(destination[i], sentinels[i]);
-  const int64_t published[2] = {
-      frame->published_counts[0], frame->published_counts[1]};
 
   OK(et_e3_test_pin_preinvoke_fault_v1(1));
   CHECK(et_e3_test_pin_preinvoke_fault_v1(2) == 1);
@@ -365,13 +385,33 @@ static void test_pin_preinvoke_cut(owner *model,
   CHECK(e3_last_code == E3_CODE_REENTRANCY);
   model->active = NULL;
 
+  et_e3_frame_internal before;
+  owner model_before;
+  et_f32_test_live_counts_v1 live_before = {.struct_size = sizeof(live_before)};
+  memcpy(&before, frame, sizeof(before));
+  memcpy(&model_before, model, sizeof(model_before));
+  et_f32_test_live_counts_snapshot_v1(&live_before);
   CHECK(et_e3_private_acquire_v1(frame) == E3_INTERNAL);
   CHECK(e3_last_domain == 0 && e3_last_category == E3_INTERNAL &&
         e3_last_code == E3_CODE_TEST_PIN_PREINVOKE);
+  CHECK(memcmp(frame, &before, sizeof(before)) == 0);
+  CHECK(memcmp(model, &model_before, sizeof(model_before)) == 0);
   CHECK(frame->phase == E3_IDLE && model->active == NULL);
   CHECK(e3_pins_idle(&frame->pins));
-  CHECK(frame->published_counts[0] == published[0] &&
-        frame->published_counts[1] == published[1]);
+  et_f32_test_live_counts_v1 live_after = {.struct_size = sizeof(live_after)};
+  et_f32_test_live_counts_snapshot_v1(&live_after);
+  CHECK(live_after.tensors == live_before.tensors);
+  CHECK(live_after.parameters == live_before.parameters);
+  CHECK(live_after.borrows == live_before.borrows);
+  CHECK(live_after.copy_plans == live_before.copy_plans);
+  CHECK(live_after.gradient_plans == live_before.gradient_plans);
+  CHECK(live_after.reset_plans == live_before.reset_plans);
+  for (size_t bank = 0; bank < 2; ++bank)
+    for (size_t i = 0; i < 3; ++i) {
+      uint32_t bits;
+      read_scalar(frame->sum[bank][i], &bits);
+      CHECK(bits == scratch[bank][i]);
+    }
   for (size_t i = 0; i < 4; ++i) {
     uint32_t bits;
     read_scalar(destination[i], &bits);
@@ -383,6 +423,20 @@ static void test_pin_preinvoke_cut(owner *model,
   OK(et_e3_private_acquire_v1(frame));
   CHECK(frame->phase == E3_ACQUIRED && model->active == frame);
   CHECK(frame->pins.held_mask == UINT16_C(0x3fff));
+  CHECK(frame->counts[0][0] == 0 && frame->counts[0][1] == 0 &&
+        frame->counts[1][0] == 0 && frame->counts[1][1] == 0);
+  CHECK(frame->active == 0 && frame->staged_counts[0] == 0 &&
+        frame->staged_counts[1] == 0 && frame->sum_bank == 0);
+  CHECK(frame->committed == 0 && frame->next_role == 0 &&
+        frame->stage_plane == 0);
+  for (size_t bank = 0; bank < 2; ++bank)
+    for (size_t i = 0; i < 3; ++i) {
+      uint32_t bits;
+      read_scalar(frame->sum[bank][i], &bits);
+      CHECK(bits == 0);
+    }
+  CHECK(frame->published_counts[0] == 11 &&
+        frame->published_counts[1] == 12 && frame->published_valid == 1);
   OK(et_e3_private_cleanup_preflight_v1(frame));
   et_e3_private_drain_v1(frame);
   et_e3_private_finish_v1(frame);
