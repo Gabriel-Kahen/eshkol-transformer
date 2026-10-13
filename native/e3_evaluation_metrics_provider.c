@@ -152,17 +152,41 @@ union results {
   struct { float n, w, correct; int64_t tokens, batches; } accumulate;
   struct { float loss, weight, perplexity, accuracy; } finalize;
 };
+#ifndef ET_E3_NUMERICAL_WRONG_VOCAB_AXIS
 static int64_t argmax(const float *row) {
   int64_t winner = 0;
   float maximum = row[0];
   for (int64_t j = 1; j < 256; ++j) {
+#ifdef ET_E3_UNIFORM_LAST_TIE_TEST
+    if (row[j] >= maximum) {
+#else
     if (row[j] > maximum) {
+#endif
       maximum = row[j];
       winner = j;
     }
   }
   return winner;
 }
+#endif
+#if defined(ET_E3_NUMERICAL_WRONG_VOCAB_AXIS) && !defined(ET_E3_NUMERICAL_TESTING)
+#error "wrong-vocabulary-axis mutation requires the private numerical test tuple"
+#endif
+#ifdef ET_E3_NUMERICAL_WRONG_VOCAB_AXIS
+/* Test mutant: reinterpret the same [T=2,V=256] logits as [V=256,T=2]. */
+static int64_t wrong_vocab_axis_argmax(const float *logits, size_t token) {
+  int64_t winner = 0;
+  float maximum = logits[token];
+  for (int64_t j = 1; j < 256; ++j) {
+    const float value = logits[2*j+token];
+    if (value > maximum) {
+      maximum = value;
+      winner = j;
+    }
+  }
+  return winner;
+}
+#endif
 static int32_t evaluate_correct(const et_kernel_call_v1 *c, union results *result,
                                 et_kernel_error *e) {
   const char *op = operations[CORRECT_BOOL];
@@ -179,8 +203,13 @@ static int32_t evaluate_correct(const et_kernel_call_v1 *c, union results *resul
   for (size_t i = 0; i < 2; ++i)
     if (mask[i] > 1u) return domain(e,op);
   if (mask[0] == 0u && mask[1] == 0u) return domain(e,op);
+#ifdef ET_E3_NUMERICAL_WRONG_VOCAB_AXIS
+  const int64_t winner0 = wrong_vocab_axis_argmax(logits, 0);
+  const int64_t winner1 = wrong_vocab_axis_argmax(logits, 1);
+#else
   const int64_t winner0 = argmax(logits);
   const int64_t winner1 = argmax(logits + 256);
+#endif
   const float weight0 = mask[0] == 0u ? 0.0f : 1.0f;
   const float weight1 = mask[1] == 0u ? 0.0f : 1.0f;
   const float hit0 = winner0 == targets[0] ? 1.0f : 0.0f;
@@ -211,8 +240,14 @@ static int32_t evaluate_accumulate(const et_kernel_call_v1 *c, union results *re
   if (batches > 8192 || tokens > 16384) return capped(e,op);
   if (batches > tokens) return domain(e,op);
   if (tokens-batches > batches) return domain(e,op);
+#ifdef ET_E3_NUMERICAL_MEAN_OF_MEANS
+  /* Compiled test mutant: accumulate each batch mean with unit batch weight. */
+  if (w != (float)batches) return domain(e,op);
+  if (correct > (float)tokens || !integral_bounded(correct)) return domain(e,op);
+#else
   if (w != (float)tokens) return domain(e,op);
   if (correct > w || !integral_bounded(correct)) return domain(e,op);
+#endif
   if (batches == 0 && n != 0.0f) return domain(e,op);
   if (wb != (float)active) return domain(e,op);
   if (cb > wb || !integral_bounded(cb)) return domain(e,op);
@@ -222,9 +257,17 @@ static int32_t evaluate_accumulate(const et_kernel_call_v1 *c, union results *re
   const int64_t next_tokens = tokens + active;
   const int64_t next_batches = batches + 1;
   if (next_batches > 8192 || next_tokens > 16384) return capped(e,op);
+#ifdef ET_E3_NUMERICAL_MEAN_OF_MEANS
+  const float next_n = n + nb / wb;
+#else
   const float next_n = n + nb;
+#endif
   if (!isfinite(next_n)) return domain(e,op);
+#ifdef ET_E3_NUMERICAL_MEAN_OF_MEANS
+  const float next_w = w + 1.0f;
+#else
   const float next_w = w + wb;
+#endif
   if (!isfinite(next_w)) return domain(e,op);
   const float next_c = correct + cb;
   if (!isfinite(next_c)) return domain(e,op);
@@ -246,7 +289,12 @@ static int32_t evaluate_finalize(const et_kernel_call_v1 *c, union results *resu
   if (w > 16384.0f) return capped(e,op);
   if (!integral_bounded(w)) return domain(e,op);
   if (correct > w || !integral_bounded(correct)) return domain(e,op);
+#ifdef ET_E3_NUMERICAL_SECOND_NORMALIZATION
+  /* Compiled test mutant: apply the global token denominator twice. */
+  const float loss = (n / w) / w;
+#else
   const float loss = n / w;
+#endif
   if (!isfinite(loss)) return domain(e,op);
   const float accuracy = correct / w;
   if (!isfinite(accuracy)) return domain(e,op);
