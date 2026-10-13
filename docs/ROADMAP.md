@@ -3105,6 +3105,25 @@ publication, public G2 and continuation remain pending.
   READY/P3 cases. An upstream ownership contract or a source-proved narrowing
   of the held-lease clause is required before claiming production retry or
   running the compiled close gate.
+  A separate `codex/g3-p2g2-held-holder-native-20261013` source candidate now
+  adds a feature-gated private C holder/witness capability in the native owner
+  translation unit, with exact pending output binding, original I1/A2 lease
+  slots, typed first-busy capture, one-use release and retry, and disposal.
+  Its focused unsupported-host Clang 22 source probe passes 714 checks in
+  normal, repeat and ASan/UBSan runs (LeakSanitizer unavailable under this
+  executor), plus feature-off symbol and dependency checks; the pinned
+  Clang 21 gate and independent source/tests review remain pending. A2's
+  terminal transaction predicate requires no active view, so the HELD witness
+  uses the captured holder view and bound identities; the predicate runs before
+  acquisition and after ending the lease. The focused negative test asserts
+  that the predicate rejects a held view while the holder witness passes.
+  Stable tombstone slots use a fixed 1,048,576-token, 16 MiB registry and are
+  never reused; disposal frees the witness body. The source test uses a
+  32-slot registry and verifies stale tokens and exhaustion, which returns
+  C4 INTERNAL/ALLOCATION. Lifetime exhaustion and 16 MiB reservation remain
+  explicit production limitations pending review and supported-host evidence.
+  This C leaf does not wire the Eshkol root, protected abort path, or public G2;
+  production same-call release/retry remains unproved.
 
 ## Wave 4 — practical pretraining and performance
 
