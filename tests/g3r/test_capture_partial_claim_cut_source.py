@@ -9,8 +9,8 @@ from unittest.mock import patch
 from tests.c2.test_handler_order import parse
 from tests.g3r import prepare_capture_partial_claim_cut as preparation
 from tests.g3r.prepare_capture_partial_claim_cut import (
-    ROOT, BASE, TREE, EXTRA, TOOLS, BYTE_FINGERPRINT, git, verify,
-    verify_file, prepare,
+    ROOT, BASE, TREE, EXTRA, TOOLS, FE9_MANIFEST, FE9_IDENTITY,
+    BYTE_FINGERPRINT, git, committed_bytes, verify, verify_file, prepare,
 )
 
 
@@ -66,13 +66,32 @@ class PartialClaimSource(unittest.TestCase):
             self.assertIn(f"approved_commit\t{BASE}\n", contents)
             self.assertIn(f"approved_tree\t{TREE}\n", contents)
             self.assertIn("compiled gate HOLD", contents)
+            self.assertIn(f"compiler_identity_manifest\t{FE9_MANIFEST}\n", contents)
+            self.assertIn(f"compiler_identity_sha256\t{preparation.PINS[FE9_MANIFEST]}\n", contents)
+            self.assertEqual(len((output / "SOURCE-SHA256SUMS").read_text().splitlines()), 113)
+            self.assertEqual(len((output / "expected-eshkol-closure.txt").read_text().splitlines()), 99)
+            self.assertNotIn("tests/tr3_lease/runtime_candidate.tsv", TOOLS)
+            self.assertFalse((output / "source/tests/tr3_lease/runtime_candidate.tsv").exists())
             self.assertTrue((output / "corpus/manifest.etm").is_file())
             self.assertIn(BYTE_FINGERPRINT.encode(),
                           (output / "corpus/manifest.etm").read_bytes())
             for name in (*EXTRA, *TOOLS):
                 path = output / "source" / name
-                self.assertEqual(path.read_bytes(), (ROOT / name).read_bytes())
+                self.assertEqual(path.read_bytes(), committed_bytes(git("rev-parse", "HEAD"), name))
                 self.assertEqual(path.stat().st_mode & 0o222, 0)
+            sealed = subprocess.run(
+                ["sha256sum", "--status", "-c", "SOURCE-SHA256SUMS"],
+                cwd=output, check=False,
+            )
+            self.assertEqual(sealed.returncode, 0)
+            identity_copy = output / "source" / FE9_MANIFEST
+            identity_copy.chmod(0o644)
+            identity_copy.write_bytes(identity_copy.read_bytes() + b"# copied drift\n")
+            drifted = subprocess.run(
+                ["sha256sum", "--status", "-c", "SOURCE-SHA256SUMS"],
+                cwd=output, check=False,
+            )
+            self.assertNotEqual(drifted.returncode, 0)
             with self.assertRaises(ValueError):
                 prepare(output, git("rev-parse", "HEAD"))
 
@@ -82,8 +101,7 @@ class PartialClaimSource(unittest.TestCase):
             for name, suffix in (
                 (EXTRA[3], b"# appended 34-byte fixture drift!\n"),
                 ("toolchain/eshkol.lock", b"# same expected line; drift\n"),
-                ("tests/tr3_lease/runtime_candidate.tsv",
-                 b"# same expected line; drift\n"),
+                (FE9_MANIFEST, b"# same expected lines; drift\n"),
                 ("tests/g3r/prepare_capture_partial_claim_cut.py",
                  b"# dirty preparer\n"),
                 ("tests/g3r/test_capture_partial_claim_cut_source.py",
@@ -98,6 +116,25 @@ class PartialClaimSource(unittest.TestCase):
                     candidate.write_bytes((ROOT / name).read_bytes() + suffix)
                     with self.assertRaises(ValueError):
                         verify_file(name, head, candidate)
+
+    def test_dedicated_compiler_identity_is_source_only(self):
+        rows = [line.split("\t") for line in (ROOT / FE9_MANIFEST).read_text().splitlines()]
+        self.assertEqual(rows, [[key, value] for key, value in FE9_IDENTITY.items()])
+        self.assertEqual(FE9_IDENTITY["role"], "source_identity_only_compiled_gate_hold")
+        self.assertNotIn("tests/tr3_lease/runtime_candidate.tsv", preparation.PINS)
+        self.assertNotIn("tests/tr3_lease/runtime_candidate.tsv", TOOLS)
+        with patch.dict(preparation.FE9_IDENTITY, {"compiler_runner_sha256": "0" * 64}):
+            with self.assertRaisesRegex(ValueError, "dedicated fe9 compiler identity"):
+                verify(git("rev-parse", "HEAD"))
+        with patch.dict(preparation.PINS, {FE9_MANIFEST: "0" * 64}):
+            with self.assertRaisesRegex(ValueError, "pinned source changed"):
+                verify(git("rev-parse", "HEAD"))
+
+    def test_fail_stop_claim_is_limited_to_process_exit(self):
+        root = (ROOT / EXTRA[2]).read_text()
+        self.assertIn('"rollback-uncertain") (exit 134))\n    (g3r-partial-real-p1-rollback', root)
+        self.assertIn('"abandon-uncertain") (exit 134))\n    (let ((result (g3r-partial-real-abandon', root)
+        self.assertNotIn("real-release marker", root)
 
     def test_dirty_worktree_is_rejected(self):
         with tempfile.NamedTemporaryFile(

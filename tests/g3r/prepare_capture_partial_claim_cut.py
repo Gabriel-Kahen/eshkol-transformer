@@ -22,9 +22,24 @@ BYTE_FINGERPRINT = (
 )
 CLOSURE = "native/g3r_same_owner_o2_adoption_source_closure.txt"
 MANIFEST = "native/g3r_same_owner_capture_main_source.sha256"
+FE9_MANIFEST = "tests/g3r/fe9_compiler_identity.tsv"
+FE9_IDENTITY = {
+    "format_version": "1",
+    "role": "source_identity_only_compiled_gate_hold",
+    "compiler_source_commit": FE9,
+    "compiler_source_tree": "66c21f7ec19b1b4a42199fa30ed8e0e9727021bf",
+    "compiler_runner_sha256": "7dd254bab761fe41142a0e3777338f41b3b9f03a5ce4c0bba419f1e2b22a99aa",
+    "runtime_archive_sha256": "32cd446a3aeaa2e78bbe49b0c04cda961b8e1eeb7bb0ea53ec5e55c11f0c183e",
+    "clang_sha256": "82481792aef943c1750ae5fd71e5a5737212741337debd0fe5d28bd82dd018e9",
+    "llvm_version": "21.1.8",
+    "clang_version": "21.1.8",
+    "supported_os": "ubuntu-22.04",
+    "supported_arch": "x86_64",
+    "container_digest": F31,
+}
 PINS = {
     "toolchain/eshkol.lock": "8c168f5d560781245f6d4c73f695e72cbafa413b606d50bc7c36d2119acd9efe",
-    "tests/tr3_lease/runtime_candidate.tsv": "46097980f65a6fee1643590e7dd983cfebf91983a0d8487832a7cacafebd8b99",
+    FE9_MANIFEST: "9f9e194961bf04bd16f1fb2623c231ab2986789b59c52d40e493f2c06f9aae4f",
     "tests/d2/test_resources.py": "0de1f3326b663c16e45d7fed5efc43e49a30b4fa540b13df5adc2c67ab2ee26d",
     "tests/c2/test_handler_order.py": "f100005dc13ecf7a01868ef107b02a276b87bda105abe080cddb82883097057d",
     "scripts/test-g3r-capture-partial-claim.sh": "2a1e7b0c7fc8e69b25b13c82a761705d927118688b865140774b9436ad70eade",
@@ -53,9 +68,10 @@ TOOLS = (
     "tests/d2/test_resources.py",
     "tests/c2/test_handler_order.py",
     "toolchain/eshkol.lock",
-    "tests/tr3_lease/runtime_candidate.tsv",
+    FE9_MANIFEST,
 )
 ALLOWED_DELTA = set(EXTRA[2:]) | set(TOOLS[:3]) | {
+    FE9_MANIFEST,
     "docs/g3/G3_R_CAPTURE_PARTIAL_CLAIM_GATE.md",
 }
 
@@ -90,10 +106,11 @@ def verify(expected_head: str) -> list[str]:
     if git("status", "--porcelain=v1", "--untracked-files=all"):
         raise ValueError("fixture worktree is not clean")
     lock = (ROOT / "toolchain/eshkol.lock").read_text()
-    candidate = (ROOT / "tests/tr3_lease/runtime_candidate.tsv").read_text()
-    if f"eshkol_commit\t{FE9}\n" not in lock or \
-            f"container_digest\t{F31}\n" not in candidate:
-        raise ValueError("supported compiler or container source pin changed")
+    if f"eshkol_commit\t{FE9}\n" not in lock:
+        raise ValueError("supported compiler source lock changed")
+    identity_rows = [line.split("\t") for line in (ROOT / FE9_MANIFEST).read_text().splitlines()]
+    if identity_rows != [[key, value] for key, value in FE9_IDENTITY.items()]:
+        raise ValueError("dedicated fe9 compiler identity changed")
     if git("rev-parse", f"{BASE}^{{tree}}") != TREE:
         raise ValueError("approved commit/tree pair changed")
     if subprocess.run(("git", "merge-base", "--is-ancestor", BASE, "HEAD"),
@@ -161,6 +178,8 @@ def prepare(output: Path, expected_head: str) -> None:
         f"fixture_tree\t{git('rev-parse', expected_head + '^{tree}')}\n"
         f"compiler_commit\t{FE9}\n"
         f"container_digest\t{F31}\n"
+        f"compiler_identity_manifest\t{FE9_MANIFEST}\n"
+        f"compiler_identity_sha256\t{PINS[FE9_MANIFEST]}\n"
         "status\tsource-prepared; compiled gate HOLD\n"
     )
     copied.append(manifest)
