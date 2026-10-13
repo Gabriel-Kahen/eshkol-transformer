@@ -65,14 +65,33 @@
             o2-ledger copied)))
 
 (define (g3r-joint-c2-original-bound-claim!
-          generator model tokenizer optimizer-value o2-ledger p1 controls)
-  (let ((binding
-          (g3r-joint-original-binding-check!
-            generator model tokenizer optimizer-value o2-ledger controls)))
-    ;; The joint hold keeps native G3/M3/A2 and O2 originals fixed through
-    ;; this call. The returned pair roots the preclaim Scheme binding and the
-    ;; C2 transfer result. Neither authorizes receipt publication.
-    (let ((result (vector binding #f)))
-      (vector-set! result 1
-        (g3r-joint-c2-claim! o2-ledger p1 (vector-ref binding 9)))
-      result)))
+          generator model tokenizer optimizer-value o2-ledger p1-ledger controls)
+  (let* ((operation 'g3r-joint-c2-original-bound-claim!)
+         (provenance (g3r-joint-p1-provenance-check! p1-ledger operation))
+         (p1 (vector-ref provenance 2))
+         (bound (vector-ref provenance 1)))
+    (guard (caught
+             (#t
+               (vector-set! p1-ledger 5 caught)
+               (g3r-joint-p1-provenance-release! p1-ledger)
+               (raise caught)))
+      (let ((binding
+              (g3r-joint-original-binding-check!
+                generator model tokenizer optimizer-value o2-ledger
+                controls)))
+        (if (or (not (eq? (vector-ref bound 2) (vector-ref binding 2)))
+                (not (eq? (vector-ref bound 4) (vector-ref binding 4)))
+                (not (eq? (vector-ref bound 7) (vector-ref binding 7)))
+                (not (eq? (vector-ref bound 8) (vector-ref binding 8)))
+                (not (equal? (vector-ref bound 9) (vector-ref binding 9))))
+            (m3t-fail 'invalid-state operation
+                      "P1 provenance differs from original owner binding"))
+        ;; The joint hold keeps native G3/M3/A2 and O2 originals fixed
+        ;; through the claim. The result roots the exact preclaim provenance.
+        (let ((result (vector binding p1-ledger #f)))
+          (vector-set! result 2
+            (g3r-joint-c2-claim! o2-ledger p1 (vector-ref binding 9)))
+          (vector-set! (vector-ref p1-ledger 6) 2 #f)
+          (vector-set! p1-ledger 2 #f)
+          (vector-set! p1-ledger 4 'c2-owned)
+          result)))))

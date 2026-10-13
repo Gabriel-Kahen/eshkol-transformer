@@ -166,3 +166,28 @@ original G3/M3/A2 to O2 binding, prepare a P1 clone and controls, transfer the
 ledger's exact shell into C2, reconcile partial claims, release both holds in
 reverse order, and gate receipt I/O. A compiled aggregate/runtime test and
 independent review are required before any held C2 owner is claimed.
+
+## Detached P1 provenance source successor
+
+`native/g3r_joint_p1_provenance_extension.esk` is an unlinked private leaf.
+Given the registered original G3/M3T/T1/O2 binding and an enrolled joint O2
+ledger, it checks the live native joint owner, roots the exact return of
+`module-state-dict model` immediately, and validates the P1 C2 topology against
+all fourteen fixed M3T parameter paths and shapes plus the head/token tie.
+It then rechecks the original owner and copied controls while the joint hold
+remains live. Its preclaim ledger contains the exact state shell and the first
+binding. `g3r-joint-c2-original-bound-claim!` now requires this ledger rather
+than an arbitrary P1 shell, rechecks the binding, and passes only that rooted
+shell to C2. A recoverable preclaim failure releases that P1 shell using
+`state-dict-release!` and rethrows the first caught value; the P1 helper never
+ends the original G3/O2 holds. An uncertain P1 release fails stop.
+
+The source mutation gate covers omitted owner checks, topology and tied-alias
+changes, cleanup omission, first-error loss, claim bypass, stale owner and
+bitwise G3 history comparison. The original binding source gate remains green.
+These are source checks, not live negative tests. In particular, no compiled
+aggregate has shown that P1's provider can clone under the live G3 model pins,
+or that all provider failure and post-tombstone release cuts retain authority.
+Until that fixture and independent review pass, this leaf is not an admitted
+same-owner P1 clone or C2 claim. D2 cursor and trainer controls, pair/receipt,
+SAVE publication and replay remain open.

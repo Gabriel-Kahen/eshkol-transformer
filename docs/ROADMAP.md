@@ -2154,6 +2154,14 @@ mode (`g3t_model_admission_extension.esk:57-59`), while TR3 fixed recheck
 requires train mode (`module.esk:5251-5260`). D2 cursors, trainer RNG and
 counters, detached P1 provenance, pair/receipt and replay remain open; no
 compiled or runtime admission follows this source leaf.
+The next unlinked P1 provenance source leaf roots `module-state-dict` from the
+exact original eval M3T model under the live joint G3/O2 owner, checks the
+canonical fourteen-parameter C2 topology and tied alias, and rechecks owner
+and controls before offering its exact state shell to C2. The private claim
+wrapper now requires that provenance ledger; preclaim failure releases only
+its rooted P1 state. Two source mutation gates pass, but held-pin cloning,
+provider failure cuts, and P1 release behavior have no compiled runtime
+evidence. No original-owner C2 claim, SAVE pair, receipt or replay is admitted.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),

@@ -1,0 +1,129 @@
+;;; Source-private detached P1 provenance under the original G3/O2 joint hold.
+;;; Load after G3-T, M3T, P1, the joint O2 adopter, and original binding.
+;;; No aggregate loads this leaf yet: held-pin clone behavior still needs a
+;;; compiled fixture before this may authorize a C2 claim.
+
+(define g3r-joint-p1-provenance-tag (vector 'g3r-joint-p1-provenance-v1))
+(define g3r-joint-p1-provenance-registry '())
+
+;;; The topology excludes the secondary tied path. The P1-owned clone must
+;;; reproduce the fourteen canonical M3T parameters and the one tied alias.
+(define (g3r-joint-p1-topology-check! state operation)
+  (let* ((topology (state-dict-c2-parameter-topology-internal state operation))
+         (paths (vector-ref topology 0))
+         (shapes (vector-ref topology 1)))
+    (if (not (equal? (vector-ref topology 2)
+                     '((("head" "weight") ("token_embedding" "weight")))))
+        (m3t-fail 'invalid-state operation "detached P1 tied alias differs"))
+    (let check ((index 0) (remaining-paths paths) (remaining-shapes shapes))
+      (if (= index 14)
+          (if (or (not (null? remaining-paths))
+                  (not (null? remaining-shapes)))
+              (m3t-fail 'invalid-state operation
+                        "detached P1 has extra parameters")
+              topology)
+          (if (or (null? remaining-paths) (null? remaining-shapes)
+                  (not (equal? (car remaining-paths)
+                               (vector-ref m3t-paths index)))
+                  (not (equal? (car remaining-shapes)
+                               (vector-ref m3t-shapes index))))
+              (m3t-fail 'invalid-state operation
+                        "detached P1 canonical parameter differs")
+              (check (+ index 1) (cdr remaining-paths)
+                     (cdr remaining-shapes)))))))
+
+;;; Ledger: tag, exact original binding, exact detached P1 shell, topology,
+;;; phase, first caught value, private record. The record and its registry
+;;; cell are allocated before cloning; enrollment is assignment-only.
+;;; No original hold is owned by this ledger.
+(define (g3r-joint-p1-provenance!
+          generator model tokenizer optimizer-value o2-ledger controls)
+  (let* ((operation 'g3r-joint-p1-provenance!)
+         (binding (g3r-joint-original-binding-check!
+                    generator model tokenizer optimizer-value o2-ledger
+                    controls))
+         (ledger (vector g3r-joint-p1-provenance-tag binding #f #f
+                         'prepared #f #f))
+         (record (vector ledger binding #f))
+         (enrollment (cons record g3r-joint-p1-provenance-registry)))
+    (vector-set! ledger 6 record)
+    (guard (caught
+             (#t
+               (vector-set! ledger 5 caught)
+               (if (vector-ref ledger 2)
+                   ;; A released P1 shell may report a provider defect after
+                   ;; tombstoning. Until compiled lifecycle evidence exists,
+                   ;; any uncertain cleanup fails stop with the first error
+                   ;; still rooted in this ledger.
+                   (guard (release-error
+                            (#t (g3r-held-o2-fail-stop)))
+                     (state-dict-release! (vector-ref ledger 2))
+                     (vector-set! ledger 2 #f)))
+               (raise caught)))
+      ;; The joint owner is checked before and after this provider-driven
+      ;; clone. Store the returned shell immediately so every later failure
+      ;; releases exactly the P1 clone, never either original owner hold.
+      (vector-set! ledger 2 (module-state-dict model))
+      (vector-set! ledger 4 'cloned)
+      (vector-set! ledger 3
+        (g3r-joint-p1-topology-check! (vector-ref ledger 2) operation))
+      (let ((rechecked
+              (g3r-joint-original-binding-check!
+                generator model tokenizer optimizer-value o2-ledger controls)))
+        (if (or (not (eq? (vector-ref rechecked 2) (vector-ref binding 2)))
+                (not (eq? (vector-ref rechecked 4) (vector-ref binding 4)))
+                (not (eq? (vector-ref rechecked 7) (vector-ref binding 7)))
+                (not (eq? (vector-ref rechecked 8) (vector-ref binding 8)))
+                (not (equal? (vector-ref rechecked 9)
+                             (vector-ref binding 9))))
+            (m3t-fail 'invalid-state operation
+                      "original owner or controls changed during P1 clone")))
+      (vector-set! ledger 4 'preclaim)
+      (vector-set! record 2 (vector-ref ledger 2))
+      (set! g3r-joint-p1-provenance-registry enrollment)
+      ledger)))
+
+(define (g3r-joint-p1-provenance-record ledger)
+  (let find ((entries g3r-joint-p1-provenance-registry))
+    (if (null? entries) #f
+        (if (eq? (vector-ref (car entries) 0) ledger)
+            (car entries)
+            (find (cdr entries))))))
+
+(define (g3r-joint-p1-provenance-owned-shell ledger operation)
+  (if (or (not (vector? ledger)) (not (= (vector-length ledger) 7))
+          (not (eq? (vector-ref ledger 0) g3r-joint-p1-provenance-tag))
+          (not (eq? (vector-ref ledger 4) 'preclaim))
+          (not (vector-ref ledger 2)))
+      (m3t-fail 'invalid-state operation
+                "expected exact live preclaim P1 provenance"))
+  (let ((record (g3r-joint-p1-provenance-record ledger)))
+    (if (or (not record)
+            (not (eq? record (vector-ref ledger 6)))
+            (not (eq? (vector-ref record 1) (vector-ref ledger 1)))
+            (not (eq? (vector-ref record 2) (vector-ref ledger 2))))
+        (m3t-fail 'invalid-state operation
+                  "P1 shell or binding differs from its private record")))
+  (vector-ref ledger 2))
+
+(define (g3r-joint-p1-provenance-check! ledger operation)
+  (g3r-joint-p1-topology-check!
+    (g3r-joint-p1-provenance-owned-shell ledger operation) operation)
+  ledger)
+
+(define (g3r-joint-p1-provenance-release! ledger)
+  (let* ((operation 'g3r-joint-p1-provenance-release!)
+         (exact (g3r-joint-p1-provenance-owned-shell ledger operation)))
+    ;; This helper owns only its detached P1 state. A provider failure may
+    ;; occur after native tombstoning; do not infer that an exception left the
+    ;; state live, and do not release the original joint hold here.
+    (guard (release-error
+             (#t
+               (if (not (vector-ref ledger 5))
+                   (vector-set! ledger 5 release-error))
+               (g3r-held-o2-fail-stop)))
+      (state-dict-release! exact)
+      (vector-set! ledger 2 #f)
+      (vector-set! (vector-ref ledger 6) 2 #f)
+      (vector-set! ledger 4 'released)
+      #t)))

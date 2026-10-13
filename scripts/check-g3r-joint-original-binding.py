@@ -65,9 +65,11 @@ def check(n: str, s: str, g: str, p: str) -> None:
     assert binding.index("(c2-training-state-controls-copy operation controls)") < binding.index(
         "(g3r-joint-original-owner-match")
     wrapper = s[s.index("(define (g3r-joint-c2-original-bound-claim!"):]
-    assert wrapper.index("(g3r-joint-original-binding-check!") < wrapper.index(
+    assert wrapper.index("(g3r-joint-p1-provenance-check! p1-ledger operation)") < wrapper.index(
+        "(g3r-joint-original-binding-check!") < wrapper.index(
         "(g3r-joint-c2-claim! o2-ledger p1 (vector-ref binding 9))")
-    assert "(let ((result (vector binding #f)))" in wrapper
+    assert "(result (vector binding p1-ledger #f))" in wrapper
+    assert "(g3r-joint-p1-provenance-release! p1-ledger)" in wrapper
     # These incompatible accepted mode contracts bar a claimed TR3 trainer
     # snapshot from serving as the same live G3 original-owner control lease.
     assert "(module-mode-internal model) 'eval" in g
@@ -86,6 +88,8 @@ mutations = (
     (native, scheme.replace("(string->utf8 (vector-ref model-config 0))", "(vector-ref resolved 0)"), g3, p1),
     (native, scheme.replace("(g3r-joint-original-owner-match\n", "(always-zero\n"), g3, p1),
     (native, scheme.replace("(g3r-joint-c2-claim! o2-ledger p1 (vector-ref binding 9))", "#f"), g3, p1),
+    (native, scheme.replace("(g3r-joint-p1-provenance-check! p1-ledger operation)", "#f"), g3, p1),
+    (native, scheme.replace("(g3r-joint-p1-provenance-release! p1-ledger)", "#f"), g3, p1),
     (native, scheme, g3.replace("(module-mode-internal model) 'eval", "(module-mode-internal model) 'train"), p1),
 )
 for changed in mutations:
@@ -95,4 +99,4 @@ for changed in mutations:
         continue
     raise AssertionError("original binding mutation escaped source gate")
 
-print("joint original binding source gate: pass (11 mutation controls)")
+print("joint original binding source gate: pass (13 mutation controls)")
