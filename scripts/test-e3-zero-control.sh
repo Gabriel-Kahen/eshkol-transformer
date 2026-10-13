@@ -204,9 +204,12 @@ for case_name in all-correct all-wrong mixed; do
         "${out}/transcript-${case_name}-${gradient}-sanitize-b.json"
   done
 done
-for case_name in missing-path foreign-handle duplicate-destination \
-    source-alias wrong-shape wrong-kind forged-source released-source \
-    decode-short decode-extent decode-role commit-reuse active-borrow active-pin \
+for case_name in missing-path foreign-handle foreign-tree duplicate-tied-head \
+    source-alias wrong-shape wrong-rank wrong-f32-geometry wrong-kind \
+    forged-source released-source decode-short decode-extent decode-role \
+    decode-request-length decode-payload decode-shape decode-rank-limit \
+    decode-dtype decode-device decode-layout decode-tail decode-operation \
+    commit-reuse active-borrow active-pin \
     alloc-i2-decode alloc-f32-decode alloc-i2-prepare alloc-f32-prepare; do
   for gradient in absent present; do
     for variant in a b sanitize-a sanitize-b; do

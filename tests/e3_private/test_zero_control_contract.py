@@ -5,8 +5,14 @@ from __future__ import annotations
 import subprocess
 import tempfile
 import unittest
+from copy import deepcopy
+from math import log
 from pathlib import Path
 
+from tests.e3_metrics.reference_probe import accumulate, divide, finalize, reduce_bool
+from tests.e3_reference.transcript import (
+    TranscriptError, f32_bits, validate_observed_case,
+)
 from tests.e3_private.parse_zero_control_observation import ROLE_NAMES, parse
 from tests.e3_private.test_retention_first_baseline import form
 
@@ -84,11 +90,57 @@ class ZeroControlContract(unittest.TestCase):
             raw.replace(b"E3BATCH\t2\t00000000,00000000,00000000,00000000\t1",
                         b"E3BATCH\t2\t00000000,00000000,00000000,00000000\t2", 1),
             raw.replace(b"E3FINAL\t", b"E3OTHER\t", 1),
+            raw.replace(b"E3ROLE\t0\tET\t1\t00000000",
+                        b"E3ROLE\t0\tET\t1\t3f800000", 1),
             raw[:-1],
         ):
             with self.subTest(mutated=mutated[-65:]):
                 with self.assertRaises(ValueError):
                     parse(mutated)
+
+    def test_numeric_transcript_mutants_reject_offline(self) -> None:
+        ce = f32_bits(log(256.0))
+        numerator, weight = reduce_bool((int(ce, 16), int(ce, 16)),
+                                        (True, True))
+        state = accumulate((0, 0, 0, 0, 0),
+                           (numerator, weight, int("40000000", 16), 2))
+        original = {
+            "kind": "observed-f32", "profile": "e3-private-n1-t2-v256-d4-v1",
+            "batches": [{
+                "ordinal": 0, "inputs": [0, 0], "targets": [0, 0],
+                "mask": [True, True], "logits_f32": [ZERO] * 512,
+                "ce_f32": [ce, ce],
+                "reduction_f32": [f"{numerator:08x}", f"{weight:08x}",
+                                  f"{divide(numerator, weight):08x}"],
+                "correct_f32": "40000000",
+                "state_f32": [f"{word:08x}" for word in state[:3]],
+                "counters": list(state[3:]),
+            }],
+            "final": {"metrics_f32": [f"{word:08x}" for word in finalize(state)],
+                      "counters": list(state[3:])},
+        }
+        expected = ({"inputs": [0, 0], "targets": [0, 0],
+                     "mask": [True, True]},)
+        validate_observed_case(original, expected)
+        for field, index, replacement in (
+            ("logits_f32", 0, "3f800000"),
+            ("ce_f32", 0, ZERO),
+            ("reduction_f32", 0, ZERO),
+            ("state_f32", 0, ZERO),
+            ("correct_f32", None, ZERO),
+        ):
+            with self.subTest(field=field):
+                damaged = deepcopy(original)
+                if index is None:
+                    damaged["batches"][0][field] = replacement
+                else:
+                    damaged["batches"][0][field][index] = replacement
+                with self.assertRaises(TranscriptError):
+                    validate_observed_case(damaged, expected)
+        damaged = deepcopy(original)
+        damaged["final"]["metrics_f32"][0] = ZERO
+        with self.assertRaises(TranscriptError):
+            validate_observed_case(damaged, expected)
 
     def test_stable_generated_source_stage_is_owned_and_fresh(self) -> None:
         helper = ROOT / "scripts/e3-zero-generated-source-stage.sh"
@@ -148,18 +200,49 @@ class ZeroControlContract(unittest.TestCase):
 
     def test_prepared_plan_has_no_observation_or_recovery_tail(self) -> None:
         driver = (ROOT / "tests/e3_private/zero_control_driver.esk").read_text()
-        load = driver.split('(define (e3-zero-load! handles sources)', 1)[1].split(
-            '(define (e3-zero-check-bytes! handles)', 1)[0]
-        self.assertIn('(guard (caught (#t (e3-zero-release-sources! sources)', load)
-        prepared = load.index('(i2-prepare-load')
-        committed = load.index('(i2-commit-load! (vector-ref prepared 0))')
-        tail = load[prepared:committed]
-        self.assertNotIn('(e3-zero-invariant', tail)
-        self.assertNotIn('(e3-zero-gradient', tail)
-        self.assertNotIn('(guard ', tail)
-        self.assertGreater(load.index('(e3-zero-release-sources! sources)', committed),
-                           committed)
+
+        def covered(source: str) -> bool:
+            load = source.split('(define (e3-zero-load! handles sources)', 1)[1].split(
+                '(define (e3-zero-check-bytes! handles)', 1)[0]
+            commit = '(i2-commit-load! (vector-ref prepared 0))'
+            cleanup = '(e3-zero-release-sources! sources)'
+            if (load.count('(i2-prepare-load') != 1 or load.count(commit) != 1
+                    or load.count(cleanup) != 2
+                    or '(guard (caught (#t ' + cleanup not in load):
+                return False
+            prepared = load.index('(i2-prepare-load')
+            committed = load.index(commit)
+            return (prepared < committed < load.rindex(cleanup)
+                    and load.index(cleanup) < prepared
+                    and not any(fragment in load[prepared:committed]
+                                for fragment in ('(e3-zero-invariant',
+                                                 '(e3-zero-gradient', '(guard ')))
+
+        self.assertTrue(covered(driver))
+        self.assertFalse(covered(driver.replace(
+            '(i2-commit-load! (vector-ref prepared 0))',
+            '(i2-commit-load! prepared)', 1)))
+        self.assertFalse(covered(driver.replace(
+            '    (e3-zero-release-sources! sources)\n    (vector-ref prepared 0)))',
+            '    (vector-ref prepared 0)))', 1)))
         self.assertNotIn('model-release', driver)
+
+    def test_negative_matrix_uses_genuine_foreign_and_tied_head(self) -> None:
+        driver = (ROOT / "tests/e3_private/zero_control_negative_driver.esk").read_text()
+        runner = (ROOT / "scripts/test-e3-zero-control.sh").read_text()
+        self.assertIn('(module-parameters foreign)', driver)
+        self.assertIn('(e3-zero-require-tree-handle tree 0 foreign-handle)', driver)
+        self.assertNotIn("(vector 'not-a-p1-handle)", driver)
+        self.assertIn("'(\"token_embedding\" \"weight\")", driver)
+        self.assertIn('(vector-ref sources 10)', driver)
+        for name in ("foreign-tree", "duplicate-tied-head", "wrong-rank",
+                     "wrong-f32-geometry", "decode-request-length",
+                     "decode-payload", "decode-shape", "decode-rank-limit",
+                     "decode-dtype", "decode-device", "decode-layout",
+                     "decode-tail", "decode-operation"):
+            with self.subTest(name=name):
+                self.assertIn(f'((string=? name "{name}")', driver)
+                self.assertIn(name, runner)
 
     def test_prebind_source_cleanup_precedes_seed_and_destination_allocation(self) -> None:
         driver = (ROOT / "tests/e3_private/zero_control_negative_driver.esk").read_text()

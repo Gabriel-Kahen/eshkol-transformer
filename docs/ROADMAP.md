@@ -936,10 +936,20 @@ head/embedding tie. A noninstalled root decodes 4,736 zero bytes through I2,
 immediately unwraps and commits the returned plan before E3 frame binding,
 then observes genuine D1/D2 all-correct, all-wrong and mixed target streams.
 The two-field ordinary E3 driver remains unchanged. Focused offline source
-tests pass; pinned Q0 oracle generation, emitted package inventories,
-generated AOT postprepare review, normal/repeat/poisoned and sanitizer runtime
-gates, and independent source review remain pending. This candidate does not
-establish N3 or E3 §9 compiled acceptance.
+tests pass. The first independent exact-head review held source acceptance:
+its negative driver used a forged foreign handle and an ordinary duplicate
+destination, and host tests missed numeric and cleanup mutants. A focused
+source repair now uses a second real rooted M3 owner for foreign handle/tree
+checks, both authentic tied head paths with distinct I2 sources for duplicate
+destination, same-byte-count wrong rank/geometry and malformed decoder
+variants; offline numeric and prepare/cleanup mutation tests pass. Authentic
+stale-handle revocation and a separately constructed unexpected P1 topology
+remain unproven with the approved fixed M3 API. The exact sanitizer import
+manifests are still absent and its build fails closed. Pinned Q0 oracle
+generation, emitted package inventories, generated AOT postprepare review,
+fresh normal/repeat/poisoned and sanitizer runtime gates, and renewed
+independent source review remain pending. This candidate does not establish
+N3 or E3 §9 compiled acceptance.
 
 A separate noninstalled E3 overflow tuple is a source candidate for a genuine
 stage-12 finalization boundary. It loads a checksummed C1 state into one fresh

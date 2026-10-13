@@ -75,7 +75,9 @@ def parse(raw: bytes) -> tuple[dict[str, object], bytes]:
                 if dimension < 1:
                     raise ValueError("zero-control role shape is empty")
                 count *= dimension
-            _words(words_raw, count)
+            words = _words(words_raw, count)
+            if any(word != "00000000" for word in words):
+                raise ValueError("zero-control model emitted a nonzero role word")
             roles.append("\t".join((str(ordinal), name, shape_raw, words_raw)))
             continue
         key = tag[2:].lower()

@@ -147,7 +147,26 @@
        (= (vector-ref left 2) (vector-ref right 2))
        (= (vector-ref left 3) (vector-ref right 3))))
 
-(define (e3-zero-negative-fire name tree handles sources)
+(define (e3-zero-negative-extra! request shape bytes)
+  (let* ((decoded (i2-checkpoint-decode
+                    (vector (make-bytevector bytes 0) 'parameter shape
+                            'f32 'cpu 'dense-row-major-contiguous
+                            'e3-zero-negative #f)))
+         (extra (vector-ref decoded 7)))
+    (guard (caught
+             (#t
+               (i2-release-owned!
+                 (vector extra 'parameter 'e3-zero-negative #f))
+               (raise caught)))
+      (request extra))
+    ;; Successful prepare would own pins and has no public abort.
+    (e3-native-invariant-fail)))
+
+(define (e3-zero-negative-decode payload role shape dtype device layout tail)
+  (i2-checkpoint-decode
+    (vector payload role shape dtype device layout 'e3-zero-negative tail)))
+
+(define (e3-zero-negative-fire name config tree handles sources)
   (let* ((destination
            (parameter-handle-tensor-internal (vector-ref handles 0)))
          (source (vector-ref sources 0))
@@ -158,14 +177,55 @@
       ((string=? name "missing-path")
        (parameter-tree-handle tree '("not-a-registered-path")))
       ((string=? name "foreign-handle")
-       (parameter-handle-shape (vector 'not-a-p1-handle)))
-      ((string=? name "duplicate-destination")
-       (request (list (vector destination source 'parameter)
-                      (vector destination (vector-ref sources 1) 'parameter))))
+       (let* ((foreign
+                (g3t-checked-m3t-model-create config
+                  (g3t-checked-m3t-initializer-state 1730)))
+              (foreign-tree (module-parameters foreign))
+              (foreign-handle
+                (parameter-tree-handle foreign-tree
+                  (vector-ref e3-zero-paths 0))))
+         (vector-set! e3-zero-foreign-owner-root 0 foreign)
+         (e3-zero-invariant
+           (not (eq? foreign-handle (vector-ref handles 0))))
+         (e3-zero-require-tree-handle tree 0 foreign-handle)))
+      ((string=? name "foreign-tree")
+       (let ((foreign
+               (g3t-checked-m3t-model-create config
+                 (g3t-checked-m3t-initializer-state 1730))))
+         (vector-set! e3-zero-foreign-owner-root 0 foreign)
+         (e3-zero-require-tree-handle
+           tree 10
+           (parameter-tree-handle (module-parameters foreign)
+             '("head" "weight")))))
+      ((string=? name "duplicate-tied-head")
+       (let ((tied
+               (parameter-tree-handle tree
+                 '("token_embedding" "weight"))))
+         (e3-zero-invariant (eq? tied (vector-ref handles 10)))
+         (e3-zero-negative-extra!
+           (lambda (extra)
+             (request
+               (list
+                 (vector (parameter-handle-tensor-internal
+                           (vector-ref handles 10))
+                         (vector-ref sources 10) 'parameter)
+                 (vector (parameter-handle-tensor-internal tied)
+                         extra 'parameter))))
+           '(256 4) 4096)))
       ((string=? name "source-alias")
        (request (list (vector destination destination 'parameter))))
       ((string=? name "wrong-shape")
        (request (list (vector destination (vector-ref sources 4) 'parameter))))
+      ((string=? name "wrong-rank")
+       (e3-zero-negative-extra!
+         (lambda (extra)
+           (request (list (vector destination extra 'parameter))))
+         '(2 2 4) 64))
+      ((string=? name "wrong-f32-geometry")
+       (e3-zero-negative-extra!
+         (lambda (extra)
+           (request (list (vector destination extra 'parameter))))
+         '(8 2) 64))
       ((string=? name "wrong-kind")
        (request (list (vector destination source 'buffer))))
       ((string=? name "forged-source")
@@ -187,6 +247,38 @@
        (i2-checkpoint-decode
          (vector (make-bytevector 16 0) 'not-a-parameter '(4) 'f32 'cpu
                  'dense-row-major-contiguous 'e3-zero-negative #f)))
+      ((string=? name "decode-request-length")
+       (i2-checkpoint-decode
+         (vector (make-bytevector 16 0) 'parameter '(4) 'f32 'cpu
+                 'dense-row-major-contiguous 'e3-zero-negative)))
+      ((string=? name "decode-payload")
+       (e3-zero-negative-decode '(0 0 0 0) 'parameter '(4) 'f32 'cpu
+         'dense-row-major-contiguous #f))
+      ((string=? name "decode-shape")
+       (e3-zero-negative-decode (make-bytevector 16 0) 'parameter #(4)
+         'f32 'cpu 'dense-row-major-contiguous #f))
+      ((string=? name "decode-rank-limit")
+       (let fill ((remaining 65) (shape '()))
+         (if (= remaining 0)
+             (e3-zero-negative-decode (make-bytevector 16 0) 'parameter
+               shape 'f32 'cpu 'dense-row-major-contiguous #f)
+             (fill (- remaining 1) (cons 1 shape)))))
+      ((string=? name "decode-dtype")
+       (e3-zero-negative-decode (make-bytevector 16 0) 'parameter '(4)
+         'f64 'cpu 'dense-row-major-contiguous #f))
+      ((string=? name "decode-device")
+       (e3-zero-negative-decode (make-bytevector 16 0) 'parameter '(4)
+         'f32 'gpu 'dense-row-major-contiguous #f))
+      ((string=? name "decode-layout")
+       (e3-zero-negative-decode (make-bytevector 16 0) 'parameter '(4)
+         'f32 'cpu 'strided #f))
+      ((string=? name "decode-tail")
+       (e3-zero-negative-decode (make-bytevector 16 0) 'parameter '(4)
+         'f32 'cpu 'dense-row-major-contiguous 'not-empty))
+      ((string=? name "decode-operation")
+       (i2-checkpoint-decode
+         (vector (make-bytevector 16 0) 'parameter '(4) 'f32 'cpu
+                 'dense-row-major-contiguous 0 #f)))
       (else (e3-native-invariant-fail)))))
 
 (define (e3-zero-negative-run scenario corpus-path)
@@ -271,7 +363,7 @@
                                 (#t (transformer-error? caught)))
                          (if completed-plan
                              (i2-commit-load! completed-plan)
-                             (e3-zero-negative-fire name tree handles sources))
+                             (e3-zero-negative-fire name config tree handles sources))
                          #f)))))
             (e3-zero-invariant rejected)
             (e3-zero-invariant

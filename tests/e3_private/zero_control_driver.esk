@@ -11,6 +11,9 @@
 ;; A sealed M3 model has no reviewed postconstruction release. Keep this root
 ;; until process exit, including prebind failures. Every test process runs once.
 (define e3-zero-owner-root (vector #f))
+;; A foreign sealed owner has no public release either. Negative processes
+;; root it separately until exit rather than pretending its handles are stale.
+(define e3-zero-foreign-owner-root (vector #f))
 (define e3-zero-paths
   '#(("blocks" "0" "attention" "key" "weight")
      ("blocks" "0" "attention" "output" "weight")
@@ -75,13 +78,24 @@
            (parameter-tree-handle tree '("token_embedding" "weight"))))
     tree))
 
+(define (e3-zero-require-tree-handle tree index handle)
+  (if (not (eq? handle
+                (parameter-tree-handle tree
+                  (vector-ref e3-zero-paths index))))
+      (et-e1b-private-raise 'invalid-argument 'e3-zero-control
+        "handle is not registered in the active model tree" '() #f))
+  handle)
+
 (define (e3-zero-stage! tree handles sources)
   ;; All roots and slots already exist before the first owned-clone decode.
   (guard (caught (#t (e3-zero-release-sources! sources) (raise caught)))
     (let stage ((index 0))
       (if (= index 14) #t
           (let* ((handle
-                   (parameter-tree-handle tree (vector-ref e3-zero-paths index)))
+                   (e3-zero-require-tree-handle
+                     tree index
+                     (parameter-tree-handle tree
+                       (vector-ref e3-zero-paths index))))
                  (shape (vector-ref e3-zero-shapes index))
                  (count (vector-ref e3-zero-counts index)))
             (e3-zero-invariant
