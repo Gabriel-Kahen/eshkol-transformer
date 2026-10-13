@@ -121,7 +121,7 @@ cat "${PROJECT_ROOT}/tests/e3_private/retention_package_sanitized_noninstrumenta
   LC_ALL=C sort -u >"${out}/expected-sanitized-undefined.txt"
 cmp "${out}/expected-sanitized-undefined.txt" \
     "${sanitized}/e3_retention_package.o.evidence/undefined.txt"
-[[ "$(wc -l <"${out}/expected-sanitized-undefined.txt")" == 226 ]] || \
+[[ "$(wc -l <"${out}/expected-sanitized-undefined.txt")" == 231 ]] || \
   die "E3 sanitized retention import union differs from its exact tuple"
 python3 -m tests.e3_reference.corpus --output "${out}/corpus" \
   >"${out}/corpus.stdout" 2>"${out}/corpus.stderr"

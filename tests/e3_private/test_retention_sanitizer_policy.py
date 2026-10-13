@@ -6,17 +6,19 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 PREFIX = ROOT / "tests/e3_private/retention_package"
+MUTANT_PREFIX = ROOT / "tests/e3_private/retention_first_eval_mutant_package"
 
 
 class RetentionSanitizerPolicyTests(unittest.TestCase):
-    def run_policy(self, kind=None, mutation=None):
+    def run_policy(self, kind=None, mutation=None, tuple_kind="retention"):
         with tempfile.TemporaryDirectory() as directory:
             out = Path(directory)
             inputs = []
+            prefix = PREFIX if tuple_kind == "retention" else MUTANT_PREFIX
             for name in ("undefined_symbols", "sanitized_noninstrumentation_undefined_symbols",
                          "sanitized_instrumentation_undefined_symbols"):
                 target = out / name
-                target.write_bytes(Path(str(PREFIX) + "_" + name + ".txt").read_bytes())
+                target.write_bytes(Path(str(prefix) + "_" + name + ".txt").read_bytes())
                 inputs.append(target)
             if kind is not None:
                 rows = inputs[kind].read_text().splitlines()
@@ -34,10 +36,10 @@ class RetentionSanitizerPolicyTests(unittest.TestCase):
                 inputs[kind].write_text("\n".join(sorted(rows)) + "\n")
             return subprocess.run(
                 ["bash", "-c", 'set -euo pipefail; die() { echo "$*" >&2; exit 1; }; '
-                 'PROJECT_ROOT=$2; source "$1"; '
+                 'PROJECT_ROOT=$2; e3_tuple_kind=$6; source "$1"; '
                  'e3_retention_verify_sanitizer_imports "$3" "$4" "$5"',
                  "policy", str(ROOT / "scripts/e3-retention-sanitizer-import-policy.sh"),
-                 str(ROOT), *(str(p) for p in inputs)], capture_output=True)
+                 str(ROOT), *(str(p) for p in inputs), tuple_kind], capture_output=True)
 
     def test_exact_emitted_inventory(self):
         result = self.run_policy()
@@ -48,6 +50,8 @@ class RetentionSanitizerPolicyTests(unittest.TestCase):
         non = set(Path(str(PREFIX) + "_sanitized_noninstrumentation_undefined_symbols.txt").read_text().splitlines())
         instrumentation = set(Path(str(PREFIX) + "_sanitized_instrumentation_undefined_symbols.txt").read_text().splitlines())
         self.assertEqual((len(non), len(instrumentation)), (172, 59))
+        self.assertFalse(non & instrumentation)
+        self.assertEqual(len(non | instrumentation), 231)
         self.assertEqual(non - normal, {"bcmp", "puts"})
         self.assertEqual(normal - non, {
             "eshkol_ad_seed_flag", "eshkol_runtime_fatal", "eshkol_taylor_lift_ad_node",
@@ -63,6 +67,18 @@ class RetentionSanitizerPolicyTests(unittest.TestCase):
         for kind in (1, 2):
             with self.subTest(kind=kind):
                 self.assertNotEqual(self.run_policy(kind, "foreign_same_count").returncode, 0)
+
+    def test_mutant_tuple_keeps_its_own_exact_imports(self):
+        self.assertEqual(self.run_policy(tuple_kind="retention-first-eval-mutant").returncode, 0)
+        for kind in (1, 2):
+            for mutation in ("missing", "extra", "same_count"):
+                with self.subTest(kind=kind, mutation=mutation):
+                    self.assertNotEqual(self.run_policy(
+                        kind, mutation, "retention-first-eval-mutant").returncode, 0)
+
+    def test_retention_runner_checks_current_import_union(self):
+        runner = (ROOT / "scripts/test-e3-complete-call-retention.sh").read_text()
+        self.assertIn('"${out}/expected-sanitized-undefined.txt")" == 231', runner)
 
     def test_noninstrumentation_drift(self):
         for mutation in ("missing", "extra", "same_count"):

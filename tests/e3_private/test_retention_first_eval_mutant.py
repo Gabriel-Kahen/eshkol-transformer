@@ -9,6 +9,12 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 PRIVATE = ROOT / "tests/e3_private"
 PREFIX = "retention_first_eval_mutant_package_"
+MUTANT_SANITIZER_HASHES = {
+    "retention_package_sanitized_noninstrumentation_undefined_symbols.txt":
+        "47f3680715ac583b31dbd4c29e997e8c17f3015af44000ebff98048317914d79",
+    "retention_package_sanitized_instrumentation_undefined_symbols.txt":
+        "957836a08fbe44b5bf4d9117ac7f6201f9153c6dc3527eb9a1cd62b3c3db65c7",
+}
 DERIVATION = runpy.run_path(str(PRIVATE / "retention_first_eval_mutant_source.py"))
 BASE, MUTANT, transform = (DERIVATION[name] for name in ("BASE", "MUTANT", "transform"))
 
@@ -89,9 +95,15 @@ class FirstEvaluationMutantTuple(unittest.TestCase):
                 expected = expected.replace("src/eshkol_transformer/e3_frame.c\n",
                                             "tests/e3_private/retention_first_eval_frame.c\n"
                                             "src/eshkol_transformer/e3_frame.c\n", 1)
-            self.assertEqual(copied.read_text(), expected, copied.name)
+            if path.name in MUTANT_SANITIZER_HASHES:
+                # The mutant keeps its own 175/51 tuple; retention's marked IR
+                # now emits a different, exact 172/59 import split.
+                self.assertEqual(sha(copied), MUTANT_SANITIZER_HASHES[path.name])
+                self.assertNotEqual(copied.read_bytes(), path.read_bytes())
+            else:
+                self.assertEqual(copied.read_text(), expected, copied.name)
         self.assertEqual(digest.hexdigest(),
-                         "9e11fe618c284dcc20c0c26f1b65d808345511fe303bb2fb115377d963cedaa7")
+                         "6afa6d35c346d4c9ed38432635fcec76f441ab5feba77be7ec4f7e1367bfd3f5")
         self.assertEqual((PRIVATE / "retention_first_eval_mutant_bridge.c").read_bytes(),
                          (PRIVATE / "retention_bridge.c").read_bytes())
 

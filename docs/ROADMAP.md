@@ -923,6 +923,13 @@ full-list comparisons and unrelated-import rejection. The failed raw result at
 `e3-edge-27d9a98-compiled-a/result` is unchanged. Independent source review
 and a fresh supported compiled edge gate remain required; this correction
 does not establish sanitizer runtime or §9 acceptance.
+Independent source review rejected the first repair commit `33e888c` because
+the first-evaluation mutant source test still assumed its distinct 175/51
+sanitizer lists equaled retention's new 172/59 lists, and the complete-call
+runner still pinned the old 226-symbol union. The successor pins the unchanged
+mutant lists by their own digests, tests both tuples' strict import rejection,
+and checks the retention union at 231. The mutant has not been repinned from
+compiled evidence; both compiled gates remain pending.
 
 The pinned `32484f6` numerical compiler diagnostic stopped before runtime on
 the exact sanitizer import delta. Its retained Clang 21 objects replace
