@@ -65,6 +65,15 @@ int main(void) {
   CHECK(hold == NULL && optimizer->busy == 0);
   CHECK(et_o2_g3r_save_tombstones == tombstones_before_partial);
   et_f32_tensor_test_reset_allocator_v1();
+  union {
+    et_o2_error_v1 error;
+    et_o2_g3r_save_hold *slot;
+  } begin_alias = {0};
+  CHECK(et_g3r_private_o2_save_begin_v1(
+      optimizer, parameters, identities, &begin_alias.slot,
+      &begin_alias.error) == ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(begin_alias.slot == NULL && optimizer->busy == 0 &&
+        et_o2_g3r_save_tombstones == tombstones_before_partial);
   CHECK(et_g3r_private_o2_save_check_v1(
       (et_o2_g3r_save_hold *)(uintptr_t)1, &o2) ==
       ET_O2_STATUS_INVALID_STATE);
@@ -77,6 +86,22 @@ int main(void) {
   CHECK(hold != NULL && optimizer->busy == 1);
   et_o2_g3r_save_hold *first_hold = hold;
   et_o2_g3r_save_hold *second_hold = NULL;
+  unsigned char shell_before[sizeof(*hold)];
+  memcpy(shell_before, hold, sizeof(shell_before));
+  CHECK(et_g3r_private_o2_save_check_v1(
+      hold, (et_o2_error_v1 *)hold) == ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_check_v1(
+      hold, (et_o2_error_v1 *)&hold->optimizer) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(memcmp(hold, shell_before, sizeof(shell_before)) == 0);
+  CHECK(et_g3r_private_o2_save_begin_v1(
+      optimizer, parameters, identities, &hold->next, &o2) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(memcmp(hold, shell_before, sizeof(shell_before)) == 0);
+  CHECK(et_g3r_private_o2_save_begin_v1(
+      optimizer, parameters, identities, &second_hold,
+      (et_o2_error_v1 *)hold) == ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(memcmp(hold, shell_before, sizeof(shell_before)) == 0);
   CHECK(et_g3r_private_o2_save_begin_v1(
       optimizer, parameters, identities, &second_hold, &o2) ==
       ET_O2_STATUS_INVALID_STATE);
@@ -93,6 +118,18 @@ int main(void) {
   CHECK(et_f32_parameter_value_snapshot_v1(parameters[0], &p1, &f32) == 0);
   CHECK(et_f32_tensor_destroy_v1(&p1, &f32) == 0);
   et_o2_optimizer_state *state = NULL;
+  union {
+    et_o2_error_v1 error;
+    et_o2_optimizer_state *slot;
+  } state_alias = {0};
+  CHECK(et_g3r_private_o2_save_state_v1(
+      hold, &state_alias.slot, &state_alias.error) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(state_alias.slot == NULL && optimizer->busy == 1);
+  CHECK(et_g3r_private_o2_save_state_v1(
+      hold, &state, (et_o2_error_v1 *)hold) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(state == NULL && optimizer->busy == 1);
   et_o2_test_fail_alloc_after_v1(0);
   CHECK(et_g3r_private_o2_save_state_v1(hold, &state, &o2) != 0);
   CHECK(state == NULL && optimizer->busy == 1);
@@ -101,6 +138,22 @@ int main(void) {
   CHECK(state != NULL && state->count == 14);
   CHECK(et_g3r_private_o2_save_check_v1(hold, &o2) == 0);
   CHECK(et_g3r_private_o2_save_issued_match_v1(hold, state, &o2) == 0);
+  memcpy(shell_before, hold, sizeof(shell_before));
+  CHECK(et_g3r_private_o2_save_issued_match_v1(
+      hold, state, (et_o2_error_v1 *)hold) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_end_v1(
+      &hold, (et_o2_error_v1 *)hold) == ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_end_v1(&hold->next, &o2) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  union {
+    et_o2_error_v1 error;
+    et_o2_g3r_save_hold *slot;
+  } end_alias = {.slot = hold};
+  CHECK(et_g3r_private_o2_save_end_v1(
+      &end_alias.slot, &end_alias.error) == ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(end_alias.slot == hold && optimizer->busy == 1);
+  CHECK(memcmp(hold, shell_before, sizeof(shell_before)) == 0);
   uint32_t *option_fields[5] = {
       &state->entries[0].options.learning_rate_bits,
       &state->entries[0].options.beta1_bits,

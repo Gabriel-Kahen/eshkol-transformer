@@ -1788,6 +1788,11 @@ stale handles, partial-clone cleanup, changed bits, first-error release and
 the 64-token exhaustion boundary. This source prerequisite still needs
 independent review and compiled same-aggregate validation before it can join
 the G3-R SAVE path; it does not admit a writer or resumed generation.
+Independent review held `66c6e1bd` after reproducing output/error alias loss
+of the sole hold token and error/live-hold alias corruption. The follow-up
+rejects overlapping private output and error spans, and spans touching any
+registered hold shell, before writing caller memory; focused native and
+sanitizer negatives cover both defects. Independent re-review remains open.
 
 The follow-on private aggregate candidate on `codex/g3r-committed-save-aggregate`
 loads that wrapper with the exact M3/G3-T/G3-M route. A real seeded P1/G1

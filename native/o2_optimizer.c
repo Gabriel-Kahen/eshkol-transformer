@@ -2067,11 +2067,44 @@ static void et_o2_release_owned_state_prefix(et_o2_optimizer_state *state) {
 }
 
 #ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+static int et_o2_g3r_save_overlap(const void *left, size_t left_bytes,
+                                  const void *right, size_t right_bytes) {
+  const uintptr_t a = (uintptr_t)left;
+  const uintptr_t b = (uintptr_t)right;
+  return left != NULL && right != NULL && left_bytes != 0u &&
+         right_bytes != 0u && a < b + right_bytes && b < a + left_bytes;
+}
+
+/* Conflicting buffers cannot receive an error record: writing it would
+ * destroy a caller output or a registered hold, including an inert shell. */
+static int et_o2_g3r_save_buffers_conflict(const void *output,
+                                           size_t output_bytes,
+                                           size_t output_alignment,
+                                           const et_o2_error_v1 *error) {
+  if ((output != NULL &&
+       ((uintptr_t)output % output_alignment != 0u ||
+        (uintptr_t)output > UINTPTR_MAX - output_bytes)) ||
+      (error != NULL &&
+       ((uintptr_t)error % _Alignof(et_o2_error_v1) != 0u ||
+        (uintptr_t)error > UINTPTR_MAX - sizeof(*error))) ||
+      et_o2_g3r_save_overlap(output, output_bytes, error,
+                             error != NULL ? sizeof(*error) : 0u))
+    return 1;
+  for (const et_o2_g3r_save_hold *hold = et_o2_g3r_save_holds;
+       hold != NULL; hold = hold->next) {
+    if (et_o2_g3r_save_overlap(output, output_bytes, hold, sizeof(*hold)) ||
+        et_o2_g3r_save_overlap(error, error != NULL ? sizeof(*error) : 0u,
+                               hold, sizeof(*hold)))
+      return 1;
+  }
+  return 0;
+}
+
 static et_o2_g3r_save_hold *et_o2_g3r_hold_admit(
     const et_o2_g3r_save_hold *candidate) {
   for (et_o2_g3r_save_hold *hold = et_o2_g3r_save_holds;
        hold != NULL; hold = hold->next)
-    if (hold == candidate && hold->live == 1u &&
+    if (hold == candidate && hold->live == 1u && hold->optimizer != NULL &&
         et_o2_find_optimizer(hold->optimizer) == hold->optimizer &&
         hold->optimizer->busy == 1u)
       return hold;
@@ -2096,6 +2129,9 @@ int32_t et_g3r_private_o2_save_begin_v1(
     et_o2_error_v1 *error) {
   const char *operation = "g3r-save-o2-begin";
   int32_t result;
+  if (et_o2_g3r_save_buffers_conflict(
+          output, sizeof(*output), _Alignof(et_o2_g3r_save_hold *), error))
+    return ET_O2_STATUS_INVALID_ARGUMENT;
   if (!parameters || !identities || !output || *output != NULL)
     return et_o2_fail(error, ET_O2_STATUS_INVALID_ARGUMENT,
                       ET_O2_CODE_NULL_ARGUMENT, operation,
@@ -2165,6 +2201,8 @@ int32_t et_g3r_private_o2_save_begin_v1(
 int32_t et_g3r_private_o2_save_check_v1(
     et_o2_g3r_save_hold *candidate, et_o2_error_v1 *error) {
   const char *operation = "g3r-save-o2-check";
+  if (et_o2_g3r_save_buffers_conflict(NULL, 0u, 1u, error))
+    return ET_O2_STATUS_INVALID_ARGUMENT;
   et_o2_g3r_save_hold *hold = et_o2_g3r_hold_admit(candidate);
   if (!hold)
     return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
@@ -2218,6 +2256,8 @@ int32_t et_g3r_private_o2_save_issued_match_v1(
     et_o2_g3r_save_hold *candidate, const et_o2_optimizer_state *issued,
     et_o2_error_v1 *error) {
   const char *operation = "g3r-save-o2-issued-match";
+  if (et_o2_g3r_save_buffers_conflict(NULL, 0u, 1u, error))
+    return ET_O2_STATUS_INVALID_ARGUMENT;
   et_o2_g3r_save_hold *hold = et_o2_g3r_hold_admit(candidate);
   et_o2_optimizer_state *state = et_o2_find_state(issued);
   if (!hold || !state)
@@ -2280,6 +2320,9 @@ int32_t et_g3r_private_o2_save_issued_match_v1(
 int32_t et_g3r_private_o2_save_end_v1(
     et_o2_g3r_save_hold **slot, et_o2_error_v1 *error) {
   const char *operation = "g3r-save-o2-end";
+  if (et_o2_g3r_save_buffers_conflict(
+          slot, sizeof(*slot), _Alignof(et_o2_g3r_save_hold *), error))
+    return ET_O2_STATUS_INVALID_ARGUMENT;
   et_o2_g3r_save_hold *hold =
       slot == NULL ? NULL : et_o2_g3r_hold_admit(*slot);
   if (!hold)
@@ -2461,6 +2504,9 @@ int32_t et_o2_optimizer_state_snapshot_v1(et_o2_optimizer *candidate,
 int32_t et_g3r_private_o2_save_state_v1(
     et_o2_g3r_save_hold *hold, et_o2_optimizer_state **state,
     et_o2_error_v1 *error) {
+  if (et_o2_g3r_save_buffers_conflict(
+          state, sizeof(*state), _Alignof(et_o2_optimizer_state *), error))
+    return ET_O2_STATUS_INVALID_ARGUMENT;
   et_o2_error_v1 first;
   int32_t result = et_g3r_private_o2_save_check_v1(hold, &first);
   if (result != 0) {
