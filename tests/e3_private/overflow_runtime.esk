@@ -1,0 +1,37 @@
+;;; Each process owns one genuine C1-loaded model. The gate invokes separate
+;;; finite and overflow processes because P1's test seam selects one token.
+(extern void e3-overflow-test-run ptr ptr ptr :real et_e3_overflow_run_v1)
+
+(define (overflow-check label value)
+  (if value #t
+      (begin (display "E3-OVERFLOW-RUNTIME-FAIL: ") (display label)
+             (newline) (exit 1))))
+
+(define arguments (command-line))
+(overflow-check 'arguments (= (length arguments) 5))
+(define case-name (list-ref arguments 1))
+(overflow-check 'case
+  (or (string=? case-name "finite") (string=? case-name "overflow")))
+(define checkpoint (list-ref arguments 2))
+(define corpus-path (list-ref arguments 3))
+(define present? (string=? (list-ref arguments 4) "present"))
+(overflow-check 'gradient-option
+  (or present? (string=? (list-ref arguments 4) "absent")))
+(define output (vector #f))
+(e3-overflow-test-run
+  (vector (vector 'finite-overflow
+                  (if (string=? case-name "finite") 'finite 'overflow)
+                  checkpoint present?))
+  (vector corpus-path) output)
+(define result (vector-ref output 0))
+(overflow-check 'result
+  (and (vector? result) (= (vector-length result) 4)
+       (eq? (vector-ref result 0) 'e3-finite-overflow-result-v1)
+       (eq? (vector-ref result 1)
+            (if (string=? case-name "finite") 'finite 'overflow))
+       (vector? (vector-ref result 2))
+       (= (vector-length (vector-ref result 2)) 6)
+       (bytevector? (vector-ref result 3))))
+(display "E3-FINITE-OVERFLOW-PASS gradient=")
+(display (if present? "present" "absent"))
+(newline)

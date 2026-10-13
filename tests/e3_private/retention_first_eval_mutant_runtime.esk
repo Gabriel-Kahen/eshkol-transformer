@@ -1,0 +1,41 @@
+;;; The selected mutation must fail during the first warmup prepare call.
+(extern void e3-retention-test-run ptr ptr ptr :real et_e3_retention_run_v1)
+
+(define (check label condition)
+  (if condition #t
+      (begin (display "FAIL: ") (display label) (newline) (exit 1))))
+
+(define (argument-count values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining) (+ count 1)))))
+
+(define (argument-ref values wanted)
+  (let loop ((remaining values) (index 0))
+    (if (= index wanted) (car remaining)
+        (loop (cdr remaining) (+ index 1)))))
+
+(define args (command-line))
+(check 'arguments (= (argument-count args) 5))
+(define path (argument-ref args 1))
+(define horizon (string->number (argument-ref args 2)))
+(define gradient (argument-ref args 3))
+(define control (argument-ref args 4))
+(check 'horizon (or (= horizon 1024) (= horizon 8192)))
+(define present? (string=? gradient "present"))
+(check 'gradient-option (or present? (string=? gradient "absent")))
+(define mutation
+  (cond ((string=? control "absent-to-present") 0)
+        ((string=? control "seeded-bit") 1)
+        ((string=? control "seeded-metadata") 2)
+        (else -1)))
+(check 'mutation-choice
+  (or (and (not present?) (= mutation 0))
+      (and present? (or (= mutation 1) (= mutation 2)))))
+
+(define input (vector path))
+(define output (vector #f))
+(define prepare (vector (vector 'retention 'prepare horizon present? mutation)))
+(e3-retention-test-run prepare input output)
+(display "FAIL: FIRST-EVAL-MUTANT-SURVIVED") (newline)
+(exit 1)
