@@ -1073,6 +1073,14 @@ fixtures, a fourth-output mutation control, source/unit/shell checks and a
 proposed normal/poison/sanitizer
 runner are staged. Independent review and the compiled supported result remain
 pending; this does not close §9 or replace the separate N5 8,192/8,193 gate.
+The pinned edge gate at `dfd4c0a`/tree `8938e6a` generated and compared the
+four D1/D2 corpora twice and passed canonical package policy, then exited 126
+before the first retention package because the directly invoked builder was
+tracked as nonexecutable (`100644`). Its sealed failure remains at
+`e3-edge-dfd4c0a-compiled-a/result/FAILURE.md`; no edge AOT or runtime result
+exists. This source repair records the builder as `100755` and checks its
+availability before toolchain and corpus work. Independent source review and a
+fresh pinned compiled edge gate remain required for admission.
 The edge-parent source-suite repair updates two retention-driver digest pins to
 the accepted fourth-output driver and regenerates the private first-evaluation
 mutant mechanically from that same N5/edge baseline. The E3-private, E3-reference

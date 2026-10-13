@@ -2,6 +2,9 @@
 set -euo pipefail
 export PYTHONDONTWRITEBYTECODE=1
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
+retention_builder="${PROJECT_ROOT}/scripts/build-e3-retention-test.sh"
+[[ -f "${retention_builder}" && -x "${retention_builder}" ]] || \
+  die "E3 retention test builder is missing or not executable: ${retention_builder}"
 verify_toolchain
 for command in ar cmp diff env grep nm python3 realpath timeout; do
   require_command "${command}"
@@ -44,7 +47,7 @@ prefix="${PROJECT_ROOT}/tests/e3_private/retention_package"
 for cache in a b sanitized; do
   mode=normal
   [[ "${cache}" != sanitized ]] || mode=sanitize
-  "${PROJECT_ROOT}/scripts/build-e3-retention-test.sh" \
+  "${retention_builder}" \
     "${out}/private-${cache}" "${mode}" \
     >"${out}/package-${cache}.stdout" 2>"${out}/package-${cache}.stderr"
   artifact="${out}/private-${cache}/e3_retention_package.o.evidence"
