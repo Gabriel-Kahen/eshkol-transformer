@@ -2160,6 +2160,11 @@ idle/train-mode check rejects a copied witness, foreign T1 shell or equal
 fingerprint from a different core before any mode transition. It does not
 transition the model, acquire a G3/O2 hold, or authorize a C2 claim. The
 combined aggregate and original-epoch handoff remain separate gates.
+The follow-up source repair makes CLI3-B inspect the authenticated T2 registry
+core for canonical-byte admission, updates the lease failure witness to the
+23-slot record, and reseals the affected fixture hashes. Focused source
+contracts pass; compiled CLI3 and TR3 runtime admission and independent review
+remain pending.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
