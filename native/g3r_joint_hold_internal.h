@@ -31,6 +31,10 @@ int64_t et_g3r_joint_hold_copy_words_v1(
 /* Returns 0 on consumed success, -1 on proved LIVE, -2 on DEAD with defect.
  * Indeterminate lifecycle fails stop. This is pre-C2-claim authority only. */
 int64_t et_g3r_joint_hold_release_issued_v1(et_g3r_joint_hold *hold);
+/* After an exact registered Scheme C2 claim, move the issued state out of
+ * joint preclaim custody. The caller must prove that claim before this call. */
+int64_t et_g3r_joint_hold_transfer_issued_v1(
+    et_g3r_joint_hold *hold, const et_o2_optimizer_state *state);
 /* Reverse O2 then G3 drain; rejects a still-owned issued state. */
 int64_t et_g3r_joint_hold_end_v1(et_g3r_joint_hold *hold);
 /* Exact registered joint identity: 1 live, 2 dead, 0 foreign. This query does

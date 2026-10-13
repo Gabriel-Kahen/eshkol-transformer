@@ -81,6 +81,36 @@ Then the 17-word G3 snapshot and original tokenizer/cursor/trainer controls
 can be bound to the detached C2 owner and its exact image receipt. No current
 source or test establishes that combined transaction.
 
+## Joint-issued C2 claim source successor
+
+`native/g3r_joint_c2_claim_extension.esk` is an unlinked private prerequisite.
+It accepts the exact enrolled joint-issued O2 ledger, an independently prepared
+detached P1 state, and C2 controls. It preallocates a 136-byte held-history
+destination, C2 request and result ledger before the C2 claim. While both
+original holds are live, it checks the registered optimizer and exact issued
+state, then copies the held 17 words. Its guard covers the C2 composition call.
+On a preclaim exception, C2's internal guard rolls back any token-matched O2
+claim before the P1 claim; the outer guard requires the O2 shell to be LIVE,
+releases the exact issued native state with one controlled retry only for
+proved LIVE, and drains O2 before G3. An unknown release or hold lifecycle
+fails stop, while a successful cleanup rethrows the first caught error.
+
+After a successful C2 composition, the source verifies the exact registered
+C2 P1/O2 children and owner token. The private native
+`et_g3r_joint_hold_transfer_issued_v1` then checks pointer identity and the
+held bits before clearing the joint record's issued custody. Only after that
+does the source end the original O2 and G3 holds. A post-drain defect is
+recorded in the rooted result; a hold that cannot be proved DEAD fails stop.
+The native transfer itself cannot prove a Scheme claim, so it is deliberately
+called only after the exact C2 registry check in this same source path.
+
+This leaf has source mutation and C syntax evidence only. It does not prepare
+or authenticate the P1 clone or original tokenizer/cursor/trainer controls,
+bind the 17 words to a serialized pair, authorize receipt I/O, or establish
+replay equivalence. The aggregate compilation, runtime fault cuts and
+independent review are still gates before an original-owner C2 claim is
+accepted.
+
 ## Bounded adopter source leaf
 
 `native/g3r_held_o2_adopter_extension.esk` defines `g3r-held-o2-adopt!` for a

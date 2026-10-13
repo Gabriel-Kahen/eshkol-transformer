@@ -284,6 +284,13 @@
          (claim-progress (vector #f)))
     (guard (caught
              (#t
+               ;; O2's claim is assignment-only today, but a provider that
+               ;; claims and then reports failure must not strand the exact
+               ;; child while P1 is returned to its caller.
+               (let ((o2-record (o2-find-identity o2 o2-states)))
+                 (if (and o2-record
+                          (eq? (vector-ref o2-record 6) owner-token))
+                     (o2-state-claim-c2-rollback-internal! o2 owner-token)))
                (if (vector-ref claim-progress 0)
                    (begin
                      (c2-training-state-rollback-p1! p1 owner-token)

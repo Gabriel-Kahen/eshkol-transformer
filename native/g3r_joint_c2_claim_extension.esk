@@ -1,0 +1,92 @@
+;;; Source-private original-owner handoff. Load after the joint-issued O2
+;;; adopter and C2 owner in one registry. The caller supplies a detached P1
+;;; state and authenticated C2 controls; this leaf does not construct either.
+(extern i64 g3r-joint-c2-copy-words ptr ptr
+        :real et_g3r_joint_hold_copy_words_v1)
+(extern i64 g3r-joint-c2-transfer-issued ptr ptr
+        :real et_g3r_joint_hold_transfer_issued_v1)
+
+(define g3r-joint-c2-claim-tag (vector 'g3r-joint-c2-claim-v1))
+
+;;; Result: tag, original joint/O2 ledger, exact C2 request, held 17 words,
+;;; phase, first native hold-end error triple. The result remains rooted by
+;;; its caller; a nonzero end error forbids later receipt publication.
+(define (g3r-joint-c2-claim! o2-ledger p1 controls)
+  (let ((operation 'g3r-joint-c2-claim!))
+    (g3r-joint-o2-check o2-ledger operation)
+    (if (not (eq? (vector-ref o2-ledger 8) 'enrolled))
+        (o2-fail 'invalid-state operation
+                 "joint-issued O2 state is not enrolled and unclaimed"))
+    (let* ((joint (vector-ref o2-ledger 1))
+           (native-optimizer (vector-ref o2-ledger 3))
+           (issued (vector-ref (vector-ref o2-ledger 4) 0))
+           (o2-shell (vector-ref o2-ledger 5))
+           (o2-record (o2-find-identity o2-shell o2-states))
+           ;; Allocate every new root before the first C2 ownership claim.
+           (words (make-bytevector 136 0))
+           (request (vector c2-training-state-compose-tag p1 o2-shell
+                            controls operation #f))
+           (first (vector 0 0 0))
+           (result (vector g3r-joint-c2-claim-tag o2-ledger request words
+                           'prepared first)))
+      (if (or (not o2-record) (not issued)
+              (not (eq? issued (vector-ref o2-record 1)))
+              (not (eq? (vector-ref o2-record 6) 'live))
+              (not (= 0 (g3r-joint-o2-optimizer-match
+                          joint native-optimizer)))
+              (not (= 0 (g3r-joint-o2-issued-match joint issued))))
+          (o2-fail 'invalid-state operation
+                   "joint O2 state is not the exact live issued state"))
+      ;; The native joint still owns both original holds during capture.
+      (if (not (= 0 (g3r-joint-c2-copy-words joint words)))
+          (g3r-joint-o2-native-fail operation))
+      ;; C2's own guard rolls back P1 and a partially claimed O2 child. This
+      ;; guard is installed before C2 can claim either child. On an exception
+      ;; the exact issued state is released, then O2 and G3 holds are drained.
+      (guard (caught
+               (#t
+                 (if (not (eq? (vector-ref result 4) 'prepared))
+                     (g3r-held-o2-fail-stop))
+                 (if (not (eq? (vector-ref o2-record 6) 'live))
+                     (g3r-held-o2-fail-stop))
+                 (let ((status (g3r-joint-o2-release-issued joint)))
+                   (if (= status -1)
+                       (set! status (g3r-joint-o2-release-issued joint)))
+                   (if (not (or (= status 0) (= status -2)))
+                       (g3r-held-o2-fail-stop))
+                   (g3r-joint-o2-consume! o2-ledger))
+                 (if (not (= 0 (g3r-joint-o2-end joint)))
+                     (g3r-joint-o2-record-error! o2-ledger))
+                 (if (not (= 2 (g3r-joint-o2-lifecycle joint)))
+                     (g3r-held-o2-fail-stop))
+                 (vector-set! o2-ledger 8 'drained)
+                 (raise caught)))
+        (c2-training-state-compose-internal request)
+        ;; The C2 registry and both child slots are the exact claim receipt.
+        ;; After this point an unexpected failure cannot return recoverably.
+        (vector-set! result 4 'claimed)
+        (let ((owner (c2-training-state-find (vector-ref request 5))))
+          (if (or (not owner)
+                  (not (eq? (vector-ref owner 1) p1))
+                  (not (eq? (vector-ref owner 2) o2-shell))
+                  (not (eq? (vector-ref owner 7) 'live))
+                  (not (eq? (vector-ref o2-record 6)
+                            (vector-ref owner 6)))
+                  (not (eq? (vector-ref request 1) #f))
+                  (not (eq? (vector-ref request 2) #f)))
+              (g3r-held-o2-fail-stop)))
+        (if (not (= 0 (g3r-joint-c2-transfer-issued joint issued)))
+            (g3r-held-o2-fail-stop))
+        (vector-set! o2-ledger 8 'c2-owned)
+        (vector-set! result 4 'transferred)
+        ;; End drains the original O2 hold before G3/M3/A2. Its lifecycle
+        ;; decides whether a nonzero status is a post-drain defect.
+        (if (not (= 0 (g3r-joint-o2-end joint)))
+            (begin
+              (vector-set! first 0 (g3r-joint-o2-last-domain))
+              (vector-set! first 1 (g3r-joint-o2-last-category))
+              (vector-set! first 2 (g3r-joint-o2-last-code))))
+        (if (not (= 2 (g3r-joint-o2-lifecycle joint)))
+            (g3r-held-o2-fail-stop))
+        (vector-set! result 4 'drained)
+        result))))

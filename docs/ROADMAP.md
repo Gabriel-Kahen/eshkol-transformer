@@ -2140,6 +2140,12 @@ The native end proof now also requires its O2 hold slot cleared and an exact
 registered G3 held-record DEAD lifecycle before publishing joint DEAD. The
 revised source gate passes nine mutations and both G3/joint C syntax cuts;
 independent review and compiled failure cuts remain pending.
+The private joint-issued C2 claim successor preallocates a held-history buffer,
+C2 request and transfer ledger; strengthens C2 rollback for a token-matched
+partial O2 claim; and moves exact issued native custody to a verified C2 child
+before draining O2 then G3. Its bounded source mutation and strict C syntax
+checks pass locally. No aggregate loads it yet, and no original P1/controls
+binding, receipt, pair, replay or accepted runtime claim follows.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),

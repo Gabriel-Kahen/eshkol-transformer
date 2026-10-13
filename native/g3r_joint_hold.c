@@ -231,6 +231,19 @@ int64_t et_g3r_joint_hold_release_issued_v1(et_g3r_joint_hold *candidate) {
   abort(); /* RELEASING or unknown authority cannot escape to Scheme. */
 }
 
+int64_t et_g3r_joint_hold_transfer_issued_v1(
+    et_g3r_joint_hold *candidate, const et_o2_optimizer_state *state) {
+  et_g3r_joint_hold *hold = joint_find(candidate);
+  joint_clear();
+  if (!hold || !state || state != hold->issued) return joint_invalid();
+  /* Require the exact original pair and still-LIVE issued bits immediately
+   * before dropping native custody. No native release occurs in this step. */
+  if (et_g3r_joint_hold_issued_match_v1(hold, state) != 0)
+    return g3r_joint_category ? g3r_joint_category : -1;
+  hold->issued = NULL;
+  return 0;
+}
+
 int64_t et_g3r_joint_hold_end_v1(et_g3r_joint_hold *candidate) {
   et_g3r_joint_hold *hold = joint_find(candidate);
   et_o2_error_v1 error = {0};
