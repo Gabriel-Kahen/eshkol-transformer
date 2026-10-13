@@ -961,10 +961,14 @@ N3 or E3 §9 compiled acceptance. A dedicated, manually dispatched
 Ubuntu-22.04/LLVM-21 zero-only inventory-discovery harness is source-staged:
 it retains the ordinary package authority checks, emits actual compiler
 closure and normal/sanitized import inventories into checksummed evidence, and
-never publishes an admitted object. Focused offline policy tests pass. No hosted
-discovery has run; the exact sanitizer manifests remain absent, and independent
-source review, immutable root evidence release, manifest review/pinning, Q0 and
-all compiled gates remain pending.
+never publishes an admitted object. Focused offline policy tests pass, and
+independent source/tests review accepted the exact `c4978ee` candidate. This
+current-main source merge includes the reviewed E3 PR #205 roadmap update; it
+does not add emitted inventories or change the zero model/driver sources. No
+hosted discovery has run. The workflow is absent from default-branch main, so
+manual dispatch remains HOLD until the reviewed workflow lands there. Exact
+sanitizer manifests, immutable root evidence release, manifest review/pinning,
+Q0 and all compiled gates remain pending.
 
 A separate noninstalled E3 overflow tuple is a source candidate for a genuine
 stage-12 finalization boundary. It loads a checksummed C1 state into one fresh
@@ -1098,9 +1102,10 @@ A bounded source-only E3 union on current main `6f6ef9ad` replays the reviewed
 corpus. The Q0 allowlist and M3CG predecessor manifest are combined from the
 actual tree; nine affected source checksum gates and focused offline source
 checks pass. Three stale E3 test assertions were refreshed to match the
-existing first-evaluation tuple. The pinned PyTorch-dependent reference test,
-independent source review, supported compiled/sanitizer gates, and §9 matrix
-remain open; this source union does not establish E3 admission.
+existing first-evaluation tuple. Independent source/tests review accepted this
+exact union. The pinned PyTorch-dependent reference test, supported
+compiled/sanitizer gates, and §9 matrix remain open; this source union does not
+establish E3 admission.
 The separate [host-monitor first-error candidate](e3/E3_HOST_MONITOR_FIRST_ERROR.md)
 records a bounded guest-relative cause for a transient unsafe-output scan;
 its successor now uses no-follow descriptor traversal, postscan identity
