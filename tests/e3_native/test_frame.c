@@ -346,6 +346,51 @@ static void test_i2_allocation_rollback(owner *model,
   }
 }
 
+static void test_pin_preinvoke_cut(owner *model,
+                                   et_f32_tensor *destination[4]) {
+  et_e3_frame_internal *frame = et_e3_private_frame_create_v1(
+      model, destination[0], destination[1], destination[2], destination[3]);
+  CHECK(frame != NULL);
+  const uint32_t sentinels[4] = {
+      UINT32_C(0x3f800000), UINT32_C(0x40000000),
+      UINT32_C(0x40400000), UINT32_C(0x40800000)};
+  for (size_t i = 0; i < 4; ++i) write_scalar(destination[i], sentinels[i]);
+  const int64_t published[2] = {
+      frame->published_counts[0], frame->published_counts[1]};
+
+  OK(et_e3_test_pin_preinvoke_fault_v1(1));
+  CHECK(et_e3_test_pin_preinvoke_fault_v1(2) == 1);
+  model->active = destination[0];
+  CHECK(et_e3_private_acquire_v1(frame) == E3_INVALID_STATE);
+  CHECK(e3_last_code == E3_CODE_REENTRANCY);
+  model->active = NULL;
+
+  CHECK(et_e3_private_acquire_v1(frame) == E3_INTERNAL);
+  CHECK(e3_last_domain == 0 && e3_last_category == E3_INTERNAL &&
+        e3_last_code == E3_CODE_TEST_PIN_PREINVOKE);
+  CHECK(frame->phase == E3_IDLE && model->active == NULL);
+  CHECK(e3_pins_idle(&frame->pins));
+  CHECK(frame->published_counts[0] == published[0] &&
+        frame->published_counts[1] == published[1]);
+  for (size_t i = 0; i < 4; ++i) {
+    uint32_t bits;
+    read_scalar(destination[i], &bits);
+    CHECK(bits == sentinels[i]);
+  }
+  OK(et_e3_private_frame_check_v1(frame));
+
+  /* The fault was consumed only by the admitted pin boundary. */
+  OK(et_e3_private_acquire_v1(frame));
+  CHECK(frame->phase == E3_ACQUIRED && model->active == frame);
+  CHECK(frame->pins.held_mask == UINT16_C(0x3fff));
+  OK(et_e3_private_cleanup_preflight_v1(frame));
+  et_e3_private_drain_v1(frame);
+  et_e3_private_finish_v1(frame);
+  OK(et_e3_private_frame_destroy_preflight_v1(frame));
+  et_e3_private_frame_destroy_v1(frame);
+  OK(et_e3_test_pin_preinvoke_fault_v1(0));
+}
+
 static void test_transaction(owner *model, et_f32_tensor *destination[4]) {
   et_e3_frame_internal *frame = et_e3_private_frame_create_v1(
       model, destination[0], destination[1], destination[2], destination[3]);
@@ -575,6 +620,7 @@ int main(void) {
   et_f32_tensor *destination[4] = {scalar(), scalar(), scalar(), scalar()};
   test_create_rejections(model, destination);
   test_i2_allocation_rollback(model, destination);
+  test_pin_preinvoke_cut(model, destination);
   test_transaction(model, destination);
   for (size_t i = 0; i < 4; ++i) destroy_tensor(&destination[i]);
   printf("E3 native frame: %zu checks passed\n", checks);

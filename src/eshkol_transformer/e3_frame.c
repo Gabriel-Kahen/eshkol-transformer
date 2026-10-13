@@ -53,7 +53,10 @@ enum {
   E3_CODE_CAPACITY = 6,
   E3_CODE_REENTRANCY = 7,
   E3_CODE_DESTINATION = 8,
-  E3_CODE_INVARIANT = 9
+  E3_CODE_INVARIANT = 9,
+#ifdef ET_E3_TESTING
+  E3_CODE_TEST_PIN_PREINVOKE = 10,
+#endif
 };
 enum {
   E3_IDLE = 0,
@@ -98,8 +101,14 @@ static int64_t e3_last_domain, e3_last_category, e3_last_code;
 
 #ifdef ET_E3_TESTING
 static size_t e3_test_frame_alloc_remaining = SIZE_MAX;
+static int e3_test_pin_preinvoke_armed;
 void et_e3_test_frame_fail_alloc_after_v1(size_t count) {
   e3_test_frame_alloc_remaining = count;
+}
+int64_t et_e3_test_pin_preinvoke_fault_v1(int64_t mode) {
+  if (mode != 0 && mode != 1) return 1;
+  e3_test_pin_preinvoke_armed = (int)mode;
+  return 0;
 }
 #endif
 
@@ -754,6 +763,13 @@ int64_t et_e3_private_acquire_v1(void *pointer) {
   frame->next_role = 0;
   frame->stage_plane = 0;
   et_f32_tensor_error error;
+#ifdef ET_E3_TESTING
+  /* Consume only after idle-frame admission, at the actual pin boundary. */
+  if (e3_test_pin_preinvoke_armed) {
+    e3_test_pin_preinvoke_armed = 0;
+    return e3_fail(E3_INTERNAL, E3_CODE_TEST_PIN_PREINVOKE);
+  }
+#endif
   if (et_g3t_model_pins_begin_internal(frame->model->p,
                                        (const void *const *)frame->model->handles,
                                        &frame->pins, &error) != 0)

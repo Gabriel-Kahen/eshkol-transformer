@@ -45,6 +45,7 @@ int64_t et_e3_private_last_error_code_v1(void);
 
 #ifdef ET_E3_TESTING
 void et_e3_test_frame_fail_alloc_after_v1(size_t count);
+int64_t et_e3_test_pin_preinvoke_fault_v1(int64_t mode);
 #endif
 
 #ifdef __cplusplus

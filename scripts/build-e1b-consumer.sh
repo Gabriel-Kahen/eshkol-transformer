@@ -2462,6 +2462,7 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
       et_e3_test_destination_destroy_v1
       et_e3_test_destination_bits_v1
       et_e3_test_frame_fail_alloc_after_v1
+      et_e3_test_pin_preinvoke_fault_v1
     )
     if [[ "${e3_tuple_kind}" == retention ||
           "${e3_tuple_kind}" == retention-first-eval-mutant ||

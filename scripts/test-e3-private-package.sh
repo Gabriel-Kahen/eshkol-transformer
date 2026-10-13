@@ -40,13 +40,14 @@ for symbol in \
     et_l3s_kernel_provider_v1 et_e3_metrics_kernel_provider_v1 \
     et_e3_private_test_run_cabi_v1 et_e3_test_destination_create_v1 \
     et_e3_test_destination_destroy_v1 et_e3_test_destination_bits_v1 \
-    et_e3_test_frame_fail_alloc_after_v1; do
+    et_e3_test_frame_fail_alloc_after_v1 \
+    et_e3_test_pin_preinvoke_fault_v1; do
   grep -E "[[:space:]]LOCAL[[:space:]].*[[:space:]]${symbol}$" \
     "${evidence}/readelf-symbols.txt" >/dev/null || \
     die "E3 required private definition is not local: ${symbol}"
 done
 if nm -g --defined-only --format=posix "${object}" | awk '{print $1}' | \
-    grep -E '^et_e3_private_|^et_e3_test_(destination|frame)_'; then
+    grep -E '^et_e3_private_|^et_e3_test_(destination|frame|pin)_'; then
   die "E3 object exposes private or test-hook authority"
 fi
 
