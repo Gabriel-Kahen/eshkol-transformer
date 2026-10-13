@@ -20,11 +20,23 @@ encodes bytes outside URL-unreserved characters, rejects `.`/`..` components,
 and is capped at 256 characters. Errno is bounded to four digits. A transient
 entry's first error survives a clean final scan.
 
+The first candidate at `ad743b69` retained L's path-based directory queue. A
+directory changed to a symlink between its metadata check and its later
+`scandir(path)` could make it count bytes outside the output root. The
+successor opens every root and queued-directory component with Linux
+`O_DIRECTORY | O_NOFOLLOW` relative to a held directory descriptor. It scans
+that descriptor, obtains entry metadata through `O_PATH | O_NOFOLLOW` plus
+`fstat`, and checks each queued directory's device/inode when reopened. A
+failed no-follow open or changed identity is an unsafe-output fault; there is
+no path-based fallback. The sealed synthetic swap reproducer is represented
+by offline tests that replace a queued directory with a symlink before open,
+with a different directory before open, and with a symlink after open.
+
 The prior 50,000-entry, 32-level, two-second traversal bounds, stream/guest-
-output/wall caps, no-follow stat, group termination, final scan, and exit-74
-failure policy remain. Offline tests cover a transient symlink removed before
-the final scan, a guest-relative control-character path, OS errors with secret
-text/host paths, hardlink/FIFO refusal, bounds, successful completion, and
-stream/guest-output/wall caps. The future one-use recipe must copy and pin this
-reviewed candidate as a new component; it must not edit or replay L. Independent
-review and an authorized fresh one-use run remain separate gates.
+output/wall caps, group termination, final scan, and exit-74 failure policy
+remain. Eleven offline tests cover these swaps, root and ancestor symlinks, a
+transient symlink removed before the final scan, a guest-relative control-
+character path, OS errors with secret text/host paths, hardlink/FIFO refusal,
+bounds, successful completion, and stream/guest-output/wall caps. The future one-use recipe must
+copy and pin this reviewed candidate as a new component; it must not edit or
+replay L. Independent review and a fresh one-use run remain separate gates.

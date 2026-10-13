@@ -17,6 +17,8 @@ from urllib.parse import quote_from_bytes
 
 SCAN_MESSAGES = {
     "traversal-bound": "guest output traversal bound exceeded",
+    "directory-open-error": "guest output directory could not be opened without following links",
+    "directory-replaced": "guest output directory identity changed during traversal",
     "scandir-error": "guest output directory scan failed",
     "stat-error": "guest output entry stat failed",
     "symlink-entry": "guest output contains a symlink",
@@ -24,6 +26,12 @@ SCAN_MESSAGES = {
     "hardlinked-entry": "guest output contains a hardlinked regular entry",
     "unclassified-error": "guest output traversal failed",
 }
+
+# Linux-only: there is no path-based fallback when descriptor/no-follow
+# traversal is unavailable. O_PATH obtains metadata without opening file data
+# or blocking on a FIFO, and O_NOFOLLOW keeps symlinks as entries to reject.
+DIRECTORY_OPEN_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+ENTRY_OPEN_FLAGS = os.O_PATH | os.O_NOFOLLOW | os.O_CLOEXEC
 
 
 class OutputScanFault(ValueError):
@@ -66,44 +74,100 @@ def safe_scan_detail(error: OSError | ValueError, phase: str) -> tuple[str, ...]
             SCAN_MESSAGES[code], errno_text)
 
 
+def open_directory_parts(anchor_fd: int, parts: tuple[str, ...]) -> int:
+    current = os.dup(anchor_fd)
+    try:
+        for part in parts:
+            if not part or part in (".", "..") or "/" in part:
+                raise ValueError("invalid directory component")
+            child = os.open(part, DIRECTORY_OPEN_FLAGS, dir_fd=current)
+            os.close(current)
+            current = child
+        return current
+    except BaseException:
+        os.close(current)
+        raise
+
+
+def open_output_root(root: Path) -> int:
+    # Walk every root component without following an ancestor symlink. The
+    # returned descriptor, not the path string, is the traversal authority.
+    parts = root.parts
+    anchor = "/" if root.is_absolute() else "."
+    if root.is_absolute():
+        parts = parts[1:]
+    anchor_fd = os.open(anchor, DIRECTORY_OPEN_FLAGS)
+    try:
+        return open_directory_parts(anchor_fd, parts)
+    finally:
+        os.close(anchor_fd)
+
+
 def output_bytes(root: Path, max_entries: int = 50000,
                  max_depth: int = 32, max_seconds: float = 2.0) -> int:
     total = 0
     count = 0
     deadline = time.monotonic() + max_seconds
-    pending = [(root, 0, ())]
-    while pending:
-        directory, depth, parts = pending.pop()
-        if depth > max_depth or time.monotonic() > deadline:
-            raise OutputScanFault("traversal-bound", parts)
-        try:
-            with os.scandir(directory) as entries:
-                for entry in entries:
-                    entry_parts = (*parts, entry.name)
-                    count += 1
-                    if count > max_entries or time.monotonic() > deadline:
-                        raise OutputScanFault("traversal-bound", entry_parts)
-                    try:
-                        info = entry.stat(follow_symlinks=False)
-                    except OSError as error:
-                        raise OutputScanFault(
-                            "stat-error", entry_parts, "OSError", error.errno
-                        ) from error
-                    if stat.S_ISDIR(info.st_mode):
-                        pending.append((Path(entry.path), depth + 1,
-                                        entry_parts))
-                    elif stat.S_ISREG(info.st_mode):
-                        if info.st_nlink != 1:
-                            raise OutputScanFault("hardlinked-entry", entry_parts)
-                        total += info.st_size
-                    elif stat.S_ISLNK(info.st_mode):
-                        raise OutputScanFault("symlink-entry", entry_parts)
-                    else:
-                        raise OutputScanFault("nonregular-entry", entry_parts)
-        except OSError as error:
-            raise OutputScanFault(
-                "scandir-error", parts, "OSError", error.errno
-            ) from error
+    try:
+        root_fd = open_output_root(root)
+    except (OSError, ValueError) as error:
+        error_class = "OSError" if isinstance(error, OSError) else "ValueError"
+        raise OutputScanFault("directory-open-error", (), error_class,
+                              getattr(error, "errno", None)) from error
+    try:
+        root_info = os.fstat(root_fd)
+        pending = [((), 0, (root_info.st_dev, root_info.st_ino))]
+        while pending:
+            parts, depth, expected_identity = pending.pop()
+            if depth > max_depth or time.monotonic() > deadline:
+                raise OutputScanFault("traversal-bound", parts)
+            try:
+                directory_fd = open_directory_parts(root_fd, parts)
+            except (OSError, ValueError) as error:
+                error_class = "OSError" if isinstance(error, OSError) else "ValueError"
+                raise OutputScanFault("directory-open-error", parts, error_class,
+                                      getattr(error, "errno", None)) from error
+            try:
+                opened = os.fstat(directory_fd)
+                if (opened.st_dev, opened.st_ino) != expected_identity:
+                    raise OutputScanFault("directory-replaced", parts)
+                try:
+                    with os.scandir(directory_fd) as entries:
+                        for entry in entries:
+                            entry_parts = (*parts, entry.name)
+                            count += 1
+                            if count > max_entries or time.monotonic() > deadline:
+                                raise OutputScanFault("traversal-bound", entry_parts)
+                            try:
+                                entry_fd = os.open(entry.name, ENTRY_OPEN_FLAGS,
+                                                   dir_fd=directory_fd)
+                                try:
+                                    info = os.fstat(entry_fd)
+                                finally:
+                                    os.close(entry_fd)
+                            except OSError as error:
+                                raise OutputScanFault(
+                                    "stat-error", entry_parts, "OSError", error.errno
+                                ) from error
+                            if stat.S_ISDIR(info.st_mode):
+                                pending.append((entry_parts, depth + 1,
+                                                (info.st_dev, info.st_ino)))
+                            elif stat.S_ISREG(info.st_mode):
+                                if info.st_nlink != 1:
+                                    raise OutputScanFault("hardlinked-entry", entry_parts)
+                                total += info.st_size
+                            elif stat.S_ISLNK(info.st_mode):
+                                raise OutputScanFault("symlink-entry", entry_parts)
+                            else:
+                                raise OutputScanFault("nonregular-entry", entry_parts)
+                except OSError as error:
+                    raise OutputScanFault(
+                        "scandir-error", parts, "OSError", error.errno
+                    ) from error
+            finally:
+                os.close(directory_fd)
+    finally:
+        os.close(root_fd)
     return total
 
 

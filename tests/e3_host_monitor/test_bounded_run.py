@@ -81,13 +81,16 @@ class BoundedRunTest(unittest.TestCase):
             class BrokenEntry:
                 name = "bad\tentry"
 
-                def stat(self, *, follow_symlinks: bool):
-                    if follow_symlinks:
-                        raise AssertionError("scanner followed an entry")
+            original_open = os.open
+
+            def broken_open(path, flags, *args, **kwargs):
+                if path == BrokenEntry.name:
                     raise OSError(errno.EIO, "SECRET_STAT", "/host/secret")
+                return original_open(path, flags, *args, **kwargs)
 
             with mock.patch.object(monitor.os, "scandir",
-                                   return_value=nullcontext([BrokenEntry()])):
+                                   return_value=nullcontext([BrokenEntry()])), \
+                 mock.patch.object(monitor.os, "open", side_effect=broken_open):
                 with self.assertRaises(monitor.OutputScanFault) as caught:
                     monitor.output_bytes(root)
             detail = monitor.safe_scan_detail(caught.exception, "live")
@@ -96,6 +99,104 @@ class BoundedRunTest(unittest.TestCase):
             self.assertEqual(detail[5], str(errno.EIO))
             self.assertNotIn("SECRET_STAT", "\t".join(detail))
             self.assertNotIn("/host/secret", "\t".join(detail))
+
+    def test_queued_directory_swap_cannot_escape_output_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            output = base / "output"
+            queued = output / "queued"
+            queued.mkdir(parents=True)
+            outside = base / "outside"
+            outside.mkdir()
+            (outside / "synthetic-only").write_bytes(b"X" * 17)
+            original_open = os.open
+            swapped = False
+
+            def swap_before_open(path, flags, *args, **kwargs):
+                nonlocal swapped
+                if path == "queued" and flags & os.O_DIRECTORY and not swapped:
+                    queued.rmdir()
+                    queued.symlink_to(outside, target_is_directory=True)
+                    swapped = True
+                return original_open(path, flags, *args, **kwargs)
+
+            with mock.patch.object(monitor.os, "open", side_effect=swap_before_open):
+                with self.assertRaises(monitor.OutputScanFault) as caught:
+                    monitor.output_bytes(output)
+            self.assertTrue(swapped)
+            self.assertEqual(caught.exception.code, "directory-open-error")
+            detail = monitor.safe_scan_detail(caught.exception, "live")
+            self.assertEqual(detail[3], "queued")
+            self.assertNotIn(str(outside), "\t".join(detail))
+
+    def test_open_directory_fd_stays_inside_after_path_swap(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            output = base / "output"
+            queued = output / "queued"
+            queued.mkdir(parents=True)
+            expected_inode = queued.stat().st_ino
+            outside = base / "outside"
+            outside.mkdir()
+            (outside / "synthetic-only").write_bytes(b"X" * 17)
+            original_scandir = os.scandir
+            swapped = False
+
+            def swap_after_open(fd):
+                nonlocal swapped
+                if (isinstance(fd, int) and os.fstat(fd).st_ino == expected_inode
+                        and not swapped):
+                    queued.rename(base / "moved")
+                    queued.symlink_to(outside, target_is_directory=True)
+                    swapped = True
+                return original_scandir(fd)
+
+            with mock.patch.object(monitor.os, "scandir", side_effect=swap_after_open):
+                self.assertEqual(monitor.output_bytes(output), 0)
+            self.assertTrue(swapped)
+
+    def test_queued_directory_replacement_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            output = base / "output"
+            queued = output / "queued"
+            queued.mkdir(parents=True)
+            original_open = os.open
+            replaced = False
+
+            def replace_before_open(path, flags, *args, **kwargs):
+                nonlocal replaced
+                if path == "queued" and flags & os.O_DIRECTORY and not replaced:
+                    queued.rename(base / "moved")
+                    queued.mkdir()
+                    replaced = True
+                return original_open(path, flags, *args, **kwargs)
+
+            with mock.patch.object(monitor.os, "open", side_effect=replace_before_open):
+                with self.assertRaises(monitor.OutputScanFault) as caught:
+                    monitor.output_bytes(output)
+            self.assertTrue(replaced)
+            self.assertEqual(caught.exception.code, "directory-replaced")
+            self.assertEqual(monitor.safe_scan_detail(caught.exception, "live")[3],
+                             "queued")
+
+    def test_output_root_symlink_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            real_parent = base / "real"
+            real_parent.mkdir()
+            output = real_parent / "output"
+            output.mkdir()
+            root_link = base / "root-link"
+            root_link.symlink_to(output, target_is_directory=True)
+            with self.assertRaises(monitor.OutputScanFault) as caught:
+                monitor.output_bytes(root_link)
+            self.assertEqual(caught.exception.code, "directory-open-error")
+            parent_link = base / "parent-link"
+            parent_link.symlink_to(real_parent, target_is_directory=True)
+            with self.assertRaises(monitor.OutputScanFault) as caught:
+                monitor.output_bytes(parent_link / "output")
+            self.assertEqual(caught.exception.code, "directory-open-error")
 
     def test_diagnostic_path_is_relative_encoded_and_bounded(self) -> None:
         path = monitor.safe_guest_path(("generated", "secret\r\n\t\\%", "x" * 255))
