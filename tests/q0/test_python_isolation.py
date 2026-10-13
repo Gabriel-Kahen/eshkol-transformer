@@ -82,6 +82,7 @@ DEVELOPMENT_SCRIPTS = frozenset({
     ROOT / "scripts" / "check-g3r-committed-history-owner.py",
     ROOT / "scripts" / "check-g3r-committed-save-snapshot.py",
     ROOT / "scripts" / "check-g3r-committed-save-aggregate.py",
+    ROOT / "scripts" / "check-g3r-snapshot-codec-adapter-aggregate.py",
     ROOT / "scripts" / "check-g3t-owned-token-input.py",
     ROOT / "scripts" / "check-g3t-ids-owner.py",
     ROOT / "scripts" / "check-g3t-length-owners.py",
