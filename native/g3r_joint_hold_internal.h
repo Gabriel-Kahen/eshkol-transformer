@@ -19,6 +19,10 @@ typedef struct et_g3r_joint_hold et_g3r_joint_hold;
 et_g3r_joint_hold *et_g3r_joint_hold_begin_v1(
     void *generator, void *sealed_model, et_o2_optimizer *optimizer);
 int64_t et_g3r_joint_hold_check_v1(et_g3r_joint_hold *hold);
+/* Match the exact registered Scheme optimizer record's native pointer to the
+ * optimizer held by this joint record, then recheck both original holds. */
+int64_t et_g3r_joint_hold_optimizer_match_v1(
+    et_g3r_joint_hold *hold, const et_o2_optimizer *optimizer);
 et_o2_optimizer_state *et_g3r_joint_hold_issue_v1(et_g3r_joint_hold *hold);
 int64_t et_g3r_joint_hold_issued_match_v1(
     et_g3r_joint_hold *hold, const et_o2_optimizer_state *candidate);

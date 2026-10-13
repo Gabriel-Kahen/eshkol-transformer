@@ -31,11 +31,36 @@ optimizer shells before calling begin; preallocate its pair envelope, pointer
 cell, C2 request and child cleanup ledger before issuing; adopt this record's
 exact pointer into the existing registered O2 Scheme shell; resolve partial
 P1/O2 C2 claims; and release the original holds before receipt I/O. The
-existing `g3r-held-o2-adopt!` issues through an O2 hold directly, so it cannot
-yet consume this joint record's issued pointer. That handoff requires a focused
-contract and runtime gate. This native leaf does not transfer an issued state
-to C2.
+existing `g3r-held-o2-adopt!` issues through an O2 hold directly. The new
+joint-issued source successor below handles the exact native-to-Scheme pointer
+handoff. No source here transfers a state to C2.
 
 `scripts/check-g3r-joint-hold-source.py` checks the source ordering with five
 mutation controls. Strict feature-on C syntax passes locally. Native runtime,
 sanitizer, combined Eshkol compilation, and failure-cut evidence remain open.
+
+## Joint-issued Scheme adopter source successor
+
+`et_g3r_joint_hold_optimizer_match_v1` now checks the exact native optimizer
+pointer obtained from a registered Scheme optimizer shell, then rechecks the
+joint G3/O2 holds. The feature-private
+`native/g3r_joint_issued_o2_adopter_extension.esk` preallocates its Scheme
+shell, state record, registry cons, exact-pointer cell, error cell, and ledger;
+it installs cleanup protection before asking the joint record to issue once.
+The joint record roots the returned pointer natively before returning it;
+Scheme stores that same pointer immediately, checks the exact joint pointer
+and owner, and only then enrolls its shell in `o2-states`.
+
+The adopter's exception path releases the issued state with lifecycle-aware
+native status, retains the first caught error, and leaves the original holds
+for the caller's outer cleanup. Its explicit preclaim drain records the first
+release defect, consumes the issued state, then calls joint end to drain O2
+before G3. Native end itself refuses any still-owned issued pointer. Distinct
+bit-equal state pointers and foreign optimizer pointers fail the exact native
+queries. This remains source-only; the Scheme extension is not loaded into a
+compiled aggregate or exercised at runtime.
+
+No C2 transfer occurs. The next coordinator must preallocate its P1/O2 request
+and pair envelope, authenticate original tokenizer/cursor/trainer controls,
+claim exactly once, reconcile partial P1/O2 transfer, release both original
+holds, then gate exact-image receipt and publication.

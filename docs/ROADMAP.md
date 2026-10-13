@@ -2122,6 +2122,15 @@ substitution, copies the held 17-word history, and drains O2 before G3 after
 lifecycle-aware preclaim release. Source mutation checks and strict C syntax
 pass. This leaf is not linked into a Scheme aggregate; its issued pointer is
 not yet adopted into C2, and no pair, receipt, replay or publication follows.
+The joint-issued Scheme adopter source successor now authenticates the exact
+registered optimizer pointer against that native joint record, allocates and
+guards its shell/record/registry/pointer/error ledger before the one-shot joint
+issue, and enrolls only the exact pointer retained by the joint owner. Its
+preclaim drain releases the issued state before O2 then G3 hold end and retains
+the first release defect. The five-mutation source check and strict C syntax
+pass; the extension is not yet loaded or runtime tested. C2 partial-claim
+rollback, original controls, pair envelope and receipt publication remain
+pending.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
