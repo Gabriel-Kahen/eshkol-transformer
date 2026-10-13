@@ -14,13 +14,13 @@ Status: **source-only proposal** based on exact L lineage `7322632224f08dc123f58
 
 ## Stage map and smallest missing cut
 
-The stage value is set **before** its named possibly failing action. A cut must be at that exact boundary, once per armed invocation, and carry the existing mapped E1 stage/category. It must not fabricate logits, CE, metric bits, model state, or a provider result.
+`e3-frame-entry-live` rejects a foreign or released frame **before** `m3-call`, the stage-0 reset, and the mapped first-error path (`native/e3_private_extension.esk:58-69,449-459`). These are pre-entry admission negatives; assert their direct E1 error and unchanged state, without claiming an E3 stage-0 first-error-table cell. For an authenticated live frame that enters the call, stage 0 is initialized before `e3-evaluate-closed!`; later stages are set before their named actions. A stage-selective cut must fire at that exact entered-call boundary, once per armed invocation, and carry the existing mapped E1 stage/category. It must not fabricate logits, CE, metric bits, model state, or a provider result.
 
 `e3-frame-bind!` and native frame construction are a **setup boundary outside stages 0–12**. Their allocation, six-provider discovery, epsilon copy and P1 bind failures require unchanged existing owners and no surviving partial frame; retry binds a fresh frame. They cannot be reported as an in-evaluation stage-3/4 cut. Conversely, native stage 3 pins the already constructed model and does not rediscover providers.
 
 | E3 stage | Current operation/anchor | Existing witness; additional cut needed |
 |---:|---|---|
-| 0 | Frame/model/native check, `e3-evaluate-closed!:370-401` | Wrong/foreign/stale/busy authority exists; no cut needed for an invented admission success. |
+| 0 | Authenticated-frame model/phase/native check, `e3-evaluate-closed!:370-401` | Wrong or busy model/phase and native frame-check denial are entered-call stage-0 cases. Foreign/released frame rejection occurs before stage 0 and stays a pre-entry negative. |
 | 1 | `p1-e3-mode-prepare!`, `:403-410` | Real P1 rejection can be tested; a one-shot test-only prepare rejection needs exact token/state preservation proof. |
 | 2 | `e3-d2-prepare!`, `:411-415`; D2 profile/remaining-row check at `e3_d2_restore.esk:112-170` | Genuine incompatible/busy/8,193 preflight. Dataset creation/open faults before the evaluator are separate setup negatives; public-seek fault may not stand in for rollback. |
 | 3 | `e3-native-acquire`, `:416-432`; native storage check and 14-pin admission at `e3_frame.c:721-752` | Frame-construction allocator is outside the call. Inventory each invocation-owned borrow/pin and add precommit one-shot cuts only where a recoverable status exists. |
@@ -47,8 +47,8 @@ No fault can fire after the first scalar write. Before that commit, final public
 | Boundary | Required negative/control |
 |---|---|
 | Source/ABI | Canonical private/public source and native object closures, defined/undefined symbols, exports and public strings remain byte-identical; proposed test control appears only in the new tuple manifests. Feature-off compile must lack every new test symbol and observer string. Reject ambient include, duplicate E3 root, forged extern and wrong arity. This document introduces **zero** source/object/ABI deltas now. |
-| Selector/authentication | Reject each invalid/stale/foreign/busy/duplicate selector without arming a later invocation. Verify one fire, consumption, no silent skip and no second fire; distinguish exhausted occurrence from unreached site. |
-| Stage and provider | Compile/admit a fault-free twin before each mutant. Assert the exact first E3 stage and named preinvoke site; post-provider cuts occur only after a completed prior provider call. Direct-provider malformed K1 and equivalent controls retain their separate label. |
+| Selector/authentication | Reject each invalid/stale/foreign/busy/duplicate selector without arming a later invocation. Foreign/released-frame rejection is pre-entry and cannot supply a stage-0 assertion. Verify one fire, consumption, no silent skip and no second fire; distinguish exhausted occurrence from unreached site. |
+| Stage and provider | Compile/admit a fault-free twin before each mutant. For an entered call, assert the exact first E3 stage and named preinvoke site; post-provider cuts occur only after a completed prior provider call. Direct-provider malformed K1 and equivalent controls retain their separate label. |
 | State and publication | On every recoverable cut, byte-compare pre/post cursor, modes, parameter+gradient/RNG, all six outputs and owner counters; clear the fault and retry. Explicitly reject missed child mode, new graph, escaped view/shell, missed pin/borrow release, first-error overwrite and allocating rollback at the first meaningful assertion. |
 | Resource | Run normal, poisoned optimized AOT, repeat and ASan/UBSan/LSan with leak detection on exact reviewed source; measure live/cumulative I2/frame controls and arena/RSS separately. The accepted one-invocation 8,192-batch horizon is a predecessor, not complete-call or all-cut evidence. |
 
