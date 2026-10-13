@@ -128,6 +128,25 @@ int32_t et_f32_parameter_gradient_borrow_begin_v1(
     et_f32_parameter *parameter, et_f32_tensor_borrow **borrow,
     et_f32_tensor_error *error);
 
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+/* Private bit witness only. The caller must first authenticate the genuine
+ * G3 model-pin hold; this token does not confer model-owner authority. */
+typedef struct et_f32_parameter_save_witness et_f32_parameter_save_witness;
+int32_t et_f32_parameter_save_witness_begin_v1(
+    et_f32_parameter *parameter, const void *identity, size_t rank,
+    const uint64_t *shape, et_f32_parameter_save_witness **output,
+    et_f32_tensor_error *error);
+int32_t et_f32_parameter_save_witness_check_v1(
+    const et_f32_parameter_save_witness *witness,
+    et_f32_tensor_error *error);
+int32_t et_f32_parameter_save_witness_end_v1(
+    et_f32_parameter_save_witness **witness,
+    et_f32_tensor_error *error);
+#ifdef ET_F32_TENSOR_TESTING
+void et_f32_parameter_save_witness_test_fail_after_v1(size_t captures);
+#endif
+#endif
+
 /* One contribution is added to every unique destination in canonical order. */
 int32_t et_f32_gradient_plan_prepare_v1(
     size_t contribution_count,
@@ -148,9 +167,13 @@ int32_t et_f32_gradient_reset_plan_release_v1(
     et_f32_gradient_reset_plan **plan, et_f32_tensor_error *error);
 
 #ifdef ET_F32_TENSOR_TESTING
-#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+#if defined(ET_G3R_CANDIDATE_RETIRE_PRIVATE) || \
+    defined(ET_G3R_SAVE_BIT_WITNESS_TESTING)
+/* Test-only read of live backing storage, including an absent gradient. */
 const et_f32_tensor *et_f32_parameter_test_gradient_tensor_v1(
     const et_f32_parameter *parameter);
+#endif
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
 /* Test-only: 0 replaces value, 1 replaces gradient. */
 int32_t et_f32_parameter_test_replace_child_v1(
     et_f32_parameter *parameter, uint32_t child, et_f32_tensor *replacement);

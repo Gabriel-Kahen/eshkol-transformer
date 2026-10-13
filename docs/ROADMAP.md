@@ -1797,6 +1797,15 @@ partitions and EOS rely on controlled native tests. Current-main combined-tree
 build and runtime validation remain gates before admission. No SAVE writer,
 file-pair publication, restore, replay or resumed continuation is provided.
 
+The reviewed [current-history held SAVE proposal](g3/G3_R_CURRENT_HISTORY_HELD_SAVE_CONTRACT.md)
+now accompanies merged main. Its first bounded native prerequisite,
+[the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
+ports exact value and absent-gradient bit baselines under the existing
+fixed14 model pins. Focused normal/repeat/sanitizer and feature-off checks
+pass locally. Independent source review, sealed M3T roster, O2 hold, current
+G3/A2 held 17-word snapshot, compiled union and failure cuts remain gates;
+this leaf adds no same-owner writer, SAVE or continuation admission.
+
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
 diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use
