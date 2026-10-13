@@ -1813,6 +1813,12 @@ combined-tree gate passed with 30 byte-identical checks in normal/repeat/
 sanitizer profiles; this closes only the private snapshot prerequisite. No SAVE writer,
 file-pair publication, restore, replay or resumed continuation is provided.
 
+A disjoint [supported-host gate recipe](g3/G3_R_SNAPSHOT_CODEC_ADAPTER_HOST_GATE.md)
+is prepared for the accepted private snapshot codec adapter source at
+`615114236150253d2fc04e0129a608ed1ab78bc6`. Its normal/repeat/sanitizer
+aggregate and independent wire oracle remain unrun pending recipe review and
+orchestration-root release. No adapter integration is claimed.
+
 The reviewed [current-history held SAVE proposal](g3/G3_R_CURRENT_HISTORY_HELD_SAVE_CONTRACT.md)
 now accompanies merged main. Its first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
