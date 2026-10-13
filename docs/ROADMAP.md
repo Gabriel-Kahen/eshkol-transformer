@@ -1777,8 +1777,11 @@ cache, compares committed length and policy, rejects pending G1 provenance,
 and publishes only detached data after checked 136-byte staging. Focused
 native normal/repeat/sanitizer and feature-off checks pass. Independent review
 and the exact-`97aec234` compiled Eshkol aggregate have also passed their
-bounded gates. Current-main union validation remains pending. This is no SAVE
-admission, file writer or replay proof.
+bounded gates. The exact `4f2abe36` current-main combined-tree gate subsequently
+passed normal/repeat/sanitizer, feature-off and Q0 checks with independent
+review (`g3r-committed-save-union-4f2abe36-fe9-f31-20261012-prepared-a/SHA256SUMS-RUN`,
+`c9094b09...`); PR #203 merged as `86f4eb36`. This is no SAVE admission,
+file writer or replay proof.
 
 The follow-on private aggregate candidate on `codex/g3r-committed-save-aggregate`
 loads that wrapper with the exact M3/G3-T/G3-M route. A real seeded P1/G1
@@ -1793,8 +1796,9 @@ symbol absence and Q0 isolation also pass. Independent source/tests review
 found no blocker at `97aec234`/tree `fbda548f`; sealed evidence is
 `g3r-committed-save-aggregate-97aec234-fe9-f31-20261012-prepared-a/SHA256SUMS-RUN`
 (`cc3c5f2e...`). The real aggregate's positive route covers P1/G1; other
-partitions and EOS rely on controlled native tests. Current-main combined-tree
-build and runtime validation remain gates before admission. No SAVE writer,
+partitions and EOS rely on controlled native tests. The exact `4f2abe36`
+combined-tree gate passed with 30 byte-identical checks in normal/repeat/
+sanitizer profiles; this closes only the private snapshot prerequisite. No SAVE writer,
 file-pair publication, restore, replay or resumed continuation is provided.
 
 The reviewed [current-history held SAVE proposal](g3/G3_R_CURRENT_HISTORY_HELD_SAVE_CONTRACT.md)
@@ -1805,6 +1809,13 @@ fixed14 model pins. Focused normal/repeat/sanitizer and feature-off checks
 pass locally. Independent source review, sealed M3T roster, O2 hold, current
 G3/A2 held 17-word snapshot, compiled union and failure cuts remain gates;
 this leaf adds no same-owner writer, SAVE or continuation admission.
+
+The [private M3 owner-roster prerequisite](g3/G3_R_M3_OWNER_ROSTER_PREREQUISITE.md)
+ports the feature-gated registry-backed fourteen-parameter/identity roster
+to current main. It rejects unsealed, stale, foreign, incomplete or inconsistent
+owners before copying any output. Source and focused native checks are pending
+independent review; the roster alone does not pin value/gradient bits, hold O2,
+or authorize a G3-R SAVE capture.
 
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
