@@ -10,7 +10,9 @@ does not admit a public SAVE or a continuation.
 compiler identity. It pins the supported fe9 source/tree, runner/runtime
 hashes, Clang/LLVM 21.1.8 and f31 image, and names the accepted C7b release
 digest. The preparer checks its exact bytes and the toolchain lock, copies it
-to `COMPILER.tsv`, and includes it in the prepared checksums. The recovered
+from the exact committed Git object to `COMPILER.tsv`, rechecks staged bytes
+against that object and pinned SHA, then atomically publishes the prepared
+bundle and checksums. The recovered
 81298 TR3 candidate is not compiler authority for this gate. These hashes do
 not prove that a capture executable was built.
 

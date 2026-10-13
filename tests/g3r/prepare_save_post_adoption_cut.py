@@ -4,8 +4,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 from pathlib import Path
-import shutil
 import subprocess
+import tempfile
 
 from tests.g3r.test_same_owner_save_caller_source import definition, validate_cleanup_root
 
@@ -39,6 +39,10 @@ ABANDON = "(g3r-save-o2-abandon-internal! owned-shell)"
 
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def committed_bytes(commit: str, name: str) -> bytes:
+    return subprocess.check_output(["git", "show", f"{commit}:{name}"], cwd=ROOT)
 
 
 def frozen_caller(source: str) -> str:
@@ -166,64 +170,78 @@ def prepare(output: Path) -> None:
         raise ValueError("output must be absolute")
     if ROOT.resolve() == output.resolve() or ROOT.resolve() in output.resolve().parents:
         raise ValueError("output must be outside the source checkout")
-    files = validate_source()
-
-    output.mkdir(parents=True)
-    source_root = output / "source"
-    copied = []
-    for name in [*files, *MANUAL_PREFILL]:
-        relative = Path(name)
-        target = source_root / relative
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(ROOT / relative, target)
-        copied.append(target)
-    for name in FIXTURES:
-        target = source_root / name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(ROOT / name, target)
-        copied.append(target)
-    generated = source_root / "tests/g3r/g3r_same_owner_save_cut_caller.esk"
-    generated.write_text(frozen_caller((ROOT / CALLER).read_text()))
-    copied.append(generated)
-    compiler_copy = output / "COMPILER.tsv"
-    shutil.copyfile(ROOT / COMPILER_MANIFEST, compiler_copy)
-    copied.append(compiler_copy)
-
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"],
                                      cwd=ROOT, text=True).strip()
-    tree = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"],
+    files = validate_source()
+    if commit != subprocess.check_output(["git", "rev-parse", "HEAD"],
+                                         cwd=ROOT, text=True).strip():
+        raise ValueError("source HEAD moved during validation")
+    tree = subprocess.check_output(["git", "rev-parse", f"{commit}^{{tree}}"],
                                    cwd=ROOT, text=True).strip()
-    manifest = output / "PREPARED.tsv"
-    manifest.write_text("".join(f"{key}\t{value}\n" for key, value in (
-        ("source_commit", commit), ("source_tree", tree),
-        ("accepted_source_commit", BASE), ("accepted_source_tree", BASE_TREE),
-        ("accepted_caller_sha256", CALLER_SHA256),
-        ("accepted_adoption_sha256", ADOPTION_SHA256),
-        ("closure_sha256", CLOSURE_SHA256),
-        ("cut", "post-adoption longjmp and fail-stop abandon only"),
-        ("fail_stop_mode", "fail-stop"),
-        ("fail_stop_expected_exit", "134"),
-        ("fail_stop_injection_marker",
-         "G3-R post-adoption O2 release fault injected"),
-        ("compiler_commit", FE9), ("compiler_runner_sha256", FE9_RUNNER_SHA256),
-        ("compiler_source_tree", "66c21f7ec19b1b4a42199fa30ed8e0e9727021bf"),
-        ("runtime_archive_sha256", FE9_RUNTIME_SHA256),
-        ("clang_sha256", "82481792aef943c1750ae5fd71e5a5737212741337debd0fe5d28bd82dd018e9"),
-        ("container_digest", F31),
-        ("supported_host", "ubuntu-22.04/x86_64"),
-        ("supported_llvm_clang", "21.1.8"),
-        ("toolchain_lock_sha256", LOCK_SHA256),
-        ("compiler_manifest_sha256", COMPILER_MANIFEST_SHA256),
-        ("closure_count", str(len(files))),
-        ("status", "source-prepared; compiled gate not run"),
-    )))
-    copied.append(manifest)
-    sums = output / "SOURCE-SHA256SUMS"
-    sums.write_text("".join(
-        f"{sha256(path.read_bytes())}  {path.relative_to(output)}\n"
-        for path in sorted(copied)))
-    for path in copied + [sums]:
-        path.chmod(0o444)
+    compiler_source = committed_bytes(commit, COMPILER_MANIFEST)
+    if sha256(compiler_source) != COMPILER_MANIFEST_SHA256:
+        raise ValueError("committed compiler manifest differs from pin")
+
+    with tempfile.TemporaryDirectory(prefix=".g3r-post-adoption-",
+                                     dir=output.parent) as stage_name:
+        stage = Path(stage_name)
+        source_root = stage / "source"
+        copied = []
+        for name in [*files, *MANUAL_PREFILL, *FIXTURES]:
+            target = source_root / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(committed_bytes(commit, name))
+            copied.append(target)
+        generated = source_root / "tests/g3r/g3r_same_owner_save_cut_caller.esk"
+        generated.write_text(frozen_caller(committed_bytes(commit, CALLER).decode()))
+        copied.append(generated)
+        compiler_copy = stage / "COMPILER.tsv"
+        compiler_copy.write_bytes(compiler_source)
+        staged_compiler = compiler_copy.read_bytes()
+        if (staged_compiler != compiler_source or
+                sha256(staged_compiler) != COMPILER_MANIFEST_SHA256):
+            raise ValueError("staged compiler manifest differs from committed pin")
+        copied.append(compiler_copy)
+
+        manifest = stage / "PREPARED.tsv"
+        manifest.write_text("".join(f"{key}\t{value}\n" for key, value in (
+            ("source_commit", commit), ("source_tree", tree),
+            ("accepted_source_commit", BASE), ("accepted_source_tree", BASE_TREE),
+            ("accepted_caller_sha256", CALLER_SHA256),
+            ("accepted_adoption_sha256", ADOPTION_SHA256),
+            ("closure_sha256", CLOSURE_SHA256),
+            ("cut", "post-adoption longjmp and fail-stop abandon only"),
+            ("fail_stop_mode", "fail-stop"),
+            ("fail_stop_expected_exit", "134"),
+            ("fail_stop_injection_marker",
+             "G3-R post-adoption O2 release fault injected"),
+            ("compiler_commit", FE9),
+            ("compiler_runner_sha256", FE9_RUNNER_SHA256),
+            ("compiler_source_tree", "66c21f7ec19b1b4a42199fa30ed8e0e9727021bf"),
+            ("runtime_archive_sha256", FE9_RUNTIME_SHA256),
+            ("clang_sha256", "82481792aef943c1750ae5fd71e5a5737212741337debd0fe5d28bd82dd018e9"),
+            ("container_digest", F31),
+            ("supported_host", "ubuntu-22.04/x86_64"),
+            ("supported_llvm_clang", "21.1.8"),
+            ("toolchain_lock_sha256", LOCK_SHA256),
+            ("compiler_manifest_sha256", COMPILER_MANIFEST_SHA256),
+            ("closure_count", str(len(files))),
+            ("status", "source-prepared; compiled gate not run"),
+        )))
+        copied.append(manifest)
+        sums = stage / "SOURCE-SHA256SUMS"
+        sums.write_text("".join(
+            f"{sha256(path.read_bytes())}  {path.relative_to(stage)}\n"
+            for path in sorted(copied)))
+        for path in copied + [sums]:
+            path.chmod(0o444)
+        staged_compiler = compiler_copy.read_bytes()
+        if (staged_compiler != compiler_source or
+                sha256(staged_compiler) != COMPILER_MANIFEST_SHA256):
+            raise ValueError("staged compiler manifest changed before publication")
+        if output.exists() or output.is_symlink():
+            raise ValueError("output appeared during preparation")
+        stage.rename(output)
 
 
 def main() -> None:

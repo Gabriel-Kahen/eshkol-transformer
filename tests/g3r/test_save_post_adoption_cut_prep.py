@@ -12,7 +12,7 @@ from tests.g3r import prepare_save_post_adoption_cut as preparation
 from tests.g3r.prepare_save_post_adoption_cut import (
     ROOT, CALLER, ADOPTION_RETURN, ABANDON, BASE, BASE_TREE, F31, FE9,
     FE9_RUNNER_SHA256, FE9_RUNTIME_SHA256, COMPILER_MANIFEST_SHA256,
-    frozen_caller, parse_unique_tsv, prepare, validate_closure,
+    committed_bytes, frozen_caller, parse_unique_tsv, prepare, validate_closure,
     validate_source, validate_toolchain_manifest,
 )
 
@@ -49,7 +49,12 @@ class PostAdoptionPreparation(unittest.TestCase):
             manifest = (destination / "PREPARED.tsv").read_text()
             self.assertEqual(len(sums.read_text().splitlines()), 103)
             self.assertEqual((destination / "COMPILER.tsv").read_bytes(),
-                             (ROOT / preparation.COMPILER_MANIFEST).read_bytes())
+                             committed_bytes(subprocess.check_output(
+                                 ["git", "rev-parse", "HEAD"], cwd=ROOT,
+                                 text=True).strip(), preparation.COMPILER_MANIFEST))
+            self.assertEqual(preparation.sha256(
+                (destination / "COMPILER.tsv").read_bytes()),
+                COMPILER_MANIFEST_SHA256)
             self.assertIn("accepted_source_commit\t" + BASE, manifest)
             self.assertIn("accepted_source_tree\t" + BASE_TREE, manifest)
             self.assertIn("closure_count\t96", manifest)
@@ -92,6 +97,24 @@ class PostAdoptionPreparation(unittest.TestCase):
         for malformed in ("key\ta\nkey\tb\n", "key\n", "key\t\n", "\n", ""):
             with self.subTest(malformed=malformed), self.assertRaises(ValueError):
                 parse_unique_tsv(malformed)
+
+    def test_copy_time_compiler_drift_denied_without_prepared_artifact(self):
+        original_write = Path.write_bytes
+        with tempfile.TemporaryDirectory(prefix="g3r-cut-copy-drift-") as directory:
+            parent = Path(directory)
+            destination = parent / "prepared"
+
+            def drift_on_stage(path, data):
+                if path.name == "COMPILER.tsv":
+                    data += b"\n# copy-time drift\n"
+                return original_write(path, data)
+
+            with patch.object(Path, "write_bytes", drift_on_stage):
+                with self.assertRaisesRegex(ValueError,
+                                            "staged compiler manifest differs"):
+                    prepare(destination)
+            self.assertFalse(destination.exists())
+            self.assertEqual(list(parent.iterdir()), [])
 
     def test_old_base_and_changed_pins_fail_closed_without_output(self):
         with tempfile.TemporaryDirectory(prefix="g3r-cut-negative-") as directory:
