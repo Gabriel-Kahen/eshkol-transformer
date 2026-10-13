@@ -79,7 +79,7 @@ class PartialClaimSource(unittest.TestCase):
         head = git("rev-parse", "HEAD")
         with tempfile.TemporaryDirectory(prefix="g3r-partial-drift-") as scratch:
             for name, suffix in (
-                (EXTRA[3], b"# appended 34-byte fixture drift!!\n"),
+                (EXTRA[3], b"# appended 34-byte fixture drift!\n"),
                 ("toolchain/eshkol.lock", b"# same expected line; drift\n"),
                 ("tests/tr3_lease/runtime_candidate.tsv",
                  b"# same expected line; drift\n"),
@@ -91,10 +91,19 @@ class PartialClaimSource(unittest.TestCase):
                  b"# dirty launcher\n"),
             ):
                 with self.subTest(name=name):
+                    if name == EXTRA[3]:
+                        self.assertEqual(len(suffix), 34)
                     candidate = Path(scratch) / Path(name).name
                     candidate.write_bytes((ROOT / name).read_bytes() + suffix)
                     with self.assertRaises(ValueError):
                         verify_file(name, head, candidate)
+
+    def test_dirty_worktree_is_rejected(self):
+        with tempfile.NamedTemporaryFile(
+            dir=ROOT / "tests/g3r", prefix=".g3r-partial-dirty-"
+        ):
+            with self.assertRaisesRegex(ValueError, "worktree is not clean"):
+                verify(git("rev-parse", "HEAD"))
 
 
 if __name__ == "__main__":
