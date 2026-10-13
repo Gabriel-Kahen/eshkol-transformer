@@ -2115,6 +2115,13 @@ LIVE, DEAD-after-defect and indeterminate native lifecycle outcomes. The
 four-mutation source check passes. The helper is not yet linked or runtime
 verified; G3/M3/A2-to-O2 coordinator binding, P1/C2 partial-claim rollback,
 hold release order and receipt gates remain pending.
+The bounded [native joint-hold source gate](g3/G3_R_JOINT_HOLD_SOURCE_GATE.md)
+now uses one sealed M3T roster to acquire the original G3/M3/A2 and O2 holds,
+registers one exact issued O2 pointer, rejects a second issue or bit-equal
+substitution, copies the held 17-word history, and drains O2 before G3 after
+lifecycle-aware preclaim release. Source mutation checks and strict C syntax
+pass. This leaf is not linked into a Scheme aggregate; its issued pointer is
+not yet adopted into C2, and no pair, receipt, replay or publication follows.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
