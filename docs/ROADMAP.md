@@ -1093,14 +1093,21 @@ The [noninstalled sum-order mutant source](e3/E3_SUM_ORDER_MUTANT_SOURCE.md)
 now prepares an exact packed D1 resource, a test-only third-batch K1 operand
 regrouping, and a private AOT gate that requires the first actual difference
 at `state_f32[0]` with no rejected transcript. Focused source-only and static
-checks pass; independent review remains pending. No optimized runtime, poison or sanitizer verdict is
-claimed, and the M2 compiled-private row stays open.
+checks pass. Independent source/tests review accepted `15373fe`/tree `9ba8c568`
+(`e3-section9-sum-order-mutant-20261013/review.md`, SHA-256
+`3cbdda001d16af48119e1635d83df7b1b238ca0c5157b106553bb33c2c1dd0b9`)
+and its PR206-composed successor `df9546c`/tree `365da582`
+(`e3-sum-order-pr206-union-review-df9546cc/SEAL.sha256`). No optimized
+runtime, poison or sanitizer verdict is claimed, and the M2 compiled-private
+row stays open.
 The merged PR #206 source-test repair keeps the exact zero-control and sum-order source
 contracts while aligning older assertions with the admitted zero ASan tuple,
 the conditional undefined-symbol comparison, the test-only sum-order frame
 guard, and the single frozen JSON witness. The E3 private (96), E3 reference
 (27), and Q0/M3CG focused (15) source checks pass on the pinned Python 3.14.6
-oracle. Independent review and supported compiled gates remain pending.
+oracle. Independent source/tests review accepted the exact `df9546c` union;
+PR #206 merged as `c60779bb`/tree `e49eb998`. Supported compiled gates
+remain pending.
 
 The N5 source prerequisite now generates independently counted authentic 8,193
 packed D2 rows and checks that the private D2-core remaining-row guard runs at
@@ -1135,13 +1142,19 @@ fresh pinned compiled edge gate remain required for admission.
 The edge-parent source-suite repair updates two retention-driver digest pins to
 the accepted fourth-output driver and regenerates the private first-evaluation
 mutant mechanically from that same N5/edge baseline. The E3-private, E3-reference
-and horizon source suites pass on this isolated tree. Independent review and
-the compiled private gates remain pending; these source checks do not establish
-edge, mutant or §9 runtime acceptance.
+and horizon source suites pass on this isolated tree. Independent source-only
+review accepted `63c5990`/tree `dd9fc757`
+(`e3-edge-suite-hash-repair-review-63c59906.txt`); the compiled private gates
+remain pending. These source checks do not establish edge, mutant or §9 runtime
+acceptance.
 The repaired E3 source union `cc0f6fe`/tree `cda29424` retains both reviewed
-parent repairs and passed independent source-composition review. Its composition
-with current main `c60779bb` still requires independent whole-tree review;
-the supported compiled E3 §9 gates remain pending.
+parent repairs and passed independent source-composition review
+(`e3-repaired-union-cc0f6fe-review.md`). Independent review of its exact
+`ff2ab7e`/tree `0ffd1e01` composition with main `c60779bb` found no new
+source defect but returned HOLD for integration (`/tmp/e3-ff2-current-main-union-review.md`,
+SHA-256 `a3630baea858bdd6d505c051633a2e2e3187b9063999b9a43b8240d0fe86f9b6`).
+Exact-head required checks and supported compiled E3
+§9 gates remain pending; this documentation successor also needs review.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each
