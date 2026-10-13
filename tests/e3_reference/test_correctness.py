@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
+import re
 import struct
 import tempfile
 import unittest
 
 from tests.e3_reference.correctness import (
-    build_reference, materialize, selection_proof, validate_manifest,
+    CONFIG, build_reference, materialize, selection_proof, validate_manifest,
     validate_materialized, verify_observed,
 )
+from tests.d2.reference import ReferenceConfig, decode_reference_cursor, encode_reference_cursor
+from tests.e3_private.parse_correctness_observation import parse_correctness
 from tests.e3_reference.transcript import canonical
 from tests.e3_reference.transcript import validate_observed_case
 
@@ -64,6 +67,34 @@ class CorrectnessCasesTests(unittest.TestCase):
         shard.write_bytes(shard.read_bytes() + b"x")
         with self.assertRaisesRegex(ValueError, "file identity"):
             validate_materialized(second, self.manifest)
+
+    def test_cursor_config_matches_compiled_driver_and_rejects_default_limit(self) -> None:
+        driver = (Path(__file__).resolve().parents[2] /
+                  "tests/e3_private/driver.esk").read_text()
+        limits = re.findall(r"':maximum-batch-bytes\s+(\d+)", driver)
+        self.assertEqual(limits, [str(CONFIG.maximum_batch_bytes)])
+        self.assertEqual(CONFIG.maximum_batch_bytes, 34)
+        for case in self.manifest["cases"]:
+            for field in ("start_cursor", "end_cursor"):
+                self.assertEqual(
+                    decode_reference_cursor(bytes.fromhex(case[field])).config, CONFIG)
+        changed = copy.deepcopy(self.manifest)
+        case = changed["cases"][0]
+        original = decode_reference_cursor(bytes.fromhex(case["start_cursor"]))
+        default_config = ReferenceConfig(1, 2, None, 1, True)
+        self.assertEqual(default_config.maximum_batch_bytes, 1_048_576)
+        case["start_cursor"] = encode_reference_cursor(
+            original.manifest_digest, original.tokenizer_fingerprint,
+            original.vocab_size, default_config, original.total_rows,
+            original.next_ordinal).hex()
+        with self.assertRaisesRegex(ValueError, "cursor identity/count mismatch"):
+            validate_manifest(changed)
+        compiled_cursor = self.manifest["cases"][0]["start_cursor"].encode("ascii")
+        raw = (b"frame\nE3RESULT\t0,0,0,0,0,0\nE3CURSOR\t" +
+               compiled_cursor + b"\t" + compiled_cursor +
+               b"\nE3-NUMERICAL-RUNTIME-PASS\n")
+        with self.assertRaisesRegex(ValueError, "caller cursor was not restored"):
+            parse_correctness(raw, changed, "all-correct")
 
     def test_manifest_rejects_identity_class_schema_and_rows(self) -> None:
         mutations = (

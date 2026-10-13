@@ -958,6 +958,14 @@ gradient mutations it requires failure at the first post-evaluation
 `success-model-image` comparison under normal, repeat, poisoned and sanitizer
 profiles, retaining raw streams, exit codes, hashes and toolchain provenance.
 This is source preparation only; no compiled result or §9 proof is claimed.
+The sealed K first-evaluation run at `268ab285` failed its first correctness
+parser gate because the reference cursor encoded the D2 default
+`maximum_batch_bytes=1048576` while the compiled driver requested `34`.
+The observed caller cursor was restored byte-for-byte. The isolated source
+repair sets the correctness reference to `34` and tests both manifest cursor
+identity and rejection of the old-default mismatch by the strict compiled
+result parser. A fresh independent source review and distinct one-use compiled
+gate remain required; K is retained as failed evidence, not numerical proof.
 
 The [E3 idle real-model control contract](e3/E3_IDLE_REAL_MODEL_CONTROL_CONTRACT.md)
 specifies a test-only use of existing I2 checkpoint decode and whole-batch load

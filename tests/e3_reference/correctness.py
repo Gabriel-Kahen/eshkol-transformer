@@ -29,7 +29,7 @@ CASES = (
     ("all-wrong", bytes.fromhex("030f39c5e7c5"), False),
 )
 KIND = "e3-correctness-corpus-v1"
-CONFIG = ReferenceConfig(1, 2, None, 1, True)
+CONFIG = ReferenceConfig(1, 2, None, 1, True, maximum_batch_bytes=34)
 
 
 def _hash(path: Path) -> str:
