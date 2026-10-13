@@ -1837,10 +1837,18 @@ and overlapping error storage before writing; the feature-gated bridge leaves
 the ordinary O2 path unchanged. Focused normal/repeat checks pass 359 each,
 the combined candidate-retire test passes 364, ASan+UBSan passes 359, and
 feature-off native objects match the accepted parent byte for byte with the
-private symbols absent. Independent source review and compiled C2 aggregate
-validation remain the admission gates.
+private symbols absent. Independent bounded source review passed for exact
+`0d2e31e8`/tree `ce68555b`; compiled C2 aggregate validation remains an
+admission gate.
 This candidate adds no public API, C2 SAVE writer, trainer-control issuer, or
 G3-R pair publication.
+
+The isolated [O2 issued-state to C2 compiled-provider gate](g3/G3_R_O2_ISSUED_C2_PROVIDER_GATE.md)
+adds a noninstalled test bridge and one-registry Eshkol runtime for the exact
+issued pointer, C2 claim/rollback/retirement, identity, alias, count, and
+same-owner retry cases. It is source-only pending supported-host execution
+and independent review; its test bridge derives the fourteen-entry roster
+from the registered optimizer and does not authenticate the M3 issuer.
 
 The follow-on private aggregate candidate on `codex/g3r-committed-save-aggregate`
 loads that wrapper with the exact M3/G3-T/G3-M route. A real seeded P1/G1
