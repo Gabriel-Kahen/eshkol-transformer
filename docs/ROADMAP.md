@@ -3202,6 +3202,14 @@ publication, public G2 and continuation remain pending.
   checks pass; a compiled rerun and independent review of their combined tree
   remain pending. Current-main admission, public G2, and continuation
   acceptance remain unproved.
+  The exact combined source `4cf3177d`/tree `d8f6a044` passed 11 source
+  checks and built normal feature-on/off native archives, including the
+  corrected symbol gate. Its first feature-on Eshkol AOT link then failed on
+  unresolved `__real_et_g3c4_private_p2g2_terminal_snapshot_v1` and
+  `__real_et_g3c4_private_p2g2_terminal_ids_clone_copy_v1`; no executable or
+  runtime result was reached. The compiled-gate linker wrapper now includes
+  both corresponding `--wrap` flags, with a source regression check. A fresh
+  exact-head compiled matrix and independent review remain pending.
 
 ## Wave 4 — practical pretraining and performance
 

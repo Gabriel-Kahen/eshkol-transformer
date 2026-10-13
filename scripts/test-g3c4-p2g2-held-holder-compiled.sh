@@ -129,6 +129,8 @@ exec $(printf '%q' "$cxx") $sanitizer_link "\$@" \\
   -Wl,--wrap=et_g3c4_private_p2g2_second_frame_carrier_v1 \\
   -Wl,--wrap=et_g3c4_private_p2g2_prefix_commit_v1 \\
   -Wl,--wrap=et_g3c4_private_p2g2_terminal_commit_v1 \\
+  -Wl,--wrap=et_g3c4_private_p2g2_terminal_snapshot_v1 \\
+  -Wl,--wrap=et_g3c4_private_p2g2_terminal_ids_clone_copy_v1 \\
   -Wl,--wrap=et_g3c4_private_call_abort_v1 \\
   -Wl,--wrap=et_a2_kv_cache_transaction_abort_v1 \\
   -Wl,--wrap=et_a2_kv_cache_transaction_commit_v1 \\

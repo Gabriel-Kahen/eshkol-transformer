@@ -72,6 +72,18 @@ class HeldHolderCompiledSource(unittest.TestCase):
         self.assertIn("ESHKOL_ARENA_POISON=1", source)
         self.assertIn('test "$status" -eq 134', source)
 
+    def test_compiled_link_wraps_terminal_calls_used_by_native_shim(self):
+        script = SCRIPT.read_text()
+        wrapper = script.split('cat >"$directory/cxx-wrap" <<WRAPPER\n', 1)[1].split('\nWRAPPER', 1)[0]
+        self.assertIn('#include "p2_g2_terminal_composer_native.c"', SHIM.read_text())
+        shim = (ROOT / "tests/g3c4/p2_g2_terminal_composer_native.c").read_text()
+        for symbol in (
+            "et_g3c4_private_p2g2_terminal_snapshot_v1",
+            "et_g3c4_private_p2g2_terminal_ids_clone_copy_v1",
+        ):
+            self.assertIn("__real_" + symbol, shim)
+            self.assertEqual(wrapper.count("-Wl,--wrap=" + symbol), 1)
+
     def test_exact_eshkol_load_manifest_is_distinct_from_native_closure(self):
         include_dirs = ("internal/p1/lib", "internal/c1/lib", "internal/t1/lib",
                         "src", "lib", "native")
