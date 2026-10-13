@@ -992,6 +992,12 @@ Its first witness in a 64-candidate SHA-256 domain has serial numerator
 21 M3 roles, CE and numerator inputs are reproducibly pinned. A rational RN-even
 oracle and negative comparator mutation validate the source fixture. This is
 reachability evidence only; a compiled private M2 mutant gate remains open.
+The [noninstalled sum-order mutant source](e3/E3_SUM_ORDER_MUTANT_SOURCE.md)
+now prepares an exact packed D1 resource, a test-only third-batch K1 operand
+regrouping, and a private AOT gate that requires the first actual difference
+at `state_f32[0]` with no rejected transcript. Focused source-only and static
+checks pass; independent review remains pending. No optimized runtime, poison or sanitizer verdict is
+claimed, and the M2 compiled-private row stays open.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each

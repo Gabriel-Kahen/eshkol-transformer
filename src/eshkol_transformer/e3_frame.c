@@ -13,6 +13,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(ET_E3_NUMERICAL_SUM_ORDER) && !defined(ET_E3_NUMERICAL_TESTING)
+#error "sum-order mutation requires the private numerical test tuple"
+#endif
+
 #ifdef ET_E3_NUMERICAL_TESTING
 #include <inttypes.h>
 #include <stdio.h>
@@ -79,6 +83,10 @@ struct et_e3_frame_internal {
   int64_t counts[2][2], active, staged_counts[2], published_counts[2];
   uint32_t sum_bank, committed, cleanup_ready, published_valid;
   et_kernel_runtime *runtime[6];
+#ifdef ET_E3_NUMERICAL_SUM_ORDER
+  float sum_order_first, sum_order_second;
+  uint32_t sum_order_seen;
+#endif
 };
 
 static et_e3_frame_internal *e3_registry;
@@ -734,6 +742,10 @@ int64_t et_e3_private_acquire_v1(void *pointer) {
   frame->active = 0;
   memset(frame->staged_counts, 0, sizeof(frame->staged_counts));
   frame->sum_bank = 0;
+#ifdef ET_E3_NUMERICAL_SUM_ORDER
+  frame->sum_order_first = frame->sum_order_second = 0.0f;
+  frame->sum_order_seen = 0;
+#endif
   frame->committed = 0;
   frame->next_role = 0;
   frame->stage_plane = 0;
@@ -1152,6 +1164,10 @@ static int64_t e3_accumulate_dispatch(et_e3_frame_internal *frame) {
   et_kernel_tensor_view_v1 inputs[9], outputs[5];
   size_t opened = 0;
   int64_t rc = 0;
+#ifdef ET_E3_NUMERICAL_SUM_ORDER
+  const int64_t ordinal = frame->counts[current][1];
+  float batch_n = 0.0f, grouped_tail = 0.0f;
+#endif
   for (size_t i = 0; i < 3 && !rc; ++i) {
     rc = e3_scope_begin(frame->sum[current][i], &guards[opened], 0);
     if (!rc) inputs[i] = guards[opened++].view;
@@ -1176,6 +1192,18 @@ static int64_t e3_accumulate_dispatch(et_e3_frame_internal *frame) {
   outputs[4] = e3_native_view(&frame->counts[next][1], sizeof(int64_t),
                               "i64", 0, NULL);
   if (!rc) {
+#ifdef ET_E3_NUMERICAL_SUM_ORDER
+    /* Only the third real CE batch changes operand grouping. The accepted K1
+     * accumulate dispatch still computes and writes the mutated state. */
+    memcpy(&batch_n, inputs[5].data, sizeof(batch_n));
+    if (ordinal == 2) {
+      if (frame->sum_order_seen != 2) abort();
+      volatile float rounded_tail = frame->sum_order_second + batch_n;
+      grouped_tail = rounded_tail;
+      inputs[0].data = &frame->sum_order_first;
+      inputs[5].data = &grouped_tail;
+    }
+#endif
     et_kernel_request_v1 request = {sizeof(request),
       "e3.evaluation-metrics.accumulate", "f32", "cpu", 3,
       e3_shape_logits, 1, {0}};
@@ -1186,6 +1214,14 @@ static int64_t e3_accumulate_dispatch(et_e3_frame_internal *frame) {
     if (et_kernel_runtime_dispatch(frame->runtime[E3_RUNTIME_METRICS],
                                    &call, &error) != 0)
       rc = e3_kernel_error(&error);
+#ifdef ET_E3_NUMERICAL_SUM_ORDER
+    if (!rc && ordinal < 2) {
+      if (ordinal < 0 || frame->sum_order_seen != (uint32_t)ordinal) abort();
+      if (ordinal == 0) frame->sum_order_first = batch_n;
+      else frame->sum_order_second = batch_n;
+      ++frame->sum_order_seen;
+    }
+#endif
   }
   while (opened) e3_scope_end(&guards[--opened]);
   return rc;
