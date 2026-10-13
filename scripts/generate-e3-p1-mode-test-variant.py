@@ -10,8 +10,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CANONICAL = ROOT / "internal/p1/lib/transformer/module.esk"
-CANONICAL_SHA256 = "1146eee9e053b4a761c24f56b75ed43e756ec2d907d0de48b04e72abe805775d"
-VARIANT_SHA256 = "f909e79420850f228f88965e4cfa3a328c54b463fbac1f124cd61942c8ba05c6"
+CANONICAL_SHA256 = "8629d7ee347fb81d0a24cbb5d296828208af9bf75965244d70f7a05ecb132e40"
+VARIANT_SHA256 = "4dfed83790ced23de91e91bede7bbc730b80273e9419de6b2c2678c5e8d58e1a"
 
 
 def spans(source: str) -> list[tuple[int, int, int]]:

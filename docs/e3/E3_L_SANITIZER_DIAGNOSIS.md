@@ -30,10 +30,22 @@ before replaying a fresh one-use E3 detector. The original L run remains a
 failed prerequisite and supplies no first-evaluation or §9 acceptance.
 
 Source-only generation parity, E3-P1 structure and TR3-P1 structure checks
-pass. The separate prepared-split checker stops on its inherited undefined-
+pass. The repaired canonical P1 SHA-256 is
+`8629d7ee347fb81d0a24cbb5d296828208af9bf75965244d70f7a05ecb132e40`.
+The noninstalled P1 mode generator and its source manifest pin this exact
+source and the resulting variant SHA-256
+`4dfed83790ced23de91e91bede7bbc730b80273e9419de6b2c2678c5e8d58e1a`.
+The mode-graph generator pins all four resulting P1 variants independently;
+its extension digests are unchanged. The two source/negative suites pass 12
+tests, including poisoned output and altered canonical source rejection.
+The separate prepared-split checker stops on its inherited undefined-
 symbols manifest pin (`1941268a...` expected versus `f40f5090...` actual);
 the manifest and checker are identical at the L base commit. This unrelated
 pre-existing static failure is not evidence for or against the repair.
+The broader Q0 Python-isolation suite also has one inherited failure: it
+rejects `scripts/generate-e3-overflow-clamp-overlay.py`, while that file and
+the Q0 checker are byte-identical to the L base. Neither inherited failure
+is repinned by this repair.
 
 The host launcher independently reported `unsafe-guest-output`, killed the
 Docker client, and returned 74. Its `output_bytes` traversal catches
