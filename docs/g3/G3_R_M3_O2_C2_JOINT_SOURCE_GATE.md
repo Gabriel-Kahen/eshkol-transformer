@@ -34,3 +34,14 @@ and feature-off symbol absence. It has not run the supported Eshkol AOT/runtime
 gate. Independent source/test review, joint allocation-failure cuts, and
 supported compiled execution remain required
 before integration or any G3-R pair/restore claim.
+
+The first one-use supported-host B attempt reached the joint AOT compiler and
+failed before runtime at `m3t_transport_extension.esk:265`: its T1-named sealed
+token predicate was absent from the D2/T2 aggregate. The B host/guest/home,
+claim, and quarantine receipts remain preserved; no SAVE bytes were produced.
+This source-only successor binds that existing T1 name to the T2 root's exact
+same-aggregate admission predicate before loading M3T, as the accepted TR3
+private aggregates already do. A focused closure test checks the upstream
+predicate and rejects a missing, late, or second-registry binding. A fresh
+supported-host executor and run require independent source review and separate
+release after raw B cleanup/quarantine review.

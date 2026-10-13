@@ -1864,8 +1864,12 @@ ports the published M3T owner-roster API into the accepted O2/C2 fixture and
 constructs O2 from the same sealed M3 model's P1 tree. Its test-only bridge
 requires the fourteen M3-issued owners and identities to match O2 before a
 hold, then exercises the existing C2 claim and SAVE writer. This is a source-
-only candidate: supported AOT/runtime execution, independent review, and
-fault/feature-off gates remain open; no G3-R restore or publication follows.
+only candidate: the first one-use B host run failed at AOT because M3T's
+T1-named token admission predicate was absent from the D2/T2 aggregate. Its
+failed evidence is preserved. A source-only successor now binds the established
+T2 predicate before M3T loads; source review, a fresh supported-host run,
+fault/feature-off gates, and raw B cleanup review remain open. No G3-R restore
+or publication follows.
 
 The follow-on private aggregate candidate on `codex/g3r-committed-save-aggregate`
 loads that wrapper with the exact M3/G3-T/G3-M route. A real seeded P1/G1

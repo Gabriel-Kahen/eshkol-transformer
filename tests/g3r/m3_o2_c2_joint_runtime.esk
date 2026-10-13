@@ -2,6 +2,9 @@
 ;;; The native bridge authenticates the M3T-issued roster before O2 begins a hold.
 ;;; The final owner uses the existing C2 SAVE writer; restore is outside scope.
 (load "d2_wave2_root.esk")
+;;; D2's T2 root owns this aggregate's sealed-token registry. M3T retains the
+;;; T1 predicate name; bind it to the same T2 authority before loading M3T.
+(define t1-wave1-tensor-admitted? t2-wave2-tensor-admitted?)
 (load "m3t_transport_extension.esk")
 (load "c2_d2_cursor_pair_extension.esk")
 (load "o2_wave2_extension.esk")
