@@ -2172,6 +2172,13 @@ It is a source prerequisite only. The pinned aggregate must still prove
 held-pin P1 cloning, exact original bit preservation, joint-issued O2 transfer,
 C2 partial-claim cleanup and reverse-order hold drain before a C2 claim is
 accepted.
+The next feature-private source aggregate now wires those leaves into one
+D2/T2/I2/P1/M3T/G3/C2 fixture, with original fourteen-value/gradient and
+17-word history comparisons plus preclaim and partial-claim negative cuts.
+Its eight-mutation source closure and shell syntax check pass; the supported
+fe9dfd5 aggregate has not compiled or run, so these are fixture assertions,
+not admitted runtime evidence. Provider and post-tombstone failure cuts still
+need compiled evidence before a same-owner C2 claim is accepted.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),

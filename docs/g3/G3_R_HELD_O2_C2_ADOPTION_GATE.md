@@ -215,3 +215,27 @@ this entry, so it does not establish a claim or a recoverable failure path.
 The next gate must link the begin entry, joint O2 adopter, original binding,
 P1 provenance and C2 claim in one pinned aggregate, then exercise the real
 CPU-f32 clone and the specified failure cuts while both holds remain live.
+
+## Feature-private held P1/C2 aggregate fixture
+
+`tests/g3r/held_p1_c2_gate.esk` now loads the real joint begin, issued O2
+adopter, P1 provenance and original-bound C2 claim in one D2/T2/I2/P1/M3T/G3
+registry. Its runner compiles the private native joint and provider flags only
+for this fixture. The source scenarios create the diagnostic CPU-f32 fourteen
+parameter model and raw T1 generator, with a distinct T2 byte tokenizer used
+only to obtain canonical D2 cursor controls. They compare all fourteen
+original value payloads, gradient metadata and the held 17-word G3 history
+across the P1 clone and successful C2 transfer. The fixture also specifies
+foreign owner, malformed controls, injected topology, caller-side shell
+substitution, stale owner and post-O2 partial claim cuts. On recoverable
+preclaim cuts it checks clone-count rollback and explicit issued-O2 then
+G3 hold drain; after C2 transfer it checks the exact registered child and
+owner through the claim helper and releases the resulting C2 owner.
+
+The fixture, runner and eight-mutation source closure pass static checks;
+the pinned aggregate has **not yet compiled or run**. Provider clone failure,
+post-tombstone P1 release defect and uncertain native release are fail-stop
+contracts, not exercised recoverable fixture outcomes. A successful compiled
+run and independent review are required before this can be an admitted
+same-owner P1/O2 C2 claim. TR3 train versus G3 eval, T1/T2 shell identity,
+original trainer/cursor controls, pair/receipt and replay remain open.
