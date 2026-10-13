@@ -1813,8 +1813,11 @@ this leaf adds no same-owner writer, SAVE or continuation admission.
 The [current-history G3/A2 held-owner leaf](g3/G3_R_CURRENT_HISTORY_HELD_OWNER_LEAF.md)
 adds source-private original-owner pins and cache borrow with a checked 17-word
 committed-history image. Focused native feature-off, normal, repeat and
-ASan+UBSan cuts pass; independent source/tests review remains open. The O2
-prerequisite has an unresolved alias finding and is excluded from this branch.
+ASan+UBSan cuts pass. A held-copy alias repair now rejects overlap with any
+registered M3/G3-T control shell, including foreign model owners, before
+writing; focused negative and sanitizer cuts pass. Independent source/tests
+review remains open. The O2 prerequisite has an unresolved alias finding and
+is excluded from this branch.
 Coordinator, post-adoption and partial-O2-claim cuts remain integration gates;
 there is no SAVE or continuation admission.
 

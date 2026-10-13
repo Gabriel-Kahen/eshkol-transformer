@@ -119,6 +119,8 @@ int32_t et_f32_tensor_private_storage_overlap_v1(const void *p, size_t n) {
 
 static g3t_context c;
 static owner model, foreign;
+static struct { owner model; unsigned char tail[136]; } foreign_partial;
+static struct { g3t_input input; unsigned char tail[136]; } transport_partial;
 static initializer initial, next;
 static unsigned char parameters[14], handles[14];
 static bytes136 destination, staging;
@@ -173,8 +175,14 @@ int main(void) {
     c.binding_identities[i] = &handles[i];
   }
   model.r.next = &foreign.r; foreign.r.next = &initial.r;
+  foreign_partial.model = foreign;
+  foreign.r.next = &foreign_partial.model.r;
+  foreign_partial.model.r.next = &initial.r;
   initial.r.next = &next.r; registry = &model.r;
-  c.h.kind = G3T_GENERATOR; c.h.state = G3T_LIVE; g3t_registry = &c.h;
+  c.h.kind = G3T_GENERATOR; c.h.state = G3T_LIVE;
+  transport_partial.input.h.kind = G3T_INPUT;
+  transport_partial.input.h.state = G3T_LIVE;
+  c.h.next = &transport_partial.input.h; g3t_registry = &c.h;
   c.model = &model; c.cache = (et_a2_kv_cache *)&parameters[0];
   c.policy[0] = 0; c.policy[1] = c.policy[3] = INT64_C(0x3f800000);
   c.policy[2] = 256; c.policy[4] = 1; c.policy[5] = 65;
@@ -243,6 +251,29 @@ int main(void) {
   assert(words.word[0] == c.policy[0] && words.word[6] == c.rng[0]);
   assert(words.word[10] == 66 && words.word[12] == 1);
   assert(words.word[16] == 0);
+  unsigned char foreign_before[sizeof(foreign)];
+  unsigned char model_before[sizeof(foreign_partial)];
+  unsigned char transport_before[sizeof(transport_partial)];
+  memcpy(foreign_before, &foreign, sizeof(foreign));
+  memcpy(model_before, &foreign_partial, sizeof(foreign_partial));
+  memcpy(transport_before, &transport_partial, sizeof(transport_partial));
+  assert(et_g3r_private_g3t_save_copy_v1(
+      hold, (et_g3r_g3t_held_words_v1 *)&foreign, sizeof(words)) == G3T_ARGUMENT);
+  assert(!memcmp(foreign_before, &foreign, sizeof(foreign)));
+  assert(et_g3t_private_last_error_code_v1() == G3T_IDENTITY);
+  assert(et_g3r_private_g3t_save_copy_v1(
+      hold, (et_g3r_g3t_held_words_v1 *)
+          ((char *)&foreign_partial.model + sizeof(owner) - 8),
+      sizeof(words)) == G3T_ARGUMENT);
+  assert(!memcmp(model_before, &foreign_partial, sizeof(foreign_partial)));
+  assert(et_g3r_private_g3t_save_copy_v1(
+      hold, (et_g3r_g3t_held_words_v1 *)
+          ((char *)&transport_partial.input + sizeof(g3t_input) - 8),
+      sizeof(words)) == G3T_ARGUMENT);
+  assert(!memcmp(transport_before, &transport_partial,
+                 sizeof(transport_partial)));
+  assert(pin_active && cache_active && c.h.busy);
+  assert(!et_g3r_private_g3t_save_check_v1(hold));
   assert(et_g3r_private_g3t_save_copy_v1(
       hold, (et_g3r_g3t_held_words_v1 *)((char *)hold + 1),
       sizeof(words)));

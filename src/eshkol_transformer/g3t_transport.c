@@ -782,6 +782,51 @@ static int g3r_save_overlap(uintptr_t first, uintptr_t last,
   return !other || start > UINTPTR_MAX - bytes ||
          (first < start + bytes && start < last);
 }
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+/* Every enrolled control shell remains addressable after release. A held
+ * snapshot must not overwrite another owner's authority, even partially. */
+static int g3r_save_control_overlap(uintptr_t first, uintptr_t last) {
+  for (const record *r = registry; r; r = r->next) {
+    size_t bytes;
+    switch (r->kind) {
+      case INITIALIZER: bytes = sizeof(initializer); break;
+      case OWNER: bytes = sizeof(owner); break;
+      case INPUT: bytes = sizeof(input); break;
+      case LOGITS: bytes = sizeof(logits); break;
+      case WORKSPACE: bytes = sizeof(workspace); break;
+      default: return 1;
+    }
+    if (g3r_save_overlap(first, last, r, bytes)) return 1;
+  }
+  for (const g3t_record *r = g3t_registry; r; r = r->next) {
+    size_t bytes;
+    switch (r->kind) {
+      case G3T_GENERATOR: bytes = sizeof(g3t_context); break;
+      case G3T_INPUT: bytes = sizeof(g3t_input); break;
+#ifdef ET_G3T_MANUAL_LOGITS_PRIVATE
+      case G3T_LOGITS: bytes = sizeof(g3t_logits); break;
+#endif
+      case G3T_OUTPUT: bytes = sizeof(g3t_output); break;
+#ifdef ET_G3T_OUTPUT_IDS_CLONE_PRIVATE
+      case G3T_IDS_CLONE: bytes = sizeof(g3t_ids_clone); break;
+#endif
+#ifdef ET_G3T_OUTPUT_LENGTHS_CLONE_PRIVATE
+      case G3T_LENGTHS_CLONE: bytes = sizeof(g3t_lengths_clone); break;
+#endif
+#ifdef ET_G3T_OUTPUT_CACHE_LENGTHS_CLONE_PRIVATE
+      case G3T_CACHE_LENGTHS_CLONE: bytes = sizeof(g3t_cache_lengths_clone); break;
+#endif
+#ifdef ET_G3T_OUTPUT_RNG_CLONE_PRIVATE
+      case G3T_RNG_CLONE: bytes = sizeof(g3t_rng_clone); break;
+#endif
+      case G3T_SAVE_HOLD: bytes = sizeof(g3r_save_hold); break;
+      default: return 1;
+    }
+    if (g3r_save_overlap(first, last, r, bytes)) return 1;
+  }
+  return 0;
+}
+#endif
 int64_t et_g3t_private_committed_save_copy_v1(
     void *generator, void *expected_model, void *destination_header,
     void *staging_header) {
@@ -1056,6 +1101,7 @@ int64_t et_g3r_private_g3t_save_copy_v1(
     return g3t_bad(G3T_ARGUMENT, G3T_IDENTITY);
   uintptr_t first = (uintptr_t)destination;
   if (first > UINTPTR_MAX - sizeof(*destination) ||
+      g3r_save_control_overlap(first, first + sizeof(*destination)) ||
       g3r_save_overlap(first, first + sizeof(*destination),
                        hold, sizeof(*hold)) ||
       g3r_save_overlap(first, first + sizeof(*destination),
