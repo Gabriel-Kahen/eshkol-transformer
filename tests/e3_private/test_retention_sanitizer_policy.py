@@ -26,6 +26,11 @@ class RetentionSanitizerPolicyTests(unittest.TestCase):
                     rows.append("zz_unreviewed_import")
                 elif mutation == "same_count":
                     rows[-1] = "zz_unreviewed_import"
+                elif mutation == "foreign_same_count":
+                    removed, added = (("puts", "getrandom") if kind == 1 else
+                                      ("__asan_load1", "__asan_report_load16"))
+                    rows.remove(removed)
+                    rows.append(added)
                 inputs[kind].write_text("\n".join(sorted(rows)) + "\n")
             return subprocess.run(
                 ["bash", "-c", 'set -euo pipefail; die() { echo "$*" >&2; exit 1; }; '
@@ -37,6 +42,27 @@ class RetentionSanitizerPolicyTests(unittest.TestCase):
     def test_exact_emitted_inventory(self):
         result = self.run_policy()
         self.assertEqual(result.returncode, 0, result.stderr.decode())
+
+    def test_instrumented_ir_import_signature(self):
+        normal = set(Path(str(PREFIX) + "_undefined_symbols.txt").read_text().splitlines())
+        non = set(Path(str(PREFIX) + "_sanitized_noninstrumentation_undefined_symbols.txt").read_text().splitlines())
+        instrumentation = set(Path(str(PREFIX) + "_sanitized_instrumentation_undefined_symbols.txt").read_text().splitlines())
+        self.assertEqual((len(non), len(instrumentation)), (172, 59))
+        self.assertEqual(non - normal, {"bcmp", "puts"})
+        self.assertEqual(normal - non, {
+            "eshkol_ad_seed_flag", "eshkol_runtime_fatal", "eshkol_taylor_lift_ad_node",
+            "memcmp", "memcpy", "memmove", "memset", "printf",
+        })
+        self.assertTrue({
+            "__asan_alloca_poison", "__asan_allocas_unpoison", "__asan_load1",
+            "__asan_load8", "__asan_store1", "__asan_store2", "__asan_store4",
+            "__asan_store8",
+        } <= instrumentation)
+
+    def test_unrelated_same_count_imports_rejected(self):
+        for kind in (1, 2):
+            with self.subTest(kind=kind):
+                self.assertNotEqual(self.run_policy(kind, "foreign_same_count").returncode, 0)
 
     def test_noninstrumentation_drift(self):
         for mutation in ("missing", "extra", "same_count"):

@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 # Only the exact noninstalled retention test tuples may use these inventories.
+# The retention list records the 27d9a98 Clang 21 object after generated IR
+# definitions receive sanitize_address; the older unmarked-IR list is stale.
 e3_retention_verify_sanitizer_imports() {
   local normal=$1 noninstrumentation=$2 instrumentation=$3
-  local prefix
+  local prefix non_count instrumentation_count absent_count
   case "${e3_tuple_kind:-retention}" in
-    retention) prefix="${PROJECT_ROOT}/tests/e3_private/retention_package_sanitized" ;;
+    retention)
+      prefix="${PROJECT_ROOT}/tests/e3_private/retention_package_sanitized"
+      non_count=172 instrumentation_count=59 absent_count=8 ;;
     retention-first-eval-mutant)
-      prefix="${PROJECT_ROOT}/tests/e3_private/retention_first_eval_mutant_package_sanitized" ;;
+      prefix="${PROJECT_ROOT}/tests/e3_private/retention_first_eval_mutant_package_sanitized"
+      non_count=175 instrumentation_count=51 absent_count=5 ;;
     *) die "E3 retention sanitizer policy rejects unrelated tuple" ;;
   esac
   local expected_non="${prefix}_noninstrumentation_undefined_symbols.txt"
@@ -17,8 +22,8 @@ e3_retention_verify_sanitizer_imports() {
     LC_ALL=C sort -u "${manifest}" | cmp -s "${manifest}" - ||
       die "E3 retention sanitizer import manifest is not sorted unique text"
   done
-  [[ "$(awk 'END {print NR}' "${expected_non}")" == 175 &&
-     "$(awk 'END {print NR}' "${expected_instrumentation}")" == 51 ]] ||
+  [[ "$(awk 'END {print NR}' "${expected_non}")" == "${non_count}" &&
+     "$(awk 'END {print NR}' "${expected_instrumentation}")" == "${instrumentation_count}" ]] ||
     die "E3 retention sanitizer manifest counts differ from the sealed tuple"
   cmp -s "${expected_non}" "${noninstrumentation}" ||
     die "E3 retention sanitized noninstrumentation imports differ"
@@ -28,6 +33,6 @@ e3_retention_verify_sanitizer_imports() {
     awk 'END {if (NR != 2) exit 1}' ||
     die "E3 retention sanitizer added import count differs"
   comm -23 "${normal}" "${noninstrumentation}" |
-    awk 'END {if (NR != 5) exit 1}' ||
+    awk -v expected="${absent_count}" 'END {if (NR != expected) exit 1}' ||
     die "E3 retention sanitizer absent import count differs"
 }

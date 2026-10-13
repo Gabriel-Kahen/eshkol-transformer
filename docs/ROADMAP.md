@@ -905,6 +905,25 @@ Eshkol frontend UBSan coverage. Actual emitted sanitizer imports and the
 existing exact test manifests still need a fresh supported diagnostic run and
 independent review before any sanitizer or §9 acceptance claim.
 
+The sealed compiled edge attempt at exact `27d9a98` stopped during sanitized
+retention packaging, before archive publication or any edge runtime. Its pinned
+preflight passed, but the combined object's import split was 172 ordinary and
+59 sanitizer symbols versus the retention policy's old 175/51 split. The old
+list came from `a5fc2081`, when the generated `private.ll` was compiled
+directly. `a64caf9a` subsequently added the exact reversible rewrite that
+marks all 2,754 generated definitions `sanitize_address` before compilation;
+the retention manifest was not repinned. The preserved object replaces the
+three `memcpy`/`memmove`/`memset` imports with ASan interceptors and adds eight
+ASan load/store/alloca hooks. The exact `combined.o` SHA-256 is
+`51df408068cea56f3135b51124bc30aec3159ca399d293dc1360ab7fb0d0ec0b`;
+the 172/59 split-file digests are `2615fc29...`/`40e37a15...`. This isolated
+source correction pins the two
+retention import lists to the preserved exact-`27d9a98` object and keeps strict
+full-list comparisons and unrelated-import rejection. The failed raw result at
+`e3-edge-27d9a98-compiled-a/result` is unchanged. Independent source review
+and a fresh supported compiled edge gate remain required; this correction
+does not establish sanitizer runtime or §9 acceptance.
+
 The pinned `32484f6` numerical compiler diagnostic stopped before runtime on
 the exact sanitizer import delta. Its retained Clang 21 objects replace
 `memcpy`, `memmove`, and `memset` imports with the corresponding `__asan_mem*`
