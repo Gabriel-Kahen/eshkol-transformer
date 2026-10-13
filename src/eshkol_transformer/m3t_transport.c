@@ -153,12 +153,30 @@ void *et_m3t_private_owner_parameter_v1(void *p,int64_t i) {
  return o->p[i];
 }
 #ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+static int roster_span_overlaps(const void *a, size_t an, const void *b, size_t bn) {
+  uintptr_t x = (uintptr_t)a, y = (uintptr_t)b;
+  if (x > UINTPTR_MAX - an || y > UINTPTR_MAX - bn) return 1;
+  return x < y + bn && y < x + an;
+}
 int64_t et_m3t_private_owner_save_roster_v1(
     void *candidate, void *parameters[14], const void *identities[14]) {
   clear();
   owner *o = admit(candidate, OWNER, 0);
   if (!o) return error_category;
   if (!parameters || !identities)
+    return bad(ET_M3T_INVALID_ARGUMENT, ET_M3T_CODE_IDENTITY);
+  if (roster_span_overlaps(parameters, 14 * sizeof(*parameters),
+          identities, 14 * sizeof(*identities)) ||
+      roster_span_overlaps(parameters, 14 * sizeof(*parameters), o, sizeof(*o)) ||
+      roster_span_overlaps(identities, 14 * sizeof(*identities), o, sizeof(*o)) ||
+      roster_span_overlaps(parameters, 14 * sizeof(*parameters),
+          o->original, sizeof(*o->original)) ||
+      roster_span_overlaps(identities, 14 * sizeof(*identities),
+          o->original, sizeof(*o->original)) ||
+      roster_span_overlaps(parameters, 14 * sizeof(*parameters),
+          o->successor, sizeof(*o->successor)) ||
+      roster_span_overlaps(identities, 14 * sizeof(*identities),
+          o->successor, sizeof(*o->successor)))
     return bad(ET_M3T_INVALID_ARGUMENT, ET_M3T_CODE_IDENTITY);
   if (o->r.state != 1 || o->initialized != 14)
     return bad(ET_M3T_INVALID_STATE, ET_M3T_CODE_LIFECYCLE);
