@@ -1793,6 +1793,14 @@ of the sole hold token and error/live-hold alias corruption. The follow-up
 rejects overlapping private output and error spans, and spans touching any
 registered hold shell, before writing caller memory; focused native and
 sanitizer negatives cover both defects. Independent re-review remains open.
+The exact-`5d9b487` follow-up found that registered optimizer and issued-state
+storage could still be passed as private output or error buffers, allowing
+success to corrupt the optimizer roster or update count. The isolated repair
+extends the prewrite conflict guard to registered optimizer shells and entries,
+issued-state shells and entry/handle/clone ledgers, and state-handle shells.
+Focused native and ASan+UBSan tests pass the causal alias negatives; feature-off
+object bytes match the parent head. Independent review and same-aggregate
+validation remain pending before integration.
 
 The follow-on private aggregate candidate on `codex/g3r-committed-save-aggregate`
 loads that wrapper with the exact M3/G3-T/G3-M route. A real seeded P1/G1

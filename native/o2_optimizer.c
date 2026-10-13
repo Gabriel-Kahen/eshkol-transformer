@@ -2076,7 +2076,17 @@ static int et_o2_g3r_save_overlap(const void *left, size_t left_bytes,
 }
 
 /* Conflicting buffers cannot receive an error record: writing it would
- * destroy a caller output or a registered hold, including an inert shell. */
+ * destroy a caller output or registered O2 authority. */
+static int et_o2_g3r_save_storage_conflict(const void *output,
+                                           size_t output_bytes,
+                                           const et_o2_error_v1 *error,
+                                           const void *storage,
+                                           size_t storage_bytes) {
+  return et_o2_g3r_save_overlap(output, output_bytes, storage, storage_bytes) ||
+         et_o2_g3r_save_overlap(error, error != NULL ? sizeof(*error) : 0u,
+                                storage, storage_bytes);
+}
+
 static int et_o2_g3r_save_buffers_conflict(const void *output,
                                            size_t output_bytes,
                                            size_t output_alignment,
@@ -2092,9 +2102,41 @@ static int et_o2_g3r_save_buffers_conflict(const void *output,
     return 1;
   for (const et_o2_g3r_save_hold *hold = et_o2_g3r_save_holds;
        hold != NULL; hold = hold->next) {
-    if (et_o2_g3r_save_overlap(output, output_bytes, hold, sizeof(*hold)) ||
-        et_o2_g3r_save_overlap(error, error != NULL ? sizeof(*error) : 0u,
-                               hold, sizeof(*hold)))
+    if (et_o2_g3r_save_storage_conflict(output, output_bytes, error, hold,
+                                        sizeof(*hold)))
+      return 1;
+  }
+  for (const et_o2_optimizer *optimizer = et_o2_optimizers;
+       optimizer != NULL; optimizer = optimizer->registry_next) {
+    if (et_o2_g3r_save_storage_conflict(output, output_bytes, error,
+                                        optimizer, sizeof(*optimizer)) ||
+        (optimizer->count <= ET_O2_MAX_PARAMETERS &&
+         et_o2_g3r_save_storage_conflict(
+             output, output_bytes, error, optimizer->entries,
+             optimizer->count * sizeof(*optimizer->entries))))
+      return 1;
+  }
+  for (const et_o2_optimizer_state *state = et_o2_states; state != NULL;
+       state = state->registry_next) {
+    if (et_o2_g3r_save_storage_conflict(output, output_bytes, error, state,
+                                        sizeof(*state)) ||
+        (state->count <= ET_O2_MAX_PARAMETERS &&
+         (et_o2_g3r_save_storage_conflict(
+              output, output_bytes, error, state->entries,
+              state->count * sizeof(*state->entries)) ||
+          et_o2_g3r_save_storage_conflict(
+              output, output_bytes, error, state->handles,
+              state->count * 2u * sizeof(*state->handles)))) ||
+        (state->owned_clone_ledger_count <= ET_O2_MAX_PARAMETERS * 2u &&
+         et_o2_g3r_save_storage_conflict(
+             output, output_bytes, error, state->owned_clones,
+             state->owned_clone_ledger_count * sizeof(*state->owned_clones))))
+      return 1;
+  }
+  for (const et_o2_optimizer_state_handle *handle = et_o2_handles;
+       handle != NULL; handle = handle->registry_next) {
+    if (et_o2_g3r_save_storage_conflict(output, output_bytes, error, handle,
+                                        sizeof(*handle)))
       return 1;
   }
   return 0;

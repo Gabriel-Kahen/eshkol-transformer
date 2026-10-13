@@ -53,6 +53,26 @@ int main(void) {
   }
   CHECK(et_o2_optimizer_builder_finish_v1(&builder, &optimizer, &o2) == 0);
   et_o2_g3r_save_hold *hold = NULL;
+  et_o2_optimizer_state *ordinary = NULL;
+  unsigned char optimizer_before[sizeof(*optimizer)];
+  unsigned char entries_before[14 * sizeof(*optimizer->entries)];
+  memcpy(optimizer_before, optimizer, sizeof(optimizer_before));
+  memcpy(entries_before, optimizer->entries, sizeof(entries_before));
+  const size_t initial_tombstones = et_o2_g3r_save_tombstones;
+  CHECK(et_g3r_private_o2_save_begin_v1(
+      optimizer, parameters, identities,
+      (et_o2_g3r_save_hold **)(void *)&optimizer->completed_updates,
+      &o2) == ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_begin_v1(
+      optimizer, parameters, identities, &hold,
+      (et_o2_error_v1 *)optimizer->entries) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_begin_v1(
+      optimizer, parameters, identities, &hold,
+      (et_o2_error_v1 *)optimizer) == ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(hold == NULL && et_o2_g3r_save_tombstones == initial_tombstones &&
+        memcmp(optimizer, optimizer_before, sizeof(optimizer_before)) == 0 &&
+        memcmp(optimizer->entries, entries_before, sizeof(entries_before)) == 0);
   et_o2_test_fail_alloc_after_v1(0);
   CHECK(et_g3r_private_o2_save_begin_v1(
       optimizer, parameters, identities, &hold, &o2) != 0);
@@ -106,11 +126,30 @@ int main(void) {
       optimizer, parameters, identities, &second_hold, &o2) ==
       ET_O2_STATUS_INVALID_STATE);
   CHECK(second_hold == NULL && hold == first_hold && optimizer->busy == 1);
+  memcpy(entries_before, optimizer->entries, sizeof(entries_before));
+  CHECK(et_g3r_private_o2_save_check_v1(
+      hold, (et_o2_error_v1 *)optimizer->entries) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_end_v1(
+      &hold, (et_o2_error_v1 *)optimizer->entries) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_end_v1(
+      (et_o2_g3r_save_hold **)(void *)&optimizer->completed_updates,
+      &o2) == ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_state_v1(
+      hold, (et_o2_optimizer_state **)(void *)&optimizer->completed_updates,
+      &o2) == ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_state_v1(
+      hold, &ordinary, (et_o2_error_v1 *)optimizer->entries) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(hold == first_hold && optimizer->busy == 1u &&
+        optimizer->completed_updates == 0u &&
+        memcmp(optimizer->entries, entries_before, sizeof(entries_before)) == 0);
   CHECK(et_o2_optimizer_step_v1(optimizer, &o2) ==
         ET_O2_STATUS_INVALID_STATE);
   CHECK(et_o2_optimizer_zero_grad_v1(optimizer, &o2) ==
         ET_O2_STATUS_INVALID_STATE);
-  et_o2_optimizer_state *ordinary = NULL;
+  ordinary = NULL;
   CHECK(et_o2_optimizer_state_snapshot_v1(optimizer, &ordinary, &o2) ==
         ET_O2_STATUS_INVALID_STATE);
   CHECK(ordinary == NULL);
@@ -138,6 +177,54 @@ int main(void) {
   CHECK(state != NULL && state->count == 14);
   CHECK(et_g3r_private_o2_save_check_v1(hold, &o2) == 0);
   CHECK(et_g3r_private_o2_save_issued_match_v1(hold, state, &o2) == 0);
+  unsigned char state_before[sizeof(*state)];
+  unsigned char state_entries_before[14 * sizeof(*state->entries)];
+  unsigned char handles_before[28 * sizeof(*state->handles)];
+  unsigned char clones_before[28 * sizeof(*state->owned_clones)];
+  unsigned char handle_before[sizeof(*state->handles[0])];
+  memcpy(state_before, state, sizeof(state_before));
+  memcpy(state_entries_before, state->entries, sizeof(state_entries_before));
+  memcpy(handles_before, state->handles, sizeof(handles_before));
+  memcpy(clones_before, state->owned_clones, sizeof(clones_before));
+  memcpy(handle_before, state->handles[0], sizeof(handle_before));
+  CHECK(et_g3r_private_o2_save_check_v1(
+      hold, (et_o2_error_v1 *)state->entries) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_issued_match_v1(
+      hold, state, (et_o2_error_v1 *)state->entries) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_issued_match_v1(
+      hold, state, (et_o2_error_v1 *)state) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_issued_match_v1(
+      hold, state, (et_o2_error_v1 *)state->handles) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_issued_match_v1(
+      hold, state, (et_o2_error_v1 *)state->owned_clones) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_issued_match_v1(
+      hold, state, (et_o2_error_v1 *)state->handles[0]) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_end_v1(
+      &hold, (et_o2_error_v1 *)state->entries) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_state_v1(
+      hold, &ordinary, (et_o2_error_v1 *)state->entries) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_begin_v1(
+      optimizer, parameters, identities, &second_hold,
+      (et_o2_error_v1 *)state->entries) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_state_v1(
+      hold, (et_o2_optimizer_state **)(void *)&state->completed_updates,
+      &o2) == ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(hold == first_hold && optimizer->busy == 1u &&
+        memcmp(state, state_before, sizeof(state_before)) == 0 &&
+        memcmp(state->entries, state_entries_before,
+               sizeof(state_entries_before)) == 0 &&
+        memcmp(state->handles, handles_before, sizeof(handles_before)) == 0 &&
+        memcmp(state->owned_clones, clones_before, sizeof(clones_before)) == 0 &&
+        memcmp(state->handles[0], handle_before, sizeof(handle_before)) == 0);
   memcpy(shell_before, hold, sizeof(shell_before));
   CHECK(et_g3r_private_o2_save_issued_match_v1(
       hold, state, (et_o2_error_v1 *)hold) ==
