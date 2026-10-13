@@ -968,7 +968,11 @@ does not add emitted inventories or change the zero model/driver sources. No
 hosted discovery has run. The workflow is absent from default-branch main, so
 manual dispatch remains HOLD until the reviewed workflow lands there. Exact
 sanitizer manifests, immutable root evidence release, manifest review/pinning,
-Q0 and all compiled gates remain pending.
+and all compiled gates remain pending. PR #206's hosted run `38445613534`
+stopped at Q0 Python isolation because the pinned, noninstalled zero P1 overlay
+generator was missing from the exact development-script allowlist. The focused
+Q0 and zero-control source tests pass after its exact path and near-miss checks
+were added; a fresh exact-head hosted run remains pending.
 
 A separate noninstalled E3 overflow tuple is a source candidate for a genuine
 stage-12 finalization boundary. It loads a checksummed C1 state into one fresh
