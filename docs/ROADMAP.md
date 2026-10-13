@@ -1859,6 +1859,14 @@ byte preservation of the held O2 shells and ledgers after native rejection,
 and retries the original owner. Supported-host execution and review of the
 successor remain open.
 
+The [M3-issued O2/C2 joint source gate](g3/G3_R_M3_O2_C2_JOINT_SOURCE_GATE.md)
+ports the published M3T owner-roster API into the accepted O2/C2 fixture and
+constructs O2 from the same sealed M3 model's P1 tree. Its test-only bridge
+requires the fourteen M3-issued owners and identities to match O2 before a
+hold, then exercises the existing C2 claim and SAVE writer. This is a source-
+only candidate: supported AOT/runtime execution, independent review, and
+fault/feature-off gates remain open; no G3-R restore or publication follows.
+
 The follow-on private aggregate candidate on `codex/g3r-committed-save-aggregate`
 loads that wrapper with the exact M3/G3-T/G3-M route. A real seeded P1/G1
 commit produces the same owner's policy, RNG, ordered raw history and
