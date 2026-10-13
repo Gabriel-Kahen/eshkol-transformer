@@ -54,6 +54,28 @@ int main(void) {
   CHECK(et_o2_optimizer_builder_finish_v1(&builder, &optimizer, &o2) == 0);
   et_o2_g3r_save_hold *hold = NULL;
   et_o2_optimizer_state *ordinary = NULL;
+  et_o2_optimizer_builder *alias_builder = NULL;
+  CHECK(et_o2_optimizer_builder_create_v1(
+      14, ET_O2_CLIP_NONE, 0, ET_O2_SCHEDULE_CONSTANT, 0, 0,
+      UINT32_C(0x3f800000), &alias_builder, &o2) == 0);
+  unsigned char builder_before[sizeof(*alias_builder)];
+  unsigned char builder_entries_before[14 * sizeof(*alias_builder->entries)];
+  memcpy(builder_before, alias_builder, sizeof(builder_before));
+  memcpy(builder_entries_before, alias_builder->entries,
+         sizeof(builder_entries_before));
+  CHECK(et_g3r_private_o2_save_begin_v1(
+      optimizer, parameters, identities, &hold,
+      (et_o2_error_v1 *)alias_builder->entries) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_begin_v1(
+      optimizer, parameters, identities,
+      (et_o2_g3r_save_hold **)(void *)&alias_builder->count,
+      &o2) == ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(hold == NULL && optimizer->busy == 0u &&
+        memcmp(alias_builder, builder_before, sizeof(builder_before)) == 0 &&
+        memcmp(alias_builder->entries, builder_entries_before,
+               sizeof(builder_entries_before)) == 0);
+  CHECK(et_o2_optimizer_builder_abort_v1(&alias_builder, &o2) == 0);
   unsigned char optimizer_before[sizeof(*optimizer)];
   unsigned char entries_before[14 * sizeof(*optimizer->entries)];
   memcpy(optimizer_before, optimizer, sizeof(optimizer_before));
@@ -126,6 +148,48 @@ int main(void) {
       optimizer, parameters, identities, &second_hold, &o2) ==
       ET_O2_STATUS_INVALID_STATE);
   CHECK(second_hold == NULL && hold == first_hold && optimizer->busy == 1);
+  CHECK(et_o2_optimizer_builder_create_v1(
+      14, ET_O2_CLIP_NONE, 0, ET_O2_SCHEDULE_CONSTANT, 0, 0,
+      UINT32_C(0x3f800000), &alias_builder, &o2) == 0);
+  memcpy(builder_before, alias_builder, sizeof(builder_before));
+  memcpy(builder_entries_before, alias_builder->entries,
+         sizeof(builder_entries_before));
+  CHECK(et_g3r_private_o2_save_check_v1(
+      hold, (et_o2_error_v1 *)alias_builder->entries) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_end_v1(
+      &hold, (et_o2_error_v1 *)alias_builder) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(hold == first_hold && optimizer->busy == 1u &&
+        memcmp(alias_builder, builder_before, sizeof(builder_before)) == 0 &&
+        memcmp(alias_builder->entries, builder_entries_before,
+               sizeof(builder_entries_before)) == 0);
+  CHECK(et_o2_optimizer_builder_abort_v1(&alias_builder, &o2) == 0);
+  const et_o2_state_reconstruct_config_v1 reconstruct_config = {
+      .struct_size = sizeof(et_o2_state_reconstruct_config_v1),
+      .clip_kind = ET_O2_CLIP_NONE,
+      .schedule_kind = ET_O2_SCHEDULE_CONSTANT,
+      .minimum_ratio_bits = UINT32_C(0x3f800000),
+      .parameter_count = 14};
+  et_o2_state_reconstruct_builder *reconstruct = NULL;
+  CHECK(et_o2_optimizer_state_reconstruct_create_v1(
+      &reconstruct_config, &reconstruct, &o2) == 0);
+  unsigned char reconstruct_before[sizeof(*reconstruct)];
+  unsigned char reconstruct_entries_before[14 * sizeof(*reconstruct->entries)];
+  memcpy(reconstruct_before, reconstruct, sizeof(reconstruct_before));
+  memcpy(reconstruct_entries_before, reconstruct->entries,
+         sizeof(reconstruct_entries_before));
+  CHECK(et_g3r_private_o2_save_check_v1(
+      hold, (et_o2_error_v1 *)reconstruct->entries) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_end_v1(
+      &hold, (et_o2_error_v1 *)reconstruct->owned_clones) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(hold == first_hold && optimizer->busy == 1u &&
+        memcmp(reconstruct, reconstruct_before, sizeof(reconstruct_before)) == 0 &&
+        memcmp(reconstruct->entries, reconstruct_entries_before,
+               sizeof(reconstruct_entries_before)) == 0);
+  CHECK(et_o2_optimizer_state_reconstruct_abort_v1(&reconstruct, &o2) == 0);
   memcpy(entries_before, optimizer->entries, sizeof(entries_before));
   CHECK(et_g3r_private_o2_save_check_v1(
       hold, (et_o2_error_v1 *)optimizer->entries) ==
@@ -177,6 +241,25 @@ int main(void) {
   CHECK(state != NULL && state->count == 14);
   CHECK(et_g3r_private_o2_save_check_v1(hold, &o2) == 0);
   CHECK(et_g3r_private_o2_save_issued_match_v1(hold, state, &o2) == 0);
+  et_o2_optimizer_state_borrow *alias_borrow = NULL;
+  const et_kernel_tensor_view_v1 *alias_view = NULL;
+  CHECK(et_o2_optimizer_state_borrow_begin_v1(
+      state, state->handles[0], &alias_borrow, &alias_view, &o2) == 0);
+  CHECK(et_g3r_private_o2_save_check_v1(
+      hold, (et_o2_error_v1 *)alias_borrow) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_end_v1(
+      &hold, (et_o2_error_v1 *)alias_borrow) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  et_o2_optimizer_state_borrow *retired_borrow = alias_borrow;
+  CHECK(hold == first_hold && optimizer->busy == 1u &&
+        state->active_borrows == 1u);
+  CHECK(et_o2_optimizer_state_borrow_end_v1(&alias_borrow, &o2) == 0);
+  CHECK(et_g3r_private_o2_save_check_v1(
+      hold, (et_o2_error_v1 *)retired_borrow) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(hold == first_hold && optimizer->busy == 1u &&
+        state->active_borrows == 0u);
   unsigned char state_before[sizeof(*state)];
   unsigned char state_entries_before[14 * sizeof(*state->entries)];
   unsigned char handles_before[28 * sizeof(*state->handles)];

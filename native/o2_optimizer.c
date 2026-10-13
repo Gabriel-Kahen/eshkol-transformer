@@ -2139,6 +2139,72 @@ static int et_o2_g3r_save_buffers_conflict(const void *output,
                                         sizeof(*handle)))
       return 1;
   }
+  for (const et_o2_optimizer_builder *builder = et_o2_builders;
+       builder != NULL; builder = builder->registry_next) {
+    if (builder->count > ET_O2_MAX_PARAMETERS ||
+        et_o2_g3r_save_storage_conflict(output, output_bytes, error, builder,
+                                        sizeof(*builder)) ||
+        et_o2_g3r_save_storage_conflict(
+            output, output_bytes, error, builder->entries,
+            builder->count * sizeof(*builder->entries)))
+      return 1;
+  }
+  for (const et_o2_optimizer_state_borrow *borrow = et_o2_borrows;
+       borrow != NULL; borrow = borrow->registry_next)
+    if (et_o2_g3r_save_storage_conflict(output, output_bytes, error, borrow,
+                                        sizeof(*borrow)))
+      return 1;
+  for (const et_o2_optimizer_state_borrow *borrow = et_o2_retired_borrows;
+       borrow != NULL; borrow = borrow->registry_next)
+    if (et_o2_g3r_save_storage_conflict(output, output_bytes, error, borrow,
+                                        sizeof(*borrow)))
+      return 1;
+  for (const et_o2_state_reconstruct_builder *builder =
+           et_o2_reconstruct_builders;
+       builder != NULL; builder = builder->registry_next) {
+    if (builder->count > ET_O2_MAX_PARAMETERS ||
+        et_o2_g3r_save_storage_conflict(output, output_bytes, error, builder,
+                                        sizeof(*builder)) ||
+        et_o2_g3r_save_storage_conflict(
+            output, output_bytes, error, builder->entries,
+            builder->count * sizeof(*builder->entries)) ||
+        et_o2_g3r_save_storage_conflict(
+            output, output_bytes, error, builder->owned_clones,
+            builder->count * 2u * sizeof(*builder->owned_clones)) ||
+        et_o2_g3r_save_storage_conflict(output, output_bytes, error,
+                                        builder->entry_set, builder->count))
+      return 1;
+    const et_o2_optimizer_state *prepared = builder->prepared_state;
+    if (prepared != NULL &&
+        (et_o2_g3r_save_storage_conflict(output, output_bytes, error,
+                                         prepared, sizeof(*prepared)) ||
+         et_o2_g3r_save_storage_conflict(
+             output, output_bytes, error, prepared->entries,
+             builder->count * sizeof(*prepared->entries)) ||
+         et_o2_g3r_save_storage_conflict(
+             output, output_bytes, error, prepared->handles,
+             builder->count * 2u * sizeof(*prepared->handles)) ||
+         et_o2_g3r_save_storage_conflict(
+             output, output_bytes, error, prepared->owned_clones,
+             builder->count * 2u * sizeof(*prepared->owned_clones))))
+      return 1;
+    if (prepared != NULL && prepared->handles != NULL)
+      for (size_t i = 0u; i < builder->count * 2u; ++i)
+        if (et_o2_g3r_save_storage_conflict(
+                output, output_bytes, error, prepared->handles[i],
+                sizeof(*prepared->handles[i])))
+          return 1;
+  }
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  for (const et_o2_retire_provenance *record = et_o2_retire_records;
+       record != NULL; record = record->next) {
+    if (record->count > ET_O2_MAX_PARAMETERS ||
+        et_o2_g3r_save_storage_conflict(
+            output, output_bytes, error, record,
+            sizeof(*record) + record->count * sizeof(et_o2_entry)))
+      return 1;
+  }
+#endif
   return 0;
 }
 

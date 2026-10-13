@@ -179,8 +179,8 @@ int32_t et_o2_optimizer_state_snapshot_v1(et_o2_optimizer *optimizer,
 #ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
 typedef struct et_o2_g3r_save_hold et_o2_g3r_save_hold;
 /* Fixed private same-owner admission. The caller must supply a roster just
- * authenticated by the registered sealed M3T owner. All caller output/error
- * spans must be disjoint from each other and every registered hold shell.
+ * authenticated by the registered sealed M3T owner. Caller output/error
+ * spans must be disjoint from each other and registered O2 owner storage.
  * An overlap returns INVALID_ARGUMENT without writing an error record. */
 int32_t et_g3r_private_o2_save_begin_v1(
     et_o2_optimizer *optimizer, et_f32_parameter *const parameters[14],
