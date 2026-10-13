@@ -1062,9 +1062,10 @@ A bounded source-only E3 union on current main `6f6ef9ad` replays the reviewed
 corpus. The Q0 allowlist and M3CG predecessor manifest are combined from the
 actual tree; nine affected source checksum gates and focused offline source
 checks pass. Three stale E3 test assertions were refreshed to match the
-existing first-evaluation tuple. The pinned PyTorch-dependent reference test,
-independent source review, supported compiled/sanitizer gates, and §9 matrix
-remain open; this source union does not establish E3 admission.
+existing first-evaluation tuple. Independent source/tests review accepted this
+exact union. The pinned PyTorch-dependent reference test, supported
+compiled/sanitizer gates, and §9 matrix remain open; this source union does not
+establish E3 admission.
 The separate [host-monitor first-error candidate](e3/E3_HOST_MONITOR_FIRST_ERROR.md)
 records a bounded guest-relative cause for a transient unsafe-output scan;
 its successor now uses no-follow descriptor traversal, postscan identity
