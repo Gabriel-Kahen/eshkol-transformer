@@ -63,6 +63,7 @@ static et_g3r_joint_hold *joint_find(const et_g3r_joint_hold *candidate) {
 et_g3r_joint_hold *et_g3r_joint_hold_begin_v1(
     void *generator, void *sealed_model, et_o2_optimizer *optimizer) {
   void *parameters[14] = {0};
+  et_f32_parameter *typed_parameters[14] = {0};
   const void *identities[14] = {0};
   et_o2_error_v1 o2_error = {0};
   et_g3r_joint_hold *hold;
@@ -84,6 +85,8 @@ et_g3r_joint_hold *et_g3r_joint_hold_begin_v1(
     free(hold);
     return NULL;
   }
+  for (size_t i = 0; i < 14; ++i)
+    typed_parameters[i] = parameters[i];
   hold->g3_hold = et_g3r_private_g3t_save_begin_v1(
       generator, parameters, identities);
   if (!hold->g3_hold) {
@@ -92,7 +95,7 @@ et_g3r_joint_hold *et_g3r_joint_hold_begin_v1(
     return NULL;
   }
   if (et_g3r_private_o2_save_begin_v1(
-          optimizer, (et_f32_parameter *const *)parameters, identities,
+          optimizer, typed_parameters, identities,
           &hold->o2_hold, &o2_error) != 0) {
     joint_o2_error(&o2_error);
     /* G3 end drains its borrow/pins even when its final check reports a

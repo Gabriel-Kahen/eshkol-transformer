@@ -15,7 +15,8 @@ def check(s: str, h: str) -> None:
     o2 = begin.index("et_g3r_private_o2_save_begin_v1")
     assert begin.index("calloc(1, sizeof(*hold))") < roster < g3 < o2
     assert "generator, parameters, identities" in begin
-    assert "optimizer, (et_f32_parameter *const *)parameters, identities" in begin
+    assert "typed_parameters[i] = parameters[i]" in begin[roster:g3]
+    assert "optimizer, typed_parameters, identities" in begin
     assert "et_g3r_private_g3t_save_end_v1(hold->g3_hold)" in begin[o2:]
     assert "joint_o2_error(&o2_error);" in begin[o2:]
     issue = s[s.index("et_o2_optimizer_state *et_g3r_joint_hold_issue_v1"):s.index(
@@ -54,8 +55,8 @@ for altered in (
     source.replace("hold->issued_once = 1u;", "/* repeat allowed */"),
     source.replace("et_g3r_private_o2_save_end_v1(&hold->o2_hold, &error)",
                    "et_g3r_private_o2_save_check_v1(hold->o2_hold, &error)"),
-    source.replace("optimizer, (et_f32_parameter *const *)parameters, identities",
-                   "optimizer, foreign_parameters, identities"),
+    source.replace("typed_parameters[i] = parameters[i]",
+                   "typed_parameters[i] = foreign_parameters[i]"),
 ):
     try:
         check(altered, header)
