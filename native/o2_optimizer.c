@@ -3040,11 +3040,6 @@ int32_t et_o2_optimizer_state_release_v1(et_o2_optimizer_state *candidate,
                       ET_O2_CODE_PROVIDER_MISMATCH, "optimizer-state-release!",
                       "optimizer state provider invariant is broken");
   }
-  if (et_o2_validate_state_owner_ledger(
-          state, ET_O2_STATUS_INVALID_STATE, "optimizer-state-release!",
-          error) != 0) {
-    return ET_O2_STATUS_INVALID_STATE;
-  }
 #ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
   et_o2_g3r_owned_spans *save_spans =
       et_o2_g3r_spans_find(state, ET_O2_G3R_SPAN_STATE);
@@ -3057,6 +3052,11 @@ int32_t et_o2_optimizer_state_release_v1(et_o2_optimizer_state *candidate,
       save_spans->bytes[2] != state->count * 2u * sizeof(*state->owned_clones))
     _Exit(134);
 #endif
+  if (et_o2_validate_state_owner_ledger(
+          state, ET_O2_STATUS_INVALID_STATE, "optimizer-state-release!",
+          error) != 0) {
+    return ET_O2_STATUS_INVALID_STATE;
+  }
   entry_count = state->count * 2u;
   for (index = 0u; index < entry_count; ++index) {
     et_o2_optimizer_state_handle *handle = state->handles[index];

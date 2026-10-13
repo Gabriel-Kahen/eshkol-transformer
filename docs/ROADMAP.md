@@ -2076,6 +2076,9 @@ private entry points reject conflicting output/error buffers before mutating
 the hold or clearing errors; the focused native fixture includes causal
 control-slot, roster, mutated-builder, borrow and decoy optimizer/issued-state
 descriptor alias negatives.
+State release authenticates its original arrays before traversing the owner
+ledger; short-decoy release negatives expect the fail-stop exit before any
+array walk.
 This is an independently reviewable prerequisite,
 not an integrated G3/A2/O2 owner. Source syntax passes locally; independent
 review, native runtime/sanitizer, feature-off symbol and compiled aggregate

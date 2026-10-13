@@ -9,6 +9,8 @@ static int32_t injected_bits_equal(const et_f32_tensor *,
 #include "../../native/o2_optimizer.c"
 #undef et_f32_tensor_bits_equal_v1
 #include <stdio.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 static size_t compare_calls;
 static int fault_issued_compare;
@@ -27,6 +29,26 @@ static int32_t injected_bits_equal(const et_f32_tensor *left,
 static unsigned checks;
 #define CHECK(x) do { ++checks; if (!(x)) { fprintf(stderr, \
     "same-owner O2:%d: %s\n", __LINE__, #x); return 1; } } while (0)
+
+static int short_decoy_release_exits_134(et_o2_optimizer_state *state,
+                                         int descriptor) {
+  pid_t child = fork();
+  if (child < 0) return 0;
+  if (child == 0) {
+    et_o2_state_entry short_entries[1] = {state->entries[0]};
+    et_o2_optimizer_state_handle *short_handles[1] = {state->handles[0]};
+    et_f32_tensor *short_clones[1] = {state->owned_clones[0]};
+    et_o2_error_v1 error;
+    if (descriptor == 0) state->entries = short_entries;
+    if (descriptor == 1) state->handles = short_handles;
+    if (descriptor == 2) state->owned_clones = short_clones;
+    (void)et_o2_optimizer_state_release_v1(state, &error);
+    _Exit(0);
+  }
+  int status = 0;
+  if (waitpid(child, &status, 0) != child) return 0;
+  return WIFEXITED(status) && WEXITSTATUS(status) == 134;
+}
 
 int main(void) {
   et_o2_optimizer_builder *builder = NULL;
@@ -452,6 +474,10 @@ int main(void) {
         o2.code == ET_F32_TENSOR_CODE_PROVIDER_REJECTED);
   fault_issued_compare = 0;
   CHECK(et_g3r_private_o2_save_issued_match_v1(hold, state, &o2) == 0);
+  CHECK(short_decoy_release_exits_134(state, 0));
+  CHECK(short_decoy_release_exits_134(state, 1));
+  CHECK(short_decoy_release_exits_134(state, 2));
+  CHECK(et_g3r_private_o2_save_check_v1(hold, &o2) == 0);
   CHECK(et_o2_optimizer_state_release_v1(state, &o2) == 0);
   state = NULL;
   CHECK(et_g3r_private_o2_save_end_v1(&hold, &o2) == 0);
