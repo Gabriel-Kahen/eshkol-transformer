@@ -1042,6 +1042,32 @@ regrouping, and a private AOT gate that requires the first actual difference
 at `state_f32[0]` with no rejected transcript. Focused source-only and static
 checks pass; independent review remains pending. No optimized runtime, poison or sanitizer verdict is
 claimed, and the M2 compiled-private row stays open.
+
+The N5 source prerequisite now generates independently counted authentic 8,193
+packed D2 rows and checks that the private D2-core remaining-row guard runs at
+stage 2 before native acquisition/traversal. The compiled private one-over
+failure, unchanged caller state and six outputs, and measured normal/poison/
+sanitizer resource bounds remain open.
+An isolated [private N5 compiled-gate candidate](e3/E3_N5_PRIVATE_PREFLIGHT_GATE.md)
+now extends the existing noninstalled retention test aggregate with a genuine
+8,192 pass and 8,193 stage-2 rejection under one model/frame authority. Its
+runner records exact D1 payload, independent D2 cursor, four destination words,
+two counters, model/gradient/mode/RNG and native owner state, plus normal,
+poisoned and sanitized peak RSS. Source and shell checks alone do not promote
+this candidate to compiled-private evidence; the supported run is pending.
+An isolated [private E3 edge-gate source candidate](e3/E3_EDGE_PRIVATE_GATE.md)
+adds authentic empty, singleton, entry-EOS and padded one-token-tail D1/D2
+cases to that noninstalled retention aggregate. The zero-row paths require
+stage-12 `invalid-state` and byte-atomic six outputs; the real padded tail
+requires three active tokens, two batches and exact accuracy one from the
+independent seed-1729 M3 all-correct selection proof. Independent D2 cursor/row
+fixtures, a fourth-output mutation control, source/unit/shell checks and a
+proposed normal/poison/sanitizer
+runner are staged. Independent review and the compiled supported result remain
+pending; this does not close §9 or replace the separate N5 8,192/8,193 gate.
+This source union retains the reviewed zero-control and sum-order candidates
+alongside the N5 and edge candidates. Whole-tree review and supported compiled
+gates remain pending; no E3 §9 acceptance follows from source composition.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each

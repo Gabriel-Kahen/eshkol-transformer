@@ -1,0 +1,48 @@
+;;; Genuine private E3 edge traversal; no expected CE/logit carrier.
+(extern void e3-retention-test-run ptr ptr ptr :real et_e3_retention_run_v1)
+
+(define (check label condition)
+  (if condition #t
+      (begin (display "E3-EDGE-FAIL: ") (display label) (newline) (exit 1))))
+
+(define (print-cursor bytes)
+  (let ((digits "0123456789abcdef"))
+    (let loop ((index 0))
+      (if (= index (bytevector-length bytes)) #t
+          (let ((byte (bytevector-u8-ref bytes index)))
+            (display (string-ref digits (quotient byte 16)))
+            (display (string-ref digits (remainder byte 16)))
+            (loop (+ index 1)))))))
+
+(define args (cdr (command-line)))
+(check 'arguments (and (pair? args) (pair? (cdr args))
+                       (pair? (cdr (cdr args)))
+                       (pair? (cdr (cdr (cdr args))))
+                       (null? (cdr (cdr (cdr (cdr args)))))))
+(define names (vector 'empty 'singleton 'entry-eos 'one-token-tail))
+(let loop ((index 0) (paths args))
+  (if (= index 4) #t
+      (let ((output (vector #f)))
+        (e3-retention-test-run
+          (vector (vector 'retention 'edge (vector-ref names index) #f))
+          (vector (car paths)) output)
+        (let ((result (vector-ref output 0)))
+          (check 'result
+            (and (vector? result) (= (vector-length result) 4)
+                 (eq? (vector-ref result 0) 'e3-edge-result-v1)
+                 (eq? (vector-ref result 1) (vector-ref names index))
+                 (bytevector? (vector-ref result 2))
+                 (integer? (vector-ref result 3))))
+          (display "E3-EDGE-CURSOR ")
+          (display (vector-ref names index))
+          (display " ")
+          (print-cursor (vector-ref result 2))
+          (newline)
+          (if (= index 3)
+              (begin
+                (display "E3-EDGE-ACCURACY one-token-tail ")
+                (display (vector-ref result 3))
+                (newline))))
+        (loop (+ index 1) (cdr paths)))))
+(display "E3-EDGE-PRIVATE-PASS cases=4 zero-weight=3 one-token-tail=1")
+(newline)

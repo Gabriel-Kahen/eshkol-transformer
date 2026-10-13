@@ -1,0 +1,38 @@
+;;; Noninstalled private N5 horizon and stage-2 one-over witness.
+(extern void e3-retention-test-run ptr ptr ptr :real et_e3_retention_run_v1)
+
+(define (check label condition)
+  (if condition #t
+      (begin (display "E3-N5-FAIL: ") (display label) (newline) (exit 1))))
+
+(define (print-cursor bytes)
+  (let ((digits "0123456789abcdef"))
+    (let loop ((index 0))
+      (if (= index (bytevector-length bytes)) #t
+          (let ((byte (bytevector-u8-ref bytes index)))
+            (display (string-ref digits (quotient byte 16)))
+            (display (string-ref digits (remainder byte 16)))
+            (loop (+ index 1)))))))
+
+(define args (command-line))
+(check 'arguments
+  (and (pair? args) (pair? (cdr args)) (pair? (cdr (cdr args)))
+       (null? (cdr (cdr (cdr args))))))
+(define output (vector #f))
+(e3-retention-test-run
+  (vector (vector 'retention 'n5 8192 #f))
+  (vector (vector (car (cdr args)) (car (cdr (cdr args))))) output)
+(define result (vector-ref output 0))
+(check 'private-result
+  (and (vector? result) (= (vector-length result) 3)
+       (eq? (vector-ref result 0) 'e3-n5-result-v1)
+       (bytevector? (vector-ref result 1))
+       (bytevector? (vector-ref result 2))))
+(display "E3-N5-CURSOR 8192 ")
+(print-cursor (vector-ref result 1))
+(newline)
+(display "E3-N5-CURSOR 8193 ")
+(print-cursor (vector-ref result 2))
+(newline)
+(display "E3-N5-PRIVATE-PASS rows=8192 one-over=8193 stage=2")
+(newline)

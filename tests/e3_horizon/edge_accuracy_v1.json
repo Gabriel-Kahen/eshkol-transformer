@@ -1,0 +1,12 @@
+{
+  "kind": "e3-edge-accuracy-selection-v1",
+  "model_seed": 1729,
+  "parameter_f32_sha256": "ccf18d65dcacf6982fa69631e57277e146c23b85a4a163401dc39c3d23dff0ba",
+  "reference_sha256": "d46f415d832719f59ad90945479a4722a039d8c2131b5c701ef09f669bfea5bc",
+  "selection_sha256": "7dc9dfc45b6ce267e087304b74e3608f05723021adda764da125c126bd5bbda0",
+  "source_case": "all-correct",
+  "rows": [
+    {"inputs": [3, 14], "targets": [14, 31], "mask": [true, true], "winners": [14, 31]},
+    {"inputs": [31, 0], "targets": [14, 0], "mask": [true, false], "winners": [14, 56]}
+  ]
+}
