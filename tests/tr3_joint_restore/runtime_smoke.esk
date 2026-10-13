@@ -1,6 +1,6 @@
 ;;; Genuine private TR3-C joint-restore runtime witness.  The source state is
 ;;; composed only from the accepted P1/O2/D2/X1 owners, and the receiver is an
-;;; enrolled fixed-profile 22-slot lease.  The aggregate is expanded here only
+;;; enrolled fixed-profile lease.  The aggregate is expanded here only
 ;;; to interpose one pre-seal O2 check for the abort/retry witness.
 (load "d2_wave2_root.esk")
 (load "c2_d2_cursor_pair_extension.esk")

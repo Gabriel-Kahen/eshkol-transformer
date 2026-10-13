@@ -36,12 +36,17 @@
   (let* ((policy (c2-public-persistence-policy
                    1048576 1048576 1048576 64 'cpu))
          (tokenizer (t2-wave2-tokenizer-load
-                      (cli3-path path 'tokenizer-load) policy)))
+                      (cli3-path path 'tokenizer-load) policy))
+         (entry (t2-private-entry tokenizer))
+         (core (and (pair? entry) (pair? (cdr entry))
+                    (null? (cdr (cdr entry)))
+                    (eq? (car entry) tokenizer)
+                    (car (cdr entry)))))
     (if (not (and (= (t2-wave2-tokenizer-vocab-size tokenizer)
                      (x1-private-config-ref resolved 'model.vocabulary-size))
                   (string=? (t2-wave2-tokenizer-fingerprint tokenizer)
                             cli3-b-byte-fingerprint)
-                  (tr3-lease-e3-byte-profile? tokenizer)))
+                  (and core (tr3-lease-e3-byte-profile? core))))
         (cli3-fail 'unsupported 'tokenizer-load
                    "only the canonical byte tokenizer is supported" '()))
     tokenizer))

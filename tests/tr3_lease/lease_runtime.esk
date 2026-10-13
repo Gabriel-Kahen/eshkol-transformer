@@ -212,7 +212,7 @@
 (check "returned shell is canonical"
        (eq? fresh-shell (vector-ref fresh-record 2)))
 (check "record fixed tuple fields"
-       (and (= (vector-length fresh-record) 22)
+       (and (= (vector-length fresh-record) 23)
             (eq? (vector-ref fresh-record 3) 'idle)
             (eq? (vector-ref fresh-record 4) #f)
             (eq? (vector-ref fresh-record 6) (vector-ref fresh 0))
@@ -222,6 +222,81 @@
             (= (vector-length (vector-ref fresh-record 10)) 17)
             (= (vector-length (vector-ref fresh-record 11)) 14)
             (= (vector-length (vector-ref fresh-record 12)) 14)))
+(define fresh-token (vector-ref fresh-record 5))
+(define fresh-t2-witness (vector-ref fresh-record 22))
+(define fresh-t2-core (vector-ref fresh-t2-witness 4))
+(check "enrollment roots exact T2 shell, entry, and raw core"
+       (and (eq? fresh-t2-witness (vector-ref fresh-t2-witness 1))
+            (eq? (vector-ref fresh-t2-witness 2) (vector-ref fresh 1))
+            (eq? (vector-ref fresh-t2-witness 3)
+                 (t2-private-entry (vector-ref fresh 1)))
+            (eq? fresh-t2-core
+                 (t2-private-require-core (vector-ref fresh 1)
+                                          'trainer-create 'invalid-state))
+            (t1-core-tokenizer? fresh-t2-core)))
+(check "private pre-handoff accepts exact registered T1 core"
+       (eq? fresh-t2-core
+            (tr3-lease-original-t2-core-internal
+              fresh-record fresh-token (vector-ref fresh 1)
+              'tr3-original-t2-witness)))
+(define same-core-t1-shell (t2-private-register-core fresh-t2-core))
+(check "distinct registered T1 shell with exact core accepts"
+       (and (not (eq? same-core-t1-shell (vector-ref fresh 1)))
+            (eq? fresh-t2-core
+                 (tr3-lease-original-t2-core-internal
+                   fresh-record fresh-token same-core-t1-shell
+                   'tr3-original-t2-witness))))
+(check "equal fingerprint from foreign registered core rejects"
+       (and (string=?
+              (t2-private-tokenizer-fingerprint (vector-ref fresh 1))
+              (t2-private-tokenizer-fingerprint (vector-ref released 1)))
+            (transformer-error-at-operation?
+              'invalid-state 'tr3-original-t2-witness
+              (lambda ()
+                (tr3-lease-original-t2-core-internal
+                  fresh-record fresh-token (vector-ref released 1)
+                  'tr3-original-t2-witness)))))
+(check "forged T1 shell rejects"
+       (transformer-error-at-operation?
+         'invalid-state 'tr3-original-t2-witness
+         (lambda ()
+           (tr3-lease-original-t2-core-internal
+             fresh-record fresh-token (vector 'forged-tokenizer)
+             'tr3-original-t2-witness))))
+(vector-set! fresh-record 22 (vector-copy fresh-t2-witness))
+(check "copied witness self rejects"
+       (transformer-error-at-operation?
+         'invalid-state 'tr3-original-t2-witness
+         (lambda ()
+           (tr3-lease-original-t2-core-internal
+             fresh-record fresh-token (vector-ref fresh 1)
+             'tr3-original-t2-witness))))
+(vector-set! fresh-record 22 fresh-t2-witness)
+(let ((entry (vector-ref fresh-t2-witness 3)))
+  (set-car! (cdr entry)
+            (car (cdr (t2-private-entry (vector-ref released 1)))))
+  (check "mutated registry core rejects"
+         (transformer-error-at-operation?
+           'invalid-state 'tr3-original-t2-witness
+           (lambda ()
+             (tr3-lease-original-t2-core-internal
+               fresh-record fresh-token (vector-ref fresh 1)
+               'tr3-original-t2-witness))))
+  (set-car! (cdr entry) fresh-t2-core))
+(vector-set! fresh-record 3 'snapshotting)
+(check "private pre-handoff rejects non-idle phase"
+       (transformer-error-at-operation?
+         'invalid-state 'tr3-original-t2-witness
+         (lambda ()
+           (tr3-lease-original-t2-core-internal
+             fresh-record fresh-token (vector-ref fresh 1)
+             'tr3-original-t2-witness))))
+(vector-set! fresh-record 3 'idle)
+(check "original witness survives negative cases"
+       (eq? fresh-t2-core
+            (tr3-lease-original-t2-core-internal
+              fresh-record fresh-token (vector-ref fresh 1)
+              'tr3-original-t2-witness)))
 (define fresh-initial-cursor (vector-ref fresh-record 17))
 (define fresh-initial-rng (vector-ref fresh-record 18))
 (check "record owns exact initial restore controls"

@@ -198,6 +198,50 @@ class SingleRegistryContract(unittest.TestCase):
                          'tests/cli3_generate/generate_extension.esk')
         entry = (FIXTURE / 'cli.esk').read_text()
         original = (ROOT / 'src/eshkol_transformer/cli.esk').read_text()
+        # The installed corpus-validate path was added to the production entry
+        # after this test-only generate fixture. Strip only that exact dispatch
+        # branch before comparing the inherited CLI3 entry byte for byte.
+        d1_imports = (
+            ';;; The app imports only a checked read-only projection of the public D1 facade.\n'
+            '(require transformer.data)\n'
+            '(require transformer.cli3_corpus_validate)\n\n'
+        )
+        self.assertIn(d1_imports, original)
+        original = original.replace(d1_imports, '', 1)
+        d1_dispatch = (
+            '(let ((arguments (cdr (command-line))))\n'
+            '  (if (and (pair? arguments)\n'
+            '           (string=? (car arguments) "corpus")\n'
+            '           (pair? (cdr arguments))\n'
+            '           (string=? (car (cdr arguments)) "validate"))\n'
+            '      (begin\n'
+            '        (cli3-corpus-validate-command arguments)\n'
+            '        (exit 0))\n'
+            '      (guard\n'
+            '       (raised (#t (cli3-exit (cli3-static-fallback))))\n'
+            '       (let ((output (vector #f)))\n'
+            '         (cli3-dispatch (vector arguments) output)\n'
+            '         (let* ((result (vector-ref output 0))\n'
+            '                (status (vector-ref result 0))\n'
+            '                (stderr-text (vector-ref result 2)))\n'
+            '           (if (> (string-length stderr-text) 0)\n'
+            '               (display stderr-text (current-error-port)))\n'
+            '           (cli3-exit status))))))\n'
+        )
+        predecessor_dispatch = (
+            '(guard\n'
+            ' (raised (#t (cli3-exit (cli3-static-fallback))))\n'
+            ' (let ((output (vector #f)))\n'
+            '   (cli3-dispatch (vector (cdr (command-line))) output)\n'
+            '   (let* ((result (vector-ref output 0))\n'
+            '          (status (vector-ref result 0))\n'
+            '          (stderr-text (vector-ref result 2)))\n'
+            '     (if (> (string-length stderr-text) 0)\n'
+            '         (display stderr-text (current-error-port)))\n'
+            '     (cli3-exit status))))\n'
+        )
+        self.assertIn(d1_dispatch, original)
+        original = original.replace(d1_dispatch, predecessor_dispatch, 1)
         self.assertEqual(
             entry.replace('Test-installed CLI3/G3-G successor entry; the package owns dispatch.',
                           'Thin Eshkol-native executable entry. The CLI3 aggregate owns all dispatch.')

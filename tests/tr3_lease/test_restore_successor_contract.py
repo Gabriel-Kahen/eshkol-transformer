@@ -22,11 +22,11 @@ class RestoreSuccessorContract(unittest.TestCase):
         return self.core[start:end]
 
     def test_record_appends_exact_control_authority(self) -> None:
-        self.assertIn("(define tr3-lease-record-length 22)", self.core)
+        self.assertIn("(define tr3-lease-record-length 23)", self.core)
         self.assertIn("'tr3-lease-record-v2", self.core)
         record = re.search(
             r"\(vector tr3-lease-record-tag #f shell 'idle #f token resolved"
-            r"[\s\S]*?initial-cursor-bytes initial-rng 0 0 0\)\)",
+            r"[\s\S]*?initial-cursor-bytes initial-rng 0 0 0 t2-witness\)\)",
             self.core,
         )
         self.assertIsNotNone(record)

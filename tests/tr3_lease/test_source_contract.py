@@ -50,6 +50,26 @@ class LeaseSourceContract(unittest.TestCase):
     def test_core_binds_the_direct_d2_idle_probe(self) -> None:
         self.assertIn("et_tr3_c_d2_dataset_idle_preflight_v1", self.core)
 
+    def test_cli3_byte_admission_uses_the_registered_raw_core(self) -> None:
+        cli3 = (NATIVE / "cli3_b_extension.esk").read_text()
+        admission = cli3[
+            cli3.index("(define (cli3-b-tokenizer") :
+            cli3.index("(define (cli3-b-dataset")
+        ]
+        self.assertIn("(entry (t2-private-entry tokenizer))", admission)
+        self.assertIn("(eq? (car entry) tokenizer)", admission)
+        self.assertIn("(tr3-lease-e3-byte-profile? core)", admission)
+        self.assertNotIn("(tr3-lease-e3-byte-profile? tokenizer)", admission)
+        self.assertIn("(t1-core-tokenizer? core)", self.core)
+
+    def test_failure_successor_checks_current_record_width(self) -> None:
+        failure = (
+            ROOT / "tests" / "tr3_lease_failure" / "lease_failure_runtime.esk"
+        ).read_text()
+        self.assertIn("(define tr3-lease-record-length 23)", self.core)
+        self.assertIn("(= (vector-length record) 23)", failure)
+        self.assertNotIn("(= (vector-length record) 22)", failure)
+
     def test_runtime_destroys_the_successful_acquisition_region(self) -> None:
         runtime = (ROOT / "tests" / "tr3_lease" / "lease_runtime.esk").read_text()
         self.assertIn("(with-region ('tr3-lease-acquisition", runtime)

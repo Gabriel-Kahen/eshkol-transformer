@@ -62,8 +62,8 @@
           (else (loop (cdr remaining))))))
 (define (verify-successor-record! shell enrollment-cursor)
   (let ((record (record-for-shell shell)))
-    (check "successful enrollment owns a 22-slot idle record"
-           (and (vector? record) (= (vector-length record) 22)
+    (check "successful enrollment owns a 23-slot idle record"
+           (and (vector? record) (= (vector-length record) 23)
                 (eq? (vector-ref record 3) 'idle)
                 (eq? (vector-ref record 4) #f)))
     (check "successful enrollment owns exact initial epoch and RNG controls"

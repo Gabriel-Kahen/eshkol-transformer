@@ -2244,6 +2244,18 @@ parameter graph or live O2 witness; the candidate-aware I2/P1/M3T adapter
 and owner teardown
 remain dependent work.
 
+The current-main G3-R/TR3 original-epoch source prerequisite is staged on
+`codex/g3-tr3-t2-current-main-union` from exact main `c60779bb`. The lease
+record now has 23 slots: slot 22 roots the enrolled T2 shell, registry entry,
+and raw T1 core, and a private idle-only handoff authenticates the original
+core. CLI3-B checks the registered raw core for its byte profile. The
+corresponding lease runtime, failure fixture, source contracts, and candidate
+manifest source hashes are aligned; the old manifest runtime/source pins are
+historical and do not validate this union. Focused source tests pass, including
+the repaired CLI3 source comparison that accounts for current main's D1
+`corpus validate` dispatch. Independent source review, supported compilation,
+runtime artifact repinning, O0/O2 failure matrices, and admission remain open.
+
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
 names would return newly owned authenticated CPU f32 `[1,256]` kind-3 shells,
