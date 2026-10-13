@@ -9,7 +9,6 @@ from pathlib import Path
 import shutil
 import subprocess
 
-from tests.d2.prepare_public_resources import FINGERPRINT, VOCAB
 from tests.d2.test_resources import write_d1_resource
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -17,6 +16,10 @@ BASE = "3b8ea59a4527ab564d0f894ca6412ec62474cc34"
 TREE = "86832ef9f1edb20383f8e7b1107ba85c97582fff"
 FE9 = "fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9"
 F31 = "sha256:f31d1db76958339e6ebd2a2f667052cdb85aeb5229914ffb10ac4fcdc6db22e6"
+BYTE_FINGERPRINT = (
+    "sha256:eshkol-byte-tokenizer-v1:"
+    "aabb31f49216963582383a00fd2e85d7c20b658d5bef0e7945344ed6bfe50704"
+)
 CLOSURE = "native/g3r_same_owner_o2_adoption_source_closure.txt"
 MANIFEST = "native/g3r_same_owner_capture_main_source.sha256"
 PINS = {
@@ -98,7 +101,7 @@ def prepare(output: Path) -> None:
     corpus = output / "corpus"
     corpus.mkdir()
     write_d1_resource(corpus, ((1, 2, 3, 4),),
-                      fingerprint=FINGERPRINT, vocab=VOCAB)
+                      fingerprint=BYTE_FINGERPRINT, vocab=256)
     copied.extend(sorted(corpus.iterdir()))
     expected = output / "expected-eshkol-closure.txt"
     expected.write_text("\n".join(sorted(

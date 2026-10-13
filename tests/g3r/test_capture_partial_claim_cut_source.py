@@ -9,7 +9,7 @@ from unittest.mock import patch
 from tests.c2.test_handler_order import parse
 from tests.g3r import prepare_capture_partial_claim_cut as preparation
 from tests.g3r.prepare_capture_partial_claim_cut import (
-    ROOT, BASE, TREE, EXTRA, verify, prepare,
+    ROOT, BASE, TREE, EXTRA, BYTE_FINGERPRINT, verify, prepare,
 )
 
 
@@ -64,6 +64,8 @@ class PartialClaimSource(unittest.TestCase):
             self.assertIn(f"approved_tree\t{TREE}\n", contents)
             self.assertIn("compiled gate HOLD", contents)
             self.assertTrue((output / "corpus/manifest.etm").is_file())
+            self.assertIn(BYTE_FINGERPRINT.encode(),
+                          (output / "corpus/manifest.etm").read_bytes())
             for name in EXTRA:
                 path = output / "source" / name
                 self.assertEqual(path.read_bytes(), (ROOT / name).read_bytes())
