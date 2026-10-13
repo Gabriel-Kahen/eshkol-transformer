@@ -1815,9 +1815,13 @@ file-pair publication, restore, replay or resumed continuation is provided.
 
 A disjoint [supported-host gate recipe](g3/G3_R_SNAPSHOT_CODEC_ADAPTER_HOST_GATE.md)
 is prepared for the accepted private snapshot codec adapter source at
-`615114236150253d2fc04e0129a608ed1ab78bc6`. Its normal/repeat/sanitizer
-aggregate and independent wire oracle remain unrun pending recipe review and
-orchestration-root release. No adapter integration is claimed.
+`615114236150253d2fc04e0129a608ed1ab78bc6`. Independent review held the
+first published recipe because a wrong clean recipe HEAD could reach `make`.
+The successor requires a separately reviewed ROOT release-pin file and digest,
+and checks its own exact HEAD/tree before evidence creation. Its
+normal/repeat/sanitizer aggregate and independent wire oracle remain unrun
+pending successor review and orchestration-root release. No adapter integration
+is claimed.
 
 The reviewed [current-history held SAVE proposal](g3/G3_R_CURRENT_HISTORY_HELD_SAVE_CONTRACT.md)
 now accompanies merged main. Its first bounded native prerequisite,

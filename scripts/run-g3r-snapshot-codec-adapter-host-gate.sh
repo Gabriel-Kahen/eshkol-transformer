@@ -7,18 +7,57 @@ adapter_tree=eda477c449c520223165644150a6c4fda69d1335
 main_base=6f6ef9ada4c586573d495c40283ad4b9410d0957
 recipe_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 
-if (( $# != 2 )); then
-  echo "usage: $0 ACCEPTED_ADAPTER_CHECKOUT NEW_EVIDENCE_DIRECTORY" >&2
+if (( $# != 4 )); then
+  echo "usage: $0 ACCEPTED_ADAPTER_CHECKOUT NEW_EVIDENCE_DIRECTORY ROOT_RELEASE_PIN_FILE ROOT_RELEASE_PIN_SHA256" >&2
   exit 2
 fi
 checkout="$(realpath -- "$1")"
 evidence="$2"
+release_pin="$(realpath -- "$3")"
+release_sha256="$4"
+[[ "$release_sha256" =~ ^[0-9a-f]{64}$ && -f "$release_pin" && ! -L "$3" ]] || {
+  echo "ROOT release pin must be a regular file with an exact SHA-256" >&2
+  exit 1
+}
+[[ "$release_pin" != "$recipe_root" && "$release_pin" != "$recipe_root/"* &&
+   "$release_pin" != "$checkout" && "$release_pin" != "$checkout/"* ]] || {
+  echo "ROOT release pin must be outside both source checkouts" >&2
+  exit 1
+}
+[[ "$(sha256sum -- "$release_pin" | cut -d ' ' -f 1)" == "$release_sha256" ]] || {
+  echo "ROOT release pin SHA-256 differs from the exact handoff" >&2
+  exit 1
+}
+mapfile -t release_lines <"$release_pin"
+(( ${#release_lines[@]} == 2 )) &&
+  [[ "${release_lines[0]}" == $'recipe_head\t'* &&
+     "${release_lines[1]}" == $'recipe_tree\t'* ]] || {
+  echo "ROOT release pin must have exact recipe_head and recipe_tree rows" >&2
+  exit 1
+}
+expected_recipe_head="${release_lines[0]#*$'\t'}"
+expected_recipe_tree="${release_lines[1]#*$'\t'}"
+[[ "$expected_recipe_head" =~ ^[0-9a-f]{40}$ &&
+   "$expected_recipe_tree" =~ ^[0-9a-f]{40}$ ]] &&
+  cmp -s -- "$release_pin" <(printf 'recipe_head\t%s\nrecipe_tree\t%s\n' \
+    "$expected_recipe_head" "$expected_recipe_tree") || {
+  echo "ROOT release pin rows must be canonical full Git IDs" >&2
+  exit 1
+}
 [[ -d "$checkout/.git" || -f "$checkout/.git" ]] || {
   echo "adapter checkout is not a Git worktree: $checkout" >&2
   exit 1
 }
 [[ -z "$(git -C "$recipe_root" status --porcelain --untracked-files=all)" ]] || {
   echo "recipe checkout is dirty" >&2
+  exit 1
+}
+[[ "$(git -C "$recipe_root" rev-parse HEAD)" == "$expected_recipe_head" ]] || {
+  echo "recipe HEAD differs from the ROOT release pin" >&2
+  exit 1
+}
+[[ "$(git -C "$recipe_root" rev-parse HEAD^{tree})" == "$expected_recipe_tree" ]] || {
+  echo "recipe tree differs from the ROOT release pin" >&2
   exit 1
 }
 [[ "$(git -C "$checkout" rev-parse HEAD)" == "$adapter_head" ]] || {
@@ -84,11 +123,17 @@ trap finalize EXIT
   printf 'adapter_head\t%s\n' "$adapter_head"
   printf 'adapter_tree\t%s\n' "$adapter_tree"
   printf 'main_base\t%s\n' "$main_base"
-  printf 'recipe_head\t%s\n' "$(git -C "$recipe_root" rev-parse HEAD)"
-  printf 'recipe_tree\t%s\n' "$(git -C "$recipe_root" rev-parse HEAD^{tree})"
+  printf 'recipe_head\t%s\n' "$expected_recipe_head"
+  printf 'recipe_tree\t%s\n' "$expected_recipe_tree"
+  printf 'release_pin_sha256\t%s\n' "$release_sha256"
   printf 'host\t%s\n' "$(uname -a)"
   printf 'python\t%s\n' "$(python3 --version)"
 } >"$evidence/run.tsv"
+cp -- "$release_pin" "$evidence/recipe-release.tsv"
+[[ "$(sha256sum -- "$evidence/recipe-release.tsv" | cut -d ' ' -f 1)" == "$release_sha256" ]] || {
+  echo "copied ROOT release pin changed before evidence capture" >&2
+  exit 1
+}
 
 [[ "$(python3 --version)" == 'Python 3.14.6' ]] || {
   echo "oracle Python must be 3.14.6" >&2
