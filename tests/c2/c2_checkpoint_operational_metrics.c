@@ -1,9 +1,11 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include <inttypes.h>
+#include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 #include <sys/resource.h>
 #include <time.h>
 #include <unistd.h>
@@ -47,16 +49,59 @@ int64_t et_c2_operational_monotonic_millis_v1(void) {
   return milliseconds > (uint64_t)INT64_MAX ? -1 : (int64_t)milliseconds;
 }
 
-/* Test-only, bounded progress evidence. Each call closes its file so a
- * watchdog termination leaves the last completed joint operation readable. */
+/* Test-only evidence: 25 expected markers, at most 32 records/2048 bytes.
+ * Create the private file ourselves, then append only to that single-link
+ * inode. O_NONBLOCK prevents a planted FIFO from delaying the watchdog. */
 void et_c2_operational_progress_v1(int64_t phase) {
+  static dev_t device;
+  static ino_t inode;
+  static off_t expected_size;
+  static unsigned records;
+  static int created;
+  static int unavailable;
   const char *path = getenv("C2_OPERATIONAL_PROGRESS_FILE");
-  FILE *stream;
-  if (path == NULL || path[0] == '\0' || phase < 1 || phase > 41) return;
-  stream = fopen(path, "a");
-  if (stream == NULL) return;
-  (void)fprintf(stream, "C2 OPERATIONAL PROGRESS: phase=%" PRId64
-                        " monotonic-ms=%" PRId64 "\n",
-                phase, et_c2_operational_monotonic_millis_v1());
-  (void)fclose(stream);
+  struct stat state;
+  char record[96];
+  int fd, length, closed;
+  ssize_t written;
+  if (path == NULL || path[0] == '\0' || phase < 1 || phase > 41 ||
+      unavailable || records >= 32u) return;
+  fd = open(path, O_WRONLY | O_APPEND | O_CLOEXEC | O_NONBLOCK | O_NOFOLLOW |
+                  (created ? 0 : O_CREAT | O_EXCL), 0600);
+  if (fd < 0) {
+    unavailable = 1;
+    return;
+  }
+  if (fstat(fd, &state) != 0 || !S_ISREG(state.st_mode) ||
+      state.st_nlink != 1 || state.st_size < 0 ||
+      (created && (state.st_dev != device || state.st_ino != inode ||
+                   state.st_size != expected_size)) ||
+      (!created && state.st_size != 0)) {
+    unavailable = 1;
+    (void)close(fd);
+    return;
+  }
+  if (!created) {
+    device = state.st_dev;
+    inode = state.st_ino;
+    created = 1;
+  }
+  length = snprintf(record, sizeof(record),
+                    "C2 OPERATIONAL PROGRESS: phase=%" PRId64
+                    " monotonic-ms=%" PRId64 "\n",
+                    phase, et_c2_operational_monotonic_millis_v1());
+  if (length <= 0 || (size_t)length >= sizeof(record) ||
+      state.st_size > 2048 - length) {
+    unavailable = 1;
+    (void)close(fd);
+    return;
+  }
+  written = write(fd, record, (size_t)length);
+  closed = close(fd);
+  if (written != length || closed != 0) {
+    unavailable = 1;
+    return;
+  }
+  expected_size = state.st_size + length;
+  ++records;
 }

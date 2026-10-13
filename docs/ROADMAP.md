@@ -624,7 +624,9 @@ was not observable. A test-only progress witness is being reviewed for a future
 diagnostic run; it records bounded joint LOAD/SAVE phase markers and prints them
 on failure. Codes 1/2 bracket LOAD; 10-16, 20-26 and 30-36 cover the three
 SAVE calls (0 begin, 1 borrow, 2 preflight, 3 measure, 4 encode, 5 publish,
-6 return); 40/41 mark release and completed checks. It changes no runtime
+6 return); 40/41 mark release and completed checks. The test writer creates a
+single-link regular file and caps evidence at 32 records/2,048 bytes; unsafe
+or unavailable evidence is reported explicitly. It changes no runtime
 limit, check count, or acceptance threshold.
 The current main runtime remains unmeasured by that failed old-head run.
 

@@ -74,8 +74,20 @@ phase_end() {
     active_phase=
   fi
 }
+progress_file_valid() {
+  local path=$1
+  [[ -n "$(find "${path}" -maxdepth 0 -type f -links 1 \
+    -size +0c -size -2049c -print -quit 2>/dev/null)" ]] || return 1
+  LC_ALL=C awk '
+    !/^C2 OPERATIONAL PROGRESS: phase=[0-9]+ monotonic-ms=[0-9]+$/ {
+      exit 1
+    }
+    NR > 32 { exit 1 }
+    END { if (NR == 0) exit 1 }
+  ' "${path}"
+}
 cleanup() {
-  local status=$?
+  local status=$? label progress
   if [[ "${development}" == 1 ]]; then
     if [[ -n "${active_phase}" ]]; then
       printf '%s_seconds=%s status=%s\n' "${active_phase}" \
@@ -85,13 +97,18 @@ cleanup() {
     return "${status}"
   fi
   if (( status != 0 )); then
-    if [[ "${active_runtime_mode}" == joint &&
-          ! -s "${tmp}/${active_runtime_label}/joint.progress" ]]; then
-      printf 'C2 OPERATIONAL PROGRESS UNAVAILABLE: %s/joint\n' \
-        "${active_runtime_label}" >&2
-    fi
-    find "${tmp}" -type f -name '*.progress' \
-      -print -exec sed -n '1,300p' {} \; >&2 || true
+    for label in clang-a clang-b; do
+      progress="${tmp}/${label}/joint.progress"
+      if progress_file_valid "${progress}"; then
+        printf '%s\n' "${progress}" >&2
+        sed -n '1,32p' "${progress}" >&2
+      elif [[ ( "${active_runtime_mode}" == joint &&
+                "${active_runtime_label}" == "${label}" ) ||
+              -e "${progress}" || -L "${progress}" ]]; then
+        printf 'C2 OPERATIONAL PROGRESS UNAVAILABLE: %s/joint\n' \
+          "${label}" >&2
+      fi
+    done
     find "${tmp}" -type f \( -name '*.stdout' -o -name '*.stderr' \) \
       -print -exec sed -n '1,300p' {} \; >&2 || true
   fi
