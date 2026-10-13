@@ -189,6 +189,42 @@ struct et_o2_g3r_save_hold {
 };
 static et_o2_g3r_save_hold *et_o2_g3r_save_holds;
 static size_t et_o2_g3r_save_tombstones;
+/* Allocation extents live outside caller-visible optimizer/state shells. */
+typedef struct et_o2_g3r_optimizer_allocation {
+  struct et_o2_g3r_optimizer_allocation *next;
+  et_o2_optimizer *owner;
+  et_o2_entry *entries;
+  size_t count;
+  uint32_t live;
+} et_o2_g3r_optimizer_allocation;
+typedef struct et_o2_g3r_state_allocation {
+  struct et_o2_g3r_state_allocation *next;
+  et_o2_optimizer_state *owner;
+  et_o2_state_entry *entries;
+  et_o2_optimizer_state_handle **handles;
+  et_f32_tensor **owned_clones;
+  size_t count;
+  uint32_t live;
+} et_o2_g3r_state_allocation;
+static et_o2_g3r_optimizer_allocation *et_o2_g3r_optimizer_allocations;
+static et_o2_g3r_state_allocation *et_o2_g3r_state_allocations;
+
+static et_o2_g3r_optimizer_allocation *et_o2_g3r_optimizer_allocation_find(
+    const et_o2_optimizer *owner) {
+  for (et_o2_g3r_optimizer_allocation *record =
+           et_o2_g3r_optimizer_allocations;
+       record != NULL; record = record->next)
+    if (record->owner == owner) return record;
+  return NULL;
+}
+
+static et_o2_g3r_state_allocation *et_o2_g3r_state_allocation_find(
+    const et_o2_optimizer_state *owner) {
+  for (et_o2_g3r_state_allocation *record = et_o2_g3r_state_allocations;
+       record != NULL; record = record->next)
+    if (record->owner == owner) return record;
+  return NULL;
+}
 #endif
 #ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
 static et_o2_retire_provenance *et_o2_retire_records;
@@ -1081,6 +1117,13 @@ int32_t et_o2_private_candidate_retire_commit_v1(
   }
   free(optimizer->entries);
   optimizer->entries = NULL;
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  et_o2_g3r_optimizer_allocation *allocation =
+      et_o2_g3r_optimizer_allocation_find(optimizer);
+  if (allocation == NULL || allocation->live != 1u) _Exit(134);
+  allocation->entries = NULL;
+  allocation->live = 0u;
+#endif
   record->entries = NULL;
   record->live = 0u;
   optimizer->count = 0u;
@@ -1277,6 +1320,23 @@ int32_t et_o2_optimizer_builder_finish_v1(et_o2_optimizer_builder **slot,
   optimizer->magic = ET_O2_OPTIMIZER_MAGIC;
   optimizer->count = builder->count;
 #ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  et_o2_g3r_optimizer_allocation *allocation =
+      et_o2_calloc(1u, sizeof(*allocation));
+  if (allocation == NULL) {
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+    free(record);
+#endif
+    free(optimizer);
+    return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
+                      ET_O2_CODE_ALLOCATION_FAILED, "optimizer-create",
+                      "cannot record optimizer allocation");
+  }
+  allocation->owner = optimizer;
+  allocation->entries = builder->entries;
+  allocation->count = builder->count;
+  allocation->live = 1u;
+  allocation->next = et_o2_g3r_optimizer_allocations;
+  et_o2_g3r_optimizer_allocations = allocation;
   optimizer->registered_count = builder->count;
 #endif
   optimizer->config = builder->config;
@@ -2115,48 +2175,80 @@ static int et_o2_g3r_save_buffers_conflict(const void *output,
                                         sizeof(*hold)))
       return 1;
   }
+  for (const et_o2_g3r_optimizer_allocation *record =
+           et_o2_g3r_optimizer_allocations;
+       record != NULL; record = record->next) {
+    if (et_o2_g3r_save_storage_conflict(output, output_bytes, error, record,
+                                        sizeof(*record)) ||
+        et_o2_g3r_save_storage_conflict(output, output_bytes, error,
+                                        record->owner, sizeof(*record->owner)) ||
+        (record->live == 1u &&
+         et_o2_g3r_save_storage_conflict(
+             output, output_bytes, error, record->entries,
+             record->count * sizeof(*record->entries))))
+      return 1;
+  }
+  for (const et_o2_g3r_state_allocation *record =
+           et_o2_g3r_state_allocations;
+       record != NULL; record = record->next) {
+    if (et_o2_g3r_save_storage_conflict(output, output_bytes, error, record,
+                                        sizeof(*record)) ||
+        et_o2_g3r_save_storage_conflict(output, output_bytes, error,
+                                        record->owner, sizeof(*record->owner)) ||
+        (record->live != 0u &&
+         (et_o2_g3r_save_storage_conflict(
+              output, output_bytes, error, record->entries,
+              record->count * sizeof(*record->entries)) ||
+          et_o2_g3r_save_storage_conflict(
+              output, output_bytes, error, record->handles,
+              record->count * 2u * sizeof(*record->handles)) ||
+          et_o2_g3r_save_storage_conflict(
+              output, output_bytes, error, record->owned_clones,
+              record->count * 2u * sizeof(*record->owned_clones)))))
+      return 1;
+  }
   for (const et_o2_optimizer *optimizer = et_o2_optimizers;
        optimizer != NULL; optimizer = optimizer->registry_next) {
-    /* A malformed registered extent cannot justify writing a caller buffer. */
-    if (optimizer->registered_count == 0u ||
-        optimizer->registered_count > ET_O2_MAX_PARAMETERS ||
-        (optimizer->entries != NULL
-             ? optimizer->count != optimizer->registered_count
-             : optimizer->count != 0u))
+    const et_o2_g3r_optimizer_allocation *record =
+        et_o2_g3r_optimizer_allocation_find(optimizer);
+    if (record == NULL || record->count == 0u ||
+        record->count > ET_O2_MAX_PARAMETERS ||
+        optimizer->registered_count != record->count ||
+        (record->live == 1u
+             ? optimizer->magic != ET_O2_OPTIMIZER_MAGIC ||
+                   optimizer->entries != record->entries ||
+                   optimizer->count != record->count
+             : record->live != 0u || optimizer->entries != NULL ||
+                   optimizer->count != 0u))
       return 1;
     if (et_o2_g3r_save_storage_conflict(output, output_bytes, error,
-                                        optimizer, sizeof(*optimizer)) ||
-        et_o2_g3r_save_storage_conflict(
-            output, output_bytes, error, optimizer->entries,
-            optimizer->count * sizeof(*optimizer->entries)))
+                                        optimizer, sizeof(*optimizer)))
       return 1;
   }
   for (const et_o2_optimizer_state *state = et_o2_states; state != NULL;
        state = state->registry_next) {
-    if (state->registered_count == 0u ||
-        state->registered_count > ET_O2_MAX_PARAMETERS ||
-        (state->lifecycle == ET_O2_OPTIMIZER_STATE_LIVE
-             ? state->entries == NULL || state->handles == NULL ||
-                   state->owned_clones == NULL ||
-                   state->count != state->registered_count ||
-                   state->owned_clone_ledger_count !=
-                       state->registered_count * 2u
-             : state->count != 0u ||
+    const et_o2_g3r_state_allocation *record =
+        et_o2_g3r_state_allocation_find(state);
+    if (record == NULL || record->count == 0u ||
+        record->count > ET_O2_MAX_PARAMETERS ||
+        state->registered_count != record->count ||
+        (record->live == 1u
+             ? state->magic != ET_O2_STATE_MAGIC ||
+                   state->lifecycle != ET_O2_OPTIMIZER_STATE_LIVE ||
+                   state->entries != record->entries ||
+                   state->handles != record->handles ||
+                   state->owned_clones != record->owned_clones ||
+                   state->count != record->count ||
+                   state->owned_clone_ledger_count != record->count * 2u
+             : record->live != 0u ||
+                   state->lifecycle != ET_O2_OPTIMIZER_STATE_DEAD ||
+                   state->count != 0u ||
                    state->owned_clone_ledger_count != 0u ||
                    state->entries != NULL || state->handles != NULL ||
                    state->owned_clones != NULL))
       return 1;
     if (et_o2_g3r_save_storage_conflict(output, output_bytes, error, state,
-                                        sizeof(*state)) ||
-        et_o2_g3r_save_storage_conflict(
-            output, output_bytes, error, state->entries,
-            state->count * sizeof(*state->entries)) ||
-        et_o2_g3r_save_storage_conflict(
-            output, output_bytes, error, state->handles,
-            state->count * 2u * sizeof(*state->handles)) ||
-        et_o2_g3r_save_storage_conflict(
-            output, output_bytes, error, state->owned_clones,
-            state->owned_clone_ledger_count * sizeof(*state->owned_clones)))
+                                        sizeof(*state)))
       return 1;
   }
   for (const et_o2_optimizer_state_handle *handle = et_o2_handles;
@@ -2529,6 +2621,24 @@ int32_t et_o2_optimizer_state_snapshot_v1(et_o2_optimizer *candidate,
     handle->live = 1u;
     state->handles[handle_index] = handle;
   }
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  et_o2_g3r_state_allocation *allocation =
+      et_o2_calloc(1u, sizeof(*allocation));
+  if (allocation == NULL) {
+    result = et_o2_fail(error, ET_O2_STATUS_INTERNAL,
+                        ET_O2_CODE_ALLOCATION_FAILED, "optimizer-state",
+                        "cannot record state allocation");
+    goto cleanup;
+  }
+  allocation->owner = state;
+  allocation->entries = state->entries;
+  allocation->handles = state->handles;
+  allocation->owned_clones = state->owned_clones;
+  allocation->count = state->count;
+  allocation->live = 1u;
+  allocation->next = et_o2_g3r_state_allocations;
+  et_o2_g3r_state_allocations = allocation;
+#endif
   state->magic = ET_O2_STATE_MAGIC;
   state->lifecycle = ET_O2_OPTIMIZER_STATE_LIVE;
   state->registry_next = et_o2_states;
@@ -2967,6 +3077,15 @@ int32_t et_o2_optimizer_state_release_v1(et_o2_optimizer_state *candidate,
   free(state->owned_clones);
   free(state->handles);
   free(state->entries);
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  et_o2_g3r_state_allocation *allocation =
+      et_o2_g3r_state_allocation_find(state);
+  if (allocation == NULL || allocation->live != 1u) abort();
+  allocation->entries = NULL;
+  allocation->handles = NULL;
+  allocation->owned_clones = NULL;
+  allocation->live = 0u;
+#endif
   state->owned_clones = NULL;
   state->owned_clone_ledger_count = 0u;
   state->handles = NULL;
@@ -3013,6 +3132,16 @@ static void et_o2_reconstruct_free_prepared(
   if (state == NULL) {
     return;
   }
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  et_o2_g3r_state_allocation **link = &et_o2_g3r_state_allocations;
+  while (*link != NULL && (*link)->owner != state) link = &(*link)->next;
+  if (*link != NULL) {
+    et_o2_g3r_state_allocation *record = *link;
+    if (record->live != 2u) abort();
+    *link = record->next;
+    free(record);
+  }
+#endif
   if (state->handles != NULL) {
     for (index = 0u; index < builder->count * 2u; ++index) {
       free(state->handles[index]);
@@ -3271,6 +3400,26 @@ int32_t et_o2_optimizer_state_reconstruct_prepare_v1(
   state->provider_major = ET_O2_PROVIDER_ABI_MAJOR;
   state->provider_minor = ET_O2_PROVIDER_ABI_MINOR;
   memcpy(state->provider_id, ET_O2_PROVIDER_ID, sizeof(ET_O2_PROVIDER_ID));
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  et_o2_g3r_state_allocation *allocation =
+      et_o2_calloc(1u, sizeof(*allocation));
+  if (allocation == NULL) {
+    builder->prepared_state = state;
+    et_o2_reconstruct_free_prepared(builder);
+    return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
+                      ET_O2_CODE_ALLOCATION_FAILED,
+                      "optimizer-state-reconstruct",
+                      "cannot record prepared state allocation");
+  }
+  allocation->owner = state;
+  allocation->entries = state->entries;
+  allocation->handles = state->handles;
+  allocation->owned_clones = state->owned_clones;
+  allocation->count = builder->count;
+  allocation->live = 2u;
+  allocation->next = et_o2_g3r_state_allocations;
+  et_o2_g3r_state_allocations = allocation;
+#endif
   builder->prepared_state = state;
   builder->prepared = 1u;
   return et_o2_success(error);
@@ -3300,6 +3449,19 @@ int32_t et_o2_optimizer_state_reconstruct_commit_v1(
   }
 #endif
   state = builder->prepared_state;
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  et_o2_g3r_state_allocation *allocation =
+      et_o2_g3r_state_allocation_find(state);
+  if (allocation == NULL || allocation->live != 2u ||
+      allocation->count != builder->count ||
+      allocation->entries != state->entries ||
+      allocation->handles != state->handles ||
+      allocation->owned_clones != state->owned_clones)
+    return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
+                      ET_O2_CODE_OWNER_CONFLICT,
+                      "optimizer-state-reconstruct",
+                      "prepared state allocation changed");
+#endif
   for (index = 0u; index < builder->count * 2u; ++index) {
     if (builder->owned_clones[index] == NULL ||
         et_f32_tensor_is_live_v1(builder->owned_clones[index]) != 1) {
@@ -3320,6 +3482,9 @@ int32_t et_o2_optimizer_state_reconstruct_commit_v1(
   }
   state->magic = ET_O2_STATE_MAGIC;
   state->lifecycle = ET_O2_OPTIMIZER_STATE_LIVE;
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  allocation->live = 1u;
+#endif
   state->registry_next = et_o2_states;
   et_o2_states = state;
   for (index = 0u; index < builder->count * 2u; ++index) {

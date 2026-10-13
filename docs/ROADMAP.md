@@ -1807,6 +1807,15 @@ before caller writes, and covers over-limit and reduced counts with ownership
 recovery checks. Focused native and ASan+UBSan tests pass 306 checks; feature-off
 object bytes still match `d6fe6906`. Independent re-review and same-aggregate
 validation remain pending before integration.
+Independent review of `d385c223` held admission: paired shell-count edits and
+live-to-dead disguises still let private errors overwrite live O2 entry, handle
+and clone allocations. The isolated follow-up records allocation pointers and
+capacities outside mutable optimizer/state shells, checks each shell against
+that provenance before caller writes, and adds causal alias negatives. Prepared
+reconstruction records are allocated in prepare, preserving allocation-free
+commit. Focused normal and ASan+UBSan tests pass 320 checks; a feature-enabled
+native reconstruction smoke passes and feature-off object bytes match the
+parent. Independent re-review and same-aggregate validation remain pending.
 
 The follow-on private aggregate candidate on `codex/g3r-committed-save-aggregate`
 loads that wrapper with the exact M3/G3-T/G3-M route. A real seeded P1/G1
