@@ -2051,6 +2051,14 @@ caller passes `#f`, while the receipt rejects images over 16 MiB before
 destination allocation. Native and static source checks pass locally. Compiled
 Eshkol behavior, independent review, CI and same-owner G3/M3/O2 pairing remain
 open gates; this leaf does not admit SAVE replay or continuation.
+The isolated `codex/c2-save-image-receipt-compiled-gate-20261013` follow-up
+prepares a deterministic compiled Eshkol driver for public SAVE compatibility,
+held-owner rejection, measured-cap order, malformed backing, post-adopt cleanup,
+digest/file parity, writer failure status and repeated release. Its source-only
+syntax/static gate passes; the pinned compiled normal/repeat/fail-stop run has
+not been authorized or executed. Native allocation/SHA injection, impossible
+post-adopt enrollment allocation, and process-root retention need separate
+instrumentation or a narrowed acceptance argument.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
