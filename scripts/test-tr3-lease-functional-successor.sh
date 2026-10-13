@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
-source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
+gate_script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+[[ "$(sha256sum "${gate_script_dir}/common.sh" | awk '{print $1}')" == \
+   2749689e6301cad6e489de4b23e0f9b1ec7c9627f47dd1c7007d9ed8e5955e83 ]] || {
+  printf 'error: functional successor common shell input changed\n' >&2
+  exit 1
+}
+source "${gate_script_dir}/common.sh"
 
 for command in git python3 readlink sha256sum; do
   require_command "${command}"
@@ -8,6 +14,8 @@ done
 
 cd "${PROJECT_ROOT}"
 candidate_manifest="${PROJECT_ROOT}/tests/tr3_lease/functional_successor_candidate.tsv"
+[[ "$(sha256sum "${candidate_manifest}" | awk '{print $1}')" == \
+   0a84c230721c3c182a798f5445e3a4ec4b775ea4b3d9712ebca8412175293dc6 ]] || die "functional successor candidate manifest changed"
 [[ "$(tsv_value "${candidate_manifest}" format_version)" == 3 ]] || \
   die "unsupported functional successor manifest format"
 source_preflight=0
@@ -44,10 +52,21 @@ trainer_tree="$(tsv_value "${candidate_manifest}" trainer_source_tree)"
   die "approved TR3 lease source tree changed"
 git merge-base --is-ancestor "${trainer_commit}" HEAD || \
   die "checkout does not descend from the approved TR3 lease successor"
+reviewed_gate_commit=8a8b011f1ef7a895aba2bcccefe06dfca9d4fca5
+git merge-base --is-ancestor "${reviewed_gate_commit}" HEAD || \
+  die "checkout does not descend from the reviewed functional successor gate"
 git diff --quiet "${trainer_commit}" -- include internal lib native src templates || \
   die "production source differs from the approved TR3 lease successor"
 [[ -z "$(git status --porcelain --untracked-files=all)" ]] || \
   die "TR3 lease supported gate requires a clean checkout"
+while IFS= read -r -d '' changed_path; do
+  case "${changed_path}" in
+    docs/*|scripts/test-tr3-lease-functional-successor.sh|\
+    tests/tr3_lease/functional_successor_candidate.tsv|\
+    tests/tr3_lease/test_functional_successor_gate.py) ;;
+    *) die "functional successor live source differs from the reviewed gate: ${changed_path}" ;;
+  esac
+done < <(git diff --name-only -z "${reviewed_gate_commit}" HEAD --)
 [[ "$(sha256sum native/tr3_lease_core_extension.esk | awk '{print $1}')" == \
    "$(tsv_value "${candidate_manifest}" lease_core_sha256)" ]] || \
   die "approved lease core changed"
@@ -64,7 +83,7 @@ git diff --quiet "${trainer_commit}" -- include internal lib native src template
    "$(tsv_value "${candidate_manifest}" functional_gate_test_sha256)" ]] || \
   die "functional successor source test changed"
 
-expected_gate_self_sha256=50db101fd88b85f7e3f01bc1365d55d81573dccd3a11ac2af956dc6ab8507eb3
+expected_gate_self_sha256=4c9ecd22cab67f5d226339ddcbf46517f93489f24805bf8e3963dc2d40bff7aa
 gate_self_sha256="$(sed \
   's/^expected_gate_self_sha256=.*/expected_gate_self_sha256=__SELF__/' \
   scripts/test-tr3-lease-functional-successor.sh | sha256sum | awk '{print $1}')"

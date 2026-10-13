@@ -13,6 +13,7 @@ GATE = "scripts/test-tr3-lease-functional-successor.sh"
 MANIFEST = "tests/tr3_lease/functional_successor_candidate.tsv"
 BASE = "41cbf6c310106c5d37cada181ecd6e8b0f91f84e"
 TREE = "50aef09425000e1f222858ce5af1189839583c2c"
+REVIEWED_GATE = "8a8b011f1ef7a895aba2bcccefe06dfca9d4fca5"
 
 
 def run(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -40,6 +41,7 @@ class FunctionalSuccessorGate(unittest.TestCase):
         self.assertIn("horizon=8192 loop_arena_delta=0", gate)
         self.assertIn("ESHKOL_ARENA_POISON=1", gate)
         self.assertIn("--network none", gate)
+        self.assertIn("reviewed_gate_commit=" + REVIEWED_GATE, gate)
         self.assertNotIn("--diagnostic-only", gate)
         self.assertNotIn("--allocation-probes", gate)
         fixture = (ROOT / "tests/tr3_lease/lease_runtime.esk").read_text()
@@ -88,9 +90,42 @@ class FunctionalSuccessorGate(unittest.TestCase):
             candidate.write_text(candidate.read_text().replace("format_version\t3", "format_version\t4"))
             self.assertEqual(run(checkout, "git", "add", MANIFEST).returncode, 0)
             self.assertEqual(run(checkout, "git", "commit", "-qm", "negative manifest version").returncode, 0)
-            self.assertIn("unsupported functional successor manifest format", preflight().stderr)
+            self.assertIn("candidate manifest changed", preflight().stderr)
 
             self.assertEqual(run(checkout, "git", "reset", "--hard", "HEAD^").returncode, 0)
+            for path in (
+                "scripts/common.sh",
+                "tests/tr3_lease/root_smoke.esk",
+                "tests/tr3b/prepare_fixture.py",
+                "tests/d2/test_resources.py",
+                "tests/d1/reference_format.py",
+                "tests/d2/reference.py",
+                "tests/__init__.py",
+                "tests/tr3b/__init__.py",
+                "tests/d2/__init__.py",
+                "tests/tr3_lease/__init__.py",
+            ):
+                source = checkout / path
+                source.write_bytes(source.read_bytes() + b"\n")
+                self.assertEqual(run(checkout, "git", "add", path).returncode, 0)
+                self.assertEqual(run(checkout, "git", "commit", "-qm", "negative live input").returncode, 0)
+                failed = preflight()
+                self.assertNotEqual(failed.returncode, 0, path)
+                self.assertIn(
+                    "common shell input changed" if path == "scripts/common.sh" else
+                    "live source differs from the reviewed gate",
+                    failed.stderr,
+                    path,
+                )
+                self.assertEqual(run(checkout, "git", "reset", "--hard", "HEAD^").returncode, 0)
+
+            injected = checkout / "sitecustomize.py"
+            injected.write_text("# Python startup hook\n")
+            self.assertEqual(run(checkout, "git", "add", "sitecustomize.py").returncode, 0)
+            self.assertEqual(run(checkout, "git", "commit", "-qm", "negative import hook").returncode, 0)
+            self.assertIn("live source differs from the reviewed gate", preflight().stderr)
+            self.assertEqual(run(checkout, "git", "reset", "--hard", "HEAD^").returncode, 0)
+
             note = checkout / "docs/tr3-functional-source-test.txt"
             note.write_text("unrelated documentation\n")
             self.assertEqual(run(checkout, "git", "add", str(note.relative_to(checkout))).returncode, 0)
