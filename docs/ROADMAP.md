@@ -1849,6 +1849,12 @@ issued pointer, C2 claim/rollback/retirement, identity, alias, count, and
 same-owner retry cases. It is source-only pending supported-host execution
 and independent review; its test bridge derives the fourteen-entry roster
 from the registered optimizer and does not authenticate the M3 issuer.
+Independent review of `16ab49a5` held the registered-foreign optimizer case:
+the fixture used an unregistered forged vector. The isolated successor adds a
+second registered equal-bit optimizer with distinct parameter owners, checks
+byte preservation of the held O2 shells and ledgers after native rejection,
+and retries the original owner. Supported-host execution and review of the
+successor remain open.
 
 The follow-on private aggregate candidate on `codex/g3r-committed-save-aggregate`
 loads that wrapper with the exact M3/G3-T/G3-M route. A real seeded P1/G1

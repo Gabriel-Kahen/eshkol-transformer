@@ -20,7 +20,11 @@ that provider. Existing C2 compose then claims the resulting shell.
 the repository's pinned supported Eshkol/Clang toolchain and writes all
 artifacts under the supplied fresh path. The runtime test uses deterministic
 D2 resources and authenticated C2 cursor/config controls. It checks an
-equal-byte different native state and foreign Eshkol optimizer shell, exact
+equal-byte different native state, a forged shell, and a second registered
+equal-bit optimizer on independent parameter owners. The registered foreign
+case compares held O2 control shells and ledgers byte for byte before and
+after rejection, checks the held moment invariant and live counts, then
+retries adoption on the original owner. The gate also checks exact
 issued pointer registration and duplicate rejection, counter and P1 alias
 preflight failures, preclaim coordinator release, injected second-claim
 rollback, same-owner retry, C2 claim consumption, exclusion of public O2
