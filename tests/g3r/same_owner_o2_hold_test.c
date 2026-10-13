@@ -208,6 +208,8 @@ int main(void) {
   CHECK(et_g3r_private_o2_save_end_v1(&foreign, &o2) ==
       ET_O2_STATUS_INVALID_STATE);
   CHECK(foreign == (et_o2_g3r_save_hold *)(uintptr_t)1);
+  et_o2_optimizer_state *equal_other = NULL;
+  CHECK(et_o2_optimizer_state_snapshot_v1(optimizer, &equal_other, &o2) == 0);
   CHECK(et_g3r_private_o2_save_begin_v1(
       optimizer, parameters, identities, &hold, &o2) == 0);
   CHECK(hold != NULL && optimizer->busy == 1);
@@ -361,6 +363,12 @@ int main(void) {
   CHECK(state != NULL && state->count == 14);
   CHECK(et_g3r_private_o2_save_check_v1(hold, &o2) == 0);
   CHECK(et_g3r_private_o2_save_issued_match_v1(hold, state, &o2) == 0);
+  /* Bit equality alone does not identify the exact save_state return. The
+   * coordinator must keep state by pointer through C2 claim or release. */
+  CHECK(equal_other != state);
+  CHECK(et_g3r_private_o2_save_issued_match_v1(hold, equal_other, &o2) == 0);
+  CHECK(et_o2_optimizer_state_release_v1(equal_other, &o2) == 0);
+  equal_other = NULL;
   CHECK(et_g3r_private_o2_save_issued_match_v1(
       hold, state, (et_o2_error_v1 *)(void *)value_data) ==
       ET_O2_STATUS_INVALID_ARGUMENT);

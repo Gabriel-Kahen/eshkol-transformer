@@ -2093,6 +2093,13 @@ parameter and moment alias negatives. `issued_match` compares held state bits,
 so the future coordinator must also root the exact state pointer returned by
 `save_state` through claim or release. These are source repairs; runtime and
 pairing gates remain open.
+The [held O2-to-C2 adoption gate](g3/G3_R_HELD_O2_C2_ADOPTION_GATE.md)
+pins the missing Eshkol transfer boundary. A causal native negative verifies
+that a distinct pre-hold O2 state with equal bits also passes `issued_match`;
+the proposed coordinator must bind the exact issued pointer before its Scheme
+shell can enter C2 composition. Current O2 Scheme enrollment uses ordinary
+snapshot, and C2 accepts only a registered Scheme O2 state. This gate provides
+no coordinator, held C2 owner, SAVE pair, or replay claim.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
