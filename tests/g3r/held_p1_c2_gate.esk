@@ -8,6 +8,8 @@
 (load "c2_training_state_extension.esk")
 (define t1-wave1-tensor-admitted? t2-wave2-tensor-admitted?)
 (load "m3t_transport_extension.esk")
+(load "m3_schedule.esk")
+(load "m3_model_extension.esk")
 (load "m3_call_adapters.esk")
 (load "g3t_model_admission_extension.esk")
 (load "g3t_generator_constructor_extension.esk")
@@ -28,6 +30,13 @@
 (load "g3r_joint_c2_claim_extension.esk")
 (load "g3r_joint_original_owner_binding_extension.esk")
 (load "g3r_joint_p1_provenance_extension.esk")
+
+(extern i64 g3r-test-held-bits-begin ptr
+        :real et_g3r_test_held_bits_begin_v1)
+(extern i64 g3r-test-held-bits-check ptr
+        :real et_g3r_test_held_bits_check_v1)
+(extern i64 g3r-test-held-bits-end ptr
+        :real et_g3r_test_held_bits_end_v1)
 
 (define checks 0)
 (define (check label condition)
@@ -171,6 +180,11 @@
                                    (vector-ref original 1)
                                    (vector-ref original 6)))))
 (define held (begin-held original))
+(define native-model
+  (vector-ref (g3t-model-entry-live
+                (vector-ref original 4) 'g3r-held-p1-c2-gate #f) 3))
+(check "all fourteen original value and absent-gradient bit baselines captured"
+       (= 0 (g3r-test-held-bits-begin native-model)))
 (define p1 (clone original held))
 (check "exact P1 record and fourteen-path tied topology"
        (and (g3r-joint-p1-provenance-live-record p1)
@@ -178,7 +192,8 @@
             (equal? (vector-ref (vector-ref p1 3) 2)
                     '((("head" "weight") ("token_embedding" "weight"))))))
 (check "held original bits and history unchanged by clone"
-       (and (= 0 (g3r-joint-original-owner-match
+       (and (= 0 (g3r-test-held-bits-check native-model))
+            (= 0 (g3r-joint-original-owner-match
                     (vector-ref held 0)
                     (vector-ref (g3t-generator-find
                                   (vector-ref original 8) 'g3r-held-p1-c2-gate) 3)
@@ -191,6 +206,8 @@
               (and (= 0 (g3r-joint-c2-copy-words
                             (vector-ref held 0) words))
                    (bytes=? words before-history)))))
+(check "all fourteen value and gradient witnesses close while pins live"
+       (= 0 (g3r-test-held-bits-end native-model)))
 (define claimed (claim original held p1))
 (define claim-result (vector-ref claimed 2))
 (define request (vector-ref claim-result 2))

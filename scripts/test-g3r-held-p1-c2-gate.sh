@@ -84,6 +84,7 @@ compile src/eshkol_transformer/g3t_transport.c g3t_transport \
   -DET_F32_TENSOR_STORAGE_QUERY_PRIVATE
 compile native/g3r_joint_hold.c g3r_joint_hold \
   -DET_G3R_COMMITTED_HISTORY_PRIVATE -DET_G3R_SAME_OWNER_SAVE_PRIVATE
+compile tests/g3r/held_p1_c2_bit_bridge.c held_p1_c2_bit_bridge
 ar rcsD "$evidence/native/libg3r_held_p1_c2_gate.a" \
   "$evidence/native"/*.o
 
