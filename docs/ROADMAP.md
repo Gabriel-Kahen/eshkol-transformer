@@ -2165,6 +2165,13 @@ core for canonical-byte admission, updates the lease failure witness to the
 23-slot record, and reseals the affected fixture hashes. Focused source
 contracts pass; compiled CLI3 and TR3 runtime admission and independent review
 remain pending.
+The [versioned TR3 lease failure successor gate](TR3_LEASE_FAILURE_SUCCESSOR_V3.md)
+is source-staged on exact `41cbf6c3` / tree `50aef094`: it separately pins the
+current successor contract and production-OFF failure runner, requires a clean
+source descendant, and requires complete matching O0/O2 allocation-prefix,
+handler, and post-staging evidence. The historical gate and evidence remain
+unchanged. Source-only negative checks pass; supported compiled O0/O2
+execution, independent review, and admission remain open.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
