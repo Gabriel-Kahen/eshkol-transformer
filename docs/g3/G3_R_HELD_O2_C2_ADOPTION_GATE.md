@@ -200,3 +200,18 @@ or that all provider failure and post-tombstone release cuts retain authority.
 Until that fixture and independent review pass, this leaf is not an admitted
 same-owner P1 clone or C2 claim. D2 cursor and trainer controls, pair/receipt,
 SAVE publication and replay remain open.
+
+## Joint begin source prerequisite
+
+`native/g3r_joint_begin_extension.esk` adds a private, unlinked Eshkol entry
+that can pass the exact registered G3 generator, live M3T model, raw T1
+tokenizer and O2 optimizer pointers to the existing native joint hold begin.
+It rejects mismatched or busy Scheme generator roots before native acquisition.
+The native begin authenticates the fourteen-parameter original M3T/O2 roster
+and returns one held owner; a native failure follows the existing joint
+error mapping. A nine-mutation source gate checks shell-to-pointer wiring and
+feature-off closure. No compiled aggregate or held-pin clone test has run on
+this entry, so it does not establish a claim or a recoverable failure path.
+The next gate must link the begin entry, joint O2 adopter, original binding,
+P1 provenance and C2 claim in one pinned aggregate, then exercise the real
+CPU-f32 clone and the specified failure cuts while both holds remain live.

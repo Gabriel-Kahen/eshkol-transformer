@@ -2166,6 +2166,12 @@ including exposed-record, pre-guard leak, and cross-owner mutation controls.
 Held-pin cloning,
 provider failure cuts, and P1 release behavior have no compiled runtime
 evidence. No original-owner C2 claim, SAVE pair, receipt or replay is admitted.
+The unlinked joint-begin Eshkol bridge now passes nine source mutations for
+registered G3/M3/T1/O2 shell-to-native pointer wiring and feature-off closure.
+It is a source prerequisite only. The pinned aggregate must still prove
+held-pin P1 cloning, exact original bit preservation, joint-issued O2 transfer,
+C2 partial-claim cleanup and reverse-order hold drain before a C2 claim is
+accepted.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),

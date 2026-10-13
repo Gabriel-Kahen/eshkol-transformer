@@ -1,0 +1,35 @@
+;;; Source-private entry to the native original-owner joint hold. Load after
+;;; G3-T, the committed-save tokenizer helper, O2, and the joint O2 adopter.
+;;; The native begin authenticates the fixed fourteen-parameter M3T roster
+;;; against the exact optimizer before either held owner is returned.
+(extern ptr g3r-joint-begin ptr ptr ptr
+        :real et_g3r_joint_hold_begin_v1)
+
+(define (g3r-joint-begin! generator model tokenizer optimizer-value)
+  (let* ((operation 'g3r-joint-begin!)
+         (generator-entry (g3t-generator-find generator operation))
+         (model-entry (g3t-model-entry-live model operation #f))
+         (optimizer-record (o2-require-optimizer operation optimizer-value)))
+    (if (or (not (vector? generator-entry))
+            (not (= (vector-length generator-entry) 12))
+            (not (eq? (vector-ref generator-entry 0) generator))
+            (not (eq? (vector-ref generator-entry 1) 'generator))
+            (not (eq? (vector-ref generator-entry 2) 'live))
+            (null? (vector-ref generator-entry 3))
+            (not (eq? (vector-ref generator-entry 4) #f))
+            (not (eq? (vector-ref generator-entry 8) #f))
+            (not (eq? (vector-ref generator-entry 9) #f))
+            (not (eq? (vector-ref generator-entry 10) #f))
+            (not (eq? (vector-ref generator-entry 11) 'diagnostic-c2))
+            (not (eq? (vector-ref generator-entry 5) model-entry))
+            (not (eq? (vector-ref generator-entry 6) tokenizer))
+            (not (g3r-save-tokenizer? tokenizer))
+            (not (vector? optimizer-record))
+            (null? (vector-ref optimizer-record 1)))
+        (g3t-fail-raw 'invalid-state operation 2
+                      "registered original G3/M3/T1/O2 owner changed"))
+    (let ((joint (g3r-joint-begin (vector-ref generator-entry 3)
+                                  (vector-ref model-entry 3)
+                                  (vector-ref optimizer-record 1))))
+      (if (null? joint) (g3r-joint-o2-native-fail operation))
+      joint)))
