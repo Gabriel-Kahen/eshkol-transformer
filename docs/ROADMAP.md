@@ -1807,6 +1807,16 @@ retains both prevalidated names. Compiled aggregate, filesystem failpoints and s
 integration remain pending. Its detached G3 input fields are unauthenticated,
 so no G3-R SAVE or continuation is admitted.
 
+The proposed [current-history held SAVE contract](g3/G3_R_CURRENT_HISTORY_HELD_SAVE_CONTRACT.md)
+records the source-only conflict between the divergent 18-word same-owner
+producer and this branch's 17-word committed-history owner. Current-main
+history and pending-G1 semantics govern. A native hold that keeps the original
+model/cache/optimizer graph pinned through C2 composition, with exact 17-word
+rechecks and explicit cleanup, needs independent review and implementation
+before the pair publisher can receive authoritative same-owner fields. The
+divergent producer's compiled post-adoption and partial-claim gates remain
+open; this contract adds no API, SAVE, or continuation admission.
+
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
 diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use
