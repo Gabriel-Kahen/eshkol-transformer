@@ -23,6 +23,10 @@
         :real et_g3r_test_o2_live_count_v1)
 (extern i64 g3r-test-o2-equal-foreign ptr ptr
         :real et_g3r_test_o2_equal_foreign_v1)
+(extern i64 g3r-test-o2-distinct-states ptr ptr
+        :real et_g3r_test_o2_distinct_states_v1)
+(extern i64 g3r-test-o2-equal-preflight ptr ptr ptr
+        :real et_g3r_test_o2_equal_preflight_v1)
 (extern i64 g3r-test-o2-held-bytes i64 ptr ptr ptr
         :real et_g3r_test_o2_held_bytes_v1)
 
@@ -32,12 +36,29 @@
       (begin (display "O2 ISSUED C2 FAIL: ")
              (display label) (newline) (exit 1))))
 (define (expect-error label category operation thunk)
-  (check label
+  (let ((caught? #f) (caught #f))
     (guard (raised
-             (#t (and (transformer-error? raised)
-                      (eq? category (transformer-error-category raised))
-                      (eq? operation (transformer-error-operation raised)))))
-      (thunk) #f)))
+             (#t (set! caught? #t) (set! caught raised) #f))
+      (thunk))
+    (let ((typed? (and caught? (transformer-error? caught))))
+      (if (not (and typed?
+                    (eq? category (transformer-error-category caught))
+                    (eq? operation (transformer-error-operation caught))))
+          (begin
+            (display "O2 ISSUED C2 ERROR: ") (display label)
+            (display " caught=") (display caught?)
+            (display " transformer=") (display typed?)
+            (if typed?
+                (begin
+                  (display " category=")
+                  (display (transformer-error-category caught))
+                  (display " operation=")
+                  (display (transformer-error-operation caught))))
+            (newline)))
+      (check label
+             (and typed?
+                  (eq? category (transformer-error-category caught))
+                  (eq? operation (transformer-error-operation caught)))))))
 
 (define names
   '("p00" "p01" "p02" "p03" "p04" "p05" "p06"
@@ -133,6 +154,11 @@
 (check "native hold starts on one registered optimizer" (not (null? hold-a)))
 (define issued-a (g3r-test-hold-issue hold-a))
 (check "native hold issues one pointer" (not (null? issued-a)))
+(check "ordinary snapshot and held issue are distinct registered states"
+       (= (g3r-test-o2-distinct-states equal-native issued-a) 1))
+(check "native preflight rejects ordinary snapshot with exact typed status"
+       (= (g3r-test-o2-equal-preflight
+            hold-a native-optimizer equal-native) 1))
 (expect-error "equal-bit foreign native state is not issued" 'invalid-state
               'g3r-save-o2-adopt
   (lambda () (o2-g3r-adopt-issued-state-internal

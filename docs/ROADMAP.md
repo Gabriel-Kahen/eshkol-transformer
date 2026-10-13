@@ -1854,7 +1854,12 @@ the fixture used an unregistered forged vector. The isolated successor adds a
 second registered equal-bit optimizer with distinct parameter owners, checks
 byte preservation of the held O2 shells and ledgers after native rejection,
 and retries the original owner. Supported-host execution and review of the
-successor remain open.
+successor remain open. A test-only diagnostic on
+`codex/o2-issued-c2-diagnostic` records whether the equal-state adoption
+throws and, when typed, its category and operation. It witnesses distinct
+registered native states and the native invalid-state/invalid-handle preflight
+before Eshkol adoption. Compiled-provider execution and independent review of
+this diagnostic remain pending.
 
 The follow-on private aggregate candidate on `codex/g3r-committed-save-aggregate`
 loads that wrapper with the exact M3/G3-T/G3-M route. A real seeded P1/G1

@@ -33,6 +33,28 @@ void *et_g3r_test_o2_hold_issue_v1(void *candidate) {
   return issued;
 }
 
+/* Diagnose pointer provenance before the Eshkol adoption wrapper runs. */
+int64_t et_g3r_test_o2_distinct_states_v1(void *ordinary_ptr,
+                                            void *issued_ptr) {
+  et_o2_optimizer_state *ordinary = (et_o2_optimizer_state *)ordinary_ptr;
+  et_o2_optimizer_state *issued = (et_o2_optimizer_state *)issued_ptr;
+  return ordinary != issued && et_o2_find_state(ordinary) == ordinary &&
+         et_o2_find_state(issued) == issued;
+}
+
+int64_t et_g3r_test_o2_equal_preflight_v1(void *hold_ptr,
+                                           void *optimizer_ptr,
+                                           void *ordinary_ptr) {
+  et_o2_error_v1 error = {0};
+  int32_t status = et_g3r_private_o2_save_adopt_preflight_v1(
+      (et_o2_g3r_save_hold *)hold_ptr, (et_o2_optimizer *)optimizer_ptr,
+      (et_o2_optimizer_state *)ordinary_ptr, &error);
+  return status == ET_O2_STATUS_INVALID_STATE &&
+         error.category == ET_O2_STATUS_INVALID_STATE &&
+         error.code == ET_O2_CODE_INVALID_HANDLE &&
+         strcmp(error.operation, "g3r-save-o2-adopt") == 0;
+}
+
 int64_t et_g3r_test_o2_hold_match_v1(void *candidate, void *issued) {
   et_o2_error_v1 error;
   return et_g3r_private_o2_save_issued_match_v1(
