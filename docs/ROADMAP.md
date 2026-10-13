@@ -1780,6 +1780,15 @@ and the exact-`97aec234` compiled Eshkol aggregate have also passed their
 bounded gates. Current-main union validation remains pending. This is no SAVE
 admission, file writer or replay proof.
 
+The isolated O2 same-owner save-hold port based on merged main `86f4eb36`
+adds the feature-gated private fourteen-entry roster admission, exclusive
+reservation, exact moment and option checks, held state clone, issued-state
+comparison, and checked release. Its native test exercises busy, foreign and
+stale handles, partial-clone cleanup, changed bits, first-error release and
+the 64-token exhaustion boundary. This source prerequisite still needs
+independent review and compiled same-aggregate validation before it can join
+the G3-R SAVE path; it does not admit a writer or resumed generation.
+
 The follow-on private aggregate candidate on `codex/g3r-committed-save-aggregate`
 loads that wrapper with the exact M3/G3-T/G3-M route. A real seeded P1/G1
 commit produces the same owner's policy, RNG, ordered raw history and
