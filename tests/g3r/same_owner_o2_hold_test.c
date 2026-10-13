@@ -127,6 +127,35 @@ int main(void) {
       ET_O2_STATUS_INVALID_STATE);
   CHECK(second_hold == NULL && hold == first_hold && optimizer->busy == 1);
   memcpy(entries_before, optimizer->entries, sizeof(entries_before));
+  size_t optimizer_count = optimizer->count;
+  et_o2_error_v1 error_before;
+  memset(&o2, 0xa5, sizeof(o2));
+  memcpy(&error_before, &o2, sizeof(o2));
+  optimizer->count = ET_O2_MAX_PARAMETERS + 1u;
+  CHECK(et_g3r_private_o2_save_check_v1(
+      hold, (et_o2_error_v1 *)optimizer->entries) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_state_v1(hold, &ordinary, &o2) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(ordinary == NULL && hold == first_hold && optimizer->busy == 1u &&
+        memcmp(&o2, &error_before, sizeof(o2)) == 0 &&
+        memcmp(optimizer->entries, entries_before, sizeof(entries_before)) == 0);
+  optimizer->count = optimizer_count;
+  CHECK(et_g3r_private_o2_save_check_v1(hold, &o2) == 0);
+  optimizer->count = 1u;
+  CHECK(et_g3r_private_o2_save_check_v1(
+      hold, (et_o2_error_v1 *)(optimizer->entries + 1u)) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(memcmp(optimizer->entries, entries_before, sizeof(entries_before)) == 0);
+  optimizer->count = 0u;
+  memset(&o2, 0xa5, sizeof(o2));
+  memcpy(&error_before, &o2, sizeof(o2));
+  CHECK(et_g3r_private_o2_save_check_v1(hold, &o2) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(memcmp(&o2, &error_before, sizeof(o2)) == 0 &&
+        memcmp(optimizer->entries, entries_before, sizeof(entries_before)) == 0);
+  optimizer->count = optimizer_count;
+  CHECK(et_g3r_private_o2_save_check_v1(hold, &o2) == 0);
   CHECK(et_g3r_private_o2_save_check_v1(
       hold, (et_o2_error_v1 *)optimizer->entries) ==
       ET_O2_STATUS_INVALID_ARGUMENT);
@@ -187,6 +216,56 @@ int main(void) {
   memcpy(handles_before, state->handles, sizeof(handles_before));
   memcpy(clones_before, state->owned_clones, sizeof(clones_before));
   memcpy(handle_before, state->handles[0], sizeof(handle_before));
+  size_t state_count = state->count;
+  size_t clone_ledger_count = state->owned_clone_ledger_count;
+  state->count = ET_O2_MAX_PARAMETERS + 1u;
+  CHECK(et_g3r_private_o2_save_check_v1(
+      hold, (et_o2_error_v1 *)state->entries) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_check_v1(
+      hold, (et_o2_error_v1 *)state->handles) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  memset(&o2, 0xa5, sizeof(o2));
+  memcpy(&error_before, &o2, sizeof(o2));
+  CHECK(et_g3r_private_o2_save_state_v1(hold, &ordinary, &o2) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(ordinary == NULL && memcmp(&o2, &error_before, sizeof(o2)) == 0 &&
+        memcmp(state->entries, state_entries_before,
+               sizeof(state_entries_before)) == 0 &&
+        memcmp(state->handles, handles_before, sizeof(handles_before)) == 0);
+  state->count = state_count;
+  CHECK(et_g3r_private_o2_save_issued_match_v1(hold, state, &o2) == 0);
+  state->count = 1u;
+  CHECK(et_g3r_private_o2_save_check_v1(
+      hold, (et_o2_error_v1 *)(state->entries + 1u)) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_check_v1(
+      hold, (et_o2_error_v1 *)(state->handles + 2u)) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(memcmp(state->entries, state_entries_before,
+               sizeof(state_entries_before)) == 0 &&
+        memcmp(state->handles, handles_before, sizeof(handles_before)) == 0);
+  state->count = state_count;
+  state->owned_clone_ledger_count = ET_O2_MAX_PARAMETERS * 2u + 1u;
+  CHECK(et_g3r_private_o2_save_check_v1(
+      hold, (et_o2_error_v1 *)state->owned_clones) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  memset(&o2, 0xa5, sizeof(o2));
+  memcpy(&error_before, &o2, sizeof(o2));
+  CHECK(et_g3r_private_o2_save_end_v1(&hold, &o2) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(hold == first_hold && optimizer->busy == 1u &&
+        memcmp(&o2, &error_before, sizeof(o2)) == 0 &&
+        memcmp(state->owned_clones, clones_before, sizeof(clones_before)) == 0);
+  state->owned_clone_ledger_count = clone_ledger_count;
+  CHECK(et_g3r_private_o2_save_issued_match_v1(hold, state, &o2) == 0);
+  state->owned_clone_ledger_count = 2u;
+  CHECK(et_g3r_private_o2_save_check_v1(
+      hold, (et_o2_error_v1 *)(state->owned_clones + 2u)) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(memcmp(state->owned_clones, clones_before, sizeof(clones_before)) == 0);
+  state->owned_clone_ledger_count = clone_ledger_count;
+  CHECK(et_g3r_private_o2_save_issued_match_v1(hold, state, &o2) == 0);
   CHECK(et_g3r_private_o2_save_check_v1(
       hold, (et_o2_error_v1 *)state->entries) ==
       ET_O2_STATUS_INVALID_ARGUMENT);

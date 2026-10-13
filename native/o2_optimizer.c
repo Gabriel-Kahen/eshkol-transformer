@@ -88,6 +88,9 @@ struct et_o2_optimizer {
   uint64_t magic;
   et_o2_optimizer *registry_next;
   size_t count;
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  size_t registered_count;
+#endif
   et_o2_config config;
   et_o2_entry *entries;
   uint64_t completed_updates;
@@ -113,6 +116,9 @@ struct et_o2_optimizer_state {
   uint64_t magic;
   et_o2_optimizer_state *registry_next;
   size_t count;
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  size_t registered_count;
+#endif
   et_o2_config config;
   et_o2_state_entry *entries;
   et_o2_optimizer_state_handle **handles;
@@ -1270,6 +1276,9 @@ int32_t et_o2_optimizer_builder_finish_v1(et_o2_optimizer_builder **slot,
 #endif
   optimizer->magic = ET_O2_OPTIMIZER_MAGIC;
   optimizer->count = builder->count;
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  optimizer->registered_count = builder->count;
+#endif
   optimizer->config = builder->config;
   optimizer->entries = builder->entries;
   optimizer->provider_major = ET_O2_PROVIDER_ABI_MAJOR;
@@ -2108,29 +2117,46 @@ static int et_o2_g3r_save_buffers_conflict(const void *output,
   }
   for (const et_o2_optimizer *optimizer = et_o2_optimizers;
        optimizer != NULL; optimizer = optimizer->registry_next) {
+    /* A malformed registered extent cannot justify writing a caller buffer. */
+    if (optimizer->registered_count == 0u ||
+        optimizer->registered_count > ET_O2_MAX_PARAMETERS ||
+        (optimizer->entries != NULL
+             ? optimizer->count != optimizer->registered_count
+             : optimizer->count != 0u))
+      return 1;
     if (et_o2_g3r_save_storage_conflict(output, output_bytes, error,
                                         optimizer, sizeof(*optimizer)) ||
-        (optimizer->count <= ET_O2_MAX_PARAMETERS &&
-         et_o2_g3r_save_storage_conflict(
-             output, output_bytes, error, optimizer->entries,
-             optimizer->count * sizeof(*optimizer->entries))))
+        et_o2_g3r_save_storage_conflict(
+            output, output_bytes, error, optimizer->entries,
+            optimizer->count * sizeof(*optimizer->entries)))
       return 1;
   }
   for (const et_o2_optimizer_state *state = et_o2_states; state != NULL;
        state = state->registry_next) {
+    if (state->registered_count == 0u ||
+        state->registered_count > ET_O2_MAX_PARAMETERS ||
+        (state->lifecycle == ET_O2_OPTIMIZER_STATE_LIVE
+             ? state->entries == NULL || state->handles == NULL ||
+                   state->owned_clones == NULL ||
+                   state->count != state->registered_count ||
+                   state->owned_clone_ledger_count !=
+                       state->registered_count * 2u
+             : state->count != 0u ||
+                   state->owned_clone_ledger_count != 0u ||
+                   state->entries != NULL || state->handles != NULL ||
+                   state->owned_clones != NULL))
+      return 1;
     if (et_o2_g3r_save_storage_conflict(output, output_bytes, error, state,
                                         sizeof(*state)) ||
-        (state->count <= ET_O2_MAX_PARAMETERS &&
-         (et_o2_g3r_save_storage_conflict(
-              output, output_bytes, error, state->entries,
-              state->count * sizeof(*state->entries)) ||
-          et_o2_g3r_save_storage_conflict(
-              output, output_bytes, error, state->handles,
-              state->count * 2u * sizeof(*state->handles)))) ||
-        (state->owned_clone_ledger_count <= ET_O2_MAX_PARAMETERS * 2u &&
-         et_o2_g3r_save_storage_conflict(
-             output, output_bytes, error, state->owned_clones,
-             state->owned_clone_ledger_count * sizeof(*state->owned_clones))))
+        et_o2_g3r_save_storage_conflict(
+            output, output_bytes, error, state->entries,
+            state->count * sizeof(*state->entries)) ||
+        et_o2_g3r_save_storage_conflict(
+            output, output_bytes, error, state->handles,
+            state->count * 2u * sizeof(*state->handles)) ||
+        et_o2_g3r_save_storage_conflict(
+            output, output_bytes, error, state->owned_clones,
+            state->owned_clone_ledger_count * sizeof(*state->owned_clones)))
       return 1;
   }
   for (const et_o2_optimizer_state_handle *handle = et_o2_handles;
@@ -2453,6 +2479,9 @@ int32_t et_o2_optimizer_state_snapshot_v1(et_o2_optimizer *candidate,
     goto cleanup;
   }
   state->count = optimizer->count;
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  state->registered_count = optimizer->count;
+#endif
   state->owned_clone_ledger_count = optimizer->count * 2u;
   state->config = optimizer->config;
   state->completed_updates = optimizer->completed_updates;
@@ -3234,6 +3263,9 @@ int32_t et_o2_optimizer_state_reconstruct_prepare_v1(
     state->handles[index] = handle;
   }
   state->count = builder->count;
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  state->registered_count = builder->count;
+#endif
   state->config = builder->config;
   state->completed_updates = builder->completed_updates;
   state->provider_major = ET_O2_PROVIDER_ABI_MAJOR;

@@ -1799,7 +1799,13 @@ success to corrupt the optimizer roster or update count. The isolated repair
 extends the prewrite conflict guard to registered optimizer shells and entries,
 issued-state shells and entry/handle/clone ledgers, and state-handle shells.
 Focused native and ASan+UBSan tests pass the causal alias negatives; feature-off
-object bytes match the parent head. Independent review and same-aggregate
+object bytes match the parent head. Independent review of exact `d6fe6906`
+held admission: mutable registered O2 counts above the maximum skipped
+entry/ledger protection. The isolated repair keeps feature-gated registered
+allocation counts, rejects mismatched optimizer, state, or clone-ledger counts
+before caller writes, and covers over-limit and reduced counts with ownership
+recovery checks. Focused native and ASan+UBSan tests pass 306 checks; feature-off
+object bytes still match `d6fe6906`. Independent re-review and same-aggregate
 validation remain pending before integration.
 
 The follow-on private aggregate candidate on `codex/g3r-committed-save-aggregate`
