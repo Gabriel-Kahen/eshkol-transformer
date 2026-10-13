@@ -4,7 +4,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tests.d2.reference import ReferenceConfig, ReferenceDataset
+from tests.d2.reference import (
+    ReferenceConfig, ReferenceDataset, decode_reference_cursor,
+)
 from tests.d2.test_resources import load_d1_resource
 from tests.e3_horizon.generate import HORIZONS, SHARD_TOKENS, materialize
 from tests.e3_reference.corpus import FINGERPRINT, VOCAB_SIZE
@@ -26,16 +28,22 @@ class HorizonCorpusTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     tuple(map(len, shards)),
-                    (SHARD_TOKENS,) * (2 * horizon // SHARD_TOKENS) + (1,),
+                    (SHARD_TOKENS,) * (2 * horizon // SHARD_TOKENS)
+                    + (2 * horizon % SHARD_TOKENS + 1,),
                 )
-                rows = ReferenceDataset(
+                reference = ReferenceDataset(
                     shards, ReferenceConfig(1, 2, None, 1, True),
                     manifest_digest=digest, tokenizer_fingerprint=FINGERPRINT,
                     vocab_size=VOCAB_SIZE,
-                ).rows
+                )
+                rows = reference.rows
                 self.assertEqual(len(rows), horizon)
                 self.assertTrue(all(row.loss_mask == (True, True) for row in rows))
-                self.assertEqual(rows[-1].targets[-1], shards[-1][0])
+                self.assertEqual(rows[-1].targets[-1], shards[-1][-1])
+                cursor = decode_reference_cursor(reference.snapshot())
+                self.assertEqual((cursor.total_rows, cursor.next_ordinal),
+                                 (horizon, 0))
+                self.assertEqual(cursor.manifest_digest, digest)
 
     def test_repeated_generation_is_byte_identical(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -52,7 +60,7 @@ class HorizonCorpusTests(unittest.TestCase):
     def test_reject_unadmitted_horizon(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             with self.assertRaisesRegex(ValueError, "unsupported E3 horizon"):
-                materialize(Path(temporary) / "other", 8193)
+                materialize(Path(temporary) / "other", 8194)
 
 
 if __name__ == "__main__":

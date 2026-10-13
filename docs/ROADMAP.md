@@ -985,6 +985,11 @@ from direct-provider-only cases and names the missing noninstalled model-control
 and stage-selective fault/observer seams for review. It provides no new runtime
 proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
 verdicts remain prerequisites before the full matrix is implemented and run.
+The N5 source prerequisite now generates independently counted authentic 8,193
+packed D2 rows and checks that the private D2-core remaining-row guard runs at
+stage 2 before native acquisition/traversal. The compiled private one-over
+failure, unchanged caller state and six outputs, and measured normal/poison/
+sanitizer resource bounds remain open.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each

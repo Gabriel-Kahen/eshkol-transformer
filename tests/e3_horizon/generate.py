@@ -1,4 +1,4 @@
-"""Generate authentic D1 corpora for one E3 call of 1,024 or 8,192 D2 rows."""
+"""Generate authentic D1 corpora for E3's 1,024/8,192/8,193-row boundary."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from tests.d2.reference import ReferenceConfig, ReferenceDataset
 from tests.d2.test_resources import load_d1_resource, write_d1_resource
 from tests.e3_reference.corpus import FINGERPRINT, VOCAB_SIZE
 
-HORIZONS = (1024, 8192)
+HORIZONS = (1024, 8192, 8193)
 TOKENS = (3, 197, 0, 255, 7, 7)
 SHARD_TOKENS = 2048
 
@@ -19,12 +19,12 @@ def materialize(root: Path, horizon: int) -> Path:
         raise ValueError("unsupported E3 horizon")
     root.mkdir(parents=True, exist_ok=False)
     # D2 packed T=2 emits ceil((N-1)/2) rows. Even-sized canonical shards
-    # preserve the rows; the singleton last shard holds only the final target.
+    # preserve the rows. H=8,193 adds two positions after the H=8,192 target.
     values = tuple(TOKENS[index % len(TOKENS)] for index in range(2 * horizon + 1))
     shards = tuple(
         values[start : start + SHARD_TOKENS]
-        for start in range(0, 2 * horizon, SHARD_TOKENS)
-    ) + (values[-1:],)
+        for start in range(0, len(values), SHARD_TOKENS)
+    )
     write_d1_resource(root, shards, fingerprint=FINGERPRINT, vocab=VOCAB_SIZE)
     loaded, digest = load_d1_resource(
         root, expected_fingerprint=FINGERPRINT, expected_vocab=VOCAB_SIZE,
