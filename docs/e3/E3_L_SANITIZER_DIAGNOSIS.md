@@ -55,4 +55,6 @@ entries and 6,883,528,604 bytes, below the 20 GiB cap; no special entry was
 found in the final read-only scan. The transient traversal failure cannot be
 reconstructed from the sealed monitor row. A future one-use launcher should
 retain a bounded error code and path at the first exception, without relaxing
-its fail-closed behavior. The sealed launcher and L output are unchanged.
+its fail-closed behavior. A separate [source-only monitor candidate](E3_HOST_MONITOR_FIRST_ERROR.md)
+implements that diagnostic; it has not run
+inside a one-use launcher. The sealed launcher and L output are unchanged.

@@ -976,6 +976,10 @@ mode variant and all four mode-graph outputs are repinned to that source; their
 12 source/negative tests and focused P1 checks pass, but no new compiled or
 sanitizer execution has run. L remains failed evidence and the
 first-evaluation detector and E3 §9 verdicts remain open.
+The separate [host-monitor first-error candidate](e3/E3_HOST_MONITOR_FIRST_ERROR.md)
+records a bounded guest-relative cause for a transient unsafe-output scan;
+offline tests pass, but no one-use launcher has consumed this source. It does
+not change L's sealed evidence or discharge its failed prerequisite.
 
 The [E3 idle real-model control contract](e3/E3_IDLE_REAL_MODEL_CONTROL_CONTRACT.md)
 specifies a test-only use of existing I2 checkpoint decode and whole-batch load

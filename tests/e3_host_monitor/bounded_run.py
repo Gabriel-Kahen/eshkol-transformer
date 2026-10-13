@@ -1,0 +1,254 @@
+#!/usr/bin/env python3
+"""Bound host streams, wall time, and guest output while running one Docker client."""
+
+from __future__ import annotations
+
+import argparse
+import os
+from pathlib import Path
+import signal
+import stat
+import subprocess
+import sys
+import threading
+import time
+from urllib.parse import quote_from_bytes
+
+
+SCAN_MESSAGES = {
+    "traversal-bound": "guest output traversal bound exceeded",
+    "scandir-error": "guest output directory scan failed",
+    "stat-error": "guest output entry stat failed",
+    "symlink-entry": "guest output contains a symlink",
+    "nonregular-entry": "guest output contains an indirect or special entry",
+    "hardlinked-entry": "guest output contains a hardlinked regular entry",
+    "unclassified-error": "guest output traversal failed",
+}
+
+
+class OutputScanFault(ValueError):
+    """A fixed diagnostic with guest-relative provenance and no raw OS text."""
+
+    def __init__(self, code: str, parts: tuple[str, ...],
+                 error_class: str = "ValueError", errno_value: int | None = None):
+        self.code = code
+        self.parts = parts
+        self.error_class = error_class
+        self.errno_value = errno_value
+        super().__init__(SCAN_MESSAGES[code])
+
+
+def safe_guest_path(parts: tuple[str, ...]) -> str:
+    if not parts:
+        return "."
+    encoded = []
+    try:
+        for part in parts:
+            if not part or part in (".", "..") or "/" in part:
+                return "<invalid-relative-path>"
+            encoded.append(quote_from_bytes(os.fsencode(part), safe="-._~"))
+    except (TypeError, ValueError):
+        return "<unavailable-relative-path>"
+    path = "/".join(encoded)
+    return path if len(path) <= 256 else path[:253] + "..."
+
+
+def safe_scan_detail(error: OSError | ValueError, phase: str) -> tuple[str, ...]:
+    if isinstance(error, OutputScanFault):
+        error_class, code, parts, number = (
+            error.error_class, error.code, error.parts, error.errno_value)
+    else:
+        error_class = "OSError" if isinstance(error, OSError) else "ValueError"
+        code, parts, number = "unclassified-error", (), None
+    errno_text = (str(number) if isinstance(number, int)
+                  and 0 <= number <= 9999 else "none")
+    return (phase, error_class, code, safe_guest_path(parts),
+            SCAN_MESSAGES[code], errno_text)
+
+
+def output_bytes(root: Path, max_entries: int = 50000,
+                 max_depth: int = 32, max_seconds: float = 2.0) -> int:
+    total = 0
+    count = 0
+    deadline = time.monotonic() + max_seconds
+    pending = [(root, 0, ())]
+    while pending:
+        directory, depth, parts = pending.pop()
+        if depth > max_depth or time.monotonic() > deadline:
+            raise OutputScanFault("traversal-bound", parts)
+        try:
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    entry_parts = (*parts, entry.name)
+                    count += 1
+                    if count > max_entries or time.monotonic() > deadline:
+                        raise OutputScanFault("traversal-bound", entry_parts)
+                    try:
+                        info = entry.stat(follow_symlinks=False)
+                    except OSError as error:
+                        raise OutputScanFault(
+                            "stat-error", entry_parts, "OSError", error.errno
+                        ) from error
+                    if stat.S_ISDIR(info.st_mode):
+                        pending.append((Path(entry.path), depth + 1,
+                                        entry_parts))
+                    elif stat.S_ISREG(info.st_mode):
+                        if info.st_nlink != 1:
+                            raise OutputScanFault("hardlinked-entry", entry_parts)
+                        total += info.st_size
+                    elif stat.S_ISLNK(info.st_mode):
+                        raise OutputScanFault("symlink-entry", entry_parts)
+                    else:
+                        raise OutputScanFault("nonregular-entry", entry_parts)
+        except OSError as error:
+            raise OutputScanFault(
+                "scandir-error", parts, "OSError", error.errno
+            ) from error
+    return total
+
+
+def group_absent(pgid: int) -> bool:
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return True
+    except PermissionError:
+        return False
+    return False
+
+
+def run(root: Path, output: Path, cap: int, output_cap: int,
+        wall: int, command: list[str]) -> int:
+    if (not root.is_absolute() or not root.is_dir() or root.is_symlink()
+            or not output.is_dir() or output.is_symlink()
+            or cap <= 0 or output_cap <= 0 or wall <= 0
+            or not command or not Path(command[0]).is_absolute()):
+        raise ValueError("invalid bounded-run authority")
+    exceeded = threading.Event()
+    counts = [0, 0]
+    truncated = [False, False]
+    first_output_error = None
+    with (root / "docker.stdout").open("xb") as stdout, \
+         (root / "docker.stderr").open("xb") as stderr:
+        process = subprocess.Popen(command, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, start_new_session=True)
+
+        def pump(pipe, target, index: int) -> None:
+            while data := pipe.read(65536):
+                room = max(0, cap - counts[index])
+                kept = data[:room]
+                target.write(kept)
+                target.flush()
+                counts[index] += len(kept)
+                if len(kept) != len(data):
+                    truncated[index] = True
+                    exceeded.set()
+
+        threads = [threading.Thread(target=pump, args=(process.stdout, stdout, 0)),
+                   threading.Thread(target=pump, args=(process.stderr, stderr, 1))]
+        for thread in threads:
+            thread.start()
+        deadline = time.monotonic() + wall
+        reason = "completed"
+        while process.poll() is None:
+            try:
+                size = output_bytes(output)
+            except (OSError, ValueError) as error:
+                if first_output_error is None:
+                    first_output_error = safe_scan_detail(error, "live")
+                reason = "unsafe-guest-output"
+                break
+            if size > output_cap:
+                reason = "guest-output-cap"
+                break
+            if exceeded.is_set():
+                reason = "host-stream-cap"
+                break
+            if time.monotonic() >= deadline:
+                reason = "wall-timeout"
+                break
+            time.sleep(0.5)
+        if reason != "completed" and process.poll() is None:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+        try:
+            raw = process.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGKILL)
+            raw = process.wait(timeout=15)
+            reason = reason if reason != "completed" else "client-drain-timeout"
+        for thread in threads:
+            thread.join(timeout=10)
+        if any(thread.is_alive() for thread in threads):
+            reason = "stream-drain-timeout"
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            for thread in threads:
+                thread.join(timeout=2)
+        if exceeded.is_set():
+            reason = "host-stream-cap"
+        absent = group_absent(process.pid) and not any(thread.is_alive() for thread in threads)
+        if not absent:
+            reason = "host-group-live"
+        if not threads[0].is_alive():
+            process.stdout.close()
+        if not threads[1].is_alive():
+            process.stderr.close()
+    (root / "docker.raw-exit").write_text(f"{raw}\n")
+    try:
+        measured = output_bytes(output)
+        final_size = str(measured)
+        if measured > output_cap:
+            reason = "guest-output-cap"
+    except (OSError, ValueError) as error:
+        if first_output_error is None:
+            first_output_error = safe_scan_detail(error, "final")
+        final_size = "untrusted"
+        reason = "unsafe-guest-output"
+    if first_output_error is None:
+        first_output_error = ("none",) * 6
+    error_phase, error_class, error_code, error_path, error_message, error_errno = (
+        first_output_error)
+    (root / "docker.monitor.tsv").write_text(
+        f"reason\t{reason}\nstdout_kept_bytes\t{counts[0]}\n"
+        f"stderr_kept_bytes\t{counts[1]}\n"
+        f"stdout_truncated\t{str(truncated[0]).lower()}\n"
+        f"stderr_truncated\t{str(truncated[1]).lower()}\n"
+        f"host_group_absent\t{str(absent).lower()}\n"
+        f"guest_output_bytes\t{final_size}\n"
+        f"first_output_error_phase\t{error_phase}\n"
+        f"first_output_error_class\t{error_class}\n"
+        f"first_output_error_code\t{error_code}\n"
+        f"first_output_error_path\t{error_path}\n"
+        f"first_output_error_message\t{error_message}\n"
+        f"first_output_error_errno\t{error_errno}\n")
+    status = 0 if raw == 0 and reason == "completed" else 74
+    (root / "docker.exit").write_text(f"{status}\n")
+    return status
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--run", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--cap", type=int, required=True)
+    parser.add_argument("--output-cap", type=int, required=True)
+    parser.add_argument("--wall", type=int, required=True)
+    parser.add_argument("command", nargs=argparse.REMAINDER)
+    args = parser.parse_args()
+    command = args.command[1:] if args.command[:1] == ["--"] else args.command
+    try:
+        status = run(args.run, args.output, args.cap, args.output_cap,
+                     args.wall, command)
+    except Exception as error:
+        (args.run / "docker.monitor-error.txt").write_text(f"{type(error).__name__}: {error}\n")
+        raise
+    raise SystemExit(status)
+
+
+if __name__ == "__main__":
+    main()
