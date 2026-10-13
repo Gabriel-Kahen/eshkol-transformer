@@ -1,4 +1,5 @@
 #define ET_M3T_TESTING 1
+#define ET_G3R_SAME_OWNER_SAVE_PRIVATE 1
 /* This focused native test can observe private slots; it is never packaged. */
 #include "../../src/eshkol_transformer/m3t_transport.c"
 #include <stdio.h>
@@ -7,10 +8,25 @@
 static unsigned char handles[14];
 static owner *make_owner(initializer *s) {
  owner *o=et_m3t_private_owner_create_v1(s);CHECK(o);
+ void *preflight[14];const void *preflight_ids[14];
+ CHECK(et_m3t_private_owner_save_roster_v1(o,preflight,preflight_ids)!=0);
  for(int i=0;i<14;i++)OK(et_m3t_private_owner_bind_v1(o,i,&handles[i]));
  for(int i=0;i<14;i++)OK(et_m3t_private_owner_initialize_v1(o,i));
  CHECK(et_m3t_private_owner_successor_v1(o)==o->successor);
- OK(et_m3t_private_owner_seal_v1(o));OK(et_m3t_private_initializer_seal_v1(o->successor));return o;
+ OK(et_m3t_private_owner_seal_v1(o));OK(et_m3t_private_initializer_seal_v1(o->successor));
+ void *parameters[14]={0};const void *identities[14]={0};
+ OK(et_m3t_private_owner_save_roster_v1(o,parameters,identities));
+ for(int i=0;i<14;i++)CHECK(parameters[i]==o->p[i] && identities[i]==o->handles[i]);
+ CHECK(et_m3t_private_owner_save_roster_v1(NULL,parameters,identities)!=0);
+ CHECK(et_m3t_private_owner_save_roster_v1(s,parameters,identities)!=0);
+ CHECK(et_m3t_private_owner_save_roster_v1(o,NULL,identities)!=0);
+ CHECK(et_m3t_private_owner_save_roster_v1(o,parameters,NULL)!=0);
+ void *saved=o->handles[0];o->handles[0]=o->handles[1];
+ CHECK(et_m3t_private_owner_save_roster_v1(o,parameters,identities)!=0);
+ for(int i=0;i<14;i++)CHECK(parameters[i]==o->p[i] && identities[i]==(i==0?saved:o->handles[i]));
+ o->handles[0]=saved;
+ OK(et_m3t_private_owner_save_roster_v1(o,parameters,identities));
+ return o;
 }
 static void forward(workspace *w) {
  OK(et_m3t_private_embedding_v1(w,0,0));OK(et_m3t_private_embedding_v1(w,1,0));
