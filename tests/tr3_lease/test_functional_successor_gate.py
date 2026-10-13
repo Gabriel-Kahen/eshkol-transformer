@@ -13,7 +13,7 @@ GATE = "scripts/test-tr3-lease-functional-successor.sh"
 MANIFEST = "tests/tr3_lease/functional_successor_candidate.tsv"
 BASE = "41cbf6c310106c5d37cada181ecd6e8b0f91f84e"
 TREE = "50aef09425000e1f222858ce5af1189839583c2c"
-REVIEWED_GATE = "8a8b011f1ef7a895aba2bcccefe06dfca9d4fca5"
+REVIEWED_GATE = "e2712626c5e0e794be176cc2ad0ce3cd2ea3b436"
 
 
 def run(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -131,6 +131,23 @@ class FunctionalSuccessorGate(unittest.TestCase):
             self.assertEqual(run(checkout, "git", "add", str(note.relative_to(checkout))).returncode, 0)
             self.assertEqual(run(checkout, "git", "commit", "-qm", "allowed documentation").returncode, 0)
             self.assertEqual(preflight().returncode, 0)
+
+            # A committed descendant must not authorize its own gate edit by
+            # updating the self hash stored inside that same gate.
+            gate_path = checkout / GATE
+            changed_gate = gate_path.read_text() + "\n# committed descendant tamper\n"
+            marker = "expected_gate_self_sha256="
+            old_hash = next(
+                line[len(marker):]
+                for line in changed_gate.splitlines()
+                if line.startswith(marker)
+            )
+            normalized = changed_gate.replace(marker + old_hash, marker + "__SELF__", 1)
+            new_hash = hashlib.sha256(normalized.encode()).hexdigest()
+            gate_path.write_text(changed_gate.replace(marker + old_hash, marker + new_hash, 1))
+            self.assertEqual(run(checkout, "git", "add", GATE).returncode, 0)
+            self.assertEqual(run(checkout, "git", "commit", "-qm", "negative gate self rehash").returncode, 0)
+            self.assertIn("differs from the source-closure repair", preflight().stderr)
 
 
 if __name__ == "__main__":
