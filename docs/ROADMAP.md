@@ -3124,6 +3124,15 @@ publication, public G2 and continuation remain pending.
   explicit production limitations pending review and supported-host evidence.
   This C leaf does not wire the Eshkol root, protected abort path, or public G2;
   production same-call release/retry remains unproved.
+  A separate feature-only Eshkol holder composer candidate on
+  `codex/g3-p2g2-held-holder-eshkol-20261013` now composes that exact C ABI
+  inside one live `m3-call`. It preserves the ordinary two-argument producer,
+  captures at P2 or P3 after the corresponding carrier, closes P2 before the
+  first-EOS/count branch and P3 before terminal commit, and routes a typed
+  first-busy rejection through owned lease end and one abort retry. Its source
+  checks pass locally; compiled feature-on behavior, exact-head independent
+  review and supported-host validation remain pending. It does not admit
+  public G2 or continuation.
 
 ## Wave 4 — practical pretraining and performance
 

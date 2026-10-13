@@ -1,0 +1,1037 @@
+;;; Feature-private held-holder P2/G2 terminal composer. Load after the
+;;; protected scope, prefix coordinator and same-aggregate T1 raw decoder.
+;;; The ordinary two-argument composer and feature-off roots remain unchanged.
+
+(extern ptr g3c4-p2g2-holder-new i64 i64
+        :real et_g3c4_private_p2g2_holder_new_v1)
+(extern i64 g3c4-p2g2-holder-generation ptr
+        :real et_g3c4_private_p2g2_holder_generation_v1)
+(extern i64 g3c4-p2g2-holder-bind ptr i64 ptr ptr
+        :real et_g3c4_private_p2g2_holder_bind_v1)
+(extern i64 g3c4-p2g2-holder-begin ptr i64 ptr ptr
+        :real et_g3c4_private_p2g2_holder_begin_capture_v1)
+(extern i64 g3c4-p2g2-holder-witness ptr i64 ptr ptr
+        :real et_g3c4_private_p2g2_holder_witness_v1)
+(extern i64 g3c4-p2g2-holder-close ptr i64 ptr ptr
+        :real et_g3c4_private_p2g2_holder_normal_close_v1)
+(extern i64 g3c4-p2g2-holder-abort ptr i64 ptr ptr i64
+        :real et_g3c4_private_p2g2_holder_abort_attempt_v1)
+(extern i64 g3c4-p2g2-holder-end-busy ptr i64 ptr ptr
+        :real et_g3c4_private_p2g2_holder_end_after_busy_v1)
+(extern i64 g3c4-p2g2-holder-dispose ptr i64
+        :real et_g3c4_private_p2g2_holder_dispose_v1)
+
+(extern i64 g3c4-p2g2-native-eos-first ptr ptr ptr i64
+        :real et_g3c4_private_p2g2_eos_first_frame_carrier_v1)
+(extern i64 g3c4-p2g2-native-second ptr ptr ptr i64
+        :real et_g3c4_private_p2g2_second_frame_carrier_v1)
+(extern i64 g3c4-p2g2-native-terminal ptr ptr ptr i64 ptr i64
+        :real et_g3c4_private_p2g2_terminal_commit_v1)
+(extern i64 g3c4-p2g2-native-snapshot ptr ptr i64
+        :real et_g3c4_private_p2g2_terminal_snapshot_v1)
+(extern ptr g3c4-p2g2-native-ids-clone ptr
+        :real et_g3c4_private_p2g2_terminal_ids_clone_v1)
+(extern i64 g3c4-p2g2-native-ids-copy ptr i64 ptr i64
+        :real et_g3c4_private_p2g2_terminal_ids_clone_copy_v1)
+(extern i64 g3c4-p2g2-native-ids-release ptr
+        :real et_g3c4_private_p2g2_terminal_ids_clone_release_v1)
+
+;;; Terminal anchors survive m3-call. Slots: state, original shell/entry/native,
+;;; first and second raw/staging, text[1]/text[2], pending raw/staging,
+;;; proven logical count/cache length, original anchor identity.
+(define g3c4-p2g2-terminal-anchors (vector '()))
+(define g3c4-p2g2-terminal-originals (vector '()))
+(define g3c4-p2g2-terminal-ids-records (vector '()))
+(define g3c4-p2g2-terminal-ids-anchors (vector '()))
+(define g3c4-p2g2-holder-brand (vector 'g3c4-p2g2-holder))
+(define g3c4-p2g2-holder-available (vector '()))
+(define g3c4-p2g2-holder-roots (vector '()))
+
+;;; Shell: [brand,native,generation,kind,phase,state,original]. Original:
+;;; [shell,native,generation,kind,phase,context,pending-output].
+(define (g3c4-p2g2-holder-new-internal kind phase)
+  (let* ((operation 'g3c4-p2g2-holder-new-internal)
+         (shell (vector g3c4-p2g2-holder-brand #f 0 kind phase 'pending #f))
+         (original (vector shell #f 0 kind phase #f #f))
+         (next (cons original (vector-ref g3c4-p2g2-holder-available 0))))
+    (if (not (and (m3t-exact-i64? kind) (or (= kind 1) (= kind 2))
+                  (m3t-exact-i64? phase) (or (= phase 2) (= phase 3))))
+        (g3c4-fail 'invalid-argument operation "invalid P2/G2 holder kind or phase"))
+    (let ((native (g3c4-p2g2-holder-new kind phase)))
+      (if (not native)
+          (g3c4-fail 'internal operation "P2/G2 holder allocation failed"))
+      (let ((generation (g3c4-p2g2-holder-generation native)))
+        (if (not (and (m3t-exact-i64? generation) (> generation 0)))
+            (exit 134))
+        (vector-set! shell 1 native)
+        (vector-set! shell 2 generation)
+        (vector-set! shell 5 'available)
+        (vector-set! shell 6 original)
+        (vector-set! original 1 native)
+        (vector-set! original 2 generation)
+        (vector-set! g3c4-p2g2-holder-available 0 next)
+        shell))))
+
+(define (g3c4-p2g2-holder-original shell state operation)
+  (if (not (and (vector? shell) (= (vector-length shell) 7)
+                (eq? (vector-ref shell 0) g3c4-p2g2-holder-brand)
+                (eq? (vector-ref shell 5) state)
+                (m3t-exact-i64? (vector-ref shell 2))
+                (> (vector-ref shell 2) 0)
+                (m3t-exact-i64? (vector-ref shell 3))
+                (or (= (vector-ref shell 3) 1)
+                    (= (vector-ref shell 3) 2))
+                (m3t-exact-i64? (vector-ref shell 4))
+                (or (= (vector-ref shell 4) 2)
+                    (= (vector-ref shell 4) 3))
+                (vector? (vector-ref shell 6))
+                (= (vector-length (vector-ref shell 6)) 7)
+                (let ((original (vector-ref shell 6)))
+                  (and (eq? (vector-ref original 0) shell)
+                       (eq? (vector-ref original 1) (vector-ref shell 1))
+                       (m3t-exact-i64? (vector-ref original 2))
+                       (= (vector-ref original 2) (vector-ref shell 2))
+                       (m3t-exact-i64? (vector-ref original 3))
+                       (= (vector-ref original 3) (vector-ref shell 3))
+                       (m3t-exact-i64? (vector-ref original 4))
+                       (= (vector-ref original 4) (vector-ref shell 4))))
+                (= (g3c4-p2g2-holder-generation (vector-ref shell 1))
+                   (vector-ref shell 2))))
+      (g3c4-fail 'invalid-state operation "P2/G2 holder identity changed"))
+  (vector-ref shell 6))
+
+(define (g3c4-p2g2-holder-available-check shell operation)
+  (let ((original (g3c4-p2g2-holder-original shell 'available operation)))
+    (if (not (and (pair? (vector-ref g3c4-p2g2-holder-available 0))
+                  (eq? (car (vector-ref g3c4-p2g2-holder-available 0)) original)))
+        (g3c4-fail 'invalid-state operation "P2/G2 holder is not caller-owned"))
+    original))
+
+(define (g3c4-p2g2-holder-root-check shell state context output operation)
+  (let ((original (g3c4-p2g2-holder-original shell state operation)))
+    (if (not (and (pair? (vector-ref g3c4-p2g2-holder-roots 0))
+                  (eq? (car (vector-ref g3c4-p2g2-holder-roots 0)) original)
+                  (eq? (vector-ref original 5) context)
+                  (eq? (vector-ref original 6) output)))
+        (g3c4-fail 'invalid-state operation "P2/G2 holder root changed"))
+    original))
+
+(define (g3c4-p2g2-holder-transfer! shell)
+  (let* ((original (g3c4-p2g2-holder-available-check shell 'p2g2-holder-transfer))
+         (next (cons original (vector-ref g3c4-p2g2-holder-roots 0))))
+    (vector-set! g3c4-p2g2-holder-available 0
+                 (cdr (vector-ref g3c4-p2g2-holder-available 0)))
+    (vector-set! g3c4-p2g2-holder-roots 0 next)
+    (vector-set! shell 5 'enrolled)
+    #t))
+
+(define (g3c4-p2g2-holder-dispose-root! shell)
+  (let ((original (vector-ref shell 6)))
+    (if (not (and (pair? (vector-ref g3c4-p2g2-holder-roots 0))
+                  (eq? (car (vector-ref g3c4-p2g2-holder-roots 0)) original)
+                  (= (g3c4-p2g2-holder-dispose
+                       (vector-ref shell 1) (vector-ref shell 2)) 0)))
+        (exit 134))
+    (vector-set! g3c4-p2g2-holder-roots 0
+                 (cdr (vector-ref g3c4-p2g2-holder-roots 0)))
+    (vector-set! shell 5 'dead)
+    (vector-set! original 5 #f)
+    (vector-set! original 6 #f)
+    #t))
+
+(define (g3c4-p2g2-holder-dispose-unbound-internal! shell)
+  (let ((original (g3c4-p2g2-holder-available-check
+                    shell 'g3c4-p2g2-holder-dispose-unbound-internal!)))
+    (if (not (= (g3c4-p2g2-holder-dispose
+                  (vector-ref shell 1) (vector-ref shell 2)) 0))
+        (exit 134))
+    (vector-set! g3c4-p2g2-holder-available 0
+                 (cdr (vector-ref g3c4-p2g2-holder-available 0)))
+    (vector-set! shell 5 'dead)
+    (vector-set! original 5 #f)
+    (vector-set! original 6 #f)
+    #t))
+
+(define (g3c4-p2g2-terminal-for-output entry)
+  (let find ((remaining (vector-ref g3c4-p2g2-terminal-anchors 0)))
+    (cond ((null? remaining) #f)
+          ((eq? (vector-ref (car remaining) 2) entry) (car remaining))
+          (else (find (cdr remaining))))))
+
+(define (g3c4-p2g2-terminal-original? anchor)
+  (and (vector? anchor) (= (vector-length anchor) 15)
+       (let ((original (vector-ref anchor 14)))
+         (and (vector? original) (= (vector-length original) 12)
+              (let registered
+                  ((remaining (vector-ref g3c4-p2g2-terminal-originals 0)))
+                (cond ((null? remaining) #f)
+                      ((eq? (car remaining) original) #t)
+                      (else (registered (cdr remaining)))))
+              (eq? (vector-ref original 0) anchor)
+              (let same ((index 1))
+                (if (= index 12) #t
+                    (and (eq? (vector-ref original index)
+                              (vector-ref anchor index))
+                         (same (+ index 1)))))))))
+
+(define (g3c4-p2g2-terminal-active-check call input input-entry native-input
+                                          terminal operation)
+  (let* ((record (g3c4-p2g2-protected-check call operation))
+         (prefix (g3c4-p2g2-prefix-anchor-for call))
+         (output (vector-ref record 6))
+         (auxiliary (if output (vector-ref output 8) #f))
+         (original (if terminal (vector-ref terminal 14) #f)))
+    (if (not (and prefix (vector? prefix) (= (vector-length prefix) 5)
+                  (pair? (vector-ref g3c4-p2g2-prefix-input-anchors 0))
+                  (eq? (car (vector-ref g3c4-p2g2-prefix-input-anchors 0))
+                       prefix)
+                  (eq? (vector-ref prefix 0) call)
+                  (eq? (vector-ref prefix 1) input)
+                  (eq? (vector-ref prefix 2) input-entry)
+                  (eq? (vector-ref prefix 3) native-input)
+                  (eq? (vector-ref prefix 4) (vector-ref record 1))
+                  (eq? (g3c4-input-entry-live input operation) input-entry)
+                  (eq? (vector-ref input-entry 3) native-input)
+                  (eq? (vector-ref input-entry 0) input)
+                  (vector? output) (= (vector-length output) 12)
+                  (vector? auxiliary) (= (vector-length auxiliary) 2)
+                  terminal (vector? terminal) (= (vector-length terminal) 15)
+                  (eq? (vector-ref terminal 0) 'pending)
+                  (pair? (vector-ref g3c4-p2g2-terminal-anchors 0))
+                  (eq? (car (vector-ref g3c4-p2g2-terminal-anchors 0))
+                       terminal)
+                  (g3c4-p2g2-terminal-original? terminal)
+                  (eq? (car (vector-ref g3c4-p2g2-terminal-originals 0))
+                       original)
+                  (eq? (vector-ref terminal 1) (vector-ref output 0))
+                  (eq? (vector-ref terminal 2) output)
+                  (eq? (vector-ref terminal 3) (vector-ref output 3))
+                  (eq? (vector-ref terminal 4) (vector-ref record 11))
+                  (eq? (vector-ref terminal 5) (vector-ref record 12))
+                  (eq? (vector-ref terminal 10) (vector-ref auxiliary 0))
+                  (eq? (vector-ref terminal 11) (vector-ref auxiliary 1))
+                  (bytevector? (vector-ref terminal 6))
+                  (= (bytevector-length (vector-ref terminal 6)) 1)
+                  (bytevector? (vector-ref terminal 7))
+                  (= (bytevector-length (vector-ref terminal 7)) 8)
+                  (bytevector? (vector-ref terminal 8))
+                  (= (bytevector-length (vector-ref terminal 8)) 1)
+                  (bytevector? (vector-ref terminal 9))
+                  (= (bytevector-length (vector-ref terminal 9)) 2)
+                  (not (eq? (vector-ref terminal 4) (vector-ref terminal 6)))
+                  (not (eq? (vector-ref terminal 5) (vector-ref terminal 7)))
+                  (not (eq? (vector-ref terminal 4) (vector-ref terminal 8)))
+                  (not (eq? (vector-ref terminal 6) (vector-ref terminal 8)))
+                  (not (eq? (vector-ref terminal 8) (vector-ref terminal 9)))
+                  (not (eq? (vector-ref terminal 6) (vector-ref terminal 10)))
+                  (not (eq? (vector-ref terminal 7) (vector-ref terminal 11)))
+                  (or (and (eq? (vector-ref record 13) 'before-prefix)
+                           (eq? (vector-ref (vector-ref record 14) 3)
+                                'p2g2-protected))
+                      (and (eq? (vector-ref record 13) 'prefix-committed)
+                           (eq? (vector-ref (vector-ref record 14) 3)
+                                'p2g2-prefix-committed)))))
+        (g3c4-fail 'invalid-state operation
+                   "P2/G2 terminal original input or carrier changed"))
+    record))
+
+(define (g3c4-p2g2-terminal-selected staging operation)
+  (if (not (and (bytevector? staging) (= (bytevector-length staging) 8)
+                (let upper ((index 1))
+                  (if (= index 8) #t
+                      (and (= (bytevector-u8-ref staging index) 0)
+                           (upper (+ index 1)))))))
+      (g3c4-fail 'invalid-state operation
+                 "P2/G2 terminal ID is outside V256"))
+  (bytevector-u8-ref staging 0))
+
+(define (g3c4-p2g2-terminal-precommit-check call input input-entry
+                                             native-input terminal count id0 id1
+                                             operation)
+  (let* ((record (g3c4-p2g2-terminal-active-check
+                   call input input-entry native-input terminal operation))
+         (policy (vector-ref record 15))
+         (first (vector-ref terminal 4))
+         (first-staging (vector-ref terminal 5))
+         (second (vector-ref terminal 6))
+         (second-staging (vector-ref terminal 7))
+         (text1 (vector-ref terminal 8))
+         (text2 (vector-ref terminal 9)))
+    (if (not (and (m3t-exact-i64? count) (or (= count 1) (= count 2))
+                  (= (bytevector-u8-ref first 0) id0)
+                  (= (g3c4-p2g2-terminal-selected first-staging operation) id0)
+                  (= (bytevector-u8-ref text1 0) id0)
+                  (= (bytevector-u8-ref text2 0) id0)
+                  (or (and (= count 1)
+                           (eq? (vector-ref record 13) 'before-prefix)
+                           (m3t-exact-i64? (vector-ref policy 6))
+                           (= id0 (vector-ref policy 6))
+                           (= (bytevector-u8-ref text2 1) 0))
+                      (and (= count 2)
+                           (eq? (vector-ref record 13) 'prefix-committed)
+                           (or (not (m3t-exact-i64? (vector-ref policy 6)))
+                               (not (= id0 (vector-ref policy 6))))
+                           (= (bytevector-u8-ref second 0) id1)
+                           (= (g3c4-p2g2-terminal-selected
+                                second-staging operation) id1)
+                           (= (bytevector-u8-ref text2 1) id1)))))
+        (g3c4-fail 'invalid-state operation
+                   "P2/G2 terminal selected IDs or T1 text changed"))
+    record))
+
+(define (g3c4-p2g2-holder-bind! shell context output operation)
+  (let ((original (g3c4-p2g2-holder-root-check
+                    shell 'enrolled #f #f operation)))
+    (g3c4-native-check
+      (g3c4-p2g2-holder-bind
+        (vector-ref shell 1) (vector-ref shell 2) context output)
+      operation)
+    (vector-set! original 5 context)
+    (vector-set! original 6 output)
+    (vector-set! shell 5 'bound)
+    #t))
+
+(define (g3c4-p2g2-holder-begin! shell context output operation)
+  (g3c4-p2g2-holder-root-check shell 'bound context output operation)
+  (g3c4-native-check
+    (g3c4-p2g2-holder-begin
+      (vector-ref shell 1) (vector-ref shell 2) context output)
+    operation)
+  (vector-set! shell 5 'held)
+  #t)
+
+(define (g3c4-p2g2-holder-close! shell context output operation)
+  (g3c4-p2g2-holder-root-check shell 'held context output operation)
+  (g3c4-native-check
+    (g3c4-p2g2-holder-witness
+      (vector-ref shell 1) (vector-ref shell 2) context output)
+    operation)
+  (if (not (= (g3c4-p2g2-holder-close
+                (vector-ref shell 1) (vector-ref shell 2)
+                context output) 0))
+      (exit 134))
+  (vector-set! shell 5 'closed)
+  (g3c4-p2g2-holder-dispose-root! shell))
+
+;;; All native abort authority is consumed before these assignment-only tails.
+(define (g3c4-p2g2-held-protected-postzero! call record anchor)
+  (let ((ledger (vector-ref record 14))
+        (output (vector-ref record 6)))
+    (if output
+        (begin
+          (g3c4-p2g2-zero-bytes! (vector-ref record 9) 2)
+          (g3c4-p2g2-zero-bytes! (vector-ref record 10) 16)
+          (g3c4-entry-dead! output)
+          (vector-set! ledger 4 #f)))
+    (g3c4-p2g2-zero-bytes! (vector-ref record 11) 1)
+    (g3c4-p2g2-zero-bytes! (vector-ref record 12) 8)
+    (vector-set! (vector-ref record 2) 10 #f)
+    (vector-set! (vector-ref record 1) 9 #f)
+    (g3c4-call-dead! call)
+    (vector-set! record 0 #f)
+    (vector-set! anchor 0 #f)
+    (vector-set! g3c4-p2g2-protected-records 0
+                 (cdr (vector-ref g3c4-p2g2-protected-records 0)))
+    (vector-set! g3c4-p2g2-protected-anchors 0
+                 (cdr (vector-ref g3c4-p2g2-protected-anchors 0)))
+    #t))
+
+(define (g3c4-p2g2-held-terminal-postzero! terminal)
+  (g3c4-p2g2-zero-bytes! (vector-ref terminal 6) 1)
+  (g3c4-p2g2-zero-bytes! (vector-ref terminal 7) 8)
+  (g3c4-p2g2-zero-bytes! (vector-ref terminal 8) 1)
+  (g3c4-p2g2-zero-bytes! (vector-ref terminal 9) 2)
+  (vector-set! terminal 0 'dead)
+  (vector-set! terminal 2 #f)
+  (vector-set! g3c4-p2g2-terminal-anchors 0
+               (cdr (vector-ref g3c4-p2g2-terminal-anchors 0)))
+  (vector-set! g3c4-p2g2-terminal-originals 0
+               (cdr (vector-ref g3c4-p2g2-terminal-originals 0)))
+  #t)
+
+(define (g3c4-p2g2-holder-abort-held! call terminal shell
+                                             input input-entry native-input)
+  (let* ((operation 'g3c4-p2g2-holder-abort-held!)
+         (record (g3c4-p2g2-terminal-active-check
+                   call input input-entry native-input terminal operation))
+         (anchor (g3c4-p2g2-anchor-for call))
+         (context (vector-ref record 5))
+         (output (vector-ref (vector-ref record 6) 3)))
+    (g3c4-p2g2-holder-root-check shell 'held context output operation)
+    (let ((first (g3c4-p2g2-holder-abort
+                   (vector-ref shell 1) (vector-ref shell 2)
+                   context output 1)))
+      (if (= first 0) (exit 134))
+      ;; The C holder retained the first status and TLS triple before any
+      ;; following native call. Only its exact typed busy triple can end.
+      (if (not (= (g3c4-p2g2-holder-end-busy
+                    (vector-ref shell 1) (vector-ref shell 2)
+                    context output) 0))
+          (exit 134)))
+    (g3c4-p2g2-terminal-active-check
+      call input input-entry native-input terminal operation)
+    (g3c4-p2g2-holder-root-check shell 'held context output operation)
+    (if (not (= (g3c4-p2g2-holder-witness
+                  (vector-ref shell 1) (vector-ref shell 2)
+                  context output) 0))
+        (exit 134))
+    (if (not (= (g3c4-p2g2-holder-abort
+                  (vector-ref shell 1) (vector-ref shell 2)
+                  context output 2) 0))
+        (exit 134))
+    (g3c4-p2g2-held-protected-postzero! call record anchor)
+    (g3c4-p2g2-held-terminal-postzero! terminal)
+    (g3c4-p2g2-holder-dispose-root! shell)
+    #t))
+
+(define (g3c4-p2g2-terminal-abort-clean! call terminal)
+  (let ((record (g3c4-p2g2-protected-for call)))
+    (if (not (and record terminal
+                  (eq? (g3c4-p2g2-terminal-active-check
+                         call (vector-ref (g3c4-p2g2-prefix-anchor-for call) 1)
+                         (vector-ref (g3c4-p2g2-prefix-anchor-for call) 2)
+                         (vector-ref (g3c4-p2g2-prefix-anchor-for call) 3)
+                         terminal 'g3c4-p2g2-terminal-abort-clean!) record)))
+        (exit 134))
+    (g3c4-p2g2-protected-abort! call)
+    (g3c4-p2g2-zero-bytes! (vector-ref terminal 6) 1)
+    (g3c4-p2g2-zero-bytes! (vector-ref terminal 7) 8)
+    (g3c4-p2g2-zero-bytes! (vector-ref terminal 8) 1)
+    (g3c4-p2g2-zero-bytes! (vector-ref terminal 9) 2)
+    (vector-set! terminal 0 'dead)
+    (vector-set! terminal 2 #f)
+    (vector-set! g3c4-p2g2-terminal-anchors 0
+                 (cdr (vector-ref g3c4-p2g2-terminal-anchors 0)))
+    (vector-set! g3c4-p2g2-terminal-originals 0
+                 (cdr (vector-ref g3c4-p2g2-terminal-originals 0)))
+    #t))
+
+(define (g3c4-p2g2-terminal-rollback-node! cell enrolled item old)
+  (let ((current (vector-ref cell 0)))
+    (if enrolled
+        (if (not (and (pair? current) (eq? (car current) item)
+                      (eq? (cdr current) old)))
+            (exit 134))
+        (if (not (eq? current old)) (exit 134)))
+    (if enrolled (vector-set! cell 0 old))
+    #t))
+
+;;; The holder transfer occurs only inside this producer's installed guard.
+(define (g3c4-p2g2-terminal-generate-held-internal generator input holder)
+  (let* ((operation 'g3c4-p2g2-terminal-generate-held-internal)
+         (input-entry (g3c4-p2g2-prefix-preflight generator input))
+         (native-input (vector-ref input-entry 3))
+         (holder-original (g3c4-p2g2-holder-available-check holder operation))
+         (generator-entry (g3c4-generator-entry-call-ready generator operation)))
+    (m3-call operation
+      (let* ((model-entry (vector-ref generator-entry 5))
+             (tokenizer (vector-ref generator-entry 6))
+             (tokenizer-core (car (cdr (g3c4-baseline-tokenizer-entry
+                                        tokenizer operation 'invalid-state
+                                        'invalid-state))))
+             (native (vector-ref generator-entry 3))
+             (policy (vector-ref generator-entry 7))
+             (first (make-bytevector 1 0))
+             (first-staging (make-bytevector 8 0))
+             (second (make-bytevector 1 0))
+             (second-staging (make-bytevector 8 0))
+             (text1 (make-bytevector 1 0))
+             (text2 (make-bytevector 2 0))
+             (ledger (vector #f #f #f #f #f))
+             (call (vector (vector 'g3c4-call-private) 'call 'pending #f
+                           generator-entry model-entry tokenizer 2 #f #f
+                           ledger g3c4-model-profile))
+             (record (vector call generator-entry model-entry tokenizer
+                             tokenizer-core native #f #f #f #f #f
+                             first first-staging 'before-prefix ledger policy
+                             (vector 10 24 9 16) (vector-ref call 0) #f
+                             (vector-ref model-entry 3)))
+             (original (vector call generator-entry model-entry tokenizer
+                               tokenizer-core native #f #f #f #f #f
+                               first first-staging 'before-prefix ledger policy
+                               (vector-ref record 16) (vector-ref call 0) #f
+                               (vector-ref model-entry 3)))
+             (prefix (vector call input input-entry native-input
+                             generator-entry))
+             (barrier (vector #f))
+             (terminal #f)
+             (enrolled #f)
+             (record-enrolled #f)
+             (anchor-enrolled #f)
+             (old-records (vector-ref g3c4-p2g2-protected-records 0))
+             (old-anchors (vector-ref g3c4-p2g2-protected-anchors 0))
+             (old-prefixes (vector-ref g3c4-p2g2-prefix-input-anchors 0)))
+        (if (not (and (eq? (vector-ref generator-entry 3) native)
+                      (eq? (vector-ref generator-entry 5) model-entry)
+                      (eq? (vector-ref generator-entry 6) tokenizer)
+                      (eq? (vector-ref generator-entry 7) policy)
+                      (eq? (vector-ref input-entry 3) native-input)
+                      (= (vector-ref policy 5) 2)
+                      (g3c4-call-tuple? 2 2)))
+            (g3c4-fail 'invalid-state operation
+                       "P2/G2 idle owner changed before call"))
+        (guard (caught
+                 (#t
+                   (if (vector-ref barrier 0) (exit 134))
+                   (if (vector-ref ledger 0)
+                       (if terminal
+                           (guard (abort-failure (#t (exit 134)))
+                             (if (eq? (vector-ref holder 5) 'held)
+                                 (g3c4-p2g2-holder-abort-held!
+                                   call terminal holder input input-entry
+                                   native-input)
+                                 (g3c4-p2g2-terminal-abort-clean!
+                                   call terminal)))
+                           (guard (abort-failure (#t (exit 134)))
+                             (g3c4-p2g2-protected-abort! call)))
+                       (begin
+                         (g3c4-p2g2-zero-bytes! first 1)
+                         (g3c4-p2g2-zero-bytes! first-staging 8)
+                         (g3c4-call-dead! call)
+                         (vector-set! record 0 #f)
+                         (vector-set! original 0 #f)
+                         (g3c4-p2g2-terminal-rollback-node!
+                           g3c4-p2g2-protected-records record-enrolled
+                           record old-records)
+                         (g3c4-p2g2-terminal-rollback-node!
+                           g3c4-p2g2-protected-anchors anchor-enrolled
+                           original old-anchors)))
+                   (if (and (not (eq? (vector-ref holder 5) 'dead))
+                            (not (eq? (vector-ref holder 5) 'available)))
+                       (g3c4-p2g2-holder-dispose-root! holder))
+                   (g3c4-p2g2-zero-bytes! second 1)
+                   (g3c4-p2g2-zero-bytes! second-staging 8)
+                   (g3c4-p2g2-zero-bytes! text1 1)
+                   (g3c4-p2g2-zero-bytes! text2 2)
+                   (g3c4-p2g2-terminal-rollback-node!
+                     g3c4-p2g2-prefix-input-anchors enrolled
+                     prefix old-prefixes)
+                   (raise caught)))
+          (g3c4-p2g2-holder-transfer! holder)
+          (let ((next (cons call (vector-ref g3c4-registry 0))))
+            (if (not (and (pair? next) (eq? (car next) call)))
+                (g3c4-fail 'internal operation
+                           "P2/G2 call registry allocation failed"))
+            (vector-set! g3c4-registry 0 next))
+          (let ((next (cons record old-records)))
+            (if (not (and (pair? next) (eq? (car next) record)
+                          (eq? (cdr next) old-records)))
+                (g3c4-fail 'internal operation
+                           "P2/G2 protected record allocation failed"))
+            (vector-set! g3c4-p2g2-protected-records 0 next)
+            (set! record-enrolled #t))
+          (let ((next (cons original old-anchors)))
+            (if (not (and (pair? next) (eq? (car next) original)
+                          (eq? (cdr next) old-anchors)))
+                (g3c4-fail 'internal operation
+                           "P2/G2 protected anchor allocation failed"))
+            (vector-set! g3c4-p2g2-protected-anchors 0 next)
+            (set! anchor-enrolled #t))
+          (let ((next (cons prefix old-prefixes)))
+            (if (not (and (pair? next) (eq? (car next) prefix)
+                          (eq? (cdr next) old-prefixes)))
+                (g3c4-fail 'internal operation
+                           "P2/G2 prefix anchor allocation failed"))
+            (vector-set! g3c4-p2g2-prefix-input-anchors 0 next)
+            (set! enrolled #t))
+          (g3c4-native-check (g3c4-native-call-acquire native 2 2)
+                             operation)
+          (vector-set! ledger 0 #t)
+          (vector-set! model-entry 10 call)
+          (vector-set! ledger 1 #t)
+          (vector-set! generator-entry 9 call)
+          (vector-set! ledger 2 #t)
+          (vector-set! call 2 'live)
+          (vector-set! ledger 3 'p2g2-protected)
+          (if (not (eq? (vector-ref m3-call-state 0) #t)) (exit 134))
+          (vector-set! m3-call-state 0 call)
+          (let* ((output (g3c4-p2g2-protected-reserve call))
+                 (auxiliary (vector-ref output 8))
+                 (created
+                   (vector 'pending (vector-ref output 0) output
+                           (vector-ref output 3) first first-staging
+                           second second-staging text1 text2
+                           (vector-ref auxiliary 0) (vector-ref auxiliary 1)
+                           0 0 #f))
+                 (terminal-original
+                   (vector created (vector-ref output 0) output
+                          (vector-ref output 3) first first-staging
+                          second second-staging text1 text2
+                          (vector-ref auxiliary 0) (vector-ref auxiliary 1)))
+                 (next-terminal
+                   (cons created
+                         (vector-ref g3c4-p2g2-terminal-anchors 0)))
+                 (next-original
+                   (cons terminal-original
+                         (vector-ref g3c4-p2g2-terminal-originals 0))))
+            (vector-set! created 14 terminal-original)
+            (vector-set! g3c4-p2g2-terminal-anchors 0
+                         next-terminal)
+            (vector-set! g3c4-p2g2-terminal-originals 0
+                         next-original)
+            (set! terminal created)
+            (g3c4-p2g2-prefix-input-check
+              call input input-entry native-input operation)
+            (g3c4-p2g2-terminal-active-check
+              call input input-entry native-input terminal operation)
+            (g3c4-p2g2-holder-bind!
+              holder native (vector-ref output 3) operation)
+            (g3c4-native-check
+              (g3c4-p2g2-native-eos-first
+                native native-input first-staging 16) operation)
+            (g3c4-p2g2-terminal-active-check
+              call input input-entry native-input terminal operation)
+            (if (= (vector-ref holder 4) 2)
+                (g3c4-p2g2-holder-begin!
+                  holder native (vector-ref output 3) operation))
+            (let* ((id0 (g3c4-p2g2-terminal-selected
+                          first-staging operation))
+                   (eos (vector-ref policy 6)))
+              (t1-private-g3-decode-raw-into!
+                tokenizer first-staging first)
+              (g3c4-p2g2-terminal-active-check
+                call input input-entry native-input terminal operation)
+              (if (not (= (bytevector-u8-ref first 0) id0))
+                  (g3c4-fail 'invalid-state operation
+                             "P2/G2 first T1 text changed"))
+              (bytevector-u8-set! text1 0 id0)
+              (bytevector-u8-set! text2 0 id0)
+              (if (= (vector-ref holder 4) 2)
+                  (g3c4-p2g2-holder-close!
+                    holder native (vector-ref output 3) operation))
+              (if (and (= (vector-ref holder 4) 3)
+                       (m3t-exact-i64? eos) (= id0 eos))
+                  (g3c4-fail 'invalid-state operation
+                             "P3 holder cannot follow first-frame EOS"))
+              (let ((count (if (and (m3t-exact-i64? eos) (= id0 eos))
+                               1 2))
+                    (id1 0))
+                (if (= count 2)
+                    (begin
+                      (g3c4-p2g2-terminal-active-check
+                        call input input-entry native-input terminal operation)
+                      (if (not (and (= (g3c4-p2g2-terminal-selected
+                                         first-staging operation) id0)
+                                    (= (bytevector-u8-ref first 0) id0)
+                                    (or (not (m3t-exact-i64? eos))
+                                        (not (= eos id0)))))
+                          (g3c4-fail 'invalid-state operation
+                                     "P2/G2 prefix raw carrier changed"))
+                      (g3c4-native-check
+                        (g3c4-p2g2-native-prefix-commit
+                          native (vector-ref output 3) first) operation)
+                      (vector-set! original 13 'prefix-committed)
+                      (vector-set! record 13 'prefix-committed)
+                      (vector-set! ledger 3 'p2g2-prefix-committed)
+                      (g3c4-p2g2-terminal-active-check
+                        call input input-entry native-input terminal operation)
+                      (g3c4-native-check
+                        (g3c4-p2g2-native-second
+                          native (vector-ref output 3) second-staging 16)
+                        operation)
+                      (g3c4-p2g2-terminal-active-check
+                        call input input-entry native-input terminal operation)
+                      (if (= (vector-ref holder 4) 3)
+                          (g3c4-p2g2-holder-begin!
+                            holder native (vector-ref output 3) operation))
+                      (set! id1 (g3c4-p2g2-terminal-selected
+                                  second-staging operation))
+                      (t1-private-g3-decode-raw-into!
+                        tokenizer second-staging second)
+                      (g3c4-p2g2-terminal-active-check
+                        call input input-entry native-input terminal operation)
+                      (if (not (= (bytevector-u8-ref second 0) id1))
+                          (g3c4-fail 'invalid-state operation
+                                     "P2/G2 second T1 text changed"))
+                      (bytevector-u8-set! text2 1 id1)))
+                (vector-set! terminal 12 count)
+                (vector-set! terminal 13 (+ 2 count))
+                (g3c4-p2g2-terminal-precommit-check
+                  call input input-entry native-input terminal count id0 id1
+                  operation)
+                (if (= (vector-ref holder 4) 3)
+                    (g3c4-p2g2-holder-close!
+                      holder native (vector-ref output 3) operation))
+                (let ((prefix-successor
+                        (cdr (vector-ref
+                               g3c4-p2g2-prefix-input-anchors 0)))
+                      (record-successor
+                        (cdr (vector-ref g3c4-p2g2-protected-records 0)))
+                      (anchor-successor
+                        (cdr (vector-ref g3c4-p2g2-protected-anchors 0)))
+                      (output-shell (vector-ref terminal 1))
+                      (selected-text (if (= count 1) text1 text2)))
+                  (if (not (and (eq? (car (vector-ref
+                                            g3c4-p2g2-prefix-input-anchors 0))
+                                     prefix)
+                                (eq? (car (vector-ref
+                                            g3c4-p2g2-protected-records 0))
+                                     record)
+                                (eq? (car (vector-ref
+                                            g3c4-p2g2-protected-anchors 0))
+                                     original)
+                                (eq? (vector-ref model-entry 10) call)
+                                (eq? (vector-ref generator-entry 9) call)
+                                (eq? (vector-ref ledger 4) output)
+                                (= (vector-ref terminal 12) count)
+                                (= (vector-ref terminal 13) (+ 2 count))))
+                      (g3c4-fail 'invalid-state operation
+                                 "P2/G2 terminal tail ownership changed"))
+                  ;; These carriers are no longer used by the native commit.
+                  ;; Scrubbing before zero leaves only bounded assignment in
+                  ;; the Eshkol success tail.
+                  (g3c4-p2g2-zero-bytes! (vector-ref terminal 10) 2)
+                  (g3c4-p2g2-zero-bytes! (vector-ref terminal 11) 16)
+                  (g3c4-p2g2-zero-bytes! first-staging 8)
+                  (g3c4-p2g2-zero-bytes! second-staging 8)
+                  (if (= count 1) (g3c4-p2g2-zero-bytes! text2 2))
+                ;; The native entry repeats full candidate, A2 witness, raw,
+                ;; owner, pin and RNG preflight before its no-failure tail.
+                (let ((status (g3c4-p2g2-native-terminal
+                                native (vector-ref output 3) first 9
+                                (if (= count 1) '() second)
+                                (if (= count 1) 0 9))))
+                  (if (not (= status 0)) (g3c4-native-check status operation))
+                  ;; Zero is irreversible. Only writes to captured objects and
+                  ;; m3-call's already installed busy-cell finalizer follow.
+                  (vector-set! barrier 0 #t)
+                  (vector-set! output 1 'terminal-output)
+                  (vector-set! output 2 'live)
+                  (vector-set! output 4 #f)
+                  (vector-set! output 5 #f)
+                  (vector-set! output 6 #f)
+                  (vector-set! output 8 selected-text)
+                  (vector-set! ledger 4 #f)
+                  (vector-set! terminal 0 'live)
+                  (vector-set! g3c4-p2g2-prefix-input-anchors 0
+                               prefix-successor)
+                  (vector-set! g3c4-p2g2-protected-records 0
+                               record-successor)
+                  (vector-set! g3c4-p2g2-protected-anchors 0
+                               anchor-successor)
+                  (vector-set! record 0 #f)
+                  (vector-set! original 0 #f)
+                  (vector-set! model-entry 10 #f)
+                  (vector-set! generator-entry 9 #f)
+                  (vector-set! call 3 #f)
+                  (vector-set! call 4 #f)
+                  (vector-set! call 5 #f)
+                  (vector-set! call 6 #f)
+                  (vector-set! call 7 #f)
+                  (vector-set! call 8 #f)
+                  (vector-set! call 9 #f)
+                  (vector-set! call 11 #f)
+                  (vector-set! call 2 'dead)
+                  (vector-set! call 10 #f)
+                  output-shell))))))))))
+
+(define (g3c4-p2g2-terminal-entry-live shell operation)
+  (let* ((entry (g3c4-registry-find shell operation))
+         (anchor (g3c4-p2g2-terminal-for-output entry)))
+    (if (not (and anchor (vector? anchor) (= (vector-length anchor) 15)
+                  (eq? (vector-ref anchor 0) 'live)
+                  (g3c4-p2g2-terminal-original? anchor)
+                  (eq? (vector-ref anchor 1) shell)
+                  (eq? (vector-ref anchor 2) entry)
+                  (eq? (vector-ref anchor 3) (vector-ref entry 3))
+                  (eq? (vector-ref entry 0) shell)
+                  (eq? (vector-ref entry 1) 'terminal-output)
+                  (eq? (vector-ref entry 2) 'live)
+                  (eq? (vector-ref entry 4) #f)
+                  (eq? (vector-ref entry 5) #f)
+                  (eq? (vector-ref entry 6) #f)
+                  (eq? (vector-ref entry 7) #f)
+                  (eq? (vector-ref entry 8)
+                       (if (= (vector-ref anchor 12) 1)
+                           (vector-ref anchor 8) (vector-ref anchor 9)))
+                  (eq? (vector-ref entry 9) #f)
+                  (eq? (vector-ref entry 10) #f)
+                  (eq? (vector-ref entry 11) g3c4-model-profile)
+                  (or (= (vector-ref anchor 12) 1)
+                      (= (vector-ref anchor 12) 2))
+                  (= (vector-ref anchor 13) (+ 2 (vector-ref anchor 12)))
+                  (= (bytevector-length (vector-ref entry 8))
+                     (vector-ref anchor 12))
+                  (= (bytevector-u8-ref (vector-ref anchor 4) 0)
+                     (bytevector-u8-ref (vector-ref entry 8) 0))
+                  (or (= (vector-ref anchor 12) 1)
+                      (= (bytevector-u8-ref (vector-ref anchor 6) 0)
+                         (bytevector-u8-ref (vector-ref entry 8) 1)))))
+        (g3c4-fail 'invalid-state operation
+                   "P2/G2 terminal shell or surviving anchor changed"))
+    entry))
+
+(define (g3c4-p2g2-terminal-word bytes offset)
+  (let loop ((index 7) (value 0))
+    (if (< index 0)
+        (if (>= value 9223372036854775808)
+            (- value 18446744073709551616) value)
+        (loop (- index 1)
+              (+ (* value 256)
+                 (bytevector-u8-ref bytes (+ offset index)))))))
+
+(define (g3c4-p2g2-terminal-snapshot-internal shell)
+  (let ((operation 'g3c4-p2g2-terminal-snapshot-internal))
+    (m3-call operation
+      (let* ((entry (g3c4-p2g2-terminal-entry-live shell operation))
+             (anchor (g3c4-p2g2-terminal-for-output entry))
+             (stage (make-bytevector 64 0))
+             (result (vector 0 0 0 0 0 0 0 0)))
+        (guard (caught
+                 (#t (g3c4-p2g2-zero-bytes! stage 64) (raise caught)))
+          (g3c4-native-check
+            (g3c4-p2g2-native-snapshot (vector-ref entry 3) stage 72)
+            operation)
+          (if (not (eq? entry (g3c4-p2g2-terminal-entry-live
+                               shell operation)))
+              (g3c4-fail 'invalid-state operation
+                         "P2/G2 snapshot source changed"))
+          (let read ((index 0))
+            (if (< index 8)
+                (begin
+                  (vector-set! result index
+                               (g3c4-p2g2-terminal-word stage (* 8 index)))
+                  (read (+ index 1)))))
+          (if (not (and (= (vector-ref result 0)
+                           (bytevector-u8-ref (vector-ref anchor 4) 0))
+                        (= (vector-ref result 1)
+                           (if (= (vector-ref anchor 12) 1) 0
+                               (bytevector-u8-ref (vector-ref anchor 6) 0)))
+                        (= (vector-ref result 2) (vector-ref anchor 12))
+                        (= (vector-ref result 3) (vector-ref anchor 13))
+                        (= (vector-ref result 4) 1)
+                        (>= (vector-ref result 5) 0)
+                        (g3c4-rng-snapshot?
+                          (vector g3c4-rng-algorithm
+                                  (vector-ref result 4)
+                                  (vector-ref result 5)
+                                  (vector-ref result 6)
+                                  (vector-ref result 7)))))
+              (g3c4-fail 'invalid-state operation
+                         "P2/G2 terminal snapshot differs from T1 output"))
+          (g3c4-p2g2-zero-bytes! stage 64)
+          result)))))
+
+(define (g3c4-p2g2-terminal-release-internal! shell)
+  (let ((operation 'g3c4-p2g2-terminal-release-internal!))
+    (m3-call operation
+      (let* ((entry (g3c4-registry-find shell operation))
+             (anchor (g3c4-p2g2-terminal-for-output entry)))
+        (if (and anchor (g3c4-p2g2-terminal-original? anchor)
+                 (eq? (vector-ref anchor 0) 'dead)
+                 (g3c4-dead-entry? entry 'terminal-output)
+                 (eq? (vector-ref entry 0) shell)
+                 (eq? (vector-ref anchor 1) shell)
+                 (eq? (vector-ref anchor 2) entry)
+                 (let dead-fields ((index 3))
+                   (if (= index 12) #t
+                       (and (eq? (vector-ref entry index) #f)
+                            (dead-fields (+ index 1))))))
+            #t
+            (let ((live (g3c4-p2g2-terminal-entry-live shell operation)))
+              (g3c4-native-check
+                (g3c4-native-output-release (vector-ref live 3)) operation)
+              (g3c4-p2g2-zero-bytes! (vector-ref anchor 4) 1)
+              (g3c4-p2g2-zero-bytes! (vector-ref anchor 5) 8)
+              (g3c4-p2g2-zero-bytes! (vector-ref anchor 6) 1)
+              (g3c4-p2g2-zero-bytes! (vector-ref anchor 7) 8)
+              (g3c4-p2g2-zero-bytes! (vector-ref anchor 8) 1)
+              (g3c4-p2g2-zero-bytes! (vector-ref anchor 9) 2)
+              (g3c4-entry-dead! live)
+              (vector-set! anchor 0 'dead)
+              #t))))))
+
+;;; The clone is a genuine independent native I1 owner. The Eshkol shell is
+;;; typed private state; it is never projected as a public scalar result.
+(define (g3c4-p2g2-terminal-ids-record shell operation)
+  (let find ((remaining (vector-ref g3c4-p2g2-terminal-ids-records 0)))
+    (cond ((null? remaining)
+           (g3c4-fail 'invalid-argument operation
+                      "P2/G2 terminal IDs shell is not registered"))
+          ((eq? (vector-ref (car remaining) 0) shell) (car remaining))
+          (else (find (cdr remaining))))))
+
+(define (g3c4-p2g2-terminal-ids-anchor record operation)
+  (let find ((remaining (vector-ref g3c4-p2g2-terminal-ids-anchors 0)))
+    (cond ((null? remaining)
+           (g3c4-fail 'invalid-state operation
+                      "P2/G2 terminal IDs anchor is absent"))
+          ((eq? (vector-ref (car remaining) 0) record) (car remaining))
+          (else (find (cdr remaining))))))
+
+(define (g3c4-p2g2-terminal-ids-live shell operation)
+  (let* ((record (g3c4-p2g2-terminal-ids-record shell operation))
+         (anchor (g3c4-p2g2-terminal-ids-anchor record operation)))
+    (if (not (and (vector? record) (= (vector-length record) 5)
+                  (vector? anchor) (= (vector-length anchor) 5)
+                  (eq? (vector-ref record 0) shell)
+                  (eq? (vector-ref record 1) 'live)
+                  (eq? (vector-ref anchor 0) record)
+                  (eq? (vector-ref anchor 1) shell)
+                  (eq? (vector-ref anchor 2) (vector-ref record 2))
+                  (eq? (vector-ref anchor 3) (vector-ref record 3))
+                  (eq? (vector-ref anchor 4) (vector-ref record 4))
+                  (or (= (vector-ref record 3) 1)
+                      (= (vector-ref record 3) 2))
+                  (bytevector? (vector-ref record 4))
+                  (= (bytevector-length (vector-ref record 4))
+                     (* 8 (vector-ref record 3)))))
+        (g3c4-fail 'invalid-state operation
+                   "P2/G2 terminal IDs owner changed"))
+    record))
+
+(define (g3c4-p2g2-terminal-ids-clone-internal shell)
+  (let* ((operation 'g3c4-p2g2-terminal-ids-clone-internal)
+         (snapshot (g3c4-p2g2-terminal-snapshot-internal shell)))
+    (m3-call operation
+      (let* ((source (g3c4-p2g2-terminal-entry-live shell operation))
+             (source-anchor (g3c4-p2g2-terminal-for-output source))
+             (count (vector-ref snapshot 2))
+             (copy (make-bytevector (* 8 count) 0))
+             (owner-shell (vector 'g3c4-p2g2-terminal-ids-private))
+             (record (vector owner-shell 'pending #f count copy))
+             (anchor (vector record owner-shell #f count copy))
+             (result (list owner-shell))
+             (old-records (vector-ref g3c4-p2g2-terminal-ids-records 0))
+             (old-anchors (vector-ref g3c4-p2g2-terminal-ids-anchors 0))
+             (next-record
+               (cons record old-records))
+             (next-anchor
+               (cons anchor old-anchors))
+             (native '()))
+        (guard (caught
+                 (#t
+                   ;; Remove only this attempt's nodes. A displaced head is
+                   ;; not ours to restore or overwrite.
+                   (if (eq? (vector-ref g3c4-p2g2-terminal-ids-records 0)
+                            next-record)
+                       (vector-set! g3c4-p2g2-terminal-ids-records 0
+                                    old-records)
+                       (if (not (eq? (vector-ref g3c4-p2g2-terminal-ids-records 0)
+                                     old-records))
+                           (exit 134)))
+                   (if (eq? (vector-ref g3c4-p2g2-terminal-ids-anchors 0)
+                            next-anchor)
+                       (vector-set! g3c4-p2g2-terminal-ids-anchors 0
+                                    old-anchors)
+                       (if (not (eq? (vector-ref g3c4-p2g2-terminal-ids-anchors 0)
+                                     old-anchors))
+                           (exit 134)))
+                   (if (not (null? native))
+                       (if (not (= (g3c4-p2g2-native-ids-release native) 0))
+                           (exit 134)))
+                   (g3c4-p2g2-zero-bytes! copy (* 8 count))
+                   (vector-set! record 1 'dead)
+                   (vector-set! record 2 #f)
+                   (vector-set! anchor 2 #f)
+                   (raise caught)))
+          (vector-set! g3c4-p2g2-terminal-ids-records 0
+                       next-record)
+          (vector-set! g3c4-p2g2-terminal-ids-anchors 0
+                       next-anchor)
+          (set! native (g3c4-p2g2-native-ids-clone (vector-ref source 3)))
+          (if (null? native) (g3c4-native-fail operation))
+          (vector-set! record 2 native)
+          (vector-set! anchor 2 native)
+          ;; The original bytevector allocation proves its 16/24-byte header
+          ;; and payload extent. Native validates alignment/aliases only.
+          (if (not (and (eq? source
+                             (g3c4-p2g2-terminal-entry-live shell operation))
+                        (eq? source-anchor
+                             (g3c4-p2g2-terminal-for-output source))
+                        (eq? copy (vector-ref record 4))
+                        (eq? copy (vector-ref anchor 4))
+                        (= (bytevector-length copy) (* 8 count))))
+              (g3c4-fail 'invalid-state operation
+                         "P2/G2 clone source or original buffer changed"))
+          (g3c4-native-check
+            (g3c4-p2g2-native-ids-copy native count copy (+ 8 (* 8 count)))
+            operation)
+          (if (not (and (eq? source
+                             (g3c4-p2g2-terminal-entry-live shell operation))
+                        (eq? copy (vector-ref record 4))
+                        (eq? copy (vector-ref anchor 4))
+                        (= (bytevector-length copy) (* 8 count))
+                        (= (g3c4-p2g2-terminal-word copy 0)
+                           (vector-ref snapshot 0))
+                        (or (= count 1)
+                            (= (g3c4-p2g2-terminal-word copy 8)
+                               (vector-ref snapshot 1)))
+                        (= (bytevector-u8-ref (vector-ref source-anchor 4) 0)
+                           (vector-ref snapshot 0))
+                        (or (= count 1)
+                            (= (bytevector-u8-ref
+                                 (vector-ref source-anchor 6) 0)
+                               (vector-ref snapshot 1)))))
+              (g3c4-fail 'invalid-state operation
+                         "P2/G2 logical I1 clone differs from terminal"))
+          (vector-set! record 1 'live)
+          result)))))
+
+(define (g3c4-p2g2-terminal-ids-copy-internal value)
+  (let ((operation 'g3c4-p2g2-terminal-ids-copy-internal))
+    (m3-call operation
+      (if (not (and (pair? value) (null? (cdr value))))
+          (g3c4-fail 'invalid-argument operation
+                     "P2/G2 terminal IDs wrapper is not exact"))
+      (let* ((shell (car value))
+             (record (g3c4-p2g2-terminal-ids-live shell operation))
+             (anchor (g3c4-p2g2-terminal-ids-anchor record operation))
+             (count (vector-ref record 3))
+             (readback (make-bytevector (* count 8) 0)))
+        (guard (caught
+                 (#t (g3c4-p2g2-zero-bytes! readback (* count 8))
+                     (raise caught)))
+          (g3c4-native-check
+            (g3c4-p2g2-native-ids-copy
+              (vector-ref record 2) count readback (+ 8 (* count 8)))
+            operation)
+          (if (not (and (eq? record
+                             (g3c4-p2g2-terminal-ids-live shell operation))
+                        (eq? anchor
+                             (g3c4-p2g2-terminal-ids-anchor record operation))
+                        (= (bytevector-length readback) (* count 8))
+                        (= (g3c4-p2g2-terminal-word readback 0)
+                           (g3c4-p2g2-terminal-word
+                             (vector-ref anchor 4) 0))
+                        (or (= count 1)
+                            (= (g3c4-p2g2-terminal-word readback 8)
+                               (g3c4-p2g2-terminal-word
+                                 (vector-ref anchor 4) 8)))))
+              (g3c4-fail 'invalid-state operation
+                         "P2/G2 detached I1 readback changed"))
+          readback)))))
+
+(define (g3c4-p2g2-terminal-ids-release-internal! value)
+  (let ((operation 'g3c4-p2g2-terminal-ids-release-internal!))
+    (m3-call operation
+      (if (not (and (pair? value) (null? (cdr value))))
+          (g3c4-fail 'invalid-argument operation
+                     "P2/G2 terminal IDs wrapper is not exact"))
+      (let* ((shell (car value))
+             (record (g3c4-p2g2-terminal-ids-record shell operation))
+             (anchor (g3c4-p2g2-terminal-ids-anchor record operation)))
+        (if (and (eq? (vector-ref record 1) 'dead)
+                 (eq? (vector-ref record 0) shell)
+                 (eq? (vector-ref record 2) #f)
+                 (eq? (vector-ref anchor 0) record)
+                 (eq? (vector-ref anchor 1) shell)
+                 (eq? (vector-ref anchor 2) #f)
+                 (eq? (vector-ref anchor 3) (vector-ref record 3))
+                 (eq? (vector-ref anchor 4) (vector-ref record 4))
+                 (or (= (vector-ref record 3) 1)
+                     (= (vector-ref record 3) 2))
+                 (bytevector? (vector-ref record 4))
+                 (= (bytevector-length (vector-ref record 4))
+                    (* 8 (vector-ref record 3))))
+            #t
+            (let ((live (g3c4-p2g2-terminal-ids-live shell operation)))
+              (g3c4-native-check
+                (g3c4-p2g2-native-ids-release (vector-ref live 2))
+                operation)
+              (g3c4-p2g2-zero-bytes! (vector-ref anchor 4)
+                                       (* 8 (vector-ref anchor 3)))
+              (vector-set! live 1 'dead)
+              (vector-set! live 2 #f)
+              (vector-set! anchor 2 #f)
+              #t))))))
