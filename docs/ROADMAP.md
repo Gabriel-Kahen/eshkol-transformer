@@ -1839,6 +1839,14 @@ The sealed host result is `g3r-current-private-union-run-20261013-c/host/SHA256S
 only. The O2 issued-pointer provider, SAVE publication/replay, terminal and
 public generation, and data-only continuation remain open; the current-main
 source/evidence/docs union is still pending integration.
+A source-only predecessor-manifest successor updates eight exact rows across
+G3-S, G3-N, M3 call-guard, E3 metrics and L3S manifests for the guarded F32
+witness and M3 owner-roster additions. Eight feature-off preprocessing
+comparisons against the prior pinned `86f4eb36` source agree; all five checksum
+gates pass and source-mutation negatives remain rejected. The affected hosted
+suites are G3-S sampling, G3-N forward, native numerics and model composition.
+Independent review and fresh supported full-suite CI remain integration gates;
+preprocessing is not object/runtime equivalence or SAVE admission.
 
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
