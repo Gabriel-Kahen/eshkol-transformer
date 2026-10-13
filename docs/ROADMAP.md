@@ -3133,6 +3133,13 @@ publication, public G2 and continuation remain pending.
   checks pass locally; compiled feature-on behavior, exact-head independent
   review and supported-host validation remain pending. It does not admit
   public G2 or continuation.
+  A separate compiled held-holder gate candidate exercises the feature-only
+  three-argument Eshkol entry with genuine I1/A2 holder acquisition at P2 and
+  P3, both first-EOS P2 paths, wrong generation, typed first-busy end/retry,
+  repeated-busy and postzero fail-stop cuts, and the unchanged feature-off
+  entry. Source-only parser/syntax checks pass; the pinned compiled
+  normal/repeat/sanitizer matrix and independent review remain pending, so no
+  behavioral admission or public G2 claim follows from this gate preparation.
 
 ## Wave 4 — practical pretraining and performance
 
