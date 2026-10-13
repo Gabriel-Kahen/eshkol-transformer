@@ -942,9 +942,12 @@ destination, and host tests missed numeric and cleanup mutants. A focused
 source repair now uses a second real rooted M3 owner for foreign handle/tree
 checks, both authentic tied head paths with distinct I2 sources for duplicate
 destination, same-byte-count wrong rank/geometry and malformed decoder
-variants; offline numeric and prepare/cleanup mutation tests pass. Authentic
-stale-handle revocation and a separately constructed unexpected P1 topology
-remain unproven with the approved fixed M3 API. The exact sanitizer import
+variants; offline numeric and prepare/cleanup mutation tests pass. A further
+test-only negative now aborts an unpublished I2/P1 staged construction and
+passes its authentic tombstoned handle through the zero input admission's P1
+shape accessor before any carrier lookup or I2 prepare. This is a stale P1
+construction handle, not a retired sealed-M3 handle. A separately constructed
+unexpected active P1 topology remains unproven. The exact sanitizer import
 manifests are still absent and its build fails closed. Pinned Q0 oracle
 generation, emitted package inventories, generated AOT postprepare review,
 fresh normal/repeat/poisoned and sanitizer runtime gates, and renewed

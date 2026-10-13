@@ -79,6 +79,12 @@
     tree))
 
 (define (e3-zero-require-tree-handle tree index handle)
+  ;; Check the proposed P1 handle while it is still an input. A tombstoned
+  ;; construction handle must reject before any carrier lookup or I2 prepare.
+  (if (not (equal? (parameter-handle-shape handle)
+                   (vector-ref e3-zero-shapes index)))
+      (et-e1b-private-raise 'shape-mismatch 'e3-zero-control
+        "handle geometry differs from the fixed zero model" '() #f))
   (if (not (eq? handle
                 (parameter-tree-handle tree
                   (vector-ref e3-zero-paths index))))

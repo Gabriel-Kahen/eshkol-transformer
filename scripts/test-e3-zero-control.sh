@@ -204,7 +204,8 @@ for case_name in all-correct all-wrong mixed; do
         "${out}/transcript-${case_name}-${gradient}-sanitize-b.json"
   done
 done
-for case_name in missing-path foreign-handle foreign-tree duplicate-tied-head \
+for case_name in missing-path foreign-handle foreign-tree stale-handle \
+    duplicate-tied-head \
     source-alias wrong-shape wrong-rank wrong-f32-geometry wrong-kind \
     forged-source released-source decode-short decode-extent decode-role \
     decode-request-length decode-payload decode-shape decode-rank-limit \

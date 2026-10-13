@@ -19,6 +19,16 @@
         :real et_e3_zero_control_fail_reset_v1)
 (extern i64 e3-zero-control-census ptr i64
         :real et_e3_zero_control_census_v1)
+(extern ptr e3-zero-stale-initializer i64
+        :real et_m3t_private_initializer_create_v1)
+(extern i64 e3-zero-stale-initializer-seal ptr
+        :real et_m3t_private_initializer_seal_v1)
+(extern ptr e3-zero-stale-owner-create ptr
+        :real et_m3t_private_owner_create_v1)
+(extern ptr e3-zero-stale-owner-parameter ptr i64
+        :real et_m3t_private_owner_parameter_v1)
+(extern i64 e3-zero-stale-owner-abort ptr
+        :real et_m3t_private_owner_abort_v1)
 
 (define (e3-zero-negative-owner model)
   (vector-ref (m3t-entry model 'model 'e3-zero-negative #t) 3))
@@ -166,7 +176,49 @@
   (i2-checkpoint-decode
     (vector payload role shape dtype device layout 'e3-zero-negative tail)))
 
+(define (e3-zero-negative-stale! tree)
+  ;; Reuse the reviewed I2/P1 construction-abort sequence. This handle belongs
+  ;; to an unpublished fixture, never to the still-rooted sealed M3 model.
+  (let ((initial (e3-zero-stale-initializer 1731)))
+    (e3-zero-invariant (not (null? initial)))
+    (e3-zero-invariant (= (e3-zero-stale-initializer-seal initial) 0))
+    (let ((owner (e3-zero-stale-owner-create initial)))
+      (e3-zero-invariant (not (null? owner)))
+      (let ((construction #f) (aborted #f))
+        (guard (caught
+                 (#t
+                   (if (and construction (not aborted))
+                       (i2-construction-abort-internal! construction))
+                   (e3-zero-invariant (= (e3-zero-stale-owner-abort owner) 0))
+                   (raise caught)))
+          (set! construction
+            (with-region ('e3-zero-stale-construction 1048576)
+              (i2-construction-begin-internal)))
+          (let ((parameter (e3-zero-stale-owner-parameter owner 0)))
+            (e3-zero-invariant (not (null? parameter)))
+            (vector-set! (vector-ref construction 8) 2 parameter)
+            (let ((stale
+                    (with-region ('e3-zero-stale-handle 1048576)
+                      (i2-module-register-parameter-internal!
+                        (vector-ref construction 2) "stale"
+                        (i2-carrier 'parameter parameter 'parameter)))))
+              (e3-zero-invariant
+                (i2-construction-abort-internal! construction))
+              (set! aborted #t)
+              (guard (stale-error
+                       (#t
+                         (e3-zero-invariant
+                           (and (transformer-error? stale-error)
+                                (eq? (transformer-error-category stale-error)
+                                     'invalid-state)))
+                         (raise stale-error)))
+                (e3-zero-require-tree-handle tree 0 stale))
+              (e3-zero-invariant (= (e3-zero-stale-owner-abort owner) 0))
+              (e3-native-invariant-fail))))))))
+
 (define (e3-zero-negative-fire name config tree handles sources)
+  (if (string=? name "stale-handle")
+      (e3-zero-negative-stale! tree)
   (let* ((destination
            (parameter-handle-tensor-internal (vector-ref handles 0)))
          (source (vector-ref sources 0))
@@ -279,7 +331,7 @@
        (i2-checkpoint-decode
          (vector (make-bytevector 16 0) 'parameter '(4) 'f32 'cpu
                  'dense-row-major-contiguous 0 #f)))
-      (else (e3-native-invariant-fail)))))
+      (else (e3-native-invariant-fail))))))
 
 (define (e3-zero-negative-run scenario corpus-path)
   (e3-zero-invariant

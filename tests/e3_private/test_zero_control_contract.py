@@ -244,6 +244,32 @@ class ZeroControlContract(unittest.TestCase):
                 self.assertIn(f'((string=? name "{name}")', driver)
                 self.assertIn(name, runner)
 
+    def test_stale_fixture_is_aborted_before_zero_input_admission(self) -> None:
+        negative = (ROOT / "tests/e3_private/zero_control_negative_driver.esk").read_text()
+        positive = (ROOT / "tests/e3_private/zero_control_driver.esk").read_text()
+        runner = (ROOT / "scripts/test-e3-zero-control.sh").read_text()
+        fixture = negative.split('(define (e3-zero-negative-stale! tree)', 1)[1].split(
+            '(define (e3-zero-negative-fire', 1)[0]
+        self.assertLess(fixture.index('(i2-module-register-parameter-internal!'),
+                        fixture.index('(i2-construction-abort-internal! construction))\n'
+                                      '              (set! aborted #t)'))
+        self.assertLess(fixture.index('(set! aborted #t)'),
+                        fixture.index('(e3-zero-require-tree-handle tree 0 stale)'))
+        self.assertIn('(transformer-error-category stale-error)', fixture)
+        self.assertIn("'invalid-state", fixture)
+        self.assertIn('(e3-zero-stale-owner-abort owner)', fixture)
+        admission = positive.split('(define (e3-zero-require-tree-handle', 1)[1].split(
+            '(define (e3-zero-stage!', 1)[0]
+        self.assertLess(admission.index('(parameter-handle-shape handle)'),
+                        admission.index('(parameter-tree-handle tree'))
+        self.assertNotIn('(parameter-handle-tensor-internal', admission)
+        fire = negative.split('(define (e3-zero-negative-fire', 1)[1].split(
+            '(define (e3-zero-negative-run', 1)[0]
+        self.assertLess(fire.index('(e3-zero-negative-stale! tree)'),
+                        fire.index('(parameter-handle-tensor-internal'))
+        self.assertIn('(if (string=? name "stale-handle")', fire)
+        self.assertIn('stale-handle', runner)
+
     def test_prebind_source_cleanup_precedes_seed_and_destination_allocation(self) -> None:
         driver = (ROOT / "tests/e3_private/zero_control_negative_driver.esk").read_text()
 
