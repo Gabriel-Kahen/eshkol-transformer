@@ -1,0 +1,322 @@
+;;; Noninstalled proof of one sealed M3T owner -> same-owner O2 hold -> C2 claim.
+;;; The native bridge authenticates the M3T-issued roster before O2 begins a hold.
+;;; The final owner uses the existing C2 SAVE writer; restore is outside scope.
+(load "d2_wave2_root.esk")
+;;; D2's T2 root owns this aggregate's sealed-token registry. M3T retains the
+;;; T1 predicate name; bind it to the same T2 authority before loading M3T.
+(define t1-wave1-tensor-admitted? t2-wave2-tensor-admitted?)
+(load "m3t_transport_extension.esk")
+(load "c2_d2_cursor_pair_extension.esk")
+(load "o2_wave2_extension.esk")
+(load "g3r_o2_issued_adoption_extension.esk")
+(load "c2_o2_reconstruct_extension.esk")
+(load "c2_o2_encode_extension.esk")
+(load "c2_model_encode_extension.esk")
+(load "c2_x1_canonical_extension.esk")
+(load "c2_training_state_extension.esk")
+(load "c2_persistence_policy_extension.esk")
+(load "c2_checkpoint_save_extension.esk")
+
+(extern ptr g3r-test-hold-begin ptr ptr
+        :real et_g3r_test_m3_o2_hold_begin_v1)
+(extern i64 g3r-test-roster-match ptr ptr
+        :real et_g3r_test_m3_o2_roster_match_v1)
+(extern ptr g3r-test-hold-issue ptr
+        :real et_g3r_test_o2_hold_issue_v1)
+(extern i64 g3r-test-hold-match ptr ptr
+        :real et_g3r_test_o2_hold_match_v1)
+(extern i64 g3r-test-hold-end ptr
+        :real et_g3r_test_o2_hold_end_v1)
+(extern i64 g3r-test-o2-live-count i64
+        :real et_g3r_test_o2_live_count_v1)
+(extern i64 g3r-test-o2-equal-foreign ptr ptr
+        :real et_g3r_test_o2_equal_foreign_v1)
+(extern i64 g3r-test-o2-held-bytes i64 ptr ptr ptr
+        :real et_g3r_test_o2_held_bytes_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "M3 O2 C2 JOINT FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (expect-error label category operation thunk)
+  (check label
+    (guard (raised
+             (#t (if (transformer-error? raised)
+                     (let ((actual-category (transformer-error-category raised))
+                           (actual-operation (transformer-error-operation raised)))
+                       (if (and (eq? category actual-category)
+                                (eq? operation actual-operation))
+                           #t
+                           (begin
+                             (display "M3 O2 C2 JOINT error mismatch: expected ")
+                             (display category) (display " / ")
+                             (display operation) (display ", got ")
+                             (display actual-category) (display " / ")
+                             (display actual-operation) (newline)
+                             #f)))
+                     (begin
+                       (display "M3 O2 C2 JOINT error mismatch: expected ")
+                       (display category) (display " / ")
+                       (display operation)
+                       (display ", got non-transformer error") (newline)
+                       #f))))
+      (thunk)
+      (display "M3 O2 C2 JOINT error mismatch: expected ")
+      (display category) (display " / ") (display operation)
+      (display ", got no error") (newline)
+      #f)))
+
+(define resolved
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define (handle-paths handles)
+  (let loop ((index 0))
+    (if (= index 14) '()
+        (cons (parameter-handle-path (vector-ref handles index))
+              (loop (+ index 1))))))
+(define (optimizer-config handles)
+  (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+        '(none) '(constant)
+        (list (list 'group (handle-paths handles)
+                    "3dcccccd" "3f000000" "3f000000"
+                    "3a83126f" "00000000"))))
+(define config-fingerprint (x1-private-config-fingerprint resolved))
+(define canonical (string->utf8 (x1-private-config-canonical resolved)))
+(define args (command-line))
+(define output-root (car (cdr (cdr args))))
+(define tokenizer (t2-wave2-tokenizer-byte resolved))
+(define fingerprint (t2-private-tokenizer-fingerprint tokenizer))
+(check "byte tokenizer identity"
+       (string=? fingerprint
+         "sha256:eshkol-byte-tokenizer-v1:aabb31f49216963582383a00fd2e85d7c20b658d5bef0e7945344ed6bfe50704"))
+(define dataset
+  (d2-token-dataset-open
+    (list ':directory (car (cdr args))
+          ':batch-size 1 ':sequence-length 2
+          ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+          ':maximum-total-tokens 4 ':maximum-batch-bytes 34
+          ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #t)
+    tokenizer))
+(define cursor (d2-token-dataset-cursor dataset))
+(d2-token-dataset-close! dataset)
+(define (controls completed)
+  (vector
+    (vector 'philox4x32-10 1 1729 -1 -9223372036854775808)
+    (vector (utf8->string (string->utf8 fingerprint)) 256)
+    (vector (bytevector-copy cursor 0 (bytevector-length cursor))
+            (bytevector-copy cursor 0 (bytevector-length cursor)))
+    (vector (bytevector-copy canonical 0 (bytevector-length canonical))
+            (utf8->string (string->utf8 config-fingerprint)))
+    (vector 99 completed 3)))
+(define (compose p1 o2 completed)
+  (let ((request
+          (vector c2-training-state-compose-tag p1 o2 (controls completed)
+                  'checkpoint-load #f)))
+    (c2-training-state-compose-internal request)
+    request))
+
+(define model
+  (m3t-public-model-create resolved (m3t-public-initializer-state 1729)))
+(define model-entry (m3t-entry model 'model 'g3r-save-test #t))
+(define native-model (vector-ref model-entry 3))
+(define handles (vector-ref model-entry 8))
+(define optimizer
+  (o2-public-optimizer-create (optimizer-config handles)
+                              (module-parameters model)))
+(define native-optimizer
+  (vector-ref (o2-require-optimizer 'g3r-save-o2-adopt optimizer) 1))
+(define foreign-model
+  (m3t-public-model-create resolved (m3t-public-initializer-state 1729)))
+(define foreign-entry (m3t-entry foreign-model 'model 'g3r-save-test #t))
+(define foreign-native-model (vector-ref foreign-entry 3))
+(define foreign-optimizer
+  (o2-public-optimizer-create
+    (optimizer-config (vector-ref foreign-entry 8))
+    (module-parameters foreign-model)))
+(define foreign-native-optimizer
+  (vector-ref
+    (o2-require-optimizer 'g3r-save-o2-adopt foreign-optimizer) 1))
+(check "foreign optimizer is registered, distinct, and bit-equal"
+       (= (g3r-test-o2-equal-foreign
+            native-optimizer foreign-native-optimizer) 1))
+(define registered-equal-state (o2-public-optimizer-state optimizer))
+(define registered-equal-native
+  (vector-ref
+    (o2-require-live-state 'g3r-save-o2-adopt registered-equal-state) 1))
+(check "M3 roster matches same-owner O2 entries"
+       (= (g3r-test-roster-match native-model native-optimizer) 1))
+(check "foreign M3 roster cannot authorize original O2"
+       (= (g3r-test-roster-match foreign-native-model native-optimizer) 0))
+(check "foreign M3 hold rejects without publication"
+       (null? (g3r-test-hold-begin foreign-native-model native-optimizer)))
+(check "wrong-kind M3 owner rejects without publication"
+       (null? (g3r-test-hold-begin native-optimizer native-optimizer)))
+(define hold-a (g3r-test-hold-begin native-model native-optimizer))
+(check "native hold starts on one registered optimizer" (not (null? hold-a)))
+(define issued-a (g3r-test-hold-issue hold-a))
+(check "native hold issues one pointer" (not (null? issued-a)))
+(expect-error "registered equal-bit native state is a duplicate" 'invalid-argument
+              'g3r-save-o2-adopt
+  (lambda () (o2-g3r-adopt-issued-state-internal
+               optimizer hold-a registered-equal-native)))
+(define before-unregistered-states (g3r-test-o2-live-count 1))
+(define unregistered-foreign-native
+  (o2-native-optimizer-state-snapshot foreign-native-optimizer))
+(check "foreign equal-bit native snapshot is live and unregistered"
+       (and (not (null? unregistered-foreign-native))
+            (not (eq? issued-a unregistered-foreign-native))
+            (not (o2-g3r-issued-native-registered? unregistered-foreign-native))))
+(expect-error "unregistered equal-bit foreign native state is not issued"
+              'invalid-state 'g3r-save-o2-adopt
+  (lambda () (o2-g3r-adopt-issued-state-internal
+               optimizer hold-a unregistered-foreign-native)))
+(check "foreign native snapshot releases after rejection"
+       (and (= (o2-native-optimizer-state-release unregistered-foreign-native) 0)
+            (= (g3r-test-o2-live-count 1) before-unregistered-states)))
+(expect-error "forged optimizer shell is rejected at registry admission"
+              'invalid-argument
+              'g3r-save-o2-adopt
+  (lambda () (o2-g3r-adopt-issued-state-internal
+               (vector 'foreign) hold-a issued-a)))
+(check "capture held original and issued control bytes"
+       (= (g3r-test-o2-held-bytes 0 hold-a native-optimizer issued-a) 1))
+(define before-foreign-states (g3r-test-o2-live-count 1))
+(define before-foreign-clones (g3r-test-o2-live-count 3))
+(expect-error "registered equal-bit foreign optimizer is rejected"
+              'invalid-state 'g3r-save-o2-adopt
+  (lambda () (o2-g3r-adopt-issued-state-internal
+               foreign-optimizer hold-a issued-a)))
+(check "foreign rejection preserves held original and issued bytes"
+       (= (g3r-test-o2-held-bytes 1 hold-a native-optimizer issued-a) 1))
+(check "foreign rejection publishes no O2 shell or native state"
+       (and (not (o2-g3r-issued-native-registered? issued-a))
+            (= (g3r-test-o2-live-count 1) before-foreign-states)
+            (= (g3r-test-o2-live-count 3) before-foreign-clones)))
+(check "foreign rejection preserves both optimizer values and hold"
+       (and (= (g3r-test-o2-equal-foreign
+                 native-optimizer foreign-native-optimizer) 1)
+            (= (g3r-test-hold-match hold-a issued-a) 0)))
+(define adopted-a
+  (o2-g3r-adopt-issued-state-internal optimizer hold-a issued-a))
+(check "same-owner adoption retries after foreign rejection"
+       (eq? issued-a
+            (vector-ref (o2-require-live-state
+                          'g3r-save-o2-adopt adopted-a) 1)))
+(check "registered native pointer is exactly issued pointer"
+       (eq? issued-a
+            (vector-ref (o2-require-live-state
+                          'g3r-save-o2-adopt adopted-a) 1)))
+(expect-error "duplicate issued pointer cannot enter registry" 'invalid-argument
+              'g3r-save-o2-adopt
+  (lambda () (o2-g3r-adopt-issued-state-internal
+               optimizer hold-a issued-a)))
+(check "issued match survives adoption"
+       (= (g3r-test-hold-match hold-a issued-a) 0))
+(define p1-a (module-state-dict model))
+(define mismatch
+  (vector c2-training-state-compose-tag p1-a adopted-a (controls 1)
+          'checkpoint-load #f))
+(expect-error "counter mismatch rejects before claim" 'shape-mismatch
+              'checkpoint-load
+  (lambda () (c2-training-state-compose-internal mismatch)))
+(check "preclaim failure preserves both request owners"
+       (and (eq? (vector-ref mismatch 1) p1-a)
+            (eq? (vector-ref mismatch 2) adopted-a)
+            (eq? (vector-ref mismatch 5) #f)))
+(check "preclaim P1 release" (state-dict-release! p1-a))
+(check "coordinator-side issued state release"
+       (o2-public-optimizer-state-release! adopted-a))
+(check "first hold ends once" (= (g3r-test-hold-end hold-a) 0))
+(check "registered equal state releases"
+       (o2-public-optimizer-state-release! registered-equal-state))
+(check "preclaim path leaves no live state or clone"
+       (and (= (g3r-test-o2-live-count 1) 0)
+            (= (g3r-test-o2-live-count 2) 0)
+            (= (g3r-test-o2-live-count 3) 0)))
+
+(define hold-b (g3r-test-hold-begin native-model native-optimizer))
+(define issued-b (g3r-test-hold-issue hold-b))
+(check "same optimizer can issue after drained failure"
+       (and (not (null? hold-b)) (not (null? issued-b))
+            (not (eq? issued-a issued-b))))
+(define adopted-b
+  (o2-g3r-adopt-issued-state-internal optimizer hold-b issued-b))
+(define wrong-alias-p1 (module-state-dict foreign-model))
+(expect-error "P1 alias mismatch rejects before claim" 'shape-mismatch
+              'checkpoint-load
+  (lambda () (compose wrong-alias-p1 adopted-b 0)))
+(check "alias negative P1 releases" (state-dict-release! wrong-alias-p1))
+(define p1-b (module-state-dict model))
+(define saved-claim c2-training-state-claim-o2!)
+(set! c2-training-state-claim-o2!
+  (lambda (state token)
+    (c2-training-state-fail 'internal 'checkpoint-load
+                            "injected second claim failure")))
+(expect-error "second claim failure rolls P1 back" 'internal
+              'checkpoint-load
+  (lambda () (compose p1-b adopted-b 0)))
+(set! c2-training-state-claim-o2! saved-claim)
+(check "failed O2 claim preserves both live component owners"
+       (and (pair? (state-dict-paths p1-b))
+            (vector? (o2-require-live-state
+                       'g3r-save-o2-adopt adopted-b))
+            (= (g3r-test-hold-match hold-b issued-b) 0)))
+(define transfer (compose p1-b adopted-b 0))
+(define owner (vector-ref transfer 5))
+(check "C2 transfer consumes both component slots"
+       (and owner (eq? (vector-ref transfer 1) #f)
+            (eq? (vector-ref transfer 2) #f)))
+(check "C2 owns exact adopted shell and issued pointer"
+       (let ((state (c2-training-state-find owner)))
+         (and (eq? (vector-ref state 2) adopted-b)
+              (eq? (vector-ref (o2-find-identity adopted-b o2-states) 1)
+                   issued-b))))
+(expect-error "public O2 release cannot consume C2 claim" 'invalid-state
+              'optimizer-state-release!
+  (lambda () (o2-public-optimizer-state-release! adopted-b)))
+(check "issued match remains before hold drain"
+       (= (g3r-test-hold-match hold-b issued-b) 0))
+(check "second hold ends once" (= (g3r-test-hold-end hold-b) 0))
+(define policy
+  (c2-persistence-policy-internal 1048576 1048576 1048576 64 'cpu))
+(expect-error "invalid SAVE path preserves claimed owner"
+              'invalid-argument 'checkpoint-save!
+  (lambda () (c2-checkpoint-save-internal! owner "" policy '())))
+(check "joint same-owner C2 SAVE"
+       (c2-checkpoint-save-internal!
+         owner (string-append output-root "/joint.c2") policy '()))
+(check "C2 alone retires issued state after claim"
+       (c2-training-state-release-internal! owner 'trainer-state-release!))
+(check "C2 retirement is idempotent"
+       (c2-training-state-release-internal! owner 'trainer-state-release!))
+(check "retired issued pointer is no longer live"
+       (not (= (g3r-test-hold-match hold-b issued-b) 0)))
+(check "postclaim path leaves no live state or clone"
+       (and (= (g3r-test-o2-live-count 1) 0)
+            (= (g3r-test-o2-live-count 2) 0)
+            (= (g3r-test-o2-live-count 3) 0)))
+
+(define hold-c (g3r-test-hold-begin native-model native-optimizer))
+(define issued-c (g3r-test-hold-issue hold-c))
+(define adopted-c
+  (o2-g3r-adopt-issued-state-internal optimizer hold-c issued-c))
+(define retry (compose (module-state-dict model) adopted-c 0))
+(check "same-owner retry composes fresh exact issued pointer"
+       (and (vector-ref retry 5) (not (eq? issued-b issued-c))
+            (eq? (vector-ref (o2-find-identity adopted-c o2-states) 1)
+                 issued-c)))
+(check "retry hold ends" (= (g3r-test-hold-end hold-c) 0))
+(check "retry C2 owner releases"
+       (c2-training-state-release-internal!
+         (vector-ref retry 5) 'trainer-state-release!))
+(check "retry leaves no live state, borrow, or clone"
+       (and (= (g3r-test-o2-live-count 1) 0)
+            (= (g3r-test-o2-live-count 2) 0)
+            (= (g3r-test-o2-live-count 3) 0)))
+(display "M3 O2 C2 JOINT PROVIDER PASS: ")
+(display checks)
+(display " checks")
+(newline)

@@ -1841,6 +1841,22 @@ owners before copying any output. Source and focused native checks are pending
 independent review; the roster alone does not pin value/gradient bits, hold O2,
 or authorize a G3-R SAVE capture.
 
+The isolated [O2 issued-state to C2 provider source gate](g3/G3_R_O2_ISSUED_C2_PROVIDER_GATE.md)
+adds a feature-gated fourteen-entry same-owner O2 hold, allocation provenance,
+one issued-state adoption wrapper, and a noninstalled C2 claim/rollback fixture.
+The [M3-issued joint source gate](g3/G3_R_M3_O2_C2_JOINT_SOURCE_GATE.md)
+authenticates the O2 roster against the sealed M3 owner and binds M3T's
+T1-named token predicate to the existing T2 predicate before its fixture loads.
+This source-only union ports candidate `20e86b192c23e59149f47c1bb0814918b19b41d7`
+onto exact main `6f6ef9ada4c586573d495c40283ad4b9410d0957`. The already
+identical M3 roster blobs are retained from main, as are
+the F32 bit witness, G3/A2 17-word held owner, C2 operational changes, and
+current predecessor pins. The earlier one-use B joint AOT failed before
+runtime on the missing predicate; the source successor and separately released
+C executor have no accepted joint runtime result here. Independent exact-union
+review, supported C runtime, combined M3/F32/G3/A2/O2/P1/C2 fault cuts, and
+SAVE file-pair/restore gates remain open. This is no continuation admission.
+
 The [current-main private provider union gate](g3/G3_R_CURRENT_PRIVATE_UNION_GATE.md)
 now has one independently accepted supported-host C run on exact source
 `c0f747dc`, accepted C7b fe9/f31 toolchain, and eight compiled Eshkol checks.
