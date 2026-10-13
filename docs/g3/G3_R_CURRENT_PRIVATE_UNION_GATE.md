@@ -28,10 +28,11 @@ failure checks pending-history rejection. The existing focused M3 and G3
 tests separately cover graph/logits and workspace roster aliases; this
 aggregate does not replace them.
 
-The heavy `--run` mode requires an explicit one-use ROOT release and
-`G3R_PRIVATE_UNION_RUNTIME_RELEASE=1`. It applies the supported-host, pinned
-Eshkol source/binary, and compiler-provenance gates before compiling and
-running the Eshkol caller. The released C executor ran this exact gate on
+The reviewed one-use heavy `--run` execution used executor C, which
+verifies ROOT release bytes before setting `G3R_PRIVATE_UNION_RUNTIME_RELEASE=1`.
+The shell gate checks that variable and then applies the supported-host,
+pinned Eshkol source/binary, and compiler-provenance gates before compiling
+and running the Eshkol caller. The released C executor ran this exact gate on
 source `c0f747dc29a19890f96afee78c2cea675f5e27f3` with the independently
 accepted C7b fe9/f31 toolchain. Its sealed guest stdout is
 `G3-R current private union PASS: checks=8`, stderr is empty, and the host
