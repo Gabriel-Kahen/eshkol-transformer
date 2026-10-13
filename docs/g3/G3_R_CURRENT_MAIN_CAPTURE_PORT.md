@@ -1,8 +1,10 @@
 # G3-R current-main same-owner capture source port
 
-**Source-only candidate; integration HOLD.** This branch starts at remote main
-`6f6ef9ada4c586573d495c40283ad4b9410d0957` (PR #204). It ports the
-private D2, M3/X1, G3 creation, training-control and O2 adoption roots and
+**Source-only candidate; integration HOLD.** This branch now includes post-E3
+remote main `bd81379c2141ff28ffa847ce579a658d98d78b85` (PR #205),
+merged over its original `6f6ef9ada4c586573d495c40283ad4b9410d0957`
+(PR #204) base. It ports the private D2, M3/X1, G3 creation,
+training-control and O2 adoption roots and
 the fixed diagnostic-C2 capture caller. The nine existing-file deltas add
 private lineage/control routes and O2 held-state hooks. Current-main G3-T,
 F32, and M3 owner implementations remain authoritative. There is no public
@@ -42,10 +44,11 @@ to a later consumer. The closure list under
 recursive Eshkol sources; the adjacent current-main SHA-256 manifest pins the
 reviewed bytes.
 
+The post-E3 source/closure/tests at `929199c` passed independent review.
 Offline source predicates, native O2 hold cuts, header/offset compile checks,
-and native syntax checks are preparation evidence only. Independent source
-review, real compiled Eshkol post-adoption longjmp and partial O2 claim cuts,
-current-main native union, full supported toolchain, and ownership/failure
-matrix remain required before integration. The old-base post-adoption fixture
+and native syntax checks remain preparation evidence only. Real compiled
+Eshkol post-adoption longjmp and partial O2 claim cuts, current-main native
+union, full supported toolchain, and ownership/failure matrix remain required
+before integration. The old-base post-adoption fixture
 cannot certify this branch because its ancestry and source hashes are pinned
 to the divergent 18-word implementation.
