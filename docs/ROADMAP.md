@@ -1859,6 +1859,13 @@ gates pass and source-mutation negatives remain rejected. The affected hosted
 suites are G3-S sampling, G3-N forward, native numerics and model composition.
 Independent review and fresh supported full-suite CI remain integration gates;
 preprocessing is not object/runtime equivalence or SAVE admission.
+The [committed snapshot-to-record adapter contract](g3/G3_R_SNAPSHOT_CODEC_ADAPTER_CONTRACT.md)
+maps the existing seven-field same-owner snapshot into the 288-byte G3RCV1
+encoder without introducing an upstream API. The current-main combined snapshot
+gate is accepted; adapter implementation and its exact-head runtime gate remain.
+Its immutable C2 digest is test-authenticated fixture data, not SAVE or pair
+authority. File-pair I/O, live restore, replay and public continuation remain
+separate gates.
 
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
