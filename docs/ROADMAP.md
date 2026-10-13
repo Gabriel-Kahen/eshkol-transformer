@@ -1797,6 +1797,14 @@ partitions and EOS rely on controlled native tests. Current-main combined-tree
 build and runtime validation remain gates before admission. No SAVE writer,
 file-pair publication, restore, replay or resumed continuation is provided.
 
+The [committed snapshot-to-record adapter contract](g3/G3_R_SNAPSHOT_CODEC_ADAPTER_CONTRACT.md)
+maps the existing seven-field same-owner snapshot into the existing 288-byte
+G3RCV1 encoder without introducing an upstream API. It is documentation and
+test design only, pending the current-main combined snapshot runtime gate.
+Its immutable C2 digest is test-authenticated fixture data, not SAVE or pair
+authority. File-pair I/O, live restore, replay and public continuation remain
+separate gates.
+
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
 diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use
