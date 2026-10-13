@@ -2256,6 +2256,15 @@ the repaired CLI3 source comparison that accounts for current main's D1
 `corpus validate` dispatch. Independent source review, supported compilation,
 runtime artifact repinning, O0/O2 failure matrices, and admission remain open.
 
+The [versioned TR3 lease failure successor gate](TR3_LEASE_FAILURE_SUCCESSOR_V3.md)
+is source-staged against exact current-main 23-slot union `1a58fc8c` /
+tree `c528ee6d`. Its source preflight pins the reviewed union, contract, failure
+fixture, and exact external de0b249 production-OFF runner/archive identities.
+The O0/O2 failure and malformed matrices have not run on this union. The
+external runtime artifacts were not supplied for this rebaseline; source-only
+checks cannot admit compiled behavior. Independent review, supported O0/O2
+runtime evidence, and admission remain open.
+
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
 names would return newly owned authenticated CPU f32 `[1,256]` kind-3 shells,
