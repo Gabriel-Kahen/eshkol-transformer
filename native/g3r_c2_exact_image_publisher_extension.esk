@@ -67,22 +67,29 @@
 
 (define (g3r-c2-exact-image-pair-publish-internal! state c2-path
                                                     companion-path policy fields)
-  (if (not (and (c1-valid-file-path? c2-path)
-                (c1-valid-file-path? companion-path)
-                (not (string=? c2-path companion-path))))
+  (if (not (and (string? c2-path) (string? companion-path)))
       (g3r-pair-publish-fail 'invalid-argument
                              "G3-R pair paths must be distinct valid paths"))
-  ;; Early rejection is useful to callers; the native no-overwrite writes
-  ;; remain the authority if the directory changes after this check.
-  (if (or (file-exists? c2-path) (file-exists? companion-path))
-      (g3r-pair-publish-fail 'invalid-state
-                             "G3-R pair target already exists"))
-  (let* ((copied (g3r-pair-publish-fields-copy fields))
-         (limits (c2-policy-limits-internal 'checkpoint-save! policy))
-         (subpolicy (c2-policy-c1-subpolicy-internal 'checkpoint-save! policy)))
-    (c2-save-with-owner-borrow
-      state limits (c2-save-effective-model-policy limits subpolicy)
-      c2-save-stage-components-internal
-      (lambda (bytes)
-        (g3r-pair-publish-encoded-image-internal!
-          bytes c2-path companion-path copied)))))
+  ;; Strings are mutable. Own both names before any check that can yield or
+  ;; any C2 build/callback; only these copies reach the native writers.
+  (let ((c2-target (string-copy c2-path))
+        (companion-target (string-copy companion-path)))
+    (if (not (and (c1-valid-file-path? c2-target)
+                  (c1-valid-file-path? companion-target)
+                  (not (string=? c2-target companion-target))))
+        (g3r-pair-publish-fail 'invalid-argument
+                               "G3-R pair paths must be distinct valid paths"))
+    ;; Early rejection is useful to callers; the native no-overwrite writes
+    ;; remain the authority if the directory changes after this check.
+    (if (or (file-exists? c2-target) (file-exists? companion-target))
+        (g3r-pair-publish-fail 'invalid-state
+                               "G3-R pair target already exists"))
+    (let* ((copied (g3r-pair-publish-fields-copy fields))
+           (limits (c2-policy-limits-internal 'checkpoint-save! policy))
+           (subpolicy (c2-policy-c1-subpolicy-internal 'checkpoint-save! policy)))
+      (c2-save-with-owner-borrow
+        state limits (c2-save-effective-model-policy limits subpolicy)
+        c2-save-stage-components-internal
+        (lambda (bytes)
+          (g3r-pair-publish-encoded-image-internal!
+            bytes c2-target companion-target copied))))))

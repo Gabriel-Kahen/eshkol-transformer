@@ -1801,7 +1801,9 @@ The [private exact-C2-image pair publisher candidate](g3/G3_R_C2_EXACT_IMAGE_PUB
 uses C2's synchronous validated-image callback to hash the exact bytes that
 its no-overwrite writer receives. It validates the G3RCV1 record before
 publishing the C2 image and then its companion. Focused source and mutation
-checks pass; compiled aggregate, filesystem failpoints and same-owner capture
+checks pass. A successor copies both mutable path strings before preflight;
+the source-execution harness mutates each original during the C2 callback and
+retains both prevalidated names. Compiled aggregate, filesystem failpoints and same-owner capture
 integration remain pending. Its detached G3 input fields are unauthenticated,
 so no G3-R SAVE or continuation is admitted.
 

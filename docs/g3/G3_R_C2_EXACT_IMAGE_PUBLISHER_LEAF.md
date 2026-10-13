@@ -14,7 +14,10 @@ companion-path, policy, fields)` accepts an existing detached C2 owner and
 seven detached G3 fields: policy[6], RNG[4], ordered raw history, prompt,
 generated and manual counts, and raw V256 T1 fingerprint[96]. It validates
 and copies those fields and both distinct paths before C2 borrowing or file
-I/O. An existing path rejects early; the native no-overwrite writer remains
+I/O. Both path snapshots are made before path validation or existence checks;
+the callback captures only those snapshots, so mutation of either original
+string cannot redirect its write. An existing path rejects early; the native
+no-overwrite writer remains
 the final authority if the directory changes. Encoding, record round trip,
 or C2 measurement failure leaves both target paths untouched. A first-write
 failure never attempts the companion. A companion failure can leave a complete
@@ -39,6 +42,11 @@ with this leaf or with PR #203.
 
 The focused source test checks exact-image hash, encode/decode-before-write,
 no-overwrite order, both failure stops, preflight order and caller-field
-copying. Nine source mutations must fail the gate. This is source evidence;
+copying. A development-only Scheme harness executes the actual publisher
+source with controlled C2/record/I/O callbacks: it mutates each original path
+after preflight and proves both writes retain the copied names, then checks
+encode/decode and first/second-write failure cuts. Its two path-copy mutants
+causally fail. This is source execution with stubs, not compiled Eshkol or
+native filesystem evidence;
 compiled C2/G3 aggregate, filesystem failpoints, repeat/sanitizer runs,
 same-owner capture and fresh-process LOAD remain required acceptance gates.
