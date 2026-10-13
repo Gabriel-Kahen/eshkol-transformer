@@ -147,6 +147,24 @@ overlay_generator = (root / additions[8]).read_text()
 assert "T1_SHA =" in overlay_generator and "COMPOSER_SHA =" in overlay_generator
 assert "result.replace(insertion, \"\", 1) != source" in overlay_generator
 assert "ambiguous/wrong-marker negative control escaped" in overlay_generator
+assert "LEASE_MARKER =" in overlay_generator
+assert "LEASE_INSERT =" in overlay_generator
+assert "composer-held-lease-overlay.esk" in overlay_generator
+assert "lease-i1" in overlay_generator and "lease-a2" in overlay_generator
+assert "result.replace(insertion, \"\", 1) != source" in overlay_generator
+assert "et_g3c4_p2g2_composer_test_lease_rejected_v1" in native_fixture
+assert "ET_I64_TENSOR_CODE_ACTIVE_BORROW" in native_fixture
+assert "ET_KERNEL_CODE_PROVIDER_REJECTED" in native_fixture
+assert "composer_lease_cache_snapshot" in native_fixture
+assert "composer_lease_pending_zero(pending, kind)" in native_fixture
+assert "composer_lease_i1, &view, &error" in native_fixture
+assert "composer_lease_calls != 2" in native_fixture
+assert "--wrap=et_g3c4_private_call_abort_v1" in runner
+assert "(overlay-lease-end" in overlay_generator
+assert "native #f kind) -1" in overlay_generator
+for root_name in ("terminal-head", "terminal-original-head", "record-head",
+                  "protected-head", "prefix-head"):
+    assert overlay_generator.count(root_name) == 2, root_name
 assert "decode-first decode-second" in runner
 assert "test \"$exit_status\" -eq 134" in runner
 assert "cmp \"$evidence/$mode-parity-original-run.stdout\"" in runner

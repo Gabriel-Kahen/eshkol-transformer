@@ -187,6 +187,193 @@ int64_t et_g3c4_p2g2_composer_test_clone_count_v1(int64_t state) {
 static int composer_overlay_active, composer_first_success;
 static int composer_second_success, composer_zero_marker;
 static et_g3c4_output_internal *composer_overlay_pending;
+/* A test-only holder spans a rejected abort inside the original m3-call. */
+static et_g3c4_context_internal *composer_lease_context;
+static et_g3c4_output_internal *composer_lease_output;
+static et_i64_tensor *composer_lease_ids;
+static et_a2_kv_cache *composer_lease_cache;
+static et_a2_kv_cache_transaction *composer_lease_transaction;
+static et_i64_tensor_borrow *composer_lease_i1;
+static et_a2_kv_cache_transaction_view *composer_lease_a2;
+static int64_t composer_lease_rng[4];
+static int composer_lease_kind, composer_lease_phase, composer_lease_calls;
+static int64_t composer_lease_first_status, composer_lease_second_status;
+static et_g3c4_error_state_internal composer_lease_first_error;
+static uint32_t composer_lease_frame_state;
+static int64_t composer_lease_frame_position, composer_lease_candidate;
+typedef struct composer_lease_cache_image {
+  unsigned char keys[64], values[64], lengths[8], keep[4];
+} composer_lease_cache_image;
+static composer_lease_cache_image composer_lease_image;
+
+static int composer_lease_pending_zero(
+    et_g3c4_output_internal *pending, int64_t kind) {
+  const et_kernel_tensor_view_v1 *view = NULL;
+  et_i64_tensor_error error;
+  if (kind == 2) return coordinator_pending_zero(pending);
+  if (kind != 1 || composer_lease_i1 == NULL ||
+      et_i64_tensor_borrow_view_v1(
+          composer_lease_i1, &view, &error) != 0) return 0;
+  return view != NULL && view->rank == 1u && view->shape != NULL &&
+         view->shape[0] == 2u && view->byte_length == 16u &&
+         view->data != NULL &&
+         memcmp(view->data, (const int64_t[2]){0, 0}, 16u) == 0;
+}
+
+static int composer_lease_cache_snapshot(
+    et_a2_kv_cache_transaction *transaction,
+    et_a2_kv_cache_transaction_view *held,
+    composer_lease_cache_image *image) {
+  et_a2_kv_cache_transaction_view *temporary = NULL;
+  const et_kernel_tensor_view_v1 *keys = NULL, *values = NULL;
+  const et_kernel_tensor_view_v1 *lengths = NULL, *keep = NULL;
+  et_kernel_error error;
+  et_a2_kv_cache_transaction_view *view = held;
+  int valid;
+  if (view == NULL && et_a2_kv_cache_transaction_view_begin_v1(
+          transaction, 0u, &temporary, &error) != 0) return -1;
+  if (view == NULL) view = temporary;
+  valid = et_a2_kv_cache_transaction_view_tensors_v1(
+      view, &keys, &values, &lengths, &keep, &error) == 0 &&
+      keys != NULL && values != NULL && lengths != NULL && keep != NULL &&
+      keys->data != NULL && values->data != NULL &&
+      lengths->data != NULL && keep->data != NULL &&
+      keys->byte_length == sizeof(image->keys) &&
+      values->byte_length == sizeof(image->values) &&
+      lengths->byte_length == sizeof(image->lengths) &&
+      keep->byte_length == sizeof(image->keep);
+  if (valid) {
+    memcpy(image->keys, keys->data, sizeof(image->keys));
+    memcpy(image->values, values->data, sizeof(image->values));
+    memcpy(image->lengths, lengths->data, sizeof(image->lengths));
+    memcpy(image->keep, keep->data, sizeof(image->keep));
+  }
+  if (temporary != NULL &&
+      et_a2_kv_cache_transaction_view_end_v1(&temporary, &error) != 0)
+    return -1;
+  return valid ? 0 : -1;
+}
+
+int64_t __real_et_g3c4_private_call_abort_v1(void *);
+int64_t __wrap_et_g3c4_private_call_abort_v1(void *candidate) {
+  int64_t result = __real_et_g3c4_private_call_abort_v1(candidate);
+  if (composer_lease_phase && candidate == composer_lease_context) {
+    composer_lease_calls++;
+    if (composer_lease_calls == 1) {
+      composer_lease_first_status = result;
+      composer_lease_first_error = et_g3c4_error_snapshot_internal();
+    } else if (composer_lease_calls == 2) {
+      composer_lease_second_status = result;
+    }
+  }
+  return result;
+}
+
+int64_t et_g3c4_p2g2_composer_test_lease_begin_v1(
+    void *context_candidate, void *output_candidate, int64_t kind) {
+  et_g3c4_context_internal *context;
+  et_g3c4_output_internal *output = NULL;
+  et_i64_tensor_error i1_error;
+  et_kernel_error a2_error;
+  if (composer_lease_phase || (kind != 1 && kind != 2) ||
+      output_candidate == NULL) return -1;
+  context = et_g3c4_admit_active_call(context_candidate);
+  if (context == NULL ||
+      et_g3c4_pending_output_lookup(context, &output) != 0 ||
+      output == NULL || output != output_candidate || output->ids == NULL ||
+      context->token_frame_state != ET_G3C4_TOKEN_FRAME_READY ||
+      context->token_frame_transaction == NULL ||
+      !coordinator_owner_unchanged()) return -1;
+  if (kind == 1) {
+    if (et_i64_tensor_borrow_begin_v1(
+          output->ids, &composer_lease_i1, &i1_error) != 0) return -1;
+  } else if (et_a2_kv_cache_transaction_view_begin_v1(
+                 context->token_frame_transaction, 0u,
+                 &composer_lease_a2, &a2_error) != 0) return -1;
+  if (composer_lease_cache_snapshot(context->token_frame_transaction,
+          composer_lease_a2, &composer_lease_image) != 0) abort();
+  composer_lease_context = context;
+  composer_lease_output = output;
+  composer_lease_ids = output->ids;
+  composer_lease_cache = context->cache;
+  composer_lease_transaction = context->token_frame_transaction;
+  composer_lease_frame_state = context->token_frame_state;
+  composer_lease_frame_position = context->token_frame_position;
+  composer_lease_candidate = context->token_frame_candidate;
+  memcpy(composer_lease_rng, context->generator_rng_words,
+         sizeof(composer_lease_rng));
+  composer_lease_kind = (int)kind;
+  composer_lease_calls = 0;
+  composer_lease_first_status = composer_lease_second_status = -1;
+  composer_lease_phase = 1;
+  return 0;
+}
+
+int64_t et_g3c4_p2g2_composer_test_lease_rejected_v1(
+    void *context_candidate, void *output_candidate, int64_t kind) {
+  et_g3c4_output_internal *pending = NULL;
+  et_g3c4_context_internal *context = composer_lease_context;
+  const int expected_domain = kind == 1 ? ET_G3C4_DOMAIN_I1 : ET_G3C4_DOMAIN_K1;
+  const int expected_category = kind == 1 ?
+      ET_I64_TENSOR_ERROR_INVALID_STATE : ET_KERNEL_ERROR_INVALID_ARGUMENT;
+  const int expected_code = kind == 1 ?
+      ET_I64_TENSOR_CODE_ACTIVE_BORROW : ET_KERNEL_CODE_PROVIDER_REJECTED;
+  composer_lease_cache_image current_image;
+  if (composer_lease_phase != 1 || composer_lease_kind != kind ||
+      context_candidate != context || output_candidate != composer_lease_output ||
+      composer_lease_calls != 1 ||
+      composer_lease_first_status != expected_category ||
+      composer_lease_first_error.domain != expected_domain ||
+      composer_lease_first_error.category != expected_category ||
+      composer_lease_first_error.code != expected_code ||
+      (kind == 1 && composer_lease_i1 == NULL) ||
+      (kind == 2 && composer_lease_a2 == NULL) ||
+      et_g3c4_admit_active_call(context_candidate) != context ||
+      et_g3c4_pending_output_lookup(context, &pending) != 0 ||
+      pending != composer_lease_output || pending->ids != composer_lease_ids ||
+      pending->transport.state != 0u ||
+      !composer_lease_pending_zero(pending, kind) ||
+      context->cache != composer_lease_cache ||
+      context->token_frame_transaction != composer_lease_transaction ||
+      context->token_frame_state != composer_lease_frame_state ||
+      context->token_frame_position != composer_lease_frame_position ||
+      context->token_frame_candidate != composer_lease_candidate ||
+      memcmp(context->generator_rng_words, composer_lease_rng,
+             sizeof(composer_lease_rng)) != 0 ||
+      composer_lease_cache_snapshot(composer_lease_transaction,
+          composer_lease_a2, &current_image) != 0 ||
+      memcmp(&current_image, &composer_lease_image,
+             sizeof(current_image)) != 0 ||
+      !coordinator_owner_unchanged()) return -1;
+  return 0;
+}
+
+int64_t et_g3c4_p2g2_composer_test_lease_end_v1(
+    void *context_candidate, void *output_candidate, int64_t kind) {
+  et_i64_tensor_error i1_error;
+  et_kernel_error a2_error;
+  if (composer_lease_phase != 1 || composer_lease_kind != kind ||
+      context_candidate != composer_lease_context ||
+      output_candidate != composer_lease_output ||
+      et_g3c4_p2g2_composer_test_lease_rejected_v1(
+          context_candidate, output_candidate, kind) != 0) return -1;
+  if (kind == 1) {
+    if (et_i64_tensor_borrow_end_v1(&composer_lease_i1, &i1_error) != 0)
+      return -1;
+  } else if (et_a2_kv_cache_transaction_view_end_v1(
+                 &composer_lease_a2, &a2_error) != 0) return -1;
+  composer_lease_phase = 2;
+  return 0;
+}
+
+int64_t et_g3c4_p2g2_composer_test_lease_after_v1(int64_t kind) {
+  if (composer_lease_phase != 2 || composer_lease_kind != kind ||
+      composer_lease_calls != 2 || composer_lease_second_status != 0 ||
+      composer_lease_i1 != NULL || composer_lease_a2 != NULL)
+    return -1;
+  composer_lease_phase = 0;
+  return 0;
+}
 int64_t et_g3c4_p2g2_composer_test_overlay_mark_v1(
     void *context, int64_t prompt0, int64_t prompt1) {
   composer_overlay_active = 0;

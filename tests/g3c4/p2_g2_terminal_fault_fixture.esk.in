@@ -13,6 +13,19 @@
   (guard (caught (#t caught))
     (g3c4-fail 'invalid-state 'terminal-postzero-cut
                "test-only postzero cut")))
+(define terminal-lease-mode '@MODE@)
+(define terminal-lease-condition
+  (guard (caught (#t caught))
+    (g3c4-fail 'invalid-state 'terminal-lease-cut
+               "test-only held lease cut")))
+(extern i64 overlay-lease-begin ptr ptr i64
+        :real et_g3c4_p2g2_composer_test_lease_begin_v1)
+(extern i64 overlay-lease-rejected ptr ptr i64
+        :real et_g3c4_p2g2_composer_test_lease_rejected_v1)
+(extern i64 overlay-lease-end ptr ptr i64
+        :real et_g3c4_p2g2_composer_test_lease_end_v1)
+(extern i64 overlay-lease-after i64
+        :real et_g3c4_p2g2_composer_test_lease_after_v1)
 (load @T1_SOURCE@)
 (load "g3c4_output_envelope_extension.esk")
 (load "g3c4_p2g2_ownership_extension.esk")
@@ -104,9 +117,14 @@
                     (null? (vector-ref g3c4-p2g2-terminal-originals 0))))
         (if (eq? mode 'precommit)
             (check (= (overlay-after native 2) 0))
-            (check (and (eq? caught terminal-decode-condition)
-                        (= (vector-ref terminal-decode-cut 0) @ORDINAL@)
-                        (= (overlay-after native @ORDINAL@) 0))))
+            (if (or (eq? mode 'lease-i1) (eq? mode 'lease-a2))
+                (check (and (eq? caught terminal-lease-condition)
+                            (= (overlay-lease-after
+                                 (if (eq? mode 'lease-i1) 1 2)) 0)
+                            (= (overlay-after native 2) 0)))
+                (check (and (eq? caught terminal-decode-condition)
+                            (= (vector-ref terminal-decode-cut 0) @ORDINAL@)
+                            (= (overlay-after native @ORDINAL@) 0)))))
         (check (g3c4-generator-close-internal! generator))
         (check (generation-tensor-release-internal! prompt))
         (display "OVERLAY_ABORT ")

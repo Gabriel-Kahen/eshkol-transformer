@@ -3091,7 +3091,20 @@ publication, public G2 and continuation remain pending.
   `g3c4-p2g2-eshkol-terminal-composer-4e07c9f-fe9-f31-20261003-prepared-f/`.
   The active pre-tail abort path still fail-stops if a genuine native I1/A2
   lease rejects abort; in-region release/retry coverage is unresolved and
-  remains a contract acceptance blocker.
+  remains a contract acceptance blocker on the published composer tree.
+  The current-main diagnostic composition carries the exact-source test-only
+  overlay from `f31ec2f` for genuine owner-held pending I1 and READY A2
+  lease rejection, preservation of all five anchor/record heads, holder
+  release, and retry within the same `m3-call`. Focused source controls pass;
+  its compiled normal/sanitizer gate has not run. The production zero-return
+  tail and fixed two-argument entry are unchanged.
+  The [production held-lease audit](g3/G3_C4_P2_G2_HELD_LEASE_PRODUCTION_HOLD.md)
+  confirms that this entry has no accepted cooperative holder/release
+  capability inside its live `m3-call`. Genuine release needs the holder's
+  captured I1/A2 pointer; the test shim supplies one only for diagnostic G2
+  READY/P3 cases. An upstream ownership contract or a source-proved narrowing
+  of the held-lease clause is required before claiming production retry or
+  running the compiled close gate.
 
 ## Wave 4 — practical pretraining and performance
 

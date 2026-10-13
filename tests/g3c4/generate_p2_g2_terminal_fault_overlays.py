@@ -15,12 +15,64 @@ COMPOSER_SHA = "e1b6fb68a083bc450b4fee414ce9c4be9ecea09a9e8af0243dd94910b1474ccf
 T1_MARKER = ("                      (bytevector-u8-set!\n"
              "                        raw 0 (bytevector-u8-ref staging 0))")
 COMPOSER_MARKER = "                  (vector-set! barrier 0 #t)\n"
+LEASE_MARKER = ("                (g3c4-p2g2-terminal-precommit-check\n"
+                "                  call input input-entry native-input terminal count id0 id1\n"
+                "                  operation)\n")
 T1_INSERT = ("                      (vector-set! terminal-decode-cut 0\n"
              "                        (+ 1 (vector-ref terminal-decode-cut 0)))\n"
              "                      (if (= (vector-ref terminal-decode-cut 0)\n"
              "                             (vector-ref terminal-decode-cut 1))\n"
              "                          (raise terminal-decode-condition))\n")
 COMPOSER_INSERT = "                  (raise terminal-postzero-condition)\n"
+LEASE_INSERT = ("                (if (or (eq? terminal-lease-mode 'lease-i1)\n"
+                "                        (eq? terminal-lease-mode 'lease-a2))\n"
+                "                    (let ((kind (if (eq? terminal-lease-mode\n"
+                "                                         'lease-i1) 1 2))\n"
+                "                          (native-output (vector-ref output 3))\n"
+                "                          (rejected #f)\n"
+                "                          (terminal-head\n"
+                "                            (vector-ref g3c4-p2g2-terminal-anchors 0))\n"
+                "                          (terminal-original-head\n"
+                "                            (vector-ref g3c4-p2g2-terminal-originals 0))\n"
+                "                          (record-head\n"
+                "                            (vector-ref g3c4-p2g2-protected-records 0))\n"
+                "                          (protected-head\n"
+                "                            (vector-ref g3c4-p2g2-protected-anchors 0))\n"
+                "                          (prefix-head\n"
+                "                            (vector-ref g3c4-p2g2-prefix-input-anchors 0)))\n"
+                "                      (if (not (and (= count 2)\n"
+                "                                    (= (overlay-lease-begin\n"
+                "                                         native native-output kind) 0)))\n"
+                "                          (exit 1))\n"
+                "                      (guard (caught (#t (set! rejected caught)))\n"
+                "                        (g3c4-p2g2-terminal-abort-clean!\n"
+                "                          call terminal))\n"
+                "                      (if (not (and (transformer-error? rejected)\n"
+                "                                    (eq? terminal-head\n"
+                "                                         (vector-ref g3c4-p2g2-terminal-anchors 0))\n"
+                "                                    (eq? terminal-original-head\n"
+                "                                         (vector-ref g3c4-p2g2-terminal-originals 0))\n"
+                "                                    (eq? record-head\n"
+                "                                         (vector-ref g3c4-p2g2-protected-records 0))\n"
+                "                                    (eq? protected-head\n"
+                "                                         (vector-ref g3c4-p2g2-protected-anchors 0))\n"
+                "                                    (eq? prefix-head\n"
+                "                                         (vector-ref g3c4-p2g2-prefix-input-anchors 0))\n"
+                "                                    (eq? (g3c4-p2g2-terminal-active-check\n"
+                "                                           call input input-entry native-input\n"
+                "                                           terminal operation)\n"
+                "                                         record)\n"
+                "                                    (eq? (vector-ref ledger 4) output)\n"
+                "                                    (= (overlay-lease-rejected\n"
+                "                                         native native-output kind) 0)\n"
+                "                                    (= (overlay-lease-end\n"
+                "                                         native #f kind) -1)\n"
+                "                                    (= (overlay-lease-rejected\n"
+                "                                         native native-output kind) 0)\n"
+                "                                    (= (overlay-lease-end\n"
+                "                                         native native-output kind) 0)))\n"
+                "                          (exit 1))\n"
+                "                      (raise terminal-lease-condition)))\n")
 
 
 def digest(data: bytes) -> str:
@@ -63,6 +115,9 @@ def main(destination: Path) -> None:
         (composer + COMPOSER_MARKER, COMPOSER_MARKER, COMPOSER_INSERT, True),
         (composer.replace(COMPOSER_MARKER, "wrong marker", 1),
          COMPOSER_MARKER, COMPOSER_INSERT, True),
+        (composer + LEASE_MARKER, LEASE_MARKER, LEASE_INSERT, True),
+        (composer.replace(LEASE_MARKER, "wrong marker", 1),
+         LEASE_MARKER, LEASE_INSERT, True),
     ):
         try:
             insert_exact(bad, marker, insertion, after)
@@ -73,11 +128,14 @@ def main(destination: Path) -> None:
     t1_overlay = insert_exact(t1, T1_MARKER, T1_INSERT, False)
     composer_overlay = insert_exact(
         composer, COMPOSER_MARKER, COMPOSER_INSERT, True)
+    lease_overlay = insert_exact(composer, LEASE_MARKER, LEASE_INSERT, True)
     destination.mkdir(parents=True, exist_ok=False)
     t1_path = destination / "t1-decode-overlay.esk"
     composer_path = destination / "composer-postzero-overlay.esk"
+    lease_path = destination / "composer-held-lease-overlay.esk"
     t1_path.write_text(t1_overlay)
     composer_path.write_text(composer_overlay)
+    lease_path.write_text(lease_overlay)
     template = TEMPLATE.read_text()
     variants = (
         ("parity-original", "parity", 0, T1, COMPOSER),
@@ -87,8 +145,10 @@ def main(destination: Path) -> None:
         ("decode-second", "second", 2, t1_path, COMPOSER),
         ("postzero", "postzero", 0, T1, composer_path),
         ("precommit", "precommit", 0, T1, COMPOSER),
+        ("lease-i1", "lease-i1", 0, T1, lease_path),
+        ("lease-a2", "lease-a2", 0, T1, lease_path),
     )
-    created = [t1_path, composer_path]
+    created = [t1_path, composer_path, lease_path]
     for name, mode, ordinal, t1_file, composer_file in variants:
         path = destination / f"{name}.esk"
         path.write_text(fixture(template, mode, ordinal, t1_file, composer_file))
@@ -96,7 +156,7 @@ def main(destination: Path) -> None:
     (destination / "SHA256SUMS").write_text("".join(
         f"{digest(path.read_bytes())}  {path.name}\n" for path in created))
     print("G3-C4 terminal exact-source fault overlays PASS: "
-          "two markers, four rejection controls, seven disposable fixtures")
+          "three markers, six rejection controls, nine disposable fixtures")
 
 
 if __name__ == "__main__":
