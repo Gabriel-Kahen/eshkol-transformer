@@ -99,7 +99,7 @@ obligations, not implemented here.
 ## Required next gates
 
 1. The current-history native G3/A2 hold has independent source/tests
-   acceptance (`/tmp/g3r-held-57a8-independent-review-20261013-a/SHA256SUMS-REVIEW`,
+   acceptance (`/home/gabe/.codex/evidence/eshkol-transformer/g3r-held-57a8-independent-review-20261013-a/SHA256SUMS-REVIEW`,
    manifest SHA-256 `da6b77bfe5227713e55c01da40a8213ce6622ee29e30cbf5adca54efbc74557c`).
    The private F32/M3/G3 source union is also accepted with integration HOLD
    (`g3r-current-main-57a8-union-independent-review-20261013-a/SHA256SUMS-REVIEW`,
