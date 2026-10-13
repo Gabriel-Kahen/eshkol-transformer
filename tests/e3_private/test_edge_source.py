@@ -24,6 +24,7 @@ class EdgeSourceTests(unittest.TestCase):
             "'edge-zero-weight-rejection", "'edge-tail-success", "'edge-cursor",
             "'edge-native-owners", "'edge-modes", "'edge-model-gradient",
             "'edge-rng", "'edge-close", "(source-code 12)",
+            "(= (e3-test-u32-ref (vector-ref destinations 3)) 1065353216)",
         ):
             self.assertIn(assertion, edge)
         self.assertNotIn("logit", edge)
@@ -43,6 +44,7 @@ class EdgeSourceTests(unittest.TestCase):
         for marker in ("normal-a normal-b poisoned-a sanitized",
                        "tests/e3_private/edge_runtime.esk",
                        "tests.e3_horizon.edge_generate",
+                       "tests.e3_horizon.edge_accuracy",
                        "e3_retention_verify_sanitizer_imports"):
             self.assertIn(marker, runner)
         self.assertNotIn("n5_runtime.esk", runner)

@@ -1001,8 +1001,10 @@ An isolated [private E3 edge-gate source candidate](e3/E3_EDGE_PRIVATE_GATE.md)
 adds authentic empty, singleton, entry-EOS and padded one-token-tail D1/D2
 cases to that noninstalled retention aggregate. The zero-row paths require
 stage-12 `invalid-state` and byte-atomic six outputs; the real padded tail
-requires three active tokens and two batches. Independent D2 cursor/row
-fixtures, source/unit/shell checks and a proposed normal/poison/sanitizer
+requires three active tokens, two batches and exact accuracy one from the
+independent seed-1729 M3 all-correct selection proof. Independent D2 cursor/row
+fixtures, a fourth-output mutation control, source/unit/shell checks and a
+proposed normal/poison/sanitizer
 runner are staged. Independent review and the compiled supported result remain
 pending; this does not close §9 or replace the separate N5 8,192/8,193 gate.
 The test-only retention driver now snapshots all 14 parameter value and gradient

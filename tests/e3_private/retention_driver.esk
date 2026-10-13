@@ -385,7 +385,8 @@
                  (> (e3-test-u32-ref (vector-ref destinations 0)) 0)
                  (< (e3-test-u32-ref (vector-ref destinations 0)) 2139095040)
                  (> (e3-test-u32-ref (vector-ref destinations 2)) 0)
-                 (< (e3-test-u32-ref (vector-ref destinations 2)) 2139095040)))
+                 (< (e3-test-u32-ref (vector-ref destinations 2)) 2139095040)
+                 (= (e3-test-u32-ref (vector-ref destinations 3)) 1065353216)))
           (e3-test-retention-check 'edge-zero-weight-rejection
             (and (transformer-error? outcome)
                  (eq? (transformer-error-category outcome) 'invalid-state)
@@ -412,7 +413,8 @@
                       (m3t-public-model-initializer model))))
       (e3-test-retention-check 'edge-close
         (d2-token-dataset-close! dataset))
-      (vector 'e3-edge-result-v1 case cursor))))
+      (vector 'e3-edge-result-v1 case cursor
+              (e3-test-u32-ref (vector-ref destinations 3))))))
 
 (define (e3-test-retention-run phase horizon present? corpus-path)
   (cond ((eq? phase 'prepare)

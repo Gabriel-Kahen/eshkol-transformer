@@ -17,8 +17,8 @@ class EdgeCorpusTests(unittest.TestCase):
             "singleton": (),
             "entry-eos": (((3, 197), (197, 0), (True, True)),),
             "one-token-tail": (
-                ((3, 197), (197, 0), (True, True)),
-                ((0, 0), (255, 0), (True, False)),
+                ((3, 14), (14, 31), (True, True)),
+                ((31, 0), (14, 0), (True, False)),
             ),
         }
         with tempfile.TemporaryDirectory() as temporary:

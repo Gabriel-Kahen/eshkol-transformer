@@ -150,25 +150,8 @@ for profile in normal-a normal-b poisoned-a sanitized; do
       >"${out}/${profile}.stdout" 2>"${out}/${profile}.stderr"
   grep -Fx 'E3-EDGE-PRIVATE-PASS cases=4 zero-weight=3 one-token-tail=1' \
     "${out}/${profile}.stdout" >/dev/null || die "edge ${profile} did not pass"
-  python3 -B - "${out}/oracle.tsv" "${out}/${profile}.stdout" <<'PY'
-from pathlib import Path
-import sys
-
-oracle = {}
-for row in Path(sys.argv[1]).read_text().splitlines():
-    case, cursor, emitted = row.split("\t")
-    if case in oracle:
-        raise SystemExit("duplicate edge oracle case")
-    oracle[case] = cursor
-observed = Path(sys.argv[2]).read_text().splitlines()
-cases = ("empty", "singleton", "entry-eos", "one-token-tail")
-if set(oracle) != set(cases):
-    raise SystemExit("edge oracle case set differs")
-expected = [f"E3-EDGE-CURSOR {case} {oracle[case]}" for case in cases] + [
-    "E3-EDGE-PRIVATE-PASS cases=4 zero-weight=3 one-token-tail=1"]
-if observed != expected:
-    raise SystemExit("edge compiled D2 cursor differs from independent reference")
-PY
+  python3 -B -m tests.e3_horizon.edge_accuracy \
+    --oracle "${out}/oracle.tsv" --stdout "${out}/${profile}.stdout"
   [[ ! -s "${out}/${profile}.stderr" ]] || \
     die "edge ${profile} emitted runtime diagnostics"
   grep -Eq '^elapsed_seconds=[0-9.]+ peak_rss_kib=[1-9][0-9]*$' \
