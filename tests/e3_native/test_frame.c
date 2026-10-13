@@ -1,7 +1,18 @@
+#include "eshkol_transformer/kernel_abi.h"
+
+int32_t et_e3_test_observed_runtime_discover_v1(
+    et_kernel_provider_resolver_v1 resolver, void *context,
+    et_kernel_runtime **runtime_output, et_kernel_error *error);
+void et_e3_test_observed_runtime_destroy_v1(et_kernel_runtime *runtime);
+
 #define ET_E3_TESTING 1
 #define et_f32_tensor_destroy_v1 et_e3_test_observed_tensor_destroy_v1
+#define et_kernel_runtime_discover et_e3_test_observed_runtime_discover_v1
+#define et_kernel_runtime_destroy et_e3_test_observed_runtime_destroy_v1
 #include "../../src/eshkol_transformer/e3_frame.c"
 #undef et_f32_tensor_destroy_v1
+#undef et_kernel_runtime_discover
+#undef et_kernel_runtime_destroy
 
 #include <math.h>
 #include <stdio.h>
@@ -11,6 +22,46 @@ int32_t et_f32_tensor_destroy_v1(et_f32_tensor **tensor,
 
 static et_f32_tensor *destroyed_tensors[64];
 static size_t destroyed_tensor_count;
+static et_kernel_runtime *live_runtimes[64];
+static size_t live_runtime_count, runtime_creates, runtime_destroys;
+
+int32_t et_e3_test_observed_runtime_discover_v1(
+    et_kernel_provider_resolver_v1 resolver, void *context,
+    et_kernel_runtime **runtime_output, et_kernel_error *error) {
+  const int32_t rc = et_kernel_runtime_discover(
+      resolver, context, runtime_output, error);
+  if (rc == 0) {
+    if (!runtime_output || !*runtime_output ||
+        live_runtime_count == sizeof(live_runtimes) / sizeof(live_runtimes[0])) {
+      fprintf(stderr, "runtime track create capacity %zu\n", live_runtime_count);
+      abort();
+    }
+    for (size_t i = 0; i < live_runtime_count; ++i)
+      if (live_runtimes[i] == *runtime_output) {
+        fprintf(stderr, "runtime track duplicate\n");
+        abort();
+      }
+    live_runtimes[live_runtime_count++] = *runtime_output;
+    ++runtime_creates;
+  }
+  return rc;
+}
+
+void et_e3_test_observed_runtime_destroy_v1(et_kernel_runtime *runtime) {
+  if (runtime) {
+    size_t index = 0;
+    while (index < live_runtime_count && live_runtimes[index] != runtime)
+      ++index;
+    if (index == live_runtime_count) {
+      fprintf(stderr, "runtime track unknown destroy %p count %zu\n",
+              (void *)runtime, live_runtime_count);
+      abort();
+    }
+    live_runtimes[index] = live_runtimes[--live_runtime_count];
+    ++runtime_destroys;
+  }
+  et_kernel_runtime_destroy(runtime);
+}
 
 int32_t et_e3_test_observed_tensor_destroy_v1(
     et_f32_tensor **tensor, et_f32_tensor_error *error) {
@@ -358,11 +409,26 @@ static void test_discovery_bind_rollback(owner *model,
     et_e3_frame_internal *registry_before = e3_registry;
     et_f32_test_live_counts_v1 before = {.struct_size = sizeof(before)};
     et_f32_test_live_counts_snapshot_v1(&before);
+    const size_t creates_before = runtime_creates;
+    const size_t destroys_before = runtime_destroys;
+    const size_t live_before = live_runtime_count;
+    et_kernel_runtime *baseline_runtimes[64];
+    memcpy(baseline_runtimes, live_runtimes,
+           live_before * sizeof(baseline_runtimes[0]));
 
     e3_test_discovery_fail_index = selected;
     CHECK(et_e3_private_frame_create_v1(model, destination[0], destination[1],
         destination[2], destination[3]) == NULL);
     CHECK(e3_test_discovery_fail_index == -1);
+    CHECK(runtime_creates == creates_before + (size_t)selected);
+    CHECK(runtime_destroys == destroys_before + (size_t)selected);
+    CHECK(live_runtime_count == live_before);
+    for (size_t i = 0; i < live_before; ++i) {
+      size_t found = 0;
+      while (found < live_runtime_count &&
+             live_runtimes[found] != baseline_runtimes[i]) ++found;
+      CHECK(found < live_runtime_count);
+    }
     CHECK(e3_last_domain == 1 &&
           e3_last_category == ET_KERNEL_ERROR_UNSUPPORTED &&
           e3_last_code == ET_KERNEL_CODE_SYMBOL_MISSING);
@@ -395,6 +461,9 @@ static void test_discovery_bind_rollback(owner *model,
         model, destination[0], destination[1], destination[2], destination[3]);
     CHECK(retry != NULL && e3_registry == retry &&
           retry->next == registry_before);
+    CHECK(runtime_creates == creates_before + (size_t)selected + 6 &&
+          runtime_destroys == destroys_before + (size_t)selected &&
+          live_runtime_count == live_before + 6);
     OK(et_e3_private_frame_check_v1(retry));
     OK(et_e3_private_acquire_v1(retry));
     stage(retry, 3, 197, 197, 0, 1, 1);
@@ -404,6 +473,8 @@ static void test_discovery_bind_rollback(owner *model,
     et_e3_private_frame_destroy_v1(retry);
     CHECK(e3_registry == retry && retry->lifecycle == 2 &&
           retry->next == registry_before && model->active == NULL);
+    CHECK(runtime_destroys == destroys_before + (size_t)selected + 6 &&
+          live_runtime_count == live_before);
     et_f32_test_live_counts_snapshot_v1(&after);
     CHECK(after.tensors == before.tensors &&
           after.parameters == before.parameters &&

@@ -1073,6 +1073,15 @@ E3 setup mapping, unchanged destination/model/registry and live owner/claim
 counts after each failed bind, then binds a fresh frame and runs a genuine
 forward batch. This remains native source evidence; the compiled-private R1
 admission matrix and supported-host validation are still pending.
+Independent review found that deleting failed-bind K1 runtime destruction
+survived the initial native checks because f32 live-owner counts exclude K1.
+The successor source-composed test observes genuine K1 discovery/destruction,
+keeps the model's preexisting runtime identities as baseline, and requires
+exactly `i` discoveries and `i` releases for failed bind index `i` (0–5),
+then six discoveries/releases for a fresh retry. Its native gate removes only
+the failed-bind destroy call in a copied source variant and requires the
+runtime-release assertion to fail. This closes that native proof gap only;
+supported-host and compiled-private R1 admission remain open.
 The bounded development-only [genuine three-batch M2 sum-order witness](../tests/e3_reference/sum_order_witness_v1.json)
 uses packed raw-V256 D2 rows and the registered seed-1729 M3/f32 CE reference.
 Its first witness in a 64-candidate SHA-256 domain has serial numerator
