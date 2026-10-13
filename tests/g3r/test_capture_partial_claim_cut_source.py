@@ -9,7 +9,8 @@ from unittest.mock import patch
 from tests.c2.test_handler_order import parse
 from tests.g3r import prepare_capture_partial_claim_cut as preparation
 from tests.g3r.prepare_capture_partial_claim_cut import (
-    ROOT, BASE, TREE, EXTRA, BYTE_FINGERPRINT, git, verify, verify_file, prepare,
+    ROOT, BASE, TREE, EXTRA, TOOLS, BYTE_FINGERPRINT, git, verify,
+    verify_file, prepare,
 )
 
 
@@ -68,7 +69,7 @@ class PartialClaimSource(unittest.TestCase):
             self.assertTrue((output / "corpus/manifest.etm").is_file())
             self.assertIn(BYTE_FINGERPRINT.encode(),
                           (output / "corpus/manifest.etm").read_bytes())
-            for name in EXTRA:
+            for name in (*EXTRA, *TOOLS):
                 path = output / "source" / name
                 self.assertEqual(path.read_bytes(), (ROOT / name).read_bytes())
                 self.assertEqual(path.stat().st_mode & 0o222, 0)

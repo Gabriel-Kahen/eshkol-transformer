@@ -132,7 +132,7 @@ def prepare(output: Path, expected_head: str) -> None:
     output.mkdir(parents=True)
     staged = output / "source"
     copied: list[Path] = []
-    for name in (*paths, *EXTRA):
+    for name in (*paths, *EXTRA, *TOOLS):
         target = staged / name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(committed_bytes(expected_head, name))
