@@ -717,6 +717,10 @@ bytes as two uninterrupted updates. Separate-process evaluation and generation
 must return identical JSON from those C2 images; reads and wrong-config,
 wrong-tokenizer, and corrupt-image rejections must preserve the checkpoint bytes.
 This extension is source-only until its compiled and hosted gates pass.
+The test-only G3-G entry is narrower than production's D1 `corpus validate`
+facade; its source contract compares the shared dispatch path and checks the
+production D1 prefix separately. This fixture correction does not extend CLI3
+runtime acceptance.
 The test is registered after the production generate gate in the required
 CLI3 CI suite. The accepted J result (`/home/gabe/.codex/evidence/eshkol-transformer/cli3-union-j-result-independent-review-20261012-a/VERDICT.md`)
 validates both compiled gates on exact source `18693b4` (tree `3a7f76e5`)

@@ -198,13 +198,34 @@ class SingleRegistryContract(unittest.TestCase):
                          'tests/cli3_generate/generate_extension.esk')
         entry = (FIXTURE / 'cli.esk').read_text()
         original = (ROOT / 'src/eshkol_transformer/cli.esk').read_text()
+        self.assertIn('(require transformer.data)', original)
+        self.assertIn('(require transformer.cli3_corpus_validate)', original)
+        self.assertIn('(cli3-corpus-validate-command arguments)', original)
+        self.assertLess(original.index('(cli3-corpus-validate-command arguments)'),
+                        original.index('(cli3-dispatch (vector arguments) output)'))
+
+        # The test aggregate intentionally omits the production D1 facade.
+        # Compare the shared fallback, status mapping and dispatch path only.
+        def fallback_and_status(source):
+            start = source.index('(extern i64 cli3-static-fallback')
+            end = source.index('\n\n', source.index('(define (cli3-exit status)'))
+            return source[start:end]
+
+        self.assertEqual(fallback_and_status(entry),
+                         fallback_and_status(original))
+
+        def dispatch_path(source):
+            start = source.index('(guard\n')
+            end = source.index('(cli3-exit status)', start) + len('(cli3-exit status)')
+            body = source[start:end]
+            body = body.replace('cli3-generate-dispatch', 'cli3-dispatch')
+            body = body.replace('(vector (cdr (command-line)))', '(vector arguments)')
+            return [line.strip() for line in body.splitlines()]
+
         self.assertEqual(
-            entry.replace('Test-installed CLI3/G3-G successor entry; the package owns dispatch.',
-                          'Thin Eshkol-native executable entry. The CLI3 aggregate owns all dispatch.')
-                 .replace('cli3-generate-dispatch', 'cli3-dispatch')
-                 .replace('et_e1b_public_cli3_generate_dispatch_v1',
-                          'et_e1b_public_cli3_dispatch_v1'),
-            original)
+            dispatch_path(entry), dispatch_path(original))
+        self.assertIn('et_e1b_public_cli3_generate_dispatch_v1', entry)
+        self.assertIn('et_e1b_public_cli3_dispatch_v1', original)
 
 
 if __name__ == '__main__':
