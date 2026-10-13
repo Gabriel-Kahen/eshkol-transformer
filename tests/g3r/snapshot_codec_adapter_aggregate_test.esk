@@ -225,6 +225,26 @@
        (= 2 (bytevector-length
               (vector-ref (g3r-committed-save-snapshot!
                             generator (destination)) 2))))
+(define model-lease-input (g3t-checked-m3t-input-create))
+(check "model lease input prepared"
+       (g3t-checked-m3t-input-copy! model-lease-input '(17 19)))
+(define model-lease-workspace (g3t-checked-m3t-workspace-create model))
+(check "model lease acquired"
+       (g3t-checked-m3t-workspace-begin!
+         model-lease-workspace model-lease-input))
+(reject-unchanged "held model lease rejected" generator)
+(reject-record "adapter held model lease rejected" generator)
+(check "model lease released"
+       (g3t-checked-m3t-workspace-reset! model-lease-workspace))
+(define after-model-lease (record-destination))
+(check "adapter retry after model lease release"
+       (and (eq? (g3r-snapshot-record-encode!
+                   generator after-model-lease digest) after-model-lease)
+            (g3r-bytes=? after-model-lease 0 record 0 288)))
+(check "model lease owners cleaned"
+       (and (g3t-checked-m3t-workspace-release! model-lease-workspace)
+            (g3t-checked-m3t-input-release! model-lease-input)))
+
 (check "native manual call acquired" (= 0 (g3r-native-call-acquire native 0)))
 (reject-unchanged "busy native generator rejected" generator)
 (reject-record "adapter busy native generator rejected" generator)
