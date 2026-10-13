@@ -34,10 +34,30 @@
 (define (expect-error label category operation thunk)
   (check label
     (guard (raised
-             (#t (and (transformer-error? raised)
-                      (eq? category (transformer-error-category raised))
-                      (eq? operation (transformer-error-operation raised)))))
-      (thunk) #f)))
+             (#t (if (transformer-error? raised)
+                     (let ((actual-category (transformer-error-category raised))
+                           (actual-operation (transformer-error-operation raised)))
+                       (if (and (eq? category actual-category)
+                                (eq? operation actual-operation))
+                           #t
+                           (begin
+                             (display "O2 ISSUED C2 error mismatch: expected ")
+                             (display category) (display " / ")
+                             (display operation) (display ", got ")
+                             (display actual-category) (display " / ")
+                             (display actual-operation) (newline)
+                             #f)))
+                     (begin
+                       (display "O2 ISSUED C2 error mismatch: expected ")
+                       (display category) (display " / ")
+                       (display operation)
+                       (display ", got non-transformer error") (newline)
+                       #f))))
+      (thunk)
+      (display "O2 ISSUED C2 error mismatch: expected ")
+      (display category) (display " / ") (display operation)
+      (display ", got no error") (newline)
+      #f)))
 
 (define names
   '("p00" "p01" "p02" "p03" "p04" "p05" "p06"
@@ -126,17 +146,32 @@
 (check "foreign optimizer is registered, distinct, and bit-equal"
        (= (g3r-test-o2-equal-foreign
             native-optimizer foreign-native-optimizer) 1))
-(define equal-state (o2-public-optimizer-state optimizer))
-(define equal-native
-  (vector-ref (o2-require-live-state 'g3r-save-o2-adopt equal-state) 1))
+(define registered-equal-state (o2-public-optimizer-state optimizer))
+(define registered-equal-native
+  (vector-ref
+    (o2-require-live-state 'g3r-save-o2-adopt registered-equal-state) 1))
 (define hold-a (g3r-test-hold-begin native-optimizer))
 (check "native hold starts on one registered optimizer" (not (null? hold-a)))
 (define issued-a (g3r-test-hold-issue hold-a))
 (check "native hold issues one pointer" (not (null? issued-a)))
-(expect-error "equal-bit foreign native state is not issued" 'invalid-state
+(expect-error "registered equal-bit native state is a duplicate" 'invalid-argument
               'g3r-save-o2-adopt
   (lambda () (o2-g3r-adopt-issued-state-internal
-               optimizer hold-a equal-native)))
+               optimizer hold-a registered-equal-native)))
+(define before-unregistered-states (g3r-test-o2-live-count 1))
+(define unregistered-foreign-native
+  (o2-native-optimizer-state-snapshot foreign-native-optimizer))
+(check "foreign equal-bit native snapshot is live and unregistered"
+       (and (not (null? unregistered-foreign-native))
+            (not (eq? issued-a unregistered-foreign-native))
+            (not (o2-g3r-issued-native-registered? unregistered-foreign-native))))
+(expect-error "unregistered equal-bit foreign native state is not issued"
+              'invalid-state 'g3r-save-o2-adopt
+  (lambda () (o2-g3r-adopt-issued-state-internal
+               optimizer hold-a unregistered-foreign-native)))
+(check "foreign native snapshot releases after rejection"
+       (and (= (o2-native-optimizer-state-release unregistered-foreign-native) 0)
+            (= (g3r-test-o2-live-count 1) before-unregistered-states)))
 (expect-error "forged optimizer shell is rejected at registry admission"
               'invalid-argument
               'g3r-save-o2-adopt
@@ -191,7 +226,8 @@
 (check "coordinator-side issued state release"
        (o2-public-optimizer-state-release! adopted-a))
 (check "first hold ends once" (= (g3r-test-hold-end hold-a) 0))
-(check "foreign equal state releases" (o2-public-optimizer-state-release! equal-state))
+(check "registered equal state releases"
+       (o2-public-optimizer-state-release! registered-equal-state))
 (check "preclaim path leaves no live state or clone"
        (and (= (g3r-test-o2-live-count 1) 0)
             (= (g3r-test-o2-live-count 2) 0)
