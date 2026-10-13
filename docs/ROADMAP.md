@@ -2042,7 +2042,17 @@ sanitizer profiles; this closes only the private snapshot prerequisite. No SAVE 
 file-pair publication, restore, replay or resumed continuation is provided.
 
 The reviewed [current-history held SAVE proposal](g3/G3_R_CURRENT_HISTORY_HELD_SAVE_CONTRACT.md)
-now accompanies merged main. Its first bounded native prerequisite,
+now accompanies merged main.
+[The detached C2 SAVE image/SHA receipt source leaf](../native/c2_save_image_receipt_root.esk)
+is being developed on `codex/c2-save-image-sha-receipt-bd813`. It adds a
+feature-private immutable image owner and receipt wrapper. The shared SAVE
+borrow helper now accepts an optional measured-image cap; its existing public
+caller passes `#f`, while the receipt rejects images over 16 MiB before
+destination allocation. Native and static source checks pass locally. Compiled
+Eshkol behavior, independent review, CI and same-owner G3/M3/O2 pairing remain
+open gates; this leaf does not admit SAVE replay or continuation.
+
+The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
 ports exact value and absent-gradient bit baselines under the existing
 fixed14 model pins. Focused normal/repeat/sanitizer and feature-off checks
