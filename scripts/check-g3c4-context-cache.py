@@ -65,6 +65,7 @@ def step4_context_surface(block):
         "ET_G3C4_GENERATOR_PRIVATE",
         "ET_G3C4_P2_G2_TERMINAL_PRIVATE",
         "ET_G3C4_P2_G2_TERMINAL_IDS_CLONE_PRIVATE",
+        "ET_G3C4_P2_G2_HELD_HOLDER_PRIVATE",
     ):
         block = without_conditional_feature(block, macro)
     return block

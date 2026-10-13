@@ -3192,9 +3192,12 @@ publication, public G2 and continuation remain pending.
   The `codex/p2g2-pr206-source-union-20261013` branch composes that E3 head
   with `205c8960` at `679de9ba`; independent bounded source review passed,
   and a current-main merge-tree check reproduced its exact tree. Focused
-  zero-control, Q0/M3CG and held-holder source checks pass. Two older G3
-  deferred-surface checker tests still fail on `generator_rng` on both
-  `205c8960` and the union; the older terminal-composer gate invokes them.
+  zero-control, Q0/M3CG and held-holder source checks pass. The older G3
+  deferred-surface checkers fail on `generator_rng` on both `205c8960` and
+  the union. A branch-scoped checker repair projects the held-holder guard
+  from the Step 4a/5 scans and passes both static checks plus six focused
+  checker regressions; the older terminal-composer compiled gate has not been
+  rerun with this repair.
   Current-main admission and the supported compiled held-holder gate remain
   held for root pin/resource checks and independent result review. No public
   G2 or continuation acceptance is claimed.
