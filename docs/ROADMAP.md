@@ -3186,14 +3186,18 @@ publication, public G2 and continuation remain pending.
   held the first candidate because its fault preceded the Eshkol HELD state
   and its depfile check mixed Eshkol loads with native/docs sources; the
   successor moves the fault to the HELD witness and checks those closures
-  separately. Successor independent review is pending, so no
-  behavioral admission or public G2 claim follows from this gate preparation.
-  A prospective source composition of the reviewed PR #206 head `ca36a66b`
-  and held-holder head `205c8960` preserves both source lines on a separate
-  branch. Focused zero-control, Q0/M3CG and held-holder source checks pass;
-  two older G3 deferred-surface checker tests still fail on `generator_rng`
-  on the unchanged held-holder head. The compiled gate and current-main
-  admission remain held until PR #206 completes and the union is rechecked.
+  separately. Independent source/tests review accepted the repaired successor
+  at `205c8960`; compiled behavior and public G2 remain unproved.
+  PR #206 merged into main at `c60779bb` with the reviewed `ca36a66b` tree.
+  The `codex/p2g2-pr206-source-union-20261013` branch composes that E3 head
+  with `205c8960` at `679de9ba`; independent bounded source review passed,
+  and a current-main merge-tree check reproduced its exact tree. Focused
+  zero-control, Q0/M3CG and held-holder source checks pass. Two older G3
+  deferred-surface checker tests still fail on `generator_rng` on both
+  `205c8960` and the union; the older terminal-composer gate invokes them.
+  Current-main admission and the supported compiled held-holder gate remain
+  held for root pin/resource checks and independent result review. No public
+  G2 or continuation acceptance is claimed.
 
 ## Wave 4 — practical pretraining and performance
 
