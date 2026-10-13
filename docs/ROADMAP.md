@@ -971,7 +971,7 @@ but failed sanitized correctness during P1 provider registration in module
 initialization, before E3 evaluation. Its generated borrow check read seven
 bytes before a native P1 token when the active-shell guard held a raw pointer.
 The isolated [source diagnosis and repair](e3/E3_L_SANITIZER_DIAGNOSIS.md)
-stores that pointer inside a managed vector; source checks pass, but no new
+stores that pointer inside a managed vector; focused P1 source checks pass, but no new
 compiled or sanitizer execution has run. L remains failed evidence and the
 first-evaluation detector and E3 §9 verdicts remain open.
 

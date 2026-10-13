@@ -29,6 +29,12 @@ sanitized P1/E3 package, including same-shell and distinct-shell reentrancy,
 before replaying a fresh one-use E3 detector. The original L run remains a
 failed prerequisite and supplies no first-evaluation or §9 acceptance.
 
+Source-only generation parity, E3-P1 structure and TR3-P1 structure checks
+pass. The separate prepared-split checker stops on its inherited undefined-
+symbols manifest pin (`1941268a...` expected versus `f40f5090...` actual);
+the manifest and checker are identical at the L base commit. This unrelated
+pre-existing static failure is not evidence for or against the repair.
+
 The host launcher independently reported `unsafe-guest-output`, killed the
 Docker client, and returned 74. Its `output_bytes` traversal catches
 `OSError` and `ValueError` but records only the generic reason, discarding the
