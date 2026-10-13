@@ -1,7 +1,8 @@
 # Held O2 state adoption into C2: source gate
 
-Status: **native owner-match prerequisite and adoption contract only**. This
-leaf adds no coordinator, SAVE pair, Eshkol owner, or file publication. Its
+Status: **native owner-match plus source-private held O2 enrollment prerequisite**.
+The adopter source is not yet loaded into a compiled aggregate. This leaf adds
+no G3/O2 coordinator, C2 claim, SAVE pair, Eshkol owner, or file publication. Its
 native negatives preserve the distinction between a bit-matching O2 state and
 the exact state issued under the original-owner hold.
 
@@ -79,3 +80,30 @@ unchanged on recoverable cuts, and zero publication before all holds drain.
 Then the 17-word G3 snapshot and original tokenizer/cursor/trainer controls
 can be bound to the detached C2 owner and its exact image receipt. No current
 source or test establishes that combined transaction.
+
+## Bounded adopter source leaf
+
+`native/g3r_held_o2_adopter_extension.esk` defines `g3r-held-o2-adopt!` for a
+caller that already owns the live original O2 hold and the registered Scheme
+optimizer. It calls the feature-private C bridge's owner match on the exact
+native pointer in that optimizer record. The helper allocates the Scheme shell,
+state record, registry cons, pointer cell, and ledger before held issue. It
+stores the exact returned pointer in the cell immediately, then checks the
+same pointer through owner match and issued match before publishing the Scheme
+state. The returned ledger retains the hold, original optimizer, native pointer,
+state shell, registry cons, and phase for a future C2 coordinator.
+
+`g3r-held-o2-adopter-release!` releases only an unclaimed issued/enrolled
+state. It uses the O2 bridge's lifecycle-aware status: `0` consumes it; `-2`
+marks it dead while retaining the native provider defect; `-1` proves it is
+still live and leaves its exact ledger rooted for retry; indeterminate status
+fails stop. An exception after issue makes one controlled retry of a proved-live
+release, then fails stop if authority remains live. The original exception is
+re-raised after successful cleanup. The hold remains the coordinator's
+authority and is never released by this helper.
+
+This is a source prerequisite only. The future coordinator must prove the
+original G3/M3/A2 to O2 binding, prepare a P1 clone and controls, transfer the
+ledger's exact shell into C2, reconcile partial claims, release both holds in
+reverse order, and gate receipt I/O. A compiled aggregate/runtime test and
+independent review are required before any held C2 owner is claimed.

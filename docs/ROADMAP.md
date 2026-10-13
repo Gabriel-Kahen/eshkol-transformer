@@ -2107,6 +2107,14 @@ bit-equal snapshot passes `issued_match` but fails `owner_match`. The future
 Scheme adopter still must bind its optimizer shell to that pointer and retain
 the exact state returned by held issue; no original G3/O2 owner binding or
 paired SAVE is established here.
+The source-private `g3r-held-o2-adopt!` prerequisite now binds that exact
+registered Scheme optimizer to the native hold, preallocates its state shell,
+record, registry cons, pointer cell and ledger before issue, and checks the
+exact returned pointer before enrollment. Its preclaim release distinguishes
+LIVE, DEAD-after-defect and indeterminate native lifecycle outcomes. The
+four-mutation source check passes. The helper is not yet linked or runtime
+verified; G3/M3/A2-to-O2 coordinator binding, P1/C2 partial-claim rollback,
+hold release order and receipt gates remain pending.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
