@@ -1007,6 +1007,12 @@ fixtures, a fourth-output mutation control, source/unit/shell checks and a
 proposed normal/poison/sanitizer
 runner are staged. Independent review and the compiled supported result remain
 pending; this does not close §9 or replace the separate N5 8,192/8,193 gate.
+The edge-parent source-suite repair updates two retention-driver digest pins to
+the accepted fourth-output driver and regenerates the private first-evaluation
+mutant mechanically from that same N5/edge baseline. The E3-private, E3-reference
+and horizon source suites pass on this isolated tree. Independent review and
+the compiled private gates remain pending; these source checks do not establish
+edge, mutant or §9 runtime acceptance.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each

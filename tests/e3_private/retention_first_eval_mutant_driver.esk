@@ -350,6 +350,101 @@
               before after growth (vector-ref record 14)
               (vector-ref record 15) (vector-ref record 16)))))
 
+(define (e3-test-edge-outputs frame destinations)
+  (vector (e3-test-u32-ref (vector-ref destinations 0))
+          (e3-test-u32-ref (vector-ref destinations 1))
+          (e3-test-u32-ref (vector-ref destinations 2))
+          (e3-test-u32-ref (vector-ref destinations 3))
+          (e3-counter-ref frame 0) (e3-counter-ref frame 1)))
+
+(define (e3-test-edge-probes=? before after)
+  (and (let loop ((index 0))
+         (if (= index 29) #t
+             (and (if (or (<= index 8) (and (>= index 10) (<= index 12))
+                          (and (>= index 17) (<= index 26)) (= index 28))
+                      (= (vector-ref before index) (vector-ref after index))
+                      #t)
+                  (loop (+ index 1)))))
+       (= (vector-ref after 20) 0)
+       (= (vector-ref after 21) 0)
+       (let ((begins (- (vector-ref after 14) (vector-ref before 14)))
+             (views (- (vector-ref after 15) (vector-ref before 15)))
+             (ends (- (vector-ref after 16) (vector-ref before 16)))
+             (retired (- (vector-ref after 9) (vector-ref before 9)))
+             (bytes (- (vector-ref after 13) (vector-ref before 13))))
+         (and (>= begins 0) (= begins ends) (>= views begins)
+              (= retired ends)
+              (= bytes (* retired (vector-ref before 28)))))))
+
+(define (e3-test-edge-run case corpus-path)
+  (e3-test-retention-check 'edge-scenario
+    (and (or (eq? case 'empty) (eq? case 'singleton)
+             (eq? case 'entry-eos) (eq? case 'one-token-tail))
+         (string? corpus-path) (not (vector-ref e3-test-retention-root 0))))
+  (let* ((fixture (e3-test-fixture))
+         (model (vector-ref fixture 0))
+         (tokenizer (vector-ref fixture 1))
+         (destinations (vector-ref fixture 2))
+         (frame (vector-ref fixture 3))
+         (dataset (d2-token-dataset-open
+                    (e3-test-dataset-config corpus-path #t) tokenizer)))
+    (e3-test-retention-set-mixed! frame)
+    (e3-test-retention-check 'edge-seed-gradient
+      (= (e3-test-seed-gradient
+           (vector-ref (m3t-entry model 'model 'e3-test-run #t) 3)) 0))
+    (if (eq? case 'entry-eos) (e3-test-skip! dataset 1))
+    (let* ((cursor (d2-token-dataset-cursor dataset))
+           (outputs (e3-test-edge-outputs frame destinations))
+           (modes (e3-test-retention-modes frame))
+           (model-image (e3-test-retention-model-snapshot model))
+           (rng (m3t-public-initializer-words
+                  (m3t-public-model-initializer model)))
+           (probes (e3-test-retention-probes))
+           (outcome
+             (with-region ('e3-edge-call 262144)
+               (guard (caught (#t caught))
+                 (e3-evaluate-into! model dataset frame)
+                 #t))))
+      (if (eq? case 'one-token-tail)
+          (e3-test-retention-check 'edge-tail-success
+            (and (eq? outcome #t)
+                 (= (e3-counter-ref frame 0) 3)
+                 (= (e3-counter-ref frame 1) 2)
+                 (= (e3-test-u32-ref (vector-ref destinations 1)) 1077936128)
+                 (> (e3-test-u32-ref (vector-ref destinations 0)) 0)
+                 (< (e3-test-u32-ref (vector-ref destinations 0)) 2139095040)
+                 (> (e3-test-u32-ref (vector-ref destinations 2)) 0)
+                 (< (e3-test-u32-ref (vector-ref destinations 2)) 2139095040)
+                 (= (e3-test-u32-ref (vector-ref destinations 3)) 1065353216)))
+          (e3-test-retention-check 'edge-zero-weight-rejection
+            (and (transformer-error? outcome)
+                 (eq? (transformer-error-category outcome) 'invalid-state)
+                 (eq? (transformer-error-operation outcome)
+                      'e3-evaluate-into!)
+                 (string=? (transformer-error-message outcome)
+                           "evaluation finalization or publication failed")
+                 (equal? (transformer-error-details outcome)
+                   '((source-domain e3-evaluation) (source-code 12)
+                     (source-message
+                       "evaluation finalization or publication failed")))
+                 (= (vector-ref (e3-frame-entry-internal frame) 15) 150)
+                 (equal? outputs (e3-test-edge-outputs frame destinations)))))
+      (e3-test-retention-check 'edge-cursor
+        (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset)))
+      (e3-test-retention-check 'edge-native-owners
+        (e3-test-edge-probes=? probes (e3-test-retention-probes)))
+      (e3-test-retention-check 'edge-modes
+        (e3-test-retention-modes=? frame modes))
+      (e3-test-retention-check 'edge-model-gradient
+        (e3-test-retention-model=? model model-image))
+      (e3-test-retention-check 'edge-rng
+        (equal? rng (m3t-public-initializer-words
+                      (m3t-public-model-initializer model))))
+      (e3-test-retention-check 'edge-close
+        (d2-token-dataset-close! dataset))
+      (vector 'e3-edge-result-v1 case cursor
+              (e3-test-u32-ref (vector-ref destinations 3))))))
+
 (define (e3-test-retention-run phase horizon present? corpus-path mutation)
   (cond ((eq? phase 'prepare)
          (e3-test-retention-prepare horizon present? corpus-path mutation))
@@ -357,6 +452,99 @@
          (e3-test-retention-execute horizon present?))
         ((eq? phase 'report)
          (e3-test-retention-report horizon present?))
+        ((eq? phase 'edge)
+         (e3-test-retention-check 'edge-parameter (eq? present? #f))
+         (e3-test-edge-run horizon corpus-path))
+        ((eq? phase 'n5)
+         (e3-test-retention-check 'n5-scenario
+           (and (= horizon 8192) (eq? present? #f)
+                (vector? corpus-path) (= (vector-length corpus-path) 2)
+                (string? (vector-ref corpus-path 0))
+                (string? (vector-ref corpus-path 1))
+                (not (vector-ref e3-test-retention-root 0))))
+         (let* ((fixture (e3-test-fixture))
+                (model (vector-ref fixture 0))
+                (tokenizer (vector-ref fixture 1))
+                (destinations (vector-ref fixture 2))
+                (frame (vector-ref fixture 3))
+                (pass-dataset
+                  (d2-token-dataset-open
+                    (e3-test-dataset-config (vector-ref corpus-path 0) #t)
+                    tokenizer))
+                (over-dataset
+                  (d2-token-dataset-open
+                    (e3-test-dataset-config (vector-ref corpus-path 1) #t)
+                    tokenizer))
+                (pass-cursor (d2-token-dataset-cursor pass-dataset))
+                (over-cursor (d2-token-dataset-cursor over-dataset)))
+           (e3-test-retention-set-mixed! frame)
+           (e3-test-retention-check 'n5-seed-gradient
+             (= (e3-test-seed-gradient
+                  (vector-ref (m3t-entry model 'model 'e3-test-run #t) 3)) 0))
+           (with-region ('e3-n5-pass 262144)
+             (e3-evaluate-into! model pass-dataset frame))
+           (e3-test-retention-check 'n5-pass-cursor
+             (d2-core-bytes=? pass-cursor
+                               (d2-token-dataset-cursor pass-dataset)))
+           (e3-test-retention-check 'n5-pass-output
+             (and (= (e3-counter-ref frame 0) 16384)
+                  (= (e3-counter-ref frame 1) 8192)
+                  (= (e3-test-u32-ref (vector-ref destinations 1))
+                     1182793728)
+                  (> (e3-test-u32-ref (vector-ref destinations 0)) 0)))
+           (let* ((outputs
+                    (vector (e3-test-u32-ref (vector-ref destinations 0))
+                            (e3-test-u32-ref (vector-ref destinations 1))
+                            (e3-test-u32-ref (vector-ref destinations 2))
+                            (e3-test-u32-ref (vector-ref destinations 3))
+                            (e3-counter-ref frame 0)
+                            (e3-counter-ref frame 1)))
+                  (modes (e3-test-retention-modes frame))
+                  (model-image (e3-test-retention-model-snapshot model))
+                  (rng (m3t-public-initializer-words
+                         (m3t-public-model-initializer model)))
+                  (probes (e3-test-retention-probes))
+                  (failed
+                    (with-region ('e3-n5-one-over 262144)
+                      (guard (caught (#t caught))
+                        (e3-evaluate-into! model over-dataset frame)
+                        #f))))
+             (e3-test-retention-check 'n5-stage2-unsupported
+               (and (transformer-error? failed)
+                    (eq? (transformer-error-category failed) 'unsupported)
+                    (eq? (transformer-error-operation failed)
+                         'e3-evaluate-into!)
+                    (string=? (transformer-error-message failed)
+                              "evaluation dataset preparation failed")
+                    (equal? (transformer-error-details failed)
+                      '((source-domain e3-evaluation) (source-code 2)
+                        (source-message "evaluation dataset preparation failed")))
+                    (= (vector-ref (e3-frame-entry-internal frame) 15) 29)))
+             (e3-test-retention-check 'n5-one-over-cursor
+               (d2-core-bytes=? over-cursor
+                                 (d2-token-dataset-cursor over-dataset)))
+             (e3-test-retention-check 'n5-native-owners
+               (equal? probes (e3-test-retention-probes)))
+             (e3-test-retention-check 'n5-six-outputs
+               (equal? outputs
+                 (vector (e3-test-u32-ref (vector-ref destinations 0))
+                         (e3-test-u32-ref (vector-ref destinations 1))
+                         (e3-test-u32-ref (vector-ref destinations 2))
+                         (e3-test-u32-ref (vector-ref destinations 3))
+                         (e3-counter-ref frame 0)
+                         (e3-counter-ref frame 1))))
+             (e3-test-retention-check 'n5-modes
+               (e3-test-retention-modes=? frame modes))
+             (e3-test-retention-check 'n5-model-gradient
+               (e3-test-retention-model=? model model-image))
+             (e3-test-retention-check 'n5-rng
+               (equal? rng (m3t-public-initializer-words
+                             (m3t-public-model-initializer model))))
+             (e3-test-retention-check 'n5-close-over
+               (d2-token-dataset-close! over-dataset))
+             (e3-test-retention-check 'n5-close-pass
+               (d2-token-dataset-close! pass-dataset))
+             (vector 'e3-n5-result-v1 pass-cursor over-cursor))))
         (else (e3-test-retention-check 'phase #f))))
 
 (define (e3-test-retention-dispatch scenario corpus-path)
