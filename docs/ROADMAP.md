@@ -711,6 +711,16 @@ training and held-out D1 corpora, and a new fixed-profile C2 checkpoint, then
 inspects, evaluates, and generates from that same checkpoint in separate
 processes. It checks exact X1/T1/C2 identities, unchanged checkpoint bytes,
 fixed-profile and cross-config rejection, and corrupt-checkpoint diagnostics.
+The source-only current-main follow-up compares a one-update checkpoint resumed
+for one update with two uninterrupted updates using exact complete C2 bytes.
+Separate-process evaluation and generation must return identical JSON from
+both final images; reads and wrong-config, wrong-tokenizer, and corrupt-image
+rejections must preserve the checkpoint bytes. This port has no compiled or
+hosted acceptance yet.
+The test-only G3-G entry omits production's D1 `corpus validate` facade. Its
+source contract compares the shared fallback and dispatch path, while checking
+the production D1 prefix separately. This fixture correction does not extend
+CLI3 runtime acceptance.
 The test is registered after the production generate gate in the required
 CLI3 CI suite. The accepted J result (`/home/gabe/.codex/evidence/eshkol-transformer/cli3-union-j-result-independent-review-20261012-a/VERDICT.md`)
 validates both compiled gates on exact source `18693b4` (tree `3a7f76e5`)
