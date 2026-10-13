@@ -2067,7 +2067,8 @@ starts from exact remote main `6f6ef9ada4c586573d495c40283ad4b9410d0957`
 and ports the missing G3-R private roots, capture coordinator, and minimal
 lineage/control/O2 hooks. It consumes the accepted 17-word held image and
 rejects the divergent 18-word ledger image. Focused offline source and native
-O2 tests pass; independent source review and real compiled post-adoption,
+O2 tests pass; the prior branch source correction passed independent review.
+The E3-composed exact-head source review and real compiled post-adoption,
 partial-claim, current-main union, and failure gates remain HOLD. The
 private O2 hold/state outputs now reject full or partial error-record overlap
 before owner mutation; focused normal and ASan/UBSan cuts pass 262 checks.
