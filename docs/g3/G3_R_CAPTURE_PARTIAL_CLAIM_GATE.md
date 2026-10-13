@@ -41,3 +41,24 @@ current-main native union and supported compiled runner are approved. No
 compiled behavior, runtime capacity, or integration is claimed. The
 source-only native observer passed local Clang 22 syntax checking; this
 does not substitute for pinned Clang 21/container execution.
+
+## Native input preflight (source-only)
+
+`python3 -m tests.g3r.native_source_contract --root ABSOLUTE_CHECKOUT` requires a
+canonical Git checkout at exactly `5c36a3f4431ce93d2676fb82349a972b513a3ebf`
+(tree `8b7eb1157feda6fa099371abc7df123c18faaa19`), a clean worktree, and
+a read-only filesystem. It compares each listed native TU, nested source, and
+required direct header to that commit's Git bytes and prints sorted SHA-256
+rows. `--source-preflight` performs the same Git-byte checks on a writable
+checkout for development; its result cannot satisfy the builder read-only
+requirement. The current 113-entry Eshkol staging manifest is unchanged.
+
+`tests/g3r/native_source_contract.py` also lists twenty candidate objects and
+their per-object macros. `normalize_depfile` accepts a single Clang `-MMD`
+rule only when its target matches the caller's declared object and every
+non-system dependency is canonical, within the pinned checkout, and equal to
+Git bytes. The source and nested included sources must appear. A future builder
+must recheck root and depfile membership around compilation, record all returned
+hashes, check feature-off and link symbols, and bind them in an independently
+approved receipt. No archive ordering, fe9 executable command, link ABI,
+runtime, or receipt verifier is admitted by this preflight. `--run` stays HOLD.

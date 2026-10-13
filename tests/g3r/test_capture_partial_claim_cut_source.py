@@ -71,6 +71,7 @@ class PartialClaimSource(unittest.TestCase):
             self.assertEqual(len((output / "SOURCE-SHA256SUMS").read_text().splitlines()), 113)
             self.assertEqual(len((output / "expected-eshkol-closure.txt").read_text().splitlines()), 99)
             self.assertNotIn("tests/tr3_lease/runtime_candidate.tsv", TOOLS)
+            self.assertFalse((output / "source/tests/g3r/native_source_contract.py").exists())
             self.assertFalse((output / "source/tests/tr3_lease/runtime_candidate.tsv").exists())
             self.assertTrue((output / "corpus/manifest.etm").is_file())
             self.assertIn(BYTE_FINGERPRINT.encode(),

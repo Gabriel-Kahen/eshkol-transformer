@@ -70,9 +70,14 @@ TOOLS = (
     "toolchain/eshkol.lock",
     FE9_MANIFEST,
 )
-ALLOWED_DELTA = set(EXTRA[2:]) | set(TOOLS[:3]) | {
-    FE9_MANIFEST,
+SOURCE_ONLY = (
+    "tests/g3r/native_source_contract.py",
+    "tests/g3r/test_native_source_contract.py",
     "docs/g3/G3_R_CAPTURE_PARTIAL_CLAIM_GATE.md",
+    "docs/ROADMAP.md",
+)
+ALLOWED_DELTA = set(EXTRA[2:]) | set(TOOLS[:3]) | set(SOURCE_ONLY) | {
+    FE9_MANIFEST,
 }
 
 
@@ -121,7 +126,7 @@ def verify(expected_head: str) -> list[str]:
         raise ValueError("fixture HEAD changes unapproved source paths")
     for name, expected in PINS.items():
         verify_file(name, BASE if name not in ALLOWED_DELTA else head)
-    for name in TOOLS:
+    for name in (*TOOLS, *SOURCE_ONLY):
         verify_file(name, head)
     paths = (ROOT / CLOSURE).read_text().splitlines()
     if len(paths) != 96 or len(set(paths)) != 96 or paths[0] != \
