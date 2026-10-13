@@ -183,7 +183,9 @@ typedef struct et_o2_g3r_save_hold et_o2_g3r_save_hold;
  * spans must be disjoint from each other and registered O2 owner storage.
  * An active O2 or reconstruction builder also returns INVALID_ARGUMENT:
  * its mutable descriptors cannot authenticate owned-array spans. Neither
- * rejection writes an error record. */
+ * rejection writes an error record. The feature requires I2's immutable
+ * owned-span provenance (ET_G3R_CANDIDATE_RETIRE_PRIVATE) in both O2 and I2;
+ * a nonzero F32 query result rejects output/error buffers before mutation. */
 int32_t et_g3r_private_o2_save_begin_v1(
     et_o2_optimizer *optimizer, et_f32_parameter *const parameters[14],
     const void *const identities[14], et_o2_g3r_save_hold **hold,

@@ -1,4 +1,5 @@
 #define ET_G3R_SAME_OWNER_SAVE_PRIVATE 1
+#define ET_G3R_CANDIDATE_RETIRE_PRIVATE 1
 #define ET_O2_TESTING 1
 #define ET_F32_TENSOR_TESTING 1
 #include "../../include/eshkol_transformer/f32_tensor.h"
@@ -74,6 +75,24 @@ int main(void) {
         UINT32_C(0x3f7d70a4), UINT32_C(0x322bcc77), 0, &o2) == 0);
   }
   CHECK(et_o2_optimizer_builder_finish_v1(&builder, &optimizer, &o2) == 0);
+  const et_f32_tensor *live_value = NULL;
+  CHECK(et_f32_parameter_value_tensor_v1(parameters[0], &live_value, &f32) == 0);
+  const float *value_data = et_f32_tensor_test_data_storage_v1(live_value);
+  const float *moment_data =
+      et_f32_tensor_test_data_storage_v1(optimizer->entries[0].exp_avg);
+  CHECK(value_data != NULL && moment_data != NULL);
+  CHECK((uintptr_t)moment_data % _Alignof(et_o2_g3r_save_hold *) == 0u);
+  CHECK(et_f32_tensor_private_owned_span_overlap_v1(
+      value_data, sizeof(et_o2_error_v1)) == 1);
+  CHECK(et_f32_tensor_private_owned_span_overlap_v1(
+      moment_data, sizeof(et_o2_g3r_save_hold *)) == 1);
+  unsigned char value_before[2 * sizeof(float)];
+  unsigned char moment_before[2 * sizeof(float)];
+  /* I2 fixes this private shell at 64 bytes (f32_tensor.c ABI assert). */
+  unsigned char parameter_before[64];
+  memcpy(value_before, value_data, sizeof(value_before));
+  memcpy(moment_before, moment_data, sizeof(moment_before));
+  memcpy(parameter_before, parameters[0], sizeof(parameter_before));
   et_o2_g3r_save_hold *hold = NULL;
   et_o2_optimizer_state *ordinary = NULL;
   et_o2_entry *owned_optimizer_entries = optimizer->entries;
@@ -149,9 +168,18 @@ int main(void) {
   CHECK(et_g3r_private_o2_save_begin_v1(
       optimizer, parameters, identities, &hold,
       (et_o2_error_v1 *)optimizer) == ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_begin_v1(
+      optimizer, parameters, identities, &hold,
+      (et_o2_error_v1 *)parameters[0]) == ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_begin_v1(
+      optimizer, parameters, identities,
+      (et_o2_g3r_save_hold **)(void *)moment_data, &o2) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
   CHECK(hold == NULL && et_o2_g3r_save_tombstones == initial_tombstones &&
         memcmp(optimizer, optimizer_before, sizeof(optimizer_before)) == 0 &&
-        memcmp(optimizer->entries, entries_before, sizeof(entries_before)) == 0);
+        memcmp(optimizer->entries, entries_before, sizeof(entries_before)) == 0 &&
+        memcmp(parameters[0], parameter_before, sizeof(parameter_before)) == 0 &&
+        memcmp(moment_data, moment_before, sizeof(moment_before)) == 0);
   et_o2_test_fail_alloc_after_v1(0);
   CHECK(et_g3r_private_o2_save_begin_v1(
       optimizer, parameters, identities, &hold, &o2) != 0);
@@ -183,6 +211,15 @@ int main(void) {
   CHECK(et_g3r_private_o2_save_begin_v1(
       optimizer, parameters, identities, &hold, &o2) == 0);
   CHECK(hold != NULL && optimizer->busy == 1);
+  CHECK(et_g3r_private_o2_save_check_v1(
+      hold, (et_o2_error_v1 *)(void *)value_data) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_end_v1(
+      &hold, (et_o2_error_v1 *)(void *)moment_data) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(hold != NULL && optimizer->busy == 1 &&
+        memcmp(value_data, value_before, sizeof(value_before)) == 0 &&
+        memcmp(moment_data, moment_before, sizeof(moment_before)) == 0);
   et_o2_g3r_save_hold *first_hold = hold;
   et_o2_g3r_save_hold *second_hold = NULL;
   unsigned char shell_before[sizeof(*hold)];
@@ -295,6 +332,15 @@ int main(void) {
   CHECK(et_f32_parameter_value_snapshot_v1(parameters[0], &p1, &f32) == 0);
   CHECK(et_f32_tensor_destroy_v1(&p1, &f32) == 0);
   et_o2_optimizer_state *state = NULL;
+  CHECK(et_g3r_private_o2_save_state_v1(
+      hold, (et_o2_optimizer_state **)(void *)moment_data, &o2) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_state_v1(
+      hold, &state, (et_o2_error_v1 *)(void *)value_data) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(state == NULL && optimizer->busy == 1 &&
+        memcmp(value_data, value_before, sizeof(value_before)) == 0 &&
+        memcmp(moment_data, moment_before, sizeof(moment_before)) == 0);
   union {
     et_o2_error_v1 error;
     et_o2_optimizer_state *slot;
@@ -315,6 +361,10 @@ int main(void) {
   CHECK(state != NULL && state->count == 14);
   CHECK(et_g3r_private_o2_save_check_v1(hold, &o2) == 0);
   CHECK(et_g3r_private_o2_save_issued_match_v1(hold, state, &o2) == 0);
+  CHECK(et_g3r_private_o2_save_issued_match_v1(
+      hold, state, (et_o2_error_v1 *)(void *)value_data) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(memcmp(value_data, value_before, sizeof(value_before)) == 0);
   et_o2_optimizer_state_borrow *alias_borrow = NULL;
   const et_kernel_tensor_view_v1 *alias_view = NULL;
   CHECK(et_o2_optimizer_state_borrow_begin_v1(

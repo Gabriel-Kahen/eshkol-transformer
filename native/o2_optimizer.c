@@ -6,6 +6,11 @@
 #include <string.h>
 #include <xmmintrin.h>
 
+#if defined(ET_G3R_SAME_OWNER_SAVE_PRIVATE) && \
+    !defined(ET_G3R_CANDIDATE_RETIRE_PRIVATE)
+#error "same-owner O2 SAVE requires I2 owned-span provenance"
+#endif
+
 #if defined(ET_TR3_C_O2_RESTORE_NATIVE) &&                                  \
     !defined(ET_I2_PRIVATE_OWNED_CLONE_MATCH)
 #error "TR3-C O2 restore requires the shared owned-clone authorizer"
@@ -2177,7 +2182,11 @@ static int et_o2_g3r_save_buffers_conflict(const void *output,
        ((uintptr_t)error % _Alignof(et_o2_error_v1) != 0u ||
         (uintptr_t)error > UINTPTR_MAX - sizeof(*error))) ||
       et_o2_g3r_save_overlap(output, output_bytes, error,
-                             error != NULL ? sizeof(*error) : 0u))
+                             error != NULL ? sizeof(*error) : 0u) ||
+      (output != NULL &&
+       et_f32_tensor_private_owned_span_overlap_v1(output, output_bytes) != 0) ||
+      (error != NULL &&
+       et_f32_tensor_private_owned_span_overlap_v1(error, sizeof(*error)) != 0))
     return 1;
   for (const et_o2_g3r_save_hold *hold = et_o2_g3r_save_holds;
        hold != NULL; hold = hold->next) {

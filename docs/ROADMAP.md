@@ -2085,6 +2085,14 @@ hold, issued state and release. Active builders fail closed when their mutable
 descriptors cannot authenticate owned spans. Source syntax and C2 receipt
 source tests pass locally; O2 native runtime/sanitizer and the combined
 compiled aggregate remain open gates.
+An independent union review found that O2's caller output/error scan still
+missed I2-owned parameter and moment storage. The source successor requires
+the I2 immutable owned-span provenance feature with the O2 held feature and
+rejects all nonzero F32 query results before writing either buffer. It adds
+parameter and moment alias negatives. `issued_match` compares held state bits,
+so the future coordinator must also root the exact state pointer returned by
+`save_state` through claim or release. These are source repairs; runtime and
+pairing gates remain open.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
