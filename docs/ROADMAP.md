@@ -2074,6 +2074,18 @@ Missing, duplicate, reordered, or unsupported source forms fail before compiler
 resolution or runtime; the Eshkol depfile check remains a separate compiled
 gate. This pin does not itself establish compiled receipt admission.
 
+The [G3-R/C2/O2 source-pair boundary](g3/G3_R_C2_O2_SOURCE_PAIR_BOUNDARY.md)
+combines the detached C2 receipt and current-main O2 held-owner source on one
+reviewable branch. Their exact native and Eshkol interfaces still require a
+feature-private original-owner coordinator and reviewed transfer/rollback
+path before any same-owner SAVE pair can be claimed. This source union has no
+compiled execution or replay evidence.
+The O2 port carries `f9173c1e`'s registered allocation-span validation for
+hold, issued state and release. Active builders fail closed when their mutable
+descriptors cannot authenticate owned spans. Source syntax and C2 receipt
+source tests pass locally; O2 native runtime/sanitizer and the combined
+compiled aggregate remain open gates.
+
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
 ports exact value and absent-gradient bit baselines under the existing
