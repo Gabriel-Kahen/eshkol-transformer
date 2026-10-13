@@ -28,11 +28,20 @@ failure checks pending-history rejection. The existing focused M3 and G3
 tests separately cover graph/logits and workspace roster aliases; this
 aggregate does not replace them.
 
-The heavy `--run` mode is disabled until
-`G3R_PRIVATE_UNION_RUNTIME_RELEASE=1` is deliberately set after the E3 load
-ends. That mode first applies `scripts/common.sh` supported host, pinned
-Eshkol source/binary, and compiler-provenance gates; it then compiles and
-runs the Eshkol caller. It has not been executed for this leaf. A passing
-`--check` cannot be reported as a passing runtime union. The next admission
-gate is a released supported-host `--run`, with its stdout/stderr and exact
-input digests sealed, followed by independent review of that result.
+The heavy `--run` mode requires an explicit one-use ROOT release and
+`G3R_PRIVATE_UNION_RUNTIME_RELEASE=1`. It applies the supported-host, pinned
+Eshkol source/binary, and compiler-provenance gates before compiling and
+running the Eshkol caller. The released C executor ran this exact gate on
+source `c0f747dc29a19890f96afee78c2cea675f5e27f3` with the independently
+accepted C7b fe9/f31 toolchain. Its sealed guest stdout is
+`G3-R current private union PASS: checks=8`, stderr is empty, and the host
+and guest exits are zero. The host evidence is
+`g3r-current-private-union-run-20261013-c/host/SHA256SUMS-HOST`
+(`a7932101227dda19b6f1c2f58f82c6174149563a93690c0b10e564250a2f1c60`).
+The independent raw review is
+`g3r-current-private-union-c-receipt-independent-review-20261013-a/SHA256SUMS-REVIEW`
+(`bb7905f60311a3e3e14912ea40712f083ef46806c7c0b997f8e0c7c17a8345d4`).
+This accepts only the eight-check private union gate. The one-second writable
+monitor is a sampling guard, and the evidence does not admit a SAVE writer,
+public generation, a continuation coordinator, or replay. Those remain
+separate integration gates.

@@ -1829,6 +1829,17 @@ owners before copying any output. Source and focused native checks are pending
 independent review; the roster alone does not pin value/gradient bits, hold O2,
 or authorize a G3-R SAVE capture.
 
+The [current-main private provider union gate](g3/G3_R_CURRENT_PRIVATE_UNION_GATE.md)
+now has one independently accepted supported-host C run on exact source
+`c0f747dc`, accepted C7b fe9/f31 toolchain, and eight compiled Eshkol checks.
+The sealed host result is `g3r-current-private-union-run-20261013-c/host/SHA256SUMS-HOST`
+(`a7932101...`); independent raw review is
+`g3r-current-private-union-c-receipt-independent-review-20261013-a/SHA256SUMS-REVIEW`
+(`bb7905f6...`). This closes the bounded private-union runtime prerequisite
+only. The O2 issued-pointer provider, SAVE publication/replay, terminal and
+public generation, and data-only continuation remain open; the current-main
+source/evidence/docs union is still pending integration.
+
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished
 diagnostic-C2 candidate. A sealed M3T owner/initializer cannot use
