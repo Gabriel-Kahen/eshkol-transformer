@@ -984,6 +984,13 @@ Eighteen offline tests reject the
 sealed symlink and persistent/transient move-out negatives, but no one-use
 launcher has consumed this source. It is not an atomic snapshot or general
 proof against concurrent mutation; L's sealed failure and prerequisite remain.
+A separate Q0 isolation successor admits only the exact noninstalled
+`generate-e3-overflow-clamp-overlay.py` development helper, correcting the
+inherited missing allowlist entry. All four isolation tests pass with added
+suffix, sibling, nested and runtime-directory rejection cases; the existing
+clamp overlay source/negative tests also pass. Independent review remains the
+integration gate. This does not change the monitor or establish compiled,
+sanitizer or E3 §9 acceptance.
 
 The [E3 idle real-model control contract](e3/E3_IDLE_REAL_MODEL_CONTROL_CONTRACT.md)
 specifies a test-only use of existing I2 checkpoint decode and whole-batch load
