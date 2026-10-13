@@ -1042,6 +1042,12 @@ regrouping, and a private AOT gate that requires the first actual difference
 at `state_f32[0]` with no rejected transcript. Focused source-only and static
 checks pass; independent review remains pending. No optimized runtime, poison or sanitizer verdict is
 claimed, and the M2 compiled-private row stays open.
+The PR #206 source-test repair keeps the exact zero-control and sum-order source
+contracts while aligning older assertions with the admitted zero ASan tuple,
+the conditional undefined-symbol comparison, the test-only sum-order frame
+guard, and the single frozen JSON witness. The E3 private (96), E3 reference
+(27), and Q0/M3CG focused (15) source checks pass on the pinned Python 3.14.6
+oracle. Independent review and supported compiled gates remain pending.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each

@@ -7,8 +7,8 @@ artifact or CI registration.
 `corpus.py` creates a canonical raw/empty V256 T1 artifact and tiny checksummed D1
 resources at a fresh output path. It derives packed, unpacked and nonzero-cursor
 emissions through the accepted carrier-neutral D2 reference. All binary resources
-and JSON transcripts are generated under a temporary or ignored build directory;
-none is checked in.
+and JSON transcripts are generated under a temporary or ignored build directory.
+The single checked-in JSON file is the frozen sum-order witness described below.
 
 `reference.py` requires the existing pinned Python 3.14.6 / PyTorch 2.13.0+cpu
 development environment with `ATEN_CPU_CAPABILITY=default` and

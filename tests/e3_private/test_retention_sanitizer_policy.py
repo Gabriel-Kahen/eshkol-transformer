@@ -73,6 +73,7 @@ class RetentionSanitizerPolicyTests(unittest.TestCase):
                 evidence = root / ("evidence" + verified)
                 result = subprocess.run(
                     ["bash", "-c", 'set -euo pipefail; e1b_tmp=$1; evidence_dir=$2; '
+                     'package_policy=e3-private-aggregate; e3_tuple_kind=retention; '
                      'e3_retention_sanitizer_inventory_verified=$3; '
                      'mkdir "${evidence_dir}.tmp.$$"; ' + publication +
                      'mv "${evidence_dir}.tmp.$$" "$evidence_dir"',
