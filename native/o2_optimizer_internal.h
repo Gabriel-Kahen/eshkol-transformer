@@ -195,6 +195,11 @@ int32_t et_g3r_private_o2_save_state_v1(
     et_o2_error_v1 *error);
 int32_t et_g3r_private_o2_save_check_v1(
     et_o2_g3r_save_hold *hold, et_o2_error_v1 *error);
+/* Authenticate the exact registered optimizer bound by begin, independently
+ * of any bit-equal state supplied to issued_match. */
+int32_t et_g3r_private_o2_save_owner_match_v1(
+    et_o2_g3r_save_hold *hold, const et_o2_optimizer *optimizer,
+    et_o2_error_v1 *error);
 /* Compare the exact issued state against the held pre-snapshot authority. */
 int32_t et_g3r_private_o2_save_issued_match_v1(
     et_o2_g3r_save_hold *hold, const et_o2_optimizer_state *state,

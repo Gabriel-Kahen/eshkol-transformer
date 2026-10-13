@@ -2420,6 +2420,24 @@ int32_t et_g3r_private_o2_save_check_v1(
   return et_o2_success(error);
 }
 
+int32_t et_g3r_private_o2_save_owner_match_v1(
+    et_o2_g3r_save_hold *candidate, const et_o2_optimizer *optimizer,
+    et_o2_error_v1 *error) {
+  const char *operation = "g3r-save-o2-owner-match";
+  if (et_o2_g3r_save_buffers_conflict(NULL, 0u, 1u, error))
+    return ET_O2_STATUS_INVALID_ARGUMENT;
+  et_o2_g3r_save_hold *hold = et_o2_g3r_hold_admit(candidate);
+  if (!hold)
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                      ET_O2_CODE_INVALID_HANDLE, operation,
+                      "same-owner hold is foreign, stale, or inactive");
+  if (et_o2_find_optimizer(optimizer) != hold->optimizer)
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                      ET_O2_CODE_OWNER_CONFLICT, operation,
+                      "optimizer is not the held original owner");
+  return et_g3r_private_o2_save_check_v1(hold, error);
+}
+
 int32_t et_g3r_private_o2_save_issued_match_v1(
     et_o2_g3r_save_hold *candidate, const et_o2_optimizer_state *issued,
     et_o2_error_v1 *error) {

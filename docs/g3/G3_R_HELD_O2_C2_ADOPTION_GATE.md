@@ -1,9 +1,9 @@
 # Held O2 state adoption into C2: source gate
 
-Status: **contract and causal negative only**. This leaf adds no coordinator,
-SAVE pair, Eshkol owner, or file publication. Its native negative preserves
-the distinction between a bit-matching O2 state and the exact state issued
-under the original-owner hold.
+Status: **native owner-match prerequisite and adoption contract only**. This
+leaf adds no coordinator, SAVE pair, Eshkol owner, or file publication. Its
+native negatives preserve the distinction between a bit-matching O2 state and
+the exact state issued under the original-owner hold.
 
 ## Observed source boundary
 
@@ -13,8 +13,14 @@ under the original-owner hold.
 configuration, options, and moment bits match the held optimizer. It does not
 record or require the address returned by `save_state`. The focused native
 fixture now snapshots another equal state **before** the hold, issues the held
-state, and verifies that both distinct pointers pass `issued_match` (340
-checks). A future caller must therefore retain the issued address itself.
+state, and verifies that both distinct pointers pass `issued_match`. A second
+registered optimizer with the same parameter roster, options, and zero moment
+bits produces a foreign snapshot that also passes `issued_match`. The new
+feature-private `et_g3r_private_o2_save_owner_match_v1` checks the live hold's
+exact registered optimizer pointer and then its held invariants; it rejects
+the foreign optimizer, stale hold, and altered original optimizer. This query
+does not identify the particular state returned by held `save_state`. A future
+caller must retain that issued address itself.
 
 `o2-public-optimizer-state` in `native/o2_wave2_extension.esk` preallocates an
 O2 Scheme shell and enrolls an ordinary native snapshot in `o2-states`. That
@@ -36,8 +42,14 @@ Scheme shell, state record, registry cons, and native pointer cell **before**
 calling the held `save_state` function. The native coordinator must hold the
 original G3/M3/A2 and O2 owners, retain the exact returned pointer in its own
 registered record, and check pointer identity as well as `issued_match` before
-any C2 claim. The helper must put the returned pointer into the preallocated
-root cell immediately; enrollment then uses assignments only. It may publish
+any C2 claim. It must also call `owner_match` on the exact O2 optimizer pointer
+from the registered Scheme optimizer shell before held issue or adoption;
+neither state bits nor an unregistered Scheme shell prove this relationship.
+The native query authenticates the O2 hold-to-optimizer link only. Binding that
+optimizer to the original G3/M3/A2 owner still requires the held roster and
+Scheme owner checks in a future coordinator. The helper must put the returned
+pointer into the preallocated root cell immediately; enrollment then uses
+assignments only. It may publish
 the Scheme state shell only after the native pointer and logical O2 projection
 are checked against the same registered optimizer. Existing ordinary O2
 snapshot code is a lifecycle reference, not an authorized held adopter.

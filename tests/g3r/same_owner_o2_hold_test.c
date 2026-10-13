@@ -75,6 +75,19 @@ int main(void) {
         UINT32_C(0x3f7d70a4), UINT32_C(0x322bcc77), 0, &o2) == 0);
   }
   CHECK(et_o2_optimizer_builder_finish_v1(&builder, &optimizer, &o2) == 0);
+  et_o2_optimizer_builder *foreign_builder = NULL;
+  et_o2_optimizer *foreign_optimizer = NULL;
+  CHECK(et_o2_optimizer_builder_create_v1(
+      14, ET_O2_CLIP_NONE, 0, ET_O2_SCHEDULE_CONSTANT,
+      0, 0, UINT32_C(0x3f800000), &foreign_builder, &o2) == 0);
+  for (size_t i = 0; i < 14; ++i)
+    CHECK(et_o2_optimizer_builder_set_v1(
+        foreign_builder, i, parameters[i], identities[i],
+        UINT32_C(0x3ca3d70a), UINT32_C(0x3f4ccccd),
+        UINT32_C(0x3f7d70a4), UINT32_C(0x322bcc77), 0, &o2) == 0);
+  CHECK(et_o2_optimizer_builder_finish_v1(
+      &foreign_builder, &foreign_optimizer, &o2) == 0);
+  CHECK(foreign_optimizer != optimizer);
   const et_f32_tensor *live_value = NULL;
   CHECK(et_f32_parameter_value_tensor_v1(parameters[0], &live_value, &f32) == 0);
   const float *value_data = et_f32_tensor_test_data_storage_v1(live_value);
@@ -213,6 +226,18 @@ int main(void) {
   CHECK(et_g3r_private_o2_save_begin_v1(
       optimizer, parameters, identities, &hold, &o2) == 0);
   CHECK(hold != NULL && optimizer->busy == 1);
+  CHECK(et_g3r_private_o2_save_owner_match_v1(hold, optimizer, &o2) == 0);
+  CHECK(et_g3r_private_o2_save_owner_match_v1(
+      hold, foreign_optimizer, &o2) == ET_O2_STATUS_INVALID_STATE);
+  CHECK(o2.code == ET_O2_CODE_OWNER_CONFLICT);
+  CHECK(et_g3r_private_o2_save_owner_match_v1(
+      hold, (et_o2_optimizer *)(uintptr_t)1, &o2) ==
+      ET_O2_STATUS_INVALID_STATE);
+  CHECK(o2.code == ET_O2_CODE_OWNER_CONFLICT);
+  CHECK(et_g3r_private_o2_save_owner_match_v1(
+      hold, optimizer, (et_o2_error_v1 *)(void *)value_data) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(memcmp(value_data, value_before, sizeof(value_before)) == 0);
   CHECK(et_g3r_private_o2_save_check_v1(
       hold, (et_o2_error_v1 *)(void *)value_data) ==
       ET_O2_STATUS_INVALID_ARGUMENT);
@@ -367,6 +392,17 @@ int main(void) {
    * coordinator must keep state by pointer through C2 claim or release. */
   CHECK(equal_other != state);
   CHECK(et_g3r_private_o2_save_issued_match_v1(hold, equal_other, &o2) == 0);
+  et_o2_optimizer_state *foreign_state = NULL;
+  CHECK(et_o2_optimizer_state_snapshot_v1(
+      foreign_optimizer, &foreign_state, &o2) == 0);
+  CHECK(foreign_state != state);
+  CHECK(et_g3r_private_o2_save_issued_match_v1(
+      hold, foreign_state, &o2) == 0);
+  CHECK(et_g3r_private_o2_save_owner_match_v1(
+      hold, foreign_optimizer, &o2) == ET_O2_STATUS_INVALID_STATE);
+  CHECK(o2.code == ET_O2_CODE_OWNER_CONFLICT);
+  CHECK(et_g3r_private_o2_save_owner_match_v1(hold, optimizer, &o2) == 0);
+  CHECK(et_o2_optimizer_state_release_v1(foreign_state, &o2) == 0);
   CHECK(et_o2_optimizer_state_release_v1(equal_other, &o2) == 0);
   equal_other = NULL;
   CHECK(et_g3r_private_o2_save_issued_match_v1(
@@ -542,6 +578,9 @@ int main(void) {
   CHECK(hold == NULL && optimizer->busy == 0);
   CHECK(et_g3r_private_o2_save_check_v1(first_hold, &o2) ==
       ET_O2_STATUS_INVALID_STATE);
+  CHECK(et_g3r_private_o2_save_owner_match_v1(first_hold, optimizer, &o2) ==
+      ET_O2_STATUS_INVALID_STATE);
+  CHECK(o2.code == ET_O2_CODE_INVALID_HANDLE);
   CHECK(et_g3r_private_o2_save_state_v1(first_hold, &state, &o2) ==
       ET_O2_STATUS_INVALID_STATE);
   CHECK(state == NULL);
@@ -564,6 +603,9 @@ int main(void) {
   memcpy(bits, &after, sizeof(after));
   optimizer->config.total_updates++;
   CHECK(et_g3r_private_o2_save_check_v1(hold, &o2) != 0);
+  CHECK(et_g3r_private_o2_save_owner_match_v1(hold, optimizer, &o2) ==
+      ET_O2_STATUS_INVALID_STATE);
+  CHECK(o2.code == ET_O2_CODE_OWNER_CONFLICT);
   CHECK(et_g3r_private_o2_save_end_v1(&hold, &o2) ==
       ET_O2_STATUS_INVALID_STATE);
   CHECK(o2.code == ET_O2_CODE_OWNER_CONFLICT);

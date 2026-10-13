@@ -2100,6 +2100,13 @@ the proposed coordinator must bind the exact issued pointer before its Scheme
 shell can enter C2 composition. Current O2 Scheme enrollment uses ordinary
 snapshot, and C2 accepts only a registered Scheme O2 state. This gate provides
 no coordinator, held C2 owner, SAVE pair, or replay claim.
+The feature-private native `et_g3r_private_o2_save_owner_match_v1` prerequisite
+checks the exact registered optimizer bound to a live O2 hold and reruns the
+held invariants. A second registered optimizer with the same roster and
+bit-equal snapshot passes `issued_match` but fails `owner_match`. The future
+Scheme adopter still must bind its optimizer shell to that pointer and retain
+the exact state returned by held issue; no original G3/O2 owner binding or
+paired SAVE is established here.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
