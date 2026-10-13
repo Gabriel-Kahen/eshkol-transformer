@@ -15,9 +15,12 @@ class ActiveCallCheckerTests(unittest.TestCase):
         surface = CHECKER["step5_projection"](source)
         self.assertIn("#ifdef ET_G3C4_P2_G2_TERMINAL_PRIVATE", source)
         self.assertIn("#ifdef ET_G3C4_P2_G2_TERMINAL_IDS_CLONE_PRIVATE", source)
+        self.assertIn("#ifdef ET_G3C4_P2_G2_HELD_HOLDER_PRIVATE", source)
         self.assertNotIn("#ifdef ET_G3C4_P2_G2_TERMINAL_PRIVATE", surface)
         self.assertNotIn("#ifdef ET_G3C4_P2_G2_TERMINAL_IDS_CLONE_PRIVATE",
                          surface)
+        self.assertNotIn("#ifdef ET_G3C4_P2_G2_HELD_HOLDER_PRIVATE", surface)
+        self.assertEqual(surface.count("et_g3c4_private_call_abort_v1"), 1)
         CHECKER["check_deferred_surfaces"](surface)
 
     def test_unguarded_generator_rng_still_fails(self):
@@ -26,6 +29,9 @@ class ActiveCallCheckerTests(unittest.TestCase):
             "generator_rng\n"
             "#endif\n"
             "#ifdef ET_G3C4_P2_G2_TERMINAL_IDS_CLONE_PRIVATE\n"
+            "generator_rng\n"
+            "#endif\n"
+            "#ifdef ET_G3C4_P2_G2_HELD_HOLDER_PRIVATE\n"
             "generator_rng\n"
             "#endif\n"
         )
@@ -37,7 +43,13 @@ class ActiveCallCheckerTests(unittest.TestCase):
 
     def test_disabled_and_unknown_arms_remain_visible(self):
         for macro in ("ET_G3C4_P2_G2_TERMINAL_PRIVATE",
-                      "ET_G3C4_P2_G2_TERMINAL_IDS_CLONE_PRIVATE"):
+                      "ET_G3C4_P2_G2_TERMINAL_IDS_CLONE_PRIVATE",
+                      "ET_G3C4_P2_G2_HELD_HOLDER_PRIVATE"):
+            for enabled in (f"#ifdef {macro}\ngenerator_rng\n#endif\n",
+                            f"#if defined({macro})\ngenerator_rng\n#endif\n"):
+                with self.subTest(macro=macro, enabled=enabled):
+                    CHECKER["check_deferred_surfaces"](
+                        CHECKER["step5_projection"](enabled))
             mutants = (
                 f"#ifndef {macro}\ngenerator_rng\n#endif\n",
                 f"#if !defined({macro})\ngenerator_rng\n#endif\n",

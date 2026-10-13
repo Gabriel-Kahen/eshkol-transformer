@@ -3192,12 +3192,16 @@ publication, public G2 and continuation remain pending.
   The `codex/p2g2-pr206-source-union-20261013` branch composes that E3 head
   with `205c8960` at `679de9ba`; independent bounded source review passed,
   and a current-main merge-tree check reproduced its exact tree. Focused
-  zero-control, Q0/M3CG and held-holder source checks pass. Two older G3
-  deferred-surface checker tests still fail on `generator_rng` on both
-  `205c8960` and the union; the older terminal-composer gate invokes them.
-  Current-main admission and the supported compiled held-holder gate remain
-  held for root pin/resource checks and independent result review. No public
-  G2 or continuation acceptance is claimed.
+  zero-control, Q0/M3CG and held-holder source checks pass. On exact
+  `427e2002`, the supported compiled held-holder gate built normal
+  feature-on/off native archives, then failed its nine-symbol check because
+  an unanchored match counted four `__wrap_` shims. It did not reach Eshkol
+  compilation or runtime. Two independently source-reviewed follow-ups repair
+  that symbol gate (`ba58977a`) and project the held-holder guard out of the
+  older Step 4a/5 checker scans (`3afa3a29`). Focused source tests and static
+  checks pass; a compiled rerun and independent review of their combined tree
+  remain pending. Current-main admission, public G2, and continuation
+  acceptance remain unproved.
 
 ## Wave 4 — practical pretraining and performance
 

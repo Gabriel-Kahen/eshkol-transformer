@@ -4,7 +4,8 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
   tests.g3c4.test_p2_g2_held_holder_eshkol_source \
-  tests.g3c4.test_p2_g2_held_holder_compiled_source
+  tests.g3c4.test_p2_g2_held_holder_compiled_source \
+  tests.g3c4.test_p2_g2_held_holder_symbol_gate
 if [[ "${G3C4_HELD_SOURCE_ONLY:-0}" == 1 ]]; then
   printf 'P2/G2 held-holder compiled gate source preparation PASS (runtime not run)\n'
   exit 0
@@ -102,14 +103,15 @@ compile_mode() {
     ar rcsD "$directory/libg3c4_held_$fixture.a" \
       "$directory/objects/owner-$fixture.o" "${shared_objects[@]}"
   done
-  nm -g --defined-only "$directory/objects/owner-on.o" |
-    rg 'et_g3c4_private_p2g2_holder_(new|generation|bind|begin_capture|witness|normal_close|abort_attempt|end_after_busy|dispose)_v1' \
+  nm -g --defined-only "$directory/objects/owner-on.o" \
+    >"$evidence/$mode-holder-on-nm.txt"
+  python3 "$PROJECT_ROOT/scripts/check-g3c4-p2g2-held-holder-symbols.py" \
+    on "$evidence/$mode-holder-on-nm.txt" \
     >"$evidence/$mode-holder-on-symbols.txt"
-  test "$(wc -l <"$evidence/$mode-holder-on-symbols.txt")" -eq 9
-  if nm -g --defined-only "$directory/objects/owner-off.o" |
-      rg 'et_g3c4_private_p2g2_holder_.*_v1'; then
-    die 'feature-off object exports holder ABI'
-  fi
+  nm -g --defined-only "$directory/objects/owner-off.o" \
+    >"$evidence/$mode-holder-off-nm.txt"
+  python3 "$PROJECT_ROOT/scripts/check-g3c4-p2g2-held-holder-symbols.py" \
+    off "$evidence/$mode-holder-off-nm.txt"
   local sanitizer_link=
   [[ "$mode" == sanitize ]] && \
     sanitizer_link='-fsanitize=address,undefined -fno-omit-frame-pointer'

@@ -73,6 +73,7 @@ def step5_projection(source):
         "ET_G3C4_P2_G1_COPYOUT_PRIVATE",
         "ET_G3C4_P2_G2_TERMINAL_PRIVATE",
         "ET_G3C4_P2_G2_TERMINAL_IDS_CLONE_PRIVATE",
+        "ET_G3C4_P2_G2_HELD_HOLDER_PRIVATE",
     ):
         source = without_conditional_feature(source, macro)
     return source
@@ -112,7 +113,8 @@ def check():
         "et_g3c4_private_call_abort_v1",
     ]:
         require(header.count(symbol) == 1, f"header boundary changed: {symbol}")
-        require(source.count(symbol) == 1, f"source boundary changed: {symbol}")
+        require(step5_source.count(symbol) == 1,
+                f"source boundary changed: {symbol}")
 
     for field in [
         "et_g3c4_model_pins_internal pins", "int64_t call_kind",
