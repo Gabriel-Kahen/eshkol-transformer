@@ -966,6 +966,14 @@ repair sets the correctness reference to `34` and tests both manifest cursor
 identity and rejection of the old-default mismatch by the strict compiled
 result parser. A fresh independent source review and distinct one-use compiled
 gate remain required; K is retained as failed evidence, not numerical proof.
+The sealed L one-use run at `73226322` passed normal A/B three-batch correctness
+but failed sanitized correctness during P1 provider registration in module
+initialization, before E3 evaluation. Its generated borrow check read seven
+bytes before a native P1 token when the active-shell guard held a raw pointer.
+The isolated [source diagnosis and repair](e3/E3_L_SANITIZER_DIAGNOSIS.md)
+stores that pointer inside a managed vector; source checks pass, but no new
+compiled or sanitizer execution has run. L remains failed evidence and the
+first-evaluation detector and E3 §9 verdicts remain open.
 
 The [E3 idle real-model control contract](e3/E3_IDLE_REAL_MODEL_CONTROL_CONTRACT.md)
 specifies a test-only use of existing I2 checkpoint decode and whole-batch load
