@@ -3195,9 +3195,15 @@ publication, public G2 and continuation remain pending.
   zero-control, Q0/M3CG and held-holder source checks pass. Two older G3
   deferred-surface checker tests still fail on `generator_rng` on both
   `205c8960` and the union; the older terminal-composer gate invokes them.
-  Current-main admission and the supported compiled held-holder gate remain
-  held for root pin/resource checks and independent result review. No public
-  G2 or continuation acceptance is claimed.
+  The exact `427e2002` source/toolchain preflight passed, and the supported
+  compiled gate built both normal feature-on/off native archives. Its first
+  nine-symbol check then failed because an unanchored pattern counted four
+  `__wrap_` shim definitions alongside the nine intended holder definitions.
+  A focused gate-script repair now matches exact holder ABI names and tests
+  wrapper, missing, and extra-symbol cases; independent review and a fresh
+  root-pinned compiled result remain pending. The failed run did not reach
+  Eshkol compilation or runtime. Current-main admission, public G2, and
+  continuation acceptance remain unproved.
 
 ## Wave 4 — practical pretraining and performance
 
