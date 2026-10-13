@@ -1,8 +1,9 @@
 # G3-R committed snapshot to record adapter contract
 
-Status: contract and test design only. The current-main combined runtime gate for
-the committed-save snapshot remains pending. This document adds no source,
-runtime claim, public name, package export, file I/O, or new upstream API.
+Status: the current-main combined committed-save snapshot gate is accepted.
+This contract now has a source-private implementation and feature-local tests;
+its exact-head runtime and independent-review gates remain separate. It adds
+no public name, package export, file I/O, or new upstream API.
 
 ## Exact inputs and authority boundary
 
@@ -55,8 +56,8 @@ committed history.
 
 ## Bounded test matrix and next gate
 
-After the current-main snapshot aggregate passes its combined compiled
-runtime gate, a feature-local same-aggregate test should exercise genuine
+The accepted current-main snapshot aggregate passed its combined compiled
+runtime gate. A feature-local same-aggregate test now exercises genuine
 P1/G1 commit and compare the adapter's 288 bytes against an independent
 Python `struct`/`hashlib` oracle: exact header/version/profile/algorithm,
 six policy and four RNG signed-i64 words, length/partition, ordered IDs,
@@ -82,3 +83,14 @@ source leaf. This contract-only commit runs no such gates.
 File-pair writer/reader, atomic pair publication, fresh-process live-model
 restore, no-draw cache replay, resumed public generation, and a larger
 repeated-decode/later-EOS profile remain separate dependencies for full G3-R.
+
+## Implementation status on this branch
+
+`native/g3r_snapshot_codec_adapter_extension.esk` composes the admitted
+snapshot and codec, validates the detached partition, terminal bit and exact
+raw-V256 fingerprint, and publishes one staged 288-byte copy. The feature-local
+aggregate fixture uses the deterministic valid M3 C2 test image produced by
+`tests.c2.prepare_checkpoint_operational_fixtures.make_m3_artifact((2, 4))`
+for its independent whole-image digest. This digest is test-authenticated only.
+The compiled normal/repeat/sanitizer gate and independent review remain open;
+no SAVE writer or C2-to-generator ownership proof is added.

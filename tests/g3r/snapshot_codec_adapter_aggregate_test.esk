@@ -1,0 +1,337 @@
+(load "m3_package_root.esk")
+(load "m3_call_adapters.esk")
+(load "g3t_model_admission_extension.esk")
+(load "g3t_generator_constructor_extension.esk")
+(load "g3t_prefill_sample_extension.esk")
+(load "g3c4_t1_output_decode_extension.esk")
+(load "g3t_output_text_extension.esk")
+(load "g3t_final_publication_extension.esk")
+(load "g3t_manual_p1_extension.esk")
+(load "g3t_manual_logits_materialize_extension.esk")
+(load "g3m_prefill_p1_extension.esk")
+(load "g3m_prefill_p2_extension.esk")
+(load "g3m_manual_decode_extension.esk")
+(load "g3m_seeded_p1_g1_extension.esk")
+(load "g3r_committed_save_snapshot_extension.esk")
+(load "c1_sha256.esk")
+(load "g3r_record_codec_extension.esk")
+(load "g3r_snapshot_codec_adapter_extension.esk")
+
+(extern i64 g3r-test-cache-length ptr :real et_g3t_test_cache_length_v1)
+(extern i64 g3r-test-rng-word ptr i64 :real et_g3t_test_rng_word_v1)
+(extern i64 g3r-test-output-word ptr i64 :real et_g3t_test_output_word_v1)
+(extern ptr g3r-test-cache-borrow-begin ptr
+        :real et_g3t_test_manual_cache_borrow_begin_v1)
+(extern i64 g3r-test-cache-borrow-end ptr
+        :real et_g3t_test_manual_cache_borrow_end_v1)
+(extern i64 g3r-test-dispatch-fail-after i64
+        :real et_g3t_test_manual_p2_fail_dispatch_after_v1)
+(extern i64 g3r-native-call-acquire ptr i64
+        :real et_g3t_private_call_acquire_v1)
+(extern i64 g3r-native-call-abort ptr
+        :real et_g3t_private_call_abort_v1)
+
+(define checks 0)
+(define (check label value)
+  (if value (set! checks (+ checks 1))
+      (begin (display "G3-R snapshot codec adapter aggregate FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (all-sentinel? bytes)
+  (let loop ((index 0))
+    (if (= index (bytevector-length bytes)) #t
+        (and (= (bytevector-u8-ref bytes index) 90)
+             (loop (+ index 1))))))
+(define (destination)
+  (make-bytevector 136 90))
+(define (record-word bytes index)
+  (let loop ((part 7) (value 0))
+    (if (< part 0)
+        (if (>= value 9223372036854775808)
+            (- value 18446744073709551616) value)
+        (loop (- part 1)
+              (+ (* value 256)
+                 (bytevector-u8-ref bytes (+ (* index 8) part)))))))
+(define (reject-unchanged label generator)
+  (let ((bytes (destination)))
+    (check label
+      (and (guard (caught (#t (transformer-error? caught)))
+             (g3r-committed-save-snapshot! generator bytes) #f)
+           (all-sentinel? bytes)))))
+(define (policy seed eos)
+  (list ':profile 'diagnostic-c2 ':sampling 'categorical
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens 1
+        ':eos eos ':seed seed))
+(define config
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define initial (g3t-checked-m3t-initializer-state 1729))
+(define model
+  (with-region ('g3r-save-model 65536)
+    (g3t-checked-m3t-model-create config initial)))
+(define tokenizer (t1-private-tokenizer-byte config))
+(check "model in eval mode" (module-eval! model))
+
+(define generator (g3t-generator-create model tokenizer (policy 1729 #f)))
+(define entry (g3t-generator-find generator 'g3r-test))
+(define native (vector-ref entry 3))
+(reject-unchanged "no committed history rejected" generator)
+(define input (g3t-generation-token-input-create 65))
+(define output (g3m-generate-p1-g1! generator input))
+(define output-native (vector-ref (g3t-prefill-entry output 'output 'g3r-test) 3))
+(define sampled (g3r-test-output-word output-native 6))
+(check "real sampled commit and A2 length"
+       (and (>= sampled 0) (<= sampled 255)
+            (= 2 (g3r-test-cache-length native))))
+(define digest (make-bytevector 32 0))
+(define digest-words (vector 198 35 29 113 28 167 89 54 48 177 148 12 199 144 254 225 21 126 150 199 236 75 176 181 145 84 118 252 155 206 99 153))
+(let fill-digest ((index 0))
+  (if (< index 32)
+      (begin (bytevector-u8-set! digest index (vector-ref digest-words index))
+             (fill-digest (+ index 1)))))
+(define (record-destination) (make-bytevector 288 90))
+(define (reject-record label owner)
+  (let ((bytes (record-destination)))
+    (check label
+      (and (guard (caught (#t #t))
+             (g3r-snapshot-record-encode! owner bytes digest) #f)
+           (all-sentinel? bytes)))))
+(define hex-digits "0123456789abcdef")
+(define (emit-record bytes)
+  (display "G3R_ADAPTER_RECORD ")
+  (let loop ((index 0))
+    (if (< index 288)
+        (let ((value (bytevector-u8-ref bytes index)))
+          (display (string-ref hex-digits (quotient value 16)))
+          (display (string-ref hex-digits (modulo value 16)))
+          (loop (+ index 1)))))
+  (newline))
+(define bytes (destination))
+(define snapshot (g3r-committed-save-snapshot! generator bytes))
+(check "real P1 generated partition"
+       (and (vector? snapshot) (= (vector-length snapshot) 7)
+            (= 1 (vector-ref snapshot 3))
+            (= 1 (vector-ref snapshot 4))
+            (= 0 (vector-ref snapshot 5))
+            (= 0 (vector-ref snapshot 6))
+            (= 2 (bytevector-length (vector-ref snapshot 2)))
+            (= 65 (bytevector-u8-ref (vector-ref snapshot 2) 0))
+            (= sampled (bytevector-u8-ref (vector-ref snapshot 2) 1))))
+(check "policy and all RNG words from same owner"
+       (and (= 1 (vector-ref (vector-ref snapshot 0) 0))
+            (= -1 (vector-ref (vector-ref snapshot 0) 5))
+            (let loop ((index 0))
+              (if (= index 4) #t
+                  (and (= (vector-ref (vector-ref snapshot 1) index)
+                          (g3r-test-rng-word native index))
+                       (loop (+ index 1)))))))
+(check "original destination receives record after success"
+       (and (not (all-sentinel? bytes))
+            (= 136 (bytevector-length bytes))
+            (= 65 (record-word bytes 10))
+            (= sampled (record-word bytes 11))
+            (= 2 (record-word bytes 12))
+            (= (vector-ref snapshot 3) (record-word bytes 13))
+            (= (vector-ref snapshot 4) (record-word bytes 14))
+            (= (vector-ref snapshot 5) (record-word bytes 15))
+            (= (vector-ref snapshot 6) (record-word bytes 16))
+            (let loop ((index 0))
+              (if (= index 6) #t
+                  (and (= (vector-ref (vector-ref snapshot 0) index)
+                          (record-word bytes index))
+                       (loop (+ index 1)))))
+            (let loop ((index 0))
+              (if (= index 4) #t
+                  (and (= (vector-ref (vector-ref snapshot 1) index)
+                          (record-word bytes (+ 6 index)))
+                       (loop (+ index 1)))))))
+(define record (record-destination))
+(check "adapter encoded real P1 G1 record"
+       (eq? (g3r-snapshot-record-encode! generator record digest) record))
+(check "record exact size and magic"
+       (and (= (bytevector-length record) 288)
+            (= (bytevector-u8-ref record 0) 71)
+            (= (bytevector-u8-ref record 1) 51)
+            (= (bytevector-u8-ref record 2) 82)))
+(define decoded (make-vector 8 'untouched))
+(check "authenticated in-memory decode"
+       (eq? (g3r-record-decode! record digest decoded) decoded))
+(check "decoded snapshot fields and exact tokenizer identity"
+       (and (= (vector-ref decoded 3) (vector-ref snapshot 3))
+            (= (vector-ref decoded 4) (vector-ref snapshot 4))
+            (= (vector-ref decoded 5) (vector-ref snapshot 5))
+            (= (bytevector-u8-ref (vector-ref decoded 2) 1) sampled)
+            (g3r-bytes=? (vector-ref decoded 6) 0
+              (string->utf8 g3r-save-tokenizer-fingerprint) 0 96)
+            (g3r-bytes=? (vector-ref decoded 7) 0 digest 0 32)))
+(display "G3R_ADAPTER_SAMPLE ") (display sampled) (newline)
+(emit-record record)
+(let emit-policy ((index 0))
+  (if (< index 6)
+      (begin (display "G3R_ADAPTER_POLICY ")
+             (display (vector-ref (vector-ref snapshot 0) index))
+             (newline) (emit-policy (+ index 1)))))
+(let emit-rng ((index 0))
+  (if (< index 4)
+      (begin (display "G3R_ADAPTER_RNG ")
+             (display (vector-ref (vector-ref snapshot 1) index))
+             (newline) (emit-rng (+ index 1)))))
+(check "wrong expected digest rejected"
+       (guard (caught (#t #t))
+         (g3r-record-decode! record (make-bytevector 32 0)
+                             (make-vector 8 'untouched)) #f))
+(check "short record destination unchanged"
+       (let ((short (make-bytevector 287 90)))
+         (and (guard (caught (#t #t))
+                (g3r-snapshot-record-encode! generator short digest) #f)
+              (all-sentinel? short))))
+(check "malformed digest extent leaves destination unchanged"
+       (let ((unchanged (record-destination)))
+         (and (guard (caught (#t #t))
+                (g3r-snapshot-record-encode! generator unchanged
+                                             (make-bytevector 31 0)) #f)
+              (all-sentinel? unchanged))))
+(check "forged terminal bit rejected before encode"
+       (let ((forged (vector-copy snapshot)))
+         (vector-set! forged 6 1)
+         (not (g3r-snapshot-record-fields? forged
+                (string->utf8 g3r-save-tokenizer-fingerprint) digest))))
+(check "impossible partition rejected before encode"
+       (let ((forged (vector-copy snapshot)))
+         (vector-set! forged 5 1)
+         (not (g3r-snapshot-record-fields? forged
+                (string->utf8 g3r-save-tokenizer-fingerprint) digest))))
+(check "invalid fingerprint rejected before encode"
+       (not (g3r-snapshot-record-fields? snapshot
+              (make-bytevector 96 97) digest)))
+(check "different canonical fingerprint rejected before encode"
+       (let ((foreign (string->utf8 g3r-save-tokenizer-fingerprint)))
+         (bytevector-u8-set! foreign 32 98)
+         (not (g3r-snapshot-record-fields? snapshot foreign digest))))
+(check "detached output release" (g3t-output-release! output))
+(check "snapshot survives detached output release"
+       (= sampled (bytevector-u8-ref
+                    (vector-ref (g3r-committed-save-snapshot!
+                                  generator (destination)) 2) 1)))
+
+(define lease (g3r-test-cache-borrow-begin native))
+(check "held A2 read borrow acquired" (not (null? lease)))
+(reject-unchanged "held A2 read borrow rejected" generator)
+(reject-record "adapter held A2 read borrow rejected" generator)
+(check "held A2 read borrow released" (= 0 (g3r-test-cache-borrow-end lease)))
+(check "snapshot after A2 borrow release"
+       (= 2 (bytevector-length
+              (vector-ref (g3r-committed-save-snapshot!
+                            generator (destination)) 2))))
+(check "native manual call acquired" (= 0 (g3r-native-call-acquire native 0)))
+(reject-unchanged "busy native generator rejected" generator)
+(reject-record "adapter busy native generator rejected" generator)
+(check "native manual call aborted" (= 0 (g3r-native-call-abort native)))
+
+(define saved-policy (vector-ref entry 7))
+(define forged-policy (vector-copy saved-policy))
+(vector-set! forged-policy 3 1)
+(vector-set! entry 7 forged-policy)
+(reject-unchanged "registered policy mismatch rejected after native copy" generator)
+(reject-record "adapter changed policy rejected" generator)
+(vector-set! entry 7 saved-policy)
+(define saved-tokenizer (vector-ref entry 6))
+(vector-set! entry 6 (vector 'foreign-tokenizer))
+(reject-unchanged "foreign tokenizer rejected" generator)
+(reject-record "adapter foreign tokenizer rejected" generator)
+(vector-set! entry 6 saved-tokenizer)
+(define foreign-model
+  (with-region ('g3r-save-foreign-model 65536)
+    (g3t-checked-m3t-model-create config initial)))
+(check "second authentic model in eval mode" (module-eval! foreign-model))
+(define saved-model-entry (vector-ref entry 5))
+(vector-set! entry 5 (g3t-model-entry-live foreign-model 'g3r-test #f))
+(reject-unchanged "different live model owner rejected" generator)
+(reject-record "adapter different model owner rejected" generator)
+(vector-set! entry 5 saved-model-entry)
+(reject-unchanged "forged generator rejected" (vector 'foreign-generator))
+(reject-record "adapter forged generator rejected" (vector 'foreign-generator))
+(reject-unchanged "wrong-kind model rejected" model)
+(reject-record "adapter wrong-kind model rejected" model)
+(check "short destination rejected unchanged"
+       (let ((short (make-bytevector 135 90)))
+         (and (guard (caught (#t (transformer-error? caught)))
+                (g3r-committed-save-snapshot! generator short) #f)
+              (all-sentinel? short))))
+
+(define partial (g3t-generator-create model tokenizer (policy 1729 #f)))
+(define partial-input (g3t-generation-token-input-create 66))
+(check "post-P1 G1 failure cut armed"
+       (= 0 (g3r-test-dispatch-fail-after 21)))
+(check "real post-prefill G1 failure injected"
+       (guard (caught (#t (transformer-error? caught)))
+         (g3m-generate-p1-g1! partial partial-input) #f))
+(check "post-P1 G1 failure cut disarmed"
+       (= 0 (g3r-test-dispatch-fail-after 9223372036854775807)))
+(check "partial G1 retained native P1 cache"
+       (= 1 (g3r-test-cache-length
+              (vector-ref (g3t-generator-find partial 'g3r-test) 3))))
+(reject-unchanged "idle post-P1 G1 abort rejected" partial)
+(reject-record "adapter idle post-P1 G1 abort rejected" partial)
+
+(define terminal-generator
+  (g3t-generator-create model tokenizer (policy 1729 sampled)))
+(define terminal-input (g3t-generation-token-input-create 65))
+(define terminal-output
+  (g3m-generate-p1-g1! terminal-generator terminal-input))
+(define terminal-snapshot
+  (g3r-committed-save-snapshot! terminal-generator (destination)))
+(check "real first generated EOS is terminal"
+       (and (= 1 (vector-ref terminal-snapshot 4))
+            (= 1 (vector-ref terminal-snapshot 6))
+            (= sampled (bytevector-u8-ref
+                 (vector-ref terminal-snapshot 2) 1))))
+(define terminal-record (record-destination))
+(define terminal-decoded (make-vector 8 'untouched))
+(check "real terminal snapshot encodes and decodes"
+       (and (eq? (g3r-snapshot-record-encode!
+                   terminal-generator terminal-record digest) terminal-record)
+            (eq? (g3r-record-decode! terminal-record digest terminal-decoded)
+                 terminal-decoded)
+            (= (vector-ref terminal-decoded 4) 1)
+            (= (vector-ref (vector-ref terminal-decoded 0) 5) sampled)))
+(check "prompt EOS alone does not mark terminal"
+       (let* ((forged (vector-copy snapshot))
+              (forged-policy (vector-copy (vector-ref snapshot 0)))
+              (ids (bytevector 65 66)))
+         (vector-set! forged-policy 5 65)
+         (vector-set! forged 0 forged-policy)
+         (vector-set! forged 2 ids)
+         (g3r-snapshot-record-fields? forged
+           (string->utf8 g3r-save-tokenizer-fingerprint) digest)))
+(check "manual EOS alone does not mark terminal"
+       (let* ((forged (vector-copy snapshot))
+              (forged-policy (vector-copy (vector-ref snapshot 0))))
+         (vector-set! forged-policy 4 0)
+         (vector-set! forged-policy 5 65)
+         (vector-set! forged 0 forged-policy)
+         (vector-set! forged 2 (bytevector 65 65))
+         (vector-set! forged 4 0)
+         (vector-set! forged 5 1)
+         (g3r-snapshot-record-fields? forged
+           (string->utf8 g3r-save-tokenizer-fingerprint) digest)))
+(check "terminal owner cleanup"
+       (and (g3t-output-release! terminal-output)
+            (g3t-generation-tensor-release! terminal-input)
+            (g3t-generator-close! terminal-generator)))
+
+(check "owners close"
+       (and (g3t-generation-tensor-release! input)
+            (g3t-generation-tensor-release! partial-input)
+            (g3t-generator-close! partial)
+            (g3t-generator-close! generator)))
+(reject-unchanged "stale closed generator rejected" generator)
+(reject-record "adapter stale closed generator rejected" generator)
+(check "detached snapshot survives owner close"
+       (and (= sampled (bytevector-u8-ref (vector-ref snapshot 2) 1))
+            (= 1 (vector-ref snapshot 4))))
+(display "G3-R snapshot codec adapter aggregate PASS: checks=")
+(display checks)
+(newline)

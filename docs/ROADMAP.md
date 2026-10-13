@@ -1862,8 +1862,9 @@ preprocessing is not object/runtime equivalence or SAVE admission.
 The [committed snapshot-to-record adapter contract](g3/G3_R_SNAPSHOT_CODEC_ADAPTER_CONTRACT.md)
 maps the existing seven-field same-owner snapshot into the 288-byte G3RCV1
 encoder without introducing an upstream API. The current-main combined snapshot
-gate is accepted; adapter implementation and its exact-head runtime gate remain.
-Its immutable C2 digest is test-authenticated fixture data, not SAVE or pair
+gate is accepted. The source-private adapter and same-owner test fixture are
+implemented on the feature branch; exact-head runtime and independent review
+remain gates. Its immutable C2 digest is test-authenticated fixture data, not SAVE or pair
 authority. File-pair I/O, live restore, replay and public continuation remain
 separate gates.
 
