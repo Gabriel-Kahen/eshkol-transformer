@@ -997,6 +997,14 @@ runner records exact D1 payload, independent D2 cursor, four destination words,
 two counters, model/gradient/mode/RNG and native owner state, plus normal,
 poisoned and sanitized peak RSS. Source and shell checks alone do not promote
 this candidate to compiled-private evidence; the supported run is pending.
+An isolated [private E3 edge-gate source candidate](e3/E3_EDGE_PRIVATE_GATE.md)
+adds authentic empty, singleton, entry-EOS and padded one-token-tail D1/D2
+cases to that noninstalled retention aggregate. The zero-row paths require
+stage-12 `invalid-state` and byte-atomic six outputs; the real padded tail
+requires three active tokens and two batches. Independent D2 cursor/row
+fixtures, source/unit/shell checks and a proposed normal/poison/sanitizer
+runner are staged. Independent review and the compiled supported result remain
+pending; this does not close §9 or replace the separate N5 8,192/8,193 gate.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each
