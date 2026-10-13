@@ -185,6 +185,14 @@ native/g3c4_p2g2_t1_prefix_coordinator_source_closure.txt
 src/eshkol_transformer/g3c4_p2g2_holder_private.h
 native/g3c4_p2g2_terminal_held_holder_extension.esk
 native/g3c4_p2g2_terminal_held_holder_root.esk
+native/e1b_error_consumer_private.esk
+lib/transformer/error_internal.esk
+lib/transformer/error_core.esk
+native/x1_config_private.esk
+internal/p1/lib/transformer/module.esk
+internal/c1/lib/transformer/persistence_policy_internal.esk
+internal/c1/lib/transformer/checkpoint_internal.esk
+internal/c1/lib/c1_sha256.esk
 tests/c2/test_handler_order.py
 tests/g3c4/test_p2_g2_held_holder_eshkol_source.py
 native/g3c4_p2g2_terminal_held_holder_source_closure.txt

@@ -17,6 +17,38 @@ SCRIPT = ROOT / "scripts/test-g3c4-p2g2-held-holder-compiled.sh"
 COMPILE_HELPER = ROOT / "scripts/g3c4-held-holder-eshkol-compile.sh"
 SHIM = ROOT / "tests/g3c4/p2_g2_held_holder_compiled_native.c"
 DEPS = ROOT / "native/g3c4_p2g2_held_holder_compiled_eshkol_deps.txt"
+INCLUDE_DIRS = ("internal/p1/lib", "internal/c1/lib", "internal/t1/lib",
+                "src", "lib", "native")
+
+
+def eshkol_import_closure(overrides=None):
+    """Resolve top-level loads and requires with the compiled gate's include order."""
+    overrides = overrides or {}
+    seen = []
+
+    def visit(name):
+        if name in seen:
+            return
+        seen.append(name)
+        source = overrides.get(name, (ROOT / name).read_text())
+        loads = re.findall(r'^\s*\(load\s+"([^"]+)"', source, re.M)
+        requires = re.findall(r'^\s*\(require\s+([\w.-]+)\s*\)', source, re.M)
+        for target in loads:
+            matches = [f"{directory}/{target}" for directory in INCLUDE_DIRS
+                       if (ROOT / directory / target).is_file()]
+            if len(matches) != 1:
+                raise ValueError(f"unresolved or ambiguous load: {name}: {target}: {matches}")
+            visit(matches[0])
+        for target in requires:
+            path = target.replace('.', '/') + '.esk'
+            matches = [f"{directory}/{path}" for directory in INCLUDE_DIRS
+                       if (ROOT / directory / path).is_file()]
+            if not matches:
+                raise ValueError(f"unresolved require: {name}: {target}")
+            visit(matches[0])
+
+    visit(DRIVER.relative_to(ROOT).as_posix())
+    return seen
 
 
 class HeldHolderCompiledSource(unittest.TestCase):
@@ -159,28 +191,37 @@ class HeldHolderCompiledSource(unittest.TestCase):
             self.assertIn("__real_" + symbol, shim)
             self.assertEqual(wrapper.count("-Wl,--wrap=" + symbol), 1)
 
-    def test_exact_eshkol_load_manifest_is_distinct_from_native_closure(self):
-        include_dirs = ("internal/p1/lib", "internal/c1/lib", "internal/t1/lib",
-                        "src", "lib", "native")
-        seen = []
-
-        def visit(name):
-            if name in seen:
-                return
-            seen.append(name)
-            text = (ROOT / name).read_text()
-            for target in re.findall(r'^\s*\(load\s+"([^"]+)"', text, re.M):
-                matches = [f"{directory}/{target}" for directory in include_dirs
-                           if (ROOT / directory / target).is_file()]
-                self.assertEqual(len(matches), 1, (name, target, matches))
-                visit(matches[0])
-
-        visit(DRIVER.relative_to(ROOT).as_posix())
+    def test_exact_eshkol_import_manifest_is_distinct_from_native_closure(self):
+        seen = eshkol_import_closure()
         self.assertEqual(DEPS.read_text().splitlines(), seen)
         broad = (ROOT / "native/g3c4_p2g2_terminal_held_holder_source_closure.txt").read_text().splitlines()
         self.assertIn("native/g3c4_p2g2_terminal_held_holder_root.esk", broad)
         self.assertIn("native/g3c4_p2g2_terminal_held_holder_extension.esk", broad)
+        required_transitive = set(seen[9:17])
+        self.assertEqual(len(required_transitive), 8)
+        self.assertTrue(required_transitive.issubset(broad))
         self.assertEqual(sum(not path.endswith('.esk') for path in broad), 162)
+
+    def test_import_manifest_rejects_missing_extra_and_unknown_transitives(self):
+        checkpoint = "internal/c1/lib/transformer/checkpoint_internal.esk"
+        source = (ROOT / checkpoint).read_text()
+        expected = DEPS.read_text().splitlines()
+        self.assertIn("(require c1_sha256)", source)
+        missing = eshkol_import_closure({checkpoint: source.replace(
+            "(require c1_sha256)", "", 1)})
+        self.assertNotIn("internal/c1/lib/c1_sha256.esk", missing)
+        self.assertNotEqual(expected, missing)
+
+        extra_path = "native/g3c4_p2g2_terminal_composer_extension.esk"
+        self.assertTrue((ROOT / extra_path).is_file())
+        extra = eshkol_import_closure({checkpoint: source +
+            '\n(load "g3c4_p2g2_terminal_composer_extension.esk")\n'})
+        self.assertIn(extra_path, extra)
+        self.assertNotEqual(expected, extra)
+
+        with self.assertRaisesRegex(ValueError, "unresolved require"):
+            eshkol_import_closure({checkpoint: source +
+                "\n(require missing_transitive_module)\n"})
 
 
 if __name__ == "__main__":

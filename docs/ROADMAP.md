@@ -3216,7 +3216,15 @@ publication, public G2 and continuation remain pending.
   object-mode compile and fails closed on missing or empty objects/depfiles;
   executable compilation retains the same source and import/link arguments.
   Source regression tests cover the mode split and missing/empty depfiles.
-  A fresh exact-head compiled normal/repeat/sanitizer matrix and independent
+  The exact `c279c67c` object-mode compiled run passed 13 source checks and
+  built normal feature-on/off C archives and Eshkol AOT executables, then
+  stopped at its first strict depfile assertion before runtime: observed
+  `on.d` contains 30 Eshkol paths while the pinned manifest contains 22.
+  Eight transitive `require` imports reached through T1 were absent from both
+  the Eshkol depfile pin and broad source closure. This isolated successor
+  adds those eight paths, keeps the strict ordered depfile comparison, and
+  covers missing, extra, and unresolved transitive imports in source tests.
+  The full normal/repeat/failure-cut/sanitizer compiled matrix and independent
   review remain pending. Public G2 and continuation acceptance remain unproved.
 
 ## Wave 4 — practical pretraining and performance
