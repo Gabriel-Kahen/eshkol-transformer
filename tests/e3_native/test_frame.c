@@ -346,6 +346,75 @@ static void test_i2_allocation_rollback(owner *model,
   }
 }
 
+static void test_discovery_bind_rollback(owner *model,
+                                         et_f32_tensor *destination[4]) {
+  const uint32_t sentinels[4] = {
+      UINT32_C(0x3f000001), UINT32_C(0x3f000002),
+      UINT32_C(0x3f000003), UINT32_C(0x3f000004)};
+  for (size_t i = 0; i < 4; ++i) write_scalar(destination[i], sentinels[i]);
+  for (int64_t selected = 0; selected < 6; ++selected) {
+    owner model_before;
+    memcpy(&model_before, model, sizeof(model_before));
+    et_e3_frame_internal *registry_before = e3_registry;
+    et_f32_test_live_counts_v1 before = {.struct_size = sizeof(before)};
+    et_f32_test_live_counts_snapshot_v1(&before);
+
+    e3_test_discovery_fail_index = selected;
+    CHECK(et_e3_private_frame_create_v1(model, destination[0], destination[1],
+        destination[2], destination[3]) == NULL);
+    CHECK(e3_test_discovery_fail_index == -1);
+    CHECK(e3_last_domain == 1 &&
+          e3_last_category == ET_KERNEL_ERROR_UNSUPPORTED &&
+          e3_last_code == ET_KERNEL_CODE_SYMBOL_MISSING);
+    CHECK(et_e3_private_last_error_domain_v1() == 1 &&
+          et_e3_private_last_error_category_v1() ==
+              ET_KERNEL_ERROR_UNSUPPORTED &&
+          et_e3_private_last_error_code_v1() ==
+              ET_KERNEL_CODE_SYMBOL_MISSING);
+    CHECK(e3_dependency_status(e3_last_domain, e3_last_category) ==
+          E3_UNSUPPORTED);
+    CHECK(e3_registry == registry_before && model->active == NULL);
+    CHECK(memcmp(model, &model_before, sizeof(model_before)) == 0);
+    et_f32_test_live_counts_v1 after = {.struct_size = sizeof(after)};
+    et_f32_test_live_counts_snapshot_v1(&after);
+    CHECK(after.tensors == before.tensors);
+    CHECK(after.parameters == before.parameters);
+    CHECK(after.owned_clones == before.owned_clones);
+    CHECK(after.borrows == before.borrows);
+    CHECK(after.copy_plans == before.copy_plans);
+    CHECK(after.gradient_plans == before.gradient_plans);
+    CHECK(after.reset_plans == before.reset_plans);
+    for (size_t i = 0; i < 4; ++i) {
+      uint32_t bits;
+      read_scalar(destination[i], &bits);
+      CHECK(bits == sentinels[i]);
+    }
+
+    /* The one-shot fault is gone: bind and use a newly constructed frame. */
+    et_e3_frame_internal *retry = et_e3_private_frame_create_v1(
+        model, destination[0], destination[1], destination[2], destination[3]);
+    CHECK(retry != NULL && e3_registry == retry &&
+          retry->next == registry_before);
+    OK(et_e3_private_frame_check_v1(retry));
+    OK(et_e3_private_acquire_v1(retry));
+    stage(retry, 3, 197, 197, 0, 1, 1);
+    forward_batch(retry);
+    abort_call(retry);
+    OK(et_e3_private_frame_destroy_preflight_v1(retry));
+    et_e3_private_frame_destroy_v1(retry);
+    CHECK(e3_registry == retry && retry->lifecycle == 2 &&
+          retry->next == registry_before && model->active == NULL);
+    et_f32_test_live_counts_snapshot_v1(&after);
+    CHECK(after.tensors == before.tensors &&
+          after.parameters == before.parameters &&
+          after.owned_clones == before.owned_clones &&
+          after.borrows == before.borrows &&
+          after.copy_plans == before.copy_plans &&
+          after.gradient_plans == before.gradient_plans &&
+          after.reset_plans == before.reset_plans);
+  }
+}
+
 static void test_pin_preinvoke_cut(owner *model,
                                    et_f32_tensor *destination[4]) {
   et_e3_frame_internal *frame = et_e3_private_frame_create_v1(
@@ -674,6 +743,7 @@ int main(void) {
   et_f32_tensor *destination[4] = {scalar(), scalar(), scalar(), scalar()};
   test_create_rejections(model, destination);
   test_i2_allocation_rollback(model, destination);
+  test_discovery_bind_rollback(model, destination);
   test_pin_preinvoke_cut(model, destination);
   test_transaction(model, destination);
   for (size_t i = 0; i < 4; ++i) destroy_tensor(&destination[i]);

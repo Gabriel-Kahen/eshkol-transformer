@@ -1066,6 +1066,13 @@ published counters and f32 live-owner counts, then permits same-frame reacquire.
 The production object must lack the test symbol. This is native source evidence
 only; exact original D2 cursor, P1 modes, gradients, RNG, arena and all six
 compiled-private outputs still need the authenticated failure/retry matrix.
+The bounded R1 provider-discovery bind cut adds a noninstalled, one-shot
+selector for each of the six K1 resolver calls before epsilon copy. A
+source-composed native test checks the genuine K1 missing-symbol diagnostic and
+E3 setup mapping, unchanged destination/model/registry and live owner/claim
+counts after each failed bind, then binds a fresh frame and runs a genuine
+forward batch. This remains native source evidence; the compiled-private R1
+admission matrix and supported-host validation are still pending.
 The bounded development-only [genuine three-batch M2 sum-order witness](../tests/e3_reference/sum_order_witness_v1.json)
 uses packed raw-V256 D2 rows and the registered seed-1729 M3/f32 CE reference.
 Its first witness in a 64-candidate SHA-256 domain has serial numerator
