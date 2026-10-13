@@ -36,6 +36,8 @@ cp "$(eshkol_build_dir)/eshkol-transformer-provenance.tsv" "${out}/toolchain.tsv
   >"${out}/source.sha256"
 python3 -B "${PROJECT_ROOT}/tests/e3_private/retention_first_eval_mutant_source.py" --check \
   >"${out}/derivation.stdout" 2>"${out}/derivation.stderr"
+[[ -x "${PROJECT_ROOT}/scripts/test-e3-complete-call-retention.sh" ]] ||
+  die "retention gate is not executable"
 
 # The accepted numerical and unmodified owner-preservation gates retain their
 # own normal/repeat/poison/sanitizer outputs and measured 1024/8192 horizons.

@@ -985,6 +985,16 @@ bindings and reads rollback's setup box from that entry. Its focused offline
 source regression checks the binding shape. Compiler-only causation and a
 passing sanitizer result remain unproven; independent source review, compiled
 IR inspection and a fresh authorized one-use gate precede §9 acceptance.
+The sealed N one-use run at `f7ebcd6d` passed the correctness gate but exited
+74 before retention began: the detector invoked
+`scripts/test-e3-complete-call-retention.sh` directly while Git recorded that
+script as nonexecutable (`100644`), producing exit 126. The retained run seal is
+`e3-section9-first-eval-oneuse-f7eb-20261013-n/run/SHA256SUMS-RUN`
+(SHA256 `a1ac2bfc9f5ffe2acbcfcfb6a22cfab57bdf127d869c264868312bd8b1d26ed6`).
+This isolated source repair marks the retention script executable and checks
+its mode before the detector begins the expensive controls. N remains failed
+evidence; independent review and a fresh one-use runtime gate precede §9
+acceptance.
 The separate [host-monitor first-error candidate](e3/E3_HOST_MONITOR_FIRST_ERROR.md)
 records a bounded guest-relative cause for a transient unsafe-output scan;
 its successor now uses no-follow descriptor traversal, postscan identity
