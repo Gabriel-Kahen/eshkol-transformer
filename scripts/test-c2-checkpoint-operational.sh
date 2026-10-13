@@ -58,6 +58,8 @@ else
 fi
 active_phase=
 phase_started=0
+active_runtime_label=
+active_runtime_mode=
 phase_begin() {
   if [[ "${development}" == 1 ]]; then
     active_phase=$1
@@ -83,6 +85,11 @@ cleanup() {
     return "${status}"
   fi
   if (( status != 0 )); then
+    if [[ "${active_runtime_mode}" == joint &&
+          ! -s "${tmp}/${active_runtime_label}/joint.progress" ]]; then
+      printf 'C2 OPERATIONAL PROGRESS UNAVAILABLE: %s/joint\n' \
+        "${active_runtime_label}" >&2
+    fi
     find "${tmp}" -type f -name '*.progress' \
       -print -exec sed -n '1,300p' {} \; >&2 || true
     find "${tmp}" -type f \( -name '*.stdout' -o -name '*.stderr' \) \
@@ -368,6 +375,8 @@ run_runtime() {
   local label=$1 mode=$2
   local output="${tmp}/${label}/output/${mode}"
   mkdir -p "${output}"
+  active_runtime_label=${label}
+  active_runtime_mode=${mode}
   phase_begin "${mode}_run"
   C2_OPERATIONAL_PROGRESS_FILE="${tmp}/${label}/${mode}.progress" \
     ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s \
@@ -415,6 +424,8 @@ run_runtime() {
     test ! -e "${output}/${mode}-reject.c2"
   fi
   phase_end
+  active_runtime_label=
+  active_runtime_mode=
   sed -n '/^C2 OPERATIONAL RUNTIME PASS:/p' \
     "${tmp}/${label}/${mode}.stdout"
 }
