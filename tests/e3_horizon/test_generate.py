@@ -32,7 +32,8 @@ class HorizonCorpusTests(unittest.TestCase):
                     + (2 * horizon % SHARD_TOKENS + 1,),
                 )
                 reference = ReferenceDataset(
-                    shards, ReferenceConfig(1, 2, None, 1, True),
+                    shards, ReferenceConfig(1, 2, None, 1, True,
+                                            maximum_batch_bytes=34),
                     manifest_digest=digest, tokenizer_fingerprint=FINGERPRINT,
                     vocab_size=VOCAB_SIZE,
                 )
@@ -44,6 +45,7 @@ class HorizonCorpusTests(unittest.TestCase):
                 self.assertEqual((cursor.total_rows, cursor.next_ordinal),
                                  (horizon, 0))
                 self.assertEqual(cursor.manifest_digest, digest)
+                self.assertEqual(cursor.config.maximum_batch_bytes, 34)
 
     def test_repeated_generation_is_byte_identical(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -31,7 +31,8 @@ def materialize(root: Path, horizon: int) -> Path:
         maximum_total_tokens=len(values),
     )
     reference = ReferenceDataset(
-        loaded, ReferenceConfig(1, 2, None, 1, True),
+        loaded, ReferenceConfig(1, 2, None, 1, True,
+                                maximum_batch_bytes=34),
         manifest_digest=digest, tokenizer_fingerprint=FINGERPRINT,
         vocab_size=VOCAB_SIZE,
     )

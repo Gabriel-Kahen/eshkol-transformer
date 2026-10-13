@@ -990,6 +990,13 @@ packed D2 rows and checks that the private D2-core remaining-row guard runs at
 stage 2 before native acquisition/traversal. The compiled private one-over
 failure, unchanged caller state and six outputs, and measured normal/poison/
 sanitizer resource bounds remain open.
+An isolated [private N5 compiled-gate candidate](e3/E3_N5_PRIVATE_PREFLIGHT_GATE.md)
+now extends the existing noninstalled retention test aggregate with a genuine
+8,192 pass and 8,193 stage-2 rejection under one model/frame authority. Its
+runner records exact D1 payload, independent D2 cursor, four destination words,
+two counters, model/gradient/mode/RNG and native owner state, plus normal,
+poisoned and sanitized peak RSS. Source and shell checks alone do not promote
+this candidate to compiled-private evidence; the supported run is pending.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each
