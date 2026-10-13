@@ -124,6 +124,33 @@ def check():
             "trusted P1 provide differs from exact private import delta")
     without_leaf = without_leaf.replace(successor_tail,
         "\n         module-construction-parameters-internal)")
+    # The L sanitizer repair is a bounded P1 admission-guard delta. Restore
+    # only these exact source spans before checking the accepted TR3 base hash.
+    sanitizer_repair = (
+        (
+            ";;; Keep the raw native shell inside a managed value. Overwriting a global\n"
+            ";;; holding the raw pointer makes the compiler's borrow check read before the\n"
+            ";;; native allocation while clearing the admission guard.\n",
+            "",
+        ),
+        (
+            "(if (eq? nested-shell\n"
+            "                       (vector-ref tensor-provider-admission-active-shell 0))",
+            "(if (eq? nested-shell tensor-provider-admission-active-shell)",
+        ),
+        (
+            "                       (active-shell (vector shell))\n",
+            "",
+        ),
+        (
+            "(set! tensor-provider-admission-active-shell active-shell)",
+            "(set! tensor-provider-admission-active-shell shell)",
+        ),
+    )
+    for revised, inherited in sanitizer_repair:
+        require(without_leaf.count(revised) == 1,
+                "P1 sanitizer guard repair changed outside its reviewed shape")
+        without_leaf = without_leaf.replace(revised, inherited)
     require(sha256(without_leaf.encode()).hexdigest() == COMPOSED_BASE_SHA256,
             "reviewed integrated P1 source changed outside the exact TR3 helper/vector append")
 

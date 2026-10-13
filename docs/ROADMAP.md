@@ -618,6 +618,18 @@ generation, and Wave 3 remains incomplete.
 | O2 | [AdamW, parameter groups, clipping, accumulation and schedules](O2_OPTIMIZER.md) | P1L, Q0, I2 | Exact 1,365-parameter/group boundary; accumulated-gradient, clipping, AdamW and schedule parity; atomic step/load; releasable logical-state continuation; exact 53-global/six-wrapper aggregate; 6,201 adversarial checks, sanitizers, independent review, supported blocking/exhaustive CI, identical-tree merge and bounded merged-main retest. Reviewed test-only repair `2a9f368` makes the TR3-O defined-symbol query portable to supported Ubuntu 22.04/GNU nm 2.38 without changing assertions or runtime scope; four focused package tests and the full TR3-O gate pass on the supported host. After accepted private A2 Step12A changed the header tree, hosted run `35999574298` reached and passed the long O2 build but failed only the stale header-tree test pin; test-only `ecbd0a6` repins the exact new tree and all four focused O2 package tests pass locally. Fresh hosted O2 rerun is pending | complete |
 | C2 | [Detached full training-state checkpoint schema](C2_TRAINING_STATE.md) | C1, D2, O2, X1, K2 | Accepted C2 1.0 component continuation and atomic-file publication: exact 81-global/75-export/81-string boundary, authenticated carriers, exact-bit LOAD/SAVE ownership, failure atomicity, deterministic packaging, flat 1,024/8,192 root retention, and final joint 64-tensor runs at 521,500/521,576 KiB below 524,288 KiB. PR #79 merged as `cbd0929`; PR #77 merged to main as `913cdf4097db09d6c33769e9b0968c01ce0e1f55`; reviewed, tested, and merged states share tree `512a3355cea79583d73b49f690a46478fb1c772c`. Supported run 35393213200 passed all 15 suites/23 commands plus smoke/benchmark, and acceptance 35401088338 reused the verified exact tree successfully. TR3 retains joint live restore/full trajectory and G3 generation proof; [issue #121 handler-order correction](C2_HANDLER_ORDER.md) is in progress: source-order/mutation tests, the exact 5/6/11 final-runtime allocation witness, and focused owner/LOAD gates pass; transformer commit `beb5821` is frozen and independently approved. The reviewed handler-order source is present in the Wave 3 integration branch. On exact clean `7ae5c37` with pinned `81298`/f31, fresh supported P1 handler/LSan, C1 native/sanitizer/AOT, four-image C2 SAVE and canonical C2 public/package/retention gates passed; public retention was 6,356,992 bytes at both 1,024 and 8,192 iterations, slope zero. Sealed public evidence is `c2-121-public-retry-root-7ae5c37-20260924T074300Z` (`SHA256SUMS` `875c3717...`). The scoped exact-7ae5c37 operational gate failed its strict <524,288 KiB peak target at 527,828 KiB; hosted PR #126 corroborated an old-head joint peak of 525,980 KiB. The 1,024/8,192 public-retention slope and production C2 bytes stayed unchanged. A test-only dedicated joint AOT witness preserved the same 26 assertions and 33-file source closure but still peaked at 524,952 KiB, 664 KiB over the unchanged cap; it was not integrated. An isolated byte-preserving C1 SHA-256 streaming repair `daeac8b` avoids copying each complete checkpoint input block and was integrated as the identical source blob at `cfb878e`. Fourteen supported known-answer/boundary cases, canonical four-image SAVE, fresh public/package/retention, and the strict joint operational gate pass. The two joint AOT peaks were 463,836 and 463,692 KiB, leaving 60,452 and 60,596 KiB under the unchanged 524,288 KiB ceiling; both 26-check runs preserved exact bytes and ownership counters. The isolated joint evidence is sealed at `c2-sha-streaming-joint-daeac8b-20260924T100039Z` (`SHA256SUMS` `3974ae27...`). Hosted PR #126 run `35989961605` on pushed `dbc4112` now passes the full C2 operational suite after the shared D2 repair: two joint runs peaked 460,520/460,576 KiB, 63,768/63,712 KiB under the unchanged 524,288 KiB cap, and file/metadata/tensor/count/corrupt, exact/one-over, admission-failure, strict Clang/GCC/C++, sanitizer and byte-lifecycle gates passed. C2 public, SAVE, LOAD, format and state suites in the same run are green. Hosted PR #126 run `35999574298` on pushed `a914540` also passes all six C2 matrix groups, including the strict operational suite; its aggregate still fails only separately scoped A2/O2 exact test pins now repaired locally. Hosted PR #126 run `36009739388` on pushed `46d5c31` also passes C2 SAVE/LOAD/format/state and the strict operational suite; its two joint peaks are 460,776/460,800 KiB, below the unchanged 524,288 KiB cap. Fresh hosted PR #126 run `36020537251` on pushed `8169e68` passes all six C2 matrix groups again, including strict operational joint peaks 460,464/461,148 KiB below 524,288 KiB; D2 shard-loader and the prior symbol-manifest failure paths also pass. All 23 jobs in that supported run completed successfully. Newer supported run `36030979305` on `979bd52` passed all 23 jobs, including all six C2 groups; the pushed `8c13bbf` E3 facade/G3 binding union run `36041612097` is queued, so final #121 acceptance remains pending its exact-head result | active |
 
+C2 operational follow-up: PR #204's old-head clang-b joint run timed out at the
+unchanged 1,800-second watchdog after clang-a's 26-check pass. The inner operation
+was not observable. Independently reviewed test-only progress witness `1abf0fd7`
+records bounded joint LOAD/SAVE phase markers and prints them on failure. Codes
+1/2 bracket LOAD; 10-16, 20-26 and 30-36 cover the three SAVE calls (0 begin,
+1 borrow, 2 preflight, 3 measure, 4 encode, 5 publish, 6 return); 40/41 mark
+release and completed checks. The writer creates a single-link regular file and
+caps evidence at 32 records/2,048 bytes; unsafe or unavailable evidence is
+reported explicitly. The 1,800-second limit, checks and resource thresholds are
+unchanged. Current-main union review and a supported diagnostic run remain gates;
+the old-head failure does not establish current-main runtime behavior.
+
 ## Wave 3 — first complete language model
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
@@ -642,6 +654,56 @@ generation, and Wave 3 remains incomplete.
 | TR3-METRICS | [Public trainer metrics successor design](TR3_PUBLIC_METRICS_PROPOSAL.md) | E3, TR3-F32, TR3 lease | Accepted design for one source-private metrics authority, exact f32-bit/i64 result schemas, measured linear process-lifetime retention and E3-owned selected-bit projection after successful evaluation; runtime f32 implementation/repin, E3 seam, trainer source, public tests and aggregate acceptance remain pending | active |
 | TR3 | [Trainer state machine and exact resume](TR3_P1_FIXED_SET.md) | M3, L2, O2, D2, C2, E3, SHARED-R2, TR3-F32 | #116 [private objective bridge candidate](TR3B_OBJECTIVE_BRIDGE.md) is preserved from exact source `071abb72` with independent approval and a passing supported Ubuntu 22.04/LLVM 21.1.8 focused gate. The bounded P1 slots69/70 fixed-set leaf preserves the accepted E3 prefix and public surface with exact zero-allocation/count/retention evidence and independent review. [#119 private O2 update-and-clear candidate](TR3_O_OPTIMIZER_TRANSACTION_PROPOSAL.md) is preserved from exact implementation source `783dc576` with local atomicity, numerical, lifetime and CI-registration evidence; independent review approved the exact `2006cde` B/O integration. The accepted [TR3-C live restore contract](TR3_C_LIVE_STATE_CONTRACT.md) now has bounded checked-I2 cleanup and feature-local private D2 restore leaf seams with focused sanitizer, symbol-isolation, strict-AOT, lifecycle, and independent-review evidence. The independently reviewed [source-grounded joint composer plan](TR3_C_JOINT_RESTORE_IMPLEMENTATION_PLAN.md) maps exact C2/D2/I2/O2 APIs, ownership transfers and commit/abort order. The independently reviewed 22-slot lease successor now owns epoch-start/RNG/T/U/E and narrow restore enter/recheck/abort/commit-controls/finish transitions. Exact production-OFF de0b249 supported O0 and O2 allocation-failure matrices each pass 1,280 cases/65,235 checks with byte-identical case statuses after the rooted D2 u64-limit repair; O2 compiled under the pinned 1,200-second bound in 1,105.48 seconds, 5,483,212 KiB peak RSS and zero process swaps. Sealed O0/O2 evidence is `tr3-c-lease-o0-full-8b102ed-20260924T071200Z`/`tr3-c-lease-o2-full-a190ca4-20260924T040000Z`. Reviewed lease/D2 source is integrated at `8f64aad`. The independently reviewed partition-2 private bindings are integrated at `b428da3`: fixed hidden I2/O2 source ABI adapters, exact O2-plan-as-I2-authority, and assignment-only transfer of all 28 O2 stage wrappers. After repairing sealed-tail transitive fallibility, focused source contracts, 340-check Clang/GCC and sanitizer/symbol-isolation gates, nine source-ledger runtime checks, and strict exact-81298 package compilation passed; sealed evidence is `tr3-c-restore-bindings-5a0b9e6-20260924T143000Z` (`SHA256SUMS` `cf5e86a4...`). The independently reviewed private partition-3 composer `dff93fb` is source-staged in the integration branch at `530f470`: it stages the accepted C2 borrow into 14 parameter and 28 moment owners, ends active P1 tensor access before C2 borrow shutdown, prepares D2/O2/I2 in fixed order, authenticates the exact native O2 plan through the 22-slot lease, and uses a checked assignment-only irreversible tail. Its sealed `tr3-c-joint-composer-dff93fb-20260924T050500Z` evidence (`SHA256SUMS` `9b340e91...`) records 34 focused source tests, the Clang/GCC/sanitizer binding gate, and exact-81298 O0 aggregate compilation (94.84 seconds, 4,652,876 KiB peak RSS, zero swaps). The independently reviewed authentic joint-restore repair `a8c6dd0` authenticates the full 15-path tied P1 projection, stages its 14 primaries, normalizes C2 expanded cursor fields 3/4 to lease-owned bytevectors, and compares canonical X1 bytes with the accepted D2 comparator. Root integrated the exact four source/test blobs at `5b3a31b`, tree `5788e8b`, and reran the genuine supported f31/81298 strict-AOT gate on that clean combined tree: 67 checks, all 42 tensor bytes and controls match after restore, injected last-recoverable O2-check abort preserves the receiver, and same-owner retry succeeds. Compilation took 95.06 seconds and 4,800,592 KiB peak RSS with zero swaps; runtime took 0.29 seconds and 79,444 KiB peak RSS with zero swaps. Sealed root evidence is `tr3-c-joint-root-5b3a31b-20260924` (`SHA256SUMS` `b6805ffa...`). The bounded actual-transaction O0 failure-cut gate at isolated test-only `b8a1372` passed 1,905 arena cut cases/76,200 checks with receiver/source byte preservation and same-owner retry, then stopped at the first genuine counterexample: arena-string allocation denial at cross-validation ordinal 1,905 caused runtime SIGSEGV before recovery. Sealed evidence is `tr3-c-joint-alloc-o0-b8a1372-20260924T110000Z` (`SHA256SUMS` `31367be7...`). Read-only attribution on both exact production-OFF `de0b249` and final runtime `81298` found a shared upstream AOT string-copy null-allocation bug: `eshkol_utf8_substring` returns null, while `StringIOCodegen::substringImpl` packs it without the existing constructor-allocation check, then a null-minus-eight header read faults. The required O2 config deep copy is correct; transformer source remains unchanged. Sealed diagnosis is `tr3-c-joint-alloc-1905-attribution-20260924T113500Z` (`SHA256SUMS` `ba1f0e1f...`). The independently reviewed isolated upstream repair `b28f43f`/tree `cdf5735` adds the existing constructor-allocation guard before pointer packing; five strict-AOT/emergency/IR tests pass (`eshkol-string-allocation-guard-b28f43f-20260924T122500Z`, seal `ff49d51b...`). A production-OFF guarded runner passed ordinal 1905 with 40 preservation/ownership/retry checks (`tr3-c-joint-ordinal1905-c8c4ce2-b28f43f-20260924T121500Z`, seal `a1134ebf...`), then passed arena cuts 1906–2198 (293 cases/11,720 checks) before stopping at a new genuine arena-header denial/SIGSEGV at ordinal 2199 (`tr3-c-joint-arena-resume1906-c8c4ce2-b28f43f-20260924T122000Z`, seal `e63ba80d...`). The guarded runtime and transformer test-only manifest repin remain isolated; root verified all seals. Ordinal 2199 was attributed to upstream `string->utf8` packing a null denied allocation before a length store/copy. Independently reviewed Eshkol guard `71cbd69a`/tree `f64e00d` inserts the existing constructor-allocation check, passes seven focused f31/LLVM21 strict-AOT/IR tests, and leaves production archive bytes unchanged (`eshkol-string-utf8-allocation-guard-71cbd69-20260924T132000Z`, seal `67bb53b5...`). Isolated transformer test-only repin `da5f139` passed ordinal 2199 with 40 preservation/ownership/retry checks (`tr3-c-joint-ordinal2199-da5f139-71cbd69-20260924T133000Z`, seal `a4141912...`), then stopped at the next arena-header denial/SIGSEGV at ordinal 2200 (`tr3-c-joint-arena-resume2200-da5f139-71cbd69-20260924T133500Z`, seal `4493141d...`). Root verified the source and ordinal-2199 evidence seals. Distinct upstream `utf8->string` null-allocation guard `bce74b4`/tree `0f07e7a` passed seven supported strict-AOT/IR checks; isolated ordinal 2200 then passed 40 checks and cuts 2201–2436 passed 236 cases/9,440 checks (`tr3-c-joint-arena-resume2201-849b156-bce74b4-20260924T142500Z`, seal `64a53990...`). Independently reviewed upstream `make-bytevector` guard `cb8abee`/tree `e29c4c3` passed nine focused checks; isolated ordinal 2437 passed 40 checks and cuts 2438–2474 passed 37 cases/1,480 checks (`tr3-c-joint-arena-resume2438-d07025b-cb8abee-20260924T152500Z`, seal `b2c0f6d9...`). Root verified both source and ordinal/resume seals. Ordinal 2475 was an upstream escaped mutable-capture allocation null-store defect. Independently reviewed closure-capture guard `36b0c2b`/tree `ef1b079` preserves conditional initializer and intervening branch writes while checking the 16-byte capture box before pointer use; supported f31/LLVM21 O0/O2 semantic/emergency/IR gates pass 11/11 (`eshkol-closure-capture-allocation-guard-36b0c2b-20260924T164500Z`, seal `b8528c45...`). Isolated ordinal 2475 passed 40 checks; 2476–2504 passed 29 cases/1,160 checks before the next denied 48-byte arena-closure allocation/SIGSEGV at ordinal 2505 (`tr3-c-joint-arena-resume2476-d39f33d-36b0c2b-20260924T170500Z`, seal `fc8c9e34...`). Root verified source/ordinal/resume seals. Ordinal 2505 was a capturing-lambda closure allocation followed by an offset-eight env read through null. Independently reviewed upstream guard `b6ff508`/tree `9072c74` covers capturing and zero-capture constructors before pointer use; supported f31/LLVM21 O0/O2 emergency/IR gates pass 13/13 (`eshkol-lambda-closure-allocation-guard-b6ff508-20260924T180000Z`, seal `38f6e1ed...`). Isolated ordinal 2505 passed 40 checks and cuts 2506–2742 passed 237 cases/9,480 checks before the next denied 32-byte arena-string allocation/SIGSEGV at ordinal 2743 (`tr3-c-joint-arena-resume2506-1bdef05-b6ff508-20260924T182000Z`, seal `ac424ec5...`). Root verified source/ordinal/resume seals. Ordinal 2743 was upstream `codegenSymbolToString` packing a denied arena-string allocation. Independently reviewed one-line guard `bba111d`/tree `6a018de` passes supported f31/LLVM21 O0/O2 emergency/IR 15/15; isolated ordinal 2743 passes 40 checks (`tr3-c-joint-ordinal2743-c6fb42a-bba111d-20260924T194500Z`, seal `dead5ebd...`). The next exact cut 2744 immediately denies a length-64/request-80 arena-string allocation and faults (`tr3-c-joint-arena-resume2744-c6fb42a-bba111d-20260924T200000Z`, seal `aeae37f1...`). Root verified source/ordinal/resume seals. The independently reviewed upstream `number->string` null-allocation guard `65db8d6`/tree `7e4f5b4` passes supported f31 O0/O2 emergency/IR 17/17; isolated ordinal 2744 passes 40 checks. Next cut 2745 denied a length-24/request-40 arena string. The independently reviewed upstream `string-append` guard `9e52e1a`/tree `926da9f` checks allocation before GEP/memcpy; supported f31 O0/O2 semantic/emergency/IR 19/19 and isolated ordinal 2745 passes 40 checks. Cuts 2746–3331 pass 586 cases/23,440 checks; exact cut 3332 denies a length-65/request-80 arena string and faults. Root verified `eshkol-string-append-allocation-guard-9e52e1a-20260924T230000Z/SHA256SUMS` and `tr3-c-joint-arena-resume2746-d5ad553-9e52e1a-20260924T235000Z/SHA256SUMS`; the independently reviewed upstream `make-string` guard `ae214210`/tree `5534420` checks allocation before memset/pack. Supported f31 O0/O2 runtime, IR mutant and checked-promotion 34/34 pass; isolated ordinal 3332 passes 40 checks. Cuts 3333–3398 pass 66 cases/2,640 checks; exact cut 3399 denies an arena-header request320/object312 and faults during cross-validation. Root verified `eshkol-make-string-allocation-guard-ae214210-20260925T010000Z/SHA256SUMS`, `tr3-c-joint-alloc-3332-ae214210-20260925T013000Z/SHA256SUMS`, and `tr3-c-joint-alloc-resume3333-ae214210-20260925T014000Z/SHA256SUMS`; the independently reviewed upstream `bytevector-copy` guard `d9e6908`/tree `3c8e7d0` checks allocation before copying/packing. Supported f31 O0/O2 runtime, IR mutant and checked-promotion 36/36 pass; isolated ordinal 3399 passes 40 checks. Cuts 3400–3412 pass 13 cases/520 checks; exact cut 3413 denies an arena-vector capacity-8/request-144 allocation and faults during cross-validation. Root verified `eshkol-bytevector-copy-allocation-guard-d9e6908-20260925T023000Z/SHA256SUMS`, `tr3-c-joint-alloc-3399-d9e6908-20260925T030000Z/SHA256SUMS`, and `tr3-c-joint-alloc-resume3400-d9e6908-20260925T031500Z/SHA256SUMS`; the independently reviewed upstream Scheme-vector `vector-copy` guard `29b9b0a`/tree `6bbddf3` checks allocation before length store, copy and packing. Supported f31 O0/O2 denial/retry and IR mutant gates plus checked-promotion 38/38 pass; exact ordinal 3413 passes 40 checks. Cuts 3414–3450 pass 37 cases/1,480 checks and 3451–4437 return authenticated `END`; the repeated arena census is exactly 3,451 allocation sites and ends at the irreversible tail. Root verified `eshkol-vector-copy-allocation-guard-29b9b0a-20260925T043000Z/SHA256SUMS`, `tr3-c-joint-alloc-3413-29b9b0a-20260925T050000Z/SHA256SUMS`, and `tr3-c-joint-alloc-resume3414-29b9b0a-20260925T051500Z/SHA256SUMS`. The distinct O0 `f32` class is now fully enumerated on the same exact pins: 282 authenticated recoverable cuts at ordinals 0–281, first authenticated `END` at 282, 283 cases/11,308 checks, zero process failures, receiver/source preservation and same-authority retry. Root verified `tr3-c-joint-f32-complete-29b9b0a-1aa6b08-20260924T141000Z/SHA256SUMS` (`a3d65060...`); no code repair was needed. O0 `i2` is also complete on the exact pins: 86 authenticated recoverable cuts at ordinals 0–85, first `END` at 86, 87 cases/3,468 checks, zero process failures, exact receiver/source byte and ownership preservation, and same-authority retry. Root verified `tr3-c-joint-i2-complete-29b9b0a-1aa6b08-20260924T143200Z/SHA256SUMS` (`0598c327...`); no repair was needed. The final O0 `o2` class is complete too: ordinal 0 has an authenticated typed `internal` allocation failure with exact receiver/source preservation and same-authority retry; ordinal 1 is first `END`, 2 cases/68 checks/zero failures. Root verified `tr3-c-joint-o2-complete-29b9b0a-1aa6b08-20260924T144800Z/SHA256SUMS` (`a9e5cd39...`). All four O0 classes are closed on exact isolated pins: arena 3,451 cuts, f32 282, i2 86, o2 1; no root toolchain pin changed. The joint O2 optimized allocation matrix also closes on the same isolated guarded runtime/source pins: independently reviewed test-only selector `875f16c`/tree `68da887` defaults to unchanged O0 and chooses supported O2 with a manifest-pinned 1,200-second compiler bound and exact 1,200-byte diagnostic hash. Supported f31/LLVM21 O2 passed 3,824 cases/152,912 checks with zero process failures: arena 3,451 recoverable cuts then END at 3,451; f32 282 then END at 282; i2 86 then END at 86; o2 1 then END at 1. Every recoverable cut preserved receiver/source bytes and ownership and passed same-authority retry. The optimized compile took 18:57.39 and peaked at 6,743,552 KiB RSS with zero swaps. Root verified `tr3-c-joint-o2-full-875f16c-20260924T150000Z/SHA256SUMS` (`43c76e3f...`). The test selector and upstream guarded runtime remain isolated; root runtime pin is unchanged. The bounded [private snapshot-to-checkpoint publication seam](TR3_C_SNAPSHOT_SAVE.md) composes an exact C2 owner, uses accepted C2 SAVE, and releases that owner on success and writer failure; its focused supported gate passes deterministic bytes and malformed/precommit/postcommit cleanup cases. The bounded [private checkpoint-to-live restore seam](TR3_C_CHECKPOINT_RESTORE.md) uses accepted capability-gated C2 LOAD and joint restore with exact detached-owner release; focused compiled evidence covers checksum/torn/malformed files, forged K2 report, X1 receiver mismatch, and all 42 restored tensor/control images. The [private trainer load-state result-cell entry](TR3_C_PRIVATE_LOAD_ENTRY.md) now delegates to the accepted joint transaction and proves malformed/busy/rollback and exact-image behavior under a supported strict-O0 gate; public trainer wiring still requires a public trainer constructor and package identity. Public trainer, exact resume and #121 final acceptance remain pending. The [bounded I2 restore candidate](TR3_I2_RESTORE_INTEGRATION.md) selectively replays accepted `154d9c3` while preserving the shared provider; its exact-union supported native gate and independent integration review passed at `b3e8464`; broader runtime/package and trainer acceptance remain pending. The independently reviewed [development reference](TR3_REFERENCE_INTEGRATION.md) from `cc474900` is preserved exactly: 33 trajectory points, 14 parameters, 28 moments, weighted held-out and D2 cursor/EOS cases, with strict checksum/type validation; this supplies no native training or resume proof. The bounded TR3-B/O prerequisite union is merged through PR #124 at `f74fede` after supported CI `35925066612` and exact-tree evidence reuse. The [bounded native O2 restore integration](TR3_O2_RESTORE_INTEGRATION.md) at `2aeefad` passed independent review and supported O2/I2/G3/C2 coexistence checks; it preserves linear terminal-control retention and adds no joint trainer transaction. Shared D2 boundary repair `63756bd` preserves same-aggregate invalid-argument errors and admitted typed allocation failures; its supported compiled public gate passed 24 checks. The independently reviewed scoped lease failure runner at `7c83038` passed both canonical O0/O2 matrices on production-OFF de0b249: each 1,145 cases/54,921 checks, identical case status, authenticated evidence; O2 admitted only the exact pinned LLVM vectorization diagnostics. The accepted lease-successor allocation diagnosis requires the width-8 D2 cursor store to reuse the rooted `d2-core-u64-space`; after review its affected-gate union must include E3 because the active E3 run remains pinned to the preceding exact tree and is not repinned in flight. Full supported successor-union CI, package localization/facade remapping, trainer/compositor integration, public trainer, joint restore, one-batch overfit, held-out improvement and interrupted/resumed equivalence remain pending | active |
 | CLI3 | Corpus, tokenizer, pretrain, evaluate, generate and inspect CLIs | T2, TR3, G3, X1 | The bounded six-command CLI3-A source from clean `392fac8` is selectively integrated at `62fa411`: tokenizer byte/train-bpe/inspect, corpus build/inspect and checkpoint inspect. Root verified all 21 CLI paths against that candidate and the 1,204 non-CLI base paths against `fc924df`. On the supported immutable Ubuntu 22/Clang 21 image with authenticated runtime `81298`, two fresh network-disabled builds produced 16 byte-identical regular files. The exact 8-global/2-export/83-string/34-source/36-formatter/54-native/157-undefined boundary, 35 public E1B AOT checks, six-command behavior/artifact/grammar/I/O tests, formatter-to-production negative, and genuine condition-5 handler-allocation plus published-shard rollback/static-fallback witness passed; root verified the 83-file evidence manifest. This accepts the bounded CLI3-A source and gate, not the root aggregate CI or full CLI3. The bounded fixed-profile pretrain/evaluate CLI3-B source is independently reviewed at `b035ca5`/tree `22340a4` after merged TR3 fresh-process head `efc2e714`. On the pinned fe9/Clang 21 image, two network-disabled builds of identical production source `7c9ef1b` passed exact source/native/export/undefined/public-string manifests and produced 16 byte-identical files; the final full CLI suite passed artifact/grammar and negative cases, fresh-process checkpoint identity, held-out evaluation, and independent O0/O2 raw-observation binary32 loss replay. The 66-file seal is `cli3b-gate-d30f4b0/SHA256SUMS` (`ec8525fd...`). CLI3-B merged through [PR #160](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/160) as `b247016e`, with exact-head hosted run [36578080741](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/36578080741) green. The test-installed one-byte `generate` successor merged through [PR #168](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/168) as `7c38d386`, and the bounded production CPU f32 successor merged through [PR #169](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/169) as `219014ad`; their exact-head hosted runs [36664638712](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/36664638712) and [36754257816](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/36754257816) passed. The focused CLI3 command gate is registered in required CI. The exact `18693b4` compiled J result and independent review passed production generation and cross-command checks for the fixed CPU f32, byte-tokenizer, context-two one-byte profile; the composed-head compiled gate and hosted exact-head CI remain pending. Full CLI3 acceptance remains open beyond that bounded profile | active |
+
+The [D1 corpus validate command slice](CLI3_CORPUS_VALIDATE.md) is staged from
+`93ea6258` on this current-main source union. It adds a standalone Eshkol-native
+`corpus validate` executable and a retained-evidence gate with source,
+toolchain, and checkout pins. The [installed-dispatch source audit](CLI3_CORPUS_INSTALLED_DISPATCH_BLOCKER.md)
+identified the former public D1 package and command-contract blocker. A
+[source-only public D1 link and dispatch candidate](CLI3_PUBLIC_D1_LINK_CONTRACT.md)
+stages the validator, six read-only summary accessors, and one shared public
+command handler for the installed app. The installed entry intercepts only
+`corpus validate`; the required production-generate gate now checks its
+command contract and the existing commands. Exact-tree compiled package,
+installed runtime, and hosted gates remain pending. Source-only tests cover
+evidence-path and dirty checkout rejection. The exact composed head has not
+passed the compiled D1 and command gate; this does not establish full CLI3
+acceptance. The required CLI3 suite's
+production-generate and cross-command gates now retain evidence in separate
+directories so their identically named output files cannot overwrite each other.
+Draft PR #202's first hosted run `38256561519` stopped at Q0 Python isolation
+because the D1 facade staging helper was under `scripts/`. The unchanged
+development-only helper now resides under `tests/cli3/`, with its build and
+source-test references updated. Focused Q0/CLI3 source tests and CI topology
+pass; the revised exact-head hosted and compiled gates remain pending.
+The next hosted run `38259465352` passed Q0 topology but its CLI3 command job
+stopped before installed runtime: the pinned Eshkol runner does not emit a
+depfile for executable output. The source-only repair obtains each app or
+standalone command import graph from an object-mode compile before producing
+its executable. Exact-head hosted and compiled validation remain pending.
+Run `38270239683` at `d17e1961` passed topology and built the source-composed
+CLI3 package, then its command job failed after the build without identifying
+the failing assertion: the production-generate driver retained redirected
+output only on the runner. A bounded diagnostic follow-up reports each phase,
+the failing status, and at most 4096 bytes from each current stdout/stderr
+evidence file. It changes no command or oracle; a fresh exact-head hosted run
+must identify the failure before a behavior repair can be reviewed.
+That run identified the `six-command-suite` formatter-private link as the
+failure, after the installed D1 validator, pretrain, generation oracles, and
+negative cases passed. The formatter fixture still built the older two-export
+archive and imported the full D1/D2 facade while linking the current app.
+Its source-only repair keeps the same private formatter assertions, admits
+exactly the installed read-only D1 public exports in that fixture archive,
+and stages the same checked D1 projection for its app compile. The subsequent
+hosted result is recorded below.
+Run `38294256092` at `f44cec54` passed the CLI3 command suite, including the
+formatter fixture. Its separate model-composition job then rejected a changed
+SHA-256 of `scripts/build-e1b-consumer.sh`, whose bytes are pinned by M3's
+predecessor-source contract. A bounded follow-up restores that builder byte
+for byte and links the unchanged two-export formatter archive to a test-only
+dispatch entry. The installed app and its D1 command are already exercised
+before this private formatter fixture; the same formatter assertions and
+`--version` oracle remain. Exact-head hosted validation is pending.
 
 The isolated CLI3 cross-command test script `scripts/test-cli3-cross-command-chain.sh`
 is prepared for a fresh production-root build. It creates one byte tokenizer,
@@ -781,8 +843,140 @@ The expected abort diagnostic appears in Docker stderr; ordinary/sanitized
 compile and runtime stderr is empty. Its current-main `5520dfe` union changes
 only unrelated G3 RNG code/tests and documentation outside the seven package
 source/native closures and depfiles; hosted CI and merge remain pending.
-Retention, numerical, other §9 and public-path acceptance remain pending; the
-separate retention and numerical test candidates are not included here.
+The supported mode/graph gate did not include retention or numerical test
+candidates. A scoped source integration adds the separate complete-call
+retention tuple and strict 1,024/8,192-call normal A/B, poison A/B and
+sanitizer runner with gradients absent/present. The frozen `091461f2` prepared
+retention J gate was not run. The supported retention attempt on frozen
+`d9328ce` built its packages but stopped at the first strict-AOT executable:
+under `--no-stdlib`, the private `retention_runtime.esk` used unavailable
+`length` and `list-ref` functions. This isolated successor reuses the existing
+private runtime's `car`/`cdr` argument traversal while preserving the retention
+assertions and full 20-case matrix. Its sanitizer manifests are still
+provisional pending fresh actual compiler diagnostics; the earlier retained
+readelf DWARF warnings have no clean-stderr or runtime acceptance claim.
+Fresh supported retention and affected mode/graph gates on this exact composed
+tree remain required. A further [numerical transcript source
+candidate](e3/E3_NUMERICAL_TRANSCRIPT.md) composes the authentic three-batch
+observer and two accepted compiled mutants onto that combined source, and
+adds a third final-loss second-normalization mutant. Its source and static
+tests require independent review, then a fresh supported numerical gate.
+The changed native frame, metrics provider and shared builder also require
+full affected mode/graph and 20-run retention gates on the exact integrated
+tree. The prior 75-file numerical seal applies only to `8dafe8cb`; broader
+§9 and public-path acceptance remain pending. A separate five-case private
+numerical transcript source candidate extends the noninstalled runtime and
+strict parser to all five existing authentic D2 layouts, with independent
+role/CE/state/final verification and byte equality for identical packed
+emissions. Its three compiled mutants remain on packed-single. Local parser
+and shell checks do not substitute for independent source/test review or a
+fresh supported compiled gate; this extension has no runtime evidence yet.
+An isolated all-correct/all-wrong source candidate adds two fixed raw V256
+six-byte D1 corpora, authentic packed D2 rows, seed-1729 M3 selection proof,
+and a separate two-case private numerical runner. The new versioned manifest
+checks exact IDs, physical hashes, cursor identity, row/mask/count and declared
+class; the compiled gate is scoped to these two cases across normal A/B,
+poison and sanitizer with 21 roles, CE, exact accumulation, six final outputs
+and accuracy 1.0/0.0. The existing five-case corpus, schema and transcripts
+are unchanged. Independent source review and a supported compiled run are
+pending; the local mathematical reference is not compiled E3 evidence.
+An isolated test-only wrong-vocabulary-axis candidate adds one numerical-tuple
+mutant that reads the existing `[1,2,256]` binary32 logits at `[V,T]` stride 2
+instead of `[T,V]` stride 256. The exact all-correct D2 rows include final
+padding input `[31,0]`; the corrected two-repeat mathematical audit yields
+normal accuracy 5/5 and wrong-stride accuracy 0/5. The candidate's private
+compiled runner requires all 63 role records, unchanged logits/CE/reduction
+and counters, then rejection at the strict `correct_f32` check with no mutant
+transcript publication. A test-only negative classifier now requires canonical
+exit 1, empty validator stdout, exact expected diagnostics (with only the
+pinned two-line NumPy warning admitted), retained raw traceback/source context,
+and absent transcript; timeouts, crashes, extra output and other exceptions
+fail closed. The production/default profile and frozen corpora are
+unchanged. Independent source review and a supported compiled mutant run are
+pending; mathematical reachability alone is not a compiled mutant kill.
+The isolated E3 private sanitizer source candidate reuses the reviewed
+streaming, reversible ASan IR helper byte-for-byte. Only exact noninstalled
+retention, mode/graph and numerical sanitizer tuples select the derived IR;
+normal and public/default builds retain the original compile input. The
+source-pinned helper and verifier compare the raw and derived IR, retain both
+with a receipt, and require generated-object `__asan_report` imports before
+native linking. This is address instrumentation of Eshkol IR, not evidence of
+Eshkol frontend UBSan coverage. Actual emitted sanitizer imports and the
+existing exact test manifests still need a fresh supported diagnostic run and
+independent review before any sanitizer or §9 acceptance claim.
+
+The pinned `32484f6` numerical compiler diagnostic stopped before runtime on
+the exact sanitizer import delta. Its retained Clang 21 objects replace
+`memcpy`, `memmove`, and `memset` imports with the corresponding `__asan_mem*`
+interceptors; raw and derived IR retain the LLVM memory intrinsics. Independent
+discovery review accepted the attribution, and a bounded manifest correction
+adds these three absent names with a real compiler-lowering regression probe.
+The 112-file discovery seal is
+`e3-streaming-asan-imports-32484f6-fe9-f31-20261004-prepared-b/SHA256SUMS-DISCOVERY`
+(`5cfc20c6...`). This is compiler discovery only. Exact source review and a fresh
+supported compiled runtime gate remain required; no sanitizer acceptance is
+claimed, and the independent upstream foreign-pointer repair remains pending.
+
+An isolated E3 uniform-tie source candidate uses a checksummed C1 zero-state
+container for the real seed-1729 M3 model before frame binding. Its dedicated
+noninstalled tuple retains the ordinary E3 entry and compares all 21 emitted
+roles, CE, state, four metrics, counts and saved D2 cursor against a separate
+six-zero-byte D1/D2 reference. The `>=` last-tie mutant and five I2 fault/census
+hooks are confined to the test build. Checksum, provider, shape and tie
+rejection plus an authentic copy-builder preparation allocation failure must
+preserve original parameter identities, values and owners before a successful
+zero-state retry. Local Q0/static controls pass; exact emitted tuple manifests,
+independent source review, and supported normal/repeat, poison and sanitizer
+execution remain pending. This supplies no §9 N3/M2 compiled acceptance or
+target-offset, wrong-axis, finite-boundary or overflow proof.
+
+A separate noninstalled E3 overflow tuple is a source candidate for a genuine
+stage-12 finalization boundary. It loads a checksummed C1 state into one fresh
+model before its authentic frame bind, uses the fixed D1 `0304`/D2 padded row,
+and checks finite gamma 22.125 against overflow gamma 22.25 in separate process
+invocations. The overflow invocation repeats rejection on its unchanged model,
+frame and corpus authority while checking six caller outputs, cursor, mixed
+17-mode token, all 14 model/gradient owners, initializer, 29 retention probes,
+arena and dataset closure. The ordinary retention entry and its 20 cases are
+unchanged. Local fixture and transcript-classifier tests do not prove compiled
+reachability, rollback or §9 acceptance; supported normal/repeat/sanitizer
+execution, emitted import closure and full IR review remain pending.
+An isolated test-only clamp-overlay successor pins the production E3 metrics
+finalizer hash and changes only its `expf` overflow rejection to `FLT_MAX` in
+an owned generated translation unit for the noninstalled overflow tuple. A
+strict parser requires the full numerical trace, `E3FINAL`, the fixture's
+stage-12 failure marker and canonical abort; the finite control must match
+the ordinary tuple byte for byte. Local hash, selector, closure and classifier
+controls do not establish a compiled mutant kill. The alternate binary64
+calculation with binary32 conversion and the same post-conversion finite
+check is observationally equivalent at this boundary. Supported fe9 runtime,
+unbuffered-output, import, sanitizer and ordinary-object parity proofs remain
+pending.
+
+The current-main source composition from `391f67ea` combines the scoped
+retention/numerical, generated-ASan import, uniform-tie, overflow and
+clamp candidates with the merged mode/graph source. Its uniform
+sanitizer absent-import manifest mirrors the reviewed numerical
+Clang 21 memory-intrinsic delta only as a strict candidate; actual
+uniform fe9 emission must match or fail closed. The combined metrics
+source has rederived exact clamp source/derived hashes; independent whole-tree
+source review and supported normal/repeat/sanitizer/runtime gates remain
+pending. The overflow tuple also admits only the exact declared retention
+region observer supplied by its separately linked test object; other private
+imports and tuple near misses remain rejected. This source correction has no
+compiled acceptance yet. The upstream typed
+foreign-pointer prerequisite remains unresolved; no generated-ASan,
+ordinary-object-parity or E3 §9 acceptance is claimed for this union.
+
+The frozen five-case gate at `2b74b534` built its package variants but
+stopped at the first runtime compile on an extra closing parenthesis in the
+argument check; no numerical runtime or mutant verdict was produced. The same
+syntax defect exists in the correctness driver. An isolated test-only successor
+removes that one character from each driver and checks complete source parsing
+with malformed-close controls. The frozen failed evidence is preserved at
+`e3-numerical-five-case-2b74b53-fe9-f31-20261004-prepared-a/SHA256SUMS-FAILED`
+(`cdb4d3cd...`). Independent source review and a fresh supported compile/runtime
+gate remain required; static parsing does not prove E3 numerical acceptance.
 
 The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
 is a docs-only candidate for the remaining private numerical, compiled-mutant,
@@ -791,6 +985,102 @@ from direct-provider-only cases and names the missing noninstalled model-control
 and stage-selective fault/observer seams for review. It provides no new runtime
 proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
 verdicts remain prerequisites before the full matrix is implemented and run.
+The test-only retention driver now snapshots all 14 parameter value and gradient
+word arrays plus three metadata fields before its first evaluator call, after
+optional fixed gradient seeding, and compares that original image after each
+completed warmup, calibration, success and retry call. The evaluator's measured
+region-byte interval is unchanged. Source mutation controls check the baseline
+order and comparison topology; a compiled first-call bit-mutation witness and
+supported complete-call gate remain pending, so this is not §9 acceptance.
+An isolated noninstalled first-evaluation mutant tuple now derives a private
+driver mechanically from that baseline and replaces only the E3 frame test
+object with a feature-gated, fixed one-shot helper. Source controls cover
+absent-to-present, seeded gradient-bit and metadata changes, tuple isolation,
+the prehook baseline check, and readback before the first comparison. Its
+normal and sanitizer manifests are candidate inputs; no mutant has been
+compiled or run, so first-call detection, manifest closure, normal/repeat,
+poison and sanitizer results remain pending independent review and a fresh
+supported gate. The original retention tuple and production sources remain
+unchanged.
+An additional test-owned native harness now specifies real M3 owner creation,
+stale/foreign/active/owner-state/gradient-state/contribution-count denials,
+unchanged full-model images on denied calls, a successful one-shot mutation
+and second-call denial, plus a feature-off object-symbol check that requires
+the symbol tool itself to succeed. This harness is source-only and has not
+been compiled or executed; its native and first-evaluator verdicts remain open.
+Malformed gradient-tensor geometry is not fabricated through a new private
+setter: the sealed fixed M3 owner exposes no reviewed geometry mutation seam.
+The composed source now includes current main `09f7ed52`, accepted first-call
+control `948b8067`, and the four exact correctness-control blobs from
+`78604fa`. `scripts/test-e3-first-eval-detector.sh` stages a fresh one-use
+supported gate: it requires the independent correctness, unmodified 1024/8192
+retention, and native-owner controls, then builds and compares normal A/B and
+sanitized noninstalled mutant packages and AOT images. For all three one-shot
+gradient mutations it requires failure at the first post-evaluation
+`success-model-image` comparison under normal, repeat, poisoned and sanitizer
+profiles, retaining raw streams, exit codes, hashes and toolchain provenance.
+This is source preparation only; no compiled result or §9 proof is claimed.
+The sealed K first-evaluation run at `268ab285` failed its first correctness
+parser gate because the reference cursor encoded the D2 default
+`maximum_batch_bytes=1048576` while the compiled driver requested `34`.
+The observed caller cursor was restored byte-for-byte. The isolated source
+repair sets the correctness reference to `34` and tests both manifest cursor
+identity and rejection of the old-default mismatch by the strict compiled
+result parser. A fresh independent source review and distinct one-use compiled
+gate remain required; K is retained as failed evidence, not numerical proof.
+The sealed L one-use run at `73226322` passed normal A/B three-batch correctness
+but failed sanitized correctness during P1 provider registration in module
+initialization, before E3 evaluation. Its generated borrow check read seven
+bytes before a native P1 token when the active-shell guard held a raw pointer.
+The isolated [source diagnosis and repair](e3/E3_L_SANITIZER_DIAGNOSIS.md)
+stores that pointer inside a managed vector. The deterministic noninstalled P1
+mode variant and all four mode-graph outputs are repinned to that source; their
+12 source/negative tests and focused P1 checks pass, but no new compiled or
+sanitizer execution has run. L remains failed evidence and the
+first-evaluation detector and E3 §9 verdicts remain open.
+The sealed M one-use run at `da18af73` failed sanitized all-correct setup in
+`e3-frame-bind!`, before first evaluation: ASan observed a one-byte read seven
+bytes before an opaque P1 token during canonical model readback. Generated IR
+shows a borrow check on the old `model` binding for `set! model`; the new
+isolated source candidate reads the canonical entry into fresh lexical
+bindings and reads rollback's setup box from that entry. Its focused offline
+source regression checks the binding shape. Compiler-only causation and a
+passing sanitizer result remain unproven; independent source review, compiled
+IR inspection and a fresh authorized one-use gate precede §9 acceptance.
+The sealed N one-use run at `f7ebcd6d` passed the correctness gate but exited
+74 before retention began: the detector invoked
+`scripts/test-e3-complete-call-retention.sh` directly while Git recorded that
+script as nonexecutable (`100644`), producing exit 126. The retained run seal is
+`e3-section9-first-eval-oneuse-f7eb-20261013-n/run/SHA256SUMS-RUN`
+(SHA256 `a1ac2bfc9f5ffe2acbcfcfb6a22cfab57bdf127d869c264868312bd8b1d26ed6`).
+This isolated source repair marks the retention script executable and checks
+its mode before the detector begins the expensive controls. N remains failed
+evidence; independent review and a fresh one-use runtime gate precede §9
+acceptance.
+A bounded source-only E3 union on current main `6f6ef9ad` replays the reviewed
+`efe11be7` delta while retaining main's CLI3/G3-R work and the original E3
+corpus. The Q0 allowlist and M3CG predecessor manifest are combined from the
+actual tree; nine affected source checksum gates and focused offline source
+checks pass. Three stale E3 test assertions were refreshed to match the
+existing first-evaluation tuple. Independent source/tests review accepted this
+exact union. The pinned PyTorch-dependent reference test, supported
+compiled/sanitizer gates, and §9 matrix remain open; this source union does not
+establish E3 admission.
+The separate [host-monitor first-error candidate](e3/E3_HOST_MONITOR_FIRST_ERROR.md)
+records a bounded guest-relative cause for a transient unsafe-output scan;
+its successor now uses no-follow descriptor traversal, postscan identity
+checks, and fail-closed Linux move watches on the root path and subtree.
+Eighteen offline tests reject the
+sealed symlink and persistent/transient move-out negatives, but no one-use
+launcher has consumed this source. It is not an atomic snapshot or general
+proof against concurrent mutation; L's sealed failure and prerequisite remain.
+A separate Q0 isolation successor admits only the exact noninstalled
+`generate-e3-overflow-clamp-overlay.py` development helper, correcting the
+inherited missing allowlist entry. All four isolation tests pass with added
+suffix, sibling, nested and runtime-directory rejection cases; the existing
+clamp overlay source/negative tests also pass. Independent review remains the
+integration gate. This does not change the monitor or establish compiled,
+sanitizer or E3 §9 acceptance.
 
 The [E3 idle real-model control contract](e3/E3_IDLE_REAL_MODEL_CONTROL_CONTRACT.md)
 specifies a test-only use of existing I2 checkpoint decode and whole-batch load
@@ -1701,6 +1991,102 @@ accepted the 30-file seal
 Hosted integration is pending. This private predicate does not authenticate a
 C2 SHA receipt or pair, reconstruct a candidate, replay history, or prove
 resumed generation.
+
+The [G3-R committed-save snapshot prerequisite](g3/G3_R_COMMITTED_SAVE_SNAPSHOT_PREREQUISITE.md)
+records the current-main source gap: the live G3-T owner retains policy and RNG
+but no committed ordered history, origin/generated/manual partition or latched
+EOS terminal state. The source-private output clone is detached and cannot
+authenticate that missing history. The next bounded source slice must review
+an exact same-owner copyout or registered snapshot contract and maintain the
+history at prefill, manual-decode and final-generation commit boundaries under
+stable leases, including explicit rejection or rollback of an idle G1 call
+aborted after its P1 prefill cache commit. The bounded
+[native committed-history owner leaf](g3/G3_R_COMMITTED_HISTORY_OWNER_LEAF.md)
+is now ported onto this branch from the independent `0714cac5` source. It
+adds feature-gated inline history and policy/RNG copyout, with pending-G1
+provenance that rejects an idle post-prefill abort and manual-decode laundering.
+Focused native source/core/controlled-transport tests pass locally. It does
+not add Eshkol same-aggregate leases or a SAVE writer, and no file-pair
+publication or resumed continuation is accepted.
+
+The bounded [private committed-save snapshot candidate](g3/G3_R_COMMITTED_SAVE_SNAPSHOT_LEAF.md)
+adds a feature-gated native same-owner copy helper and source-private Eshkol
+wrapper on the accepted owner ancestry. It authenticates the registered
+generator/model/raw V256 T1 aggregate, pins model parameters, borrows the A2
+cache, compares committed length and policy, rejects pending G1 provenance,
+and publishes only detached data after checked 136-byte staging. Focused
+native normal/repeat/sanitizer and feature-off checks pass. Independent review
+and the exact-`97aec234` compiled Eshkol aggregate have also passed their
+bounded gates. The exact `4f2abe36` current-main combined-tree gate subsequently
+passed normal/repeat/sanitizer, feature-off and Q0 checks with independent
+review (`g3r-committed-save-union-4f2abe36-fe9-f31-20261012-prepared-a/SHA256SUMS-RUN`,
+`c9094b09...`); PR #203 merged as `86f4eb36`. This is no SAVE admission,
+file writer or replay proof.
+
+The follow-on private aggregate candidate on `codex/g3r-committed-save-aggregate`
+loads that wrapper with the exact M3/G3-T/G3-M route. A real seeded P1/G1
+commit produces the same owner's policy, RNG, ordered raw history and
+prompt/generated partition; the fixture checks the 136-byte destination
+record against the detached result. Held A2 borrow, busy call, live foreign
+model, changed policy/tokenizer, forged and stale owners, short destination,
+and idle post-P1 G1 abort all reject without changing the destination.
+Pinned fe9dfd Eshkol/LLVM 21 normal, repeat and ASan+UBSan+LSan runs pass 30
+checks with identical stdout and empty compiler/runtime stderr; feature-off
+symbol absence and Q0 isolation also pass. Independent source/tests review
+found no blocker at `97aec234`/tree `fbda548f`; sealed evidence is
+`g3r-committed-save-aggregate-97aec234-fe9-f31-20261012-prepared-a/SHA256SUMS-RUN`
+(`cc3c5f2e...`). The real aggregate's positive route covers P1/G1; other
+partitions and EOS rely on controlled native tests. The exact `4f2abe36`
+combined-tree gate passed with 30 byte-identical checks in normal/repeat/
+sanitizer profiles; this closes only the private snapshot prerequisite. No SAVE writer,
+file-pair publication, restore, replay or resumed continuation is provided.
+
+The reviewed [current-history held SAVE proposal](g3/G3_R_CURRENT_HISTORY_HELD_SAVE_CONTRACT.md)
+now accompanies merged main. Its first bounded native prerequisite,
+[the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
+ports exact value and absent-gradient bit baselines under the existing
+fixed14 model pins. Focused normal/repeat/sanitizer and feature-off checks
+pass locally. Independent source review, sealed M3T roster, O2 hold, current
+G3/A2 held 17-word snapshot, compiled union and failure cuts remain gates;
+this leaf adds no same-owner writer, SAVE or continuation admission.
+
+The [current-history G3/A2 held-owner leaf](g3/G3_R_CURRENT_HISTORY_HELD_OWNER_LEAF.md)
+adds source-private original-owner pins and cache borrow with a checked 17-word
+committed-history image. Focused native feature-off, normal, repeat and
+ASan+UBSan cuts pass. A held-copy alias repair now rejects overlap with M3
+graph/logits controls and separately rostered workspace metadata as well as
+foreign model owners, while admitting disjoint output; focused causal and
+sanitizer cuts pass. Independent source/tests
+review remains open. The O2 prerequisite has an unresolved alias finding and
+is excluded from this branch.
+Coordinator, post-adoption and partial-O2-claim cuts remain integration gates;
+there is no SAVE or continuation admission.
+
+The [private M3 owner-roster prerequisite](g3/G3_R_M3_OWNER_ROSTER_PREREQUISITE.md)
+ports the feature-gated registry-backed fourteen-parameter/identity roster
+to current main. It rejects unsealed, stale, foreign, incomplete or inconsistent
+owners before copying any output. Source and focused native checks are pending
+independent review; the roster alone does not pin value/gradient bits, hold O2,
+or authorize a G3-R SAVE capture.
+
+The [current-main private provider union gate](g3/G3_R_CURRENT_PRIVATE_UNION_GATE.md)
+now has one independently accepted supported-host C run on exact source
+`c0f747dc`, accepted C7b fe9/f31 toolchain, and eight compiled Eshkol checks.
+The sealed host result is `g3r-current-private-union-run-20261013-c/host/SHA256SUMS-HOST`
+(`a7932101...`); independent raw review is
+`g3r-current-private-union-c-receipt-independent-review-20261013-a/SHA256SUMS-REVIEW`
+(`bb7905f6...`). This closes the bounded private-union runtime prerequisite
+only. The O2 issued-pointer provider, SAVE publication/replay, terminal and
+public generation, and data-only continuation remain open; the current-main
+source/evidence/docs union is still pending integration.
+A source-only predecessor-manifest successor updates eight exact rows across
+G3-S, G3-N, M3 call-guard, E3 metrics and L3S manifests for the guarded F32
+witness and M3 owner-roster additions. Eight feature-off preprocessing
+comparisons against the prior pinned `86f4eb36` source agree; all five checksum
+gates pass and source-mutation negatives remain rejected. The affected hosted
+suites are G3-S sampling, G3-N forward, native numerics and model composition.
+Independent review and fresh supported full-suite CI remain integration gates;
+preprocessing is not object/runtime equivalence or SAVE admission.
 
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished

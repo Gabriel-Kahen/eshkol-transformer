@@ -58,6 +58,8 @@ else
 fi
 active_phase=
 phase_started=0
+active_runtime_label=
+active_runtime_mode=
 phase_begin() {
   if [[ "${development}" == 1 ]]; then
     active_phase=$1
@@ -72,8 +74,20 @@ phase_end() {
     active_phase=
   fi
 }
+progress_file_valid() {
+  local path=$1
+  [[ -n "$(find "${path}" -maxdepth 0 -type f -links 1 \
+    -size +0c -size -2049c -print -quit 2>/dev/null)" ]] || return 1
+  LC_ALL=C awk '
+    !/^C2 OPERATIONAL PROGRESS: phase=[0-9]+ monotonic-ms=[0-9]+$/ {
+      exit 1
+    }
+    NR > 32 { exit 1 }
+    END { if (NR == 0) exit 1 }
+  ' "${path}"
+}
 cleanup() {
-  local status=$?
+  local status=$? label progress
   if [[ "${development}" == 1 ]]; then
     if [[ -n "${active_phase}" ]]; then
       printf '%s_seconds=%s status=%s\n' "${active_phase}" \
@@ -83,6 +97,18 @@ cleanup() {
     return "${status}"
   fi
   if (( status != 0 )); then
+    for label in clang-a clang-b; do
+      progress="${tmp}/${label}/joint.progress"
+      if progress_file_valid "${progress}"; then
+        printf '%s\n' "${progress}" >&2
+        sed -n '1,32p' "${progress}" >&2
+      elif [[ ( "${active_runtime_mode}" == joint &&
+                "${active_runtime_label}" == "${label}" ) ||
+              -e "${progress}" || -L "${progress}" ]]; then
+        printf 'C2 OPERATIONAL PROGRESS UNAVAILABLE: %s/joint\n' \
+          "${label}" >&2
+      fi
+    done
     find "${tmp}" -type f \( -name '*.stdout' -o -name '*.stderr' \) \
       -print -exec sed -n '1,300p' {} \; >&2 || true
   fi
@@ -366,8 +392,11 @@ run_runtime() {
   local label=$1 mode=$2
   local output="${tmp}/${label}/output/${mode}"
   mkdir -p "${output}"
+  active_runtime_label=${label}
+  active_runtime_mode=${mode}
   phase_begin "${mode}_run"
-  ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s \
+  C2_OPERATIONAL_PROGRESS_FILE="${tmp}/${label}/${mode}.progress" \
+    ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s \
     1800s "${tmp}/${label}/operational" \
       "${fixtures}/joint-exact.c2" "${fixtures}/file-one.c2" \
       "${fixtures}/metadata-one.c2" "${fixtures}/tensor-one.c2" \
@@ -412,6 +441,8 @@ run_runtime() {
     test ! -e "${output}/${mode}-reject.c2"
   fi
   phase_end
+  active_runtime_label=
+  active_runtime_mode=
   sed -n '/^C2 OPERATIONAL RUNTIME PASS:/p' \
     "${tmp}/${label}/${mode}.stdout"
 }

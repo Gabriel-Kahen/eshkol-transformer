@@ -1,0 +1,4 @@
+;;; Standalone public-D1 corpus validation entry.
+(require transformer.cli3_corpus_validate)
+
+(cli3-corpus-validate-command (cdr (command-line)))

@@ -172,7 +172,7 @@
           (#t
            (if canonical
                (begin
-                 (let ((mode-token (vector-ref setup-box 1)))
+                 (let ((mode-token (vector-ref (vector-ref canonical 8) 1)))
                    (if mode-token
                        (let ((status (p1-e3-mode-unbind! mode-token)))
                          (if (not (= status 0))
@@ -183,31 +183,33 @@
          (set! canonical (car (vector-ref e3-frame-registry-root 0)))
          ;; The root write barrier may canonicalize the staged graph. Never use
          ;; prepublication identities for P1 binding or as the returned token.
-         (set! token (vector-ref canonical 0))
-         (set! model (vector-ref canonical 2))
-         (set! model-entry (vector-ref canonical 3))
-         (set! destinations (vector-ref canonical 5))
-         (set! setup-box (vector-ref canonical 8))
-         (let ((p1-status (p1-e3-mode-bind! model setup-box)))
+         (let* ((root-token (vector-ref canonical 0))
+                (root-model (vector-ref canonical 2))
+                (root-model-entry (vector-ref canonical 3))
+                (root-destinations (vector-ref canonical 5))
+                (root-setup-box (vector-ref canonical 8))
+                (p1-status (p1-e3-mode-bind! root-model root-setup-box)))
            (if (not (= p1-status 0))
                (let ((unreachable
                       (et-e1b-private-raise
                        (e3-error-category-from-p1 p1-status) operation
                        "P1 rejected E3 mode binding" '() #f)))
                  unreachable))
-           (let ((mode-token (vector-ref setup-box 1)))
+           (let ((mode-token (vector-ref root-setup-box 1)))
              (vector-set! canonical 6 mode-token)
              (let ((native
                     (e3-native-frame-create
-                     (vector-ref model-entry 3)
-                     (vector-ref destinations 0) (vector-ref destinations 1)
-                     (vector-ref destinations 2) (vector-ref destinations 3))))
+                     (vector-ref root-model-entry 3)
+                     (vector-ref root-destinations 0)
+                     (vector-ref root-destinations 1)
+                     (vector-ref root-destinations 2)
+                     (vector-ref root-destinations 3))))
                (if (null? native)
                    (e3-raise-native-setup operation))
                (vector-set! canonical 4 native)
-               (vector-set! canonical 8 #f)
                (vector-set! canonical 1 1)
-               token))))))))
+               (vector-set! canonical 8 #f)
+               root-token))))))))
 
 (define (e3-frame-d2-record-internal frame)
   (let ((entry (e3-frame-entry-live frame 'e3-evaluate-into!)))

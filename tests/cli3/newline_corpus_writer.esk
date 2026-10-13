@@ -1,0 +1,5 @@
+;;; Test-only public D1 writer for a canonical fingerprint with a newline.
+(require transformer.data)
+
+(token-corpus-write! (car (cdr (command-line))) "line\nidentity" 8 2 '(0 7))
+(exit 0)

@@ -347,6 +347,9 @@
 (define (tensor-provider-registry-current)
   (vector-ref tensor-provider-registry-root 0))
 (define tensor-provider-admission-active? #f)
+;;; Keep the raw native shell inside a managed value. Overwriting a global
+;;; holding the raw pointer makes the compiler's borrow check read before the
+;;; native allocation while clearing the admission guard.
 (define tensor-provider-admission-active-shell #f)
 (define protected-storage-comparison-active? #f)
 (define protected-storage-comparison-request (vector #f #f #f #f #f))
@@ -1261,7 +1264,8 @@
               ;; The outer guard owns cleanup of the provider currently being
               ;; admitted. Distinct nested providers have no such owner and
               ;; must be tombstoned here before the reentrancy failure escapes.
-              (if (eq? nested-shell tensor-provider-admission-active-shell)
+              (if (eq? nested-shell
+                       (vector-ref tensor-provider-admission-active-shell 0))
                   #f
                   (abort-unpublished-provider!
                     'tensor-provider-register-internal! provider)))
@@ -1297,6 +1301,7 @@
                        ;; its identity fields are filled only from canonical
                        ;; registry readback after admission succeeds.
                        (registration (vector #f shell #f))
+                       (active-shell (vector shell))
                        (next-providers
                          (cons registration
                                (tensor-provider-registry-current)))
@@ -1309,7 +1314,7 @@
                              (vector-set! outcome 0 #f)
                              (vector-set! outcome 1 error)
                              outcome))
-                    (set! tensor-provider-admission-active-shell shell)
+                    (set! tensor-provider-admission-active-shell active-shell)
                     (tensor-provider-admit! admitted evidence)
                     (set! tensor-provider-admission-active-shell #f)
                     (set! callbacks
