@@ -23,7 +23,10 @@ Independent line inspection connects `%canonical.load154` to vector slot 2,
 `%root-setup-box.load` to `p1-e3-mode-bind!`. The corrected offline inspector
 accepts that function and still rejects M's exact sealed IR for its old-model
 borrow check. It accepts either an SSA argument or a single initial stack
-store, while rejecting a post-readback old-model use or reassignment.
+store, while rejecting a direct post-readback `%model`/`%model1` use or a
+second `%model1` store. It does not trace copies made before readback under
+other SSA names or through other storage. Independent IR dataflow review is
+therefore a required condition before treating any pattern receipt as proof.
 
 This is a pattern and dataflow diagnosis of generated IR, not runtime or
 sanitizer admission. The corrected inspector is a new source candidate in

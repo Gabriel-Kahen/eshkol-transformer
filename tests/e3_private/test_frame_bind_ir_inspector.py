@@ -36,7 +36,7 @@ class FrameBindIRInspectorTests(unittest.TestCase):
         )
         self.assertEqual(inspect(stack)["old_model_storage"], "stack_slot")
 
-    def test_rejects_old_binding_after_readback(self) -> None:
+    def test_rejects_direct_old_binding_use_after_readback(self) -> None:
         for old_slot in (False, True):
             body = GOOD
             if old_slot:

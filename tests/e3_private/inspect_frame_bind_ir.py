@@ -89,6 +89,9 @@ def inspect(body: bytes) -> dict[str, object]:
     root_store = root_stores[0]
     if old_stores and old_stores[0].start() >= root_store.start():
         fail("old model store occurs after root readback")
+    # This excludes direct old-name uses. A value copied before readback can
+    # carry the old binding under another SSA name; the verdict requires the
+    # independent IR dataflow review named below.
     if re.search(rb"%model(?:1)?(?![A-Za-z0-9_.-])", body[root_store.end():]):
         fail("old model binding is used after root readback")
     # The nearby canonical load and literal index 2 connect this SSA result to
