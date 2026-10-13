@@ -1844,10 +1844,12 @@ partial-claim, current-main union, and failure gates remain HOLD. The
 private O2 hold/state outputs now reject full or partial error-record overlap
 before owner mutation; focused normal and ASan/UBSan cuts pass 262 checks.
 No capture to pair bridge, public SAVE, restore, replay or continuation is admitted.
-An exact-tree post-adoption fixture now has separate successful-abandon and
-O2-release-fault modes plus a guarded exit-134 result verifier. The LLVM21
-source-preparation manifest is reviewable; neither mode has been compiled or
-run, and the separate partial-claim cut remains HOLD.
+The [post-adoption fixture](g3/G3_R_POST_ADOPTION_COMPILED_GATE_HOLD.md) has
+separate successful-abandon and O2-release-fault source modes. A dedicated
+fe9/f31/LLVM21 identity manifest replaces the unrelated recovered TR3
+candidate pin, but the exact capture builder, deterministic V256 corpus and
+trusted receipt are missing. Runtime verification now fails closed; neither
+mode has been compiled or run. The separate partial-claim cut remains HOLD.
 
 The [private M3 owner-roster prerequisite](g3/G3_R_M3_OWNER_ROSTER_PREREQUISITE.md)
 ports the feature-gated registry-backed fourteen-parameter/identity roster

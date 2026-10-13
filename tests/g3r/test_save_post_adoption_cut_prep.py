@@ -1,5 +1,6 @@
 """Source-only checks for the future compiled same-owner failure cut."""
 from pathlib import Path
+import inspect
 import os
 import subprocess
 import tempfile
@@ -10,8 +11,9 @@ from tests.c2.test_handler_order import parse
 from tests.g3r import prepare_save_post_adoption_cut as preparation
 from tests.g3r.prepare_save_post_adoption_cut import (
     ROOT, CALLER, ADOPTION_RETURN, ABANDON, BASE, BASE_TREE, F31, FE9,
-    FE9_RUNNER_SHA256, FE9_RUNTIME_SHA256, frozen_caller, prepare,
-    validate_closure, validate_source, validate_toolchain_manifest,
+    FE9_RUNNER_SHA256, FE9_RUNTIME_SHA256, COMPILER_MANIFEST_SHA256,
+    frozen_caller, parse_unique_tsv, prepare, validate_closure,
+    validate_source, validate_toolchain_manifest,
 )
 
 
@@ -45,12 +47,17 @@ class PostAdoptionPreparation(unittest.TestCase):
             self.assertIn("source-prepared; compiled gate not run",
                           (destination / "PREPARED.tsv").read_text())
             manifest = (destination / "PREPARED.tsv").read_text()
+            self.assertEqual(len(sums.read_text().splitlines()), 103)
+            self.assertEqual((destination / "COMPILER.tsv").read_bytes(),
+                             (ROOT / preparation.COMPILER_MANIFEST).read_bytes())
             self.assertIn("accepted_source_commit\t" + BASE, manifest)
             self.assertIn("accepted_source_tree\t" + BASE_TREE, manifest)
             self.assertIn("closure_count\t96", manifest)
             self.assertIn("supported_llvm_clang\t21.1.8", manifest)
             self.assertIn("post-adoption longjmp and fail-stop abandon only", manifest)
             self.assertIn("fail_stop_expected_exit\t134", manifest)
+            self.assertIn("compiler_manifest_sha256\t" + COMPILER_MANIFEST_SHA256,
+                          manifest)
             root = (destination / "source/tests/g3r/save_post_adoption_cut_root.esk").read_text()
             self.assertIn('(load "g3r_training_controls_root.esk")', root)
             self.assertIn('(load "g3m_prefill_p1_extension.esk")', root)
@@ -71,13 +78,20 @@ class PostAdoptionPreparation(unittest.TestCase):
             with self.assertRaises(ValueError):
                 prepare(destination)
 
-    def test_supported_runtime_pins_match_existing_gate(self):
-        validate_toolchain_manifest()
-        candidate = (ROOT / "tests/tr3_lease/runtime_candidate.tsv").read_text()
-        existing = (ROOT / "scripts/test-tr3-c-trainer-load-state.sh").read_text()
-        self.assertIn("container_digest\t" + F31, candidate)
-        for pin in (FE9, FE9_RUNNER_SHA256, FE9_RUNTIME_SHA256):
-            self.assertIn(pin, existing)
+    def test_dedicated_fe9_manifest_excludes_recovered_candidate(self):
+        pins = validate_toolchain_manifest()
+        self.assertEqual(pins["compiler_source_commit"], FE9)
+        self.assertEqual(pins["runner_sha256"], FE9_RUNNER_SHA256)
+        self.assertEqual(pins["runtime_archive_sha256"], FE9_RUNTIME_SHA256)
+        self.assertEqual(pins["container_digest"], F31)
+        self.assertNotIn("81298b4a", (ROOT / preparation.COMPILER_MANIFEST).read_text())
+        self.assertNotIn("runtime_candidate",
+                         inspect.getsource(preparation.validate_toolchain_manifest))
+
+    def test_manifest_parser_rejects_duplicate_and_malformed_rows(self):
+        for malformed in ("key\ta\nkey\tb\n", "key\n", "key\t\n", "\n", ""):
+            with self.subTest(malformed=malformed), self.assertRaises(ValueError):
+                parse_unique_tsv(malformed)
 
     def test_old_base_and_changed_pins_fail_closed_without_output(self):
         with tempfile.TemporaryDirectory(prefix="g3r-cut-negative-") as directory:
@@ -86,7 +100,7 @@ class PostAdoptionPreparation(unittest.TestCase):
                               ("ADOPTION_SHA256", "0" * 64),
                               ("CLOSURE_SHA256", "0" * 64),
                               ("LOCK_SHA256", "0" * 64),
-                              ("CANDIDATE_SHA256", "0" * 64)):
+                              ("COMPILER_MANIFEST_SHA256", "0" * 64)):
                 destination = Path(directory) / name
                 with self.subTest(pin=name), patch.object(preparation, name, bad):
                     with self.assertRaises(ValueError):
@@ -121,19 +135,17 @@ class PostAdoptionPreparation(unittest.TestCase):
         self.assertIn("(guard (caught (#t (exit 134)))", adoption)
         self.assertIn("(guard (cleanup (#t (exit 134)))", caller)
         launcher_source = launcher.read_text()
-        self.assertIn('"$(cat "$evidence/fail-stop.status")" == 134', launcher_source)
-        self.assertIn('grep -Fxq \'G3-R post-adoption O2 release fault injected\'',
-                      launcher_source)
-        self.assertIn('RECOVERED ERROR|RETURNED|cut PASS', launcher_source)
-        denied = subprocess.run([str(launcher), "--verify-runtime", "/missing",
-                                 "/missing", "/missing", "/missing"],
-                                cwd=ROOT,
-                                env={**os.environ,
-                                     "G3R_POST_ADOPTION_RUNTIME_RELEASE": "0"},
-                                capture_output=True, text=True)
-        self.assertEqual(denied.returncode, 74)
-        self.assertIn("explicit post-adoption runtime release is required",
-                      denied.stderr)
+        self.assertIn("runtime verification disabled", launcher_source)
+        self.assertNotIn('timeout --foreground', launcher_source)
+        for release in ("0", "1"):
+            denied = subprocess.run([str(launcher), "--verify-runtime", "/missing",
+                                     "/missing", "/missing", "/missing"],
+                                    cwd=ROOT,
+                                    env={**os.environ,
+                                         "G3R_POST_ADOPTION_RUNTIME_RELEASE": release},
+                                    capture_output=True, text=True)
+            self.assertEqual(denied.returncode, 74)
+            self.assertIn("runtime verification disabled", denied.stderr)
 
 
 if __name__ == "__main__":

@@ -27,7 +27,8 @@ FE9_RUNNER_SHA256 = "7dd254bab761fe41142a0e3777338f41b3b9f03a5ce4c0bba419f1e2b22
 FE9_RUNTIME_SHA256 = "32cd446a3aeaa2e78bbe49b0c04cda961b8e1eeb7bb0ea53ec5e55c11f0c183e"
 F31 = "sha256:f31d1db76958339e6ebd2a2f667052cdb85aeb5229914ffb10ac4fcdc6db22e6"
 LOCK_SHA256 = "8c168f5d560781245f6d4c73f695e72cbafa413b606d50bc7c36d2119acd9efe"
-CANDIDATE_SHA256 = "46097980f65a6fee1643590e7dd983cfebf91983a0d8487832a7cacafebd8b99"
+COMPILER_MANIFEST = "tests/g3r/post_adoption_fe9_compiler.tsv"
+COMPILER_MANIFEST_SHA256 = "6aa744a3b6a7ebda7566c183e8fe1134d95cd1ee02ca0a4ad1ac6785a4e59f23"
 
 ADOPTION_RETURN = """      (vector-set! shell-cell 0
         (g3r-save-o2-adopt-held-internal
@@ -76,18 +77,52 @@ def validate_closure(files: list[str]) -> None:
         raise ValueError("real P1/O2/C2/adoption leaves are missing")
 
 
-def validate_toolchain_manifest() -> None:
+def parse_unique_tsv(data: str) -> dict[str, str]:
+    values = {}
+    for row in data.splitlines():
+        if row.startswith("#"):
+            continue
+        parts = row.split("\t")
+        if len(parts) != 2 or not parts[0] or not parts[1] or parts[0] in values:
+            raise ValueError("malformed or duplicate compiler manifest row")
+        values[parts[0]] = parts[1]
+    if not values:
+        raise ValueError("empty compiler manifest")
+    return values
+
+
+def validate_toolchain_manifest() -> dict[str, str]:
     if sha256((ROOT / "toolchain/eshkol.lock").read_bytes()) != LOCK_SHA256:
         raise ValueError("supported LLVM21 toolchain lock changed")
-    if sha256((ROOT / "tests/tr3_lease/runtime_candidate.tsv").read_bytes()) != \
-            CANDIDATE_SHA256:
-        raise ValueError("compiler candidate manifest changed")
-    candidate = (ROOT / "tests/tr3_lease/runtime_candidate.tsv").read_text()
-    existing = (ROOT / "scripts/test-tr3-c-trainer-load-state.sh").read_text()
-    if "container_digest\t" + F31 not in candidate or any(
-            pin not in existing for pin in
-            (FE9, FE9_RUNNER_SHA256, FE9_RUNTIME_SHA256)):
-        raise ValueError("supported compiler candidate pins changed")
+    manifest = (ROOT / COMPILER_MANIFEST).read_bytes()
+    if sha256(manifest) != COMPILER_MANIFEST_SHA256:
+        raise ValueError("dedicated fe9 compiler manifest changed")
+    values = parse_unique_tsv(manifest.decode("utf-8"))
+    expected = {
+        "schema": "g3r-post-adoption-fe9-compiler-v1",
+        "compiler_source_commit": FE9,
+        "compiler_source_tree": "66c21f7ec19b1b4a42199fa30ed8e0e9727021bf",
+        "runner_sha256": FE9_RUNNER_SHA256,
+        "runtime_archive_sha256": FE9_RUNTIME_SHA256,
+        "clang_sha256": "82481792aef943c1750ae5fd71e5a5737212741337debd0fe5d28bd82dd018e9",
+        "container_digest": F31,
+        "supported_os": "ubuntu-22.04",
+        "supported_arch": "x86_64",
+        "llvm_version": "21.1.8",
+        "clang_version": "21.1.8",
+        "toolchain_lock_sha256": LOCK_SHA256,
+        "c7b_release_sha256": "736d282d210cf92b3141bd8b9405232f627356573231a10b2626f4262384d91e",
+        "status": "source-only; capture build and runtime HOLD",
+    }
+    if values != expected:
+        raise ValueError("dedicated fe9 compiler identity changed")
+    lock = parse_unique_tsv((ROOT / "toolchain/eshkol.lock").read_text())
+    for key, value in (("eshkol_commit", FE9), ("llvm_version", "21.1.8"),
+                       ("clang_version", "21.1.8"), ("supported_os", "ubuntu-22.04"),
+                       ("supported_arch", "x86_64")):
+        if lock.get(key) != value:
+            raise ValueError("compiler manifest conflicts with toolchain lock")
+    return values
 
 
 def validate_source() -> list[str]:
@@ -117,6 +152,9 @@ def validate_source() -> list[str]:
                                             cwd=ROOT)
         if (ROOT / name).read_bytes() != committed:
             raise ValueError(f"uncommitted fixture bytes: {name}")
+    if (ROOT / COMPILER_MANIFEST).read_bytes() != subprocess.check_output(
+            ["git", "show", f"HEAD:{COMPILER_MANIFEST}"], cwd=ROOT):
+        raise ValueError("uncommitted compiler manifest")
     frozen_caller((ROOT / CALLER).read_text())
     return files
 
@@ -147,6 +185,9 @@ def prepare(output: Path) -> None:
     generated = source_root / "tests/g3r/g3r_same_owner_save_cut_caller.esk"
     generated.write_text(frozen_caller((ROOT / CALLER).read_text()))
     copied.append(generated)
+    compiler_copy = output / "COMPILER.tsv"
+    shutil.copyfile(ROOT / COMPILER_MANIFEST, compiler_copy)
+    copied.append(compiler_copy)
 
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"],
                                      cwd=ROOT, text=True).strip()
@@ -165,12 +206,14 @@ def prepare(output: Path) -> None:
         ("fail_stop_injection_marker",
          "G3-R post-adoption O2 release fault injected"),
         ("compiler_commit", FE9), ("compiler_runner_sha256", FE9_RUNNER_SHA256),
+        ("compiler_source_tree", "66c21f7ec19b1b4a42199fa30ed8e0e9727021bf"),
         ("runtime_archive_sha256", FE9_RUNTIME_SHA256),
+        ("clang_sha256", "82481792aef943c1750ae5fd71e5a5737212741337debd0fe5d28bd82dd018e9"),
         ("container_digest", F31),
         ("supported_host", "ubuntu-22.04/x86_64"),
         ("supported_llvm_clang", "21.1.8"),
         ("toolchain_lock_sha256", LOCK_SHA256),
-        ("runtime_candidate_manifest_sha256", CANDIDATE_SHA256),
+        ("compiler_manifest_sha256", COMPILER_MANIFEST_SHA256),
         ("closure_count", str(len(files))),
         ("status", "source-prepared; compiled gate not run"),
     )))
