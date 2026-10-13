@@ -12,6 +12,7 @@
 (define tr3-lease-unenroll-active? #f)
 (define tr3-lease-record-tag (vector 'tr3-lease-record-v2))
 (define tr3-lease-token-tag (vector 'tr3-lease-token-v2))
+(define tr3-lease-t2-witness-tag (vector 'tr3-lease-t2-witness-v1))
 (define tr3-lease-snapshot-parent-tag (vector 'tr3-c-snapshot-parent-v1))
 (define tr3-lease-snapshot-parent-length 10)
 (define tr3-lease-restore-parent-tag (vector 'tr3-c-restore-parent-v1))
@@ -25,8 +26,10 @@
 
 ;;; Record slots 17..21 are the only durable trainer-control authority:
 ;;; epoch-start cursor bytes, RNG, total active tokens, completed updates, and
-;;; completed epochs.  Slots 0..16 retain the accepted lease layout.
-(define tr3-lease-record-length 22)
+;;; completed epochs. Slot 22 roots the exact enrolled T2 shell, registry
+;;; entry, and raw core for a later private original-epoch handoff.
+;;; Slots 0..21 retain the accepted lease layout.
+(define tr3-lease-record-length 23)
 
 (define (tr3-lease-vector-identical? vector-value list-value count)
   (and (vector? vector-value) (= (vector-length vector-value) count)
@@ -150,17 +153,50 @@
                         "tokenizer differs from the dataset identity")))
   #t)
 
-(define (tr3-lease-e3-byte-profile? tokenizer)
-  ;; T2 authenticates the public shell before this private T1-core inspection.
-  ;; The witness is retained in the existing lease identity field, not in C2.
-  (let ((core (t2-private-require-core tokenizer 'trainer-create
-                                       'invalid-argument)))
-    (and (t1-core-tokenizer? core)
-         (eq? (vector-ref core 1) 'raw)
-         (null? (vector-ref core 2))
-         (null? (vector-ref core 3))
-         (null? (vector-ref core 4))
-         (= (t1-tokenizer-core-vocab-size core) 256))))
+(define (tr3-lease-e3-byte-profile? core)
+  (and (t1-core-tokenizer? core)
+       (eq? (vector-ref core 1) 'raw)
+       (null? (vector-ref core 2))
+       (null? (vector-ref core 3))
+       (null? (vector-ref core 4))
+       (= (t1-tokenizer-core-vocab-size core) 256)))
+
+(define (tr3-lease-t2-witness-valid? witness)
+  ;; The entry must still be the node in the aggregate-owned T2 registry.
+  ;; Equal fingerprint or copied entry bytes cannot establish provenance.
+  (and (vector? witness) (= (vector-length witness) 5)
+       (eq? (vector-ref witness 0) tr3-lease-t2-witness-tag)
+       (eq? (vector-ref witness 1) witness)
+       (let ((shell (vector-ref witness 2))
+             (entry (vector-ref witness 3))
+             (core (vector-ref witness 4)))
+         (and (pair? entry) (pair? (cdr entry)) (null? (cdr (cdr entry)))
+              (eq? (car entry) shell)
+              (eq? (car (cdr entry)) core)
+              (eq? (t2-private-entry shell) entry)
+              (t2-private-core? core)))))
+
+(define (tr3-lease-original-t2-core-internal
+          record token t1-tokenizer operation)
+  ;; This is only a pre-transition prerequisite. The ordinary trainer
+  ;; authentication remains train-mode-only; no eval handoff is added here.
+  (tr3-lease-authenticate record token operation)
+  (if (or (not (eq? (vector-ref record 3) 'idle))
+          (vector-ref record 4))
+      (tr3-lease-operation-fail
+        'invalid-state operation "trainer is not idle for original handoff"))
+  (let* ((witness (vector-ref record 22))
+         (t1-entry (t2-private-entry t1-tokenizer)))
+    (if (or (not (tr3-lease-t2-witness-valid? witness))
+            (not (t1-core-tokenizer? (vector-ref witness 4)))
+            (not (pair? t1-entry))
+            (not (pair? (cdr t1-entry)))
+            (not (null? (cdr (cdr t1-entry))))
+            (not (eq? (car t1-entry) t1-tokenizer))
+            (not (eq? (car (cdr t1-entry)) (vector-ref witness 4))))
+        (tr3-lease-operation-fail
+          'invalid-state operation "original T2 and T1 core identity differs"))
+    (vector-ref witness 4)))
 
 (define (tr3-lease-d2-idle! dataset-state operation)
   (let ((generation (vector-ref dataset-state 8))
@@ -416,12 +452,23 @@
              (begin (x1-private-config-validate resolved)
                     (x1-private-config-canonical resolved)))
            (config-fingerprint (x1-private-config-fingerprint resolved))
+           (tokenizer-entry (t2-private-entry tokenizer))
+           (tokenizer-core
+             (and (pair? tokenizer-entry)
+                  (pair? (cdr tokenizer-entry))
+                  (car (cdr tokenizer-entry))))
            (base-tokenizer-identity (d2-tokenizer-identity tokenizer))
            (tokenizer-identity
              (vector (vector-ref base-tokenizer-identity 0)
                      (vector-ref base-tokenizer-identity 1)
-                     (tr3-lease-e3-byte-profile? tokenizer)))
-           (tokenizer-entry (t2-private-entry tokenizer)))
+                     (tr3-lease-e3-byte-profile? tokenizer-core))))
+      (if (or (not (pair? tokenizer-entry))
+              (not (pair? (cdr tokenizer-entry)))
+              (not (null? (cdr (cdr tokenizer-entry))))
+              (not (eq? (car tokenizer-entry) tokenizer))
+              (not (t2-private-core? tokenizer-core)))
+          (tr3-lease-fail 'invalid-state
+                          "tokenizer registry entry changed during acquisition"))
       (if (not (eq? (vector-ref model-entry 11) m3t-profile))
           (tr3-lease-fail 'unsupported "model profile is not supported"))
       (tr3-lease-config-witness!
@@ -450,11 +497,14 @@
       ;; rechecks.  Staging through the sole root promotes the entire graph.
       (let* ((shell (vector 'trainer))
              (token (vector tr3-lease-token-tag))
+             (t2-witness
+               (vector tr3-lease-t2-witness-tag #f tokenizer
+                       tokenizer-entry tokenizer-core))
              (record
                (vector tr3-lease-record-tag #f shell 'idle #f token resolved
                        tokenizer-identity model model-entry modules handles
                        carriers optimizer optimizer-record dataset dataset-state
-                       initial-cursor-bytes initial-rng 0 0 0))
+                       initial-cursor-bytes initial-rng 0 0 0 t2-witness))
              (successor (cons record observed-head))
              ;; The staging envelope retains every fresh witness used after
              ;; promotion. Final checks never dereference their regional inputs.
@@ -462,6 +512,7 @@
                (vector successor config-canonical config-fingerprint
                        tokenizer-entry tokenizer)))
         (vector-set! record 1 record)
+        (vector-set! t2-witness 1 t2-witness)
         (vector-set! tr3-trainers 1 staging)
         (let* ((canonical-staging (vector-ref tr3-trainers 1))
                (canonical-successor (vector-ref canonical-staging 0))
@@ -470,6 +521,7 @@
                (canonical-config-fingerprint (vector-ref canonical-staging 2))
                (canonical-tokenizer-entry (vector-ref canonical-staging 3))
                (canonical-tokenizer (vector-ref canonical-staging 4))
+               (canonical-t2-witness (vector-ref canonical-record 22))
                (canonical-tokenizer-identity (vector-ref canonical-record 7))
                (canonical-model (vector-ref canonical-record 8))
                (canonical-model-entry (vector-ref canonical-record 9))
@@ -484,8 +536,13 @@
           (tr3-lease-config-witness!
             canonical-model-entry canonical-config-canonical
             canonical-config-fingerprint)
-          (if (not (eq? canonical-tokenizer-entry
-                         (t2-private-entry canonical-tokenizer)))
+          (if (or (not (tr3-lease-t2-witness-valid? canonical-t2-witness))
+                  (not (eq? canonical-tokenizer-entry
+                            (t2-private-entry canonical-tokenizer)))
+                  (not (eq? canonical-tokenizer
+                            (vector-ref canonical-t2-witness 2)))
+                  (not (eq? canonical-tokenizer-entry
+                            (vector-ref canonical-t2-witness 3))))
               (tr3-lease-fail 'invalid-state
                               "tokenizer registry identity changed"))
           (tr3-lease-tokenizer-dataset!

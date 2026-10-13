@@ -2154,6 +2154,12 @@ mode (`g3t_model_admission_extension.esk:57-59`), while TR3 fixed recheck
 requires train mode (`module.esk:5251-5260`). D2 cursors, trainer RNG and
 counters, detached P1 provenance, pair/receipt and replay remain open; no
 compiled or runtime admission follows this source leaf.
+The bounded TR3 enrollment prerequisite now roots the exact T2 shell,
+same-aggregate registry entry, and raw core in the trainer record. A private
+idle/train-mode check rejects a copied witness, foreign T1 shell or equal
+fingerprint from a different core before any mode transition. It does not
+transition the model, acquire a G3/O2 hold, or authorize a C2 claim. The
+combined aggregate and original-epoch handoff remain separate gates.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
