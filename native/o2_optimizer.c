@@ -183,6 +183,16 @@ struct et_o2_g3r_save_hold {
 };
 static et_o2_g3r_save_hold *et_o2_g3r_save_holds;
 static size_t et_o2_g3r_save_tombstones;
+enum { ET_O2_G3R_SPAN_OPTIMIZER = 1, ET_O2_G3R_SPAN_STATE = 2 };
+typedef struct et_o2_g3r_owned_spans {
+  struct et_o2_g3r_owned_spans *next;
+  const void *owner;
+  const void *storage[3];
+  size_t bytes[3];
+  uint32_t kind;
+  uint32_t live;
+} et_o2_g3r_owned_spans;
+static et_o2_g3r_owned_spans *et_o2_g3r_owned_spans_registry;
 #endif
 #ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
 static et_o2_retire_provenance *et_o2_retire_records;
@@ -222,6 +232,41 @@ static void *et_o2_calloc(size_t count, size_t size) {
 #endif
   return allocation;
 }
+
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+static et_o2_g3r_owned_spans *et_o2_g3r_spans_new(
+    const void *owner, uint32_t kind, const void *first, size_t first_bytes,
+    const void *second, size_t second_bytes, const void *third,
+    size_t third_bytes) {
+  et_o2_g3r_owned_spans *record = et_o2_calloc(1u, sizeof(*record));
+  if (record != NULL) {
+    record->owner = owner;
+    record->kind = kind;
+    record->live = 1u;
+    record->storage[0] = first;
+    record->storage[1] = second;
+    record->storage[2] = third;
+    record->bytes[0] = first_bytes;
+    record->bytes[1] = second_bytes;
+    record->bytes[2] = third_bytes;
+  }
+  return record;
+}
+
+static et_o2_g3r_owned_spans *et_o2_g3r_spans_find(
+    const void *owner, uint32_t kind) {
+  for (et_o2_g3r_owned_spans *record = et_o2_g3r_owned_spans_registry;
+       record != NULL; record = record->next)
+    if (record->owner == owner && record->kind == kind)
+      return record;
+  return NULL;
+}
+
+static void et_o2_g3r_spans_publish(et_o2_g3r_owned_spans *record) {
+  record->next = et_o2_g3r_owned_spans_registry;
+  et_o2_g3r_owned_spans_registry = record;
+}
+#endif
 
 static void et_o2_error_clear(et_o2_error_v1 *error) {
   if (error != NULL) {
@@ -1056,6 +1101,14 @@ int32_t et_o2_private_candidate_retire_commit_v1(
   record = et_o2_retire_record_find(optimizer);
   if (record == NULL || record->live != 1u ||
       record->entries != optimizer->entries) _Exit(134);
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  et_o2_g3r_owned_spans *save_spans =
+      et_o2_g3r_spans_find(optimizer, ET_O2_G3R_SPAN_OPTIMIZER);
+  if (save_spans == NULL || save_spans->live != 1u ||
+      save_spans->storage[0] != optimizer->entries ||
+      save_spans->bytes[0] != optimizer->count * sizeof(*optimizer->entries))
+    _Exit(134);
+#endif
   for (size_t index = 0u; index < ET_O2_CANDIDATE_COUNT; ++index) {
     et_f32_tensor **slots[2] = {&optimizer->entries[index].exp_avg,
                                 &optimizer->entries[index].exp_avg_sq};
@@ -1074,6 +1127,9 @@ int32_t et_o2_private_candidate_retire_commit_v1(
     }
   }
   free(optimizer->entries);
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  save_spans->live = 0u;
+#endif
   optimizer->entries = NULL;
   record->entries = NULL;
   record->live = 0u;
@@ -1206,6 +1262,9 @@ int32_t et_o2_optimizer_builder_finish_v1(et_o2_optimizer_builder **slot,
                                           et_o2_error_v1 *error) {
   et_o2_optimizer_builder *builder;
   et_o2_optimizer *optimizer;
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  et_o2_g3r_owned_spans *save_spans;
+#endif
   size_t left;
   size_t right;
   if (slot == NULL || output == NULL || *output != NULL ||
@@ -1243,9 +1302,23 @@ int32_t et_o2_optimizer_builder_finish_v1(et_o2_optimizer_builder **slot,
                       ET_O2_CODE_ALLOCATION_FAILED, "optimizer-create",
                       "cannot publish optimizer receiver");
   }
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  save_spans = et_o2_g3r_spans_new(
+      optimizer, ET_O2_G3R_SPAN_OPTIMIZER, builder->entries,
+      builder->count * sizeof(*builder->entries), NULL, 0u, NULL, 0u);
+  if (save_spans == NULL) {
+    free(optimizer);
+    return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
+                      ET_O2_CODE_ALLOCATION_FAILED, "optimizer-create",
+                      "cannot record optimizer entry ownership");
+  }
+#endif
 #ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
   if (builder->count > (SIZE_MAX - sizeof(et_o2_retire_provenance)) /
                            sizeof(et_o2_entry)) {
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+    free(save_spans);
+#endif
     free(optimizer);
     return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
                       ET_O2_CODE_ALLOCATION_FAILED, "optimizer-create",
@@ -1256,6 +1329,9 @@ int32_t et_o2_optimizer_builder_finish_v1(et_o2_optimizer_builder **slot,
   et_o2_retire_provenance *record =
       (et_o2_retire_provenance *)et_o2_calloc(1u, retire_bytes);
   if (record == NULL) {
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+    free(save_spans);
+#endif
     free(optimizer);
     return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
                       ET_O2_CODE_ALLOCATION_FAILED, "optimizer-create",
@@ -1277,6 +1353,9 @@ int32_t et_o2_optimizer_builder_finish_v1(et_o2_optimizer_builder **slot,
   memcpy(optimizer->provider_id, ET_O2_PROVIDER_ID, sizeof(ET_O2_PROVIDER_ID));
   optimizer->registry_next = et_o2_optimizers;
   et_o2_optimizers = optimizer;
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  et_o2_g3r_spans_publish(save_spans);
+#endif
 #ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
   record->next = et_o2_retire_records;
   et_o2_retire_records = record;
@@ -2106,32 +2185,26 @@ static int et_o2_g3r_save_buffers_conflict(const void *output,
                                         sizeof(*hold)))
       return 1;
   }
-  for (const et_o2_optimizer *optimizer = et_o2_optimizers;
-       optimizer != NULL; optimizer = optimizer->registry_next) {
+  for (const et_o2_g3r_owned_spans *spans = et_o2_g3r_owned_spans_registry;
+       spans != NULL; spans = spans->next) {
+    if (spans->live > 1u ||
+        (spans->kind != ET_O2_G3R_SPAN_OPTIMIZER &&
+         spans->kind != ET_O2_G3R_SPAN_STATE))
+      return 1;
+    const size_t shell_bytes = spans->kind == ET_O2_G3R_SPAN_OPTIMIZER
+                                   ? sizeof(et_o2_optimizer)
+                                   : sizeof(et_o2_optimizer_state);
     if (et_o2_g3r_save_storage_conflict(output, output_bytes, error,
-                                        optimizer, sizeof(*optimizer)) ||
-        (optimizer->count <= ET_O2_MAX_PARAMETERS &&
-         et_o2_g3r_save_storage_conflict(
-             output, output_bytes, error, optimizer->entries,
-             optimizer->count * sizeof(*optimizer->entries))))
+                                        spans->owner, shell_bytes) ||
+        et_o2_g3r_save_storage_conflict(output, output_bytes, error,
+                                        spans, sizeof(*spans)))
       return 1;
-  }
-  for (const et_o2_optimizer_state *state = et_o2_states; state != NULL;
-       state = state->registry_next) {
-    if (et_o2_g3r_save_storage_conflict(output, output_bytes, error, state,
-                                        sizeof(*state)) ||
-        (state->count <= ET_O2_MAX_PARAMETERS &&
-         (et_o2_g3r_save_storage_conflict(
-              output, output_bytes, error, state->entries,
-              state->count * sizeof(*state->entries)) ||
-          et_o2_g3r_save_storage_conflict(
-              output, output_bytes, error, state->handles,
-              state->count * 2u * sizeof(*state->handles)))) ||
-        (state->owned_clone_ledger_count <= ET_O2_MAX_PARAMETERS * 2u &&
-         et_o2_g3r_save_storage_conflict(
-             output, output_bytes, error, state->owned_clones,
-             state->owned_clone_ledger_count * sizeof(*state->owned_clones))))
-      return 1;
+    if (spans->live != 0u)
+      for (size_t i = 0u; i < 3u; ++i)
+        if (et_o2_g3r_save_storage_conflict(
+                output, output_bytes, error, spans->storage[i],
+                spans->bytes[i]))
+          return 1;
   }
   for (const et_o2_optimizer_state_handle *handle = et_o2_handles;
        handle != NULL; handle = handle->registry_next) {
@@ -2139,16 +2212,10 @@ static int et_o2_g3r_save_buffers_conflict(const void *output,
                                         sizeof(*handle)))
       return 1;
   }
-  for (const et_o2_optimizer_builder *builder = et_o2_builders;
-       builder != NULL; builder = builder->registry_next) {
-    if (builder->count > ET_O2_MAX_PARAMETERS ||
-        et_o2_g3r_save_storage_conflict(output, output_bytes, error, builder,
-                                        sizeof(*builder)) ||
-        et_o2_g3r_save_storage_conflict(
-            output, output_bytes, error, builder->entries,
-            builder->count * sizeof(*builder->entries)))
-      return 1;
-  }
+  /* Builder-owned allocations have no independent span provenance. Their
+   * mutable descriptors cannot establish disjoint caller buffers. */
+  if (et_o2_builders != NULL || et_o2_reconstruct_builders != NULL)
+    return 1;
   for (const et_o2_optimizer_state_borrow *borrow = et_o2_borrows;
        borrow != NULL; borrow = borrow->registry_next)
     if (et_o2_g3r_save_storage_conflict(output, output_bytes, error, borrow,
@@ -2159,49 +2226,16 @@ static int et_o2_g3r_save_buffers_conflict(const void *output,
     if (et_o2_g3r_save_storage_conflict(output, output_bytes, error, borrow,
                                         sizeof(*borrow)))
       return 1;
-  for (const et_o2_state_reconstruct_builder *builder =
-           et_o2_reconstruct_builders;
-       builder != NULL; builder = builder->registry_next) {
-    if (builder->count > ET_O2_MAX_PARAMETERS ||
-        et_o2_g3r_save_storage_conflict(output, output_bytes, error, builder,
-                                        sizeof(*builder)) ||
-        et_o2_g3r_save_storage_conflict(
-            output, output_bytes, error, builder->entries,
-            builder->count * sizeof(*builder->entries)) ||
-        et_o2_g3r_save_storage_conflict(
-            output, output_bytes, error, builder->owned_clones,
-            builder->count * 2u * sizeof(*builder->owned_clones)) ||
-        et_o2_g3r_save_storage_conflict(output, output_bytes, error,
-                                        builder->entry_set, builder->count))
-      return 1;
-    const et_o2_optimizer_state *prepared = builder->prepared_state;
-    if (prepared != NULL &&
-        (et_o2_g3r_save_storage_conflict(output, output_bytes, error,
-                                         prepared, sizeof(*prepared)) ||
-         et_o2_g3r_save_storage_conflict(
-             output, output_bytes, error, prepared->entries,
-             builder->count * sizeof(*prepared->entries)) ||
-         et_o2_g3r_save_storage_conflict(
-             output, output_bytes, error, prepared->handles,
-             builder->count * 2u * sizeof(*prepared->handles)) ||
-         et_o2_g3r_save_storage_conflict(
-             output, output_bytes, error, prepared->owned_clones,
-             builder->count * 2u * sizeof(*prepared->owned_clones))))
-      return 1;
-    if (prepared != NULL && prepared->handles != NULL)
-      for (size_t i = 0u; i < builder->count * 2u; ++i)
-        if (et_o2_g3r_save_storage_conflict(
-                output, output_bytes, error, prepared->handles[i],
-                sizeof(*prepared->handles[i])))
-          return 1;
-  }
 #ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
   for (const et_o2_retire_provenance *record = et_o2_retire_records;
        record != NULL; record = record->next) {
     if (record->count > ET_O2_MAX_PARAMETERS ||
         et_o2_g3r_save_storage_conflict(
             output, output_bytes, error, record,
-            sizeof(*record) + record->count * sizeof(et_o2_entry)))
+            sizeof(*record) + record->count * sizeof(et_o2_entry)) ||
+        (record->live == 1u && et_o2_g3r_save_storage_conflict(
+            output, output_bytes, error, record->entries,
+            record->count * sizeof(*record->entries))))
       return 1;
   }
 #endif
@@ -2250,6 +2284,14 @@ int32_t et_g3r_private_o2_save_begin_v1(
     return et_o2_fail(error, ET_O2_STATUS_SHAPE_MISMATCH,
                       ET_O2_CODE_MISSING_PARAMETER, operation,
                       "same-owner save requires fourteen parameters");
+  const et_o2_g3r_owned_spans *optimizer_spans =
+      et_o2_g3r_spans_find(candidate, ET_O2_G3R_SPAN_OPTIMIZER);
+  if (optimizer_spans == NULL || optimizer_spans->live != 1u ||
+      optimizer_spans->storage[0] != candidate->entries ||
+      optimizer_spans->bytes[0] != 14u * sizeof(*candidate->entries))
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                      ET_O2_CODE_OWNER_CONFLICT, operation,
+                      "optimizer entry allocation changed");
   if (et_o2_g3r_save_tombstones >= ET_G3R_O2_SAVE_MAX_TOMBSTONES)
     return et_o2_fail(error, ET_O2_STATUS_UNSUPPORTED,
                       ET_O2_CODE_CONSUMED, operation,
@@ -2317,6 +2359,15 @@ int32_t et_g3r_private_o2_save_check_v1(
                       ET_O2_CODE_INVALID_HANDLE, operation,
                       "same-owner hold is foreign, stale, or inactive");
   et_o2_optimizer *optimizer = hold->optimizer;
+  const et_o2_g3r_owned_spans *optimizer_spans =
+      et_o2_g3r_spans_find(optimizer, ET_O2_G3R_SPAN_OPTIMIZER);
+  if (optimizer_spans == NULL || optimizer_spans->live != 1u ||
+      optimizer->count != 14u ||
+      optimizer_spans->storage[0] != optimizer->entries ||
+      optimizer_spans->bytes[0] != 14u * sizeof(*optimizer->entries))
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                      ET_O2_CODE_OWNER_CONFLICT, operation,
+                      "optimizer entry allocation changed");
   if (optimizer->count != 14u ||
       optimizer->config.clip_kind != hold->config.clip_kind ||
       optimizer->config.clip_max_bits != hold->config.clip_max_bits ||
@@ -2376,6 +2427,19 @@ int32_t et_g3r_private_o2_save_issued_match_v1(
   if (result != 0) return result;
   result = et_o2_require_state_live(issued, operation, error);
   if (result != 0) return result;
+  const et_o2_g3r_owned_spans *state_spans =
+      et_o2_g3r_spans_find(state, ET_O2_G3R_SPAN_STATE);
+  if (state_spans == NULL || state_spans->live != 1u ||
+      state->count != 14u ||
+      state_spans->storage[0] != state->entries ||
+      state_spans->storage[1] != state->handles ||
+      state_spans->storage[2] != state->owned_clones ||
+      state_spans->bytes[0] != 14u * sizeof(*state->entries) ||
+      state_spans->bytes[1] != 28u * sizeof(*state->handles) ||
+      state_spans->bytes[2] != 28u * sizeof(*state->owned_clones))
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                      ET_O2_CODE_OWNER_CONFLICT, operation,
+                      "issued state allocation changed");
   result = et_o2_validate_state_owner_ledger(
       state, ET_O2_STATUS_INVALID_STATE, operation, error);
   if (result != 0) return result;
@@ -2465,6 +2529,9 @@ int32_t et_o2_optimizer_state_snapshot_v1(et_o2_optimizer *candidate,
 #endif
   et_o2_optimizer *optimizer = et_o2_find_optimizer(candidate);
   et_o2_optimizer_state *state = NULL;
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  et_o2_g3r_owned_spans *save_spans;
+#endif
   size_t index;
   size_t handle_index;
   int32_t result = ET_O2_STATUS_INTERNAL;
@@ -2566,10 +2633,26 @@ int32_t et_o2_optimizer_state_snapshot_v1(et_o2_optimizer *candidate,
     handle->live = 1u;
     state->handles[handle_index] = handle;
   }
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  save_spans = et_o2_g3r_spans_new(
+      state, ET_O2_G3R_SPAN_STATE, state->entries,
+      state->count * sizeof(*state->entries), state->handles,
+      state->count * 2u * sizeof(*state->handles), state->owned_clones,
+      state->count * 2u * sizeof(*state->owned_clones));
+  if (save_spans == NULL) {
+    result = et_o2_fail(error, ET_O2_STATUS_INTERNAL,
+                        ET_O2_CODE_ALLOCATION_FAILED, "optimizer-state",
+                        "cannot record optimizer state ownership");
+    goto cleanup;
+  }
+#endif
   state->magic = ET_O2_STATE_MAGIC;
   state->lifecycle = ET_O2_OPTIMIZER_STATE_LIVE;
   state->registry_next = et_o2_states;
   et_o2_states = state;
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  et_o2_g3r_spans_publish(save_spans);
+#endif
   for (handle_index = 0u; handle_index < optimizer->count * 2u;
        ++handle_index) {
     state->handles[handle_index]->registry_next = et_o2_handles;
@@ -2962,6 +3045,18 @@ int32_t et_o2_optimizer_state_release_v1(et_o2_optimizer_state *candidate,
           error) != 0) {
     return ET_O2_STATUS_INVALID_STATE;
   }
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  et_o2_g3r_owned_spans *save_spans =
+      et_o2_g3r_spans_find(state, ET_O2_G3R_SPAN_STATE);
+  if (save_spans == NULL || save_spans->live != 1u ||
+      save_spans->storage[0] != state->entries ||
+      save_spans->storage[1] != state->handles ||
+      save_spans->storage[2] != state->owned_clones ||
+      save_spans->bytes[0] != state->count * sizeof(*state->entries) ||
+      save_spans->bytes[1] != state->count * 2u * sizeof(*state->handles) ||
+      save_spans->bytes[2] != state->count * 2u * sizeof(*state->owned_clones))
+    _Exit(134);
+#endif
   entry_count = state->count * 2u;
   for (index = 0u; index < entry_count; ++index) {
     et_o2_optimizer_state_handle *handle = state->handles[index];
@@ -3004,6 +3099,9 @@ int32_t et_o2_optimizer_state_release_v1(et_o2_optimizer_state *candidate,
   free(state->owned_clones);
   free(state->handles);
   free(state->entries);
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  save_spans->live = 0u;
+#endif
   state->owned_clones = NULL;
   state->owned_clone_ledger_count = 0u;
   state->handles = NULL;
@@ -3315,6 +3413,9 @@ int32_t et_o2_optimizer_state_reconstruct_commit_v1(
     et_o2_error_v1 *error) {
   et_o2_state_reconstruct_builder *builder;
   et_o2_optimizer_state *state;
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  et_o2_g3r_owned_spans *save_spans;
+#endif
   size_t index;
   if (slot == NULL || output == NULL || *output != NULL ||
       (builder = et_o2_find_reconstruct_builder(
@@ -3343,6 +3444,18 @@ int32_t et_o2_optimizer_state_reconstruct_commit_v1(
                         "prepared clone ledger changed before commit");
     }
   }
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  save_spans = et_o2_g3r_spans_new(
+      state, ET_O2_G3R_SPAN_STATE, state->entries,
+      builder->count * sizeof(*state->entries), state->handles,
+      builder->count * 2u * sizeof(*state->handles), state->owned_clones,
+      builder->count * 2u * sizeof(*state->owned_clones));
+  if (save_spans == NULL)
+    return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
+                      ET_O2_CODE_ALLOCATION_FAILED,
+                      "optimizer-state-reconstruct",
+                      "cannot record reconstructed state ownership");
+#endif
   for (index = 0u; index < builder->count; ++index) {
     state->entries[index] = builder->entries[index];
   }
@@ -3356,6 +3469,9 @@ int32_t et_o2_optimizer_state_reconstruct_commit_v1(
   state->lifecycle = ET_O2_OPTIMIZER_STATE_LIVE;
   state->registry_next = et_o2_states;
   et_o2_states = state;
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  et_o2_g3r_spans_publish(save_spans);
+#endif
   for (index = 0u; index < builder->count * 2u; ++index) {
     state->handles[index]->registry_next = et_o2_handles;
     et_o2_handles = state->handles[index];

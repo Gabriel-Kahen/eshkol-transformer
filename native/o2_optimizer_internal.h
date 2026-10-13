@@ -181,7 +181,9 @@ typedef struct et_o2_g3r_save_hold et_o2_g3r_save_hold;
 /* Fixed private same-owner admission. The caller must supply a roster just
  * authenticated by the registered sealed M3T owner. Caller output/error
  * spans must be disjoint from each other and registered O2 owner storage.
- * An overlap returns INVALID_ARGUMENT without writing an error record. */
+ * An active O2 or reconstruction builder also returns INVALID_ARGUMENT:
+ * its mutable descriptors cannot authenticate owned-array spans. Neither
+ * rejection writes an error record. */
 int32_t et_g3r_private_o2_save_begin_v1(
     et_o2_optimizer *optimizer, et_f32_parameter *const parameters[14],
     const void *const identities[14], et_o2_g3r_save_hold **hold,

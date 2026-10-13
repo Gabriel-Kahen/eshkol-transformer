@@ -54,6 +54,25 @@ int main(void) {
   CHECK(et_o2_optimizer_builder_finish_v1(&builder, &optimizer, &o2) == 0);
   et_o2_g3r_save_hold *hold = NULL;
   et_o2_optimizer_state *ordinary = NULL;
+  et_o2_entry *owned_optimizer_entries = optimizer->entries;
+  size_t owned_optimizer_count = optimizer->count;
+  et_o2_entry decoy_optimizer_entries[14];
+  unsigned char owned_optimizer_before[14 * sizeof(*owned_optimizer_entries)];
+  memcpy(decoy_optimizer_entries, owned_optimizer_entries,
+         sizeof(decoy_optimizer_entries));
+  memcpy(owned_optimizer_before, owned_optimizer_entries,
+         sizeof(owned_optimizer_before));
+  optimizer->entries = decoy_optimizer_entries;
+  optimizer->count = 1u;
+  CHECK(et_g3r_private_o2_save_begin_v1(
+      optimizer, parameters, identities, &hold,
+      (et_o2_error_v1 *)owned_optimizer_entries) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(hold == NULL && optimizer->busy == 0u &&
+        memcmp(owned_optimizer_entries, owned_optimizer_before,
+               sizeof(owned_optimizer_before)) == 0);
+  optimizer->entries = owned_optimizer_entries;
+  optimizer->count = owned_optimizer_count;
   et_o2_optimizer_builder *alias_builder = NULL;
   CHECK(et_o2_optimizer_builder_create_v1(
       14, ET_O2_CLIP_NONE, 0, ET_O2_SCHEDULE_CONSTANT, 0, 0,
@@ -63,6 +82,9 @@ int main(void) {
   memcpy(builder_before, alias_builder, sizeof(builder_before));
   memcpy(builder_entries_before, alias_builder->entries,
          sizeof(builder_entries_before));
+  CHECK(et_g3r_private_o2_save_begin_v1(
+      optimizer, parameters, identities, &hold, &o2) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
   CHECK(et_g3r_private_o2_save_begin_v1(
       optimizer, parameters, identities, &hold,
       (et_o2_error_v1 *)alias_builder->entries) ==
@@ -75,6 +97,19 @@ int main(void) {
         memcmp(alias_builder, builder_before, sizeof(builder_before)) == 0 &&
         memcmp(alias_builder->entries, builder_entries_before,
                sizeof(builder_entries_before)) == 0);
+  et_o2_entry *owned_builder_entries = alias_builder->entries;
+  size_t owned_builder_count = alias_builder->count;
+  alias_builder->entries = NULL;
+  alias_builder->count = 0u;
+  CHECK(et_g3r_private_o2_save_begin_v1(
+      optimizer, parameters, identities, &hold,
+      (et_o2_error_v1 *)owned_builder_entries) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(hold == NULL && optimizer->busy == 0u &&
+        memcmp(owned_builder_entries, builder_entries_before,
+               sizeof(builder_entries_before)) == 0);
+  alias_builder->entries = owned_builder_entries;
+  alias_builder->count = owned_builder_count;
   CHECK(et_o2_optimizer_builder_abort_v1(&alias_builder, &o2) == 0);
   unsigned char optimizer_before[sizeof(*optimizer)];
   unsigned char entries_before[14 * sizeof(*optimizer->entries)];
@@ -154,6 +189,8 @@ int main(void) {
   memcpy(builder_before, alias_builder, sizeof(builder_before));
   memcpy(builder_entries_before, alias_builder->entries,
          sizeof(builder_entries_before));
+  CHECK(et_g3r_private_o2_save_check_v1(hold, &o2) ==
+        ET_O2_STATUS_INVALID_ARGUMENT);
   CHECK(et_g3r_private_o2_save_check_v1(
       hold, (et_o2_error_v1 *)alias_builder->entries) ==
       ET_O2_STATUS_INVALID_ARGUMENT);
@@ -189,6 +226,21 @@ int main(void) {
         memcmp(reconstruct, reconstruct_before, sizeof(reconstruct_before)) == 0 &&
         memcmp(reconstruct->entries, reconstruct_entries_before,
                sizeof(reconstruct_entries_before)) == 0);
+  et_o2_state_entry *owned_reconstruct_entries = reconstruct->entries;
+  size_t owned_reconstruct_count = reconstruct->count;
+  reconstruct->entries = NULL;
+  reconstruct->count = 0u;
+  CHECK(et_g3r_private_o2_save_check_v1(
+      hold, (et_o2_error_v1 *)owned_reconstruct_entries) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_g3r_private_o2_save_end_v1(
+      &hold, (et_o2_error_v1 *)owned_reconstruct_entries) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(hold == first_hold && optimizer->busy == 1u &&
+        memcmp(owned_reconstruct_entries, reconstruct_entries_before,
+               sizeof(reconstruct_entries_before)) == 0);
+  reconstruct->entries = owned_reconstruct_entries;
+  reconstruct->count = owned_reconstruct_count;
   CHECK(et_o2_optimizer_state_reconstruct_abort_v1(&reconstruct, &o2) == 0);
   memcpy(entries_before, optimizer->entries, sizeof(entries_before));
   CHECK(et_g3r_private_o2_save_check_v1(
@@ -260,6 +312,43 @@ int main(void) {
       ET_O2_STATUS_INVALID_ARGUMENT);
   CHECK(hold == first_hold && optimizer->busy == 1u &&
         state->active_borrows == 0u);
+  et_o2_state_entry *owned_state_entries = state->entries;
+  et_o2_optimizer_state_handle **owned_state_handles = state->handles;
+  et_f32_tensor **owned_state_clones = state->owned_clones;
+  const size_t owned_state_count = state->count;
+  const size_t owned_clone_count = state->owned_clone_ledger_count;
+  et_o2_state_entry decoy_state_entries[14];
+  et_o2_optimizer_state_handle *decoy_state_handles[28];
+  et_f32_tensor *decoy_state_clones[28];
+  memcpy(decoy_state_entries, owned_state_entries, sizeof(decoy_state_entries));
+  memcpy(decoy_state_handles, owned_state_handles, sizeof(decoy_state_handles));
+  memcpy(decoy_state_clones, owned_state_clones, sizeof(decoy_state_clones));
+  state->entries = decoy_state_entries;
+  state->count = 1u;
+  CHECK(et_g3r_private_o2_save_issued_match_v1(
+      hold, state, (et_o2_error_v1 *)owned_state_entries) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  state->entries = owned_state_entries;
+  state->count = owned_state_count;
+  state->handles = decoy_state_handles;
+  CHECK(et_g3r_private_o2_save_check_v1(
+      hold, (et_o2_error_v1 *)owned_state_handles) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  state->handles = owned_state_handles;
+  state->owned_clones = decoy_state_clones;
+  state->owned_clone_ledger_count = 1u;
+  CHECK(et_g3r_private_o2_save_end_v1(
+      &hold, (et_o2_error_v1 *)owned_state_clones) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  state->owned_clones = owned_state_clones;
+  state->owned_clone_ledger_count = owned_clone_count;
+  CHECK(hold == first_hold && optimizer->busy == 1u &&
+        memcmp(owned_state_entries, decoy_state_entries,
+               sizeof(decoy_state_entries)) == 0 &&
+        memcmp(owned_state_handles, decoy_state_handles,
+               sizeof(decoy_state_handles)) == 0 &&
+        memcmp(owned_state_clones, decoy_state_clones,
+               sizeof(decoy_state_clones)) == 0);
   unsigned char state_before[sizeof(*state)];
   unsigned char state_entries_before[14 * sizeof(*state->entries)];
   unsigned char handles_before[28 * sizeof(*state->handles)];

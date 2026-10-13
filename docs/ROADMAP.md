@@ -2065,11 +2065,17 @@ there is no SAVE or continuation admission.
 A separate current-main O2 hold source candidate ports the private
 `et_g3r_private_o2_save_*_v1` ABI from `66c6e1bd`, its reviewed hold-shell
 alias repair from `5d9b4873`, and the registered optimizer/issued-state
-storage alias repair from `d6fe6906`, then extends the same guard to active
-builder/reconstruction storage and active or retired borrow shells. All five
+storage alias repair from `d6fe6906`, then fail-closes private hold calls
+while any O2 or reconstruction builder is registered because their mutable
+descriptors cannot authenticate owned-array spans. Private sidecar records
+capture optimizer and issued-state allocation spans at publication, and
+private calls traverse those records rather than mutable owner links before
+writing caller buffers. The guard also protects active and retired borrow
+shells. All five
 private entry points reject conflicting output/error buffers before mutating
 the hold or clearing errors; the focused native fixture includes causal
-control-slot, roster, builder, borrow and issued-state alias negatives.
+control-slot, roster, mutated-builder, borrow and decoy optimizer/issued-state
+descriptor alias negatives.
 This is an independently reviewable prerequisite,
 not an integrated G3/A2/O2 owner. Source syntax passes locally; independent
 review, native runtime/sanitizer, feature-off symbol and compiled aggregate
