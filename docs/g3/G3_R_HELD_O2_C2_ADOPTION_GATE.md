@@ -175,16 +175,20 @@ ledger, it checks the live native joint owner, roots the exact return of
 `module-state-dict model` immediately, and validates the P1 C2 topology against
 all fourteen fixed M3T parameter paths and shapes plus the head/token tie.
 It then rechecks the original owner and copied controls while the joint hold
-remains live. Its preclaim ledger contains the exact state shell and the first
-binding. `g3r-joint-c2-original-bound-claim!` now requires this ledger rather
-than an arbitrary P1 shell, rechecks the binding, and passes only that rooted
-shell to C2. A recoverable preclaim failure releases that P1 shell using
-`state-dict-release!` and rethrows the first caught value; the P1 helper never
-ends the original G3/O2 holds. An uncertain P1 release fails stop.
+remains live. Its preclaim ledger contains the state shell and first binding,
+while a separate private registry record retains their exact identities. The
+record is never returned or stored inside the caller's ledger. The claim
+wrapper first finds that record by ledger identity, then installs cleanup
+protection before topology or owner validation. It passes only the
+registry-rooted P1 shell to C2. A recoverable preclaim failure releases that
+exact shell using `state-dict-release!` and rethrows the first caught value;
+the P1 helper never ends the original G3/O2 holds. An uncertain P1 release
+fails stop.
 
 The source mutation gate covers omitted owner checks, topology and tied-alias
-changes, cleanup omission, first-error loss, claim bypass, stale owner and
-bitwise G3 history comparison. The original binding source gate remains green.
+changes, cleanup omission, first-error loss, claim bypass, stale owner,
+bitwise G3 history comparison, caller-side P1 substitution and validation
+moved before the cleanup guard. The original binding source gate remains green.
 These are source checks, not live negative tests. In particular, no compiled
 aggregate has shown that P1's provider can clone under the live G3 model pins,
 or that all provider failure and post-tombstone release cuts retain authority.

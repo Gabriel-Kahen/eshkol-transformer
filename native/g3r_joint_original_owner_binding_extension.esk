@@ -67,15 +67,21 @@
 (define (g3r-joint-c2-original-bound-claim!
           generator model tokenizer optimizer-value o2-ledger p1-ledger controls)
   (let* ((operation 'g3r-joint-c2-original-bound-claim!)
-         (provenance (g3r-joint-p1-provenance-check! p1-ledger operation))
-         (p1 (vector-ref provenance 2))
-         (bound (vector-ref provenance 1)))
+         (record (g3r-joint-p1-provenance-live-record p1-ledger)))
+    (if (not record)
+        (m3t-fail 'invalid-state operation
+                  "expected a registry-rooted preclaim P1 ledger"))
+    ;; An authentic record is the cleanup authority even when a mutable
+    ;; ledger field or provider topology check has been corrupted.
     (guard (caught
              (#t
                (vector-set! p1-ledger 5 caught)
                (g3r-joint-p1-provenance-release! p1-ledger)
                (raise caught)))
-      (let ((binding
+      (g3r-joint-p1-provenance-check! p1-ledger operation)
+      (let* ((p1 (vector-ref record 2))
+             (bound (vector-ref record 1))
+             (binding
               (g3r-joint-original-binding-check!
                 generator model tokenizer optimizer-value o2-ledger
                 controls)))
@@ -91,7 +97,8 @@
         (let ((result (vector binding p1-ledger #f)))
           (vector-set! result 2
             (g3r-joint-c2-claim! o2-ledger p1 (vector-ref binding 9)))
-          (vector-set! (vector-ref p1-ledger 6) 2 #f)
+          (vector-set! record 2 #f)
+          (vector-set! record 3 'c2-owned)
           (vector-set! p1-ledger 2 #f)
           (vector-set! p1-ledger 4 'c2-owned)
           result)))))

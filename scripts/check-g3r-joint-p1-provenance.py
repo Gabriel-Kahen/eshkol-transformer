@@ -50,7 +50,7 @@ def check(p: str, b: str, j: str, g: str) -> None:
         assert required in topology
 
     create = p[p.index("(define (g3r-joint-p1-provenance!"):p.index(
-        "(define (g3r-joint-p1-provenance-check!")]
+        "(define (g3r-joint-p1-provenance-record")]
     assert create.count("(g3r-joint-original-binding-check!") == 2
     first = create.index("(g3r-joint-original-binding-check!")
     clone = create.index("(vector-set! ledger 2 (module-state-dict model))")
@@ -62,30 +62,39 @@ def check(p: str, b: str, j: str, g: str) -> None:
     assert "(raise caught)" in create
     assert "(g3r-held-o2-fail-stop)" in create
     assert "g3r-joint-o2-end" not in p and "g3r-joint-o2-release-issued" not in p
+    assert "(ledger (vector g3r-joint-p1-provenance-tag binding #f #f\n                         'prepared #f))" in create
+    assert "(record (vector ledger binding #f 'prepared))" in create
+    assert "(vector-set! ledger 6 record)" not in p
     ownership = p[p.index("(define (g3r-joint-p1-provenance-record"):
                   p.index("(define (g3r-joint-p1-provenance-check!")]
     for required in ("g3r-joint-p1-provenance-registry",
                      "(eq? (vector-ref (car entries) 0) ledger)",
-                     "(eq? record (vector-ref ledger 6))",
+                     "(eq? (vector-ref record 3) 'preclaim)",
                      "(eq? (vector-ref record 1) (vector-ref ledger 1))",
-                     "(eq? (vector-ref record 2) (vector-ref ledger 2))"):
+                     "(eq? (vector-ref record 2) (vector-ref ledger 2))",
+                     "(vector-ref record 2)))"):
         assert required in ownership
     assert "(vector-set! record 2 (vector-ref ledger 2))" in create
+    assert "(vector-set! record 3 'preclaim)" in create
     assert "(set! g3r-joint-p1-provenance-registry enrollment)" in create
     release = p[p.index("(define (g3r-joint-p1-provenance-release!"):]
-    assert "(g3r-joint-p1-provenance-owned-shell ledger operation)" in release
+    assert "(record (g3r-joint-p1-provenance-live-record ledger))" in release
     assert "(if (not (vector-ref ledger 5))" in release
-    assert "(state-dict-release! exact)" in release
+    assert "(state-dict-release! (vector-ref record 2))" in release
+    assert "(vector-set! record 3 'released)" in release
 
     wrapper = b[b.index("(define (g3r-joint-c2-original-bound-claim!"):]
     for required in ("(g3r-joint-p1-provenance-check! p1-ledger operation)",
-                     "(p1 (vector-ref provenance 2))",
+                     "(record (g3r-joint-p1-provenance-live-record p1-ledger))",
+                     "(p1 (vector-ref record 2))",
                      "(g3r-joint-p1-provenance-release! p1-ledger)",
                      "(vector-ref bound 2)", "(vector-ref bound 4)",
                      "(vector-ref bound 7)", "(vector-ref bound 8)",
                      "(vector-ref bound 9)",
                      "(result (vector binding p1-ledger #f))"):
         assert required in wrapper
+    assert wrapper.index("(record (g3r-joint-p1-provenance-live-record p1-ledger))") < wrapper.index(
+        "(guard (caught") < wrapper.index("(g3r-joint-p1-provenance-check! p1-ledger operation)")
     assert wrapper.index("(g3r-joint-original-binding-check!") < wrapper.index(
         "(g3r-joint-c2-claim! o2-ledger p1 (vector-ref binding 9))")
     assert wrapper.index("(g3r-joint-c2-claim! o2-ledger p1 (vector-ref binding 9))") < wrapper.index(
@@ -115,9 +124,15 @@ mutations = (
     (leaf.replace("(g3r-joint-original-binding-check!", "(always-pass", 1), binding, joint, g3),
     (leaf.replace("(g3r-joint-original-binding-check!", "(always-pass"), binding, joint, g3),
     (leaf.replace("(eq? (vector-ref record 2) (vector-ref ledger 2))", "#t"), binding, joint, g3),
+    (leaf.replace("'prepared #f))\n         (record", "'prepared #f #f))\n         (record").replace(
+        "(guard (caught", "(vector-set! ledger 6 record)\n    (guard (caught", 1), binding, joint, g3),
     (leaf.replace("(set! g3r-joint-p1-provenance-registry enrollment)", "#t"), binding, joint, g3),
     (leaf.replace("(if (not (vector-ref ledger 5))", "(if #t"), binding, joint, g3),
     (leaf, binding.replace("(g3r-joint-p1-provenance-release! p1-ledger)", "#t"), joint, g3),
+    (leaf, binding.replace("(p1 (vector-ref record 2))", "(p1 (vector-ref p1-ledger 2))"), joint, g3),
+    (leaf, binding.replace("(g3r-joint-p1-provenance-check! p1-ledger operation)", "#t"), joint, g3),
+    (leaf, binding.replace("(guard (caught", "(g3r-joint-p1-provenance-check! p1-ledger operation)\n    (guard (caught", 1).replace(
+        "      (g3r-joint-p1-provenance-check! p1-ledger operation)\n      (let*", "      (let*"), joint, g3),
     (leaf, binding.replace("(vector-ref bound 8)", "(vector-ref binding 8)"), joint, g3),
     (leaf, binding.replace("(g3r-joint-c2-claim! o2-ledger p1 (vector-ref binding 9))", "#f"), joint, g3),
     (leaf, binding, joint.replace("sealed_model != hold->model", "sealed_model == hold->model"), g3),
@@ -133,4 +148,4 @@ for changed in mutations:
 assert "g3r_joint_p1_provenance_extension.esk" not in (
     (root / "Makefile").read_text()
 )
-print("joint P1 provenance source gate: pass (16 mutation controls; unlinked)")
+print("joint P1 provenance source gate: pass (20 mutation controls; unlinked)")

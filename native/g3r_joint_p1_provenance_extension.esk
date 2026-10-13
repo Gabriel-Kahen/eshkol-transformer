@@ -33,8 +33,9 @@
                      (cdr remaining-shapes)))))))
 
 ;;; Ledger: tag, exact original binding, exact detached P1 shell, topology,
-;;; phase, first caught value, private record. The record and its registry
-;;; cell are allocated before cloning; enrollment is assignment-only.
+;;; phase, first caught value. Its separate private record and registry cell
+;;; are allocated before cloning; enrollment is assignment-only. The returned
+;;; ledger never exposes that record, even through a nested slot.
 ;;; No original hold is owned by this ledger.
 (define (g3r-joint-p1-provenance!
           generator model tokenizer optimizer-value o2-ledger controls)
@@ -43,10 +44,9 @@
                     generator model tokenizer optimizer-value o2-ledger
                     controls))
          (ledger (vector g3r-joint-p1-provenance-tag binding #f #f
-                         'prepared #f #f))
-         (record (vector ledger binding #f))
+                         'prepared #f))
+         (record (vector ledger binding #f 'prepared))
          (enrollment (cons record g3r-joint-p1-provenance-registry)))
-    (vector-set! ledger 6 record)
     (guard (caught
              (#t
                (vector-set! ledger 5 caught)
@@ -80,6 +80,7 @@
                       "original owner or controls changed during P1 clone")))
       (vector-set! ledger 4 'preclaim)
       (vector-set! record 2 (vector-ref ledger 2))
+      (vector-set! record 3 'preclaim)
       (set! g3r-joint-p1-provenance-registry enrollment)
       ledger)))
 
@@ -90,21 +91,23 @@
             (car entries)
             (find (cdr entries))))))
 
-(define (g3r-joint-p1-provenance-owned-shell ledger operation)
-  (if (or (not (vector? ledger)) (not (= (vector-length ledger) 7))
-          (not (eq? (vector-ref ledger 0) g3r-joint-p1-provenance-tag))
-          (not (eq? (vector-ref ledger 4) 'preclaim))
-          (not (vector-ref ledger 2)))
-      (m3t-fail 'invalid-state operation
-                "expected exact live preclaim P1 provenance"))
+(define (g3r-joint-p1-provenance-live-record ledger)
   (let ((record (g3r-joint-p1-provenance-record ledger)))
+    (if (and record (eq? (vector-ref record 3) 'preclaim)
+             (vector-ref record 2))
+        record
+        #f)))
+
+(define (g3r-joint-p1-provenance-owned-shell ledger operation)
+  (let ((record (g3r-joint-p1-provenance-live-record ledger)))
     (if (or (not record)
-            (not (eq? record (vector-ref ledger 6)))
+            (not (eq? (vector-ref ledger 0) g3r-joint-p1-provenance-tag))
+            (not (eq? (vector-ref ledger 4) 'preclaim))
             (not (eq? (vector-ref record 1) (vector-ref ledger 1)))
             (not (eq? (vector-ref record 2) (vector-ref ledger 2))))
         (m3t-fail 'invalid-state operation
-                  "P1 shell or binding differs from its private record")))
-  (vector-ref ledger 2))
+                  "P1 shell or binding differs from its private record"))
+    (vector-ref record 2)))
 
 (define (g3r-joint-p1-provenance-check! ledger operation)
   (g3r-joint-p1-topology-check!
@@ -113,7 +116,10 @@
 
 (define (g3r-joint-p1-provenance-release! ledger)
   (let* ((operation 'g3r-joint-p1-provenance-release!)
-         (exact (g3r-joint-p1-provenance-owned-shell ledger operation)))
+         (record (g3r-joint-p1-provenance-live-record ledger)))
+    (if (not record)
+        (m3t-fail 'invalid-state operation
+                  "no exact live P1 state remains for release"))
     ;; This helper owns only its detached P1 state. A provider failure may
     ;; occur after native tombstoning; do not infer that an exception left the
     ;; state live, and do not release the original joint hold here.
@@ -122,8 +128,9 @@
                (if (not (vector-ref ledger 5))
                    (vector-set! ledger 5 release-error))
                (g3r-held-o2-fail-stop)))
-      (state-dict-release! exact)
+      (state-dict-release! (vector-ref record 2))
       (vector-set! ledger 2 #f)
-      (vector-set! (vector-ref ledger 6) 2 #f)
+      (vector-set! record 2 #f)
+      (vector-set! record 3 'released)
       (vector-set! ledger 4 'released)
       #t)))
