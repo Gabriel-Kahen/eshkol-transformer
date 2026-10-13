@@ -33,6 +33,41 @@ static void check_busy(int64_t token) {
   assert(et_c2_private_save_image_publish_v1(token, "/tmp/never", 0) == -2);
 }
 
+static void check_failure_cuts(uint8_t *image, uint8_t *cell,
+                               int64_t previous_token) {
+  const int64_t adopt_cuts[] = {
+      ET_C2_IMAGE_TEST_FAIL_ENTRY_ALLOC,
+      ET_C2_IMAGE_TEST_FAIL_VECTOR_ALLOC,
+      ET_C2_IMAGE_TEST_FAIL_AFTER_SHA};
+  for (unsigned int repeat = 0; repeat < 32u; ++repeat) {
+    for (size_t cut = 0; cut < sizeof(adopt_cuts) / sizeof(adopt_cuts[0]);
+         ++cut) {
+      memset(cell + sizeof(int64_t), 0xa5, 8u);
+      et_c2_private_save_image_test_fail_next_v1(adopt_cuts[cut]);
+      assert(et_c2_private_save_image_adopt_v1(image, 3, cell) == -3);
+      uint64_t output = UINT64_MAX;
+      memcpy(&output, cell + sizeof(int64_t), sizeof(output));
+      assert(output == 0u);
+      assert(et_c2_private_save_image_live_bytes_v1() == 0u);
+      assert(et_c2_private_save_image_live_count_v1() == 0u);
+    }
+    int64_t token = adopt(image, 3u, cell);
+    assert(token == previous_token + 1);
+    previous_token = token;
+    assert(et_c2_private_save_image_live_bytes_v1() == 3u);
+    assert(et_c2_private_save_image_live_count_v1() == 1u);
+    et_c2_private_save_image_test_fail_next_v1(ET_C2_IMAGE_TEST_FAIL_RELEASE);
+    assert(et_c2_private_save_image_release_v1(-1) == -1);
+    assert(et_c2_private_save_image_release_v1(token - 1) == -2);
+    assert(et_c2_private_save_image_release_v1(token) == -3);
+    assert(et_c2_private_save_image_live_bytes_v1() == 3u);
+    assert(et_c2_private_save_image_live_count_v1() == 1u);
+    assert(et_c2_private_save_image_release_v1(token) == 0);
+    assert(et_c2_private_save_image_live_bytes_v1() == 0u);
+    assert(et_c2_private_save_image_live_count_v1() == 0u);
+  }
+}
+
 int main(void) {
   static const uint8_t abc_sha[32] = {
       0xba,0x78,0x16,0xbf,0x8f,0x01,0xcf,0xea,0x41,0x41,0x40,0xde,
@@ -58,6 +93,8 @@ int main(void) {
   assert(et_c2_private_save_image_live_bytes_v1() == 16777216u);
   assert(et_c2_private_save_image_release_v1(token) == 0);
   assert(et_c2_private_save_image_live_bytes_v1() == 0u);
+  assert(et_c2_private_save_image_live_count_v1() == 0u);
+  check_failure_cuts(image, cell, token);
   assert(et_c2_private_save_image_release_v1(token) == -2);
   assert(et_c2_private_save_image_digest_v1(token + 100, digest) == -1);
   assert(et_c2_private_save_image_digest_v1(token, digest) == -2);
@@ -85,6 +122,9 @@ int main(void) {
   assert(fclose(file) == 0 && memcmp(observed, "abc", 3u) == 0);
   assert(et_c2_private_save_image_digest_v1(token, digest) == 0);
   assert(memcmp(digest + 8u, abc_sha, 32u) == 0);
+  et_c2_private_save_image_test_fail_next_v1(ET_C2_IMAGE_TEST_FAIL_RELEASE);
+  assert(et_c2_private_save_image_release_v1(token) == -3);
+  assert(et_c2_private_save_image_live_count_v1() == 1u);
   assert(et_c2_private_save_image_release_v1(token) == 0);
   assert(et_c2_private_save_image_release_v1(token) == -2);
 

@@ -2,6 +2,10 @@
 
 (extern i64 c2-image-live-bytes
         :real et_c2_private_save_image_live_bytes_v1)
+(extern i64 c2-image-live-count
+        :real et_c2_private_save_image_live_count_v1)
+(extern void c2-image-test-fail-next i64
+        :real et_c2_private_save_image_test_fail_next_v1)
 (extern void c2-image-test-corrupt i64 i64
         :real et_c2_private_save_image_test_corrupt_v1)
 (extern void c2-image-io-reset :real et_checkpoint_io_test_reset_v1)
@@ -124,12 +128,10 @@
 (define post-path (string-append output-root "/post.c2"))
 
 (if (string=? mode "fail-stop")
-    (let* ((receipt (c2-save-image-receipt-create-internal owner policy))
-           (record (c2-image-record receipt))
-           (token (c2-image-token (vector-ref record 2))))
-      (check "direct release for fail-stop cut" (= (c2-image-release token) 0))
+    (let ((receipt (c2-save-image-receipt-create-internal owner policy)))
+      (c2-image-test-fail-next 4)
       (c2-save-image-receipt-release-internal! receipt)
-      (display "C2 IMAGE FAIL: release returned after uncertain ownership")
+      (display "C2 IMAGE FAIL: native release failure returned after uncertain ownership")
       (newline)
       (exit 99)))
 
@@ -179,6 +181,7 @@
   (lambda () (c2-save-image-receipt-create-internal owner policy)))
 (set! c2-image-after-adopt-internal saved-after)
 (check "post-adopt native bytes zero" (= (c2-image-live-bytes) 0))
+(check "post-adopt native roots zero" (= (c2-image-live-count) 0))
 (check "post-adopt registry empty" (null? c2-image-receipts))
 
 (define receipt (c2-save-image-receipt-create-internal owner policy))
@@ -247,8 +250,13 @@
       (let ((item (c2-save-image-receipt-create-internal owner policy)))
         (check "repeat receipt releases"
                (c2-save-image-receipt-release-internal! item))
+        (check "repeat native bytes baseline" (= (c2-image-live-bytes) 0))
+        (check "repeat native roots baseline" (= (c2-image-live-count) 0))
+        (check "repeat Eshkol roots baseline"
+               (= (length c2-image-receipts) baseline))
         (loop (+ i 1)))))
 (check "native image bytes return to zero" (= (c2-image-live-bytes) 0))
+(check "native image roots return to zero" (= (c2-image-live-count) 0))
 (check "receipt registry returns to baseline"
        (= (length c2-image-receipts) baseline))
 (check "no regional escape" (= (c2-image-region-depth) 0))

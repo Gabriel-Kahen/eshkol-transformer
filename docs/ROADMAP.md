@@ -2059,6 +2059,15 @@ syntax/static gate passes; the pinned compiled normal/repeat/fail-stop run has
 not been authorized or executed. Native allocation/SHA injection, impossible
 post-adopt enrollment allocation, and process-root retention need separate
 instrumentation or a narrowed acceptance argument.
+The isolated `codex/c2-save-image-receipt-fault-cuts-20261013` follow-up adds
+test-only native failure cuts for entry/vector allocation, a synthetic SHA
+result failure after hashing the retained copy but before token enrollment,
+and release failure before ownership mutation. Native repeat checks require
+zero live bytes and zero native registry entries after each failed adoption
+and successful cleanup; the compiled driver's fail-stop branch now injects
+an actual native release error, and its normal repeat loop checks native and
+Eshkol root baselines after every release. These are source-level gates only;
+compiled normal/repeat/fail-stop and independent review remain required.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),

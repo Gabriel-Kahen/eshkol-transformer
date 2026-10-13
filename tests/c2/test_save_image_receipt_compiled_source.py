@@ -37,6 +37,10 @@ class ReceiptCompiledSource(unittest.TestCase):
             "committed writer failure",
             "retained SHA mismatch",
             "receipt registry returns to baseline",
+            "repeat native bytes baseline",
+            "repeat native roots baseline",
+            "repeat Eshkol roots baseline",
+            "(c2-image-test-fail-next 4)",
             "uncertain ownership",
         ):
             self.assertIn(cut, source)

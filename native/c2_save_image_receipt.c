@@ -1,5 +1,6 @@
 /* Feature-private detached C2 SAVE image owner. Not linked by public C2. */
 #include "c2_checkpoint_format.h"
+#include "c2_save_image_receipt.h"
 #include "checkpoint_io.h"
 
 #include <limits.h>
@@ -26,6 +27,13 @@ static image_owner *image_live;
 static uint64_t image_issued;
 #ifdef ET_C2_SAVE_IMAGE_RECEIPT_TESTING
 static void (*image_writer_hook)(int64_t);
+static atomic_int_fast64_t image_fail_next;
+static int fail_at(int64_t cut) {
+  int_fast64_t expected = (int_fast64_t)cut;
+  return atomic_compare_exchange_strong_explicit(
+      &image_fail_next, &expected, 0, memory_order_acq_rel,
+      memory_order_acquire);
+}
 #endif
 static void lock_images(void) {
   while (atomic_flag_test_and_set_explicit(&image_lock, memory_order_acquire)) {}
@@ -97,14 +105,30 @@ int64_t et_c2_private_save_image_adopt_v1(const void *encoded_bv,
       !span(token_bv8, 8u, &output) ||
       overlap(encoded_bv, (uint64_t)length, token_bv8, 8u)) return -1;
   memset((void *)(uintptr_t)output, 0, 8u);
+#ifdef ET_C2_SAVE_IMAGE_RECEIPT_TESTING
+  if (fail_at(ET_C2_IMAGE_TEST_FAIL_ENTRY_ALLOC)) return -3;
+#endif
   entry = (image_owner *)calloc(1u, sizeof(*entry));
   if (entry == NULL) return -3;
+#ifdef ET_C2_SAVE_IMAGE_RECEIPT_TESTING
+  if (fail_at(ET_C2_IMAGE_TEST_FAIL_VECTOR_ALLOC)) {
+    wipe(entry, sizeof(*entry)); free(entry); return -3;
+  }
+#endif
   entry->vector = (uint8_t *)malloc((size_t)length + sizeof(int64_t));
   if (entry->vector == NULL) { free(entry); return -3; }
   memcpy(entry->vector, &length, sizeof(length));
   memcpy(entry->vector + sizeof(length), source, (size_t)length);
   entry->length = (uint64_t)length;
   hash_image(entry->vector + sizeof(length), (size_t)length, digest);
+#ifdef ET_C2_SAVE_IMAGE_RECEIPT_TESTING
+  /* Synthetic SHA-result failure after hashing, before token enrollment. */
+  if (fail_at(ET_C2_IMAGE_TEST_FAIL_AFTER_SHA)) {
+    wipe(digest, sizeof(digest));
+    free_image(entry); wipe(entry, sizeof(*entry)); free(entry);
+    return -3;
+  }
+#endif
   memcpy(entry->digest, digest, sizeof(digest));
   wipe(digest, sizeof(digest));
   entry->state = IMAGE_READY;
@@ -194,6 +218,12 @@ int64_t et_c2_private_save_image_release_v1(int64_t token) {
   if (entry == NULL || entry->state == IMAGE_WRITING) {
     unlock_images(); return -2;
   }
+#ifdef ET_C2_SAVE_IMAGE_RECEIPT_TESTING
+  /* Leave ownership untouched so the caller must fail-stop on this error. */
+  if (fail_at(ET_C2_IMAGE_TEST_FAIL_RELEASE)) {
+    unlock_images(); return -3;
+  }
+#endif
   unlink_image(entry, prior);
   free_image(entry);
   wipe(entry, sizeof(*entry));
@@ -211,6 +241,19 @@ uint64_t et_c2_private_save_image_live_bytes_v1(void) {
     total += entry->vector != NULL ? entry->length : 0u;
   unlock_images();
   return total;
+}
+uint64_t et_c2_private_save_image_live_count_v1(void) {
+  uint64_t total = 0u;
+  image_owner *entry;
+  lock_images();
+  for (entry = image_live; entry != NULL; entry = entry->next) ++total;
+  unlock_images();
+  return total;
+}
+void et_c2_private_save_image_test_fail_next_v1(int64_t cut) {
+  if (cut < 0 || cut > ET_C2_IMAGE_TEST_FAIL_RELEASE) abort();
+  atomic_store_explicit(&image_fail_next, (int_fast64_t)cut,
+                        memory_order_release);
 }
 void et_c2_private_save_image_test_set_issued_v1(uint64_t issued) {
   lock_images();
