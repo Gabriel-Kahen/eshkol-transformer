@@ -50,6 +50,14 @@ owner token are the transfer ledger. A partial P1/O2 claim must be rolled back
 or quarantined with the exact child shell, and no receipt or file I/O can begin
 while the original holds remain live. The existing C2 rollback only covers its
 own claimed Scheme children; it cannot repair an unregistered raw O2 pointer.
+Native `et_o2_optimizer_state_release_v1` may return a provider defect **after**
+marking the state DEAD. The adopter must inspect the exact native lifecycle
+after a nonzero release: a still-LIVE state retains its root for a controlled
+retry, DEAD means its authority was consumed even though the defect is
+reported, and RELEASING or an unprovable lifecycle fails stop. The existing
+Scheme `o2-public-optimizer-state-release!` distinguishes its wrapped `-1`
+and `-2` outcomes; a raw adopter cannot collapse every nonzero status into
+"unchanged state." Preserve the first typed error across this inspection.
 
 The first combined source/runtime gate should prove: distinct bit-equal state
 rejected by pointer identity, one held issue and one claim, pre-enrollment
