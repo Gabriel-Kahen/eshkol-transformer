@@ -90,8 +90,11 @@ native pointer in that optimizer record. The helper allocates the Scheme shell,
 state record, registry cons, pointer cell, and ledger before held issue. It
 stores the exact returned pointer in the cell immediately, then checks the
 same pointer through owner match and issued match before publishing the Scheme
-state. The returned ledger retains the hold, original optimizer, native pointer,
-state shell, registry cons, and phase for a future C2 coordinator.
+state. It installs the cleanup handler before native issue; its handler uses
+non-raising native release statuses, with no nested handler installation after
+ownership transfers. The returned ledger retains the hold, original optimizer,
+native pointer, state shell, registry cons, and phase for a future C2
+coordinator.
 
 `g3r-held-o2-adopter-release!` releases only an unclaimed issued/enrolled
 state. It uses the O2 bridge's lifecycle-aware status: `0` consumes it; `-2`

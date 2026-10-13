@@ -15,9 +15,12 @@ def check(c: str, s: str) -> None:
     assert "et_o2_optimizer_state_lifecycle_v1" in c
     allocation = s.index("(let* ((shell (o2-make-identity")
     issue = s.index("(let ((issued (g3r-held-o2-issue hold)))")
+    handler = s.index("(guard (caught", allocation)
     assert allocation < s.index("(enrollment (cons state o2-states))") < issue
     assert allocation < s.index("(pointer (vector #f))") < issue
     assert allocation < s.index("(ledger\n") < issue
+    assert allocation < handler < issue
+    assert s[handler:issue].count("(guard (") == 1
     assert issue < s.index("(vector-set! pointer 0 issued)")
     assert s.index("(vector-set! pointer 0 issued)") < s.index(
         "(vector-set! state 1 issued)"
@@ -40,6 +43,7 @@ for changed_bridge, changed_adopter in (
     (bridge, adopter.replace("(vector-set! pointer 0 issued)", "#t")),
     (bridge, adopter.replace("(set! o2-states enrollment)", "#t")),
     (bridge, adopter.replace("(g3r-held-o2-adopter-match! ledger operation)", "#t")),
+    (bridge, adopter.replace("(guard (caught\n                 (#t", "(NO-GUARD (caught\n                 (#t")),
 ):
     try:
         check(changed_bridge, changed_adopter)
@@ -48,4 +52,4 @@ for changed_bridge, changed_adopter in (
     else:
         raise AssertionError("source mutation escaped the held-adopter gate")
 
-print("held O2 adopter source gate: pass (4 mutation controls)")
+print("held O2 adopter source gate: pass (5 mutation controls)")

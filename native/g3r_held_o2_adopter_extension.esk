@@ -118,26 +118,36 @@
                        'prepared)))
         (if (not (= 0 (g3r-held-o2-owner-match hold native-optimizer)))
             (o2-native-fail operation))
-        (let ((issued (g3r-held-o2-issue hold)))
-          (if (null? issued) (o2-native-fail operation))
-          ;; First operation after the returned pointer: root its exact value.
-          (vector-set! pointer 0 issued)
-          (vector-set! state 1 issued)
-          (vector-set! ledger 8 'issued)
-          (guard (caught
-                   (#t
-                     (let ((released
-                             (guard (release-error (#t #f))
-                               (g3r-held-o2-adopter-release! ledger))))
-                       (if (not released)
-                           ;; A proved-LIVE failed release receives one exact
-                           ;; controlled retry. An indeterminate release has
-                           ;; already stopped in the release helper.
-                           (if (not (guard (retry-error (#t #f))
-                                      (g3r-held-o2-adopter-release! ledger)))
-                               (g3r-held-o2-fail-stop)))
-                       ;; Keep the first typed error from the failed adoption.
-                       (raise caught))))
+        ;; Installing a guard can allocate. Install it before native issue,
+        ;; while the ledger is still prepared and owns no native state.
+        (guard (caught
+                 (#t
+                   (if (or (eq? (vector-ref ledger 8) 'issued)
+                           (eq? (vector-ref ledger 8) 'enrolled))
+                       (let ((exact (vector-ref pointer 0)))
+                         (if (or (not exact)
+                                 (not (eq? exact (vector-ref state 1))))
+                             (g3r-held-o2-fail-stop))
+                         ;; Cleanup calls are non-raising native status checks.
+                         ;; Installing another Scheme handler here could itself
+                         ;; allocate after native issue and lose this owner.
+                         (let ((status (o2-native-optimizer-state-release exact)))
+                           (if (= status -1)
+                               ;; A proved-LIVE failure permits one exact retry.
+                               (set! status
+                                 (o2-native-optimizer-state-release exact)))
+                           (if (or (= status 0) (= status -2))
+                               (g3r-held-o2-adopter-consume! ledger)
+                               (g3r-held-o2-fail-stop)))))
+                   ;; Keep the first typed error from the failed adoption.
+                   (raise caught)))
+          (let ((issued (g3r-held-o2-issue hold)))
+            (if (null? issued) (o2-native-fail operation))
+            ;; The first operations after return are assignment-only and
+            ;; make the exact pointer and cleanup phase rooted.
+            (vector-set! pointer 0 issued)
+            (vector-set! state 1 issued)
+            (vector-set! ledger 8 'issued)
             (g3r-held-o2-adopter-match! ledger operation)
             (vector-set! state 6 'live)
             (set! o2-states enrollment)
