@@ -29,6 +29,7 @@ flags=(-std=c11 -O2 -Wall -Wextra -Werror -Wpedantic -Wconversion
   -DET_F32_TENSOR_TESTING -DET_O2_TESTING)
 native="$tmp/native"
 mkdir -p "$native"
+# The source-only unittest pins every compiler input to the tracked native list.
 "$cc" "${flags[@]}" -DET_I2_NATIVE_HELPERS_ONLY -DET_C2_I2_MODEL_COPY \
   -c "$PROJECT_ROOT/native/i2_wave2_package_bridge.c" -o "$native/i2.o"
 "$cc" "${flags[@]}" -DET_O2_NATIVE_HELPERS_ONLY \

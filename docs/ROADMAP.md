@@ -2068,6 +2068,11 @@ and successful cleanup; the compiled driver's fail-stop branch now injects
 an actual native release error, and its normal repeat loop checks native and
 Eshkol root baselines after every release. These are source-level gates only;
 compiled normal/repeat/fail-stop and independent review remain required.
+The compiled gate now also checks its literal native C compiler inputs against
+`native/c2_save_image_receipt_compiled_native_sources.txt` in source-only mode.
+Missing, duplicate, reordered, or unsupported source forms fail before compiler
+resolution or runtime; the Eshkol depfile check remains a separate compiled
+gate. This pin does not itself establish compiled receipt admission.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
