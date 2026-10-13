@@ -15,7 +15,7 @@ done
 cd "${PROJECT_ROOT}"
 candidate_manifest="${PROJECT_ROOT}/tests/tr3_lease/functional_successor_candidate.tsv"
 [[ "$(sha256sum "${candidate_manifest}" | awk '{print $1}')" == \
-   2678ae5422a68b75f74b4b856c396f50a90a820b58ca8dc1510b1be84cb500fc ]] || die "functional successor candidate manifest changed"
+   5b4a3b763ee779e1f23c1b5a91bc7248ec668614534d8c2f557c5ea39af17c48 ]] || die "functional successor candidate manifest changed"
 [[ "$(tsv_value "${candidate_manifest}" format_version)" == 3 ]] || \
   die "unsupported functional successor manifest format"
 source_preflight=0
@@ -55,25 +55,18 @@ git merge-base --is-ancestor "${trainer_commit}" HEAD || \
 reviewed_gate_commit=e2712626c5e0e794be176cc2ad0ce3cd2ea3b436
 git merge-base --is-ancestor "${reviewed_gate_commit}" HEAD || \
   die "checkout does not descend from the reviewed functional successor gate"
-repair_anchor="$(git rev-list --first-parent --reverse "${reviewed_gate_commit}..HEAD" | sed -n '1p')"
-[[ -n "${repair_anchor}" &&
-   "$(git rev-parse "${repair_anchor}^")" == "${reviewed_gate_commit}" ]] || \
-  die "checkout does not contain the direct functional source-closure repair"
+# This pin is supplied by the root gate after independent review. The caller
+# must verify HEAD against that fixed value before executing this script: a
+# modified checkout cannot authenticate its own script by running it.
+reviewed_head="${TR3_FUNCTIONAL_REVIEWED_HEAD:-}"
+[[ "${reviewed_head}" =~ ^[0-9a-f]{40}$ ]] || \
+  die "TR3_FUNCTIONAL_REVIEWED_HEAD must be an externally reviewed full commit ID"
+[[ "$(git rev-parse HEAD)" == "${reviewed_head}" ]] || \
+  die "checkout HEAD differs from the externally reviewed functional successor head"
 git diff --quiet "${trainer_commit}" -- include internal lib native src templates || \
   die "production source differs from the approved TR3 lease successor"
 [[ -z "$(git status --porcelain --untracked-files=all)" ]] || \
   die "TR3 lease supported gate requires a clean checkout"
-git diff --quiet "${repair_anchor}" HEAD -- \
-  scripts/test-tr3-lease-functional-successor.sh \
-  tests/tr3_lease/functional_successor_candidate.tsv \
-  tests/tr3_lease/test_functional_successor_gate.py || \
-  die "functional successor gate, manifest, or test differs from the source-closure repair"
-while IFS= read -r -d '' changed_path; do
-  case "${changed_path}" in
-    docs/*) ;;
-    *) die "functional successor live source differs from the reviewed gate: ${changed_path}" ;;
-  esac
-done < <(git diff --name-only -z "${repair_anchor}" HEAD --)
 [[ "$(sha256sum native/tr3_lease_core_extension.esk | awk '{print $1}')" == \
    "$(tsv_value "${candidate_manifest}" lease_core_sha256)" ]] || \
   die "approved lease core changed"
@@ -90,7 +83,7 @@ done < <(git diff --name-only -z "${repair_anchor}" HEAD --)
    "$(tsv_value "${candidate_manifest}" functional_gate_test_sha256)" ]] || \
   die "functional successor source test changed"
 
-expected_gate_self_sha256=464dcc3e517dc24ea9ce5b91bd6fa6d8730c200e49df4c0bcae856f26d1d71ae
+expected_gate_self_sha256=cb59856c64087b5d3cb437007c83dd7bcc5e9082c29fda357d6e0a322dc3df68
 gate_self_sha256="$(sed \
   's/^expected_gate_self_sha256=.*/expected_gate_self_sha256=__SELF__/' \
   scripts/test-tr3-lease-functional-successor.sh | sha256sum | awk '{print $1}')"

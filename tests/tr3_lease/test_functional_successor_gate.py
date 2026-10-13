@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import subprocess
 import tempfile
 import unittest
@@ -16,8 +17,8 @@ TREE = "50aef09425000e1f222858ce5af1189839583c2c"
 REVIEWED_GATE = "e2712626c5e0e794be176cc2ad0ce3cd2ea3b436"
 
 
-def run(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(args, cwd=cwd, text=True, capture_output=True, check=False)
+def run(cwd: Path, *args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(args, cwd=cwd, env=env, text=True, capture_output=True, check=False)
 
 
 class FunctionalSuccessorGate(unittest.TestCase):
@@ -42,6 +43,8 @@ class FunctionalSuccessorGate(unittest.TestCase):
         self.assertIn("ESHKOL_ARENA_POISON=1", gate)
         self.assertIn("--network none", gate)
         self.assertIn("reviewed_gate_commit=" + REVIEWED_GATE, gate)
+        self.assertIn("TR3_FUNCTIONAL_REVIEWED_HEAD", gate)
+        self.assertNotIn("repair_anchor=", gate)
         self.assertNotIn("--diagnostic-only", gate)
         self.assertNotIn("--allocation-probes", gate)
         fixture = (ROOT / "tests/tr3_lease/lease_runtime.esk").read_text()
@@ -57,7 +60,9 @@ class FunctionalSuccessorGate(unittest.TestCase):
         normalized = gate.replace(marker + expected, marker + "__SELF__", 1)
         self.assertEqual(hashlib.sha256(normalized.encode()).hexdigest(), expected)
 
-    def test_source_preflight_accepts_only_clean_unchanged_descendants(self) -> None:
+    def test_source_preflight_accepts_only_the_externally_pinned_head(self) -> None:
+        reviewed_head = run(ROOT, "git", "rev-parse", "HEAD").stdout.strip()
+        self.assertRegex(reviewed_head, r"^[0-9a-f]{40}$")
         with tempfile.TemporaryDirectory(prefix="tr3-functional-gate-") as directory:
             checkout = Path(directory) / "checkout"
             cloned = run(ROOT, "git", "clone", "--quiet", "--shared", str(ROOT), str(checkout))
@@ -65,8 +70,14 @@ class FunctionalSuccessorGate(unittest.TestCase):
             for args in (("user.name", "Source Test"), ("user.email", "source@test.invalid")):
                 self.assertEqual(run(checkout, "git", "config", *args).returncode, 0)
 
-            def preflight() -> subprocess.CompletedProcess[str]:
-                return run(checkout, "bash", GATE, "--source-preflight")
+            def preflight(pin: str | None = reviewed_head) -> subprocess.CompletedProcess[str]:
+                env = os.environ.copy()
+                env.pop("TR3_FUNCTIONAL_REVIEWED_HEAD", None)
+                if pin is not None:
+                    env["TR3_FUNCTIONAL_REVIEWED_HEAD"] = pin
+                return run(checkout, "bash", GATE, "--source-preflight", env=env)
+
+            self.assertIn("externally reviewed full commit ID", preflight(None).stderr)
 
             passed = preflight()
             self.assertEqual(passed.returncode, 0, passed.stderr)
@@ -83,7 +94,7 @@ class FunctionalSuccessorGate(unittest.TestCase):
             self.assertNotEqual(preflight().returncode, 0)
             self.assertEqual(run(checkout, "git", "add", "native/tr3_lease_core_extension.esk").returncode, 0)
             self.assertEqual(run(checkout, "git", "commit", "-qm", "negative production change").returncode, 0)
-            self.assertIn("production source differs", preflight().stderr)
+            self.assertIn("externally reviewed functional successor head", preflight().stderr)
 
             self.assertEqual(run(checkout, "git", "reset", "--hard", "HEAD^").returncode, 0)
             candidate = checkout / MANIFEST
@@ -113,9 +124,8 @@ class FunctionalSuccessorGate(unittest.TestCase):
                 self.assertNotEqual(failed.returncode, 0, path)
                 self.assertIn(
                     "common shell input changed" if path == "scripts/common.sh" else
-                    "live source differs from the reviewed gate",
-                    failed.stderr,
-                    path,
+                    "externally reviewed functional successor head",
+                    failed.stderr, path,
                 )
                 self.assertEqual(run(checkout, "git", "reset", "--hard", "HEAD^").returncode, 0)
 
@@ -123,14 +133,14 @@ class FunctionalSuccessorGate(unittest.TestCase):
             injected.write_text("# Python startup hook\n")
             self.assertEqual(run(checkout, "git", "add", "sitecustomize.py").returncode, 0)
             self.assertEqual(run(checkout, "git", "commit", "-qm", "negative import hook").returncode, 0)
-            self.assertIn("live source differs from the reviewed gate", preflight().stderr)
+            self.assertIn("externally reviewed functional successor head", preflight().stderr)
             self.assertEqual(run(checkout, "git", "reset", "--hard", "HEAD^").returncode, 0)
 
             note = checkout / "docs/tr3-functional-source-test.txt"
             note.write_text("unrelated documentation\n")
             self.assertEqual(run(checkout, "git", "add", str(note.relative_to(checkout))).returncode, 0)
             self.assertEqual(run(checkout, "git", "commit", "-qm", "allowed documentation").returncode, 0)
-            self.assertEqual(preflight().returncode, 0)
+            self.assertIn("externally reviewed functional successor head", preflight().stderr)
 
             # A committed descendant must not authorize its own gate edit by
             # updating the self hash stored inside that same gate.
@@ -147,7 +157,41 @@ class FunctionalSuccessorGate(unittest.TestCase):
             gate_path.write_text(changed_gate.replace(marker + old_hash, marker + new_hash, 1))
             self.assertEqual(run(checkout, "git", "add", GATE).returncode, 0)
             self.assertEqual(run(checkout, "git", "commit", "-qm", "negative gate self rehash").returncode, 0)
-            self.assertIn("differs from the source-closure repair", preflight().stderr)
+            self.assertIn("externally reviewed functional successor head", preflight().stderr)
+
+            # Reproduce the original escape: a direct sibling of the first
+            # reviewed gate contains a rehashed copy of this gate. The pin is
+            # fixed before switching to the sibling, as the root caller must do.
+            current_files = {
+                path: (checkout / path).read_bytes()
+                for path in (GATE, MANIFEST, "tests/tr3_lease/test_functional_successor_gate.py")
+            }
+            self.assertEqual(
+                run(checkout, "git", "checkout", "--detach", "--quiet", REVIEWED_GATE).returncode,
+                0,
+            )
+            for path, contents in current_files.items():
+                (checkout / path).write_bytes(contents)
+            sibling_gate = checkout / GATE
+            sibling_text = sibling_gate.read_text() + "\n# sibling gate tamper\n"
+            old_hash = next(
+                line[len(marker):]
+                for line in sibling_text.splitlines()
+                if line.startswith(marker)
+            )
+            sibling_hash = hashlib.sha256(
+                sibling_text.replace(marker + old_hash, marker + "__SELF__", 1).encode()
+            ).hexdigest()
+            sibling_gate.write_text(
+                sibling_text.replace(marker + old_hash, marker + sibling_hash, 1)
+            )
+            self.assertEqual(run(checkout, "git", "add", GATE, MANIFEST,
+                                 "tests/tr3_lease/test_functional_successor_gate.py").returncode, 0)
+            self.assertEqual(run(checkout, "git", "commit", "-qm", "sibling self rehash").returncode, 0)
+            sibling_head = run(checkout, "git", "rev-parse", "HEAD").stdout.strip()
+            self.assertNotEqual(sibling_head, reviewed_head)
+            self.assertEqual(run(checkout, "git", "rev-parse", "HEAD^").stdout.strip(), REVIEWED_GATE)
+            self.assertIn("externally reviewed functional successor head", preflight().stderr)
 
 
 if __name__ == "__main__":
