@@ -1,0 +1,327 @@
+;;; Dedicated noninstalled E3 zero-state driver. The ordinary evaluator and
+;;; frame entry below are retained; C1 loads the real model before frame bind.
+
+(extern ptr e3-test-destination-create
+        :real et_e3_test_destination_create_v1)
+(extern i64 e3-test-destination-destroy ptr
+        :real et_e3_test_destination_destroy_v1)
+(extern i64 e3-test-destination-bits ptr
+        :real et_e3_test_destination_bits_v1)
+(extern void e3-uniform-fail-copy-alloc i64
+        :real et_i2_test_fail_alloc_after_v1)
+(extern void e3-uniform-reset-copy-alloc
+        :real et_i2_test_reset_allocator_v1)
+(extern i64 e3-uniform-live-builders
+        :real et_e3_uniform_i2_live_builders_v1)
+(extern i64 e3-uniform-retired-builder-bytes
+        :real et_e3_uniform_i2_retired_builder_controls_v1)
+(extern i64 e3-uniform-decode-builder-bytes
+        :real et_e3_uniform_i2_decode_builder_bytes_v1)
+
+(define e3-uniform-files #f)
+(define e3-uniform-policy
+  (c1-persistence-policy-internal 1048576 524288 262144 64 'cpu))
+
+(define (e3-uniform-check label value)
+  (if value #t
+      (begin (display "E3-UNIFORM-SETUP-FAIL: ") (display label)
+             (newline) (exit 1))))
+
+(define (e3-uniform-bytes=? left right)
+  (and (bytevector? left) (bytevector? right)
+       (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+
+(define (e3-uniform-set-files! files)
+  (e3-uniform-check 'paths
+    (and (vector? files) (= (vector-length files) 5)
+         (let loop ((index 0))
+           (if (= index 5) #t
+               (and (string? (vector-ref files index))
+                    (loop (+ index 1)))))))
+  (set! e3-uniform-files files))
+
+(define (e3-uniform-state-bytes model)
+  (let ((state (module-state-dict model)))
+    (guard (caught (#t (state-dict-release! state) (raise caught)))
+      (let ((bytes (c1-checkpoint-encode-state-internal
+                     state e3-uniform-policy i2-checkpoint-codec-internal)))
+        (state-dict-release! state)
+        bytes))))
+
+(define (e3-uniform-handles model)
+  (let* ((tree (module-parameters model))
+         (paths (parameter-tree-paths tree)))
+    (e3-uniform-check 'parameter-count
+      (= (let count ((rest paths) (total 0))
+           (if (null? rest) total (count (cdr rest) (+ total 1)))) 15))
+    (e3-uniform-check 'tied-parameter
+      (eq? (parameter-tree-handle tree '("head" "weight"))
+           (parameter-tree-handle tree '("token_embedding" "weight"))))
+    (e3-uniform-check 'head-shape
+      (equal? (parameter-handle-shape
+                (parameter-tree-handle tree '("head" "weight"))) '(256 4)))
+    (let loop ((rest paths) (result '()))
+      (if (null? rest) result
+          (loop (cdr rest)
+                (let ((handle (parameter-tree-handle tree (car rest))))
+                  (cons (vector (car rest) handle
+                                (parameter-handle-shape handle)
+                                (parameter-handle-tensor-identity-internal handle))
+                        result)))))))
+
+(define (e3-uniform-same-handles? before after)
+  (let loop ((left before) (right after))
+    (if (null? left) (null? right)
+        (and (pair? right)
+             (equal? (vector-ref (car left) 0) (vector-ref (car right) 0))
+             (eq? (vector-ref (car left) 1) (vector-ref (car right) 1))
+             (equal? (vector-ref (car left) 2) (vector-ref (car right) 2))
+             (eq? (vector-ref (car left) 3) (vector-ref (car right) 3))
+             (loop (cdr left) (cdr right))))))
+
+(define (e3-uniform-assert-original model words handles bytes owned builders)
+  (e3-uniform-check 'initializer
+    (equal? words (m3t-public-initializer-words
+                    (m3t-public-model-initializer model))))
+  (e3-uniform-check 'parameter-identity
+    (e3-uniform-same-handles? handles (e3-uniform-handles model)))
+  (e3-uniform-check 'parameter-values
+    (e3-uniform-bytes=? bytes (e3-uniform-state-bytes model)))
+  (e3-uniform-check 'imported-owners
+    (= owned (i2-native-owned-clone-live-count)))
+  (e3-uniform-check 'copy-builders
+    (= builders (e3-uniform-live-builders))))
+
+(define (e3-uniform-expect-rejection model path category operation)
+  (let ((matched? #f))
+    (guard (caught
+             (#t (set! matched?
+                   (and (transformer-error? caught)
+                        (eq? (transformer-error-category caught) category)
+                        (eq? (transformer-error-operation caught) operation)))))
+      (c1-checkpoint-load-module-internal!
+        model path e3-uniform-policy i2-checkpoint-codec-internal
+        i2-provider-name))
+    (e3-uniform-check category matched?)))
+
+(define (e3-uniform-load-before-frame! model)
+  (e3-uniform-check 'paths-ready e3-uniform-files)
+  (let* ((words
+           (m3t-public-initializer-words (m3t-public-model-initializer model)))
+         (handles (e3-uniform-handles model))
+         (before (e3-uniform-state-bytes model))
+         (owned (i2-native-owned-clone-live-count))
+         (builders (e3-uniform-live-builders))
+         (retired (e3-uniform-retired-builder-bytes)))
+    (e3-uniform-check 'seed1729-successor
+      (equal? words '(1 1729 580 0)))
+    (e3-uniform-expect-rejection model (vector-ref e3-uniform-files 1)
+                                 'corrupt-data 'c1-checkpoint-decode-state-internal)
+    (e3-uniform-assert-original model words handles before owned builders)
+    (e3-uniform-expect-rejection model (vector-ref e3-uniform-files 2)
+                                 'unsupported 'c1-checkpoint-decode-state-internal)
+    (e3-uniform-assert-original model words handles before owned builders)
+    (e3-uniform-expect-rejection model (vector-ref e3-uniform-files 3)
+                                 'shape-mismatch 'module-load-state-dict!)
+    (e3-uniform-assert-original model words handles before owned builders)
+    (e3-uniform-expect-rejection model (vector-ref e3-uniform-files 4)
+                                 'shape-mismatch 'module-load-state-dict!)
+    (e3-uniform-assert-original model words handles before owned builders)
+    ;; Decode first: the armed I2 allocation cut must be reached by P1's
+    ;; authentic copy-plan preparation, not by checkpoint decoding.
+    (let* ((decoded
+            (c1-checkpoint-load-state-internal
+              (vector-ref e3-uniform-files 0) e3-uniform-policy
+              i2-checkpoint-codec-internal i2-provider-name))
+          (decoded-owned (i2-native-owned-clone-live-count))
+          (fault? #f)
+          (retired-after-decode (e3-uniform-retired-builder-bytes)))
+      (e3-uniform-check 'decoded-owners (> decoded-owned owned))
+      (e3-uniform-check 'decode-controls
+        (> (e3-uniform-decode-builder-bytes) 0))
+      (e3-uniform-fail-copy-alloc 0)
+      (guard (caught
+               (#t (set! fault?
+                     (and (transformer-error? caught)
+                          (eq? (transformer-error-category caught) 'internal)
+                          (eq? (transformer-error-operation caught)
+                               'module-load-state-dict!)
+                          (string=? (transformer-error-message caught)
+                                    "I2 dense CPU-f32 carrier rejected the request")))))
+        (module-load-state-dict! model decoded))
+      (e3-uniform-reset-copy-alloc)
+      (e3-uniform-assert-original model words handles before decoded-owned builders)
+      (e3-uniform-check 'copy-prepare-retired-controls
+        (= retired-after-decode (e3-uniform-retired-builder-bytes)))
+      (state-dict-release! decoded)
+      (e3-uniform-check 'copy-prepare-fault fault?))
+    (e3-uniform-assert-original model words handles before owned builders)
+    (e3-uniform-check 'retired-controls-monotonic
+      (>= (e3-uniform-retired-builder-bytes) retired))
+    (c1-checkpoint-load-module-internal!
+      model (vector-ref e3-uniform-files 0) e3-uniform-policy
+      i2-checkpoint-codec-internal i2-provider-name)
+    (e3-uniform-check 'zero-model-values
+      (e3-uniform-bytes=?
+        (e3-uniform-state-bytes model)
+        (c1-read-file (vector-ref e3-uniform-files 0)
+                      e3-uniform-policy 'e3-uniform-zero)))
+    (e3-uniform-check 'zero-model-identities
+      (e3-uniform-same-handles? handles (e3-uniform-handles model)))
+    (e3-uniform-check 'zero-import-owners
+      (= owned (i2-native-owned-clone-live-count)))
+    (e3-uniform-check 'zero-copy-builders
+      (= builders (e3-uniform-live-builders)))
+    (e3-uniform-check 'zero-initializer
+      (equal? words (m3t-public-initializer-words
+                      (m3t-public-model-initializer model))))
+    (display "E3-UNIFORM-ZERO-STATE-PASS") (newline)))
+
+(define e3-test-fixture-root (vector #f #f #f #f))
+
+(define (e3-test-destinations-destroy! destinations)
+  (let cleanup ((index 0))
+    (if (= index 4) #t
+        (begin
+          (if (vector-ref destinations index)
+              (if (not (= (e3-test-destination-destroy
+                           (vector-ref destinations index)) 0))
+                  (e3-native-invariant-fail)))
+          (vector-set! destinations index #f)
+          (cleanup (+ index 1))))))
+
+(define (e3-test-fixed-config)
+  (let* ((parsed
+          (x1-private-config-parse
+           "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}"))
+         (result (x1-private-config-resolve parsed '())))
+    result))
+
+(define (e3-test-destinations-create)
+  (let ((destinations (vector #f #f #f #f)))
+    (guard
+     (caught
+      (#t
+       (e3-test-destinations-destroy! destinations)
+       (raise caught)))
+     (let create ((index 0))
+       (if (= index 4) destinations
+           (let ((destination (e3-test-destination-create)))
+             (if (null? destination)
+                 (let ((unreachable
+                        (et-e1b-private-raise
+                         'internal 'e3-test-run
+                         "E3 destination fixture allocation failed" '() #f)))
+                   unreachable))
+             (vector-set! destinations index destination)
+             (create (+ index 1))))))))
+
+(define (e3-test-fixture)
+  (if (vector-ref e3-test-fixture-root 0) e3-test-fixture-root
+      (let* ((config (e3-test-fixed-config))
+             (tokenizer (t1-private-tokenizer-byte config))
+             (initial (g3t-checked-m3t-initializer-state 1729))
+             (model (g3t-checked-m3t-model-create config initial))
+             (loaded (e3-uniform-load-before-frame! model))
+             (destinations (e3-test-destinations-create))
+             (frame #f))
+        (guard
+         (caught
+          (#t
+           (e3-test-destinations-destroy! destinations)
+           (raise caught)))
+         (set! frame (e3-frame-bind! model destinations))
+         (vector-set! e3-test-fixture-root 0 model)
+         (vector-set! e3-test-fixture-root 1 tokenizer)
+         (vector-set! e3-test-fixture-root 2 destinations)
+         (vector-set! e3-test-fixture-root 3 frame)
+         e3-test-fixture-root))))
+
+(define (e3-test-scenario scenario)
+  (if (not (and (vector? scenario) (= (vector-length scenario) 2)
+                (boolean? (vector-ref scenario 0))
+                (integer? (vector-ref scenario 1))
+                (exact? (vector-ref scenario 1))
+                (>= (vector-ref scenario 1) 0)
+                (<= (vector-ref scenario 1) 8192)))
+      (let ((unreachable
+             (et-e1b-private-raise
+              'invalid-argument 'e3-test-run
+              "expected #(packing? skipped-batches)" '() #f)))
+        unreachable))
+  scenario)
+
+(define (e3-test-dataset-config directory packing?)
+  (list ':directory directory ':batch-size 1 ':sequence-length 2
+        ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 65536 ':maximum-batch-bytes 34
+        ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? packing?))
+
+(define (e3-test-skip! dataset count)
+  (let loop ((remaining count))
+    (if (= remaining 0) #t
+        (let ((advanced
+               (with-region ('e3-test-skip 65536)
+                 (let ((batch (d2-token-dataset-next-batch dataset)))
+                   (if (d2-token-dataset-end? batch) #f
+                       (begin (d2-token-batch-release! batch) #t))))))
+          (if advanced (loop (- remaining 1))
+              (let ((unreachable
+                     (et-e1b-private-raise
+                      'invalid-state 'e3-test-run
+                      "scenario skips beyond dataset EOS" '() #f)))
+                unreachable))))))
+
+(define (e3-test-u32-ref destination)
+  (let ((bits (e3-test-destination-bits destination)))
+    (if (< bits 0)
+        (let ((unreachable
+               (et-e1b-private-raise
+                'internal 'e3-test-run
+                "E3 destination fixture read failed" '() #f)))
+          unreachable))
+    bits))
+
+(define (e3-test-output frame destinations before after)
+  (let ((entry (e3-frame-entry-internal frame)))
+    (if (or (not (= (vector-ref entry 1) 1))
+            (vector-ref (vector-ref entry 3) 10)
+            (not (vector-ref entry 14)))
+        (e3-native-invariant-fail)))
+  (vector 'e3-private-result-v1
+          (e3-test-u32-ref (vector-ref destinations 0))
+          (e3-test-u32-ref (vector-ref destinations 1))
+          (e3-test-u32-ref (vector-ref destinations 2))
+          (e3-test-u32-ref (vector-ref destinations 3))
+          (e3-counter-ref frame 0) (e3-counter-ref frame 1)
+          before after))
+
+(define (e3-test-run scenario corpus-path)
+  (let* ((checked (e3-test-scenario scenario))
+         (fixture (e3-test-fixture))
+         (model (vector-ref fixture 0))
+         (tokenizer (vector-ref fixture 1))
+         (destinations (vector-ref fixture 2))
+         (frame (vector-ref fixture 3))
+         (dataset
+          (d2-token-dataset-open
+           (e3-test-dataset-config corpus-path (vector-ref checked 0))
+           tokenizer)))
+    (guard
+     (caught
+      (#t
+       (d2-token-dataset-close! dataset)
+       (raise caught)))
+     (e3-test-skip! dataset (vector-ref checked 1))
+     (let ((before (d2-token-dataset-cursor dataset)))
+       (with-region ('e3-evaluation-invocation 262144)
+         (e3-evaluate-into! model dataset frame))
+       (let ((after (d2-token-dataset-cursor dataset)))
+         (let ((result (e3-test-output frame destinations before after)))
+           (d2-token-dataset-close! dataset)
+           result))))))

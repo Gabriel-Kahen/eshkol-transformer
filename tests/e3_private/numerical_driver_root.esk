@@ -1,0 +1,2 @@
+;;; Exact noninstalled numerical witness; production and canonical roots stay unchanged.
+(load "../../native/e3_private_driver_root.esk")
