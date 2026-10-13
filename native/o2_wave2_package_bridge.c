@@ -173,6 +173,32 @@ void *et_o2_private_optimizer_state_snapshot_v1(void *optimizer) {
   return state;
 }
 
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+/* A private Eshkol wrapper may register only this hold's issued native state. */
+int64_t et_o2_private_g3r_issued_state_admit_v1(
+    void *optimizer, void *hold, void *issued) {
+  uint64_t completed = 0u;
+  if (et_g3r_private_o2_save_adopt_preflight_v1(
+          (et_o2_g3r_save_hold *)hold, (et_o2_optimizer *)optimizer,
+          (et_o2_optimizer_state *)issued, &et_o2_bridge_error) != 0 ||
+      et_o2_optimizer_state_completed_updates_v1(
+          (et_o2_optimizer_state *)issued, &completed,
+          &et_o2_bridge_error) != 0)
+    return -1;
+  if (completed > INT64_MAX) {
+    static const char operation[] = "g3r-save-o2-adopt";
+    static const char message[] = "issued update count exceeds C2 range";
+    memset(&et_o2_bridge_error, 0, sizeof(et_o2_bridge_error));
+    et_o2_bridge_error.category = ET_O2_STATUS_UNSUPPORTED;
+    et_o2_bridge_error.code = ET_O2_CODE_COUNTER_OVERFLOW;
+    memcpy(et_o2_bridge_error.operation, operation, sizeof(operation));
+    memcpy(et_o2_bridge_error.message, message, sizeof(message));
+    return -1;
+  }
+  return (int64_t)completed;
+}
+#endif
+
 int64_t et_o2_private_optimizer_load_state_v1(void *optimizer, void *state) {
   return (int64_t)et_o2_optimizer_load_state_v1(
       (et_o2_optimizer *)optimizer, (et_o2_optimizer_state *)state,

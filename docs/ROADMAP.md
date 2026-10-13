@@ -1828,6 +1828,20 @@ remains allocation free under an injected failpoint, and feature-off objects
 match the parent byte for byte. Fresh independent review and same-aggregate
 validation remain pending.
 
+The isolated private O2 issued-state adoption candidate on
+`codex/o2-issued-c2-adoption` binds one active same-owner hold to the exact
+native state pointer it issued, rejects a second issue, and registers that
+pointer under one Eshkol O2 state identity with copied original optimizer
+metadata. The native adoption preflight rejects foreign or equal-byte states
+and overlapping error storage before writing; the feature-gated bridge leaves
+the ordinary O2 path unchanged. Focused normal/repeat checks pass 359 each,
+the combined candidate-retire test passes 364, ASan+UBSan passes 359, and
+feature-off native objects match the accepted parent byte for byte with the
+private symbols absent. Independent source review and compiled C2 aggregate
+validation remain the admission gates.
+This candidate adds no public API, C2 SAVE writer, trainer-control issuer, or
+G3-R pair publication.
+
 The follow-on private aggregate candidate on `codex/g3r-committed-save-aggregate`
 loads that wrapper with the exact M3/G3-T/G3-M route. A real seeded P1/G1
 commit produces the same owner's policy, RNG, ordered raw history and

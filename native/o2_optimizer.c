@@ -185,6 +185,7 @@ struct et_o2_g3r_save_hold {
   et_o2_options options[14];
   et_o2_config config;
   uint64_t completed_updates;
+  et_o2_optimizer_state *issued_state;
   uint32_t live;
 };
 static et_o2_g3r_save_hold *et_o2_g3r_save_holds;
@@ -2557,10 +2558,10 @@ int32_t et_g3r_private_o2_save_issued_match_v1(
     return ET_O2_STATUS_INVALID_ARGUMENT;
   et_o2_g3r_save_hold *hold = et_o2_g3r_hold_admit(candidate);
   et_o2_optimizer_state *state = et_o2_find_state(issued);
-  if (!hold || !state)
+  if (!hold || !state || hold->issued_state != state)
     return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
                       ET_O2_CODE_INVALID_HANDLE, operation,
-                      "issued state or hold is not registered and live");
+                      "state was not issued by this live hold");
   int32_t result = et_g3r_private_o2_save_check_v1(hold, error);
   if (result != 0) return result;
   result = et_o2_require_state_live(issued, operation, error);
@@ -2614,6 +2615,22 @@ int32_t et_g3r_private_o2_save_issued_match_v1(
   return et_o2_success(error);
 }
 
+int32_t et_g3r_private_o2_save_adopt_preflight_v1(
+    et_o2_g3r_save_hold *candidate, const et_o2_optimizer *optimizer,
+    const et_o2_optimizer_state *issued, et_o2_error_v1 *error) {
+  const char *operation = "g3r-save-o2-adopt";
+  if (et_o2_g3r_save_buffers_conflict(NULL, 0u, 1u, error))
+    return ET_O2_STATUS_INVALID_ARGUMENT;
+  et_o2_g3r_save_hold *hold = et_o2_g3r_hold_admit(candidate);
+  if (hold == NULL || et_o2_find_optimizer(optimizer) != optimizer ||
+      hold->optimizer != optimizer || hold->issued_state != issued ||
+      et_o2_find_state(issued) != issued)
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                      ET_O2_CODE_INVALID_HANDLE, operation,
+                      "issued state, hold, or optimizer identity differs");
+  return et_g3r_private_o2_save_issued_match_v1(hold, issued, error);
+}
+
 int32_t et_g3r_private_o2_save_end_v1(
     et_o2_g3r_save_hold **slot, et_o2_error_v1 *error) {
   const char *operation = "g3r-save-o2-end";
@@ -2633,6 +2650,7 @@ int32_t et_g3r_private_o2_save_end_v1(
   memset(hold->parameters, 0, sizeof(hold->parameters));
   memset(hold->identities, 0, sizeof(hold->identities));
   memset(hold->moment_owners, 0, sizeof(hold->moment_owners));
+  hold->issued_state = NULL;
   hold->live = 0u; /* Keep the registered shell; never reuse its address. */
   *slot = NULL;
   if (result != 0) {
@@ -2831,6 +2849,10 @@ int32_t et_g3r_private_o2_save_state_v1(
     if (error) *error = first;
     return result;
   }
+  if (hold->issued_state != NULL)
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                      ET_O2_CODE_CONSUMED, "g3r-save-o2-state",
+                      "hold already issued one state");
   result = et_o2_snapshot_core(hold->optimizer, state, error, hold);
   if (result != 0) return result;
   result = et_g3r_private_o2_save_check_v1(hold, &first);
@@ -2842,6 +2864,7 @@ int32_t et_g3r_private_o2_save_state_v1(
     if (error) *error = first;
     return result;
   }
+  hold->issued_state = *state;
   return et_o2_success(error);
 }
 #endif

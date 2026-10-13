@@ -8,6 +8,8 @@ static int32_t injected_bits_equal(const et_f32_tensor *,
 #define et_f32_tensor_bits_equal_v1 injected_bits_equal
 #include "../../native/o2_optimizer.c"
 #undef et_f32_tensor_bits_equal_v1
+#define ET_O2_NATIVE_HELPERS_ONLY 1
+#include "../../native/o2_wave2_package_bridge.c"
 #include <stdio.h>
 
 static size_t compare_calls;
@@ -54,6 +56,8 @@ int main(void) {
   CHECK(et_o2_optimizer_builder_finish_v1(&builder, &optimizer, &o2) == 0);
   et_o2_g3r_save_hold *hold = NULL;
   et_o2_optimizer_state *ordinary = NULL;
+  et_o2_optimizer_state *equal_state = NULL;
+  CHECK(et_o2_optimizer_state_snapshot_v1(optimizer, &equal_state, &o2) == 0);
   unsigned char optimizer_before[sizeof(*optimizer)];
   unsigned char entries_before[14 * sizeof(*optimizer->entries)];
   memcpy(optimizer_before, optimizer, sizeof(optimizer_before));
@@ -290,6 +294,33 @@ int main(void) {
   CHECK(state != NULL && state->count == 14);
   CHECK(et_g3r_private_o2_save_check_v1(hold, &o2) == 0);
   CHECK(et_g3r_private_o2_save_issued_match_v1(hold, state, &o2) == 0);
+  unsigned char issued_before[sizeof(*state)];
+  memcpy(issued_before, state, sizeof(issued_before));
+  CHECK(et_g3r_private_o2_save_adopt_preflight_v1(
+      hold, optimizer, state, &o2) == 0);
+  CHECK(et_o2_private_g3r_issued_state_admit_v1(optimizer, hold, state) == 0);
+  CHECK(et_g3r_private_o2_save_adopt_preflight_v1(
+      hold, optimizer, state,
+      (et_o2_error_v1 *)((unsigned char *)state + 1)) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(memcmp(issued_before, state, sizeof(issued_before)) == 0);
+  CHECK(et_g3r_private_o2_save_issued_match_v1(hold, equal_state, &o2) ==
+      ET_O2_STATUS_INVALID_STATE);
+  CHECK(et_g3r_private_o2_save_adopt_preflight_v1(
+      hold, optimizer, equal_state, &o2) == ET_O2_STATUS_INVALID_STATE);
+  CHECK(et_o2_private_g3r_issued_state_admit_v1(
+      optimizer, hold, equal_state) == -1);
+  CHECK(et_g3r_private_o2_save_adopt_preflight_v1(
+      hold, (et_o2_optimizer *)(uintptr_t)1, state, &o2) ==
+      ET_O2_STATUS_INVALID_STATE);
+  CHECK(et_g3r_private_o2_save_adopt_preflight_v1(
+      (et_o2_g3r_save_hold *)(uintptr_t)1, optimizer, state, &o2) ==
+      ET_O2_STATUS_INVALID_STATE);
+  CHECK(et_g3r_private_o2_save_state_v1(hold, &ordinary, &o2) ==
+      ET_O2_STATUS_INVALID_STATE);
+  CHECK(ordinary == NULL && memcmp(issued_before, state,
+                                  sizeof(issued_before)) == 0);
+  CHECK(et_o2_optimizer_state_release_v1(equal_state, &o2) == 0);
   et_o2_optimizer_state_handle *borrow_handle = NULL;
   et_o2_optimizer_state_borrow *borrow = NULL;
   const et_kernel_tensor_view_v1 *borrow_view = NULL;
@@ -513,6 +544,9 @@ int main(void) {
         o2.code == ET_F32_TENSOR_CODE_PROVIDER_REJECTED);
   fault_issued_compare = 0;
   CHECK(et_g3r_private_o2_save_issued_match_v1(hold, state, &o2) == 0);
+  CHECK(et_o2_optimizer_state_release_v1(state, &o2) == 0);
+  CHECK(et_g3r_private_o2_save_adopt_preflight_v1(
+      hold, optimizer, state, &o2) == ET_O2_STATUS_INVALID_STATE);
   CHECK(et_o2_optimizer_state_release_v1(state, &o2) == 0);
   state = NULL;
   CHECK(et_g3r_private_o2_save_end_v1(&hold, &o2) == 0);

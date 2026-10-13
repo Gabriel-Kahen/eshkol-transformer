@@ -1,0 +1,41 @@
+;;; Load only after o2_wave2_extension.esk in a private same-owner aggregate.
+;;; This source registers exactly one held native O2 state for existing C2
+;;; composition; it installs no public facade and performs no second snapshot.
+
+(extern i64 o2-g3r-native-issued-admit ptr ptr ptr
+        :real et_o2_private_g3r_issued_state_admit_v1)
+
+(define (o2-g3r-issued-native-registered? issued)
+  (let loop ((remaining o2-states))
+    (if (null? remaining)
+        #f
+        (if (eq? (vector-ref (car remaining) 1) issued)
+            #t
+            (loop (cdr remaining))))))
+
+(define (o2-g3r-adopt-issued-state-internal optimizer-value hold issued)
+  (let* ((operation 'g3r-save-o2-adopt)
+         (optimizer (o2-require-optimizer operation optimizer-value))
+         ;; Copy all Eshkol metadata and allocate the publication envelope
+         ;; before touching native adoption authority.
+         (config (o2-copy-config-data operation (vector-ref optimizer 2)))
+         (paths (o2-copy-paths (vector-ref optimizer 3)))
+         (aliases (o2-copy-aliases (vector-ref optimizer 4)))
+         (shell (o2-make-identity "transformer.optimizer-state:v1"))
+         (state (vector shell #f config paths aliases #f 'constructing #f))
+         (next-registry (cons state o2-states)))
+    (if (or (null? hold) (null? issued)
+            (o2-g3r-issued-native-registered? issued))
+        (o2-fail 'invalid-argument operation
+                 "issued state is absent or already registered"))
+    (let ((completed
+            (o2-g3r-native-issued-admit
+              (vector-ref optimizer 1) hold issued)))
+      (if (< completed 0) (o2-native-fail operation))
+      ;; The verified native pointer is never cloned. This tail cannot
+      ;; allocate or call out; C2 later claims this exact registered shell.
+      (vector-set! state 1 issued)
+      (vector-set! state 5 completed)
+      (vector-set! state 6 'live)
+      (set! o2-states next-registry)
+      shell)))
