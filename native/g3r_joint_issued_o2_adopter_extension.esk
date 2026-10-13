@@ -11,6 +11,8 @@
         :real et_g3r_joint_hold_release_issued_v1)
 (extern i64 g3r-joint-o2-end ptr
         :real et_g3r_joint_hold_end_v1)
+(extern i64 g3r-joint-o2-lifecycle ptr
+        :real et_g3r_joint_hold_lifecycle_v1)
 (extern i64 g3r-joint-o2-last-domain
         :real et_g3r_joint_hold_last_domain_v1)
 (extern i64 g3r-joint-o2-last-category
@@ -159,6 +161,12 @@
                        (eq? (vector-ref ledger 8) 'dead)))
               (o2-fail 'invalid-state operation
                        "joint O2 ledger has no preclaim drain authority"))
+          ;; A copied or stale ledger joint must never be considered drained.
+          ;; This query binds the exact joint to the registered Scheme optimizer
+          ;; before any native release or hold-end action.
+          (if (not (= 0 (g3r-joint-o2-optimizer-match
+                          (vector-ref ledger 1) (vector-ref ledger 3))))
+              (g3r-held-o2-fail-stop))
           (if (not (eq? (vector-ref ledger 8) 'dead))
               (let ((exact (vector-ref (vector-ref ledger 4) 0)))
                 (if (or (not exact)
@@ -176,6 +184,10 @@
                       (g3r-held-o2-fail-stop)))))
           (if (not (= 0 (g3r-joint-o2-end (vector-ref ledger 1))))
               (g3r-joint-o2-record-error! ledger))
+          ;; End can report a post-drain defect or reject before draining. Only
+          ;; the exact registered DEAD lifecycle proves both holds retired.
+          (if (not (= 2 (g3r-joint-o2-lifecycle (vector-ref ledger 1))))
+              (g3r-held-o2-fail-stop))
           (vector-set! ledger 8 'drained)
           (let ((first (vector-ref ledger 9)))
             (if (not (= (vector-ref first 0) 0))

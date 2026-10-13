@@ -33,6 +33,9 @@ int64_t et_g3r_joint_hold_copy_words_v1(
 int64_t et_g3r_joint_hold_release_issued_v1(et_g3r_joint_hold *hold);
 /* Reverse O2 then G3 drain; rejects a still-owned issued state. */
 int64_t et_g3r_joint_hold_end_v1(et_g3r_joint_hold *hold);
+/* Exact registered joint identity: 1 live, 2 dead, 0 foreign. This query does
+ * not clear the saved first error from a preceding end. */
+int64_t et_g3r_joint_hold_lifecycle_v1(const et_g3r_joint_hold *hold);
 int64_t et_g3r_joint_hold_last_domain_v1(void);
 int64_t et_g3r_joint_hold_last_category_v1(void);
 int64_t et_g3r_joint_hold_last_code_v1(void);

@@ -245,12 +245,15 @@ int64_t et_g3r_joint_hold_end_v1(et_g3r_joint_hold *candidate) {
     first_code = g3r_joint_code;
   }
   if (hold->o2_hold != NULL) abort(); /* End did not consume the exact hold. */
-  if (et_g3r_private_g3t_save_end_v1(hold->g3_hold) != 0 && !first_domain) {
+  const int64_t g3_end = et_g3r_private_g3t_save_end_v1(hold->g3_hold);
+  if (g3_end != 0 && !first_domain) {
     joint_g3_error();
     first_domain = g3r_joint_domain;
     first_category = g3r_joint_category;
     first_code = g3r_joint_code;
   }
+  if (et_g3r_private_g3t_save_hold_lifecycle_v1(hold->g3_hold) != 2)
+    abort(); /* A rejected G3 end did not drain the original owner. */
   hold->g3_hold = NULL;
   hold->generator = hold->model = NULL;
   hold->optimizer = NULL;
@@ -260,6 +263,18 @@ int64_t et_g3r_joint_hold_end_v1(et_g3r_joint_hold *candidate) {
   g3r_joint_code = first_code;
   return first_domain ? (first_domain == G3R_JOINT_O2
                              ? first_category : -first_category) : 0;
+}
+
+int64_t et_g3r_joint_hold_lifecycle_v1(
+    const et_g3r_joint_hold *candidate) {
+  for (const et_g3r_joint_hold *hold = g3r_joint_registry;
+       hold; hold = hold->next)
+    if (hold == candidate) {
+      if (hold->live == 1u) return 1;
+      if (hold->live == 0u) return 2;
+      abort();
+    }
+  return 0;
 }
 
 int64_t et_g3r_joint_hold_last_domain_v1(void) { return g3r_joint_domain; }

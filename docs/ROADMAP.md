@@ -2131,6 +2131,15 @@ the first release defect. The five-mutation source check and strict C syntax
 pass; the extension is not yet loaded or runtime tested. C2 partial-claim
 rollback, original controls, pair envelope and receipt publication remain
 pending.
+The joint-issued adopter drain now requires an exact native DEAD lifecycle
+after hold end and rechecks the registered optimizer-to-joint pointer before
+release. A rejected pre-drain end cannot mark the Scheme ledger drained. Seven
+source mutations, strict C syntax and Scheme balance pass; no compiled/runtime
+claim follows.
+The native end proof now also requires its O2 hold slot cleared and an exact
+registered G3 held-record DEAD lifecycle before publishing joint DEAD. The
+revised source gate passes nine mutations and both G3/joint C syntax cuts;
+independent review and compiled failure cuts remain pending.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),

@@ -41,6 +41,9 @@ int64_t et_g3r_private_g3t_save_copy_v1(
     void *hold, et_g3r_g3t_held_words_v1 *destination,
     int64_t destination_bytes);
 int64_t et_g3r_private_g3t_save_end_v1(void *hold);
+/* Exact registered held-record lifecycle, without clearing prior G3 error:
+ * 1 LIVE, 2 DEAD, 0 foreign. */
+int64_t et_g3r_private_g3t_save_hold_lifecycle_v1(void *hold);
 #endif
 #ifdef ET_G3R_COMMITTED_SAVE_SNAPSHOT_PRIVATE
 /* Eshkol bytevector headers: original destination >= 136 bytes, staging

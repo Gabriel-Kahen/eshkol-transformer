@@ -59,6 +59,17 @@ before G3. Native end itself refuses any still-owned issued pointer. Distinct
 bit-equal state pointers and foreign optimizer pointers fail the exact native
 queries. This remains source-only; the Scheme extension is not loaded into a
 compiled aggregate or exercised at runtime.
+Before preclaim drain it reauthenticates the ledger's joint pointer against
+the registered optimizer. After native end, it requires an exact registered
+DEAD joint lifecycle before marking the Scheme ledger drained. A nonzero end
+can mean a post-drain defect or a rejected still-live hold; only the lifecycle
+probe distinguishes them. A foreign, stale, or still-LIVE joint fails stop.
+The native joint end also verifies that O2 cleared its exact hold slot and that
+the G3 held record reached registered DEAD. A new private G3 lifecycle query
+does not clear the first G3 error, so the joint record can preserve a
+post-drain defect while refusing to report DEAD after pre-drain rejection.
+The joint-issued source check now passes nine mutation controls, including
+substituted joint, omitted lifecycle proof, and false G3-dead classification.
 
 No C2 transfer occurs. The next coordinator must preallocate its P1/O2 request
 and pair envelope, authenticate original tokenizer/cursor/trainer controls,
