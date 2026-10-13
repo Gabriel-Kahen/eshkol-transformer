@@ -3138,7 +3138,11 @@ publication, public G2 and continuation remain pending.
   P3, both first-EOS P2 paths, wrong generation, typed first-busy end/retry,
   repeated-busy and postzero fail-stop cuts, and the unchanged feature-off
   entry. Source-only parser/syntax checks pass; the pinned compiled
-  normal/repeat/sanitizer matrix and independent review remain pending, so no
+  normal/repeat/sanitizer matrix remains pending. Independent source review
+  held the first candidate because its fault preceded the Eshkol HELD state
+  and its depfile check mixed Eshkol loads with native/docs sources; the
+  successor moves the fault to the HELD witness and checks those closures
+  separately. Successor independent review is pending, so no
   behavioral admission or public G2 claim follows from this gate preparation.
 
 ## Wave 4 — practical pretraining and performance

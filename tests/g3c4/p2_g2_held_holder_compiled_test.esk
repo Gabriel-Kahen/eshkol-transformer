@@ -124,7 +124,7 @@
          (old-anchors (vector-ref g3c4-p2g2-protected-anchors 0))
          (old-prefixes (vector-ref g3c4-p2g2-prefix-input-anchors 0)))
     (check "capture native rollback reference" (= (held-mark native 0 255) 0))
-    (check "arm fault immediately after held acquire" (= (held-arm 1) 0))
+    (check "arm fault at HELD witness" (= (held-arm 1) 0))
     (reject "held fault rolls back same call"
       (lambda () (g3c4-p2g2-terminal-generate-held-internal
                    generator input holder)))

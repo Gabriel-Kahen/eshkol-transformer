@@ -131,6 +131,7 @@ exec $(printf '%q' "$cxx") $sanitizer_link "\$@" \\
   -Wl,--wrap=et_a2_kv_cache_transaction_abort_v1 \\
   -Wl,--wrap=et_a2_kv_cache_transaction_commit_v1 \\
   -Wl,--wrap=et_g3c4_private_p2g2_holder_begin_capture_v1 \\
+  -Wl,--wrap=et_g3c4_private_p2g2_holder_witness_v1 \\
   -Wl,--wrap=et_g3c4_private_p2g2_holder_abort_attempt_v1 \\
   -Wl,--wrap=et_g3c4_private_p2g2_holder_end_after_busy_v1
 WRAPPER
@@ -156,23 +157,58 @@ WRAPPER
       2>"$evidence/$mode-$fixture-compile.stderr"
     test ! -s "$evidence/$mode-$fixture-compile.stderr"
   done
-  python3 - "$PROJECT_ROOT" "$directory/on.d" <<'PY'
+  python3 - "$PROJECT_ROOT" "$directory/on.d" "$directory/off.d" "$evidence" "$mode" <<'PY'
 from pathlib import Path
+import hashlib
+import shlex
+import subprocess
 import sys
+
 root = Path(sys.argv[1]).resolve()
-depfile = Path(sys.argv[2]).read_text().replace('\\\n', ' ')
-actual = []
-for source in depfile.split(':', 1)[1].split():
-    path = Path(source)
-    if not path.is_absolute():
-        path = Path(sys.argv[2]).parent / path
-    path = path.resolve()
-    if path.is_relative_to(root):
+on_depfile, off_depfile, evidence, mode = (
+    Path(sys.argv[2]), Path(sys.argv[3]), Path(sys.argv[4]), sys.argv[5])
+
+def dependencies(depfile):
+    text = depfile.read_text().replace('\\\n', '')
+    items = shlex.split(text.split(':', 1)[1])
+    names = []
+    for item in items:
+        path = Path(item)
+        path = (path if path.is_absolute() else root / path).resolve(strict=True)
+        assert path.is_relative_to(root), item
         name = path.relative_to(root).as_posix()
-        if name != 'tests/g3c4/p2_g2_held_holder_compiled_test.esk':
-            actual.append(name)
-expected = (root / 'native/g3c4_p2g2_terminal_held_holder_source_closure.txt').read_text().splitlines()
-assert actual == expected, (actual, expected)
+        assert name.endswith('.esk'), name
+        names.append(name)
+    assert len(names) == len(set(names)), names
+    return names
+
+on = dependencies(on_depfile)
+off = dependencies(off_depfile)
+expected = (root / 'native/g3c4_p2g2_held_holder_compiled_eshkol_deps.txt').read_text().splitlines()
+assert on == expected, (on, expected)
+assert 'native/g3c4_p2g2_terminal_composer_extension.esk' in off, off
+assert not any('held_holder' in name for name in off), off
+
+closure = (root / 'native/g3c4_p2g2_terminal_held_holder_source_closure.txt').read_text().splitlines()
+assert len(closure) == 190 and len(closure) == len(set(closure))
+assert {'native/g3c4_p2g2_terminal_held_holder_root.esk',
+        'native/g3c4_p2g2_terminal_held_holder_extension.esk'}.issubset(closure)
+non_eshkol = [name for name in closure if not name.endswith('.esk')]
+assert len(non_eshkol) == 162
+for name in non_eshkol:
+    path = (root / name).resolve(strict=True)
+    assert path.is_relative_to(root) and path.is_file(), name
+subprocess.run(['git', '-C', str(root), 'ls-files', '--error-unmatch', '--',
+                *non_eshkol], check=True, stdout=subprocess.DEVNULL)
+subprocess.run(['git', '-C', str(root), 'diff', '--quiet', 'HEAD', '--',
+                *non_eshkol], check=True)
+(evidence / f'{mode}-on-eshkol-deps.txt').write_text(
+    ''.join(name + '\n' for name in on))
+(evidence / f'{mode}-off-eshkol-deps.txt').write_text(
+    ''.join(name + '\n' for name in off))
+(evidence / f'{mode}-non-eshkol-sources.sha256').write_text(
+    ''.join(f'{hashlib.sha256((root / name).read_bytes()).hexdigest()}  {name}\n'
+            for name in non_eshkol))
 PY
   for fixture in on off; do
     local expected='^G3-C4 held-holder compiled PASS: checks=[1-9][0-9]*$'
@@ -209,6 +245,7 @@ compile_mode sanitize
 cmp "$evidence/normal-on.stdout" "$evidence/sanitize-on.stdout"
 cmp "$evidence/normal-off.stdout" "$evidence/sanitize-off.stdout"
 sha256sum "$PROJECT_ROOT/native/g3c4_p2g2_terminal_held_holder_source_closure.txt" \
+  "$PROJECT_ROOT/native/g3c4_p2g2_held_holder_compiled_eshkol_deps.txt" \
   >"$evidence/closure.sha256"
 printf 'P2/G2 held-holder compiled normal/repeat/sanitizer/off/fail-stop PASS\n' \
   | tee "$evidence/result.txt"

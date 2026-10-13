@@ -9,8 +9,8 @@ static int held_cut, held_kind, held_begins, held_first, held_ends, held_second;
 static int64_t held_first_status, held_first_domain, held_first_category;
 static int64_t held_first_code;
 
-/* Cut 1 fails immediately after a genuine holder acquisition. Cut 2 also
- * makes the second abort appear busy; the Eshkol fail-stop must terminate. */
+/* Cuts 1/2 fail at the first HELD witness, after Eshkol records the lease.
+ * Cut 2 also makes the second abort appear busy; Eshkol must fail-stop. */
 int64_t et_g3c4_p2g2_held_test_arm_v1(int64_t cut) {
   if (cut < 0 || cut > 3) return -1;
   held_cut = (int)cut;
@@ -56,10 +56,19 @@ int64_t __wrap_et_g3c4_private_p2g2_holder_begin_capture_v1(
     if (owner == NULL) abort();
     held_kind = (int)owner->kind;
     held_begins++;
-    if (held_cut == 1 || held_cut == 2) {
-      held_cut += 4;
-      return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
-    }
+  }
+  return status;
+}
+
+int64_t __real_et_g3c4_private_p2g2_holder_witness_v1(
+    void *, int64_t, void *, void *);
+int64_t __wrap_et_g3c4_private_p2g2_holder_witness_v1(
+    void *holder, int64_t generation, void *context, void *output) {
+  int64_t status = __real_et_g3c4_private_p2g2_holder_witness_v1(
+      holder, generation, context, output);
+  if (status == 0 && (held_cut == 1 || held_cut == 2)) {
+    held_cut += 4;
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
   }
   return status;
 }
