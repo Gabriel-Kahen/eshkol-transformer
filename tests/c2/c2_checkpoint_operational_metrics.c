@@ -1,7 +1,9 @@
 #define _POSIX_C_SOURCE 200809L
 
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/resource.h>
 #include <time.h>
 #include <unistd.h>
@@ -43,4 +45,18 @@ int64_t et_c2_operational_monotonic_millis_v1(void) {
   milliseconds = (uint64_t)now.tv_sec * UINT64_C(1000) +
                  (uint64_t)now.tv_nsec / UINT64_C(1000000);
   return milliseconds > (uint64_t)INT64_MAX ? -1 : (int64_t)milliseconds;
+}
+
+/* Test-only, bounded progress evidence. Each call closes its file so a
+ * watchdog termination leaves the last completed joint operation readable. */
+void et_c2_operational_progress_v1(int64_t phase) {
+  const char *path = getenv("C2_OPERATIONAL_PROGRESS_FILE");
+  FILE *stream;
+  if (path == NULL || path[0] == '\0' || phase < 1 || phase > 41) return;
+  stream = fopen(path, "a");
+  if (stream == NULL) return;
+  (void)fprintf(stream, "C2 OPERATIONAL PROGRESS: phase=%" PRId64
+                        " monotonic-ms=%" PRId64 "\n",
+                phase, et_c2_operational_monotonic_millis_v1());
+  (void)fclose(stream);
 }

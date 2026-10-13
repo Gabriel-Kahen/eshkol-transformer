@@ -83,6 +83,8 @@ cleanup() {
     return "${status}"
   fi
   if (( status != 0 )); then
+    find "${tmp}" -type f -name '*.progress' \
+      -print -exec sed -n '1,300p' {} \; >&2 || true
     find "${tmp}" -type f \( -name '*.stdout' -o -name '*.stderr' \) \
       -print -exec sed -n '1,300p' {} \; >&2 || true
   fi
@@ -367,7 +369,8 @@ run_runtime() {
   local output="${tmp}/${label}/output/${mode}"
   mkdir -p "${output}"
   phase_begin "${mode}_run"
-  ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s \
+  C2_OPERATIONAL_PROGRESS_FILE="${tmp}/${label}/${mode}.progress" \
+    ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s \
     1800s "${tmp}/${label}/operational" \
       "${fixtures}/joint-exact.c2" "${fixtures}/file-one.c2" \
       "${fixtures}/metadata-one.c2" "${fixtures}/tensor-one.c2" \
