@@ -1048,6 +1048,37 @@ the conditional undefined-symbol comparison, the test-only sum-order frame
 guard, and the single frozen JSON witness. The E3 private (96), E3 reference
 (27), and Q0/M3CG focused (15) source checks pass on the pinned Python 3.14.6
 oracle. Independent review and supported compiled gates remain pending.
+
+The N5 source prerequisite now generates independently counted authentic 8,193
+packed D2 rows and checks that the private D2-core remaining-row guard runs at
+stage 2 before native acquisition/traversal. The compiled private one-over
+failure, unchanged caller state and six outputs, and measured normal/poison/
+sanitizer resource bounds remain open.
+An isolated [private N5 compiled-gate candidate](e3/E3_N5_PRIVATE_PREFLIGHT_GATE.md)
+now extends the existing noninstalled retention test aggregate with a genuine
+8,192 pass and 8,193 stage-2 rejection under one model/frame authority. Its
+runner records exact D1 payload, independent D2 cursor, four destination words,
+two counters, model/gradient/mode/RNG and native owner state, plus normal,
+poisoned and sanitized peak RSS. Source and shell checks alone do not promote
+this candidate to compiled-private evidence; the supported run is pending.
+An isolated [private E3 edge-gate source candidate](e3/E3_EDGE_PRIVATE_GATE.md)
+adds authentic empty, singleton, entry-EOS and padded one-token-tail D1/D2
+cases to that noninstalled retention aggregate. The zero-row paths require
+stage-12 `invalid-state` and byte-atomic six outputs; the real padded tail
+requires three active tokens, two batches and exact accuracy one from the
+independent seed-1729 M3 all-correct selection proof. Independent D2 cursor/row
+fixtures, a fourth-output mutation control, source/unit/shell checks and a
+proposed normal/poison/sanitizer
+runner are staged. Independent review and the compiled supported result remain
+pending; this does not close §9 or replace the separate N5 8,192/8,193 gate.
+The edge-parent source-suite repair updates two retention-driver digest pins to
+the accepted fourth-output driver and regenerates the private first-evaluation
+mutant mechanically from that same N5/edge baseline. The E3-private, E3-reference
+and horizon source suites pass on this isolated tree. Independent review and
+the compiled private gates remain pending; these source checks do not establish
+edge, mutant or §9 runtime acceptance.
+This source composition retains both reviewed parent repairs. Independent
+whole-tree review and the supported compiled E3 §9 gates remain pending.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each

@@ -103,9 +103,9 @@ printf '%s\n' "$e3_tuple_kind"
             with self.assertRaises((ValueError, AssertionError)):
                 validate(first)
 
-    def test_exact_tuple_delta_and_ordinary_driver_unchanged(self) -> None:
+    def test_exact_tuple_delta_and_accepted_retention_driver(self) -> None:
         self.assertEqual(hashlib.sha256((PRIVATE / "retention_driver.esk").read_bytes()).hexdigest(),
-                         "44d64a8bd96d48ae3faea18d437fb5ee4934016da7f75a3011c666bd0a35be09")
+                         "a62186336f2fad5496756902f426409e088017c6f1823f7e21a3a5690bfc9ed7")
         for suffix, added, removed in (
             ("source_closure", {"tests/e3_private/overflow_driver_root.esk",
                                 "tests/e3_private/overflow_driver.esk"},

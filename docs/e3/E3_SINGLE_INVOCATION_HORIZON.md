@@ -15,6 +15,14 @@ committed. The generator validates the D1 resource and D2 row count, and its
 unit test compares two independent materializations byte for byte at both
 horizons.
 
+The generator also admits a separate 8,193-row source fixture with the same
+authenticated D1 format and D2 equations. It has eight full shards and a
+three-token tail; the independent D2 cursor records 8,193 remaining rows.
+Source checks pin the private evaluator's stage-2 D2-core preflight before
+native acquisition and traversal. No compiled private invocation, pre/post
+state assertion, poison, sanitizer, or resource measurement has been run on
+that fixture; the §9 N5 one-over gate remains open.
+
 The public caller opens D2 while all shards are valid, saves its cursor, and
 uses a test-only C filesystem hook to hide the singleton final shard. It calls
 the evaluator once. The only missing read is the final batch, so the expected
