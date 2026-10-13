@@ -976,6 +976,15 @@ mode variant and all four mode-graph outputs are repinned to that source; their
 12 source/negative tests and focused P1 checks pass, but no new compiled or
 sanitizer execution has run. L remains failed evidence and the
 first-evaluation detector and E3 §9 verdicts remain open.
+The sealed M one-use run at `da18af73` failed sanitized all-correct setup in
+`e3-frame-bind!`, before first evaluation: ASan observed a one-byte read seven
+bytes before an opaque P1 token during canonical model readback. Generated IR
+shows a borrow check on the old `model` binding for `set! model`; the new
+isolated source candidate reads the canonical entry into fresh lexical
+bindings and reads rollback's setup box from that entry. Its focused offline
+source regression checks the binding shape. Compiler-only causation and a
+passing sanitizer result remain unproven; independent source review, compiled
+IR inspection and a fresh authorized one-use gate precede §9 acceptance.
 The separate [host-monitor first-error candidate](e3/E3_HOST_MONITOR_FIRST_ERROR.md)
 records a bounded guest-relative cause for a transient unsafe-output scan;
 its successor now uses no-follow descriptor traversal, postscan identity
