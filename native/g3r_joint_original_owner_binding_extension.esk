@@ -85,11 +85,7 @@
               (g3r-joint-original-binding-check!
                 generator model tokenizer optimizer-value o2-ledger
                 controls)))
-        (if (or (not (eq? (vector-ref bound 2) (vector-ref binding 2)))
-                (not (eq? (vector-ref bound 4) (vector-ref binding 4)))
-                (not (eq? (vector-ref bound 7) (vector-ref binding 7)))
-                (not (eq? (vector-ref bound 8) (vector-ref binding 8)))
-                (not (equal? (vector-ref bound 9) (vector-ref binding 9))))
+        (if (not (g3r-joint-p1-owner-witness-match? bound binding))
             (m3t-fail 'invalid-state operation
                       "P1 provenance differs from original owner binding"))
         ;; The joint hold keeps native G3/M3/A2 and O2 originals fixed

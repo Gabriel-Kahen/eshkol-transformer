@@ -2159,9 +2159,11 @@ exact original eval M3T model under the live joint G3/O2 owner, checks the
 canonical fourteen-parameter C2 topology and tied alias, and rechecks owner
 and controls before offering its exact state shell to C2. The private claim
 wrapper now requires that provenance ledger and authenticates it against a
-separate private record; its cleanup guard precedes topology validation and
+separate private record with an independent owner/control witness; its cleanup
+guard precedes topology validation and
 releases only the registry-rooted P1 state. Two source mutation gates pass,
-including the exposed-record and pre-guard leak controls. Held-pin cloning,
+including exposed-record, pre-guard leak, and cross-owner mutation controls.
+Held-pin cloning,
 provider failure cuts, and P1 release behavior have no compiled runtime
 evidence. No original-owner C2 claim, SAVE pair, receipt or replay is admitted.
 

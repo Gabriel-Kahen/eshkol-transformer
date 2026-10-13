@@ -176,19 +176,24 @@ ledger, it checks the live native joint owner, roots the exact return of
 all fourteen fixed M3T parameter paths and shapes plus the head/token tie.
 It then rechecks the original owner and copied controls while the joint hold
 remains live. Its preclaim ledger contains the state shell and first binding,
-while a separate private registry record retains their exact identities. The
-record is never returned or stored inside the caller's ledger. The claim
-wrapper first finds that record by ledger identity, then installs cleanup
-protection before topology or owner validation. It passes only the
-registry-rooted P1 shell to C2. A recoverable preclaim failure releases that
+while a separate private registry record retains the exact shell and an
+independent owner witness. The witness copies all original binding identities
+and makes a separate validated deep copy of the controls; it shares no mutable
+binding vector or control leaf with the returned ledger. The record is never
+returned or stored inside that ledger. The claim wrapper first finds the
+record by ledger identity, then installs cleanup protection before topology
+or owner validation. It compares both the ledger binding and fresh claim
+binding with the private witness, and passes only the registry-rooted P1 shell
+to C2. A recoverable preclaim failure releases that
 exact shell using `state-dict-release!` and rethrows the first caught value;
 the P1 helper never ends the original G3/O2 holds. An uncertain P1 release
 fails stop.
 
 The source mutation gate covers omitted owner checks, topology and tied-alias
 changes, cleanup omission, first-error loss, claim bypass, stale owner,
-bitwise G3 history comparison, caller-side P1 substitution and validation
-moved before the cleanup guard. The original binding source gate remains green.
+bitwise G3 history comparison, caller-side P1 substitution, in-place
+cross-owner binding mutation, and validation moved before the cleanup guard.
+The original binding source gate remains green.
 These are source checks, not live negative tests. In particular, no compiled
 aggregate has shown that P1's provider can clone under the live G3 model pins,
 or that all provider failure and post-tombstone release cuts retain authority.

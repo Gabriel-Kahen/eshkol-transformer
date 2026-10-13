@@ -4,7 +4,31 @@
 ;;; compiled fixture before this may authorize a C2 claim.
 
 (define g3r-joint-p1-provenance-tag (vector 'g3r-joint-p1-provenance-v1))
+(define g3r-joint-p1-owner-witness-tag
+  (vector 'g3r-joint-p1-owner-witness-v1))
 (define g3r-joint-p1-provenance-registry '())
+
+;;; A fresh private snapshot, not the mutable binding returned in the ledger.
+;;; C2's validator makes a separate deep copy of all mutable control leaves.
+(define (g3r-joint-p1-owner-witness-copy operation binding)
+  (vector g3r-joint-p1-owner-witness-tag
+          (vector-ref binding 1) (vector-ref binding 2)
+          (vector-ref binding 3) (vector-ref binding 4)
+          (vector-ref binding 5) (vector-ref binding 6)
+          (vector-ref binding 7) (vector-ref binding 8)
+          (c2-training-state-controls-copy operation (vector-ref binding 9))))
+
+(define (g3r-joint-p1-owner-witness-match? witness binding)
+  (and (vector? witness) (= (vector-length witness) 10)
+       (eq? (vector-ref witness 0) g3r-joint-p1-owner-witness-tag)
+       (vector? binding) (= (vector-length binding) 10)
+       (eq? (vector-ref binding 0) g3r-joint-original-binding-tag)
+       (let same ((index 1))
+         (if (= index 9) #t
+             (and (eq? (vector-ref witness index)
+                       (vector-ref binding index))
+                  (same (+ index 1)))))
+       (equal? (vector-ref witness 9) (vector-ref binding 9))))
 
 ;;; The topology excludes the secondary tied path. The P1-owned clone must
 ;;; reproduce the fourteen canonical M3T parameters and the one tied alias.
@@ -33,9 +57,9 @@
                      (cdr remaining-shapes)))))))
 
 ;;; Ledger: tag, exact original binding, exact detached P1 shell, topology,
-;;; phase, first caught value. Its separate private record and registry cell
-;;; are allocated before cloning; enrollment is assignment-only. The returned
-;;; ledger never exposes that record, even through a nested slot.
+;;; phase, first caught value. Its separate private owner witness, record and
+;;; registry cell are allocated before cloning; enrollment is assignment-only.
+;;; The returned ledger never exposes the witness or record.
 ;;; No original hold is owned by this ledger.
 (define (g3r-joint-p1-provenance!
           generator model tokenizer optimizer-value o2-ledger controls)
@@ -43,9 +67,10 @@
          (binding (g3r-joint-original-binding-check!
                     generator model tokenizer optimizer-value o2-ledger
                     controls))
+         (witness (g3r-joint-p1-owner-witness-copy operation binding))
          (ledger (vector g3r-joint-p1-provenance-tag binding #f #f
                          'prepared #f))
-         (record (vector ledger binding #f 'prepared))
+         (record (vector ledger witness #f 'prepared))
          (enrollment (cons record g3r-joint-p1-provenance-registry)))
     (guard (caught
              (#t
@@ -70,12 +95,7 @@
       (let ((rechecked
               (g3r-joint-original-binding-check!
                 generator model tokenizer optimizer-value o2-ledger controls)))
-        (if (or (not (eq? (vector-ref rechecked 2) (vector-ref binding 2)))
-                (not (eq? (vector-ref rechecked 4) (vector-ref binding 4)))
-                (not (eq? (vector-ref rechecked 7) (vector-ref binding 7)))
-                (not (eq? (vector-ref rechecked 8) (vector-ref binding 8)))
-                (not (equal? (vector-ref rechecked 9)
-                             (vector-ref binding 9))))
+        (if (not (g3r-joint-p1-owner-witness-match? witness rechecked))
             (m3t-fail 'invalid-state operation
                       "original owner or controls changed during P1 clone")))
       (vector-set! ledger 4 'preclaim)
@@ -103,7 +123,8 @@
     (if (or (not record)
             (not (eq? (vector-ref ledger 0) g3r-joint-p1-provenance-tag))
             (not (eq? (vector-ref ledger 4) 'preclaim))
-            (not (eq? (vector-ref record 1) (vector-ref ledger 1)))
+            (not (g3r-joint-p1-owner-witness-match?
+                   (vector-ref record 1) (vector-ref ledger 1)))
             (not (eq? (vector-ref record 2) (vector-ref ledger 2))))
         (m3t-fail 'invalid-state operation
                   "P1 shell or binding differs from its private record"))
