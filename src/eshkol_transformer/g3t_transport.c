@@ -104,6 +104,12 @@
 #error "G3-R history requires final G3-T P1/P2 and manual decode commits"
 #endif
 #endif
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+#if !defined(ET_G3R_COMMITTED_SAVE_SNAPSHOT_PRIVATE) || \
+    !defined(ET_G3T_PREFILL_SAMPLE_PRIVATE)
+#error "held SAVE requires current committed history, A2 and model pins"
+#endif
+#endif
 #ifdef ET_G3R_COMMITTED_SAVE_SNAPSHOT_PRIVATE
 #if !defined(ET_G3R_COMMITTED_HISTORY_PRIVATE) || \
     !defined(ET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE) || \
@@ -146,6 +152,9 @@ enum { G3T_GENERATOR = 1, G3T_INPUT = 2,
 #ifdef ET_G3T_OUTPUT_RNG_CLONE_PRIVATE
        G3T_RNG_CLONE = 8,
 #endif
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+       G3T_SAVE_HOLD = 10,
+#endif
        G3T_PENDING = 0, G3T_LIVE = 1, G3T_DEAD = -1 };
 enum { G3T_ARGUMENT = 1, G3T_STATE = 2, G3T_SHAPE = 3,
        G3T_INTERNAL = 5 };
@@ -156,6 +165,18 @@ typedef struct g3t_record {
   struct g3t_record *next;
   int kind, state, busy;
 } g3t_record;
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+typedef struct g3r_save_hold {
+  g3t_record h;
+  void *context, *model, *cache;
+  et_a2_kv_cache_read_borrow *cache_borrow;
+  unsigned char key_bits[32], value_bits[32];
+  int64_t cache_length;
+  uint8_t keep_bits[2];
+  et_g3r_g3t_held_words_v1 value;
+} g3r_save_hold;
+static size_t g3r_save_hold_tombstones;
+#endif
 typedef struct g3t_frame {
   int active, kind, next_ordinal, prepared, end_prepared;
   int64_t token, prompt_length;
@@ -240,6 +261,9 @@ typedef struct g3t_context {
   int64_t history_generated_count, history_manual_count;
   int64_t history_generated_eos_terminal;
   int history_pending_g1;
+#endif
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  g3r_save_hold *save_hold;
 #endif
   et_g3t_model_pins_internal pins;
 #ifdef ET_G3T_MANUAL_LOGITS_PRIVATE
@@ -758,6 +782,55 @@ static int g3r_save_overlap(uintptr_t first, uintptr_t last,
   return !other || start > UINTPTR_MAX - bytes ||
          (first < start + bytes && start < last);
 }
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+/* Every enrolled control shell remains addressable after release. A held
+ * snapshot must not overwrite another owner's authority, even partially. */
+static int g3r_save_control_overlap(uintptr_t first, uintptr_t last) {
+  for (const record *r = registry; r; r = r->next) {
+    size_t bytes;
+    switch (r->kind) {
+      case INITIALIZER: bytes = sizeof(initializer); break;
+      case OWNER: bytes = sizeof(owner); break;
+      case INPUT: bytes = sizeof(input); break;
+      case LOGITS: bytes = sizeof(logits); break;
+      case WORKSPACE: bytes = sizeof(workspace); break;
+      case M3_GRAPH: bytes = sizeof(m3_graph); break;
+      case M3_LOGITS: bytes = sizeof(m3_logits); break;
+      default: return 1;
+    }
+    if (g3r_save_overlap(first, last, r, bytes)) return 1;
+  }
+  for (const m3_workspace *s = m3_workspaces; s; s = s->next)
+    if (g3r_save_overlap(first, last, s, sizeof(*s))) return 1;
+  for (const g3t_record *r = g3t_registry; r; r = r->next) {
+    size_t bytes;
+    switch (r->kind) {
+      case G3T_GENERATOR: bytes = sizeof(g3t_context); break;
+      case G3T_INPUT: bytes = sizeof(g3t_input); break;
+#ifdef ET_G3T_MANUAL_LOGITS_PRIVATE
+      case G3T_LOGITS: bytes = sizeof(g3t_logits); break;
+#endif
+      case G3T_OUTPUT: bytes = sizeof(g3t_output); break;
+#ifdef ET_G3T_OUTPUT_IDS_CLONE_PRIVATE
+      case G3T_IDS_CLONE: bytes = sizeof(g3t_ids_clone); break;
+#endif
+#ifdef ET_G3T_OUTPUT_LENGTHS_CLONE_PRIVATE
+      case G3T_LENGTHS_CLONE: bytes = sizeof(g3t_lengths_clone); break;
+#endif
+#ifdef ET_G3T_OUTPUT_CACHE_LENGTHS_CLONE_PRIVATE
+      case G3T_CACHE_LENGTHS_CLONE: bytes = sizeof(g3t_cache_lengths_clone); break;
+#endif
+#ifdef ET_G3T_OUTPUT_RNG_CLONE_PRIVATE
+      case G3T_RNG_CLONE: bytes = sizeof(g3t_rng_clone); break;
+#endif
+      case G3T_SAVE_HOLD: bytes = sizeof(g3r_save_hold); break;
+      default: return 1;
+    }
+    if (g3r_save_overlap(first, last, r, bytes)) return 1;
+  }
+  return 0;
+}
+#endif
 int64_t et_g3t_private_committed_save_copy_v1(
     void *generator, void *expected_model, void *destination_header,
     void *staging_header) {
@@ -843,6 +916,246 @@ int64_t et_g3t_private_committed_save_copy_v1(
   return status;
 }
 #endif
+#endif
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+_Static_assert(sizeof(et_g3r_g3t_held_words_v1) == 136,
+               "held current-history image must have 17 words");
+static void g3r_save_capture_words(const g3t_context *c,
+                                   et_g3r_g3t_held_words_v1 *value) {
+  memcpy(value->word, c->policy, sizeof(c->policy));
+  memcpy(value->word + 6, c->rng, sizeof(c->rng));
+  memcpy(value->word + 10, c->history_ids, sizeof(c->history_ids));
+  value->word[12] = c->history_length;
+  value->word[13] = c->history_prompt_length;
+  value->word[14] = c->history_generated_count;
+  value->word[15] = c->history_manual_count;
+  value->word[16] = c->history_generated_eos_terminal;
+}
+static int g3r_save_cache_check(g3r_save_hold *hold, int capture) {
+  const et_kernel_tensor_view_v1 *keys = NULL, *values = NULL;
+  const et_kernel_tensor_view_v1 *lengths = NULL, *mask = NULL;
+  et_kernel_error error;
+  if (g3t_capture_kernel(et_a2_kv_cache_read_borrow_layer_v1(
+          hold->cache_borrow, 0, &keys, &values, &lengths, &mask,
+          &error), &error)) return -1;
+  g3t_context *c = hold->context;
+  if (!keys || !values || !lengths || !mask ||
+      keys->struct_size != sizeof(*keys) ||
+      values->struct_size != sizeof(*values) ||
+      lengths->struct_size != sizeof(*lengths) ||
+      mask->struct_size != sizeof(*mask) ||
+      !keys->data || !values->data || !lengths->data || !mask->data ||
+      !keys->dtype || strcmp(keys->dtype, "f32") ||
+      !values->dtype || strcmp(values->dtype, "f32") ||
+      !lengths->dtype || strcmp(lengths->dtype, "i64") ||
+      !mask->dtype || strcmp(mask->dtype, "bool") ||
+      !keys->device || strcmp(keys->device, "cpu") ||
+      !values->device || strcmp(values->device, "cpu") ||
+      !lengths->device || strcmp(lengths->device, "cpu") ||
+      !mask->device || strcmp(mask->device, "cpu") ||
+      keys->layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR ||
+      values->layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR ||
+      lengths->layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR ||
+      mask->layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR ||
+      keys->offset_bytes || values->offset_bytes ||
+      lengths->offset_bytes || mask->offset_bytes ||
+      keys->rank != 4 || values->rank != 4 ||
+      !keys->shape || !values->shape ||
+      keys->shape[0] != 1 || keys->shape[1] != 2 ||
+      keys->shape[2] != 2 || keys->shape[3] != 2 ||
+      values->shape[0] != 1 || values->shape[1] != 2 ||
+      values->shape[2] != 2 || values->shape[3] != 2 ||
+      keys->byte_length != sizeof(hold->key_bits) ||
+      values->byte_length != sizeof(hold->value_bits) ||
+      lengths->rank != 1 || !lengths->shape || lengths->shape[0] != 1 ||
+      lengths->byte_length != sizeof(int64_t) ||
+      mask->rank != 2 || !mask->shape || mask->shape[0] != 1 ||
+      mask->shape[1] != 2 || mask->byte_length != sizeof(hold->keep_bits))
+    return g3t_bad(G3T_STATE, G3T_TOPOLOGY);
+  int64_t length;
+  memcpy(&length, lengths->data, sizeof(length));
+  if (length != c->history_length ||
+      ((const uint8_t *)mask->data)[0] != 1 ||
+      ((const uint8_t *)mask->data)[1] != (length == 2))
+    return g3t_bad(G3T_STATE, G3T_TOPOLOGY);
+  if (capture) {
+    hold->cache_length = length;
+    memcpy(hold->key_bits, keys->data, sizeof(hold->key_bits));
+    memcpy(hold->value_bits, values->data, sizeof(hold->value_bits));
+    memcpy(hold->keep_bits, mask->data, sizeof(hold->keep_bits));
+  } else if (length != hold->cache_length ||
+             memcmp(hold->key_bits, keys->data, sizeof(hold->key_bits)) ||
+             memcmp(hold->value_bits, values->data,
+                    sizeof(hold->value_bits)) ||
+             memcmp(hold->keep_bits, mask->data,
+                    sizeof(hold->keep_bits))) {
+    return g3t_bad(G3T_STATE, G3T_INVARIANT);
+  }
+  return 0;
+}
+void *et_g3r_private_g3t_save_begin_v1(
+    void *candidate, void *const parameters[14],
+    const void *const identities[14]) {
+  g3t_clear();
+  g3t_context *c = g3t_admit(candidate, 0);
+  if (!c) return NULL;
+  owner *o = g3t_model(c->model);
+  if (!o) return NULL;
+  if (!parameters || !identities || c->save_hold ||
+      g3r_save_hold_tombstones >= 64u) {
+    g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+    return NULL;
+  }
+  for (size_t i = 0; i < 14; ++i)
+    if (o->p[i] != parameters[i] || o->handles[i] != identities[i]) {
+      g3t_bad(G3T_STATE, G3T_TOPOLOGY);
+      return NULL;
+    }
+  et_g3r_committed_history_snapshot_v1 snapshot;
+  if (et_g3t_private_committed_history_snapshot_v1(c, &snapshot)) return NULL;
+  if (!snapshot.length || !c->binding_ready) {
+    g3t_bad(G3T_STATE, G3T_INVARIANT);
+    return NULL;
+  }
+  g3r_save_hold *hold = calloc(1, sizeof(*hold));
+  if (!hold) {
+    g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
+    return NULL;
+  }
+  et_f32_tensor_error error;
+  if (et_g3t_model_pins_begin_internal(
+          o->p, (const void *const *)o->handles, &c->pins, &error) != 0) {
+    free(hold);
+    g3t_f32_failure(&error);
+    return NULL;
+  }
+  if (g3t_check_binding(c) != 0) {
+    et_g3t_model_pins_end_internal(&c->pins);
+    free(hold);
+    return NULL;
+  }
+  hold->context = c;
+  hold->model = o;
+  hold->cache = c->cache;
+  et_kernel_error cache_error;
+  if (g3t_capture_kernel(et_a2_kv_cache_read_borrow_begin_v1(
+          c->cache, &hold->cache_borrow, &cache_error), &cache_error)) {
+    et_g3t_model_pins_end_internal(&c->pins);
+    free(hold);
+    return NULL;
+  }
+  if (g3r_save_cache_check(hold, 1) != 0) {
+    if (et_a2_kv_cache_read_borrow_end_v1(
+            &hold->cache_borrow, &cache_error) != 0) abort();
+    et_g3t_model_pins_end_internal(&c->pins);
+    free(hold);
+    return NULL;
+  }
+  g3r_save_capture_words(c, &hold->value);
+  if (memcmp(&hold->value, &snapshot, sizeof(snapshot))) abort();
+  hold->h.kind = G3T_SAVE_HOLD;
+  hold->h.state = G3T_LIVE;
+  hold->h.next = g3t_registry;
+  g3t_registry = &hold->h;
+  ++g3r_save_hold_tombstones;
+  c->save_hold = hold;
+  c->h.busy = 1;
+  o->active = c;
+  return hold;
+}
+int64_t et_g3r_private_g3t_save_check_v1(void *candidate) {
+  g3t_clear();
+  g3r_save_hold *hold = (g3r_save_hold *)g3t_admit_record(
+      candidate, G3T_SAVE_HOLD, 0);
+  if (!hold) return g3t_error_category;
+  g3t_context *c = hold->context;
+  owner *o = g3t_model(c->model);
+  if (!o) return g3t_error_category;
+  if (c->save_hold != hold || !c->h.busy || o != hold->model ||
+      o->active != c || c->cache != hold->cache ||
+      c->pins.held_mask != UINT16_C(0x3fff) || !c->binding_ready ||
+      c->call_kind || c->frame.active || c->frame.kind ||
+      c->frame.transaction || c->frame.candidate_cache ||
+      c->pending_output ||
+#ifdef ET_G3T_MANUAL_LOGITS_PRIVATE
+      c->pending_logits ||
+#endif
+      c->final_committed || !g3t_history_valid(c) ||
+      c->history_pending_g1 || c->history_length < 1 ||
+      !g3t_policy_valid(c->policy[0], c->policy[1], c->policy[2],
+                        c->policy[3], c->policy[4], c->policy[5]) ||
+      c->rng[0] != 1 || c->rng[1] < 0)
+    return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+  if (g3t_check_binding(c)) return g3t_error_category;
+  et_g3r_g3t_held_words_v1 now;
+  g3r_save_capture_words(c, &now);
+  if (memcmp(&now, &hold->value, sizeof(now)))
+    return g3t_bad(G3T_STATE, G3T_INVARIANT);
+  if (g3r_save_cache_check(hold, 0) != 0) return g3t_error_category;
+  return 0;
+}
+int64_t et_g3r_private_g3t_save_copy_v1(
+    void *candidate, et_g3r_g3t_held_words_v1 *destination,
+    int64_t destination_bytes) {
+  g3t_clear();
+  g3r_save_hold *hold = (g3r_save_hold *)g3t_admit_record(
+      candidate, G3T_SAVE_HOLD, 0);
+  if (!hold) return g3t_error_category;
+  if (!destination || destination_bytes != (int64_t)sizeof(*destination))
+    return g3t_bad(G3T_ARGUMENT, G3T_IDENTITY);
+  uintptr_t first = (uintptr_t)destination;
+  if (first > UINTPTR_MAX - sizeof(*destination) ||
+      g3r_save_control_overlap(first, first + sizeof(*destination)) ||
+      g3r_save_overlap(first, first + sizeof(*destination),
+                       hold, sizeof(*hold)) ||
+      g3r_save_overlap(first, first + sizeof(*destination),
+                       hold->context, sizeof(g3t_context)) ||
+      g3r_save_overlap(first, first + sizeof(*destination),
+                       hold->model, sizeof(owner)) ||
+      et_a2_kv_cache_private_storage_overlap_v1(
+          destination, sizeof(*destination)) != 0 ||
+      et_f32_tensor_private_storage_overlap_v1(
+          destination, sizeof(*destination)) != 0)
+    return g3t_bad(G3T_ARGUMENT, G3T_IDENTITY);
+  if (et_g3r_private_g3t_save_check_v1(hold)) return g3t_error_category;
+  memcpy(destination, &hold->value, sizeof(*destination));
+  return 0;
+}
+int64_t et_g3r_private_g3t_save_end_v1(void *candidate) {
+  g3t_clear();
+  g3r_save_hold *hold = (g3r_save_hold *)g3t_admit_record(
+      candidate, G3T_SAVE_HOLD, 0);
+  if (!hold) return g3t_error_category;
+  int64_t first = et_g3r_private_g3t_save_check_v1(hold);
+  int64_t domain = g3t_error_domain, category = g3t_error_category;
+  int64_t code = g3t_error_code;
+  g3t_context *c = hold->context;
+  owner *o = hold->model;
+  if (c->save_hold != hold || o->active != c ||
+      c->pins.held_mask != UINT16_C(0x3fff)) abort();
+  et_kernel_error cache_error;
+  if (et_a2_kv_cache_read_borrow_end_v1(
+          &hold->cache_borrow, &cache_error) != 0) abort();
+  et_g3t_model_pins_end_internal(&c->pins);
+  o->active = NULL;
+  c->h.busy = 0;
+  c->save_hold = NULL;
+  memset(&hold->value, 0, sizeof(hold->value));
+  memset(hold->key_bits, 0, sizeof(hold->key_bits));
+  memset(hold->value_bits, 0, sizeof(hold->value_bits));
+  memset(hold->keep_bits, 0, sizeof(hold->keep_bits));
+  hold->cache_length = 0;
+  hold->context = hold->model = hold->cache = NULL;
+  hold->h.state = G3T_DEAD;
+  if (first) {
+    g3t_error_domain = domain;
+    g3t_error_category = category;
+    g3t_error_code = code;
+    return first;
+  }
+  g3t_clear();
+  return 0;
+}
 #endif
 int64_t et_g3t_private_generator_close_v1(void *candidate) {
   g3t_clear();

@@ -618,6 +618,18 @@ generation, and Wave 3 remains incomplete.
 | O2 | [AdamW, parameter groups, clipping, accumulation and schedules](O2_OPTIMIZER.md) | P1L, Q0, I2 | Exact 1,365-parameter/group boundary; accumulated-gradient, clipping, AdamW and schedule parity; atomic step/load; releasable logical-state continuation; exact 53-global/six-wrapper aggregate; 6,201 adversarial checks, sanitizers, independent review, supported blocking/exhaustive CI, identical-tree merge and bounded merged-main retest. Reviewed test-only repair `2a9f368` makes the TR3-O defined-symbol query portable to supported Ubuntu 22.04/GNU nm 2.38 without changing assertions or runtime scope; four focused package tests and the full TR3-O gate pass on the supported host. After accepted private A2 Step12A changed the header tree, hosted run `35999574298` reached and passed the long O2 build but failed only the stale header-tree test pin; test-only `ecbd0a6` repins the exact new tree and all four focused O2 package tests pass locally. Fresh hosted O2 rerun is pending | complete |
 | C2 | [Detached full training-state checkpoint schema](C2_TRAINING_STATE.md) | C1, D2, O2, X1, K2 | Accepted C2 1.0 component continuation and atomic-file publication: exact 81-global/75-export/81-string boundary, authenticated carriers, exact-bit LOAD/SAVE ownership, failure atomicity, deterministic packaging, flat 1,024/8,192 root retention, and final joint 64-tensor runs at 521,500/521,576 KiB below 524,288 KiB. PR #79 merged as `cbd0929`; PR #77 merged to main as `913cdf4097db09d6c33769e9b0968c01ce0e1f55`; reviewed, tested, and merged states share tree `512a3355cea79583d73b49f690a46478fb1c772c`. Supported run 35393213200 passed all 15 suites/23 commands plus smoke/benchmark, and acceptance 35401088338 reused the verified exact tree successfully. TR3 retains joint live restore/full trajectory and G3 generation proof; [issue #121 handler-order correction](C2_HANDLER_ORDER.md) is in progress: source-order/mutation tests, the exact 5/6/11 final-runtime allocation witness, and focused owner/LOAD gates pass; transformer commit `beb5821` is frozen and independently approved. The reviewed handler-order source is present in the Wave 3 integration branch. On exact clean `7ae5c37` with pinned `81298`/f31, fresh supported P1 handler/LSan, C1 native/sanitizer/AOT, four-image C2 SAVE and canonical C2 public/package/retention gates passed; public retention was 6,356,992 bytes at both 1,024 and 8,192 iterations, slope zero. Sealed public evidence is `c2-121-public-retry-root-7ae5c37-20260924T074300Z` (`SHA256SUMS` `875c3717...`). The scoped exact-7ae5c37 operational gate failed its strict <524,288 KiB peak target at 527,828 KiB; hosted PR #126 corroborated an old-head joint peak of 525,980 KiB. The 1,024/8,192 public-retention slope and production C2 bytes stayed unchanged. A test-only dedicated joint AOT witness preserved the same 26 assertions and 33-file source closure but still peaked at 524,952 KiB, 664 KiB over the unchanged cap; it was not integrated. An isolated byte-preserving C1 SHA-256 streaming repair `daeac8b` avoids copying each complete checkpoint input block and was integrated as the identical source blob at `cfb878e`. Fourteen supported known-answer/boundary cases, canonical four-image SAVE, fresh public/package/retention, and the strict joint operational gate pass. The two joint AOT peaks were 463,836 and 463,692 KiB, leaving 60,452 and 60,596 KiB under the unchanged 524,288 KiB ceiling; both 26-check runs preserved exact bytes and ownership counters. The isolated joint evidence is sealed at `c2-sha-streaming-joint-daeac8b-20260924T100039Z` (`SHA256SUMS` `3974ae27...`). Hosted PR #126 run `35989961605` on pushed `dbc4112` now passes the full C2 operational suite after the shared D2 repair: two joint runs peaked 460,520/460,576 KiB, 63,768/63,712 KiB under the unchanged 524,288 KiB cap, and file/metadata/tensor/count/corrupt, exact/one-over, admission-failure, strict Clang/GCC/C++, sanitizer and byte-lifecycle gates passed. C2 public, SAVE, LOAD, format and state suites in the same run are green. Hosted PR #126 run `35999574298` on pushed `a914540` also passes all six C2 matrix groups, including the strict operational suite; its aggregate still fails only separately scoped A2/O2 exact test pins now repaired locally. Hosted PR #126 run `36009739388` on pushed `46d5c31` also passes C2 SAVE/LOAD/format/state and the strict operational suite; its two joint peaks are 460,776/460,800 KiB, below the unchanged 524,288 KiB cap. Fresh hosted PR #126 run `36020537251` on pushed `8169e68` passes all six C2 matrix groups again, including strict operational joint peaks 460,464/461,148 KiB below 524,288 KiB; D2 shard-loader and the prior symbol-manifest failure paths also pass. All 23 jobs in that supported run completed successfully. Newer supported run `36030979305` on `979bd52` passed all 23 jobs, including all six C2 groups; the pushed `8c13bbf` E3 facade/G3 binding union run `36041612097` is queued, so final #121 acceptance remains pending its exact-head result | active |
 
+C2 operational follow-up: PR #204's old-head clang-b joint run timed out at the
+unchanged 1,800-second watchdog after clang-a's 26-check pass. The inner operation
+was not observable. Independently reviewed test-only progress witness `1abf0fd7`
+records bounded joint LOAD/SAVE phase markers and prints them on failure. Codes
+1/2 bracket LOAD; 10-16, 20-26 and 30-36 cover the three SAVE calls (0 begin,
+1 borrow, 2 preflight, 3 measure, 4 encode, 5 publish, 6 return); 40/41 mark
+release and completed checks. The writer creates a single-link regular file and
+caps evidence at 32 records/2,048 bytes; unsafe or unavailable evidence is
+reported explicitly. The 1,800-second limit, checks and resource thresholds are
+unchanged. Current-main union review and a supported diagnostic run remain gates;
+the old-head failure does not establish current-main runtime behavior.
+
 ## Wave 3 — first complete language model
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
@@ -1777,8 +1789,11 @@ cache, compares committed length and policy, rejects pending G1 provenance,
 and publishes only detached data after checked 136-byte staging. Focused
 native normal/repeat/sanitizer and feature-off checks pass. Independent review
 and the exact-`97aec234` compiled Eshkol aggregate have also passed their
-bounded gates. Current-main union validation remains pending. This is no SAVE
-admission, file writer or replay proof.
+bounded gates. The exact `4f2abe36` current-main combined-tree gate subsequently
+passed normal/repeat/sanitizer, feature-off and Q0 checks with independent
+review (`g3r-committed-save-union-4f2abe36-fe9-f31-20261012-prepared-a/SHA256SUMS-RUN`,
+`c9094b09...`); PR #203 merged as `86f4eb36`. This is no SAVE admission,
+file writer or replay proof.
 
 The follow-on private aggregate candidate on `codex/g3r-committed-save-aggregate`
 loads that wrapper with the exact M3/G3-T/G3-M route. A real seeded P1/G1
@@ -1793,9 +1808,57 @@ symbol absence and Q0 isolation also pass. Independent source/tests review
 found no blocker at `97aec234`/tree `fbda548f`; sealed evidence is
 `g3r-committed-save-aggregate-97aec234-fe9-f31-20261012-prepared-a/SHA256SUMS-RUN`
 (`cc3c5f2e...`). The real aggregate's positive route covers P1/G1; other
-partitions and EOS rely on controlled native tests. Current-main combined-tree
-build and runtime validation remain gates before admission. No SAVE writer,
+partitions and EOS rely on controlled native tests. The exact `4f2abe36`
+combined-tree gate passed with 30 byte-identical checks in normal/repeat/
+sanitizer profiles; this closes only the private snapshot prerequisite. No SAVE writer,
 file-pair publication, restore, replay or resumed continuation is provided.
+
+The reviewed [current-history held SAVE proposal](g3/G3_R_CURRENT_HISTORY_HELD_SAVE_CONTRACT.md)
+now accompanies merged main. Its first bounded native prerequisite,
+[the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
+ports exact value and absent-gradient bit baselines under the existing
+fixed14 model pins. Focused normal/repeat/sanitizer and feature-off checks
+pass locally. Independent source review, sealed M3T roster, O2 hold, current
+G3/A2 held 17-word snapshot, compiled union and failure cuts remain gates;
+this leaf adds no same-owner writer, SAVE or continuation admission.
+
+The [current-history G3/A2 held-owner leaf](g3/G3_R_CURRENT_HISTORY_HELD_OWNER_LEAF.md)
+adds source-private original-owner pins and cache borrow with a checked 17-word
+committed-history image. Focused native feature-off, normal, repeat and
+ASan+UBSan cuts pass. A held-copy alias repair now rejects overlap with M3
+graph/logits controls and separately rostered workspace metadata as well as
+foreign model owners, while admitting disjoint output; focused causal and
+sanitizer cuts pass. Independent source/tests
+review remains open. The O2 prerequisite has an unresolved alias finding and
+is excluded from this branch.
+Coordinator, post-adoption and partial-O2-claim cuts remain integration gates;
+there is no SAVE or continuation admission.
+
+The [private M3 owner-roster prerequisite](g3/G3_R_M3_OWNER_ROSTER_PREREQUISITE.md)
+ports the feature-gated registry-backed fourteen-parameter/identity roster
+to current main. It rejects unsealed, stale, foreign, incomplete or inconsistent
+owners before copying any output. Source and focused native checks are pending
+independent review; the roster alone does not pin value/gradient bits, hold O2,
+or authorize a G3-R SAVE capture.
+
+The [current-main private provider union gate](g3/G3_R_CURRENT_PRIVATE_UNION_GATE.md)
+now has one independently accepted supported-host C run on exact source
+`c0f747dc`, accepted C7b fe9/f31 toolchain, and eight compiled Eshkol checks.
+The sealed host result is `g3r-current-private-union-run-20261013-c/host/SHA256SUMS-HOST`
+(`a7932101...`); independent raw review is
+`g3r-current-private-union-c-receipt-independent-review-20261013-a/SHA256SUMS-REVIEW`
+(`bb7905f6...`). This closes the bounded private-union runtime prerequisite
+only. The O2 issued-pointer provider, SAVE publication/replay, terminal and
+public generation, and data-only continuation remain open; the current-main
+source/evidence/docs union is still pending integration.
+A source-only predecessor-manifest successor updates eight exact rows across
+G3-S, G3-N, M3 call-guard, E3 metrics and L3S manifests for the guarded F32
+witness and M3 owner-roster additions. Eight feature-off preprocessing
+comparisons against the prior pinned `86f4eb36` source agree; all five checksum
+gates pass and source-mutation negatives remain rejected. The affected hosted
+suites are G3-S sampling, G3-N forward, native numerics and model composition.
+Independent review and fresh supported full-suite CI remain integration gates;
+preprocessing is not object/runtime equivalence or SAVE admission.
 
 The proposed [G3-R fresh-candidate retirement prerequisite](g3/G3_R_FRESH_CANDIDATE_RETIREMENT_CONTRACT.md)
 bounds a private, feature-gated pre-replay teardown for an unpublished

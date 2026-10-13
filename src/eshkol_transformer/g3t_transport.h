@@ -29,6 +29,19 @@ typedef struct et_g3r_committed_history_snapshot_v1 {
 } et_g3r_committed_history_snapshot_v1;
 int64_t et_g3t_private_committed_history_snapshot_v1(
     void *generator, et_g3r_committed_history_snapshot_v1 *destination);
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+/* Seventeen current committed-history words; source-private held owner. */
+typedef struct et_g3r_g3t_held_words_v1 { int64_t word[17]; }
+    et_g3r_g3t_held_words_v1;
+void *et_g3r_private_g3t_save_begin_v1(
+    void *generator, void *const parameters[14],
+    const void *const identities[14]);
+int64_t et_g3r_private_g3t_save_check_v1(void *hold);
+int64_t et_g3r_private_g3t_save_copy_v1(
+    void *hold, et_g3r_g3t_held_words_v1 *destination,
+    int64_t destination_bytes);
+int64_t et_g3r_private_g3t_save_end_v1(void *hold);
+#endif
 #ifdef ET_G3R_COMMITTED_SAVE_SNAPSHOT_PRIVATE
 /* Eshkol bytevector headers: original destination >= 136 bytes, staging
  * exactly 136 bytes. Only staging is written, after all leases are released. */

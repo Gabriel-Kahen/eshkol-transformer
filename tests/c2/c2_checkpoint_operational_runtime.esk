@@ -22,6 +22,8 @@
         :real et_c2_operational_peak_rss_kib_v1)
 (extern i64 c2-operational-now
         :real et_c2_operational_monotonic_millis_v1)
+(extern void c2-operational-progress i64
+        :real et_c2_operational_progress_v1)
 (extern i64 c2-operational-f32-control-bytes
         :real et_f32_tensor_test_control_bytes_v1)
 (extern i64 c2-operational-i2-decode-control-bytes
@@ -601,14 +603,21 @@
         (newline)))))
 
 ;;; The joint exact artifact is authoritative for the measured lifecycle.
+;;; Progress codes: 1/2 enter/return LOAD; 10-16, 20-26, and 30-36 mark
+;;; first, second, and overwrite SAVE. Within each SAVE, 0 begins, 1 borrow
+;;; returns, 2 preflight returns, 3 measure returns, 4 encode returns,
+;;; 5 publish returns, and 6 SAVE returns. 40/41 mark release/checks done.
 (define (run-joint-mode)
 (define lifecycle-before (snapshot-counts))
 (define owner-before (c2-load-owner-counts-internal))
 (define stage-before (c2-load-stage-counts-internal))
 (define require-before (c2-operational-k2-require-count))
 (define owner
-  (c2-public-checkpoint-load
-    joint-path target-policy operational-report))
+  (begin
+    (c2-operational-progress 1)
+    (c2-public-checkpoint-load
+      joint-path target-policy operational-report)))
+(c2-operational-progress 2)
 (check "joint public load requires every one of 64 descriptors exactly once"
        (= (c2-operational-k2-require-count) (+ require-before 64)))
 (check "joint exact reconstruction publishes one exact C2 owner"
@@ -669,6 +678,7 @@
 (set! c2-save-borrow-begin-internal
   (lambda (state operation)
     (let ((result (saved-operational-borrow state operation)))
+      (c2-operational-progress (+ 11 (* 10 joint-borrow-calls)))
       (vector-set! joint-borrow-arena joint-borrow-calls (__arena-used))
       (set! joint-borrow-calls (+ joint-borrow-calls 1))
       result)))
@@ -676,12 +686,14 @@
   (lambda (topology o2-projection limits)
     (let ((result
             (saved-operational-preflight topology o2-projection limits)))
+      (c2-operational-progress (+ 12 (* 10 joint-preflight-calls)))
       (vector-set! joint-preflight-arena joint-preflight-calls (__arena-used))
       (set! joint-preflight-calls (+ joint-preflight-calls 1))
       result)))
 (set! c2-save-measure-staged-internal
   (lambda (staged limits)
     (let ((result (saved-operational-measure staged limits)))
+      (c2-operational-progress (+ 13 (* 10 joint-measure-calls)))
       (vector-set! joint-measure-current joint-measure-calls
                    (c2-operational-current-rss))
       (vector-set! joint-measure-peak joint-measure-calls
@@ -694,6 +706,7 @@
     (let ((result
             (saved-operational-encode
               staged limits destination file-bytes)))
+      (c2-operational-progress (+ 14 (* 10 joint-encode-calls)))
       (vector-set! joint-encode-current joint-encode-calls
                    (c2-operational-current-rss))
       (vector-set! joint-encode-peak joint-encode-calls
@@ -704,6 +717,7 @@
 (set! c2-save-publish-internal
   (lambda (path bytes overwrite)
     (let ((result (saved-operational-publish path bytes overwrite)))
+      (c2-operational-progress (+ 15 (* 10 joint-publish-calls)))
       (vector-set! joint-publish-current joint-publish-calls
                    (c2-operational-current-rss))
       (vector-set! joint-publish-peak joint-publish-calls
@@ -713,8 +727,10 @@
       result)))
 (define first-save-counts (snapshot-counts))
 (define first-save-arena-before (__arena-used))
+(c2-operational-progress 10)
 (check "first joint operational save succeeds"
        (c2-public-checkpoint-save! owner save-a target-policy '()))
+(c2-operational-progress 16)
 (define first-save-arena-delta (- (__arena-used) first-save-arena-before))
 (check "first joint save retains under two exact file images"
        (and (>= first-save-arena-delta 0)
@@ -725,8 +741,10 @@
          first-save-counts (snapshot-counts) 33 124))
 (define save-counts (snapshot-counts))
 (define second-save-arena-before (__arena-used))
+(c2-operational-progress 20)
 (check "second joint operational save succeeds"
        (c2-public-checkpoint-save! owner save-b target-policy '()))
+(c2-operational-progress 26)
 (define second-save-arena-delta (- (__arena-used) second-save-arena-before))
 (if (or (< second-save-arena-delta 0)
         (>= second-save-arena-delta 32768))
@@ -748,9 +766,11 @@
 (check "second joint operational save is control-flat"
        (equal? save-counts (snapshot-counts)))
 (define overwrite-save-arena-before (__arena-used))
+(c2-operational-progress 30)
 (check "overwrite joint operational save succeeds"
        (c2-public-checkpoint-save!
          owner save-a target-policy '(:overwrite? #t)))
+(c2-operational-progress 36)
 (define overwrite-save-arena-delta
   (- (__arena-used) overwrite-save-arena-before))
 (if (or (< overwrite-save-arena-delta 0)
@@ -786,6 +806,7 @@
 
 (check "joint exact owner releases"
        (c2-public-trainer-state-release! owner))
+(c2-operational-progress 40)
 (define lifecycle-after (snapshot-counts))
 (define stage-after (c2-load-stage-counts-internal))
 (define owner-after (c2-load-owner-counts-internal))
@@ -865,6 +886,7 @@
        (and (> peak-rss 0) (< peak-rss 524288)))
 (check "measured runtime is inside the explicit watchdog"
        (and (>= elapsed-ms 0) (< elapsed-ms 1800000)))
+(c2-operational-progress 41)
 
 (display "C2 OPERATIONAL RUNTIME PASS: ")
 (display checks)
