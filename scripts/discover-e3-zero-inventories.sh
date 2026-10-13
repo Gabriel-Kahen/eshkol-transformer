@@ -76,5 +76,9 @@ for mode in normal sanitize; do
   [[ ! -e "${object}" && ! -L "${object}" &&
      "$(awk -F '\t' '$1 == "result" { print $2 }' "${gate}/evidence/builder-status.tsv")" == success ]] ||
     die "E3 zero discovery unexpectedly published an object or omitted evidence"
+  cmp "${prefix}_defined_symbols.txt" "${gate}/evidence/global-defined.txt" ||
+    die "E3 zero discovery defined symbols differ from the tuple manifest"
+  cmp "${prefix}_native_objects.txt" "${gate}/evidence/native-objects.txt" ||
+    die "E3 zero discovery native objects differ from the tuple manifest"
 done
 printf 'discovery\tcomplete-no-admission\n' >>"${root}/status.tsv"

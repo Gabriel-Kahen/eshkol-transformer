@@ -48,6 +48,10 @@ class ZeroDiscoveryPolicyTest(unittest.TestCase):
         self.assertIn('E3_ZERO_CONTROL_DISCOVERY=1', harness)
         self.assertIn('E3_ZERO_CONTROL_SANITIZE=', harness)
         self.assertIn('[[ ! -e "${object}" && ! -L "${object}"', harness)
+        self.assertIn('cmp "${prefix}_defined_symbols.txt" '
+                      '"${gate}/evidence/global-defined.txt"', harness)
+        self.assertIn('cmp "${prefix}_native_objects.txt" '
+                      '"${gate}/evidence/native-objects.txt"', harness)
         self.assertNotIn('build-e3-zero-control-test.sh', harness)
         self.assertNotIn('test-e3-zero-control.sh', harness)
         for fragment in ('workflow_dispatch:', 'runs-on: ubuntu-22.04',
