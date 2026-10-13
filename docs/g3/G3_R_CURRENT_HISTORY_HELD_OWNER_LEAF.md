@@ -20,8 +20,9 @@ terminal. The terminal comes from committed native history, not a detached ID.
 bits, committed-history invariant and all seventeen words, plus the borrowed
 cache's shape, dtype, device, length and exact bits. `copy` writes only a
 disjoint 136-byte destination after a successful check. Its destination cannot
-overlap any registered M3 or G3-T control shell, including another model owner
-or a partial record span. `end` checks once,
+overlap any registered M3 or G3-T control shell, including M3 graph/logits
+records, separately rostered M3 workspace metadata, another model owner, or
+a partial record span. `end` checks once,
 then drains the A2 borrow and model pins and leaves an inert registered shell;
 release uncertainty fails stop. The first typed G3 error is restored if the
 final check fails. This API does no file I/O and grants no caller mutation.
@@ -29,9 +30,11 @@ final check fails. This API does no file I/O and grants no caller mutation.
 Focused `scripts/test-g3r-current-history-held-owner.sh` passes feature-off,
 normal, repeat and ASan+UBSan native cuts, including pending-G1 rejection,
 17-word offsets, changed history, changed RNG, stale hold, and aliased/short
-copy output. Foreign-owner and partial-owner/transport aliases reject without
-changing bytes or releasing the active hold. LSan is unavailable in the ptraced
-local runner and was disabled for the sanitizer cut. Independent source/tests
+copy output. Foreign-owner, M3 graph/logits, M3 workspace-roster and
+partial-owner/transport aliases reject without changing bytes or releasing the
+active hold; an enrolled M3 graph does not reject disjoint output. LSan is
+unavailable in the ptraced local runner and was disabled for the sanitizer
+cut. Independent source/tests
 review, repaired O2 review,
 post-adoption cleanup, true partial-O2-claim rollback, and compiled aggregate
 cuts remain gates before any held SAVE integration.

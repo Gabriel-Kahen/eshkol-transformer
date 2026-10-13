@@ -121,6 +121,10 @@ static g3t_context c;
 static owner model, foreign;
 static struct { owner model; unsigned char tail[136]; } foreign_partial;
 static struct { g3t_input input; unsigned char tail[136]; } transport_partial;
+static struct { m3_graph graph; unsigned char tail[136]; } graph_partial;
+static struct { m3_logits logits; unsigned char tail[136]; } logits_partial;
+static workspace native_workspace;
+static struct { m3_workspace shell; unsigned char tail[136]; } workspace_partial;
 static initializer initial, next;
 static unsigned char parameters[14], handles[14];
 static bytes136 destination, staging;
@@ -177,8 +181,19 @@ int main(void) {
   model.r.next = &foreign.r; foreign.r.next = &initial.r;
   foreign_partial.model = foreign;
   foreign.r.next = &foreign_partial.model.r;
-  foreign_partial.model.r.next = &initial.r;
+  graph_partial.graph.r.kind = M3_GRAPH;
+  graph_partial.graph.r.state = 1;
+  logits_partial.logits.r.kind = M3_LOGITS;
+  logits_partial.logits.r.state = 1;
+  native_workspace.r.kind = WORKSPACE;
+  native_workspace.r.state = 1;
+  foreign_partial.model.r.next = &graph_partial.graph.r;
+  graph_partial.graph.r.next = &logits_partial.logits.r;
+  logits_partial.logits.r.next = &native_workspace.r;
+  native_workspace.r.next = &initial.r;
   initial.r.next = &next.r; registry = &model.r;
+  workspace_partial.shell.value = &native_workspace;
+  m3_workspaces = &workspace_partial.shell;
   c.h.kind = G3T_GENERATOR; c.h.state = G3T_LIVE;
   transport_partial.input.h.kind = G3T_INPUT;
   transport_partial.input.h.state = G3T_LIVE;
@@ -254,9 +269,15 @@ int main(void) {
   unsigned char foreign_before[sizeof(foreign)];
   unsigned char model_before[sizeof(foreign_partial)];
   unsigned char transport_before[sizeof(transport_partial)];
+  unsigned char graph_before[sizeof(graph_partial)];
+  unsigned char logits_before[sizeof(logits_partial)];
+  unsigned char workspace_before[sizeof(workspace_partial)];
   memcpy(foreign_before, &foreign, sizeof(foreign));
   memcpy(model_before, &foreign_partial, sizeof(foreign_partial));
   memcpy(transport_before, &transport_partial, sizeof(transport_partial));
+  memcpy(graph_before, &graph_partial, sizeof(graph_partial));
+  memcpy(logits_before, &logits_partial, sizeof(logits_partial));
+  memcpy(workspace_before, &workspace_partial, sizeof(workspace_partial));
   assert(et_g3r_private_g3t_save_copy_v1(
       hold, (et_g3r_g3t_held_words_v1 *)&foreign, sizeof(words)) == G3T_ARGUMENT);
   assert(!memcmp(foreign_before, &foreign, sizeof(foreign)));
@@ -272,6 +293,21 @@ int main(void) {
       sizeof(words)) == G3T_ARGUMENT);
   assert(!memcmp(transport_before, &transport_partial,
                  sizeof(transport_partial)));
+  assert(et_g3r_private_g3t_save_copy_v1(
+      hold, (et_g3r_g3t_held_words_v1 *)&graph_partial.graph,
+      sizeof(words)) == G3T_ARGUMENT);
+  assert(!memcmp(graph_before, &graph_partial, sizeof(graph_partial)));
+  assert(et_g3r_private_g3t_save_copy_v1(
+      hold, (et_g3r_g3t_held_words_v1 *)
+          ((char *)&logits_partial.logits + sizeof(m3_logits) - 8),
+      sizeof(words)) == G3T_ARGUMENT);
+  assert(!memcmp(logits_before, &logits_partial, sizeof(logits_partial)));
+  assert(et_g3r_private_g3t_save_copy_v1(
+      hold, (et_g3r_g3t_held_words_v1 *)
+          ((char *)&workspace_partial.shell + sizeof(m3_workspace) - 8),
+      sizeof(words)) == G3T_ARGUMENT);
+  assert(!memcmp(workspace_before, &workspace_partial,
+                 sizeof(workspace_partial)));
   assert(pin_active && cache_active && c.h.busy);
   assert(!et_g3r_private_g3t_save_check_v1(hold));
   assert(et_g3r_private_g3t_save_copy_v1(

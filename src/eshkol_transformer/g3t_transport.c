@@ -794,10 +794,14 @@ static int g3r_save_control_overlap(uintptr_t first, uintptr_t last) {
       case INPUT: bytes = sizeof(input); break;
       case LOGITS: bytes = sizeof(logits); break;
       case WORKSPACE: bytes = sizeof(workspace); break;
+      case M3_GRAPH: bytes = sizeof(m3_graph); break;
+      case M3_LOGITS: bytes = sizeof(m3_logits); break;
       default: return 1;
     }
     if (g3r_save_overlap(first, last, r, bytes)) return 1;
   }
+  for (const m3_workspace *s = m3_workspaces; s; s = s->next)
+    if (g3r_save_overlap(first, last, s, sizeof(*s))) return 1;
   for (const g3t_record *r = g3t_registry; r; r = r->next) {
     size_t bytes;
     switch (r->kind) {
