@@ -1819,7 +1819,8 @@ ASan+UBSan cuts pass. A held-copy alias repair now rejects overlap with M3
 graph/logits controls and separately rostered workspace metadata as well as
 foreign model owners, while admitting disjoint output; focused causal and
 sanitizer cuts pass. Independent G3/A2 source/tests review is accepted
-(receipt SHA-256 `da6b77bfe5227713e55c01da40a8213ce6622ee29e30cbf5adca54efbc74557c`).
+(`/tmp/g3r-held-57a8-independent-review-20261013-a/SHA256SUMS-REVIEW`,
+manifest SHA-256 `da6b77bfe5227713e55c01da40a8213ce6622ee29e30cbf5adca54efbc74557c`).
 The exact `57a8e80a` private F32/M3/G3 source union is accepted with
 integration HOLD (`g3r-current-main-57a8-union-independent-review-20261013-a/SHA256SUMS-REVIEW`,
 manifest SHA-256 `cf7dce7a0a0f1059576904bc693b1506cd9e4bb865d385dbe9a0725f534bcb81`).
