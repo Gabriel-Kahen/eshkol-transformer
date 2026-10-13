@@ -5,6 +5,8 @@ parameter owners and their original bound identities from one sealed M3T
 registry owner. It validates the owner, completed initialization, every
 parameter-to-identity binding and uniqueness of owners and handles before
 copying either output array. A failed call leaves both arrays untouched.
+The output spans must be disjoint from each other and from the owner and its
+initializer controls; overlap is rejected before either array is written.
 The API is private to the same-owner SAVE work; feature-off builds do not
 export it.
 
@@ -18,7 +20,9 @@ prerequisites and compiled failure cuts.
 
 The native M3T transport fixture checks an unsealed owner, a valid sealed
 fourteen-slot roster, null and foreign owners, null outputs, a corrupted
-identity binding, and unchanged output arrays after rejection. Final
+identity binding, and unchanged output arrays after rejection. It also rejects
+identical and shifted overlapping outputs and
+owner-backed output storage without changing the sealed roster. Final
 integration requires independent source/tests review, feature-off absence,
 and supported compiled union validation before this private roster can be
 used by the joint capture coordinator.

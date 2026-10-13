@@ -21,6 +21,13 @@ static owner *make_owner(initializer *s) {
  CHECK(et_m3t_private_owner_save_roster_v1(s,parameters,identities)!=0);
  CHECK(et_m3t_private_owner_save_roster_v1(o,NULL,identities)!=0);
  CHECK(et_m3t_private_owner_save_roster_v1(o,parameters,NULL)!=0);
+ void *shared[15]={0};
+ CHECK(et_m3t_private_owner_save_roster_v1(o,shared,(const void **)shared)!=0);
+ CHECK(et_m3t_private_owner_save_roster_v1(o,shared,(const void **)(shared+1))!=0);
+ for(int i=0;i<15;i++)CHECK(shared[i]==NULL);
+ CHECK(et_m3t_private_owner_save_roster_v1(o,o->handles,identities)!=0);
+ CHECK(et_m3t_private_owner_save_roster_v1(o,parameters,(const void **)o->p)!=0);
+ for(int i=0;i<14;i++)CHECK(parameters[i]==o->p[i] && identities[i]==o->handles[i]);
  void *saved=o->handles[0];o->handles[0]=o->handles[1];
  CHECK(et_m3t_private_owner_save_roster_v1(o,parameters,identities)!=0);
  for(int i=0;i<14;i++)CHECK(parameters[i]==o->p[i] && identities[i]==(i==0?saved:o->handles[i]));
