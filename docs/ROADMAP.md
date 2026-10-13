@@ -1816,6 +1816,17 @@ reconstruction records are allocated in prepare, preserving allocation-free
 commit. Focused normal and ASan+UBSan tests pass 320 checks; a feature-enabled
 native reconstruction smoke passes and feature-off object bytes match the
 parent. Independent re-review and same-aggregate validation remain pending.
+Independent review of `9300a640` held admission after finding private output
+and error aliases into the candidate-retire roster, active optimizer and
+reconstruction builder arrays, and a live state-borrow shell. The follow-up
+extends the common prewrite guard to those allocations and retired borrows.
+Builder extents come from separate allocation records; the candidate-retire
+roster extent comes from the existing optimizer allocation record. Causal
+normal and ASan+UBSan checks pass 344 checks (349 with candidate retirement);
+the combined retirement fixture passes 1,812 checks, the prepared commit
+remains allocation free under an injected failpoint, and feature-off objects
+match the parent byte for byte. Fresh independent review and same-aggregate
+validation remain pending.
 
 The follow-on private aggregate candidate on `codex/g3r-committed-save-aggregate`
 loads that wrapper with the exact M3/G3-T/G3-M route. A real seeded P1/G1

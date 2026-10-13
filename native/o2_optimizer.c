@@ -196,6 +196,9 @@ typedef struct et_o2_g3r_optimizer_allocation {
   et_o2_entry *entries;
   size_t count;
   uint32_t live;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  et_o2_retire_provenance *retire_record;
+#endif
 } et_o2_g3r_optimizer_allocation;
 typedef struct et_o2_g3r_state_allocation {
   struct et_o2_g3r_state_allocation *next;
@@ -206,8 +209,24 @@ typedef struct et_o2_g3r_state_allocation {
   size_t count;
   uint32_t live;
 } et_o2_g3r_state_allocation;
+typedef struct et_o2_g3r_builder_allocation {
+  struct et_o2_g3r_builder_allocation *next;
+  et_o2_optimizer_builder *owner;
+  et_o2_entry *entries;
+  size_t count;
+} et_o2_g3r_builder_allocation;
+typedef struct et_o2_g3r_reconstruct_allocation {
+  struct et_o2_g3r_reconstruct_allocation *next;
+  et_o2_state_reconstruct_builder *owner;
+  et_o2_state_entry *entries;
+  et_f32_tensor **owned_clones;
+  unsigned char *entry_set;
+  size_t count;
+} et_o2_g3r_reconstruct_allocation;
 static et_o2_g3r_optimizer_allocation *et_o2_g3r_optimizer_allocations;
 static et_o2_g3r_state_allocation *et_o2_g3r_state_allocations;
+static et_o2_g3r_builder_allocation *et_o2_g3r_builder_allocations;
+static et_o2_g3r_reconstruct_allocation *et_o2_g3r_reconstruct_allocations;
 
 static et_o2_g3r_optimizer_allocation *et_o2_g3r_optimizer_allocation_find(
     const et_o2_optimizer *owner) {
@@ -224,6 +243,27 @@ static et_o2_g3r_state_allocation *et_o2_g3r_state_allocation_find(
        record != NULL; record = record->next)
     if (record->owner == owner) return record;
   return NULL;
+}
+
+static void et_o2_g3r_builder_allocation_remove(
+    const et_o2_optimizer_builder *owner) {
+  et_o2_g3r_builder_allocation **link = &et_o2_g3r_builder_allocations;
+  while (*link != NULL && (*link)->owner != owner) link = &(*link)->next;
+  if (*link == NULL) abort();
+  et_o2_g3r_builder_allocation *record = *link;
+  *link = record->next;
+  free(record);
+}
+
+static void et_o2_g3r_reconstruct_allocation_remove(
+    const et_o2_state_reconstruct_builder *owner) {
+  et_o2_g3r_reconstruct_allocation **link =
+      &et_o2_g3r_reconstruct_allocations;
+  while (*link != NULL && (*link)->owner != owner) link = &(*link)->next;
+  if (*link == NULL) abort();
+  et_o2_g3r_reconstruct_allocation *record = *link;
+  *link = record->next;
+  free(record);
 }
 #endif
 #ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
@@ -1167,6 +1207,22 @@ int32_t et_o2_optimizer_builder_create_v1(
                       ET_O2_CODE_ALLOCATION_FAILED, "optimizer-create",
                       "cannot allocate optimizer builder");
   }
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  et_o2_g3r_builder_allocation *allocation =
+      et_o2_calloc(1u, sizeof(*allocation));
+  if (allocation == NULL) {
+    free(builder->entries);
+    free(builder);
+    return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
+                      ET_O2_CODE_ALLOCATION_FAILED, "optimizer-create",
+                      "cannot record optimizer builder allocation");
+  }
+  allocation->owner = builder;
+  allocation->entries = builder->entries;
+  allocation->count = parameter_count;
+  allocation->next = et_o2_g3r_builder_allocations;
+  et_o2_g3r_builder_allocations = allocation;
+#endif
   builder->magic = ET_O2_BUILDER_MAGIC;
   builder->count = parameter_count;
   builder->config = config;
@@ -1335,6 +1391,9 @@ int32_t et_o2_optimizer_builder_finish_v1(et_o2_optimizer_builder **slot,
   allocation->entries = builder->entries;
   allocation->count = builder->count;
   allocation->live = 1u;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  allocation->retire_record = record;
+#endif
   allocation->next = et_o2_g3r_optimizer_allocations;
   et_o2_g3r_optimizer_allocations = allocation;
   optimizer->registered_count = builder->count;
@@ -1352,6 +1411,9 @@ int32_t et_o2_optimizer_builder_finish_v1(et_o2_optimizer_builder **slot,
 #endif
   builder->entries = NULL;
   et_o2_unlink_builder(builder);
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  et_o2_g3r_builder_allocation_remove(builder);
+#endif
   builder->magic = 0u;
   free(builder);
   *slot = NULL;
@@ -1377,6 +1439,9 @@ int32_t et_o2_optimizer_builder_abort_v1(et_o2_optimizer_builder **slot,
                       "builder is foreign or stale");
   }
   et_o2_unlink_builder(builder);
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  et_o2_g3r_builder_allocation_remove(builder);
+#endif
   et_o2_destroy_entry_moments(builder->entries, builder->count);
   free(builder->entries);
   builder->magic = 0u;
@@ -2178,6 +2243,8 @@ static int et_o2_g3r_save_buffers_conflict(const void *output,
   for (const et_o2_g3r_optimizer_allocation *record =
            et_o2_g3r_optimizer_allocations;
        record != NULL; record = record->next) {
+    if (record->count == 0u || record->count > ET_O2_MAX_PARAMETERS)
+      return 1;
     if (et_o2_g3r_save_storage_conflict(output, output_bytes, error, record,
                                         sizeof(*record)) ||
         et_o2_g3r_save_storage_conflict(output, output_bytes, error,
@@ -2187,10 +2254,24 @@ static int et_o2_g3r_save_buffers_conflict(const void *output,
              output, output_bytes, error, record->entries,
              record->count * sizeof(*record->entries))))
       return 1;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+    if (record->retire_record == NULL ||
+        et_o2_g3r_save_storage_conflict(
+            output, output_bytes, error, record->retire_record,
+            sizeof(*record->retire_record) +
+                record->count * sizeof(et_o2_entry)) ||
+        record->retire_record->owner != record->owner ||
+        record->retire_record->entries != record->entries ||
+        record->retire_record->count != record->count ||
+        record->retire_record->live != record->live)
+      return 1;
+#endif
   }
   for (const et_o2_g3r_state_allocation *record =
            et_o2_g3r_state_allocations;
        record != NULL; record = record->next) {
+    if (record->count == 0u || record->count > ET_O2_MAX_PARAMETERS)
+      return 1;
     if (et_o2_g3r_save_storage_conflict(output, output_bytes, error, record,
                                         sizeof(*record)) ||
         et_o2_g3r_save_storage_conflict(output, output_bytes, error,
@@ -2205,6 +2286,52 @@ static int et_o2_g3r_save_buffers_conflict(const void *output,
           et_o2_g3r_save_storage_conflict(
               output, output_bytes, error, record->owned_clones,
               record->count * 2u * sizeof(*record->owned_clones)))))
+      return 1;
+    if (record->live == 2u) {
+      for (size_t index = 0u; index < record->count * 2u; ++index) {
+        if (record->handles[index] == NULL ||
+            et_o2_g3r_save_storage_conflict(
+                output, output_bytes, error, record->handles[index],
+                sizeof(*record->handles[index])))
+          return 1;
+      }
+    }
+  }
+  for (const et_o2_g3r_builder_allocation *record =
+           et_o2_g3r_builder_allocations;
+       record != NULL; record = record->next) {
+    if (record->count == 0u || record->count > ET_O2_MAX_PARAMETERS ||
+        et_o2_g3r_save_storage_conflict(output, output_bytes, error, record,
+                                        sizeof(*record)) ||
+        et_o2_g3r_save_storage_conflict(output, output_bytes, error,
+                                        record->owner, sizeof(*record->owner)) ||
+        et_o2_g3r_save_storage_conflict(
+            output, output_bytes, error, record->entries,
+            record->count * sizeof(*record->entries)) ||
+        record->owner->count != record->count ||
+        record->owner->entries != record->entries)
+      return 1;
+  }
+  for (const et_o2_g3r_reconstruct_allocation *record =
+           et_o2_g3r_reconstruct_allocations;
+       record != NULL; record = record->next) {
+    if (record->count == 0u || record->count > ET_O2_MAX_PARAMETERS ||
+        et_o2_g3r_save_storage_conflict(output, output_bytes, error, record,
+                                        sizeof(*record)) ||
+        et_o2_g3r_save_storage_conflict(output, output_bytes, error,
+                                        record->owner, sizeof(*record->owner)) ||
+        et_o2_g3r_save_storage_conflict(
+            output, output_bytes, error, record->entries,
+            record->count * sizeof(*record->entries)) ||
+        et_o2_g3r_save_storage_conflict(
+            output, output_bytes, error, record->owned_clones,
+            record->count * 2u * sizeof(*record->owned_clones)) ||
+        et_o2_g3r_save_storage_conflict(output, output_bytes, error,
+                                        record->entry_set, record->count) ||
+        record->owner->count != record->count ||
+        record->owner->entries != record->entries ||
+        record->owner->owned_clones != record->owned_clones ||
+        record->owner->entry_set != record->entry_set)
       return 1;
   }
   for (const et_o2_optimizer *optimizer = et_o2_optimizers;
@@ -2257,6 +2384,16 @@ static int et_o2_g3r_save_buffers_conflict(const void *output,
                                         sizeof(*handle)))
       return 1;
   }
+  for (const et_o2_optimizer_state_borrow *borrow = et_o2_borrows;
+       borrow != NULL; borrow = borrow->registry_next)
+    if (et_o2_g3r_save_storage_conflict(output, output_bytes, error, borrow,
+                                        sizeof(*borrow)))
+      return 1;
+  for (const et_o2_optimizer_state_borrow *borrow = et_o2_retired_borrows;
+       borrow != NULL; borrow = borrow->registry_next)
+    if (et_o2_g3r_save_storage_conflict(output, output_bytes, error, borrow,
+                                        sizeof(*borrow)))
+      return 1;
   return 0;
 }
 
@@ -3204,6 +3341,27 @@ int32_t et_o2_optimizer_state_reconstruct_create_v1(
                       "optimizer-state-reconstruct",
                       "cannot allocate reconstruction builder");
   }
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  et_o2_g3r_reconstruct_allocation *allocation =
+      et_o2_calloc(1u, sizeof(*allocation));
+  if (allocation == NULL) {
+    free(builder->entry_set);
+    free(builder->owned_clones);
+    free(builder->entries);
+    free(builder);
+    return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
+                      ET_O2_CODE_ALLOCATION_FAILED,
+                      "optimizer-state-reconstruct",
+                      "cannot record reconstruction builder allocation");
+  }
+  allocation->owner = builder;
+  allocation->entries = builder->entries;
+  allocation->owned_clones = builder->owned_clones;
+  allocation->entry_set = builder->entry_set;
+  allocation->count = input->parameter_count;
+  allocation->next = et_o2_g3r_reconstruct_allocations;
+  et_o2_g3r_reconstruct_allocations = allocation;
+#endif
   builder->magic = ET_O2_RECONSTRUCT_MAGIC;
   builder->count = input->parameter_count;
   builder->config = config;
@@ -3493,6 +3651,9 @@ int32_t et_o2_optimizer_state_reconstruct_commit_v1(
   }
   builder->prepared_state = NULL;
   et_o2_unlink_reconstruct_builder(builder);
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  et_o2_g3r_reconstruct_allocation_remove(builder);
+#endif
   builder->magic = 0u;
   free(builder->entry_set);
   free(builder->owned_clones);
@@ -3536,6 +3697,9 @@ int32_t et_o2_optimizer_state_reconstruct_abort_v1(
     }
   }
   et_o2_unlink_reconstruct_builder(builder);
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+  et_o2_g3r_reconstruct_allocation_remove(builder);
+#endif
   builder->magic = 0u;
   free(builder->entry_set);
   free(builder->owned_clones);
