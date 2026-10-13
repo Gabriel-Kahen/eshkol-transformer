@@ -40,7 +40,9 @@ class HeldHolderSymbolGate(unittest.TestCase):
 
     def test_missing_extra_and_feature_off_exports_fail(self):
         intended = [f"{PREFIX}{name}_v1" for name in NAMES]
-        missing = self.run_checker("on", intended[:-1])
+        # A wrapper bearing the missing symbol's spelling must not fill its slot.
+        missing = self.run_checker(
+            "on", intended[:-1] + [f"__wrap_{intended[-1]}"])
         self.assertNotEqual(missing.returncode, 0)
         self.assertIn(f"missing=['{intended[-1]}']", missing.stderr)
         extra_name = f"{PREFIX}unexpected_v1"
