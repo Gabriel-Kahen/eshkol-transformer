@@ -28,6 +28,50 @@ static unsigned checks;
 #define CHECK(x) do { ++checks; if (!(x)) { fprintf(stderr, \
     "same-owner O2:%d: %s\n", __LINE__, #x); return 1; } } while (0)
 
+static int alias_denials(et_o2_optimizer *optimizer,
+                         et_f32_parameter *const parameters[14],
+                         const void *const identities[14],
+                         et_o2_g3r_save_hold *hold) {
+  const size_t error_bytes = sizeof(et_o2_error_v1);
+  const size_t offsets[][2] = {
+      {0u, 0u}, {8u, 0u}, {error_bytes / 16u * 8u, 0u},
+      {error_bytes - sizeof(void *), 0u}, {0u, 4u}};
+  et_o2_g3r_save_hold *hold_head = et_o2_g3r_save_holds;
+  et_o2_optimizer_state *state_head = et_o2_states;
+  et_o2_optimizer_state_handle *handle_head = et_o2_handles;
+  const size_t tombstones = et_o2_g3r_save_tombstones;
+  const size_t allocations = et_o2_successful_allocations;
+  const size_t clones = et_o2_owned_state_clones;
+  const uint32_t busy = optimizer->busy;
+  for (size_t i = 0; i < sizeof(offsets) / sizeof(offsets[0]); ++i) {
+    _Alignas(16) unsigned char bytes[sizeof(et_o2_error_v1) + 16u];
+    unsigned char before[sizeof(bytes)];
+    memset(bytes, 0xa5, sizeof(bytes));
+    memset(bytes + offsets[i][0], 0, sizeof(void *));
+    memcpy(before, bytes, sizeof(bytes));
+    et_o2_error_v1 *error =
+        (et_o2_error_v1 *)(void *)(bytes + offsets[i][1]);
+    int32_t result;
+    if (hold) {
+      result = et_g3r_private_o2_save_state_v1(
+          hold, (et_o2_optimizer_state **)(void *)(bytes + offsets[i][0]),
+          error);
+    } else {
+      result = et_g3r_private_o2_save_begin_v1(
+          optimizer, parameters, identities,
+          (et_o2_g3r_save_hold **)(void *)(bytes + offsets[i][0]), error);
+    }
+    CHECK(result == ET_O2_STATUS_INVALID_ARGUMENT);
+    CHECK(memcmp(bytes, before, sizeof(bytes)) == 0);
+    CHECK(optimizer->busy == busy && et_o2_g3r_save_holds == hold_head &&
+          et_o2_states == state_head && et_o2_handles == handle_head &&
+          et_o2_g3r_save_tombstones == tombstones &&
+          et_o2_successful_allocations == allocations &&
+          et_o2_owned_state_clones == clones);
+  }
+  return 0;
+}
+
 int main(void) {
   et_o2_optimizer_builder *builder = NULL;
   et_o2_optimizer *optimizer = NULL;
@@ -52,6 +96,7 @@ int main(void) {
         UINT32_C(0x3f7d70a4), UINT32_C(0x322bcc77), 0, &o2) == 0);
   }
   CHECK(et_o2_optimizer_builder_finish_v1(&builder, &optimizer, &o2) == 0);
+  CHECK(alias_denials(optimizer, parameters, identities, NULL) == 0);
   et_o2_g3r_save_hold *hold = NULL;
   et_o2_test_fail_alloc_after_v1(0);
   CHECK(et_g3r_private_o2_save_begin_v1(
@@ -61,6 +106,7 @@ int main(void) {
   CHECK(et_g3r_private_o2_save_begin_v1(
       optimizer, parameters, identities, &hold, &o2) == 0);
   CHECK(hold != NULL && optimizer->busy == 1);
+  CHECK(alias_denials(optimizer, parameters, identities, hold) == 0);
   CHECK(et_o2_optimizer_step_v1(optimizer, &o2) ==
         ET_O2_STATUS_INVALID_STATE);
   CHECK(et_o2_optimizer_zero_grad_v1(optimizer, &o2) ==

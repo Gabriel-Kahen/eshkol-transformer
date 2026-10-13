@@ -29,6 +29,12 @@ feature macro is a compile-time error in the coordinator header. The current
 G3 owner supplies the history and rejects pending G1; the capture caller does
 not reconstruct either from a detached output.
 
+Both private O2 hold and held-state issue reject any overlap between their
+output slot and error record before reading or writing the slot or changing
+owner state. This denial returns invalid-argument status without touching the
+overlapping caller bytes; the registered hold/state and optimizer busy bit
+remain unchanged.
+
 The successful private return is `[detached C2 owner, copied 17-word G3 image,
 training-control epoch]`. It grants no file writer or model/tokenizer identity
 to a later consumer. The closure list under

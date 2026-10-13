@@ -2090,12 +2090,27 @@ static void et_o2_g3r_hold_drain(et_o2_g3r_save_hold *hold) {
     hold->optimizer->busy = 0u;
 }
 
+/* An aliased error write would erase a returned live hold/state pointer.
+ * Reject every partial overlap before reading an output slot or mutating an
+ * owner. The caller's overlapping bytes are left unchanged on this denial. */
+static int et_o2_g3r_output_error_overlap(const void *output,
+                                          size_t output_bytes,
+                                          const et_o2_error_v1 *error) {
+  if (!output || !error) return 0;
+  const uintptr_t out = (uintptr_t)output;
+  const uintptr_t err = (uintptr_t)error;
+  return out <= err ? err - out < output_bytes
+                    : out - err < sizeof(*error);
+}
+
 int32_t et_g3r_private_o2_save_begin_v1(
     et_o2_optimizer *candidate, et_f32_parameter *const parameters[14],
     const void *const identities[14], et_o2_g3r_save_hold **output,
     et_o2_error_v1 *error) {
   const char *operation = "g3r-save-o2-begin";
   int32_t result;
+  if (et_o2_g3r_output_error_overlap(output, sizeof(*output), error))
+    return ET_O2_STATUS_INVALID_ARGUMENT;
   if (!parameters || !identities || !output || *output != NULL)
     return et_o2_fail(error, ET_O2_STATUS_INVALID_ARGUMENT,
                       ET_O2_CODE_NULL_ARGUMENT, operation,
@@ -2461,6 +2476,8 @@ int32_t et_o2_optimizer_state_snapshot_v1(et_o2_optimizer *candidate,
 int32_t et_g3r_private_o2_save_state_v1(
     et_o2_g3r_save_hold *hold, et_o2_optimizer_state **state,
     et_o2_error_v1 *error) {
+  if (et_o2_g3r_output_error_overlap(state, sizeof(*state), error))
+    return ET_O2_STATUS_INVALID_ARGUMENT;
   et_o2_error_v1 first;
   int32_t result = et_g3r_private_o2_save_check_v1(hold, &first);
   if (result != 0) {

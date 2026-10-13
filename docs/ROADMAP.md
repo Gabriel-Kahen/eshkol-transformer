@@ -1840,8 +1840,10 @@ and ports the missing G3-R private roots, capture coordinator, and minimal
 lineage/control/O2 hooks. It consumes the accepted 17-word held image and
 rejects the divergent 18-word ledger image. Focused offline source and native
 O2 tests pass; independent source review and real compiled post-adoption,
-partial-claim, current-main union, and failure gates remain HOLD. No capture
-to pair bridge, public SAVE, restore, replay or continuation is admitted.
+partial-claim, current-main union, and failure gates remain HOLD. The
+private O2 hold/state outputs now reject full or partial error-record overlap
+before owner mutation; focused normal and ASan/UBSan cuts pass 262 checks.
+No capture to pair bridge, public SAVE, restore, replay or continuation is admitted.
 
 The [private M3 owner-roster prerequisite](g3/G3_R_M3_OWNER_ROSTER_PREREQUISITE.md)
 ports the feature-gated registry-backed fourteen-parameter/identity roster
