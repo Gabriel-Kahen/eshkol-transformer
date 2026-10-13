@@ -1,0 +1,128 @@
+;;; Test-only root over the exact production controls, adoption and caller.
+(load "g3r_training_controls_root.esk")
+(load "g3t_manual_p1_extension.esk")
+(load "g3m_prefill_p1_extension.esk")
+(load "g3r_same_owner_o2_adoption_extension.esk")
+(load "g3r_same_owner_save_caller_extension.esk")
+
+(extern i64 g3r-partial-gradient-copy ptr i64 ptr i64
+        :real et_g3r_partial_gradient_copy_v1)
+(extern i64 g3r-partial-moment-copy ptr i64 i64 ptr i64
+        :real et_g3r_partial_moment_copy_v1)
+(extern i64 g3r-partial-history-copy ptr ptr i64
+        :real et_g3r_partial_history_copy_v1)
+
+;;; [P1, token, shell, request, P1 claims, O2 hooks, rollbacks, abandons,
+;;;  reverse release order, in abandon?, compose calls, typed error].
+(define g3r-partial (vector #f #f #f #f 0 0 0 0 '() #f 0 #f))
+(define g3r-partial-args (command-line))
+(define g3r-partial-mode
+  (if (pair? (cdr (cdr g3r-partial-args)))
+      (car (cdr (cdr g3r-partial-args))) "normal"))
+(define g3r-partial-real-p1-claim c2-training-state-claim-p1!)
+(define g3r-partial-real-o2-claim c2-training-state-claim-o2!)
+(define g3r-partial-real-p1-rollback c2-training-state-rollback-p1!)
+(define g3r-partial-real-compose c2-training-state-compose-internal)
+(define g3r-partial-real-abandon g3r-save-o2-abandon-internal!)
+(define g3r-partial-real-o2-release o2-public-optimizer-state-release!)
+(define g3r-partial-real-p1-release state-dict-release!)
+
+(define (g3r-partial-require condition)
+  (if (not condition) (exit 134)))
+(define (g3r-partial-raise)
+  (et-e1b-private-raise
+    'invalid-state 'g3r-capture-partial-claim
+    "test-only after genuine P1 claim, before O2 claim"
+    '((source-code 79) (source-domain g3r-capture-partial-claim)) #f))
+
+(set! c2-training-state-claim-p1!
+  (lambda (p1 token)
+    (g3r-partial-require
+      (and (= (vector-ref g3r-partial 4) 0)
+           (eq? p1 (vector-ref (vector-ref g3r-partial 3) 1))
+           (vector? token) (= (vector-length token) 3)
+           (eq? (vector-ref token 0) c2-training-state-owner-token-tag)))
+    (let ((result (g3r-partial-real-p1-claim p1 token)))
+      (g3r-partial-require (eq? result #t))
+      (vector-set! g3r-partial 0 p1)
+      (vector-set! g3r-partial 1 token)
+      (vector-set! g3r-partial 4 1)
+      result)))
+(set! c2-training-state-claim-o2!
+  (lambda (shell token)
+    (if (string=? g3r-partial-mode "hook-absent")
+        (g3r-partial-real-o2-claim shell token)
+        (begin
+          (if (string=? g3r-partial-mode "wrong-token")
+              (vector-set! g3r-partial 1 #f))
+          (if (string=? g3r-partial-mode "wrong-shell")
+              (vector-set! g3r-partial 2 #f))
+          (g3r-partial-require
+            (and (= (vector-ref g3r-partial 4) 1)
+                 (= (vector-ref g3r-partial 5) 0)
+                 (eq? token (vector-ref g3r-partial 1))
+                 (eq? shell (vector-ref g3r-partial 2))
+                 (eq? shell (vector-ref (vector-ref g3r-partial 3) 2))
+                 (g3r-save-o2-require-held-internal shell)))
+          (vector-set! g3r-partial 5 1)
+          (g3r-partial-raise)))))
+(set! c2-training-state-rollback-p1!
+  (lambda (p1 token)
+    (g3r-partial-require
+      (and (= (vector-ref g3r-partial 5) 1)
+           (= (vector-ref g3r-partial 6) 0)
+           (eq? p1 (vector-ref g3r-partial 0))
+           (eq? token (vector-ref g3r-partial 1))))
+    (vector-set! g3r-partial 6 1)
+    (if (string=? g3r-partial-mode "rollback-uncertain") (exit 134))
+    (g3r-partial-real-p1-rollback p1 token)))
+(set! c2-training-state-compose-internal
+  (lambda (request)
+    (g3r-partial-require
+      (and (= (vector-ref g3r-partial 10) 0)
+           (vector? request) (= (vector-length request) 6)
+           (eq? (vector-ref request 0) c2-training-state-compose-tag)
+           (eq? (vector-ref request 5) #f)))
+    (vector-set! g3r-partial 3 request)
+    (vector-set! g3r-partial 2 (vector-ref request 2))
+    (vector-set! g3r-partial 10 1)
+    (g3r-partial-real-compose request)))
+(set! g3r-save-o2-abandon-internal!
+  (lambda (shell)
+    (g3r-partial-require
+      (and (= (vector-ref g3r-partial 6) 1)
+           (= (vector-ref g3r-partial 7) 0)
+           (eq? shell (vector-ref g3r-partial 2))))
+    (vector-set! g3r-partial 7 1)
+    (vector-set! g3r-partial 9 #t)
+    (if (string=? g3r-partial-mode "abandon-uncertain") (exit 134))
+    (let ((result (g3r-partial-real-abandon shell)))
+      (vector-set! g3r-partial 9 #f)
+      result)))
+(set! o2-public-optimizer-state-release!
+  (lambda (shell)
+    (if (vector-ref g3r-partial 9)
+        (begin
+          (g3r-partial-require (eq? shell (vector-ref g3r-partial 2)))
+          (vector-set! g3r-partial 8
+            (cons 'o2 (vector-ref g3r-partial 8)))))
+    (g3r-partial-real-o2-release shell)))
+(set! state-dict-release!
+  (lambda (p1)
+    (if (vector-ref g3r-partial 9)
+        (begin
+          (g3r-partial-require (eq? p1 (vector-ref g3r-partial 0)))
+          (vector-set! g3r-partial 8
+            (cons 'p1 (vector-ref g3r-partial 8)))))
+    (g3r-partial-real-p1-release p1)))
+
+(define (g3r-partial-restore!)
+  (set! c2-training-state-claim-p1! g3r-partial-real-p1-claim)
+  (set! c2-training-state-claim-o2! g3r-partial-real-o2-claim)
+  (set! c2-training-state-rollback-p1! g3r-partial-real-p1-rollback)
+  (set! c2-training-state-compose-internal g3r-partial-real-compose)
+  (set! g3r-save-o2-abandon-internal! g3r-partial-real-abandon)
+  (set! o2-public-optimizer-state-release! g3r-partial-real-o2-release)
+  (set! state-dict-release! g3r-partial-real-p1-release))
+
+(load "capture_partial_claim_cut_runtime.esk")

@@ -1,0 +1,201 @@
+;;; One authentic diagnostic-C2 graph, then an error after the real P1 claim.
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3-R partial claim FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (bytes=? left right)
+  (and (bytevector? left) (bytevector? right)
+       (d2-core-bytes=? left right)))
+(define (images=? left right count)
+  (and (= (vector-length left) count)
+       (= (vector-length right) count)
+       (let loop ((index 0))
+         (if (= index count) #t
+             (and (bytes=? (vector-ref left index)
+                           (vector-ref right index))
+                  (loop (+ index 1)))))))
+(define sizes '#(64 64 64 64 128 128 16 16 16 16 4096 16 16 32))
+
+(define resolved
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define tokenizer (t2-wave2-tokenizer-byte resolved))
+(define corpus-directory (car (cdr (command-line))))
+(define dataset
+  (g3r-d2-lineage-open
+    (list ':directory corpus-directory ':batch-size 1 ':sequence-length 2
+          ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+          ':maximum-total-tokens 4 ':maximum-batch-bytes 34
+          ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #t)
+    tokenizer))
+(define model
+  (g3r-x1-model-create resolved (m3t-public-initializer-state 1729)))
+(define model-entry (m3t-entry model 'model 'g3r-partial-claim #t))
+(define handles (vector-ref model-entry 8))
+(define (handle-paths index)
+  (if (= index 14) '()
+      (cons (parameter-handle-path (vector-ref handles index))
+            (handle-paths (+ index 1)))))
+(define optimizer
+  (o2-public-optimizer-create
+    (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+          '(none) '(constant)
+          (list (list 'group (handle-paths 0)
+                      "3dcccccd" "3f000000" "3f000000"
+                      "3a83126f" "00000000")))
+    (module-parameters model)))
+(define optimizer-entry
+  (o2-require-optimizer 'g3r-partial-claim optimizer))
+(check "model eval" (module-eval! model))
+(define generator
+  (g3r-generator-create-from-sources
+    model resolved tokenizer
+    (list ':profile 'diagnostic-c2 ':sampling 'greedy
+          ':temperature-bits #x3f800000 ':top-k 256
+          ':top-p-bits #x3f800000 ':max-new-tokens 1
+          ':eos #f ':seed 1729)
+    dataset optimizer))
+(define input (g3t-generation-token-input-create 65))
+(define logits (g3m-prefill-p1! generator input))
+(check "manual logits release" (g3t-generation-tensor-release! logits))
+(check "input release" (g3t-generation-tensor-release! input))
+(define capsule
+  (g3r-controls-trainer-create resolved tokenizer dataset model optimizer))
+(g3r-controls-capture-release! capsule)
+
+(define (value-images)
+  (let ((images (make-vector 14 #f)))
+    (let loop ((index 0))
+      (if (= index 14) images
+          (begin
+            (vector-set! images index
+              (i2-checkpoint-encode
+                (vector (parameter-handle-tensor-internal
+                          (vector-ref handles index))
+                        'parameter
+                        (parameter-handle-shape (vector-ref handles index))
+                        'f32 'cpu 'dense-row-major-contiguous
+                        'g3r-partial-claim)))
+            (loop (+ index 1)))))))
+(define (gradient-images)
+  (let ((images (make-vector 14 #f)))
+    (let loop ((index 0))
+      (if (= index 14) images
+          (let* ((size (vector-ref sizes index))
+                 (bytes (make-bytevector size 0)))
+            (check "absent gradient image"
+              (= 0 (g3r-partial-gradient-copy
+                     (vector-ref model-entry 3) index bytes size)))
+            (vector-set! images index bytes)
+            (loop (+ index 1)))))))
+(define (moment-images)
+  (let ((images (make-vector 28 #f)))
+    (let loop ((index 0))
+      (if (= index 28) images
+          (let* ((parameter (quotient index 2))
+                 (kind (remainder index 2))
+                 (size (vector-ref sizes parameter))
+                 (bytes (make-bytevector size 0)))
+            (check "original O2 moment image"
+              (= 0 (g3r-partial-moment-copy
+                     (vector-ref optimizer-entry 1) parameter kind
+                     bytes size)))
+            (vector-set! images index bytes)
+            (loop (+ index 1)))))))
+(define (history-image)
+  (let ((bytes (make-bytevector 136 0)))
+    (check "original 17-word G3 image"
+      (= 0 (g3r-partial-history-copy
+             (vector-ref (g3t-generator-find
+                           generator 'g3r-partial-claim) 3)
+             bytes 136)))
+    bytes))
+(define (original-tie?)
+  (let ((tree (module-parameters model)))
+    (and (equal? (parameter-tree-tie-groups tree)
+                 '((( "head" "weight") ("token_embedding" "weight"))))
+         (eq? (parameter-tree-handle tree '("head" "weight"))
+              (parameter-tree-handle
+                tree '("token_embedding" "weight")))
+         (eq? (parameter-tree-handle tree '("head" "weight"))
+              (vector-ref handles 10)))))
+
+(check "original tie" (original-tie?))
+(define values-before (value-images))
+(define gradients-before (gradient-images))
+(define moments-before (moment-images))
+(define history-before (history-image))
+(define controls-before (g3r-controls-captured-copy capsule))
+(define cursor-before (d2-token-dataset-cursor dataset))
+(define updates-before (o2-optimizer-completed-updates-internal optimizer))
+(define c2-head-before c2-training-state-states)
+
+(if (string=? g3r-partial-mode "premature-o2")
+    (c2-training-state-claim-o2! #f #f))
+(guard (caught (#t (vector-set! g3r-partial 11 caught)))
+  (g3r-save-c2-capture-internal
+    generator model resolved tokenizer dataset optimizer capsule))
+(define first (vector-ref g3r-partial 11))
+(check "original typed error rethrown"
+  (and (transformer-error? first)
+       (eq? (transformer-error-category first) 'invalid-state)
+       (eq? (transformer-error-operation first)
+            'g3r-capture-partial-claim)
+       (string=? (transformer-error-message first)
+                 "test-only after genuine P1 claim, before O2 claim")
+       (equal? (transformer-error-details first)
+               '((source-code 79)
+                 (source-domain g3r-capture-partial-claim)))
+       (eq? (transformer-error-cause first) #f)))
+(check "real P1 claim, O2 cut, C2 rollback, capture abandon each once"
+  (and (= (vector-ref g3r-partial 4) 1)
+       (= (vector-ref g3r-partial 5) 1)
+       (= (vector-ref g3r-partial 6) 1)
+       (= (vector-ref g3r-partial 7) 1)
+       (= (vector-ref g3r-partial 10) 1)))
+(check "original token and genuine issued shell"
+  (and (vector? (vector-ref g3r-partial 1))
+       (eq? (vector-ref (vector-ref g3r-partial 1) 0)
+            c2-training-state-owner-token-tag)
+       (eq? (vector-ref g3r-partial 2)
+            (vector-ref (vector-ref g3r-partial 3) 2))))
+(check "real O2 release precedes real P1 release"
+  (equal? (vector-ref g3r-partial 8) '(p1 o2)))
+(check "C2 request stays unpublished and C2 registry unchanged"
+  (and (eq? (vector-ref (vector-ref g3r-partial 3) 5) #f)
+       (eq? c2-head-before c2-training-state-states)))
+(check "original fourteen F32 value images and absent gradients unchanged"
+  (and (images=? values-before (value-images) 14)
+       (images=? gradients-before (gradient-images) 14)
+       (original-tie?)))
+(check "original O2 moments and update count unchanged"
+  (and (images=? moments-before (moment-images) 28)
+       (= updates-before
+          (o2-optimizer-completed-updates-internal optimizer))))
+(check "original G3 policy/RNG/history words unchanged"
+  (bytes=? history-before (history-image)))
+(check "capsule journal/controls and D2 cursor unchanged"
+  (and (equal? controls-before (g3r-controls-captured-copy capsule))
+       (bytes=? cursor-before (d2-token-dataset-cursor dataset))))
+(check "spent shell denies a second take"
+  (guard (caught
+           (#t (and (transformer-error? caught)
+                    (eq? (transformer-error-category caught)
+                         'invalid-state))))
+    (g3r-save-o2-take-for-c2-internal (vector-ref g3r-partial 2))
+    #f))
+(g3r-partial-restore!)
+(define retry
+  (g3r-save-c2-capture-internal
+    generator model resolved tokenizer dataset optimizer capsule))
+(check "fresh capture publishes one valid C2 owner"
+  (and (vector? retry) (= (vector-length retry) 3)
+       (vector-ref retry 0)
+       (not (eq? c2-head-before c2-training-state-states))))
+(check "fresh owner release" (c2-public-trainer-state-release! (vector-ref retry 0)))
+(display "G3-R partial claim PASS: checks=")
+(display checks)
+(newline)
