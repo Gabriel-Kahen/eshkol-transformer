@@ -1426,6 +1426,32 @@ accepted exact `67f6c4e1618e0e87fcaed49d5dec023ce121e74c`/tree
 Supported compiled Eshkol normal/poison, LSan and full E3 §9 admission remain
 **HOLD**.
 
+The bounded E3 §9 stage-6 input pre-copy source candidate adds noninstalled
+frame-owned site 13, ordinal 0, occurrences 1 or 2. In
+`et_e3_private_stage_inputs_v1`, the real input view and both ID ranges are
+validated before the selector consumes and returns local internal/invariant
+status, ahead of `memcpy(frame->ids, ...)` (E1 stage 6, table index 83). At
+denial the frame is `E3_ACQUIRED`, `stage_plane = 0`, with IDs, targets and
+mask unchanged. The input D2 borrow is open during native denial. The input
+consumer returns false, then `d2-token-tensor-with-view-internal` calls
+`d2-borrow-end!` on its normal path. Target and mask borrows and role/provider
+dispatch have not begun in the Eshkol source-order `and` chain; this is
+**source evidence, not a compiled Eshkol runtime trace**. Native tests cover
+invalid view and out-of-range ID precedence, unchanged staged data, no added
+dispatch, selector lifecycle, unchanged six outputs/counters and same-frame
+retry. Occurrence 2 follows a completed first batch with distinct second IDs
+in the same armed call. The private fixture extends first-error, exact
+cursor, 17-mode, 14 model/gradient-image, RNG, 29-owner-probe, six-output,
+independent-twin and retry checks as source coverage. A cut moved after the ID
+copy fails the native unchanged-ID assertion; feature-off preprocessing
+excludes site 13. Independent source/host review accepted exact
+`4629edc407cdb30eeaf1905e955152e79deeceb1`/tree
+`f8b8025beebb1f22e82b25240c8f15bd2429d212`; receipt
+`/home/gabe/.codex/evidence/eshkol-transformer/e3-stage6-site13-source-review-20261014/REVIEW.md`
+(SHA-256 `4f4e32dfd6e27662cbf8e29fcce37bd74cf85663d8e4236c04a7e3b6083e13db`).
+Supported compiled Eshkol normal/poison, LSan and full E3 §9 admission remain
+**HOLD**.
+
 The bounded E3 §9 stage-8 source candidate adds noninstalled frame-owned
 site 5, ordinal 0, occurrences 1 or 2. After all 21 forward roles, it
 consumes the one-shot selector before L2 CE dispatch and returns the existing
