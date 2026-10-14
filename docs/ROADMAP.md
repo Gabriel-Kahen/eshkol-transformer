@@ -3177,6 +3177,13 @@ publication, public G2 and continuation remain pending.
   evidence: native invocation, first-EOS/G2 rollback and success, terminal release, post-call
   snapshot, detached clone, public G2, and independent review of the repair
   remain pending.
+  A separate private detached snapshot source leaf reads the accepted 72-byte
+  native descriptor only after terminal publication, rechecks the original live
+  output and surviving authority across the read, and matches ID, count and
+  cache words to the original T1 text. It returns the copied four final RNG
+  words without inventing a precommit RNG oracle. Its source-only negative
+  checks do not establish compiled first-EOS/G2 execution, public access,
+  output release, detached I1 clone or data-only continuation.
 
 ## Wave 4 — practical pretraining and performance
 
