@@ -17,6 +17,50 @@ def rows(prefix: Path, suffix: str) -> list[str]:
 
 
 class FaultTupleTest(unittest.TestCase):
+    @staticmethod
+    def bound_expression(source: str):
+        """Parse the actual closed guard, so deletion of a comparison changes cases."""
+        start = source.index("(define (e3-test-fault-bound?")
+        tokens = re.findall(r"\(|\)|[^\s()]+", source[start:])
+        def parse(index):
+            if tokens[index] != "(":
+                return tokens[index], index + 1
+            values = []
+            index += 1
+            while tokens[index] != ")":
+                value, index = parse(index)
+                values.append(value)
+            return values, index + 1
+        definition, _ = parse(0)
+        return definition[2]
+
+    @staticmethod
+    def eval_bound(expression, environment):
+        if isinstance(expression, str):
+            return int(expression) if expression.isdigit() else environment[expression]
+        op = expression[0]
+        if op == "let":
+            local = environment.copy()
+            for name, value in expression[1]:
+                local[name] = FaultTupleTest.eval_bound(value, environment)
+            return FaultTupleTest.eval_bound(expression[2], local)
+        if op == "and":
+            return all(FaultTupleTest.eval_bound(value, environment)
+                       for value in expression[1:])
+        args = [FaultTupleTest.eval_bound(value, environment)
+                for value in expression[1:]]
+        if op == "vector-ref":
+            return args[0][args[1]]
+        if op == "vector?":
+            return isinstance(args[0], list)
+        if op == "=":
+            return args[0] == args[1]
+        if op == "eq?":
+            return args[0] is args[1]
+        if op == "e3-test-fault-path=?":
+            return args[0] == tuple(args[1])
+        raise AssertionError(f"unhandled guard operation: {op}")
+
     def test_exact_derived_inventories(self):
         for suffix in ("defined_symbols", "public_exports", "public_strings"):
             self.assertEqual(rows(FAULT, suffix),
@@ -158,6 +202,38 @@ e3_reject_unresolved_private fault "$3" "$3"
                  'e3_reject_unresolved_private fault "$2" "$2"',
                  "bash", str(unresolved), str(forged)], capture_output=True)
             self.assertEqual(denied.returncode, 77)
+
+    def test_bound_selector_rejects_mismatch_and_phase_reordering(self):
+        source = (TESTS / "fault_driver.esk").read_text()
+        guard = self.bound_expression(source)
+        scenario = ["fault", "execute", True, 1, 1, 1]
+        bound = [1, 1, 1, True, tuple("corpus-a"), 1]
+        def admitted(candidate=scenario, state=bound, path="corpus-a", phase=1):
+            return self.eval_bound(guard, {
+                "e3-test-fault-root": [state], "scenario": candidate,
+                "corpus-path": path, "phase": phase,
+            })
+        self.assertTrue(admitted())
+        for field, replacement in ((2, False), (3, 0), (4, 2), (5, 2)):
+            changed = scenario.copy()
+            changed[field] = replacement
+            self.assertFalse(admitted(changed), f"field {field}")
+        self.assertFalse(admitted(path="corpus-b"))
+        self.assertFalse(admitted(state=None))  # execute before prepare
+        self.assertFalse(admitted(phase=2))  # report before execute
+        executed = bound.copy()
+        executed[5] = 2
+        self.assertFalse(admitted(state=executed))  # duplicate execute
+        self.assertTrue(admitted(state=executed, phase=2))
+        self.assertFalse(admitted(scenario[:5] + [2], state=executed, phase=2))
+        self.assertFalse(admitted(state=executed, phase=2, path="corpus-b"))
+        self.assertIn("(make-vector length #f)", source)
+        self.assertIn("(vector-set! image index (string-ref path index))", source)
+        dispatch = source[source.index("(define (e3-test-fault-dispatch"):]
+        self.assertLess(dispatch.index("'bound-execute"),
+                        dispatch.index("(e3-test-fault-execute"))
+        self.assertLess(dispatch.index("'bound-report"),
+                        dispatch.index("(e3-test-retention-report"))
 
 
 if __name__ == "__main__":

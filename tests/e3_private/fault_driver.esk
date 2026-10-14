@@ -6,10 +6,40 @@
 (extern i64 e3-test-fault-reset ptr
         :real et_e3_test_fault_reset_v1)
 
+(define e3-test-fault-root (vector #f))
+
 (define (e3-test-fault-check label condition)
   (if condition #t
       (begin (display "E3-FAULT-FAIL: ") (display label) (newline)
              (e3-native-invariant-fail))))
+
+;;; Copy the path's characters, not the caller's string/vector identity.
+;;; A changed corpus path must fail before the frame or dataset is touched.
+(define (e3-test-fault-path-snapshot path)
+  (let* ((length (string-length path))
+         (image (make-vector length #f)))
+    (let copy ((index 0))
+      (if (= index length) image
+          (begin (vector-set! image index (string-ref path index))
+                 (copy (+ index 1)))))))
+
+(define (e3-test-fault-path=? image path)
+  (and (string? path) (= (vector-length image) (string-length path))
+       (let compare ((index 0))
+         (if (= index (vector-length image)) #t
+             (and (equal? (vector-ref image index) (string-ref path index))
+                  (compare (+ index 1)))))))
+
+;;; State is (site role occurrence present? path-image phase), where phase
+;;; 1 is prepared and 2 is executed. It is private to this fault tuple.
+(define (e3-test-fault-bound? scenario corpus-path phase)
+  (let ((bound (vector-ref e3-test-fault-root 0)))
+    (and (vector? bound) (= (vector-ref bound 5) phase)
+         (= (vector-ref bound 0) (vector-ref scenario 3))
+         (= (vector-ref bound 1) (vector-ref scenario 4))
+         (= (vector-ref bound 2) (vector-ref scenario 5))
+         (eq? (vector-ref bound 3) (vector-ref scenario 2))
+         (e3-test-fault-path=? (vector-ref bound 4) corpus-path))))
 
 (define (e3-test-fault-execute site role occurrence)
   (e3-test-fault-check 'prepared-root
@@ -89,6 +119,7 @@
              (eq? (vector-ref scenario 1) 'execute)
              (eq? (vector-ref scenario 1) 'report))
          (boolean? (vector-ref scenario 2))
+         (string? corpus-path)
          (= (vector-ref scenario 3) 1)
          (>= (vector-ref scenario 4) 0)
          (<= (vector-ref scenario 4) 20)
@@ -97,9 +128,30 @@
   (let ((phase (vector-ref scenario 1))
         (present? (vector-ref scenario 2)))
     (cond ((eq? phase 'prepare)
-           (e3-test-retention-prepare 1024 present? corpus-path))
+           (e3-test-fault-check 'fresh-selector
+             (and (not (vector-ref e3-test-fault-root 0))
+                  (not (vector-ref e3-test-retention-root 0))))
+           (let ((path-image (e3-test-fault-path-snapshot corpus-path)))
+             (e3-test-retention-prepare 1024 present? corpus-path)
+             (vector-set! e3-test-fault-root 0
+               (vector (vector-ref scenario 3) (vector-ref scenario 4)
+                       (vector-ref scenario 5) present? path-image 1))
+             #t))
           ((eq? phase 'execute)
-           (e3-test-fault-execute (vector-ref scenario 3)
-                                  (vector-ref scenario 4)
-                                  (vector-ref scenario 5)))
-          (else (e3-test-retention-report 1024 present?)))))
+           (e3-test-fault-check 'bound-execute
+             (e3-test-fault-bound? scenario corpus-path 1))
+           (let ((bound (vector-ref e3-test-fault-root 0)))
+             (e3-test-fault-check 'prepared-gradient
+               (eq? (vector-ref (vector-ref e3-test-retention-root 0) 10)
+                    present?))
+             (e3-test-fault-execute (vector-ref bound 0)
+                                    (vector-ref bound 1)
+                                    (vector-ref bound 2))
+             (vector-set! bound 5 2)
+             #t))
+          (else
+           (e3-test-fault-check 'bound-report
+             (e3-test-fault-bound? scenario corpus-path 2))
+           (let ((result (e3-test-retention-report 1024 present?)))
+             (vector-set! e3-test-fault-root 0 #f)
+             result)))))

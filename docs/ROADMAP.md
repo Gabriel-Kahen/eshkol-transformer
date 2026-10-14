@@ -995,8 +995,11 @@ feature-off frame object is byte-identical to the design base under the same
 host compile flags. The retention-derived noninstalled fault tuple now has
 closed prepare/execute/report wiring, live-frame arm/readback/reset bindings,
 lexical package admission, and source-pinned symbol and closure inventories.
+The fault root snapshots the selector, gradient choice and corpus path at
+prepare, then checks exact identity and phase order before execute/report.
 Host-only checks cover mixed and partial inputs, symlink/ambient roots,
-forged bindings, and isolated native define wiring. Those inventories remain
+forged bindings, selector/phase mismatches, and isolated native define wiring.
+Those inventories remain
 compiler-unverified; the supported Clang 21/LSan gate, compiled failure/retry
 matrix and resource verdicts remain open. This source candidate does not admit
 §9 R1/R2.
