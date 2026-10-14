@@ -328,6 +328,7 @@ int64_t et_e3_test_fault_arm_v1(void *pointer, int64_t site,
         || (site == 8 && ordinal == 0 && occurrence >= 1 && occurrence <= 2)
         || (site == 10 && ordinal == 0 && occurrence >= 1 && occurrence <= 2)
         || (site == 11 && ordinal == 0 && occurrence >= 1 && occurrence <= 2)
+        || (site == 12 && ordinal == 0 && occurrence >= 1 && occurrence <= 2)
 #ifdef ET_E3_PARTIAL_PIN_TESTING
         || (site == 4 && ordinal >= 0 && ordinal < 14 && occurrence == 1)
 #endif
@@ -1068,6 +1069,15 @@ int64_t et_e3_private_stage_mask_v1(
   frame->stage_plane = 3;
   frame->next_role = 0;
   frame->phase = E3_FORWARD;
+#ifdef ET_E3_FAULT_TESTING
+  if (frame->fault_state == 1 && frame->fault_site == 12) {
+    ++frame->fault_reached;
+    if (frame->fault_reached == frame->fault_occurrence) {
+      frame->fault_state = 2; /* Mask borrow unwinds before role 0 dispatch. */
+      return e3_fail(E3_INTERNAL, E3_CODE_INVARIANT);
+    }
+  }
+#endif
   return 0;
 }
 

@@ -1100,6 +1100,108 @@ static void test_mask_staging_preinvoke_selector(
   CHECK(et_e3_test_fault_arm_v1(frame, 11, 0, 1) == E3_INVALID_STATE);
 }
 
+static void test_post_mask_copy_preinvoke_selector(
+    owner *model, et_f32_tensor *destination[4]) {
+  et_e3_frame_internal *frame = et_e3_private_frame_create_v1(
+      model, destination[0], destination[1], destination[2], destination[3]);
+  CHECK(frame != NULL);
+  CHECK(et_e3_test_fault_arm_v1(frame, 12, -1, 1) == E3_INVALID_ARGUMENT);
+  CHECK(et_e3_test_fault_arm_v1(frame, 12, 1, 1) == E3_INVALID_ARGUMENT);
+  CHECK(et_e3_test_fault_arm_v1(frame, 12, 0, 0) == E3_INVALID_ARGUMENT);
+  CHECK(et_e3_test_fault_arm_v1(frame, 12, 0, 3) == E3_INVALID_ARGUMENT);
+  CHECK(et_e3_test_fault_ref_v1(frame, 0) == 0);
+
+  for (int64_t occurrence = 1; occurrence <= 2; ++occurrence) {
+    uint32_t words[4];
+    for (size_t i = 0; i < 4; ++i) read_scalar(destination[i], &words[i]);
+    const int64_t tokens = et_e3_private_counter_ref_v1(frame, 0);
+    const int64_t batches = et_e3_private_counter_ref_v1(frame, 1);
+    OK(et_e3_test_fault_arm_v1(frame, 12, 0, occurrence));
+    CHECK(et_e3_test_fault_arm_v1(frame, 12, 0, occurrence) == E3_INVALID_STATE);
+    OK(et_e3_private_acquire_v1(frame));
+    CHECK(et_e3_test_fault_reset_v1(frame) == E3_INVALID_STATE);
+    const size_t initial_dispatches = observed_dispatches;
+    for (int64_t visit = 1; visit <= occurrence; ++visit) {
+      int64_t inputs[2] = {visit == 1 ? 3 : 0, visit == 1 ? 197 : 255};
+      int64_t targets[2] = {visit == 1 ? 197 : 255, visit == 1 ? 0 : 7};
+      unsigned char masks[2] = {visit == 1 ? 1 : 0, 1};
+      et_kernel_tensor_view_v1 input_view = i64_pair(inputs);
+      et_kernel_tensor_view_v1 target_view = i64_pair(targets);
+      et_kernel_tensor_view_v1 mask_view = bool_pair(masks);
+      OK(et_e3_private_stage_inputs_v1(frame, &input_view));
+      OK(et_e3_private_stage_targets_v1(frame, &target_view));
+      const size_t before_mask = observed_dispatches;
+      if (visit < occurrence) {
+        OK(et_e3_private_stage_mask_v1(frame, &mask_view));
+        forward_batch(frame);
+        CHECK(observed_dispatches > initial_dispatches &&
+              frame->fault_state == 1 && frame->fault_reached == 1);
+      } else {
+        CHECK(et_e3_private_stage_mask_v1(frame, &mask_view) == E3_INTERNAL);
+        CHECK(e3_last_domain == 0 && e3_last_category == E3_INTERNAL &&
+              e3_last_code == E3_CODE_INVARIANT);
+        CHECK(frame->ids[0] == inputs[0] && frame->ids[1] == inputs[1] &&
+              frame->targets[0] == targets[0] &&
+              frame->targets[1] == targets[1] &&
+              frame->mask[0] == masks[0] && frame->mask[1] == masks[1]);
+        CHECK(frame->phase == E3_FORWARD && frame->stage_plane == 3 &&
+              frame->next_role == 0 && observed_dispatches == before_mask &&
+              frame->fault_state == 2 && frame->fault_reached == occurrence);
+      }
+    }
+    abort_call(frame);
+    CHECK(et_e3_test_fault_ref_v1(frame, 0) == 2);
+    CHECK(et_e3_test_fault_ref_v1(frame, 1) == 12);
+    CHECK(et_e3_test_fault_ref_v1(frame, 2) == 0);
+    CHECK(et_e3_test_fault_ref_v1(frame, 3) == occurrence);
+    CHECK(et_e3_test_fault_ref_v1(frame, 4) == occurrence);
+    CHECK(et_e3_private_acquire_v1(frame) == E3_INVALID_STATE);
+    for (size_t i = 0; i < 4; ++i) {
+      uint32_t after;
+      read_scalar(destination[i], &after);
+      CHECK(after == words[i]);
+    }
+    CHECK(et_e3_private_counter_ref_v1(frame, 0) == tokens &&
+          et_e3_private_counter_ref_v1(frame, 1) == batches);
+    OK(et_e3_test_fault_reset_v1(frame));
+    OK(et_e3_private_acquire_v1(frame));
+    stage(frame, 3, 197, 197, 0, 1, 1);
+    forward_batch(frame);
+    abort_call(frame);
+  }
+
+  OK(et_e3_test_fault_arm_v1(frame, 12, 0, 1));
+  OK(et_e3_private_acquire_v1(frame));
+  int64_t input_only[2] = {3, 197}, target_only[2] = {197, 0};
+  unsigned char invalid_mask[2] = {0, 0};
+  et_kernel_tensor_view_v1 input_view = i64_pair(input_only);
+  et_kernel_tensor_view_v1 target_view = i64_pair(target_only);
+  et_kernel_tensor_view_v1 mask_view = bool_pair(invalid_mask);
+  OK(et_e3_private_stage_inputs_v1(frame, &input_view));
+  OK(et_e3_private_stage_targets_v1(frame, &target_view));
+  CHECK(et_e3_private_stage_mask_v1(frame, &mask_view) == E3_INVALID_ARGUMENT);
+  CHECK(e3_last_domain == 0 && e3_last_category == E3_INVALID_ARGUMENT &&
+        e3_last_code == E3_CODE_PROFILE && frame->stage_plane == 2 &&
+        frame->fault_state == 1 && frame->fault_reached == 0);
+  abort_call(frame);
+  CHECK(et_e3_test_fault_ref_v1(frame, 0) == 3);
+  CHECK(et_e3_test_fault_ref_v1(frame, 4) == 0);
+  OK(et_e3_test_fault_reset_v1(frame));
+
+  OK(et_e3_test_fault_arm_v1(frame, 12, 0, 2));
+  OK(et_e3_private_acquire_v1(frame));
+  stage(frame, 3, 197, 197, 0, 1, 1);
+  forward_batch(frame);
+  abort_call(frame);
+  CHECK(et_e3_test_fault_ref_v1(frame, 0) == 3);
+  CHECK(et_e3_test_fault_ref_v1(frame, 4) == 1);
+  CHECK(et_e3_private_acquire_v1(frame) == E3_INVALID_STATE);
+  OK(et_e3_test_fault_reset_v1(frame));
+  OK(et_e3_private_frame_destroy_preflight_v1(frame));
+  et_e3_private_frame_destroy_v1(frame);
+  CHECK(et_e3_test_fault_arm_v1(frame, 12, 0, 1) == E3_INVALID_STATE);
+}
+
 static void test_ce_preinvoke_selector(
     owner *model, et_f32_tensor *destination[4]) {
   et_e3_frame_internal *frame = et_e3_private_frame_create_v1(
@@ -1528,6 +1630,7 @@ int main(void) {
   test_forward_preinvoke_selector(model, destination);
   test_target_staging_preinvoke_selector(model, destination);
   test_mask_staging_preinvoke_selector(model, destination);
+  test_post_mask_copy_preinvoke_selector(model, destination);
   test_ce_preinvoke_selector(model, destination);
   test_reduce_preinvoke_selector(model, destination);
   test_correct_preinvoke_selector(model, destination);
