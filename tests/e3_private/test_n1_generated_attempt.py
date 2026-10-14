@@ -68,7 +68,18 @@ class GeneratedAttemptTests(unittest.TestCase):
         self.assertLess(attempt.probe("timeout")["elapsed_boottime_ns"], 3_000_000_000)
 
     def test_detached_pipe_free_actor_is_reaped_and_blocks_peak_sum(self):
-        record = attempt.probe("detached_actor")
+        denied = attempt.probe("detached_actor")
+        self.assert_hold(denied)
+        self.assertEqual(denied["reason"], "actor-exit-unverified")
+        self.assertEqual(denied["unexpected_actors"], [])
+        self.assertNotIn("observed_peak_sum_bytes", denied)
+
+        # Simulate a missing role filter to retain the independent subreaper
+        # regression: the detached child closes all phase pipes and is adopted.
+        with mock.patch.object(attempt, "_install_no_spawn"), \
+                mock.patch.object(attempt, "_assert_no_spawn"):
+            record = attempt.probe("detached_actor")
+            outer = attempt._finite_observer_diagnostic("detached_actor")
         self.assert_hold(record)
         self.assertEqual(record["reason"], "unexpected-or-unmeasured-actor")
         self.assertEqual(record["phases"], ["HOLD", "RECEIPT", "SEAL"])
@@ -77,9 +88,28 @@ class GeneratedAttemptTests(unittest.TestCase):
         self.assertEqual(record["unexpected_actors"][0]["exit_code"], 0)
         self.assertGreater(record["unexpected_actors"][0]["peak_rss_bytes"], 0)
         self.assertNotIn("observed_peak_sum_bytes", record)
-        outer = attempt._finite_observer_diagnostic("detached_actor")
         self.assertEqual(outer["reason"], "observer-report-unverified")
         self.assertNotIn("declared_plus_caller_peak_sum_bytes", outer)
+
+    def test_all_fixed_roles_require_tested_kernel_no_spawn_filter(self):
+        pid = os.fork()
+        if pid == 0:
+            try:
+                attempt._install_no_spawn()
+                attempt._assert_no_spawn()
+                os._exit(0)
+            except BaseException:
+                os._exit(9)
+        waited, status, _ = os.wait4(pid, 0)
+        self.assertEqual(waited, pid)
+        self.assertEqual(os.waitstatus_to_exitcode(status), 0)
+
+        with mock.patch.object(attempt, "_install_no_spawn",
+                               side_effect=attempt.Hold("no-spawn-filter-unavailable")):
+            unavailable = attempt.probe()
+        self.assert_hold(unavailable)
+        self.assertEqual(unavailable["phases"], [])
+        self.assertNotIn("observed_peak_sum_bytes", unavailable)
 
     def test_subreaper_or_unlisted_child_uncertainty_blocks_peak_sum(self):
         with mock.patch.object(attempt, "_enable_subreaper",

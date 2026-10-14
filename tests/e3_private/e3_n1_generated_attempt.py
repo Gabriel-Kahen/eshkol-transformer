@@ -2,6 +2,7 @@
 """Generated-only finite attempt diagnostic. Every result retains custody HOLD."""
 
 import ctypes
+import errno
 import hashlib
 import json
 import os
@@ -22,6 +23,7 @@ GENERATED = b"e3-n1-generated-stream-v1\n"
 MAX_REPORT = 8192
 MAX_OBSERVER_REPORT = 16384
 FINITE_SCHEMA = "e3-n1-finite-observer-diagnostic-v3"
+NO_SPAWN_CALLS = (b"fork", b"vfork", b"clone", b"clone3")
 
 
 class Hold(Exception):
@@ -48,6 +50,52 @@ def _enable_subreaper():
     state = ctypes.c_int()
     if libc.prctl(37, ctypes.byref(state), 0, 0, 0) != 0 or state.value != 1:
         raise Hold("subreaper-unverified")
+
+
+def _install_no_spawn():
+    """Install inherited Linux syscall denial before a fixed role runs."""
+    libc = ctypes.CDLL(None, use_errno=True)
+    if libc.prctl(38, 1, 0, 0, 0) != 0 or libc.prctl(39, 0, 0, 0, 0) != 1:
+        raise Hold("no-new-privs-unverified")
+    try:
+        seccomp = ctypes.CDLL("libseccomp.so.2", use_errno=True)
+    except OSError as error:
+        raise Hold("no-spawn-filter-unavailable") from error
+    seccomp.seccomp_init.argtypes = [ctypes.c_uint32]
+    seccomp.seccomp_init.restype = ctypes.c_void_p
+    seccomp.seccomp_syscall_resolve_name.argtypes = [ctypes.c_char_p]
+    seccomp.seccomp_syscall_resolve_name.restype = ctypes.c_int
+    seccomp.seccomp_rule_add.argtypes = [ctypes.c_void_p, ctypes.c_uint32,
+                                       ctypes.c_int, ctypes.c_uint]
+    seccomp.seccomp_load.argtypes = [ctypes.c_void_p]
+    seccomp.seccomp_release.argtypes = [ctypes.c_void_p]
+    context = seccomp.seccomp_init(0x7fff0000)  # SCMP_ACT_ALLOW
+    if not context:
+        raise Hold("no-spawn-filter-init")
+    try:
+        deny = 0x00050000 | errno.EPERM  # SCMP_ACT_ERRNO(EPERM)
+        for name in NO_SPAWN_CALLS:
+            number = seccomp.seccomp_syscall_resolve_name(name)
+            if number < 0 or seccomp.seccomp_rule_add(context, deny, number, 0) != 0:
+                raise Hold("no-spawn-filter-rule:" + name.decode())
+        if seccomp.seccomp_load(context) != 0:
+            raise Hold("no-spawn-filter-load")
+    finally:
+        seccomp.seccomp_release(context)
+
+
+def _assert_no_spawn():
+    """A successful install must actually deny the role's fork path."""
+    try:
+        pid = os.fork()
+    except OSError as error:
+        if error.errno == errno.EPERM:
+            return
+        raise Hold("no-spawn-filter-unverified") from error
+    if pid == 0:
+        os._exit(9)
+    os.wait4(pid, 0)
+    raise Hold("no-spawn-filter-unverified")
 
 
 def _census_unlisted_children():
@@ -223,6 +271,8 @@ def _spawn(fn, *args):
     pid = os.fork()
     if pid == 0:
         try:
+            _install_no_spawn()
+            _assert_no_spawn()
             fn(*args)
             os._exit(0)
         except BaseException:
