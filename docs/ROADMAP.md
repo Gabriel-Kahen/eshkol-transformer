@@ -1238,8 +1238,12 @@ The [E3 §9 stage-cut inventory](e3/E3_STAGE_CUT_INVENTORY.md) and
 [R1/R2 selector topology](e3/E3_R1_SELECTOR_TOPOLOGY.md) define a source-only,
 noninstalled fault route. A guarded native candidate implements only the
 forward-role preinvoke selector on an authentic idle frame. Host Clang 22 native
-checks and feature-off frame-object parity pass; the noninstalled Eshkol tuple,
-supported Clang 21/LSan, compiled failure/retry and resource proof remain open.
+checks and feature-off frame-object parity pass. A bounded current-main source
+union now adds the retention-derived, noninstalled Eshkol tuple, exact lexical
+policy, source-pinned manifests and a feature-private phase identity binding
+for site, role, occurrence, gradient choice and corpus path. Host-only policy
+and mismatch/order checks pass; the manifests remain compiler-unverified.
+Supported Clang 21/LSan, compiled failure/retry and resource proof remain open.
 This candidate does not admit E3 §9 R1/R2.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4

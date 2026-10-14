@@ -1,0 +1,157 @@
+;;; Closed, test-only entry. The native pointer comes only from the live E3 frame.
+(extern i64 e3-test-fault-arm ptr i64 i64 i64
+        :real et_e3_test_fault_arm_v1)
+(extern i64 e3-test-fault-ref ptr i64
+        :real et_e3_test_fault_ref_v1)
+(extern i64 e3-test-fault-reset ptr
+        :real et_e3_test_fault_reset_v1)
+
+(define e3-test-fault-root (vector #f))
+
+(define (e3-test-fault-check label condition)
+  (if condition #t
+      (begin (display "E3-FAULT-FAIL: ") (display label) (newline)
+             (e3-native-invariant-fail))))
+
+;;; Copy the path's characters, not the caller's string/vector identity.
+;;; A changed corpus path must fail before the frame or dataset is touched.
+(define (e3-test-fault-path-snapshot path)
+  (let* ((length (string-length path))
+         (image (make-vector length #f)))
+    (let copy ((index 0))
+      (if (= index length) image
+          (begin (vector-set! image index (string-ref path index))
+                 (copy (+ index 1)))))))
+
+(define (e3-test-fault-path=? image path)
+  (and (string? path) (= (vector-length image) (string-length path))
+       (let compare ((index 0))
+         (if (= index (vector-length image)) #t
+             (and (equal? (vector-ref image index) (string-ref path index))
+                  (compare (+ index 1)))))))
+
+;;; State is (site role occurrence present? path-image phase), where phase
+;;; 1 is prepared and 2 is executed. It is private to this fault tuple.
+(define (e3-test-fault-bound? scenario corpus-path phase)
+  (let ((bound (vector-ref e3-test-fault-root 0)))
+    (and (vector? bound) (= (vector-ref bound 5) phase)
+         (= (vector-ref bound 0) (vector-ref scenario 3))
+         (= (vector-ref bound 1) (vector-ref scenario 4))
+         (= (vector-ref bound 2) (vector-ref scenario 5))
+         (eq? (vector-ref bound 3) (vector-ref scenario 2))
+         (e3-test-fault-path=? (vector-ref bound 4) corpus-path))))
+
+(define (e3-test-fault-execute site role occurrence)
+  (e3-test-fault-check 'prepared-root
+    (vector? (vector-ref e3-test-retention-root 0)))
+  (let* ((record (vector-ref e3-test-retention-root 0))
+         (model (vector-ref record 0))
+         (destinations (vector-ref record 1))
+         (frame (vector-ref record 2))
+         (dataset (vector-ref record 3))
+         (entry (e3-frame-entry-live frame 'e3-test-fault-execute))
+         (native (vector-ref entry 4))
+         (cursor (vector-ref record 4))
+         (modes (vector-ref record 5))
+         (model-image (vector-ref record 6))
+         (rng (vector-ref record 7))
+         (before (vector-ref record 8)))
+    (e3-test-fault-check 'prepared
+      (and (vector? record) (= (vector-ref entry 1) 1)
+           (not (vector-ref record 13))))
+    (e3-test-fault-check 'arm (= (e3-test-fault-arm native site role occurrence) 0))
+    (e3-test-fault-check 'armed (= (e3-test-fault-ref native 0) 1))
+    (let ((failed?
+           (with-region ('e3-fault-call 262144)
+             (guard
+              (caught
+               (#t (and (transformer-error? caught)
+                        (eq? (transformer-error-category caught) 'internal)
+                        (eq? (transformer-error-operation caught)
+                             'e3-evaluate-into!))))
+              (e3-evaluate-into! model dataset frame)
+              #f))))
+      (e3-test-fault-check 'typed-stage7 failed?))
+    ;; The wrapper has already captured the native error before readback clears it.
+    (let ((error (vector-ref entry 12)))
+      (e3-test-fault-check 'first-error
+        (and (= (vector-ref error 0) 7) (= (vector-ref error 1) 0)
+             (= (vector-ref error 2) 5) (= (vector-ref error 3) 9))))
+    (e3-test-fault-check 'one-shot
+      (and (= (e3-test-fault-ref native 0) 2)
+           (= (e3-test-fault-ref native 1) site)
+           (= (e3-test-fault-ref native 2) role)
+           (= (e3-test-fault-ref native 3) occurrence)
+           (= (e3-test-fault-ref native 4) occurrence)))
+    (with-region ('e3-fault-observe 262144)
+      (e3-test-fault-check 'cursor
+        (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset)))
+      (e3-test-fault-check 'output
+        (e3-test-retention-output=? frame destinations))
+      (e3-test-fault-check 'modes
+        (e3-test-retention-modes=? frame modes))
+      (e3-test-fault-check 'model
+        (e3-test-retention-model=? model model-image))
+      (e3-test-fault-check 'rng
+        (equal? rng (m3t-public-initializer-words
+                     (m3t-public-model-initializer model))))
+      (let check ((index 0))
+        (if (= index 29) #t
+            (begin
+              (if (or (<= index 6) (and (>= index 17) (<= index 26)))
+                  (e3-test-fault-check 'owners
+                    (= (vector-ref before index)
+                       (e3-test-retention-probe index))))
+              (check (+ index 1))))))
+    (e3-test-fault-check 'reset (= (e3-test-fault-reset native) 0))
+    (e3-test-fault-check 'clear (= (e3-test-fault-ref native 0) 0))
+    (e3-test-retention-call! model dataset frame destinations cursor modes
+                             model-image)
+    (vector-set! record 12 (__arena-used))
+    (vector-set! record 13 #t)
+    #t))
+
+(define (e3-test-fault-dispatch scenario corpus-path)
+  (e3-test-fault-check 'scenario
+    (and (vector? scenario) (= (vector-length scenario) 6)
+         (eq? (vector-ref scenario 0) 'fault)
+         (or (eq? (vector-ref scenario 1) 'prepare)
+             (eq? (vector-ref scenario 1) 'execute)
+             (eq? (vector-ref scenario 1) 'report))
+         (boolean? (vector-ref scenario 2))
+         (string? corpus-path)
+         (= (vector-ref scenario 3) 1)
+         (>= (vector-ref scenario 4) 0)
+         (<= (vector-ref scenario 4) 20)
+         (>= (vector-ref scenario 5) 1)
+         (<= (vector-ref scenario 5) 8192)))
+  (let ((phase (vector-ref scenario 1))
+        (present? (vector-ref scenario 2)))
+    (cond ((eq? phase 'prepare)
+           (e3-test-fault-check 'fresh-selector
+             (and (not (vector-ref e3-test-fault-root 0))
+                  (not (vector-ref e3-test-retention-root 0))))
+           (let ((path-image (e3-test-fault-path-snapshot corpus-path)))
+             (e3-test-retention-prepare 1024 present? corpus-path)
+             (vector-set! e3-test-fault-root 0
+               (vector (vector-ref scenario 3) (vector-ref scenario 4)
+                       (vector-ref scenario 5) present? path-image 1))
+             #t))
+          ((eq? phase 'execute)
+           (e3-test-fault-check 'bound-execute
+             (e3-test-fault-bound? scenario corpus-path 1))
+           (let ((bound (vector-ref e3-test-fault-root 0)))
+             (e3-test-fault-check 'prepared-gradient
+               (eq? (vector-ref (vector-ref e3-test-retention-root 0) 10)
+                    present?))
+             (e3-test-fault-execute (vector-ref bound 0)
+                                    (vector-ref bound 1)
+                                    (vector-ref bound 2))
+             (vector-set! bound 5 2)
+             #t))
+          (else
+           (e3-test-fault-check 'bound-report
+             (e3-test-fault-bound? scenario corpus-path 2))
+           (let ((result (e3-test-retention-report 1024 present?)))
+             (vector-set! e3-test-fault-root 0 #f)
+             result)))))
