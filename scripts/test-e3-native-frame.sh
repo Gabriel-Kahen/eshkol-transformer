@@ -51,6 +51,7 @@ fi
 python3 "${PROJECT_ROOT}/tests/e3_native/mutate_runtime_cleanup.py" \
   "${e3_tmp}/cleanup-mutant"
 "${e3_cc}" "${e3_flags[@]}" -O2 \
+  -DET_E3_PARTIAL_PIN_TESTING \
   "${e3_tmp}/cleanup-mutant/tests/e3_native/test_frame.c" \
   "${e3_sources[@]:1}" -lm -o "${e3_tmp}/frame-cleanup-mutant"
 if "${e3_tmp}/frame-cleanup-mutant" >"${e3_tmp}/mutant.stdout" \
