@@ -1029,6 +1029,28 @@ from direct-provider-only cases and names the missing noninstalled model-control
 and stage-selective fault/observer seams for review. It provides no new runtime
 proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
 verdicts remain prerequisites before the full matrix is implemented and run.
+The first [mathematical three-batch M2 sum-order witness](../tests/e3_reference/sum_order_witness_v1.json)
+failed the one-use df9546 compiled C gate: compiled CE rounded both groupings
+to `41dcde82`. The successor [compiled witness](../tests/e3_reference/sum_order_witness_v2.json)
+uses SHA-domain candidate 3, pinned by four actual native observations. Its
+compiled CE numerators give serial `41de3b31` and grouped `41de3b30`;
+the PyTorch reference for this candidate has equal groupings. The failed
+one-use df9546 C evidence remains preserved. The [noninstalled sum-order mutant
+source](e3/E3_SUM_ORDER_MUTANT_SOURCE.md) prepares an exact packed D1 resource,
+a test-only third-batch K1 operand regrouping, and a private AOT gate requiring
+the first actual difference at `state_f32[0]` with no rejected transcript.
+The independent compiled RESULT review at
+`/home/gabe/.codex/evidence/eshkol-transformer/e3-sum-order-ad4ad9ac-a-independent-result-review-20261014/REVIEW.md`
+(SHA-256 `a58151c84401527909d63b2fb6f2d3cf5c4fc86b28c9008883e24b835fd5a26f`)
+accepts only the exact noninstalled M2 sum-order subgate on
+`ad4ad9acdd912d8a28343f0c5ee125e6adaa2ebe`/tree
+`aa17f1bf8f457a325cd1b5614018a16a61fdbf32`. The fresh supported gate
+exited 0: genuine three-batch normal,
+repeat, poison and ASan/UBSan runs matched the frozen compiled CE words, and
+all four mutant runs first diverged at the third-batch numerator and rejected
+without publishing a transcript. The other M2 numerical mutants and the full
+E3 §9 acceptance matrix remain open; this result does not establish installed
+or public E3 behavior or GPU execution.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each

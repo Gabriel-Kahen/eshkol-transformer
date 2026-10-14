@@ -256,7 +256,7 @@ printf '%s\\n' "$e3_tuple_kind"
         self.assertEqual(admitted.returncode, 0, admitted.stderr)
         selector = (ROOT / "scripts/build-e3-numerical-test.sh").read_text()
         runner = (ROOT / "scripts/test-e3-correctness-cases.sh").read_text()
-        self.assertIn("wrong-vocab-axis|sanitize", selector)
+        self.assertIn("wrong-vocab-axis|sum-order|sanitize|sum-order-sanitize", selector)
         self.assertIn('wrong_vocab_axis_rejection.py" run', runner)
         self.assertIn('wrong_vocab_axis_rejection.py" check', runner)
         self.assertIn('verify-wrong-vocab-axis-all-correct.exit', runner)
@@ -278,13 +278,18 @@ printf '%s\\n' "$e3_tuple_kind"
                 env={"E3_NUMERICAL_MUTANT": value}, capture_output=True,
                 text=True, check=False,
             )
-        accepted = select("e3-private-aggregate", "numerical", "wrong-vocab-axis")
-        self.assertEqual((accepted.returncode, accepted.stdout),
-                         (0, "wrong-vocab-axis\n"), accepted.stderr)
+        for value in ("wrong-vocab-axis", "sum-order"):
+            accepted = select("e3-private-aggregate", "numerical", value)
+            self.assertEqual((accepted.returncode, accepted.stdout),
+                             (0, value + "\n"), accepted.stderr)
         for policy, kind, value in (("e3-private-aggregate", "base", "wrong-vocab-axis"),
                                     ("e3-private-aggregate", "mode-graph", "wrong-vocab-axis"),
                                     ("other", "numerical", "wrong-vocab-axis"),
-                                    ("e3-private-aggregate", "numerical", "wrong-vocab-axes")):
+                                    ("e3-private-aggregate", "base", "sum-order"),
+                                    ("e3-private-aggregate", "mode-graph", "sum-order"),
+                                    ("other", "numerical", "sum-order"),
+                                    ("e3-private-aggregate", "numerical", "wrong-vocab-axes"),
+                                    ("e3-private-aggregate", "numerical", "sum-orders")):
             with self.subTest(policy=policy, kind=kind, value=value):
                 self.assertEqual(select(policy, kind, value).returncode, 77)
 
