@@ -138,7 +138,7 @@ printf '%s\n' "$e3_tuple_kind"
         self.assertIn("frame->phase != E3_IDLE", guarded)
         self.assertIn("selector < 0 || selector > 1", guarded)
         retention_flags = builder.split(
-            '"${e3_tuple_kind}" == retention-first-eval-mutant ) ]]; then\n'
+            '"${e3_tuple_kind}" == fault ) ]]; then\n'
             '    package_native_cflags+=(-DET_E3_RETENTION_TESTING)', 1)[1]
         retention_flags = retention_flags.split("fi", 1)[0]
         self.assertNotIn("ET_E3_OVERFLOW_TESTING", retention_flags)

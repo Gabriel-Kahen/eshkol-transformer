@@ -1372,6 +1372,14 @@ at the CE dispatch count. This remains source/host evidence on an unsupported
 Clang 22 host. Independent review and supported compiled Eshkol normal,
 poison and sanitizer gates remain open; no §9 R1 admission follows.
 
+The stage-8 fault candidate and retention post-report teardown now share a
+source-only branch based on the independently reviewed CLI3 `baf0a03f` union.
+The shared E3 lexical fault sequence is applied once; the accepted stage-8 and
+retention source heads follow without changing the installed training path.
+Focused host source and native checks pass on an unsupported CachyOS/Clang 22
+host. Independent review and supported compiled Eshkol normal, poison, and
+sanitizer evidence remain required; E3 §9 admission remains **HOLD**.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
