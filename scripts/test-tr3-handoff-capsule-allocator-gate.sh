@@ -16,10 +16,11 @@ runtime_source="${TR3_CAPSULE_ALLOCATOR_RUNTIME_SOURCE:-/home/gabe/.codex/worktr
   die "frozen TR3 runtime root is unavailable: ${candidate_root}"
 candidate_root="$(readlink -f -- "${candidate_root}")"
 runner_relative="$(tsv_value "${candidate_manifest}" runner_relative_path)"
+runtime_source_commit="$(tsv_value "${candidate_manifest}" runtime_source_commit)"
 runner="${candidate_root}/${runner_relative}"
 archive="${candidate_root}/$(tsv_value "${candidate_manifest}" runtime_archive_relative_path)"
 [[ "$(sha256sum "${archive}" | awk '{print $1}')" == "$(tsv_value "${candidate_manifest}" runtime_archive_sha256)" ]] || die "frozen TR3 runtime archive hash changed"
-[[ "$(git -C "${runtime_source}" rev-parse HEAD)" == "$(tsv_value "${candidate_manifest}" runtime_source_commit)" ]] || die "runtime source commit differs"
+[[ "$(git -C "${runtime_source}" rev-parse HEAD)" == "${runtime_source_commit}" ]] || die "runtime source commit differs"
 [[ -z "$(git -C "${runtime_source}" status --porcelain)" ]] || die "runtime source checkout is dirty"
 [[ -x "${runner}" ]] || die "frozen TR3 runner is unavailable"
 [[ "$(sha256sum "${runner}" | awk '{print $1}')" == \
@@ -212,7 +213,7 @@ grep -E '^TR3-CAPSULE-ALLOCATOR-PASS classes=5$' \
   printf 'source_status\t%s\n' "$(test -z "$(git status --porcelain --untracked-files=all)" && printf clean || printf dirty)"
   printf 'runner_sha256\t%s\n' "$(tsv_value "${candidate_manifest}" runner_sha256)"
   printf 'runner_role\t%s\n' "$(tsv_value "${candidate_manifest}" runner_role)"
-  printf 'compiler_source_commit\t%s\n' "$(tsv_value "${candidate_manifest}" compiler_source_commit)"
+  printf 'runtime_source_commit\t%s\n' "${runtime_source_commit}"
   printf 'container_image\t%s\n' "${image}"
   printf 'container_digest\t%s\n' "$(tsv_value "${candidate_manifest}" container_digest)"
   printf 'runtime_fixture_sha256\t%s\n' \

@@ -2247,6 +2247,10 @@ archive bytes have been removed, the cross-source compiled pair and capsule
 ABI have not been independently reviewed, and no capsule allocator case has
 run. Reconstruct or repin a reviewed repaired runtime, compile and seal the
 five-class matrix, then obtain independent runtime review before admission.
+The successor source repair now records the checked `runtime_source_commit`
+provenance and requires the caught E1 shell's exact category, operation, and
+message; source-only negative cuts cover both. The compiled matrix is still
+held on the missing historical runner and archive.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),

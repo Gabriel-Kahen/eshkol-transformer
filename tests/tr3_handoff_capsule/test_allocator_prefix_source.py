@@ -38,6 +38,11 @@ def has_causal_contract(runner: str, shim: str, gate: str) -> bool:
         "(eq? (module-mode-internal model) 'train)",
         "(arm-class! class ordinal)",
         "(ca-handler-arm)",
+        "(eq? (transformer-error-category caught) 'internal)",
+        "'config-fingerprint)",
+        "'tokenizer-fingerprint)",
+        "(= (ca-condition-kind) 2)",
+        "(= (ca-condition-kind) 1)",
     )
     shim_cuts = (
         "bounded_object_failure",
@@ -48,6 +53,8 @@ def has_causal_contract(runner: str, shim: str, gate: str) -> bool:
         "bytes == sizeof(eshkol_exception_handler_t) && in_push",
         "__real_eshkol_get_raised_value(value)",
         "require(caught == 1 && observed",
+        "condition_kind = e1_shell ? 2 : 1;",
+        "et_tr3_ca_condition_kind_v1",
     )
     gate_cuts = (
         "for class in object all promotion target; do",
@@ -58,6 +65,8 @@ def has_causal_contract(runner: str, shim: str, gate: str) -> bool:
         "TR3-CAPSULE-ALLOCATOR-PASS classes=5",
         "/out/capsule_allocator /out/corpus",
         "cmp /out/expected-wrap-symbols.txt /out/linked-wrap-symbols.txt",
+        'runtime_source_commit="$(tsv_value "${candidate_manifest}" runtime_source_commit)"',
+        "printf 'runtime_source_commit\\t%s\\n' \"${runtime_source_commit}\"",
     )
     return (all(cut in runner for cut in runner_cuts)
             and all(cut in shim for cut in shim_cuts)
@@ -66,7 +75,12 @@ def has_causal_contract(runner: str, shim: str, gate: str) -> bool:
             < runner.index("(tr3-handoff-capture-internal! trainer tokenizer)",
                            runner.index("(arm-class! class ordinal)"))
             and gate.index("run_case handler 0")
-            > gate.index("for class in object all promotion target; do"))
+            > gate.index("for class in object all promotion target; do")
+            and runner.count("(expected-allocation-condition?") == 3
+            and runner.find("(expected-allocation-condition? caught #f)")
+            > runner.index("(define (handler-scope depth)")
+            and runner.find("(expected-allocation-condition?\n               caught (string=? class \"all\"))")
+            > runner.index("(define (finish-case caught class)"))
 
 
 class CapsuleAllocatorSource(unittest.TestCase):
@@ -92,6 +106,10 @@ class CapsuleAllocatorSource(unittest.TestCase):
                     RECIPE.parse_manifest("\n".join(mutated) + "\n")
         with self.assertRaises(ValueError):
             RECIPE.parse_manifest(MANIFEST + "admission\tadmitted\n")
+        with self.assertRaises(ValueError):
+            RECIPE.parse_manifest("\n".join(
+                line for line in MANIFEST.splitlines()
+                if not line.startswith("runtime_source_commit\t")) + "\n")
 
     def test_causal_proof_contract_and_negative_cuts(self) -> None:
         self.assertTrue(has_causal_contract(RUNNER, SHIM, GATE))
@@ -101,12 +119,19 @@ class CapsuleAllocatorSource(unittest.TestCase):
                       "(ca-verify-optimizer",
                       "(eq? (vector-ref (vector-ref record 16) 1)",
                       "(ca-handler-arm)")),
+            (RUNNER, ("(expected-allocation-condition? caught #f)",
+                      "caught (string=? class \"all\"))",
+                      "(eq? (transformer-error-category caught) 'internal)",
+                      "'config-fingerprint)",
+                      "'tokenizer-fingerprint)")),
             (SHIM, ("bounded_object_failure",
                     "throw std::bad_alloc()",
-                    "__real_eshkol_get_raised_value(value)")),
+                    "__real_eshkol_get_raised_value(value)",
+                    "condition_kind = e1_shell ? 2 : 1;")),
             (GATE, ("while (( ordinal < 2048 )); do",
                     "run_case handler 0",
-                    "cmp /out/expected-wrap-symbols.txt /out/linked-wrap-symbols.txt")),
+                    "cmp /out/expected-wrap-symbols.txt /out/linked-wrap-symbols.txt",
+                    'runtime_source_commit="$(tsv_value "${candidate_manifest}" runtime_source_commit)"')),
         ):
             for marker in markers:
                 with self.subTest(marker=marker):

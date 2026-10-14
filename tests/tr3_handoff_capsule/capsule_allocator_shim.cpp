@@ -63,6 +63,7 @@ uint64_t target_failures = 0;
 uint64_t handler_failures = 0;
 bool hit = false;
 bool observed = false;
+int condition_kind = 0; // 1: native allocator condition, 2: E1 shell
 bool promotion_active = false;
 bool target_active = false;
 bool preparing_handler = false;
@@ -119,6 +120,7 @@ void arm(Mode next, uint64_t ordinal) {
   raw_attempts = header_attempts = closure_attempts = string_attempts = 0;
   promotion_barriers = 0;
   hit = observed = false;
+  condition_kind = 0;
 }
 bool deny_object(uint64_t &kind_attempts) {
   if (mode != Mode::object && mode != Mode::all_object) return false;
@@ -368,12 +370,13 @@ extern "C" void __wrap_eshkol_get_raised_value(eshkol_tagged_value_t *value) {
     const bool promotion =
         std::strcmp(exception->message,
                     "region promotion allocation failed") == 0;
-    // The E1 shell is opaque here. The Eshkol guard checks its actual
-    // category and operation before treating it as an expected failure.
+    // The E1 shell is opaque here. The Eshkol guard checks the caught
+    // shell's category, operation and message before accepting this kind.
     const bool e1_shell =
         std::strcmp(exception->message, "transformer.error_internal:v1") == 0;
     require(constructor || promotion || (all_object_armed && e1_shell),
             "unexpected allocation condition");
+    condition_kind = e1_shell ? 2 : 1;
     observed = true;
   }
 }
@@ -414,10 +417,14 @@ extern "C" int64_t et_tr3_ca_handler_arm_v1() {
   arm(Mode::handler, 0);
   return 1;
 }
+extern "C" int64_t et_tr3_ca_condition_kind_v1() {
+  return hit && observed ? condition_kind : 0;
+}
 extern "C" int64_t et_tr3_ca_finish_v1(int64_t caught) {
   const bool failed = hit;
   if (failed) {
-    require(caught == 1 && observed, "failure was not caught as real condition");
+    require(caught == 1 && observed && condition_kind != 0,
+            "failure was not caught as real condition");
   } else {
     require(caught == 0, "uninjected attempt unexpectedly raised");
     require(mode == Mode::object || mode == Mode::all_object ||
@@ -432,6 +439,7 @@ extern "C" int64_t et_tr3_ca_finish_v1(int64_t caught) {
   mode = Mode::idle;
   all_object_armed = false;
   hit = observed = promotion_active = target_active = false;
+  condition_kind = 0;
   return failed ? 1 : 0;
 }
 extern "C" int64_t et_tr3_ca_snapshot_begin_v1() {

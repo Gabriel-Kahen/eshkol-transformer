@@ -6,12 +6,6 @@
   (if ok (set! checks (+ checks 1))
       (begin (display "TR3 HANDOFF FAIL: ") (display label)
              (newline) (exit 1))))
-(define (rejects? category operation thunk)
-  (guard (caught
-           (#t (and (transformer-error? caught)
-                    (eq? category (transformer-error-category caught))
-                    (eq? operation (transformer-error-operation caught)))))
-    (thunk) #f))
 (define (resolved-config)
   (x1-private-config-resolve
     (x1-private-config-parse
@@ -61,6 +55,7 @@
 (extern i64 ca-handler-fresh :real et_tr3_ca_handler_fresh_v1)
 (extern i64 ca-handler-arm :real et_tr3_ca_handler_arm_v1)
 (extern i64 ca-finish i64 :real et_tr3_ca_finish_v1)
+(extern i64 ca-condition-kind :real et_tr3_ca_condition_kind_v1)
 (extern i64 ca-done :real et_tr3_ca_done_v1)
 (extern i64 ca-snapshot-begin :real et_tr3_ca_snapshot_begin_v1)
 (extern i64 ca-snapshot-parameter i64 ptr
@@ -72,6 +67,23 @@
 (extern i64 ca-verify-optimizer ptr
         :real et_tr3_ca_verify_optimizer_v1)
 (extern i64 p1-live-count :real et_p1_test_live_entry_count_v1)
+
+(define (expected-allocation-condition? caught allow-e1?)
+  ;; The shim identifies the exact native allocator condition. For its opaque
+  ;; E1 shell, inspect the actual caught value before accepting the hit.
+  (and caught
+       (if (transformer-error? caught)
+           (and allow-e1? (= (ca-condition-kind) 2)
+                (eq? (transformer-error-category caught) 'internal)
+                (or (and (eq? (transformer-error-operation caught)
+                              'config-fingerprint)
+                         (string=? (transformer-error-message caught)
+                                   "canonical SHA-256 result could not be materialized"))
+                    (and (eq? (transformer-error-operation caught)
+                              'tokenizer-fingerprint)
+                         (string=? (transformer-error-message caught)
+                                   "unexpected tokenizer core failure"))))
+           (= (ca-condition-kind) 1))))
 
 (define (same-vector? a b n)
   (and (vector? a) (= (vector-length a) n)
@@ -215,7 +227,11 @@
            (and (tr3-handoff-abort-before-eval-internal! record capsule)
                 (idle?) (= (p1-live-count) original-live)))
     (native-verify!)))
-(define (finish-case caught)
+(define (finish-case caught class)
+  (if caught
+      (check "allocator condition has exact native or E1 provenance"
+             (expected-allocation-condition?
+               caught (string=? class "all"))))
   (let ((hit (= (ca-finish (if caught 1 0)) 1)))
     (if hit
         (begin
@@ -238,8 +254,9 @@
                     (string->number (car (cdr args)))))
 (define (handler-scope depth)
   (guard (caught
-           (#t (check "handler allocator fault caught"
-                      (= (ca-finish 1) 1))
+           (#t (check "handler native allocator condition"
+                      (expected-allocation-condition? caught #f))
+               (check "handler allocator fault caught" (= (ca-finish 1) 1))
                #t))
     (if (= (ca-handler-fresh) 0)
         (if (< depth 512)
@@ -263,7 +280,7 @@
                (arm-class! class ordinal)
                (tr3-handoff-capture-internal! trainer tokenizer)
                #f))
-           (hit (finish-case caught)))
+           (hit (finish-case caught class)))
       (display "TR3-CAPSULE-ALLOCATOR-CASE class=")
       (display class)
       (display " ordinal=") (display ordinal)

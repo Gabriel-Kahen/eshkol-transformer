@@ -69,6 +69,13 @@ release, then retries and aborts on the same owner. A provider outcome with
 unaccounted native custody fails the case. The shell seals per-case output,
 symbol closure, compiler inputs, and SHA256SUMS.
 
+The native shim checks the allocator condition's identity and message. For
+an E1 shell in the `all` class, the fixture checks the caught value's
+`internal` category and exact fingerprint operation and message before
+counting a hit. The handler class requires the native allocator condition.
+The evidence manifest records the pinned `runtime_source_commit` after the
+strict preflight and a checked key lookup.
+
 Source-only preflight:
 
 ```sh
