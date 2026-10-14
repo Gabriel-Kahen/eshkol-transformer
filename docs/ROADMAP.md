@@ -3158,14 +3158,25 @@ publication, public G2 and continuation remain pending.
   coordinator now source-wires the accepted six-argument native terminal
   commit after that precommit frame. It treats nonzero as recoverable before
   the boundary, sets a preallocated fail-stop barrier immediately on zero,
-  then uses bounded writes to make the original output shell and surviving
-  anchor independently live while clearing active call and closure edges.
+  then uses bounded writes to make the original output shell live while
+  clearing active call and pending-anchor edges. The first source candidate
+  `a11c1ca` is held: its zero tail also cleared the pending anchor's only
+  original-identity closure, leaving no authentic detached live authority.
+  A bounded repair now preallocates a distinct live record, allocation-identity
+  closure and two root nodes before first sampling, binds the proved branch,
+  count and original selected text before native commit, and publishes those
+  live roots only after native zero. The old pending anchor and roots are
+  tombstoned/removed in the same guarded tail. A source-private live-entry
+  checker authenticates the original record, output shell/entry/native,
+  logical text and IDs through the surviving roots; no public accessor or
+  release is added.
   The exact pinned Eshkol compiler source confirms that `#f` in the first-EOS
   fifth `ptr` argument lowers to C NULL, paired with extent zero. The focused
-  source gate covers twenty negative mutations, including prezero abort and
-  postzero fail-stop order. This is not compiled same-call evidence: native
-  invocation, first-EOS/G2 rollback and success, terminal release, post-call
-  snapshot, detached clone, public G2, and independent review remain pending.
+  source gate covers prezero abort, postzero fail-stop, original root and
+  equal-length carrier substitution mutations. This is not compiled same-call
+  evidence: native invocation, first-EOS/G2 rollback and success, terminal release, post-call
+  snapshot, detached clone, public G2, and independent review of the repair
+  remain pending.
 
 ## Wave 4 — practical pretraining and performance
 

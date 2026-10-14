@@ -211,6 +211,7 @@ native/g3c4_p2g2_terminal_precommit_frame_extension.esk
 scripts/check-g3c4-p2g2-terminal-precommit-frame-source.py
 scripts/test-g3c4-p2g2-terminal-precommit-frame-source.sh
 native/g3c4_p2g2_terminal_precommit_frame_source_closure.txt
+native/g3c4_p2g2_terminal_live_authority_extension.esk
 native/g3c4_p2g2_terminal_commit_extension.esk
 scripts/check-g3c4-p2g2-terminal-commit-source.py
 scripts/check-g3c4-p2g2-terminal-null-ffi-source.py
