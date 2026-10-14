@@ -326,6 +326,7 @@ int64_t et_e3_test_fault_arm_v1(void *pointer, int64_t site,
         || (site == 6 && ordinal == 0 && occurrence >= 1 && occurrence <= 2)
         || (site == 7 && ordinal == 0 && occurrence >= 1 && occurrence <= 2)
         || (site == 8 && ordinal == 0 && occurrence >= 1 && occurrence <= 2)
+        || (site == 10 && ordinal == 0 && occurrence >= 1 && occurrence <= 2)
 #ifdef ET_E3_PARTIAL_PIN_TESTING
         || (site == 4 && ordinal >= 0 && ordinal < 14 && occurrence == 1)
 #endif
@@ -1018,6 +1019,15 @@ int64_t et_e3_private_stage_targets_v1(
   if (frame->phase != E3_STAGING || frame->stage_plane != 1 ||
       frame->cleanup_ready)
     return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
+#ifdef ET_E3_FAULT_TESTING
+  if (frame->fault_state == 1 && frame->fault_site == 10) {
+    ++frame->fault_reached;
+    if (frame->fault_reached == frame->fault_occurrence) {
+      frame->fault_state = 2; /* Input copy is complete; no target view opened. */
+      return e3_fail(E3_INTERNAL, E3_CODE_INVARIANT);
+    }
+  }
+#endif
   int64_t rc = e3_stage_view(frame, view, "i64", 2 * sizeof(int64_t),
                              _Alignof(int64_t));
   if (rc) return rc;
