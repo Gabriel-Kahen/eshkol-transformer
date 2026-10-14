@@ -52,6 +52,29 @@ def definition(text, name):
     raise ValueError(f"unbalanced lexical helper {name}")
 
 
+def check_eval_fidelity(text):
+    """Require the eval leaf to differ only in its per-module mode token."""
+    train_module = definition(text, "tr3-fixed-recheck-module")
+    train_modules = definition(text, "tr3-fixed-recheck-modules")
+    train_root = definition(text, "tr3-fixed-recheck!")
+    eval_module = definition(text, "tr3-fixed-eval-recheck-module")
+    eval_modules = definition(text, "tr3-fixed-eval-recheck-modules")
+    eval_root = definition(text, "tr3-fixed-eval-recheck!")
+    require(eval_module.count("e3-mode-eval") == 1 and
+            "e3-mode-train" not in eval_module,
+            "eval module no longer requires exact eval mode")
+    require(eval_module.replace("tr3-fixed-eval-recheck-module",
+                                "tr3-fixed-recheck-module").replace(
+                                    "e3-mode-eval", "e3-mode-train") == train_module,
+            "eval module validation differs from exact train identity checks")
+    require(eval_modules.replace("tr3-fixed-eval-recheck",
+                                 "tr3-fixed-recheck") == train_modules,
+            "eval module roster differs from exact train 17-module walk")
+    require(eval_root.replace("tr3-fixed-eval-recheck",
+                              "tr3-fixed-recheck") == train_root,
+            "eval root, provider, tie or 14-handle validation differs from train")
+
+
 def check():
     subprocess.run(
         [sys.executable, str(ROOT / "scripts/check-e3-p1-contract.py")],
@@ -69,6 +92,8 @@ def check():
     recheck = definition(text, "tr3-fixed-recheck!")
     capture_module = definition(text, "tr3-fixed-capture-module!")
     recheck_module = definition(text, "tr3-fixed-recheck-module")
+    eval_recheck = definition(text, "tr3-fixed-eval-recheck!")
+    check_eval_fidelity(text)
     capture_modules = definition(text, "tr3-fixed-capture-modules!")
     capture_handles = definition(text, "tr3-fixed-capture-handles!")
     require("let loop" not in capture_modules and "let loop" not in capture_handles,
@@ -94,7 +119,8 @@ def check():
     ):
         require(forbidden not in leaf,
                 f"TR3 fixed-set leaf gained forbidden operation: {forbidden}")
-    require("(fail " not in capture and "(fail " not in recheck,
+    require("(fail " not in capture and "(fail " not in recheck and
+            "(fail " not in eval_recheck,
             "public exception transport entered status-only leaf")
     require(capture.count("(eq? token-handle head-handle)") == 1 and
             recheck.count("(eq? token-handle head-handle)") == 1,
@@ -109,6 +135,8 @@ def check():
             "capture wrapper no longer calls exact slot 69")
     require(wrapper.count("(vector-ref p1-trusted-surface 70)") == 1,
             "recheck wrapper no longer calls exact slot 70")
+    require(wrapper.count("(vector-ref p1-trusted-surface 73)") == 1,
+            "eval recheck wrapper no longer calls append-only slot 73")
 
     vector_append = (
         "  ;; Append-only source-private TR3 fixed-set validation, slots 69..70.\n"
@@ -116,8 +144,14 @@ def check():
         "  tr3-fixed-recheck!\n")
     require(text.count(vector_append) == 1,
             "TR3 P1 surface append is missing or duplicated")
+    eval_vector_append = (
+        "  ;; Append-only feature-private TR3 fixed-set eval recheck, slot 73.\n"
+        "  tr3-fixed-eval-recheck!\n")
+    require(text.count(eval_vector_append) == 1,
+            "TR3 P1 eval surface append is missing or duplicated")
     without_leaf = text[:leaf_start] + "\n" + text[leaf_end + 2:]
     without_leaf = without_leaf.replace(vector_append, "")
+    without_leaf = without_leaf.replace(eval_vector_append, "")
     successor_tail = ("\n         module-construction-parameters-internal"
                       "\n         p1-trusted-surface)")
     require(without_leaf.count(successor_tail) == 1,
@@ -154,7 +188,7 @@ def check():
     require(sha256(without_leaf.encode()).hexdigest() == COMPOSED_BASE_SHA256,
             "reviewed integrated P1 source changed outside the exact TR3 helper/vector append")
 
-    print("TR3-P1 FIXED STRUCTURE PASS: slots=69,70 modules=17 handles=14 carriers=14")
+    print("TR3-P1 FIXED STRUCTURE PASS: slots=69,70,73 modules=17 handles=14 carriers=14")
     for path in (SOURCE, WRAPPER, MANIFEST):
         relative = path.relative_to(ROOT)
         print(f"sha256 {sha256(path.read_bytes()).hexdigest()} {relative}")

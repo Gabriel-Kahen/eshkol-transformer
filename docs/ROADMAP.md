@@ -2379,6 +2379,18 @@ The exact current-main union still needs independent source review and a
 compiled genuine-owner Eshkol repeated-scope gate. This adapter does not
 issue a C2 claim, receipt, SAVE, or data-only continuation admission.
 
+The first upstream train-to-eval prerequisite adds a feature-private P1
+fixed-set eval recheck at append-only trusted slot 73. It accepts the original
+17 module shells and 14 handle/carrier identities only when every module is
+finalized and in eval mode; root, parent, provider, topology, profile, tie,
+and handle checks are identical to the unchanged train-only slot 70. Focused
+source mutants cover mode, finalization, roster bound, provider, shell identity,
+root pointer and handle validation. Private runtime fixtures now stage exact
+eval success, train/mixed-mode rejection, copied and bit-equal foreign shells,
+and stale carrier cuts. This leaf has source checks only: independent review
+and compiled fixture execution remain pending. No trainer lease transition,
+same-owner C2 SAVE, receipt, or data-only continuation is admitted.
+
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
 ports exact value and absent-gradient bit baselines under the existing

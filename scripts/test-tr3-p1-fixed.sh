@@ -79,9 +79,9 @@ for horizon in short long; do
 done
 ' bash "${relative_evidence}"
 
-grep -Fx 'TR3-P1-FIXED-PASS checks=55 horizon=1024 capture_arena_delta=0 recheck_arena_delta=0 loop_arena_delta=0 p1_live_delta=0 p1_tombstone_delta=0 f32_fail_after=0' \
+grep -Fx 'TR3-P1-FIXED-PASS checks=63 horizon=1024 capture_arena_delta=0 recheck_arena_delta=0 loop_arena_delta=0 p1_live_delta=0 p1_tombstone_delta=0 f32_fail_after=0' \
   "${evidence_dir}/short.stdout" >/dev/null
-grep -Fx 'TR3-P1-FIXED-PASS checks=55 horizon=8192 capture_arena_delta=0 recheck_arena_delta=0 loop_arena_delta=0 p1_live_delta=0 p1_tombstone_delta=0 f32_fail_after=0' \
+grep -Fx 'TR3-P1-FIXED-PASS checks=63 horizon=8192 capture_arena_delta=0 recheck_arena_delta=0 loop_arena_delta=0 p1_live_delta=0 p1_tombstone_delta=0 f32_fail_after=0' \
   "${evidence_dir}/long.stdout" >/dev/null
 short_bytes="$(awk -F= '/global_total_allocated_bytes=/{print $2}' "${evidence_dir}/short.stderr" | tail -1)"
 long_bytes="$(awk -F= '/global_total_allocated_bytes=/{print $2}' "${evidence_dir}/long.stderr" | tail -1)"

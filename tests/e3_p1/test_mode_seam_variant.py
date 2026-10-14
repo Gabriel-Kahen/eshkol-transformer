@@ -75,7 +75,7 @@ class ModeSeamVariantTest(unittest.TestCase):
             variant.compose(canonical.replace("e3-mode-eval 'eval",
                                               "e3-mode-eval 'train", 1))
 
-    def test_trusted_surface_stays_73_and_raw_nodes_do_not_escape(self) -> None:
+    def test_trusted_surface_stays_74_and_raw_nodes_do_not_escape(self) -> None:
         canonical = variant.CANONICAL.read_text()
         generated = variant.compose(canonical)
         self.assertNotIn("p1-e3-test-seam", canonical)

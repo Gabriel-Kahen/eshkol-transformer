@@ -69,7 +69,7 @@
 (check "genuine head/token tie"
   (eq? (parameter-tree-handle observed-tree '("head" "weight"))
        (parameter-tree-handle observed-tree '("token_embedding" "weight"))))
-(check "surface length" (= (vector-length p1-trusted-surface) 73))
+(check "surface length" (= (vector-length p1-trusted-surface) 74))
 
 (define modules (make-vector 17 #f))
 (define handles (make-vector 14 #f))
@@ -235,7 +235,34 @@
 (module-eval! model)
 (check-status "recheck requires all train"
   (tr3-p1-fixed-recheck-internal model modules handles carriers) 2)
+(check-status "eval recheck exact original fixed set"
+  (tr3-p1-fixed-eval-recheck-internal model modules handles carriers) 0)
+(check-status "eval recheck rejects copied model shell"
+  (tr3-p1-fixed-eval-recheck-internal
+    (vector (vector-ref model 0)) modules handles carriers) 1)
+(check-status "eval recheck rejects foreign model shell"
+  (tr3-p1-fixed-eval-recheck-internal second-model modules handles carriers) 1)
+(module-eval! second-model)
+(define original-module-8 (vector-ref modules 8))
+(define original-handle-13 (vector-ref handles 13))
+(define original-carrier-13 (vector-ref carriers 13))
+(vector-set! modules 8 (vector-ref second-modules 8))
+(check-status "eval recheck rejects bit-equal distinct module"
+  (tr3-p1-fixed-eval-recheck-internal model modules handles carriers) 4)
+(vector-set! modules 8 original-module-8)
+(vector-set! handles 13 (vector-ref second-handles 13))
+(check-status "eval recheck rejects bit-equal distinct handle"
+  (tr3-p1-fixed-eval-recheck-internal model modules handles carriers) 4)
+(vector-set! handles 13 original-handle-13)
+(vector-set! carriers 13 (vector-ref second-carriers 13))
+(check-status "eval recheck rejects stale foreign carrier"
+  (tr3-p1-fixed-eval-recheck-internal model modules handles carriers) 4)
+(vector-set! carriers 13 original-carrier-13)
+(check-status "eval recheck recovers exact original set"
+  (tr3-p1-fixed-eval-recheck-internal model modules handles carriers) 0)
 (module-train! model)
+(check-status "eval recheck rejects restored train"
+  (tr3-p1-fixed-eval-recheck-internal model modules handles carriers) 2)
 (check-status "recheck recovers after train restore"
   (tr3-p1-fixed-recheck-internal model modules handles carriers) 0)
 

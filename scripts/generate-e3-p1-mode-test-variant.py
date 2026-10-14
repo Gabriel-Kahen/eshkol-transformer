@@ -10,8 +10,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CANONICAL = ROOT / "internal/p1/lib/transformer/module.esk"
-CANONICAL_SHA256 = "8629d7ee347fb81d0a24cbb5d296828208af9bf75965244d70f7a05ecb132e40"
-VARIANT_SHA256 = "4dfed83790ced23de91e91bede7bbc730b80273e9419de6b2c2678c5e8d58e1a"
+CANONICAL_SHA256 = "bfbe4b159b1bcab9f1ac19a82872f0bb5243ba9b6cc4bf7d217180abd289b138"
+VARIANT_SHA256 = "175d4f4e91bc2303bfc877257aea89641d93e1a13132fa951d889f801ae5f637"
 
 
 def spans(source: str) -> list[tuple[int, int, int]]:
@@ -61,7 +61,7 @@ def one_form(source: str, forms: list[tuple[int, int, int]],
 
 TEST_WRAPPERS = '''
 ;;; This cell exists only in the generated, noninstalled E3 mode-test variant.
-;;; The canonical 73-slot trusted surface and raw P1 node ownership are intact.
+;;; The canonical 74-slot trusted surface and raw P1 node ownership are intact.
 (define p1-e3-test-seam (vector #f #f #f #f))
 (define (p1-e3-test-fixed-mixed! token)
   ((vector-ref p1-e3-test-seam 0) token))

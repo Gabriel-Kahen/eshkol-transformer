@@ -5541,6 +5541,68 @@
                           modules handles carriers provider)))))))))))
 
 
+;;; Exact read-only eval counterpart. The train-only validators above and all
+;;; existing trusted surface slots remain unchanged.
+(define (tr3-fixed-eval-recheck-module modules provider index)
+  (let* ((shell (vector-ref modules index))
+         (node (tr3-fixed-shell-raw shell 'module))
+         (parent-index (e3-mode-parent index))
+         (parent (if (= index 0) #f
+                     (tr3-fixed-module-raw modules parent-index))))
+    (cond
+      ((not (module-value? node)) 4)
+      ((not (eq? (vector-ref node 7) #t)) 2)
+      ((not (eq? (vector-ref node 1) e3-mode-eval)) 2)
+      ((not (and (eq? (vector-ref node 5) parent)
+                 (eq? (vector-ref node 6) provider)
+                 (eq? (vector-ref node 7) #t)
+                 (or (not (= index 0)) (e3-mode-i64=? (vector-ref node 10) 17))
+                 (e3-mode-child-list? (vector-ref node 4)
+                                      (e3-mode-child-count index))
+                 (or (= index 0)
+                     (eq? (e3-mode-child (vector-ref parent 4)
+                                         (e3-mode-name index)) node))
+                 (tr3-fixed-binding-list? (vector-ref node 2)
+                                           (tr3-fixed-parameter-count index))
+                 (null? (vector-ref node 3))
+                 (tr3-fixed-module-distinct? modules node index)
+                 (eq? (tr3-fixed-existing-shell 'module node) shell))) 4)
+      (else 0))))
+
+(define (tr3-fixed-eval-recheck-modules modules provider)
+  (let loop ((index 0))
+    (if (= index 17) 0
+        (let ((status (tr3-fixed-eval-recheck-module modules provider index)))
+          (if (= status 0) (loop (+ index 1)) status)))))
+
+(define (tr3-fixed-eval-recheck! model modules handles carriers)
+  (cond
+    ((not (tr3-fixed-recheck-arguments? modules handles carriers)) 1)
+    ((not (eq? model (vector-ref modules 0))) 1)
+    (protected-storage-comparison-active? 2)
+    (else
+      (let* ((entry (shell-entry model))
+             (root (if (and entry (eq? (vector-ref entry 1) 'module))
+                       (vector-ref entry 2) #f))
+             (provider (tensor-provider-find e3-mode-provider-name)))
+        (if (not (and entry (eq? (vector-ref entry 1) 'module))) 1
+            (if (not (and (module-value? root) provider
+                          (eq? (vector-ref root 5) #f)
+                          (eq? (vector-ref root 6) provider))) 4
+            (let ((module-status
+                    (tr3-fixed-eval-recheck-modules modules provider)))
+              (if (not (= module-status 0)) module-status
+                  (let ((token-handle
+                          (tr3-fixed-binding-handle
+                            (tr3-fixed-module-raw modules 16) "weight"))
+                        (head-handle
+                          (tr3-fixed-expected-handle modules 10)))
+                    (if (not (and token-handle head-handle
+                                  (eq? token-handle head-handle))) 4
+                        (tr3-fixed-recheck-handles
+                          modules handles carriers provider)))))))))))
+
+
 (vector
   (lambda (module)
     (let* ((observation
@@ -6043,6 +6105,8 @@
     (construction-prepare-eval-guarded! identity))
   (lambda (identity)
     (construction-seal-prepared! identity))
+  ;; Append-only feature-private TR3 fixed-set eval recheck, slot 73.
+  tr3-fixed-eval-recheck!
   )))
 
 (define (module-parameters module)

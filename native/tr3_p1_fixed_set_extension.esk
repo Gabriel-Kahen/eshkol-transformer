@@ -10,3 +10,10 @@
           model modules retained-handles carriers)
   ((vector-ref p1-trusted-surface 70)
    model modules retained-handles carriers))
+
+;;; Feature-private exact eval-mode counterpart. Slots 69/70 remain
+;;; train-only and keep their original ABI.
+(define (tr3-p1-fixed-eval-recheck-internal
+          model modules retained-handles carriers)
+  ((vector-ref p1-trusted-surface 73)
+   model modules retained-handles carriers))

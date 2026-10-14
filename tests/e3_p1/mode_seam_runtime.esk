@@ -2,6 +2,7 @@
 ;;; E3 in-call placement and complete-call retention are separate downstream gates.
 (load "m3_package_root.esk")
 (load "e3_p1_modes_extension.esk")
+(load "tr3_p1_fixed_set_extension.esk")
 
 (define checks 0)
 (define (check label actual expected)
@@ -18,13 +19,27 @@
       "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}") '()))
 (define model (m3t-public-model-create config
                 (m3t-public-initializer-state 1729)))
+(define source-handles
+  (vector-ref (m3t-entry model 'model 'tr3-p1-fixed-test #t) 8))
+(define fixed-modules (make-vector 17 #f))
+(define fixed-handles (make-vector 14 #f))
+(define fixed-carriers (make-vector 14 #f))
+(check 'fixed-train-capture
+  (tr3-p1-fixed-capture-internal
+    model source-handles fixed-modules fixed-handles fixed-carriers) 0)
+(check 'eval-recheck-rejects-train
+  (tr3-p1-fixed-eval-recheck-internal
+    model fixed-modules fixed-handles fixed-carriers) 2)
 (define token (mode-frame model))
-(check 'canonical-trusted-surface (vector-length p1-trusted-surface) 73)
+(check 'canonical-trusted-surface (vector-length p1-trusted-surface) 74)
 (check 'unselected-mask (p1-e3-test-mode-mask token) -1)
 (check 'forged-set (p1-e3-test-fixed-mixed! (vector #f)) 1)
 (check 'wrong-kind-set (p1-e3-test-fixed-mixed! model) 1)
 (check 'still-unselected (p1-e3-test-mode-mask token) -1)
 (check 'fixed-mixed (p1-e3-test-fixed-mixed! token) 0)
+(check 'eval-recheck-rejects-mixed
+  (tr3-p1-fixed-eval-recheck-internal
+    model fixed-modules fixed-handles fixed-carriers) 2)
 (check 'mixed17-mask (p1-e3-test-mode-mask token) 43690)
 (check 'root-still-train (module-mode-internal model) 'train)
 (check 'copied-token-mask
@@ -44,12 +59,21 @@
 (check 'enter (p1-e3-mode-enter! token) 0)
 (check 'entered-set-rejected (p1-e3-test-fixed-mixed! token) 2)
 (check 'all17-eval-during-enter (p1-e3-test-mode-mask token) 131071)
+(check 'eval-recheck-accepts-exact-entered-set
+  (tr3-p1-fixed-eval-recheck-internal
+    model fixed-modules fixed-handles fixed-carriers) 0)
 (check 'root-eval (module-mode-internal model) 'eval)
 (check 'restore (p1-e3-mode-restore! token) 0)
 (check 'exact-mixed17-restore (p1-e3-test-mode-mask token) 43690)
+(check 'eval-recheck-rejects-restored-mixed
+  (tr3-p1-fixed-eval-recheck-internal
+    model fixed-modules fixed-handles fixed-carriers) 2)
 (check 'retry-prepare (p1-e3-mode-prepare! token) 0)
 (check 'retry-enter (p1-e3-mode-enter! token) 0)
 (check 'retry-all17-eval (p1-e3-test-mode-mask token) 131071)
+(check 'eval-recheck-accepts-retry
+  (tr3-p1-fixed-eval-recheck-internal
+    model fixed-modules fixed-handles fixed-carriers) 0)
 (check 'retry-restore (p1-e3-mode-restore! token) 0)
 (check 'retry-mixed17-restore (p1-e3-test-mode-mask token) 43690)
 (check 'foreign-unbind (p1-e3-mode-unbind! foreign-token) 0)
