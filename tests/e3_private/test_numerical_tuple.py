@@ -358,7 +358,9 @@ source "$5"
         self.assertEqual(len(roles.splitlines()), 42)
         with self.assertRaisesRegex(ValueError, "omitted"):
             parse(frame_bytes(records), 3)
-        for bad_count in (0, 1, 4, True):
+        with self.assertRaisesRegex(ValueError, "omitted"):
+            parse(frame_bytes(records), 1)
+        for bad_count in (0, 4, True):
             with self.subTest(count=bad_count), self.assertRaisesRegex(ValueError, "count"):
                 parse(frame_bytes(records), bad_count)
         broken = {
@@ -376,6 +378,25 @@ source "$5"
         for name, lines in broken.items():
             with self.subTest(name=name), self.assertRaises(ValueError):
                 parse(frame_bytes(lines), 2)
+
+    def test_one_batch_parser_requires_complete_ordered_native_records(self) -> None:
+        records = frame_lines(1)
+        payload, roles = parse(frame_bytes(records), 1)
+        self.assertEqual([batch["ordinal"] for batch in payload["batches"]], [0])
+        self.assertEqual(payload["final"]["counters"], [2, 1])
+        self.assertEqual(len(roles.splitlines()), 21)
+        for count in (2, 3):
+            with self.subTest(count=count), self.assertRaisesRegex(ValueError, "omitted"):
+                parse(frame_bytes(records), count)
+        for name, broken in {
+            "missing-role": records[:2] + records[3:],
+            "duplicate-row": records[:1] + records[:1] + records[1:],
+            "missing-final": records[:-2] + records[-1:],
+            "wrong-ordinal": [records[0].replace("E3ROW\t0", "E3ROW\t1")]
+            + records[1:],
+        }.items():
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                parse(frame_bytes(broken), 1)
 
 
 if __name__ == "__main__":
