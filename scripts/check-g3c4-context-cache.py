@@ -34,12 +34,46 @@ def ordered(text, fragments, label):
 
 def _condition_value(expression, disabled):
     """Return True, False, or None for an unknown preprocessor condition."""
-    expression = re.sub(
-        r"\bdefined\s+([A-Za-z_]\w*)\b", r"defined(\1)", expression)
-    expression = expression.replace("&&", " and ").replace("||", " or ")
-    expression = re.sub(r"(?<![=!<>])!(?!=)", " not ", expression)
+    tokens = []
+    position = 0
+    while position < len(expression):
+        if expression[position].isspace():
+            position += 1
+            continue
+        match = re.match(r"[A-Za-z_]\w*|0[xX][0-9A-Fa-f]+|[0-9]+|&&|\|\||!|[()]",
+                         expression[position:])
+        require(match is not None,
+                f"unsupported preprocessor condition: {expression}")
+        tokens.append(match.group())
+        position += len(match.group())
+
+    translated = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "defined":
+            index += 1
+            parenthesized = index < len(tokens) and tokens[index] == "("
+            if parenthesized:
+                index += 1
+            require(index < len(tokens) and
+                    re.fullmatch(r"[A-Za-z_]\w*", tokens[index]) is not None,
+                    f"unsupported preprocessor condition: {expression}")
+            name = tokens[index]
+            index += 1
+            if parenthesized:
+                require(index < len(tokens) and tokens[index] == ")",
+                        f"unsupported preprocessor condition: {expression}")
+                index += 1
+            translated.append(f"defined({name})")
+            continue
+        if re.fullmatch(r"[A-Za-z_]\w*", token):
+            require(token in disabled,
+                    f"unsupported preprocessor macro expansion: {token}")
+        translated.append({"&&": "and", "||": "or", "!": "not"}.get(token, token))
+        index += 1
     try:
-        parsed = ast.parse(expression.strip(), mode="eval")
+        parsed = ast.parse(" ".join(translated), mode="eval")
     except SyntaxError as error:
         raise ValueError(f"unsupported preprocessor condition: {expression}") from error
 

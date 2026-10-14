@@ -108,6 +108,29 @@ class Step4ProjectionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unsupported Step 4a include"):
             CHECKER.require_no_deferred_surface(source)
 
+    def test_operator_macro_expansion_cannot_hide_leak(self):
+        cases = (
+            ("#define and ||\n",
+             "defined(ET_G3C4_GENERATOR_PRIVATE) and "
+             "defined(ET_G3C4_CONTEXT_PRIVATE)"),
+            ("#define ENABLE_OR 1 || 1\n",
+             "defined(ET_G3C4_GENERATOR_PRIVATE) && ENABLE_OR"),
+        )
+        for definition, condition in cases:
+            with self.subTest(condition=condition):
+                source = (
+                    f"{definition}#ifdef ET_G3C4_CONTEXT_PRIVATE\n"
+                    f"#if {condition}\nint generator_rng;\n#endif\n#endif\n"
+                )
+                processed = subprocess.run(
+                    ["cc", "-E", "-P", "-x", "c", "-std=c11",
+                     "-pedantic-errors", "-DET_G3C4_CONTEXT_PRIVATE", "-"],
+                    input=source, text=True, capture_output=True, check=True)
+                self.assertIn("int generator_rng;", processed.stdout)
+                CHECKER.require_no_feature_redefinitions(source)
+                with self.assertRaisesRegex(ValueError, "unsupported preprocessor macro expansion"):
+                    CHECKER.require_no_deferred_surface(source)
+
     def test_unsupported_condition_fails_closed(self):
         mutant = BASE.replace(
             "int cache;",
