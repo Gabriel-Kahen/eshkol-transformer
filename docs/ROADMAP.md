@@ -1068,6 +1068,16 @@ The sealed raw evidence and independent HOLD review remain at
 A bounded source repair makes only those local masks writable and adds the
 strict compiler qualifier check to the source test; independent source review
 and a fresh one-use compiled normal/repeat/poison/sanitizer gate are pending.
+The subsequent one-use gate on `91d5e96` also exited 1: the mutant reached
+final counters `(6, 3)`, but the shared numerical runtime `sum-order` case
+asserted `(5, 3)` before parsing or oracle comparison. The independent HOLD
+review is preserved at
+`/home/gabe/.codex/evidence/eshkol-transformer/e3-m2-padded-91d5-static-20261014-a/INDEPENDENT-GATE-FAILED-RAW-REVIEW.md`
+(SHA-256 `f0333078989ac79871873c1dde2b4cee963853f813799818c1db27e4f0c1af6d`).
+A bounded source successor gives mutant variants a distinct `(6, 3)` runtime
+case while normal variants keep `(5, 3)` and both retain the cursor check.
+Independent source review and a fresh separately released one-use compiled gate
+remain pending; the failed gate supplies no padded-position admission.
 This does not advance the remaining M2 or full §9 admission status.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after

@@ -108,17 +108,21 @@ done
 run_case() {
   local variant=$1 poison=$2 key=$3
   local parse_args=()
-  [[ "${variant}" != mutant* ]] || parse_args=(--padded-mutant)
+  local case_name=sum-order
+  if [[ "${variant}" == mutant* ]]; then
+    parse_args=(--padded-mutant)
+    case_name=sum-order-padded
+  fi
   if [[ "${variant}" == *-sanitize ]]; then
     ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
       UBSAN_OPTIONS=halt_on_error=1 ESHKOL_ARENA_POISON=1 \
       timeout --foreground --signal=TERM --kill-after=5s 900s \
-      "${out}/runtime-${variant}" sum-order "${out}/corpus-a" \
+      "${out}/runtime-${variant}" "${case_name}" "${out}/corpus-a" \
       >"${out}/run-${key}.stdout" 2>"${out}/run-${key}.stderr"
   else
     ESHKOL_ARENA_POISON="${poison}" \
       timeout --foreground --signal=TERM --kill-after=5s 900s \
-      "${out}/runtime-${variant}" sum-order "${out}/corpus-a" \
+      "${out}/runtime-${variant}" "${case_name}" "${out}/corpus-a" \
       >"${out}/run-${key}.stdout" 2>"${out}/run-${key}.stderr"
   fi
   grep -Fx 'E3-NUMERICAL-RUNTIME-PASS' "${out}/run-${key}.stdout" >/dev/null ||
