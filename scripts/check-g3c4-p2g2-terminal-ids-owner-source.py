@@ -11,6 +11,7 @@ additions = [
     "scripts/check-g3c4-p2g2-terminal-ids-owner-source.py",
     "scripts/test-g3c4-p2g2-terminal-ids-owner-source.sh",
     "docs/g3/G3_C4_P2_G2_LOGICAL_I1_CLONE_CONTRACT.md",
+    "tests/g3c4/private_terminal_owners_extent_diagnostic.esk",
     "native/g3c4_p2g2_terminal_ids_owner_source_closure.txt",
 ]
 closure = (root / additions[-1]).read_text().splitlines()
@@ -25,6 +26,20 @@ for symbol in (
 ):
     assert symbol in header and symbol in native
 assert "#ifdef ET_G3C4_P2_G2_TERMINAL_IDS_CLONE_PRIVATE" in header
+fixture = (root / "tests/g3c4/private_terminal_owners_extent_diagnostic.esk").read_text()
+for fragment in (
+    '(flush-output-port (current-output-port))',
+    '(stage "setup begin" 0)',
+    '(stage "terminal commit" expected-count)',
+    '(stage "clone and readback" expected-count)',
+    '(stage "negative short extent" expected-count)',
+    'native count short-copy (* count 8)',
+    '(bytevector-length (vector-ref entry 8)) extent',
+    '(bytevector-length (g3c4-p2g2-terminal-ids-copy-private ids))',
+    '(case-run first-id 1)',
+    '(case-run #f 2)',
+):
+    assert fragment in fixture, fragment
 
 
 def valid(text):
@@ -54,7 +69,11 @@ def valid(text):
         "(anchor 'bytes-match bytes)",
         "(anchor 'bound created)",
         "(eq? (vector-ref entry 8) bytes)",
-        "(= (bytevector-length bytes) payload)",
+        "(= (bytevector-length bytes) extent)",
+        "(bytes (make-bytevector extent 0))",
+        "(= (bytevector-length original-bytes)\n                              (+ 8 (* original-count 8)))",
+        "(= (bytevector-length candidate)\n                              (+ 8 (* original-count 8)))",
+        "(= (bytevector-length bytes) (+ 8 (* count 8)))",
         "(= (bytevector-u8-ref bytes 0) payload)",
         "(g3c4-p2g2-terminal-snapshot-small-word",
         "(anchor 'publish #f)",
@@ -73,7 +92,7 @@ def valid(text):
         "(anchor 'retire live)",
         "(anchor 'node-bind anchor-node)",
         "(anchor 'node nodes)",
-        "(g3c4-p2g2-zero-bytes! bytes (* count 8))",
+        "(g3c4-p2g2-zero-bytes! bytes (+ 8 (* count 8)))",
         "(g3c4-entry-dead! live)",
     )
     if any(fragment not in code for fragment in required):
@@ -88,9 +107,11 @@ def valid(text):
         "(anchor 'bytes-match bytes)",
         "(g3c4-p2g2-terminal-ids-entry-live shell operation)",
         "(eq? (vector-ref entry 8) bytes)",
-        "(= (bytevector-length bytes) payload)",
+        "(= (bytevector-length bytes) extent)",
+        "(bytes (make-bytevector extent 0))",
     ):
-        if code.count(repeated) != 2:
+        expected = 4 if repeated == "(= (bytevector-length bytes) extent)" else 2
+        if code.count(repeated) != expected:
             return False
     clone = code.index("(g3c4-p2g2-native-terminal-ids-clone source-native)")
     copy = code.index("created count bytes extent")
@@ -126,13 +147,18 @@ mutations = (
     ("(anchor 'bound created)", "#t"),
     ("(anchor 'bytes-match bytes)", "#t"),
     ("(eq? (vector-ref entry 8) bytes)", "#t"),
-    ("(= (bytevector-length bytes) payload)", "#t"),
+    ("(= (bytevector-length bytes) extent)", "#t"),
+    ("(bytes (make-bytevector extent 0))",
+     "(bytes (make-bytevector (* count 8) 0))"),
+    ("(= (bytevector-length original-bytes)\n                              (+ 8 (* original-count 8)))", "#t"),
+    ("(= (bytevector-length candidate)\n                              (+ 8 (* original-count 8)))", "#t"),
+    ("(= (bytevector-length bytes) (+ 8 (* count 8)))", "#t"),
     ("(= (bytevector-u8-ref bytes 0) payload)", "#t"),
     ("(g3c4-p2g2-terminal-ids-entry-live shell operation)",
      "(g3c4-registry-find shell operation)"),
     ("(begin\n              (g3c4-p2g2-terminal-ids-entry-dead shell entry operation)\n              #t)", "#t"),
     ("(anchor 'node-bind anchor-node)", "#t"),
-    ("(g3c4-p2g2-zero-bytes! bytes (* count 8))", "#t"),
+    ("(g3c4-p2g2-zero-bytes! bytes (+ 8 (* count 8)))", "#t"),
     ("(anchor 'retire live)", "#t"),
     ("(vector-set! (cdr candidate) 0 #t)", "#t"),
     ("(g3c4-entry-dead! live)", "#t"),
@@ -151,4 +177,7 @@ mutations = (
 )
 for before, after in mutations:
     assert before in source and not valid(source.replace(before, after, 1)), before
-print(f"G3-C4 terminal private I1 owner source PASS: {len(mutations)} negative mutations")
+allocation = "(bytes (make-bytevector extent 0))"
+before, after = source.rsplit(allocation, 1)
+assert not valid(before + "(bytes (make-bytevector payload 0))" + after)
+print(f"G3-C4 terminal private I1 owner source PASS: {len(mutations) + 1} negative mutations")

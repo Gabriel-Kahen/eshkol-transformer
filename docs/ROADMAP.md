@@ -3216,6 +3216,14 @@ publication, public G2 and continuation remain pending.
   held-lease, same-registry clone/copy/release and source-release-before-clone-
   read proof. Public tensor access remains unproved. Retired Scheme anchor
   nodes persist as tombstones; long-run retention is unmeasured.
+  The consumed `1d917cc5` one-use compiled diagnostic failed with a generic
+  runtime exception and no stage trace. Independent review found that the
+  Eshkol clone and copy bytevectors allocated only the 8/16-byte payload while
+  passing the native 16/24-byte header-plus-payload extent. A scoped successor
+  now allocates and checks the complete extent, updates the source contract and
+  diagnostic expectations, and adds a short-extent negative plus flushed stage
+  markers. Its source/Q0 checks pass locally; independent source review and a
+  fresh sealed compiled gate remain pending. The failed package is preserved.
 
 ## Wave 4 — practical pretraining and performance
 

@@ -51,10 +51,10 @@
              (anchor (vector-ref entry 10))
              (count (vector-ref entry 7))
              (extent (+ 8 (* count 8)))
-             (bytes (make-bytevector (* count 8) 0))
+             (bytes (make-bytevector extent 0))
              (native (vector-ref entry 3)))
         (bytevector-u8-set! bytes 0 (* count 8))
-        (if (not (and (= (bytevector-length bytes) (* count 8))
+        (if (not (and (= (bytevector-length bytes) extent)
                       (eq? entry (g3c4-p2g2-terminal-ids-entry-live
                                     shell operation))))
             (g3c4-fail 'invalid-state operation
@@ -65,7 +65,7 @@
         (if (not (and (eq? entry (g3c4-p2g2-terminal-ids-entry-live
                                    shell operation))
                       (eq? native (vector-ref entry 3))
-                      (= (bytevector-length bytes) (* count 8))
+                      (= (bytevector-length bytes) extent)
                       (= (bytevector-u8-ref bytes 0) (* count 8))
                       (anchor 'bytes-match bytes)))
             (g3c4-fail 'invalid-state operation
@@ -87,7 +87,7 @@
              (id-one (g3c4-p2g2-terminal-snapshot-small-word snapshot 16))
              (payload (* count 8))
              (extent (+ 8 payload))
-             (bytes (make-bytevector payload 0))
+             (bytes (make-bytevector extent 0))
              (clone-shell (vector 'g3c4-terminal-ids-private))
              (entry (vector clone-shell 'terminal-ids 'pending #f #f #f
                             #f count bytes #f #f g3c4-model-profile))
@@ -166,7 +166,7 @@
                                 g3c4-model-profile)
                            (bytevector? original-bytes)
                            (= (bytevector-length original-bytes)
-                              (* original-count 8))
+                              (+ 8 (* original-count 8)))
                            (= (g3c4-p2g2-terminal-snapshot-small-word
                                 original-bytes 0)
                               (* original-count 8))
@@ -182,7 +182,7 @@
                      ((eq? command 'bytes-match)
                       (and (bytevector? candidate)
                            (= (bytevector-length candidate)
-                              (* original-count 8))
+                              (+ 8 (* original-count 8)))
                            (= (g3c4-p2g2-terminal-snapshot-small-word
                                 candidate 0)
                               (* original-count 8))
@@ -290,7 +290,7 @@
                                      shell source operation))
                         (eq? source-native (vector-ref source 3))
                         (eq? (vector-ref entry 8) bytes)
-                        (= (bytevector-length bytes) payload)))
+                        (= (bytevector-length bytes) extent)))
               (g3c4-fail 'invalid-state operation
                          "terminal clone source or destination changed"))
           (g3c4-native-check
@@ -314,7 +314,7 @@
                         (eq? (vector-ref entry 11) g3c4-model-profile)
                         (eq? (vector-ref g3c4-p2g2-terminal-ids-anchors 0)
                              anchor-node)
-                        (= (bytevector-length bytes) payload)
+                        (= (bytevector-length bytes) extent)
                         (= (bytevector-u8-ref bytes 0) payload)
                         (anchor 'bytes-match bytes)))
               (g3c4-fail 'invalid-state operation
@@ -343,7 +343,7 @@
                                    shell operation))
                             (or (= count 1) (= count 2))
                             (eq? bytes (vector-ref live 8))
-                            (= (bytevector-length bytes) (* count 8))))
+                            (= (bytevector-length bytes) (+ 8 (* count 8)))))
                   (g3c4-fail 'invalid-state operation
                              "terminal ID clone changed before release"))
               (guard (caught
@@ -352,7 +352,7 @@
                 (let ((status (anchor 'native-release release-request)))
                   (if (= status 0)
                       (begin
-                        (g3c4-p2g2-zero-bytes! bytes (* count 8))
+                        (g3c4-p2g2-zero-bytes! bytes (+ 8 (* count 8)))
                         (g3c4-entry-dead! live)
                         (anchor 'retire live)
                         #t)
