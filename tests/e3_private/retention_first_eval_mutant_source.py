@@ -75,13 +75,25 @@ PATCHES = (
         "         (e3-test-retention-prepare horizon present? corpus-path mutation))\n",
     ),
     (
-        "    (and (vector? scenario) (= (vector-length scenario) 4)\n",
-        "    (and (vector? scenario) (= (vector-length scenario) 5)\n",
+        "        (e3-test-retention-run 'edge (vector-ref scenario 2)\n"
+        "                               (vector-ref scenario 3) corpus-path))\n",
+        "        (e3-test-retention-run 'edge (vector-ref scenario 2)\n"
+        "                               (vector-ref scenario 3) corpus-path -1))\n",
     ),
     (
-        "                         (vector-ref scenario 3) corpus-path))\n",
-        "                         (vector-ref scenario 3) corpus-path\n"
-        "                         (vector-ref scenario 4)))\n",
+        "        (e3-test-retention-check 'scenario\n"
+        "          (and (vector? scenario) (= (vector-length scenario) 4)\n",
+        "        (e3-test-retention-check 'scenario\n"
+        "          (and (vector? scenario) (= (vector-length scenario) 5)\n",
+    ),
+    (
+        "        (e3-test-retention-run (vector-ref scenario 1)\n"
+        "                               (vector-ref scenario 2)\n"
+        "                               (vector-ref scenario 3) corpus-path))))\n",
+        "        (e3-test-retention-run (vector-ref scenario 1)\n"
+        "                               (vector-ref scenario 2)\n"
+        "                               (vector-ref scenario 3) corpus-path\n"
+        "                               (vector-ref scenario 4)))))\n",
     ),
 )
 

@@ -132,6 +132,27 @@ for cache in a b sanitized; do
 done
 cmp "${out}/runtime-a" "${out}/runtime-b"
 
+# Both injected exceptions must fail through the boxed bridge with distinct,
+# flushed pre/post evaluator provenance. They never count as edge successes.
+for control in pre post; do
+  if timeout --foreground --signal=TERM --kill-after=5s \
+      "${runtime_timeout}s" "${out}/runtime-a" \
+      "${out}/corpus-a-empty" "${out}/corpus-a-singleton" \
+      "${out}/corpus-a-entry-eos" "${out}/corpus-a-one-token-tail" \
+      "--edge-${control}-fault" \
+      >"${out}/control-${control}.stdout" \
+      2>"${out}/control-${control}.stderr"; then
+    die "edge ${control} exception control unexpectedly passed"
+  else
+    status=$?
+  fi
+  [[ "${status}" -eq 1 ]] || die "edge ${control} control exited ${status}, expected 1"
+  python3 -B -m tests.e3_private.edge_phase_check \
+    --stderr "${out}/control-${control}.stderr" --mode "${control}"
+  [[ ! -s "${out}/control-${control}.stdout" ]] || \
+    die "edge ${control} control emitted success output"
+done
+
 for profile in normal-a normal-b poisoned-a sanitized; do
   executable="${out}/runtime-a"
   poison=0
@@ -155,8 +176,8 @@ for profile in normal-a normal-b poisoned-a sanitized; do
     "${out}/${profile}.stdout" >/dev/null || die "edge ${profile} did not pass"
   python3 -B -m tests.e3_horizon.edge_accuracy \
     --oracle "${out}/oracle.tsv" --stdout "${out}/${profile}.stdout"
-  [[ ! -s "${out}/${profile}.stderr" ]] || \
-    die "edge ${profile} emitted runtime diagnostics"
+  python3 -B -m tests.e3_private.edge_phase_check \
+    --stderr "${out}/${profile}.stderr" --mode normal
   grep -Eq '^elapsed_seconds=[0-9.]+ peak_rss_kib=[1-9][0-9]*$' \
     "${out}/${profile}.time" || die "edge ${profile} resource record is absent"
 done

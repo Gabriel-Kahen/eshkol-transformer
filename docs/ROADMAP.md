@@ -1117,6 +1117,12 @@ The repaired E3 source union `cc0f6fe`/tree `cda29424` retains both reviewed
 parent repairs and passed independent source-composition review. Its composition
 with current main `c60779bb` still requires independent whole-tree review;
 the supported compiled E3 §9 gates remain pending.
+The exact `129460f4` edge compiled B attempt built normal and sanitized
+runtimes, then its first `normal-a` process exited 1 with only a generic user
+exception, before any oracle result. A test-only diagnostic successor adds
+flushed case/phase and caught-exception provenance plus failing pre/post
+evaluator controls. Source checks alone do not establish the throw site or
+edge acceptance; independent source review precedes any fresh compiled gate.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each

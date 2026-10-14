@@ -30,9 +30,12 @@ class RetentionTupleTest(unittest.TestCase):
             sorted(lines(BASE, "undefined_symbols")
                    + ["eshkol_builtin_arena_used",
                       "eshkol_display_value",
+                      "eshkol_display_value_to_port",
+                      "eshkol_runtime_current_error_fp",
                       "eshkol_runtime_current_output_fp",
                       "eshkol_tail_transfer_slot",
-                      "et_e3_retention_region_used_v1", "fputc"]),
+                      "eshkol_write_value_to_port",
+                      "et_e3_retention_region_used_v1", "fflush", "fputc"]),
         )
         for suffix in ("defined_symbols", "public_exports", "public_strings"):
             expected = sorted(lines(BASE, suffix) + ["et_e3_retention_run_v1"])

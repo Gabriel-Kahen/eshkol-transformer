@@ -11,7 +11,7 @@ PRIVATE = ROOT / "tests/e3_private"
 PREFIX = "retention_first_eval_mutant_package_"
 MUTANT_SANITIZER_HASHES = {
     "retention_package_sanitized_noninstrumentation_undefined_symbols.txt":
-        "47f3680715ac583b31dbd4c29e997e8c17f3015af44000ebff98048317914d79",
+        "8d412b5e0ee3bc87f8a83fade9c12625561d0d8f1da0076b6026f2fa6df5537c",
     "retention_package_sanitized_instrumentation_undefined_symbols.txt":
         "957836a08fbe44b5bf4d9117ac7f6201f9153c6dc3527eb9a1cd62b3c3db65c7",
 }
@@ -55,7 +55,7 @@ class FirstEvaluationMutantTuple(unittest.TestCase):
     def test_exact_driver_inverse_and_first_call_boundary(self) -> None:
         base, mutant = BASE.read_text(), MUTANT.read_text()
         self.assertEqual(sha(BASE),
-                         "a62186336f2fad5496756902f426409e088017c6f1823f7e21a3a5690bfc9ed7")
+                         "c6dc06bb8a5e9729fd975072b90c9310238b532199c16691f019a5149bfcebfe")
         self.assertEqual(transform(base), mutant)
         self.assertEqual(transform(mutant, reverse=True), base)
         measured = mutant.index("(- (e3-test-region-used) region-before)")
@@ -103,7 +103,7 @@ class FirstEvaluationMutantTuple(unittest.TestCase):
             else:
                 self.assertEqual(copied.read_text(), expected, copied.name)
         self.assertEqual(digest.hexdigest(),
-                         "6afa6d35c346d4c9ed38432635fcec76f441ab5feba77be7ec4f7e1367bfd3f5")
+                         "697561aaf78c7c2a8c208a5b32a94b2db08cc1a24816072d3ecd3a92a0deaec5")
         self.assertEqual((PRIVATE / "retention_first_eval_mutant_bridge.c").read_bytes(),
                          (PRIVATE / "retention_bridge.c").read_bytes())
 

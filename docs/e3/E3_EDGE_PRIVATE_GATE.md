@@ -50,3 +50,20 @@ Independent whole-tree review of this current-main source composition, then
 the supported compiled gate, are required before marking these four N5 cases
 proved. PR #206 CI passed before its merge and did not run this gate. Exact
 8,192/8,193 and full resource/ownership horizons remain separately gated.
+
+The reviewed `129460f4` compiled B attempt built the runtimes but its first
+`normal-a` process exited 1 with only `Unhandled exception: user exception`;
+it reached no oracle or acceptance result. This diagnostic successor marks and
+flushes the case and phase to stderr before fixture creation, D2 open, seed,
+each snapshot, evaluation, every postcondition and close. An outer edge-only
+guard prints caught exception category, operation and message (or the raw
+non-transformer value), then rethrows. The evaluator's own guard and exact
+stage-12 zero-row assertion remain in place. The runner checks complete
+four-case phase transcripts and runs deliberate pre-evaluation and post-
+evaluation exception controls, each requiring exit 1 and its distinct phase.
+These are source-staged diagnostics; independent review and a fresh compiled
+result are still required before edge admission. The shared test driver also
+regenerates the first-evaluation mutant and updates its source pins. The
+candidate package inventories include the compiler's port, write and flush
+imports, inferred from its codegen; source checks do not prove those exact
+imports or package closure.

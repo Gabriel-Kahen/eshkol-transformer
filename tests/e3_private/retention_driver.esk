@@ -15,6 +15,34 @@
 
 (define e3-test-retention-root (vector #f))
 
+;;; Edge-only stderr witness: a flushed case/phase survives a failing boxed bridge.
+(define e3-test-edge-position (vector #f #f))
+(define (e3-test-edge-mark! case phase)
+  (vector-set! e3-test-edge-position 0 case)
+  (vector-set! e3-test-edge-position 1 phase)
+  (let ((port (current-error-port)))
+    (display "E3-EDGE-PHASE case=" port) (display case port)
+    (display " phase=" port) (display phase port) (newline port)
+    (flush-output-port port)))
+
+(define (e3-test-edge-report! caught)
+  (let ((port (current-error-port)))
+    (display "E3-EDGE-EXCEPTION case=" port)
+    (display (vector-ref e3-test-edge-position 0) port)
+    (display " phase=" port)
+    (display (vector-ref e3-test-edge-position 1) port)
+    (if (transformer-error? caught)
+        (begin
+          (display " category=" port)
+          (write (transformer-error-category caught) port)
+          (display " operation=" port)
+          (write (transformer-error-operation caught) port)
+          (display " message=" port)
+          (write (transformer-error-message caught) port))
+        (begin (display " category=non-transformer-error value=" port)
+               (write caught port)))
+    (newline port) (flush-output-port port)))
+
 ;;; The retention path is only reachable through the separate noninstalled retention driver. One
 ;;; root-stable D2 dataset, model, frame, and four destinations survive all
 ;;; complete evaluator calls. Only each invocation's transient work is regional.
@@ -347,35 +375,52 @@
               (= retired ends)
               (= bytes (* retired (vector-ref before 28)))))))
 
-(define (e3-test-edge-run case corpus-path)
+(define (e3-test-edge-run case corpus-path fault)
+  (e3-test-edge-mark! case 'scenario)
   (e3-test-retention-check 'edge-scenario
     (and (or (eq? case 'empty) (eq? case 'singleton)
              (eq? case 'entry-eos) (eq? case 'one-token-tail))
          (string? corpus-path) (not (vector-ref e3-test-retention-root 0))))
+  (e3-test-edge-mark! case 'fixture)
   (let* ((fixture (e3-test-fixture))
          (model (vector-ref fixture 0))
          (tokenizer (vector-ref fixture 1))
          (destinations (vector-ref fixture 2))
-         (frame (vector-ref fixture 3))
-         (dataset (d2-token-dataset-open
-                    (e3-test-dataset-config corpus-path #t) tokenizer)))
+         (frame (vector-ref fixture 3)))
+    (e3-test-edge-mark! case 'd2-open)
+    (if (eq? fault 'pre-eval-fault) (raise 'edge-pre-eval-control))
+    (let ((dataset (d2-token-dataset-open
+                     (e3-test-dataset-config corpus-path #t) tokenizer)))
+    (e3-test-edge-mark! case 'mode-seed)
     (e3-test-retention-set-mixed! frame)
+    (e3-test-edge-mark! case 'gradient-seed)
     (e3-test-retention-check 'edge-seed-gradient
       (= (e3-test-seed-gradient
            (vector-ref (m3t-entry model 'model 'e3-test-run #t) 3)) 0))
+    (e3-test-edge-mark! case 'entry-skip)
     (if (eq? case 'entry-eos) (e3-test-skip! dataset 1))
-    (let* ((cursor (d2-token-dataset-cursor dataset))
-           (outputs (e3-test-edge-outputs frame destinations))
-           (modes (e3-test-retention-modes frame))
-           (model-image (e3-test-retention-model-snapshot model))
-           (rng (m3t-public-initializer-words
-                  (m3t-public-model-initializer model)))
-           (probes (e3-test-retention-probes))
+    (let* ((cursor (begin (e3-test-edge-mark! case 'cursor-snapshot)
+                          (d2-token-dataset-cursor dataset)))
+           (outputs (begin (e3-test-edge-mark! case 'outputs-snapshot)
+                           (e3-test-edge-outputs frame destinations)))
+           (modes (begin (e3-test-edge-mark! case 'modes-snapshot)
+                         (e3-test-retention-modes frame)))
+           (model-image (begin (e3-test-edge-mark! case 'model-snapshot)
+                               (e3-test-retention-model-snapshot model)))
+           (rng (begin (e3-test-edge-mark! case 'rng-snapshot)
+                       (m3t-public-initializer-words
+                         (m3t-public-model-initializer model))))
+           (probes (begin (e3-test-edge-mark! case 'probes-snapshot)
+                          (e3-test-retention-probes)))
            (outcome
-             (with-region ('e3-edge-call 262144)
-               (guard (caught (#t caught))
-                 (e3-evaluate-into! model dataset frame)
-                 #t))))
+             (begin (e3-test-edge-mark! case 'evaluate)
+                    (with-region ('e3-edge-call 262144)
+                      (guard (caught (#t caught))
+                        (e3-evaluate-into! model dataset frame)
+                        #t)))))
+      (e3-test-edge-mark! case 'post-eval)
+      (if (eq? fault 'post-eval-fault) (raise 'edge-post-eval-control))
+      (e3-test-edge-mark! case 'outcome-check)
       (if (eq? case 'one-token-tail)
           (e3-test-retention-check 'edge-tail-success
             (and (eq? outcome #t)
@@ -400,21 +445,30 @@
                        "evaluation finalization or publication failed")))
                  (= (vector-ref (e3-frame-entry-internal frame) 15) 150)
                  (equal? outputs (e3-test-edge-outputs frame destinations)))))
+      (e3-test-edge-mark! case 'cursor-check)
       (e3-test-retention-check 'edge-cursor
         (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset)))
+      (e3-test-edge-mark! case 'owners-check)
       (e3-test-retention-check 'edge-native-owners
         (e3-test-edge-probes=? probes (e3-test-retention-probes)))
+      (e3-test-edge-mark! case 'modes-check)
       (e3-test-retention-check 'edge-modes
         (e3-test-retention-modes=? frame modes))
+      (e3-test-edge-mark! case 'model-check)
       (e3-test-retention-check 'edge-model-gradient
         (e3-test-retention-model=? model model-image))
+      (e3-test-edge-mark! case 'rng-check)
       (e3-test-retention-check 'edge-rng
         (equal? rng (m3t-public-initializer-words
                       (m3t-public-model-initializer model))))
+      (e3-test-edge-mark! case 'close)
       (e3-test-retention-check 'edge-close
         (d2-token-dataset-close! dataset))
-      (vector 'e3-edge-result-v1 case cursor
-              (e3-test-u32-ref (vector-ref destinations 3))))))
+      (e3-test-edge-mark! case 'result-read)
+      (let ((result (vector 'e3-edge-result-v1 case cursor
+                            (e3-test-u32-ref (vector-ref destinations 3)))))
+        (e3-test-edge-mark! case 'done)
+        result))))))
 
 (define (e3-test-retention-run phase horizon present? corpus-path)
   (cond ((eq? phase 'prepare)
@@ -424,8 +478,11 @@
         ((eq? phase 'report)
          (e3-test-retention-report horizon present?))
         ((eq? phase 'edge)
-         (e3-test-retention-check 'edge-parameter (eq? present? #f))
-         (e3-test-edge-run horizon corpus-path))
+         (e3-test-edge-mark! horizon 'parameter)
+         (e3-test-retention-check 'edge-parameter
+           (or (eq? present? #f) (eq? present? 'pre-eval-fault)
+               (eq? present? 'post-eval-fault)))
+         (e3-test-edge-run horizon corpus-path present?))
         ((eq? phase 'n5)
          (e3-test-retention-check 'n5-scenario
            (and (= horizon 8192) (eq? present? #f)
@@ -519,9 +576,16 @@
         (else (e3-test-retention-check 'phase #f))))
 
 (define (e3-test-retention-dispatch scenario corpus-path)
-  (e3-test-retention-check 'scenario
-    (and (vector? scenario) (= (vector-length scenario) 4)
-         (eq? (vector-ref scenario 0) 'retention)))
-  (e3-test-retention-run (vector-ref scenario 1)
-                         (vector-ref scenario 2)
-                         (vector-ref scenario 3) corpus-path))
+  (if (and (vector? scenario) (= (vector-length scenario) 4)
+           (eq? (vector-ref scenario 0) 'retention)
+           (eq? (vector-ref scenario 1) 'edge))
+      (guard (caught (#t (e3-test-edge-report! caught) (raise caught)))
+        (e3-test-retention-run 'edge (vector-ref scenario 2)
+                               (vector-ref scenario 3) corpus-path))
+      (begin
+        (e3-test-retention-check 'scenario
+          (and (vector? scenario) (= (vector-length scenario) 4)
+               (eq? (vector-ref scenario 0) 'retention)))
+        (e3-test-retention-run (vector-ref scenario 1)
+                               (vector-ref scenario 2)
+                               (vector-ref scenario 3) corpus-path))))
