@@ -50,11 +50,11 @@
       (let* ((entry (g3c4-p2g2-terminal-ids-entry-live shell operation))
              (anchor (vector-ref entry 10))
              (count (vector-ref entry 7))
-             (extent (+ 8 (* count 8)))
-             (bytes (make-bytevector extent 0))
+             (payload (* count 8))
+             (extent (+ 8 payload))
+             (bytes (make-bytevector payload 0))
              (native (vector-ref entry 3)))
-        (bytevector-u8-set! bytes 0 (* count 8))
-        (if (not (and (= (bytevector-length bytes) extent)
+        (if (not (and (= (bytevector-length bytes) payload)
                       (eq? entry (g3c4-p2g2-terminal-ids-entry-live
                                     shell operation))))
             (g3c4-fail 'invalid-state operation
@@ -65,8 +65,7 @@
         (if (not (and (eq? entry (g3c4-p2g2-terminal-ids-entry-live
                                    shell operation))
                       (eq? native (vector-ref entry 3))
-                      (= (bytevector-length bytes) extent)
-                      (= (bytevector-u8-ref bytes 0) (* count 8))
+                      (= (bytevector-length bytes) payload)
                       (anchor 'bytes-match bytes)))
             (g3c4-fail 'invalid-state operation
                        "terminal ID clone bytes differ from original"))
@@ -82,12 +81,12 @@
              (live (g3c4-p2g2-terminal-snapshot-live-for
                      shell source operation))
              (source-native (vector-ref source 3))
-             (count (g3c4-p2g2-terminal-snapshot-small-word snapshot 24))
-             (id-zero (g3c4-p2g2-terminal-snapshot-small-word snapshot 8))
-             (id-one (g3c4-p2g2-terminal-snapshot-small-word snapshot 16))
+             (count (g3c4-p2g2-terminal-snapshot-small-word snapshot 16))
+             (id-zero (g3c4-p2g2-terminal-snapshot-small-word snapshot 0))
+             (id-one (g3c4-p2g2-terminal-snapshot-small-word snapshot 8))
              (payload (* count 8))
              (extent (+ 8 payload))
-             (bytes (make-bytevector extent 0))
+             (bytes (make-bytevector payload 0))
              (clone-shell (vector 'g3c4-terminal-ids-private))
              (entry (vector clone-shell 'terminal-ids 'pending #f #f #f
                             #f count bytes #f #f g3c4-model-profile))
@@ -166,33 +165,27 @@
                                 g3c4-model-profile)
                            (bytevector? original-bytes)
                            (= (bytevector-length original-bytes)
-                              (+ 8 (* original-count 8)))
-                           (= (g3c4-p2g2-terminal-snapshot-small-word
-                                original-bytes 0)
                               (* original-count 8))
                            (= (g3c4-p2g2-terminal-snapshot-small-word
-                                original-bytes 8)
+                                original-bytes 0)
                               original-zero)
                            (if (= original-count 1)
                                (= original-one 0)
                                (and (= original-count 2)
                                     (= (g3c4-p2g2-terminal-snapshot-small-word
-                                         original-bytes 16)
+                                         original-bytes 8)
                                        original-one)))))
                      ((eq? command 'bytes-match)
                       (and (bytevector? candidate)
                            (= (bytevector-length candidate)
-                              (+ 8 (* original-count 8)))
-                           (= (g3c4-p2g2-terminal-snapshot-small-word
-                                candidate 0)
                               (* original-count 8))
                            (= (g3c4-p2g2-terminal-snapshot-small-word
-                                candidate 8)
+                                candidate 0)
                               original-zero)
                            (if (= original-count 1)
                                (= original-one 0)
                                (= (g3c4-p2g2-terminal-snapshot-small-word
-                                    candidate 16)
+                                    candidate 8)
                                   original-one))))
                      ((eq? command 'native-release)
                       (if (not (and published? (not native-released?)
@@ -261,7 +254,6 @@
                       (eq? source-native (vector-ref source 3))))
             (g3c4-fail 'invalid-state operation
                        "terminal source changed after snapshot"))
-        (bytevector-u8-set! bytes 0 payload)
         (vector-set! entry 10 anchor)
         (anchor 'node-bind anchor-node)
         (guard (caught
@@ -290,7 +282,7 @@
                                      shell source operation))
                         (eq? source-native (vector-ref source 3))
                         (eq? (vector-ref entry 8) bytes)
-                        (= (bytevector-length bytes) extent)))
+                        (= (bytevector-length bytes) payload)))
               (g3c4-fail 'invalid-state operation
                          "terminal clone source or destination changed"))
           (g3c4-native-check
@@ -314,8 +306,7 @@
                         (eq? (vector-ref entry 11) g3c4-model-profile)
                         (eq? (vector-ref g3c4-p2g2-terminal-ids-anchors 0)
                              anchor-node)
-                        (= (bytevector-length bytes) extent)
-                        (= (bytevector-u8-ref bytes 0) payload)
+                        (= (bytevector-length bytes) payload)
                         (anchor 'bytes-match bytes)))
               (g3c4-fail 'invalid-state operation
                          "terminal clone does not match original IDs"))
@@ -334,6 +325,7 @@
             (let* ((live (g3c4-p2g2-terminal-ids-entry-live
                            shell operation))
                    (count (vector-ref live 7))
+                   (payload (* count 8))
                    (bytes (vector-ref live 8))
                    (anchor (vector-ref live 10))
                    (barrier (vector #f))
@@ -343,7 +335,7 @@
                                    shell operation))
                             (or (= count 1) (= count 2))
                             (eq? bytes (vector-ref live 8))
-                            (= (bytevector-length bytes) (+ 8 (* count 8)))))
+                            (= (bytevector-length bytes) payload)))
                   (g3c4-fail 'invalid-state operation
                              "terminal ID clone changed before release"))
               (guard (caught
@@ -352,7 +344,7 @@
                 (let ((status (anchor 'native-release release-request)))
                   (if (= status 0)
                       (begin
-                        (g3c4-p2g2-zero-bytes! bytes (+ 8 (* count 8)))
+                        (g3c4-p2g2-zero-bytes! bytes payload)
                         (g3c4-entry-dead! live)
                         (anchor 'retire live)
                         #t)

@@ -3253,6 +3253,15 @@ publication, public G2 and continuation remain pending.
   live-output, native-pointer, small-word and clone initializer. Source/tests
   review and a fresh one-use gate remain pending; no snapshot, clone, short
   extent, held owner, repeat/sanitizer or public G3 acceptance is claimed.
+  The consumed snapshot-binding probe at `2dc56379` instead reaches native
+  snapshot and returns shape/code 4 on case 1. The pinned Eshkol runtime
+  allocates an eight-byte native bytevector header before the requested
+  payload: `make-bytevector 72` declares 72 payload bytes, and setting byte
+  zero changes payload, not header. A focused source-only successor requests
+  64 snapshot payload bytes and 8/16 clone payload bytes, retains the native
+  72/16/24 total extents, and reads words at payload-relative offsets. Its
+  host runtime-layout test and source mutations pass; independent review and
+  a new compiled gate remain pending. The consumed probe is not rerun.
   All failed packages and raw evidence are preserved; terminal/full/public/
   data-only G3 remain HOLD.
 

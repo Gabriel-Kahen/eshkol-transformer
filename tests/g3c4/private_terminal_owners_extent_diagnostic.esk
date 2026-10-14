@@ -217,7 +217,7 @@
                    (case-binding "snapshot count read begin" expected-count
                      (lambda ()
                        (g3c4-p2g2-terminal-snapshot-small-word
-                         snapshot 24)))))
+                         snapshot 16)))))
              (stage "snapshot count read complete" expected-count)
              value))
          (first
@@ -225,7 +225,7 @@
                    (case-binding "snapshot first read begin" expected-count
                      (lambda ()
                        (g3c4-p2g2-terminal-snapshot-small-word
-                         snapshot 8)))))
+                         snapshot 0)))))
              (stage "snapshot first read complete" expected-count)
              value))
          (second
@@ -233,7 +233,7 @@
                    (case-binding "snapshot second read begin" expected-count
                      (lambda ()
                        (g3c4-p2g2-terminal-snapshot-small-word
-                         snapshot 16)))))
+                         snapshot 8)))))
              (stage "snapshot second read complete" expected-count)
              value))
          (ids
@@ -246,31 +246,37 @@
          (entry (g3c4-p2g2-terminal-ids-entry-live ids 'private-owners))
          (native (vector-ref entry 3))
          (extent (+ 8 (* count 8)))
-         (short-copy (make-bytevector extent 0)))
+         (payload (* count 8))
+         (short-copy (make-bytevector payload 0))
+         (wrong-header (make-bytevector extent 0)))
     (stage "clone readback complete" expected-count)
     (check "logical count" (= count expected-count))
-    (check "clone allocation covers header and payload"
-      (= (bytevector-length (vector-ref entry 8)) extent))
-    (check "clone readback declares payload"
-      (= (g3c4-p2g2-terminal-snapshot-small-word (vector-ref entry 8) 0)
-         (* count 8)))
-    (bytevector-u8-set! short-copy 0 (* count 8))
+    (check "clone payload has native header plus payload allocation"
+      (= (bytevector-length (vector-ref entry 8)) payload))
     (stage "negative short extent" expected-count)
     (check "native rejects payload-only passed extent"
       (not (= (g3c4-p2g2-native-terminal-ids-clone-copy
                 native count short-copy (* count 8)) 0)))
-    (check "short extent preserves declared header"
-      (= (bytevector-u8-ref short-copy 0) (* count 8)))
+    (check "short extent preserves native declared length"
+      (= (bytevector-length short-copy) payload))
     (check "short extent preserves payload"
-      (and (= (bytevector-u8-ref short-copy 8) 0)
-           (= (bytevector-u8-ref short-copy (- extent 1)) 0)))
+      (and (= (bytevector-u8-ref short-copy 0) 0)
+           (= (bytevector-u8-ref short-copy (- payload 1)) 0)))
+    (stage "negative wrong native header" expected-count)
+    (check "native rejects full extent with wrong header"
+      (not (= (g3c4-p2g2-native-terminal-ids-clone-copy
+                native count wrong-header extent) 0)))
+    (check "wrong header preserves payload"
+      (and (= (bytevector-length wrong-header) extent)
+           (= (bytevector-u8-ref wrong-header 0) 0)
+           (= (bytevector-u8-ref wrong-header (- extent 1)) 0)))
     (check "first EOS truth value"
       (eq? (and (= first first-id) (= count 1))
            (if (= expected-count 1) #t #f)))
     (if (= count 1)
         (check "G1 zero physical second slot" (= second 0))
         (check "G2 cache length"
-          (= (g3c4-p2g2-terminal-snapshot-small-word snapshot 32) 4)))
+          (= (g3c4-p2g2-terminal-snapshot-small-word snapshot 24) 4)))
     (stage "terminal lease and release" expected-count)
     (check "hold genuine terminal output I1"
       (= (probe-output-hold source-native) 0))
@@ -295,7 +301,7 @@
     (stage "clone copy after source release" expected-count)
     (check "clone copy after source release"
       (= (bytevector-length (g3c4-p2g2-terminal-ids-copy-private ids))
-         extent))
+         payload))
     (stage "clone lease and release" expected-count)
     (check "hold genuine clone I1" (= (probe-clone-hold native) 0))
     (reject "held clone release leaves owner live"
