@@ -1246,6 +1246,21 @@ and mismatch/order checks pass; the manifests remain compiler-unverified.
 Supported Clang 21/LSan, compiled failure/retry and resource proof remain open.
 This candidate does not admit E3 §9 R1/R2.
 
+A separate bounded source union adds the `ET_E3_TESTING` one-shot selector for
+the six actual K1 provider discoveries during frame bind and the reviewed
+runtime-lifetime witness. The selector replaces only the selected provider
+with null before the real K1 discovery call; it is independent of the
+`ET_E3_FAULT_TESTING` per-frame forward-role selector. A source-composed native
+test counts each successful discovery and destruction around failed bind
+indices 0–5, preserves the preexisting model runtimes, and checks a fresh
+bind and forward retry. The skipped-destroy mutant fails at the lifetime
+assertion. On the local unsupported Clang 22 host, the normal native gate
+passed 11,562 checks, a separate ASan/UBSan run passed 11,562 checks with
+leak detection disabled, and 51 adjacent private tuple/policy tests passed;
+LeakSanitizer could not start under ptrace. This is setup-time, test-only
+source evidence. Supported Clang 21/LSan, compiled Eshkol failure/retry,
+resource proof, and E3 §9 R1/R2 admission remain open.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
