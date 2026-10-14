@@ -2236,6 +2236,13 @@ then obtains the sealed M3T 14-handle roster before native G3 hold begin.
 Host source checks and a causal C bridge fixture cover foreign, stale, busy,
 unleased and zero-publication cuts. This is source-only: no linked Eshkol gate,
 O2 hold, C2 claim, receipt or replay admission follows from it.
+The [original-owner G3/O2 coordinator source leaf](g3/G3_R_ORIGINAL_OWNER_COORDINATOR_LEAF.md)
+now composes that exact trainer-held G3 leaf with the accepted held-O2 TR3
+recheck in one private source root. A preallocated ledger owns the trainer
+snapshot lease, G3/M3/A2 hold and O2 hold; failure and explicit end drain O2,
+then G3, then abort the lease, failing stop on uncertain cleanup. Causal host
+source and bridge checks pass. No linked Eshkol gate, held O2 state, C2 claim,
+receipt, public SAVE or replay is admitted.
 The [C2 claim successor source audit](g3/G3_R_HELD_O2_C2_ADOPTION_GATE.md#c2-claim-successor-gap-source-audit-2026-10-14)
 found a concrete partial-claim gap: C2's provisional token and progress stay
 lexical, and its guard rolls back P1 but not an O2 claim that mutates and then
