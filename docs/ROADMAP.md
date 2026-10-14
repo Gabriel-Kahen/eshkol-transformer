@@ -2223,6 +2223,16 @@ order and exact token. This does not call the held O2 adopter or bind an
 original-owner P1 clone and controls; a same-owner C2 claim, receipt, and SAVE
 remain pending separate compiled and review gates.
 
+The bounded P1 state-shell publication repair keeps the registry authoritative
+and skips its fallible advisory-index write for state shells after native
+publication. Exact shell lookup falls back to the registry scan; all other
+indexing and ordinary P1 observation remain unchanged. A source mutation gate
+and test-only post-publication index trap cover this prerequisite, while its
+compiled runtime/IR gate, state-lookup performance and independent review
+remain open. Historical E3/P1 exact-source overlays also need a reviewed
+repin and compiled gate before this candidate can enter the integrated tree.
+This adds no held-safe clone, C2 claim, SAVE receipt or replay.
+
 The [private M3 owner-roster prerequisite](g3/G3_R_M3_OWNER_ROSTER_PREREQUISITE.md)
 ports the feature-gated registry-backed fourteen-parameter/identity roster
 to current main. It rejects unsealed, stale, foreign, incomplete or inconsistent

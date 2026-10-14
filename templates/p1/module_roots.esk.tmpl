@@ -628,8 +628,8 @@
 
 (define (index-published-shell! (shell : ptr) entry)
   ;; Publication through the registry holder promotes the canonical record
-  ;; before this advisory lookup is filled. A failed hash-table resize leaves
-  ;; the registry authoritative and the lookup above falls back to its scan.
+  ;; before this advisory lookup is filled. The registry is authoritative and
+  ;; shell-entry falls back to its exact-identity scan on an index miss.
   (hash-table-set! shell-identity-index (ptr->usize shell) entry))
 
 (define (canonical-published-shell entry) : ptr
@@ -683,9 +683,14 @@
                             active-slot (vector-ref stage 1))
                (vector-set! active-record-root 3 #f)
                (vector-set! active-record-root 2 (vector-ref stage 2))))
-         (index-published-shell!
-           (canonical-published-shell (car (shell-registry-current)))
-           (car (shell-registry-current)))
+         ;; A state owner ledger cannot revoke a token if publication throws
+         ;; before shell-for-raw returns it. Skip fallible advisory indexing
+         ;; for states; shell-entry uses the authoritative exact registry scan.
+         (if (eq? kind 'state)
+             #t
+             (index-published-shell!
+               (canonical-published-shell (car (shell-registry-current)))
+               (car (shell-registry-current))))
          ;; Return only the canonical post-barrier identity.
          (vector-ref (car (shell-registry-current)) 0)))
       ((and (eq? kind (vector-ref (car entries) 1))

@@ -435,9 +435,9 @@ test ! -s "${tmp}/runtime.stderr"
 grep -Fx "P1 REGISTRY PUBLICATION PASS: 24 checks" \
   "${tmp}/runtime.stdout" >/dev/null
 
-# The diagnostic copy differs from the trusted root only at four asserted
-# insertion sites. Its extra slot is private to this test; the production
-# source, generated template, and ABI are checked above and never altered.
+# The diagnostic copy differs from the trusted root only at asserted insertion
+# sites. Its extra slots are private to this test; the production source,
+# generated template, and ABI are checked above and never altered.
 python3 - "${generated}" "${tmp}/overlay/transformer/module.esk" <<'PY'
 from pathlib import Path
 import sys
@@ -453,6 +453,7 @@ inject("         module-construction-parameters-internal\n"
        "         p1-trusted-surface)\n",
        "         module-construction-parameters-internal\n"
        "         p1-index-test-control!\n"
+       "         p1-index-test-observe\n"
        "         p1-trusted-surface)\n")
 inject("(define active-record-root (vector '() '() #t #f '() '()))\n",
        "(define active-record-root (vector '() '() #t #f '() '()))\n"
@@ -464,6 +465,11 @@ inject("    (vector-set! active-record-root 3 stage)\n"
        "        (begin (set! p1-index-test-fail-stage? #f)\n"
        "               (raise 'index-stage-failed)) #t)\n"
        "    (vector-ref active-record-root 3)))")
+inject("  (hash-table-set! shell-identity-index (ptr->usize shell) entry))",
+       "  ;; If a state reaches this post-publication advisory index, fail.\n"
+       "  (if (eq? (vector-ref entry 1) 'state)\n"
+       "      (raise 'post-publication-state-index-reached)\n"
+       "      (hash-table-set! shell-identity-index (ptr->usize shell) entry)))")
 inject("  ;; Append-only source-private G3-C4 construction split, slots 71..72.\n"
        "  (lambda (identity)\n"
        "    (construction-prepare-eval-guarded! identity))\n"
@@ -488,9 +494,24 @@ inject("  ;; Append-only source-private G3-C4 construction split, slots 71..72.\
        "          ((eq? mode 'invalid)\n"
        "           (not (vector-ref active-record-root 2)))\n"
        "          (else #f)))\n"
+       "  ;; Test-only slot 74 reads source identity and owner counts.\n"
+       "  (lambda (mode value)\n"
+       "    (cond ((eq? mode 'live)\n"
+       "           (native-live-count 'p1-index-test-observe))\n"
+       "          ((eq? mode 'tombstones)\n"
+       "           (native-tombstone-count 'p1-index-test-observe))\n"
+       "          ((eq? mode 'finalized)\n"
+       "           (vector-ref\n"
+       "             (raw-for-shell 'p1-index-test-observe 'module value) 7))\n"
+       "          ((eq? mode 'path-object)\n"
+       "           (vector-ref\n"
+       "             (raw-for-shell 'p1-index-test-observe 'handle value) 2))\n"
+       "          (else #f)))\n"
        "  )))")
 source += "\n(define (p1-index-test-control! mode)\n"
 source += "  ((vector-ref p1-trusted-surface 73) mode))\n"
+source += "\n(define (p1-index-test-observe mode value)\n"
+source += "  ((vector-ref p1-trusted-surface 74) mode value))\n"
 Path(sys.argv[2]).write_text(source)
 PY
 
@@ -515,7 +536,7 @@ ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=2s \
   30s "${tmp}/fallback/index-fallback" \
   >"${tmp}/fallback/runtime.stdout" 2>"${tmp}/fallback/runtime.stderr"
 test ! -s "${tmp}/fallback/runtime.stderr"
-grep -Fx "P1 INDEX FALLBACK PASS: 11 checks" \
+grep -Fx "P1 INDEX FALLBACK PASS: 24 checks" \
   "${tmp}/fallback/runtime.stdout" >/dev/null
 
 cat "${tmp}/publication-witness.txt"

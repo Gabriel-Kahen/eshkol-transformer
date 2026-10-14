@@ -1,5 +1,5 @@
-;;; Test-only trusted-root overlay exposes a diagnostic control in slot 73.
-;;; Production module source and its public ABI have no such control.
+;;; Test-only trusted-root overlay exposes diagnostic slots 73..74.
+;;; Production module source and its public ABI have no such controls.
 (require transformer.module)
 (require p1_test.tensor_provider)
 
@@ -56,6 +56,48 @@
        (p1-index-test-control! 'invalid))
 (check "first state releases" (state-dict-release! state))
 (check "second state releases" (state-dict-release! later-state))
+
+;; The overlay raises if a state tries the advisory index after authoritative
+;; publication. State construction must still return the canonical shell to
+;; its owner ledger; release must restore both native and provider counts.
+(define source (module-create-fixture-internal))
+(define source-handle
+  (module-register-parameter-internal!
+    source "weight"
+    (fixture-tensor-internal '(2) 'f32 'cpu (vector 'state-index 'cut))))
+(check "source starts unfinalized"
+       (not (p1-index-test-observe 'finalized source)))
+(check "source path starts unobserved"
+       (not (p1-index-test-observe 'path-object source-handle)))
+(define live-before (p1-index-test-observe 'live #f))
+(define tombstones-before (p1-index-test-observe 'tombstones #f))
+(define owners-before (fixture-owned-live-count-internal))
+(define cut-state (module-state-dict source))
+(define source-path-object
+  (p1-index-test-observe 'path-object source-handle))
+(check "post-publication index cut returns exact state"
+       (equal? (state-dict-paths cut-state) '(("weight"))))
+(check "ordinary module observation finalizes source"
+       (p1-index-test-observe 'finalized source))
+(check "ordinary module observation installs canonical path"
+       (equal? (parameter-handle-path source-handle) '("weight")))
+(check "one native state authority is live"
+       (= (p1-index-test-observe 'live #f) (+ live-before 1)))
+(check "one provider clone owner is live"
+       (= (fixture-owned-live-count-internal) (+ owners-before 1)))
+(check "cut state releases" (state-dict-release! cut-state))
+(check "source canonical path object survives release"
+       (eq? source-path-object
+            (p1-index-test-observe 'path-object source-handle)))
+(check "source finalized flag survives release"
+       (p1-index-test-observe 'finalized source))
+(check "no orphan native state remains"
+       (= (p1-index-test-observe 'live #f) live-before))
+(check "no orphan provider clone remains"
+       (= (fixture-owned-live-count-internal) owners-before))
+(check "exactly one native state tombstone records release"
+       (= (p1-index-test-observe 'tombstones #f)
+          (+ tombstones-before 1)))
 
 (display "P1 INDEX FALLBACK PASS: ")
 (display checks)
