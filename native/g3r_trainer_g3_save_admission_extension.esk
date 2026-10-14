@@ -1,0 +1,140 @@
+;;; Feature-private train-mode G3 held-save admission. Load after the accepted
+;;; CLI3 T2/G3-G root. Ordinary G3 creation and generation stay eval-only.
+(extern ptr g3r-trainer-g3-native-begin ptr ptr
+        :real et_g3r_private_trainer_g3_save_begin_v1)
+(extern i64 g3r-trainer-g3-native-check ptr
+        :real et_g3r_private_trainer_g3_save_check_v1)
+(extern i64 g3r-trainer-g3-native-end ptr
+        :real et_g3r_private_trainer_g3_save_end_v1)
+(extern i64 g3r-trainer-g3-native-error-source
+        :real et_g3r_private_trainer_g3_save_last_source_v1)
+
+(define g3r-trainer-g3-save-tag (vector 'g3r-trainer-g3-save-v1))
+(define g3r-trainer-g3-save-operation 'g3r-trainer-g3-save-begin!)
+(define g3r-trainer-g3-fingerprint
+  "sha256:eshkol-byte-tokenizer-v1:aabb31f49216963582383a00fd2e85d7c20b658d5bef0e7945344ed6bfe50704")
+
+(define (g3r-trainer-g3-save-native-fail operation)
+  (let ((source (g3r-trainer-g3-native-error-source)))
+    (cond ((= source 1) (m3t-native-fail-raw operation))
+          ((= source 2) (g3t-native-fail-raw operation))
+          (else (m3t-fail 'internal operation
+                          "G3 held-save bridge lost native authority")))))
+
+;;; The trainer registry, not a caller-supplied mode flag, authorizes this
+;;; separate path. Native begin subsequently authenticates the sealed M3T
+;;; roster against the generator's original model and committed history.
+(define (g3r-trainer-g3-save-entry trainer generator)
+  (let* ((operation g3r-trainer-g3-save-operation)
+         (record (tr3-lease-record-for-shell-internal trainer operation))
+         (entry (g3t-generator-find generator operation))
+         (model-entry (vector-ref record 9))
+         (tokenizer (if (and (vector? entry) (= (vector-length entry) 12))
+                        (vector-ref entry 6) #f))
+         (tokenizer-entry (if tokenizer (t1-private-entry tokenizer) #f))
+         (identity (vector-ref record 7)))
+    (if (or tr3-acquisition-active? tr3-lease-unenroll-active?
+            (not (eq? (vector-ref record 3) 'idle))
+            (vector-ref record 4)
+            (not (eq? (module-mode-internal (vector-ref record 8)) 'train)))
+        (m3t-fail 'invalid-state operation
+                  "trainer is not idle with its original train-mode model"))
+    (tr3-lease-restore-enter-admission! record operation)
+    (if (or (not (vector? entry)) (not (= (vector-length entry) 12))
+            (not (eq? (vector-ref entry 0) generator))
+            (not (eq? (vector-ref entry 1) 'generator))
+            (not (eq? (vector-ref entry 2) 'live))
+            (null? (vector-ref entry 3))
+            (vector-ref entry 4)
+            (not (eq? (vector-ref entry 5) model-entry))
+            (vector-ref entry 8) (vector-ref entry 9)
+            (vector-ref entry 10)
+            (not (eq? (vector-ref entry 11) 'diagnostic-c2))
+            (not (eq? (m3t-find (vector-ref record 8)) model-entry))
+            (not (and (pair? tokenizer-entry)
+                      (eq? (car tokenizer-entry) tokenizer)
+                      (pair? (cdr tokenizer-entry))
+                      (null? (cdr (cdr tokenizer-entry)))))
+            (not (let ((core (car (cdr tokenizer-entry))))
+                   (and (t1-core-tokenizer? core)
+                        (eq? (vector-ref core 1) 'raw)
+                        (null? (vector-ref core 2))
+                        (null? (vector-ref core 3))
+                        (null? (vector-ref core 4))
+                        (= (t1-tokenizer-core-vocab-size core) 256)
+                        (string=? (vector-ref core 6)
+                                  g3r-trainer-g3-fingerprint))))
+            (not (and (vector? identity) (= (vector-length identity) 3)
+                      (string=? (vector-ref identity 0)
+                                g3r-trainer-g3-fingerprint)
+                      (= (vector-ref identity 1) 256)
+                      (eq? (vector-ref identity 2) #t))))
+        (m3t-fail 'invalid-state operation
+                  "generator is not the trainer's exact idle G3 owner"))
+    (vector record entry model-entry)))
+
+;;; Ledger: tag, exact trainer record, exact snapshot parent, generator entry,
+;;; model entry, native hold cell, phase. It is returned only after both the
+;;; trainer lease and native G3 hold pass their post-begin checks.
+(define (g3r-trainer-g3-save-begin! trainer generator)
+  (let* ((operation g3r-trainer-g3-save-operation)
+         (admitted (g3r-trainer-g3-save-entry trainer generator))
+         (record (vector-ref admitted 0))
+         (entry (vector-ref admitted 1))
+         (model-entry (vector-ref admitted 2))
+         (parent (tr3-c-snapshot-parent trainer (vector #f)))
+         (hold-cell (vector #f))
+         (lease-cell (vector #f))
+         (ledger (vector g3r-trainer-g3-save-tag record parent entry
+                         model-entry hold-cell 'prepared)))
+    (guard (caught
+             (#t
+               (guard (cleanup-failure (#t (tr3-lease-fail-stop 134)))
+                 (if (vector-ref hold-cell 0)
+                     (let ((status
+                             (g3r-trainer-g3-native-end
+                               (vector-ref hold-cell 0))))
+                       (if (not (= status 0)) (tr3-lease-fail-stop 134))
+                       (vector-set! hold-cell 0 #f)))
+                 (if (vector-ref lease-cell 0)
+                     (tr3-lease-snapshot-abort-internal!
+                       (vector-ref lease-cell 0) parent)))
+               (raise caught)))
+      (let ((leased (tr3-lease-snapshot-enter-internal! trainer parent)))
+        (vector-set! lease-cell 0 leased))
+      (tr3-lease-snapshot-recheck-internal record parent)
+      (if (not (eq? (g3t-generator-find generator operation) entry))
+          (m3t-fail 'invalid-state operation
+                    "G3 entry changed after trainer lease"))
+      (let ((hold (g3r-trainer-g3-native-begin
+                    (vector-ref entry 3) (vector-ref model-entry 3))))
+        (if (null? hold) (g3r-trainer-g3-save-native-fail operation))
+        (vector-set! hold-cell 0 hold))
+      (if (not (= (g3r-trainer-g3-native-check
+                    (vector-ref hold-cell 0)) 0))
+          (g3r-trainer-g3-save-native-fail operation))
+      (tr3-lease-snapshot-recheck-internal record parent)
+      (vector-set! ledger 6 'held)
+      ledger)))
+
+(define (g3r-trainer-g3-save-end! ledger)
+  (let ((operation 'g3r-trainer-g3-save-end!))
+    (if (or (not (vector? ledger)) (not (= (vector-length ledger) 7))
+            (not (eq? (vector-ref ledger 0) g3r-trainer-g3-save-tag))
+            (not (eq? (vector-ref ledger 6) 'held))
+            (not (vector? (vector-ref ledger 5)))
+            (not (= (vector-length (vector-ref ledger 5)) 1))
+            (not (vector-ref (vector-ref ledger 5) 0)))
+        (m3t-fail 'invalid-state operation
+                  "G3 held-save ledger is stale or malformed"))
+    (let ((status (g3r-trainer-g3-native-end
+                    (vector-ref (vector-ref ledger 5) 0))))
+      ;; A nonzero end is not recoverable here: this bridge cannot prove a
+      ;; native lifecycle after an altered or stale hold pointer.
+      (if (not (= status 0)) (tr3-lease-fail-stop 134))
+      (vector-set! (vector-ref ledger 5) 0 #f)
+      (guard (caught (#t (tr3-lease-fail-stop 134)))
+        (tr3-lease-snapshot-abort-internal!
+          (vector-ref ledger 1) (vector-ref ledger 2)))
+      (vector-set! ledger 6 'dead)
+      #t)))

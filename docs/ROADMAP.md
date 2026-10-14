@@ -2228,6 +2228,14 @@ M3/D2 idle checks, exact optimizer binding, held absent-gradient and moment
 checks, and equality of held and trainer update counts. Ordinary snapshot entry,
 snapshot/restore rechecks and O2 busy rejection stay unchanged. Focused source
 mutations pass; compiled joint lease/hold cleanup and SAVE gates remain open.
+The feature-private trainer-authorized G3 held-save admission leaf uses an
+exact enrolled TR3 snapshot lease to permit the same original M3T model in
+train mode, while ordinary G3 construction remains eval-only. It checks the
+registered generator/model and accepted same-registry T2 tokenizer bridge,
+then obtains the sealed M3T 14-handle roster before native G3 hold begin.
+Host source checks and a causal C bridge fixture cover foreign, stale, busy,
+unleased and zero-publication cuts. This is source-only: no linked Eshkol gate,
+O2 hold, C2 claim, receipt or replay admission follows from it.
 The [C2 claim successor source audit](g3/G3_R_HELD_O2_C2_ADOPTION_GATE.md#c2-claim-successor-gap-source-audit-2026-10-14)
 found a concrete partial-claim gap: C2's provisional token and progress stay
 lexical, and its guard rolls back P1 but not an O2 claim that mutates and then
