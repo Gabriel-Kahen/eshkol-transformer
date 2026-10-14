@@ -2,9 +2,10 @@
 
 Status: **source-only design**, based on `codex/e3-fault-symbol-audit` at
 `6cd29ccd2568daedb1ef6b71697b71e3968897e2`. This refines the
-[stage-cut inventory](E3_STAGE_CUT_INVENTORY.md) without adding a callable,
-changing a package, or admitting an R1/R2 row. The selected route remains the
-private bool evaluator. Every proposed fault is a test-only, recoverable
+[stage-cut inventory](E3_STAGE_CUT_INVENTORY.md). The original design
+commit added no callable or package; the bounded native test callables in the
+section below are now present in this source-only union. No R1/R2 row is
+admitted. The selected route remains the private bool evaluator. Every proposed fault is a test-only, recoverable
 preinvoke or preflight denial; no fault enters a validated K1 provider invoke.
 
 ## Bounded native source candidate
