@@ -9,6 +9,7 @@ import textwrap
 import unittest
 
 from tests.c2.test_handler_order import parse
+from tests.g3c4.p2_g2_held_holder_phase_overlay import MARKERS, instrument
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -16,6 +17,7 @@ DRIVER = ROOT / "tests/g3c4/p2_g2_held_holder_compiled_test.esk"
 SCRIPT = ROOT / "scripts/test-g3c4-p2g2-held-holder-compiled.sh"
 COMPILE_HELPER = ROOT / "scripts/g3c4-held-holder-eshkol-compile.sh"
 SHIM = ROOT / "tests/g3c4/p2_g2_held_holder_compiled_native.c"
+EXTENSION = ROOT / "native/g3c4_p2g2_terminal_held_holder_extension.esk"
 DEPS = ROOT / "native/g3c4_p2g2_held_holder_compiled_eshkol_deps.txt"
 INCLUDE_DIRS = ("internal/p1/lib", "internal/c1/lib", "internal/t1/lib",
                 "src", "lib", "native")
@@ -55,7 +57,7 @@ def phase_trace_contract(driver, shim, script):
     """Check the durable trace brackets the existing first-case assertions."""
     if not parse(driver):
         raise AssertionError("driver does not parse")
-    for phase in (*range(1, 6), *range(10, 24)):
+    for phase in (*range(1, 6), *range(10, 24), *range(30, 43)):
         if f"case {phase}:" not in shim:
             raise AssertionError(f"unmapped phase {phase}")
     if 'write(4, line, (size_t)size)' not in shim:
@@ -113,6 +115,30 @@ def phase_trace_contract(driver, shim, script):
 
 
 class HeldHolderCompiledSource(unittest.TestCase):
+    def test_test_only_overlay_traces_each_unwrapped_interval(self):
+        original = EXTENSION.read_text()
+        overlay = instrument(original)
+        self.assertTrue(parse(overlay))
+        self.assertNotIn("(held-phase ", original)
+        self.assertIn("(extern i64 held-phase", DRIVER.read_text().splitlines()[0])
+        for before, after in MARKERS:
+            with self.subTest(anchor=before[:45]):
+                self.assertIn(before, original)
+                self.assertIn(after, overlay)
+                with self.assertRaises(ValueError):
+                    instrument(original.replace(before, "", 1))
+        self.assertEqual(
+            [int(value) for value in re.findall(r"\(held-phase (\d+)\)", overlay)],
+            list(range(30, 43)))
+        helper = COMPILE_HELPER.read_text()
+        script = SCRIPT.read_text()
+        self.assertLess(helper.index('"${overlay_include[@]}"'),
+                        helper.index('-I "$project_root/native"'))
+        self.assertIn('test "$fixture" = on', helper)
+        self.assertIn('assert overlays == (1 if allow_overlay else 0)', script)
+        self.assertIn('assert on == expected', script)
+        self.assertIn('assert not any(\'held_holder\' in name for name in off)', script)
+
     def test_phase_trace_brackets_first_generation_and_rejects_mutations(self):
         driver, shim, script = DRIVER.read_text(), SHIM.read_text(), SCRIPT.read_text()
         phase_trace_contract(driver, shim, script)
@@ -211,21 +237,28 @@ class HeldHolderCompiledSource(unittest.TestCase):
                 """))
             runner.chmod(0o700)
 
-            for depfile_mode, fixture in (("normal", "on"), ("normal", "off"),
-                                          ("missing", "on"), ("empty", "on")):
-                with self.subTest(depfile_mode=depfile_mode, fixture=fixture):
-                    directory = base / f"{depfile_mode}-{fixture}"
+            for depfile_mode, fixture, with_overlay in (
+                    ("normal", "on", False), ("normal", "off", False),
+                    ("normal", "on", True), ("missing", "on", False),
+                    ("empty", "on", False)):
+                with self.subTest(depfile_mode=depfile_mode, fixture=fixture,
+                                  overlay=with_overlay):
+                    directory = base / f"{depfile_mode}-{fixture}-{with_overlay}"
                     evidence = directory / "evidence"
                     evidence.mkdir(parents=True)
+                    overlay = directory / "overlay"
+                    if with_overlay:
+                        overlay.mkdir()
+                        (overlay / EXTENSION.name).write_text("fixture")
                     call_log = directory / "calls.jsonl"
                     env = {**os.environ, "CALL_LOG": str(call_log),
                            "DEPFILE_MODE": depfile_mode}
                     result = subprocess.run(
                         ["bash", "-ec", 'source "$1"; compile_eshkol_fixture '
-                         '"$2" "$3" "$4" "$5" normal "$6" /bin/true "$7"',
+                         '"$2" "$3" "$4" "$5" normal "$6" /bin/true "$7" "$8"',
                          "bash", str(COMPILE_HELPER), fixture,
                          str(base / "fixture.esk"), str(directory), str(evidence),
-                         str(runner), str(ROOT)],
+                         str(runner), str(ROOT), str(overlay) if with_overlay else ""],
                         env=env, capture_output=True, text=True, check=False)
                     calls = [json.loads(line) for line in call_log.read_text().splitlines()]
                     if depfile_mode == "normal":
@@ -249,6 +282,9 @@ class HeldHolderCompiledSource(unittest.TestCase):
                             return result
 
                         self.assertEqual(common(object_call), common(executable_call))
+                        if with_overlay:
+                            self.assertLess(object_call.index(str(overlay)),
+                                            object_call.index(str(ROOT / "native")))
                         self.assertTrue((directory / f"{fixture}.d").stat().st_size)
                         self.assertTrue((directory / f"held-{fixture}").stat().st_size)
                     else:

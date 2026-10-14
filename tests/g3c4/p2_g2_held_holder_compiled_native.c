@@ -43,6 +43,19 @@ int64_t et_g3c4_p2g2_held_test_phase_v1(int64_t phase) {
     case 21: name = "generator.closed"; break;
     case 22: name = "case.done"; break;
     case 23: name = "reject.return"; break;
+    case 30: name = "preflight.enter"; break;
+    case 31: name = "preflight.return"; break;
+    case 32: name = "holder.check.enter"; break;
+    case 33: name = "holder.check.return"; break;
+    case 34: name = "generator.check.enter"; break;
+    case 35: name = "generator.check.return"; break;
+    case 36: name = "protected.scope.enter"; break;
+    case 37: name = "native.acquire.enter"; break;
+    case 38: name = "native.acquire.return"; break;
+    case 39: name = "protected.reserve.enter"; break;
+    case 40: name = "protected.reserve.return"; break;
+    case 41: name = "holder.bind.enter"; break;
+    case 42: name = "holder.bind.return"; break;
     default: abort();
   }
   held_trace(name);

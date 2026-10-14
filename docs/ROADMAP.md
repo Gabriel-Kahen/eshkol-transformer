@@ -3231,9 +3231,16 @@ publication, public G2 and continuation remain pending.
   for each held-holder run. Case 0 marks initialization, case 1 is the first
   held generation, and each case records native wrapper entry/return and
   postcheck boundaries. The trace is retained beside stdout/stderr on a
-  failure. Source controls pass; a reviewed, supported-host compiled run is
-  still needed to localize the crash. The full matrix, public G2, and
-  continuation acceptance remain unproved.
+  failure. On exact `17abc7c4`, an independent compiled run stopped at the
+  first normal-on case with SIGSEGV at `0x68`; its final fd-4 marker was
+  `generate.enter`, before `native.begin.enter`. The faulting instruction is
+  unknown. A bounded test-only overlay now adds unbuffered brackets around
+  prefix preflight, holder/generator checks, protected scope entry, native
+  acquire, protected reserve, and unwrapped holder bind. Production Eshkol
+  source and contracts are unchanged. Source controls and missing-anchor
+  negatives pass; the next gate is a changed-head supported-host compiled
+  first-case run with independent raw review to identify the failing interval.
+  The full matrix, public G2, and continuation acceptance remain unproved.
 
 ## Wave 4 — practical pretraining and performance
 

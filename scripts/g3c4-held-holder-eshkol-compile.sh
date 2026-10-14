@@ -4,11 +4,17 @@
 # object mode. The pinned runner does not emit depfiles for executables.
 compile_eshkol_fixture() {
   local fixture=$1 input=$2 directory=$3 evidence=$4 mode=$5 runner=$6
-  local cxx=$7 project_root=$8
+  local cxx=$7 project_root=$8 overlay=${9:-}
+  local -a overlay_include=()
+  if [[ -n "$overlay" ]]; then
+    test "$fixture" = on
+    test -s "$overlay/g3c4_p2g2_terminal_held_holder_extension.esk"
+    overlay_include=(-I "$overlay")
+  fi
   local -a arguments=(--strict-types --optimize 0 --no-stdlib
     -I "$project_root/internal/p1/lib" -I "$project_root/internal/c1/lib"
     -I "$project_root/internal/t1/lib" -I "$project_root/src"
-    -I "$project_root/lib" -I "$project_root/native"
+    -I "$project_root/lib" "${overlay_include[@]}" -I "$project_root/native"
     -L "$directory" --lib "g3c4_held_$fixture" "$input")
 
   mkdir -p "$directory/cache/$fixture"

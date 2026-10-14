@@ -141,14 +141,20 @@ exec $(printf '%q' "$cxx") $sanitizer_link "\$@" \\
   -Wl,--wrap=et_g3c4_private_p2g2_holder_end_after_busy_v1
 WRAPPER
   chmod 0500 "$directory/cxx-wrap"
+  python3 "$PROJECT_ROOT/tests/g3c4/p2_g2_held_holder_phase_overlay.py" \
+    "$PROJECT_ROOT" "$directory/overlay"
   for fixture in on off; do
+    local overlay_arg=
     local input="$PROJECT_ROOT/tests/g3c4/p2_g2_terminal_composer_feature_off_test.esk"
-    [[ "$fixture" == on ]] && \
+    if [[ "$fixture" == on ]]; then
       input="$PROJECT_ROOT/tests/g3c4/p2_g2_held_holder_compiled_test.esk"
+      overlay_arg="$directory/overlay"
+    fi
     compile_eshkol_fixture "$fixture" "$input" "$directory" "$evidence" \
-      "$mode" "$runner" "$cxx" "$PROJECT_ROOT"
+      "$mode" "$runner" "$cxx" "$PROJECT_ROOT" "$overlay_arg"
   done
-  python3 - "$PROJECT_ROOT" "$directory/on.d" "$directory/off.d" "$evidence" "$mode" <<'PY'
+  python3 - "$PROJECT_ROOT" "$directory/on.d" "$directory/off.d" \
+    "$evidence" "$mode" "$directory/overlay/g3c4_p2g2_terminal_held_holder_extension.esk" <<'PY'
 from pathlib import Path
 import hashlib
 import shlex
@@ -158,22 +164,30 @@ import sys
 root = Path(sys.argv[1]).resolve()
 on_depfile, off_depfile, evidence, mode = (
     Path(sys.argv[2]), Path(sys.argv[3]), Path(sys.argv[4]), sys.argv[5])
+overlay = Path(sys.argv[6]).resolve(strict=True)
+original = 'native/g3c4_p2g2_terminal_held_holder_extension.esk'
 
-def dependencies(depfile):
+def dependencies(depfile, allow_overlay=False):
     text = depfile.read_text().replace('\\\n', '')
     items = shlex.split(text.split(':', 1)[1])
     names = []
+    overlays = 0
     for item in items:
         path = Path(item)
         path = (path if path.is_absolute() else root / path).resolve(strict=True)
+        if allow_overlay and path == overlay:
+            names.append(original)
+            overlays += 1
+            continue
         assert path.is_relative_to(root), item
         name = path.relative_to(root).as_posix()
         assert name.endswith('.esk'), name
         names.append(name)
     assert len(names) == len(set(names)), names
+    assert overlays == (1 if allow_overlay else 0), overlays
     return names
 
-on = dependencies(on_depfile)
+on = dependencies(on_depfile, allow_overlay=True)
 off = dependencies(off_depfile)
 expected = (root / 'native/g3c4_p2g2_held_holder_compiled_eshkol_deps.txt').read_text().splitlines()
 assert on == expected, (on, expected)

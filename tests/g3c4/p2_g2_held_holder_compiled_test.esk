@@ -1,3 +1,4 @@
+(extern i64 held-phase i64 :real et_g3c4_p2g2_held_test_phase_v1)
 (load "g3c4_p2g2_terminal_held_holder_root.esk")
 
 (extern i64 held-arm i64 :real et_g3c4_p2g2_held_test_arm_v1)
@@ -6,7 +7,6 @@
         :real et_g3c4_p2g2_coordinator_test_mark_v1)
 (extern i64 held-after-abort ptr i64
         :real et_g3c4_p2g2_coordinator_test_after_abort_v1)
-(extern i64 held-phase i64 :real et_g3c4_p2g2_held_test_phase_v1)
 
 (held-phase 1)
 (define checks 0)
