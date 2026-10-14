@@ -2014,8 +2014,9 @@ full continuation.
 The [private replayed-P1 linked gate candidate](g3/G3_R_REPLAYED_PREFIX_LINKED_GATE.md)
 pins a one-use real-provider Eshkol fixture, test-only sampler interposition,
 ordered source/SHA manifest, and release-gated normal/repeat/sanitizer runner.
-Source-only closure and command checks are prepared; linked compiler execution
-and admission remain **HOLD**. The fixture covers P1 prefix parity at the
+Source-only closure, exact linker-wrapper and logged PASS-command checks, and
+SHA-repinned semantic negatives are prepared; linked compiler execution and
+admission remain **HOLD**. The fixture covers P1 prefix parity at the
 uninterrupted sampler boundary, replayed commit parity, fresh EOS, no-draw
 P2/budget/exhaustion, and same-generator abort/retry.
 

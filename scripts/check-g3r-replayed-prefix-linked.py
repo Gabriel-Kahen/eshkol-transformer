@@ -2,6 +2,7 @@
 """Closed, source-only manifest and command check for the linked P1 gate."""
 from hashlib import sha256
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = "native/g3m_seeded_p1_g1_source_closure.txt"
@@ -78,9 +79,30 @@ def validate_runner(source: str) -> None:
             "release must precede toolchain execution")
     require(source.index("python3 \"$PROJECT_ROOT/scripts/check-g3r-replayed-prefix-linked.py\"")
             < source.index("verify_toolchain"), "source check must precede build")
+    wrapper_start = '  cat >"$directory/cxx-wrap" <<WRAPPER'
+    require(source.count(wrapper_start) == 1, "linker wrapper definition changed")
+    wrapper = re.findall(r'(?m)^  cat >"\$directory/cxx-wrap" <<WRAPPER\n(.*?)^WRAPPER$',
+                         source, re.DOTALL | re.MULTILINE)
+    expected_wrapper = ('#!/usr/bin/env bash\n'
+                        'exec $(printf \'%q\' "$cxx") '
+                        '-Wl,--wrap=et_kernel_runtime_dispatch '
+                        '$sanitizer_link "\\$@"\n')
+    require(wrapper == [expected_wrapper], "linker wrapper command changed")
+    build = re.findall(r'(?m)^build_mode\(\) \{\n(.*?)^\}\nbuild_mode normal$',
+                       source, re.DOTALL | re.MULTILINE)
+    require(len(build) == 1, "build_mode command structure changed")
+    expected_pass = ('  [[ ! -s "$directory/stderr" ]] || '
+                     'die "$mode runtime stderr is nonempty"\n'
+                     "  run_logged grep -E '^G3-R linked replayed P1 PASS: "
+                     "checks=[1-9][0-9]*$' \\\n"
+                     '    "$directory/stdout" >/dev/null || '
+                     'die "$mode PASS line missing"\n')
+    require(build[0].endswith(expected_pass), "logged PASS check command changed")
+    require(build[0].count("grep -E") == 1, "PASS check command duplicated")
 
 
-def validate_manifest(source: str, paths: list[str], root: Path) -> None:
+def validate_manifest(source: str, paths: list[str], root: Path,
+                      overrides: dict[str, bytes] | None = None) -> None:
     lines = source.splitlines()
     expected_headers = [f"{key}\t{value}" for key, value in HEADERS]
     require(lines[:len(expected_headers)] == expected_headers, "toolchain provenance header changed")
@@ -92,8 +114,26 @@ def validate_manifest(source: str, paths: list[str], root: Path) -> None:
     sha_lines = lines[len(expected_headers):]
     require(len(sha_lines) == len(local), "manifest path omission or addition")
     for line, path in zip(sha_lines, local):
-        digest = sha256((root / path).read_bytes()).hexdigest()
+        content = (overrides or {}).get(path)
+        digest = sha256(content if content is not None else (root / path).read_bytes()).hexdigest()
         require(line == f"source_sha256\t{digest}\t{path}", f"source hash/path drift: {path}")
+
+
+def require_rejected_repin(runner: str, manifest: str, paths: list[str],
+                           old: str, new: str) -> None:
+    require(runner.count(old) == 1, f"mutation target changed: {old}")
+    mutant = runner.replace(old, new, 1)
+    path = "scripts/test-g3r-replayed-prefix-linked.sh"
+    old_row = f"source_sha256\t{sha256(runner.encode()).hexdigest()}\t{path}"
+    new_row = f"source_sha256\t{sha256(mutant.encode()).hexdigest()}\t{path}"
+    require(manifest.count(old_row) == 1, "runner manifest row changed")
+    repinned = manifest.replace(old_row, new_row, 1)
+    validate_manifest(repinned, paths, ROOT, {path: mutant.encode()})
+    try:
+        validate_runner(mutant)
+    except ValueError:
+        return
+    raise ValueError(f"repinned semantic mutation escaped checker: {old} -> {new}")
 
 
 def main() -> None:
@@ -114,17 +154,14 @@ def main() -> None:
     for needle in BRIDGE_NEEDLES:
         require(needle in bridge, f"bridge omitted {needle}")
     validate_manifest(manifest, closure, ROOT)
-    # Causal source-only negatives: an omitted command or manifest entry must
-    # close the gate, not merely change a printed PASS string.
-    for needle in ("-Wl,--wrap=et_kernel_runtime_dispatch",
-                   "-DET_G3R_REPLAYED_PREFIX_PRIVATE",
-                   "replayed_prefix_linked_probe.c"):
-        try:
-            validate_runner(runner.replace(needle, "", 1))
-        except ValueError:
-            pass
-        else:
-            raise ValueError(f"omitted command escaped checker: {needle}")
+    # Repin the changed runner SHA first, so these negatives prove command
+    # semantics are checked independently of manifest drift.
+    for old, new in (("-Wl,--wrap=et_kernel_runtime_dispatch",
+                      "-Wl,--wrap=et_kernel_runtime_dispatch_broken"),
+                     ("run_logged grep -E", "grep -E"),
+                     ("-DET_G3R_REPLAYED_PREFIX_PRIVATE", ""),
+                     ("replayed_prefix_linked_probe.c", "")):
+        require_rejected_repin(runner, manifest, closure, old, new)
     lines = manifest.splitlines()
     try:
         validate_manifest("\n".join(lines[:-1]) + "\n", closure, ROOT)
