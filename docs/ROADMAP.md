@@ -874,6 +874,13 @@ same-UID and unauthenticated. The sum covers only the declared setup, roles
 and observer; the passive
 caller is still active, the actor graph and reports lack protected authority,
 and whole-attempt resource/time proof remains HOLD.
+The generated setup worker now verifies child-subreaper status and reaps an
+injected detached, pipe-free descendant after the broker exits. That unlisted
+actor blocks the declared peak sum even with all three phases and expected
+pipe EOF; unavailable subreaper and live-child cuts also omit the sum. This is
+an ancestry census for the fixed same-UID graph, not spawn/migration denial or
+a private-cgroup empty-scope proof. The sampled caller and protected-custody
+gaps remain HOLD.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.

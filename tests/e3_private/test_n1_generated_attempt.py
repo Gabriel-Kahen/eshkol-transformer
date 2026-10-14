@@ -30,6 +30,7 @@ class GeneratedAttemptTests(unittest.TestCase):
         self.assertEqual(record["phases"], ["HOLD", "RECEIPT", "SEAL"])
         self.assertEqual(set(record["roles"]), {"broker", "reader", "sealer"})
         self.assertEqual(record["unresolved"], [])
+        self.assertEqual(record["unexpected_actors"], [])
         self.assertEqual(record["uid_transition"], "STUB-SAME-UID")
         self.assertEqual(record["protected_channel"], "STUB-SAME-UID")
         self.assertEqual(record["private_cgroup"], "HOLD")
@@ -50,6 +51,7 @@ class GeneratedAttemptTests(unittest.TestCase):
             "seal_sync": ["HOLD", "RECEIPT"],
             "timeout": ["HOLD"], "inherited_fd": [],
             "cgroup_migration": ["HOLD", "RECEIPT"],
+            "detached_actor": ["HOLD", "RECEIPT", "SEAL"],
         }
         for fault, phases in expected.items():
             with self.subTest(fault=fault):
@@ -64,6 +66,36 @@ class GeneratedAttemptTests(unittest.TestCase):
             self.assertEqual(attempt.probe(fault)["roles"]["broker"]["exit_code"], 9)
         self.assertEqual(attempt.probe("seal_sync")["roles"]["sealer"]["exit_code"], 9)
         self.assertLess(attempt.probe("timeout")["elapsed_boottime_ns"], 3_000_000_000)
+
+    def test_detached_pipe_free_actor_is_reaped_and_blocks_peak_sum(self):
+        record = attempt.probe("detached_actor")
+        self.assert_hold(record)
+        self.assertEqual(record["reason"], "unexpected-or-unmeasured-actor")
+        self.assertEqual(record["phases"], ["HOLD", "RECEIPT", "SEAL"])
+        self.assertEqual(record["unresolved"], [])
+        self.assertEqual(len(record["unexpected_actors"]), 1)
+        self.assertEqual(record["unexpected_actors"][0]["exit_code"], 0)
+        self.assertGreater(record["unexpected_actors"][0]["peak_rss_bytes"], 0)
+        self.assertNotIn("observed_peak_sum_bytes", record)
+        outer = attempt._finite_observer_diagnostic("detached_actor")
+        self.assertEqual(outer["reason"], "observer-report-unverified")
+        self.assertNotIn("declared_plus_caller_peak_sum_bytes", outer)
+
+    def test_subreaper_or_unlisted_child_uncertainty_blocks_peak_sum(self):
+        with mock.patch.object(attempt, "_enable_subreaper",
+                               side_effect=attempt.Hold("subreaper-unavailable")):
+            unavailable = attempt.probe()
+        self.assert_hold(unavailable)
+        self.assertEqual(unavailable["reason"], "setup-or-report-closure-unverified")
+        self.assertNotIn("observed_peak_sum_bytes", unavailable)
+
+        with mock.patch.object(attempt, "_census_unlisted_children",
+                               return_value=([], True)):
+            live = attempt.probe()
+        self.assert_hold(live)
+        self.assertEqual(live["reason"], "actor-closure-unverified")
+        self.assertEqual(live["unresolved"], ["unlisted-live-child"])
+        self.assertNotIn("observed_peak_sum_bytes", live)
 
     def test_unknown_fault_or_malformed_setup_report_cannot_succeed(self):
         with self.assertRaisesRegex(ValueError, "unknown-generated-fault"):
@@ -80,6 +112,7 @@ class GeneratedAttemptTests(unittest.TestCase):
                     "roles": {role: {"exit_code": 0, "peak_rss_bytes": 1024}
                               for role in ("broker", "reader", "sealer")},
                     "unresolved": [], "uid_transition": "STUB-SAME-UID",
+                    "unexpected_actors": [],
                     "protected_channel": "STUB-SAME-UID", "private_cgroup": "HOLD",
                     "v3_signatures": "HOLD"}
         mutants = {
@@ -91,6 +124,8 @@ class GeneratedAttemptTests(unittest.TestCase):
             "unresolved-role": {**complete, "unresolved": ["sealer"]},
             "missing-phase": {**complete, "phases": ["HOLD", "RECEIPT"]},
             "duplicate-phase": {**complete, "phases": ["HOLD", "RECEIPT", "SEAL", "SEAL"]},
+            "unexpected-actor": {**complete, "unexpected_actors": [
+                {"exit_code": 0, "peak_rss_bytes": 1024}]},
         }
         for name, body in mutants.items():
             with self.subTest(name=name), mock.patch.object(attempt, "_setup", return_value=body):
@@ -105,6 +140,7 @@ class GeneratedAttemptTests(unittest.TestCase):
                 "roles": {role: {"exit_code": 0, "peak_rss_bytes": 1}
                           for role in ("broker", "reader", "sealer")},
                 "unresolved": [], "uid_transition": "STUB-SAME-UID",
+                "unexpected_actors": [],
                 "protected_channel": "STUB-SAME-UID", "private_cgroup": "HOLD",
                 "v3_signatures": "HOLD"}
         raw = json.dumps(body)

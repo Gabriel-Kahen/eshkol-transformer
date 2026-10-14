@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Generated-only finite attempt diagnostic. Every result retains custody HOLD."""
 
+import ctypes
 import hashlib
 import json
 import os
@@ -13,14 +14,14 @@ import tempfile
 import time
 from pathlib import Path
 
-SCHEMA = "e3-n1-generated-attempt-v1"
+SCHEMA = "e3-n1-generated-attempt-v2"
 FAULTS = {None, "before_hold", "after_hold", "after_receipt", "after_seal",
           "hold_sync", "receipt_sync", "seal_sync", "timeout",
-          "inherited_fd", "cgroup_migration"}
+          "inherited_fd", "cgroup_migration", "detached_actor"}
 GENERATED = b"e3-n1-generated-stream-v1\n"
 MAX_REPORT = 8192
 MAX_OBSERVER_REPORT = 16384
-FINITE_SCHEMA = "e3-n1-finite-observer-diagnostic-v2"
+FINITE_SCHEMA = "e3-n1-finite-observer-diagnostic-v3"
 
 
 class Hold(Exception):
@@ -37,6 +38,34 @@ def _cgroup():
     if len(matches) != 1:
         raise Hold("cgroup-v2-unavailable")
     return matches[0]
+
+
+def _enable_subreaper():
+    """Keep orphaned descendants reparented to this finite setup worker."""
+    libc = ctypes.CDLL(None, use_errno=True)
+    if libc.prctl(36, 1, 0, 0, 0) != 0:  # PR_SET_CHILD_SUBREAPER
+        raise Hold("subreaper-unavailable")
+    state = ctypes.c_int()
+    if libc.prctl(37, ctypes.byref(state), 0, 0, 0) != 0 or state.value != 1:
+        raise Hold("subreaper-unverified")
+
+
+def _census_unlisted_children():
+    """Reap adopted children; a live or unknown child blocks a declared sum."""
+    unexpected = []
+    deadline = _now() + 1_000_000_000
+    while True:
+        try:
+            pid, status, usage = os.wait4(-1, os.WNOHANG)
+        except ChildProcessError:
+            return unexpected, False
+        if pid:
+            unexpected.append({"exit_code": os.waitstatus_to_exitcode(status),
+                               "peak_rss_bytes": usage.ru_maxrss * 1024})
+            continue
+        if _now() >= deadline:
+            return unexpected, True
+        time.sleep(0.005)
 
 
 def _close_except(allowed):
@@ -165,6 +194,12 @@ def _broker(root, report_fd, data_fd, fault, extra_fd):
     receipt_hash = _sync_json(root / "receipt-stub.json", {"schema": SCHEMA, "kind": "unsigned-receipt-stub"}, fault == "receipt_sync")
     _sync_json(root / "commit-stub.json", {"receipt_sha256": receipt_hash})
     _phase(report_fd, "RECEIPT")
+    if fault == "detached_actor":
+        if os.fork() == 0:
+            os.setsid()
+            _close_except({0, 1, 2})
+            time.sleep(0.05)
+            os._exit(0)
 
 
 def _reader(data_fd):
@@ -267,6 +302,7 @@ def _reap(roles, force):
 
 
 def _setup(fault):
+    _enable_subreaper()
     roles = {}
     fds = []
     phases = []
@@ -317,6 +353,11 @@ def _setup(fault):
             for fd in fds:
                 os.close(fd)
             peaks, unresolved = _reap(roles, reason != "generated-order-observed")
+            unexpected, unknown_live = _census_unlisted_children()
+    if unexpected or unknown_live:
+        reason = "unexpected-or-unmeasured-actor"
+        if unknown_live:
+            unresolved.append("unlisted-live-child")
     if unresolved:
         reason = "actor-closure-unverified"
     elif reason == "generated-order-observed" and (
@@ -324,6 +365,7 @@ def _setup(fault):
             any(item["exit_code"] != 0 for item in peaks.values())):
         reason = "actor-exit-unverified"
     return {"reason": reason, "phases": phases, "roles": peaks,
+            "unexpected_actors": unexpected,
             "unresolved": unresolved, "uid_transition": "STUB-SAME-UID",
             "protected_channel": "STUB-SAME-UID",
             "private_cgroup": "HOLD", "v3_signatures": "HOLD"}
@@ -395,7 +437,7 @@ def probe(fault=None):
     try:
         body = json.loads(data, object_pairs_hook=_unique_object)
         if not isinstance(body, dict) or set(body) != {
-                "reason", "phases", "roles", "unresolved", "uid_transition",
+                "reason", "phases", "roles", "unresolved", "unexpected_actors", "uid_transition",
                 "protected_channel", "private_cgroup", "v3_signatures"}:
             raise ValueError
         if (not isinstance(body["reason"], str) or
@@ -403,12 +445,19 @@ def probe(fault=None):
                 any(phase not in ("HOLD", "RECEIPT", "SEAL") for phase in body["phases"]) or
                 not isinstance(body["roles"], dict) or
                 not set(body["roles"]) <= {"broker", "reader", "sealer"} or
+                not isinstance(body["unexpected_actors"], list) or
                 not isinstance(body["unresolved"], list) or
                 body["uid_transition"] != "STUB-SAME-UID" or
                 body["protected_channel"] != "STUB-SAME-UID" or
                 body["private_cgroup"] != "HOLD" or body["v3_signatures"] != "HOLD"):
             raise ValueError
         for item in body["roles"].values():
+            if (not isinstance(item, dict) or set(item) != {"exit_code", "peak_rss_bytes"}
+                    or type(item["exit_code"]) is not int
+                    or type(item["peak_rss_bytes"]) is not int
+                    or item["peak_rss_bytes"] < 0):
+                raise ValueError
+        for item in body["unexpected_actors"]:
             if (not isinstance(item, dict) or set(item) != {"exit_code", "peak_rss_bytes"}
                     or type(item["exit_code"]) is not int
                     or type(item["peak_rss_bytes"]) is not int
@@ -421,6 +470,7 @@ def probe(fault=None):
     complete = (body["reason"] == "generated-order-observed" and
                 body["phases"] == ["HOLD", "RECEIPT", "SEAL"] and
                 set(body["roles"]) == {"broker", "reader", "sealer"} and
+                body["unexpected_actors"] == [] and
                 body["unresolved"] == [] and
                 all(item["exit_code"] == 0 for item in body["roles"].values()))
     if complete:
@@ -451,7 +501,7 @@ def _observer_sender(ancillary):
 def _complete_inner_peak(record):
     keys = {"schema", "status", "resource_proof", "protected_pre_read_custody",
             "source_opened", "elapsed_boottime_ns", "setup_peak_rss_bytes",
-            "reason", "phases", "roles", "unresolved", "uid_transition",
+            "reason", "phases", "roles", "unresolved", "unexpected_actors", "uid_transition",
             "protected_channel", "private_cgroup", "v3_signatures",
             "observed_peak_sum_bytes"}
     if not isinstance(record, dict) or set(record) != keys:
@@ -462,6 +512,7 @@ def _complete_inner_peak(record):
             record["source_opened"] is not False or
             record["reason"] != "generated-order-observed" or
             record["phases"] != ["HOLD", "RECEIPT", "SEAL"] or
+            record["unexpected_actors"] != [] or
             record["unresolved"] != [] or
             record["uid_transition"] != "STUB-SAME-UID" or
             record["protected_channel"] != "STUB-SAME-UID" or
