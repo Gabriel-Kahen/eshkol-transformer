@@ -1,0 +1,710 @@
+#!/usr/bin/env python3
+"""Generated-only finite attempt diagnostic. Every result retains custody HOLD."""
+
+import ctypes
+import errno
+import hashlib
+import json
+import os
+import resource
+import select
+import signal
+import socket
+import struct
+import tempfile
+import time
+from pathlib import Path
+
+SCHEMA = "e3-n1-generated-attempt-v2"
+FAULTS = {None, "before_hold", "after_hold", "after_receipt", "after_seal",
+          "hold_sync", "receipt_sync", "seal_sync", "timeout",
+          "inherited_fd", "cgroup_migration", "detached_actor"}
+GENERATED = b"e3-n1-generated-stream-v1\n"
+MAX_REPORT = 8192
+MAX_OBSERVER_REPORT = 16384
+FINITE_SCHEMA = "e3-n1-finite-observer-diagnostic-v3"
+NO_SPAWN_CALLS = (b"fork", b"vfork", b"clone", b"clone3")
+
+
+class Hold(Exception):
+    pass
+
+
+def _now():
+    return time.clock_gettime_ns(time.CLOCK_BOOTTIME)
+
+
+def _cgroup():
+    lines = Path("/proc/self/cgroup").read_text().splitlines()
+    matches = [line[3:] for line in lines if line.startswith("0::/")]
+    if len(matches) != 1:
+        raise Hold("cgroup-v2-unavailable")
+    return matches[0]
+
+
+def _enable_subreaper():
+    """Keep orphaned descendants reparented to this finite setup worker."""
+    libc = ctypes.CDLL(None, use_errno=True)
+    if libc.prctl(36, 1, 0, 0, 0) != 0:  # PR_SET_CHILD_SUBREAPER
+        raise Hold("subreaper-unavailable")
+    state = ctypes.c_int()
+    if libc.prctl(37, ctypes.byref(state), 0, 0, 0) != 0 or state.value != 1:
+        raise Hold("subreaper-unverified")
+
+
+def _install_no_spawn():
+    """Install inherited Linux syscall denial before a fixed role runs."""
+    libc = ctypes.CDLL(None, use_errno=True)
+    if libc.prctl(38, 1, 0, 0, 0) != 0 or libc.prctl(39, 0, 0, 0, 0) != 1:
+        raise Hold("no-new-privs-unverified")
+    try:
+        seccomp = ctypes.CDLL("libseccomp.so.2", use_errno=True)
+    except OSError as error:
+        raise Hold("no-spawn-filter-unavailable") from error
+    seccomp.seccomp_init.argtypes = [ctypes.c_uint32]
+    seccomp.seccomp_init.restype = ctypes.c_void_p
+    seccomp.seccomp_syscall_resolve_name.argtypes = [ctypes.c_char_p]
+    seccomp.seccomp_syscall_resolve_name.restype = ctypes.c_int
+    seccomp.seccomp_rule_add.argtypes = [ctypes.c_void_p, ctypes.c_uint32,
+                                       ctypes.c_int, ctypes.c_uint]
+    seccomp.seccomp_load.argtypes = [ctypes.c_void_p]
+    seccomp.seccomp_release.argtypes = [ctypes.c_void_p]
+    context = seccomp.seccomp_init(0x7fff0000)  # SCMP_ACT_ALLOW
+    if not context:
+        raise Hold("no-spawn-filter-init")
+    try:
+        deny = 0x00050000 | errno.EPERM  # SCMP_ACT_ERRNO(EPERM)
+        for name in NO_SPAWN_CALLS:
+            number = seccomp.seccomp_syscall_resolve_name(name)
+            if number < 0 or seccomp.seccomp_rule_add(context, deny, number, 0) != 0:
+                raise Hold("no-spawn-filter-rule:" + name.decode())
+        if seccomp.seccomp_load(context) != 0:
+            raise Hold("no-spawn-filter-load")
+    finally:
+        seccomp.seccomp_release(context)
+
+
+def _assert_no_spawn():
+    """A successful install must actually deny the role's fork path."""
+    try:
+        pid = os.fork()
+    except OSError as error:
+        if error.errno == errno.EPERM:
+            return
+        raise Hold("no-spawn-filter-unverified") from error
+    if pid == 0:
+        os._exit(9)
+    os.wait4(pid, 0)
+    raise Hold("no-spawn-filter-unverified")
+
+
+def _census_unlisted_children():
+    """Reap adopted children; a live or unknown child blocks a declared sum."""
+    unexpected = []
+    deadline = _now() + 1_000_000_000
+    while True:
+        try:
+            pid, status, usage = os.wait4(-1, os.WNOHANG)
+        except ChildProcessError:
+            return unexpected, False
+        if pid:
+            unexpected.append({"exit_code": os.waitstatus_to_exitcode(status),
+                               "peak_rss_bytes": usage.ru_maxrss * 1024})
+            continue
+        if _now() >= deadline:
+            return unexpected, True
+        time.sleep(0.005)
+
+
+def _close_except(allowed):
+    for item in os.listdir("/proc/self/fd"):
+        fd = int(item)
+        if fd not in allowed:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+
+
+def _assert_fds(allowed):
+    for item in os.listdir("/proc/self/fd"):
+        fd = int(item)
+        if fd not in allowed:
+            try:
+                os.fstat(fd)
+            except OSError:
+                continue  # The temporary /proc directory descriptor closed.
+            raise Hold("unexpected-inherited-fd")
+
+
+def _parent_dirfd(path):
+    if not path.is_absolute() or ".." in path.parts:
+        raise Hold("parent-path-unverified")
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+    fd = None
+    try:
+        fd = os.open("/", flags)
+        for component in path.parts[1:]:
+            next_fd = os.open(component, flags, dir_fd=fd)
+            os.close(fd)
+            fd = next_fd
+        return fd
+    except OSError as error:
+        if fd is not None:
+            os.close(fd)
+        raise Hold("parent-path-unverified") from error
+
+
+def _check_parent_binding(path, pinned_fd):
+    current_fd = _parent_dirfd(path)
+    try:
+        pinned = os.fstat(pinned_fd)
+        current = os.fstat(current_fd)
+        if (pinned.st_dev, pinned.st_ino) != (current.st_dev, current.st_ino):
+            raise Hold("parent-identity-drift")
+    finally:
+        os.close(current_fd)
+
+
+def _sync_json(path, body, fault=False):
+    raw = json.dumps(body, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+    if path.name in ("", ".", ".."):
+        raise Hold("record-name-unverified")
+    parent = _parent_dirfd(path.parent)
+    try:
+        fd = os.open(path.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL |
+                     os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=parent)
+        try:
+            offset = 0
+            while offset < len(raw):
+                written = os.write(fd, raw[offset:])
+                if written <= 0:
+                    raise Hold("short-record-write")
+                offset += written
+            if fault:
+                raise Hold("injected-record-sync")
+            os.fsync(fd)
+            created = os.fstat(fd)
+        finally:
+            os.close(fd)
+        os.fsync(parent)
+        _check_parent_binding(path.parent, parent)
+        try:
+            read_fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW |
+                              os.O_CLOEXEC, dir_fd=parent)
+        except OSError as error:
+            raise Hold("readback-open-unverified") from error
+        try:
+            observed = os.fstat(read_fd)
+            identity = (created.st_dev, created.st_ino)
+            if (observed.st_dev, observed.st_ino) != identity:
+                raise Hold("readback-identity-drift")
+            with os.fdopen(read_fd, "rb", closefd=False) as stream:
+                if stream.read(len(raw) + 1) != raw:
+                    raise Hold("readback-mismatch")
+            current = os.stat(path.name, dir_fd=parent, follow_symlinks=False)
+            if (current.st_dev, current.st_ino) != identity:
+                raise Hold("readback-identity-drift")
+            _check_parent_binding(path.parent, parent)
+        finally:
+            os.close(read_fd)
+    finally:
+        os.close(parent)
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _phase(fd, name, fault=None):
+    group = "/synthetic-migration" if fault == "cgroup_migration" else _cgroup()
+    os.write(fd, (name + "|" + group + "\n").encode())
+
+
+def _broker(root, report_fd, data_fd, fault, extra_fd):
+    allowed = {0, 1, 2, report_fd, data_fd}
+    _close_except(allowed | ({extra_fd} if extra_fd is not None else set()))
+    _assert_fds(allowed)
+    if fault == "before_hold":
+        raise Hold("injected-before-hold")
+    _sync_json(root / "HOLD.json", {"schema": SCHEMA, "state": "HOLD"}, fault == "hold_sync")
+    _phase(report_fd, "HOLD")
+    if fault == "timeout":
+        time.sleep(2)
+    chunks = []
+    while True:
+        block = os.read(data_fd, 128)
+        if not block:
+            break
+        chunks.append(block)
+        if sum(map(len, chunks)) > len(GENERATED):
+            raise Hold("generated-overflow")
+    if b"".join(chunks) != GENERATED:
+        raise Hold("generated-stream-mismatch")
+    _sync_json(root / "stage.json", {"generated_sha256": hashlib.sha256(GENERATED).hexdigest()})
+    receipt_hash = _sync_json(root / "receipt-stub.json", {"schema": SCHEMA, "kind": "unsigned-receipt-stub"}, fault == "receipt_sync")
+    _sync_json(root / "commit-stub.json", {"receipt_sha256": receipt_hash})
+    _phase(report_fd, "RECEIPT")
+    if fault == "detached_actor":
+        if os.fork() == 0:
+            os.setsid()
+            _close_except({0, 1, 2})
+            time.sleep(0.05)
+            os._exit(0)
+
+
+def _reader(data_fd):
+    allowed = {0, 1, 2, data_fd}
+    _close_except(allowed)
+    _assert_fds(allowed)
+    os.write(data_fd, GENERATED)
+
+
+def _sealer(root, report_fd, fault):
+    allowed = {0, 1, 2, report_fd}
+    _close_except(allowed)
+    _assert_fds(allowed)
+    if not (root / "HOLD.json").is_file() or not (root / "commit-stub.json").is_file():
+        raise Hold("predecessor-missing")
+    _sync_json(root / "seal-stub.json", {"schema": SCHEMA, "kind": "unsigned-seal-stub"}, fault == "seal_sync")
+    _phase(report_fd, "SEAL", fault)
+
+
+def _spawn(fn, *args):
+    pid = os.fork()
+    if pid == 0:
+        try:
+            _install_no_spawn()
+            _assert_no_spawn()
+            fn(*args)
+            os._exit(0)
+        except BaseException:
+            os._exit(9)
+    return pid
+
+
+def _line(fd, deadline):
+    data = bytearray()
+    while _now() < deadline and len(data) <= 256:
+        ready, _, _ = select.select([fd], [], [], max(0, min(0.01, (deadline - _now()) / 1e9)))
+        if ready:
+            byte = os.read(fd, 1)
+            if not byte:
+                raise Hold("phase-eof")
+            if byte == b"\n":
+                name, group = data.decode().split("|", 1)
+                return name, group
+            data.extend(byte)
+    raise Hold("phase-timeout")
+
+
+def _expect_eof(fd, deadline):
+    while _now() < deadline:
+        ready, _, _ = select.select([fd], [], [], 0.01)
+        if ready:
+            if os.read(fd, 1):
+                raise Hold("unexpected-phase-byte")
+            return
+    raise Hold("phase-pipe-not-eof")
+
+
+def _unique_object(pairs):
+    body = {}
+    for key, value in pairs:
+        if key in body:
+            raise ValueError("duplicate-report-key")
+        body[key] = value
+    return body
+
+
+def _reap(roles, force):
+    peaks = {}
+    unresolved = []
+    for role, pid in roles.items():
+        deadline = _now() + (0 if force else 200_000_000)
+        while _now() < deadline:
+            try:
+                waited, status, usage = os.wait4(pid, os.WNOHANG)
+            except ChildProcessError:
+                unresolved.append(role)
+                break
+            if waited:
+                peaks[role] = {"exit_code": os.waitstatus_to_exitcode(status),
+                               "peak_rss_bytes": usage.ru_maxrss * 1024}
+                break
+            time.sleep(0.005)
+        else:
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            cleanup_end = _now() + 1_000_000_000
+            while _now() < cleanup_end:
+                try:
+                    waited, status, usage = os.wait4(pid, os.WNOHANG)
+                except ChildProcessError:
+                    break
+                if waited:
+                    peaks[role] = {"exit_code": os.waitstatus_to_exitcode(status),
+                                   "peak_rss_bytes": usage.ru_maxrss * 1024}
+                    break
+                time.sleep(0.005)
+            if role not in peaks:
+                unresolved.append(role)
+    return peaks, unresolved
+
+
+def _setup(fault):
+    _enable_subreaper()
+    roles = {}
+    fds = []
+    phases = []
+    reason = "generated-order-observed"
+    expected = _cgroup()
+    with tempfile.TemporaryDirectory(prefix="e3-n1-generated-") as directory:
+        root = Path(directory)
+        broker_r, broker_w = os.pipe2(os.O_CLOEXEC)
+        data_r, data_w = os.pipe2(os.O_CLOEXEC)
+        fds.extend((broker_r, broker_w, data_r, data_w))
+        extra = os.open("/dev/null", os.O_RDONLY) if fault == "inherited_fd" else None
+        if extra is not None:
+            fds.append(extra)
+        try:
+            roles["broker"] = _spawn(_broker, root, broker_w, data_r, fault, extra)
+            os.close(broker_w); fds.remove(broker_w)
+            os.close(data_r); fds.remove(data_r)
+            deadline = _now() + (150_000_000 if fault == "timeout" else 1_000_000_000)
+            phase, group = _line(broker_r, deadline)
+            if (phase, group) != ("HOLD", expected):
+                raise Hold("hold-or-cgroup-mismatch")
+            phases.append(phase)
+            if fault == "after_hold":
+                raise Hold("injected-after-hold")
+            roles["reader"] = _spawn(_reader, data_w)
+            os.close(data_w); fds.remove(data_w)
+            phase, group = _line(broker_r, deadline)
+            if (phase, group) != ("RECEIPT", expected):
+                raise Hold("receipt-or-cgroup-mismatch")
+            phases.append(phase)
+            if fault == "after_receipt":
+                raise Hold("injected-after-receipt")
+            seal_r, seal_w = os.pipe2(os.O_CLOEXEC)
+            fds.extend((seal_r, seal_w))
+            roles["sealer"] = _spawn(_sealer, root, seal_w, fault)
+            os.close(seal_w); fds.remove(seal_w)
+            phase, group = _line(seal_r, deadline)
+            if (phase, group) != ("SEAL", expected):
+                raise Hold("seal-or-cgroup-mismatch")
+            phases.append(phase)
+            if fault == "after_seal":
+                raise Hold("injected-after-seal")
+            _expect_eof(seal_r, deadline)
+            _expect_eof(broker_r, deadline)
+        except (Hold, OSError, ValueError) as error:
+            reason = str(error)
+        finally:
+            for fd in fds:
+                os.close(fd)
+            peaks, unresolved = _reap(roles, reason != "generated-order-observed")
+            unexpected, unknown_live = _census_unlisted_children()
+    if unexpected or unknown_live:
+        reason = "unexpected-or-unmeasured-actor"
+        if unknown_live:
+            unresolved.append("unlisted-live-child")
+    if unresolved:
+        reason = "actor-closure-unverified"
+    elif reason == "generated-order-observed" and (
+            set(peaks) != {"broker", "reader", "sealer"} or
+            any(item["exit_code"] != 0 for item in peaks.values())):
+        reason = "actor-exit-unverified"
+    return {"reason": reason, "phases": phases, "roles": peaks,
+            "unexpected_actors": unexpected,
+            "unresolved": unresolved, "uid_transition": "STUB-SAME-UID",
+            "protected_channel": "STUB-SAME-UID",
+            "private_cgroup": "HOLD", "v3_signatures": "HOLD"}
+
+
+def probe(fault=None):
+    """No source path or real-read mode is accepted."""
+    if fault not in FAULTS:
+        raise ValueError("unknown-generated-fault")
+    start = _now()
+    read_fd, write_fd = os.pipe2(os.O_CLOEXEC)
+    pid = os.fork()
+    if pid == 0:
+        os.close(read_fd)
+        os.setpgid(0, 0)
+        try:
+            body = _setup(fault)
+            os.write(write_fd, json.dumps(body, sort_keys=True).encode() + b"\n")
+            os._exit(0)
+        except BaseException:
+            os._exit(9)
+    os.close(write_fd)
+    data = bytearray()
+    reaped = None
+    eof = False
+    deadline = start + 3_000_000_000
+    while _now() < deadline and (reaped is None or not eof):
+        ready, _, _ = select.select([read_fd], [], [], 0.01)
+        if ready:
+            block = os.read(read_fd, MAX_REPORT + 1)
+            if block:
+                data.extend(block)
+            else:
+                eof = True
+        if reaped is None:
+            waited, status, usage = os.wait4(pid, os.WNOHANG)
+            if waited:
+                reaped = (os.waitstatus_to_exitcode(status), usage.ru_maxrss * 1024)
+        if len(data) > MAX_REPORT:
+            break
+    if reaped is None:
+        try:
+            os.killpg(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+    if reaped is None:
+        cleanup_end = _now() + 1_000_000_000
+        while _now() < cleanup_end:
+            waited, status, usage = os.wait4(pid, os.WNOHANG)
+            if waited:
+                reaped = (os.waitstatus_to_exitcode(status), usage.ru_maxrss * 1024)
+                break
+            time.sleep(0.005)
+    os.close(read_fd)
+    result = {"schema": SCHEMA, "status": "HOLD", "resource_proof": "HOLD",
+              "protected_pre_read_custody": "HOLD", "source_opened": False,
+              "setup_peak_rss_bytes": reaped[1] if reaped is not None else None}
+
+    def finish():
+        result["elapsed_boottime_ns"] = _now() - start
+        return result
+
+    if reaped is None or not eof or reaped[0] != 0 or len(data) > MAX_REPORT:
+        result["reason"] = "setup-or-report-closure-unverified"
+        return finish()
+    try:
+        body = json.loads(data, object_pairs_hook=_unique_object)
+        if not isinstance(body, dict) or set(body) != {
+                "reason", "phases", "roles", "unresolved", "unexpected_actors", "uid_transition",
+                "protected_channel", "private_cgroup", "v3_signatures"}:
+            raise ValueError
+        if (not isinstance(body["reason"], str) or
+                not isinstance(body["phases"], list) or
+                any(phase not in ("HOLD", "RECEIPT", "SEAL") for phase in body["phases"]) or
+                not isinstance(body["roles"], dict) or
+                not set(body["roles"]) <= {"broker", "reader", "sealer"} or
+                not isinstance(body["unexpected_actors"], list) or
+                not isinstance(body["unresolved"], list) or
+                body["uid_transition"] != "STUB-SAME-UID" or
+                body["protected_channel"] != "STUB-SAME-UID" or
+                body["private_cgroup"] != "HOLD" or body["v3_signatures"] != "HOLD"):
+            raise ValueError
+        for item in body["roles"].values():
+            if (not isinstance(item, dict) or set(item) != {"exit_code", "peak_rss_bytes"}
+                    or type(item["exit_code"]) is not int
+                    or type(item["peak_rss_bytes"]) is not int
+                    or item["peak_rss_bytes"] < 0):
+                raise ValueError
+        for item in body["unexpected_actors"]:
+            if (not isinstance(item, dict) or set(item) != {"exit_code", "peak_rss_bytes"}
+                    or type(item["exit_code"]) is not int
+                    or type(item["peak_rss_bytes"]) is not int
+                    or item["peak_rss_bytes"] < 0):
+                raise ValueError
+    except (ValueError, UnicodeDecodeError, TypeError):
+        result["reason"] = "setup-report-unverified"
+        return finish()
+    result.update(body)
+    complete = (body["reason"] == "generated-order-observed" and
+                body["phases"] == ["HOLD", "RECEIPT", "SEAL"] and
+                set(body["roles"]) == {"broker", "reader", "sealer"} and
+                body["unexpected_actors"] == [] and
+                body["unresolved"] == [] and
+                all(item["exit_code"] == 0 for item in body["roles"].values()))
+    if complete:
+        result["observed_peak_sum_bytes"] = reaped[1] + sum(
+            item["peak_rss_bytes"] for item in body["roles"].values())
+    elif body["reason"] == "generated-order-observed":
+        result["reason"] = "finite-graph-unverified"
+    return finish()
+
+
+def _emit_observer_report(channel, record):
+    raw = json.dumps(record, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+    if len(raw) > MAX_OBSERVER_REPORT:
+        raise Hold("observer-report-too-large")
+    if channel.send(raw) != len(raw):
+        raise Hold("observer-report-short-send")
+
+
+def _observer_sender(ancillary):
+    credentials = [struct.unpack("3i", data) for level, kind, data in ancillary
+                   if level == socket.SOL_SOCKET and kind == socket.SCM_CREDENTIALS
+                   and len(data) == struct.calcsize("3i")]
+    if len(credentials) != 1 or len(ancillary) != 1:
+        raise ValueError("observer-credentials-unverified")
+    return credentials[0]
+
+
+def _complete_inner_peak(record):
+    keys = {"schema", "status", "resource_proof", "protected_pre_read_custody",
+            "source_opened", "elapsed_boottime_ns", "setup_peak_rss_bytes",
+            "reason", "phases", "roles", "unresolved", "unexpected_actors", "uid_transition",
+            "protected_channel", "private_cgroup", "v3_signatures",
+            "observed_peak_sum_bytes"}
+    if not isinstance(record, dict) or set(record) != keys:
+        raise ValueError("observer-report-shape")
+    if (record["schema"] != SCHEMA or record["status"] != "HOLD" or
+            record["resource_proof"] != "HOLD" or
+            record["protected_pre_read_custody"] != "HOLD" or
+            record["source_opened"] is not False or
+            record["reason"] != "generated-order-observed" or
+            record["phases"] != ["HOLD", "RECEIPT", "SEAL"] or
+            record["unexpected_actors"] != [] or
+            record["unresolved"] != [] or
+            record["uid_transition"] != "STUB-SAME-UID" or
+            record["protected_channel"] != "STUB-SAME-UID" or
+            record["private_cgroup"] != "HOLD" or
+            record["v3_signatures"] != "HOLD" or
+            type(record["elapsed_boottime_ns"]) is not int or
+            record["elapsed_boottime_ns"] < 0 or
+            type(record["setup_peak_rss_bytes"]) is not int or
+            record["setup_peak_rss_bytes"] < 0 or
+            not isinstance(record["roles"], dict) or
+            set(record["roles"]) != {"broker", "reader", "sealer"} or
+            type(record["observed_peak_sum_bytes"]) is not int):
+        raise ValueError("observer-report-invalid")
+    peaks = []
+    for role in ("broker", "reader", "sealer"):
+        item = record["roles"][role]
+        if (not isinstance(item, dict) or set(item) != {"exit_code", "peak_rss_bytes"}
+                or type(item["exit_code"]) is not int or item["exit_code"] != 0
+                or type(item["peak_rss_bytes"]) is not int
+                or item["peak_rss_bytes"] < 0):
+            raise ValueError("observer-role-invalid")
+        peaks.append(item["peak_rss_bytes"])
+    subtotal = record["setup_peak_rss_bytes"] + sum(peaks)
+    if record["observed_peak_sum_bytes"] != subtotal:
+        raise ValueError("observer-peak-sum-invalid")
+    return subtotal
+
+
+def _caller_peak_rss_bytes():
+    """Linux lifetime high-water RSS through this sample, including prior work."""
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    if type(peak) is not int or peak <= 0:
+        raise ValueError("caller-peak-unverified")
+    return peak * 1024
+
+
+def _finite_observer_diagnostic(fault=None):
+    """Generated-only finite peaks and sampled caller peak; custody remains HOLD."""
+    if fault not in FAULTS:
+        raise ValueError("unknown-generated-fault")
+    start = _now()
+    receiver = sender = None
+    try:
+        receiver, sender = socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+        receiver.setsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED, 1)
+    except OSError:
+        if receiver is not None:
+            receiver.close()
+            sender.close()
+        return {"schema": FINITE_SCHEMA, "status": "HOLD", "resource_proof": "HOLD",
+                "protected_pre_read_custody": "HOLD", "source_opened": False,
+                "finite_observer_elapsed_boottime_ns": _now() - start,
+                "observer_peak_rss_bytes": None,
+                "reason": "observer-credential-channel-unavailable"}
+    pid = os.fork()
+    if pid == 0:
+        receiver.close()
+        try:
+            _emit_observer_report(sender, probe(fault))
+            sender.close()
+            os._exit(0)
+        except BaseException:
+            os._exit(9)
+    sender.close()
+    data = None
+    reaped = None
+    eof = False
+    lost = False
+    report_invalid = False
+    deadline = start + 6_000_000_000
+    while _now() < deadline and (reaped is None or not eof):
+        ready, _, _ = select.select([receiver], [], [], 0.01)
+        if ready:
+            block, ancillary, flags, _ = receiver.recvmsg(
+                MAX_OBSERVER_REPORT + 1, socket.CMSG_SPACE(struct.calcsize("3i")))
+            if block or ancillary:
+                try:
+                    if (data is not None or not block or
+                            flags & (socket.MSG_TRUNC | socket.MSG_CTRUNC) or
+                            len(block) > MAX_OBSERVER_REPORT or
+                            _observer_sender(ancillary) != (pid, os.getuid(), os.getgid())):
+                        raise ValueError("observer-report-origin-unverified")
+                except (ValueError, struct.error):
+                    report_invalid = True
+                else:
+                    data = block
+            else:
+                eof = True
+        # Keep the forked PID unreaped until EOF: a queued credential cannot
+        # accidentally match a later process that reused that PID.
+        if eof and reaped is None:
+            try:
+                waited, status, usage = os.wait4(pid, os.WNOHANG)
+            except ChildProcessError:
+                lost = True
+                break
+            if waited:
+                reaped = (os.waitstatus_to_exitcode(status), usage.ru_maxrss * 1024)
+    if reaped is None and not lost:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        cleanup_end = _now() + 1_000_000_000
+        while _now() < cleanup_end:
+            try:
+                waited, status, usage = os.wait4(pid, os.WNOHANG)
+            except ChildProcessError:
+                break
+            if waited:
+                reaped = (os.waitstatus_to_exitcode(status), usage.ru_maxrss * 1024)
+                break
+            time.sleep(0.005)
+    receiver.close()
+    end = _now()
+    result = {"schema": FINITE_SCHEMA, "status": "HOLD", "resource_proof": "HOLD",
+              "protected_pre_read_custody": "HOLD", "source_opened": False,
+              "finite_observer_elapsed_boottime_ns": end - start,
+              "observer_peak_rss_bytes": reaped[1] if reaped is not None else None}
+    if reaped is None or reaped[0] != 0 or not eof:
+        result["reason"] = "observer-or-report-closure-unverified"
+        return result
+    if report_invalid or data is None:
+        result["reason"] = "observer-report-unverified"
+        return result
+    try:
+        inner = json.loads(data, object_pairs_hook=_unique_object)
+        subtotal = _complete_inner_peak(inner)
+        if inner["elapsed_boottime_ns"] > end - start:
+            raise ValueError("observer-time-inconsistent")
+    except (ValueError, UnicodeDecodeError, TypeError):
+        result["reason"] = "observer-report-unverified"
+        return result
+    result["reason"] = "declared-peak-arithmetic-observed"
+    result["inner_observation"] = inner
+    result["declared_finite_peak_sum_bytes"] = subtotal + reaped[1]
+    try:
+        caller_peak = _caller_peak_rss_bytes()
+    except (OSError, ValueError):
+        result["reason"] = "caller-peak-unverified"
+        return result
+    result["caller_peak_rss_bytes_at_sample"] = caller_peak
+    result["declared_plus_caller_peak_sum_bytes"] = (
+        result["declared_finite_peak_sum_bytes"] + caller_peak)
+    return result

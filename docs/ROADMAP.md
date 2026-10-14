@@ -1234,6 +1234,16 @@ current two-field private scenario, the single tied head/token-embedding owner,
 and immediate commit after successful prepare. Integration and compiled proof
 remain pending; this contract does not discharge any §9 numerical or rollback row.
 
+The [E3 N1 current-main source union](e3/E3_N1_BA4954_UNION.md) carries the
+independently accepted generated-resource contracts, Python tools and tests
+from `5dc1e475` onto main `ba4954d2`, including the actor census, role
+no-spawn filter and ancestor-symlink readback repair. A repository-destination
+guard preserves the synthetic-only contract when an isolated worktree lies
+under `/tmp`. Focused N1 host tests (112 private, 24 broker), 107 CI source
+tests and CI topology pass. This is source-only generated evidence: protected
+custody, real OCI read, trusted actor closure, the 30-second/256-MiB attempt
+predicate, compiled E3 and full §9 acceptance remain **HOLD**.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
