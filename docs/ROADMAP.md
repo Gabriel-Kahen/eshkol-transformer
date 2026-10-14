@@ -3379,6 +3379,13 @@ publication, public G2 and continuation remain pending.
   claimed.
   All failed packages and raw evidence are preserved; terminal/full/public/
   data-only G3 remain HOLD.
+  A bounded [public G2 frontier contract](g3/G3_C4_P2_G2_PUBLIC_FRONTIER_CONTRACT.md)
+  now source-pins the installed C2/C4 P2/G1 package and rejects premature
+  G2 routing, terminal package load, scalar-result reuse, private clone export
+  and weakened native-first release. Its causal mutation checker is source-only;
+  no G2 profile value, public tensor ABI, dispatch or package export is added.
+  Public implementation waits for accepted private compiled terminal evidence,
+  a reviewed profile/EOS policy and a typed logical-I1 public bridge contract.
 
 ## Wave 4 — practical pretraining and performance
 

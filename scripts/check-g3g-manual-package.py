@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Closed fixed-profile G3-G revision-3 package source contract."""
 from pathlib import Path
+from runpy import run_path
 import re
 
 root = Path(__file__).resolve().parents[1]
@@ -106,4 +107,9 @@ public_test = (root / "tests/g3g_manual/public_runtime.esk").read_text()
 for witness in ("C2 P2/G1 remains over capacity before C4 call",
                 "C2 P2/G1 remains over capacity after C4 call"):
     assert witness in public_test
+# The public G2 dependency remains closed until its separate compiled and
+# typed-result contracts are accepted. This source check is part of both
+# existing G3-G package gates.
+frontier = run_path(str(root / "scripts/check-g3c4-public-g2-frontier.py"))
+assert not frontier["issues"](frontier["current_sources"]())
 print("G3-G manual package source contract: PASS")

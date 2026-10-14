@@ -46,6 +46,7 @@ G3C4_DEVELOPMENT_SCRIPTS = frozenset({
         "check-g3c4-p2g2-eos-first-frame.py",
         "check-g3c4-p2g2-second-frame.py",
         "check-g3c4-p2g2-terminal.py",
+        "check-g3c4-public-g2-frontier.py",
         "check-g3c4-p2g2-terminal-abort-coordinator-source.py",
         "check-g3c4-p2g2-terminal-anchor.py",
         "check-g3c4-p2g2-terminal-commit-source.py",
