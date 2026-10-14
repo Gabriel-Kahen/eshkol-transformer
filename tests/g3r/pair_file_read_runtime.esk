@@ -68,6 +68,20 @@
   (lambda () (g3r-c2-pair-file-decode-internal! receipt 17 pending)))
 (reject "empty path" 'invalid-argument
   (lambda () (g3r-c2-pair-file-decode-internal! receipt "" pending)))
+(reject "embedded-NUL path" 'invalid-argument
+  (lambda () (g3r-c2-pair-file-decode-internal!
+               receipt (string-append directory "/" (string #\nul) "valid.g3r")
+               pending)))
+(check "embedded-NUL path preserves destination and receipt"
+  (and (untouched? pending) (receipt-idle? receipt)))
+(define oversized-utf8-path (make-string 2049 (string-ref "é" 0)))
+(check "oversized path has fewer than 4096 characters"
+  (< (string-length oversized-utf8-path) 4096))
+(check "oversized path has more than 4096 UTF-8 bytes"
+  (> (bytevector-length (string->utf8 oversized-utf8-path)) 4096))
+(reject "oversized UTF-8 path" 'invalid-argument
+  (lambda () (g3r-c2-pair-file-decode-internal!
+               receipt oversized-utf8-path pending)))
 (check "invalid paths preserve destination and receipt"
   (and (untouched? pending) (receipt-idle? receipt)))
 (define (file-reject label path)
