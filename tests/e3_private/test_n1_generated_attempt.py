@@ -155,6 +155,71 @@ class GeneratedAttemptTests(unittest.TestCase):
                                  "setup-report-unverified" if malformed else
                                  "generated-order-observed")
 
+    def test_finite_observer_final_peak_includes_late_allocation(self):
+        normal = attempt._finite_observer_diagnostic()
+        self.assertEqual(normal["status"], "HOLD")
+        self.assertEqual(normal["resource_proof"], "HOLD")
+        self.assertEqual(normal["protected_pre_read_custody"], "HOLD")
+        self.assertEqual(normal["reason"], "declared-peak-arithmetic-observed")
+        self.assertGreater(normal["observer_peak_rss_bytes"], 0)
+        self.assertGreaterEqual(normal["finite_observer_elapsed_boottime_ns"],
+                                normal["inner_observation"]["elapsed_boottime_ns"])
+        self.assertEqual(normal["declared_finite_peak_sum_bytes"],
+                         normal["inner_observation"]["observed_peak_sum_bytes"] +
+                         normal["observer_peak_rss_bytes"])
+
+        real_emit = attempt._emit_observer_report
+
+        def emit_then_allocate(fd, record):
+            real_emit(fd, record)
+            pages = bytearray(16 * 1024 * 1024)
+            for offset in range(0, len(pages), 4096):
+                pages[offset] = 1
+
+        with mock.patch.object(attempt, "_emit_observer_report", side_effect=emit_then_allocate):
+            late = attempt._finite_observer_diagnostic()
+        self.assertEqual(late["reason"], "declared-peak-arithmetic-observed")
+        self.assertGreater(late["observer_peak_rss_bytes"],
+                           normal["observer_peak_rss_bytes"] + 8 * 1024 * 1024)
+        self.assertEqual(late["declared_finite_peak_sum_bytes"],
+                         late["inner_observation"]["observed_peak_sum_bytes"] +
+                         late["observer_peak_rss_bytes"])
+
+    def test_finite_observer_rejects_partial_and_malformed_reports(self):
+        partial = attempt._finite_observer_diagnostic("after_hold")
+        self.assertEqual(partial["reason"], "observer-report-unverified")
+        self.assertNotIn("declared_finite_peak_sum_bytes", partial)
+
+        with mock.patch.object(attempt, "_emit_observer_report", return_value=None):
+            empty = attempt._finite_observer_diagnostic()
+        self.assertEqual(empty["reason"], "observer-report-unverified")
+        self.assertNotIn("declared_finite_peak_sum_bytes", empty)
+
+        real_emit = attempt._emit_observer_report
+
+        def forge_elapsed(fd, record):
+            record["elapsed_boottime_ns"] = 100_000_000_000
+            real_emit(fd, record)
+
+        with mock.patch.object(attempt, "_emit_observer_report", side_effect=forge_elapsed):
+            inconsistent = attempt._finite_observer_diagnostic()
+        self.assertEqual(inconsistent["reason"], "observer-report-unverified")
+        self.assertNotIn("declared_finite_peak_sum_bytes", inconsistent)
+
+        def forge_subtotal(fd, record):
+            record["observed_peak_sum_bytes"] = 1
+            real_emit(fd, record)
+
+        with mock.patch.object(attempt, "_emit_observer_report", side_effect=forge_subtotal):
+            inconsistent = attempt._finite_observer_diagnostic()
+        self.assertEqual(inconsistent["reason"], "observer-report-unverified")
+        self.assertNotIn("declared_finite_peak_sum_bytes", inconsistent)
+
+        with mock.patch.object(attempt, "_emit_observer_report", side_effect=RuntimeError):
+            failed = attempt._finite_observer_diagnostic()
+        self.assertEqual(failed["reason"], "observer-or-report-closure-unverified")
+        self.assertNotIn("declared_finite_peak_sum_bytes", failed)
+
     def test_generated_record_readback_rejects_same_bytes_path_replacement(self):
         body = {"schema": attempt.SCHEMA, "state": "HOLD"}
         raw = json.dumps(body, sort_keys=True, separators=(",", ":")).encode() + b"\n"

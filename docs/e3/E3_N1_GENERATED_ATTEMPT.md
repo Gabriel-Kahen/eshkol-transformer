@@ -83,6 +83,22 @@ after sync with the old pathname replaced by a symlink or a new directory.
 The elapsed-time test advances the observer clock during both valid and
 malformed report parsing and requires that work to appear in the result.
 
+The private `_finite_observer_diagnostic(fault=None)` adds a second, passive
+caller around `probe`. It starts `CLOCK_BOOTTIME` before forking the active
+observer, waits for that observer's bounded report, pipe EOF and final
+`wait4`, then samples the clock. The final `wait4` peak therefore includes
+the active observer's report emission and any later allocation before its
+exit. Only an exact, duplicate-key-free inner report with three successful
+declared roles, matching setup/role peak arithmetic, and an inner interval
+no longer than the outer interval emits `declared_finite_peak_sum_bytes`.
+This is the sum of the reported setup and role peaks plus the final observer
+peak; it is a diagnostic of the **declared** graph, not a whole-attempt RSS
+bound. The wrapper always returns HOLD and has no real-source mode. Tests
+exercise a late observer allocation, a partial attempt, missing report,
+inconsistent elapsed time and peak subtotal, and observer failure. The
+passive caller itself remains active when its result is produced; its final
+RSS and cessation are not measured by this contract.
+
 The separate
 [finite-closure diagnostic](E3_N1_F32_FINITE_CLOSURE_PROBE.md) exercises a
 detached pipe holder, but its result cannot be merged into this graph as a
@@ -90,14 +106,14 @@ whole-attempt proof.
 
 ## Missing deployment gate
 
-The setup report is same-UID and unauthenticated, so even a complete reported
-sum is not a trustworthy whole-attempt RSS bound. The active outer observer
-also has no final peak measurement and has not ceased at the diagnostic end
-timestamp. Thus the longer interval is still not a completed-attempt time
-proof. All actors run as the caller UID in its
-existing cgroup. Pipes are not an
-authenticated protected channel, the stubs have no v3 signatures or
-protected stores, and the outer active observer's final RSS is not measured.
+The setup and observer reports are same-UID and unauthenticated, so even a
+complete declared sum is not a trustworthy whole-attempt RSS bound. The
+original `probe` leaves its active observer outside its measured interval;
+the finite wrapper measures that observer through EOF and final `wait4`, but
+its passive caller is not an admitted attempt boundary and remains active.
+All actors run as the caller UID in its existing cgroup. Pipes are not an
+authenticated protected channel, and the stubs have no v3 signatures or
+protected stores.
 There is no spawn/migration denial, independently protected pre-read intent,
 immutable handoff, complete raw source transport, actual receipt/seal
 delivery, or closed hostile process graph. A forged cgroup report would not

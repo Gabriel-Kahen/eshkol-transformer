@@ -16,6 +16,8 @@ FAULTS = {None, "before_hold", "after_hold", "after_receipt", "after_seal",
           "inherited_fd", "cgroup_migration"}
 GENERATED = b"e3-n1-generated-stream-v1\n"
 MAX_REPORT = 8192
+MAX_OBSERVER_REPORT = 16384
+FINITE_SCHEMA = "e3-n1-finite-observer-diagnostic-v1"
 
 
 class Hold(Exception):
@@ -424,3 +426,133 @@ def probe(fault=None):
     elif body["reason"] == "generated-order-observed":
         result["reason"] = "finite-graph-unverified"
     return finish()
+
+
+def _emit_observer_report(fd, record):
+    raw = json.dumps(record, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+    if len(raw) > MAX_OBSERVER_REPORT:
+        raise Hold("observer-report-too-large")
+    while raw:
+        written = os.write(fd, raw)
+        if written <= 0:
+            raise Hold("observer-report-short-write")
+        raw = raw[written:]
+
+
+def _complete_inner_peak(record):
+    keys = {"schema", "status", "resource_proof", "protected_pre_read_custody",
+            "source_opened", "elapsed_boottime_ns", "setup_peak_rss_bytes",
+            "reason", "phases", "roles", "unresolved", "uid_transition",
+            "protected_channel", "private_cgroup", "v3_signatures",
+            "observed_peak_sum_bytes"}
+    if not isinstance(record, dict) or set(record) != keys:
+        raise ValueError("observer-report-shape")
+    if (record["schema"] != SCHEMA or record["status"] != "HOLD" or
+            record["resource_proof"] != "HOLD" or
+            record["protected_pre_read_custody"] != "HOLD" or
+            record["source_opened"] is not False or
+            record["reason"] != "generated-order-observed" or
+            record["phases"] != ["HOLD", "RECEIPT", "SEAL"] or
+            record["unresolved"] != [] or
+            record["uid_transition"] != "STUB-SAME-UID" or
+            record["protected_channel"] != "STUB-SAME-UID" or
+            record["private_cgroup"] != "HOLD" or
+            record["v3_signatures"] != "HOLD" or
+            type(record["elapsed_boottime_ns"]) is not int or
+            record["elapsed_boottime_ns"] < 0 or
+            type(record["setup_peak_rss_bytes"]) is not int or
+            record["setup_peak_rss_bytes"] < 0 or
+            not isinstance(record["roles"], dict) or
+            set(record["roles"]) != {"broker", "reader", "sealer"} or
+            type(record["observed_peak_sum_bytes"]) is not int):
+        raise ValueError("observer-report-invalid")
+    peaks = []
+    for role in ("broker", "reader", "sealer"):
+        item = record["roles"][role]
+        if (not isinstance(item, dict) or set(item) != {"exit_code", "peak_rss_bytes"}
+                or type(item["exit_code"]) is not int or item["exit_code"] != 0
+                or type(item["peak_rss_bytes"]) is not int
+                or item["peak_rss_bytes"] < 0):
+            raise ValueError("observer-role-invalid")
+        peaks.append(item["peak_rss_bytes"])
+    subtotal = record["setup_peak_rss_bytes"] + sum(peaks)
+    if record["observed_peak_sum_bytes"] != subtotal:
+        raise ValueError("observer-peak-sum-invalid")
+    return subtotal
+
+
+def _finite_observer_diagnostic(fault=None):
+    """Generated-only final observer peak; the passive caller boundary is unadmitted."""
+    if fault not in FAULTS:
+        raise ValueError("unknown-generated-fault")
+    start = _now()
+    read_fd, write_fd = os.pipe2(os.O_CLOEXEC)
+    pid = os.fork()
+    if pid == 0:
+        os.close(read_fd)
+        try:
+            _emit_observer_report(write_fd, probe(fault))
+            os.close(write_fd)
+            os._exit(0)
+        except BaseException:
+            os._exit(9)
+    os.close(write_fd)
+    data = bytearray()
+    reaped = None
+    eof = False
+    lost = False
+    deadline = start + 6_000_000_000
+    while _now() < deadline and (reaped is None or not eof):
+        ready, _, _ = select.select([read_fd], [], [], 0.01)
+        if ready:
+            block = os.read(read_fd, MAX_OBSERVER_REPORT + 1)
+            if block:
+                data.extend(block)
+            else:
+                eof = True
+        if reaped is None:
+            try:
+                waited, status, usage = os.wait4(pid, os.WNOHANG)
+            except ChildProcessError:
+                lost = True
+                break
+            if waited:
+                reaped = (os.waitstatus_to_exitcode(status), usage.ru_maxrss * 1024)
+        if len(data) > MAX_OBSERVER_REPORT:
+            break
+    if reaped is None and not lost:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        cleanup_end = _now() + 1_000_000_000
+        while _now() < cleanup_end:
+            try:
+                waited, status, usage = os.wait4(pid, os.WNOHANG)
+            except ChildProcessError:
+                break
+            if waited:
+                reaped = (os.waitstatus_to_exitcode(status), usage.ru_maxrss * 1024)
+                break
+            time.sleep(0.005)
+    os.close(read_fd)
+    end = _now()
+    result = {"schema": FINITE_SCHEMA, "status": "HOLD", "resource_proof": "HOLD",
+              "protected_pre_read_custody": "HOLD", "source_opened": False,
+              "finite_observer_elapsed_boottime_ns": end - start,
+              "observer_peak_rss_bytes": reaped[1] if reaped is not None else None}
+    if reaped is None or reaped[0] != 0 or not eof or len(data) > MAX_OBSERVER_REPORT:
+        result["reason"] = "observer-or-report-closure-unverified"
+        return result
+    try:
+        inner = json.loads(data, object_pairs_hook=_unique_object)
+        subtotal = _complete_inner_peak(inner)
+        if inner["elapsed_boottime_ns"] > end - start:
+            raise ValueError("observer-time-inconsistent")
+    except (ValueError, UnicodeDecodeError, TypeError):
+        result["reason"] = "observer-report-unverified"
+        return result
+    result["reason"] = "declared-peak-arithmetic-observed"
+    result["inner_observation"] = inner
+    result["declared_finite_peak_sum_bytes"] = subtotal + reaped[1]
+    return result
