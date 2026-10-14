@@ -12,6 +12,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 static _Thread_local et_o2_error_v1 et_o2_bridge_error;
@@ -203,6 +204,77 @@ int64_t et_o2_private_optimizer_state_release_v1(void *state) {
   }
   return -3;
 }
+
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+/* Private held-state adopter bridge. The Scheme caller keeps the exact return
+ * value from issue in a rooted cell; a bit-equal state is never authority. */
+int64_t et_g3r_private_o2_adopter_owner_match_v1(void *hold,
+                                                  void *optimizer) {
+  return (int64_t)et_g3r_private_o2_save_owner_match_v1(
+      (et_o2_g3r_save_hold *)hold, (et_o2_optimizer *)optimizer,
+      &et_o2_bridge_error);
+}
+
+void *et_g3r_private_o2_adopter_issue_v1(void *hold) {
+  et_o2_optimizer_state *state = NULL;
+  if (et_g3r_private_o2_save_state_v1((et_o2_g3r_save_hold *)hold, &state,
+                                      &et_o2_bridge_error) != 0)
+    return NULL;
+  return state;
+}
+
+int64_t et_g3r_private_o2_adopter_issued_match_v1(
+    void *hold, void *optimizer, void *issued, void *candidate) {
+  if (issued == NULL || issued != candidate) {
+    memset(&et_o2_bridge_error, 0, sizeof(et_o2_bridge_error));
+    et_o2_bridge_error.category = ET_O2_STATUS_INVALID_STATE;
+    et_o2_bridge_error.code = ET_O2_CODE_OWNER_CONFLICT;
+    return ET_O2_STATUS_INVALID_STATE;
+  }
+  const int32_t owner_status = et_g3r_private_o2_save_owner_match_v1(
+          (et_o2_g3r_save_hold *)hold, (et_o2_optimizer *)optimizer,
+          &et_o2_bridge_error);
+  if (owner_status != 0)
+    return (int64_t)owner_status;
+  return (int64_t)et_g3r_private_o2_save_issued_match_v1(
+      (et_o2_g3r_save_hold *)hold, (et_o2_optimizer_state *)candidate,
+      &et_o2_bridge_error);
+}
+
+/* Ticket-backed successor. Keep the exact issued pointer in the Scheme
+ * ledger; neither a bit-equal state nor a stale ticket is claim authority. */
+int64_t et_g3r_private_o2_adopter_owner_match_v2(
+    int64_t ticket, void *optimizer) {
+  return (int64_t)et_g3r_private_o2_save_owner_match_v2(
+      ticket, (et_o2_optimizer *)optimizer, &et_o2_bridge_error);
+}
+
+void *et_g3r_private_o2_adopter_issue_v2(int64_t ticket) {
+  et_o2_optimizer_state *state = NULL;
+  if (et_g3r_private_o2_save_state_v2(ticket, &state,
+                                      &et_o2_bridge_error) != 0)
+    return NULL;
+  return state;
+}
+
+int64_t et_g3r_private_o2_adopter_issued_match_v2(
+    int64_t ticket, void *optimizer, void *issued, void *candidate) {
+  if (issued == NULL || issued != candidate) {
+    memset(&et_o2_bridge_error, 0, sizeof(et_o2_bridge_error));
+    et_o2_bridge_error.category = ET_O2_STATUS_INVALID_STATE;
+    et_o2_bridge_error.code = ET_O2_CODE_OWNER_CONFLICT;
+    return ET_O2_STATUS_INVALID_STATE;
+  }
+  const int32_t owner_status = et_g3r_private_o2_save_owner_match_v2(
+      ticket, (et_o2_optimizer *)optimizer, &et_o2_bridge_error);
+  if (owner_status != 0) return (int64_t)owner_status;
+  return (int64_t)et_g3r_private_o2_save_issued_match_v2(
+      ticket, (et_o2_optimizer_state *)candidate, &et_o2_bridge_error);
+}
+
+/* An indeterminate native lifecycle cannot become a Scheme exception. */
+void et_g3r_private_o2_adopter_fail_stop_v1(void) { abort(); }
+#endif
 
 #ifdef ET_C2_O2_RECONSTRUCT_BRIDGE
 /*

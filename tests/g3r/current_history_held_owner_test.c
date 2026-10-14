@@ -334,6 +334,40 @@ int main(void) {
   c.rng[2] ^= 1;
   assert(et_g3r_private_g3t_save_end_v1(hold));
   assert(!pin_active && !cache_active && !c.h.busy);
+  int64_t first_ticket = 0;
+  for (int i = 0; i < 80; ++i) {
+    int64_t ticket = et_g3r_private_g3t_save_begin_v2(
+        &c, (void *const *)model.p, (const void *const *)model.handles);
+    assert(ticket > 0 && pin_active && cache_active && c.h.busy);
+    if (!first_ticket) first_ticket = ticket;
+    if (i != 0) assert(et_g3r_private_g3t_save_check_v2(first_ticket));
+    assert(!et_g3r_private_g3t_save_begin_v2(
+        &c, (void *const *)model.p, (const void *const *)model.handles));
+    assert(!et_g3r_private_g3t_save_copy_v2(ticket, &words, sizeof(words)));
+    assert(!et_g3r_private_g3t_save_end_v2(ticket));
+    assert(!pin_active && !cache_active && !c.h.busy);
+    assert(et_g3r_private_g3t_save_check_v2(first_ticket));
+    assert(et_g3r_private_g3t_save_end_v2(ticket));
+  }
+  assert(et_g3r_private_g3t_save_check_v2(0));
+  assert(et_g3r_private_g3t_save_check_v2(INT64_MAX));
+  int64_t ticket = et_g3r_private_g3t_save_begin_v2(
+      &c, (void *const *)model.p, (const void *const *)model.handles);
+  assert(ticket > 0);
+  c.rng[2] ^= 1;
+  assert(et_g3r_private_g3t_save_end_v2(ticket) == G3T_STATE);
+  assert(et_g3t_private_last_error_code_v1() == G3T_INVARIANT);
+  assert(!pin_active && !cache_active && !c.h.busy);
+  assert(et_g3r_private_g3t_save_check_v2(ticket));
+  c.rng[2] ^= 1;
+  g3r_save_next_ticket = INT64_MAX;
+  ticket = et_g3r_private_g3t_save_begin_v2(
+      &c, (void *const *)model.p, (const void *const *)model.handles);
+  assert(ticket == INT64_MAX);
+  assert(!et_g3r_private_g3t_save_end_v2(ticket));
+  assert(!et_g3r_private_g3t_save_begin_v2(
+      &c, (void *const *)model.p, (const void *const *)model.handles));
+  assert(!pin_active && !cache_active && !c.h.busy);
   puts("G3-R current-history held owner PASS");
   return 0;
 }

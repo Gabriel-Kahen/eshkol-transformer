@@ -1,0 +1,165 @@
+;;; Feature-private genuine trainer/G3/O2 scope prerequisite. Load after
+;;; tr3_c_snapshot_root, the G3 generator leaves, and the held-pair/adopter
+;;; leaves. It composes no C2 owner and publishes no receipt.
+(define g3r-scope-tag (vector 'g3r-genuine-owner-scope-v1))
+(define g3r-scope-registry (vector '()))
+
+(define (g3r-scope-member? candidate)
+  (let loop ((remaining (vector-ref g3r-scope-registry 0)))
+    (cond ((null? remaining) #f)
+          ((eq? candidate (car remaining)) #t)
+          (else (loop (cdr remaining))))))
+
+;;; Unlink only after native and trainer release proofs. The registry must
+;;; never retain a completed scope's original owner graph.
+(define (g3r-scope-unlink! scope)
+  (let loop ((previous #f)
+             (remaining (vector-ref g3r-scope-registry 0)))
+    (cond ((null? remaining) (g3r-holds-fail-stop))
+          ((eq? scope (car remaining))
+           (if previous
+               (set-cdr! previous (cdr remaining))
+               (vector-set! g3r-scope-registry 0 (cdr remaining)))
+           #t)
+          (else (loop remaining (cdr remaining))))))
+
+(define (g3r-scope-bind! record generator tokenizer operation)
+  (let* ((model (vector-ref record 8))
+         (model-entry (g3t-model-entry-live model operation #f))
+         (generator-entry (g3t-generator-find generator operation))
+         (trainer-tokenizer (vector-ref record 7)))
+    (if (not (and (eq? model-entry (vector-ref record 9))
+                  (eq? (vector-ref generator-entry 0) generator)
+                  (eq? (vector-ref generator-entry 1) 'generator)
+                  (eq? (vector-ref generator-entry 2) 'live)
+                  (eq? (vector-ref generator-entry 5) model-entry)
+                  (eq? (vector-ref generator-entry 6) tokenizer)
+                  (t2-private-entry tokenizer)
+                  (vector? trainer-tokenizer)
+                  (= (vector-length trainer-tokenizer) 3)
+                  (eq? (vector-ref trainer-tokenizer 2) #t)
+                  (string=? (t2-wave2-tokenizer-fingerprint tokenizer)
+                            (vector-ref trainer-tokenizer 0))
+                  (= (t2-wave2-tokenizer-vocab-size tokenizer)
+                     (vector-ref trainer-tokenizer 1))))
+        (g3t-fail-raw 'invalid-state operation 2
+                      "G3 owner and enrolled trainer tokenizer differ"))
+    record))
+
+;;; Preserve first typed error while draining native holds before the trainer
+;;; lease. Failure to prove the exclusive lease was released is fatal.
+(define (g3r-scope-drain! scope first)
+  (let ((pair (vector-ref (vector-ref scope 2) 0)))
+    (if (and (eq? (vector-ref scope 9) 'live) (not pair))
+        (g3r-holds-fail-stop))
+    (if pair
+        (begin
+          (guard (caught (#t (if (not first) (set! first caught))))
+            (g3r-hold-pair-end! pair))
+          (if (not (eq? (vector-ref pair 8) 'dead))
+              (g3r-holds-fail-stop))
+          (vector-set! (vector-ref scope 2) 0 #f))))
+  (let ((record (vector-ref (vector-ref scope 1) 0)))
+    (if (and (eq? (vector-ref scope 9) 'live) (not record))
+        (g3r-holds-fail-stop))
+    (if record
+        (begin
+          (guard (caught (#t (g3r-holds-fail-stop)))
+            (tr3-lease-snapshot-abort-internal!
+              record (vector-ref scope 8)))
+          (if (not (and (eq? (vector-ref record 3) 'idle)
+                        (eq? (vector-ref record 4) #f)
+                        (eq? (vector-ref (vector-ref scope 8) 3) 'dead)))
+              (g3r-holds-fail-stop))
+          (vector-set! (vector-ref scope 1) 0 #f))))
+  (vector-set! scope 9 'dead)
+  (g3r-scope-unlink! scope)
+  first)
+
+;;; Scope slots: tag, trainer-record cell, native-pair cell, trainer,
+;;; generator, tokenizer, original model, original optimizer, lease parent,
+;;; phase, copied C2 controls. The registry roots the complete graph before
+;;; lease publication and binds the D2/X1/RNG/counter epoch before native holds.
+(define (g3r-same-owner-scope-enter! trainer generator tokenizer)
+  (let* ((operation 'g3r-same-owner-scope-enter!)
+         (record (tr3-lease-record-for-shell-internal trainer operation))
+         (bound (g3r-scope-bind! record generator tokenizer operation))
+         (parent (tr3-c-snapshot-parent trainer (vector #f)))
+         (scope (vector g3r-scope-tag (vector #f) (vector #f)
+                        trainer generator tokenizer (vector-ref bound 8)
+                        (vector-ref bound 13) parent 'pending #f))
+         (next (cons scope (vector-ref g3r-scope-registry 0))))
+    (vector-set! g3r-scope-registry 0 next)
+    (guard (caught
+             (#t (let ((first (g3r-scope-drain! scope caught)))
+                   (raise first))))
+      (let ((leased (tr3-lease-snapshot-enter-internal! trainer parent)))
+        ;; First assignment after the lease's non-failing publication tail.
+        (vector-set! (vector-ref scope 1) 0 leased)
+        (tr3-lease-snapshot-recheck-internal leased parent)
+        (if (not (eq? leased bound))
+            (g3r-holds-fail-stop))
+        (vector-set! scope 10
+          (c2-training-state-controls-copy operation
+            (tr3-c-snapshot-controls! leased parent)))
+        (let ((pair (g3r-hold-pair-begin!
+                      generator (vector-ref scope 6) (vector-ref scope 7))))
+          ;; First assignment after native pair ownership transfers.
+          (vector-set! (vector-ref scope 2) 0 pair)
+          (if (not (eq? (tr3-lease-authenticate
+                          leased (vector-ref leased 5) operation) leased))
+              (g3r-holds-fail-stop))
+          (g3r-scope-bind! leased generator tokenizer operation)
+          (g3r-hold-pair-check! pair operation)
+          (if (not (equal? (vector-ref scope 10)
+                           (c2-training-state-controls-copy operation
+                             (tr3-c-snapshot-controls! leased parent))))
+              (g3t-fail-raw 'invalid-state operation 2
+                            "trainer controls changed while holds began"))
+          (vector-set! scope 9 'live)
+          scope)))))
+
+(define (g3r-same-owner-scope-check! scope)
+  (let ((operation 'g3r-same-owner-scope-check!))
+    (if (not (and (g3r-scope-member? scope)
+                  (vector? scope) (= (vector-length scope) 11)
+                  (eq? (vector-ref scope 0) g3r-scope-tag)
+                  (eq? (vector-ref scope 9) 'live)
+                  (eq? (vector-ref (vector-ref scope 1) 0)
+                       (tr3-lease-record-for-shell-internal
+                         (vector-ref scope 3) operation))))
+        (g3r-holds-fail-stop))
+    (let ((record (vector-ref (vector-ref scope 1) 0))
+          (pair (vector-ref (vector-ref scope 2) 0)))
+      (if (not (and pair
+                    (eq? (vector-ref record 3) 'snapshotting)
+                    (eq? (vector-ref record 4) (vector-ref scope 8))
+                    (eq? (vector-ref record 8) (vector-ref scope 6))
+                    (eq? (vector-ref record 13) (vector-ref scope 7))))
+          (g3r-holds-fail-stop))
+      (g3r-scope-bind! record (vector-ref scope 4)
+                       (vector-ref scope 5) operation)
+      (g3r-hold-pair-check! pair operation)
+      (if (not (equal? (vector-ref scope 10)
+                       (c2-training-state-controls-copy operation
+                         (tr3-c-snapshot-controls! record
+                           (vector-ref scope 8)))))
+          (g3t-fail-raw 'invalid-state operation 2
+                        "trainer control epoch changed under held owners"))
+      scope)))
+
+(define (g3r-same-owner-scope-pair! scope)
+  (g3r-same-owner-scope-check! scope)
+  (vector-ref (vector-ref scope 2) 0))
+
+(define (g3r-same-owner-scope-end! scope)
+  (if (not (and (g3r-scope-member? scope)
+                (vector? scope) (= (vector-length scope) 11)
+                (eq? (vector-ref scope 0) g3r-scope-tag)
+                (eq? (vector-ref scope 9) 'live)))
+      (g3r-holds-fail-stop))
+  ;; Native end performs its own check and drains even on a check error. A
+  ;; precheck here would strand the lease on a recoverable provider defect.
+  (let ((first (g3r-scope-drain! scope #f)))
+    (if first (raise first))
+    #t))

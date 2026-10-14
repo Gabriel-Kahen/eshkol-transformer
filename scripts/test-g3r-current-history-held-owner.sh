@@ -8,7 +8,7 @@ common=(-std=c11 -Wall -Wextra -Werror -Wno-unused-parameter
         -I "$root/include" -I "$root/native" -I "$root/src"
         -I "$root/src/eshkol_transformer")
 cc "${common[@]}" -O0 -c "$root/src/eshkol_transformer/g3t_transport.c" -o "$out/off.o"
-if nm -g --defined-only "$out/off.o" | grep -Fq et_g3r_private_g3t_save_begin_v1; then
+if nm -g --defined-only "$out/off.o" | grep -Eq 'et_g3r_private_g3t_save_.*_v[12]'; then
   echo "held owner escaped feature-off object" >&2
   exit 1
 fi

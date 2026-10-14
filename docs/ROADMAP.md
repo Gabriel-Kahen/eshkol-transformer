@@ -2187,7 +2187,199 @@ sanitizer profiles; this closes only the private snapshot prerequisite. No SAVE 
 file-pair publication, restore, replay or resumed continuation is provided.
 
 The reviewed [current-history held SAVE proposal](g3/G3_R_CURRENT_HISTORY_HELD_SAVE_CONTRACT.md)
-now accompanies merged main. Its first bounded native prerequisite,
+now accompanies merged main.
+[The detached C2 SAVE image/SHA receipt source leaf](../native/c2_save_image_receipt_root.esk)
+is being developed on `codex/c2-save-image-sha-receipt-bd813`. It adds a
+feature-private immutable image owner and receipt wrapper. The shared SAVE
+borrow helper now accepts an optional measured-image cap; its existing public
+caller passes `#f`, while the receipt rejects images over 16 MiB before
+destination allocation. Native and static source checks pass locally. Compiled
+Eshkol behavior, independent review, CI and same-owner G3/M3/O2 pairing remain
+open gates; this leaf does not admit SAVE replay or continuation.
+The isolated `codex/c2-save-image-receipt-compiled-gate-20261013` follow-up
+prepares a deterministic compiled Eshkol driver for public SAVE compatibility,
+held-owner rejection, measured-cap order, malformed backing, post-adopt cleanup,
+digest/file parity, writer failure status and repeated release. Its source-only
+syntax/static gate passes; at that stage the pinned compiled
+normal/repeat/fail-stop run had not been executed. Native allocation/SHA
+injection, impossible post-adopt enrollment allocation, and process-root
+retention need separate instrumentation or a narrowed acceptance argument.
+The isolated `codex/c2-save-image-receipt-fault-cuts-20261013` follow-up adds
+test-only native failure cuts for entry/vector allocation, a synthetic SHA
+result failure after hashing the retained copy but before token enrollment,
+and release failure before ownership mutation. Native repeat checks require
+zero live bytes and zero native registry entries after each failed adoption
+and successful cleanup; the compiled driver's fail-stop branch now injects
+an actual native release error, and its normal repeat loop checks native and
+Eshkol root baselines after every release. The later exact-leaf compiled
+diagnostic passed these private cuts; exact-union compiled review remains required.
+The compiled gate now also checks its literal native C compiler inputs against
+`native/c2_save_image_receipt_compiled_native_sources.txt` in source-only mode.
+Missing, duplicate, reordered, or unsupported source forms fail before compiler
+resolution or runtime; the Eshkol depfile check remains a separate compiled
+gate. This pin does not itself establish compiled receipt admission.
+
+The [G3-R/C2/O2 source-pair boundary](g3/G3_R_C2_O2_SOURCE_PAIR_BOUNDARY.md)
+combines the detached C2 receipt and current-main O2 held-owner source on one
+reviewable branch. Their exact native and Eshkol interfaces still require a
+feature-private original-owner coordinator and reviewed transfer/rollback
+path before any same-owner SAVE pair can be claimed. The later leaf diagnostic
+and focused local union fixtures do not establish a supported exact-union
+compiled aggregate or replay evidence.
+The O2 port carries `f9173c1e`'s registered allocation-span validation for
+hold, issued state and release. Active builders fail closed when their mutable
+descriptors cannot authenticate owned spans. Source syntax and C2 receipt
+source tests pass locally. O2 standalone normal/repeat/sanitizer fixtures pass
+on this union; the supported combined compiled aggregate remains an open gate.
+An independent union review found that O2's caller output/error scan still
+missed I2-owned parameter and moment storage. The source successor requires
+the I2 immutable owned-span provenance feature with the O2 held feature and
+rejects all nonzero F32 query results before writing either buffer. It adds
+parameter and moment alias negatives. `issued_match` compares held state bits,
+so the future coordinator must also root the exact state pointer returned by
+`save_state` through claim or release. These are source repairs; runtime and
+pairing gates remain open.
+The [held O2-to-C2 adoption gate](g3/G3_R_HELD_O2_C2_ADOPTION_GATE.md)
+pins the missing Eshkol transfer boundary. A causal native negative verifies
+that a distinct pre-hold O2 state with equal bits also passes `issued_match`;
+the proposed coordinator must bind the exact issued pointer before its Scheme
+shell can enter C2 composition. Current O2 Scheme enrollment uses ordinary
+snapshot, and C2 accepts only a registered Scheme O2 state. This gate provides
+no coordinator, held C2 owner, SAVE pair, or replay claim.
+The feature-private native `et_g3r_private_o2_save_owner_match_v1` prerequisite
+checks the exact registered optimizer bound to a live O2 hold and reruns the
+held invariants. A second registered optimizer with the same roster and
+bit-equal snapshot passes `issued_match` but fails `owner_match`. The future
+Scheme adopter still must bind its optimizer shell to that pointer and retain
+the exact state returned by held issue; no original G3/O2 owner binding or
+paired SAVE is established here.
+The source-private `g3r-held-o2-adopt!` prerequisite now binds that exact
+registered Scheme optimizer to the native hold, preallocates its state shell,
+record, registry cons, pointer cell and ledger before issue, and checks the
+exact returned pointer before enrollment. Its preclaim release distinguishes
+LIVE, DEAD-after-defect and indeterminate native lifecycle outcomes. The
+five-mutation source check passes. The helper is not yet linked or runtime
+verified; G3/M3/A2-to-O2 coordinator binding, P1/C2 partial-claim rollback,
+hold release order and receipt gates remain pending.
+The [C2 claim successor source audit](g3/G3_R_HELD_O2_C2_ADOPTION_GATE.md#c2-claim-successor-gap-source-audit-2026-10-14)
+found a concrete partial-claim gap: C2's provisional token and progress stay
+lexical, and its guard rolls back P1 but not an O2 claim that mutates and then
+raises. The adopter has no claimed phase and cannot safely use its preclaim
+release after that cut. A C2-side checked two-child rollback or exposed exact
+private transfer authority is required before implementing the held claim;
+this branch records the source gap only and makes no C2/SAVE admission.
+The C2-side source successor now reconciles an attempted O2 claim against the
+exact registered state and provisional token before rolling P1 back. It
+accepts only a still-live O2 state or a state claimed by that token; uncertain
+rollback fails stop. The source-order suite passes 12 checks, including
+mutations of the token and rollback checks. Added runtime negatives cover an
+O2 claim that raises after mutation, first-error retention, unchanged request
+slots, and token mismatch. The exact leaf's private compiled owner/native
+fixture diagnostic passed, as recorded below. Independent exact-union review
+and its compiled owner gate remain pending; this does not admit a held C2
+transfer or SAVE pair.
+The standalone same-owner O2 hold and C2 image receipt C fixtures are now wired
+to the blocking C2 SAVE CI target. A topology regression test fails if either
+fixture is omitted from the runner. The native runner checks feature-off symbol
+absence and normal/repeat/sanitizer execution; supported exact-union CI and its
+compiled C2 owner/receipt gates remain pending. This does not compile the held
+Eshkol adopter or establish a same-owner SAVE pair.
+The first one-use C gate at `b2a3f138`/tree `e4001b6d` exited 134:
+the native image fixture hardcoded `/tmp` while its Docker run supplied
+writable `TMPDIR=/out/tmp` and read-only `/tmp`. The sealed failed-gate
+manifest is `c2-postmutation-rollback-fixture-compiled-static-b2a3f138-20261014-c/GATE-ALL-RAW-SHA256.txt`
+(SHA-256 `28685be3c14255cee62e94bdf6dbefc0dabab4fed808b19de0547239d70efb1a`).
+The isolated fixture repair uses nonempty `TMPDIR`, retains the empty/unset
+`/tmp` fallback, and allocates complete directory/image paths. The one-use
+private owner/native-fixture diagnostic on exact `0851f42`/tree `e881c1b7`
+passed preflight and gate: 12 Python tests, 375 native O2 checks, and
+normal/repeat/sanitizer receipt fixtures. Independent result review accepted
+the leaf diagnostic under the all-raw seal SHA-256
+`c49627a89ea230ea52996d182b153ecf24ad6938e1500290ed8c3fce23bb6623`.
+The exact current-main-plus-0851 union still needs independent source/CI
+review and its own compiled owner/native-fixture gate. Same-owner C2 SAVE/O2
+and data-only admission remain HOLD.
+The next feature-private held-adopter source leaf adds a checked post-compose
+C2 claim transition: it authenticates the exact registered C2/P1/O2 graph,
+original O2 optimizer and issued native state while the hold is live, then
+marks the adopter ledger claimed so preclaim release cannot consume it.
+Source mutation checks are wired into the blocking C2 SAVE target. Independent
+source review, a compiled aggregate, post-claim and partial-claim runtime
+cuts, original G3/O2 binding, hold release, and receipt publication remain
+pending; this leaf makes no same-owner SAVE or replay admission claim.
+The next original-owner hold prerequisite adds a feature-private native bridge
+and Eshkol-callable rooted ledger. It obtains the registered M3T fourteen-owner
+roster, begins the G3/A2 hold, then begins the O2 hold against that same roster;
+failure drains an acquired first hold and retains the first typed error. End
+drains O2 then G3, retains a stable tombstone, and fails stop if native custody
+cannot be proved. Focused causal native normal/repeat/sanitizer and feature-off
+checks pass locally. Independent source review and a compiled feature-on joint
+aggregate with genuine owners, issued-state/adopter release, postclaim/partial
+claim, and zero-publication cuts remain HOLD. This is no C2 SAVE or data-only
+continuation admission.
+The held-copy successor exposes the existing checked G3 17-word image to an
+exact 136-byte Eshkol bytevector while both original holds remain live. Native
+validation rejects malformed length, stale pair, failed O2/G3 checks, and
+provider copy failures before writing the destination; focused causal and
+sanitizer checks pass locally. This is only an in-memory copy seam. The joint
+genuine-owner aggregate, same-owner trainer-control binding, adopter/C2 claim,
+reverse-order release and zero-publication runtime gate remain HOLD.
+The first genuine-owner coordinator scope now enters the existing exclusive
+TR3 snapshot lease before acquiring the original G3/O2 native pair. It binds
+the registered trainer model, optimizer and tokenizer to the exact G3
+generator, copies the validated D2/X1/RNG/counter controls on both sides of
+hold acquisition, and drains the pair before aborting the lease. Source
+mutation checks cover binding, rooting, acquisition order, and first-error
+cleanup. Independent source review and a compiled feature-on genuine-owner
+runtime gate remain pending. The scope does not issue an O2 state, claim C2,
+create a receipt, or admit data-only continuation.
+An isolated scope repair candidate binds G3's T1-spelled private lookup and
+typed raise to the already loaded T2 registry, following the existing CLI3
+same-registry bridge. The T2 entry uses exact shell identity and G3 still
+checks the raw V256 T1 core profile. Completed scopes now unlink their root
+after native-pair and trainer-lease release proofs; uncertain release still
+fails stop. Focused source checks include foreign/bit-equal identity mutants,
+head/interior unlink mutants, and the feature-on source load closure. The
+compiled feature-on genuine-owner and repeated-scope retention gates remain
+pending, as do independent review and all C2 continuation claims.
+An isolated hold-retention successor changes only the feature-private pair
+handle to a monotonic positive i64 ticket. It removes a proved-drained native
+pair from the active registry and frees it, so an allocator-reused address
+cannot reauthenticate a stale ticket and the 64-pair limit applies to
+simultaneous holds rather than process lifetime. The Eshkol pair ledger unlinks
+and scrubs original owner references on failed begin and proved end. Focused
+native normal/repeat/sanitizer and feature-off checks exercise more than 64
+sequential pairs, stale/double tickets, foreign and bit-equal distinct owners,
+and first-error release; source mutation checks cover both registry removals.
+Independent bounded source review accepted this pair/ledger leaf at `47e5eb94`;
+genuine feature-on repeated-scope runtime proof remains pending. No O2 issue,
+C2 claim, receipt or data-only admission follows.
+The feature-private G3 and O2 provider ticket foundation now adds monotonic,
+non-reused positive i64 held-owner handles alongside the unchanged capped v1
+pointer APIs. A v2 release drains the original pins/borrow or moment baselines,
+preserves the first typed error, unlinks the dead provider record, and frees its
+storage; stale tickets cannot reacquire a new allocation. Ticket exhaustion
+rejects before pin, borrow, or optimizer-busy mutation. Focused native normal,
+repeat, sanitizer, feature-off, more-than-64 sequential, stale/double,
+concurrent-busy, foreign-owner and failed-release checks pass locally.
+Independent bounded source review accepted the provider foundation at
+`13b2d14c`; the adopter/C2 ticket migration follows below. A genuine
+feature-on repeated-scope aggregate remains pending. This foundation alone
+does not remove the v1 lifetime cap or admit SAVE or continuation.
+The next bounded private adapter uses the accepted G3/O2 provider v2 tickets
+through a new C2 pair v2 API and O2 adopter v2 ABI. The Eshkol pair and adopter
+FFI now carry positive i64 hold tickets while retaining the original G3/model/
+optimizer shells, the exact issued O2 state pointer, and reverse-order release.
+The v1 pointer APIs and capped pair path remain available unchanged. Focused
+native and source checks cover stale provider tickets while later pairs live,
+foreign/bit-equal owners, malformed copy carriers, concurrent acquisition,
+first-error drain and more than 64 sequential pairs against C ABI stubs.
+Independent bounded source review accepted this adapter at `2faa8ab4`.
+The exact current-main union still needs independent source review and a
+compiled genuine-owner Eshkol repeated-scope gate. This adapter does not
+issue a C2 claim, receipt, SAVE, or data-only continuation admission.
+
+The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
 ports exact value and absent-gradient bit baselines under the existing
 fixed14 model pins. Focused normal/repeat/sanitizer and feature-off checks
