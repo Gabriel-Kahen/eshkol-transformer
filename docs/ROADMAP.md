@@ -863,6 +863,10 @@ Generated record readback also rejects same-byte inode replacement and
 symlink substitution after sync. A pinned parent dirfd and no-symlink
 ancestor walks reject the tested ancestor-swap case; protected custody
 remains HOLD.
+The generated observer's elapsed diagnostic now samples after report
+validation on success and error paths, and after peak-sum calculation on
+success. Its final peak and cessation are still unmeasured, so whole-attempt
+resource/time proof is HOLD.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.

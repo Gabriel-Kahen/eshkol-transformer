@@ -129,6 +129,32 @@ class GeneratedAttemptTests(unittest.TestCase):
             self.assertEqual(record["reason"], "setup-report-unverified")
             self.assertNotIn("observed_peak_sum_bytes", record)
 
+    def test_elapsed_includes_observer_report_validation(self):
+        real_now = attempt._now
+        real_loads = json.loads
+        for malformed in (False, True):
+            with self.subTest(malformed=malformed):
+                clock_advance = 0
+
+                def clock():
+                    return real_now() + clock_advance
+
+                def parse_report(*args, **kwargs):
+                    nonlocal clock_advance
+                    clock_advance = 5_000_000_000
+                    if malformed:
+                        raise ValueError("injected-report-parse-failure")
+                    return real_loads(*args, **kwargs)
+
+                with mock.patch.object(attempt, "_now", side_effect=clock), \
+                        mock.patch.object(attempt.json, "loads", side_effect=parse_report):
+                    record = attempt.probe()
+                self.assert_hold(record)
+                self.assertGreaterEqual(record["elapsed_boottime_ns"], 5_000_000_000)
+                self.assertEqual(record["reason"],
+                                 "setup-report-unverified" if malformed else
+                                 "generated-order-observed")
+
     def test_generated_record_readback_rejects_same_bytes_path_replacement(self):
         body = {"schema": attempt.SCHEMA, "state": "HOLD"}
         raw = json.dumps(body, sort_keys=True, separators=(",", ":")).encode() + b"\n"

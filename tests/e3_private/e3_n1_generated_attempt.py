@@ -376,14 +376,17 @@ def probe(fault=None):
                 break
             time.sleep(0.005)
     os.close(read_fd)
-    end = _now()
     result = {"schema": SCHEMA, "status": "HOLD", "resource_proof": "HOLD",
               "protected_pre_read_custody": "HOLD", "source_opened": False,
-              "elapsed_boottime_ns": end - start,
               "setup_peak_rss_bytes": reaped[1] if reaped is not None else None}
+
+    def finish():
+        result["elapsed_boottime_ns"] = _now() - start
+        return result
+
     if reaped is None or not eof or reaped[0] != 0 or len(data) > MAX_REPORT:
         result["reason"] = "setup-or-report-closure-unverified"
-        return result
+        return finish()
     try:
         body = json.loads(data, object_pairs_hook=_unique_object)
         if not isinstance(body, dict) or set(body) != {
@@ -408,7 +411,7 @@ def probe(fault=None):
                 raise ValueError
     except (ValueError, UnicodeDecodeError, TypeError):
         result["reason"] = "setup-report-unverified"
-        return result
+        return finish()
     result.update(body)
     complete = (body["reason"] == "generated-order-observed" and
                 body["phases"] == ["HOLD", "RECEIPT", "SEAL"] and
@@ -420,4 +423,4 @@ def probe(fault=None):
             item["peak_rss_bytes"] for item in body["roles"].values())
     elif body["reason"] == "generated-order-observed":
         result["reason"] = "finite-graph-unverified"
-    return result
+    return finish()

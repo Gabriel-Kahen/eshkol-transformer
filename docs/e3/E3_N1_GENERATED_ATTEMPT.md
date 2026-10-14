@@ -32,10 +32,13 @@ replacement, remains HOLD. These are observations at the checked moments:
 same-UID control can still change the path later or race the walks, so this
 does not establish protected custody.
 
-The outer observer records one `CLOCK_BOOTTIME` interval from before setup fork to
-after setup reap and report EOF, plus the sum of observed setup and role
-peaks. The diagnostic uses a temporary same-UID directory and removes it
-after the generated attempt; the records are **not protected custody**.
+The outer observer records one `CLOCK_BOOTTIME` interval from before setup
+fork through setup reap, report EOF, local report validation and peak-sum
+calculation. The timestamp is taken immediately before the result
+returns; that final assignment and the observer's exit are outside the
+interval. The diagnostic also records the sum of observed setup and role
+peaks. It uses a temporary same-UID directory and removes it after the
+generated attempt; the records are **not protected custody**.
 
 `probe(fault)` accepts only `before_hold`, `after_hold`, `after_receipt`,
 `after_seal`, `hold_sync`, `receipt_sync`, `seal_sync`, `timeout`,
@@ -77,6 +80,8 @@ The generated-record test replaces a synced path with either a new file
 containing identical bytes or a symlink before readback; both are rejected.
 It also rejects an already-symlinked ancestor and a parent directory renamed
 after sync with the old pathname replaced by a symlink or a new directory.
+The elapsed-time test advances the observer clock during both valid and
+malformed report parsing and requires that work to appear in the result.
 
 The separate
 [finite-closure diagnostic](E3_N1_F32_FINITE_CLOSURE_PROBE.md) exercises a
@@ -87,7 +92,9 @@ whole-attempt proof.
 
 The setup report is same-UID and unauthenticated, so even a complete reported
 sum is not a trustworthy whole-attempt RSS bound. The active outer observer
-also has no final peak measurement. All actors run as the caller UID in its
+also has no final peak measurement and has not ceased at the diagnostic end
+timestamp. Thus the longer interval is still not a completed-attempt time
+proof. All actors run as the caller UID in its
 existing cgroup. Pipes are not an
 authenticated protected channel, the stubs have no v3 signatures or
 protected stores, and the outer active observer's final RSS is not measured.
