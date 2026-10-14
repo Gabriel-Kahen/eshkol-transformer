@@ -1360,6 +1360,24 @@ symbol/feature-off checks pass. This is
 still a source candidate: supported optimized Eshkol AOT normal, poison and
 sanitizer gates plus independent review remain the next admission gate.
 
+The bounded E3 §9 stage-6 target-staging source candidate adds noninstalled
+frame-owned site 10, ordinal 0, occurrences 1 or 2. It consumes after the
+input ID copy and target-phase guard, before target view or copy, returning
+fixed internal/invariant status (mapped E1 stage 6, table index 83). The
+native fixture proves copied input IDs, unchanged targets, no target-time
+dispatch, and occurrence 2 after a completed preceding batch within the same
+armed call. The private fixture extends first-error, exact cursor, 17-mode,
+14-parameter/gradient/RNG, six-output, 29-probe, and same-frame retry checks
+against a fault-free twin. Host source tests reject a target-copy-before-denial
+mutant and verify the feature-off boundary. Independent source/host review
+accepted exact `8455a1a0e7937bd85cc42b117dff6b64ac24a3a1`/tree
+`f8a66f461909e4819b0b4cb8ffd76a27b92b5bac`; the durable receipt is
+`/home/gabe/.codex/evidence/eshkol-transformer/e3-stage6-target-copy-source-review-20261014/REVIEW.txt`
+(SHA-256 `55dd17e023f7a6ab80d2ca0b1157943e53ff6e1393e146747a44fe9e44f77f31`).
+This acceptance is source/host only. Input and mask staging cuts, supported
+compiled Eshkol normal/poison and LSan gates remain pending; full E3 §9
+admission remains **HOLD**.
+
 The bounded E3 §9 stage-8 source candidate adds noninstalled frame-owned
 site 5, ordinal 0, occurrences 1 or 2. After all 21 forward roles, it
 consumes the one-shot selector before L2 CE dispatch and returns the existing
