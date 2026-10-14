@@ -30,13 +30,16 @@ word at third-batch `state_f32[0]`. A rejected mutant must publish no transcript
 If a newly built executable changes CE words, the gate fails before accepting
 the mutant. The original C result is never rerun.
 
-The prepared `scripts/test-e3-sum-order-mutant.sh` specifies two deterministic
-normal and mutant builds, exact package/closure comparisons, optimized private
-AOT, repeat output comparison, poison runs, ASan/UBSan/LSan runs and the
-first-difference/no-transcript assertion. It has **not** been run with the
-candidate-3 fixture. Source-only
-checks are `tests.e3_private.test_sum_order_mutant`,
-`tests.e3_private.test_numerical_tuple`, `bash -n` and C syntax admission.
-The sealed old executables were locally rerun on the new corpus; normal passed
-and mutant was rejected at the third state. Independent review, then a fresh
-supported compiled gate and sealed outputs are required before M2 can advance.
+The fresh supported `scripts/test-e3-sum-order-mutant.sh` gate exited 0 on
+`ad4ad9acdd912d8a28343f0c5ee125e6adaa2ebe`/tree
+`aa17f1bf8f457a325cd1b5614018a16a61fdbf32`. Its deterministic normal,
+mutant, repeat, poison and ASan/UBSan private AOT runs completed three genuine
+batches. The normal runs retained the frozen compiled CE numerator words; all
+four mutant runs first diverged at the third-batch numerator and rejected
+without publishing a transcript. The independent compiled RESULT review at
+`/home/gabe/.codex/evidence/eshkol-transformer/e3-sum-order-ad4ad9ac-a-independent-result-review-20261014/REVIEW.md`
+(SHA-256 `a58151c84401527909d63b2fb6f2d3cf5c4fc86b28c9008883e24b835fd5a26f`)
+accepts this exact noninstalled M2 sum-order subgate only. The earlier df9546 C
+failure remains preserved. Other M2 numerical mutants and the complete E3 §9
+matrix remain open; the source is not merged or installed, and no GPU result is
+claimed.
