@@ -6,6 +6,7 @@ import copy
 import math
 import struct
 import unittest
+from pathlib import Path
 
 from tests.e3_metrics.reference_probe import accumulate, divide, finalize, reduce_bool, rounded
 from tests.e3_private.verify_capacity_denominator_mutant import check_mutant
@@ -60,6 +61,14 @@ def _mutant(normal: dict[str, object]) -> dict[str, object]:
 
 
 class CapacityDenominatorHostTests(unittest.TestCase):
+    def test_gate_accepts_verifiers_normal_marker(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        gate = (root / "scripts/test-e3-capacity-denominator-mutant.sh").read_text()
+        verifier = (root / "tests/e3_private/verify_capacity_denominator_mutant.py").read_text()
+        marker = "E3-CAPACITY-DENOMINATOR-NORMAL-PASS"
+        self.assertIn(f"print(\"{marker}\")", verifier)
+        self.assertIn(f"grep -Fx '{marker}'", gate)
+
     def test_weight_is_first_change_and_oracle_kills(self) -> None:
         normal = _ordinary()
         rows = tuple({key: row[key] for key in ("inputs", "targets", "mask")}

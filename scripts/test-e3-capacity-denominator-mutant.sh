@@ -150,7 +150,7 @@ verify_normal() {
     --roles "${out}/roles-${key}.tsv" \
     --transcript "${out}/transcript-${key}.json" \
     >"${out}/verify-${key}.stdout" 2>"${out}/verify-${key}.stderr"
-  grep -Fx 'E3-PADDED-POSITION-NORMAL-PASS' "${out}/verify-${key}.stdout" >/dev/null
+  grep -Fx 'E3-CAPACITY-DENOMINATOR-NORMAL-PASS' "${out}/verify-${key}.stdout" >/dev/null
 }
 for key in normal-a normal-b normal-poison normal-sanitize; do
   verify_normal "${key}"
