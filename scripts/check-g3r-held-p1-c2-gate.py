@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Bounded source closure for the unadmitted held-P1/C2 runtime fixture."""
 from pathlib import Path
+import re
+import subprocess
+import sys
 
 root = Path(__file__).resolve().parents[1]
 fixture = (root / "tests/g3r/held_p1_c2_gate.esk").read_text()
@@ -62,21 +65,31 @@ def compile_command(script: str, header: str) -> str:
 def check(source: str, script: str, bits: str) -> None:
     assert balanced(source)
     assert '(extern i64 g3r-test-phase i64 :real et_g3r_test_phase_v1)' in source
-    assert source.count('(g3r-test-phase 0)') == 1
+    source_phases = [int(value) for value in re.findall(
+        r'(?m)^\s*\(g3r-test-phase ([0-9]+)\)\s*$', source)]
+    assert source_phases == [
+        *range(30), *range(100, 104), *range(200, 207),
+        300, 301, 400, 401, 500, 501, 502, 600, 999,
+    ]
     loads = [line for line in source.splitlines() if line.startswith('(load "')]
     assert len(loads) == 29
     for index, load in enumerate(loads, 1):
-        assert source.count(f'(g3r-test-phase {index})') == 1
         assert load + f'\n(g3r-test-phase {index})' in source
-    assert source.count('(g3r-test-phase 999)') == 1
     assert source.index('(g3r-test-phase 999)') < source.index(
         '(display "G3-R held P1/C2 source aggregate PASS: checks=")')
     assert "int64_t et_g3r_test_phase_v1(int64_t phase)" in bits
     assert 'fprintf(stderr, "G3R_PHASE %lld\\n"' in bits
     assert 'fflush(stderr) != 0' in bits
     assert 're.fullmatch(r"G3R_PHASE ([0-9]+)", line)' in script
-    assert 'phases[:30] != list(range(30))' in script
-    assert 'phases[-1] != 999' in script
+    assert '''fixture_phases = [100, 101, 102, 103]
+expected_phases = [
+    *range(30), *fixture_phases, *range(200, 207),
+    *fixture_phases, 300, 301,
+    *fixture_phases, 400, 401,
+    *fixture_phases, 500, 501, 502,
+    *fixture_phases, 600, 999,
+]
+if phases != expected_phases:''' in script
     for leaf in leaves:
         assert source.count(f'(load "{leaf}")') == 1
         assert leaf not in (root / "Makefile").read_text()
@@ -196,9 +209,21 @@ def check(source: str, script: str, bits: str) -> None:
     assert "void et_f32_tensor_test_fail_alloc_after_v1(size_t allowed)" in f32
 
 
+def swap_phase_calls(source: str, first: int, second: int) -> str:
+    first_call = f'(g3r-test-phase {first})'
+    second_call = f'(g3r-test-phase {second})'
+    return (source.replace(first_call, '(g3r-test-phase swapped)', 1)
+            .replace(second_call, first_call, 1)
+            .replace('(g3r-test-phase swapped)', second_call, 1))
+
+
 check(fixture, runner, bit_bridge)
 mutations = (
     (fixture.replace('(g3r-test-phase 0)', ''), bit_bridge),
+    (fixture.replace('(g3r-test-phase 203)', ''), bit_bridge),
+    (fixture.replace('(g3r-test-phase 203)',
+                     '(g3r-test-phase 203)\n(g3r-test-phase 203)'), bit_bridge),
+    (swap_phase_calls(fixture, 203, 204), bit_bridge),
     (fixture.replace('(load "cli3_generate_t2_bridge.esk")', ""), bit_bridge),
     (fixture.replace('(not (eq? t1 t2))', '#t'), bit_bridge),
     (fixture.replace('(set! g3r-joint-p1-topology-query original-topology-query)',
@@ -227,6 +252,52 @@ for index, (mutation, bridge_mutation) in enumerate(mutations):
     except (AssertionError, ValueError):
         continue
     raise AssertionError(f"held P1/C2 mutation {index} escaped")
+
+# Exercise the embedded runtime parser with a complete trace and three interior
+# counterexamples. The fixture function emits 100-103 on each of five calls.
+phase_parser = runner.split("<<'PY_PHASES'\n", 1)[1].split("\nPY_PHASES", 1)[0]
+read_phases = 'Path(sys.argv[1]).read_text()'
+assert read_phases in phase_parser
+phase_parser = phase_parser.replace(read_phases, 'sys.stdin.read()', 1)
+runtime_phases = [
+    *range(30), *range(100, 104), *range(200, 207),
+    *range(100, 104), 300, 301,
+    *range(100, 104), 400, 401,
+    *range(100, 104), 500, 501, 502,
+    *range(100, 104), 600, 999,
+]
+
+
+def parser_accepts(phases: list[int]) -> bool:
+    result = subprocess.run(
+        [sys.executable, '-c', phase_parser],
+        input=''.join(f'G3R_PHASE {phase}\n' for phase in phases),
+        text=True, capture_output=True, check=False)
+    return result.returncode == 0
+
+
+assert parser_accepts(runtime_phases)
+interior = runtime_phases.index(203)
+assert not parser_accepts(runtime_phases[:interior] + runtime_phases[interior + 1:])
+assert not parser_accepts(runtime_phases[:interior] + [203] + runtime_phases[interior:])
+reordered = runtime_phases.copy()
+reordered[interior], reordered[interior + 1] = reordered[interior + 1], reordered[interior]
+assert not parser_accepts(reordered)
+
+runner_mutations = (
+    runner.replace('if phases != expected_phases:',
+                   'if phases[:30] != list(range(30)) or phases[-1] != 999:', 1),
+    runner.replace('*range(200, 207)', '200, 201, 202, 204, 205, 206', 1),
+    runner.replace('*fixture_phases, 300, 301', '*fixture_phases, 300, 300, 301', 1),
+    runner.replace('*fixture_phases, 400, 401', '*fixture_phases, 401, 400', 1),
+)
+for index, mutation in enumerate(runner_mutations):
+    assert mutation != runner
+    try:
+        check(fixture, mutation, bit_bridge)
+    except (AssertionError, ValueError):
+        continue
+    raise AssertionError(f"runtime phase predicate mutation {index} escaped")
 old_runner = runner.replace('"$evidence/off"',
                             '"$evidence/off" "$evidence/corpus"', 1)
 assert old_runner != runner
@@ -269,4 +340,4 @@ except (AssertionError, ValueError):
     pass
 else:
     raise AssertionError("duplicate F32 owner recipe escaped")
-print(f"held P1/C2 source aggregate: pass ({len(mutations) + 5} mutations; unadmitted)")
+print(f"held P1/C2 source aggregate: pass ({len(mutations) + len(runner_mutations) + 5} mutations; unadmitted)")

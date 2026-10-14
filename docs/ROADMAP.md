@@ -2240,6 +2240,12 @@ native stderr phase receipts before and after each of its 29 module loads and
 at fixture and held-owner cut boundaries. Its source gate now rejects a
 missing initial phase; focused source, C syntax, shell syntax and diff checks
 pass. No causal call or runtime success is established by this instrumentation.
+Independent source review found that its runtime parser accepted the 0-29 load
+prefix followed directly by 999. The bounded successor requires the exact
+ordered trace, including five 100-103 fixture groups and every 200-600 cut.
+Its source preflight rejects missing, duplicate and reordered interior calls
+and predicates; a complete synthetic trace passes while each damaged trace
+fails. This repair has source-only validation and remains unadmitted.
 A fresh pinned one-use compiled/runtime gate and independent review must use
 the receipts to locate the failure before any held P1/C2 admission.
 

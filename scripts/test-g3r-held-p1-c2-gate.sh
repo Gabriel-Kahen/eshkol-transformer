@@ -146,7 +146,15 @@ for line in lines:
     if match is None:
         raise SystemExit(f"G3-R runtime emitted non-phase stderr: {line}")
     phases.append(int(match.group(1)))
-if phases[:30] != list(range(30)) or not phases or phases[-1] != 999:
+fixture_phases = [100, 101, 102, 103]
+expected_phases = [
+    *range(30), *fixture_phases, *range(200, 207),
+    *fixture_phases, 300, 301,
+    *fixture_phases, 400, 401,
+    *fixture_phases, 500, 501, 502,
+    *fixture_phases, 600, 999,
+]
+if phases != expected_phases:
     raise SystemExit(f"G3-R runtime phase sequence incomplete: {phases}")
 PY_PHASES
 grep -E '^G3-R held P1/C2 source aggregate PASS: checks=[1-9][0-9]*$' \
