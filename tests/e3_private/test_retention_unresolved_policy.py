@@ -20,7 +20,8 @@ class RetentionUnresolvedPolicyTest(unittest.TestCase):
                       builder)
         self.assertIn('e3_reject_unresolved_private "${e3_tuple_kind}"', builder)
         self.assertIn('"${e1b_tmp}/undefined.txt" "${e1b_tmp}/expected-undefined.txt"', builder)
-        self.assertLess(builder.index('if ! e1b_compare_exact_undefined_allowlist'),
+        self.assertLess(builder.index('e1b_compare_exact_undefined_allowlist',
+                                      builder.index('e3_retention_sanitizer_inventory_verified=0')),
                         builder.index('e3_reject_unresolved_private'))
 
     def check_policy(self, kind: str, actual: list[str],

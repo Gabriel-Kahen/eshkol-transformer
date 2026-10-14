@@ -1159,6 +1159,14 @@ completed warmup, calibration, success and retry call. The evaluator's measured
 region-byte interval is unchanged. Source mutation controls check the baseline
 order and comparison topology; a compiled first-call bit-mutation witness and
 supported complete-call gate remain pending, so this is not §9 acceptance.
+The separate post-report teardown phase now closes D2 before its 29-probe
+baseline, unbinds the idle E3 frame, destroys all four caller destinations,
+and compares a second 29-probe snapshot. It requires 41 fewer live I2 tensors,
+one fewer live frame and one additional dead-frame tombstone, zero transient
+borrows/batches/FDs, and unchanged model-owned counts and full model image.
+Focused source tests reject skip-unbind and skip-one-destination mutations.
+Compiled 1,024/8,192-call resource and sanitizer gates remain pending; this
+test-only source leaf does not establish their runtime outcome.
 An isolated noninstalled first-evaluation mutant tuple now derives a private
 driver mechanically from that baseline and replaces only the E3 frame test
 object with a feature-gated, fixed one-shot helper. Source controls cover
@@ -1265,6 +1273,114 @@ under `/tmp`. Focused N1 host tests (112 private, 24 broker), 107 CI source
 tests and CI topology pass. This is source-only generated evidence: protected
 custody, real OCI read, trusted actor closure, the 30-second/256-MiB attempt
 predicate, compiled E3 and full §9 acceptance remain **HOLD**.
+
+The [E3 §9 stage-cut inventory](e3/E3_STAGE_CUT_INVENTORY.md) and
+[R1/R2 selector topology](e3/E3_R1_SELECTOR_TOPOLOGY.md) define a source-only,
+noninstalled fault route. A guarded native candidate implements only the
+forward-role preinvoke selector on an authentic idle frame. Host Clang 22 native
+checks and feature-off frame-object parity pass. A bounded current-main source
+union now adds the retention-derived, noninstalled Eshkol tuple, exact lexical
+policy, source-pinned manifests and a feature-private phase identity binding
+for site, role, occurrence, gradient choice and corpus path. Host-only policy
+and mismatch/order checks pass; the manifests remain compiler-unverified.
+Supported Clang 21/LSan, compiled failure/retry and resource proof remain open.
+This candidate does not admit E3 §9 R1/R2.
+
+A separate bounded source union adds the `ET_E3_TESTING` one-shot selector for
+the six actual K1 provider discoveries during frame bind and the reviewed
+runtime-lifetime witness. The selector replaces only the selected provider
+with null before the real K1 discovery call; it is independent of the
+`ET_E3_FAULT_TESTING` per-frame forward-role selector. A source-composed native
+test counts each successful discovery and destruction around failed bind
+indices 0–5, preserves the preexisting model runtimes, and checks a fresh
+bind and forward retry. The skipped-destroy mutant fails at the lifetime
+assertion. On the local unsupported Clang 22 host, the normal native gate
+passed 11,562 checks, a separate ASan/UBSan run passed 11,562 checks with
+leak detection disabled, and 51 adjacent private tuple/policy tests passed;
+LeakSanitizer could not start under ptrace. This is setup-time, test-only
+source evidence. Supported Clang 21/LSan, compiled Eshkol failure/retry,
+resource proof, and E3 §9 R1/R2 admission remain open.
+
+The bounded stage-7 fault-driver successor on the published K1 source child
+captures six actual pre-call output words, saved D2 cursor, 17-mode mask,
+14 parameter/gradient word and metadata images, initializer algorithm/four
+successor words, and all 29 native probes immediately before the armed call.
+It checks the first mapped stage-7/internal table index and native tuple,
+restores exact live state, reconciles borrow/retired-control event deltas,
+resets the one-shot arm, and retries a complete call on the same authorities.
+Focused host source tests include wrong-selector and owner-event mutants,
+value/gradient/metadata changes across all 14 owners, and omission mutants.
+This remains a noninstalled source
+candidate: supported compiled Eshkol
+normal/poison/LSan failure/retry and resource evidence are still pending.
+The repeated fixed corpus gives the same six result words before and after a
+successful call, so stage-12 byte-atomic publication needs distinguishable
+pre-call values and its own genuine preflight cut. Other R1/R2 stages,
+tie identity, graph-producing mutations, and complete-call horizons remain
+open; no §9 admission follows from this source slice.
+
+A bounded noninstalled stage-12 successor extends the existing
+`ET_E3_FAULT_TESTING` frame selector with site 2, ordinal 0, occurrence 1.
+It fires after all four destination and four result view checks, count
+validation and final destination metadata checks, before the first output
+write; the cut releases all opened destination views and returns the existing
+internal/invariant error. A guarded idle-frame fixture seeds distinct finite
+I2 words and valid prior counters `(7,4)` after a successful warmup. The
+fault driver compares all six actual pre-call words, first stage-12 error,
+cursor/mode/model/RNG/owner state and same-authority retry against the fixed
+`(5,3)` result. Focused host source tests and the unsupported-host Clang 22
+normal native frame run pass; the local sanitizer run cannot start LeakSanitizer
+under ptrace. Supported optimized Eshkol AOT normal/poison/sanitizer evidence,
+independent review and the remaining R1/R2 stage cuts remain open.
+
+A bounded noninstalled stage-3 successor holds an authentic model parameter
+value borrow through the existing private fault tuple. The real M3 pin
+preflight denies acquisition before any of the 14 pins are committed, and the
+driver checks mapped stage 3/invalid-state (table index 42), native domain 3/
+category 4/code 8, exact saved cursor, modes, model/gradient/RNG image, all six
+distinct seeded output words and owner counts while the external borrow remains
+held. It then releases that borrow and retries with the same model, dataset,
+frame and destinations against a separate fixed-seed model/frame/dataset
+twin's six outputs and end cursor. This is a source-only external-borrow
+admission witness; it does not prove rollback after a partial pin acquisition.
+Focused source tests and independent source review pass; a supported compiled
+normal/poison/sanitizer gate and other stage-3/4 cuts remain open for R1.
+
+The next bounded E3 §9 stage-3 source candidate adds frame-owned site 4,
+ordinal 0–13, occurrence 1. Its noninstalled M3 begin entry takes an explicit
+fail-before index, uses the ordinary admission and prefix-drain path, and
+returns domain 3/category 6/code 6 after consuming the E3 selector before
+the M3 call. The fault driver checks mapped stage 3/internal (table index 47),
+unchanged cursor, all 17 modes, model/gradient/RNG and six seeded outputs,
+zero live pins/borrows, and same-authority retry against an independent twin.
+The host included-TU M3 test exercises all 14 indices and rejects index 14;
+the host native E3 frame test checks every prefix, pin and borrow release,
+selector negatives, and retry. Focused lexical/source and native
+symbol/feature-off checks pass. This is
+still a source candidate: supported optimized Eshkol AOT normal, poison and
+sanitizer gates plus independent review remain the next admission gate.
+
+The bounded E3 §9 stage-8 source candidate adds noninstalled frame-owned
+site 5, ordinal 0, occurrences 1 or 2. After all 21 forward roles, it
+consumes the one-shot selector before L2 CE dispatch and returns the existing
+internal/invariant status (mapped E1 stage 8, table index 107). The private
+fault tuple compares the saved cursor, 17 modes, all model/gradient/RNG and
+owner observations, six seeded output words, and a same-frame retry against
+an independent twin. Host source and native checks cover invalid, duplicate,
+unreached and both reached occurrences; a dispatch-before-denial mutant fails
+at the CE dispatch count. This remains source/host evidence on an unsupported
+Clang 22 host. Independent source/test review accepted the E3 union at
+`9aed9c65`/tree `55377da7`; supported compiled Eshkol normal, poison and
+sanitizer gates remain open; no §9 R1 admission follows.
+
+The stage-8 fault candidate and retention post-report teardown now share a
+source-only branch based on the independently reviewed CLI3 `baf0a03f` union.
+The shared E3 lexical fault sequence is applied once; the accepted stage-8 and
+retention source heads follow without changing the installed training path.
+Focused host source and native checks pass on an unsupported CachyOS/Clang 22
+host. Independent source/test review accepted this E3 union at `9aed9c65`;
+supported compiled Eshkol normal, poison, and sanitizer evidence remains
+required; E3 §9 admission remains **HOLD**.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
@@ -2185,10 +2301,18 @@ reviewed CLI3 `baf0a03f` child of main `ee24ef4` and carries only G3 leaf
 commits `2569ccf`, `c63951e`, `b8b64b9`, `f3e1485`, and `308dd596`.
 It retains the CLI3 resume-parity source and E3 N1 roadmap status on that
 base. The private replay host checks, companion fixture/source checks, SAVE
-gate source checks, and shell syntax pass in the union. Independent union
-source review, compiled G3-R normal/repeat/sanitizer gates, CLI3 compiled
-cross-command validation, and hosted checks remain open. The Wave 3 G3,
-C2/SAVE, TR3, and CLI3 acceptance rows remain open.
+gate source checks, and shell syntax pass in the union. Independent source
+review accepted `c812b019`/tree `0d237093`; compiled G3-R
+normal/repeat/sanitizer gates, CLI3 compiled cross-command validation, and
+hosted checks remain open. The Wave 3 G3, C2/SAVE, TR3, and CLI3 acceptance
+rows remain open.
+
+A conditional current-main Wave 3 source candidate combines that G3/C2 head
+with the independently source-reviewed E3 `9aed9c65` head over the exact
+reviewed CLI3 `baf0a03f` base. The G3 and E3 source/test blobs are retained
+unchanged. Combined source/docs review, compiled cross-workstream and hosted
+gates remain open. G3, C2/SAVE, E3 §9, TR3, CLI3 and full Wave 3 acceptance
+remain **HOLD**.
 
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
