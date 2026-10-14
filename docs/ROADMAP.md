@@ -989,9 +989,14 @@ now specifies the one-row numerical frame, all 21 M3 roles, CE, reductions,
 state, six caller outputs, D2 saved/restored cursor, corpus identity and raw
 stdout provenance for each target. A strict versioned parser and independent
 M3 comparator have source tests for malformed, duplicate, missing and
-wrong-target records. This is a source candidate: the target runtime has not
-been compiled against the numerical test package, and the pinned Q0 comparison
-and section-9 N3 admission remain pending.
+wrong-target records. This remains a source candidate: the target runtime
+was compiled against the numerical test package, while the pinned Q0 comparison
+and section-9 N3 admission remain pending. The first one-use compiled
+target-offset gate stopped at the first parsed case: the private driver used
+D2 maximum batch bytes 34 while the reference cursor used the 1,048,576
+default. This source candidate aligns the reference fixture with that unchanged
+driver and tests cursor configuration parity; a fresh, independently reviewed
+compiled gate is still required.
 
 A separate noninstalled E3 overflow tuple is a source candidate for a genuine
 stage-12 finalization boundary. It loads a checksummed C1 state into one fresh

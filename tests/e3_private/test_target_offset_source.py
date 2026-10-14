@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from copy import deepcopy
 from pathlib import Path
+import re
 import tempfile
 import unittest
 
-from tests.e3_reference.target_offset import CASES, materialize, validate_materialized
+from tests.d2.reference import decode_reference_cursor
+from tests.e3_reference.target_offset import CASES, CONFIG, materialize, validate_materialized
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -33,6 +35,37 @@ class TargetOffsetSourceTest(unittest.TestCase):
             self.assertEqual([row["mask"] for row in rows], [[True, True]] * 2)
             self.assertEqual([row["targets"] for row in rows],
                              [[197, 0], [197, 7]])
+
+    def test_reference_cursor_config_matches_private_driver(self) -> None:
+        driver = (ROOT / "tests/e3_private/driver.esk").read_text()
+        start = driver.index("(define (e3-test-dataset-config ")
+        stop = driver.index("\n(define ", start + 1)
+        pairs = re.findall(r"':([a-z?-]+)\s+([^\s)]+)", driver[start:stop])
+        expected = {
+            "directory": "directory",
+            "batch-size": str(CONFIG.batch_size),
+            "sequence-length": str(CONFIG.sequence_length),
+            "maximum-manifest-bytes": str(CONFIG.maximum_manifest_bytes),
+            "maximum-shard-bytes": str(CONFIG.maximum_shard_bytes),
+            "maximum-total-tokens": str(CONFIG.maximum_total_tokens),
+            "maximum-batch-bytes": str(CONFIG.maximum_batch_bytes),
+            "shuffle-seed": "#f" if CONFIG.shuffle_seed is None
+            else str(CONFIG.shuffle_seed),
+            "shuffle-window-rows": str(CONFIG.shuffle_window_rows),
+            "packing?": "packing?",
+        }
+        self.assertEqual(len(pairs), len(expected))
+        self.assertEqual(dict(pairs), expected)
+        runtime = (ROOT / "tests/e3_private/target_offset_runtime.esk").read_text()
+        self.assertIn("(vector (vector #t 0))", runtime)
+        self.assertTrue(CONFIG.packing)
+        self.assertEqual(CONFIG.maximum_batch_bytes, 34)
+        with tempfile.TemporaryDirectory(prefix="e3-target-offset-") as temporary:
+            payload = materialize(Path(temporary) / "corpus")
+            for case in payload["cases"]:
+                cursor = bytes.fromhex(case["start_cursor"])
+                self.assertEqual(decode_reference_cursor(cursor).config, CONFIG)
+                self.assertEqual(int.from_bytes(cursor[88:96], "little"), 34)
 
     def test_corrupt_shard_and_manifest_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory(prefix="e3-target-offset-") as temporary:

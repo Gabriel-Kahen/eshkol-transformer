@@ -17,7 +17,7 @@ from tests.t1.reference import Identity, encode_artifact, encode_bytes, fingerpr
 ROOT = Path(__file__).resolve().parents[2]
 TOKENIZER = Identity("raw", (), (), ())
 FINGERPRINT = fingerprint(TOKENIZER)
-CONFIG = ReferenceConfig(1, 2, None, 1, True)
+CONFIG = ReferenceConfig(1, 2, None, 1, True, maximum_batch_bytes=34)
 CASES = (("target-zero", (3, 197, 0), (197, 0)),
          ("target-seven", (3, 197, 7), (197, 7)))
 
