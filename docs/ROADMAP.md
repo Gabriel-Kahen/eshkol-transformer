@@ -987,8 +987,14 @@ It adds no fault selector or §9 acceptance evidence.
 The [R1/R2 selector topology](e3/E3_R1_SELECTOR_TOPOLOGY.md) now fixes the
 entered-call ownership boundary, one-shot per-frame selector rules, exact
 noninstalled tuple requirements, and the first bounded forward-role preinvoke
-slice. It is source-only: the selector, tuple, compiled failure/retry matrix
-and resource verdicts remain open.
+slice. A guarded native source/test candidate now implements that first
+forward-role selector on an authentic idle frame, with fixed native denial,
+one-shot consumption, idle readback/reset, invalid/stale/busy/duplicate and
+unreached negatives. Its native frame test passes under host Clang 22; the
+feature-off frame object is byte-identical to the design base under the same
+host compile flags. The noninstalled Eshkol tuple and exact manifests,
+supported Clang 21/LSan gate, compiled failure/retry matrix and resource
+verdicts remain open. This source candidate does not admit §9 R1/R2.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.

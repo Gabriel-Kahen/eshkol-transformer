@@ -7,6 +7,29 @@ changing a package, or admitting an R1/R2 row. The selected route remains the
 private bool evaluator. Every proposed fault is a test-only, recoverable
 preinvoke or preflight denial; no fault enters a validated K1 provider invoke.
 
+## Bounded native source candidate
+
+The first candidate adds `ET_E3_FAULT_TESTING` only to the native frame and
+its internal declarations. Test-only `et_e3_test_fault_arm_v1(frame, site,
+ordinal, occurrence)` accepts site 1, role 0–20, and occurrence 1–8,192 on
+an authentic idle frame. `et_e3_test_fault_ref_v1(frame, field)` reads
+state/site/ordinal/occurrence/reached as fields 0–4; states are clear 0,
+armed 1, fired 2, and unreached 3. `et_e3_test_fault_reset_v1(frame)` is
+idle-only and clears the record. Duplicate arm, consumed retry, and frame
+destruction before reset reject. A selected role increments `reached` only
+after the authentic phase and next-role checks and consumes before dispatch.
+The fixed denial is native domain 0, category `E3_INTERNAL` (5), code
+`E3_CODE_INVARIANT` (9); the existing stage-7 Eshkol wrapper remains the only
+first-error mapping. A completed entered call that missed the occurrence
+marks the record unreached at native finish, so it cannot arm the next call.
+
+This is a native source/test candidate, not an admitted Eshkol tuple. A
+pre-acquire Eshkol failure has not entered this native boundary and the
+future closed test driver must explicitly reset its arm. No generated
+P1/D2 source, package policy, exact symbol/closure manifest, compiled Eshkol
+failure/retry, supported Clang 21/LSan or §9 result is claimed. The exact
+retention-derived lexical tuple remains a separate implementation gate.
+
 ## Exact entry and ownership boundaries
 
 `e3-evaluate-into!` resolves an authentic live frame before `m3-call` and

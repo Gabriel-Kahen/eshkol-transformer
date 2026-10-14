@@ -1,13 +1,27 @@
 #define ET_E3_TESTING 1
+#define ET_E3_FAULT_TESTING 1
 #define et_f32_tensor_destroy_v1 et_e3_test_observed_tensor_destroy_v1
+#define et_kernel_runtime_dispatch et_e3_test_observed_kernel_dispatch_v1
 #include "../../src/eshkol_transformer/e3_frame.c"
 #undef et_f32_tensor_destroy_v1
+#undef et_kernel_runtime_dispatch
 
 #include <math.h>
 #include <stdio.h>
 
 int32_t et_f32_tensor_destroy_v1(et_f32_tensor **tensor,
                                  et_f32_tensor_error *error);
+int32_t et_kernel_runtime_dispatch(const et_kernel_runtime *runtime,
+                                   const et_kernel_call_v1 *call,
+                                   et_kernel_error *error);
+
+static size_t observed_dispatches;
+int32_t et_e3_test_observed_kernel_dispatch_v1(
+    const et_kernel_runtime *runtime, const et_kernel_call_v1 *call,
+    et_kernel_error *error) {
+  ++observed_dispatches;
+  return et_kernel_runtime_dispatch(runtime, call, error);
+}
 
 static et_f32_tensor *destroyed_tensors[64];
 static size_t destroyed_tensor_count;
@@ -569,6 +583,107 @@ static void test_transaction(owner *model, et_f32_tensor *destination[4]) {
   CHECK(et_e3_private_frame_destroy_preflight_v1(frame) == E3_INVALID_STATE);
 }
 
+static void test_forward_preinvoke_selector(
+    owner *model, et_f32_tensor *destination[4]) {
+  et_e3_frame_internal *frame = et_e3_private_frame_create_v1(
+      model, destination[0], destination[1], destination[2], destination[3]);
+  CHECK(frame != NULL);
+  et_e3_frame_internal *other = et_e3_private_frame_create_v1(
+      model, destination[0], destination[1], destination[2], destination[3]);
+  CHECK(other != NULL);
+  OK(et_e3_test_fault_arm_v1(other, 1, 20, 8192));
+  CHECK(et_e3_test_fault_ref_v1(frame, 0) == 0);
+  CHECK(et_e3_test_fault_ref_v1(other, 2) == 20);
+  CHECK(et_e3_test_fault_ref_v1(other, 3) == 8192);
+  OK(et_e3_test_fault_reset_v1(other));
+  OK(et_e3_private_frame_destroy_preflight_v1(other));
+  et_e3_private_frame_destroy_v1(other);
+  CHECK(et_e3_test_fault_arm_v1((void *)(uintptr_t)17, 1, 0, 1) ==
+        E3_INVALID_ARGUMENT);
+  CHECK(et_e3_test_fault_arm_v1(frame, 0, 0, 1) == E3_INVALID_ARGUMENT);
+  CHECK(et_e3_test_fault_arm_v1(frame, 1, -1, 1) == E3_INVALID_ARGUMENT);
+  CHECK(et_e3_test_fault_arm_v1(frame, 1, 21, 1) == E3_INVALID_ARGUMENT);
+  CHECK(et_e3_test_fault_arm_v1(frame, 1, 0, 0) == E3_INVALID_ARGUMENT);
+  CHECK(et_e3_test_fault_arm_v1(frame, 1, 0, 8193) == E3_INVALID_ARGUMENT);
+  CHECK(et_e3_test_fault_ref_v1(frame, 0) == 0);
+  CHECK(et_e3_test_fault_ref_v1(frame, 5) == -1);
+
+  OK(et_e3_test_fault_arm_v1(frame, 1, 0, 1));
+  frame->positions[1] = 2;
+  CHECK(et_e3_private_acquire_v1(frame) == E3_INTERNAL);
+  frame->positions[1] = 1;
+  CHECK(et_e3_private_acquire_v1(frame) == E3_INVALID_STATE);
+  CHECK(et_e3_test_fault_ref_v1(frame, 0) == 3);
+  OK(et_e3_test_fault_reset_v1(frame));
+
+  OK(et_e3_test_fault_arm_v1(frame, 1, 1, 1));
+  CHECK(et_e3_test_fault_arm_v1(frame, 1, 0, 1) == E3_INVALID_STATE);
+  OK(et_e3_private_acquire_v1(frame));
+  CHECK(et_e3_test_fault_reset_v1(frame) == E3_INVALID_STATE);
+  CHECK(et_e3_test_fault_ref_v1(frame, 0) == -1);
+  stage(frame, 3, 197, 197, 0, 1, 1);
+  CHECK(et_e3_private_forward_role_v1(frame, 1) == E3_INVALID_STATE);
+  CHECK(frame->fault_reached == 0);
+  const size_t before_role_zero = observed_dispatches;
+  OK(et_e3_private_forward_role_v1(frame, 0));
+  CHECK(frame->next_role == 1 && observed_dispatches == before_role_zero + 1);
+  CHECK(et_e3_private_forward_role_v1(frame, 1) == E3_INTERNAL);
+  CHECK(e3_last_domain == 0 && e3_last_category == E3_INTERNAL &&
+        e3_last_code == E3_CODE_INVARIANT);
+  CHECK(frame->next_role == 1 && frame->fault_state == 2 &&
+        frame->fault_reached == 1 &&
+        observed_dispatches == before_role_zero + 1);
+  abort_call(frame);
+  CHECK(et_e3_test_fault_ref_v1(frame, 0) == 2);
+  CHECK(et_e3_test_fault_ref_v1(frame, 1) == 1);
+  CHECK(et_e3_test_fault_ref_v1(frame, 2) == 1);
+  CHECK(et_e3_test_fault_ref_v1(frame, 3) == 1);
+  CHECK(et_e3_test_fault_ref_v1(frame, 4) == 1);
+  CHECK(et_e3_private_acquire_v1(frame) == E3_INVALID_STATE);
+  CHECK(et_e3_test_fault_arm_v1(frame, 1, 0, 1) == E3_INVALID_STATE);
+  CHECK(et_e3_private_frame_destroy_preflight_v1(frame) == E3_INVALID_STATE);
+  OK(et_e3_test_fault_reset_v1(frame));
+  CHECK(et_e3_test_fault_ref_v1(frame, 0) == 0);
+
+  /* The second visit to role 0 occurs only after a complete first batch. */
+  OK(et_e3_test_fault_arm_v1(frame, 1, 0, 2));
+  OK(et_e3_private_acquire_v1(frame));
+  stage(frame, 3, 197, 197, 0, 1, 1);
+  forward_batch(frame);
+  CHECK(frame->fault_reached == 1 && frame->fault_state == 1);
+  stage(frame, 0, 255, 255, 7, 1, 1);
+  const size_t before_second_role_zero = observed_dispatches;
+  CHECK(et_e3_private_forward_role_v1(frame, 0) == E3_INTERNAL);
+  CHECK(e3_last_domain == 0 && e3_last_category == E3_INTERNAL &&
+        e3_last_code == E3_CODE_INVARIANT);
+  CHECK(frame->next_role == 0 && frame->fault_state == 2 &&
+        frame->fault_reached == 2 &&
+        observed_dispatches == before_second_role_zero);
+  abort_call(frame);
+  OK(et_e3_test_fault_reset_v1(frame));
+
+  /* An unreached occurrence is retained as failed test state until reset. */
+  OK(et_e3_test_fault_arm_v1(frame, 1, 20, 2));
+  OK(et_e3_private_acquire_v1(frame));
+  stage(frame, 3, 197, 197, 0, 1, 1);
+  forward_batch(frame);
+  abort_call(frame);
+  CHECK(et_e3_test_fault_ref_v1(frame, 0) == 3);
+  CHECK(et_e3_test_fault_ref_v1(frame, 4) == 1);
+  CHECK(et_e3_private_acquire_v1(frame) == E3_INVALID_STATE);
+  OK(et_e3_test_fault_reset_v1(frame));
+
+  /* Feature-enabled, unarmed dispatch remains the ordinary role sequence. */
+  OK(et_e3_private_acquire_v1(frame));
+  stage(frame, 3, 197, 197, 0, 1, 1);
+  forward_batch(frame);
+  CHECK(frame->next_role == 0 && frame->phase == E3_ACQUIRED);
+  abort_call(frame);
+  OK(et_e3_private_frame_destroy_preflight_v1(frame));
+  et_e3_private_frame_destroy_v1(frame);
+  CHECK(et_e3_test_fault_arm_v1(frame, 1, 0, 1) == E3_INVALID_STATE);
+}
+
 int main(void) {
   test_diagnostic_mapping();
   owner *model = make_model();
@@ -576,6 +691,7 @@ int main(void) {
   test_create_rejections(model, destination);
   test_i2_allocation_rollback(model, destination);
   test_transaction(model, destination);
+  test_forward_preinvoke_selector(model, destination);
   for (size_t i = 0; i < 4; ++i) destroy_tensor(&destination[i]);
   printf("E3 native frame: %zu checks passed\n", checks);
   return 0;
