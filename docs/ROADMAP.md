@@ -3127,7 +3127,13 @@ publication, public G2 and continuation remain pending.
   passes. The unmodified `c60779bbd` predecessor context/cache checker fails on
   `Step 4a reaches deferred surface: generator_rng`; full same-call composition,
   independent review, and compiled proof remain pending. No public G2 or
-  continuation acceptance is claimed.
+  continuation acceptance is claimed. A separate source-private first-token
+  successor uses the accepted EOS-capable native first carrier and genuine
+  same-registry T1 decode into the original pending raw[1]/staging[8] owner,
+  with full i64 and identity rechecks after recoverable steps. It remains
+  abort-only in the existing protected call region; prefix/terminal commit,
+  post-call snapshot, detached clone, full same-call tests, and independent
+  review remain pending.
 
 ## Wave 4 — practical pretraining and performance
 
