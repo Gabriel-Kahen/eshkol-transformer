@@ -2189,8 +2189,15 @@ after resetting the allocator. Its runner links the F32 test allocator and
 the seventeen-mutation source closure passes, including a regression against
 precreating the D2 corpus directory. The first pinned `2bcdda47` gate stopped
 at that setup error before native or Eshkol compilation; the runner is now
-repaired. This remains source evidence until the pinned aggregate compiles and
-runs; post-tombstone P1 and uncertain native
+repaired. A later one-use compiled gate on `f8eca233` stopped in O2 compilation:
+the runner enabled same-owner SAVE without its required candidate-retire
+owned-span provenance flag. The feature-on F32 and O2 compile lines now carry
+both flags, with a nineteen-mutation source closure rejecting either missing
+prerequisite. The
+failed gate remains sealed at
+`g3r-provider-f8-compiled-a/result/gate.stderr`; the flag repair has source
+evidence only until a fresh pinned aggregate compiles and runs. Post-tombstone
+P1 and uncertain native
 release cuts still require separate evidence.
 
 The first bounded native prerequisite,

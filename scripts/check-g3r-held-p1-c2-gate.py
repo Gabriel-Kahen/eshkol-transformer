@@ -46,6 +46,15 @@ def balanced(source: str) -> bool:
     return depth == 0 and not quoted
 
 
+def compile_command(script: str, header: str) -> str:
+    lines = script.splitlines(keepends=True)
+    start = next(i for i, line in enumerate(lines) if line.rstrip() == header)
+    end = start + 1
+    while lines[end - 1].rstrip().endswith("\\"):
+        end += 1
+    return "".join(lines[start:end])
+
+
 def check(source: str, script: str, bits: str) -> None:
     assert balanced(source)
     for leaf in leaves:
@@ -117,6 +126,11 @@ def check(source: str, script: str, bits: str) -> None:
     ):
         assert required in provider, required
     assert script.count("-DET_G3R_SAME_OWNER_SAVE_PRIVATE") >= 4
+    for header in ("compile native/f32_tensor.c f32_tensor \\",
+                   "compile native/o2_optimizer.c o2_optimizer \\"):
+        command = compile_command(script, header)
+        assert "-DET_G3R_SAME_OWNER_SAVE_PRIVATE" in command
+        assert "-DET_G3R_CANDIDATE_RETIRE_PRIVATE" in command
     assert "compile native/f32_tensor.c f32_tensor" in script
     assert "et_f32_tensor_test_fail_alloc_after_v1" in script
     assert "-DET_F32_TENSOR_TESTING" in script
@@ -174,4 +188,16 @@ except (AssertionError, ValueError):
     pass
 else:
     raise AssertionError("premature corpus creation escaped")
-print(f"held P1/C2 source aggregate: pass ({len(mutations) + 1} mutations; unadmitted)")
+for header in ("compile native/f32_tensor.c f32_tensor \\",
+               "compile native/o2_optimizer.c o2_optimizer \\"):
+    command = compile_command(runner, header)
+    old_flags = runner.replace(
+        command, command.replace(" -DET_G3R_CANDIDATE_RETIRE_PRIVATE", ""), 1)
+    assert old_flags != runner
+    try:
+        check(fixture, old_flags, bit_bridge)
+    except (AssertionError, ValueError):
+        pass
+    else:
+        raise AssertionError(f"missing owned-span prerequisite escaped: {header}")
+print(f"held P1/C2 source aggregate: pass ({len(mutations) + 3} mutations; unadmitted)")
