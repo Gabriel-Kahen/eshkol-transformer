@@ -2180,6 +2180,16 @@ existing private file reader against that image in normal, repeat and
 sanitizer modes. Source and host checks are complete; the compiled gate is
 unrun and does not establish restored model or public continuation.
 
+The source-only current-main union of these G3-R leaves starts from the
+reviewed CLI3 `baf0a03f` child of main `ee24ef4` and carries only G3 leaf
+commits `2569ccf`, `c63951e`, `b8b64b9`, `f3e1485`, and `308dd596`.
+It retains the CLI3 resume-parity source and E3 N1 roadmap status on that
+base. The private replay host checks, companion fixture/source checks, SAVE
+gate source checks, and shell syntax pass in the union. Independent union
+source review, compiled G3-R normal/repeat/sanitizer gates, CLI3 compiled
+cross-command validation, and hosted checks remain open. The Wave 3 G3,
+C2/SAVE, TR3, and CLI3 acceptance rows remain open.
+
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
 checks the authentic idle generator's four RNG words without allocation,
