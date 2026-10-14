@@ -173,6 +173,10 @@ def eos_observation_contract(driver, composer, coordinator, script):
             "coordinator_owner", "coordinator_marked_context",
             "coordinator_entry_cache_owner")):
         raise AssertionError("case reset leaves a stale owner witness")
+    observe = coordinator[coordinator.index("int64_t et_g3c4_p2g2_coordinator_test_observe_v1("):]
+    if not (observe.index("coordinator_observations++;") <
+            observe.index("et_g3c4_admit_active_call(context_candidate)")):
+        raise AssertionError("observer count must record entry before admission")
     missing = driver[driver.index('(if (string=? mode "missing-mark")'):]
     missing = missing[:missing.index('"mark native destructive observation"')]
     if not (driver.index("(define first-id (normal-case 1 2 #f 2))") <

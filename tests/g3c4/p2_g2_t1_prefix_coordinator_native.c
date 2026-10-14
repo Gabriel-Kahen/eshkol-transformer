@@ -316,15 +316,15 @@ int64_t et_g3c4_p2g2_coordinator_test_fault_v1(int64_t mode) {
 int64_t et_g3c4_p2g2_coordinator_test_observe_v1(
     void *context_candidate, void *output_candidate, int64_t cache_length,
     int64_t selected) {
-  et_g3c4_context_internal *context =
-      et_g3c4_admit_active_call(context_candidate);
-  et_g3c4_output_internal *output =
-      et_g3c4_admit_output(output_candidate, 0);
+  et_g3c4_context_internal *context;
+  et_g3c4_output_internal *output;
   cache_snapshot cache;
   et_a2_kv_cache_read_borrow *borrow = NULL;
   et_kernel_error error;
   int frame_owns_cache;
   coordinator_observations++;
+  context = et_g3c4_admit_active_call(context_candidate);
+  output = et_g3c4_admit_output(output_candidate, 0);
   if (context == NULL || output == NULL ||
       (cache_length != 0 && cache_length != 2) ||
       !coordinator_owner_unchanged() ||
