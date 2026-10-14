@@ -8,6 +8,8 @@ e3_cc="${CC:-clang}"
 e3_cxx="${CXX:-clang++}"
 require_command "${e3_cc}"
 require_command "${e3_cxx}"
+require_command nm
+require_command python3
 e3_expected="$(lock_value clang_version)"
 e3_cc_version="$("${e3_cc}" --version | sed -n '1s/.*version \([0-9][0-9.]*\).*/\1/p')"
 e3_cxx_version="$("${e3_cxx}" --version | sed -n '1s/.*version \([0-9][0-9.]*\).*/\1/p')"
@@ -37,6 +39,29 @@ e3_sources=("${PROJECT_ROOT}/tests/e3_native/test_frame.c"
   -I "${PROJECT_ROOT}/include" -I "${PROJECT_ROOT}/src/eshkol_transformer" \
   "${PROJECT_ROOT}/tests/e3_native/header_cpp.cpp" -c \
   -o "${e3_tmp}/header_cpp.o"
+
+"${e3_cc}" "${e3_flags[@]}" -O2 -c \
+  "${PROJECT_ROOT}/src/eshkol_transformer/e3_frame.c" \
+  -o "${e3_tmp}/production-frame.o"
+if nm -a "${e3_tmp}/production-frame.o" | grep -E \
+    'e3_test_discovery_fail_index|et_e3_test_fault_(arm|ref|reset)_v1'; then
+  die "production E3 frame exposes test-only selector"
+fi
+
+python3 "${PROJECT_ROOT}/tests/e3_native/mutate_runtime_cleanup.py" \
+  "${e3_tmp}/cleanup-mutant"
+"${e3_cc}" "${e3_flags[@]}" -O2 \
+  "${e3_tmp}/cleanup-mutant/tests/e3_native/test_frame.c" \
+  "${e3_sources[@]:1}" -lm -o "${e3_tmp}/frame-cleanup-mutant"
+if "${e3_tmp}/frame-cleanup-mutant" >"${e3_tmp}/mutant.stdout" \
+    2>"${e3_tmp}/mutant.stderr"; then
+  die "failed-bind K1 cleanup mutant survived"
+fi
+if ! grep -F 'runtime_destroys == destroys_before + (size_t)selected' \
+    "${e3_tmp}/mutant.stderr" >/dev/null; then
+  die "failed-bind K1 cleanup mutant failed for an unrelated reason"
+fi
+printf 'E3 failed-bind K1 cleanup mutant rejected\n'
 
 for e3_mode in normal sanitize; do
   e3_extra=(-O2)

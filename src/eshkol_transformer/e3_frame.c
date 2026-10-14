@@ -101,6 +101,8 @@ static int64_t e3_last_domain, e3_last_category, e3_last_code;
 
 #ifdef ET_E3_TESTING
 static size_t e3_test_frame_alloc_remaining = SIZE_MAX;
+/* Select one genuine K1 provider discovery during a source-composed test. */
+static int64_t e3_test_discovery_fail_index = -1;
 void et_e3_test_frame_fail_alloc_after_v1(size_t count) {
   e3_test_frame_alloc_remaining = count;
 }
@@ -680,8 +682,16 @@ void *et_e3_private_frame_create_v1(
       et_a2_kernel_provider_v1(), et_l2_indexed_cross_entropy_provider_v1(),
       et_l3s_kernel_provider_v1(), et_e3_metrics_kernel_provider_v1()
     };
-    for (size_t i = 0; i < 6 && !rc; ++i)
-      rc = e3_discover(&frame->runtime[i], providers[i]);
+    for (size_t i = 0; i < 6 && !rc; ++i) {
+      const et_kernel_provider_v1 *provider = providers[i];
+#ifdef ET_E3_TESTING
+      if (e3_test_discovery_fail_index == (int64_t)i) {
+        e3_test_discovery_fail_index = -1;
+        provider = NULL;
+      }
+#endif
+      rc = e3_discover(&frame->runtime[i], provider);
+    }
   }
   if (!rc) {
     const uint32_t epsilon = UINT32_C(0x3727c5ac);
