@@ -2182,6 +2182,13 @@ fourteen-mutation source closure and shell/C syntax checks pass; the supported
 fe9dfd5 aggregate has not compiled or run, so these are fixture assertions,
 not admitted runtime evidence. Provider and post-tombstone failure cuts still
 need compiled evidence before a same-owner C2 claim is accepted.
+The next feature-private held P1/C2 fixture now adds an authentic I2/F32
+provider-clone allocation failure under the original live G3/O2 pins, checks
+typed failure and preserved original witnesses, and requires same-owner retry
+after resetting the allocator. Its runner links the F32 test allocator and
+the sixteen-mutation source closure passes. This remains source evidence until
+the pinned aggregate compiles and runs; post-tombstone P1 and uncertain native
+release cuts still require separate evidence.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),

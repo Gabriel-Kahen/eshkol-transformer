@@ -46,6 +46,12 @@ compile() {
 compile native/i2_wave2_package_bridge.c i2_bridge \
   -DET_I2_NATIVE_HELPERS_ONLY -DET_M3T_PACKAGE_BUILD \
   -DET_C2_I2_MODEL_COPY
+compile native/f32_tensor.c f32_tensor \
+  -DET_F32_TENSOR_TESTING -DET_F32_TENSOR_STORAGE_QUERY_PRIVATE \
+  -DET_G3R_SAME_OWNER_SAVE_PRIVATE
+nm -g --defined-only "$evidence/native/f32_tensor.o" | \
+  grep -Fq et_f32_tensor_test_fail_alloc_after_v1 || \
+  die "G3-R provider cut lacks the linked F32 test allocator"
 compile native/o2_wave2_package_bridge.c o2_bridge \
   -DET_O2_NATIVE_HELPERS_ONLY -DET_C2_O2_RECONSTRUCT_BRIDGE \
   -DET_G3R_SAME_OWNER_SAVE_PRIVATE

@@ -229,15 +229,22 @@ all fourteen original value and absent-gradient bit baselines under the live
 pins and checks both immediately after the P1 clone. After C2 transfer, the
 fixture compares all fourteen original value payloads, gradient metadata and
 the held 17-word G3 history. The fixture also specifies
-foreign owner, malformed controls, injected topology, caller-side shell
-substitution, stale owner and post-O2 partial claim cuts. On recoverable
+foreign owner, malformed controls, injected topology, an authentic I2/F32
+provider-clone allocation failure, caller-side shell substitution, stale owner
+and post-O2 partial claim cuts. The provider failure arms the F32 test
+allocator immediately before the clone while the original G3/O2 holds and
+issued O2 are live. It requires a typed `module-state-dict` error, unchanged
+owned-clone count, no P1 record or C2 child, all fourteen original held bit
+witnesses and seventeen history words intact, then resets the allocator and
+requires an exact same-owner P1 retry and release. The fixture archive now
+includes the F32 test allocator implementation and checks its symbol. On recoverable
 preclaim cuts it checks clone-count rollback and explicit issued-O2 then
 G3 hold drain; after C2 transfer it checks the exact registered child and
 owner through the claim helper and releases the resulting C2 owner.
 
-The fixture, runner and fourteen-mutation source closure pass static checks;
-the pinned aggregate has **not yet compiled or run**. Provider clone failure,
-post-tombstone P1 release defect and uncertain native release are fail-stop
+The fixture, runner and sixteen-mutation source closure pass static checks;
+the pinned aggregate has **not yet compiled or run**. Post-tombstone P1 release
+defect and uncertain native release are fail-stop
 contracts, not exercised recoverable fixture outcomes. A successful compiled
 run and independent review are required before this can be an admitted
 same-owner P1/O2 C2 claim. TR3 train versus G3 eval, T1/T2 shell identity,

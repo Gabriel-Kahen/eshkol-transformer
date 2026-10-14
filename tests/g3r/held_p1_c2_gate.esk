@@ -37,6 +37,8 @@
         :real et_g3r_test_held_bits_check_v1)
 (extern i64 g3r-test-held-bits-end ptr
         :real et_g3r_test_held_bits_end_v1)
+(extern i64 g3t-test-fail-f32-after i64
+        :real et_g3t_test_fail_f32_after_v1)
 
 (define checks 0)
 (define (check label condition)
@@ -290,6 +292,92 @@
        (and (g3r-joint-o2-drain-preclaim! (vector-ref preclaim-held 1))
             (= 2 (g3r-joint-o2-lifecycle (vector-ref preclaim-held 0)))))
 (retire preclaim)
+
+;;; Fail the authentic I2-owned F32 clone while both original pins and the
+;;; exact issued O2 state are live. The same held owner must remain retryable.
+(define provider-fault (fixture corpus-directory))
+(define provider-fault-bits (model-bits (vector-ref provider-fault 5)))
+(define provider-fault-gradients
+  (gradient-state (vector-ref provider-fault 5)))
+(define provider-fault-history (snapshot (vector-ref provider-fault 8)))
+(define provider-fault-held (begin-held provider-fault))
+(define provider-fault-native-model
+  (vector-ref (g3t-model-entry-live
+                (vector-ref provider-fault 4) 'g3r-held-p1-c2-gate #f) 3))
+(check "provider cut captures all fourteen original witnesses"
+       (= 0 (g3r-test-held-bits-begin provider-fault-native-model)))
+(define provider-fault-clones (i2-owned-clone-live-count-internal))
+(define provider-fault-p1-registry g3r-joint-p1-provenance-registry)
+(define provider-fault-c2-registry c2-training-state-states)
+(check "authentic F32 clone allocation cut armed"
+       (= 0 (g3t-test-fail-f32-after 0)))
+(define provider-fault-error
+  (guard (caught (#t caught))
+    (clone provider-fault provider-fault-held) #f))
+(check "authentic F32 clone allocation cut reset"
+       (= 0 (g3t-test-fail-f32-after 9223372036854775807)))
+(check "provider allocation failure is typed at the I2 clone"
+       (and (transformer-error? provider-fault-error)
+            (eq? (transformer-error-category provider-fault-error) 'internal)
+            (eq? (transformer-error-operation provider-fault-error)
+                 'module-state-dict)))
+(check "failed provider clone has no owned clone, P1 record or C2 child"
+       (and (= provider-fault-clones
+               (i2-owned-clone-live-count-internal))
+            (eq? provider-fault-p1-registry
+                 g3r-joint-p1-provenance-registry)
+            (eq? provider-fault-c2-registry c2-training-state-states)))
+(check "failed provider clone preserves both original pins and issued O2"
+       (and (= 1 (g3r-joint-o2-lifecycle
+                    (vector-ref provider-fault-held 0)))
+            (eq? (vector-ref (vector-ref provider-fault-held 1) 8)
+                 'enrolled)
+            (= 0 (g3r-joint-o2-issued-match
+                    (vector-ref provider-fault-held 0)
+                    (vector-ref (vector-ref
+                                  (vector-ref provider-fault-held 1) 4) 0)))
+            (= 0 (g3r-joint-original-owner-match
+                    (vector-ref provider-fault-held 0)
+                    (vector-ref (g3t-generator-find
+                                  (vector-ref provider-fault 8)
+                                  'g3r-held-p1-c2-gate) 3)
+                    provider-fault-native-model
+                    (vector-ref (o2-require-optimizer
+                                  'g3r-held-p1-c2-gate
+                                  (vector-ref provider-fault 6)) 1)))))
+(check "failed provider clone preserves fourteen held bit witnesses"
+       (= 0 (g3r-test-held-bits-check provider-fault-native-model)))
+(check "failed provider clone closes fourteen held bit witnesses"
+       (= 0 (g3r-test-held-bits-end provider-fault-native-model)))
+(check "failed provider clone preserves original values and gradients"
+       (and (byte-list=? provider-fault-bits
+                         (model-bits (vector-ref provider-fault 5)))
+            (equal? provider-fault-gradients
+                    (gradient-state (vector-ref provider-fault 5)))))
+(check "failed provider clone preserves held seventeen history words"
+       (let ((words (make-bytevector 136 0)))
+         (and (= 0 (g3r-joint-c2-copy-words
+                       (vector-ref provider-fault-held 0) words))
+              (bytes=? words provider-fault-history))))
+(define provider-fault-retry
+  (clone provider-fault provider-fault-held))
+(check "reset hook permits same-owner exact P1 retry"
+       (and (g3r-joint-p1-provenance-live-record provider-fault-retry)
+            (> (i2-owned-clone-live-count-internal)
+               provider-fault-clones)))
+(check "same-owner retry P1 releases"
+       (g3r-joint-p1-provenance-release! provider-fault-retry))
+(check "same-owner retry removes exact P1 clone"
+       (and (not (g3r-joint-p1-provenance-live-record
+                   provider-fault-retry))
+            (= provider-fault-clones
+               (i2-owned-clone-live-count-internal))))
+(check "provider cut drains issued O2 then both original pins"
+       (and (g3r-joint-o2-drain-preclaim!
+              (vector-ref provider-fault-held 1))
+            (= 2 (g3r-joint-o2-lifecycle
+                    (vector-ref provider-fault-held 0)))))
+(retire provider-fault)
 
 ;;; C2's injected O2 claim defect occurs after the token-matched O2 claim.
 ;;; Its guard rolls back both children; the joint guard releases issued O2 and

@@ -90,7 +90,31 @@ def check(source: str, script: str, bits: str) -> None:
         "(vector-set! mutant-p1 2 foreign-p1)") < source.index(
         "(g3r-joint-o2-drain-preclaim! (vector-ref mutant-held 1))")
     assert "(original-o2-claim state token)" in source
+    provider = source[source.index("(define provider-fault (fixture corpus-directory))"):
+                      source.index(";;; C2's injected O2 claim defect")]
+    assert provider.index("(g3r-test-held-bits-begin provider-fault-native-model)") < provider.index(
+        "(g3t-test-fail-f32-after 0)") < provider.index(
+        "(clone provider-fault provider-fault-held) #f") < provider.index(
+        "(g3t-test-fail-f32-after 9223372036854775807)") < provider.index(
+        "(clone provider-fault provider-fault-held))")
+    for required in (
+        "(transformer-error-category provider-fault-error) 'internal",
+        "(transformer-error-operation provider-fault-error)",
+        "'module-state-dict", "(i2-owned-clone-live-count-internal)",
+        "g3r-joint-p1-provenance-registry", "c2-training-state-states",
+        "(g3r-test-held-bits-check provider-fault-native-model)",
+        "(g3r-test-held-bits-end provider-fault-native-model)",
+        "(g3r-joint-o2-issued-match", "(g3r-joint-original-owner-match",
+        "(model-bits (vector-ref provider-fault 5))",
+        "(gradient-state (vector-ref provider-fault 5))",
+        "(g3r-joint-c2-copy-words", "(g3r-joint-p1-provenance-release! provider-fault-retry)",
+        "(g3r-joint-o2-drain-preclaim!",
+    ):
+        assert required in provider, required
     assert script.count("-DET_G3R_SAME_OWNER_SAVE_PRIVATE") >= 4
+    assert "compile native/f32_tensor.c f32_tensor" in script
+    assert "et_f32_tensor_test_fail_alloc_after_v1" in script
+    assert "-DET_F32_TENSOR_TESTING" in script
     assert "native/g3r_joint_hold.c" in script
     assert "native/o2_optimizer.c" in script
     assert "tests/g3r/held_p1_c2_bit_bridge.c" in script
@@ -106,6 +130,8 @@ def check(source: str, script: str, bits: str) -> None:
     assert "for (size_t k = 0; k < 2; ++k)" in witness
     assert "memcmp(t->data, w->baseline[k]->data, t->byte_length)" in witness
     assert "!tensor_exact_positive_zero(p->gradient)" in witness
+    assert "if (successful_allocations >= allocation_limit)" in f32
+    assert "void et_f32_tensor_test_fail_alloc_after_v1(size_t allowed)" in f32
 
 
 check(fixture, runner, bit_bridge)
@@ -123,6 +149,8 @@ mutations = (
     (fixture.replace('(byte-list=? before-bits (model-bits (vector-ref original 5)))', '#t'), bit_bridge),
     (fixture.replace('(equal? before-gradients\n                    (gradient-state (vector-ref original 5)))', '#t'), bit_bridge),
     (fixture.replace('(original-o2-claim state token)', '#t'), bit_bridge),
+    (fixture.replace('(g3t-test-fail-f32-after 0)', '(g3t-test-fail-f32-after 9223372036854775807)'), bit_bridge),
+    (fixture.replace('(g3t-test-fail-f32-after 9223372036854775807)', '(g3t-test-fail-f32-after 0)'), bit_bridge),
     (fixture, bit_bridge.replace('et_f32_parameter_save_witness_check_v1(',
                                  'et_f32_parameter_save_witness_end_v1(')),
 )
