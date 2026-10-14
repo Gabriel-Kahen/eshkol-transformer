@@ -2221,6 +2221,13 @@ before allocating or issuing its O2 state. Focused host native negatives cover
 foreign and stale holds, equal distinct optimizers, alias rejection, unchanged
 outputs on failure, and the ordinary busy path; no TR3 held snapshot,
 same-owner coordinator, compiled aggregate, SAVE pair or replay is admitted.
+The [TR3 held-O2 snapshot recheck leaf](g3/G3_R_TR3_HELD_O2_SNAPSHOT_RECHECK_LEAF.md)
+adds a separate source-private recheck for the exact enrolled snapshot parent
+after the original O2 hold is acquired. It repeats trainer authentication,
+M3/D2 idle checks, exact optimizer binding, held absent-gradient and moment
+checks, and equality of held and trainer update counts. Ordinary snapshot entry,
+snapshot/restore rechecks and O2 busy rejection stay unchanged. Focused source
+mutations pass; compiled joint lease/hold cleanup and SAVE gates remain open.
 The [C2 claim successor source audit](g3/G3_R_HELD_O2_C2_ADOPTION_GATE.md#c2-claim-successor-gap-source-audit-2026-10-14)
 found a concrete partial-claim gap: C2's provisional token and progress stay
 lexical, and its guard rolls back P1 but not an O2 claim that mutates and then
