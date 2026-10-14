@@ -2165,6 +2165,15 @@ core for canonical-byte admission, updates the lease failure witness to the
 23-slot record, and reseals the affected fixture hashes. Focused source
 contracts pass; compiled CLI3 and TR3 runtime admission and independent review
 remain pending.
+The private original-epoch handoff capsule source candidate roots the exact
+enrolled TR3 record/node, P1 fixed roster, O2 and D2 registry/native owners,
+registered T2/T1 core, X1 model binding, detached P1 state, and validated
+copied controls under an idle/train authentication. Its one-shot slot-4
+`handoff` phase fences ordinary trainer operations and release; a pre-eval
+abort rechecks the original owners and controls before releasing P1 and
+returning to idle/train. This is a source candidate only. Eval transition,
+G3/O2 holds, C2 claim, capsule-aware trainer release, receipt, replay,
+compiled runtime admission, and independent review remain separate gates.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
