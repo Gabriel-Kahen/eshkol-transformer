@@ -2231,10 +2231,11 @@ and test-only post-publication index trap cover this prerequisite. Independent
 source review accepted exact `3cbdb97`/tree `aa5e8b46`; the compiled runtime/IR
 gate and state-lookup performance remain open. The historical E3/P1 mode,
 mode-graph and zero-topology overlays now pin that exact P1 source; focused
-P1 variant, zero insertion and mutation checks pass. The full mode-graph source
-gate remains blocked by its inherited E3 extension pin (`08f1c3...` expected,
-`571f878...` current); this P1 pin refresh does not admit that extension.
-Compiled gates and independent pin review remain pending before integrated
+P1 variant, zero insertion and mutation checks pass. The mode-graph generator
+now pins the current canonical E3 extension (`571f878...`) and all four exact
+emitted extension digests after the canonical frame-publication change; its
+source-composition and stale-pin negatives pass. The full compiled mode-graph
+gate and independent pin review remain pending before integrated
 admission. Earlier failed E3 evidence is retained. This adds no held-safe
 clone, C2 claim, SAVE receipt or replay.
 
