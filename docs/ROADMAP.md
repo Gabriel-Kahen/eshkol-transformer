@@ -726,6 +726,13 @@ preserving traversal and symlink rejection for each root. Focused policy tests
 and the compiled J production-generate/cross-command gates pass on repaired
 source `18693b4`; composed-head compiled and hosted exact-head checks remain open.
 
+At current main `b67ca3f`, the focused CLI3/G3-G source contract found a stale
+fixture-to-production entry equality assertion after the installed D1 intercept.
+The test now constructs that exact D1 successor from the fixture and still
+requires full-entry equality, including the existing native dispatch and
+fallback. The focused source suite passes 18/18; compiled installed and
+cross-command results remain separate pending gates.
+
 The test-only CLI3/G3-G checkpoint-to-generation prerequisite has passed its
 exact fe9/f31 supported linked/runtime gate at `ab479f5`/tree `1102384`.
 Its single registry composes the accepted CLI3/TR3 C2 root with the public
