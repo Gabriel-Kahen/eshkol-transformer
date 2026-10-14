@@ -23,6 +23,7 @@ class NativeFixtureWiringTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/full-coverage.yml").read_text()
         self.assertFalse(missing_fixture_sources(runner))
         target = makefile.split("test-ci-c2-save-after-build:\n", 1)[1].split("\n\n", 1)[0]
+        self.assertIn("tests.c2.test_held_o2_claim_source", target)
         self.assertIn("scripts/test-c2-o2-native-fixtures.sh", target)
         self.assertIn("test_target: test-ci-c2-save-after-build", workflow)
         self.assertIn("for mode in normal repeat san; do", runner)

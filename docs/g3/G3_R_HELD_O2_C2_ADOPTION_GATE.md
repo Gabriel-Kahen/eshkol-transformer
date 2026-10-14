@@ -151,3 +151,23 @@ the blocking C2 SAVE CI target through `scripts/test-c2-o2-native-fixtures.sh`.
 The runner checks feature-off symbol absence and normal, repeat, and sanitizer
 execution of both fixtures. This is native component evidence only: the held
 Eshkol adopter and C2/SAVE pair remain uncompiled and unadmitted.
+
+## Checked claim-resolution source leaf
+
+`g3r-held-o2-adopter-c2-claim!` is a feature-private successor for a caller
+that has just returned successfully from `c2-training-state-compose-internal`
+while retaining its original holds, adopter ledger, P1 clone, and exact compose
+request. It requires C2's cleared child slots and exact registered output shell,
+then checks the C2 owner, P1 clone, O2 shell, C2 token, registered O2 state,
+original optimizer pointer, and exact native state issued under the live O2
+hold. Only after all checks pass does it mark the ledger `claimed`. The ledger
+keeps its roots until the future coordinator releases the original holds; its
+preclaim release helper rejects the `claimed` phase. Any mismatch after a
+possible C2 claim fails stop instead of attempting raw-state release.
+
+The source mutation tests are wired into the blocking C2 SAVE target. This
+leaf does not invoke C2 composition, bind the G3/M3/A2 owner to O2, release
+holds, or publish an image. It still needs a compiled aggregate and runtime
+failure cuts for successful adoption, post-claim mismatch, partial claim,
+reverse-order hold release, and first-error retention before a same-owner
+SAVE pair can be admitted.

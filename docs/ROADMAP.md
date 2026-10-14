@@ -2251,6 +2251,14 @@ the leaf diagnostic under the all-raw seal SHA-256
 The exact current-main-plus-0851 union still needs independent source/CI
 review and its own compiled owner/native-fixture gate. Same-owner C2 SAVE/O2
 and data-only admission remain HOLD.
+The next feature-private held-adopter source leaf adds a checked post-compose
+C2 claim transition: it authenticates the exact registered C2/P1/O2 graph,
+original O2 optimizer and issued native state while the hold is live, then
+marks the adopter ledger claimed so preclaim release cannot consume it.
+Source mutation checks are wired into the blocking C2 SAVE target. Independent
+source review, a compiled aggregate, post-claim and partial-claim runtime
+cuts, original G3/O2 binding, hold release, and receipt publication remain
+pending; this leaf makes no same-owner SAVE or replay admission claim.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
