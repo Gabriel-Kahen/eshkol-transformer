@@ -38,7 +38,69 @@ def native_compiler_inputs(script):
     return inputs
 
 
+def assert_aot_depfile_contract(script):
+    """The pinned compiler emits depfiles only for object-mode AOT."""
+    shared = script.split('aot_args=(', 1)[1].split('\n)', 1)[0]
+    for input_arg in ('--strict-types --optimize 0 --no-stdlib',
+                      '-I "$PROJECT_ROOT/internal/p1/lib"',
+                      '-I "$PROJECT_ROOT/internal/c1/lib"',
+                      '-I "$PROJECT_ROOT/internal/t2/lib"',
+                      '-I "$PROJECT_ROOT/internal/t1/lib"',
+                      '-I "$PROJECT_ROOT/internal/d2/lib"',
+                      '-I "$PROJECT_ROOT/native" -L "$native"',
+                      '--lib eshkol_transformer_c2_image',
+                      '"$PROJECT_ROOT/tests/c2/c2_save_image_receipt_runtime.esk"'):
+        assert input_arg in shared
+    assert script.count('"$runner" \\') == 2
+    assert script.count('--emit-depfile') == 1
+    assert script.count('"${aot_args[@]}"') == 2
+    object_pass = ('"$runner" \\\n'
+                   '      --compile-only --emit-depfile "$tmp/compile/image.d" \\\n'
+                   '      "${aot_args[@]}" -o "$tmp/compile/image.o"')
+    executable_pass = ('"$runner" \\\n'
+                       '      "${aot_args[@]}" -o "$tmp/compile/image"')
+    assert object_pass in script
+    assert executable_pass in script
+    ordered = (
+        object_pass,
+        'test -s "$tmp/compile/image.o"',
+        'test -s "$tmp/compile/image.d"',
+        'assert actual == expected, (actual, expected)',
+        executable_pass,
+        'test -x "$tmp/compile/image"',
+        'for iteration in a b; do',
+    )
+    assert all(part in script for part in ordered)
+    positions = [script.index(part) for part in ordered]
+    assert positions == sorted(positions)
+
+
 class ReceiptCompiledSource(unittest.TestCase):
+    def test_depfile_object_and_executable_are_separate(self):
+        script = SCRIPT.read_text()
+        assert_aot_depfile_contract(script)
+        object_start = script.index('(cd "$tmp/compile" &&')
+        object_end = script.index('python3 - "$PROJECT_ROOT" "$tmp/compile/image.d"',
+                                  object_start)
+        depfile_only_executable = (
+            script[:object_start] + script[object_end:]).replace(
+                '"${aot_args[@]}" -o "$tmp/compile/image"',
+                '--emit-depfile "$tmp/compile/image.d" \\\n'
+                '      "${aot_args[@]}" -o "$tmp/compile/image"', 1)
+        for mutant in (
+            depfile_only_executable,
+            script.replace('--compile-only --emit-depfile', '--emit-depfile', 1),
+            script.replace('test -s "$tmp/compile/image.o"',
+                           'test -f "$tmp/compile/image.o"', 1),
+            script.replace('test -s "$tmp/compile/image.d"',
+                           'test -f "$tmp/compile/image.d"', 1),
+            script.replace('"${aot_args[@]}" -o "$tmp/compile/image"',
+                           '"$PROJECT_ROOT/tests/c2/c2_save_image_receipt_runtime.esk" '
+                           '-o "$tmp/compile/image"', 1),
+        ):
+            with self.assertRaises(AssertionError):
+                assert_aot_depfile_contract(mutant)
+
     def test_exact_native_compiler_inputs_match_tracked_manifest(self):
         manifest = NATIVE_SOURCES.read_text()
         expected = manifest.splitlines()

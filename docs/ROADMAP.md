@@ -2068,6 +2068,13 @@ syntax checks pass; a fresh exact-head compiled normal/repeat/fail-stop gate
 and independent result review remain required. Native allocation/SHA injection,
 impossible post-adopt enrollment allocation, and process-root retention need separate
 instrumentation or a narrowed acceptance argument.
+The `71778556` one-use gate emitted an AOT executable with empty compiler
+diagnostics, then stopped before runtime because the pinned compiler does not
+write a depfile in executable mode. Its independent result review remains HOLD.
+The successor gate now obtains its nonempty object and depfile from an explicit
+compile-only pass, checks the exact source closure, and compiles the executable
+separately from the same inputs. Source-only checks pass; a fresh one-use
+compiled normal/repeat/fail-stop run and independent result review remain open.
 The isolated `codex/c2-save-image-receipt-fault-cuts-20261013` follow-up adds
 test-only native failure cuts for entry/vector allocation, a synthetic SHA
 result failure after hashing the retained copy but before token enrollment,

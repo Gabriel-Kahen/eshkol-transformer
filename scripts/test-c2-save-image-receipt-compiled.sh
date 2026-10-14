@@ -60,25 +60,27 @@ ar rcsD "$native/libeshkol_transformer_c2_image.a" "$native"/*.o
 (cd "$PROJECT_ROOT" && PYTHONDONTWRITEBYTECODE=1 python3 \
   -m tests.d2.prepare_public_resources --output "$tmp/resources")
 mkdir -p "$tmp/compile"
+aot_args=(--strict-types --optimize 0 --no-stdlib
+  -I "$PROJECT_ROOT/internal/p1/lib"
+  -I "$PROJECT_ROOT/internal/c1/lib"
+  -I "$PROJECT_ROOT/internal/t2/lib"
+  -I "$PROJECT_ROOT/internal/t1/lib"
+  -I "$PROJECT_ROOT/internal/d2/lib"
+  -I "$PROJECT_ROOT/src" -I "$PROJECT_ROOT/lib"
+  -I "$PROJECT_ROOT/native" -L "$native"
+  --lib eshkol_transformer_c2_image
+  "$PROJECT_ROOT/tests/c2/c2_save_image_receipt_runtime.esk")
 (cd "$tmp/compile" &&
   env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
     XDG_CACHE_HOME="$tmp/cache" ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
     ESHKOL_CXX_COMPILER="$cxx" \
     timeout --foreground --signal=TERM --kill-after=5s 720s "$runner" \
-      --strict-types --optimize 0 --no-stdlib \
-      --emit-depfile "$tmp/compile/image.d" \
-      -I "$PROJECT_ROOT/internal/p1/lib" \
-      -I "$PROJECT_ROOT/internal/c1/lib" \
-      -I "$PROJECT_ROOT/internal/t2/lib" \
-      -I "$PROJECT_ROOT/internal/t1/lib" \
-      -I "$PROJECT_ROOT/internal/d2/lib" \
-      -I "$PROJECT_ROOT/src" -I "$PROJECT_ROOT/lib" \
-      -I "$PROJECT_ROOT/native" -L "$native" \
-      --lib eshkol_transformer_c2_image \
-      "$PROJECT_ROOT/tests/c2/c2_save_image_receipt_runtime.esk" \
-      -o "$tmp/compile/image" >"$tmp/compile/stdout" \
-      2>"$tmp/compile/stderr")
-test ! -s "$tmp/compile/stderr"
+      --compile-only --emit-depfile "$tmp/compile/image.d" \
+      "${aot_args[@]}" -o "$tmp/compile/image.o" \
+      >"$tmp/compile/object.stdout" 2>"$tmp/compile/object.stderr")
+test -s "$tmp/compile/image.o"
+test -s "$tmp/compile/image.d"
+test ! -s "$tmp/compile/object.stderr"
 python3 - "$PROJECT_ROOT" "$tmp/compile/image.d" <<'PY'
 from pathlib import Path
 import sys
@@ -97,6 +99,15 @@ for source in depfile.split(':', 1)[1].split():
 expected = (root / 'native/c2_save_image_receipt_source_closure.txt').read_text().splitlines()
 assert actual == expected, (actual, expected)
 PY
+(cd "$tmp/compile" &&
+  env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
+    XDG_CACHE_HOME="$tmp/cache" ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
+    ESHKOL_CXX_COMPILER="$cxx" \
+    timeout --foreground --signal=TERM --kill-after=5s 720s "$runner" \
+      "${aot_args[@]}" -o "$tmp/compile/image" \
+      >"$tmp/compile/stdout" 2>"$tmp/compile/stderr")
+test -x "$tmp/compile/image"
+test ! -s "$tmp/compile/stderr"
 
 for iteration in a b; do
   mkdir -p "$tmp/$iteration"
