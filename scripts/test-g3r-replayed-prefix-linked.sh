@@ -105,13 +105,13 @@ build_mode() {
     -o "$directory/g3t_feature_off.o"
   run_logged nm -g --defined-only "$directory/g3t_feature_off.o" \
     >"$directory/feature-off.symbols"
-  if rg -q 'et_g3t_private_replayed_prefix_call_acquire_v1' \
+  if run_logged rg -q 'et_g3t_private_replayed_prefix_call_acquire_v1' \
       "$directory/feature-off.symbols"; then
     die "feature-off replayed-prefix symbol escaped"
   fi
   run_logged nm -g --defined-only "$directory/objects/g3t_transport.o" \
     >"$directory/feature-on.symbols"
-  rg -q 'et_g3t_private_replayed_prefix_call_acquire_v1' \
+  run_logged rg -q 'et_g3t_private_replayed_prefix_call_acquire_v1' \
     "$directory/feature-on.symbols" || \
     die "feature-on replayed-prefix symbol missing"
   run_logged "$cc" "${common[@]}" "${flags[@]}" -DET_G3T_TESTING \
@@ -143,7 +143,7 @@ WRAPPER
     timeout --foreground --signal=TERM --kill-after=5s 120s \
     "$directory/caller" >"$directory/stdout" 2>"$directory/stderr"
   [[ ! -s "$directory/stderr" ]] || die "$mode runtime stderr is nonempty"
-  grep -E '^G3-R linked replayed P1 PASS: checks=[1-9][0-9]*$' \
+  run_logged grep -E '^G3-R linked replayed P1 PASS: checks=[1-9][0-9]*$' \
     "$directory/stdout" >/dev/null || die "$mode PASS line missing"
 }
 build_mode normal
