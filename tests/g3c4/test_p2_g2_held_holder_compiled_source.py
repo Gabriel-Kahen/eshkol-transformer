@@ -131,7 +131,51 @@ def eos_args_fd4_contract(shim):
     return writer
 
 
+def eos_observation_contract(driver, composer):
+    """Every path reaching the EOS wrapper arms its native oracle first."""
+    for start, end, marker in (
+        ("(define (normal-case", "(define (wrong-handle)",
+         '"mark native normal observation" (= (held-mark native 0 255) 0)'),
+        ("(define (p3-first-eos-reject", "(define (retry-case",
+         '"mark native first EOS observation" (= (held-mark native 0 255) 0)'),
+        ("(define (retry-case", "(define first-id",
+         '"capture native rollback reference" (= (held-mark native 0 255) 0)'),
+    ):
+        section = driver[driver.index(start):driver.index(end)]
+        if not ("(held-mark native 0 255)" in section and
+                section.index("(native (vector-ref triple 1))") <
+                section.index(marker) <
+                section.index("(g3c4-p2g2-terminal-generate-held-internal")):
+            raise AssertionError("EOS native observation is not armed before generation")
+    destructive = driver[driver.index('(if (string=? mode "normal")'):]
+    destructive = destructive[destructive.index("(let* ((triple (fresh #f 1 2))"):]
+    if not (destructive.index("(native (vector-ref triple 1))") <
+            destructive.index('"mark native destructive observation"') <
+            destructive.index("(held-mark native 0 255)") <
+            destructive.index("(g3c4-p2g2-terminal-generate-held-internal")):
+        raise AssertionError("destructive EOS observation is not armed")
+    wrapper = composer[composer.index(
+        "int64_t __wrap_et_g3c4_private_p2g2_eos_first_frame_carrier_v1("):]
+    if not (wrapper.index("coordinator_owner == NULL") <
+            wrapper.index("et_g3c4_p2g2_coordinator_test_observe_v1(")):
+        raise AssertionError("EOS wrapper lacks an unarmed-oracle guard")
+
+
 class HeldHolderCompiledSource(unittest.TestCase):
+    def test_eos_observation_is_armed_and_missing_marks_fail_closed(self):
+        driver, composer = DRIVER.read_text(), COMPOSER.read_text()
+        eos_observation_contract(driver, composer)
+        for marker in ('"mark native normal observation" (= (held-mark native 0 255) 0)',
+                       '"mark native first EOS observation" (= (held-mark native 0 255) 0)',
+                       '"capture native rollback reference" (= (held-mark native 0 255) 0)',
+                       '"mark native destructive observation"\n               (= (held-mark native 0 255) 0)'):
+            with self.subTest(marker=marker), self.assertRaises((ValueError, AssertionError)):
+                eos_observation_contract(driver.replace(marker, "#t", 1),
+                                         composer)
+        with self.assertRaises((ValueError, AssertionError)):
+            eos_observation_contract(driver, composer.replace(
+                "coordinator_owner == NULL", "coordinator_owner != NULL", 1))
+
     def test_eos_boundary_trace_is_ordered_and_test_only(self):
         held, composer, owner = SHIM.read_text(), COMPOSER.read_text(), OWNER.read_text()
         feature = "ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE"

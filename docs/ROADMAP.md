@@ -3274,6 +3274,18 @@ publication, public G2 and continuation remain pending.
   controls and strict on/off C syntax checks pass; no compiled runtime result
   is claimed. Independent source review and a separately prepared changed-head
   compiled diagnostic are the next gates.
+  The exact `ed313c41` one-use compiled diagnostic passed 18 source checks
+  and normal on/off compilation, then exited 139 in its first normal-on case.
+  Its sealed fd-4 trace ends after `eos.real.return`, before
+  `eos.wrapper.return` (`GATE-RAW-SHA256.txt`, SHA-256 `d560ac61...`). The
+  held fixture had not called `coordinator_test_mark_v1` for normal or P3
+  first-EOS cases; the EOS wrapper's unconditional observation dereferenced
+  its null coordinator owner, consistent with the reported fault at `0x68`.
+  This test-only successor arms the native observation in those cases and
+  makes a missing mark fail closed before the wrapper observes. Focused
+  source tests with missing-mark controls and strict on/off C syntax checks
+  pass. Independent source review and a fresh changed-head compiled gate
+  remain pending; this does not admit P2/G2 runtime.
   The full matrix, public G2, and continuation acceptance remain unproved.
 
 ## Wave 4 — practical pretraining and performance

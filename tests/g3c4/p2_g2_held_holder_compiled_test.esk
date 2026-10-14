@@ -65,7 +65,9 @@
   (held-phase 10)
   (let* ((triple (fresh eos kind phase))
          (generator (vector-ref triple 0))
+         (native (vector-ref triple 1))
          (holder (vector-ref triple 2)))
+    (check "mark native normal observation" (= (held-mark native 0 255) 0))
     (check "arm normal" (= (held-arm 0) 0))
     (held-phase 15)
     (held-phase 16)
@@ -116,12 +118,14 @@
   (held-phase 10)
   (let* ((triple (fresh eos 1 3))
          (generator (vector-ref triple 0))
+         (native (vector-ref triple 1))
          (holder (vector-ref triple 2))
          (old-terminals (vector-ref g3c4-p2g2-terminal-anchors 0))
          (old-originals (vector-ref g3c4-p2g2-terminal-originals 0))
          (old-records (vector-ref g3c4-p2g2-protected-records 0))
          (old-anchors (vector-ref g3c4-p2g2-protected-anchors 0))
          (old-prefixes (vector-ref g3c4-p2g2-prefix-input-anchors 0)))
+    (check "mark native first EOS observation" (= (held-mark native 0 255) 0))
     (check "arm first EOS P3 rejection" (= (held-arm 0) 0))
     (reject "P3 holder rejects first EOS before its capture"
       (lambda () (g3c4-p2g2-terminal-generate-held-internal
@@ -191,7 +195,10 @@
       (held-phase 10)
       (let* ((triple (fresh #f 1 2))
              (generator (vector-ref triple 0))
+             (native (vector-ref triple 1))
              (holder (vector-ref triple 2)))
+        (check "mark native destructive observation"
+               (= (held-mark native 0 255) 0))
         (check "arm destructive cut"
                (= (held-arm (if (string=? mode "repeat-busy") 2 3)) 0))
         (held-phase 15)
