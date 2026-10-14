@@ -16,24 +16,24 @@ TEST_ROOT = ROOT / "tests/e3_mode_graph/private_root.esk"
 P1_GENERATOR = ROOT / "scripts/generate-e3-p1-mode-test-variant.py"
 PINS = {
     E3_ROOT: "c5a0cdbceff21aea36b68a4b438e76962250a56cbf5259e2b765c92ce50c63b0",
-    E3_EXTENSION: "08f1c3fda42ddf98cd3a69dac1c0d8fa3f35510531cc95db4cc5e9f72b0fd15b",
+    E3_EXTENSION: "571f878aaa8b77ece6474c8c184abbd96aa8863581b989d2e1fef465cab361d6",
 }
 OUTPUT_DIGESTS = {
     "normal": (
         "63ea5a485fc120e3c63528fbf0a486a2a346f7a64f49f8082ecc75737981aca9",
-        "11ac65012eb02ca855e19a3123cc3d0108585dbdd05031e02aae8295f5b90fb9",
+        "6f843fd15fd7cf7bb174cea787e7e683546c888de144b12e68b04a0daa5a0481",
     ),
     "missed-child": (
         "d734b6cb57fd0eb5da9370581cc3507ac57075c58b7620c3e75b8dab56389171",
-        "11ac65012eb02ca855e19a3123cc3d0108585dbdd05031e02aae8295f5b90fb9",
+        "6f843fd15fd7cf7bb174cea787e7e683546c888de144b12e68b04a0daa5a0481",
     ),
     "enter-write-only": (
         "cf26c105501764183b9fd718f2044d2d24d6402427c7462e81cbcb9dace49e7a",
-        "11ac65012eb02ca855e19a3123cc3d0108585dbdd05031e02aae8295f5b90fb9",
+        "6f843fd15fd7cf7bb174cea787e7e683546c888de144b12e68b04a0daa5a0481",
     ),
     "graph-create": (
         "63ea5a485fc120e3c63528fbf0a486a2a346f7a64f49f8082ecc75737981aca9",
-        "8b0059c99b84eb43abd37f085379ee27d46fb474493dc4f6920673652061c57e",
+        "003b938983151b8838c5e438106a65163640fa3ba5caf7daf6ebe2ee1b584a30",
     ),
 }
 

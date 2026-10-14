@@ -2227,11 +2227,14 @@ The bounded P1 state-shell publication repair keeps the registry authoritative
 and skips its fallible advisory-index write for state shells after native
 publication. Exact shell lookup falls back to the registry scan; all other
 indexing and ordinary P1 observation remain unchanged. A source mutation gate
-and test-only post-publication index trap cover this prerequisite, while its
-compiled runtime/IR gate, state-lookup performance and independent review
-remain open. Historical E3/P1 exact-source overlays also need a reviewed
-repin and compiled gate before this candidate can enter the integrated tree.
-This adds no held-safe clone, C2 claim, SAVE receipt or replay.
+and test-only post-publication index trap cover this prerequisite. Independent
+source review accepted exact `3cbdb97`/tree `aa5e8b46`; its compiled runtime/IR
+gate and state-lookup performance remain open. The historical E3/P1 mode,
+mode-graph and zero-topology overlays pin the P1 source. The mode-graph
+generator also pins the current canonical E3 extension (`571f878...`) and all
+four emitted extension digests after the canonical frame-publication change.
+The source-composition and stale-pin negatives pass; the full compiled
+mode-graph gate remains pending. Earlier failed E3 evidence is retained.
 
 The feature-private P1 held clone now prepares and returns one detached,
 releasable state shell without applying the public observation's original
@@ -2241,10 +2244,12 @@ trusted slots 0..72 and the public facade unchanged. A 50-check test-only
 registry overlay covers original path/finalized identity, native/provider
 owner counts, a post-publication wrap fault, provider clone failure, and
 malformed/nonroot owners; source generation and E3 overlay hashes are repinned.
-The P1 runtime overlay and atomic-shell compiled prerequisite still require
-the supported build and independent review before this source can join the
-held G3/O2/C2 coordinator. No C2 claim, SAVE receipt or replay follows from
-this source-only candidate.
+The private P1 source design and the sibling mode-graph pin repair have
+independent source acceptance. The combined source generation and manifest
+checks pass; its P1 runtime overlay, atomic-shell prerequisite, and compiled
+mode-graph gate remain pending before it can join the held G3/O2/C2
+coordinator. No C2 claim, SAVE receipt or replay follows from this source-only
+candidate.
 
 The [private M3 owner-roster prerequisite](g3/G3_R_M3_OWNER_ROSTER_PREREQUISITE.md)
 ports the feature-gated registry-backed fourteen-parameter/identity roster

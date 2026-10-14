@@ -8,8 +8,10 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 from tests.e3_mode_graph.verify_observation import verify
+from tests.p1.test_state_shell_publication_source import publication_contract
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -27,6 +29,30 @@ def lines(prefix: Path, suffix: str) -> list[str]:
 
 
 class ModeGraphTupleTest(unittest.TestCase):
+    def test_stale_extension_pins_fail_closed(self) -> None:
+        old_source = "08f1c3fda42ddf98cd3a69dac1c0d8fa3f35510531cc95db4cc5e9f72b0fd15b"
+        old_output = "11ac65012eb02ca855e19a3123cc3d0108585dbdd05031e02aae8295f5b90fb9"
+        with mock.patch.dict(generator.PINS, {generator.E3_EXTENSION: old_source}):
+            with self.assertRaisesRegex(ValueError, "canonical source digest differs"):
+                generator.extension_source("normal")
+        with tempfile.TemporaryDirectory(prefix="e3-mode-graph-stale-") as temporary:
+            p1_digest = generator.OUTPUT_DIGESTS["normal"][0]
+            with mock.patch.dict(generator.OUTPUT_DIGESTS,
+                                 {"normal": (p1_digest, old_output)}):
+                with mock.patch.object(sys, "argv", [str(GENERATOR),
+                                                      "--output-dir", temporary]):
+                    with self.assertRaisesRegex(ValueError,
+                                                "generated normal digests differ"):
+                        generator.main()
+
+    def test_p1_variants_keep_state_publication_contract(self) -> None:
+        # The E3 extension has its own exact pin and admission gate.
+        for mode, (expected_p1, _) in generator.OUTPUT_DIGESTS.items():
+            with self.subTest(mode=mode):
+                p1 = generator.p1_source(mode)
+                self.assertEqual(generator.digest(p1), expected_p1)
+                self.assertTrue(publication_contract(p1))
+
     def test_exact_generated_sources_and_mutations(self) -> None:
         with tempfile.TemporaryDirectory(prefix="e3-mode-graph-") as temporary:
             for mode in generator.OUTPUT_DIGESTS:
