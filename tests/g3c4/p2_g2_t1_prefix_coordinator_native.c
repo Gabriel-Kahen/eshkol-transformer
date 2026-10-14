@@ -172,6 +172,8 @@ int64_t et_g3c4_p2g2_coordinator_test_cache_lease_v1(
 
 /* This fixture observes the same native owner used by the Eshkol scope. */
 static et_g3c4_model_owner_internal *coordinator_owner;
+static et_g3c4_context_internal *coordinator_marked_context;
+static int64_t coordinator_observations;
 static uint32_t coordinator_values[1192], coordinator_gradients[1192];
 static int64_t coordinator_entry_rng[4], coordinator_successor_rng[4];
 static cache_snapshot coordinator_entry_cache, coordinator_precommit_cache;
@@ -188,6 +190,18 @@ static int64_t coordinator_selected;
 static int64_t coordinator_prompt[2];
 static int64_t coordinator_policy[6];
 static int coordinator_saw_prefix;
+
+int64_t et_g3c4_p2g2_coordinator_test_reset_v1(void) {
+  coordinator_owner = NULL;
+  coordinator_marked_context = NULL;
+  coordinator_entry_cache_owner = NULL;
+  coordinator_observations = 0;
+  return 0;
+}
+
+int64_t et_g3c4_p2g2_coordinator_test_observations_v1(void) {
+  return coordinator_observations;
+}
 
 static void coordinator_owner_bytes(uint32_t values[1192],
                                     uint32_t gradients[1192]) {
@@ -251,6 +265,7 @@ int64_t et_g3c4_p2g2_coordinator_test_mark_v1(
       et_g3c4_admit_idle_call(candidate);
   if (context == NULL) return -1;
   coordinator_owner = context->owner;
+  coordinator_marked_context = context;
   coordinator_prompt[0] = first;
   coordinator_prompt[1] = second;
   memcpy(coordinator_policy, context->generator_policy,
@@ -309,6 +324,7 @@ int64_t et_g3c4_p2g2_coordinator_test_observe_v1(
   et_a2_kv_cache_read_borrow *borrow = NULL;
   et_kernel_error error;
   int frame_owns_cache;
+  coordinator_observations++;
   if (context == NULL || output == NULL ||
       (cache_length != 0 && cache_length != 2) ||
       !coordinator_owner_unchanged() ||

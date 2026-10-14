@@ -131,8 +131,12 @@ def eos_args_fd4_contract(shim):
     return writer
 
 
-def eos_observation_contract(driver, composer):
+def eos_observation_contract(driver, composer, coordinator, script):
     """Every path reaching the EOS wrapper arms its native oracle first."""
+    fresh = driver[driver.index("(define (fresh eos"):driver.index("(define (roots-clean?")]
+    if not (fresh.index("(held-reset)") <
+            fresh.index("(g3c4-generator-create-internal")):
+        raise AssertionError("each case must clear its prior native observation")
     for start, end, marker in (
         ("(define (normal-case", "(define (wrong-handle)",
          '"mark native normal observation" (= (held-mark native 0 255) 0)'),
@@ -148,7 +152,7 @@ def eos_observation_contract(driver, composer):
                 section.index("(g3c4-p2g2-terminal-generate-held-internal")):
             raise AssertionError("EOS native observation is not armed before generation")
     destructive = driver[driver.index('(if (string=? mode "normal")'):]
-    destructive = destructive[destructive.index("(let* ((triple (fresh #f 1 2))"):]
+    destructive = destructive[destructive.rindex("(let* ((triple (fresh #f 1 2))"):]
     if not (destructive.index("(native (vector-ref triple 1))") <
             destructive.index('"mark native destructive observation"') <
             destructive.index("(held-mark native 0 255)") <
@@ -156,25 +160,65 @@ def eos_observation_contract(driver, composer):
         raise AssertionError("destructive EOS observation is not armed")
     wrapper = composer[composer.index(
         "int64_t __wrap_et_g3c4_private_p2g2_eos_first_frame_carrier_v1("):]
-    if not (wrapper.index("coordinator_owner == NULL") <
-            wrapper.index("et_g3c4_p2g2_coordinator_test_observe_v1(")):
+    observer = wrapper.index("et_g3c4_p2g2_coordinator_test_observe_v1(")
+    if not all(wrapper.index(guard) < observer for guard in (
+            "coordinator_owner == NULL", "coordinator_marked_context != context",
+            "coordinator_owner !=\n           ((et_g3c4_context_internal *)context)->owner",
+            "coordinator_entry_cache_owner !=\n"
+            "           ((et_g3c4_context_internal *)context)->cache")):
         raise AssertionError("EOS wrapper lacks an unarmed-oracle guard")
+    reset = coordinator[coordinator.index("int64_t et_g3c4_p2g2_coordinator_test_reset_v1("):
+                        coordinator.index("int64_t et_g3c4_p2g2_coordinator_test_observations_v1(")]
+    if not all(f"{name} = NULL;" in reset for name in (
+            "coordinator_owner", "coordinator_marked_context",
+            "coordinator_entry_cache_owner")):
+        raise AssertionError("case reset leaves a stale owner witness")
+    missing = driver[driver.index('(if (string=? mode "missing-mark")'):]
+    missing = missing[:missing.index('"mark native destructive observation"')]
+    if not (driver.index("(define first-id (normal-case 1 2 #f 2))") <
+            driver.index('(if (string=? mode "missing-mark")') and
+            missing.index("(fresh #f 1 2)") <
+            missing.index('"later case without mark rejects before observation"') <
+            missing.index("(held-observations) 0") and
+            "(held-mark" not in missing and
+            '"$directory/held-on" missing-mark' in script):
+        raise AssertionError("missing-mark runtime negative is not executable")
 
 
 class HeldHolderCompiledSource(unittest.TestCase):
     def test_eos_observation_is_armed_and_missing_marks_fail_closed(self):
         driver, composer = DRIVER.read_text(), COMPOSER.read_text()
-        eos_observation_contract(driver, composer)
+        coordinator = (ROOT / "tests/g3c4/p2_g2_t1_prefix_coordinator_native.c").read_text()
+        script = SCRIPT.read_text()
+        eos_observation_contract(driver, composer, coordinator, script)
         for marker in ('"mark native normal observation" (= (held-mark native 0 255) 0)',
                        '"mark native first EOS observation" (= (held-mark native 0 255) 0)',
                        '"capture native rollback reference" (= (held-mark native 0 255) 0)',
-                       '"mark native destructive observation"\n               (= (held-mark native 0 255) 0)'):
+                       '"mark native destructive observation"\n                   (= (held-mark native 0 255) 0)'):
             with self.subTest(marker=marker), self.assertRaises((ValueError, AssertionError)):
                 eos_observation_contract(driver.replace(marker, "#t", 1),
-                                         composer)
+                                         composer, coordinator, script)
         with self.assertRaises((ValueError, AssertionError)):
             eos_observation_contract(driver, composer.replace(
-                "coordinator_owner == NULL", "coordinator_owner != NULL", 1))
+                "coordinator_owner == NULL", "coordinator_owner != NULL", 1),
+                coordinator, script)
+        for changed in (driver.replace("(held-reset)", "0", 1),
+                        driver.replace("(held-observations) 0", "0", 1)):
+            with self.assertRaises((ValueError, AssertionError)):
+                eos_observation_contract(changed, composer, coordinator, script)
+        with self.assertRaises((ValueError, AssertionError)):
+            eos_observation_contract(driver, composer.replace(
+                "coordinator_marked_context != context", "0", 1),
+                coordinator, script)
+        with self.assertRaises((ValueError, AssertionError)):
+            eos_observation_contract(driver, composer.replace(
+                "coordinator_entry_cache_owner !=\n"
+                "           ((et_g3c4_context_internal *)context)->cache", "0", 1),
+                coordinator, script)
+        with self.assertRaises((ValueError, AssertionError)):
+            eos_observation_contract(driver, composer, coordinator,
+                                     script.replace('"$directory/held-on" missing-mark',
+                                                    '"$directory/held-on" normal', 1))
 
     def test_eos_boundary_trace_is_ordered_and_test_only(self):
         held, composer, owner = SHIM.read_text(), COMPOSER.read_text(), OWNER.read_text()

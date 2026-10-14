@@ -445,7 +445,12 @@ int64_t __wrap_et_g3c4_private_p2g2_eos_first_frame_carrier_v1(
                sizeof(coordinator_entry_rng)) == 0;
   }
   if (result == 0 &&
-      (coordinator_owner == NULL || coordinator_entry_cache_owner == NULL ||
+      (coordinator_owner == NULL || coordinator_marked_context != context ||
+       coordinator_owner !=
+           ((et_g3c4_context_internal *)context)->owner ||
+       coordinator_entry_cache_owner == NULL ||
+       coordinator_entry_cache_owner !=
+           ((et_g3c4_context_internal *)context)->cache ||
        et_g3c4_pending_output_lookup(context, &pending) != 0 ||
        pending == NULL ||
        et_g3c4_p2g2_coordinator_test_observe_v1(

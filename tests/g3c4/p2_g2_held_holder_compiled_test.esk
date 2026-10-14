@@ -5,6 +5,9 @@
 (extern i64 held-observe i64 :real et_g3c4_p2g2_held_test_observe_v1)
 (extern i64 held-mark ptr i64 i64
         :real et_g3c4_p2g2_coordinator_test_mark_v1)
+(extern i64 held-reset :real et_g3c4_p2g2_coordinator_test_reset_v1)
+(extern i64 held-observations
+        :real et_g3c4_p2g2_coordinator_test_observations_v1)
 (extern i64 held-after-abort ptr i64
         :real et_g3c4_p2g2_coordinator_test_after_abort_v1)
 
@@ -36,6 +39,7 @@
 (define args (command-line))
 (define mode (car (cdr args)))
 (if (not (or (string=? mode "normal")
+             (string=? mode "missing-mark")
              (string=? mode "repeat-busy")
              (string=? mode "postzero")))
     (exit 2))
@@ -43,6 +47,7 @@
 
 (define (fresh eos kind phase)
   (held-phase 11)
+  (check "reset native observation for new case" (= (held-reset) 0))
   (let ((generator (g3c4-generator-create-internal
                      model tokenizer (config eos))))
     (held-phase 12)
@@ -191,18 +196,35 @@
       (check "owned input release" (generation-tensor-release-internal! input))
       (display "G3-C4 held-holder compiled PASS: checks=")
       (display checks) (newline))
-    (begin
-      (held-phase 10)
-      (let* ((triple (fresh #f 1 2))
-             (generator (vector-ref triple 0))
-             (native (vector-ref triple 1))
-             (holder (vector-ref triple 2)))
-        (check "mark native destructive observation"
-               (= (held-mark native 0 255) 0))
-        (check "arm destructive cut"
-               (= (held-arm (if (string=? mode "repeat-busy") 2 3)) 0))
-        (held-phase 15)
-        (held-phase 16)
-        (g3c4-p2g2-terminal-generate-held-internal generator input holder)
-        (display "G3-C4 held-holder FAIL: destructive cut returned")
-        (newline) (exit 99))))
+    (if (string=? mode "missing-mark")
+        (begin
+          (held-phase 10)
+          (let* ((triple (fresh #f 1 2))
+                 (generator (vector-ref triple 0))
+                 (holder (vector-ref triple 2)))
+            (check "arm later unmarked case" (= (held-arm 0) 0))
+            (reject "later case without mark rejects before observation"
+              (lambda () (g3c4-p2g2-terminal-generate-held-internal
+                           generator input holder)))
+            (check "later case never entered native observer"
+                   (= (held-observations) 0))
+            (check "later unmarked generator closes"
+                   (g3c4-generator-close-internal! generator))
+            (check "owned input release" (generation-tensor-release-internal! input))
+            (display "G3-C4 held-holder missing-mark PASS: checks=")
+            (display checks) (newline)))
+        (begin
+          (held-phase 10)
+          (let* ((triple (fresh #f 1 2))
+                 (generator (vector-ref triple 0))
+                 (native (vector-ref triple 1))
+                 (holder (vector-ref triple 2)))
+            (check "mark native destructive observation"
+                   (= (held-mark native 0 255) 0))
+            (check "arm destructive cut"
+                   (= (held-arm (if (string=? mode "repeat-busy") 2 3)) 0))
+            (held-phase 15)
+            (held-phase 16)
+            (g3c4-p2g2-terminal-generate-held-internal generator input holder)
+            (display "G3-C4 held-holder FAIL: destructive cut returned")
+            (newline) (exit 99)))))

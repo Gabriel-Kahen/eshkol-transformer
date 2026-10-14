@@ -235,6 +235,16 @@ PY
   test -s "$evidence/$mode-repeat.trace"
   test ! -s "$evidence/$mode-repeat.stderr"
   cmp "$evidence/$mode-on.stdout" "$evidence/$mode-repeat.stdout"
+  "${runtime[@]}" ESHKOL_ARENA_POISON=1 \
+    timeout --foreground --signal=TERM --kill-after=5s 120s \
+    "$directory/held-on" missing-mark \
+    >"$evidence/$mode-missing-mark.stdout" \
+    2>"$evidence/$mode-missing-mark.stderr" \
+    4>"$evidence/$mode-missing-mark.trace"
+  test -s "$evidence/$mode-missing-mark.trace"
+  test ! -s "$evidence/$mode-missing-mark.stderr"
+  rg '^G3-C4 held-holder missing-mark PASS: checks=[1-9][0-9]*$' \
+    "$evidence/$mode-missing-mark.stdout" >/dev/null
   for fixture in repeat-busy postzero; do
     local status=0 marker=R
     [[ "$fixture" == postzero ]] && marker=Z

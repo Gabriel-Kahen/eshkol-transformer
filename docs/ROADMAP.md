@@ -3284,8 +3284,14 @@ publication, public G2 and continuation remain pending.
   This test-only successor arms the native observation in those cases and
   makes a missing mark fail closed before the wrapper observes. Focused
   source tests with missing-mark controls and strict on/off C syntax checks
-  pass. Independent source review and a fresh changed-head compiled gate
-  remain pending; this does not admit P2/G2 runtime.
+  pass. Independent review of `f712fe48` then held fresh-package preparation:
+  a prior case left nonnull owner/cache marks, allowing a later unmarked case
+  to reach the observer. The successor clears the test-only witness on each
+  fresh case, binds the EOS guard to its exact context, model owner, and cache,
+  and adds a marked-then-unmarked executable negative that requires zero
+  observer entries. The 19 focused source tests and strict on/off Clang syntax
+  checks pass. Independent source/tests review and a fresh changed-head compiled
+  gate remain pending; this does not admit P2/G2 runtime.
   The full matrix, public G2, and continuation acceptance remain unproved.
 
 ## Wave 4 — practical pretraining and performance
