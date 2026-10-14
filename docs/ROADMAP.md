@@ -2075,6 +2075,11 @@ The successor gate now obtains its nonempty object and depfile from an explicit
 compile-only pass, checks the exact source closure, and compiles the executable
 separately from the same inputs. Source-only checks pass; a fresh one-use
 compiled normal/repeat/fail-stop run and independent result review remain open.
+The one-use `c2e2a688` gate compiled its object with empty diagnostics, then
+stopped at the exact depfile comparison: the private source closure omitted
+direct root loads `d2_wave2_root.esk` and `k2_wave2_extension.esk`. No receipt
+runtime ran. The focused source successor repairs the closure and checks direct
+load order; a fresh compiled gate and independent result review remain required.
 The isolated `codex/c2-save-image-receipt-fault-cuts-20261013` follow-up adds
 test-only native failure cuts for entry/vector allocation, a synthetic SHA
 result failure after hashing the retained copy but before token enrollment,

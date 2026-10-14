@@ -10,6 +10,8 @@ ROOT = Path(__file__).resolve().parents[2]
 DRIVER = ROOT / "tests/c2/c2_save_image_receipt_runtime.esk"
 SCRIPT = ROOT / "scripts/test-c2-save-image-receipt-compiled.sh"
 NATIVE_SOURCES = ROOT / "native/c2_save_image_receipt_compiled_native_sources.txt"
+SOURCE_CLOSURE = ROOT / "native/c2_save_image_receipt_source_closure.txt"
+PRIVATE_ROOT = ROOT / "native/c2_save_image_receipt_root.esk"
 
 
 def native_compiler_inputs(script):
@@ -131,6 +133,17 @@ class ReceiptCompiledSource(unittest.TestCase):
             native_compiler_inputs(script.replace(
                 '"$PROJECT_ROOT/native/c2_save_image_receipt.c"',
                 '"${PROJECT_ROOT}/native/c2_save_image_receipt.c"', 1))
+
+    def test_private_root_loads_are_in_source_closure_order(self):
+        root = PRIVATE_ROOT.read_text()
+        loads = re.findall(r'^\(load "([^"/]+\.esk)"\)$', root, re.MULTILINE)
+        self.assertTrue(loads)
+        manifest = SOURCE_CLOSURE.read_text().splitlines()
+        self.assertEqual(manifest[0], "native/c2_save_image_receipt_root.esk")
+        self.assertEqual(len(manifest), len(set(manifest)))
+        self.assertTrue(all((ROOT / path).is_file() for path in manifest))
+        positions = [manifest.index(f"native/{name}") for name in loads]
+        self.assertEqual(positions, sorted(positions))
 
     def test_driver_parses_and_uses_real_private_root(self):
         source = DRIVER.read_text()
