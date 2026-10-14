@@ -1120,8 +1120,9 @@ the supported compiled E3 §9 gates remain pending.
 The exact `129460f4` edge compiled B attempt built normal and sanitized
 runtimes, then its first `normal-a` process exited 1 with only a generic user
 exception, before any oracle result. A test-only diagnostic successor adds
-flushed case/phase and caught-exception provenance plus failing pre/post
-evaluator controls. Source checks alone do not establish the throw site or
+flushed case/phase and caught-exception provenance. Its controls exercise a
+missing-path D2-open exception and a labeled postcondition abort after the
+stage-12 outcome check. Source checks alone do not establish the throw site or
 edge acceptance; independent source review precedes any fresh compiled gate.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after

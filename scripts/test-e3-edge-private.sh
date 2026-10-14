@@ -132,25 +132,43 @@ for cache in a b sanitized; do
 done
 cmp "${out}/runtime-a" "${out}/runtime-b"
 
-# Both injected exceptions must fail through the boxed bridge with distinct,
-# flushed pre/post evaluator provenance. They never count as edge successes.
+# A missing D1 directory fails inside D2 open, before evaluation.
+missing_corpus="${out}/corpus-a-missing"
+[[ ! -e "${missing_corpus}" && ! -L "${missing_corpus}" ]] || \
+  die "edge missing-corpus control path exists"
 for control in pre post; do
+  first_corpus="${out}/corpus-a-empty"
+  extra=()
+  if [[ "${control}" == pre ]]; then
+    first_corpus="${missing_corpus}"
+  else
+    extra=(--edge-post-fault)
+  fi
   if timeout --foreground --signal=TERM --kill-after=5s \
       "${runtime_timeout}s" "${out}/runtime-a" \
-      "${out}/corpus-a-empty" "${out}/corpus-a-singleton" \
+      "${first_corpus}" "${out}/corpus-a-singleton" \
       "${out}/corpus-a-entry-eos" "${out}/corpus-a-one-token-tail" \
-      "--edge-${control}-fault" \
+      "${extra[@]}" \
       >"${out}/control-${control}.stdout" \
       2>"${out}/control-${control}.stderr"; then
-    die "edge ${control} exception control unexpectedly passed"
+    die "edge ${control} causal control unexpectedly passed"
   else
     status=$?
   fi
-  [[ "${status}" -eq 1 ]] || die "edge ${control} control exited ${status}, expected 1"
+  expected_status=1
+  [[ "${control}" != post ]] || expected_status=134
+  [[ "${status}" -eq "${expected_status}" ]] || \
+    die "edge ${control} control exited ${status}, expected ${expected_status}"
   python3 -B -m tests.e3_private.edge_phase_check \
     --stderr "${out}/control-${control}.stderr" --mode "${control}"
-  [[ ! -s "${out}/control-${control}.stdout" ]] || \
-    die "edge ${control} control emitted success output"
+  if [[ "${control}" == pre ]]; then
+    [[ ! -s "${out}/control-pre.stdout" ]] || \
+      die "edge pre control emitted success output"
+  else
+    [[ "$(<"${out}/control-post.stdout")" == \
+       'E3-RETENTION-FAIL: edge-postcondition-control' ]] || \
+      die "edge post control did not fail its postcondition"
+  fi
 done
 
 for profile in normal-a normal-b poisoned-a sanitized; do

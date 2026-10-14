@@ -14,15 +14,11 @@ PHASES = (
     "modes-check", "model-check", "rng-check", "close", "result-read", "done",
 )
 PHASE_LINE = re.compile(r"E3-EDGE-PHASE case=([a-z-]+) phase=([a-z0-9-]+)\Z")
-CONTROL = {
-    "pre": ("d2-open", "edge-pre-eval-control"),
-    "post": ("post-eval", "edge-post-eval-control"),
-}
-
-
 def check(text: str, mode: str) -> None:
     lines = text.splitlines()
-    if mode != "normal" and lines and lines[-1].startswith("Unhandled exception: "):
+    if mode == "pre" and lines and lines[-1] == "Unhandled exception: user exception":
+        lines.pop()
+    if mode == "post" and lines and lines[-1] == "timeout: the monitored command dumped core":
         lines.pop()
     markers = []
     exceptions = []
@@ -39,13 +35,18 @@ def check(text: str, mode: str) -> None:
         if markers != expected or exceptions:
             raise ValueError("normal edge traversal lacks four complete phase traces")
         return
-    phase, value = CONTROL[mode]
-    expected = [("empty", item) for item in PHASES[:PHASES.index(phase) + 1]]
-    if markers != expected or len(exceptions) != 1:
-        raise ValueError(f"{mode} control must stop at {phase} with one exception")
-    if exceptions[0] != ("E3-EDGE-EXCEPTION case=empty phase=" + phase +
-                         " category=non-transformer-error value=" + value):
-        raise ValueError(f"{mode} control has wrong exception provenance")
+    if mode == "pre":
+        expected = [("empty", item) for item in PHASES[:PHASES.index("d2-open") + 1]]
+        provenance = ('E3-EDGE-EXCEPTION case=empty phase=d2-open '
+                      'category=io operation=token-dataset-open '
+                      'message="required file is missing"')
+        if markers != expected or exceptions != [provenance]:
+            raise ValueError("missing D2 corpus must fail at open with IO provenance")
+        return
+    expected = [("empty", item) for item in PHASES[:PHASES.index("outcome-check") + 1]]
+    expected.append(("empty", "postcondition-control"))
+    if markers != expected or exceptions:
+        raise ValueError("post control must fail after checked evaluator outcome")
 
 
 def main() -> None:

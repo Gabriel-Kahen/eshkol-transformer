@@ -60,7 +60,12 @@ guard prints caught exception category, operation and message (or the raw
 non-transformer value), then rethrows. The evaluator's own guard and exact
 stage-12 zero-row assertion remain in place. The runner checks complete
 four-case phase transcripts and runs deliberate pre-evaluation and post-
-evaluation exception controls, each requiring exit 1 and its distinct phase.
+evaluation controls. The pre control passes a guaranteed missing corpus
+directory into D2 open and requires its structured `io` exception at
+`d2-open`. The post control first checks the expected stage-12 zero-row
+outcome, then fails a labeled retention postcondition through its native
+invariant abort. Its flushed label and `postcondition-control` phase must
+survive the failing process. Neither control can emit an edge pass.
 These are source-staged diagnostics; independent review and a fresh compiled
 result are still required before edge admission. The shared test driver also
 regenerates the first-evaluation mutant and updates its source pins. The

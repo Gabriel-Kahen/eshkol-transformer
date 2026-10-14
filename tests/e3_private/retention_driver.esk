@@ -49,6 +49,7 @@
 (define (e3-test-retention-check label condition)
   (if condition #t
       (begin (display "E3-RETENTION-FAIL: ") (display label) (newline)
+             (flush-output-port (current-output-port))
              (e3-native-invariant-fail))))
 
 (define (e3-test-retention-probes)
@@ -388,7 +389,6 @@
          (destinations (vector-ref fixture 2))
          (frame (vector-ref fixture 3)))
     (e3-test-edge-mark! case 'd2-open)
-    (if (eq? fault 'pre-eval-fault) (raise 'edge-pre-eval-control))
     (let ((dataset (d2-token-dataset-open
                      (e3-test-dataset-config corpus-path #t) tokenizer)))
     (e3-test-edge-mark! case 'mode-seed)
@@ -419,7 +419,6 @@
                         (e3-evaluate-into! model dataset frame)
                         #t)))))
       (e3-test-edge-mark! case 'post-eval)
-      (if (eq? fault 'post-eval-fault) (raise 'edge-post-eval-control))
       (e3-test-edge-mark! case 'outcome-check)
       (if (eq? case 'one-token-tail)
           (e3-test-retention-check 'edge-tail-success
@@ -445,6 +444,11 @@
                        "evaluation finalization or publication failed")))
                  (= (vector-ref (e3-frame-entry-internal frame) 15) 150)
                  (equal? outputs (e3-test-edge-outputs frame destinations)))))
+      (if (eq? fault 'postcondition-fault)
+          (begin
+            (e3-test-edge-mark! case 'postcondition-control)
+            (e3-test-retention-check 'edge-postcondition-control
+              (= (e3-counter-ref frame 0) -1))))
       (e3-test-edge-mark! case 'cursor-check)
       (e3-test-retention-check 'edge-cursor
         (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset)))
@@ -480,8 +484,7 @@
         ((eq? phase 'edge)
          (e3-test-edge-mark! horizon 'parameter)
          (e3-test-retention-check 'edge-parameter
-           (or (eq? present? #f) (eq? present? 'pre-eval-fault)
-               (eq? present? 'post-eval-fault)))
+           (or (eq? present? #f) (eq? present? 'postcondition-fault)))
          (e3-test-edge-run horizon corpus-path present?))
         ((eq? phase 'n5)
          (e3-test-retention-check 'n5-scenario
