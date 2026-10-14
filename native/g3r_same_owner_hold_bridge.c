@@ -8,10 +8,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* One immutable shell per address: stale and double-release pointers never
- * become a later live pair. Caller serializes the entire feature. */
+/* Tickets never alias a later pair when allocator addresses are recycled.
+ * Only active records remain allocated. Caller serializes the feature. */
 typedef struct et_g3r_hold_pair {
   struct et_g3r_hold_pair *next;
+  int64_t ticket;
   void *generator, *model, *optimizer;
   void *g3;
   et_o2_g3r_save_hold *o2;
@@ -19,6 +20,7 @@ typedef struct et_g3r_hold_pair {
 } et_g3r_hold_pair;
 static et_g3r_hold_pair *pairs;
 static unsigned pair_count;
+static int64_t next_pair_ticket = 1;
 static _Thread_local int64_t error_source, error_category, error_code;
 
 enum { BRIDGE = 0, M3 = 1, G3 = 2, O2 = 3 };
@@ -46,30 +48,31 @@ static void o2_error(const et_o2_error_v1 *error, int32_t status) {
 static void clear_error(void) {
   error_source = error_category = error_code = 0;
 }
-static et_g3r_hold_pair *admit(void *candidate) {
+static et_g3r_hold_pair *admit(int64_t candidate) {
   for (et_g3r_hold_pair *p = pairs; p; p = p->next)
-    if (p == candidate && p->live && p->g3 && p->o2) return p;
+    if (p->ticket == candidate && p->live && p->g3 && p->o2) return p;
   bridge_error(2, 2); /* invalid-state, stale/foreign handle */
   return NULL;
 }
 
-void *et_g3r_private_same_owner_holds_begin_v1(
+int64_t et_g3r_private_same_owner_holds_begin_v1(
     void *generator, void *model, void *optimizer) {
   clear_error();
-  if (!generator || !model || !optimizer || pair_count == 64u) {
+  if (!generator || !model || !optimizer || pair_count == 64u ||
+      next_pair_ticket == INT64_MAX) {
     bridge_error(!generator || !model || !optimizer ? 1 : 4, 1);
-    return NULL;
+    return 0;
   }
   et_g3r_hold_pair *pair = calloc(1, sizeof(*pair));
-  if (!pair) { bridge_error(5, 5); return NULL; }
+  if (!pair) { bridge_error(5, 5); return 0; }
   void *parameters[14] = {0};
   const void *identities[14] = {0};
   if (et_m3t_private_owner_save_roster_v1(model, parameters, identities)) {
-    m3_error(); free(pair); return NULL;
+    m3_error(); free(pair); return 0;
   }
   pair->g3 = et_g3r_private_g3t_save_begin_v1(
       generator, parameters, identities);
-  if (!pair->g3) { g3_error(); free(pair); return NULL; }
+  if (!pair->g3) { g3_error(); free(pair); return 0; }
   et_f32_parameter *o2_parameters[14];
   for (size_t i = 0; i < 14; ++i)
     o2_parameters[i] = (et_f32_parameter *)parameters[i];
@@ -87,17 +90,18 @@ void *et_g3r_private_same_owner_holds_begin_v1(
     error_source = first_source; error_category = first_category;
     error_code = first_code;
     free(pair);
-    return NULL;
+    return 0;
   }
   if (!pair->o2) abort();
   pair->generator = generator; pair->model = model; pair->optimizer = optimizer;
+  pair->ticket = next_pair_ticket++;
   pair->live = 1u;
   pair->next = pairs; pairs = pair; ++pair_count;
-  return pair;
+  return pair->ticket;
 }
 
 int64_t et_g3r_private_same_owner_holds_check_v1(
-    void *candidate, void *generator, void *model, void *optimizer) {
+    int64_t candidate, void *generator, void *model, void *optimizer) {
   clear_error();
   et_g3r_hold_pair *pair = admit(candidate);
   if (!pair) return error_category;
@@ -116,18 +120,18 @@ int64_t et_g3r_private_same_owner_holds_check_v1(
   return 0;
 }
 
-void *et_g3r_private_same_owner_holds_g3_v1(void *candidate) {
+void *et_g3r_private_same_owner_holds_g3_v1(int64_t candidate) {
   clear_error();
   et_g3r_hold_pair *pair = admit(candidate);
   return pair ? pair->g3 : NULL;
 }
-void *et_g3r_private_same_owner_holds_o2_v1(void *candidate) {
+void *et_g3r_private_same_owner_holds_o2_v1(int64_t candidate) {
   clear_error();
   et_g3r_hold_pair *pair = admit(candidate);
   return pair ? pair->o2 : NULL;
 }
 int64_t et_g3r_private_same_owner_holds_copy_g3_v1(
-    void *candidate, void *bytevector_header, int64_t payload_bytes) {
+    int64_t candidate, void *bytevector_header, int64_t payload_bytes) {
   clear_error();
   et_g3r_hold_pair *pair = admit(candidate);
   if (!pair) return error_category;
@@ -147,7 +151,7 @@ int64_t et_g3r_private_same_owner_holds_copy_g3_v1(
   if (address < pair_begin + sizeof(*pair) && pair_begin < end)
     return bridge_error(1, 1);
   if (et_g3r_private_same_owner_holds_check_v1(
-          pair, pair->generator, pair->model, pair->optimizer))
+          candidate, pair->generator, pair->model, pair->optimizer))
     return error_category;
   /* G3's copy rejects payload overlap with its original owner, A2, F32,
    * and held controls before writing any byte. The Eshkol wrapper allocates
@@ -161,13 +165,13 @@ int64_t et_g3r_private_same_owner_holds_copy_g3_v1(
   clear_error();
   return 0;
 }
-int64_t et_g3r_private_same_owner_holds_end_v1(void *candidate) {
+int64_t et_g3r_private_same_owner_holds_end_v1(int64_t candidate) {
   clear_error();
   et_g3r_hold_pair *pair = admit(candidate);
   if (!pair) return error_category;
   /* Check before reverse-order draining. Preserve the earliest typed error. */
   (void)et_g3r_private_same_owner_holds_check_v1(
-      pair, pair->generator, pair->model, pair->optimizer);
+      candidate, pair->generator, pair->model, pair->optimizer);
   int64_t first_source = error_source, first_category = error_category;
   int64_t first_code = error_code;
   et_o2_error_v1 error = {0};
@@ -184,8 +188,14 @@ int64_t et_g3r_private_same_owner_holds_end_v1(void *candidate) {
     first_source = error_source; first_category = error_category;
     first_code = error_code;
   }
-  pair->g3 = NULL; pair->generator = pair->model = pair->optimizer = NULL;
-  pair->live = 0u;
+  /* Remove by exact active record before freeing; stale tickets cannot match
+   * a future allocation at the same address. Ambiguous registry is fatal. */
+  et_g3r_hold_pair **slot = &pairs;
+  while (*slot && *slot != pair) slot = &(*slot)->next;
+  if (!*slot || !pair_count) abort();
+  *slot = pair->next;
+  --pair_count;
+  free(pair);
   error_source = first_source; error_category = first_category;
   error_code = first_code;
   return first_category;

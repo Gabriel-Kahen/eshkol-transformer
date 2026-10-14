@@ -1,17 +1,17 @@
 ;;; Feature-private original-owner hold pair. Load after M3/G3-T/O2 roots and
 ;;; link g3r_same_owner_hold_bridge.c with ET_G3R_SAME_OWNER_SAVE_PRIVATE.
 ;;; No public SAVE, receipt, or C2 continuation is installed here.
-(extern ptr g3r-holds-native-begin ptr ptr ptr
+(extern i64 g3r-holds-native-begin ptr ptr ptr
         :real et_g3r_private_same_owner_holds_begin_v1)
-(extern i64 g3r-holds-native-check ptr ptr ptr ptr
+(extern i64 g3r-holds-native-check i64 ptr ptr ptr
         :real et_g3r_private_same_owner_holds_check_v1)
-(extern ptr g3r-holds-native-g3 ptr
+(extern ptr g3r-holds-native-g3 i64
         :real et_g3r_private_same_owner_holds_g3_v1)
-(extern ptr g3r-holds-native-o2 ptr
+(extern ptr g3r-holds-native-o2 i64
         :real et_g3r_private_same_owner_holds_o2_v1)
-(extern i64 g3r-holds-native-copy-g3 ptr ptr i64
+(extern i64 g3r-holds-native-copy-g3 i64 ptr i64
         :real et_g3r_private_same_owner_holds_copy_g3_v1)
-(extern i64 g3r-holds-native-end ptr
+(extern i64 g3r-holds-native-end i64
         :real et_g3r_private_same_owner_holds_end_v1)
 (extern i64 g3r-holds-error-source
         :real et_g3r_private_same_owner_holds_error_source_v1)
@@ -24,6 +24,25 @@
 
 (define g3r-hold-pair-tag (vector 'g3r-hold-pair-v1))
 (define g3r-hold-pair-registry (vector '()))
+
+(define (g3r-hold-pair-unlink! ledger)
+  (let loop ((previous #f)
+             (remaining (vector-ref g3r-hold-pair-registry 0)))
+    (cond ((null? remaining) (g3r-holds-fail-stop))
+          ((eq? ledger (car remaining))
+           (if previous
+               (set-cdr! previous (cdr remaining))
+               (vector-set! g3r-hold-pair-registry 0 (cdr remaining)))
+           #t)
+          (else (loop remaining (cdr remaining))))))
+
+(define (g3r-hold-pair-scrub! ledger)
+  (let loop ((index 2))
+    (if (< index 8)
+        (begin (vector-set! ledger index #f) (loop (+ index 1)))))
+  (vector-set! (vector-ref ledger 1) 0 #f)
+  (vector-set! ledger 8 'dead)
+  (g3r-hold-pair-unlink! ledger))
 
 (define (g3r-holds-native-fail operation)
   (let* ((source (g3r-holds-error-source))
@@ -81,8 +100,8 @@
           (let ((native (g3r-holds-native-begin
                           (vector-ref ledger 5) (vector-ref ledger 6)
                           (vector-ref ledger 7))))
-            (if (null? native)
-                (begin (vector-set! ledger 8 'dead)
+            (if (<= native 0)
+                (begin (g3r-hold-pair-scrub! ledger)
                        (g3r-holds-native-fail operation)))
             (vector-set! cell 0 native)
             (vector-set! ledger 8 'live)
@@ -146,12 +165,11 @@
       (if (not (and (vector? ledger) (= (vector-length ledger) 9)
                     (eq? (vector-ref ledger 0) g3r-hold-pair-tag)
                     (eq? (vector-ref ledger 8) 'live)
-                    (vector-ref (vector-ref ledger 1) 0)))
+                    (> (vector-ref (vector-ref ledger 1) 0) 0)))
           (g3r-holds-fail-stop))
       (let ((status (g3r-holds-native-end
                       (vector-ref (vector-ref ledger 1) 0))))
         ;; C end either drains both holds or aborts on ambiguous custody.
-        (vector-set! (vector-ref ledger 1) 0 #f)
-        (vector-set! ledger 8 'dead)
+        (g3r-hold-pair-scrub! ledger)
         (if (not (= status 0)) (g3r-holds-native-fail operation))
         #t))))

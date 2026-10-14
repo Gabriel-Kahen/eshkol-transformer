@@ -129,9 +129,9 @@ int main(void) {
   assert(et_g3r_private_same_owner_holds_error_category_v1() ==
          ET_O2_STATUS_INVALID_ARGUMENT);
   fail_o2_begin = 0;
-  void *pair = et_g3r_private_same_owner_holds_begin_v1(
+  int64_t pair = et_g3r_private_same_owner_holds_begin_v1(
       &generator, &model, &optimizer);
-  assert(pair && et_g3r_private_same_owner_holds_g3_v1(pair) == &g3_hold);
+  assert(pair > 0 && et_g3r_private_same_owner_holds_g3_v1(pair) == &g3_hold);
   assert(et_g3r_private_same_owner_holds_o2_v1(pair) == &o2_hold);
   equal_optimizer = optimizer; /* bit-equal, distinct owner address */
   assert(et_g3r_private_same_owner_holds_check_v1(
@@ -184,9 +184,21 @@ int main(void) {
   fail_o2_check = fail_g3_end = 0;
   pair = et_g3r_private_same_owner_holds_begin_v1(
       &generator, &model, &optimizer);
-  assert(pair);
+  assert(pair > 0);
   assert(et_g3r_private_same_owner_holds_end_v1(pair) == 0);
   assert(o2_releases == 2 && g3_releases == 4);
   assert(et_g3r_private_same_owner_holds_end_v1(pair) == 2);
+  const int64_t stale = pair;
+  /* More than the old lifetime cap, while allocator addresses may recycle. */
+  for (int i = 0; i < 128; ++i) {
+    pair = et_g3r_private_same_owner_holds_begin_v1(
+        &generator, &model, &optimizer);
+    assert(pair > stale);
+    assert(et_g3r_private_same_owner_holds_check_v1(
+        stale, &generator, &model, &optimizer) == 2);
+    assert(et_g3r_private_same_owner_holds_end_v1(pair) == 0);
+    assert(et_g3r_private_same_owner_holds_end_v1(pair) == 2);
+  }
+  assert(o2_releases == 130 && g3_releases == 132);
   puts("same-owner hold bridge fixture PASS");
 }

@@ -2294,6 +2294,17 @@ fails stop. Focused source checks include foreign/bit-equal identity mutants,
 head/interior unlink mutants, and the feature-on source load closure. The
 compiled feature-on genuine-owner and repeated-scope retention gates remain
 pending, as do independent review and all C2 continuation claims.
+An isolated hold-retention successor changes only the feature-private pair
+handle to a monotonic positive i64 ticket. It removes a proved-drained native
+pair from the active registry and frees it, so an allocator-reused address
+cannot reauthenticate a stale ticket and the 64-pair limit applies to
+simultaneous holds rather than process lifetime. The Eshkol pair ledger unlinks
+and scrubs original owner references on failed begin and proved end. Focused
+native normal/repeat/sanitizer and feature-off checks exercise more than 64
+sequential pairs, stale/double tickets, foreign and bit-equal distinct owners,
+and first-error release; source mutation checks cover both registry removals.
+Independent source review and genuine feature-on repeated-scope runtime proof
+remain pending. No O2 issue, C2 claim, receipt or data-only admission follows.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
