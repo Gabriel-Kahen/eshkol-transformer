@@ -12,6 +12,10 @@
 #endif
 #include <xmmintrin.h>
 
+#if defined(ET_E3_NUMERICAL_CAPACITY_DENOMINATOR) && !defined(ET_E3_NUMERICAL_TESTING)
+#error "capacity-denominator mutation requires the private numerical test tuple"
+#endif
+
 #pragma STDC FENV_ACCESS ON
 #pragma STDC FP_CONTRACT OFF
 _Static_assert(CHAR_BIT == 8 && sizeof(float) == 4 && FLT_RADIX == 2 &&
@@ -157,6 +161,10 @@ static int evaluate(const et_kernel_call_v1 *c, enum operation op, float result[
     if (!isfinite(n)) return 0;
     n = n + p1;
     if (!isfinite(n)) return 0;
+#ifdef ET_E3_NUMERICAL_CAPACITY_DENOMINATOR
+    /* Test mutant: retain the masked numerator but divide by physical T=2. */
+    if (op == REDUCE_BOOL && m[0] == 1.0f && m[1] == 0.0f) w = 2.0f;
+#endif
     const float mean = n / w;
     if (!isfinite(mean)) return 0;
     result[0] = positive_zero(n);

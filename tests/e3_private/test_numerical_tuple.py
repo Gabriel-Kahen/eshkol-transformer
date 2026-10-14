@@ -256,7 +256,7 @@ printf '%s\\n' "$e3_tuple_kind"
         self.assertEqual(admitted.returncode, 0, admitted.stderr)
         selector = (ROOT / "scripts/build-e3-numerical-test.sh").read_text()
         runner = (ROOT / "scripts/test-e3-correctness-cases.sh").read_text()
-        self.assertIn("wrong-vocab-axis|sum-order|padded-position|sanitize|sum-order-sanitize|padded-position-sanitize", selector)
+        self.assertIn("wrong-vocab-axis|sum-order|padded-position|capacity-denominator|sanitize|sum-order-sanitize|padded-position-sanitize|capacity-denominator-sanitize", selector)
         self.assertIn('wrong_vocab_axis_rejection.py" run', runner)
         self.assertIn('wrong_vocab_axis_rejection.py" check', runner)
         self.assertIn('verify-wrong-vocab-axis-all-correct.exit', runner)

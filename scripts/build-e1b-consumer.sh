@@ -1254,7 +1254,7 @@ if [[ -n "${E3_NUMERICAL_MUTANT+x}" ]]; then
     die "E3 numerical mutation is allowed only for the exact test tuple"
 fi
 case "${e3_numerical_mutant}" in
-  normal|wrong-target|mean-of-means|second-normalization|wrong-vocab-axis|sum-order|padded-position) ;;
+  normal|wrong-target|mean-of-means|second-normalization|wrong-vocab-axis|sum-order|padded-position|capacity-denominator) ;;
   *) die "unknown E3 numerical mutation: ${e3_numerical_mutant}" ;;
 esac
 e3_uniform_mutant=${E3_UNIFORM_MUTANT:-normal}
@@ -1876,6 +1876,7 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
       wrong-vocab-axis) package_native_cflags+=(-DET_E3_NUMERICAL_WRONG_VOCAB_AXIS) ;;
       sum-order) package_native_cflags+=(-DET_E3_NUMERICAL_SUM_ORDER) ;;
       padded-position) package_native_cflags+=(-DET_E3_NUMERICAL_PADDED_POSITION) ;;
+      capacity-denominator) package_native_cflags+=(-DET_E3_NUMERICAL_CAPACITY_DENOMINATOR) ;;
     esac
   fi
   if [[ "${package_policy}" == e3-private-aggregate &&

@@ -13,6 +13,10 @@
 #endif
 #include <xmmintrin.h>
 
+#if defined(ET_E3_NUMERICAL_CAPACITY_DENOMINATOR) && !defined(ET_E3_NUMERICAL_TESTING)
+#error "capacity-denominator mutation requires the private numerical test tuple"
+#endif
+
 #pragma STDC FENV_ACCESS ON
 #pragma STDC FP_CONTRACT OFF
 _Static_assert(CHAR_BIT == 8 && sizeof(float) == 4 && FLT_RADIX == 2 &&
@@ -249,7 +253,13 @@ static int32_t evaluate_accumulate(const et_kernel_call_v1 *c, union results *re
   if (correct > w || !integral_bounded(correct)) return domain(e,op);
 #endif
   if (batches == 0 && n != 0.0f) return domain(e,op);
+#ifdef ET_E3_NUMERICAL_CAPACITY_DENOMINATOR
+  /* Admit only the authentic third 10 row with its deliberately wrong W_b. */
+  if (wb != (float)active && !(tokens == 4 && batches == 2 && w == 4.0f &&
+                                active == 1 && wb == 2.0f)) return domain(e,op);
+#else
   if (wb != (float)active) return domain(e,op);
+#endif
   if (cb > wb || !integral_bounded(cb)) return domain(e,op);
   if (tokens > INT64_MAX-active || batches == INT64_MAX)
     return fail(e, ET_KERNEL_ERROR_INVALID_ARGUMENT, ET_KERNEL_CODE_INTEGER_OVERFLOW,

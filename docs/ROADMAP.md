@@ -1125,6 +1125,14 @@ The remaining M2 mutants and full E3 §9 admission matrix remain open;
 installed/public E3 behavior and GPU execution are not established. This
 current-main source/docs union still needs independent review and hosted
 exact-head validation before integration.
+
+The [noninstalled physical-capacity denominator mutant source](e3/E3_CAPACITY_DENOMINATOR_MUTANT_SOURCE.md)
+is a separate M2 candidate on the same authentic packed `11,11,10` corpus. It
+changes only the final L3S weight from one active token to physical capacity
+two, retains the masked CE numerator and correct count, and checks downstream
+serial weight and final metrics against the independent binary32 oracle. Its
+normal/repeat/poison/sanitizer compiled gate is prepared but has not run or been
+independently reviewed; no compiled kill or full §9 acceptance is claimed.
 The 7eeaa03 current-main M2 union added the padded-position test selector to
 `scripts/build-e1b-consumer.sh`, changing its source bytes. Hosted model
 composition failed only the M3CG predecessor checksum. This bounded successor
