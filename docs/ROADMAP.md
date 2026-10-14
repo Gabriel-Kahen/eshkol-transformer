@@ -3253,6 +3253,16 @@ publication, public G2 and continuation remain pending.
   from Q0's exact development-only Python allowlist. The successor admits that
   path with near-miss negatives; source and Q0 pass, while the changed-head
   compiled runtime and independent raw review remain the next gate.
+  The exact `53113213` one-use compiled retry passed 17 source tests and
+  compiled normal on/off executables, then failed in the first normal/on run
+  with SIGSEGV at `0x68` after fd-4 phase 42 `holder.bind.return`; the
+  faulting instruction remains unproved. This test-only successor adds ordered
+  fd-4 brackets around the native EOS first-frame call/check, the next active
+  check, the holder-begin branch, first selected ID, decode, and following
+  active check. The overlay's source anchors and compiled depfile closure have
+  negative source controls. Production Eshkol source is unchanged. Independent
+  source/tests/current-main review must precede a fresh pinned one-use compiled
+  diagnostic; no runtime acceptance follows from the source checks alone.
   The full matrix, public G2, and continuation acceptance remain unproved.
 
 ## Wave 4 — practical pretraining and performance

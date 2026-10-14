@@ -175,7 +175,7 @@ root_overlay, extension_overlay = overrides
 assert root_overlay.read_bytes() == (root / overrides[root_overlay]).read_bytes()
 assert extension_overlay.read_bytes() != (root / overrides[extension_overlay]).read_bytes()
 assert all(f'(held-phase {phase})' in extension_overlay.read_text()
-           for phase in range(30, 43))
+           for phase in range(30, 57))
 
 on = dependencies(on_depfile, root, overrides)
 off = dependencies(off_depfile, root, {})

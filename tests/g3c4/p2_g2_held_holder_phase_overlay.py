@@ -40,6 +40,46 @@ MARKERS = (
      "            (g3c4-p2g2-holder-bind!\n"
      "              holder native (vector-ref output 3) operation)\n"
      "            (held-phase 42)"),
+    ("            (g3c4-native-check\n"
+     "              (g3c4-p2g2-native-eos-first\n"
+     "                native native-input first-staging 16) operation)",
+     "            (held-phase 43)\n"
+     "            (g3c4-native-check\n"
+     "              (begin (held-phase 44)\n"
+     "                (let ((status (g3c4-p2g2-native-eos-first\n"
+     "                                native native-input first-staging 16)))\n"
+     "                  (held-phase 45) status)) operation)\n"
+     "            (held-phase 46)"),
+    ("            (g3c4-p2g2-terminal-active-check\n"
+     "              call input input-entry native-input terminal operation)\n"
+     "            (if (= (vector-ref holder 4) 2)",
+     "            (held-phase 47)\n"
+     "            (g3c4-p2g2-terminal-active-check\n"
+     "              call input input-entry native-input terminal operation)\n"
+     "            (held-phase 48)\n"
+     "            (held-phase 49)\n"
+     "            (if (= (vector-ref holder 4) 2)"),
+    ("                  holder native (vector-ref output 3) operation))\n"
+     "            (let* ((id0 (g3c4-p2g2-terminal-selected\n"
+     "                          first-staging operation))",
+     "                  holder native (vector-ref output 3) operation))\n"
+     "            (held-phase 50)\n"
+     "            (let* ((id0 (begin (held-phase 51)\n"
+     "                          (let ((value (g3c4-p2g2-terminal-selected\n"
+     "                                         first-staging operation)))\n"
+     "                            (held-phase 52) value)))"),
+    ("              (t1-private-g3-decode-raw-into!\n"
+     "                tokenizer first-staging first)\n"
+     "              (g3c4-p2g2-terminal-active-check\n"
+     "                call input input-entry native-input terminal operation)",
+     "              (held-phase 53)\n"
+     "              (t1-private-g3-decode-raw-into!\n"
+     "                tokenizer first-staging first)\n"
+     "              (held-phase 54)\n"
+     "              (held-phase 55)\n"
+     "              (g3c4-p2g2-terminal-active-check\n"
+     "                call input input-entry native-input terminal operation)\n"
+     "              (held-phase 56)"),
 )
 
 

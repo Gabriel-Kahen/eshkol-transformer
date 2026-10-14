@@ -58,7 +58,7 @@ def phase_trace_contract(driver, shim, script):
     """Check the durable trace brackets the existing first-case assertions."""
     if not parse(driver):
         raise AssertionError("driver does not parse")
-    for phase in (*range(1, 6), *range(10, 24), *range(30, 43)):
+    for phase in (*range(1, 6), *range(10, 24), *range(30, 57)):
         if f"case {phase}:" not in shim:
             raise AssertionError(f"unmapped phase {phase}")
     if 'write(4, line, (size_t)size)' not in shim:
@@ -130,7 +130,26 @@ class HeldHolderCompiledSource(unittest.TestCase):
                     instrument(original.replace(before, "", 1))
         self.assertEqual(
             [int(value) for value in re.findall(r"\(held-phase (\d+)\)", overlay)],
-            list(range(30, 43)))
+            list(range(30, 57)))
+        post_bind = overlay[overlay.index("(held-phase 42)"):]
+        ordered = ("(held-phase 42)", "(held-phase 43)",
+                   "(held-phase 44)", "(g3c4-p2g2-native-eos-first",
+                   "(held-phase 45)", "(held-phase 46)",
+                   "(held-phase 47)", "(g3c4-p2g2-terminal-active-check",
+                   "(held-phase 48)", "(held-phase 49)",
+                   "(g3c4-p2g2-holder-begin!", "(held-phase 50)",
+                   "(held-phase 51)", "(g3c4-p2g2-terminal-selected",
+                   "(held-phase 52)", "(held-phase 53)",
+                   "(t1-private-g3-decode-raw-into!", "(held-phase 54)",
+                   "(held-phase 55)", "(g3c4-p2g2-terminal-active-check",
+                   "(held-phase 56)")
+        cursor = 0
+        for fragment in ordered:
+            position = post_bind.find(fragment, cursor)
+            self.assertGreaterEqual(position, 0, fragment)
+            cursor = position + len(fragment)
+        self.assertIn('case 44: name = "eos.native.enter";', SHIM.read_text())
+        self.assertIn('case 45: name = "eos.native.return";', SHIM.read_text())
         helper = COMPILE_HELPER.read_text()
         script = SCRIPT.read_text()
         self.assertLess(helper.index('"${overlay_include[@]}"'),
@@ -175,7 +194,7 @@ class HeldHolderCompiledSource(unittest.TestCase):
                 str(overlay)], check=True)
             self.assertEqual((overlay / names[0]).read_bytes(),
                              (ROOT / "native" / names[0]).read_bytes())
-            self.assertIn("(held-phase 42)", (overlay / names[1]).read_text())
+            self.assertIn("(held-phase 56)", (overlay / names[1]).read_text())
 
     def test_phase_trace_brackets_first_generation_and_rejects_mutations(self):
         driver, shim, script = DRIVER.read_text(), SHIM.read_text(), SCRIPT.read_text()
@@ -183,6 +202,7 @@ class HeldHolderCompiledSource(unittest.TestCase):
         variants = (
             (driver.replace("(held-phase 16)", "(held-phase 99)", 1), shim, script),
             (driver, shim.replace('held_trace("native.begin.enter");', "", 1), script),
+            (driver, shim.replace('case 45: name = "eos.native.return";', "", 1), script),
             (driver, shim.replace('write(4, line, (size_t)size)',
                                    'write(2, line, (size_t)size)', 1), script),
             (driver, shim, script.replace(

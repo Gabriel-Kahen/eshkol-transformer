@@ -56,6 +56,20 @@ int64_t et_g3c4_p2g2_held_test_phase_v1(int64_t phase) {
     case 40: name = "protected.reserve.return"; break;
     case 41: name = "holder.bind.enter"; break;
     case 42: name = "holder.bind.return"; break;
+    case 43: name = "eos.check.enter"; break;
+    case 44: name = "eos.native.enter"; break;
+    case 45: name = "eos.native.return"; break;
+    case 46: name = "eos.check.return"; break;
+    case 47: name = "post-eos.active.enter"; break;
+    case 48: name = "post-eos.active.return"; break;
+    case 49: name = "holder.begin.branch.enter"; break;
+    case 50: name = "holder.begin.branch.return"; break;
+    case 51: name = "first.selected.enter"; break;
+    case 52: name = "first.selected.return"; break;
+    case 53: name = "first.decode.enter"; break;
+    case 54: name = "first.decode.return"; break;
+    case 55: name = "first.active.enter"; break;
+    case 56: name = "first.active.return"; break;
     default: abort();
   }
   held_trace(name);
