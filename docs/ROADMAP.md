@@ -984,6 +984,15 @@ tests pass. The pinned Q0 oracle generation and supported compiled private
 comparison have not run, so this establishes reachability only and leaves N3
 and §9 acceptance open.
 
+The separate [N3 target-offset observation contract](e3/E3_N3_TARGET_OFFSET_OBSERVATION.md)
+now specifies the one-row numerical frame, all 21 M3 roles, CE, reductions,
+state, six caller outputs, D2 saved/restored cursor, corpus identity and raw
+stdout provenance for each target. A strict versioned parser and independent
+M3 comparator have source tests for malformed, duplicate, missing and
+wrong-target records. This is a source candidate: the target runtime has not
+been compiled against the numerical test package, and the pinned Q0 comparison
+and section-9 N3 admission remain pending.
+
 A separate noninstalled E3 overflow tuple is a source candidate for a genuine
 stage-12 finalization boundary. It loads a checksummed C1 state into one fresh
 model before its authentic frame bind, uses the fixed D1 `0304`/D2 padded row,

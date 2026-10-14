@@ -36,8 +36,8 @@ def _pair(raw: str, *, mask: bool = False) -> list[int] | list[bool]:
 
 
 def parse(raw: bytes, batch_count: int) -> tuple[dict[str, object], bytes]:
-    if type(batch_count) is not int or batch_count not in (2, 3):
-        raise ValueError("numerical batch count must be two or three")
+    if type(batch_count) is not int or batch_count not in (1, 2, 3):
+        raise ValueError("numerical batch count must be one, two or three")
     try:
         lines = raw.decode("ascii").splitlines()
     except UnicodeDecodeError as error:
@@ -139,7 +139,7 @@ def parse(raw: bytes, batch_count: int) -> tuple[dict[str, object], bytes]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--stdout", required=True, type=Path)
-    parser.add_argument("--batch-count", required=True, type=int, choices=(2, 3))
+    parser.add_argument("--batch-count", required=True, type=int, choices=(1, 2, 3))
     parser.add_argument("--observed", required=True, type=Path)
     parser.add_argument("--roles", required=True, type=Path)
     args = parser.parse_args()

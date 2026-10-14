@@ -26,7 +26,7 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _rows(directory: Path, tokens: tuple[int, ...]) -> tuple[list[dict[str, object]], str]:
+def _rows(directory: Path, tokens: tuple[int, ...]) -> tuple[list[dict[str, object]], str, str, str]:
     loaded, manifest_digest = load_d1_resource(
         directory, expected_fingerprint=FINGERPRINT,
         expected_vocab=256, maximum_total_tokens=3,
@@ -37,12 +37,13 @@ def _rows(directory: Path, tokens: tuple[int, ...]) -> tuple[list[dict[str, obje
         loaded, CONFIG, manifest_digest=manifest_digest,
         tokenizer_fingerprint=FINGERPRINT, vocab_size=256,
     )
+    start_cursor = dataset.snapshot().hex()
     rows = []
     while (batch := dataset.next_batch()) is not None:
         rows.append({"inputs": list(batch.inputs[0]),
                      "targets": list(batch.targets[0]),
                      "mask": list(batch.loss_mask[0])})
-    return rows, manifest_digest.hex()
+    return rows, manifest_digest.hex(), start_cursor, dataset.snapshot().hex()
 
 
 def materialize(output: Path) -> dict[str, object]:
@@ -61,12 +62,13 @@ def materialize(output: Path) -> dict[str, object]:
         manifest = write_d1_resource(
             directory, (tokens,), fingerprint=FINGERPRINT, vocab=256,
         )
-        rows, digest = _rows(directory, tokens)
+        rows, digest, start, end = _rows(directory, tokens)
         if rows != [{"inputs": [3, 197], "targets": list(targets),
                      "mask": [True, True]}] or digest != manifest[-32:].hex():
             raise AssertionError("genuine packed D2 target-offset row changed")
         cases.append({
             "name": name, "source_bytes": bytes(tokens).hex(), "batches": rows,
+            "start_cursor": start, "end_cursor": end,
             "manifest_trailer_sha256": digest,
             "files": [
                 {"path": path.name, "bytes": path.stat().st_size,
@@ -101,7 +103,7 @@ def validate_materialized(output: Path, payload: dict[str, object]) -> None:
         directory = output / name
         if directory.is_symlink() or not directory.is_dir():
             raise ValueError("target-offset corpus directory differs")
-        rows, digest = _rows(directory, tokens)
+        rows, digest, start, end = _rows(directory, tokens)
         paths = sorted(directory.iterdir())
         if ([path.name for path in paths] !=
                 ["manifest.etm", "shard-0000000000000000.ets"]
@@ -114,6 +116,7 @@ def validate_materialized(output: Path, payload: dict[str, object]) -> None:
         ]
         if case != {"name": name, "source_bytes": bytes(tokens).hex(),
                     "batches": rows, "manifest_trailer_sha256": digest,
+                    "start_cursor": start, "end_cursor": end,
                     "files": files} or rows != [
                         {"inputs": [3, 197], "targets": list(targets),
                          "mask": [True, True]}]:

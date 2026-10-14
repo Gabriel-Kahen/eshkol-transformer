@@ -64,8 +64,13 @@ class TargetOffsetSourceTest(unittest.TestCase):
         self.assertIn("(e3-private-test-run (vector (vector #t 0))", runtime)
         self.assertIn('"target-zero"', runtime)
         self.assertIn('"target-seven"', runtime)
+        self.assertIn('"E3-TARGET-OFFSET-RUNTIME-PASS"', runtime)
         self.assertNotIn("e3-zero-run", runtime)
         self.assertNotIn("e3-zero-control-run", runtime)
+        observer = (ROOT / "src/eshkol_transformer/e3_frame.c").read_text()
+        self.assertIn("#ifdef ET_E3_NUMERICAL_TESTING", observer)
+        self.assertIn("e3_numerical_batch(frame);", observer)
+        self.assertIn("e3_numerical_final(frame);", observer)
         self.assertIn('"expected #(packing? skipped-batches)"', driver)
         self.assertIn("(g3t-checked-m3t-initializer-state 1729)", driver)
 
