@@ -3249,8 +3249,10 @@ publication, public G2 and continuation remain pending.
   in the overlay could not intercept that load. A successor copies the exact
   feature root beside the instrumented extension and requires both overlay
   paths in the compiled depfile. A source negative rejects the canonical
-  extension. The changed-head compiled runtime and independent raw review
-  remain the next gate.
+  extension. Its independent source review found the new depfile helper missing
+  from Q0's exact development-only Python allowlist. The successor admits that
+  path with near-miss negatives; source and Q0 pass, while the changed-head
+  compiled runtime and independent raw review remain the next gate.
   The full matrix, public G2, and continuation acceptance remain unproved.
 
 ## Wave 4 — practical pretraining and performance
