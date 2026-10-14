@@ -3226,6 +3226,14 @@ checks do not establish the supported compiled normal/repeat/sanitizer or
 one-archive gate. Independent exact-head source/tests review, compiled
 acceptance, Eshkol composition, and public G2 remain pending.
 
+A bounded [private typed copy accessor](g3/G3_C4_P2_G2_TYPED_COPY_LEAF.md)
+extends that exact five-symbol native seam with one header-aware copy entry
+for the future Eshkol wrapper. It writes only the original 8/16-byte
+bytevector payload after validating owner, logical length, complete header
+extent, storage aliases and the dense CPU-i64 source. This source branch is
+not Eshkol composition or public G2 admission; independent review and the
+supported one-archive gate remain pending.
+
 - **Private Eshkol P2/G2 terminal close contract:**
   [accepted same-call ownership contract](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md)
   specifies one original pending output entry, a surviving terminal anchor,

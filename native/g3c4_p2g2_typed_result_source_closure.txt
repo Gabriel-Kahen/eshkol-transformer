@@ -236,3 +236,4 @@ tests/g3c4/test_p2_g2_terminal_ids_clone.c
 tests/g3c4/test_p2_g2_typed_result.c
 scripts/test-g3c4-p2g2-typed-result.sh
 native/g3c4_p2g2_typed_result_source_closure.txt
+docs/g3/G3_C4_P2_G2_TYPED_COPY_LEAF.md

@@ -14,8 +14,9 @@ added = [
     "tests/g3c4/test_p2_g2_typed_result.c",
     "scripts/test-g3c4-p2g2-typed-result.sh",
     "native/g3c4_p2g2_typed_result_source_closure.txt",
+    "docs/g3/G3_C4_P2_G2_TYPED_COPY_LEAF.md",
 ]
-closure = (root / added[-1]).read_text().splitlines()
+closure = (root / "native/g3c4_p2g2_typed_result_source_closure.txt").read_text().splitlines()
 assert closure == base + added and len(closure) == len(set(closure))
 assert all((root / name).is_file() for name in closure)
 PY_SOURCE_CLOSURE
@@ -73,6 +74,7 @@ done
 comm -13 "$out/owner-off.symbols" "$out/owner-on.symbols" \
   >"$out/typed-only.symbols"
 printf '%s\n' \
+  et_g3c4_private_p2g2_typed_copy_v1 \
   et_g3c4_private_p2g2_typed_element_v1 \
   et_g3c4_private_p2g2_typed_ids_create_v1 \
   et_g3c4_private_p2g2_typed_length_v1 \

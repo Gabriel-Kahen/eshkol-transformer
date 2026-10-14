@@ -49,6 +49,64 @@ static void typed_alias_walkers(
   OK(et_g3c4_private_generator_close_v1(context));
 }
 
+static void typed_copy_case(void *owner, int64_t count,
+                            const int64_t expected[2]) {
+  struct {
+    int64_t length;
+    unsigned char payload[16];
+  } destination = {count * 8, {0}};
+  unsigned char before[sizeof(destination)];
+  memset(destination.payload, 0xa5, sizeof(destination.payload));
+  memcpy(before, &destination, sizeof(before));
+#define REJECT_COPY(candidate, length, pointer, extent) do {                \
+    CHECK(et_g3c4_private_p2g2_typed_copy_v1(                       \
+        (candidate), (length), (pointer), (extent)) != 0);           \
+    CHECK(memcmp(before, &destination, sizeof(before)) == 0);       \
+  } while (0)
+  REJECT_COPY(NULL, count, &destination, 8 + count * 8);
+  REJECT_COPY(owner, INT64_MAX, &destination, 8 + count * 8);
+  REJECT_COPY(owner, count == 1 ? 2 : 1,
+              &destination, 8 + count * 8);
+  REJECT_COPY(owner, count, NULL, 8 + count * 8);
+  REJECT_COPY(owner, count, (unsigned char *)&destination + 1,
+              8 + count * 8);
+  REJECT_COPY(owner, count, &destination, INT64_MAX);
+  REJECT_COPY(owner, count, &destination, count * 8);
+  destination.length = 0;
+  CHECK(et_g3c4_private_p2g2_typed_copy_v1(
+      owner, count, &destination, 8 + count * 8) != 0);
+  CHECK(memcmp(destination.payload, before + 8, sizeof(destination.payload)) == 0);
+  destination.length = count * 8;
+  REJECT_COPY(owner, count,
+              &((et_g3c4_typed_result_internal *)owner)->values[0],
+              8 + count * 8);
+  et_i64_tensor_error error;
+  et_i64_tensor_borrow *lease = NULL;
+  OK(et_i64_tensor_borrow_begin_v1(
+      ((et_g3c4_typed_result_internal *)owner)->tensor, &lease, &error));
+  REJECT_COPY(owner, count, &destination, 8 + count * 8);
+  OK(et_i64_tensor_borrow_end_v1(&lease, &error));
+  for (int fault = 1; fault <= 3; fault++) {
+    typed_view_fault = fault;
+    REJECT_COPY(owner, count, &destination, 8 + count * 8);
+  }
+  typed_view_fault = 0;
+  OK(et_g3c4_private_p2g2_typed_copy_v1(
+      owner, count, &destination, 8 + count * 8));
+  CHECK(destination.length == count * 8);
+  for (int64_t index = 0; index < count; index++) {
+    uint64_t decoded = 0;
+    for (size_t byte = 0; byte < 8u; byte++)
+      decoded |= (uint64_t)destination.payload[(size_t)index * 8u + byte]
+                 << (8u * byte);
+    CHECK((int64_t)decoded == expected[index]);
+  }
+  for (size_t byte = (size_t)count * 8u; byte < sizeof(destination.payload);
+       byte++)
+    CHECK(destination.payload[byte] == 0xa5);
+#undef REJECT_COPY
+}
+
 static void typed_case(et_g3c4_model_owner_internal *model, int first_eos) {
   int64_t expected[2] = {0, 0}, value = -99;
   et_g3c4_output_internal *output =
@@ -129,6 +187,13 @@ static void typed_case(et_g3c4_model_owner_internal *model, int first_eos) {
   CHECK(et_g3c4_private_p2g2_typed_length_v1(ids) == length);
   CHECK(et_g3c4_private_p2g2_typed_length_v1(lengths) == 1);
   CHECK(et_g3c4_private_p2g2_typed_length_v1(cache) == 1);
+  typed_copy_case(ids, length, expected);
+  const int64_t scalar_length[2] = {length, 0};
+  const int64_t scalar_cache[2] = {2 + length, 0};
+  typed_copy_case(lengths, 1, scalar_length);
+  typed_copy_case(cache, 1, scalar_cache);
+  CHECK(et_g3c4_private_p2g2_typed_copy_v1(
+      clone, length, NULL, 0) != 0);
   for (int64_t index = 0; index < length; index++) {
     OK(et_g3c4_private_p2g2_typed_element_v1(ids, index, &value));
     CHECK(value == expected[index]);
@@ -195,6 +260,7 @@ static void typed_case(et_g3c4_model_owner_internal *model, int first_eos) {
   CHECK(value == expected[0]);
   OK(et_g3c4_private_p2g2_typed_release_v1(ids));
   OK(et_g3c4_private_p2g2_typed_release_v1(ids));
+  CHECK(et_g3c4_private_p2g2_typed_copy_v1(ids, length, NULL, 0) != 0);
   typed_alias_walkers(model, ids);
   CHECK(et_g3c4_private_p2g2_typed_element_v1(ids_again, 0,
         &((et_g3c4_typed_result_internal *)ids)->length) != 0);

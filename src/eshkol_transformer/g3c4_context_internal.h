@@ -264,6 +264,12 @@ void *et_g3c4_private_p2g2_typed_scalar_create_v1(int64_t kind, int64_t value);
 int64_t et_g3c4_private_p2g2_typed_length_v1(void *owner);
 int64_t et_g3c4_private_p2g2_typed_element_v1(
     void *owner, int64_t index, int64_t *value);
+/* Copies the complete logical [1]/[2] tensor as little-endian i64 values
+ * into an Eshkol bytevector payload. The caller proves the actual allocation
+ * extent; destination_header addresses its eight-byte length header. */
+int64_t et_g3c4_private_p2g2_typed_copy_v1(
+    void *owner, int64_t expected_length,
+    void *destination_header, int64_t destination_bytes);
 int64_t et_g3c4_private_p2g2_typed_release_v1(void *owner);
 #endif
 

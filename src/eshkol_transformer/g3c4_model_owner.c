@@ -9120,6 +9120,62 @@ int64_t et_g3c4_private_p2g2_typed_element_v1(
   return 0;
 }
 
+int64_t et_g3c4_private_p2g2_typed_copy_v1(
+    void *candidate, int64_t expected_length,
+    void *destination_header, int64_t destination_bytes) {
+  et_g3c4_typed_result_internal *result;
+  et_i64_tensor *original;
+  int64_t declared, words[2] = {0, 0}, again[2] = {0, 0};
+  unsigned char encoded[16];
+  size_t extent;
+  uint32_t kind;
+  et_g3c4_error_reset_internal();
+  result = et_g3c4_typed_admit(candidate, 0);
+  if (result == NULL) return et_g3c4_error_state.category;
+  if (expected_length != result->length ||
+      (expected_length != 1 && expected_length != 2))
+    return et_g3c4_fail(ET_G3C4_SHAPE_MISMATCH, ET_G3C4_CODE_SHAPE);
+  extent = 8u + 8u * (size_t)expected_length;
+  if (destination_bytes != (int64_t)extent ||
+      !et_g3c4_range_valid(destination_header, extent) ||
+      (uintptr_t)destination_header % _Alignof(int64_t) != 0u)
+    return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+  if (et_g3c4_terminal_snapshot_alias(destination_header, extent) != 0)
+    return et_g3c4_error_state.category;
+  memcpy(&declared, destination_header, sizeof(declared));
+  if (declared != 8 * expected_length)
+    return et_g3c4_fail(ET_G3C4_SHAPE_MISMATCH, ET_G3C4_CODE_SHAPE);
+  original = result->tensor;
+  kind = result->transport.kind;
+  if (et_g3c4_typed_read(result, words) != 0)
+    return et_g3c4_error_state.category;
+  for (int64_t index = 0; index < expected_length; index++)
+    for (size_t byte = 0u; byte < 8u; byte++)
+      encoded[(size_t)index * 8u + byte] =
+          (unsigned char)((uint64_t)words[index] >> (8u * byte));
+  result = et_g3c4_typed_admit(candidate, 0);
+  if (result == NULL) return et_g3c4_error_state.category;
+  if (result->tensor != original || result->length != expected_length ||
+      result->transport.kind != kind)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (et_g3c4_typed_read(result, again) != 0)
+    return et_g3c4_error_state.category;
+  if (memcmp(words, again, (size_t)expected_length * sizeof(int64_t)) != 0)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  result = et_g3c4_typed_admit(candidate, 0);
+  if (result == NULL) return et_g3c4_error_state.category;
+  if (result->tensor != original || result->length != expected_length ||
+      result->transport.kind != kind)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (et_g3c4_terminal_snapshot_alias(destination_header, extent) != 0)
+    return et_g3c4_error_state.category;
+  memcpy(&declared, destination_header, sizeof(declared));
+  if (declared != 8 * expected_length)
+    return et_g3c4_fail(ET_G3C4_SHAPE_MISMATCH, ET_G3C4_CODE_SHAPE);
+  memcpy((unsigned char *)destination_header + 8u, encoded, extent - 8u);
+  return 0;
+}
+
 int64_t et_g3c4_private_p2g2_typed_release_v1(void *candidate) {
   et_g3c4_typed_result_internal *result;
   et_i64_tensor_error error;
