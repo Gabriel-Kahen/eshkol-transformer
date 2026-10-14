@@ -3248,11 +3248,31 @@ publication, public G2 and continuation remain pending.
   `a67dc743baff40c0e25f1c810b40206c208e98d84ee24b5197235a17b1dd83c0`.
   The stage preceded the snapshot call, so that trace cannot distinguish the
   call from following `let*` bindings or establish a production defect. A
-  bounded diagnostic successor adds flushed begin/complete markers and
+  bounded diagnostic successor added flushed begin/complete markers and
   first-error type/category/operation/message/details for each snapshot,
-  live-output, native-pointer, small-word and clone initializer. Source/tests
-  review and a fresh one-use gate remain pending; no snapshot, clone, short
-  extent, held owner, repeat/sanitizer or public G3 acceptance is claimed.
+  live-output, native-pointer, small-word and clone initializer. It passed
+  source/tests review, but no snapshot, clone, short extent, held owner,
+  repeat/sanitizer or public G3 acceptance is claimed.
+  The subsequent `2dc56379` one-use diagnostic compiled and finished the
+  zero-count probe, then its first-EOS case failed exactly in the native
+  terminal snapshot with C4 shape-mismatch/code 4; no clone, repeat or
+  sanitizer result exists. The sealed raw manifest is
+  `g3c4-terminal-snapshot-2dc56379-gate-all-raw-20261014.json` (SHA-256
+  `6ebc58688aaf2b409765083e6fd030813072ced47d65172c026f6c870a89fe24`);
+  independent HOLD review SHA-256 is
+  `a9903c807c61d6fc04c90f9b80fda4d84e973e776954e84fc77ce2e8500c8829`.
+  Pinned compiler source proves the cause: Eshkol
+  bytevector `ptr` names its eight-byte length header, whereas indexed byte
+  zero names payload. The wrapper allocated 72 payload bytes, overwrote its
+  first payload byte with 64, and passed native extent 72; native read header
+  72 where its contract requires 64. The adjacent clone/copy wrapper used the
+  same mistaken layout. A bounded source repair allocates 64 snapshot payload
+  bytes and logical-count*8 clone payload bytes, passes the existing native
+  header-inclusive extents, shifts Eshkol payload reads to offsets zero and
+  eight, and updates the focused fixture and source mutations. This is a
+  source-level ABI correction; it still needs independent review and a fresh
+  one-use compiled normal/repeat/sanitizer gate. No compiled snapshot, clone,
+  held-owner, terminal or public G3 acceptance is claimed.
   All failed packages and raw evidence are preserved; terminal/full/public/
   data-only G3 remain HOLD.
 

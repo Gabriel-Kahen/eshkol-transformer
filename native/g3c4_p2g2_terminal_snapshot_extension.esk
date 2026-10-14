@@ -37,11 +37,10 @@
              (live (g3c4-p2g2-terminal-snapshot-live-for
                      shell output operation))
              (native (vector-ref output 3))
-             (bytes (make-bytevector 72 0)))
-        ;; The native ABI reads an eight-byte LE payload-length header and
-        ;; writes eight signed-i64 words only after all its checks succeed.
-        (bytevector-u8-set! bytes 0 64)
-        (if (not (and (= (bytevector-length bytes) 72)
+             (bytes (make-bytevector 64 0)))
+        ;; Eshkol's bytevector pointer starts at its native eight-byte length
+        ;; header; its 64 indexed bytes are the destination payload.
+        (if (not (and (= (bytevector-length bytes) 64)
                       (eq? output
                            (g3c4-p2g2-terminal-output-entry-live
                              shell operation))
@@ -52,8 +51,7 @@
                        "terminal snapshot source changed before read"))
         (g3c4-native-check
           (g3c4-p2g2-native-terminal-snapshot native bytes 72) operation)
-        (if (not (and (= (bytevector-length bytes) 72)
-                      (= (bytevector-u8-ref bytes 0) 64)
+        (if (not (and (= (bytevector-length bytes) 64)
                       (eq? output
                            (g3c4-p2g2-terminal-output-entry-live
                              shell operation))
@@ -62,16 +60,10 @@
                       (eq? native (vector-ref output 3))))
             (g3c4-fail 'invalid-state operation
                        "terminal snapshot source changed after read"))
-        (let header ((index 1))
-          (if (< index 8)
-              (if (= (bytevector-u8-ref bytes index) 0)
-                  (header (+ index 1))
-                  (g3c4-fail 'invalid-state operation
-                             "terminal snapshot header changed"))))
-        (let ((id-zero (g3c4-p2g2-terminal-snapshot-small-word bytes 8))
-              (id-one (g3c4-p2g2-terminal-snapshot-small-word bytes 16))
-              (count (g3c4-p2g2-terminal-snapshot-small-word bytes 24))
-              (cache (g3c4-p2g2-terminal-snapshot-small-word bytes 32)))
+        (let ((id-zero (g3c4-p2g2-terminal-snapshot-small-word bytes 0))
+              (id-one (g3c4-p2g2-terminal-snapshot-small-word bytes 8))
+              (count (g3c4-p2g2-terminal-snapshot-small-word bytes 16))
+              (cache (g3c4-p2g2-terminal-snapshot-small-word bytes 24)))
           (if (not (and (or (= count 1) (= count 2))
                         (= count (vector-ref live 6))
                         (= cache (vector-ref live 15))

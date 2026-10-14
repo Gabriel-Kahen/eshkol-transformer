@@ -35,15 +35,13 @@ def valid(text):
         "(m3-call operation",
         "(g3c4-p2g2-terminal-output-entry-live",
         "(g3c4-p2g2-terminal-snapshot-live-for",
-        "(bytes (make-bytevector 72 0))",
-        "(bytevector-u8-set! bytes 0 64)",
+        "(bytes (make-bytevector 64 0))",
         "(g3c4-p2g2-native-terminal-snapshot native bytes 72)",
-        "(= (bytevector-length bytes) 72)",
-        "(= (bytevector-u8-ref bytes 0) 64)",
+        "(= (bytevector-length bytes) 64)",
+        "(g3c4-p2g2-terminal-snapshot-small-word bytes 0)",
         "(g3c4-p2g2-terminal-snapshot-small-word bytes 8)",
         "(g3c4-p2g2-terminal-snapshot-small-word bytes 16)",
         "(g3c4-p2g2-terminal-snapshot-small-word bytes 24)",
-        "(g3c4-p2g2-terminal-snapshot-small-word bytes 32)",
         "(or (= count 1) (= count 2))",
         "(= count (vector-ref live 6))",
         "(= cache (vector-ref live 15))",
@@ -60,15 +58,21 @@ def valid(text):
         return False
     if code.count("(eq? native (vector-ref output 3))") != 2:
         return False
-    if code.count("(= (bytevector-length bytes) 72)") != 2:
+    if code.count("(= (bytevector-length bytes) 64)") != 2:
         return False
+    for name, offset in (("id-zero", 0), ("id-one", 8),
+                         ("count", 16), ("cache", 24)):
+        if f"({name} (g3c4-p2g2-terminal-snapshot-small-word bytes {offset}))" not in code:
+            return False
     if any(fragment in code for fragment in (
         "g3c4-p2g2-native-terminal-commit",
         "g3c4-native-output-release",
         "g3c4-public-generation-output",
+        "(bytevector-u8-set! bytes 0 64)",
+        "(bytes (make-bytevector 72 0))",
     )):
         return False
-    before = code.index("(bytevector-u8-set! bytes 0 64)")
+    before = code.index("(bytes (make-bytevector 64 0))")
     native = code.index("(g3c4-p2g2-native-terminal-snapshot native bytes 72)")
     after = code.rindex("(g3c4-p2g2-terminal-output-entry-live")
     compare = code.index("(= count (vector-ref live 6))")
@@ -77,9 +81,13 @@ def valid(text):
 
 assert valid(source)
 mutations = (
-    ("make-bytevector 72 0", "make-bytevector 64 0"),
-    ("bytes 0 64", "bytes 0 63"),
+    ("make-bytevector 64 0", "make-bytevector 72 0"),
+    ("bytes (make-bytevector 64 0)", "bytes (make-bytevector 63 0)"),
     ("native bytes 72", "native bytes 64"),
+    ("(id-zero (g3c4-p2g2-terminal-snapshot-small-word bytes 0))",
+     "(id-zero (g3c4-p2g2-terminal-snapshot-small-word bytes 8))"),
+    ("(count (g3c4-p2g2-terminal-snapshot-small-word bytes 16))",
+     "(count (g3c4-p2g2-terminal-snapshot-small-word bytes 24))"),
     ("(= count (vector-ref live 6))", "#t"),
     ("(= cache (vector-ref live 15))", "#t"),
     ("(= id-zero (vector-ref live 8))", "#t"),
