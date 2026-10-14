@@ -3131,9 +3131,12 @@ publication, public G2 and continuation remain pending.
   successor uses the accepted EOS-capable native first carrier and genuine
   same-registry T1 decode into the original pending raw[1]/staging[8] owner,
   with full i64 and identity rechecks after recoverable steps. It remains
-  abort-only in the existing protected call region; prefix/terminal commit,
-  post-call snapshot, detached clone, full same-call tests, and independent
-  review remain pending.
+  abort-only in the existing protected call region. A following source-private
+  non-EOS leaf reuses the accepted native prefix commit on that original
+  pending output, then advances the existing protected phase; its source
+  checker covers eight negative mutations. Both leaves still require in-region
+  abort. First-EOS terminal commit, second-token sampling, post-call snapshot,
+  detached clone, full same-call tests, and independent review remain pending.
 
 ## Wave 4 — practical pretraining and performance
 
