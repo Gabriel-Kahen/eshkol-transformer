@@ -975,6 +975,36 @@ generator was missing from the exact development-script allowlist. The focused
 Q0 and zero-control source tests pass after its exact path and near-miss checks
 were added; a fresh exact-head hosted run remains pending.
 
+A bounded N3 target-offset source extension adds two generated, checksummed
+three-byte D1 corpora, `(3,197,0)` and `(3,197,7)`. Their packed D2 row has
+the same `[3,197]` inputs and `11` mask and differs only in the second target.
+The seeded development oracle checks actual M3 logits and requires different
+second-position CE; a separate runtime source calls the unchanged canonical
+two-field E3 entry once per corpus. Focused offline D1/D2 and source-boundary
+tests pass. The exact `7bb38a56c` source/tree `370b63652629` passed the bounded
+F target-offset compiled gate: duplicate pinned Q0 corpus generation, real
+private AOT normal/repeat/poison and sanitized runs, complete one-row numerical
+observations, and wrong-target rejection. The independent F result review is
+`e3-n3-f-independent-gate-result-review-20261014.md` (SHA-256
+`825ed5cc7fe3b44e16915e3716ef76b3ccf4454eb01aad749388689057b8f1db`).
+This evidence proves only the fixed target-offset leaf on that exact source;
+the current-main source union needs its own review and hosted checks. Other N3
+cases and full E3 §9 acceptance remain open.
+
+The separate [N3 target-offset observation contract](e3/E3_N3_TARGET_OFFSET_OBSERVATION.md)
+now specifies the one-row numerical frame, all 21 M3 roles, CE, reductions,
+state, six caller outputs, D2 saved/restored cursor, corpus identity and raw
+stdout provenance for each target. A strict versioned parser and independent
+M3 comparator have source tests for malformed, duplicate, missing and
+wrong-target records. The first one-use compiled gate stopped at the first
+parsed case because the private driver used D2 maximum batch bytes 34 while
+the reference cursor used the 1,048,576 default. The `7bb38a56c` fixture
+aligns that limit with the unchanged driver and tests cursor configuration
+parity. Its fresh F gate passed and was independently accepted for the bounded
+target-offset witness. Failed A–E raw and decisions remain preserved. Neither
+that result nor this current-main integration candidate admits all of N3 or
+E3 §9.
+
 A separate noninstalled E3 overflow tuple is a source candidate for a genuine
 stage-12 finalization boundary. It loads a checksummed C1 state into one fresh
 model before its authentic frame bind, uses the fixed D1 `0304`/D2 padded row,
