@@ -1374,9 +1374,32 @@ accepted exact `8455a1a0e7937bd85cc42b117dff6b64ac24a3a1`/tree
 `f8a66f461909e4819b0b4cb8ffd76a27b92b5bac`; the durable receipt is
 `/home/gabe/.codex/evidence/eshkol-transformer/e3-stage6-target-copy-source-review-20261014/REVIEW.txt`
 (SHA-256 `55dd17e023f7a6ab80d2ca0b1157943e53ff6e1393e146747a44fe9e44f77f31`).
-This acceptance is source/host only. Input and mask staging cuts, supported
-compiled Eshkol normal/poison and LSan gates remain pending; full E3 §9
-admission remains **HOLD**.
+This acceptance is source/host only. Input staging, supported compiled Eshkol
+normal/poison and LSan gates remain pending; full E3 §9 admission remains
+**HOLD**.
+
+The next bounded E3 §9 stage-6 mask preinvoke source candidate adds
+noninstalled frame-owned site 11, ordinal 0, occurrences 1 or 2. It consumes
+in `et_e3_private_stage_targets_v1` after the real input-ID and validated
+target copies and `stage_plane = 2`, before return and the D2 mask view. The
+target D2 borrow is still open at denial and unwinds through its existing
+guard; the mask borrow has not begun in the source-order `and` chain. The cut
+returns local internal/invariant status, mapped to E1 stage 6/table index 83.
+Native tests prove copied IDs and targets, unchanged mask, no additional
+provider dispatch, invalid target-view precedence and selector lifecycle;
+occurrence 2 follows a completed first batch in the same armed call. The
+private fixture extends first-error, exact cursor, 17-mode, 14
+model/gradient-image, RNG, 29-owner-probe, six-output, and same-frame retry
+checks against an independent twin as source coverage. A target-copy-before-
+fault mutant fails the native assertion. The mask-view-before-target mutant
+fails a source-order assertion, **not a compiled runtime mask-borrow trace**.
+Independent source/host review accepted exact
+`c937ecef8b1a238fbc664e76225234409b15a46b`/tree
+`c54aaa0cae3c1c07fc2af4c6e7acce71addd84cb`; receipt
+`/home/gabe/.codex/evidence/eshkol-transformer/e3-stage6-mask-cut-source-review-20261014/REVIEW.md`
+(SHA-256 `d670f78dae543da8f6c199d0eafc8cf6bdf13c94fcc9445cd4338eef016fabbf`).
+Supported compiled Eshkol normal/poison, LSan and full E3 §9 admission remain
+**HOLD**.
 
 The bounded E3 §9 stage-8 source candidate adds noninstalled frame-owned
 site 5, ordinal 0, occurrences 1 or 2. After all 21 forward roles, it
