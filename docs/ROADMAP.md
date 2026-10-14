@@ -2285,6 +2285,15 @@ mutation checks cover binding, rooting, acquisition order, and first-error
 cleanup. Independent source review and a compiled feature-on genuine-owner
 runtime gate remain pending. The scope does not issue an O2 state, claim C2,
 create a receipt, or admit data-only continuation.
+An isolated scope repair candidate binds G3's T1-spelled private lookup and
+typed raise to the already loaded T2 registry, following the existing CLI3
+same-registry bridge. The T2 entry uses exact shell identity and G3 still
+checks the raw V256 T1 core profile. Completed scopes now unlink their root
+after native-pair and trainer-lease release proofs; uncertain release still
+fails stop. Focused source checks include foreign/bit-equal identity mutants,
+head/interior unlink mutants, and the feature-on source load closure. The
+compiled feature-on genuine-owner and repeated-scope retention gates remain
+pending, as do independent review and all C2 continuation claims.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),

@@ -1,6 +1,7 @@
 ;;; Feature-private joint identity universe for the bounded owner scope.
 ;;; No public facade, C2 compose caller, or receipt publisher is installed.
 (load "tr3_c_snapshot_root.esk")
+(load "g3r_same_owner_t2_authority_extension.esk")
 (load "m3_call_adapters.esk")
 (load "g3t_model_admission_extension.esk")
 (load "g3t_generator_constructor_extension.esk")

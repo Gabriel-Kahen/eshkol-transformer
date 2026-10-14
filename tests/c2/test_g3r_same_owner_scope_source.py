@@ -8,6 +8,11 @@ from tests.c2.test_handler_order import form, parse
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "native/g3r_same_owner_scope_extension.esk"
 LOAD_ROOT = ROOT / "native/g3r_same_owner_scope_root.esk"
+AUTHORITY = ROOT / "native/g3r_same_owner_t2_authority_extension.esk"
+T2_REGISTRY = ROOT / "internal/t2/lib/transformer/tokenizer_internal.esk"
+CONSTRUCTOR = ROOT / "native/g3t_generator_constructor_extension.esk"
+DECODER = ROOT / "native/g3c4_t1_output_decode_extension.esk"
+T2_ROOT = ROOT / "native/t2_wave2_root.esk"
 
 
 def define(forms, name):
@@ -27,15 +32,33 @@ def calls(tree):
         name for child in tree for name in calls(child)]
 
 
-def validate(source, root):
+def validate(source, root, authority, registry, constructor, decoder):
     forms = parse(source)
     loads = [x[1].strip('"') for x in parse(root)]
-    expected = ["tr3_c_snapshot_root.esk", "g3t_model_admission_extension.esk",
+    expected = ["tr3_c_snapshot_root.esk",
+                "g3r_same_owner_t2_authority_extension.esk",
+                "g3t_model_admission_extension.esk",
                 "g3r_same_owner_hold_bridge_extension.esk",
                 "g3r_held_o2_adopter_extension.esk",
                 "g3r_same_owner_scope_extension.esk"]
     if [loads.index(x) for x in expected] != sorted(loads.index(x) for x in expected):
         raise ValueError("joint owner load order changed")
+    if "tokenizer_internal.esk" in root or "t1_wave1_root.esk" in root:
+        raise ValueError("second tokenizer authority loaded")
+    if parse(authority) != [form("(define t1-private-entry t2-private-entry)"),
+                            form("(define-syntax t1-private-raise (syntax-rules () ((_ category operation message) (t2-private-raise category operation message))))")]:
+        raise ValueError("G3 alias must use the single T2 registry and typed raise")
+    if not contains(define(parse(registry), "t2-private-entry"),
+                    form("(eq? value (car (car remaining)))")):
+        raise ValueError("T2 entry must authenticate shell identity")
+    if not contains(define(parse(constructor), "g3t-generator-create"),
+                    form("(t1-private-entry tokenizer)")) or \
+            not contains(define(parse(decoder), "t1-private-g3-decode-raw-into!"),
+                         form("(t1-private-entry tokenizer)")):
+        raise ValueError("G3 leaf no longer checks tokenizer authority")
+    for leaf in (constructor, decoder):
+        if "(t1-core-tokenizer? core)" not in leaf or "(eq? (vector-ref core 1) 'raw)" not in leaf:
+            raise ValueError("G3 leaf no longer checks the raw T1 core profile")
     bind = define(forms, "g3r-scope-bind!")
     for exact in ("(eq? model-entry (vector-ref record 9))",
                   "(eq? (vector-ref generator-entry 5) model-entry)",
@@ -87,6 +110,15 @@ def validate(source, root):
     if not contains(drain, form("(and (eq? (vector-ref scope 9) 'live) (not pair))")) or \
             not contains(drain, form("(and (eq? (vector-ref scope 9) 'live) (not record))")):
         raise ValueError("lost live authority can bypass fail stop")
+    unlink = define(forms, "g3r-scope-unlink!")
+    if not contains(unlink, form("(eq? scope (car remaining))")) or \
+            not contains(unlink, form("(set-cdr! previous (cdr remaining))")) or \
+            not contains(unlink, form("(vector-set! g3r-scope-registry 0 (cdr remaining))")) or \
+            not contains(unlink, form("(g3r-holds-fail-stop)")):
+        raise ValueError("scope must unlink exact head/interior entry or fail stop")
+    if drain[-3:] != [form("(vector-set! scope 9 'dead)"),
+                      form("(g3r-scope-unlink! scope)"), "first"]:
+        raise ValueError("completed scope retained or unlinked before release proof")
     end = define(forms, "g3r-same-owner-scope-end!")
     accessor = define(forms, "g3r-same-owner-scope-pair!")
     if accessor[2] != form("(g3r-same-owner-scope-check! scope)"):
@@ -101,9 +133,33 @@ class SameOwnerScopeSourceTest(unittest.TestCase):
     def setUpClass(cls):
         cls.source = SOURCE.read_text()
         cls.root = LOAD_ROOT.read_text()
+        cls.authority = AUTHORITY.read_text()
+        cls.registry = T2_REGISTRY.read_text()
+        cls.constructor = CONSTRUCTOR.read_text()
+        cls.decoder = DECODER.read_text()
+
+    def validate(self, source=None, root=None, authority=None, registry=None,
+                 constructor=None, decoder=None):
+        validate(source if source is not None else self.source,
+                 root if root is not None else self.root,
+                 authority if authority is not None else self.authority,
+                 registry if registry is not None else self.registry,
+                 constructor if constructor is not None else self.constructor,
+                 decoder if decoder is not None else self.decoder)
 
     def test_contract(self):
-        validate(self.source, self.root)
+        self.validate()
+
+    def test_feature_on_source_root_closure(self):
+        self.assertIn('(load "t2_wave2_root.esk")',
+                      (ROOT / "native/d2_wave2_root.esk").read_text())
+        self.assertIn('(load "d2_wave2_root.esk")',
+                      (ROOT / "native/tr3_c_snapshot_root.esk").read_text())
+        self.assertIn('(load "transformer/tokenizer_internal.esk")',
+                      T2_ROOT.read_text())
+        for loaded in (x[1].strip('"') for x in parse(self.root)):
+            self.assertTrue((ROOT / "native" / loaded).is_file(), loaded)
+        self.assertNotIn('(load "t1_wave1_root.esk")', self.root)
 
     def test_owner_and_order_mutations_fail(self):
         for old, new in (
@@ -118,7 +174,7 @@ class SameOwnerScopeSourceTest(unittest.TestCase):
             with self.subTest(old=old):
                 self.assertEqual(self.source.count(old), 1)
                 with self.assertRaises(ValueError):
-                    validate(self.source.replace(old, new), self.root)
+                    self.validate(source=self.source.replace(old, new))
 
     def test_load_order_mutation_fails(self):
         mutated = self.root.replace(
@@ -128,7 +184,32 @@ class SameOwnerScopeSourceTest(unittest.TestCase):
             '(load "g3r_held_o2_adopter_extension.esk")')
         self.assertNotEqual(mutated, self.root)
         with self.assertRaises(ValueError):
-            validate(self.source, mutated)
+            self.validate(root=mutated)
+
+    def test_foreign_and_bit_equal_distinct_tokenizer_mutations_fail(self):
+        with self.assertRaisesRegex(ValueError, "shell identity"):
+            self.validate(registry=self.registry.replace(
+                "(eq? value (car (car remaining)))",
+                "(equal? value (car (car remaining)))"))
+        with self.assertRaisesRegex(ValueError, "single T2 registry"):
+            self.validate(authority=self.authority.replace(
+                "(define t1-private-entry t2-private-entry)",
+                "(define (t1-private-entry value) (t1-private-entry value))"))
+        with self.assertRaisesRegex(ValueError, "authority"):
+            self.validate(constructor=self.constructor.replace(
+                "(t1-private-entry tokenizer)", "(list tokenizer core)", 1))
+
+    def test_completed_scope_retention_mutations_fail(self):
+        for old, new in (
+            ("\n  (g3r-scope-unlink! scope)\n", "\n  #t\n"),
+            ("(eq? scope (car remaining))", "(equal? scope (car remaining))"),
+            ("(set-cdr! previous (cdr remaining))", "#t"),
+            ("(vector-set! g3r-scope-registry 0 (cdr remaining))", "#t"),
+        ):
+            with self.subTest(old=old):
+                self.assertEqual(self.source.count(old), 1)
+                with self.assertRaises(ValueError):
+                    self.validate(source=self.source.replace(old, new))
 
 
 if __name__ == "__main__":

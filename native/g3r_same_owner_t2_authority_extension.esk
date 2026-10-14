@@ -1,0 +1,9 @@
+;;; Feature-private G3 spelling over the TR3/T2 tokenizer authority.
+;;; The T2 registry owns both byte and BPE shells in this aggregate. G3's
+;;; existing core-profile checks admit only its raw V256 predecessor.
+;;; Never load the T1 private registry beside this bridge.
+(define t1-private-entry t2-private-entry)
+(define-syntax t1-private-raise
+  (syntax-rules ()
+    ((_ category operation message)
+     (t2-private-raise category operation message))))

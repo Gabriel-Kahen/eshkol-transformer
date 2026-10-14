@@ -10,6 +10,19 @@
           ((eq? candidate (car remaining)) #t)
           (else (loop (cdr remaining))))))
 
+;;; Unlink only after native and trainer release proofs. The registry must
+;;; never retain a completed scope's original owner graph.
+(define (g3r-scope-unlink! scope)
+  (let loop ((previous #f)
+             (remaining (vector-ref g3r-scope-registry 0)))
+    (cond ((null? remaining) (g3r-holds-fail-stop))
+          ((eq? scope (car remaining))
+           (if previous
+               (set-cdr! previous (cdr remaining))
+               (vector-set! g3r-scope-registry 0 (cdr remaining)))
+           #t)
+          (else (loop remaining (cdr remaining))))))
+
 (define (g3r-scope-bind! record generator tokenizer operation)
   (let* ((model (vector-ref record 8))
          (model-entry (g3t-model-entry-live model operation #f))
@@ -60,6 +73,7 @@
               (g3r-holds-fail-stop))
           (vector-set! (vector-ref scope 1) 0 #f))))
   (vector-set! scope 9 'dead)
+  (g3r-scope-unlink! scope)
   first)
 
 ;;; Scope slots: tag, trainer-record cell, native-pair cell, trainer,
