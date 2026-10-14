@@ -7,6 +7,7 @@ fixture = (root / "tests/g3r/held_p1_c2_gate.esk").read_text()
 runner = (root / "scripts/test-g3r-held-p1-c2-gate.sh").read_text()
 bit_bridge = (root / "tests/g3r/held_p1_c2_bit_bridge.c").read_text()
 f32 = (root / "native/f32_tensor.c").read_text()
+corpus_builder = (root / "tests/d2/prepare_public_resources.py").read_text()
 leaves = (
     "g3r_held_o2_adopter_extension.esk",
     "g3r_joint_issued_o2_adopter_extension.esk",
@@ -90,6 +91,10 @@ def check(source: str, script: str, bits: str) -> None:
         "(vector-set! mutant-p1 2 foreign-p1)") < source.index(
         "(g3r-joint-o2-drain-preclaim! (vector-ref mutant-held 1))")
     assert "(original-o2-claim state token)" in source
+    assert "output.mkdir(parents=True)" in corpus_builder
+    setup = script.split('evidence="$(readlink -f "$evidence")"', 1)[0]
+    assert '"$evidence/corpus"' not in setup
+    assert '--output "$evidence/corpus"' in script
     provider = source[source.index("(define provider-fault (fixture corpus-directory))"):
                       source.index(";;; C2's injected O2 claim defect")]
     assert provider.index("(g3r-test-held-bits-begin provider-fault-native-model)") < provider.index(
@@ -160,4 +165,13 @@ for index, (mutation, bridge_mutation) in enumerate(mutations):
     except (AssertionError, ValueError):
         continue
     raise AssertionError(f"held P1/C2 mutation {index} escaped")
-print(f"held P1/C2 source aggregate: pass ({len(mutations)} mutations; unadmitted)")
+old_runner = runner.replace('"$evidence/off"',
+                            '"$evidence/off" "$evidence/corpus"', 1)
+assert old_runner != runner
+try:
+    check(fixture, old_runner, bit_bridge)
+except (AssertionError, ValueError):
+    pass
+else:
+    raise AssertionError("premature corpus creation escaped")
+print(f"held P1/C2 source aggregate: pass ({len(mutations) + 1} mutations; unadmitted)")

@@ -7,8 +7,7 @@ cc= cxx=
 resolve_provenance_compilers cc cxx \
   "${CC:-$(lock_value supported_cc)}" "${CXX:-$(lock_value supported_cxx)}"
 evidence="${1:?pass a writable evidence directory outside the source checkout}"
-mkdir -p "$evidence/native" "$evidence/off" "$evidence/cache" \
-  "$evidence/corpus"
+mkdir -p "$evidence/native" "$evidence/off" "$evidence/cache"
 evidence="$(readlink -f "$evidence")"
 [[ "$evidence" != "$PROJECT_ROOT" && "$evidence" != "$PROJECT_ROOT/"* ]] || \
   die "evidence directory must be outside the source checkout"

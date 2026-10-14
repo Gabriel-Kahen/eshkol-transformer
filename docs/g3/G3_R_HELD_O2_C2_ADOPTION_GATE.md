@@ -242,8 +242,12 @@ preclaim cuts it checks clone-count rollback and explicit issued-O2 then
 G3 hold drain; after C2 transfer it checks the exact registered child and
 owner through the claim helper and releases the resulting C2 owner.
 
-The fixture, runner and sixteen-mutation source closure pass static checks;
-the pinned aggregate has **not yet compiled or run**. Post-tombstone P1 release
+The fixture, runner and seventeen-mutation source closure pass static checks.
+The added regression rejects a runner that precreates the corpus directory:
+the D2 resource builder creates that directory itself. The first pinned gate
+on `2bcdda47` stopped at this setup error before native or Eshkol compilation;
+the runner is repaired, but the aggregate has **not yet compiled or run**.
+Post-tombstone P1 release
 defect and uncertain native release are fail-stop
 contracts, not exercised recoverable fixture outcomes. A successful compiled
 run and independent review are required before this can be an admitted

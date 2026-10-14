@@ -2186,8 +2186,11 @@ The next feature-private held P1/C2 fixture now adds an authentic I2/F32
 provider-clone allocation failure under the original live G3/O2 pins, checks
 typed failure and preserved original witnesses, and requires same-owner retry
 after resetting the allocator. Its runner links the F32 test allocator and
-the sixteen-mutation source closure passes. This remains source evidence until
-the pinned aggregate compiles and runs; post-tombstone P1 and uncertain native
+the seventeen-mutation source closure passes, including a regression against
+precreating the D2 corpus directory. The first pinned `2bcdda47` gate stopped
+at that setup error before native or Eshkol compilation; the runner is now
+repaired. This remains source evidence until the pinned aggregate compiles and
+runs; post-tombstone P1 and uncertain native
 release cuts still require separate evidence.
 
 The first bounded native prerequisite,
