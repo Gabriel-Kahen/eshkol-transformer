@@ -321,7 +321,11 @@ int64_t et_e3_test_fault_arm_v1(void *pointer, int64_t site,
   if (frame->fault_state) return e3_fail(E3_INVALID_STATE, E3_CODE_REENTRANCY);
   if (!((site == 1 && ordinal >= 0 && ordinal <= 20 &&
          occurrence >= 1 && occurrence <= 8192) ||
-        (site == 2 && ordinal == 0 && occurrence == 1)))
+        (site == 2 && ordinal == 0 && occurrence == 1)
+#ifdef ET_E3_PARTIAL_PIN_TESTING
+        || (site == 4 && ordinal >= 0 && ordinal < 14 && occurrence == 1)
+#endif
+        ))
     return e3_fail(E3_INVALID_ARGUMENT, E3_CODE_PHASE);
   frame->fault_state = 1;
   frame->fault_site = (uint32_t)site;
@@ -870,9 +874,21 @@ int64_t et_e3_private_acquire_v1(void *pointer) {
   frame->next_role = 0;
   frame->stage_plane = 0;
   et_f32_tensor_error error;
-  if (et_g3t_model_pins_begin_internal(frame->model->p,
-                                       (const void *const *)frame->model->handles,
-                                       &frame->pins, &error) != 0) {
+  int32_t pin_status;
+#ifdef ET_E3_PARTIAL_PIN_TESTING
+  if (frame->fault_state == 1 && frame->fault_site == 4) {
+    ++frame->fault_reached;
+    frame->fault_state = 2; /* Consume before M3 admission and prefix drain. */
+    pin_status = et_g3t_model_pins_begin_fail_before_internal(
+        frame->model->p, (const void *const *)frame->model->handles,
+        &frame->pins, &error, frame->fault_ordinal);
+    if (pin_status == 0) abort();
+  } else
+#endif
+    pin_status = et_g3t_model_pins_begin_internal(
+        frame->model->p, (const void *const *)frame->model->handles,
+        &frame->pins, &error);
+  if (pin_status != 0) {
 #ifdef ET_E3_FAULT_TESTING
     if (frame->fault_state == 1) frame->fault_state = 3;
 #endif

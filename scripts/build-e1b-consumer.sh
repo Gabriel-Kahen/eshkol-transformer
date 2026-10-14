@@ -1941,9 +1941,14 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
       esac
     fi
     if [[ "${package_policy}" == e3-private-aggregate &&
-          "${e3_tuple_kind}" == fault &&
-          "${package_native_source}" == "${PROJECT_ROOT}/src/eshkol_transformer/e3_frame.c" ]]; then
-      package_source_flags+=(-DET_E3_FAULT_TESTING)
+          "${e3_tuple_kind}" == fault ]]; then
+      case "${package_native_source}" in
+        "${PROJECT_ROOT}/src/eshkol_transformer/e3_frame.c")
+          package_source_flags+=(-DET_E3_FAULT_TESTING
+                                 -DET_E3_PARTIAL_PIN_TESTING) ;;
+        "${PROJECT_ROOT}/src/eshkol_transformer/m3_call_f32_integration.c")
+          package_source_flags+=(-DET_E3_PARTIAL_PIN_TESTING) ;;
+      esac
     fi
     if [[ "${package_policy}" == e3-private-aggregate &&
           "${e3_tuple_kind}" == zero ]]; then
@@ -2520,6 +2525,7 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
           et_e3_test_fault_ref_v1
           et_e3_test_fault_reset_v1
           et_e3_test_fault_seed_publication_v1
+          et_g3t_model_pins_begin_fail_before_internal
           et_e3_fault_value_borrow_begin_v1
           et_e3_fault_value_borrow_end_v1
         )

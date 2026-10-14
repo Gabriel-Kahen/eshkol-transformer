@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -195,12 +196,14 @@ printf '%s\n' "$e3_tuple_kind"
 
     def test_native_define_and_closed_binding(self):
         builder = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
-        self.assertEqual(builder.count("package_source_flags+=(-DET_E3_FAULT_TESTING)"), 1)
+        self.assertEqual(builder.count("package_source_flags+=(-DET_E3_FAULT_TESTING"), 1)
         seam = builder[builder.index('if [[ "${package_policy}" == e3-private-aggregate &&\n'
-                                     '          "${e3_tuple_kind}" == fault &&\n'
-                                     '          "${package_native_source}" == '
-                                     '"${PROJECT_ROOT}/src/eshkol_transformer/e3_frame.c" ]]; then'):]
-        self.assertIn("package_source_flags+=(-DET_E3_FAULT_TESTING)", seam[:350])
+                                     '          "${e3_tuple_kind}" == fault ]]; then'):]
+        self.assertIn("package_source_flags+=(-DET_E3_FAULT_TESTING", seam[:350])
+        self.assertEqual(seam[:650].count("-DET_E3_PARTIAL_PIN_TESTING"), 2)
+        self.assertIn("et_g3t_model_pins_begin_fail_before_internal",
+                      builder[builder.index('if [[ "${e3_tuple_kind}" == fault ]]; then\n'
+                                            '        e3_required_private+=('):])
         source = (TESTS / "fault_driver.esk").read_text()
         signatures = (
             r'\(extern i64 e3-test-fault-arm ptr i64 i64 i64\s+:real et_e3_test_fault_arm_v1\)',
@@ -223,6 +226,46 @@ printf '%s\n' "$e3_tuple_kind"
         self.assertLess(execute.index("(e3-test-fault-reset native)"),
                         execute.index("(e3-test-retention-call! model dataset frame"))
         self.assertNotIn("e3-test-fault-arm", (TESTS / "retention_driver.esk").read_text())
+
+    def test_partial_pin_site_and_native_symbol_boundary(self):
+        driver = (TESTS / "fault_driver.esk").read_text()
+        frame = (ROOT / "src/eshkol_transformer/e3_frame.c").read_text()
+        pins = (ROOT / "src/eshkol_transformer/m3_call_f32_integration.c").read_text()
+        self.assertIn("(and (= (vector-ref scenario 3) 4)\n"
+                      "                  (>= (vector-ref scenario 4) 0)\n"
+                      "                  (<= (vector-ref scenario 4) 13)", driver)
+        self.assertIn("site == 4 && ordinal >= 0 && ordinal < 14 && occurrence == 1", frame)
+        self.assertLess(frame.index("frame->fault_state = 2; /* Consume before M3 admission"),
+                        frame.index("pin_status = et_g3t_model_pins_begin_fail_before_internal"))
+        self.assertIn("(if (= site 3) 42 (if (= site 4) 47", driver)
+        self.assertIn("(if (or (= site 3) (= site 4))\n        (e3-test-fault-check 'independent-twin", driver)
+        self.assertIn("if (fail_before >= M3_CALL_PIN_COUNT)", pins)
+        self.assertIn("m3_call_drain(pins, i)", pins)
+        self.assertIn("for(size_t n=0;n<14;++n)", (ROOT / "tests/m3cg/test_pins.c").read_text())
+
+        compiler, nm = shutil.which("clang"), shutil.which("nm")
+        if not compiler or not nm:
+            self.skipTest("clang/nm unavailable for native symbol check")
+        with tempfile.TemporaryDirectory() as directory:
+            def symbols(source, flags, name):
+                obj = Path(directory) / name
+                subprocess.run([compiler, "-std=c11", "-O0", "-c",
+                                "-I", str(ROOT / "include"),
+                                "-I", str(ROOT / "native"), *flags,
+                                str(ROOT / source), "-o", str(obj)],
+                               check=True, capture_output=True, text=True)
+                return subprocess.run([nm, "-g", str(obj)], check=True,
+                                      capture_output=True, text=True).stdout
+            on = ["-DET_E3_PARTIAL_PIN_TESTING", "-DET_E3_FAULT_TESTING"]
+            off = []
+            m3_on = symbols("src/eshkol_transformer/m3_call_f32_integration.c", on, "m3-on.o")
+            e3_on = symbols("src/eshkol_transformer/e3_frame.c", on, "e3-on.o")
+            m3_off = symbols("src/eshkol_transformer/m3_call_f32_integration.c", off, "m3-off.o")
+            e3_off = symbols("src/eshkol_transformer/e3_frame.c", off, "e3-off.o")
+            symbol = "et_g3t_model_pins_begin_fail_before_internal"
+            self.assertRegex(m3_on, rf"(?m)^\S+ T {symbol}$")
+            self.assertRegex(e3_on, rf"(?m)^                 U {symbol}$")
+            self.assertNotIn(symbol, m3_off + e3_off)
 
     def test_generated_stage_is_owned_and_fresh(self):
         helper = ROOT / "scripts/e3-mode-graph-stage-cleanup.sh"
@@ -327,14 +370,14 @@ e3_reject_unresolved_private fault "$3" "$3"
             self.assertIn(snapshot, execute)
             self.assertLess(execute.index(snapshot), execute.index("(e3-test-fault-arm native"))
         required = (
-            "(if (= site 3) 42 (if (= site 2) 155 95))",
+            "(if (= site 3) 42 (if (= site 4) 47 (if (= site 2) 155 95)))",
             "(e3-test-fault-check 'cursor\n        (d2-core-bytes=? cursor",
             "(e3-test-fault-check 'output\n        (equal? publication",
             "(e3-test-fault-check 'modes\n        (e3-test-retention-modes=?",
             "(e3-test-fault-check 'model\n        (e3-test-retention-model=?",
             "(e3-test-fault-check 'rng\n        (and (eq? rng-algorithm",
             "(e3-test-fault-check 'owners\n        (e3-test-fault-probes-restored?",
-            "(e3-test-fault-check 'retry-output\n      (equal? (if (or (= site 2) (= site 3))",
+            "(e3-test-fault-check 'retry-output\n      (equal? (if (or (= site 2) (= site 3) (= site 4))",
             "(e3-test-fault-check 'retry-rng\n      (and (eq? rng-algorithm",
         )
         def guarded(candidate):
@@ -357,14 +400,14 @@ e3_reject_unresolved_private fault "$3" "$3"
             "(held (if (= site 3)",
             "(e3-fault-value-borrow-begin owner role)",
             "(vector-ref before 3) (+ (vector-ref unheld 3) 1)",
-            "(if (or (= site 2) (= site 3))\n        (e3-test-fault-check 'distinct-precall",
+            "(if (or (= site 2) (= site 3) (= site 4))\n        (e3-test-fault-check 'distinct-precall",
             "(equal? publication e3-test-fault-sentinels)",
             "(if (= site 3) 'invalid-state 'internal)",
-            "(if (= site 3) 42 (if (= site 2) 155 95))",
-            "(if (= site 3) 3 (if (= site 2) 12 7))",
-            "(if (= site 3) 3 0)",
-            "(if (= site 3) 4 5)",
-            "(if (= site 3) 8 9)",
+            "(if (= site 3) 42 (if (= site 4) 47 (if (= site 2) 155 95)))",
+            "(if (or (= site 3) (= site 4)) 3 (if (= site 2) 12 7))",
+            "(if (or (= site 3) (= site 4)) 3 0)",
+            "(if (= site 3) 4 (if (= site 4) 6 5))",
+            "(if (= site 3) 8 (if (= site 4) 6 9))",
             "(e3-test-fault-probes-restored?\n          before",
             "(e3-fault-value-borrow-end owner role)",
             "(vector-ref unheld 3)",
@@ -381,7 +424,7 @@ e3_reject_unresolved_private fault "$3" "$3"
                         execute.index("(e3-test-retention-call! model dataset frame"))
         self.assertLess(execute.index("(e3-test-retention-call! model dataset frame"),
                         execute.index("'independent-twin"))
-        self.assertIn("(twin (if (= (vector-ref scenario 3) 3)", source)
+        self.assertIn("(twin (if (or (= (vector-ref scenario 3) 3)", source)
         self.assertIn("(e3-test-fault-make-twin present? corpus-path)", source)
         self.assertLess(source.index("(e3-test-fault-make-twin present? corpus-path)",
                                      source.index("(define (e3-test-fault-dispatch")),
@@ -440,9 +483,9 @@ e3_reject_unresolved_private fault "$3" "$3"
         self.assertIn("et_e3_test_fault_seed_publication_v1", native)
         self.assertIn("(equal? publication e3-test-fault-sentinels)", driver)
         self.assertIn("(e3-test-fault-all-distinct?", driver)
-        self.assertIn("(if (= site 3) 42 (if (= site 2) 155 95))", driver)
+        self.assertIn("(if (= site 3) 42 (if (= site 4) 47 (if (= site 2) 155 95)))", driver)
         self.assertIn("(equal? publication\n                (e3-test-fault-publication", driver)
-        self.assertIn("(if (or (= site 2) (= site 3))\n                  e3-test-fault-final-publication publication)", driver)
+        self.assertIn("(if (or (= site 2) (= site 3) (= site 4))\n                  e3-test-fault-final-publication publication)", driver)
 
         for mutated in (
             publish[:cut] + publish[cut:].replace("frame->fault_state = 2;", "", 1),
