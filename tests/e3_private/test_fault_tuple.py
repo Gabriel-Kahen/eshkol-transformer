@@ -699,6 +699,7 @@ printf '%s\n' "$e3_tuple_kind"
                        "observed_dispatches == before_target",
                        "observed_dispatches > initial_dispatches",
                        "frame->fault_reached == occurrence",
+                       "frame->fault_state == 1 && frame->fault_reached == 0",
                        "test_mask_staging_preinvoke_selector(model, destination)"):
             self.assertIn(clause, native)
 

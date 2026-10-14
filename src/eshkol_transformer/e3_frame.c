@@ -1042,7 +1042,7 @@ int64_t et_e3_private_stage_targets_v1(
   if (frame->fault_state == 1 && frame->fault_site == 11) {
     ++frame->fault_reached;
     if (frame->fault_reached == frame->fault_occurrence) {
-      frame->fault_state = 2; /* Both copies complete; D2 mask view is unopened. */
+      frame->fault_state = 2; /* Target borrow unwinds; mask view is unopened. */
       return e3_fail(E3_INTERNAL, E3_CODE_INVARIANT);
     }
   }

@@ -1071,6 +1071,21 @@ static void test_mask_staging_preinvoke_selector(
     abort_call(frame);
   }
 
+  /* Target validation precedes the site; a bad view cannot consume it. */
+  OK(et_e3_test_fault_arm_v1(frame, 11, 0, 1));
+  OK(et_e3_private_acquire_v1(frame));
+  int64_t input_only[2] = {3, 197};
+  et_kernel_tensor_view_v1 input_only_view = i64_pair(input_only);
+  OK(et_e3_private_stage_inputs_v1(frame, &input_only_view));
+  CHECK(et_e3_private_stage_targets_v1(frame, NULL) == E3_INVALID_ARGUMENT);
+  CHECK(e3_last_domain == 0 && e3_last_category == E3_INVALID_ARGUMENT &&
+        e3_last_code == E3_CODE_DESTINATION && frame->stage_plane == 1 &&
+        frame->fault_state == 1 && frame->fault_reached == 0);
+  abort_call(frame);
+  CHECK(et_e3_test_fault_ref_v1(frame, 0) == 3);
+  CHECK(et_e3_test_fault_ref_v1(frame, 4) == 0);
+  OK(et_e3_test_fault_reset_v1(frame));
+
   OK(et_e3_test_fault_arm_v1(frame, 11, 0, 2));
   OK(et_e3_private_acquire_v1(frame));
   stage(frame, 3, 197, 197, 0, 1, 1);
