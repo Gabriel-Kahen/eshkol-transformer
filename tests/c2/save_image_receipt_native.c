@@ -68,22 +68,32 @@ static void check_failure_cuts(uint8_t *image, uint8_t *cell,
   }
 }
 
-int main(void) {
+int main(int argc, char **argv) {
   static const uint8_t abc_sha[32] = {
       0xba,0x78,0x16,0xbf,0x8f,0x01,0xcf,0xea,0x41,0x41,0x40,0xde,
       0x5d,0xae,0x22,0x23,0xb0,0x03,0x61,0xa3,0x96,0x17,0x7a,0x9c,
       0xb4,0x10,0xff,0x61,0xf2,0x00,0x15,0xad};
-  char directory[] = "/tmp/eshkol-c2-image-receipt-XXXXXX";
-  char path[128];
-  uint8_t *image = bv(3u), *image8 = bv(8u);
-  uint8_t *cell = bv(8u), *digest = bv(32u);
-  uint8_t *large = bv(16777216u), *too_large = bv(16777217u);
+  const char *tmpdir = getenv("TMPDIR");
+  char *directory = NULL, *path = NULL;
+  uint8_t *image, *image8, *cell, *digest, *large, *too_large;
   int64_t token, collision, committed, precommit;
   FILE *file;
   uint8_t observed[3];
 
+  assert(argc == 1 ||
+         (argc == 2 && strcmp(argv[1], "--print-temp-template") == 0));
+  if (tmpdir == NULL || tmpdir[0] == '\0') tmpdir = "/tmp";
+  assert(asprintf(&directory, "%s/eshkol-c2-image-receipt-XXXXXX", tmpdir) >= 0);
+  if (argc == 2) {
+    puts(directory);
+    free(directory);
+    return 0;
+  }
   assert(mkdtemp(directory) != NULL);
-  assert(snprintf(path, sizeof(path), "%s/image", directory) > 0);
+  assert(asprintf(&path, "%s/image", directory) >= 0);
+  image = bv(3u); image8 = bv(8u);
+  cell = bv(8u); digest = bv(32u);
+  large = bv(16777216u); too_large = bv(16777217u);
   memcpy(image + 8u, "abc", 3u);
   assert(et_c2_private_save_image_adopt_v1(image, 4, cell) == -1);
   assert(et_c2_private_save_image_adopt_v1(image8, 8, image8) == -1);
@@ -161,7 +171,7 @@ int main(void) {
   assert(et_c2_private_save_image_adopt_v1(image, 3, cell) == -4);
   assert(et_c2_private_save_image_live_bytes_v1() == 0u);
   free(image); free(image8); free(cell); free(digest);
-  free(large); free(too_large);
+  free(large); free(too_large); free(path); free(directory);
   puts("C2 private image receipt native checks passed");
   return 0;
 }

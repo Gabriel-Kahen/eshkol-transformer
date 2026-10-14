@@ -56,6 +56,18 @@ for mode in normal repeat san; do
   grep -Fx 'C2 private image receipt native checks passed' \
     "$out/$mode/image.stdout" >/dev/null
 done
+template='eshkol-c2-image-receipt-XXXXXX'
+test "$(env -u TMPDIR "$out/normal/image" --print-temp-template)" = "/tmp/$template"
+test "$(TMPDIR= "$out/normal/image" --print-temp-template)" = "/tmp/$template"
+long_tmp="$out/normal/$(printf '%0130d' 0)"
+mkdir -p "$long_tmp"
+test "$(TMPDIR="$long_tmp" "$out/normal/image" --print-temp-template)" = \
+  "$long_tmp/$template"
+TMPDIR="$long_tmp" "$out/normal/image" >"$out/normal/image-long.stdout" \
+  2>"$out/normal/image-long.stderr"
+test ! -s "$out/normal/image-long.stderr"
+cmp "$out/normal/image.stdout" "$out/normal/image-long.stdout"
+rmdir "$long_tmp"
 for fixture in o2 image; do
   cmp "$out/normal/$fixture.stdout" "$out/repeat/$fixture.stdout"
   cmp "$out/normal/$fixture.stdout" "$out/san/$fixture.stdout"

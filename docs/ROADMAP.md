@@ -2137,6 +2137,16 @@ fixture is omitted from the runner. The native runner checks feature-off symbol
 absence and normal/repeat/sanitizer execution; supported exact-union CI and the
 compiled C2 owner/receipt gates remain pending. This does not compile the held
 Eshkol adopter or establish a same-owner SAVE pair.
+The first one-use C gate at `b2a3f138`/tree `e4001b6d` exited 134:
+the native image fixture hardcoded `/tmp` while its Docker run supplied
+writable `TMPDIR=/out/tmp` and read-only `/tmp`. The sealed failed-gate
+manifest is `c2-postmutation-rollback-fixture-compiled-static-b2a3f138-20261014-c/GATE-ALL-RAW-SHA256.txt`
+(SHA-256 `28685be3c14255cee62e94bdf6dbefc0dabab4fed808b19de0547239d70efb1a`).
+The isolated fixture repair uses nonempty `TMPDIR`, retains the empty/unset
+`/tmp` fallback, and allocates complete directory/image paths. Focused
+local source and native fixture tests pass, including long-`TMPDIR` execution;
+independent source/static review and a fresh C gate remain pending. Compiled
+C2 owner/receipt admission is still HOLD.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
