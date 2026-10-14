@@ -1,0 +1,164 @@
+"""Host-only lexical and source isolation checks for the noninstalled E3 fault tuple."""
+
+from pathlib import Path
+import re
+import subprocess
+import tempfile
+import unittest
+
+ROOT = Path(__file__).resolve().parents[2]
+TESTS = ROOT / "tests/e3_private"
+RETENTION = TESTS / "retention_package"
+FAULT = TESTS / "fault_package"
+
+
+def rows(prefix: Path, suffix: str) -> list[str]:
+    return Path(f"{prefix}_{suffix}.txt").read_text().splitlines()
+
+
+class FaultTupleTest(unittest.TestCase):
+    def test_exact_derived_inventories(self):
+        for suffix in ("defined_symbols", "public_exports", "public_strings"):
+            self.assertEqual(rows(FAULT, suffix),
+                             sorted(rows(RETENTION, suffix) + ["et_e3_fault_run_v1"]))
+        for suffix in ("undefined_symbols", "native_objects"):
+            self.assertEqual(rows(FAULT, suffix), rows(RETENTION, suffix))
+        self.assertEqual(rows(FAULT, "private_renames"),
+                         rows(RETENTION, "private_renames") +
+                         ["e3-test-fault-dispatch et_e3_private_fault_dispatch_cabi_v1"])
+        self.assertEqual(rows(FAULT, "source_closure"),
+                         ["tests/e3_private/fault_driver_root.esk"] +
+                         rows(RETENTION, "source_closure") +
+                         ["tests/e3_private/fault_driver.esk"])
+        native = rows(RETENTION, "native_source_closure")
+        native.insert(native.index("tests/e3_private/retention_bridge.c"),
+                      "tests/e3_private/fault_bridge.c")
+        self.assertEqual(rows(FAULT, "native_source_closure"), native)
+        self.assertEqual(rows(FAULT, "archive_members"), ["e3_fault_package.o"])
+        for suffix in ("sanitized_noninstrumentation_undefined_symbols",
+                       "sanitized_instrumentation_undefined_symbols"):
+            self.assertEqual(rows(FAULT, suffix), rows(RETENTION, suffix))
+        root = (TESTS / "fault_driver_root.esk").read_text()
+        self.assertEqual(root.count('(load "retention_driver_root.esk")'), 1)
+        self.assertEqual(root.count('(load "fault_driver.esk")'), 1)
+        self.assertNotIn("fault_driver", (ROOT / "native/e3_private_driver_root.esk").read_text())
+
+    def test_policy_rejects_mixed_partial_symlink_and_ambient_roots(self):
+        policy = ROOT / "scripts/e3-private-package-policy.sh"
+        inputs = [TESTS / "fault_driver_root.esk", TESTS / "fault_bridge.c",
+                  Path(f"{FAULT}_private_renames.txt"),
+                  Path(f"{FAULT}_public_exports.txt")]
+        script = r'''
+PROJECT_ROOT=$1
+raw_private_root=$2
+raw_package_bridge=$3
+raw_package_renames=$4
+raw_public_exports=$5
+raw_include_dirs=("$1/internal/p1/lib" "$1/internal/c1/lib" "$1/internal/t1/lib" "$1/src" "$1/internal/d2/lib" "$1/internal/e3/lib")
+if [[ "${7:-}" == ambient ]]; then raw_include_dirs+=("$1/native"); fi
+die() { printf '%s\n' "$*" >&2; exit 77; }
+source "$6"
+printf '%s\n' "$e3_tuple_kind"
+'''
+        def select(paths, extra=""):
+            return subprocess.run(
+                ["bash", "-c", script, "bash", str(ROOT),
+                 *(str(p) for p in paths), str(policy), extra],
+                capture_output=True, text=True)
+        accepted = select(inputs)
+        self.assertEqual((accepted.returncode, accepted.stdout),
+                         (0, "fault\n"), accepted.stderr)
+        for index, replacement in (
+            (0, TESTS / "retention_driver_root.esk"),
+            (1, TESTS / "retention_bridge.c"),
+            (2, Path(f"{RETENTION}_private_renames.txt")),
+            (3, Path(f"{RETENTION}_public_exports.txt")),
+        ):
+            mixed = inputs.copy()
+            mixed[index] = replacement
+            self.assertEqual(select(mixed).returncode, 77)
+        self.assertEqual(select(inputs, "ambient").returncode, 77)
+        with tempfile.TemporaryDirectory() as directory:
+            alias = Path(directory) / "fault_driver_root.esk"
+            alias.symlink_to(inputs[0])
+            self.assertEqual(select([alias, *inputs[1:]]).returncode, 77)
+
+    def test_native_define_and_closed_binding(self):
+        builder = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
+        self.assertEqual(builder.count("package_source_flags+=(-DET_E3_FAULT_TESTING)"), 1)
+        seam = builder[builder.index('if [[ "${package_policy}" == e3-private-aggregate &&\n'
+                                     '          "${e3_tuple_kind}" == fault &&\n'
+                                     '          "${package_native_source}" == '
+                                     '"${PROJECT_ROOT}/src/eshkol_transformer/e3_frame.c" ]]; then'):]
+        self.assertIn("package_source_flags+=(-DET_E3_FAULT_TESTING)", seam[:350])
+        source = (TESTS / "fault_driver.esk").read_text()
+        signatures = (
+            r'\(extern i64 e3-test-fault-arm ptr i64 i64 i64\s+:real et_e3_test_fault_arm_v1\)',
+            r'\(extern i64 e3-test-fault-ref ptr i64\s+:real et_e3_test_fault_ref_v1\)',
+            r'\(extern i64 e3-test-fault-reset ptr\s+:real et_e3_test_fault_reset_v1\)',
+        )
+        def valid(text):
+            return all(len(re.findall(pattern, text)) == 1 for pattern in signatures)
+        self.assertTrue(valid(source))
+        self.assertFalse(valid(source.replace("arm ptr i64 i64 i64", "arm ptr i64 i64")))
+        self.assertFalse(valid(source.replace("et_e3_test_fault_ref_v1",
+                                              "et_e3_private_forward_role_v1")))
+        self.assertIn("(e3-frame-entry-live frame 'e3-test-fault-execute)", source)
+        self.assertIn("(native (vector-ref entry 4))", source)
+        self.assertLess(source.index("(e3-test-fault-reset native)"),
+                        source.index("(e3-test-retention-call! model dataset frame"))
+        self.assertNotIn("e3-test-fault-arm", (TESTS / "retention_driver.esk").read_text())
+
+    def test_generated_stage_is_owned_and_fresh(self):
+        helper = ROOT / "scripts/e3-mode-graph-stage-cleanup.sh"
+        with tempfile.TemporaryDirectory() as directory:
+            gate = Path(directory)
+            stage = gate / ".e3-fault.A1b2C3"
+            stage.mkdir()
+            obj = stage / "e3_fault_package.o"
+            def select(path):
+                return subprocess.run(
+                    ["bash", "-c", 'source "$1"; e3_fault_generated_stage "$2"',
+                     "bash", str(helper), str(path)], capture_output=True, text=True)
+            self.assertEqual((select(obj).returncode, select(obj).stdout),
+                             (0, f"{gate}/.e3-fault-generated\n"))
+            self.assertNotEqual(select(stage / "foreign.o").returncode, 0)
+            alias = gate / ".e3-fault.Z9y8X7"
+            alias.symlink_to(stage, target_is_directory=True)
+            self.assertNotEqual(select(alias / obj.name).returncode, 0)
+            generated = gate / ".e3-fault-generated"
+            generated.mkdir()
+            self.assertNotEqual(select(obj).returncode, 0)
+
+    def test_sanitizer_and_unresolved_policies_are_fault_scoped(self):
+        sanitize = ROOT / "scripts/e3-retention-sanitizer-import-policy.sh"
+        unresolved = ROOT / "scripts/e3-private-unresolved-policy.sh"
+        script = r'''
+set -euo pipefail
+PROJECT_ROOT=$1
+e3_tuple_kind=fault
+die() { printf '%s\n' "$*" >&2; exit 77; }
+source "$2"
+e3_retention_verify_sanitizer_imports "$3" "$4" "$5"
+source "$6"
+e3_reject_unresolved_private fault "$3" "$3"
+'''
+        accepted = subprocess.run(
+            ["bash", "-c", script, "bash", str(ROOT), str(sanitize),
+             str(TESTS / "fault_package_undefined_symbols.txt"),
+             str(TESTS / "fault_package_sanitized_noninstrumentation_undefined_symbols.txt"),
+             str(TESTS / "fault_package_sanitized_instrumentation_undefined_symbols.txt"),
+             str(unresolved)], capture_output=True, text=True)
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        with tempfile.TemporaryDirectory() as directory:
+            forged = Path(directory) / "forged.txt"
+            forged.write_text("et_e3_private_publish_v1\n")
+            denied = subprocess.run(
+                ["bash", "-c", 'die() { exit 77; }; source "$1"; '
+                 'e3_reject_unresolved_private fault "$2" "$2"',
+                 "bash", str(unresolved), str(forged)], capture_output=True)
+            self.assertEqual(denied.returncode, 77)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -992,9 +992,14 @@ forward-role selector on an authentic idle frame, with fixed native denial,
 one-shot consumption, idle readback/reset, invalid/stale/busy/duplicate and
 unreached negatives. Its native frame test passes under host Clang 22; the
 feature-off frame object is byte-identical to the design base under the same
-host compile flags. The noninstalled Eshkol tuple and exact manifests,
-supported Clang 21/LSan gate, compiled failure/retry matrix and resource
-verdicts remain open. This source candidate does not admit §9 R1/R2.
+host compile flags. The retention-derived noninstalled fault tuple now has
+closed prepare/execute/report wiring, live-frame arm/readback/reset bindings,
+lexical package admission, and source-pinned symbol and closure inventories.
+Host-only checks cover mixed and partial inputs, symlink/ambient roots,
+forged bindings, and isolated native define wiring. Those inventories remain
+compiler-unverified; the supported Clang 21/LSan gate, compiled failure/retry
+matrix and resource verdicts remain open. This source candidate does not admit
+§9 R1/R2.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
