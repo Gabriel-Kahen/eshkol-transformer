@@ -175,6 +175,7 @@ docs/g3/G3_C4_P2_G2_PROTECTED_SCOPE_LEAF.md
 native/g3c4_p2g2_protected_scope_source_closure.txt
 native/g3c4_p2g2_t1_prefix_coordinator_extension.esk
 tests/g3c4/p2_g2_t1_prefix_coordinator_native.c
+tests/g3c4/p2_g2_held_case_witness.h
 tests/g3c4/p2_g2_t1_prefix_coordinator_test.esk
 tests/g3c4/p2_g2_t1_prefix_coordinator_feature_off_test.esk
 tests/g3c4/check_p2_g2_t1_prefix_oracle.py

@@ -185,11 +185,11 @@ assert 'native/g3c4_p2g2_terminal_composer_extension.esk' in off, off
 assert not any('held_holder' in name for name in off), off
 
 closure = (root / 'native/g3c4_p2g2_terminal_held_holder_source_closure.txt').read_text().splitlines()
-assert len(closure) == 198 and len(closure) == len(set(closure))
+assert len(closure) == 199 and len(closure) == len(set(closure))
 assert {'native/g3c4_p2g2_terminal_held_holder_root.esk',
         'native/g3c4_p2g2_terminal_held_holder_extension.esk'}.issubset(closure)
 non_eshkol = [name for name in closure if not name.endswith('.esk')]
-assert len(non_eshkol) == 162
+assert len(non_eshkol) == 163
 required_transitive = {
     'native/e1b_error_consumer_private.esk',
     'lib/transformer/error_internal.esk',

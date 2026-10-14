@@ -19,6 +19,8 @@ SCRIPT = ROOT / "scripts/test-g3c4-p2g2-held-holder-compiled.sh"
 COMPILE_HELPER = ROOT / "scripts/g3c4-held-holder-eshkol-compile.sh"
 SHIM = ROOT / "tests/g3c4/p2_g2_held_holder_compiled_native.c"
 COMPOSER = ROOT / "tests/g3c4/p2_g2_terminal_composer_native.c"
+COORDINATOR = ROOT / "tests/g3c4/p2_g2_t1_prefix_coordinator_native.c"
+CASE_WITNESS = ROOT / "tests/g3c4/p2_g2_held_case_witness.h"
 OWNER = ROOT / "src/eshkol_transformer/g3c4_model_owner.c"
 EXTENSION = ROOT / "native/g3c4_p2g2_terminal_held_holder_extension.esk"
 DEPS = ROOT / "native/g3c4_p2g2_held_holder_compiled_eshkol_deps.txt"
@@ -175,6 +177,49 @@ class HeldHolderCompiledSource(unittest.TestCase):
         with self.assertRaises((ValueError, AssertionError)):
             eos_observation_contract(driver, composer.replace(
                 "coordinator_owner == NULL", "coordinator_owner != NULL", 1))
+
+    def test_later_case_omitted_mark_rejects_reused_context_and_cache(self):
+        shim = SHIM.read_text()
+        coordinator = COORDINATOR.read_text()
+        composer = COMPOSER.read_text()
+        self.assertIn('et_g3c4_p2g2_held_case_begin(&coordinator_held_case_witness)',
+                      shim)
+        self.assertIn('et_g3c4_p2g2_held_case_mark(\n'
+                      '      &coordinator_held_case_witness, context, context->cache)',
+                      coordinator)
+        self.assertIn('!et_g3c4_p2g2_held_case_current(\n'
+                      '           &coordinator_held_case_witness, context,', composer)
+        source = textwrap.dedent('''\
+            #include "p2_g2_held_case_witness.h"
+            int main(void) {
+              int context = 1, cache = 2, other = 3;
+              et_g3c4_p2g2_held_case_witness witness = {0};
+              et_g3c4_p2g2_held_case_begin(&witness);
+              if (et_g3c4_p2g2_held_case_current(&witness, &context, &cache))
+                return 1;
+              et_g3c4_p2g2_held_case_mark(&witness, &context, &cache);
+              if (!et_g3c4_p2g2_held_case_current(&witness, &context, &cache) ||
+                  et_g3c4_p2g2_held_case_current(&witness, &other, &cache) ||
+                  et_g3c4_p2g2_held_case_current(&witness, &context, &other))
+                return 2;
+              et_g3c4_p2g2_held_case_begin(&witness);
+              /* Later case omits mark; addresses may be reused. */
+              if (et_g3c4_p2g2_held_case_current(&witness, &context, &cache))
+                return 3;
+              et_g3c4_p2g2_held_case_mark(&witness, &context, &cache);
+              return et_g3c4_p2g2_held_case_current(
+                  &witness, &context, &cache) ? 0 : 4;
+            }
+        ''')
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = Path(temporary) / "held_case.c"
+            binary = Path(temporary) / "held_case"
+            fixture.write_text(source)
+            subprocess.run([os.environ.get("CC", "cc"), "-std=c11", "-Wall",
+                            "-Wextra", "-Werror", "-pedantic", "-I",
+                            str(CASE_WITNESS.parent), str(fixture), "-o",
+                            str(binary)], check=True, capture_output=True)
+            subprocess.run([str(binary)], check=True, capture_output=True)
 
     def test_eos_boundary_trace_is_ordered_and_test_only(self):
         held, composer, owner = SHIM.read_text(), COMPOSER.read_text(), OWNER.read_text()
@@ -482,7 +527,8 @@ class HeldHolderCompiledSource(unittest.TestCase):
         required_transitive = set(seen[9:17])
         self.assertEqual(len(required_transitive), 8)
         self.assertTrue(required_transitive.issubset(broad))
-        self.assertEqual(sum(not path.endswith('.esk') for path in broad), 162)
+        self.assertIn(CASE_WITNESS.relative_to(ROOT).as_posix(), broad)
+        self.assertEqual(sum(not path.endswith('.esk') for path in broad), 163)
 
     def test_import_manifest_rejects_missing_extra_and_unknown_transitives(self):
         checkpoint = "internal/c1/lib/transformer/checkpoint_internal.esk"

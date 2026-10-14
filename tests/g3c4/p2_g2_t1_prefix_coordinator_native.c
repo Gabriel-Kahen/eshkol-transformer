@@ -188,6 +188,10 @@ static int64_t coordinator_selected;
 static int64_t coordinator_prompt[2];
 static int64_t coordinator_policy[6];
 static int coordinator_saw_prefix;
+#ifdef ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE
+#include "p2_g2_held_case_witness.h"
+static et_g3c4_p2g2_held_case_witness coordinator_held_case_witness;
+#endif
 
 static void coordinator_owner_bytes(uint32_t values[1192],
                                     uint32_t gradients[1192]) {
@@ -249,6 +253,7 @@ int64_t et_g3c4_p2g2_coordinator_test_mark_v1(
     void *candidate, int64_t first, int64_t second) {
   et_g3c4_context_internal *context =
       et_g3c4_admit_idle_call(candidate);
+  int valid;
   if (context == NULL) return -1;
   coordinator_owner = context->owner;
   coordinator_prompt[0] = first;
@@ -265,9 +270,14 @@ int64_t et_g3c4_p2g2_coordinator_test_mark_v1(
   coordinator_prefix_cache_owner = NULL;
   coordinator_precommit_cache_readable = 0;
   coordinator_saw_prefix = 0;
-  return coordinator_entry_cache.length == 0 &&
-         coordinator_entry_binding.ready == 0u &&
-         coordinator_owner_unchanged() ? 0 : -1;
+  valid = coordinator_entry_cache.length == 0 &&
+          coordinator_entry_binding.ready == 0u &&
+          coordinator_owner_unchanged();
+#ifdef ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE
+  if (valid) et_g3c4_p2g2_held_case_mark(
+      &coordinator_held_case_witness, context, context->cache);
+#endif
+  return valid ? 0 : -1;
 }
 
 /* 1..5: bridge cuts; 6..10: prefix precommit; 11/12: stage header/alias. */

@@ -46,7 +46,11 @@ int64_t et_g3c4_p2g2_held_test_phase_v1(int64_t phase) {
     case 3: name = "init.model"; break;
     case 4: name = "init.input"; break;
     case 5: name = "init.mode"; break;
-    case 10: held_trace_case++; name = "case.begin"; break;
+    case 10:
+      held_trace_case++;
+      et_g3c4_p2g2_held_case_begin(&coordinator_held_case_witness);
+      name = "case.begin";
+      break;
     case 11: name = "fresh.begin"; break;
     case 12: name = "fresh.generator"; break;
     case 13: name = "fresh.native"; break;

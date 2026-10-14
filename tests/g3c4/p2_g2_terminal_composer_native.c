@@ -446,6 +446,11 @@ int64_t __wrap_et_g3c4_private_p2g2_eos_first_frame_carrier_v1(
   }
   if (result == 0 &&
       (coordinator_owner == NULL || coordinator_entry_cache_owner == NULL ||
+#ifdef ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE
+       !et_g3c4_p2g2_held_case_current(
+           &coordinator_held_case_witness, context,
+           ((et_g3c4_context_internal *)context)->cache) ||
+#endif
        et_g3c4_pending_output_lookup(context, &pending) != 0 ||
        pending == NULL ||
        et_g3c4_p2g2_coordinator_test_observe_v1(

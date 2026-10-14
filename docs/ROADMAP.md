@@ -3284,8 +3284,16 @@ publication, public G2 and continuation remain pending.
   This test-only successor arms the native observation in those cases and
   makes a missing mark fail closed before the wrapper observes. Focused
   source tests with missing-mark controls and strict on/off C syntax checks
-  pass. Independent source review and a fresh changed-head compiled gate
-  remain pending; this does not admit P2/G2 runtime.
+  pass. Independent review of exact `f712fe48` held fresh static-package
+  preparation: its non-null owner/cache guard could accept a later case's
+  omitted mark after an earlier case had populated both static pointers.
+  This test-only successor resets a case witness at each `held-phase 10`,
+  records successful marks against that case's exact context/cache, and
+  checks the binding before EOS observation. An executable C negative uses
+  identical context/cache addresses in a later unmarked case. All 20 focused
+  source checks and strict on/off C syntax pass. Independent changed-head
+  source review and a fresh compiled diagnostic remain pending; this does
+  not admit P2/G2 runtime.
   The full matrix, public G2, and continuation acceptance remain unproved.
 
 ## Wave 4 — practical pretraining and performance
