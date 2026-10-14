@@ -2011,6 +2011,14 @@ native sample/commit. Its linked Eshkol numerical and fresh-process pinned
 gate remains **HOLD**; it does not bind a persisted C2 pair or establish
 full continuation.
 
+The [private replayed-P1 linked gate candidate](g3/G3_R_REPLAYED_PREFIX_LINKED_GATE.md)
+pins a one-use real-provider Eshkol fixture, test-only sampler interposition,
+ordered source/SHA manifest, and release-gated normal/repeat/sanitizer runner.
+Source-only closure and command checks are prepared; linked compiler execution
+and admission remain **HOLD**. The fixture covers P1 prefix parity at the
+uninterrupted sampler boundary, replayed commit parity, fresh EOS, no-draw
+P2/budget/exhaustion, and same-generator abort/retry.
+
 The [private G3-R fixed-record codec leaf](g3/G3_R_RECORD_CODEC_LEAF.md)
 stages an in-memory 288-byte encoder/decoder using the existing C1 SHA-256.
 It validates the exact policy, G3-S words, history/EOS partition, T1

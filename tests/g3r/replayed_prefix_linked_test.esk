@@ -1,0 +1,262 @@
+(load "m3_package_root.esk")
+(load "m3_call_adapters.esk")
+(load "g3t_model_admission_extension.esk")
+(load "g3t_generator_constructor_extension.esk")
+(load "g3t_prefill_sample_extension.esk")
+(load "g3c4_t1_output_decode_extension.esk")
+(load "g3t_output_text_extension.esk")
+(load "g3t_final_publication_extension.esk")
+(load "g3t_manual_p1_extension.esk")
+(load "g3t_manual_logits_materialize_extension.esk")
+(load "g3m_prefill_p1_extension.esk")
+(load "g3m_prefill_p2_extension.esk")
+(load "g3m_seeded_p1_g1_extension.esk")
+(load "g3t_t1_input_extension.esk")
+(load "g3t_rng_owner_extension.esk")
+(load "g3r_rng_import_extension.esk")
+(load "g3r_replayed_prefix_extension.esk")
+
+(extern i64 linked-arm ptr ptr i64 :real et_g3r_linked_probe_arm_v1)
+(extern i64 linked-result :real et_g3r_linked_probe_result_v1)
+(extern i64 linked-calls :real et_g3r_linked_sample_calls_v1)
+(extern i64 linked-history ptr i64 :real et_g3r_linked_history_word_v1)
+(extern i64 cache-length ptr :real et_g3t_test_cache_length_v1)
+(extern i64 rng-word ptr i64 :real et_g3t_test_rng_word_v1)
+(extern i64 logit-bits ptr i64 :real et_g3t_test_logit_bits_v1)
+(extern i64 generated-bits ptr i64 :real et_g3t_test_generated_logit_bits_v1)
+(extern i64 cache-kv ptr i64 i64 :real et_g3t_test_manual_cache_kv_word_v1)
+(extern i64 output-word ptr i64 :real et_g3t_test_output_word_v1)
+(extern i64 pin-count ptr :real et_g3t_test_pin_count_v1)
+
+(define checks 0)
+(define (check name value)
+  (if value (set! checks (+ checks 1))
+      (begin (display "G3-R linked FAIL: ") (display name) (newline) (exit 1))))
+(define (native-generator generator)
+  (vector-ref (g3t-generator-find generator 'linked) 3))
+(define (native-output output)
+  (vector-ref (g3t-prefill-entry output 'output 'linked) 3))
+(define (policy rng eos budget)
+  (list ':profile 'diagnostic-c2 ':sampling 'categorical
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens budget
+        ':eos eos ':rng rng))
+(define (rng) (g3r-rng-owner-from-checked-words 1 1729 5 0))
+(define (exhausted-rng)
+  (g3r-rng-owner-from-checked-words 1 1729 -1 -1))
+(define (prefix generator token)
+  (let* ((input (g3t-generation-token-input-create token))
+         (logits (g3m-prefill-p1! generator input)))
+    (check "manual P1 owners release"
+           (and (g3t-generation-tensor-release! input)
+                (g3t-generation-tensor-release! logits)))
+    (native-generator generator)))
+(define (same-words? first second count reader)
+  (let loop ((index 0))
+    (if (= index count) #t
+        (and (= (reader first index) (reader second index))
+             (loop (+ index 1))))))
+(define (same-cache? first second)
+  (let outer ((which 0) (index 0))
+    (if (= which 2) #t
+        (and (= (cache-kv first which index) (cache-kv second which index))
+             (if (= index 7) (outer (+ which 1) 0)
+                 (outer which (+ index 1)))))))
+(define (same-bytes? first second)
+  (and (= (bytevector-length first) (bytevector-length second))
+       (let loop ((index 0))
+         (if (= index (bytevector-length first)) #t
+             (and (= (bytevector-u8-ref first index)
+                     (bytevector-u8-ref second index))
+                  (loop (+ index 1)))))))
+(define (same-output? first second first-native second-native)
+  (and (same-words? (native-output first) (native-output second) 11 output-word)
+       (same-bytes? (car (g3t-generation-output-text first))
+                    (car (g3t-generation-output-text second)))
+       (same-words? first-native second-native 256 generated-bits)
+       (same-cache? first-native second-native)
+       (same-words? first-native second-native 4 rng-word)
+       (same-words? first-native second-native 17 linked-history)
+       (= 2 (linked-history first-native 12))
+       (= 1 (linked-history first-native 14))
+       (= 1 (linked-history first-native 15))
+       (= 0 (pin-count first-native)) (= 0 (pin-count second-native))))
+(define (rejected? thunk)
+  (guard (caught (#t (transformer-error? caught))) (thunk) #f))
+
+(define config
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define model
+  (with-region ('g3r-linked-model 65536)
+    (g3t-checked-m3t-model-create config (g3t-checked-m3t-initializer-state 1729))))
+(define tokenizer (t1-private-tokenizer-byte config))
+(check "real M3T eval" (module-eval! model))
+
+;;; Replay first: capture its complete committed prefix before the independent
+;;; uninterrupted reference reaches its sampler. The link probe checks the
+;;; reference's live sampler input, cache, and RNG at that boundary.
+(define source-rng (rng))
+(define reference-rng (rng))
+(define replay (g3t-generator-create model tokenizer (policy source-rng #f 1)))
+(define reference (g3t-generator-create model tokenizer (policy reference-rng #f 1)))
+(define replay-native (prefix replay 65))
+(define reference-native (native-generator reference))
+(check "manual prefix history and zero RNG draw"
+       (and (= 1 (cache-length replay-native))
+            (= 1 (linked-history replay-native 12))
+            (= 1 (linked-history replay-native 15))
+            (= 0 (linked-history replay-native 14))
+            (= 5 (rng-word replay-native 2))
+            (= 0 (rng-word replay-native 3))))
+(check "capture replay prefix" (= 0 (linked-arm replay-native reference-native 0)))
+(define reference-input (g3t-generation-token-input-create 65))
+(define reference-output (g3m-generate-p1-g1! reference reference-input))
+(check "reference prefix matched before its sample" (= 0 (linked-result)))
+(check "replay prefix remains bit exact to reference"
+       (and (same-words? replay-native reference-native 256 logit-bits)
+            (= 5 (rng-word replay-native 2))))
+(check "arm replay sampler" (= 0 (linked-arm replay-native replay-native 0)))
+(define replay-output (g3r-generate-replayed-p1! replay))
+(check "replay sampler enrolled and reached provider" (= 0 (linked-result)))
+(check "uninterrupted and replayed P1/G1 equivalent"
+       (same-output? replay-output reference-output replay-native reference-native))
+(define sampled-id (output-word (native-output reference-output) 6))
+(check "normal sample advanced exactly one RNG block"
+       (and (= 6 (rng-word replay-native 2))
+            (= 6 (rng-word reference-native 2))
+            (= 2 (cache-length replay-native))))
+(check "normal owners release"
+       (and (g3t-output-release! replay-output)
+            (g3t-output-release! reference-output)
+            (g3t-generation-tensor-release! reference-input)
+            (g3t-generator-close! replay) (g3t-generator-close! reference)
+            (g3t-generation-rng-release! source-rng)
+            (g3t-generation-rng-release! reference-rng)))
+
+;;; EOS is a fresh identical-owner scenario; no committed policy is changed.
+(define eos-replay-rng (rng))
+(define eos-reference-rng (rng))
+(define eos-replay (g3t-generator-create model tokenizer
+                         (policy eos-replay-rng sampled-id 1)))
+(define eos-reference (g3t-generator-create model tokenizer
+                            (policy eos-reference-rng sampled-id 1)))
+(define eos-replay-native (prefix eos-replay 65))
+(define eos-reference-native (native-generator eos-reference))
+(check "EOS fresh prefix zero draw" (= 5 (rng-word eos-replay-native 2)))
+(check "arm EOS reference prefix" (= 0 (linked-arm eos-replay-native eos-reference-native 0)))
+(define eos-input (g3t-generation-token-input-create 65))
+(define eos-reference-output (g3m-generate-p1-g1! eos-reference eos-input))
+(check "EOS reference prefix matched" (= 0 (linked-result)))
+(check "arm EOS replay" (= 0 (linked-arm eos-replay-native eos-replay-native 0)))
+(define eos-replay-output (g3r-generate-replayed-p1! eos-replay))
+(check "EOS replay sampled" (= 0 (linked-result)))
+(check "EOS output, terminal history, logits and RNG equivalent"
+       (and (same-output? eos-replay-output eos-reference-output
+                          eos-replay-native eos-reference-native)
+            (= sampled-id (output-word (native-output eos-replay-output) 6))
+            (= 1 (linked-history eos-replay-native 16))))
+(check "EOS owners release"
+       (and (g3t-output-release! eos-replay-output)
+            (g3t-output-release! eos-reference-output)
+            (g3t-generation-tensor-release! eos-input)
+            (g3t-generator-close! eos-replay)
+            (g3t-generator-close! eos-reference)
+            (g3t-generation-rng-release! eos-replay-rng)
+            (g3t-generation-rng-release! eos-reference-rng)))
+
+(define budget-rng (rng))
+(define budget (g3t-generator-create model tokenizer (policy budget-rng #f 0)))
+(define budget-native (prefix budget 65))
+(define before-budget-calls (linked-calls))
+(check "budget-zero replay rejects without sampler"
+       (and (rejected? (lambda () (g3r-generate-replayed-p1! budget)))
+            (= before-budget-calls (linked-calls))
+            (= 1 (cache-length budget-native))
+            (= 5 (rng-word budget-native 2))
+            (= 1 (linked-history budget-native 15))
+            (= 0 (pin-count budget-native))))
+(check "budget owners release"
+       (and (g3t-generator-close! budget)
+            (g3t-generation-rng-release! budget-rng)))
+
+(define p2-rng (rng))
+(define p2 (g3t-generator-create model tokenizer (policy p2-rng #f 1)))
+(define p2-encoded (t1-wave1-tokenizer-encode tokenizer (bytevector 65 66)))
+(define p2-input (g3t-generation-t1-input-create p2-encoded))
+(define p2-logits (g3m-prefill-p2! p2 p2-input))
+(define p2-native (native-generator p2))
+(define before-p2-calls (linked-calls))
+(check "full P2 replay rejects without draw"
+       (and (= 2 (cache-length p2-native))
+            (= 5 (rng-word p2-native 2))
+            (rejected? (lambda () (g3r-generate-replayed-p1! p2)))
+            (= before-p2-calls (linked-calls))
+            (= 2 (cache-length p2-native))
+            (= 5 (rng-word p2-native 2))
+            (= 2 (linked-history p2-native 12))
+            (= 0 (pin-count p2-native))))
+(check "P2 owners release"
+       (and (g3t-generation-tensor-release! p2-logits)
+            (g3t-generation-tensor-release! p2-input)
+            (g3t-generator-close! p2)
+            (g3t-generation-rng-release! p2-rng)))
+
+(define exhausted-source (exhausted-rng))
+(define exhausted (g3t-generator-create model tokenizer
+                    (policy exhausted-source #f 1)))
+(define exhausted-native (prefix exhausted 65))
+(define before-exhausted-calls (linked-calls))
+(check "exhausted categorical replay rejects without draw"
+       (and (rejected? (lambda () (g3r-generate-replayed-p1! exhausted)))
+            (= before-exhausted-calls (linked-calls))
+            (= -1 (rng-word exhausted-native 2))
+            (= -1 (rng-word exhausted-native 3))
+            (= 1 (cache-length exhausted-native))
+            (= 0 (pin-count exhausted-native))))
+(check "exhausted owners release"
+       (and (g3t-generator-close! exhausted)
+            (g3t-generation-rng-release! exhausted-source)))
+
+;;; Inject at the actual G3-S dispatch after output enrollment. Retry the
+;;; exact same native/Eshkol generator, then compare with uninterrupted G1.
+(define retry-rng (rng))
+(define retry (g3t-generator-create model tokenizer (policy retry-rng #f 1)))
+(define retry-native (prefix retry 65))
+(check "arm real sampler failure" (= 0 (linked-arm retry-native retry-native 1)))
+(check "real wrapper aborts after sampler failure"
+       (rejected? (lambda () (g3r-generate-replayed-p1! retry))))
+(check "fault reached sampler, rollback preserved prefix"
+       (and (= 0 (linked-result))
+            (= 1 (cache-length retry-native))
+            (= 5 (rng-word retry-native 2))
+            (= 0 (linked-history retry-native 14))
+            (= 1 (linked-history retry-native 15))
+            (= 0 (pin-count retry-native))))
+(check "arm same-generator retry" (= 0 (linked-arm retry-native retry-native 0)))
+(define retry-output (g3r-generate-replayed-p1! retry))
+(check "same-generator retry sampled" (= 0 (linked-result)))
+;;; Compare against a fresh uninterrupted reference from the same RNG words.
+(define retry-reference-rng (rng))
+(define retry-reference (g3t-generator-create model tokenizer
+                         (policy retry-reference-rng #f 1)))
+(define retry-reference-input (g3t-generation-token-input-create 65))
+(define retry-reference-output
+  (g3m-generate-p1-g1! retry-reference retry-reference-input))
+(check "same-generator retry equals uninterrupted P1/G1"
+       (same-output? retry-output retry-reference-output retry-native
+                     (native-generator retry-reference)))
+(check "retry owners release"
+       (and (g3t-output-release! retry-output)
+            (g3t-output-release! retry-reference-output)
+            (g3t-generation-tensor-release! retry-reference-input)
+            (g3t-generator-close! retry)
+            (g3t-generator-close! retry-reference)
+            (g3t-generation-rng-release! retry-rng)
+            (g3t-generation-rng-release! retry-reference-rng)))
+
+(display "G3-R linked replayed P1 PASS: checks=")
+(display checks)
+(newline)
