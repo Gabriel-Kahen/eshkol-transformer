@@ -9,6 +9,8 @@ runner = (root / "scripts/test-g3r-held-p1-c2-gate.sh").read_text()
 symbol_probe = (root / "scripts/check-g3r-f32-allocator-symbol.sh").read_text()
 bit_bridge = (root / "tests/g3r/held_p1_c2_bit_bridge.c").read_text()
 f32 = (root / "native/f32_tensor.c").read_text()
+m3_call_f32 = (root / "src/eshkol_transformer/m3_call_f32_integration.c").read_text()
+m3t_f32 = (root / "src/eshkol_transformer/m3t_f32_integration.c").read_text()
 corpus_builder = (root / "tests/d2/prepare_public_resources.py").read_text()
 leaves = (
     "g3r_held_o2_adopter_extension.esk",
@@ -142,14 +144,20 @@ def check(source: str, script: str, bits: str) -> None:
     ):
         assert required in provider, required
     assert script.count("-DET_G3R_SAME_OWNER_SAVE_PRIVATE") >= 4
-    for header in ("compile native/f32_tensor.c f32_tensor \\",
+    assert m3_call_f32.count('#include "m3t_f32_integration.c"') == 1
+    assert m3t_f32.count('#include "../../native/f32_tensor.c"') == 1
+    assert "compile native/f32_tensor.c f32_tensor" not in script
+    for header in ("compile src/eshkol_transformer/m3_call_f32_integration.c m3_call_f32_integration \\",
                    "compile native/o2_optimizer.c o2_optimizer \\"):
         command = compile_command(script, header)
         assert "-DET_G3R_SAME_OWNER_SAVE_PRIVATE" in command
         assert "-DET_G3R_CANDIDATE_RETIRE_PRIVATE" in command
-    assert "compile native/f32_tensor.c f32_tensor" in script
     assert '"$PROJECT_ROOT/scripts/check-g3r-f32-allocator-symbol.sh" \\' in script
-    assert '"$evidence/native/f32_tensor.defined-symbols.txt"' in script
+    assert '"$evidence/native/m3_call_f32_integration.o"' in script
+    assert '"$evidence/native/m3_call_f32_integration.defined-symbols.txt"' in script
+    assert 'if ar t "$archive" | grep -Fxq f32_tensor.o; then' in script
+    assert 'counts["et_f32_tensor_test_fail_alloc_after_v1"] != 1' in script
+    assert 'if repeated:' in script
     assert 'LC_ALL=C nm -g --defined-only --format=posix "$object" > "$symbols"' in symbol_probe
     assert "grep -Eq '^et_f32_tensor_test_fail_alloc_after_v1 T [[:xdigit:]]+ [[:xdigit:]]+$'" in symbol_probe
     assert "-DET_F32_TENSOR_TESTING" in script
@@ -221,7 +229,7 @@ except (AssertionError, ValueError):
     pass
 else:
     raise AssertionError("missing allocator symbol probe escaped")
-for header in ("compile native/f32_tensor.c f32_tensor \\",
+for header in ("compile src/eshkol_transformer/m3_call_f32_integration.c m3_call_f32_integration \\",
                "compile native/o2_optimizer.c o2_optimizer \\"):
     command = compile_command(runner, header)
     old_flags = runner.replace(
@@ -233,4 +241,15 @@ for header in ("compile native/f32_tensor.c f32_tensor \\",
         pass
     else:
         raise AssertionError(f"missing owned-span prerequisite escaped: {header}")
-print(f"held P1/C2 source aggregate: pass ({len(mutations) + 4} mutations; unadmitted)")
+duplicate_owner = runner.replace(
+    "compile src/eshkol_transformer/m3_call_f32_integration.c m3_call_f32_integration \\",
+    "compile native/f32_tensor.c f32_tensor -DET_F32_TENSOR_TESTING\n"
+    "compile src/eshkol_transformer/m3_call_f32_integration.c m3_call_f32_integration \\", 1)
+assert duplicate_owner != runner
+try:
+    check(fixture, duplicate_owner, bit_bridge)
+except (AssertionError, ValueError):
+    pass
+else:
+    raise AssertionError("duplicate F32 owner recipe escaped")
+print(f"held P1/C2 source aggregate: pass ({len(mutations) + 5} mutations; unadmitted)")

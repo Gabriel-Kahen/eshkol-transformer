@@ -2217,6 +2217,20 @@ and routes the post-clone fault through a private query initialized to the
 actual P1 topology function. Focused source gates pass; the sealed `73d87b49`
 compiler failure remains unadmitted until a fresh pinned aggregate compiles
 and exercises the held-owner and failure-cut checks.
+The next one-use gate on `601f760f` passed source preflight and built the
+native archive, but executable linking failed with duplicate F32 definitions:
+`m3_call_f32_integration.c` includes `m3t_f32_integration.c`, which already
+includes `native/f32_tensor.c`, while the runner also archived a separate
+`f32_tensor.o`. The bounded link repair makes M3 call the sole F32 registry
+owner in this fixture, carries the same-owner and candidate-retirement flags
+onto that compilation, and probes its F32 test allocator symbol. An archive
+inventory now rejects a second F32 object, missing allocator, or repeated F32
+definitions. The source gate rejects a duplicate-owner mutation; a focused
+host Clang 22 compile and relocatable link over the repaired archive members
+pass with 79 unique F32 definitions. This local link check reuses prior gate
+objects and does not establish a supported Clang 21 Eshkol executable or any
+runtime behavior. A fresh pinned compiled/runtime gate and independent review
+remain required before the held P1/C2 claim can be admitted.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),

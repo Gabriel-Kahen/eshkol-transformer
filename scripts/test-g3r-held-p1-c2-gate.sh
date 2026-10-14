@@ -45,13 +45,6 @@ compile() {
 compile native/i2_wave2_package_bridge.c i2_bridge \
   -DET_I2_NATIVE_HELPERS_ONLY -DET_M3T_PACKAGE_BUILD \
   -DET_C2_I2_MODEL_COPY
-compile native/f32_tensor.c f32_tensor \
-  -DET_F32_TENSOR_TESTING -DET_F32_TENSOR_STORAGE_QUERY_PRIVATE \
-  -DET_G3R_SAME_OWNER_SAVE_PRIVATE -DET_G3R_CANDIDATE_RETIRE_PRIVATE
-"$PROJECT_ROOT/scripts/check-g3r-f32-allocator-symbol.sh" \
-  "$evidence/native/f32_tensor.o" \
-  "$evidence/native/f32_tensor.defined-symbols.txt" || \
-  die "G3-R provider cut lacks the linked F32 test allocator"
 compile native/o2_wave2_package_bridge.c o2_bridge \
   -DET_O2_NATIVE_HELPERS_ONLY -DET_C2_O2_RECONSTRUCT_BRIDGE \
   -DET_G3R_SAME_OWNER_SAVE_PRIVATE
@@ -64,9 +57,15 @@ for source in data_io checkpoint_io kernel_abi t1_i64_shell d2_native \
 done
 compile src/eshkol_transformer/m3_i64_integration.c m3_i64_integration \
   -DET_I64_TENSOR_TESTING -DET_I64_TENSOR_STORAGE_QUERY_PRIVATE
+# M3 call includes M3T F32, which includes native/f32_tensor.c. Compile it
+# once so public F32 symbols and the private registry have one linked owner.
 compile src/eshkol_transformer/m3_call_f32_integration.c m3_call_f32_integration \
   -DET_F32_TENSOR_TESTING -DET_F32_TENSOR_STORAGE_QUERY_PRIVATE \
-  -DET_G3R_SAME_OWNER_SAVE_PRIVATE
+  -DET_G3R_SAME_OWNER_SAVE_PRIVATE -DET_G3R_CANDIDATE_RETIRE_PRIVATE
+"$PROJECT_ROOT/scripts/check-g3r-f32-allocator-symbol.sh" \
+  "$evidence/native/m3_call_f32_integration.o" \
+  "$evidence/native/m3_call_f32_integration.defined-symbols.txt" || \
+  die "G3-R M3/F32 owner lacks the linked F32 test allocator"
 compile native/o2_optimizer.c o2_optimizer \
   -DET_G3R_SAME_OWNER_SAVE_PRIVATE -DET_G3R_CANDIDATE_RETIRE_PRIVATE
 compile native/a2_kv_cache.c a2_kv_cache \
@@ -93,6 +92,29 @@ compile native/g3r_joint_hold.c g3r_joint_hold \
 compile tests/g3r/held_p1_c2_bit_bridge.c held_p1_c2_bit_bridge
 ar rcsD "$evidence/native/libg3r_held_p1_c2_gate.a" \
   "$evidence/native"/*.o
+# A separate native/f32_tensor.o would duplicate M3's included F32 registry.
+archive="$evidence/native/libg3r_held_p1_c2_gate.a"
+if ar t "$archive" | grep -Fxq f32_tensor.o; then
+  die "G3-R archive contains a second F32 owner"
+fi
+LC_ALL=C nm -g --defined-only --format=posix "$archive" > \
+  "$evidence/native/archive-defined-symbols.txt"
+PYTHONDONTWRITEBYTECODE=1 python3 - \
+  "$evidence/native/archive-defined-symbols.txt" <<'PY_ARCHIVE'
+from collections import Counter
+from pathlib import Path
+import sys
+
+symbols = [line.split()[0] for line in Path(sys.argv[1]).read_text().splitlines()
+           if line.startswith("et_f32_")]
+counts = Counter(symbols)
+if counts["et_f32_tensor_test_fail_alloc_after_v1"] != 1:
+    raise SystemExit("G3-R archive lacks exactly one linked F32 test allocator")
+repeated = sorted(symbol for symbol, count in counts.items() if count != 1)
+if repeated:
+    raise SystemExit("G3-R archive has duplicate F32 definitions: " +
+                     ", ".join(repeated))
+PY_ARCHIVE
 
 env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
   XDG_CACHE_HOME="$evidence/cache" ESHKOL_CXX_COMPILER="$cxx" \
