@@ -2,6 +2,7 @@
 ;;; One D2/T2/I2/P1 registry also hosts M3T, G3 and C2. The T1 and T2 byte
 ;;; tokenizer shells remain distinct; only their checked fingerprint matches.
 (load "d2_wave2_root.esk")
+(load "cli3_generate_t2_bridge.esk")
 (load "c2_d2_cursor_pair_extension.esk")
 (load "o2_wave2_extension.esk")
 (load "c2_x1_canonical_extension.esk")
@@ -108,7 +109,7 @@
              (x1-private-config-parse
                "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
              '()))
-         (t1 (t1-private-tokenizer-byte config))
+         (t1 (t2-private-tokenizer-byte config))
          (t2 (t2-wave2-tokenizer-byte config))
          (dataset (d2-token-dataset-open (dataset-config directory) t2))
          (model (with-region ('g3r-held-p1-model 65536)
@@ -190,7 +191,8 @@
 (define p1 (clone original held))
 (check "exact P1 record and fourteen-path tied topology"
        (and (g3r-joint-p1-provenance-live-record p1)
-            (= (length (vector-ref (vector-ref p1 3) 0)) 14)
+            (equal? (vector-ref (vector-ref p1 3) 0)
+                    (handle-paths (vector-ref original 5)))
             (equal? (vector-ref (vector-ref p1 3) 2)
                     '((("head" "weight") ("token_embedding" "weight"))))))
 (check "held original bits and history unchanged by clone"
@@ -265,14 +267,14 @@
                    (vector-ref preclaim 1) (vector-ref preclaim 6)
                    (vector-ref preclaim-held 1) invalid-controls))))
 (define clone-count-before (i2-owned-clone-live-count-internal))
-(define original-topology state-dict-c2-parameter-topology-internal)
-(set! state-dict-c2-parameter-topology-internal
+(define original-topology-query g3r-joint-p1-topology-query)
+(set! g3r-joint-p1-topology-query
   (lambda (state operation)
-    (let ((topology (original-topology state operation)))
+    (let ((topology (original-topology-query state operation)))
       (vector '() (vector-ref topology 1) (vector-ref topology 2)))))
 (check "provider clone with malformed topology rejects"
        (error? (lambda () (clone preclaim preclaim-held))))
-(set! state-dict-c2-parameter-topology-internal original-topology)
+(set! g3r-joint-p1-topology-query original-topology-query)
 (check "failed topology releases detached P1 and preserves held originals"
        (and (= clone-count-before (i2-owned-clone-live-count-internal))
             (= 1 (g3r-joint-o2-lifecycle (vector-ref preclaim-held 0)))

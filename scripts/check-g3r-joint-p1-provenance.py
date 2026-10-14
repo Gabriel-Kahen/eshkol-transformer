@@ -50,9 +50,11 @@ def check(p: str, b: str, j: str, g: str) -> None:
     assert "(eq? (vector-ref witness index)" in witness
     assert "(vector-ref binding index)" in witness
     assert "(equal? (vector-ref witness 9) (vector-ref binding 9))" in witness
+    assert p.count("(define g3r-joint-p1-topology-query\n"
+                   "  state-dict-c2-parameter-topology-internal)") == 1
     topology = p[p.index("(define (g3r-joint-p1-topology-check!"):p.index(
         "(define (g3r-joint-p1-provenance!")]
-    for required in ("state-dict-c2-parameter-topology-internal",
+    for required in ("(g3r-joint-p1-topology-query state operation)",
                      "(= index 14)", "m3t-paths index", "m3t-shapes index",
                      '((("head" "weight") ("token_embedding" "weight")))',
                      "(null? remaining-paths)", "(null? remaining-shapes)"):
@@ -141,6 +143,8 @@ assert all(private_witness[i] is not binding_a[i] for i in range(1, 9))
 assert private_witness[9] != binding_a[9]
 
 mutations = (
+    (leaf.replace("(g3r-joint-p1-topology-query state operation)",
+                  "(vector '() '() '())"), binding, joint, g3),
     (leaf.replace("(= index 14)", "(= index 13)"), binding, joint, g3),
     (leaf.replace('((("head" "weight") ("token_embedding" "weight")))', "'()"), binding, joint, g3),
     (leaf.replace("m3t-shapes index", "m3t-paths index"), binding, joint, g3),

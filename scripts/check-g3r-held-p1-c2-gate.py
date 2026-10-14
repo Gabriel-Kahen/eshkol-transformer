@@ -4,6 +4,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 fixture = (root / "tests/g3r/held_p1_c2_gate.esk").read_text()
+bridge = (root / "native/cli3_generate_t2_bridge.esk").read_text()
 runner = (root / "scripts/test-g3r-held-p1-c2-gate.sh").read_text()
 symbol_probe = (root / "scripts/check-g3r-f32-allocator-symbol.sh").read_text()
 bit_bridge = (root / "tests/g3r/held_p1_c2_bit_bridge.c").read_text()
@@ -61,6 +62,20 @@ def check(source: str, script: str, bits: str) -> None:
     for leaf in leaves:
         assert source.count(f'(load "{leaf}")') == 1
         assert leaf not in (root / "Makefile").read_text()
+    assert source.count('(load "cli3_generate_t2_bridge.esk")') == 1
+    assert "(define t1-private-entry t2-private-entry)" in bridge
+    assert "(t2-private-raise category operation message)" in bridge
+    assert "(define t1-wave1-native-fail t2-wave2-native-fail)" in bridge
+    assert source.index('(load "d2_wave2_root.esk")') < source.index(
+        '(load "cli3_generate_t2_bridge.esk")') < source.index(
+        '(load "g3t_generator_constructor_extension.esk")')
+    assert "(t1 (t2-private-tokenizer-byte config))" in source
+    assert "(t2 (t2-wave2-tokenizer-byte config))" in source
+    assert "(not (eq? t1 t2))" in source
+    assert ("(equal? (vector-ref (vector-ref p1 3) 0)\n"
+            "                    (handle-paths (vector-ref original 5)))") in source
+    assert "(define original-topology-query g3r-joint-p1-topology-query)" in source
+    assert "(set! g3r-joint-p1-topology-query original-topology-query)" in source
     assert source.index('(load "c2_training_state_extension.esk")') < source.index(
         '(load "g3r_joint_issued_o2_adopter_extension.esk")')
     assert source.index('(load "g3r_joint_issued_o2_adopter_extension.esk")') < source.index(
@@ -159,6 +174,10 @@ def check(source: str, script: str, bits: str) -> None:
 
 check(fixture, runner, bit_bridge)
 mutations = (
+    (fixture.replace('(load "cli3_generate_t2_bridge.esk")', ""), bit_bridge),
+    (fixture.replace('(not (eq? t1 t2))', '#t'), bit_bridge),
+    (fixture.replace('(set! g3r-joint-p1-topology-query original-topology-query)',
+                     '#t'), bit_bridge),
     (fixture.replace('(load "g3r_joint_begin_extension.esk")', ""), bit_bridge),
     (fixture.replace('(load "m3_schedule.esk")', ""), bit_bridge),
     (fixture.replace('(load "m3_model_extension.esk")', ""), bit_bridge),

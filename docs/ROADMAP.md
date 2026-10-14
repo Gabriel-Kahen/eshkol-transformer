@@ -2206,6 +2206,17 @@ pipe early. The probe now records complete defined-symbol output and requires
 the exact global text symbol. A source-closure mutation and generated-object
 positive/missing-symbol regressions cover this repair. The failed gate remains
 unadmitted; a fresh pinned compiled run and independent review remain required.
+The next one-use gate on `73d87b49` passed native provider linking but stopped
+at Eshkol compilation. Its D2/T2 root did not load the existing G3 bridge for
+T1 predecessor lookups, the held fixture used an unavailable T1 constructor
+and `length` under `--no-stdlib`, and its topology fault tried to reassign an
+imported P1 binding. The isolated source repair loads the reviewed T2/G3
+bridge, constructs two distinct byte-tokenizer shells in the successor
+registry, compares detached P1 paths with the exact original handle paths,
+and routes the post-clone fault through a private query initialized to the
+actual P1 topology function. Focused source gates pass; the sealed `73d87b49`
+compiler failure remains unadmitted until a fresh pinned aggregate compiles
+and exercises the held-owner and failure-cut checks.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),

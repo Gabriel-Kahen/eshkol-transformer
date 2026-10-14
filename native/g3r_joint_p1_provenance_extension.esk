@@ -32,8 +32,10 @@
 
 ;;; The topology excludes the secondary tied path. The P1-owned clone must
 ;;; reproduce the fourteen canonical M3T parameters and the one tied alias.
+(define g3r-joint-p1-topology-query
+  state-dict-c2-parameter-topology-internal)
 (define (g3r-joint-p1-topology-check! state operation)
-  (let* ((topology (state-dict-c2-parameter-topology-internal state operation))
+  (let* ((topology (g3r-joint-p1-topology-query state operation))
          (paths (vector-ref topology 0))
          (shapes (vector-ref topology 1)))
     (if (not (equal? (vector-ref topology 2)
