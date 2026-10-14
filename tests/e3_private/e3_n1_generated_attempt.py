@@ -4,6 +4,7 @@
 import hashlib
 import json
 import os
+import resource
 import select
 import signal
 import socket
@@ -19,7 +20,7 @@ FAULTS = {None, "before_hold", "after_hold", "after_receipt", "after_seal",
 GENERATED = b"e3-n1-generated-stream-v1\n"
 MAX_REPORT = 8192
 MAX_OBSERVER_REPORT = 16384
-FINITE_SCHEMA = "e3-n1-finite-observer-diagnostic-v1"
+FINITE_SCHEMA = "e3-n1-finite-observer-diagnostic-v2"
 
 
 class Hold(Exception):
@@ -489,8 +490,16 @@ def _complete_inner_peak(record):
     return subtotal
 
 
+def _caller_peak_rss_bytes():
+    """Linux lifetime high-water RSS through this sample, including prior work."""
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    if type(peak) is not int or peak <= 0:
+        raise ValueError("caller-peak-unverified")
+    return peak * 1024
+
+
 def _finite_observer_diagnostic(fault=None):
-    """Generated-only final observer peak; the passive caller boundary is unadmitted."""
+    """Generated-only finite peaks and sampled caller peak; custody remains HOLD."""
     if fault not in FAULTS:
         raise ValueError("unknown-generated-fault")
     start = _now()
@@ -589,4 +598,12 @@ def _finite_observer_diagnostic(fault=None):
     result["reason"] = "declared-peak-arithmetic-observed"
     result["inner_observation"] = inner
     result["declared_finite_peak_sum_bytes"] = subtotal + reaped[1]
+    try:
+        caller_peak = _caller_peak_rss_bytes()
+    except (OSError, ValueError):
+        result["reason"] = "caller-peak-unverified"
+        return result
+    result["caller_peak_rss_bytes_at_sample"] = caller_peak
+    result["declared_plus_caller_peak_sum_bytes"] = (
+        result["declared_finite_peak_sum_bytes"] + caller_peak)
     return result

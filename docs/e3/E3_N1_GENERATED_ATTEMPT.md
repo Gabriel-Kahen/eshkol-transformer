@@ -98,13 +98,22 @@ Only an exact, duplicate-key-free inner report with three successful
 declared roles, matching setup/role peak arithmetic, and an inner interval
 no longer than the outer interval emits `declared_finite_peak_sum_bytes`.
 This is the sum of the reported setup and role peaks plus the final observer
-peak; it is a diagnostic of the **declared** graph, not a whole-attempt RSS
-bound. The wrapper always returns HOLD and has no real-source mode. Tests
-exercise a late observer allocation, a partial attempt, missing report,
-inconsistent elapsed time and peak subtotal, observer failure, descendant
-report injection, duplicate reports and unavailable credential support. The
-passive caller itself remains active when its result is produced; its final
-RSS and cessation are not measured by this contract.
+peak. In diagnostic schema v2, after validating that report and computing this
+sum, the passive caller samples Linux `RUSAGE_SELF.ru_maxrss` and adds its
+lifetime high-water RSS as `caller_peak_rss_bytes_at_sample` and
+`declared_plus_caller_peak_sum_bytes`. The lifetime high-water may include
+unrelated work before this attempt, so it is conservative for the caller only
+through the sample. If the sample is unavailable or invalid, the combined sum
+is absent and the reason is `caller-peak-unverified`. An incomplete observer
+report also emits no combined sum. Tests check sample ordering, exact
+arithmetic and those fail-closed cases, as well as a late observer allocation,
+partial attempt, missing report, inconsistent elapsed time and peak subtotal,
+observer failure, descendant report injection, duplicate reports and
+unavailable credential support. These are diagnostics of the **declared**
+graph and sampled caller, not a whole-attempt RSS bound. The wrapper always
+returns HOLD and has no real-source mode. The passive caller remains active
+after the sample; its final RSS and cessation are not measured by this
+contract.
 
 The separate
 [finite-closure diagnostic](E3_N1_F32_FINITE_CLOSURE_PROBE.md) exercises a
@@ -119,8 +128,9 @@ and its nested setup report remain same-UID and unprotected; the binding does
 not authenticate the report's assertions. Even a complete declared sum is
 not a trustworthy whole-attempt RSS bound. The
 original `probe` leaves its active observer outside its measured interval;
-the finite wrapper measures that observer through EOF and final `wait4`, but
-its passive caller is not an admitted attempt boundary and remains active.
+the finite wrapper measures that observer through EOF and final `wait4`, and
+samples the passive caller's lifetime high-water RSS. The caller is not an
+admitted attempt boundary and remains active after the sample.
 All actors run as the caller UID in its existing cgroup. Pipes are not an
 authenticated protected channel, and the stubs have no v3 signatures or
 protected stores.

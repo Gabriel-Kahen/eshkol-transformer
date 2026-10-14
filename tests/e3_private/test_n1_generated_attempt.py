@@ -167,6 +167,11 @@ class GeneratedAttemptTests(unittest.TestCase):
         self.assertEqual(normal["declared_finite_peak_sum_bytes"],
                          normal["inner_observation"]["observed_peak_sum_bytes"] +
                          normal["observer_peak_rss_bytes"])
+        self.assertEqual(normal["schema"], attempt.FINITE_SCHEMA)
+        self.assertGreater(normal["caller_peak_rss_bytes_at_sample"], 0)
+        self.assertEqual(normal["declared_plus_caller_peak_sum_bytes"],
+                         normal["declared_finite_peak_sum_bytes"] +
+                         normal["caller_peak_rss_bytes_at_sample"])
 
         real_emit = attempt._emit_observer_report
 
@@ -185,10 +190,52 @@ class GeneratedAttemptTests(unittest.TestCase):
                          late["inner_observation"]["observed_peak_sum_bytes"] +
                          late["observer_peak_rss_bytes"])
 
+    def test_caller_peak_is_sampled_after_report_validation(self):
+        validated = False
+        real_complete = attempt._complete_inner_peak
+
+        def validate(record):
+            nonlocal validated
+            subtotal = real_complete(record)
+            validated = True
+            return subtotal
+
+        def sample():
+            self.assertTrue(validated)
+            return 12_345_678
+
+        with mock.patch.object(attempt, "_complete_inner_peak", side_effect=validate), \
+                mock.patch.object(attempt, "_caller_peak_rss_bytes", side_effect=sample):
+            record = attempt._finite_observer_diagnostic()
+        self.assertEqual(record["reason"], "declared-peak-arithmetic-observed")
+        self.assertEqual(record["caller_peak_rss_bytes_at_sample"], 12_345_678)
+        self.assertEqual(record["declared_plus_caller_peak_sum_bytes"],
+                         record["declared_finite_peak_sum_bytes"] + 12_345_678)
+
+    def test_unavailable_caller_peak_omits_combined_sum(self):
+        for failure in (OSError("unavailable"), ValueError("bad sample")):
+            with self.subTest(failure=failure), \
+                    mock.patch.object(attempt, "_caller_peak_rss_bytes", side_effect=failure):
+                record = attempt._finite_observer_diagnostic()
+            self.assertEqual(record["reason"], "caller-peak-unverified")
+            self.assertIn("declared_finite_peak_sum_bytes", record)
+            self.assertNotIn("caller_peak_rss_bytes_at_sample", record)
+            self.assertNotIn("declared_plus_caller_peak_sum_bytes", record)
+            self.assertEqual(record["resource_proof"], "HOLD")
+        for bad in (0, -1, 1.5, True):
+            with self.subTest(bad=bad), \
+                    mock.patch.object(attempt.resource, "getrusage",
+                                      return_value=mock.Mock(ru_maxrss=bad)):
+                with self.assertRaisesRegex(ValueError, "caller-peak-unverified"):
+                    attempt._caller_peak_rss_bytes()
+
     def test_finite_observer_rejects_partial_and_malformed_reports(self):
-        partial = attempt._finite_observer_diagnostic("after_hold")
+        with mock.patch.object(attempt, "_caller_peak_rss_bytes") as sample:
+            partial = attempt._finite_observer_diagnostic("after_hold")
+        sample.assert_not_called()
         self.assertEqual(partial["reason"], "observer-report-unverified")
         self.assertNotIn("declared_finite_peak_sum_bytes", partial)
+        self.assertNotIn("declared_plus_caller_peak_sum_bytes", partial)
 
         with mock.patch.object(attempt, "_emit_observer_report", return_value=None):
             empty = attempt._finite_observer_diagnostic()
