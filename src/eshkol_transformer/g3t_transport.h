@@ -52,6 +52,12 @@ int64_t et_g3t_private_committed_save_copy_v1(
 #endif
 int64_t et_g3t_private_generator_close_v1(void *context);
 int64_t et_g3t_private_call_acquire_v1(void *context, int64_t call_kind);
+#ifdef ET_G3R_REPLAYED_PREFIX_PRIVATE
+/* Enter generated kind-2 from an authentic idle committed P1 owner.
+ * expected_model is the exact native M3 owner held by the same registry. */
+int64_t et_g3t_private_replayed_prefix_call_acquire_v1(
+    void *context, void *expected_model);
+#endif
 int64_t et_g3t_private_call_abort_v1(void *context);
 #ifdef ET_G3T_PREFILL_SAMPLE_PRIVATE
 void *et_g3t_private_input_from_token_v1(int64_t token);

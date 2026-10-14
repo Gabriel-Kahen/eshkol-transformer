@@ -104,6 +104,13 @@
 #error "G3-R history requires final G3-T P1/P2 and manual decode commits"
 #endif
 #endif
+#ifdef ET_G3R_REPLAYED_PREFIX_PRIVATE
+#if !defined(ET_G3R_COMMITTED_HISTORY_PRIVATE) || \
+    !defined(ET_G3T_PREFILL_SAMPLE_PRIVATE) || \
+    !defined(ET_G3T_OUTPUT_TEXT_PRIVATE)
+#error "G3-R replayed-prefix generation requires committed history and output transport"
+#endif
+#endif
 #ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
 #if !defined(ET_G3R_COMMITTED_SAVE_SNAPSHOT_PRIVATE) || \
     !defined(ET_G3T_PREFILL_SAMPLE_PRIVATE)
@@ -279,6 +286,9 @@ typedef struct g3t_context {
 #endif
   int64_t sample_token, successor_rng[4];
   int prefill_committed, sampled;
+#ifdef ET_G3R_REPLAYED_PREFIX_PRIVATE
+  int replayed_prefix_call;
+#endif
   const void *binding_identities[14];
   unsigned char binding_values[4736];
   int binding_ready;
@@ -1215,6 +1225,104 @@ int64_t et_g3t_private_call_acquire_v1(void *candidate, int64_t call_kind) {
   o->active = c;
   return 0;
 }
+#ifdef ET_G3R_REPLAYED_PREFIX_PRIVATE
+static int64_t g3r_replayed_p1_cache_check(g3t_context *c) {
+  et_a2_kv_cache_read_borrow *borrow = NULL;
+  const et_kernel_tensor_view_v1 *keys = NULL, *values = NULL;
+  const et_kernel_tensor_view_v1 *lengths = NULL, *mask = NULL;
+  et_kernel_error error;
+  if (g3t_capture_kernel(et_a2_kv_cache_read_borrow_begin_v1(
+          c->cache, &borrow, &error), &error)) return g3t_error_category;
+  if (g3t_capture_kernel(et_a2_kv_cache_read_borrow_layer_v1(
+          borrow, 0, &keys, &values, &lengths, &mask, &error), &error))
+    goto done;
+  if (!keys || !values || !lengths || !mask ||
+      keys->struct_size != sizeof(*keys) ||
+      values->struct_size != sizeof(*values) ||
+      lengths->struct_size != sizeof(*lengths) ||
+      mask->struct_size != sizeof(*mask) ||
+      !keys->data || !values->data || !lengths->data || !mask->data ||
+      !keys->dtype || strcmp(keys->dtype, "f32") ||
+      !values->dtype || strcmp(values->dtype, "f32") ||
+      !lengths->dtype || strcmp(lengths->dtype, "i64") ||
+      !mask->dtype || strcmp(mask->dtype, "bool") ||
+      !keys->device || strcmp(keys->device, "cpu") ||
+      !values->device || strcmp(values->device, "cpu") ||
+      !lengths->device || strcmp(lengths->device, "cpu") ||
+      !mask->device || strcmp(mask->device, "cpu") ||
+      keys->layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR ||
+      values->layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR ||
+      lengths->layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR ||
+      mask->layout != ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR ||
+      keys->offset_bytes || values->offset_bytes ||
+      lengths->offset_bytes || mask->offset_bytes ||
+      keys->rank != 4 || values->rank != 4 ||
+      !keys->shape || !values->shape ||
+      keys->shape[0] != 1 || keys->shape[1] != 2 ||
+      keys->shape[2] != 2 || keys->shape[3] != 2 ||
+      values->shape[0] != 1 || values->shape[1] != 2 ||
+      values->shape[2] != 2 || values->shape[3] != 2 ||
+      keys->byte_length != 32 || values->byte_length != 32 ||
+      lengths->rank != 1 || !lengths->shape || lengths->shape[0] != 1 ||
+      lengths->byte_length != sizeof(int64_t) ||
+      mask->rank != 2 || !mask->shape ||
+      mask->shape[0] != 1 || mask->shape[1] != 2 ||
+      mask->byte_length != 2 ||
+      ((const int64_t *)lengths->data)[0] != 1 ||
+      ((const uint8_t *)mask->data)[0] != 1 ||
+      ((const uint8_t *)mask->data)[1] != 0)
+    g3t_bad(G3T_STATE, G3T_TOPOLOGY);
+done: {
+    int64_t domain = g3t_error_domain, category = g3t_error_category;
+    int64_t code = g3t_error_code;
+    if (et_a2_kv_cache_read_borrow_end_v1(&borrow, &error)) abort();
+    return category ? g3t_fail(domain, category, code) : 0;
+  }
+}
+int64_t et_g3t_private_replayed_prefix_call_acquire_v1(
+    void *candidate, void *expected_model) {
+  g3t_clear();
+  g3t_context *c = g3t_admit(candidate, 0);
+  if (!c) return g3t_error_category;
+  owner *o = g3t_model(expected_model);
+  if (!o) return g3t_error_category;
+  if (c->model != o) return g3t_bad(G3T_STATE, G3T_TOPOLOGY);
+  if (c->h.busy || o->active || c->pins.held_mask || !c->cache ||
+      !c->prefill_committed || !c->binding_ready || c->call_kind ||
+      c->final_committed || c->replayed_prefix_call ||
+      c->frame.active || c->frame.kind || c->frame.transaction ||
+      c->frame.candidate_cache || c->pending_output || c->pending_logits)
+    return g3t_bad(G3T_STATE, G3T_LIFECYCLE);
+  if (!g3t_policy_valid(c->policy[0], c->policy[1], c->policy[2],
+                        c->policy[3], c->policy[4], c->policy[5]) ||
+      c->policy[4] != 1 || c->rng[0] != 1 || c->rng[1] < 0 ||
+      !g3t_history_valid(c) || c->history_pending_g1)
+    return g3t_bad(G3T_STATE, G3T_CONFIG);
+  /* P2 is a full diagnostic-C2 context; reject before pinning or drawing. */
+  if (c->history_length != 1 || c->history_prompt_length != 1 ||
+      c->history_generated_count || c->history_manual_count ||
+      c->history_generated_eos_terminal)
+    return g3t_bad(G3T_SHAPE, G3T_CONFIG);
+  if (c->policy[0] == 1 && c->rng[2] == -1 && c->rng[3] == -1)
+    return g3t_bad(G3T_STATE, G3T_DRAW_EXHAUSTION);
+  et_f32_tensor_error error;
+  if (et_g3t_model_pins_begin_internal(o->p,
+          (const void *const *)o->handles, &c->pins, &error))
+    return g3t_f32_failure(&error);
+  if (g3t_check_binding(c) || g3r_replayed_p1_cache_check(c)) {
+    int64_t domain = g3t_error_domain, category = g3t_error_category;
+    int64_t code = g3t_error_code;
+    et_g3t_model_pins_end_internal(&c->pins);
+    return g3t_fail(domain, category, code);
+  }
+  c->call_kind = 2;
+  c->replayed_prefix_call = 1;
+  c->history_pending_g1 = 1;
+  c->h.busy = 1;
+  o->active = c;
+  return 0;
+}
+#endif
 #ifdef ET_G3T_PREFILL_SAMPLE_PRIVATE
 #ifdef ET_G3T_FULL_REQUEST_PREFLIGHT_PRIVATE
 /* Pure admission: no pins, output, RNG draw, cache transaction, or enrollment. */
@@ -1576,7 +1684,11 @@ void *et_g3t_private_output_reserve_v1(void *candidate, int64_t prompt_length) {
       prompt_length != 1 ||
 #endif
       c->pending_output ||
-      c->prefill_committed || c->frame.active) {
+      (c->prefill_committed
+#ifdef ET_G3R_REPLAYED_PREFIX_PRIVATE
+       && !c->replayed_prefix_call
+#endif
+       ) || c->frame.active) {
     g3t_bad(G3T_STATE, G3T_CONFIG);
     return NULL;
   }
@@ -3040,6 +3152,9 @@ int64_t et_g3t_private_call_finish_v1(void *candidate) {
   c->call_kind = 0;
   c->final_committed = 0;
   c->sampled = 0;
+#ifdef ET_G3R_REPLAYED_PREFIX_PRIVATE
+  c->replayed_prefix_call = 0;
+#endif
   c->sample_token = 0;
   memset(c->successor_rng, 0, sizeof(c->successor_rng));
   return 0;
@@ -3169,6 +3284,12 @@ int64_t et_g3t_private_call_abort_v1(void *candidate) {
   }
 #endif
   c->sampled = 0;
+#ifdef ET_G3R_REPLAYED_PREFIX_PRIVATE
+  if (c->replayed_prefix_call) {
+    c->history_pending_g1 = 0;
+    c->replayed_prefix_call = 0;
+  }
+#endif
   c->sample_token = 0;
   memset(c->successor_rng, 0, sizeof(c->successor_rng));
   et_g3t_model_pins_end_internal(&c->pins);

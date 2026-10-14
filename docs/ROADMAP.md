@@ -2003,6 +2003,14 @@ publication transaction. Full G3-R still requires a separately admitted larger
 repeated-decode and later-EOS continuation profile. No persistence implementation
 or save/reload equivalence is claimed.
 
+The [private G3-R replayed-P1 generated-call transition candidate](g3/G3_R_REPLAYED_PREFIX_GENERATED_TRANSITION_LEAF.md)
+adds an isolated feature-gated native kind-2 admission and same-registry
+composer from an authentic idle manual P1 prefix. Synthetic host tests cover
+no-draw P2/exhaustion rejection, pending-output enrollment, rollback and
+native sample/commit. Its linked Eshkol numerical and fresh-process pinned
+gate remains **HOLD**; it does not bind a persisted C2 pair or establish
+full continuation.
+
 The [private G3-R fixed-record codec leaf](g3/G3_R_RECORD_CODEC_LEAF.md)
 stages an in-memory 288-byte encoder/decoder using the existing C1 SHA-256.
 It validates the exact policy, G3-S words, history/EOS partition, T1
