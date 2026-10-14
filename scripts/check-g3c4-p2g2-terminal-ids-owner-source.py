@@ -41,6 +41,66 @@ for fragment in (
 ):
     assert fragment in fixture, fragment
 
+# The first-ID discovery failed before the terminal cases in the consumed
+# compiled gate. Keep every possible failing interval visible in its own
+# flushed stage, preserve in-region pending cleanup, then rethrow the cause.
+probe = fixture.split('(stage "probe begin" 0)', 1)[1].split(
+    '(stage "probe complete" 0)', 1)[0]
+probe_order = (
+    'generator create begin', 'generator create complete',
+    'prefix entry/preflight begin', 'prefix entry/preflight complete',
+    'pending reserve begin', 'pending reserve complete',
+    'first frame/sample begin', 'native first frame complete',
+    'T1 decode complete', 'first frame/sample complete',
+    'pending abort begin', 'pending abort complete',
+    'generator close begin', 'generator close complete',
+)
+
+
+def probe_valid(text):
+    offsets = [text.find(f'(stage "{label}" 0)') for label in probe_order]
+    if -1 in offsets or offsets != sorted(offsets):
+        return False
+    required = (
+        '(guard (caught (#t (probe-failure caught)))',
+        '(guard (caught\n             (#t\n               (stage "generator close after failure begin" 0)',
+        '(guard (close-failure (#t (exit 134)))',
+        '(guard (caught\n                     (#t\n                       (stage "pending abort after failure begin" 0)',
+        '(guard (abort-failure (#t (exit 134)))',
+        '(g3c4-p2g2-terminal-pending-abort! call pending)',
+        '(g3c4-p2g2-terminal-first-sample-decode-probed!',
+        '(lambda (held) (stage "native first frame complete" 0))',
+        '(lambda (held) (stage "T1 decode complete" 0))',
+    )
+    reserve = text.find('(g3c4-p2g2-terminal-pending-reserve! call)')
+    sample = text.find('(g3c4-p2g2-terminal-first-sample-decode-probed!')
+    abort = text.rfind('(g3c4-p2g2-terminal-pending-abort! call pending)')
+    close = text.rfind('(g3c4-generator-close-internal! probe-generator)')
+    return (all(fragment in text for fragment in required)
+            and text.count('(raise caught)') == 2
+            and text.count('(g3c4-p2g2-terminal-pending-abort! call pending)') == 2
+            and -1 < reserve < sample < abort < close)
+
+
+assert probe_valid(probe)
+for before, after in (
+    ('(stage "pending reserve begin" 0)', '(stage "pending reserve lost" 0)'),
+    ('(stage "native first frame complete" 0)', '(stage "native frame lost" 0)'),
+    ('(guard (abort-failure (#t (exit 134)))', '(begin'),
+    ('(guard (close-failure (#t (exit 134)))', '(begin'),
+    ('(g3c4-p2g2-terminal-first-sample-decode-probed!',
+     '(g3c4-p2g2-terminal-first-sample-decode!'),
+    ('(lambda (held) (stage "T1 decode complete" 0))',
+     '(lambda (held) #t)'),
+    ('(g3c4-p2g2-terminal-pending-abort! call pending)',
+     '(g3c4-p2g2-protected-abort! call)'),
+    ('(raise caught)', '(exit 1)'),
+):
+    assert before in probe and not probe_valid(probe.replace(before, after, 1)), before
+assert '(transformer-error-category caught)' in fixture
+assert '(transformer-error-operation caught)' in fixture
+assert '(flush-output-port (current-output-port))' in fixture
+
 
 def valid(text):
     code = "\n".join(line.split(";", 1)[0] for line in text.splitlines())

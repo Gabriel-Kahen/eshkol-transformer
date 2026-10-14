@@ -36,6 +36,19 @@
   (display count)
   (newline)
   (flush-output-port (current-output-port)))
+(define (probe-failure caught)
+  (display "G3-C4 private owners PROBE ERROR: type=")
+  (display (if (transformer-error? caught)
+               'transformer-error 'non-transformer))
+  (display " category=")
+  (display (if (transformer-error? caught)
+               (transformer-error-category caught) 'unknown))
+  (display " operation=")
+  (display (if (transformer-error? caught)
+               (transformer-error-operation caught) 'unknown))
+  (newline)
+  (flush-output-port (current-output-port))
+  (raise caught))
 (define (check label good)
   (if good (set! checks (+ checks 1))
       (begin (display "G3-C4 private owners FAIL: ")
@@ -64,19 +77,49 @@
 ;;; into a terminal carrier.
 (define first-id #f)
 (stage "probe begin" 0)
-(define probe-generator
-  (g3c4-generator-create-internal model tokenizer (config #f)))
-(check "first-ID probe abort"
-  (g3c4-with-p2g2-prefix-call 'private-owners-probe
-    probe-generator input (call)
-    (let ((pending (g3c4-p2g2-terminal-pending-reserve! call)))
-      (set! first-id
-        (g3c4-p2g2-terminal-first-sample-decode! call pending))
-      (g3c4-p2g2-terminal-pending-abort! call pending))))
-(check "authentic first ID" (and (m3t-exact-i64? first-id)
-                                  (>= first-id 0) (<= first-id 255)))
-(check "probe generator closes"
-  (g3c4-generator-close-internal! probe-generator))
+(guard (caught (#t (probe-failure caught)))
+  (stage "generator create begin" 0)
+  (let ((probe-generator
+          (g3c4-generator-create-internal model tokenizer (config #f))))
+    (stage "generator create complete" 0)
+    (guard (caught
+             (#t
+               (stage "generator close after failure begin" 0)
+               (guard (close-failure (#t (exit 134)))
+                 (g3c4-generator-close-internal! probe-generator))
+               (stage "generator close after failure complete" 0)
+               (raise caught)))
+      (stage "prefix entry/preflight begin" 0)
+      (check "first-ID probe abort"
+        (g3c4-with-p2g2-prefix-call 'private-owners-probe
+          probe-generator input (call)
+          (stage "prefix entry/preflight complete" 0)
+          (stage "pending reserve begin" 0)
+          (let ((pending (g3c4-p2g2-terminal-pending-reserve! call)))
+            (stage "pending reserve complete" 0)
+            (guard (caught
+                     (#t
+                       (stage "pending abort after failure begin" 0)
+                       (guard (abort-failure (#t (exit 134)))
+                         (g3c4-p2g2-terminal-pending-abort! call pending))
+                       (stage "pending abort after failure complete" 0)
+                       (raise caught)))
+              (stage "first frame/sample begin" 0)
+              (set! first-id
+                (g3c4-p2g2-terminal-first-sample-decode-probed!
+                  call pending
+                  (lambda (held) (stage "native first frame complete" 0))
+                  (lambda (held) (stage "T1 decode complete" 0))))
+              (stage "first frame/sample complete" 0))
+            (stage "pending abort begin" 0)
+            (g3c4-p2g2-terminal-pending-abort! call pending)
+            (stage "pending abort complete" 0))))
+      (check "authentic first ID" (and (m3t-exact-i64? first-id)
+                                        (>= first-id 0) (<= first-id 255))))
+    (stage "generator close begin" 0)
+    (check "probe generator closes"
+      (g3c4-generator-close-internal! probe-generator))
+    (stage "generator close complete" 0)))
 (stage "probe complete" 0)
 
 (define (case-run eos expected-count)

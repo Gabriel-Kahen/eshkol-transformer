@@ -3219,11 +3219,19 @@ publication, public G2 and continuation remain pending.
   The consumed `1d917cc5` one-use compiled diagnostic failed with a generic
   runtime exception and no stage trace. Independent review found that the
   Eshkol clone and copy bytevectors allocated only the 8/16-byte payload while
-  passing the native 16/24-byte header-plus-payload extent. A scoped successor
-  now allocates and checks the complete extent, updates the source contract and
-  diagnostic expectations, and adds a short-extent negative plus flushed stage
-  markers. Its source/Q0 checks pass locally; independent source review and a
-  fresh sealed compiled gate remain pending. The failed package is preserved.
+  passing the native 16/24-byte header-plus-payload extent. The scoped
+  `904eead` successor allocates and checks the complete extent, updates the
+  source contract and diagnostic expectations, and adds a short-extent
+  negative. Its source/Q0 checks passed, but its consumed `-b` one-use compiled
+  gate failed after `probe begin` with a generic exception. Generator creation
+  through probe close were unobserved, so the extent repair and terminal
+  behavior have no passing compiled proof. A source-only diagnostic successor
+  now brackets generator creation, prefix entry/preflight, pending reserve,
+  native first-frame/T1 decode, abort and close with flushed markers. It
+  reports transformer category and operation, preserves in-region pending
+  abort on failure and rethrows. Focused source mutations pass; independent
+  source/tests review and a fresh sealed one-use compiled gate remain pending.
+  Both failed packages and raw evidence are preserved.
 
 ## Wave 4 — practical pretraining and performance
 
