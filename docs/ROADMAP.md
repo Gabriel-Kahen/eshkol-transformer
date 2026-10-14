@@ -1352,6 +1352,18 @@ symbol/feature-off checks pass. This is
 still a source candidate: supported optimized Eshkol AOT normal, poison and
 sanitizer gates plus independent review remain the next admission gate.
 
+The bounded E3 §9 stage-8 source candidate adds noninstalled frame-owned
+site 5, ordinal 0, occurrences 1 or 2. After all 21 forward roles, it
+consumes the one-shot selector before L2 CE dispatch and returns the existing
+internal/invariant status (mapped E1 stage 8, table index 107). The private
+fault tuple compares the saved cursor, 17 modes, all model/gradient/RNG and
+owner observations, six seeded output words, and a same-frame retry against
+an independent twin. Host source and native checks cover invalid, duplicate,
+unreached and both reached occurrences; a dispatch-before-denial mutant fails
+at the CE dispatch count. This remains source/host evidence on an unsupported
+Clang 22 host. Independent review and supported compiled Eshkol normal,
+poison and sanitizer gates remain open; no §9 R1 admission follows.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
