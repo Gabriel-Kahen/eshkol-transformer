@@ -48,6 +48,14 @@ class TargetOffsetSourceTest(unittest.TestCase):
             shard.write_bytes(data)
             with self.assertRaises(ValueError):
                 validate_materialized(root, payload)
+            manifest_root = Path(temporary) / "manifest-case"
+            manifest_payload = materialize(manifest_root)
+            manifest = manifest_root / "target-zero" / "manifest.etm"
+            data = bytearray(manifest.read_bytes())
+            data[-1] ^= 1
+            manifest.write_bytes(data)
+            with self.assertRaises(ValueError):
+                validate_materialized(manifest_root, manifest_payload)
 
     def test_runtime_keeps_the_canonical_two_field_scenario(self) -> None:
         runtime = (ROOT / "tests/e3_private/target_offset_runtime.esk").read_text()
