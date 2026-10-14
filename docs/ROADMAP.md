@@ -2035,6 +2035,15 @@ publication transaction. Full G3-R still requires a separately admitted larger
 repeated-decode and later-EOS continuation profile. No persistence implementation
 or save/reload equivalence is claimed.
 
+The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
+adds a source-only native/Eshkol transition from an authentic idle manual P1
+commit to one generated G1. Its host synthetic state witness and causal source
+checks cover admission, ordinary-route isolation, pending output, abort and
+retry. The genuine same-process sampling fixture is prepared but unrun; an
+independent source review and pinned normal/repeat/sanitizer gate are required
+before this private seam is accepted. This does not bind a C2 pair, expose a
+public route, or prove resumed generation.
+
 The [private G3-R fixed-record codec leaf](g3/G3_R_RECORD_CODEC_LEAF.md)
 stages an in-memory 288-byte encoder/decoder using the existing C1 SHA-256.
 It validates the exact policy, G3-S words, history/EOS partition, T1
