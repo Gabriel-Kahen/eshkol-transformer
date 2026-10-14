@@ -10,6 +10,9 @@ int64_t et_g3r_private_same_owner_holds_check_v1(
     void *pair, void *generator, void *model, void *optimizer);
 void *et_g3r_private_same_owner_holds_g3_v1(void *pair);
 void *et_g3r_private_same_owner_holds_o2_v1(void *pair);
+/* Copy the held 17-word image to an exact 136-byte Eshkol bytevector. */
+int64_t et_g3r_private_same_owner_holds_copy_g3_v1(
+    void *pair, void *bytevector_header, int64_t payload_bytes);
 int64_t et_g3r_private_same_owner_holds_end_v1(void *pair);
 int64_t et_g3r_private_same_owner_holds_error_source_v1(void);
 int64_t et_g3r_private_same_owner_holds_error_category_v1(void);

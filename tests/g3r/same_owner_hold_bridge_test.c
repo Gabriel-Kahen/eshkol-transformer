@@ -11,7 +11,8 @@
 
 static int model, generator, optimizer, equal_optimizer, g3_hold, o2_hold;
 static int parameters[14], identities[14], g3_releases, o2_releases;
-static int fail_o2_begin, fail_o2_check, fail_g3_end, forge_roster;
+static int fail_o2_begin, fail_o2_check, fail_g3_end, fail_g3_copy;
+static int forge_roster, g3_copies;
 static int64_t g3_category, g3_code, m3_category, m3_code;
 
 int64_t et_m3t_private_last_error_category_v1(void) { return m3_category; }
@@ -38,6 +39,15 @@ void *et_g3r_private_g3t_save_begin_v1(
 }
 int64_t et_g3r_private_g3t_save_check_v1(void *hold) {
   assert(hold == &g3_hold); return 0;
+}
+int64_t et_g3r_private_g3t_save_copy_v1(
+    void *hold, et_g3r_g3t_held_words_v1 *destination,
+    int64_t destination_bytes) {
+  assert(hold == &g3_hold && destination_bytes == 136);
+  if (fail_g3_copy) { g3_category = 2; g3_code = 9; return 2; }
+  ++g3_copies;
+  for (int i = 0; i < 17; ++i) destination->word[i] = 100 + i;
+  return 0;
 }
 int64_t et_g3r_private_g3t_save_end_v1(void *hold) {
   assert(hold == &g3_hold); ++g3_releases;
@@ -129,6 +139,35 @@ int main(void) {
   assert(et_g3r_private_same_owner_holds_error_source_v1() == 0);
   assert(et_g3r_private_same_owner_holds_check_v1(
       pair, &generator, &model, &optimizer) == 0);
+  struct { int64_t length; int64_t words[17]; } image;
+  memset(&image, 0x5a, sizeof(image));
+  image.length = 136;
+  const int64_t before = image.words[0];
+  assert(et_g3r_private_same_owner_holds_copy_g3_v1(
+      pair, &image, 135) == 1);
+  assert(image.words[0] == before && g3_copies == 0);
+  image.length = 135;
+  assert(et_g3r_private_same_owner_holds_copy_g3_v1(
+      pair, &image, 136) == 1);
+  assert(image.words[0] == before && g3_copies == 0);
+  image.length = 136;
+  assert(et_g3r_private_same_owner_holds_copy_g3_v1(
+      pair, (unsigned char *)&image + 1, 136) == 1);
+  assert(image.words[0] == before && g3_copies == 0);
+  fail_o2_check = 1;
+  assert(et_g3r_private_same_owner_holds_copy_g3_v1(
+      pair, &image, 136) == 7);
+  assert(image.words[0] == before && g3_copies == 0);
+  fail_o2_check = 0;
+  fail_g3_copy = 1;
+  assert(et_g3r_private_same_owner_holds_copy_g3_v1(
+      pair, &image, 136) == 2);
+  assert(et_g3r_private_same_owner_holds_error_source_v1() == 2);
+  assert(image.words[0] == before && g3_copies == 0);
+  fail_g3_copy = 0;
+  assert(et_g3r_private_same_owner_holds_copy_g3_v1(
+      pair, &image, 136) == 0);
+  assert(g3_copies == 1 && image.words[0] == 100 && image.words[16] == 116);
   fail_o2_check = 1;
   fail_g3_end = 1;
   assert(et_g3r_private_same_owner_holds_end_v1(pair) == 7);
@@ -138,6 +177,9 @@ int main(void) {
          ET_O2_CODE_INVALID_MOMENT);
   assert(et_g3r_private_same_owner_holds_end_v1(pair) == 2);
   assert(o2_releases == 1 && g3_releases == 3);
+  assert(et_g3r_private_same_owner_holds_copy_g3_v1(
+      pair, &image, 136) == 2);
+  assert(g3_copies == 1);
   assert(!et_g3r_private_same_owner_holds_o2_v1(pair));
   fail_o2_check = fail_g3_end = 0;
   pair = et_g3r_private_same_owner_holds_begin_v1(

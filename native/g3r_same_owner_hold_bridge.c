@@ -6,6 +6,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* One immutable shell per address: stale and double-release pointers never
  * become a later live pair. Caller serializes the entire feature. */
@@ -124,6 +125,41 @@ void *et_g3r_private_same_owner_holds_o2_v1(void *candidate) {
   clear_error();
   et_g3r_hold_pair *pair = admit(candidate);
   return pair ? pair->o2 : NULL;
+}
+int64_t et_g3r_private_same_owner_holds_copy_g3_v1(
+    void *candidate, void *bytevector_header, int64_t payload_bytes) {
+  clear_error();
+  et_g3r_hold_pair *pair = admit(candidate);
+  if (!pair) return error_category;
+  enum { HELD_BYTES = 17 * 8, CARRIER_BYTES = 8 + HELD_BYTES };
+  _Static_assert(sizeof(et_g3r_g3t_held_words_v1) == HELD_BYTES,
+                 "G3 held image ABI changed");
+  const uintptr_t address = (uintptr_t)bytevector_header;
+  if (!bytevector_header || payload_bytes != HELD_BYTES ||
+      address % _Alignof(int64_t) != 0u ||
+      address > UINTPTR_MAX - CARRIER_BYTES)
+    return bridge_error(1, 1);
+  int64_t declared = -1;
+  memcpy(&declared, bytevector_header, sizeof(declared));
+  if (declared != HELD_BYTES) return bridge_error(1, 1);
+  const uintptr_t end = address + CARRIER_BYTES;
+  const uintptr_t pair_begin = (uintptr_t)pair;
+  if (address < pair_begin + sizeof(*pair) && pair_begin < end)
+    return bridge_error(1, 1);
+  if (et_g3r_private_same_owner_holds_check_v1(
+          pair, pair->generator, pair->model, pair->optimizer))
+    return error_category;
+  /* G3's copy rejects payload overlap with its original owner, A2, F32,
+   * and held controls before writing any byte. The Eshkol wrapper allocates
+   * this exact carrier; no detached snapshot or temporary lease is used. */
+  void *payload = (unsigned char *)bytevector_header + sizeof(int64_t);
+  if (et_g3r_private_g3t_save_copy_v1(
+          pair->g3, (et_g3r_g3t_held_words_v1 *)payload,
+          HELD_BYTES)) {
+    g3_error(); return error_category;
+  }
+  clear_error();
+  return 0;
 }
 int64_t et_g3r_private_same_owner_holds_end_v1(void *candidate) {
   clear_error();

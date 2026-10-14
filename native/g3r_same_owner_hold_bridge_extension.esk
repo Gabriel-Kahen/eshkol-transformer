@@ -9,6 +9,8 @@
         :real et_g3r_private_same_owner_holds_g3_v1)
 (extern ptr g3r-holds-native-o2 ptr
         :real et_g3r_private_same_owner_holds_o2_v1)
+(extern i64 g3r-holds-native-copy-g3 ptr ptr i64
+        :real et_g3r_private_same_owner_holds_copy_g3_v1)
 (extern i64 g3r-holds-native-end ptr
         :real et_g3r_private_same_owner_holds_end_v1)
 (extern i64 g3r-holds-error-source
@@ -125,6 +127,16 @@
                     (vector-ref (vector-ref ledger 1) 0))))
         (if (null? hold) (g3r-holds-fail-stop))
         hold))))
+
+(define (g3r-hold-pair-copy-g3! ledger)
+  (let ((operation 'g3r-hold-pair-copy-g3!))
+    (m3-call operation
+      (let ((image (make-bytevector 136 0)))
+        (g3r-hold-pair-check! ledger operation)
+        (if (not (= 0 (g3r-holds-native-copy-g3
+                        (vector-ref (vector-ref ledger 1) 0) image 136)))
+            (g3r-holds-native-fail operation))
+        image))))
 
 (define (g3r-hold-pair-end! ledger)
   (let ((operation 'g3r-hold-pair-end!))

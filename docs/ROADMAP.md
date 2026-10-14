@@ -2269,6 +2269,13 @@ checks pass locally. Independent source review and a compiled feature-on joint
 aggregate with genuine owners, issued-state/adopter release, postclaim/partial
 claim, and zero-publication cuts remain HOLD. This is no C2 SAVE or data-only
 continuation admission.
+The held-copy successor exposes the existing checked G3 17-word image to an
+exact 136-byte Eshkol bytevector while both original holds remain live. Native
+validation rejects malformed length, stale pair, failed O2/G3 checks, and
+provider copy failures before writing the destination; focused causal and
+sanitizer checks pass locally. This is only an in-memory copy seam. The joint
+genuine-owner aggregate, same-owner trainer-control binding, adopter/C2 claim,
+reverse-order release and zero-publication runtime gate remain HOLD.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
