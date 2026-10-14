@@ -323,6 +323,7 @@ int64_t et_e3_test_fault_arm_v1(void *pointer, int64_t site,
          occurrence >= 1 && occurrence <= 8192) ||
         (site == 2 && ordinal == 0 && occurrence == 1)
         || (site == 5 && ordinal == 0 && occurrence >= 1 && occurrence <= 2)
+        || (site == 6 && ordinal == 0 && occurrence >= 1 && occurrence <= 2)
 #ifdef ET_E3_PARTIAL_PIN_TESTING
         || (site == 4 && ordinal >= 0 && ordinal < 14 && occurrence == 1)
 #endif
@@ -1264,6 +1265,15 @@ int64_t et_e3_private_reduce_v1(void *pointer) {
   if (frame->phase != E3_CE_READY || frame->next_role != 22 ||
       frame->cleanup_ready)
     return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
+#ifdef ET_E3_FAULT_TESTING
+  if (frame->fault_state == 1 && frame->fault_site == 6) {
+    ++frame->fault_reached;
+    if (frame->fault_reached == frame->fault_occurrence) {
+      frame->fault_state = 2; /* Consume before L3S dispatch. */
+      return e3_fail(E3_INTERNAL, E3_CODE_INVARIANT);
+    }
+  }
+#endif
   et_kernel_tensor_view_v1 mask = e3_native_view(
       frame->mask, sizeof(frame->mask), "bool", 2, e3_shape_pair);
 #ifdef ET_E3_NUMERICAL_PADDED_POSITION

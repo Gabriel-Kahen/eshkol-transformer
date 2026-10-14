@@ -1382,6 +1382,19 @@ host. Independent source/test review accepted this E3 union at `9aed9c65`;
 supported compiled Eshkol normal, poison, and sanitizer evidence remains
 required; E3 §9 admission remains **HOLD**.
 
+The bounded E3 §9 stage-9 source candidate adds noninstalled frame-owned
+site 6, ordinal 0, occurrences 1 or 2. It consumes the selector after
+completed CE and the reduce entry guard, before L3S dispatch, and returns
+the fixed internal/invariant status (mapped E1 stage 9, table index 119).
+The native and private fault fixtures check first error, exact saved cursor,
+17 modes, model/gradient/RNG images, six seeded output words, 29 retention
+probes, one-shot state, and same-frame retry against a fixed-seed twin.
+The native fixture measures no L3S dispatch at denial and a completed first
+batch for occurrence 2; the host dispatch-before-denial mutant must fail that
+count. This is source/host evidence only. Independent review and supported
+compiled Eshkol normal, poison, and sanitizer gates remain pending; E3 §9
+admission remains **HOLD**.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
