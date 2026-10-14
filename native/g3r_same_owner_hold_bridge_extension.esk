@@ -1,0 +1,145 @@
+;;; Feature-private original-owner hold pair. Load after M3/G3-T/O2 roots and
+;;; link g3r_same_owner_hold_bridge.c with ET_G3R_SAME_OWNER_SAVE_PRIVATE.
+;;; No public SAVE, receipt, or C2 continuation is installed here.
+(extern ptr g3r-holds-native-begin ptr ptr ptr
+        :real et_g3r_private_same_owner_holds_begin_v1)
+(extern i64 g3r-holds-native-check ptr ptr ptr ptr
+        :real et_g3r_private_same_owner_holds_check_v1)
+(extern ptr g3r-holds-native-g3 ptr
+        :real et_g3r_private_same_owner_holds_g3_v1)
+(extern ptr g3r-holds-native-o2 ptr
+        :real et_g3r_private_same_owner_holds_o2_v1)
+(extern i64 g3r-holds-native-end ptr
+        :real et_g3r_private_same_owner_holds_end_v1)
+(extern i64 g3r-holds-error-source
+        :real et_g3r_private_same_owner_holds_error_source_v1)
+(extern i64 g3r-holds-error-category
+        :real et_g3r_private_same_owner_holds_error_category_v1)
+(extern i64 g3r-holds-error-code
+        :real et_g3r_private_same_owner_holds_error_code_v1)
+(extern void g3r-holds-fail-stop
+        :real et_g3r_private_same_owner_holds_fail_stop_v1)
+
+(define g3r-hold-pair-tag (vector 'g3r-hold-pair-v1))
+(define g3r-hold-pair-registry (vector '()))
+
+(define (g3r-holds-native-fail operation)
+  (let* ((source (g3r-holds-error-source))
+         (number (g3r-holds-error-category))
+         (code (g3r-holds-error-code))
+         (category
+           (cond ((= source 3)
+                  (cond ((= number 1) 'invalid-argument)
+                        ((= number 2) 'shape-mismatch)
+                        ((= number 3) 'dtype-mismatch)
+                        ((= number 4) 'device-mismatch)
+                        ((= number 5) 'noncontiguous)
+                        ((= number 6) 'unsupported)
+                        ((= number 7) 'invalid-state)
+                        ((= number 8) 'version-mismatch)
+                        ((= number 10) 'corrupt-data)
+                        ((= number 11) 'determinism-unavailable)
+                        (else 'internal)))
+                 ((= number 1) 'invalid-argument)
+                 ((= number 2) 'invalid-state)
+                 ((= number 3) 'shape-mismatch)
+                 ((= number 4) 'unsupported)
+                 (else 'internal))))
+    (et-e1b-private-raise category operation
+      "private same-owner hold bridge rejected the request"
+      (list (list 'source-domain
+                  (cond ((= source 1) 'm3t-transport)
+                        ((= source 2) 'g3t-transport)
+                        ((= source 3) 'o2-optimizer)
+                        (else 'g3r-hold-bridge)))
+            (list 'source-code code)
+            (list 'native-category number)) #f)))
+
+;;; Keep a rooted ledger before native begin. Slots: tag, native cell,
+;;; generator/model/optimizer shells, their original native pointers, phase.
+(define (g3r-hold-pair-begin! generator model optimizer)
+  (let ((operation 'g3r-hold-pair-begin!))
+    (m3-call operation
+      (let* ((model-entry (g3t-model-entry-live model operation #f))
+             (generator-entry (g3t-generator-find generator operation))
+             (optimizer-entry (o2-require-optimizer operation optimizer)))
+        (if (not (and (eq? (vector-ref generator-entry 2) 'live)
+                      (eq? (vector-ref generator-entry 5) model-entry)
+                      (not (null? (vector-ref generator-entry 3)))
+                      (not (null? (vector-ref optimizer-entry 1)))))
+            (g3t-fail-raw 'invalid-state operation 2
+                          "original G3 and O2 owners are not live and bound"))
+        (let* ((cell (vector #f))
+               (ledger (vector g3r-hold-pair-tag cell generator model optimizer
+                               (vector-ref generator-entry 3)
+                               (vector-ref model-entry 3)
+                               (vector-ref optimizer-entry 1) 'pending))
+               (root (cons ledger (vector-ref g3r-hold-pair-registry 0))))
+          (vector-set! g3r-hold-pair-registry 0 root)
+          (let ((native (g3r-holds-native-begin
+                          (vector-ref ledger 5) (vector-ref ledger 6)
+                          (vector-ref ledger 7))))
+            (if (null? native)
+                (begin (vector-set! ledger 8 'dead)
+                       (g3r-holds-native-fail operation)))
+            (vector-set! cell 0 native)
+            (vector-set! ledger 8 'live)
+            ledger))))))
+
+(define (g3r-hold-pair-check! ledger operation)
+  (if (not (and (vector? ledger) (= (vector-length ledger) 9)
+                (eq? (vector-ref ledger 0) g3r-hold-pair-tag)
+                (eq? (vector-ref ledger 8) 'live)
+                (eq? (vector-ref (g3t-generator-find
+                                   (vector-ref ledger 2) operation) 3)
+                     (vector-ref ledger 5))
+                (eq? (vector-ref (g3t-model-entry-live
+                                   (vector-ref ledger 3) operation #f) 3)
+                     (vector-ref ledger 6))
+                (eq? (vector-ref (o2-require-optimizer
+                                   operation (vector-ref ledger 4)) 1)
+                     (vector-ref ledger 7))))
+      (g3t-fail-raw 'invalid-state operation 2
+                    "held pair lost its original registered owners"))
+  (if (not (= 0 (g3r-holds-native-check
+                   (vector-ref (vector-ref ledger 1) 0)
+                   (vector-ref ledger 5) (vector-ref ledger 6)
+                   (vector-ref ledger 7))))
+      (g3r-holds-native-fail operation))
+  ledger)
+
+(define (g3r-hold-pair-g3! ledger)
+  (let ((operation 'g3r-hold-pair-g3!))
+    (m3-call operation
+      (g3r-hold-pair-check! ledger operation)
+      (let ((hold (g3r-holds-native-g3
+                    (vector-ref (vector-ref ledger 1) 0))))
+        (if (null? hold) (g3r-holds-fail-stop))
+        hold))))
+
+(define (g3r-hold-pair-o2! ledger)
+  (let ((operation 'g3r-hold-pair-o2!))
+    (m3-call operation
+      (g3r-hold-pair-check! ledger operation)
+      (let ((hold (g3r-holds-native-o2
+                    (vector-ref (vector-ref ledger 1) 0))))
+        (if (null? hold) (g3r-holds-fail-stop))
+        hold))))
+
+(define (g3r-hold-pair-end! ledger)
+  (let ((operation 'g3r-hold-pair-end!))
+    (m3-call operation
+      ;; Do not precheck the providers here: their end contracts drain after a
+      ;; failed check and preserve its first error. A precheck would leak both.
+      (if (not (and (vector? ledger) (= (vector-length ledger) 9)
+                    (eq? (vector-ref ledger 0) g3r-hold-pair-tag)
+                    (eq? (vector-ref ledger 8) 'live)
+                    (vector-ref (vector-ref ledger 1) 0)))
+          (g3r-holds-fail-stop))
+      (let ((status (g3r-holds-native-end
+                      (vector-ref (vector-ref ledger 1) 0))))
+        ;; C end either drains both holds or aborts on ambiguous custody.
+        (vector-set! (vector-ref ledger 1) 0 #f)
+        (vector-set! ledger 8 'dead)
+        (if (not (= status 0)) (g3r-holds-native-fail operation))
+        #t))))

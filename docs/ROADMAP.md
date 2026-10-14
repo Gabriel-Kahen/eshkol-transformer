@@ -2259,6 +2259,16 @@ Source mutation checks are wired into the blocking C2 SAVE target. Independent
 source review, a compiled aggregate, post-claim and partial-claim runtime
 cuts, original G3/O2 binding, hold release, and receipt publication remain
 pending; this leaf makes no same-owner SAVE or replay admission claim.
+The next original-owner hold prerequisite adds a feature-private native bridge
+and Eshkol-callable rooted ledger. It obtains the registered M3T fourteen-owner
+roster, begins the G3/A2 hold, then begins the O2 hold against that same roster;
+failure drains an acquired first hold and retains the first typed error. End
+drains O2 then G3, retains a stable tombstone, and fails stop if native custody
+cannot be proved. Focused causal native normal/repeat/sanitizer and feature-off
+checks pass locally. Independent source review and a compiled feature-on joint
+aggregate with genuine owners, issued-state/adopter release, postclaim/partial
+claim, and zero-publication cuts remain HOLD. This is no C2 SAVE or data-only
+continuation admission.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),

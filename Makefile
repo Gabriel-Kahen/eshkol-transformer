@@ -221,6 +221,7 @@ test-ci-c2-state-after-build:
 
 test-ci-c2-save-after-build:
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v tests.c2.test_held_o2_claim_source
+	/usr/bin/bash scripts/test-g3r-same-owner-hold-bridge.sh
 	/usr/bin/bash scripts/test-c2.sh --group c2-save
 	/usr/bin/bash scripts/test-c2-o2-native-fixtures.sh
 
