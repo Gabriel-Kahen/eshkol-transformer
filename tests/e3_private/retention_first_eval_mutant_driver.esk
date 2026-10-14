@@ -379,12 +379,32 @@
               before after growth (vector-ref record 14)
               (vector-ref record 15) (vector-ref record 16)))))
 
-(define (e3-test-edge-outputs frame destinations)
+(define (e3-test-edge-outputs destinations)
   (vector (e3-test-u32-ref (vector-ref destinations 0))
           (e3-test-u32-ref (vector-ref destinations 1))
           (e3-test-u32-ref (vector-ref destinations 2))
-          (e3-test-u32-ref (vector-ref destinations 3))
-          (e3-counter-ref frame 0) (e3-counter-ref frame 1)))
+          (e3-test-u32-ref (vector-ref destinations 3))))
+
+(define (e3-test-edge-unpublished? frame)
+  (let ((entry (e3-frame-entry-live frame 'e3-test-edge-unpublished?)))
+    (and (= (e3-native-frame-check (vector-ref entry 4)) 0)
+         (let loop ((selector 0))
+           (if (= selector 2) #t
+               (and
+                (guard (caught
+                         (#t (and (transformer-error? caught)
+                                  (eq? (transformer-error-category caught)
+                                       'invalid-state)
+                                  (eq? (transformer-error-operation caught)
+                                       'e3-counter-ref)
+                                  (equal? (transformer-error-details caught)
+                                    '((source-domain e3-evaluation)
+                                      (source-code 2)
+                                      (source-message
+                                       "native frame setup failed")))))
+                  (e3-counter-ref frame selector)
+                  #f)
+                (loop (+ selector 1)))))))))
 
 (define (e3-test-edge-probes=? before after)
   (and (let loop ((index 0))
@@ -431,7 +451,9 @@
     (let* ((cursor (begin (e3-test-edge-mark! case 'cursor-snapshot)
                           (d2-token-dataset-cursor dataset)))
            (outputs (begin (e3-test-edge-mark! case 'outputs-snapshot)
-                           (e3-test-edge-outputs frame destinations)))
+                           (e3-test-retention-check 'edge-unpublished-before
+                             (e3-test-edge-unpublished? frame))
+                           (e3-test-edge-outputs destinations)))
            (modes (begin (e3-test-edge-mark! case 'modes-snapshot)
                          (e3-test-retention-modes frame)))
            (model-image (begin (e3-test-edge-mark! case 'model-snapshot)
@@ -472,12 +494,13 @@
                      (source-message
                        "evaluation finalization or publication failed")))
                  (= (vector-ref (e3-frame-entry-internal frame) 15) 150)
-                 (equal? outputs (e3-test-edge-outputs frame destinations)))))
+                 (equal? outputs (e3-test-edge-outputs destinations))
+                 (e3-test-edge-unpublished? frame))))
       (if (eq? fault 'postcondition-fault)
           (begin
             (e3-test-edge-mark! case 'postcondition-control)
             (e3-test-retention-check 'edge-postcondition-control
-              (= (e3-counter-ref frame 0) -1))))
+              (= (e3-test-u32-ref (vector-ref destinations 0)) -1))))
       (e3-test-edge-mark! case 'cursor-check)
       (e3-test-retention-check 'edge-cursor
         (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset)))

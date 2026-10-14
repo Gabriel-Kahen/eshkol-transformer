@@ -57,7 +57,7 @@ def audit_causal_controls(driver: str, runner: str) -> None:
         raise ValueError("post control bypasses the evaluated outcome check")
     if "(raise " in edge[checked:post]:
         raise ValueError("post control raises before its assertion")
-    if "(= (e3-counter-ref frame 0) -1)" not in edge[post:]:
+    if "(= (e3-test-u32-ref (vector-ref destinations 0)) -1)" not in edge[post:]:
         raise ValueError("post control does not fail a real assertion")
     if ('first_corpus="${missing_corpus}"' not in runner or
             '"${first_corpus}"' not in runner or
@@ -83,8 +83,21 @@ class EdgeSourceTests(unittest.TestCase):
         edge = form(source, "(define (e3-test-edge-run")
         self.assertLess(edge.index("(e3-test-skip! dataset 1)"),
                         edge.index("(d2-token-dataset-cursor dataset)"))
-        self.assertLess(edge.index("(e3-test-edge-outputs frame destinations)"),
+        self.assertLess(edge.index("(e3-test-edge-outputs destinations)"),
                         edge.index("(e3-evaluate-into! model dataset frame)"))
+        outputs = form(source, "(define (e3-test-edge-outputs")
+        unpublished = form(source, "(define (e3-test-edge-unpublished?")
+        self.assertNotIn("e3-counter-ref", outputs)
+        self.assertIn("(= (e3-native-frame-check (vector-ref entry 4)) 0)",
+                      unpublished)
+        self.assertIn("(if (= selector 2) #t", unpublished)
+        for expected in ("(transformer-error? caught)", "'invalid-state",
+                         "'e3-counter-ref", "(source-code 2)",
+                         '"native frame setup failed"'):
+            self.assertIn(expected, unpublished)
+        self.assertIn("(e3-test-retention-check 'edge-unpublished-before", edge)
+        self.assertIn("(e3-test-edge-unpublished? frame)",
+                      edge[edge.index("'edge-zero-weight-rejection"):])
         for assertion in (
             "'edge-zero-weight-rejection", "'edge-tail-success", "'edge-cursor",
             "'edge-native-owners", "'edge-modes", "'edge-model-gradient",
@@ -131,7 +144,7 @@ class EdgeSourceTests(unittest.TestCase):
                         edge.index("'edge-zero-weight-rejection"))
         self.assertLess(edge.index("'edge-zero-weight-rejection"),
                         edge.index("'edge-postcondition-control"))
-        self.assertIn("(= (e3-counter-ref frame 0) -1)", edge)
+        self.assertIn("(= (e3-test-u32-ref (vector-ref destinations 0)) -1)", edge)
         self.assertIn("(flush-output-port (current-output-port))", source)
         self.assertIn("(flush-output-port port)", source)
         self.assertIn("(e3-test-edge-report! caught) (raise caught)", dispatch)

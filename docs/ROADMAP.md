@@ -1092,7 +1092,8 @@ this candidate to compiled-private evidence; the supported run is pending.
 An isolated [private E3 edge-gate source candidate](e3/E3_EDGE_PRIVATE_GATE.md)
 adds authentic empty, singleton, entry-EOS and padded one-token-tail D1/D2
 cases to that noninstalled retention aggregate. The zero-row paths require
-stage-12 `invalid-state` and byte-atomic six outputs; the real padded tail
+stage-12 `invalid-state`, unchanged four I2 words and unpublished counters;
+the real padded tail
 requires three active tokens, two batches and exact accuracy one from the
 independent seed-1729 M3 all-correct selection proof. Independent D2 cursor/row
 fixtures, a fourth-output mutation control, source/unit/shell checks and a
@@ -1130,6 +1131,12 @@ evidence is preserved. A source-only successor removes the extra edge-tail
 delimiter in the test driver and its derived mutant, with a whole-file parser
 negative that rejects the original malformed tail. Independent review and a
 fresh compiled result remain pending.
+The `a007ab91` compiled edge attempt passed the missing-path pre control but
+its post control stopped before evaluation when a fresh, unpublished frame's
+counter accessor correctly raised `invalid-state`. A test-only successor uses
+readable I2 words for pre/post snapshots, checks the exact unpublished-counter
+provenance for both selectors, and makes the post control fail an I2 assertion
+after the zero-row outcome check. The fresh compiled edge gate remains pending.
 The exact `7f54a866` E3-private source suite found four stale assertions after
 the edge diagnostics change: overflow pinned the prior retention-driver hash,
 and sanitizer policy still counted the pre-diagnostics 172/59 retention and
