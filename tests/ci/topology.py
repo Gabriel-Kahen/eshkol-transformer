@@ -299,7 +299,10 @@ def check(root, overrides=None):
         if suite_id == "canonical-build":
             continue
         if suite_id.startswith("c2-"):
-            assert targets[target] == [f"/usr/bin/bash scripts/test-c2.sh --group {suite_id}"]
+            expected = [f"/usr/bin/bash scripts/test-c2.sh --group {suite_id}"]
+            if suite_id == "c2-save":
+                expected.append("/usr/bin/bash scripts/test-c2-o2-native-fixtures.sh")
+            assert targets[target] == expected
         else:
             leaves += targets[target]
     assert Counter(leaves) == Counter(c for c in FULL if c != "/usr/bin/bash scripts/test-c2.sh")

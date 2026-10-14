@@ -137,10 +137,17 @@ adopter as preclaim authority then fails its own live-state check. Any such
 unproved transfer must fail stop with the rooted O2 ledger and original holds
 intact; it cannot be reported as a recoverable C2 error.
 
-This source boundary does not admit a claim helper against the current exact
-API. The next C2-side contract must make every failed compose provably leave
-both children live, including a postmutation second-claim failure, or expose
-the exact provisional token and child progress to a private caller for checked
-rollback. Only then can an adopter successor add a single transfer transition,
-negative partial-claim cuts, reverse-order hold release, and a compiled gate.
-No public SAVE-pair or receipt claim follows from this audit.
+The later C2 source successor reconciles an attempted O2 claim against the
+exact registered state and provisional token before rolling P1 back. It accepts
+only a still-live O2 state or one claimed by that token; uncertainty fails
+stop. Source-order tests include token and rollback mutations, and runtime
+negatives cover a second claim that raises after mutation. The compiled C2
+owner gate has not run for this successor. A future adopter still needs a
+checked transfer transition, reverse-order hold release, and a compiled joint
+gate. No public SAVE pair or receipt claim follows from this repair.
+
+The standalone same-owner O2 and C2 image receipt C fixtures are registered in
+the blocking C2 SAVE CI target through `scripts/test-c2-o2-native-fixtures.sh`.
+The runner checks feature-off symbol absence and normal, repeat, and sanitizer
+execution of both fixtures. This is native component evidence only: the held
+Eshkol adopter and C2/SAVE pair remain uncompiled and unadmitted.

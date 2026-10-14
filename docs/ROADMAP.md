@@ -2131,6 +2131,12 @@ O2 claim that raises after mutation, first-error retention, unchanged request
 slots, and token mismatch; the compiled owner gate has not run for this leaf.
 This is a source repair pending independent review and the compiled owner gate;
 it does not admit a held C2 transfer or SAVE pair.
+The standalone same-owner O2 hold and C2 image receipt C fixtures are now wired
+to the blocking C2 SAVE CI target. A topology regression test fails if either
+fixture is omitted from the runner. The native runner checks feature-off symbol
+absence and normal/repeat/sanitizer execution; supported exact-union CI and the
+compiled C2 owner/receipt gates remain pending. This does not compile the held
+Eshkol adopter or establish a same-owner SAVE pair.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
