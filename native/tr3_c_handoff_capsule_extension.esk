@@ -1,0 +1,208 @@
+;;; Source-private, train-mode half of original-epoch handoff.  No evaluator,
+;;; native hold, C2 claim, release, or receipt is admitted by this source.
+
+(define tr3-handoff-capsule-tag (vector 'tr3-original-epoch-capsule-v1))
+(define tr3-handoff-capsule-length 10)
+(define tr3-handoff-operation 'trainer-original-epoch-handoff)
+
+(define (tr3-handoff-fail category message)
+  (tr3-lease-operation-fail category tr3-handoff-operation message))
+
+(define (tr3-handoff-copy-identities source count)
+  (if (or (not (vector? source)) (not (= (vector-length source) count)))
+      (tr3-handoff-fail 'invalid-state "fixed owner roster has wrong shape"))
+  (let ((copy (make-vector count #f)))
+    (let loop ((index 0))
+      (if (< index count)
+          (begin
+            (vector-set! copy index (vector-ref source index))
+            (loop (+ index 1)))))
+    copy))
+
+(define (tr3-handoff-node record)
+  (let loop ((nodes (vector-ref tr3-trainers 0)))
+    (cond ((null? nodes)
+           (tr3-handoff-fail 'invalid-state "trainer registry node is absent"))
+          ((eq? (car nodes) record) nodes)
+          (else (loop (cdr nodes))))))
+
+(define (tr3-handoff-controls record)
+  ;; Reuse the C2 cursor-pair, X1 and counter equations, with owned copies.
+  (let ((probe (make-vector 8 #f)))
+    (vector-set! probe 7 (make-vector 5 #f))
+    (tr3-c-snapshot-controls! record probe)))
+
+(define (tr3-handoff-owner-roster record t1-tokenizer node)
+  ;; The 20 positions retain original shells and registry owners, including
+  ;; the exact native pointers. The three fixed-order vectors are copies so
+  ;; a later replacement of a record slot cannot silently retarget custody.
+  (let ((witness (vector-ref record 22)))
+    (vector record (vector-ref record 5) node
+            (vector-ref record 8) (vector-ref record 9)
+            (tr3-handoff-copy-identities (vector-ref record 10) 17)
+            (tr3-handoff-copy-identities (vector-ref record 11) 14)
+            (tr3-handoff-copy-identities (vector-ref record 12) 14)
+            (vector-ref record 13) (vector-ref record 14)
+            (vector-ref (vector-ref record 14) 1)
+            (vector-ref record 15) (vector-ref record 16)
+            (vector-ref (vector-ref record 16) 1)
+            witness (vector-ref witness 2) (vector-ref witness 3)
+            (vector-ref witness 4) t1-tokenizer (vector-ref record 6))))
+
+(define (tr3-handoff-capsule-check! capsule record phase)
+  ;; This private predicate is the sole admission for the rooted capsule.
+  ;; Record enrollment and pointer identity, never detached byte equality,
+  ;; establish custody. It is deliberately usable only before model eval.
+  (tr3-lease-authenticate-minimal record tr3-handoff-operation)
+  (if (or (not (vector? capsule))
+          (not (= (vector-length capsule) tr3-handoff-capsule-length))
+          (not (eq? (vector-ref capsule 0) tr3-handoff-capsule-tag))
+          (not (eq? (vector-ref capsule 1) capsule))
+          (not (eq? (vector-ref capsule 2) record))
+          (not (eq? (vector-ref capsule 3) (vector-ref record 5)))
+          (not (eq? (vector-ref capsule 4) (tr3-handoff-node record)))
+          (not (eq? (vector-ref capsule 5) phase))
+          (not (if (eq? phase 'prepared)
+                   (and (eq? (vector-ref record 3) 'idle)
+                        (not (vector-ref record 4)))
+                   (and (eq? phase 'fenced)
+                        (eq? (vector-ref record 3) 'handoff)
+                        (eq? (vector-ref record 4) capsule))))
+          (not (vector? (vector-ref capsule 6)))
+          (not (= (vector-length (vector-ref capsule 6)) 20))
+          (not (vector? (vector-ref capsule 7)))
+          (not (= (vector-length (vector-ref capsule 7)) 5))
+          (not (vector? (vector-ref capsule 8)))
+          (not (= (vector-length (vector-ref capsule 8)) 1))
+          (not (vector-ref (vector-ref capsule 8) 0))
+          (not (tr3-lease-cell-empty? (vector-ref capsule 9))))
+      (tr3-handoff-fail 'invalid-state "handoff capsule is forged or stale"))
+  (let ((owners (vector-ref capsule 6))
+        (witness (vector-ref record 22)))
+    (if (or (not (eq? (vector-ref owners 0) record))
+            (not (eq? (vector-ref owners 1) (vector-ref record 5)))
+            (not (eq? (vector-ref owners 2) (vector-ref capsule 4)))
+            (not (eq? (vector-ref owners 3) (vector-ref record 8)))
+            (not (eq? (vector-ref owners 4) (vector-ref record 9)))
+            (not (tr3-lease-vector-eq?
+                   (vector-ref owners 5) (vector-ref record 10) 17))
+            (not (tr3-lease-vector-eq?
+                   (vector-ref owners 6) (vector-ref record 11) 14))
+            (not (tr3-lease-vector-eq?
+                   (vector-ref owners 7) (vector-ref record 12) 14))
+            (not (eq? (vector-ref owners 8) (vector-ref record 13)))
+            (not (eq? (vector-ref owners 9) (vector-ref record 14)))
+            (not (eq? (vector-ref owners 10)
+                      (vector-ref (vector-ref record 14) 1)))
+            (not (eq? (vector-ref owners 11) (vector-ref record 15)))
+            (not (eq? (vector-ref owners 12) (vector-ref record 16)))
+            (not (eq? (vector-ref owners 13)
+                      (vector-ref (vector-ref record 16) 1)))
+            (not (eq? (vector-ref owners 14) witness))
+            (not (tr3-lease-t2-witness-valid? witness))
+            (not (eq? (vector-ref owners 15) (vector-ref witness 2)))
+            (not (eq? (vector-ref owners 16) (vector-ref witness 3)))
+            (not (eq? (vector-ref owners 17) (vector-ref witness 4)))
+            (not (eq? (vector-ref owners 19) (vector-ref record 6)))
+            (not (let ((t1-entry
+                         (t2-private-entry (vector-ref owners 18))))
+                   (and (pair? t1-entry)
+                        (pair? (cdr t1-entry))
+                        (null? (cdr (cdr t1-entry)))
+                        (eq? (car t1-entry) (vector-ref owners 18))
+                        (eq? (car (cdr t1-entry))
+                             (vector-ref owners 17))))))
+        (tr3-handoff-fail 'invalid-state
+                          "original handoff owner identity changed")))
+  (if (not (equal? (vector-ref capsule 7) (tr3-handoff-controls record)))
+      (tr3-handoff-fail 'invalid-state "original handoff controls changed"))
+  (let ((resolved (vector-ref (vector-ref capsule 7) 3)))
+    (tr3-lease-config-witness!
+      (vector-ref record 9)
+      (utf8->string (vector-ref resolved 0))
+      (vector-ref resolved 1)))
+  (tr3-lease-tokenizer-dataset!
+    (vector-ref record 7) (vector-ref record 16))
+  (tr3-lease-restore-enter-admission! record tr3-handoff-operation)
+  capsule)
+
+(define (tr3-handoff-capture-internal! trainer t1-tokenizer)
+  (if (or tr3-handoff-capture-active? tr3-acquisition-active?
+          tr3-lease-unenroll-active? (vector-ref tr3-trainers 1))
+      (tr3-handoff-fail 'invalid-state "trainer lease registry is busy"))
+  (let* ((record
+           (tr3-lease-record-for-shell-internal
+             trainer tr3-handoff-operation))
+         (token (vector-ref record 5)))
+    (tr3-lease-authenticate record token tr3-handoff-operation)
+    (if (or (not (eq? (vector-ref record 3) 'idle))
+            (vector-ref record 4))
+        (tr3-handoff-fail 'invalid-state "trainer is not idle and plan-free"))
+    (tr3-lease-restore-enter-admission! record tr3-handoff-operation)
+    (tr3-lease-original-t2-core-internal
+      record token t1-tokenizer tr3-handoff-operation)
+    (let ((p1-cell (vector #f)))
+      (guard (caught
+               (#t
+                 (begin
+                   (if (vector-ref p1-cell 0)
+                       (guard (release-error
+                                (#t (tr3-lease-fail-stop 134)))
+                         (tr3-c-snapshot-p1-release! (vector-ref p1-cell 0))))
+                   (set! tr3-handoff-capture-active? #f)
+                   (raise caught))))
+        (set! tr3-handoff-capture-active? #t)
+        (let* ((node (tr3-handoff-node record))
+               (owners (tr3-handoff-owner-roster record t1-tokenizer node))
+               (controls (tr3-handoff-controls record))
+               (capsule
+                 (vector tr3-handoff-capsule-tag #f record token node
+                         'prepared owners controls p1-cell (vector #f))))
+          (vector-set! capsule 1 capsule)
+          (vector-set! p1-cell 0
+                       (tr3-c-snapshot-p1-call (vector-ref record 8)))
+          (tr3-lease-authenticate record token tr3-handoff-operation)
+          (tr3-handoff-capsule-check! capsule record 'prepared)
+          ;; No allocation or provider call follows the final admission.
+          (if (or (not (eq? (vector-ref record 3) 'idle))
+                  (vector-ref record 4)
+                  (not (eq? node (tr3-handoff-node record))))
+              (tr3-handoff-fail 'invalid-state
+                                "trainer changed before handoff fence"))
+          (vector-set! record 4 capsule)
+          (vector-set! record 3 'handoff)
+          (vector-set! capsule 5 'fenced)
+          (set! tr3-handoff-capture-active? #f)
+          capsule)))))
+
+(define (tr3-handoff-abort-before-eval-internal! record capsule)
+  (if tr3-handoff-capture-active?
+      (tr3-handoff-fail 'invalid-state "handoff boundary is busy"))
+  (tr3-lease-authenticate-minimal record tr3-handoff-operation)
+  (if (or (not (eq? (vector-ref record 3) 'handoff))
+          (not (eq? (vector-ref record 4) capsule)))
+      (tr3-handoff-fail 'invalid-state "handoff capsule is not enrolled"))
+  (guard (caught
+           (#t (begin
+                 (set! tr3-handoff-capture-active? #f)
+                 (raise caught))))
+    (set! tr3-handoff-capture-active? #t)
+    (tr3-lease-authenticate record (vector-ref record 5)
+                            tr3-handoff-operation)
+    (tr3-handoff-capsule-check! capsule record 'fenced)
+    (let ((p1-cell (vector-ref capsule 8)))
+      (if (or (not (vector? p1-cell))
+              (not (= (vector-length p1-cell) 1))
+              (not (vector-ref p1-cell 0)))
+          (tr3-handoff-fail 'invalid-state
+                            "handoff P1 owner is absent or consumed"))
+      ;; Release is the only fallible step after revalidation. A failed release
+      ;; leaves custody uncertain, so it cannot return an idle trainer.
+      (guard (release-error (#t (tr3-lease-fail-stop 134)))
+        (tr3-c-snapshot-p1-release! (vector-ref p1-cell 0)))
+      (vector-set! p1-cell 0 #f)
+      (vector-set! capsule 5 'dead)
+      (vector-set! record 4 #f)
+      (vector-set! record 3 'idle)
+      (set! tr3-handoff-capture-active? #f)
+      #t)))

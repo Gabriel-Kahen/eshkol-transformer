@@ -2212,8 +2212,18 @@ remain pending.
 The follow-up TR3 witness-pin repair aligns both lease runtime manifests with
 the unchanged restore-successor source contract. A source-only regression
 rejects the prior stale digest and a foreign digest; historical runner, runtime,
-and trainer provenance remains pinned. Independent source review and compiled
-runtime gates remain pending.
+and trainer provenance remains pinned. Its independent source review passed;
+compiled runtime admission remains pending.
+The private original-epoch handoff capsule source candidate roots the exact
+enrolled TR3 record/node, P1 fixed roster, O2 and D2 registry/native owners,
+registered T2/T1 core, X1 model binding, detached P1 state, and validated
+copied controls under an idle/train authentication. Its one-shot slot-4
+`handoff` phase fences ordinary trainer operations and release; a pre-eval
+abort rechecks the original owners and controls before releasing P1 and
+returning to idle/train. Its bounded independent source review passed. This
+current-main composition requires independent whole-union source review and
+compiled runtime admission. Eval transition, G3/O2 holds, C2 claim,
+capsule-aware trainer release, receipt, and replay remain separate gates.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),

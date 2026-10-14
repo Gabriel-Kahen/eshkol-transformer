@@ -104,6 +104,11 @@ DEVELOPMENT_SCRIPTS = frozenset({
     ROOT / "scripts" / "check-g3g-manual-package.py",
     ROOT / "scripts" / "check-g3r-record-codec.py",
     ROOT / "scripts" / "check-g3r-p1-roster.py",
+    ROOT / "scripts" / "check-g3r-held-o2-adopter.py",
+    ROOT / "scripts" / "check-g3r-joint-c2-claim.py",
+    ROOT / "scripts" / "check-g3r-joint-hold-source.py",
+    ROOT / "scripts" / "check-g3r-joint-issued-adopter.py",
+    ROOT / "scripts" / "check-g3r-joint-original-binding.py",
 }) | G3C4_DEVELOPMENT_SCRIPTS
 
 

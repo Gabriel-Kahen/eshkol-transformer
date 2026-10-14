@@ -10,6 +10,7 @@
 (define tr3-trainers (vector '() #f))
 (define tr3-acquisition-active? #f)
 (define tr3-lease-unenroll-active? #f)
+(define tr3-handoff-capture-active? #f)
 (define tr3-lease-record-tag (vector 'tr3-lease-record-v2))
 (define tr3-lease-token-tag (vector 'tr3-lease-token-v2))
 (define tr3-lease-t2-witness-tag (vector 'tr3-lease-t2-witness-v1))
@@ -430,7 +431,8 @@
   #t)
 
 (define (tr3-lease-create-internal resolved tokenizer dataset model optimizer)
-  (if (or tr3-acquisition-active? tr3-lease-unenroll-active?)
+  (if (or tr3-acquisition-active? tr3-lease-unenroll-active?
+          tr3-handoff-capture-active?)
       (tr3-lease-fail 'invalid-state "trainer acquisition is already active"))
   ;; The handler is installed before the global guard.  Every recoverable exit
   ;; clears both the staging root and the guard without changing registry head.
@@ -628,6 +630,9 @@
       (else (find (cdr remaining))))))
 
 (define (tr3-lease-record-for-shell-internal trainer operation)
+  (if tr3-handoff-capture-active?
+      (tr3-lease-operation-fail
+        'invalid-state operation "trainer handoff capture is active"))
   (let find ((remaining (vector-ref tr3-trainers 0)))
     (cond
       ((null? remaining)
@@ -644,6 +649,7 @@
 (define (tr3-lease-unenroll-internal! trainer)
   (let ((operation 'tr3-lease-unenroll-internal!))
     (if (or tr3-acquisition-active? tr3-lease-unenroll-active?
+            tr3-handoff-capture-active?
             (vector-ref tr3-trainers 1))
         (tr3-lease-operation-fail
           'invalid-state operation "trainer lease registry is busy"))
@@ -1014,6 +1020,9 @@
   #t)
 
 (define (tr3-lease-phase! record token phase active operation)
+  (if tr3-handoff-capture-active?
+      (tr3-lease-operation-fail
+        'invalid-state operation "trainer handoff capture is active"))
   (let ((enrolled (tr3-lease-authenticate record token operation)))
     (if (or (not (eq? (vector-ref enrolled 3) phase))
             (not (eq? (vector-ref enrolled 4) active)))
