@@ -1391,9 +1391,10 @@ The native and private fault fixtures check first error, exact saved cursor,
 probes, one-shot state, and same-frame retry against a fixed-seed twin.
 The native fixture measures no L3S dispatch at denial and a completed first
 batch for occurrence 2; the host dispatch-before-denial mutant must fail that
-count. This is source/host evidence only. Independent review and supported
-compiled Eshkol normal, poison, and sanitizer gates remain pending; E3 §9
-admission remains **HOLD**.
+count. This is source/host evidence only. Independent source/host review
+accepted exact `0f1a27f`/tree `9dfb1f5`.
+Supported compiled Eshkol normal, poison, and sanitizer gates remain pending;
+E3 §9 admission remains **HOLD**.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
