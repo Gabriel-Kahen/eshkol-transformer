@@ -3141,10 +3141,16 @@ publication, public G2 and continuation remain pending.
   further source-private logical text preflight checks the first-EOS versus
   committed-prefix G2 phase, full LE V256 IDs and T1 raw parity, then copies
   the selected bytes into the original logical-one or logical-two text
-  carrier. Its source checker covers nineteen negative mutations. All leaves
-  still require in-region abort. Native first-EOS/G2 terminal commit,
-  post-call snapshot, detached clone, full same-call tests, and independent
-  review remain pending.
+  carrier. Its source checker covers nineteen negative mutations. An abort-only
+  same-call source coordinator now composes the original pending reservation,
+  genuine first decode, conditional prefix/second decode, and logical text
+  preflight inside the existing protected region; both prepared and recoverable
+  error paths abort the original owner before leaving it. The reservation's
+  final post-root check also cleans the rooted pending anchor in-region on
+  rejection, with fail-stop if authenticated cleanup cannot complete. Its
+  source checker covers fifteen negative mutations. This remains source-only:
+  native first-EOS/G2 terminal commit, post-call snapshot, detached clone,
+  compiled same-call proof, and independent review remain pending.
 
 ## Wave 4 — practical pretraining and performance
 

@@ -163,7 +163,14 @@
       (vector-set! anchor 16 original)
       (vector-set! g3c4-p2g2-terminal-pending-anchors 0 anchor-node)
       (vector-set! g3c4-p2g2-terminal-pending-originals 0 original-node)
-      (g3c4-p2g2-terminal-pending-check call anchor operation))))
+      ;; The anchor is rooted now. If this last check rejects, clean it in
+      ;; this call region before the protected scope handles the exception.
+      (guard (caught
+               (#t
+                 (guard (abort-failure (#t (exit 134)))
+                   (g3c4-p2g2-terminal-pending-abort! call anchor))
+                 (raise caught)))
+        (g3c4-p2g2-terminal-pending-check call anchor operation)))))
 
 ;;; A held genuine I1/A2 lease makes protected-abort! reject before mutation.
 ;;; The anchor stays pending for an in-region release and retry by its caller.
