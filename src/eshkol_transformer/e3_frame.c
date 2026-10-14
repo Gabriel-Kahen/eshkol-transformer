@@ -329,6 +329,7 @@ int64_t et_e3_test_fault_arm_v1(void *pointer, int64_t site,
         || (site == 10 && ordinal == 0 && occurrence >= 1 && occurrence <= 2)
         || (site == 11 && ordinal == 0 && occurrence >= 1 && occurrence <= 2)
         || (site == 12 && ordinal == 0 && occurrence >= 1 && occurrence <= 2)
+        || (site == 13 && ordinal == 0 && occurrence >= 1 && occurrence <= 2)
 #ifdef ET_E3_PARTIAL_PIN_TESTING
         || (site == 4 && ordinal >= 0 && ordinal < 14 && occurrence == 1)
 #endif
@@ -1006,6 +1007,15 @@ int64_t et_e3_private_stage_inputs_v1(
   for (size_t i = 0; i < 2; ++i)
     if (ids[i] < 0 || ids[i] >= 256)
       return e3_fail(E3_SHAPE_MISMATCH, E3_CODE_SHAPE);
+#ifdef ET_E3_FAULT_TESTING
+  if (frame->fault_state == 1 && frame->fault_site == 13) {
+    ++frame->fault_reached;
+    if (frame->fault_reached == frame->fault_occurrence) {
+      frame->fault_state = 2; /* Input borrow closes after the false return. */
+      return e3_fail(E3_INTERNAL, E3_CODE_INVARIANT);
+    }
+  }
+#endif
   memcpy(frame->ids, ids, sizeof(frame->ids));
   frame->phase = E3_STAGING;
   frame->stage_plane = 1;
