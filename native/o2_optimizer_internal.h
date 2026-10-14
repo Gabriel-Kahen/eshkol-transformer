@@ -176,6 +176,42 @@ et_o2_optimizer_schedule_factor_bits_v1(const et_o2_optimizer *optimizer,
 int32_t et_o2_optimizer_state_snapshot_v1(et_o2_optimizer *optimizer,
                                           et_o2_optimizer_state **state,
                                           et_o2_error_v1 *error);
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+typedef struct et_o2_g3r_save_hold et_o2_g3r_save_hold;
+/* Fixed private same-owner admission. The caller must supply a roster just
+ * authenticated by the registered sealed M3T owner. Caller output/error
+ * spans must be disjoint from each other and registered O2 owner storage.
+ * An active O2 or reconstruction builder also returns INVALID_ARGUMENT:
+ * its mutable descriptors cannot authenticate owned-array spans. Neither
+ * rejection writes an error record. The feature requires I2's immutable
+ * owned-span provenance (ET_G3R_CANDIDATE_RETIRE_PRIVATE) in both O2 and I2;
+ * a nonzero F32 query result rejects output/error buffers before mutation. */
+int32_t et_g3r_private_o2_save_begin_v1(
+    et_o2_optimizer *optimizer, et_f32_parameter *const parameters[14],
+    const void *const identities[14], et_o2_g3r_save_hold **hold,
+    et_o2_error_v1 *error);
+int32_t et_g3r_private_o2_save_state_v1(
+    et_o2_g3r_save_hold *hold, et_o2_optimizer_state **state,
+    et_o2_error_v1 *error);
+int32_t et_g3r_private_o2_save_check_v1(
+    et_o2_g3r_save_hold *hold, et_o2_error_v1 *error);
+/* Authenticate the exact registered optimizer bound by begin, independently
+ * of any bit-equal state supplied to issued_match. */
+int32_t et_g3r_private_o2_save_owner_match_v1(
+    et_o2_g3r_save_hold *hold, const et_o2_optimizer *optimizer,
+    et_o2_error_v1 *error);
+/* Return the captured count only for this live hold's exact original owner.
+ * Status and output are separate; failure leaves completed_updates untouched. */
+int32_t et_g3r_private_o2_save_completed_updates_v1(
+    et_o2_g3r_save_hold *hold, const et_o2_optimizer *optimizer,
+    uint64_t *completed_updates, et_o2_error_v1 *error);
+/* Compare the exact issued state against the held pre-snapshot authority. */
+int32_t et_g3r_private_o2_save_issued_match_v1(
+    et_o2_g3r_save_hold *hold, const et_o2_optimizer_state *state,
+    et_o2_error_v1 *error);
+int32_t et_g3r_private_o2_save_end_v1(
+    et_o2_g3r_save_hold **hold, et_o2_error_v1 *error);
+#endif
 int32_t et_o2_optimizer_load_state_v1(et_o2_optimizer *optimizer,
                                       et_o2_optimizer_state *state,
                                       et_o2_error_v1 *error);

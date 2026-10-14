@@ -2195,6 +2195,14 @@ pass locally. Independent source review, sealed M3T roster, O2 hold, current
 G3/A2 held 17-word snapshot, compiled union and failure cuts remain gates;
 this leaf adds no same-owner writer, SAVE or continuation admission.
 
+The [original-owner G3/O2 coordinator source union](g3/G3_R_ORIGINAL_OWNER_COORDINATOR_LEAF.md)
+now combines the reviewed trainer-held G3 leaf, held-O2 TR3 recheck and
+feature-private original O2 hold with current main. Its focused host gate
+covers causal source checks, the G3 and O2 bridges, feature-off bridge
+absence, and 403 native O2 hold checks. This is a source-only prerequisite:
+the joint Eshkol lease/hold lifecycle and adverse cleanup remain uncompiled,
+and no held state, C2 claim, SAVE receipt or replay is admitted.
+
 The [current-history G3/A2 held-owner leaf](g3/G3_R_CURRENT_HISTORY_HELD_OWNER_LEAF.md)
 adds source-private original-owner pins and cache borrow with a checked 17-word
 committed-history image. Focused native feature-off, normal, repeat and

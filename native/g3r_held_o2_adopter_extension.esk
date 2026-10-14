@@ -1,0 +1,213 @@
+;;; Feature-private O2 held-state enrollment prerequisite. Load after O2 in a
+;;; G3-R source aggregate with ET_G3R_SAME_OWNER_SAVE_PRIVATE. The caller owns
+;;; the original hold and must keep it live through a later C2 transfer.
+(extern i64 g3r-held-o2-owner-match ptr ptr
+        :real et_g3r_private_o2_adopter_owner_match_v1)
+(extern i64 g3r-held-o2-completed-updates ptr ptr
+        :real et_g3r_private_o2_adopter_completed_updates_v1)
+(extern ptr g3r-held-o2-issue ptr
+        :real et_g3r_private_o2_adopter_issue_v1)
+(extern i64 g3r-held-o2-issued-match ptr ptr ptr ptr
+        :real et_g3r_private_o2_adopter_issued_match_v1)
+(extern void g3r-held-o2-fail-stop
+        :real et_g3r_private_o2_adopter_fail_stop_v1)
+
+(define g3r-held-o2-adopter-tag (vector 'g3r-held-o2-adopter-v1))
+
+;;; Ledger: tag, exact hold, Scheme optimizer, native optimizer, exact native
+;;; pointer cell, Scheme state shell, state record, registry cons, phase.
+;;; The ledger is the future C2 request's authority, not a public O2 state.
+(define (g3r-held-o2-adopter-check ledger operation)
+  (if (or (not (vector? ledger)) (not (= (vector-length ledger) 9))
+          (not (eq? (vector-ref ledger 0) g3r-held-o2-adopter-tag))
+          (not (eq? (vector-ref ledger 2)
+                    (vector-ref (o2-require-optimizer
+                                  operation (vector-ref ledger 2)) 0)))
+          (not (eq? (vector-ref ledger 3)
+                    (vector-ref (o2-require-optimizer
+                                  operation (vector-ref ledger 2)) 1)))
+          (not (eq? (vector-ref (vector-ref ledger 6) 0)
+                    (vector-ref ledger 5))))
+      (o2-fail 'invalid-state operation
+               "held O2 adoption ledger lost its exact optimizer or shell"))
+  ledger)
+
+(define (g3r-held-o2-adopter-match! ledger operation)
+  (g3r-held-o2-adopter-check ledger operation)
+  (let ((issued (vector-ref (vector-ref ledger 4) 0)))
+    (if (or (not issued)
+            (not (eq? issued (vector-ref (vector-ref ledger 6) 1))))
+        (o2-fail 'invalid-state operation
+                 "held O2 state differs from the exact issued pointer"))
+    (if (not (= 0 (g3r-held-o2-issued-match
+                    (vector-ref ledger 1) (vector-ref ledger 3)
+                    issued (vector-ref (vector-ref ledger 6) 1))))
+        (o2-native-fail operation)))
+  #t)
+
+(define (g3r-held-o2-adopter-consume! ledger)
+  (vector-set! (vector-ref ledger 4) 0 #f)
+  (let ((state (vector-ref ledger 6)))
+    (vector-set! state 1 'released)
+    (vector-set! state 2 'released)
+    (vector-set! state 3 'released)
+    (vector-set! state 4 'released)
+    (vector-set! state 6 'dead))
+  (vector-set! ledger 8 'dead)
+  #t)
+
+;;; Release is valid only before a C2 claim. The native O2 bridge probes the
+;;; exact state's lifecycle after a failed release and retains the first O2
+;;; error. -1 is proved LIVE; retry once while the ledger stays rooted. -2 is
+;;; DEAD with a provider defect. -3 cannot prove the lifecycle and fails stop.
+(define (g3r-held-o2-adopter-release! ledger)
+  (let ((operation 'g3r-held-o2-adopter-release!))
+    (g3r-held-o2-adopter-check ledger operation)
+    (if (eq? (vector-ref ledger 8) 'dead)
+        #t
+        (begin
+          (if (not (or (eq? (vector-ref ledger 8) 'issued)
+                       (eq? (vector-ref ledger 8) 'enrolled)))
+              (o2-fail 'invalid-state operation
+                       "held O2 state is not preclaim release authority"))
+          (let* ((state (vector-ref ledger 6))
+                 (issued (vector-ref (vector-ref ledger 4) 0)))
+            (if (or (not issued)
+                    (not (eq? issued (vector-ref state 1)))
+                    (not (eq? (vector-ref state 6)
+                              (if (eq? (vector-ref ledger 8) 'issued)
+                                  'constructing 'live))))
+                (o2-fail 'invalid-state operation
+                         "held O2 release lost its exact native pointer"))
+            (let ((status (o2-native-optimizer-state-release issued)))
+              (cond
+                ((= status 0) (g3r-held-o2-adopter-consume! ledger))
+                ((= status -2)
+                 (g3r-held-o2-adopter-consume! ledger)
+                 (o2-native-fail operation))
+                ((= status -1)
+                 ;; Still LIVE. The caller retains the ledger for a controlled
+                 ;; retry and must not release either original hold yet.
+                 (o2-native-fail operation))
+                (else (g3r-held-o2-fail-stop)))))))))
+
+(define (g3r-held-o2-adopt! hold optimizer-value)
+  (let* ((operation 'g3r-held-o2-adopt!)
+         (optimizer (o2-require-optimizer operation optimizer-value))
+         (native-optimizer (vector-ref optimizer 1)))
+    (let ((completed (g3r-held-o2-completed-updates
+                       hold native-optimizer)))
+      (if (< completed 0) (o2-native-fail operation))
+      (o2-state-projection-budget!
+        operation (vector-ref optimizer 2) (vector-ref optimizer 3)
+        (vector-ref optimizer 4) (vector-ref optimizer 5))
+      ;; All Scheme allocation, including the next registry cons, precedes
+      ;; native issue. No public state shell is published until the exact
+      ;; issued pointer, owner, and held bits have all passed validation.
+      (let* ((shell (o2-make-identity "transformer.optimizer-state:v1"))
+             (state
+               (vector shell #f
+                       (o2-copy-config-data operation (vector-ref optimizer 2))
+                       (o2-copy-paths (vector-ref optimizer 3))
+                       (o2-copy-aliases (vector-ref optimizer 4))
+                       completed 'constructing #f))
+             (enrollment (cons state o2-states))
+             (pointer (vector #f))
+             (ledger
+               (vector g3r-held-o2-adopter-tag hold optimizer-value
+                       native-optimizer pointer shell state enrollment
+                       'prepared)))
+        (if (not (= 0 (g3r-held-o2-owner-match hold native-optimizer)))
+            (o2-native-fail operation))
+        ;; Installing a guard can allocate. Install it before native issue,
+        ;; while the ledger is still prepared and owns no native state.
+        (guard (caught
+                 (#t
+                   (if (or (eq? (vector-ref ledger 8) 'issued)
+                           (eq? (vector-ref ledger 8) 'enrolled))
+                       (let ((exact (vector-ref pointer 0)))
+                         (if (or (not exact)
+                                 (not (eq? exact (vector-ref state 1))))
+                             (g3r-held-o2-fail-stop))
+                         ;; Cleanup calls are non-raising native status checks.
+                         ;; Installing another Scheme handler here could itself
+                         ;; allocate after native issue and lose this owner.
+                         (let ((status (o2-native-optimizer-state-release exact)))
+                           (if (= status -1)
+                               ;; A proved-LIVE failure permits one exact retry.
+                               (set! status
+                                 (o2-native-optimizer-state-release exact)))
+                           (if (or (= status 0) (= status -2))
+                               (g3r-held-o2-adopter-consume! ledger)
+                               (g3r-held-o2-fail-stop)))))
+                   ;; Keep the first typed error from the failed adoption.
+                   (raise caught)))
+          (let ((issued (g3r-held-o2-issue hold)))
+            (if (null? issued) (o2-native-fail operation))
+            ;; The first operations after return are assignment-only and
+            ;; make the exact pointer and cleanup phase rooted.
+            (vector-set! pointer 0 issued)
+            (vector-set! state 1 issued)
+            (vector-set! ledger 8 'issued)
+            (g3r-held-o2-adopter-match! ledger operation)
+            (vector-set! state 6 'live)
+            (set! o2-states enrollment)
+            (vector-set! ledger 8 'enrolled)
+            ledger))))))
+
+;;; Called only after C2 compose returned successfully. The caller keeps the
+;;; original G3/O2 holds, this ledger, its P1 clone, and the exact request
+;;; rooted until this check finishes. After C2 has claimed O2, any uncertain
+;;; observation is fatal: preclaim release no longer owns the native state.
+(define (g3r-held-o2-adopter-c2-claim! ledger request p1)
+  (if (or (not (vector? ledger)) (not (= (vector-length ledger) 9))
+          (not (eq? (vector-ref ledger 0) g3r-held-o2-adopter-tag))
+          (not (eq? (vector-ref ledger 8) 'enrolled))
+          (not (vector? request)) (not (= (vector-length request) 6))
+          (not (eq? (vector-ref request 0) c2-training-state-compose-tag))
+          (not (eq? (vector-ref request 1) #f))
+          (not (eq? (vector-ref request 2) #f))
+          (not (vector? (vector-ref ledger 4)))
+          (not (= (vector-length (vector-ref ledger 4)) 1))
+          (not (vector? (vector-ref ledger 6)))
+          (not (= (vector-length (vector-ref ledger 6)) 8))
+          (not (pair? (vector-ref ledger 7)))
+          (not (eq? (car (vector-ref ledger 7))
+                    (vector-ref ledger 6))))
+      (g3r-held-o2-fail-stop))
+  (let* ((shell (vector-ref request 5))
+         (owner (c2-training-state-find shell))
+         (o2-shell (vector-ref ledger 5))
+         (o2-state (vector-ref ledger 6))
+         (issued (vector-ref (vector-ref ledger 4) 0))
+         (optimizer (o2-find-identity (vector-ref ledger 2) o2-optimizers)))
+    (if (or (not owner) (not (vector? owner))
+            (not (= (vector-length owner) 9))
+            (not (eq? (vector-ref owner 0) shell))
+            (not (eq? (vector-ref owner 1) p1))
+            (not (eq? (vector-ref owner 2) o2-shell))
+            (not (eq? (vector-ref owner 7) 'live))
+            (not (vector? (vector-ref owner 6)))
+            (not (= (vector-length (vector-ref owner 6)) 3))
+            (not (eq? (vector-ref (vector-ref owner 6) 0)
+                      c2-training-state-owner-token-tag))
+            (not (eq? (vector-ref (vector-ref owner 6) 1) shell))
+            (not (eq? (vector-ref (vector-ref owner 6) 2) #f))
+            (not optimizer)
+            (not (vector? optimizer))
+            (not (= (vector-length optimizer) 6))
+            (not (eq? (vector-ref optimizer 1) (vector-ref ledger 3)))
+            (not (eq? (vector-ref o2-state 0) o2-shell))
+            (not (eq? o2-state (o2-find-identity o2-shell o2-states)))
+            (not (eq? (vector-ref o2-state 1) issued))
+            (not (eq? (vector-ref o2-state 6) (vector-ref owner 6)))
+            (not (eq? (vector-ref o2-state 7) #f))
+            (not issued)
+            (not (= 0 (g3r-held-o2-issued-match
+                        (vector-ref ledger 1) (vector-ref ledger 3)
+                        issued (vector-ref o2-state 1)))))
+        (g3r-held-o2-fail-stop))
+    ;; Assignment-only transfer tail. The ledger remains rooted until the
+    ;; coordinator has checked and released both original holds.
+    (vector-set! ledger 8 'claimed)
+    shell))
