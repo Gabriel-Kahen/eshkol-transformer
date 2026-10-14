@@ -161,6 +161,11 @@ def eos_observation_contract(driver, composer, coordinator, script):
     wrapper = composer[composer.index(
         "int64_t __wrap_et_g3c4_private_p2g2_eos_first_frame_carrier_v1("):]
     observer = wrapper.index("et_g3c4_p2g2_coordinator_test_observe_v1(")
+    guard_marker = 'if (result == 0) held_trace("eos.guard.enter");'
+    if not (wrapper.index('held_trace("eos.real.return")') <
+            wrapper.index(guard_marker) <
+            wrapper.index("if (result == 0 &&") < observer):
+        raise AssertionError("EOS guard-entry trace must follow successful real return")
     if not all(wrapper.index(guard) < observer for guard in (
             "coordinator_owner == NULL", "coordinator_marked_context != context",
             "coordinator_owner !=\n           ((et_g3c4_context_internal *)context)->owner",
@@ -187,6 +192,11 @@ def eos_observation_contract(driver, composer, coordinator, script):
             "(held-mark" not in missing and
             '"$directory/held-on" missing-mark' in script):
         raise AssertionError("missing-mark runtime negative is not executable")
+    missing_gate = script[script.index('"$directory/held-on" missing-mark'):
+                          script.index('for fixture in repeat-busy postzero; do')]
+    if not (missing_gate.index('rg -Fqx \'case=2 phase=eos.guard.enter\'') <
+            missing_gate.index('G3-C4 held-holder missing-mark PASS:')):
+        raise AssertionError("missing-mark gate does not prove second-case guard entry")
 
 
 class HeldHolderCompiledSource(unittest.TestCase):
@@ -223,6 +233,20 @@ class HeldHolderCompiledSource(unittest.TestCase):
             eos_observation_contract(driver, composer, coordinator,
                                      script.replace('"$directory/held-on" missing-mark',
                                                     '"$directory/held-on" normal', 1))
+        with self.assertRaises((ValueError, AssertionError)):
+            eos_observation_contract(driver, composer.replace(
+                'if (result == 0) held_trace("eos.guard.enter");',
+                'if (result != 0) held_trace("eos.guard.enter");', 1),
+                coordinator, script)
+        with self.assertRaises((ValueError, AssertionError)):
+            eos_observation_contract(driver, composer.replace(
+                'held_trace("eos.guard.enter");', '', 1),
+                coordinator, script)
+        with self.assertRaises((ValueError, AssertionError)):
+            eos_observation_contract(driver, composer, coordinator,
+                                     script.replace(
+                                         "rg -Fqx 'case=2 phase=eos.guard.enter'",
+                                         "test -s", 1))
 
     def test_eos_boundary_trace_is_ordered_and_test_only(self):
         held, composer, owner = SHIM.read_text(), COMPOSER.read_text(), OWNER.read_text()

@@ -444,6 +444,9 @@ int64_t __wrap_et_g3c4_private_p2g2_eos_first_frame_carrier_v1(
         memcmp(actual->generator_rng_words, coordinator_entry_rng,
                sizeof(coordinator_entry_rng)) == 0;
   }
+#ifdef ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE
+  if (result == 0) held_trace("eos.guard.enter");
+#endif
   if (result == 0 &&
       (coordinator_owner == NULL || coordinator_marked_context != context ||
        coordinator_owner !=

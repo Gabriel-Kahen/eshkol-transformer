@@ -3290,8 +3290,13 @@ publication, public G2 and continuation remain pending.
   fresh case, binds the EOS guard to its exact context, model owner, and cache,
   and adds a marked-then-unmarked executable negative that requires zero
   observer entries. The 19 focused source tests and strict on/off Clang syntax
-  checks pass. Independent source/tests review and a fresh changed-head compiled
-  gate remain pending; this does not admit P2/G2 runtime.
+  checks pass. Independent review of `06563e14` held the causal negative: the
+  later case could reject before EOS while the first case alone made the
+  combined trace nonempty. The successor requires an exact `case=2`
+  `eos.guard.enter` trace after a successful real EOS return and before the
+  observer, alongside typed rejection and zero observer entries. Independent
+  source/tests review and a fresh changed-head compiled gate remain pending;
+  this does not admit P2/G2 runtime.
   The full matrix, public G2, and continuation acceptance remain unproved.
 
 ## Wave 4 — practical pretraining and performance

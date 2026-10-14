@@ -242,6 +242,8 @@ PY
     2>"$evidence/$mode-missing-mark.stderr" \
     4>"$evidence/$mode-missing-mark.trace"
   test -s "$evidence/$mode-missing-mark.trace"
+  rg -Fqx 'case=2 phase=eos.guard.enter' \
+    "$evidence/$mode-missing-mark.trace" >/dev/null
   test ! -s "$evidence/$mode-missing-mark.stderr"
   rg '^G3-C4 held-holder missing-mark PASS: checks=[1-9][0-9]*$' \
     "$evidence/$mode-missing-mark.stdout" >/dev/null
