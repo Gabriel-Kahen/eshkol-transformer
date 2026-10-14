@@ -7,6 +7,9 @@ recipe, the existing allocator shim, and both historical TR3 lease manifests.
 The historical manifests are evidence of earlier gates; their `lease_core_sha256`
 remains `65e8f97c...` while this source is `28b1d5bd...`. Neither historical
 manifest is an admission for the current tree.
+The successor recipe carries the inherited `runner_role` in its strict
+manifest and evidence output, and requires the fixture's 15-check pass marker.
+The source test executes the rendered role expression and pass predicate.
 
 The source-only preflight is:
 

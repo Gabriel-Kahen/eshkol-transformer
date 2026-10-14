@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.util
+import re
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -27,6 +29,7 @@ class CurrentTreeCandidate(unittest.TestCase):
                          "28b1d5bddf68331a877169080ed67de0493a9697d9bc37db9ae64fb03471d75b")
         self.assertEqual(rows["allocation_classes"],
                          "object,all,promotion,target,handler")
+        self.assertEqual(rows["runner_role"], "functional_recovered_final81298")
 
     def test_manifest_tampering_fails_closed(self) -> None:
         rows = dict(line.split("\t", 1) for line in MANIFEST.splitlines())
@@ -39,6 +42,7 @@ class CurrentTreeCandidate(unittest.TestCase):
             ("historical_failure_manifest_sha256", "0" * 64),
             ("allocation_classes", "object,all"),
             ("runner_sha256", "0" * 64),
+            ("runner_role", "wrong_role"),
         ):
             with self.subTest(key=key):
                 mutant = dict(rows, **{key: value})
@@ -50,16 +54,53 @@ class CurrentTreeCandidate(unittest.TestCase):
             RECIPE.parse_manifest(MANIFEST + "admission\tadmitted\n")
         with self.assertRaises(ValueError):
             RECIPE.parse_manifest(MANIFEST.replace("\t", " ", 1))
+        with self.assertRaises(ValueError):
+            RECIPE.parse_manifest("\n".join(
+                line for line in MANIFEST.splitlines()
+                if not line.startswith("runner_role\t")) + "\n")
 
     def test_held_recipe_replaces_fixture_and_preflights_current_source(self) -> None:
         rendered = RECIPE.render(RECIPE.parse_manifest(MANIFEST))
         self.assertIn("tests/tr3_handoff_capsule/runtime_candidate.esk", rendered)
         self.assertNotIn("tests/tr3_joint_restore/runtime_smoke.esk", rendered)
         self.assertIn("prepare-tr3-handoff-capsule-gate.py --verify-only", rendered)
-        self.assertIn("TR3-HANDOFF-CANDIDATE-PASS checks=[0-9]+", rendered)
+        marker = r"^TR3-HANDOFF-CANDIDATE-PASS checks=15$"
+        self.assertIn(marker, rendered)
+        self.assertNotIn("checks=[0-9]+", rendered)
+        gate_marker = re.search(r"grep -E '([^']+)'", rendered)
+        self.assertIsNotNone(gate_marker)
+        self.assertEqual(gate_marker.group(1), marker)
+        for stdout in ("TR3-HANDOFF-CANDIDATE-PASS checks=0\n",
+                       "TR3-HANDOFF-CANDIDATE-PASS checks=14\n",
+                       "TR3-HANDOFF-CANDIDATE-PASS checks=150\n"):
+            with self.subTest(stdout=stdout):
+                self.assertNotEqual(subprocess.run(
+                    ["grep", "-E", gate_marker.group(1)], input=stdout,
+                    text=True, capture_output=True).returncode, 0)
+        self.assertEqual(subprocess.run(
+            ["grep", "-E", gate_marker.group(1)],
+            input="TR3-HANDOFF-CANDIDATE-PASS checks=15\n",
+            text=True, capture_output=True).returncode, 0)
         self.assertNotIn("TR3-C JOINT RUNTIME PASS", rendered)
         with self.assertRaises(ValueError):
             RECIPE.replace_once("missing marker", "expected marker", "new")
+
+    def test_rendered_role_expression_reports_inherited_value(self) -> None:
+        rendered = RECIPE.render(RECIPE.parse_manifest(MANIFEST))
+        role_lines = [line.strip() for line in rendered.splitlines()
+                      if "printf 'runner_role\\t%s\\n'" in line]
+        self.assertEqual(len(role_lines), 1)
+        script = (f"source '{ROOT}/scripts/common.sh'\n"
+                  f"candidate_manifest='{RECIPE.MANIFEST}'\n"
+                  f"{role_lines[0]}\n")
+        result = subprocess.run(["bash", "-c", script], capture_output=True,
+                                text=True, check=True)
+        self.assertEqual(result.stdout,
+                         "runner_role\tfunctional_recovered_final81298\n")
+        self.assertEqual(result.stderr, "")
+
+    def test_fixture_check_count_matches_pinned_marker(self) -> None:
+        self.assertEqual(len(re.findall(r"(?m)^\(check\s", FIXTURE)), 15)
 
     def test_fixture_covers_causal_private_cuts(self) -> None:
         for marker in (

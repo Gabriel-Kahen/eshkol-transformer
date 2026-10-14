@@ -2232,6 +2232,10 @@ or native runtime result exists. A genuine capsule-specific allocator-prefix
 shim/matrix, exact symbol closure, bounded compiled run and independent review
 remain required before runtime admission. Historical lease manifests retain
 their original provenance and are not reused as current-tree gate approval.
+The successor source recipe now validates the inherited runner role and pins
+the pass marker to all 15 fixture checks. Source-only negative tests cover
+missing or changed role and incorrect pass counts; runtime admission stays held
+on the allocator matrix and compiled/native evidence above.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),

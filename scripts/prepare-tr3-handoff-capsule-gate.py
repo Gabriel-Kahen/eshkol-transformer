@@ -26,7 +26,7 @@ HASH_PATHS = {
 }
 REQUIRED = set(HASH_PATHS) | {
     "format_version", "admission", "source_basis_commit", "source_basis_tree",
-    "runner_relative_path", "runner_sha256", "compiler_source_commit",
+    "runner_relative_path", "runner_sha256", "runner_role", "compiler_source_commit",
     "container_image", "container_digest", "allocation_classes",
 }
 
@@ -45,7 +45,7 @@ def parse_manifest(source: str) -> dict[str, str]:
         raise ValueError("real allocator failure matrix is not fully declared")
     historical = dict(line.split("\t", 1) for line in
                       (ROOT / "tests/tr3_lease/runtime_candidate.tsv").read_text().splitlines())
-    for key in ("runner_relative_path", "runner_sha256", "compiler_source_commit",
+    for key in ("runner_relative_path", "runner_sha256", "runner_role", "compiler_source_commit",
                 "container_image", "container_digest"):
         if rows[key] != historical[key]:
             raise ValueError(f"inherited runner provenance differs: {key}")
@@ -57,6 +57,9 @@ def parse_manifest(source: str) -> dict[str, str]:
         actual = hashlib.sha256((ROOT / HASH_PATHS[key]).read_bytes()).hexdigest()
         if actual != rows[key]:
             raise ValueError(f"source digest differs: {HASH_PATHS[key]}")
+    fixture = (ROOT / HASH_PATHS["fixture_sha256"]).read_text()
+    if len(re.findall(r"(?m)^\(check\s", fixture)) != 15:
+        raise ValueError("capsule fixture check count differs from pinned pass marker")
     if not re.fullmatch(r"[0-9a-f]{40}", rows["source_basis_commit"]):
         raise ValueError("invalid source basis")
     result = subprocess.run(
@@ -104,7 +107,7 @@ def render(rows: dict[str, str]) -> str:
         "tr3_joint_runtime": "tr3_handoff_candidate_runtime",
         "joint-runtime": "handoff-candidate-runtime",
         "TR3-C JOINT RUNTIME PASS: [0-9]+ checks, 42 tensors, abort/retry":
-            "TR3-HANDOFF-CANDIDATE-PASS checks=[0-9]+",
+            "TR3-HANDOFF-CANDIDATE-PASS checks=15",
     }
     for old, new in substitutions.items():
         if old not in gate:
