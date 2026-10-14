@@ -120,6 +120,17 @@ def phase_trace_contract(driver, shim, script):
         raise AssertionError("normal and fail-stop cases need separate traces")
 
 
+def eos_args_fd4_contract(shim):
+    """Pin the EOS argument writer itself to the durable trace descriptor."""
+    start = shim.index('static void held_trace_eos_args(', shim.index(
+        'static void held_trace(const char *phase) {'))
+    end = shim.index('\n}', start) + 2
+    writer = shim[start:end]
+    if 'write(4, line, (size_t)size) != size' not in writer:
+        raise AssertionError("EOS args trace must write to fd 4")
+    return writer
+
+
 class HeldHolderCompiledSource(unittest.TestCase):
     def test_eos_boundary_trace_is_ordered_and_test_only(self):
         held, composer, owner = SHIM.read_text(), COMPOSER.read_text(), OWNER.read_text()
@@ -127,7 +138,13 @@ class HeldHolderCompiledSource(unittest.TestCase):
         self.assertLess(held.index(f"#define {feature} 1"),
                         held.index('#include "p2_g2_terminal_composer_native.c"'))
         self.assertNotIn(f"#define {feature}", composer)
-        self.assertIn('write(4, line, (size_t)size)', held)
+        args_writer = eos_args_fd4_contract(held)
+        redirected = held.replace(args_writer, args_writer.replace(
+            'write(4, line, (size_t)size)',
+            'write(2, line, (size_t)size)', 1), 1)
+        self.assertNotEqual(redirected, held)
+        with self.assertRaisesRegex(AssertionError, "EOS args trace must write to fd 4"):
+            eos_args_fd4_contract(redirected)
         for field in ("context=%p", "input=%p", "staging=%p", "bytes=%lld"):
             self.assertIn(field, held)
 
