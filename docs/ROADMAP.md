@@ -2206,7 +2206,7 @@ pipe early. The probe now records complete defined-symbol output and requires
 the exact global text symbol. A source-closure mutation and generated-object
 positive/missing-symbol regressions cover this repair. The failed gate remains
 unadmitted; a fresh pinned compiled run and independent review remain required.
-The next one-use gate on `73d87b49` passed native provider linking but stopped
+The next one-use gate on `73d87b49` built the native provider archive but stopped
 at Eshkol compilation. Its D2/T2 root did not load the existing G3 bridge for
 T1 predecessor lookups, the held fixture used an unavailable T1 constructor
 and `length` under `--no-stdlib`, and its topology fault tried to reassign an
