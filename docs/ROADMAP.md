@@ -1159,6 +1159,14 @@ completed warmup, calibration, success and retry call. The evaluator's measured
 region-byte interval is unchanged. Source mutation controls check the baseline
 order and comparison topology; a compiled first-call bit-mutation witness and
 supported complete-call gate remain pending, so this is not §9 acceptance.
+The separate post-report teardown phase now closes D2 before its 29-probe
+baseline, unbinds the idle E3 frame, destroys all four caller destinations,
+and compares a second 29-probe snapshot. It requires 41 fewer live I2 tensors,
+one fewer live frame and one additional dead-frame tombstone, zero transient
+borrows/batches/FDs, and unchanged model-owned counts and full model image.
+Focused source tests reject skip-unbind and skip-one-destination mutations.
+Compiled 1,024/8,192-call resource and sanitizer gates remain pending; this
+test-only source leaf does not establish their runtime outcome.
 An isolated noninstalled first-evaluation mutant tuple now derives a private
 driver mechanically from that baseline and replaces only the E3 frame test
 object with a feature-gated, fixed one-shot helper. Source controls cover

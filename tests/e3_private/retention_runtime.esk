@@ -35,6 +35,7 @@
 (define prepare (vector (vector 'retention 'prepare horizon present?)))
 (define execute (vector (vector 'retention 'execute horizon present?)))
 (define report (vector (vector 'retention 'report horizon present?)))
+(define teardown (vector (vector 'retention 'teardown horizon present?)))
 
 (e3-retention-test-run prepare input output)
 (check 'prepared (eq? (vector-ref output 0) #t))
@@ -81,6 +82,15 @@
             (= (vector-ref growth 5)
                (- (vector-ref (vector-ref result 6) 27)
                   (vector-ref (vector-ref result 5) 27)))))
+(e3-retention-test-run teardown input output)
+(define teardown-result (vector-ref output 0))
+(check 'teardown-result-shape
+       (and (vector? teardown-result) (= (vector-length teardown-result) 3)
+            (eq? (vector-ref teardown-result 0) 'e3-retention-teardown-v1)
+            (vector? (vector-ref teardown-result 1))
+            (= (vector-length (vector-ref teardown-result 1)) 29)
+            (vector? (vector-ref teardown-result 2))
+            (= (vector-length (vector-ref teardown-result 2)) 29)))
 (display "E3-COMPLETE-CALL-RETENTION-PASS horizon=") (display horizon)
 (display " gradient=") (display (if present? "present" "absent"))
 (display " arena_used=") (display used-after)
