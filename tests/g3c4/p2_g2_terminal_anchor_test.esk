@@ -1,0 +1,69 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+(load "g3c4_t1_output_decode_extension.esk")
+(load "g3c4_output_envelope_extension.esk")
+(load "g3c4_p2g2_ownership_extension.esk")
+(load "g3c4_p2g2_protected_scope_extension.esk")
+(load "g3c4_p2g2_t1_prefix_coordinator_extension.esk")
+(load "g3c4_p2g2_terminal_extension.esk")
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "P2/G2 terminal anchor FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label thunk)
+  (check label
+    (guard (caught (#t (transformer-error? caught)))
+      (thunk) #f)))
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define model (g3c4-model-create-seeded-internal 1729))
+(define input
+  (g3c4-p2g2-owned-input-create
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255))))
+(define generator
+  (g3c4-generator-create-internal
+    model tokenizer
+    (list ':profile 'diagnostic-c4 ':sampling 'greedy
+          ':temperature-bits 1065353216 ':top-k 256
+          ':top-p-bits 1065353216 ':max-new-tokens 2
+          ':eos 255 ':seed 17)))
+(define output #f)
+(define pending-anchor #f)
+
+(check "same-call pending reservation"
+  (g3c4-with-p2g2-prefix-call 'terminal-anchor-test generator input (call)
+    (set! pending-anchor (g3c4-p2g2-terminal-pending-reserve! call))
+    (set! output (vector-ref pending-anchor 4))
+    (check "same original enrolled output"
+      (and (eq? (vector-ref (vector-ref call 10) 4) output)
+           (eq? (g3c4-registry-find (vector-ref output 0) 'test) output)
+           (eq? (g3c4-p2g2-terminal-pending-check
+                  call pending-anchor 'test) pending-anchor)))
+    (let ((saved (vector-ref pending-anchor 9)))
+      (vector-set! pending-anchor 9 (make-bytevector 1 0))
+      (reject "equal-length second carrier substitution"
+        (lambda () (g3c4-p2g2-terminal-pending-check
+                     call pending-anchor 'test)))
+      (vector-set! pending-anchor 9 saved))
+    (let ((saved (vector-ref pending-anchor 15)))
+      (vector-set! pending-anchor 15 (vector 9 16 9 16 10 24 9 10))
+      (reject "paired extent replacement"
+        (lambda () (g3c4-p2g2-terminal-pending-check
+                     call pending-anchor 'test)))
+      (vector-set! pending-anchor 15 saved))
+    (check "authenticated abort"
+      (g3c4-p2g2-terminal-pending-abort! call pending-anchor))))
+(check "pending anchor tombstoned"
+  (and (eq? (vector-ref pending-anchor 0) 'dead)
+       (null? (vector-ref g3c4-p2g2-terminal-pending-anchors 0))
+       (null? (vector-ref g3c4-p2g2-terminal-pending-originals 0))
+       (eq? (vector-ref output 2) 'dead)))
+(display "G3-C4 P2/G2 terminal anchor PASS: checks=")
+(display checks)
+(newline)

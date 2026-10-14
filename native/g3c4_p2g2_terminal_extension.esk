@@ -1,0 +1,184 @@
+;;; Private P2/G2 terminal reservation prerequisite. Load after the protected
+;;; scope and T1 prefix coordinator. This source does not publish an output.
+;;; A future same-call composer must retain this anchor through native zero.
+
+(define g3c4-p2g2-terminal-pending-anchors (vector '()))
+(define g3c4-p2g2-terminal-pending-originals (vector '()))
+
+(define (g3c4-p2g2-terminal-pending-distinct? values)
+  (let outer ((rest values))
+    (or (null? rest)
+        (and (let inner ((tail (cdr rest)))
+               (or (null? tail)
+                   (and (not (eq? (car rest) (car tail)))
+                        (inner (cdr tail)))))
+             (outer (cdr rest))))))
+
+;;; The closure, held in a second root, retains the actual allocation-time
+;;; objects. Equal-size substitutions in mutable anchor slots cannot pass.
+(define (g3c4-p2g2-terminal-pending-original
+          anchor call record prefix input input-entry native-input
+          first first-staging second second-staging text1 text2
+          extents old-anchors old-originals)
+  (let ((output #f) (shell #f) (native #f)
+        (pending-raw #f) (pending-staging #f))
+    (lambda (command candidate)
+      (cond
+        ((eq? command 'bind)
+         (if output (exit 134))
+         (set! output candidate)
+         (set! shell (vector-ref candidate 0))
+         (set! native (vector-ref candidate 3))
+         (set! pending-raw (vector-ref (vector-ref candidate 8) 0))
+         (set! pending-staging (vector-ref (vector-ref candidate 8) 1))
+         #t)
+        ((eq? command 'check)
+        (and (eq? candidate anchor)
+             (eq? (vector-ref candidate 0) 'pending)
+             (eq? (vector-ref candidate 1) call)
+             (eq? (vector-ref candidate 2) record)
+             (eq? (vector-ref candidate 3) prefix)
+             (eq? (vector-ref prefix 1) input)
+             (eq? (vector-ref prefix 2) input-entry)
+             (eq? (vector-ref prefix 3) native-input)
+             (eq? (vector-ref candidate 4) output)
+             (eq? (vector-ref candidate 5) shell)
+             (eq? (vector-ref candidate 6) native)
+             (eq? (vector-ref candidate 7) first)
+             (eq? (vector-ref candidate 8) first-staging)
+             (eq? (vector-ref candidate 9) second)
+             (eq? (vector-ref candidate 10) second-staging)
+             (eq? (vector-ref candidate 11) pending-raw)
+             (eq? (vector-ref candidate 12) pending-staging)
+             (eq? (vector-ref candidate 13) text1)
+             (eq? (vector-ref candidate 14) text2)
+             (eq? (vector-ref candidate 15) extents)
+             (eq? (vector-ref candidate 17) old-anchors)
+             (eq? (vector-ref candidate 18) old-originals)
+             (bytevector? first) (= (bytevector-length first) 1)
+             (bytevector? first-staging)
+             (= (bytevector-length first-staging) 8)
+             (bytevector? second) (= (bytevector-length second) 1)
+             (bytevector? second-staging)
+             (= (bytevector-length second-staging) 8)
+             (bytevector? pending-raw)
+             (= (bytevector-length pending-raw) 2)
+             (bytevector? pending-staging)
+             (= (bytevector-length pending-staging) 16)
+             (bytevector? text1) (= (bytevector-length text1) 1)
+             (bytevector? text2) (= (bytevector-length text2) 2)
+             (vector? extents) (= (vector-length extents) 8)
+             (equal? extents (vector 9 16 9 16 10 24 9 10))
+             (g3c4-p2g2-terminal-pending-distinct?
+               (list first first-staging second second-staging
+                     pending-raw pending-staging text1 text2))))
+        (else #f)))))
+
+(define (g3c4-p2g2-terminal-pending-check call anchor operation)
+  (let* ((record (g3c4-p2g2-protected-check call operation))
+         (prefix (g3c4-p2g2-prefix-anchor-for call))
+         (original (if (and (vector? anchor) (= (vector-length anchor) 19))
+                       (vector-ref anchor 16) #f))
+         (output (if (and (vector? anchor) (= (vector-length anchor) 19))
+                     (vector-ref anchor 4) #f)))
+    (if (not (and prefix (procedure? original)
+                  (pair? (vector-ref g3c4-p2g2-terminal-pending-anchors 0))
+                  (eq? (car (vector-ref
+                              g3c4-p2g2-terminal-pending-anchors 0)) anchor)
+                  (eq? (cdr (vector-ref
+                              g3c4-p2g2-terminal-pending-anchors 0))
+                       (vector-ref anchor 17))
+                  (pair? (vector-ref g3c4-p2g2-terminal-pending-originals 0))
+                  (eq? (car (vector-ref
+                              g3c4-p2g2-terminal-pending-originals 0))
+                       original)
+                  (eq? (cdr (vector-ref
+                              g3c4-p2g2-terminal-pending-originals 0))
+                       (vector-ref anchor 18))
+                  (original 'check anchor)
+                  (eq? (vector-ref anchor 2) record)
+                  (eq? (vector-ref anchor 3) prefix)
+                  (pair? (vector-ref g3c4-p2g2-prefix-input-anchors 0))
+                  (eq? (car (vector-ref g3c4-p2g2-prefix-input-anchors 0))
+                       prefix)
+                  (eq? (g3c4-input-entry-live
+                         (vector-ref prefix 1) operation)
+                       (vector-ref prefix 2))
+                  (eq? (vector-ref (vector-ref prefix 2) 3)
+                       (vector-ref prefix 3))
+                  (eq? (vector-ref record 6) output)
+                  (eq? (vector-ref record 11) (vector-ref anchor 7))
+                  (eq? (vector-ref record 12) (vector-ref anchor 8))
+                  (eq? (g3t-output-entry-pending call output operation)
+                       output)
+                  (eq? (g3c4-registry-find (vector-ref anchor 5) operation)
+                       output)))
+        (g3c4-fail 'invalid-state operation
+                   "P2/G2 original terminal reservation changed"))
+    anchor))
+
+;;; Reserve the sole original output before either native sampling call.
+;;; All Eshkol carriers and rooted nodes are allocated first; after native
+;;; reservation succeeds, only bounded writes enroll the pending anchor.
+(define (g3c4-p2g2-terminal-pending-reserve! call)
+  (let* ((operation 'g3c4-p2g2-terminal-pending-reserve!)
+         (record (g3c4-p2g2-protected-check call operation))
+         (prefix (g3c4-p2g2-prefix-anchor-for call))
+         (second (make-bytevector 1 0))
+         (second-staging (make-bytevector 8 0))
+         (text1 (make-bytevector 1 0))
+         (text2 (make-bytevector 2 0))
+         (extents (vector 9 16 9 16 10 24 9 10))
+         (old-anchors (vector-ref g3c4-p2g2-terminal-pending-anchors 0))
+         (old-originals (vector-ref g3c4-p2g2-terminal-pending-originals 0))
+         (anchor (vector 'pending call record prefix #f #f #f
+                         (vector-ref record 11) (vector-ref record 12)
+                         second second-staging #f #f text1 text2 extents
+                         #f old-anchors old-originals))
+         (original (g3c4-p2g2-terminal-pending-original
+                     anchor call record prefix
+                     (if prefix (vector-ref prefix 1) #f)
+                     (if prefix (vector-ref prefix 2) #f)
+                     (if prefix (vector-ref prefix 3) #f)
+                     (vector-ref record 11)
+                     (vector-ref record 12) second second-staging text1 text2
+                     extents old-anchors old-originals))
+         (anchor-node (cons anchor old-anchors))
+         (original-node (cons original old-originals)))
+    (if (not (and prefix (eq? (vector-ref record 13) 'before-prefix)
+                  (eq? (vector-ref record 6) #f)))
+        (g3c4-fail 'invalid-state operation
+                   "P2/G2 terminal reservation needs original call"))
+    (g3c4-p2g2-prefix-input-check
+      call (vector-ref prefix 1) (vector-ref prefix 2)
+      (vector-ref prefix 3) operation)
+    (let* ((output (g3c4-p2g2-protected-reserve call))
+           (auxiliary (vector-ref output 8)))
+      (original 'bind output)
+      (vector-set! anchor 4 output)
+      (vector-set! anchor 5 (vector-ref output 0))
+      (vector-set! anchor 6 (vector-ref output 3))
+      (vector-set! anchor 11 (vector-ref auxiliary 0))
+      (vector-set! anchor 12 (vector-ref auxiliary 1))
+      (vector-set! anchor 16 original)
+      (vector-set! g3c4-p2g2-terminal-pending-anchors 0 anchor-node)
+      (vector-set! g3c4-p2g2-terminal-pending-originals 0 original-node)
+      (g3c4-p2g2-terminal-pending-check call anchor operation))))
+
+;;; A held genuine I1/A2 lease makes protected-abort! reject before mutation.
+;;; The anchor stays pending for an in-region release and retry by its caller.
+(define (g3c4-p2g2-terminal-pending-abort! call anchor)
+  (let ((operation 'g3c4-p2g2-terminal-pending-abort!))
+    (g3c4-p2g2-terminal-pending-check call anchor operation)
+    (g3c4-p2g2-protected-abort! call)
+    (g3c4-p2g2-zero-bytes! (vector-ref anchor 9) 1)
+    (g3c4-p2g2-zero-bytes! (vector-ref anchor 10) 8)
+    (g3c4-p2g2-zero-bytes! (vector-ref anchor 13) 1)
+    (g3c4-p2g2-zero-bytes! (vector-ref anchor 14) 2)
+    (vector-set! anchor 0 'dead)
+    (vector-set! anchor 4 #f)
+    (vector-set! g3c4-p2g2-terminal-pending-anchors 0
+                 (vector-ref anchor 17))
+    (vector-set! g3c4-p2g2-terminal-pending-originals 0
+                 (vector-ref anchor 18))
+    #t))

@@ -3120,9 +3120,14 @@ publication, public G2 and continuation remain pending.
   [accepted same-call ownership contract](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md)
   specifies one original pending output entry, a surviving terminal anchor,
   authentic T1/EOS/second-token composition, and a preflighted no-failure close
-  after native commit. Native terminal integration and logical I1 clone code
-  are prerequisites; Eshkol implementation and compiled same-call proof remain
-  pending. No public G2 or continuation acceptance is claimed.
+  after native commit. A bounded private reservation dependency is source-staged
+  on `codex/g3c4-p2g2-eshkol-terminal-20261014`: it roots the original pending
+  output and allocation-time carrier identities, and leaves a held-lease abort
+  rejection intact for in-region release/retry. Its focused source-only checker
+  passes. The unmodified `c60779bbd` predecessor context/cache checker fails on
+  `Step 4a reaches deferred surface: generator_rng`; full same-call composition,
+  independent review, and compiled proof remain pending. No public G2 or
+  continuation acceptance is claimed.
 
 ## Wave 4 — practical pretraining and performance
 
