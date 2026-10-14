@@ -25,7 +25,7 @@ static int64_t length = 1;
 static uint64_t kv_shape[4] = {1, 2, 2, 2};
 static uint64_t length_shape[1] = {1}, keep_shape[2] = {1, 2};
 static et_kernel_tensor_view_v1 kv[2], len_view, keep_view;
-static int fail_borrow, fail_pins, draws;
+static int fail_borrow, fail_pins;
 static unsigned char borrow_tag;
 
 int32_t et_f32_parameter_validate_identity_v1(
@@ -160,7 +160,7 @@ int main(void) {
   g3t_context original = c;
   assert(et_g3t_private_replayed_p1_g1_preflight_v1((void *)1));
   assert(!et_g3t_private_replayed_p1_g1_preflight_v1(&c));
-  assert(!memcmp(&c, &original, sizeof(c)) && !draws);
+  assert(!memcmp(&c, &original, sizeof(c)));
   assert(et_g3t_private_call_acquire_v1(&c, 2));
   assert(!c.h.busy && !model.active);
   length = 2; keep[1] = 1;
@@ -195,7 +195,7 @@ int main(void) {
   c.policy[0] = 0; c.rng[2] = c.rng[3] = 0;
   assert(!et_g3t_private_replayed_p1_g1_acquire_v1(&c));
   assert(c.h.busy && model.active == &c && c.call_kind == 2 &&
-         c.replayed_p1_g1_call && c.pins.self == &c.pins && !draws);
+         c.replayed_p1_g1_call && c.pins.self == &c.pins);
   void *output = et_g3t_private_output_reserve_v1(&c, 1);
   assert(output && c.pending_output == output);
   c.frame.kind = 2; c.frame.token = 66;

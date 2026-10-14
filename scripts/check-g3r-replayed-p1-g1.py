@@ -29,6 +29,11 @@ assert (root / "native/g3r_replayed_p1_g1_local_symbols.txt").read_text().splitl
 ]
 assert "et_g3t_private_replayed_p1_g1_preflight_v1" in header
 assert "et_g3t_private_replayed_p1_g1_acquire_v1" in header
+transition = source.split("int64_t et_g3t_private_replayed_p1_g1_preflight_v1", 1)[1].split(
+    "#endif\n#ifdef ET_G3T_PREFILL_SAMPLE_PRIVATE", 1)[0]
+for forbidden in ("et_kernel_runtime_dispatch", "g3t_dispatch(",
+                  "et_g3t_private_sample_v1", "g3t_history_commit_append(c"):
+    assert forbidden not in transition
 assert "#ifdef ET_G3R_REPLAYED_P1_G1_PRIVATE" in source
 assert "c->prefill_committed))" in source.split(
     "int64_t et_g3t_private_call_acquire_v1", 1)[1].split(
