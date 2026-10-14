@@ -2276,6 +2276,15 @@ provider copy failures before writing the destination; focused causal and
 sanitizer checks pass locally. This is only an in-memory copy seam. The joint
 genuine-owner aggregate, same-owner trainer-control binding, adopter/C2 claim,
 reverse-order release and zero-publication runtime gate remain HOLD.
+The first genuine-owner coordinator scope now enters the existing exclusive
+TR3 snapshot lease before acquiring the original G3/O2 native pair. It binds
+the registered trainer model, optimizer and tokenizer to the exact G3
+generator, copies the validated D2/X1/RNG/counter controls on both sides of
+hold acquisition, and drains the pair before aborting the lease. Source
+mutation checks cover binding, rooting, acquisition order, and first-error
+cleanup. Independent source review and a compiled feature-on genuine-owner
+runtime gate remain pending. The scope does not issue an O2 state, claim C2,
+create a receipt, or admit data-only continuation.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
