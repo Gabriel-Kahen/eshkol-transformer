@@ -372,10 +372,10 @@
                                     '((source-domain e3-evaluation)
                                       (source-code 2)
                                       (source-message
-                                       "native frame setup failed")))))
+                                       "native frame setup failed"))))))
                   (e3-counter-ref frame selector)
                   #f)
-                (loop (+ selector 1)))))))))
+                (loop (+ selector 1))))))))
 
 (define (e3-test-edge-probes=? before after)
   (and (let loop ((index 0))

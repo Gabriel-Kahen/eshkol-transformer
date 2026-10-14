@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -65,7 +66,36 @@ def audit_causal_controls(driver: str, runner: str) -> None:
         raise ValueError("runner does not select both causal controls")
 
 
+def audit_unpublished_guard(source: str) -> None:
+    unpublished = form(source, "(define (e3-test-edge-unpublished?")
+    guard = form(unpublished, "(guard (caught")
+    header = form(guard, "(caught")
+    clause = form(header, "(#t")
+    if not re.fullmatch(r"\(caught\s+" + re.escape(clause) + r"\s*\)",
+                        header, re.DOTALL):
+        raise ValueError("edge guard header contains a non-clause")
+    body = guard[len("(guard ") + len(header):]
+    if not re.fullmatch(r"\s*\(e3-counter-ref\s+frame\s+selector\)\s*#f\s*\)",
+                        body):
+        raise ValueError("edge guard body is not outside its clause header")
+
+
 class EdgeSourceTests(unittest.TestCase):
+    def test_unpublished_guard_has_closed_header_and_real_body(self) -> None:
+        for path in (DRIVER, MUTANT):
+            with self.subTest(path=path.name):
+                source = path.read_text()
+                audit_parentheses(source)
+                audit_unpublished_guard(source)
+                old_failure = source.replace(
+                    '"native frame setup failed"))))))',
+                    '"native frame setup failed")))))', 1,
+                ).replace('(loop (+ selector 1))))))))',
+                          '(loop (+ selector 1)))))))))', 1)
+                audit_parentheses(old_failure)
+                with self.assertRaisesRegex(ValueError, "guard header"):
+                    audit_unpublished_guard(old_failure)
+
     def test_complete_driver_syntax_rejects_failed_tail(self) -> None:
         for path in (DRIVER, MUTANT):
             with self.subTest(path=path.name):

@@ -1137,6 +1137,17 @@ counter accessor correctly raised `invalid-state`. A test-only successor uses
 readable I2 words for pre/post snapshots, checks the exact unpublished-counter
 provenance for both selectors, and makes the post control fail an I2 assertion
 after the zero-row outcome check. The fresh compiled edge gate remains pending.
+The exact `799805e1` one-use edge successor passed corpus generation and
+canonical package policy, then stopped at normal retention package A compilation:
+the test driver's balanced `guard` accidentally left its clause header open,
+making bare `#f` an invalid clause. Its 96-file, 447,895,935-byte raw result is
+sealed at `e3-edge-799-compiled-a/result/GATE-RAW-SHA256.txt` and independently
+reviewed at `e3-edge-799-independent-result-review-20261014/REVIEW.md`.
+The focused source successor closes that header in the baseline and exact
+derived mutant, with a structural negative that rejects the original malformed
+guard even though its whole-file parentheses balance. A fresh compiled edge
+gate and independent exact-head source review remain required; this is not
+edge runtime or E3 §9 admission.
 The exact `7f54a866` E3-private source suite found four stale assertions after
 the edge diagnostics change: overflow pinned the prior retention-driver hash,
 and sanitizer policy still counted the pre-diagnostics 172/59 retention and
