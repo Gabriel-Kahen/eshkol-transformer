@@ -3241,7 +3241,16 @@ publication, public G2 and continuation remain pending.
   negatives, and Q0 Python isolation pass after admitting the exact
   development-only held-holder symbol checker path; the next gate is a
   changed-head supported-host compiled first-case run with independent raw
-  review to identify the failing interval.
+  review to identify the failing interval. The exact `89e268f3` one-use
+  compiled run passed 16 source checks and normal on/off compilation, then
+  failed closed before runtime: `on.d` named the canonical held-holder
+  extension, not the generated trace overlay. Eshkol resolves a nested load
+  beside its requiring root before searching `-I`; placing only the extension
+  in the overlay could not intercept that load. A successor copies the exact
+  feature root beside the instrumented extension and requires both overlay
+  paths in the compiled depfile. A source negative rejects the canonical
+  extension. The changed-head compiled runtime and independent raw review
+  remain the next gate.
   The full matrix, public G2, and continuation acceptance remain unproved.
 
 ## Wave 4 — practical pretraining and performance

@@ -4,6 +4,7 @@ import sys
 
 
 SOURCE = Path("native/g3c4_p2g2_terminal_held_holder_extension.esk")
+ROOT_SOURCE = Path("native/g3c4_p2g2_terminal_held_holder_root.esk")
 
 # Each replacement must be unique in the production source.  No production
 # module is edited or linked against the diagnostic fd-4 symbol.
@@ -55,6 +56,9 @@ def instrument(source: str) -> str:
 def main() -> None:
     root, destination = Path(sys.argv[1]), Path(sys.argv[2])
     destination.mkdir(parents=True, exist_ok=True)
+    # Nested loads search the requiring file's directory before -I. The
+    # feature root must live beside the instrumented extension.
+    (destination / ROOT_SOURCE.name).write_bytes((root / ROOT_SOURCE).read_bytes())
     (destination / SOURCE.name).write_text(instrument((root / SOURCE).read_text()))
 
 

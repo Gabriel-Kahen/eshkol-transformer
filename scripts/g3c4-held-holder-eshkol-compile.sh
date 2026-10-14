@@ -8,6 +8,7 @@ compile_eshkol_fixture() {
   local -a overlay_include=()
   if [[ -n "$overlay" ]]; then
     test "$fixture" = on
+    test -s "$overlay/g3c4_p2g2_terminal_held_holder_root.esk"
     test -s "$overlay/g3c4_p2g2_terminal_held_holder_extension.esk"
     overlay_include=(-I "$overlay")
   fi

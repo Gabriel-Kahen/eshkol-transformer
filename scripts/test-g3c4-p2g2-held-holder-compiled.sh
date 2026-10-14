@@ -154,41 +154,31 @@ WRAPPER
       "$mode" "$runner" "$cxx" "$PROJECT_ROOT" "$overlay_arg"
   done
   python3 - "$PROJECT_ROOT" "$directory/on.d" "$directory/off.d" \
-    "$evidence" "$mode" "$directory/overlay/g3c4_p2g2_terminal_held_holder_extension.esk" <<'PY'
+    "$evidence" "$mode" "$directory/overlay" <<'PY'
 from pathlib import Path
 import hashlib
-import shlex
 import subprocess
 import sys
+from scripts.g3c4_held_holder_depfile import dependencies
 
 root = Path(sys.argv[1]).resolve()
 on_depfile, off_depfile, evidence, mode = (
     Path(sys.argv[2]), Path(sys.argv[3]), Path(sys.argv[4]), sys.argv[5])
-overlay = Path(sys.argv[6]).resolve(strict=True)
-original = 'native/g3c4_p2g2_terminal_held_holder_extension.esk'
+overlay_dir = Path(sys.argv[6]).resolve(strict=True)
+overrides = {
+    (overlay_dir / name).resolve(strict=True): f'native/{name}'
+    for name in ('g3c4_p2g2_terminal_held_holder_root.esk',
+                 'g3c4_p2g2_terminal_held_holder_extension.esk')
+}
+assert len(overrides) == 2
+root_overlay, extension_overlay = overrides
+assert root_overlay.read_bytes() == (root / overrides[root_overlay]).read_bytes()
+assert extension_overlay.read_bytes() != (root / overrides[extension_overlay]).read_bytes()
+assert all(f'(held-phase {phase})' in extension_overlay.read_text()
+           for phase in range(30, 43))
 
-def dependencies(depfile, allow_overlay=False):
-    text = depfile.read_text().replace('\\\n', '')
-    items = shlex.split(text.split(':', 1)[1])
-    names = []
-    overlays = 0
-    for item in items:
-        path = Path(item)
-        path = (path if path.is_absolute() else root / path).resolve(strict=True)
-        if allow_overlay and path == overlay:
-            names.append(original)
-            overlays += 1
-            continue
-        assert path.is_relative_to(root), item
-        name = path.relative_to(root).as_posix()
-        assert name.endswith('.esk'), name
-        names.append(name)
-    assert len(names) == len(set(names)), names
-    assert overlays == (1 if allow_overlay else 0), overlays
-    return names
-
-on = dependencies(on_depfile, allow_overlay=True)
-off = dependencies(off_depfile)
+on = dependencies(on_depfile, root, overrides)
+off = dependencies(off_depfile, root, {})
 expected = (root / 'native/g3c4_p2g2_held_holder_compiled_eshkol_deps.txt').read_text().splitlines()
 assert on == expected, (on, expected)
 assert 'native/g3c4_p2g2_terminal_composer_extension.esk' in off, off

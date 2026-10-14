@@ -10,6 +10,7 @@ import unittest
 
 from tests.c2.test_handler_order import parse
 from tests.g3c4.p2_g2_held_holder_phase_overlay import MARKERS, instrument
+from scripts.g3c4_held_holder_depfile import dependencies
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -135,9 +136,46 @@ class HeldHolderCompiledSource(unittest.TestCase):
         self.assertLess(helper.index('"${overlay_include[@]}"'),
                         helper.index('-I "$project_root/native"'))
         self.assertIn('test "$fixture" = on', helper)
-        self.assertIn('assert overlays == (1 if allow_overlay else 0)', script)
+        self.assertIn('test -s "$overlay/g3c4_p2g2_terminal_held_holder_root.esk"', helper)
+        self.assertIn('on = dependencies(on_depfile, root, overrides)', script)
         self.assertIn('assert on == expected', script)
         self.assertIn('assert not any(\'held_holder\' in name for name in off)', script)
+
+    def test_depfile_rejects_canonical_extension_and_missing_overlay_root(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            native = root / "native"
+            overlay = root / "overlay"
+            native.mkdir()
+            overlay.mkdir()
+            names = ("g3c4_p2g2_terminal_held_holder_root.esk",
+                     "g3c4_p2g2_terminal_held_holder_extension.esk")
+            for name in names:
+                (native / name).write_text("original")
+                (overlay / name).write_text("overlay")
+            overrides = {(overlay / name).resolve(): f"native/{name}"
+                         for name in names}
+            depfile = root / "on.d"
+
+            def check(paths):
+                depfile.write_text("object: " + " ".join(map(str, paths)) + "\n")
+                return dependencies(depfile, root, overrides)
+
+            self.assertEqual(check(overlay / name for name in names),
+                             [f"native/{name}" for name in names])
+            with self.assertRaises(AssertionError):
+                check((overlay / names[0], native / names[1]))
+            with self.assertRaises(AssertionError):
+                check((native / names[0], overlay / names[1]))
+            with self.assertRaises(AssertionError):
+                check((overlay / names[1],))
+
+            subprocess.run(["python3", str(ROOT /
+                "tests/g3c4/p2_g2_held_holder_phase_overlay.py"), str(ROOT),
+                str(overlay)], check=True)
+            self.assertEqual((overlay / names[0]).read_bytes(),
+                             (ROOT / "native" / names[0]).read_bytes())
+            self.assertIn("(held-phase 42)", (overlay / names[1]).read_text())
 
     def test_phase_trace_brackets_first_generation_and_rejects_mutations(self):
         driver, shim, script = DRIVER.read_text(), SHIM.read_text(), SCRIPT.read_text()
@@ -249,6 +287,7 @@ class HeldHolderCompiledSource(unittest.TestCase):
                     overlay = directory / "overlay"
                     if with_overlay:
                         overlay.mkdir()
+                        (overlay / "g3c4_p2g2_terminal_held_holder_root.esk").write_text("fixture")
                         (overlay / EXTENSION.name).write_text("fixture")
                     call_log = directory / "calls.jsonl"
                     env = {**os.environ, "CALL_LOG": str(call_log),
