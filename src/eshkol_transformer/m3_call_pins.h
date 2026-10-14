@@ -15,12 +15,6 @@ typedef struct et_g3t_model_pins_internal {
 int32_t et_g3t_model_pins_begin_internal(
     et_f32_parameter *const parameters[14], const void *const identities[14],
     et_g3t_model_pins_internal *pins, et_f32_tensor_error *error);
-#ifdef ET_E3_PARTIAL_PIN_TESTING
-int32_t et_g3t_model_pins_begin_fail_before_internal(
-    et_f32_parameter *const parameters[14], const void *const identities[14],
-    et_g3t_model_pins_internal *pins, et_f32_tensor_error *error,
-    size_t fail_before);
-#endif
 int32_t et_g3t_model_pins_check_internal(
     const et_g3t_model_pins_internal *pins, et_f32_tensor_error *error);
 void et_g3t_model_pins_end_internal(et_g3t_model_pins_internal *pins);

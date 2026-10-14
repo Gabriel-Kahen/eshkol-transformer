@@ -306,6 +306,10 @@ int32_t et_g3t_model_pins_begin_internal(
 int32_t et_g3t_model_pins_begin_fail_before_internal(
     et_f32_parameter *const parameters[14], const void *const identities[14],
     et_g3t_model_pins_internal *pins, et_f32_tensor_error *error,
+    size_t fail_before);
+int32_t et_g3t_model_pins_begin_fail_before_internal(
+    et_f32_parameter *const parameters[14], const void *const identities[14],
+    et_g3t_model_pins_internal *pins, et_f32_tensor_error *error,
     size_t fail_before) {
   if (fail_before >= M3_CALL_PIN_COUNT)
     return set_error(error, ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,

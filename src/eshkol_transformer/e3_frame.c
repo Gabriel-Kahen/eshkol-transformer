@@ -8,6 +8,14 @@
 #include "eshkol_transformer/n3k_primitives_abi.h"
 #include "m3_call_pins.h"
 
+#ifdef ET_E3_PARTIAL_PIN_TESTING
+/* The fault cut is test-only; the shared M3 pin header has an exact contract. */
+int32_t et_g3t_model_pins_begin_fail_before_internal(
+    et_f32_parameter *const parameters[14], const void *const identities[14],
+    et_g3t_model_pins_internal *pins, et_f32_tensor_error *error,
+    size_t fail_before);
+#endif
+
 #include <limits.h>
 #include <stdint.h>
 #include <stdlib.h>
