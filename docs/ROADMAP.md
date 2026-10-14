@@ -3217,6 +3217,15 @@ Hosted CI and upstream merge remain pending. The native terminal dependency
 is reviewed and gated in PR #184; final integration requires its merge gates. Eshkol terminal
 publication, public G2 and continuation remain pending.
 
+A bounded feature-private typed P2/G2 I1 result candidate is source-staged on
+`codex/g3c4-private-typed-result-20261014` over the reviewed private terminal
+union. It creates separate kinds 10/11/12 for exact dense CPU-i64 `[1]`/`[2]`
+logical IDs, scalar generated length, and scalar cache length from an
+admitted kind-9 clone. The scoped host source/fixture syntax and closure
+checks do not establish the supported compiled normal/repeat/sanitizer or
+one-archive gate. Independent exact-head source/tests review, compiled
+acceptance, Eshkol composition, and public G2 remain pending.
+
 - **Private Eshkol P2/G2 terminal close contract:**
   [accepted same-call ownership contract](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md)
   specifies one original pending output entry, a surviving terminal anchor,

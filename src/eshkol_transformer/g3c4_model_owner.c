@@ -34,6 +34,11 @@
 #error "C4 P2/G2 logical IDs clone requires terminal output and private I1 ownership"
 #endif
 
+#if defined(ET_G3C4_P2_G2_TYPED_RESULT_PRIVATE) && \
+    !defined(ET_G3C4_P2_G2_TERMINAL_IDS_CLONE_PRIVATE)
+#error "C4 typed P2/G2 results require the logical I1 clone prerequisite"
+#endif
+
 #include <limits.h>
 #include <math.h>
 #include <stddef.h>
@@ -993,6 +998,9 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
 #ifdef ET_G3C4_P2_G1_PUBLIC_RESULT_PRIVATE
 #define ET_G3C4_RESULT_MAGIC UINT64_C(0x4733433452455331)
 #endif
+#ifdef ET_G3C4_P2_G2_TYPED_RESULT_PRIVATE
+#define ET_G3C4_TYPED_RESULT_MAGIC UINT64_C(0x4733433454525331)
+#endif
 #endif
 #ifdef ET_G3C4_LOGITS_RESERVATION_PRIVATE
 #define ET_G3C4_LOGITS_MAGIC UINT64_C(0x473343344c4f4731)
@@ -1026,6 +1034,11 @@ enum {
   ET_G3C4_RNG_KIND = 8
 #ifdef ET_G3C4_P2_G2_TERMINAL_IDS_CLONE_PRIVATE
   , ET_G3C4_TERMINAL_IDS_KIND = 9
+#endif
+#ifdef ET_G3C4_P2_G2_TYPED_RESULT_PRIVATE
+  , ET_G3C4_TYPED_IDS_KIND = 10,
+    ET_G3C4_TYPED_LENGTHS_KIND = 11,
+    ET_G3C4_TYPED_CACHE_KIND = 12
 #endif
 #else
   ET_G3C4_RNG_KIND = 2
@@ -1254,6 +1267,14 @@ typedef struct et_g3c4_result_tensor_internal {
   et_i64_tensor *tensor;
   int64_t value;
 } et_g3c4_result_tensor_internal;
+#endif
+#ifdef ET_G3C4_P2_G2_TYPED_RESULT_PRIVATE
+typedef struct et_g3c4_typed_result_internal {
+  et_g3c4_transport_header_internal transport;
+  et_i64_tensor *tensor;
+  int64_t length;
+  int64_t values[2];
+} et_g3c4_typed_result_internal;
 #endif
 #endif
 
@@ -1693,6 +1714,32 @@ static int et_g3c4_transport_record_valid(
                 ? clone->ids != NULL &&
                   (clone->logical_length == 1 || clone->logical_length == 2)
                 : clone->ids == NULL && clone->logical_length == 0);
+  }
+#endif
+#ifdef ET_G3C4_P2_G2_TYPED_RESULT_PRIVATE
+  if (header->kind >= ET_G3C4_TYPED_IDS_KIND &&
+      header->kind <= ET_G3C4_TYPED_CACHE_KIND) {
+    const et_g3c4_typed_result_internal *result =
+        (const et_g3c4_typed_result_internal *)header;
+    if (header->magic != ET_G3C4_TYPED_RESULT_MAGIC || header->busy != 0u ||
+        (header->state != ET_G3C4_CONTEXT_LIVE &&
+         header->state != ET_G3C4_CONTEXT_DEAD)) return 0;
+    if (header->state == ET_G3C4_CONTEXT_DEAD)
+      return result->tensor == NULL && result->length == 0 &&
+             result->values[0] == 0 && result->values[1] == 0;
+    if (result->tensor == NULL ||
+        (header->kind == ET_G3C4_TYPED_IDS_KIND
+             ? (result->length != 1 && result->length != 2)
+             : result->length != 1)) return 0;
+    if (header->kind == ET_G3C4_TYPED_IDS_KIND)
+      return result->values[0] >= 0 && result->values[0] <= 255 &&
+             (result->length == 1 ? result->values[1] == 0
+                                  : result->values[1] >= 0 &&
+                                    result->values[1] <= 255);
+    return result->values[1] == 0 &&
+           (header->kind == ET_G3C4_TYPED_LENGTHS_KIND
+                ? (result->values[0] == 1 || result->values[0] == 2)
+                : (result->values[0] == 3 || result->values[0] == 4));
   }
 #endif
 #endif
@@ -6847,6 +6894,12 @@ static size_t et_g3c4_transport_record_bytes(
     case ET_G3C4_TERMINAL_IDS_KIND:
       return sizeof(et_g3c4_terminal_ids_clone_internal);
 #endif
+#ifdef ET_G3C4_P2_G2_TYPED_RESULT_PRIVATE
+    case ET_G3C4_TYPED_IDS_KIND:
+    case ET_G3C4_TYPED_LENGTHS_KIND:
+    case ET_G3C4_TYPED_CACHE_KIND:
+      return sizeof(et_g3c4_typed_result_internal);
+#endif
     case ET_G3C4_OUTPUT_KIND:
       return sizeof(et_g3c4_output_internal);
 #ifdef ET_G3C4_LOGITS_RESERVATION_PRIVATE
@@ -8880,6 +8933,220 @@ int64_t et_g3c4_private_p2g2_terminal_ids_clone_release_v1(
   if (et_i64_tensor_destroy_v1(&clone->ids, &error) != 0) abort();
   clone->logical_length = 0;
   clone->transport.state = ET_G3C4_CONTEXT_DEAD;
+  return 0;
+}
+#endif
+
+#ifdef ET_G3C4_P2_G2_TYPED_RESULT_PRIVATE
+static et_g3c4_typed_result_internal *et_g3c4_typed_admit(
+    const void *candidate, int allow_dead) {
+  et_g3c4_transport_header_internal *header;
+  for (header = et_g3c4_transport_registry;
+       header != NULL && (const void *)header != candidate;
+       header = header->registry_next) {}
+  if (header == NULL || header->kind < ET_G3C4_TYPED_IDS_KIND ||
+      header->kind > ET_G3C4_TYPED_CACHE_KIND) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return NULL;
+  }
+  if (!et_g3c4_transport_record_valid(header)) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    return NULL;
+  }
+  if (!allow_dead && header->state == ET_G3C4_CONTEXT_DEAD) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return NULL;
+  }
+  return (et_g3c4_typed_result_internal *)header;
+}
+
+static int64_t et_g3c4_typed_read(
+    et_g3c4_typed_result_internal *result, int64_t values[2]) {
+  if (et_g3c4_terminal_ids_read(result->tensor, result->length, values) != 0)
+    return et_g3c4_error_state.category;
+  if (memcmp(values, result->values,
+             (size_t)result->length * sizeof(int64_t)) != 0)
+    return et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+  return 0;
+}
+
+static void *et_g3c4_typed_create(
+    uint32_t kind, int64_t length, const int64_t values[2],
+    void *source, et_i64_tensor *source_ids) {
+  et_g3c4_typed_result_internal *result;
+  et_g3c4_terminal_ids_clone_internal *clone;
+  et_i64_tensor_error error;
+  et_g3c4_error_state_internal first;
+  int64_t again[2] = {0, 0};
+  const uint64_t shape[1] = {(uint64_t)length};
+#ifdef ET_G3C4_CONTEXT_TESTING
+  if (et_g3c4_context_successful_allocations >=
+      et_g3c4_context_allocation_limit) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_ALLOCATION);
+    return NULL;
+  }
+#endif
+  result = (et_g3c4_typed_result_internal *)calloc(1u, sizeof(*result));
+  if (result == NULL) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_ALLOCATION);
+    return NULL;
+  }
+#ifdef ET_G3C4_CONTEXT_TESTING
+  et_g3c4_context_successful_allocations++;
+#endif
+  if (et_g3c4_capture_i64(et_i64_tensor_create_v1(
+          1u, shape, &result->tensor, &error), &error) != 0 ||
+      et_g3c4_capture_i64(et_i64_tensor_copy_from_v1(
+          result->tensor, values, (size_t)length, &error), &error) != 0) {
+    goto fail;
+  }
+  if (source != NULL) {
+    clone = et_g3c4_terminal_ids_admit(source, 0);
+    if (clone == NULL) goto fail;
+    if (clone->ids != source_ids || clone->logical_length != length) {
+      (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+      goto fail;
+    }
+    if (et_g3c4_terminal_ids_read(source_ids, length, again) != 0)
+      goto fail;
+    if (memcmp(again, values, (size_t)length * sizeof(int64_t)) != 0) {
+      (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+      goto fail;
+    }
+  }
+  result->transport.magic = ET_G3C4_TYPED_RESULT_MAGIC;
+  result->transport.kind = kind;
+  result->transport.state = ET_G3C4_CONTEXT_LIVE;
+  result->length = length;
+  memcpy(result->values, values, (size_t)length * sizeof(int64_t));
+  result->transport.registry_next = et_g3c4_transport_registry;
+  et_g3c4_transport_registry = &result->transport;
+  return result;
+fail:
+  first = et_g3c4_error_snapshot_internal();
+  if (result->tensor != NULL &&
+      et_i64_tensor_destroy_v1(&result->tensor, &error) != 0) abort();
+  free(result);
+  et_g3c4_error_restore_internal(first);
+  return NULL;
+}
+
+void *et_g3c4_private_p2g2_typed_ids_create_v1(void *source) {
+  et_g3c4_terminal_ids_clone_internal *clone;
+  et_i64_tensor *original;
+  int64_t length, words[2] = {0, 0}, again[2] = {0, 0};
+  et_g3c4_error_reset_internal();
+  clone = et_g3c4_terminal_ids_admit(source, 0);
+  if (clone == NULL) return NULL;
+  original = clone->ids;
+  length = clone->logical_length;
+  if (et_g3c4_terminal_ids_read(original, length, words) != 0) return NULL;
+  clone = et_g3c4_terminal_ids_admit(source, 0);
+  if (clone == NULL) return NULL;
+  if (clone->ids != original || clone->logical_length != length) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return NULL;
+  }
+  if (et_g3c4_terminal_ids_read(original, length, again) != 0) return NULL;
+  if (memcmp(words, again, (size_t)length * sizeof(int64_t)) != 0) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return NULL;
+  }
+  return et_g3c4_typed_create(
+      ET_G3C4_TYPED_IDS_KIND, length, words, source, original);
+}
+
+void *et_g3c4_private_p2g2_typed_scalar_create_v1(
+    int64_t kind, int64_t value) {
+  const int64_t words[2] = {value, 0};
+  et_g3c4_error_reset_internal();
+  if (!((kind == ET_G3C4_TYPED_LENGTHS_KIND &&
+         (value == 1 || value == 2)) ||
+        (kind == ET_G3C4_TYPED_CACHE_KIND &&
+         (value == 3 || value == 4)))) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
+    return NULL;
+  }
+  return et_g3c4_typed_create((uint32_t)kind, 1, words, NULL, NULL);
+}
+
+int64_t et_g3c4_private_p2g2_typed_length_v1(void *candidate) {
+  et_g3c4_typed_result_internal *result;
+  int64_t words[2] = {0, 0};
+  et_i64_tensor *original;
+  int64_t length;
+  et_g3c4_error_reset_internal();
+  result = et_g3c4_typed_admit(candidate, 0);
+  if (result == NULL) return -1;
+  original = result->tensor;
+  length = result->length;
+  if (et_g3c4_typed_read(result, words) != 0) return -1;
+  result = et_g3c4_typed_admit(candidate, 0);
+  if (result == NULL) return -1;
+  if (result->tensor != original || result->length != length) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return -1;
+  }
+  return length;
+}
+
+int64_t et_g3c4_private_p2g2_typed_element_v1(
+    void *candidate, int64_t index, int64_t *value) {
+  et_g3c4_typed_result_internal *result;
+  int64_t words[2] = {0, 0};
+  et_i64_tensor *original;
+  int64_t length;
+  et_g3c4_error_reset_internal();
+  result = et_g3c4_typed_admit(candidate, 0);
+  if (result == NULL) return et_g3c4_error_state.category;
+  original = result->tensor;
+  length = result->length;
+  if (index < 0 || index >= result->length)
+    return et_g3c4_fail(ET_G3C4_SHAPE_MISMATCH, ET_G3C4_CODE_SHAPE);
+  if (!et_g3c4_range_valid(value, sizeof(*value)) ||
+      (uintptr_t)value % _Alignof(int64_t) != 0u)
+    return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+  if (et_g3c4_terminal_snapshot_alias(value, sizeof(*value)) != 0)
+    return et_g3c4_error_state.category;
+  if (et_g3c4_typed_read(result, words) != 0)
+    return et_g3c4_error_state.category;
+  result = et_g3c4_typed_admit(candidate, 0);
+  if (result == NULL) return et_g3c4_error_state.category;
+  if (result->tensor != original || result->length != length)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (et_g3c4_terminal_snapshot_alias(value, sizeof(*value)) != 0)
+    return et_g3c4_error_state.category;
+  *value = words[index];
+  return 0;
+}
+
+int64_t et_g3c4_private_p2g2_typed_release_v1(void *candidate) {
+  et_g3c4_typed_result_internal *result;
+  et_i64_tensor_error error;
+  int64_t words[2] = {0, 0};
+  et_i64_tensor *original;
+  int64_t length;
+  et_g3c4_error_reset_internal();
+  result = et_g3c4_typed_admit(candidate, 1);
+  if (result == NULL) return et_g3c4_error_state.category;
+  if (result->transport.state == ET_G3C4_CONTEXT_DEAD) return 0;
+  original = result->tensor;
+  length = result->length;
+  if (et_g3c4_capture_i64(et_m3_private_i64_unborrowed_v1(
+          result->tensor, &error), &error) != 0 ||
+      et_g3c4_typed_read(result, words) != 0)
+    return et_g3c4_error_state.category;
+  result = et_g3c4_typed_admit(candidate, 0);
+  if (result == NULL) return et_g3c4_error_state.category;
+  if (result->tensor != original || result->length != length)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (et_g3c4_capture_i64(et_m3_private_i64_unborrowed_v1(
+          original, &error), &error) != 0)
+    return et_g3c4_error_state.category;
+  if (et_i64_tensor_destroy_v1(&result->tensor, &error) != 0) abort();
+  result->length = 0;
+  result->values[0] = result->values[1] = 0;
+  result->transport.state = ET_G3C4_CONTEXT_DEAD;
   return 0;
 }
 #endif
