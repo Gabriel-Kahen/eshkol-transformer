@@ -1052,6 +1052,34 @@ all four mutant runs first diverged at the third-batch numerator and rejected
 without publishing a transcript. The other M2 numerical mutants and the full
 E3 §9 acceptance matrix remain open; this result does not establish installed
 or public E3 behavior or GPU execution.
+The separate noninstalled M2 padded-position source candidate reuses the same
+authentic three-row packed D1/D2 witness. Its test-only frame variant supplies a
+local `11` mask to both final-row L3S reduce and E3 correct while retaining the
+emitted `10` row and frame mask. A strict verifier requires normal M3 roles,
+CE, rows and serial state first, then the mutant's oracle-derived final L3S
+numerator/weight, correct count, accumulated state and final metrics; the
+oracle identifies `reduction_f32[0]` as the first changed word. The gate kills
+only at that final-row reduction mismatch and publishes no mutant transcript.
+The first one-use padded-position gate on `ea52ada` exited 1 while building
+`mutant-a`: two mutant-local `const unsigned char[2]` masks could not be
+assigned to the writable `void *` tensor-view field under strict Clang.
+The sealed raw evidence and independent HOLD review remain at
+`/home/gabe/.codex/evidence/eshkol-transformer/e3-m2-padded-ea52-static-20261014-a/result/`
+(review SHA-256 `6679ce1400293008bf3ded35794d6527b7f5fd585c53fe7a2fd1283c9113dbbb`).
+A bounded source repair makes only those local masks writable and adds the
+strict compiler qualifier check to the source test; independent source review
+and a fresh one-use compiled normal/repeat/poison/sanitizer gate are pending.
+The subsequent one-use gate on `91d5e96` also exited 1: the mutant reached
+final counters `(6, 3)`, but the shared numerical runtime `sum-order` case
+asserted `(5, 3)` before parsing or oracle comparison. The independent HOLD
+review is preserved at
+`/home/gabe/.codex/evidence/eshkol-transformer/e3-m2-padded-91d5-static-20261014-a/INDEPENDENT-GATE-FAILED-RAW-REVIEW.md`
+(SHA-256 `f0333078989ac79871873c1dde2b4cee963853f813799818c1db27e4f0c1af6d`).
+A bounded source successor gives mutant variants a distinct `(6, 3)` runtime
+case while normal variants keep `(5, 3)` and both retain the cursor check.
+Independent source review and a fresh separately released one-use compiled gate
+remain pending; the failed gate supplies no padded-position admission.
+This does not advance the remaining M2 or full §9 admission status.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each
