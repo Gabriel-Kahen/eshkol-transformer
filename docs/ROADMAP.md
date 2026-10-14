@@ -2151,6 +2151,16 @@ prepared but unrun. It adds no SAVE writer, C2 owner transfer, model restore,
 public generation or continuation. Independent source review and pinned
 compiled normal/repeat/sanitizer acceptance remain pending.
 
+The G3-R authentic C2 SAVE test gate is prepared at
+`scripts/test-g3r-c2-authentic-save.sh`. It compiles the accepted public C2
+LOAD→SAVE→release fixture, retains a fresh `roundtrip.c2` with archive,
+facade, build, size, hash and byte-equality evidence, and first runs a
+compiled LOAD/release control without SAVE that must leave the output absent.
+It derives G3RCV1 companions from the retained saved bytes and invokes the
+existing private file reader against that image in normal, repeat and
+sanitizer modes. Source and host checks are complete; the compiled gate is
+unrun and does not establish restored model or public continuation.
+
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
 checks the authentic idle generator's four RNG words without allocation,
