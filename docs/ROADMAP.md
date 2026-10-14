@@ -3224,8 +3224,16 @@ publication, public G2 and continuation remain pending.
   the Eshkol depfile pin and broad source closure. This isolated successor
   adds those eight paths, keeps the strict ordered depfile comparison, and
   covers missing, extra, and unresolved transitive imports in source tests.
-  The full normal/repeat/failure-cut/sanitizer compiled matrix and independent
-  review remain pending. Public G2 and continuation acceptance remain unproved.
+  At exact `7f4cc4fc`, 14 source checks and normal feature-on/off compilation
+  and depfile checks passed. The first normal-on runtime then exited 139 with
+  an Eshkol SIGSEGV report at `0x68` and empty stdout; its precise cause is
+  unknown. This diagnostic successor records unbuffered phase traces on fd 4
+  for each held-holder run. Case 0 marks initialization, case 1 is the first
+  held generation, and each case records native wrapper entry/return and
+  postcheck boundaries. The trace is retained beside stdout/stderr on a
+  failure. Source controls pass; a reviewed, supported-host compiled run is
+  still needed to localize the crash. The full matrix, public G2, and
+  continuation acceptance remain unproved.
 
 ## Wave 4 — practical pretraining and performance
 

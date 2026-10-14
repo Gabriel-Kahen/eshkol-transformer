@@ -6,7 +6,9 @@
         :real et_g3c4_p2g2_coordinator_test_mark_v1)
 (extern i64 held-after-abort ptr i64
         :real et_g3c4_p2g2_coordinator_test_after_abort_v1)
+(extern i64 held-phase i64 :real et_g3c4_p2g2_held_test_phase_v1)
 
+(held-phase 1)
 (define checks 0)
 (define (check label good)
   (if good (set! checks (+ checks 1))
@@ -24,24 +26,32 @@
 (define tokenizer
   (t1-private-register-core
     (t1-tokenizer-core-create 'raw '() '() '())))
+(held-phase 2)
 (define model (g3c4-model-create-seeded-internal 1729))
+(held-phase 3)
 (define input
   (g3c4-p2g2-owned-input-create
     (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255))))
+(held-phase 4)
 (define args (command-line))
 (define mode (car (cdr args)))
 (if (not (or (string=? mode "normal")
              (string=? mode "repeat-busy")
              (string=? mode "postzero")))
     (exit 2))
+(held-phase 5)
 
 (define (fresh eos kind phase)
-  (let* ((generator (g3c4-generator-create-internal
-                      model tokenizer (config eos)))
-         (native (vector-ref
-                   (g3c4-generator-entry-call-ready generator 'test) 3))
-         (holder (g3c4-p2g2-holder-new-internal kind phase)))
-    (vector generator native holder)))
+  (held-phase 11)
+  (let ((generator (g3c4-generator-create-internal
+                     model tokenizer (config eos))))
+    (held-phase 12)
+    (let ((native (vector-ref
+                    (g3c4-generator-entry-call-ready generator 'test) 3)))
+      (held-phase 13)
+      (let ((holder (g3c4-p2g2-holder-new-internal kind phase)))
+        (held-phase 14)
+        (vector generator native holder)))))
 (define (roots-clean? old-terminals old-originals old-records old-anchors
                       old-prefixes)
   (and (null? (vector-ref g3c4-p2g2-holder-roots 0))
@@ -52,26 +62,36 @@
        (eq? (vector-ref g3c4-p2g2-prefix-input-anchors 0) old-prefixes)))
 
 (define (normal-case kind phase eos expected-count)
+  (held-phase 10)
   (let* ((triple (fresh eos kind phase))
          (generator (vector-ref triple 0))
          (holder (vector-ref triple 2)))
     (check "arm normal" (= (held-arm 0) 0))
-    (let* ((output (g3c4-p2g2-terminal-generate-held-internal
-                     generator input holder))
-           (snapshot (g3c4-p2g2-terminal-snapshot-internal output)))
-      (check "authentic terminal count" (= (vector-ref snapshot 2) expected-count))
-      (check "one genuine holder capture" (= (held-observe 1) 1))
-      (check "normal holder does not abort"
-             (and (= (held-observe 2) 0) (= (held-observe 3) 0)
-                  (= (held-observe 4) 0)))
-      (check "holder disposed before terminal zero"
-             (and (eq? (vector-ref holder 5) 'dead)
-                  (null? (vector-ref g3c4-p2g2-holder-roots 0))))
-      (check "terminal release" (g3c4-p2g2-terminal-release-internal! output))
-      (check "generator close" (g3c4-generator-close-internal! generator))
-      (vector-ref snapshot 0))))
+    (held-phase 15)
+    (held-phase 16)
+    (let ((output (g3c4-p2g2-terminal-generate-held-internal
+                    generator input holder)))
+      (held-phase 17)
+      (let ((snapshot (g3c4-p2g2-terminal-snapshot-internal output)))
+        (held-phase 18)
+        (held-phase 19)
+        (check "authentic terminal count" (= (vector-ref snapshot 2) expected-count))
+        (check "one genuine holder capture" (= (held-observe 1) 1))
+        (check "normal holder does not abort"
+               (and (= (held-observe 2) 0) (= (held-observe 3) 0)
+                    (= (held-observe 4) 0)))
+        (check "holder disposed before terminal zero"
+               (and (eq? (vector-ref holder 5) 'dead)
+                    (null? (vector-ref g3c4-p2g2-holder-roots 0))))
+        (check "terminal release" (g3c4-p2g2-terminal-release-internal! output))
+        (held-phase 20)
+        (check "generator close" (g3c4-generator-close-internal! generator))
+        (held-phase 21)
+        (held-phase 22)
+        (vector-ref snapshot 0)))))
 
 (define (wrong-handle)
+  (held-phase 10)
   (let* ((triple (fresh #f 1 2))
          (generator (vector-ref triple 0))
          (holder (vector-ref triple 2))
@@ -81,6 +101,7 @@
     (reject "wrong generation rejected before transfer"
       (lambda () (g3c4-p2g2-terminal-generate-held-internal
                    generator input holder)))
+    (held-phase 23)
     (vector-set! holder 2 generation)
     (check "wrong handle did not enroll call"
            (and (eq? (vector-ref g3c4-p2g2-protected-records 0) old-records)
@@ -88,9 +109,11 @@
     (check "wrong handle remains caller-owned"
            (g3c4-p2g2-holder-dispose-unbound-internal! holder))
     (check "wrong-handle generator closes"
-           (g3c4-generator-close-internal! generator))))
+           (g3c4-generator-close-internal! generator))
+    (held-phase 22)))
 
 (define (p3-first-eos-reject eos)
+  (held-phase 10)
   (let* ((triple (fresh eos 1 3))
          (generator (vector-ref triple 0))
          (holder (vector-ref triple 2))
@@ -103,6 +126,7 @@
     (reject "P3 holder rejects first EOS before its capture"
       (lambda () (g3c4-p2g2-terminal-generate-held-internal
                    generator input holder)))
+    (held-phase 23)
     (check "P3 first EOS did not acquire holder lease"
            (= (held-observe 1) 0))
     (check "P3 first EOS restored original ledgers"
@@ -111,9 +135,11 @@
     (check "P3 first EOS disposed bound holder"
            (eq? (vector-ref holder 5) 'dead))
     (check "P3 first EOS generator closes"
-           (g3c4-generator-close-internal! generator))))
+           (g3c4-generator-close-internal! generator))
+    (held-phase 22)))
 
 (define (retry-case kind phase)
+  (held-phase 10)
   (let* ((triple (fresh #f kind phase))
          (generator (vector-ref triple 0))
          (native (vector-ref triple 1))
@@ -128,6 +154,7 @@
     (reject "held fault rolls back same call"
       (lambda () (g3c4-p2g2-terminal-generate-held-internal
                    generator input holder)))
+    (held-phase 23)
     (check "exact first typed busy and one end/retry"
            (and (= (held-observe 1) 1) (= (held-observe 2) 1)
                 (= (held-observe 3) 1) (= (held-observe 4) 1)
@@ -140,7 +167,8 @@
     (check "holder consumed after successful retry"
            (eq? (vector-ref holder 5) 'dead))
     (check "generator closes after retry"
-           (g3c4-generator-close-internal! generator))))
+           (g3c4-generator-close-internal! generator))
+    (held-phase 22)))
 
 (define first-id (normal-case 1 2 #f 2))
 (if (string=? mode "normal")
@@ -159,11 +187,15 @@
       (check "owned input release" (generation-tensor-release-internal! input))
       (display "G3-C4 held-holder compiled PASS: checks=")
       (display checks) (newline))
-    (let* ((triple (fresh #f 1 2))
-           (generator (vector-ref triple 0))
-           (holder (vector-ref triple 2)))
-      (check "arm destructive cut"
-             (= (held-arm (if (string=? mode "repeat-busy") 2 3)) 0))
-      (g3c4-p2g2-terminal-generate-held-internal generator input holder)
-      (display "G3-C4 held-holder FAIL: destructive cut returned")
-      (newline) (exit 99)))
+    (begin
+      (held-phase 10)
+      (let* ((triple (fresh #f 1 2))
+             (generator (vector-ref triple 0))
+             (holder (vector-ref triple 2)))
+        (check "arm destructive cut"
+               (= (held-arm (if (string=? mode "repeat-busy") 2 3)) 0))
+        (held-phase 15)
+        (held-phase 16)
+        (g3c4-p2g2-terminal-generate-held-internal generator input holder)
+        (display "G3-C4 held-holder FAIL: destructive cut returned")
+        (newline) (exit 99))))

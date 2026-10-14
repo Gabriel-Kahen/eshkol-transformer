@@ -51,7 +51,84 @@ def eshkol_import_closure(overrides=None):
     return seen
 
 
+def phase_trace_contract(driver, shim, script):
+    """Check the durable trace brackets the existing first-case assertions."""
+    if not parse(driver):
+        raise AssertionError("driver does not parse")
+    for phase in (*range(1, 6), *range(10, 24)):
+        if f"case {phase}:" not in shim:
+            raise AssertionError(f"unmapped phase {phase}")
+    if 'write(4, line, (size_t)size)' not in shim:
+        raise AssertionError("trace must use the dedicated unbuffered fd")
+
+    def ordered(source, fragments):
+        cursor = 0
+        for fragment in fragments:
+            position = source.find(fragment, cursor)
+            if position < 0:
+                raise AssertionError(f"missing or out-of-order trace: {fragment}")
+            cursor = position + len(fragment)
+
+    ordered(driver[:driver.index("(define (fresh eos")], (
+        "(held-phase 1)", "(define tokenizer", "(held-phase 2)",
+        "(define model", "(held-phase 3)", "(define input",
+        "(held-phase 4)", "(define args", "(held-phase 5)",
+    ))
+    fresh = driver[driver.index("(define (fresh eos"):
+                   driver.index("(define (roots-clean?")]
+    ordered(fresh, ("(held-phase 11)", "(g3c4-generator-create-internal",
+                    "(held-phase 12)", "(g3c4-generator-entry-call-ready",
+                    "(held-phase 13)", "(g3c4-p2g2-holder-new-internal",
+                    "(held-phase 14)"))
+    normal = driver[driver.index("(define (normal-case"):
+                    driver.index("(define (wrong-handle)")]
+    ordered(normal, (
+        "(held-phase 10)", "(fresh eos kind phase)",
+        '"arm normal"', "(held-phase 15)", "(held-phase 16)",
+        "(g3c4-p2g2-terminal-generate-held-internal", "(held-phase 17)",
+        "(g3c4-p2g2-terminal-snapshot-internal", "(held-phase 18)",
+        "(held-phase 19)", '"authentic terminal count"',
+        '"terminal release"', "(held-phase 20)",
+        '"generator close"', "(held-phase 21)", "(held-phase 22)",
+    ))
+    for name, call in (
+        ("begin", "__real_et_g3c4_private_p2g2_holder_begin_capture_v1("),
+        ("witness", "__real_et_g3c4_private_p2g2_holder_witness_v1("),
+        ("end", "__real_et_g3c4_private_p2g2_holder_end_after_busy_v1("),
+        ("commit", "held_base_wrap_terminal_commit("),
+    ):
+        section = shim[shim.index(f"int64_t __wrap_et_g3c4_private_p2g2_holder_{name}"):] \
+            if name != "commit" else shim[shim.index(
+                "int64_t __wrap_et_g3c4_private_p2g2_terminal_commit_v1("):]
+        ordered(section, (f'held_trace("native.{name}.enter");', call,
+                          f'held_trace("native.{name}.return");'))
+    for redirect in (
+        '4>"$evidence/$mode-$fixture.trace"',
+        '4>"$evidence/$mode-repeat.trace"',
+    ):
+        if redirect not in script:
+            raise AssertionError(f"missing durable trace redirect: {redirect}")
+    if script.count('4>"$evidence/$mode-$fixture.trace"') != 2:
+        raise AssertionError("normal and fail-stop cases need separate traces")
+
+
 class HeldHolderCompiledSource(unittest.TestCase):
+    def test_phase_trace_brackets_first_generation_and_rejects_mutations(self):
+        driver, shim, script = DRIVER.read_text(), SHIM.read_text(), SCRIPT.read_text()
+        phase_trace_contract(driver, shim, script)
+        variants = (
+            (driver.replace("(held-phase 16)", "(held-phase 99)", 1), shim, script),
+            (driver, shim.replace('held_trace("native.begin.enter");', "", 1), script),
+            (driver, shim.replace('write(4, line, (size_t)size)',
+                                   'write(2, line, (size_t)size)', 1), script),
+            (driver, shim, script.replace(
+                '4>"$evidence/$mode-$fixture.trace"', "", 1)),
+        )
+        for index, variant in enumerate(variants):
+            with self.subTest(variant=index):
+                with self.assertRaises(AssertionError):
+                    phase_trace_contract(*variant)
+
     def test_driver_parses_and_reaches_exact_private_entry(self):
         source = DRIVER.read_text()
         self.assertTrue(parse(source))

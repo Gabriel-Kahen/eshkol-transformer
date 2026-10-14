@@ -219,12 +219,16 @@ PY
     "${runtime[@]}" ESHKOL_ARENA_POISON=1 \
       timeout --foreground --signal=TERM --kill-after=5s 120s \
       "$directory/held-$fixture" normal \
-      >"$evidence/$mode-$fixture.stdout" 2>"$evidence/$mode-$fixture.stderr"
+      >"$evidence/$mode-$fixture.stdout" 2>"$evidence/$mode-$fixture.stderr" \
+      4>"$evidence/$mode-$fixture.trace"
+    [[ "$fixture" != on ]] || test -s "$evidence/$mode-$fixture.trace"
     test ! -s "$evidence/$mode-$fixture.stderr"
     rg "$expected" "$evidence/$mode-$fixture.stdout" >/dev/null
   done
   "${runtime[@]}" ESHKOL_ARENA_POISON=1 "$directory/held-on" normal \
-    >"$evidence/$mode-repeat.stdout" 2>"$evidence/$mode-repeat.stderr"
+    >"$evidence/$mode-repeat.stdout" 2>"$evidence/$mode-repeat.stderr" \
+    4>"$evidence/$mode-repeat.trace"
+  test -s "$evidence/$mode-repeat.trace"
   test ! -s "$evidence/$mode-repeat.stderr"
   cmp "$evidence/$mode-on.stdout" "$evidence/$mode-repeat.stdout"
   for fixture in repeat-busy postzero; do
@@ -235,7 +239,9 @@ PY
       "$directory/held-on" "$fixture" \
       3>"$evidence/$mode-$fixture.marker" \
       >"$evidence/$mode-$fixture.stdout" \
-      2>"$evidence/$mode-$fixture.stderr" || status=$?
+      2>"$evidence/$mode-$fixture.stderr" \
+      4>"$evidence/$mode-$fixture.trace" || status=$?
+    test -s "$evidence/$mode-$fixture.trace"
     test "$status" -eq 134
     test "$(cat "$evidence/$mode-$fixture.marker")" = "$marker"
     ! rg 'held-holder compiled PASS' "$evidence/$mode-$fixture.stdout"
