@@ -1244,6 +1244,15 @@ tests and CI topology pass. This is source-only generated evidence: protected
 custody, real OCI read, trusted actor closure, the 30-second/256-MiB attempt
 predicate, compiled E3 and full §9 acceptance remain **HOLD**.
 
+The E3 §9 N1/N2 five-case identity sidecar is source prepared in
+`tests/e3_reference/section9_case_manifest.py`. It checks the existing v1
+corpus and reference bundle against physical T1/D1 bytes, then freezes ordered
+case IDs, model/T1/D1 identity, D2 settings, exact rows and independently
+replayed end cursors in a strict version-1 record. Focused host tests cover
+fresh-directory byte identity and malformed records. Independent source/test
+review, sealed exact-tree evidence and later compiled-private cursor/numerical
+comparison remain open; no §9 acceptance is inferred.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained

@@ -10,6 +10,14 @@ emissions through the accepted carrier-neutral D2 reference. All binary resource
 and JSON transcripts are generated under a temporary or ignored build directory;
 none is checked in.
 
+`section9_case_manifest.py` creates a separate version-1, 65,536-byte maximum
+five-case identity sidecar. It binds the existing corpus and mathematical bundle
+bytes, model control/parameter digest, T1 identity, physical D1 file lengths and
+digests, and independently replayed D2 start/end cursors and exact rows. Its
+decoder rejects duplicate/extra fields and mismatches before passing an observed
+record to the existing comparator. This is source preparation for §9 N1/N2;
+compiled-private numerical comparison remains open.
+
 `reference.py` requires the existing pinned Python 3.14.6 / PyTorch 2.13.0+cpu
 development environment with `ATEN_CPU_CAPABILITY=default` and
 `MKL_CBWR=COMPATIBLE`. It reuses the accepted M3 initializer and mathematical
@@ -29,11 +37,19 @@ python3 -m unittest tests.e3_reference.test_corpus \
 ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "$Q0_PYTHON" \
   -m unittest tests.e3_reference.test_reference -v
 
+ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "$Q0_PYTHON" \
+  -m unittest tests.e3_reference.test_section9_case_manifest -v
+
 python3 -m tests.e3_reference.corpus --output build/e3-reference/corpus
 ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "$Q0_PYTHON" \
   -m tests.e3_reference.reference \
   --corpus-reference build/e3-reference/corpus/corpus-reference.json \
   --output build/e3-reference/reference.json
+ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "$Q0_PYTHON" \
+  -m tests.e3_reference.section9_case_manifest \
+  --corpus-dir build/e3-reference/corpus \
+  --reference-bundle build/e3-reference/reference.json \
+  --output build/e3-reference/section9-cases.json
 ```
 
 Valid N1/T2 D2 emissions have active-prefix masks `11` or `10`; `01` remains a
