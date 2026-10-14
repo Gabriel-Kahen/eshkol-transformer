@@ -134,7 +134,21 @@ ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM \
   --kill-after=5s 300s "$evidence/held-p1-c2" \
   "$evidence/corpus/small" \
   >"$evidence/runtime.stdout" 2>"$evidence/runtime.stderr"
-test ! -s "$evidence/runtime.stderr"
+PYTHONDONTWRITEBYTECODE=1 python3 - "$evidence/runtime.stderr" <<'PY_PHASES'
+from pathlib import Path
+import re
+import sys
+
+lines = Path(sys.argv[1]).read_text().splitlines()
+phases = []
+for line in lines:
+    match = re.fullmatch(r"G3R_PHASE ([0-9]+)", line)
+    if match is None:
+        raise SystemExit(f"G3-R runtime emitted non-phase stderr: {line}")
+    phases.append(int(match.group(1)))
+if phases[:30] != list(range(30)) or not phases or phases[-1] != 999:
+    raise SystemExit(f"G3-R runtime phase sequence incomplete: {phases}")
+PY_PHASES
 grep -E '^G3-R held P1/C2 source aggregate PASS: checks=[1-9][0-9]*$' \
   "$evidence/runtime.stdout" >/dev/null
 cat "$evidence/source.stdout"

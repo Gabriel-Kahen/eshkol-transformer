@@ -1,36 +1,67 @@
 ;;; Feature-private original-owner P1/O2/C2 gate. Never install this root.
 ;;; One D2/T2/I2/P1 registry also hosts M3T, G3 and C2. The T1 and T2 byte
 ;;; tokenizer shells remain distinct; only their checked fingerprint matches.
+(extern i64 g3r-test-phase i64 :real et_g3r_test_phase_v1)
+(g3r-test-phase 0)
 (load "d2_wave2_root.esk")
+(g3r-test-phase 1)
 (load "cli3_generate_t2_bridge.esk")
+(g3r-test-phase 2)
 (load "c2_d2_cursor_pair_extension.esk")
+(g3r-test-phase 3)
 (load "o2_wave2_extension.esk")
+(g3r-test-phase 4)
 (load "c2_x1_canonical_extension.esk")
+(g3r-test-phase 5)
 (load "c2_training_state_extension.esk")
+(g3r-test-phase 6)
 (define t1-wave1-tensor-admitted? t2-wave2-tensor-admitted?)
 (load "m3t_transport_extension.esk")
+(g3r-test-phase 7)
 (load "m3_schedule.esk")
+(g3r-test-phase 8)
 (load "m3_model_extension.esk")
+(g3r-test-phase 9)
 (load "m3_call_adapters.esk")
+(g3r-test-phase 10)
 (load "g3t_model_admission_extension.esk")
+(g3r-test-phase 11)
 (load "g3t_generator_constructor_extension.esk")
+(g3r-test-phase 12)
 (load "g3t_prefill_sample_extension.esk")
+(g3r-test-phase 13)
 (load "g3c4_t1_output_decode_extension.esk")
+(g3r-test-phase 14)
 (load "g3t_output_text_extension.esk")
+(g3r-test-phase 15)
 (load "g3t_final_publication_extension.esk")
+(g3r-test-phase 16)
 (load "g3t_manual_p1_extension.esk")
+(g3r-test-phase 17)
 (load "g3t_manual_logits_materialize_extension.esk")
+(g3r-test-phase 18)
 (load "g3m_prefill_p1_extension.esk")
+(g3r-test-phase 19)
 (load "g3m_prefill_p2_extension.esk")
+(g3r-test-phase 20)
 (load "g3m_manual_decode_extension.esk")
+(g3r-test-phase 21)
 (load "g3m_seeded_p1_g1_extension.esk")
+(g3r-test-phase 22)
 (load "g3r_committed_save_snapshot_extension.esk")
+(g3r-test-phase 23)
 (load "g3r_held_o2_adopter_extension.esk")
+(g3r-test-phase 24)
 (load "g3r_joint_issued_o2_adopter_extension.esk")
+(g3r-test-phase 25)
 (load "g3r_joint_begin_extension.esk")
+(g3r-test-phase 26)
 (load "g3r_joint_c2_claim_extension.esk")
+(g3r-test-phase 27)
 (load "g3r_joint_original_owner_binding_extension.esk")
+(g3r-test-phase 28)
 (load "g3r_joint_p1_provenance_extension.esk")
+(g3r-test-phase 29)
 
 (extern i64 g3r-test-held-bits-begin ptr
         :real et_g3r_test_held_bits_begin_v1)
@@ -104,6 +135,7 @@
     (g3r-committed-save-snapshot! generator bytes)
     bytes))
 (define (fixture directory)
+  (g3r-test-phase 100)
   (let* ((config
            (x1-private-config-resolve
              (x1-private-config-parse
@@ -126,6 +158,7 @@
                    (vector (string->utf8 (x1-private-config-canonical config))
                            (x1-private-config-fingerprint config))
                    (vector 0 0 0))))
+    (g3r-test-phase 101)
     (check "T1/T2 fingerprint equality without shell identity"
            (and (not (eq? t1 t2))
                 (string=? (vector-ref (vector-ref controls 1) 0)
@@ -135,11 +168,13 @@
            (vector? (c2-training-state-controls-copy
                       'g3r-held-p1-c2-gate controls)))
     (check "model eval" (module-eval! model))
+    (g3r-test-phase 102)
     (let* ((generator (g3t-generator-create model t1 (policy)))
            (input (g3t-generation-token-input-create 65))
            (output (g3m-generate-p1-g1! generator input)))
       (check "committed P1/G1 output released"
              (g3t-output-release! output))
+      (g3r-test-phase 103)
       (vector config t1 t2 dataset model handles optimizer controls
               generator input))))
 (define (controls tuple) (vector-ref tuple 7))
@@ -172,10 +207,13 @@
   (check "dataset closed" (d2-token-dataset-close! (vector-ref tuple 3))))
 
 (define corpus-directory (car (cdr (command-line))))
+(g3r-test-phase 200)
 (define original (fixture corpus-directory))
+(g3r-test-phase 201)
 (define before-bits (model-bits (vector-ref original 5)))
 (define before-gradients (gradient-state (vector-ref original 5)))
 (define before-history (snapshot (vector-ref original 8)))
+(g3r-test-phase 202)
 (check "foreign model rejected before hold acquisition"
        (error? (lambda ()
                  (g3r-joint-begin! (vector-ref original 8)
@@ -183,12 +221,14 @@
                                    (vector-ref original 1)
                                    (vector-ref original 6)))))
 (define held (begin-held original))
+(g3r-test-phase 203)
 (define native-model
   (vector-ref (g3t-model-entry-live
                 (vector-ref original 4) 'g3r-held-p1-c2-gate #f) 3))
 (check "all fourteen original value and absent-gradient bit baselines captured"
        (= 0 (g3r-test-held-bits-begin native-model)))
 (define p1 (clone original held))
+(g3r-test-phase 204)
 (check "exact P1 record and fourteen-path tied topology"
        (and (g3r-joint-p1-provenance-live-record p1)
             (equal? (vector-ref (vector-ref p1 3) 0)
@@ -213,6 +253,7 @@
 (check "all fourteen value and gradient witnesses close while pins live"
        (= 0 (g3r-test-held-bits-end native-model)))
 (define claimed (claim original held p1))
+(g3r-test-phase 205)
 (define claim-result (vector-ref claimed 2))
 (define request (vector-ref claim-result 2))
 (check "exact C2 claim and reverse-order hold drain"
@@ -232,10 +273,12 @@
        (c2-training-state-release-internal!
          (vector-ref request 5) 'g3r-held-p1-c2-gate))
 (retire original)
+(g3r-test-phase 206)
 
 ;;; A caller-side ledger substitution must release the registry-owned clone,
 ;;; retain the first error, and leave original holds for explicit reverse drain.
 (define mutant (fixture corpus-directory))
+(g3r-test-phase 300)
 (define mutant-held (begin-held mutant))
 (define mutant-p1 (clone mutant mutant-held))
 (define foreign-p1 (module-state-dict (vector-ref mutant 4)))
@@ -251,11 +294,13 @@
             (= 2 (g3r-joint-o2-lifecycle (vector-ref mutant-held 0)))))
 (check "stale owner rejected" (error? (lambda () (clone mutant mutant-held))))
 (retire mutant)
+(g3r-test-phase 301)
 
 ;;; A malformed control rejects before cloning. A topology fault after the
 ;;; provider clone must release precisely its detached P1 state, yet retain
 ;;; the issued O2 state and both original holds for a valid retry.
 (define preclaim (fixture corpus-directory))
+(g3r-test-phase 400)
 (define preclaim-history (snapshot (vector-ref preclaim 8)))
 (define preclaim-held (begin-held preclaim))
 (define invalid-controls (vector-copy (controls preclaim)))
@@ -294,10 +339,12 @@
        (and (g3r-joint-o2-drain-preclaim! (vector-ref preclaim-held 1))
             (= 2 (g3r-joint-o2-lifecycle (vector-ref preclaim-held 0)))))
 (retire preclaim)
+(g3r-test-phase 401)
 
 ;;; Fail the authentic I2-owned F32 clone while both original pins and the
 ;;; exact issued O2 state are live. The same held owner must remain retryable.
 (define provider-fault (fixture corpus-directory))
+(g3r-test-phase 500)
 (define provider-fault-bits (model-bits (vector-ref provider-fault 5)))
 (define provider-fault-gradients
   (gradient-state (vector-ref provider-fault 5)))
@@ -316,6 +363,7 @@
 (define provider-fault-error
   (guard (caught (#t caught))
     (clone provider-fault provider-fault-held) #f))
+(g3r-test-phase 501)
 (check "authentic F32 clone allocation cut reset"
        (= 0 (g3t-test-fail-f32-after 9223372036854775807)))
 (check "provider allocation failure is typed at the I2 clone"
@@ -380,11 +428,13 @@
             (= 2 (g3r-joint-o2-lifecycle
                     (vector-ref provider-fault-held 0)))))
 (retire provider-fault)
+(g3r-test-phase 502)
 
 ;;; C2's injected O2 claim defect occurs after the token-matched O2 claim.
 ;;; Its guard rolls back both children; the joint guard releases issued O2 and
 ;;; drains originals; the outer provenance guard then releases exact P1.
 (define partial (fixture corpus-directory))
+(g3r-test-phase 600)
 (define partial-held (begin-held partial))
 (define partial-p1 (clone partial partial-held))
 (define original-o2-claim c2-training-state-claim-o2!)
@@ -405,6 +455,7 @@
             (= 2 (g3r-joint-o2-lifecycle (vector-ref partial-held 0)))
             (eq? (vector-ref (vector-ref partial-held 1) 8) 'drained)))
 (retire partial)
+(g3r-test-phase 999)
 (display "G3-R held P1/C2 source aggregate PASS: checks=")
 (display checks)
 (newline)

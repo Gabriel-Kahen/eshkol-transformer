@@ -61,6 +61,22 @@ def compile_command(script: str, header: str) -> str:
 
 def check(source: str, script: str, bits: str) -> None:
     assert balanced(source)
+    assert '(extern i64 g3r-test-phase i64 :real et_g3r_test_phase_v1)' in source
+    assert source.count('(g3r-test-phase 0)') == 1
+    loads = [line for line in source.splitlines() if line.startswith('(load "')]
+    assert len(loads) == 29
+    for index, load in enumerate(loads, 1):
+        assert source.count(f'(g3r-test-phase {index})') == 1
+        assert load + f'\n(g3r-test-phase {index})' in source
+    assert source.count('(g3r-test-phase 999)') == 1
+    assert source.index('(g3r-test-phase 999)') < source.index(
+        '(display "G3-R held P1/C2 source aggregate PASS: checks=")')
+    assert "int64_t et_g3r_test_phase_v1(int64_t phase)" in bits
+    assert 'fprintf(stderr, "G3R_PHASE %lld\\n"' in bits
+    assert 'fflush(stderr) != 0' in bits
+    assert 're.fullmatch(r"G3R_PHASE ([0-9]+)", line)' in script
+    assert 'phases[:30] != list(range(30))' in script
+    assert 'phases[-1] != 999' in script
     for leaf in leaves:
         assert source.count(f'(load "{leaf}")') == 1
         assert leaf not in (root / "Makefile").read_text()
@@ -182,6 +198,7 @@ def check(source: str, script: str, bits: str) -> None:
 
 check(fixture, runner, bit_bridge)
 mutations = (
+    (fixture.replace('(g3r-test-phase 0)', ''), bit_bridge),
     (fixture.replace('(load "cli3_generate_t2_bridge.esk")', ""), bit_bridge),
     (fixture.replace('(not (eq? t1 t2))', '#t'), bit_bridge),
     (fixture.replace('(set! g3r-joint-p1-topology-query original-topology-query)',

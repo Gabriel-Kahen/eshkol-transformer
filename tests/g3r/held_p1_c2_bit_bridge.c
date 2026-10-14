@@ -6,7 +6,16 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
+
+/* Test-only, flushed runtime phase receipt. The gate keeps stderr verbatim. */
+int64_t et_g3r_test_phase_v1(int64_t phase) {
+  if (fprintf(stderr, "G3R_PHASE %lld\n", (long long)phase) < 0 ||
+      fflush(stderr) != 0)
+    return -1;
+  return 0;
+}
 
 static const uint64_t shapes[14][2] = {
     {4, 4}, {4, 4}, {4, 4}, {4, 4}, {4, 8}, {8, 4}, {4, 0},

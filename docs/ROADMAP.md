@@ -2231,6 +2231,17 @@ pass with 79 unique F32 definitions. This local link check reuses prior gate
 objects and does not establish a supported Clang 21 Eshkol executable or any
 runtime behavior. A fresh pinned compiled/runtime gate and independent review
 remain required before the held P1/C2 claim can be admitted.
+The sealed one-use gate on `8b583cd6` passed its 24-mutation source
+preflight and compiled and linked the duplicate-free provider, but the first
+arena-poisoned runtime invocation exited with only
+`Unhandled exception: user exception`. It emitted no check count or location;
+the result remains unadmitted. The next private fixture revision adds flushed
+native stderr phase receipts before and after each of its 29 module loads and
+at fixture and held-owner cut boundaries. Its source gate now rejects a
+missing initial phase; focused source, C syntax, shell syntax and diff checks
+pass. No causal call or runtime success is established by this instrumentation.
+A fresh pinned one-use compiled/runtime gate and independent review must use
+the receipts to locate the failure before any held P1/C2 admission.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
