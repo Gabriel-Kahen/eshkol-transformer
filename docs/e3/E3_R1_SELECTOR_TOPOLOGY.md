@@ -129,3 +129,25 @@ expire an entered arm. Feature-off object comparison checks this prerequisite.
 The noninstalled lexical tuple, bridge use, real successful D2 prepare,
 compiled same-frame failure/retry matrix, and resource horizons remain
 separate gates.
+
+## Retention successor driver source candidate
+
+`tests/e3_private/fault_driver_root.esk` loads the retained private root and
+one fault extension; `fault_bridge.c` layers one boxed fault entry over the
+retention bridge. The extension obtains the native pointer from an authentic
+live E3 frame entry. Each selected call arms and begins the frame selector,
+catches the synchronous evaluator outcome, then ends the selector scope before
+readback or retry. A deliberately unreached role-20/occurrence-8192 control
+exercises the successful end path; the selected failure path checks stage 7,
+native `(0, 2, 2)`, exact reach/fired state, preserved cursor, 17 modes,
+14 model/gradient images, RNG, six retained output words and live owners, then
+explicitly resets and retries the same frame. The source accepts only the
+closed forward role/occurrence scenario and reuses the existing retention
+fixture. A guarded native raw counter observer reads the two published counts
+after an acquired failure, when the normal committed-only counter accessor is
+unavailable. Focused source checks and the native selector probe pass.
+
+This is an unadmitted source candidate: no E1B policy selects its root,
+bridge, `ET_E3_FAULT_TESTING` native frame object, or exact manifests. A valid
+compiled D2 preparation, the failure/retry assertions, feature-on symbol
+localization, package negatives and resource horizons remain unverified.

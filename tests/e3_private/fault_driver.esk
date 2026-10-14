@@ -1,0 +1,134 @@
+;;; Source-only noninstalled successor of the retention driver.
+(extern i64 e3-fault-arm ptr i64 i64
+        :real et_e3_test_forward_fault_arm_v1)
+(extern i64 e3-fault-begin ptr
+        :real et_e3_test_forward_fault_begin_v1)
+(extern i64 e3-fault-end ptr
+        :real et_e3_test_forward_fault_end_v1)
+(extern i64 e3-fault-status ptr i64
+        :real et_e3_test_forward_fault_status_v1)
+(extern i64 e3-fault-reset ptr
+        :real et_e3_test_forward_fault_reset_v1)
+(extern i64 e3-fault-counter-raw ptr i64
+        :real et_e3_test_fault_counter_raw_v1)
+
+(define (e3-test-fault-native frame)
+  (vector-ref (e3-frame-entry-live frame 'e3-test-fault-run) 4))
+
+;;; The guard catches either outcome, then end closes exactly this attempt.
+;;; Never inspect selector status or retry before end returns successfully.
+(define (e3-test-fault-scoped-call model dataset frame role occurrence)
+  (let* ((native (e3-test-fault-native frame))
+         (outcome (vector #f)))
+    (e3-test-retention-check 'fault-arm
+      (= (e3-fault-arm native role occurrence) 0))
+    (e3-test-retention-check 'fault-begin (= (e3-fault-begin native) 0))
+    (guard
+     (caught
+      (#t (vector-set! outcome 0 caught) #f))
+     (e3-evaluate-into! model dataset frame)
+     (vector-set! outcome 0 #t))
+    (e3-test-retention-check 'fault-end (= (e3-fault-end native) 0))
+    (vector-ref outcome 0)))
+
+(define (e3-test-fault-status=? native state role occurrence reached fired)
+  (and (= (e3-fault-status native 0) state)
+       (= (e3-fault-status native 1) role)
+       (= (e3-fault-status native 2) occurrence)
+       (= (e3-fault-status native 3) reached)
+       (= (e3-fault-status native 4) fired)))
+
+(define (e3-test-fault-output frame destinations)
+  (let ((native (e3-test-fault-native frame)))
+    (vector (e3-test-u32-ref (vector-ref destinations 0))
+            (e3-test-u32-ref (vector-ref destinations 1))
+            (e3-test-u32-ref (vector-ref destinations 2))
+            (e3-test-u32-ref (vector-ref destinations 3))
+            (e3-fault-counter-raw native 0)
+            (e3-fault-counter-raw native 1))))
+
+(define (e3-test-fault-preserved? record outputs)
+  (let ((model (vector-ref record 0))
+        (destinations (vector-ref record 1))
+        (frame (vector-ref record 2))
+        (dataset (vector-ref record 3))
+        (cursor (vector-ref record 4))
+        (modes (vector-ref record 5))
+        (model-image (vector-ref record 6))
+        (rng (vector-ref record 7)))
+    (and (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset))
+         (equal? outputs (e3-test-fault-output frame destinations))
+         (e3-test-retention-modes=? frame modes)
+         (e3-test-retention-model=? model model-image)
+         (equal? rng (m3t-public-initializer-words
+                      (m3t-public-model-initializer model))))))
+
+(define (e3-test-fault-owners-preserved? record)
+  (let ((before (vector-ref record 8))
+        (after (e3-test-retention-probes)))
+    (let loop ((index 0))
+      (if (= index 29) #t
+          (and (if (or (<= index 6) (and (>= index 17) (<= index 26))
+                       (= index 28))
+                   (= (vector-ref before index) (vector-ref after index))
+                   #t)
+               (loop (+ index 1)))))))
+
+(define (e3-test-fault-dispatch scenario corpus-path)
+  (e3-test-retention-check 'fault-scenario
+    (and (vector? scenario) (= (vector-length scenario) 3)
+         (eq? (vector-ref scenario 0) 'forward-preinvoke)
+         (integer? (vector-ref scenario 1)) (exact? (vector-ref scenario 1))
+         (>= (vector-ref scenario 1) 0) (<= (vector-ref scenario 1) 20)
+         (integer? (vector-ref scenario 2)) (exact? (vector-ref scenario 2))
+         (>= (vector-ref scenario 2) 1) (<= (vector-ref scenario 2) 8192)))
+  (e3-test-retention-prepare 1024 #f corpus-path)
+  (let* ((record (vector-ref e3-test-retention-root 0))
+         (model (vector-ref record 0))
+         (destinations (vector-ref record 1))
+         (frame (vector-ref record 2))
+         (dataset (vector-ref record 3))
+         (cursor (vector-ref record 4))
+         (modes (vector-ref record 5))
+         (model-image (vector-ref record 6))
+         (native (e3-test-fault-native frame))
+         (role (vector-ref scenario 1))
+         (occurrence (vector-ref scenario 2)))
+    ;; A successful call proves end is reached without a thrown E3 error.
+    (e3-test-retention-check 'control-success
+      (eq? (e3-test-fault-scoped-call model dataset frame 20 8192) #t))
+    (e3-test-retention-check 'control-unreached
+      (e3-test-fault-status=? native 4 20 8192 3 0))
+    (e3-test-retention-check 'control-output
+      (e3-test-retention-output=? frame destinations))
+    (let ((outputs (e3-test-fault-output frame destinations)))
+      (e3-test-retention-check 'control-preserved
+        (e3-test-fault-preserved? record outputs))
+      (e3-test-retention-check 'control-reset (= (e3-fault-reset native) 0))
+      (let ((caught (e3-test-fault-scoped-call model dataset frame
+                                              role occurrence)))
+        (e3-test-retention-check 'selected-error
+          (and (transformer-error? caught)
+               (eq? (transformer-error-category caught) 'invalid-state)
+               (eq? (transformer-error-operation caught) 'e3-evaluate-into!)))
+        (e3-test-retention-check 'selected-fired
+          (e3-test-fault-status=? native 3 role occurrence occurrence 1))
+        (let ((error (vector-ref (e3-frame-entry-live frame
+                                   'e3-test-fault-run) 12)))
+          (e3-test-retention-check 'selected-stage-and-native-status
+            (and (= (vector-ref error 0) 7) (= (vector-ref error 1) 0)
+                 (= (vector-ref error 2) 2) (= (vector-ref error 3) 2))))
+        (e3-test-retention-check 'selected-preserved
+          (e3-test-fault-preserved? record outputs))
+        (e3-test-retention-check 'selected-owners
+          (e3-test-fault-owners-preserved? record))
+        (e3-test-retention-check 'selected-reset (= (e3-fault-reset native) 0))
+        (e3-test-retention-call! model dataset frame destinations cursor modes
+                                 model-image)
+        (e3-test-retention-check 'same-frame-retry
+          (e3-test-fault-preserved? record outputs))
+        (e3-test-retention-check 'retry-owners
+          (e3-test-fault-owners-preserved? record))
+        (d2-token-dataset-close! dataset)
+        (vector-set! e3-test-retention-root 0 #f)
+        (vector 'e3-fault-result-v1 role occurrence #t)))))
