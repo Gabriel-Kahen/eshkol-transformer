@@ -712,6 +712,13 @@ training and held-out D1 corpora, and a new fixed-profile C2 checkpoint, then
 inspects, evaluates, and generates from that same checkpoint in separate
 processes. It checks exact X1/T1/C2 identities, unchanged checkpoint bytes,
 fixed-profile and cross-config rejection, and corrupt-checkpoint diagnostics.
+The source-only follow-up on PR #212 head `05e3bec` compares a one-update
+checkpoint resumed for one more update with two uninterrupted updates. It
+requires complete C2 byte equality and identical separate-process evaluate
+and generate JSON for both final checkpoints, while retaining the original
+one-update checks. Successful reads and wrong-tokenizer, wrong-config, and
+corrupt-image rejections must leave checkpoint bytes unchanged. This added
+parity path has not yet passed a compiled or hosted gate.
 The test is registered after the production generate gate in the required
 CLI3 CI suite. The accepted J result (`/home/gabe/.codex/evidence/eshkol-transformer/cli3-union-j-result-independent-review-20261012-a/VERDICT.md`)
 validates both compiled gates on exact source `18693b4` (tree `3a7f76e5`)

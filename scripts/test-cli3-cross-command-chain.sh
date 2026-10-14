@@ -88,6 +88,18 @@ run_ok pretrain "${binary}" pretrain \
   --train-corpus "${scratch}/train" --checkpoint "${scratch}/first.c2" \
   --max-updates 1
 cp "${scratch}/first.c2" "${scratch}/first-before.c2"
+run_ok pretrain-resumed "${binary}" pretrain \
+  --config "${scratch}/config.json" --tokenizer "${scratch}/byte.t1" \
+  --train-corpus "${scratch}/train" --checkpoint "${scratch}/resumed.c2" \
+  --resume "${scratch}/first.c2" --max-updates 1
+run_ok pretrain-uninterrupted "${binary}" pretrain \
+  --config "${scratch}/config.json" --tokenizer "${scratch}/byte.t1" \
+  --train-corpus "${scratch}/train" \
+  --checkpoint "${scratch}/uninterrupted.c2" --max-updates 2
+cmp "${scratch}/resumed.c2" "${scratch}/uninterrupted.c2"
+cmp "${scratch}/first-before.c2" "${scratch}/first.c2"
+cp "${scratch}/resumed.c2" "${scratch}/resumed-before.c2"
+cp "${scratch}/uninterrupted.c2" "${scratch}/uninterrupted-before.c2"
 run_ok checkpoint-inspect "${binary}" checkpoint inspect \
   --input "${scratch}/first.c2"
 run_ok evaluate "${binary}" evaluate \
@@ -99,7 +111,22 @@ run_ok generate "${binary}" generate \
   --config "${scratch}/config.json" --tokenizer "${scratch}/byte.t1" \
   --train-corpus "${scratch}/train" --checkpoint "${scratch}/first.c2" \
   --prompt-hex 41 --sampling greedy --seed 1729
+for image in resumed uninterrupted; do
+  run_ok "evaluate-${image}" "${binary}" evaluate \
+    --config "${scratch}/config.json" --tokenizer "${scratch}/byte.t1" \
+    --train-corpus "${scratch}/train" \
+    --validation-corpus "${scratch}/heldout" \
+    --checkpoint "${scratch}/${image}.c2"
+  run_ok "generate-${image}" "${binary}" generate \
+    --config "${scratch}/config.json" --tokenizer "${scratch}/byte.t1" \
+    --train-corpus "${scratch}/train" --checkpoint "${scratch}/${image}.c2" \
+    --prompt-hex 41 --sampling greedy --seed 1729
+done
+cmp "${evidence}/evaluate-resumed.json" "${evidence}/evaluate-uninterrupted.json"
+cmp "${evidence}/generate-resumed.json" "${evidence}/generate-uninterrupted.json"
 cmp "${scratch}/first-before.c2" "${scratch}/first.c2"
+cmp "${scratch}/resumed-before.c2" "${scratch}/resumed.c2"
+cmp "${scratch}/uninterrupted-before.c2" "${scratch}/uninterrupted.c2"
 
 # This valid 256-token BPE is rejected by the fixed byte-profile admission.
 run_ok other-tokenizer-create "${binary}" tokenizer train-bpe \
@@ -112,24 +139,24 @@ run_rejected evaluate-mismatched-tokenizer 11 unsupported \
   "${binary}" evaluate --config "${scratch}/config.json" \
   --tokenizer "${scratch}/other.t1" --train-corpus "${scratch}/train" \
   --validation-corpus "${scratch}/heldout" \
-  --checkpoint "${scratch}/first.c2"
+  --checkpoint "${scratch}/resumed.c2"
 run_rejected generate-mismatched-tokenizer 11 unsupported \
   "${binary}" generate --config "${scratch}/config.json" \
   --tokenizer "${scratch}/other.t1" --train-corpus "${scratch}/train" \
-  --checkpoint "${scratch}/first.c2" --prompt-hex 41 \
+  --checkpoint "${scratch}/resumed.c2" --prompt-hex 41 \
   --sampling greedy --seed 1729
 
 # The alternate config passes the fixed profile and differs only in run.seed.
-# Restore must reject its identity against the C2 produced above.
+# Restore must reject its identity against the resumed C2 produced above.
 run_rejected evaluate-config-identity 14 invalid-state \
   "${binary}" evaluate --config "${scratch}/other-config.json" \
   --tokenizer "${scratch}/byte.t1" --train-corpus "${scratch}/train" \
   --validation-corpus "${scratch}/heldout" \
-  --checkpoint "${scratch}/first.c2"
+  --checkpoint "${scratch}/resumed.c2"
 run_rejected generate-config-identity 14 invalid-state \
   "${binary}" generate --config "${scratch}/other-config.json" \
   --tokenizer "${scratch}/byte.t1" --train-corpus "${scratch}/train" \
-  --checkpoint "${scratch}/first.c2" --prompt-hex 41 \
+  --checkpoint "${scratch}/resumed.c2" --prompt-hex 41 \
   --sampling greedy --seed 1729
 for name in evaluate-config-identity generate-config-identity; do
   grep -F 'operation="trainer-load-state!" message="detached controls fail cross-state validation"' \
@@ -142,11 +169,12 @@ from pathlib import Path
 import sys
 
 root = Path(sys.argv[1])
-corrupt = bytearray((root / 'first.c2').read_bytes())
+corrupt = bytearray((root / 'resumed.c2').read_bytes())
 assert corrupt
 corrupt[-1] ^= 1
 (root / 'corrupt.c2').write_bytes(corrupt)
 PY
+cp "${scratch}/corrupt.c2" "${scratch}/corrupt-before.c2"
 run_rejected checkpoint-inspect-corrupt 12 corrupt-data \
   "${binary}" checkpoint inspect --input "${scratch}/corrupt.c2"
 run_rejected evaluate-corrupt 12 corrupt-data \
@@ -160,6 +188,9 @@ run_rejected generate-corrupt 12 corrupt-data \
   --checkpoint "${scratch}/corrupt.c2" --prompt-hex 41 \
   --sampling greedy --seed 1729
 cmp "${scratch}/first-before.c2" "${scratch}/first.c2"
+cmp "${scratch}/resumed-before.c2" "${scratch}/resumed.c2"
+cmp "${scratch}/uninterrupted-before.c2" "${scratch}/uninterrupted.c2"
+cmp "${scratch}/corrupt-before.c2" "${scratch}/corrupt.c2"
 
 python3 - "${evidence}" "${scratch}" <<'PY'
 from pathlib import Path
@@ -181,9 +212,15 @@ other = record('other-tokenizer-inspect')
 train = record('train-inspect')
 heldout = record('heldout-inspect')
 pretrain = record('pretrain')
+resumed = record('pretrain-resumed')
+uninterrupted = record('pretrain-uninterrupted')
 checkpoint = record('checkpoint-inspect')
 evaluation = record('evaluate')
 generation = record('generate')
+resumed_evaluation = record('evaluate-resumed')
+uninterrupted_evaluation = record('evaluate-uninterrupted')
+resumed_generation = record('generate-resumed')
+uninterrupted_generation = record('generate-uninterrupted')
 
 assert tokenizer == {
     'artifact': 'tokenizer', 'family': 'byte',
@@ -207,6 +244,11 @@ assert train['total_shard_bytes'] == heldout['total_shard_bytes'] > 0
 assert pretrain['artifact'] == checkpoint['artifact'] == 'checkpoint'
 assert pretrain['checkpoint'] == str(scratch / 'first.c2')
 assert pretrain['updates'] == 1 and pretrain['tokens'] == 4
+assert resumed['artifact'] == uninterrupted['artifact'] == 'checkpoint'
+assert resumed['checkpoint'] == str(scratch / 'resumed.c2')
+assert uninterrupted['checkpoint'] == str(scratch / 'uninterrupted.c2')
+assert (resumed['updates'], resumed['tokens']) == (1, 3)
+assert (uninterrupted['updates'], uninterrupted['tokens']) == (2, 7)
 assert set(checkpoint) == {
     'api_version', 'artifact', 'checksum_algorithm', 'config_fingerprint',
     'config_schema_version', 'format_id', 'format_version', 'payload_bytes',
@@ -227,12 +269,22 @@ assert checkpoint['required_features'] == []
 assert checkpoint['tensor_count'] > 0 and checkpoint['payload_bytes'] > 0
 assert evaluation['artifact'] == 'evaluation'
 assert evaluation['batches'] > 0 and evaluation['tokens'] > 0
-for result in (pretrain, evaluation):
+assert resumed_evaluation == uninterrupted_evaluation
+assert resumed_evaluation['artifact'] == 'evaluation'
+assert resumed_evaluation['batches'] > 0 and resumed_evaluation['tokens'] > 0
+for result in (pretrain, resumed, uninterrupted, evaluation,
+               resumed_evaluation, uninterrupted_evaluation):
     for key in ('loss_f32_bits', 'mask_weight_f32_bits'):
         assert re.fullmatch(r'[0-9a-f]{8}', result[key]), (key, result)
 assert generation == {
     'artifact': 'generation', 'generated_hex': 'c5',
     'prompt_hex': '41', 'sampling': 'greedy', 'seed': 1729,
 }
+assert resumed_generation == uninterrupted_generation
+assert set(resumed_generation) == set(generation)
+assert resumed_generation['artifact'] == 'generation'
+assert re.fullmatch(r'[0-9a-f]{2}', resumed_generation['generated_hex'])
+for key in ('prompt_hex', 'sampling', 'seed'):
+    assert resumed_generation[key] == generation[key]
 PY
 printf 'CLI3-CROSS-COMMAND-CHAIN-PASS\n'
