@@ -1051,6 +1051,17 @@ all four mutant runs first diverged at the third-batch numerator and rejected
 without publishing a transcript. The other M2 numerical mutants and the full
 E3 §9 acceptance matrix remain open; this result does not establish installed
 or public E3 behavior or GPU execution.
+The separate noninstalled M2 padded-position source candidate reuses the same
+authentic three-row packed D1/D2 witness. Its test-only frame variant supplies a
+local `11` mask to both final-row L3S reduce and E3 correct while retaining the
+emitted `10` row and frame mask. A strict verifier requires normal M3 roles,
+CE, rows and serial state first, then the mutant's oracle-derived final L3S
+numerator/weight, correct count, accumulated state and final metrics; the
+oracle identifies `reduction_f32[0]` as the first changed word. The gate kills
+only at that final-row reduction mismatch and publishes no mutant transcript.
+Focused source tests pass; independent source review and compiled private
+normal/repeat/poison/sanitizer evidence are pending. This does not advance the
+remaining M2 or full §9 admission status.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each
