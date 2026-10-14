@@ -221,6 +221,7 @@ test-ci-c2-state-after-build:
 
 test-ci-c2-save-after-build:
 	/usr/bin/bash scripts/test-c2.sh --group c2-save
+	/usr/bin/bash scripts/test-c2-o2-native-fixtures.sh
 
 test-ci-c2-load-after-build:
 	/usr/bin/bash scripts/test-c2.sh --group c2-load

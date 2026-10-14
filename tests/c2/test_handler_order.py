@@ -8,7 +8,7 @@ P1 = "templates/p1/module_roots.esk.tmpl"
 C1 = "internal/c1/lib/transformer/checkpoint_internal.esk"
 E1 = "lib/transformer/error_core.esk"
 FILES = (P1, "internal/p1/lib/transformer/module.esk", *(f"native/{name}.esk" for name in (
-    "c2_training_state_extension", "c2_checkpoint_save_extension",
+    "c2_training_state_extension", "o2_wave2_extension", "c2_checkpoint_save_extension",
     "c2_o2_reconstruct_extension", "c2_checkpoint_load_extension", "c2_public_extension")),
     C1, E1)
 
@@ -383,7 +383,7 @@ def validate(sources):
     for name, path, effect, depth in TARGETS:
         protected(definition(sources, name, path), effect, depth)
     for name, path, binding, effect in (
-        ("c2-training-state-compose-internal", None, "(claim-progress (vector #f))", TARGETS[1][2]),
+        ("c2-training-state-compose-internal", None, "(claim-progress (vector #f #f))", TARGETS[1][2]),
         ("c2-training-state-borrow-begin-internal", None, "(p1-active (vector #f))", TARGETS[2][2]),
         ("c2-save-with-owner-borrow", None, "(transaction (vector #f #f #f #f))", TARGETS[4][2]),
         ("o2-state-reconstruct-internal", None, "(builder-cell (vector #f))", TARGETS[5][2]),
@@ -408,8 +408,25 @@ def validate(sources):
     guards = protected(compose, "(c2-training-state-claim-p1! p1 owner-token)", 1,
                        "(c2-training-state-rollback-p1! p1 owner-token)")
     consecutive(guards[-1], "(c2-training-state-claim-p1! p1 owner-token)",
-                "(vector-set! claim-progress 0 #t)", "(c2-training-state-claim-o2! o2 owner-token)")
-    contains(handler(guards[-1]), "(if (vector-ref claim-progress 0) (begin (c2-training-state-rollback-p1! p1 owner-token) (vector-set! claim-progress 0 #f)))")
+                "(vector-set! claim-progress 0 #t)",
+                "(vector-set! claim-progress 1 #t)",
+                "(c2-training-state-claim-o2! o2 owner-token)")
+    cleanup = handler(guards[-1])
+    contains(cleanup, "(if (vector-ref claim-progress 1) (begin (if (not (c2-training-state-rollback-o2-or-live! o2 owner-token)) (exit 1)) (vector-set! claim-progress 1 #f)))")
+    contains(cleanup, "(if (vector-ref claim-progress 0) (begin (if (not (c2-training-state-rollback-p1! p1 owner-token)) (exit 1)) (vector-set! claim-progress 0 #f)))")
+    consecutive(cleanup,
+                "(if (vector-ref claim-progress 1) (begin (if (not (c2-training-state-rollback-o2-or-live! o2 owner-token)) (exit 1)) (vector-set! claim-progress 1 #f)))",
+                "(if (vector-ref claim-progress 0) (begin (if (not (c2-training-state-rollback-p1! p1 owner-token)) (exit 1)) (vector-set! claim-progress 0 #f)))")
+    contains(cleanup, "(guard (rollback-failure (#t (exit 1))) (if (vector-ref claim-progress 1) (begin (if (not (c2-training-state-rollback-o2-or-live! o2 owner-token)) (exit 1)) (vector-set! claim-progress 1 #f))) (if (vector-ref claim-progress 0) (begin (if (not (c2-training-state-rollback-p1! p1 owner-token)) (exit 1)) (vector-set! claim-progress 0 #f))))")
+    contains(cleanup, "(raise caught)")
+    o2_reconcile = definition(sources, "o2-state-claim-c2-rollback-or-live-internal!",
+                              "native/o2_wave2_extension.esk")
+    for check in ("(not owner-token)", "(not state)", "(vector-ref state 7)",
+                  "(eq? (vector-ref state 6) 'live)",
+                  "(eq? (vector-ref state 6) owner-token)",
+                  "(o2-state-claim-c2-rollback-internal! value owner-token)"):
+        need(form(check) in lists(o2_reconcile),
+             f"missing O2 reconciliation check {check}")
     borrow = definition(sources, "c2-training-state-borrow-begin-internal")
     call = "(c2-training-state-activate-p1-borrow! (vector-ref state 1) active-owner-token active-access-token active-borrow operation)"
     guards = unique(borrow, call)[1]
@@ -649,6 +666,8 @@ class HandlerOrder(unittest.TestCase):
     def test_phase_and_canonical_cleanup_mutations(self):
         cases = (
             ("c2-training-state-compose-internal", "(vector-set! claim-progress 0 #t)"),
+            ("c2-training-state-compose-internal", "(vector-set! claim-progress 1 #t)"),
+            ("c2-training-state-compose-internal", "(c2-training-state-rollback-o2-or-live! o2 owner-token)"),
             ("c2-training-state-borrow-begin-internal", "(vector-set! p1-active 0 #t)"),
             ("c2-training-state-borrow-begin-internal", "(vector-ref state 7)"),
             ("c2-training-state-borrow-activation-rollback!", "(vector-set! owner-token 2 #f)"),
@@ -666,9 +685,29 @@ class HandlerOrder(unittest.TestCase):
                     binding = next(node for node, _ in events(owner)
                                    if node[:1] == ["let*"] and node[1][0][0] == "active-borrow")
                     node = binding[1][0][1]
+                elif effect == "(c2-training-state-rollback-o2-or-live! o2 owner-token)":
+                    guard = unique(owner,
+                                   "(c2-training-state-claim-p1! p1 owner-token)")[1][-1]
+                    node, _ = unique(handler(guard), effect)
                 else:
                     node, _ = unique(owner, effect)
                 node[:] = ["begin", "#f"]
+                with self.assertRaises(ValueError):
+                    validate(changed)
+
+    def test_o2_reconcile_rejects_lost_authority_mutations(self):
+        for check in ("(vector-ref state 7)",
+                      "(eq? (vector-ref state 6) 'live)",
+                      "(eq? (vector-ref state 6) owner-token)",
+                      "(o2-state-claim-c2-rollback-internal! value owner-token)"):
+            with self.subTest(missing=check):
+                changed = deepcopy(self.sources)
+                owner = definition(changed,
+                                   "o2-state-claim-c2-rollback-or-live-internal!",
+                                   "native/o2_wave2_extension.esk")
+                found = [node for node in lists(owner) if node == form(check)]
+                self.assertEqual(len(found), 1)
+                found[0][:] = ["begin", "#f"]
                 with self.assertRaises(ValueError):
                     validate(changed)
 
