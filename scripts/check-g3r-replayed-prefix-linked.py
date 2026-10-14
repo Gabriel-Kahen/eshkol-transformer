@@ -48,6 +48,7 @@ RUNNER_NEEDLES = [
     "feature-off replayed-prefix symbol escaped", "feature-on replayed-prefix symbol missing",
 ]
 FIXTURE_NEEDLES = [
+    '(load "g3t_text_result_extension.esk")',
     '(load "g3r_rng_import_extension.esk")',
     '(load "g3r_replayed_prefix_extension.esk")',
     '(g3m-prefill-p1! generator input)',
@@ -112,6 +113,14 @@ def validate_runner(source: str) -> None:
             "runner command/receipt path changed")
 
 
+def validate_fixture(source: str) -> None:
+    for needle in FIXTURE_NEEDLES:
+        require(needle in source, f"fixture omitted {needle}")
+    require(source.index('(load "g3t_final_publication_extension.esk")')
+            < source.index('(load "g3t_text_result_extension.esk")'),
+            "text result must load after final publication")
+
+
 def validate_manifest(source: str, paths: list[str], root: Path,
                       overrides: dict[str, bytes] | None = None) -> None:
     lines = source.splitlines()
@@ -160,11 +169,25 @@ def main() -> None:
     bridge = (ROOT / "tests/g3r/replayed_prefix_linked_probe.c").read_text()
     manifest = (ROOT / MANIFEST).read_text()
     validate_runner(runner)
-    for needle in FIXTURE_NEEDLES:
-        require(needle in fixture, f"fixture omitted {needle}")
+    validate_fixture(fixture)
     for needle in BRIDGE_NEEDLES:
         require(needle in bridge, f"bridge omitted {needle}")
     validate_manifest(manifest, closure, ROOT)
+    fixture_path = "tests/g3r/replayed_prefix_linked_test.esk"
+    load = '(load "g3t_text_result_extension.esk")\n'
+    require(fixture.count(load) == 1, "text-result fixture load changed")
+    missing_load = fixture.replace(load, "", 1)
+    old_row = f"source_sha256\t{sha256(fixture.encode()).hexdigest()}\t{fixture_path}"
+    new_row = f"source_sha256\t{sha256(missing_load.encode()).hexdigest()}\t{fixture_path}"
+    require(manifest.count(old_row) == 1, "fixture manifest row changed")
+    validate_manifest(manifest.replace(old_row, new_row, 1), closure, ROOT,
+                      {fixture_path: missing_load.encode()})
+    try:
+        validate_fixture(missing_load)
+    except ValueError:
+        pass
+    else:
+        raise ValueError("repinned missing text-result load escaped checker")
     # Repin the changed runner SHA first, so these negatives prove command
     # semantics are checked independently of manifest drift.
     for old, new in (("-Wl,--wrap=et_kernel_runtime_dispatch",

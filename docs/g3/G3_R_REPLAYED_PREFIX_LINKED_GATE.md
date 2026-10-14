@@ -46,3 +46,9 @@ The C interposer exists only in this test archive, behind test/private flags.
 It neither substitutes positive provider output nor changes the public G2
 path. A source-only PASS records readiness for a later linked runtime attempt,
 not success of that attempt.
+
+The first one-use compiled attempt at `5aff31c` stopped during Eshkol fixture
+compilation: `g3t-generation-output-text` was referenced without loading its
+already pinned `g3t_text_result_extension.esk` definition. This source repair
+adds that load after final publication. A new exact-head linked run is required
+before any runtime or numerical claim.

@@ -6,6 +6,7 @@
 (load "g3c4_t1_output_decode_extension.esk")
 (load "g3t_output_text_extension.esk")
 (load "g3t_final_publication_extension.esk")
+(load "g3t_text_result_extension.esk")
 (load "g3t_manual_p1_extension.esk")
 (load "g3t_manual_logits_materialize_extension.esk")
 (load "g3m_prefill_p1_extension.esk")
