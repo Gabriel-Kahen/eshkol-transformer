@@ -1398,6 +1398,17 @@ accepted exact `0f1a27f`/tree `9dfb1f5`; the durable receipt is
 Supported compiled Eshkol normal, poison, and sanitizer gates remain pending;
 E3 §9 admission remains **HOLD**.
 
+The bounded E3 §9 stage-10 source candidate adds noninstalled frame-owned
+site 7, ordinal 0, occurrences 1 or 2. It consumes after the reduced-phase
+and cleanup guard, before correctness view borrow and E3-N K1 dispatch,
+returning fixed internal/invariant status (E1 stage 10, table index 131).
+The native fixture measures a completed L3S predecessor and no correctness
+dispatch at denial; the private fixture extends exact cursor, 17-mode,
+14-parameter/gradient/RNG, six-output, 29-probe, first-error and same-frame
+retry checks against a fault-free twin. Focused host source/native checks are
+candidate evidence only; supported compiled Eshkol normal, poison and
+sanitizer gates remain pending. E3 §9 admission remains **HOLD**.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
