@@ -56,6 +56,10 @@ def verify(source: str, root: str, closure: str, predecessor: str,
     for text in (
             '"valid.g3r"', '"wrong-digest.g3r"', '"torn.g3r"',
             '"short.g3r"', '"long.g3r"', '"link.g3r"', '"fifo.g3r"',
+            '(string #\\nul)',
+            '(make-string 2049 (string-ref "é" 0))',
+            '(string->utf8 oversized-utf8-path)',
+            '"embedded-NUL path"', '"oversized UTF-8 path"',
             '(g3r-pair-file-io-fail 6 1 5)',
             '(g3r-pair-file-io-fail 7 1 5)',
             '(g3r-pair-file-io-fail 16 1 5)',
@@ -102,9 +106,16 @@ class FileReadSourceTest(unittest.TestCase):
             verify(self.source, self.root, self.closure,
                    self.predecessor,
                    self.fixture.replace('(g3r-pair-file-io-fail 7 1 5)', ''))
+        for marker in ('(string #\\nul)',
+                       '(make-string 2049 (string-ref "é" 0))',
+                       '(string->utf8 oversized-utf8-path)',
+                       '"embedded-NUL path"', '"oversized UTF-8 path"'):
+            with self.subTest(marker=marker), self.assertRaises(ValueError):
+                verify(self.source, self.root, self.closure,
+                       self.predecessor, self.fixture.replace(marker, '', 1))
 
     def test_independent_files(self):
-        with tempfile.TemporaryDirectory(dir="/dev/shm") as scratch:
+        with tempfile.TemporaryDirectory() as scratch:
             home = Path(scratch)
             c2 = home / "image.c2"
             c2.write_bytes(b"independent fixture image")
