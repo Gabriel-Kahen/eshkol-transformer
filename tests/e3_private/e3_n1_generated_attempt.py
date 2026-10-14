@@ -68,6 +68,7 @@ def _sync_json(path, body, fault=False):
         if fault:
             raise Hold("injected-record-sync")
         os.fsync(fd)
+        created = os.fstat(fd)
     finally:
         os.close(fd)
     parent = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
@@ -75,8 +76,23 @@ def _sync_json(path, body, fault=False):
         os.fsync(parent)
     finally:
         os.close(parent)
-    if path.read_bytes() != raw:
-        raise Hold("readback-mismatch")
+    try:
+        read_fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    except OSError as error:
+        raise Hold("readback-open-unverified") from error
+    try:
+        observed = os.fstat(read_fd)
+        identity = (created.st_dev, created.st_ino)
+        if (observed.st_dev, observed.st_ino) != identity:
+            raise Hold("readback-identity-drift")
+        with os.fdopen(read_fd, "rb", closefd=False) as stream:
+            if stream.read(len(raw) + 1) != raw:
+                raise Hold("readback-mismatch")
+        current = os.stat(path, follow_symlinks=False)
+        if (current.st_dev, current.st_ino) != identity:
+            raise Hold("readback-identity-drift")
+    finally:
+        os.close(read_fd)
     return hashlib.sha256(raw).hexdigest()
 
 

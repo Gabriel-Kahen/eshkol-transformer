@@ -1,7 +1,10 @@
 """Generated-only finite attempt ordering and fail-closed cuts."""
 
 import json
+import os
+import stat
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -125,6 +128,36 @@ class GeneratedAttemptTests(unittest.TestCase):
             self.assert_hold(record)
             self.assertEqual(record["reason"], "setup-report-unverified")
             self.assertNotIn("observed_peak_sum_bytes", record)
+
+    def test_generated_record_readback_rejects_same_bytes_path_replacement(self):
+        body = {"schema": attempt.SCHEMA, "state": "HOLD"}
+        raw = json.dumps(body, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+        for kind, reason in (("replacement", "readback-identity-drift"),
+                             ("symlink", "readback-open-unverified")):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory(
+                    prefix="e3-n1-readback-test-") as directory:
+                target = Path(directory) / "HOLD.json"
+                replacement = Path(directory) / "replacement.json"
+                replacement.write_bytes(raw)
+                real_fsync = os.fsync
+                swapped = False
+
+                def swap_after_directory_sync(fd):
+                    nonlocal swapped
+                    real_fsync(fd)
+                    if stat.S_ISDIR(os.fstat(fd).st_mode) and not swapped:
+                        if kind == "replacement":
+                            os.replace(replacement, target)
+                        else:
+                            target.unlink()
+                            target.symlink_to(replacement)
+                        swapped = True
+
+                with mock.patch.object(attempt.os, "fsync", side_effect=swap_after_directory_sync):
+                    with self.assertRaisesRegex(attempt.Hold, reason):
+                        attempt._sync_json(target, body)
+                self.assertTrue(swapped)
+                self.assertEqual(target.read_bytes(), raw)
 
 
 if __name__ == "__main__":

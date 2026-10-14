@@ -859,6 +859,8 @@ role and phase reports; partial or failed reports cannot publish an
 undercounted sum. Duplicate JSON report keys, including repeated role names,
 are rejected before aggregation. It remains same-UID source evidence with no
 resource proof.
+Generated record readback also rejects same-byte inode replacement and
+symlink substitution after sync; protected custody remains HOLD.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
