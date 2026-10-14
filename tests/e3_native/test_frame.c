@@ -828,6 +828,87 @@ static void test_forward_preinvoke_selector(
   CHECK(et_e3_test_fault_arm_v1(frame, 1, 0, 1) == E3_INVALID_STATE);
 }
 
+static void test_publication_precommit_selector(
+    owner *model, et_f32_tensor *destination[4]) {
+  et_e3_frame_internal *frame = et_e3_private_frame_create_v1(
+      model, destination[0], destination[1], destination[2], destination[3]);
+  CHECK(frame != NULL);
+  CHECK(et_e3_test_fault_seed_publication_v1(frame) == E3_INVALID_STATE);
+  CHECK(et_e3_test_fault_arm_v1(frame, 2, 1, 1) == E3_INVALID_ARGUMENT);
+  CHECK(et_e3_test_fault_arm_v1(frame, 2, 0, 2) == E3_INVALID_ARGUMENT);
+  CHECK(et_e3_test_fault_arm_v1(frame, 3, 0, 1) == E3_INVALID_ARGUMENT);
+  uint32_t ordinary[4];
+  const uint32_t sentinels[4] = {UINT32_C(0x3f800000), UINT32_C(0x40000000),
+                                  UINT32_C(0x40400000), UINT32_C(0x40800000)};
+  for (int invocation = 0; invocation < 3; ++invocation) {
+    if (invocation == 1) {
+      OK(et_e3_test_fault_seed_publication_v1(frame));
+      CHECK(et_e3_private_counter_ref_v1(frame, 0) == 7);
+      CHECK(et_e3_private_counter_ref_v1(frame, 1) == 4);
+      for (size_t i = 0; i < 4; ++i) {
+        uint32_t bits;
+        read_scalar(destination[i], &bits);
+        CHECK(bits == sentinels[i] && bits != ordinary[i]);
+      }
+      OK(et_e3_test_fault_arm_v1(frame, 2, 0, 1));
+      CHECK(et_e3_test_fault_arm_v1(frame, 1, 0, 1) == E3_INVALID_STATE);
+    }
+    OK(et_e3_private_acquire_v1(frame));
+    stage(frame, 3, 197, 197, 0, 1, 1);
+    forward_batch(frame);
+    stage(frame, 0, 255, 255, 7, 1, 1);
+    forward_batch(frame);
+    stage(frame, 7, 7, 7, 0, 1, 0);
+    forward_batch(frame);
+    OK(et_e3_private_finalize_v1(frame));
+    OK(et_e3_private_cleanup_preflight_v1(frame));
+    et_e3_private_drain_v1(frame);
+    if (invocation == 1) {
+      et_f32_test_live_counts_v1 before = {.struct_size = sizeof(before)};
+      et_f32_test_live_counts_v1 after = {.struct_size = sizeof(after)};
+      et_f32_test_live_counts_snapshot_v1(&before);
+      CHECK(et_e3_private_publish_v1(frame) == E3_INTERNAL);
+      CHECK(e3_last_domain == 0 && e3_last_category == E3_INTERNAL &&
+            e3_last_code == E3_CODE_INVARIANT);
+      et_f32_test_live_counts_snapshot_v1(&after);
+      CHECK(after.borrows == before.borrows);
+      CHECK(frame->fault_state == 2 && frame->fault_reached == 1 &&
+            frame->committed == 1);
+    } else {
+      OK(et_e3_private_publish_v1(frame));
+    }
+    et_e3_private_finish_v1(frame);
+    if (invocation == 0) {
+      for (size_t i = 0; i < 4; ++i) read_scalar(destination[i], &ordinary[i]);
+      CHECK(frame->published_counts[0] == 5 && frame->published_counts[1] == 3);
+    } else if (invocation == 1) {
+      CHECK(et_e3_test_fault_ref_v1(frame, 0) == 2);
+      CHECK(et_e3_test_fault_ref_v1(frame, 1) == 2);
+      CHECK(et_e3_test_fault_ref_v1(frame, 2) == 0);
+      CHECK(et_e3_test_fault_ref_v1(frame, 3) == 1);
+      CHECK(et_e3_test_fault_ref_v1(frame, 4) == 1);
+      CHECK(et_e3_private_counter_ref_v1(frame, 0) == 7);
+      CHECK(et_e3_private_counter_ref_v1(frame, 1) == 4);
+      for (size_t i = 0; i < 4; ++i) {
+        uint32_t bits;
+        read_scalar(destination[i], &bits);
+        CHECK(bits == sentinels[i]);
+      }
+      OK(et_e3_test_fault_reset_v1(frame));
+    } else {
+      CHECK(et_e3_private_counter_ref_v1(frame, 0) == 5);
+      CHECK(et_e3_private_counter_ref_v1(frame, 1) == 3);
+      for (size_t i = 0; i < 4; ++i) {
+        uint32_t bits;
+        read_scalar(destination[i], &bits);
+        CHECK(bits == ordinary[i] && bits != sentinels[i]);
+      }
+    }
+  }
+  OK(et_e3_private_frame_destroy_preflight_v1(frame));
+  et_e3_private_frame_destroy_v1(frame);
+}
+
 int main(void) {
   test_diagnostic_mapping();
   owner *model = make_model();
@@ -837,6 +918,7 @@ int main(void) {
   test_transaction(model, destination);
   test_discovery_bind_rollback(model, destination);
   test_forward_preinvoke_selector(model, destination);
+  test_publication_precommit_selector(model, destination);
   for (size_t i = 0; i < 4; ++i) destroy_tensor(&destination[i]);
   printf("E3 native frame: %zu checks passed\n", checks);
   return 0;

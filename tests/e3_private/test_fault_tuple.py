@@ -82,6 +82,8 @@ class FaultTupleTest(unittest.TestCase):
         if op == "or":
             return any(FaultTupleTest.eval_probe(value, environment)
                        for value in expression[1:])
+        if op == "not":
+            return not FaultTupleTest.eval_probe(expression[1], environment)
         if op == "if":
             branch = expression[2] if FaultTupleTest.eval_probe(
                 expression[1], environment) else expression[3]
@@ -204,6 +206,7 @@ printf '%s\n' "$e3_tuple_kind"
             r'\(extern i64 e3-test-fault-arm ptr i64 i64 i64\s+:real et_e3_test_fault_arm_v1\)',
             r'\(extern i64 e3-test-fault-ref ptr i64\s+:real et_e3_test_fault_ref_v1\)',
             r'\(extern i64 e3-test-fault-reset ptr\s+:real et_e3_test_fault_reset_v1\)',
+            r'\(extern i64 e3-test-fault-seed-publication ptr\s+:real et_e3_test_fault_seed_publication_v1\)',
         )
         def valid(text):
             return all(len(re.findall(pattern, text)) == 1 for pattern in signatures)
@@ -320,14 +323,14 @@ e3_reject_unresolved_private fault "$3" "$3"
             self.assertIn(snapshot, execute)
             self.assertLess(execute.index(snapshot), execute.index("(e3-test-fault-arm native"))
         required = (
-            "(= (vector-ref entry 15) 95)",
+            "(= (vector-ref entry 15) (if (= site 2) 155 95))",
             "(e3-test-fault-check 'cursor\n        (d2-core-bytes=? cursor",
             "(e3-test-fault-check 'output\n        (equal? publication",
             "(e3-test-fault-check 'modes\n        (e3-test-retention-modes=?",
             "(e3-test-fault-check 'model\n        (e3-test-retention-model=?",
             "(e3-test-fault-check 'rng\n        (and (eq? rng-algorithm",
             "(e3-test-fault-check 'owners\n        (e3-test-fault-probes-restored?",
-            "(e3-test-fault-check 'retry-output\n      (equal? publication",
+            "(e3-test-fault-check 'retry-output\n      (equal? (if (= site 2) e3-test-fault-final-publication publication)",
             "(e3-test-fault-check 'retry-rng\n      (and (eq? rng-algorithm",
         )
         def guarded(candidate):
@@ -367,6 +370,54 @@ e3_reject_unresolved_private fault "$3" "$3"
             mutant, "e3-test-fault-publication")
         self.assertNotEqual(self.eval_probe(changed_expression, environment),
                             expected)
+
+    def test_stage12_precommit_cut_and_distinct_sentinels(self):
+        native = (ROOT / "src/eshkol_transformer/e3_frame.c").read_text()
+        driver = (TESTS / "fault_driver.esk").read_text()
+        publish = native[native.index("int64_t et_e3_private_publish_v1("):]
+        publish = publish[:publish.index("void et_e3_private_finish_v1(")]
+        cut = publish.index("frame->fault_site == 2")
+        self.assertLess(publish.index("e3_publication_counts(frame)"), cut)
+        self.assertLess(publish.index("results[i].view.byte_length"), cut)
+        self.assertLess(publish.index("destinations[i].view.byte_length"), cut)
+        self.assertLess(cut, publish.index("memcpy(destinations[i].view.data"))
+        self.assertIn("e3_scope_end(&destinations[--destination_count])",
+                      publish[cut:publish.index("memcpy(destinations[i].view.data")])
+        self.assertIn("et_e3_test_fault_seed_publication_v1", native)
+        self.assertIn("(equal? publication e3-test-fault-sentinels)", driver)
+        self.assertIn("(e3-test-fault-all-distinct?", driver)
+        self.assertIn("(= (vector-ref entry 15) (if (= site 2) 155 95))", driver)
+        self.assertIn("(equal? publication\n                (e3-test-fault-publication", driver)
+        self.assertIn("(if (= site 2) e3-test-fault-final-publication publication)", driver)
+
+        for mutated in (
+            publish[:cut] + publish[cut:].replace("frame->fault_state = 2;", "", 1),
+            publish[:cut] + publish[cut:].replace(
+                "while (destination_count) e3_scope_end(&destinations[--destination_count]);",
+                "", 1),
+            publish[:cut] + publish[cut:].replace(
+                "return e3_fail(E3_INTERNAL, E3_CODE_INVARIANT);", "return 0;", 1),
+        ):
+            self.assertNotEqual(mutated, publish)
+            self.assertFalse(all(fragment in mutated[mutated.index("frame->fault_site == 2"):
+                                                mutated.index("memcpy(destinations[i].view.data")]
+                                 for fragment in (
+                                     "frame->fault_state = 2;",
+                                     "e3_scope_end(&destinations[--destination_count])",
+                                     "return e3_fail(E3_INTERNAL, E3_CODE_INVARIANT);")))
+
+    def test_stage12_each_sentinel_is_causally_distinct(self):
+        source = (TESTS / "fault_driver.esk").read_text()
+        expression = self.function_expression(source, "e3-test-fault-all-distinct?")
+        old = [1065353216, 1073741824, 1077936128, 1082130432, 7, 4]
+        final = [1085366897, 1084227584, 1132430055, 0, 5, 3]
+        self.assertTrue(self.eval_probe(expression, {"left": old, "right": final}))
+        for index in range(6):
+            mutant = old.copy()
+            mutant[index] = final[index]
+            self.assertFalse(self.eval_probe(expression,
+                                             {"left": mutant, "right": final}),
+                             f"undistinguished publication word {index}")
 
     def test_probe_balance_negative_mutants(self):
         source = (TESTS / "fault_driver.esk").read_text()

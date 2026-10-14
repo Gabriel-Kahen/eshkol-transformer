@@ -319,8 +319,9 @@ int64_t et_e3_test_fault_arm_v1(void *pointer, int64_t site,
       e3_dependency_status(e3_last_domain, e3_last_category) : e3_last_category;
   if (!e3_fault_idle(frame)) return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
   if (frame->fault_state) return e3_fail(E3_INVALID_STATE, E3_CODE_REENTRANCY);
-  if (site != 1 || ordinal < 0 || ordinal > 20 ||
-      occurrence < 1 || occurrence > 8192)
+  if (!((site == 1 && ordinal >= 0 && ordinal <= 20 &&
+         occurrence >= 1 && occurrence <= 8192) ||
+        (site == 2 && ordinal == 0 && occurrence == 1)))
     return e3_fail(E3_INVALID_ARGUMENT, E3_CODE_PHASE);
   frame->fault_state = 1;
   frame->fault_site = (uint32_t)site;
@@ -357,6 +358,31 @@ int64_t et_e3_test_fault_reset_v1(void *pointer) {
   if (!e3_fault_idle(frame)) return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
   frame->fault_state = frame->fault_site = frame->fault_ordinal = 0;
   frame->fault_occurrence = frame->fault_reached = frame->fault_started = 0;
+  return 0;
+}
+
+/* Distinct, finite pre-call words make each of the six publication stores
+ * observable. Only an idle frame with an earlier successful publication may
+ * be seeded; a copy failure is a fixture invariant, not an E3 fault cut. */
+int64_t et_e3_test_fault_seed_publication_v1(void *pointer) {
+  e3_clear();
+  et_e3_frame_internal *frame = e3_admit(pointer);
+  if (!frame) return e3_last_domain ?
+      e3_dependency_status(e3_last_domain, e3_last_category) : e3_last_category;
+  if (!e3_fault_idle(frame) || frame->fault_state ||
+      !frame->published_valid || frame->committed != 2)
+    return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
+  const uint32_t sentinels[4] = {UINT32_C(0x3f800000), UINT32_C(0x40000000),
+                                  UINT32_C(0x40400000), UINT32_C(0x40800000)};
+  et_f32_tensor_error error;
+  for (size_t i = 0; i < 4; ++i) {
+    et_f32_tensor_error_clear_v1(&error);
+    if (et_f32_tensor_copy_bits_from_v1(frame->destination[i],
+                                        &sentinels[i], 1, &error) != 0)
+      abort();
+  }
+  frame->published_counts[0] = 7;
+  frame->published_counts[1] = 4;
   return 0;
 }
 #endif
@@ -1480,6 +1506,16 @@ int64_t et_e3_private_publish_v1(void *pointer) {
         destinations[i].view.rank != 0 || destinations[i].view.shape ||
         destinations[i].view.byte_length != sizeof(float))
       abort();
+#ifdef ET_E3_FAULT_TESTING
+  if (frame->fault_state == 1 && frame->fault_site == 2) {
+    ++frame->fault_reached;
+    if (frame->fault_reached == frame->fault_occurrence) {
+      frame->fault_state = 2;
+      while (destination_count) e3_scope_end(&destinations[--destination_count]);
+      return e3_fail(E3_INTERNAL, E3_CODE_INVARIANT);
+    }
+  }
+#endif
   for (size_t i = 0; i < 4; ++i)
     memcpy(destinations[i].view.data, &staged[i], sizeof(staged[i]));
   frame->published_counts[0] = frame->staged_counts[0];

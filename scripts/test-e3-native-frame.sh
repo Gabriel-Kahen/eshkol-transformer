@@ -44,7 +44,7 @@ e3_sources=("${PROJECT_ROOT}/tests/e3_native/test_frame.c"
   "${PROJECT_ROOT}/src/eshkol_transformer/e3_frame.c" \
   -o "${e3_tmp}/production-frame.o"
 if nm -a "${e3_tmp}/production-frame.o" | grep -E \
-    'e3_test_discovery_fail_index|et_e3_test_fault_(arm|ref|reset)_v1'; then
+    'e3_test_discovery_fail_index|et_e3_test_fault_(arm|ref|reset|seed_publication)_v1'; then
   die "production E3 frame exposes test-only selector"
 fi
 
