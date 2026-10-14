@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import os
 import shutil
 import struct
 import subprocess
@@ -124,9 +125,12 @@ class PaddedPositionMutantSourceTests(unittest.TestCase):
         self.assertIn("--padded-mutant", gate)
         self.assertIn("batches[2].reduction_f32: exact rational reduction mismatch", gate)
         self.assertIn('[[ ! -e "${out}/transcript-${mutant}.json" ]]', gate)
-        if shutil.which("clang") is None:
+        source_cc = os.environ.get("E3_SOURCE_CC") or shutil.which("clang")
+        if source_cc is None:
             self.skipTest("Clang unavailable for source admission guard")
-        base = ["clang", "-std=c11", "-fsyntax-only", "-I", str(ROOT / "include"),
+        base = [source_cc, "-std=c11", "-fsyntax-only", "-Werror",
+                "-Wincompatible-pointer-types-discards-qualifiers",
+                "-I", str(ROOT / "include"),
                 "-I", str(ROOT / "src"), "-I", str(ROOT / "native")]
         source = str(ROOT / "src/eshkol_transformer/e3_frame.c")
         denied = subprocess.run(base + ["-DET_E3_NUMERICAL_PADDED_POSITION", source],

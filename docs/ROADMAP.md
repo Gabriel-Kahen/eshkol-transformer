@@ -1059,9 +1059,16 @@ CE, rows and serial state first, then the mutant's oracle-derived final L3S
 numerator/weight, correct count, accumulated state and final metrics; the
 oracle identifies `reduction_f32[0]` as the first changed word. The gate kills
 only at that final-row reduction mismatch and publishes no mutant transcript.
-Focused source tests pass; independent source review and compiled private
-normal/repeat/poison/sanitizer evidence are pending. This does not advance the
-remaining M2 or full §9 admission status.
+The first one-use padded-position gate on `ea52ada` exited 1 while building
+`mutant-a`: two mutant-local `const unsigned char[2]` masks could not be
+assigned to the writable `void *` tensor-view field under strict Clang.
+The sealed raw evidence and independent HOLD review remain at
+`/home/gabe/.codex/evidence/eshkol-transformer/e3-m2-padded-ea52-static-20261014-a/result/`
+(review SHA-256 `6679ce1400293008bf3ded35794d6527b7f5fd585c53fe7a2fd1283c9113dbbb`).
+A bounded source repair makes only those local masks writable and adds the
+strict compiler qualifier check to the source test; independent source review
+and a fresh one-use compiled normal/repeat/poison/sanitizer gate are pending.
+This does not advance the remaining M2 or full §9 admission status.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each

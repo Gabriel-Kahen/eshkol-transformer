@@ -18,7 +18,8 @@ print(torch.__version__)
 PY
 )"
 [[ "${versions}" == $'3.14.6\n2.13.0+cpu' ]] || die "padded-position Q0 versions differ"
-ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "${q0_python}" -B \
+E3_SOURCE_CC="$(tsv_value "$(eshkol_build_dir)/eshkol-transformer-provenance.tsv" cc_path)" \
+  ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "${q0_python}" -B \
   -m unittest tests.e3_reference.test_sum_order_witness \
     tests.e3_private.test_padded_position_mutant \
   >"${out}/source.stdout" 2>"${out}/source.stderr"

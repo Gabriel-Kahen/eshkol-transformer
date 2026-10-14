@@ -1114,7 +1114,7 @@ int64_t et_e3_private_reduce_v1(void *pointer) {
   et_kernel_tensor_view_v1 mask = e3_native_view(
       frame->mask, sizeof(frame->mask), "bool", 2, e3_shape_pair);
 #ifdef ET_E3_NUMERICAL_PADDED_POSITION
-  const unsigned char padded_mask[2] = {1, 1};
+  unsigned char padded_mask[2] = {1, 1};
   if (frame->mask[0] == 1 && frame->mask[1] == 0)
     mask.data = padded_mask;
 #endif
@@ -1139,7 +1139,7 @@ int64_t et_e3_private_correct_v1(void *pointer) {
   et_kernel_tensor_view_v1 mask = e3_native_view(
       frame->mask, sizeof(frame->mask), "bool", 2, e3_shape_pair);
 #ifdef ET_E3_NUMERICAL_PADDED_POSITION
-  const unsigned char padded_mask[2] = {1, 1};
+  unsigned char padded_mask[2] = {1, 1};
   if (frame->mask[0] == 1 && frame->mask[1] == 0)
     mask.data = padded_mask;
 #endif
