@@ -3137,10 +3137,14 @@ publication, public G2 and continuation remain pending.
   checker covers eight negative mutations. A further source-private leaf calls
   the accepted second-frame carrier on the original pending output and decodes
   its genuine EOS or non-EOS ID through T1 into the distinct original second
-  raw[1] carrier; its focused checker covers twelve negative mutations. These
-  leaves still require in-region abort. First-EOS/G2 terminal commit, text
-  preflight, post-call snapshot, detached clone, full same-call tests, and
-  independent review remain pending.
+  raw[1] carrier; its focused checker covers twelve negative mutations. A
+  further source-private logical text preflight checks the first-EOS versus
+  committed-prefix G2 phase, full LE V256 IDs and T1 raw parity, then copies
+  the selected bytes into the original logical-one or logical-two text
+  carrier. Its source checker covers nineteen negative mutations. All leaves
+  still require in-region abort. Native first-EOS/G2 terminal commit,
+  post-call snapshot, detached clone, full same-call tests, and independent
+  review remain pending.
 
 ## Wave 4 — practical pretraining and performance
 
