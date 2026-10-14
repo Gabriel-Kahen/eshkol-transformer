@@ -6,6 +6,8 @@ import json
 import os
 import select
 import signal
+import socket
+import struct
 import tempfile
 import time
 from pathlib import Path
@@ -428,15 +430,21 @@ def probe(fault=None):
     return finish()
 
 
-def _emit_observer_report(fd, record):
+def _emit_observer_report(channel, record):
     raw = json.dumps(record, sort_keys=True, separators=(",", ":")).encode() + b"\n"
     if len(raw) > MAX_OBSERVER_REPORT:
         raise Hold("observer-report-too-large")
-    while raw:
-        written = os.write(fd, raw)
-        if written <= 0:
-            raise Hold("observer-report-short-write")
-        raw = raw[written:]
+    if channel.send(raw) != len(raw):
+        raise Hold("observer-report-short-send")
+
+
+def _observer_sender(ancillary):
+    credentials = [struct.unpack("3i", data) for level, kind, data in ancillary
+                   if level == socket.SOL_SOCKET and kind == socket.SCM_CREDENTIALS
+                   and len(data) == struct.calcsize("3i")]
+    if len(credentials) != 1 or len(ancillary) != 1:
+        raise ValueError("observer-credentials-unverified")
+    return credentials[0]
 
 
 def _complete_inner_peak(record):
@@ -486,31 +494,56 @@ def _finite_observer_diagnostic(fault=None):
     if fault not in FAULTS:
         raise ValueError("unknown-generated-fault")
     start = _now()
-    read_fd, write_fd = os.pipe2(os.O_CLOEXEC)
+    receiver = sender = None
+    try:
+        receiver, sender = socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+        receiver.setsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED, 1)
+    except OSError:
+        if receiver is not None:
+            receiver.close()
+            sender.close()
+        return {"schema": FINITE_SCHEMA, "status": "HOLD", "resource_proof": "HOLD",
+                "protected_pre_read_custody": "HOLD", "source_opened": False,
+                "finite_observer_elapsed_boottime_ns": _now() - start,
+                "observer_peak_rss_bytes": None,
+                "reason": "observer-credential-channel-unavailable"}
     pid = os.fork()
     if pid == 0:
-        os.close(read_fd)
+        receiver.close()
         try:
-            _emit_observer_report(write_fd, probe(fault))
-            os.close(write_fd)
+            _emit_observer_report(sender, probe(fault))
+            sender.close()
             os._exit(0)
         except BaseException:
             os._exit(9)
-    os.close(write_fd)
-    data = bytearray()
+    sender.close()
+    data = None
     reaped = None
     eof = False
     lost = False
+    report_invalid = False
     deadline = start + 6_000_000_000
     while _now() < deadline and (reaped is None or not eof):
-        ready, _, _ = select.select([read_fd], [], [], 0.01)
+        ready, _, _ = select.select([receiver], [], [], 0.01)
         if ready:
-            block = os.read(read_fd, MAX_OBSERVER_REPORT + 1)
-            if block:
-                data.extend(block)
+            block, ancillary, flags, _ = receiver.recvmsg(
+                MAX_OBSERVER_REPORT + 1, socket.CMSG_SPACE(struct.calcsize("3i")))
+            if block or ancillary:
+                try:
+                    if (data is not None or not block or
+                            flags & (socket.MSG_TRUNC | socket.MSG_CTRUNC) or
+                            len(block) > MAX_OBSERVER_REPORT or
+                            _observer_sender(ancillary) != (pid, os.getuid(), os.getgid())):
+                        raise ValueError("observer-report-origin-unverified")
+                except (ValueError, struct.error):
+                    report_invalid = True
+                else:
+                    data = block
             else:
                 eof = True
-        if reaped is None:
+        # Keep the forked PID unreaped until EOF: a queued credential cannot
+        # accidentally match a later process that reused that PID.
+        if eof and reaped is None:
             try:
                 waited, status, usage = os.wait4(pid, os.WNOHANG)
             except ChildProcessError:
@@ -518,8 +551,6 @@ def _finite_observer_diagnostic(fault=None):
                 break
             if waited:
                 reaped = (os.waitstatus_to_exitcode(status), usage.ru_maxrss * 1024)
-        if len(data) > MAX_OBSERVER_REPORT:
-            break
     if reaped is None and not lost:
         try:
             os.kill(pid, signal.SIGKILL)
@@ -535,14 +566,17 @@ def _finite_observer_diagnostic(fault=None):
                 reaped = (os.waitstatus_to_exitcode(status), usage.ru_maxrss * 1024)
                 break
             time.sleep(0.005)
-    os.close(read_fd)
+    receiver.close()
     end = _now()
     result = {"schema": FINITE_SCHEMA, "status": "HOLD", "resource_proof": "HOLD",
               "protected_pre_read_custody": "HOLD", "source_opened": False,
               "finite_observer_elapsed_boottime_ns": end - start,
               "observer_peak_rss_bytes": reaped[1] if reaped is not None else None}
-    if reaped is None or reaped[0] != 0 or not eof or len(data) > MAX_OBSERVER_REPORT:
+    if reaped is None or reaped[0] != 0 or not eof:
         result["reason"] = "observer-or-report-closure-unverified"
+        return result
+    if report_invalid or data is None:
+        result["reason"] = "observer-report-unverified"
         return result
     try:
         inner = json.loads(data, object_pairs_hook=_unique_object)

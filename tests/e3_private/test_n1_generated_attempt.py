@@ -220,6 +220,39 @@ class GeneratedAttemptTests(unittest.TestCase):
         self.assertEqual(failed["reason"], "observer-or-report-closure-unverified")
         self.assertNotIn("declared_finite_peak_sum_bytes", failed)
 
+    def test_finite_observer_report_requires_reaped_sender_identity(self):
+        real_emit = attempt._emit_observer_report
+
+        with self.assertRaisesRegex(ValueError, "observer-credentials-unverified"):
+            attempt._observer_sender([])
+
+        def descendant_emit(channel, record):
+            pid = os.fork()
+            if pid == 0:
+                real_emit(channel, record)
+                channel.close()
+                os._exit(0)
+            os.waitpid(pid, 0)
+
+        with mock.patch.object(attempt, "_emit_observer_report", side_effect=descendant_emit):
+            forged = attempt._finite_observer_diagnostic()
+        self.assertEqual(forged["reason"], "observer-report-unverified")
+        self.assertNotIn("declared_finite_peak_sum_bytes", forged)
+
+        def duplicate_emit(channel, record):
+            real_emit(channel, record)
+            real_emit(channel, record)
+
+        with mock.patch.object(attempt, "_emit_observer_report", side_effect=duplicate_emit):
+            duplicate = attempt._finite_observer_diagnostic()
+        self.assertEqual(duplicate["reason"], "observer-report-unverified")
+        self.assertNotIn("declared_finite_peak_sum_bytes", duplicate)
+
+        with mock.patch.object(attempt.socket, "socketpair", side_effect=OSError):
+            unavailable = attempt._finite_observer_diagnostic()
+        self.assertEqual(unavailable["reason"], "observer-credential-channel-unavailable")
+        self.assertNotIn("declared_finite_peak_sum_bytes", unavailable)
+
     def test_generated_record_readback_rejects_same_bytes_path_replacement(self):
         body = {"schema": attempt.SCHEMA, "state": "HOLD"}
         raw = json.dumps(body, sort_keys=True, separators=(",", ":")).encode() + b"\n"

@@ -867,7 +867,11 @@ The generated `probe` elapsed diagnostic samples after report validation on
 success and error paths, and after peak-sum calculation on success. A separate
 private finite-observer wrapper now reaps that active observer with `wait4`
 after bounded report EOF and records its final peak and outer interval. Its
-sum covers only the declared same-UID setup, roles and observer; the passive
+outer report now requires one Linux credentialed packet from the still-unreaped
+observer PID/UID/GID; missing credentials, descendant or duplicate reports,
+and missing EOF omit the declared sum. The nested setup report remains
+same-UID and unauthenticated. The sum covers only the declared setup, roles
+and observer; the passive
 caller is still active, the actor graph and reports lack protected authority,
 and whole-attempt resource/time proof remains HOLD.
 

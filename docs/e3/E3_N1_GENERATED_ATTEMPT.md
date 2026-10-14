@@ -85,17 +85,24 @@ malformed report parsing and requires that work to appear in the result.
 
 The private `_finite_observer_diagnostic(fault=None)` adds a second, passive
 caller around `probe`. It starts `CLOCK_BOOTTIME` before forking the active
-observer, waits for that observer's bounded report, pipe EOF and final
+observer, waits for that observer's bounded report, channel EOF and final
 `wait4`, then samples the clock. The final `wait4` peak therefore includes
 the active observer's report emission and any later allocation before its
-exit. Only an exact, duplicate-key-free inner report with three successful
+exit. Its Linux Unix sequenced-packet channel requires exactly one bounded
+report with `SCM_CREDENTIALS` matching the still-unreaped observer PID and
+the caller UID/GID. Missing credentials, a descendant's report, duplicate
+record, truncated record, missing EOF or unavailable credential support is
+HOLD without a declared sum. The observer remains unreaped until channel
+EOF so its PID cannot be reused while queued credentials are checked.
+Only an exact, duplicate-key-free inner report with three successful
 declared roles, matching setup/role peak arithmetic, and an inner interval
 no longer than the outer interval emits `declared_finite_peak_sum_bytes`.
 This is the sum of the reported setup and role peaks plus the final observer
 peak; it is a diagnostic of the **declared** graph, not a whole-attempt RSS
 bound. The wrapper always returns HOLD and has no real-source mode. Tests
 exercise a late observer allocation, a partial attempt, missing report,
-inconsistent elapsed time and peak subtotal, and observer failure. The
+inconsistent elapsed time and peak subtotal, observer failure, descendant
+report injection, duplicate reports and unavailable credential support. The
 passive caller itself remains active when its result is produced; its final
 RSS and cessation are not measured by this contract.
 
@@ -106,8 +113,11 @@ whole-attempt proof.
 
 ## Missing deployment gate
 
-The setup and observer reports are same-UID and unauthenticated, so even a
-complete declared sum is not a trustworthy whole-attempt RSS bound. The
+The setup report is same-UID and unauthenticated. The finite wrapper binds
+the outer report to the reaped observer's kernel PID/UID/GID, but that actor
+and its nested setup report remain same-UID and unprotected; the binding does
+not authenticate the report's assertions. Even a complete declared sum is
+not a trustworthy whole-attempt RSS bound. The
 original `probe` leaves its active observer outside its measured interval;
 the finite wrapper measures that observer through EOF and final `wait4`, but
 its passive caller is not an admitted attempt boundary and remains active.
