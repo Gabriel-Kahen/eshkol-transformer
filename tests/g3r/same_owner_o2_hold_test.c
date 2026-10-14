@@ -15,9 +15,12 @@ static int32_t injected_bits_equal(const et_f32_tensor *,
 
 static size_t compare_calls;
 static int fault_issued_compare;
+static et_o2_optimizer *mutate_count_on_compare;
 static int32_t injected_bits_equal(const et_f32_tensor *left,
                                    const et_f32_tensor *right, int32_t *equal,
                                    et_f32_tensor_error *error) {
+  if (mutate_count_on_compare && ++compare_calls == 28u)
+    mutate_count_on_compare->completed_updates++;
   if (fault_issued_compare && ++compare_calls == 29u) {
     memset(error, 0, sizeof(*error));
     error->category = ET_F32_TENSOR_ERROR_INTERNAL;
@@ -226,6 +229,54 @@ int main(void) {
   CHECK(et_g3r_private_o2_save_begin_v1(
       optimizer, parameters, identities, &hold, &o2) == 0);
   CHECK(hold != NULL && optimizer->busy == 1);
+  uint64_t held_count = UINT64_MAX;
+  uint64_t ordinary_busy_count = UINT64_MAX;
+  CHECK(et_o2_optimizer_completed_updates_v1(
+      optimizer, &ordinary_busy_count, &o2) == ET_O2_STATUS_INVALID_STATE);
+  CHECK(ordinary_busy_count == UINT64_MAX &&
+        o2.code == ET_O2_CODE_ACTIVE_BORROW);
+  CHECK(et_g3r_private_o2_save_completed_updates_v1(
+      hold, optimizer, &held_count, &o2) == 0);
+  CHECK(held_count == 0u);
+  compare_calls = 0;
+  mutate_count_on_compare = optimizer;
+  held_count = UINT64_MAX;
+  CHECK(et_g3r_private_o2_save_completed_updates_v1(
+      hold, optimizer, &held_count, &o2) == ET_O2_STATUS_INVALID_STATE);
+  CHECK(compare_calls == 28u && held_count == UINT64_MAX &&
+        o2.code == ET_O2_CODE_OWNER_CONFLICT);
+  mutate_count_on_compare = NULL;
+  optimizer->completed_updates = 0u;
+  optimizer->completed_updates = 1u;
+  held_count = UINT64_MAX;
+  CHECK(et_g3r_private_o2_save_completed_updates_v1(
+      hold, optimizer, &held_count, &o2) == ET_O2_STATUS_INVALID_STATE);
+  CHECK(held_count == UINT64_MAX && o2.code == ET_O2_CODE_OWNER_CONFLICT);
+  optimizer->completed_updates = 0u;
+  held_count = UINT64_MAX;
+  CHECK(et_g3r_private_o2_save_completed_updates_v1(
+      hold, foreign_optimizer, &held_count, &o2) ==
+      ET_O2_STATUS_INVALID_STATE);
+  CHECK(held_count == UINT64_MAX && o2.code == ET_O2_CODE_OWNER_CONFLICT);
+  CHECK(et_g3r_private_o2_save_completed_updates_v1(
+      (et_o2_g3r_save_hold *)(uintptr_t)1, optimizer,
+      &held_count, &o2) == ET_O2_STATUS_INVALID_STATE);
+  CHECK(held_count == UINT64_MAX && o2.code == ET_O2_CODE_INVALID_HANDLE);
+  CHECK(et_g3r_private_o2_save_completed_updates_v1(
+      hold, optimizer, NULL, &o2) == ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(o2.code == ET_O2_CODE_NULL_ARGUMENT);
+  union {
+    uint64_t count;
+    et_o2_error_v1 error;
+  } count_alias = {.count = UINT64_MAX};
+  CHECK(et_g3r_private_o2_save_completed_updates_v1(
+      hold, optimizer, &count_alias.count, &count_alias.error) ==
+      ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(count_alias.count == UINT64_MAX && optimizer->busy == 1);
+  CHECK(et_g3r_private_o2_save_completed_updates_v1(
+      hold, optimizer, (uint64_t *)(void *)&optimizer->completed_updates,
+      &o2) == ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(optimizer->completed_updates == 0u && optimizer->busy == 1);
   CHECK(et_g3r_private_o2_save_owner_match_v1(hold, optimizer, &o2) == 0);
   CHECK(et_g3r_private_o2_save_owner_match_v1(
       hold, foreign_optimizer, &o2) == ET_O2_STATUS_INVALID_STATE);
@@ -581,12 +632,35 @@ int main(void) {
   CHECK(et_g3r_private_o2_save_owner_match_v1(first_hold, optimizer, &o2) ==
       ET_O2_STATUS_INVALID_STATE);
   CHECK(o2.code == ET_O2_CODE_INVALID_HANDLE);
+  held_count = UINT64_MAX;
+  CHECK(et_g3r_private_o2_save_completed_updates_v1(
+      first_hold, optimizer, &held_count, &o2) == ET_O2_STATUS_INVALID_STATE);
+  CHECK(held_count == UINT64_MAX && o2.code == ET_O2_CODE_INVALID_HANDLE);
   CHECK(et_g3r_private_o2_save_state_v1(first_hold, &state, &o2) ==
       ET_O2_STATUS_INVALID_STATE);
   CHECK(state == NULL);
   CHECK(et_g3r_private_o2_save_end_v1(&hold, &o2) != 0);
   CHECK(et_o2_optimizer_state_snapshot_v1(optimizer, &ordinary, &o2) == 0);
   CHECK(et_o2_optimizer_state_release_v1(ordinary, &o2) == 0);
+  CHECK(et_o2_test_optimizer_set_completed_updates_v1(optimizer, 7u) == 0);
+  CHECK(et_g3r_private_o2_save_begin_v1(
+      optimizer, parameters, identities, &hold, &o2) == 0);
+  held_count = UINT64_MAX;
+  CHECK(et_g3r_private_o2_save_completed_updates_v1(
+      hold, optimizer, &held_count, &o2) == 0);
+  CHECK(held_count == 7u);
+  CHECK(et_g3r_private_o2_save_end_v1(&hold, &o2) == 0);
+  CHECK(et_o2_test_optimizer_set_completed_updates_v1(optimizer, 0u) == 0);
+  CHECK(et_o2_test_optimizer_set_completed_updates_v1(
+      optimizer, (uint64_t)INT64_MAX + 1u) == 0);
+  CHECK(et_g3r_private_o2_save_begin_v1(
+      optimizer, parameters, identities, &hold, &o2) == 0);
+  held_count = UINT64_MAX;
+  CHECK(et_g3r_private_o2_save_completed_updates_v1(
+      hold, optimizer, &held_count, &o2) == ET_O2_STATUS_INVALID_STATE);
+  CHECK(held_count == UINT64_MAX && o2.code == ET_O2_CODE_OWNER_CONFLICT);
+  CHECK(et_g3r_private_o2_save_end_v1(&hold, &o2) == 0);
+  CHECK(et_o2_test_optimizer_set_completed_updates_v1(optimizer, 0u) == 0);
   identities[0] = parameters[1];
   CHECK(et_g3r_private_o2_save_begin_v1(
       optimizer, parameters, identities, &hold, &o2) != 0);
@@ -615,7 +689,7 @@ int main(void) {
   CHECK(et_g3r_private_o2_save_begin_v1(
       optimizer, parameters, identities, &hold, &o2) == 0);
   CHECK(et_g3r_private_o2_save_end_v1(&hold, &o2) == 0);
-  for (size_t i = 0; i < 61; ++i) {
+  for (size_t i = 0; i < 59; ++i) {
     CHECK(et_g3r_private_o2_save_begin_v1(
         optimizer, parameters, identities, &hold, &o2) == 0);
     CHECK(et_g3r_private_o2_save_end_v1(&hold, &o2) == 0);

@@ -10,12 +10,25 @@ flags=(-std=c11 -O1 -Wall -Wextra -Werror -Wpedantic -Wconversion
 
 # Both private surfaces must disappear when their feature macros are absent.
 "$cc" "${flags[@]}" -c "$root/native/o2_optimizer.c" -o "$out/o2-off.o"
+"$cc" "${flags[@]}" -DET_O2_NATIVE_HELPERS_ONLY=1 \
+  -c "$root/native/o2_wave2_package_bridge.c" -o "$out/o2-bridge-off.o"
+"$cc" "${flags[@]}" -DET_O2_NATIVE_HELPERS_ONLY=1 \
+  -DET_G3R_SAME_OWNER_SAVE_PRIVATE=1 \
+  -DET_G3R_CANDIDATE_RETIRE_PRIVATE=1 \
+  -c "$root/native/o2_wave2_package_bridge.c" -o "$out/o2-bridge-on.o"
 "$cc" "${flags[@]}" -c "$root/native/c2_save_image_receipt.c" \
   -o "$out/image-off.o"
-if nm -g --defined-only "$out/o2-off.o" | grep -E 'et_g3r_private_o2_save_(begin|owner_match)_v1'; then
+if nm -g --defined-only "$out/o2-off.o" | grep -E 'et_g3r_private_o2_save_(begin|owner_match|completed_updates)_v1'; then
   echo 'O2 feature-off object exports held-save API' >&2
   exit 1
 fi
+if nm -g --defined-only "$out/o2-bridge-off.o" | grep -F \
+  'et_g3r_private_o2_adopter_completed_updates_v1'; then
+  echo 'O2 feature-off bridge exports held count' >&2
+  exit 1
+fi
+nm -g --defined-only "$out/o2-bridge-on.o" | grep -F \
+  'et_g3r_private_o2_adopter_completed_updates_v1' >/dev/null
 if nm -g --defined-only "$out/image-off.o" | grep -F 'et_c2_private_save_image_adopt_v1'; then
   echo 'C2 feature-off object exports image receipt API' >&2
   exit 1
@@ -41,6 +54,8 @@ for mode in normal repeat san; do
     -c "$root/native/c2_save_image_receipt.c" -o "$out/$mode/image.o"
   "$cc" "${mode_flags[@]}" "$root/tests/g3r/same_owner_o2_hold_test.c" \
     "$out/$mode/f32.o" "$out/$mode/kernel.o" -o "$out/$mode/o2"
+  nm -g --defined-only "$out/$mode/o2" | grep -F \
+    'et_g3r_private_o2_save_completed_updates_v1' >/dev/null
   "$cc" "${mode_flags[@]}" -DET_C2_SAVE_IMAGE_RECEIPT_PRIVATE=1 \
     -DET_C2_SAVE_IMAGE_RECEIPT_TESTING=1 -DET_CHECKPOINT_IO_TESTING=1 \
     "$root/tests/c2/save_image_receipt_native.c" \
@@ -51,7 +66,7 @@ for mode in normal repeat san; do
       >"$out/$mode/$fixture.stdout" 2>"$out/$mode/$fixture.stderr"
     test ! -s "$out/$mode/$fixture.stderr"
   done
-  grep -Fx 'same-owner O2 hold PASS: 375 checks' \
+  grep -Fx 'same-owner O2 hold PASS: 403 checks' \
     "$out/$mode/o2.stdout" >/dev/null
   grep -Fx 'C2 private image receipt native checks passed' \
     "$out/$mode/image.stdout" >/dev/null

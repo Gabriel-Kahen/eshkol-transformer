@@ -3,6 +3,8 @@
 ;;; the original hold and must keep it live through a later C2 transfer.
 (extern i64 g3r-held-o2-owner-match ptr ptr
         :real et_g3r_private_o2_adopter_owner_match_v1)
+(extern i64 g3r-held-o2-completed-updates ptr ptr
+        :real et_g3r_private_o2_adopter_completed_updates_v1)
 (extern ptr g3r-held-o2-issue ptr
         :real et_g3r_private_o2_adopter_issue_v1)
 (extern i64 g3r-held-o2-issued-match ptr ptr ptr ptr
@@ -93,9 +95,8 @@
   (let* ((operation 'g3r-held-o2-adopt!)
          (optimizer (o2-require-optimizer operation optimizer-value))
          (native-optimizer (vector-ref optimizer 1)))
-    (if (not (= 0 (g3r-held-o2-owner-match hold native-optimizer)))
-        (o2-native-fail operation))
-    (let ((completed (o2-native-optimizer-completed-updates native-optimizer)))
+    (let ((completed (g3r-held-o2-completed-updates
+                       hold native-optimizer)))
       (if (< completed 0) (o2-native-fail operation))
       (o2-state-projection-budget!
         operation (vector-ref optimizer 2) (vector-ref optimizer 3)

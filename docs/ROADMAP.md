@@ -2213,6 +2213,14 @@ LIVE, DEAD-after-defect and indeterminate native lifecycle outcomes. The
 five-mutation source check passes. The helper is not yet linked or runtime
 verified; G3/M3/A2-to-O2 coordinator binding, P1/C2 partial-claim rollback,
 hold release order and receipt gates remain pending.
+The bounded held-count prerequisite adds a feature-private native status/output
+witness that rechecks the live O2 hold against its exact original optimizer,
+then returns the hold-captured completed-update count without weakening the
+ordinary busy-rejecting O2 query. The source-private adopter uses that witness
+before allocating or issuing its O2 state. Focused host native negatives cover
+foreign and stale holds, equal distinct optimizers, alias rejection, unchanged
+outputs on failure, and the ordinary busy path; no TR3 held snapshot,
+same-owner coordinator, compiled aggregate, SAVE pair or replay is admitted.
 The [C2 claim successor source audit](g3/G3_R_HELD_O2_C2_ADOPTION_GATE.md#c2-claim-successor-gap-source-audit-2026-10-14)
 found a concrete partial-claim gap: C2's provisional token and progress stay
 lexical, and its guard rolls back P1 but not an O2 claim that mutates and then

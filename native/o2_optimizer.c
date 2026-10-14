@@ -2438,6 +2438,32 @@ int32_t et_g3r_private_o2_save_owner_match_v1(
   return et_g3r_private_o2_save_check_v1(hold, error);
 }
 
+int32_t et_g3r_private_o2_save_completed_updates_v1(
+    et_o2_g3r_save_hold *candidate, const et_o2_optimizer *optimizer,
+    uint64_t *completed_updates, et_o2_error_v1 *error) {
+  const char *operation = "g3r-save-o2-completed-updates";
+  if (et_o2_g3r_save_buffers_conflict(
+          completed_updates, completed_updates != NULL
+                                 ? sizeof(*completed_updates) : 0u,
+          _Alignof(uint64_t), error))
+    return ET_O2_STATUS_INVALID_ARGUMENT;
+  if (completed_updates == NULL)
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_ARGUMENT,
+                      ET_O2_CODE_NULL_ARGUMENT, operation,
+                      "completed-update output is null");
+  int32_t result = et_g3r_private_o2_save_owner_match_v1(
+      candidate, optimizer, error);
+  if (result != 0) return result;
+  et_o2_g3r_save_hold *hold = et_o2_g3r_hold_admit(candidate);
+  if (hold == NULL || hold->completed_updates > (uint64_t)INT64_MAX ||
+      hold->optimizer->completed_updates != hold->completed_updates)
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                      ET_O2_CODE_OWNER_CONFLICT, operation,
+                      "held optimizer count is not an admitted signed count");
+  *completed_updates = hold->completed_updates;
+  return et_o2_success(error);
+}
+
 int32_t et_g3r_private_o2_save_issued_match_v1(
     et_o2_g3r_save_hold *candidate, const et_o2_optimizer_state *issued,
     et_o2_error_v1 *error) {

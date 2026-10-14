@@ -200,6 +200,11 @@ int32_t et_g3r_private_o2_save_check_v1(
 int32_t et_g3r_private_o2_save_owner_match_v1(
     et_o2_g3r_save_hold *hold, const et_o2_optimizer *optimizer,
     et_o2_error_v1 *error);
+/* Return the captured count only for this live hold's exact original owner.
+ * Status and output are separate; failure leaves completed_updates untouched. */
+int32_t et_g3r_private_o2_save_completed_updates_v1(
+    et_o2_g3r_save_hold *hold, const et_o2_optimizer *optimizer,
+    uint64_t *completed_updates, et_o2_error_v1 *error);
 /* Compare the exact issued state against the held pre-snapshot authority. */
 int32_t et_g3r_private_o2_save_issued_match_v1(
     et_o2_g3r_save_hold *hold, const et_o2_optimizer_state *state,

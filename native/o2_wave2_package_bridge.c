@@ -215,6 +215,16 @@ int64_t et_g3r_private_o2_adopter_owner_match_v1(void *hold,
       &et_o2_bridge_error);
 }
 
+int64_t et_g3r_private_o2_adopter_completed_updates_v1(void *hold,
+                                                         void *optimizer) {
+  uint64_t completed = 0u;
+  if (et_g3r_private_o2_save_completed_updates_v1(
+          (et_o2_g3r_save_hold *)hold, (et_o2_optimizer *)optimizer,
+          &completed, &et_o2_bridge_error) != 0)
+    return -1;
+  return (int64_t)completed;
+}
+
 void *et_g3r_private_o2_adopter_issue_v1(void *hold) {
   et_o2_optimizer_state *state = NULL;
   if (et_g3r_private_o2_save_state_v1((et_o2_g3r_save_hold *)hold, &state,
