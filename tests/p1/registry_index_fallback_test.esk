@@ -1,6 +1,7 @@
 ;;; Test-only trusted-root overlay exposes diagnostic slots 73..74.
 ;;; Production module source and its public ABI have no such controls.
 (require transformer.module)
+(require transformer.error_internal)
 (require p1_test.tensor_provider)
 
 (define checks 0)
@@ -69,9 +70,81 @@
        (not (p1-index-test-observe 'finalized source)))
 (check "source path starts unobserved"
        (not (p1-index-test-observe 'path-object source-handle)))
+(define nonroot (module-create-fixture-internal))
+(module-register-child-internal! source "child" nonroot)
 (define live-before (p1-index-test-observe 'live #f))
 (define tombstones-before (p1-index-test-observe 'tombstones #f))
 (define owners-before (fixture-owned-live-count-internal))
+
+;; The feature-private helper clones data while an unobserved root remains
+;; unfinalized. It must publish one independent owner and return its exact
+;; releasable state shell without replacing the original handle's path object.
+(define held-state (module-state-dict-held-clone-internal source))
+(check "held clone has canonical path"
+       (equal? (state-dict-paths held-state) '(("weight"))))
+(check "held clone leaves source unfinalized"
+       (not (p1-index-test-observe 'finalized source)))
+(check "held clone leaves original path object"
+       (not (p1-index-test-observe 'path-object source-handle)))
+(check "held clone adds one native state"
+       (= (p1-index-test-observe 'live #f) (+ live-before 1)))
+(check "held clone adds one provider owner"
+       (= (fixture-owned-live-count-internal) (+ owners-before 1)))
+(define held-peer (module-state-dict-held-clone-internal source))
+(check "second held clone is a distinct owner"
+       (and (not (eq? held-peer held-state))
+            (= (p1-index-test-observe 'live #f) (+ live-before 2))
+            (= (fixture-owned-live-count-internal) (+ owners-before 2))))
+(check "second clone leaves first held state readable"
+       (equal? (state-dict-paths held-state) '(("weight"))))
+(check "second held clone releases" (state-dict-release! held-peer))
+(check "first held state retains its exact owner"
+       (and (= (p1-index-test-observe 'live #f) (+ live-before 1))
+            (= (fixture-owned-live-count-internal) (+ owners-before 1))))
+(check "held clone releases" (state-dict-release! held-state))
+(check "held clone release restores native baseline"
+       (= (p1-index-test-observe 'live #f) live-before))
+(check "held clone release restores owner baseline"
+       (= (fixture-owned-live-count-internal) owners-before))
+
+;; Raise after the state has been published and bound but before the helper
+;; returns its shell. The helper must revoke the native identity and release
+;; the provider clone, leaving the original root untouched.
+(define release-before-held-fault (fixture-release-call-count-internal))
+(p1-index-test-control! 'fail-held-wrap)
+(check "held wrap fault is exact"
+       (guard (raised (#t (eq? raised 'held-wrap-failed)))
+         (module-state-dict-held-clone-internal source)
+         #f))
+(check "held wrap fault releases one owner"
+       (= (fixture-release-call-count-internal)
+          (+ release-before-held-fault 1)))
+(check "held wrap fault restores native baseline"
+       (= (p1-index-test-observe 'live #f) live-before))
+(check "held wrap fault restores provider baseline"
+       (= (fixture-owned-live-count-internal) owners-before))
+(check "held wrap fault preserves source fields"
+       (and (not (p1-index-test-observe 'finalized source))
+            (not (p1-index-test-observe 'path-object source-handle))))
+
+(check "malformed module owner rejected"
+       (guard (raised
+                (#t (and (transformer-error? raised)
+                         (eq? (transformer-error-category raised)
+                              'invalid-argument))))
+         (module-state-dict-held-clone-internal source-handle)
+         #f))
+(check "child owner rejected"
+       (guard (raised
+                (#t (and (transformer-error? raised)
+                         (eq? (transformer-error-category raised)
+                              'invalid-state))))
+         (module-state-dict-held-clone-internal nonroot)
+         #f))
+(check "owner rejection leaves counts unchanged"
+       (and (= (p1-index-test-observe 'live #f) live-before)
+            (= (fixture-owned-live-count-internal) owners-before)))
+
 (define cut-state (module-state-dict source))
 (define source-path-object
   (p1-index-test-observe 'path-object source-handle))
@@ -95,9 +168,34 @@
        (= (p1-index-test-observe 'live #f) live-before))
 (check "no orphan provider clone remains"
        (= (fixture-owned-live-count-internal) owners-before))
-(check "exactly one native state tombstone records release"
+(check "four native state tombstones record exact releases"
        (= (p1-index-test-observe 'tombstones #f)
-          (+ tombstones-before 1)))
+          (+ tombstones-before 4)))
+
+;; A source already finalized by ordinary P1 still retains the same path
+;; object through a held clone and through a provider clone failure.
+(define finalized-path (p1-index-test-observe 'path-object source-handle))
+(define finalized-held (module-state-dict-held-clone-internal source))
+(check "finalized held clone keeps path identity"
+       (eq? finalized-path
+            (p1-index-test-observe 'path-object source-handle)))
+(check "finalized held clone keeps finalized flag"
+       (p1-index-test-observe 'finalized source))
+(check "finalized held clone releases" (state-dict-release! finalized-held))
+(define failure-live-before (p1-index-test-observe 'live #f))
+(define failure-owners-before (fixture-owned-live-count-internal))
+(fixture-arm-clone-defect-internal! 0 'publish-then-raise)
+(check "provider clone failure surfaces"
+       (guard (raised (#t (transformer-error? raised)))
+         (module-state-dict-held-clone-internal source)
+         #f))
+(check "provider clone failure leaves original held state unchanged"
+       (and (p1-index-test-observe 'finalized source)
+            (eq? finalized-path
+                 (p1-index-test-observe 'path-object source-handle))))
+(check "provider clone failure restores native and provider counts"
+       (and (= (p1-index-test-observe 'live #f) failure-live-before)
+            (= (fixture-owned-live-count-internal) failure-owners-before)))
 
 (display "P1 INDEX FALLBACK PASS: ")
 (display checks)

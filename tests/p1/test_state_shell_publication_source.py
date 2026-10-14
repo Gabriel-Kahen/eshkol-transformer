@@ -68,7 +68,7 @@ class StateShellPublicationSourceTest(unittest.TestCase):
         script = PROOF.read_text()
         self.assertIn("'post-publication-state-index-reached", script)
         self.assertIn("(vector-ref entry 1) 'state", script)
-        self.assertIn("P1 INDEX FALLBACK PASS: 24 checks", script)
+        self.assertIn("P1 INDEX FALLBACK PASS: 50 checks", script)
 
     def test_runtime_overlay_builds_from_exact_generated_source(self):
         script = PROOF.read_text()

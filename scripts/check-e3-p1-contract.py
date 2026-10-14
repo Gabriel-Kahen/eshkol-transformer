@@ -123,12 +123,27 @@ def check():
     ]
     require(sum(signature(n) in g3c4_externs for n in externs(nodes)) == 3,
             "G3-C4 native extern delta is missing or duplicated")
+    held_clone_private = {
+        "p1-held-clone-private", "module-state-dict-held-clone-internal",
+    }
     top_level = [n for n in nodes if n is not surface
                  and signature(n) not in g3c4_externs]
     inherited_forms = []
     for node in top_level:
         source = text[node[0]:node[1]]
+        if (isinstance(node[2], list) and len(node[2]) > 1
+                and atom(node[2][0]) == "define"):
+            target = node[2][1]
+            name = atom(target)
+            if name is None and isinstance(target[2], list) and target[2]:
+                name = atom(target[2][0])
+            if name in held_clone_private:
+                continue
         if source.startswith("(provide "):
+            private_export = "\n         module-state-dict-held-clone-internal"
+            require(source.count(private_export) == 1,
+                    "held clone must have one trusted-only export")
+            source = source.replace(private_export, "", 1)
             successor_tail = ("\n         module-construction-parameters-internal"
                               "\n         p1-trusted-surface)")
             require(source.endswith(successor_tail),
@@ -147,7 +162,7 @@ def check():
         "lib/transformer/module.esk":
             "38be7a65d467753dc53abccf5195107d939d842e5988783d8f0073f4b9c9f46c",
         "tools/p1/module_surface.tsv":
-            "e302fb8c7545d450b5365460393c41b61c9bba8840de27b3c3f6abfcec714104",
+            "1da79b197893e495c51d009d6e282e98893588ae647dfda71b3f7fdef5091c4c",
     }.items():
         require(sha256((ROOT / path).read_bytes()).hexdigest() == expected,
                 f"unchanged inherited public/named surface drifted: {path}")

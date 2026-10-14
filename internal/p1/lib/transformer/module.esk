@@ -77,6 +77,7 @@
          parameter-handle-path parameter-handle-shape parameter-handle-dtype
          parameter-handle-device state-dict-paths state-dict-tensor
          state-dict-alias-groups state-dict-release!
+         module-state-dict-held-clone-internal
          tensor-provider-create-internal tensor-provider-register-internal!
          module-create-internal module-create-with-provider-internal
          module-register-parameter-internal!
@@ -114,6 +115,8 @@
          module-construction-abort-internal!
          module-construction-parameters-internal
          p1-trusted-surface)
+
+(define p1-held-clone-private (vector #f))
 
 (define p1-trusted-surface
   (let ()
@@ -3063,10 +3066,44 @@
     (if (not (= entry-count (vector-ref module 9)))
         (fail 'internal 'module-state-dict
               "module state entry count invariant failed" '())
-        (let ((state
-                (state-from-flat parameters buffers groups 'module-state-dict
-                                 provider)))
-          (vector state updates finalizers)))))
+        (let ((observation (vector #f updates finalizers)))
+          ;; Allocate the observation before publishing the owned state. The
+          ;; final write is nonallocating, so a failed preparation cannot lose
+          ;; a successfully published state before its caller owns the shell.
+          (vector-set! observation 0
+            (state-from-flat parameters buffers groups 'module-state-dict
+                             provider))
+          observation))))
+
+(define (published-state-shell-for-raw operation state) : ptr
+  ;; state-from-flat returns only after canonical publication and native bind.
+  ;; Scan the authoritative registry so cleanup does not depend on its advisory
+  ;; hash index or attempt to create another identity after a wrapping fault.
+  (let loop ((records (shell-registry-current)))
+    (if (null? records)
+        (fail 'internal operation "prepared state shell is missing" '())
+        (let ((record (car records)))
+          (if (and (eq? (vector-ref record 1) 'state)
+                   (eq? (vector-ref record 2) state))
+              (vector-ref record 0)
+              (loop (cdr records)))))))
+
+(define (held-clone-state-shell module)
+  (let* ((operation 'module-state-dict-held-clone-internal)
+         (raw-module (raw-for-shell operation 'module module))
+         (observation (prepare-module-state-dict raw-module))
+         (state (vector-ref observation 0)))
+    ;; Preparation owns a bound state but has not applied canonical path
+    ;; replacements or module finalization. A wrapping fault must release it.
+    (guard (caught
+             (#t
+               ((vector-ref p1-trusted-surface 17)
+                (published-state-shell-for-raw operation state))
+               (raise caught)))
+      (let ((shell (published-state-shell-for-raw operation state)))
+        (if (not (eq? (raw-for-shell operation 'state shell) state))
+            (fail 'internal operation "prepared state identity differs" '())
+            shell)))))
 
 (define (module-state-dict module)
   (commit-module-observation! (prepare-module-state-dict module)))
@@ -5340,6 +5377,8 @@
                           modules handles carriers provider)))))))))))
 
 
+(vector-set! p1-held-clone-private 0 held-clone-state-shell)
+
 (vector
   (lambda (module)
     (let* ((observation
@@ -5850,6 +5889,8 @@
   ((vector-ref p1-trusted-surface 1) module))
 (define (module-state-dict module)
   ((vector-ref p1-trusted-surface 2) module))
+(define (module-state-dict-held-clone-internal module)
+  ((vector-ref p1-held-clone-private 0) module))
 (define (module-load-state-dict! module state)
   ((vector-ref p1-trusted-surface 3) module state))
 (define (module-train! module)

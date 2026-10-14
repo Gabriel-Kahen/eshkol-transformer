@@ -16,6 +16,7 @@ public	state-dict-paths
 public	state-dict-tensor
 public	state-dict-alias-groups
 public	state-dict-release!
+internal	module-state-dict-held-clone-internal
 internal	tensor-provider-create-internal
 internal	tensor-provider-register-internal!
 internal	module-create-internal

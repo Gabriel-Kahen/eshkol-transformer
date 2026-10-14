@@ -457,7 +457,8 @@ inject("         module-construction-parameters-internal\n"
        "         p1-trusted-surface)\n")
 inject("(define active-record-root (vector '() '() #t #f '() '()))\n",
        "(define active-record-root (vector '() '() #t #f '() '()))\n"
-       "(define p1-index-test-fail-stage? #f)\n")
+       "(define p1-index-test-fail-stage? #f)\n"
+       "(define p1-index-test-fail-held-wrap? #f)\n")
 inject("    (vector-set! active-record-root 3 stage)\n"
        "    (vector-ref active-record-root 3)))",
        "    (vector-set! active-record-root 3 stage)\n"
@@ -470,6 +471,11 @@ inject("  (hash-table-set! shell-identity-index (ptr->usize shell) entry))",
        "  (if (eq? (vector-ref entry 1) 'state)\n"
        "      (raise 'post-publication-state-index-reached)\n"
        "      (hash-table-set! shell-identity-index (ptr->usize shell) entry)))")
+inject("      (let ((shell (published-state-shell-for-raw operation state)))\n",
+       "      (if p1-index-test-fail-held-wrap?\n"
+       "          (begin (set! p1-index-test-fail-held-wrap? #f)\n"
+       "                 (raise 'held-wrap-failed)) #t)\n"
+       "      (let ((shell (published-state-shell-for-raw operation state)))\n")
 inject("  ;; Append-only source-private G3-C4 construction split, slots 71..72.\n"
        "  (lambda (identity)\n"
        "    (construction-prepare-eval-guarded! identity))\n"
@@ -485,6 +491,8 @@ inject("  ;; Append-only source-private G3-C4 construction split, slots 71..72.\
        "  (lambda (mode)\n"
        "    (cond ((eq? mode 'fail-stage)\n"
        "           (set! p1-index-test-fail-stage? #t) #t)\n"
+       "          ((eq? mode 'fail-held-wrap)\n"
+       "           (set! p1-index-test-fail-held-wrap? #t) #t)\n"
        "          ((eq? mode 'pending-clear)\n"
        "           (not (vector-ref active-record-root 3)))\n"
        "          ((eq? mode 'invalidate)\n"
@@ -536,7 +544,7 @@ ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=2s \
   30s "${tmp}/fallback/index-fallback" \
   >"${tmp}/fallback/runtime.stdout" 2>"${tmp}/fallback/runtime.stderr"
 test ! -s "${tmp}/fallback/runtime.stderr"
-grep -Fx "P1 INDEX FALLBACK PASS: 24 checks" \
+grep -Fx "P1 INDEX FALLBACK PASS: 50 checks" \
   "${tmp}/fallback/runtime.stdout" >/dev/null
 
 cat "${tmp}/publication-witness.txt"
