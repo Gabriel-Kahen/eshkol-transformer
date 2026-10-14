@@ -79,6 +79,10 @@ struct et_e3_frame_internal {
   int64_t counts[2][2], active, staged_counts[2], published_counts[2];
   uint32_t sum_bank, committed, cleanup_ready, published_valid;
   et_kernel_runtime *runtime[6];
+#ifdef ET_E3_FAULT_TESTING
+  uint32_t forward_fault_state, forward_fault_role, forward_fault_occurrence;
+  uint32_t forward_fault_reached, forward_fault_fired;
+#endif
 };
 
 static et_e3_frame_internal *e3_registry;
@@ -282,6 +286,97 @@ static et_e3_frame_internal *e3_admit(void *pointer) {
   }
   return frame;
 }
+
+#ifdef ET_E3_FAULT_TESTING
+enum {
+  E3_FAULT_CLEAR = 0,
+  E3_FAULT_ARMED = 1,
+  E3_FAULT_ENTERED = 2,
+  E3_FAULT_FIRED = 3,
+  E3_FAULT_MISSED = 4
+};
+
+static int e3_fault_idle(const et_e3_frame_internal *frame) {
+  return frame->phase == E3_IDLE && !frame->cleanup_ready &&
+      !frame->model->active && e3_pins_idle(&frame->pins);
+}
+
+static void e3_fault_enter(et_e3_frame_internal *frame) {
+  if (!e3_fault_idle(frame)) return;
+  if (frame->forward_fault_state == E3_FAULT_ARMED) {
+    frame->forward_fault_state = E3_FAULT_ENTERED;
+  } else if (frame->forward_fault_state == E3_FAULT_ENTERED) {
+    frame->forward_fault_state = E3_FAULT_MISSED;
+  }
+}
+
+static int64_t e3_fault_forward_preinvoke(
+    et_e3_frame_internal *frame, uint32_t role) {
+  if (frame->forward_fault_state != E3_FAULT_ENTERED ||
+      frame->forward_fault_role != role)
+    return 0;
+  ++frame->forward_fault_reached;
+  if (frame->forward_fault_reached != frame->forward_fault_occurrence)
+    return 0;
+  frame->forward_fault_state = E3_FAULT_FIRED;
+  frame->forward_fault_fired = 1;
+  return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
+}
+
+int64_t et_e3_test_forward_fault_arm_v1(
+    void *pointer, int64_t role, int64_t occurrence) {
+  e3_clear();
+  et_e3_frame_internal *frame = e3_admit(pointer);
+  if (!frame) return e3_last_domain ?
+      e3_dependency_status(e3_last_domain, e3_last_category) : e3_last_category;
+  if (role < 0 || role > 20 || occurrence < 1 || occurrence > 8192)
+    return e3_fail(E3_INVALID_ARGUMENT, E3_CODE_PHASE);
+  if (!e3_fault_idle(frame) || frame->forward_fault_state != E3_FAULT_CLEAR)
+    return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
+  frame->forward_fault_role = (uint32_t)role;
+  frame->forward_fault_occurrence = (uint32_t)occurrence;
+  frame->forward_fault_reached = 0;
+  frame->forward_fault_fired = 0;
+  frame->forward_fault_state = E3_FAULT_ARMED;
+  return 0;
+}
+
+int64_t et_e3_test_forward_fault_status_v1(void *pointer, int64_t selector) {
+  e3_clear();
+  et_e3_frame_internal *frame = e3_admit(pointer);
+  if (!frame) return -1;
+  if (selector < 0 || selector > 4) {
+    e3_fail(E3_INVALID_ARGUMENT, E3_CODE_PHASE);
+    return -1;
+  }
+  if (!e3_fault_idle(frame)) {
+    e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
+    return -1;
+  }
+  switch (selector) {
+    case 0: return frame->forward_fault_state;
+    case 1: return frame->forward_fault_role;
+    case 2: return frame->forward_fault_occurrence;
+    case 3: return frame->forward_fault_reached;
+    default: return frame->forward_fault_fired;
+  }
+}
+
+int64_t et_e3_test_forward_fault_reset_v1(void *pointer) {
+  e3_clear();
+  et_e3_frame_internal *frame = e3_admit(pointer);
+  if (!frame) return e3_last_domain ?
+      e3_dependency_status(e3_last_domain, e3_last_category) : e3_last_category;
+  if (!e3_fault_idle(frame))
+    return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
+  frame->forward_fault_state = E3_FAULT_CLEAR;
+  frame->forward_fault_role = 0;
+  frame->forward_fault_occurrence = 0;
+  frame->forward_fault_reached = 0;
+  frame->forward_fault_fired = 0;
+  return 0;
+}
+#endif
 
 static int64_t e3_scope_begin(et_f32_tensor *tensor,
                               et_f32_scoped_guard_internal *guard,
@@ -707,6 +802,11 @@ int64_t et_e3_private_frame_check_v1(void *pointer) {
   et_e3_frame_internal *frame = e3_admit(pointer);
   if (!frame) return e3_last_domain ?
       e3_dependency_status(e3_last_domain, e3_last_category) : e3_last_category;
+#ifdef ET_E3_FAULT_TESTING
+  /* This is the evaluator's native entry check. An unfired prior attempt
+   * expires here, so it cannot silently fault a subsequent invocation. */
+  e3_fault_enter(frame);
+#endif
   return e3_storage_check(frame, 1);
 }
 
@@ -963,6 +1063,10 @@ int64_t et_e3_private_forward_role_v1(void *pointer, int64_t role) {
   if (frame->phase != E3_FORWARD || frame->cleanup_ready ||
       frame->next_role != (uint32_t)role)
     return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
+#ifdef ET_E3_FAULT_TESTING
+  int64_t fault_status = e3_fault_forward_preinvoke(frame, (uint32_t)role);
+  if (fault_status) return fault_status;
+#endif
   et_kernel_tensor_view_v1 ids = e3_native_view(
       frame->ids, sizeof(frame->ids), "i64", 2, e3_shape_pair);
   et_kernel_tensor_view_v1 positions = e3_native_view(
@@ -1345,6 +1449,10 @@ void et_e3_private_finish_v1(void *pointer) {
       !frame->cleanup_ready || frame->model->active != frame ||
       !e3_pins_idle(&frame->pins))
     abort();
+#ifdef ET_E3_FAULT_TESTING
+  if (frame->forward_fault_state == E3_FAULT_ENTERED)
+    frame->forward_fault_state = E3_FAULT_MISSED;
+#endif
   frame->model->active = NULL;
   frame->phase = E3_IDLE;
   frame->next_role = 0;

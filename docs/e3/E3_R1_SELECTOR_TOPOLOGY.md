@@ -107,3 +107,19 @@ required evidence. The full R1/R2 table still needs stage-specific P1, D2,
 pin, copy, later read, CE/L3S/correct/accumulate/finalize and publication
 preflight cuts; cleanup invariants and the postpublication commit tail remain
 fail-stop, not recoverable selectors.
+
+## Native prerequisite candidate
+
+The guarded native frame candidate adds a forward-only arm/readback/reset seam
+under `ET_E3_FAULT_TESTING`; it is not selected by any package tuple yet. Its
+fixed denial is native `(domain, category, code) = (0, 2, 2)` (`invalid-state`,
+`phase`). The authenticated `et_e3_private_frame_check_v1` transitions an arm
+to an entered invocation. A second entry check expires an unfired arm; native
+finish also expires it. The preinvoke check follows frame, phase and next-role
+admission and precedes operand setup and `e3_dispatch`. Idle readback selectors
+0–4 return state, role, occurrence, reached and fired, respectively. States
+are clear 0, armed 1, entered 2, fired 3 and missed 4; explicit idle reset is
+required before another arm. A C state-machine probe and feature-off object
+comparison exercise this prerequisite. The noninstalled lexical tuple, native
+bridge use, compiled same-frame failure/retry matrix, and resource horizons
+remain separate gates.

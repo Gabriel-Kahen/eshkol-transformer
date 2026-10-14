@@ -989,6 +989,12 @@ entered-call ownership boundary, one-shot per-frame selector rules, exact
 noninstalled tuple requirements, and the first bounded forward-role preinvoke
 slice. It is source-only: the selector, tuple, compiled failure/retry matrix
 and resource verdicts remain open.
+An isolated native prerequisite candidate now adds the guarded frame-owned
+forward-role selector with explicit idle reset, exact reached/fired readback,
+and fixed `(0, 2, 2)` denial. A focused native state-machine probe (including
+ASan/UBSan) and feature-off object checks pass. It has no admitted package
+tuple or Eshkol bridge yet; compiled same-frame failure/retry, negative package
+tests, and resource horizons remain open before any R1 row can be admitted.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
