@@ -326,6 +326,8 @@ int64_t et_e3_test_fault_arm_v1(void *pointer, int64_t site,
         || (site == 6 && ordinal == 0 && occurrence >= 1 && occurrence <= 2)
         || (site == 7 && ordinal == 0 && occurrence >= 1 && occurrence <= 2)
         || (site == 8 && ordinal == 0 && occurrence >= 1 && occurrence <= 2)
+        /* Finalize is called once per frame; occurrence 2 expires unfired. */
+        || (site == 9 && ordinal == 0 && occurrence >= 1 && occurrence <= 2)
 #ifdef ET_E3_PARTIAL_PIN_TESTING
         || (site == 4 && ordinal >= 0 && ordinal < 14 && occurrence == 1)
 #endif
@@ -1458,6 +1460,15 @@ int64_t et_e3_private_finalize_v1(void *pointer) {
   const size_t bank = frame->sum_bank;
   if (frame->counts[bank][1] <= 0 || frame->counts[bank][0] <= 0)
     return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
+#ifdef ET_E3_FAULT_TESTING
+  if (frame->fault_state == 1 && frame->fault_site == 9) {
+    ++frame->fault_reached;
+    if (frame->fault_reached == frame->fault_occurrence) {
+      frame->fault_state = 2; /* Consume before result views/K1 dispatch. */
+      return e3_fail(E3_INTERNAL, E3_CODE_INVARIANT);
+    }
+  }
+#endif
   e3_operand inputs[] = {e3_tensor_operand(frame->sum[bank][0]),
                          e3_tensor_operand(frame->sum[bank][1]),
                          e3_tensor_operand(frame->sum[bank][2])};

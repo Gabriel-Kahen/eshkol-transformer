@@ -238,7 +238,7 @@ printf '%s\n' "$e3_tuple_kind"
         self.assertLess(frame.index("frame->fault_state = 2; /* Consume before M3 admission"),
                         frame.index("pin_status = et_g3t_model_pins_begin_fail_before_internal"))
         self.assertIn("(if (= site 3) 42\n                    (if (= site 4) 47", driver)
-        self.assertIn("(if (or (= site 3) (= site 4) (= site 5) (= site 6) (= site 7) (= site 8))\n        (e3-test-fault-check 'independent-twin", driver)
+        self.assertIn("(if (or (= site 3) (= site 4) (= site 5) (= site 6) (= site 7) (= site 8) (= site 9))\n        (e3-test-fault-check 'independent-twin", driver)
         self.assertIn("if (fail_before >= M3_CALL_PIN_COUNT)", pins)
         self.assertIn("m3_call_drain(pins, i)", pins)
         self.assertIn("for(size_t n=0;n<14;++n)", (ROOT / "tests/m3cg/test_pins.c").read_text())
@@ -574,6 +574,78 @@ printf '%s\n' "$e3_tuple_kind"
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("observed_dispatches == before_accumulate", result.stderr)
 
+    def test_stage12_finalize_cut_and_dispatch_before_denial_mutant(self):
+        frame = (ROOT / "src/eshkol_transformer/e3_frame.c").read_text()
+        driver = (TESTS / "fault_driver.esk").read_text()
+        native = (ROOT / "tests/e3_native/test_frame.c").read_text()
+        finalize = frame.split("int64_t et_e3_private_finalize_v1(void *pointer) {", 1)[1]
+        finalize = finalize.split("int64_t et_e3_private_cleanup_preflight_v1", 1)[0]
+        cut_start = finalize.index("#ifdef ET_E3_FAULT_TESTING")
+        cut_end = finalize.index("#endif", cut_start) + len("#endif\n")
+        cut = finalize[cut_start:cut_end]
+        dispatch = "int64_t rc = e3_dispatch(frame, E3_RUNTIME_METRICS,"
+        self.assertLess(finalize.index("frame->counts[bank][1] <= 0"), cut_start)
+        self.assertLess(cut_end, finalize.index("e3_operand inputs[]"))
+        self.assertLess(cut_end, finalize.index(dispatch))
+        self.assertIn("frame->fault_state = 2; /* Consume before result views/K1 dispatch. */", cut)
+        self.assertIn("site == 9 && ordinal == 0 && occurrence >= 1 && occurrence <= 2", frame)
+        self.assertIn("((= site 9) 'typed-stage12-finalize)", driver)
+        self.assertIn("(if (= site 9) 155", driver)
+        self.assertIn("(if (= site 9) 12", driver)
+        self.assertIn("(and (= (vector-ref scenario 3) 9)", driver)
+        self.assertIn("(and (= (vector-ref scenario 3) 9)\n                  (= (vector-ref scenario 4) 0)\n                  (= (vector-ref scenario 5) 1))", driver)
+        self.assertIn("(e3-test-fault-make-twin present? corpus-path)", driver)
+        for witness in ("'prepared-gradient", "'cursor", "'output", "'modes",
+                        "'model", "'rng", "'owners", "'independent-twin",
+                        "'retry-output", "'retry-rng"):
+            self.assertIn(witness, driver)
+        self.assertIn("observed_dispatches == before_finalize", native)
+        self.assertIn("frame->committed == 0", native)
+        self.assertIn("frame->fault_state == 1 && frame->fault_reached == 1 &&", native)
+        self.assertIn("(occurrence == 1 ? 2 : 3)", native)
+        self.assertEqual(12 * 12 + 11, 155)
+        compiler = shutil.which("clang")
+        if not compiler:
+            self.skipTest("clang unavailable for finalizer dispatch mutant")
+        feature_off = subprocess.run([
+            compiler, "-E", "-P", "-std=c11", "-I", str(ROOT / "include"),
+            "-I", str(ROOT / "native"),
+            str(ROOT / "src/eshkol_transformer/e3_frame.c")],
+            capture_output=True, text=True)
+        self.assertEqual(feature_off.returncode, 0, feature_off.stderr)
+        self.assertNotIn("frame->fault_site == 9", feature_off.stdout)
+        mutant_finalize = finalize[:cut_start] + finalize[cut_end:]
+        after_dispatch = mutant_finalize.index("  if (!rc) {")
+        mutant_finalize = mutant_finalize[:after_dispatch] + cut + mutant_finalize[after_dispatch:]
+        mutant_source = frame.replace(finalize, mutant_finalize, 1)
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Path(directory)
+            (fixture / "src/eshkol_transformer").mkdir(parents=True)
+            (fixture / "tests/e3_native").mkdir(parents=True)
+            (fixture / "src/eshkol_transformer/e3_frame.c").write_text(mutant_source)
+            (fixture / "tests/e3_native/test_frame.c").write_text(native)
+            sources = [fixture / "tests/e3_native/test_frame.c"] + [
+                ROOT / path for path in (
+                    "src/eshkol_transformer/m3_call_f32_integration.c",
+                    "src/eshkol_transformer/m3_i64_integration.c",
+                    "native/kernel_abi.c", "native/t1_i64_shell.c",
+                    "native/n3k_primitives_provider.c", "native/n2_primitives_provider.c",
+                    "native/a2_attention_provider.c", "native/indexed_cross_entropy.c",
+                    "native/l3s_masked_objective_provider.c",
+                    "native/e3_evaluation_metrics_provider.c")]
+            build = subprocess.run([
+                compiler, "-std=c11", "-O2", "-DET_F32_TENSOR_TESTING",
+                "-DET_I64_TENSOR_TESTING", "-DET_E3_PARTIAL_PIN_TESTING",
+                "-I", str(ROOT / "include"), "-I", str(ROOT / "native"),
+                "-I", str(ROOT / "src/eshkol_transformer"),
+                *(str(path) for path in sources), "-lm", "-o", str(fixture / "frame")],
+                capture_output=True, text=True)
+            self.assertEqual(build.returncode, 0, build.stderr)
+            result = subprocess.run([str(fixture / "frame")],
+                                    capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("observed_dispatches == before_finalize", result.stderr)
+
     def test_generated_stage_is_owned_and_fresh(self):
         helper = ROOT / "scripts/e3-mode-graph-stage-cleanup.sh"
         with tempfile.TemporaryDirectory() as directory:
@@ -677,14 +749,14 @@ e3_reject_unresolved_private fault "$3" "$3"
             self.assertIn(snapshot, execute)
             self.assertLess(execute.index(snapshot), execute.index("(e3-test-fault-arm native"))
         required = (
-            "(if (= site 2) 155 (if (= site 5) 107 95))",
+            "(if (= site 9) 155 (if (= site 2) 155 (if (= site 5) 107 95)))",
             "(e3-test-fault-check 'cursor\n        (d2-core-bytes=? cursor",
             "(e3-test-fault-check 'output\n        (equal? publication",
             "(e3-test-fault-check 'modes\n        (e3-test-retention-modes=?",
             "(e3-test-fault-check 'model\n        (e3-test-retention-model=?",
             "(e3-test-fault-check 'rng\n        (and (eq? rng-algorithm",
             "(e3-test-fault-check 'owners\n        (e3-test-fault-probes-restored?",
-            "(e3-test-fault-check 'retry-output\n      (equal? (if (or (= site 2) (= site 3) (= site 4) (= site 5) (= site 6) (= site 7) (= site 8))",
+            "(e3-test-fault-check 'retry-output\n      (equal? (if (or (= site 2) (= site 3) (= site 4) (= site 5) (= site 6) (= site 7) (= site 8) (= site 9))",
             "(e3-test-fault-check 'retry-rng\n      (and (eq? rng-algorithm",
         )
         def guarded(candidate):
@@ -707,10 +779,10 @@ e3_reject_unresolved_private fault "$3" "$3"
             "(held (if (= site 3)",
             "(e3-fault-value-borrow-begin owner role)",
             "(vector-ref before 3) (+ (vector-ref unheld 3) 1)",
-            "(if (or (= site 2) (= site 3) (= site 4) (= site 5) (= site 6) (= site 7) (= site 8))\n        (e3-test-fault-check 'distinct-precall",
+            "(if (or (= site 2) (= site 3) (= site 4) (= site 5) (= site 6) (= site 7) (= site 8) (= site 9))\n        (e3-test-fault-check 'distinct-precall",
             "(equal? publication e3-test-fault-sentinels)",
             "(if (= site 3) 'invalid-state 'internal)",
-            "(if (= site 2) 155 (if (= site 5) 107 95))",
+            "(if (= site 9) 155 (if (= site 2) 155 (if (= site 5) 107 95)))",
             "(if (= site 2) 12 (if (= site 5) 8 7))",
             "(if (or (= site 3) (= site 4)) 3 0)",
             "(if (= site 3) 4 (if (= site 4) 6 5))",
@@ -790,9 +862,9 @@ e3_reject_unresolved_private fault "$3" "$3"
         self.assertIn("et_e3_test_fault_seed_publication_v1", native)
         self.assertIn("(equal? publication e3-test-fault-sentinels)", driver)
         self.assertIn("(e3-test-fault-all-distinct?", driver)
-        self.assertIn("(if (= site 2) 155 (if (= site 5) 107 95))", driver)
+        self.assertIn("(if (= site 9) 155 (if (= site 2) 155 (if (= site 5) 107 95)))", driver)
         self.assertIn("(equal? publication\n                (e3-test-fault-publication", driver)
-        self.assertIn("(if (or (= site 2) (= site 3) (= site 4) (= site 5) (= site 6) (= site 7) (= site 8))\n                  e3-test-fault-final-publication publication)", driver)
+        self.assertIn("(if (or (= site 2) (= site 3) (= site 4) (= site 5) (= site 6) (= site 7) (= site 8) (= site 9))\n                  e3-test-fault-final-publication publication)", driver)
 
         for mutated in (
             publish[:cut] + publish[cut:].replace("frame->fault_state = 2;", "", 1),

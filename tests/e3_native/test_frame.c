@@ -1236,6 +1236,102 @@ static void test_accumulate_preinvoke_selector(
   CHECK(et_e3_test_fault_arm_v1(frame, 8, 0, 1) == E3_INVALID_STATE);
 }
 
+static void test_finalize_preinvoke_selector(
+    owner *model, et_f32_tensor *destination[4]) {
+  et_e3_frame_internal *frame = et_e3_private_frame_create_v1(
+      model, destination[0], destination[1], destination[2], destination[3]);
+  CHECK(frame != NULL);
+  CHECK(et_e3_test_fault_arm_v1(frame, 9, -1, 1) == E3_INVALID_ARGUMENT);
+  CHECK(et_e3_test_fault_arm_v1(frame, 9, 1, 1) == E3_INVALID_ARGUMENT);
+  CHECK(et_e3_test_fault_arm_v1(frame, 9, 0, 0) == E3_INVALID_ARGUMENT);
+  CHECK(et_e3_test_fault_arm_v1(frame, 9, 0, 3) == E3_INVALID_ARGUMENT);
+  for (int64_t occurrence = 1; occurrence <= 2; ++occurrence) {
+    uint32_t destinations_before[4];
+    for (size_t i = 0; i < 4; ++i)
+      read_scalar(destination[i], &destinations_before[i]);
+    int64_t published_before[2] = {
+        et_e3_private_counter_ref_v1(frame, 0),
+        et_e3_private_counter_ref_v1(frame, 1)};
+    OK(et_e3_test_fault_arm_v1(frame, 9, 0, occurrence));
+    OK(et_e3_private_acquire_v1(frame));
+    stage(frame, 3, 197, 197, 0, 1, 1);
+    forward_batch(frame);
+    stage(frame, 0, 255, 255, 7, 1, 1);
+    forward_batch(frame);
+    stage(frame, 7, 7, 7, 0, 1, 0);
+    forward_batch(frame);
+    CHECK(frame->counts[frame->sum_bank][0] == 5 &&
+          frame->counts[frame->sum_bank][1] == 3);
+    const size_t before_finalize = observed_dispatches;
+    if (occurrence == 1) {
+        int64_t counts[2][2], staged[2];
+        uint32_t sums[2][3], results[4];
+        memcpy(counts, frame->counts, sizeof(counts));
+        memcpy(staged, frame->staged_counts, sizeof(staged));
+        for (size_t side = 0; side < 2; ++side)
+          for (size_t i = 0; i < 3; ++i)
+            read_scalar(frame->sum[side][i], &sums[side][i]);
+        for (size_t i = 0; i < 4; ++i)
+          read_scalar(frame->result[i], &results[i]);
+        CHECK(et_e3_private_finalize_v1(frame) == E3_INTERNAL);
+        CHECK(e3_last_domain == 0 && e3_last_category == E3_INTERNAL &&
+              e3_last_code == E3_CODE_INVARIANT);
+        CHECK(observed_dispatches == before_finalize &&
+              frame->phase == E3_ACQUIRED && frame->committed == 0 &&
+              frame->fault_state == 2 && frame->fault_reached == 1);
+        CHECK(memcmp(counts, frame->counts, sizeof(counts)) == 0 &&
+              memcmp(staged, frame->staged_counts, sizeof(staged)) == 0);
+        for (size_t side = 0; side < 2; ++side)
+          for (size_t i = 0; i < 3; ++i) {
+            uint32_t after;
+            read_scalar(frame->sum[side][i], &after);
+            CHECK(after == sums[side][i]);
+          }
+        for (size_t i = 0; i < 4; ++i) {
+          uint32_t after;
+          read_scalar(frame->result[i], &after);
+          CHECK(after == results[i]);
+        }
+    } else {
+      OK(et_e3_private_finalize_v1(frame));
+      CHECK(observed_dispatches == before_finalize + 1 &&
+            frame->fault_state == 1 && frame->fault_reached == 1 &&
+            frame->committed == 1);
+    }
+    abort_call(frame);
+    CHECK(et_e3_test_fault_ref_v1(frame, 0) == (occurrence == 1 ? 2 : 3) &&
+          et_e3_test_fault_ref_v1(frame, 1) == 9 &&
+          et_e3_test_fault_ref_v1(frame, 2) == 0 &&
+          et_e3_test_fault_ref_v1(frame, 3) == occurrence &&
+          et_e3_test_fault_ref_v1(frame, 4) == 1);
+    CHECK(et_e3_private_acquire_v1(frame) == E3_INVALID_STATE);
+    for (size_t i = 0; i < 4; ++i) {
+      uint32_t after;
+      read_scalar(destination[i], &after);
+      CHECK(after == destinations_before[i]);
+    }
+    CHECK(et_e3_private_counter_ref_v1(frame, 0) == published_before[0] &&
+          et_e3_private_counter_ref_v1(frame, 1) == published_before[1]);
+    OK(et_e3_test_fault_reset_v1(frame));
+    OK(et_e3_private_acquire_v1(frame));
+    stage(frame, 3, 197, 197, 0, 1, 1);
+    forward_batch(frame);
+    stage(frame, 0, 255, 255, 7, 1, 1);
+    forward_batch(frame);
+    stage(frame, 7, 7, 7, 0, 1, 0);
+    forward_batch(frame);
+    OK(et_e3_private_finalize_v1(frame));
+    OK(et_e3_private_cleanup_preflight_v1(frame));
+    et_e3_private_drain_v1(frame);
+    OK(et_e3_private_publish_v1(frame));
+    et_e3_private_finish_v1(frame);
+    CHECK(et_e3_private_counter_ref_v1(frame, 0) == 5 &&
+          et_e3_private_counter_ref_v1(frame, 1) == 3);
+  }
+  OK(et_e3_private_frame_destroy_preflight_v1(frame));
+  et_e3_private_frame_destroy_v1(frame);
+}
+
 static void test_publication_precommit_selector(
     owner *model, et_f32_tensor *destination[4]) {
   et_e3_frame_internal *frame = et_e3_private_frame_create_v1(
@@ -1330,6 +1426,7 @@ int main(void) {
   test_reduce_preinvoke_selector(model, destination);
   test_correct_preinvoke_selector(model, destination);
   test_accumulate_preinvoke_selector(model, destination);
+  test_finalize_preinvoke_selector(model, destination);
   test_partial_pin_selector(model, destination);
   test_publication_precommit_selector(model, destination);
   for (size_t i = 0; i < 4; ++i) destroy_tensor(&destination[i]);
