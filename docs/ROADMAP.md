@@ -739,13 +739,15 @@ with its test fixture after accounting for the public D1 `corpus validate`
 intercept. The corrected test constructs that exact successor and retains
 full-entry equality, including native dispatch and fallback. It passed the
 focused 18-test source suite on `5b2fe64`; the reviewed PR #210 candidate
-`5f4ff8d` preserved that test and the installed entry. This source/docs union
-is based on repaired M2 PR #211 head `9098d4d` and retains its N3 and M2
-evidence, including the predecessor-checksum repair. The focused
-CLI3 generate source suite passes all 19 tests on this union, and the
-M3CG predecessor manifest verifies. It still needs independent review,
-exact-head hosted checks, and compiled installed/cross-command validation
-before integration.
+`5f4ff8d` preserved that test and the installed entry. The earlier PR #212
+source/docs union was based on repaired M2 PR #211 head `9098d4d` and retained
+its N3 and M2 evidence, including the predecessor-checksum repair. The current
+source-only union carries PR #212 head `05e3bec` and resume-parity child
+`1004a5e` onto exact main `ee24ef4`, retaining main's E3 N1 roadmap status.
+All 19 focused CLI3 generate source tests, shell syntax, native closure policy,
+and required CI registration pass. Independent source review, a fresh
+exact-tree compiled installed/cross-command seal, and hosted checks remain
+open before integration.
 
 The test-only CLI3/G3-G checkpoint-to-generation prerequisite has passed its
 exact fe9/f31 supported linked/runtime gate at `ab479f5`/tree `1102384`.
