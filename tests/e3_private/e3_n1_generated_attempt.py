@@ -55,44 +55,79 @@ def _assert_fds(allowed):
             raise Hold("unexpected-inherited-fd")
 
 
+def _parent_dirfd(path):
+    if not path.is_absolute() or ".." in path.parts:
+        raise Hold("parent-path-unverified")
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+    fd = None
+    try:
+        fd = os.open("/", flags)
+        for component in path.parts[1:]:
+            next_fd = os.open(component, flags, dir_fd=fd)
+            os.close(fd)
+            fd = next_fd
+        return fd
+    except OSError as error:
+        if fd is not None:
+            os.close(fd)
+        raise Hold("parent-path-unverified") from error
+
+
+def _check_parent_binding(path, pinned_fd):
+    current_fd = _parent_dirfd(path)
+    try:
+        pinned = os.fstat(pinned_fd)
+        current = os.fstat(current_fd)
+        if (pinned.st_dev, pinned.st_ino) != (current.st_dev, current.st_ino):
+            raise Hold("parent-identity-drift")
+    finally:
+        os.close(current_fd)
+
+
 def _sync_json(path, body, fault=False):
     raw = json.dumps(body, sort_keys=True, separators=(",", ":")).encode() + b"\n"
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    if path.name in ("", ".", ".."):
+        raise Hold("record-name-unverified")
+    parent = _parent_dirfd(path.parent)
     try:
-        offset = 0
-        while offset < len(raw):
-            written = os.write(fd, raw[offset:])
-            if written <= 0:
-                raise Hold("short-record-write")
-            offset += written
-        if fault:
-            raise Hold("injected-record-sync")
-        os.fsync(fd)
-        created = os.fstat(fd)
-    finally:
-        os.close(fd)
-    parent = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-    try:
+        fd = os.open(path.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL |
+                     os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=parent)
+        try:
+            offset = 0
+            while offset < len(raw):
+                written = os.write(fd, raw[offset:])
+                if written <= 0:
+                    raise Hold("short-record-write")
+                offset += written
+            if fault:
+                raise Hold("injected-record-sync")
+            os.fsync(fd)
+            created = os.fstat(fd)
+        finally:
+            os.close(fd)
         os.fsync(parent)
+        _check_parent_binding(path.parent, parent)
+        try:
+            read_fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW |
+                              os.O_CLOEXEC, dir_fd=parent)
+        except OSError as error:
+            raise Hold("readback-open-unverified") from error
+        try:
+            observed = os.fstat(read_fd)
+            identity = (created.st_dev, created.st_ino)
+            if (observed.st_dev, observed.st_ino) != identity:
+                raise Hold("readback-identity-drift")
+            with os.fdopen(read_fd, "rb", closefd=False) as stream:
+                if stream.read(len(raw) + 1) != raw:
+                    raise Hold("readback-mismatch")
+            current = os.stat(path.name, dir_fd=parent, follow_symlinks=False)
+            if (current.st_dev, current.st_ino) != identity:
+                raise Hold("readback-identity-drift")
+            _check_parent_binding(path.parent, parent)
+        finally:
+            os.close(read_fd)
     finally:
         os.close(parent)
-    try:
-        read_fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
-    except OSError as error:
-        raise Hold("readback-open-unverified") from error
-    try:
-        observed = os.fstat(read_fd)
-        identity = (created.st_dev, created.st_ino)
-        if (observed.st_dev, observed.st_ino) != identity:
-            raise Hold("readback-identity-drift")
-        with os.fdopen(read_fd, "rb", closefd=False) as stream:
-            if stream.read(len(raw) + 1) != raw:
-                raise Hold("readback-mismatch")
-        current = os.stat(path, follow_symlinks=False)
-        if (current.st_dev, current.st_ino) != identity:
-            raise Hold("readback-identity-drift")
-    finally:
-        os.close(read_fd)
     return hashlib.sha256(raw).hexdigest()
 
 

@@ -159,6 +159,49 @@ class GeneratedAttemptTests(unittest.TestCase):
                 self.assertTrue(swapped)
                 self.assertEqual(target.read_bytes(), raw)
 
+    def test_generated_record_readback_rejects_ancestor_swap_after_sync(self):
+        body = {"schema": attempt.SCHEMA, "state": "HOLD"}
+        for kind, reason in (("symlink", "parent-path-unverified"),
+                             ("new-directory", "parent-identity-drift")):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory(
+                    prefix="e3-n1-ancestor-test-") as directory:
+                base = Path(directory)
+                original = base / "root"
+                moved = base / "moved"
+                original.mkdir()
+                target = original / "HOLD.json"
+                real_fsync = os.fsync
+                swapped = False
+
+                def swap_after_directory_sync(fd):
+                    nonlocal swapped
+                    real_fsync(fd)
+                    if stat.S_ISDIR(os.fstat(fd).st_mode) and not swapped:
+                        original.rename(moved)
+                        if kind == "symlink":
+                            original.symlink_to(moved, target_is_directory=True)
+                        else:
+                            original.mkdir()
+                        swapped = True
+
+                with mock.patch.object(attempt.os, "fsync", side_effect=swap_after_directory_sync):
+                    with self.assertRaisesRegex(attempt.Hold, reason):
+                        attempt._sync_json(target, body)
+                self.assertTrue(swapped)
+                self.assertTrue((moved / "HOLD.json").is_file())
+
+    def test_generated_record_rejects_preexisting_ancestor_symlink(self):
+        body = {"schema": attempt.SCHEMA, "state": "HOLD"}
+        with tempfile.TemporaryDirectory(prefix="e3-n1-ancestor-test-") as directory:
+            base = Path(directory)
+            actual = base / "actual"
+            child = actual / "child"
+            child.mkdir(parents=True)
+            (base / "alias").symlink_to(actual, target_is_directory=True)
+            with self.assertRaisesRegex(attempt.Hold, "parent-path-unverified"):
+                attempt._sync_json(base / "alias" / "child" / "HOLD.json", body)
+            self.assertFalse((child / "HOLD.json").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
