@@ -1431,6 +1431,27 @@ compatibility probe. Independent source/host review accepted exact
 Supported compiled Eshkol normal, poison and sanitizer gates remain pending;
 E3 §9 admission remains **HOLD**.
 
+The bounded E3 §9 stage-12 finalizer source adds noninstalled frame-owned
+site 9, ordinal 0, occurrences 1 or 2. After phase and nonempty-count guards,
+occurrence 1 consumes before result views and metrics K1 dispatch, returning
+local internal/invariant (E1 stage 12, table index 155). Native checks confirm
+three completed accumulations, no finalizer dispatch or result/counter staging
+at denial, unchanged six publication words, abort and same-frame retry. The
+private fault fixture extends cursor, modes, model/gradient/RNG, resource,
+first-error, independent-twin and retry source witnesses. Occurrence 2 is an
+expiry control: a normal evaluation finalizes once, then the selector finishes
+in state 3 with reached count 1 and never fires; a second same-frame finalizer
+is unreachable. Independent source/host review accepted exact
+`ad0fcdde6571ddfffd21f522f4c2a4949148eea5`/tree
+`c9639eecfaa2d14c17a1e61459f6cb1d7207b0de`; receipt
+`/home/gabe/.codex/evidence/eshkol-transformer/e3-stage12-finalize-source-review-20261014/REVIEW.md`
+(SHA-256 `7710f7fdf35b62d24caf490fb61228b82159e4bbe6532950264c4ef4415fc2f2`).
+The 19 host fault tests and 38,782 native checks passed, including the
+dispatch-before-denial mutant and direct Clang 22 ASan/UBSan with leak detection
+disabled. Production feature-off preprocessing matches stage 11. A compiled
+Eshkol site-9 tuple, supported Ubuntu 22.04/Clang 21 LeakSanitizer run and full
+E3 §9 acceptance remain **HOLD**.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
