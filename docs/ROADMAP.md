@@ -3237,9 +3237,11 @@ publication, public G2 and continuation remain pending.
   unknown. A bounded test-only overlay now adds unbuffered brackets around
   prefix preflight, holder/generator checks, protected scope entry, native
   acquire, protected reserve, and unwrapped holder bind. Production Eshkol
-  source and contracts are unchanged. Source controls and missing-anchor
-  negatives pass; the next gate is a changed-head supported-host compiled
-  first-case run with independent raw review to identify the failing interval.
+  source and contracts are unchanged. Source controls, missing-anchor
+  negatives, and Q0 Python isolation pass after admitting the exact
+  development-only held-holder symbol checker path; the next gate is a
+  changed-head supported-host compiled first-case run with independent raw
+  review to identify the failing interval.
   The full matrix, public G2, and continuation acceptance remain unproved.
 
 ## Wave 4 — practical pretraining and performance

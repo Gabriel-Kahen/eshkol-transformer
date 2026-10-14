@@ -44,6 +44,7 @@ G3C4_DEVELOPMENT_SCRIPTS = frozenset({
         "check-g3c4-p2g2-prefix-commit.py",
         "check-g3c4-p2g2-carrier-bridge.py",
         "check-g3c4-p2g2-eos-first-frame.py",
+        "check-g3c4-p2g2-held-holder-symbols.py",
         "check-g3c4-p2g2-second-frame.py",
         "check-g3c4-p2g2-terminal.py",
         "check-g3c4-p2g2-terminal-ids-clone.py",
