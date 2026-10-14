@@ -1300,8 +1300,10 @@ successor words, and all 29 native probes immediately before the armed call.
 It checks the first mapped stage-7/internal table index and native tuple,
 restores exact live state, reconciles borrow/retired-control event deltas,
 resets the one-shot arm, and retries a complete call on the same authorities.
-Focused host source tests include omission and wrong-selector mutants. This
-remains a noninstalled source candidate: supported compiled Eshkol
+Focused host source tests include wrong-selector and owner-event mutants,
+value/gradient/metadata changes across all 14 owners, and omission mutants.
+This remains a noninstalled source
+candidate: supported compiled Eshkol
 normal/poison/LSan failure/retry and resource evidence are still pending.
 The repeated fixed corpus gives the same six result words before and after a
 successful call, so stage-12 byte-atomic publication needs distinguishable
