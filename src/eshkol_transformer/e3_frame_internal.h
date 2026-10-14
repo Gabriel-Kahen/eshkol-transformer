@@ -47,6 +47,15 @@ int64_t et_e3_private_last_error_code_v1(void);
 void et_e3_test_frame_fail_alloc_after_v1(size_t count);
 #endif
 
+#ifdef ET_E3_FAULT_TESTING
+/* Native-only test seam. Status selectors: state, role, occurrence, reached,
+ * fired (0..4). State: clear=0, armed=1, entered=2, fired=3, missed=4. */
+int64_t et_e3_test_forward_fault_arm_v1(
+    void *frame, int64_t role, int64_t occurrence);
+int64_t et_e3_test_forward_fault_status_v1(void *frame, int64_t selector);
+int64_t et_e3_test_forward_fault_reset_v1(void *frame);
+#endif
+
 #ifdef __cplusplus
 }
 #endif
