@@ -3234,6 +3234,14 @@ extent, storage aliases and the dense CPU-i64 source. This source branch is
 not Eshkol composition or public G2 admission; independent review and the
 supported one-archive gate remain pending.
 
+A bounded [same-registry Eshkol typed wrapper candidate](g3/G3_C4_P2_G2_ESHKOL_TYPED_WRAPPER_LEAF.md)
+now composes those exact six private symbols from an authenticated logical
+clone, roots the allocation-time bytevector identity/extent, checks copied
+IDs/scalars before publication, and releases each detached typed owner through
+native-first retryable cleanup. Its source/host mutation gate does not prove
+compiled Eshkol composition; independent review, supported one-archive
+normal/repeat/sanitizer acceptance, and public G2 remain pending.
+
 - **Private Eshkol P2/G2 terminal close contract:**
   [accepted same-call ownership contract](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md)
   specifies one original pending output entry, a surviving terminal anchor,

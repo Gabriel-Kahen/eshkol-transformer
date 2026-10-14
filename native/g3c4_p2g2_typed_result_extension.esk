@@ -1,0 +1,300 @@
+;;; Feature-private detached C4 typed results. Load after the terminal I1
+;;; clone owner in the same registry-owning aggregate. No public dispatch.
+
+(extern ptr g3c4-p2g2-native-typed-ids-create ptr
+        :real et_g3c4_private_p2g2_typed_ids_create_v1)
+(extern ptr g3c4-p2g2-native-typed-scalar-create i64 i64
+        :real et_g3c4_private_p2g2_typed_scalar_create_v1)
+(extern i64 g3c4-p2g2-native-typed-length ptr
+        :real et_g3c4_private_p2g2_typed_length_v1)
+(extern i64 g3c4-p2g2-native-typed-copy ptr i64 ptr i64
+        :real et_g3c4_private_p2g2_typed_copy_v1)
+(extern i64 g3c4-p2g2-native-typed-release ptr
+        :real et_g3c4_private_p2g2_typed_release_v1)
+
+(define g3c4-p2g2-typed-anchors (vector '()))
+
+(define (g3c4-p2g2-typed-anchor-for shell operation)
+  (let loop ((nodes (vector-ref g3c4-p2g2-typed-anchors 0)))
+    (if (not (pair? nodes))
+        (g3c4-fail 'invalid-state operation "typed owner anchor is missing"))
+    (let ((anchor (car nodes)))
+      (if (and (procedure? anchor) (eq? (anchor 'shell #f) shell))
+          (if (anchor 'node nodes) anchor
+              (g3c4-fail 'invalid-state operation
+                         "typed owner root changed"))
+          (loop (cdr nodes))))))
+
+(define (g3c4-p2g2-typed-entry-live shell operation)
+  (let* ((entry (g3c4-registry-find shell operation))
+         (anchor (g3c4-p2g2-typed-anchor-for shell operation)))
+    (if (not (and (vector? entry) (= (vector-length entry) 12)
+                  (eq? (vector-ref entry 0) shell)
+                  (eq? (vector-ref entry 2) 'live)
+                  (eq? (vector-ref entry 10) anchor)
+                  (anchor 'check entry)))
+        (g3c4-fail 'invalid-state operation "typed owner changed"))
+    entry))
+
+(define (g3c4-p2g2-typed-entry-dead shell entry operation)
+  (let ((anchor (g3c4-p2g2-typed-anchor-for shell operation)))
+    (if (not (anchor 'dead entry))
+        (g3c4-fail 'invalid-state operation
+                   "typed dead owner lacks release authority"))
+    entry))
+
+(define (g3c4-p2g2-typed-match bytes count first second)
+  (and (bytevector? bytes) (= (bytevector-length bytes) (* count 8))
+       (= (g3c4-p2g2-terminal-snapshot-small-word bytes 0) first)
+       (if (= count 1) #t
+           (= (g3c4-p2g2-terminal-snapshot-small-word bytes 8) second))))
+
+(define (g3c4-p2g2-typed-create-private clone-shell kind)
+  (let ((operation 'g3c4-p2g2-typed-create-private))
+    (m3-call operation
+      (let* ((source (g3c4-p2g2-terminal-ids-entry-live
+                       clone-shell operation))
+             (source-native (vector-ref source 3))
+             (source-bytes (vector-ref source 8))
+             (logical (vector-ref source 7))
+             (first (g3c4-p2g2-terminal-snapshot-small-word source-bytes 0))
+             (second (if (= logical 2)
+                         (g3c4-p2g2-terminal-snapshot-small-word
+                           source-bytes 8)
+                         0))
+             (native-kind (cond ((eq? kind 'typed-ids) 10)
+                                ((eq? kind 'typed-lengths) 11)
+                                ((eq? kind 'typed-cache-lengths) 12)
+                                (else (g3c4-fail 'invalid-argument operation
+                                                 "unknown typed kind"))))
+             (count (if (= native-kind 10) logical 1))
+             (expected-first (cond ((= native-kind 10) first)
+                                   ((= native-kind 11) logical)
+                                   (else (+ 2 logical))))
+             (expected-second (if (= native-kind 10) second 0))
+             (payload (* count 8))
+             (extent (+ 8 payload))
+             (bytes (make-bytevector payload 0))
+             (shell (vector 'g3c4-p2g2-typed-private))
+             (entry (vector shell kind 'pending #f #f #f #f count bytes
+                            #f #f g3c4-model-profile))
+             (old-anchors (vector-ref g3c4-p2g2-typed-anchors 0))
+             (old-registry (vector-ref g3c4-registry 0))
+             (native '())
+             (anchor
+               (let ((original-shell shell) (original-entry entry)
+                     (original-bytes bytes) (original-kind kind)
+                     (original-count count) (original-first expected-first)
+                     (original-second expected-second)
+                     (original-native '()) (original-node #f)
+                     (released? #f) (retired? #f) (published? #f))
+                 (lambda (command candidate)
+                   (cond
+                     ((eq? command 'shell) original-shell)
+                     ((eq? command 'node-bind)
+                      (if (or original-node
+                              (not (pair? candidate))
+                              (not (eq? (car candidate)
+                                        (vector-ref original-entry 10)))
+                              (not (eq? (cdr candidate) old-anchors)))
+                          (g3c4-fail 'invalid-state operation
+                                     "typed root cannot rebind"))
+                      (set! original-node candidate) #t)
+                     ((eq? command 'node)
+                      (and original-node (eq? candidate original-node)))
+                     ((eq? command 'bind)
+                      (if (or (not original-node)
+                              (not (null? original-native))
+                              (not (eq? (vector-ref original-entry 2)
+                                        'pending)))
+                          (g3c4-fail 'invalid-state operation
+                                     "typed native owner already bound"))
+                      (set! original-native candidate)
+                      (vector-set! original-entry 3 candidate) #t)
+                     ((eq? command 'publish)
+                      (set! published? #t) #t)
+                     ((eq? command 'check)
+                      (and published? (not released?) original-node
+                           (eq? candidate original-entry)
+                           (eq? (car original-node) (vector-ref original-entry 10))
+                           (eq? (cdr original-node) old-anchors)
+                           (eq? (vector-ref original-entry 0) original-shell)
+                           (eq? (vector-ref original-entry 1) original-kind)
+                           (eq? (vector-ref original-entry 2) 'live)
+                           (eq? (vector-ref original-entry 3) original-native)
+                           (not (null? original-native))
+                           (eq? (vector-ref original-entry 4) #f)
+                           (eq? (vector-ref original-entry 5) #f)
+                           (eq? (vector-ref original-entry 6) #f)
+                           (= (vector-ref original-entry 7) original-count)
+                           (eq? (vector-ref original-entry 8) original-bytes)
+                           (eq? (vector-ref original-entry 9) #f)
+                           (eq? (vector-ref original-entry 11)
+                                g3c4-model-profile)
+                           (g3c4-p2g2-typed-match original-bytes
+                             original-count original-first original-second)))
+                     ((eq? command 'match)
+                      (g3c4-p2g2-typed-match candidate original-count
+                        original-first original-second))
+                     ((eq? command 'native-release)
+                      (if (not (and published? (not released?)
+                                    (eq? candidate original-entry)
+                                    (eq? (vector-ref original-entry 3)
+                                         original-native)))
+                          (g3c4-fail 'invalid-state operation
+                                     "typed release owner changed"))
+                      (let ((status
+                              (g3c4-p2g2-native-typed-release
+                                original-native)))
+                        (if (= status 0) (set! released? #t))
+                        status))
+                     ((eq? command 'retire)
+                      (if (not (and released? (not retired?)
+                                    (eq? candidate original-entry)
+                                    (g3c4-dead-entry? original-entry
+                                      original-kind)))
+                          (g3c4-fail 'invalid-state operation
+                                     "typed owner cannot retire"))
+                      (set! retired? #t)
+                      (set! original-native '()) #t)
+                     ((eq? command 'dead)
+                      (and retired? released? original-node
+                           (eq? candidate original-entry)
+                           (eq? (vector-ref original-entry 0) original-shell)
+                           (g3c4-dead-entry? original-entry original-kind)
+                           (eq? (vector-ref original-entry 3) #f)
+                           (eq? (vector-ref original-entry 4) #f)
+                           (eq? (vector-ref original-entry 5) #f)
+                           (eq? (vector-ref original-entry 6) #f)
+                           (eq? (vector-ref original-entry 7) #f)
+                           (eq? (vector-ref original-entry 8) #f)
+                           (eq? (vector-ref original-entry 9) #f)
+                           (eq? (vector-ref original-entry 10) #f)
+                           (eq? (vector-ref original-entry 11) #f)
+                           (pair? original-node)
+                           (eq? (cdr original-node) old-anchors)))
+                     (else #f)))))
+             (anchor-node (cons anchor old-anchors))
+             (registry-node (cons entry old-registry)))
+        (if (not (and (or (= logical 1) (= logical 2))
+                      (= (bytevector-length source-bytes) (* logical 8))
+                      (= (bytevector-length bytes) payload)
+                      (eq? source
+                           (g3c4-p2g2-terminal-ids-entry-live
+                             clone-shell operation))))
+            (g3c4-fail 'invalid-state operation
+                       "typed source or allocation changed"))
+        (vector-set! entry 10 anchor)
+        (anchor 'node-bind anchor-node)
+        (guard (caught
+                 (#t
+                   (if (not (null? native))
+                       (if (not (= (g3c4-p2g2-native-typed-release
+                                     native) 0))
+                           (exit 134)))
+                   (g3c4-entry-dead! entry)
+                   (if (eq? (vector-ref g3c4-p2g2-typed-anchors 0)
+                            anchor-node)
+                       (vector-set! g3c4-p2g2-typed-anchors 0 old-anchors)
+                       (exit 134))
+                   (raise caught)))
+          (vector-set! g3c4-registry 0 registry-node)
+          (vector-set! g3c4-p2g2-typed-anchors 0 anchor-node)
+          (set! native
+                (if (= native-kind 10)
+                    (g3c4-p2g2-native-typed-ids-create source-native)
+                    (g3c4-p2g2-native-typed-scalar-create
+                      native-kind expected-first)))
+          (if (null? native) (g3c4-native-fail operation))
+          (anchor 'bind native)
+          (if (not (and (eq? source
+                             (g3c4-p2g2-terminal-ids-entry-live
+                               clone-shell operation))
+                        (eq? source-native (vector-ref source 3))
+                        (eq? source-bytes (vector-ref source 8))
+                        (eq? bytes (vector-ref entry 8))
+                        (= (bytevector-length bytes) payload)))
+              (g3c4-fail 'invalid-state operation
+                         "typed source or carrier changed"))
+          (let ((native-length (g3c4-p2g2-native-typed-length native)))
+            (if (= native-length -1) (g3c4-native-fail operation))
+            (if (not (= native-length count))
+                (g3c4-fail 'shape-mismatch operation
+                           "typed rank-one extent differs")))
+          (g3c4-native-check
+            (g3c4-p2g2-native-typed-copy native count bytes extent)
+            operation)
+          (if (not (and (eq? source
+                             (g3c4-p2g2-terminal-ids-entry-live
+                               clone-shell operation))
+                        (eq? source-native (vector-ref source 3))
+                        (eq? source-bytes (vector-ref source 8))
+                        (eq? entry (g3c4-registry-find shell operation))
+                        (eq? (vector-ref entry 3) native)
+                        (eq? (vector-ref entry 8) bytes)
+                        (= (bytevector-length bytes) payload)
+                        (anchor 'match bytes)))
+              (g3c4-fail 'invalid-state operation
+                         "typed values or allocation changed"))
+          (anchor 'publish #f)
+          (vector-set! entry 2 'live)
+          (list shell))))))
+
+(define (g3c4-p2g2-typed-copy-private shell)
+  (let ((operation 'g3c4-p2g2-typed-copy-private))
+    (m3-call operation
+      (let* ((entry (g3c4-p2g2-typed-entry-live shell operation))
+             (anchor (vector-ref entry 10))
+             (native (vector-ref entry 3))
+             (count (vector-ref entry 7))
+             (payload (* count 8))
+             (bytes (make-bytevector payload 0)))
+        (if (not (and (= (bytevector-length bytes) payload)
+                      (eq? entry
+                           (g3c4-p2g2-typed-entry-live shell operation))))
+            (g3c4-fail 'invalid-state operation
+                       "typed copy destination changed"))
+        (g3c4-native-check
+          (g3c4-p2g2-native-typed-copy native count bytes (+ 8 payload))
+          operation)
+        (if (not (and (eq? entry
+                           (g3c4-p2g2-typed-entry-live shell operation))
+                      (eq? native (vector-ref entry 3))
+                      (= (bytevector-length bytes) payload)
+                      (anchor 'match bytes)))
+            (g3c4-fail 'invalid-state operation
+                       "typed copied values changed"))
+        bytes))))
+
+(define (g3c4-p2g2-typed-release-private! shell)
+  (let ((operation 'g3c4-p2g2-typed-release-private!))
+    (m3-call operation
+      (let ((entry (g3c4-registry-find shell operation)))
+        (if (eq? (vector-ref entry 2) 'dead)
+            (begin
+              (g3c4-p2g2-typed-entry-dead shell entry operation)
+              #t)
+            (let* ((live (g3c4-p2g2-typed-entry-live shell operation))
+                   (bytes (vector-ref live 8))
+                   (count (vector-ref live 7))
+                   (anchor (vector-ref live 10))
+                   (barrier (vector #f)))
+              (if (not (and (eq? live
+                                 (g3c4-p2g2-typed-entry-live
+                                   shell operation))
+                            (eq? bytes (vector-ref live 8))
+                            (= (bytevector-length bytes) (* count 8))))
+                  (g3c4-fail 'invalid-state operation
+                             "typed owner changed before release"))
+              (guard (caught
+                       (#t (if (vector-ref barrier 0) (exit 134))
+                           (raise caught)))
+                (let ((status (anchor 'native-release live)))
+                  (if (= status 0)
+                      (begin
+                        (vector-set! barrier 0 #t)
+                        (g3c4-p2g2-zero-bytes! bytes (* count 8))
+                        (g3c4-entry-dead! live)
+                        (anchor 'retire live)
+                        #t)
+                      (g3c4-native-check status operation))))))))))
