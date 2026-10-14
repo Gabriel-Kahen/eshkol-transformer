@@ -3154,9 +3154,18 @@ publication, public G2 and continuation remain pending.
   T1/raw/staging and selected text, then captures the exact 9-byte first and
   optional second native raw-header operands and bounded tail references.
   Its source checker covers twenty negative mutations. This remains
-  source-only and abort-only: native first-EOS/G2 terminal commit, the
-  post-zero success tail, post-call snapshot, detached clone, compiled
-  same-call proof, and independent review remain pending.
+  source-only and abort-only at that predecessor. A separate fixed private
+  coordinator now source-wires the accepted six-argument native terminal
+  commit after that precommit frame. It treats nonzero as recoverable before
+  the boundary, sets a preallocated fail-stop barrier immediately on zero,
+  then uses bounded writes to make the original output shell and surviving
+  anchor independently live while clearing active call and closure edges.
+  The exact pinned Eshkol compiler source confirms that `#f` in the first-EOS
+  fifth `ptr` argument lowers to C NULL, paired with extent zero. The focused
+  source gate covers twenty negative mutations, including prezero abort and
+  postzero fail-stop order. This is not compiled same-call evidence: native
+  invocation, first-EOS/G2 rollback and success, terminal release, post-call
+  snapshot, detached clone, public G2, and independent review remain pending.
 
 ## Wave 4 — practical pretraining and performance
 
