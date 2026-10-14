@@ -1,0 +1,75 @@
+;;; Public fixed-profile witness for the authentic 8,193-row D2 preflight.
+(require transformer.config)
+(require transformer.data)
+(require transformer.diagnostic_transport)
+(require transformer.error_public)
+(require transformer.evaluation)
+(require transformer.tokenizer)
+
+;; The existing horizon hook hides the first shard after D2 open. An attempted
+;; traversal would read it and produce 'io instead of the expected cap error.
+(extern i64 hide-first-shard :real et_e3_horizon_hide_late_shard_v1)
+(extern i64 restore-first-shard :real et_e3_horizon_restore_late_shard_v1)
+
+(define (check label value)
+  (if (not value)
+      (begin (display "E3-CAP-FAIL ") (display label) (newline) (exit 1))))
+
+(define (bytes=? left right)
+  (and (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+
+(define (cap-error? value)
+  (and (transformer-error? value)
+       (eq? (transformer-error-category value) 'unsupported)
+       (eq? (transformer-error-operation value) 'e3-evaluate-into!)
+       (string=? (transformer-error-message value)
+                 "D2 dataset exceeds E3 traversal bounds")))
+
+(define args (cdr (command-line)))
+(check 'arguments (and (pair? args) (null? (cdr args))))
+(define config
+  (config-resolve
+    (config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define tokenizer (tokenizer-byte config))
+(define model
+  (with-region ('e3-cap-model 65536)
+    (diagnostic-model-create config (diagnostic-initializer-state 1729))))
+(define dataset
+  (token-dataset-open
+    (list ':directory (car args) ':batch-size 1 ':sequence-length 2
+          ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+          ':maximum-total-tokens 65536 ':maximum-batch-bytes 34
+          ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #t)
+    tokenizer))
+(define before (token-dataset-cursor dataset))
+(define arena-before (__arena-used))
+
+(check 'hide-first-shard (= (hide-first-shard) 0))
+(define denied-with-hidden-shard
+  (guard (caught (#t caught))
+    (with-region ('e3-cap-first-denial 262144)
+      (diagnostic-evaluate-fixed! model dataset))))
+(check 'typed-preflight-with-hidden-shard (cap-error? denied-with-hidden-shard))
+(check 'first-cursor (bytes=? before (token-dataset-cursor dataset)))
+(check 'restore-first-shard (= (restore-first-shard) 0))
+
+;; The second denial on the same model and dataset catches a leaked E3/D2
+;; claim even though a successful 8,192-row continuation is a later gate.
+(define denied-again
+  (guard (caught (#t caught))
+    (with-region ('e3-cap-second-denial 262144)
+      (diagnostic-evaluate-fixed! model dataset))))
+(check 'typed-repeat-preflight (cap-error? denied-again))
+(check 'repeat-cursor (bytes=? before (token-dataset-cursor dataset)))
+(define arena-after (__arena-used))
+(check 'dataset-close (token-dataset-close! dataset))
+(display "E3-CAP-PASS rows=8193 denials=2 cursor=unchanged first-shard=unread arena-delta=")
+(display (- arena-after arena-before))
+(newline)

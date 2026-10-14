@@ -816,6 +816,13 @@ historical, not passes. The 3,600-second bound and 512 MiB RSS ceiling remain.
 It does not close the other E3 §9 retention, mode, gradient, and sanitizer
 obligations.
 
+The separate [8,193-row public preflight source candidate](e3/E3_PUBLIC_CAP_PREFLIGHT_SOURCE.md)
+uses an authentic D1/D2 one-over corpus, hides the first shard after dataset
+open, and requires the exact typed cap denial twice with unchanged cursor.
+Its offline corpus tests pass; the optimized normal/poison AOT gate is prepared
+but unrun. Public error/cursor observations cannot close the §9 private
+destination, owner, mode, gradient, stage, or sanitizer requirements.
+
 The [E3 in-call mode and graph observation contract](e3/E3_MODE_GRAPH_OBSERVATION_CONTRACT.md)
 now has a bounded [source candidate](e3/E3_MODE_GRAPH_SOURCE_CANDIDATE.md).
 Its P1-owned test variant reads all 17 modes through the authentic E3 token;
