@@ -1423,9 +1423,13 @@ dispatch at denial. The private fixture extends exact cursor, 17-mode,
 14-parameter/gradient/RNG, six-output, 29-probe, first-error and same-frame
 retry checks against a fault-free twin. Host checks include a compiled
 dispatch-before-denial mutant; native normal ran as an unsupported-host
-compatibility probe. Supported compiled Eshkol normal, poison and sanitizer
-gates and independent source review remain pending; E3 §9 admission remains
-**HOLD**.
+compatibility probe. Independent source/host review accepted exact
+`6479fbf24f5d76f72136bc60f750d0bdf506cd4e`/tree
+`f0c30ae464697a0b7b33fd59d88bce3f87c4fcee`; the durable receipt is
+`/home/gabe/.codex/evidence/eshkol-transformer/e3-stage11-accumulate-source-review-20261014/REVIEW.txt`
+(SHA-256 `43f7431a91837b88c081f521c563661c29c3890912d07ccb77baa28fae70f94c`).
+Supported compiled Eshkol normal, poison and sanitizer gates remain pending;
+E3 §9 admission remains **HOLD**.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
