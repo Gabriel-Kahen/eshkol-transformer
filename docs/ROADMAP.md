@@ -833,6 +833,11 @@ checks same-frame repeat behavior. Source/negative controls pass, but the
 changed retention, derived first-evaluation mutant and overflow compiled
 closures require fresh exact-tree package manifests and gates. No private AOT,
 resource, poison or sanitizer verdict is claimed, and full N5 remains open.
+The inherited first-evaluation mutant source test still pinned an older
+production `e3_frame.c` blob from before subsequent guarded E3 test seams.
+Its current-main source hash is now repinned in a separate source-only
+successor after inspecting that exact file delta; this repairs offline
+manifest admission, not first-evaluation compiled or sanitizer proof.
 
 The [E3 in-call mode and graph observation contract](e3/E3_MODE_GRAPH_OBSERVATION_CONTRACT.md)
 now has a bounded [source candidate](e3/E3_MODE_GRAPH_SOURCE_CANDIDATE.md).
