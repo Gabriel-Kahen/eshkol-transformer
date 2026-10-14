@@ -2112,9 +2112,16 @@ registered Scheme optimizer to the native hold, preallocates its state shell,
 record, registry cons, pointer cell and ledger before issue, and checks the
 exact returned pointer before enrollment. Its preclaim release distinguishes
 LIVE, DEAD-after-defect and indeterminate native lifecycle outcomes. The
-four-mutation source check passes. The helper is not yet linked or runtime
+five-mutation source check passes. The helper is not yet linked or runtime
 verified; G3/M3/A2-to-O2 coordinator binding, P1/C2 partial-claim rollback,
 hold release order and receipt gates remain pending.
+The [C2 claim successor source audit](g3/G3_R_HELD_O2_C2_ADOPTION_GATE.md#c2-claim-successor-gap-source-audit-2026-10-14)
+found a concrete partial-claim gap: C2's provisional token and progress stay
+lexical, and its guard rolls back P1 but not an O2 claim that mutates and then
+raises. The adopter has no claimed phase and cannot safely use its preclaim
+release after that cut. A C2-side checked two-child rollback or exposed exact
+private transfer authority is required before implementing the held claim;
+this branch records the source gap only and makes no C2/SAVE admission.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),

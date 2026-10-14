@@ -110,3 +110,37 @@ original G3/M3/A2 to O2 binding, prepare a P1 clone and controls, transfer the
 ledger's exact shell into C2, reconcile partial claims, release both holds in
 reverse order, and gate receipt I/O. A compiled aggregate/runtime test and
 independent review are required before any held C2 owner is claimed.
+
+## C2 claim successor gap (source audit, 2026-10-14)
+
+The exact C2 compose request is `[tag, P1 shell, O2 shell, controls, operation,
+#f-output]`. `c2-training-state-compose-internal` allocates its owner token,
+provisional C2 state, registry cons, and one-bit P1 claim-progress cell inside
+the call. It claims P1, marks progress, then claims O2. Its guard rolls P1 back
+if the second claim raises; the success tail registers the C2 state and clears
+both request children. This is a useful ordinary second-claim rollback, and the
+existing C2 owner test covers a failure *before* O2 is claimed.
+
+The held adopter can pass its enrolled exact O2 shell in request slot 2, but
+its nine-slot ledger has only `prepared`, `issued`, `enrolled`, and `dead`
+phases. `g3r-held-o2-adopter-release!` admits only the preclaim `issued` and
+`enrolled` phases and requires the O2 state phase to be `constructing` or
+`live`. A successful C2 claim replaces `live` with C2's private owner token,
+so the adopter has no checked claimed/consumed transition. The C2 request
+exposes the owner shell only on success; on failure it retains both child
+slots and `#f` output. The exact token, progress cell, and provisional state
+remain lexical, so those unchanged slots cannot prove that both children are
+unclaimed. In particular, if the second-claim seam claims O2 and then raises,
+the C2 guard rolls P1 back but has no O2 rollback, and the caller has no token
+with which to invoke `o2-state-claim-c2-rollback-internal!`. Releasing the
+adopter as preclaim authority then fails its own live-state check. Any such
+unproved transfer must fail stop with the rooted O2 ledger and original holds
+intact; it cannot be reported as a recoverable C2 error.
+
+This source boundary does not admit a claim helper against the current exact
+API. The next C2-side contract must make every failed compose provably leave
+both children live, including a postmutation second-claim failure, or expose
+the exact provisional token and child progress to a private caller for checked
+rollback. Only then can an adopter successor add a single transfer transition,
+negative partial-claim cuts, reverse-order hold release, and a compiled gate.
+No public SAVE-pair or receipt claim follows from this audit.
