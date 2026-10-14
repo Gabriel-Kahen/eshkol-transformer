@@ -2221,9 +2221,17 @@ copied controls under an idle/train authentication. Its one-shot slot-4
 `handoff` phase fences ordinary trainer operations and release; a pre-eval
 abort rechecks the original owners and controls before releasing P1 and
 returning to idle/train. Its bounded independent source review passed. This
-current-main composition requires independent whole-union source review and
-compiled runtime admission. Eval transition, G3/O2 holds, C2 claim,
+current-main composition passed independent whole-union source review;
+compiled runtime admission remains open. Eval transition, G3/O2 holds, C2 claim,
 capsule-aware trainer release, receipt, and replay remain separate gates.
+The [current-tree capsule runtime candidate](../tests/tr3_handoff_capsule/README.md)
+now pins exact private source, a held joint-aggregate build recipe and a
+capture/fence/pre-eval-abort fixture with forged, stale, control and post-P1
+failure cuts. Its source-only manifest and negative checks pass; no compiled
+or native runtime result exists. A genuine capsule-specific allocator-prefix
+shim/matrix, exact symbol closure, bounded compiled run and independent review
+remain required before runtime admission. Historical lease manifests retain
+their original provenance and are not reused as current-tree gate approval.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),

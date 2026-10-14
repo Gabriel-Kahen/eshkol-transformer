@@ -109,6 +109,7 @@ DEVELOPMENT_SCRIPTS = frozenset({
     ROOT / "scripts" / "check-g3r-joint-hold-source.py",
     ROOT / "scripts" / "check-g3r-joint-issued-adopter.py",
     ROOT / "scripts" / "check-g3r-joint-original-binding.py",
+    ROOT / "scripts" / "prepare-tr3-handoff-capsule-gate.py",
 }) | G3C4_DEVELOPMENT_SCRIPTS
 
 

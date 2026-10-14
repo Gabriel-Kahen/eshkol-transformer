@@ -1,0 +1,134 @@
+;;; Held private runtime candidate. No public facade or original-epoch claim.
+(load "tr3_c_handoff_capsule_root.esk")
+
+(define checks 0)
+(define (check label ok)
+  (if ok (set! checks (+ checks 1))
+      (begin (display "TR3 HANDOFF FAIL: ") (display label)
+             (newline) (exit 1))))
+(define (rejects? category operation thunk)
+  (guard (caught
+           (#t (and (transformer-error? caught)
+                    (eq? category (transformer-error-category caught))
+                    (eq? operation (transformer-error-operation caught)))))
+    (thunk) #f))
+(define (resolved-config)
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define (dataset-config directory)
+  (list ':directory directory ':batch-size 1 ':sequence-length 2
+        ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 4 ':maximum-batch-bytes 34
+        ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #t))
+(define (handle-paths handles)
+  (let loop ((i 0))
+    (if (= i (vector-length handles)) '()
+        (cons (parameter-handle-path (vector-ref handles i))
+              (loop (+ i 1))))))
+(define (optimizer-config handles)
+  (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+        '(none) '(constant)
+        (list (list 'group (handle-paths handles)
+                    "3dcccccd" "3f000000" "3f000000"
+                    "3a83126f" "00000000"))))
+(define corpus-directory (car (cdr (command-line))))
+(define resolved (resolved-config))
+(define tokenizer (t2-wave2-tokenizer-byte resolved))
+(define dataset (d2-token-dataset-open
+                  (dataset-config corpus-directory) tokenizer))
+(define model (m3t-public-model-create
+                resolved (m3t-public-initializer-state 1729)))
+(define handles (vector-ref (m3t-entry model 'model 'trainer-create #t) 8))
+(define optimizer (o2-public-optimizer-create
+                    (optimizer-config handles) (module-parameters model)))
+(define trainer (tr3-lease-create-internal
+                  resolved tokenizer dataset model optimizer))
+(define record (tr3-lease-record-for-shell-internal
+                 trainer tr3-handoff-operation))
+(define original-cursor (d2-token-dataset-cursor dataset))
+(define (idle?)
+  (and (eq? (vector-ref record 3) 'idle)
+       (not (vector-ref record 4))
+       (not tr3-handoff-capture-active?)))
+
+(check "foreign T1 core is rejected before capture"
+       (rejects? 'invalid-state tr3-handoff-operation
+         (lambda ()
+           (tr3-handoff-capture-internal!
+             trainer (t2-wave2-tokenizer-byte resolved)))))
+(check "foreign T1 leaves trainer idle" (idle?))
+
+;;; This test-only dependency fault cuts before P1 allocation. It is not a
+;;; substitute for the separate real allocator-prefix matrix in the recipe.
+(define original-cursor-call tr3-c-snapshot-cursor-call)
+(set! tr3-c-snapshot-cursor-call
+  (lambda (value)
+    (m3t-fail 'internal 'token-dataset-cursor "injected control cut")))
+(check "control dependency failure is caught"
+       (rejects? 'internal 'token-dataset-cursor
+         (lambda () (tr3-handoff-capture-internal! trainer tokenizer))))
+(set! tr3-c-snapshot-cursor-call original-cursor-call)
+(check "pre-P1 failure leaves trainer idle" (idle?))
+
+;;; A post-P1 cut must release the exact detached owner once before returning.
+(define original-check tr3-handoff-capsule-check!)
+(define original-p1-release tr3-c-snapshot-p1-release!)
+(define releases 0)
+(set! tr3-c-snapshot-p1-release!
+  (lambda (state)
+    (set! releases (+ releases 1))
+    (original-p1-release state)))
+(set! tr3-handoff-capsule-check!
+  (lambda (capsule owner phase)
+    (original-check capsule owner phase)
+    (m3t-fail 'internal tr3-handoff-operation "injected post-P1 cut")))
+(check "post-P1 failure is caught"
+       (rejects? 'internal tr3-handoff-operation
+         (lambda () (tr3-handoff-capture-internal! trainer tokenizer))))
+(set! tr3-handoff-capsule-check! original-check)
+(set! tr3-c-snapshot-p1-release! original-p1-release)
+(check "post-P1 cut releases once and leaves no fence"
+       (and (= releases 1) (idle?)))
+
+(define capsule (tr3-handoff-capture-internal! trainer tokenizer))
+(check "capture roots exact one-shot handoff fence"
+       (and (eq? (vector-ref capsule 1) capsule)
+            (eq? (vector-ref capsule 2) record)
+            (eq? (vector-ref record 4) capsule)
+            (eq? (vector-ref record 3) 'handoff)
+            (eq? (vector-ref capsule 5) 'fenced)))
+(check "public eval is fenced"
+       (rejects? 'invalid-state 'module-eval!
+         (lambda () (tr3-public-module-eval! model))))
+(check "ordinary trainer release is fenced"
+       (rejects? 'invalid-state 'tr3-lease-unenroll-internal!
+         (lambda () (tr3-lease-unenroll-internal! trainer))))
+(check "copied capsule is rejected"
+       (rejects? 'invalid-state tr3-handoff-operation
+         (lambda ()
+           (tr3-handoff-capsule-check! (vector-copy capsule) record 'fenced))))
+(vector-set! (vector-ref (vector-ref capsule 7) 4) 0 1)
+(check "changed copied controls are rejected"
+       (rejects? 'invalid-state tr3-handoff-operation
+         (lambda () (tr3-handoff-capsule-check! capsule record 'fenced))))
+(vector-set! (vector-ref (vector-ref capsule 7) 4) 0 0)
+(vector-set! record 19 1)
+(check "changed live controls are rejected"
+       (rejects? 'invalid-state tr3-handoff-operation
+         (lambda () (tr3-handoff-capsule-check! capsule record 'fenced))))
+(vector-set! record 19 0)
+(check "pre-eval abort consumes exact P1 and restores idle"
+       (and (tr3-handoff-abort-before-eval-internal! record capsule)
+            (idle?)
+            (eq? (vector-ref capsule 5) 'dead)
+            (not (vector-ref (vector-ref capsule 8) 0))
+            (equal? original-cursor (d2-token-dataset-cursor dataset))))
+(check "stale capsule cannot reenter"
+       (rejects? 'invalid-state tr3-handoff-operation
+         (lambda () (tr3-handoff-capsule-check! capsule record 'fenced))))
+(check "double abort cannot release twice"
+       (rejects? 'invalid-state tr3-handoff-operation
+         (lambda () (tr3-handoff-abort-before-eval-internal! record capsule))))
+(display "TR3-HANDOFF-CANDIDATE-PASS checks=") (display checks) (newline)
