@@ -3292,8 +3292,20 @@ publication, public G2 and continuation remain pending.
   checks the binding before EOS observation. An executable C negative uses
   identical context/cache addresses in a later unmarked case. All 20 focused
   source checks and strict on/off C syntax pass. Independent changed-head
-  source review and a fresh compiled diagnostic remain pending; this does
-  not admit P2/G2 runtime.
+  source review and a fresh compiled diagnostic were the next gates. The exact
+  `4774d540` one-use compiled gate passed source/preflight and normal on/off
+  compilation, then failed in the first normal-on case after
+  `eos.native.return`, before `eos.check.return`; its native status was
+  nonzero, but the trace did not distinguish a real carrier rejection from
+  the test wrapper's rejection (independent review SHA-256 `af06dd2e...`,
+  raw seal SHA-256 `2565833c...`). This isolated test-only successor records
+  the real return status, observer branch/result, final wrapper status and
+  native error domain/category/code on fd 4 before Eshkol translates status.
+  The feature-off wrapper retains its original decision path and the phase-10
+  case witness remains intact. Twenty source-only tests pass, including
+  missing-marker/output-field and feature-off negatives; no C or Eshkol
+  compilation was run on this successor. Independent source review and one
+  fresh immutable compiled diagnostic remain pending. P2/G2 runtime is held.
   The full matrix, public G2, and continuation acceptance remain unproved.
 
 ## Wave 4 — practical pretraining and performance

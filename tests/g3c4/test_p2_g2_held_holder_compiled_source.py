@@ -133,6 +133,59 @@ def eos_args_fd4_contract(shim):
     return writer
 
 
+def eos_status_trace_contract(shim, composer):
+    """Pin value-bearing EOS records and the untouched feature-off branch."""
+    start = shim.index('static void held_trace_eos_status(', shim.index(
+        'static void held_trace_eos_args(', shim.index(
+            'static void held_trace(const char *phase) {')))
+    writer = shim[start:shim.index('\n}', start) + 2]
+    for field in ("case=%d", "phase=%s", "branch=%s", "status=%lld",
+                  "domain=%lld", "category=%lld", "code=%lld"):
+        if field not in writer:
+            raise AssertionError(f"missing EOS status field: {field}")
+    for field in ("et_g3c4_private_last_error_domain_v1()",
+                  "et_g3c4_private_last_error_category_v1()",
+                  "et_g3c4_private_last_error_code_v1()",
+                  "write(4, line, (size_t)size) != size"):
+        if field not in writer:
+            raise AssertionError(f"missing EOS status source: {field}")
+
+    wrapper = composer[composer.index(
+        "int64_t __wrap_et_g3c4_private_p2g2_eos_first_frame_carrier_v1("):
+        composer.index("int64_t et_g3c4_p2g2_composer_test_after_abort_v1(")]
+    real = wrapper.index("result = __real_et_g3c4_private_p2g2_eos_first_frame_carrier_v1(")
+    trace = wrapper.index('held_trace_eos_status("eos.real.return", "carrier", result)')
+    case3 = wrapper.index("if (result != 0 && composer_counter_case == 3)")
+    if not real < trace < case3:
+        raise AssertionError("real status must precede test observations")
+    for marker in (
+        'held_trace_eos_status("eos.wrapper.return", "fault", result)',
+        'held_trace_eos_status("eos.wrapper.observe", "guard-reject", 0)',
+        'held_trace_eos_status("eos.wrapper.return", "guard-reject", -1)',
+        'observer_result = et_g3c4_p2g2_coordinator_test_observe_v1(',
+        'observer_result == 0 ? "accept" : "reject"',
+        'held_trace_eos_status("eos.wrapper.return", "observer-reject", -1)',
+        'held_trace_eos_status("eos.wrapper.observe", "skipped-real-error", 0)',
+        'result == 0 ? "success" : "real-error", result',
+    ):
+        if marker not in wrapper:
+            raise AssertionError(f"missing EOS wrapper outcome: {marker}")
+    feature_off = wrapper[wrapper.index('"skipped-real-error", 0);'):]
+    feature_off = feature_off[feature_off.index("#else\n  if (result == 0 &&"):]
+    feature_off = feature_off[:feature_off.index("#endif")]
+    if not (feature_off.startswith("#else\n  if (result == 0 &&")
+            and "coordinator_owner == NULL" in feature_off
+            and "coordinator_entry_cache_owner == NULL" in feature_off
+            and "et_g3c4_pending_output_lookup(context, &pending) != 0" in feature_off
+            and "et_g3c4_p2g2_coordinator_test_observe_v1(" in feature_off
+            and "et_g3c4_p2g2_held_case_current(" not in feature_off
+            and "held_trace_eos_status" not in feature_off):
+        raise AssertionError("feature-off EOS observer path changed")
+    if ("#else\n    return et_g3c4_fail("
+            "ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);" not in wrapper):
+        raise AssertionError("feature-off EOS fault path changed")
+
+
 def eos_observation_contract(driver, composer):
     """Every path reaching the EOS wrapper arms its native oracle first."""
     for start, end, marker in (
@@ -245,8 +298,8 @@ class HeldHolderCompiledSource(unittest.TestCase):
                        'held_trace_eos_args(context, input, staging, bytes)',
                        'held_trace("eos.real.enter")',
                        '__real_et_g3c4_private_p2g2_eos_first_frame_carrier_v1(\n',
-                       'held_trace("eos.real.return")',
-                       'held_trace("eos.wrapper.return")')),
+                       'held_trace_eos_status("eos.real.return", "carrier", result)',
+                       'held_trace_eos_status("eos.wrapper.return", "guard-reject", -1)')),
             (carrier, ('held_trace("eos.carrier.enter")',
                        'held_trace_eos_args(\n',
                        'et_g3c4_error_reset_internal()',
@@ -270,6 +323,40 @@ class HeldHolderCompiledSource(unittest.TestCase):
                     position = source.find(fragment, cursor)
                     self.assertGreaterEqual(position, 0)
                     cursor = position + len(fragment)
+
+    def test_eos_status_records_cover_real_observer_and_final_returns(self):
+        shim, composer = SHIM.read_text(), COMPOSER.read_text()
+        eos_status_trace_contract(shim, composer)
+        writer_start = shim.index('static void held_trace_eos_status(', shim.index(
+            'static void held_trace_eos_args(', shim.index(
+                'static void held_trace(const char *phase) {')))
+        wrong_fd = shim[:writer_start] + shim[writer_start:].replace(
+            "write(4, line, (size_t)size) != size",
+            "write(2, line, (size_t)size) != size", 1)
+        variants = (
+            (shim.replace("status=%lld", "status=missing", 1), composer),
+            (shim.replace("domain=%lld", "domain=missing", 1), composer),
+            (shim.replace("category=%lld", "category=missing", 1), composer),
+            (shim.replace("code=%lld", "code=missing", 1), composer),
+            (shim.replace("et_g3c4_private_last_error_code_v1()",
+                          "0", 1), composer),
+            (wrong_fd, composer),
+            (shim, composer.replace(
+                'held_trace_eos_status("eos.real.return", "carrier", result)',
+                'held_trace("eos.real.return")', 1)),
+            (shim, composer.replace(
+                'observer_result == 0 ? "accept" : "reject"',
+                '"unknown"', 1)),
+            (shim, composer.replace(
+                'held_trace_eos_status("eos.wrapper.return", "observer-reject", -1)',
+                'held_trace("eos.wrapper.return")', 1)),
+            (shim, composer.replace(
+                "#else\n  if (result == 0 &&", "#else\n  if (result != 0 &&", 1)),
+        )
+        for index, (changed_shim, changed_composer) in enumerate(variants):
+            with self.subTest(variant=index), self.assertRaises(
+                    (AssertionError, ValueError)):
+                eos_status_trace_contract(changed_shim, changed_composer)
 
     def test_test_only_overlay_traces_each_unwrapped_interval(self):
         original = EXTENSION.read_text()

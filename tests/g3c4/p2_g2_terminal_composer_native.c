@@ -418,9 +418,12 @@ int64_t __wrap_et_g3c4_private_p2g2_eos_first_frame_carrier_v1(
   if (composer_fault_mode == 1) {
     composer_fault_mode = 0;
 #ifdef ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE
-    held_trace("eos.wrapper.return");
-#endif
+    result = et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    held_trace_eos_status("eos.wrapper.return", "fault", result);
+    return result;
+#else
     return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+#endif
   }
 #ifdef ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE
   held_trace("eos.real.enter");
@@ -428,7 +431,7 @@ int64_t __wrap_et_g3c4_private_p2g2_eos_first_frame_carrier_v1(
   result = __real_et_g3c4_private_p2g2_eos_first_frame_carrier_v1(
       context, input, staging, bytes);
 #ifdef ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE
-  held_trace("eos.real.return");
+  held_trace_eos_status("eos.real.return", "carrier", result);
 #endif
   if (result != 0 && composer_counter_case == 3) {
     et_g3c4_context_internal *actual = (et_g3c4_context_internal *)context;
@@ -444,23 +447,42 @@ int64_t __wrap_et_g3c4_private_p2g2_eos_first_frame_carrier_v1(
         memcmp(actual->generator_rng_words, coordinator_entry_rng,
                sizeof(coordinator_entry_rng)) == 0;
   }
+#ifdef ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE
   if (result == 0 &&
       (coordinator_owner == NULL || coordinator_entry_cache_owner == NULL ||
-#ifdef ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE
        !et_g3c4_p2g2_held_case_current(
            &coordinator_held_case_witness, context,
            ((et_g3c4_context_internal *)context)->cache) ||
-#endif
+       et_g3c4_pending_output_lookup(context, &pending) != 0 ||
+       pending == NULL)) {
+    held_trace_eos_status("eos.wrapper.observe", "guard-reject", 0);
+    held_trace_eos_status("eos.wrapper.return", "guard-reject", -1);
+    return -1;
+  }
+  if (result == 0) {
+    int64_t observer_result = et_g3c4_p2g2_coordinator_test_observe_v1(
+        context, pending, 2,
+        ((et_g3c4_context_internal *)context)->token_frame_candidate);
+    held_trace_eos_status("eos.wrapper.observe",
+                          observer_result == 0 ? "accept" : "reject",
+                          observer_result);
+    if (observer_result != 0) {
+      held_trace_eos_status("eos.wrapper.return", "observer-reject", -1);
+      return -1;
+    }
+  } else {
+    held_trace_eos_status("eos.wrapper.observe", "skipped-real-error", 0);
+  }
+#else
+  if (result == 0 &&
+      (coordinator_owner == NULL || coordinator_entry_cache_owner == NULL ||
        et_g3c4_pending_output_lookup(context, &pending) != 0 ||
        pending == NULL ||
        et_g3c4_p2g2_coordinator_test_observe_v1(
            context, pending, 2,
-           ((et_g3c4_context_internal *)context)->token_frame_candidate) != 0)) {
-#ifdef ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE
-    held_trace("eos.wrapper.return");
-#endif
+           ((et_g3c4_context_internal *)context)->token_frame_candidate) != 0))
     return -1;
-  }
+#endif
   if (result == 0 && composer_overlay_active) {
     if (pending == NULL || coordinator_precommit_cache_owner == NULL ||
         coordinator_saw_prefix || composer_first_success ||
@@ -471,7 +493,8 @@ int64_t __wrap_et_g3c4_private_p2g2_eos_first_frame_carrier_v1(
     composer_first_success = 1;
   }
 #ifdef ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE
-  held_trace("eos.wrapper.return");
+  held_trace_eos_status("eos.wrapper.return",
+                        result == 0 ? "success" : "real-error", result);
 #endif
   return result;
 }

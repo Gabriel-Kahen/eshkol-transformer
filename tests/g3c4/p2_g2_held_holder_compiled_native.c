@@ -5,6 +5,8 @@
 static void held_trace(const char *phase);
 static void held_trace_eos_args(
     const void *context, const void *input, const void *staging, int64_t bytes);
+static void held_trace_eos_status(
+    const char *phase, const char *branch, int64_t status);
 #define __wrap_et_g3c4_private_p2g2_terminal_commit_v1 \
   held_base_wrap_terminal_commit
 #include "p2_g2_terminal_composer_native.c"
@@ -33,6 +35,22 @@ static void held_trace_eos_args(
   int size = snprintf(line, sizeof(line),
       "case=%d phase=eos.args context=%p input=%p staging=%p bytes=%lld\n",
       held_trace_case, context, input, staging, (long long)bytes);
+  if (size < 0 || (size_t)size >= sizeof(line) ||
+      write(4, line, (size_t)size) != size)
+    abort();
+}
+
+/* Snapshot the status and native error before another test observer can alter
+ * the thread-local error.  The branch identifies who supplied the status. */
+static void held_trace_eos_status(
+    const char *phase, const char *branch, int64_t status) {
+  char line[192];
+  int size = snprintf(line, sizeof(line),
+      "case=%d phase=%s branch=%s status=%lld domain=%lld category=%lld code=%lld\n",
+      held_trace_case, phase, branch, (long long)status,
+      (long long)et_g3c4_private_last_error_domain_v1(),
+      (long long)et_g3c4_private_last_error_category_v1(),
+      (long long)et_g3c4_private_last_error_code_v1());
   if (size < 0 || (size_t)size >= sizeof(line) ||
       write(4, line, (size_t)size) != size)
     abort();
