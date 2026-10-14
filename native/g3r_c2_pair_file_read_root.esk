@@ -1,0 +1,3 @@
+;;; Feature-local read-side G3RCV1/C2 pair; no public LOAD or SAVE route.
+(load "g3r_c2_sha_receipt_root.esk")
+(load "g3r_c2_pair_file_read_extension.esk")
