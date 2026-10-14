@@ -1,0 +1,15 @@
+;;; Private read-side G3RCV1 admission. The C1 reader fills only fresh staging
+;;; after successful exact-file/close checks; the accepted pair decoder alone
+;;; authenticates the C2 receipt and publishes decoded caller fields.
+
+(define (g3r-c2-pair-file-decode-internal! receipt path destination)
+  (let ((operation 'checkpoint-load))
+    (if (not (t2-wave2-valid-file-path? path))
+        (c2-load-fail 'invalid-argument operation
+                      "invalid G3-R companion path" '()))
+    (let* ((record (make-bytevector 288 0))
+           (status (t1-native-read-exact path record 288 288)))
+      (if (not (= status 0))
+          (t2-wave2-io-fail operation "checked G3-R companion read failed"
+                            status))
+      (g3r-c2-pair-decode-internal! receipt record destination))))

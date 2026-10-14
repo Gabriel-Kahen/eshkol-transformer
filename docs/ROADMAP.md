@@ -2142,6 +2142,15 @@ pair admission does not read or publish the companion file, authenticate live
 model/tokenizer identity, restore parameters, replay a generator, or discharge
 the remaining G3-R C2/SAVE and Wave 3 obligations.
 
+The [private G3RCV1 companion file-read candidate]
+(g3/G3_R_C2_PAIR_FILE_READ_LEAF.md) composes the accepted in-memory C2/SHA
+pair decoder with C1's exact 288-byte file read into fresh staging. Host-only
+source mutations and independently generated short/long/symlink/FIFO/wrong-
+digest fixtures pass; a genuine same-registry Eshkol file/receipt fixture is
+prepared but unrun. It adds no SAVE writer, C2 owner transfer, model restore,
+public generation or continuation. Independent source review and pinned
+compiled normal/repeat/sanitizer acceptance remain pending.
+
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
 checks the authentic idle generator's four RNG words without allocation,
