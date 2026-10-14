@@ -10,6 +10,7 @@ int32_t et_e3_test_observed_kernel_dispatch_v1(
 
 #define ET_E3_TESTING 1
 #define ET_E3_FAULT_TESTING 1
+#define ET_E3_PARTIAL_PIN_TESTING 1
 #define et_f32_tensor_destroy_v1 et_e3_test_observed_tensor_destroy_v1
 #define et_kernel_runtime_dispatch et_e3_test_observed_kernel_dispatch_v1
 #define et_kernel_runtime_discover et_e3_test_observed_runtime_discover_v1
@@ -828,6 +829,77 @@ static void test_forward_preinvoke_selector(
   CHECK(et_e3_test_fault_arm_v1(frame, 1, 0, 1) == E3_INVALID_STATE);
 }
 
+static void test_partial_pin_selector(
+    owner *model, et_f32_tensor *destination[4]) {
+  et_e3_frame_internal *frame = et_e3_private_frame_create_v1(
+      model, destination[0], destination[1], destination[2], destination[3]);
+  CHECK(frame != NULL);
+  et_e3_frame_internal *other = et_e3_private_frame_create_v1(
+      model, destination[0], destination[1], destination[2], destination[3]);
+  CHECK(other != NULL);
+  OK(et_e3_test_fault_arm_v1(other, 4, 2, 1));
+  CHECK(et_e3_test_fault_ref_v1(frame, 0) == 0);
+  CHECK(et_e3_test_fault_ref_v1(other, 2) == 2);
+  OK(et_e3_test_fault_reset_v1(other));
+  OK(et_e3_private_frame_destroy_preflight_v1(other));
+  et_e3_private_frame_destroy_v1(other);
+  CHECK(et_e3_test_fault_arm_v1(frame, 4, -1, 1) == E3_INVALID_ARGUMENT);
+  CHECK(et_e3_test_fault_arm_v1(frame, 4, 14, 1) == E3_INVALID_ARGUMENT);
+  CHECK(et_e3_test_fault_arm_v1(frame, 4, 0, 0) == E3_INVALID_ARGUMENT);
+  CHECK(et_e3_test_fault_arm_v1(frame, 4, 0, 2) == E3_INVALID_ARGUMENT);
+  CHECK(et_e3_test_fault_arm_v1((void *)(uintptr_t)17, 4, 0, 1) ==
+        E3_INVALID_ARGUMENT);
+  for (int64_t index = 0; index < 14; ++index) {
+    uint32_t words[4];
+    for (size_t i = 0; i < 4; ++i) read_scalar(destination[i], &words[i]);
+    int64_t tokens = et_e3_private_counter_ref_v1(frame, 0);
+    int64_t batches = et_e3_private_counter_ref_v1(frame, 1);
+    OK(et_e3_test_fault_arm_v1(frame, 4, index, 1));
+    CHECK(et_e3_test_fault_arm_v1(frame, 4, index, 1) == E3_INVALID_STATE);
+    CHECK(et_e3_private_acquire_v1(frame) == E3_INTERNAL);
+    CHECK(e3_last_domain == 3 && e3_last_category == 6 && e3_last_code == 6);
+    CHECK(frame->phase == E3_IDLE && !frame->model->active &&
+          e3_pins_idle(&frame->pins));
+    CHECK(et_e3_test_fault_ref_v1(frame, 0) == 2);
+    CHECK(et_e3_test_fault_ref_v1(frame, 1) == 4);
+    CHECK(et_e3_test_fault_ref_v1(frame, 2) == index);
+    CHECK(et_e3_test_fault_ref_v1(frame, 4) == 1);
+    for (size_t i = 0; i < 14; ++i) {
+      const et_f32_tensor *value = NULL;
+      size_t pins = SIZE_MAX;
+      et_f32_tensor_borrow *borrow = NULL;
+      et_f32_tensor_error error;
+      OK(et_f32_parameter_value_tensor_v1(model->p[i], &value, &error));
+      OK(et_f32_tensor_test_plan_pins_v1(value, &pins));
+      CHECK(pins == 0);
+      OK(et_f32_parameter_value_borrow_begin_v1(model->p[i], &borrow, &error));
+      OK(et_f32_tensor_borrow_end_v1(&borrow, &error));
+    }
+    for (size_t i = 0; i < 4; ++i) {
+      uint32_t after;
+      read_scalar(destination[i], &after);
+      CHECK(after == words[i]);
+    }
+    CHECK(et_e3_private_counter_ref_v1(frame, 0) == tokens &&
+          et_e3_private_counter_ref_v1(frame, 1) == batches);
+    CHECK(et_e3_private_acquire_v1(frame) == E3_INVALID_STATE);
+    OK(et_e3_test_fault_reset_v1(frame));
+  }
+  OK(et_e3_test_fault_arm_v1(frame, 4, 13, 1));
+  frame->positions[1] = 2;
+  CHECK(et_e3_private_acquire_v1(frame) == E3_INTERNAL);
+  frame->positions[1] = 1;
+  CHECK(et_e3_test_fault_ref_v1(frame, 0) == 3);
+  CHECK(et_e3_test_fault_ref_v1(frame, 4) == 0);
+  OK(et_e3_test_fault_reset_v1(frame));
+  OK(et_e3_private_acquire_v1(frame));
+  CHECK(et_e3_test_fault_arm_v1(frame, 4, 0, 1) == E3_INVALID_STATE);
+  abort_call(frame);
+  OK(et_e3_private_frame_destroy_preflight_v1(frame));
+  et_e3_private_frame_destroy_v1(frame);
+  CHECK(et_e3_test_fault_arm_v1(frame, 4, 0, 1) == E3_INVALID_STATE);
+}
+
 static void test_publication_precommit_selector(
     owner *model, et_f32_tensor *destination[4]) {
   et_e3_frame_internal *frame = et_e3_private_frame_create_v1(
@@ -918,6 +990,7 @@ int main(void) {
   test_transaction(model, destination);
   test_discovery_bind_rollback(model, destination);
   test_forward_preinvoke_selector(model, destination);
+  test_partial_pin_selector(model, destination);
   test_publication_precommit_selector(model, destination);
   for (size_t i = 0; i < 4; ++i) destroy_tensor(&destination[i]);
   printf("E3 native frame: %zu checks passed\n", checks);
