@@ -3175,7 +3175,21 @@ publication, public G2 and continuation remain pending.
   source gate covers prezero abort, postzero fail-stop, original root and
   equal-length carrier substitution mutations. This is not compiled same-call
   evidence: native invocation, first-EOS/G2 rollback and success, terminal release, post-call
-  snapshot, detached clone, public G2, and independent review of the repair
+  snapshot, detached clone, and public G2 remain pending. The live-authority
+  repair is independently source-accepted at `577fdb41`/tree `7b8335f0`.
+  An additional source-private diagnostic sibling now shares the fixed
+  two-argument coordinator body and closed zero tail. Only the first native
+  prezero nonzero may call its one-shot repair probe to release a genuine
+  caller-held I1 or A2 lease through the existing end API. It authenticates
+  the pending and staged-live originals before the probe, then rebuilds and
+  compares every precommit-frame slot and rechecks original live authority
+  before one native retry. A false or throwing repair cannot publish; abort
+  remains authenticated or fail-stop if the lease is still held. The production
+  two-argument entry remains unchanged in behavior and cannot itself release
+  a caller-held lease. Focused source negatives and an unrun same-call fixture
+  cover I1/A2 release/retry and failed repair. This sibling is intermediate
+  source evidence only; independent review, emitted-code audit, compiled
+  first-EOS/G2 and held-lease proof, release/snapshot/clone and public G2
   remain pending.
 
 ## Wave 4 — practical pretraining and performance

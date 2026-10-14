@@ -216,4 +216,6 @@ native/g3c4_p2g2_terminal_commit_extension.esk
 scripts/check-g3c4-p2g2-terminal-commit-source.py
 scripts/check-g3c4-p2g2-terminal-null-ffi-source.py
 scripts/test-g3c4-p2g2-terminal-commit-source.sh
+tests/g3c4/p2_g2_terminal_repair_probe_native.c
+tests/g3c4/p2_g2_terminal_repair_probe_test.esk
 native/g3c4_p2g2_terminal_commit_source_closure.txt

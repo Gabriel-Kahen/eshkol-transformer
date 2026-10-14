@@ -11,15 +11,19 @@ additions = [
     "scripts/check-g3c4-p2g2-terminal-commit-source.py",
     "scripts/check-g3c4-p2g2-terminal-null-ffi-source.py",
     "scripts/test-g3c4-p2g2-terminal-commit-source.sh",
+    "tests/g3c4/p2_g2_terminal_repair_probe_native.c",
+    "tests/g3c4/p2_g2_terminal_repair_probe_test.esk",
     "native/g3c4_p2g2_terminal_commit_source_closure.txt",
 ]
 closure = (root / additions[-1]).read_text().splitlines()
-assert closure == base + additions and len(closure) == len(set(closure)) == 219
+assert closure == base + additions and len(closure) == len(set(closure)) == 221
 assert all((root / path).is_file() for path in closure)
 authority = (root / additions[0]).read_text()
 source = (root / additions[1]).read_text()
 abort_only = (root / "native/g3c4_p2g2_terminal_abort_coordinator_extension.esk").read_text()
 call_entry = (root / "native/g3c4_call_entry_extension.esk").read_text()
+probe_native = (root / additions[-3]).read_text()
+probe_esk = (root / additions[-2]).read_text()
 
 
 def clean(text):
@@ -103,6 +107,10 @@ def valid_authority(text):
         "(eq? (cdr (vector-ref live 14)) (vector-ref live 12))",
         "(procedure? original)",
         "(original 'check live)",
+        "((or (eq? command 'check)\n                      (eq? command 'staged-check))",
+        "(if (eq? command 'check) 'live 'unpublished)",
+        "(define (g3c4-p2g2-terminal-live-recheck-prezero! call pending live frame)",
+        "((vector-ref live 10) 'staged-check live)",
         "(eq? (vector-ref live 1) output)",
         "(eq? (vector-ref output 0) shell)",
         "(eq? (vector-ref output 1) 'terminal-output)",
@@ -122,12 +130,48 @@ def valid_authority(text):
 
 
 def valid(text):
-    code = clean(text)
-    if form_end(code, code.index("(define (g3c4-p2g2-terminal-commit-private!")) != len(code.rstrip()):
+    whole = clean(text)
+    core_start = whole.index("(define (g3c4-p2g2-terminal-commit-core-private!")
+    core_end = form_end(whole, core_start)
+    code = whole[core_start:core_end]
+    if core_end < 0 or not whole.rstrip().endswith(
+        "(g3c4-p2g2-terminal-commit-core-private! generator input repair))"):
+        return False
+    if "(define (g3c4-p2g2-terminal-commit-private! generator input)\n  (g3c4-p2g2-terminal-commit-core-private! generator input #f))" not in whole:
+        return False
+    if "(define (g3c4-p2g2-terminal-commit-repair-probed! generator input repair)" not in whole:
+        return False
+    if "(if (not (procedure? repair))" not in whole:
+        return False
+    if "(extern i64 g3c4-p2g2-native-terminal-commit ptr ptr ptr i64 ptr i64\n        :real et_g3c4_private_p2g2_terminal_commit_v1)" not in whole:
+        return False
+    native_helper = """(define (g3c4-p2g2-terminal-native-commit-frame frame)
+  (g3c4-p2g2-native-terminal-commit
+    (vector-ref frame 5) (vector-ref frame 6)
+    (vector-ref frame 7) (vector-ref frame 8)
+    (vector-ref frame 9) (vector-ref frame 10)))"""
+    if whole.count(native_helper) != 1:
+        return False
+    if whole.count("(g3c4-p2g2-native-terminal-commit") != 1:
+        return False
+    if core_end >= whole.index("(define (g3c4-p2g2-terminal-commit-private!"):
+        return False
+    if code.count("(g3c4-p2g2-terminal-native-commit-frame") != 2:
+        return False
+    if "(if (not (eq? (repair call pending first-status)\n                                         #t))" not in code:
+        return False
+    if "(if (not (g3c4-p2g2-terminal-same-frame?\n                                        frame retry-frame))" not in code:
+        return False
+    if not all(part in whole for part in (
+        "(= (vector-length original) 31) (= (vector-length current) 31)",
+        "(if (= index 31) #t",
+        "(or (= index 8) (= index 10) (= index 11))",
+        "(m3t-exact-i64? (vector-ref original index))",
+        "(m3t-exact-i64? (vector-ref current index))",
+        "(eq? (vector-ref original index)",
+        "(loop (+ index 1))")):
         return False
     required = (
-        "(extern i64 g3c4-p2g2-native-terminal-commit ptr ptr ptr i64 ptr i64",
-        ":real et_g3c4_private_p2g2_terminal_commit_v1)",
         "(g3c4-p2g2-prefix-preflight generator input)",
         "(m3-call operation",
         "(barrier (vector #f))",
@@ -145,11 +189,14 @@ def valid(text):
         "(g3c4-p2g2-terminal-non-eos-prefix-commit!",
         "(g3c4-p2g2-terminal-second-sample-decode!",
         "(g3c4-p2g2-terminal-text-preflight!",
-        "(g3c4-p2g2-terminal-precommit-frame",
         "(g3c4-p2g2-terminal-live-bind! call pending live frame)",
-        "(g3c4-p2g2-native-terminal-commit",
-        "(vector-ref frame 7) (vector-ref frame 8)",
-        "(vector-ref frame 9) (vector-ref frame 10)",
+        "(let ((first-status",
+        "(g3c4-p2g2-terminal-native-commit-frame frame)",
+        "(if (or (= first-status 0) (not repair))",
+        "(g3c4-p2g2-terminal-live-recheck-prezero!",
+        "(eq? (repair call pending first-status)",
+        "(g3c4-p2g2-terminal-same-frame?",
+        "(g3c4-p2g2-terminal-native-commit-frame\n                               retry-frame)",
         "(if (= status 0)",
         "(vector-set! barrier 0 #t)",
         "(vector-set! output 1 'terminal-output)",
@@ -169,8 +216,12 @@ def valid(text):
         "(vector-set! g3c4-p2g2-prefix-input-anchors 0 prefix-next)",
         "(g3c4-native-check status operation)",
     )
-    if any(code.count(fragment) != (2 if fragment == "(g3c4-call-dead! call)" else 1)
+    if any(code.count(fragment) != (2 if fragment in (
+               "(g3c4-call-dead! call)",
+               "(g3c4-p2g2-terminal-live-recheck-prezero!") else 1)
            for fragment in required):
+        return False
+    if code.count("(g3c4-p2g2-terminal-precommit-frame") != 2:
         return False
     order = (
         "(barrier (vector #f))",
@@ -182,7 +233,11 @@ def valid(text):
         "(g3c4-p2g2-terminal-text-preflight!",
         "(g3c4-p2g2-terminal-precommit-frame",
         "(g3c4-p2g2-terminal-live-bind! call pending live frame)",
-        "(g3c4-p2g2-native-terminal-commit",
+        "(g3c4-p2g2-terminal-native-commit-frame frame)",
+        "(if (or (= first-status 0) (not repair))",
+        "(repair call pending first-status)",
+        "(g3c4-p2g2-terminal-same-frame?",
+        "(g3c4-p2g2-terminal-native-commit-frame\n                               retry-frame)",
         "(if (= status 0)",
         "(vector-set! barrier 0 #t)",
         "(vector-set! output 2 'live)",
@@ -294,6 +349,28 @@ mutations = (
 )
 for before, after in mutations:
     assert before in source and not valid(source.replace(before, after, 1)), before
+repair_mutations = (
+    ("(if (or (= first-status 0) (not repair))",
+     "(if (not repair)"),
+    ("(g3c4-p2g2-terminal-live-recheck-prezero!\n                             call pending live frame)",
+     "#t"),
+    ("(eq? (repair call pending first-status)",
+     "(eq? #t"),
+    ("(g3c4-p2g2-terminal-precommit-frame\n                                     call pending first-selected",
+     "(vector\n                                     call pending first-selected"),
+    ("(g3c4-p2g2-terminal-same-frame?\n                                        frame retry-frame)",
+     "#t"),
+    ("(g3c4-p2g2-terminal-live-recheck-prezero!\n                               call pending live retry-frame)",
+     "#t"),
+    ("(g3c4-p2g2-terminal-native-commit-frame\n                               retry-frame)",
+     "(g3c4-p2g2-terminal-native-commit-frame frame)"),
+    ("(g3c4-p2g2-terminal-commit-core-private! generator input #f)",
+     "(g3c4-p2g2-terminal-commit-core-private! generator input repair)"),
+    ("(if (not (procedure? repair))", "(if #f"),
+    ("(if (= index 31) #t", "(if (= index 30) #t"),
+)
+for before, after in repair_mutations:
+    assert before in source and not valid(source.replace(before, after, 1)), before
 authority_mutations = (
     ("(live (vector 'unpublished output shell native text-one text-two",
      "(live (vector 'unpublished output shell native text-one text-one"),
@@ -328,7 +405,39 @@ authority_mutations = (
     ("(g3c4-registry-find shell operation)", "#f"),
 )
 for before, after in authority_mutations:
-    assert before in authority and not valid_authority(authority.replace(before, after, 1)), before
+    assert before in authority and not valid_authority(authority.replace(before, after)), before
+staged_mutations = (
+    ("(eq? command 'staged-check)", "(eq? command 'wrong-staged-check)"),
+    ("(if (eq? command 'check) 'live 'unpublished)",
+     "(if (eq? command 'check) 'live 'live)"),
+    ("((vector-ref live 10) 'staged-check live)", "#t"),
+    ("(g3c4-p2g2-terminal-pending-check call pending operation)", "#t"),
+    ("(eq? (car (vector-ref live 14)) (vector-ref live 10))", "#t"),
+)
+for before, after in staged_mutations:
+    assert before in authority and not valid_authority(authority.replace(before, after)), before
+assert all(fragment in probe_native for fragment in (
+    "__wrap_et_g3c4_private_p2g2_terminal_commit_v1",
+    "et_i64_tensor_borrow_begin_v1", "et_i64_tensor_borrow_end_v1",
+    "et_a2_kv_cache_transaction_view_begin_v1",
+    "et_a2_kv_cache_transaction_view_end_v1",
+    "terminal_repair_attempts == 1", "terminal_repair_attempts != 2",
+    "output->transport.state == 0u", "output->length == 0",
+    "G3_TERMINAL_REPAIR_CASE", "held-false",
+))
+assert all(fragment in probe_esk for fragment in (
+    "(repair-case 'ids #f)", "(repair-case 'cache #f)",
+    "(repair-case 'ids #t)",
+    "(zero-case)", "callback after zero",
+    "(g3c4-p2g2-terminal-pending-check", "(vector-ref anchor 0) 'pending",
+    "(vector-ref output 2) 'pending", "(terminal-repair-pending",
+    "(terminal-repair-release)", "(terminal-repair-done",
+    "(vector-ref pending 0) 'dead",
+    "(g3c4-p2g2-terminal-output-entry-live shell 'test)",
+    "(terminal-repair-failstop-mode)",
+    "failed repair sees untouched pending owner",
+    "(exit 1)",
+))
 assert not valid(source.replace("(vector-set! barrier 0 #t)",
                                 "(vector-set! barrier 0 #t)\n                  (g3c4-fail 'internal operation \"fault\")", 1))
 assert not valid(source.replace("(vector-set! barrier 0 #t)",
@@ -336,4 +445,4 @@ assert not valid(source.replace("(vector-set! barrier 0 #t)",
 assert not valid(source.replace("(vector-set! barrier 0 #t)",
                                 "(vector-set! barrier 0 #t)\n                  (g3c4-registry-find shell operation)", 1))
 print(f"G3-C4 P2/G2 terminal live-authority source PASS: "
-      f"{len(mutations) + len(authority_mutations) + 3} negative mutations")
+      f"{len(mutations) + len(repair_mutations) + len(authority_mutations) + len(staged_mutations) + 3} negative mutations")

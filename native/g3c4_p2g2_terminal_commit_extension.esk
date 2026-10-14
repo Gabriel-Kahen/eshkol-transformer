@@ -5,7 +5,29 @@
 (extern i64 g3c4-p2g2-native-terminal-commit ptr ptr ptr i64 ptr i64
         :real et_g3c4_private_p2g2_terminal_commit_v1)
 
-(define (g3c4-p2g2-terminal-commit-private! generator input)
+(define (g3c4-p2g2-terminal-same-frame? original current)
+  (and (vector? original) (vector? current)
+       (= (vector-length original) 31) (= (vector-length current) 31)
+       (let loop ((index 0))
+         (if (= index 31) #t
+             (and (if (or (= index 8) (= index 10) (= index 11))
+                      (and (m3t-exact-i64? (vector-ref original index))
+                           (m3t-exact-i64? (vector-ref current index))
+                           (= (vector-ref original index)
+                              (vector-ref current index)))
+                      (eq? (vector-ref original index)
+                           (vector-ref current index)))
+                  (loop (+ index 1)))))))
+
+(define (g3c4-p2g2-terminal-native-commit-frame frame)
+  (g3c4-p2g2-native-terminal-commit
+    (vector-ref frame 5) (vector-ref frame 6)
+    (vector-ref frame 7) (vector-ref frame 8)
+    (vector-ref frame 9) (vector-ref frame 10)))
+
+;;; repair is #f for production. The diagnostic sibling may release its own
+;;; genuine held lease once, only after the first native prezero rejection.
+(define (g3c4-p2g2-terminal-commit-core-private! generator input repair)
   (let* ((operation 'g3c4-p2g2-terminal-commit-private!)
          (input-entry (g3c4-p2g2-prefix-preflight generator input))
          (native-input (vector-ref input-entry 3))
@@ -152,10 +174,29 @@
                  (bound-live
                    (g3c4-p2g2-terminal-live-bind! call pending live frame))
                  (status
-                   (g3c4-p2g2-native-terminal-commit
-                     (vector-ref frame 5) output-native
-                     (vector-ref frame 7) (vector-ref frame 8)
-                     (vector-ref frame 9) (vector-ref frame 10))))
+                   (let ((first-status
+                           (g3c4-p2g2-terminal-native-commit-frame frame)))
+                     (if (or (= first-status 0) (not repair))
+                         first-status
+                         (begin
+                           (g3c4-p2g2-terminal-live-recheck-prezero!
+                             call pending live frame)
+                           (if (not (eq? (repair call pending first-status)
+                                         #t))
+                               (g3c4-fail 'invalid-state operation
+                                          "terminal prezero repair failed"))
+                           (let ((retry-frame
+                                   (g3c4-p2g2-terminal-precommit-frame
+                                     call pending first-selected
+                                     second-selected logical-count)))
+                             (if (not (g3c4-p2g2-terminal-same-frame?
+                                        frame retry-frame))
+                                 (g3c4-fail 'invalid-state operation
+                                            "terminal retry operands changed"))
+                             (g3c4-p2g2-terminal-live-recheck-prezero!
+                               call pending live retry-frame)
+                             (g3c4-p2g2-terminal-native-commit-frame
+                               retry-frame))))))
             (if (= status 0)
                 (begin
                   (vector-set! barrier 0 #t)
@@ -227,4 +268,17 @@
                                protected-anchors-next)
                   (vector-set! g3c4-p2g2-prefix-input-anchors 0 prefix-next)
                   shell)
-                (g3c4-native-check status operation))))))))
+                (g3c4-native-check status operation)))))))))
+
+(define (g3c4-p2g2-terminal-commit-private! generator input)
+  (g3c4-p2g2-terminal-commit-core-private! generator input #f))
+
+;;; Source-private diagnostic entry. A repair probe receives the authentic
+;;; call, pending record and first native nonzero status. It must release its
+;;; own held lease through the existing I1/A2 end API and return #t.
+(define (g3c4-p2g2-terminal-commit-repair-probed! generator input repair)
+  (if (not (procedure? repair))
+      (g3c4-fail 'invalid-argument
+                 'g3c4-p2g2-terminal-commit-repair-probed!
+                 "repair probe must be a procedure"))
+  (g3c4-p2g2-terminal-commit-core-private! generator input repair))

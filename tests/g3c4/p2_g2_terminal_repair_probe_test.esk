@@ -1,0 +1,166 @@
+;;; Compiled-gate candidate, not source-gate execution evidence. Link the
+;;; native sibling with --wrap=et_g3c4_private_p2g2_terminal_commit_v1.
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+(load "g3c4_t1_output_decode_extension.esk")
+(load "g3c4_output_envelope_extension.esk")
+(load "g3c4_p2g2_ownership_extension.esk")
+(load "g3c4_p2g2_protected_scope_extension.esk")
+(load "g3c4_p2g2_t1_prefix_coordinator_extension.esk")
+(load "g3c4_p2g2_terminal_extension.esk")
+(load "g3c4_p2g2_terminal_first_extension.esk")
+(load "g3c4_p2g2_terminal_prefix_extension.esk")
+(load "g3c4_p2g2_terminal_second_extension.esk")
+(load "g3c4_p2g2_terminal_text_preflight_extension.esk")
+(load "g3c4_p2g2_terminal_precommit_frame_extension.esk")
+(load "g3c4_p2g2_terminal_live_authority_extension.esk")
+(load "g3c4_p2g2_terminal_commit_extension.esk")
+
+(extern i64 terminal-repair-arm i64
+        :real et_g3c4_terminal_repair_probe_arm_v1)
+(extern i64 terminal-repair-pending ptr ptr
+        :real et_g3c4_terminal_repair_probe_pending_v1)
+(extern i64 terminal-repair-release
+        :real et_g3c4_terminal_repair_probe_release_v1)
+(extern i64 terminal-repair-done i64
+        :real et_g3c4_terminal_repair_probe_done_v1)
+(extern i64 terminal-repair-failstop-mode
+        :real et_g3c4_terminal_repair_probe_failstop_mode_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3-C4 terminal repair FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label thunk)
+  (check label
+    (guard (caught (#t (transformer-error? caught)))
+      (thunk) #f)))
+(define (config)
+  (list ':profile 'diagnostic-c4 ':sampling 'greedy
+        ':temperature-bits 1065353216 ':top-k 256
+        ':top-p-bits 1065353216 ':max-new-tokens 2
+        ':eos #f ':seed 7))
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define model (g3c4-model-create-seeded-internal 1729))
+(define input
+  (g3c4-p2g2-owned-input-create
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255))))
+
+(define (zero-case)
+  (let* ((generator (g3c4-generator-create-internal model tokenizer (config)))
+         (shell
+           (g3c4-p2g2-terminal-commit-repair-probed!
+             generator input
+             (lambda (call anchor first-status)
+               (display "G3-C4 terminal repair FAIL: callback after zero")
+               (newline) (exit 1)))))
+    (check "native zero skips diagnostic callback"
+           (g3c4-p2g2-terminal-output-entry-live shell 'test))
+    (check "zero-case generator closes"
+           (g3c4-generator-close-internal! generator))))
+
+(define (repair-case lease failed?)
+  (let* ((generator (g3c4-generator-create-internal model tokenizer (config)))
+         (mode (if (eq? lease 'ids) 1 2))
+         (calls 0) (pending #f) (output #f) (shell #f))
+    (check "arm genuine I1 or A2 lease" (= (terminal-repair-arm mode) 0))
+    (if failed?
+        (reject "failed repair is recoverable abort, never publication"
+          (lambda ()
+            (g3c4-p2g2-terminal-commit-repair-probed!
+              generator input
+              (lambda (call anchor first-status)
+                (set! calls (+ calls 1))
+                (set! pending anchor)
+                (set! output (vector-ref anchor 4))
+                (set! shell (vector-ref anchor 5))
+                (check "first native commit rejected with live pending owner"
+                       (and (not (= first-status 0))
+                            (eq? (g3c4-p2g2-terminal-pending-check
+                                   call anchor 'test) anchor)
+                            (eq? (vector-ref anchor 0) 'pending)
+                            (eq? (vector-ref output 2) 'pending)
+                            (= (terminal-repair-pending
+                                 (vector-ref (vector-ref anchor 2) 5)
+                                 (vector-ref output 3))
+                               0)))
+                (check "release held lease using native end API"
+                       (= (terminal-repair-release) 0))
+                #f))))
+        (set! shell
+          (g3c4-p2g2-terminal-commit-repair-probed!
+            generator input
+            (lambda (call anchor first-status)
+              (set! calls (+ calls 1))
+              (set! pending anchor)
+              (set! output (vector-ref anchor 4))
+              (check "held lease preserves pending before repair"
+                     (and (not (= first-status 0))
+                          (eq? (g3c4-p2g2-terminal-pending-check
+                                 call anchor 'test) anchor)
+                          (eq? (vector-ref anchor 0) 'pending)
+                          (eq? (vector-ref output 2) 'pending)
+                          (= (terminal-repair-pending
+                               (vector-ref (vector-ref anchor 2) 5)
+                               (vector-ref output 3))
+                             0)))
+              (check "release genuine held lease before retry"
+                     (= (terminal-repair-release) 0))
+              #t))))
+    (check "repair callback ran exactly once" (= calls 1))
+    (check "native attempt count and released lease"
+           (= (terminal-repair-done (if failed? 0 1)) 0))
+    (if failed?
+        (begin
+          (check "failed repair tombstones original pending output"
+                 (and (eq? (vector-ref pending 0) 'dead)
+                      (eq? (vector-ref output 2) 'dead)
+                      (null? (vector-ref
+                                g3c4-p2g2-terminal-pending-anchors 0))))
+          (reject "failed repair cannot appear as live publication"
+            (lambda ()
+              (g3c4-p2g2-terminal-output-entry-live shell 'test))))
+        (check "retry publishes only authenticated original shell"
+               (and (eq? (vector-ref output 0) shell)
+                    (eq? (g3c4-p2g2-terminal-output-entry-live shell 'test)
+                         output)
+                    (eq? (vector-ref pending 0) 'dead)
+                    (null? (vector-ref
+                              g3c4-p2g2-terminal-pending-anchors 0)))))
+    (check "generator closes after region"
+           (g3c4-generator-close-internal! generator))))
+
+(if (= (terminal-repair-failstop-mode) 1)
+    (let ((generator (g3c4-generator-create-internal model tokenizer (config))))
+      (check "arm held lease for fail-stop cut"
+             (= (terminal-repair-arm 1) 0))
+      (g3c4-p2g2-terminal-commit-repair-probed!
+        generator input
+        (lambda (call anchor first-status)
+          (check "failed repair sees untouched pending owner"
+                 (and (not (= first-status 0))
+                      (eq? (g3c4-p2g2-terminal-pending-check
+                             call anchor 'test) anchor)
+                      (= (terminal-repair-pending
+                           (vector-ref (vector-ref anchor 2) 5)
+                           (vector-ref (vector-ref anchor 4) 3)) 0)))
+          #f))
+      ;; The still-held genuine I1 lease must reject abort. The outer guard
+      ;; exits 134; reaching this line means rollback was falsely claimed.
+      (exit 1))
+    (begin
+      (zero-case)
+      (repair-case 'ids #f)
+      (repair-case 'cache #f)
+      (repair-case 'ids #t)
+      (check "owned input releases after all regions"
+             (generation-tensor-release-internal! input))
+      (display "G3-C4 terminal repair probe PASS: checks=")
+      (display checks)
+      (newline)))

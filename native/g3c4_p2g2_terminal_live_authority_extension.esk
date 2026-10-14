@@ -71,9 +71,11 @@
                   (vector-set! live 15 (+ count 2))
                   (set! bound? #t)
                   #t)
-                 ((eq? command 'check)
+                 ((or (eq? command 'check)
+                      (eq? command 'staged-check))
                   (and bound? nodes-bound? (eq? candidate live)
-                       (eq? (vector-ref live 0) 'live)
+                       (eq? (vector-ref live 0)
+                            (if (eq? command 'check) 'live 'unpublished))
                        (eq? (vector-ref live 1) output)
                        (eq? (vector-ref live 2) shell)
                        (eq? (vector-ref live 3) native)
@@ -137,6 +139,38 @@
         (g3c4-fail 'invalid-state operation
                    "terminal original owner changed before commit"))
     ((vector-ref live 10) 'bind frame)
+    live))
+
+;;; Recheck the still-unpublished original before any prezero repair and
+;;; after it. The closure authenticates the allocation-time text bytes/IDs;
+;;; the roots and frame fields authenticate their current owner.
+(define (g3c4-p2g2-terminal-live-recheck-prezero! call pending live frame)
+  (let ((operation 'g3c4-p2g2-terminal-live-recheck-prezero!))
+    (g3c4-p2g2-terminal-pending-check call pending operation)
+    (if (not (and (vector? live) (= (vector-length live) 16)
+                  (vector? frame) (= (vector-length frame) 31)
+                  (eq? (vector-ref frame 2) pending)
+                  (eq? (vector-ref live 1) (vector-ref frame 3))
+                  (eq? (vector-ref live 2) (vector-ref frame 4))
+                  (eq? (vector-ref live 3) (vector-ref frame 6))
+                  (eq? (vector-ref live 4) (vector-ref frame 27))
+                  (eq? (vector-ref live 5) (vector-ref frame 28))
+                  (eq? (vector-ref live 7) (vector-ref frame 12))
+                  (= (vector-ref live 6) (vector-ref frame 11))
+                  (eq? (vector-ref g3c4-p2g2-terminal-live-anchors 0)
+                       (vector-ref live 11))
+                  (eq? (vector-ref g3c4-p2g2-terminal-live-originals 0)
+                       (vector-ref live 12))
+                  (pair? (vector-ref live 13))
+                  (eq? (car (vector-ref live 13)) live)
+                  (eq? (cdr (vector-ref live 13)) (vector-ref live 11))
+                  (pair? (vector-ref live 14))
+                  (eq? (car (vector-ref live 14)) (vector-ref live 10))
+                  (eq? (cdr (vector-ref live 14)) (vector-ref live 12))
+                  (procedure? (vector-ref live 10))
+                  ((vector-ref live 10) 'staged-check live)))
+        (g3c4-fail 'invalid-state operation
+                   "terminal prezero original identity changed"))
     live))
 
 ;;; Only a detached private reader may call this after the coordinator has
