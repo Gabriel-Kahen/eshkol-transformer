@@ -2236,6 +2236,17 @@ The successor source recipe now validates the inherited runner role and pins
 the pass marker to all 15 fixture checks. Source-only negative tests cover
 missing or changed role and incorrect pass counts; runtime admission stays held
 on the allocator matrix and compiled/native evidence above.
+A [separate capsule allocator-prefix source candidate](../tests/tr3_handoff_capsule/README.md)
+now declares fresh-process object/all/promotion/target/handler sweeps, a native
+P1 live-owner census, exact post-publication release, fixed owner/native-bit
+preservation, and same-owner retry. Its strict manifest pins the accepted
+capsule production tree and the repaired production-OFF allocator source
+`de0b249`, with a source-only check of the exact `81298..de0b249` changed
+paths. This is **not runtime admission**: the historical repaired runner and
+archive bytes have been removed, the cross-source compiled pair and capsule
+ABI have not been independently reviewed, and no capsule allocator case has
+run. Reconstruct or repin a reviewed repaired runtime, compile and seal the
+five-class matrix, then obtain independent runtime review before admission.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),

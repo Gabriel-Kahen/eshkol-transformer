@@ -45,3 +45,43 @@ exactly one release. A provider outcome with uncertain custody must fail stop.
 The existing lease shim is pinned as a source starting point, not represented
 as a completed capsule allocator matrix. Eval transition, G3/O2 holds, C2
 claim, trainer release, receipt, SAVE, and replay are outside this candidate.
+
+## Separate capsule allocator-prefix source candidate
+
+`allocator_prefix_candidate.tsv` pins a distinct five-class matrix over the
+same accepted capsule production source. Its runner and archive identities
+come from the historical **production-OFF allocator repair** manifest at
+`de0b249`; they do not replace the inherited functional `81298` runner
+in `current_tree_candidate.tsv`. The source preflight compares exact runtime
+commit/tree and the complete `81298..de0b249` changed-path set, which is
+limited to backend allocator code generation, runtime closure allocation, and
+their tests. It also requires the capsule production directories to remain
+byte-identical to the accepted `3ea8f80` source basis.
+
+The fixture arms immediately inside an already installed guard, then calls
+`tr3-handoff-capture-internal!` on an enrolled idle/train owner. Each ordinal
+runs in a fresh process; `object`, `all`, `promotion`, and `target` sweep
+through the first unhit ordinal, and `handler` exhausts live guards before
+denying the exact handler allocation. Every hit checks original record/node
+and fixed owner identities, cursor/RNG/counters, native parameter/gradient/O2
+bits, cleared guard and slot 4, P1 live count and exact post-publication
+release, then retries and aborts on the same owner. A provider outcome with
+unaccounted native custody fails the case. The shell seals per-case output,
+symbol closure, compiler inputs, and SHA256SUMS.
+
+Source-only preflight:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/prepare-tr3-handoff-capsule-allocator-gate.py --verify-only
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v tests.tr3_handoff_capsule.test_allocator_prefix_source
+bash -n scripts/test-tr3-handoff-capsule-allocator-gate.sh
+```
+
+This is an **unadmitted source recipe**. The historical `de0b249` runner
+and archive were removed from its evidence root
+(`GENERATED_ARTIFACTS_REMOVED.md`); their hashes remain in the historical
+manifest. A reviewed reconstruction of those exact bytes or a new pinned
+runtime build, source/ABI review of the resulting functional-plus-allocator
+pair, exact symbol closure, a bounded compiled five-class run, and
+independent runtime evidence review are required before this matrix can be
+admitted. No unavailable class or ordinal is counted as a pass.

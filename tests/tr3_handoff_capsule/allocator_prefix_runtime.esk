@@ -1,0 +1,271 @@
+;;; Held private runtime candidate. No public facade or original-epoch claim.
+(load "tr3_c_handoff_capsule_root.esk")
+
+(define checks 0)
+(define (check label ok)
+  (if ok (set! checks (+ checks 1))
+      (begin (display "TR3 HANDOFF FAIL: ") (display label)
+             (newline) (exit 1))))
+(define (rejects? category operation thunk)
+  (guard (caught
+           (#t (and (transformer-error? caught)
+                    (eq? category (transformer-error-category caught))
+                    (eq? operation (transformer-error-operation caught)))))
+    (thunk) #f))
+(define (resolved-config)
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define (dataset-config directory)
+  (list ':directory directory ':batch-size 1 ':sequence-length 2
+        ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 4 ':maximum-batch-bytes 34
+        ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #t))
+(define (handle-paths handles)
+  (let loop ((i 0))
+    (if (= i (vector-length handles)) '()
+        (cons (parameter-handle-path (vector-ref handles i))
+              (loop (+ i 1))))))
+(define (optimizer-config handles)
+  (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+        '(none) '(constant)
+        (list (list 'group (handle-paths handles)
+                    "3dcccccd" "3f000000" "3f000000"
+                    "3a83126f" "00000000"))))
+(define corpus-directory (car (cdr (command-line))))
+(define resolved (resolved-config))
+(define tokenizer (t2-wave2-tokenizer-byte resolved))
+(define dataset (d2-token-dataset-open
+                  (dataset-config corpus-directory) tokenizer))
+(define model (m3t-public-model-create
+                resolved (m3t-public-initializer-state 1729)))
+(define handles (vector-ref (m3t-entry model 'model 'trainer-create #t) 8))
+(define optimizer (o2-public-optimizer-create
+                    (optimizer-config handles) (module-parameters model)))
+(define trainer (tr3-lease-create-internal
+                  resolved tokenizer dataset model optimizer))
+(define record (tr3-lease-record-for-shell-internal
+                 trainer tr3-handoff-operation))
+(define original-cursor (d2-token-dataset-cursor dataset))
+(define (idle?)
+  (and (eq? (vector-ref record 3) 'idle)
+       (not (vector-ref record 4))
+       (not tr3-handoff-capture-active?)))
+
+(extern i64 ca-object-arm i64 :real et_tr3_ca_object_arm_v1)
+(extern i64 ca-all-arm i64 :real et_tr3_ca_all_arm_v1)
+(extern i64 ca-promotion-arm i64 :real et_tr3_ca_promotion_arm_v1)
+(extern i64 ca-target-arm i64 :real et_tr3_ca_target_arm_v1)
+(extern i64 ca-handler-prepare :real et_tr3_ca_handler_prepare_v1)
+(extern i64 ca-handler-fresh :real et_tr3_ca_handler_fresh_v1)
+(extern i64 ca-handler-arm :real et_tr3_ca_handler_arm_v1)
+(extern i64 ca-finish i64 :real et_tr3_ca_finish_v1)
+(extern i64 ca-done :real et_tr3_ca_done_v1)
+(extern i64 ca-snapshot-begin :real et_tr3_ca_snapshot_begin_v1)
+(extern i64 ca-snapshot-parameter i64 ptr
+        :real et_tr3_ca_snapshot_parameter_v1)
+(extern i64 ca-snapshot-optimizer ptr
+        :real et_tr3_ca_snapshot_optimizer_v1)
+(extern i64 ca-verify-parameter i64 ptr
+        :real et_tr3_ca_verify_parameter_v1)
+(extern i64 ca-verify-optimizer ptr
+        :real et_tr3_ca_verify_optimizer_v1)
+(extern i64 p1-live-count :real et_p1_test_live_entry_count_v1)
+
+(define (same-vector? a b n)
+  (and (vector? a) (= (vector-length a) n)
+       (let loop ((i 0))
+         (if (= i n) #t
+             (and (eq? (vector-ref a i) (vector-ref b i))
+                  (loop (+ i 1)))))))
+(define (native-snapshot!)
+  (check "native snapshot begins" (= (ca-snapshot-begin) 1))
+  (let loop ((i 0))
+    (if (= i 14) #t
+        (let ((carrier (parameter-handle-tensor-internal
+                         (vector-ref handles i))))
+          (check "native parameter snapshot"
+                 (= (ca-snapshot-parameter i (vector-ref carrier 2)) 1))
+          (loop (+ i 1)))))
+  (check "native optimizer snapshot"
+         (= (ca-snapshot-optimizer
+              (vector-ref (o2-require-optimizer
+                            'trainer-create optimizer) 1)) 1)))
+(define (native-verify!)
+  (let loop ((i 0))
+    (if (= i 14) #t
+        (let ((carrier (parameter-handle-tensor-internal
+                         (vector-ref handles i))))
+          (check "native parameter bits and gradients unchanged"
+                 (= (ca-verify-parameter i (vector-ref carrier 2)) 1))
+          (loop (+ i 1)))))
+  (check "native optimizer moments and counter unchanged"
+         (= (ca-verify-optimizer
+              (vector-ref (o2-require-optimizer
+                            'trainer-create optimizer) 1)) 1)))
+(define (arm-class! name ordinal)
+  (cond ((string=? name "object") (ca-object-arm ordinal))
+        ((string=? name "all") (ca-all-arm ordinal))
+        ((string=? name "promotion") (ca-promotion-arm ordinal))
+        ((string=? name "target") (ca-target-arm ordinal))
+        (else (exit 83))))
+
+;;; Instrument only the test-visible P1 return and release. The native P1
+;;; identity census below also catches a provider outcome with hidden custody.
+(define original-p1-call tr3-c-snapshot-p1-call)
+(define original-p1-release tr3-c-snapshot-p1-release!)
+(define published #f)
+(define publications 0)
+(define releases 0)
+(set! tr3-c-snapshot-p1-call
+  (lambda (module)
+    (let ((owner (original-p1-call module)))
+      (if published (exit 87))
+      (set! published owner)
+      (set! publications (+ publications 1))
+      owner)))
+(set! tr3-c-snapshot-p1-release!
+  (lambda (owner)
+    (if (not (eq? owner published)) (exit 88))
+    (set! releases (+ releases 1))
+    (original-p1-release owner)))
+
+(define original-node (tr3-handoff-node record))
+(define original-head (vector-ref tr3-trainers 0))
+(define original-cursor (d2-token-dataset-cursor dataset))
+(define original-epoch (bytevector-copy
+                         (vector-ref record 17) 0
+                         (bytevector-length (vector-ref record 17))))
+(define original-rng (vector-copy (vector-ref record 18)))
+(define original-counters (vector (vector-ref record 19)
+                                  (vector-ref record 20)
+                                  (vector-ref record 21)))
+(define original-modules (vector-copy (vector-ref record 10)))
+(define original-handles (vector-copy (vector-ref record 11)))
+(define original-carriers (vector-copy (vector-ref record 12)))
+(define original-token (vector-ref record 5))
+(define original-config (vector-ref record 6))
+(define original-o2-record (vector-ref record 14))
+(define original-d2-record (vector-ref record 16))
+(define original-o2-native (vector-ref original-o2-record 1))
+(define original-d2-native (vector-ref original-d2-record 1))
+(define original-t2-witness (vector-ref record 22))
+(define original-t2-core (vector-ref original-t2-witness 4))
+(define original-model-frame (vector-ref (m3t-entry model 'model 'trainer-create #t) 10))
+(define original-live (p1-live-count))
+(native-snapshot!)
+(check "enrolled original owner starts idle and train"
+       (and (idle?) (eq? (module-mode-internal model) 'train)
+            (eq? (car original-node) record)
+            (= (vector-length handles) 14)))
+(define (verify-failure!)
+  (check "same enrolled trainer and node"
+         (and (eq? (tr3-handoff-node record) original-node)
+              (eq? (vector-ref tr3-trainers 0) original-head)
+              (eq? (vector-ref record 2) trainer)))
+  (check "idle train, guard clear, slot four and staging empty"
+         (and (idle?) (eq? (module-mode-internal model) 'train)
+              (not tr3-acquisition-active?)
+              (not tr3-lease-unenroll-active?)
+              (not (vector-ref tr3-trainers 1))))
+  (check "fixed native and registry owner identities"
+         (and (same-vector? (vector-ref record 10) original-modules 17)
+              (same-vector? (vector-ref record 11) original-handles 14)
+              (same-vector? (vector-ref record 12) original-carriers 14)
+              (eq? (vector-ref record 8) model)
+              (eq? (vector-ref record 13) optimizer)
+              (eq? (vector-ref record 15) dataset)
+              (eq? (vector-ref record 7) tokenizer)
+              (eq? (vector-ref record 5) original-token)
+              (eq? (vector-ref record 6) original-config)
+              (eq? (vector-ref record 14) original-o2-record)
+              (eq? (vector-ref record 16) original-d2-record)
+              (eq? (vector-ref (vector-ref record 14) 1)
+                   original-o2-native)
+              (eq? (vector-ref (vector-ref record 16) 1)
+                   original-d2-native)
+              (eq? (vector-ref record 22) original-t2-witness)
+              (eq? (vector-ref (vector-ref record 22) 4)
+                   original-t2-core)
+              (eq? (vector-ref (m3t-entry model 'model
+                                           'trainer-create #t) 10)
+                   original-model-frame)))
+  (check "cursor, epoch, RNG and counters unchanged"
+         (and (equal? (d2-token-dataset-cursor dataset) original-cursor)
+              (equal? (vector-ref record 17) original-epoch)
+              (equal? (vector-ref record 18) original-rng)
+              (= (vector-ref record 19) (vector-ref original-counters 0))
+              (= (vector-ref record 20) (vector-ref original-counters 1))
+              (= (vector-ref record 21) (vector-ref original-counters 2))))
+  (check "post-P1 release exactly once, no detached live owner"
+         (and (= publications releases)
+              (<= publications 1)
+              (= (p1-live-count) original-live)))
+  (native-verify!))
+(define (retry!)
+  (let ((capsule (tr3-handoff-capture-internal! trainer tokenizer)))
+    (check "same-owner retry enrolls capsule"
+           (and (eq? (vector-ref record 4) capsule)
+                (eq? (vector-ref capsule 2) record)
+                (eq? (vector-ref capsule 4) original-node)
+                (eq? (vector-ref record 3) 'handoff)
+                (= (p1-live-count) (+ original-live 1))))
+    (check "same-owner abort restores idle and P1 live count"
+           (and (tr3-handoff-abort-before-eval-internal! record capsule)
+                (idle?) (= (p1-live-count) original-live)))
+    (native-verify!)))
+(define (finish-case caught)
+  (let ((hit (= (ca-finish (if caught 1 0)) 1)))
+    (if hit
+        (begin
+          (check "injected allocator fault was caught" caught)
+          (verify-failure!)
+          (retry!))
+        (begin
+          (check "first unhit ordinal captured" (not caught))
+          (check "unhit abort restores idle"
+                 (and (vector-ref record 4)
+                      (tr3-handoff-abort-before-eval-internal!
+                        record (vector-ref record 4))
+                      (idle?) (= (p1-live-count) original-live)))))
+    (check "isolated case completes" (= (ca-done) 1))
+    hit))
+
+(define args (cdr (cdr (command-line))))
+(define class (car args))
+(define ordinal (if (null? (cdr args)) 0
+                    (string->number (car (cdr args)))))
+(define (handler-scope depth)
+  (guard (caught
+           (#t (check "handler allocator fault caught"
+                      (= (ca-finish 1) 1))
+               #t))
+    (if (= (ca-handler-fresh) 0)
+        (if (< depth 512)
+            (+ 1 (handler-scope (+ depth 1)))
+            (exit 82))
+        (begin
+          (ca-handler-arm)
+          (tr3-handoff-capture-internal! trainer tokenizer)
+          #f))))
+(if (string=? class "handler")
+    (begin
+      (check "handler preparation begins" (= (ca-handler-prepare) 1))
+      (check "handler allocator fault caught" (handler-scope 0))
+      (verify-failure!)
+      (retry!)
+      (check "isolated handler case completes" (= (ca-done) 1))
+      (display "TR3-CAPSULE-ALLOCATOR-CASE class=handler ordinal=0 result=HIT checks=")
+      (display checks) (newline))
+    (let* ((caught
+             (guard (value (#t value))
+               (arm-class! class ordinal)
+               (tr3-handoff-capture-internal! trainer tokenizer)
+               #f))
+           (hit (finish-case caught)))
+      (display "TR3-CAPSULE-ALLOCATOR-CASE class=")
+      (display class)
+      (display " ordinal=") (display ordinal)
+      (display " result=") (display (if hit "HIT" "END"))
+      (display " checks=") (display checks) (newline)))
