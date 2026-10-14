@@ -1125,6 +1125,11 @@ The remaining M2 mutants and full E3 §9 admission matrix remain open;
 installed/public E3 behavior and GPU execution are not established. This
 current-main source/docs union still needs independent review and hosted
 exact-head validation before integration.
+The 7eeaa03 current-main M2 union added the padded-position test selector to
+`scripts/build-e1b-consumer.sh`, changing its source bytes. Hosted model
+composition failed only the M3CG predecessor checksum. This bounded successor
+repins that one script hash; independent review and fresh hosted exact-head
+validation remain required before integration.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each
