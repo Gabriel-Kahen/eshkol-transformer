@@ -984,6 +984,11 @@ The exact `842c98c2` source-symbol audit records which D2/P1/I2/K1/frame
 controls are test-only, persistent, setup-only or genuinely preinvoke, and
 specifies the canonical-package negatives for a later noninstalled tuple.
 It adds no fault selector or §9 acceptance evidence.
+The [R1/R2 selector topology](e3/E3_R1_SELECTOR_TOPOLOGY.md) now fixes the
+entered-call ownership boundary, one-shot per-frame selector rules, exact
+noninstalled tuple requirements, and the first bounded forward-role preinvoke
+slice. It is source-only: the selector, tuple, compiled failure/retry matrix
+and resource verdicts remain open.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
