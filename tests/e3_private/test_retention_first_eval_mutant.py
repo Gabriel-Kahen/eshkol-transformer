@@ -66,8 +66,9 @@ class FirstEvaluationMutantTuple(unittest.TestCase):
                 self.assertNotEqual(transform(base), mutant.replace(missing, "removed", 1))
 
     def test_normal_inputs_unchanged_and_manifests_exact(self) -> None:
+        # Pin the main94 union with its separate numerical and fault guards.
         self.assertEqual(sha(ROOT / "src/eshkol_transformer/e3_frame.c"),
-                         "547386a6ee2b13870a226c8020088ba8363872b0caeb8ad044e91bbdc28ca3ef")
+                         "5c605c0ebc41a83dcd70814d1a2572cf29b4e6086534afe47ebbb193cd7d5656")
         digest = hashlib.sha256()
         originals = sorted(PRIVATE.glob("retention_package_*.txt"))
         self.assertEqual(len(originals), 11)
