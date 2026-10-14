@@ -1049,7 +1049,8 @@ exited 0: genuine three-batch normal,
 repeat, poison and ASan/UBSan runs matched the frozen compiled CE words, and
 all four mutant runs first diverged at the third-batch numerator and rejected
 without publishing a transcript. The other M2 numerical mutants and the full
-E3 §9 acceptance matrix remain open; no source merge or GPU claim follows.
+E3 §9 acceptance matrix remain open; this result does not establish installed
+or public E3 behavior or GPU execution.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each

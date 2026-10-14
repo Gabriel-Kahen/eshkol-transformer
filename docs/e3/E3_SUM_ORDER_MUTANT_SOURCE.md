@@ -41,5 +41,5 @@ without publishing a transcript. The independent compiled RESULT review at
 (SHA-256 `a58151c84401527909d63b2fb6f2d3cf5c4fc86b28c9008883e24b835fd5a26f`)
 accepts this exact noninstalled M2 sum-order subgate only. The earlier df9546 C
 failure remains preserved. Other M2 numerical mutants and the complete E3 §9
-matrix remain open; the source is not merged or installed, and no GPU result is
-claimed.
+matrix remain open; this result does not establish installed or public E3
+behavior or GPU execution.
