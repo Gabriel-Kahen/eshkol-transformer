@@ -457,7 +457,8 @@
 (define c2-save-borrow-begin-internal
   c2-training-state-borrow-begin-internal)
 
-(define (c2-save-with-owner-borrow state limits subpolicy build publish)
+(define (c2-save-with-owner-borrow
+          state limits subpolicy build publish max-image-bytes)
   ;; Allocate cleanup authority and install the handler before borrow-begin can
   ;; publish owner busy. Slot 0 receives only the exact canonical borrow returned
   ;; after promotion: [borrow-or-#f, borrow-ended?, failed?, caught-value].
@@ -544,6 +545,15 @@
                                             limits subpolicy)))
                               (c2-save-measure-staged-internal
                                 staged limits))))
+                        ;; A detached receipt has a tighter private image cap.
+                        ;; Reject it before allocating the destination or
+                        ;; entering the encode pass.
+                        (_size-admitted
+                          (if (and max-image-bytes
+                                   (> file-bytes max-image-bytes))
+                              (c2-save-fail
+                                'invalid-state
+                                "C2 image exceeds the receipt limit" '() #f)))
                         ;; The destination belongs to the parent scratch. A
                         ;; child encode may mutate its raw bytes, but cannot
                         ;; store an arena pointer in the bytevector.
@@ -571,7 +581,7 @@
                    (c2-training-state-borrow-end-internal
                      (vector-ref transaction 0))
                    (vector-set! transaction 1 #t)
-                   (publish destination))))))))))
+                   (publish destination file-bytes))))))))))
     ;; Build/region exceptions, including #f, arrive with an active borrow.
     ;; Writer exceptions arrive after borrow-ended was set and must not cause a
     ;; second end attempt.
@@ -603,7 +613,8 @@
               (c2-save-with-owner-borrow
                 state limits (c2-save-effective-model-policy limits subpolicy)
                 c2-save-stage-components-internal
-                (lambda (bytes)
+                (lambda (bytes _measured-bytes)
                   (c2-save-publish-internal
-                    path bytes (if (vector-ref parsed-options 0) 1 0))))))
+                    path bytes (if (vector-ref parsed-options 0) 1 0)))
+                #f)))
         result))))

@@ -1,0 +1,78 @@
+;;; Source-private original-owner identity and bounded C2 control binding.
+;;; Load after G3-T, G3-R snapshot, O2, C2 and the joint-issued adopter. This
+;;; file does not make trainer RNG, D2 cursors or counters original-owner facts.
+(extern i64 g3r-joint-original-owner-match ptr ptr ptr ptr
+        :real et_g3r_joint_hold_owner_match_v1)
+
+(define g3r-joint-original-binding-tag
+  (vector 'g3r-joint-original-binding-v1))
+
+;;; Binding: tag, generator shell/entry, model shell/entry, T1 tokenizer,
+;;; optimizer shell/record, joint O2 ledger, copied C2 controls.
+(define (g3r-joint-original-binding-check!
+          generator model tokenizer optimizer-value o2-ledger controls)
+  (let* ((operation 'g3r-joint-original-binding-check!)
+         (generator-entry (g3t-generator-find generator operation))
+         (model-entry (g3t-model-entry-live model operation #f))
+         (optimizer-record (o2-require-optimizer operation optimizer-value))
+         (joint (vector-ref (g3r-joint-o2-check o2-ledger operation) 1))
+         (copied (c2-training-state-controls-copy operation controls)))
+    (if (or (not (vector? generator-entry))
+            (not (= (vector-length generator-entry) 12))
+            (not (eq? (vector-ref generator-entry 0) generator))
+            (not (eq? (vector-ref generator-entry 1) 'generator))
+            (not (eq? (vector-ref generator-entry 2) 'live))
+            (null? (vector-ref generator-entry 3))
+            (not (eq? (vector-ref generator-entry 4) #f))
+            (not (eq? (vector-ref generator-entry 8) #f))
+            (not (eq? (vector-ref generator-entry 9) #f))
+            (not (eq? (vector-ref generator-entry 10) #f))
+            (not (eq? (vector-ref generator-entry 11) 'diagnostic-c2))
+            (not (eq? (vector-ref generator-entry 5) model-entry))
+            (not (eq? (vector-ref generator-entry 6) tokenizer))
+            (not (g3r-save-tokenizer? tokenizer))
+            (not (eq? (vector-ref o2-ledger 2) optimizer-value))
+            (not (eq? (vector-ref o2-ledger 3)
+                      (vector-ref optimizer-record 1)))
+            (not (eq? (vector-ref o2-ledger 8) 'enrolled)))
+        (g3t-fail-raw 'invalid-state operation 2
+                      "registered original owner or T1 root changed"))
+    (if (not (= 0 (g3r-joint-original-owner-match
+                    joint (vector-ref generator-entry 3)
+                    (vector-ref model-entry 3)
+                    (vector-ref optimizer-record 1))))
+        (g3r-joint-o2-native-fail operation))
+    ;; T1 and TR3's T2 shell are distinct identities. Only the authenticated
+    ;; raw T1 fingerprint/vocabulary may be compared with C2 control values.
+    (let ((token-control (vector-ref copied 1))
+          (resolved (vector-ref copied 3))
+          (model-config (vector-ref model-entry 7)))
+      (if (or (not (string=? (vector-ref token-control 0)
+                             g3r-save-tokenizer-fingerprint))
+              (not (= (vector-ref token-control 1) 256))
+              (not (vector? model-config))
+              (not (= (vector-length model-config) 2))
+              (not (string? (vector-ref model-config 0)))
+              (not (string? (vector-ref model-config 1)))
+              (not (equal? (vector-ref resolved 0)
+                           (string->utf8 (vector-ref model-config 0))))
+              (not (string=? (vector-ref resolved 1)
+                             (vector-ref model-config 1))))
+          (g3t-fail-raw 'invalid-state operation 2
+                        "C2 tokenizer or X1 config differs from original")))
+    (vector g3r-joint-original-binding-tag generator generator-entry
+            model model-entry tokenizer optimizer-value optimizer-record
+            o2-ledger copied)))
+
+(define (g3r-joint-c2-original-bound-claim!
+          generator model tokenizer optimizer-value o2-ledger p1 controls)
+  (let ((binding
+          (g3r-joint-original-binding-check!
+            generator model tokenizer optimizer-value o2-ledger controls)))
+    ;; The joint hold keeps native G3/M3/A2 and O2 originals fixed through
+    ;; this call. The returned pair roots the preclaim Scheme binding and the
+    ;; C2 transfer result. Neither authorizes receipt publication.
+    (let ((result (vector binding #f)))
+      (vector-set! result 1
+        (g3r-joint-c2-claim! o2-ledger p1 (vector-ref binding 9)))
+      result)))

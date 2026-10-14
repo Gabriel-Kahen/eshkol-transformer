@@ -26,7 +26,7 @@ observed prefix counts, and fails if an ordinal is silently skipped. The handler
 failure and post-staging census each run in their own process as well.
 
 The successor gate accepts only `--allocation-class all`. It binds the approved
-22-slot lease source and failure fixture to a separate production-OFF
+lease source and failure fixture to a separate production-OFF
 `de0b249` runner and archive. Their paths, hashes, clean source commit/tree,
 root/build provenance, CMake profile, artifact manifest, container digest, and
 LLVM version are recorded in `failure_runtime_candidate.tsv` and checked before
@@ -42,7 +42,7 @@ It proves the 1024/8192 functional horizons,
 while this witness proves allocation-prefix rollback and successful retry.
 
 The successor fixture additionally verifies that each successful retry owns a
-22-slot idle record whose epoch-start cursor equals the pre-enrollment cursor,
+23-slot idle record whose epoch-start cursor equals the pre-enrollment cursor,
 whose RNG is `(philox4x32-10, 1, 1729, 0, 0)`, and whose T/U/E counters are zero.
 The O2 diagnostic-only mode exists solely to capture the new compiler warning
 bytes for review. A full O2 matrix refuses to start until the reviewed byte

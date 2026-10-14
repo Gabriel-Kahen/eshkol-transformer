@@ -1,0 +1,197 @@
+;;; Source-private bridge from a registered joint G3/O2 hold to one enrolled
+;;; Scheme O2 state. Load after O2 and g3r_held_o2_adopter_extension.esk in a
+;;; future feature-local aggregate; no C2 claim or public facade is defined.
+(extern i64 g3r-joint-o2-optimizer-match ptr ptr
+        :real et_g3r_joint_hold_optimizer_match_v1)
+(extern ptr g3r-joint-o2-issue ptr
+        :real et_g3r_joint_hold_issue_v1)
+(extern i64 g3r-joint-o2-issued-match ptr ptr
+        :real et_g3r_joint_hold_issued_match_v1)
+(extern i64 g3r-joint-o2-release-issued ptr
+        :real et_g3r_joint_hold_release_issued_v1)
+(extern i64 g3r-joint-o2-end ptr
+        :real et_g3r_joint_hold_end_v1)
+(extern i64 g3r-joint-o2-lifecycle ptr
+        :real et_g3r_joint_hold_lifecycle_v1)
+(extern i64 g3r-joint-o2-last-domain
+        :real et_g3r_joint_hold_last_domain_v1)
+(extern i64 g3r-joint-o2-last-category
+        :real et_g3r_joint_hold_last_category_v1)
+(extern i64 g3r-joint-o2-last-code
+        :real et_g3r_joint_hold_last_code_v1)
+
+(define g3r-joint-o2-adopter-tag (vector 'g3r-joint-o2-adopter-v1))
+
+;;; Ledger: tag, joint hold, registered optimizer shell, exact native
+;;; optimizer, pointer cell, state shell, state record, registry cons, phase,
+;;; and a preallocated first-error triple. The source caller retains this
+;;; ledger and owns the original holds until drain or future C2 transfer.
+(define (g3r-joint-o2-record-error! ledger)
+  (let ((first (vector-ref ledger 9)))
+    (if (= (vector-ref first 0) 0)
+        (begin
+          (vector-set! first 0 (g3r-joint-o2-last-domain))
+          (vector-set! first 1 (g3r-joint-o2-last-category))
+          (vector-set! first 2 (g3r-joint-o2-last-code))))))
+
+(define (g3r-joint-o2-fail operation domain category)
+  (o2-fail
+    (cond
+      ((= domain 3)
+       (cond ((= category 1) 'invalid-argument)
+             ((= category 2) 'shape-mismatch)
+             ((= category 3) 'dtype-mismatch)
+             ((= category 4) 'device-mismatch)
+             ((= category 5) 'noncontiguous)
+             ((= category 6) 'unsupported)
+             ((= category 7) 'invalid-state)
+             ((= category 8) 'version-mismatch)
+             ((= category 10) 'corrupt-data)
+             (else 'internal)))
+      ((= domain 2)
+       (cond ((= category 1) 'invalid-argument)
+             ((= category 2) 'invalid-state)
+             ((= category 3) 'shape-mismatch)
+             ((= category 4) 'unsupported)
+             (else 'internal)))
+      (else 'internal))
+    operation "joint G3/O2 original-owner operation failed"))
+
+(define (g3r-joint-o2-native-fail operation)
+  (g3r-joint-o2-fail operation
+                     (g3r-joint-o2-last-domain)
+                     (g3r-joint-o2-last-category)))
+
+(define (g3r-joint-o2-consume! ledger)
+  (vector-set! (vector-ref ledger 4) 0 #f)
+  (let ((state (vector-ref ledger 6)))
+    (vector-set! state 1 'released)
+    (vector-set! state 2 'released)
+    (vector-set! state 3 'released)
+    (vector-set! state 4 'released)
+    (vector-set! state 6 'dead))
+  (vector-set! ledger 8 'dead)
+  #t)
+
+(define (g3r-joint-o2-check ledger operation)
+  (if (or (not (vector? ledger)) (not (= (vector-length ledger) 10))
+          (not (eq? (vector-ref ledger 0) g3r-joint-o2-adopter-tag)))
+      (o2-fail 'invalid-argument operation "expected exact joint O2 ledger"))
+  (let ((optimizer
+          (o2-require-optimizer operation (vector-ref ledger 2))))
+    (if (or (not (eq? (vector-ref optimizer 1) (vector-ref ledger 3)))
+            (not (eq? (vector-ref (vector-ref ledger 6) 0)
+                      (vector-ref ledger 5))))
+        (o2-fail 'invalid-state operation
+                 "joint O2 ledger differs from registered optimizer")))
+  ledger)
+
+(define (g3r-joint-o2-adopt! joint optimizer-value)
+  (let* ((operation 'g3r-joint-o2-adopt!)
+         (optimizer (o2-require-optimizer operation optimizer-value))
+         (native-optimizer (vector-ref optimizer 1)))
+    (if (not (= 0 (g3r-joint-o2-optimizer-match joint native-optimizer)))
+        (g3r-joint-o2-native-fail operation))
+    (let ((completed (o2-native-optimizer-completed-updates native-optimizer)))
+      (if (< completed 0) (o2-native-fail operation))
+      (o2-state-projection-budget!
+        operation (vector-ref optimizer 2) (vector-ref optimizer 3)
+        (vector-ref optimizer 4) (vector-ref optimizer 5))
+      ;; Every Scheme allocation and cleanup handler precedes joint issue.
+      (let* ((shell (o2-make-identity "transformer.optimizer-state:v1"))
+             (state
+               (vector shell #f
+                       (o2-copy-config-data operation (vector-ref optimizer 2))
+                       (o2-copy-paths (vector-ref optimizer 3))
+                       (o2-copy-aliases (vector-ref optimizer 4))
+                       completed 'constructing #f))
+             (enrollment (cons state o2-states))
+             (pointer (vector #f))
+             (failure (vector 0 0 0))
+             (ledger
+               (vector g3r-joint-o2-adopter-tag joint optimizer-value
+                       native-optimizer pointer shell state enrollment
+                       'prepared failure)))
+        (if (not (= 0 (g3r-joint-o2-optimizer-match joint native-optimizer)))
+            (g3r-joint-o2-native-fail operation))
+        (guard (caught
+                 (#t
+                   (if (or (eq? (vector-ref ledger 8) 'issued)
+                           (eq? (vector-ref ledger 8) 'enrolled))
+                       (let ((exact (vector-ref pointer 0)))
+                         (if (or (not exact)
+                                 (not (eq? exact (vector-ref state 1))))
+                             (g3r-held-o2-fail-stop))
+                         ;; Native release inspects LIVE/DEAD itself. A proved
+                         ;; LIVE failure gets one retry; uncertainty stops.
+                         (let ((status (g3r-joint-o2-release-issued joint)))
+                           (if (= status -1)
+                               (set! status
+                                 (g3r-joint-o2-release-issued joint)))
+                           (if (or (= status 0) (= status -2))
+                               (g3r-joint-o2-consume! ledger)
+                               (g3r-held-o2-fail-stop)))))
+                   ;; Caller retains the original holds and first error.
+                   (raise caught)))
+          (let ((issued (g3r-joint-o2-issue joint)))
+            (if (null? issued) (g3r-joint-o2-native-fail operation))
+            (vector-set! pointer 0 issued)
+            (vector-set! state 1 issued)
+            (vector-set! ledger 8 'issued)
+            (if (or (not (= 0 (g3r-joint-o2-optimizer-match
+                                joint native-optimizer)))
+                    (not (= 0 (g3r-joint-o2-issued-match joint issued))))
+                (g3r-joint-o2-native-fail operation))
+            (vector-set! state 6 'live)
+            (set! o2-states enrollment)
+            (vector-set! ledger 8 'enrolled)
+            ledger))))))
+
+;;; Preclaim drain consumes the joint-issued state before reversing O2 then
+;;; G3 holds. Native end refuses a still-owned issued pointer. The first typed
+;;; release defect is retained through end and reported after both holds drain.
+(define (g3r-joint-o2-drain-preclaim! ledger)
+  (let ((operation 'g3r-joint-o2-drain-preclaim!))
+    (g3r-joint-o2-check ledger operation)
+    (if (eq? (vector-ref ledger 8) 'drained)
+        #t
+        (begin
+          (if (not (or (eq? (vector-ref ledger 8) 'issued)
+                       (eq? (vector-ref ledger 8) 'enrolled)
+                       (eq? (vector-ref ledger 8) 'dead)))
+              (o2-fail 'invalid-state operation
+                       "joint O2 ledger has no preclaim drain authority"))
+          ;; A copied or stale ledger joint must never be considered drained.
+          ;; This query binds the exact joint to the registered Scheme optimizer
+          ;; before any native release or hold-end action.
+          (if (not (= 0 (g3r-joint-o2-optimizer-match
+                          (vector-ref ledger 1) (vector-ref ledger 3))))
+              (g3r-held-o2-fail-stop))
+          (if (not (eq? (vector-ref ledger 8) 'dead))
+              (let ((exact (vector-ref (vector-ref ledger 4) 0)))
+                (if (or (not exact)
+                        (not (eq? exact (vector-ref (vector-ref ledger 6) 1))))
+                    (g3r-held-o2-fail-stop))
+                (let ((status
+                        (g3r-joint-o2-release-issued (vector-ref ledger 1))))
+                  (if (not (= status 0))
+                      (g3r-joint-o2-record-error! ledger))
+                  (if (= status -1)
+                      (set! status
+                        (g3r-joint-o2-release-issued (vector-ref ledger 1))))
+                  (if (or (= status 0) (= status -2))
+                      (g3r-joint-o2-consume! ledger)
+                      (g3r-held-o2-fail-stop)))))
+          (if (not (= 0 (g3r-joint-o2-end (vector-ref ledger 1))))
+              (g3r-joint-o2-record-error! ledger))
+          ;; End can report a post-drain defect or reject before draining. Only
+          ;; the exact registered DEAD lifecycle proves both holds retired.
+          (if (not (= 2 (g3r-joint-o2-lifecycle (vector-ref ledger 1))))
+              (g3r-held-o2-fail-stop))
+          (vector-set! ledger 8 'drained)
+          (let ((first (vector-ref ledger 9)))
+            (if (not (= (vector-ref first 0) 0))
+                (g3r-joint-o2-fail operation
+                                   (vector-ref first 0)
+                                   (vector-ref first 1))))
+          #t))))

@@ -2086,7 +2086,136 @@ sanitizer profiles; this closes only the private snapshot prerequisite. No SAVE 
 file-pair publication, restore, replay or resumed continuation is provided.
 
 The reviewed [current-history held SAVE proposal](g3/G3_R_CURRENT_HISTORY_HELD_SAVE_CONTRACT.md)
-now accompanies merged main. Its first bounded native prerequisite,
+now accompanies merged main.
+[The detached C2 SAVE image/SHA receipt source leaf](../native/c2_save_image_receipt_root.esk)
+is being developed on `codex/c2-save-image-sha-receipt-bd813`. It adds a
+feature-private immutable image owner and receipt wrapper. The shared SAVE
+borrow helper now accepts an optional measured-image cap; its existing public
+caller passes `#f`, while the receipt rejects images over 16 MiB before
+destination allocation. Native and static source checks pass locally. Compiled
+Eshkol behavior, independent review, CI and same-owner G3/M3/O2 pairing remain
+open gates; this leaf does not admit SAVE replay or continuation.
+The isolated `codex/c2-save-image-receipt-compiled-gate-20261013` follow-up
+prepares a deterministic compiled Eshkol driver for public SAVE compatibility,
+held-owner rejection, measured-cap order, malformed backing, post-adopt cleanup,
+digest/file parity, writer failure status and repeated release. Its source-only
+syntax/static gate passes; the pinned compiled normal/repeat/fail-stop run has
+not been authorized or executed. Native allocation/SHA injection, impossible
+post-adopt enrollment allocation, and process-root retention need separate
+instrumentation or a narrowed acceptance argument.
+The isolated `codex/c2-save-image-receipt-fault-cuts-20261013` follow-up adds
+test-only native failure cuts for entry/vector allocation, a synthetic SHA
+result failure after hashing the retained copy but before token enrollment,
+and release failure before ownership mutation. Native repeat checks require
+zero live bytes and zero native registry entries after each failed adoption
+and successful cleanup; the compiled driver's fail-stop branch now injects
+an actual native release error, and its normal repeat loop checks native and
+Eshkol root baselines after every release. These are source-level gates only;
+compiled normal/repeat/fail-stop and independent review remain required.
+The compiled gate now also checks its literal native C compiler inputs against
+`native/c2_save_image_receipt_compiled_native_sources.txt` in source-only mode.
+Missing, duplicate, reordered, or unsupported source forms fail before compiler
+resolution or runtime; the Eshkol depfile check remains a separate compiled
+gate. This pin does not itself establish compiled receipt admission.
+
+The [G3-R/C2/O2 source-pair boundary](g3/G3_R_C2_O2_SOURCE_PAIR_BOUNDARY.md)
+combines the detached C2 receipt and current-main O2 held-owner source on one
+reviewable branch. Their exact native and Eshkol interfaces still require a
+feature-private original-owner coordinator and reviewed transfer/rollback
+path before any same-owner SAVE pair can be claimed. This source union has no
+compiled execution or replay evidence.
+The O2 port carries `f9173c1e`'s registered allocation-span validation for
+hold, issued state and release. Active builders fail closed when their mutable
+descriptors cannot authenticate owned spans. Source syntax and C2 receipt
+source tests pass locally; O2 native runtime/sanitizer and the combined
+compiled aggregate remain open gates.
+An independent union review found that O2's caller output/error scan still
+missed I2-owned parameter and moment storage. The source successor requires
+the I2 immutable owned-span provenance feature with the O2 held feature and
+rejects all nonzero F32 query results before writing either buffer. It adds
+parameter and moment alias negatives. `issued_match` compares held state bits,
+so the future coordinator must also root the exact state pointer returned by
+`save_state` through claim or release. These are source repairs; runtime and
+pairing gates remain open.
+The [held O2-to-C2 adoption gate](g3/G3_R_HELD_O2_C2_ADOPTION_GATE.md)
+pins the missing Eshkol transfer boundary. A causal native negative verifies
+that a distinct pre-hold O2 state with equal bits also passes `issued_match`;
+the proposed coordinator must bind the exact issued pointer before its Scheme
+shell can enter C2 composition. Current O2 Scheme enrollment uses ordinary
+snapshot, and C2 accepts only a registered Scheme O2 state. This gate provides
+no coordinator, held C2 owner, SAVE pair, or replay claim.
+The feature-private native `et_g3r_private_o2_save_owner_match_v1` prerequisite
+checks the exact registered optimizer bound to a live O2 hold and reruns the
+held invariants. A second registered optimizer with the same roster and
+bit-equal snapshot passes `issued_match` but fails `owner_match`. The future
+Scheme adopter still must bind its optimizer shell to that pointer and retain
+the exact state returned by held issue; no original G3/O2 owner binding or
+paired SAVE is established here.
+The source-private `g3r-held-o2-adopt!` prerequisite now binds that exact
+registered Scheme optimizer to the native hold, preallocates its state shell,
+record, registry cons, pointer cell and ledger before issue, and checks the
+exact returned pointer before enrollment. Its preclaim release distinguishes
+LIVE, DEAD-after-defect and indeterminate native lifecycle outcomes. The
+four-mutation source check passes. The helper is not yet linked or runtime
+verified; G3/M3/A2-to-O2 coordinator binding, P1/C2 partial-claim rollback,
+hold release order and receipt gates remain pending.
+The bounded [native joint-hold source gate](g3/G3_R_JOINT_HOLD_SOURCE_GATE.md)
+now uses one sealed M3T roster to acquire the original G3/M3/A2 and O2 holds,
+registers one exact issued O2 pointer, rejects a second issue or bit-equal
+substitution, copies the held 17-word history, and drains O2 before G3 after
+lifecycle-aware preclaim release. Source mutation checks and strict C syntax
+pass. This leaf is not linked into a Scheme aggregate; its issued pointer is
+not yet adopted into C2, and no pair, receipt, replay or publication follows.
+The joint-issued Scheme adopter source successor now authenticates the exact
+registered optimizer pointer against that native joint record, allocates and
+guards its shell/record/registry/pointer/error ledger before the one-shot joint
+issue, and enrolls only the exact pointer retained by the joint owner. Its
+preclaim drain releases the issued state before O2 then G3 hold end and retains
+the first release defect. The five-mutation source check and strict C syntax
+pass; the extension is not yet loaded or runtime tested. C2 partial-claim
+rollback, original controls, pair envelope and receipt publication remain
+pending.
+The joint-issued adopter drain now requires an exact native DEAD lifecycle
+after hold end and rechecks the registered optimizer-to-joint pointer before
+release. A rejected pre-drain end cannot mark the Scheme ledger drained. Seven
+source mutations, strict C syntax and Scheme balance pass; no compiled/runtime
+claim follows.
+The native end proof now also requires its O2 hold slot cleared and an exact
+registered G3 held-record DEAD lifecycle before publishing joint DEAD. The
+revised source gate passes nine mutations and both G3/joint C syntax cuts;
+independent review and compiled failure cuts remain pending.
+The private joint-issued C2 claim successor preallocates a held-history buffer,
+C2 request and transfer ledger; strengthens C2 rollback for a token-matched
+partial O2 claim; and moves exact issued native custody to a verified C2 child
+before draining O2 then G3. Its bounded source mutation and strict C syntax
+checks pass locally. No aggregate loads it yet, and no original P1/controls
+binding, receipt, pair, replay or accepted runtime claim follows.
+The next source-only binding checks exact registered G3 generator/M3T model/T1
+tokenizer/O2 optimizer shells against one LIVE native joint owner, then compares
+validated C2 tokenizer and X1 config controls with that original T1/model.
+It still cannot bind a TR3 trainer to the same live G3 model: G3 requires eval
+mode (`g3t_model_admission_extension.esk:57-59`), while TR3 fixed recheck
+requires train mode (`module.esk:5251-5260`). D2 cursors, trainer RNG and
+counters, detached P1 provenance, pair/receipt and replay remain open; no
+compiled or runtime admission follows this source leaf.
+The bounded TR3 enrollment prerequisite now roots the exact T2 shell,
+same-aggregate registry entry, and raw core in the trainer record. A private
+idle/train-mode check rejects a copied witness, foreign T1 shell or equal
+fingerprint from a different core before any mode transition. It does not
+transition the model, acquire a G3/O2 hold, or authorize a C2 claim. The
+combined aggregate and original-epoch handoff remain separate gates.
+The follow-up source repair makes CLI3-B inspect the authenticated T2 registry
+core for canonical-byte admission, updates the lease failure witness to the
+23-slot record, and reseals the affected fixture hashes. Focused source
+contracts pass; compiled CLI3 and TR3 runtime admission and independent review
+remain pending.
+The follow-up TR3 witness-pin repair aligns both lease runtime manifests with
+the unchanged restore-successor source contract. A source-only regression
+rejects the prior stale digest and a foreign digest; historical runner, runtime,
+and trainer provenance remains pinned. Independent source review and compiled
+runtime gates remain pending.
+
+The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
 ports exact value and absent-gradient bit baselines under the existing
 fixed14 model pins. Focused normal/repeat/sanitizer and feature-off checks

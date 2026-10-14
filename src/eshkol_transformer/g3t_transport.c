@@ -1156,6 +1156,17 @@ int64_t et_g3r_private_g3t_save_end_v1(void *candidate) {
   g3t_clear();
   return 0;
 }
+
+int64_t et_g3r_private_g3t_save_hold_lifecycle_v1(void *candidate) {
+  for (const g3t_record *record = g3t_registry; record; record = record->next)
+    if (record == candidate) {
+      if (record->kind != G3T_SAVE_HOLD) abort();
+      if (record->state == G3T_LIVE) return 1;
+      if (record->state == G3T_DEAD) return 2;
+      abort();
+    }
+  return 0;
+}
 #endif
 int64_t et_g3t_private_generator_close_v1(void *candidate) {
   g3t_clear();
