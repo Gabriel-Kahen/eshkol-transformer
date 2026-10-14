@@ -62,11 +62,42 @@ def compile_command(script: str, header: str) -> str:
     return "".join(lines[start:end])
 
 
+def phase_calls(source: str) -> list[int]:
+    tokens = [(match.group(), match.start(), match.end()) for match in
+              re.finditer(r'"(?:\\.|[^"\\])*"|;[^\n]*|[()]|[^()\s";]+', source)
+              if not match.group().startswith(';')]
+    phases = []
+    depth = 0
+    for index, (token, start, _) in enumerate(tokens):
+        if token == ')':
+            depth -= 1
+            continue
+        if token != '(':
+            continue
+        if index + 1 >= len(tokens) or tokens[index + 1][0] != 'g3r-test-phase':
+            depth += 1
+            continue
+        assert index + 3 < len(tokens)
+        value, _, _ = tokens[index + 2]
+        closing, _, end = tokens[index + 3]
+        assert value.isascii() and value.isdecimal() and closing == ')'
+        phase = int(value)
+        assert (depth > 0) if 100 <= phase <= 103 else (depth == 0)
+        line_start = source.rfind('\n', 0, start) + 1
+        line_end = source.find('\n', end)
+        if line_end == -1:
+            line_end = len(source)
+        assert not source[line_start:start].strip()
+        assert not source[end:line_end].strip()
+        phases.append(phase)
+        depth += 1
+    return phases
+
+
 def check(source: str, script: str, bits: str) -> None:
     assert balanced(source)
     assert '(extern i64 g3r-test-phase i64 :real et_g3r_test_phase_v1)' in source
-    source_phases = [int(value) for value in re.findall(
-        r'(?m)^\s*\(g3r-test-phase ([0-9]+)\)\s*$', source)]
+    source_phases = phase_calls(source)
     assert source_phases == [
         *range(30), *range(100, 104), *range(200, 207),
         300, 301, 400, 401, 500, 501, 502, 600, 999,
@@ -218,11 +249,23 @@ def swap_phase_calls(source: str, first: int, second: int) -> str:
 
 
 check(fixture, runner, bit_bridge)
+check(fixture + '\n; (g3r-test-phase 203)\n'
+      '(define phase-text "(g3r-test-phase 203)")\n', runner, bit_bridge)
 mutations = (
     (fixture.replace('(g3r-test-phase 0)', ''), bit_bridge),
     (fixture.replace('(g3r-test-phase 203)', ''), bit_bridge),
     (fixture.replace('(g3r-test-phase 203)',
                      '(g3r-test-phase 203)\n(g3r-test-phase 203)'), bit_bridge),
+    (fixture.replace('(define corpus-directory (car (cdr (command-line))))',
+                     '(define corpus-directory (car (cdr (command-line)))) '
+                     '(g3r-test-phase 203)'), bit_bridge),
+    (fixture.replace('(g3r-test-phase 203)',
+                     '(g3r-test-phase 203) (g3r-test-phase 203)'), bit_bridge),
+    (fixture.replace('(define held (begin-held original))\n(g3r-test-phase 203)',
+                     '(define held (begin-held original)) (g3r-test-phase 203)'), bit_bridge),
+    (fixture.replace('(define held (begin-held original))\n(g3r-test-phase 203)',
+                     '(define held (begin-held original))\n(begin\n'
+                     '(g3r-test-phase 203))'), bit_bridge),
     (swap_phase_calls(fixture, 203, 204), bit_bridge),
     (fixture.replace('(load "cli3_generate_t2_bridge.esk")', ""), bit_bridge),
     (fixture.replace('(not (eq? t1 t2))', '#t'), bit_bridge),

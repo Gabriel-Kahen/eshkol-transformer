@@ -2243,9 +2243,11 @@ pass. No causal call or runtime success is established by this instrumentation.
 Independent source review found that its runtime parser accepted the 0-29 load
 prefix followed directly by 999. The bounded successor requires the exact
 ordered trace, including five 100-103 fixture groups and every 200-600 cut.
-Its source preflight rejects missing, duplicate and reordered interior calls
-and predicates; a complete synthetic trace passes while each damaged trace
-fails. This repair has source-only validation and remains unadmitted.
+Its source preflight scans calls outside strings and comments, requires each
+phase receipt on its own line at the expected nesting level, and rejects
+missing, duplicate, moved, inline and reordered calls. Its 36 focused preflight
+mutations pass, as do synthetic complete and damaged runtime-parser traces.
+This repair has source-only validation and remains unadmitted.
 A fresh pinned one-use compiled/runtime gate and independent review must use
 the receipts to locate the failure before any held P1/C2 admission.
 
