@@ -1346,7 +1346,9 @@ the M3 call. The fault driver checks mapped stage 3/internal (table index 47),
 unchanged cursor, all 17 modes, model/gradient/RNG and six seeded outputs,
 zero live pins/borrows, and same-authority retry against an independent twin.
 The host included-TU M3 test exercises all 14 indices and rejects index 14;
-the focused lexical/source and native symbol/feature-off checks pass. This is
+the host native E3 frame test checks every prefix, pin and borrow release,
+selector negatives, and retry. Focused lexical/source and native
+symbol/feature-off checks pass. This is
 still a source candidate: supported optimized Eshkol AOT normal, poison and
 sanitizer gates plus independent review remain the next admission gate.
 
