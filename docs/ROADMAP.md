@@ -2122,6 +2122,15 @@ raises. The adopter has no claimed phase and cannot safely use its preclaim
 release after that cut. A C2-side checked two-child rollback or exposed exact
 private transfer authority is required before implementing the held claim;
 this branch records the source gap only and makes no C2/SAVE admission.
+The C2-side source successor now reconciles an attempted O2 claim against the
+exact registered state and provisional token before rolling P1 back. It
+accepts only a still-live O2 state or a state claimed by that token; uncertain
+rollback fails stop. The source-order suite passes 12 checks, including
+mutations of the token and rollback checks. Added runtime negatives cover an
+O2 claim that raises after mutation, first-error retention, unchanged request
+slots, and token mismatch; the compiled owner gate has not run for this leaf.
+This is a source repair pending independent review and the compiled owner gate;
+it does not admit a held C2 transfer or SAVE pair.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
