@@ -58,6 +58,9 @@ int64_t et_e3_test_forward_fault_begin_v1(void *frame);
 int64_t et_e3_test_forward_fault_end_v1(void *frame);
 int64_t et_e3_test_forward_fault_status_v1(void *frame, int64_t selector);
 int64_t et_e3_test_forward_fault_reset_v1(void *frame);
+/* Read retained published counts even after a failed acquired invocation
+ * clears the public committed bit. Idle authenticated frame only. */
+int64_t et_e3_test_fault_counter_raw_v1(void *frame, int64_t selector);
 #endif
 
 #ifdef __cplusplus

@@ -999,6 +999,12 @@ an invalid-storage frame; ASan/UBSan and feature-off object checks pass. It has
 no admitted package tuple or Eshkol bridge yet; compiled same-frame
 failure/retry, negative package tests, and resource horizons remain open before
 any R1 row can be admitted.
+A separate retention-successor driver source candidate is written to bracket
+an authentic E3 evaluator call with the native selector's begin/end on success
+and caught failure. It specifies a role-20 unreached control, stage-7 selected
+failure readback, exact retained-state checks and same-frame retry. Focused
+source checks pass; the lexical package policy/manifests, feature-on build,
+compiled D2 path, failure/retry gate and resource horizons remain pending.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.

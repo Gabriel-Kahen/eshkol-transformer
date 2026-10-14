@@ -35,6 +35,11 @@ int main(void) {
   frame.phase = E3_IDLE;
   frame.model = &model;
   e3_registry = &frame;
+  frame.published_counts[0] = 5;
+  frame.published_counts[1] = 3;
+  assert(et_e3_test_fault_counter_raw_v1(&frame, 0) == 5);
+  assert(et_e3_test_fault_counter_raw_v1(&frame, 1) == 3);
+  assert(et_e3_test_fault_counter_raw_v1(&frame, 2) == -1);
 
   assert(et_e3_test_forward_fault_begin_v1(NULL) == E3_INVALID_ARGUMENT);
   assert(et_e3_test_forward_fault_end_v1(NULL) == E3_INVALID_ARGUMENT);
@@ -102,6 +107,7 @@ int main(void) {
   assert(et_e3_test_forward_fault_arm_v1(&frame, 20, 8192) == 0);
   frame.phase = E3_FORWARD;
   model.active = &frame;
+  assert(et_e3_test_fault_counter_raw_v1(&frame, 0) == -1);
   assert(et_e3_test_forward_fault_arm_v1(&frame, 0, 1) == E3_INVALID_STATE);
   assert(et_e3_test_forward_fault_begin_v1(&frame) == E3_INVALID_STATE);
   assert(et_e3_test_forward_fault_end_v1(&frame) == E3_INVALID_STATE);
@@ -112,6 +118,7 @@ int main(void) {
   assert(et_e3_test_forward_fault_status_v1(&frame, 0) == E3_FAULT_ARMED);
   assert(et_e3_test_forward_fault_reset_v1(&frame) == 0);
   frame.lifecycle = 2;
+  assert(et_e3_test_fault_counter_raw_v1(&frame, 0) == -1);
   assert(et_e3_test_forward_fault_arm_v1(&frame, 0, 1) == E3_INVALID_STATE);
   assert(et_e3_test_forward_fault_begin_v1(&frame) == E3_INVALID_STATE);
   assert(et_e3_test_forward_fault_end_v1(&frame) == E3_INVALID_STATE);

@@ -1533,6 +1533,16 @@ int64_t et_e3_private_counter_ref_v1(void *pointer, int64_t selector) {
   return frame->published_counts[selector];
 }
 
+#ifdef ET_E3_FAULT_TESTING
+int64_t et_e3_test_fault_counter_raw_v1(void *pointer, int64_t selector) {
+  e3_clear();
+  et_e3_frame_internal *frame = e3_admit(pointer);
+  if (!frame || !e3_fault_idle(frame) || selector < 0 || selector > 1)
+    return -1;
+  return frame->published_counts[selector];
+}
+#endif
+
 int64_t et_e3_private_frame_destroy_preflight_v1(void *pointer) {
   e3_clear();
   et_e3_frame_internal *frame = e3_admit(pointer);
