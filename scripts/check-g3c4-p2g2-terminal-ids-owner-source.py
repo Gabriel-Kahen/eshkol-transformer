@@ -27,6 +27,31 @@ for symbol in (
     assert symbol in header and symbol in native
 assert "#ifdef ET_G3C4_P2_G2_TERMINAL_IDS_CLONE_PRIVATE" in header
 fixture = (root / "tests/g3c4/private_terminal_owners_extent_diagnostic.esk").read_text()
+prefix_source = (root / "native/g3c4_p2g2_t1_prefix_coordinator_extension.esk").read_text()
+reserve_source = (root / "native/g3c4_p2g2_terminal_extension.esk").read_text()
+mode_gate = "(if require-output? (vector-ref record 6)\n                      (eq? (vector-ref record 6) #f))"
+
+
+def prefix_mode_valid(text):
+    check = text.split("(define (g3c4-p2g2-prefix-input-check", 1)[1].split(
+        "(define (g3c4-p2g2-prefix-byte-check", 1)[0]
+    return (mode_gate in check
+            and "(or (eq? require-output? #t)\n                      (eq? require-output? #f))" in check
+            and text.count("native-input operation #t") == 5)
+
+
+assert prefix_mode_valid(prefix_source)
+for before, after in (
+    (mode_gate, "(vector-ref record 6)"),
+    ("(eq? (vector-ref record 6) #f)", "#t"),
+    ("native-input operation #t", "native-input operation #f"),
+):
+    assert before in prefix_source and not prefix_mode_valid(
+        prefix_source.replace(before, after, 1))
+reserve = reserve_source.split(
+    "(define (g3c4-p2g2-terminal-pending-reserve!", 1)[1].split(
+    "(define (g3c4-p2g2-terminal-pending-abort!", 1)[0]
+assert "(vector-ref prefix 3) operation #f)" in reserve
 for fragment in (
     '(flush-output-port (current-output-port))',
     '(stage "setup begin" 0)',
@@ -49,7 +74,10 @@ probe = fixture.split('(stage "probe begin" 0)', 1)[1].split(
 probe_order = (
     'generator create begin', 'generator create complete',
     'prefix entry/preflight begin', 'prefix entry/preflight complete',
-    'pending reserve begin', 'pending reserve complete',
+    'pending reserve begin', 'reserve protected owner begin',
+    'reserve protected owner complete', 'reserve prefix owner begin',
+    'reserve prefix owner complete', 'reserve core begin',
+    'pending reserve complete',
     'first frame/sample begin', 'native first frame complete',
     'T1 decode complete', 'first frame/sample complete',
     'pending abort begin', 'pending abort complete',
@@ -63,6 +91,9 @@ def probe_valid(text):
         return False
     required = (
         '(guard (caught (#t (probe-failure caught)))',
+        '(guard (caught (#t (probe-reserve-error caught)))',
+        '(g3c4-p2g2-protected-check call \'private-owners-probe)',
+        "(vector-ref prefix 3) 'private-owners-probe #f)",
         '(guard (caught\n             (#t\n               (stage "generator close after failure begin" 0)',
         '(guard (close-failure (#t (exit 134)))',
         '(guard (caught\n                     (#t\n                       (stage "pending abort after failure begin" 0)',
@@ -83,8 +114,37 @@ def probe_valid(text):
 
 
 assert probe_valid(probe)
+reserve_error = fixture.split('(define (probe-reserve-error caught)', 1)[1].split(
+    '(define (check label good)', 1)[0]
+
+
+def reserve_error_valid(text):
+    return all(fragment in text for fragment in (
+        '(transformer-error? caught)',
+        '(transformer-error-category caught)',
+        '(transformer-error-operation caught)',
+        '(transformer-error-message caught)',
+        '(transformer-error-details caught)',
+        '(flush-output-port (current-output-port))',
+        '(raise caught)',
+    ))
+
+
+assert reserve_error_valid(reserve_error)
+for before, after in (
+    ('(transformer-error-message caught)', "'unknown"),
+    ('(transformer-error-details caught)', "'unknown"),
+    ('(flush-output-port (current-output-port))', '#t'),
+    ('(raise caught)', '#t'),
+):
+    assert not reserve_error_valid(reserve_error.replace(before, after, 1))
 for before, after in (
     ('(stage "pending reserve begin" 0)', '(stage "pending reserve lost" 0)'),
+    ('(stage "reserve prefix owner complete" 0)',
+     '(stage "reserve prefix owner lost" 0)'),
+    ('(guard (caught (#t (probe-reserve-error caught)))', '(begin'),
+    ("(vector-ref prefix 3) 'private-owners-probe #f)",
+     "(vector-ref prefix 3) 'private-owners-probe #t)"),
     ('(stage "native first frame complete" 0)', '(stage "native frame lost" 0)'),
     ('(guard (abort-failure (#t (exit 134)))', '(begin'),
     ('(guard (close-failure (#t (exit 134)))', '(begin'),

@@ -151,7 +151,7 @@
                    "P2/G2 terminal reservation needs original call"))
     (g3c4-p2g2-prefix-input-check
       call (vector-ref prefix 1) (vector-ref prefix 2)
-      (vector-ref prefix 3) operation)
+      (vector-ref prefix 3) operation #f)
     (let* ((output (g3c4-p2g2-protected-reserve call))
            (auxiliary (vector-ref output 8)))
       (original 'bind output)

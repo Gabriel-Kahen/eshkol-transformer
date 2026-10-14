@@ -3225,13 +3225,19 @@ publication, public G2 and continuation remain pending.
   negative. Its source/Q0 checks passed, but its consumed `-b` one-use compiled
   gate failed after `probe begin` with a generic exception. Generator creation
   through probe close were unobserved, so the extent repair and terminal
-  behavior have no passing compiled proof. A source-only diagnostic successor
-  now brackets generator creation, prefix entry/preflight, pending reserve,
-  native first-frame/T1 decode, abort and close with flushed markers. It
-  reports transformer category and operation, preserves in-region pending
-  abort on failure and rethrows. Focused source mutations pass; independent
-  source/tests review and a fresh sealed one-use compiled gate remain pending.
-  Both failed packages and raw evidence are preserved.
+  behavior have no passing compiled proof. The `dcd8536` source-only diagnostic
+  added flushed stages and passed independent source/tests review, but its
+  consumed one-use compiled gate stopped after `pending reserve begin` with a
+  typed invalid-state error rewrapped as `private-owners-probe`. It never
+  reached native first-frame, terminal cases or extent readback. Source
+  inspection found a definite contradiction: terminal reserve checks prefix
+  ownership while output is empty, but the shared checker required an output.
+  A bounded successor gives reserve an explicit empty-output check and keeps
+  prefix commit's pending-output check. The diagnostic now reports the first
+  error's message/details inside the call boundary and marks protected-owner,
+  prefix-owner and reserve-core steps. Source/tests review and a fresh sealed
+  one-use compiled gate remain pending. All failed packages and raw evidence
+  are preserved; terminal/full/public/data-only G3 remain HOLD.
 
 ## Wave 4 — practical pretraining and performance
 

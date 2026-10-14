@@ -55,6 +55,18 @@ assert balanced_scheme(source)
 assert balanced_scheme(fixture)
 assert source.count("(define (g3c4-p2g2-terminal-pending-") == 5
 assert "(g3c4-p2g2-protected-reserve call)" in source
+reserve = source.split("(define (g3c4-p2g2-terminal-pending-reserve!", 1)[1].split(
+    "(define (g3c4-p2g2-terminal-pending-abort!", 1)[0]
+def valid_reserve_mode(text):
+    check = "(vector-ref prefix 3) operation #f)"
+    return check in text and text.index(check) < text.index(
+        "(g3c4-p2g2-protected-reserve call)")
+
+
+assert valid_reserve_mode(reserve)
+assert not valid_reserve_mode(reserve.replace(
+    "(vector-ref prefix 3) operation #f)",
+    "(vector-ref prefix 3) operation #t)", 1))
 assert source.index("(g3c4-p2g2-protected-reserve call)") < source.index(
     "(vector-set! g3c4-p2g2-terminal-pending-anchors 0 anchor-node)"
 )
