@@ -288,8 +288,12 @@ printf '%s\\n' "$e3_tuple_kind"
                                     ("e3-private-aggregate", "base", "sum-order"),
                                     ("e3-private-aggregate", "mode-graph", "sum-order"),
                                     ("other", "numerical", "sum-order"),
+                                    ("e3-private-aggregate", "base", "padded-position"),
+                                    ("e3-private-aggregate", "mode-graph", "padded-position"),
+                                    ("other", "numerical", "padded-position"),
                                     ("e3-private-aggregate", "numerical", "wrong-vocab-axes"),
-                                    ("e3-private-aggregate", "numerical", "sum-orders")):
+                                    ("e3-private-aggregate", "numerical", "sum-orders"),
+                                    ("e3-private-aggregate", "numerical", "padded-positions")):
             with self.subTest(policy=policy, kind=kind, value=value):
                 self.assertEqual(select(policy, kind, value).returncode, 77)
 
