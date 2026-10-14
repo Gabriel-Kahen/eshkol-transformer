@@ -18,6 +18,8 @@ DRIVER = ROOT / "tests/g3c4/p2_g2_held_holder_compiled_test.esk"
 SCRIPT = ROOT / "scripts/test-g3c4-p2g2-held-holder-compiled.sh"
 COMPILE_HELPER = ROOT / "scripts/g3c4-held-holder-eshkol-compile.sh"
 SHIM = ROOT / "tests/g3c4/p2_g2_held_holder_compiled_native.c"
+COMPOSER = ROOT / "tests/g3c4/p2_g2_terminal_composer_native.c"
+OWNER = ROOT / "src/eshkol_transformer/g3c4_model_owner.c"
 EXTENSION = ROOT / "native/g3c4_p2g2_terminal_held_holder_extension.esk"
 DEPS = ROOT / "native/g3c4_p2g2_held_holder_compiled_eshkol_deps.txt"
 INCLUDE_DIRS = ("internal/p1/lib", "internal/c1/lib", "internal/t1/lib",
@@ -61,7 +63,10 @@ def phase_trace_contract(driver, shim, script):
     for phase in (*range(1, 6), *range(10, 24), *range(30, 57)):
         if f"case {phase}:" not in shim:
             raise AssertionError(f"unmapped phase {phase}")
-    if 'write(4, line, (size_t)size)' not in shim:
+    phase_writer = shim[shim.index('static void held_trace(const char *phase) {'):
+                        shim.index('static void held_trace_eos_args(', shim.index(
+                            'static void held_trace(const char *phase) {'))]
+    if 'write(4, line, (size_t)size)' not in phase_writer:
         raise AssertionError("trace must use the dedicated unbuffered fd")
 
     def ordered(source, fragments):
@@ -116,6 +121,50 @@ def phase_trace_contract(driver, shim, script):
 
 
 class HeldHolderCompiledSource(unittest.TestCase):
+    def test_eos_boundary_trace_is_ordered_and_test_only(self):
+        held, composer, owner = SHIM.read_text(), COMPOSER.read_text(), OWNER.read_text()
+        feature = "ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE"
+        self.assertLess(held.index(f"#define {feature} 1"),
+                        held.index('#include "p2_g2_terminal_composer_native.c"'))
+        self.assertNotIn(f"#define {feature}", composer)
+        self.assertIn('write(4, line, (size_t)size)', held)
+        for field in ("context=%p", "input=%p", "staging=%p", "bytes=%lld"):
+            self.assertIn(field, held)
+
+        wrapper = composer[composer.index(
+            "int64_t __wrap_et_g3c4_private_p2g2_eos_first_frame_carrier_v1("):]
+        carrier = owner[owner.index("static int64_t et_g3c4_p2g2_first_frame_carrier("):]
+        sequences = (
+            (wrapper, ('held_trace("eos.wrapper.enter")',
+                       'held_trace_eos_args(context, input, staging, bytes)',
+                       'held_trace("eos.real.enter")',
+                       '__real_et_g3c4_private_p2g2_eos_first_frame_carrier_v1(\n',
+                       'held_trace("eos.real.return")',
+                       'held_trace("eos.wrapper.return")')),
+            (carrier, ('held_trace("eos.carrier.enter")',
+                       'held_trace_eos_args(\n',
+                       'et_g3c4_error_reset_internal()',
+                       'held_trace("eos.admit.active.enter")',
+                       'et_g3c4_admit_active_call(context_candidate)',
+                       'held_trace("eos.admit.active.return")',
+                       'held_trace("eos.admit.input.enter")',
+                       'et_g3c4_admit_input(input_candidate, 0)',
+                       'held_trace("eos.admit.input.return")',
+                       'held_trace("eos.pending.lookup.enter")',
+                       'et_g3c4_pending_output_lookup(context, &pending)',
+                       'held_trace("eos.pending.lookup.return")',
+                       'held_trace("eos.prefill.enter")',
+                       'et_g3c4_private_prompt_prefill_v1(\n',
+                       'held_trace("eos.prefill.return")')),
+        )
+        for source, fragments in sequences:
+            cursor = 0
+            for fragment in fragments:
+                with self.subTest(marker=fragment):
+                    position = source.find(fragment, cursor)
+                    self.assertGreaterEqual(position, 0)
+                    cursor = position + len(fragment)
+
     def test_test_only_overlay_traces_each_unwrapped_interval(self):
         original = EXTENSION.read_text()
         overlay = instrument(original)

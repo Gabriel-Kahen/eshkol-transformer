@@ -1,5 +1,10 @@
 /* The accepted composer aggregate, with the private holder enabled. */
+#include <stdint.h>
 #define ET_G3C4_P2_G2_HELD_HOLDER_PRIVATE 1
+#define ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE 1
+static void held_trace(const char *phase);
+static void held_trace_eos_args(
+    const void *context, const void *input, const void *staging, int64_t bytes);
 #define __wrap_et_g3c4_private_p2g2_terminal_commit_v1 \
   held_base_wrap_terminal_commit
 #include "p2_g2_terminal_composer_native.c"
@@ -16,6 +21,18 @@ static void held_trace(const char *phase) {
   char line[128];
   int size = snprintf(line, sizeof(line), "case=%d phase=%s\n",
                       held_trace_case, phase);
+  if (size < 0 || (size_t)size >= sizeof(line) ||
+      write(4, line, (size_t)size) != size)
+    abort();
+}
+
+/* Log the FFI values before either the wrapper or carrier validates them. */
+static void held_trace_eos_args(
+    const void *context, const void *input, const void *staging, int64_t bytes) {
+  char line[192];
+  int size = snprintf(line, sizeof(line),
+      "case=%d phase=eos.args context=%p input=%p staging=%p bytes=%lld\n",
+      held_trace_case, context, input, staging, (long long)bytes);
   if (size < 0 || (size_t)size >= sizeof(line) ||
       write(4, line, (size_t)size) != size)
     abort();

@@ -411,12 +411,25 @@ int64_t __wrap_et_g3c4_private_p2g2_eos_first_frame_carrier_v1(
     void *context, void *input, void *staging, int64_t bytes) {
   int64_t result;
   et_g3c4_output_internal *pending = NULL;
+#ifdef ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE
+  held_trace("eos.wrapper.enter");
+  held_trace_eos_args(context, input, staging, bytes);
+#endif
   if (composer_fault_mode == 1) {
     composer_fault_mode = 0;
+#ifdef ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE
+    held_trace("eos.wrapper.return");
+#endif
     return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
   }
+#ifdef ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE
+  held_trace("eos.real.enter");
+#endif
   result = __real_et_g3c4_private_p2g2_eos_first_frame_carrier_v1(
       context, input, staging, bytes);
+#ifdef ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE
+  held_trace("eos.real.return");
+#endif
   if (result != 0 && composer_counter_case == 3) {
     et_g3c4_context_internal *actual = (et_g3c4_context_internal *)context;
     snapshot_cache(actual->cache, &coordinator_precommit_cache);
@@ -436,8 +449,12 @@ int64_t __wrap_et_g3c4_private_p2g2_eos_first_frame_carrier_v1(
        pending == NULL ||
        et_g3c4_p2g2_coordinator_test_observe_v1(
            context, pending, 2,
-           ((et_g3c4_context_internal *)context)->token_frame_candidate) != 0))
+           ((et_g3c4_context_internal *)context)->token_frame_candidate) != 0)) {
+#ifdef ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE
+    held_trace("eos.wrapper.return");
+#endif
     return -1;
+  }
   if (result == 0 && composer_overlay_active) {
     if (pending == NULL || coordinator_precommit_cache_owner == NULL ||
         coordinator_saw_prefix || composer_first_success ||
@@ -447,6 +464,9 @@ int64_t __wrap_et_g3c4_private_p2g2_eos_first_frame_carrier_v1(
     composer_overlay_pending = pending;
     composer_first_success = 1;
   }
+#ifdef ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE
+  held_trace("eos.wrapper.return");
+#endif
   return result;
 }
 

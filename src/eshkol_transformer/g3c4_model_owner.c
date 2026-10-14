@@ -6967,13 +6967,40 @@ int64_t et_g3c4_private_p2g2_first_frame_carrier_v1(
   unsigned char encoded[8];
   size_t index;
 
+#ifdef ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE
+  if (allow_eos) {
+    held_trace("eos.carrier.enter");
+    held_trace_eos_args(
+        context_candidate, input_candidate, staging_header, carrier_bytes);
+  }
+#endif
   et_g3c4_error_reset_internal();
+#ifdef ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE
+  if (allow_eos) held_trace("eos.admit.active.enter");
+#endif
   context = et_g3c4_admit_active_call(context_candidate);
+#ifdef ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE
+  if (allow_eos) held_trace("eos.admit.active.return");
+#endif
   if (context == NULL) return et_g3c4_error_state.category;
+#ifdef ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE
+  if (allow_eos) held_trace("eos.admit.input.enter");
+#endif
   input = et_g3c4_admit_input(input_candidate, 0);
+#ifdef ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE
+  if (allow_eos) held_trace("eos.admit.input.return");
+#endif
   if (input == NULL) return et_g3c4_error_state.category;
+#ifdef ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE
+  if (allow_eos) held_trace("eos.pending.lookup.enter");
+  bridge_result = et_g3c4_pending_output_lookup(context, &pending);
+  if (allow_eos) held_trace("eos.pending.lookup.return");
+  if (bridge_result != 0)
+    return et_g3c4_error_state.category;
+#else
   if (et_g3c4_pending_output_lookup(context, &pending) != 0)
     return et_g3c4_error_state.category;
+#endif
   if (context->call_kind != 2 || context->budget != 2 ||
       context->p2g2_prefix_committed != 0u ||
       !et_g3c4_token_frame_idle(context) || input->length != 2 ||
@@ -6997,8 +7024,14 @@ int64_t et_g3c4_private_p2g2_first_frame_carrier_v1(
     return et_g3c4_fail(
         ET_G3C4_SHAPE_MISMATCH, ET_G3C4_CODE_SHAPE);
 
+#ifdef ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE
+  if (allow_eos) held_trace("eos.prefill.enter");
+#endif
   bridge_result = et_g3c4_private_prompt_prefill_v1(
       context, input, last_logits);
+#ifdef ET_G3C4_P2_G2_EOS_BOUNDARY_TRACE
+  if (allow_eos) held_trace("eos.prefill.return");
+#endif
   if (bridge_result != 0) return bridge_result;
   bridge_result = et_g3c4_private_token_frame_begin_last_v1(
       context, last_logits, &selected);

@@ -3263,6 +3263,17 @@ publication, public G2 and continuation remain pending.
   negative source controls. Production Eshkol source is unchanged. Independent
   source/tests/current-main review must precede a fresh pinned one-use compiled
   diagnostic; no runtime acceptance follows from the source checks alone.
+  The independent exact-`aa0762a5` compiled gate passed 17 source checks and
+  normal on/off compilation, then exited 139 in its first normal-on case.
+  Its fd-4 trace ends at `eos.native.enter`; Eshkol reported SIGSEGV at
+  `0x68`. The faulting dereference and EOS carrier admission remain unknown.
+  This successor adds held-fixture-only fd-4 wrapper/real-call brackets,
+  records the four raw FFI arguments before validation, and brackets native
+  active/input admission, pending lookup, and prompt prefill. The feature-off
+  fixture and production contracts retain their original behavior. Source
+  controls and strict on/off C syntax checks pass; no compiled runtime result
+  is claimed. Independent source review and a separately prepared changed-head
+  compiled diagnostic are the next gates.
   The full matrix, public G2, and continuation acceptance remain unproved.
 
 ## Wave 4 — practical pretraining and performance
