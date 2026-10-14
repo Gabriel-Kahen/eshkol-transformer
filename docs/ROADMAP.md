@@ -1325,6 +1325,19 @@ normal native frame run pass; the local sanitizer run cannot start LeakSanitizer
 under ptrace. Supported optimized Eshkol AOT normal/poison/sanitizer evidence,
 independent review and the remaining R1/R2 stage cuts remain open.
 
+A bounded noninstalled stage-3 successor holds an authentic model parameter
+value borrow through the existing private fault tuple. The real M3 pin
+preflight denies acquisition before any of the 14 pins are committed, and the
+driver checks mapped stage 3/invalid-state (table index 42), native domain 3/
+category 4/code 8, exact saved cursor, modes, model/gradient/RNG image, all six
+distinct seeded output words and owner counts while the external borrow remains
+held. It then releases that borrow and retries with the same model, dataset,
+frame and destinations against a separate fixed-seed model/frame/dataset
+twin's six outputs and end cursor. This is a source-only external-borrow
+admission witness; it does not prove rollback after a partial pin acquisition.
+Focused source tests and independent source review pass; a supported compiled
+normal/poison/sanitizer gate and other stage-3/4 cuts remain open for R1.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
