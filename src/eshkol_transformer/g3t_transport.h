@@ -41,6 +41,16 @@ int64_t et_g3r_private_g3t_save_copy_v1(
     void *hold, et_g3r_g3t_held_words_v1 *destination,
     int64_t destination_bytes);
 int64_t et_g3r_private_g3t_save_end_v1(void *hold);
+/* Non-reused process-lifetime ticket. Zero means begin failed; a released
+ * ticket never authenticates a later hold, even if its allocation is reused. */
+int64_t et_g3r_private_g3t_save_begin_v2(
+    void *generator, void *const parameters[14],
+    const void *const identities[14]);
+int64_t et_g3r_private_g3t_save_check_v2(int64_t ticket);
+int64_t et_g3r_private_g3t_save_copy_v2(
+    int64_t ticket, et_g3r_g3t_held_words_v1 *destination,
+    int64_t destination_bytes);
+int64_t et_g3r_private_g3t_save_end_v2(int64_t ticket);
 #endif
 #ifdef ET_G3R_COMMITTED_SAVE_SNAPSHOT_PRIVATE
 /* Eshkol bytevector headers: original destination >= 136 bytes, staging

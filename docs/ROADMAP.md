@@ -2303,8 +2303,20 @@ and scrubs original owner references on failed begin and proved end. Focused
 native normal/repeat/sanitizer and feature-off checks exercise more than 64
 sequential pairs, stale/double tickets, foreign and bit-equal distinct owners,
 and first-error release; source mutation checks cover both registry removals.
-Independent source review and genuine feature-on repeated-scope runtime proof
-remain pending. No O2 issue, C2 claim, receipt or data-only admission follows.
+Independent bounded source review accepted this pair/ledger leaf at `47e5eb94`;
+genuine feature-on repeated-scope runtime proof remains pending. No O2 issue,
+C2 claim, receipt or data-only admission follows.
+The feature-private G3 and O2 provider ticket foundation now adds monotonic,
+non-reused positive i64 held-owner handles alongside the unchanged capped v1
+pointer APIs. A v2 release drains the original pins/borrow or moment baselines,
+preserves the first typed error, unlinks the dead provider record, and frees its
+storage; stale tickets cannot reacquire a new allocation. Ticket exhaustion
+rejects before pin, borrow, or optimizer-busy mutation. Focused native normal,
+repeat, sanitizer, feature-off, more-than-64 sequential, stale/double,
+concurrent-busy, foreign-owner and failed-release checks pass locally.
+Independent provider source review, adopter/C2 ticket migration, and a genuine
+feature-on repeated-scope aggregate remain pending. This foundation alone
+does not remove the v1 lifetime cap or admit SAVE or continuation.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),

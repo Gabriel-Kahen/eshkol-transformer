@@ -176,6 +176,7 @@ static size_t et_o2_owned_state_clones;
 enum { ET_G3R_O2_SAVE_MAX_TOMBSTONES = 64 };
 struct et_o2_g3r_save_hold {
   struct et_o2_g3r_save_hold *next;
+  int64_t ticket;
   et_o2_optimizer *optimizer;
   et_f32_parameter *parameters[14];
   const void *identities[14];
@@ -188,6 +189,7 @@ struct et_o2_g3r_save_hold {
 };
 static et_o2_g3r_save_hold *et_o2_g3r_save_holds;
 static size_t et_o2_g3r_save_tombstones;
+static int64_t et_o2_g3r_save_next_ticket = 1;
 enum { ET_O2_G3R_SPAN_OPTIMIZER = 1, ET_O2_G3R_SPAN_STATE = 2 };
 typedef struct et_o2_g3r_owned_spans {
   struct et_o2_g3r_owned_spans *next;
@@ -2261,6 +2263,14 @@ static et_o2_g3r_save_hold *et_o2_g3r_hold_admit(
       return hold;
   return NULL;
 }
+static et_o2_g3r_save_hold *et_o2_g3r_ticket_admit(int64_t ticket) {
+  if (ticket > 0)
+    for (et_o2_g3r_save_hold *hold = et_o2_g3r_save_holds;
+         hold != NULL; hold = hold->next)
+      if (hold->ticket == ticket && et_o2_g3r_hold_admit(hold) == hold)
+        return hold;
+  return NULL;
+}
 
 static void et_o2_g3r_hold_drain(et_o2_g3r_save_hold *hold) {
   for (size_t i = 0; i < 28; ++i) {
@@ -2274,10 +2284,10 @@ static void et_o2_g3r_hold_drain(et_o2_g3r_save_hold *hold) {
     hold->optimizer->busy = 0u;
 }
 
-int32_t et_g3r_private_o2_save_begin_v1(
+static int32_t et_o2_g3r_save_begin(
     et_o2_optimizer *candidate, et_f32_parameter *const parameters[14],
     const void *const identities[14], et_o2_g3r_save_hold **output,
-    et_o2_error_v1 *error) {
+    et_o2_error_v1 *error, int ticket_mode) {
   const char *operation = "g3r-save-o2-begin";
   int32_t result;
   if (et_o2_g3r_save_buffers_conflict(
@@ -2301,10 +2311,12 @@ int32_t et_g3r_private_o2_save_begin_v1(
     return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
                       ET_O2_CODE_OWNER_CONFLICT, operation,
                       "optimizer entry allocation changed");
-  if (et_o2_g3r_save_tombstones >= ET_G3R_O2_SAVE_MAX_TOMBSTONES)
+  if (ticket_mode ? et_o2_g3r_save_next_ticket == 0 :
+                    et_o2_g3r_save_tombstones >= ET_G3R_O2_SAVE_MAX_TOMBSTONES)
     return et_o2_fail(error, ET_O2_STATUS_UNSUPPORTED,
                       ET_O2_CODE_CONSUMED, operation,
-                      "same-owner hold tombstone limit reached");
+                      ticket_mode ? "same-owner ticket space exhausted" :
+                                    "same-owner hold tombstone limit reached");
   for (size_t i = 0; i < 14; ++i) {
     et_f32_tensor_error i2_error;
     if (!parameters[i] || !identities[i] ||
@@ -2352,9 +2364,39 @@ int32_t et_g3r_private_o2_save_begin_v1(
   hold->live = 1u;
   hold->next = et_o2_g3r_save_holds;
   et_o2_g3r_save_holds = hold;
-  ++et_o2_g3r_save_tombstones;
+  if (ticket_mode) {
+    hold->ticket = et_o2_g3r_save_next_ticket;
+    et_o2_g3r_save_next_ticket =
+        hold->ticket == INT64_MAX ? 0 : hold->ticket + 1;
+  } else {
+    ++et_o2_g3r_save_tombstones;
+  }
   *output = hold;
   return et_o2_success(error);
+}
+int32_t et_g3r_private_o2_save_begin_v1(
+    et_o2_optimizer *candidate, et_f32_parameter *const parameters[14],
+    const void *const identities[14], et_o2_g3r_save_hold **output,
+    et_o2_error_v1 *error) {
+  return et_o2_g3r_save_begin(candidate, parameters, identities, output,
+                              error, 0);
+}
+int32_t et_g3r_private_o2_save_begin_v2(
+    et_o2_optimizer *candidate, et_f32_parameter *const parameters[14],
+    const void *const identities[14], int64_t *output,
+    et_o2_error_v1 *error) {
+  if (et_o2_g3r_save_buffers_conflict(
+          output, sizeof(*output), _Alignof(int64_t), error))
+    return ET_O2_STATUS_INVALID_ARGUMENT;
+  if (!output || *output != 0)
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_ARGUMENT,
+                      ET_O2_CODE_NULL_ARGUMENT, "g3r-save-o2-begin",
+                      "expected empty ticket slot");
+  et_o2_g3r_save_hold *hold = NULL;
+  int32_t result = et_o2_g3r_save_begin(candidate, parameters, identities,
+                                         &hold, error, 1);
+  if (result == 0) *output = hold->ticket;
+  return result;
 }
 
 int32_t et_g3r_private_o2_save_check_v1(
@@ -2739,6 +2781,80 @@ int32_t et_g3r_private_o2_save_state_v1(
     if (et_o2_optimizer_state_release_v1(*state, &cleanup) != 0)
       abort(); /* New owned clone has no external borrower. */
     *state = NULL;
+    if (error) *error = first;
+    return result;
+  }
+  return et_o2_success(error);
+}
+static et_o2_g3r_save_hold *et_o2_g3r_ticket_require(
+    int64_t ticket, const char *operation, et_o2_error_v1 *error,
+    int32_t *failure) {
+  if (et_o2_g3r_save_buffers_conflict(NULL, 0u, 1u, error)) {
+    *failure = ET_O2_STATUS_INVALID_ARGUMENT;
+    return NULL;
+  }
+  et_o2_g3r_save_hold *hold = et_o2_g3r_ticket_admit(ticket);
+  if (!hold)
+    *failure = et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                          ET_O2_CODE_INVALID_HANDLE, operation,
+                          "same-owner ticket is foreign, stale, or inactive");
+  return hold;
+}
+int32_t et_g3r_private_o2_save_check_v2(
+    int64_t ticket, et_o2_error_v1 *error) {
+  int32_t failure = 0;
+  et_o2_g3r_save_hold *hold = et_o2_g3r_ticket_require(
+      ticket, "g3r-save-o2-check", error, &failure);
+  return hold ? et_g3r_private_o2_save_check_v1(hold, error) : failure;
+}
+int32_t et_g3r_private_o2_save_owner_match_v2(
+    int64_t ticket, const et_o2_optimizer *optimizer, et_o2_error_v1 *error) {
+  int32_t failure = 0;
+  et_o2_g3r_save_hold *hold = et_o2_g3r_ticket_require(
+      ticket, "g3r-save-o2-owner-match", error, &failure);
+  return hold ? et_g3r_private_o2_save_owner_match_v1(
+                    hold, optimizer, error) : failure;
+}
+int32_t et_g3r_private_o2_save_issued_match_v2(
+    int64_t ticket, const et_o2_optimizer_state *state,
+    et_o2_error_v1 *error) {
+  int32_t failure = 0;
+  et_o2_g3r_save_hold *hold = et_o2_g3r_ticket_require(
+      ticket, "g3r-save-o2-issued-match", error, &failure);
+  return hold ? et_g3r_private_o2_save_issued_match_v1(hold, state, error) :
+                failure;
+}
+int32_t et_g3r_private_o2_save_state_v2(
+    int64_t ticket, et_o2_optimizer_state **state, et_o2_error_v1 *error) {
+  if (et_o2_g3r_save_buffers_conflict(
+          state, sizeof(*state), _Alignof(et_o2_optimizer_state *), error))
+    return ET_O2_STATUS_INVALID_ARGUMENT;
+  int32_t failure = 0;
+  et_o2_g3r_save_hold *hold = et_o2_g3r_ticket_require(
+      ticket, "g3r-save-o2-state", error, &failure);
+  return hold ? et_g3r_private_o2_save_state_v1(hold, state, error) :
+                failure;
+}
+int32_t et_g3r_private_o2_save_end_v2(
+    int64_t *slot, et_o2_error_v1 *error) {
+  if (et_o2_g3r_save_buffers_conflict(
+          slot, sizeof(*slot), _Alignof(int64_t), error))
+    return ET_O2_STATUS_INVALID_ARGUMENT;
+  int32_t failure = 0;
+  et_o2_g3r_save_hold *hold = et_o2_g3r_ticket_require(
+      slot ? *slot : 0, "g3r-save-o2-end", error, &failure);
+  if (!hold) return failure;
+  et_o2_g3r_save_hold **link = &et_o2_g3r_save_holds;
+  while (*link && *link != hold) link = &(*link)->next;
+  if (!*link) abort();
+  et_o2_g3r_save_hold *owned = hold;
+  et_o2_error_v1 first;
+  const int32_t result = et_g3r_private_o2_save_end_v1(&owned, &first);
+  if (owned != NULL) abort();
+  *link = hold->next;
+  free(hold);
+  *slot = 0;
+  if (result != 0) {
     if (error) *error = first;
     return result;
   }

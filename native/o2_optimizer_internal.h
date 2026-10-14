@@ -206,6 +206,23 @@ int32_t et_g3r_private_o2_save_issued_match_v1(
     et_o2_error_v1 *error);
 int32_t et_g3r_private_o2_save_end_v1(
     et_o2_g3r_save_hold **hold, et_o2_error_v1 *error);
+/* Feature-private process-lifetime tickets. Zero is never a live hold.
+ * End consumes the slot after draining, including on a first-error result. */
+int32_t et_g3r_private_o2_save_begin_v2(
+    et_o2_optimizer *optimizer, et_f32_parameter *const parameters[14],
+    const void *const identities[14], int64_t *ticket,
+    et_o2_error_v1 *error);
+int32_t et_g3r_private_o2_save_state_v2(
+    int64_t ticket, et_o2_optimizer_state **state, et_o2_error_v1 *error);
+int32_t et_g3r_private_o2_save_check_v2(
+    int64_t ticket, et_o2_error_v1 *error);
+int32_t et_g3r_private_o2_save_owner_match_v2(
+    int64_t ticket, const et_o2_optimizer *optimizer, et_o2_error_v1 *error);
+int32_t et_g3r_private_o2_save_issued_match_v2(
+    int64_t ticket, const et_o2_optimizer_state *state,
+    et_o2_error_v1 *error);
+int32_t et_g3r_private_o2_save_end_v2(
+    int64_t *ticket, et_o2_error_v1 *error);
 #endif
 int32_t et_o2_optimizer_load_state_v1(et_o2_optimizer *optimizer,
                                       et_o2_optimizer_state *state,

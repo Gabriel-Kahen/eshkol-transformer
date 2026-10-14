@@ -168,6 +168,7 @@ typedef struct g3t_record {
 #ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
 typedef struct g3r_save_hold {
   g3t_record h;
+  int64_t ticket;
   void *context, *model, *cache;
   et_a2_kv_cache_read_borrow *cache_borrow;
   unsigned char key_bits[32], value_bits[32];
@@ -176,6 +177,7 @@ typedef struct g3r_save_hold {
   et_g3r_g3t_held_words_v1 value;
 } g3r_save_hold;
 static size_t g3r_save_hold_tombstones;
+static int64_t g3r_save_next_ticket = 1;
 #endif
 typedef struct g3t_frame {
   int active, kind, next_ordinal, prepared, end_prepared;
@@ -504,8 +506,8 @@ static g3t_logits *g3t_logits_allocate(void) {
   return logits;
 }
 #endif
-/* Search by address before reading any candidate bytes. Dead headers remain
- * enrolled, so an old pointer cannot gain authority through address reuse. */
+/* Search by address before reading any candidate bytes. Pointer-exposed v1
+ * headers remain enrolled; v2 holds are admitted only by non-reused ticket. */
 static g3t_record *g3t_admit_record(void *candidate, int kind, int allow_dead) {
   g3t_record *r = g3t_registry;
   while (r && r != candidate) r = r->next;
@@ -993,16 +995,17 @@ static int g3r_save_cache_check(g3r_save_hold *hold, int capture) {
   }
   return 0;
 }
-void *et_g3r_private_g3t_save_begin_v1(
+static g3r_save_hold *g3r_save_begin(
     void *candidate, void *const parameters[14],
-    const void *const identities[14]) {
+    const void *const identities[14], int ticket_mode) {
   g3t_clear();
   g3t_context *c = g3t_admit(candidate, 0);
   if (!c) return NULL;
   owner *o = g3t_model(c->model);
   if (!o) return NULL;
   if (!parameters || !identities || c->save_hold ||
-      g3r_save_hold_tombstones >= 64u) {
+      (ticket_mode ? g3r_save_next_ticket == 0 :
+                     g3r_save_hold_tombstones >= 64u)) {
     g3t_bad(G3T_STATE, G3T_LIFECYCLE);
     return NULL;
   }
@@ -1057,11 +1060,36 @@ void *et_g3r_private_g3t_save_begin_v1(
   hold->h.state = G3T_LIVE;
   hold->h.next = g3t_registry;
   g3t_registry = &hold->h;
-  ++g3r_save_hold_tombstones;
+  if (ticket_mode) {
+    hold->ticket = g3r_save_next_ticket;
+    g3r_save_next_ticket = hold->ticket == INT64_MAX ? 0 : hold->ticket + 1;
+  } else {
+    ++g3r_save_hold_tombstones;
+  }
   c->save_hold = hold;
   c->h.busy = 1;
   o->active = c;
   return hold;
+}
+void *et_g3r_private_g3t_save_begin_v1(
+    void *candidate, void *const parameters[14],
+    const void *const identities[14]) {
+  return g3r_save_begin(candidate, parameters, identities, 0);
+}
+int64_t et_g3r_private_g3t_save_begin_v2(
+    void *candidate, void *const parameters[14],
+    const void *const identities[14]) {
+  g3r_save_hold *hold = g3r_save_begin(candidate, parameters, identities, 1);
+  return hold ? hold->ticket : 0;
+}
+static g3r_save_hold *g3r_save_ticket_admit(int64_t ticket) {
+  if (ticket > 0)
+    for (g3t_record *r = g3t_registry; r; r = r->next)
+      if (r->kind == G3T_SAVE_HOLD && r->state == G3T_LIVE &&
+          ((g3r_save_hold *)r)->ticket == ticket)
+        return (g3r_save_hold *)r;
+  g3t_bad(G3T_ARGUMENT, G3T_IDENTITY);
+  return NULL;
 }
 int64_t et_g3r_private_g3t_save_check_v1(void *candidate) {
   g3t_clear();
@@ -1155,6 +1183,37 @@ int64_t et_g3r_private_g3t_save_end_v1(void *candidate) {
   }
   g3t_clear();
   return 0;
+}
+int64_t et_g3r_private_g3t_save_check_v2(int64_t ticket) {
+  g3t_clear();
+  g3r_save_hold *hold = g3r_save_ticket_admit(ticket);
+  return hold ? et_g3r_private_g3t_save_check_v1(hold) : g3t_error_category;
+}
+int64_t et_g3r_private_g3t_save_copy_v2(
+    int64_t ticket, et_g3r_g3t_held_words_v1 *destination,
+    int64_t destination_bytes) {
+  g3t_clear();
+  g3r_save_hold *hold = g3r_save_ticket_admit(ticket);
+  return hold ? et_g3r_private_g3t_save_copy_v1(
+                    hold, destination, destination_bytes)
+              : g3t_error_category;
+}
+int64_t et_g3r_private_g3t_save_end_v2(int64_t ticket) {
+  g3t_clear();
+  g3r_save_hold *hold = g3r_save_ticket_admit(ticket);
+  if (!hold) return g3t_error_category;
+  const int64_t result = et_g3r_private_g3t_save_end_v1(hold);
+  const int64_t domain = g3t_error_domain, category = g3t_error_category;
+  const int64_t code = g3t_error_code;
+  g3t_record **slot = &g3t_registry;
+  while (*slot && *slot != &hold->h) slot = &(*slot)->next;
+  if (!*slot) abort();
+  *slot = hold->h.next;
+  free(hold);
+  g3t_error_domain = domain;
+  g3t_error_category = category;
+  g3t_error_code = code;
+  return result;
 }
 #endif
 int64_t et_g3t_private_generator_close_v1(void *candidate) {

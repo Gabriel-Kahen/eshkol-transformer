@@ -12,7 +12,7 @@ flags=(-std=c11 -O1 -Wall -Wextra -Werror -Wpedantic -Wconversion
 "$cc" "${flags[@]}" -c "$root/native/o2_optimizer.c" -o "$out/o2-off.o"
 "$cc" "${flags[@]}" -c "$root/native/c2_save_image_receipt.c" \
   -o "$out/image-off.o"
-if nm -g --defined-only "$out/o2-off.o" | grep -E 'et_g3r_private_o2_save_(begin|owner_match)_v1'; then
+if nm -g --defined-only "$out/o2-off.o" | grep -E 'et_g3r_private_o2_save_.*_v[12]'; then
   echo 'O2 feature-off object exports held-save API' >&2
   exit 1
 fi
@@ -51,7 +51,7 @@ for mode in normal repeat san; do
       >"$out/$mode/$fixture.stdout" 2>"$out/$mode/$fixture.stderr"
     test ! -s "$out/$mode/$fixture.stderr"
   done
-  grep -Fx 'same-owner O2 hold PASS: 375 checks' \
+  grep -Fx 'same-owner O2 hold PASS: 1268 checks' \
     "$out/$mode/o2.stdout" >/dev/null
   grep -Fx 'C2 private image receipt native checks passed' \
     "$out/$mode/image.stdout" >/dev/null

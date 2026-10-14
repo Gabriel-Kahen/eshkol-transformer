@@ -624,6 +624,55 @@ int main(void) {
       optimizer, parameters, identities, &hold, &o2) ==
       ET_O2_STATUS_UNSUPPORTED);
   CHECK(hold == NULL && optimizer->busy == 0);
+  int64_t first_ticket = 0;
+  for (size_t i = 0; i < 80; ++i) {
+    int64_t ticket = 0, blocked = 0;
+    CHECK(et_g3r_private_o2_save_begin_v2(
+        optimizer, parameters, identities, &ticket, &o2) == 0);
+    CHECK(ticket > 0 && optimizer->busy == 1u);
+    if (!first_ticket) first_ticket = ticket;
+    if (i != 0)
+      CHECK(et_g3r_private_o2_save_check_v2(first_ticket, &o2) ==
+            ET_O2_STATUS_INVALID_STATE);
+    CHECK(et_g3r_private_o2_save_begin_v2(
+        optimizer, parameters, identities, &blocked, &o2) != 0);
+    CHECK(blocked == 0 && optimizer->busy == 1u);
+    CHECK(et_g3r_private_o2_save_owner_match_v2(
+        ticket, foreign_optimizer, &o2) == ET_O2_STATUS_INVALID_STATE);
+    CHECK(et_g3r_private_o2_save_owner_match_v2(
+        ticket, optimizer, &o2) == 0);
+    CHECK(et_g3r_private_o2_save_end_v2(&ticket, &o2) == 0);
+    CHECK(ticket == 0 && optimizer->busy == 0u);
+    CHECK(et_g3r_private_o2_save_check_v2(first_ticket, &o2) ==
+          ET_O2_STATUS_INVALID_STATE);
+    CHECK(et_g3r_private_o2_save_end_v2(&ticket, &o2) ==
+          ET_O2_STATUS_INVALID_STATE);
+  }
+  CHECK(et_g3r_private_o2_save_check_v2(INT64_MAX, &o2) ==
+        ET_O2_STATUS_INVALID_STATE);
+  int64_t ticket = 0;
+  CHECK(et_g3r_private_o2_save_begin_v2(
+      optimizer, parameters, identities, &ticket, &o2) == 0);
+  CHECK(et_g3r_private_o2_save_check_v2(ticket, &o2) == 0);
+  CHECK(et_g3r_private_o2_save_state_v2(ticket, &state, &o2) == 0);
+  CHECK(et_g3r_private_o2_save_issued_match_v2(ticket, state, &o2) == 0);
+  CHECK(et_o2_optimizer_state_release_v1(state, &o2) == 0);
+  state = NULL;
+  optimizer->config.total_updates++;
+  CHECK(et_g3r_private_o2_save_end_v2(&ticket, &o2) ==
+        ET_O2_STATUS_INVALID_STATE);
+  CHECK(o2.code == ET_O2_CODE_OWNER_CONFLICT);
+  CHECK(ticket == 0 && optimizer->busy == 0u);
+  optimizer->config.total_updates--;
+  et_o2_g3r_save_next_ticket = INT64_MAX;
+  CHECK(et_g3r_private_o2_save_begin_v2(
+      optimizer, parameters, identities, &ticket, &o2) == 0);
+  CHECK(ticket == INT64_MAX);
+  CHECK(et_g3r_private_o2_save_end_v2(&ticket, &o2) == 0);
+  CHECK(et_g3r_private_o2_save_begin_v2(
+      optimizer, parameters, identities, &ticket, &o2) ==
+      ET_O2_STATUS_UNSUPPORTED);
+  CHECK(ticket == 0 && optimizer->busy == 0u);
   printf("same-owner O2 hold PASS: %u checks\n", checks);
   return 0;
 }
