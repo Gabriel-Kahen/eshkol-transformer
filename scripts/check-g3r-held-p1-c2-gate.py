@@ -67,22 +67,42 @@ def phase_calls(source: str) -> list[int]:
               re.finditer(r'"(?:\\.|[^"\\])*"|;[^\n]*|[()]|[^()\s";]+', source)
               if not match.group().startswith(';')]
     phases = []
-    depth = 0
+    frames = []
+    fixture_definitions = 0
+
+    def token_at(index: int) -> str:
+        return tokens[index][0] if index < len(tokens) else ''
+
     for index, (token, start, _) in enumerate(tokens):
         if token == ')':
-            depth -= 1
+            assert frames
+            frames.pop()
             continue
         if token != '(':
             continue
-        if index + 1 >= len(tokens) or tokens[index + 1][0] != 'g3r-test-phase':
-            depth += 1
+        if not frames and tuple(token_at(index + offset) for offset in range(1, 4)) == (
+                'define', '(', 'fixture'):
+            assert tuple(token_at(index + offset) for offset in range(1, 6)) == (
+                'define', '(', 'fixture', 'directory', ')')
+            fixture_definitions += 1
+        if token_at(index + 1) != 'g3r-test-phase':
+            frames.append(index)
             continue
         assert index + 3 < len(tokens)
         value, _, _ = tokens[index + 2]
         closing, _, end = tokens[index + 3]
         assert value.isascii() and value.isdecimal() and closing == ')'
         phase = int(value)
-        assert (depth > 0) if 100 <= phase <= 103 else (depth == 0)
+        if 100 <= phase <= 103:
+            assert frames
+            outer = frames[0]
+            assert tuple(token_at(outer + offset) for offset in range(1, 6)) == (
+                'define', '(', 'fixture', 'directory', ')')
+            expected_frames = {100: 1, 101: 2, 102: 2, 103: 3}
+            assert len(frames) == expected_frames[phase]
+            assert all(token_at(frame + 1) == 'let*' for frame in frames[1:])
+        else:
+            assert not frames
         line_start = source.rfind('\n', 0, start) + 1
         line_end = source.find('\n', end)
         if line_end == -1:
@@ -90,7 +110,9 @@ def phase_calls(source: str) -> list[int]:
         assert not source[line_start:start].strip()
         assert not source[end:line_end].strip()
         phases.append(phase)
-        depth += 1
+        frames.append(index)
+    assert not frames
+    assert fixture_definitions == 1
     return phases
 
 
@@ -253,6 +275,25 @@ check(fixture + '\n; (g3r-test-phase 203)\n'
       '(define phase-text "(g3r-test-phase 203)")\n', runner, bit_bridge)
 mutations = (
     (fixture.replace('(g3r-test-phase 0)', ''), bit_bridge),
+    # Keep the phase numbers in order while moving receipts into dead helpers.
+    (fixture.replace('(define (fixture directory)\n  (g3r-test-phase 100)',
+                     '(define (unused-phase)\n  (g3r-test-phase 100))\n'
+                     '(define (fixture directory)'), bit_bridge),
+    (fixture.replace('    (g3r-test-phase 101)',
+                     '    (define (unused-phase)\n'
+                     '      (g3r-test-phase 101))'), bit_bridge),
+    (fixture.replace('    (g3r-test-phase 102)',
+                     '    (begin\n      (g3r-test-phase 102))'), bit_bridge),
+    (fixture.replace('      (g3r-test-phase 103)',
+                     '      (define (unused-phase)\n'
+                     '        (g3r-test-phase 103))'), bit_bridge),
+    (fixture.replace('      (g3r-test-phase 103)', '')
+            .replace('(define (controls tuple)',
+                     '(define (unused-phase)\n  (g3r-test-phase 103))\n'
+                     '(define (controls tuple)'), bit_bridge),
+    (fixture.replace('(define (controls tuple)',
+                     '(define (fixture directory) #f)\n'
+                     '(define (controls tuple)'), bit_bridge),
     (fixture.replace('(g3r-test-phase 203)', ''), bit_bridge),
     (fixture.replace('(g3r-test-phase 203)',
                      '(g3r-test-phase 203)\n(g3r-test-phase 203)'), bit_bridge),
@@ -290,11 +331,19 @@ mutations = (
                                  'et_f32_parameter_save_witness_end_v1(')),
 )
 for index, (mutation, bridge_mutation) in enumerate(mutations):
+    assert mutation != fixture or bridge_mutation != bit_bridge
     try:
         check(mutation, runner, bridge_mutation)
     except (AssertionError, ValueError):
         continue
     raise AssertionError(f"held P1/C2 mutation {index} escaped")
+for index, (mutation, _) in enumerate(mutations[1:7], 1):
+    assert balanced(mutation)
+    try:
+        phase_calls(mutation)
+    except AssertionError:
+        continue
+    raise AssertionError(f"phase scope mutation {index} escaped scanner")
 
 # Exercise the embedded runtime parser with a complete trace and three interior
 # counterexamples. The fixture function emits 100-103 on each of five calls.

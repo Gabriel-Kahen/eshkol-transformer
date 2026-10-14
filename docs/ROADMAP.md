@@ -2243,11 +2243,16 @@ pass. No causal call or runtime success is established by this instrumentation.
 Independent source review found that its runtime parser accepted the 0-29 load
 prefix followed directly by 999. The bounded successor requires the exact
 ordered trace, including five 100-103 fixture groups and every 200-600 cut.
-Its source preflight scans calls outside strings and comments, requires each
-phase receipt on its own line at the expected nesting level, and rejects
-missing, duplicate, moved, inline and reordered calls. Its 36 focused preflight
-mutations pass, as do synthetic complete and damaged runtime-parser traces.
-This repair has source-only validation and remains unadmitted.
+Its source preflight scans calls outside strings and comments and requires each
+receipt on its own line. Independent review of the 36-mutation revision found
+that a fixture receipt moved to an unused helper still passed source preflight.
+The successor binds 100-103 to the single `fixture` definition and their exact
+`fixture`/`let*` lexical frames, while all other receipts must be top-level.
+Its 42 focused mutations include ordered moves into dead helpers before,
+within and after `fixture`; synthetic complete and damaged runtime-parser
+traces also pass. Lexical placement alone does not prove a receipt executes;
+the exact runtime trace remains the execution gate. This repair has source-only
+validation and remains unadmitted.
 A fresh pinned one-use compiled/runtime gate and independent review must use
 the receipts to locate the failure before any held P1/C2 admission.
 
