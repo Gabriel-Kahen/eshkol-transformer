@@ -1392,7 +1392,9 @@ probes, one-shot state, and same-frame retry against a fixed-seed twin.
 The native fixture measures no L3S dispatch at denial and a completed first
 batch for occurrence 2; the host dispatch-before-denial mutant must fail that
 count. This is source/host evidence only. Independent source/host review
-accepted exact `0f1a27f`/tree `9dfb1f5`.
+accepted exact `0f1a27f`/tree `9dfb1f5`; the durable receipt is
+`/home/gabe/.codex/evidence/eshkol-transformer/e3-stage9-l3s-source-review-20261014/REVIEW.txt`
+(SHA-256 `6ca71676c12e6543d0f3eabd4b66508eff326824b585abcb079937edb4487b41`).
 Supported compiled Eshkol normal, poison, and sanitizer gates remain pending;
 E3 §9 admission remains **HOLD**.
 
