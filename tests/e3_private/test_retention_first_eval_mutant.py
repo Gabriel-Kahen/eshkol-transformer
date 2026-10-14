@@ -96,8 +96,8 @@ class FirstEvaluationMutantTuple(unittest.TestCase):
                                             "tests/e3_private/retention_first_eval_frame.c\n"
                                             "src/eshkol_transformer/e3_frame.c\n", 1)
             if path.name in MUTANT_SANITIZER_HASHES:
-                # The mutant keeps its own 175/51 tuple; retention's marked IR
-                # now emits a different, exact 172/59 import split.
+                # The mutant keeps its own 179/51 declared tuple; retention's
+                # marked IR has a distinct 176/59 declared import split.
                 self.assertEqual(sha(copied), MUTANT_SANITIZER_HASHES[path.name])
                 self.assertNotEqual(copied.read_bytes(), path.read_bytes())
             else:

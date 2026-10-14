@@ -105,7 +105,7 @@ printf '%s\n' "$e3_tuple_kind"
 
     def test_exact_tuple_delta_and_accepted_retention_driver(self) -> None:
         self.assertEqual(hashlib.sha256((PRIVATE / "retention_driver.esk").read_bytes()).hexdigest(),
-                         "a62186336f2fad5496756902f426409e088017c6f1823f7e21a3a5690bfc9ed7")
+                         "76a09c4006982b1f0224b4f6b22eedda7a56e9b64fefc5dc396e4f27c16939d2")
         for suffix, added, removed in (
             ("source_closure", {"tests/e3_private/overflow_driver_root.esk",
                                 "tests/e3_private/overflow_driver.esk"},
@@ -114,7 +114,9 @@ printf '%s\n' "$e3_tuple_kind"
             ("public_exports", {"et_e3_overflow_run_v1"}, set()),
             ("public_strings", {"et_e3_overflow_run_v1"}, set()),
             ("defined_symbols", {"et_e3_overflow_run_v1"}, set()),
-            ("undefined_symbols", {"fflush"}, set()),
+            ("undefined_symbols", set(),
+             {"eshkol_display_value_to_port", "eshkol_runtime_current_error_fp",
+              "eshkol_write_value_to_port"}),
         ):
             with self.subTest(suffix=suffix):
                 baseline = (PRIVATE / f"retention_package_{suffix}.txt").read_text().splitlines()

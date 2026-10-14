@@ -33,6 +33,8 @@ class RetentionSanitizerPolicyTests(unittest.TestCase):
                                       ("__asan_load1", "__asan_report_load16"))
                     rows.remove(removed)
                     rows.append(added)
+                elif mutation.startswith("remove:"):
+                    rows.remove(mutation.removeprefix("remove:"))
                 inputs[kind].write_text("\n".join(sorted(rows)) + "\n")
             return subprocess.run(
                 ["bash", "-c", 'set -euo pipefail; die() { echo "$*" >&2; exit 1; }; '
@@ -41,7 +43,7 @@ class RetentionSanitizerPolicyTests(unittest.TestCase):
                  "policy", str(ROOT / "scripts/e3-retention-sanitizer-import-policy.sh"),
                  str(ROOT), *(str(p) for p in inputs), tuple_kind], capture_output=True)
 
-    def test_exact_emitted_inventory(self):
+    def test_exact_declared_inventory(self):
         result = self.run_policy()
         self.assertEqual(result.returncode, 0, result.stderr.decode())
 
@@ -49,9 +51,9 @@ class RetentionSanitizerPolicyTests(unittest.TestCase):
         normal = set(Path(str(PREFIX) + "_undefined_symbols.txt").read_text().splitlines())
         non = set(Path(str(PREFIX) + "_sanitized_noninstrumentation_undefined_symbols.txt").read_text().splitlines())
         instrumentation = set(Path(str(PREFIX) + "_sanitized_instrumentation_undefined_symbols.txt").read_text().splitlines())
-        self.assertEqual((len(non), len(instrumentation)), (172, 59))
+        self.assertEqual((len(non), len(instrumentation)), (176, 59))
         self.assertFalse(non & instrumentation)
-        self.assertEqual(len(non | instrumentation), 231)
+        self.assertEqual(len(non | instrumentation), 235)
         self.assertEqual(non - normal, {"bcmp", "puts"})
         self.assertEqual(normal - non, {
             "eshkol_ad_seed_flag", "eshkol_runtime_fatal", "eshkol_taylor_lift_ad_node",
@@ -70,6 +72,10 @@ class RetentionSanitizerPolicyTests(unittest.TestCase):
 
     def test_mutant_tuple_keeps_its_own_exact_imports(self):
         self.assertEqual(self.run_policy(tuple_kind="retention-first-eval-mutant").returncode, 0)
+        mutant_non = set(Path(str(MUTANT_PREFIX) + "_sanitized_noninstrumentation_undefined_symbols.txt").read_text().splitlines())
+        mutant_instrumentation = set(Path(str(MUTANT_PREFIX) + "_sanitized_instrumentation_undefined_symbols.txt").read_text().splitlines())
+        self.assertEqual((len(mutant_non), len(mutant_instrumentation)), (179, 51))
+        self.assertEqual(len(mutant_non | mutant_instrumentation), 230)
         for kind in (1, 2):
             for mutation in ("missing", "extra", "same_count"):
                 with self.subTest(kind=kind, mutation=mutation):
@@ -78,7 +84,22 @@ class RetentionSanitizerPolicyTests(unittest.TestCase):
 
     def test_retention_runner_checks_current_import_union(self):
         runner = (ROOT / "scripts/test-e3-complete-call-retention.sh").read_text()
-        self.assertIn('"${out}/expected-sanitized-undefined.txt")" == 231', runner)
+        self.assertIn('"${out}/expected-sanitized-undefined.txt")" == 235', runner)
+
+    def test_each_diagnostic_import_is_required_in_both_tuples(self):
+        diagnostics = {"eshkol_display_value_to_port",
+                       "eshkol_runtime_current_error_fp",
+                       "eshkol_write_value_to_port", "fflush"}
+        for tuple_kind, prefix in (("retention", PREFIX),
+                                   ("retention-first-eval-mutant", MUTANT_PREFIX)):
+            normal = set(Path(str(prefix) + "_undefined_symbols.txt").read_text().splitlines())
+            non = set(Path(str(prefix) + "_sanitized_noninstrumentation_undefined_symbols.txt").read_text().splitlines())
+            self.assertTrue(diagnostics <= normal & non)
+            for symbol in diagnostics:
+                for kind in (0, 1):
+                    with self.subTest(tuple_kind=tuple_kind, symbol=symbol, kind=kind):
+                        self.assertNotEqual(self.run_policy(
+                            kind, f"remove:{symbol}", tuple_kind).returncode, 0)
 
     def test_noninstrumentation_drift(self):
         for mutation in ("missing", "extra", "same_count"):

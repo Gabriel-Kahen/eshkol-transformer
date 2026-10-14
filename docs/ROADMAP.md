@@ -1130,6 +1130,17 @@ evidence is preserved. A source-only successor removes the extra edge-tail
 delimiter in the test driver and its derived mutant, with a whole-file parser
 negative that rejects the original malformed tail. Independent review and a
 fresh compiled result remain pending.
+The exact `7f54a866` E3-private source suite found four stale assertions after
+the edge diagnostics change: overflow pinned the prior retention-driver hash,
+and sanitizer policy still counted the pre-diagnostics 172/59 retention and
+175/51 mutant splits. Commit `78b9b468` added the same four ordinary imports
+(`eshkol_display_value_to_port`, `eshkol_runtime_current_error_fp`,
+`eshkol_write_value_to_port`, `fflush`) to each normal and sanitized
+noninstrumentation manifest. The declared splits are now 176/59 and 179/51;
+the retention runner's declared union is 235. Source tests require all four
+imports in both tuples and reject removing each one. These are candidate
+manifest and source-test repairs; actual compiled imports, edge runtime and
+§9 acceptance still require the supported gates.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each
