@@ -188,7 +188,7 @@ The named next gates keep each still-open obligation visible:
 |---|---|---|
 | N1 three-batch exact roles/CE/states/outputs | Numerical F failed sanitized import admission before AOT/runtime; no pass inferred | Independently reviewed inventory repair, fresh supported rerun, sealed evidence verdict. |
 | N2 five authentic layouts, cursor/repartition/boundary | Open beyond reference-only and final-only checks | Expanded frozen-corpus private AOT transcript. |
-| N3 correct/wrong/tie/uniform/target offset | Open; reachability/model authority unresolved | Reviewed idle-model control or test-only real-owner control, then independent M3 oracle and private AOT. |
+| N3 correct/wrong/tie/uniform/target offset | Bounded target-offset leaf passed F compiled gate and independent result review on exact `7bb38a56c` source/tree `370b6365`; current-main union unreviewed. Correct/wrong/tie/uniform and full N3 remain open. | Independent source/evidence/docs union review and hosted checks; separately prove remaining N3 cases with reviewed model control, independent M3 oracle and private AOT. |
 | N4 `01`, masked invalid, fenv, subnormal/signed-zero | Provider-only unless independent model reachability is shown | Retained direct K1 provider numeric/admission gate; leave private requirement explicitly unsupported or open after reachability review. |
 | N5 empty/singleton/EOS/one-token/8,192/8,193/resources | Horizon proves only a subset and lacks compiled 8,193 preflight | Authentic D2 private edge/cap and measured resource gate. |
 | M1 wrong target/mean of means | Compiled source exists, supported F result pending | Numerical F exact value assertions. |
