@@ -833,6 +833,13 @@ checks same-frame repeat behavior. Source/negative controls pass, but the
 changed retention, derived first-evaluation mutant and overflow compiled
 closures require fresh exact-tree package manifests and gates. No private AOT,
 resource, poison or sanitizer verdict is claimed, and full N5 remains open.
+
+The independent [N5 one-valid-final-token source candidate](e3/E3_N5_ONE_FINAL_TOKEN_SOURCE.md)
+uses an authenticated two-byte D1 shard and exactly one padded `10` D2 row.
+It pins the seed-1729 numerical oracle and a noninstalled private result/cursor
+witness without changing the production ABI or prior E3 packages. Focused
+offline source/negative tests pass; its exact-tree normal/repeat/poison/sanitizer
+compiled gate remains unrun, and no other N5 edge or full §9 verdict is claimed.
 The inherited first-evaluation mutant source test still pinned an older
 production `e3_frame.c` blob from before subsequent guarded E3 test seams.
 Its current-main source hash is now repinned in a separate source-only
