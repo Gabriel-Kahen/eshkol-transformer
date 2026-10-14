@@ -16,6 +16,9 @@
 #if defined(ET_E3_NUMERICAL_SUM_ORDER) && !defined(ET_E3_NUMERICAL_TESTING)
 #error "sum-order mutation requires the private numerical test tuple"
 #endif
+#if defined(ET_E3_NUMERICAL_PADDED_POSITION) && !defined(ET_E3_NUMERICAL_TESTING)
+#error "padded-position mutation requires the private numerical test tuple"
+#endif
 
 #if defined(ET_E3_NUMERICAL_TESTING) || defined(ET_E3_ZERO_CONTROL_TESTING)
 #include <inttypes.h>
@@ -1110,6 +1113,11 @@ int64_t et_e3_private_reduce_v1(void *pointer) {
     return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
   et_kernel_tensor_view_v1 mask = e3_native_view(
       frame->mask, sizeof(frame->mask), "bool", 2, e3_shape_pair);
+#ifdef ET_E3_NUMERICAL_PADDED_POSITION
+  unsigned char padded_mask[2] = {1, 1};
+  if (frame->mask[0] == 1 && frame->mask[1] == 0)
+    mask.data = padded_mask;
+#endif
   e3_operand inputs[] = {e3_tensor_operand(frame->ce), e3_view_operand(&mask)};
   et_f32_tensor *outputs[] = {frame->batch[0], frame->batch[1], frame->batch[2]};
   int64_t rc = e3_dispatch(frame, E3_RUNTIME_L3S,
@@ -1130,6 +1138,11 @@ int64_t et_e3_private_correct_v1(void *pointer) {
       frame->targets, sizeof(frame->targets), "i64", 2, e3_shape_pair);
   et_kernel_tensor_view_v1 mask = e3_native_view(
       frame->mask, sizeof(frame->mask), "bool", 2, e3_shape_pair);
+#ifdef ET_E3_NUMERICAL_PADDED_POSITION
+  unsigned char padded_mask[2] = {1, 1};
+  if (frame->mask[0] == 1 && frame->mask[1] == 0)
+    mask.data = padded_mask;
+#endif
   et_kernel_tensor_view_v1 active = e3_native_view(
       &frame->active, sizeof(frame->active), "i64", 0, NULL);
   et_f32_tensor *float_output[] = {frame->batch[3]};
