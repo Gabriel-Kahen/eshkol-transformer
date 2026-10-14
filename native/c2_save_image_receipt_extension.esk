@@ -11,7 +11,7 @@
 (extern void c2-image-fail-stop i64 :real _Exit)
 
 (define c2-image-receipts '())
-(define c2-image-brand (vector 'transformer.c2-save-image-receipt:v1))
+(define c2-image-brand (vector 'transformer.c2-save-image-receipt-v1))
 (define c2-image-allocate-internal (lambda (length) (make-bytevector length 0)))
 (define c2-image-after-adopt-internal (lambda () #t))
 

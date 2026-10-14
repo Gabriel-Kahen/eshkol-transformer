@@ -244,7 +244,8 @@
 (check "corrupt READY can release"
        (c2-save-image-receipt-release-internal! corrupt))
 
-(define baseline (length c2-image-receipts))
+(define baseline (c1-list-length-bounded c2-image-receipts 64))
+(check "receipt registry baseline is bounded" (integer? baseline))
 (let loop ((i 0))
   (if (< i 32)
       (let ((item (c2-save-image-receipt-create-internal owner policy)))
@@ -253,12 +254,12 @@
         (check "repeat native bytes baseline" (= (c2-image-live-bytes) 0))
         (check "repeat native roots baseline" (= (c2-image-live-count) 0))
         (check "repeat Eshkol roots baseline"
-               (= (length c2-image-receipts) baseline))
+               (= (c1-list-length-bounded c2-image-receipts 64) baseline))
         (loop (+ i 1)))))
 (check "native image bytes return to zero" (= (c2-image-live-bytes) 0))
 (check "native image roots return to zero" (= (c2-image-live-count) 0))
 (check "receipt registry returns to baseline"
-       (= (length c2-image-receipts) baseline))
+       (= (c1-list-length-bounded c2-image-receipts 64) baseline))
 (check "no regional escape" (= (c2-image-region-depth) 0))
 (check "owner releases" (c2-training-state-release-internal!
                             owner 'trainer-state-release!))

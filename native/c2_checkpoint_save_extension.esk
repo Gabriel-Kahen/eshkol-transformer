@@ -551,7 +551,7 @@
                         (_size-admitted
                           (if (and max-image-bytes
                                    (> file-bytes max-image-bytes))
-                              (c2-save-fail
+                              (c2-save-fail-raw
                                 'invalid-state
                                 "C2 image exceeds the receipt limit" '() #f)))
                         ;; The destination belongs to the parent scratch. A

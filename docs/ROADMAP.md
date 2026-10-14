@@ -2056,8 +2056,17 @@ prepares a deterministic compiled Eshkol driver for public SAVE compatibility,
 held-owner rejection, measured-cap order, malformed backing, post-adopt cleanup,
 digest/file parity, writer failure status and repeated release. Its source-only
 syntax/static gate passes; the pinned compiled normal/repeat/fail-stop run has
-not been authorized or executed. Native allocation/SHA injection, impossible
-post-adopt enrollment allocation, and process-root retention need separate
+failed during AOT at `de95fc45` before any receipt runtime assertion. The
+independent result review holds compiled acceptance: first diagnostic is the
+measured-cap macro at SAVE extension line 554, followed by a private C1 IO
+helper import, invalid receipt brand token, and no-stdlib fixture `length`.
+The scoped `codex/c2-save-image-aot-repair` successor uses the raw C2 failure
+function at the preallocation cap, exports C1's established native failure
+decoder only from its internal module, gives the brand a valid private symbol,
+and checks registry roots with C1's bounded count. Focused source and shell
+syntax checks pass; a fresh exact-head compiled normal/repeat/fail-stop gate
+and independent result review remain required. Native allocation/SHA injection,
+impossible post-adopt enrollment allocation, and process-root retention need separate
 instrumentation or a narrowed acceptance argument.
 The isolated `codex/c2-save-image-receipt-fault-cuts-20261013` follow-up adds
 test-only native failure cuts for entry/vector allocation, a synthetic SHA
