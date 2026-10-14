@@ -3302,7 +3302,7 @@ publication, public G2 and continuation remain pending.
   the real return status, observer branch/result, final wrapper status and
   native error domain/category/code on fd 4 before Eshkol translates status.
   The feature-off wrapper retains its original decision path and the phase-10
-  case witness remains intact. Twenty source-only tests pass, including
+  case witness remains intact. Twenty-one source-only tests pass, including
   missing-marker/output-field and feature-off negatives; no C or Eshkol
   compilation was run on this successor. Independent source review and one
   fresh immutable compiled diagnostic remain pending. P2/G2 runtime is held.
