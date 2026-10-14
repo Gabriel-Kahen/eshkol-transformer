@@ -49,7 +49,8 @@ void et_e3_test_frame_fail_alloc_after_v1(size_t count);
 
 #ifdef ET_E3_FAULT_TESTING
 /* Test-only, frame-owned selector. Site 1 is forward-role preinvoke;
- * site 2 is final publication precommit (ordinal 0, occurrence 1).
+ * site 2 is final publication precommit (ordinal 0, occurrence 1);
+ * site 8 is accumulation preinvoke (ordinal 0, occurrence 1 or 2).
  * Readback fields are state/site/ordinal/occurrence/reached. */
 int64_t et_e3_test_fault_arm_v1(void *frame, int64_t site,
                                 int64_t ordinal, int64_t occurrence);

@@ -1413,6 +1413,20 @@ accepted exact `94be03e669ab1432a4ff0b2f88d83fbd6cfed60e`/tree
 Supported compiled Eshkol normal, poison and sanitizer gates remain pending;
 E3 §9 admission remains **HOLD**.
 
+The bounded E3 §9 stage-11 source candidate adds noninstalled frame-owned
+site 8, ordinal 0, occurrences 1 or 2. It consumes after the corrected-phase
+and cleanup guard, before nine accumulation view borrows, E3-N K1 dispatch or
+sum-bank flip, returning fixed internal/invariant status (E1 stage 11, table
+index 143). The native fixture measures a completed correctness predecessor,
+one earlier completed accumulation for occurrence 2, and no accumulation
+dispatch at denial. The private fixture extends exact cursor, 17-mode,
+14-parameter/gradient/RNG, six-output, 29-probe, first-error and same-frame
+retry checks against a fault-free twin. Host checks include a compiled
+dispatch-before-denial mutant; native normal ran as an unsupported-host
+compatibility probe. Supported compiled Eshkol normal, poison and sanitizer
+gates and independent source review remain pending; E3 §9 admission remains
+**HOLD**.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
