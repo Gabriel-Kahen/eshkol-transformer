@@ -70,6 +70,33 @@
   (newline)
   (flush-output-port (current-output-port))
   (raise caught))
+;;; The consumed count=1 gate ended after the pre-snapshot stage. Catch each
+;;; binding's first error before a later let* initializer can obscure it.
+(define (case-binding label count thunk)
+  (stage label count)
+  (guard (caught
+           (#t
+             (display "G3-C4 private owners CASE FIRST ERROR: binding=")
+             (display label)
+             (display " type=")
+             (display (if (transformer-error? caught)
+                          'transformer-error 'non-transformer))
+             (display " category=")
+             (display (if (transformer-error? caught)
+                          (transformer-error-category caught) 'unknown))
+             (display " operation=")
+             (display (if (transformer-error? caught)
+                          (transformer-error-operation caught) 'unknown))
+             (display " message=")
+             (display (if (transformer-error? caught)
+                          (transformer-error-message caught) 'unknown))
+             (display " details=")
+             (display (if (transformer-error? caught)
+                          (transformer-error-details caught) 'unknown))
+             (newline)
+             (flush-output-port (current-output-port))
+             (raise caught)))
+    (thunk)))
 (define (check label good)
   (if good (set! checks (+ checks 1))
       (begin (display "G3-C4 private owners FAIL: ")
@@ -164,16 +191,58 @@
            (g3c4-generator-create-internal model tokenizer (config eos)))
          (shell (begin (stage "terminal commit" expected-count)
                        (g3c4-p2g2-terminal-commit-private! generator input)))
-         (snapshot (begin (stage "terminal snapshot" expected-count)
-                          (g3c4-p2g2-terminal-snapshot-private shell)))
+         (snapshot
+           (let ((value
+                   (case-binding "terminal snapshot" expected-count
+                     (lambda ()
+                       (g3c4-p2g2-terminal-snapshot-private shell)))))
+             (stage "terminal snapshot complete" expected-count)
+             value))
          (source-entry
-           (g3c4-p2g2-terminal-output-entry-live shell 'private-owners))
-         (source-native (vector-ref source-entry 3))
-         (count (g3c4-p2g2-terminal-snapshot-small-word snapshot 24))
-         (first (g3c4-p2g2-terminal-snapshot-small-word snapshot 8))
-         (second (g3c4-p2g2-terminal-snapshot-small-word snapshot 16))
-         (ids (car (begin (stage "clone and readback" expected-count)
-                          (g3c4-p2g2-terminal-ids-clone-private shell))))
+           (let ((value
+                   (case-binding "source output entry begin" expected-count
+                     (lambda ()
+                       (g3c4-p2g2-terminal-output-entry-live
+                         shell 'private-owners)))))
+             (stage "source output entry complete" expected-count)
+             value))
+         (source-native
+           (let ((value
+                   (case-binding "source native pointer begin" expected-count
+                     (lambda () (vector-ref source-entry 3)))))
+             (stage "source native pointer complete" expected-count)
+             value))
+         (count
+           (let ((value
+                   (case-binding "snapshot count read begin" expected-count
+                     (lambda ()
+                       (g3c4-p2g2-terminal-snapshot-small-word
+                         snapshot 24)))))
+             (stage "snapshot count read complete" expected-count)
+             value))
+         (first
+           (let ((value
+                   (case-binding "snapshot first read begin" expected-count
+                     (lambda ()
+                       (g3c4-p2g2-terminal-snapshot-small-word
+                         snapshot 8)))))
+             (stage "snapshot first read complete" expected-count)
+             value))
+         (second
+           (let ((value
+                   (case-binding "snapshot second read begin" expected-count
+                     (lambda ()
+                       (g3c4-p2g2-terminal-snapshot-small-word
+                         snapshot 16)))))
+             (stage "snapshot second read complete" expected-count)
+             value))
+         (ids
+           (let ((value
+                   (case-binding "clone and readback" expected-count
+                     (lambda ()
+                       (car (g3c4-p2g2-terminal-ids-clone-private shell))))))
+             (stage "clone call complete" expected-count)
+             value))
          (entry (g3c4-p2g2-terminal-ids-entry-live ids 'private-owners))
          (native (vector-ref entry 3))
          (extent (+ 8 (* count 8)))

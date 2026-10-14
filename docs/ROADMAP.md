@@ -3236,8 +3236,25 @@ publication, public G2 and continuation remain pending.
   prefix commit's pending-output check. The diagnostic now reports the first
   error's message/details inside the call boundary and marks protected-owner,
   prefix-owner and reserve-core steps. Source/tests review and a fresh sealed
-  one-use compiled gate remain pending. All failed packages and raw evidence
-  are preserved; terminal/full/public/data-only G3 remain HOLD.
+  one-use compiled gate were completed for the `cfbbbffe` source and
+  independently reviewed, but the consumed gate is HOLD: normal AOT compiled,
+  and runtime completed the zero-count reserve, native first frame, T1 decode,
+  abort and close before case 1 printed `terminal commit` and `terminal
+  snapshot`. It then raised a generic user exception before clone readback;
+  repeat and sanitizer did not run. The sealed 50-file raw manifest is
+  `g3c4-terminal-reserve-cfbbbffe-gate-all-raw-20261014.json` (SHA-256
+  `5ba50bf8bc028752273766edc8dc1995f73aceb70b5d9aae0694005607c79bab`),
+  with independent HOLD review SHA-256
+  `a67dc743baff40c0e25f1c810b40206c208e98d84ee24b5197235a17b1dd83c0`.
+  The stage preceded the snapshot call, so that trace cannot distinguish the
+  call from following `let*` bindings or establish a production defect. A
+  bounded diagnostic successor adds flushed begin/complete markers and
+  first-error type/category/operation/message/details for each snapshot,
+  live-output, native-pointer, small-word and clone initializer. Source/tests
+  review and a fresh one-use gate remain pending; no snapshot, clone, short
+  extent, held owner, repeat/sanitizer or public G3 acceptance is claimed.
+  All failed packages and raw evidence are preserved; terminal/full/public/
+  data-only G3 remain HOLD.
 
 ## Wave 4 — practical pretraining and performance
 

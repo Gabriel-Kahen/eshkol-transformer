@@ -56,7 +56,7 @@ for fragment in (
     '(flush-output-port (current-output-port))',
     '(stage "setup begin" 0)',
     '(stage "terminal commit" expected-count)',
-    '(stage "clone and readback" expected-count)',
+    '(case-binding "clone and readback" expected-count',
     '(stage "negative short extent" expected-count)',
     'native count short-copy (* count 8)',
     '(bytevector-length (vector-ref entry 8)) extent',
@@ -115,7 +115,7 @@ def probe_valid(text):
 
 assert probe_valid(probe)
 reserve_error = fixture.split('(define (probe-reserve-error caught)', 1)[1].split(
-    '(define (check label good)', 1)[0]
+    '(define (case-binding label count thunk)', 1)[0]
 
 
 def reserve_error_valid(text):
@@ -160,6 +160,91 @@ for before, after in (
 assert '(transformer-error-category caught)' in fixture
 assert '(transformer-error-operation caught)' in fixture
 assert '(flush-output-port (current-output-port))' in fixture
+
+# The consumed cfbbbffe compiled gate finished terminal commit, then failed
+# after the pre-snapshot stage with a generic exception. Every initializer up
+# to the clone must identify its own first error and finish with a flushed
+# completion marker, without making a failed case look successful.
+case_helper = fixture.split('(define (case-binding label count thunk)', 1)[1].split(
+    '(define (check label good)', 1)[0]
+case = fixture.split('(define (case-run eos expected-count)', 1)[1].split(
+    '(case-run first-id 1)', 1)[0]
+case_bindings = (
+    ('terminal snapshot', 'terminal snapshot complete',
+     '(g3c4-p2g2-terminal-snapshot-private shell)'),
+    ('source output entry begin', 'source output entry complete',
+     '(g3c4-p2g2-terminal-output-entry-live'),
+    ('source native pointer begin', 'source native pointer complete',
+     '(vector-ref source-entry 3)'),
+    ('snapshot count read begin', 'snapshot count read complete',
+     'snapshot 24)'),
+    ('snapshot first read begin', 'snapshot first read complete',
+     'snapshot 8)'),
+    ('snapshot second read begin', 'snapshot second read complete',
+     'snapshot 16)'),
+    ('clone and readback', 'clone call complete',
+     '(car (g3c4-p2g2-terminal-ids-clone-private shell))'),
+)
+
+
+def case_helper_valid(text):
+    required = (
+        '(stage label count)', '(guard (caught',
+        'G3-C4 private owners CASE FIRST ERROR: binding=',
+        '(transformer-error? caught)',
+        '(transformer-error-category caught)',
+        '(transformer-error-operation caught)',
+        '(transformer-error-message caught)',
+        '(transformer-error-details caught)',
+        '(flush-output-port (current-output-port))',
+        '(raise caught)', '(thunk)',
+    )
+    return (all(fragment in text for fragment in required)
+            and text.index('(stage label count)') < text.index('(guard (caught')
+            and text.index('(raise caught)') < text.index('(thunk)'))
+
+
+def case_valid(text):
+    if text.count('(case-binding ') != len(case_bindings):
+        return False
+    previous = -1
+    for label, complete, call in case_bindings:
+        start = text.find(f'(case-binding "{label}" expected-count')
+        end = text.find(f'(stage "{complete}" expected-count)', start)
+        if start <= previous or end <= start or call not in text[start:end]:
+            return False
+        previous = end
+    return (text.index('(case-binding "terminal snapshot" expected-count')
+            > text.index('(stage "terminal commit" expected-count')
+            and text.index('(stage "clone readback complete" expected-count)')
+            > previous)
+
+
+assert case_helper_valid(case_helper)
+assert case_valid(case)
+for before, after in (
+    ('(transformer-error-message caught)', "'unknown"),
+    ('(transformer-error-details caught)', "'unknown"),
+    ('(flush-output-port (current-output-port))', '#t'),
+    ('(raise caught)', '#t'),
+):
+    assert before in case_helper and not case_helper_valid(
+        case_helper.replace(before, after, 1)), before
+for before, after in (
+    ('(case-binding "terminal snapshot" expected-count',
+     '(begin'),
+    ('(stage "terminal snapshot complete" expected-count)',
+     '(stage "terminal snapshot lost" expected-count)'),
+    ('(case-binding "source output entry begin" expected-count',
+     '(begin'),
+    ('(stage "snapshot count read complete" expected-count)',
+     '(stage "snapshot count lost" expected-count)'),
+    ('(g3c4-p2g2-terminal-snapshot-private shell)',
+     '(g3c4-p2g2-terminal-ids-clone-private shell)'),
+    ('(vector-ref source-entry 3)', '(vector-ref source-entry 4)'),
+    ('(case-binding "clone and readback" expected-count', '(begin'),
+):
+    assert before in case and not case_valid(case.replace(before, after, 1)), before
 
 
 def valid(text):
@@ -300,4 +385,4 @@ for before, after in mutations:
 allocation = "(bytes (make-bytevector extent 0))"
 before, after = source.rsplit(allocation, 1)
 assert not valid(before + "(bytes (make-bytevector payload 0))" + after)
-print(f"G3-C4 terminal private I1 owner source PASS: {len(mutations) + 1} negative mutations")
+print(f"G3-C4 terminal private I1 owner source PASS: {len(mutations) + 1} owner + 11 diagnostic negative mutations")
