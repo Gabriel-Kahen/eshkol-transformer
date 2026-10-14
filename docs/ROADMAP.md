@@ -2165,6 +2165,11 @@ core for canonical-byte admission, updates the lease failure witness to the
 23-slot record, and reseals the affected fixture hashes. Focused source
 contracts pass; compiled CLI3 and TR3 runtime admission and independent review
 remain pending.
+The follow-up TR3 witness-pin repair aligns both lease runtime manifests with
+the unchanged restore-successor source contract. A source-only regression
+rejects the prior stale digest and a foreign digest; historical runner, runtime,
+and trainer provenance remains pinned. Independent source review and compiled
+runtime gates remain pending.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),
