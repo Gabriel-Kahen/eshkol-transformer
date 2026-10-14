@@ -3184,6 +3184,13 @@ publication, public G2 and continuation remain pending.
   words without inventing a precommit RNG oracle. Its source-only negative
   checks do not establish compiled first-EOS/G2 execution, public access,
   output release, detached I1 clone or data-only continuation.
+  A separate source-private terminal release leaf now authenticates that same
+  surviving original before native release. Native held-I1 rejection leaves
+  its Scheme output and text intact; success enters a guarded fixed-write tail
+  that scrubs both original logical text carriers and tombstones the output.
+  Same-shell dead release is idempotent. Older rooted records remain as dead
+  tombstones, so long-run retention is unmeasured. This source-only leaf still
+  needs independent review and compiled held-lease/release proof.
 
 ## Wave 4 — practical pretraining and performance
 

@@ -1,0 +1,53 @@
+;;; Source-private release of an original published P2/G2 terminal output.
+;;; A native held I1 lease rejects before any Scheme owner is changed.
+
+(define (g3c4-p2g2-terminal-release-private! shell)
+  (let ((operation 'g3c4-p2g2-terminal-release-private!))
+    (m3-call operation
+      (let ((output (g3c4-registry-find shell operation)))
+        (if (g3c4-dead-entry? output 'terminal-output)
+            #t
+            (let* ((entry (g3c4-p2g2-terminal-output-entry-live
+                            shell operation))
+                   (live (g3c4-p2g2-terminal-snapshot-live-for
+                           shell entry operation))
+                   (native (vector-ref entry 3))
+                   (text-one (vector-ref live 4))
+                   (text-two (vector-ref live 5))
+                   (barrier (vector #f)))
+              (if (not (and (eq? output entry)
+                            (bytevector? text-one)
+                            (= (bytevector-length text-one) 1)
+                            (bytevector? text-two)
+                            (= (bytevector-length text-two) 2)
+                            (not (eq? text-one text-two))
+                            (eq? native (vector-ref live 3))
+                            (eq? entry
+                                 (g3c4-p2g2-terminal-output-entry-live
+                                   shell operation))
+                            (eq? live
+                                 (g3c4-p2g2-terminal-snapshot-live-for
+                                   shell entry operation))))
+                  (g3c4-fail 'invalid-state operation
+                             "terminal original owner changed before release"))
+              (guard (caught
+                       (#t (if (vector-ref barrier 0) (exit 134))
+                           (raise caught)))
+                (let ((status (g3c4-native-output-release native)))
+                  (if (= status 0)
+                      (begin
+                        ;; Native success is destructive. All remaining writes
+                        ;; use preauthenticated objects and fixed indices.
+                        (vector-set! barrier 0 #t)
+                        (bytevector-u8-set! text-one 0 0)
+                        (bytevector-u8-set! text-two 0 0)
+                        (bytevector-u8-set! text-two 1 0)
+                        (g3c4-entry-dead! entry)
+                        (vector-set! live 0 'dead)
+                        (let clear ((index 1))
+                          (if (< index 16)
+                              (begin
+                                (vector-set! live index #f)
+                                (clear (+ index 1)))))
+                        #t)
+                      (g3c4-native-check status operation))))))))))
