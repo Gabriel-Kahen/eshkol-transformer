@@ -3197,8 +3197,15 @@ publication, public G2 and continuation remain pending.
   verifies copied logical IDs before publishing a separate owner. Its private
   copy and release entries do not require the terminal source to remain live;
   held-clone lease rejection preserves the owner. Focused source mutations
-  pass, while same-registry compiled clone/copy/release, source-release-before-
-  clone-read, and public tensor access remain unproved. Retired Scheme anchor
+  passed on the initial leaf, but independent review placed that exact source
+  on HOLD: a caller could forge mutable entry slot 2 to `dead` and make repeat
+  release report success while the native clone remained live. A focused
+  successor routes repeat release through the original rooted anchor and a
+  native-success/retirement proof; its source mutation gate covers forged-dead
+  bypass, same-shell cleanup ordering and other-kind anchor substitution. It
+  still needs independent review and compiled adversarial release/repair,
+  held-lease, same-registry clone/copy/release and source-release-before-clone-
+  read proof. Public tensor access remains unproved. Retired Scheme anchor
   nodes persist as tombstones; long-run retention is unmeasured.
 
 ## Wave 4 — practical pretraining and performance

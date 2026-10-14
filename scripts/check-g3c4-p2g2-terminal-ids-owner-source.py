@@ -60,14 +60,21 @@ def valid(text):
         "(anchor 'publish #f)",
         "(vector-set! entry 2 'live)",
         "(g3c4-p2g2-terminal-ids-entry-live shell operation)",
-        "(g3c4-p2g2-native-terminal-ids-clone-release native)",
+        "(g3c4-p2g2-native-terminal-ids-clone-release\n                                original-native)",
         "(g3c4-dead-entry? entry 'terminal-ids)",
+        "(begin\n              (g3c4-p2g2-terminal-ids-entry-dead shell entry operation)\n              #t)",
+        "(g3c4-p2g2-terminal-ids-entry-dead shell entry operation)",
+        "(let ((anchor (g3c4-p2g2-terminal-ids-anchor-for shell operation)))",
+        "(anchor 'dead entry)",
+        "(anchor 'native-release release-request)",
+        "(release-request (cons live barrier))",
+        "(if (= status 0)\n                            (begin\n                              (vector-set! (cdr candidate) 0 #t)\n                              (set! native-released? #t)))",
+        "(and retired? native-released? node-bound?",
+        "(anchor 'retire live)",
         "(anchor 'node-bind anchor-node)",
         "(anchor 'node nodes)",
         "(g3c4-p2g2-zero-bytes! bytes (* count 8))",
-        "(vector-set! barrier 0 #t)",
         "(g3c4-entry-dead! live)",
-        "(anchor 'retire #f)",
     )
     if any(fragment not in code for fragment in required):
         return False
@@ -90,7 +97,18 @@ def valid(text):
     match = code.rindex("(anchor 'bytes-match bytes)")
     publish = code.index("(anchor 'publish #f)")
     live = code.index("(vector-set! entry 2 'live)")
-    return clone < copy < match < publish < live
+    release = code.index("(define (g3c4-p2g2-terminal-ids-release-private! shell)")
+    dead = code.index("(g3c4-p2g2-terminal-ids-entry-dead shell entry operation)", release)
+    native_release = code.index("(anchor 'native-release release-request)", release)
+    anchor_release = code.index("((eq? command 'native-release)")
+    native_status = code.index("(g3c4-p2g2-native-terminal-ids-clone-release", anchor_release)
+    barrier = code.index("(vector-set! (cdr candidate) 0 #t)", anchor_release)
+    recorded = code.index("(set! native-released? #t)", anchor_release)
+    scrub = code.index("(g3c4-entry-dead! live)", release)
+    retire = code.index("(anchor 'retire live)", release)
+    return (clone < copy < match < publish < live < release
+            and anchor_release < native_status < barrier < recorded < release
+            and release < dead < native_release < scrub < retire)
 
 
 assert valid(source)
@@ -112,12 +130,24 @@ mutations = (
     ("(= (bytevector-u8-ref bytes 0) payload)", "#t"),
     ("(g3c4-p2g2-terminal-ids-entry-live shell operation)",
      "(g3c4-registry-find shell operation)"),
-    ("(g3c4-dead-entry? entry 'terminal-ids)", "#f"),
+    ("(begin\n              (g3c4-p2g2-terminal-ids-entry-dead shell entry operation)\n              #t)", "#t"),
     ("(anchor 'node-bind anchor-node)", "#t"),
     ("(g3c4-p2g2-zero-bytes! bytes (* count 8))", "#t"),
-    ("(anchor 'retire #f)", "#t"),
-    ("(vector-set! barrier 0 #t)", "#t"),
+    ("(anchor 'retire live)", "#t"),
+    ("(vector-set! (cdr candidate) 0 #t)", "#t"),
     ("(g3c4-entry-dead! live)", "#t"),
+    # A live owner whose mutable slot 2 was forged to 'dead must fail the
+    # original-anchor proof rather than skip native release and cleanup.
+    ("(anchor 'dead entry)", "#t"),
+    ("(and retired? native-released? node-bound?",
+     "(and retired? node-bound?"),
+    ("(if (= status 0)\n                            (begin\n                              (vector-set! (cdr candidate) 0 #t)\n                              (set! native-released? #t)))",
+     "(begin\n                              (vector-set! (cdr candidate) 0 #t)\n                              (set! native-released? #t))"),
+    ("(anchor 'native-release release-request)",
+     "(g3c4-p2g2-native-terminal-ids-clone-release native)"),
+    # Re-labeling another kind's mutable fields cannot create this anchor.
+    ("(let ((anchor (g3c4-p2g2-terminal-ids-anchor-for shell operation)))",
+     "(let ((anchor #t))"),
 )
 for before, after in mutations:
     assert before in source and not valid(source.replace(before, after, 1)), before
