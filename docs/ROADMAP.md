@@ -2317,6 +2317,17 @@ concurrent-busy, foreign-owner and failed-release checks pass locally.
 Independent provider source review, adopter/C2 ticket migration, and a genuine
 feature-on repeated-scope aggregate remain pending. This foundation alone
 does not remove the v1 lifetime cap or admit SAVE or continuation.
+The next bounded private adapter uses the accepted G3/O2 provider v2 tickets
+through a new C2 pair v2 API and O2 adopter v2 ABI. The Eshkol pair and adopter
+FFI now carry positive i64 hold tickets while retaining the original G3/model/
+optimizer shells, the exact issued O2 state pointer, and reverse-order release.
+The v1 pointer APIs and capped pair path remain available unchanged. Focused
+native and source checks cover stale provider tickets while later pairs live,
+foreign/bit-equal owners, malformed copy carriers, concurrent acquisition,
+first-error drain and more than 64 sequential pairs against C ABI stubs.
+Independent source review and the compiled genuine-owner Eshkol scope gate
+remain pending; this adapter
+does not issue a C2 claim, receipt, SAVE, or data-only continuation admission.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),

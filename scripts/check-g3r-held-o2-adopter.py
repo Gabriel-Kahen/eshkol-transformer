@@ -8,10 +8,15 @@ adopter = (root / "native/g3r_held_o2_adopter_extension.esk").read_text()
 
 
 def check(c: str, s: str) -> None:
-    assert "issued == NULL || issued != candidate" in c
-    assert "et_g3r_private_o2_save_owner_match_v1" in c
-    assert "et_g3r_private_o2_save_issued_match_v1" in c
-    assert "et_g3r_private_o2_save_state_v1" in c
+    v2 = c.split("int64_t et_g3r_private_o2_adopter_owner_match_v2(", 1)[1]
+    v2 = v2.split("/* An indeterminate native lifecycle", 1)[0]
+    assert "issued == NULL || issued != candidate" in v2
+    assert "et_g3r_private_o2_save_owner_match_v2" in v2
+    assert "et_g3r_private_o2_save_issued_match_v2" in v2
+    assert "et_g3r_private_o2_save_state_v2" in v2
+    assert "(extern i64 g3r-held-o2-owner-match i64 ptr" in s
+    assert "(extern ptr g3r-held-o2-issue i64" in s
+    assert "(extern i64 g3r-held-o2-issued-match i64 ptr ptr ptr" in s
     assert "et_o2_optimizer_state_lifecycle_v1" in c
     allocation = s.index("(let* ((shell (o2-make-identity")
     issue = s.index("(let ((issued (g3r-held-o2-issue hold)))")

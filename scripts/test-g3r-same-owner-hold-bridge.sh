@@ -11,14 +11,12 @@ common=(-std=c11 -Wall -Wextra -Werror -Wpedantic -Wconversion
 feature=(-DET_G3R_SAME_OWNER_SAVE_PRIVATE
   -DET_G3R_COMMITTED_HISTORY_PRIVATE)
 "$cc" "${common[@]}" "${feature[@]}" \
-  "$root/native/g3r_same_owner_hold_bridge.c" \
   "$root/tests/g3r/same_owner_hold_bridge_test.c" -o "$out/normal"
 "$out/normal" >"$out/normal.out"
 "$out/normal" >"$out/repeat.out"
 cmp "$out/normal.out" "$out/repeat.out"
 "$cc" "${common[@]}" "${feature[@]}" -g \
   -fsanitize=address,undefined \
-  "$root/native/g3r_same_owner_hold_bridge.c" \
   "$root/tests/g3r/same_owner_hold_bridge_test.c" -o "$out/san"
 ASAN_OPTIONS=detect_leaks=1 "$out/san" >"$out/san.out"
 cmp "$out/normal.out" "$out/san.out"

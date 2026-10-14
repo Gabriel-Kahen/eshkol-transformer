@@ -15,6 +15,17 @@ void *et_g3r_private_same_owner_holds_o2_v1(int64_t pair);
 int64_t et_g3r_private_same_owner_holds_copy_g3_v1(
     int64_t pair, void *bytevector_header, int64_t payload_bytes);
 int64_t et_g3r_private_same_owner_holds_end_v1(int64_t pair);
+/* Ticket-backed successor. The v1 pointer-backed pair remains source-private
+ * and unchanged until every existing consumer is migrated. */
+int64_t et_g3r_private_same_owner_holds_begin_v2(
+    void *generator, void *model, void *optimizer);
+int64_t et_g3r_private_same_owner_holds_check_v2(
+    int64_t pair, void *generator, void *model, void *optimizer);
+int64_t et_g3r_private_same_owner_holds_g3_v2(int64_t pair);
+int64_t et_g3r_private_same_owner_holds_o2_v2(int64_t pair);
+int64_t et_g3r_private_same_owner_holds_copy_g3_v2(
+    int64_t pair, void *bytevector_header, int64_t payload_bytes);
+int64_t et_g3r_private_same_owner_holds_end_v2(int64_t pair);
 int64_t et_g3r_private_same_owner_holds_error_source_v1(void);
 int64_t et_g3r_private_same_owner_holds_error_category_v1(void);
 int64_t et_g3r_private_same_owner_holds_error_code_v1(void);

@@ -1,12 +1,12 @@
 ;;; Feature-private O2 held-state enrollment prerequisite. Load after O2 in a
 ;;; G3-R source aggregate with ET_G3R_SAME_OWNER_SAVE_PRIVATE. The caller owns
 ;;; the original hold and must keep it live through a later C2 transfer.
-(extern i64 g3r-held-o2-owner-match ptr ptr
-        :real et_g3r_private_o2_adopter_owner_match_v1)
-(extern ptr g3r-held-o2-issue ptr
-        :real et_g3r_private_o2_adopter_issue_v1)
-(extern i64 g3r-held-o2-issued-match ptr ptr ptr ptr
-        :real et_g3r_private_o2_adopter_issued_match_v1)
+(extern i64 g3r-held-o2-owner-match i64 ptr
+        :real et_g3r_private_o2_adopter_owner_match_v2)
+(extern ptr g3r-held-o2-issue i64
+        :real et_g3r_private_o2_adopter_issue_v2)
+(extern i64 g3r-held-o2-issued-match i64 ptr ptr ptr
+        :real et_g3r_private_o2_adopter_issued_match_v2)
 (extern void g3r-held-o2-fail-stop
         :real et_g3r_private_o2_adopter_fail_stop_v1)
 

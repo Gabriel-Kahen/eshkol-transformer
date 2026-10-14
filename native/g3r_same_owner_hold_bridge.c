@@ -16,6 +16,7 @@ typedef struct et_g3r_hold_pair {
   void *generator, *model, *optimizer;
   void *g3;
   et_o2_g3r_save_hold *o2;
+  int64_t g3_ticket, o2_ticket;
   unsigned live;
 } et_g3r_hold_pair;
 static et_g3r_hold_pair *pairs;
@@ -52,6 +53,13 @@ static et_g3r_hold_pair *admit(int64_t candidate) {
   for (et_g3r_hold_pair *p = pairs; p; p = p->next)
     if (p->ticket == candidate && p->live && p->g3 && p->o2) return p;
   bridge_error(2, 2); /* invalid-state, stale/foreign handle */
+  return NULL;
+}
+static et_g3r_hold_pair *admit_v2(int64_t candidate) {
+  for (et_g3r_hold_pair *p = pairs; p; p = p->next)
+    if (p->ticket == candidate && p->live && p->g3_ticket > 0 &&
+        p->o2_ticket > 0) return p;
+  bridge_error(2, 2);
   return NULL;
 }
 
@@ -190,6 +198,154 @@ int64_t et_g3r_private_same_owner_holds_end_v1(int64_t candidate) {
   }
   /* Remove by exact active record before freeing; stale tickets cannot match
    * a future allocation at the same address. Ambiguous registry is fatal. */
+  et_g3r_hold_pair **slot = &pairs;
+  while (*slot && *slot != pair) slot = &(*slot)->next;
+  if (!*slot || !pair_count) abort();
+  *slot = pair->next;
+  --pair_count;
+  free(pair);
+  error_source = first_source; error_category = first_category;
+  error_code = first_code;
+  return first_category;
+}
+int64_t et_g3r_private_same_owner_holds_begin_v2(
+    void *generator, void *model, void *optimizer) {
+  clear_error();
+  if (!generator || !model || !optimizer || pair_count == 64u ||
+      next_pair_ticket == INT64_MAX) {
+    bridge_error(!generator || !model || !optimizer ? 1 : 4, 1);
+    return 0;
+  }
+  et_g3r_hold_pair *pair = calloc(1, sizeof(*pair));
+  if (!pair) { bridge_error(5, 5); return 0; }
+  void *parameters[14] = {0};
+  const void *identities[14] = {0};
+  if (et_m3t_private_owner_save_roster_v1(model, parameters, identities)) {
+    m3_error(); free(pair); return 0;
+  }
+  pair->g3_ticket = et_g3r_private_g3t_save_begin_v2(
+      generator, parameters, identities);
+  if (pair->g3_ticket <= 0) { g3_error(); free(pair); return 0; }
+  et_f32_parameter *o2_parameters[14];
+  for (size_t i = 0; i < 14; ++i)
+    o2_parameters[i] = (et_f32_parameter *)parameters[i];
+  et_o2_error_v1 error = {0};
+  const int32_t o2_status = et_g3r_private_o2_save_begin_v2(
+      (et_o2_optimizer *)optimizer, o2_parameters, identities,
+      &pair->o2_ticket, &error);
+  if (o2_status) {
+    o2_error(&error, o2_status);
+    const int64_t first_source = error_source, first_category = error_category;
+    const int64_t first_code = error_code;
+    if (pair->o2_ticket != 0) abort();
+    /* A successful G3 begin owns exactly one pin/cache hold. Its ticket end
+     * drains even if the held image check reports the first defect. */
+    const int64_t g3_status = et_g3r_private_g3t_save_end_v2(
+        pair->g3_ticket);
+    if (g3_status && et_g3t_private_last_error_category_v1() == 1 &&
+        et_g3t_private_last_error_code_v1() == 1) abort();
+    error_source = first_source; error_category = first_category;
+    error_code = first_code;
+    free(pair);
+    return 0;
+  }
+  if (pair->o2_ticket <= 0) abort();
+  pair->generator = generator; pair->model = model; pair->optimizer = optimizer;
+  pair->ticket = next_pair_ticket++;
+  pair->live = 1u;
+  pair->next = pairs; pairs = pair; ++pair_count;
+  return pair->ticket;
+}
+
+int64_t et_g3r_private_same_owner_holds_check_v2(
+    int64_t candidate, void *generator, void *model, void *optimizer) {
+  clear_error();
+  et_g3r_hold_pair *pair = admit_v2(candidate);
+  if (!pair) return error_category;
+  if (pair->generator != generator || pair->model != model ||
+      pair->optimizer != optimizer)
+    return bridge_error(2, 3);
+  if (et_g3r_private_g3t_save_check_v2(pair->g3_ticket)) {
+    g3_error(); return error_category;
+  }
+  et_o2_error_v1 error = {0};
+  int32_t status = et_g3r_private_o2_save_owner_match_v2(
+      pair->o2_ticket, (et_o2_optimizer *)optimizer, &error);
+  if (status) { o2_error(&error, status); return error_category; }
+  status = et_g3r_private_o2_save_check_v2(pair->o2_ticket, &error);
+  if (status) { o2_error(&error, status); return error_category; }
+  return 0;
+}
+
+int64_t et_g3r_private_same_owner_holds_g3_v2(int64_t candidate) {
+  clear_error();
+  et_g3r_hold_pair *pair = admit_v2(candidate);
+  return pair ? pair->g3_ticket : 0;
+}
+int64_t et_g3r_private_same_owner_holds_o2_v2(int64_t candidate) {
+  clear_error();
+  et_g3r_hold_pair *pair = admit_v2(candidate);
+  return pair ? pair->o2_ticket : 0;
+}
+
+int64_t et_g3r_private_same_owner_holds_copy_g3_v2(
+    int64_t candidate, void *bytevector_header, int64_t payload_bytes) {
+  clear_error();
+  et_g3r_hold_pair *pair = admit_v2(candidate);
+  if (!pair) return error_category;
+  enum { HELD_BYTES = 17 * 8, CARRIER_BYTES = 8 + HELD_BYTES };
+  _Static_assert(sizeof(et_g3r_g3t_held_words_v1) == HELD_BYTES,
+                 "G3 held image ABI changed");
+  const uintptr_t address = (uintptr_t)bytevector_header;
+  if (!bytevector_header || payload_bytes != HELD_BYTES ||
+      address % _Alignof(int64_t) != 0u ||
+      address > UINTPTR_MAX - CARRIER_BYTES)
+    return bridge_error(1, 1);
+  int64_t declared = -1;
+  memcpy(&declared, bytevector_header, sizeof(declared));
+  if (declared != HELD_BYTES) return bridge_error(1, 1);
+  const uintptr_t end = address + CARRIER_BYTES;
+  const uintptr_t pair_begin = (uintptr_t)pair;
+  if (address < pair_begin + sizeof(*pair) && pair_begin < end)
+    return bridge_error(1, 1);
+  if (et_g3r_private_same_owner_holds_check_v2(
+          candidate, pair->generator, pair->model, pair->optimizer))
+    return error_category;
+  void *payload = (unsigned char *)bytevector_header + sizeof(int64_t);
+  if (et_g3r_private_g3t_save_copy_v2(
+          pair->g3_ticket, (et_g3r_g3t_held_words_v1 *)payload,
+          HELD_BYTES)) {
+    g3_error(); return error_category;
+  }
+  clear_error();
+  return 0;
+}
+
+int64_t et_g3r_private_same_owner_holds_end_v2(int64_t candidate) {
+  clear_error();
+  et_g3r_hold_pair *pair = admit_v2(candidate);
+  if (!pair) return error_category;
+  (void)et_g3r_private_same_owner_holds_check_v2(
+      candidate, pair->generator, pair->model, pair->optimizer);
+  int64_t first_source = error_source, first_category = error_category;
+  int64_t first_code = error_code;
+  et_o2_error_v1 error = {0};
+  const int32_t o2_status = et_g3r_private_o2_save_end_v2(
+      &pair->o2_ticket, &error);
+  if (pair->o2_ticket != 0) abort();
+  if (o2_status && !first_category) {
+    o2_error(&error, o2_status);
+    first_source = error_source; first_category = error_category;
+    first_code = error_code;
+  }
+  const int64_t g3_status = et_g3r_private_g3t_save_end_v2(pair->g3_ticket);
+  if (g3_status && et_g3t_private_last_error_category_v1() == 1 &&
+      et_g3t_private_last_error_code_v1() == 1) abort();
+  if (g3_status && !first_category) {
+    g3_error();
+    first_source = error_source; first_category = error_category;
+    first_code = error_code;
+  }
   et_g3r_hold_pair **slot = &pairs;
   while (*slot && *slot != pair) slot = &(*slot)->next;
   if (!*slot || !pair_count) abort();

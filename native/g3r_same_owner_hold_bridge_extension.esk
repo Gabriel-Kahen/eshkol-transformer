@@ -2,17 +2,17 @@
 ;;; link g3r_same_owner_hold_bridge.c with ET_G3R_SAME_OWNER_SAVE_PRIVATE.
 ;;; No public SAVE, receipt, or C2 continuation is installed here.
 (extern i64 g3r-holds-native-begin ptr ptr ptr
-        :real et_g3r_private_same_owner_holds_begin_v1)
+        :real et_g3r_private_same_owner_holds_begin_v2)
 (extern i64 g3r-holds-native-check i64 ptr ptr ptr
-        :real et_g3r_private_same_owner_holds_check_v1)
-(extern ptr g3r-holds-native-g3 i64
-        :real et_g3r_private_same_owner_holds_g3_v1)
-(extern ptr g3r-holds-native-o2 i64
-        :real et_g3r_private_same_owner_holds_o2_v1)
+        :real et_g3r_private_same_owner_holds_check_v2)
+(extern i64 g3r-holds-native-g3 i64
+        :real et_g3r_private_same_owner_holds_g3_v2)
+(extern i64 g3r-holds-native-o2 i64
+        :real et_g3r_private_same_owner_holds_o2_v2)
 (extern i64 g3r-holds-native-copy-g3 i64 ptr i64
-        :real et_g3r_private_same_owner_holds_copy_g3_v1)
+        :real et_g3r_private_same_owner_holds_copy_g3_v2)
 (extern i64 g3r-holds-native-end i64
-        :real et_g3r_private_same_owner_holds_end_v1)
+        :real et_g3r_private_same_owner_holds_end_v2)
 (extern i64 g3r-holds-error-source
         :real et_g3r_private_same_owner_holds_error_source_v1)
 (extern i64 g3r-holds-error-category
@@ -135,7 +135,7 @@
       (g3r-hold-pair-check! ledger operation)
       (let ((hold (g3r-holds-native-g3
                     (vector-ref (vector-ref ledger 1) 0))))
-        (if (null? hold) (g3r-holds-fail-stop))
+        (if (<= hold 0) (g3r-holds-fail-stop))
         hold))))
 
 (define (g3r-hold-pair-o2! ledger)
@@ -144,7 +144,7 @@
       (g3r-hold-pair-check! ledger operation)
       (let ((hold (g3r-holds-native-o2
                     (vector-ref (vector-ref ledger 1) 0))))
-        (if (null? hold) (g3r-holds-fail-stop))
+        (if (<= hold 0) (g3r-holds-fail-stop))
         hold))))
 
 (define (g3r-hold-pair-copy-g3! ledger)
