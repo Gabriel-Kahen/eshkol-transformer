@@ -3221,9 +3221,164 @@ publication, public G2 and continuation remain pending.
   [accepted same-call ownership contract](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md)
   specifies one original pending output entry, a surviving terminal anchor,
   authentic T1/EOS/second-token composition, and a preflighted no-failure close
-  after native commit. Native terminal integration and logical I1 clone code
-  are prerequisites; Eshkol implementation and compiled same-call proof remain
-  pending. No public G2 or continuation acceptance is claimed.
+  after native commit. A bounded private reservation dependency is source-staged
+  on `codex/g3c4-p2g2-eshkol-terminal-20261014`: it roots the original pending
+  output and allocation-time carrier identities, and leaves a held-lease abort
+  rejection intact for in-region release/retry. Its focused source-only checker
+  passes. The unmodified `c60779bbd` predecessor context/cache checker fails on
+  `Step 4a reaches deferred surface: generator_rng`; full same-call composition,
+  independent review, and compiled proof remain pending. No public G2 or
+  continuation acceptance is claimed. A separate source-private first-token
+  successor uses the accepted EOS-capable native first carrier and genuine
+  same-registry T1 decode into the original pending raw[1]/staging[8] owner,
+  with full i64 and identity rechecks after recoverable steps. It remains
+  abort-only in the existing protected call region. A following source-private
+  non-EOS leaf reuses the accepted native prefix commit on that original
+  pending output, then advances the existing protected phase; its source
+  checker covers eight negative mutations. A further source-private leaf calls
+  the accepted second-frame carrier on the original pending output and decodes
+  its genuine EOS or non-EOS ID through T1 into the distinct original second
+  raw[1] carrier; its focused checker covers twelve negative mutations. A
+  further source-private logical text preflight checks the first-EOS versus
+  committed-prefix G2 phase, full LE V256 IDs and T1 raw parity, then copies
+  the selected bytes into the original logical-one or logical-two text
+  carrier. Its source checker covers nineteen negative mutations. An abort-only
+  same-call source coordinator now composes the original pending reservation,
+  genuine first decode, conditional prefix/second decode, and logical text
+  preflight inside the existing protected region; both prepared and recoverable
+  error paths abort the original owner before leaving it. The reservation's
+  final post-root check also cleans the rooted pending anchor in-region on
+  rejection, with fail-stop if authenticated cleanup cannot complete. Its
+  source checker covers fifteen negative mutations. A following source-private
+  precommit frame is called on both abort-only branches after logical text
+  preparation. It reauthenticates the original owner, count, branch phase,
+  T1/raw/staging and selected text, then captures the exact 9-byte first and
+  optional second native raw-header operands and bounded tail references.
+  Its source checker covers twenty negative mutations. This remains
+  source-only and abort-only at that predecessor. A separate fixed private
+  coordinator now source-wires the accepted six-argument native terminal
+  commit after that precommit frame. It treats nonzero as recoverable before
+  the boundary, sets a preallocated fail-stop barrier immediately on zero,
+  then uses bounded writes to make the original output shell live while
+  clearing active call and pending-anchor edges. The first source candidate
+  `a11c1ca` is held: its zero tail also cleared the pending anchor's only
+  original-identity closure, leaving no authentic detached live authority.
+  A bounded repair now preallocates a distinct live record, allocation-identity
+  closure and two root nodes before first sampling, binds the proved branch,
+  count and original selected text before native commit, and publishes those
+  live roots only after native zero. The old pending anchor and roots are
+  tombstoned/removed in the same guarded tail. A source-private live-entry
+  checker authenticates the original record, output shell/entry/native,
+  logical text and IDs through the surviving roots; no public accessor or
+  release is added.
+  The exact pinned Eshkol compiler source confirms that `#f` in the first-EOS
+  fifth `ptr` argument lowers to C NULL, paired with extent zero. The focused
+  source gate covers prezero abort, postzero fail-stop, original root and
+  equal-length carrier substitution mutations. This is not compiled same-call
+  evidence: native invocation, first-EOS/G2 rollback and success, terminal release, post-call
+  snapshot, detached clone, public G2, and independent review of the repair
+  remain pending.
+  A separate private detached snapshot source leaf reads the accepted 72-byte
+  native descriptor only after terminal publication, rechecks the original live
+  output and surviving authority across the read, and matches ID, count and
+  cache words to the original T1 text. It returns the copied four final RNG
+  words without inventing a precommit RNG oracle. Its source-only negative
+  checks do not establish compiled first-EOS/G2 execution, public access,
+  output release, detached I1 clone or data-only continuation.
+  A separate source-private terminal release leaf now authenticates that same
+  surviving original before native release. Native held-I1 rejection leaves
+  its Scheme output and text intact; success enters a guarded fixed-write tail
+  that scrubs both original logical text carriers and tombstones the output.
+  The initial same-shell dead path had a source HOLD: caller mutation of its
+  entry state to `dead` could bypass native output release. A focused successor
+  now asks the surviving original closure for native-success and retirement
+  proof before accepting a dead entry; its Guile source probe rejects a forged
+  live-to-dead entry without releasing native state, then verifies held-I1
+  retry, successful native-zero cleanup and same-shell idempotence. This
+  successor passed independent source/tests review at `448015e0`, but its
+  one-use source preflight is held: Q0 rejected twelve tracked terminal
+  development checkers missing from its exact Python allowlist. A narrow
+  successor adds only those checker paths; it needs independent review and a
+  fresh one-use static package before any compiled adversarial proof. Older
+  rooted records remain as dead tombstones, so long-run retention is unmeasured.
+  A further source-private logical I1 owner now uses the existing native
+  terminal clone/copy/release ABI. It obtains an authenticated detached
+  snapshot, anchors the original typed shell and readback allocation, and
+  verifies copied logical IDs before publishing a separate owner. Its private
+  copy and release entries do not require the terminal source to remain live;
+  held-clone lease rejection preserves the owner. Focused source mutations
+  passed on the initial leaf, but independent review placed that exact source
+  on HOLD: a caller could forge mutable entry slot 2 to `dead` and make repeat
+  release report success while the native clone remained live. A focused
+  successor routes repeat release through the original rooted anchor and a
+  native-success/retirement proof; its source mutation gate covers forged-dead
+  bypass, same-shell cleanup ordering and other-kind anchor substitution. It
+  still needs independent review and compiled adversarial release/repair,
+  held-lease, same-registry clone/copy/release and source-release-before-clone-
+  read proof. Public tensor access remains unproved. Retired Scheme anchor
+  nodes persist as tombstones; long-run retention is unmeasured.
+  The consumed `1d917cc5` one-use compiled diagnostic failed with a generic
+  runtime exception and no stage trace. Independent review found that the
+  Eshkol clone and copy bytevectors allocated only the 8/16-byte payload while
+  passing the native 16/24-byte header-plus-payload extent. The scoped
+  `904eead` successor allocates and checks the complete extent, updates the
+  source contract and diagnostic expectations, and adds a short-extent
+  negative. Its source/Q0 checks passed, but its consumed `-b` one-use compiled
+  gate failed after `probe begin` with a generic exception. Generator creation
+  through probe close were unobserved, so the extent repair and terminal
+  behavior have no passing compiled proof. The `dcd8536` source-only diagnostic
+  added flushed stages and passed independent source/tests review, but its
+  consumed one-use compiled gate stopped after `pending reserve begin` with a
+  typed invalid-state error rewrapped as `private-owners-probe`. It never
+  reached native first-frame, terminal cases or extent readback. Source
+  inspection found a definite contradiction: terminal reserve checks prefix
+  ownership while output is empty, but the shared checker required an output.
+  A bounded successor gives reserve an explicit empty-output check and keeps
+  prefix commit's pending-output check. The diagnostic now reports the first
+  error's message/details inside the call boundary and marks protected-owner,
+  prefix-owner and reserve-core steps. Source/tests review and a fresh sealed
+  one-use compiled gate were completed for the `cfbbbffe` source and
+  independently reviewed, but the consumed gate is HOLD: normal AOT compiled,
+  and runtime completed the zero-count reserve, native first frame, T1 decode,
+  abort and close before case 1 printed `terminal commit` and `terminal
+  snapshot`. It then raised a generic user exception before clone readback;
+  repeat and sanitizer did not run. The sealed 50-file raw manifest is
+  `g3c4-terminal-reserve-cfbbbffe-gate-all-raw-20261014.json` (SHA-256
+  `5ba50bf8bc028752273766edc8dc1995f73aceb70b5d9aae0694005607c79bab`),
+  with independent HOLD review SHA-256
+  `a67dc743baff40c0e25f1c810b40206c208e98d84ee24b5197235a17b1dd83c0`.
+  The stage preceded the snapshot call, so that trace cannot distinguish the
+  call from following `let*` bindings or establish a production defect. A
+  bounded diagnostic successor added flushed begin/complete markers and
+  first-error type/category/operation/message/details for each snapshot,
+  live-output, native-pointer, small-word and clone initializer. It passed
+  source/tests review, but no snapshot, clone, short extent, held owner,
+  repeat/sanitizer or public G3 acceptance is claimed.
+  The subsequent `2dc56379` one-use diagnostic compiled and finished the
+  zero-count probe, then its first-EOS case failed exactly in the native
+  terminal snapshot with C4 shape-mismatch/code 4; no clone, repeat or
+  sanitizer result exists. The sealed raw manifest is
+  `g3c4-terminal-snapshot-2dc56379-gate-all-raw-20261014.json` (SHA-256
+  `6ebc58688aaf2b409765083e6fd030813072ced47d65172c026f6c870a89fe24`);
+  independent HOLD review SHA-256 is
+  `a9903c807c61d6fc04c90f9b80fda4d84e973e776954e84fc77ce2e8500c8829`.
+  Pinned compiler source proves the cause: Eshkol
+  bytevector `ptr` names its eight-byte length header, whereas indexed byte
+  zero names payload. The wrapper allocated 72 payload bytes, overwrote its
+  first payload byte with 64, and passed native extent 72; native read header
+  72 where its contract requires 64. The adjacent clone/copy wrapper used the
+  same mistaken layout. A bounded source repair allocates 64 snapshot payload
+  bytes and logical-count*8 clone payload bytes, passes the existing native
+  header-inclusive extents, shifts Eshkol payload reads to offsets zero and
+  eight, and updates the focused fixture and source mutations. Independent
+  source/tests review accepted exact `776a425d`/tree `73748ca8` (review
+  SHA-256 `57ac3c1b763d95e52383a37e7443713c3a93c364be606534efb6c1692f0b885c`).
+  Its composition with main `ba4954d` is source-only and needs independent
+  union review before a fresh one-use compiled normal/repeat/sanitizer gate.
+  No compiled snapshot, clone, held-owner, terminal or public G3 acceptance is
+  claimed.
+  All failed packages and raw evidence are preserved; terminal/full/public/
+  data-only G3 remain HOLD.
 
 ## Wave 4 — practical pretraining and performance
 

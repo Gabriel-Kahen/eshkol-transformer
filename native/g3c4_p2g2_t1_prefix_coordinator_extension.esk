@@ -80,8 +80,10 @@
                                  g3c4-p2g2-prefix-input-anchors 0)))
              #t)))))))
 
+;;; Reservation requires an empty output slot; prefix commit requires the
+;;; authenticated pending output already checked by protected-check.
 (define (g3c4-p2g2-prefix-input-check call input input-entry native-input
-                                       operation)
+                                       operation require-output?)
   (let ((record (g3c4-p2g2-protected-check call operation)))
     (let ((anchor (g3c4-p2g2-prefix-anchor-for call)))
       (if (not (and anchor
@@ -97,7 +99,10 @@
                   (eq? (vector-ref input-entry 3) native-input)
                   (eq? (vector-ref input-entry 0) input)
                   (eq? (vector-ref record 13) 'before-prefix)
-                  (vector-ref record 6)))
+                  (or (eq? require-output? #t)
+                      (eq? require-output? #f))
+                  (if require-output? (vector-ref record 6)
+                      (eq? (vector-ref record 6) #f))))
           (g3c4-fail 'invalid-state operation
                      "P2/G2 prefix input or pending owner changed")))
     record))
@@ -134,7 +139,7 @@
          (input-entry (g3c4-input-entry-live input operation))
          (native-input (vector-ref input-entry 3))
          (record (g3c4-p2g2-prefix-input-check
-                   call input input-entry native-input operation))
+                   call input input-entry native-input operation #t))
          (native (vector-ref record 5))
          (output-native (vector-ref record 7))
          (staging (vector-ref record 12))
@@ -143,7 +148,7 @@
       (g3c4-p2g2-native-first-frame native native-input staging 16)
       operation)
     (set! record (g3c4-p2g2-prefix-input-check
-                   call input input-entry native-input operation))
+                   call input input-entry native-input operation #t))
     (let ((selected (bytevector-u8-ref staging 0)))
       ;; The bridge wrote this exact i64 carrier only after native sampling
       ;; and forward. Require its full little-endian V256 form before decode.
@@ -159,14 +164,14 @@
                      "P2/G2 first-token EOS is terminal"))
       (before-decode record)
       (set! record (g3c4-p2g2-prefix-input-check
-                     call input input-entry native-input operation))
+                     call input input-entry native-input operation #t))
       (t1-private-g3-decode-raw-into!
         (vector-ref record 3) staging raw)
       (set! record (g3c4-p2g2-prefix-input-check
-                     call input input-entry native-input operation))
+                     call input input-entry native-input operation #t))
       (after-decode record)
       (set! record (g3c4-p2g2-prefix-input-check
-                     call input input-entry native-input operation))
+                     call input input-entry native-input operation #t))
       (if (not (and (eq? (vector-ref record 5) native)
                     (eq? (vector-ref record 7) output-native)
                     (eq? (vector-ref record 11) raw)

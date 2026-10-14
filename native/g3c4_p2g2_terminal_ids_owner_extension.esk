@@ -1,0 +1,350 @@
+;;; Source-private detached logical I1 owner. The native clone is opaque;
+;;; copied bytes are checked before this typed shell becomes live.
+
+(extern ptr g3c4-p2g2-native-terminal-ids-clone ptr
+        :real et_g3c4_private_p2g2_terminal_ids_clone_v1)
+(extern i64 g3c4-p2g2-native-terminal-ids-clone-copy ptr i64 ptr i64
+        :real et_g3c4_private_p2g2_terminal_ids_clone_copy_v1)
+(extern i64 g3c4-p2g2-native-terminal-ids-clone-release ptr
+        :real et_g3c4_private_p2g2_terminal_ids_clone_release_v1)
+
+(define g3c4-p2g2-terminal-ids-anchors (vector '()))
+
+(define (g3c4-p2g2-terminal-ids-anchor-for shell operation)
+  (let loop ((nodes (vector-ref g3c4-p2g2-terminal-ids-anchors 0)))
+    (if (not (pair? nodes))
+        (g3c4-fail 'invalid-state operation
+                   "terminal ID clone original anchor is missing"))
+    (let ((anchor (car nodes)))
+      (if (and (procedure? anchor) (eq? (anchor 'shell #f) shell))
+          (if (anchor 'node nodes)
+              anchor
+              (g3c4-fail 'invalid-state operation
+                         "terminal ID clone original root changed"))
+          (loop (cdr nodes))))))
+
+(define (g3c4-p2g2-terminal-ids-entry-live shell operation)
+  (let* ((entry (g3c4-registry-find shell operation))
+         (anchor (g3c4-p2g2-terminal-ids-anchor-for shell operation)))
+    (if (not (and (vector? entry) (= (vector-length entry) 12)
+                  (eq? (vector-ref entry 0) shell)
+                  (eq? (vector-ref entry 1) 'terminal-ids)
+                  (eq? (vector-ref entry 2) 'live)
+                  (eq? (vector-ref entry 10) anchor)
+                  (anchor 'check entry)))
+        (g3c4-fail 'invalid-state operation
+                   "terminal ID clone original owner changed"))
+    entry))
+
+(define (g3c4-p2g2-terminal-ids-entry-dead shell entry operation)
+  (let ((anchor (g3c4-p2g2-terminal-ids-anchor-for shell operation)))
+    (if (not (and (g3c4-dead-entry? entry 'terminal-ids)
+                  (anchor 'dead entry)))
+        (g3c4-fail 'invalid-state operation
+                   "terminal ID clone original dead owner changed"))
+    entry))
+
+(define (g3c4-p2g2-terminal-ids-copy-private shell)
+  (let ((operation 'g3c4-p2g2-terminal-ids-copy-private))
+    (m3-call operation
+      (let* ((entry (g3c4-p2g2-terminal-ids-entry-live shell operation))
+             (anchor (vector-ref entry 10))
+             (count (vector-ref entry 7))
+             (payload (* count 8))
+             (extent (+ 8 payload))
+             (bytes (make-bytevector payload 0))
+             (native (vector-ref entry 3)))
+        (if (not (and (= (bytevector-length bytes) payload)
+                      (eq? entry (g3c4-p2g2-terminal-ids-entry-live
+                                    shell operation))))
+            (g3c4-fail 'invalid-state operation
+                       "terminal ID copy destination changed"))
+        (g3c4-native-check
+          (g3c4-p2g2-native-terminal-ids-clone-copy
+            native count bytes extent) operation)
+        (if (not (and (eq? entry (g3c4-p2g2-terminal-ids-entry-live
+                                   shell operation))
+                      (eq? native (vector-ref entry 3))
+                      (= (bytevector-length bytes) payload)
+                      (anchor 'bytes-match bytes)))
+            (g3c4-fail 'invalid-state operation
+                       "terminal ID clone bytes differ from original"))
+        bytes))))
+
+(define (g3c4-p2g2-terminal-ids-clone-private shell)
+  ;; Snapshot closes its own m3-call first. No nested protected region.
+  (let ((snapshot (g3c4-p2g2-terminal-snapshot-private shell))
+        (operation 'g3c4-p2g2-terminal-ids-clone-private))
+    (m3-call operation
+      (let* ((source (g3c4-p2g2-terminal-output-entry-live
+                       shell operation))
+             (live (g3c4-p2g2-terminal-snapshot-live-for
+                     shell source operation))
+             (source-native (vector-ref source 3))
+             (count (g3c4-p2g2-terminal-snapshot-small-word snapshot 16))
+             (id-zero (g3c4-p2g2-terminal-snapshot-small-word snapshot 0))
+             (id-one (g3c4-p2g2-terminal-snapshot-small-word snapshot 8))
+             (payload (* count 8))
+             (extent (+ 8 payload))
+             (bytes (make-bytevector payload 0))
+             (clone-shell (vector 'g3c4-terminal-ids-private))
+             (entry (vector clone-shell 'terminal-ids 'pending #f #f #f
+                            #f count bytes #f #f g3c4-model-profile))
+             (answer (list clone-shell))
+             (old-anchors (vector-ref g3c4-p2g2-terminal-ids-anchors 0))
+             (old-registry (vector-ref g3c4-registry 0))
+             (anchor
+               (let ((original-shell clone-shell)
+                     (original-entry entry)
+                     (original-bytes bytes)
+                     (original-count count)
+                     (original-zero id-zero)
+                     (original-one id-one)
+                     (original-native '())
+                     (original-node #f)
+                     (node-bound? #f)
+                     (published? #f)
+                     (native-released? #f)
+                     (retired? #f))
+                 (lambda (command candidate)
+                   (cond
+                     ((eq? command 'shell) original-shell)
+                     ((eq? command 'node-bind)
+                      (if (or node-bound?
+                              (not (pair? candidate))
+                              (not (eq? (car candidate)
+                                        (vector-ref original-entry 10)))
+                              (not (eq? (cdr candidate) old-anchors)))
+                          (g3c4-fail 'invalid-state operation
+                                     "terminal ID clone root cannot rebind"))
+                      (set! original-node candidate)
+                      (set! node-bound? #t)
+                      #t)
+                     ((eq? command 'node)
+                      (and node-bound? (eq? candidate original-node)))
+                     ((eq? command 'bind)
+                      (if (or (not node-bound?)
+                              (not (null? original-native))
+                              (not (eq? (vector-ref original-entry 2)
+                                        'pending)))
+                          (g3c4-fail 'invalid-state operation
+                                     "terminal ID clone already bound"))
+                     (set! original-native candidate)
+                      (vector-set! original-entry 3 candidate)
+                      #t)
+                     ((eq? command 'bound)
+                      (and (not (null? original-native))
+                           (eq? candidate original-native)))
+                     ((eq? command 'publish)
+                      (set! published? #t)
+                      #t)
+                     ((eq? command 'check)
+                      (and published? (not native-released?) node-bound?
+                           (eq? candidate original-entry)
+                           (pair? original-node)
+                           (eq? (car original-node)
+                                (vector-ref original-entry 10))
+                           (eq? (cdr original-node) old-anchors)
+                           (eq? (vector-ref original-entry 0)
+                                original-shell)
+                           (eq? (vector-ref original-entry 1)
+                                'terminal-ids)
+                           (eq? (vector-ref original-entry 2) 'live)
+                           (eq? (vector-ref original-entry 3)
+                                original-native)
+                           (not (null? original-native))
+                           (eq? (vector-ref original-entry 4) #f)
+                           (eq? (vector-ref original-entry 5) #f)
+                           (eq? (vector-ref original-entry 6) #f)
+                           (= (vector-ref original-entry 7)
+                              original-count)
+                           (eq? (vector-ref original-entry 8)
+                                original-bytes)
+                           (eq? (vector-ref original-entry 9) #f)
+                           (eq? (vector-ref original-entry 11)
+                                g3c4-model-profile)
+                           (bytevector? original-bytes)
+                           (= (bytevector-length original-bytes)
+                              (* original-count 8))
+                           (= (g3c4-p2g2-terminal-snapshot-small-word
+                                original-bytes 0)
+                              original-zero)
+                           (if (= original-count 1)
+                               (= original-one 0)
+                               (and (= original-count 2)
+                                    (= (g3c4-p2g2-terminal-snapshot-small-word
+                                         original-bytes 8)
+                                       original-one)))))
+                     ((eq? command 'bytes-match)
+                      (and (bytevector? candidate)
+                           (= (bytevector-length candidate)
+                              (* original-count 8))
+                           (= (g3c4-p2g2-terminal-snapshot-small-word
+                                candidate 0)
+                              original-zero)
+                           (if (= original-count 1)
+                               (= original-one 0)
+                               (= (g3c4-p2g2-terminal-snapshot-small-word
+                                    candidate 8)
+                                  original-one))))
+                     ((eq? command 'native-release)
+                      (if (not (and published? (not native-released?)
+                                    (pair? candidate)
+                                    (eq? (car candidate) original-entry)
+                                    (vector? (cdr candidate))
+                                    (= (vector-length (cdr candidate)) 1)
+                                    (eq? (vector-ref (cdr candidate) 0) #f)
+                                    (eq? (vector-ref original-entry 2) 'live)
+                                    (eq? (vector-ref original-entry 3)
+                                         original-native)))
+                          (g3c4-fail 'invalid-state operation
+                                     "terminal ID clone release owner changed"))
+                      (let ((status
+                              (g3c4-p2g2-native-terminal-ids-clone-release
+                                original-native)))
+                        (if (= status 0)
+                            (begin
+                              (vector-set! (cdr candidate) 0 #t)
+                              (set! native-released? #t)))
+                        status))
+                     ((eq? command 'retire)
+                      (if (not (and native-released?
+                                    (not retired?)
+                                    (eq? candidate original-entry)
+                                    (g3c4-dead-entry? original-entry
+                                                      'terminal-ids)))
+                          (g3c4-fail 'invalid-state operation
+                                     "terminal ID clone cannot retire"))
+                      (set! original-bytes #f)
+                      (set! original-native '())
+                      (set! retired? #t)
+                      #t)
+                     ((eq? command 'dead)
+                      (and retired? native-released? node-bound?
+                           (eq? candidate original-entry)
+                           (eq? (vector-ref original-entry 0)
+                                original-shell)
+                           (g3c4-dead-entry? original-entry 'terminal-ids)
+                           (eq? (vector-ref original-entry 3) #f)
+                           (eq? (vector-ref original-entry 4) #f)
+                           (eq? (vector-ref original-entry 5) #f)
+                           (eq? (vector-ref original-entry 6) #f)
+                           (eq? (vector-ref original-entry 7) #f)
+                           (eq? (vector-ref original-entry 8) #f)
+                           (eq? (vector-ref original-entry 9) #f)
+                           (eq? (vector-ref original-entry 10) #f)
+                           (eq? (vector-ref original-entry 11) #f)
+                           (pair? original-node)
+                           (eq? (cdr original-node) old-anchors)))
+                     (else #f)))))
+             (anchor-node (cons anchor old-anchors))
+             (registry-node (cons entry old-registry))
+             (created '()))
+        (if (not (and (or (= count 1) (= count 2))
+                      (= count (vector-ref live 6))
+                      (= id-zero (vector-ref live 8))
+                      (if (= count 1)
+                          (= id-one 0)
+                          (= id-one (vector-ref live 9)))
+                      (eq? source
+                           (g3c4-p2g2-terminal-output-entry-live
+                             shell operation))
+                      (eq? live (g3c4-p2g2-terminal-snapshot-live-for
+                                   shell source operation))
+                      (eq? source-native (vector-ref source 3))))
+            (g3c4-fail 'invalid-state operation
+                       "terminal source changed after snapshot"))
+        (vector-set! entry 10 anchor)
+        (anchor 'node-bind anchor-node)
+        (guard (caught
+                 (#t
+                   (if (not (null? created))
+                       (if (not (= (g3c4-p2g2-native-terminal-ids-clone-release
+                                     created) 0))
+                           (exit 134)))
+                   (g3c4-entry-dead! entry)
+                   (if (eq? (vector-ref g3c4-p2g2-terminal-ids-anchors 0)
+                            anchor-node)
+                       (vector-set! g3c4-p2g2-terminal-ids-anchors 0
+                                    old-anchors)
+                       (exit 134))
+                   (raise caught)))
+          (vector-set! g3c4-registry 0 registry-node)
+          (vector-set! g3c4-p2g2-terminal-ids-anchors 0 anchor-node)
+          (set! created
+                (g3c4-p2g2-native-terminal-ids-clone source-native))
+          (if (null? created) (g3c4-native-fail operation))
+          (anchor 'bind created)
+          (if (not (and (eq? source
+                             (g3c4-p2g2-terminal-output-entry-live
+                               shell operation))
+                        (eq? live (g3c4-p2g2-terminal-snapshot-live-for
+                                     shell source operation))
+                        (eq? source-native (vector-ref source 3))
+                        (eq? (vector-ref entry 8) bytes)
+                        (= (bytevector-length bytes) payload)))
+              (g3c4-fail 'invalid-state operation
+                         "terminal clone source or destination changed"))
+          (g3c4-native-check
+            (g3c4-p2g2-native-terminal-ids-clone-copy
+              created count bytes extent) operation)
+          (if (not (and (eq? source
+                             (g3c4-p2g2-terminal-output-entry-live
+                               shell operation))
+                        (eq? live (g3c4-p2g2-terminal-snapshot-live-for
+                                     shell source operation))
+                        (eq? entry (g3c4-registry-find
+                                     clone-shell operation))
+                        (eq? (vector-ref entry 0) clone-shell)
+                        (eq? (vector-ref entry 1) 'terminal-ids)
+                        (eq? (vector-ref entry 2) 'pending)
+                        (eq? (vector-ref entry 3) created)
+                        (anchor 'bound created)
+                        (= (vector-ref entry 7) count)
+                        (eq? (vector-ref entry 8) bytes)
+                        (eq? (vector-ref entry 10) anchor)
+                        (eq? (vector-ref entry 11) g3c4-model-profile)
+                        (eq? (vector-ref g3c4-p2g2-terminal-ids-anchors 0)
+                             anchor-node)
+                        (= (bytevector-length bytes) payload)
+                        (anchor 'bytes-match bytes)))
+              (g3c4-fail 'invalid-state operation
+                         "terminal clone does not match original IDs"))
+          (anchor 'publish #f)
+          (vector-set! entry 2 'live)
+          answer)))))
+
+(define (g3c4-p2g2-terminal-ids-release-private! shell)
+  (let ((operation 'g3c4-p2g2-terminal-ids-release-private!))
+    (m3-call operation
+      (let ((entry (g3c4-registry-find shell operation)))
+        (if (g3c4-dead-entry? entry 'terminal-ids)
+            (begin
+              (g3c4-p2g2-terminal-ids-entry-dead shell entry operation)
+              #t)
+            (let* ((live (g3c4-p2g2-terminal-ids-entry-live
+                           shell operation))
+                   (count (vector-ref live 7))
+                   (bytes (vector-ref live 8))
+                   (anchor (vector-ref live 10))
+                   (barrier (vector #f))
+                   (release-request (cons live barrier)))
+              (if (not (and (eq? live
+                                 (g3c4-p2g2-terminal-ids-entry-live
+                                   shell operation))
+                            (or (= count 1) (= count 2))
+                            (eq? bytes (vector-ref live 8))
+                            (= (bytevector-length bytes) (* count 8))))
+                  (g3c4-fail 'invalid-state operation
+                             "terminal ID clone changed before release"))
+              (guard (caught
+                       (#t (if (vector-ref barrier 0) (exit 134))
+                           (raise caught)))
+                (let ((status (anchor 'native-release release-request)))
+                  (if (= status 0)
+                      (begin
+                        (g3c4-p2g2-zero-bytes! bytes (* count 8))
+                        (g3c4-entry-dead! live)
+                        (anchor 'retire live)
+                        #t)
+                      (g3c4-native-check status operation))))))))))
