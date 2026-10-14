@@ -1112,6 +1112,13 @@ all four mutant runs first diverged at the third-batch numerator and rejected
 without publishing a transcript. The other M2 numerical mutants and the full
 E3 §9 acceptance matrix remain open; this result does not establish installed
 or public E3 behavior or GPU execution.
+The [exp-before-global host candidate](e3/E3_EXP_BEFORE_GLOBAL_SOURCE.md)
+freezes authentic three-batch D2/M3 reference words and a rational
+binary32 distinction: global perplexity `437f82e7` versus weighted
+per-batch exponentiation `437f8748`. Three focused host tests check
+reproducibility, reference identity, and rejection of the mutant final
+word. A compiled private baseline/mutant gate and independent result
+review remain required; M2 and full E3 §9 remain open.
 The separate noninstalled M2 padded-position source candidate reuses the same
 authentic three-row packed D1/D2 witness. Its test-only frame variant supplies a
 local `11` mask to both final-row L3S reduce and E3 correct while retaining the
