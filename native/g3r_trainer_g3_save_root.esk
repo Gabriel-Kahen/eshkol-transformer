@@ -1,0 +1,4 @@
+;;; Feature-private trainer-authorized G3 held-save source union. Never install.
+;;; CLI3 already binds G3's T1 predecessor lookup to the same T2 registry.
+(load "cli3_generate_root.esk")
+(load "g3r_trainer_g3_save_admission_extension.esk")

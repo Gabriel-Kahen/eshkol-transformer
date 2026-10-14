@@ -2214,6 +2214,15 @@ owners before copying any output. Source and focused native checks are pending
 independent review; the roster alone does not pin value/gradient bits, hold O2,
 or authorize a G3-R SAVE capture.
 
+The feature-private trainer-authorized G3 held-save admission leaf uses an
+exact enrolled TR3 snapshot lease to permit the same original M3T model in
+train mode, while ordinary G3 construction remains eval-only. It checks the
+registered generator/model and accepted same-registry T2 tokenizer bridge,
+then obtains the sealed M3T 14-handle roster before native G3 hold begin.
+Host source checks and a causal C bridge fixture cover foreign, stale, busy,
+unleased and zero-publication cuts. This is source-only: no linked Eshkol gate,
+O2 hold, C2 claim, receipt or replay admission follows from it.
+
 The [current-main private provider union gate](g3/G3_R_CURRENT_PRIVATE_UNION_GATE.md)
 now has one independently accepted supported-host C run on exact source
 `c0f747dc`, accepted C7b fe9/f31 toolchain, and eight compiled Eshkol checks.
