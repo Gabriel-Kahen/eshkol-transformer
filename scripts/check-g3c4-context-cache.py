@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Fast structural checks for the accepted G3-C4 Step 4a context/cache leaf."""
 
+import ast
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -21,57 +23,116 @@ def ordered(text, fragments, label):
         position = found
 
 
-def without_conditional_feature(text, macro):
-    """Project source with one later feature disabled, retaining its false arm."""
-    kept = []
-    frames = []
+def _condition_value(expression, disabled):
+    """Return True, False, or None for an unknown preprocessor condition."""
+    expression = re.sub(
+        r"\bdefined\s+([A-Za-z_]\w*)\b", r"defined(\1)", expression)
+    expression = expression.replace("&&", " and ").replace("||", " or ")
+    expression = re.sub(r"(?<![=!<>])!(?!=)", " not ", expression)
+    try:
+        parsed = ast.parse(expression.strip(), mode="eval")
+    except SyntaxError as error:
+        raise ValueError(f"unsupported preprocessor condition: {expression}") from error
 
-    def visible():
-        return all(not target or keep for target, keep in frames)
+    def negate(value):
+        return None if value is None else not value
 
-    for line in text.splitlines(keepends=True):
-        directive = line.lstrip()
-        opens = (directive.startswith("#if ") or
-                 directive.startswith("#ifdef ") or
-                 directive.startswith("#ifndef "))
-        if opens:
-            target = macro in directive
-            was_visible = visible()
-            frames.append((target, directive.startswith("#ifndef ") if target else True))
-            if was_visible and not target:
-                kept.append(line)
-        elif directive.startswith("#else"):
-            require(frames, f"unexpected #else while projecting {macro}")
-            target, keep = frames[-1]
-            if target:
-                frames[-1] = (target, not keep)
-            elif visible():
-                kept.append(line)
-        elif directive.startswith("#elif"):
-            require(frames, f"unexpected #elif while projecting {macro}")
-            require(not frames[-1][0] and macro not in directive,
-                    f"unsupported #elif while projecting {macro}")
-            if visible():
-                kept.append(line)
-        elif directive.startswith("#endif"):
-            require(frames, f"unexpected #endif while projecting {macro}")
-            target, _ = frames.pop()
-            if not target and visible():
-                kept.append(line)
-        elif visible():
-            kept.append(line)
-    require(not frames, f"unterminated conditional feature block: {macro}")
-    return "".join(kept)
+    def combine(values, is_and):
+        if (False if is_and else True) in values:
+            return not is_and
+        if all(value is (True if is_and else False) for value in values):
+            return is_and
+        return None
+
+    def evaluate(node):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            require(node.func.id == "defined" and len(node.args) == 1 and
+                    isinstance(node.args[0], ast.Name) and not node.keywords,
+                    f"unsupported preprocessor condition: {expression}")
+            return False if node.args[0].id in disabled else None
+        if isinstance(node, ast.Name):
+            return False if node.id in disabled else None
+        if isinstance(node, ast.Constant) and type(node.value) is int:
+            return bool(node.value)
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+            return negate(evaluate(node.operand))
+        if isinstance(node, ast.BoolOp):
+            require(isinstance(node.op, (ast.And, ast.Or)),
+                    f"unsupported preprocessor condition: {expression}")
+            return combine([evaluate(value) for value in node.values],
+                           isinstance(node.op, ast.And))
+        raise ValueError(f"unsupported preprocessor condition: {expression}")
+
+    return evaluate(parsed.body)
+
+
+def _logical_lines(text):
+    lines = iter(text.splitlines(keepends=True))
+    for line in lines:
+        if re.match(r"\s*#\s*(?:if|elif)\b", line):
+            while line.rstrip().endswith("\\"):
+                line = line.rstrip()[:-1] + " " + next(
+                    lines, "")  # An incomplete directive fails to parse.
+        yield line
 
 
 def step4_projection(block):
-    for macro in (
+    """Keep every source arm that can run with later features disabled."""
+    disabled = {
         "ET_G3C4_ACTIVE_CALL_PRIVATE",
         "ET_G3C4_GENERATOR_PRIVATE",
         "ET_G3C4_P2_G2_TERMINAL_PRIVATE",
-    ):
-        block = without_conditional_feature(block, macro)
-    return block
+    }
+    kept = []
+    frames = []  # [prior-arm truth, current-arm reachable]
+
+    def visible():
+        return all(frame[1] for frame in frames)
+
+    for line in _logical_lines(block):
+        match = re.match(r"\s*#\s*(if|ifdef|ifndef|elif|else|endif)\b(.*)",
+                         line, re.DOTALL)
+        if not match:
+            if visible():
+                kept.append(line)
+            continue
+        directive, rest = match.groups()
+        if directive in ("if", "ifdef", "ifndef", "elif"):
+            if directive == "if" or directive == "elif":
+                value = _condition_value(rest, disabled) if visible() or directive == "elif" else None
+            else:
+                name = rest.strip()
+                require(re.fullmatch(r"[A-Za-z_]\w*", name) is not None,
+                        f"unsupported #{directive}: {rest}")
+                value = False if name in disabled else None
+                if directive == "ifndef":
+                    value = None if value is None else not value
+            if directive == "elif":
+                require(frames, "unexpected #elif")
+                prior = frames[-1][0]
+                frames[-1] = [
+                    _or(prior, value),
+                    prior is not True and value is not False,
+                ]
+            else:
+                frames.append([value, value is not False])
+        elif directive == "else":
+            require(frames, "unexpected #else")
+            prior = frames[-1][0]
+            frames[-1] = [True, prior is not True]
+        else:
+            require(frames, "unexpected #endif")
+            frames.pop()
+    require(not frames, "unterminated preprocessor conditional")
+    return "".join(kept)
+
+
+def _or(left, right):
+    if left is True or right is True:
+        return True
+    if left is False and right is False:
+        return False
+    return None
 
 
 def require_no_deferred_surface(block):

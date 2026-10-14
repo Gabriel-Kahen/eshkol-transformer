@@ -50,6 +50,29 @@ class Step4ProjectionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "generator_seed"):
             CHECKER.require_no_deferred_surface(mutant)
 
+    def test_reachable_conditional_arms_are_rejected(self):
+        guards = (
+            "#if !defined(ET_G3C4_GENERATOR_PRIVATE)",
+            "#if defined(ET_G3C4_GENERATOR_PRIVATE) || "
+            + chr(92) + "\n    defined(ET_G3C4_CONTEXT_PRIVATE)",
+            "#ifdef ET_G3C4_GENERATOR_PRIVATE_EXTRA",
+        )
+        for guard in guards:
+            with self.subTest(guard=guard):
+                mutant = BASE.replace(
+                    "int cache;", f"int cache;\n{guard}\nint generator_rng;\n#endif")
+                with self.assertRaisesRegex(ValueError, "generator_rng"):
+                    CHECKER.require_no_deferred_surface(mutant)
+
+    def test_unsupported_condition_fails_closed(self):
+        mutant = BASE.replace(
+            "int cache;",
+            "int cache;\n#if defined(ET_G3C4_GENERATOR_PRIVATE) ^ 1\n"
+            "int generator_rng;\n#endif",
+        )
+        with self.assertRaisesRegex(ValueError, "unsupported preprocessor condition"):
+            CHECKER.require_no_deferred_surface(mutant)
+
     def test_unguarded_deferred_surfaces_are_rejected(self):
         for surface in (
             "et_g3c4_model_pins", "generator_seed", "generator_rng",
