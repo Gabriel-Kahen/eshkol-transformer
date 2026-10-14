@@ -224,6 +224,7 @@ native/g3c4_p2g2_terminal_snapshot_source_closure.txt
 native/g3c4_p2g2_terminal_release_extension.esk
 scripts/check-g3c4-p2g2-terminal-release-source.py
 scripts/test-g3c4-p2g2-terminal-release-source.sh
+scripts/test-g3c4-p2g2-terminal-release-dead-authority.scm
 native/g3c4_p2g2_terminal_release_source_closure.txt
 native/g3c4_p2g2_terminal_ids_owner_extension.esk
 scripts/check-g3c4-p2g2-terminal-ids-owner-source.py

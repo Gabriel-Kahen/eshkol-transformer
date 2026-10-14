@@ -45,7 +45,8 @@ def valid_authority(text):
     if form_end(code, start) < 0:
         return False
     start = code.index("(define (g3c4-p2g2-terminal-output-entry-live")
-    if form_end(code, start) != len(code.rstrip()):
+    if not code[form_end(code, start):].strip().startswith(
+            "(define (g3c4-p2g2-terminal-output-original-for"):
         return False
     required = (
         "(define g3c4-p2g2-terminal-live-anchors (vector '()))",
@@ -73,7 +74,7 @@ def valid_authority(text):
         "(vector-set! live 8 id-zero)",
         "(vector-set! live 9 id-one)",
         "(vector-set! live 15 (+ count 2))",
-        "(and bound? nodes-bound? (eq? candidate live)",
+        "(and bound? nodes-bound? (not native-released?)\n                       (not retired?) (eq? candidate live)",
         "(eq? (vector-ref live 1) output)",
         "(eq? (vector-ref live 2) shell)",
         "(eq? (vector-ref live 3) native)",
@@ -306,7 +307,7 @@ authority_mutations = (
     ("(vector-set! live 7 selected)", "(vector-set! live 7 text-one)"),
     ("(eq? (vector-ref candidate 27) text-one)", "#t"),
     ("(eq? (vector-ref candidate 28) text-two)", "#t"),
-    ("(and bound? nodes-bound? (eq? candidate live)", "(and bound? #t"),
+    ("(and bound? nodes-bound? (not native-released?)\n                       (not retired?) (eq? candidate live)", "(and bound? #t"),
     ("(eq? (vector-ref live 3) native)", "#t"),
     ("(eq? (vector-ref live 4) text-one)", "#t"),
     ("(eq? (vector-ref live 5) text-two)", "#t"),

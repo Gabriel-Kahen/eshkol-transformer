@@ -6,16 +6,22 @@
     (m3-call operation
       (let ((output (g3c4-registry-find shell operation)))
         (if (g3c4-dead-entry? output 'terminal-output)
-            #t
+            (begin
+              (g3c4-p2g2-terminal-output-entry-dead shell output operation)
+              #t)
             (let* ((entry (g3c4-p2g2-terminal-output-entry-live
                             shell operation))
                    (live (g3c4-p2g2-terminal-snapshot-live-for
                            shell entry operation))
+                   (original (g3c4-p2g2-terminal-output-original-for
+                               shell entry operation))
                    (native (vector-ref entry 3))
                    (text-one (vector-ref live 4))
                    (text-two (vector-ref live 5))
-                   (barrier (vector #f)))
+                   (barrier (vector #f))
+                   (release-request (cons live barrier)))
               (if (not (and (eq? output entry)
+                            (eq? original (vector-ref live 10))
                             (bytevector? text-one)
                             (= (bytevector-length text-one) 1)
                             (bytevector? text-two)
@@ -33,7 +39,7 @@
               (guard (caught
                        (#t (if (vector-ref barrier 0) (exit 134))
                            (raise caught)))
-                (let ((status (g3c4-native-output-release native)))
+                (let ((status (original 'native-release release-request)))
                   (if (= status 0)
                       (begin
                         ;; Native success is destructive. All remaining writes
@@ -49,5 +55,6 @@
                               (begin
                                 (vector-set! live index #f)
                                 (clear (+ index 1)))))
+                        (original 'retire entry)
                         #t)
                       (g3c4-native-check status operation))))))))))

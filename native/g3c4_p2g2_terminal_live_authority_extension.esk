@@ -21,10 +21,18 @@
                        #f #f #f #f #f old-anchors old-originals #f #f #f))
          (original
            (let ((bound? #f) (nodes-bound? #f)
+                 (native-released? #f) (retired? #f)
                  (original-anchor-node #f) (original-original-node #f)
                  (count #f) (selected #f) (id-zero #f) (id-one #f))
              (lambda (command candidate)
                (cond
+                 ((eq? command 'shell) shell)
+                 ((eq? command 'entry) output)
+                 ((eq? command 'root)
+                  (and nodes-bound? (pair? candidate)
+                       (eq? (car candidate) original-anchor-node)
+                       (eq? (cdr candidate) original-original-node)
+                       (eq? (car original-anchor-node) live)))
                  ((eq? command 'nodes)
                   (if nodes-bound? (exit 134))
                   (set! original-anchor-node (vector-ref live 13))
@@ -72,7 +80,8 @@
                   (set! bound? #t)
                   #t)
                  ((eq? command 'check)
-                  (and bound? nodes-bound? (eq? candidate live)
+                  (and bound? nodes-bound? (not native-released?)
+                       (not retired?) (eq? candidate live)
                        (eq? (vector-ref live 0) 'live)
                        (eq? (vector-ref live 1) output)
                        (eq? (vector-ref live 2) shell)
@@ -102,6 +111,49 @@
                            (and (eq? selected text-two)
                                 (= (bytevector-u8-ref text-two 1) id-one)
                                 (g3c4-p2g2-terminal-text-zero? text-one 1)))))
+                 ((eq? command 'native-release)
+                  (if (not (and bound? nodes-bound? (not native-released?)
+                                (not retired?) (pair? candidate)
+                                (eq? (car candidate) live)
+                                (vector? (cdr candidate))
+                                (= (vector-length (cdr candidate)) 1)
+                                (eq? (vector-ref (cdr candidate) 0) #f)
+                                (eq? (vector-ref live 0) 'live)
+                                (eq? (vector-ref output 2) 'live)
+                                (eq? (vector-ref output 3) native)))
+                      (g3c4-fail 'invalid-state operation
+                                 "terminal original release owner changed"))
+                  (let ((status (g3c4-native-output-release native)))
+                    (if (= status 0)
+                        (begin
+                          (vector-set! (cdr candidate) 0 #t)
+                          (set! native-released? #t)))
+                    status))
+                 ((eq? command 'retire)
+                  (if (not (and native-released? (not retired?)
+                                (eq? candidate output)
+                                (g3c4-dead-entry? output 'terminal-output)))
+                      (g3c4-fail 'invalid-state operation
+                                 "terminal original cannot retire"))
+                  (set! retired? #t)
+                  #t)
+                 ((eq? command 'dead)
+                  (and bound? nodes-bound? native-released? retired?
+                       (eq? candidate output)
+                       (eq? (vector-ref output 0) shell)
+                       (g3c4-dead-entry? output 'terminal-output)
+                       (let clear-entry ((index 3))
+                         (if (= index 12) #t
+                             (and (eq? (vector-ref output index) #f)
+                                  (clear-entry (+ index 1)))))
+                       (eq? (vector-ref live 0) 'dead)
+                       (let clear-live ((index 1))
+                         (if (= index 16) #t
+                             (and (eq? (vector-ref live index) #f)
+                                  (clear-live (+ index 1)))))
+                       (= (bytevector-u8-ref text-one 0) 0)
+                       (= (bytevector-u8-ref text-two 0) 0)
+                       (= (bytevector-u8-ref text-two 1) 0)))
                  (else #f)))))
          (anchor-node (cons live old-anchors))
          (original-node (cons original old-originals)))
@@ -176,3 +228,28 @@
                                "terminal original live identity changed")
                     output)
                 (loop (cdr anchors) (cdr originals))))))))
+
+;;; Rooted original closure, rather than mutable output state, decides whether
+;;; a dead entry ever crossed the native zero boundary in this process.
+(define (g3c4-p2g2-terminal-output-original-for shell output operation)
+  (let loop ((anchors (vector-ref g3c4-p2g2-terminal-live-anchors 0))
+             (originals (vector-ref g3c4-p2g2-terminal-live-originals 0)))
+    (if (or (not (pair? anchors)) (not (pair? originals)))
+        (g3c4-fail 'invalid-state operation
+                   "terminal original release authority is missing"))
+    (let ((original (car originals)))
+      (if (and (procedure? original) (eq? (original 'shell #f) shell))
+          (if (and (original 'root (cons anchors originals))
+                   (eq? (original 'entry #f) output))
+              original
+              (g3c4-fail 'invalid-state operation
+                         "terminal original release identity changed"))
+          (loop (cdr anchors) (cdr originals))))))
+
+(define (g3c4-p2g2-terminal-output-entry-dead shell output operation)
+  (let ((original (g3c4-p2g2-terminal-output-original-for
+                    shell output operation)))
+    (if (not (original 'dead output))
+        (g3c4-fail 'invalid-state operation
+                   "terminal original dead owner changed"))
+    output))

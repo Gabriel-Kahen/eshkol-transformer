@@ -3188,9 +3188,15 @@ publication, public G2 and continuation remain pending.
   surviving original before native release. Native held-I1 rejection leaves
   its Scheme output and text intact; success enters a guarded fixed-write tail
   that scrubs both original logical text carriers and tombstones the output.
-  Same-shell dead release is idempotent. Older rooted records remain as dead
-  tombstones, so long-run retention is unmeasured. This source-only leaf still
-  needs independent review and compiled held-lease/release proof.
+  The initial same-shell dead path had a source HOLD: caller mutation of its
+  entry state to `dead` could bypass native output release. A focused successor
+  now asks the surviving original closure for native-success and retirement
+  proof before accepting a dead entry; its Guile source probe rejects a forged
+  live-to-dead entry without releasing native state, then verifies held-I1
+  retry, successful native-zero cleanup and same-shell idempotence. This
+  successor still needs independent source review and compiled adversarial
+  proof. Older rooted records remain as dead tombstones, so long-run retention
+  is unmeasured.
   A further source-private logical I1 owner now uses the existing native
   terminal clone/copy/release ABI. It obtains an authenticated detached
   snapshot, anchors the original typed shell and readback allocation, and
