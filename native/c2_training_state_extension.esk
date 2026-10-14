@@ -235,6 +235,9 @@
     (state-dict-claim-c2-rollback-internal! state token)))
 (define c2-training-state-claim-o2!
   (lambda (state token) (o2-state-claim-c2-internal! state token)))
+(define c2-training-state-rollback-o2-or-live!
+  (lambda (state token)
+    (o2-state-claim-c2-rollback-or-live-internal! state token)))
 (define c2-training-state-activate-p1-borrow!
   (lambda (state owner-token access-token borrow operation)
     (state-dict-c2-owned-borrow-activate-internal!
@@ -279,18 +282,32 @@
          (state (vector shell p1 o2 controls topology o2-projection
                         owner-token 'constructing #f))
          (next-registry (cons state c2-training-state-states))
-         ;; Cleanup progress only. Exact P1 state plus owner-token identity
-         ;; remains the rollback authority.
-         (claim-progress (vector #f)))
+         ;; Cleanup progress only: successful P1 claim and attempted O2 claim.
+         ;; The exact child shells and token remain the rollback authority.
+         (claim-progress (vector #f #f)))
     (guard (caught
              (#t
-               (if (vector-ref claim-progress 0)
-                   (begin
-                     (c2-training-state-rollback-p1! p1 owner-token)
-                     (vector-set! claim-progress 0 #f)))
+               ;; An O2 claim can mutate and then raise. Roll it back first;
+               ;; only a proved-live O2 and a successful P1 rollback permit
+               ;; the original exception to escape. Uncertain cleanup stops
+               ;; the process with both child shells still rooted here.
+               (guard (rollback-failure (#t (exit 1)))
+                 (if (vector-ref claim-progress 1)
+                     (begin
+                       (if (not (c2-training-state-rollback-o2-or-live!
+                                  o2 owner-token))
+                           (exit 1))
+                       (vector-set! claim-progress 1 #f)))
+                 (if (vector-ref claim-progress 0)
+                     (begin
+                       (if (not (c2-training-state-rollback-p1!
+                                  p1 owner-token))
+                           (exit 1))
+                       (vector-set! claim-progress 0 #f))))
                (raise caught)))
       (c2-training-state-claim-p1! p1 owner-token)
       (vector-set! claim-progress 0 #t)
+      (vector-set! claim-progress 1 #t)
       (c2-training-state-claim-o2! o2 owner-token))
     ;; The transfer tail is assignment-only and non-failing.
     (vector-set! state 7 'live)

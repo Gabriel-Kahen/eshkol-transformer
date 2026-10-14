@@ -27,5 +27,14 @@ same order. A nonzero O2 drain or any uncertain G3/lease cleanup fails stop
 while the ledgers remain rooted. No C2 child, P1 clone, O2 state, result cell,
 receipt, or file is published. A future coordinator successor must add a
 compiled joint gate for normal and adverse native lifecycle cuts, exact held
-O2 state adoption, partial C2 claim rollback, reverse hold release, and zero
+O2 state adoption, partial C2 claim rollback cuts, reverse hold release, and zero
 publication before any SAVE admission.
+
+The C2 composition primitive now reconciles an attempted O2 claim before P1
+rollback. It accepts only the exact preclaim LIVE state or this request's owner
+token, and fails stop if either child's cleanup is uncertain. This is a source
+repair to the detached C2 owner path; the original-owner coordinator still has
+no held-safe P1 clone, held O2 adoption call, or original-control binding into
+a C2 request. The existing TR3 snapshot composer calls ordinary O2 snapshot,
+which rejects a busy held optimizer. The same-owner claim and receipt gates
+therefore remain open.

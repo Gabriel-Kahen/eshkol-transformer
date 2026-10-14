@@ -2215,6 +2215,14 @@ is excluded from this branch.
 Coordinator, post-adoption and partial-O2-claim cuts remain integration gates;
 there is no SAVE or continuation admission.
 
+On the `ec56e5f9` original-owner coordinator base, the accepted C2 detached
+owner rollback now reconciles a token-matched partial O2 claim before P1
+rollback, preserving the first error on proven cleanup and failing stop on
+uncertain authority. Its focused source mutation gate covers the rollback
+order and exact token. This does not call the held O2 adopter or bind an
+original-owner P1 clone and controls; a same-owner C2 claim, receipt, and SAVE
+remain pending separate compiled and review gates.
+
 The [private M3 owner-roster prerequisite](g3/G3_R_M3_OWNER_ROSTER_PREREQUISITE.md)
 ports the feature-gated registry-backed fourteen-parameter/identity roster
 to current main. It rejects unsealed, stale, foreign, incomplete or inconsistent
