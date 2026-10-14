@@ -3188,7 +3188,11 @@ publication, public G2 and continuation remain pending.
   two-argument entry remains unchanged in behavior and cannot itself release
   a caller-held lease. Focused source negatives and an unrun same-call fixture
   cover I1/A2 release/retry and failed repair. This sibling is intermediate
-  source evidence only; independent review, emitted-code audit, compiled
+  source evidence only. Its exact-source compiled gate is held because Q0
+  found nine new development-only terminal source checkers absent from the
+  Python isolation allowlist. A focused successor registers only those nine
+  exact script paths and tests near-miss rejection; independent review of
+  that successor is pending. Emitted-code audit, compiled
   first-EOS/G2 and held-lease proof, release/snapshot/clone and public G2
   remain pending.
 

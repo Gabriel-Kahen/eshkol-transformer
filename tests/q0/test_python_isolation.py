@@ -6,6 +6,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 Q0 = ROOT / "tests" / "q0"
+TERMINAL_SOURCE_CHECKERS = (
+    "check-g3c4-p2g2-terminal-abort-coordinator-source.py",
+    "check-g3c4-p2g2-terminal-anchor.py",
+    "check-g3c4-p2g2-terminal-commit-source.py",
+    "check-g3c4-p2g2-terminal-first-source.py",
+    "check-g3c4-p2g2-terminal-null-ffi-source.py",
+    "check-g3c4-p2g2-terminal-precommit-frame-source.py",
+    "check-g3c4-p2g2-terminal-prefix-source.py",
+    "check-g3c4-p2g2-terminal-second-source.py",
+    "check-g3c4-p2g2-terminal-text-preflight-source.py",
+)
 G3C4_DEVELOPMENT_SCRIPTS = frozenset({
     ROOT / "scripts" / name
     for name in (
@@ -57,6 +68,7 @@ G3C4_DEVELOPMENT_SCRIPTS = frozenset({
         "check-g3c4-token-frame.py",
         "check-g3c4-token-forward.py",
         "check-p1-prepared-split.py",
+        *TERMINAL_SOURCE_CHECKERS,
     )
 })
 DEVELOPMENT_SCRIPTS = frozenset({
@@ -164,6 +176,12 @@ class PythonIsolationTests(unittest.TestCase):
                 self.assertFalse(development_python(ROOT / relative))
 
     def test_g3c4_checker_near_misses_are_rejected(self) -> None:
+        for name in TERMINAL_SOURCE_CHECKERS:
+            path = ROOT / "scripts" / name
+            with self.subTest(path=path.relative_to(ROOT)):
+                self.assertTrue(path.is_file())
+                self.assertIn(path, G3C4_DEVELOPMENT_SCRIPTS)
+                self.assertTrue(development_python(path))
         for admitted in G3C4_DEVELOPMENT_SCRIPTS:
             for path in (
                 admitted.with_name(admitted.name + ".extra.py"),
