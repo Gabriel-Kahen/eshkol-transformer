@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tests.e3_metrics.reference_probe import add, divide
+from tests.e3_metrics.reference_probe import add, divide, exp_bits
 from tests.e3_private.sum_order_corpus import materialize
 from tests.e3_private.verify_sum_order_mutant import check_mutant, check_normal, frozen
 from tests.e3_reference.reference import _synthetic_case
@@ -29,6 +29,19 @@ class SumOrderMutantSourceTests(unittest.TestCase):
         parameters, _ = m3.parameters(1729)
         cls.normal, _, _ = _synthetic_case(cls.rows, parameters)
         cls.normal["kind"] = "observed-f32"
+        numerator = 0
+        for batch, ce, word in zip(cls.normal["batches"],
+                                   cls.fixture["compiled"]["ce_f32"],
+                                   cls.fixture["compiled"]["numerator_f32"]):
+            batch["ce_f32"] = ce
+            batch["reduction_f32"][0] = word
+            batch["reduction_f32"][2] = f"{divide(int(word, 16), int(batch['reduction_f32'][1], 16)):08x}"
+            numerator = add(numerator, int(word, 16))
+            batch["state_f32"][0] = f"{numerator:08x}"
+        weight = int(cls.normal["batches"][-1]["state_f32"][1], 16)
+        loss = divide(numerator, weight)
+        cls.normal["final"]["metrics_f32"][0] = f"{loss:08x}"
+        cls.normal["final"]["metrics_f32"][2] = f"{exp_bits(loss):08x}"
 
     def test_normal_comparator_checks_all_named_m3_roles(self) -> None:
         lines = []
@@ -73,6 +86,15 @@ class SumOrderMutantSourceTests(unittest.TestCase):
             check_mutant(normal, mutant, b"unchanged roles", b"unchanged roles")
         with self.assertRaisesRegex(ValueError, "changed model roles"):
             check_mutant(normal, mutant, b"roles a", b"roles b")
+
+    def test_unwitnessed_compiled_ce_is_rejected(self) -> None:
+        observed = copy.deepcopy(self.normal)
+        observed["batches"][0]["ce_f32"][0] = "40b1902d"
+        with tempfile.TemporaryDirectory(prefix="e3-m2-ce-") as location:
+            role_path = Path(location) / "roles.tsv"
+            role_path.write_text("")
+            with self.assertRaisesRegex(ValueError, "compiled CE words differ"):
+                check_normal(observed, role_path, self.reference)
 
     def test_mutation_is_confined_to_the_exact_noninstalled_tuple(self) -> None:
         builder = (ROOT / "scripts/build-e1b-consumer.sh").read_text()

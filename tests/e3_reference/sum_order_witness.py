@@ -1,12 +1,13 @@
-"""Bounded, development-only search for a genuine E3 M2 sum-order witness.
+"""Bounded D1/D2 M2 witness selected by actual compiled CE observations.
 
-This is a mathematical M3/CE+D2 source fixture, not an E3 runtime observation.
-The candidate domain is exactly the first 64 SHA-256-derived six-byte corpora.
+The frozen probe records the first compiled distinction in a SHA-256 domain.
+PyTorch supplies an independent mathematical reference, not the selection rule.
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 import tempfile
 from pathlib import Path
 
@@ -23,7 +24,9 @@ from tests.t1.reference import encode_artifact, encode_bytes
 DOMAIN = b"e3-section9-sum-order-search-v1"
 MAX_CANDIDATES = 64
 SEED = 1729
-FIXTURE = Path(__file__).with_name("sum_order_witness_v1.json")
+FIXTURE = Path(__file__).with_name("sum_order_witness_v2.json")
+PROBE = Path(__file__).with_name("sum_order_compiled_probe_v1.json")
+PROBE_SHA256 = "f590f9912bfd02b507972076cb51bb57433342bf91cc744d86eac9d47baf6f1f"
 
 
 def candidate(index: int) -> bytes:
@@ -88,25 +91,53 @@ def batch_words_sha256(batches: list[dict[str, object]]) -> str:
     ])).hexdigest()
 
 
-def search(parameters):
-    for index in range(MAX_CANDIDATES):
+def compiled_probe() -> tuple[dict[str, object], dict[str, object]]:
+    """Authenticate and independently check the finite compiled search record."""
+    raw_probe = PROBE.read_bytes()
+    if hashlib.sha256(raw_probe).hexdigest() != PROBE_SHA256:
+        raise ValueError("compiled probe hash differs")
+    probe = json.loads(raw_probe)
+    if (canonical(probe) != raw_probe or probe["version"] != 1
+            or probe["source_head"] != "df9546cc6d5f39e53609e0fe41bb7190952508ad"
+            or probe["source_tree"] != "365da582ed1fe7fa8fce32857bdc15dddf72cd39"
+            or len(probe["rows"]) not in range(1, MAX_CANDIDATES + 1)):
+        raise ValueError("compiled probe identity differs")
+    for index, record in enumerate(probe["rows"]):
         raw = candidate(index)
+        if record["index"] != index or record["raw"] != raw.hex():
+            raise ValueError("compiled probe candidate order differs")
         emitted = rows(raw)
-        reductions = ce_numerators(parameters, emitted)
-        order = order_words(tuple(item[1] for item in reductions))
-        if order["serial"] != order["grouped"]:
-            return index, raw, emitted, reductions, order
-    return None
+        ce = record["compiled_ce"]
+        if len(ce) != 3 or any(len(pair) != 2 for pair in ce):
+            raise ValueError("compiled probe CE shape differs")
+        try:
+            numerators = [
+                reduce_bool(tuple(int(word, 16) for word in pair),
+                            tuple(row["mask"]))[0]
+                for pair, row in zip(ce, emitted)
+            ]
+        except (TypeError, ValueError) as error:
+            raise ValueError("compiled probe CE words malformed") from error
+        if ([f"{word:08x}" for word in numerators] != record["compiled_numerators"]
+                or order_words(tuple(numerators)) != record["order"]):
+            raise ValueError("compiled CE reduction or sum oracle differs")
+        if (index < len(probe["rows"]) - 1
+                and record["order"]["serial"] != record["order"]["grouped"]):
+            raise ValueError("compiled search skipped earlier witness")
+    witness = probe["rows"][-1]
+    if witness["order"]["serial"] == witness["order"]["grouped"]:
+        raise ValueError("compiled search has no distinguishing witness")
+    return probe, witness
 
 
 def validate_oracle(payload: dict[str, object]) -> None:
     """Independently recompute RN-even sums from frozen CE numerator words."""
     if not isinstance(payload, dict) or set(payload) != {
         "kind", "version", "search", "model", "corpus", "batches", "order",
-        "batch_words_sha256",
+        "batch_words_sha256", "compiled", "mathematical_order",
     }:
-        raise ValueError("witness fields differ from version 1")
-    if payload["kind"] != "genuine-m3-ce-sum-order" or payload["version"] != 1:
+        raise ValueError("witness fields differ from version 2")
+    if payload["kind"] != "genuine-m3-ce-sum-order" or payload["version"] != 2:
         raise ValueError("witness kind/version mismatch")
     batches = payload["batches"]
     if not isinstance(batches, list) or len(batches) != 3:
@@ -120,10 +151,21 @@ def validate_oracle(payload: dict[str, object]) -> None:
         expected = order_words(numerators)
     except (KeyError, TypeError, OverflowError) as error:
         raise ValueError("invalid numerator words") from error
-    if payload["order"] != expected:
-        raise ValueError("sum-order comparator disagrees with rational RN-even oracle")
-    if expected["serial"] == expected["grouped"]:
-        raise ValueError("frozen corpus does not distinguish the grouping")
+    if payload["mathematical_order"] != expected:
+        raise ValueError("mathematical sum-order comparator disagrees with rational RN-even oracle")
+    probe, witness = compiled_probe()
+    compiled = payload["compiled"]
+    if (payload["search"]["first_witness_index"] != witness["index"]
+            or payload["corpus"]["source_hex"] != witness["raw"]
+            or compiled != {"probe_sha256": PROBE_SHA256,
+                            "executable_sha256": probe["executable_sha256"],
+                            "openblas_sha256": probe["openblas_sha256"],
+                            "ce_f32": witness["compiled_ce"],
+                            "numerator_f32": witness["compiled_numerators"],
+                            "stdout_sha256": witness["stdout_sha256"],
+                            "roles_sha256": witness["roles_sha256"]}
+            or payload["order"] != witness["order"]):
+        raise ValueError("compiled witness differs from checked native probe")
 
 
 def build() -> dict[str, object]:
@@ -132,10 +174,8 @@ def build() -> dict[str, object]:
 
     m3.setup()  # single CPU thread and deterministic algorithms
     parameters, successor = m3.parameters(SEED)
-    found = search(parameters)
-    if found is None:
-        raise RuntimeError(f"no genuine grouping witness in {MAX_CANDIDATES} candidates")
-    index, raw, _, _, _ = found
+    probe, witness = compiled_probe()
+    index, raw = witness["index"], bytes.fromhex(witness["raw"])
     with tempfile.TemporaryDirectory(prefix="e3-sum-order-") as location:
         directory = Path(location)
         manifest = write_d1_resource(
@@ -166,9 +206,9 @@ def build() -> dict[str, object]:
         for item in parameters[path].to(torch.float32).detach().reshape(-1).tolist()
     )
     payload = {
-        "kind": "genuine-m3-ce-sum-order", "version": 1,
+        "kind": "genuine-m3-ce-sum-order", "version": 2,
         "search": {"domain": DOMAIN.decode("ascii"), "maximum_candidates": MAX_CANDIDATES,
-                   "first_witness_index": index},
+                   "first_witness_index": index, "compiled_candidates_tested": len(probe["rows"])},
         "model": {"seed": SEED, "initializer_successor": list(successor),
                   "parameter_f32_sha256": hashlib.sha256(parameter_words).hexdigest(),
                   "reference_manifest_sha256": hashlib.sha256(
@@ -185,7 +225,15 @@ def build() -> dict[str, object]:
                    "d2_rows_sha256": hashlib.sha256(canonical(emitted)).hexdigest()},
         "batches": batches,
         "batch_words_sha256": batch_words_sha256(batches),
-        "order": order_words(tuple(item[1] for item in reductions)),
+        "mathematical_order": order_words(tuple(item[1] for item in reductions)),
+        "compiled": {"probe_sha256": PROBE_SHA256,
+                     "executable_sha256": probe["executable_sha256"],
+                     "openblas_sha256": probe["openblas_sha256"],
+                     "ce_f32": witness["compiled_ce"],
+                     "numerator_f32": witness["compiled_numerators"],
+                     "stdout_sha256": witness["stdout_sha256"],
+                     "roles_sha256": witness["roles_sha256"]},
+        "order": witness["order"],
     }
     validate_oracle(payload)
     return payload

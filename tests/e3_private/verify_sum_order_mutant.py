@@ -37,12 +37,23 @@ def frozen() -> tuple[dict[str, object], list[dict[str, object]], list[dict[str,
                 or actual["reduction_f32"][:2]
                 != [expected["numerator_f32"], expected["weight_f32"]]):
             raise ValueError("frozen M3/CE words differ")
+    if fixture["order"]["serial"] == fixture["order"]["grouped"]:
+        raise ValueError("frozen compiled CE words do not distinguish grouping")
     return fixture, rows, mathematical, loss_word
 
 
 def check_normal(observed: dict[str, object], role_path: Path,
                  frozen_reference=None) -> None:
     fixture, rows, mathematical, loss_word = frozen_reference or frozen()
+    if len(observed.get("batches", [])) != 3:
+        raise ValueError("actual compiled batch count differs from witness")
+    for actual, ce, numerator in zip(observed["batches"],
+                                     fixture["compiled"]["ce_f32"],
+                                     fixture["compiled"]["numerator_f32"]):
+        if (actual["ce_f32"] != ce or actual["reduction_f32"][0] != numerator):
+            raise ValueError("actual compiled CE words differ from frozen witness")
+    if observed["batches"][2]["state_f32"][0] != fixture["order"]["serial"]:
+        raise ValueError("actual compiled serial state differs from frozen witness")
     validate_mathematical_case(observed, mathematical, tuple(rows), loss_word)
     roles = _roles(role_path)
     if len(roles) != 3 * len(ROLE_NAMES):

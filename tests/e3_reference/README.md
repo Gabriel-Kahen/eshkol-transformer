@@ -42,15 +42,17 @@ may preserve rows; unpacked shard boundaries deliberately change them. Synthetic
 records test this development comparator only and make no native traversal,
 transaction, lifetime, publication or public-evaluator claim.
 
-`sum_order_witness.py` performs a finite, single-threaded search of exactly 64
-SHA-256-derived six-byte raw V256 corpora. Each candidate yields three actual
-packed D2 batches; the registered seed-1729 M3 equations and f32 CE produce the
-batch numerator words. The first genuine serial-versus-grouped RN-even
-counterexample is frozen in `sum_order_witness_v1.json`, with exact source,
-physical D1, D2 rows, parameter, 21-role-trace, Q0-lock, CE and numerator
-checksums/words. The rational oracle recomputes both groupings from those words.
-This is still a development reference; it does not prove native E3 traversal or
-compiled-private M2 acceptance. Run the bounded source gate with a 30-second cap:
+`sum_order_witness.py` checks the first four SHA-256-derived six-byte V256
+corpora in `sum_order_compiled_probe_v1.json`. The failed one-use C executable
+and its native OpenBLAS dependency produced the recorded CE words for each
+three-batch D2 corpus. The first compiled RN-even distinction is index 3,
+frozen in `sum_order_witness_v2.json` with physical D1, D2, parameter, role,
+Q0, mathematical CE, and separately pinned compiled CE provenance. PyTorch
+does not distinguish index 3; the native result does. The rational oracle
+recomputes both groupings from each set of words. The source checks and local
+rerun establish reachability for that sealed executable, while a fresh
+compiled-private gate and independent review remain required for M2 admission.
+Run the bounded source gate with a 30-second cap:
 
 ```bash
 ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE timeout 30s "$Q0_PYTHON" \

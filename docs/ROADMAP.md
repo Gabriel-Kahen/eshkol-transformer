@@ -1029,19 +1029,21 @@ from direct-provider-only cases and names the missing noninstalled model-control
 and stage-selective fault/observer seams for review. It provides no new runtime
 proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
 verdicts remain prerequisites before the full matrix is implemented and run.
-The bounded development-only [genuine three-batch M2 sum-order witness](../tests/e3_reference/sum_order_witness_v1.json)
-uses packed raw-V256 D2 rows and the registered seed-1729 M3/f32 CE reference.
-Its first witness in a 64-candidate SHA-256 domain has serial numerator
-`41dcde81` and regrouped numerator `41dcde80`; physical D1, D2 rows, all
-21 M3 roles, CE and numerator inputs are reproducibly pinned. A rational RN-even
-oracle and negative comparator mutation validate the source fixture. This is
-reachability evidence only; a compiled private M2 mutant gate remains open.
+The first [mathematical three-batch M2 sum-order witness](../tests/e3_reference/sum_order_witness_v1.json)
+failed the one-use df9546 compiled C gate: compiled CE rounded both groupings
+to `41dcde82`. The successor [compiled witness](../tests/e3_reference/sum_order_witness_v2.json)
+uses SHA-domain candidate 3, pinned by four actual native observations. Its
+compiled CE numerators give serial `41de3b31` and grouped `41de3b30`;
+the PyTorch reference for this candidate has equal groupings. Source checks
+and a local rerun of the sealed old executables pass the expected normal and
+third-state mutant rejection. Independent review and a fresh supported
+compiled-private M2 gate remain open; the failed C evidence stays preserved.
 The [noninstalled sum-order mutant source](e3/E3_SUM_ORDER_MUTANT_SOURCE.md)
 now prepares an exact packed D1 resource, a test-only third-batch K1 operand
 regrouping, and a private AOT gate that requires the first actual difference
 at `state_f32[0]` with no rejected transcript. Focused source-only and static
-checks pass; independent review remains pending. No optimized runtime, poison or sanitizer verdict is
-claimed, and the M2 compiled-private row stays open.
+checks pass; independent review remains pending. No fresh optimized runtime,
+poison, or sanitizer verdict is claimed, and M2 compiled-private stays open.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each

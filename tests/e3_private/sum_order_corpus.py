@@ -14,7 +14,7 @@ from tests.e3_reference.transcript import canonical
 from tests.t1.reference import encode_artifact, encode_bytes
 
 
-FIXTURE = Path(__file__).resolve().parents[1] / "e3_reference/sum_order_witness_v1.json"
+FIXTURE = Path(__file__).resolve().parents[1] / "e3_reference/sum_order_witness_v2.json"
 
 
 def materialize(output: Path) -> dict[str, object]:
@@ -22,8 +22,9 @@ def materialize(output: Path) -> dict[str, object]:
     search, corpus = fixture["search"], fixture["corpus"]
     index = search["first_witness_index"]
     domain = search["domain"].encode("ascii")
-    if (fixture["kind"] != "genuine-m3-ce-sum-order" or fixture["version"] != 1
-            or index != 2 or search["maximum_candidates"] != 64
+    if (fixture["kind"] != "genuine-m3-ce-sum-order" or fixture["version"] != 2
+            or index != 3 or search["maximum_candidates"] != 64
+            or search["compiled_candidates_tested"] != 4
             or domain != b"e3-section9-sum-order-search-v1"):
         raise ValueError("frozen search identity differs")
     raw = bytes.fromhex(corpus["source_hex"])
