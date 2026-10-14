@@ -3194,9 +3194,12 @@ publication, public G2 and continuation remain pending.
   proof before accepting a dead entry; its Guile source probe rejects a forged
   live-to-dead entry without releasing native state, then verifies held-I1
   retry, successful native-zero cleanup and same-shell idempotence. This
-  successor still needs independent source review and compiled adversarial
-  proof. Older rooted records remain as dead tombstones, so long-run retention
-  is unmeasured.
+  successor passed independent source/tests review at `448015e0`, but its
+  one-use source preflight is held: Q0 rejected twelve tracked terminal
+  development checkers missing from its exact Python allowlist. A narrow
+  successor adds only those checker paths; it needs independent review and a
+  fresh one-use static package before any compiled adversarial proof. Older
+  rooted records remain as dead tombstones, so long-run retention is unmeasured.
   A further source-private logical I1 owner now uses the existing native
   terminal clone/copy/release ABI. It obtains an authenticated detached
   snapshot, anchors the original typed shell and readback allocation, and
