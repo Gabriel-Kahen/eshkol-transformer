@@ -501,7 +501,7 @@
       (let ((result (vector 'e3-edge-result-v1 case cursor
                             (e3-test-u32-ref (vector-ref destinations 3)))))
         (e3-test-edge-mark! case 'done)
-        result))))))
+        result)))))
 
 (define (e3-test-retention-run phase horizon present? corpus-path mutation)
   (cond ((eq? phase 'prepare)

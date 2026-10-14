@@ -1124,6 +1124,12 @@ flushed case/phase and caught-exception provenance. Its controls exercise a
 missing-path D2-open exception and a labeled postcondition abort after the
 stage-12 outcome check. Source checks alone do not establish the throw site or
 edge acceptance; independent source review precedes any fresh compiled gate.
+The exact `dacb88ef` source gate stopped in retention package A with an Eshkol
+`unexpected closing parenthesis` before any edge runtime or control. Its raw
+evidence is preserved. A source-only successor removes the extra edge-tail
+delimiter in the test driver and its derived mutant, with a whole-file parser
+negative that rejects the original malformed tail. Independent review and a
+fresh compiled result remain pending.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each

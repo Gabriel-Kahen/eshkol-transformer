@@ -16,6 +16,33 @@ DRIVER = ROOT / "tests/e3_private/retention_driver.esk"
 RUNTIME = ROOT / "tests/e3_private/edge_runtime.esk"
 RUNNER = ROOT / "scripts/test-e3-edge-private.sh"
 BUILDER = ROOT / "scripts/build-e3-retention-test.sh"
+MUTANT = ROOT / "tests/e3_private/retention_first_eval_mutant_driver.esk"
+
+
+def audit_parentheses(source: str) -> None:
+    depth = 0
+    quoted = escaped = False
+    for number, line in enumerate(source.splitlines(), 1):
+        for char in line:
+            if quoted:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == '"':
+                    quoted = False
+            elif char == ";":
+                break
+            elif char == '"':
+                quoted = True
+            elif char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+                if depth < 0:
+                    raise ValueError(f"unexpected closing parenthesis at line {number}")
+    if depth or quoted:
+        raise ValueError("unclosed Eshkol form or string")
 
 
 def audit_causal_controls(driver: str, runner: str) -> None:
@@ -39,6 +66,18 @@ def audit_causal_controls(driver: str, runner: str) -> None:
 
 
 class EdgeSourceTests(unittest.TestCase):
+    def test_complete_driver_syntax_rejects_failed_tail(self) -> None:
+        for path in (DRIVER, MUTANT):
+            with self.subTest(path=path.name):
+                source = path.read_text()
+                audit_parentheses(source)
+                self.assertIn("        result)))))\n", source)
+                old_failure = source.replace("        result)))))\n",
+                                             "        result))))))\n", 1)
+                with self.assertRaisesRegex(ValueError,
+                                            "unexpected closing parenthesis"):
+                    audit_parentheses(old_failure)
+
     def test_closed_edge_path_checks_outcome_and_state(self) -> None:
         source = DRIVER.read_text()
         edge = form(source, "(define (e3-test-edge-run")

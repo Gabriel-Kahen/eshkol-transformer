@@ -55,7 +55,7 @@ class FirstEvaluationMutantTuple(unittest.TestCase):
     def test_exact_driver_inverse_and_first_call_boundary(self) -> None:
         base, mutant = BASE.read_text(), MUTANT.read_text()
         self.assertEqual(sha(BASE),
-                         "38c1f3d4b750b9d548e1355af5d156fae06c3e5547be99064a9eb5dfbada4f05")
+                         "76a09c4006982b1f0224b4f6b22eedda7a56e9b64fefc5dc396e4f27c16939d2")
         self.assertEqual(transform(base), mutant)
         self.assertEqual(transform(mutant, reverse=True), base)
         measured = mutant.index("(- (e3-test-region-used) region-before)")
