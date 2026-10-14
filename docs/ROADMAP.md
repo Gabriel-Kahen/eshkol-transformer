@@ -3134,9 +3134,13 @@ publication, public G2 and continuation remain pending.
   abort-only in the existing protected call region. A following source-private
   non-EOS leaf reuses the accepted native prefix commit on that original
   pending output, then advances the existing protected phase; its source
-  checker covers eight negative mutations. Both leaves still require in-region
-  abort. First-EOS terminal commit, second-token sampling, post-call snapshot,
-  detached clone, full same-call tests, and independent review remain pending.
+  checker covers eight negative mutations. A further source-private leaf calls
+  the accepted second-frame carrier on the original pending output and decodes
+  its genuine EOS or non-EOS ID through T1 into the distinct original second
+  raw[1] carrier; its focused checker covers twelve negative mutations. These
+  leaves still require in-region abort. First-EOS/G2 terminal commit, text
+  preflight, post-call snapshot, detached clone, full same-call tests, and
+  independent review remain pending.
 
 ## Wave 4 — practical pretraining and performance
 

@@ -1,0 +1,70 @@
+;;; Private second sample/decode after the original non-EOS prefix commit.
+;;; This remains abort-only in the protected call; no output is published.
+
+(extern i64 g3c4-p2g2-native-second-frame ptr ptr ptr i64
+        :real et_g3c4_private_p2g2_second_frame_carrier_v1)
+
+(define (g3c4-p2g2-terminal-second-id-check staging selected operation)
+  (if (not (= (bytevector-u8-ref staging 0) selected))
+      (g3c4-fail 'invalid-state operation
+                 "P2/G2 second native selected ID changed"))
+  (let upper ((index 1))
+    (if (< index 8)
+        (if (= (bytevector-u8-ref staging index) 0)
+            (upper (+ index 1))
+            (g3c4-fail 'invalid-state operation
+                       "P2/G2 second native ID is outside raw V256")))))
+
+(define (g3c4-p2g2-terminal-second-sample-decode-probed!
+          call anchor before-decode after-decode)
+  (let* ((operation 'g3c4-p2g2-terminal-second-sample-decode!)
+         (checked (g3c4-p2g2-terminal-pending-check call anchor operation))
+         (record (vector-ref checked 2))
+         (protected-anchor (g3c4-p2g2-anchor-for call))
+         (native (vector-ref record 5))
+         (output-native (vector-ref checked 6))
+         (tokenizer (vector-ref record 3))
+         (staging (vector-ref checked 10))
+         (raw (vector-ref checked 9)))
+    (if (not (and (eq? (vector-ref record 13) 'prefix-committed)
+                  (eq? (vector-ref protected-anchor 13) 'prefix-committed)
+                  (eq? (vector-ref record 7) output-native)
+                  (eq? (vector-ref anchor 9) raw)
+                  (eq? (vector-ref anchor 10) staging)))
+        (g3c4-fail 'invalid-state operation
+                   "P2/G2 second frame needs original committed prefix"))
+    (g3c4-p2g2-prefix-byte-check
+      record (bytevector-u8-ref (vector-ref checked 8) 0) operation)
+    ;; Native samples retained prefix logits, including a genuine second EOS,
+    ;; into the original second staging[8] carrier.
+    (g3c4-native-check
+      (g3c4-p2g2-native-second-frame native output-native staging 16)
+      operation)
+    (g3c4-p2g2-terminal-pending-check call anchor operation)
+    (if (not (and (eq? (vector-ref record 5) native)
+                  (eq? (vector-ref record 7) output-native)
+                  (eq? (vector-ref record 3) tokenizer)
+                  (eq? (vector-ref anchor 9) raw)
+                  (eq? (vector-ref anchor 10) staging)))
+        (g3c4-fail 'invalid-state operation
+                   "P2/G2 second native carrier identities changed"))
+    (let ((selected (bytevector-u8-ref staging 0)))
+      (g3c4-p2g2-terminal-second-id-check staging selected operation)
+      (before-decode anchor)
+      (g3c4-p2g2-terminal-pending-check call anchor operation)
+      (g3c4-p2g2-terminal-second-id-check staging selected operation)
+      (t1-private-g3-decode-raw-into! tokenizer staging raw)
+      (g3c4-p2g2-terminal-pending-check call anchor operation)
+      (after-decode anchor)
+      (g3c4-p2g2-terminal-pending-check call anchor operation)
+      (g3c4-p2g2-terminal-second-id-check staging selected operation)
+      (if (not (and (eq? (vector-ref anchor 9) raw)
+                    (eq? (vector-ref anchor 10) staging)
+                    (= (bytevector-u8-ref raw 0) selected)))
+          (g3c4-fail 'invalid-state operation
+                     "P2/G2 second T1 byte differs from native selected ID"))
+      selected)))
+
+(define (g3c4-p2g2-terminal-second-sample-decode! call anchor)
+  (g3c4-p2g2-terminal-second-sample-decode-probed!
+    call anchor (lambda (pending) #t) (lambda (pending) #t)))
