@@ -305,15 +305,6 @@ static int e3_fault_idle(const et_e3_frame_internal *frame) {
       !frame->model->active && e3_pins_idle(&frame->pins);
 }
 
-static void e3_fault_enter(et_e3_frame_internal *frame) {
-  if (!e3_fault_idle(frame)) return;
-  if (frame->forward_fault_state == E3_FAULT_ARMED) {
-    frame->forward_fault_state = E3_FAULT_ENTERED;
-  } else if (frame->forward_fault_state == E3_FAULT_ENTERED) {
-    frame->forward_fault_state = E3_FAULT_MISSED;
-  }
-}
-
 static int64_t e3_fault_forward_preinvoke(
     et_e3_frame_internal *frame, uint32_t role) {
   if (frame->forward_fault_state != E3_FAULT_ENTERED ||
@@ -342,6 +333,32 @@ int64_t et_e3_test_forward_fault_arm_v1(
   frame->forward_fault_reached = 0;
   frame->forward_fault_fired = 0;
   frame->forward_fault_state = E3_FAULT_ARMED;
+  return 0;
+}
+
+int64_t et_e3_test_forward_fault_begin_v1(void *pointer) {
+  e3_clear();
+  et_e3_frame_internal *frame = e3_admit(pointer);
+  if (!frame) return e3_last_domain ?
+      e3_dependency_status(e3_last_domain, e3_last_category) : e3_last_category;
+  if (!e3_fault_idle(frame) || frame->forward_fault_state != E3_FAULT_ARMED)
+    return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
+  frame->forward_fault_state = E3_FAULT_ENTERED;
+  return 0;
+}
+
+int64_t et_e3_test_forward_fault_end_v1(void *pointer) {
+  e3_clear();
+  et_e3_frame_internal *frame = e3_admit(pointer);
+  if (!frame) return e3_last_domain ?
+      e3_dependency_status(e3_last_domain, e3_last_category) : e3_last_category;
+  if (!e3_fault_idle(frame) ||
+      (frame->forward_fault_state != E3_FAULT_ENTERED &&
+       frame->forward_fault_state != E3_FAULT_FIRED &&
+       frame->forward_fault_state != E3_FAULT_MISSED))
+    return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
+  if (frame->forward_fault_state == E3_FAULT_ENTERED)
+    frame->forward_fault_state = E3_FAULT_MISSED;
   return 0;
 }
 
@@ -806,11 +823,6 @@ int64_t et_e3_private_frame_check_v1(void *pointer) {
   et_e3_frame_internal *frame = e3_admit(pointer);
   if (!frame) return e3_last_domain ?
       e3_dependency_status(e3_last_domain, e3_last_category) : e3_last_category;
-#ifdef ET_E3_FAULT_TESTING
-  /* This is the evaluator's native entry check. An unfired prior attempt
-   * expires here, so it cannot silently fault a subsequent invocation. */
-  e3_fault_enter(frame);
-#endif
   return e3_storage_check(frame, 1);
 }
 

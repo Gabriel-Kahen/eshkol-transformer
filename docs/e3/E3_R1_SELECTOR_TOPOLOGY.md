@@ -31,7 +31,8 @@ there. A frame-constructor allocation countdown cannot stand in for stage 3.
 The E3 fault selector must be owned by the **authenticated native frame**,
 never by a process-global countdown. A test driver first obtains the live
 entry through `e3-frame-entry-live`, arms its native pointer while the frame is
-idle, and then enters `e3-evaluate-into!`. The closed request is
+idle, begins one test-only invocation scope, enters `e3-evaluate-into!`, and
+ends that scope on either outcome. The closed request is
 `(site, ordinal, occurrence)`; `site` is a reviewed enum, `ordinal` is a
 site-specific role or copy index, and `occurrence` is the positive count of
 that exact site **within one invocation**. No caller callback, string,
@@ -68,7 +69,7 @@ before code is admitted. A source-only negative must prove an unarmed frame
 has identical dispatch order and result. This slice adds no stage 3, D2,
 copy, P1, CE, finalization, publication or resource proof by implication.
 
-The test-only frame fields and C setter/status/reset definitions belong to
+The test-only frame fields and C arm/begin/end/status/reset definitions belong to
 `e3_frame.c` (the frame struct is defined there); declarations used by the
 test bridge belong to `e3_frame_internal.h`, compiled only for the new tuple. The
 driver's Eshkol externs and test scenario belong to a new
@@ -110,16 +111,21 @@ fail-stop, not recoverable selectors.
 
 ## Native prerequisite candidate
 
-The guarded native frame candidate adds a forward-only arm/readback/reset seam
+The guarded native frame candidate adds a forward-only arm/begin/end/readback/reset seam
 under `ET_E3_FAULT_TESTING`; it is not selected by any package tuple yet. Its
 fixed denial is native `(domain, category, code) = (0, 2, 2)` (`invalid-state`,
-`phase`). The authenticated `et_e3_private_frame_check_v1` transitions an arm
-to an entered invocation. A second entry check expires an unfired arm; native
-finish also expires it. The preinvoke check follows frame, phase and next-role
+`phase`). The future noninstalled driver must call the authenticated idle-only
+native `begin` immediately before one `e3-evaluate-into!` attempt and `end`
+after either outcome, including a pre-acquire rejection. The evaluator and D2
+prepare both call `et_e3_private_frame_check_v1` while the native frame is
+idle; neither check changes selector state. Native finish also marks an
+unfired entered arm missed. The preinvoke check follows frame, phase and next-role
 admission and precedes operand setup and `e3_dispatch`. Idle readback selectors
 0–4 return state, role, occurrence, reached and fired, respectively. States
 are clear 0, armed 1, entered 2, fired 3 and missed 4; explicit idle reset is
-required before another arm. A C state-machine probe and feature-off object
-comparison exercise this prerequisite. The noninstalled lexical tuple, native
-bridge use, compiled same-frame failure/retry matrix, and resource horizons
-remain separate gates.
+required before another arm. A C state-machine probe calls both native frame
+checks on a deliberately invalid-storage frame and verifies they cannot
+expire an entered arm. Feature-off object comparison checks this prerequisite.
+The noninstalled lexical tuple, bridge use, real successful D2 prepare,
+compiled same-frame failure/retry matrix, and resource horizons remain
+separate gates.
