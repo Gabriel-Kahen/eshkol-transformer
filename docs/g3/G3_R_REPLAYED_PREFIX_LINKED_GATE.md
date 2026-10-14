@@ -9,9 +9,12 @@ load a fresh process, or establish full G3-R continuation.
 toolchain. Its ordered closure and SHA-256 manifest pin the actual Eshkol
 source commit `fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9`, compiler
 versions and provenance fields, native providers, Eshkol fixture, bridge, and
-runner. It checks the exact linker-wrapper command and logged PASS-line command,
-including source-only semantic mutations whose runner SHA is repinned in the
-manifest. It also rejects omitted manifest entries and critical build commands.
+runner. It checks the exact linker-wrapper command, the replayed-prefix feature
+flag as a token, and independent fixed SHA-256 values for the full runner and
+its `build_mode` command and receipt body. Source-only semantic mutations repin
+the runner SHA in the manifest; the checker still rejects them, including an
+early return before the PASS receipt. It also rejects omitted manifest entries
+and critical build commands.
 These checks do not compile Eshkol.
 
 For a separately released run, start from a clean immutable gate commit and

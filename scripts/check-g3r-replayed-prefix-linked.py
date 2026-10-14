@@ -30,6 +30,10 @@ HEADERS = [
     ("compiler_provenance_file", ".deps/eshkol-build/eshkol-transformer-provenance.tsv"),
     ("compiler_provenance_keys", "eshkol_commit,cc_path,cxx_path,cc_version,cxx_version,llvm_version,eshkol_binary_sha256"),
 ]
+# Freeze the runner and executable build-mode body independently of the
+# repinnable manifest row. Command or receipt-path changes need review.
+RUNNER_SHA256 = "e4a0c4492220efa2514edfb1665f111e7a72a2beff472cf79928c68048fc5640"
+BUILD_MODE_SHA256 = "ff381e33d2e8c445d28cf9a21cabb8b38a5ed3080a66b4b8d7e569a6b279f189"
 RUNNER_NEEDLES = [
     "G3R_LINKED_RUNTIME_RELEASE", "G3R_LINKED_EXPECTED_COMMIT",
     "git -C \"$PROJECT_ROOT\" status --porcelain", "verify_toolchain",
@@ -91,6 +95,9 @@ def validate_runner(source: str) -> None:
     build = re.findall(r'(?m)^build_mode\(\) \{\n(.*?)^\}\nbuild_mode normal$',
                        source, re.DOTALL | re.MULTILINE)
     require(len(build) == 1, "build_mode command structure changed")
+    feature_flag = r'(?<!\S)-DET_G3R_REPLAYED_PREFIX_PRIVATE(?=\s|\\)'
+    require(len(re.findall(feature_flag, build[0])) == 1,
+            "exact replayed-prefix feature flag changed")
     expected_pass = ('  [[ ! -s "$directory/stderr" ]] || '
                      'die "$mode runtime stderr is nonempty"\n'
                      "  run_logged grep -E '^G3-R linked replayed P1 PASS: "
@@ -99,6 +106,10 @@ def validate_runner(source: str) -> None:
                      'die "$mode PASS line missing"\n')
     require(build[0].endswith(expected_pass), "logged PASS check command changed")
     require(build[0].count("grep -E") == 1, "PASS check command duplicated")
+    require(sha256(build[0].encode()).hexdigest() == BUILD_MODE_SHA256,
+            "build_mode command/receipt path changed")
+    require(sha256(source.encode()).hexdigest() == RUNNER_SHA256,
+            "runner command/receipt path changed")
 
 
 def validate_manifest(source: str, paths: list[str], root: Path,
@@ -159,6 +170,10 @@ def main() -> None:
     for old, new in (("-Wl,--wrap=et_kernel_runtime_dispatch",
                       "-Wl,--wrap=et_kernel_runtime_dispatch_broken"),
                      ("run_logged grep -E", "grep -E"),
+                     ("-DET_G3R_REPLAYED_PREFIX_PRIVATE",
+                      "-DET_G3R_REPLAYED_PREFIX_PRIVATE_BROKEN"),
+                     ('  [[ ! -s "$directory/stderr" ]]',
+                      '  return 0\n  [[ ! -s "$directory/stderr" ]]'),
                      ("-DET_G3R_REPLAYED_PREFIX_PRIVATE", ""),
                      ("replayed_prefix_linked_probe.c", "")):
         require_rejected_repin(runner, manifest, closure, old, new)
