@@ -1382,8 +1382,9 @@ The next bounded E3 §9 stage-6 mask preinvoke source candidate adds
 noninstalled frame-owned site 11, ordinal 0, occurrences 1 or 2. It consumes
 in `et_e3_private_stage_targets_v1` after the real input-ID and validated
 target copies and `stage_plane = 2`, before return and the D2 mask view. The
-target D2 borrow is still open at denial and unwinds through its existing
-guard; the mask borrow has not begun in the source-order `and` chain. The cut
+target D2 borrow is still open at denial. The target consumer returns false,
+then `d2-token-tensor-with-view-internal` calls `d2-borrow-end!` on its normal
+path; the mask borrow has not begun in the source-order `and` chain. The cut
 returns local internal/invariant status, mapped to E1 stage 6/table index 83.
 Native tests prove copied IDs and targets, unchanged mask, no additional
 provider dispatch, invalid target-view precedence and selector lifecycle;
@@ -1406,9 +1407,10 @@ frame-owned site 12, ordinal 0, occurrences 1 or 2. In
 `et_e3_private_stage_mask_v1`, the real mask view is validated and copied,
 then `stage_plane = 3`, `next_role = 0` and `phase = E3_FORWARD` are set before
 the selector consumes and returns local internal/invariant status (E1 stage 6,
-table index 83). The D2 mask borrow is still open at native denial and unwinds
-through its existing guard. The Eshkol wrapper reaches stage 7/role 0 only
-after staging succeeds; that borrow and role ordering is source evidence,
+table index 83). The D2 mask borrow is still open at native denial. The mask
+consumer returns false, then `d2-token-tensor-with-view-internal` calls
+`d2-borrow-end!` on its normal path. The Eshkol wrapper reaches stage 7/role 0
+only after staging succeeds; that borrow and role ordering is source evidence,
 **not a compiled runtime trace**. Native tests prove copied IDs, targets and
 mask, no added provider dispatch, invalid-mask precedence, selector lifecycle,
 unchanged outputs/counters and same-frame retry. Occurrence 2 follows a
