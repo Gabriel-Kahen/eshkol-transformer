@@ -46,15 +46,24 @@ python3 -I -B -m unittest discover -s tests/e3_private -p 'test_n1_generated_att
 ```
 
 It checks the normal phase order, three role peaks, setup peak and aggregate
-arithmetic; each phase, sync, timeout, fd and cgroup-report fault returns
-HOLD without a false completion claim. The separate
+arithmetic. The `observed_peak_sum_bytes` diagnostic is emitted only when
+the setup report names all three declared roles with zero exit codes, no
+unresolved actor, and the exact HOLD/RECEIPT/SEAL phase sequence. A partial,
+failed, or inconsistent report omits the sum so it cannot undercount the
+declared graph; adversarial report tests cover missing and failed roles,
+unresolved actors, and missing or duplicate phases. Each phase, sync,
+timeout, fd and cgroup-report fault returns HOLD without a false completion
+claim. The separate
 [finite-closure diagnostic](E3_N1_F32_FINITE_CLOSURE_PROBE.md) exercises a
 detached pipe holder, but its result cannot be merged into this graph as a
 whole-attempt proof.
 
 ## Missing deployment gate
 
-All actors run as the caller UID in its existing cgroup. Pipes are not an
+The setup report is same-UID and unauthenticated, so even a complete reported
+sum is not a trustworthy whole-attempt RSS bound. The active outer observer
+also has no final peak measurement. All actors run as the caller UID in its
+existing cgroup. Pipes are not an
 authenticated protected channel, the stubs have no v3 signatures or
 protected stores, and the outer active observer's final RSS is not measured.
 There is no spawn/migration denial, independently protected pre-read intent,

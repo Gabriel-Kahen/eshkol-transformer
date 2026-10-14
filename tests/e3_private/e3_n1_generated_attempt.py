@@ -350,6 +350,14 @@ def probe(fault=None):
         result["reason"] = "setup-report-unverified"
         return result
     result.update(body)
-    result["observed_peak_sum_bytes"] = reaped[1] + sum(
-        item["peak_rss_bytes"] for item in body["roles"].values())
+    complete = (body["reason"] == "generated-order-observed" and
+                body["phases"] == ["HOLD", "RECEIPT", "SEAL"] and
+                set(body["roles"]) == {"broker", "reader", "sealer"} and
+                body["unresolved"] == [] and
+                all(item["exit_code"] == 0 for item in body["roles"].values()))
+    if complete:
+        result["observed_peak_sum_bytes"] = reaped[1] + sum(
+            item["peak_rss_bytes"] for item in body["roles"].values())
+    elif body["reason"] == "generated-order-observed":
+        result["reason"] = "finite-graph-unverified"
     return result

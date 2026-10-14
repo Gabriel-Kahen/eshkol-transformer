@@ -55,9 +55,7 @@ class GeneratedAttemptTests(unittest.TestCase):
                 self.assertNotEqual(record["reason"], "generated-order-observed")
                 self.assertEqual(record["unresolved"], [])
                 self.assertTrue(record["roles"])
-                self.assertEqual(record["observed_peak_sum_bytes"],
-                                 record["setup_peak_rss_bytes"] +
-                                 sum(item["peak_rss_bytes"] for item in record["roles"].values()))
+                self.assertNotIn("observed_peak_sum_bytes", record)
         for fault in ("before_hold", "hold_sync", "receipt_sync", "inherited_fd"):
             self.assertEqual(attempt.probe(fault)["roles"]["broker"]["exit_code"], 9)
         self.assertEqual(attempt.probe("seal_sync")["roles"]["sealer"]["exit_code"], 9)
@@ -71,6 +69,31 @@ class GeneratedAttemptTests(unittest.TestCase):
         self.assert_hold(record)
         self.assertEqual(record["reason"], "setup-report-unverified")
         self.assertNotIn("observed_peak_sum_bytes", record)
+
+    def test_incomplete_or_failed_report_cannot_emit_peak_sum(self):
+        complete = {"reason": "generated-order-observed",
+                    "phases": ["HOLD", "RECEIPT", "SEAL"],
+                    "roles": {role: {"exit_code": 0, "peak_rss_bytes": 1024}
+                              for role in ("broker", "reader", "sealer")},
+                    "unresolved": [], "uid_transition": "STUB-SAME-UID",
+                    "protected_channel": "STUB-SAME-UID", "private_cgroup": "HOLD",
+                    "v3_signatures": "HOLD"}
+        mutants = {
+            "missing-role": {**complete, "roles": {"broker": complete["roles"]["broker"],
+                                                    "reader": complete["roles"]["reader"]}},
+            "failed-role": {**complete, "roles": {**complete["roles"],
+                                                   "sealer": {"exit_code": 9,
+                                                              "peak_rss_bytes": 1024}}},
+            "unresolved-role": {**complete, "unresolved": ["sealer"]},
+            "missing-phase": {**complete, "phases": ["HOLD", "RECEIPT"]},
+            "duplicate-phase": {**complete, "phases": ["HOLD", "RECEIPT", "SEAL", "SEAL"]},
+        }
+        for name, body in mutants.items():
+            with self.subTest(name=name), mock.patch.object(attempt, "_setup", return_value=body):
+                record = attempt.probe()
+            self.assert_hold(record)
+            self.assertEqual(record["reason"], "finite-graph-unverified")
+            self.assertNotIn("observed_peak_sum_bytes", record)
 
 
 if __name__ == "__main__":
