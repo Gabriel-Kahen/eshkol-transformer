@@ -72,6 +72,8 @@ class FaultTupleTest(unittest.TestCase):
                 return True
             if expression == "#f":
                 return False
+            if expression.startswith("'"):
+                return expression
             return int(expression) if expression.isdigit() else environment[expression]
         op = expression[0]
         if op == "and":
@@ -103,6 +105,8 @@ class FaultTupleTest(unittest.TestCase):
             return args
         if op == "vector-ref":
             return args[0][args[1]]
+        if op == "vector-length":
+            return len(args[0])
         if op == "=":
             return args[0] == args[1]
         if op == "<=":
@@ -396,6 +400,62 @@ e3_reject_unresolved_private fault "$3" "$3"
             changed = after.copy()
             changed[field] += 1
             self.assertTrue(admits(changed, mutant), f"mutant failed to escape {field}")
+
+    def test_fourteen_model_images_reject_gradient_and_metadata_mutants(self):
+        source = (TESTS / "retention_driver.esk").read_text()
+        source = source[source.index("(define (e3-test-retention-model=? "):]
+        expression = self.function_expression(source, "e3-test-retention-model=?")
+        owner = [
+            [[1000 + parameter, 2000 + parameter],
+             [3000 + parameter, 4000 + parameter],
+             [1, parameter + 1, 1065353216]]
+            for parameter in range(14)
+        ]
+        expected = [[fields[0].copy(), fields[1].copy(), *fields[2]]
+                    for fields in owner]
+        def copy_owner():
+            return [[part.copy() for part in parameter] for parameter in owner]
+        def admits(candidate=owner, predicate=expression):
+            return self.eval_probe(predicate, {
+                "model": candidate, "expected": expected,
+                "m3t-entry": lambda model, _kind, _operation, _live: [None, None, None, model],
+                "e3-test-model-word-count":
+                    lambda model, parameter, gradient: len(model[parameter][gradient]),
+                "e3-test-model-word":
+                    lambda model, parameter, gradient, index: model[parameter][gradient][index],
+                "e3-test-gradient-metadata":
+                    lambda model, parameter, field: model[parameter][2][field],
+            })
+        self.assertTrue(admits())
+        for parameter in range(14):
+            for gradient in (0, 1):
+                changed = copy_owner()
+                changed[parameter][gradient][1] += 1
+                self.assertFalse(admits(changed),
+                                 f"parameter {parameter} gradient {gradient} word")
+            for field in range(3):
+                changed = copy_owner()
+                changed[parameter][2][field] += 1
+                self.assertFalse(admits(changed),
+                                 f"parameter {parameter} metadata {field}")
+
+        changed_gradient = copy_owner()
+        changed_gradient[7][1][1] += 1
+        self.assertFalse(admits(changed_gradient))
+        skipped_gradient = source.replace("(= gradient 2)", "(= gradient 1)", 1)
+        self.assertNotEqual(skipped_gradient, source)
+        gradient_mutant = self.function_expression(
+            skipped_gradient, "e3-test-retention-model=?")
+        self.assertTrue(admits(changed_gradient, gradient_mutant))
+
+        changed_metadata = copy_owner()
+        changed_metadata[11][2][2] += 1
+        self.assertFalse(admits(changed_metadata))
+        skipped_metadata = source.replace("(= field 3)", "(= field 0)", 1)
+        self.assertNotEqual(skipped_metadata, source)
+        metadata_mutant = self.function_expression(
+            skipped_metadata, "e3-test-retention-model=?")
+        self.assertTrue(admits(changed_metadata, metadata_mutant))
 
 
 if __name__ == "__main__":
