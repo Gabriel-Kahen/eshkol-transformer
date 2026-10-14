@@ -22,26 +22,66 @@ def ordered(text, fragments, label):
 
 
 def without_conditional_feature(text, macro):
-    """Remove source regions compiled only when a later feature is enabled."""
+    """Project source with one later feature disabled, retaining its false arm."""
     kept = []
-    depth = 0
+    frames = []
+
+    def visible():
+        return all(not target or keep for target, keep in frames)
+
     for line in text.splitlines(keepends=True):
         directive = line.lstrip()
         opens = (directive.startswith("#if ") or
                  directive.startswith("#ifdef ") or
                  directive.startswith("#ifndef "))
-        if depth:
-            if opens:
-                depth += 1
-            elif directive.startswith("#endif"):
-                depth -= 1
-            continue
-        if opens and macro in directive:
-            depth = 1
-            continue
-        kept.append(line)
-    require(depth == 0, f"unterminated conditional feature block: {macro}")
+        if opens:
+            target = macro in directive
+            was_visible = visible()
+            frames.append((target, directive.startswith("#ifndef ") if target else True))
+            if was_visible and not target:
+                kept.append(line)
+        elif directive.startswith("#else"):
+            require(frames, f"unexpected #else while projecting {macro}")
+            target, keep = frames[-1]
+            if target:
+                frames[-1] = (target, not keep)
+            elif visible():
+                kept.append(line)
+        elif directive.startswith("#elif"):
+            require(frames, f"unexpected #elif while projecting {macro}")
+            require(not frames[-1][0] and macro not in directive,
+                    f"unsupported #elif while projecting {macro}")
+            if visible():
+                kept.append(line)
+        elif directive.startswith("#endif"):
+            require(frames, f"unexpected #endif while projecting {macro}")
+            target, _ = frames.pop()
+            if not target and visible():
+                kept.append(line)
+        elif visible():
+            kept.append(line)
+    require(not frames, f"unterminated conditional feature block: {macro}")
     return "".join(kept)
+
+
+def step4_projection(block):
+    for macro in (
+        "ET_G3C4_ACTIVE_CALL_PRIVATE",
+        "ET_G3C4_GENERATOR_PRIVATE",
+        "ET_G3C4_P2_G2_TERMINAL_PRIVATE",
+    ):
+        block = without_conditional_feature(block, macro)
+    return block
+
+
+def require_no_deferred_surface(block):
+    step4_block = step4_projection(block)
+    for forbidden in [
+        "et_g3c4_model_pins", "generator_seed", "generator_rng",
+        "policy", "sampler", "forward", "owner->active =",
+    ]:
+        require(forbidden not in step4_block,
+                f"Step 4a reaches deferred surface: {forbidden}")
 
 
 def check():
@@ -59,10 +99,6 @@ def check():
     require(source.count("#ifdef ET_G3C4_CONTEXT_PRIVATE") == 1,
             "context implementation feature block changed")
     block = source[source.index("#ifdef ET_G3C4_CONTEXT_PRIVATE"):]
-    step4_block = without_conditional_feature(
-        block, "ET_G3C4_ACTIVE_CALL_PRIVATE")
-    step4_block = without_conditional_feature(
-        step4_block, "ET_G3C4_GENERATOR_PRIVATE")
     require(source.index("#ifdef ET_G3C4_CONTEXT_PRIVATE") >
             source.index("et_g3c4_private_model_owner_abort_v1"),
             "context block no longer follows accepted owner implementation")
@@ -77,12 +113,7 @@ def check():
         "registry_next", "magic", "kind", "state", "busy", "owner", "cache",
     ]:
         require(field in block, f"context record omits {field}")
-    for forbidden in [
-        "et_g3c4_model_pins", "generator_seed", "generator_rng",
-        "policy", "sampler", "forward", "owner->active =",
-    ]:
-        require(forbidden not in step4_block,
-                f"Step 4a reaches deferred surface: {forbidden}")
+    require_no_deferred_surface(block)
 
     ordered(block, [
         "owner = et_g3c4_admit_owner(candidate, 0)",
