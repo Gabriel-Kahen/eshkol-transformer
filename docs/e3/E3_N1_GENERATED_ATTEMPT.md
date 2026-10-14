@@ -109,7 +109,7 @@ Only an exact, duplicate-key-free inner report with three successful
 declared roles, matching setup/role peak arithmetic, and an inner interval
 no longer than the outer interval emits `declared_finite_peak_sum_bytes`.
 This is the sum of the reported setup and role peaks plus the final observer
-peak. In diagnostic schema v2, after validating that report and computing this
+peak. In diagnostic schema v3, after validating that report and computing this
 sum, the passive caller samples Linux `RUSAGE_SELF.ru_maxrss` and adds its
 lifetime high-water RSS as `caller_peak_rss_bytes_at_sample` and
 `declared_plus_caller_peak_sum_bytes`. The lifetime high-water may include
