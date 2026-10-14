@@ -52,7 +52,7 @@ class E3AsanIRBoundaryTests(unittest.TestCase):
         seam = seam.split('  -o "${e1b_tmp}/private.o"', 1)[0]
         self.assertIn('if [[ "${e3_private_test_sanitize}" == 1 ]]; then', seam)
         self.assertIn('[[ "${package_policy}" == e3-private-aggregate ]]', seam)
-        self.assertIn('retention|retention-first-eval-mutant|retention-overflow|mode-graph|numerical|uniform)', seam)
+        self.assertIn('retention|fault|retention-first-eval-mutant|retention-overflow|mode-graph|numerical|uniform|zero)', seam)
         self.assertIn('e1b_private_compile_ir="${e1b_tmp}/private.asan.ll"', seam)
         self.assertIn('"${e1b_cc}" "${e3_private_test_sanitize_flags[@]}" -c -x ir "${e1b_private_compile_ir}"',
                       builder)
@@ -69,8 +69,8 @@ class E3AsanIRBoundaryTests(unittest.TestCase):
         shell = ('set -euo pipefail\n'
                  'e3_tuple_kind=$1\n'
                  'die() { exit 77; }\n' + case)
-        for tuple_name in ("retention", "retention-overflow", "mode-graph",
-                           "numerical", "uniform"):
+        for tuple_name in ("retention", "fault", "retention-overflow",
+                           "mode-graph", "numerical", "uniform", "zero"):
             with self.subTest(tuple_name=tuple_name):
                 result = subprocess.run(["bash", "-c", shell, "bash", tuple_name],
                                         capture_output=True, check=False)
