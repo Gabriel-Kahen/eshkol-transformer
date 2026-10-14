@@ -2199,6 +2199,13 @@ failed gate remains sealed at
 evidence only until a fresh pinned aggregate compiles and runs. Post-tombstone
 P1 and uncertain native
 release cuts still require separate evidence.
+The next sealed gate on `fe678660` stopped at the F32 allocator-symbol probe
+before provider linking. Its compiled object defines the required allocator,
+but `nm | grep -Fq` under `pipefail` can report failure if `grep` closes the
+pipe early. The probe now records complete defined-symbol output and requires
+the exact global text symbol. A source-closure mutation and generated-object
+positive/missing-symbol regressions cover this repair. The failed gate remains
+unadmitted; a fresh pinned compiled run and independent review remain required.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),

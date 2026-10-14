@@ -5,6 +5,7 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 fixture = (root / "tests/g3r/held_p1_c2_gate.esk").read_text()
 runner = (root / "scripts/test-g3r-held-p1-c2-gate.sh").read_text()
+symbol_probe = (root / "scripts/check-g3r-f32-allocator-symbol.sh").read_text()
 bit_bridge = (root / "tests/g3r/held_p1_c2_bit_bridge.c").read_text()
 f32 = (root / "native/f32_tensor.c").read_text()
 corpus_builder = (root / "tests/d2/prepare_public_resources.py").read_text()
@@ -132,7 +133,10 @@ def check(source: str, script: str, bits: str) -> None:
         assert "-DET_G3R_SAME_OWNER_SAVE_PRIVATE" in command
         assert "-DET_G3R_CANDIDATE_RETIRE_PRIVATE" in command
     assert "compile native/f32_tensor.c f32_tensor" in script
-    assert "et_f32_tensor_test_fail_alloc_after_v1" in script
+    assert '"$PROJECT_ROOT/scripts/check-g3r-f32-allocator-symbol.sh" \\' in script
+    assert '"$evidence/native/f32_tensor.defined-symbols.txt"' in script
+    assert 'LC_ALL=C nm -g --defined-only --format=posix "$object" > "$symbols"' in symbol_probe
+    assert "grep -Eq '^et_f32_tensor_test_fail_alloc_after_v1 T [[:xdigit:]]+ [[:xdigit:]]+$'" in symbol_probe
     assert "-DET_F32_TENSOR_TESTING" in script
     assert "native/g3r_joint_hold.c" in script
     assert "native/o2_optimizer.c" in script
@@ -188,6 +192,16 @@ except (AssertionError, ValueError):
     pass
 else:
     raise AssertionError("premature corpus creation escaped")
+old_probe = runner.replace(
+    '"$PROJECT_ROOT/scripts/check-g3r-f32-allocator-symbol.sh"',
+    'true # skipped allocator symbol probe', 1)
+assert old_probe != runner
+try:
+    check(fixture, old_probe, bit_bridge)
+except (AssertionError, ValueError):
+    pass
+else:
+    raise AssertionError("missing allocator symbol probe escaped")
 for header in ("compile native/f32_tensor.c f32_tensor \\",
                "compile native/o2_optimizer.c o2_optimizer \\"):
     command = compile_command(runner, header)
@@ -200,4 +214,4 @@ for header in ("compile native/f32_tensor.c f32_tensor \\",
         pass
     else:
         raise AssertionError(f"missing owned-span prerequisite escaped: {header}")
-print(f"held P1/C2 source aggregate: pass ({len(mutations) + 3} mutations; unadmitted)")
+print(f"held P1/C2 source aggregate: pass ({len(mutations) + 4} mutations; unadmitted)")
