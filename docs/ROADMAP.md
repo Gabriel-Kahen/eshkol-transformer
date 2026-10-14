@@ -1066,20 +1066,35 @@ assigned to the writable `void *` tensor-view field under strict Clang.
 The sealed raw evidence and independent HOLD review remain at
 `/home/gabe/.codex/evidence/eshkol-transformer/e3-m2-padded-ea52-static-20261014-a/result/`
 (review SHA-256 `6679ce1400293008bf3ded35794d6527b7f5fd585c53fe7a2fd1283c9113dbbb`).
-A bounded source repair makes only those local masks writable and adds the
-strict compiler qualifier check to the source test; independent source review
-and a fresh one-use compiled normal/repeat/poison/sanitizer gate are pending.
+The bounded source repair made only those local masks writable and added a
+strict compiler qualifier check; that failed gate supplied no admission.
 The subsequent one-use gate on `91d5e96` also exited 1: the mutant reached
 final counters `(6, 3)`, but the shared numerical runtime `sum-order` case
 asserted `(5, 3)` before parsing or oracle comparison. The independent HOLD
 review is preserved at
 `/home/gabe/.codex/evidence/eshkol-transformer/e3-m2-padded-91d5-static-20261014-a/INDEPENDENT-GATE-FAILED-RAW-REVIEW.md`
 (SHA-256 `f0333078989ac79871873c1dde2b4cee963853f813799818c1db27e4f0c1af6d`).
-A bounded source successor gives mutant variants a distinct `(6, 3)` runtime
-case while normal variants keep `(5, 3)` and both retain the cursor check.
-Independent source review and a fresh separately released one-use compiled gate
-remain pending; the failed gate supplies no padded-position admission.
-This does not advance the remaining M2 or full §9 admission status.
+The independently source-reviewed `aa3fbd41` successor gives mutant variants
+a distinct `(6, 3)` runtime case while normal variants keep `(5, 3)` and both
+retain the cursor-byte equality assertion. The source ACCEPT is
+`/home/gabe/.codex/evidence/eshkol-transformer/e3-m2-padded-aa3fbd41-source-review-20261014/INDEPENDENT-SOURCE-ACCEPT.md`
+(SHA-256 `a7b4dbb4c6b6100f8cd0b1dcd2e25493a6056b40af39d62a0237b248b22a66a7`).
+Its separate one-use compiled gate
+exited 0 and passed normal/repeat, poison and ASan/UBSan runs on the genuine
+three-row D2 masks `11, 11, 10`. The first changed numerical word was the
+third-row `reduction_f32[0]`; four mutant oracle runs rejected at that row
+without publishing a transcript, while four normal runs produced transcripts.
+The independent bounded compiled-result ACCEPT is
+`/home/gabe/.codex/evidence/eshkol-transformer/e3-m2-padded-aa3fbd41-independent-compiled-review-20261014.md`
+(SHA-256 `e242b9538ee07434a6381e410d706e7426c37db278fa7a470c4d19fa4f08f4e9`);
+all 421 raw-result entries are sealed by
+`/home/gabe/.codex/evidence/eshkol-transformer/e3-m2-padded-aa3fbd41-gate-all-raw-20261014.json`
+(SHA-256 `6532c72dcf405d93a0e89471179a995e14197cf33675eeba097e53cb7df56df1`).
+This accepts only the noninstalled, test-only padded-position M2 subgate.
+The remaining M2 mutants and full E3 §9 admission matrix remain open;
+installed/public E3 behavior and GPU execution are not established. This
+current-main source/docs union still needs independent review and hosted
+exact-head validation before integration.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each
