@@ -3148,9 +3148,15 @@ publication, public G2 and continuation remain pending.
   error paths abort the original owner before leaving it. The reservation's
   final post-root check also cleans the rooted pending anchor in-region on
   rejection, with fail-stop if authenticated cleanup cannot complete. Its
-  source checker covers fifteen negative mutations. This remains source-only:
-  native first-EOS/G2 terminal commit, post-call snapshot, detached clone,
-  compiled same-call proof, and independent review remain pending.
+  source checker covers fifteen negative mutations. A following source-private
+  precommit frame is called on both abort-only branches after logical text
+  preparation. It reauthenticates the original owner, count, branch phase,
+  T1/raw/staging and selected text, then captures the exact 9-byte first and
+  optional second native raw-header operands and bounded tail references.
+  Its source checker covers twenty negative mutations. This remains
+  source-only and abort-only: native first-EOS/G2 terminal commit, the
+  post-zero success tail, post-call snapshot, detached clone, compiled
+  same-call proof, and independent review remain pending.
 
 ## Wave 4 — practical pretraining and performance
 

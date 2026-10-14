@@ -19,16 +19,23 @@
                    (g3c4-p2g2-terminal-pending-check call anchor operation))
                  (eos (vector-ref (vector-ref (vector-ref checked 2) 15) 6)))
             (if (and (m3t-exact-i64? eos) (= first-selected eos))
-                (g3c4-p2g2-terminal-text-preflight!
-                  call anchor first-selected #f)
+                (let ((logical-count
+                        (g3c4-p2g2-terminal-text-preflight!
+                          call anchor first-selected #f)))
+                  (g3c4-p2g2-terminal-precommit-frame
+                    call anchor first-selected #f logical-count))
                 (begin
                   (g3c4-p2g2-terminal-non-eos-prefix-commit!
                     call anchor first-selected)
                   (let ((second-selected
                           (g3c4-p2g2-terminal-second-sample-decode!
                             call anchor)))
-                    (g3c4-p2g2-terminal-text-preflight!
-                      call anchor first-selected second-selected))))))
+                    (let ((logical-count
+                            (g3c4-p2g2-terminal-text-preflight!
+                              call anchor first-selected second-selected)))
+                      (g3c4-p2g2-terminal-precommit-frame
+                        call anchor first-selected second-selected
+                        logical-count)))))))
         ;; An abort rejection cannot leave a live call outside m3-call.
         (guard (abort-failure (#t (exit 134)))
           (g3c4-p2g2-terminal-pending-abort! call anchor))
