@@ -1,5 +1,6 @@
 """Generated-only finite attempt ordering and fail-closed cuts."""
 
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -93,6 +94,36 @@ class GeneratedAttemptTests(unittest.TestCase):
                 record = attempt.probe()
             self.assert_hold(record)
             self.assertEqual(record["reason"], "finite-graph-unverified")
+            self.assertNotIn("observed_peak_sum_bytes", record)
+
+    def test_duplicate_raw_report_keys_cannot_emit_peak_sum(self):
+        body = {"reason": "generated-order-observed",
+                "phases": ["HOLD", "RECEIPT", "SEAL"],
+                "roles": {role: {"exit_code": 0, "peak_rss_bytes": 1}
+                          for role in ("broker", "reader", "sealer")},
+                "unresolved": [], "uid_transition": "STUB-SAME-UID",
+                "protected_channel": "STUB-SAME-UID", "private_cgroup": "HOLD",
+                "v3_signatures": "HOLD"}
+        raw = json.dumps(body)
+        broker = '"broker": {"exit_code": 0, "peak_rss_bytes": 1}'
+        mutants = {
+            "duplicate-broker": raw.replace(
+                broker, '"broker": {"exit_code": 0, "peak_rss_bytes": 999999999}, '
+                + broker, 1),
+            "duplicate-peak": raw.replace(
+                '"peak_rss_bytes": 1',
+                '"peak_rss_bytes": 999999999, "peak_rss_bytes": 1', 1),
+            "duplicate-top-level": raw.replace(
+                '"reason": "generated-order-observed"',
+                '"reason": "other", "reason": "generated-order-observed"', 1),
+        }
+        for name, report in mutants.items():
+            self.assertNotEqual(report, raw)
+            with self.subTest(name=name), mock.patch.object(attempt, "_setup", return_value={}), \
+                    mock.patch.object(attempt.json, "dumps", return_value=report):
+                record = attempt.probe()
+            self.assert_hold(record)
+            self.assertEqual(record["reason"], "setup-report-unverified")
             self.assertNotIn("observed_peak_sum_bytes", record)
 
 

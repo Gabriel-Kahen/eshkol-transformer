@@ -164,6 +164,15 @@ def _expect_eof(fd, deadline):
     raise Hold("phase-pipe-not-eof")
 
 
+def _unique_object(pairs):
+    body = {}
+    for key, value in pairs:
+        if key in body:
+            raise ValueError("duplicate-report-key")
+        body[key] = value
+    return body
+
+
 def _reap(roles, force):
     peaks = {}
     unresolved = []
@@ -325,7 +334,7 @@ def probe(fault=None):
         result["reason"] = "setup-or-report-closure-unverified"
         return result
     try:
-        body = json.loads(data)
+        body = json.loads(data, object_pairs_hook=_unique_object)
         if not isinstance(body, dict) or set(body) != {
                 "reason", "phases", "roles", "unresolved", "uid_transition",
                 "protected_channel", "private_cgroup", "v3_signatures"}:

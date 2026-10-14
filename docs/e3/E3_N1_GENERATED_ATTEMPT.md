@@ -53,7 +53,15 @@ failed, or inconsistent report omits the sum so it cannot undercount the
 declared graph; adversarial report tests cover missing and failed roles,
 unresolved actors, and missing or duplicate phases. Each phase, sync,
 timeout, fd and cgroup-report fault returns HOLD without a false completion
-claim. The separate
+claim.
+
+The setup report decoder rejects duplicate JSON object keys at every level,
+including repeated role names and repeated peak fields. Such a report is
+`setup-report-unverified` and emits no peak sum, even if the last duplicate
+would otherwise make the decoded graph appear complete. Raw report tests
+cover conflicting broker peaks, nested peak fields and top-level keys.
+
+The separate
 [finite-closure diagnostic](E3_N1_F32_FINITE_CLOSURE_PROBE.md) exercises a
 detached pipe holder, but its result cannot be merged into this graph as a
 whole-attempt proof.
