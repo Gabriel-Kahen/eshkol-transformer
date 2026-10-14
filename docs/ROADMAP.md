@@ -727,6 +727,16 @@ preserving traversal and symlink rejection for each root. Focused policy tests
 and the compiled J production-generate/cross-command gates pass on repaired
 source `18693b4`; composed-head compiled and hosted exact-head checks remain open.
 
+The CLI3/G3-G source contract compares the complete installed executable entry
+with its test fixture after accounting for the public D1 `corpus validate`
+intercept. The corrected test constructs that exact successor and retains
+full-entry equality, including native dispatch and fallback. It passed the
+focused 18-test source suite on `5b2fe64`; the reviewed PR #210 candidate
+`5f4ff8d` preserved that test and the installed entry. This source/docs union
+is based on the independently reviewed M2 PR #211 head `7eeaa03b` and retains
+its N3 and M2 evidence. It still needs independent review, exact-head hosted
+checks, and compiled installed/cross-command validation before integration.
+
 The test-only CLI3/G3-G checkpoint-to-generation prerequisite has passed its
 exact fe9/f31 supported linked/runtime gate at `ab479f5`/tree `1102384`.
 Its single registry composes the accepted CLI3/TR3 C2 root with the public
