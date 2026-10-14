@@ -1,0 +1,306 @@
+;;; Test-only, noninstalled C2 held-owner matrix precursor. This source is not
+;;; a compiled-runtime result; the P1 atomic-shell gate remains on HOLD.
+(load "g3r_c2_held_transaction_root.esk")
+
+(define checks 0)
+(define (check label value)
+  (if value (set! checks (+ checks 1))
+      (begin (display "C2 HELD MATRIX FAIL: ") (display label)
+             (newline) (exit 1))))
+(define (typed-error? thunk)
+  (guard (caught (#t (transformer-error? caught))) (thunk) #f))
+(define (bytes=? a b)
+  (and (bytevector? a) (bytevector? b)
+       (= (bytevector-length a) (bytevector-length b))
+       (let loop ((i 0))
+         (or (= i (bytevector-length a))
+             (and (= (bytevector-u8-ref a i) (bytevector-u8-ref b i))
+                  (loop (+ i 1)))))))
+(define (byte-lists=? a b)
+  (if (null? a) (null? b)
+      (and (pair? a) (pair? b) (bytes=? (car a) (car b))
+           (byte-lists=? (cdr a) (cdr b)))))
+(define (reverse-list xs)
+  (let loop ((rest xs) (out '()))
+    (if (null? rest) out (loop (cdr rest) (cons (car rest) out)))))
+(define (elements shape)
+  (let loop ((rest shape) (n 1))
+    (if (null? rest) n (loop (cdr rest) (* n (car rest))))))
+(define (length-exact xs n)
+  (let loop ((rest xs) (i 0))
+    (cond ((null? rest) (= i n))
+          ((or (not (pair? rest)) (= i n)) #f)
+          (else (loop (cdr rest) (+ i 1))))))
+
+;;; The production TR3-C witness uses these same C2-owned projection APIs.
+;;; Image: 14 ordered P1 payloads, 28 ordered O2 moment payloads, controls.
+(define (owner-image shell)
+  (let* ((borrow (c2-training-state-borrow-begin-internal
+                   shell 'g3r-c2-held-transaction-internal))
+         (projection (c2-training-state-borrow-projection-internal borrow))
+         (token (c2-training-state-borrow-owner-token-internal
+                  borrow 'g3r-c2-held-transaction-internal))
+         (p1 (vector-ref projection 0))
+         (o2 (vector-ref projection 1))
+         (topology (vector-ref projection 3))
+         (entries (vector-ref
+                    (state-dict-c2-owned-projection-internal
+                      p1 token 'g3r-c2-held-transaction-internal) 4)))
+    (check "exact P1 topology" (length-exact entries 15))
+    (check "exact O2 topology" (length-exact (vector-ref topology 1) 14))
+    (let p1-loop ((rest entries) (i 0) (payloads '()))
+      (if (= i 14)
+          (let o2-loop ((shapes (vector-ref topology 1))
+                       (i 0) (moments '()))
+            (if (null? shapes)
+                (let ((image (vector (reverse-list payloads)
+                                     (reverse-list moments)
+                                     (vector-ref projection 2))))
+                  (c2-training-state-borrow-end-internal borrow)
+                  image)
+                (let* ((n (elements (car shapes)))
+                       (avg (make-bytevector (* n 4) 0))
+                       (sq (make-bytevector (* n 4) 0)))
+                  (o2-state-copy-moment-bits-c2-owned-internal
+                    (vector o2 i 0 avg n token
+                            'g3r-c2-held-transaction-internal))
+                  (o2-state-copy-moment-bits-c2-owned-internal
+                    (vector o2 i 1 sq n token
+                            'g3r-c2-held-transaction-internal))
+                  (o2-loop (cdr shapes) (+ i 1)
+                           (cons sq (cons avg moments))))))
+          (let* ((entry (car rest))
+                 (carrier (state-dict-c2-owned-tensor-borrow-begin-internal
+                            p1 token entry
+                            'g3r-c2-held-transaction-internal))
+                 (payload (i2-checkpoint-encode
+                            (vector carrier
+                                    (state-entry-kind-internal entry)
+                                    (state-entry-shape-internal entry)
+                                    (state-entry-dtype-internal entry)
+                                    (state-entry-device-internal entry)
+                                    (state-entry-layout-internal entry)
+                                    'g3r-c2-held-transaction-internal))))
+            (state-dict-c2-owned-tensor-borrow-end-internal
+              p1 token entry 'g3r-c2-held-transaction-internal)
+            (p1-loop (cdr rest) (+ i 1) (cons payload payloads)))))))
+(define (image=? a b)
+  (and (byte-lists=? (vector-ref a 0) (vector-ref b 0))
+       (byte-lists=? (vector-ref a 1) (vector-ref b 1))
+       (controls=? (vector-ref a 2) (vector-ref b 2))))
+(define (controls=? a b)
+  (and (equal? (vector-ref a 0) (vector-ref b 0))
+       (equal? (vector-ref a 1) (vector-ref b 1))
+       (bytes=? (vector-ref (vector-ref a 2) 0)
+                 (vector-ref (vector-ref b 2) 0))
+       (bytes=? (vector-ref (vector-ref a 2) 1)
+                 (vector-ref (vector-ref b 2) 1))
+       (bytes=? (vector-ref (vector-ref a 3) 0)
+                 (vector-ref (vector-ref b 3) 0))
+       (equal? (vector-ref (vector-ref a 3) 1)
+               (vector-ref (vector-ref b 3) 1))
+       (equal? (vector-ref a 4) (vector-ref b 4))))
+
+(define (config)
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define (dataset-config directory)
+  (list ':directory directory ':batch-size 1 ':sequence-length 2
+        ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 4 ':maximum-batch-bytes 34
+        ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #t))
+(define (paths handles)
+  (let loop ((i 0))
+    (if (= i (vector-length handles)) '()
+        (cons (parameter-handle-path (vector-ref handles i))
+              (loop (+ i 1))))))
+(define (optimizer-config handles)
+  (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+        '(none) '(constant)
+        (list (list 'group (paths handles)
+                    "3dcccccd" "3f000000" "3f000000"
+                    "3a83126f" "00000000"))))
+(define (policy)
+  (list ':profile 'diagnostic-c2 ':sampling 'categorical
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens 1
+        ':eos #f ':seed 1729))
+(define corpus (car (cdr (command-line))))
+(define (fixture)
+  (let* ((resolved (config))
+         (tokenizer (t2-wave2-tokenizer-byte resolved))
+         (dataset (d2-token-dataset-open (dataset-config corpus) tokenizer))
+         (model (m3t-public-model-create
+                  resolved (m3t-public-initializer-state 1729)))
+         (handles (vector-ref (m3t-entry model 'model 'trainer-create #t) 8))
+         (tree (module-parameters model))
+         (optimizer (o2-public-optimizer-create
+                      (optimizer-config handles) tree)))
+    ;; G3 constructor is eval-only; the enrolled trainer requires train mode.
+    (check "eval before authentic G3 create" (module-eval! model))
+    (let ((generator (g3t-generator-create model tokenizer (policy))))
+      (check "train before authentic TR3 enrollment" (module-train! model))
+      (vector (tr3-lease-create-internal
+                resolved tokenizer dataset model optimizer)
+              generator model optimizer handles dataset))))
+
+(define (original-paths handles)
+  (let loop ((i 0) (out '()))
+    (if (= i (vector-length handles)) (reverse-list out)
+        (let ((raw (raw-for-shell
+                     'g3r-c2-held-transaction-internal 'handle
+                     (vector-ref handles i))))
+          (loop (+ i 1) (cons (vector-ref raw 2) out))))))
+(define (same-path-objects? before handles)
+  (let loop ((i 0) (rest before))
+    (if (= i (vector-length handles)) (null? rest)
+        (and (pair? rest)
+             (eq? (car rest)
+                  (vector-ref
+                    (raw-for-shell 'g3r-c2-held-transaction-internal
+                                   'handle (vector-ref handles i)) 2))
+             (loop (+ i 1) (cdr rest))))))
+(define (original-observation f)
+  (let ((raw (raw-for-shell 'g3r-c2-held-transaction-internal
+                            'module (vector-ref f 2))))
+    (vector (vector-ref raw 7) (original-paths (vector-ref f 4)))))
+(define (same-original? before f)
+  (let ((raw (raw-for-shell 'g3r-c2-held-transaction-internal
+                            'module (vector-ref f 2))))
+    (and (eq? (vector-ref before 0) (vector-ref raw 7))
+         (same-path-objects? (vector-ref before 1) (vector-ref f 4)))))
+
+;;; Reference ownership is detached before the original-owner transaction.
+;;; The two fixture trees are independent, so its release cannot release the
+;;; transaction's native model, optimizer, trainer, or generator authority.
+(define (reference-owner f)
+  (let* ((trainer (vector-ref f 0))
+         (record (tr3-lease-record-for-shell-internal
+                   trainer 'g3r-c2-held-transaction-internal))
+         (parent (tr3-c-snapshot-parent trainer (vector #f)))
+         (controls (c2-training-state-controls-copy
+                     'g3r-c2-held-transaction-internal
+                     (tr3-c-snapshot-controls! record parent)))
+         (p1 (module-state-dict-held-clone-internal (vector-ref f 2)))
+         (o2 (o2-public-optimizer-state (vector-ref f 3)))
+         (request (vector c2-training-state-compose-tag p1 o2 controls
+                          'g3r-c2-held-transaction-internal #f)))
+    (c2-training-state-compose-internal request)
+    (check "reference transfers six-slot request"
+           (and (= (vector-length request) 6)
+                (not (vector-ref request 1))
+                (not (vector-ref request 2))
+                (vector-ref request 5)))
+    (vector-ref request 5)))
+
+(define reference (fixture))
+(define twin (fixture))
+(define original-before (original-observation reference))
+(define twin-before (original-observation twin))
+(define reference-shell (reference-owner reference))
+(define reference-bytes (owner-image reference-shell))
+(define twin-shell (reference-owner twin))
+(define twin-bytes (owner-image twin-shell))
+(check "reference preserves original path and finalization identity"
+       (same-original? original-before reference))
+(check "reference release"
+       (c2-training-state-release-internal!
+         reference-shell 'g3r-c2-held-transaction-internal))
+(check "twin reference release"
+       (c2-training-state-release-internal!
+         twin-shell 'g3r-c2-held-transaction-internal))
+
+;;; Composer cut happens before transfer. The test records the exact P1 and
+;;; O2 child pointers while original holds are live; cleanup must drain them.
+(define compose-original g3r-c2-held-compose-call)
+(define release-original g3r-held-o2-adopter-release!)
+(define begin-original g3r-original-owner-begin!)
+(define held-owner #f)
+(define cut-request #f)
+(define release-ledger #f)
+(define release-calls 0)
+(set! g3r-original-owner-begin!
+  (lambda (trainer generator)
+    (let ((owner (begin-original trainer generator)))
+      (set! held-owner owner)
+      owner)))
+(set! g3r-c2-held-compose-call
+  (lambda (request)
+    (set! cut-request request)
+    (check "exact original G3 and O2 authority stays held"
+           (and (eq? (vector-ref held-owner 5) 'held)
+                (eq? (vector-ref
+                       (vector-ref (vector-ref held-owner 3) 0) 6) 'held)
+                (vector-ref (vector-ref held-owner 4) 0)
+                (g3r-c2-held-original-check! held-owner)))
+    (check "six-slot request before claim"
+           (and (eq? (vector-ref request 0)
+                     c2-training-state-compose-tag)
+                (= (vector-length request) 6)
+                (vector-ref request 1)
+                (vector-ref request 2)
+                (vector-ref request 3)
+                (eq? (vector-ref request 4)
+                     'g3r-c2-held-transaction-internal)
+                (not (vector-ref request 5))))
+    (m3t-fail 'internal 'g3r-c2-held-transaction-internal
+              "injected preclaim composer cut")))
+(set! g3r-held-o2-adopter-release!
+  (lambda (ledger)
+    (set! release-calls (+ release-calls 1))
+    (if (= release-calls 1)
+        (begin
+          (set! release-ledger ledger)
+          (o2-fail 'internal 'g3r-held-o2-adopter-release!
+                   "injected unchanged-live first release"))
+        (begin
+          (check "same exact adopter ledger on retry"
+                 (eq? ledger release-ledger))
+          (release-original ledger)))))
+(check "preclaim failure retains a typed error"
+       (typed-error?
+         (lambda ()
+           (g3r-c2-held-transaction-internal
+             (vector-ref reference 0) (vector-ref reference 1)))))
+(set! g3r-c2-held-compose-call compose-original)
+(set! g3r-held-o2-adopter-release! release-original)
+(set! g3r-original-owner-begin! begin-original)
+(check "unchanged-live retry occurred exactly once" (= release-calls 2))
+(check "fault drains exact original owner"
+       (eq? (vector-ref held-owner 5) 'dead))
+(check "fault request remained unclaimed"
+       (and (eq? (vector-ref cut-request 5) #f)
+            (vector-ref cut-request 1)
+            (vector-ref cut-request 2)))
+(check "fault drained original trainer lease"
+       (eq? (vector-ref
+              (tr3-lease-record-for-shell-internal
+                (vector-ref reference 0) 'g3r-c2-held-transaction-internal)
+              3) 'idle))
+(check "fault did not alter either original"
+       (and (same-original? original-before reference)
+            (same-original? twin-before twin)))
+
+(define held-shell
+  (g3r-c2-held-transaction-internal
+    (vector-ref reference 0) (vector-ref reference 1)))
+(check "held transaction returns one live detached C2 authority"
+       (eq? (vector-ref (c2-training-state-find held-shell) 7) 'live))
+(check "original 42 parameter and moment payloads plus controls"
+       (image=? reference-bytes (owner-image held-shell)))
+(check "success preserves original path and finalization identity"
+       (same-original? original-before reference))
+(check "independent twin remains untouched"
+       (and (same-original? twin-before twin)
+            (let ((shell (reference-owner twin)))
+              (let ((same (image=? twin-bytes (owner-image shell))))
+                (c2-training-state-release-internal!
+                  shell 'g3r-c2-held-transaction-internal)
+                same))))
+(check "held shell releases"
+       (c2-training-state-release-internal!
+         held-shell 'g3r-c2-held-transaction-internal))
+(display "C2 HELD MATRIX PRECURSOR PASS: ")
+(display checks) (display " checks") (newline)

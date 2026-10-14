@@ -38,3 +38,18 @@ path/finalized identity; the existing C2 owner runtime source covers an O2
 claim that mutates before raising. These are separate prerequisite results.
 The joint Eshkol runtime, failure-injection matrix, original byte comparison,
 and compiled atomic-shell gate remain required before admission.
+
+The noninstalled `tests/g3r/c2_held_byte_matrix_precursor.esk` now records
+a bounded compiled-runtime candidate against this exact source root. It
+constructs genuine T2/D2/M3T/O2/TR3 and G3 owners, compares 14 P1 payloads,
+28 O2 moment payloads, and controls against a detached same-source reference,
+checks original path/finalization identity, and keeps an independent twin for
+byte and identity comparison. Its preclaim composer cut checks live original
+G3/O2 authority and the six-slot request; a test-only first O2 release error
+leaves the ledger unchanged and requires one retry on the exact adopter, followed by normal same-owner
+transaction success. The source checker has 11 negative mutations. No Eshkol
+compiler or linked runtime has executed this fixture, so these are proposed
+observations, not passing runtime evidence. The injected release error does
+not establish a native proved-live status. Postclaim, native lifecycle, and
+fail-stop cuts still require the joint compiled matrix after the P1
+atomic-shell gate clears.

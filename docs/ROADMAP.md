@@ -2261,6 +2261,12 @@ causal mutations; the separate original-owner, O2 count, P1 shell-publication,
 and C2 rollback source gates pass. This is source-only review material. The
 joint runtime fault matrix, original byte comparison and compiled atomic-shell
 gate remain pending; no receipt, SAVE, file, or replay path is admitted.
+The noninstalled test-only held-byte matrix precursor now specifies an
+authentic original-owner fixture, 42 payload/control comparison, exact
+path/finalization identity, one recoverable preclaim cleanup and same-authority
+retry, plus an independent twin. Its 11-mutation source check passes; it has
+not run as a linked Eshkol program. The compiled P1 atomic-shell HOLD and
+joint runtime fault matrix remain admission gates.
 
 The [private M3 owner-roster prerequisite](g3/G3_R_M3_OWNER_ROSTER_PREREQUISITE.md)
 ports the feature-gated registry-backed fourteen-parameter/identity roster
