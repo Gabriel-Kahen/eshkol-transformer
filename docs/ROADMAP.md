@@ -1266,6 +1266,18 @@ tests and CI topology pass. This is source-only generated evidence: protected
 custody, real OCI read, trusted actor closure, the 30-second/256-MiB attempt
 predicate, compiled E3 and full §9 acceptance remain **HOLD**.
 
+The [E3 §9 stage-cut inventory](e3/E3_STAGE_CUT_INVENTORY.md) and
+[R1/R2 selector topology](e3/E3_R1_SELECTOR_TOPOLOGY.md) define a source-only,
+noninstalled fault route. A guarded native candidate implements only the
+forward-role preinvoke selector on an authentic idle frame. Host Clang 22 native
+checks and feature-off frame-object parity pass. A bounded current-main source
+union now adds the retention-derived, noninstalled Eshkol tuple, exact lexical
+policy, source-pinned manifests and a feature-private phase identity binding
+for site, role, occurrence, gradient choice and corpus path. Host-only policy
+and mismatch/order checks pass; the manifests remain compiler-unverified.
+Supported Clang 21/LSan, compiled failure/retry and resource proof remain open.
+This candidate does not admit E3 §9 R1/R2.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
