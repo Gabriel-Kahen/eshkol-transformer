@@ -7,6 +7,10 @@
         :real et_e3_test_fault_reset_v1)
 (extern i64 e3-test-fault-seed-publication ptr
         :real et_e3_test_fault_seed_publication_v1)
+(extern i64 e3-fault-value-borrow-begin ptr i64
+        :real et_e3_fault_value_borrow_begin_v1)
+(extern i64 e3-fault-value-borrow-end ptr i64
+        :real et_e3_fault_value_borrow_end_v1)
 
 (define e3-test-fault-root (vector #f))
 
@@ -32,7 +36,7 @@
              (and (equal? (vector-ref image index) (string-ref path index))
                   (compare (+ index 1)))))))
 
-;;; State is (site role occurrence present? path-image phase), where phase
+;;; State is (site role occurrence present? path-image phase twin), where phase
 ;;; 1 is prepared and 2 is executed. It is private to this fault tuple.
 (define (e3-test-fault-bound? scenario corpus-path phase)
   (let ((bound (vector-ref e3-test-fault-root 0)))
@@ -85,6 +89,34 @@
           (= bytes (* ends (vector-ref before 28)))))
    (>= (vector-ref after 27) (vector-ref before 27))))
 
+;;; A separate fixed-seed owner/frame/dataset provides the fault-free result.
+;;; Keep it rooted through the stage-3 retry and retention report.
+(define (e3-test-fault-make-twin present? corpus-path)
+  (let* ((config (e3-test-fixed-config))
+         (tokenizer (t1-private-tokenizer-byte config))
+         (initial (g3t-checked-m3t-initializer-state 1729))
+         (model (g3t-checked-m3t-model-create config initial))
+         (destinations (e3-test-destinations-create))
+         (frame (e3-frame-bind! model destinations))
+         (dataset (d2-token-dataset-open
+                    (e3-test-dataset-config corpus-path #t) tokenizer)))
+    (e3-test-retention-set-mixed! frame)
+    (if present?
+        (e3-test-fault-check 'twin-gradient
+          (= (e3-test-seed-gradient
+               (vector-ref (m3t-entry model 'model 'e3-test-fault-make-twin #t)
+                           3)) 0)))
+    (let* ((cursor (d2-token-dataset-cursor dataset))
+           (modes (e3-test-retention-modes frame))
+           (image (e3-test-retention-model-snapshot model)))
+      (e3-test-retention-call! model dataset frame destinations cursor modes image)
+      (let ((end-cursor (d2-token-dataset-cursor dataset))
+            (output (e3-test-fault-publication frame destinations)))
+        (d2-token-dataset-close! dataset)
+        (e3-frame-unbind! frame)
+        (e3-test-destinations-destroy! destinations)
+        (vector model tokenizer destinations frame dataset end-cursor output)))))
+
 (define (e3-test-fault-execute site role occurrence)
   (e3-test-fault-check 'prepared-root
     (vector? (vector-ref e3-test-retention-root 0)))
@@ -95,6 +127,13 @@
          (dataset (vector-ref record 3))
          (entry (e3-frame-entry-live frame 'e3-test-fault-execute))
          (native (vector-ref entry 4))
+         (twin (vector-ref (vector-ref e3-test-fault-root 0) 6))
+         (owner (vector-ref (m3t-entry model 'model 'e3-test-fault-execute #t) 3))
+         (unheld (e3-test-retention-probes))
+         (held (if (= site 3)
+                   (e3-test-fault-check 'real-value-borrow
+                     (= (e3-fault-value-borrow-begin owner role) 0))
+                   #f))
          (cursor (d2-token-dataset-cursor dataset))
          (modes (e3-test-retention-modes frame))
          (model-image (e3-test-retention-model-snapshot model))
@@ -113,38 +152,54 @@
     (e3-test-fault-check 'prepared-output
       (equal? publication
               (e3-test-fault-publication frame destinations)))
-    (if (= site 2)
+    (if (or (= site 2) (= site 3))
         (e3-test-fault-check 'distinct-precall
           (and (equal? publication e3-test-fault-sentinels)
                (e3-test-fault-all-distinct?
                  publication e3-test-fault-final-publication))))
-    (e3-test-fault-check 'arm (= (e3-test-fault-arm native site role occurrence) 0))
-    (e3-test-fault-check 'armed (= (e3-test-fault-ref native 0) 1))
+    (if (= site 3)
+        (e3-test-fault-check 'borrow-without-selector
+          (and held (= (e3-test-fault-ref native 0) 0)
+               (= (vector-ref before 3) (+ (vector-ref unheld 3) 1))))
+        (begin
+          (e3-test-fault-check 'arm
+            (= (e3-test-fault-arm native site role occurrence) 0))
+          (e3-test-fault-check 'armed (= (e3-test-fault-ref native 0) 1))))
     (let ((failed?
            (with-region ('e3-fault-call 262144)
              (guard
               (caught
                (#t (and (transformer-error? caught)
-                        (eq? (transformer-error-category caught) 'internal)
+                        (eq? (transformer-error-category caught)
+                             (if (= site 3) 'invalid-state 'internal))
                         (eq? (transformer-error-operation caught)
                              'e3-evaluate-into!))))
               (e3-evaluate-into! model dataset frame)
               #f))))
-      (e3-test-fault-check (if (= site 2) 'typed-stage12 'typed-stage7)
+      (e3-test-fault-check
+        (cond ((= site 3) 'typed-stage3)
+              ((= site 2) 'typed-stage12)
+              (else 'typed-stage7))
                            failed?))
     ;; The wrapper has already captured the native error before readback clears it.
     (let ((error (vector-ref entry 12)))
       (e3-test-fault-check 'first-error
-        (and (= (vector-ref entry 15) (if (= site 2) 155 95))
-             (= (vector-ref error 0) (if (= site 2) 12 7))
-             (= (vector-ref error 1) 0)
-             (= (vector-ref error 2) 5) (= (vector-ref error 3) 9))))
-    (e3-test-fault-check 'one-shot
-      (and (= (e3-test-fault-ref native 0) 2)
-           (= (e3-test-fault-ref native 1) site)
-           (= (e3-test-fault-ref native 2) role)
-           (= (e3-test-fault-ref native 3) occurrence)
-           (= (e3-test-fault-ref native 4) occurrence)))
+        (and (= (vector-ref entry 15)
+                (if (= site 3) 42 (if (= site 2) 155 95)))
+             (= (vector-ref error 0)
+                (if (= site 3) 3 (if (= site 2) 12 7)))
+             (= (vector-ref error 1) (if (= site 3) 3 0))
+             (= (vector-ref error 2) (if (= site 3) 4 5))
+             (= (vector-ref error 3) (if (= site 3) 8 9)))))
+    (if (= site 3)
+        (e3-test-fault-check 'real-prepin-denial
+          (= (e3-test-fault-ref native 0) 0))
+        (e3-test-fault-check 'one-shot
+          (and (= (e3-test-fault-ref native 0) 2)
+               (= (e3-test-fault-ref native 1) site)
+               (= (e3-test-fault-ref native 2) role)
+               (= (e3-test-fault-ref native 3) occurrence)
+               (= (e3-test-fault-ref native 4) occurrence))))
     (with-region ('e3-fault-observe 262144)
       (e3-test-fault-check 'cursor
         (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset)))
@@ -162,12 +217,31 @@
       (e3-test-fault-check 'owners
         (e3-test-fault-probes-restored?
           before (e3-test-retention-probes))))
-    (e3-test-fault-check 'reset (= (e3-test-fault-reset native) 0))
-    (e3-test-fault-check 'clear (= (e3-test-fault-ref native 0) 0))
+    (if (= site 3)
+        (begin
+          (e3-test-fault-check 'release-external-borrow
+            (= (e3-fault-value-borrow-end owner role) 0))
+          (e3-test-fault-check 'released-live-borrow
+            (= (vector-ref (e3-test-retention-probes) 3)
+               (vector-ref unheld 3))))
+        (begin
+          (e3-test-fault-check 'reset (= (e3-test-fault-reset native) 0))
+          (e3-test-fault-check 'clear (= (e3-test-fault-ref native 0) 0))))
     (e3-test-retention-call! model dataset frame destinations cursor modes
                              model-image)
+    (if (= site 3)
+        (e3-test-fault-check 'independent-twin
+          (and (vector? twin)
+               (not (eq? model (vector-ref twin 0)))
+               (not (eq? frame (vector-ref twin 3)))
+               (not (eq? dataset (vector-ref twin 4)))
+               (equal? (e3-test-fault-publication frame destinations)
+                       (vector-ref twin 6))
+               (d2-core-bytes=? (d2-token-dataset-cursor dataset)
+                                 (vector-ref twin 5)))))
     (e3-test-fault-check 'retry-output
-      (equal? (if (= site 2) e3-test-fault-final-publication publication)
+      (equal? (if (or (= site 2) (= site 3))
+                  e3-test-fault-final-publication publication)
               (e3-test-fault-publication frame destinations)))
     (e3-test-fault-check 'retry-rng
       (and (eq? rng-algorithm
@@ -193,6 +267,10 @@
                   (<= (vector-ref scenario 5) 8192))
              (and (= (vector-ref scenario 3) 2)
                   (= (vector-ref scenario 4) 0)
+                  (= (vector-ref scenario 5) 1))
+             (and (= (vector-ref scenario 3) 3)
+                  (>= (vector-ref scenario 4) 0)
+                  (<= (vector-ref scenario 4) 13)
                   (= (vector-ref scenario 5) 1)))))
   (let ((phase (vector-ref scenario 1))
         (present? (vector-ref scenario 2)))
@@ -200,9 +278,13 @@
            (e3-test-fault-check 'fresh-selector
              (and (not (vector-ref e3-test-fault-root 0))
                   (not (vector-ref e3-test-retention-root 0))))
-           (let ((path-image (e3-test-fault-path-snapshot corpus-path)))
+           (let ((path-image (e3-test-fault-path-snapshot corpus-path))
+                 (twin (if (= (vector-ref scenario 3) 3)
+                           (e3-test-fault-make-twin present? corpus-path)
+                           #f)))
              (e3-test-retention-prepare 1024 present? corpus-path)
-             (if (= (vector-ref scenario 3) 2)
+             (if (or (= (vector-ref scenario 3) 2)
+                     (= (vector-ref scenario 3) 3))
                  (let* ((record (vector-ref e3-test-retention-root 0))
                         (frame (vector-ref record 2))
                         (native (vector-ref
@@ -217,7 +299,7 @@
                    (vector-set! record 8 (e3-test-retention-probes))))
              (vector-set! e3-test-fault-root 0
                (vector (vector-ref scenario 3) (vector-ref scenario 4)
-                       (vector-ref scenario 5) present? path-image 1))
+                       (vector-ref scenario 5) present? path-image 1 twin))
              #t))
           ((eq? phase 'execute)
            (e3-test-fault-check 'bound-execute
