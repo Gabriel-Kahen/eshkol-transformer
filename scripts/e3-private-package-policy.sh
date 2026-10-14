@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Sourced only by E1B. This admits the base private E3 tuple, its exact
 # source-private diagnostic successor, the installed diagnostic tuple, or the
-# separate noninstalled retention, overflow, mode/graph, numerical, and
+# separate noninstalled retention, fault, overflow, mode/graph, numerical, and
 # uniform-tie successors.
 # Mixed and partial tuples are rejected.
 e3_base_prefix="${PROJECT_ROOT}/native/e3_private_package"
 e3_diagnostic_prefix="${PROJECT_ROOT}/native/e3_diagnostic_private_package"
 e3_public_prefix="${PROJECT_ROOT}/native/e3_diagnostic_public_package"
 e3_retention_prefix="${PROJECT_ROOT}/tests/e3_private/retention_package"
+e3_fault_prefix="${PROJECT_ROOT}/tests/e3_private/fault_package"
 e3_first_eval_mutant_prefix="${PROJECT_ROOT}/tests/e3_private/retention_first_eval_mutant_package"
 e3_overflow_prefix="${PROJECT_ROOT}/tests/e3_private/overflow_package"
 e3_mode_graph_prefix="${PROJECT_ROOT}/tests/e3_mode_graph/package"
@@ -36,6 +37,12 @@ e3_retention_inputs=(
   "${PROJECT_ROOT}/tests/e3_private/retention_bridge.c"
   "${e3_retention_prefix}_private_renames.txt"
   "${e3_retention_prefix}_public_exports.txt"
+)
+e3_fault_inputs=(
+  "${PROJECT_ROOT}/tests/e3_private/fault_driver_root.esk"
+  "${PROJECT_ROOT}/tests/e3_private/fault_bridge.c"
+  "${e3_fault_prefix}_private_renames.txt"
+  "${e3_fault_prefix}_public_exports.txt"
 )
 e3_first_eval_mutant_inputs=(
   "${PROJECT_ROOT}/tests/e3_private/retention_first_eval_mutant_driver_root.esk"
@@ -107,6 +114,14 @@ for e3_raw in "${raw_private_root}" "${raw_package_bridge}" \
       e3_tuple_requested=1
     fi
   done
+  for e3_expected in "${e3_fault_inputs[@]}"; do
+    if [[ "$(realpath -m -- "${e3_raw}")" == "${e3_expected}" ]]; then
+      [[ -z "${e3_tuple_kind}" || "${e3_tuple_kind}" == fault ]] || \
+        die "E3 policy rejects mixed fault and other tuples"
+      e3_tuple_kind=fault
+      e3_tuple_requested=1
+    fi
+  done
   for e3_expected in "${e3_first_eval_mutant_inputs[@]}"; do
     if [[ "$(realpath -m -- "${e3_raw}")" == "${e3_expected}" ]]; then
       [[ -z "${e3_tuple_kind}" ||
@@ -161,6 +176,9 @@ elif [[ "${e3_tuple_kind}" == public ]]; then
 elif [[ "${e3_tuple_kind}" == retention ]]; then
   e3_prefix="${e3_retention_prefix}"
   e3_inputs=("${e3_retention_inputs[@]}")
+elif [[ "${e3_tuple_kind}" == fault ]]; then
+  e3_prefix="${e3_fault_prefix}"
+  e3_inputs=("${e3_fault_inputs[@]}")
 elif [[ "${e3_tuple_kind}" == retention-first-eval-mutant ]]; then
   e3_prefix="${e3_first_eval_mutant_prefix}"
   e3_inputs=("${e3_first_eval_mutant_inputs[@]}")
@@ -218,6 +236,7 @@ e3_normalize_source_dependencies() {
       printf '@BUILD@/source/e3_d2_dataset.esk\n'
     elif [[ ( "${e3_tuple_kind}" == mode-graph ||
               "${e3_tuple_kind}" == retention ||
+              "${e3_tuple_kind}" == fault ||
               "${e3_tuple_kind}" == retention-first-eval-mutant ||
               "${e3_tuple_kind}" == retention-overflow ) && \
             "$(realpath -m -- "${dependency}")" == \
@@ -260,5 +279,11 @@ if [[ "${e3_tuple_requested}" == 1 ]]; then
   done
   if [[ "${e3_public_tuple}" == 1 ]]; then
     e3_check_repository_path "${e3_prefix}_facades.txt"
+  fi
+  if [[ "${e3_tuple_kind}" == fault ]]; then
+    e3_check_repository_path \
+      "${e3_prefix}_sanitized_noninstrumentation_undefined_symbols.txt"
+    e3_check_repository_path \
+      "${e3_prefix}_sanitized_instrumentation_undefined_symbols.txt"
   fi
 fi

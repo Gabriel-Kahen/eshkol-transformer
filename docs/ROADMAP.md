@@ -1005,6 +1005,13 @@ and caught failure. It specifies a role-20 unreached control, stage-7 selected
 failure readback, exact retained-state checks and same-frame retry. Focused
 source checks pass; the lexical package policy/manifests, feature-on build,
 compiled D2 path, failure/retry gate and resource horizons remain pending.
+An isolated noninstalled `fault_package` source candidate now selects the exact
+four-path E1B tuple, six ordered include roots, dedicated fault-only native
+flags and build stage, private dispatch rename, and closed source/native/object,
+symbol, string and archive manifests. Mixed, ambient, symlink and feature-off
+controls are source-tested. The manifests derive from the retention tuple and
+have not passed a fresh Eshkol package compile; normal/sanitizer manifest
+comparison, authentic D2 failure/retry and resource horizons remain open.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
