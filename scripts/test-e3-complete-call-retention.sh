@@ -2,7 +2,7 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 verify_toolchain
-for command in ar cmp diff env grep nm python3 realpath strings timeout wc; do require_command "${command}"; done
+for command in ar awk cmp diff env grep nm python3 realpath strings timeout wc; do require_command "${command}"; done
 [[ -x /usr/bin/time ]] || die "GNU time is required for E3 retention measurements"
 [[ $# -le 1 ]] || die "usage: $0 [FRESH_OUTPUT_DIRECTORY]"
 out="$(realpath -m -- "${1:-$(project_build_dir)/e3-complete-call-retention}")"
@@ -45,14 +45,8 @@ canonical="${out}/canonical"
   >"${out}/canonical-package.stdout" 2>"${out}/canonical-package.stderr"
 /usr/bin/bash "${PROJECT_ROOT}/scripts/test-e3-private-package.sh" "${canonical}" \
   >"${out}/canonical-check.stdout" 2>"${out}/canonical-check.stderr"
-for observer in et_e3_test_retention_probe_v1 \
-    et_e3_test_model_word_v1 et_d2_exact_read_test_fail_stage_v1 \
-    et_f32_test_live_counts_snapshot_v1; do
-  if grep -F "${observer}" \
-      "${canonical}/e3_private_package.o.evidence/readelf-symbols.txt" >/dev/null; then
-    die "retention observer leaked into canonical private package: ${observer}"
-  fi
-done
+/usr/bin/bash "${PROJECT_ROOT}/scripts/e3-canonical-observer-isolation.sh" \
+  "${canonical}/e3_private_package.o.evidence/readelf-symbols.txt"
 
 for cache in a b; do
   artifact="${out}/private-${cache}"

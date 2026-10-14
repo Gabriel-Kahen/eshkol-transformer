@@ -142,6 +142,39 @@ printf '%s\n' /outside-private-test/source/transformer/module.esk | e3_normalize
         self.assertNotIn("retention_driver.esk",
                          (ROOT / "native/e3_private_driver_root.esk").read_text())
 
+    def test_canonical_object_rejects_each_noninstalled_observer(self) -> None:
+        gate = ROOT / "scripts/e3-canonical-observer-isolation.sh"
+        observers = (
+            "et_e3_test_retention_probe_v1",
+            "et_e3_test_model_word_count_v1",
+            "et_e3_test_model_word_v1",
+            "et_e3_test_gradient_metadata_v1",
+            "et_e3_test_seed_gradient_v1",
+            "et_e3_test_first_eval_corrupt_v1",
+            "et_e3_test_graph_event_v1",
+            "et_d2_exact_read_test_fail_stage_v1",
+            "et_f32_test_live_counts_snapshot_v1",
+            "et_f32_test_retired_counts_snapshot_v1",
+            "et_f32_test_borrow_event_counts_snapshot_v1",
+        )
+        runner = (ROOT / "scripts/test-e3-complete-call-retention.sh").read_text()
+        self.assertIn("scripts/e3-canonical-observer-isolation.sh", runner)
+        with tempfile.TemporaryDirectory() as temp:
+            symbols = Path(temp) / "readelf-symbols.txt"
+            def run(row: str) -> subprocess.CompletedProcess:
+                symbols.write_text("Symbol table '.symtab' contains 1 entries:\n" + row)
+                return subprocess.run(["bash", str(gate), str(symbols)],
+                                      capture_output=True, text=True)
+            self.assertEqual(run("  1: 0 0 FUNC LOCAL DEFAULT 1 ordinary\n").returncode, 0)
+            for observer in observers:
+                self.assertIn(observer, gate.read_text())
+                row = f"  1: 0 0 FUNC LOCAL DEFAULT 1 {observer}\n"
+                rejected = run(row)
+                self.assertEqual(rejected.returncode, 1, observer)
+                self.assertIn(observer, rejected.stderr)
+                self.assertEqual(run(row.replace(observer, observer + "_near")).returncode, 0)
+
+
     def test_policy_admits_only_the_exact_tuple(self) -> None:
         policy = ROOT / "scripts/e3-private-package-policy.sh"
         root = ROOT / "tests/e3_private/retention_driver_root.esk"

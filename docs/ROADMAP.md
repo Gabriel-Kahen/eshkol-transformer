@@ -1029,6 +1029,11 @@ from direct-provider-only cases and names the missing noninstalled model-control
 and stage-selective fault/observer seams for review. It provides no new runtime
 proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
 verdicts remain prerequisites before the full matrix is implemented and run.
+The complete-call retention gate now checks the canonical private object's
+symbol table for listed retention, gradient-word/metadata and first-call,
+graph-event, D2 read-fault and I2 census probes. Static negative
+controls inject each forbidden symbol independently and verify exact-name
+rejection; they do not establish a compiled retention or §9 rollback verdict.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each
