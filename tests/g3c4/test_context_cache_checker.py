@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Regression tests for the Step 4a source projection."""
 import importlib.util
+import subprocess
 from pathlib import Path
 import unittest
 
@@ -63,6 +64,49 @@ class Step4ProjectionTests(unittest.TestCase):
                     "int cache;", f"int cache;\n{guard}\nint generator_rng;\n#endif")
                 with self.assertRaisesRegex(ValueError, "generator_rng"):
                     CHECKER.require_no_deferred_surface(mutant)
+
+    def test_commented_guard_and_local_define_cannot_hide_leak(self):
+        cases = {
+            "commented guard": (
+                "#ifdef ET_G3C4_CONTEXT_PRIVATE\nint cache;\n"
+                "/*\n#ifdef ET_G3C4_GENERATOR_PRIVATE\n*/\n"
+                "int generator_rng;\n/*\n#endif\n*/\n#endif\n",
+                "generator_rng",
+            ),
+            "locally defined feature": (
+                "#ifdef ET_G3C4_CONTEXT_PRIVATE\nint cache;\n"
+                "#define ET_G3C4_GENERATOR_PRIVATE 1\n"
+                "#ifdef ET_G3C4_GENERATOR_PRIVATE\n"
+                "int generator_rng;\n#endif\n#endif\n",
+                "feature redefined",
+            ),
+            "continued comment opener": (
+                "#ifdef ET_G3C4_CONTEXT_PRIVATE\nint cache;\n"
+                "/" + chr(92) + "\n*\n"
+                "#ifdef ET_G3C4_GENERATOR_PRIVATE\n*/\n"
+                "int generator_rng;\n/*\n#endif\n*/\n#endif\n",
+                "generator_rng",
+            ),
+        }
+        for label, (source, error) in cases.items():
+            with self.subTest(label=label):
+                processed = subprocess.run(
+                    ["cc", "-E", "-P", "-x", "c",
+                     "-DET_G3C4_CONTEXT_PRIVATE", "-"],
+                    input=source, text=True, capture_output=True, check=True)
+                self.assertIn("int generator_rng;", processed.stdout)
+                with self.assertRaisesRegex(ValueError, error):
+                    CHECKER.require_no_deferred_surface(source)
+
+    def test_unknown_include_fails_closed(self):
+        source = (
+            "#ifdef ET_G3C4_CONTEXT_PRIVATE\n"
+            '#include "feature_that_defines_generator.h"\n'
+            "#ifdef ET_G3C4_GENERATOR_PRIVATE\n"
+            "int generator_rng;\n#endif\n#endif\n"
+        )
+        with self.assertRaisesRegex(ValueError, "unsupported Step 4a include"):
+            CHECKER.require_no_deferred_surface(source)
 
     def test_unsupported_condition_fails_closed(self):
         mutant = BASE.replace(

@@ -8,6 +8,15 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+DISABLED_STEP4 = frozenset({
+    "ET_G3C4_ACTIVE_CALL_PRIVATE",
+    "ET_G3C4_GENERATOR_PRIVATE",
+    "ET_G3C4_P2_G2_TERMINAL_PRIVATE",
+})
+SAFE_STEP4_INCLUDES = frozenset({
+    '"g3c4_context_internal.h"',
+    '"eshkol_transformer/a2_kv_cache.h"',
+})
 
 
 def require(condition, message):
@@ -66,23 +75,73 @@ def _condition_value(expression, disabled):
     return evaluate(parsed.body)
 
 
+def _mask_comments(text):
+    """Replace C comments with spaces before recognizing directives."""
+    kept = []
+    state = "code"
+    index = 0
+    while index < len(text):
+        pair = text[index:index + 2]
+        char = text[index]
+        if state == "block":
+            if pair == "*/":
+                kept.extend("  ")
+                state = "code"
+                index += 2
+            else:
+                kept.append("\n" if char == "\n" else " ")
+                index += 1
+        elif state == "line":
+            kept.append("\n" if char == "\n" else " ")
+            if char == "\n":
+                state = "code"
+            index += 1
+        elif state in ('"', "'"):
+            kept.append(char)
+            if char == "\\" and index + 1 < len(text):
+                kept.append(text[index + 1])
+                index += 2
+            else:
+                if char == state:
+                    state = "code"
+                index += 1
+        elif pair in ("/*", "//"):
+            kept.extend("  ")
+            state = "block" if pair == "/*" else "line"
+            index += 2
+        else:
+            kept.append(char)
+            if char in ('"', "'"):
+                state = char
+            index += 1
+    require(state not in ("block", '"', "'"), "unterminated C comment or quote")
+    return "".join(kept)
+
+
 def _logical_lines(text):
-    lines = iter(text.splitlines(keepends=True))
-    for line in lines:
-        if re.match(r"\s*#\s*(?:if|elif)\b", line):
-            while line.rstrip().endswith("\\"):
-                line = line.rstrip()[:-1] + " " + next(
-                    lines, "")  # An incomplete directive fails to parse.
-        yield line
+    """Apply C line splicing before comment masking and directive parsing."""
+    require("??/" not in text, "unsupported C trigraph in Step 4a projection")
+    spliced = text.replace(chr(92) + "\r\n", "").replace(chr(92) + "\n", "")
+    yield from _mask_comments(spliced).splitlines(keepends=True)
+
+
+def require_no_feature_redefinitions(source):
+    """Reject source/header changes that invalidate the disabled-feature premise."""
+    def inspect(text, label):
+        for line in _logical_lines(text):
+            match = re.match(r"\s*#\s*(?:define|undef)\s+([A-Za-z_]\w*)\b", line)
+            require(not match or match.group(1) not in DISABLED_STEP4,
+                    f"Step 4a feature redefined by {label}")
+
+    inspect(source, "source")
+    for directory in ("src", "include"):
+        for path in (ROOT / directory).rglob("*.h"):
+            inspect(path.read_text(), str(path))
 
 
 def step4_projection(block):
     """Keep every source arm that can run with later features disabled."""
-    disabled = {
-        "ET_G3C4_ACTIVE_CALL_PRIVATE",
-        "ET_G3C4_GENERATOR_PRIVATE",
-        "ET_G3C4_P2_G2_TERMINAL_PRIVATE",
-    }
+    disabled = DISABLED_STEP4
     kept = []
     frames = []  # [prior-arm truth, current-arm reachable]
 
@@ -90,13 +149,27 @@ def step4_projection(block):
         return all(frame[1] for frame in frames)
 
     for line in _logical_lines(block):
-        match = re.match(r"\s*#\s*(if|ifdef|ifndef|elif|else|endif)\b(.*)",
+        match = re.match(r"\s*#\s*([A-Za-z_]\w*)\b(.*)",
                          line, re.DOTALL)
         if not match:
             if visible():
                 kept.append(line)
             continue
         directive, rest = match.groups()
+        if directive in ("define", "undef") and visible():
+            name = re.match(r"\s*([A-Za-z_]\w*)\b", rest)
+            require(name is not None, f"unsupported #{directive}: {rest}")
+            require(name.group(1) not in disabled,
+                    f"Step 4a feature redefined: {name.group(1)}")
+        elif directive == "include" and visible():
+            require(rest.strip() in SAFE_STEP4_INCLUDES,
+                    f"unsupported Step 4a include: {rest.strip()}")
+        elif directive == "pragma" and visible():
+            raise ValueError("unsupported Step 4a pragma")
+        if directive not in ("if", "ifdef", "ifndef", "elif", "else", "endif"):
+            if visible():
+                kept.append(line)
+            continue
         if directive in ("if", "ifdef", "ifndef", "elif"):
             if directive == "if" or directive == "elif":
                 value = _condition_value(rest, disabled) if visible() or directive == "elif" else None
@@ -160,6 +233,7 @@ def check():
     require(source.count("#ifdef ET_G3C4_CONTEXT_PRIVATE") == 1,
             "context implementation feature block changed")
     block = source[source.index("#ifdef ET_G3C4_CONTEXT_PRIVATE"):]
+    require_no_feature_redefinitions(source)
     require(source.index("#ifdef ET_G3C4_CONTEXT_PRIVATE") >
             source.index("et_g3c4_private_model_owner_abort_v1"),
             "context block no longer follows accepted owner implementation")
