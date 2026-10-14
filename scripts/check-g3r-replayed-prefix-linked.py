@@ -62,6 +62,39 @@ FIXTURE_NEEDLES = [
     '(same-output? retry-output retry-reference-output',
     '(= 1 (linked-history eos-replay-native 16))',
 ]
+HISTORY_CLAIMS = [
+    ('(= 2 (linked-history first-native 12))',
+     '(= 1 (linked-history first-native 12))'),
+    ('(= 1 (linked-history first-native 13))',
+     '(= 0 (linked-history first-native 13))'),
+    ('(= 1 (linked-history first-native 14))',
+     '(= 0 (linked-history first-native 14))'),
+    ('(= 0 (linked-history first-native 15))',
+     '(= 1 (linked-history first-native 15))'),
+    ('(check "prefix history length" (= 1 (linked-history replay-native 12)))',
+     '(check "prefix history length" (= 0 (linked-history replay-native 12)))'),
+    ('(check "prefix prompt length" (= 1 (linked-history replay-native 13)))',
+     '(check "prefix prompt length" (= 0 (linked-history replay-native 13)))'),
+    ('(check "prefix generated count" (= 0 (linked-history replay-native 14)))',
+     '(check "prefix generated count" (= 1 (linked-history replay-native 14)))'),
+    ('(check "prefix manual count" (= 0 (linked-history replay-native 15)))',
+     '(check "prefix manual count" (= 1 (linked-history replay-native 15)))'),
+    ('(check "prefix EOS terminal" (= 0 (linked-history replay-native 16)))',
+     '(check "prefix EOS terminal" (= 1 (linked-history replay-native 16)))'),
+    ('(= 0 (linked-history budget-native 15))',
+     '(= 1 (linked-history budget-native 15))'),
+    ('(= 0 (linked-history retry-native 15))',
+     '(= 1 (linked-history retry-native 15))'),
+]
+PREFIX_CLAIMS = [
+    '(check "prefix cache length" (= 1 (cache-length replay-native)))',
+    '(check "prefix RNG version" (= 1 (rng-word replay-native 0)))',
+    '(check "prefix RNG seed" (= 1729 (rng-word replay-native 1)))',
+    '(check "prefix RNG counter low" (= 5 (rng-word replay-native 2)))',
+    '(check "prefix RNG counter high" (= 0 (rng-word replay-native 3)))',
+    '(check "budget-zero prompt-only manual count"',
+    '(check "fault rollback prompt-only manual count"',
+]
 BRIDGE_NEEDLES = [
     "__wrap_et_kernel_runtime_dispatch",
     "__real_et_kernel_runtime_dispatch(runtime, call, error)",
@@ -116,6 +149,10 @@ def validate_runner(source: str) -> None:
 def validate_fixture(source: str) -> None:
     for needle in FIXTURE_NEEDLES:
         require(needle in source, f"fixture omitted {needle}")
+    for claim, _ in HISTORY_CLAIMS:
+        require(source.count(claim) == 1, f"fixture history claim changed: {claim}")
+    for claim in PREFIX_CLAIMS:
+        require(source.count(claim) == 1, f"fixture prefix claim changed: {claim}")
     require(source.index('(load "g3t_final_publication_extension.esk")')
             < source.index('(load "g3t_text_result_extension.esk")'),
             "text result must load after final publication")
@@ -156,6 +193,23 @@ def require_rejected_repin(runner: str, manifest: str, paths: list[str],
     raise ValueError(f"repinned semantic mutation escaped checker: {old} -> {new}")
 
 
+def require_rejected_fixture_repin(fixture: str, manifest: str,
+                                   paths: list[str], old: str, new: str) -> None:
+    require(fixture.count(old) == 1, f"fixture mutation target changed: {old}")
+    mutant = fixture.replace(old, new, 1)
+    path = "tests/g3r/replayed_prefix_linked_test.esk"
+    old_row = f"source_sha256\t{sha256(fixture.encode()).hexdigest()}\t{path}"
+    new_row = f"source_sha256\t{sha256(mutant.encode()).hexdigest()}\t{path}"
+    require(manifest.count(old_row) == 1, "fixture manifest row changed")
+    validate_manifest(manifest.replace(old_row, new_row, 1), paths, ROOT,
+                      {path: mutant.encode()})
+    try:
+        validate_fixture(mutant)
+    except ValueError:
+        return
+    raise ValueError(f"repinned history mutation escaped checker: {old} -> {new}")
+
+
 def main() -> None:
     base = (ROOT / BASE).read_text().splitlines()
     closure = (ROOT / CLOSURE).read_text().splitlines()
@@ -188,6 +242,8 @@ def main() -> None:
         pass
     else:
         raise ValueError("repinned missing text-result load escaped checker")
+    for old, new in HISTORY_CLAIMS:
+        require_rejected_fixture_repin(fixture, manifest, closure, old, new)
     # Repin the changed runner SHA first, so these negatives prove command
     # semantics are checked independently of manifest drift.
     for old, new in (("-Wl,--wrap=et_kernel_runtime_dispatch",

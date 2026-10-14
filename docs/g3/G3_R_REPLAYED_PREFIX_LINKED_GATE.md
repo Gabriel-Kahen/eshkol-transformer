@@ -49,6 +49,13 @@ not success of that attempt.
 
 The first one-use compiled attempt at `5aff31c` stopped during Eshkol fixture
 compilation: `g3t-generation-output-text` was referenced without loading its
-already pinned `g3t_text_result_extension.esk` definition. This source repair
-adds that load after final publication. A new exact-head linked run is required
-before any runtime or numerical claim.
+already pinned `g3t_text_result_extension.esk` definition. The next exact-head
+attempt at `14bcb8e` compiled the caller, then failed its first runtime assertion,
+`manual prefix history and zero RNG draw`. The assertion expected manual count
+one after prompt-only P1 prefill, while the native prompt commit sets manual and
+generated counts to zero. The sealed result does not reveal the individual
+conjunct values. This source repair corrects all four prompt/generated history
+expectations and gives the first prefix cache, history fields, and RNG words
+separate failure names. The checker rejects SHA-repinned wrong history claims.
+An independent source review and a fresh one-use exact-head linked run remain
+required before any runtime or numerical claim.

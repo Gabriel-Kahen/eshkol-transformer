@@ -2018,8 +2018,13 @@ Source-only closure now pins the exact runner and build-mode receipt body,
 checks the replayed-prefix feature flag as a token, and rejects SHA-repinned
 semantic negatives. The first compiled attempt at `5aff31c` stopped on a
 missing fixture load for `g3t-generation-output-text`; the candidate now loads
-the already pinned text-result extension after final publication. A new
-exact-head compiled gate and admission remain **HOLD**.
+the already pinned text-result extension after final publication. The exact
+`14bcb8e` attempt compiled its caller but failed at the first runtime assertion:
+the fixture expected manual count one after prompt-only P1 prefill, contrary to
+the committed-history contract. The fixture now expects zero at all four
+affected sites, names each first-boundary cache/history/RNG assertion, and
+rejects SHA-repinned wrong history claims. Independent source review and a new
+exact-head compiled gate remain **HOLD**; linked admission has not passed.
 The fixture covers P1 prefix parity at the uninterrupted sampler boundary,
 replayed commit parity, fresh EOS, no-draw
 P2/budget/exhaustion, and same-generator abort/retry.
