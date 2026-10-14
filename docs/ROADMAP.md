@@ -1261,6 +1261,22 @@ LeakSanitizer could not start under ptrace. This is setup-time, test-only
 source evidence. Supported Clang 21/LSan, compiled Eshkol failure/retry,
 resource proof, and E3 §9 R1/R2 admission remain open.
 
+The bounded stage-7 fault-driver successor on the published K1 source child
+captures six actual pre-call output words, saved D2 cursor, 17-mode mask,
+14 parameter/gradient word and metadata images, initializer algorithm/four
+successor words, and all 29 native probes immediately before the armed call.
+It checks the first mapped stage-7/internal table index and native tuple,
+restores exact live state, reconciles borrow/retired-control event deltas,
+resets the one-shot arm, and retries a complete call on the same authorities.
+Focused host source tests include omission and wrong-selector mutants. This
+remains a noninstalled source candidate: supported compiled Eshkol
+normal/poison/LSan failure/retry and resource evidence are still pending.
+The repeated fixed corpus gives the same six result words before and after a
+successful call, so stage-12 byte-atomic publication needs distinguishable
+pre-call values and its own genuine preflight cut. Other R1/R2 stages,
+tie identity, graph-producing mutations, and complete-call horizons remain
+open; no §9 admission follows from this source slice.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained

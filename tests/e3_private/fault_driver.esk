@@ -41,6 +41,37 @@
          (eq? (vector-ref bound 3) (vector-ref scenario 2))
          (e3-test-fault-path=? (vector-ref bound 4) corpus-path))))
 
+(define (e3-test-fault-publication frame destinations)
+  (vector (e3-test-u32-ref (vector-ref destinations 0))
+          (e3-test-u32-ref (vector-ref destinations 1))
+          (e3-test-u32-ref (vector-ref destinations 2))
+          (e3-test-u32-ref (vector-ref destinations 3))
+          (e3-counter-ref frame 0) (e3-counter-ref frame 1)))
+
+;;; A completed provider call can grow retired borrow controls. Live owners,
+;;; frame state, graph owners and D2 carriers must return to the pre-call image.
+(define (e3-test-fault-probes-restored? before after)
+  (and
+   (let fixed ((index 0))
+     (if (= index 29) #t
+         (and (if (or (<= index 8) (and (>= index 10) (<= index 12))
+                      (and (>= index 17) (<= index 26)) (= index 28))
+                  (= (vector-ref before index) (vector-ref after index))
+                  #t)
+              (fixed (+ index 1)))))
+   (= (vector-ref after 20) 0) (= (vector-ref after 21) 0)
+   (= (vector-ref after 23) 0) (= (vector-ref after 24) 0)
+   (= (vector-ref after 26) 0)
+   (let ((begins (- (vector-ref after 14) (vector-ref before 14)))
+         (views (- (vector-ref after 15) (vector-ref before 15)))
+         (ends (- (vector-ref after 16) (vector-ref before 16)))
+         (retired (- (vector-ref after 9) (vector-ref before 9)))
+         (bytes (- (vector-ref after 13) (vector-ref before 13))))
+     (and (> begins 0) (= begins ends) (>= views begins)
+          (= retired ends)
+          (= bytes (* ends (vector-ref before 28)))))
+   (>= (vector-ref after 27) (vector-ref before 27))))
+
 (define (e3-test-fault-execute site role occurrence)
   (e3-test-fault-check 'prepared-root
     (vector? (vector-ref e3-test-retention-root 0)))
@@ -51,14 +82,24 @@
          (dataset (vector-ref record 3))
          (entry (e3-frame-entry-live frame 'e3-test-fault-execute))
          (native (vector-ref entry 4))
-         (cursor (vector-ref record 4))
-         (modes (vector-ref record 5))
-         (model-image (vector-ref record 6))
-         (rng (vector-ref record 7))
-         (before (vector-ref record 8)))
+         (cursor (d2-token-dataset-cursor dataset))
+         (modes (e3-test-retention-modes frame))
+         (model-image (e3-test-retention-model-snapshot model))
+         (initializer (m3t-public-model-initializer model))
+         (rng-algorithm (m3t-public-initializer-algorithm initializer))
+         (rng (m3t-public-initializer-words initializer))
+         (publication (e3-test-fault-publication frame destinations))
+         (before (e3-test-retention-probes)))
     (e3-test-fault-check 'prepared
       (and (vector? record) (= (vector-ref entry 1) 1)
            (not (vector-ref record 13))))
+    (e3-test-fault-check 'prepared-cursor
+      (d2-core-bytes=? (vector-ref record 4) cursor))
+    (e3-test-fault-check 'prepared-model
+      (e3-test-retention-model=? model (vector-ref record 6)))
+    (e3-test-fault-check 'prepared-output
+      (equal? publication
+              (e3-test-fault-publication frame destinations)))
     (e3-test-fault-check 'arm (= (e3-test-fault-arm native site role occurrence) 0))
     (e3-test-fault-check 'armed (= (e3-test-fault-ref native 0) 1))
     (let ((failed?
@@ -75,7 +116,8 @@
     ;; The wrapper has already captured the native error before readback clears it.
     (let ((error (vector-ref entry 12)))
       (e3-test-fault-check 'first-error
-        (and (= (vector-ref error 0) 7) (= (vector-ref error 1) 0)
+        (and (= (vector-ref entry 15) 95)
+             (= (vector-ref error 0) 7) (= (vector-ref error 1) 0)
              (= (vector-ref error 2) 5) (= (vector-ref error 3) 9))))
     (e3-test-fault-check 'one-shot
       (and (= (e3-test-fault-ref native 0) 2)
@@ -87,26 +129,29 @@
       (e3-test-fault-check 'cursor
         (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset)))
       (e3-test-fault-check 'output
-        (e3-test-retention-output=? frame destinations))
+        (equal? publication
+                (e3-test-fault-publication frame destinations)))
       (e3-test-fault-check 'modes
         (e3-test-retention-modes=? frame modes))
       (e3-test-fault-check 'model
         (e3-test-retention-model=? model model-image))
       (e3-test-fault-check 'rng
-        (equal? rng (m3t-public-initializer-words
-                     (m3t-public-model-initializer model))))
-      (let check ((index 0))
-        (if (= index 29) #t
-            (begin
-              (if (or (<= index 6) (and (>= index 17) (<= index 26)))
-                  (e3-test-fault-check 'owners
-                    (= (vector-ref before index)
-                       (e3-test-retention-probe index))))
-              (check (+ index 1))))))
+        (and (eq? rng-algorithm
+                  (m3t-public-initializer-algorithm initializer))
+             (equal? rng (m3t-public-initializer-words initializer))))
+      (e3-test-fault-check 'owners
+        (e3-test-fault-probes-restored?
+          before (e3-test-retention-probes))))
     (e3-test-fault-check 'reset (= (e3-test-fault-reset native) 0))
     (e3-test-fault-check 'clear (= (e3-test-fault-ref native 0) 0))
     (e3-test-retention-call! model dataset frame destinations cursor modes
                              model-image)
+    (e3-test-fault-check 'retry-output
+      (equal? publication (e3-test-fault-publication frame destinations)))
+    (e3-test-fault-check 'retry-rng
+      (and (eq? rng-algorithm
+                (m3t-public-initializer-algorithm initializer))
+           (equal? rng (m3t-public-initializer-words initializer))))
     (vector-set! record 12 (__arena-used))
     (vector-set! record 13 #t)
     #t))
