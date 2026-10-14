@@ -2227,11 +2227,16 @@ The bounded P1 state-shell publication repair keeps the registry authoritative
 and skips its fallible advisory-index write for state shells after native
 publication. Exact shell lookup falls back to the registry scan; all other
 indexing and ordinary P1 observation remain unchanged. A source mutation gate
-and test-only post-publication index trap cover this prerequisite, while its
-compiled runtime/IR gate, state-lookup performance and independent review
-remain open. Historical E3/P1 exact-source overlays also need a reviewed
-repin and compiled gate before this candidate can enter the integrated tree.
-This adds no held-safe clone, C2 claim, SAVE receipt or replay.
+and test-only post-publication index trap cover this prerequisite. Independent
+source review accepted exact `3cbdb97`/tree `aa5e8b46`; the compiled runtime/IR
+gate and state-lookup performance remain open. The historical E3/P1 mode,
+mode-graph and zero-topology overlays now pin that exact P1 source; focused
+P1 variant, zero insertion and mutation checks pass. The full mode-graph source
+gate remains blocked by its inherited E3 extension pin (`08f1c3...` expected,
+`571f878...` current); this P1 pin refresh does not admit that extension.
+Compiled gates and independent pin review remain pending before integrated
+admission. Earlier failed E3 evidence is retained. This adds no held-safe
+clone, C2 claim, SAVE receipt or replay.
 
 The [private M3 owner-roster prerequisite](g3/G3_R_M3_OWNER_ROSTER_PREREQUISITE.md)
 ports the feature-gated registry-backed fourteen-parameter/identity roster

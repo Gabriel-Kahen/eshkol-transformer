@@ -8,6 +8,8 @@ import sys
 import tempfile
 import unittest
 
+from tests.p1.test_state_shell_publication_source import publication_contract
+
 
 ROOT = Path(__file__).resolve().parents[2]
 GENERATOR = ROOT / "scripts/generate-e3-p1-mode-test-variant.py"
@@ -55,6 +57,7 @@ class ModeSeamVariantTest(unittest.TestCase):
         self.assertEqual(hashlib.sha256(canonical.encode()).hexdigest(),
                          variant.CANONICAL_SHA256)
         generated = variant.compose(canonical)
+        self.assertTrue(publication_contract(generated))
         self.assertEqual(hashlib.sha256(generated.encode()).hexdigest(),
                          variant.VARIANT_SHA256)
         with tempfile.TemporaryDirectory() as temporary:

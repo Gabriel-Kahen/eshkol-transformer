@@ -20,19 +20,19 @@ PINS = {
 }
 OUTPUT_DIGESTS = {
     "normal": (
-        "4dfed83790ced23de91e91bede7bbc730b80273e9419de6b2c2678c5e8d58e1a",
+        "f75a2d82268a7e781f4a3b2c3e1240846fa3aaad7ee988673d33543ad4395099",
         "11ac65012eb02ca855e19a3123cc3d0108585dbdd05031e02aae8295f5b90fb9",
     ),
     "missed-child": (
-        "ac601a3c3b0156f7ac5ba87318bfffa15d699b271d14f88961ce997adf3a403d",
+        "4e4dedb1931c8ac42ba51bfa08a6b6034c9fe0ecad5c67b9d2c182feb47226a4",
         "11ac65012eb02ca855e19a3123cc3d0108585dbdd05031e02aae8295f5b90fb9",
     ),
     "enter-write-only": (
-        "32350d01e8423adce29fbe5e6015112daba90bc81fa07bd472aa59fcf22142d9",
+        "669fa46e4da56514b4f7ed78161cb2eba7a716a230a209e6301b90dfec916cb9",
         "11ac65012eb02ca855e19a3123cc3d0108585dbdd05031e02aae8295f5b90fb9",
     ),
     "graph-create": (
-        "4dfed83790ced23de91e91bede7bbc730b80273e9419de6b2c2678c5e8d58e1a",
+        "f75a2d82268a7e781f4a3b2c3e1240846fa3aaad7ee988673d33543ad4395099",
         "8b0059c99b84eb43abd37f085379ee27d46fb474493dc4f6920673652061c57e",
     ),
 }

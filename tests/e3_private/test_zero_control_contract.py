@@ -17,6 +17,7 @@ from tests.e3_reference.transcript import (
 )
 from tests.e3_private.parse_zero_control_observation import ROLE_NAMES, parse
 from tests.e3_private.test_retention_first_baseline import form
+from tests.p1.test_state_shell_publication_source import publication_contract
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -286,6 +287,7 @@ class ZeroControlContract(unittest.TestCase):
         spec.loader.exec_module(module)
         source = module.CANONICAL.read_bytes()
         emitted = module.compose(source)
+        self.assertTrue(publication_contract(emitted.decode("utf-8")))
         module.verify_manifest()
         self.assertEqual(hashlib.sha256(source).hexdigest(), module.SOURCE_SHA256)
         self.assertEqual(hashlib.sha256(emitted).hexdigest(), module.EMITTED_SHA256)

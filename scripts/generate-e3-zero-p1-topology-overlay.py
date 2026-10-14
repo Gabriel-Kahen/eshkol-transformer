@@ -11,8 +11,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CANONICAL = ROOT / "internal/p1/lib/transformer/module.esk"
-SOURCE_SHA256 = "8629d7ee347fb81d0a24cbb5d296828208af9bf75965244d70f7a05ecb132e40"
-EMITTED_SHA256 = "06f0d533f2ea1c1188ba939709ab814ba36e01391f91b434f7ca80a058c680c8"
+SOURCE_SHA256 = "f14b0817d951d79693328d27dc9450ce72cf08337d2e0edf4d75076e39398f02"
+EMITTED_SHA256 = "fe60f113d82773cfd04c0c812ffaac78ee6dc049571784fbb049965309e829f6"
 MANIFEST = ROOT / "tests/e3_private/zero_control_p1_overlay_manifest.json"
 ANCHOR = b'''  (lambda (identity)
     (construction-seal-prepared! identity))

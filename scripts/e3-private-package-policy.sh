@@ -242,7 +242,7 @@ e3_check_zero_generated_dependency() {
   done
   [[ -f "${expected}" ]] || die "E3 zero P1 overlay is absent"
   [[ "$(sha256sum -- "${expected}" | cut -d' ' -f1)" == \
-     06f0d533f2ea1c1188ba939709ab814ba36e01391f91b434f7ca80a058c680c8 ]] ||
+     fe60f113d82773cfd04c0c812ffaac78ee6dc049571784fbb049965309e829f6 ]] ||
     die "E3 zero P1 overlay hash differs from the reviewed insertion"
 }
 
@@ -269,7 +269,7 @@ e3_normalize_source_dependencies() {
             "$(realpath -m -- "${dependency}")" == \
               "${e3_generated_source_root}/transformer/module.esk" ]]; then
       [[ "$(sha256sum -- "${dependency}" 2>/dev/null | cut -d' ' -f1)" != \
-         06f0d533f2ea1c1188ba939709ab814ba36e01391f91b434f7ca80a058c680c8 ]] ||
+         fe60f113d82773cfd04c0c812ffaac78ee6dc049571784fbb049965309e829f6 ]] ||
         die "E3 zero P1 overlay is forbidden for another tuple"
       printf '@BUILD@/source/transformer/module.esk\n'
     elif [[ "${e3_tuple_kind}" == mode-graph && \

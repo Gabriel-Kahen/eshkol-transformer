@@ -10,6 +10,7 @@ import tempfile
 import unittest
 
 from tests.e3_mode_graph.verify_observation import verify
+from tests.p1.test_state_shell_publication_source import publication_contract
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -27,6 +28,14 @@ def lines(prefix: Path, suffix: str) -> list[str]:
 
 
 class ModeGraphTupleTest(unittest.TestCase):
+    def test_p1_variants_keep_state_publication_contract(self) -> None:
+        # The E3 extension has its own exact pin and admission gate.
+        for mode, (expected_p1, _) in generator.OUTPUT_DIGESTS.items():
+            with self.subTest(mode=mode):
+                p1 = generator.p1_source(mode)
+                self.assertEqual(generator.digest(p1), expected_p1)
+                self.assertTrue(publication_contract(p1))
+
     def test_exact_generated_sources_and_mutations(self) -> None:
         with tempfile.TemporaryDirectory(prefix="e3-mode-graph-") as temporary:
             for mode in generator.OUTPUT_DIGESTS:
@@ -39,6 +48,7 @@ class ModeGraphTupleTest(unittest.TestCase):
                     )
                     self.assertEqual(result.returncode, 0, result.stderr)
                 p1 = (output / "transformer/module.esk").read_text()
+                self.assertTrue(publication_contract(p1))
                 extension = (output / "e3_mode_graph_extension.esk").read_text()
                 self.assertEqual(generator.digest(p1),
                                  generator.OUTPUT_DIGESTS[mode][0])
