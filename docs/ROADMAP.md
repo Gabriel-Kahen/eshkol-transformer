@@ -974,6 +974,16 @@ generator was missing from the exact development-script allowlist. The focused
 Q0 and zero-control source tests pass after its exact path and near-miss checks
 were added; a fresh exact-head hosted run remains pending.
 
+A bounded N3 target-offset source extension adds two generated, checksummed
+three-byte D1 corpora, `(3,197,0)` and `(3,197,7)`. Their packed D2 row has
+the same `[3,197]` inputs and `11` mask and differs only in the second target.
+The seeded development oracle checks actual M3 logits and requires different
+second-position CE; a separate runtime source calls the unchanged canonical
+two-field E3 entry once per corpus. Focused offline D1/D2 and source-boundary
+tests pass. The pinned Q0 oracle generation and supported compiled private
+comparison have not run, so this establishes reachability only and leaves N3
+and §9 acceptance open.
+
 A separate noninstalled E3 overflow tuple is a source candidate for a genuine
 stage-12 finalization boundary. It loads a checksummed C1 state into one fresh
 model before its authentic frame bind, uses the fixed D1 `0304`/D2 padded row,

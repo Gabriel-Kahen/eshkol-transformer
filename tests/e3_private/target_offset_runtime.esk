@@ -1,0 +1,49 @@
+;;; Source-only N3 witness entry. Link against the unchanged canonical E3 tuple.
+(extern void e3-private-test-run ptr ptr ptr :real et_e3_test_run_v1)
+
+(define (check condition)
+  (if condition #t
+      (begin (display "E3-TARGET-OFFSET-FAIL") (newline) (exit 1))))
+
+(define (bytes=? left right)
+  (and (bytevector? left) (bytevector? right)
+       (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+
+(define (print-hex bytes)
+  (let ((digits "0123456789abcdef"))
+    (let loop ((index 0))
+      (if (= index (bytevector-length bytes)) #t
+          (let ((value (bytevector-u8-ref bytes index)))
+            (display (string-ref digits (quotient value 16)))
+            (display (string-ref digits (remainder value 16)))
+            (loop (+ index 1)))))))
+
+(define args (command-line))
+(check (and (pair? args) (pair? (cdr args))
+            (pair? (cdr (cdr args)))
+            (null? (cdr (cdr (cdr args))))))
+(define case-name (car (cdr args)))
+(define corpus-path (car (cdr (cdr args))))
+(check (or (string=? case-name "target-zero")
+           (string=? case-name "target-seven")))
+(define output (vector #f))
+(e3-private-test-run (vector (vector #t 0)) (vector corpus-path) output)
+(define result (vector-ref output 0))
+(check (and (vector? result) (= (vector-length result) 9)
+            (eq? (vector-ref result 0) 'e3-private-result-v1)
+            (= (vector-ref result 5) 2) (= (vector-ref result 6) 1)
+            (bytes=? (vector-ref result 7) (vector-ref result 8))))
+(display "E3-TARGET-OFFSET")
+(display "\t") (display case-name)
+(let loop ((index 1))
+  (if (= index 7) #t
+      (begin (display "\t") (display (vector-ref result index))
+             (loop (+ index 1)))))
+(display "\t") (print-hex (vector-ref result 7))
+(display "\t") (print-hex (vector-ref result 8))
+(newline)
