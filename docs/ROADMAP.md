@@ -1306,6 +1306,18 @@ admission witness; it does not prove rollback after a partial pin acquisition.
 Focused source tests and independent source review pass; a supported compiled
 normal/poison/sanitizer gate and other stage-3/4 cuts remain open for R1.
 
+The next bounded E3 §9 stage-3 source candidate adds frame-owned site 4,
+ordinal 0–13, occurrence 1. Its noninstalled M3 begin entry takes an explicit
+fail-before index, uses the ordinary admission and prefix-drain path, and
+returns domain 3/category 6/code 6 after consuming the E3 selector before
+the M3 call. The fault driver checks mapped stage 3/internal (table index 47),
+unchanged cursor, all 17 modes, model/gradient/RNG and six seeded outputs,
+zero live pins/borrows, and same-authority retry against an independent twin.
+The host included-TU M3 test exercises all 14 indices and rejects index 14;
+the focused lexical/source and native symbol/feature-off checks pass. This is
+still a source candidate: supported optimized Eshkol AOT normal, poison and
+sanitizer gates plus independent review remain the next admission gate.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained

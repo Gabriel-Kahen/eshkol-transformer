@@ -7,7 +7,7 @@ m3cg_dir="$(project_build_dir)/m3cg/native"
 mkdir -p "${m3cg_dir}"
 m3cg_flags=(-std=c11 -Wall -Wextra -Werror -Wpedantic -ffp-contract=off
   -fexcess-precision=standard -fno-fast-math -frounding-math -fstack-protector-all
-  -DET_F32_TENSOR_TESTING -DET_M3_CALL_TESTING
+  -DET_F32_TENSOR_TESTING -DET_M3_CALL_TESTING -DET_E3_PARTIAL_PIN_TESTING
   -I "${PROJECT_ROOT}/include" -I "${PROJECT_ROOT}/native")
 for m3cg_mode in normal sanitize; do
   m3cg_extra=(-O2)

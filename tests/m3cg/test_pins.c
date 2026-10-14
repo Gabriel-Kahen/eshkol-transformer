@@ -292,6 +292,19 @@ static void acquisition_failures(void) {
     et_f32_tensor_test_reset_allocator_v1();
   }
   m3_call_test_fail_after=SIZE_MAX;
+#ifdef ET_E3_PARTIAL_PIN_TESTING
+  for(size_t n=0;n<14;++n) {
+    m3_call_test_release_count=0;
+    expect(et_g3t_model_pins_begin_fail_before_internal(
+      f.p,f.identities,&f.pins,&error,n),6,6,"m3-call-pins-begin");
+    CHECK(m3_call_test_release_count==n);
+    for(size_t i=0;i<n;++i) CHECK(m3_call_test_release_order[i]==n-1-i);
+    empty(); preserved();
+  }
+  expect(et_g3t_model_pins_begin_fail_before_internal(
+    f.p,f.identities,&f.pins,&error,14),1,3,"m3-call-pins-begin");
+  empty(); preserved();
+#endif
 }
 static void exclusions(int present) {
   et_f32_tensor *source=NULL;
