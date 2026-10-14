@@ -233,6 +233,69 @@
     (vector-ref tuple 0) (vector-ref tuple 1) (vector-ref tuple 2)
     (vector-ref tuple 3) (vector-ref tuple 4)))
 (define record (record-for-shell trainer))
+(define mode-parent (tr3-c-snapshot-parent trainer (vector #f)))
+(tr3-lease-snapshot-enter-internal! trainer mode-parent)
+(check "mode ticket accepts exact original train set"
+       (= (tr3-p1-fixed-recheck-internal
+            (vector-ref record 8) (vector-ref record 10)
+            (vector-ref record 11) (vector-ref record 12)) 0))
+(check "mode ticket returns callback value"
+       (eq? (tr3-c-snapshot-with-eval-internal!
+              record mode-parent
+              (lambda ()
+                (check "mode ticket admits exact original eval set"
+                       (= (tr3-p1-fixed-eval-recheck-internal
+                            (vector-ref record 8) (vector-ref record 10)
+                            (vector-ref record 11) (vector-ref record 12)) 0))
+                (check "train recheck rejects entered eval"
+                       (= (tr3-p1-fixed-recheck-internal
+                            (vector-ref record 8) (vector-ref record 10)
+                            (vector-ref record 11) (vector-ref record 12)) 2))
+                (check "overlapping mode ticket is rejected"
+                       (transformer-error-at?
+                         'invalid-state 'trainer-state
+                         (lambda ()
+                           (tr3-c-snapshot-with-eval-internal!
+                             record mode-parent (lambda () #t)))))
+                'mode-ok))
+            'mode-ok))
+(check "mode ticket restores train before returning"
+       (and (not (vector-ref tr3-lease-snapshot-mode-root 0))
+            (= (tr3-p1-fixed-recheck-internal
+                 (vector-ref record 8) (vector-ref record 10)
+                 (vector-ref record 11) (vector-ref record 12)) 0)))
+(check "mode ticket rejects copied snapshot parent"
+       (transformer-error-at?
+         'invalid-state 'trainer-state
+         (lambda ()
+           (tr3-c-snapshot-with-eval-internal!
+             record (vector-copy mode-parent) (lambda () #t)))))
+(check "mode ticket rolls back callback failure"
+       (transformer-error-at?
+         'corrupt-data 'trainer-state
+         (lambda ()
+           (tr3-c-snapshot-with-eval-internal!
+             record mode-parent
+             (lambda ()
+               (m3t-fail 'corrupt-data 'trainer-state
+                         "injected eval callback failure"))))))
+(check "failed mode ticket leaves original train and live parent"
+       (and (not (vector-ref tr3-lease-snapshot-mode-root 0))
+            (eq? (vector-ref record 4) mode-parent)
+            (eq? (vector-ref record 3) 'snapshotting)
+            (= (tr3-p1-fixed-recheck-internal
+                 (vector-ref record 8) (vector-ref record 10)
+                 (vector-ref record 11) (vector-ref record 12)) 0)))
+(tr3-lease-snapshot-abort-internal! record mode-parent)
+(check "mode ticket abort occurs after train restoration"
+       (and (eq? (vector-ref record 3) 'idle)
+            (not (vector-ref record 4))))
+(check "stale mode parent cannot reenter"
+       (transformer-error-at?
+         'invalid-state 'trainer-state
+         (lambda ()
+           (tr3-c-snapshot-with-eval-internal!
+             record mode-parent (lambda () #t)))))
 (define cursor-before (d2-token-dataset-cursor (vector-ref tuple 2)))
 (define reference
   (compose-owner tuple (record-controls tuple record)))

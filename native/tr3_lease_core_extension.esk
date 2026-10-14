@@ -14,6 +14,9 @@
 (define tr3-lease-token-tag (vector 'tr3-lease-token-v2))
 (define tr3-lease-snapshot-parent-tag (vector 'tr3-c-snapshot-parent-v1))
 (define tr3-lease-snapshot-parent-length 10)
+;;; Feature-private synchronous eval ticket: parent and ticket are rooted only
+;;; until exact train restoration. No snapshot parent slot or public ABI changes.
+(define tr3-lease-snapshot-mode-root (vector #f #f))
 (define tr3-lease-restore-parent-tag (vector 'tr3-c-restore-parent-v1))
 (define tr3-lease-restore-parent-length 13)
 
@@ -724,6 +727,8 @@
     enrolled))
 
 (define (tr3-lease-snapshot-abort-internal! record parent)
+  (if (eq? (vector-ref tr3-lease-snapshot-mode-root 0) parent)
+      (tr3-lease-fail-stop 134))
   (let* ((operation 'trainer-state)
          (enrolled (tr3-lease-authenticate-minimal record operation)))
     (if (or (not (eq? (vector-ref enrolled 3) 'snapshotting))
@@ -745,6 +750,8 @@
     #t))
 
 (define (tr3-lease-snapshot-finish-tail-internal! record parent)
+  (if (eq? (vector-ref tr3-lease-snapshot-mode-root 0) parent)
+      (tr3-lease-fail-stop 134))
   ;; Tail-only after the composer publishes its result and marks the exact
   ;; rooted parent dead.  Any admitted authority divergence is impossible.
   (if (or (not (eq? (vector-ref record 3) 'snapshotting))

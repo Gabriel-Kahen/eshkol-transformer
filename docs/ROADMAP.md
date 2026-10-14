@@ -2390,6 +2390,15 @@ eval success, train/mixed-mode rejection, copied and bit-equal foreign shells,
 and stale carrier cuts. This leaf has source checks only: independent review
 and compiled fixture execution remain pending. No trainer lease transition,
 same-owner C2 SAVE, receipt, or data-only continuation is admitted.
+The next [private snapshot eval-mode ticket](TR3_SNAPSHOT_EVAL_MODE_TICKET.md)
+keeps the fixed ten-slot parent and train-only lease unchanged. A synchronous
+private callback runs only while the exact parent owns a rooted one-use ticket,
+P1 has entered eval, and the exact eval fixed set rechecks. Both success and
+exceptional exit restore and recheck the original train set before P1 token
+unbind, owner release, or lease unlink; ambiguous restoration fails stop.
+Focused source mutants and a genuine-trainer runtime fixture are staged, but
+compiled execution and independent review remain pending. G3/O2 same-owner
+composition, C2 SAVE and data-only continuation remain HOLD.
 
 The first bounded native prerequisite,
 [the F32 bit-witness leaf](g3/G3_R_CURRENT_HISTORY_F32_WITNESS_LEAF.md),

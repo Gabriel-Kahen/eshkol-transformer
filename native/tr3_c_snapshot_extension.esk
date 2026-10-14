@@ -172,7 +172,119 @@
                 (lambda () (release owner tr3-c-snapshot-operation))
                 (lambda () (release owner))))))))
 
+;;; One-use mode ticket never leaves this synchronous, snapshot-parent-owned
+;;; region. P1 slots 64..68 are the reviewed E3 mode authority; slot 73 is the
+;;; exact eval counterpart of the lease's unchanged train-only slot 70.
+(define tr3-c-snapshot-mode-ticket-tag (vector 'tr3-c-snapshot-mode-ticket-v1))
+
+(define (tr3-c-snapshot-mode-status! status message)
+  (if (not (= status 0))
+      (tr3-c-snapshot-fail
+        (if (= status 2) 'invalid-state 'internal) message))
+  #t)
+
+(define (tr3-c-snapshot-mode-p1-recheck record eval?)
+  (if eval?
+      (tr3-p1-fixed-eval-recheck-internal
+        (vector-ref record 8) (vector-ref record 10)
+        (vector-ref record 11) (vector-ref record 12))
+      (tr3-p1-fixed-recheck-internal
+        (vector-ref record 8) (vector-ref record 10)
+        (vector-ref record 11) (vector-ref record 12))))
+
+(define (tr3-c-snapshot-mode-drain! ticket)
+  ;; Every error here makes original-mode custody ambiguous. Do not clear the
+  ;; active root or permit owner release in that case.
+  (guard (caught (#t (tr3-lease-fail-stop 134)))
+    (let* ((parent (vector-ref ticket 3))
+           (setup (vector-ref ticket 4))
+           (token (vector-ref setup 1))
+           (phase (vector-ref ticket 6)))
+      (if (or (not (eq? (vector-ref ticket 0)
+                        tr3-c-snapshot-mode-ticket-tag))
+              (not (eq? (vector-ref ticket 1) ticket))
+              (not (eq? (vector-ref tr3-lease-snapshot-mode-root 0) parent))
+              (not (eq? (vector-ref tr3-lease-snapshot-mode-root 1) ticket))
+              (and (not (eq? phase 'binding))
+                   (not (eq? (vector-ref ticket 5) token)))
+              (not (or (eq? phase 'binding) (eq? phase 'bound)
+                       (eq? phase 'prepared) (eq? phase 'entered))))
+          (tr3-lease-fail-stop 134))
+      (if (or (eq? phase 'prepared) (eq? phase 'entered))
+          (if (or (not token)
+                  (not (= ((vector-ref p1-trusted-surface 67) token) 0)))
+              (tr3-lease-fail-stop 134)))
+      (if (not (= (tr3-c-snapshot-mode-p1-recheck
+                    (vector-ref ticket 2) #f) 0))
+          (tr3-lease-fail-stop 134))
+      (if token
+          (if (not (= ((vector-ref p1-trusted-surface 68) token) 0))
+              (tr3-lease-fail-stop 134)))
+      (let ((record (vector-ref ticket 2)))
+        (if (or (not (eq? (vector-ref record 3) 'snapshotting))
+                (not (eq? (vector-ref record 4) parent))
+                (not (eq? (vector-ref parent 1) parent))
+                (not (eq? (vector-ref parent 2) (vector-ref record 2)))
+                (not (eq? (vector-ref parent 3) 'constructing)))
+            (tr3-lease-fail-stop 134)))
+      (vector-set! ticket 6 'dead)
+      (vector-set! tr3-lease-snapshot-mode-root 1 #f)
+      (vector-set! tr3-lease-snapshot-mode-root 0 #f)
+      #t)))
+
+(define (tr3-c-snapshot-with-eval-internal! record parent thunk)
+  ;; The callback is trusted private code. It cannot outlive this ticket and
+  ;; must not publish a C2 owner or release the snapshot parent while in eval.
+  (tr3-lease-snapshot-recheck-internal record parent)
+  (if (vector-ref tr3-lease-snapshot-mode-root 0)
+      (tr3-c-snapshot-fail 'invalid-state
+        "another snapshot mode ticket is active"))
+  (let* ((setup (vector (vector #f) #f))
+         (ticket (vector tr3-c-snapshot-mode-ticket-tag #f record parent
+                         setup #f 'binding)))
+    (vector-set! ticket 1 ticket)
+    (vector-set! tr3-lease-snapshot-mode-root 0 parent)
+    (vector-set! tr3-lease-snapshot-mode-root 1 ticket)
+    (guard (caught
+             (#t
+               (if (not (eq? (vector-ref ticket 6) 'dead))
+                   (tr3-c-snapshot-mode-drain! ticket))
+               (tr3-c-snapshot-rethrow caught)))
+      (tr3-c-snapshot-mode-status!
+        ((vector-ref p1-trusted-surface 64) (vector-ref record 8) setup)
+        "P1 mode ticket bind failed")
+      (if (not (vector-ref setup 1)) (tr3-lease-fail-stop 134))
+      (vector-set! ticket 5 (vector-ref setup 1))
+      (vector-set! ticket 6 'bound)
+      (tr3-c-snapshot-mode-status!
+        ((vector-ref p1-trusted-surface 65) (vector-ref ticket 5))
+        "P1 mode ticket prepare failed")
+      (vector-set! ticket 6 'prepared)
+      (tr3-c-snapshot-mode-status!
+        ((vector-ref p1-trusted-surface 66) (vector-ref ticket 5))
+        "P1 mode ticket enter failed")
+      (vector-set! ticket 6 'entered)
+      (tr3-c-snapshot-mode-status!
+        (tr3-c-snapshot-mode-p1-recheck record #t)
+        "fixed model failed exact eval recheck")
+      (let ((result (thunk)))
+        (if (or (not (eq? (vector-ref record 3) 'snapshotting))
+                (not (eq? (vector-ref record 4) parent))
+                (not (eq? (vector-ref parent 3) 'constructing)))
+            (tr3-c-snapshot-fail 'invalid-state
+              "snapshot parent changed during eval ticket"))
+        (tr3-c-snapshot-mode-status!
+          (tr3-c-snapshot-mode-p1-recheck record #t)
+          "fixed model drifted during eval ticket")
+        (tr3-c-snapshot-mode-drain! ticket)
+        (tr3-lease-snapshot-recheck-internal record parent)
+        result))))
+
 (define (tr3-c-snapshot-abort! record parent)
+  ;; An entered eval ticket must restore train before any irreversible owner
+  ;; release or parent unlink. The synchronous scope normally drains first.
+  (if (eq? (vector-ref tr3-lease-snapshot-mode-root 0) parent)
+      (tr3-lease-fail-stop 134))
   (vector-set! parent 3 'aborting)
   (let ((cleanup (vector-ref parent 8)))
     (tr3-c-snapshot-release-cell!
@@ -236,6 +348,8 @@
         ;; and outer cleanup authority becoming reachable.
         (vector-set! record-cell 0 record)
         (let ((owner (tr3-c-snapshot-compose! record parent)))
+          (if (eq? (vector-ref tr3-lease-snapshot-mode-root 0) parent)
+              (tr3-lease-fail-stop 134))
           (vector-set! result-cell 0 owner)
           (let ((canonical (vector-ref result-cell 0)))
             (if (not (eq? canonical
