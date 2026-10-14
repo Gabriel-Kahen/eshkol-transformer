@@ -3191,6 +3191,15 @@ publication, public G2 and continuation remain pending.
   Same-shell dead release is idempotent. Older rooted records remain as dead
   tombstones, so long-run retention is unmeasured. This source-only leaf still
   needs independent review and compiled held-lease/release proof.
+  A further source-private logical I1 owner now uses the existing native
+  terminal clone/copy/release ABI. It obtains an authenticated detached
+  snapshot, anchors the original typed shell and readback allocation, and
+  verifies copied logical IDs before publishing a separate owner. Its private
+  copy and release entries do not require the terminal source to remain live;
+  held-clone lease rejection preserves the owner. Focused source mutations
+  pass, while same-registry compiled clone/copy/release, source-release-before-
+  clone-read, and public tensor access remain unproved. Retired Scheme anchor
+  nodes persist as tombstones; long-run retention is unmeasured.
 
 ## Wave 4 — practical pretraining and performance
 
