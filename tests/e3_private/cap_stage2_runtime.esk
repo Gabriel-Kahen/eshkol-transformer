@@ -1,0 +1,41 @@
+;;; Noninstalled private N5 stage-2 witness; supply packed-single and cap roots.
+(extern void e3-retention-test-run ptr ptr ptr :real et_e3_retention_run_v1)
+
+(define (check label condition)
+  (if condition #t
+      (begin (display "FAIL: ") (display label) (newline) (exit 1))))
+
+(define (argument-count values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining) (+ count 1)))))
+
+(define (argument-ref values wanted)
+  (let loop ((remaining values) (index 0))
+    (if (= index wanted) (car remaining)
+        (loop (cdr remaining) (+ index 1)))))
+
+(define args (command-line))
+(check 'arguments (= (argument-count args) 4))
+(define baseline-path (argument-ref args 1))
+(define cap-path (argument-ref args 2))
+(define choice (argument-ref args 3))
+(check 'gradient-choice
+       (or (string=? choice "present") (string=? choice "absent")))
+(define present? (string=? choice "present"))
+
+(define scenario (vector (vector 'cap-stage2 present?)))
+(define paths (vector (vector baseline-path cap-path)))
+(define output (vector #f))
+(e3-retention-test-run scenario paths output)
+(define result (vector-ref output 0))
+(check 'private-stage2-result
+       (and (vector? result) (= (vector-length result) 4)
+            (eq? (vector-ref result 0) 'e3-cap-stage2-result-v1)
+            (eq? (vector-ref result 1) present?)
+            (= (vector-ref result 2) 8193)
+            (= (vector-ref result 3) 2)))
+(display "E3-CAP-STAGE2-PASS gradient=")
+(display choice)
+(display " rows=8193 stage=2")
+(newline)

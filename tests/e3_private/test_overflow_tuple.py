@@ -105,7 +105,7 @@ printf '%s\n' "$e3_tuple_kind"
 
     def test_exact_tuple_delta_and_ordinary_driver_unchanged(self) -> None:
         self.assertEqual(hashlib.sha256((PRIVATE / "retention_driver.esk").read_bytes()).hexdigest(),
-                         "44d64a8bd96d48ae3faea18d437fb5ee4934016da7f75a3011c666bd0a35be09")
+                         "fd6abaac261740a3bb6c9b90d1f0a1c01310b9688cebff154db81c0b524d35cb")
         for suffix, added, removed in (
             ("source_closure", {"tests/e3_private/overflow_driver_root.esk",
                                 "tests/e3_private/overflow_driver.esk"},

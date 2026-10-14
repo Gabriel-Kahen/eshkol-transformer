@@ -359,11 +359,122 @@
          (e3-test-retention-report horizon present?))
         (else (e3-test-retention-check 'phase #f))))
 
+(define (e3-test-cap-stage2-check! model dataset frame destinations
+                                  cursor modes model-image rng probes)
+  (let ((entry (e3-frame-entry-internal frame)))
+    (e3-test-retention-check 'cap-stage2
+      (and (= (vector-ref entry 1) 1)
+           (= (vector-ref (vector-ref entry 12) 0) 2)
+           (transformer-error? (vector-ref entry 11))
+           (eq? (transformer-error-category (vector-ref entry 11))
+                'unsupported)
+           (eq? (transformer-error-operation (vector-ref entry 11))
+                'e3-evaluate-into!)))
+    (e3-test-retention-check 'cap-six-caller-outputs
+      (e3-test-retention-output=? frame destinations))
+    (e3-test-retention-check 'cap-cursor
+      (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset)))
+    (e3-test-retention-check 'cap-mixed17-modes
+      (e3-test-retention-modes=? frame modes))
+    (e3-test-retention-check 'cap-14-model-gradient-images
+      (e3-test-retention-model=? model model-image))
+    (e3-test-retention-check 'cap-initializer
+      (equal? rng (m3t-public-initializer-words
+                   (m3t-public-model-initializer model))))
+    (let live ((index 17))
+      (if (= index 27) #t
+          (begin
+            (e3-test-retention-check 'cap-no-native-live-growth
+              (= (vector-ref probes index)
+                 (e3-test-retention-probe index)))
+            (live (+ index 1)))))))
+
+;;; Test-only one-over witness. The genuine three-batch call publishes six
+;;; known outputs before the 8,193-row dataset is opened. The injected D2 read
+;;; fault would turn any traversal into 'io rather than the required stage-2
+;;; 'unsupported, so the denial is causally before the first batch read.
+(define (e3-test-cap-stage2 present? paths)
+  (e3-test-retention-check 'cap-input
+    (and (boolean? present?) (vector? paths) (= (vector-length paths) 2)
+         (string? (vector-ref paths 0)) (string? (vector-ref paths 1))))
+  (e3-test-retention-check 'cap-fresh-root
+    (not (vector-ref e3-test-retention-root 0)))
+  (let* ((baseline (e3-test-run (vector #t 0) (vector-ref paths 0)))
+         (fixture (e3-test-fixture))
+         (model (vector-ref fixture 0))
+         (tokenizer (vector-ref fixture 1))
+         (destinations (vector-ref fixture 2))
+         (frame (vector-ref fixture 3)))
+    (e3-test-retention-check 'cap-genuine-baseline
+      (and (vector? baseline)
+           (eq? (vector-ref baseline 0) 'e3-private-result-v1)
+           (e3-test-retention-output=? frame destinations)))
+    (e3-test-retention-set-mixed! frame)
+    (if present?
+        (e3-test-retention-check 'cap-seeded-gradient
+          (= (e3-test-seed-gradient
+               (vector-ref (m3t-entry model 'model 'e3-test-run #t) 3)) 0)))
+    (let* ((dataset
+             (d2-token-dataset-open
+               (e3-test-dataset-config (vector-ref paths 1) #t) tokenizer))
+           (state (d2-open-dataset-state dataset 'e3-evaluate-into!))
+           (core (vector-ref state 6))
+           (cursor (d2-token-dataset-cursor dataset))
+           (modes (e3-test-retention-modes frame))
+           (model-image (e3-test-retention-model-snapshot model))
+           (rng (m3t-public-initializer-words
+                  (m3t-public-model-initializer model)))
+           (probes (e3-test-retention-probes)))
+      (e3-test-retention-check 'cap-authentic-d2-8193
+        (and (= (vector-ref core 14) 8193) (= (vector-ref core 15) 0)
+             (eq? (vector-ref core 12) #t)))
+      (e3-test-retention-check 'cap-gradient-state
+        (= (vector-ref (vector-ref model-image 0) 2)
+           (if present? 1 0)))
+      (if present?
+          (e3-test-retention-check 'cap-nonzero-gradient
+            (= (vector-ref (vector-ref (vector-ref model-image 0) 1) 0)
+               1056964608)))
+      (e3-test-read-fail-stage 1)
+      (let ((caught
+              (guard (error (#t error))
+                (with-region ('e3-cap-stage2 262144)
+                  (e3-evaluate-into! model dataset frame))
+                #f)))
+        (e3-test-read-fail-stage 0)
+        (e3-test-retention-check 'cap-typed-unsupported
+          (and (transformer-error? caught)
+               (eq? (transformer-error-category caught) 'unsupported)
+               (eq? (transformer-error-operation caught)
+                    'e3-evaluate-into!)))
+        (e3-test-cap-stage2-check! model dataset frame destinations cursor
+                                   modes model-image rng probes))
+      ;; A second call on the same frame and dataset also denies at stage 2.
+      ;; It establishes no retry publication or destination mutation.
+      (let ((caught
+              (guard (error (#t error))
+                (with-region ('e3-cap-stage2-retry 262144)
+                  (e3-evaluate-into! model dataset frame))
+                #f)))
+        (e3-test-retention-check 'cap-retry-unsupported
+          (and (transformer-error? caught)
+               (eq? (transformer-error-category caught) 'unsupported)
+               (eq? (transformer-error-operation caught)
+                    'e3-evaluate-into!)))
+        (e3-test-cap-stage2-check! model dataset frame destinations cursor
+                                   modes model-image rng probes))
+      (d2-token-dataset-close! dataset)
+      (vector 'e3-cap-stage2-result-v1 present? 8193 2))))
+
 (define (e3-test-retention-dispatch scenario corpus-path)
-  (e3-test-retention-check 'scenario
-    (and (vector? scenario) (= (vector-length scenario) 5)
-         (eq? (vector-ref scenario 0) 'retention)))
-  (e3-test-retention-run (vector-ref scenario 1)
-                         (vector-ref scenario 2)
-                         (vector-ref scenario 3) corpus-path
-                         (vector-ref scenario 4)))
+  (if (and (vector? scenario) (= (vector-length scenario) 2)
+           (eq? (vector-ref scenario 0) 'cap-stage2))
+      (e3-test-cap-stage2 (vector-ref scenario 1) corpus-path)
+      (begin
+        (e3-test-retention-check 'scenario
+          (and (vector? scenario) (= (vector-length scenario) 5)
+               (eq? (vector-ref scenario 0) 'retention)))
+        (e3-test-retention-run (vector-ref scenario 1)
+                               (vector-ref scenario 2)
+                               (vector-ref scenario 3) corpus-path
+                               (vector-ref scenario 4)))))

@@ -79,9 +79,9 @@ PATCHES = (
         "    (and (vector? scenario) (= (vector-length scenario) 5)\n",
     ),
     (
-        "                         (vector-ref scenario 3) corpus-path))\n",
-        "                         (vector-ref scenario 3) corpus-path\n"
-        "                         (vector-ref scenario 4)))\n",
+        "                               (vector-ref scenario 3) corpus-path))))\n",
+        "                               (vector-ref scenario 3) corpus-path\n"
+        "                               (vector-ref scenario 4)))))\n",
     ),
 )
 

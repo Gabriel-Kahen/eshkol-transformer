@@ -823,6 +823,17 @@ Its offline corpus tests pass; the optimized normal/poison AOT gate is prepared
 but unrun. Public error/cursor observations cannot close the §9 private
 destination, owner, mode, gradient, stage, or sanitizer requirements.
 
+The separate [private N5 stage-2 source candidate](e3/E3_N5_PRIVATE_STAGE2_SOURCE.md)
+uses the existing noninstalled retention frame and the same authentic 8,193-row
+corpus. It observes exact stage-2 `unsupported`, six prior caller outputs,
+cursor, mixed 17 modes, all 14 parameter/gradient images, initializer and
+live native counters in absent and seeded-present variants. Its first denial
+arms a D2 read fault to make any traversal fail as `io`; the second denial
+checks same-frame repeat behavior. Source/negative controls pass, but the
+changed retention, derived first-evaluation mutant and overflow compiled
+closures require fresh exact-tree package manifests and gates. No private AOT,
+resource, poison or sanitizer verdict is claimed, and full N5 remains open.
+
 The [E3 in-call mode and graph observation contract](e3/E3_MODE_GRAPH_OBSERVATION_CONTRACT.md)
 now has a bounded [source candidate](e3/E3_MODE_GRAPH_SOURCE_CANDIDATE.md).
 Its P1-owned test variant reads all 17 modes through the authentic E3 token;
