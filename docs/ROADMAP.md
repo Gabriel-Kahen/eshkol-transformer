@@ -1405,9 +1405,13 @@ returning fixed internal/invariant status (E1 stage 10, table index 131).
 The native fixture measures a completed L3S predecessor and no correctness
 dispatch at denial; the private fixture extends exact cursor, 17-mode,
 14-parameter/gradient/RNG, six-output, 29-probe, first-error and same-frame
-retry checks against a fault-free twin. Focused host source/native checks are
-candidate evidence only; supported compiled Eshkol normal, poison and
-sanitizer gates remain pending. E3 §9 admission remains **HOLD**.
+retry checks against a fault-free twin. Independent source/host review
+accepted exact `94be03e669ab1432a4ff0b2f88d83fbd6cfed60e`/tree
+`9b961e712683435c1d88f2c33136da3e33231361`; the durable receipt is
+`/home/gabe/.codex/evidence/eshkol-transformer/e3-stage10-correct-source-review-20261014/REVIEW.txt`
+(SHA-256 `0c32c5c211c0dc4b510c470e1417becc1e9d514205e61238b97a414d6a5f7798`).
+Supported compiled Eshkol normal, poison and sanitizer gates remain pending;
+E3 §9 admission remains **HOLD**.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
