@@ -147,7 +147,16 @@ fixture. A guarded native raw counter observer reads the two published counts
 after an acquired failure, when the normal committed-only counter accessor is
 unavailable. Focused source checks and the native selector probe pass.
 
-This is an unadmitted source candidate: no E1B policy selects its root,
-bridge, `ET_E3_FAULT_TESTING` native frame object, or exact manifests. A valid
-compiled D2 preparation, the failure/retry assertions, feature-on symbol
-localization, package negatives and resource horizons remain unverified.
+That first driver-only candidate had no E1B package selection. The
+current-main source union below adds the noninstalled lexical tuple; compiled
+D2 preparation and same-frame failure/retry remain unverified.
+
+## Current-main source union
+
+The noninstalled `fault_package` tuple and guarded selector are now composed
+on live main `c60779bb` while preserving its zero tuple and canonical
+source contracts. Focused source checks and the standalone native selector
+probe pass; feature-off E3 preprocessing matches that main exactly. The
+manifest inventories remain source candidates until an exact package build
+and independent current-main review validate them. Real D2 failure/retry,
+sanitizer behavior, and resource horizons remain open.

@@ -67,7 +67,7 @@ class FirstEvaluationMutantTuple(unittest.TestCase):
 
     def test_normal_inputs_unchanged_and_manifests_exact(self) -> None:
         self.assertEqual(sha(ROOT / "src/eshkol_transformer/e3_frame.c"),
-                         "8d238ed79b0b14d74b8ed454e328bcc22da46e766e4d70a59482763ef18b8857")
+                         "547386a6ee2b13870a226c8020088ba8363872b0caeb8ad044e91bbdc28ca3ef")
         digest = hashlib.sha256()
         originals = sorted(PRIVATE.glob("retention_package_*.txt"))
         self.assertEqual(len(originals), 11)

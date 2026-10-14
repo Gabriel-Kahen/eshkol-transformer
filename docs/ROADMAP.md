@@ -1133,6 +1133,18 @@ current two-field private scenario, the single tied head/token-embedding owner,
 and immediate commit after successful prepare. Integration and compiled proof
 remain pending; this contract does not discharge any §9 numerical or rollback row.
 
+The [E3 R1 selector topology](e3/E3_R1_SELECTOR_TOPOLOGY.md) and
+[stage-cut inventory](e3/E3_STAGE_CUT_INVENTORY.md) now accompany a
+source-only current-main union of the guarded forward preinvoke fault
+selector and exact noninstalled `fault_package` tuple. The fault
+arm/begin/end/status/reset seam is frame-owned and compiled only for
+the test tuple; the driver brackets one evaluation attempt and checks
+stage-7 failure and same-frame retry. Source and native selector
+checks pass on this union, with feature-off E3 preprocessing identical
+to live main `c60779bb`. Exact package compilation, sanitizer, real
+D2 failure/retry and resource horizons remain unverified; no §9 R1
+acceptance or bundle root release follows.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
