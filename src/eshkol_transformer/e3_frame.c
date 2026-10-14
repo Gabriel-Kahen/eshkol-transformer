@@ -94,6 +94,11 @@ struct et_e3_frame_internal {
   float sum_order_first, sum_order_second;
   uint32_t sum_order_seen;
 #endif
+#ifdef ET_E3_FAULT_TESTING
+  /* State: 0 clear, 1 armed, 2 fired, 3 unreached after one call. */
+  uint32_t fault_state, fault_site, fault_ordinal, fault_occurrence;
+  uint32_t fault_reached, fault_started;
+#endif
 };
 
 static et_e3_frame_internal *e3_registry;
@@ -299,6 +304,88 @@ static et_e3_frame_internal *e3_admit(void *pointer) {
   }
   return frame;
 }
+
+#ifdef ET_E3_FAULT_TESTING
+static int e3_fault_idle(const et_e3_frame_internal *frame) {
+  return frame->phase == E3_IDLE && !frame->cleanup_ready &&
+      !frame->model->active && e3_pins_idle(&frame->pins);
+}
+
+int64_t et_e3_test_fault_arm_v1(void *pointer, int64_t site,
+                                int64_t ordinal, int64_t occurrence) {
+  e3_clear();
+  et_e3_frame_internal *frame = e3_admit(pointer);
+  if (!frame) return e3_last_domain ?
+      e3_dependency_status(e3_last_domain, e3_last_category) : e3_last_category;
+  if (!e3_fault_idle(frame)) return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
+  if (frame->fault_state) return e3_fail(E3_INVALID_STATE, E3_CODE_REENTRANCY);
+  if (!((site == 1 && ordinal >= 0 && ordinal <= 20 &&
+         occurrence >= 1 && occurrence <= 8192) ||
+        (site == 2 && ordinal == 0 && occurrence == 1)))
+    return e3_fail(E3_INVALID_ARGUMENT, E3_CODE_PHASE);
+  frame->fault_state = 1;
+  frame->fault_site = (uint32_t)site;
+  frame->fault_ordinal = (uint32_t)ordinal;
+  frame->fault_occurrence = (uint32_t)occurrence;
+  frame->fault_reached = 0;
+  frame->fault_started = 0;
+  return 0;
+}
+
+int64_t et_e3_test_fault_ref_v1(void *pointer, int64_t field) {
+  e3_clear();
+  et_e3_frame_internal *frame = e3_admit(pointer);
+  if (!frame) return -1;
+  if (!e3_fault_idle(frame)) {
+    e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
+    return -1;
+  }
+  switch (field) {
+    case 0: return frame->fault_state;
+    case 1: return frame->fault_site;
+    case 2: return frame->fault_ordinal;
+    case 3: return frame->fault_occurrence;
+    case 4: return frame->fault_reached;
+    default: e3_fail(E3_INVALID_ARGUMENT, E3_CODE_PHASE); return -1;
+  }
+}
+
+int64_t et_e3_test_fault_reset_v1(void *pointer) {
+  e3_clear();
+  et_e3_frame_internal *frame = e3_admit(pointer);
+  if (!frame) return e3_last_domain ?
+      e3_dependency_status(e3_last_domain, e3_last_category) : e3_last_category;
+  if (!e3_fault_idle(frame)) return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
+  frame->fault_state = frame->fault_site = frame->fault_ordinal = 0;
+  frame->fault_occurrence = frame->fault_reached = frame->fault_started = 0;
+  return 0;
+}
+
+/* Distinct, finite pre-call words make each of the six publication stores
+ * observable. Only an idle frame with an earlier successful publication may
+ * be seeded; a copy failure is a fixture invariant, not an E3 fault cut. */
+int64_t et_e3_test_fault_seed_publication_v1(void *pointer) {
+  e3_clear();
+  et_e3_frame_internal *frame = e3_admit(pointer);
+  if (!frame) return e3_last_domain ?
+      e3_dependency_status(e3_last_domain, e3_last_category) : e3_last_category;
+  if (!e3_fault_idle(frame) || frame->fault_state ||
+      !frame->published_valid || frame->committed != 2)
+    return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
+  const uint32_t sentinels[4] = {UINT32_C(0x3f800000), UINT32_C(0x40000000),
+                                  UINT32_C(0x40400000), UINT32_C(0x40800000)};
+  et_f32_tensor_error error;
+  for (size_t i = 0; i < 4; ++i) {
+    et_f32_tensor_error_clear_v1(&error);
+    if (et_f32_tensor_copy_bits_from_v1(frame->destination[i],
+                                        &sentinels[i], 1, &error) != 0)
+      abort();
+  }
+  frame->published_counts[0] = 7;
+  frame->published_counts[1] = 4;
+  return 0;
+}
+#endif
 
 static int64_t e3_scope_begin(et_f32_tensor *tensor,
                               et_f32_scoped_guard_internal *guard,
@@ -750,11 +837,27 @@ int64_t et_e3_private_acquire_v1(void *pointer) {
       e3_dependency_status(e3_last_domain, e3_last_category) : e3_last_category;
   if (frame->phase != E3_IDLE || frame->cleanup_ready)
     return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
+#ifdef ET_E3_FAULT_TESTING
+  if (frame->fault_state > 1 ||
+      (frame->fault_state == 1 && frame->fault_started))
+    return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
+  if (frame->fault_state == 1) frame->fault_started = 1;
+#endif
   int64_t rc = e3_storage_check(frame, 1);
-  if (rc) return rc;
+  if (rc) {
+#ifdef ET_E3_FAULT_TESTING
+    if (frame->fault_state == 1) frame->fault_state = 3;
+#endif
+    return rc;
+  }
   for (size_t bank = 0; bank < 2; ++bank)
     for (size_t i = 0; i < 3; ++i)
-      if ((rc = e3_zero_tensor(frame->sum[bank][i])) != 0) return rc;
+      if ((rc = e3_zero_tensor(frame->sum[bank][i])) != 0) {
+#ifdef ET_E3_FAULT_TESTING
+        if (frame->fault_state == 1) frame->fault_state = 3;
+#endif
+        return rc;
+      }
   memset(frame->counts, 0, sizeof(frame->counts));
   frame->active = 0;
   memset(frame->staged_counts, 0, sizeof(frame->staged_counts));
@@ -769,8 +872,12 @@ int64_t et_e3_private_acquire_v1(void *pointer) {
   et_f32_tensor_error error;
   if (et_g3t_model_pins_begin_internal(frame->model->p,
                                        (const void *const *)frame->model->handles,
-                                       &frame->pins, &error) != 0)
+                                       &frame->pins, &error) != 0) {
+#ifdef ET_E3_FAULT_TESTING
+    if (frame->fault_state == 1) frame->fault_state = 3;
+#endif
     return e3_f32_error(&error);
+  }
   frame->model->active = frame;
   frame->phase = E3_ACQUIRED;
   return 0;
@@ -992,6 +1099,16 @@ int64_t et_e3_private_forward_role_v1(void *pointer, int64_t role) {
   if (frame->phase != E3_FORWARD || frame->cleanup_ready ||
       frame->next_role != (uint32_t)role)
     return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
+#ifdef ET_E3_FAULT_TESTING
+  if (frame->fault_state == 1 && frame->fault_site == 1 &&
+      frame->fault_ordinal == (uint32_t)role) {
+    ++frame->fault_reached;
+    if (frame->fault_reached == frame->fault_occurrence) {
+      frame->fault_state = 2; /* Consume before any provider dispatch. */
+      return e3_fail(E3_INTERNAL, E3_CODE_INVARIANT);
+    }
+  }
+#endif
   et_kernel_tensor_view_v1 ids = e3_native_view(
       frame->ids, sizeof(frame->ids), "i64", 2, e3_shape_pair);
   et_kernel_tensor_view_v1 positions = e3_native_view(
@@ -1389,6 +1506,16 @@ int64_t et_e3_private_publish_v1(void *pointer) {
         destinations[i].view.rank != 0 || destinations[i].view.shape ||
         destinations[i].view.byte_length != sizeof(float))
       abort();
+#ifdef ET_E3_FAULT_TESTING
+  if (frame->fault_state == 1 && frame->fault_site == 2) {
+    ++frame->fault_reached;
+    if (frame->fault_reached == frame->fault_occurrence) {
+      frame->fault_state = 2;
+      while (destination_count) e3_scope_end(&destinations[--destination_count]);
+      return e3_fail(E3_INTERNAL, E3_CODE_INVARIANT);
+    }
+  }
+#endif
   for (size_t i = 0; i < 4; ++i)
     memcpy(destinations[i].view.data, &staged[i], sizeof(staged[i]));
   frame->published_counts[0] = frame->staged_counts[0];
@@ -1409,6 +1536,10 @@ void et_e3_private_finish_v1(void *pointer) {
       !e3_pins_idle(&frame->pins))
     abort();
   frame->model->active = NULL;
+#ifdef ET_E3_FAULT_TESTING
+  if (frame->fault_state == 1 && frame->fault_started)
+    frame->fault_state = 3;
+#endif
   frame->phase = E3_IDLE;
   frame->next_role = 0;
   frame->stage_plane = 0;
@@ -1484,6 +1615,10 @@ int64_t et_e3_private_frame_destroy_preflight_v1(void *pointer) {
   if (frame->phase != E3_IDLE || frame->model->active ||
       !e3_pins_idle(&frame->pins))
     return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
+#ifdef ET_E3_FAULT_TESTING
+  if (frame->fault_state)
+    return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
+#endif
   return e3_storage_check(frame, 1);
 }
 
@@ -1492,6 +1627,9 @@ void et_e3_private_frame_destroy_v1(void *pointer) {
   if (!frame || frame->lifecycle != 1 || frame->phase != E3_IDLE ||
       !frame->model || frame->model->active || !e3_pins_idle(&frame->pins))
     abort();
+#ifdef ET_E3_FAULT_TESTING
+  if (frame->fault_state) abort();
+#endif
   for (size_t i = 0; i < 6; ++i)
     if (!frame->runtime[i]) abort();
   for (size_t i = 6; i > 0; --i) {

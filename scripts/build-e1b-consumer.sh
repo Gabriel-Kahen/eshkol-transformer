@@ -2519,6 +2519,7 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
           et_e3_test_fault_arm_v1
           et_e3_test_fault_ref_v1
           et_e3_test_fault_reset_v1
+          et_e3_test_fault_seed_publication_v1
         )
       fi
       if [[ "${e3_tuple_kind}" == retention-first-eval-mutant ]]; then

@@ -1311,6 +1311,20 @@ pre-call values and its own genuine preflight cut. Other R1/R2 stages,
 tie identity, graph-producing mutations, and complete-call horizons remain
 open; no §9 admission follows from this source slice.
 
+A bounded noninstalled stage-12 successor extends the existing
+`ET_E3_FAULT_TESTING` frame selector with site 2, ordinal 0, occurrence 1.
+It fires after all four destination and four result view checks, count
+validation and final destination metadata checks, before the first output
+write; the cut releases all opened destination views and returns the existing
+internal/invariant error. A guarded idle-frame fixture seeds distinct finite
+I2 words and valid prior counters `(7,4)` after a successful warmup. The
+fault driver compares all six actual pre-call words, first stage-12 error,
+cursor/mode/model/RNG/owner state and same-authority retry against the fixed
+`(5,3)` result. Focused host source tests and the unsupported-host Clang 22
+normal native frame run pass; the local sanitizer run cannot start LeakSanitizer
+under ptrace. Supported optimized Eshkol AOT normal/poison/sanitizer evidence,
+independent review and the remaining R1/R2 stage cuts remain open.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
