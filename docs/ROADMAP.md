@@ -2251,6 +2251,17 @@ mode-graph gate remain pending before it can join the held G3/O2/C2
 coordinator. No C2 claim, SAVE receipt or replay follows from this source-only
 candidate.
 
+The [private data-only held C2 transaction source](g3/G3_R_C2_HELD_TRANSACTION_SOURCE.md)
+now composes the original-owner ledger, the nonmutating P1 held clone, exact
+held-O2 adoption, and C2's six-slot claim under one rooted request. It checks
+the original trainer controls before and after C2 claim, drains the original
+O2/G3 holds before returning a detached C2 shell, and fails stop if a
+postclaim or cleanup state cannot be proved. The focused source gate has 12
+causal mutations; the separate original-owner, O2 count, P1 shell-publication,
+and C2 rollback source gates pass. This is source-only review material. The
+joint runtime fault matrix, original byte comparison and compiled atomic-shell
+gate remain pending; no receipt, SAVE, file, or replay path is admitted.
+
 The [private M3 owner-roster prerequisite](g3/G3_R_M3_OWNER_ROSTER_PREREQUISITE.md)
 ports the feature-gated registry-backed fourteen-parameter/identity roster
 to current main. It rejects unsealed, stale, foreign, incomplete or inconsistent

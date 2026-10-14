@@ -1,0 +1,178 @@
+;;; Feature-private, data-only held transaction. The original trainer, G3,
+;;; model and optimizer stay held until the detached C2 owner is fully claimed.
+;;; This leaf creates no receipt, SAVE pair, file, or replay authority.
+(define g3r-c2-held-transaction-tag (vector 'g3r-c2-held-transaction-v1))
+(define g3r-c2-held-compose-call c2-training-state-compose-internal)
+(define g3r-c2-held-claim-call g3r-held-o2-adopter-c2-claim!)
+
+;;; Ledger: tag, original-owner cell, P1 cell, O2-adopter cell, exact C2
+;;; request, phase. Allocate the request and every ownership cell before the
+;;; first native hold. No result is published outside this lexical root until
+;;; both original holds and the trainer lease have drained.
+(define (g3r-c2-held-transaction-ledger)
+  (vector g3r-c2-held-transaction-tag (vector #f) (vector #f) (vector #f)
+          (vector c2-training-state-compose-tag #f #f #f
+                  'g3r-c2-held-transaction-internal #f)
+          'prepared))
+
+(define (g3r-c2-held-original-check! owner)
+  (let* ((operation 'g3r-c2-held-transaction-internal)
+         (g3-ledger (vector-ref (vector-ref owner 3) 0))
+         (hold (vector-ref (vector-ref owner 4) 0))
+         (record (vector-ref g3-ledger 1))
+         (parent (vector-ref g3-ledger 2)))
+    (if (or (not (eq? (vector-ref owner 5) 'held))
+            (not (eq? (vector-ref g3-ledger 6) 'held))
+            (not (eq? (vector-ref record 2) (vector-ref owner 1)))
+            (not (eq? (vector-ref record 13)
+                      (vector-ref (vector-ref record 14) 0))))
+        (m3t-fail 'invalid-state operation
+                  "original trainer, G3, or optimizer identity changed"))
+    (tr3-lease-snapshot-recheck-held-o2-internal record parent hold)
+    (g3r-original-owner-g3-recheck!
+      (vector-ref owner 1) (vector-ref owner 2) g3-ledger)
+    (if (not (= (g3r-trainer-g3-native-check
+                  (vector-ref (vector-ref g3-ledger 5) 0)) 0))
+        (g3r-trainer-g3-save-native-fail operation))
+    record))
+
+(define (g3r-c2-held-controls-check! owner captured)
+  (let* ((operation 'g3r-c2-held-transaction-internal)
+         (record (g3r-c2-held-original-check! owner))
+         (g3-ledger (vector-ref (vector-ref owner 3) 0))
+         (current
+           (c2-training-state-controls-copy
+             operation
+             (tr3-c-snapshot-controls! record (vector-ref g3-ledger 2)))))
+    (if (not (equal? current captured))
+        (m3t-fail 'invalid-state operation
+                  "original trainer controls changed under held owners"))
+    #t))
+
+;;; An O2 release defect may consume the exact issued state (-2), or prove it
+;;; still LIVE (-1). Retry only the latter with the same rooted ledger. A
+;;; second live failure, a changed shell, or an unknown lifecycle is terminal.
+;;; Return the first typed release error when cleanup is nevertheless proven.
+(define (g3r-c2-held-release-o2-or-stop! adopter)
+  (let ((first #f))
+    (guard (caught (#t (set! first caught)))
+      (g3r-held-o2-adopter-release! adopter))
+    (if first
+        (cond
+          ((eq? (vector-ref adopter 8) 'dead) first)
+          ((and (eq? (vector-ref adopter 8) 'enrolled)
+                (eq? (vector-ref (vector-ref adopter 6) 6) 'live))
+           (guard (retry-error
+                    (#t (if (not (eq? (vector-ref adopter 8) 'dead))
+                            (g3r-held-o2-fail-stop))))
+             (g3r-held-o2-adopter-match!
+               adopter 'g3r-c2-held-transaction-internal)
+             (g3r-held-o2-adopter-release! adopter))
+           (if (not (eq? (vector-ref adopter 8) 'dead))
+               (g3r-held-o2-fail-stop))
+           first)
+          (else (g3r-held-o2-fail-stop)))
+        (if (eq? (vector-ref adopter 8) 'dead)
+            #f
+            (g3r-held-o2-fail-stop)))))
+
+;;; C2's own guarded composer proves any attempted O2 claim rolled back
+;;; before an exception escapes. Its request must still name both exact live
+;;; children. After a successful transfer, even a caught error is terminal:
+;;; preclaim release no longer owns either child.
+(define (g3r-c2-held-abort! ledger caught)
+  (let* ((request (vector-ref ledger 4))
+         (owner (vector-ref (vector-ref ledger 1) 0))
+         (p1 (vector-ref (vector-ref ledger 2) 0))
+         (adopter (vector-ref (vector-ref ledger 3) 0))
+         (o2 (if adopter (vector-ref adopter 5) #f))
+         (first caught))
+    (if (or (vector-ref request 5)
+            (not (eq? (vector-ref request 1) p1))
+            (not (eq? (vector-ref request 2) o2))
+            (and adopter
+                 (not (and (eq? (vector-ref adopter 8) 'enrolled)
+                           (eq? (vector-ref (vector-ref adopter 6) 6)
+                                'live)))))
+        (g3r-held-o2-fail-stop))
+    ;; Any uncertainty during cleanup retains every owner in this ledger and
+    ;; stops the process. A proved-dead O2 provider defect retains the first
+    ;; typed error while P1 and the original holds are still drained.
+    (guard (cleanup-error (#t (g3r-held-o2-fail-stop)))
+      (if adopter
+          (let ((release-error (g3r-c2-held-release-o2-or-stop! adopter)))
+            (if (and release-error (not first))
+                (set! first release-error))))
+      (if p1
+          (if (not (state-dict-release! p1))
+              (g3r-held-o2-fail-stop)))
+      (if owner
+          (begin
+            (g3r-original-owner-end! owner)
+            (if (not (eq? (vector-ref owner 5) 'dead))
+                (g3r-held-o2-fail-stop))))
+      (vector-set! ledger 5 'dead)
+      first)))
+
+(define (g3r-c2-held-transaction-internal trainer generator)
+  (let* ((operation 'g3r-c2-held-transaction-internal)
+         (ledger (g3r-c2-held-transaction-ledger))
+         (request (vector-ref ledger 4)))
+    (guard (caught
+             (#t (raise (g3r-c2-held-abort! ledger caught))))
+      (let ((owner (g3r-original-owner-begin! trainer generator)))
+        (vector-set! (vector-ref ledger 1) 0 owner)
+        (vector-set! ledger 5 'held))
+      (let* ((owner (vector-ref (vector-ref ledger 1) 0))
+             (record (g3r-c2-held-original-check! owner))
+             (g3-ledger (vector-ref (vector-ref owner 3) 0)))
+        (vector-set! request 3
+          (c2-training-state-controls-copy
+            operation
+            (tr3-c-snapshot-controls! record (vector-ref g3-ledger 2))))
+        ;; The P1 entry point itself requires this exact registered root and
+        ;; releases a prepared clone if wrapping fails after publication.
+        (g3r-c2-held-original-check! owner)
+        (let ((p1 (module-state-dict-held-clone-internal
+                    (vector-ref record 8))))
+          (vector-set! (vector-ref ledger 2) 0 p1)
+          (vector-set! request 1 p1))
+        (g3r-c2-held-original-check! owner)
+        (let ((adopter
+                (g3r-held-o2-adopt!
+                  (vector-ref (vector-ref owner 4) 0)
+                  (vector-ref record 13))))
+          (vector-set! (vector-ref ledger 3) 0 adopter)
+          (vector-set! request 2 (vector-ref adopter 5)))
+        (g3r-c2-held-controls-check! owner (vector-ref request 3))
+        (g3r-held-o2-adopter-match!
+          (vector-ref (vector-ref ledger 3) 0) operation)
+        (vector-set! ledger 5 'composing)
+        (g3r-c2-held-compose-call request)
+        (if (and (eq? (vector-ref request 1) #f)
+                 (eq? (vector-ref request 2) #f)
+                 (vector-ref request 5))
+            #t
+            (if (and (eq? (vector-ref request 1)
+                          (vector-ref (vector-ref ledger 2) 0))
+                     (eq? (vector-ref request 2)
+                          (vector-ref
+                            (vector-ref (vector-ref ledger 3) 0) 5)))
+                (m3t-fail 'internal operation
+                          "C2 composer returned without an owner")
+                (g3r-held-o2-fail-stop)))
+        (let ((shell (vector-ref request 5))
+              (p1 (vector-ref (vector-ref ledger 2) 0))
+              (adopter (vector-ref (vector-ref ledger 3) 0)))
+          (if (not (eq? (g3r-c2-held-claim-call adopter request p1)
+                        shell))
+              (g3r-held-o2-fail-stop))
+          (vector-set! ledger 5 'claimed)
+          (guard (drain-error (#t (g3r-held-o2-fail-stop)))
+            (g3r-c2-held-controls-check! owner (vector-ref request 3))
+            (g3r-original-owner-end! owner))
+          (if (not (eq? (vector-ref owner 5) 'dead))
+              (g3r-held-o2-fail-stop))
+          (vector-set! (vector-ref ledger 1) 0 #f)
+          (vector-set! ledger 5 'dead)
+          shell)))))

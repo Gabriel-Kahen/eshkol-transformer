@@ -1,0 +1,4 @@
+;;; Source-only G3-R data snapshot candidate. Never install or expose a SAVE.
+(load "g3r_original_owner_coordinator_root.esk")
+(load "g3r_held_o2_adopter_extension.esk")
+(load "g3r_c2_held_transaction_extension.esk")
