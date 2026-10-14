@@ -1148,6 +1148,19 @@ derived mutant, with a structural negative that rejects the original malformed
 guard even though its whole-file parentheses balance. A fresh compiled edge
 gate and independent exact-head source review remain required; this is not
 edge runtime or E3 §9 admission.
+The exact `541400ea` one-use compiled edge gate passed source/dependency
+preflight, corpus generation, package policy and normal/sanitized AOT builds.
+Its missing-path pre control reached the intended D2-open error; the post
+control aborted at `outputs-snapshot` on `edge-unpublished-before`, before
+any evaluator call. The independent result review could not isolate the
+compound assertion from the trace. Source diagnosis found that E1B sorts
+error-detail alists lexicographically (`source-code`, `source-domain`,
+`source-message`), while the retention driver compared insertion-order literals
+in the unpublished-counter, zero-row, and N5 checks. This isolated test-only
+repair orders all three literals to the E1B contract, regenerates the exact
+first-evaluation mutant and pins, and adds a source control that rejects the
+previous order. Its tests do not establish runtime behavior; a fresh independent
+source review and compiled edge gate remain required for E3 §9 admission.
 The exact `7f54a866` E3-private source suite found four stale assertions after
 the edge diagnostics change: overflow pinned the prior retention-driver hash,
 and sanitizer policy still counted the pre-diagnostics 172/59 retention and

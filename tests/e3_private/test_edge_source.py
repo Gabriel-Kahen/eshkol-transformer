@@ -18,6 +18,7 @@ RUNTIME = ROOT / "tests/e3_private/edge_runtime.esk"
 RUNNER = ROOT / "scripts/test-e3-edge-private.sh"
 BUILDER = ROOT / "scripts/build-e3-retention-test.sh"
 MUTANT = ROOT / "tests/e3_private/retention_first_eval_mutant_driver.esk"
+ERROR_CORE = ROOT / "lib/transformer/error_core.esk"
 
 
 def audit_parentheses(source: str) -> None:
@@ -80,6 +81,26 @@ def audit_unpublished_guard(source: str) -> None:
         raise ValueError("edge guard body is not outside its clause header")
 
 
+def audit_normalized_error_details(source: str, error_core: str) -> None:
+    # E1B returns a freshly normalized alist, sorted by key spelling.
+    if ('(string<? (symbol->string left) (symbol->string right))' not in error_core
+            or '(sort-entries copied operation)' not in error_core):
+        raise ValueError("E1B detail normalization contract changed")
+    for name, code, message in (
+            ("caught", 2, "native frame setup failed"),
+            ("outcome", 12, "evaluation finalization or publication failed"),
+            ("failed", 2, "evaluation dataset preparation failed")):
+        expression = form(source, f"(equal? (transformer-error-details {name})")
+        expected = re.compile(
+            r"\(equal\? \(transformer-error-details " + name + r"\)\s*"
+            r"'\(\(source-code " + str(code) + r"\)\s*"
+            r"\(source-domain e3-evaluation\)\s*"
+            r'\(source-message\s+"' + re.escape(message) + r'"\)\)\)',
+            re.DOTALL)
+        if not expected.fullmatch(expression):
+            raise ValueError(f"{name} detail expectation differs from E1B order")
+
+
 class EdgeSourceTests(unittest.TestCase):
     def test_unpublished_guard_has_closed_header_and_real_body(self) -> None:
         for path in (DRIVER, MUTANT):
@@ -95,6 +116,19 @@ class EdgeSourceTests(unittest.TestCase):
                 audit_parentheses(old_failure)
                 with self.assertRaisesRegex(ValueError, "guard header"):
                     audit_unpublished_guard(old_failure)
+
+    def test_error_details_follow_e1b_normalization(self) -> None:
+        error_core = ERROR_CORE.read_text()
+        for path in (DRIVER, MUTANT):
+            with self.subTest(path=path.name):
+                source = path.read_text()
+                audit_normalized_error_details(source, error_core)
+                old_order = source.replace(
+                    "'((source-code 12) (source-domain e3-evaluation)",
+                    "'((source-domain e3-evaluation) (source-code 12)", 1)
+                self.assertNotEqual(old_order, source)
+                with self.assertRaisesRegex(ValueError, "E1B order"):
+                    audit_normalized_error_details(old_order, error_core)
 
     def test_complete_driver_syntax_rejects_failed_tail(self) -> None:
         for path in (DRIVER, MUTANT):

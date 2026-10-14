@@ -369,8 +369,8 @@
                                   (eq? (transformer-error-operation caught)
                                        'e3-counter-ref)
                                   (equal? (transformer-error-details caught)
-                                    '((source-domain e3-evaluation)
-                                      (source-code 2)
+                                    '((source-code 2)
+                                      (source-domain e3-evaluation)
                                       (source-message
                                        "native frame setup failed"))))))
                   (e3-counter-ref frame selector)
@@ -461,7 +461,7 @@
                  (string=? (transformer-error-message outcome)
                            "evaluation finalization or publication failed")
                  (equal? (transformer-error-details outcome)
-                   '((source-domain e3-evaluation) (source-code 12)
+                   '((source-code 12) (source-domain e3-evaluation)
                      (source-message
                        "evaluation finalization or publication failed")))
                  (= (vector-ref (e3-frame-entry-internal frame) 15) 150)
@@ -571,7 +571,7 @@
                     (string=? (transformer-error-message failed)
                               "evaluation dataset preparation failed")
                     (equal? (transformer-error-details failed)
-                      '((source-domain e3-evaluation) (source-code 2)
+                      '((source-code 2) (source-domain e3-evaluation)
                         (source-message "evaluation dataset preparation failed")))
                     (= (vector-ref (e3-frame-entry-internal frame) 15) 29)))
              (e3-test-retention-check 'n5-one-over-cursor
