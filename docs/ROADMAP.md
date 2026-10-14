@@ -1401,6 +1401,29 @@ Independent source/host review accepted exact
 Supported compiled Eshkol normal/poison, LSan and full E3 §9 admission remain
 **HOLD**.
 
+The bounded E3 §9 stage-6 post-mask-copy source candidate adds noninstalled
+frame-owned site 12, ordinal 0, occurrences 1 or 2. In
+`et_e3_private_stage_mask_v1`, the real mask view is validated and copied,
+then `stage_plane = 3`, `next_role = 0` and `phase = E3_FORWARD` are set before
+the selector consumes and returns local internal/invariant status (E1 stage 6,
+table index 83). The D2 mask borrow is still open at native denial and unwinds
+through its existing guard. The Eshkol wrapper reaches stage 7/role 0 only
+after staging succeeds; that borrow and role ordering is source evidence,
+**not a compiled runtime trace**. Native tests prove copied IDs, targets and
+mask, no added provider dispatch, invalid-mask precedence, selector lifecycle,
+unchanged outputs/counters and same-frame retry. Occurrence 2 follows a
+completed first batch within one armed call. The private fixture extends
+first-error, exact cursor, 17-mode, 14 model/gradient-image, RNG, 29-owner-
+probe, six-output, independent-twin and retry assertions as source coverage.
+A mask-copy-after-fault mutant fails the native copied-mask assertion, and
+feature-off preprocessing excludes site 12. Independent source/host review
+accepted exact `67f6c4e1618e0e87fcaed49d5dec023ce121e74c`/tree
+`e646a0f86480d343c3c9c30c29e9985d4d4684bf`; receipt
+`/home/gabe/.codex/evidence/eshkol-transformer/e3-stage6-site12-source-review-20261014/REVIEW.md`
+(SHA-256 `df1c6fe0d05e1e8b2627bf0cbcba1ce72f42c0b7d6063492417ddccbf3c4be83`).
+Supported compiled Eshkol normal/poison, LSan and full E3 §9 admission remain
+**HOLD**.
+
 The bounded E3 §9 stage-8 source candidate adds noninstalled frame-owned
 site 5, ordinal 0, occurrences 1 or 2. After all 21 forward roles, it
 consumes the one-shot selector before L2 CE dispatch and returns the existing
