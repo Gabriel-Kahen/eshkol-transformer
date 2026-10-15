@@ -49,11 +49,6 @@ def parse(raw: bytes, batch_count: int, *, padded_mutant: bool = False) -> tuple
         raise ValueError("numerical stdout is not ASCII") from error
     if not raw.endswith(b"\n") or lines[-1:] != ["E3-NUMERICAL-RUNTIME-PASS"]:
         raise ValueError("compiled numerical runtime did not complete")
-    if len(lines) >= 3 and lines[-3].startswith("E3ENDCURSOR"):
-        end = CURSOR.fullmatch(lines[-3])
-        if end is None or len(end[1]) % 2:
-            raise ValueError("compiled numerical end cursor is malformed")
-        del lines[-3]
     batches = [dict() for _ in range(batch_count)]
     roles: list[str] = []
     final: dict[str, object] | None = None
@@ -177,7 +172,7 @@ def parse_compiled(
     words = [int(part) for part in tail[3].split("\t", 1)[1].split(",")]
     if any(word >= 1 << 32 for word in words):
         raise ValueError("compiled numerical result is outside u32")
-    observed, roles = parse("".join(lines[:-4]).encode("ascii")
+    observed, roles = parse("".join(lines[:-6] + [lines[-5]]).encode("ascii")
                             + b"E3-NUMERICAL-RUNTIME-PASS\n",
                             batch_count, padded_mutant=padded_mutant)
     final = observed["final"]

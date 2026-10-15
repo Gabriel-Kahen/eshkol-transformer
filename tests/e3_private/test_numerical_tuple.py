@@ -208,6 +208,11 @@ class NumericalTupleTest(unittest.TestCase):
 
     def test_compiled_result_records_bind_frame_and_cursors(self) -> None:
         raw = compiled_bytes(3)
+        # Legacy observed-f32 parsing must reject an unbound end cursor.
+        unbound = frame_lines(3)
+        unbound.insert(-2, "E3ENDCURSOR\tbb")
+        with self.assertRaisesRegex(ValueError, "omitted or duplicated"):
+            parse(frame_bytes(unbound), 3)
         observed, roles, result = parse_compiled(raw, 3, expected_case="packed-single")
         self.assertEqual(len(observed["batches"]), 3)
         self.assertEqual(len(roles.splitlines()), 63)
