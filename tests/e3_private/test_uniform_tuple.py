@@ -1,10 +1,13 @@
 """Noninstalled uniform-tie tuple and private fault-hook boundaries."""
 
 from pathlib import Path
+import math
+import re
 import subprocess
 import tempfile
 import unittest
 
+from tests.e3_reference.uniform_tie import SHAPES
 from tests.e3_private.parse_uniform_observation import MARKER, parse_uniform
 from tests.e3_private.test_numerical_tuple import frame_bytes, frame_lines
 
@@ -19,6 +22,50 @@ def lines(prefix: Path, suffix: str) -> list[str]:
 
 
 class UniformTupleTest(unittest.TestCase):
+    def test_zero_state_roster_and_transaction_guards(self) -> None:
+        driver = (ROOT / "tests/e3_private/uniform_driver.esk").read_text()
+        bridge = (ROOT / "tests/e3_private/uniform_bridge.c").read_text()
+
+        def roster(source: str) -> tuple:
+            paths = source.split("(define e3-uniform-paths", 1)[1].split(
+                "(define e3-uniform-shapes", 1)[0]
+            shapes = source.split("(define e3-uniform-shapes", 1)[1].split(
+                "(define e3-uniform-unique-counts", 1)[0]
+            counts = source.split("(define e3-uniform-unique-counts", 1)[1].split(
+                "(define e3-uniform-files", 1)[0]
+            return (
+                tuple("/".join(re.findall(r'"([^"]+)"', line))
+                      for line in paths.splitlines() if '"' in line),
+                tuple(tuple(map(int, match.split()))
+                      for match in re.findall(r"\(([0-9 ]+)\)", shapes)),
+                tuple(map(int, re.findall(r"\d+", counts))),
+            )
+
+        paths, shapes, counts = roster(driver)
+        self.assertEqual(tuple(zip(paths, shapes)), SHAPES)
+        self.assertEqual(counts, tuple(math.prod(shape) for _, shape in SHAPES[:-1]))
+        self.assertEqual((len(counts), sum(counts), 4 * sum(counts)), (14, 1184, 4736))
+        for mutant in (driver.replace('("blocks" "0" "attention" "key" "weight")',
+                                      '("blocks" "0" "attention" "keq" "weight")', 1),
+                       driver.replace('(4 8)', '(8 8)', 1)):
+            self.assertNotEqual(roster(mutant), roster(driver))
+        for witness in ("'parameter-roster", "'tie-graph", "'unique-owner-handles",
+                        "'owner-contract", "'owner-payload-length",
+                        "'owner-payload-total", "'owner-zero-payload",
+                        "'original-state-hash", "'loaded-state-hash",
+                        "'no-active-native-leases"):
+            self.assertIn(witness, driver)
+        self.assertEqual(driver.count("(e3-uniform-assert-original model words handles before before-hash"), 6)
+        self.assertLess(driver.index("(e3-uniform-load-before-frame! model)"),
+                        driver.index("(e3-frame-bind! model destinations)"))
+        self.assertIn("et_e3_uniform_live_leases_v1", bridge)
+        build = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
+        self.assertIn('"${e3_tuple_kind}" == uniform &&\n'
+                      '          "${package_native_source}" == "${PROJECT_ROOT}/native/f32_tensor.c"',
+                      build)
+        for field in ("borrows", "copy_plans", "gradient_plans", "reset_plans"):
+            self.assertIn(f"counts.{field}", bridge)
+
     def test_completed_state_marker_and_closed_frame_records(self) -> None:
         frame = frame_bytes(frame_lines(3))
         complete = MARKER + frame[:-len(b"E3-NUMERICAL-RUNTIME-PASS\n")] + (

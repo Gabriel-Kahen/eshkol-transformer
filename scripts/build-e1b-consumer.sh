@@ -1923,6 +1923,11 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     package_native_depfile="${e1b_tmp}/package-native-${native_index}.d"
     package_source_flags=()
     if [[ "${package_policy}" == e3-private-aggregate &&
+          "${e3_tuple_kind}" == uniform &&
+          "${package_native_source}" == "${PROJECT_ROOT}/native/f32_tensor.c" ]]; then
+      package_source_flags+=(-DET_F32_TENSOR_TESTING)
+    fi
+    if [[ "${package_policy}" == e3-private-aggregate &&
           ( "${e3_tuple_kind}" == mode-graph ||
             "${e3_tuple_kind}" == fault ||
             "${e3_tuple_kind}" == retention ||

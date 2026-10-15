@@ -961,6 +961,15 @@ independent source review, and supported normal/repeat, poison and sanitizer
 execution remain pending. This supplies no §9 N3/M2 compiled acceptance or
 target-offset, wrong-axis, finite-boundary or overflow proof.
 
+A bounded follow-up tightens only that noninstalled uniform C1 prebind control:
+the driver freezes all 15 logical paths and 14 unique CPU/f32 owners, every
+shape and the head/embedding tie, then encodes exactly 1,184 words/4,736 bytes
+through the registered I2 carriers. It checks the original C1 state hash and
+owner identities after each malformed input and the copy-allocation cut, and
+checks the loaded hash, zero payloads, identities and empty native lease census
+after retry. This is source/test preparation pending independent review and a
+supported compiled run; it adds no public model setter or §9 numerical proof.
+
 The separate E3 N3 zero-model source candidate on the exact `a64caf9a7`
 union uses the registered M3 tree's 14 unique CPU/f32 owners and one
 head/embedding tie. A noninstalled root decodes 4,736 zero bytes through I2,
