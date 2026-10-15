@@ -1,0 +1,42 @@
+;;; Feature-private TR3 snapshot recheck after the original O2 hold begins.
+;;; Load after the accepted TR3 snapshot root with the held O2 bridge linked.
+;;; Snapshot entry remains the ordinary idle-only lease admission: a live O2
+;;; hold cannot predate that entry because the ordinary O2 probe rejects busy.
+(extern i64 tr3-held-o2-completed-updates ptr ptr
+        :real et_g3r_private_o2_adopter_completed_updates_v1)
+
+(define (tr3-lease-snapshot-recheck-held-o2-internal record parent hold)
+  (let* ((operation 'trainer-state)
+         (minimal (tr3-lease-authenticate-minimal record operation))
+         (enrolled
+           (tr3-lease-authenticate
+             minimal (vector-ref minimal 5) operation)))
+    (if (or (not (eq? (vector-ref enrolled 3) 'snapshotting))
+            (not (eq? (vector-ref enrolled 4) parent)))
+        (tr3-lease-operation-fail
+          'invalid-state operation "snapshot parent is stale or copied"))
+    (tr3-lease-snapshot-parent-header!
+      parent (vector-ref enrolled 2) operation)
+    (if (not (eq? (vector-ref parent 3) 'constructing))
+        (tr3-lease-operation-fail
+          'invalid-state operation "snapshot parent phase is invalid"))
+    (tr3-lease-m3-idle! (vector-ref enrolled 9) operation)
+    (tr3-lease-d2-idle! (vector-ref enrolled 16) operation)
+    (let* ((optimizer-record (vector-ref enrolled 14))
+           (optimizer
+             (o2-require-optimizer operation (vector-ref enrolled 13))))
+      (if (not (eq? optimizer optimizer-record))
+          (tr3-lease-operation-fail
+            'invalid-state operation "trainer optimizer identity changed"))
+      ;; The private native witness requires this exact original optimizer,
+      ;; rechecks held moment bits and absent gradients while it is busy, and
+      ;; returns only the count captured by the live hold.
+      (let ((completed
+              (tr3-held-o2-completed-updates
+                hold (vector-ref optimizer-record 1))))
+        (if (< completed 0) (o2-native-fail operation))
+        (if (not (= completed (vector-ref enrolled 20)))
+            (tr3-lease-operation-fail
+              'invalid-state operation
+              "optimizer and trainer update counts differ"))))
+    enrolled))

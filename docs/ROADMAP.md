@@ -2429,6 +2429,17 @@ contract and package bridge are absent from that head, so the held-O2 recheck,
 adopter and original-owner coordinator roots remain unported. This adds no C2
 claim, SAVE writer, replay or continuation admission.
 
+The scoped `codex/g3r-o2-tr3-recheck-union-20261015` source union combines the
+independently accepted PR #214 held-owner guard repair (`9fa0f758`), the
+roster-authenticated O2 native hold successor (`76130cf7`), and only the
+source-private TR3 held-O2 snapshot recheck. Focused host gates cover the
+original G3 hold, O2 hold and roster negatives, feature-off builds, bridge
+failure cuts, and eight TR3 authority mutations. The held recheck resolves the
+same registered trainer/optimizer owner and uses O2's held-safe count witness;
+the branch still needs independent union review and a linked Eshkol gate. It
+adds no held-state adopter root, coordinator, C2 claim, SAVE writer, or replay
+admission.
+
 The [private M3 owner-roster prerequisite](g3/G3_R_M3_OWNER_ROSTER_PREREQUISITE.md)
 ports the feature-gated registry-backed fourteen-parameter/identity roster
 to current main. It rejects unsealed, stale, foreign, incomplete or inconsistent

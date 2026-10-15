@@ -1,0 +1,4 @@
+;;; Feature-private TR3 snapshot lease and held-O2 recheck in one registry.
+;;; The native aggregate must link the accepted held O2 bridge; never install.
+(load "tr3_c_snapshot_root.esk")
+(load "g3r_tr3_held_o2_snapshot_recheck_extension.esk")
