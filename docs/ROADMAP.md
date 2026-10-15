@@ -1099,6 +1099,17 @@ prepared but unrun. `01`, `00`, and invalid-mask K1 cases remain provider-only
 controls for this fixed profile; M3 nonfinite/subnormal/signed-zero and
 full-call floating-environment reachability remain open. No §9 compiled or
 public evaluator admission follows from this source slice.
+A separate N4 test-only whole-call fenv source candidate brackets the genuine
+`e3-evaluate-into!` inside its invocation region. Its serial C observer records
+errno, x87 control/status, MXCSR including sticky flags, and a zero-initialized
+`fenv_t` image at begin/end. Host Clang, GCC, and ASan/UBSan checks pass for
+no-op observer return/caught outcome labels and a compiled MXCSR control-bit mutation rejected at
+the ambient-state check. The Eshkol source prepares legal nonzero publication
+and cursor sentinels, a stage-8 site-5 occurrence-2 failure, byte-exact
+rollback, and same-authority suffix retry against an independent twin. The
+pinned Eshkol toolchain and exact compiled package closure are unavailable in
+this checkout; the private tuple is not built or executed, and neither the
+whole-call fenv property nor §9 admission is established by these host checks.
 The first [mathematical three-batch M2 sum-order witness](../tests/e3_reference/sum_order_witness_v1.json)
 failed the one-use df9546 compiled C gate: compiled CE rounded both groupings
 to `41dcde82`. The successor [compiled witness](../tests/e3_reference/sum_order_witness_v2.json)

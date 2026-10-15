@@ -1,0 +1,10 @@
+;;; Noninstalled boxed entry; the package and runtime gate remain separate.
+(extern void e3-fenv-test-run ptr ptr :real et_e3_fenv_run_v1)
+(define args (command-line))
+(if (not (and (pair? args) (pair? (cdr args))
+              (null? (cdr (cdr args)))))
+    (exit 1))
+(define output (vector #f))
+(e3-fenv-test-run (vector (car (cdr args))) output)
+(if (not (eq? (vector-ref output 0) #t)) (exit 1))
+(display "E3-FENV-WHOLECALL-PASS") (newline)

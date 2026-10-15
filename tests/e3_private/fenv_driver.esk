@@ -1,0 +1,192 @@
+;;; Test-only E3 §9 whole-invocation observer. No controlled M3 logits.
+(extern i64 e3-fenv-begin :real et_e3_test_fenv_begin_v1)
+(extern i64 e3-fenv-end i64 i64 :real et_e3_test_fenv_end_v1)
+(extern i64 e3-fenv-ref i64 :real et_e3_test_fenv_ref_v1)
+(extern i64 e3-fenv-env-byte i64 i64
+        :real et_e3_test_fenv_env_byte_v1)
+(extern i64 e3-fenv-mutant-arm :real et_e3_test_fenv_mutant_arm_v1)
+(extern i64 e3-fault-arm ptr i64 i64 i64
+        :real et_e3_test_fault_arm_v1)
+(extern i64 e3-fault-ref ptr i64 :real et_e3_test_fault_ref_v1)
+(extern i64 e3-fault-reset ptr :real et_e3_test_fault_reset_v1)
+(extern i64 e3-fault-seed ptr :real et_e3_test_fault_seed_publication_v1)
+
+(define (e3-fenv-check label value)
+  (if value #t
+      (begin (display "E3-FENV-FAIL: ") (display label) (newline)
+             (e3-native-invariant-fail))))
+
+(define (e3-fenv-publication frame destinations)
+  (vector (e3-test-u32-ref (vector-ref destinations 0))
+          (e3-test-u32-ref (vector-ref destinations 1))
+          (e3-test-u32-ref (vector-ref destinations 2))
+          (e3-test-u32-ref (vector-ref destinations 3))
+          (e3-counter-ref frame 0) (e3-counter-ref frame 1)))
+
+(define e3-fenv-sentinels
+  (vector 1065353216 1073741824 1077936128 1082130432 7 4))
+
+(define (e3-fenv-cursor-ordinal-one? cursor)
+  (and (bytevector? cursor) (>= (bytevector-length cursor) 128)
+       (= (bytevector-u8-ref cursor 120) 1)
+       (let zero ((index 121))
+         (if (= index 128) #t
+             (and (= (bytevector-u8-ref cursor index) 0)
+                  (zero (+ index 1)))))))
+
+(define (e3-fenv-report! token outcome)
+  (e3-fenv-check 'generation (= (e3-fenv-ref 0) token))
+  (e3-fenv-check 'ended (= (e3-fenv-ref 1) 0))
+  (e3-fenv-check 'outcome (= (e3-fenv-ref 2) outcome))
+  ;; The causal MXCSR mutant must fail here before any rollback assertion.
+  (e3-fenv-check 'ambient-state (= (e3-fenv-ref 3) 0))
+  (e3-fenv-check 'environment-size (> (e3-fenv-ref 4) 0))
+  (e3-fenv-check 'errno (= (e3-fenv-ref 5) (e3-fenv-ref 6)))
+  (e3-fenv-check 'x87-control (= (e3-fenv-ref 7) (e3-fenv-ref 8)))
+  (e3-fenv-check 'x87-status (= (e3-fenv-ref 9) (e3-fenv-ref 10)))
+  (e3-fenv-check 'mxcsr (= (e3-fenv-ref 11) (e3-fenv-ref 12)))
+  (let bytes ((index 0))
+    (if (= index (e3-fenv-ref 4)) #t
+        (begin
+          (e3-fenv-check 'environment-byte
+            (= (e3-fenv-env-byte 0 index)
+               (e3-fenv-env-byte 1 index)))
+          (bytes (+ index 1))))))
+
+(define (e3-fenv-calibrate!)
+  (with-region ('e3-fenv-noop-return 262144)
+    (let ((token (e3-fenv-begin)))
+      (e3-fenv-check 'calibration-return
+        (not (guard (caught
+                     (#t (e3-fenv-end token 1) #t))
+               #t
+               (e3-fenv-end token 0)
+               #f)))
+      (e3-fenv-report! token 0)))
+  (with-region ('e3-fenv-noop-catch 262144)
+    (let ((token (e3-fenv-begin)))
+      (e3-fenv-check 'calibration-catch
+        (guard (caught
+                (#t (e3-fenv-end token 1) #t))
+          (raise 'e3-fenv-noop-calibration)
+          (e3-fenv-end token 0)
+          #f))
+      (e3-fenv-report! token 1))))
+
+;;; A separate model/frame/dataset runs the exact skip-one suffix. It is an
+;;; independent retry oracle, not a full-corpus (5,3) result.
+(define (e3-fenv-suffix-twin corpus-path)
+  (let* ((config (e3-test-fixed-config))
+         (tokenizer (t1-private-tokenizer-byte config))
+         (initial (g3t-checked-m3t-initializer-state 1729))
+         (model (g3t-checked-m3t-model-create config initial))
+         (destinations (e3-test-destinations-create))
+         (frame (e3-frame-bind! model destinations))
+         (dataset (d2-token-dataset-open
+                   (e3-test-dataset-config corpus-path #t) tokenizer)))
+    (e3-test-skip! dataset 1)
+    (with-region ('e3-fenv-suffix-twin 262144)
+      (e3-evaluate-into! model dataset frame))
+    (let ((publication (e3-fenv-publication frame destinations))
+          (cursor (d2-token-dataset-cursor dataset)))
+      (e3-fenv-check 'suffix-counts
+        (and (= (vector-ref publication 4) 3)
+             (= (vector-ref publication 5) 2)))
+      (d2-token-dataset-close! dataset)
+      (e3-frame-unbind! frame)
+      (e3-test-destinations-destroy! destinations)
+      (vector model tokenizer frame dataset publication cursor))))
+
+(define (e3-fenv-invoke! model dataset frame)
+  (with-region ('e3-fenv-invocation 262144)
+    (let ((token (e3-fenv-begin)))
+      (let ((failed?
+             (guard (caught
+                     (#t
+                      ;; First catch action, before fixture/dataset cleanup.
+                      (e3-fenv-end token 1)
+                      (e3-fenv-check 'typed
+                        (and (transformer-error? caught)
+                             (eq? (transformer-error-category caught)
+                                  'internal)
+                             (eq? (transformer-error-operation caught)
+                                  'e3-evaluate-into!)))
+                      #t))
+               (e3-evaluate-into! model dataset frame)
+               (e3-fenv-end token 0)
+               #f)))
+        (e3-fenv-check 'begin (> token 0))
+        (e3-fenv-report! token (if failed? 1 0))
+        failed?))))
+
+(define (e3-fenv-run corpus-path)
+  (e3-fenv-check 'path (string? corpus-path))
+  (e3-fenv-calibrate!)
+  (let* ((fixture (e3-test-fixture))
+         (model (vector-ref fixture 0))
+         (tokenizer (vector-ref fixture 1))
+         (destinations (vector-ref fixture 2))
+         (frame (vector-ref fixture 3))
+         (entry (e3-frame-entry-live frame 'e3-fenv-run))
+         (native (vector-ref entry 4)))
+    ;; Warmup makes publication seeding legal on this same live authority.
+    (e3-test-run (vector #t 0) corpus-path)
+    (e3-fenv-check 'seed (= (e3-fault-seed native) 0))
+    (e3-fenv-check 'seeded
+      (equal? (e3-fenv-publication frame destinations) e3-fenv-sentinels))
+    (let* ((twin (e3-fenv-suffix-twin corpus-path))
+           (dataset (d2-token-dataset-open
+                     (e3-test-dataset-config corpus-path #t) tokenizer)))
+      (e3-fenv-check 'independent-suffix-twin
+        (and (not (eq? model (vector-ref twin 0)))
+             (not (eq? frame (vector-ref twin 2)))
+             (not (eq? dataset (vector-ref twin 3)))))
+      (guard (outer
+              (#t (d2-token-dataset-close! dataset) (raise outer)))
+        (e3-test-skip! dataset 1)
+        (let ((before (d2-token-dataset-cursor dataset))
+              (publication (e3-fenv-publication frame destinations))
+              (authority (vector model frame dataset native)))
+          (e3-fenv-check 'nonzero-cursor (e3-fenv-cursor-ordinal-one? before))
+          (e3-fenv-check 'sentinels (equal? publication e3-fenv-sentinels))
+          (e3-fenv-check 'arm (= (e3-fault-arm native 5 0 2) 0))
+          (e3-fenv-check 'armed (= (e3-fault-ref native 0) 1))
+          (e3-fenv-check 'mutant-arm (= (e3-fenv-mutant-arm) 0))
+          (e3-fenv-check 'typed-stage8 (e3-fenv-invoke! model dataset frame))
+          ;; The private evaluator records its first native error before the
+          ;; wrapper performs readback. Check it before resetting the seam.
+          (let ((error (vector-ref entry 12)))
+            (e3-fenv-check 'first-error
+              (and (= (vector-ref entry 15) 107)
+                   (= (vector-ref error 0) 8)
+                   (= (vector-ref error 1) 0)
+                   (= (vector-ref error 2) 5)
+                   (= (vector-ref error 3) 9))))
+          (e3-fenv-check 'one-shot
+            (and (= (e3-fault-ref native 0) 2)
+                 (= (e3-fault-ref native 1) 5)
+                 (= (e3-fault-ref native 2) 0)
+                 (= (e3-fault-ref native 3) 2)
+                 (= (e3-fault-ref native 4) 2)))
+          (e3-fenv-check 'rollback-cursor
+            (d2-core-bytes=? before (d2-token-dataset-cursor dataset)))
+          (e3-fenv-check 'rollback-publication
+            (equal? publication (e3-fenv-publication frame destinations)))
+          (e3-fenv-check 'identity
+            (and (eq? model (vector-ref authority 0))
+                 (eq? frame (vector-ref authority 1))
+                 (eq? dataset (vector-ref authority 2))
+                 (eq? native (vector-ref authority 3))
+                 (eq? native (vector-ref
+                       (e3-frame-entry-live frame 'e3-fenv-run) 4))))
+          (e3-fenv-check 'disarm (= (e3-fault-reset native) 0))
+          (e3-fenv-check 'retry-success
+            (not (e3-fenv-invoke! model dataset frame)))
+          (e3-fenv-check 'retry-suffix-output
+            (equal? (e3-fenv-publication frame destinations)
+                    (vector-ref twin 4)))
+          (e3-fenv-check 'retry-suffix-cursor
+            (d2-core-bytes=? (d2-token-dataset-cursor dataset)
+                              (vector-ref twin 5)))
+          (d2-token-dataset-close! dataset)
+          #t)))))
