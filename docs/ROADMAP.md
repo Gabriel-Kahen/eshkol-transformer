@@ -2413,6 +2413,14 @@ is excluded from this branch.
 Coordinator, post-adoption and partial-O2-claim cuts remain integration gates;
 there is no SAVE or continuation admission.
 
+The [PR #214 original-owner port boundary](g3/G3_R_PR214_ORIGINAL_OWNER_PORT_BOUNDARY.md)
+selectively carries the reviewed, dependency-closed trainer-held G3 source
+leaf onto the exact PR #214 head. Its host source and controlled bridge cuts
+pass; no linked Eshkol aggregate was run. The reviewed O2 held-save native
+contract and package bridge are absent from that head, so the held-O2 recheck,
+adopter and original-owner coordinator roots remain unported. This adds no C2
+claim, SAVE writer, replay or continuation admission.
+
 The [private M3 owner-roster prerequisite](g3/G3_R_M3_OWNER_ROSTER_PREREQUISITE.md)
 ports the feature-gated registry-backed fourteen-parameter/identity roster
 to current main. It rejects unsealed, stale, foreign, incomplete or inconsistent
