@@ -2308,6 +2308,14 @@ existing private file reader against that image in normal, repeat and
 sanitizer modes. Source and host checks are complete; the compiled gate is
 unrun and does not establish restored model or public continuation.
 
+The exact PR #214 source-head [data-only composition audit](g3/G3_R_DATA_ONLY_COMPOSITION_BOUNDARY.md)
+pins the first remaining ownership gate: the installed 136-byte detached
+snapshot, private native hold, C2 SAVE fixture, and read-side pair helpers do
+not compose a same-owner G3/C2 SAVE transaction. An Eshkol original-owner
+held coordinator and C2 SAVE image receipt are absent at that head; candidate
+rollback and replay/publication remain later gates. No resumed generation is
+claimed.
+
 The source-only current-main union of these G3-R leaves starts from the
 reviewed CLI3 `baf0a03f` child of main `ee24ef4` and carries only G3 leaf
 commits `2569ccf`, `c63951e`, `b8b64b9`, `f3e1485`, and `308dd596`.
