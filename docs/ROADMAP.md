@@ -1484,19 +1484,28 @@ Independent whole-union source/test review accepted the bounded R1/R2 union at
 Compiled normal/repeat/poison/sanitizer and mutant verdicts remain open, so
 §9 R1/R2 admission remains **HOLD**. PR #214/current-main integration is a
 separate gate.
-The combined min-subnormal and R1/R2 source candidate requires fresh
-whole-union source/test review and exact-tree package evidence; neither
-branch's separate review or package seal admits the combined tree.
+Independent whole-union source/test review accepted the combined min-subnormal
+and R1/R2 candidate at `924b001e`/tree `a41eb27d`; the sealed
+`e3-n4-minsubnormal-r1r2-union-independent-review-20261015/REVIEW.md` receipt
+has SHA-256 `364daf5f31ee0254e95004c1e94f36c11f4e702cbc77cbb1cbbe686e5d8c6821`.
+The separate current-main ancestry/evidence audit accepted a coherent source
+base, with receipt SHA-256
+`fb30c9bfcd42d5c303d7c800e3296d59d4046ddc98f02d488bd4dd9c35dc9801`;
+it did not admit PR #214/main integration. Fresh exact-combined-tree package
+evidence remains required; earlier package seals do not transfer.
 The bounded N4 whole-call fenv union adds a test-only C observer and Eshkol
 driver, a separate noninstalled normal-only fenv package tuple, exact four-input
 policy selection and an independently owned generated-source stage. It retains
 the existing min-subnormal tuple and R1/R2 fault route, including the fault-only
-P1 enter-denial variant. Source and host checks do not establish the emitted
-closure or a compiled whole-call property. The new combined tree needs
-independent source/test review, then a fresh source-pinned LLVM 21 closure
-emission gate comparing actual source, native and symbol inventories with the
-candidate manifests. Normal runtime, sanitizer and private MXCSR-mutant tuple
-work, causal poison, and full E3 §9 admission remain **HOLD**.
+P1 enter-denial variant. Independent source/test review accepted exact
+`90a7bade`/tree `fc3d366f`; the sealed
+`e3-fenv-minsub-union-independent-20261015/REVIEW.md` receipt has SHA-256
+`a9d152f514d8a787f896cad304e0df59db6850815366d5f20bc11b71aabcf455`.
+That review did not establish emitted closure or compiled whole-call behavior.
+A fresh source-pinned LLVM 21 closure-emission gate must compare actual source,
+native and symbol inventories with the candidate manifests. Normal runtime,
+sanitizer and private MXCSR-mutant tuple work, causal poison, full E3 §9
+admission and PR #214/main integration remain **HOLD**.
 
 The stage-8 fault candidate and retention post-report teardown now share a
 source-only branch based on the independently reviewed CLI3 `baf0a03f` union.
