@@ -1379,6 +1379,23 @@ union at `9aed9c65`/tree `55377da7`. This remains a source candidate;
 supported optimized Eshkol AOT normal, poison and sanitizer gates are the next
 admission gate.
 
+The bounded E3 §9 stage-4 source candidate adds a one-shot P1-local enter
+denial only to the generated, noninstalled fault-tuple mode variant. Fault
+site 14, ordinal 0, occurrence 1 binds the genuine P1 token, rejects a wrong
+or duplicate arm, and returns existing P1 status 2 after enter preflight but
+before the first of 17 mode writes. The private driver checks first mapped E1
+`invalid-state` at stage 4/table index 54 with private `(5,2,2)`, then verifies
+cursor, all modes, model/gradient metadata and RNG, six seeded output words,
+and live-owner cleanup. A one-use fire readback and clear precede retry on the
+same objects against an independent fixed-seed twin. Focused host source tests
+and fault-only generation checks pass. The fault-only test seam admits the
+primary token after the twin's P1 record reaches retired state 3, while
+rejecting active-token switches and stale/foreign arm tokens. Independent
+review and supported
+optimized AOT normal, poison and sanitizer failure/retry gates remain open.
+Canonical P1 and production native control paths are unchanged; R1 remains
+open.
+
 The bounded E3 §9 stage-8 source candidate adds noninstalled frame-owned
 site 5, ordinal 0, occurrences 1 or 2. After all 21 forward roles, it
 consumes the one-shot selector before L2 CE dispatch and returns the existing
