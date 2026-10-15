@@ -184,6 +184,7 @@ struct et_o2_g3r_save_hold {
   et_o2_options options[14];
   et_o2_config config;
   uint64_t completed_updates;
+  et_o2_optimizer_state *issued_state;
   uint32_t live;
 };
 static et_o2_g3r_save_hold *et_o2_g3r_save_holds;
@@ -2570,6 +2571,24 @@ int32_t et_g3r_private_o2_save_issued_match_v1(
   return et_o2_success(error);
 }
 
+int32_t et_g3r_private_o2_save_issued_identity_v1(
+    et_o2_g3r_save_hold *candidate, const et_o2_optimizer_state *issued,
+    et_o2_error_v1 *error) {
+  const char *operation = "g3r-save-o2-issued-identity";
+  if (et_o2_g3r_save_buffers_conflict(NULL, 0u, 1u, error))
+    return ET_O2_STATUS_INVALID_ARGUMENT;
+  et_o2_g3r_save_hold *hold = et_o2_g3r_hold_admit(candidate);
+  if (!hold)
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                      ET_O2_CODE_INVALID_HANDLE, operation,
+                      "same-owner hold is foreign, stale, or inactive");
+  if (!issued || issued != hold->issued_state)
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                      ET_O2_CODE_OWNER_CONFLICT, operation,
+                      "state was not this hold's latest successful issue");
+  return et_g3r_private_o2_save_issued_match_v1(hold, issued, error);
+}
+
 int32_t et_g3r_private_o2_save_end_v1(
     et_o2_g3r_save_hold **slot, et_o2_error_v1 *error) {
   const char *operation = "g3r-save-o2-end";
@@ -2586,6 +2605,7 @@ int32_t et_g3r_private_o2_save_end_v1(
   int32_t result = et_g3r_private_o2_save_check_v1(hold, &first);
   et_o2_g3r_hold_drain(hold);
   hold->optimizer = NULL;
+  hold->issued_state = NULL;
   memset(hold->parameters, 0, sizeof(hold->parameters));
   memset(hold->identities, 0, sizeof(hold->identities));
   memset(hold->moment_owners, 0, sizeof(hold->moment_owners));
@@ -2796,6 +2816,9 @@ int32_t et_g3r_private_o2_save_state_v1(
     if (error) *error = first;
     return result;
   }
+  /* Assignment-only publication after all fallible checks. A later success
+   * revokes the former pointer; failed attempts leave it unchanged. */
+  hold->issued_state = *state;
   return et_o2_success(error);
 }
 #endif

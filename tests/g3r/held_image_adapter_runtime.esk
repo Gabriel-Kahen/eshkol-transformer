@@ -205,7 +205,8 @@
                      (vector-ref (vector-ref original-a 4) 0)
                      (vector-ref tuple-a 4) #f #f
                      (vector-ref adopter-b 5) #f #f 'claimed))
-           (spliced (vector-copy adopter-a)))
+           (spliced (vector-copy adopter-a))
+           (b-clone-a-hold (vector-copy adopter-b)))
       (check "A and B controls have matching detached values"
              (equal? (vector-ref (c2-training-state-find shell-a) 3)
                      (vector-ref (c2-training-state-find shell-b) 3)))
@@ -215,6 +216,25 @@
       (try-project-values original-a sparse request-b p1-b shell-b 'state)
       (vector-set! spliced 5 (vector-ref adopter-b 5))
       (try-project-values original-a spliced request-b p1-b shell-b 'state)
+      (vector-set! b-clone-a-hold 1 (vector-ref adopter-a 1))
+      (vector-set! b-clone-a-hold 2 (vector-ref adopter-a 2))
+      (vector-set! b-clone-a-hold 3 (vector-ref adopter-a 3))
+      (let ((saved g3r-held-image-issued-identity-internal)
+            (identity-calls 0)
+            (identity-status #f))
+        (set! g3r-held-image-issued-identity-internal
+          (lambda (held native-optimizer issued candidate)
+            (set! identity-calls (+ identity-calls 1))
+            (set! identity-status
+              (saved held native-optimizer issued candidate))
+            identity-status))
+        (try-project-values original-a b-clone-a-hold
+                            request-b p1-b shell-b 'state)
+        (check "B clone with A hold reaches native issuance identity"
+               (and (= identity-calls 1)
+                    (number? identity-status)
+                    (not (= identity-status 0))))
+        (set! g3r-held-image-issued-identity-internal saved))
       ;; Neither rejected projection borrowed C2 or consumed either native
       ;; hold. Both real transfers must still project and release normally.
       (retry-project transfer-a shell-a)

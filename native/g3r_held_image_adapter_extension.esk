@@ -3,6 +3,8 @@
 (extern i64 g3r-held-image-native-copy ptr ptr
         :real et_g3r_private_held_image_copy_v1)
 (define g3r-held-image-copy-internal g3r-held-image-native-copy)
+(define g3r-held-image-issued-identity-internal
+  g3r-held-o2-issued-identity)
 
 (define (g3r-held-image-owner-recheck! original operation)
   (if (or (not (vector? original)) (not (= (vector-length original) 6))
@@ -80,7 +82,7 @@
 
 ;;; Re-authenticate the *claimed* adopter against its canonical O2 state and
 ;;; native issued pointer. This runs only while C2 is live, before and after
-;;; its borrow: the native issued-match correctly rejects an active borrow.
+;;; its borrow: the native identity check also rejects an active borrow.
 (define (g3r-held-image-adopter-recheck!
           original adopter record owner p1 shell operation)
   (if (or (not (vector? adopter)) (not (= (vector-length adopter) 9))
@@ -129,7 +131,7 @@
             (not issued))
         (m3t-fail 'invalid-state operation
                   "claimed C2 child is not the issued O2 owner"))
-    (if (not (= 0 (g3r-held-o2-issued-match
+    (if (not (= 0 (g3r-held-image-issued-identity-internal
                     (vector-ref adopter 1) (vector-ref adopter 3)
                     issued (vector-ref o2-state 1))))
         (o2-native-fail operation))

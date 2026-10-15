@@ -205,8 +205,15 @@ int32_t et_g3r_private_o2_save_owner_match_v1(
 int32_t et_g3r_private_o2_save_completed_updates_v1(
     et_o2_g3r_save_hold *hold, const et_o2_optimizer *optimizer,
     uint64_t *completed_updates, et_o2_error_v1 *error);
-/* Compare the exact issued state against the held pre-snapshot authority. */
+/* Compare a registered state's values against the held pre-snapshot authority.
+ * Equal states from another issuer are intentionally accepted here. */
 int32_t et_g3r_private_o2_save_issued_match_v1(
+    et_o2_g3r_save_hold *hold, const et_o2_optimizer_state *state,
+    et_o2_error_v1 *error);
+/* Authenticate the exact latest successful state pointer issued by this live
+ * hold, then apply the existing value check. Failed issue does not bind; a
+ * later success revokes the older pointer. Dead state/hold stays rejected. */
+int32_t et_g3r_private_o2_save_issued_identity_v1(
     et_o2_g3r_save_hold *hold, const et_o2_optimizer_state *state,
     et_o2_error_v1 *error);
 int32_t et_g3r_private_o2_save_end_v1(

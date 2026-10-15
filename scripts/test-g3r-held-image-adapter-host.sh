@@ -19,5 +19,6 @@ if "$cc" -std=c11 -I "$root/src" \
   exit 1
 fi
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/tests/g3r/test_held_image_adapter_source.py"
+"$root/scripts/test-g3r-o2-held-save-native.sh"
 "$root/scripts/test-g3r-current-history-held-owner.sh"
 echo 'G3R HELD IMAGE HOST PASS'

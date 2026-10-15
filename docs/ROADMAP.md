@@ -2476,10 +2476,15 @@ an adopter vector could splice a different claimed C2 shell onto the live
 original hold. The source successor now reauthenticates the canonical O2
 registry state, enrollment cell, C2 owner token, exact issued pointer and
 native issued-match before and after C2 borrow; its prepared two-owner splice
-case requires both original transfers to remain retryable. Focused host
-bridge, source-mutation, and native held-owner tests pass. The Eshkol aggregate
-and fail-stop cuts still need compiled admission. It publishes no file, public
-SAVE, LOAD, or replay behavior.
+case requires both original transfers to remain retryable. A second independent
+review found the native issued-match only compares values, allowing a genuine
+B adopter with its hold/optimizer slots replaced by A's. A feature-private
+issued-identity witness now binds each successful O2 issue to its live hold;
+the adapter checks it before and after C2 borrow, and the two-owner fixture
+requires that deeper splice to reach and fail the identity check. The earlier
+value-match API remains unchanged. Focused host bridge, source-mutation, and
+native held-owner tests pass; the Eshkol aggregate and fail-stop cuts still
+need compiled admission. It publishes no file, public SAVE, LOAD, or replay.
 
 The [private M3 owner-roster prerequisite](g3/G3_R_M3_OWNER_ROSTER_PREREQUISITE.md)
 ports the feature-gated registry-backed fourteen-parameter/identity roster

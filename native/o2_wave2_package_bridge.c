@@ -296,6 +296,23 @@ int64_t et_g3r_private_o2_adopter_issued_match_v1(
       &et_o2_bridge_error);
 }
 
+int64_t et_g3r_private_o2_adopter_issued_identity_v1(
+    void *hold, void *optimizer, void *issued, void *candidate) {
+  if (issued == NULL || issued != candidate) {
+    memset(&et_o2_bridge_error, 0, sizeof(et_o2_bridge_error));
+    et_o2_bridge_error.category = ET_O2_STATUS_INVALID_STATE;
+    et_o2_bridge_error.code = ET_O2_CODE_OWNER_CONFLICT;
+    return ET_O2_STATUS_INVALID_STATE;
+  }
+  const int32_t owner_status = et_g3r_private_o2_save_owner_match_v1(
+      (et_o2_g3r_save_hold *)hold, (et_o2_optimizer *)optimizer,
+      &et_o2_bridge_error);
+  if (owner_status != 0) return (int64_t)owner_status;
+  return (int64_t)et_g3r_private_o2_save_issued_identity_v1(
+      (et_o2_g3r_save_hold *)hold, (et_o2_optimizer_state *)candidate,
+      &et_o2_bridge_error);
+}
+
 /* An indeterminate native lifecycle cannot become a Scheme exception. */
 void et_g3r_private_o2_adopter_fail_stop_v1(void) { abort(); }
 #endif

@@ -9,6 +9,8 @@
         :real et_g3r_private_o2_adopter_issue_v1)
 (extern i64 g3r-held-o2-issued-match ptr ptr ptr ptr
         :real et_g3r_private_o2_adopter_issued_match_v1)
+(extern i64 g3r-held-o2-issued-identity ptr ptr ptr ptr
+        :real et_g3r_private_o2_adopter_issued_identity_v1)
 (extern void g3r-held-o2-fail-stop
         :real et_g3r_private_o2_adopter_fail_stop_v1)
 

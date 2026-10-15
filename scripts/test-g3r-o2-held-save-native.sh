@@ -16,7 +16,7 @@ flags=(-std=c11 -O1 -Wall -Wextra -Werror -Wpedantic -Wconversion
 "$cc" "${flags[@]}" -DET_O2_NATIVE_HELPERS_ONLY=1 \
   -c "$root/native/o2_wave2_package_bridge.c" -o "$out/bridge-off.o"
 if nm -g --defined-only "$out/o2-off.o" | grep -E \
-  'et_g3r_private_o2_save_(begin|check|completed_updates|state|issued_match|end)_v1'; then
+  'et_g3r_private_o2_save_(begin|check|completed_updates|state|issued_match|issued_identity|end)_v1'; then
   echo 'feature-off O2 exposes held-save contract' >&2
   exit 1
 fi
@@ -61,7 +61,7 @@ for mode in normal repeat san; do
     >"$out/$mode/bridge.stdout" 2>"$out/$mode/bridge.stderr"
   test ! -s "$out/$mode/hold.stderr"
   test ! -s "$out/$mode/bridge.stderr"
-  grep -Fx 'same-owner O2 hold PASS: 421 checks' \
+  grep -Fx 'same-owner O2 hold PASS: 440 checks' \
     "$out/$mode/hold.stdout" >/dev/null
   grep -Fx 'G3R-ORIGINAL-O2-BRIDGE-PASS' \
     "$out/$mode/bridge.stdout" >/dev/null

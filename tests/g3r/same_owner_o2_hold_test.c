@@ -485,21 +485,31 @@ int main(void) {
   et_o2_test_fail_alloc_after_v1(0);
   CHECK(et_g3r_private_o2_save_state_v1(hold, &state, &o2) != 0);
   CHECK(state == NULL && optimizer->busy == 1);
+  CHECK(et_g3r_private_o2_save_issued_identity_v1(
+      hold, equal_other, &o2) == ET_O2_STATUS_INVALID_STATE);
+  CHECK(o2.code == ET_O2_CODE_OWNER_CONFLICT);
   et_o2_test_reset_failpoints_v1();
   CHECK(et_g3r_private_o2_save_state_v1(hold, &state, &o2) == 0);
   CHECK(state != NULL && state->count == 14);
   CHECK(et_g3r_private_o2_save_check_v1(hold, &o2) == 0);
   CHECK(et_g3r_private_o2_save_issued_match_v1(hold, state, &o2) == 0);
+  CHECK(et_g3r_private_o2_save_issued_identity_v1(hold, state, &o2) == 0);
   /* Bit equality alone does not identify the exact save_state return. The
    * coordinator must keep state by pointer through C2 claim or release. */
   CHECK(equal_other != state);
   CHECK(et_g3r_private_o2_save_issued_match_v1(hold, equal_other, &o2) == 0);
+  CHECK(et_g3r_private_o2_save_issued_identity_v1(
+      hold, equal_other, &o2) == ET_O2_STATUS_INVALID_STATE);
+  CHECK(o2.code == ET_O2_CODE_OWNER_CONFLICT);
   et_o2_optimizer_state *foreign_state = NULL;
   CHECK(et_o2_optimizer_state_snapshot_v1(
       foreign_optimizer, &foreign_state, &o2) == 0);
   CHECK(foreign_state != state);
   CHECK(et_g3r_private_o2_save_issued_match_v1(
       hold, foreign_state, &o2) == 0);
+  CHECK(et_g3r_private_o2_save_issued_identity_v1(
+      hold, foreign_state, &o2) == ET_O2_STATUS_INVALID_STATE);
+  CHECK(o2.code == ET_O2_CODE_OWNER_CONFLICT);
   CHECK(et_g3r_private_o2_save_owner_match_v1(
       hold, foreign_optimizer, &o2) == ET_O2_STATUS_INVALID_STATE);
   CHECK(o2.code == ET_O2_CODE_OWNER_CONFLICT);
@@ -674,10 +684,29 @@ int main(void) {
   CHECK(short_decoy_release_exits_134(state, 1));
   CHECK(short_decoy_release_exits_134(state, 2));
   CHECK(et_g3r_private_o2_save_check_v1(hold, &o2) == 0);
+  et_o2_optimizer_state *replacement = NULL;
+  CHECK(et_g3r_private_o2_save_state_v1(hold, &replacement, &o2) == 0);
+  CHECK(replacement != state);
+  CHECK(et_g3r_private_o2_save_issued_identity_v1(
+      hold, state, &o2) == ET_O2_STATUS_INVALID_STATE);
+  CHECK(o2.code == ET_O2_CODE_OWNER_CONFLICT);
+  CHECK(et_g3r_private_o2_save_issued_identity_v1(
+      hold, replacement, &o2) == 0);
+  et_o2_optimizer_state *retired_state = state;
   CHECK(et_o2_optimizer_state_release_v1(state, &o2) == 0);
   state = NULL;
+  CHECK(et_o2_optimizer_state_release_v1(replacement, &o2) == 0);
+  CHECK(et_g3r_private_o2_save_issued_identity_v1(
+      hold, replacement, &o2) == ET_O2_STATUS_INVALID_STATE);
+  et_o2_optimizer_state *later = NULL;
+  CHECK(et_g3r_private_o2_save_state_v1(hold, &later, &o2) == 0);
+  CHECK(later != retired_state && later != replacement);
+  CHECK(et_g3r_private_o2_save_issued_identity_v1(hold, later, &o2) == 0);
+  CHECK(et_o2_optimizer_state_release_v1(later, &o2) == 0);
   CHECK(et_g3r_private_o2_save_end_v1(&hold, &o2) == 0);
   CHECK(hold == NULL && optimizer->busy == 0);
+  CHECK(et_g3r_private_o2_save_issued_identity_v1(
+      first_hold, later, &o2) == ET_O2_STATUS_INVALID_STATE);
   CHECK(et_g3r_private_o2_save_check_v1(first_hold, &o2) ==
       ET_O2_STATUS_INVALID_STATE);
   CHECK(et_g3r_private_o2_save_owner_match_v1(first_hold, optimizer, &o2) ==

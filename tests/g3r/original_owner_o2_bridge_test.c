@@ -9,10 +9,12 @@
 extern void *et_g3r_private_trainer_o2_save_begin_v1(void *, void *);
 extern int64_t et_g3r_private_trainer_o2_save_end_v1(void *);
 extern int64_t et_g3r_private_trainer_o2_save_last_source_v1(void);
+extern int64_t et_g3r_private_o2_adopter_issued_identity_v1(
+    void *, void *, void *, void *);
 
-static int model, optimizer, hold, parameter[14], identity[14];
+static int model, optimizer, hold, issued_state, parameter[14], identity[14];
 static int model_live = 1, optimizer_busy, native_live;
-static int roster_calls, begin_calls, end_calls;
+static int roster_calls, begin_calls, end_calls, owner_calls, issue_calls;
 
 int64_t et_m3t_private_owner_save_roster_v1(
     void *candidate, void *parameters[14], const void *identities[14]) {
@@ -57,6 +59,27 @@ int32_t et_g3r_private_o2_save_end_v1(
   return 0;
 }
 
+int32_t et_g3r_private_o2_save_owner_match_v1(
+    et_o2_g3r_save_hold *candidate, const et_o2_optimizer *owner,
+    et_o2_error_v1 *error) {
+  ++owner_calls;
+  if ((void *)candidate == &hold && (void *)owner == &optimizer && native_live)
+    return 0;
+  error->category = ET_O2_STATUS_INVALID_STATE;
+  return ET_O2_STATUS_INVALID_STATE;
+}
+
+int32_t et_g3r_private_o2_save_issued_identity_v1(
+    et_o2_g3r_save_hold *candidate, const et_o2_optimizer_state *issued,
+    et_o2_error_v1 *error) {
+  ++issue_calls;
+  if ((void *)candidate == &hold && (void *)issued == &issued_state &&
+      native_live)
+    return 0;
+  error->category = ET_O2_STATUS_INVALID_STATE;
+  return ET_O2_STATUS_INVALID_STATE;
+}
+
 int main(void) {
   int foreign;
   assert(et_g3r_private_trainer_o2_save_begin_v1(&optimizer, &foreign) == NULL);
@@ -74,6 +97,17 @@ int main(void) {
   void *published = et_g3r_private_trainer_o2_save_begin_v1(&optimizer, &model);
   assert(published == &hold && native_live && begin_calls == 2);
   assert(et_g3r_private_trainer_o2_save_last_source_v1() == 0);
+  assert(et_g3r_private_o2_adopter_issued_identity_v1(
+      &hold, &optimizer, &issued_state, &issued_state) == 0);
+  assert(owner_calls == 1 && issue_calls == 1);
+  assert(et_g3r_private_o2_adopter_issued_identity_v1(
+      &hold, &optimizer, &issued_state, &foreign) ==
+      ET_O2_STATUS_INVALID_STATE);
+  assert(owner_calls == 1 && issue_calls == 1);
+  assert(et_g3r_private_o2_adopter_issued_identity_v1(
+      &hold, &foreign, &issued_state, &issued_state) ==
+      ET_O2_STATUS_INVALID_STATE);
+  assert(owner_calls == 2 && issue_calls == 1);
   assert(et_g3r_private_trainer_o2_save_end_v1(published) == 0);
   assert(!native_live && end_calls == 1);
   assert(et_g3r_private_trainer_o2_save_end_v1(published) ==

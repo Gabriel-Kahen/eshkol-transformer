@@ -48,6 +48,8 @@ assert root_source.count('(load "g3r_committed_save_snapshot_extension.esk")') =
 assert root_source.count('(load "g3r_held_image_adapter_extension.esk")') == 1
 assert source.count("(define (g3r-held-image-project!") == 1
 assert "(define g3r-held-image-copy-internal g3r-held-image-native-copy)" in source
+assert "(define g3r-held-image-issued-identity-internal" in source
+assert "g3r-held-o2-issued-identity)" in source
 assert fixture.count('(load "g3r_held_image_adapter_root.esk")') == 1
 assert fixture.count("(load ") == 1
 for needle in (
@@ -66,6 +68,10 @@ for needle in (
     "(define (splice-adopter-case", "(try-project-values original-a sparse",
     "(try-project-values original-a spliced", "(retry-project transfer-a shell-a)",
     "(retry-project transfer-b shell-b)",
+    "(vector-copy adopter-b)", "(vector-set! b-clone-a-hold 1",
+    "(vector-set! b-clone-a-hold 2", "(vector-set! b-clone-a-hold 3",
+    "(try-project-values original-a b-clone-a-hold",
+    "(= identity-calls 1)", "(not (= identity-status 0))",
 ):
     assert needle in fixture, needle
 
@@ -109,7 +115,7 @@ def contract(owner_text, controls_text, adopter_text, project_text,
         "(eq? remaining (vector-ref adopter 7))",
         "(vector-ref o2-state 1) issued",
         "(vector-ref o2-state 6) (vector-ref owner 6)",
-        "(g3r-held-o2-issued-match",
+        "(g3r-held-image-issued-identity-internal",
     ):
         assert needle in adopter_text, needle
     for needle in (
@@ -173,7 +179,7 @@ cuts = [
     ("adopter", "(eq? remaining (vector-ref adopter 7))"),
     ("adopter", "(vector-ref o2-state 1) issued"),
     ("adopter", "(vector-ref o2-state 6) (vector-ref owner 6)"),
-    ("adopter", "(g3r-held-o2-issued-match"),
+    ("adopter", "(g3r-held-image-issued-identity-internal"),
     ("project", "g3r-held-image-adopter-recheck!"),
     ("project", "g3r-held-image-copy-internal hold staging"),
     ("project", "g3r-save-data staging entry"),
