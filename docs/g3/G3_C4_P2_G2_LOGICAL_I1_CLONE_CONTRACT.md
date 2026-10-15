@@ -43,3 +43,12 @@ A separately reviewed private same-aggregate adapter may preallocate a typed `te
 The source-private Eshkol release may accept a repeated same-shell DEAD entry only through its original rooted closure. Mutable registry kind/state fields alone are insufficient: a LIVE clone's slot 2 can be changed to `dead` while its native kind-9 record and I1 remain live. The closure calls the native release itself and raises the fail-stop barrier only on native zero, then records success and permits retirement after the Scheme entry is scrubbed. Its dead proof checks the exact original shell/entry/root, recorded native success, retirement and scrubbed fields. A forged-dead call must reject without claiming cleanup; restoring the live slot permits the ordinary native release, scrub and repeat-idempotence path. Focused source mutations cover the dead-branch bypass and removal of the native-success or original-anchor proofs; compiled adversarial and held-lease behavior remain unproved.
 
 Native normal/repeat/ASan+UBSan+LSan proof must include authentic first-EOS G1 and two-token G2 terminal owners; bitwise clone parity/shape and G1 zero-slot exclusion; source release before clone copy; two independent clones; repeated exact release; held source/clone I1 leases with repair/retry; forged, stale, wrong-kind, P2/G1, pending and dead owners; every allocation/borrow/copy cut with error preservation and unchanged source/destination/registry; full live/dead clone control-tail, metadata, I1, f32, model and A2 alias checks across **all** old and new carrier walkers; and private feature-off/symbol/macro boundaries with P2/G1/terminal predecessor gates. A compiled same-registry Eshkol adapter must separately prove original bytevector allocation/extent/identity, equal-length substitution rejection, typed shell identity, copy access, T1 parity and release. No proof here authorizes a public G2 or data-only continuation claim.
+
+The same-registry diagnostic's held-output liveness probe must inspect an
+exactly matched registered transport record, require output kind and valid
+record header, and then distinguish terminal/non-null-I1 from dead/null-I1.
+It must not call ordinary output admission while the deliberate output I1
+lease is held: that admission requires an unborrowed tensor and therefore
+cannot report the release-rejection state. The Eshkol fixture separately
+requires held release to reject, an unchanged live probe result, successful
+borrow end, then dead probe result after actual release.

@@ -12,6 +12,7 @@ additions = [
     "scripts/test-g3c4-p2g2-terminal-ids-owner-source.sh",
     "docs/g3/G3_C4_P2_G2_LOGICAL_I1_CLONE_CONTRACT.md",
     "tests/g3c4/private_terminal_owners_extent_diagnostic.esk",
+    "tests/g3c4/private_terminal_owners_native_bridge.c",
     "native/g3c4_p2g2_terminal_ids_owner_source_closure.txt",
 ]
 closure = (root / additions[-1]).read_text().splitlines()
@@ -27,6 +28,47 @@ for symbol in (
     assert symbol in header and symbol in native
 assert "#ifdef ET_G3C4_P2_G2_TERMINAL_IDS_CLONE_PRIVATE" in header
 fixture = (root / "tests/g3c4/private_terminal_owners_extent_diagnostic.esk").read_text()
+bridge = (root / "tests/g3c4/private_terminal_owners_native_bridge.c").read_text()
+
+
+def held_output_probe_valid(text):
+    body = text.split("int64_t et_g3c4_private_probe_output_live_v1(", 1)[1].split(
+        "int64_t et_g3c4_private_probe_clone_hold_v1(", 1)[0]
+    required = (
+        "header = et_g3c4_transport_registry",
+        "header != NULL && (const void *)header != candidate",
+        "header = header->registry_next",
+        "header == NULL || header->kind != ET_G3C4_OUTPUT_KIND ||",
+        "!et_g3c4_transport_record_valid(header)",
+        "output = (et_g3c4_output_internal *)header",
+        "output->transport.state == ET_G3C4_OUTPUT_TERMINAL &&",
+        "output->ids != NULL",
+        "output->transport.state == ET_G3C4_CONTEXT_DEAD &&",
+        "output->ids == NULL",
+    )
+    return (all(fragment in body for fragment in required)
+            and "et_g3c4_admit_output" not in body
+            and "et_m3_private_i64_unborrowed_v1" not in body
+            and body.index("header == NULL") < body.index("(et_g3c4_output_internal *)header")
+            and body.index("!et_g3c4_transport_record_valid(header)")
+            < body.index("(et_g3c4_output_internal *)header"))
+
+
+assert held_output_probe_valid(bridge)
+probe_begin = bridge.index("int64_t et_g3c4_private_probe_output_live_v1(")
+probe_end = bridge.index("int64_t et_g3c4_private_probe_clone_hold_v1(", probe_begin)
+probe_body = bridge[probe_begin:probe_end]
+for before, after in (
+    ("header != NULL && (const void *)header != candidate", "header != NULL"),
+    ("header->kind != ET_G3C4_OUTPUT_KIND", "header->kind != ET_G3C4_TERMINAL_IDS_KIND"),
+    ("!et_g3c4_transport_record_valid(header)", "0"),
+    ("output->ids != NULL", "output->ids == NULL"),
+    ("output->ids == NULL", "output->ids != NULL"),
+):
+    assert before in probe_body and not held_output_probe_valid(
+        bridge[:probe_begin] + probe_body.replace(before, after, 1)
+        + bridge[probe_end:]), before
+
 prefix_source = (root / "native/g3c4_p2g2_t1_prefix_coordinator_extension.esk").read_text()
 reserve_source = (root / "native/g3c4_p2g2_terminal_extension.esk").read_text()
 mode_gate = "(if require-output? (vector-ref record 6)\n                      (eq? (vector-ref record 6) #f))"
@@ -390,4 +432,4 @@ for before, after in mutations:
 allocation = "(bytes (make-bytevector payload 0))"
 before, after = source.rsplit(allocation, 1)
 assert not valid(before + "(bytes (make-bytevector extent 0))" + after)
-print(f"G3-C4 terminal private I1 owner source PASS: {len(mutations) + 1} owner + 11 diagnostic negative mutations")
+print(f"G3-C4 terminal private I1 owner source PASS: {len(mutations) + 1} owner + 11 diagnostic + 5 held-probe negative mutations")

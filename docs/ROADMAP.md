@@ -3261,7 +3261,16 @@ publication, public G2 and continuation remain pending.
   64 snapshot payload bytes and 8/16 clone payload bytes, retains the native
   72/16/24 total extents, and reads words at payload-relative offsets. Its
   host runtime-layout test and source mutations pass; independent review and
-  a new compiled gate remain pending. The consumed probe is not rerun.
+  a new compiled gate remain pending. Its successor package D was consumed:
+  normal case 1 failed at `held native terminal output still live` before
+  repeat or sanitizer. The package-only C bridge used ordinary terminal
+  admission during an intentionally held I1 lease, so its unborrowed preflight
+  made that observation a false negative. A focused successor tracks the
+  bridge in source and checks exact registry identity, output kind and record
+  header before reading terminal/dead state, without admission or any
+  candidate dereference. Source mutations cover identity, kind, record and
+  both state predicates; compiled proof and independent review remain pending.
+  The consumed probe and D package are not rerun.
   All failed packages and raw evidence are preserved; terminal/full/public/
   data-only G3 remain HOLD.
 

@@ -231,4 +231,5 @@ scripts/check-g3c4-p2g2-terminal-ids-owner-source.py
 scripts/test-g3c4-p2g2-terminal-ids-owner-source.sh
 docs/g3/G3_C4_P2_G2_LOGICAL_I1_CLONE_CONTRACT.md
 tests/g3c4/private_terminal_owners_extent_diagnostic.esk
+tests/g3c4/private_terminal_owners_native_bridge.c
 native/g3c4_p2g2_terminal_ids_owner_source_closure.txt
