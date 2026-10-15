@@ -21,6 +21,33 @@ def lines(prefix: Path, suffix: str) -> list[str]:
     return Path(f"{prefix}_{suffix}.txt").read_text().splitlines()
 
 
+def scheme_form(source: str, name: str) -> str:
+    """Extract one balanced top-level definition; this is a source check only."""
+    start = source.index(f"(define ({name}")
+    depth = 0
+    quoted = escaped = commented = False
+    for end in range(start, len(source)):
+        char = source[end]
+        if commented:
+            if char == "\n":
+                commented = False
+        elif escaped:
+            escaped = False
+        elif char == "\\" and quoted:
+            escaped = True
+        elif char == '"':
+            quoted = not quoted
+        elif char == ";" and not quoted:
+            commented = True
+        elif not quoted:
+            depth += (char == "(") - (char == ")")
+            if depth == 0:
+                return source[start:end + 1]
+            if depth < 0:
+                break
+    raise ValueError(f"unbalanced {name}")
+
+
 class UniformTupleTest(unittest.TestCase):
     def test_zero_state_roster_and_transaction_guards(self) -> None:
         driver = (ROOT / "tests/e3_private/uniform_driver.esk").read_text()
@@ -65,6 +92,46 @@ class UniformTupleTest(unittest.TestCase):
                       build)
         for field in ("borrows", "copy_plans", "gradient_plans", "reset_plans"):
             self.assertIn(f"counts.{field}", bridge)
+
+    def test_prebind_and_postcall_contract_source(self) -> None:
+        driver = (ROOT / "tests/e3_private/uniform_driver.esk").read_text()
+        build = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
+        owner = scheme_form(driver, "e3-uniform-check-owners")
+        original = scheme_form(driver, "e3-uniform-assert-original")
+        load = scheme_form(driver, "e3-uniform-load-before-frame!")
+        post = scheme_form(driver, "e3-uniform-assert-post")
+        call = scheme_form(driver, "e3-test-run")
+        self.assertIn("(i2-describe", owner)
+        self.assertIn("'native-owner-geometry", owner)
+        for witness in ("e3-uniform-gradient-image", "e3-uniform-modes",
+                        "e3-uniform-assert-leases"):
+            self.assertIn(witness, original)
+            self.assertIn(witness, post)
+        self.assertEqual(load.count("(e3-uniform-assert-original"), 6)
+        self.assertIn("'zero-gradients", load)
+        self.assertIn("'zero-modes", load)
+        self.assertLess(call.index("(e3-evaluate-into! model dataset frame)"),
+                        call.index("(e3-uniform-assert-post model"))
+        self.assertIn('"${e3_tuple_kind}" == uniform ]]; then\n'
+                      '    package_native_cflags+=(-DET_E3_NUMERICAL_TESTING\n'
+                      '                            -DET_E3_RETENTION_TESTING', build)
+        for symbol in ("et_e3_test_model_word_count_v1",
+                       "et_e3_test_model_word_v1",
+                       "et_e3_test_gradient_metadata_v1"):
+            self.assertIn(symbol, build)
+            self.assertIn(symbol, (ROOT / "src/eshkol_transformer/e3_frame.c").read_text())
+        self.assertIn("et_m3t_test_parameter_gradient",
+                      (ROOT / "src/eshkol_transformer/m3t_f32_integration.c").read_text())
+        self.assertIn('"${e3_tuple_kind}" == uniform ) ]]; then', build)
+        # Causal source mutations: an equal-byte wrong geometry or dropped
+        # postcall guard must fail the extracted contract before any runtime claim.
+        def source_contract(owner_form: str, call_form: str) -> bool:
+            return "(i2-describe" in owner_form and "(e3-uniform-assert-post model" in call_form
+
+        self.assertTrue(source_contract(owner, call))
+        self.assertFalse(source_contract(owner.replace("(i2-describe", "(i2-describx", 1), call))
+        self.assertFalse(source_contract(owner, call.replace(
+            "(e3-uniform-assert-post model", "(e3-uniform-assert-posx model", 1)))
 
     def test_completed_state_marker_and_closed_frame_records(self) -> None:
         frame = frame_bytes(frame_lines(3))

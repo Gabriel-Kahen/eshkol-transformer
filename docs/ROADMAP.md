@@ -969,6 +969,14 @@ owner identities after each malformed input and the copy-allocation cut, and
 checks the loaded hash, zero payloads, identities and empty native lease census
 after retry. This is source/test preparation pending independent review and a
 supported compiled run; it adds no public model setter or §9 numerical proof.
+The review of that first slice held admission because supplied I2 shapes and
+payload lengths did not independently verify native dimensions, and gradients,
+module modes and post-evaluation state were not covered. A source-only successor
+uses the existing native-backed `i2-describe` and noninstalled gradient probes,
+captures all 14 gradient payloads/metadata and 17 module modes through every
+rejection and retry, and checks the loaded owner image and native lease census
+after each ordinary evaluator call. Host source checks do not execute this Eshkol
+path; independent exact-head review and supported compiled runs remain required.
 
 The separate E3 N3 zero-model source candidate on the exact `a64caf9a7`
 union uses the registered M3 tree's 14 unique CPU/f32 owners and one

@@ -1907,7 +1907,8 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
   fi
   if [[ "${package_policy}" == e3-private-aggregate &&
         "${e3_tuple_kind}" == uniform ]]; then
-    package_native_cflags+=(-DET_E3_NUMERICAL_TESTING -fno-builtin-printf)
+    package_native_cflags+=(-DET_E3_NUMERICAL_TESTING
+                            -DET_E3_RETENTION_TESTING -fno-builtin-printf)
     if [[ "${e3_uniform_mutant}" == last-tie ]]; then
       package_native_cflags+=(-DET_E3_UNIFORM_LAST_TIE_TEST)
     fi
@@ -1932,7 +1933,8 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
             "${e3_tuple_kind}" == fault ||
             "${e3_tuple_kind}" == retention ||
             "${e3_tuple_kind}" == retention-first-eval-mutant ||
-            "${e3_tuple_kind}" == retention-overflow ) ]]; then
+            "${e3_tuple_kind}" == retention-overflow ||
+            "${e3_tuple_kind}" == uniform ) ]]; then
       case "${package_native_source}" in
         "${PROJECT_ROOT}/src/eshkol_transformer/m3_call_f32_integration.c")
           package_source_flags+=(-DET_F32_TENSOR_TESTING) ;;
@@ -2559,6 +2561,12 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
         et_e3_test_gradient_metadata_v1
         et_e3_test_seed_gradient_v1
         et_d2_exact_read_test_fail_stage_v1
+      )
+    elif [[ "${e3_tuple_kind}" == uniform ]]; then
+      e3_required_private+=(
+        et_e3_test_model_word_count_v1
+        et_e3_test_model_word_v1
+        et_e3_test_gradient_metadata_v1
       )
     fi
   fi

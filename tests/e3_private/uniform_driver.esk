@@ -19,6 +19,12 @@
         :real et_e3_uniform_i2_decode_builder_bytes_v1)
 (extern i64 e3-uniform-live-leases
         :real et_e3_uniform_live_leases_v1)
+(extern i64 e3-uniform-model-word-count ptr i64 i64
+        :real et_e3_test_model_word_count_v1)
+(extern i64 e3-uniform-model-word ptr i64 i64 i64
+        :real et_e3_test_model_word_v1)
+(extern i64 e3-uniform-gradient-metadata ptr i64 i64
+        :real et_e3_test_gradient_metadata_v1)
 
 (define e3-uniform-paths
   '(("blocks" "0" "attention" "key" "weight")
@@ -95,11 +101,19 @@
                          (list-ref e3-uniform-paths index)))
                (shape (vector-ref e3-uniform-shapes index))
                (size (* 4 (vector-ref e3-uniform-unique-counts index)))
+               (native (i2-describe
+                         (vector (parameter-handle-tensor-internal handle)
+                                 'parameter 'e3-uniform-roster)))
                (payload (i2-checkpoint-encode
                           (vector (parameter-handle-tensor-internal handle)
                                   'parameter shape 'f32 'cpu
                                   'dense-row-major-contiguous
                                   'e3-uniform-roster))))
+          (e3-uniform-check 'native-owner-geometry
+            (and (equal? (vector-ref native 0) shape)
+                 (eq? (vector-ref native 1) 'f32)
+                 (eq? (vector-ref native 2) 'cpu)
+                 (eq? (vector-ref native 3) 'dense-row-major-contiguous)))
           (e3-uniform-check 'owner-payload-length
             (= (bytevector-length payload) size))
           (if zero?
@@ -155,7 +169,64 @@
              (eq? (vector-ref (car left) 3) (vector-ref (car right) 3))
              (loop (cdr left) (cdr right))))))
 
-(define (e3-uniform-assert-original model words handles bytes hash owned builders)
+(define (e3-uniform-gradient-image model)
+  (let ((owner (vector-ref (m3t-entry model 'model 'e3-uniform-roster #t) 3))
+        (image (make-vector 14 #f)))
+    (let parameter ((index 0))
+      (if (= index 14) image
+          (let* ((count (e3-uniform-model-word-count owner index 1))
+                 (words (make-vector (vector-ref e3-uniform-unique-counts index) 0))
+                 (state (e3-uniform-gradient-metadata owner index 0))
+                 (contributions (e3-uniform-gradient-metadata owner index 1))
+                 (weight (e3-uniform-gradient-metadata owner index 2)))
+            (e3-uniform-check 'gradient-geometry
+              (= count (vector-length words)))
+            (e3-uniform-check 'gradient-metadata-readable
+              (and (>= state 0) (>= contributions 0) (>= weight 0)))
+            (let word ((offset 0))
+              (if (= offset count) #t
+                  (begin
+                    (vector-set! words offset
+                      (e3-uniform-model-word owner index 1 offset))
+                    (word (+ offset 1)))))
+            (vector-set! image index
+              (vector state contributions weight words))
+            (parameter (+ index 1)))))))
+
+(define (e3-uniform-modes model)
+  (let ((modules (vector-ref (m3t-entry model 'model 'e3-uniform-roster #t) 4))
+        (modes (make-vector 17 #f)))
+    (let fill ((index 0))
+      (if (= index 17) modes
+          (begin
+            (vector-set! modes index
+              (module-mode-internal (vector-ref modules index)))
+            (fill (+ index 1)))))))
+
+(define (e3-uniform-same-gradients? before after)
+  (let parameter ((index 0))
+    (if (= index 14) #t
+        (let ((left (vector-ref before index))
+              (right (vector-ref after index)))
+          (and (= (vector-ref left 0) (vector-ref right 0))
+               (= (vector-ref left 1) (vector-ref right 1))
+               (= (vector-ref left 2) (vector-ref right 2))
+               (let ((a (vector-ref left 3)) (b (vector-ref right 3)))
+                 (and (= (vector-length a) (vector-length b))
+                      (let word ((offset 0))
+                        (if (= offset (vector-length a)) #t
+                            (and (= (vector-ref a offset) (vector-ref b offset))
+                                 (word (+ offset 1)))))))
+               (parameter (+ index 1)))))))
+
+(define (e3-uniform-same-modes? before after)
+  (let module ((index 0))
+    (if (= index 17) #t
+        (and (eq? (vector-ref before index) (vector-ref after index))
+             (module (+ index 1))))))
+
+(define (e3-uniform-assert-original model words handles bytes hash
+                                    gradients modes owned builders)
   (e3-uniform-check 'initializer
     (equal? words (m3t-public-initializer-words
                     (m3t-public-model-initializer model))))
@@ -165,6 +236,10 @@
     (e3-uniform-bytes=? bytes (e3-uniform-state-bytes model)))
   (e3-uniform-check 'original-state-hash
     (e3-uniform-bytes=? hash (e3-uniform-state-hash model)))
+  (e3-uniform-check 'original-gradients
+    (e3-uniform-same-gradients? gradients (e3-uniform-gradient-image model)))
+  (e3-uniform-check 'original-modes
+    (e3-uniform-same-modes? modes (e3-uniform-modes model)))
   (e3-uniform-check 'imported-owners
     (= owned (i2-native-owned-clone-live-count)))
   (e3-uniform-check 'copy-builders
@@ -190,6 +265,8 @@
          (handles (e3-uniform-handles model))
          (before (e3-uniform-state-bytes model))
          (before-hash (c1-sha256 before))
+         (gradients (e3-uniform-gradient-image model))
+         (modes (e3-uniform-modes model))
          (owned (i2-native-owned-clone-live-count))
          (builders (e3-uniform-live-builders))
          (retired (e3-uniform-retired-builder-bytes)))
@@ -198,16 +275,20 @@
     (e3-uniform-assert-leases)
     (e3-uniform-expect-rejection model (vector-ref e3-uniform-files 1)
                                  'corrupt-data 'c1-checkpoint-decode-state-internal)
-    (e3-uniform-assert-original model words handles before before-hash owned builders)
+    (e3-uniform-assert-original model words handles before before-hash
+                                gradients modes owned builders)
     (e3-uniform-expect-rejection model (vector-ref e3-uniform-files 2)
                                  'unsupported 'c1-checkpoint-decode-state-internal)
-    (e3-uniform-assert-original model words handles before before-hash owned builders)
+    (e3-uniform-assert-original model words handles before before-hash
+                                gradients modes owned builders)
     (e3-uniform-expect-rejection model (vector-ref e3-uniform-files 3)
                                  'shape-mismatch 'module-load-state-dict!)
-    (e3-uniform-assert-original model words handles before before-hash owned builders)
+    (e3-uniform-assert-original model words handles before before-hash
+                                gradients modes owned builders)
     (e3-uniform-expect-rejection model (vector-ref e3-uniform-files 4)
                                  'shape-mismatch 'module-load-state-dict!)
-    (e3-uniform-assert-original model words handles before before-hash owned builders)
+    (e3-uniform-assert-original model words handles before before-hash
+                                gradients modes owned builders)
     ;; Decode first: the armed I2 allocation cut must be reached by P1's
     ;; authentic copy-plan preparation, not by checkpoint decoding.
     (let* ((decoded
@@ -231,12 +312,14 @@
                                     "I2 dense CPU-f32 carrier rejected the request")))))
         (module-load-state-dict! model decoded))
       (e3-uniform-reset-copy-alloc)
-      (e3-uniform-assert-original model words handles before before-hash decoded-owned builders)
+      (e3-uniform-assert-original model words handles before before-hash
+                                  gradients modes decoded-owned builders)
       (e3-uniform-check 'copy-prepare-retired-controls
         (= retired-after-decode (e3-uniform-retired-builder-bytes)))
       (state-dict-release! decoded)
       (e3-uniform-check 'copy-prepare-fault fault?))
-    (e3-uniform-assert-original model words handles before before-hash owned builders)
+    (e3-uniform-assert-original model words handles before before-hash
+                                gradients modes owned builders)
     (e3-uniform-check 'retired-controls-monotonic
       (>= (e3-uniform-retired-builder-bytes) retired))
     (c1-checkpoint-load-module-internal!
@@ -256,13 +339,45 @@
       (= owned (i2-native-owned-clone-live-count)))
     (e3-uniform-check 'zero-copy-builders
       (= builders (e3-uniform-live-builders)))
+    (e3-uniform-check 'zero-gradients
+      (e3-uniform-same-gradients? gradients (e3-uniform-gradient-image model)))
+    (e3-uniform-check 'zero-modes
+      (e3-uniform-same-modes? modes (e3-uniform-modes model)))
     (e3-uniform-assert-leases)
     (e3-uniform-check 'zero-initializer
       (equal? words (m3t-public-initializer-words
                       (m3t-public-model-initializer model))))
     (display "E3-UNIFORM-ZERO-STATE-PASS") (newline)))
 
-(define e3-test-fixture-root (vector #f #f #f #f))
+(define (e3-uniform-loaded-image model)
+  (vector (e3-uniform-handles model)
+          (e3-uniform-state-hash model)
+          (e3-uniform-gradient-image model)
+          (e3-uniform-modes model)
+          (i2-native-owned-clone-live-count)
+          (e3-uniform-live-builders)))
+
+(define (e3-uniform-assert-post model image)
+  (e3-uniform-check 'post-evaluation-identities
+    (e3-uniform-same-handles? (vector-ref image 0)
+                              (e3-uniform-handles model)))
+  (e3-uniform-check-owners (module-parameters model) #t)
+  (e3-uniform-check 'post-evaluation-hash
+    (e3-uniform-bytes=? (vector-ref image 1)
+                        (e3-uniform-state-hash model)))
+  (e3-uniform-check 'post-evaluation-gradients
+    (e3-uniform-same-gradients? (vector-ref image 2)
+                                (e3-uniform-gradient-image model)))
+  (e3-uniform-check 'post-evaluation-modes
+    (e3-uniform-same-modes? (vector-ref image 3)
+                            (e3-uniform-modes model)))
+  (e3-uniform-check 'post-evaluation-owners
+    (= (vector-ref image 4) (i2-native-owned-clone-live-count)))
+  (e3-uniform-check 'post-evaluation-builders
+    (= (vector-ref image 5) (e3-uniform-live-builders)))
+  (e3-uniform-assert-leases))
+
+(define e3-test-fixture-root (vector #f #f #f #f #f))
 
 (define (e3-test-destinations-destroy! destinations)
   (let cleanup ((index 0))
@@ -308,6 +423,7 @@
              (initial (g3t-checked-m3t-initializer-state 1729))
              (model (g3t-checked-m3t-model-create config initial))
              (loaded (e3-uniform-load-before-frame! model))
+             (loaded-image (e3-uniform-loaded-image model))
              (destinations (e3-test-destinations-create))
              (frame #f))
         (guard
@@ -320,6 +436,7 @@
          (vector-set! e3-test-fixture-root 1 tokenizer)
          (vector-set! e3-test-fixture-root 2 destinations)
          (vector-set! e3-test-fixture-root 3 frame)
+         (vector-set! e3-test-fixture-root 4 loaded-image)
          e3-test-fixture-root))))
 
 (define (e3-test-scenario scenario)
@@ -401,6 +518,7 @@
      (let ((before (d2-token-dataset-cursor dataset)))
        (with-region ('e3-evaluation-invocation 262144)
          (e3-evaluate-into! model dataset frame))
+       (e3-uniform-assert-post model (vector-ref fixture 4))
        (let ((after (d2-token-dataset-cursor dataset)))
          (let ((result (e3-test-output frame destinations before after)))
            (d2-token-dataset-close! dataset)
