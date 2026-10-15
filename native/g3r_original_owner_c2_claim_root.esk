@@ -1,0 +1,4 @@
+;;; Private same-registry G3/O2/TR3/C2 source union; never install.
+;;; The preclaim root already loads C2 and O2 through CLI3/TR3 exactly once.
+(load "g3r_original_owner_preclaim_root.esk")
+(load "g3r_held_o2_c2_claim_extension.esk")

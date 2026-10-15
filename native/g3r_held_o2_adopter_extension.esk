@@ -155,5 +155,5 @@
             (vector-set! ledger 8 'enrolled)
             ledger))))))
 
-;;; This PR214 port stops at preclaim enrollment and release. C2's current
-;;; second-claim rollback cannot prove a state live after a mutating failure.
+;;; This preclaim leaf owns only enrollment and release. Its separate C2
+;;; successor authenticates the claimed state after C2 compose returns.

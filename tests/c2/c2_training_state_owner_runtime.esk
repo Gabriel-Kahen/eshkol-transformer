@@ -272,7 +272,7 @@
        (and (state-dict-release! alias-p1)
             (o2-public-optimizer-state-release! alias-o2)))
 
-;;; The second claim is the only fallible operation after the first claim.
+;;; The second claim can fail before or after its ownership assignment.
 (define rollback-p1 (make-p1-state "weight" '(4) #f))
 (define rollback-o2 (make-o2-state '("weight") '(4) '() 17))
 (define saved-o2-claim c2-training-state-claim-o2!)
@@ -287,6 +287,62 @@
 (check "rolled-back owners release normally"
        (and (state-dict-release! rollback-p1)
             (o2-public-optimizer-state-release! rollback-o2)))
+
+(define post-claim-p1 (make-p1-state "weight" '(4) #f))
+(define post-claim-o2 (make-o2-state '("weight") '(4) '() 17))
+(define post-claim-request
+  (vector c2-training-state-compose-tag post-claim-p1 post-claim-o2
+          (make-controls 17) 'checkpoint-load #f))
+(define post-claim-counts (c2-test-owner-counts))
+(set! c2-training-state-claim-o2!
+  (lambda (state token)
+    (saved-o2-claim state token)
+    (c2-training-state-fail 'corrupt-data 'checkpoint-load
+                            "injected post-claim failure")))
+(expect-error "postmutation O2 claim retains first typed error"
+              'corrupt-data 'checkpoint-load
+  (lambda () (c2-training-state-compose-internal post-claim-request)))
+(set! c2-training-state-claim-o2! saved-o2-claim)
+(check "postmutation failure leaves request and C2 registry untouched"
+       (and (eq? (vector-ref post-claim-request 1) post-claim-p1)
+            (eq? (vector-ref post-claim-request 2) post-claim-o2)
+            (eq? (vector-ref post-claim-request 5) #f)
+            (equal? (c2-test-owner-counts) post-claim-counts)))
+(check "postmutation rollback restores both public child authorities"
+       (and (pair? (state-dict-paths post-claim-p1))
+            (o2-public-optimizer-state-release! post-claim-o2)
+            (state-dict-release! post-claim-p1)))
+
+(define false-claim-p1 (make-p1-state "weight" '(4) #f))
+(define false-claim-o2 (make-o2-state '("weight") '(4) '() 17))
+(set! c2-training-state-claim-o2!
+  (lambda (state token)
+    (saved-o2-claim state token)
+    (raise #f)))
+(expect-raised-false "postmutation O2 claim retains raised false"
+  (lambda () (compose false-claim-p1 false-claim-o2 (make-controls 17))))
+(set! c2-training-state-claim-o2! saved-o2-claim)
+(check "raised-false rollback restores both child authorities"
+       (and (pair? (state-dict-paths false-claim-p1))
+            (o2-public-optimizer-state-release! false-claim-o2)
+            (state-dict-release! false-claim-p1)))
+
+(define token-check-o2 (make-o2-state '("weight") '(4) '() 17))
+(define token-check-owner (vector 'exact-owner-token))
+(define token-check-other (vector 'exact-owner-token))
+(check "live O2 reconciliation is a checked no-op"
+       (o2-state-claim-c2-rollback-or-live-internal!
+         token-check-o2 token-check-owner))
+(o2-state-claim-c2-internal! token-check-o2 token-check-owner)
+(expect-error "O2 reconciliation rejects equal-looking foreign token"
+              'invalid-state 'o2-state-claim-c2-rollback-or-live-internal!
+  (lambda ()
+    (o2-state-claim-c2-rollback-or-live-internal!
+      token-check-o2 token-check-other)))
+(check "exact O2 token still restores live authority"
+       (and (o2-state-claim-c2-rollback-or-live-internal!
+              token-check-o2 token-check-owner)
+            (o2-public-optimizer-state-release! token-check-o2)))
 
 ;;; Successful transfer deep-owns controls and consumes both request slots.
 (define owned-p1 (make-p1-state "weight" '(4) #f))

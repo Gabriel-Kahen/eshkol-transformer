@@ -2444,12 +2444,18 @@ The [PR214 original-owner preclaim port](g3/G3_R_PR214_ORIGINAL_OWNER_PRECLAIM_P
 selectively adds the reviewed G3/O2 hold coordinator and O2 preclaim adopter
 source above independently accepted `ec97f61a`. Its focused host source,
 native, feature-off and failure cuts pass; linked Eshkol owner validation is
-still pending. The PR214 C2 compose source lacks O2 rollback-or-live handling
-after a mutating second claim, so this port excludes the C2 claim helper and
-stops before adoption into C2. The `5fff0548` C2 source contract requires
-independent acceptance and a separate exact-lineage port before partial-claim
-or post-adoption cleanup can be tested or claimed. No SAVE or replay admission
-follows.
+still pending. That preclaim root remains an isolated prerequisite.
+
+The [PR214 same-registry C2 partial-claim source union](g3/G3_R_PR214_C2_PARTIAL_CLAIM_UNION.md)
+ports the independently reviewed C2/O2 rollback-or-live source and adverse
+tests onto the accepted preclaim head. A new private root loads the original
+G3/O2/TR3/C2 graph once and adds the reviewed post-compose exact-owner
+check. C2 records attempted O2 claim before calling the fallible seam and
+reconciles exact O2 authority before P1 on typed or `#f` failure; foreign
+tokens and uncertain rollback fail stop. Host source gates and prepared C2
+runtime negatives are separate from the still-pending linked owner runtime
+gate. This branch provides no data-only SAVE writer, LOAD, restored generator,
+or resumed continuation.
 
 The [private M3 owner-roster prerequisite](g3/G3_R_M3_OWNER_ROSTER_PREREQUISITE.md)
 ports the feature-gated registry-backed fourteen-parameter/identity roster
