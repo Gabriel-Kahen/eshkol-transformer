@@ -961,6 +961,30 @@ independent source review, and supported normal/repeat, poison and sanitizer
 execution remain pending. This supplies no §9 N3/M2 compiled acceptance or
 target-offset, wrong-axis, finite-boundary or overflow proof.
 
+A bounded follow-up tightens only that noninstalled uniform C1 prebind control:
+the driver freezes all 15 logical paths and 14 unique CPU/f32 owners, every
+shape and the head/embedding tie, then encodes exactly 1,184 words/4,736 bytes
+through the registered I2 carriers. It checks the original C1 state hash and
+owner identities after each malformed input and the copy-allocation cut, and
+checks the loaded hash, zero payloads, identities and empty native lease census
+after retry. This is source/test preparation pending independent review and a
+supported compiled run; it adds no public model setter or §9 numerical proof.
+The review of that first slice held admission because supplied I2 shapes and
+payload lengths did not independently verify native dimensions, and gradients,
+module modes and post-evaluation state were not covered. A source-only successor
+uses the existing native-backed `i2-describe` and noninstalled gradient probes,
+captures all 14 gradient payloads/metadata and 17 module modes through every
+rejection and retry, and checks the loaded owner image and native lease census
+after each ordinary evaluator call. Host source checks do not execute this Eshkol
+path; independent exact-head review and supported compiled runs remain required.
+The first successor was held at source review: the uniform native closure did
+not enable the gradient accessor in its separate M3T translation unit, its
+mode image read a workspace-only registry slot from the model, and an error
+sentinel could enter a gradient image. A focused repair enables the accessor
+only for that test tuple, traverses the sealed P1 root's checked child bindings
+and compares modes by path, and rejects gradient reads outside uint32. This
+remains source/static preparation until independent review and runtime gates.
+
 The separate E3 N3 zero-model source candidate on the exact `a64caf9a7`
 union uses the registered M3 tree's 14 unique CPU/f32 owners and one
 head/embedding tie. A noninstalled root decodes 4,736 zero bytes through I2,
@@ -1099,6 +1123,30 @@ prepared but unrun. `01`, `00`, and invalid-mask K1 cases remain provider-only
 controls for this fixed profile; M3 nonfinite/subnormal/signed-zero and
 full-call floating-environment reachability remain open. No §9 compiled or
 public evaluator admission follows from this source slice.
+A separate development-only finite min-subnormal source fixture builds a
+checksummed C1 state with the existing 14-unique/15-logical M3 topology and
+head/embedding tie, plus genuine checked D1/D2 `11,11,10` rows. The pinned
+PyTorch M3 equations independently emit f32 `0x00000001` at vocabulary index
+zero in both positions; a cleared final-norm bias first changes logit zero.
+Host tests freeze C1 geometry, exact bits, checksums, D2 cursors, 21 role
+records, CE/state/final reference and duplicate-generation bytes. This is a
+source/oracle candidate only: it adds no Eshkol driver or production API, and
+the predecessor M3 zero-state package and N4 D2 Eshkol census still require
+supported compiled results before any private numerical reachability claim.
+A separate noninstalled min-subnormal E3 tuple now has a C1 prebind driver,
+exact unique-owner payload/tie checks, generated D2 source closure, and a
+recipe for genuine three-batch E3 observations. Its parser requires physical
+f32 logit `00000001` at both positions before the independent 21-role and
+six-output/cursor comparison; a bias-clear checkpoint must fail that first
+logit gate. Host source/negative checks pass. The exact `7cad6364` package
+passed independent static review (receipt SHA-256
+`bbba537cce4d1c2e202c45b3cc256944fa36ea86a3efe39719979c0b56c5c7ba`)
+and its released source-only preflight passed independent raw review (receipt
+SHA-256 `879938afda94be5e8f221aac5d542575e431b7abc65504d5cc900a4a33acb120`).
+This remains source-only. Compiled M3/D2 behavior, the physical
+min-subnormal observation, and
+floating-environment support remain unverified, so §9 numerical reachability
+remains open. Those package pins apply only to the exact `7cad6364` tree.
 The first [mathematical three-batch M2 sum-order witness](../tests/e3_reference/sum_order_witness_v1.json)
 failed the one-use df9546 compiled C gate: compiled CE rounded both groupings
 to `41dcde82`. The successor [compiled witness](../tests/e3_reference/sum_order_witness_v2.json)
@@ -1426,6 +1474,9 @@ Independent whole-union source/test review accepted the bounded R1/R2 union at
 Compiled normal/repeat/poison/sanitizer and mutant verdicts remain open, so
 §9 R1/R2 admission remains **HOLD**. PR #214/current-main integration is a
 separate gate.
+The combined min-subnormal and R1/R2 source candidate requires fresh
+whole-union source/test review and exact-tree package evidence; neither
+branch's separate review or package seal admits the combined tree.
 
 The stage-8 fault candidate and retention post-report teardown now share a
 source-only branch based on the independently reviewed CLI3 `baf0a03f` union.

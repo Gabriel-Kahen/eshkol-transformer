@@ -1,0 +1,508 @@
+;;; Dedicated noninstalled E3 finite min-subnormal driver. C1 loads the
+;;; actual model before frame bind; the ordinary evaluator owns the outputs.
+
+(extern ptr e3-test-destination-create
+        :real et_e3_test_destination_create_v1)
+(extern i64 e3-test-destination-destroy ptr
+        :real et_e3_test_destination_destroy_v1)
+(extern i64 e3-test-destination-bits ptr
+        :real et_e3_test_destination_bits_v1)
+(extern void e3-minsubnormal-fail-copy-alloc i64
+        :real et_i2_test_fail_alloc_after_v1)
+(extern void e3-minsubnormal-reset-copy-alloc
+        :real et_i2_test_reset_allocator_v1)
+(extern i64 e3-minsubnormal-live-builders
+        :real et_e3_minsubnormal_i2_live_builders_v1)
+(extern i64 e3-minsubnormal-retired-builder-bytes
+        :real et_e3_minsubnormal_i2_retired_builder_controls_v1)
+(extern i64 e3-minsubnormal-decode-builder-bytes
+        :real et_e3_minsubnormal_i2_decode_builder_bytes_v1)
+(extern i64 e3-minsubnormal-live-leases
+        :real et_e3_minsubnormal_live_leases_v1)
+(extern i64 e3-minsubnormal-model-word-count ptr i64 i64
+        :real et_e3_test_model_word_count_v1)
+(extern i64 e3-minsubnormal-model-word ptr i64 i64 i64
+        :real et_e3_test_model_word_v1)
+(extern i64 e3-minsubnormal-gradient-metadata ptr i64 i64
+        :real et_e3_test_gradient_metadata_v1)
+
+(define e3-minsubnormal-paths
+  '(("blocks" "0" "attention" "key" "weight")
+    ("blocks" "0" "attention" "output" "weight")
+    ("blocks" "0" "attention" "query" "weight")
+    ("blocks" "0" "attention" "value" "weight")
+    ("blocks" "0" "ffn" "down" "weight")
+    ("blocks" "0" "ffn" "up" "weight")
+    ("blocks" "0" "norm1" "bias")
+    ("blocks" "0" "norm1" "weight")
+    ("blocks" "0" "norm2" "bias")
+    ("blocks" "0" "norm2" "weight")
+    ("head" "weight")
+    ("norm_final" "bias")
+    ("norm_final" "weight")
+    ("position_embedding" "weight")
+    ("token_embedding" "weight")))
+(define e3-minsubnormal-shapes
+  '#((4 4) (4 4) (4 4) (4 4) (4 8) (8 4) (4) (4) (4) (4)
+     (256 4) (4) (4) (2 4) (256 4)))
+(define e3-minsubnormal-unique-counts
+  '#(16 16 16 16 32 32 4 4 4 4 1024 4 4 8))
+
+(define e3-minsubnormal-files #f)
+(define e3-minsubnormal-bias-clear? #f)
+(define e3-minsubnormal-policy
+  (c1-persistence-policy-internal 1048576 524288 262144 64 'cpu))
+
+(define (e3-minsubnormal-check label value)
+  (if value #t
+      (begin (display "E3-MINSUBNORMAL-SETUP-FAIL: ") (display label)
+             (newline) (exit 1))))
+
+(define (e3-minsubnormal-bytes=? left right)
+  (and (bytevector? left) (bytevector? right)
+       (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+
+(define (e3-minsubnormal-set-files! files clear?)
+  (e3-minsubnormal-check 'paths
+    (and (vector? files) (= (vector-length files) 1)
+         (string? (vector-ref files 0)) (boolean? clear?)))
+  (set! e3-minsubnormal-files files)
+  (set! e3-minsubnormal-bias-clear? clear?))
+
+(define (e3-minsubnormal-state-bytes model)
+  (let ((state (module-state-dict model)))
+    (guard (caught (#t (state-dict-release! state) (raise caught)))
+      (let ((bytes (c1-checkpoint-encode-state-internal
+                     state e3-minsubnormal-policy i2-checkpoint-codec-internal)))
+        (state-dict-release! state)
+        bytes))))
+
+(define (e3-minsubnormal-state-hash model)
+  (c1-sha256 (e3-minsubnormal-state-bytes model)))
+
+(define (e3-minsubnormal-assert-leases)
+  (e3-minsubnormal-check 'no-active-native-leases
+    (= (e3-minsubnormal-live-leases) 0)))
+
+(define (e3-minsubnormal-expected-byte owner offset)
+  (cond ((and (= owner 10) (= offset 2)) 128)
+        ((and (= owner 10) (= offset 3)) 63)
+        ((and (= owner 11) (= offset 0)
+              (not e3-minsubnormal-bias-clear?)) 1)
+        (else 0)))
+
+(define (e3-minsubnormal-check-owners tree exact?)
+  ;; Encoding uses the registered native owner and rejects a carrier whose
+  ;; advertised dense CPU-f32 layout cannot be read as the exact shape.
+  (let loop ((index 0) (words 0) (bytes 0))
+    (if (= index 14)
+        (e3-minsubnormal-check 'owner-payload-total
+          (and (= words 1184) (= bytes 4736)))
+        (let* ((handle (parameter-tree-handle tree
+                         (list-ref e3-minsubnormal-paths index)))
+               (shape (vector-ref e3-minsubnormal-shapes index))
+               (size (* 4 (vector-ref e3-minsubnormal-unique-counts index)))
+               (native (i2-describe
+                         (vector (parameter-handle-tensor-internal handle)
+                                 'parameter 'e3-minsubnormal-roster)))
+               (payload (i2-checkpoint-encode
+                          (vector (parameter-handle-tensor-internal handle)
+                                  'parameter shape 'f32 'cpu
+                                  'dense-row-major-contiguous
+                                  'e3-minsubnormal-roster))))
+          (e3-minsubnormal-check 'native-owner-geometry
+            (and (equal? (vector-ref native 0) shape)
+                 (eq? (vector-ref native 1) 'f32)
+                 (eq? (vector-ref native 2) 'cpu)
+                 (eq? (vector-ref native 3) 'dense-row-major-contiguous)))
+          (e3-minsubnormal-check 'owner-payload-length
+            (= (bytevector-length payload) size))
+          (if exact?
+              (e3-minsubnormal-check 'owner-exact-payload
+                (let exact-byte ((byte 0))
+                  (if (= byte size) #t
+                      (and (= (bytevector-u8-ref payload byte)
+                              (e3-minsubnormal-expected-byte index byte))
+                           (exact-byte (+ byte 1)))))))
+          (loop (+ index 1)
+                (+ words (vector-ref e3-minsubnormal-unique-counts index))
+                (+ bytes size))))))
+
+(define (e3-minsubnormal-handles model)
+  (let* ((tree (module-parameters model))
+         (paths (parameter-tree-paths tree)))
+    (e3-minsubnormal-check 'parameter-roster
+      (equal? paths e3-minsubnormal-paths))
+    (e3-minsubnormal-check 'tie-graph
+      (equal? (parameter-tree-tie-groups tree)
+              '((("head" "weight") ("token_embedding" "weight")))))
+    (e3-minsubnormal-check 'tied-parameter
+      (eq? (parameter-tree-handle tree '("head" "weight"))
+           (parameter-tree-handle tree '("token_embedding" "weight"))))
+    (let loop ((rest paths) (index 0) (result '()))
+      (if (null? rest)
+          (begin (e3-minsubnormal-check-owners tree #f) result)
+          (let ((handle (parameter-tree-handle tree (car rest))))
+            (e3-minsubnormal-check 'owner-contract
+              (and (equal? (parameter-handle-shape handle)
+                           (vector-ref e3-minsubnormal-shapes index))
+                   (eq? (parameter-handle-dtype handle) 'f32)
+                   (eq? (parameter-handle-device handle) 'cpu)))
+            (if (< index 14)
+                (let distinct ((prior result))
+                  (if (null? prior) #t
+                      (begin
+                        (e3-minsubnormal-check 'unique-owner-handles
+                          (not (eq? handle (vector-ref (car prior) 1))))
+                        (distinct (cdr prior))))))
+            (loop (cdr rest) (+ index 1)
+                  (cons (vector (car rest) handle
+                                (parameter-handle-shape handle)
+                                (parameter-handle-tensor-identity-internal handle))
+                        result)))))))
+
+(define (e3-minsubnormal-same-handles? before after)
+  (let loop ((left before) (right after))
+    (if (null? left) (null? right)
+        (and (pair? right)
+             (equal? (vector-ref (car left) 0) (vector-ref (car right) 0))
+             (eq? (vector-ref (car left) 1) (vector-ref (car right) 1))
+             (equal? (vector-ref (car left) 2) (vector-ref (car right) 2))
+             (eq? (vector-ref (car left) 3) (vector-ref (car right) 3))
+             (loop (cdr left) (cdr right))))))
+
+(define (e3-minsubnormal-gradient-image model)
+  (let ((owner (vector-ref (m3t-entry model 'model 'e3-minsubnormal-roster #t) 3))
+        (image (make-vector 14 #f)))
+    (let parameter ((index 0))
+      (if (= index 14) image
+          (let* ((count (e3-minsubnormal-model-word-count owner index 1))
+                 (words (make-vector (vector-ref e3-minsubnormal-unique-counts index) 0))
+                 (state (e3-minsubnormal-gradient-metadata owner index 0))
+                 (contributions (e3-minsubnormal-gradient-metadata owner index 1))
+                 (weight (e3-minsubnormal-gradient-metadata owner index 2)))
+            (e3-minsubnormal-check 'gradient-geometry
+              (= count (vector-length words)))
+            (e3-minsubnormal-check 'gradient-metadata-readable
+              (and (>= state 0) (>= contributions 0) (>= weight 0)))
+            (let word ((offset 0))
+              (if (= offset count) #t
+                  (let ((bits
+                         (e3-minsubnormal-model-word owner index 1 offset)))
+                    (e3-minsubnormal-check 'gradient-word-readable
+                      (and (>= bits 0) (<= bits 4294967295)))
+                    (vector-set! words offset bits)
+                    (word (+ offset 1)))))
+            (vector-set! image index
+              (vector state contributions weight words))
+            (parameter (+ index 1)))))))
+
+(define (e3-minsubnormal-modes model)
+  ;; Mirror P1's finalization walk over the actual model root. M3's registry
+  ;; slot 4 belongs to workspaces, so it is never a model-module image.
+  (let ((root (vector-ref (m3t-entry model 'model 'e3-minsubnormal-roster #t) 0)))
+    (e3-minsubnormal-check 'mode-root-node-count (= (vector-ref root 10) 17))
+    (let walk ((pending (list (vector '() root)))
+               (seen '()) (result '()) (count 0))
+      (if (null? pending)
+          (begin (e3-minsubnormal-check 'mode-tree-count (= count 17)) result)
+          (let* ((row (car pending))
+                 (path (vector-ref row 0))
+                 (current (vector-ref row 1))
+                 (mode (module-mode-internal current)))
+            (e3-minsubnormal-check 'distinct-mode-modules
+              (let distinct ((prior seen))
+                (if (null? prior) #t
+                    (and (not (eq? current (car prior)))
+                         (distinct (cdr prior))))))
+            (e3-minsubnormal-check 'distinct-mode-paths
+              (let distinct ((prior result))
+                (if (null? prior) #t
+                    (and (not (equal? path (vector-ref (car prior) 0)))
+                         (distinct (cdr prior))))))
+            (e3-minsubnormal-check 'mode-tree-bound (< count 17))
+            (e3-minsubnormal-check 'mode-children-list
+              (list? (vector-ref current 4)))
+            (let children ((edges (vector-ref current 4))
+                           (next (cdr pending)))
+              (if (null? edges)
+                  (walk next (cons current seen)
+                        (cons (vector path current mode) result) (+ count 1))
+                  (let ((edge (car edges)))
+                    (e3-minsubnormal-check 'mode-child-binding
+                      (and (vector? edge) (= (vector-length edge) 3)
+                           (eq? (vector-ref edge 0) 'child-binding)
+                           (string? (vector-ref edge 1))))
+                    (let ((child (vector-ref edge 2)))
+                      (module-mode-internal child)
+                      (e3-minsubnormal-check 'mode-child-parent
+                        (eq? (vector-ref child 5) current))
+                      (children (cdr edges)
+                        (cons (vector (cons (vector-ref edge 1) path) child)
+                              next)))))))))))
+
+(define (e3-minsubnormal-same-gradients? before after)
+  (let parameter ((index 0))
+    (if (= index 14) #t
+        (let ((left (vector-ref before index))
+              (right (vector-ref after index)))
+          (and (= (vector-ref left 0) (vector-ref right 0))
+               (= (vector-ref left 1) (vector-ref right 1))
+               (= (vector-ref left 2) (vector-ref right 2))
+               (let ((a (vector-ref left 3)) (b (vector-ref right 3)))
+                 (and (= (vector-length a) (vector-length b))
+                      (let word ((offset 0))
+                        (if (= offset (vector-length a)) #t
+                            (and (= (vector-ref a offset) (vector-ref b offset))
+                                 (word (+ offset 1)))))))
+               (parameter (+ index 1)))))))
+
+(define (e3-minsubnormal-same-modes? before after)
+  (let entry ((remaining before) (count 0))
+    (if (null? remaining)
+        (and (= count 17) (= (length after) 17))
+        (let* ((row (car remaining))
+               (match
+                (let find ((candidates after))
+                  (cond ((null? candidates) #f)
+                        ((equal? (vector-ref (car candidates) 0)
+                                 (vector-ref row 0)) (car candidates))
+                        (else (find (cdr candidates)))))))
+          (and match
+               (eq? (vector-ref row 1) (vector-ref match 1))
+               (eq? (vector-ref row 2) (vector-ref match 2))
+               (entry (cdr remaining) (+ count 1)))))))
+
+(define (e3-minsubnormal-assert-original model words handles bytes hash
+                                    gradients modes owned builders)
+  (e3-minsubnormal-check 'initializer
+    (equal? words (m3t-public-initializer-words
+                    (m3t-public-model-initializer model))))
+  (e3-minsubnormal-check 'parameter-identity
+    (e3-minsubnormal-same-handles? handles (e3-minsubnormal-handles model)))
+  (e3-minsubnormal-check 'parameter-values
+    (e3-minsubnormal-bytes=? bytes (e3-minsubnormal-state-bytes model)))
+  (e3-minsubnormal-check 'original-state-hash
+    (e3-minsubnormal-bytes=? hash (e3-minsubnormal-state-hash model)))
+  (e3-minsubnormal-check 'original-gradients
+    (e3-minsubnormal-same-gradients? gradients (e3-minsubnormal-gradient-image model)))
+  (e3-minsubnormal-check 'original-modes
+    (e3-minsubnormal-same-modes? modes (e3-minsubnormal-modes model)))
+  (e3-minsubnormal-check 'imported-owners
+    (= owned (i2-native-owned-clone-live-count)))
+  (e3-minsubnormal-check 'copy-builders
+    (= builders (e3-minsubnormal-live-builders)))
+  (e3-minsubnormal-assert-leases))
+
+(define (e3-minsubnormal-load-before-frame! model)
+  (e3-minsubnormal-check 'path-ready e3-minsubnormal-files)
+  (let* ((words
+           (m3t-public-initializer-words (m3t-public-model-initializer model)))
+         (handles (e3-minsubnormal-handles model))
+         (gradients (e3-minsubnormal-gradient-image model))
+         (modes (e3-minsubnormal-modes model))
+         (owned (i2-native-owned-clone-live-count))
+         (builders (e3-minsubnormal-live-builders)))
+    (e3-minsubnormal-check 'seed1729-successor
+      (equal? words '(1 1729 580 0)))
+    (e3-minsubnormal-assert-leases)
+    (c1-checkpoint-load-module-internal!
+      model (vector-ref e3-minsubnormal-files 0) e3-minsubnormal-policy
+      i2-checkpoint-codec-internal i2-provider-name)
+    (e3-minsubnormal-check-owners (module-parameters model) #t)
+    (e3-minsubnormal-check 'loaded-identities
+      (e3-minsubnormal-same-handles? handles (e3-minsubnormal-handles model)))
+    (e3-minsubnormal-check 'loaded-gradients
+      (e3-minsubnormal-same-gradients? gradients
+        (e3-minsubnormal-gradient-image model)))
+    (e3-minsubnormal-check 'loaded-modes
+      (e3-minsubnormal-same-modes? modes (e3-minsubnormal-modes model)))
+    (e3-minsubnormal-check 'loaded-initializer
+      (equal? words (m3t-public-initializer-words
+                      (m3t-public-model-initializer model))))
+    (e3-minsubnormal-check 'loaded-owners
+      (= owned (i2-native-owned-clone-live-count)))
+    (e3-minsubnormal-check 'loaded-builders
+      (= builders (e3-minsubnormal-live-builders)))
+    (e3-minsubnormal-assert-leases)
+    (display "E3-MINSUBNORMAL-STATE-PASS") (newline)))
+
+(define (e3-minsubnormal-loaded-image model)
+  (vector (e3-minsubnormal-handles model)
+          (e3-minsubnormal-state-hash model)
+          (e3-minsubnormal-gradient-image model)
+          (e3-minsubnormal-modes model)
+          (i2-native-owned-clone-live-count)
+          (e3-minsubnormal-live-builders)))
+
+(define (e3-minsubnormal-assert-post model image)
+  (e3-minsubnormal-check 'post-evaluation-identities
+    (e3-minsubnormal-same-handles? (vector-ref image 0)
+                              (e3-minsubnormal-handles model)))
+  (e3-minsubnormal-check-owners (module-parameters model) #t)
+  (e3-minsubnormal-check 'post-evaluation-hash
+    (e3-minsubnormal-bytes=? (vector-ref image 1)
+                        (e3-minsubnormal-state-hash model)))
+  (e3-minsubnormal-check 'post-evaluation-gradients
+    (e3-minsubnormal-same-gradients? (vector-ref image 2)
+                                (e3-minsubnormal-gradient-image model)))
+  (e3-minsubnormal-check 'post-evaluation-modes
+    (e3-minsubnormal-same-modes? (vector-ref image 3)
+                            (e3-minsubnormal-modes model)))
+  (e3-minsubnormal-check 'post-evaluation-owners
+    (= (vector-ref image 4) (i2-native-owned-clone-live-count)))
+  (e3-minsubnormal-check 'post-evaluation-builders
+    (= (vector-ref image 5) (e3-minsubnormal-live-builders)))
+  (e3-minsubnormal-assert-leases))
+
+(define e3-test-fixture-root (vector #f #f #f #f #f))
+
+(define (e3-test-destinations-destroy! destinations)
+  (let cleanup ((index 0))
+    (if (= index 4) #t
+        (begin
+          (if (vector-ref destinations index)
+              (if (not (= (e3-test-destination-destroy
+                           (vector-ref destinations index)) 0))
+                  (e3-native-invariant-fail)))
+          (vector-set! destinations index #f)
+          (cleanup (+ index 1))))))
+
+(define (e3-test-fixed-config)
+  (let* ((parsed
+          (x1-private-config-parse
+           "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}"))
+         (result (x1-private-config-resolve parsed '())))
+    result))
+
+(define (e3-test-destinations-create)
+  (let ((destinations (vector #f #f #f #f)))
+    (guard
+     (caught
+      (#t
+       (e3-test-destinations-destroy! destinations)
+       (raise caught)))
+     (let create ((index 0))
+       (if (= index 4) destinations
+           (let ((destination (e3-test-destination-create)))
+             (if (null? destination)
+                 (let ((unreachable
+                        (et-e1b-private-raise
+                         'internal 'e3-test-run
+                         "E3 destination fixture allocation failed" '() #f)))
+                   unreachable))
+             (vector-set! destinations index destination)
+             (create (+ index 1))))))))
+
+(define (e3-test-fixture)
+  (if (vector-ref e3-test-fixture-root 0) e3-test-fixture-root
+      (let* ((config (e3-test-fixed-config))
+             (tokenizer (t1-private-tokenizer-byte config))
+             (initial (g3t-checked-m3t-initializer-state 1729))
+             (model (g3t-checked-m3t-model-create config initial))
+             (loaded (e3-minsubnormal-load-before-frame! model))
+             (loaded-image (e3-minsubnormal-loaded-image model))
+             (destinations (e3-test-destinations-create))
+             (frame #f))
+        (guard
+         (caught
+          (#t
+           (e3-test-destinations-destroy! destinations)
+           (raise caught)))
+         (set! frame (e3-frame-bind! model destinations))
+         (vector-set! e3-test-fixture-root 0 model)
+         (vector-set! e3-test-fixture-root 1 tokenizer)
+         (vector-set! e3-test-fixture-root 2 destinations)
+         (vector-set! e3-test-fixture-root 3 frame)
+         (vector-set! e3-test-fixture-root 4 loaded-image)
+         e3-test-fixture-root))))
+
+(define (e3-test-scenario scenario)
+  (if (not (and (vector? scenario) (= (vector-length scenario) 2)
+                (boolean? (vector-ref scenario 0))
+                (integer? (vector-ref scenario 1))
+                (exact? (vector-ref scenario 1))
+                (>= (vector-ref scenario 1) 0)
+                (<= (vector-ref scenario 1) 8192)))
+      (let ((unreachable
+             (et-e1b-private-raise
+              'invalid-argument 'e3-test-run
+              "expected #(packing? skipped-batches)" '() #f)))
+        unreachable))
+  scenario)
+
+(define (e3-test-dataset-config directory packing?)
+  (list ':directory directory ':batch-size 1 ':sequence-length 2
+        ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 65536 ':maximum-batch-bytes 34
+        ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? packing?))
+
+(define (e3-test-skip! dataset count)
+  (let loop ((remaining count))
+    (if (= remaining 0) #t
+        (let ((advanced
+               (with-region ('e3-test-skip 65536)
+                 (let ((batch (d2-token-dataset-next-batch dataset)))
+                   (if (d2-token-dataset-end? batch) #f
+                       (begin (d2-token-batch-release! batch) #t))))))
+          (if advanced (loop (- remaining 1))
+              (let ((unreachable
+                     (et-e1b-private-raise
+                      'invalid-state 'e3-test-run
+                      "scenario skips beyond dataset EOS" '() #f)))
+                unreachable))))))
+
+(define (e3-test-u32-ref destination)
+  (let ((bits (e3-test-destination-bits destination)))
+    (if (< bits 0)
+        (let ((unreachable
+               (et-e1b-private-raise
+                'internal 'e3-test-run
+                "E3 destination fixture read failed" '() #f)))
+          unreachable))
+    bits))
+
+(define (e3-test-output frame destinations before after)
+  (let ((entry (e3-frame-entry-internal frame)))
+    (if (or (not (= (vector-ref entry 1) 1))
+            (vector-ref (vector-ref entry 3) 10)
+            (not (vector-ref entry 14)))
+        (e3-native-invariant-fail)))
+  (vector 'e3-private-result-v1
+          (e3-test-u32-ref (vector-ref destinations 0))
+          (e3-test-u32-ref (vector-ref destinations 1))
+          (e3-test-u32-ref (vector-ref destinations 2))
+          (e3-test-u32-ref (vector-ref destinations 3))
+          (e3-counter-ref frame 0) (e3-counter-ref frame 1)
+          before after))
+
+(define (e3-test-run scenario corpus-path)
+  (let* ((checked (e3-test-scenario scenario))
+         (fixture (e3-test-fixture))
+         (model (vector-ref fixture 0))
+         (tokenizer (vector-ref fixture 1))
+         (destinations (vector-ref fixture 2))
+         (frame (vector-ref fixture 3))
+         (dataset
+          (d2-token-dataset-open
+           (e3-test-dataset-config corpus-path (vector-ref checked 0))
+           tokenizer)))
+    (guard
+     (caught
+      (#t
+       (d2-token-dataset-close! dataset)
+       (raise caught)))
+     (e3-test-skip! dataset (vector-ref checked 1))
+     (let ((before (d2-token-dataset-cursor dataset)))
+       (with-region ('e3-evaluation-invocation 262144)
+         (e3-evaluate-into! model dataset frame))
+       (e3-minsubnormal-assert-post model (vector-ref fixture 4))
+       (let ((after (d2-token-dataset-cursor dataset)))
+         (let ((result (e3-test-output frame destinations before after)))
+           (d2-token-dataset-close! dataset)
+           result))))))
