@@ -6,8 +6,12 @@ import subprocess
 import tempfile
 import unittest
 
-from tests.e3_private.parse_numerical_observation import ROLE_NAMES, parse
+from tests.e3_private.parse_numerical_observation import (
+    ROLE_NAMES, decode_result, parse, parse_compiled, validate_result_against_case,
+)
+from tests.e3_reference.transcript import canonical
 from tests.c2.test_handler_order import parse as parse_source
+from tests.d2.reference import ReferenceConfig, ReferenceDataset
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -39,6 +43,18 @@ def frame_lines(batch_count: int) -> list[str]:
 
 def frame_bytes(records: list[str]) -> bytes:
     return ("\n".join(records) + "\n").encode("ascii")
+
+
+def compiled_bytes(batch_count: int) -> bytes:
+    records = frame_lines(batch_count)
+    records.insert(-2, "E3ENDCURSOR\tbb")
+    records[-1:-1] = [
+        "E3CASE\tpacked-single",
+        "E3RESULT\t1065353216,1073741824,1077936128,0,"
+        f"{2 * batch_count},{batch_count}",
+        "E3CURSOR\taa\taa",
+    ]
+    return frame_bytes(records)
 
 
 class NumericalTupleTest(unittest.TestCase):
@@ -174,8 +190,12 @@ class NumericalTupleTest(unittest.TestCase):
                          sorted(lines(BASE, "undefined_symbols") + ["fflush"]))
         self.assertEqual(
             lines(NUMERICAL, "source_closure"),
-            ["tests/e3_private/numerical_driver_root.esk"]
-            + lines(BASE, "source_closure"),
+            ["tests/e3_private/numerical_driver_root.esk",
+             "@BUILD@/source/e3_numerical_private_root.esk"]
+            + lines(BASE, "source_closure")[2:26]
+            + ["@BUILD@/source/e3_numerical_extension.esk"]
+            + lines(BASE, "source_closure")[27:-1]
+            + ["@BUILD@/source/e3_numerical_driver.esk"],
         )
         native = lines(BASE, "native_source_closure")
         native.insert(native.index("native/e3_private_bridge.c"),
@@ -185,6 +205,110 @@ class NumericalTupleTest(unittest.TestCase):
                          ["e3_numerical_package.o"])
         self.assertNotIn("numerical_driver_root.esk",
                          (ROOT / "native/e3_private_driver_root.esk").read_text())
+
+    def test_compiled_result_records_bind_frame_and_cursors(self) -> None:
+        raw = compiled_bytes(3)
+        observed, roles, result = parse_compiled(raw, 3, expected_case="packed-single")
+        self.assertEqual(len(observed["batches"]), 3)
+        self.assertEqual(len(roles.splitlines()), 63)
+        self.assertEqual((result["cursor_before"], result["cursor_end"],
+                          result["cursor_after"]), ("aa", "bb", "aa"))
+        self.assertEqual(result["outputs_u32"][4:], [6, 3])
+        self.assertEqual(decode_result(canonical(result)), result)
+        for changed, message in (
+            (raw.replace(b"E3ENDCURSOR\tbb", b"E3ENDCURSOR\tbc"), None),
+            (raw.replace(b"E3ENDCURSOR\tbb", b"E3ENDCURSOR\tBB"), "record order"),
+            (raw.replace(b"E3CASE\tpacked-single", b"E3CASE\tpacked-suffix"), "case identity"),
+            (raw.replace(b"E3RESULT\t1065353216", b"E3RESULT\t1065353217"), "six-output metrics"),
+            (raw.replace(b"E3CURSOR\taa\taa", b"E3CURSOR\taa\tAA"), "record order"),
+            (raw.replace(b"E3RESULT\t", b"E3RESULT\t0,0,0,0,0,0\nE3RESULT\t", 1), "record order"),
+        ):
+            if message is None:
+                # A different valid end cursor is rejected against the sidecar
+                # by the verifier, not by the structural stdout parser.
+                self.assertEqual(parse_compiled(changed, 3)[2]["cursor_end"], "bc")
+            else:
+                with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+                    parse_compiled(changed, 3, expected_case="packed-single")
+
+    def test_reference_cursor_rejects_old_max_batch_and_wrong_outputs(self) -> None:
+        def cursor(maximum_batch_bytes: int):
+            dataset = ReferenceDataset(
+                ((3, 197, 0, 255, 7, 7),),
+                ReferenceConfig(1, 2, None, 1, True,
+                                maximum_batch_bytes=maximum_batch_bytes),
+                manifest_digest=bytes(32), tokenizer_fingerprint="fixture",
+                vocab_size=256,
+            )
+            before = dataset.snapshot().hex()
+            while dataset.next_batch() is not None:
+                pass
+            return before, dataset.snapshot().hex()
+
+        start, end = cursor(1_048_576)
+        old_start, _ = cursor(34)
+        self.assertNotEqual(start, old_start)
+        observed, _, result = parse_compiled(compiled_bytes(3), 3)
+        case = {"case_id": "packed-single",
+                "d2": {"start_cursor": start, "end_cursor": end}}
+        result.update(cursor_before=start, cursor_end=end, cursor_after=start)
+        validate_result_against_case(result, case, observed)
+        for field, value, message in (
+            ("cursor_before", old_start, "start cursor"),
+            ("cursor_end", start, "end cursor"),
+            ("cursor_after", end, "not restored"),
+            ("case_id", "packed-suffix", "case identity"),
+        ):
+            changed = dict(result, **{field: value})
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, message):
+                validate_result_against_case(changed, case, observed)
+        changed = dict(result, outputs_u32=[result["outputs_u32"][0] ^ 1]
+                       + result["outputs_u32"][1:])
+        with self.assertRaisesRegex(ValueError, "caller metrics"):
+            validate_result_against_case(changed, case, observed)
+        changed = dict(result, outputs_u32=result["outputs_u32"][:-1]
+                       + [result["outputs_u32"][-1] + 1])
+        with self.assertRaisesRegex(ValueError, "caller counters"):
+            validate_result_against_case(changed, case, observed)
+        for changed, message in (
+            (dict(result, cursor_end="AA"), "cursor encoding"),
+            (dict(result, outputs_u32=result["outputs_u32"] + [0]), "six outputs"),
+            (dict(result, case_id="packed_single"), "case identity"),
+            (dict(result, extra=0), "schema"),
+        ):
+            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+                decode_result(canonical(changed))
+        duplicate = canonical(result).replace(b'"case_id":', b'"case_id":"extra","case_id":', 1)
+        with self.assertRaisesRegex(ValueError, "duplicate compiled result"):
+            decode_result(duplicate)
+
+    def test_in_call_cursor_source_is_numerical_only(self) -> None:
+        script = ROOT / "scripts/generate-e3-numerical-cursor-source.py"
+        with tempfile.TemporaryDirectory(prefix="e3-numerical-cursor-") as temporary:
+            output = Path(temporary)
+            subprocess.run(["python3", "-B", str(script), "--output-dir", str(output)],
+                           check=True, capture_output=True, text=True)
+            subprocess.run(["python3", "-B", str(script), "--output-dir", str(output),
+                            "--check"], check=True, capture_output=True, text=True)
+            extension = (output / "e3_numerical_extension.esk").read_text()
+            self.assertTrue(parse_source(extension))
+            self.assertTrue(parse_source((output / "e3_numerical_private_root.esk").read_text()))
+            self.assertTrue(parse_source((output / "e3_numerical_driver.esk").read_text()))
+            self.assertIn("(if (e3-traverse! frame dataset)", extension)
+            self.assertIn('(display "E3ENDCURSOR\\t")', extension)
+            self.assertEqual(extension.count('E3ENDCURSOR'), 1)
+            self.assertLess(extension.index('(display "E3ENDCURSOR\\t")'),
+                            extension.index("(e3-restore-closed! frame #t)"))
+            self.assertNotIn("E3ENDCURSOR", (ROOT / "native/e3_private_extension.esk").read_text())
+            driver = (output / "e3_numerical_driver.esk").read_text()
+            original_driver = (ROOT / "tests/e3_private/driver.esk").read_text()
+            self.assertEqual(driver, original_driver.replace(
+                ":maximum-batch-bytes 34", ":maximum-batch-bytes 1048576", 1))
+            (output / "e3_numerical_extension.esk").write_text(extension.replace(
+                '(display "E3ENDCURSOR\\t")', "#t", 1))
+            failed = subprocess.run(["python3", "-B", str(script), "--output-dir",
+                                     str(output), "--check"], capture_output=True, text=True)
+            self.assertNotEqual(failed.returncode, 0)
 
     def test_policy_rejects_mixed_tuple_before_compilation(self) -> None:
         policy = ROOT / "scripts/e3-private-package-policy.sh"

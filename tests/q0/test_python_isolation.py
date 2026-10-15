@@ -61,6 +61,7 @@ G3C4_DEVELOPMENT_SCRIPTS = frozenset({
 })
 DEVELOPMENT_SCRIPTS = frozenset({
     ROOT / "scripts" / "generate-e3-d2-source.py",
+    ROOT / "scripts" / "generate-e3-numerical-cursor-source.py",
     ROOT / "scripts" / "generate-e3-p1-mode-test-variant.py",
     ROOT / "scripts" / "generate-e3-mode-graph-source.py",
     ROOT / "scripts" / "generate-e3-overflow-clamp-overlay.py",

@@ -256,6 +256,18 @@ e3_normalize_source_dependencies() {
     [[ -n "${dependency}" ]] || continue
     if [[ "$(realpath -m -- "${dependency}")" == "${generated}" ]]; then
       printf '@BUILD@/source/e3_d2_dataset.esk\n'
+    elif [[ "${e3_tuple_kind}" == numerical &&
+            "$(realpath -m -- "${dependency}")" == \
+              "${e3_generated_source_root}/e3_numerical_private_root.esk" ]]; then
+      printf '@BUILD@/source/e3_numerical_private_root.esk\n'
+    elif [[ "${e3_tuple_kind}" == numerical &&
+            "$(realpath -m -- "${dependency}")" == \
+              "${e3_generated_source_root}/e3_numerical_extension.esk" ]]; then
+      printf '@BUILD@/source/e3_numerical_extension.esk\n'
+    elif [[ "${e3_tuple_kind}" == numerical &&
+            "$(realpath -m -- "${dependency}")" == \
+              "${e3_generated_source_root}/e3_numerical_driver.esk" ]]; then
+      printf '@BUILD@/source/e3_numerical_driver.esk\n'
     elif [[ "${e3_tuple_kind}" == zero && "${dependency}" == "${zero_p1}" ]]; then
       e3_check_zero_generated_dependency "${dependency}"
       printf '@BUILD@/source/transformer/module.esk\n'

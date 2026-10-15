@@ -9,6 +9,10 @@ from pathlib import Path
 import struct
 
 from tests.e3_reference.reference import ROLE_NAMES, validate_bundle
+from tests.e3_private.parse_numerical_observation import (
+    decode_result, validate_result_against_case,
+)
+from tests.e3_reference.section9_case_manifest import decode as decode_case_manifest
 from tests.e3_reference.transcript import (
     F32_TOLERANCE,
     decode,
@@ -57,19 +61,41 @@ def main() -> None:
     parser.add_argument("--observed", required=True, type=Path)
     parser.add_argument("--roles", required=True, type=Path)
     parser.add_argument("--transcript", required=True, type=Path)
+    parser.add_argument("--case-manifest", type=Path)
+    parser.add_argument("--corpus-dir", type=Path)
+    parser.add_argument("--result", type=Path)
     arguments = parser.parse_args()
 
     bundle = decode(arguments.reference.read_bytes())
     validate_bundle(bundle)
+    section9 = (arguments.case_manifest, arguments.corpus_dir, arguments.result)
+    if any(item is not None for item in section9) and not all(
+        item is not None for item in section9
+    ):
+        raise ValueError("section 9 case manifest, corpus and result must appear together")
+    expected_case = None
+    if all(item is not None for item in section9):
+        corpus = decode((arguments.corpus_dir / "corpus-reference.json").read_bytes())
+        identity = decode_case_manifest(arguments.case_manifest.read_bytes(), corpus,
+                                        bundle, arguments.corpus_dir)
+        selected = [item for item in identity["cases"]
+                    if item["case_id"] == arguments.case]
+        if len(selected) != 1:
+            raise ValueError("section 9 case identity is absent or duplicated")
+        expected_case = selected[0]
     matches = [case for case in bundle["cases"] if case["name"] == arguments.case]
     if len(matches) != 1:
         raise ValueError("requested case is absent or duplicated")
     case = matches[0]
+    result = decode_result(arguments.result.read_bytes()) if expected_case else None
     observed = json.loads(arguments.observed.read_bytes())
     if not isinstance(observed, dict) or observed.get("kind") != "observed-f32":
         raise ValueError("native observation is not explicitly labeled observed-f32")
-    expected_batches = tuple(case["corpus"]["batches"])
+    expected_batches = tuple(expected_case["rows"] if expected_case else
+                             case["corpus"]["batches"])
     validate_observed_case(observed, expected_batches)
+    if result is not None:
+        validate_result_against_case(result, expected_case, observed)
     measurements = validate_mathematical_case(
         observed, case["mathematical"], expected_batches,
         case["mathematical_loss_f64"],

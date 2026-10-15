@@ -1421,7 +1421,17 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
   python3 "${PROJECT_ROOT}/scripts/generate-e3-d2-source.py" \
     --output-dir "${e3_generated_dir}" >"${e1b_tmp}/d2-generation.json"
   e3_generated_source_root="${e3_generated_dir}/source"
-    if [[ "${e3_tuple_kind}" == retention ||
+  if [[ "${e3_tuple_kind}" == numerical ]]; then
+    python3 -B "${PROJECT_ROOT}/scripts/generate-e3-numerical-cursor-source.py" \
+      --output-dir "${e3_generated_source_root}" \
+      >"${e1b_tmp}/numerical-cursor-generation.txt"
+    python3 -B "${PROJECT_ROOT}/scripts/generate-e3-numerical-cursor-source.py" \
+      --output-dir "${e3_generated_source_root}" --check \
+      >"${e1b_tmp}/numerical-cursor-check.txt"
+    cmp "${e1b_tmp}/numerical-cursor-generation.txt" \
+        "${e1b_tmp}/numerical-cursor-check.txt"
+  fi
+  if [[ "${e3_tuple_kind}" == retention ||
         "${e3_tuple_kind}" == retention-first-eval-mutant ||
         "${e3_tuple_kind}" == retention-overflow ]]; then
     python3 "${PROJECT_ROOT}/scripts/generate-e3-p1-mode-test-variant.py" \
@@ -1586,7 +1596,8 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
   else
     include_args+=(-I "${e3_generated_source_root}")
   fi
-  if [[ "${e3_tuple_kind}" == mode-graph ||
+  if [[ "${e3_tuple_kind}" == numerical ||
+        "${e3_tuple_kind}" == mode-graph ||
         "${e3_tuple_kind}" == retention ||
         "${e3_tuple_kind}" == retention-first-eval-mutant ||
         "${e3_tuple_kind}" == retention-overflow ]]; then
@@ -2584,6 +2595,14 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     "${evidence_dir}.tmp.$$/d2-generation.json"
   cp "${e3_generated_source_root}/e3_d2_dataset.esk" \
     "${evidence_dir}.tmp.$$/e3_d2_dataset.esk"
+  if [[ "${e3_tuple_kind}" == numerical ]]; then
+    cp "${e3_generated_source_root}/e3_numerical_private_root.esk" \
+      "${evidence_dir}.tmp.$$/e3_numerical_private_root.esk"
+    cp "${e3_generated_source_root}/e3_numerical_extension.esk" \
+      "${evidence_dir}.tmp.$$/e3_numerical_extension.esk"
+    cp "${e3_generated_source_root}/e3_numerical_driver.esk" \
+      "${evidence_dir}.tmp.$$/e3_numerical_driver.esk"
+  fi
   cp "${e3_generated_source_root}/e3_d2_source_provenance.json" \
     "${evidence_dir}.tmp.$$/e3_d2_source_provenance.json"
   if [[ "${e3_tuple_kind}" == zero ]]; then

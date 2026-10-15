@@ -28,9 +28,16 @@ for cache in a b; do
     --corpus-reference "${out}/corpus-${cache}/corpus-reference.json" \
     --output "${out}/reference-${cache}.json" \
     >"${out}/reference-${cache}.stdout" 2>"${out}/reference-${cache}.stderr"
+  ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "${q0_python}" \
+    -B -m tests.e3_reference.section9_case_manifest \
+    --corpus-dir "${out}/corpus-${cache}" \
+    --reference-bundle "${out}/reference-${cache}.json" \
+    --output "${out}/section9-${cache}.json" \
+    >"${out}/section9-${cache}.stdout" 2>"${out}/section9-${cache}.stderr"
 done
 diff -r "${out}/corpus-a" "${out}/corpus-b"
 cmp "${out}/reference-a.json" "${out}/reference-b.json"
+cmp "${out}/section9-a.json" "${out}/section9-b.json"
 
 # The ordinary private package is built independently and its object must not
 # contain the frame emitter. The numerical tuple keeps its own exact manifests.
@@ -148,8 +155,10 @@ run_case() {
     die "compiled numerical ${key} emitted runtime diagnostics"
   python3 -B -m tests.e3_private.parse_numerical_observation \
     --stdout "${out}/run-${key}.stdout" --batch-count "${batch_count}" \
+    --case "${case_name}" \
     --observed "${out}/observed-${key}.json" \
-    --roles "${out}/roles-${key}.tsv"
+    --roles "${out}/roles-${key}.tsv" \
+    --result "${out}/result-${key}.json"
 }
 
 verify_case() {
@@ -158,6 +167,8 @@ verify_case() {
   ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "${q0_python}" \
     -B -m tests.e3_native_parity.verify_observation \
     --reference "${out}/reference-a.json" --case "${case_name}" \
+    --case-manifest "${out}/section9-a.json" \
+    --corpus-dir "${out}/corpus-a" --result "${out}/result-${key}.json" \
     --observed "${out}/observed-${key}.json" \
     --roles "${out}/roles-${key}.tsv" \
     --transcript "${out}/transcript-${key}.json" \
@@ -180,6 +191,8 @@ for index in "${!cases[@]}"; do
   done
   cmp "${out}/transcript-${key_a}.json" "${out}/transcript-${key_b}.json"
   cmp "${out}/transcript-${key_a}.json" "${out}/transcript-${key_poison}.json"
+  cmp "${out}/result-${key_a}.json" "${out}/result-${key_b}.json"
+  cmp "${out}/result-${key_a}.json" "${out}/result-${key_poison}.json"
 done
 
 # Only these two D2 layouts emit identical packed batches. Compare every
@@ -216,6 +229,8 @@ for variant in wrong-target mean-of-means second-normalization; do
   if ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "${q0_python}" \
     -B -m tests.e3_native_parity.verify_observation \
     --reference "${out}/reference-a.json" --case packed-single \
+    --case-manifest "${out}/section9-a.json" \
+    --corpus-dir "${out}/corpus-a" --result "${out}/result-${variant}.json" \
     --observed "${out}/observed-${variant}.json" \
     --roles "${out}/roles-${variant}.tsv" \
     --transcript "${out}/transcript-${variant}.json" \

@@ -1,6 +1,5 @@
 tests/e3_private/numerical_driver_root.esk
-native/e3_private_driver_root.esk
-native/e3_private_root.esk
+@BUILD@/source/e3_numerical_private_root.esk
 native/m3_package_root.esk
 native/m3t_package_root.esk
 native/i2_wave2_root.esk
@@ -25,7 +24,7 @@ native/e3_errors_extension.esk
 internal/d2/lib/d2_semantic_core.esk
 internal/e3/lib/e3_d2_identity.esk
 @BUILD@/source/e3_d2_dataset.esk
-native/e3_private_extension.esk
+@BUILD@/source/e3_numerical_extension.esk
 internal/e3/lib/e3_d2_restore.esk
 native/e3_forward_schedule.esk
-tests/e3_private/driver.esk
+@BUILD@/source/e3_numerical_driver.esk

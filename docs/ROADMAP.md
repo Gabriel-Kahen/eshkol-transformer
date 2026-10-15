@@ -1250,8 +1250,17 @@ corpus and reference bundle against physical T1/D1 bytes, then freezes ordered
 case IDs, model/T1/D1 identity, D2 settings, exact rows and independently
 replayed end cursors in a strict version-1 record. Focused host tests cover
 fresh-directory byte identity and malformed records. Independent source/test
-review, sealed exact-tree evidence and later compiled-private cursor/numerical
-comparison remain open; no §9 acceptance is inferred.
+review accepted `be701894`/tree `cb0a42ef` for bounded source preparation;
+the receipt is `e3-section9-case-manifest-review-be701894-20261014.md`.
+The separate N1/N2 result/cursor bridge is a noninstalled source candidate:
+it pins a numerical-only evaluator variant to observe the actual D2 end
+cursor before restoration, binds the caller's start/restored cursor and six
+published outputs to the accepted sidecar, and leaves the existing v1
+`observed-f32` schema unchanged. Its numerical-only fixture uses the sidecar's
+`maximum-batch-bytes=1048576`; a host negative proves the canonical fixture's
+`34` produces a different cursor. Focused host tests and static syntax/closure
+checks pass. Independent review and fresh supported five-case normal/repeat,
+poison and sanitizer runtime remain required; no §9 admission is inferred.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
