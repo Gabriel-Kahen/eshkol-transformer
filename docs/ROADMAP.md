@@ -2440,6 +2440,17 @@ the branch still needs independent union review and a linked Eshkol gate. It
 adds no held-state adopter root, coordinator, C2 claim, SAVE writer, or replay
 admission.
 
+The [PR214 original-owner preclaim port](g3/G3_R_PR214_ORIGINAL_OWNER_PRECLAIM_PORT.md)
+selectively adds the reviewed G3/O2 hold coordinator and O2 preclaim adopter
+source above independently accepted `ec97f61a`. Its focused host source,
+native, feature-off and failure cuts pass; linked Eshkol owner validation is
+still pending. The PR214 C2 compose source lacks O2 rollback-or-live handling
+after a mutating second claim, so this port excludes the C2 claim helper and
+stops before adoption into C2. The `5fff0548` C2 source contract requires
+independent acceptance and a separate exact-lineage port before partial-claim
+or post-adoption cleanup can be tested or claimed. No SAVE or replay admission
+follows.
+
 The [private M3 owner-roster prerequisite](g3/G3_R_M3_OWNER_ROSTER_PREREQUISITE.md)
 ports the feature-gated registry-backed fourteen-parameter/identity roster
 to current main. It rejects unsealed, stale, foreign, incomplete or inconsistent

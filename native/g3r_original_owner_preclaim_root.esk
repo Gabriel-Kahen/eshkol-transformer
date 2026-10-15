@@ -1,0 +1,4 @@
+;;; One private CLI3/TR3/T2/G3/O2 registry for original holds and O2 preclaim.
+;;; No C2 compose, claimed-state transition, SAVE, or public export is loaded.
+(load "g3r_original_owner_coordinator_root.esk")
+(load "g3r_held_o2_adopter_extension.esk")
