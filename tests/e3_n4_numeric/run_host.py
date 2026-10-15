@@ -60,15 +60,15 @@ def main():
         work = Path(tmp)
         baseline = work / "baseline"
         build(args.cc, baseline)
-        for case in ("bits", "first", "fenv"):
+        for case in ("bits", "first", "bool", "fenv"):
             run(baseline, case)
-        print("normal: bits, first, fenv PASS")
+        print("normal: bits, first, bool, fenv PASS")
 
         sanitized = work / "sanitized"
         build(args.cc, sanitized, sanitized=True)
-        for case in ("bits", "first", "fenv"):
+        for case in ("bits", "first", "bool", "fenv"):
             run(sanitized, case, sanitized=True)
-        print("ASan/UBSan: bits, first, fenv PASS (leak detection disabled)")
+        print("ASan/UBSan: bits, first, bool, fenv PASS (leak detection disabled)")
 
         sign = "return x == 0.0f ? 0.0f : x;"
         targets = [
@@ -83,6 +83,13 @@ def main():
              "if (fp_supported() && 0)", "fenv"),
             ("l3s-control", L3S, "if (!fp_supported())",
              "if (fp_supported() && 0)", "fenv"),
+            ("bool-invalid", L3S, "if (byte > 1u) return 0;",
+             "if (byte > 2u) return 0;", "bool"),
+            ("bool-masked-ce", L3S,
+             "if (!nonnegative(value)) return 0;\n"
+             "      ce[i] = positive_zero(value);",
+             "if (!nonnegative(value) && m[i] != 0.0f) return 0;\n"
+             "      ce[i] = m[i] == 0.0f ? 0.0f : positive_zero(value);", "bool"),
             ("output-guard", E3,
              "*(float *)output(c,0)->data = result.correct.correct;",
              "*(float *)output(c,0)->data = result.correct.correct; "

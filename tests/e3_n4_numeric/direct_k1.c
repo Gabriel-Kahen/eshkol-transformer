@@ -16,11 +16,12 @@
 } } while (0)
 #define COUNT(x) (sizeof(x) / sizeof((x)[0]))
 
-enum operation { CORRECT, ACCUMULATE, FINALIZE, REDUCE, SEED };
+enum operation { CORRECT, ACCUMULATE, FINALIZE, REDUCE, SEED, REDUCE_BOOL };
 static const char *const names[] = {
   "e3.evaluation-metrics.correct.bool", "e3.evaluation-metrics.accumulate",
   "e3.evaluation-metrics.finalize", "l3s.masked-objective.reduce.f32",
-  "l3s.masked-objective.numerator-seed.f32"
+  "l3s.masked-objective.numerator-seed.f32",
+  "l3s.masked-objective.reduce.bool"
 };
 typedef union store { uint64_t align; unsigned char bytes[2064]; } store;
 typedef struct fixture {
@@ -29,6 +30,7 @@ typedef struct fixture {
   et_kernel_tensor_view_v1 in[9], out[5];
   uint64_t request_shape[3], in_shape[9][3], out_shape[5][2];
   char capability[48], operation[64];
+  char f32[8], i64[8], boolean[8], cpu[8];
   store input[9], output[5];
 } fixture;
 
@@ -46,22 +48,26 @@ static int64_t get64(const void *p) {
 }
 static void *data(store *s) { return s->bytes + 8u; }
 static et_kernel_tensor_view_v1 view(void *p, size_t bytes, const char *dtype,
+                                     const char *device,
                                      size_t rank, const uint64_t *shape) {
   return (et_kernel_tensor_view_v1){sizeof(et_kernel_tensor_view_v1), p, bytes,
-    dtype, "cpu", ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR, 0u, rank, shape};
+    dtype, device, ET_KERNEL_LAYOUT_DENSE_ROW_MAJOR, 0u, rank, shape};
 }
 static void setup(fixture *f, enum operation op) {
   memset(f, 0, sizeof(*f));
   const int l3s = op >= REDUCE;
   strcpy(f->capability, l3s ? "l3s.masked-objective" : "e3.evaluation-metrics");
   strcpy(f->operation, names[op]);
+  strcpy(f->f32, "f32"); strcpy(f->i64, "i64");
+  strcpy(f->boolean, "bool"); strcpy(f->cpu, "cpu");
   f->request_shape[0] = 1; f->request_shape[1] = 2;
   f->request_shape[2] = l3s ? 0 : 256;
-  f->request = (et_kernel_request_v1){sizeof(f->request), f->operation, "f32",
-    "cpu", l3s ? 2u : 3u, f->request_shape, 1u, {0}};
-  const size_t ni = op == ACCUMULATE ? 9u : op == SEED ? 1u : op == REDUCE ? 2u : 3u;
+  f->request = (et_kernel_request_v1){sizeof(f->request), f->operation, f->f32,
+    f->cpu, l3s ? 2u : 3u, f->request_shape, 1u, {0}};
+  const size_t ni = op == ACCUMULATE ? 9u : op == SEED ? 1u :
+    op == REDUCE || op == REDUCE_BOOL ? 2u : 3u;
   const size_t no = op == ACCUMULATE ? 5u : op == FINALIZE ? 4u :
-    op == CORRECT ? 2u : op == REDUCE ? 3u : 1u;
+    op == CORRECT ? 2u : op == REDUCE || op == REDUCE_BOOL ? 3u : 1u;
   for (size_t i = 0; i < 9u; ++i) {
     memset(f->input[i].bytes, 0xa5, sizeof(store));
     f->in_shape[i][0] = 1; f->in_shape[i][1] = 2; f->in_shape[i][2] = 256;
@@ -69,9 +75,10 @@ static void setup(fixture *f, enum operation op) {
       (op == CORRECT && i == 1u);
     const size_t rank = op == CORRECT ? (i == 0u ? 3u : 2u) : l3s ? 2u : 0u;
     const size_t bytes = op == CORRECT ? (i == 0u ? 2048u : i == 1u ? 16u : 2u) :
-      l3s ? 8u : integer ? 8u : 4u;
-    f->in[i] = view(data(&f->input[i]), bytes, integer ? "i64" :
-      op == CORRECT && i == 2u ? "bool" : "f32", rank,
+      op == REDUCE_BOOL && i == 1u ? 2u : l3s ? 8u : integer ? 8u : 4u;
+    f->in[i] = view(data(&f->input[i]), bytes, integer ? f->i64 :
+      (op == CORRECT && i == 2u) || (op == REDUCE_BOOL && i == 1u) ?
+        f->boolean : f->f32, f->cpu, rank,
       rank ? f->in_shape[i] : NULL);
     memset(f->in[i].data, 0, bytes);
   }
@@ -80,7 +87,7 @@ static void setup(fixture *f, enum operation op) {
     f->out_shape[i][0] = 1; f->out_shape[i][1] = 2;
     const int integer = (op == ACCUMULATE && i >= 3u) || (op == CORRECT && i == 1u);
     f->out[i] = view(data(&f->output[i]), integer ? 8u : op == SEED ? 8u : 4u,
-      integer ? "i64" : "f32", op == SEED ? 2u : 0u,
+      integer ? f->i64 : f->f32, f->cpu, op == SEED ? 2u : 0u,
       op == SEED ? f->out_shape[i] : NULL);
   }
   if (op == CORRECT) {
@@ -91,10 +98,13 @@ static void setup(fixture *f, enum operation op) {
     put64(f->in[8].data, 0, 1);
   } else if (op == FINALIZE) {
     put32(f->in[1].data, 0, 0x3f800000u);
-  } else if (op == REDUCE) {
+  } else if (op == REDUCE || op == REDUCE_BOOL) {
     put32(f->in[0].data, 0, 0x3f800000u);
-    put32(f->in[1].data, 0, 0x3f800000u);
-    put32(f->in[1].data, 1, 0x3f800000u);
+    if (op == REDUCE_BOOL) memset(f->in[1].data, 1, 2u);
+    else {
+      put32(f->in[1].data, 0, 0x3f800000u);
+      put32(f->in[1].data, 1, 0x3f800000u);
+    }
   } else {
     put32(f->in[0].data, 0, 0x3f800000u);
     put32(f->in[0].data, 1, 0x3f800000u);
@@ -252,6 +262,53 @@ static void precedence_cases(et_kernel_runtime *e3, et_kernel_runtime *l3s) {
   put32(f.in[1].data, 1, 0u); domain(l3s, &f); /* masked CE still validated */
 }
 
+static void bool_cases(et_kernel_runtime *l3s) {
+  fixture f;
+  setup(&f, REDUCE_BOOL);
+  ((unsigned char *)f.in[1].data)[1] = 0;
+  put32(f.in[0].data, 1, 0x40000000u);
+  ok(l3s, &f); /* 10: authentic N4 D2 mask pattern */
+  CHECK(get32(f.out[0].data, 0) == 0x3f800000u);
+  CHECK(get32(f.out[1].data, 0) == 0x3f800000u);
+  CHECK(get32(f.out[2].data, 0) == 0x3f800000u);
+
+  setup(&f, REDUCE_BOOL);
+  ((unsigned char *)f.in[1].data)[0] = 0;
+  put32(f.in[0].data, 1, 0x40000000u);
+  ok(l3s, &f); /* 01: direct-provider control only */
+  CHECK(get32(f.out[0].data, 0) == 0x40000000u);
+  CHECK(get32(f.out[1].data, 0) == 0x3f800000u);
+  CHECK(get32(f.out[2].data, 0) == 0x40000000u);
+
+  setup(&f, REDUCE_BOOL);
+  put32(f.in[0].data, 1, 0x40000000u);
+  ok(l3s, &f); /* 11: authentic N4 D2 mask pattern */
+  CHECK(get32(f.out[0].data, 0) == 0x40400000u);
+  CHECK(get32(f.out[1].data, 0) == 0x40000000u);
+  CHECK(get32(f.out[2].data, 0) == 0x3fc00000u);
+
+  setup(&f, REDUCE_BOOL);
+  memset(f.in[1].data, 0, 2u);
+  domain(l3s, &f); /* 00 cannot reduce */
+  ((unsigned char *)f.in[1].data)[0] = 2;
+  domain(l3s, &f); /* invalid byte precedes zero-weight check */
+  ((unsigned char *)f.in[1].data)[0] = 1;
+  ok(l3s, &f); /* same storage retries after both rejections */
+
+  static const uint32_t bad[] = {0x7fc00001u, 0x7f800001u,
+    0xff800001u, 0x7f800000u, 0xff800000u};
+  for (size_t i = 0; i < COUNT(bad); ++i) {
+    for (size_t masked = 0; masked < 2u; ++masked) {
+      setup(&f, REDUCE_BOOL);
+      ((unsigned char *)f.in[1].data)[masked] = 0;
+      put32(f.in[0].data, masked, bad[i]);
+      domain(l3s, &f); /* masked CE is still validated */
+      put32(f.in[0].data, masked, 0u);
+      ok(l3s, &f);
+    }
+  }
+}
+
 static void environment_cases(et_kernel_runtime *e3, et_kernel_runtime *l3s) {
   fixture f;
   fenv_t baseline; CHECK(fegetenv(&baseline) == 0);
@@ -259,41 +316,35 @@ static void environment_cases(et_kernel_runtime *e3, et_kernel_runtime *l3s) {
   const unsigned mx = _mm_getcsr();
   et_kernel_runtime *r[] = {e3, l3s};
   for (size_t p = 0; p < COUNT(r); ++p) {
-    const enum operation op = p ? REDUCE : CORRECT;
+    const enum operation op = p ? REDUCE_BOOL : CORRECT;
     setup(&f, op);
-    if (p) put32(f.in[1].data, 0, 0x7f800001u);
-    else put32(f.in[0].data, 0, 0x7f800001u);
+    put32(f.in[0].data, 0, 0x7f800001u);
     sticky();
     domain(r[p], &f);
     CHECK(fesetenv(&baseline) == 0);
-    if (p) put32(f.in[1].data, 0, 0x3f800000u);
-    else put32(f.in[0].data, 0, 0u);
+    put32(f.in[0].data, 0, p ? 0x3f800000u : 0u);
     ok(r[p], &f); /* same descriptors and storage after rejection */
     CHECK(fesetenv(&baseline) == 0);
 
     static const unsigned mx_bits[] = {0x0040u, 0x8000u, 0x2000u};
     for (size_t j = 0; j < COUNT(mx_bits); ++j) {
       setup(&f, op);
-      if (p) put32(f.in[1].data, 0, 0x7fc00001u);
-      else put32(f.in[0].data, 0, 0x7fc00001u);
+      put32(f.in[0].data, 0, 0x7fc00001u);
       _mm_setcsr(mx | mx_bits[j]);
       unsupported(r[p], &f); /* control rejection precedes operand rejection */
       CHECK(fesetenv(&baseline) == 0);
       domain(r[p], &f);
-      if (p) put32(f.in[1].data, 0, 0x3f800000u);
-      else put32(f.in[0].data, 0, 0u);
+      put32(f.in[0].data, 0, p ? 0x3f800000u : 0u);
       ok(r[p], &f);
       CHECK(fesetenv(&baseline) == 0);
     }
     setup(&f, op);
-    if (p) put32(f.in[1].data, 0, 0x7fc00001u);
-    else put32(f.in[0].data, 0, 0x7fc00001u);
+    put32(f.in[0].data, 0, 0x7fc00001u);
     set_control((unsigned short)(cw | 0x0400u));
     unsupported(r[p], &f);
     CHECK(fesetenv(&baseline) == 0);
     domain(r[p], &f);
-    if (p) put32(f.in[1].data, 0, 0x3f800000u);
-    else put32(f.in[0].data, 0, 0u);
+    put32(f.in[0].data, 0, p ? 0x3f800000u : 0u);
     ok(r[p], &f);
     CHECK(fesetenv(&baseline) == 0);
   }
@@ -311,6 +362,7 @@ int main(int argc, char **argv) {
     (void *)et_l3s_kernel_provider_v1(), &l3s, &error) == 0);
   if (strcmp(argv[1], "bits") == 0) bit_cases(e3, l3s);
   else if (strcmp(argv[1], "first") == 0) precedence_cases(e3, l3s);
+  else if (strcmp(argv[1], "bool") == 0) bool_cases(l3s);
   else if (strcmp(argv[1], "fenv") == 0) environment_cases(e3, l3s);
   else CHECK(0);
   et_kernel_runtime_destroy(l3s);

@@ -1103,15 +1103,17 @@ A descendant test-only direct-K1 N4 numerical/fenv fixture now exercises the
 existing E3 metrics and L3S providers through actual K1 dispatch. Frozen raw
 f32 inputs cover qNaN/sNaN/±infinity, signed zero, positive/negative
 subnormals and neighboring normal words; the fixture checks exact return and
-first-error records, observable output words, immutable input/metadata bytes,
-output guards, errno, x87/MXCSR controls and rejection-time sticky flags, then
-retries after restoring the environment. Seven independently compiled source
-mutants are rejected for sign loss, changed first error, masked nonfinite
-acceptance, FTZ/DAZ or rounding acceptance, and output guard corruption. The
-focused host normal and ASan/UBSan runs pass; LeakSanitizer cannot run on this
-host. This is provider-only source/test evidence, pending independent review and
-supported gate. It does not establish actual M3 logits, authentic D2 traversal,
-complete-call `e3-evaluate-into!` fenv, or §9 admission.
+first-error records, observable output words, immutable input/metadata text and
+bytes, output guards, errno, x87/MXCSR controls and rejection-time sticky flags,
+then retries after restoring the environment. The actual L3S boolean reduction
+receives `10`/`11` masks plus provider-only `01`/`00`, invalid-byte and masked
+nonfinite controls. Nine independently compiled source mutants are rejected for
+sign loss, changed first error, masked nonfinite acceptance, invalid boolean
+mask acceptance, FTZ/DAZ or rounding acceptance, and output guard corruption.
+Focused Clang and GCC normal and ASan/UBSan host runs pass; LeakSanitizer cannot
+run on this host. This is provider-only source/test evidence, pending independent
+review and supported gate. It does not establish actual M3 logits, authentic D2
+traversal, complete-call `e3-evaluate-into!` fenv, or §9 admission.
 The first [mathematical three-batch M2 sum-order witness](../tests/e3_reference/sum_order_witness_v1.json)
 failed the one-use df9546 compiled C gate: compiled CE rounded both groupings
 to `41dcde82`. The successor [compiled witness](../tests/e3_reference/sum_order_witness_v2.json)
