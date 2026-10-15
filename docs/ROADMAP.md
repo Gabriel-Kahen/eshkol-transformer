@@ -3238,8 +3238,11 @@ A bounded [same-registry Eshkol typed wrapper candidate](g3/G3_C4_P2_G2_ESHKOL_T
 now composes those exact six private symbols from an authenticated logical
 clone, roots the allocation-time bytevector identity/extent, checks copied
 IDs/scalars before publication, and releases each detached typed owner through
-native-first retryable cleanup. Its source/host mutation gate does not prove
-compiled Eshkol composition; independent review, supported one-archive
+native-first retryable cleanup. The review-held cleanup successor restores
+the exact prior registry and anchor roots after recoverable creation failure;
+its host harness checks 64 failures each at create/length/copy and detects
+unchecked native-copy mutants. Source/host gates do not prove compiled Eshkol
+composition; independent re-review, supported one-archive
 normal/repeat/sanitizer acceptance, and public G2 remain pending.
 
 - **Private Eshkol P2/G2 terminal close contract:**

@@ -12,6 +12,8 @@ added = [
     "scripts/check-g3c4-p2g2-typed-wrapper-source.py",
     "scripts/test-g3c4-p2g2-typed-wrapper-source.sh",
     "docs/g3/G3_C4_P2_G2_ESHKOL_TYPED_WRAPPER_LEAF.md",
+    "tests/g3c4/p2_g2_typed_wrapper_rollback_test.scm",
+    "scripts/test-g3c4-p2g2-typed-wrapper-host.sh",
     "native/g3c4_p2g2_typed_wrapper_source_closure.txt",
 ]
 closure = (root / added[-1]).read_text().splitlines()
@@ -76,6 +78,8 @@ def ordered(text, fragments):
 
 
 def valid_create(text):
+    cleanup = text.split("(guard (caught", 1)[1].split(
+        "(vector-set! g3c4-registry 0 registry-node)", 1)[0]
     return (ordered(text, (
         "(source (g3c4-p2g2-terminal-ids-entry-live",
         "(source-bytes (vector-ref source 8))",
@@ -90,7 +94,15 @@ def valid_create(text):
         "(anchor 'match bytes)",
         "(anchor 'publish #f)",
         "(vector-set! entry 2 'live)",
-    )) and text.count("(= (bytevector-length bytes) payload)") == 3 and (
+    )) and ordered(cleanup, (
+        "(g3c4-p2g2-native-typed-release",
+        "(eq? (vector-ref g3c4-registry 0)",
+        "(eq? (vector-ref g3c4-p2g2-typed-anchors 0)",
+        "(g3c4-entry-dead! entry)",
+        "(vector-set! g3c4-registry 0 old-registry)",
+        "(vector-set! g3c4-p2g2-typed-anchors 0 old-anchors)",
+        "(raise caught)",
+    )) and "(g3c4-native-check\n            (g3c4-p2g2-native-typed-copy native count bytes extent)\n            operation)" in text and text.count("(= (bytevector-length bytes) payload)") == 3 and (
         text.count("(eq? source-bytes (vector-ref source 8))") == 2
     ) and all(item in text for item in (
         "(eq? source-native (vector-ref source 3))",
@@ -114,14 +126,18 @@ def valid_release(text):
     )) and "(if (vector-ref barrier 0) (exit 134))" in text)
 
 
+def valid_copy(text):
+    return ordered(text, (
+        "(bytes (make-bytevector payload 0))",
+        "(= (bytevector-length bytes) payload)",
+        "(g3c4-p2g2-native-typed-copy native count bytes (+ 8 payload))",
+        "(anchor 'match bytes)",
+    )) and "(g3c4-native-check\n          (g3c4-p2g2-native-typed-copy native count bytes (+ 8 payload))\n          operation)" in text
+
+
 assert valid_create(create) and valid_release(release)
 assert "(anchor 'check entry)" in live
-assert ordered(copy, (
-    "(bytes (make-bytevector payload 0))",
-    "(= (bytevector-length bytes) payload)",
-    "(g3c4-p2g2-native-typed-copy native count bytes (+ 8 payload))",
-    "(anchor 'match bytes)",
-))
+assert valid_copy(copy)
 assert "(and retired? released? original-node" in create
 assert "(g3c4-dead-entry? original-entry original-kind)" in create
 for before, after in (
@@ -131,8 +147,15 @@ for before, after in (
     ("(g3c4-p2g2-native-typed-copy native count bytes extent)", "0"),
     ("(anchor 'match bytes)", "#t"),
     ("(g3c4-entry-dead! entry)", "#t"),
+    ("(vector-set! g3c4-registry 0 old-registry)", "#t"),
+    ("(eq? (vector-ref g3c4-registry 0)", "(eq? old-registry"),
+    ("(g3c4-native-check\n            (g3c4-p2g2-native-typed-copy native count bytes extent)\n            operation)",
+     "(g3c4-p2g2-native-typed-copy native count bytes extent)"),
 ):
     assert valid_create(create.replace(before, after, 1)) is False
+assert not valid_copy(copy.replace(
+    "(g3c4-native-check\n          (g3c4-p2g2-native-typed-copy native count bytes (+ 8 payload))\n          operation)",
+    "(g3c4-p2g2-native-typed-copy native count bytes (+ 8 payload))", 1))
 for before, after in (
     ("(anchor 'native-release live)", "0"),
     ("(g3c4-p2g2-zero-bytes! bytes (* count 8))", "#t"),
@@ -143,4 +166,4 @@ for before, after in (
 
 assert "g3c4-p2g2-typed-result-extension" not in (
     root / "lib/transformer/generation.esk").read_text()
-print("G3-C4 private Eshkol typed wrapper source PASS: mutations=10")
+print("G3-C4 private Eshkol typed wrapper source PASS: mutations=14")

@@ -241,4 +241,6 @@ native/g3c4_p2g2_typed_result_extension.esk
 scripts/check-g3c4-p2g2-typed-wrapper-source.py
 scripts/test-g3c4-p2g2-typed-wrapper-source.sh
 docs/g3/G3_C4_P2_G2_ESHKOL_TYPED_WRAPPER_LEAF.md
+tests/g3c4/p2_g2_typed_wrapper_rollback_test.scm
+scripts/test-g3c4-p2g2-typed-wrapper-host.sh
 native/g3c4_p2g2_typed_wrapper_source_closure.txt

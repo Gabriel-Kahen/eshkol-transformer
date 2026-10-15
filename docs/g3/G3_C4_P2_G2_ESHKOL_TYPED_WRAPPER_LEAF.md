@@ -22,7 +22,9 @@ a fresh carrier and repeats native copy/readback checks. Once published, the
 typed result no longer depends on the clone or terminal output being live.
 
 On failed creation, the exact created native owner is released before the
-pending Eshkol entry is tombstoned; the first Eshkol error is rethrown. A
+pending Eshkol entry is tombstoned; the original registry and anchor heads
+are restored only when both still point at this attempt's nodes. An unexpected
+head is fail-stop. The first Eshkol error is rethrown. A
 native held-I1 lease rejects release without Eshkol mutation, allowing retry.
 On successful native release, the wrapper scrubs its retained copy and
 tombstones the entry through a fail-stop tail. Exact repeated release requires
@@ -30,9 +32,13 @@ the original rooted closure's recorded native success. Forged dead state,
 changed shell/entry/carrier/native identity, wrong kind and stale ownership
 cannot claim cleanup.
 
-The host source gate checks closure/load boundaries, balanced syntax and
-mutations that remove allocation, extent, identity, copied-value and cleanup
-steps. A compiled same-registry Eshkol gate, release fault injection,
+The source gate checks closure/load boundaries, balanced syntax and mutations
+that remove allocation, extent, identity, checked native copy and cleanup
+steps. A host Guile harness loads the actual wrapper with controlled native
+stubs: 64 failures each at creation, length, and copy leave the original
+registry/anchor roots and lookup unchanged (969 checks). It detects removal
+of registry rollback or either native-copy status check. These stubs do not
+prove the C FFI or Eshkol compiler behavior. A compiled same-registry Eshkol gate, release fault injection,
 normal/repeat/sanitizers and the supported one-archive gate remain required
 before this candidate is admitted. The native accessor cannot prove actual
 Eshkol allocation; this wrapper's allocation-time root is that proof.
