@@ -49,6 +49,8 @@
          (destinations (vector-ref record 1))
          (frame (vector-ref record 2))
          (dataset (vector-ref record 3))
+         (d2-state (dataset d2-dataset-query))
+         (generation-before (vector-ref d2-state 8))
          (entry (e3-frame-entry-live frame 'e3-test-fault-execute))
          (native (vector-ref entry 4))
          (cursor (vector-ref record 4))
@@ -58,6 +60,8 @@
          (before (vector-ref record 8)))
     (e3-test-fault-check 'prepared
       (and (vector? record) (= (vector-ref entry 1) 1)
+           (vector? d2-state) (= (vector-length d2-state) 19)
+           (eq? (vector-ref d2-state 1) dataset)
            (not (vector-ref record 13))))
     (e3-test-fault-check 'arm (= (e3-test-fault-arm native site role occurrence) 0))
     (e3-test-fault-check 'armed (= (e3-test-fault-ref native 0) 1))
@@ -86,6 +90,9 @@
     (with-region ('e3-fault-observe 262144)
       (e3-test-fault-check 'cursor
         (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset)))
+      ;; Rollback rewinds the logical cursor, never the last issued batch ID.
+      (e3-test-fault-check 'generation-advanced
+        (= (vector-ref d2-state 8) (+ generation-before occurrence)))
       (e3-test-fault-check 'output
         (e3-test-retention-output=? frame destinations))
       (e3-test-fault-check 'modes

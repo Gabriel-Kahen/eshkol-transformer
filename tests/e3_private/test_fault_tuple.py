@@ -1,10 +1,16 @@
 """Host-only lexical and source isolation checks for the noninstalled E3 fault tuple."""
 
 from pathlib import Path
+import hashlib
 import re
 import subprocess
+import sys
 import tempfile
 import unittest
+
+from tests.e3_private.generate_generation_rewind import (
+    ANCHOR, MUTANT, MUTANT_SHA256, SOURCE, generate,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 TESTS = ROOT / "tests/e3_private"
@@ -18,9 +24,9 @@ def rows(prefix: Path, suffix: str) -> list[str]:
 
 class FaultTupleTest(unittest.TestCase):
     @staticmethod
-    def bound_expression(source: str):
-        """Parse the actual closed guard, so deletion of a comparison changes cases."""
-        start = source.index("(define (e3-test-fault-bound?")
+    def expression_after(source: str, marker: str):
+        """Parse a source expression, so changed assertions change host controls."""
+        start = source.index(marker)
         tokens = re.findall(r"\(|\)|[^\s()]+", source[start:])
         def parse(index):
             if tokens[index] != "(":
@@ -33,6 +39,11 @@ class FaultTupleTest(unittest.TestCase):
             return values, index + 1
         definition, _ = parse(0)
         return definition[2]
+
+    @staticmethod
+    def bound_expression(source: str):
+        return FaultTupleTest.expression_after(
+            source, "(define (e3-test-fault-bound?")
 
     @staticmethod
     def eval_bound(expression, environment):
@@ -55,6 +66,8 @@ class FaultTupleTest(unittest.TestCase):
             return isinstance(args[0], list)
         if op == "=":
             return args[0] == args[1]
+        if op == "+":
+            return sum(args)
         if op == "eq?":
             return args[0] is args[1]
         if op == "e3-test-fault-path=?":
@@ -234,6 +247,78 @@ e3_reject_unresolved_private fault "$3" "$3"
                         dispatch.index("(e3-test-fault-execute"))
         self.assertLess(dispatch.index("'bound-report"),
                         dispatch.index("(e3-test-retention-report"))
+
+    def test_stage7_rollback_preserves_monotonic_generation(self):
+        source = (TESTS / "fault_driver.esk").read_text()
+        marker = "(e3-test-fault-check 'generation-advanced"
+        expression = self.expression_after(source, marker)
+        self.assertEqual(expression,
+                         ["=", ["vector-ref", "d2-state", "8"],
+                          ["+", "generation-before", "occurrence"]])
+        state = [0] * 19
+        for prior, occurrence in ((3, 1), (1027, 3), (8192, 17)):
+            for observed in (prior, prior + occurrence - 1,
+                             prior + occurrence, prior + occurrence + 1):
+                state[8] = observed
+                self.assertEqual(self.eval_bound(expression, {
+                    "d2-state": state, "generation-before": prior,
+                    "occurrence": occurrence,
+                }), observed == prior + occurrence)
+        self.assertLess(source.index("(d2-state (dataset d2-dataset-query))"),
+                        source.index("(e3-test-fault-arm native site role occurrence)"))
+        self.assertLess(source.index("(e3-test-fault-check 'cursor"),
+                        source.index(marker))
+        self.assertLess(source.index("(e3-test-fault-check 'typed-stage7"),
+                        source.index(marker))
+        self.assertLess(source.index(marker),
+                        source.index("(e3-test-fault-reset native)"))
+        for bad in ("#t", "(= (vector-ref d2-state 8) generation-before)",
+                    "(= (vector-ref d2-state 8) (+ generation-before 1))"):
+            changed = source.replace(
+                "(= (vector-ref d2-state 8) (+ generation-before occurrence))",
+                bad, 1)
+            self.assertNotEqual(self.expression_after(changed, marker), expression)
+
+    def test_generation_witness_is_downstream_of_real_d2_publication(self):
+        native_d2 = (ROOT / "native/d2_native.c").read_text()
+        e3 = (ROOT / "native/e3_private_extension.esk").read_text()
+        frame = (ROOT / "src/eshkol_transformer/e3_frame.c").read_text()
+        restore = SOURCE.read_text()
+        self.assertLess(native_d2.index("dataset->current_batch = batch;"),
+                        native_d2.index("dataset->next_batch_generation++;"))
+        self.assertLess(e3.index("(e3-stage-batch! frame batch)"),
+                        e3.index("(e3-forward-schedule-internal frame)"))
+        hook = frame[frame.index("int64_t et_e3_private_forward_role_v1"):
+                     frame.index("et_kernel_tensor_view_v1 ids = e3_native_view(",
+                                 frame.index("int64_t et_e3_private_forward_role_v1"))]
+        self.assertIn("++frame->fault_reached;", hook)
+        self.assertIn("frame->fault_reached == frame->fault_occurrence", hook)
+        self.assertIn("/* Consume before any provider dispatch. */", hook)
+        commit = restore[restore.index("(define (e3-d2-restore-commit!"):
+                         restore.index("(define (e3-d2-cancel-prepare!")]
+        self.assertNotIn("(vector-set! state 8", commit)
+
+    def test_rewind_mutant_is_exact_private_source_delta(self):
+        original = SOURCE.read_bytes()
+        mutated = generate(original)
+        self.assertEqual(mutated, original.replace(ANCHOR.encode(),
+                                                   MUTANT.encode(), 1))
+        self.assertEqual(mutated.count(b"(vector-set! state 8"), 1)
+        self.assertEqual(hashlib.sha256(mutated).hexdigest(), MUTANT_SHA256)
+        self.assertEqual(SOURCE.read_bytes(), original)
+        with self.assertRaisesRegex(ValueError, "differs"):
+            generate(original + b"; drift\n")
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "e3_d2_restore.esk"
+            command = [sys.executable, "-B",
+                       str(TESTS / "generate_generation_rewind.py"),
+                       "--output", str(output)]
+            first = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(first.returncode, 0, first.stderr)
+            self.assertEqual(output.read_bytes(), mutated)
+            second = subprocess.run(command, capture_output=True, text=True)
+            self.assertNotEqual(second.returncode, 0)
+            self.assertEqual(output.read_bytes(), mutated)
 
 
 if __name__ == "__main__":

@@ -1246,6 +1246,16 @@ and mismatch/order checks pass; the manifests remain compiler-unverified.
 Supported Clang 21/LSan, compiled failure/retry and resource proof remain open.
 This candidate does not admit E3 §9 R1/R2.
 
+An isolated source-only extension to that fault tuple now snapshots the
+authentic D2 last-issued batch generation before a stage-7 cut. After the
+failed call it requires the generation to advance by the selected batch
+occurrence while the logical cursor and six caller outputs are restored. A
+pinned, noninstalled generator prepares one mutant that rewinds the Eshkol D2
+generation during rollback; host tests verify its exact source delta and the
+assertion's causal placement. Independent source review, supported compiled
+mutant rejection, normal/poisoned/sanitizer runs, and current-main integration
+remain pending; this does not admit §9 R1/R2.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
