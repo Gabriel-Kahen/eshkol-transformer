@@ -1474,9 +1474,19 @@ Independent whole-union source/test review accepted the bounded R1/R2 union at
 Compiled normal/repeat/poison/sanitizer and mutant verdicts remain open, so
 §9 R1/R2 admission remains **HOLD**. PR #214/current-main integration is a
 separate gate.
-The combined min-subnormal and R1/R2 source candidate requires fresh
-whole-union source/test review and exact-tree package evidence; neither
-branch's separate review or package seal admits the combined tree.
+Independent whole-union source/test review **ACCEPTED** the combined
+min-subnormal and R1/R2 candidate at
+`924b001e3f508014f64ad75badf65be49937de93`/tree
+`a41eb27df256d5804f0cf369818ff1635c7d5509`; the sealed
+`e3-n4-minsubnormal-r1r2-union-independent-review-20261015/REVIEW.md` receipt
+has SHA-256 `364daf5f31ee0254e95004c1e94f36c11f4e702cbc77cbb1cbbe686e5d8c6821`.
+A read-only current-main audit accepted coherent ancestry and evidence (receipt
+SHA-256 `fb30c9bfcd42d5c303d7c800e3296d59d4046ddc98f02d488bd4dd9c35dc9801`),
+but leaves admission **HOLD**. Fresh exact-combined-tree package evidence and
+independent raw compiled/fenv review remain required; earlier branch package
+seals do not transfer. Compiled R1/R2 normal/repeat/poison/sanitizer and mutant
+verdicts, physical min-subnormal/fenv observation, §9 admission, and PR
+#214/current-main integration remain **HOLD**.
 
 The stage-8 fault candidate and retention post-report teardown now share a
 source-only branch based on the independently reviewed CLI3 `baf0a03f` union.
