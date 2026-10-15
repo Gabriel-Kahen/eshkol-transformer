@@ -1143,6 +1143,9 @@ if [[ "${package_policy}" == g3g-public-aggregate || "${package_policy}" == g3g-
   g3g_package_policy=1
 fi
 e3_private_test_sanitize=0
+if [[ -n "${E3_FENV_SANITIZE+x}" || -n "${E3_FENV_MUTANT+x}" ]]; then
+  die "E3 fenv sanitizer and private mutant selectors need pinned emitted inventories"
+fi
 if [[ "${E3_FIRST_EVAL_MUTANT_SANITIZE:-0}" != 0 ]]; then
   [[ "${E3_FIRST_EVAL_MUTANT_SANITIZE}" == 1 &&
      "${package_policy}" == e3-private-aggregate &&
@@ -1314,6 +1317,7 @@ e3_fault_generated_dir=
 e3_overflow_generated_dir=
 e3_numerical_generated_dir=
 e3_uniform_generated_dir=
+e3_fenv_generated_dir=
 e3_zero_generated_dir=
 if [[ "${package_policy}" == e3-private-aggregate &&
       "${e3_tuple_kind}" == mode-graph ]]; then
@@ -1347,6 +1351,11 @@ elif [[ "${package_policy}" == e3-private-aggregate &&
   e3_uniform_generated_dir="$(e3_uniform_generated_stage "${output_object}")" ||
     die "E3 uniform generated source requires a fresh private gate stage"
 elif [[ "${package_policy}" == e3-private-aggregate &&
+        "${e3_tuple_kind}" == fenv ]]; then
+  source "${PROJECT_ROOT}/scripts/e3-generated-source-stage.sh"
+  e3_fenv_generated_dir="$(e3_fenv_generated_stage "${output_object}")" ||
+    die "E3 fenv generated source requires a fresh private gate stage"
+elif [[ "${package_policy}" == e3-private-aggregate &&
         "${e3_tuple_kind}" == zero ]]; then
   source "${PROJECT_ROOT}/scripts/e3-zero-generated-source-stage.sh"
   e3_zero_generated_dir="$(e3_zero_generated_stage "${output_object}")" ||
@@ -1360,6 +1369,7 @@ e3_fault_generated_owned=0
 e3_overflow_generated_owned=0
 e3_numerical_generated_owned=0
 e3_uniform_generated_owned=0
+e3_fenv_generated_owned=0
 e3_zero_generated_owned=0
 e1b_cleanup() {
   local status=$?
@@ -1395,13 +1405,16 @@ e1b_cleanup() {
   if [[ "${status}" == 0 && "${e3_uniform_generated_owned}" == 1 ]]; then
     rm -rf -- "${e3_uniform_generated_dir}"
   fi
+  if [[ "${status}" == 0 && "${e3_fenv_generated_owned}" == 1 ]]; then
+    rm -rf -- "${e3_fenv_generated_dir}"
+  fi
   if [[ "${status}" == 0 && "${e3_zero_generated_owned}" == 1 ]]; then
     rm -rf -- "${e3_zero_generated_dir}"
   fi
   return "${status}"
 }
 trap e1b_cleanup EXIT
-if [[ -n "${e3_mode_graph_generated_dir}${e3_retention_generated_dir}${e3_fault_generated_dir}${e3_overflow_generated_dir}${e3_numerical_generated_dir}${e3_uniform_generated_dir}${e3_zero_generated_dir}" ]]; then
+if [[ -n "${e3_mode_graph_generated_dir}${e3_retention_generated_dir}${e3_fault_generated_dir}${e3_overflow_generated_dir}${e3_numerical_generated_dir}${e3_uniform_generated_dir}${e3_fenv_generated_dir}${e3_zero_generated_dir}" ]]; then
   trap 'exit 143' TERM
   trap 'exit 130' INT
 fi
@@ -1432,6 +1445,10 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     mkdir -m 0700 -- "${e3_uniform_generated_dir}" ||
       die "E3 uniform generated source path was claimed concurrently"
     e3_uniform_generated_owned=1
+  elif [[ -n "${e3_fenv_generated_dir}" ]]; then
+    mkdir -m 0700 -- "${e3_fenv_generated_dir}" ||
+      die "E3 fenv generated source path was claimed concurrently"
+    e3_fenv_generated_owned=1
   elif [[ -n "${e3_zero_generated_dir}" ]]; then
     mkdir -m 0700 -- "${e3_zero_generated_dir}" ||
       die "E3 zero-control generated source path was claimed concurrently"
@@ -1439,7 +1456,7 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
   else
     e3_mode_graph_generated_dir="${e1b_tmp}/generated"
   fi
-  e3_generated_dir="${e3_fault_generated_dir:-${e3_zero_generated_dir:-${e3_uniform_generated_dir:-${e3_numerical_generated_dir:-${e3_overflow_generated_dir:-${e3_retention_generated_dir:-${e3_mode_graph_generated_dir}}}}}}}"
+  e3_generated_dir="${e3_fenv_generated_dir:-${e3_fault_generated_dir:-${e3_zero_generated_dir:-${e3_uniform_generated_dir:-${e3_numerical_generated_dir:-${e3_overflow_generated_dir:-${e3_retention_generated_dir:-${e3_mode_graph_generated_dir}}}}}}}}"
   python3 "${PROJECT_ROOT}/scripts/generate-e3-d2-source.py" \
     --output-dir "${e3_generated_dir}" >"${e1b_tmp}/d2-generation.json"
   e3_generated_source_root="${e3_generated_dir}/source"
@@ -1530,6 +1547,8 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
       export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
     elif [[ "${e3_tuple_kind}" == fault ]]; then
       export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1|et_e3_fault_run_v1)$'
+    elif [[ "${e3_tuple_kind}" == fenv ]]; then
+      export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_fenv_run_v1)$'
     elif [[ "${e3_tuple_kind}" == retention ||
             "${e3_tuple_kind}" == retention-first-eval-mutant ]]; then
       export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1)$'
@@ -1948,6 +1967,13 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
                                  -DET_E3_PARTIAL_PIN_TESTING) ;;
         "${PROJECT_ROOT}/src/eshkol_transformer/m3_call_f32_integration.c")
           package_source_flags+=(-DET_E3_PARTIAL_PIN_TESTING) ;;
+      esac
+    fi
+    if [[ "${package_policy}" == e3-private-aggregate &&
+          "${e3_tuple_kind}" == fenv ]]; then
+      case "${package_native_source}" in
+        "${PROJECT_ROOT}/src/eshkol_transformer/e3_frame.c")
+          package_source_flags+=("-DET_E3_FAULT_TESTING") ;;
       esac
     fi
     if [[ "${package_policy}" == e3-private-aggregate &&
@@ -2556,6 +2582,20 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
         et_d2_exact_read_test_fail_stage_v1
       )
     fi
+    if [[ "${e3_tuple_kind}" == fenv ]]; then
+      e3_required_private+=(
+        et_e3_private_fenv_run_cabi_v1
+        et_e3_test_fenv_begin_v1
+        et_e3_test_fenv_end_v1
+        et_e3_test_fenv_ref_v1
+        et_e3_test_fenv_env_byte_v1
+        et_e3_test_fenv_mutant_arm_v1
+        et_e3_test_fault_arm_v1
+        et_e3_test_fault_ref_v1
+        et_e3_test_fault_reset_v1
+        et_e3_test_fault_seed_publication_v1
+      )
+    fi
   fi
   for privileged in "${e3_required_private[@]}"; do
     grep -E "[[:space:]]LOCAL[[:space:]].*[[:space:]]${privileged}$" \
@@ -2593,6 +2633,7 @@ if [[ "${package_policy}" == e3-private-aggregate &&
         "${e3_tuple_kind:-}" == retention-overflow ||
         "${e3_tuple_kind:-}" == numerical ||
         "${e3_tuple_kind:-}" == uniform ||
+        "${e3_tuple_kind:-}" == fenv ||
         "${e3_tuple_kind:-}" == zero ) ]]; then
   cp "${e1b_tmp}/private.ll" "${evidence_dir}.tmp.$$/private.ll"
 fi
@@ -2689,6 +2730,8 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
       public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_diagnostic_test_(failure|run)_v1)$'
     elif [[ "${e3_tuple_kind}" == fault ]]; then
       public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1|et_e3_fault_run_v1)$'
+    elif [[ "${e3_tuple_kind}" == fenv ]]; then
+      public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_fenv_run_v1)$'
     elif [[ "${e3_tuple_kind}" == retention ||
             "${e3_tuple_kind}" == retention-first-eval-mutant ]]; then
       public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_retention_run_v1)$'

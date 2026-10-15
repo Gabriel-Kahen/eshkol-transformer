@@ -1110,6 +1110,14 @@ rollback, and same-authority suffix retry against an independent twin. The
 pinned Eshkol toolchain and exact compiled package closure are unavailable in
 this checkout; the private tuple is not built or executed, and neither the
 whole-call fenv property nor §9 admission is established by these host checks.
+A source-level successor adds a separate noninstalled fenv tuple selector,
+fresh generated-source stage, normal-only build entry, and strict manifest
+candidates derived from the existing private package. Five host tests check
+the exact four-input selection, reject mixed/ambient/symlinked near misses,
+and pin the source and bridge closure. The emitted source, native and symbol
+inventories still require the pinned compiler to match byte for byte; no
+sanitizer or private MXCSR-mutant selector is admitted, and no compiled runtime
+or §9 result follows from the static checks.
 The first [mathematical three-batch M2 sum-order witness](../tests/e3_reference/sum_order_witness_v1.json)
 failed the one-use df9546 compiled C gate: compiled CE rounded both groupings
 to `41dcde82`. The successor [compiled witness](../tests/e3_reference/sum_order_witness_v2.json)
