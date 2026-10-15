@@ -135,6 +135,8 @@
                      (= (e3-fault-value-borrow-begin owner role) 0))
                    #f))
          (cursor (d2-token-dataset-cursor dataset))
+         (d2-state (d2-open-dataset-state dataset 'e3-evaluate-into!))
+         (generation-before (vector-ref d2-state 8))
          (modes (e3-test-retention-modes frame))
          (model-image (e3-test-retention-model-snapshot model))
          (initializer (m3t-public-model-initializer model))
@@ -207,6 +209,10 @@
     (with-region ('e3-fault-observe 262144)
       (e3-test-fault-check 'cursor
         (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset)))
+      (if (and (= site 5) (= occurrence 2))
+          (e3-test-fault-check 'generation-after-failure
+            (and (= (vector-ref d2-state 8) (+ generation-before 2))
+                 (e3-d2-source-idle? d2-state))))
       (e3-test-fault-check 'output
         (equal? publication
                 (e3-test-fault-publication frame destinations)))
@@ -233,6 +239,9 @@
           (e3-test-fault-check 'clear (= (e3-test-fault-ref native 0) 0))))
     (e3-test-retention-call! model dataset frame destinations cursor modes
                              model-image)
+    (if (and (= site 5) (= occurrence 2))
+        (e3-test-fault-check 'generation-after-retry
+          (= (vector-ref d2-state 8) (+ generation-before 5))))
     (if (or (= site 3) (= site 4) (= site 5))
         (e3-test-fault-check 'independent-twin
           (and (vector? twin)

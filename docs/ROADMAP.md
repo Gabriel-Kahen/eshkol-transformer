@@ -1392,6 +1392,18 @@ Clang 22 host. Independent source/test review accepted the E3 union at
 `9aed9c65`/tree `55377da7`; supported compiled Eshkol normal, poison and
 sanitizer gates remain open; no §9 R1 admission follows.
 
+The bounded §9 R2 D2-generation source successor reuses site 5 occurrence 2,
+where two real packed batches precede the CE denial. It snapshots the dataset
+generation before arming, then checks that abort restores the cursor while
+generation advances by two and the source is idle; the same-authority retry
+must advance it by three more and match the independent twin's six outputs and
+end cursor. The existing first-error, seeded output, modes, model/gradient,
+RNG and owner checks remain in force. Host source negatives reject omitted or
+weakened generation comparisons; a test-only, exact-N4 restore-commit mutant
+resets generation after preflight for the later compiled gate. This source
+candidate has no compiled normal/repeat/poison/sanitizer or mutant verdict, so
+§9 R2 remains open.
+
 The stage-8 fault candidate and retention post-report teardown now share a
 source-only branch based on the independently reviewed CLI3 `baf0a03f` union.
 The shared E3 lexical fault sequence is applied once; the accepted stage-8 and
