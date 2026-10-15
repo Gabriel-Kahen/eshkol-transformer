@@ -1314,6 +1314,7 @@ e3_fault_generated_dir=
 e3_overflow_generated_dir=
 e3_numerical_generated_dir=
 e3_uniform_generated_dir=
+e3_minsubnormal_generated_dir=
 e3_zero_generated_dir=
 if [[ "${package_policy}" == e3-private-aggregate &&
       "${e3_tuple_kind}" == mode-graph ]]; then
@@ -1347,6 +1348,11 @@ elif [[ "${package_policy}" == e3-private-aggregate &&
   e3_uniform_generated_dir="$(e3_uniform_generated_stage "${output_object}")" ||
     die "E3 uniform generated source requires a fresh private gate stage"
 elif [[ "${package_policy}" == e3-private-aggregate &&
+        "${e3_tuple_kind}" == minsubnormal ]]; then
+  source "${PROJECT_ROOT}/scripts/e3-generated-source-stage.sh"
+  e3_minsubnormal_generated_dir="$(e3_minsubnormal_generated_stage "${output_object}")" ||
+    die "E3 min-subnormal generated source requires a fresh private gate stage"
+elif [[ "${package_policy}" == e3-private-aggregate &&
         "${e3_tuple_kind}" == zero ]]; then
   source "${PROJECT_ROOT}/scripts/e3-zero-generated-source-stage.sh"
   e3_zero_generated_dir="$(e3_zero_generated_stage "${output_object}")" ||
@@ -1360,6 +1366,7 @@ e3_fault_generated_owned=0
 e3_overflow_generated_owned=0
 e3_numerical_generated_owned=0
 e3_uniform_generated_owned=0
+e3_minsubnormal_generated_owned=0
 e3_zero_generated_owned=0
 e1b_cleanup() {
   local status=$?
@@ -1395,13 +1402,16 @@ e1b_cleanup() {
   if [[ "${status}" == 0 && "${e3_uniform_generated_owned}" == 1 ]]; then
     rm -rf -- "${e3_uniform_generated_dir}"
   fi
+  if [[ "${status}" == 0 && "${e3_minsubnormal_generated_owned}" == 1 ]]; then
+    rm -rf -- "${e3_minsubnormal_generated_dir}"
+  fi
   if [[ "${status}" == 0 && "${e3_zero_generated_owned}" == 1 ]]; then
     rm -rf -- "${e3_zero_generated_dir}"
   fi
   return "${status}"
 }
 trap e1b_cleanup EXIT
-if [[ -n "${e3_mode_graph_generated_dir}${e3_retention_generated_dir}${e3_fault_generated_dir}${e3_overflow_generated_dir}${e3_numerical_generated_dir}${e3_uniform_generated_dir}${e3_zero_generated_dir}" ]]; then
+if [[ -n "${e3_mode_graph_generated_dir}${e3_retention_generated_dir}${e3_fault_generated_dir}${e3_overflow_generated_dir}${e3_numerical_generated_dir}${e3_uniform_generated_dir}${e3_minsubnormal_generated_dir}${e3_zero_generated_dir}" ]]; then
   trap 'exit 143' TERM
   trap 'exit 130' INT
 fi
@@ -1432,6 +1442,10 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     mkdir -m 0700 -- "${e3_uniform_generated_dir}" ||
       die "E3 uniform generated source path was claimed concurrently"
     e3_uniform_generated_owned=1
+  elif [[ -n "${e3_minsubnormal_generated_dir}" ]]; then
+    mkdir -m 0700 -- "${e3_minsubnormal_generated_dir}" ||
+      die "E3 min-subnormal generated source path was claimed concurrently"
+    e3_minsubnormal_generated_owned=1
   elif [[ -n "${e3_zero_generated_dir}" ]]; then
     mkdir -m 0700 -- "${e3_zero_generated_dir}" ||
       die "E3 zero-control generated source path was claimed concurrently"
@@ -1439,7 +1453,7 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
   else
     e3_mode_graph_generated_dir="${e1b_tmp}/generated"
   fi
-  e3_generated_dir="${e3_fault_generated_dir:-${e3_zero_generated_dir:-${e3_uniform_generated_dir:-${e3_numerical_generated_dir:-${e3_overflow_generated_dir:-${e3_retention_generated_dir:-${e3_mode_graph_generated_dir}}}}}}}"
+  e3_generated_dir="${e3_fault_generated_dir:-${e3_zero_generated_dir:-${e3_minsubnormal_generated_dir:-${e3_uniform_generated_dir:-${e3_numerical_generated_dir:-${e3_overflow_generated_dir:-${e3_retention_generated_dir:-${e3_mode_graph_generated_dir}}}}}}}}"
   python3 "${PROJECT_ROOT}/scripts/generate-e3-d2-source.py" \
     --output-dir "${e3_generated_dir}" >"${e1b_tmp}/d2-generation.json"
   e3_generated_source_root="${e3_generated_dir}/source"
@@ -1816,7 +1830,7 @@ elif [[ "${package_policy}" == e3-private-aggregate ]]; then
   if [[ "${e3_public_tuple:-0}" != 1 ]]; then
     package_bridge_flags+=(-DET_E3_TESTING)
   fi
-  if [[ "${e3_tuple_kind}" == uniform ]]; then
+  if [[ ( "${e3_tuple_kind}" == uniform || "${e3_tuple_kind}" == minsubnormal ) ]]; then
     package_bridge_flags+=(-DET_F32_TENSOR_TESTING)
   fi
 elif [[ "${package_policy}" == m3-model-aggregate || \
@@ -1912,6 +1926,10 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     if [[ "${e3_uniform_mutant}" == last-tie ]]; then
       package_native_cflags+=(-DET_E3_UNIFORM_LAST_TIE_TEST)
     fi
+  elif [[ "${package_policy}" == e3-private-aggregate &&
+          "${e3_tuple_kind}" == minsubnormal ]]; then
+    package_native_cflags+=(-DET_E3_NUMERICAL_TESTING
+                            -DET_E3_RETENTION_TESTING -fno-builtin-printf)
   fi
   if [[ "${package_policy}" == e3-private-aggregate &&
         "${e3_tuple_kind}" == zero ]]; then
@@ -1925,6 +1943,12 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     package_source_flags=()
     if [[ "${package_policy}" == e3-private-aggregate &&
           "${e3_tuple_kind}" == uniform &&
+          ( "${package_native_source}" == "${PROJECT_ROOT}/native/f32_tensor.c" ||
+            "${package_native_source}" == "${PROJECT_ROOT}/src/eshkol_transformer/m3t_f32_integration.c" ) ]]; then
+      package_source_flags+=(-DET_F32_TENSOR_TESTING)
+    fi
+    if [[ "${package_policy}" == e3-private-aggregate &&
+          "${e3_tuple_kind}" == minsubnormal &&
           ( "${package_native_source}" == "${PROJECT_ROOT}/native/f32_tensor.c" ||
             "${package_native_source}" == "${PROJECT_ROOT}/src/eshkol_transformer/m3t_f32_integration.c" ) ]]; then
       package_source_flags+=(-DET_F32_TENSOR_TESTING)
@@ -1944,6 +1968,17 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
         "${PROJECT_ROOT}/tests/e3_private/retention_first_eval_frame.c")
           package_source_flags+=(-DET_F32_TENSOR_TESTING -DET_D2_NATIVE_TESTING
                                  -DET_E3_FIRST_EVAL_MUTATION_TESTING) ;;
+        "${PROJECT_ROOT}/native/e3_d2_native.c")
+          package_source_flags+=(-DET_D2_NATIVE_TESTING) ;;
+      esac
+    fi
+    if [[ "${package_policy}" == e3-private-aggregate &&
+          "${e3_tuple_kind}" == minsubnormal ]]; then
+      case "${package_native_source}" in
+        "${PROJECT_ROOT}/src/eshkol_transformer/m3_call_f32_integration.c")
+          package_source_flags+=(-DET_F32_TENSOR_TESTING) ;;
+        "${PROJECT_ROOT}/src/eshkol_transformer/e3_frame.c")
+          package_source_flags+=(-DET_F32_TENSOR_TESTING -DET_D2_NATIVE_TESTING) ;;
         "${PROJECT_ROOT}/native/e3_d2_native.c")
           package_source_flags+=(-DET_D2_NATIVE_TESTING) ;;
       esac
@@ -2563,7 +2598,7 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
         et_e3_test_seed_gradient_v1
         et_d2_exact_read_test_fail_stage_v1
       )
-    elif [[ "${e3_tuple_kind}" == uniform ]]; then
+    elif [[ ( "${e3_tuple_kind}" == uniform || "${e3_tuple_kind}" == minsubnormal ) ]]; then
       e3_required_private+=(
         et_e3_test_model_word_count_v1
         et_e3_test_model_word_v1
@@ -2607,6 +2642,7 @@ if [[ "${package_policy}" == e3-private-aggregate &&
         "${e3_tuple_kind:-}" == retention-overflow ||
         "${e3_tuple_kind:-}" == numerical ||
         "${e3_tuple_kind:-}" == uniform ||
+        "${e3_tuple_kind:-}" == minsubnormal ||
         "${e3_tuple_kind:-}" == zero ) ]]; then
   cp "${e1b_tmp}/private.ll" "${evidence_dir}.tmp.$$/private.ll"
 fi

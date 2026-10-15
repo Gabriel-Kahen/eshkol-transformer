@@ -1133,6 +1133,14 @@ records, CE/state/final reference and duplicate-generation bytes. This is a
 source/oracle candidate only: it adds no Eshkol driver or production API, and
 the predecessor M3 zero-state package and N4 D2 Eshkol census still require
 supported compiled results before any private numerical reachability claim.
+A separate noninstalled min-subnormal E3 tuple now has a C1 prebind driver,
+exact unique-owner payload/tie checks, generated D2 source closure, and a
+recipe for genuine three-batch E3 observations. Its parser requires physical
+f32 logit `00000001` at both positions before the independent 21-role and
+six-output/cursor comparison; a bias-clear checkpoint must fail that first
+logit gate. Host source/negative checks pass. This remains source-only: the
+dedicated package, compiled M3/D2 behavior, and floating-environment support
+have not been verified, so §9 numerical reachability remains open.
 The first [mathematical three-batch M2 sum-order witness](../tests/e3_reference/sum_order_witness_v1.json)
 failed the one-use df9546 compiled C gate: compiled CE rounded both groupings
 to `41dcde82`. The successor [compiled witness](../tests/e3_reference/sum_order_witness_v2.json)

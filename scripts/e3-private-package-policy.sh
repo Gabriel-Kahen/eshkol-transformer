@@ -14,6 +14,7 @@ e3_overflow_prefix="${PROJECT_ROOT}/tests/e3_private/overflow_package"
 e3_mode_graph_prefix="${PROJECT_ROOT}/tests/e3_mode_graph/package"
 e3_numerical_prefix="${PROJECT_ROOT}/tests/e3_private/numerical_package"
 e3_uniform_prefix="${PROJECT_ROOT}/tests/e3_private/uniform_package"
+e3_minsubnormal_prefix="${PROJECT_ROOT}/tests/e3_private/minsubnormal_package"
 e3_zero_prefix="${PROJECT_ROOT}/tests/e3_private/zero_control_package"
 e3_base_inputs=(
   "${PROJECT_ROOT}/native/e3_private_driver_root.esk"
@@ -74,6 +75,12 @@ e3_uniform_inputs=(
   "${PROJECT_ROOT}/tests/e3_private/uniform_bridge.c"
   "${e3_uniform_prefix}_private_renames.txt"
   "${e3_uniform_prefix}_public_exports.txt"
+)
+e3_minsubnormal_inputs=(
+  "${PROJECT_ROOT}/tests/e3_private/minsubnormal_driver_root.esk"
+  "${PROJECT_ROOT}/tests/e3_private/minsubnormal_bridge.c"
+  "${e3_minsubnormal_prefix}_private_renames.txt"
+  "${e3_minsubnormal_prefix}_public_exports.txt"
 )
 e3_zero_inputs=(
   "${PROJECT_ROOT}/tests/e3_private/zero_control_driver_root.esk"
@@ -170,6 +177,14 @@ for e3_raw in "${raw_private_root}" "${raw_package_bridge}" \
       e3_tuple_requested=1
     fi
   done
+  for e3_expected in "${e3_minsubnormal_inputs[@]}"; do
+    if [[ "$(realpath -m -- "${e3_raw}")" == "${e3_expected}" ]]; then
+      [[ -z "${e3_tuple_kind}" || "${e3_tuple_kind}" == minsubnormal ]] ||
+        die "E3 policy rejects mixed min-subnormal and other tuples"
+      e3_tuple_kind=minsubnormal
+      e3_tuple_requested=1
+    fi
+  done
   for e3_expected in "${e3_zero_inputs[@]}"; do
     if [[ "$(realpath -m -- "${e3_raw}")" == "${e3_expected}" ]]; then
       [[ -z "${e3_tuple_kind}" || "${e3_tuple_kind}" == zero ]] || \
@@ -209,6 +224,9 @@ elif [[ "${e3_tuple_kind}" == numerical ]]; then
 elif [[ "${e3_tuple_kind}" == uniform ]]; then
   e3_prefix="${e3_uniform_prefix}"
   e3_inputs=("${e3_uniform_inputs[@]}")
+elif [[ "${e3_tuple_kind}" == minsubnormal ]]; then
+  e3_prefix="${e3_minsubnormal_prefix}"
+  e3_inputs=("${e3_minsubnormal_inputs[@]}")
 elif [[ "${e3_tuple_kind}" == zero ]]; then
   e3_prefix="${e3_zero_prefix}"
   e3_inputs=("${e3_zero_inputs[@]}")
