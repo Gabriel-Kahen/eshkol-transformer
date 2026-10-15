@@ -1152,6 +1152,13 @@ The 7eeaa03 current-main M2 union added the padded-position test selector to
 composition failed only the M3CG predecessor checksum. This bounded successor
 repins that one script hash; independent review and fresh hosted exact-head
 validation remain required before integration.
+The separate [missing-third-batch M2 source candidate](e3/E3_MISSING_BATCH_MUTANT_SOURCE.md)
+prepares a numerical-tuple-only native accumulation omission after the genuine
+third D2 row. A distinct runtime case reaches the oracle with counters `(4,2)`;
+the source verifier requires unchanged D2/21-role/CE/reduction observations and
+first divergence at the third serial batch counter. Focused host source tests
+pass, but independent review and a fresh supported compiled-private gate are
+still required; this candidate adds no §9 acceptance.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each

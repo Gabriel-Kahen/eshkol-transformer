@@ -13,6 +13,10 @@
 #endif
 #include <xmmintrin.h>
 
+#if defined(ET_E3_NUMERICAL_MISSING_BATCH) && !defined(ET_E3_NUMERICAL_TESTING)
+#error "missing-batch mutation requires the private numerical test tuple"
+#endif
+
 #pragma STDC FENV_ACCESS ON
 #pragma STDC FP_CONTRACT OFF
 _Static_assert(CHAR_BIT == 8 && sizeof(float) == 4 && FLT_RADIX == 2 &&
@@ -257,6 +261,17 @@ static int32_t evaluate_accumulate(const et_kernel_call_v1 *c, union results *re
   const int64_t next_tokens = tokens + active;
   const int64_t next_batches = batches + 1;
   if (next_batches > 8192 || next_tokens > 16384) return capped(e,op);
+#ifdef ET_E3_NUMERICAL_MISSING_BATCH
+  /* Test-only fault: consume the third D2 row but omit its serial update. */
+  if (batches == 2) {
+    result->accumulate.n = n;
+    result->accumulate.w = w;
+    result->accumulate.correct = correct;
+    result->accumulate.tokens = tokens;
+    result->accumulate.batches = batches;
+    return 0;
+  }
+#endif
 #ifdef ET_E3_NUMERICAL_MEAN_OF_MEANS
   const float next_n = n + nb / wb;
 #else
