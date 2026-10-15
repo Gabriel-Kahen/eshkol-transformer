@@ -1338,8 +1338,9 @@ fault driver compares all six actual pre-call words, first stage-12 error,
 cursor/mode/model/RNG/owner state and same-authority retry against the fixed
 `(5,3)` result. Focused host source tests and the unsupported-host Clang 22
 normal native frame run pass; the local sanitizer run cannot start LeakSanitizer
-under ptrace. Supported optimized Eshkol AOT normal/poison/sanitizer evidence,
-independent review and the remaining R1/R2 stage cuts remain open.
+under ptrace. Independent source/test review accepted the composed E3 union at
+`9aed9c65`/tree `55377da7`; supported optimized Eshkol AOT
+normal/poison/sanitizer evidence and the remaining R1/R2 stage cuts stay open.
 
 A bounded noninstalled stage-3 successor holds an authentic model parameter
 value borrow through the existing private fault tuple. The real M3 pin
@@ -1364,9 +1365,10 @@ zero live pins/borrows, and same-authority retry against an independent twin.
 The host included-TU M3 test exercises all 14 indices and rejects index 14;
 the host native E3 frame test checks every prefix, pin and borrow release,
 selector negatives, and retry. Focused lexical/source and native
-symbol/feature-off checks pass. This is
-still a source candidate: supported optimized Eshkol AOT normal, poison and
-sanitizer gates plus independent review remain the next admission gate.
+symbol/feature-off checks pass. Independent source/test review accepted the E3
+union at `9aed9c65`/tree `55377da7`. This remains a source candidate;
+supported optimized Eshkol AOT normal, poison and sanitizer gates are the next
+admission gate.
 
 The bounded E3 §9 stage-8 source candidate adds noninstalled frame-owned
 site 5, ordinal 0, occurrences 1 or 2. After all 21 forward roles, it
@@ -2163,8 +2165,9 @@ The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRI
 adds a source-only native/Eshkol transition from an authentic idle manual P1
 commit to one generated G1. Its host synthetic state witness and causal source
 checks cover admission, ordinary-route isolation, pending output, abort and
-retry. The genuine same-process sampling fixture is prepared but unrun; an
-independent source review and pinned normal/repeat/sanitizer gate are required
+retry. The current-main G3 leaf union was independently source-reviewed at
+`c812b019`/tree `0d237093`; the genuine same-process sampling fixture remains
+unrun and pinned normal/repeat/sanitizer compiled acceptance is required
 before this private seam is accepted. This does not bind a C2 pair, expose a
 public route, or prove resumed generation.
 
@@ -2291,8 +2294,9 @@ pair decoder with C1's exact 288-byte file read into fresh staging. Host-only
 source mutations and independently generated short/long/symlink/FIFO/wrong-
 digest fixtures pass; a genuine same-registry Eshkol file/receipt fixture is
 prepared but unrun. It adds no SAVE writer, C2 owner transfer, model restore,
-public generation or continuation. Independent source review and pinned
-compiled normal/repeat/sanitizer acceptance remain pending.
+public generation or continuation. The current-main G3 leaf union was
+independently source-reviewed at `c812b019`/tree `0d237093`; pinned compiled
+normal/repeat/sanitizer acceptance remains pending.
 
 The G3-R authentic C2 SAVE test gate is prepared at
 `scripts/test-g3r-c2-authentic-save.sh`. It compiles the accepted public C2
