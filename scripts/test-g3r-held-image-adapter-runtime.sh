@@ -41,12 +41,14 @@ env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
     >"$out/compile.stdout" 2>"$out/compile.stderr"
 [[ -s "$out/held-image" && ! -s "$out/compile.stderr" ]] || \
   die "held-image compilation failed"
-ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 180s \
-  "$out/held-image" "$out/linked/corpus" normal \
-  >"$out/normal.stdout" 2>"$out/normal.stderr"
-[[ ! -s "$out/normal.stderr" ]] || die "normal case wrote stderr"
-rg -q '^G3R HELD IMAGE ADAPTER PASS: [0-9]+ checks$' \
-  "$out/normal.stdout" || die "normal case missed pass marker"
+for mode in normal splice; do
+  ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 180s \
+    "$out/held-image" "$out/linked/corpus" "$mode" \
+    >"$out/$mode.stdout" 2>"$out/$mode.stderr"
+  [[ ! -s "$out/$mode.stderr" ]] || die "$mode wrote stderr"
+  rg -q '^G3R HELD IMAGE ADAPTER PASS: [0-9]+ checks$' \
+    "$out/$mode.stdout" || die "$mode missed pass marker"
+done
 for mode in uncertain-release-raise uncertain-release-return; do
   if ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 180s \
     "$out/held-image" "$out/linked/corpus" "$mode" \

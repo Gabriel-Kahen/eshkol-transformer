@@ -2471,10 +2471,15 @@ while original G3/O2/TR3 holds and the claimed C2 child remain live. Its
 private bridge requires the feature macros; the adapter rechecks original
 owner/model/tokenizer and TR3/O2 authority, compares borrowed C2 controls to
 their original issuer, and validates partition and EOS provenance before
-returning any fields. Focused host bridge, source-mutation, and inherited
-native held-owner tests pass; the prepared Eshkol aggregate and fail-stop
-cuts still need compiled admission. It publishes no file, public SAVE, LOAD,
-or replay behavior.
+returning any fields. Independent source review held its first version because
+an adopter vector could splice a different claimed C2 shell onto the live
+original hold. The source successor now reauthenticates the canonical O2
+registry state, enrollment cell, C2 owner token, exact issued pointer and
+native issued-match before and after C2 borrow; its prepared two-owner splice
+case requires both original transfers to remain retryable. Focused host
+bridge, source-mutation, and native held-owner tests pass. The Eshkol aggregate
+and fail-stop cuts still need compiled admission. It publishes no file, public
+SAVE, LOAD, or replay behavior.
 
 The [private M3 owner-roster prerequisite](g3/G3_R_M3_OWNER_ROSTER_PREREQUISITE.md)
 ports the feature-gated registry-backed fourteen-parameter/identity roster

@@ -101,21 +101,24 @@
   (check "claimed C2 child releases"
          (c2-training-state-release-internal! shell 'trainer-state)))
 
-(define (try-project transfer shell expected)
+(define (try-project-values original adopter request p1 shell expected)
   (let* ((sentinel (vector 'unpublished))
          (result sentinel)
          (caught sentinel))
     (guard (raised (#t (set! caught raised)))
       (set! result
-        (g3r-held-image-project!
-          (vector-ref transfer 0) (vector-ref transfer 1)
-          (vector-ref transfer 3) (vector-ref transfer 2) shell)))
+        (g3r-held-image-project! original adopter request p1 shell)))
     (check "failure publishes no seven fields" (eq? result sentinel))
     (check "first error survives cleanup"
            (if (eq? expected 'false) (eq? caught #f)
                (if (eq? expected 'typed)
                    (error-at? 'corrupt-data 'g3r-held-image-project! caught)
                    (transformer-error? caught))))))
+
+(define (try-project transfer shell expected)
+  (try-project-values
+    (vector-ref transfer 0) (vector-ref transfer 1)
+    (vector-ref transfer 3) (vector-ref transfer 2) shell expected))
 
 (define (retry-project transfer shell)
   (let ((fields
@@ -186,6 +189,41 @@
     (set! g3r-original-owner-g3-recheck! saved)
     (retry-project transfer shell)))
 
+(define (splice-adopter-case tuple-a transfer-a shell-a directory)
+  (let* ((tuple-b (make-tuple directory))
+         (transfer-b (prepare-transfer tuple-b))
+         (request-b (vector-ref transfer-b 3))
+         (adopter-b (vector-ref transfer-b 1))
+         (p1-b (vector-ref transfer-b 2)))
+    (c2-training-state-compose-internal request-b)
+    (let* ((shell-b (g3r-held-o2-adopter-c2-claim!
+                      adopter-b request-b p1-b))
+           (original-a (vector-ref transfer-a 0))
+           (adopter-a (vector-ref transfer-a 1))
+           (sparse
+             (vector g3r-held-o2-adopter-tag
+                     (vector-ref (vector-ref original-a 4) 0)
+                     (vector-ref tuple-a 4) #f #f
+                     (vector-ref adopter-b 5) #f #f 'claimed))
+           (spliced (vector-copy adopter-a)))
+      (check "A and B controls have matching detached values"
+             (equal? (vector-ref (c2-training-state-find shell-a) 3)
+                     (vector-ref (c2-training-state-find shell-b) 3)))
+      (check "both original holds remain live"
+             (and (eq? (vector-ref original-a 5) 'held)
+                  (eq? (vector-ref (vector-ref transfer-b 0) 5) 'held)))
+      (try-project-values original-a sparse request-b p1-b shell-b 'state)
+      (vector-set! spliced 5 (vector-ref adopter-b 5))
+      (try-project-values original-a spliced request-b p1-b shell-b 'state)
+      ;; Neither rejected projection borrowed C2 or consumed either native
+      ;; hold. Both real transfers must still project and release normally.
+      (retry-project transfer-a shell-a)
+      (retry-project transfer-b shell-b)
+      (release-claimed transfer-b shell-b)
+      (release-claimed transfer-a shell-a)
+      (finish-tuple tuple-b)
+      (finish-tuple tuple-a))))
+
 (define args (command-line))
 (define directory (car (cdr args)))
 (define mode (car (cdr (cdr args))))
@@ -196,8 +234,13 @@
 (define p1 (vector-ref transfer 2))
 (c2-training-state-compose-internal request)
 (define shell (g3r-held-o2-adopter-c2-claim! adopter request p1))
-(if (or (string=? mode "uncertain-release-raise")
-        (string=? mode "uncertain-release-return"))
+(cond
+  ((string=? mode "splice")
+   (splice-adopter-case tuple transfer shell directory)
+   (display "G3R HELD IMAGE ADAPTER PASS: ")
+   (display checks) (display " checks") (newline))
+  ((or (string=? mode "uncertain-release-raise")
+       (string=? mode "uncertain-release-return"))
     (begin
       (set! c2-training-state-borrow-end-internal
         (lambda (borrow)
@@ -207,8 +250,9 @@
                (current-error-port))
       (newline (current-error-port))
       (g3r-held-image-project! (vector-ref transfer 0) adopter request p1 shell)
-      (exit 43))
-    (begin
+      (exit 43)))
+  ((string=? mode "normal")
+   (begin
       (retry-project transfer shell)
       (cut-c2-control transfer shell 0 2 1730)
       (cut-c2-control transfer shell 1 0
@@ -253,3 +297,4 @@
       (finish-tuple tuple)
       (display "G3R HELD IMAGE ADAPTER PASS: ")
       (display checks) (display " checks") (newline)))
+  (else (check "known mode" #f)))

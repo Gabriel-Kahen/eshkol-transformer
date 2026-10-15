@@ -63,19 +63,25 @@ for needle in (
     "(current-error-port)",
     "(check \"failure publishes no seven fields\"",
     "(retry-project transfer shell)",
+    "(define (splice-adopter-case", "(try-project-values original-a sparse",
+    "(try-project-values original-a spliced", "(retry-project transfer-a shell-a)",
+    "(retry-project transfer-b shell-b)",
 ):
     assert needle in fixture, needle
 
 owner = source.split("(define (g3r-held-image-owner-recheck!", 1)[1].split(
     "(define (g3r-held-image-controls-check!", 1)[0]
 controls = source.split("(define (g3r-held-image-controls-check!", 1)[1].split(
+    "(define (g3r-held-image-adopter-recheck!", 1)[0]
+adopter = source.split("(define (g3r-held-image-adopter-recheck!", 1)[1].split(
     "(define (g3r-held-image-project!", 1)[0]
 project = source.split("(define (g3r-held-image-project!", 1)[1]
 native_copy = native.split("int64_t et_g3r_private_g3t_save_copy_v1(", 1)[1].split(
     "int64_t et_g3r_private_g3t_save_end_v1", 1)[0]
 
 
-def contract(owner_text, controls_text, project_text, pure_text, bridge_text):
+def contract(owner_text, controls_text, adopter_text, project_text,
+             pure_text, bridge_text):
     for needle in (
         "g3r-original-owner-tag", "'held", "g3r-trainer-g3-save-tag",
         "tr3-lease-record-for-shell-internal",
@@ -94,7 +100,20 @@ def contract(owner_text, controls_text, project_text, pure_text, bridge_text):
     ):
         assert needle in controls_text, needle
     for needle in (
-        "g3r-held-o2-adopter-tag", "'claimed", "c2-training-state-find",
+        "g3r-held-o2-adopter-tag", "'claimed", "(vector-ref adopter 3)",
+        "(vector-ref adopter 4)", "(vector-ref adopter 5)",
+        "(vector-ref adopter 6)", "(vector-ref adopter 7)",
+        "(o2-find-identity o2-shell o2-states)",
+        "(o2-find-identity (vector-ref adopter 2) o2-optimizers)",
+        "(eq? owner (c2-training-state-find shell))",
+        "(eq? remaining (vector-ref adopter 7))",
+        "(vector-ref o2-state 1) issued",
+        "(vector-ref o2-state 6) (vector-ref owner 6)",
+        "(g3r-held-o2-issued-match",
+    ):
+        assert needle in adopter_text, needle
+    for needle in (
+        "c2-training-state-find",
         "c2-training-state-borrow-begin-internal",
         "c2-training-state-borrow-projection-internal",
         "g3r-held-image-copy-internal hold staging",
@@ -105,7 +124,13 @@ def contract(owner_text, controls_text, project_text, pure_text, bridge_text):
     ):
         assert needle in project_text, needle
     assert project_text.count("g3r-held-image-owner-recheck! original operation") == 4
+    assert project_text.count("g3r-held-image-adopter-recheck!") == 2
     assert project_text.count("g3r-held-image-controls-check! controls record entry operation") == 2
+    assert project_text.index("g3r-held-image-adopter-recheck!") < project_text.index(
+        "c2-training-state-borrow-begin-internal")
+    assert project_text.rindex("c2-training-state-borrow-end-internal") < project_text.rindex(
+        "g3r-held-image-adopter-recheck!") < project_text.rindex(
+        "g3r-held-image-owner-recheck! original operation")
     assert project_text.index("c2-training-state-borrow-begin-internal") < project_text.index(
         "g3r-held-image-copy-internal hold staging") < project_text.index(
         "g3r-save-data staging entry") < project_text.rindex(
@@ -124,7 +149,7 @@ def contract(owner_text, controls_text, project_text, pure_text, bridge_text):
     assert "et_g3r_private_g3t_save_copy_v1(hold, image, length)" in bridge_text
 
 
-contract(owner, controls, project, pure, bridge)
+contract(owner, controls, adopter, project, pure, bridge)
 assert "et_g3r_private_g3t_save_check_v1(hold)" in native_copy
 assert "memcpy(destination, &hold->value, sizeof(*destination))" in native_copy
 for needle in ("history_pending_g1 = 1", "history_ids[0] ^= 1",
@@ -143,20 +168,28 @@ cuts = [
     ("controls", "(vector-ref record 18)"),
     ("controls", "(vector-ref record 17)"),
     ("controls", "(vector-ref record 19)"),
+    ("adopter", "(o2-find-identity o2-shell o2-states)"),
+    ("adopter", "(eq? owner (c2-training-state-find shell))"),
+    ("adopter", "(eq? remaining (vector-ref adopter 7))"),
+    ("adopter", "(vector-ref o2-state 1) issued"),
+    ("adopter", "(vector-ref o2-state 6) (vector-ref owner 6)"),
+    ("adopter", "(g3r-held-o2-issued-match"),
+    ("project", "g3r-held-image-adopter-recheck!"),
     ("project", "g3r-held-image-copy-internal hold staging"),
     ("project", "g3r-save-data staging entry"),
     ("project", "tr3-lease-fail-stop 134"),
     ("pure", "(g3r-save-word bytes 16)"),
     ("bridge", "et_g3r_private_g3t_save_copy_v1(hold, image, length)"),
 ]
-parts = dict(owner=owner, controls=controls, project=project,
+parts = dict(owner=owner, controls=controls, adopter=adopter, project=project,
              pure=pure, bridge=bridge)
 for section, needle in cuts:
     assert needle in parts[section]
     changed = dict(parts)
     changed[section] = changed[section].replace(needle, "CUT")
     try:
-        contract(changed["owner"], changed["controls"], changed["project"],
+        contract(changed["owner"], changed["controls"], changed["adopter"],
+                 changed["project"],
                  changed["pure"], changed["bridge"])
     except (AssertionError, ValueError):
         pass
