@@ -104,6 +104,7 @@ DEVELOPMENT_SCRIPTS = frozenset({
     ROOT / "scripts" / "check-g3g-manual-package.py",
     ROOT / "scripts" / "check-g3r-record-codec.py",
     ROOT / "scripts" / "check-g3r-p1-roster.py",
+    ROOT / "scripts" / "check-g3r-replayed-p1-g1.py",
 }) | G3C4_DEVELOPMENT_SCRIPTS
 
 
@@ -159,6 +160,10 @@ class PythonIsolationTests(unittest.TestCase):
             "scripts/nested/generate-e3-d2-source.py",
             "src/generate-e3-d2-source.py", "lib/runtime.py",
             "internal/e3/runtime.py", "native/runtime.py",
+            "scripts/check-g3r-replayed-p1-g1.py.extra.py",
+            "scripts/nested/check-g3r-replayed-p1-g1.py",
+            "src/check-g3r-replayed-p1-g1.py",
+            "native/check-g3r-replayed-p1-g1.py",
         ):
             with self.subTest(path=relative):
                 self.assertFalse(development_python(ROOT / relative))

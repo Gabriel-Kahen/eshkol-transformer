@@ -214,6 +214,10 @@ int64_t et_g3t_private_role_step_v1(void *candidate, int64_t ordinal) {
   g3t_clear();
   g3t_context *c = g3t_active(candidate);
   if (!c) return g3t_error_category;
+#ifdef ET_G3R_REPLAYED_P1_G1_PRIVATE
+  if (!g3t_replay_coherent(c))
+    return g3t_bad(G3T_STATE, G3T_INVARIANT);
+#endif
   if (ordinal < 0 || ordinal > 20)
     return g3t_bad(G3T_ARGUMENT, G3T_CONFIG);
 #ifdef ET_G3T_MANUAL_P1_PREFILL_PRIVATE

@@ -1,0 +1,136 @@
+;;; Prepared same-registry fixture; requires a genuine valid C2 image and
+;;; prepare_pair_file_inputs.py's fresh companion directory. Not source proof.
+(load "g3r_c2_pair_file_read_root.esk")
+
+(extern void g3r-pair-file-io-reset
+        :real et_checkpoint_io_test_reset_v1)
+(extern void g3r-pair-file-io-fail i64 i64 i64
+        :real et_checkpoint_io_test_fail_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3-R PAIR FILE FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label category thunk)
+  (let ((caught? #f) (caught #f))
+    (guard (raised (#t (set! caught? #t) (set! caught raised)))
+      (thunk))
+    (check label
+      (and caught? (transformer-error? caught)
+           (eq? (transformer-error-category caught) category)
+           (eq? (transformer-error-operation caught) 'checkpoint-load)))))
+(define (reject-any label thunk)
+  (let ((caught? #f))
+    (guard (raised (#t (set! caught? #t))) (thunk))
+    (check label caught?)))
+(define (untouched? values)
+  (let loop ((at 0))
+    (if (= at 8) #t
+        (and (eq? (vector-ref values at) 'untouched)
+             (loop (+ at 1))))))
+(define (bytes=? left right)
+  (and (= (bytevector-length left) (bytevector-length right))
+       (let loop ((at 0))
+         (if (= at (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left at)
+                     (bytevector-u8-ref right at))
+                  (loop (+ at 1)))))))
+(define (receipt-idle? receipt)
+  (eq? (vector-ref (g3r-c2-receipt-find receipt) 1) 'live))
+
+(define args (command-line))
+(define c2-path (car (cdr args)))
+(define directory (car (cdr (cdr args))))
+(define (companion name) (string-append directory "/" name))
+(define policy
+  (c2-persistence-policy-internal 1048576 1048576 1048576 16 'cpu))
+(define report (k2-public-capability-discover))
+(define receipt (g3r-c2-load-with-sha-internal c2-path policy report))
+(define destination (make-vector 8 'untouched))
+(check "valid file returns caller destination"
+  (eq? (g3r-c2-pair-file-decode-internal!
+         receipt (companion "valid.g3r") destination)
+       destination))
+(check "valid file binds the exact bounded fields"
+  (and (equal? (vector-ref destination 0)
+               (vector 0 1065353216 256 1065353216 1 -1))
+       (equal? (vector-ref destination 1)
+               (vector 1 1729 -1 -9223372036854775808))
+       (bytes=? (vector-ref destination 2) (bytevector 7))
+       (= (vector-ref destination 3) 1)
+       (= (vector-ref destination 4) 0)
+       (= (vector-ref destination 5) 0)
+       (= (bytevector-length (vector-ref destination 7)) 32)
+       (receipt-idle? receipt)))
+(define pending (make-vector 8 'untouched))
+(reject "non-string path" 'invalid-argument
+  (lambda () (g3r-c2-pair-file-decode-internal! receipt 17 pending)))
+(reject "empty path" 'invalid-argument
+  (lambda () (g3r-c2-pair-file-decode-internal! receipt "" pending)))
+(reject "embedded-NUL path" 'invalid-argument
+  (lambda () (g3r-c2-pair-file-decode-internal!
+               receipt (string-append directory "/" (string #\nul) "valid.g3r")
+               pending)))
+(check "embedded-NUL path preserves destination and receipt"
+  (and (untouched? pending) (receipt-idle? receipt)))
+(define oversized-utf8-path (make-string 2049 (string-ref "é" 0)))
+(check "oversized path has fewer than 4096 characters"
+  (< (string-length oversized-utf8-path) 4096))
+(check "oversized path has more than 4096 UTF-8 bytes"
+  (> (bytevector-length (string->utf8 oversized-utf8-path)) 4096))
+(reject "oversized UTF-8 path" 'invalid-argument
+  (lambda () (g3r-c2-pair-file-decode-internal!
+               receipt oversized-utf8-path pending)))
+(check "invalid paths preserve destination and receipt"
+  (and (untouched? pending) (receipt-idle? receipt)))
+(define (file-reject label path)
+  (reject label 'io
+    (lambda () (g3r-c2-pair-file-decode-internal!
+                 receipt path pending)))
+  (check "file error preserves destination and receipt"
+    (and (untouched? pending) (receipt-idle? receipt))))
+(file-reject "short exact record" (companion "short.g3r"))
+(file-reject "long exact record" (companion "long.g3r"))
+(file-reject "symlink record" (companion "link.g3r"))
+(file-reject "FIFO record" (companion "fifo.g3r"))
+(reject-any "valid wrong-image record rejects"
+  (lambda () (g3r-c2-pair-file-decode-internal!
+               receipt (companion "wrong-digest.g3r") pending)))
+(check "wrong digest preserves destination and receipt"
+  (and (untouched? pending) (receipt-idle? receipt)))
+(reject-any "torn record rejects"
+  (lambda () (g3r-c2-pair-file-decode-internal!
+               receipt (companion "torn.g3r") pending)))
+(check "torn record preserves destination and receipt"
+  (and (untouched? pending) (receipt-idle? receipt)))
+(g3r-pair-file-io-reset)
+(g3r-pair-file-io-fail 6 1 5)
+(file-reject "read cut" (companion "valid.g3r"))
+(g3r-pair-file-io-reset)
+(g3r-pair-file-io-fail 7 1 5)
+(file-reject "source close cut" (companion "valid.g3r"))
+(g3r-pair-file-io-reset)
+(g3r-pair-file-io-fail 16 1 5)
+(file-reject "directory close cut" (companion "valid.g3r"))
+(g3r-pair-file-io-reset)
+(reject "forged receipt" 'invalid-argument
+  (lambda () (g3r-c2-pair-file-decode-internal!
+               (vector 'forged) (companion "valid.g3r") pending)))
+(check "forged receipt leaves destination and original receipt"
+  (and (untouched? pending) (receipt-idle? receipt)))
+(define borrow
+  (g3r-c2-receipt-borrow-begin-internal receipt 'checkpoint-load))
+(reject "busy receipt" 'invalid-state
+  (lambda () (g3r-c2-pair-file-decode-internal!
+               receipt (companion "valid.g3r") pending)))
+(g3r-c2-receipt-borrow-end-internal! borrow)
+(check "busy receipt leaves destination and becomes idle"
+  (and (untouched? pending) (receipt-idle? receipt)))
+(check "release exact receipt" (g3r-c2-receipt-release-internal! receipt))
+(reject "dead receipt" 'invalid-state
+  (lambda () (g3r-c2-pair-file-decode-internal!
+               receipt (companion "valid.g3r") pending)))
+(check "dead receipt leaves destination" (untouched? pending))
+(display "G3-R companion file read PASS: ")
+(display checks) (display " checks") (newline)
