@@ -94,6 +94,9 @@ struct et_e3_frame_internal {
   float sum_order_first, sum_order_second;
   uint32_t sum_order_seen;
 #endif
+#ifdef ET_E3_NUMERICAL_TESTING
+  uint32_t numerical_batches;
+#endif
 #ifdef ET_E3_FAULT_TESTING
   /* State: 0 clear, 1 armed, 2 fired, 3 unreached after one call. */
   uint32_t fault_state, fault_site, fault_ordinal, fault_occurrence;
@@ -438,8 +441,10 @@ static void e3_numerical_words(et_f32_tensor *tensor, size_t expected) {
 
 static void e3_numerical_batch(et_e3_frame_internal *frame) {
   const size_t bank = frame->sum_bank;
-  const int64_t ordinal = frame->counts[bank][1] - 1;
-  if (ordinal < 0 || ordinal >= 3) abort();
+  /* Observation order follows completed D2 rows, even when a test provider
+   * deliberately omits an accumulation and leaves the result count unchanged. */
+  const int64_t ordinal = (int64_t)frame->numerical_batches;
+  if (ordinal >= 3) abort();
   printf("E3ROW\t%" PRId64 "\t%" PRId64 ",%" PRId64
          "\t%" PRId64 ",%" PRId64 "\t%u,%u\n", ordinal,
          frame->ids[0], frame->ids[1], frame->targets[0], frame->targets[1],
@@ -483,6 +488,7 @@ static void e3_numerical_batch(et_e3_frame_internal *frame) {
   }
   printf("\t%" PRId64 ",%" PRId64 "\n",
          frame->counts[bank][0], frame->counts[bank][1]);
+  ++frame->numerical_batches;
 }
 
 static void e3_numerical_final(et_e3_frame_internal *frame) {
@@ -872,6 +878,9 @@ int64_t et_e3_private_acquire_v1(void *pointer) {
   frame->active = 0;
   memset(frame->staged_counts, 0, sizeof(frame->staged_counts));
   frame->sum_bank = 0;
+#ifdef ET_E3_NUMERICAL_TESTING
+  frame->numerical_batches = 0;
+#endif
 #ifdef ET_E3_NUMERICAL_SUM_ORDER
   frame->sum_order_first = frame->sum_order_second = 0.0f;
   frame->sum_order_seen = 0;

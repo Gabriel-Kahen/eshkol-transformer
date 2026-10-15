@@ -91,6 +91,15 @@ class MissingBatchMutantSourceTests(unittest.TestCase):
         payload, roles = parse(frame_bytes(records), 3)
         self.assertEqual(len(payload["batches"]), 3)
         self.assertEqual(len(roles.splitlines()), 63)
+        # An omitted accumulation leaves the state count at two, but the
+        # observer must still identify the third emitted D2 row as ordinal 2.
+        repeated_state_ordinal = [
+            line.replace("\t2\t", "\t1\t", 1) if line.startswith("E3")
+            and not line.startswith("E3FINAL") and "\t2\t" in line else line
+            for line in records
+        ]
+        with self.assertRaisesRegex(ValueError, "ordinal differs"):
+            parse(frame_bytes(repeated_state_ordinal), 3)
         final_row = next(index for index, line in enumerate(records)
                          if line.startswith("E3ROW\t2\t"))
         with self.assertRaisesRegex(ValueError, "omitted or duplicated"):
@@ -101,6 +110,13 @@ class MissingBatchMutantSourceTests(unittest.TestCase):
         selector = (ROOT / "scripts/build-e3-numerical-test.sh").read_text()
         gate = (ROOT / "scripts/test-e3-missing-batch-mutant.sh").read_text()
         runtime = (ROOT / "tests/e3_private/numerical_runtime.esk").read_text()
+        frame = (ROOT / "src/eshkol_transformer/e3_frame.c").read_text()
+        observer = frame.split("static void e3_numerical_batch(", 1)[1].split(
+            "static void e3_numerical_final(", 1)[0]
+        self.assertIn("frame->numerical_batches = 0;", frame)
+        self.assertIn("ordinal = (int64_t)frame->numerical_batches;", observer)
+        self.assertIn("++frame->numerical_batches;", observer)
+        self.assertNotIn("frame->counts[bank][1] - 1", observer)
         self.assertIn('missing-batch) package_native_cflags+=(-DET_E3_NUMERICAL_MISSING_BATCH)', builder)
         self.assertIn('"${e3_tuple_kind}" == numerical', builder)
         self.assertIn('missing-batch-sanitize', selector)

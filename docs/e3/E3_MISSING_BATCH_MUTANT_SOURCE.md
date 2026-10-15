@@ -15,7 +15,9 @@ ABI, and other numerical mutants are unchanged. Without
 
 The `sum-order-missing-batch` runtime case expects final counters `(4,2)` so
 the executable reaches the independent oracle after consuming the genuine
-third D2 row. The parser requires three ordered rows and 63 model roles.
+third D2 row. The test-only numerical observer numbers completed D2 rows with
+its own counter because the mutant intentionally leaves the accumulation count
+at two. The parser requires three ordered rows and 63 model roles.
 `verify_missing_batch_mutant.py` first checks the normal observation against
 the frozen model oracle. It then requires identical roles, D2 rows, CE,
 reductions and first two states, plus the third result equal to the prior
@@ -26,8 +28,13 @@ writing a transcript. This corpus has third-row correct count zero, so `C`
 remains exactly zero; the missing row is witnessed by the counter and `N,W`.
 The runtime also requires cursor-byte equality.
 
-The one-use `scripts/test-e3-missing-batch-mutant.sh` gate is prepared but has
-not been run. It requires canonical isolation, exact object/archive/depfile
+The first one-use `scripts/test-e3-missing-batch-mutant.sh` gate on `9417daca`
+failed at mutant observation parsing: its third emitted row had ordinal 1,
+inherited from the deliberately unchanged accumulated batch count. Normal
+output parsed successfully. The failed raw evidence is preserved at
+`e3-m2-missing-batch-9417daca-runtime-20261015-a`. The bounded observer
+repair needs an independent source review and fresh supported gate. That gate
+requires canonical isolation, exact object/archive/depfile
 and symbol/closure inventories, two fresh private AOT builds, normal/repeat,
 poison and ASan/UBSan runs, four normal transcripts and four causal mutant
 rejections without transcripts. Independent source/test review must precede

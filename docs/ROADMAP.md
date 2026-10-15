@@ -1157,8 +1157,14 @@ prepares a numerical-tuple-only native accumulation omission after the genuine
 third D2 row. A distinct runtime case reaches the oracle with counters `(4,2)`;
 the source verifier requires unchanged D2/21-role/CE/reduction observations and
 first divergence at the third serial batch counter. Focused host source tests
-pass, but independent review and a fresh supported compiled-private gate are
-still required; this candidate adds no §9 acceptance.
+pass. The first one-use compiled gate on `9417daca` exited 1 after the normal
+three-row run: the mutant emitted its third row as ordinal 1 because the
+test-only observer derived the row ordinal from the deliberately unchanged
+accumulated batch count. The raw failed evidence remains preserved at
+`e3-m2-missing-batch-9417daca-runtime-20261015-a`. A bounded observer repair
+counts completed emitted rows separately and leaves the accumulated state in
+the trace unchanged. Independent source review and a fresh supported compiled
+gate are required; this candidate adds no §9 acceptance.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each
