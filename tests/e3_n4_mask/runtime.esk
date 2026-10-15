@@ -1,0 +1,41 @@
+;;; Prepared same-registry check of authentic D2 views; compiled gate unrun.
+(extern i64 n4-view-match ptr i64 i64 i64 ptr i64
+        :real et_d2_test_view_match_v1)
+
+(define (n4-check label ok)
+  (if (not ok)
+      (begin (display "E3 N4 MASK FAIL: ") (display label) (newline) (exit 1))))
+
+(define (n4-config directory packed?)
+  (list ':directory directory ':batch-size 1 ':sequence-length 2
+        ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 3 ':maximum-batch-bytes 34
+        ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? packed?))
+
+(define (n4-case root name packed? second)
+  (let* ((directory (string-append root "/" name))
+         (dataset (d2-token-dataset-open (n4-config directory packed?) tokenizer))
+         (batch (d2-token-dataset-next-batch dataset))
+         (mask (d2-token-batch-loss-mask batch))
+         (expected (bytevector 1 second)))
+    (n4-check name
+      (d2-token-tensor-with-view-internal
+        mask (lambda (view) (= 1 (n4-view-match view 1 2 2 expected 2)))))
+    (d2-token-batch-release! batch)
+    (n4-check 'end (d2-token-dataset-end? (d2-token-dataset-next-batch dataset)))
+    (d2-token-dataset-close! dataset)))
+
+(define args (command-line))
+(n4-check 'arguments (and (pair? (cdr args)) (null? (cdr (cdr args)))))
+(define root (car (cdr args)))
+(define config
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define tokenizer (t1-private-tokenizer-byte config))
+(n4-case root "p2" #t 0)
+(n4-case root "u2" #f 0)
+(n4-case root "p3" #t 1)
+(n4-case root "u3" #f 1)
+(display "E3 N4 AUTHENTIC MASK CENSUS PASS: 4 rows") (newline)

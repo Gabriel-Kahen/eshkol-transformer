@@ -1090,6 +1090,15 @@ from direct-provider-only cases and names the missing noninstalled model-control
 and stage-selective fault/observer seams for review. It provides no new runtime
 proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
 verdicts remain prerequisites before the full matrix is implemented and run.
+A bounded noninstalled N4 mask-census source/test candidate uses fresh checked
+raw-V256 D1 resources containing two or three tokens and existing D2 T=2
+packed/unpacked APIs. Its host test observes all four native D2 rows as `10`
+or `11`; a test-only mask-placement mutant first changes the two-token packed
+row to `01` and is rejected. A same-registry Eshkol D1→D2 view fixture is
+prepared but unrun. `01`, `00`, and invalid-mask K1 cases remain provider-only
+controls for this fixed profile; M3 nonfinite/subnormal/signed-zero and
+full-call floating-environment reachability remain open. No §9 compiled or
+public evaluator admission follows from this source slice.
 The first [mathematical three-batch M2 sum-order witness](../tests/e3_reference/sum_order_witness_v1.json)
 failed the one-use df9546 compiled C gate: compiled CE rounded both groupings
 to `41dcde82`. The successor [compiled witness](../tests/e3_reference/sum_order_witness_v2.json)
