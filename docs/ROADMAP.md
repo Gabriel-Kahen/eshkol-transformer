@@ -1391,8 +1391,8 @@ same objects against an independent fixed-seed twin. Focused host source tests
 and fault-only generation checks pass. The fault-only test seam admits the
 primary token after the twin's P1 record reaches retired state 3, while
 rejecting active-token switches and stale/foreign arm tokens. Independent
-review and supported
-optimized AOT normal, poison and sanitizer failure/retry gates remain open.
+source review accepted this bounded slice at `8aa5677d`/tree `ba316b61`;
+supported optimized AOT normal, poison and sanitizer failure/retry gates remain open.
 Canonical P1 and production native control paths are unchanged; R1 remains
 open.
 
@@ -1408,6 +1408,20 @@ at the CE dispatch count. This remains source/host evidence on an unsupported
 Clang 22 host. Independent source/test review accepted the E3 union at
 `9aed9c65`/tree `55377da7`; supported compiled Eshkol normal, poison and
 sanitizer gates remain open; no §9 R1 admission follows.
+
+The bounded §9 R2 D2-generation source successor reuses site 5 occurrence 2,
+where two real packed batches precede the CE denial. It snapshots the dataset
+generation before arming, then checks that abort restores the cursor while
+generation advances by two and the source is idle; the same-authority retry
+must advance it by three more and match the independent twin's six outputs and
+end cursor. The existing first-error, seeded output, modes, model/gradient,
+RNG and owner checks remain in force. Host source negatives reject omitted or
+weakened generation comparisons; a test-only, exact-N4 restore-commit mutant
+resets generation after preflight for the later compiled gate. This source
+candidate passed independent source review at `78b72206`/tree `5bff914f`.
+The combined R1/R2 source union still needs whole-union review. It has no
+compiled normal/repeat/poison/sanitizer or mutant verdict, so §9 R2 remains
+open.
 
 The stage-8 fault candidate and retention post-report teardown now share a
 source-only branch based on the independently reviewed CLI3 `baf0a03f` union.

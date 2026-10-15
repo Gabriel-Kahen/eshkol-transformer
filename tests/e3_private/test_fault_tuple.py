@@ -6,6 +6,7 @@ import re
 import runpy
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -588,6 +589,8 @@ e3_reject_unresolved_private fault "$3" "$3"
         execute = execute.split("(define (e3-test-fault-dispatch", 1)[0]
         snapshots = (
             "(cursor (d2-token-dataset-cursor dataset))",
+            "(d2-state (d2-open-dataset-state dataset 'e3-evaluate-into!))",
+            "(generation-before (vector-ref d2-state 8))",
             "(modes (e3-test-retention-modes frame))",
             "(model-image (e3-test-retention-model-snapshot model))",
             "(rng-algorithm (m3t-public-initializer-algorithm initializer))",
@@ -601,6 +604,7 @@ e3_reject_unresolved_private fault "$3" "$3"
         required = (
             "(if (= site 2) 155 (if (= site 5) 107 95))",
             "(e3-test-fault-check 'cursor\n        (d2-core-bytes=? cursor",
+            "(e3-test-fault-check 'generation-after-failure\n            (and (= (vector-ref d2-state 8) (+ generation-before 2))\n                 (e3-d2-source-idle? d2-state)))",
             "(e3-test-fault-check 'output\n        (equal? publication",
             "(e3-test-fault-check 'modes\n        (e3-test-retention-modes=?",
             "(e3-test-fault-check 'model\n        (e3-test-retention-model=?",
@@ -608,6 +612,7 @@ e3_reject_unresolved_private fault "$3" "$3"
             "(e3-test-fault-check 'owners\n        (e3-test-fault-probes-restored?",
             "(e3-test-fault-check 'retry-output\n      (equal? (if (or (= site 2) (= site 3) (= site 4) (= site 5) (= site 14))",
             "(e3-test-fault-check 'retry-rng\n      (and (eq? rng-algorithm",
+            "(e3-test-fault-check 'generation-after-retry\n          (= (vector-ref d2-state 8) (+ generation-before 5)))",
         )
         def guarded(candidate):
             return all(clause in candidate for clause in required)
@@ -616,9 +621,54 @@ e3_reject_unresolved_private fault "$3" "$3"
                         execute.index("(e3-test-retention-call! model dataset frame"))
         self.assertLess(execute.index("(e3-test-retention-call! model dataset frame"),
                         execute.index("'retry-output"))
+        self.assertEqual(execute.count("(if (and (= site 5) (= occurrence 2))"), 2)
+        self.assertLess(execute.index("'first-error"),
+                        execute.index("'generation-after-failure"))
+        self.assertLess(execute.index("'cursor\n"),
+                        execute.index("'generation-after-failure"))
+        self.assertLess(execute.index("'generation-after-failure"),
+                        execute.index("(e3-test-retention-call! model dataset frame"))
+        self.assertLess(execute.index("(e3-test-retention-call! model dataset frame"),
+                        execute.index("'generation-after-retry"))
+        self.assertLess(execute.index("'generation-after-retry"),
+                        execute.index("'independent-twin"))
         for removal in required:
             self.assertFalse(guarded(execute.replace(removal, "#f", 1)),
                              f"omitted call assertion: {removal}")
+        for wrong in ("generation-before", "(d2-core-bytes=? cursor (d2-token-dataset-cursor dataset))"):
+            self.assertFalse(guarded(execute.replace("(+ generation-before 2)", wrong, 1)),
+                             f"failure comparator admitted {wrong}")
+        self.assertFalse(guarded(execute.replace("(+ generation-before 5)",
+                                                "generation-before", 1)))
+
+    def test_restore_generation_mutant_is_after_preflight_and_test_only(self):
+        source_path = ROOT / "internal/e3/lib/e3_d2_restore.esk"
+        source = source_path.read_text()
+        helper = TESTS / "r2_generation_mutant.py"
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "restore-mutant.esk"
+            command = [sys.executable, str(helper), str(source_path), str(output)]
+            subprocess.run(command, check=True, capture_output=True, text=True)
+            mutant = output.read_text()
+            insertion = "    (vector-set! state 8 (vector-ref record 13))\n"
+            self.assertEqual(mutant, source.replace(
+                "    (vector-set! core 15 (vector-ref record 7))\n",
+                "    (vector-set! core 15 (vector-ref record 7))\n" + insertion, 1))
+            self.assertEqual(mutant.count(insertion), 1)
+            self.assertLess(mutant.index("(define (e3-d2-restore-preflight! frame)"),
+                            mutant.index(insertion))
+            self.assertLess(mutant.index(insertion),
+                            mutant.index("(define (e3-d2-cancel-prepare! frame)"))
+            self.assertNotIn(insertion, source)
+            rejected = subprocess.run([sys.executable, str(helper), str(output),
+                                       str(Path(directory) / "twice.esk")],
+                                      capture_output=True, text=True)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("differs from the accepted N4 base", rejected.stderr)
+            same_path = subprocess.run(command[:3] + [str(source_path)],
+                                       capture_output=True, text=True)
+            self.assertNotEqual(same_path.returncode, 0)
+            self.assertIn("must differ from production source", same_path.stderr)
 
     def test_real_stage3_value_borrow_denial_is_causal(self):
         source = (TESTS / "fault_driver.esk").read_text()
