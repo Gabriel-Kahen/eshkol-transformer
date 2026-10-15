@@ -2465,6 +2465,17 @@ post-adoption cleanup, and post-compose fail-stop cuts. Source closure and
 host mutation checks are available; the linked Eshkol run remains pending
 until the supported toolchain is available. No SAVE or replay follows.
 
+The noninstalled held-image adapter candidate loads that exact same-registry
+root and projects the current 136-byte G3 held copy to seven detached fields
+while original G3/O2/TR3 holds and the claimed C2 child remain live. Its
+private bridge requires the feature macros; the adapter rechecks original
+owner/model/tokenizer and TR3/O2 authority, compares borrowed C2 controls to
+their original issuer, and validates partition and EOS provenance before
+returning any fields. Focused host bridge, source-mutation, and inherited
+native held-owner tests pass; the prepared Eshkol aggregate and fail-stop
+cuts still need compiled admission. It publishes no file, public SAVE, LOAD,
+or replay behavior.
+
 The [private M3 owner-roster prerequisite](g3/G3_R_M3_OWNER_ROSTER_PREREQUISITE.md)
 ports the feature-gated registry-backed fourteen-parameter/identity roster
 to current main. It rejects unsealed, stale, foreign, incomplete or inconsistent

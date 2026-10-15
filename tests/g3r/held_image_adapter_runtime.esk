@@ -1,0 +1,255 @@
+;;; Private same-registry owner gate. No SAVE, LOAD, or replay authority.
+(load "g3r_held_image_adapter_root.esk")
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3R LINKED OWNER FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (error-at? category operation caught)
+  (and (transformer-error? caught)
+       (eq? category (transformer-error-category caught))
+       (eq? operation (transformer-error-operation caught))))
+(define (policy)
+  (list ':profile 'diagnostic-c2 ':sampling 'categorical
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens 1
+        ':eos #f ':seed 1729))
+(define (resolved-config)
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define (dataset-config directory)
+  (list ':directory directory ':batch-size 1 ':sequence-length 2
+        ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 4 ':maximum-batch-bytes 34
+        ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #t))
+(define (handle-paths handles)
+  (let loop ((index 0))
+    (if (= index (vector-length handles)) '()
+        (cons (parameter-handle-path (vector-ref handles index))
+              (loop (+ index 1))))))
+(define (optimizer-config handles)
+  (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+        '(none) '(constant)
+        (list (list 'group (handle-paths handles)
+                    "3dcccccd" "3f000000" "3f000000"
+                    "3a83126f" "00000000"))))
+(define (make-tuple directory)
+  (let* ((resolved (resolved-config))
+         (tokenizer (t2-wave2-tokenizer-byte resolved))
+         (dataset (d2-token-dataset-open
+                    (dataset-config directory) tokenizer))
+         (model (m3t-public-model-create
+                  resolved (m3t-public-initializer-state 1729))))
+    (check "generator construction starts from eval model" (module-eval! model))
+    (let* ((generator (g3t-generator-create model tokenizer (policy)))
+           (input (g3t-generation-token-input-create 65))
+           (output (g3m-generate-p1-g1! generator input)))
+      (check "committed P1/G1 output releases" (g3t-output-release! output))
+      (check "exact generator model enters trainer train mode"
+             (module-train! model))
+      (let* ((handles (vector-ref
+                        (m3t-entry model 'model 'trainer-create #t) 8))
+             (optimizer (o2-public-optimizer-create
+                          (optimizer-config handles)
+                          (module-parameters model)))
+             (trainer (tr3-lease-create-internal
+                        resolved tokenizer dataset model optimizer))
+             (record (tr3-lease-record-for-shell-internal
+                       trainer 'trainer-state)))
+        (vector resolved tokenizer dataset model optimizer trainer
+                generator record)))))
+(define (controls tuple)
+  (let ((record (vector-ref tuple 7))
+        (resolved (vector-ref tuple 0)))
+    (vector
+      (vector-ref record 18)
+      (vector-ref record 7)
+      (vector (d2-token-dataset-cursor (vector-ref tuple 2))
+              (vector-ref record 17))
+      (vector (string->utf8 (x1-private-config-canonical resolved))
+              (x1-private-config-fingerprint resolved))
+      (vector (vector-ref record 19) (vector-ref record 20)
+              (vector-ref record 21)))))
+(define (prepare-transfer tuple)
+  (let* ((original (g3r-original-owner-begin!
+                     (vector-ref tuple 5) (vector-ref tuple 6)))
+         (hold (vector-ref (vector-ref original 4) 0))
+         (adopter (g3r-held-o2-adopt! hold (vector-ref tuple 4)))
+         (p1 (module-state-dict (vector-ref tuple 3)))
+         (request (vector c2-training-state-compose-tag p1
+                          (vector-ref adopter 5) (controls tuple)
+                          'trainer-state #f)))
+    (check "G3 and O2 originals remain held before C2"
+           (and (eq? (vector-ref original 5) 'held)
+                (eq? (vector-ref adopter 8) 'enrolled)
+                (vector-ref (vector-ref original 3) 0)
+                hold))
+    (vector original adopter p1 request)))
+(define (finish-tuple tuple)
+  (check "trainer returns to idle"
+         (and (eq? (vector-ref (vector-ref tuple 7) 3) 'idle)
+              (not (vector-ref (vector-ref tuple 7) 4))))
+  (check "trainer unenrolls" (tr3-lease-unenroll-internal! (vector-ref tuple 5)))
+  (check "generator closes" (g3t-generator-close! (vector-ref tuple 6)))
+  (check "dataset closes" (d2-token-dataset-close! (vector-ref tuple 2))))
+(define (release-claimed transfer shell)
+  (check "O2 drains before G3 and trainer lease"
+         (g3r-original-owner-end! (vector-ref transfer 0)))
+  (check "claimed C2 child releases"
+         (c2-training-state-release-internal! shell 'trainer-state)))
+
+(define (try-project transfer shell expected)
+  (let* ((sentinel (vector 'unpublished))
+         (result sentinel)
+         (caught sentinel))
+    (guard (raised (#t (set! caught raised)))
+      (set! result
+        (g3r-held-image-project!
+          (vector-ref transfer 0) (vector-ref transfer 1)
+          (vector-ref transfer 3) (vector-ref transfer 2) shell)))
+    (check "failure publishes no seven fields" (eq? result sentinel))
+    (check "first error survives cleanup"
+           (if (eq? expected 'false) (eq? caught #f)
+               (if (eq? expected 'typed)
+                   (error-at? 'corrupt-data 'g3r-held-image-project! caught)
+                   (transformer-error? caught))))))
+
+(define (retry-project transfer shell)
+  (let ((fields
+          (g3r-held-image-project!
+            (vector-ref transfer 0) (vector-ref transfer 1)
+            (vector-ref transfer 3) (vector-ref transfer 2) shell)))
+    (check "seven detached fields" (and (vector? fields)
+                                         (= (vector-length fields) 7)))
+    (check "policy and RNG projected"
+           (and (= (vector-length (vector-ref fields 0)) 6)
+                (= (vector-length (vector-ref fields 1)) 4)))
+    (check "one committed prompt and no generated EOS"
+           (and (= (bytevector-length (vector-ref fields 2)) 1)
+                (= (vector-ref fields 3) 1)
+                (= (vector-ref fields 4) 0)
+                (= (vector-ref fields 5) 0)
+                (= (vector-ref fields 6) 0)))
+    fields))
+
+(define (cut-c2-control transfer shell slot field cut)
+  (let* ((state (c2-training-state-find shell))
+         (controls (vector-ref state 3))
+         (part (vector-ref controls slot))
+         (saved (vector-ref part field)))
+    (vector-set! part field cut)
+    (try-project transfer shell 'state)
+    (vector-set! part field saved)
+    (retry-project transfer shell)))
+
+(define (cut-bridge transfer shell false?)
+  (let ((saved g3r-held-image-copy-internal))
+    (set! g3r-held-image-copy-internal
+      (lambda (hold bytes)
+        (if false?
+            (raise #f)
+            (m3t-fail 'corrupt-data 'g3r-held-image-project!
+                      "injected held copy error"))))
+    (try-project transfer shell (if false? 'false 'typed))
+    (set! g3r-held-image-copy-internal saved)
+    (retry-project transfer shell)))
+
+(define (cut-image transfer shell word)
+  (let ((saved g3r-held-image-copy-internal))
+    (set! g3r-held-image-copy-internal
+      (lambda (hold bytes)
+        (let ((status (saved hold bytes)))
+          (if (= status 0)
+              (bytevector-u8-set! bytes (* word 8)
+                (if (= (bytevector-u8-ref bytes (* word 8)) 0) 1 0)))
+          status)))
+    (try-project transfer shell 'state)
+    (set! g3r-held-image-copy-internal saved)
+    (retry-project transfer shell)))
+
+(define (cut-recheck transfer shell false?)
+  (let ((saved g3r-original-owner-g3-recheck!)
+        (calls 0))
+    (set! g3r-original-owner-g3-recheck!
+      (lambda (trainer generator ledger)
+        (set! calls (+ calls 1))
+        (if (= calls 3)
+            (if false? (raise #f)
+                (m3t-fail 'corrupt-data 'g3r-held-image-project!
+                          "injected post-copy recheck error"))
+            (saved trainer generator ledger))))
+    (try-project transfer shell (if false? 'false 'typed))
+    (check "post-copy recheck reached" (= calls 3))
+    (set! g3r-original-owner-g3-recheck! saved)
+    (retry-project transfer shell)))
+
+(define args (command-line))
+(define directory (car (cdr args)))
+(define mode (car (cdr (cdr args))))
+(define tuple (make-tuple directory))
+(define transfer (prepare-transfer tuple))
+(define request (vector-ref transfer 3))
+(define adopter (vector-ref transfer 1))
+(define p1 (vector-ref transfer 2))
+(c2-training-state-compose-internal request)
+(define shell (g3r-held-o2-adopter-c2-claim! adopter request p1))
+(if (or (string=? mode "uncertain-release-raise")
+        (string=? mode "uncertain-release-return"))
+    (begin
+      (set! c2-training-state-borrow-end-internal
+        (lambda (borrow)
+          (if (string=? mode "uncertain-release-raise")
+              (raise #f) #f)))
+      (display "G3R HELD IMAGE UNCERTAIN RELEASE"
+               (current-error-port))
+      (newline (current-error-port))
+      (g3r-held-image-project! (vector-ref transfer 0) adopter request p1 shell)
+      (exit 43))
+    (begin
+      (retry-project transfer shell)
+      (cut-c2-control transfer shell 0 2 1730)
+      (cut-c2-control transfer shell 1 0
+        "sha256:eshkol-byte-tokenizer-v1:0000000000000000000000000000000000000000000000000000000000000000")
+      (cut-c2-control transfer shell 2 0 (make-bytevector 1 7))
+      (cut-c2-control transfer shell 3 1 "changed-config")
+      (cut-c2-control transfer shell 4 0 9)
+      (try-project transfer #f 'state)
+      (retry-project transfer shell)
+      (let ((original (vector-ref transfer 0)))
+        (vector-set! original 1 #f)
+        (try-project transfer shell 'state)
+        (vector-set! original 1 (vector-ref tuple 5))
+        (retry-project transfer shell))
+      (let* ((original (vector-ref transfer 0))
+             (g3 (vector-ref (vector-ref original 3) 0))
+             (identity (vector-ref (vector-ref g3 1) 7))
+             (fingerprint (vector-ref identity 0)))
+        (vector-set! identity 0 "foreign-t1")
+        (try-project transfer shell 'state)
+        (vector-set! identity 0 fingerprint)
+        (retry-project transfer shell)
+        (vector-set! original 5 'busy)
+        (try-project transfer shell 'state)
+        (vector-set! original 5 'held)
+        (retry-project transfer shell))
+      (let ((borrow (c2-training-state-borrow-begin-internal
+                      shell 'g3r-held-image-project!)))
+        (try-project transfer shell 'state)
+        (check "foreign busy borrow ends"
+               (c2-training-state-borrow-end-internal borrow))
+        (retry-project transfer shell))
+      (cut-bridge transfer shell #f)
+      (cut-bridge transfer shell #t)
+      (cut-recheck transfer shell #f)
+      (cut-recheck transfer shell #t)
+      (cut-image transfer shell 2)
+      (cut-image transfer shell 6)
+      (cut-image transfer shell 16)
+      (release-claimed transfer shell)
+      (try-project transfer shell 'state)
+      (finish-tuple tuple)
+      (display "G3R HELD IMAGE ADAPTER PASS: ")
+      (display checks) (display " checks") (newline)))

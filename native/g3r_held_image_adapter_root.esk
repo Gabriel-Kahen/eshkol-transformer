@@ -1,0 +1,4 @@
+;;; Noninstalled same-registry held-image projection; no SAVE or replay.
+(load "g3r_original_owner_c2_claim_root.esk")
+(load "g3r_committed_save_snapshot_extension.esk")
+(load "g3r_held_image_adapter_extension.esk")

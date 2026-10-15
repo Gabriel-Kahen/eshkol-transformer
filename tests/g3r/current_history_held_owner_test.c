@@ -310,6 +310,23 @@ int main(void) {
                  sizeof(workspace_partial)));
   assert(pin_active && cache_active && c.h.busy);
   assert(!et_g3r_private_g3t_save_check_v1(hold));
+  unsigned char held_words_before[sizeof(words)];
+  memcpy(held_words_before, &words, sizeof(words));
+  assert(!et_g3r_private_g3t_save_begin_v1(
+      &c, (void *const *)model.p, (const void *const *)model.handles));
+  c.policy[0] ^= 1;
+  assert(et_g3r_private_g3t_save_copy_v1(hold, &words, sizeof(words)));
+  c.policy[0] ^= 1;
+  c.rng[2] ^= 1;
+  assert(et_g3r_private_g3t_save_copy_v1(hold, &words, sizeof(words)));
+  c.rng[2] ^= 1;
+  c.history_generated_eos_terminal = 1;
+  assert(et_g3r_private_g3t_save_copy_v1(hold, &words, sizeof(words)));
+  c.history_generated_eos_terminal = 0;
+  model_bits[0] = 1;
+  assert(et_g3r_private_g3t_save_copy_v1(hold, &words, sizeof(words)));
+  model_bits[0] = 0;
+  assert(!memcmp(held_words_before, &words, sizeof(words)));
   assert(et_g3r_private_g3t_save_copy_v1(
       hold, (et_g3r_g3t_held_words_v1 *)((char *)hold + 1),
       sizeof(words)));
