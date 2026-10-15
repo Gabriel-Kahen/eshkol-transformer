@@ -1114,6 +1114,16 @@ from direct-provider-only cases and names the missing noninstalled model-control
 and stage-selective fault/observer seams for review. It provides no new runtime
 proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
 verdicts remain prerequisites before the full matrix is implemented and run.
+A separate N4 test-only whole-call fenv source candidate brackets the genuine
+`e3-evaluate-into!` inside its invocation region. Its serial C observer records
+errno, x87 control/status, MXCSR including sticky flags, and a zero-initialized
+`fenv_t` image at begin/end. Host Clang, GCC and ASan/UBSan checks on the
+isolated child covered no-op observer return/caught labels and an MXCSR
+control-bit mutation rejected at the ambient-state check. The Eshkol source
+prepares nonzero publication/cursor sentinels, a stage-8 site-5 occurrence-2
+failure, byte-exact rollback and same-authority retry against an independent
+twin. The separate normal-only tuple selector remains an emitted-closure
+candidate; no compiled whole-call fenv or §9 verdict is established here.
 A bounded noninstalled N4 mask-census source/test candidate uses fresh checked
 raw-V256 D1 resources containing two or three tokens and existing D2 T=2
 packed/unpacked APIs. Its host test observes all four native D2 rows as `10`
@@ -1477,6 +1487,16 @@ separate gate.
 The combined min-subnormal and R1/R2 source candidate requires fresh
 whole-union source/test review and exact-tree package evidence; neither
 branch's separate review or package seal admits the combined tree.
+The bounded N4 whole-call fenv union adds a test-only C observer and Eshkol
+driver, a separate noninstalled normal-only fenv package tuple, exact four-input
+policy selection and an independently owned generated-source stage. It retains
+the existing min-subnormal tuple and R1/R2 fault route, including the fault-only
+P1 enter-denial variant. Source and host checks do not establish the emitted
+closure or a compiled whole-call property. The new combined tree needs
+independent source/test review, then a fresh source-pinned LLVM 21 closure
+emission gate comparing actual source, native and symbol inventories with the
+candidate manifests. Normal runtime, sanitizer and private MXCSR-mutant tuple
+work, causal poison, and full E3 §9 admission remain **HOLD**.
 
 The stage-8 fault candidate and retention post-report teardown now share a
 source-only branch based on the independently reviewed CLI3 `baf0a03f` union.
