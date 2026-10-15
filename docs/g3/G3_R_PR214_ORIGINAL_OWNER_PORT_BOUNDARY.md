@@ -16,8 +16,8 @@ raw V256 tokenizer and live generator; it enrolls a TR3 snapshot lease before
 the native G3/M3/A2 hold and drains that hold before aborting the lease. The
 native bridge obtains the original model's fourteen-handle roster and passes
 it to the installed G3 hold. Its returned private ledger owns no O2 or C2
-child. The host gate exercises foreign/stale/busy rejection and dead-hold
-idempotence with controlled native stubs; it is not a linked Eshkol fixture.
+child. The host gate exercises foreign/stale/busy and repeated dead-hold
+rejection with controlled native stubs; it is not a linked Eshkol fixture.
 
 The next reviewed coordinator root cannot be linked on this base. In
 `d50d2bd`, `native/o2_optimizer_internal.h` declares the private

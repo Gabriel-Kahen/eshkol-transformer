@@ -12,6 +12,30 @@ if nm -g --defined-only "$out/off.o" | grep -Fq et_g3r_private_g3t_save_begin_v1
   echo "held owner escaped feature-off object" >&2
   exit 1
 fi
+# Causal regression: removing the no-replay arm must break the held-owner
+# translation unit, while the unmodified source compiles in the modes below.
+python3 - "$root" "$out" <<'PY'
+from pathlib import Path
+import sys
+
+root, out = map(Path, sys.argv[1:])
+source = (root / "src/eshkol_transformer/g3t_transport.c").read_text()
+arm = "#else\n         c->history_pending_g1\n#endif"
+assert source.count(arm) == 1
+mutant = out / "g3t_missing_no_replay_arm.c"
+mutant.write_text(source.replace(arm, "#endif", 1))
+fixture = (root / "tests/g3r/current_history_held_owner_test.c").read_text()
+include = '#include "../../src/eshkol_transformer/g3t_transport.c"'
+assert fixture.count(include) == 1
+(out / "missing_arm_test.c").write_text(
+    fixture.replace(include, f'#include "{mutant}"', 1))
+PY
+if cc "${common[@]}" -O0 -c "$out/missing_arm_test.c" \
+  -o "$out/missing_arm.o" 2>"$out/missing_arm.stderr"; then
+  echo "held-owner compile accepted missing no-replay history arm" >&2
+  exit 1
+fi
+grep -F 'g3t_history_append_preflight' "$out/missing_arm.stderr" >/dev/null
 for mode in normal repeat sanitizer; do
   flags=(-O0)
   if [[ "$mode" == sanitizer ]]; then

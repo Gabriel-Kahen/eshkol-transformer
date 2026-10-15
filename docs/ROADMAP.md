@@ -2413,6 +2413,14 @@ is excluded from this branch.
 Coordinator, post-adoption and partial-O2-claim cuts remain integration gates;
 there is no SAVE or continuation admission.
 
+The PR #214 source inherited a missing no-replay preprocessor arm in G3-T's
+committed-history append preflight. A bounded guard repair now compiles the
+held-owner fixture without `ET_G3R_REPLAYED_P1_G1_PRIVATE`; its normal,
+repeat and sanitizer host cuts, the replay-feature host route, and the
+committed-history owner host gate pass. A causal mutation removes the restored
+arm and must fail compilation. This is a host-source repair, not a linked
+Eshkol, same-owner SAVE or continuation gate.
+
 The [PR #214 original-owner port boundary](g3/G3_R_PR214_ORIGINAL_OWNER_PORT_BOUNDARY.md)
 selectively carries the reviewed, dependency-closed trainer-held G3 source
 leaf onto the exact PR #214 head. Its host source and controlled bridge cuts

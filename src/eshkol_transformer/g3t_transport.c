@@ -339,12 +339,13 @@ static int64_t g3t_history_append_preflight(g3t_context *c) {
       c->history_generated_eos_terminal || c->frame.kind != 2 ||
       !((c->call_kind == 1 && !c->history_pending_g1) ||
         (c->call_kind == 2 &&
-         ((c->history_pending_g1
 #ifdef ET_G3R_REPLAYED_P1_G1_PRIVATE
-           && !c->replayed_p1_g1_call) ||
-          (!c->history_pending_g1 && c->replayed_p1_g1_call)
+         ((c->history_pending_g1 && !c->replayed_p1_g1_call) ||
+          (!c->history_pending_g1 && c->replayed_p1_g1_call))
+#else
+         c->history_pending_g1
 #endif
-          ))) ||
+         )) ||
       c->frame.token < 0 || c->frame.token > 255)
     return g3t_bad(G3T_STATE, G3T_INVARIANT);
   return 0;
