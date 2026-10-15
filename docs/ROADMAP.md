@@ -1419,9 +1419,13 @@ RNG and owner checks remain in force. Host source negatives reject omitted or
 weakened generation comparisons; a test-only, exact-N4 restore-commit mutant
 resets generation after preflight for the later compiled gate. This source
 candidate passed independent source review at `78b72206`/tree `5bff914f`.
-The combined R1/R2 source union still needs whole-union review. It has no
-compiled normal/repeat/poison/sanitizer or mutant verdict, so §9 R2 remains
-open.
+Independent whole-union source/test review accepted the bounded R1/R2 union at
+`6f309385`/tree `56073bdd`; the sealed
+`e3-r1-r2-stage4-generation-union-20261015/REVIEW.md` receipt has SHA-256
+`1566c85c69942a18d33e9b61508d50c8df30c03a312a338290d183abbf582eda`.
+Compiled normal/repeat/poison/sanitizer and mutant verdicts remain open, so
+§9 R1/R2 admission remains **HOLD**. PR #214/current-main integration is a
+separate gate.
 
 The stage-8 fault candidate and retention post-report teardown now share a
 source-only branch based on the independently reviewed CLI3 `baf0a03f` union.
