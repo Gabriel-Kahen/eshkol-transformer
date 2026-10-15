@@ -26,6 +26,12 @@ class RetentionSanitizerPolicyTests(unittest.TestCase):
                     rows.append("zz_unreviewed_import")
                 elif mutation == "same_count":
                     rows[-1] = "zz_unreviewed_import"
+                elif mutation == "reintroduced_memcpy":
+                    rows.append("memcpy")
+                elif mutation == "missing_asan_memcpy":
+                    rows.remove("__asan_memcpy")
+                elif mutation == "missing_asan_load8":
+                    rows.remove("__asan_load8")
                 inputs[kind].write_text("\n".join(sorted(rows)) + "\n")
             return subprocess.run(
                 ["bash", "-c", 'set -euo pipefail; die() { echo "$*" >&2; exit 1; }; '
@@ -37,6 +43,30 @@ class RetentionSanitizerPolicyTests(unittest.TestCase):
     def test_exact_emitted_inventory(self):
         result = self.run_policy()
         self.assertEqual(result.returncode, 0, result.stderr.decode())
+
+    def test_memory_calls_are_intercepted_in_the_sanitized_tuple(self):
+        normal = set(Path(str(PREFIX) + "_undefined_symbols.txt").read_text().splitlines())
+        ordinary = set(Path(str(PREFIX) + "_sanitized_noninstrumentation_undefined_symbols.txt")
+                       .read_text().splitlines())
+        instrumented = set(Path(str(PREFIX) + "_sanitized_instrumentation_undefined_symbols.txt")
+                           .read_text().splitlines())
+        memory_calls = {"memcpy", "memmove", "memset"}
+        self.assertTrue(memory_calls <= normal)
+        self.assertTrue(memory_calls.isdisjoint(ordinary))
+        self.assertTrue({"__asan_" + name for name in memory_calls} <= instrumented)
+        self.assertEqual(len(ordinary), 172)
+        self.assertEqual(len(instrumented), 59)
+        self.assertNotEqual(self.run_policy(1, "reintroduced_memcpy").returncode, 0)
+        self.assertNotEqual(self.run_policy(2, "missing_asan_memcpy").returncode, 0)
+
+    def test_private_asan_instrumentation_growth_is_exact(self):
+        instrumented = set(Path(str(PREFIX) + "_sanitized_instrumentation_undefined_symbols.txt")
+                           .read_text().splitlines())
+        self.assertTrue({"__asan_alloca_poison", "__asan_allocas_unpoison",
+                         "__asan_load1", "__asan_load8", "__asan_store1",
+                         "__asan_store2", "__asan_store4", "__asan_store8"}
+                        <= instrumented)
+        self.assertNotEqual(self.run_policy(2, "missing_asan_load8").returncode, 0)
 
     def test_noninstrumentation_drift(self):
         for mutation in ("missing", "extra", "same_count"):

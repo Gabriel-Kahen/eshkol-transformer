@@ -146,9 +146,20 @@ class FaultTupleTest(unittest.TestCase):
                       "tests/e3_private/fault_bridge.c")
         self.assertEqual(rows(FAULT, "native_source_closure"), native)
         self.assertEqual(rows(FAULT, "archive_members"), ["e3_fault_package.o"])
-        for suffix in ("sanitized_noninstrumentation_undefined_symbols",
-                       "sanitized_instrumentation_undefined_symbols"):
-            self.assertEqual(rows(FAULT, suffix), rows(RETENTION, suffix))
+        # The supported retention object has a measured sanitizer import split;
+        # the fault tuple keeps its own inventory until its compiled gate runs.
+        fault_ordinary = set(rows(FAULT, "sanitized_noninstrumentation_undefined_symbols"))
+        retention_ordinary = set(rows(RETENTION, "sanitized_noninstrumentation_undefined_symbols"))
+        self.assertEqual(fault_ordinary - retention_ordinary,
+                         {"memcpy", "memmove", "memset"})
+        self.assertEqual(retention_ordinary - fault_ordinary, set())
+        fault_asan = set(rows(FAULT, "sanitized_instrumentation_undefined_symbols"))
+        retention_asan = set(rows(RETENTION, "sanitized_instrumentation_undefined_symbols"))
+        self.assertEqual(fault_asan - retention_asan, set())
+        self.assertEqual(retention_asan - fault_asan,
+                         {"__asan_alloca_poison", "__asan_allocas_unpoison",
+                          "__asan_load1", "__asan_load8", "__asan_store1",
+                          "__asan_store2", "__asan_store4", "__asan_store8"})
         root = (TESTS / "fault_driver_root.esk").read_text()
         self.assertEqual(root.count('(load "retention_driver_root.esk")'), 1)
         self.assertEqual(root.count('(load "fault_driver.esk")'), 1)

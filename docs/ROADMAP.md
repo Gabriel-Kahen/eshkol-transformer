@@ -1452,6 +1452,19 @@ excludes site 13. Independent source/host review accepted exact
 Supported compiled Eshkol normal/poison, LSan and full E3 §9 admission remain
 **HOLD**.
 
+The exact `ff25cfc` supported stage-6 sites 10–13 run reached a terminal
+retention sanitizer package failure before runtime admission. Its raw combined
+object has 172 ordinary imports where the retention manifest pinned 175:
+`memcpy`, `memmove`, and `memset` are absent, while their `__asan_mem*`
+interceptors remain. It also has 59 sanitizer imports where the manifest pinned
+51; eight additional `__asan_*` references originate in the generated private
+object. The read-only terminal review is
+`/home/gabe/.codex/evidence/eshkol-transformer/e3-stage6-d-terminal-raw-review-20261015/REVIEW-RECEIPT.json`.
+The isolated retention-only policy and inventory repair pins these observed
+imports; fault and first-eval-mutant tuples keep their prior inventories.
+Independent source review and a fresh supported compiled package gate are
+still required. Package E and full E3 §9 admission remain **HOLD**.
+
 The bounded E3 §9 stage-8 source candidate adds noninstalled frame-owned
 site 5, ordinal 0, occurrences 1 or 2. After all 21 forward roles, it
 consumes the one-shot selector before L2 CE dispatch and returns the existing
