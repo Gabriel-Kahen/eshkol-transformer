@@ -2440,6 +2440,16 @@ the branch still needs independent union review and a linked Eshkol gate. It
 adds no held-state adopter root, coordinator, C2 claim, SAVE writer, or replay
 admission.
 
+The scoped PR #214-lineage C2 claim-rollback candidate adds the reviewed
+private O2 `rollback-or-live` reconciler and a second preallocated progress
+bit before the fallible O2 claim. If O2 mutates and then raises, C2 first
+restores that exact O2 child to live, then rolls back P1; uncertain cleanup
+stops before publishing an owner. The host handler-order/mutation suite passes,
+and the prepared owner fixture includes post-claim typed-error, raised-false,
+foreign-token and child-authority checks. The compiled Eshkol owner gate
+remains unrun; this is no held-state adoption, same-owner SAVE or replay
+admission.
+
 The [private M3 owner-roster prerequisite](g3/G3_R_M3_OWNER_ROSTER_PREREQUISITE.md)
 ports the feature-gated registry-backed fourteen-parameter/identity roster
 to current main. It rejects unsealed, stale, foreign, incomplete or inconsistent

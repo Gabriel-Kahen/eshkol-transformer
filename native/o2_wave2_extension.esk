@@ -583,6 +583,23 @@
     (vector-set! state 6 'live)
     #t))
 
+;;; A C2 claim seam may raise after the assignment above. Reconcile only the
+;;; exact preclaim LIVE state or this request's exact token; any other phase or
+;;; active borrow makes rollback uncertain and must never become recoverable.
+(define (o2-state-claim-c2-rollback-or-live-internal! value owner-token)
+  (let ((state (o2-find-identity value o2-states)))
+    (if (or (not owner-token) (not state) (vector-ref state 7))
+        (o2-fail 'invalid-state
+                 'o2-state-claim-c2-rollback-or-live-internal!
+                 "O2 claim rollback authority is uncertain"))
+    (cond ((eq? (vector-ref state 6) 'live) #t)
+          ((eq? (vector-ref state 6) owner-token)
+           (o2-state-claim-c2-rollback-internal! value owner-token))
+          (else
+            (o2-fail 'invalid-state
+                     'o2-state-claim-c2-rollback-or-live-internal!
+                     "O2 claim token differs")))))
+
 (define (o2-state-release-c2-owned-internal! value owner-token)
   (let ((state (o2-find-identity value o2-states)))
     (if (not state)
