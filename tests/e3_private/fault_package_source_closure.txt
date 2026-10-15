@@ -32,3 +32,4 @@ native/e3_forward_schedule.esk
 tests/e3_private/driver.esk
 tests/e3_private/retention_driver.esk
 tests/e3_private/fault_driver.esk
+tests/e3_private/n5_cap_driver.esk

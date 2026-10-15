@@ -838,6 +838,21 @@ historical, not passes. The 3,600-second bound and 512 MiB RSS ceiling remain.
 It does not close the other E3 §9 retention, mode, gradient, and sanitizer
 obligations.
 
+The bounded E3 §9 N5 one-over source candidate adds a separate deterministic
+checksummed D1 fixture of 16,387 raw tokens, independently yielding 8,193
+packed `[1,2]` D2 rows. A noninstalled fault-tuple scenario snapshots the
+authentic cursor, all 17 modes, fourteen model/gradient images, initializer
+RNG, six caller-owned publication words, and 29 native owner probes. It
+requires the first 8,193-row call to map `unsupported` at stage 2/table index
+29 before acquisition or publication, with all snapshots unchanged. It then
+releases one real D2 batch on the same dataset/model/frame and requires the
+remaining 8,192-row call to publish 16,384 tokens and 8,192 batches. A
+generated test-only `>=8192` comparator mutant must reject that valid boundary
+with the same fail-stop observations. Host generator, source-isolation and
+closure tests pass; the normal/mutant compiled runtime, poison/sanitizer
+resource measurements, independent review and full §9 acceptance remain
+**HOLD**.
+
 The [E3 in-call mode and graph observation contract](e3/E3_MODE_GRAPH_OBSERVATION_CONTRACT.md)
 now has a bounded [source candidate](e3/E3_MODE_GRAPH_SOURCE_CANDIDATE.md).
 Its P1-owned test variant reads all 17 modes through the authentic E3 token;

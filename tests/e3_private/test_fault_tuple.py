@@ -140,7 +140,8 @@ class FaultTupleTest(unittest.TestCase):
         self.assertEqual(rows(FAULT, "source_closure"),
                          ["tests/e3_private/fault_driver_root.esk"] +
                          rows(RETENTION, "source_closure") +
-                         ["tests/e3_private/fault_driver.esk"])
+                         ["tests/e3_private/fault_driver.esk",
+                          "tests/e3_private/n5_cap_driver.esk"])
         native = rows(RETENTION, "native_source_closure")
         native.insert(native.index("tests/e3_private/retention_bridge.c"),
                       "tests/e3_private/fault_bridge.c")
@@ -152,6 +153,7 @@ class FaultTupleTest(unittest.TestCase):
         root = (TESTS / "fault_driver_root.esk").read_text()
         self.assertEqual(root.count('(load "retention_driver_root.esk")'), 1)
         self.assertEqual(root.count('(load "fault_driver.esk")'), 1)
+        self.assertEqual(root.count('(load "n5_cap_driver.esk")'), 1)
         self.assertNotIn("fault_driver", (ROOT / "native/e3_private_driver_root.esk").read_text())
 
     def test_policy_rejects_mixed_partial_symlink_and_ambient_roots(self):

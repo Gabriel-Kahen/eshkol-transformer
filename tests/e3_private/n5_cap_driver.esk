@@ -1,0 +1,129 @@
+;;; Noninstalled N5 source proof. Run the authentic 8,193-row D2 corpus once
+;;; above the cap, then advance one real D2 row on the same authority and test
+;;; the admitted 8,192-row boundary. The mutant differs only in the cap guard.
+
+(define (e3-test-n5-state! label model dataset frame destinations cursor
+                           modes model-image rng-algorithm rng publication
+                           probes)
+  (with-region ('e3-n5-observe 262144)
+    (e3-test-fault-check label
+      (and (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset))
+           (e3-test-retention-modes=? frame modes)
+           (e3-test-retention-model=? model model-image)
+           (let ((initializer (m3t-public-model-initializer model)))
+             (and (eq? rng-algorithm
+                       (m3t-public-initializer-algorithm initializer))
+                  (equal? rng (m3t-public-initializer-words initializer))))
+           (equal? publication (e3-test-fault-publication frame destinations))
+           (equal? probes (e3-test-retention-probes))))))
+
+(define (e3-test-n5-unsupported! label model dataset frame destinations
+                                 cursor modes model-image rng-algorithm rng
+                                 publication probes)
+  (let ((failed?
+         (guard
+          (caught
+           (#t (and (transformer-error? caught)
+                    (eq? (transformer-error-category caught) 'unsupported)
+                    (eq? (transformer-error-operation caught)
+                         'e3-evaluate-into!))))
+          (with-region ('e3-n5-rejected 262144)
+            (e3-evaluate-into! model dataset frame))
+          #f)))
+    (e3-test-fault-check label failed?))
+  (let* ((entry (e3-frame-entry-live frame 'e3-test-n5-unsupported!))
+         (error (vector-ref entry 12)))
+    ;; stage 2, unsupported category 5, first table index 2*12+5.
+    (e3-test-fault-check 'n5-first-mapped-stage2
+      (and (= (vector-ref entry 15) 29)
+           (= (vector-ref error 0) 2)
+           (= (vector-ref error 1) 0)
+           (= (vector-ref error 2) 5)
+           (= (vector-ref error 3) 9)
+           (= (vector-ref entry 1) 1)
+           (not (vector-ref entry 14)))))
+  (e3-test-n5-state! 'n5-unsupported-unchanged model dataset frame destinations
+                     cursor modes model-image rng-algorithm rng publication
+                     probes))
+
+(define (e3-test-n5-dispatch scenario corpus-path)
+  (e3-test-fault-check 'n5-scenario
+    (and (vector? scenario) (= (vector-length scenario) 3)
+         (eq? (vector-ref scenario 0) 'n5-cap)
+         (boolean? (vector-ref scenario 1))
+         (boolean? (vector-ref scenario 2))
+         (string? corpus-path)
+         (not (vector-ref e3-test-fault-root 0))
+         (not (vector-ref e3-test-retention-root 0))))
+  (let* ((present? (vector-ref scenario 1))
+         (mutant? (vector-ref scenario 2))
+         (config (e3-test-fixed-config))
+         (tokenizer (t1-private-tokenizer-byte config))
+         (initial (g3t-checked-m3t-initializer-state 1729))
+         (model (g3t-checked-m3t-model-create config initial))
+         (destinations (e3-test-destinations-create))
+         (frame (e3-frame-bind! model destinations))
+         (dataset (d2-token-dataset-open
+                   (e3-test-dataset-config corpus-path #t) tokenizer)))
+    (e3-test-retention-set-mixed! frame)
+    (if present?
+        (e3-test-fault-check 'n5-gradient-seed
+          (= (e3-test-seed-gradient
+               (vector-ref (m3t-entry model 'model 'e3-test-n5-dispatch #t)
+                           3)) 0)))
+    (let* ((native (vector-ref
+                    (e3-frame-entry-live frame 'e3-test-n5-dispatch) 4))
+           (seeded (e3-test-fault-seed-publication native)))
+      (e3-test-fault-check 'n5-seeded-six
+        (and (= seeded 0)
+             (equal? (e3-test-fault-publication frame destinations)
+                     e3-test-fault-sentinels))))
+    (let* ((cursor (d2-token-dataset-cursor dataset))
+           (modes (e3-test-retention-modes frame))
+           (model-image (e3-test-retention-model-snapshot model))
+           (initializer (m3t-public-model-initializer model))
+           (rng-algorithm (m3t-public-initializer-algorithm initializer))
+           (rng (m3t-public-initializer-words initializer))
+           (publication (e3-test-fault-publication frame destinations))
+           (probes (e3-test-retention-probes)))
+      (e3-test-n5-unsupported! 'n5-one-over model dataset frame destinations
+                               cursor modes model-image rng-algorithm rng
+                               publication probes)
+      ;; This is an actual D2 next/release, not a forged cursor or core count.
+      (e3-test-skip! dataset 1)
+      (let* ((boundary-cursor (d2-token-dataset-cursor dataset))
+             (boundary-probes (e3-test-retention-probes)))
+        (e3-test-fault-check 'n5-real-advance
+          (not (d2-core-bytes=? cursor boundary-cursor)))
+        (if mutant?
+            (e3-test-n5-unsupported!
+             'n5-mutant-rejects-valid-boundary
+             model dataset frame destinations boundary-cursor modes
+             model-image rng-algorithm rng publication boundary-probes)
+            (begin
+              (with-region ('e3-n5-boundary 262144)
+                (e3-evaluate-into! model dataset frame))
+              (e3-test-fault-check 'n5-boundary-published
+                (and (= (e3-counter-ref frame 0) 16384)
+                     (= (e3-counter-ref frame 1) 8192)
+                     (e3-test-fault-all-distinct?
+                      publication
+                      (e3-test-fault-publication frame destinations))))
+              (with-region ('e3-n5-boundary-observe 262144)
+                (e3-test-fault-check 'n5-boundary-restored
+                  (and (d2-core-bytes=? boundary-cursor
+                                         (d2-token-dataset-cursor dataset))
+                       (e3-test-retention-modes=? frame modes)
+                       (e3-test-retention-model=? model model-image)
+                       (let ((after (m3t-public-model-initializer model)))
+                         (and (eq? rng-algorithm
+                                   (m3t-public-initializer-algorithm after))
+                              (equal? rng
+                                      (m3t-public-initializer-words after))))
+                       (e3-test-fault-probes-restored?
+                        boundary-probes (e3-test-retention-probes)))))))
+        (d2-token-dataset-close! dataset)
+        (e3-frame-unbind! frame)
+        (e3-test-destinations-destroy! destinations)
+        (vector 'e3-n5-cap-result-v1 present? mutant? 8193 8192
+                29 (if mutant? 'unsupported 'success))))))

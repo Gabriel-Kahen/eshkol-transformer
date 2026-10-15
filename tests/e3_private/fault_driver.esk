@@ -259,7 +259,7 @@
     (vector-set! record 13 #t)
     #t))
 
-(define (e3-test-fault-dispatch scenario corpus-path)
+(define (e3-test-fault-dispatch-original scenario corpus-path)
   (e3-test-fault-check 'scenario
     (and (vector? scenario) (= (vector-length scenario) 6)
          (eq? (vector-ref scenario 0) 'fault)
@@ -362,3 +362,11 @@
            (let ((result (e3-test-retention-report 1024 present?)))
              (vector-set! e3-test-fault-root 0 #f)
              result)))))
+
+;;; The N5 source proof uses this same noninstalled CABI, with a distinct
+;;; scenario. No production evaluator or retention warmup is changed.
+(define (e3-test-fault-dispatch scenario corpus-path)
+  (if (and (vector? scenario) (> (vector-length scenario) 0)
+           (eq? (vector-ref scenario 0) 'n5-cap))
+      (e3-test-n5-dispatch scenario corpus-path)
+      (e3-test-fault-dispatch-original scenario corpus-path)))
