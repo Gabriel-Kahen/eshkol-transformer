@@ -366,7 +366,11 @@
 ;;; The N5 source proof uses this same noninstalled CABI, with a distinct
 ;;; scenario. No production evaluator or retention warmup is changed.
 (define (e3-test-fault-dispatch scenario corpus-path)
-  (if (and (vector? scenario) (> (vector-length scenario) 0)
-           (eq? (vector-ref scenario 0) 'n5-cap))
-      (e3-test-n5-dispatch scenario corpus-path)
-      (e3-test-fault-dispatch-original scenario corpus-path)))
+  (cond
+    ((and (vector? scenario) (> (vector-length scenario) 0)
+          (eq? (vector-ref scenario 0) 'n5-cap))
+     (e3-test-n5-dispatch scenario corpus-path))
+    ((and (vector? scenario) (= (vector-length scenario) 2)
+          (eq? (vector-ref scenario 0) 'n5-oracle))
+     (e3-test-n5-oracle (vector-ref scenario 1) corpus-path))
+    (else (e3-test-fault-dispatch-original scenario corpus-path))))

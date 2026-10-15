@@ -853,6 +853,13 @@ closure tests pass; the normal/mutant compiled runtime, poison/sanitizer
 resource measurements, independent review and full §9 acceptance remain
 **HOLD**.
 
+The [N5 gate-completeness successor](e3/E3_N5_GATE_COMPLETENESS.md) prepares
+a separately checked 8,192-row D1/D2 exact-bit oracle for the same-authority
+one-over boundary, and pinned normal/repeat/poison/ASan+UBSan profiles for
+both original and `>=8192` mutant packages. It records payload and RSS evidence
+and requires the mutant to emit no metric transcript. Host/source tests are
+the only validation so far; the compiled and resource gates remain **HOLD**.
+
 The [E3 in-call mode and graph observation contract](e3/E3_MODE_GRAPH_OBSERVATION_CONTRACT.md)
 now has a bounded [source candidate](e3/E3_MODE_GRAPH_SOURCE_CANDIDATE.md).
 Its P1-owned test variant reads all 17 modes through the authentic E3 token;

@@ -46,6 +46,59 @@
                      cursor modes model-image rng-algorithm rng publication
                      probes))
 
+;;; Separate checked D1 materialization of the exact remaining 8,192 rows.
+;;; This is an exact-bit oracle, not the same-authority boundary call below.
+(define (e3-test-n5-oracle present? corpus-path)
+  (e3-test-fault-check 'n5-oracle-scenario
+    (and (boolean? present?) (string? corpus-path)
+         (not (vector-ref e3-test-fault-root 0))
+         (not (vector-ref e3-test-retention-root 0))))
+  (let* ((config (e3-test-fixed-config))
+         (tokenizer (t1-private-tokenizer-byte config))
+         (initial (g3t-checked-m3t-initializer-state 1729))
+         (model (g3t-checked-m3t-model-create config initial))
+         (destinations (e3-test-destinations-create))
+         (frame (e3-frame-bind! model destinations))
+         (dataset (d2-token-dataset-open
+                   (e3-test-dataset-config corpus-path #t) tokenizer)))
+    (e3-test-retention-set-mixed! frame)
+    (if present?
+        (e3-test-fault-check 'n5-oracle-gradient-seed
+          (= (e3-test-seed-gradient
+               (vector-ref (m3t-entry model 'model 'e3-test-n5-oracle #t)
+                           3)) 0)))
+    (let* ((cursor (d2-token-dataset-cursor dataset))
+           (modes (e3-test-retention-modes frame))
+           (model-image (e3-test-retention-model-snapshot model))
+           (initializer (m3t-public-model-initializer model))
+           (rng-algorithm (m3t-public-initializer-algorithm initializer))
+           (rng (m3t-public-initializer-words initializer))
+           (publication (e3-test-fault-publication frame destinations))
+           (probes (e3-test-retention-probes)))
+      (with-region ('e3-n5-oracle-call 262144)
+        (e3-evaluate-into! model dataset frame))
+      (let ((result (e3-test-fault-publication frame destinations)))
+        (e3-test-fault-check 'n5-oracle-exact-counts
+          (and (= (vector-ref result 4) 16384)
+               (= (vector-ref result 5) 8192)
+               (e3-test-fault-all-distinct? publication result)))
+        (with-region ('e3-n5-oracle-observe 262144)
+          (e3-test-fault-check 'n5-oracle-restored
+            (and (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset))
+                 (e3-test-retention-modes=? frame modes)
+                 (e3-test-retention-model=? model model-image)
+                 (let ((after (m3t-public-model-initializer model)))
+                   (and (eq? rng-algorithm
+                             (m3t-public-initializer-algorithm after))
+                        (equal? rng
+                                (m3t-public-initializer-words after))))
+                 (e3-test-fault-probes-restored?
+                  probes (e3-test-retention-probes)))))
+        (d2-token-dataset-close! dataset)
+        (e3-frame-unbind! frame)
+        (e3-test-destinations-destroy! destinations)
+        (vector 'e3-n5-oracle-result-v1 present? result)))))
+
 (define (e3-test-n5-dispatch scenario corpus-path)
   (e3-test-fault-check 'n5-scenario
     (and (vector? scenario) (= (vector-length scenario) 3)
@@ -92,7 +145,8 @@
       ;; This is an actual D2 next/release, not a forged cursor or core count.
       (e3-test-skip! dataset 1)
       (let* ((boundary-cursor (d2-token-dataset-cursor dataset))
-             (boundary-probes (e3-test-retention-probes)))
+             (boundary-probes (e3-test-retention-probes))
+             (boundary-publication #f))
         (e3-test-fault-check 'n5-real-advance
           (not (d2-core-bytes=? cursor boundary-cursor)))
         (if mutant?
@@ -109,6 +163,8 @@
                      (e3-test-fault-all-distinct?
                       publication
                       (e3-test-fault-publication frame destinations))))
+              (set! boundary-publication
+                    (e3-test-fault-publication frame destinations))
               (with-region ('e3-n5-boundary-observe 262144)
                 (e3-test-fault-check 'n5-boundary-restored
                   (and (d2-core-bytes=? boundary-cursor
@@ -126,4 +182,5 @@
         (e3-frame-unbind! frame)
         (e3-test-destinations-destroy! destinations)
         (vector 'e3-n5-cap-result-v1 present? mutant? 8193 8192
-                29 (if mutant? 'unsupported 'success))))))
+                29 (if mutant? 'unsupported 'success)
+                boundary-publication)))))

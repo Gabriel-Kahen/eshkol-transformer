@@ -2,12 +2,14 @@
 # Noninstalled N5 fault tuple; the mutant is an exact generated Eshkol overlay.
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
-[[ $# -le 2 ]] || die "usage: $0 [ARTIFACT_DIR] [normal|gte]"
+[[ $# -le 3 ]] || die "usage: $0 [ARTIFACT_DIR] [normal|gte] [normal|sanitize]"
 verify_toolchain
 for command in ar cmp; do require_command "${command}"; done
 artifact="${1:-$(project_build_dir)/e3-n5-cap-test}"
 mode="${2:-normal}"
 case "${mode}" in normal|gte) ;; *) die "invalid N5 cap mode: ${mode}" ;; esac
+profile="${3:-normal}"
+case "${profile}" in normal|sanitize) ;; *) die "invalid N5 build profile: ${profile}" ;; esac
 mkdir -p "$(dirname -- "${artifact}")"
 staging="$(mktemp -d "$(dirname -- "${artifact}")/.e3-fault.XXXXXX")"
 source "${PROJECT_ROOT}/scripts/e3-mode-graph-stage-cleanup.sh"
@@ -15,6 +17,7 @@ e3_mode_graph_install_stage_cleanup "${staging}" fault
 prefix="${PROJECT_ROOT}/tests/e3_private/fault_package"
 E1B_COMPILER_TIMEOUT_SECONDS="${E3_COMPILER_TIMEOUT_SECONDS:-900}" \
 E3_N5_CAP_MUTANT="${mode}" \
+E3_FAULT_SANITIZE="$([[ "${profile}" == sanitize ]] && printf 1 || printf 0)" \
   /usr/bin/bash "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
   "${PROJECT_ROOT}/tests/e3_private/fault_driver_root.esk" \
   "${PROJECT_ROOT}/tests/e3_private/fault_bridge.c" \
@@ -32,5 +35,5 @@ ar t "${staging}/libeshkol_transformer_e3_fault.a" | \
   cmp "${prefix}_archive_members.txt" -
 python3 "${PROJECT_ROOT}/scripts/e3-atomic-publish.py" \
   "${staging}" "${artifact}"
-printf 'built N5 %s private artifact: %s\n' "${mode}" \
+printf 'built N5 %s/%s private artifact: %s\n' "${mode}" "${profile}" \
   "${artifact}/libeshkol_transformer_e3_fault.a"

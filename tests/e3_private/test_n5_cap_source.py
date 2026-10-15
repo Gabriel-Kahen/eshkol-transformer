@@ -10,6 +10,35 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class N5CapSourceTest(unittest.TestCase):
+    def test_new_eshkol_forms_are_balanced(self) -> None:
+        for name in ("n5_cap_driver.esk", "n5_cap_runtime.esk"):
+            source = (ROOT / "tests/e3_private" / name).read_text()
+            depth = 0
+            quoted = escaped = False
+            for line in source.splitlines():
+                comment = False
+                for char in line:
+                    if comment:
+                        continue
+                    if quoted:
+                        if escaped:
+                            escaped = False
+                        elif char == "\\":
+                            escaped = True
+                        elif char == '"':
+                            quoted = False
+                    elif char == ";":
+                        comment = True
+                    elif char == '"':
+                        quoted = True
+                    elif char == "(":
+                        depth += 1
+                    elif char == ")":
+                        depth -= 1
+                        self.assertGreaterEqual(depth, 0, name)
+            self.assertEqual(depth, 0, name)
+            self.assertFalse(quoted, name)
+
     def test_single_causal_comparator_cut(self) -> None:
         source = (ROOT / "internal/e3/lib/e3_d2_restore.esk").read_bytes()
         derived = derive(source)
@@ -51,7 +80,7 @@ class N5CapSourceTest(unittest.TestCase):
         builder = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
         runtime = (ROOT / "tests/e3_private/n5_cap_runtime.esk").read_text()
         self.assertIn('(load "n5_cap_driver.esk")', root)
-        self.assertEqual(driver.count("(e3-evaluate-into! model dataset frame)"), 2)
+        self.assertEqual(driver.count("(e3-evaluate-into! model dataset frame)"), 3)
         self.assertIn("(e3-test-skip! dataset 1)", driver)
         self.assertIn("(d2-token-dataset-cursor dataset)", driver)
         self.assertIn("(e3-test-retention-model-snapshot model)", driver)
@@ -66,6 +95,34 @@ class N5CapSourceTest(unittest.TestCase):
         self.assertIn("E3_N5_CAP_MUTANT", builder)
         self.assertIn("et_e3_fault_run_v1", runtime)
         self.assertNotIn("(load ", runtime)
+
+    def test_compiled_successor_has_exact_oracle_and_resource_profiles(self) -> None:
+        runner = (ROOT / "scripts/test-e3-n5-cap-compiled.sh").read_text()
+        builder = (ROOT / "scripts/build-e3-n5-cap-test.sh").read_text()
+        driver = (ROOT / "tests/e3_private/n5_cap_driver.esk").read_text()
+        runtime = (ROOT / "tests/e3_private/n5_cap_runtime.esk").read_text()
+        dispatcher = (ROOT / "tests/e3_private/fault_driver.esk").read_text()
+        for cut in (
+            "--boundary", 'diff -r "${out}/boundary-a" "${out}/boundary-b"',
+            'for profile in normal repeat poison sanitized',
+            'ESHKOL_ARENA_POISON="${poison}"',
+            'ASAN_OPTIONS=detect_leaks=1:halt_on_error=1',
+            'UBSAN_OPTIONS=halt_on_error=1',
+            "peak_rss_kib=%M", '"payload.tsv"',
+            'cat "${out}/${oracle}.stdout" >>"${out}/${stem}.expected"',
+            'cmp "${out}/${stem}.expected" "${out}/${stem}.stdout"',
+            '[[ "$(wc -l <"${out}/${stem}.stdout")" == 1 ]]',
+        ):
+            self.assertIn(cut, runner, cut)
+        self.assertIn('E3_FAULT_SANITIZE=', builder)
+        self.assertIn("(define (e3-test-n5-oracle", driver)
+        self.assertIn("(e3-test-n5-unsupported! 'n5-one-over", driver)
+        self.assertIn("(e3-test-skip! dataset 1)", driver)
+        self.assertIn("(e3-test-n5-unsupported!\n             'n5-mutant", driver)
+        self.assertIn("(eq? (vector-ref scenario 0) 'n5-oracle)", dispatcher)
+        self.assertIn("(if (not mutant?) (print-metrics", runtime)
+        self.assertIn("(e3-n5-rss-record rss-before rss-after)", runtime)
+        self.assertIn('E3_RETENTION_RSS_PATH="${out}/${stem}.rss"', runner)
 
 
 if __name__ == "__main__":
