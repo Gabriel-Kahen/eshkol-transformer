@@ -2457,6 +2457,14 @@ runtime negatives are separate from the still-pending linked owner runtime
 gate. This branch provides no data-only SAVE writer, LOAD, restored generator,
 or resumed continuation.
 
+The [original-owner linked runtime gate](g3/G3_R_ORIGINAL_OWNER_LINKED_GATE.md)
+prepares a same-registry fixture and pinned local runner for the genuine
+G3/O2/TR3 hold, held-state adoption, C2 claim, reverse hold release, and
+detached C2 release. It adds process-isolated partial-claim typed/`#f`,
+post-adoption cleanup, and post-compose fail-stop cuts. Source closure and
+host mutation checks are available; the linked Eshkol run remains pending
+until the supported toolchain is available. No SAVE or replay follows.
+
 The [private M3 owner-roster prerequisite](g3/G3_R_M3_OWNER_ROSTER_PREREQUISITE.md)
 ports the feature-gated registry-backed fourteen-parameter/identity roster
 to current main. It rejects unsealed, stale, foreign, incomplete or inconsistent

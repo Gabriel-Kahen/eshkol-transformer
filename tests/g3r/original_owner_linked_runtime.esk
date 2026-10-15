@@ -1,0 +1,201 @@
+;;; Private same-registry owner gate. No SAVE, LOAD, or replay authority.
+(load "g3r_original_owner_c2_claim_root.esk")
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3R LINKED OWNER FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (error-at? category operation caught)
+  (and (transformer-error? caught)
+       (eq? category (transformer-error-category caught))
+       (eq? operation (transformer-error-operation caught))))
+(define (policy)
+  (list ':profile 'diagnostic-c2 ':sampling 'categorical
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens 1
+        ':eos #f ':seed 1729))
+(define (resolved-config)
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define (dataset-config directory)
+  (list ':directory directory ':batch-size 1 ':sequence-length 2
+        ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 4 ':maximum-batch-bytes 34
+        ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #t))
+(define (handle-paths handles)
+  (let loop ((index 0))
+    (if (= index (vector-length handles)) '()
+        (cons (parameter-handle-path (vector-ref handles index))
+              (loop (+ index 1))))))
+(define (optimizer-config handles)
+  (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+        '(none) '(constant)
+        (list (list 'group (handle-paths handles)
+                    "3dcccccd" "3f000000" "3f000000"
+                    "3a83126f" "00000000"))))
+(define (make-tuple directory)
+  (let* ((resolved (resolved-config))
+         (tokenizer (t2-wave2-tokenizer-byte resolved))
+         (dataset (d2-token-dataset-open
+                    (dataset-config directory) tokenizer))
+         (model (m3t-public-model-create
+                  resolved (m3t-public-initializer-state 1729))))
+    (check "generator construction starts from eval model" (module-eval! model))
+    (let* ((generator (g3t-generator-create model tokenizer (policy)))
+           (input (g3t-generation-token-input-create 65))
+           (output (g3m-generate-p1-g1! generator input)))
+      (check "committed P1/G1 output releases" (g3t-output-release! output))
+      (check "exact generator model enters trainer train mode"
+             (module-train! model))
+      (let* ((handles (vector-ref
+                        (m3t-entry model 'model 'trainer-create #t) 8))
+             (optimizer (o2-public-optimizer-create
+                          (optimizer-config handles)
+                          (module-parameters model)))
+             (trainer (tr3-lease-create-internal
+                        resolved tokenizer dataset model optimizer))
+             (record (tr3-lease-record-for-shell-internal
+                       trainer 'trainer-state)))
+        (vector resolved tokenizer dataset model optimizer trainer
+                generator record)))))
+(define (controls tuple)
+  (let ((record (vector-ref tuple 7))
+        (resolved (vector-ref tuple 0)))
+    (vector
+      (vector-ref record 18)
+      (vector-ref record 7)
+      (vector (d2-token-dataset-cursor (vector-ref tuple 2))
+              (vector-ref record 17))
+      (vector (string->utf8 (x1-private-config-canonical resolved))
+              (x1-private-config-fingerprint resolved))
+      (vector (vector-ref record 19) (vector-ref record 20)
+              (vector-ref record 21)))))
+(define (prepare-transfer tuple)
+  (let* ((original (g3r-original-owner-begin!
+                     (vector-ref tuple 5) (vector-ref tuple 6)))
+         (hold (vector-ref (vector-ref original 4) 0))
+         (adopter (g3r-held-o2-adopt! hold (vector-ref tuple 4)))
+         (p1 (module-state-dict (vector-ref tuple 3)))
+         (request (vector c2-training-state-compose-tag p1
+                          (vector-ref adopter 5) (controls tuple)
+                          'trainer-state #f)))
+    (check "G3 and O2 originals remain held before C2"
+           (and (eq? (vector-ref original 5) 'held)
+                (eq? (vector-ref adopter 8) 'enrolled)
+                (vector-ref (vector-ref original 3) 0)
+                hold))
+    (vector original adopter p1 request)))
+(define (finish-tuple tuple)
+  (check "trainer returns to idle"
+         (and (eq? (vector-ref (vector-ref tuple 7) 3) 'idle)
+              (not (vector-ref (vector-ref tuple 7) 4))))
+  (check "trainer unenrolls" (tr3-lease-unenroll-internal! (vector-ref tuple 5)))
+  (check "generator closes" (g3t-generator-close! (vector-ref tuple 6)))
+  (check "dataset closes" (d2-token-dataset-close! (vector-ref tuple 2))))
+(define (release-claimed transfer shell)
+  (check "O2 drains before G3 and trainer lease"
+         (g3r-original-owner-end! (vector-ref transfer 0)))
+  (check "claimed C2 child releases"
+         (c2-training-state-release-internal! shell 'trainer-state)))
+(define (normal tuple transfer)
+  (let* ((request (vector-ref transfer 3))
+         (adopter (vector-ref transfer 1))
+         (p1 (vector-ref transfer 2)))
+    (c2-training-state-compose-internal request)
+    (let ((shell (g3r-held-o2-adopter-c2-claim! adopter request p1)))
+      (check "C2 owns the exact adopted O2 and cloned P1"
+             (and (eq? (vector-ref adopter 8) 'claimed)
+                  (eq? (vector-ref request 5) shell)
+                  (eq? (vector-ref request 1) #f)
+                  (eq? (vector-ref request 2) #f)
+                  (eq? (vector-ref (c2-training-state-find shell) 1) p1)
+                  (eq? (vector-ref (c2-training-state-find shell) 2)
+                       (vector-ref adopter 5))))
+      (release-claimed transfer shell))))
+(define (partial-claim tuple transfer raised-false?)
+  (let* ((request (vector-ref transfer 3))
+         (adopter (vector-ref transfer 1))
+         (p1 (vector-ref transfer 2))
+         (before c2-training-state-states)
+         (saved c2-training-state-claim-o2!)
+         (caught-value #t))
+    (set! c2-training-state-claim-o2!
+      (lambda (state token)
+        (saved state token)
+        (if raised-false?
+            (raise #f)
+            (c2-training-state-fail 'corrupt-data 'trainer-state
+                                    "injected after O2 claim"))))
+    (guard (caught (#t (set! caught-value caught)))
+      (c2-training-state-compose-internal request))
+    (set! c2-training-state-claim-o2! saved)
+    (check "postmutation first exception preserved"
+           (if raised-false? (eq? caught-value #f)
+               (error-at? 'corrupt-data 'trainer-state caught-value)))
+    (check "failed C2 transfer publishes nothing"
+           (and (eq? c2-training-state-states before)
+                (eq? (vector-ref request 1) p1)
+                (eq? (vector-ref request 2) (vector-ref adopter 5))
+                (eq? (vector-ref request 5) #f)
+                (eq? (vector-ref adopter 8) 'enrolled)))
+    (check "P1 rollback retains child authority" (pair? (state-dict-paths p1)))
+    (check "O2 rollback retains child authority"
+           (vector? (o2-require-live-state 'trainer-state
+                                           (vector-ref adopter 5))))
+    (check "P1 clone releases" (state-dict-release! p1))
+    (check "preclaim O2 state releases" (g3r-held-o2-adopter-release! adopter))
+    (check "original holds release after children"
+           (g3r-original-owner-end! (vector-ref transfer 0)))))
+(define (post-adoption-cleanup tuple transfer raised-false?)
+  (let* ((request (vector-ref transfer 3))
+         (adopter (vector-ref transfer 1))
+         (p1 (vector-ref transfer 2))
+         (shell #f)
+         (caught-value #f))
+    (guard (caught
+             (#t
+               (set! caught-value caught)
+               (if shell (release-claimed transfer shell))))
+      (c2-training-state-compose-internal request)
+      (set! shell (g3r-held-o2-adopter-c2-claim! adopter request p1))
+      (if raised-false?
+          (raise #f)
+          (c2-training-state-fail 'internal 'trainer-state
+                                  "injected post-adoption cleanup")))
+    (check "post-adoption first error survives cleanup"
+           (if raised-false? (eq? caught-value #f)
+               (error-at? 'internal 'trainer-state caught-value)))
+    (check "post-adoption C2 owner is dead"
+           (eq? (vector-ref (c2-training-state-find shell) 7) 'dead))))
+(define (post-compose-forgery transfer)
+  (let ((request (vector-ref transfer 3)))
+    (c2-training-state-compose-internal request)
+    (vector-set! request 1 (vector-ref transfer 2))
+    (display "G3R LINKED OWNER POST-COMPOSE FORGERY"
+             (current-error-port))
+    (newline (current-error-port))
+    (g3r-held-o2-adopter-c2-claim!
+      (vector-ref transfer 1) request (vector-ref transfer 2))
+    (display "G3R LINKED OWNER FORGERY ESCAPED") (newline)
+    (exit 43)))
+
+(define args (command-line))
+(define directory (car (cdr args)))
+(define mode (car (cdr (cdr args))))
+(define tuple (make-tuple directory))
+(define transfer (prepare-transfer tuple))
+(cond ((string=? mode "normal") (normal tuple transfer))
+      ((string=? mode "typed") (partial-claim tuple transfer #f))
+      ((string=? mode "false") (partial-claim tuple transfer #t))
+      ((string=? mode "post-cleanup-typed")
+       (post-adoption-cleanup tuple transfer #f))
+      ((string=? mode "post-cleanup-false")
+       (post-adoption-cleanup tuple transfer #t))
+      ((string=? mode "post-forgery") (post-compose-forgery transfer))
+      (else (check "known mode" #f)))
+(finish-tuple tuple)
+(display "G3R LINKED OWNER PASS: ") (display mode)
+(display " ") (display checks) (display " checks") (newline)
