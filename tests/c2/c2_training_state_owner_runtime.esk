@@ -177,6 +177,29 @@
     (c2-training-state-compose-internal request)
     request))
 
+;;; Run only in the runner's separate process: the uncertain second claim
+;;; must stop before either the original #f or a C2 owner can escape.
+(if (and (= (length args) 4)
+         (string=? (car (cdr (cdr (cdr args))))
+                   "--foreign-token-fail-stop"))
+    (let ((p1 (make-p1-state "weight" '(4) #f))
+          (o2 (make-o2-state '("weight") '(4) '() 17)))
+      (set! c2-training-state-claim-o2!
+        (lambda (state token)
+          (o2-state-claim-c2-internal! state (vector 'foreign-owner-token))
+          (display "C2 OWNER FOREIGN TOKEN CLAIMED") (newline)
+          (raise #f)))
+      (guard (caught
+               (#t
+                 (display "C2 OWNER FOREIGN TOKEN EXCEPTION ESCAPED")
+                 (newline)
+                 (exit 42)))
+        (compose p1 o2 (make-controls 17))
+        (display "C2 OWNER FOREIGN TOKEN COMPOSE RETURNED")
+        (newline)
+        (exit 43)))
+    #t)
+
 ;;; Component borrows reject composition with the caller operation, publish
 ;;; nothing, and preserve both authorities for use after the borrow ends.
 (define busy-p1 (make-p1-state "weight" '(4) #f))

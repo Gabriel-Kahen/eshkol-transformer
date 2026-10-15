@@ -2446,9 +2446,10 @@ bit before the fallible O2 claim. If O2 mutates and then raises, C2 first
 restores that exact O2 child to live, then rolls back P1; uncertain cleanup
 stops before publishing an owner. The host handler-order/mutation suite passes,
 and the prepared owner fixture includes post-claim typed-error, raised-false,
-foreign-token and child-authority checks. The compiled Eshkol owner gate
-remains unrun; this is no held-state adoption, same-owner SAVE or replay
-admission.
+foreign-token and child-authority checks. Its runner now includes a separate
+process that assigns a foreign O2 claim token and requires a fail-stop exit
+after a raised `#f`; compiled Eshkol evidence remains pending. This is no
+held-state adoption, same-owner SAVE or replay admission.
 
 The [private M3 owner-roster prerequisite](g3/G3_R_M3_OWNER_ROSTER_PREREQUISITE.md)
 ports the feature-gated registry-backed fourteen-parameter/identity roster

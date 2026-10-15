@@ -95,6 +95,26 @@ for label in a b; do
 done
 cmp "${tmp}/a/run.stdout" "${tmp}/b/run.stdout"
 
+for label in a b; do
+  if ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 180s \
+      "${tmp}/${label}/owner" \
+      "${PROJECT_ROOT}/tests/t2/fixtures/bpe_tokenizer_v1.tsv" \
+      "${tmp}/resources-a" --foreign-token-fail-stop \
+      >"${tmp}/${label}/foreign.stdout" \
+      2>"${tmp}/${label}/foreign.stderr"; then
+    status=0
+  else
+    status=$?
+  fi
+  test "${status}" -eq 1
+  grep -Fx 'C2 OWNER FOREIGN TOKEN CLAIMED' \
+    "${tmp}/${label}/foreign.stdout" >/dev/null
+  ! grep -E 'FOREIGN TOKEN (EXCEPTION ESCAPED|COMPOSE RETURNED)|OWNER PASS' \
+    "${tmp}/${label}/foreign.stdout" >/dev/null
+  test ! -s "${tmp}/${label}/foreign.stderr"
+done
+cmp "${tmp}/a/foreign.stdout" "${tmp}/b/foreign.stdout"
+
 for source in o2_optimizer f32_tensor kernel_abi; do
   "${cc}" "${cflags[@]}" -O1 -fsanitize=address,undefined \
     -fno-omit-frame-pointer -c "${PROJECT_ROOT}/native/${source}.c" \
@@ -125,4 +145,4 @@ cmp "${PROJECT_ROOT}/native/c2_training_state_source_closure.txt" \
     native/c2_o2_reconstruct_extension.esk native/c2_o2_encode_extension.esk \
     native/c2_model_encode_extension.esk native/c2_x1_canonical_extension.esk \
     native/c2_training_state_extension.esk)
-printf 'C2 TRAINING STATE OWNER PASS: strict repeated AOT/runtime, ownership/failpoints/topology, deterministic fixtures, ASan/UBSan, source closure\n'
+printf 'C2 TRAINING STATE OWNER PASS: strict repeated AOT/runtime, foreign-token fail-stop, ownership/failpoints/topology, deterministic fixtures, ASan/UBSan, source closure\n'
