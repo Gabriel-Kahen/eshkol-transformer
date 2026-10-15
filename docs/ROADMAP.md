@@ -1462,6 +1462,12 @@ object. The read-only terminal review is
 `/home/gabe/.codex/evidence/eshkol-transformer/e3-stage6-d-terminal-raw-review-20261015/REVIEW-RECEIPT.json`.
 The isolated retention-only policy and inventory repair pins these observed
 imports; fault and first-eval-mutant tuples keep their prior inventories.
+Independent review of `986790b` held source acceptance because the
+first-eval-mutant host test still required identical sanitizer manifests and
+an older `e3_frame.c` hash. The follow-up test contract pins the exact
+retention-only delta and the already reviewed stage-6 source hash; its focused
+host module passes 7/7. The review receipt is
+`/home/gabe/.codex/evidence/eshkol-transformer/e3-retention-sanitizer-import-repair-986790b-independent-review-20261015/REVIEW.md`.
 Independent source review and a fresh supported compiled package gate are
 still required. Package E and full E3 §9 admission remain **HOLD**.
 

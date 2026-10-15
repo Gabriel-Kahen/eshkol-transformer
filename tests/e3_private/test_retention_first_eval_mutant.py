@@ -17,6 +17,23 @@ def sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def audit_sanitizer_split(retention_non: list[str], mutant_non: list[str],
+                          retention_asan: list[str], mutant_asan: list[str]) -> None:
+    inventories = (retention_non, mutant_non, retention_asan, mutant_asan)
+    if any(rows != sorted(set(rows)) for rows in inventories):
+        raise ValueError("sanitizer inventories are not sorted unique")
+    if tuple(map(len, inventories)) != (172, 175, 59, 51):
+        raise ValueError("retention or mutant sanitizer import count changed")
+    if (set(mutant_non) - set(retention_non) != {"memcpy", "memmove", "memset"}
+            or set(retention_non) - set(mutant_non)
+            or set(mutant_asan) - set(retention_asan)
+            or set(retention_asan) - set(mutant_asan) != {
+                "__asan_alloca_poison", "__asan_allocas_unpoison",
+                "__asan_load1", "__asan_load8", "__asan_store1",
+                "__asan_store2", "__asan_store4", "__asan_store8"}):
+        raise ValueError("retention sanitizer imports differ from the measured delta")
+
+
 def audit_native(source: str) -> None:
     required = (
         '#include "../../src/eshkol_transformer/e3_frame.c"',
@@ -67,7 +84,7 @@ class FirstEvaluationMutantTuple(unittest.TestCase):
 
     def test_normal_inputs_unchanged_and_manifests_exact(self) -> None:
         self.assertEqual(sha(ROOT / "src/eshkol_transformer/e3_frame.c"),
-                         "248e9149ed6a4c3042800c713c7783738e5b506fd8825379b6bb846252d50e33")
+                         "80cfa48482333d60c60462b33b102f1b09ec63720ee674250794b67c4be5201a")
         digest = hashlib.sha256()
         originals = sorted(PRIVATE.glob("retention_package_*.txt"))
         self.assertEqual(len(originals), 11)
@@ -86,9 +103,24 @@ class FirstEvaluationMutantTuple(unittest.TestCase):
                 expected = expected.replace("src/eshkol_transformer/e3_frame.c\n",
                                             "tests/e3_private/retention_first_eval_frame.c\n"
                                             "src/eshkol_transformer/e3_frame.c\n", 1)
-            self.assertEqual(copied.read_text(), expected, copied.name)
+            if "_sanitized_" not in path.name:
+                self.assertEqual(copied.read_text(), expected, copied.name)
+        retention_non = (PRIVATE / "retention_package_sanitized_noninstrumentation_undefined_symbols.txt").read_text().splitlines()
+        mutant_non = (PRIVATE / "retention_first_eval_mutant_package_sanitized_noninstrumentation_undefined_symbols.txt").read_text().splitlines()
+        retention_asan = (PRIVATE / "retention_package_sanitized_instrumentation_undefined_symbols.txt").read_text().splitlines()
+        mutant_asan = (PRIVATE / "retention_first_eval_mutant_package_sanitized_instrumentation_undefined_symbols.txt").read_text().splitlines()
+        audit_sanitizer_split(retention_non, mutant_non, retention_asan, mutant_asan)
+        with self.assertRaises(ValueError):
+            audit_sanitizer_split(sorted((set(retention_non) - {"memchr"}) | {"memcpy"}),
+                                  mutant_non,
+                                  retention_asan, mutant_asan)
+        with self.assertRaises(ValueError):
+            audit_sanitizer_split(retention_non, mutant_non,
+                                  sorted((set(retention_asan) - {"__asan_load8"}) |
+                                         {"__asan_load16"}),
+                                  mutant_asan)
         self.assertEqual(digest.hexdigest(),
-                         "9e11fe618c284dcc20c0c26f1b65d808345511fe303bb2fb115377d963cedaa7")
+                         "6afa6d35c346d4c9ed38432635fcec76f441ab5feba77be7ec4f7e1367bfd3f5")
         self.assertEqual((PRIVATE / "retention_first_eval_mutant_bridge.c").read_bytes(),
                          (PRIVATE / "retention_bridge.c").read_bytes())
 
