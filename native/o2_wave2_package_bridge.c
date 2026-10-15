@@ -6,12 +6,17 @@
 #endif
 
 #include "o2_optimizer_internal.h"
+#if defined(ET_G3R_SAME_OWNER_SAVE_PRIVATE) && \
+    defined(ET_G3R_CANDIDATE_RETIRE_PRIVATE)
+#include "../src/eshkol_transformer/m3t_transport.h"
+#endif
 #ifdef ET_TR3_O2_STEP_CLEAR_BRIDGE
 #include "tr3_o2_step_clear_internal.h"
 #endif
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 static _Thread_local et_o2_error_v1 et_o2_bridge_error;
@@ -203,6 +208,97 @@ int64_t et_o2_private_optimizer_state_release_v1(void *state) {
   }
   return -3;
 }
+
+#ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
+/* Private held-state adopter bridge. The Scheme caller keeps the exact return
+ * value from issue in a rooted cell; a bit-equal state is never authority. */
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+static _Thread_local int64_t et_g3r_trainer_o2_save_error_source;
+
+/* 1=M3T roster; 2=O2 held owner. No trainer authority is granted here. */
+int64_t et_g3r_private_trainer_o2_save_last_source_v1(void) {
+  return et_g3r_trainer_o2_save_error_source;
+}
+
+void *et_g3r_private_trainer_o2_save_begin_v1(void *optimizer,
+                                               void *sealed_model) {
+  void *raw_parameters[14] = {0};
+  et_f32_parameter *parameters[14] = {0};
+  const void *identities[14] = {0};
+  et_o2_g3r_save_hold *hold = NULL;
+  et_g3r_trainer_o2_save_error_source = 0;
+  if (et_m3t_private_owner_save_roster_v1(
+          sealed_model, raw_parameters, identities) != 0) {
+    et_g3r_trainer_o2_save_error_source = 1;
+    return NULL;
+  }
+  for (size_t i = 0; i < 14; ++i)
+    parameters[i] = (et_f32_parameter *)raw_parameters[i];
+  if (et_g3r_private_o2_save_begin_v1(
+          (et_o2_optimizer *)optimizer, parameters, identities, &hold,
+          &et_o2_bridge_error) != 0) {
+    et_g3r_trainer_o2_save_error_source = 2;
+    return NULL;
+  }
+  if (hold == NULL) abort();
+  return hold;
+}
+
+int64_t et_g3r_private_trainer_o2_save_end_v1(void *candidate) {
+  et_o2_g3r_save_hold *hold = (et_o2_g3r_save_hold *)candidate;
+  const int32_t status = et_g3r_private_o2_save_end_v1(
+      &hold, &et_o2_bridge_error);
+  if (status == 0 && hold != NULL) abort();
+  return (int64_t)status;
+}
+#endif
+
+int64_t et_g3r_private_o2_adopter_owner_match_v1(void *hold,
+                                                  void *optimizer) {
+  return (int64_t)et_g3r_private_o2_save_owner_match_v1(
+      (et_o2_g3r_save_hold *)hold, (et_o2_optimizer *)optimizer,
+      &et_o2_bridge_error);
+}
+
+int64_t et_g3r_private_o2_adopter_completed_updates_v1(void *hold,
+                                                         void *optimizer) {
+  uint64_t completed = 0u;
+  if (et_g3r_private_o2_save_completed_updates_v1(
+          (et_o2_g3r_save_hold *)hold, (et_o2_optimizer *)optimizer,
+          &completed, &et_o2_bridge_error) != 0)
+    return -1;
+  return (int64_t)completed;
+}
+
+void *et_g3r_private_o2_adopter_issue_v1(void *hold) {
+  et_o2_optimizer_state *state = NULL;
+  if (et_g3r_private_o2_save_state_v1((et_o2_g3r_save_hold *)hold, &state,
+                                      &et_o2_bridge_error) != 0)
+    return NULL;
+  return state;
+}
+
+int64_t et_g3r_private_o2_adopter_issued_match_v1(
+    void *hold, void *optimizer, void *issued, void *candidate) {
+  if (issued == NULL || issued != candidate) {
+    memset(&et_o2_bridge_error, 0, sizeof(et_o2_bridge_error));
+    et_o2_bridge_error.category = ET_O2_STATUS_INVALID_STATE;
+    et_o2_bridge_error.code = ET_O2_CODE_OWNER_CONFLICT;
+    return ET_O2_STATUS_INVALID_STATE;
+  }
+  const int32_t owner_status = et_g3r_private_o2_save_owner_match_v1(
+          (et_o2_g3r_save_hold *)hold, (et_o2_optimizer *)optimizer,
+          &et_o2_bridge_error);
+  if (owner_status != 0)
+    return (int64_t)owner_status;
+  return (int64_t)et_g3r_private_o2_save_issued_match_v1(
+      (et_o2_g3r_save_hold *)hold, (et_o2_optimizer_state *)candidate,
+      &et_o2_bridge_error);
+}
+
+/* An indeterminate native lifecycle cannot become a Scheme exception. */
+void et_g3r_private_o2_adopter_fail_stop_v1(void) { abort(); }
+#endif
 
 #ifdef ET_C2_O2_RECONSTRUCT_BRIDGE
 /*

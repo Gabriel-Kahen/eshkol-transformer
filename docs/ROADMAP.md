@@ -2421,6 +2421,14 @@ contract and package bridge are absent from that head, so the held-O2 recheck,
 adopter and original-owner coordinator roots remain unported. This adds no C2
 claim, SAVE writer, replay or continuation admission.
 
+The scoped O2 native port on `codex/g3r-o2-native-port-20261015` adds the
+feature-gated same-owner held-save contract and roster-to-O2 package bridge
+above the exact PR #214 prerequisite. Focused host checks cover hold lifecycle,
+owner/count and issued-state matching, aliases, first-error drain, the 64-entry
+tombstone cap and feature-off exports. It remains a source candidate pending
+independent review and linked Eshkol validation; no SAVE, replay or public
+admission follows from these native checks.
+
 The [private M3 owner-roster prerequisite](g3/G3_R_M3_OWNER_ROSTER_PREREQUISITE.md)
 ports the feature-gated registry-backed fourteen-parameter/identity roster
 to current main. It rejects unsealed, stale, foreign, incomplete or inconsistent
