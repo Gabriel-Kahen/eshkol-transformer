@@ -2429,6 +2429,15 @@ tombstone cap and feature-off exports. It remains a source candidate pending
 independent review and linked Eshkol validation; no SAVE, replay or public
 admission follows from these native checks.
 
+Independent review held that first O2 port: replacing an entry's moment pointer
+with another live optimizer's moment before `begin` was accepted because the
+hold trusted mutable entries. The successor on
+`codex/g3r-o2-held-roster-proof-20261015` requires all fourteen live entries,
+including both moment pointers and canonical storage owners, to match O2's
+immutable publication roster at `begin` and `check`. Its cross-optimizer
+substitution negative fails on the predecessor and passes on this successor;
+independent repair review and linked Eshkol validation remain open.
+
 The [private M3 owner-roster prerequisite](g3/G3_R_M3_OWNER_ROSTER_PREREQUISITE.md)
 ports the feature-gated registry-backed fourteen-parameter/identity roster
 to current main. It rejects unsealed, stale, foreign, incomplete or inconsistent

@@ -2251,6 +2251,26 @@ static int et_o2_g3r_save_buffers_conflict(const void *output,
   return 0;
 }
 
+/* The live entry array is mutable; only the publication roster records which
+ * moment tensors and parameter storage this optimizer actually owns. */
+static int et_o2_g3r_save_roster_matches(const et_o2_optimizer *optimizer) {
+  const et_o2_retire_provenance *record = et_o2_retire_record_find(optimizer);
+  if (record == NULL || record->owner != optimizer || record->live != 1u ||
+      record->count != 14u || record->entries != optimizer->entries)
+    return 0;
+  for (size_t i = 0u; i < 14u; ++i) {
+    const et_o2_entry *published = &record->roster[i];
+    if (memcmp(&optimizer->entries[i], published, sizeof(*published)) != 0 ||
+        published->initialized != 1u || published->parameter == NULL ||
+        published->p1_handle == NULL || published->storage_owner == NULL ||
+        published->exp_avg == NULL || published->exp_avg_sq == NULL ||
+        et_f32_parameter_canonical_owner_v1(published->parameter) !=
+            published->storage_owner)
+      return 0;
+  }
+  return 1;
+}
+
 static et_o2_g3r_save_hold *et_o2_g3r_hold_admit(
     const et_o2_g3r_save_hold *candidate) {
   for (et_o2_g3r_save_hold *hold = et_o2_g3r_save_holds;
@@ -2301,6 +2321,10 @@ int32_t et_g3r_private_o2_save_begin_v1(
     return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
                       ET_O2_CODE_OWNER_CONFLICT, operation,
                       "optimizer entry allocation changed");
+  if (!et_o2_g3r_save_roster_matches(candidate))
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                      ET_O2_CODE_OWNER_CONFLICT, operation,
+                      "optimizer entries differ from published ownership");
   if (et_o2_g3r_save_tombstones >= ET_G3R_O2_SAVE_MAX_TOMBSTONES)
     return et_o2_fail(error, ET_O2_STATUS_UNSUPPORTED,
                       ET_O2_CODE_CONSUMED, operation,
@@ -2377,6 +2401,10 @@ int32_t et_g3r_private_o2_save_check_v1(
     return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
                       ET_O2_CODE_OWNER_CONFLICT, operation,
                       "optimizer entry allocation changed");
+  if (!et_o2_g3r_save_roster_matches(optimizer))
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                      ET_O2_CODE_OWNER_CONFLICT, operation,
+                      "optimizer entries differ from published ownership");
   if (optimizer->count != 14u ||
       optimizer->config.clip_kind != hold->config.clip_kind ||
       optimizer->config.clip_max_bits != hold->config.clip_max_bits ||

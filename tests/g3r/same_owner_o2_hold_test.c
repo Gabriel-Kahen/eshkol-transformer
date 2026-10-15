@@ -196,6 +196,38 @@ int main(void) {
         memcmp(optimizer->entries, entries_before, sizeof(entries_before)) == 0 &&
         memcmp(parameters[0], parameter_before, sizeof(parameter_before)) == 0 &&
         memcmp(moment_data, moment_before, sizeof(moment_before)) == 0);
+  for (size_t kind = 0; kind < 2; ++kind) {
+    et_f32_tensor **owner_slot = kind == 0
+        ? &optimizer->entries[0].exp_avg : &optimizer->entries[0].exp_avg_sq;
+    et_f32_tensor *published = *owner_slot;
+    et_f32_tensor *foreign_moment = kind == 0
+        ? foreign_optimizer->entries[0].exp_avg
+        : foreign_optimizer->entries[0].exp_avg_sq;
+    CHECK(published != foreign_moment);
+    *owner_slot = foreign_moment;
+    CHECK(et_g3r_private_o2_save_begin_v1(
+        optimizer, parameters, identities, &hold, &o2) ==
+        ET_O2_STATUS_INVALID_STATE);
+    CHECK(o2.code == ET_O2_CODE_OWNER_CONFLICT && hold == NULL &&
+          optimizer->busy == 0u &&
+          et_o2_g3r_save_tombstones == initial_tombstones);
+    *owner_slot = published;
+  }
+  CHECK(memcmp(optimizer->entries, entries_before,
+               sizeof(entries_before)) == 0);
+  const et_f32_tensor *published_storage =
+      optimizer->entries[0].storage_owner;
+  CHECK(published_storage != optimizer->entries[1].storage_owner);
+  optimizer->entries[0].storage_owner = optimizer->entries[1].storage_owner;
+  CHECK(et_g3r_private_o2_save_begin_v1(
+      optimizer, parameters, identities, &hold, &o2) ==
+      ET_O2_STATUS_INVALID_STATE);
+  CHECK(o2.code == ET_O2_CODE_OWNER_CONFLICT && hold == NULL &&
+        optimizer->busy == 0u &&
+        et_o2_g3r_save_tombstones == initial_tombstones);
+  optimizer->entries[0].storage_owner = published_storage;
+  CHECK(memcmp(optimizer->entries, entries_before,
+               sizeof(entries_before)) == 0);
   et_o2_test_fail_alloc_after_v1(0);
   CHECK(et_g3r_private_o2_save_begin_v1(
       optimizer, parameters, identities, &hold, &o2) != 0);
@@ -229,6 +261,25 @@ int main(void) {
   CHECK(et_g3r_private_o2_save_begin_v1(
       optimizer, parameters, identities, &hold, &o2) == 0);
   CHECK(hold != NULL && optimizer->busy == 1);
+  for (size_t kind = 0; kind < 2; ++kind) {
+    et_f32_tensor **owner_slot = kind == 0
+        ? &optimizer->entries[0].exp_avg : &optimizer->entries[0].exp_avg_sq;
+    et_f32_tensor *published = *owner_slot;
+    *owner_slot = kind == 0 ? foreign_optimizer->entries[0].exp_avg
+                            : foreign_optimizer->entries[0].exp_avg_sq;
+    CHECK(et_g3r_private_o2_save_check_v1(hold, &o2) ==
+          ET_O2_STATUS_INVALID_STATE);
+    CHECK(o2.code == ET_O2_CODE_OWNER_CONFLICT && hold != NULL &&
+          optimizer->busy == 1u);
+    *owner_slot = published;
+  }
+  optimizer->entries[0].storage_owner = optimizer->entries[1].storage_owner;
+  CHECK(et_g3r_private_o2_save_check_v1(hold, &o2) ==
+        ET_O2_STATUS_INVALID_STATE);
+  CHECK(o2.code == ET_O2_CODE_OWNER_CONFLICT && hold != NULL &&
+        optimizer->busy == 1u);
+  optimizer->entries[0].storage_owner = published_storage;
+  CHECK(et_g3r_private_o2_save_check_v1(hold, &o2) == 0);
   uint64_t held_count = UINT64_MAX;
   uint64_t ordinary_busy_count = UINT64_MAX;
   CHECK(et_o2_optimizer_completed_updates_v1(

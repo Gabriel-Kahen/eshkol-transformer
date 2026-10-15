@@ -61,7 +61,7 @@ for mode in normal repeat san; do
     >"$out/$mode/bridge.stdout" 2>"$out/$mode/bridge.stderr"
   test ! -s "$out/$mode/hold.stderr"
   test ! -s "$out/$mode/bridge.stderr"
-  grep -Fx 'same-owner O2 hold PASS: 403 checks' \
+  grep -Fx 'same-owner O2 hold PASS: 421 checks' \
     "$out/$mode/hold.stdout" >/dev/null
   grep -Fx 'G3R-ORIGINAL-O2-BRIDGE-PASS' \
     "$out/$mode/bridge.stdout" >/dev/null
