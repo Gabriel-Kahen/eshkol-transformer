@@ -977,6 +977,13 @@ captures all 14 gradient payloads/metadata and 17 module modes through every
 rejection and retry, and checks the loaded owner image and native lease census
 after each ordinary evaluator call. Host source checks do not execute this Eshkol
 path; independent exact-head review and supported compiled runs remain required.
+The first successor was held at source review: the uniform native closure did
+not enable the gradient accessor in its separate M3T translation unit, its
+mode image read a workspace-only registry slot from the model, and an error
+sentinel could enter a gradient image. A focused repair enables the accessor
+only for that test tuple, traverses the sealed P1 root's checked child bindings
+and compares modes by path, and rejects gradient reads outside uint32. This
+remains source/static preparation until independent review and runtime gates.
 
 The separate E3 N3 zero-model source candidate on the exact `a64caf9a7`
 union uses the registered M3 tree's 14 unique CPU/f32 owners and one

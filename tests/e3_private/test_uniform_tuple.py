@@ -3,6 +3,7 @@
 from pathlib import Path
 import math
 import re
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -49,6 +50,35 @@ def scheme_form(source: str, name: str) -> str:
 
 
 class UniformTupleTest(unittest.TestCase):
+    def test_uniform_only_gradient_accessor_object_closure(self) -> None:
+        cc, nm = shutil.which("cc"), shutil.which("nm")
+        if not cc or not nm:
+            self.skipTest("host C compiler and nm required for object-symbol check")
+        includes = ["-I", str(ROOT / "include"), "-I", str(ROOT / "src"),
+                    "-I", str(ROOT / "native")]
+        source = ROOT / "src/eshkol_transformer/m3t_f32_integration.c"
+        with tempfile.TemporaryDirectory(prefix="e3-uniform-symbol-") as temporary:
+            plain, enabled, frame = (Path(temporary) / name
+                                     for name in ("plain.o", "enabled.o", "frame.o"))
+            for flags, output in (([], plain), (["-DET_F32_TENSOR_TESTING"], enabled)):
+                subprocess.run([cc, "-std=c11", *flags, *includes, "-c",
+                                str(source), "-o", str(output)], check=True,
+                               capture_output=True, text=True)
+            frame_flags = ("-DET_E3_RETENTION_TESTING", "-DET_F32_TENSOR_TESTING",
+                           "-DET_D2_NATIVE_TESTING", "-DET_E3_NUMERICAL_TESTING")
+            subprocess.run([cc, "-std=c11", *frame_flags, *includes, "-c",
+                            str(ROOT / "src/eshkol_transformer/e3_frame.c"),
+                            "-o", str(frame)], check=True, capture_output=True,
+                           text=True)
+            symbol = "et_m3t_test_parameter_gradient"
+            def symbols(path: Path, option: str) -> set[str]:
+                output = subprocess.run([nm, option, str(path)], check=True,
+                                        capture_output=True, text=True).stdout
+                return {line.split()[-1] for line in output.splitlines() if line.split()}
+            self.assertNotIn(symbol, symbols(plain, "--defined-only"))
+            self.assertIn(symbol, symbols(enabled, "--defined-only"))
+            self.assertIn(symbol, symbols(frame, "--undefined-only"))
+
     def test_zero_state_roster_and_transaction_guards(self) -> None:
         driver = (ROOT / "tests/e3_private/uniform_driver.esk").read_text()
         bridge = (ROOT / "tests/e3_private/uniform_bridge.c").read_text()
@@ -88,7 +118,9 @@ class UniformTupleTest(unittest.TestCase):
         self.assertIn("et_e3_uniform_live_leases_v1", bridge)
         build = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
         self.assertIn('"${e3_tuple_kind}" == uniform &&\n'
-                      '          "${package_native_source}" == "${PROJECT_ROOT}/native/f32_tensor.c"',
+                      '          ( "${package_native_source}" == "${PROJECT_ROOT}/native/f32_tensor.c" ||\n'
+                      '            "${package_native_source}" == "${PROJECT_ROOT}/src/eshkol_transformer/m3t_f32_integration.c" ) ]]; then\n'
+                      '      package_source_flags+=(-DET_F32_TENSOR_TESTING)',
                       build)
         for field in ("borrows", "copy_plans", "gradient_plans", "reset_plans"):
             self.assertIn(f"counts.{field}", bridge)
@@ -101,6 +133,8 @@ class UniformTupleTest(unittest.TestCase):
         load = scheme_form(driver, "e3-uniform-load-before-frame!")
         post = scheme_form(driver, "e3-uniform-assert-post")
         call = scheme_form(driver, "e3-test-run")
+        gradients = scheme_form(driver, "e3-uniform-gradient-image")
+        modes = scheme_form(driver, "e3-uniform-modes")
         self.assertIn("(i2-describe", owner)
         self.assertIn("'native-owner-geometry", owner)
         for witness in ("e3-uniform-gradient-image", "e3-uniform-modes",
@@ -110,6 +144,14 @@ class UniformTupleTest(unittest.TestCase):
         self.assertEqual(load.count("(e3-uniform-assert-original"), 6)
         self.assertIn("'zero-gradients", load)
         self.assertIn("'zero-modes", load)
+        self.assertIn("'gradient-word-readable", gradients)
+        self.assertIn("(<= bits 4294967295)", gradients)
+        self.assertIn("(vector-ref (m3t-entry model 'model 'e3-uniform-roster #t) 0)", modes)
+        self.assertIn("(module-mode-internal current)", modes)
+        self.assertIn("'mode-child-parent", modes)
+        self.assertIn("'distinct-mode-modules", modes)
+        self.assertIn("'mode-root-node-count", modes)
+        self.assertNotIn("(vector-ref (m3t-entry model 'model 'e3-uniform-roster #t) 4)", modes)
         self.assertLess(call.index("(e3-evaluate-into! model dataset frame)"),
                         call.index("(e3-uniform-assert-post model"))
         self.assertIn('"${e3_tuple_kind}" == uniform ]]; then\n'

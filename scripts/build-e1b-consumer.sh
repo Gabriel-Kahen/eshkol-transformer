@@ -1925,7 +1925,8 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     package_source_flags=()
     if [[ "${package_policy}" == e3-private-aggregate &&
           "${e3_tuple_kind}" == uniform &&
-          "${package_native_source}" == "${PROJECT_ROOT}/native/f32_tensor.c" ]]; then
+          ( "${package_native_source}" == "${PROJECT_ROOT}/native/f32_tensor.c" ||
+            "${package_native_source}" == "${PROJECT_ROOT}/src/eshkol_transformer/m3t_f32_integration.c" ) ]]; then
       package_source_flags+=(-DET_F32_TENSOR_TESTING)
     fi
     if [[ "${package_policy}" == e3-private-aggregate &&

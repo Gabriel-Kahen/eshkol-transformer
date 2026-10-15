@@ -185,23 +185,59 @@
               (and (>= state 0) (>= contributions 0) (>= weight 0)))
             (let word ((offset 0))
               (if (= offset count) #t
-                  (begin
-                    (vector-set! words offset
-                      (e3-uniform-model-word owner index 1 offset))
+                  (let ((bits
+                         (e3-uniform-model-word owner index 1 offset)))
+                    (e3-uniform-check 'gradient-word-readable
+                      (and (>= bits 0) (<= bits 4294967295)))
+                    (vector-set! words offset bits)
                     (word (+ offset 1)))))
             (vector-set! image index
               (vector state contributions weight words))
             (parameter (+ index 1)))))))
 
 (define (e3-uniform-modes model)
-  (let ((modules (vector-ref (m3t-entry model 'model 'e3-uniform-roster #t) 4))
-        (modes (make-vector 17 #f)))
-    (let fill ((index 0))
-      (if (= index 17) modes
-          (begin
-            (vector-set! modes index
-              (module-mode-internal (vector-ref modules index)))
-            (fill (+ index 1)))))))
+  ;; Mirror P1's finalization walk over the actual model root. M3's registry
+  ;; slot 4 belongs to workspaces, so it is never a model-module image.
+  (let ((root (vector-ref (m3t-entry model 'model 'e3-uniform-roster #t) 0)))
+    (e3-uniform-check 'mode-root-node-count (= (vector-ref root 10) 17))
+    (let walk ((pending (list (vector '() root)))
+               (seen '()) (result '()) (count 0))
+      (if (null? pending)
+          (begin (e3-uniform-check 'mode-tree-count (= count 17)) result)
+          (let* ((row (car pending))
+                 (path (vector-ref row 0))
+                 (current (vector-ref row 1))
+                 (mode (module-mode-internal current)))
+            (e3-uniform-check 'distinct-mode-modules
+              (let distinct ((prior seen))
+                (if (null? prior) #t
+                    (and (not (eq? current (car prior)))
+                         (distinct (cdr prior))))))
+            (e3-uniform-check 'distinct-mode-paths
+              (let distinct ((prior result))
+                (if (null? prior) #t
+                    (and (not (equal? path (vector-ref (car prior) 0)))
+                         (distinct (cdr prior))))))
+            (e3-uniform-check 'mode-tree-bound (< count 17))
+            (e3-uniform-check 'mode-children-list
+              (list? (vector-ref current 4)))
+            (let children ((edges (vector-ref current 4))
+                           (next (cdr pending)))
+              (if (null? edges)
+                  (walk next (cons current seen)
+                        (cons (vector path current mode) result) (+ count 1))
+                  (let ((edge (car edges)))
+                    (e3-uniform-check 'mode-child-binding
+                      (and (vector? edge) (= (vector-length edge) 3)
+                           (eq? (vector-ref edge 0) 'child-binding)
+                           (string? (vector-ref edge 1))))
+                    (let ((child (vector-ref edge 2)))
+                      (module-mode-internal child)
+                      (e3-uniform-check 'mode-child-parent
+                        (eq? (vector-ref child 5) current))
+                      (children (cdr edges)
+                        (cons (vector (cons (vector-ref edge 1) path) child)
+                              next)))))))))))
 
 (define (e3-uniform-same-gradients? before after)
   (let parameter ((index 0))
@@ -220,10 +256,20 @@
                (parameter (+ index 1)))))))
 
 (define (e3-uniform-same-modes? before after)
-  (let module ((index 0))
-    (if (= index 17) #t
-        (and (eq? (vector-ref before index) (vector-ref after index))
-             (module (+ index 1))))))
+  (let entry ((remaining before) (count 0))
+    (if (null? remaining)
+        (and (= count 17) (= (length after) 17))
+        (let* ((row (car remaining))
+               (match
+                (let find ((candidates after))
+                  (cond ((null? candidates) #f)
+                        ((equal? (vector-ref (car candidates) 0)
+                                 (vector-ref row 0)) (car candidates))
+                        (else (find (cdr candidates)))))))
+          (and match
+               (eq? (vector-ref row 1) (vector-ref match 1))
+               (eq? (vector-ref row 2) (vector-ref match 2))
+               (entry (cdr remaining) (+ count 1)))))))
 
 (define (e3-uniform-assert-original model words handles bytes hash
                                     gradients modes owned builders)
