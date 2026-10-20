@@ -1,5 +1,6 @@
 from pathlib import Path
 import re
+import textwrap
 import unittest
 
 
@@ -198,13 +199,38 @@ class SingleRegistryContract(unittest.TestCase):
                          'tests/cli3_generate/generate_extension.esk')
         entry = (FIXTURE / 'cli.esk').read_text()
         original = (ROOT / 'src/eshkol_transformer/cli.esk').read_text()
-        self.assertEqual(
-            entry.replace('Test-installed CLI3/G3-G successor entry; the package owns dispatch.',
-                          'Thin Eshkol-native executable entry. The CLI3 aggregate owns all dispatch.')
-                 .replace('cli3-generate-dispatch', 'cli3-dispatch')
-                 .replace('et_e1b_public_cli3_generate_dispatch_v1',
-                          'et_e1b_public_cli3_dispatch_v1'),
-            original)
+        # The installed entry adds one public-D1 branch before the unchanged
+        # native dispatch. Construct that exact successor from the fixture so
+        # a change in either branch, fallback, or CLI3 argument flow fails.
+        self.assertEqual(entry.count('\n(guard\n'), 1)
+        self.assertEqual(entry.count('(vector (cdr (command-line)))'), 1)
+        expected = (entry.replace(
+            'Test-installed CLI3/G3-G successor entry; the package owns dispatch.',
+            'Thin Eshkol-native executable entry. The CLI3 aggregate owns all dispatch.')
+            .replace('cli3-generate-dispatch', 'cli3-dispatch')
+            .replace('et_e1b_public_cli3_generate_dispatch_v1',
+                     'et_e1b_public_cli3_dispatch_v1'))
+        expected = expected.replace(
+            '\n\n(extern void cli3-dispatch',
+            '\n\n;;; The app imports only a checked read-only projection of the public D1 facade.\n'
+            '(require transformer.data)\n'
+            '(require transformer.cli3_corpus_validate)\n\n'
+            '(extern void cli3-dispatch')
+        self.assertEqual(expected.count('\n(guard\n'), 1)
+        prefix, dispatch = expected.split('\n(guard\n')
+        dispatch = '(guard\n' + dispatch
+        dispatch = dispatch.replace('(vector (cdr (command-line)))',
+                                    '(vector arguments)')
+        expected = (prefix + '\n(let ((arguments (cdr (command-line))))\n'
+                    '  (if (and (pair? arguments)\n'
+                    '           (string=? (car arguments) "corpus")\n'
+                    '           (pair? (cdr arguments))\n'
+                    '           (string=? (car (cdr arguments)) "validate"))\n'
+                    '      (begin\n'
+                    '        (cli3-corpus-validate-command arguments)\n'
+                    '        (exit 0))\n'
+                    + textwrap.indent(dispatch.rstrip('\n'), '      ') + '))\n')
+        self.assertEqual(expected, original)
 
 
 if __name__ == '__main__':
