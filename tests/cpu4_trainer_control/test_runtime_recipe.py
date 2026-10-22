@@ -65,6 +65,21 @@ class RuntimeRecipe(unittest.TestCase):
         self.assertNotIn("m3t-public-model-create", self.text)
         self.assertNotRegex(self.text, r"\(length\s")
 
+    def test_controls_compare_byte_payloads_explicitly(self):
+        functions = {form[1][0]: form for form in self.forms
+                     if form[0] == "define" and isinstance(form[1], list)}
+        calls = [node for node in walk(functions["controls=?"])
+                 if node and node[0] == "d2-core-bytes=?"]
+        self.assertEqual(len(calls), 3)
+        self.assertNotIn("(equal? zero (cpu4-trainer-", self.text)
+        for label in ("distinct canonical bytevector objects", "same canonical byte payload",
+                      "detached complete controls compare by value",
+                      "controls comparison catches current cursor bytes",
+                      "controls comparison catches epoch cursor bytes",
+                      "controls comparison catches canonical config bytes",
+                      "controls comparison catches byte payload length"):
+            self.assertIn('"' + label + '"', self.text)
+
     def test_recipe_reuses_exact_binding_native_universe_plus_o2(self):
         self.assertIn('native/cpu4_binding_native_sources.txt', self.script)
         self.assertIn("printf '%s\\n' native/o2_optimizer.c native/o2_wave2_package_bridge.c", self.script)
