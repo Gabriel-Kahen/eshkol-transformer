@@ -161,6 +161,20 @@ static void test_roster_and_retry(void) {
   REJECT(et_cpu4_private_candidate_retire_prepare_v1(a, NULL, NULL));
   original->gradient = gradient;
   et_f32_tensor_error error;
+  /* Publish a real PRESENT gradient before requesting its parameter lease. */
+  const et_f32_tensor *numerator = NULL;
+  OK(et_f32_parameter_value_tensor_v1(b->owner->parameters[13], &numerator, &error));
+  et_f32_gradient_contribution_v1 contribution = {
+      sizeof(contribution), original, numerator, 0u};
+  et_f32_gradient_plan *plan = NULL;
+  OK(et_f32_gradient_plan_prepare_v1(1u, &contribution,
+      UINT32_C(0x3f800000), &plan, &error));
+  REJECT(et_cpu4_private_candidate_retire_prepare_v1(a, NULL, NULL));
+  OK(et_f32_gradient_plan_commit_v1(plan, &error));
+  OK(et_f32_gradient_plan_release_v1(&plan, &error));
+  et_f32_gradient_metadata_v1 metadata = {.struct_size = sizeof(metadata)};
+  OK(et_f32_parameter_gradient_metadata_v1(original, &metadata, &error));
+  CHECK(metadata.state == ET_F32_GRADIENT_PRESENT && metadata.contribution_count == 1u);
   for (int grad = 0; grad < 2; ++grad) {
     et_f32_tensor_borrow *borrow = NULL;
     if (grad) OK(et_f32_parameter_gradient_borrow_begin_v1(original, &borrow, &error));

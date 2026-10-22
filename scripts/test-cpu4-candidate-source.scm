@@ -1,4 +1,4 @@
-(use-modules (ice-9 popen) (ice-9 textual-ports) (ice-9 rdelim))
+(use-modules (ice-9 copy-tree) (ice-9 popen) (ice-9 textual-ports) (ice-9 rdelim))
 (define checks 0)
 (define (check label value)
   (if value (set! checks (+ checks 1)) (error label)))
@@ -179,3 +179,87 @@
     '((load "m3_package_root.esk") (load "g3c4_i2_construction_extension.esk")
       (load "g3c4_model_extension.esk") (load "cpu4_candidate_extension.esk"))))
 (display "CPU4 candidate exact closure PASS: checks=") (display checks) (newline)
+;; fe9 imported Function* values are not closure objects. Each native capture
+;; must materialize a real Scheme lambda whose body directly calls its extern.
+(define extern-forms
+  (append (filter (lambda (x) (and (pair? x) (eq? (car x) 'extern))) feature)
+          (filter (lambda (x) (and (pair? x) (eq? (car x) 'extern))) c4-i2)
+          (filter (lambda (x) (and (pair? x) (eq? (car x) 'extern)))
+                  (read-file "native/g3c4_model_extension.esk"))))
+(define extern-names (map caddr extern-forms))
+(define native-captures
+  '((native-begin cpu4-native-candidate-begin)
+    (native-owner cpu4-native-candidate-owner)
+    (native-abort cpu4-native-candidate-abort-open)
+    (native-adopt cpu4-native-candidate-adopt)
+    (native-prepare cpu4-native-candidate-retire-prepare)
+    (native-cancel cpu4-native-candidate-retire-cancel)
+    (native-graph cpu4-native-candidate-retire-graph)
+    (native-payload cpu4-native-candidate-retire-payload)
+    (p1-native-begin-fixed cpu4-native-p1-candidate-begin)
+    (bind-ffi cpu4-native-candidate-bind-graph)
+    (owner-parameter i2-native-g3c4-owner-parameter)
+    (i2-available i2-native-g3c4-construction-available)
+    (last-error-category g3c4-native-last-error-category)
+    (owner-initialize g3c4-native-owner-initialize)
+    (owner-word g3c4-native-owner-word)
+    (owner-prepare g3c4-native-owner-prepare-seal)
+    (owner-seal g3c4-native-owner-commit-seal)))
+(define candidate-bindings (cadr (caddr (definition 'cpu4-candidate-surface feature))))
+(define (ffi-capture-valid? value extern-name)
+  (let ((declaration (find (lambda (form) (eq? (caddr form) extern-name)) extern-forms)))
+    (and declaration (list? value) (= (length value) 3)
+         (eq? (car value) 'lambda) (list? (cadr value))
+         (every symbol? (cadr value))
+         (= (length (cadr value))
+            (length (take-while (lambda (x) (not (eq? x ':real))) (cdddr declaration))))
+         (equal? (caddr value) (cons extern-name (cadr value))))))
+(for-each
+  (lambda (capture)
+    (let* ((binding (assq (car capture) candidate-bindings))
+           (extern-name (cadr capture))
+           (formals (cadr (cadr binding)))
+           (extra-formals (append formals '(extra)))
+           (wrong-arity `(lambda ,extra-formals (,extern-name ,@extra-formals)))
+           ;; Keep the actual lambda's valid arity. Only its call fails to
+           ;; forward formals (zero-arity uses one unforwarded literal).
+           (wrong-forwarding
+             `(lambda ,formals
+                (,extern-name ,@(if (null? formals) '(#f) (drop-right formals 1))))))
+      (check "native capture is an exact-arity direct-call Scheme lambda"
+        (and binding (ffi-capture-valid? (cadr binding) extern-name)))
+      (check "bare extern capture rejected"
+        (not (ffi-capture-valid? extern-name extern-name)))
+      (check "wrong arity with exact forwarding rejected"
+        (and (equal? (caddr wrong-arity) (cons extern-name (cadr wrong-arity)))
+             (not (ffi-capture-valid? wrong-arity extern-name))))
+      (check "wrong forwarding with valid lambda arity rejected"
+        (and (= (length (cadr wrong-forwarding)) (length formals))
+             (not (ffi-capture-valid? wrong-forwarding extern-name))))))
+  native-captures)
+(define (reject-bare-captures form)
+  (if (pair? form)
+      (begin
+        (if (and (memq (car form) '(let let*)) (pair? (cdr form)))
+            (for-each
+              (lambda (binding)
+                (check "no bare extern value in any feature let binding"
+                  (not (and (symbol? (cadr binding)) (memq (cadr binding) extern-names)))))
+              (if (symbol? (cadr form)) (caddr form) (cadr form))))
+        (for-each reject-bare-captures form))))
+(for-each reject-bare-captures feature)
+(display "CPU4 captured FFI closure guard PASS: checks=") (display checks) (newline)
+;; The repair must not change the existing producer/retirement implementation.
+(define normalized-feature (copy-tree feature))
+(define normalized-bindings
+  (cadr (caddr (definition 'cpu4-candidate-surface normalized-feature))))
+(for-each (lambda (capture)
+            (set-car! (cdr (assq (car capture) normalized-bindings)) (cadr capture)))
+          native-captures)
+(let* ((port (open-pipe* OPEN_READ "git" "show"
+                        "3f0358d3:native/cpu4_candidate_extension.esk"))
+       (prior (forms port)))
+  (check "repair baseline available" (= (close-pipe port) 0))
+  (check "only native capture representation changed"
+         (equal? normalized-feature prior)))
+(display "CPU4 FFI-only repair delta PASS: checks=") (display checks) (newline)

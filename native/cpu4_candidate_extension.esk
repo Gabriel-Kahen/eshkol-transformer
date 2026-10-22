@@ -22,17 +22,19 @@
         :real et_p1_private_candidate_construction_begin_v1)
 
 (define cpu4-candidate-surface
-  (let* ((native-begin cpu4-native-candidate-begin)
-         (native-owner cpu4-native-candidate-owner)
-         (native-abort cpu4-native-candidate-abort-open)
-         (native-adopt cpu4-native-candidate-adopt)
-         (native-prepare cpu4-native-candidate-retire-prepare)
-         (native-cancel cpu4-native-candidate-retire-cancel)
-         (native-graph cpu4-native-candidate-retire-graph)
-         (native-payload cpu4-native-candidate-retire-payload)
+  (let* ((native-begin (lambda (seed) (cpu4-native-candidate-begin seed)))
+         (native-owner (lambda (candidate) (cpu4-native-candidate-owner candidate)))
+         (native-abort (lambda (candidate) (cpu4-native-candidate-abort-open candidate)))
+         (native-adopt (lambda (candidate generator) (cpu4-native-candidate-adopt candidate generator)))
+         (native-prepare (lambda (candidate optimizer generator) (cpu4-native-candidate-retire-prepare candidate optimizer generator)))
+         (native-cancel (lambda (candidate) (cpu4-native-candidate-retire-cancel candidate)))
+         (native-graph (lambda (candidate) (cpu4-native-candidate-retire-graph candidate)))
+         (native-payload (lambda (candidate) (cpu4-native-candidate-retire-payload candidate)))
+         ;; Bare extern Function* values are not closures in fe9. Every FFI
+         ;; capture is a real fixed-arity Scheme lambda with a direct FFI call.
          ;; Read installer and all returned operations once, at feature init.
-         (p1-native-begin-fixed cpu4-native-p1-candidate-begin)
-         (bind-ffi cpu4-native-candidate-bind-graph)
+         (p1-native-begin-fixed (lambda (context) (cpu4-native-p1-candidate-begin context)))
+         (bind-ffi (lambda (candidate context scope) (cpu4-native-candidate-bind-graph candidate context scope)))
          (bind-fixed
            (lambda (capability context scope)
              (let ((status (bind-ffi capability context scope)))
@@ -45,13 +47,13 @@
          (p1-preflight (vector-ref p1-bridge 2))
          (p1-invalidate (vector-ref p1-bridge 3))
          (registry (vector '()))
-         (owner-parameter i2-native-g3c4-owner-parameter)
-         (i2-available i2-native-g3c4-construction-available)
-         (last-error-category g3c4-native-last-error-category)
-         (owner-initialize g3c4-native-owner-initialize)
-         (owner-word g3c4-native-owner-word)
-         (owner-prepare g3c4-native-owner-prepare-seal)
-         (owner-seal g3c4-native-owner-commit-seal))
+         (owner-parameter (lambda (owner index) (i2-native-g3c4-owner-parameter owner index)))
+         (i2-available (lambda () (i2-native-g3c4-construction-available)))
+         (last-error-category (lambda () (g3c4-native-last-error-category)))
+         (owner-initialize (lambda (owner index) (g3c4-native-owner-initialize owner index)))
+         (owner-word (lambda (owner index) (g3c4-native-owner-word owner index)))
+         (owner-prepare (lambda (owner) (g3c4-native-owner-prepare-seal owner)))
+         (owner-seal (lambda (owner) (g3c4-native-owner-commit-seal owner))))
     ;; Row: self/state/native-cap/owner/C4-entry/I2-record/P1-ticket/I2-sidecar/
     ;; resolved/first-error/cleanup-fault/busy. No child adoption by inference.
     (define (find candidate operation)
