@@ -271,6 +271,12 @@
                   (g3c4-public-g2-profile-live generator operation))
                 (input-entry
                   (g3c4-p2g2-prefix-preflight generator input))
+                ;; The issuer validates the live public profile before creating
+                ;; the ticket. These lexical values remain creation provenance
+                ;; after generator/profile records have been tombstoned.
+                (creation-profile 'diagnostic-c4-p2g2)
+                (creation-budget (vector-ref (vector-ref profile 5) 5))
+                (creation-eos (vector-ref (vector-ref profile 5) 6))
                 (old-tickets (vector-ref g3c4-public-g2-tickets 0))
                 (old-rows (vector-ref g3c4-public-g2-output-rows 0))
                 (old-anchors (vector-ref g3c4-public-g2-output-anchors 0))
@@ -309,6 +315,10 @@
                              #t)))
                       ((eq? verb 'verify)
                        (and bound-shell bound-entry bound-native
+                            (eq? creation-profile 'diagnostic-c4-p2g2)
+                            (= creation-budget 2)
+                            (m3t-exact-i64? creation-eos)
+                            (<= 0 creation-eos) (<= creation-eos 255)
                             (eq? (vector-ref issued 0) secret)
                             (eq? (vector-ref issued 1) generator)
                             (eq? (vector-ref issued 2) input)

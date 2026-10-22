@@ -6,6 +6,7 @@ trap 'rm -rf "$tmp"' EXIT
 export G3C4_TEST_ROOT="$root" GUILE_AUTO_COMPILE=0
 guile -s "$root/tests/g3c4/p2_g2_public_ticket_host_test.scm"
 guile -s "$root/tests/g3c4/p2_g2_public_typed_result_host_test.scm"
+guile -s "$root/tests/g3c4/p2_g2_public_output_lifetime_host_test.scm"
 for mode in reinstall alias-roots held-abort; do
   set +e
   G3C4_TICKET_CASE="$mode" guile -s "$root/tests/g3c4/p2_g2_public_ticket_host_test.scm" \

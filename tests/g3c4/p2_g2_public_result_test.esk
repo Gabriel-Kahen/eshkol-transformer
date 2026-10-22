@@ -42,6 +42,8 @@
 (define generator
   (g3g-public-generator-create model tokenizer (config selected-first)))
 (define output (g3g-public-generator-generate generator input))
+(check "generator closes before output reads"
+  (g3g-public-generator-close generator))
 (define snapshot (g3c4-public-g2-source-snapshot output 'test))
 (define count (vector-ref snapshot 2))
 (check "genuine first EOS stops at one ID"
@@ -194,6 +196,8 @@
   (g3g-public-generator-create model tokenizer (config non-eos)))
 (define second-output
   (g3g-public-generator-generate second-generator input))
+(check "two-token generator closes before output reads"
+  (g3g-public-generator-close second-generator))
 (define second-snapshot (g3c4-public-g2-source-snapshot second-output 'test))
 (define second-row (vector-ref (g3c4-public-g2-output-live second-output 'test) 6))
 (define two-text (vector-ref second-row 7))

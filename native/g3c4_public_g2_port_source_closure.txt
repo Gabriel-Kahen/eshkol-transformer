@@ -260,4 +260,5 @@ scripts/test-g3c4-public-g2-port-host.sh
 docs/g3/G3_C4_PUBLIC_G2_CLOSED_COORDINATOR_PORT.md
 scripts/test-g3c4-public-g2-port-source.sh
 scripts/test-g3c4-public-g2-port-native-source.sh
+tests/g3c4/p2_g2_public_output_lifetime_host_test.scm
 native/g3c4_public_g2_port_source_closure.txt

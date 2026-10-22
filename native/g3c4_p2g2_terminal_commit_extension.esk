@@ -12,6 +12,16 @@
 
 (define g3c4-p2g2-terminal-commit-private!
   (let ((installed? #f))
+    (let ((generator-node
+            (lambda (root shell)
+              (let find ((nodes (vector-ref root 0)))
+                (if (not (pair? nodes))
+                    (g3c4-fail 'invalid-state 'g3c4-p2g2-terminal-commit-private!
+                               "terminal generator provenance node missing"))
+                (let ((row (car nodes)))
+                  (if (and (vector? row) (> (vector-length row) 0)
+                           (eq? (vector-ref row 0) shell))
+                      nodes (find (cdr nodes))))))))
     (let ((core (lambda (generator input enrollment)
   (let* ((operation 'g3c4-p2g2-terminal-commit-private!)
          (input-entry (g3c4-p2g2-prefix-preflight generator input))
@@ -20,6 +30,7 @@
          (issuer (if enrollment (vector-ref enrollment 1) #f))
          (enrollment-roots (if enrollment (vector-ref enrollment 2) #f))
          (enrollment-heads (if enrollment (vector-ref enrollment 3) #f))
+         (generator-proof (if enrollment (vector-ref enrollment 4) #f))
          (creation-profile (if enrollment (vector-ref (vector-ref enrollment 0) 3) #f))
          (enrollment-binding (if enrollment (car (vector-ref enrollment-heads 3)) #f))
          (enrollment-authority (if enrollment (vector-ref (vector-ref enrollment 0) 16) #f))
@@ -226,6 +237,28 @@
                                    (roots-unchanged (+ index 1))
                                    (g3c4-fail 'invalid-state operation
                                               "terminal enrollment root changed")))))
+                     (if enrollment
+                         (let provenance ((index 0))
+                           (if (< index 3)
+                               (let* ((node (vector-ref generator-proof index))
+                                      (original-row (vector-ref generator-proof (+ index 3)))
+                                      (fields (vector-ref generator-proof (+ index 6))))
+                                 (if (not (and
+                                       (eq? (generator-node
+                                               (vector-ref enrollment-roots (+ index 4)) generator) node)
+                                       (eq? (car node) original-row)
+                                       (eq? (cdr node) (vector-ref generator-proof (+ index 9)))
+                                       (vector? original-row)
+                                       (= (vector-length original-row) (if (= index 2) 2 8))))
+                                     (g3c4-fail 'invalid-state operation
+                                                "terminal generator provenance node changed"))
+                                 (let exact-fields ((slot 0))
+                                   (if (< slot (vector-length fields))
+                                       (if (eq? (vector-ref original-row slot) (vector-ref fields slot))
+                                           (exact-fields (+ slot 1))
+                                           (g3c4-fail 'invalid-state operation
+                                                      "terminal generator provenance fields changed"))))
+                                 (provenance (+ index 1))))))
                      (if (not (and
                          (eq? bound-live live)
                          (eq? (vector-ref generator-entry 7) creation-policy)
@@ -438,14 +471,36 @@
                               (distinct (+ other 1)))))
                     (check (+ index 1)))))
             (lambda (generator input ticket)
-              (let ((heads
+              (let* ((heads
                       (vector (vector-ref (vector-ref original-roots 0) 0)
                               (vector-ref (vector-ref original-roots 1) 0)
                               (vector-ref (vector-ref original-roots 2) 0)
                               (vector-ref (vector-ref original-roots 3) 0)
                               (vector-ref (vector-ref original-roots 4) 0)
                               (vector-ref (vector-ref original-roots 5) 0)
-                              (vector-ref (vector-ref original-roots 6) 0))))
-                (core generator input
-                      (vector ticket original-stage original-roots heads)))))))
-      (lambda (generator input) (core generator input #f)))))
+                              (vector-ref (vector-ref original-roots 6) 0)))
+                     (row-node (generator-node (vector-ref original-roots 4) generator))
+                     (anchor-node (generator-node (vector-ref original-roots 5) generator))
+                     (binding-node (generator-node (vector-ref original-roots 6) generator))
+                     (row (car row-node)) (anchor (car anchor-node)) (binding (car binding-node)))
+                (if (not (and (vector? ticket) (= (vector-length ticket) 21)
+                              (eq? row (vector-ref ticket 3))
+                              (= (vector-length row) 8) (= (vector-length anchor) 8)
+                              (= (vector-length binding) 2) (procedure? (vector-ref binding 1))
+                              (not (eq? row anchor)) (not (eq? row binding))
+                              (not (eq? anchor binding))))
+                    (g3c4-fail 'invalid-state 'g3c4-p2g2-terminal-commit-private!
+                               "terminal generator provenance carriers changed"))
+                (let ((proof
+                        (vector row-node anchor-node binding-node row anchor binding
+                          (vector (vector-ref row 0) (vector-ref row 1) (vector-ref row 2)
+                                  (vector-ref row 3) (vector-ref row 4) (vector-ref row 5)
+                                  (vector-ref row 6) (vector-ref row 7))
+                          (vector (vector-ref anchor 0) (vector-ref anchor 1) (vector-ref anchor 2)
+                                  (vector-ref anchor 3) (vector-ref anchor 4) (vector-ref anchor 5)
+                                  (vector-ref anchor 6) (vector-ref anchor 7))
+                          (vector (vector-ref binding 0) (vector-ref binding 1))
+                          (cdr row-node) (cdr anchor-node) (cdr binding-node))))
+                  (core generator input
+                        (vector ticket original-stage original-roots heads proof))))))))
+      (lambda (generator input) (core generator input #f))))))
