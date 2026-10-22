@@ -304,18 +304,25 @@
          payload))
     (stage "clone lease and release" expected-count)
     (check "hold genuine clone I1" (= (probe-clone-hold native) 0))
+    (stage "clone lease held" expected-count)
     (reject "held clone release leaves owner live"
       (lambda () (g3c4-p2g2-terminal-ids-release-private! ids)))
+    (stage "clone held release rejected" expected-count)
     (check "held native clone still live" (= (probe-clone-live native) 0))
+    (stage "clone held owner live" expected-count)
     (check "end genuine clone I1 lease" (= (probe-clone-end) 0))
+    (stage "clone lease ended" expected-count)
     (vector-set! entry 2 'dead)
     (reject "forged dead does not skip native release"
       (lambda () (g3c4-p2g2-terminal-ids-release-private! ids)))
     (check "forged dead left native clone live"
       (= (probe-clone-live native) 0))
+    (stage "clone forged dead rejected" expected-count)
     (vector-set! entry 2 'live)
+    (stage "clone restored release begin" expected-count)
     (check "restored owner releases native clone"
       (g3c4-p2g2-terminal-ids-release-private! ids))
+    (stage "clone restored release complete" expected-count)
     (check "native clone is dead" (= (probe-clone-live native) 1))
     (check "exact same-shell dead repeat"
       (g3c4-p2g2-terminal-ids-release-private! ids))
