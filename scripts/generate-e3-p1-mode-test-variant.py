@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CANONICAL = ROOT / "internal/p1/lib/transformer/module.esk"
 CANONICAL_SHA256 = "8629d7ee347fb81d0a24cbb5d296828208af9bf75965244d70f7a05ecb132e40"
 VARIANT_SHA256 = "4dfed83790ced23de91e91bede7bbc730b80273e9419de6b2c2678c5e8d58e1a"
+FAULT_VARIANT_SHA256 = "d4e22a1d2319f0a1c90c5af0c18960c48849a34dbdd51f86c2c1dff72721a6bc"
 
 
 def spans(source: str) -> list[tuple[int, int, int]]:
@@ -124,8 +125,55 @@ TEST_CLOSURES = '''
 
 '''
 
+FAULT_WRAPPERS = '''
+;;; Fault-tuple-only P1 selector; all calls require the genuine retained token.
+(define (p1-e3-test-enter-arm! token)
+  ((vector-ref p1-e3-test-seam 4) token))
+(define (p1-e3-test-enter-read! token)
+  ((vector-ref p1-e3-test-seam 5) token))
+(define (p1-e3-test-enter-clear! token)
+  ((vector-ref p1-e3-test-seam 6) token))
+(define (p1-e3-test-enter-denial! token)
+  (if (and (eq? token (vector-ref p1-e3-test-seam 8))
+           (= (vector-ref p1-e3-test-seam 7) 1))
+      (begin (vector-set! p1-e3-test-seam 7 2) #t)
+      #f))
 
-def compose(source: str) -> str:
+'''
+
+FAULT_CLOSURES = '''
+;;; 0 idle, 1 armed, 2 fired, 3 read. Clear rejects an unreached arm.
+(vector-set! p1-e3-test-seam 7 0)
+(vector-set! p1-e3-test-seam 4
+  (lambda (token)
+    (let ((record (e3-mode-record token)))
+      (cond ((not (and record
+                       (eq? token (vector-ref p1-e3-test-seam 2))
+                       (eq? record (vector-ref p1-e3-test-seam 3))
+                       (eq? token (vector-ref record 0)))) 1)
+            ((not (= (vector-ref p1-e3-test-seam 7) 0)) 2)
+            ((not (and (e3-mode-i64=? (vector-ref record 1) 0)
+                       (= (e3-mode-check record) 0))) 2)
+            (else (vector-set! p1-e3-test-seam 8 token)
+                  (vector-set! p1-e3-test-seam 7 1)
+                  0)))))
+(vector-set! p1-e3-test-seam 5
+  (lambda (token)
+    (if (and (eq? token (vector-ref p1-e3-test-seam 8))
+             (= (vector-ref p1-e3-test-seam 7) 2))
+        (begin (vector-set! p1-e3-test-seam 7 3) 2)
+        -1)))
+(vector-set! p1-e3-test-seam 6
+  (lambda (token)
+    (if (and (eq? token (vector-ref p1-e3-test-seam 8))
+             (= (vector-ref p1-e3-test-seam 7) 3))
+        (begin (vector-set! p1-e3-test-seam 8 #f)
+               (vector-set! p1-e3-test-seam 7 0) 0)
+        1)))
+'''
+
+
+def compose(source: str, fault_enter_denial: bool = False) -> str:
     if hashlib.sha256(source.encode()).hexdigest() != CANONICAL_SHA256:
         raise ValueError("canonical P1 source digest differs")
     forms = spans(source)
@@ -147,13 +195,45 @@ def compose(source: str) -> str:
     if len(final_vectors) != 1:
         raise ValueError("P1 final trusted vector anchor changed")
     vector_start, _ = final_vectors[0]
+    closures = TEST_CLOSURES.format(writes=_writes(), mask_terms=_mask_terms())
+    if fault_enter_denial:
+        previous = """((and (vector-ref p1-e3-test-seam 2)
+              (not (eq? token (vector-ref p1-e3-test-seam 2)))) 1)"""
+        retired_ok = """((and (vector-ref p1-e3-test-seam 2)
+              (not (eq? token (vector-ref p1-e3-test-seam 2)))
+              (not (e3-mode-i64=?
+                     (vector-ref (vector-ref p1-e3-test-seam 3) 1) 3))) 1)"""
+        if closures.count(previous) != 1:
+            raise ValueError("P1 test token switch anchor changed")
+        closures = closures.replace(previous, retired_ok, 1)
     additions = [
         (provide_end - 1,
-         " p1-e3-test-fixed-mixed! p1-e3-test-mode-mask"),
-        (trusted_start, TEST_WRAPPERS),
-        (vector_start, TEST_CLOSURES.format(
-            writes=_writes(), mask_terms=_mask_terms())),
+         " p1-e3-test-fixed-mixed! p1-e3-test-mode-mask" +
+         (" p1-e3-test-enter-arm! p1-e3-test-enter-read!"
+          " p1-e3-test-enter-clear!" if fault_enter_denial else "")),
+        (trusted_start, (TEST_WRAPPERS.replace(
+             "(vector #f #f #f #f)",
+             "(vector #f #f #f #f #f #f #f 0 #f)")
+             if fault_enter_denial else TEST_WRAPPERS) +
+         (FAULT_WRAPPERS if fault_enter_denial else "")),
+        (vector_start, closures +
+         (FAULT_CLOSURES if fault_enter_denial else "")),
     ]
+    if fault_enter_denial:
+        enter_start, enter_end = one_form(source, forms, "(define (e3-mode-enter!", 2)
+        enter = source[enter_start:enter_end]
+        anchor = "(let ((nodes (vector-ref record 5)))"
+        if enter.count(anchor) != 1:
+            raise ValueError("P1 enter write anchor changed")
+        node_start = enter_start + enter.index(anchor)
+        node_form = [(start, end) for start, end, _ in forms if start == node_start]
+        if len(node_form) != 1 or node_form[0][1] >= enter_end:
+            raise ValueError("P1 enter write form changed")
+        node_end = node_form[0][1]
+        additions.extend([
+            (node_start, "(if (p1-e3-test-enter-denial! token) 2 "),
+            (node_end, ")"),
+        ])
     result = source
     for position, replacement in reversed(additions):
         result = result[:position] + replacement + result[position:]
@@ -164,10 +244,11 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--fault-enter-denial", action="store_true")
     args = parser.parse_args()
-    output = compose(CANONICAL.read_text())
+    output = compose(CANONICAL.read_text(), args.fault_enter_denial)
     digest = hashlib.sha256(output.encode()).hexdigest()
-    if digest != VARIANT_SHA256:
+    if digest != (FAULT_VARIANT_SHA256 if args.fault_enter_denial else VARIANT_SHA256):
         raise SystemExit(f"generated P1 variant digest differs: {digest}")
     if args.check:
         if args.output.read_text() != output:
