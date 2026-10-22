@@ -46,3 +46,8 @@ index/mask errors. Layout calls reject transposed tensor metadata and head
 storage metadata used as a request. These primitive checks do not establish
 model training, C4 ownership, checkpoint compatibility, evaluator admission or
 generation correctness; those require the upstream composition gates.
+
+Device negatives distinguish two K1 stages: capability lookup for a `cuda`
+request returns `UNSUPPORTED / CAPABILITY_NOT_VERIFIED`; dispatch of that
+request with CPU operands returns `DEVICE_MISMATCH / INVALID_BUFFER` during
+generic operand validation, before capability lookup or provider invocation.

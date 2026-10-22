@@ -43,11 +43,17 @@ static void fill_outputs(test_case *c) {
   for (size_t i = 0; i < c->no; ++i) memset(c->output[i].data, 0x5a, c->output[i].bytes);
 }
 static void reject_unchanged(et_kernel_runtime *runtime, test_case *c,
-                             et_kernel_call_v1 *call, int unsupported) {
+                             et_kernel_call_v1 *call, uint32_t category,
+                             uint32_t code) {
   fill_outputs(c);
   et_kernel_error error;
   CHECK(et_kernel_runtime_dispatch(runtime, call, &error) != 0);
-  if (unsupported) CHECK(error.category == ET_KERNEL_ERROR_UNSUPPORTED);
+  if ((category && error.category != category) || (code && error.code != code))
+    fprintf(stderr, "%s: expected category/code %u/%u, got %u/%u at %s: %s\n",
+            c->operation, category, code, error.category, error.code,
+            error.operation, error.message);
+  if (category) CHECK(error.category == category);
+  if (code) CHECK(error.code == code);
   for (size_t i = 0; i < c->no; ++i)
     for (size_t j = 0; j < c->output[i].bytes; ++j)
       CHECK(((unsigned char *)c->output[i].data)[j] == 0x5a);
@@ -82,37 +88,48 @@ static void test(et_kernel_runtime *runtime, test_case *c) {
   for (uint64_t t = 3; t <= 5; t += 2) {
     if (c->provider == 2) wrong[3] = wrong[4] = t;
     else wrong[1] = t;
-    reject_unchanged(runtime, c, &call, 1);
+    reject_unchanged(runtime, c, &call, ET_KERNEL_ERROR_UNSUPPORTED,
+                     ET_KERNEL_CODE_CAPABILITY_NOT_VERIFIED);
   }
   request.shape = c->shape;
   --outputs[0].byte_length;
-  reject_unchanged(runtime, c, &call, 0);
+  reject_unchanged(runtime, c, &call, 0, 0);
   ++outputs[0].byte_length;
   const char *dtype = inputs[0].dtype;
   inputs[0].dtype = "f64";
-  reject_unchanged(runtime, c, &call, 0);
+  reject_unchanged(runtime, c, &call, 0, 0);
   inputs[0].dtype = dtype;
   request.device = "cuda";
-  reject_unchanged(runtime, c, &call, 1);
+  /* Discovery rejects the unsupported device. Dispatch first observes that
+   * the supplied CPU operands disagree with this otherwise valid request. */
+  const et_kernel_capability_v1 *entry = NULL;
+  CHECK(et_kernel_runtime_capability_require(
+    runtime, c->capability, &request, &entry, &error) != 0);
+  CHECK(entry == NULL);
+  CHECK(error.category == ET_KERNEL_ERROR_UNSUPPORTED);
+  CHECK(error.code == ET_KERNEL_CODE_CAPABILITY_NOT_VERIFIED);
+  CHECK(strcmp(error.operation, "capability-require") == 0);
+  reject_unchanged(runtime, c, &call, ET_KERNEL_ERROR_DEVICE_MISMATCH,
+                   ET_KERNEL_CODE_INVALID_BUFFER);
   request.device = "cpu";
 
   for (size_t i = 0; i < c->ni; ++i) if (!strcmp(inputs[i].dtype, "f32")) {
     float *value = inputs[i].data, saved = value[0];
     value[0] = NAN;
-    reject_unchanged(runtime, c, &call, 0);
+    reject_unchanged(runtime, c, &call, 0, 0);
     value[0] = saved;
     break;
   }
   if (strstr(c->operation, "embedding")) {
     int64_t *ids = inputs[0].data, saved = ids[3];
     ids[3] = -1;
-    reject_unchanged(runtime, c, &call, 0);
+    reject_unchanged(runtime, c, &call, 0, 0);
     ids[3] = saved;
   }
   if (c->provider == 2) {
     unsigned char *mask = inputs[5].data, saved = mask[15];
     mask[15] = 2;
-    reject_unchanged(runtime, c, &call, 0);
+    reject_unchanged(runtime, c, &call, 0, 0);
     mask[15] = saved;
   }
   if (!strcmp(c->capability, "n3k.head-layout")) {
@@ -121,11 +138,12 @@ static void test(et_kernel_runtime *runtime, test_case *c) {
     const uint64_t transposed[] = {1, 4, 2, 2};
     const uint64_t *saved = head->shape;
     head->shape = transposed;
-    reject_unchanged(runtime, c, &call, 0);
+    reject_unchanged(runtime, c, &call, 0, 0);
     head->shape = saved;
     const uint64_t tensor_as_request[] = {1, 2, 4, 2};
     request.shape = tensor_as_request;
-    reject_unchanged(runtime, c, &call, 1);
+    reject_unchanged(runtime, c, &call, ET_KERNEL_ERROR_UNSUPPORTED,
+                     ET_KERNEL_CODE_CAPABILITY_NOT_VERIFIED);
     request.shape = c->shape;
   }
 }
