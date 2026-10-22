@@ -109,10 +109,45 @@
                  "I2 restore ledger is foreign, stale, or in the wrong phase"))
     ledger))
 
+;;; Closed assignment-only transfer; allocated once with this source, never a
+;;; named-let closure allocated after native plan acquisition.
+(define (tr3-c-restore-transfer28! stage-carriers)
+  (vector-set! (vector-ref stage-carriers 0) 2 '())
+  (vector-set! (vector-ref stage-carriers 1) 2 '())
+  (vector-set! (vector-ref stage-carriers 2) 2 '())
+  (vector-set! (vector-ref stage-carriers 3) 2 '())
+  (vector-set! (vector-ref stage-carriers 4) 2 '())
+  (vector-set! (vector-ref stage-carriers 5) 2 '())
+  (vector-set! (vector-ref stage-carriers 6) 2 '())
+  (vector-set! (vector-ref stage-carriers 7) 2 '())
+  (vector-set! (vector-ref stage-carriers 8) 2 '())
+  (vector-set! (vector-ref stage-carriers 9) 2 '())
+  (vector-set! (vector-ref stage-carriers 10) 2 '())
+  (vector-set! (vector-ref stage-carriers 11) 2 '())
+  (vector-set! (vector-ref stage-carriers 12) 2 '())
+  (vector-set! (vector-ref stage-carriers 13) 2 '())
+  (vector-set! (vector-ref stage-carriers 14) 2 '())
+  (vector-set! (vector-ref stage-carriers 15) 2 '())
+  (vector-set! (vector-ref stage-carriers 16) 2 '())
+  (vector-set! (vector-ref stage-carriers 17) 2 '())
+  (vector-set! (vector-ref stage-carriers 18) 2 '())
+  (vector-set! (vector-ref stage-carriers 19) 2 '())
+  (vector-set! (vector-ref stage-carriers 20) 2 '())
+  (vector-set! (vector-ref stage-carriers 21) 2 '())
+  (vector-set! (vector-ref stage-carriers 22) 2 '())
+  (vector-set! (vector-ref stage-carriers 23) 2 '())
+  (vector-set! (vector-ref stage-carriers 24) 2 '())
+  (vector-set! (vector-ref stage-carriers 25) 2 '())
+  (vector-set! (vector-ref stage-carriers 26) 2 '())
+  (vector-set! (vector-ref stage-carriers 27) 2 '())
+  #t)
+
 ;;; Request: [optimizer-shell, authenticated O2 projection, 28 owned stages,
 ;;; target-U, receiver-R, operation, #f-output]. Native publication is the
-;;; ownership boundary. All 28 wrapper raw slots remain intact on failure and
-;;; are cleared exactly once only after the native plan is in the ledger.
+;;; ownership boundary. All28 raw slots remain intact on no-plan failure;
+;;; they clear only after native ownership is captured in the rooted ledger.
+;;; Constructing ledger[6] roots [28-carrier-vector, native-request-buffer]; it
+;;; returns to #f only after exact request[6] publication or no-plan failure.
 (define (tr3-c-restore-o2-prepare-internal request)
   (if (or (not (vector? request)) (not (= (vector-length request) 7))
           (not (vector? (vector-ref request 1)))
@@ -133,9 +168,10 @@
          (clip (vector-ref parsed 1))
          (schedule (vector-ref parsed 2))
          (native-request (make-bytevector tr3-c-restore-request-bytes 0))
+         (stage-carriers (make-vector 28 #f))
          (ledger
            (vector tr3-c-restore-o2-tag #f #f optimizer
-                   (vector-ref parsed 0) stages #f 'constructing))
+                   (vector-ref parsed 0) stages (vector stage-carriers native-request) 'constructing))
          (next-registry (cons ledger tr3-c-restore-o2-ledgers)))
     (if (or (not (o2-exact-nonnegative-i64? target))
             (not (o2-exact-nonnegative-i64? receiver))
@@ -166,6 +202,8 @@
                    (tr3-c-restore-owned-stage
                      operation
                      (tr3-c-restore-list-ref stages (+ (* index 2) 1)))))
+            (vector-set! stage-carriers (* index 2) avg)
+            (vector-set! stage-carriers (+ (* index 2) 1) sq)
             (if (not (= (tr3-c-restore-native-request-append14
                           native-request
                           (vector-ref group 1) (vector-ref group 2)
@@ -175,42 +213,73 @@
                         0))
                 (tr3-c-restore-native-fail operation))
             (fill (cdr remaining) (+ index 1)))))
-    (let ((plan
-            (tr3-c-restore-native-o2-prepare
-              (vector-ref optimizer 1) native-request)))
-      (if (null? plan) (tr3-c-restore-native-fail operation))
-      ;; Canonical publication precedes the 28 assignment-only transfers.
-      (vector-set! ledger 1 ledger)
-      (vector-set! ledger 2 plan)
-      (vector-set! ledger 7 'prepared)
-      (set! tr3-c-restore-o2-ledgers next-registry)
-      (let ((canonical
-              (tr3-c-restore-find-identity
-                ledger tr3-c-restore-o2-ledgers)))
-        (if (or (not canonical)
-                (not (eq? (vector-ref canonical 2) plan)))
-            (tr3-lease-fail-stop 134)))
-      (let transfer ((remaining stages))
-        (if (null? remaining)
-            #t
-            (begin
-              (vector-set! (car remaining) 2 '())
-              (transfer (cdr remaining)))))
-      (vector-set! request 6 ledger)
-      request)))
+    ;; Root the exact construction ledger BEFORE native ownership can exist.
+    ;; No registry cons, vector or transfer-loop closure is allocated afterward.
+    (vector-set! ledger 1 ledger)
+    (set! tr3-c-restore-o2-ledgers next-registry)
+    (let ((canonical
+            (tr3-c-restore-find-identity ledger tr3-c-restore-o2-ledgers)))
+      (if (not canonical) (tr3-lease-fail-stop 134))
+      (guard (caught
+               (#t
+                 (let ((plan (vector-ref canonical 2)))
+                   (if (and plan (not (null? plan)))
+                       (begin
+                         ;; Existing request[6] is the caller's cleanup authority
+                         ;; even if construction raises after native publication.
+                         (if (not (eq? (vector-ref request 6) canonical))
+                             (tr3-c-restore-transfer28!
+                               (vector-ref (vector-ref canonical 6) 0)))
+                         (vector-set! canonical 7 'prepared)
+                         (vector-set! request 6 canonical)
+                         (vector-set! canonical 6 #f))
+                       (begin
+                         (vector-set! canonical 5 '())
+                         (vector-set! canonical 6 #f)
+                         (vector-set! canonical 7 'aborted))))
+                 (raise caught)))
+        (let ((plan
+                (tr3-c-restore-native-o2-prepare
+                  (vector-ref (vector-ref canonical 3) 1)
+                  (vector-ref (vector-ref canonical 6) 1))))
+          (if (null? plan) (tr3-c-restore-native-fail operation))
+          ;; First store captures the exact native owner in its pre-rooted row.
+          (vector-set! canonical 2 plan)
+          (tr3-c-restore-transfer28! (vector-ref (vector-ref canonical 6) 0))
+          (vector-set! canonical 7 'prepared)
+          (vector-set! request 6 canonical)
+          (vector-set! canonical 6 #f)
+          request)))))
 
 (define (tr3-c-restore-i2-create-internal o2-value)
   (let* ((operation 'trainer-load-state!)
          (o2-ledger
            (tr3-c-restore-require-o2 operation o2-value '(prepared)))
-         (native (tr3-c-restore-native-i2-create (vector-ref o2-ledger 2)))
          (ledger
-           (vector tr3-c-restore-i2-tag #f native o2-ledger #f 'prefix))
+           (vector tr3-c-restore-i2-tag #f #f o2-ledger #f 'constructing))
          (next-registry (cons ledger tr3-c-restore-i2-ledgers)))
-    (if (null? native) (tr3-c-restore-native-fail operation))
     (vector-set! ledger 1 ledger)
     (set! tr3-c-restore-i2-ledgers next-registry)
-    ledger))
+    (let ((canonical
+            (tr3-c-restore-find-identity ledger tr3-c-restore-i2-ledgers)))
+      (if (not canonical) (tr3-lease-fail-stop 134))
+      (guard (caught
+               (#t
+                 (let ((native (vector-ref canonical 2)))
+                   (if (and native (not (null? native)))
+                       ;; This unpublished builder is still an empty prefix;
+                       ;; abort consumes no caller-owned O2 plan or clone.
+                       (if (not (= (tr3-c-restore-native-i2-abort
+                                     native (vector-ref (vector-ref canonical 3) 2)) 0))
+                           (tr3-lease-fail-stop 134))))
+                 (vector-set! canonical 2 '())
+                 (vector-set! canonical 5 'aborted)
+                 (raise caught)))
+        (let ((native (tr3-c-restore-native-i2-create (vector-ref (vector-ref canonical 3) 2))))
+          (if (null? native) (tr3-c-restore-native-fail operation))
+          (vector-set! canonical 2 native)
+          (vector-set! canonical 5 'prefix)
+          canonical)))))
 
 (define (tr3-c-restore-i2-append-parameter-internal!
           i2-value parameter-carrier p1-handle source-carrier)
