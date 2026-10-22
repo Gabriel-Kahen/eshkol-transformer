@@ -119,6 +119,24 @@ Its canonical/external/old-policy/alias/foreign-header regression and strict
 M3CG checks pass. The earlier `7ce3...` pin is historical.
 Compiled failure/retry admission remains a separate queued gate.
 
+## Adopted upstream CPU4 lease and active implementation
+
+The [typed lease contract](CPU4_TYPED_LEASE_CONTRACT.md) revision two is adopted
+for lease-only implementation after one independent assessment. CLI3 is implementing
+the exact nine private methods and two native-only child hooks; no parameter owner
+is copied or cast. Context accounting excludes even idle generation contexts from
+training, native child/ordinal records enforce phase cleanup, and release preserves
+the canonical C4 owner. Input/result/graph/E3 signatures await the joint producer
+freeze before dependent composition.
+
+A2/N2/N3K and E3 L3S/metrics native source implementation is active under the
+reviewed exact T4 row contracts. Public G2 port source `3f53c54b` remains on HOLD:
+independent causal tests found output lifetime coupled to generator liveness and
+an unchecked selected generator-root node mutation. Both repairs are in progress;
+passing advertised host tests is not source or runtime admission. Receipts:
+`finish-20261022/REVIEW-integration-public-g2-3f53c54b.md` and
+`REVIEW-integration-cpu4-provider-contract.md` / `REVIEW-integration-cpu4-metrics-addendum.md`.
+
 ## CPU v1 completion rule
 
 All checklist rows are required within the declared CPU profile: numerical and
