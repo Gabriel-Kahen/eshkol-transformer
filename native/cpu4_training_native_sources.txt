@@ -1,0 +1,17 @@
+native/i2_wave2_package_bridge.c
+src/eshkol_transformer/m3t_f32_integration.c
+src/eshkol_transformer/g3c4_model_owner.c
+native/data_io.c
+native/checkpoint_io.c
+native/kernel_abi.c
+native/t1_i64_shell.c
+native/n3k_primitives_provider.c
+native/n2_primitives_provider.c
+native/a2_attention_provider.c
+native/p1_identity.c
+src/eshkol_transformer/m3_i64_integration.c
+src/eshkol_transformer/m3_model.c
+native/d2_native.c
+src/eshkol_transformer/cpu4_training_transport.c
+native/indexed_cross_entropy.c
+native/l3s_masked_objective_provider.c

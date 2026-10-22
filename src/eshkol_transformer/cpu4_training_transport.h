@@ -20,5 +20,12 @@ int64_t et_cpu4_private_last_error_domain_v1(void);
 int64_t et_cpu4_private_last_error_category_v1(void);
 int64_t et_cpu4_private_last_error_code_v1(void);
 
+#ifdef ET_CPU4_OBJECTIVE_PRIVATE
+struct et_kernel_tensor_view_v1;
+int64_t et_cpu4_private_batch_copy_v1(void *lease, const struct et_kernel_tensor_view_v1 *view,
+                                     void *bytes, int64_t kind);
+int64_t et_cpu4_private_objective_prepare_v1(void *logits, void *seed, void *targets,
+                                            void *mask, void *observation);
+#endif
 #endif
 #endif
