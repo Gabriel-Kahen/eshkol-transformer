@@ -166,15 +166,21 @@ def validate(repo, roster, overrides=None):
     # Actual factory source dependencies must resolve to these original leaves.
     for name, source in FACTORY_PROVIDERS.items():
         assert names.get(name) == source, f'factory prerequisite absent/replaced: {name}'
+    for name, source in HANDOFF_PROVIDERS.items():
+        assert names.get(name) == source, f'handoff prerequisite absent/replaced: {name}'
     tables = {path: {f[1][0]: f for f in forms
                     if len(f) > 2 and f[0] == 'define' and isinstance(f[1], list)}
               for path, forms in closure}
     checkpoint = tables['native/cpu4_checkpoint_extension.esk']
     factory = tables['native/cpu4_checkpoint_factory_extension.esk']
+    handoff = tables['native/cpu4_generator_handoff_extension.esk']
     for table, entry in ((checkpoint, 'cpu4-trainer-snapshot-internal'),
                          (checkpoint, 'cpu4-trainer-restore-internal!'),
                          (factory, 'cpu4-checkpoint-factory-create-internal!'),
-                         (factory, 'cpu4-checkpoint-factory-retire-internal!')):
+                         (factory, 'cpu4-checkpoint-factory-retire-internal!'),
+                         (handoff, 'cpu4-owned-generator-handoff-internal!'),
+                         (handoff, 'cpu4-checkpoint-factory-generator-handoff-internal!'),
+                         (handoff, 'cpu4-generator-handoff-retry-internal!')):
         assert table[entry][2][0] == 'cpu4-checkpoint-require-nonregional!', 'nonregional guard must be first'
     checkpoint_forms = next(forms for path, forms in closure if path == 'native/cpu4_checkpoint_extension.esk')
     assert ['extern', 'ptr', 'cpu4-checkpoint-native-current-region', ':real', 'region_current'] in checkpoint_forms, 'actual runtime region query required'
@@ -201,6 +207,8 @@ def validate(repo, roster, overrides=None):
         ('c2_checkpoint_save_extension', 'c2_public_extension'),
         ('c2_checkpoint_load_extension', 'c2_public_extension'),
         ('c2_public_extension', 'cpu4_checkpoint_factory_extension'),
+        ('cpu4_checkpoint_factory_extension', 'cpu4_generator_handoff_extension'),
+        ('g3c4_public_generation_dispatch_extension', 'cpu4_generator_handoff_extension'),
         ('e3_p1_modes_extension', 'e3_cpu4_private_extension'),
         ('e3_errors_extension', 'e3_cpu4_private_extension')):
         left, right = 'native/' + before + '.esk', 'native/' + after + '.esk'
@@ -255,4 +263,15 @@ FACTORY_PROVIDERS = {
     'cpu4-owned-candidate-create-internal': 'native/cpu4_candidate_children_extension.esk',
     'cpu4-checkpoint-factory-create-internal!': 'native/cpu4_checkpoint_factory_extension.esk',
     'cpu4-checkpoint-factory-retire-internal!': 'native/cpu4_checkpoint_factory_extension.esk',
+}
+
+HANDOFF_PROVIDERS = {
+    **{name: 'native/cpu4_generator_handoff_extension.esk' for name in (
+        'cpu4-owned-generator-handoff-internal!',
+        'cpu4-checkpoint-factory-generator-handoff-internal!',
+        'cpu4-generator-handoff-retry-internal!')},
+    'cpu4-candidate-adopt-public-g2-entry-internal!': 'native/cpu4_candidate_extension.esk',
+    'g3c4-public-g2-profile-live': 'native/g3c4_public_generation_dispatch_extension.esk',
+    'g3c4-public-generator-create': 'native/g3c4_public_generation_dispatch_extension.esk',
+    'g3c4-generator-entry-call-ready': 'native/g3c4_call_entry_extension.esk',
 }

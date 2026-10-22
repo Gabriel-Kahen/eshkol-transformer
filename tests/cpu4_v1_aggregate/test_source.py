@@ -169,6 +169,27 @@ class SourceUnion(unittest.TestCase):
         self.assertIn('tests/shared/prepare_eshkol_asan_ir.py', manifest(ROOT, self.roster))
         self.assertIn('tests/e3_private/check_asan_ir.py', manifest(ROOT, self.roster))
 
+    def test_handoff_requires_actual_factory_and_public_generation_order(self):
+        handoff = '(load "cpu4_generator_handoff_extension.esk")'
+        with self.assertRaisesRegex(AssertionError, 'handoff prerequisite'):
+            validate(ROOT, self.roster, {ENTRY: self.text.replace(handoff, '')})
+        factory = '(load "cpu4_checkpoint_factory_extension.esk")'
+        changed = self.text.replace(handoff, '').replace(factory, handoff + '\n' + factory)
+        with self.assertRaisesRegex(AssertionError, 'leaf prerequisite order'):
+            validate(ROOT, self.roster, {ENTRY: changed})
+
+    def test_handoff_first_guard_and_original_public_authority(self):
+        source = 'native/cpu4_generator_handoff_extension.esk'
+        text = (ROOT / source).read_text().replace(
+            "(cpu4-checkpoint-require-nonregional! 'cpu4-generator-handoff-retry)", '#t')
+        with self.assertRaisesRegex(AssertionError, 'nonregional guard must be first'):
+            validate(ROOT, self.roster, {source: text})
+        source = 'native/g3c4_public_generation_dispatch_extension.esk'
+        text = (ROOT / source).read_text().replace(
+            '(define (g3c4-public-g2-profile-live ', '(define (replacement-profile-live ')
+        with self.assertRaisesRegex(AssertionError, 'handoff prerequisite'):
+            validate(ROOT, self.roster, {source: text})
+
 
 if __name__ == '__main__':
     unittest.main()

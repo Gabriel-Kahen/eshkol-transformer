@@ -9,7 +9,9 @@ selected enclosing C TUs, conservative local headers/includes, and current IR
 sanitizer transformation/proof. It is not a compiler depfile, symbol inventory,
 import allowlist, or installed admission manifest.
 
-The actual `g3g_manual_package_root.esk` supplies the full public generation
+Both original tokenizer internal files load explicitly before either root; their
+shared load name otherwise selects only one implementation through include order.
+The actual `g3g_manual_package_root.esk` supplies the public generation
 closure, original T1/I2/M3 helpers, and canonical C4 authority once. T2 remains
 separate; T1 admission is never aliased. E3 contributes its specific leaves,
 reusing the seven identical original boundary forms. The E3/checkpoint fixture
@@ -39,10 +41,15 @@ reviewed source contract is in `docs/CPU4_CHECKPOINT_FACTORY.md`. The common roo
 adds no factory or checkpoint orchestration and no public names.
 
 The lifecycle boundary is train/restore, E3 evaluate/drain/destroy (restoring
-TRAIN), detach trainer/release binding while still TRAIN, `module-eval!` on that
-same model, fresh generator, then native adopt. Moving persistently to EVAL before
-detach fails the actual binding preflight. This root implements none of that
-orchestration. Public G2 retains diagnostic C4/P2, budget two, explicit EOS 0..255,
+TRAIN), O2 preflight, detach trainer/release binding while still TRAIN, owned O2
+retirement, `module-eval!` on that same model, fresh generator, then native adopt. Moving persistently to EVAL before
+detach fails the actual binding preflight. The load root invokes no workflow. The closed
+[handoff](../docs/CPU4_GENERATOR_HANDOFF.md) leaf follows the actual factory and
+public-G2 dependencies. Its three entries require the real nonregional guard
+first; real public membership and exact model/original-T1 links precede the sixth
+typed base operation. Existing null adoption and slots0–4 remain unchanged.
+Callers must finish/unbind E3 before detach; an idle E3 enrollment is not inferred
+from the active-READ rejection test. Public G2 retains diagnostic C4/P2, budget two, explicit EOS 0..255,
 and genuine typed result-RNG continuation; training's serialized RNG is not that
 capability.
 

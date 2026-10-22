@@ -38,6 +38,7 @@
 (load "c2_checkpoint_load_extension.esk")
 (load "c2_public_extension.esk")
 (load "cpu4_checkpoint_factory_extension.esk")
+(load "cpu4_generator_handoff_extension.esk")
 ;;; E3 reuses the seven actual M3 boundary definitions already loaded above.
 (load "e3_p1_modes_extension.esk")
 (load "e3_errors_extension.esk")
