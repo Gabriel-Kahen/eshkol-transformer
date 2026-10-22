@@ -26,11 +26,13 @@
 (define new-body (trusted-body new-p1))
 (define old-slots (car (reverse old-body)))
 (define new-slots (car (reverse new-body)))
-(check "trusted vector preserved and appended once"
+(check "trusted vector preserves original slots and closed CPU4 additions"
   (and (eq? (car old-slots) 'vector) (eq? (car new-slots) 'vector)
-       (= (length old-slots) 74) (= (length new-slots) 75)
+       (= (length old-slots) 74) (= (length new-slots) 76)
        (equal? (cdr old-slots) (list-head (cdr new-slots) 73))
-       (eq? (list-ref new-slots 74) 'candidate-bridge-install)))
+       (eq? (list-ref new-slots 74) 'candidate-bridge-install)
+       (equal? (list-ref new-slots 75)
+               '(vector cpu4-fixed-capture! cpu4-fixed-recheck!))))
 (for-each
   (lambda (name)
     (check "ordinary construction preserved"
