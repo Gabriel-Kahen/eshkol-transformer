@@ -73,7 +73,8 @@ static int fp_supported(void) {
     (mxcsr & 0x1f80u) == 0x1f80u && (mxcsr & 0xe040u) == 0;
 }
 static int32_t validate_view(const et_kernel_tensor_view_v1 *v, const char *dtype,
-                             size_t rank, const char *op, et_kernel_error *e) {
+                             size_t rank, size_t tokens, const char *op,
+                             et_kernel_error *e) {
   if (!same(v->dtype, dtype))
     return fail(e, ET_KERNEL_ERROR_DTYPE_MISMATCH, ET_KERNEL_CODE_INVALID_TEXT,
                 op, "operand dtype differs from schema");
@@ -84,12 +85,12 @@ static int32_t validate_view(const et_kernel_tensor_view_v1 *v, const char *dtyp
     return fail(e, ET_KERNEL_ERROR_NONCONTIGUOUS, ET_KERNEL_CODE_INVALID_BUFFER,
                 op, "operand must be dense and zero-offset");
   if (v->rank != rank || (rank == 0 ? v->shape != NULL :
-      v->shape == NULL || v->shape[0] != 1 || v->shape[1] != 2 ||
+      v->shape == NULL || v->shape[0] != 1 || v->shape[1] != tokens ||
       (rank == 3 && v->shape[2] != 256)))
     return fail(e, ET_KERNEL_ERROR_SHAPE_MISMATCH, ET_KERNEL_CODE_INVALID_SHAPE,
                 op, "operand shape differs from exact schema");
   const size_t width = same(dtype, "bool") ? 1u : same(dtype, "i64") ? 8u : 4u;
-  const size_t bytes = width * (rank == 0 ? 1u : rank == 2 ? 2u : 512u);
+  const size_t bytes = width * (rank == 0 ? 1u : rank == 2 ? tokens : tokens*256u);
   if (v->byte_length != bytes || !span(v->data, bytes) ||
       (uintptr_t)v->data % width != 0)
     return fail(e, ET_KERNEL_ERROR_INVALID_ARGUMENT, ET_KERNEL_CODE_INVALID_BUFFER,
@@ -152,7 +153,6 @@ union results {
   struct { float n, w, correct; int64_t tokens, batches; } accumulate;
   struct { float loss, weight, perplexity, accuracy; } finalize;
 };
-#ifndef ET_E3_NUMERICAL_WRONG_VOCAB_AXIS
 static int64_t argmax(const float *row) {
   int64_t winner = 0;
   float maximum = row[0];
@@ -168,7 +168,6 @@ static int64_t argmax(const float *row) {
   }
   return winner;
 }
-#endif
 #if defined(ET_E3_NUMERICAL_WRONG_VOCAB_AXIS) && !defined(ET_E3_NUMERICAL_TESTING)
 #error "wrong-vocabulary-axis mutation requires the private numerical test tuple"
 #endif
@@ -187,8 +186,38 @@ static int64_t wrong_vocab_axis_argmax(const float *logits, size_t token) {
   return winner;
 }
 #endif
+static int32_t evaluate_correct_four(const et_kernel_call_v1 *c,
+                                     union results *result, et_kernel_error *e) {
+  const char *op = operations[CORRECT_BOOL];
+  const float *logits = input(c,0)->data;
+  const int64_t *labels = input(c,1)->data;
+  const uint8_t *mask = input(c,2)->data;
+  for (size_t i = 0; i < 4; ++i)
+    if (labels[i] < 0 || labels[i] >= 256)
+      return fail(e, ET_KERNEL_ERROR_SHAPE_MISMATCH, ET_KERNEL_CODE_INVALID_SHAPE,
+                  op, "target index is outside vocabulary");
+  for (size_t i = 0; i < 1024; ++i)
+    if (!isfinite(logits[i])) return domain(e,op);
+  for (size_t i = 0; i < 4; ++i)
+    if (mask[i] > 1u) return domain(e,op);
+  int64_t active = 0;
+  float count = 0.0f;
+  for (size_t i = 0; i < 4; ++i) {
+    const int64_t winner = argmax(logits + 256*i);
+    const float weight = mask[i] == 0u ? 0.0f : 1.0f;
+    const float hit = winner == labels[i] ? 1.0f : 0.0f;
+    const float product = weight * hit;
+    count = count + product;
+    active += (int64_t)mask[i];
+  }
+  if (active == 0) return domain(e,op);
+  result->correct.correct = count;
+  result->correct.active = active;
+  return 0;
+}
 static int32_t evaluate_correct(const et_kernel_call_v1 *c, union results *result,
                                 et_kernel_error *e) {
+  if (c->request->shape[1] == 4u) return evaluate_correct_four(c,result,e);
   const char *op = operations[CORRECT_BOOL];
   const float *logits = input(c,0)->data;
   const int64_t *targets = input(c,1)->data;
@@ -235,11 +264,13 @@ static int32_t evaluate_accumulate(const et_kernel_call_v1 *c, union results *re
   const float nb = positive_zero(scalar(c,5)), wb = positive_zero(scalar(c,6));
   const float cb = positive_zero(scalar(c,7));
   const int64_t tokens = counter(c,3), batches = counter(c,4), active = counter(c,8);
+  const int64_t width = (int64_t)c->request->shape[1];
+  const int64_t token_cap = 8192 * width;
   if (tokens < 0 || batches < 0 || active < 0) return domain(e,op);
-  if (active != 1 && active != 2) return domain(e,op);
-  if (batches > 8192 || tokens > 16384) return capped(e,op);
+  if (active < 1 || active > width) return domain(e,op);
+  if (batches > 8192 || tokens > token_cap) return capped(e,op);
   if (batches > tokens) return domain(e,op);
-  if (tokens-batches > batches) return domain(e,op);
+  if (tokens-batches > (width-1)*batches) return domain(e,op);
 #ifdef ET_E3_NUMERICAL_MEAN_OF_MEANS
   /* Compiled test mutant: accumulate each batch mean with unit batch weight. */
   if (w != (float)batches) return domain(e,op);
@@ -256,7 +287,7 @@ static int32_t evaluate_accumulate(const et_kernel_call_v1 *c, union results *re
                 op, "integer counter addition overflow");
   const int64_t next_tokens = tokens + active;
   const int64_t next_batches = batches + 1;
-  if (next_batches > 8192 || next_tokens > 16384) return capped(e,op);
+  if (next_batches > 8192 || next_tokens > token_cap) return capped(e,op);
 #ifdef ET_E3_NUMERICAL_MEAN_OF_MEANS
   const float next_n = n + nb / wb;
 #else
@@ -286,7 +317,7 @@ static int32_t evaluate_finalize(const et_kernel_call_v1 *c, union results *resu
   const float n = positive_zero(scalar(c,0)), w = positive_zero(scalar(c,1));
   const float correct = positive_zero(scalar(c,2));
   if (w == 0.0f) return domain(e,op);
-  if (w > 16384.0f) return capped(e,op);
+  if (w > 8192.0f * (float)c->request->shape[1]) return capped(e,op);
   if (!integral_bounded(w)) return domain(e,op);
   if (correct > w || !integral_bounded(correct)) return domain(e,op);
 #ifdef ET_E3_NUMERICAL_SECOND_NORMALIZATION
@@ -334,7 +365,8 @@ static int32_t validate_inner(const et_kernel_call_v1 *c, et_kernel_error *e) {
   if (kind != UNKNOWN) op = operations[kind];
   if (kind == UNKNOWN || !same(c->capability,"e3.evaluation-metrics") ||
       !same(r->dtype,"f32") || !same(r->device,"cpu") || r->rank != 3u ||
-      r->shape == NULL || r->shape[0] != 1u || r->shape[1] != 2u ||
+      r->shape == NULL || r->shape[0] != 1u ||
+      (r->shape[1] != 2u && r->shape[1] != 4u) ||
       r->shape[2] != 256u)
     return fail(e, ET_KERNEL_ERROR_UNSUPPORTED, ET_KERNEL_CODE_PROVIDER_REJECTED,
                 op, "request is outside exact E3 metrics profile");
@@ -348,13 +380,13 @@ static int32_t validate_inner(const et_kernel_call_v1 *c, et_kernel_error *e) {
       (i == 0 ? "f32" : i == 1 ? "i64" : "bool") :
       kind == ACCUMULATE && (i == 3 || i == 4 || i == 8) ? "i64" : "f32";
     const size_t rank = kind == CORRECT_BOOL ? (i == 0 ? 3u : 2u) : 0u;
-    const int32_t rc = validate_view(input(c,i),dtype,rank,op,e);
+    const int32_t rc = validate_view(input(c,i),dtype,rank,r->shape[1],op,e);
     if (rc) return rc;
   }
   for (size_t i = 0; i < no; ++i) {
     const char *dtype = (kind == ACCUMULATE && i >= 3) ||
       (kind == CORRECT_BOOL && i == 1) ? "i64" : "f32";
-    const int32_t rc = validate_view(output(c,i),dtype,0u,op,e);
+    const int32_t rc = validate_view(output(c,i),dtype,0u,r->shape[1],op,e);
     if (rc) return rc;
   }
   for (size_t i = 0; i < ni; ++i) for (size_t j = i+1; j < ni; ++j)
@@ -418,13 +450,16 @@ static void provider_invoke(const et_kernel_call_v1 *c) {
 static const et_kernel_dimension_range_v1 dimensions[] = {
   {1,1,0,{0}}, {2,2,0,{0}}, {256,256,0,{0}}
 };
-static const et_kernel_shape_range_v1 rows[] = {{3,dimensions}};
+static const et_kernel_dimension_range_v1 dimensions_four[] = {
+  {1,1,0,{0}}, {4,4,0,{0}}, {256,256,0,{0}}
+};
+static const et_kernel_shape_range_v1 rows[] = {{3,dimensions}, {3,dimensions_four}};
 static const char *const dtypes[] = {"f32"};
 static const char *const devices[] = {"cpu"};
 static const et_kernel_capability_v1 capability = {
   sizeof(et_kernel_capability_v1), "e3.evaluation-metrics", ET_KERNEL_CAPABILITY_VERIFIED,
   "e3.cpu-f32-bool.serial", "1.0", "E3:cpu-f32-bool-metrics-v1", 1, {0},
-  3, operations, 1, dtypes, 1, devices, 1, rows
+  3, operations, 1, dtypes, 1, devices, 2, rows
 };
 static const et_kernel_provider_v1 provider = {
   sizeof(et_kernel_provider_v1), ET_KERNEL_ABI_MAJOR, ET_KERNEL_ABI_MINOR, 0,

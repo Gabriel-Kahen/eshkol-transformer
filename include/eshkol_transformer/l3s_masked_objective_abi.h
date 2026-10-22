@@ -11,7 +11,8 @@ extern "C" {
 #define ET_L3S_MASKED_OBJECTIVE_ABI_MINOR 0u
 
 /* Immutable metadata for explicit K1 discovery. Dispatch requires the exact
- * [1,2] schemas and caller-owned storage documented in L3S_MASKED_OBJECTIVE.md.
+ * [1,2] or [1,4] input/seed shapes; reductions publish three scalars.
+ * Both exact alternatives use serial CPU-f32 arithmetic and caller storage.
  * This accessor defines neither the canonical K1 resolver nor a storage owner. */
 const et_kernel_provider_v1 *et_l3s_kernel_provider_v1(void);
 
