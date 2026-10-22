@@ -57,6 +57,20 @@ source/tree/branch, command/results, sealed logs, measured limits and one next g
 Integration consumes completion messages, uses one bounded team wait, and does
 independent review/doc work while heavy gates run. Silence is never success.
 
+## Current execution receipts
+
+- Independent initial integration review: `finish-20261022/REVIEW-integration-initial.md`.
+  Source composition and recovered bounded hosted CLI execution accepted; full admission held.
+- E3 reports a supported fe9/Ubuntu22/LLVM21 native-frame control: 22,223 checks
+  ordinary and ASan/UBSan/LSan plus cleanup-mutant rejection. The numerical
+  transcript gate is running separately; no full-matrix pass is inferred.
+- Historical TR3 learning/resume observations authenticate retained bytes, but
+  17 relevant source files differ from the newer retained run.
+  `finish-20261022/TR3-PRIOR-AUTH.json` records missing generated artifacts and
+  zero retained hash mismatches; current-source execution remains required.
+- [Fixed-profile command walkthrough](WAVE3_WALKTHROUGH.md) provides the exact
+  bounded recipe; its fresh retained local execution remains pending.
+
 ## Contract changes
 
 None in the initial completion index. Existing admission requirements are retained.
