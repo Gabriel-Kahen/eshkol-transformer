@@ -36,3 +36,11 @@ Prepare-only checks:
 Actual normal/repeat FILE/AOT/native/region and all SAN/end-to-end gates are
 NOT RUN until root schedules the one reviewed execution. Artificial coherent
 FILE data movement does not prove training or persisted generation continuation.
+
+The outer caller guard is diagnostic-only and nonrecursive. Unexpected genuine
+E1 values print the actual category/operation/message/details accessors; foreign
+caught values have a separate FOREIGN tag and printed value. Both print the data
+and region check counters and exit1. Success stdout and the actual call arguments
+are unchanged. This does not catch process exits, native aborts or errors while
+loading the fixture definitions. Fixtures, assertions and expected negatives are
+unchanged; no exception becomes an accepted rejection or successful result.

@@ -2,5 +2,30 @@
 (load "cpu4_v1_private_root.esk")
 (load "nonregional_runtime.esk")
 (load "positive_runtime.esk")
-(cpu4-factory-data-runtime! (car (cdr (command-line)))
-                          (car (cdr (cdr (command-line)))))
+;;; Diagnostic only: report an unexpected raise from the actual FILE call.
+;;; Expected negatives/assertions remain inside the unchanged fixtures.
+(guard (caught
+         (#t
+           (if (transformer-error? caught)
+               (begin
+                 (display "CPU4 FILE unexpected E1 category=")
+                 (write (transformer-error-category caught))
+                 (display " operation=")
+                 (write (transformer-error-operation caught))
+                 (display " message=")
+                 (write (transformer-error-message caught))
+                 (display " details=")
+                 (write (transformer-error-details caught))
+                 (newline))
+               (begin
+                 (display "CPU4 FILE unexpected FOREIGN value=")
+                 (write caught)
+                 (newline)))
+           (display "CPU4 FILE checks data=")
+           (display cpu4-fdt-checks)
+           (display " region=")
+           (display cpu4-factory-region-checks)
+           (newline)
+           (exit 1)))
+  (cpu4-factory-data-runtime! (car (cdr (command-line)))
+                            (car (cdr (cdr (command-line))))))

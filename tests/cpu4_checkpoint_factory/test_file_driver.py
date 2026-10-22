@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 import subprocess
-from tests.cpu4_trainer_control.test_source_contract import parse
+from tests.cpu4_trainer_control.test_source_contract import parse, walk
 from .file_driver import CALLER, OVERLAY, ROOT, OBSERVER, TEST_FLAGS, dependencies, gate, load_roster, plan
 
 
@@ -17,13 +17,36 @@ class FileDriver(unittest.TestCase):
         self.assertEqual(forms[:3], [['load', 'cpu4_v1_private_root.esk'],
                                      ['load', 'nonregional_runtime.esk'], ['load', 'positive_runtime.esk']])
         self.assertEqual(len(forms), 4)
-        self.assertEqual(forms[3], ['cpu4-factory-data-runtime!', ['car', ['cdr', ['command-line']]],
-                                   ['car', ['cdr', ['cdr', ['command-line']]]]])
+        self.assertEqual(forms[3][0], 'guard')
+        self.assertEqual(forms[3][2:], [['cpu4-factory-data-runtime!', ['car', ['cdr', ['command-line']]],
+                                      ['car', ['cdr', ['cdr', ['command-line']]]]]])
         for name, digest in {
             'nonregional_runtime.esk': 'fa3c7a8bd87512d109c95f00bb500fd8b8faf8f8a6a0f052ce89066c20e88cd7',
             'positive_runtime.esk': 'ce6fae7dc9fd8be4caee0602ab484b3ef8e72cc4ea50672200f76bad2c202a24',
         }.items():
             self.assertEqual(hashlib.sha256((CALLER.parent / name).read_bytes()).hexdigest(), digest)
+
+    def test_unexpected_error_guard_reports_real_fields_and_exits(self):
+        guarded = parse(CALLER.read_text())[3]
+        self.assertEqual(guarded[0], 'guard')
+        self.assertEqual(guarded[1][0], 'caught')
+        handler = guarded[1][1]
+        self.assertEqual(handler[0], '#t')
+        self.assertEqual(handler[-1], ['exit', '1'])
+        calls = [node[0] for node in walk(handler) if node and isinstance(node[0], str)]
+        for accessor in ('transformer-error-category', 'transformer-error-operation',
+                         'transformer-error-message', 'transformer-error-details'):
+            self.assertEqual(calls.count(accessor), 1)
+        self.assertIn(['write', 'caught'], list(walk(handler)))
+        self.assertIn('CPU4 FILE unexpected FOREIGN value=', CALLER.read_text())
+        self.assertIn('CPU4 FILE unexpected E1 category=', CALLER.read_text())
+        self.assertIn(['display', 'cpu4-fdt-checks'], list(walk(handler)))
+        self.assertIn(['display', 'cpu4-factory-region-checks'], list(walk(handler)))
+        self.assertNotIn('let', calls)
+        self.assertNotIn('cpu4-factory-data-runtime!', calls)
+        # The success branch is only the original real call, without prints.
+        self.assertEqual(len(guarded[2:]), 1)
+        self.assertEqual(guarded[2][0], 'cpu4-factory-data-runtime!')
 
     def test_overlay_preserves_every_production_tu_feature_and_owner(self):
         roster = load_roster()
