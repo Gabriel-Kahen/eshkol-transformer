@@ -32,4 +32,11 @@ G3C4_TICKET_CASE=postzero-fault G3C4_TEST_SOURCE="$tmp/postzero-fault.esk" \
 status=$?
 set -e
 [[ "$status" == 134 ]] || { cat "$tmp/postzero.stderr" >&2; exit 1; }
-printf 'G3-C4 public ticket fail-stop controls PASS: cases=4\n'
+set +e
+G3C4_LIFETIME_CASE=cleanup-mismatch \
+  guile -s "$root/tests/g3c4/p2_g2_public_output_lifetime_host_test.scm" \
+  >"$tmp/cleanup-mismatch.stdout" 2>"$tmp/cleanup-mismatch.stderr"
+status=$?
+set -e
+[[ "$status" == 134 ]] || { cat "$tmp/cleanup-mismatch.stderr" >&2; exit 1; }
+printf 'G3-C4 public ticket fail-stop controls PASS: cases=5\n'

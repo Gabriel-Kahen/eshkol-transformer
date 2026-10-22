@@ -59,7 +59,7 @@ def seam_valid(source):
         assert '(if (or installed? (not (procedure? stage))' in source
         assert '(not (= (vector-length roots) 7))' in source
         assert '(eq? root (vector-ref original-roots other))' in source
-        assert '(vector ticket original-stage original-roots heads proof)' in source
+        assert '(vector ticket original-stage original-roots heads proof' in source
         assert '(lambda (generator input) (core generator input #f))' in source
         # The only public calls in core are the fixed three prezero phases.
         stages = [call for call in calls(core, 'issuer') if len(call) > 2]
@@ -79,6 +79,9 @@ def seam_valid(source):
             "(eq? (vector-ref enrollment-row 8) 'pending)",
             "(eq? (vector-ref enrollment-anchor 8) 'pending)",
             '(eq? (generator-node\n                                               (vector-ref enrollment-roots (+ index 4)) generator) node)',
+            '(eq? (vector-ref enrollment-ticket 0)\n                                         (vector-ref ticket-proof 0))',
+            '(eq? (cdr (vector-ref enrollment-heads index))\n                                            (vector-ref ticket-proof (+ index 1)))',
+            '(eq? (vector-ref enrollment-ticket (+ index 17))\n                                            (vector-ref ticket-proof (+ index 1)))',
             '(eq? (car node) original-row)',
             '(eq? (cdr node) (vector-ref generator-proof (+ index 9)))',
             '(eq? (vector-ref original-row slot) (vector-ref fields slot))',
@@ -162,6 +165,8 @@ class PublicG2Port(unittest.TestCase):
         self.assertFalse(calls(output_live, 'g3c4-public-g2-profile-original'))
         dispatch = DISPATCH.read_text()
         self.assertIn("(eq? creation-profile 'diagnostic-c4-p2g2)", dispatch)
+        self.assertIn('(eq? candidate-row public-row)', dispatch)
+        self.assertIn('(eq? candidate-anchor public-anchor)', dispatch)
         self.assertIn('(= creation-budget 2)', dispatch)
         self.assertIn('(<= 0 creation-eos) (<= creation-eos 255)', dispatch)
         self.assertEqual(len(calls(tree, 'g3c4-p2g2-typed-create-private')), 1)

@@ -315,6 +315,8 @@
                              #t)))
                       ((eq? verb 'verify)
                        (and bound-shell bound-entry bound-native
+                            (eq? candidate-row public-row)
+                            (eq? candidate-anchor public-anchor)
                             (eq? creation-profile 'diagnostic-c4-p2g2)
                             (= creation-budget 2)
                             (m3t-exact-i64? creation-eos)

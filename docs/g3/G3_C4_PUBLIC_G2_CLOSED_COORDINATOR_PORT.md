@@ -91,3 +91,31 @@ callable stage. Actual-body host controls cover close-before-all-accessors/relea
 held-I1 rejection, typed/RNG survival after source retirement, head/interior node
 substitution/removal/closure mutation, and admission of an older generator.
 These repairs add no postzero registration or public API.
+
+### Complete final-authority snapshot
+
+The final independent check inventories every public authority edge; the host
+matrix mutates each edge only after the last callable stage and requires native
+commit count zero plus original-call abort (92 causal cases).
+
+| Ticket slots | Original authority and allowed transition |
+| --- | --- |
+| 0 | Exact issuer seal, captured before admission |
+| 1..4 | Original generator, input, creation profile, input entry |
+| 5..9 | Original output shell/entry/native, live record, original closure, bound prezero |
+| 10..11 | Exact original distinct row12 and anchor12 carriers |
+| 12 | Pending until the fixed native-zero marker store |
+| 13..15 | Selected count/first/second IDs, verified against original private frame |
+| 16 | Exact original output-binding closure |
+| 17..20 | Exact original four pending-node tails / prior public root heads |
+
+Both output rows have all 12 fields checked against the original bound frame.
+The output binding's two fields and exact original row/anchor identities remain
+sealed during detached access. Four pending nodes retain original cars/cdrs;
+seven root heads retain identity. Selected generator row/anchor/binding nodes
+retain reachability, original cars/cdrs and all 8/8/2 payload fields; six original
+policy words are checked independently. Interior generator nodes are supported.
+Failed-attempt outer cleanup restores older output root heads and leaves the
+older output usable; a cleanup-head mismatch fails stop. The two missed operands
+reproduced on `41ae436e` (issuer seal and pending-node tails) have separately
+preserved probe evidence. Neither rejected source is runtime admission.

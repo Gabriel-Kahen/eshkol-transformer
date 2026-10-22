@@ -31,6 +31,7 @@
          (enrollment-roots (if enrollment (vector-ref enrollment 2) #f))
          (enrollment-heads (if enrollment (vector-ref enrollment 3) #f))
          (generator-proof (if enrollment (vector-ref enrollment 4) #f))
+         (ticket-proof (if enrollment (vector-ref enrollment 5) #f))
          (creation-profile (if enrollment (vector-ref (vector-ref enrollment 0) 3) #f))
          (enrollment-binding (if enrollment (car (vector-ref enrollment-heads 3)) #f))
          (enrollment-authority (if enrollment (vector-ref (vector-ref enrollment 0) 16) #f))
@@ -237,6 +238,22 @@
                                    (roots-unchanged (+ index 1))
                                    (g3c4-fail 'invalid-state operation
                                               "terminal enrollment root changed")))))
+                     (if enrollment
+                         (begin
+                           (if (not (eq? (vector-ref enrollment-ticket 0)
+                                         (vector-ref ticket-proof 0)))
+                               (g3c4-fail 'invalid-state operation
+                                          "terminal enrollment issuer seal changed"))
+                           (let pending-tails ((index 0))
+                             (if (< index 4)
+                                 (if (and
+                                       (eq? (cdr (vector-ref enrollment-heads index))
+                                            (vector-ref ticket-proof (+ index 1)))
+                                       (eq? (vector-ref enrollment-ticket (+ index 17))
+                                            (vector-ref ticket-proof (+ index 1))))
+                                     (pending-tails (+ index 1))
+                                     (g3c4-fail 'invalid-state operation
+                                                "terminal enrollment pending tail changed"))))))
                      (if enrollment
                          (let provenance ((index 0))
                            (if (< index 3)
@@ -502,5 +519,8 @@
                           (vector (vector-ref binding 0) (vector-ref binding 1))
                           (cdr row-node) (cdr anchor-node) (cdr binding-node))))
                   (core generator input
-                        (vector ticket original-stage original-roots heads proof))))))))
+                        (vector ticket original-stage original-roots heads proof
+                                (vector (vector-ref ticket 0)
+                                        (cdr (vector-ref heads 0)) (cdr (vector-ref heads 1))
+                                        (cdr (vector-ref heads 2)) (cdr (vector-ref heads 3)))))))))))
       (lambda (generator input) (core generator input #f))))))
