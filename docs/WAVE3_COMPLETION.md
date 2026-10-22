@@ -151,7 +151,8 @@ Initial failed sources/receipts remain preserved.
 | Masked training objective and Eshkol schedule | [Objective contract](CPU4_TRAINING_OBJECTIVE.md), twelve reviewed blobs at `bb6ca081` integrated as `4df3500f`. Independent supported result PASS: native2,501 objective checks/full1,192 CE central derivatives and genuine Eshkol114 checks of21F→L2/L3S→25R→atomic fourteen-gradient contribution in normal2/native-provider SAN2,255.108s. | Real O2 update/full step, learning and same-model resume remain separate. Recorded toolchain is fe9/runner7dd254ba; generated IR is uninstrumented. |
 | Full training step | [Step contract](CPU4_TRAINING_STEP.md); six reviewed new blobs at `a8e24ea7` integrated as `fdbe3a69`, seven host source guards PASS. Own exact frame drains READ microbatches before WRITE/O2 prepare; guard installed before first write; controls-last tail and retryable prewrite abort. Accumulation bounded at2^22. | First actual IR/ELF run stopped before O2 update: test helper used the absent-gradient state-snapshot API after expected gradient contribution. Reviewed moment-bit-observer fixture `2574d0fb` integrated as `7b49d17e`; seven host guards PASS, supported retry pending. No O2-update/learning claim; comparisons retain all1,192 values and2,384 moment words against ordinary O2. |
 | Typed factory child custody | [Children contract](CPU4_CANDIDATE_CHILDREN.md), reviewed `de2e6d83` integrated as `2dd97345`: eight exact changed blobs, original strict75-slot checker retained unchanged. Private O2 constructor pre-roots/reacquires genuine owner before native allocation; typed cleanup preflights O2 before detach/native retirement. Four structural,219 explicit-double host and1,427 planner checks PASS. | Real active-region allocation/failure and provider-SAN gate pending. No public O2/native-adoption change or compound factory/checkpoint admission. Independent stronger-checker integration review accepted; all eight changed blobs match the reviewed leaf. |
-| Existing-trainer checkpoint consumer | [Consumer contract](CPU4_CHECKPOINT_CONSUMER.md), five reviewed v2 files at `42438ce3` integrated as `c448e44b`; exact control dependency `502f0671`. Seven structural and34 actual-host/double checks PASS. Full14 values/28 moments/all metadata detached before C2 borrow-end; prepared controls precede busy participants; I2→O2→D2→controls-last. | Native/SAN compound snapshot/restore and nonzero resume. Shared I2/O2 ledger acquisition repair is a required unresolved prerequisite; factory/private O2 remains separate. |
+| Existing-trainer checkpoint consumer | [Consumer contract](CPU4_CHECKPOINT_CONSUMER.md), five reviewed v2 files at `42438ce3` integrated as `c448e44b`; exact control dependency `502f0671`. Seven structural and34 actual-host/double checks PASS. Full14 values/28 moments/all metadata detached before C2 borrow-end; prepared controls precede busy participants; I2→O2→D2→controls-last. | Native/SAN compound snapshot/restore and nonzero resume. Shared I2/O2 acquisition `64fd89bc`+`fefbfa6d` integrated through `3c45186c`, independently source-accepted with nine structural/33 instrumented-host checks; actual regional shim AOT and real native compound gates remain required; factory/private O2 remains separate. |
+| Learning acceptance fixtures | [One-batch contract](CPU4_ONE_BATCH_OVERFIT.md), seven source-reviewed fixture files `722726b3` integrated as `76773cae`; five source/six checker tests PASS. Frozen250-update criterion: >=75% observed mean-CE reduction and last observed mean<=1.0. Held-out tokens `(197,197,3,41,7)` perturb training `(3,197,3,41,7)`; frozen actual E3 mean must improve>=10%, with full state/cursor/mode preservation. | Overfit native execution waits accepted full-step retry. Held-out fixture body/common candidate-ON roster still implementing; no learning, generalization or long-run memory claim. |
 | Installed G2 proving recipe | Independently reviewed `81704701` integrated as `b8e0d4e0`, preserving prior E3/C2-header changes. Combined source gate: eight unit/Q0 plus four public-source tests PASS. | Actual installed normal/SAN/coexistence NOT RUN. Supported native98a5 held-kind9 diagnostic independently PASS151; it supplies no Eshkol attribution. Old stage45 status134 remains unattributed; reviewed historical E attribution is staged but unqueued behind the CPU4 smoke priority. |
 
 Latest binding and candidate result reviews are `team/CPU4-BINDING-RESULT-REVIEW.md`
@@ -249,11 +250,22 @@ second destructor. The existing shared I2/O2 restore-bindings constructors have
 the same native-before-global-publication gap; G3 owns a bounded same-signature
 repair that roots both ledgers and installs cleanup before native acquisition. These source targets still need immutable review and runtime
 failure gates. Native adoption still requires trainer/binding release first.
+The shared acquisition repair uses canonical global-head readback after rooting,
+not pre-promotion local identity. Its prepared actual Eshkol regional fixture
+uses an explicit native ABI shim; that result cannot admit real payload plans.
+
 The fresh file factory is assigned to G3: it owns its loaded C2 image/staging
 and fresh children, while tokenizer/D2 remain caller-owned. Release its owned
 source image before O2 retirement preflight; external live O2 state may still
 block cleanup, which must retain exact retry ownership. Never destroy a caller
 checkpoint or relax the native global-state guard to force cleanup.
+Existing C2 reader/compose publication still has regional allocation windows.
+The fixed serial CPU-v1 factory and CPU4 checkpoint entries will enforce no
+active region before effects using the genuine pinned `region_current` symbol.
+The sealed no-region checked-store proof is
+`cpu4-nonregional-reader-source-proof-de2e6d83/PROOF.md`; guard source and genuine
+regional rejection/ownership tests remain pending. General active-region C2 use
+is not admitted by this narrowed target.
 
 Any further contract change must be recorded here with owner, exact source and
 review decision before integration.
