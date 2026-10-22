@@ -14,9 +14,27 @@
     (if (and inject-store? (= index 2) (memq value '(native-plan native-builder)))
         (begin (set! inject-store? #f) (raise 'after-pointer-store))))
 
+(define promotion-copies 0)
+(define (test-promote-registry rows)
+  ;; Explicit host model: global rooting copies the new regional ledger and
+  ;; its new stage materials, while preserving already-global owner identities.
+  ;; The real Eshkol region fixture remains a separate NOT RUN gate.
+  (let* ((old (car rows)) (copy (vector-copy old)))
+    (set! promotion-copies (+ promotion-copies 1))
+    (original-vector-set! copy 1 copy)
+    (if (= (vector-length copy) 8)
+        (let* ((stages (map vector-copy (vector-ref old 5)))
+               (materials (vector (list->vector stages)
+                                  (bytevector-copy (vector-ref (vector-ref old 6) 1)))))
+          (original-vector-set! copy 5 stages)
+          (original-vector-set! copy 6 materials)))
+    (cons copy (cdr rows))))
 (define (instrument-stores form)
   (cond ((not (pair? form)) form)
         ((eq? (car form) 'quote) form)
+        ((and (eq? (car form) 'set!)
+              (memq (cadr form) '(tr3-c-restore-o2-ledgers tr3-c-restore-i2-ledgers)))
+         (list 'set! (cadr form) (list 'test-promote-registry (instrument-stores (caddr form)))))
         (else
           (cons (if (eq? (car form) 'vector-set!) 'test-fixed-store!
                     (instrument-stores (car form)))
@@ -157,5 +175,7 @@
        (eq? (vector-ref (car tr3-c-restore-i2-ledgers) 5) 'aborted)
        (null? (vector-ref (car tr3-c-restore-i2-ledgers) 2))
        (eq? (vector-ref o2-ledger 7) 'prepared)))
+(check "every constructor acquired through a copied canonical registry head"
+  (= promotion-copies 8))
 (display "Restore binding instrumented source construction/rooting host PASS: checks=")
 (display checks) (newline)
