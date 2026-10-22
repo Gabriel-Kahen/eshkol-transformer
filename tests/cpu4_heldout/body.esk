@@ -1,0 +1,209 @@
+;;; Noninstalled held-out fixture BODY ONLY. Root owns the one source aggregate,
+;;; genuine trainer/datasets, exact frozen resource bytes, 250-step loop and gate.
+;;; Requires accepted controls502, actual CPU4 E3 APIs from tuple4c745a0f, and
+;;; inspect.c linked into that SAME registry universe with ET_O2_TESTING.
+(extern ptr heldout-image-create ptr ptr :real et_cpu4_heldout_image_create)
+(extern i64 heldout-image-equal ptr ptr ptr :real et_cpu4_heldout_image_equal)
+(extern i64 heldout-image-destroy ptr :real et_cpu4_heldout_image_destroy)
+(extern ptr heldout-output-create :real et_cpu4_heldout_output_create)
+(extern i64 heldout-output-bits ptr :real et_cpu4_heldout_output_bits)
+(extern i64 heldout-output-destroy ptr :real et_cpu4_heldout_output_destroy)
+(extern i64 heldout-live-owned :real et_cpu4_heldout_live_owned)
+
+;;; Only Scheme identity metadata crosses phases; no native owner is retained.
+;;; [identity-only baseline row or #f, fixture-busy?, new/baseline/done].
+(define heldout-fixture-session (vector #f #f 'new))
+(define (heldout-fail message)
+  (cpu4-binding-fail 'invalid-state 'cpu4-heldout-fixture message))
+(define (heldout-require condition message)
+  (if (not condition) (heldout-fail message)) #t)
+(define (heldout-pointer pointer)
+  (if (null? pointer) (heldout-fail "fixture observation allocation failed")) pointer)
+(define (heldout-modes record)
+  (let ((modes (make-vector 17 #f)))
+    (let capture-modes ((index 0))
+      (if (= index 17) modes
+          (begin
+            (vector-set! modes index
+              (module-mode-internal (vector-ref (vector-ref record 10) index)))
+            (capture-modes (+ index 1)))))))
+(define (heldout-controls=? left right)
+  ;; Both tuples come directly from the genuine closed controls-copy producer.
+  ;; fe9 equal? has no bytevector value case, including inside nested vectors.
+  (and (equal? (vector-ref left 0) (vector-ref right 0))
+       (equal? (vector-ref left 1) (vector-ref right 1))
+       (d2-core-bytes=? (vector-ref (vector-ref left 2) 0)
+                       (vector-ref (vector-ref right 2) 0))
+       (d2-core-bytes=? (vector-ref (vector-ref left 2) 1)
+                       (vector-ref (vector-ref right 2) 1))
+       (d2-core-bytes=? (vector-ref (vector-ref left 3) 0)
+                       (vector-ref (vector-ref right 3) 0))
+       (string=? (vector-ref (vector-ref left 3) 1)
+                 (vector-ref (vector-ref right 3) 1))
+       (equal? (vector-ref left 4) (vector-ref right 4))))
+
+;;; Ledger [frame,#(four owned outputs),native fixed-array image,control parent].
+;;; Assertion errors unwind every fixture-owned object before fail-stop. A
+;;; cleanup invariant defect itself fail-stops; it never returns hidden success.
+(define (heldout-cleanup! ledger)
+  (guard (caught (#t (cpu4-binding-fail-stop 70)))
+    (if (vector-ref ledger 3)
+        (begin (cpu4-trainer-control-end-internal! (vector-ref ledger 3))
+               (vector-set! ledger 3 #f)))
+    (if (vector-ref ledger 0)
+        (begin (e3-frame-unbind! (vector-ref ledger 0))
+               (vector-set! ledger 0 #f)))
+    (let destroy-outputs ((index 0))
+      (if (< index 4)
+          (begin
+            (if (vector-ref (vector-ref ledger 1) index)
+                (begin
+                  (if (not (= (heldout-output-destroy
+                                (vector-ref (vector-ref ledger 1) index)) 0))
+                      (cpu4-binding-fail-stop 70))
+                  (vector-set! (vector-ref ledger 1) index #f)))
+            (destroy-outputs (+ index 1)))))
+    (if (vector-ref ledger 2)
+        (begin
+          (if (not (= (heldout-image-destroy (vector-ref ledger 2)) 0))
+              (cpu4-binding-fail-stop 70))
+          (vector-set! ledger 2 #f)))
+    (if (not (= (heldout-live-owned) 0)) (cpu4-binding-fail-stop 70))
+    #t))
+(define (heldout-copy-controls! trainer ledger)
+  ;; Actual WRITE enter/leave proves native IDLE and absent gradients before
+  ;; and after evaluation. No invented lease-phase getter is used.
+  (vector-set! ledger 3 (cpu4-trainer-control-begin-internal trainer 'snapshot))
+  (let ((copy (cpu4-trainer-controls-copy-internal (vector-ref ledger 3))))
+    (cpu4-trainer-control-end-internal! (vector-ref ledger 3))
+    (vector-set! ledger 3 #f)
+    copy))
+(define (heldout-counts! record phase)
+  (heldout-require
+    (equal? (vector (vector-ref record 19) (vector-ref record 20) (vector-ref record 21))
+            (if (eq? phase 'baseline) (vector 0 0 0) (vector 1000 250 249)))
+    "frozen initial/final trainer counters differ"))
+(define (heldout-source! record dataset)
+  (heldout-require (not (eq? dataset (vector-ref record 15)))
+    "held-out dataset must be distinct from the training dataset")
+  (let* ((state (d2-open-dataset-state dataset 'cpu4-heldout-fixture))
+         (core (cpu4-d2-idle-core dataset 'cpu4-heldout-fixture))
+         (config (vector-ref state 3)))
+    (heldout-require
+      (and (string=? (vector-ref core 2) (vector-ref (vector-ref record 7) 0))
+           (= (vector-ref core 14) 1) (= (vector-ref core 15) 0)
+           (eq? (d2-core-config-ref config ':packing?) #f)
+           (eq? (d2-core-config-ref config ':shuffle-seed) #f)
+           (= (d2-core-config-ref config ':shuffle-window-rows) 1))
+      "held-out source must be one unpacked unshuffled raw V256 T4 row at cursor0")))
+(define (heldout-phase-identity! trainer model binding dataset phase)
+  (let ((previous (vector-ref heldout-fixture-session 0)))
+    (cond ((eq? phase 'baseline)
+           (heldout-require (and (eq? previous #f)
+                                 (eq? (vector-ref heldout-fixture-session 2) 'new))
+             "baseline cannot repeat"))
+          ((eq? phase 'post)
+           (heldout-require
+             (and (eq? (vector-ref heldout-fixture-session 2) 'baseline)
+                  (vector? previous) (= (vector-length previous) 4)
+                  (eq? trainer (vector-ref previous 0))
+                  (eq? model (vector-ref previous 1))
+                  (eq? binding (vector-ref previous 2))
+                  (eq? dataset (vector-ref previous 3)))
+             "post requires baseline and the exact same trainer/model/binding/held-out dataset"))
+          (else (heldout-fail "expected baseline or post phase")))))
+(define (heldout-emit phase report)
+  (display "CPU4-HELDOUT-OBS ") (display phase)
+  (let emit-fields ((index 0))
+    (if (< index 9)
+        (begin (display " ") (display (vector-ref report index))
+               (emit-fields (+ index 1)))))
+  (newline))
+
+;;; Returns nine copied scalar words/counts after all owned resources retire.
+;;; It creates no model, trainer, optimizer, dataset, training loop or generator.
+(define (cpu4-heldout-evaluate-internal! trainer dataset phase)
+  (if (vector-ref heldout-fixture-session 1)
+      (heldout-fail "held-out fixture is already active"))
+  (let ((ledger (vector #f (vector #f #f #f #f) #f #f)))
+    (vector-set! heldout-fixture-session 1 #t)
+    (guard
+      (caught
+        (#t
+          (heldout-cleanup! ledger)
+          (vector-set! heldout-fixture-session 1 #f)
+          (display "CPU4-HELDOUT-ERROR ")
+          (if (transformer-error? caught)
+              (begin (display (transformer-error-category caught)) (display " ")
+                     (display (transformer-error-operation caught)) (display " ")
+                     (display (transformer-error-message caught)))
+              (display "foreign condition"))
+          (newline) (cpu4-binding-fail-stop 70)))
+      (let* ((record (cpu4-trainer-idle-check-internal trainer 'cpu4-heldout-fixture))
+             (binding (vector-ref record 9)) (model (vector-ref record 8))
+             (lease (cpu4-model-binding-native-lease-internal binding))
+             (optimizer (vector-ref (vector-ref record 14) 1)))
+        (heldout-phase-identity! trainer model binding dataset phase)
+        (heldout-counts! record phase)
+        (heldout-source! record dataset)
+        (heldout-require (= (heldout-live-owned) 0) "a prior fixture owner remains live")
+        (let* ((before-controls (heldout-copy-controls! trainer ledger))
+               (before-modes (heldout-modes record))
+               (before-cursor (cpu4-d2-cursor-capture-internal dataset)))
+          (vector-set! ledger 2 (heldout-pointer (heldout-image-create lease optimizer)))
+          (let create-outputs ((index 0))
+            (if (< index 4)
+                (begin
+                  (vector-set! (vector-ref ledger 1) index
+                    (heldout-pointer (heldout-output-create)))
+                  (create-outputs (+ index 1)))))
+          (vector-set! ledger 0
+            (cpu4-e3-frame-bind-internal binding (vector-ref ledger 1)))
+          (e3-evaluate-into! model dataset (vector-ref ledger 0))
+          (let ((report (vector
+                  (heldout-output-bits (vector-ref (vector-ref ledger 1) 0))
+                  (heldout-output-bits (vector-ref (vector-ref ledger 1) 1))
+                  (heldout-output-bits (vector-ref (vector-ref ledger 1) 2))
+                  (heldout-output-bits (vector-ref (vector-ref ledger 1) 3))
+                  (e3-counter-ref (vector-ref ledger 0) 0)
+                  (e3-counter-ref (vector-ref ledger 0) 1)
+                  (vector-ref record 19) (vector-ref record 20) (vector-ref record 21))))
+            (let validate-words ((index 0))
+              (if (< index 4)
+                  (begin
+                    (heldout-require
+                      (and (m3t-exact-i64? (vector-ref report index))
+                           (>= (vector-ref report index) 0)
+                           (<= (vector-ref report index) 4294967295))
+                      "rank0 metric inspection failed")
+                    (validate-words (+ index 1)))))
+            (heldout-require
+              (and (= (vector-ref report 1) 1082130432)
+                   (= (vector-ref report 4) 4) (= (vector-ref report 5) 1))
+              "E3 did not report fullmask weight4/physical4/batches1")
+            ;; Finish this exact frame before testing native IDLE via controls.
+            (e3-frame-unbind! (vector-ref ledger 0))
+            (vector-set! ledger 0 #f)
+            (heldout-require
+              (heldout-controls=? before-controls (heldout-copy-controls! trainer ledger))
+              "evaluation changed controls/RNG/training cursor/config")
+            (heldout-require (equal? before-modes (heldout-modes record))
+              "evaluation changed one of the17 P1 modes")
+            (heldout-require
+              (d2-core-bytes=? before-cursor (cpu4-d2-cursor-capture-internal dataset))
+              "evaluation changed the held-out logical cursor")
+            (heldout-source! record dataset)
+            (heldout-counts! record phase)
+            (heldout-require (= (heldout-image-equal lease optimizer (vector-ref ledger 2)) 1)
+              "evaluation changed full14 values/28 moments/identities/absent gradients")
+            (heldout-cleanup! ledger)
+            ;; All native owners are gone before publication or caller training.
+            (if (eq? phase 'baseline)
+                (begin
+                  (vector-set! heldout-fixture-session 0 (vector trainer model binding dataset))
+                  (vector-set! heldout-fixture-session 2 'baseline))
+                (begin (vector-set! heldout-fixture-session 0 #f)
+                       (vector-set! heldout-fixture-session 2 'done)))
+            (vector-set! heldout-fixture-session 1 #f)
+            (heldout-emit phase report)
+            report))))))
