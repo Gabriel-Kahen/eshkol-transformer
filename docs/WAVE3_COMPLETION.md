@@ -77,6 +77,17 @@ independent review/doc work while heavy gates run. Silence is never success.
 - [Fixed-profile command walkthrough](WAVE3_WALKTHROUGH.md) provides the exact
   bounded recipe; its fresh retained local execution remains pending.
 
+## Source integration (runtime admission still held)
+
+The published integration source union `cad08034e94a383f0e1191949419d9191e89b928`
+(tree `2f021cac225edad622edd6fae514a7a08a00789b`) selectively composes reviewed
+E3 retention-import/test repairs, CLI corpus-validation assertions and G3 SAVE/replay
+runners. No production numerical/generation source is changed by those leaves.
+All 47 focused source/contract tests pass on the union; `git diff --check` passes.
+Receipt: `finish-20261022/integration-source-union-tests.log`. Compiled producers
+retain their original immutable lane identities; these static results do not
+substitute for their supported runtime gates or final combined-source CI.
+
 ## CPU v1 completion rule
 
 All checklist rows are required within the declared CPU profile: numerical and
@@ -90,8 +101,21 @@ existing tiny one-byte proof alone does not satisfy CPU v1.
 
 ## Contract changes
 
-None in the initial completion index. Existing admission requirements are retained.
-Any proposed contract change must be recorded here with owner, exact source and
+Initial index and admitted source-only runner repairs change no API. Existing
+admission requirements remain intact.
+
+Pending private composition contract, integration owner: port the already reviewed
+public `diagnostic-c4-p2g2` adapter (budget two, explicit byte EOS) to the closed
+terminal coordinator and current typed-owner ABI. Baseline terminal source is
+`4506bc8f89bfe8083f5c47d71dcad74d968222c5`; existing public source is `cdf5f5e`
+and typed wrapper `666d54eb`. Public provenance must be preallocated and completely
+validated before native commit, with only fixed prevalidated state-marker writes
+after success. No postcommit registration, arbitrary callback, new public name or
+provenance-check relaxation is permitted. Independent source-contract review is
+pending before shared seam implementation/integration. The historical compiler
+AD/ND failure used test-only `6803dbe2`, not the supported fe9 toolchain.
+
+Any further contract change must be recorded here with owner, exact source and
 review decision before integration.
 
 ## Supported-scope boundary
