@@ -2,8 +2,10 @@
 
 import ast
 from fractions import Fraction
+import hashlib
 import importlib.util
 import runpy
+import shlex
 from pathlib import Path
 import subprocess
 import sys
@@ -17,6 +19,40 @@ SPEC.loader.exec_module(ref)
 
 
 class Cpu4SourceTests(unittest.TestCase):
+    def test_exit_seal_runs_without_file_digest_and_seals_failure_status(self):
+        script=(ROOT/"scripts/test-e3-cpu4-providers.sh").read_text()
+        function=script[script.index("seal() {"):script.index("trap seal EXIT")]
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)/"output";root.mkdir();(root/"nested").mkdir()
+            (root/"empty").write_bytes(b"")
+            (root/"nested"/"payload").write_bytes(bytes(range(256))*8193)
+            (root/"nested"/"SHA256SUMS").write_bytes(b"nested payload must be sealed\n")
+            (root/"SHA256SUMS").write_text("stale checksum row\n")
+            shim=Path(directory)/"python310.py"
+            shim.write_text("""import hashlib,sys
+assert sys.argv[1:3]==['-B','-']
+if hasattr(hashlib,'file_digest'): del hashlib.file_digest
+assert not hasattr(hashlib,'file_digest')
+sys.argv=sys.argv[2:]
+exec(compile(sys.stdin.read(),'<extracted-exit-seal>','exec'))
+""")
+            shell=("set -euo pipefail\nout="+shlex.quote(str(root))+"\n"
+                   "python3() { "+shlex.quote(sys.executable)+" -B "+shlex.quote(str(shim))+" \"$@\"; }\n"
+                   +function+"trap seal EXIT\nexit 37\n")
+            result=subprocess.run(["bash","-c",shell],capture_output=True,text=True)
+            self.assertEqual(result.returncode,37,result.stderr)
+            self.assertEqual(result.stdout,"");self.assertEqual(result.stderr,"")
+            self.assertEqual((root/"gate.exit").read_text(),"37\n")
+            rows={name:digest for digest,name in
+                  (line.split("  ",1) for line in (root/"SHA256SUMS").read_text().splitlines())}
+            self.assertEqual(set(rows),{"empty","nested/payload","nested/SHA256SUMS","gate.exit"})
+            for name,digest in rows.items():
+                self.assertEqual(digest,hashlib.sha256((root/name).read_bytes()).hexdigest())
+
+    def test_fixture_python_syntax_is_python310_compatible(self):
+        for path in Path(__file__).parent.glob("*.py"):
+            ast.parse(path.read_text(),filename=str(path),feature_version=(3,10))
+
     def test_rational_rounding_and_provider_only_order_witness(self):
         self.assertEqual(ref.rounded(Fraction(1,2**150)),0)
         self.assertEqual(ref.rounded(Fraction(3,2**150)),2)

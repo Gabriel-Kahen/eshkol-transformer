@@ -18,9 +18,12 @@ import hashlib,pathlib,sys
 root=pathlib.Path(sys.argv[1])
 with (root/'SHA256SUMS').open('w') as stream:
     for path in sorted(root.rglob('*')):
-        if path.is_file() and path.name!='SHA256SUMS':
-            digest=hashlib.file_digest(path.open('rb'),'sha256').hexdigest()
-            stream.write(f'{digest}  {path.relative_to(root)}\n')
+        if path.is_file() and path!=root/'SHA256SUMS':
+            digest=hashlib.sha256()
+            with path.open('rb') as source:
+                for chunk in iter(lambda: source.read(1024*1024), b''):
+                    digest.update(chunk)
+            stream.write(f'{digest.hexdigest()}  {path.relative_to(root)}\n')
 PY
   return "$status"
 }
