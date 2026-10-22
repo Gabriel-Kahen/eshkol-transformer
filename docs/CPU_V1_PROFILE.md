@@ -20,6 +20,10 @@ vectors, `[256,4]` token/head weight and `[4,4]` learned positions. This is 1,19
 f32 values / 4,768 unique value bytes. The token/head tie is one owner, not a copied
 parameter. Activation `[1,4,4]`, attention `[1,2,4,2]`, FFN `[1,4,8]`, logits
 `[1,4,256]`, and genuine D2 input/target/mask `[1,4]` contracts must be explicit.
+Heads split/merge request metadata is `[1,4,2,2]` (N,T,H,Dh), distinct from
+actual head storage `[1,2,4,2]` (N,H,T,Dh); attention request metadata is
+`[1,2,2,4,4,2]`. The old T=H=2 profile hid this distinction. Nonsymmetric
+forward/VJP layout references and transposed-metadata rejection are required.
 
 Reuse the sole C4 model authority and accepted seeded construction. Training,
 evaluation and generation must authenticate that same canonical model and its
@@ -27,6 +31,12 @@ original fourteen parameter handles; source review must define any delegated
 execution adapter without creating a second authority or presenting C4 as the
 legacy context-two M3T owner. An admitted checkpoint restore creates the same
 C4 model identity with every parameter word authenticated from the checkpoint.
+Keep C4 model-entry slot seven `#f`; an authenticated training/checkpoint ledger
+keyed by the exact model/native owner/fourteen handles carries config identity.
+A borrowed C4 training transport may provide execution authority over this roster,
+not a second parameter owner. Construct a generation context only after checkpoint
+restore, explicit eval mode and training-lease release; do not reuse a generator
+that was bound before model updates.
 An equal-seed fresh constructor is not restored trained state.
 
 `C2` names the checkpoint format/workstream; it is not permission to reinterpret
@@ -44,12 +54,13 @@ any restored candidate. Unsupported legacy callers must reject the C4 schema.
    record decisions in the completion index. Public names and native signatures
    are not invented by this target document.
 2. **CLI3 upstream implementer:** add bounded C4 model/training support, actual T4
-   forward/backward transport, exact reviewed provider rows and reproducibility
+   forward/backward transport, exact A2/N2/N3K provider rows and reproducibility
    state. Preserve legacy context-two behavior and explicit capability negatives.
 3. **G3:** bind checkpoint restore and the terminal/typed/public generation path to
    that same C4 authority and parameter words, preserving closed commit/rollback
    and preallocated public provenance. Implement genuine save/replay/continuation.
-4. **E3:** adapt the evaluator to the exact admitted T4 model/provider and objective
+4. **E3:** supply the shared L3S T4 objective/reduction/seed-VJP row, then adapt
+   the evaluator to the exact admitted T4 model/provider and objective
    contracts. Keep numerical, mode/gradient, failure/rollback and resource evidence
    distinct from prior context-two/private/provider-only results.
 5. **CLI3 consumer, then integration:** compose only landed upstream exports into
