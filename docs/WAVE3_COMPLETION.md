@@ -140,15 +140,21 @@ Initial failed sources/receipts remain preserved.
 
 | Foundation | Integrated source and current result | Remaining gate |
 |---|---|---|
-| Typed C4 lease and training transport | [Lease contract](CPU4_TYPED_LEASE_CONTRACT.md), [transport contract](CPU4_THIN_TRANSPORT_CONTRACT.md). Reviewed `063bc4c9`/`2558dfdf1`, fixture repair `f935035b` integrated as `64877a8c`. Supported native normal/repeat/ASan+UBSan+LSan independently PASS: 318 lease and 4,219 transport checks, all 1,024 logits/1,192 full-model gradients and atomic fourteen-parameter contribution. | Actual Eshkol/config/P1 binding, O2 step and same-model checkpoint composition. |
+| Typed C4 lease and training transport | [Lease contract](CPU4_TYPED_LEASE_CONTRACT.md), [transport contract](CPU4_THIN_TRANSPORT_CONTRACT.md). Reviewed `063bc4c9`/`2558dfdf1`, fixture repair `f935035b` integrated as `64877a8c`. Supported native normal/repeat/ASan+UBSan+LSan independently PASS: 318 lease and 4,219 transport checks, all 1,024 logits/1,192 full-model gradients and atomic fourteen-parameter contribution. | O2 update and same-model checkpoint composition; real binding and objective results are tracked below. |
 | A2/N2/N3K exact T4 primitive rows | Source-approved `d5a5c33b`, test-only successors `615a0078`/`eaf48ccf` integrated through `df5d1a9f`. Independent supported result PASS in 22.44 s: 28 forward/VJP cases and 98,960 checks in normal/SAN, affected A2/N2/N3K normal/repeat/SAN suites. | Exact primitive/provider scope only; initial negative-classification/metadata failures stay preserved. |
 | E3 T4 objective and metrics | Source-approved `d5970d77` integrated as `bda0c8605`. Supported native gate independently PASS in 15.931 s: 24 positive runs, T2 regressions, 22-case exact oracle, five intended compiled-mutant kills, empty diagnostics and authenticated cleanup/custody. | Native provider scope only; no full evaluator/P1/D2 admission. |
 | E3 no-grad frame | [Accepted frame contract](CPU4_E3_FRAME_CONTRACT.md); six reviewed blobs at `393b5358` integrated as `9a7bfc67`. Fixture repairs through `c9613ef6` integrated as `98875504`; supported native result independently PASS: 22,890 assertions each in two normal/two ASan+UBSan+LSan runs, 21 roles/full 1,024 logits, gradient/owner preservation, atomicity/first-error/resource cases. | Real P1/D2/Eshkol consumer is implementing against actual binding. Failed mount and precondition fixtures remain preserved. No whole-frame bitwise or unbounded memory claim. |
-| Candidate constructor/retirement | [Accepted contract](CPU4_CANDIDATE_CONTRACT.md); 29 reviewed blobs at `3f0358d3` integrated as `09b5669f`. Composition review and 1,239 host source/planner checks PASS. | Repairs `7d1d3cfc`/`0a8ad5a9` are integrated through `f0df7708`: real FFI closures, bounded runtime helpers and reserved loop correction. Genuine producer normal/repeat PASS84 is observed at exact `0a8ad5a9`; broader gate stopped in an O2 diagnostic-alias test, with result review/reuse and native/provider SAN pending. Initial Scheme cleanup still admits null optimizer/generator children only. |
+| Candidate constructor/retirement | [Accepted contract](CPU4_CANDIDATE_CONTRACT.md); producer/FFI/bounded-helper repairs integrated through `f0df7708`, O2 diagnostic test-only `f94eeb43` as `22707205`. Independent final gate PASS: genuine producer normal/repeat84 via authenticated unchanged-source reuse; fresh native-provider SAN84; native805 normal/repeat/SAN, 34 exact fault exits, F32/P1/O2 repeats and eight feature-off pairs equal. | Typed Scheme child custody and factory/checkpoint cleanup. Initial Scheme cleanup admits null optimizer/generator only. Generated Eshkol IR/prebuilt runtime are uninstrumented; provider SAN is not whole-runtime coverage. |
 | Public G2 ownership and aliasing | Reviewed `0a292f416` integrated as `10a1764f9`; actual-union C11/feature-off/host controls PASS. Control-alias `11d3d5b3` passed690 checks; candidate-record successor `0064e886` independently PASS732 normal/repeat/SAN, genuine live/DEAD capability ALIAS plus per-call byte invariance. Capability records are288 bytes; candidate-on I2 parameter controls are separately80 bytes. | Complete installed AOT/runtime/SAN and same-trained-model generation/continuation. Control observer protects known record extents; arbitrary child-payload extent is not inferred. |
-| Canonical binding/P1/D2 | Nine reviewed blobs at `78f39c93` integrated as `02336953`, corrected P1 helper merge at `f0df7708`; exact trusted75-slot checker at `31530dfd` preserves0..72 and fixed73/74. Actual source gates PASS1427/53. Genuine binding IR/binary compiled. | Initial runtime reached14 pointer/17mode checks then correctly rejected a V259 tokenizer fixture for V256 corpus; test-only correction and fresh normal/repeat/SAN gate remain required. |
-| Trainer snapshot/restore controls | Three reviewed blobs at `fd1691ff` integrated as `1a97ecc1`; own authenticated22-slot record, real WRITE lease, prepared controls-last tail; six source guards PASS. | Actual component-plan integration and runtime gate. Step explicitly unsupported until distinct READ forward/VJP→drain→WRITE/O2 handoff; no training claim. |
+| Canonical binding/P1/D2 | Nine reviewed blobs at `78f39c93` integrated as `02336953`, bounded P1 helper merge at `f0df7708`, trusted75-slot checker at `31530dfd`. Raw-tokenizer fixture `c267f0ef` integrated as `192792a1`; independent supported normal2/native-provider SAN2 PASS68: fourteen handle/carrier identities, position[4,4], seventeen modes, real T4 cursor and binding release. | Training/restore composition. Original V259-fixture rejection remains preserved; corrected gate uses genuine raw V256 identity. |
+| Trainer snapshot/restore controls | Authenticated22-slot record, real WRITE lease and prepared controls-last tail at `fd1691ff`/`1a97ecc1`. Runtime recipe `eecf9396` and canonical bytewise comparison repair `502f0671` integrated through `948b8c31`; six source guards, four recipe checks and thirteen actual byte-helper host checks PASS. [Closed detach](CPU4_TRAINER_DETACH.md) `3580136f` integrated as `13af5c4b`. | Fresh controls and detach supported runtime gates; full C2/I2/O2/D2 transaction. Original constructor failure was canonical bytevector pointer equality in pinned fe9 and stays preserved. Detach is source-approved only. |
+| Masked training objective and Eshkol schedule | [Objective contract](CPU4_TRAINING_OBJECTIVE.md), twelve reviewed blobs at `bb6ca081` integrated as `4df3500f`. Supported gate reports native2,501 objective checks/full1,192 CE central derivatives and genuine Eshkol21F→L2/L3S→25R→atomic fourteen-gradient contribution in normal2/native-provider SAN2. | Independent result review pending; real O2 update/full step, learning and same-model resume remain separate. Recorded toolchain is fe9/runner7dd254ba; generated IR is uninstrumented. |
 | Installed G2 proving recipe | Independently reviewed `81704701` integrated as `b8e0d4e0`, preserving prior E3/C2-header changes. Combined source gate: eight unit/Q0 plus four public-source tests PASS. | Actual installed normal/SAN/coexistence NOT RUN. Supported native98a5 held-kind9 diagnostic independently PASS151; it supplies no Eshkol attribution. Old stage45 status134 remains unattributed; reviewed historical E attribution is staged but unqueued behind the CPU4 smoke priority. |
+
+Latest binding and candidate result reviews are `team/CPU4-BINDING-RESULT-REVIEW.md`
+and `cpu4-candidate-final-independent-evidence-audit-f94eeb43/AUDIT.md` beneath
+`finish-20261022/`. Their exact fixture deltas and review seals were authenticated
+before integration; the complete combined source is not runtime-admitted.
 
 The lease/transport fixture repair binds all fourteen handles before any
 initialization; production guards were preserved. Its independently accepted
@@ -217,6 +223,25 @@ exactly three fixed live-phase
 markers. Restore pending roots only after successful abort/drain and exact-root
 verification; mismatch or postzero error fails stop. The historical compiler
 AD/ND failure used test-only `6803dbe2`, not the supported fe9 toolchain.
+
+Current private checkpoint/factory target, owned by G3 with integration review:
+caller retains tokenizer and D2; factory owns candidate/model, binding, O2 and
+trainer. Snapshot uses a genuine WRITE parent. Restore detaches all values,
+moments and later metadata before ending C2 borrow; stages and copies controls
+before participants become busy; preflights every component before the first
+write, then commits I2, O2/config/update, D2 and controls last. Prewrite blocked
+cleanup retains exact retry ownership; unexpected postwrite failure fails stop.
+No legacy TR3 trainer or M3T model authority is substituted.
+
+Factory child tickets must be rooted before construction. Audit found existing
+O2 native finish precedes fallible Scheme global registration; a caller ticket
+cannot close that gap. G3 is implementing a closed CPU4 O2 constructor that roots
+the actual envelope/registry before native finish and uses a fixed-store
+publication tail. Public O2 remains unchanged. Exact typed child cleanup must
+preflight the real native O2 before trainer detach, retire the unpublished native
+candidate with that O2, then invalidate its Scheme shell/registry without a
+second destructor. These source targets still need immutable review and runtime
+failure gates. Native adoption still requires trainer/binding release first.
 
 Any further contract change must be recorded here with owner, exact source and
 review decision before integration.
