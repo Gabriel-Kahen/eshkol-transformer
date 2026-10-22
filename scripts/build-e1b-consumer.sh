@@ -2127,6 +2127,7 @@ if [[ -n "${package_native_source_closure}" ]]; then
         tr -s '[:space:]' '\n' | while IFS= read -r native_dependency; do
           [[ -n "${native_dependency}" ]] || continue
           if [[ "${package_policy}" == cli3-tr3-aggregate || \
+      "${package_policy}" == c2-wave2-aggregate || \
       "${package_policy}" == e3-private-aggregate || \
       "${package_policy}" == m3-model-aggregate || \
       "${g3g_package_policy}" == 1 || \
