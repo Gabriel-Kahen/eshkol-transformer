@@ -34,6 +34,51 @@ def forms(text):
     if depth or string:raise ValueError('unterminated source')
     return out
 
+def nested(form):
+    yield form
+    for child in forms(form[1:-1]):
+        yield from nested(child)
+
+
+def assert_closed_tail(source):
+    definitions=forms(source)
+    def definition(name):
+        matches=[f for f in definitions if f.startswith('(define ('+name+' ')]
+        assert len(matches)==1, 'missing/duplicate '+name
+        return matches[0]
+    closed=definition('cpu4-e3-restore-acquired-closed!')
+    wrapper=definition('e3-restore-closed!')
+    checker=definition('cpu4-e3-restored-binding?')
+    assert '(guard' not in checker and '(guard' not in closed, 'late handler allocation'
+    assert '(cpu4-model-binding-check-internal (vector-ref entry 3))' in checker
+    positions=[closed.index(x) for x in (
+        '(e3-cleanup-preflight!', '(e3-d2-restore-preflight!', '(e3-native-drain',
+        '(e3-d2-restore-commit!', '(p1-e3-mode-restore!', '(cpu4-e3-restored-binding?',
+        '(e3-native-publish', '(e3-native-finish', '(e3-source-finish!')]
+    assert positions==sorted(positions), 'closed transaction ordering'
+    branches=[f for f in nested(closed) if f.startswith('(if publish?')]
+    assert len(branches)==1
+    branch=branches[0]
+    assert '(cpu4-e3-restored-binding? entry)' in branch and '(e3-native-publish' in branch
+    assert re.search(r'\s#f\)$',branch), 'abort must skip checker/publication'
+    guards=[f for f in nested(wrapper) if f.startswith('(guard')]
+    assert len(guards)==1, 'one preinstalled publication handler'
+    guard=guards[0]
+    children=forms(guard[1:-1])
+    assert len(children)==2 and children[0].startswith('(caught'), 'handler shape'
+    assert ' '.join(children[1].split())=='(cpu4-e3-restore-acquired-closed! frame entry #t)', 'guard must dominate entire closed helper'
+    handler=children[0]
+    assert '(e3-note-caught-error! entry 12 caught' in handler
+    assert '(e3-native-finish' in handler and '(e3-source-finish!' in handler
+    assert '(e3-abort!' not in handler and 'restore-' not in handler, 'no recursive restoration'
+    outside=wrapper.replace(guard,'PREINSTALLED-GUARD')
+    assert '(guard' not in outside
+    assert outside.count('(cpu4-e3-restore-acquired-closed! frame entry #f)')==1
+    assert '(cpu4-e3-restore-acquired-closed! frame entry #t)' not in outside
+    abort=definition('e3-abort!')
+    assert '(guard' not in abort and '(e3-restore-closed! frame #f)' in abort
+
+
 class SourceTests(unittest.TestCase):
     def test_exact_boundary_forms_and_original_sources(self):
         pins=json.loads((ROOT/'native/e3_cpu4_boundary_forms.json').read_text())
@@ -81,13 +126,24 @@ class SourceTests(unittest.TestCase):
 
     def test_closed_restore_tail_and_order(self):
         source=(ROOT/'native/e3_cpu4_private_extension.esk').read_text()
-        restore=next(f for f in forms(source) if f.startswith('(define (e3-restore-closed!'))
-        positions=[restore.index(x) for x in ('(e3-native-drain','(e3-d2-restore-commit!','(p1-e3-mode-restore!','(cpu4-e3-restored-binding?','(e3-native-publish','(e3-native-finish')]
-        self.assertEqual(positions,sorted(positions))
+        assert_closed_tail(source)
         tail=(ROOT/'internal/e3/lib/e3_cpu4_d2_restore.esk').read_text()
         commit=next(f for f in forms(tail) if f.startswith('(define (e3-d2-restore-commit!'))
         self.assertNotRegex(commit,r'(?:cursor-restore|dataset-seek|vector-set! state 8)')
         self.assertIn('(vector-set! core 15 (vector-ref record 7))',commit)
+
+    def test_old_late_guard_and_unguarded_prefix_rejected(self):
+        source=(ROOT/'native/e3_cpu4_private_extension.esk').read_text()
+        assert_closed_tail(source)
+        checker=next(f for f in forms(source) if f.startswith('(define (cpu4-e3-restored-binding?'))
+        old_checker='(define (cpu4-e3-restored-binding? entry) (guard (caught (#t #f)) (cpu4-model-binding-check-internal (vector-ref entry 3)) #t))'
+        with self.assertRaises(AssertionError):assert_closed_tail(source.replace(checker,old_checker))
+        wrapper=next(f for f in forms(source) if f.startswith('(define (e3-restore-closed!'))
+        guard=next(f for f in nested(wrapper) if f.startswith('(guard'))
+        with self.assertRaises(AssertionError):
+            assert_closed_tail(source.replace(guard,'(cpu4-e3-restore-acquired-closed! frame entry #t)'))
+        historical=subprocess.check_output(['git','show','59efa27f1c99995d2995c74679a80515e20adbf7:native/e3_cpu4_private_extension.esk'],cwd=ROOT,text=True)
+        with self.assertRaises(AssertionError):assert_closed_tail(historical)
 
     def test_exact_transcript_accepts_words_rejects_noise(self):
         valid='CPU4-CONSUMER-REPORT #(1085276160 1090519040 1132462080 0 8 2)\nCPU4-CONSUMER-PASS checks=99\n'
