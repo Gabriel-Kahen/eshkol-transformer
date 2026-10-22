@@ -52,3 +52,20 @@ identical PASS output. Sanitize additionally enables ASan/UBSan for native code
 and linking. The script neither takes a second lock nor starts parallel builds.
 
 Runtime and supported-image compilation: NOT RUN at source handoff.
+
+The fe9 runtime deep-equality helper (`lib/core/runtime_deep_equal.cpp`,
+vector recursion221..231 and default286..287) has no bytevector content case.
+Distinct canonical UTF-8 buffers and detached nested controls therefore require
+`d2-core-bytes=?`, not general `equal?`. The producer uses that exact byte
+predicate for canonical configuration; the fixture's `controls=?` uses it for
+current cursor, epoch cursor and canonical configuration. General RNG, tokenizer
+and counter vector predicates remain unchanged. Regression cases require distinct
+objects with identical payloads and reject cursor/config payload or length,
+fingerprint and tuple-shape mismatches. The host helper regression is:
+
+```
+GUILE_AUTO_COMPILE=0 guile --no-auto-compile -s tests/cpu4_trainer_control/test_controls_bytes.scm
+```
+
+This repair changes no upstream runtime or checkpoint schema. The genuine
+supported-image constructor/snapshot/restore gate remains the execution oracle.
