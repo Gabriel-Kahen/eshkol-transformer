@@ -20,11 +20,16 @@ The fixture checks all 17 modes, exact encoded cursor/metadata identities,
 nonzero logical restoration with increasing generations/stale old capability,
 model values, all gradient metadata, and present-gradient payloads. Absent
 internal gradient backing is not exposed by this candidate-OFF tuple. It tests
-malformed admission, two-frame source and native READ contention, controlled
+malformed admission, actual second-bind rejection in idle/prepared/eval states,
+same-frame prepared contention and native READ contention, controlled
 partial prepare/enter/borrow cleanup, strict binding checks while READ remains,
 late binding denial and fourth-destination publication denial, prior report
 retention, and same-bound retries. Manual partial stages call existing internal
-operations; the ordinary success/retry path calls e3-evaluate-into!.
+operations; the ordinary success/retry path calls e3-evaluate-into!. The supported
+P1 boundary is one enrolled E3 frame per model. After genuine unbind/destruction,
+a sequential frame rebind uses the same still-live binding and produces the same
+report. The defensive source registry guard does not establish support for two
+simultaneously bound frames.
 
 Source-only checks:
 
