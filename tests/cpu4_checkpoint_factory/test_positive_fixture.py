@@ -1,6 +1,7 @@
 """Source checks for the prepared actual FILE data-movement fragment; no runtime."""
 from pathlib import Path
 import unittest
+import json
 from tests.cpu4_trainer_control.test_source_contract import parse, walk
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -79,6 +80,32 @@ class PositiveFixture(unittest.TestCase):
         self.assertIn('(eq? cpu4-fdt-observed-cut (car remaining))', self.text)
         for phase in ['optimizer', 'binding', 'trainer']:
             self.assertIn("(set! cpu4-fdt-observed-cut '" + phase + ')', self.text)
+
+    def test_fe9_mutable_locations_capture_originals_before_exact_redefinitions(self):
+        creators = parse((ROOT / 'native/cpu4_candidate_children_extension.esk').read_text())
+        for name, original, args in (
+            ('cpu4-owned-candidate-create-internal', 'cpu4-fdt-original-candidate', ['resolved']),
+            ('cpu4-owned-binding-create-internal!', 'cpu4-fdt-original-binding', ['child']),
+            ('cpu4-owned-trainer-create-internal!', 'cpu4-fdt-original-trainer', ['child', 'tokenizer', 'dataset'])):
+            original_forms = [f for f in creators if f[0] == 'define' and isinstance(f[1], list) and f[1][0] == name]
+            redefinitions = [f for f in self.forms if f[0] == 'define' and isinstance(f[1], list) and f[1][0] == name]
+            self.assertEqual(len(original_forms), 1)
+            self.assertEqual(redefinitions, [['define', [name, *args], [original, *args]]])
+            capture = ['define', original, name]
+            self.assertLess(self.forms.index(capture), self.forms.index(redefinitions[0]))
+            # The six existing install/restore set! sites and the original
+            # creators/cut markers remain; only the test binding storage changes.
+            mutations = [f for f in walk(self.forms) if len(f) > 2 and f[:2] == ['set!', name]]
+            self.assertEqual(len(mutations), 2)
+        proof = json.loads((ROOT / 'tests/cpu4_checkpoint_factory/fe9_binding_source_proof.json').read_text())
+        lock = dict(line.split('\t', 1) for line in (ROOT / 'toolchain/eshkol.lock').read_text().splitlines() if line and not line.startswith('#'))
+        self.assertEqual(proof['compiler_commit'], lock['eshkol_commit'])
+        self.assertIn('lib/backend/llvm_codegen.cpp', proof['files'])
+        self.assertIn('exe/eshkol-run.cpp', proof['files'])
+        for record in proof['files'].values():
+            self.assertEqual(len(record['git_blob']), 40)
+            self.assertEqual(len(record['sha256']), 64)
+            self.assertTrue(all(row['first'] <= row['last'] and len(row['sha256']) == 64 for row in record['line_blobs']))
 
     def test_external_c2_checkpoint_is_never_factory_owned_and_retry_is_explicit(self):
         body = self.text[self.text.index('(let* ((external (cpu4-fdt-snapshot restored))'):]

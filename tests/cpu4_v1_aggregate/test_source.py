@@ -58,6 +58,29 @@ class SourceUnion(unittest.TestCase):
             name = form[1][0] if isinstance(form[1], list) else form[1]
             self.assertEqual(actual[name], form, name)
 
+    def test_g2_dead_release_uses_loaded_identity_helper(self):
+        from tests.cpu4_trainer_control.test_source_contract import parse, walk
+        forms = parse((ROOT / 'native/g3c4_public_g2_result_extension.esk').read_text())
+        body = next(f for f in forms if f[0] == 'define' and isinstance(f[1], list) and f[1][0] == 'g3c4-public-g2-output-release!')
+        self.assertIn(['i2-identity-member?', 'shell', ['vector-ref', 'g3c4-public-g2-released-outputs', '0']], list(walk(body)))
+        self.assertFalse(any(f and f[0] == 'memq' for f in walk(body)))
+        definitions = {f[1][0]: f for _, source_forms in source_closure(ROOT, self.roster)
+                       for f in source_forms if len(f) > 2 and f[0] == 'define' and isinstance(f[1], list)}
+        helper = definitions['i2-identity-member?']
+        self.assertIn(['eq?', 'value', ['car', 'values']], list(walk(helper)))
+
+    def test_explicit_original_tokenizer_leaves_cannot_be_omitted(self):
+        for leaf in ('t1', 't2'):
+            text = self.text.replace(f'(load "../internal/{leaf}/lib/transformer/tokenizer_internal.esk")', '')
+            with self.subTest(leaf=leaf), self.assertRaises(AssertionError):
+                validate(ROOT, self.roster, {ENTRY: text})
+        # Explicit canonical preloads make this dependency independent of which
+        # tokenizer_internal short spelling wins later include-path lookup.
+        changed = copy.deepcopy(self.roster)
+        a, b = changed['source_include_dirs'].index('internal/t1/lib'), changed['source_include_dirs'].index('internal/t2/lib')
+        changed['source_include_dirs'][a], changed['source_include_dirs'][b] = changed['source_include_dirs'][b], changed['source_include_dirs'][a]
+        validate(ROOT, changed)
+
     def test_transitive_duplicate_is_detected(self):
         path = 'native/g3c4_public_g2_result_extension.esk'
         text = (ROOT / path).read_text() + '\n(define i2-carrier-tag (vector #f))\n'

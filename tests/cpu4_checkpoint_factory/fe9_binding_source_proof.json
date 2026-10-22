@@ -1,0 +1,53 @@
+{
+  "compiler_commit": "fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9",
+  "scope": "Source proof only; actual corrected AOT and initializer ordering remain NOT RUN",
+  "files": {
+    "exe/eshkol-run.cpp": {
+      "git_blob": "c75f379c9cc702efbf235e4b80cc5ae70e735ecd",
+      "sha256": "80bc7cec7a8069662e67a4903f1870aacc6046a1592f7e27ad6af70c37598951",
+      "line_blobs": [
+        {
+          "first": 2424,
+          "last": 2442,
+          "sha256": "653cbe61d1df1ffd809b4d05ea58a6ed8fd699835bb7a1133cba2850e02e7284"
+        }
+      ]
+    },
+    "lib/backend/llvm_codegen.cpp": {
+      "git_blob": "f2225843e2c16019bbb1d91bdfec1b6feaac3d2c",
+      "sha256": "18a3a048bf29c282d512900c261ed293cb9e0bb50d31d3220ec4ccc9fda881cb",
+      "line_blobs": [
+        {
+          "first": 2804,
+          "last": 2834,
+          "sha256": "a0956350ff942766fd00346cae8d195e7ed9dc4927410a1b208f8bb0a6f15e3f"
+        },
+        {
+          "first": 2976,
+          "last": 2993,
+          "sha256": "30d9b8c229df0768078ec79e8681231d100c0bcfd244e0a22c4a3615fe1c3e06"
+        },
+        {
+          "first": 3823,
+          "last": 3865,
+          "sha256": "9c3fcc4d7dff4743e60bf49a13361e18ad26daee7ab1c51b502ed60ae4a374e7"
+        },
+        {
+          "first": 3964,
+          "last": 4018,
+          "sha256": "d597f4bd2e39d6fb96fbc137774fae6b1d6e8c9f07908bb931c4f621e1ebf32c"
+        },
+        {
+          "first": 12322,
+          "last": 12365,
+          "sha256": "33292a657d094c0cdf2f35e9a0b43b081320a47cbb21582c3763589dde8a3498"
+        },
+        {
+          "first": 17426,
+          "last": 17439,
+          "sha256": "43a4e3a7d5aae08f287e6964c742b22bddc821dec4cee15015529c41b1c8d6b3"
+        }
+      ]
+    }
+  }
+}
