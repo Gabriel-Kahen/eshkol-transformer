@@ -31,8 +31,9 @@ static et_g3c4_model_owner_internal *model(size_t row) {
   CHECK(owner != NULL);
   for (int64_t i = 0; i < 14; ++i) {
     OK(et_g3c4_private_model_owner_bind_v1(owner, i, &identities[row][i]));
-    OK(et_g3c4_private_model_owner_initialize_v1(owner, i));
+
   }
+  for (int64_t i = 0; i < 14; ++i) OK(et_g3c4_private_model_owner_initialize_v1(owner, i));
   OK(et_g3c4_private_model_owner_prepare_seal_v1(owner));
   OK(et_g3c4_private_model_owner_commit_seal_v1(owner));
   return owner;

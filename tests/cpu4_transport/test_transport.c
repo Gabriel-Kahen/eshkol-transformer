@@ -23,8 +23,9 @@ static et_g3c4_model_owner_internal *model(size_t index) {
  et_g3c4_model_owner_internal *o=et_g3c4_private_model_owner_create_seeded_v1(1729);CHECK(o);
  for(int64_t i=0;i<14;i++) {
   OK(et_g3c4_private_model_owner_bind_v1(o,i,&identities[index][i]));
-  OK(et_g3c4_private_model_owner_initialize_v1(o,i));
+
  }
+  for (int64_t i = 0; i < 14; ++i) OK(et_g3c4_private_model_owner_initialize_v1(o, i));
  OK(et_g3c4_private_model_owner_prepare_seal_v1(o));OK(et_g3c4_private_model_owner_commit_seal_v1(o));
  for(size_t i=0;i<14;i++) {et_f32_tensor_error e;
   OK(et_f32_tensor_copy_bits_from_v1(o->parameters[i]->value,cpu4_ref_parameter_bits+cpu4_ref_parameter_offsets[i],parameter_words(i),&e));
