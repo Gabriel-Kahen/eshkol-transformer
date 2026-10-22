@@ -143,7 +143,7 @@ static void test_metadata(et_kernel_runtime *rt) {
                                              "residual.forward"};
   static const uint64_t embedding_rows[] = {1, 1, 1, 1, 1, 4, 3, 2, 2, 3, 5, 6};
   static const uint64_t linear_rows[] = {1, 1, 1, 1, 1, 2, 3, 4, 2, 3, 4, 5};
-  static const uint64_t norm_rows[] = {1, 1, 1, 1, 1, 3, 1, 2, 4, 2, 2, 4};
+  static const uint64_t norm_rows[] = {1, 1, 1, 1, 1, 3, 1, 2, 4, 2, 2, 4, 1, 4, 4};
   static const uint64_t activation_rows[] = {1, 1, 1, 1, 1, 8,
                                              1, 2, 5, 2, 2, 4};
   static const uint64_t dropout_rows[] = {1, 1, 1, 1, 1, 2, 1, 1,
@@ -162,7 +162,7 @@ static void test_metadata(et_kernel_runtime *rt) {
       {"kernel.embedding-backward", embedding_backward_ops, 1, embedding_rows,
        3, 4},
       {"kernel.matmul", matmul_ops, 4, linear_rows, 3, 4},
-      {"kernel.norm", norm_ops, 2, norm_rows, 4, 3},
+      {"kernel.norm", norm_ops, 2, norm_rows, 5, 3},
       {"kernel.activation", activation_ops, 4, activation_rows, 4, 3},
       {"kernel.dropout", dropout_ops, 4, dropout_rows, 5, 3},
       {"kernel.residual", residual_ops, 2, residual_rows, 3, 3},
