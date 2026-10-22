@@ -1,0 +1,17 @@
+{
+  "schema": "cpu4-factory-file-test-overlay-v1",
+  "mode": "normal",
+  "per_tu_defines": {
+    "src/eshkol_transformer/m3_call_f32_integration.c": ["ET_F32_TENSOR_TESTING"],
+    "native/o2_optimizer.c": ["ET_O2_TESTING"],
+    "native/c2_checkpoint_reader.c": ["ET_C2_CHECKPOINT_READER_TESTING"],
+    "native/c2_checkpoint_core.c": ["ET_C2_CHECKPOINT_CORE_TESTING"],
+    "native/checkpoint_io.c": ["ET_CHECKPOINT_IO_TESTING"]
+  },
+  "additional_translation_units": [
+    {
+      "source": "tests/cpu4_candidate_children/native_observer.c",
+      "defines": ["ET_O2_TESTING", "ET_F32_TENSOR_TESTING"]
+    }
+  ]
+}
