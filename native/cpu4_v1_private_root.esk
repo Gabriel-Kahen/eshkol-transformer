@@ -23,6 +23,17 @@
 (load "cpu4_checkpoint_extension.esk")
 (load "cpu4_trainer_detach_extension.esk")
 (load "cpu4_candidate_children_extension.esk")
+;;; Existing split FILE reader and authentic K2 admission share the original
+;;; I2/D2/O2 owners. The public C2 leaf also requires its SAVE/inspect branches.
+(load "k2_wave2_extension.esk")
+(load "c2_o2_encode_extension.esk")
+(load "c2_model_encode_extension.esk")
+(load "c2_persistence_policy_extension.esk")
+(load "c2_checkpoint_inspect_extension.esk")
+(load "c2_checkpoint_save_extension.esk")
+(load "c2_checkpoint_load_extension.esk")
+(load "c2_public_extension.esk")
+(load "cpu4_checkpoint_factory_extension.esk")
 ;;; E3 reuses the seven actual M3 boundary definitions already loaded above.
 (load "e3_p1_modes_extension.esk")
 (load "e3_errors_extension.esk")

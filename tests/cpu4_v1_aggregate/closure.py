@@ -87,7 +87,8 @@ COMMON = {'ET_G3C4_NATIVE_OWNER_PRIVATE', 'ET_G3C4_NATIVE_PINS_PRIVATE',
           'ET_CPU4_CANDIDATE_PRIVATE', 'ET_G3R_CANDIDATE_RETIRE_PRIVATE'}
 FORBIDDEN_SOURCE = {'native/i2_wave2_extension.esk', 'native/e3_cpu4_boundary.esk',
                     'native/e3_cpu4_private_root.esk', 'native/d2_wave2_root.esk',
-                    'native/cpu4_checkpoint_root.esk'}
+                    'native/cpu4_checkpoint_root.esk', 'native/c2_wave2_root.esk',
+                    'native/k2_wave2_root.esk'}
 
 
 def validate(repo, roster, overrides=None):
@@ -100,7 +101,8 @@ def validate(repo, roster, overrides=None):
         assert not any('ET_M3T_PACKAGE_BUILD' in item or item.endswith('=0') or
                        'TESTING' in item or 'REUSE_E3_M3_OWNER' in item for item in defs), 'forbidden native feature'
     required = {
-        'native/i2_wave2_package_bridge.c': {'ET_I2_NATIVE_HELPERS_ONLY', 'ET_G3C4_I2_CONSTRUCTION_PRIVATE', 'ET_I2_PRIVATE_OWNED_CLONE_MATCH', 'ET_TR3_C_I2_RESTORE_PRIVATE'},
+        'native/k2_capabilities.c': {'ET_C2_CARRIER_FACTORIES'},
+        'native/i2_wave2_package_bridge.c': {'ET_I2_NATIVE_HELPERS_ONLY', 'ET_G3C4_I2_CONSTRUCTION_PRIVATE', 'ET_I2_PRIVATE_OWNED_CLONE_MATCH', 'ET_TR3_C_I2_RESTORE_PRIVATE', 'ET_C2_I2_MODEL_COPY'},
         'native/o2_wave2_package_bridge.c': {'ET_O2_NATIVE_HELPERS_ONLY', 'ET_TR3_O2_STEP_CLEAR_BRIDGE', 'ET_C2_O2_RECONSTRUCT_BRIDGE'},
         'native/o2_optimizer.c': {'ET_TR3_O2_STEP_CLEAR_NATIVE', 'ET_TR3_C_O2_RESTORE_NATIVE', 'ET_I2_PRIVATE_OWNED_CLONE_MATCH'},
         'native/tr3_c_restore_bindings.c': {'ET_TR3_C_RESTORE_BINDINGS', 'ET_TR3_C_I2_RESTORE_PRIVATE', 'ET_TR3_C_O2_RESTORE_NATIVE', 'ET_I2_PRIVATE_OWNED_CLONE_MATCH'},
@@ -122,6 +124,10 @@ def validate(repo, roster, overrides=None):
                  'native/o2_optimizer.c', 'native/o2_wave2_package_bridge.c',
                  'native/tr3_c_restore_bindings.c', 'native/c2_x1_canonical.c'}
     expected |= {'native/' + name + '_provider.c' for name in ('g3n_primitives', 'g3s_sampling', 'g3c4_primitives')}
+    expected |= {'native/' + name + '.c' for name in (
+        'k2_capabilities', 'c2_checkpoint_codec', 'c2_checkpoint_format',
+        'c2_checkpoint_save_bridge', 'c2_checkpoint_reader', 'c2_checkpoint_core',
+        'c2_checkpoint_load_bridge', 'c2_checkpoint_inspect_bridge')}
     assert set(units) == expected, 'native union missing/extra production TU'
     # Read all generation feature operands from the existing reviewed builder.
     builder = (repo / 'scripts/build-e1b-consumer.sh').read_text()
@@ -151,6 +157,23 @@ def validate(repo, roster, overrides=None):
                    'cpu4-trainer-detach-internal!', 'cpu4-owned-candidate-create-internal',
                    'e3-evaluate-into!', 'g3c4-public-generator-create'):
         assert needed in names, f'required operation missing: {needed}'
+    # Actual factory source dependencies must resolve to these original leaves.
+    for name, source in FACTORY_PROVIDERS.items():
+        assert names.get(name) == source, f'factory prerequisite absent/replaced: {name}'
+    tables = {path: {f[1][0]: f for f in forms
+                    if len(f) > 2 and f[0] == 'define' and isinstance(f[1], list)}
+              for path, forms in closure}
+    checkpoint = tables['native/cpu4_checkpoint_extension.esk']
+    factory = tables['native/cpu4_checkpoint_factory_extension.esk']
+    for table, entry in ((checkpoint, 'cpu4-trainer-snapshot-internal'),
+                         (checkpoint, 'cpu4-trainer-restore-internal!'),
+                         (factory, 'cpu4-checkpoint-factory-create-internal!'),
+                         (factory, 'cpu4-checkpoint-factory-retire-internal!')):
+        assert table[entry][2][0] == 'cpu4-checkpoint-require-nonregional!', 'nonregional guard must be first'
+    checkpoint_forms = next(forms for path, forms in closure if path == 'native/cpu4_checkpoint_extension.esk')
+    assert ['extern', 'ptr', 'cpu4-checkpoint-native-current-region', ':real', 'region_current'] in checkpoint_forms, 'actual runtime region query required'
+    public_forms = next(forms for path, forms in closure if path == 'native/c2_public_extension.esk')
+    assert public_forms[0] == ['vector-set!', 't2-wave2-policy-projector', '0', 'c2-policy-t2-entry-internal'], 'original T2 policy installation changed'
     # Initialization order follows the actual leaves' declared prerequisites.
     order = {path: i for i, (path, _) in enumerate(closure)}
     for before, after in (
@@ -162,9 +185,21 @@ def validate(repo, roster, overrides=None):
         ('tr3_o2_step_clear_extension', 'cpu4_training_step_extension'),
         ('tr3_c_restore_bindings_extension', 'cpu4_checkpoint_extension'),
         ('cpu4_trainer_detach_extension', 'cpu4_candidate_children_extension'),
+        ('cpu4_candidate_children_extension', 'cpu4_checkpoint_factory_extension'),
+        ('cpu4_checkpoint_extension', 'cpu4_checkpoint_factory_extension'),
+        ('k2_wave2_extension', 'c2_public_extension'),
+        ('c2_model_encode_extension', 'c2_checkpoint_save_extension'),
+        ('c2_o2_encode_extension', 'c2_checkpoint_save_extension'),
+        ('c2_persistence_policy_extension', 'c2_public_extension'),
+        ('c2_checkpoint_inspect_extension', 'c2_public_extension'),
+        ('c2_checkpoint_save_extension', 'c2_public_extension'),
+        ('c2_checkpoint_load_extension', 'c2_public_extension'),
+        ('c2_public_extension', 'cpu4_checkpoint_factory_extension'),
         ('e3_p1_modes_extension', 'e3_cpu4_private_extension'),
         ('e3_errors_extension', 'e3_cpu4_private_extension')):
-        assert order['native/' + before + '.esk'] < order['native/' + after + '.esk'], 'leaf prerequisite order'
+        left, right = 'native/' + before + '.esk', 'native/' + after + '.esk'
+        assert left in order and right in order, 'leaf prerequisite absent'
+        assert order[left] < order[right], 'leaf prerequisite order'
     # Root defines only the already-existing checkpoint fail-stop adapter.
     forms = next(forms for path, forms in closure if path == ENTRY)
     assert [f for f in forms if f[0] != 'load'] == [
@@ -197,3 +232,18 @@ def local_native_inputs(repo, roster):
     for path in native_closure(repo, roster):
         visit(repo / path)
     return seen
+
+
+FACTORY_PROVIDERS = {
+    **{name: 'native/c2_checkpoint_load_extension.esk' for name in (
+        'c2-checkpoint-load-stage-internal', 'c2-checkpoint-load-capability-descriptors-internal',
+        'c2-checkpoint-load-reconstruct-internal', 'c2-checkpoint-load-staging-release-internal!',
+        'c2-checkpoint-load-staging-dead-internal?')},
+    'c2-public-capability-admit-all': 'native/c2_public_extension.esk',
+    'k2-public-capability-discover': 'native/k2_wave2_extension.esk',
+    'k2-public-capability-require': 'native/k2_wave2_extension.esk',
+    'cpu4-checkpoint-require-nonregional!': 'native/cpu4_checkpoint_extension.esk',
+    'cpu4-owned-candidate-create-internal': 'native/cpu4_candidate_children_extension.esk',
+    'cpu4-checkpoint-factory-create-internal!': 'native/cpu4_checkpoint_factory_extension.esk',
+    'cpu4-checkpoint-factory-retire-internal!': 'native/cpu4_checkpoint_factory_extension.esk',
+}

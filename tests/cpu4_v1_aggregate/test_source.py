@@ -31,7 +31,8 @@ class SourceUnion(unittest.TestCase):
 
     def test_copied_authority_and_fixture_roots_rejected(self):
         for name in ('i2_wave2_extension.esk', 'e3_cpu4_boundary.esk', 'e3_cpu4_private_root.esk',
-                     'd2_wave2_root.esk', 'cpu4_checkpoint_root.esk'):
+                     'd2_wave2_root.esk', 'cpu4_checkpoint_root.esk',
+                     'c2_wave2_root.esk', 'k2_wave2_root.esk'):
             with self.subTest(name=name):
                 self.reject_source(f'\n(load "{name}")\n')
 
@@ -101,6 +102,41 @@ class SourceUnion(unittest.TestCase):
             changed = copy.deepcopy(self.roster)
             next(u for u in changed['translation_units'] if u['source'] == source)['defines'].remove(flag)
             with self.subTest(source=source), self.assertRaises(AssertionError):
+                validate(ROOT, changed)
+
+    def test_factory_requires_real_reader_k2_and_child_order(self):
+        leaves = ('k2_wave2_extension', 'c2_o2_encode_extension', 'c2_model_encode_extension',
+                  'c2_persistence_policy_extension', 'c2_checkpoint_inspect_extension',
+                  'c2_checkpoint_save_extension', 'c2_checkpoint_load_extension',
+                  'c2_public_extension', 'cpu4_checkpoint_factory_extension')
+        for leaf in leaves:
+            changed = self.text.replace(f'(load "{leaf}.esk")', '')
+            with self.subTest(missing=leaf), self.assertRaises(AssertionError):
+                validate(ROOT, self.roster, {ENTRY: changed})
+        factory = '(load "cpu4_checkpoint_factory_extension.esk")'
+        changed = self.text.replace(factory, '').replace('(load "cpu4_candidate_children_extension.esk")',
+                                                       factory + '\n(load "cpu4_candidate_children_extension.esk")')
+        with self.assertRaisesRegex(AssertionError, 'leaf prerequisite order'):
+            validate(ROOT, self.roster, {ENTRY: changed})
+
+    def test_factory_guard_and_original_t2_policy_installation(self):
+        checkpoint = 'native/cpu4_checkpoint_extension.esk'
+        text = (ROOT / checkpoint).read_text().replace(
+            "(cpu4-checkpoint-require-nonregional! 'cpu4-trainer-restore)", '#t')
+        self.assertNotEqual(text, (ROOT / checkpoint).read_text())
+        with self.assertRaisesRegex(AssertionError, 'nonregional guard must be first'):
+            validate(ROOT, self.roster, {checkpoint: text})
+        public = 'native/c2_public_extension.esk'
+        text = (ROOT / public).read_text().replace(
+            '(vector-set! t2-wave2-policy-projector 0 c2-policy-t2-entry-internal)',
+            '(vector-set! t2-wave2-policy-projector 0 #f)')
+        with self.assertRaisesRegex(AssertionError, 'original T2 policy installation changed'):
+            validate(ROOT, self.roster, {public: text})
+        for source, flag in (('native/k2_capabilities.c', 'ET_C2_CARRIER_FACTORIES'),
+                             ('native/i2_wave2_package_bridge.c', 'ET_C2_I2_MODEL_COPY')):
+            changed = copy.deepcopy(self.roster)
+            next(u for u in changed['translation_units'] if u['source'] == source)['defines'].remove(flag)
+            with self.subTest(flag=flag), self.assertRaises(AssertionError):
                 validate(ROOT, changed)
 
     def test_current_sanitizer_helper_and_proof_are_pinned(self):
