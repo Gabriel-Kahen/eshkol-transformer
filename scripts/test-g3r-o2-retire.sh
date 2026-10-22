@@ -94,7 +94,7 @@ for mode in normal repeat san; do
   set -e
   printf '%s\n' "$status" >"$out/$mode/run.exit"
   [[ "$status" -eq 0 && ! -s "$out/$mode/run.stderr" ]]
-  grep -Fx 'G3R O2 retirement PASS: 1812 checks' \
+  grep -Fx 'G3R O2 retirement PASS: 1841 checks' \
     "$out/$mode/run.stdout" >/dev/null
 done
 cmp "$out/normal/run.stdout" "$out/repeat/run.stdout"
