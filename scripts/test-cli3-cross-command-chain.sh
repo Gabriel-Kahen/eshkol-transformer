@@ -83,6 +83,15 @@ run_ok heldout-inspect "${binary}" corpus inspect \
   --input-directory "${scratch}/heldout"
 cmp "${evidence}/heldout-build.json" "${evidence}/heldout-inspect.json"
 
+# The installed validator has a plain-text summary, rather than JSON output.
+for corpus in train heldout; do
+  "${binary}" corpus validate "${scratch}/${corpus}" \
+    >"${evidence}/${corpus}-validate.stdout" \
+    2>"${evidence}/${corpus}-validate.stderr"
+  [[ ! -s "${evidence}/${corpus}-validate.stderr" ]] || \
+    die "${corpus}: expected empty validator stderr"
+done
+
 run_ok pretrain "${binary}" pretrain \
   --config "${scratch}/config.json" --tokenizer "${scratch}/byte.t1" \
   --train-corpus "${scratch}/train" --checkpoint "${scratch}/first.c2" \
@@ -240,6 +249,14 @@ for corpus in (train, heldout):
     assert corpus['vocabulary_size'] == tokenizer['vocabulary_size']
     assert corpus['total_tokens'] == 6
     assert corpus['shard_count'] == 2 and corpus['shard_token_limit'] == 4
+for name, corpus in (('train', train), ('heldout', heldout)):
+    expected = (
+        f"shards={corpus['shard_count']} tokens={corpus['total_tokens']} "
+        f"vocab={corpus['vocabulary_size']} limit={corpus['shard_token_limit']} "
+        f"bytes={corpus['total_shard_bytes']} "
+        f"fingerprint_hex={corpus['tokenizer_fingerprint'].encode().hex()}\n"
+    )
+    assert (evidence / f'{name}-validate.stdout').read_bytes() == expected.encode()
 assert train['total_shard_bytes'] == heldout['total_shard_bytes'] > 0
 assert pretrain['artifact'] == checkpoint['artifact'] == 'checkpoint'
 assert pretrain['checkpoint'] == str(scratch / 'first.c2')
