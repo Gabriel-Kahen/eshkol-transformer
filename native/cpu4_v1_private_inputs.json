@@ -1,0 +1,246 @@
+{
+  "schema": "cpu4-v1-private-source-inputs-v1",
+  "base_commit": "3c45186c25fef2d1766cb77c4debc9c91a42b0c2",
+  "candidate_mode": "on",
+  "source_include_dirs": [
+    "internal/p1/lib",
+    "internal/c1/lib",
+    "internal/t2/lib",
+    "internal/t1/lib",
+    "internal/d2/lib",
+    "internal/e3/lib",
+    "src",
+    "lib",
+    "native"
+  ],
+  "native_include_dirs": [
+    "include",
+    "native",
+    "src",
+    "src/eshkol_transformer"
+  ],
+  "cflags": [
+    "-std=c11",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-Wpedantic",
+    "-fPIC",
+    "-fvisibility=hidden",
+    "-fno-common",
+    "-fstack-protector-all",
+    "-ffp-contract=off",
+    "-fexcess-precision=standard",
+    "-frounding-math",
+    "-fno-fast-math"
+  ],
+  "common_defines": [
+    "ET_G3C4_NATIVE_OWNER_PRIVATE",
+    "ET_G3C4_NATIVE_PINS_PRIVATE",
+    "ET_CPU4_TRAINING_PRIVATE",
+    "ET_CPU4_OBJECTIVE_PRIVATE",
+    "ET_CPU4_CANDIDATE_PRIVATE",
+    "ET_G3R_CANDIDATE_RETIRE_PRIVATE"
+  ],
+  "translation_units": [
+    {
+      "source": "native/i2_wave2_package_bridge.c",
+      "defines": [
+        "ET_I2_NATIVE_HELPERS_ONLY",
+        "ET_G3C4_I2_CONSTRUCTION_PRIVATE",
+        "ET_I2_PRIVATE_OWNED_CLONE_MATCH",
+        "ET_TR3_C_I2_RESTORE_PRIVATE"
+      ]
+    },
+    {
+      "source": "src/eshkol_transformer/m3_call_f32_integration.c",
+      "defines": [
+        "ET_F32_TENSOR_STORAGE_QUERY_PRIVATE",
+        "ET_I2_PRIVATE_OWNED_CLONE_MATCH"
+      ]
+    },
+    {
+      "source": "src/eshkol_transformer/g3c4_model_owner.c",
+      "defines": [
+        "ET_G3C4_CONTEXT_PRIVATE",
+        "ET_G3C4_ACTIVE_CALL_PRIVATE",
+        "ET_G3C4_GENERATOR_PRIVATE",
+        "ET_G3C4_PROMPT_T1_BORROW_PRIVATE",
+        "ET_G3C4_T1_I1_EXACT_PAIR_PRIVATE",
+        "ET_G3C4_PROVIDER_ROUTES_PRIVATE",
+        "ET_G3C4_FULL_PREFIX_FORWARD_PRIVATE",
+        "ET_G3C4_SAMPLER_TRANSPORT_PRIVATE",
+        "ET_G3C4_TOKEN_FRAME_PRIVATE",
+        "ET_G3C4_TOKEN_FORWARD_PRIVATE",
+        "ET_G3C4_PREFILL3_PRIVATE",
+        "ET_G3C4_PREFILL1_PRIVATE",
+        "ET_G3C4_PREFILL2_PRIVATE",
+        "ET_G3C4_PROMPT_PREFILL_PRIVATE",
+        "ET_G3C4_OUTPUT_RESERVATION_PRIVATE",
+        "ET_G3C4_LAST_LOGIT_FRAME_PRIVATE",
+        "ET_G3C4_OUTPUT_PREPARE_PRIVATE",
+        "ET_G3C4_OUTPUT_DECODE_IDS_PRIVATE",
+        "ET_G3C4_OUTPUT_TEXT_PRIVATE",
+        "ET_G3C4_P2_G1_PENDING_PRIVATE",
+        "ET_G3C4_P2_G1_PUBLICATION_PRIVATE",
+        "ET_G3C4_P2_G1_COPYOUT_PRIVATE",
+        "ET_G3C4_P2_G1_COORDINATOR_PRIVATE",
+        "ET_G3C4_P2_G1_PUBLIC_RESULT_PRIVATE",
+        "ET_G3C4_P2_G2_FIRST_FRAME_PRIVATE",
+        "ET_G3C4_P2_G2_PREFIX_COMMIT_PRIVATE",
+        "ET_G3C4_P2_G2_CARRIER_BRIDGE_PRIVATE",
+        "ET_G3C4_P2_G2_EOS_FIRST_FRAME_PRIVATE",
+        "ET_G3C4_P2_G2_SECOND_FRAME_PRIVATE",
+        "ET_G3C4_P2_G2_TERMINAL_PRIVATE",
+        "ET_G3C4_P2_G2_TERMINAL_IDS_CLONE_PRIVATE",
+        "ET_G3C4_P2_G2_TYPED_RESULT_PRIVATE",
+        "ET_A2_KV_CACHE_TERMINAL_WITNESS_PRIVATE",
+        "ET_I64_TENSOR_STORAGE_QUERY_PRIVATE",
+        "ET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE",
+        "ET_F32_TENSOR_STORAGE_QUERY_PRIVATE"
+      ]
+    },
+    {
+      "source": "native/data_io.c",
+      "defines": []
+    },
+    {
+      "source": "native/checkpoint_io.c",
+      "defines": []
+    },
+    {
+      "source": "native/kernel_abi.c",
+      "defines": []
+    },
+    {
+      "source": "native/t1_i64_shell.c",
+      "defines": [
+        "ET_G3C4_T1_I1_EXACT_PAIR_PRIVATE"
+      ]
+    },
+    {
+      "source": "src/eshkol_transformer/m3_i64_integration.c",
+      "defines": [
+        "ET_I64_TENSOR_STORAGE_QUERY_PRIVATE",
+        "ET_G3C4_T1_I1_EXACT_PAIR_PRIVATE"
+      ]
+    },
+    {
+      "source": "native/p1_identity.c",
+      "defines": [
+        "ET_P1_TRUSTED_BUILD=1"
+      ]
+    },
+    {
+      "source": "native/e3_d2_native.c",
+      "defines": [
+        "ET_TR3_C_D2_RESTORE"
+      ]
+    },
+    {
+      "source": "src/eshkol_transformer/g3t_transport.c",
+      "defines": [
+        "ET_G3T_PREFILL_SAMPLE_PRIVATE",
+        "ET_G3T_OUTPUT_TEXT_PRIVATE",
+        "ET_G3T_FINAL_PUBLICATION_PRIVATE",
+        "ET_G3T_FULL_REQUEST_PREFLIGHT_PRIVATE",
+        "ET_G3T_OUTPUT_IDS_CLONE_PRIVATE",
+        "ET_G3T_OUTPUT_LENGTHS_CLONE_PRIVATE",
+        "ET_G3T_OUTPUT_CACHE_LENGTHS_CLONE_PRIVATE",
+        "ET_G3T_OUTPUT_RNG_CLONE_PRIVATE",
+        "ET_G3T_GENERATOR_RNG_PRIVATE",
+        "ET_G3T_INPUT_FROM_T1_PRIVATE",
+        "ET_G3T_OWNED_TOKEN_INPUT_PRIVATE",
+        "ET_I64_TENSOR_STORAGE_QUERY_PRIVATE",
+        "ET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE",
+        "ET_G3T_ZERO_BUDGET_PRIVATE",
+        "ET_G3T_P2_ZERO_BUDGET_PRIVATE",
+        "ET_G3T_MANUAL_LOGITS_PRIVATE",
+        "ET_G3T_MANUAL_P1_PREFILL_PRIVATE",
+        "ET_G3T_MANUAL_P2_PREFILL_PRIVATE",
+        "ET_G3T_MANUAL_DECODE_PRIVATE",
+        "ET_G3T_MANUAL_LOGITS_MATERIALIZE_PRIVATE"
+      ]
+    },
+    {
+      "source": "native/a2_kv_cache.c",
+      "defines": [
+        "ET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE",
+        "ET_A2_KV_CACHE_TERMINAL_WITNESS_PRIVATE"
+      ]
+    },
+    {
+      "source": "src/eshkol_transformer/cpu4_training_transport.c",
+      "defines": []
+    },
+    {
+      "source": "src/eshkol_transformer/e3_cpu4_frame.c",
+      "defines": []
+    },
+    {
+      "source": "native/o2_optimizer.c",
+      "defines": [
+        "ET_TR3_O2_STEP_CLEAR_NATIVE",
+        "ET_TR3_C_O2_RESTORE_NATIVE",
+        "ET_I2_PRIVATE_OWNED_CLONE_MATCH"
+      ]
+    },
+    {
+      "source": "native/o2_wave2_package_bridge.c",
+      "defines": [
+        "ET_O2_NATIVE_HELPERS_ONLY",
+        "ET_TR3_O2_STEP_CLEAR_BRIDGE",
+        "ET_C2_O2_RECONSTRUCT_BRIDGE"
+      ]
+    },
+    {
+      "source": "native/tr3_c_restore_bindings.c",
+      "defines": [
+        "ET_TR3_C_RESTORE_BINDINGS",
+        "ET_TR3_C_I2_RESTORE_PRIVATE",
+        "ET_TR3_C_O2_RESTORE_NATIVE",
+        "ET_I2_PRIVATE_OWNED_CLONE_MATCH"
+      ]
+    },
+    {
+      "source": "native/c2_x1_canonical.c",
+      "defines": []
+    },
+    {
+      "source": "native/n2_primitives_provider.c",
+      "defines": []
+    },
+    {
+      "source": "native/n3k_primitives_provider.c",
+      "defines": []
+    },
+    {
+      "source": "native/a2_attention_provider.c",
+      "defines": []
+    },
+    {
+      "source": "native/g3n_primitives_provider.c",
+      "defines": []
+    },
+    {
+      "source": "native/g3s_sampling_provider.c",
+      "defines": []
+    },
+    {
+      "source": "native/g3c4_primitives_provider.c",
+      "defines": []
+    },
+    {
+      "source": "native/l3s_masked_objective_provider.c",
+      "defines": []
+    },
+    {
+      "source": "native/e3_evaluation_metrics_provider.c",
+      "defines": []
+    },
+    {
+      "source": "native/indexed_cross_entropy.c",
+      "defines": []
+    }
+  ]
+}
