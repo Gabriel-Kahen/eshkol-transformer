@@ -74,3 +74,50 @@ et_f32_tensor *et_m3t_test_parameter_gradient(et_f32_parameter *p) {
   return find_parameter(p) ? p->gradient : NULL;
 }
 #endif
+
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+#ifndef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+#error "CPU4 candidate teardown requires authenticated F32 backing"
+#endif
+int32_t et_cpu4_parameter_destroy_preflight_internal(
+    et_f32_parameter *parameter, et_f32_tensor_error *error) {
+  const char *operation = "cpu4-parameter-destroy-preflight";
+  if (f32_destroy_error_aliases(error))
+    return ET_F32_TENSOR_ERROR_INVALID_ARGUMENT;
+  int32_t rc = require_parameter(parameter, operation, error);
+  if (rc) return rc;
+  if (parameter->value != parameter->cpu4_original_value ||
+      parameter->gradient != parameter->cpu4_original_gradient ||
+      parameter->value == NULL || parameter->gradient == NULL ||
+      find_tensor(parameter->value) != parameter->value ||
+      find_tensor(parameter->gradient) != parameter->gradient ||
+      parameter->value == parameter->gradient ||
+      parameter->value->magic != ET_F32_TENSOR_MAGIC ||
+      parameter->gradient->magic != ET_F32_TENSOR_MAGIC)
+    return f32_destroy_report(error, ET_F32_TENSOR_ERROR_INTERNAL,
+        ET_F32_TENSOR_CODE_PROVIDER_REJECTED,
+        "parameter child identity is unproved");
+  for (const et_f32_parameter *peer = live_parameters; peer != NULL;
+       peer = peer->registry_next)
+    if (peer != parameter &&
+        (peer->value == parameter->value || peer->gradient == parameter->value ||
+         peer->value == parameter->gradient || peer->gradient == parameter->gradient))
+      return f32_destroy_report(error, ET_F32_TENSOR_ERROR_INTERNAL,
+          ET_F32_TENSOR_CODE_PROVIDER_REJECTED,
+          "parameter child is shared by another live parameter");
+  if (parameter->plan_pins != 0u ||
+      parameter->value->active_borrow != NULL ||
+      parameter->gradient->active_borrow != NULL ||
+      parameter->value->plan_pins != 0u ||
+      parameter->gradient->plan_pins != 0u)
+    return set_error(error, ET_F32_TENSOR_ERROR_INVALID_STATE,
+        ET_F32_TENSOR_CODE_INVALID_HANDLE, operation,
+        "parameter or child is borrowed or pinned");
+  if (!f32_destroy_backing_safe(parameter->value) ||
+      !f32_destroy_backing_safe(parameter->gradient))
+    return f32_destroy_report(error, ET_F32_TENSOR_ERROR_INTERNAL,
+        ET_F32_TENSOR_CODE_PROVIDER_REJECTED,
+        "parameter backing provenance is unproved");
+  return success(error);
+}
+#endif

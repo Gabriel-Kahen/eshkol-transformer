@@ -1,4 +1,5 @@
 #define ET_G3R_CANDIDATE_RETIRE_PRIVATE 1
+#define ET_CPU4_CANDIDATE_PRIVATE 1
 #define ET_O2_TESTING 1
 #define ET_F32_TENSOR_TESTING 1
 #define ET_F32_TENSOR_STORAGE_QUERY_PRIVATE 1
@@ -58,6 +59,105 @@ static void cleanup_fixture(fixture *f) {
   }
 }
 
+static void owner_roster(fixture *f, et_f32_parameter *parameters[14],
+                         const void *handles[14]) {
+  for (size_t i = 0u; i < 14u; ++i) {
+    parameters[i] = f->parameter[i];
+    handles[i] = f->parameter[i];
+  }
+}
+
+static void candidate_roster_checks(fixture *f) {
+  et_f32_parameter *parameters[14];
+  const void *handles[14];
+  et_o2_error_v1 error;
+  et_o2_optimizer_builder *builder = NULL;
+  et_o2_optimizer_state *state = NULL;
+  et_o2_entry before[14];
+  owner_roster(f, parameters, handles);
+  memcpy(before, f->optimizer->entries, sizeof(before));
+  size_t allocations = et_o2_successful_allocations;
+  CHECK(et_cpu4_optimizer_roster_preflight_internal(
+      f->optimizer, parameters, handles, &error) == 0);
+  CHECK(et_cpu4_optimizer_roster_preflight_internal(
+      NULL, parameters, handles, &error) == ET_O2_STATUS_INVALID_STATE);
+  CHECK(error.code == ET_O2_CODE_OWNER_CONFLICT);
+  CHECK(et_cpu4_optimizer_roster_preflight_internal(
+      (void *)(uintptr_t)1, parameters, handles, &error) != 0);
+  CHECK(et_cpu4_optimizer_roster_preflight_internal(
+      f->optimizer, NULL, handles, &error) == ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(et_cpu4_optimizer_roster_preflight_internal(
+      f->optimizer, parameters, NULL, &error) == ET_O2_STATUS_INVALID_ARGUMENT);
+  et_f32_parameter *saved_parameter = parameters[0];
+  const void *saved_handle = handles[0];
+  parameters[0] = parameters[1];
+  handles[0] = handles[1];
+  CHECK(et_cpu4_optimizer_roster_preflight_internal(
+      f->optimizer, parameters, handles, &error) != 0);
+  parameters[0] = saved_parameter;
+  handles[0] = saved_handle;
+  parameters[0] = (void *)(uintptr_t)1;
+  CHECK(et_cpu4_optimizer_roster_preflight_internal(
+      NULL, parameters, handles, &error) != 0);
+  parameters[0] = saved_parameter;
+  parameters[0] = parameters[1];
+  handles[0] = handles[1];
+  parameters[1] = saved_parameter;
+  handles[1] = saved_handle;
+  CHECK(et_cpu4_optimizer_roster_preflight_internal(
+      f->optimizer, parameters, handles, &error) != 0);
+  CHECK(error.code == ET_O2_CODE_OWNER_CONFLICT);
+  owner_roster(f, parameters, handles);
+  CHECK(et_o2_successful_allocations == allocations);
+  CHECK(memcmp(before, f->optimizer->entries, sizeof(before)) == 0);
+  CHECK(et_o2_optimizer_builder_create_v1(
+      1u, ET_O2_CLIP_NONE, 0u, ET_O2_SCHEDULE_CONSTANT, 0u, 0u,
+      UINT32_C(0x3f800000), &builder, &error) == 0);
+  CHECK(et_cpu4_optimizer_roster_preflight_internal(
+      NULL, parameters, handles, &error) == ET_O2_STATUS_INVALID_STATE);
+  CHECK(error.code == ET_O2_CODE_ACTIVE_BORROW);
+  CHECK(et_o2_optimizer_builder_abort_v1(&builder, &error) == 0);
+  CHECK(et_o2_optimizer_state_snapshot_v1(f->optimizer, &state, &error) == 0);
+  CHECK(et_cpu4_optimizer_roster_preflight_internal(
+      NULL, parameters, handles, &error) != 0);
+  CHECK(et_o2_optimizer_state_release_v1(state, &error) == 0);
+  CHECK(et_cpu4_optimizer_roster_preflight_internal(
+      f->optimizer, parameters, handles, &error) == 0);
+  CHECK(memcmp(before, f->optimizer->entries, sizeof(before)) == 0);
+}
+
+static void genuine_shared_consumer(fixture *f) {
+  /* A second genuine consumer cannot be retired while the first is live. */
+  pid_t child = fork();
+  CHECK(child >= 0);
+  if (child == 0) {
+    et_o2_optimizer_builder *builder = NULL;
+    et_o2_optimizer *other = NULL;
+    et_f32_parameter *parameters[14];
+    const void *handles[14];
+    et_o2_error_v1 error;
+    owner_roster(f, parameters, handles);
+    CHECK(et_o2_optimizer_builder_create_v1(
+        14u, ET_O2_CLIP_NONE, 0u, ET_O2_SCHEDULE_CONSTANT, 0u, 0u,
+        UINT32_C(0x3f800000), &builder, &error) == 0);
+    for (size_t i = 0u; i < 14u; ++i)
+      CHECK(et_o2_optimizer_builder_set_v1(
+          builder, i, parameters[i], handles[i], UINT32_C(0x3ca3d70a),
+          UINT32_C(0x3f4ccccd), UINT32_C(0x3f7d70a4),
+          UINT32_C(0x322bcc77), 0u, &error) == 0);
+    CHECK(et_o2_optimizer_builder_finish_v1(&builder, &other, &error) == 0);
+    CHECK(et_cpu4_optimizer_roster_preflight_internal(
+        f->optimizer, parameters, handles, &error) != 0);
+    CHECK(error.code == ET_O2_CODE_OWNER_CONFLICT);
+    CHECK(et_cpu4_optimizer_roster_preflight_internal(
+        NULL, parameters, handles, &error) != 0);
+    _Exit(0);
+  }
+  int status = 0;
+  CHECK(waitpid(child, &status, 0) == child);
+  CHECK(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+}
+
 static void expect_failure(et_o2_optimizer *candidate, uint32_t category,
                            uint32_t code) {
   et_o2_error_v1 error;
@@ -104,6 +204,8 @@ int main(void) {
   et_o2_test_live_counts_v1 o2_after = {.struct_size = sizeof(o2_after)};
 
   make_fixture(&first);
+  candidate_roster_checks(&first);
+  genuine_shared_consumer(&first);
   et_f32_test_live_counts_snapshot_v1(&before);
   et_o2_test_live_counts_snapshot_v1(&o2_before);
   CHECK(o2_before.optimizers == 1u);
@@ -293,6 +395,13 @@ int main(void) {
   et_o2_test_reset_failpoints_v1();
   CHECK(first.optimizer->entries == NULL && first.optimizer->count == 0u);
   CHECK(first.optimizer->magic == ET_O2_RETIRED_OPTIMIZER_MAGIC);
+  et_f32_parameter *retired_parameters[14];
+  const void *retired_handles[14];
+  owner_roster(&first, retired_parameters, retired_handles);
+  CHECK(et_cpu4_optimizer_roster_preflight_internal(
+      NULL, retired_parameters, retired_handles, &error) == 0);
+  CHECK(et_cpu4_optimizer_roster_preflight_internal(
+      second.optimizer, retired_parameters, retired_handles, &error) != 0);
   CHECK(entries != first.optimizer->entries);
   expect_failure(first.optimizer, ET_O2_STATUS_INVALID_STATE,
                  ET_O2_CODE_INVALID_HANDLE);

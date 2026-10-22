@@ -87,6 +87,7 @@ nm -g --defined-only "${temporary}/candidate.o" | \
 {
   cat "${PROJECT_ROOT}/native/p1_identity_trusted_symbols.txt"
   printf '%s\n' et_p1_private_candidate_construction_begin_v1 \
+    et_p1_private_candidate_state_preflight_v1 \
     et_p1_private_candidate_graph_preflight_v1 \
     et_p1_private_candidate_graph_revoke_v1
 } | LC_ALL=C sort >"${temporary}/expected-candidate-symbols"
@@ -118,7 +119,7 @@ for run in a b; do
 done
 cmp "${temporary}/run-a.stdout" "${temporary}/run-b.stdout" \
   >"${temporary}/repeat-cmp.stdout" 2>"${temporary}/repeat-cmp.stderr"
-grep -Fx 'G3-R P1 candidate roster PASS: 19 retired tokens, exact native enrollment and retained-roster baseline' \
+grep -Fx 'G3-R P1 candidate roster PASS: phase0/2 proof, 19 main-context retired tokens and retained-roster baseline' \
   "${temporary}/run-a.stdout" >/dev/null
 
 "${cc}" "${flags[@]}" -fsanitize=address,undefined \

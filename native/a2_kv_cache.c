@@ -446,6 +446,23 @@ allocation_failed:
               op, "cache allocation failed");
 }
 
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+/* Source-private mirror of destroy's read-only admission. */
+int32_t et_cpu4_kv_cache_destroy_preflight_internal(
+    et_a2_kv_cache *candidate, et_kernel_error *error) {
+  const char *op = "cpu4-kv-cache-destroy-preflight";
+  if (preflight_error_sink(error) != 0) return raw_reject();
+  et_a2_kv_cache *cache = find_cache(candidate);
+  if (cache == NULL)
+    return fail(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+        ET_KERNEL_CODE_INVALID_BUFFER, op, "cache handle is invalid");
+  if (cache->active_transaction != NULL || cache->active_borrow != NULL)
+    return fail(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+        ET_KERNEL_CODE_PROVIDER_REJECTED, op, "cache has a live lease");
+  return success_preflighted(error);
+}
+#endif
+
 int32_t et_a2_kv_cache_destroy_v1(et_a2_kv_cache **slot,
                                   et_kernel_error *error) {
   const char *op = "a2-kv-cache.destroy";

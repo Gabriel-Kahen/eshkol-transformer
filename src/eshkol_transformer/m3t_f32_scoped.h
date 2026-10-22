@@ -18,6 +18,10 @@ int32_t et_f32_tensor_scoped_end_internal(et_f32_scoped_guard_internal *);
 int32_t et_f32_parameter_idle_preflight_internal(
     et_f32_parameter *, et_f32_tensor_error *);
 #endif
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+int32_t et_cpu4_parameter_destroy_preflight_internal(
+    et_f32_parameter *, et_f32_tensor_error *);
+#endif
 /* Read-only abort preflight, used only with the fixed M3T owner collection. */
 int32_t et_m3t_f32_parameter_preflight_internal(et_f32_parameter *, et_f32_tensor_error *);
 #endif

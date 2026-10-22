@@ -111,6 +111,13 @@ int64_t et_p1_private_construction_abort_prepared_v1(void *context,
                                                       void *construction);
 #if defined(ET_G3R_CANDIDATE_RETIRE_PRIVATE)
 int64_t et_p1_private_candidate_construction_begin_v1(void *context);
+/* Closed phases: 0 empty active OPEN, 2 already ABORTED. Read-only. */
+int64_t et_p1_private_candidate_state_preflight_v1(
+    void *context, void *construction, int64_t expected_phase);
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+int64_t et_p1_private_candidate_handle_preflight_v1(
+    void *context, void *construction, const void *handle);
+#endif
 int64_t et_p1_private_candidate_graph_preflight_v1(void *context,
                                                    void *construction);
 int64_t et_p1_private_candidate_graph_revoke_v1(void *context,

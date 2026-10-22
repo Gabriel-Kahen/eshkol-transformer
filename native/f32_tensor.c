@@ -82,6 +82,11 @@ struct et_f32_parameter {
     struct {
       et_f32_tensor *value;
       et_f32_tensor *gradient;
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+      /* Captured at allocation; restore updates bytes, never child identity. */
+      et_f32_tensor *cpu4_original_value;
+      et_f32_tensor *cpu4_original_gradient;
+#endif
       const void *identity;
       uint64_t contribution_count;
       uint32_t normalization_weight_bits;
@@ -206,7 +211,11 @@ _Static_assert(F32_RETIRED_INDEX_OFFSET ==
 _Static_assert(sizeof(et_f32_tensor) == 88u &&
                    sizeof(et_f32_tensor_borrow) == 96u &&
                    sizeof(et_f32_tensor_copy_plan) == 40u &&
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+                   sizeof(et_f32_parameter) == 80u &&
+#else
                    sizeof(et_f32_parameter) == 64u &&
+#endif
                    sizeof(et_f32_gradient_plan) == 48u &&
                    sizeof(et_f32_gradient_reset_plan) == 40u,
                "retired index must not change control retention");
@@ -2519,6 +2528,10 @@ int32_t et_f32_parameter_create_v1(const et_f32_tensor *initial,
   }
   parameter->value = value;
   parameter->gradient = gradient;
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+  parameter->cpu4_original_value = value;
+  parameter->cpu4_original_gradient = gradient;
+#endif
   parameter->magic = ET_F32_PARAMETER_MAGIC;
   parameter->registry_next = live_parameters;
   live_parameters = parameter;
