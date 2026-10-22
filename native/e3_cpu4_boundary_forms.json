@@ -1,0 +1,47 @@
+{
+  "base_commit": "0064e886ca14bb69a46513587baf4f4875aa2ebd",
+  "forms": [
+    {
+      "source": "native/m3t_transport_extension.esk",
+      "source_sha256": "71247e722d72764ce1b3400cb3f818ba12c3754dd11a6c742ffcec63942d5815",
+      "marker": "(define (m3t-fail-raw ",
+      "form_sha256": "b6bd6f386e8065b0580998f50d31e76820b605971a2811eb872e4465ff27c24c"
+    },
+    {
+      "source": "native/m3t_transport_extension.esk",
+      "source_sha256": "71247e722d72764ce1b3400cb3f818ba12c3754dd11a6c742ffcec63942d5815",
+      "marker": "(define-syntax m3t-fail\n",
+      "form_sha256": "6919b8a86ec8acedb9016e891a504399dc559d367de3ce046388bcda67cfcf41"
+    },
+    {
+      "source": "native/m3t_transport_extension.esk",
+      "source_sha256": "71247e722d72764ce1b3400cb3f818ba12c3754dd11a6c742ffcec63942d5815",
+      "marker": "(define (m3t-rethrow-raw ",
+      "form_sha256": "e60cb512064ea9318d78958798c1726421fbd8fe973e849bafbd20fa9bdb2c02"
+    },
+    {
+      "source": "native/m3t_transport_extension.esk",
+      "source_sha256": "71247e722d72764ce1b3400cb3f818ba12c3754dd11a6c742ffcec63942d5815",
+      "marker": "(define-syntax m3t-boundary\n",
+      "form_sha256": "85c3279e6cd5ade94c3526c131691f21c2db78ba0dcdc4c6f7fa548e6bf4c4f3"
+    },
+    {
+      "source": "native/m3t_transport_extension.esk",
+      "source_sha256": "71247e722d72764ce1b3400cb3f818ba12c3754dd11a6c742ffcec63942d5815",
+      "marker": "(define (m3t-exact-i64? ",
+      "form_sha256": "c14499ed2ec48a7ade1818ba9f83cd01b9e10312b6b8395ad617cffa6d8abef3"
+    },
+    {
+      "source": "native/m3_model_extension.esk",
+      "source_sha256": "9e3db713c7c7d4b044e0bbff6502a1879ffc6a5d4878cf86e57d579e0677683e",
+      "marker": "(define m3-call-state ",
+      "form_sha256": "c15b3de6d3fbba6e48d38de3ac7557bedc8913a80a3f566e2ff46c49b7866c8b"
+    },
+    {
+      "source": "native/m3_model_extension.esk",
+      "source_sha256": "9e3db713c7c7d4b044e0bbff6502a1879ffc6a5d4878cf86e57d579e0677683e",
+      "marker": "(define-syntax m3-call\n",
+      "form_sha256": "811ce326625ff88000372889f8d83c999ddced373f8382cb40f8461d628a7f8f"
+    }
+  ]
+}
