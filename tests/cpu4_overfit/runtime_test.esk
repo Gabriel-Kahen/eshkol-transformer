@@ -95,9 +95,12 @@
   (display " ") (display (vector-ref result 0))
   (display " ") (display (vector-ref result 1))
   (display " ") (display (vector-ref result 2)) (newline))
+;;; Keep the diagnostic guard outside named-let TCO/capture lowering in fe9.
+(define (actual-step)
+  (must "actual full step" (cpu4-training-step-internal! trainer)))
 (let overfit-update-loop ((update 1))
   (if (<= update 250)
-      (let* ((result (must "actual full step" (cpu4-training-step-internal! trainer)))
+      (let* ((result (actual-step))
              (observations (vector-ref result 3)) (observation (vector-ref observations 0)))
         (check "one actual full-mask observation" (and (= (vector-length observations) 1)
           (= (bytevector-length observation) 12) (= (cpu4-training-u32 observation 4) 1082130432)))
