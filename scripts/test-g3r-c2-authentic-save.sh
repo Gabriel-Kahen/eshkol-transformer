@@ -3,6 +3,8 @@ set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 verify_toolchain
+[[ -z "$(git -C "$PROJECT_ROOT" status --porcelain --untracked-files=all)" ]] || \
+  die "G3-R SAVE admission requires a clean source tree"
 for command in ar cmp cut nm python3 realpath rg sha256sum stat timeout; do
   require_command "$command"
 done
@@ -183,7 +185,7 @@ build_reader() {
     -I "$PROJECT_ROOT/internal/d2/lib" -I "$PROJECT_ROOT/src"
     -I "$PROJECT_ROOT/lib" -I "$PROJECT_ROOT/native" -L "$directory"
     --lib g3r_c2_sha_stage "$PROJECT_ROOT/tests/g3r/pair_file_read_runtime.esk")
-  printf '%q ' "$runner" --strict-types --optimize 0 --no-stdlib \
+  printf '%q ' "$runner" --strict-types --optimize 0 --no-stdlib --dump-ir \
     "${inputs[@]}" -o "$directory/pair-file-reader" \
     >"$directory/build.argv"
   printf '\n' >>"$directory/build.argv"
@@ -191,10 +193,38 @@ build_reader() {
     XDG_CACHE_HOME="$directory/cache" ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
     ESHKOL_CXX_COMPILER="$directory/cxx-wrap" \
     timeout --foreground --signal=TERM --kill-after=5s 1200s "$runner" \
-      --strict-types --optimize 0 --no-stdlib "${inputs[@]}" \
+      --strict-types --optimize 0 --no-stdlib --dump-ir "${inputs[@]}" \
       -o "$directory/pair-file-reader" \
       >"$directory/build.stdout" 2>"$directory/build.stderr"
   test -s "$directory/pair-file-reader"
+  test -s "$directory/pair-file-reader.ll"
+  test ! -s "$directory/build.stderr"
+  nm -u --format=posix "$directory/pair-file-reader" \
+    >"$directory/linked-undefined-symbols.txt"
+  # Executable mode in the pinned compiler does not emit dependency files.
+  # One matching object build authenticates the loaded Eshkol source closure.
+  if [[ "$mode" == normal ]]; then
+    env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
+      XDG_CACHE_HOME="$directory/cache" ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
+      ESHKOL_CXX_COMPILER="$directory/cxx-wrap" \
+      timeout --foreground --signal=TERM --kill-after=5s 1200s "$runner" \
+        --strict-types --optimize 0 --no-stdlib --emit-object \
+        --emit-depfile "$directory/reader.d" "${inputs[@]}" \
+        -o "$directory/reader.o" \
+        >"$directory/object-build.stdout" 2>"$directory/object-build.stderr"
+    test ! -s "$directory/object-build.stderr"
+    sed -e 's/^[^:]*://' -e 's/\\//g' "$directory/reader.d" | \
+      tr -s '[:space:]' '\n' | rg "^$PROJECT_ROOT/" | \
+      sed "s#^$PROJECT_ROOT/##" | \
+      rg -v '^tests/g3r/pair_file_read_runtime\.esk$' \
+      >"$directory/source-closure.txt"
+    cmp "$PROJECT_ROOT/native/g3r_c2_pair_file_read_source_closure.txt" \
+      "$directory/source-closure.txt"
+    nm -u --format=posix "$directory/reader.o" \
+      >"$directory/eshkol-object-undefined-symbols.txt"
+    rg 'et_c2_private_checkpoint_load_stage_with_sha_v1' \
+      "$directory/eshkol-object-undefined-symbols.txt" >/dev/null
+  fi
   "${runtime[@]}" ESHKOL_ARENA_POISON=1 \
     timeout --foreground --signal=TERM --kill-after=5s 360s \
     "$directory/pair-file-reader" "$saved" "$out/companions" \
