@@ -2,9 +2,24 @@
 
 import argparse
 from pathlib import Path
+import re
 import subprocess
 
 ROOT=Path(__file__).resolve().parents[2]
+EXPECTED_ASSERTIONS={
+    "reordered-four-term-sum":"bits(f.result[i])==expected[i]",
+    "wider-four-term-sum":"bits(f.result[i])==expected[i]",
+    "physical-capacity-denominator":"bits(f.result[i])==expected[i]",
+    "truncated-four-word-seed":"bits(f.result[i])==expected[i]",
+    "masked-last-invalid-bypass":"et_kernel_runtime_dispatch(r,&f->call,&e)!=0",
+}
+
+
+def classify(name, status, stdout, stderr):
+    expression=EXPECTED_ASSERTIONS[name].encode()
+    diagnostic=rb"FAIL [^\r\n]+:[0-9]+: "+re.escape(expression)+rb"\n"
+    if status!=1 or stdout or re.fullmatch(diagnostic,stderr) is None:
+        raise AssertionError(f"mutant failed outside its intended assertion: {name}")
 
 
 def variants(source):
@@ -56,8 +71,7 @@ def main():
         (args.output/(name+".stdout")).write_bytes(result.stdout)
         (args.output/(name+".stderr")).write_bytes(result.stderr)
         (args.output/(name+".exit")).write_text(f"{result.returncode}\n")
-        if result.returncode!=1 or not result.stderr.startswith(b"FAIL ") or b"unexpected dispatch" in result.stderr:
-            raise AssertionError(f"mutant failed outside its value/admission assertion: {name}")
+        classify(name,result.returncode,result.stdout,result.stderr)
         print(f"CPU4 provider mutant {name}: compiled assertion kill")
 
 
