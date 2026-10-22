@@ -148,11 +148,17 @@ static void capability_tests(et_kernel_runtime *runtime) {
   CHECK(c->operation_count==3 && c->deterministic==1);
   CHECK(c->dtype_count==1 && strcmp(c->dtypes[0],"f32")==0);
   CHECK(c->device_count==1 && strcmp(c->devices[0],"cpu")==0);
-  CHECK(c->shape_range_count==1 && c->shape_ranges[0].rank==3);
+  CHECK(c->shape_range_count==2 && c->shape_ranges[0].rank==3);
   const uint64_t dims[]={1,2,256};
   for(size_t d=0;d<3;++d) {
     const et_kernel_dimension_range_v1 *r=&c->shape_ranges[0].dimensions[d];
     CHECK(r->minimum==dims[d] && r->maximum==dims[d] && r->maximum_unbounded==0);
+  }
+  CHECK(c->shape_ranges[1].rank==3);
+  const uint64_t dims_four[]={1,4,256};
+  for(size_t d=0;d<3;++d) {
+    const et_kernel_dimension_range_v1 *r=&c->shape_ranges[1].dimensions[d];
+    CHECK(r->minimum==dims_four[d] && r->maximum==dims_four[d] && r->maximum_unbounded==0);
   }
   size_t verified=0;
   for(size_t i=0;i<et_kernel_runtime_capability_count(runtime);++i)

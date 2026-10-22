@@ -12,6 +12,8 @@ extern "C" {
 
 /* Immutable metadata for explicit K1 discovery only. CPU f32/BOOL/i64 views
  * follow docs/e3/E3_BOOL_METRICS_CONTRACT.md at request shape [1,2,256].
+ * All operations also admit exact [1,4,256]. Scalar arithmetic is unchanged;
+ * per-batch active counts and 8,192-batch token caps follow the request width.
  * Dispatch borrows caller-owned storage and retains no pointers. */
 const et_kernel_provider_v1 *et_e3_metrics_kernel_provider_v1(void);
 
