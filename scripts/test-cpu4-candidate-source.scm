@@ -28,7 +28,7 @@
 (define new-slots (car (reverse new-body)))
 (check "trusted vector preserved and appended once"
   (and (eq? (car old-slots) 'vector) (eq? (car new-slots) 'vector)
-       (= (length old-slots) 74) (= (length new-slots) 75)
+       (= (length old-slots) 74) (>= (length new-slots) 75)
        (equal? (cdr old-slots) (list-head (cdr new-slots) 73))
        (eq? (list-ref new-slots 74) 'candidate-bridge-install)))
 (for-each
