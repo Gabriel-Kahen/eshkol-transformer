@@ -227,3 +227,30 @@ int64_t et_g3c4_private_training_lease_commit_release_v1(void *candidate) {
   lease->phase = CPU4_LEASE_DEAD;
   return 0;
 }
+
+static int cpu4_control_overlap(const void *span, size_t bytes,
+                               const void *control, size_t extent) {
+  uintptr_t a = (uintptr_t)span, b = (uintptr_t)control;
+  return b > UINTPTR_MAX - extent || (a < b + extent && b < a + bytes);
+}
+int64_t et_g3c4_training_span_disjoint_internal(
+    void *candidate, const void *span, size_t bytes) {
+  et_g3c4_error_reset_internal();
+  et_g3c4_training_lease_internal *lease = cpu4_admit_lease(candidate);
+  if (lease == NULL || cpu4_lease_roster(lease)) return et_g3c4_error_state.category;
+  if (span == NULL || bytes == 0 || (uintptr_t)span > UINTPTR_MAX - bytes)
+    return cpu4_lease_error(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_ALIAS);
+  for (et_g3c4_model_owner_internal *owner = et_g3c4_owner_registry;
+       owner != NULL; owner = owner->registry_next)
+    if (cpu4_control_overlap(span, bytes, owner, sizeof(*owner)))
+      return cpu4_lease_error(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_ALIAS);
+  for (et_g3c4_training_lease_internal *item = cpu4_training_leases;
+       item != NULL; item = item->next) {
+    if (cpu4_control_overlap(span, bytes, item, sizeof(*item)))
+      return cpu4_lease_error(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_ALIAS);
+    for (cpu4_training_child *child = item->children; child != NULL; child = child->next)
+      if (cpu4_control_overlap(span, bytes, child, sizeof(*child)))
+        return cpu4_lease_error(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_ALIAS);
+  }
+  return 0;
+}
