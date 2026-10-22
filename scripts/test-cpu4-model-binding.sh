@@ -57,7 +57,7 @@ env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
 for repeat in 1 2; do
  env ESHKOL_ARENA_POISON=1 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
  timeout --foreground --signal=TERM --kill-after=5s 120s "$out/binding" \
- "$PROJECT_ROOT/tests/t1/fixtures/byte_tokenizer_v1.tsv" "$out/resources" \
+ "$out/resources" \
  >"$out/run-$repeat.stdout" 2>"$out/run-$repeat.stderr"
  test ! -s "$out/run-$repeat.stderr"
 done
