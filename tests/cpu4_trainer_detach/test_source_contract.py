@@ -71,6 +71,26 @@ class DetachFixture(unittest.TestCase):
             self.assertIn('"' + label + '"', self.text)
         self.assertNotIn('optimizer-step!', self.text)
 
+    def test_no_reserved_builtin_named_loops_and_exact_check_budget(self):
+        loops = [node for form in self.forms for node in walk(form)
+                 if len(node) > 2 and node[0] == 'let' and isinstance(node[1], str)]
+        # Closed allowlist excludes every builtin name, including fe9's values
+        # special form, and requires review before a new loop name is added.
+        self.assertEqual({node[1] for node in loops},
+                         {'loop', 'capture', 'save', 'unchanged',
+                          'cpu4-detach-parameter-check-loop'})
+        self.assertNotIn('values', {node[1] for node in loops})
+        parameter_loop = next(node for node in loops
+                              if node[1] == 'cpu4-detach-parameter-check-loop')
+        self.assertEqual(sum(node[:1] == ['cpu4-detach-parameter-check-loop']
+                             for node in walk(parameter_loop)), 1)
+        checks = sum(1 for form in self.forms if form[0] not in ('define', 'load')
+                     for node in walk(form) if node and node[0] in ('check', 'reject'))
+        # One unchanged-slot assertion executes21 times, two parameter checks
+        # execute14 times. The supported runtime gate must reach all93 checks.
+        self.assertEqual(checks + 20 + 26, 93)
+        self.assertIn("grep -Fx 'CPU4 genuine unpublished trainer detach PASS: checks=93'", self.script)
+
     def test_recipe_preserves_accepted_controls_closure(self):
         original = (ROOT / 'scripts/test-cpu4-trainer-control.sh').read_text()
         expected = original.replace('test-cpu4-trainer-control.sh', 'test-cpu4-trainer-detach.sh')
@@ -80,6 +100,9 @@ class DetachFixture(unittest.TestCase):
         expected = expected.replace('"$out/controls"', '"$out/detach"')
         expected = expected.replace('CPU4 genuine constructor/snapshot/restore controls PASS:',
                                     'CPU4 genuine unpublished trainer detach PASS:')
+        expected = expected.replace(
+            "grep -E '^CPU4 genuine unpublished trainer detach PASS: checks=[1-9][0-9]*$'",
+            "grep -Fx 'CPU4 genuine unpublished trainer detach PASS: checks=93'")
         self.assertEqual(self.script, expected)
         self.assertIn('for repeat in 1 2', self.script)
         self.assertIn('--strict-types --optimize 0 --no-stdlib', self.script)

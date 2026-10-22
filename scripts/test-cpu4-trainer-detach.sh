@@ -66,4 +66,4 @@ for repeat in 1 2; do
  test ! -s "$out/run-$repeat.stderr"
 done
 cmp "$out/run-1.stdout" "$out/run-2.stdout"
-grep -E '^CPU4 genuine unpublished trainer detach PASS: checks=[1-9][0-9]*$' "$out/run-1.stdout"
+grep -Fx 'CPU4 genuine unpublished trainer detach PASS: checks=93' "$out/run-1.stdout"
