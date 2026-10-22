@@ -990,6 +990,9 @@ static const et_kernel_dimension_range_v1 attention_scale_dimensions[] = {
 static const et_kernel_dimension_range_v1 attention_mha_d2_dimensions[] = {
     EXACT_DIMENSION(1u), EXACT_DIMENSION(2u), EXACT_DIMENSION(2u),
     EXACT_DIMENSION(2u), EXACT_DIMENSION(2u), EXACT_DIMENSION(2u)};
+static const et_kernel_dimension_range_v1 attention_mha_t4_d2_dimensions[] = {
+    EXACT_DIMENSION(1u), EXACT_DIMENSION(2u), EXACT_DIMENSION(2u),
+    EXACT_DIMENSION(4u), EXACT_DIMENSION(4u), EXACT_DIMENSION(2u)};
 static const et_kernel_dimension_range_v1 attention_gqa_t1_dimensions[] = {
     EXACT_DIMENSION(1u), EXACT_DIMENSION(4u), EXACT_DIMENSION(2u),
     EXACT_DIMENSION(1u), EXACT_DIMENSION(1u), EXACT_DIMENSION(2u)};
@@ -1031,6 +1034,7 @@ static const et_kernel_shape_range_v1 attention_ranges[] = {
     {.rank = 6u, .dimensions = attention_aot_dimensions},
     {.rank = 6u, .dimensions = attention_scale_dimensions},
     {.rank = 6u, .dimensions = attention_mha_d2_dimensions},
+    {.rank = 6u, .dimensions = attention_mha_t4_d2_dimensions},
     {.rank = 6u, .dimensions = attention_gqa_t1_dimensions},
     {.rank = 6u, .dimensions = attention_gqa_t3_dimensions},
     {.rank = 6u, .dimensions = attention_n2_rectangular_dimensions},

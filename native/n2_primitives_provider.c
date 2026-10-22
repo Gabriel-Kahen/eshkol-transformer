@@ -816,7 +816,8 @@ static int request_row(enum operation_kind kind,
   static const size_t linear_rows[][4] = {
       {1u, 1u, 1u, 1u}, {1u, 2u, 3u, 4u}, {2u, 3u, 4u, 5u}};
   static const size_t norm_rows[][3] = {
-      {1u, 1u, 1u}, {1u, 1u, 3u}, {1u, 2u, 4u}, {2u, 2u, 4u}};
+      {1u, 1u, 1u}, {1u, 1u, 3u}, {1u, 2u, 4u}, {2u, 2u, 4u},
+      {1u, 4u, 4u}};
   static const size_t activation_rows[][3] = {
       {1u, 1u, 1u}, {1u, 1u, 8u}, {1u, 2u, 5u}, {2u, 2u, 4u}};
   static const size_t residual_rows[][3] = {
@@ -1533,6 +1534,7 @@ DEFINE_ROW3(norm_111, 1u, 1u, 1u);
 DEFINE_ROW3(norm_113, 1u, 1u, 3u);
 DEFINE_ROW3(norm_124, 1u, 2u, 4u);
 DEFINE_ROW3(norm_224, 2u, 2u, 4u);
+DEFINE_ROW3(norm_144, 1u, 4u, 4u);
 DEFINE_ROW3(activation_111, 1u, 1u, 1u);
 DEFINE_ROW3(activation_118, 1u, 1u, 8u);
 DEFINE_ROW3(activation_125, 1u, 2u, 5u);
@@ -1562,7 +1564,8 @@ static const et_kernel_shape_range_v1 norm_ranges[] = {
     {.rank = 3u, .dimensions = norm_111_dimensions},
     {.rank = 3u, .dimensions = norm_113_dimensions},
     {.rank = 3u, .dimensions = norm_124_dimensions},
-    {.rank = 3u, .dimensions = norm_224_dimensions}};
+    {.rank = 3u, .dimensions = norm_224_dimensions},
+    {.rank = 3u, .dimensions = norm_144_dimensions}};
 static const et_kernel_shape_range_v1 activation_ranges[] = {
     {.rank = 3u, .dimensions = activation_111_dimensions},
     {.rank = 3u, .dimensions = activation_118_dimensions},
