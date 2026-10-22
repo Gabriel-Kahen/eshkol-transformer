@@ -1,8 +1,10 @@
 # Fixed-profile language-model walkthrough
 
 Status: command recipe derived from the candidate's compiled CLI acceptance script.
-The exact candidate's hosted cross-command test passed; a retained local binary and
-fresh walkthrough receipt are pending. Full Wave 3 acceptance is tracked in
+The exact candidate's hosted cross-command test passed. A fresh retained local
+cross-command gate also passed at `574b98e42ee0d81491458fc5439c7efb64082014`
+in 678.61 seconds. Its supported executable and actual artifacts are available;
+this standalone recipe has not been executed separately. Full Wave 3 acceptance is tracked in
 [WAVE3_COMPLETION.md](WAVE3_COMPLETION.md).
 
 This exercises the existing CPU-f32 diagnostic model: context 2, hidden size 4,
@@ -87,3 +89,16 @@ inspecting the same source. Its `cross-command-scratch-path.txt` identifies the
 retained binary/config/tokenizer/corpus/checkpoint fixtures. The exact output
 JSON and sealed gate receipt, rather than an expected example invented here,
 are the result to inspect.
+
+## Retained bounded execution
+
+Receipt: `/home/gabe/.codex/evidence/eshkol-transformer/finish-20261022/CLI3-LOCAL-RESULT-REVIEW.md`.
+The binary is retained at
+`/home/gabe/.codex/evidence/eshkol-transformer/finish-20261022/cli3-local/cross-command/.cli3-cross-command.budija/eshkol-transformer`,
+SHA-256 `dce2be716ab56707e54b1106c138a25c925b365d73ec31f58060f4adf33056d1`.
+The same directory contains config/tokenizer/corpora/checkpoints; JSON is in
+`cli3-local/cross-command/` below the finish receipt root. Independently verified
+resumed/uninterrupted checkpoint bytes and evaluation/generation JSON agree;
+evaluation reports three batches/five tokens and greedy generation emits byte
+`c5`. The 125-file gate seal verifies. This is the legacy context-two profile,
+not the new context-four CPU v1 workflow or merged integration acceptance.

@@ -82,7 +82,9 @@ independent review/doc work while heavy gates run. Silence is never success.
   `finish-20261022/TR3-PRIOR-AUTH.json` records missing generated artifacts and
   zero retained hash mismatches; current-source execution remains required.
 - [Fixed-profile command walkthrough](WAVE3_WALKTHROUGH.md) provides the exact
-  bounded recipe; its fresh retained local execution remains pending.
+  bounded recipe; the source-574b local scripted chain now passes with a retained
+  binary/artifacts and independently reviewed checkpoint/JSON parity. Separate
+  walkthrough execution and the new CPU4 workflow remain pending.
 
 ## Source integration (runtime admission still held)
 
@@ -172,8 +174,10 @@ AOT/native/sanitizer execution remains pending. Simultaneous CPU4-training and
 typed-result operation additionally requires the new lease/control span checks
 in shared typed output alias validation; the independently source-approved fix
 `11d3d5b3` is integrated at `16183055`. It protects known lease/child-record
-extents; no arbitrary child payload extent is inferred. Its supported combined
-normal/repeat/sanitizer gate remains queued. Earlier `3f53c54b` and successor source receipts remain held/preserved:
+extents; no arbitrary child payload extent is inferred. Its supported combined gate completed in 29.58 seconds at exact `11d3d5b3`:
+690 identical normal/repeat/ASan+UBSan+LSan checks, empty diagnostics and exact
+CPU4-off object equality. Independent result review and 37-file seal authenticate;
+receipt `finish-20261022/CPU4-CONTROL-ALIAS-RESULT-REVIEW.md`. Earlier `3f53c54b` and successor source receipts remain held/preserved:
 causal tests exposed output lifetime coupled to generator liveness and incomplete
 final authority checks. The final repair reports 92 actual-core mutation controls;
 host controls do not establish supported AOT/native/sanitizer admission. Receipts:
