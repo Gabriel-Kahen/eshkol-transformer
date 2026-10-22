@@ -1,0 +1,109 @@
+;;; Definitions only. Append to ONE authentic CPU4 checkpoint/children + public-G2
+;;; aggregate. Parent supplies an idle TRAIN owned child (optionally its factory
+;;; ticket), authentic generation-T1 and actual public-G2 config. No new model,
+;;; evaluator, generation request, training step or persisted-history fixture.
+(extern i64 cpu4-handoff-test-count i64 :real et_cpu4_child_test_o2_count)
+(define cpu4-handoff-runtime-checks 0)
+(define (cpu4-handoff-runtime-check message good)
+  (if good (set! cpu4-handoff-runtime-checks (+ cpu4-handoff-runtime-checks 1))
+      (begin (display "CPU4 handoff runtime FAIL: ") (display message) (newline) (exit 1))))
+(define (cpu4-handoff-runtime-error? category thunk)
+  (guard (caught (#t (and (transformer-error? caught)
+                          (eq? (transformer-error-category caught) category))))
+    (thunk) #f))
+(define (cpu4-handoff-runtime-values handles)
+  (let ((planes (make-vector 14 #f)))
+    (let copy ((index 0))
+      (if (= index 14) planes
+          (let* ((handle (vector-ref handles index))
+                 (carrier (parameter-handle-tensor-identity-internal handle)))
+            (vector-set! planes index
+              (i2-checkpoint-encode
+                (vector carrier 'parameter (vector-ref g3c4-model-shapes index)
+                        'f32 'cpu 'dense-row-major-contiguous 'cpu4-handoff-runtime)))
+            (copy (+ index 1)))))))
+(define (cpu4-handoff-runtime-values=? left right)
+  (let compare ((index 0))
+    (if (= index 14) #t
+        (and (d2-core-bytes=? (vector-ref left index) (vector-ref right index))
+             (compare (+ index 1))))))
+(define (cpu4-generator-handoff-runtime! child-token factory-ticket-or-false generation-tokenizer config)
+  (cpu4-handoff-runtime-check "actual NULL baseline"
+    (null? (cpu4-checkpoint-native-current-region)))
+  (let* ((child (cpu4-owned-open child-token 'cpu4-handoff-runtime))
+         (model (cpu4-owned-model-internal child-token))
+         (trainer (vector-ref child 10)) (binding (vector-ref child 9))
+         (binding-record (cpu4-model-binding-check-internal binding))
+         (lease (cpu4-model-binding-native-lease-internal binding))
+         (handles (vector-ref child 13))
+         (values (cpu4-handoff-runtime-values handles))
+         (parameters (cpu4-handoff-test-count 5))
+         (tensors (cpu4-handoff-test-count 4))
+         (optimizers (cpu4-handoff-test-count 1))
+         (moments (cpu4-handoff-test-count 3))
+         (recovery (vector #f)))
+    (g3c4-baseline-tokenizer-entry generation-tokenizer 'cpu4-handoff-runtime 'invalid-argument 'unsupported)
+    (with-region ('cpu4-handoff-negative 1048576)
+      (cpu4-handoff-runtime-check "actual regional pointer is non-NULL"
+        (not (null? (cpu4-checkpoint-native-current-region))))
+      (cpu4-handoff-runtime-check "regional handoff rejects before acquisition"
+        (cpu4-handoff-runtime-error? 'unsupported
+          (lambda () (cpu4-owned-generator-handoff-internal! child-token generation-tokenizer config recovery))))
+      (cpu4-handoff-runtime-check "regional rejection preserves original TRAIN authority"
+        (and (not (vector-ref recovery 0)) (not (vector-ref child 12))
+             (not (vector-ref child 11)) (eq? (module-mode-internal model) 'train)
+             (eq? binding-record (cpu4-model-binding-check-internal binding)))))
+    ;; Genuine native READ contention, representing the binding's real live
+    ;; read-lease boundary. This is not a substitute claim for E3 evaluation.
+    (cpu4-handoff-runtime-check "actual native READ enter" (= (cpu4-control-native-enter lease 1) 0))
+    (cpu4-handoff-runtime-check "READ blocks handoff while trainer remains TRAIN"
+      (cpu4-handoff-runtime-error? 'invalid-state
+        (lambda ()
+          (if factory-ticket-or-false
+              (cpu4-checkpoint-factory-generator-handoff-internal!
+                factory-ticket-or-false generation-tokenizer config recovery)
+              (cpu4-owned-generator-handoff-internal! child-token generation-tokenizer config recovery)))))
+    (cpu4-handoff-runtime-check "READ rejection retained recovery before detach"
+      (and (vector-ref recovery 0) (vector-ref child 12)
+           (not (vector-ref child 11))
+           (eq? (vector-ref (cpu4-handoff-row (vector-ref recovery 0) 'cpu4-handoff-runtime) 3) 'training)
+           (eq? (module-mode-internal model) 'train)
+           (= optimizers (cpu4-handoff-test-count 1)) (= moments (cpu4-handoff-test-count 3))))
+    (with-region ('cpu4-handoff-retry-negative 1048576)
+      (cpu4-handoff-runtime-check "regional retry preserves pending authority"
+        (cpu4-handoff-runtime-error? 'unsupported
+          (lambda () (cpu4-generator-handoff-retry-internal! (vector-ref recovery 0))))))
+    (cpu4-handoff-runtime-check "actual READ release" (= (cpu4-control-native-leave lease) 0))
+    (let* ((result (cpu4-generator-handoff-retry-internal! (vector-ref recovery 0)))
+           (row (cpu4-handoff-row (vector-ref recovery 0) 'cpu4-handoff-runtime))
+           (generator (vector-ref result 1))
+           (profile (g3c4-public-g2-profile-live generator 'cpu4-handoff-runtime))
+           (entry (g3c4-generator-entry-call-ready generator 'cpu4-handoff-runtime)))
+      (cpu4-handoff-runtime-check "same C4 model and genuine public G2 crosslinks"
+        (and (eq? (vector-ref result 0) model) (eq? (vector-ref profile 1) entry)
+             (eq? (vector-ref entry 5) (vector-ref row 7))
+             (eq? (vector-ref entry 6) generation-tokenizer)))
+      (cpu4-handoff-runtime-check "all14 model value planes and original handles preserved"
+        (and (eq? handles (vector-ref child 13))
+             (cpu4-handoff-runtime-values=? values (cpu4-handoff-runtime-values handles))))
+      (cpu4-handoff-runtime-check "model remains live EVAL with slot7 false"
+        (and (eq? (module-mode-internal model) 'eval) (not (vector-ref (vector-ref row 7) 7))))
+      (cpu4-handoff-runtime-check "only owned optimizer and28 moments retired"
+        (and (= (cpu4-handoff-test-count 1) (- optimizers 1))
+             (= (cpu4-handoff-test-count 3) (- moments 28))
+             (= (cpu4-handoff-test-count 4) (- tensors 28))
+             (= (cpu4-handoff-test-count 5) parameters)))
+      (cpu4-handoff-runtime-check "caller trainingT2 and D2 remain live"
+        (and (= (t2-wave2-tokenizer-vocab-size (vector-ref row 19)) 256)
+             (cpu4-d2-cursor-capture-internal (vector-ref row 20))))
+      (if factory-ticket-or-false
+          (cpu4-checkpoint-factory-retire-internal! factory-ticket-or-false)
+          (cpu4-owned-candidate-retire-internal! child-token))
+      (cpu4-handoff-runtime-check "later factory/child retire cannot destroy adopted model"
+        (and (g3c4-public-g2-profile-live generator 'cpu4-handoff-runtime)
+             (cpu4-handoff-runtime-values=? values (cpu4-handoff-runtime-values handles))))
+      (display "CPU4 genuine same-model generator handoff PASS: checks=")
+      (display cpu4-handoff-runtime-checks) (newline)
+      ;; Public generator and adopted model now belong to caller. Preserve them
+      ;; for root's genuine generation chain instead of destroying trained data.
+      result)))

@@ -385,6 +385,37 @@
         ;; Publication boundary. Only fixed writes and preallocated return.
         (vector-set! row 1 'adopted)
         result))
+    ;; Source-private typed precondition: the closed G2 handoff leaf has JUST
+    ;; authenticated public profile membership and call-ready identity. Keeping
+    ;; that authority in the leaf avoids a public-G2 dependency in this base.
+    ;; This accepts the complete typed entry, never a raw-pointer/getter route.
+    (define (adopt-public-g2-entry candidate entry)
+      (let* ((operation 'cpu4-candidate-adopt-public-g2)
+             (row (unpublished candidate operation))
+             (model-entry (vector-ref row 4))
+             (result (vector-ref model-entry 0)))
+        (if (not (and (vector? entry) (= (vector-length entry) 12)
+                      (vector-ref entry 0) (eq? (vector-ref entry 1) 'generator)
+                      (eq? (vector-ref entry 2) 'live)
+                      (vector-ref entry 3) (not (null? (vector-ref entry 3)))
+                      (eq? (vector-ref entry 4) #f)
+                      (eq? (vector-ref entry 5) model-entry)
+                      (vector-ref entry 6)
+                      (vector? (vector-ref entry 7))
+                      (= (vector-length (vector-ref entry 7)) 7)
+                      (eq? (vector-ref (vector-ref entry 7) 0) g3c4-model-profile)
+                      (= (vector-ref (vector-ref entry 7) 5) 2)
+                      (eq? (vector-ref entry 8) #f)
+                      (eq? (vector-ref entry 9) #f)
+                      (eq? (vector-ref entry 10) #f)
+                      (eq? (vector-ref entry 11) g3c4-model-profile)
+                      (eq? (vector-ref model-entry 10) #f)))
+            (g3c4-fail 'invalid-state operation "typed G2 entry or model crosslink changed"))
+        (p1-preflight (vector-ref row 6))
+        (i2-preflight (vector-ref row 7))
+        (g3c4-native-check (native-adopt (vector-ref row 2) (vector-ref entry 3)) operation)
+        (vector-set! row 1 'adopted)
+        result))
     (define (retire-owned-optimizer candidate optimizer)
       (let* ((operation 'cpu4-candidate-retire-internal!)
              (row (find candidate operation)))
@@ -427,7 +458,7 @@
                   (vector-set! row 11 #f)
                   #t)))))
     (define (retire candidate) (retire-owned-optimizer candidate '()))
-    (vector create model adopt retire retire-owned-optimizer)))
+    (vector create model adopt retire retire-owned-optimizer adopt-public-g2-entry)))
 
 (define (cpu4-candidate-model-create-internal! resolved)
   ((vector-ref cpu4-candidate-surface 0) resolved))
@@ -441,3 +472,7 @@
 ;;; Source-private typed child producer only. No callback or destructor input.
 (define (cpu4-candidate-retire-owned-optimizer-internal! candidate optimizer)
   ((vector-ref cpu4-candidate-surface 4) candidate optimizer))
+
+;;; Only the closed public-G2 handoff leaf supplies this authenticated entry.
+(define (cpu4-candidate-adopt-public-g2-entry-internal! candidate entry)
+  ((vector-ref cpu4-candidate-surface 5) candidate entry))
