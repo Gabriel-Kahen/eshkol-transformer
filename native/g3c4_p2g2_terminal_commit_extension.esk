@@ -5,11 +5,45 @@
 (extern i64 g3c4-p2g2-native-terminal-commit ptr ptr ptr i64 ptr i64
         :real et_g3c4_private_p2g2_terminal_commit_v1)
 
-(define (g3c4-p2g2-terminal-commit-private! generator input)
+;;; The enrollment installer is consumed exactly once by the owning public
+;;; dispatcher during package initialization. No current-ticket cell exists.
+(define g3c4-p2g2-terminal-enrollment-route-private
+  (lambda (stage roots) (exit 134)))
+
+(define g3c4-p2g2-terminal-commit-private!
+  (let ((installed? #f))
+    (let ((core (lambda (generator input enrollment)
   (let* ((operation 'g3c4-p2g2-terminal-commit-private!)
          (input-entry (g3c4-p2g2-prefix-preflight generator input))
          (native-input (vector-ref input-entry 3))
-         (generator-entry (g3c4-generator-entry-call-ready generator operation)))
+         (generator-entry (g3c4-generator-entry-call-ready generator operation))
+         (issuer (if enrollment (vector-ref enrollment 1) #f))
+         (enrollment-roots (if enrollment (vector-ref enrollment 2) #f))
+         (enrollment-heads (if enrollment (vector-ref enrollment 3) #f))
+         (creation-profile (if enrollment (vector-ref (vector-ref enrollment 0) 3) #f))
+         (enrollment-binding (if enrollment (car (vector-ref enrollment-heads 3)) #f))
+         (enrollment-authority (if enrollment (vector-ref (vector-ref enrollment 0) 16) #f))
+         (creation-policy (vector-ref generator-entry 7))
+         (creation-words
+           (vector (vector-ref creation-policy 1) (vector-ref creation-policy 2)
+                   (vector-ref creation-policy 3) (vector-ref creation-policy 4)
+                   (vector-ref creation-policy 5) (vector-ref creation-policy 6)))
+         (enrollment-row (if enrollment (vector-ref (vector-ref enrollment 0) 10)
+                             (make-vector 12 #f)))
+         (enrollment-anchor
+           (if enrollment (vector-ref (vector-ref enrollment 0) 11)
+               (make-vector 12 #f)))
+         (enrollment-ticket
+           (if enrollment (vector-ref enrollment 0) (make-vector 21 #f))))
+    (if enrollment
+        (issuer 'admit generator input enrollment-ticket #f #f #f
+                0 -1 -1 operation)
+        (begin
+          (vector-set! enrollment-ticket 10 enrollment-row)
+          (vector-set! enrollment-ticket 11 enrollment-anchor)
+          (vector-set! enrollment-ticket 12 'pending)
+          (vector-set! enrollment-row 8 'pending)
+          (vector-set! enrollment-anchor 8 'pending)))
     (m3-call operation
       (let* ((model-entry (vector-ref generator-entry 5))
              (tokenizer (vector-ref generator-entry 6))
@@ -48,7 +82,10 @@
                (cons prefix (vector-ref g3c4-p2g2-prefix-input-anchors 0)))
              (prefix-installed? #f)
              (pending #f)
-             (live #f))
+             (live #f)
+             (live-authority #f)
+             (live-anchor-node #f)
+             (live-original-node #f))
         (if (not (and (eq? input-entry
                            (g3c4-input-entry-live input operation))
                       (eq? (vector-ref input-entry 3) native-input)
@@ -108,6 +145,13 @@
           (set! prefix-installed? #t)
           (set! pending (g3c4-p2g2-terminal-pending-reserve! call))
           (set! live (g3c4-p2g2-terminal-live-prepare call pending))
+          (set! live-authority (vector-ref live 10))
+          (set! live-anchor-node (vector-ref live 13))
+          (set! live-original-node (vector-ref live 14))
+          (if enrollment
+              (issuer 'bind generator input enrollment-ticket
+                      (vector-ref live 1) live (vector-ref live 10)
+                      0 -1 -1 operation))
           (let* ((first-selected
                    (g3c4-p2g2-terminal-first-sample-decode! call pending))
                  (checked
@@ -151,6 +195,142 @@
                  ;; supplies that #f with byte extent zero.
                  (bound-live
                    (g3c4-p2g2-terminal-live-bind! call pending live frame))
+                 ;; Every callable public stage precedes the final independent
+                 ;; private frame/carrier authentication below.
+                 (enrollment-verified
+                   (if enrollment
+                       (issuer 'verify generator input enrollment-ticket
+                               output live (vector-ref live 10) logical-count
+                               first-selected
+                               (if (= logical-count 1) 0 second-selected)
+                               operation)
+                       #t))
+                 (final-frame
+                   (g3c4-p2g2-terminal-precommit-frame
+                     call pending first-selected second-selected
+                     logical-count))
+                 (final-checked
+                   (begin
+                     (let exact-frame ((index 0))
+                       (if (< index 31)
+                           (if (eq? (vector-ref frame index)
+                                    (vector-ref final-frame index))
+                               (exact-frame (+ index 1))
+                               (g3c4-fail 'invalid-state operation
+                                          "terminal frame changed after enrollment"))))
+                     (if enrollment
+                         (let roots-unchanged ((index 0))
+                           (if (< index 7)
+                               (if (eq? (vector-ref (vector-ref enrollment-roots index) 0)
+                                        (vector-ref enrollment-heads index))
+                                   (roots-unchanged (+ index 1))
+                                   (g3c4-fail 'invalid-state operation
+                                              "terminal enrollment root changed")))))
+                     (if (not (and
+                         (eq? bound-live live)
+                         (eq? (vector-ref generator-entry 7) creation-policy)
+                         (vector? enrollment-ticket)
+                         (= (vector-length enrollment-ticket) 21)
+                         (vector? enrollment-row)
+                         (= (vector-length enrollment-row) 12)
+                         (vector? enrollment-anchor)
+                         (= (vector-length enrollment-anchor) 12)
+                         (not (eq? enrollment-ticket enrollment-row))
+                         (not (eq? enrollment-ticket enrollment-anchor))
+                         (not (eq? enrollment-row enrollment-anchor))
+                         (eq? (vector-ref enrollment-ticket 10) enrollment-row)
+                         (eq? (vector-ref enrollment-ticket 11) enrollment-anchor)
+                         (eq? (vector-ref enrollment-ticket 12) 'pending)
+                         (eq? (vector-ref enrollment-row 8) 'pending)
+                         (eq? (vector-ref enrollment-anchor 8) 'pending)
+                         (not (eq? enrollment-row output))
+                         (not (eq? enrollment-anchor output))
+                         (not (eq? enrollment-ticket live))
+                         (not (eq? enrollment-ticket record))
+                         (not (eq? enrollment-row record))
+                         (not (eq? enrollment-anchor record))
+                         (eq? (vector-ref live 0) 'unpublished)
+                         (eq? (vector-ref live 1) output)
+                         (eq? (vector-ref live 2) shell)
+                         (eq? (vector-ref live 3) output-native)
+                         (eq? (vector-ref live 4) text-one)
+                         (eq? (vector-ref live 5) text-two)
+                         (eq? (vector-ref live 10) live-authority)
+                         (eq? (vector-ref live 13) live-anchor-node)
+                         (eq? (vector-ref live 14) live-original-node)
+                         (eq? (car live-anchor-node) live)
+                         (eq? (car live-original-node) live-authority)
+                         (eq? (cdr live-anchor-node) (vector-ref live 11))
+                         (eq? (cdr live-original-node) (vector-ref live 12))
+                         (eq? (vector-ref g3c4-p2g2-terminal-live-anchors 0)
+                              (vector-ref live 11))
+                         (eq? (vector-ref g3c4-p2g2-terminal-live-originals 0)
+                              (vector-ref live 12))
+                         (= (vector-ref live 6) logical-count)
+                         (eq? (vector-ref live 7) selected-text)
+                         (= (vector-ref live 8) first-selected)
+                         (if (= logical-count 1)
+                             (eq? (vector-ref live 9) #f)
+                             (= (vector-ref live 9) second-selected))
+                         (= (vector-ref live 15) (+ logical-count 2))
+                         (if enrollment
+                             (and
+                               (pair? (vector-ref enrollment-heads 0))
+                               (eq? (car (vector-ref enrollment-heads 0)) enrollment-ticket)
+                               (eq? (car (vector-ref enrollment-heads 1)) enrollment-row)
+                               (eq? (car (vector-ref enrollment-heads 2)) enrollment-anchor)
+                               (eq? (car (vector-ref enrollment-heads 3)) enrollment-binding)
+                               (eq? (vector-ref enrollment-ticket 16) enrollment-authority)
+                               (eq? (vector-ref enrollment-binding 1) enrollment-authority)
+                               (eq? (vector-ref enrollment-binding 0) shell)
+                               (eq? (vector-ref (car (vector-ref enrollment-heads 3)) 1)
+                                    (vector-ref enrollment-ticket 16))
+                               (eq? (vector-ref enrollment-ticket 3) creation-profile)
+                               (eq? (vector-ref creation-profile 0) generator)
+                               (eq? (vector-ref creation-profile 1) generator-entry)
+                               (eq? (vector-ref creation-profile 2) native)
+                               (eq? (vector-ref creation-profile 3) model-entry)
+                               (eq? (vector-ref creation-profile 4) tokenizer)
+                               (eq? (vector-ref creation-profile 5) creation-policy)
+                               (eq? (vector-ref creation-profile 6) 'diagnostic-c4-p2g2)
+                               (eq? (vector-ref creation-profile 7) 'live)
+                               (let policy-unchanged ((index 1))
+                                 (if (= index 7) #t
+                                     (and (= (vector-ref creation-policy index)
+                                             (vector-ref creation-words (- index 1)))
+                                          (policy-unchanged (+ index 1)))))
+                               (= (vector-ref creation-policy 5) 2)
+                               (<= 0 (vector-ref creation-policy 6))
+                               (<= (vector-ref creation-policy 6) 255)
+                               (eq? (vector-ref enrollment-ticket 1) generator)
+                               (eq? (vector-ref enrollment-ticket 2) input)
+                               (eq? (vector-ref enrollment-ticket 4) input-entry)
+                               (eq? (vector-ref enrollment-ticket 5) shell)
+                               (eq? (vector-ref enrollment-ticket 6) output)
+                               (eq? (vector-ref enrollment-ticket 7) output-native)
+                               (eq? (vector-ref enrollment-ticket 8) live)
+                               (eq? (vector-ref enrollment-ticket 9)
+                                    (vector-ref live 10))
+                               (= (vector-ref enrollment-ticket 13) logical-count)
+                               (= (vector-ref enrollment-ticket 14) first-selected)
+                               (= (vector-ref enrollment-ticket 15)
+                                  (if (= logical-count 1) 0 second-selected))
+                               (let ((expected
+                                       (vector shell output output-native generator input
+                                               creation-profile live live-authority 'pending
+                                               logical-count first-selected
+                                               (if (= logical-count 1) 0 second-selected))))
+                                 (let fields ((index 0))
+                                   (if (= index 12) #t
+                                       (and (eq? (vector-ref enrollment-row index)
+                                                 (vector-ref expected index))
+                                            (eq? (vector-ref enrollment-anchor index)
+                                                 (vector-ref expected index))
+                                            (fields (+ index 1)))))))
+                             #t)))
+                         (g3c4-fail 'invalid-state operation
+                                    "terminal enrollment carriers changed"))
+                     #t))
                  (status
                    (g3c4-p2g2-native-terminal-commit
                      (vector-ref frame 5) output-native
@@ -159,6 +339,9 @@
             (if (= status 0)
                 (begin
                   (vector-set! barrier 0 #t)
+                  (vector-set! enrollment-ticket 12 'live)
+                  (vector-set! enrollment-row 8 'live)
+                  (vector-set! enrollment-anchor 8 'live)
                   ;; Closed tail: exact original carriers, fixed byte writes.
                   ;; Pending raw/staging and unused text were proved zero by
                   ;; the precommit frame and are detached below.
@@ -228,3 +411,41 @@
                   (vector-set! g3c4-p2g2-prefix-input-anchors 0 prefix-next)
                   shell)
                 (g3c4-native-check status operation))))))))
+
+      ))
+      (set! g3c4-p2g2-terminal-enrollment-route-private
+        (lambda (stage roots)
+          (if (or installed? (not (procedure? stage))
+                  (not (vector? roots)) (not (= (vector-length roots) 7)))
+              (exit 134))
+          ;; Consume before returning the route, including on malformed roots.
+          (set! installed? #t)
+          (let ((original-stage stage)
+                (original-roots
+                  (vector (vector-ref roots 0) (vector-ref roots 1)
+                          (vector-ref roots 2) (vector-ref roots 3)
+                          (vector-ref roots 4) (vector-ref roots 5)
+                          (vector-ref roots 6))))
+            (let check ((index 0))
+              (if (< index 7)
+                  (let ((root (vector-ref original-roots index)))
+                    (if (not (and (vector? root) (= (vector-length root) 1)))
+                        (exit 134))
+                    (let distinct ((other 0))
+                      (if (< other index)
+                          (if (eq? root (vector-ref original-roots other))
+                              (exit 134)
+                              (distinct (+ other 1)))))
+                    (check (+ index 1)))))
+            (lambda (generator input ticket)
+              (let ((heads
+                      (vector (vector-ref (vector-ref original-roots 0) 0)
+                              (vector-ref (vector-ref original-roots 1) 0)
+                              (vector-ref (vector-ref original-roots 2) 0)
+                              (vector-ref (vector-ref original-roots 3) 0)
+                              (vector-ref (vector-ref original-roots 4) 0)
+                              (vector-ref (vector-ref original-roots 5) 0)
+                              (vector-ref (vector-ref original-roots 6) 0))))
+                (core generator input
+                      (vector ticket original-stage original-roots heads)))))))
+      (lambda (generator input) (core generator input #f)))))

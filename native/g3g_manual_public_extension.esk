@@ -104,34 +104,49 @@
       shell)))
 (define (g3g-public-generation-output-ids output)
   (g3g-public-boundary 'generation-output-ids
-    (if (or (g3c4-public-transport-member output)
-            (g3c4-public-model-member output))
-        (g3c4-public-generation-output-ids output)
-        (g3t-generation-output-ids output))))
+    (let ((entry (g3c4-public-transport-member output)))
+      (cond ((and entry (eq? (vector-ref entry 1) 'terminal-output))
+             (g3c4-public-g2-output-access output 'ids
+                                           'generation-output-ids))
+            ((or entry (g3c4-public-model-member output))
+             (g3c4-public-generation-output-ids output))
+            (else (g3t-generation-output-ids output))))))
 (define (g3g-public-generation-output-lengths output)
   (g3g-public-boundary 'generation-output-lengths
-    (if (or (g3c4-public-transport-member output)
-            (g3c4-public-model-member output))
-        (g3c4-public-generation-output-lengths output)
-        (g3t-generation-output-lengths output))))
+    (let ((entry (g3c4-public-transport-member output)))
+      (cond ((and entry (eq? (vector-ref entry 1) 'terminal-output))
+             (g3c4-public-g2-output-access output 'lengths
+                                           'generation-output-lengths))
+            ((or entry (g3c4-public-model-member output))
+             (g3c4-public-generation-output-lengths output))
+            (else (g3t-generation-output-lengths output))))))
 (define (g3g-public-generation-output-text output)
   (g3g-public-boundary 'generation-output-text
-    (if (or (g3c4-public-transport-member output)
-            (g3c4-public-model-member output))
-        (g3c4-public-generation-output-text output)
-        (g3t-generation-output-text output))))
+    (let ((entry (g3c4-public-transport-member output)))
+      (cond ((and entry (eq? (vector-ref entry 1) 'terminal-output))
+             (g3c4-public-g2-output-access output 'text
+                                           'generation-output-text))
+            ((or entry (g3c4-public-model-member output))
+             (g3c4-public-generation-output-text output))
+            (else (g3t-generation-output-text output))))))
 (define (g3g-public-generation-output-rng output)
   (g3g-public-boundary 'generation-output-rng
-    (if (or (g3c4-public-transport-member output)
-            (g3c4-public-model-member output))
-        (g3c4-public-generation-output-rng output)
-        (g3t-generation-output-rng output))))
+    (let ((entry (g3c4-public-transport-member output)))
+      (cond ((and entry (eq? (vector-ref entry 1) 'terminal-output))
+             (g3c4-public-g2-output-access output 'result-rng
+                                           'generation-output-rng))
+            ((or entry (g3c4-public-model-member output))
+             (g3c4-public-generation-output-rng output))
+            (else (g3t-generation-output-rng output))))))
 (define (g3g-public-generation-output-cache-lengths output)
   (g3g-public-boundary 'generation-output-cache-lengths
-    (if (or (g3c4-public-transport-member output)
-            (g3c4-public-model-member output))
-        (g3c4-public-generation-output-cache-lengths output)
-        (g3t-generation-output-cache-lengths output))))
+    (let ((entry (g3c4-public-transport-member output)))
+      (cond ((and entry (eq? (vector-ref entry 1) 'terminal-output))
+             (g3c4-public-g2-output-access output 'cache-lengths
+                                           'generation-output-cache-lengths))
+            ((or entry (g3c4-public-model-member output))
+             (g3c4-public-generation-output-cache-lengths output))
+            (else (g3t-generation-output-cache-lengths output))))))
 
 (define (g3g-public-generation-tensor-release value)
   (g3g-public-boundary 'generation-tensor-release!
@@ -141,7 +156,19 @@
           (g3t-fail-raw 'invalid-argument 'generation-tensor-release! 1
                         "C4 model is not a tensor owner"))
       (if c4-transport
-          (g3c4-public-generation-tensor-release! value)
+          (if (g3c4-public-g2-result-known? value)
+              (let* ((actual (vector-ref c4-transport 1))
+                     (kind (cond ((eq? actual 'typed-ids) 'ids)
+                                 ((eq? actual 'typed-lengths) 'lengths)
+                                 ((eq? actual 'typed-cache-lengths) 'cache-lengths)
+                                 (else #f))))
+                (if (not kind)
+                    (g3c4-fail 'invalid-argument
+                               'generation-tensor-release!
+                               "C4 identity is not a result tensor"))
+                (g3c4-public-g2-result-release!
+                  value kind 'generation-tensor-release!))
+              (g3c4-public-generation-tensor-release! value))
           (let ((kind (vector-ref (g3t-generator-find
                                    value 'generation-tensor-release!) 1)))
             (if (not (or (eq? kind 'input) (eq? kind 'logits) (eq? kind 'ids)
@@ -155,15 +182,21 @@
               released))))))
 (define (g3g-public-generation-output-release output)
   (g3g-public-boundary 'generation-output-release!
-    (if (or (g3c4-public-transport-member output)
-            (g3c4-public-model-member output))
-        (g3c4-public-generation-output-release! output)
-        (g3t-output-release! output))))
+    (let ((entry (g3c4-public-transport-member output)))
+      (cond ((and entry (eq? (vector-ref entry 1) 'terminal-output))
+             (g3c4-public-g2-output-release!
+               output 'generation-output-release!))
+            ((or entry (g3c4-public-model-member output))
+             (g3c4-public-generation-output-release! output))
+            (else (g3t-output-release! output))))))
 (define (g3g-public-generation-rng-release rng)
   (g3g-public-boundary 'generation-rng-release!
-    (if (or (g3c4-public-transport-member rng)
-            (g3c4-public-model-member rng))
-        (g3c4-public-generation-rng-release! rng)
+      (if (or (g3c4-public-transport-member rng)
+              (g3c4-public-model-member rng))
+        (if (g3c4-public-g2-result-known? rng)
+            (g3c4-public-g2-result-release!
+              rng 'result-rng 'generation-rng-release!)
+            (g3c4-public-generation-rng-release! rng))
         (g3t-generation-rng-release! rng))))
 (define (g3g-public-generator-close generator)
   (g3g-public-boundary 'generator-close!
