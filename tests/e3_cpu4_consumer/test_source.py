@@ -81,6 +81,13 @@ def assert_closed_tail(source):
     assert '(guard' not in abort and '(e3-restore-closed! frame #f)' in abort
 
 
+def assert_loaded_tokenizer_api(runtime,loaded):
+    definitions=set(re.findall(r'\(define \(([^\s()]+)',loaded))
+    called=set(re.findall(r'\((t[12]-(?:private|wave2)-tokenizer-[^\s()]+)',runtime))
+    assert called=={'t2-wave2-tokenizer-byte','t2-wave2-tokenizer-vocab-size'}, 'fixture must use loaded Wave2 tokenizer API'
+    assert called<=definitions, 'tokenizer call is not defined by loaded Wave2 root'
+
+
 class SourceTests(unittest.TestCase):
     def test_exact_boundary_forms_and_original_sources(self):
         pins=json.loads((ROOT/'native/e3_cpu4_boundary_forms.json').read_text())
@@ -103,6 +110,16 @@ class SourceTests(unittest.TestCase):
         else:
             result=subprocess.run(['guile',*host_reader.ARGUMENTS],cwd=ROOT,capture_output=True,text=True)
             self.assertEqual((result.returncode,result.stdout,result.stderr),(0,'',''))
+
+    def test_fixture_tokenizer_calls_match_loaded_wave(self):
+        runtime=(ROOT/'tests/e3_cpu4_consumer/runtime.esk').read_text()
+        root=(ROOT/'native/e3_cpu4_private_root.esk').read_text()
+        self.assertIn('(load "t2_wave2_root.esk")',root)
+        loaded=(ROOT/'native/t2_wave2_root.esk').read_text()
+        assert_loaded_tokenizer_api(runtime,loaded)
+        failed=runtime.replace('t2-wave2-tokenizer-byte','t1-private-tokenizer-byte').replace('t2-wave2-tokenizer-vocab-size','t1-private-tokenizer-vocab-size')
+        with self.assertRaises(AssertionError):assert_loaded_tokenizer_api(failed,loaded)
+        with self.assertRaises(AssertionError):assert_loaded_tokenizer_api(runtime,loaded.replace('(define (t2-wave2-tokenizer-byte ','(define (missing-tokenizer-byte '))
 
     def test_closed_native_tuple_and_root(self):
         names=(ROOT/'native/e3_cpu4_consumer_native_sources.txt').read_text().splitlines()
