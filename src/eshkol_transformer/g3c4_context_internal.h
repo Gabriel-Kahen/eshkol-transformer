@@ -250,6 +250,29 @@ int64_t et_g3c4_private_p2g2_terminal_ids_clone_copy_v1(
 int64_t et_g3c4_private_p2g2_terminal_ids_clone_release_v1(void *clone);
 #endif
 
+#ifdef ET_G3C4_P2_G2_TYPED_RESULT_PRIVATE
+/* Separate source-private C4 I1 owners for future public results:
+ * kinds 10=IDs, 11=length, 12=cache.
+ * IDs copy a live logical clone; scalar values are G=1/2 or 2+G=3/4.
+ * All tensors are dense CPU-i64 rank one, shape [1] or [2]. No I1 pointer
+ * escapes. length returns 1/2 or -1 with C4 error; element writes one i64
+ * through a valid aligned disjoint destination and returns 0 or C4 error.
+ * A failed call preserves the destination. Release rejects a held I1 lease
+ * without mutation; exact repeated release succeeds. */
+void *et_g3c4_private_p2g2_typed_ids_create_v1(void *logical_clone);
+void *et_g3c4_private_p2g2_typed_scalar_create_v1(int64_t kind, int64_t value);
+int64_t et_g3c4_private_p2g2_typed_length_v1(void *owner);
+int64_t et_g3c4_private_p2g2_typed_element_v1(
+    void *owner, int64_t index, int64_t *value);
+/* Copies the complete logical [1]/[2] tensor as little-endian i64 values
+ * into an Eshkol bytevector payload. The caller proves the actual allocation
+ * extent; destination_header addresses its eight-byte length header. */
+int64_t et_g3c4_private_p2g2_typed_copy_v1(
+    void *owner, int64_t expected_length,
+    void *destination_header, int64_t destination_bytes);
+int64_t et_g3c4_private_p2g2_typed_release_v1(void *owner);
+#endif
+
 #ifdef __cplusplus
 }
 #endif
