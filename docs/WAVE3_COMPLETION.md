@@ -136,7 +136,10 @@ The [typed lease contract](CPU4_TYPED_LEASE_CONTRACT.md) revision two is adopted
 for lease-only implementation after one independent assessment. The six-file native lease foundation is source-approved at worker
 `063bc4c93ee2c1c62d108d0d4818182613c93a9f` and integrated as `6b62b596a`.
 All six reviewed Git blobs were independently authenticated before integration.
-The supported feature-off/normal/repeat/leak-sanitizer gate remains queued.
+The first supported lease gate stopped in fixture construction before any lease
+operation: it interleaved binding and initialization, while C4 requires all
+fourteen handles bound first. CLI3 is repairing the fixture in a new immutable
+leaf; production guards and failed evidence are preserved.
 The source implements the exact nine private methods and two native-only child hooks; no parameter owner
 is copied or cast. Context accounting excludes even idle generation contexts from
 training, native child/ordinal records enforce phase cleanup, and release preserves
@@ -149,18 +152,28 @@ control. Runtime acceptance remains pending. Joint canonical
 C4/config/P1-mode binding remains an upstream dependency.
 
 A2/N2/N3K T4 source and independent primitive-gradient fixtures are integrated
-as `c7a3014d1` from source-approved worker `d5a5c33b`; the supported compiled
-gate is queued. E3 L3S/metrics source `d5970d77` is independently source-approved and integrated
+as `c7a3014d1` from source-approved worker `d5a5c33b`; the initial supported gate stopped at a negative error-classification assertion.
+CLI3 is repairing the expected classification against the actual K1 stage;
+failed evidence is retained. E3 L3S/metrics source `d5970d77` is independently source-approved and integrated
 as `bda0c8605` after authentication of all thirteen reviewed blobs; ten combined
 source/oracle tests and strict E3 predecessor hashes pass;
-its native gate supervisor is being repaired before execution. The final public
+the supported provider gate completed at exact `d5970d77` in 15.931 seconds
+and passed independent result review. Twenty-four native positive executions,
+T2 regressions, a twenty-two-case exact oracle and five intended compiled-mutant
+failures passed, with empty compiler/link/runtime diagnostics. Inner/outer seals,
+source custody and terminal container cleanup authenticate. Receipt:
+`finish-20261022/e3/cpu4-native-b-result-review/REVIEW.md`. This admits only the
+native objective/metrics provider scope, with CPU4 frame/model integration open. The final public
 G2 repair `0a292f416a3add5ef511c84bb7d89922e4a690ab` passed independent
 source/tests review and is integrated at `10a1764f9` after authentication of all
 264 sealed Git blobs. Actual-union source/C11/feature-off and host controls pass.
 The bounded owner/builder merge assessment accepted the scoped union; supported installed
 AOT/native/sanitizer execution remains pending. Simultaneous CPU4-training and
 typed-result operation additionally requires the new lease/control span checks
-in shared typed output alias validation; CLI3 owns that bounded transport delta. Earlier `3f53c54b` and successor source receipts remain held/preserved:
+in shared typed output alias validation; the independently source-approved fix
+`11d3d5b3` is integrated at `16183055`. It protects known lease/child-record
+extents; no arbitrary child payload extent is inferred. Its supported combined
+normal/repeat/sanitizer gate remains queued. Earlier `3f53c54b` and successor source receipts remain held/preserved:
 causal tests exposed output lifetime coupled to generator liveness and incomplete
 final authority checks. The final repair reports 92 actual-core mutation controls;
 host controls do not establish supported AOT/native/sanitizer admission. Receipts:
@@ -169,10 +182,23 @@ host controls do not establish supported AOT/native/sanitizer admission. Receipt
 
 The [candidate producer/retirement contract](CPU4_CANDIDATE_CONTRACT.md) is adopted
 with the independently required OPEN_EMPTY versus authentic ABORTED native P1
-proof. G3 is implementing this upstream producer before checkpoint consumers,
-retaining P1/I2 authority before sealing rather than wrapping a sealed ordinary
-model. Initial Scheme cleanup rejects retained optimizer/generator children;
+proof. The independently source-approved producer `3f0358d3` is integrated as
+`09b5669f`, after authenticating all twenty-nine reviewed Git blobs and a bounded
+composition review. Source/planner 1,239 checks and public C11/feature-off controls
+pass on the union. Sixteen exact hash replacements across five predecessor
+manifests retain their complete path lists. Supported native/Eshkol proving gates
+are queued. It retains P1/I2 authority before sealing rather than wrapping a
+sealed ordinary model. Initial Scheme cleanup rejects retained optimizer/generator children;
 compound restore/continuation cleanup remains required before that acceptance row.
+
+The frame-local training transport `2558dfdf1` is independently source-approved
+and integrated as `e6d43612` after eight reviewed-blob checks. Its full-model
+oracle covers all 1,192 parameter derivatives. Its initial native run stopped
+at the same bind-before-initialize fixture defect before any transport operation;
+the fixture repair and supported numerical/sanitizer rerun remain required. The integrated candidate parity runner now stages complete immutable Git
+closures for provider `063bc4c9` and owner/control-alias `11d3d5b3`, retains depfiles
+and rejects dependencies escaping each snapshot. Independent source/depchecker
+controls accepted the repair at `8537341c`; no integrated object parity is claimed.
 
 The next integrated execution priority is a thin supported same-owner
 train → SAVE → reload/resume → evaluate → multi-token/EOS generation smoke after
