@@ -71,6 +71,17 @@ class Source(unittest.TestCase):
         self.assertIn("67108864", self.fixture)
         self.assertIn("262144", self.fixture)
 
+    def test_diagnostic_guard_outside_named_loop_capture_lowering(self):
+        helper = next(f for f in self.forms if f[:2] == ["define", ["actual-step"]])
+        self.assertEqual(helper, ["define", ["actual-step"],
+            ["must", "actual full step", ["cpu4-training-step-internal!", "trainer"]]])
+        update_loop = next(f for f in self.forms if f[:2] == ["let", "overfit-update-loop"])
+        heads = [n[0] for n in walk(update_loop) if n and isinstance(n[0], str)]
+        self.assertEqual(heads.count("actual-step"), 1)
+        for forbidden in ("must", "guard", "cpu4-training-step-internal!"):
+            self.assertNotIn(forbidden, heads)
+        self.assertNotIn("actual-step", [n[0] for n in walk(helper[2]) if n])
+
     def test_recipe_one_aggregate_exact_flags_and_post_execution_only_checker(self):
         for required in ("native/cpu4_training_native_sources.txt", "-DET_CPU4_OBJECTIVE_PRIVATE",
                          "-DET_TR3_O2_STEP_CLEAR_NATIVE -DET_O2_TESTING",
