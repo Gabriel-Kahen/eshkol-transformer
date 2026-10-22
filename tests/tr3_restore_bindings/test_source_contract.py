@@ -48,23 +48,43 @@ class RestoreBindingContract(unittest.TestCase):
             "tr3-c-restore-i2-append-parameter-internal!",
             "tr3-c-restore-o2-append-internal!",
         )
-        self.assertIn("(vector-ref o2-ledger 2)", create)
+        self.assertIn("(vector-ref (vector-ref canonical 3) 2)", create)
         self.assertIn("(vector-ref o2-ledger 2)", append)
         self.assertNotIn("parent", create + append)
 
-    def test_all_stage_wrappers_clear_only_after_plan_publication(self) -> None:
-        prepare = self.definition(
-            "tr3-c-restore-o2-prepare-internal",
-            "tr3-c-restore-i2-create-internal",
-        )
-        publish = prepare.index("(set! tr3-c-restore-o2-ledgers next-registry)")
-        readback = prepare.index("(tr3-c-restore-find-identity")
-        clear = prepare.index("(vector-set! (car remaining) 2 '())")
-        self.assertLess(publish, readback)
-        self.assertLess(readback, clear)
-        before_native = prepare[: prepare.index("(let ((plan")]
-        self.assertNotIn("(vector-set! (car remaining) 2 '())", before_native)
-        self.assertIn("tr3-c-restore-stage-count 28", ESK)
+    def test_preallocated_ledger_and_guard_precede_native_ownership(self) -> None:
+        for name, next_name, registry, native in (
+            ("tr3-c-restore-o2-prepare-internal", "tr3-c-restore-i2-create-internal",
+             "o2", "tr3-c-restore-native-o2-prepare"),
+            ("tr3-c-restore-i2-create-internal", "tr3-c-restore-i2-append-parameter-internal!",
+             "i2", "tr3-c-restore-native-i2-create"),
+        ):
+            body = self.definition(name, next_name)
+            acquire = body.index(f"({native}")
+            self.assertLess(body.index(f"(set! tr3-c-restore-{registry}-ledgers next-registry)"), acquire)
+            self.assertLess(body.index("(guard (caught"), acquire)
+            self.assertLess(body.index("(tr3-c-restore-find-identity"), acquire)
+            after = body[acquire:]
+            self.assertNotIn("(cons ", after)
+            self.assertNotIn("(vector ", after)
+            self.assertNotIn("(make-vector ", after)
+            self.assertNotIn("(let transfer", after)
+
+    def test_all_stage_wrappers_transfer_to_existing_output_slot(self) -> None:
+        transfer = self.definition("tr3-c-restore-transfer28!", "tr3-c-restore-o2-prepare-internal")
+        for index in range(28):
+            self.assertIn(f"(vector-set! (vector-ref stage-carriers {index}) 2 '())", transfer)
+        self.assertEqual(transfer.count("(vector-set!"), 28)
+        self.assertNotIn("(let ", transfer)
+        prepare = self.definition("tr3-c-restore-o2-prepare-internal", "tr3-c-restore-i2-create-internal")
+        self.assertIn("stages (vector stage-carriers native-request) 'constructing", prepare)
+        self.assertEqual(prepare.count("(vector-set! canonical 6 #f)"), 3)
+        self.assertEqual(prepare.count("(vector-set! request 6 canonical)"), 2)
+        self.assertEqual(prepare.count("(tr3-c-restore-transfer28!"), 2)
+        # Both guarded adoption and success publish a prepared exact ledger;
+        # the materials root is cleared only after request output publication.
+        self.assertEqual(prepare.count("(vector-set! canonical 7 'prepared)"), 2)
+        self.assertIn("(eq? (vector-ref request 6) canonical)", prepare)
 
     def test_native_failure_categories_use_existing_dependency_spelling(self) -> None:
         mapping = self.definition(
