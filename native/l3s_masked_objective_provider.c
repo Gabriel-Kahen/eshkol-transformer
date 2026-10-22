@@ -71,7 +71,8 @@ static int fp_supported(void) {
     (mxcsr & 0x1f80u) == 0x1f80u && (mxcsr & 0xe040u) == 0;
 }
 static int32_t validate_view(const et_kernel_tensor_view_v1 *v, const char *dtype,
-                             int scalar, const char *op, et_kernel_error *e) {
+                             int scalar, size_t tokens, const char *op,
+                             et_kernel_error *e) {
   if (!same(v->dtype, dtype))
     return fail(e, ET_KERNEL_ERROR_DTYPE_MISMATCH, ET_KERNEL_CODE_INVALID_TEXT,
                 op, "operand dtype differs from schema");
@@ -82,11 +83,11 @@ static int32_t validate_view(const et_kernel_tensor_view_v1 *v, const char *dtyp
     return fail(e, ET_KERNEL_ERROR_NONCONTIGUOUS, ET_KERNEL_CODE_INVALID_BUFFER,
                 op, "operand must be dense and zero-offset");
   if (v->rank != (scalar ? 0u : 2u) || (scalar ? v->shape != NULL :
-      v->shape == NULL || v->shape[0] != 1 || v->shape[1] != 2))
+      v->shape == NULL || v->shape[0] != 1 || v->shape[1] != tokens))
     return fail(e, ET_KERNEL_ERROR_SHAPE_MISMATCH, ET_KERNEL_CODE_INVALID_SHAPE,
-                op, "operand must have exact scalar or [1,2] shape");
+                op, "operand must match the exact request or scalar shape");
   const size_t width = same(dtype, "bool") ? 1u : sizeof(float);
-  const size_t bytes = width * (scalar ? 1u : 2u);
+  const size_t bytes = width * (scalar ? 1u : tokens);
   if (v->byte_length != bytes || !span(v->data, bytes) ||
       (uintptr_t)v->data % width != 0)
     return fail(e, ET_KERNEL_ERROR_INVALID_ARGUMENT, ET_KERNEL_CODE_INVALID_BUFFER,
@@ -120,9 +121,63 @@ static int hits_metadata(const et_kernel_call_v1 *c,
 static float positive_zero(float x) { return x == 0.0f ? 0.0f : x; }
 static int nonnegative(float x) { return isfinite(x) && x >= 0.0f; }
 
+/* Exact T4 alternative. Validate every entry, including masked losses, before
+ * computing a serial binary32 reduction or publishing the full four-word seed. */
+static int evaluate_four(const et_kernel_call_v1 *c, enum operation op,
+                         float result[4]) {
+  const int reduce = op == REDUCE_BOOL || op == REDUCE_F32;
+  const void *mask = input(c, reduce ? 1u : 0u)->data;
+  float weights[4], losses[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+  for (size_t i = 0; i < 4; ++i) {
+    if (op % 2 == 0) {
+      const uint8_t byte = ((const uint8_t *)mask)[i];
+      if (byte > 1u) return 0;
+      weights[i] = byte == 0u ? 0.0f : 1.0f;
+    } else {
+      const float value = ((const float *)mask)[i];
+      if (!nonnegative(value)) return 0;
+      weights[i] = positive_zero(value);
+    }
+    if (reduce) {
+      const float value = ((const float *)input(c,0)->data)[i];
+      if (!nonnegative(value)) return 0;
+      losses[i] = positive_zero(value);
+    }
+  }
+  float weight = 0.0f;
+  for (size_t i = 0; i < 4; ++i) {
+    weight = weight + weights[i];
+    if (!isfinite(weight)) return 0;
+  }
+  if (weight <= 0.0f) return 0;
+  if (reduce) {
+    float numerator = 0.0f;
+    for (size_t i = 0; i < 4; ++i) {
+      const float product = weights[i] * losses[i];
+      if (!isfinite(product)) return 0;
+      numerator = numerator + product;
+      if (!isfinite(numerator)) return 0;
+    }
+    const float average = numerator / weight;
+    if (!isfinite(average)) return 0;
+    result[0] = positive_zero(numerator);
+    result[1] = weight;
+    result[2] = positive_zero(average);
+  } else {
+    for (size_t i = 0; i < 4; ++i) {
+      const float upstream = op == MEAN_BOOL || op == MEAN_F32 ?
+        weights[i] / weight : weights[i];
+      if (!isfinite(upstream)) return 0;
+      result[i] = positive_zero(upstream);
+    }
+  }
+  return 1;
+}
+
 /* Same fixed stack evaluation is used for preflight and commit. Separate
  * statements and strict FP compilation preserve every binary32 rounding point. */
-static int evaluate(const et_kernel_call_v1 *c, enum operation op, float result[3]) {
+static int evaluate(const et_kernel_call_v1 *c, enum operation op, float result[4]) {
+  if (c->request->shape[1] == 4u) return evaluate_four(c,op,result);
   const int reduce = op == REDUCE_BOOL || op == REDUCE_F32;
   const int boolean = op % 2 == 0;
   const void *mask = input(c, reduce ? 1u : 0u)->data;
@@ -187,7 +242,8 @@ static int32_t validate_inner(const et_kernel_call_v1 *c, et_kernel_error *e) {
   const enum operation kind = identify(r->operation);
   if (kind == UNKNOWN || !same(c->capability, "l3s.masked-objective") ||
       !same(r->dtype,"f32") || !same(r->device,"cpu") || r->rank != 2u ||
-      r->shape == NULL || r->shape[0] != 1u || r->shape[1] != 2u)
+      r->shape == NULL || r->shape[0] != 1u ||
+      (r->shape[1] != 2u && r->shape[1] != 4u))
     return fail(e, ET_KERNEL_ERROR_UNSUPPORTED, ET_KERNEL_CODE_PROVIDER_REJECTED,
                 op, "request is outside the exact L3S profile");
   op = r->operation;
@@ -199,11 +255,11 @@ static int32_t validate_inner(const et_kernel_call_v1 *c, et_kernel_error *e) {
   int32_t rc;
   for (size_t i = 0; i < ni; ++i) {
     const char *dtype = i == ni-1 && kind % 2 == 0 ? "bool" : "f32";
-    rc = validate_view(input(c,i), dtype, 0, op, e);
+    rc = validate_view(input(c,i), dtype, 0, r->shape[1], op, e);
     if (rc) return rc;
   }
   for (size_t i = 0; i < no; ++i) {
-    rc = validate_view(output(c,i), "f32", reduce, op, e);
+    rc = validate_view(output(c,i), "f32", reduce, r->shape[1], op, e);
     if (rc) return rc;
   }
   for (size_t i = 0; i < ni; ++i) for (size_t j = i+1; j < ni; ++j)
@@ -218,7 +274,7 @@ static int32_t validate_inner(const et_kernel_call_v1 *c, et_kernel_error *e) {
   if (!fp_supported())
     return fail(e, ET_KERNEL_ERROR_UNSUPPORTED, ET_KERNEL_CODE_PROVIDER_REJECTED,
                 op, "unsupported x87 or MXCSR controls");
-  float result[3];
+  float result[4];
   if (!evaluate(c,kind,result))
     return fail(e, ET_KERNEL_ERROR_INVALID_ARGUMENT, ET_KERNEL_CODE_PROVIDER_REJECTED,
                 op, "invalid operand, weight, intermediate or result");
@@ -238,10 +294,12 @@ static int32_t provider_validate(const et_kernel_call_v1 *c, et_kernel_error *e)
 }
 static void provider_invoke(const et_kernel_call_v1 *c) {
   const enum operation op = identify(c->request->operation);
-  float result[3];
+  float result[4];
   (void)evaluate(c,op,result);
   if (op == REDUCE_BOOL || op == REDUCE_F32) {
     for (size_t i = 0; i < 3; ++i) *(float *)output(c,i)->data = result[i];
+  } else if (c->request->shape[1] == 4u) {
+    memcpy(output(c,0)->data, result, 4u*sizeof(float));
   } else {
     memcpy(output(c,0)->data, result, 2u*sizeof(float));
   }
@@ -250,13 +308,16 @@ static void provider_invoke(const et_kernel_call_v1 *c) {
 static const et_kernel_dimension_range_v1 dimensions[] = {
   {1,1,0,{0}}, {2,2,0,{0}}
 };
-static const et_kernel_shape_range_v1 rows[] = {{2,dimensions}};
+static const et_kernel_dimension_range_v1 dimensions_four[] = {
+  {1,1,0,{0}}, {4,4,0,{0}}
+};
+static const et_kernel_shape_range_v1 rows[] = {{2,dimensions}, {2,dimensions_four}};
 static const char *const dtypes[] = {"f32"};
 static const char *const devices[] = {"cpu"};
 static const et_kernel_capability_v1 capability = {
   sizeof(et_kernel_capability_v1), "l3s.masked-objective", ET_KERNEL_CAPABILITY_VERIFIED,
   "l3s.cpu-f32.serial", "1.0", "L3S:cpu-f32-masked-objective-v1", 1, {0},
-  6, operations, 1, dtypes, 1, devices, 1, rows
+  6, operations, 1, dtypes, 1, devices, 2, rows
 };
 static const et_kernel_provider_v1 provider = {
   sizeof(et_kernel_provider_v1), ET_KERNEL_ABI_MAJOR, ET_KERNEL_ABI_MINOR, 0,
