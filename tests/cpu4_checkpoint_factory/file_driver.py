@@ -90,6 +90,7 @@ def gate(out, runner, cc, cxx, compiler_source):
         (out / 'selected-native-inputs.json').write_text(json.dumps(units, indent=2) + '\n')
         (out / 'profile.txt').write_text('candidate=ON\ncompile_jobs=1\nmode=normal\nSAN=NOT RUN\nclosure=discovery, independent review required\n')
         resources = out / 'resources'
+        resources.mkdir()
         write_d1_resource(resources, ((3,197,3,41,7,2,9,5,1),), fingerprint=FINGERPRINT, vocab=256)
         hashes(resources, out / 'resource-bytes.sha256')
         objects = out / 'objects'
