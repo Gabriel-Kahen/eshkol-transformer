@@ -40,6 +40,11 @@
     (if (and (transformer-error? caught) (eq? category (transformer-error-category caught)))
         #t (begin (report label caught) #f)))) (thunk) #f)))
 (define directory (car (cdr (command-line))))
+(define (reject-at label category operation thunk)
+  (check label (guard (caught (#t
+    (if (and (transformer-error? caught) (eq? category (transformer-error-category caught))
+             (eq? operation (transformer-error-operation caught)))
+        #t (begin (report label caught) #f)))) (thunk) #f)))
 (define resolved (must "config"
   (x1-private-config-resolve
     (x1-private-config-parse
@@ -110,6 +115,42 @@
 (define (same-moments?) (= (moments-equal (native-optimizer target) (native-optimizer reference)) 1))
 (define before (parameter-bytes (vector-ref target 6)))
 (define initial (cpu4-d2-cursor-capture-internal (vector-ref target 5)))
+(define (cursor-error-control label category value)
+  (reject-at label category 'token-dataset-seek!
+    (lambda () (cpu4-d2-cursor-restore-internal! (vector-ref target 5) value)))
+  (check "malformed cursor preserves exact D2 continuation"
+    (d2-core-bytes=? initial (cpu4-d2-cursor-capture-internal (vector-ref target 5))))
+  (check "malformed cursor preserves all14 absent gradients" (metadata? 0 0)))
+(cursor-error-control "cursor wrong type structured" 'invalid-argument 42)
+(cursor-error-control "cursor short physical length structured" 'corrupt-data (make-bytevector 208 0))
+(let ((bad (cpu4-control-bytes initial)))
+  (bytevector-u8-set! bad 0 0) (cursor-error-control "cursor magic structured" 'corrupt-data bad))
+(let ((bad (cpu4-control-bytes initial)))
+  (bytevector-u8-set! bad (- (bytevector-length bad) 1)
+    (if (= (bytevector-u8-ref bad (- (bytevector-length bad) 1)) 0) 1 0))
+  (cursor-error-control "cursor checksum structured" 'corrupt-data bad))
+(let ((bad (cpu4-control-bytes initial)))
+  (bytevector-u8-set! bad 8 2) (cursor-error-control "cursor version structured" 'version-mismatch bad))
+(let ((bad (cpu4-control-bytes initial)))
+  (bytevector-u8-set! bad 16 1) (cursor-error-control "cursor required feature structured" 'unsupported bad))
+(define foreign-cursor
+  (let* ((core (vector-ref (vector-ref record 16) 6))
+         (copy (make-vector 17 #f))
+         (manifest (cpu4-control-bytes (vector-ref core 1))))
+    (let copy-cursor-core-loop ((index 0))
+      (if (< index 17)
+          (begin (vector-set! copy index (vector-ref core index))
+                 (copy-cursor-core-loop (+ index 1)))))
+    (bytevector-u8-set! manifest 0 (if (= (bytevector-u8-ref manifest 0) 0) 1 0))
+    (vector-set! copy 1 manifest)
+    (d2-core-cursor-snapshot copy)))
+(reject-at "CPU4 identity error retains own operation" 'invalid-argument 'cpu4-d2-cursor-restore!
+  (lambda () (cpu4-d2-cursor-restore-internal! (vector-ref target 5) foreign-cursor)))
+(check "identity rejection preserves D2 continuation"
+  (d2-core-bytes=? initial (cpu4-d2-cursor-capture-internal (vector-ref target 5))))
+(check "identity rejection preserves all14 absent gradients" (metadata? 0 0))
+(check "valid cursor retry after all malformed controls"
+  (cpu4-d2-cursor-restore-internal! (vector-ref target 5) initial))
 (define (unchanged label)
   (check (string-append label " values1192/bytes4768")
          (byte-vectors=? before (parameter-bytes (vector-ref target 6))))
@@ -138,7 +179,8 @@
 (unchanged "first microbatch preserves all values/moments/counters")
 (define saved (cpu4-control-bytes (vector-ref first 6)))
 (bytevector-u8-set! (vector-ref first 6) 0 0)
-(reject "failed D2 seek retains frame" 'corrupt-data (lambda () (cpu4-training-step-abort-internal! first)))
+(reject-at "failed D2 seek retains frame" 'corrupt-data 'token-dataset-seek!
+  (lambda () (cpu4-training-step-abort-internal! first)))
 (check "same busy frame after seek failure" (and (eq? first (vector-ref record 4))
   (eq? (cpu4-step-frame-internal first) first) (not (vector-ref first 16)) (metadata? 1 1)))
 (idle-native "failed seek releases WRITE")
@@ -253,4 +295,6 @@
 (d2-token-dataset-close! (vector-ref reference 5))
 (check "target binding releases after full steps" (cpu4-model-binding-release-internal! (vector-ref target 3)))
 (check "reference binding releases" (cpu4-model-binding-release-internal! (vector-ref reference 3)))
+(if (not (= checks 140))
+    (begin (display "CPU4 step FAIL: exact check budget ") (display checks) (newline) (exit 1)))
 (display "CPU4 genuine full-step READ/WRITE/O2 PASS: checks=") (display checks) (newline)

@@ -25,6 +25,13 @@ D2 cursor helpers require a genuine idle N1/T4/V256 dataset with at least68 byte
 of physical batch capacity. They capture/check an encoded cursor identity and
 reuse checked D2 seek for restoration. This seek is an allocating fallible
 operation, not E3's prepared no-fail rollback tail.
+Restore decoder preflight runs inside the existing `d2-with-core-errors`
+boundary, just like public D2 seek. Cursor format/type/version/feature errors
+retain their decoder category and `token-dataset-seek!` operation as structured
+transformer errors; CPU4 profile/identity mismatches retain `invalid-argument`
+at `cpu4-d2-cursor-restore!`. Existing structured and foreign conditions pass
+through unchanged. Failed decode changes no cursor or frame ownership; the
+full-step caller retains the exact retry frame and manages its WRITE phase.
 
 Host source tests exercise exact P1 shape wrappers and binding publication/error
 paths with explicit native doubles, then actual SHA256/D2 cursor semantics.

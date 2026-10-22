@@ -221,11 +221,16 @@
         (cpu4-binding-fail 'invalid-state operation "CPU4 captured cursor differs"))
     cursor))
 (define (cpu4-d2-cursor-restore-internal! dataset cursor)
-  (let* ((operation 'cpu4-d2-cursor-restore!)
-         (core (cpu4-d2-idle-core dataset operation))
-         (decoded (d2-core-cursor-decode cursor)))
-    (if (not (and (= (vector-ref decoded 3) 256)
-                  (= (vector-ref decoded 4) 1) (= (vector-ref decoded 5) 4)
-                  (d2-core-state-identity=? core decoded)))
-        (cpu4-binding-fail 'invalid-argument operation "CPU4 restore cursor identity or sequence differs"))
-    (d2-token-dataset-seek! dataset cursor)))
+  ;; Decoder preflight precedes public seek, so it needs the existing core-error
+  ;; boundary too. Preserve decoder category/operation/message; already
+  ;; structured CPU4 profile errors and seek errors pass through unchanged.
+  (d2-with-core-errors
+    (lambda ()
+      (let* ((operation 'cpu4-d2-cursor-restore!)
+             (core (cpu4-d2-idle-core dataset operation))
+             (decoded (d2-core-cursor-decode cursor)))
+        (if (not (and (= (vector-ref decoded 3) 256)
+                      (= (vector-ref decoded 4) 1) (= (vector-ref decoded 5) 4)
+                      (d2-core-state-identity=? core decoded)))
+            (cpu4-binding-fail 'invalid-argument operation "CPU4 restore cursor identity or sequence differs"))
+        (d2-token-dataset-seek! dataset cursor)))))
