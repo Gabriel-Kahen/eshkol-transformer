@@ -1,6 +1,12 @@
-# Wave 3 completion — current acceptance index
+# CPU v1 completion — current acceptance index
 
 Updated 2026-10-22. **Not admitted; PR #214 remains draft and unmerged.**
+Active milestone: the first complete validated **Eshkol-native CPU-f32 version**.
+The user narrowed scope on 2026-10-22; the team contract is
+`finish-20261022/CPU_V1_SCOPE.md` beneath the receipt root. Existing in-flight gates
+continue unchanged. GPU backends, mixed precision, distributed work, new
+architectures, broad optimization and optional roadmap expansion remain backlog.
+
 This index supersedes historical pending-status prose for the current finish effort;
 the roadmap and linked contracts retain scope and measured limits.
 
@@ -31,10 +37,10 @@ the roadmap and linked contracts retain scope and measured limits.
 | G3-R replay / same-registry generation / authentic C2 SAVE | G3 | Reviewed source union; hosted C2 suites cover their declared scope | Authenticate retained receipts, then supported SAVE/reader normal, repeat, sanitizer and genuine replay/same-registry evidence. First entry point: `bash scripts/test-g3r-c2-authentic-save.sh FRESH_OUTPUT_DIRECTORY`. |
 | E3 section 9 | E3 | Prior bounded leaves and native/provider checks only where exact source and seals authenticate | Complete [section 9 matrix](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md): numeric/mode/gradient/failure/resource rows, poison and leak-enabled runs. First choose missing supported runner from retained evidence; `scripts/test-e3-numerical-transcript.sh`, `scripts/test-e3-mode-graph.sh`, and `scripts/test-e3-complete-call-retention.sh` remain separate gates. |
 | Installed CLI3 chain and resume parity | CLI3 | Exact-c71 hosted job `116183228215` includes `CLI3-PRODUCTION-GENERATE-PASS` and `CLI3-CROSS-COMMAND-CHAIN-PASS`; retained authenticated log | `bash scripts/test-cli3-cross-command-chain.sh DISK_BACKED_EVIDENCE_DIR`: tokenizer/corpus → train → SAVE → resume vs uninterrupted → evaluate/generate, malformed/identity negatives and checkpoint immutability. |
-| Public G3 terminal and data-only continuation | G3 → CLI3 | Native terminal prerequisites and fixed one-byte CLI path only | Implement/compile accepted [same-call terminal contract](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md), then public G2 gates and [data-only continuation](g3/G3_R_DATA_ONLY_CONTINUATION_CONTRACT.md); larger repeated-decode/EOS profile remains required by the full G3 contract. CLI adapter follows admitted exports. |
-| Full TR3 training acceptance | CLI3 | Bounded two-update CLI parity is distinct from training acceptance | Authenticate retained one-batch-overfit, held-out-improvement and longer interrupted-resume receipts against current source; execute genuinely missing declared gates and retain unsupported scope. |
+| CPU multi-token/EOS terminal and data-only continuation | G3 + integration public adapter → CLI3 | Native terminal prerequisites and fixed one-byte CLI path only | Implement/compile accepted [same-call terminal contract](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md), then public G2 gates and [data-only continuation](g3/G3_R_DATA_ONLY_CONTINUATION_CONTRACT.md); larger repeated-decode/EOS profile remains required by the full G3 contract. CLI adapter follows admitted exports. |
+| Current-source CPU training/learning/resume acceptance | CLI3 | Bounded two-update CLI parity is distinct from training acceptance | Authenticate retained one-batch-overfit, held-out-improvement and longer interrupted-resume receipts against current source; execute genuinely missing declared gates and retain unsupported scope. |
 | Combined source/tests/evidence and current-main union | Integration reviewer | Prior exact-c71 source review accepted; runtime union open | Review worker immutable commits, provenance, seals, results, scope limits and integration diff once the three lane results exist. |
-| Usable command walkthrough | Integration | Scripted chain exists; execution pending | Run and document an installed supported binary using the validated configuration and artifacts; retain actual JSON, parity and failure evidence. |
+| Installed CPU binary, artifacts and usable command walkthrough | Integration + CLI3 | Scripted chain exists; execution pending | Run and document an installed supported binary using the validated configuration and artifacts; retain actual JSON, parity and failure evidence. |
 | Merge and final validation | Integration only | None; admission held | All rows above discharged, exact-head checks satisfied, reviewed main union, then merge and authenticate resulting main identity/checks. |
 
 ## Execution and handoff contract
@@ -70,6 +76,17 @@ independent review/doc work while heavy gates run. Silence is never success.
   zero retained hash mismatches; current-source execution remains required.
 - [Fixed-profile command walkthrough](WAVE3_WALKTHROUGH.md) provides the exact
   bounded recipe; its fresh retained local execution remains pending.
+
+## CPU v1 completion rule
+
+All checklist rows are required within the declared CPU profile: numerical and
+gradient correctness; one-batch overfit and held-out improvement; complete-state
+interrupted/resumed equivalence; accepted terminal/multi-token/EOS and persisted
+continuation; evaluator mode/gradient preservation, atomic failures and bounded
+resources; supported sanitizer/CI evidence; independent combined review; integration
+and bounded merged-main validation. Deliver the actual binary, artifacts and
+reproducible walkthrough with measured time/memory and unsupported cases. The
+existing tiny one-byte proof alone does not satisfy CPU v1.
 
 ## Contract changes
 

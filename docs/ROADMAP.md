@@ -632,9 +632,12 @@ the old-head failure does not establish current-main runtime behavior.
 
 ## Wave 3 — first complete language model
 
-Current acceptance and finish ownership: [Wave 3 completion index](WAVE3_COMPLETION.md)
-(updated 2026-10-22). PR #214 exact-head hosted checks pass; compiled cross-workstream
-admission remains open. Historical detail below retains its original evidence scope.
+Active finish milestone: **first complete validated CPU v1**. Current acceptance
+and ownership: [CPU v1 completion index](WAVE3_COMPLETION.md), updated 2026-10-22.
+PR #214 exact-head hosted checks pass; current-source learning/resume, multi-token
+EOS/continuation, evaluator and compiled integration admission remain required.
+GPU, mixed precision and optional expansion stay backlog. Historical detail below
+retains its original evidence scope.
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
