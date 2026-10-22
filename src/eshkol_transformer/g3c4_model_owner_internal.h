@@ -73,4 +73,23 @@ int64_t et_g3c4_private_last_error_domain_v1(void);
 int64_t et_g3c4_private_last_error_category_v1(void);
 int64_t et_g3c4_private_last_error_code_v1(void);
 
+#ifdef ET_CPU4_TRAINING_PRIVATE
+/* Registered control-only borrow of the existing sealed C4 parameter owner. */
+typedef struct et_g3c4_training_lease_internal et_g3c4_training_lease_internal;
+void *et_g3c4_private_training_lease_create_v1(void *owner);
+void *et_g3c4_private_training_lease_parameter_v1(void *lease, int64_t index);
+void *et_g3c4_private_training_lease_identity_v1(void *lease, int64_t index);
+int64_t et_g3c4_private_training_lease_check_v1(void *lease);
+int64_t et_g3c4_private_training_lease_enter_v1(void *lease, int64_t phase);
+int64_t et_g3c4_private_training_lease_leave_v1(void *lease);
+int64_t et_g3c4_private_training_lease_prepare_release_v1(void *lease);
+int64_t et_g3c4_private_training_lease_cancel_release_v1(void *lease);
+int64_t et_g3c4_private_training_lease_commit_release_v1(void *lease);
+/* Native transport only, after that transport's own resource authentication. */
+int64_t et_g3c4_training_child_acquire_internal(
+    void *lease, const void *child, int64_t kind);
+int64_t et_g3c4_training_child_release_internal(
+    void *lease, const void *child, int64_t kind);
+#endif
+
 #endif
