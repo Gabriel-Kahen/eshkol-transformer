@@ -242,7 +242,7 @@ static int cpu4_control_overlap(const void *span, size_t bytes,
   return b > UINTPTR_MAX - extent || (a < b + extent && b < a + bytes);
 }
 /* Read-only registry observer. Child identity pointers have no declared payload
- * extent: this protects owner, lease and child RECORD allocations only. */
+ * extent: this protects registered control RECORD allocations only. */
 static int cpu4_control_span_overlaps_internal(const void *span, size_t bytes) {
   if (span == NULL || bytes == 0 || (uintptr_t)span > UINTPTR_MAX - bytes)
     return 1;
@@ -250,6 +250,12 @@ static int cpu4_control_span_overlaps_internal(const void *span, size_t bytes) {
        owner != NULL; owner = owner->registry_next)
     if (cpu4_control_overlap(span, bytes, owner, sizeof(*owner)))
       return 1;
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+  for (const et_cpu4_candidate_internal *cap = cpu4_candidates;
+       cap != NULL; cap = cap->next)
+    if (cpu4_control_overlap(span, bytes, cap, sizeof(*cap)))
+      return 1;
+#endif
   for (et_g3c4_training_lease_internal *item = cpu4_training_leases;
        item != NULL; item = item->next) {
     if (cpu4_control_overlap(span, bytes, item, sizeof(*item)))

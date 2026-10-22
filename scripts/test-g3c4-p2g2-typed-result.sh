@@ -38,6 +38,14 @@ sources=("$root/tests/g3c4/test_p2_g2_typed_result.c"
   "$root/native/g3n_primitives_provider.c"
   "$root/native/n2_primitives_provider.c"
   "$root/native/a2_kv_cache.c")
+case "${CPU4_TYPED_CANDIDATE_TESTING:-0}" in
+  0) ;;
+  1)
+    flags+=(-DET_CPU4_TRAINING_PRIVATE -DET_CPU4_CANDIDATE_PRIVATE
+      -DET_G3R_CANDIDATE_RETIRE_PRIVATE -DET_P1_TRUSTED_BUILD)
+    sources+=("$root/native/p1_identity.c" "$root/native/o2_optimizer.c") ;;
+  *) echo 'CPU4_TYPED_CANDIDATE_TESTING must be 0 or 1' >&2; exit 1 ;;
+esac
 owner_macros=(-DET_G3C4_CONTEXT_PRIVATE -DET_G3C4_NATIVE_PINS_PRIVATE
   -DET_G3C4_ACTIVE_CALL_PRIVATE -DET_G3C4_GENERATOR_PRIVATE
   -DET_G3C4_PROMPT_T1_BORROW_PRIVATE -DET_G3C4_PROVIDER_ROUTES_PRIVATE

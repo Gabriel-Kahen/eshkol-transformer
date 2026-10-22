@@ -108,6 +108,33 @@ static void typed_copy_case(void *owner, int64_t count,
 }
 
 #ifdef ET_CPU4_TRAINING_PRIVATE
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+static void typed_candidate_control_aliases(void *typed,
+    et_g3c4_output_internal *output, int64_t length) {
+  et_cpu4_candidate_internal *cap = et_cpu4_private_candidate_begin_v1(1729);
+  CHECK(cap != NULL && cap->state == CPU4_CANDIDATE_CONSTRUCTING);
+  for (int dead = 0; dead < 2; ++dead) {
+    unsigned char before[sizeof(*cap)];
+    memcpy(before, cap, sizeof(before));
+#define CANDIDATE_ALIAS(call) do { \
+    CHECK((call) != 0); \
+    CHECK(et_g3c4_error_state.category == ET_G3C4_INVALID_ARGUMENT && \
+          et_g3c4_error_state.code == ET_G3C4_CODE_ALIAS); \
+    CHECK(memcmp(before, cap, sizeof(before)) == 0); \
+  } while (0)
+    CANDIDATE_ALIAS(et_g3c4_private_p2g2_typed_copy_v1(
+        typed, length, cap, 8 + length * 8));
+    CANDIDATE_ALIAS(et_g3c4_private_p2g2_typed_element_v1(
+        typed, 0, &cap->origin_pid));
+    CANDIDATE_ALIAS(et_g3c4_private_p2g2_terminal_snapshot_v1(output, cap, 72));
+#undef CANDIDATE_ALIAS
+    if (!dead) {
+      OK(et_cpu4_private_candidate_abort_open_v1(cap));
+      CHECK(cap->state == CPU4_CANDIDATE_DEAD);
+    }
+  }
+}
+#endif
 static void typed_cpu4_control_aliases(
     et_g3c4_model_owner_internal *model, void *typed,
     et_g3c4_output_internal *output, int64_t length) {
@@ -150,6 +177,9 @@ static void typed_cpu4_control_aliases(
   CHECK(et_g3c4_private_p2g2_typed_element_v1(
       typed, 0, (int64_t *)(void *)&training->ordinal) != 0);
   CHECK(memcmp(lease_before, training, sizeof(lease_before)) == 0);
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+  typed_candidate_control_aliases(typed, output, length);
+#endif
 }
 #endif
 

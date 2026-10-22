@@ -121,8 +121,30 @@ static void test_abort(void) {
     OK(et_cpu4_private_candidate_abort_open_v1(candidate));
   }
 }
+static void candidate_control_aliases(et_cpu4_candidate_internal *candidate,
+                                      et_cpu4_candidate_internal *other) {
+  unsigned char before[sizeof(*candidate)];
+  memcpy(before, candidate, sizeof(before));
+  void *lease = et_g3c4_private_training_lease_create_v1(other->owner);
+  CHECK(lease != NULL);
+  const void *spans[] = {candidate, &candidate->origin_pid, &candidate->state};
+  const size_t sizes[] = {sizeof(*candidate), sizeof(candidate->origin_pid),
+                         sizeof(candidate->state)};
+  for (size_t i = 0; i < 3u; ++i) {
+    REJECT(et_g3c4_training_span_disjoint_internal(lease, spans[i], sizes[i]));
+    CHECK(et_g3c4_error_state.category == ET_G3C4_INVALID_ARGUMENT &&
+          et_g3c4_error_state.code == ET_G3C4_CODE_ALIAS);
+    CHECK(memcmp(before, candidate, sizeof(before)) == 0);
+  }
+  int64_t separate = 7;
+  OK(et_g3c4_training_span_disjoint_internal(lease, &separate, sizeof(separate)));
+  CHECK(separate == 7);
+  OK(et_g3c4_private_training_lease_prepare_release_v1(lease));
+  OK(et_g3c4_private_training_lease_commit_release_v1(lease));
+}
 static void test_roster_and_retry(void) {
   et_cpu4_candidate_internal *a = sealed(), *b = sealed();
+  candidate_control_aliases(a, b);
   et_cpu4_candidate_internal *cross = begin();
   REJECT(et_g3c4_private_model_owner_bind_v1(
       cross->owner, 0, (void *)b->owner->handles[0]));
@@ -208,6 +230,7 @@ static void test_roster_and_retry(void) {
   OK(et_cpu4_private_candidate_retire_cancel_v1(a));
   REJECT(et_cpu4_private_candidate_retire_graph_commit_v1(a));
   retire(a); /* A before B preserves the independent graph. */
+  candidate_control_aliases(a, b); /* Retained DEAD capabilities stay protected. */
   CHECK(b->owner->parameters[13] != NULL);
   void *g = generator(b->owner);
   CHECK(g != NULL);
