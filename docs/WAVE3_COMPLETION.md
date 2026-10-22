@@ -4,7 +4,7 @@ Updated 2026-10-22. **Not admitted; PR #214 remains draft and unmerged.**
 Active milestone: the first complete validated **Eshkol-native CPU-f32 version**.
 The user narrowed scope on 2026-10-22; the team contract is
 `finish-20261022/CPU_V1_SCOPE.md` beneath the receipt root. Existing in-flight gates
-continue unchanged. GPU backends, mixed precision, distributed work, new
+continue unchanged; queued legacy gates may be deferred before acquiring the heavy lock. GPU backends, mixed precision, distributed work, new
 architectures, broad optimization and optional roadmap expansion remain backlog.
 
 This index supersedes historical pending-status prose for the current finish effort;
@@ -122,18 +122,28 @@ Compiled failure/retry admission remains a separate queued gate.
 ## Adopted upstream CPU4 lease and active implementation
 
 The [typed lease contract](CPU4_TYPED_LEASE_CONTRACT.md) revision two is adopted
-for lease-only implementation after one independent assessment. CLI3 is implementing
-the exact nine private methods and two native-only child hooks; no parameter owner
+for lease-only implementation after one independent assessment. The six-file native lease foundation is source-approved at worker
+`063bc4c93ee2c1c62d108d0d4818182613c93a9f` and integrated as `6b62b596a`.
+All six reviewed Git blobs were independently authenticated before integration.
+The supported feature-off/normal/repeat/leak-sanitizer gate remains queued.
+The source implements the exact nine private methods and two native-only child hooks; no parameter owner
 is copied or cast. Context accounting excludes even idle generation contexts from
 training, native child/ordinal records enforce phase cleanup, and release preserves
-the canonical C4 owner. Input/result/graph/E3 signatures await the joint producer
-freeze before dependent composition.
+the canonical C4 owner. The independently approved [thin transport contract](CPU4_THIN_TRANSPORT_CONTRACT.md)
+uses one frame-local workspace with immutable snapshots and the existing Eshkol
+21-forward/25-reverse schedule. CLI3 is implementing that producer; the narrow
+E3 lease-bound no-grad frame seam is under independent review. Joint canonical
+C4/config/P1-mode binding remains an upstream dependency.
 
-A2/N2/N3K and E3 L3S/metrics native source implementation is active under the
-reviewed exact T4 row contracts. Public G2 port source `3f53c54b` remains on HOLD:
-independent causal tests found output lifetime coupled to generator liveness and
-an unchecked selected generator-root node mutation. Both repairs are in progress;
-passing advertised host tests is not source or runtime admission. Receipts:
+A2/N2/N3K T4 source and independent primitive-gradient fixtures are integrated
+as `c7a3014d1` from source-approved worker `d5a5c33b`; the supported compiled
+gate is queued. E3 L3S/metrics source `d5970d77` is independently source-approved;
+its native gate supervisor is being repaired before execution. Public G2 final
+repair source `0a292f416a3add5ef511c84bb7d89922e4a690ab` is under independent
+review. Earlier `3f53c54b` and successor source receipts remain held/preserved:
+causal tests exposed output lifetime coupled to generator liveness and incomplete
+final authority checks. The final repair reports 92 actual-core mutation controls;
+host controls do not establish supported AOT/native/sanitizer admission. Receipts:
 `finish-20261022/REVIEW-integration-public-g2-3f53c54b.md` and
 `REVIEW-integration-cpu4-provider-contract.md` / `REVIEW-integration-cpu4-metrics-addendum.md`.
 
@@ -195,8 +205,9 @@ review decision before integration.
 
 ## Supported-scope boundary
 
-The candidate's CLI acceptance uses the fixed CPU-f32 diagnostic profile (context
-2, hidden size 4, one layer, two query heads, vocabulary 256, byte tokenizer).
+The frozen c71 candidate's bounded CLI acceptance uses context two. The current
+CPU v1 target is full sequence/context four with the geometry in
+[CPU_V1_PROFILE.md](CPU_V1_PROFILE.md); its compiled acceptance is pending.
 A passing bounded chain does not establish arbitrary model sizes, GPU execution,
 mixed precision, language quality, flat memory or practical scaling. Preserve
 measured retention, resource and unsupported-case limits from each lane.
