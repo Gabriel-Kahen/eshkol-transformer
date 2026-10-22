@@ -48,7 +48,7 @@ run resources python3 -B -m tests.e3_cpu4_consumer.resources "$out/resources"
 sha256sum --quiet -c tests/e3_private/asan_ir_sources.sha256
 cp tests/e3_private/asan_ir_sources.sha256 "$out/asan-ir-sources.sha256"
 flags=(-std=c11 -Wall -Wextra -Werror -Wpedantic -fPIC -fvisibility=hidden
-  -fno-common -fstack-protector-all -ffp-contract=off -fexcess-precision=standard -fno-fast-math
+  -fno-common -fstack-protector-all -ffp-contract=off -fexcess-precision=standard -frounding-math -fno-fast-math
   -I "$PROJECT_ROOT/include" -I "$PROJECT_ROOT/native" -I "$PROJECT_ROOT/src"
   -I "$PROJECT_ROOT/src/eshkol_transformer" -I "$(eshkol_source_dir)/inc"
   -DET_G3C4_NATIVE_OWNER_PRIVATE -DET_CPU4_TRAINING_PRIVATE
