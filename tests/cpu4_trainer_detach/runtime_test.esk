@@ -1,0 +1,215 @@
+;;; Genuine unpublished trainer/binding detach; no component destruction.
+;;; Zero controls only, no training step or full checkpoint transaction.
+(load "t2_wave2_root.esk")
+(load "i2_wave2_extension.esk")
+(load "o2_wave2_extension.esk")
+(define t1-wave1-tensor-admitted? t2-wave2-tensor-admitted?)
+(load "m3t_transport_extension.esk")
+(load "m3_schedule.esk")
+(load "m3_model_extension.esk")
+(load "d2_semantic_core.esk")
+(load "d2_dataset.esk")
+(load "c2_d2_cursor_pair_extension.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "cpu4_p1_fixed_set_extension.esk")
+(load "cpu4_model_binding_extension.esk")
+(load "cpu4_trainer_control_extension.esk")
+(load "cpu4_trainer_detach_extension.esk")
+
+(define checks 0)
+(define (check label good)
+  (if good (set! checks (+ checks 1))
+      (begin (display "CPU4 detach FAIL: ") (display label) (newline) (exit 1))))
+(define (report-error label caught)
+  (display "CPU4 detach ERROR: ") (display label)
+  (if (transformer-error? caught)
+      (begin (display " category=") (display (transformer-error-category caught))
+             (display " operation=") (display (transformer-error-operation caught))
+             (display " message=") (display (transformer-error-message caught)))
+      (display " non-transformer error"))
+  (newline))
+(define (must label thunk)
+  (guard (caught (#t (report-error label caught) (exit 1))) (thunk)))
+(define (reject label category thunk)
+  (check label
+    (guard (caught (#t (if (and (transformer-error? caught)
+                                (eq? category (transformer-error-category caught)))
+                            #t (begin (report-error label caught) #f))))
+      (thunk) #f)))
+(define (handle-paths handles)
+  (let loop ((index 0))
+    (if (= index 14) '()
+        (cons (parameter-handle-path (vector-ref handles index)) (loop (+ index 1))))))
+(define (all-modes modules expected)
+  (let loop ((index 0))
+    (if (= index 17) #t
+        (and (eq? (module-mode-internal (vector-ref modules index)) expected)
+             (loop (+ index 1))))))
+
+(define resolved
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":4,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}") '()))
+(define model (g3c4-model-create-seeded-internal 1729))
+(module-train! model)
+(define binding (cpu4-model-binding-create-internal model resolved))
+(define binding-record (cpu4-model-binding-check-internal binding))
+(define handles (vector-ref binding-record 10))
+(define modules (vector-ref binding-record 9))
+(define lease (cpu4-model-binding-native-lease-internal binding))
+(define optimizer
+  (o2-public-optimizer-create
+    (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu '(none) '(constant)
+      (list (list 'group (handle-paths handles) "3dcccccd" "3f000000" "3f000000"
+                  "3a83126f" "00000000")))
+    (module-parameters model)))
+(define arguments (command-line))
+(define tokenizer (must "raw V256 tokenizer" (lambda () (t2-wave2-tokenizer-byte resolved))))
+(define dataset (must "real N1/T4/V256 dataset" (lambda ()
+  (d2-token-dataset-open
+    (list ':directory (car (cdr arguments)) ':batch-size 1 ':sequence-length 4
+          ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+          ':maximum-total-tokens 65536 ':maximum-batch-bytes 68
+          ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #f) tokenizer))))
+(define initial-cursor (cpu4-d2-cursor-capture-internal dataset))
+(define trainer (must "genuine zero trainer"
+  (lambda () (cpu4-trainer-create-internal binding tokenizer dataset optimizer))))
+(define record (cpu4-trainer-idle-check-internal trainer 'cpu4-detach-test))
+(define o2-record (o2-require-optimizer 'cpu4-detach-test optimizer))
+(define d2-state (d2-open-dataset-state dataset 'cpu4-detach-test))
+(define checksums (make-vector 14 0))
+(define (value-checksum index)
+  (let* ((carrier (vector-ref (vector-ref binding-record 11) index))
+         (value (i2-native-borrow-checksum (vector-ref carrier 2)
+                  (i2-native-role carrier) (vector-ref carrier 3))))
+    (if (< value 0) (i2-native-fail 'cpu4-detach-checksum)) value))
+(let capture ((index 0))
+  (if (< index 14)
+      (begin (vector-set! checksums index (value-checksum index)) (capture (+ index 1)))))
+(define (same-live-idle?)
+  (and (eq? record (cpu4-trainer-idle-check-internal trainer 'cpu4-detach-test))
+       (eq? binding-record (cpu4-model-binding-check-internal binding))
+       (eq? lease (cpu4-model-binding-native-lease-internal binding))
+       (eq? (vector-ref record 3) 'idle) (eq? (vector-ref record 4) #f)))
+(define (zero-controls? controls)
+  (and (= (vector-length controls) 5)
+       (equal? (vector-ref controls 0) (vector 'philox4x32-10 1 1729 0 0))
+       (equal? (vector-ref controls 4) (vector 0 0 0))
+       (d2-core-bytes=? (vector-ref (vector-ref controls 2) 0) initial-cursor)
+       (d2-core-bytes=? (vector-ref (vector-ref controls 2) 1) initial-cursor)
+       (d2-core-bytes=? (vector-ref (vector-ref controls 3) 0)
+                        (string->utf8 (x1-private-config-canonical resolved)))))
+(check "genuine idle22 record" (and (= (vector-length record) 22) (same-live-idle?)))
+(check "same original model and full position extent" (and (eq? model (vector-ref record 8))
+  (equal? (parameter-handle-shape (vector-ref handles 13)) '(4 4))))
+(reject "forged trainer rejected" 'invalid-argument
+  (lambda () (cpu4-trainer-detach-internal! (vector 'cpu4-trainer))))
+(check "forgery preserves canonical trainer/binding" (same-live-idle?))
+
+;;; Real active snapshot parent retains WRITE; failed detach preserves it.
+(define snapshot (cpu4-trainer-control-begin-internal trainer 'snapshot))
+(reject "active snapshot prevents detach" 'invalid-state
+  (lambda () (cpu4-trainer-detach-internal! trainer)))
+(check "same snapshot parent and controls survive" (and (eq? (vector-ref record 4) snapshot)
+  (zero-controls? (cpu4-trainer-controls-copy-internal snapshot))))
+(check "snapshot still owns native WRITE" (not (= (cpu4-control-native-enter lease 1) 0)))
+(cpu4-trainer-control-end-internal! snapshot)
+(check "snapshot close restores same idle" (same-live-idle?))
+
+;;; Genuine staged/prepared control authority, then abort and close. The stage
+;;; and closed parent stay registered; detach must ignore their consumed state.
+(define restore (cpu4-trainer-control-begin-internal trainer 'restore))
+(define controls (cpu4-trainer-controls-copy-internal restore))
+(define stage (cpu4-trainer-controls-restore-stage-internal restore controls))
+(reject "staged restore prevents detach" 'invalid-state
+  (lambda () (cpu4-trainer-detach-internal! trainer)))
+(check "same stage survives failed detach" (zero-controls? (cpu4-trainer-controls-restore-copy-internal stage)))
+(cpu4-trainer-controls-restore-precommit-internal stage)
+(reject "prepared restore prevents detach" 'invalid-state
+  (lambda () (cpu4-trainer-detach-internal! trainer)))
+(check "same prepared stage survives" (zero-controls? (cpu4-trainer-controls-restore-copy-internal stage)))
+(cpu4-trainer-controls-restore-abort-internal! stage)
+(cpu4-trainer-control-end-internal! restore)
+(check "aborted stage/closed parent restore idle" (same-live-idle?))
+
+;;; Zero-state controls identity commit only: no parameter/moment/D2 plan claim.
+(define committed-parent (cpu4-trainer-control-begin-internal trainer 'restore))
+(define committed-stage (cpu4-trainer-controls-restore-stage-internal committed-parent
+  (cpu4-trainer-controls-copy-internal committed-parent)))
+(cpu4-trainer-controls-restore-precommit-internal committed-stage)
+(cpu4-trainer-controls-restore-commit-internal! committed-stage)
+(cpu4-trainer-control-end-internal! committed-parent)
+(check "consumed stage/closed parent restore idle" (same-live-idle?))
+
+;;; Genuine P1 and D2 preflight failures must not retire the binding.
+(module-eval! model)
+(reject "P1 EVAL preflight prevents detach" 'invalid-state
+  (lambda () (cpu4-trainer-detach-internal! trainer)))
+(module-train! model)
+(check "P1 retry keeps same live idle" (same-live-idle?))
+(define batch (d2-token-dataset-next-batch dataset))
+(check "real T4 batch remains caller owned" (not (d2-token-dataset-end? batch)))
+(reject "live D2 batch prevents detach" 'invalid-state
+  (lambda () (cpu4-trainer-detach-internal! trainer)))
+(check "D2 rejection leaves binding live" (eq? lease (cpu4-model-binding-native-lease-internal binding)))
+(d2-token-batch-release! batch)
+(cpu4-d2-cursor-restore-internal! dataset initial-cursor)
+(check "D2 retry keeps same live idle" (same-live-idle?))
+
+;;; Canonical trainer is idle, but the native binding release must reject READ.
+(check "external native READ enter" (= (cpu4-control-native-enter lease 1) 0))
+(reject "native READ contention prevents detach" 'invalid-state
+  (lambda () (cpu4-trainer-detach-internal! trainer)))
+(check "failed native prepare preserves same trainer/lease" (same-live-idle?))
+(check "failed native prepare leaves READ held" (not (= (cpu4-control-native-enter lease 2) 0)))
+(check "external native READ leave" (= (cpu4-control-native-leave lease) 0))
+(define saved-slots (make-vector 22 #f))
+(let save ((index 0))
+  (if (< index 22)
+      (begin (vector-set! saved-slots index (vector-ref record index)) (save (+ index 1)))))
+(must "detach same trainer after failed preflight" (lambda () (cpu4-trainer-detach-internal! trainer)))
+(check "trainer is dead" (eq? (vector-ref record 3) 'dead))
+(let unchanged ((index 0))
+  (if (< index 22)
+      (begin (if (not (= index 3))
+                 (check "only trainer state slot changed" (eq? (vector-ref record index) (vector-ref saved-slots index))))
+             (unchanged (+ index 1)))))
+(reject "repeat detach is stale" 'invalid-state (lambda () (cpu4-trainer-detach-internal! trainer)))
+(reject "dead row accessor rejected" 'invalid-state
+  (lambda () (cpu4-trainer-record-internal trainer 'cpu4-detach-test)))
+(reject "dead trainer cannot begin controls" 'invalid-state
+  (lambda () (cpu4-trainer-control-begin-internal trainer 'snapshot)))
+(reject "old parent cannot regain authority" 'invalid-state
+  (lambda () (cpu4-trainer-controls-copy-internal snapshot)))
+(reject "old stage cannot regain authority" 'invalid-state
+  (lambda () (cpu4-trainer-controls-restore-precommit-internal stage)))
+(reject "released binding lease accessor rejected" 'invalid-state
+  (lambda () (cpu4-model-binding-native-lease-internal binding)))
+(check "binding released through actual contract" (cpu4-model-binding-release-internal! binding))
+
+;;; Components remain real and usable; the fixture performs their own cleanup.
+(check "same canonical model still accessible" (eq? model (cpu4-model-binding-model-internal binding)))
+(check "all17 P1 modes preserved" (all-modes modules 'train))
+(check "same genuine O2 optimizer remains registered" (eq? o2-record (o2-require-optimizer 'cpu4-detach-test optimizer)))
+(check "O2 completed updates remain zero" (= (o2-native-optimizer-completed-updates (vector-ref o2-record 1)) 0))
+(check "O2 zero-grad remains usable" (o2-public-optimizer-zero-grad! optimizer))
+(define optimizer-state (must "O2 state remains usable" (lambda () (o2-public-optimizer-state optimizer))))
+(check "release genuine O2 snapshot" (o2-public-optimizer-state-release! optimizer-state))
+(check "same genuine D2 owner remains live" (eq? d2-state (d2-open-dataset-state dataset 'cpu4-detach-test)))
+(check "D2 cursor preserved by detach" (d2-core-bytes=? initial-cursor (cpu4-d2-cursor-capture-internal dataset)))
+(define post-detach-batch (d2-token-dataset-next-batch dataset))
+(check "D2 still produces real T4 batch" (not (d2-token-dataset-end? post-detach-batch)))
+(d2-token-batch-release! post-detach-batch)
+(cpu4-d2-cursor-restore-internal! dataset initial-cursor)
+(let values ((index 0))
+  (if (< index 14)
+      (begin (check "all14 canonical parameter values preserved" (= (value-checksum index) (vector-ref checksums index)))
+             (check "all14 gradients remain absent"
+               (equal? (i2-parameter-gradient-metadata-internal (vector-ref (vector-ref binding-record 11) index)) (vector 0 0)))
+             (values (+ index 1)))))
+(check "tokenizer remains canonical V256" (= (t2-wave2-tokenizer-vocab-size tokenizer) 256))
+(d2-token-dataset-close! dataset)
+(module-eval! model)
+(check "model P1 modes remain usable" (all-modes modules 'eval))
+(display "CPU4 genuine unpublished trainer detach PASS: checks=") (display checks) (newline)
