@@ -67,7 +67,11 @@ static int cpu4_storage_idle(et_g3c4_training_lease_internal *lease) {
 }
 #ifdef ET_G3C4_CONTEXT_PRIVATE
 static int cpu4_context_available(et_g3c4_model_owner_internal *owner) {
-  return owner->training_lease == NULL && owner->live_contexts != SIZE_MAX;
+  return owner->training_lease == NULL && owner->live_contexts != SIZE_MAX
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+      && cpu4_candidate_available(owner)
+#endif
+      ;
 }
 static void cpu4_context_published(et_g3c4_model_owner_internal *owner) {
   if (!cpu4_context_available(owner)) abort();
@@ -85,7 +89,11 @@ void *et_g3c4_private_training_lease_create_v1(void *candidate) {
   et_g3c4_model_owner_internal *owner = et_g3c4_admit_owner(candidate, 0);
   if (owner == NULL) return NULL;
   if (owner->state != ET_G3C4_OWNER_SEALED || owner->active != NULL ||
-      owner->training_lease != NULL || owner->live_contexts != 0u) {
+      owner->training_lease != NULL || owner->live_contexts != 0u
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+      || !cpu4_candidate_available(owner)
+#endif
+  ) {
     (void)cpu4_lease_error(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
     return NULL;
   }

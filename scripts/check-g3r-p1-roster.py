@@ -17,6 +17,7 @@ flag = "ET_G3R_CANDIDATE_RETIRE_PRIVATE"
 require(flag in source and flag in header and flag in test, "feature guard missing")
 for name in (
     "et_p1_private_candidate_construction_begin_v1",
+    "et_p1_private_candidate_state_preflight_v1",
     "et_p1_private_candidate_graph_preflight_v1",
     "et_p1_private_candidate_graph_revoke_v1",
 ):
@@ -30,11 +31,25 @@ require("record->candidate_construction != ledger" in source and
 require("ledger->entries != ledger->candidate_roster_base" in source and
         "ledger->count != ledger->sealed_count" in source,
         "roster extent or identity check missing")
+phase = source.split("ET_P1_PRIVATE int64_t et_p1_private_candidate_state_preflight_v1", 1)[1].split(
+    "ET_P1_PRIVATE int64_t et_p1_private_candidate_graph_preflight_v1", 1)[0].split("#ifdef ET_CPU4_CANDIDATE_PRIVATE", 1)[0]
+require("find_context(candidate)" in phase and "context_integrity(context)" in phase and
+        "require_context(candidate)" not in phase and
+        "memset(&context->error, 0, sizeof(context->error))" in phase,
+        "phase proof must preserve the fresh begin result")
+require(all(item in phase for item in (
+    "expected_phase != 0 && expected_phase != 2", "ledger->candidate_retirable != 1u",
+    "ledger->count == 0u", "context->result_ptr == ledger",
+    "active_construction == ledger", "ledger->entries == ledger->candidate_roster_base",
+    "ledger->state == 2u", "active_construction == NULL",
+    "ledger->entries == NULL && ledger->candidate_roster_base == NULL")),
+    "closed empty-OPEN/ABORTED proof is incomplete")
 require("ET_G3R_CANDIDATE_RETIRE_PRIVATE" not in
         (root / "native/p1_identity_public_symbols.txt").read_text(),
         "public manifest mentions candidate feature")
 for name in (
     "et_p1_private_candidate_construction_begin_v1",
+    "et_p1_private_candidate_state_preflight_v1",
     "et_p1_private_candidate_graph_preflight_v1",
     "et_p1_private_candidate_graph_revoke_v1",
 ):

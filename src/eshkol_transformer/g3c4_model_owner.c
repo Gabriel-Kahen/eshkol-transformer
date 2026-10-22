@@ -34,6 +34,18 @@
 #error "C4 P2/G2 logical IDs clone requires terminal output and private I1 ownership"
 #endif
 
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+#if !defined(ET_CPU4_TRAINING_PRIVATE) || !defined(ET_G3R_CANDIDATE_RETIRE_PRIVATE)
+#error "CPU4 candidate requires typed training leases and retained P1/F32/O2 authority"
+#endif
+#include <unistd.h>
+#ifndef ET_P1_PRIVATE_API
+#define ET_P1_PRIVATE_API 1
+#endif
+#include "../../native/p1_identity_internal.h"
+typedef struct et_cpu4_candidate_internal et_cpu4_candidate_internal;
+#endif
+
 #include <limits.h>
 #include <math.h>
 #include <stddef.h>
@@ -62,11 +74,52 @@ typedef struct et_g3c4_model_owner_internal {
   et_f32_parameter *parameters[14];
   const void *handles[14];
   void *active;
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+  et_cpu4_candidate_internal *candidate;
+#endif
 #ifdef ET_CPU4_TRAINING_PRIVATE
   et_g3c4_training_lease_internal *training_lease;
   size_t live_contexts;
 #endif
 } et_g3c4_model_owner_internal;
+
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+enum { CPU4_CANDIDATE_CONSTRUCTING, CPU4_CANDIDATE_UNPUBLISHED,
+       CPU4_CANDIDATE_ADOPTED, CPU4_CANDIDATE_PREPARED,
+       CPU4_CANDIDATE_REVOKED, CPU4_CANDIDATE_DEAD };
+struct et_cpu4_candidate_internal {
+  et_cpu4_candidate_internal *next;
+  et_g3c4_model_owner_internal *owner;
+  void *p1_context;
+  void *p1_scope;
+  et_f32_parameter *parameters[14];
+  const void *handles[14];
+  void *optimizer;
+  void *generator;
+  int64_t origin_pid;
+  int state;
+  int abort_authorized;
+};
+static et_cpu4_candidate_internal *cpu4_candidates;
+static int cpu4_candidate_owner_valid(const et_g3c4_model_owner_internal *owner) {
+  const et_cpu4_candidate_internal *found = NULL;
+  for (const et_cpu4_candidate_internal *cap = cpu4_candidates;
+       cap != NULL; cap = cap->next) {
+    if (cap->owner == owner) {
+      if (found != NULL) return 0;
+      found = cap;
+    }
+  }
+  return found == owner->candidate &&
+      (found == NULL || found->origin_pid == (int64_t)getpid());
+}
+static int cpu4_candidate_available(const et_g3c4_model_owner_internal *owner) {
+  if (!cpu4_candidate_owner_valid(owner)) return 0;
+  return owner->candidate == NULL ||
+      owner->candidate->state == CPU4_CANDIDATE_UNPUBLISHED ||
+      owner->candidate->state == CPU4_CANDIDATE_ADOPTED;
+}
+#endif
 
 static _Thread_local et_g3c4_error_state_internal et_g3c4_error_state;
 static et_g3c4_model_owner_internal *et_g3c4_owner_registry;
@@ -224,6 +277,12 @@ static et_g3c4_model_owner_internal *et_g3c4_admit_owner(
     (void)et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
     return NULL;
   }
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+  if (!cpu4_candidate_owner_valid(owner)) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+    return NULL;
+  }
+#endif
   if (owner->state == ET_G3C4_OWNER_ABORTED && !allow_aborted) {
     (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
     return NULL;
@@ -538,11 +597,22 @@ int64_t et_g3c4_private_model_owner_bind_v1(
       return et_g3c4_fail(
           ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_TOPOLOGY);
   }
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+  if (owner->candidate != NULL &&
+      et_p1_private_candidate_handle_preflight_v1(
+          owner->candidate->p1_context, owner->candidate->p1_scope,
+          exact_handle) != 0)
+    return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+#endif
   if (et_g3c4_capture_f32(
           et_f32_parameter_bind_identity_v1(
               owner->parameters[index], exact_handle, &error), &error))
     return et_g3c4_error_state.category;
   owner->handles[index] = exact_handle;
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+  if (owner->candidate != NULL)
+    owner->candidate->handles[index] = exact_handle;
+#endif
   return 0;
 }
 
@@ -714,7 +784,21 @@ int64_t et_g3c4_private_model_owner_commit_seal_v1(void *candidate) {
   if (owner != staged_c4_owner || owner->state != ET_G3C4_OWNER_PREPARED)
     return et_g3c4_fail(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+  if (owner->candidate != NULL &&
+      (owner->candidate->state != CPU4_CANDIDATE_CONSTRUCTING ||
+       owner->candidate->p1_scope == NULL || owner->candidate->p1_context == NULL))
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (owner->candidate != NULL &&
+      et_p1_private_candidate_graph_preflight_v1(
+          owner->candidate->p1_context, owner->candidate->p1_scope) != 0)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_IDENTITY);
+#endif
   owner->state = ET_G3C4_OWNER_SEALED;
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+  if (owner->candidate != NULL)
+    owner->candidate->state = CPU4_CANDIDATE_UNPUBLISHED;
+#endif
   staged_c4_owner = NULL;
   return 0;
 }
@@ -726,6 +810,10 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
   owner = et_g3c4_admit_owner(candidate, 1);
   if (owner == NULL) return et_g3c4_error_state.category;
   if (owner->state == ET_G3C4_OWNER_ABORTED) return 0;
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+  if (owner->candidate != NULL && !owner->candidate->abort_authorized)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+#endif
   if (owner == staged_c4_owner &&
       (owner->state == ET_G3C4_OWNER_OPEN ||
        owner->state == ET_G3C4_OWNER_PREPARED)) {
@@ -9080,4 +9168,8 @@ fail:
   et_g3c4_error_restore_internal(first);
   return -1;
 }
+#endif
+
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+#include "cpu4_candidate.inc"
 #endif

@@ -65,6 +65,21 @@ int64_t et_g3c4_private_model_owner_prepare_seal_v1(void *owner);
 int64_t et_g3c4_private_model_owner_commit_seal_v1(void *owner);
 int64_t et_g3c4_private_model_owner_abort_v1(void *owner);
 
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+/* Closed unpublished producer. All calls require external serialization. */
+void *et_cpu4_private_candidate_begin_v1(int64_t seed);
+void *et_cpu4_private_candidate_owner_v1(void *candidate);
+int64_t et_cpu4_private_candidate_bind_graph_v1(
+    void *candidate, void *p1_context, void *p1_construction);
+int64_t et_cpu4_private_candidate_abort_open_v1(void *candidate);
+int64_t et_cpu4_private_candidate_adopt_v1(void *candidate, void *owned_generator);
+int64_t et_cpu4_private_candidate_retire_prepare_v1(
+    void *candidate, void *owned_optimizer, void *owned_generator);
+int64_t et_cpu4_private_candidate_retire_cancel_v1(void *candidate);
+int64_t et_cpu4_private_candidate_retire_graph_commit_v1(void *candidate);
+int64_t et_cpu4_private_candidate_retire_payload_commit_v1(void *candidate);
+#endif
+
 int32_t et_g3c4_construction_parameter_preflight_internal(
     const void *exact_owner, void *parameter,
     const void *exact_handle, et_f32_tensor_error *error);

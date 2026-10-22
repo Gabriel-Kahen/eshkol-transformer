@@ -1016,6 +1016,80 @@ int32_t et_o2_private_candidate_retire_preflight_v1(
   return et_o2_success(error);
 }
 
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+int32_t et_cpu4_optimizer_roster_preflight_internal(
+    et_o2_optimizer *optimizer_or_null,
+    et_f32_parameter *const parameters[14],
+    const void *const handles[14], et_o2_error_v1 *error) {
+  const char *operation = "cpu4-optimizer-roster-preflight";
+  if (et_o2_retire_error_overlaps(error)) return ET_O2_STATUS_INVALID_ARGUMENT;
+  if (parameters == NULL || handles == NULL)
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_ARGUMENT,
+        ET_O2_CODE_INVALID_HANDLE, operation, "owner roster is required");
+  for (size_t i = 0u; i < 14u; ++i) {
+    et_f32_tensor_error child_error;
+    if (parameters[i] == NULL || handles[i] == NULL ||
+        et_f32_parameter_validate_identity_v1(
+            parameters[i], handles[i], &child_error) != 0)
+      return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+          ET_O2_CODE_INVALID_HANDLE, operation, "owner roster is invalid");
+    for (size_t j = 0u; j < i; ++j)
+      if (parameters[i] == parameters[j] || handles[i] == handles[j])
+        return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+            ET_O2_CODE_OWNER_CONFLICT, operation, "owner roster repeats");
+  }
+  if (optimizer_or_null != NULL) {
+    int32_t status = et_o2_private_candidate_retire_preflight_v1(
+        optimizer_or_null, error);
+    if (status != 0) return status;
+    /* Admission above makes these exact native entries safe to read. */
+    for (size_t i = 0u; i < 14u; ++i)
+      if (optimizer_or_null->entries[i].parameter != parameters[i] ||
+          optimizer_or_null->entries[i].p1_handle != handles[i])
+        return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+            ET_O2_CODE_OWNER_CONFLICT, operation,
+            "optimizer does not have the exact ordered owner roster");
+    return et_o2_success(error);
+  }
+  /* Builders and state clones have no retained parameter-origin roster.
+   * Conservatively deny rather than infer independence from their payload. */
+  if (et_o2_builders != NULL || et_o2_reconstruct_builders != NULL)
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+        ET_O2_CODE_ACTIVE_BORROW, operation, "an O2 builder is active");
+  for (const et_o2_optimizer_state *state = et_o2_states; state != NULL;
+       state = state->registry_next)
+    if (state->lifecycle == ET_O2_OPTIMIZER_STATE_LIVE ||
+        state->active_borrows != 0u)
+      return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+          ET_O2_CODE_ACTIVE_BORROW, operation, "an O2 state is active");
+  for (const et_o2_optimizer *other = et_o2_optimizers; other != NULL;
+       other = other->registry_next) {
+    if (other->magic != ET_O2_OPTIMIZER_MAGIC) continue;
+    const et_o2_retire_provenance *record = et_o2_retire_record_find(other);
+    if (record == NULL || record->live != 1u || record->count == 0u ||
+        record->count > ET_O2_MAX_PARAMETERS ||
+        other->entries == NULL || other->entries != record->entries ||
+        other->count != record->count)
+      return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
+          ET_O2_CODE_PROVIDER_DEFECT, operation, "unproved live optimizer");
+    for (size_t j = 0u; j < record->count; ++j) {
+      const et_o2_entry *entry = &other->entries[j];
+      if (memcmp(entry, &record->roster[j], sizeof(*entry)) != 0)
+        return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
+            ET_O2_CODE_PROVIDER_DEFECT, operation, "changed live optimizer");
+      for (size_t i = 0u; i < 14u; ++i)
+        if (entry->parameter == parameters[i] || entry->p1_handle == handles[i] ||
+            entry->storage_owner ==
+                et_f32_parameter_canonical_owner_v1(parameters[i]))
+          return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+              ET_O2_CODE_OWNER_CONFLICT, operation,
+              "owner roster has a live optimizer consumer");
+    }
+  }
+  return et_o2_success(error);
+}
+#endif
+
 #ifdef ET_O2_TESTING
 static size_t et_o2_retire_fail_after = SIZE_MAX;
 void et_o2_test_retire_fail_after_v1(size_t destroyed) {
