@@ -1,0 +1,116 @@
+;;; Genuine-runtime fixture fragment: append AFTER root-owned CPU4+C2 reader/
+;;; K2/typed-child/factory aggregate. Link the existing child native observer.
+;;; Prepared only: host doubles do not prove any of these runtime observations.
+(extern i64 cpu4-factory-region-native-count i64 :real et_cpu4_child_test_o2_count)
+(extern i64 cpu4-factory-region-reader-events :real et_c2_checkpoint_reader_test_event_count_v1)
+(extern i64 cpu4-factory-region-io-events :real et_checkpoint_io_test_event_count_v1)
+(extern i64 cpu4-factory-region-images :real et_c2_checkpoint_core_test_live_images_v1)
+(extern i64 cpu4-factory-region-readers :real et_c2_checkpoint_reader_test_live_count_v1)
+(extern i64 cpu4-factory-region-fds :real et_c2_checkpoint_reader_test_fd_live_count_v1)
+(define cpu4-factory-region-checks 0)
+(define (cpu4-factory-region-check good message)
+  (set! cpu4-factory-region-checks (+ cpu4-factory-region-checks 1))
+  (if (not good)
+      (begin (display "CPU4 factory region FAIL: ") (display message) (newline) (exit 1))))
+(define (cpu4-factory-region-native-counts)
+  (vector (cpu4-factory-region-native-count 0) (cpu4-factory-region-native-count 1)
+          (cpu4-factory-region-native-count 2) (cpu4-factory-region-native-count 3)
+          (cpu4-factory-region-native-count 4) (cpu4-factory-region-native-count 5)))
+(define (cpu4-factory-region-counts=? left right count)
+  (let compare ((index 0))
+    (if (= index count) #t
+        (and (= (vector-ref left index) (vector-ref right index))
+             (compare (+ index 1))))))
+(define (cpu4-factory-region-snapshot)
+  (vector (vector-ref cpu4-checkpoint-factories 0)
+          (vector-ref cpu4-owned-candidates 0) (vector-ref cpu4-model-bindings 0)
+          (vector-ref cpu4-trainers 0) (vector-ref cpu4-checkpoint-parents 0)
+          (vector-ref cpu4-snapshot-envelopes 0) c2-load-stages
+          c2-training-state-states o2-optimizers
+          (vector-ref g3c4-model-registry 0) (vector-ref i2-module-registry-root 0)
+          (c2-load-stage-counts-internal) (c2-load-owner-counts-internal)
+          (cpu4-factory-region-native-counts)
+          (vector (cpu4-factory-region-reader-events) (cpu4-factory-region-io-events)
+                  (cpu4-factory-region-images) (cpu4-factory-region-readers)
+                  (cpu4-factory-region-fds))))
+(define (cpu4-factory-region-unchanged? before)
+  (let ((after (cpu4-factory-region-snapshot)))
+    (and (let heads ((index 0))
+           (if (= index 11) #t
+               (and (eq? (vector-ref before index) (vector-ref after index))
+                    (heads (+ index 1)))))
+         (cpu4-factory-region-counts=? (vector-ref before 11) (vector-ref after 11) 4)
+         (cpu4-factory-region-counts=? (vector-ref before 12) (vector-ref after 12) 4)
+         (cpu4-factory-region-counts=? (vector-ref before 13) (vector-ref after 13) 6)
+         (cpu4-factory-region-counts=? (vector-ref before 14) (vector-ref after 14) 5))))
+(define (cpu4-factory-region-reject thunk)
+  (guard (caught
+           (#t (and (transformer-error? caught)
+                    (eq? (transformer-error-category caught) 'unsupported))))
+    (thunk) #f))
+(define (cpu4-factory-region-negatives! before)
+  (let ((recovery (vector #f)) (snapshot (vector #f)))
+    ;; Deliberately nonexistent path and invalid component arguments: only the
+    ;; FIRST region guard may reject. No policy/file/owner validation may run.
+    (cpu4-factory-region-check
+      (cpu4-factory-region-reject
+        (lambda () (cpu4-checkpoint-factory-create-internal!
+          "/__cpu4_region_guard_must_not_open__/missing.c2" #f #f #f #f #f recovery)))
+      "regional file factory did not reject before reader admission")
+    (cpu4-factory-region-check (not (vector-ref recovery 0))
+                              "regional factory published recovery authority")
+    (cpu4-factory-region-check
+      (cpu4-factory-region-reject
+        (lambda () (cpu4-trainer-snapshot-internal #f snapshot)))
+      "regional snapshot did not reject before owner validation")
+    (cpu4-factory-region-check (not (vector-ref snapshot 0))
+                              "regional snapshot published output")
+    (cpu4-factory-region-check
+      (cpu4-factory-region-reject (lambda () (cpu4-trainer-restore-internal! #f #f)))
+      "regional restore did not reject before source/receiver validation")
+    (cpu4-factory-region-check
+      (cpu4-factory-region-reject
+        (lambda () (cpu4-checkpoint-factory-retire-internal! #f)))
+      "regional cleanup did not reject before ticket validation")
+    (cpu4-factory-region-check (cpu4-factory-region-unchanged? before)
+      "regional rejection changed checkpoint registries or native ownership")))
+
+(cpu4-factory-region-check (null? (cpu4-checkpoint-native-current-region))
+                          "actual runtime baseline region_current is not NULL")
+(cpu4-factory-region-check (cpu4-checkpoint-require-nonregional! 'cpu4-region-baseline)
+                          "guard rejected actual nonregional baseline")
+(define cpu4-factory-region-before (cpu4-factory-region-snapshot))
+(with-region ('cpu4-factory-region-outer 1048576)
+  (let ((outer (cpu4-checkpoint-native-current-region)))
+    (cpu4-factory-region-check (not (null? outer)) "outer region query was vacuously NULL")
+    (cpu4-factory-region-negatives! cpu4-factory-region-before)
+    (with-region ('cpu4-factory-region-inner 1048576)
+      (let ((inner (cpu4-checkpoint-native-current-region)))
+        (cpu4-factory-region-check (and (not (null? inner)) (not (eq? outer inner)))
+                                  "nested query did not identify a distinct active region")
+        (cpu4-factory-region-negatives! cpu4-factory-region-before)))
+    (cpu4-factory-region-check (eq? outer (cpu4-checkpoint-native-current-region))
+                              "nested region did not restore outer query")))
+(cpu4-factory-region-check (null? (cpu4-checkpoint-native-current-region))
+                          "actual region query did not restore NULL baseline")
+(cpu4-factory-region-check (cpu4-factory-region-unchanged? cpu4-factory-region-before)
+                          "negative suite changed held checkpoint/native state")
+
+;;; Parent's genuine positive factory fixture calls this while its successful
+;;; recovery ticket still owns the trainer/binding/model; rejection must preserve
+;;; that exact authority for a subsequent nonregional cleanup retry.
+(define (cpu4-factory-region-check-held-ticket! ticket)
+  (let* ((row (cpu4-checkpoint-factory-row ticket 'cpu4-region-held-test))
+         (child (vector-ref row 14)) (trainer (vector-ref row 15))
+         (before (cpu4-factory-region-snapshot)))
+    (with-region ('cpu4-factory-held-negative 1048576)
+      (cpu4-factory-region-check
+        (cpu4-factory-region-reject
+          (lambda () (cpu4-checkpoint-factory-retire-internal! ticket)))
+        "regional cleanup of genuine held ticket did not reject")
+      (cpu4-factory-region-check
+        (and (eq? child (vector-ref row 14)) (eq? trainer (vector-ref row 15))
+             (cpu4-factory-region-unchanged? before))
+        "regional cleanup changed genuine held child authority"))))
+(display "CPU4 factory genuine region guard PASS checks=")
+(display cpu4-factory-region-checks) (newline)
