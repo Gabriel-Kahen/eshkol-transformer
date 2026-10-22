@@ -40,3 +40,13 @@ flags and no-stdlib Eshkol build. It compiles sequentially and runs each binary
 twice with arena poison, empty stderr and identical PASS output. The sanitizer
 mode instruments native code with ASan/UBSan. No nested lock is acquired.
 Compiled and runtime acceptance: NOT RUN at source handoff.
+
+The sealed be65 fixture result printed67 checks and remains partial coverage:
+its final named loop was `values`, a special form in pinnedfe9. The actual IR
+returned index+1 instead of iterating, so only parameter0 reached the two final
+preservation checks. This test-only repair renames the loop and recursive call
+`cpu4-detach-parameter-check-loop`, statically permits only a closed set of
+non-builtin loop names, and requires exactly93 checks in the supported recipe.
+The missing26 checks are the two checks for each of the remaining13 parameters.
+No production detach/control/native code changes. The corrected full-coverage
+runtime gate remains NOT RUN; the earlier67 result is not relabeled.
