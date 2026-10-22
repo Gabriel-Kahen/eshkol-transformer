@@ -1,6 +1,6 @@
 {
   "schema": "cpu4-v1-private-source-inputs-v1",
-  "base_commit": "3c45186c25fef2d1766cb77c4debc9c91a42b0c2",
+  "base_commit": "031aeeb5f41ab6c0a03d88b916c4360354894ea0",
   "candidate_mode": "on",
   "source_include_dirs": [
     "internal/p1/lib",
@@ -49,7 +49,8 @@
         "ET_I2_NATIVE_HELPERS_ONLY",
         "ET_G3C4_I2_CONSTRUCTION_PRIVATE",
         "ET_I2_PRIVATE_OWNED_CLONE_MATCH",
-        "ET_TR3_C_I2_RESTORE_PRIVATE"
+        "ET_TR3_C_I2_RESTORE_PRIVATE",
+        "ET_C2_I2_MODEL_COPY"
       ]
     },
     {
@@ -240,6 +241,40 @@
     },
     {
       "source": "native/indexed_cross_entropy.c",
+      "defines": []
+    },
+    {
+      "source": "native/k2_capabilities.c",
+      "defines": [
+        "ET_C2_CARRIER_FACTORIES"
+      ]
+    },
+    {
+      "source": "native/c2_checkpoint_codec.c",
+      "defines": []
+    },
+    {
+      "source": "native/c2_checkpoint_format.c",
+      "defines": []
+    },
+    {
+      "source": "native/c2_checkpoint_save_bridge.c",
+      "defines": []
+    },
+    {
+      "source": "native/c2_checkpoint_reader.c",
+      "defines": []
+    },
+    {
+      "source": "native/c2_checkpoint_core.c",
+      "defines": []
+    },
+    {
+      "source": "native/c2_checkpoint_load_bridge.c",
+      "defines": []
+    },
+    {
+      "source": "native/c2_checkpoint_inspect_bridge.c",
       "defines": []
     }
   ]
