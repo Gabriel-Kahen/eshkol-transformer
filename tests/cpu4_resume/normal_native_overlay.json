@@ -1,0 +1,13 @@
+{
+  "schema": "cpu4-resume-test-overlay-v1",
+  "mode": "normal",
+  "per_tu_defines": {
+    "native/o2_optimizer.c": ["ET_O2_TESTING"]
+  },
+  "additional_translation_units": [
+    {
+      "source": "tests/cpu4_heldout/inspect.c",
+      "defines": ["ET_O2_TESTING"]
+    }
+  ]
+}
