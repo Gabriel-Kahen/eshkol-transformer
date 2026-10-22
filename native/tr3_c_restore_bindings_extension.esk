@@ -217,9 +217,13 @@
     ;; No registry cons, vector or transfer-loop closure is allocated afterward.
     (vector-set! ledger 1 ledger)
     (set! tr3-c-restore-o2-ledgers next-registry)
-    (let ((canonical
-            (tr3-c-restore-find-identity ledger tr3-c-restore-o2-ledgers)))
-      (if (not canonical) (tr3-lease-fail-stop 134))
+    (let ((canonical (car tr3-c-restore-o2-ledgers)))
+      ;; Global assignment may promote the regional row. Reacquire the head,
+      ;; never look it up using the pre-promotion local object's identity.
+      (if (not (and (eq? (vector-ref canonical 0) tr3-c-restore-o2-tag)
+                    (eq? (vector-ref canonical 1) canonical)
+                    (eq? (vector-ref canonical 7) 'constructing)))
+          (tr3-lease-fail-stop 134))
       (guard (caught
                (#t
                  (let ((plan (vector-ref canonical 2)))
@@ -228,8 +232,10 @@
                          ;; Existing request[6] is the caller's cleanup authority
                          ;; even if construction raises after native publication.
                          (if (not (eq? (vector-ref request 6) canonical))
-                             (tr3-c-restore-transfer28!
-                               (vector-ref (vector-ref canonical 6) 0)))
+                             (begin
+                               (tr3-c-restore-transfer28!
+                                 (vector-ref (vector-ref canonical 6) 0))
+                               (tr3-c-restore-transfer28! stage-carriers)))
                          (vector-set! canonical 7 'prepared)
                          (vector-set! request 6 canonical)
                          (vector-set! canonical 6 #f))
@@ -246,6 +252,7 @@
           ;; First store captures the exact native owner in its pre-rooted row.
           (vector-set! canonical 2 plan)
           (tr3-c-restore-transfer28! (vector-ref (vector-ref canonical 6) 0))
+          (tr3-c-restore-transfer28! stage-carriers)
           (vector-set! canonical 7 'prepared)
           (vector-set! request 6 canonical)
           (vector-set! canonical 6 #f)
@@ -260,9 +267,11 @@
          (next-registry (cons ledger tr3-c-restore-i2-ledgers)))
     (vector-set! ledger 1 ledger)
     (set! tr3-c-restore-i2-ledgers next-registry)
-    (let ((canonical
-            (tr3-c-restore-find-identity ledger tr3-c-restore-i2-ledgers)))
-      (if (not canonical) (tr3-lease-fail-stop 134))
+    (let ((canonical (car tr3-c-restore-i2-ledgers)))
+      (if (not (and (eq? (vector-ref canonical 0) tr3-c-restore-i2-tag)
+                    (eq? (vector-ref canonical 1) canonical)
+                    (eq? (vector-ref canonical 5) 'constructing)))
+          (tr3-lease-fail-stop 134))
       (guard (caught
                (#t
                  (let ((native (vector-ref canonical 2)))
