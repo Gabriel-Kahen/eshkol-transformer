@@ -1,0 +1,33 @@
+;;; Closed failed/unpublished factory cleanup only; caller still owns O2/D2/model.
+;;; Load after cpu4_trainer_control_extension. No public/general destroy operation.
+(define (cpu4-trainer-detach-internal! trainer)
+  (let* ((operation 'cpu4-trainer-detach!)
+         (record (cpu4-trainer-idle-check-internal trainer operation)))
+    ;; The canonical row is idle, and no separate registered control can retain
+    ;; authority over it. Pending construction cells are checked as well.
+    (let parents ((rows (vector-ref cpu4-control-parents 0)))
+      (if (not (null? rows))
+          (let ((parent (car rows)))
+            (if (and (eq? record (vector-ref parent 3))
+                     (or (eq? (vector-ref parent 5) 'pending)
+                         (eq? (vector-ref parent 5) 'active)))
+                (cpu4-control-fail 'invalid-state operation "CPU4 control still owns this trainer"))
+            (let stages ((remaining (vector-ref cpu4-control-stages 0)))
+              (if (not (null? remaining))
+                  (let ((stage (car remaining)))
+                    (if (and (eq? record (vector-ref parent 3))
+                             (eq? (vector-ref parent 2) (vector-ref stage 3))
+                             (or (eq? (vector-ref stage 4) 'pending)
+                                 (eq? (vector-ref stage 4) 'staged)
+                                 (eq? (vector-ref stage 4) 'prepared)))
+                        (cpu4-control-fail 'invalid-state operation "CPU4 restore stage still owns this trainer"))
+                    (stages (cdr remaining)))))
+            (parents (cdr rows)))))
+    ;; Binding release is the LAST fallible operation. Its genuine native
+    ;; prepare proves IDLE/no children/unborrowed canonical storage; rejection
+    ;; retains this exact live trainer/binding for retry. Commit is no-fail.
+    (cpu4-model-binding-release-internal! (vector-ref record 9))
+    ;; Existing overlap checks skip dead rows. Accessors reject this tombstone.
+    ;; No component destruction, allocation or dependency call follows release.
+    (vector-set! record 3 'dead)
+    #t))
