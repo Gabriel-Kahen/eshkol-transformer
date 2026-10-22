@@ -427,4 +427,8 @@ int64_t et_cpu4_private_workspace_role_v1(void *p,int64_t family,int64_t index,i
   return c4t_execute(w,&roles[i]);
  return c4t_bad(ET_M3T_INVALID_ARGUMENT,ET_M3T_CODE_SELECTOR);
 }
+#ifdef ET_CPU4_OBJECTIVE_PRIVATE
+#include "cpu4_training_objective.inc"
+#endif
+
 #endif
