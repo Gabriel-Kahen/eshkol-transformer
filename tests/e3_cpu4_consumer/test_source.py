@@ -5,6 +5,8 @@ import re
 import subprocess
 import tempfile
 import ast
+import os
+from tests.e3_cpu4_consumer import host_reader
 import unittest
 from pathlib import Path
 from tests.e3_cpu4_consumer.resources import generate
@@ -94,12 +96,13 @@ class SourceTests(unittest.TestCase):
             self.assertEqual(hashlib.sha256(actual.encode()).hexdigest(),row['form_sha256'])
 
     def test_actual_scheme_reader(self):
-        names=['native/e3_cpu4_private_root.esk','native/e3_cpu4_private_extension.esk',
-               'native/e3_cpu4_boundary.esk','internal/e3/lib/e3_cpu4_d2_restore.esk',
-               'tests/e3_cpu4_consumer/runtime.esk']
-        expression='(for-each (lambda (p) (call-with-input-file p (lambda (s) (let loop () (if (not (eof-object? (read s))) (loop)))))) (cdr (command-line)))'
-        result=subprocess.run(['guile','--no-auto-compile','-c',expression,*names],cwd=ROOT,capture_output=True,text=True)
-        self.assertEqual((result.returncode,result.stdout,result.stderr),(0,'',''))
+        receipt=os.environ.get('CPU4_CONSUMER_HOST_READER_RECEIPT')
+        if receipt:
+            host_reader.validate(json.loads(Path(receipt).read_text()))
+            print('HOST GUILE VERIFIED / GUEST GUILE NOT RUN')
+        else:
+            result=subprocess.run(['guile',*host_reader.ARGUMENTS],cwd=ROOT,capture_output=True,text=True)
+            self.assertEqual((result.returncode,result.stdout,result.stderr),(0,'',''))
 
     def test_closed_native_tuple_and_root(self):
         names=(ROOT/'native/e3_cpu4_consumer_native_sources.txt').read_text().splitlines()
@@ -145,6 +148,24 @@ class SourceTests(unittest.TestCase):
         historical=subprocess.check_output(['git','show','59efa27f1c99995d2995c74679a80515e20adbf7:native/e3_cpu4_private_extension.esk'],cwd=ROOT,text=True)
         with self.assertRaises(AssertionError):assert_closed_tail(historical)
 
+    def test_host_reader_receipt_rejects_tamper_head_files_and_failed_reader(self):
+        receipt={**host_reader.identity(),'reader':{'executable':'/host/guile',
+                 'sha256':'a'*64,'version':'guile (GNU Guile) source test fixture',
+                 'arguments':host_reader.ARGUMENTS,'exit':0,'stdout':'','stderr':''}}
+        host_reader.validate(receipt)
+        for field in ('head','tree'):
+            bad=json.loads(json.dumps(receipt));bad[field]='0'*40
+            with self.assertRaises(ValueError):host_reader.validate(bad)
+        for field in ('sources','code'):
+            bad=json.loads(json.dumps(receipt));bad[field][next(iter(bad[field]))]='0'*64
+            with self.assertRaises(ValueError):host_reader.validate(bad)
+        for field,value in (('exit',37),('stdout','noise'),('stderr','warning'),
+                            ('arguments',[]),('sha256','bad')):
+            bad=json.loads(json.dumps(receipt));bad['reader'][field]=value
+            with self.assertRaises(ValueError):host_reader.validate(bad)
+        bad=json.loads(json.dumps(receipt));bad['extra']='tamper'
+        with self.assertRaises(ValueError):host_reader.validate(bad)
+
     def test_exact_transcript_accepts_words_rejects_noise(self):
         valid='CPU4-CONSUMER-REPORT #(1085276160 1090519040 1132462080 0 8 2)\nCPU4-CONSUMER-PASS checks=99\n'
         self.assertEqual(parse(valid)['physical_tokens'],8)
@@ -154,7 +175,7 @@ class SourceTests(unittest.TestCase):
             with self.assertRaises(ValueError):parse(bad)
 
     def test_python310_syntax_and_bash(self):
-        for name in ('resources.py','test_source.py','observation.py'):
+        for name in ('resources.py','test_source.py','observation.py','host_reader.py'):
             ast.parse((ROOT/'tests/e3_cpu4_consumer'/name).read_text(),feature_version=(3,10))
         subprocess.run(['bash','-n','scripts/test-e3-cpu4-consumer.sh'],cwd=ROOT,check=True)
 
