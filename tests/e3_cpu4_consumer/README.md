@@ -18,7 +18,9 @@ coverage and does not claim a new gradient or numerical oracle.
 
 The fixture checks all 17 modes, exact encoded cursor/metadata identities,
 nonzero logical restoration with increasing generations/stale old capability,
-model values, all gradient metadata, and present-gradient payloads. Absent
+model values, all gradient metadata, and varied finite nonzero present-gradient
+payloads. A deliberately zeroed expected gradient word must fail the actual
+snapshot comparison before the original witness is restored. Absent
 internal gradient backing is not exposed by this candidate-OFF tuple. It tests
 malformed admission, actual second-bind rejection in idle/prepared/eval states,
 same-frame prepared contention and native READ contention, controlled

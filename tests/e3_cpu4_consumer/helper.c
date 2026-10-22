@@ -71,7 +71,10 @@ int64_t et_cpu4_consumer_seed_gradients(void *lease) {
     et_f32_tensor_error error; size_t count=0; uint32_t words[1024]={0};
     if (!parameter || et_f32_parameter_value_snapshot_v1(parameter,&numerator,&error)) return 1;
     int status=et_f32_tensor_element_count_v1(numerator,&count,&error);
-    if (!status && count<=1024) status=et_f32_tensor_copy_bits_from_v1(numerator,words,count,&error);
+    if (!status && count<=1024) {
+      for (size_t j=0;j<count;++j) words[j]=UINT32_C(0x3e800000)+(uint32_t)j+17u*(uint32_t)i;
+      status=et_f32_tensor_copy_bits_from_v1(numerator,words,count,&error);
+    }
     else status=1;
     et_f32_gradient_contribution_v1 contribution={sizeof(contribution),parameter,numerator,0};
     if (!status) status=et_f32_gradient_plan_prepare_v1(1,&contribution,UINT32_C(0x3f800000),&plan,&error);
@@ -98,4 +101,16 @@ int64_t et_cpu4_consumer_view_word(void *value,int64_t index) {
       !view->data || view->offset_bytes!=0) return -1;
   memcpy(&word,(const unsigned char *)view->data+8*(size_t)index,8);
   return word;
+}
+
+/* Negative observation control: a zeroed expected gradient word must differ. */
+int64_t et_cpu4_consumer_image_zero_control(void *lease,void *value) {
+  image *expected=value;
+  if (!expected || expected->metadata[0].state!=ET_F32_GRADIENT_PRESENT ||
+      !expected->counts[0][1] || !expected->words[0][1][0]) return 0;
+  uint32_t saved=expected->words[0][1][0];
+  expected->words[0][1][0]=0;
+  int64_t rejected=!et_cpu4_consumer_image_equal(lease,expected);
+  expected->words[0][1][0]=saved;
+  return rejected && et_cpu4_consumer_image_equal(lease,expected);
 }
