@@ -1,0 +1,78 @@
+;;; Detached private read of the original live P2/G2 terminal output.
+;;; Load after terminal live authority. This does not publish a tensor or a
+;;; continuation record; the returned 64-byte payload is an owned copy.
+
+(extern i64 g3c4-p2g2-native-terminal-snapshot ptr ptr i64
+        :real et_g3c4_private_p2g2_terminal_snapshot_v1)
+
+(define (g3c4-p2g2-terminal-snapshot-small-word bytes offset)
+  (let upper ((index 1))
+    (if (< index 8)
+        (if (= (bytevector-u8-ref bytes (+ offset index)) 0)
+            (upper (+ index 1))
+            (g3c4-fail 'invalid-state
+                       'g3c4-p2g2-terminal-snapshot-private
+                       "terminal snapshot small word is outside V256"))))
+  (bytevector-u8-ref bytes offset))
+
+(define (g3c4-p2g2-terminal-snapshot-live-for shell output operation)
+  (let loop ((anchors (vector-ref g3c4-p2g2-terminal-live-anchors 0)))
+    (if (not (pair? anchors))
+        (g3c4-fail 'invalid-state operation
+                   "terminal snapshot original authority is missing"))
+    (let ((live (car anchors)))
+      (if (and (vector? live) (= (vector-length live) 16)
+               (eq? (vector-ref live 2) shell))
+          (if (eq? (vector-ref live 1) output)
+              live
+              (g3c4-fail 'invalid-state operation
+                         "terminal snapshot original output changed"))
+          (loop (cdr anchors))))))
+
+(define (g3c4-p2g2-terminal-snapshot-private shell)
+  (let ((operation 'g3c4-p2g2-terminal-snapshot-private))
+    (m3-call operation
+      (let* ((output (g3c4-p2g2-terminal-output-entry-live
+                       shell operation))
+             (live (g3c4-p2g2-terminal-snapshot-live-for
+                     shell output operation))
+             (native (vector-ref output 3))
+             (bytes (make-bytevector 64 0)))
+        ;; Eshkol allocates the eight-byte length header before these 64 bytes.
+        ;; The native ptr sees that header and the full 72-byte allocation.
+        (if (not (and (= (bytevector-length bytes) 64)
+                      (eq? output
+                           (g3c4-p2g2-terminal-output-entry-live
+                             shell operation))
+                      (eq? live (g3c4-p2g2-terminal-snapshot-live-for
+                                   shell output operation))
+                      (eq? native (vector-ref output 3))))
+            (g3c4-fail 'invalid-state operation
+                       "terminal snapshot source changed before read"))
+        (g3c4-native-check
+          (g3c4-p2g2-native-terminal-snapshot native bytes 72) operation)
+        (if (not (and (= (bytevector-length bytes) 64)
+                      (eq? output
+                           (g3c4-p2g2-terminal-output-entry-live
+                             shell operation))
+                      (eq? live (g3c4-p2g2-terminal-snapshot-live-for
+                                   shell output operation))
+                      (eq? native (vector-ref output 3))))
+            (g3c4-fail 'invalid-state operation
+                       "terminal snapshot source changed after read"))
+        (let ((id-zero (g3c4-p2g2-terminal-snapshot-small-word bytes 0))
+              (id-one (g3c4-p2g2-terminal-snapshot-small-word bytes 8))
+              (count (g3c4-p2g2-terminal-snapshot-small-word bytes 16))
+              (cache (g3c4-p2g2-terminal-snapshot-small-word bytes 24)))
+          (if (not (and (or (= count 1) (= count 2))
+                        (= count (vector-ref live 6))
+                        (= cache (vector-ref live 15))
+                        (= id-zero (vector-ref live 8))
+                        (if (= count 1)
+                            (= id-one 0)
+                            (= id-one (vector-ref live 9)))))
+              (g3c4-fail 'invalid-state operation
+                         "terminal snapshot differs from original text")))
+        ;; Keep all four final RNG words as copied LE bytes, including values
+        ;; outside signed-positive i64. They have no precommit Eshkol oracle.
+        bytes))))

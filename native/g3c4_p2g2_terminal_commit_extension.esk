@@ -1,0 +1,230 @@
+;;; Private fixed P2/G2 terminal coordinator. Load only with the accepted
+;;; native terminal feature and all preceding source-private P2/G2 leaves.
+;;; Its sole success is the original terminal output shell, never a body value.
+
+(extern i64 g3c4-p2g2-native-terminal-commit ptr ptr ptr i64 ptr i64
+        :real et_g3c4_private_p2g2_terminal_commit_v1)
+
+(define (g3c4-p2g2-terminal-commit-private! generator input)
+  (let* ((operation 'g3c4-p2g2-terminal-commit-private!)
+         (input-entry (g3c4-p2g2-prefix-preflight generator input))
+         (native-input (vector-ref input-entry 3))
+         (generator-entry (g3c4-generator-entry-call-ready generator operation)))
+    (m3-call operation
+      (let* ((model-entry (vector-ref generator-entry 5))
+             (tokenizer (vector-ref generator-entry 6))
+             (tokenizer-core
+               (car (cdr (g3c4-baseline-tokenizer-entry
+                          tokenizer operation 'invalid-state 'invalid-state))))
+             (native (vector-ref generator-entry 3))
+             (policy (vector-ref generator-entry 7))
+             (first-raw (make-bytevector 1 0))
+             (first-staging (make-bytevector 8 0))
+             (ledger (vector #f #f #f #f #f))
+             (barrier (vector #f))
+             (call (vector (vector 'g3c4-call-private) 'call 'pending #f
+                           generator-entry model-entry tokenizer 2 #f #f
+                           ledger g3c4-model-profile))
+             (record (vector call generator-entry model-entry tokenizer
+                             tokenizer-core native #f #f #f #f #f
+                             first-raw first-staging 'before-prefix ledger
+                             policy (vector 10 24 9 16) (vector-ref call 0)
+                             #f (vector-ref model-entry 3)))
+             (protected-anchor
+               (vector call generator-entry model-entry tokenizer
+                       tokenizer-core native #f #f #f #f #f
+                       first-raw first-staging 'before-prefix ledger policy
+                       (vector-ref record 16) (vector-ref call 0)
+                       #f (vector-ref model-entry 3)))
+             (prefix (vector call input input-entry native-input
+                             generator-entry))
+             (registry-node (cons call (vector-ref g3c4-registry 0)))
+             (record-node
+               (cons record (vector-ref g3c4-p2g2-protected-records 0)))
+             (protected-node
+               (cons protected-anchor
+                     (vector-ref g3c4-p2g2-protected-anchors 0)))
+             (prefix-node
+               (cons prefix (vector-ref g3c4-p2g2-prefix-input-anchors 0)))
+             (prefix-installed? #f)
+             (pending #f)
+             (live #f))
+        (if (not (and (eq? input-entry
+                           (g3c4-input-entry-live input operation))
+                      (eq? (vector-ref input-entry 3) native-input)
+                      (eq? generator-entry
+                           (g3c4-generator-entry-call-ready
+                             generator operation))
+                      (vector-ref g3c4-p2g2-ownership-gate 0)
+                      (= (vector-ref policy 5) 2)
+                      (g3c4-call-tuple? 2 2)))
+            (g3c4-fail 'invalid-state operation
+                       "P2/G2 terminal input or generator changed"))
+        (guard (caught
+                 (#t
+                   ;; Native zero is irreversible. No abort, validator or
+                   ;; recoverable exception may cross the closed success tail.
+                   (if (vector-ref barrier 0) (exit 134))
+                   (if (not (eq? (vector-ref call 2) 'dead))
+                       (if (vector-ref ledger 0)
+                           (guard (abort-failure (#t (exit 134)))
+                             (if pending
+                                 (g3c4-p2g2-terminal-pending-abort!
+                                   call pending)
+                                 (g3c4-p2g2-protected-abort! call)))
+                           (begin
+                             (g3c4-p2g2-zero-bytes! first-raw 1)
+                             (g3c4-p2g2-zero-bytes! first-staging 8)
+                             (g3c4-call-dead! call)
+                             (vector-set! record 0 #f)
+                             (vector-set! protected-anchor 0 #f)
+                             (vector-set! g3c4-p2g2-protected-records 0
+                                          (cdr record-node))
+                             (vector-set! g3c4-p2g2-protected-anchors 0
+                                          (cdr protected-node)))))
+                   (if prefix-installed?
+                       (if (eq? (vector-ref
+                                   g3c4-p2g2-prefix-input-anchors 0)
+                                prefix-node)
+                           (vector-set! g3c4-p2g2-prefix-input-anchors 0
+                                        (cdr prefix-node))
+                           (exit 134)))
+                   (raise caught)))
+          (vector-set! g3c4-registry 0 registry-node)
+          (vector-set! g3c4-p2g2-protected-records 0 record-node)
+          (vector-set! g3c4-p2g2-protected-anchors 0 protected-node)
+          (g3c4-native-check (g3c4-native-call-acquire native 2 2)
+                             operation)
+          (vector-set! ledger 0 #t)
+          (vector-set! model-entry 10 call)
+          (vector-set! ledger 1 #t)
+          (vector-set! generator-entry 9 call)
+          (vector-set! ledger 2 #t)
+          (vector-set! call 2 'live)
+          (vector-set! ledger 3 'p2g2-protected)
+          (if (not (eq? (vector-ref m3-call-state 0) #t)) (exit 134))
+          (vector-set! m3-call-state 0 call)
+          (vector-set! g3c4-p2g2-prefix-input-anchors 0 prefix-node)
+          (set! prefix-installed? #t)
+          (set! pending (g3c4-p2g2-terminal-pending-reserve! call))
+          (set! live (g3c4-p2g2-terminal-live-prepare call pending))
+          (let* ((first-selected
+                   (g3c4-p2g2-terminal-first-sample-decode! call pending))
+                 (checked
+                   (g3c4-p2g2-terminal-pending-check
+                     call pending operation))
+                 (eos (vector-ref (vector-ref (vector-ref checked 2) 15) 6))
+                 (first-eos? (and (m3t-exact-i64? eos)
+                                  (= first-selected eos)))
+                 (second-selected
+                   (if first-eos? #f
+                       (begin
+                         (g3c4-p2g2-terminal-non-eos-prefix-commit!
+                           call pending first-selected)
+                         (g3c4-p2g2-terminal-second-sample-decode!
+                           call pending))))
+                 (logical-count
+                   (g3c4-p2g2-terminal-text-preflight!
+                     call pending first-selected second-selected))
+                 (frame
+                   (g3c4-p2g2-terminal-precommit-frame
+                     call pending first-selected second-selected
+                     logical-count))
+                 (output (vector-ref frame 3))
+                 (shell (vector-ref frame 4))
+                 (output-native (vector-ref frame 6))
+                 (selected-text (vector-ref frame 12))
+                 (second-raw (vector-ref frame 26))
+                 (first-staging (vector-ref frame 24))
+                 (second-staging (vector-ref frame 25))
+                 (text-one (vector-ref frame 27))
+                 (text-two (vector-ref frame 28))
+                 (pending-raw (vector-ref frame 29))
+                 (pending-staging (vector-ref frame 30))
+                 (pending-anchors-next (vector-ref frame 19))
+                 (pending-originals-next (vector-ref frame 20))
+                 (protected-records-next (vector-ref frame 21))
+                 (protected-anchors-next (vector-ref frame 22))
+                 (prefix-next (vector-ref frame 23))
+                 ;; The accepted compiler pin converts #f payload zero to
+                 ;; C NULL for a declared extern ptr. The first-EOS frame
+                 ;; supplies that #f with byte extent zero.
+                 (bound-live
+                   (g3c4-p2g2-terminal-live-bind! call pending live frame))
+                 (status
+                   (g3c4-p2g2-native-terminal-commit
+                     (vector-ref frame 5) output-native
+                     (vector-ref frame 7) (vector-ref frame 8)
+                     (vector-ref frame 9) (vector-ref frame 10))))
+            (if (= status 0)
+                (begin
+                  (vector-set! barrier 0 #t)
+                  ;; Closed tail: exact original carriers, fixed byte writes.
+                  ;; Pending raw/staging and unused text were proved zero by
+                  ;; the precommit frame and are detached below.
+                  (bytevector-u8-set! first-raw 0 0)
+                  (bytevector-u8-set! first-staging 0 0)
+                  (bytevector-u8-set! first-staging 1 0)
+                  (bytevector-u8-set! first-staging 2 0)
+                  (bytevector-u8-set! first-staging 3 0)
+                  (bytevector-u8-set! first-staging 4 0)
+                  (bytevector-u8-set! first-staging 5 0)
+                  (bytevector-u8-set! first-staging 6 0)
+                  (bytevector-u8-set! first-staging 7 0)
+                  (bytevector-u8-set! second-raw 0 0)
+                  (bytevector-u8-set! second-staging 0 0)
+                  (bytevector-u8-set! second-staging 1 0)
+                  (bytevector-u8-set! second-staging 2 0)
+                  (bytevector-u8-set! second-staging 3 0)
+                  (bytevector-u8-set! second-staging 4 0)
+                  (bytevector-u8-set! second-staging 5 0)
+                  (bytevector-u8-set! second-staging 6 0)
+                  (bytevector-u8-set! second-staging 7 0)
+                  (vector-set! output 4 #f)
+                  (vector-set! output 5 #f)
+                  (vector-set! output 6 #f)
+                  (vector-set! output 8 selected-text)
+                  (vector-set! output 1 'terminal-output)
+                  (vector-set! output 2 'live)
+                  (vector-set! live 0 'live)
+                  (vector-set! g3c4-p2g2-terminal-live-anchors 0
+                               (vector-ref live 13))
+                  (vector-set! g3c4-p2g2-terminal-live-originals 0
+                               (vector-ref live 14))
+                  (vector-set! pending 1 #f)
+                  (vector-set! pending 2 #f)
+                  (vector-set! pending 3 #f)
+                  (vector-set! pending 4 #f)
+                  (vector-set! pending 5 #f)
+                  (vector-set! pending 6 #f)
+                  (vector-set! pending 7 #f)
+                  (vector-set! pending 8 #f)
+                  (vector-set! pending 9 #f)
+                  (vector-set! pending 10 #f)
+                  (vector-set! pending 11 #f)
+                  (vector-set! pending 12 #f)
+                  (vector-set! pending 13 #f)
+                  (vector-set! pending 14 #f)
+                  (vector-set! pending 15 #f)
+                  (vector-set! pending 16 #f)
+                  (vector-set! g3c4-p2g2-terminal-pending-anchors 0
+                               pending-anchors-next)
+                  (vector-set! g3c4-p2g2-terminal-pending-originals 0
+                               pending-originals-next)
+                  (vector-set! pending 17 #f)
+                  (vector-set! pending 18 #f)
+                  (vector-set! pending 0 'dead)
+                  (vector-set! ledger 3 'p2g2-terminal-committed)
+                  (vector-set! ledger 4 #f)
+                  (vector-set! model-entry 10 #f)
+                  (vector-set! generator-entry 9 #f)
+                  (g3c4-call-dead! call)
+                  (vector-set! record 0 #f)
+                  (vector-set! protected-anchor 0 #f)
+                  (vector-set! g3c4-p2g2-protected-records 0
+                               protected-records-next)
+                  (vector-set! g3c4-p2g2-protected-anchors 0
+                               protected-anchors-next)
+                  (vector-set! g3c4-p2g2-prefix-input-anchors 0 prefix-next)
+                  shell)
+                (g3c4-native-check status operation))))))))

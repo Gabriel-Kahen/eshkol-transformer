@@ -1,0 +1,42 @@
+;;; Private same-call P2/G2 source composition through logical text.
+;;; Every path aborts the original pending output in its protected region.
+;;; This diagnostic does not invoke native terminal commit or publish output.
+
+(define (g3c4-p2g2-terminal-abort-only! generator input)
+  (let ((operation 'g3c4-p2g2-terminal-abort-only!))
+    (g3c4-with-p2g2-prefix-call operation generator input (call)
+      (let ((anchor (g3c4-p2g2-terminal-pending-reserve! call)))
+        (guard (caught
+                 (#t
+                   ;; A recovered decode/native error still owns this call.
+                   ;; If authenticated abort itself fails, it cannot escape.
+                   (guard (abort-failure (#t (exit 134)))
+                     (g3c4-p2g2-terminal-pending-abort! call anchor))
+                   (raise caught)))
+          (let* ((first-selected
+                   (g3c4-p2g2-terminal-first-sample-decode! call anchor))
+                 (checked
+                   (g3c4-p2g2-terminal-pending-check call anchor operation))
+                 (eos (vector-ref (vector-ref (vector-ref checked 2) 15) 6)))
+            (if (and (m3t-exact-i64? eos) (= first-selected eos))
+                (let ((logical-count
+                        (g3c4-p2g2-terminal-text-preflight!
+                          call anchor first-selected #f)))
+                  (g3c4-p2g2-terminal-precommit-frame
+                    call anchor first-selected #f logical-count))
+                (begin
+                  (g3c4-p2g2-terminal-non-eos-prefix-commit!
+                    call anchor first-selected)
+                  (let ((second-selected
+                          (g3c4-p2g2-terminal-second-sample-decode!
+                            call anchor)))
+                    (let ((logical-count
+                            (g3c4-p2g2-terminal-text-preflight!
+                              call anchor first-selected second-selected)))
+                      (g3c4-p2g2-terminal-precommit-frame
+                        call anchor first-selected second-selected
+                        logical-count)))))))
+        ;; An abort rejection cannot leave a live call outside m3-call.
+        (guard (abort-failure (#t (exit 134)))
+          (g3c4-p2g2-terminal-pending-abort! call anchor))
+        #t))))
