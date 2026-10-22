@@ -19,9 +19,11 @@ size_t et_e3_cpu4_test_k1_live_allocations(void);
 static size_t k1_baseline;
 static size_t checks;
 #define CHECK(x) do { ++checks; if (!(x)) { \
-  fprintf(stderr,"FAIL %d: %s E3=%lld/%lld/%lld raw=%lld/%lld/%lld\n",__LINE__,#x, \
+  fprintf(stderr,"FAIL %d: %s E3=%lld/%lld/%lld raw=%lld/%lld/%lld C4-now=%lld/%lld/%lld\n",__LINE__,#x, \
     (long long)e3_last_domain,(long long)e3_last_category,(long long)e3_last_code, \
-    (long long)e3_raw_domain,(long long)e3_raw_category,(long long)e3_raw_code); exit(1); \
+    (long long)e3_raw_domain,(long long)e3_raw_category,(long long)e3_raw_code, \
+    (long long)et_g3c4_error_state.domain,(long long)et_g3c4_error_state.category, \
+    (long long)et_g3c4_error_state.code); exit(1); \
 } } while (0)
 #define OK(x) CHECK((x)==0)
 #define NO(x) CHECK((x)!=0)
@@ -53,15 +55,18 @@ static et_g3c4_model_owner_internal *make_model(size_t index,int present) {
   for (int64_t i=0;i<14;++i) {
     OK(et_g3c4_private_model_owner_initialize_v1(owner,i));
     OK(et_f32_tensor_copy_bits_from_v1(et_g3c4_parameter_value(owner,(size_t)i),parameter_bits[i],parameter_counts[i],&error));
-    if (present) {
-      uint32_t gradient[1024];
-      for (size_t j=0;j<parameter_counts[i];++j) gradient[j]=UINT32_C(0x3e800000)+(uint32_t)(j+17*(size_t)i);
-      et_f32_parameter_test_set_gradient_bits_v1(owner->parameters[i],gradient,parameter_counts[i]);
-      et_f32_parameter_test_set_metadata_v1(owner->parameters[i],ET_F32_GRADIENT_PRESENT,3,UINT32_C(0x40400000));
-    }
   }
   OK(et_g3c4_private_model_owner_prepare_seal_v1(owner));
-  OK(et_g3c4_private_model_owner_commit_seal_v1(owner)); return owner;
+  OK(et_g3c4_private_model_owner_commit_seal_v1(owner));
+  /* Construction seals only absent/count0/weight0 gradients. Materialize a
+   * trained-state witness afterwards, before capture or lease publication. */
+  if (present) for (size_t i=0;i<14;++i) {
+    uint32_t gradient[1024];
+    for (size_t j=0;j<parameter_counts[i];++j) gradient[j]=UINT32_C(0x3e800000)+(uint32_t)(j+17*i);
+    et_f32_parameter_test_set_gradient_bits_v1(owner->parameters[i],gradient,parameter_counts[i]);
+    et_f32_parameter_test_set_metadata_v1(owner->parameters[i],ET_F32_GRADIENT_PRESENT,3,UINT32_C(0x40400000));
+  }
+  return owner;
 }
 static void destinations_bits(et_f32_tensor *dest[4],uint32_t words[4]) {
   et_f32_tensor_error error;
