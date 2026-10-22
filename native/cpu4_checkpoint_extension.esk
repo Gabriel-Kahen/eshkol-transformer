@@ -1,0 +1,604 @@
+;;; Private CPU4 same-canonical C4 snapshot/restore consumer.
+;;; Existing registered trainers only. No child factory, TR3 trainer authority,
+;;; M3T owner cast or substituted model. See CPU4_CHECKPOINT_CONSUMER.md.
+(define cpu4-checkpoint-operation 'cpu4-trainer-restore)
+(define cpu4-checkpoint-i64-max 9223372036854775807)
+(define cpu4-checkpoint-parents (vector '()))
+(define (cpu4-checkpoint-fail category message)
+  (cpu4-control-fail category cpu4-checkpoint-operation message))
+(define (cpu4-checkpoint-length value limit)
+  (let loop ((remaining value) (count 0))
+    (cond ((null? remaining) count)
+          ((or (not (pair? remaining)) (= count limit)) #f)
+          (else (loop (cdr remaining) (+ count 1))))))
+
+(define (cpu4-checkpoint-list-ref values index)
+  (if (= index 0) (car values)
+      (cpu4-checkpoint-list-ref (cdr values) (- index 1))))
+
+(define (cpu4-checkpoint-list-prefix values count)
+  (if (= count 0) '()
+      (cons (car values)
+            (cpu4-checkpoint-list-prefix (cdr values) (- count 1)))))
+
+(define (cpu4-checkpoint-vector->list value count)
+  (let loop ((index (- count 1)) (result '()))
+    (if (< index 0) result
+        (loop (- index 1) (cons (vector-ref value index) result)))))
+
+(define (cpu4-checkpoint-product shape)
+  (let loop ((remaining shape) (product 1))
+    (if (null? remaining) product
+        (let ((extent (car remaining)))
+          (if (or (not (integer? extent)) (not (exact? extent)) (< extent 0)
+                  (> extent cpu4-checkpoint-i64-max)
+                  (and (> product 0) (> extent 0)
+                       (> product (quotient cpu4-checkpoint-i64-max extent))))
+              (cpu4-checkpoint-fail 'shape-mismatch
+                               "restore tensor shape is malformed or overflows"))
+          (loop (cdr remaining)
+                (if (or (= product 0) (= extent 0)) 0 (* product extent)))))))
+
+(define (cpu4-checkpoint-controls-copy controls)
+  (if (or (not (vector? controls)) (not (= (vector-length controls) 5))
+          (not (vector? (vector-ref controls 2)))
+          (not (= (vector-length (vector-ref controls 2)) 10))
+          (not (bytevector? (vector-ref (vector-ref controls 2) 3)))
+          (not (bytevector? (vector-ref (vector-ref controls 2) 4)))
+          (not (vector? (vector-ref controls 3)))
+          (not (= (vector-length (vector-ref controls 3)) 3)))
+      (cpu4-checkpoint-fail 'corrupt-data
+                       "detached trainer controls are malformed"))
+  (let* ((dataset (vector-ref controls 2))
+         (resolved (vector-ref controls 3))
+         (copied
+           (c2-training-state-controls-copy
+             cpu4-checkpoint-operation
+             (vector (vector-ref controls 0) (vector-ref controls 1)
+                     (vector (vector-ref dataset 3) (vector-ref dataset 4))
+                     (vector (vector-ref resolved 0) (vector-ref resolved 1))
+                     (vector-ref controls 4))))
+         (copied-dataset (vector-ref copied 2)))
+    ;; C2 returns its authenticated 10-slot cursor projection.  The lease
+    ;; parent owns the two bytevectors required by its frozen control shape;
+    ;; retain those exact copied fields rather than the projection header.
+    (vector (vector-ref copied 0) (vector-ref copied 1)
+            (vector (vector-ref copied-dataset 3)
+                    (vector-ref copied-dataset 4))
+            (vector (vector-ref (vector-ref copied 3) 0)
+                    (vector-ref (vector-ref copied 3) 1))
+            (vector-ref copied 4))))
+
+(define (cpu4-checkpoint-fixed-source! p1 projection topology)
+  (if (or (not (vector? projection)) (not (= (vector-length projection) 6))
+          (not (vector? topology)) (not (= (vector-length topology) 3))
+          (not (eq? (vector-ref projection 0) 'transformer-state-dict))
+          (not (equal? (vector-ref projection 1) '(1 0)))
+          (not (equal? (vector-ref projection 2) '()))
+          (not (equal? (vector-ref projection 3)
+                       '(transformer-tensor-provider 2 0
+                         i2-dense-cpu-f32-v1))))
+      (cpu4-checkpoint-fail 'version-mismatch
+                       "detached P1 projection version is unsupported"))
+  (let ((entries (vector-ref projection 4))
+        (paths (vector-ref topology 0))
+        (shapes (vector-ref topology 1))
+        (aliases (vector-ref topology 2)))
+    (if (or (not (equal? (cpu4-checkpoint-length entries 16) 15))
+            (not (equal? (cpu4-checkpoint-length paths 15) 14))
+            (not (equal? (cpu4-checkpoint-length shapes 15) 14))
+            (not (equal? paths cpu4-checkpoint-fixed-paths))
+            (not (equal? shapes cpu4-checkpoint-fixed-shapes))
+            (not (equal? aliases (vector-ref projection 5)))
+            (not (equal? aliases
+                         '((("head" "weight")
+                            ("token_embedding" "weight"))))))
+        (cpu4-checkpoint-fail 'shape-mismatch
+                         "detached P1 schedule is not the fixed 15-path tie"))
+    (let loop ((index 0) (remaining entries)
+               (remaining-paths paths) (remaining-shapes shapes))
+      (if (= index 14)
+          (let ((secondary (car remaining)))
+            (if (or (not (null? (cdr remaining)))
+                    (not (equal? (state-entry-path-internal secondary)
+                                 cpu4-checkpoint-tied-secondary-path))
+                    (not (equal? (state-entry-shape-internal secondary)
+                                 cpu4-checkpoint-tied-secondary-shape))
+                    (not (eq? (state-entry-kind-internal secondary) 'parameter))
+                    (not (eq? (state-entry-dtype-internal secondary) 'f32))
+                    (not (eq? (state-entry-device-internal secondary) 'cpu))
+                    (not (eq? (state-entry-layout-internal secondary)
+                              'dense-row-major-contiguous)))
+                (cpu4-checkpoint-fail
+                  'shape-mismatch
+                  "detached tied-secondary P1 entry differs from fixed order"))
+            ;; The C2 projection authenticates all 15 canonical paths.  The
+            ;; exact alias graph above proves the final secondary aliases the
+            ;; head row, so only the 14 topology-primary entries are staged.
+            (cpu4-checkpoint-list-prefix entries 14))
+          (let* ((entry (car remaining))
+                 (path (state-entry-path-internal entry))
+                 (shape (state-entry-shape-internal entry)))
+            (if (or (not (equal? path
+                                 (cpu4-checkpoint-list-ref
+                                   cpu4-checkpoint-fixed-paths index)))
+                    (not (equal? shape
+                                 (cpu4-checkpoint-list-ref
+                                   cpu4-checkpoint-fixed-shapes index)))
+                    (not (equal? path (car remaining-paths)))
+                    (not (equal? shape (car remaining-shapes)))
+                    (not (eq? (state-entry-kind-internal entry) 'parameter))
+                    (not (eq? (state-entry-dtype-internal entry) 'f32))
+                    (not (eq? (state-entry-device-internal entry) 'cpu))
+                    (not (eq? (state-entry-layout-internal entry)
+                              'dense-row-major-contiguous)))
+                (cpu4-checkpoint-fail 'shape-mismatch
+                                 "detached P1 entry differs from fixed order"))
+            (loop (+ index 1) (cdr remaining)
+                  (cdr remaining-paths) (cdr remaining-shapes)))))))
+
+(define (cpu4-checkpoint-install-clone! parent index source-p1 token entry)
+  (let* ((cell (vector-ref (vector-ref parent 5) index))
+         (cleanup (vector-ref parent 11))
+         (request (vector #f 'parameter cpu4-checkpoint-operation #f))
+         (carrier
+           (state-dict-c2-owned-tensor-borrow-begin-internal
+             source-p1 token entry cpu4-checkpoint-operation)))
+    (vector-set! cleanup 1 entry)
+    (vector-set! request 0 carrier)
+    (let ((outcome
+            (guard (caught (#t (vector #f caught)))
+              (i2-clone request)
+              (vector #t #t))))
+      (if (vector-ref request 3)
+          (begin
+            (vector-set! cell 0 (vector-ref request 3))
+            (vector-set! request 3 #f)))
+      ;; P1 clears its active-access record before its final native validation.
+      (state-dict-c2-owned-tensor-borrow-end-internal
+        source-p1 token entry cpu4-checkpoint-operation)
+      (vector-set! cleanup 1 #f)
+      (if (not (vector-ref outcome 0)) (raise (vector-ref outcome 1)))
+      (if (not (vector-ref cell 0))
+          (cpu4-checkpoint-fail 'internal
+                           "I2 clone returned without publishing ownership"))
+      #t)))
+
+(define (cpu4-checkpoint-install-moment!
+          parent stages source-o2 token index kind shape stage-index)
+  (let* ((elements (cpu4-checkpoint-product shape))
+         (bytes (make-bytevector (* elements 4) 0))
+         (request
+           (vector bytes 'buffer shape 'f32 'cpu
+                   'dense-row-major-contiguous cpu4-checkpoint-operation #f)))
+    (o2-state-copy-moment-bits-c2-owned-internal
+      (vector source-o2 index kind bytes elements token cpu4-checkpoint-operation))
+    (let ((outcome
+            (guard (caught (#t (vector #f caught)))
+              (i2-checkpoint-decode request)
+              (vector #t #t))))
+      (if (vector-ref request 7)
+          (begin
+            (vector-set! stages stage-index (vector-ref request 7))
+            (vector-set! request 7 #f)))
+      (if (not (vector-ref outcome 0)) (raise (vector-ref outcome 1)))
+      (if (not (vector-ref stages stage-index))
+          (cpu4-checkpoint-fail 'internal
+                           "I2 decoder returned without publishing ownership"))
+      #t)))
+
+(define (cpu4-checkpoint-stage-source! parent source)
+  (let* ((borrow
+           (c2-training-state-borrow-begin-internal
+             source cpu4-checkpoint-operation))
+         (cleanup (vector-ref parent 11)))
+    (vector-set! parent 4 borrow)
+    (let* ((projection (c2-training-state-borrow-projection-internal borrow))
+           (token
+             (c2-training-state-borrow-owner-token-internal
+               borrow cpu4-checkpoint-operation))
+           (source-p1 (vector-ref projection 0))
+           (source-o2 (vector-ref projection 1))
+           (topology (vector-ref projection 3))
+           (p1-projection
+             (state-dict-c2-owned-projection-internal
+               source-p1 token cpu4-checkpoint-operation))
+           (entries (cpu4-checkpoint-fixed-source!
+                      source-p1 p1-projection topology))
+           (stages (make-vector 28 #f)))
+      (vector-set! cleanup 2 source-p1)
+      (vector-set! cleanup 3 token)
+      (vector-set! cleanup 4 stages)
+      (vector-set! (vector-ref parent 6) 0 stages)
+      (let p1-loop ((index 0) (remaining entries))
+        (if (= index 14) #t
+            (begin
+              (cpu4-checkpoint-install-clone!
+                parent index source-p1 token (car remaining))
+              (p1-loop (+ index 1) (cdr remaining)))))
+      (let moment-loop ((index 0) (shapes (vector-ref topology 1)))
+        (if (= index 14) #t
+            (begin
+              (cpu4-checkpoint-install-moment!
+                parent stages source-o2 token index 0 (car shapes) (* index 2))
+              (cpu4-checkpoint-install-moment!
+                parent stages source-o2 token index 1 (car shapes)
+                (+ (* index 2) 1))
+              (moment-loop (+ index 1) (cdr shapes)))))
+      (let ((copied (cpu4-checkpoint-controls-copy (vector-ref projection 2))))
+        (vector-set! (vector-ref parent 8) 0 (vector-ref copied 0))
+        (vector-set! (vector-ref parent 8) 1 (vector-ref copied 1))
+        (vector-set! (vector-ref parent 8) 2 (vector-ref copied 2))
+        (vector-set! (vector-ref parent 8) 3 (vector-ref copied 3))
+        (vector-set! (vector-ref parent 8) 4 (vector-ref copied 4)))
+      ;; Detach EVERY metadata leaf used later while the C2 borrow is active.
+      (let* ((o2-projection (vector-ref projection 4))
+             (copied-topology
+               (vector (o2-copy-paths (vector-ref topology 0))
+                       (o2-copy-config-data cpu4-checkpoint-operation (vector-ref topology 1))
+                       (o2-copy-aliases (vector-ref topology 2))))
+             (copied-o2
+               (vector (o2-copy-config-data cpu4-checkpoint-operation (vector-ref o2-projection 0))
+                       (o2-copy-paths (vector-ref o2-projection 1))
+                       (o2-copy-aliases (vector-ref o2-projection 2))
+                       (vector-ref o2-projection 3)))
+             (detached (vector copied-topology copied-o2)))
+        (vector-set! parent 3 'source-staged)
+        (c2-training-state-borrow-end-internal borrow)
+        (vector-set! parent 4 #f)
+        (vector-set! cleanup 2 #f)
+        (vector-set! cleanup 3 #f)
+        (vector-set! parent 3 'source-closed)
+        detached))))
+
+(define (cpu4-checkpoint-release-cell! cell)
+  (let ((carrier (vector-ref cell 0)))
+    (if carrier
+        (begin
+          (if (not (null? (vector-ref carrier 2)))
+              (tr3-c-restore-owned-release-tail-internal! carrier))
+          (vector-set! cell 0 #f)))))
+
+(define (cpu4-checkpoint-access-clear? borrow)
+  (let ((access (vector-ref borrow 5)))
+    (and (vector? access) (= (vector-length access) 5)
+         (not (vector-ref access 0)) (not (vector-ref access 1))
+         (not (vector-ref access 2)) (not (vector-ref access 3))
+         (not (vector-ref access 4)))))
+
+(define cpu4-checkpoint-fixed-paths
+  (cpu4-checkpoint-vector->list g3c4-model-paths 14))
+(define cpu4-checkpoint-fixed-shapes
+  (cpu4-checkpoint-vector->list g3c4-model-shapes 14))
+(define cpu4-checkpoint-tied-secondary-path '("token_embedding" "weight"))
+(define cpu4-checkpoint-tied-secondary-shape '(256 4))
+
+;;; Private cleanup envelope, rooted before any child/parent publication.
+;;; 0..12 retain the accepted restore composer's child-cell layout; 13 is the
+;;; CPU4 control parent and 14 its exact staged controls. Slots15/16 retain
+;;; their genuine rows for closed-custody retry. Neither is TR3 authority.
+(define (cpu4-checkpoint-parent trainer)
+  (let* ((cells (make-vector 14 #f))
+         (parent (vector 'cpu4-checkpoint #f trainer 'constructing #f cells
+                         (vector #f) (vector #f) (make-vector 5 #f) #f #f
+                         (make-vector 6 #f) (vector #f) #f #f #f #f)))
+    (let initialize ((index 0))
+      (if (= index 14) #t
+          (begin (vector-set! cells index (vector #f))
+                 (initialize (+ index 1)))))
+    (vector-set! parent 1 parent)
+    (vector-set! cpu4-checkpoint-parents 0
+                 (cons parent (vector-ref cpu4-checkpoint-parents 0)))
+    (car (vector-ref cpu4-checkpoint-parents 0))))
+
+(define (cpu4-checkpoint-validate-source! parent staged)
+  (let* ((topology (vector-ref staged 0)) (o2 (vector-ref staged 1))
+         (controls (vector-ref parent 8)))
+    (if (not (and (vector? o2) (= (vector-length o2) 4)
+                  (equal? (vector-ref topology 0) (vector-ref o2 1))
+                  (equal? (vector-ref topology 2) (vector-ref o2 2))
+                  (equal? (vector-ref (vector-ref controls 4) 1)
+                          (vector-ref o2 3))))
+        (cpu4-checkpoint-fail 'corrupt-data "C2 model, optimizer and controls differ"))
+    #t))
+
+(define (cpu4-checkpoint-prepare! record parent staged)
+  (cpu4-checkpoint-validate-source! parent staged)
+  (let* ((control (cpu4-trainer-control-begin-internal (vector-ref record 2) 'restore)))
+    (vector-set! parent 13 control)
+    (vector-set! parent 16 (cpu4-control-parent-internal control cpu4-checkpoint-operation))
+    ;; Stage controls while every receiver participant is still idle.
+    (let ((stage (cpu4-trainer-controls-restore-stage-internal
+                   control (vector-ref parent 8))))
+      (vector-set! parent 14 stage)
+      (vector-set! parent 15 (cpu4-control-stage-internal stage cpu4-checkpoint-operation))
+      (let* ((copy (cpu4-trainer-controls-restore-copy-internal stage))
+             (cursors (vector-ref copy 2))
+             (d2 (tr3-d2-restore-prepare-internal
+                   (vector-ref record 15) (vector-ref cursors 0) (vector-ref cursors 1))))
+        (vector-set! parent 9 d2)
+        (let* ((stages (vector-ref (vector-ref parent 6) 0))
+               (request (vector (vector-ref record 13) (vector-ref staged 1)
+                                (cpu4-checkpoint-vector->list stages 28)
+                                (vector-ref (vector-ref copy 4) 1)
+                                (vector-ref record 20) cpu4-checkpoint-operation #f))
+               (outcome (guard (caught (#t (vector #f caught)))
+                          (tr3-c-restore-o2-prepare-internal request)
+                          (vector #t #t))))
+          ;; The request output is authoritative even after a wrapper raises.
+          (if (vector-ref request 6)
+              (begin
+                (vector-set! (vector-ref parent 11) 0 (vector-ref request 6))
+                (vector-set! (vector-ref parent 7) 0 (vector-ref (vector-ref request 6) 2))
+                (vector-set! (vector-ref parent 6) 0 #f)
+                (vector-set! (vector-ref parent 11) 4 #f)))
+          (if (not (vector-ref outcome 0)) (raise (vector-ref outcome 1)))
+          (if (not (vector-ref request 6))
+              (cpu4-checkpoint-fail 'internal "O2 restore did not publish its plan"))
+          (let* ((o2 (vector-ref request 6))
+                 (i2 (tr3-c-restore-i2-create-internal o2)))
+            (vector-set! parent 10 i2)
+            (let append-parameters ((index 0))
+              (if (= index 14) #t
+                  (begin
+                    (tr3-c-restore-i2-append-parameter-internal!
+                      i2 (vector-ref (vector-ref record 12) index)
+                      (vector-ref (vector-ref record 11) index)
+                      (vector-ref (vector-ref (vector-ref parent 5) index) 0))
+                    (append-parameters (+ index 1)))))
+            (tr3-c-restore-o2-append-internal! o2 i2)
+            (cpu4-binding-p1-check
+              (cpu4-p1-fixed-recheck-internal
+                (vector-ref record 8) (vector-ref record 10)
+                (vector-ref record 11) (vector-ref record 12))
+              cpu4-checkpoint-operation)
+            (cpu4-trainer-controls-restore-precommit-internal stage)
+            (tr3-d2-restore-check-internal d2)
+            (tr3-c-restore-o2-check-internal o2)
+            (tr3-c-restore-i2-prepare-internal! i2)
+            (vector-set! parent 3 'sealed)
+            #t))))))
+
+(define (cpu4-checkpoint-abort! parent)
+  (let ((cleanup (vector-ref parent 11)) (borrow (vector-ref parent 4)))
+    (if borrow
+        (begin
+          ;; A successful C2 end clears borrow[1]. A consumed tensor access
+          ;; clears borrow[5] before final native validation. Retry only exact
+          ;; still-live authority; never call end on a closed owned token.
+          (if (vector-ref borrow 1)
+              (begin
+                (if (vector-ref cleanup 1)
+                    (begin
+                      (if (not (cpu4-checkpoint-access-clear? borrow))
+                          (state-dict-c2-owned-tensor-borrow-end-internal
+                            (vector-ref cleanup 2) (vector-ref cleanup 3)
+                            (vector-ref cleanup 1) cpu4-checkpoint-operation))
+                      (vector-set! cleanup 1 #f)))
+                (if (not (cpu4-checkpoint-access-clear? borrow))
+                    (cpu4-binding-fail-stop 134))
+                (c2-training-state-borrow-end-internal borrow)))
+          (vector-set! parent 4 #f)
+          (vector-set! cleanup 1 #f)
+          (vector-set! cleanup 2 #f)
+          (vector-set! cleanup 3 #f)))
+    (if (vector-ref parent 10)
+        (begin
+          (if (not (eq? (vector-ref (vector-ref parent 10) 5) 'aborted))
+              (tr3-c-restore-i2-abort-internal! (vector-ref parent 10)))
+          (vector-set! parent 10 #f)))
+    (if (vector-ref parent 9)
+        (begin
+          (if (not (eq? (vector-ref (vector-ref parent 9) 5) 'aborted))
+              (tr3-d2-restore-abort-internal! (vector-ref parent 9)))
+          (vector-set! parent 9 #f)))
+    (if (vector-ref cleanup 0)
+        (begin
+          (if (not (eq? (vector-ref (vector-ref cleanup 0) 7) 'aborted))
+              (tr3-c-restore-o2-abort-internal! (vector-ref cleanup 0)))
+          (vector-set! cleanup 0 #f)
+               (vector-set! (vector-ref parent 7) 0 #f))
+        (let ((stages (vector-ref (vector-ref parent 6) 0)))
+          (if stages
+              (let release-moments ((index 0))
+                (if (= index 28) #t
+                    (begin
+                      (if (vector-ref stages index)
+                          (begin
+                            (if (not (null? (vector-ref (vector-ref stages index) 2)))
+                                (tr3-c-restore-owned-release-tail-internal!
+                                  (vector-ref stages index)))
+                            (vector-set! stages index #f)))
+                      (release-moments (+ index 1))))))))
+    (let release-parameters ((index 0))
+      (if (= index 14) #t
+          (begin
+            (cpu4-checkpoint-release-cell! (vector-ref (vector-ref parent 5) index))
+            (release-parameters (+ index 1)))))
+    (if (vector-ref parent 14)
+        (begin
+          (if (not (and (vector-ref parent 15)
+                        (eq? (vector-ref (vector-ref parent 15) 4) 'aborted)))
+              (cpu4-trainer-controls-restore-abort-internal! (vector-ref parent 14)))
+          (vector-set! parent 14 #f)))
+    (if (vector-ref parent 13)
+        (begin
+          (if (not (and (vector-ref parent 16)
+                        (eq? (vector-ref (vector-ref parent 16) 5) 'closed)))
+              (cpu4-trainer-control-end-internal! (vector-ref parent 13)))
+          (vector-set! parent 13 #f)))
+    (vector-set! parent 3 'dead)
+    #t))
+
+;;; All recoverable checks finish before I2 writes. These are the accepted
+;;; genuine component tails, followed by the controls-last local authority.
+(define (cpu4-checkpoint-commit! parent)
+  (let ((i2 (vector-ref parent 10)) (o2 (vector-ref (vector-ref parent 11) 0))
+        (d2 (vector-ref parent 9)) (cells (vector-ref parent 5)))
+    (vector-set! parent 3 'committing)
+    (tr3-c-restore-i2-commit-tail-internal! i2)
+    (tr3-c-restore-o2-commit-tail-internal! o2)
+    (tr3-c-restore-o2-finalize-tail-internal! o2)
+    (tr3-d2-restore-commit-internal! d2)
+    (cpu4-trainer-controls-restore-commit-internal! (vector-ref parent 14))
+    (vector-set! parent 14 #f)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 0) 0))
+    (vector-set! (vector-ref cells 0) 0 #f)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 1) 0))
+    (vector-set! (vector-ref cells 1) 0 #f)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 2) 0))
+    (vector-set! (vector-ref cells 2) 0 #f)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 3) 0))
+    (vector-set! (vector-ref cells 3) 0 #f)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 4) 0))
+    (vector-set! (vector-ref cells 4) 0 #f)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 5) 0))
+    (vector-set! (vector-ref cells 5) 0 #f)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 6) 0))
+    (vector-set! (vector-ref cells 6) 0 #f)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 7) 0))
+    (vector-set! (vector-ref cells 7) 0 #f)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 8) 0))
+    (vector-set! (vector-ref cells 8) 0 #f)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 9) 0))
+    (vector-set! (vector-ref cells 9) 0 #f)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 10) 0))
+    (vector-set! (vector-ref cells 10) 0 #f)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 11) 0))
+    (vector-set! (vector-ref cells 11) 0 #f)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 12) 0))
+    (vector-set! (vector-ref cells 12) 0 #f)
+    (tr3-c-restore-owned-release-tail-internal! (vector-ref (vector-ref cells 13) 0))
+    (vector-set! (vector-ref cells 13) 0 #f)
+    (vector-set! parent 9 #f)
+    (vector-set! parent 10 #f)
+    (vector-set! (vector-ref parent 11) 0 #f)
+    (vector-set! (vector-ref parent 7) 0 #f)
+    (cpu4-trainer-control-end-internal! (vector-ref parent 13))
+    (vector-set! parent 13 #f)
+    (vector-set! parent 3 'dead)
+    #t))
+
+(define (cpu4-trainer-restore-internal! trainer source)
+  (cpu4-checkpoint-drain-pending! trainer)
+  (cpu4-snapshot-drain-pending! trainer)
+  (let* ((record (cpu4-trainer-idle-check-internal trainer cpu4-checkpoint-operation))
+         (parent (cpu4-checkpoint-parent trainer)))
+    (guard (caught
+             (#t
+               (if (or (eq? (vector-ref parent 3) 'committing)
+                       (eq? (vector-ref parent 3) 'dead))
+                   (cpu4-binding-fail-stop 134))
+               ;; Retain the original error and exact cleanup authority. A
+               ;; later call drains this owned envelope before idle admission.
+               (vector-set! (vector-ref parent 12) 0 caught)
+               (vector-set! parent 3 'cleanup-blocked)
+               (guard (cleanup-error (#t (raise caught)))
+                 (cpu4-checkpoint-abort! parent))
+               (raise caught)))
+      (let ((staged (cpu4-checkpoint-stage-source! parent source)))
+        (cpu4-checkpoint-prepare! record parent staged)
+        (cpu4-checkpoint-commit! parent)))))
+
+;;; Snapshot envelope [parent,P1,O2,C2,request,state,first-error,parent-row,trainer].
+(define cpu4-snapshot-envelopes (vector '()))
+(define (cpu4-checkpoint-drain-pending! trainer)
+  (let drain ((rows (vector-ref cpu4-checkpoint-parents 0)))
+    (if (null? rows) #t
+        (let ((parent (car rows)))
+          (if (and (eq? (vector-ref parent 2) trainer)
+                   (eq? (vector-ref parent 3) 'cleanup-blocked))
+              (guard (blocked (#t (raise (vector-ref (vector-ref parent 12) 0))))
+                (cpu4-checkpoint-abort! parent)))
+          (drain (cdr rows))))))
+(define (cpu4-snapshot-drain-pending! trainer)
+  (let drain ((rows (vector-ref cpu4-snapshot-envelopes 0)))
+    (if (null? rows) #t
+        (let ((envelope (car rows)))
+          (if (and (eq? (vector-ref envelope 8) trainer)
+                   (eq? (vector-ref envelope 5) 'cleanup-blocked))
+              (guard (blocked (#t (raise (vector-ref envelope 6))))
+                (cpu4-snapshot-abort! envelope)))
+          (drain (cdr rows))))))
+(define (cpu4-snapshot-transfer! envelope request)
+  (let ((p1 (vector-ref request 1)) (o2 (vector-ref request 2))
+        (output (vector-ref request 5)))
+    (cond
+      ((and (not p1) (not o2) output)
+       (let ((state (c2-training-state-find output)))
+         (if (not (and state (eq? (vector-ref state 0) output)
+                       (eq? (vector-ref state 7) 'live)
+                       (eq? (vector-ref envelope 1) (vector-ref state 1))
+                       (eq? (vector-ref envelope 2) (vector-ref state 2))))
+             (cpu4-binding-fail-stop 134))
+         (vector-set! envelope 1 #f)
+         (vector-set! envelope 2 #f)
+         (vector-set! envelope 3 output)
+         output))
+      ((and (eq? p1 (vector-ref envelope 1))
+            (eq? o2 (vector-ref envelope 2)) (not output)) #f)
+      (else (cpu4-binding-fail-stop 134)))))
+(define (cpu4-snapshot-abort! envelope)
+  (if (vector-ref envelope 3)
+      (begin (c2-training-state-release-internal!
+               (vector-ref envelope 3) 'cpu4-trainer-snapshot)
+             (vector-set! envelope 3 #f)))
+  (if (vector-ref envelope 2)
+      (begin (o2-public-optimizer-state-release! (vector-ref envelope 2))
+             (vector-set! envelope 2 #f)))
+  (if (vector-ref envelope 1)
+      (begin (state-dict-release! (vector-ref envelope 1))
+             (vector-set! envelope 1 #f)))
+  (if (vector-ref envelope 0)
+      (begin
+        (if (not (and (vector-ref envelope 7)
+                      (eq? (vector-ref (vector-ref envelope 7) 5) 'closed)))
+            (cpu4-trainer-control-end-internal! (vector-ref envelope 0)))
+        (vector-set! envelope 0 #f)))
+  (vector-set! envelope 4 #f)
+  (vector-set! envelope 5 'dead)
+  #t)
+(define (cpu4-trainer-snapshot-internal trainer result-cell)
+  (if (not (and (vector? result-cell) (= (vector-length result-cell) 1)
+                (not (vector-ref result-cell 0))))
+      (cpu4-control-fail 'invalid-argument 'cpu4-trainer-snapshot
+                         "snapshot result cell must be empty and exact"))
+  (cpu4-checkpoint-drain-pending! trainer)
+  (cpu4-snapshot-drain-pending! trainer)
+  (let* ((record (cpu4-trainer-idle-check-internal trainer 'cpu4-trainer-snapshot))
+         (envelope (vector #f #f #f #f #f 'constructing #f #f trainer))
+         (next (cons envelope (vector-ref cpu4-snapshot-envelopes 0))))
+    (vector-set! cpu4-snapshot-envelopes 0 next)
+    (let ((canonical (car (vector-ref cpu4-snapshot-envelopes 0))))
+      (guard (caught
+               (#t
+                 (vector-set! canonical 6 caught)
+                 (vector-set! canonical 5 'cleanup-blocked)
+                 (guard (cleanup-error (#t (raise caught)))
+                   (cpu4-snapshot-abort! canonical))
+                 (raise caught)))
+        (let ((control (cpu4-trainer-control-begin-internal trainer 'snapshot)))
+          (vector-set! canonical 0 control)
+          (vector-set! canonical 7 (cpu4-control-parent-internal control 'cpu4-trainer-snapshot))
+          (let ((controls (cpu4-trainer-controls-copy-internal control)))
+            (vector-set! canonical 1 (module-state-dict (vector-ref record 8)))
+            (vector-set! canonical 2 (o2-public-optimizer-state (vector-ref record 13)))
+            (let* ((request (vector c2-training-state-compose-tag
+                                    (vector-ref canonical 1) (vector-ref canonical 2)
+                                    controls 'cpu4-trainer-snapshot #f)))
+              (vector-set! canonical 4 request)
+              (let* ((outcome (guard (caught (#t (vector #f caught)))
+                                (c2-training-state-compose-internal request)
+                                (vector #t #t)))
+                     (owner (cpu4-snapshot-transfer! canonical request)))
+                (if (not (vector-ref outcome 0)) (raise (vector-ref outcome 1)))
+                (if (not owner)
+                    (cpu4-control-fail 'internal 'cpu4-trainer-snapshot
+                                       "C2 snapshot did not transfer both owners"))
+                (cpu4-trainer-control-end-internal! control)
+                (vector-set! canonical 0 #f)
+                (vector-set! result-cell 0 owner)
+                (vector-set! canonical 3 #f)
+                (vector-set! canonical 4 #f)
+                (vector-set! canonical 5 'dead)
+                owner))))))))
