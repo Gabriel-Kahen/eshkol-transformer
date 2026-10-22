@@ -63,7 +63,8 @@ class RestoreBindingContract(unittest.TestCase):
             acquire = body.index(f"({native}")
             self.assertLess(body.index(f"(set! tr3-c-restore-{registry}-ledgers next-registry)"), acquire)
             self.assertLess(body.index("(guard (caught"), acquire)
-            self.assertLess(body.index("(tr3-c-restore-find-identity"), acquire)
+            self.assertLess(body.index(f"(car tr3-c-restore-{registry}-ledgers)"), acquire)
+            self.assertNotIn("(tr3-c-restore-find-identity ledger", body)
             after = body[acquire:]
             self.assertNotIn("(cons ", after)
             self.assertNotIn("(vector ", after)
@@ -80,11 +81,19 @@ class RestoreBindingContract(unittest.TestCase):
         self.assertIn("stages (vector stage-carriers native-request) 'constructing", prepare)
         self.assertEqual(prepare.count("(vector-set! canonical 6 #f)"), 3)
         self.assertEqual(prepare.count("(vector-set! request 6 canonical)"), 2)
-        self.assertEqual(prepare.count("(tr3-c-restore-transfer28!"), 2)
+        self.assertEqual(prepare.count("(tr3-c-restore-transfer28!"), 4)
         # Both guarded adoption and success publish a prepared exact ledger;
         # the materials root is cleared only after request output publication.
         self.assertEqual(prepare.count("(vector-set! canonical 7 'prepared)"), 2)
         self.assertIn("(eq? (vector-ref request 6) canonical)", prepare)
+
+    def test_actual_region_fixture_covers_canonical_escape_and_drain(self) -> None:
+        fixture = (ROOT / "tests/tr3_restore_bindings/source_runtime.esk").read_text()
+        self.assertIn("(with-region ('tr3-restore-ledger-rooting 65536)", fixture)
+        self.assertIn("regional caller stage wrappers kept raw ownership", fixture)
+        self.assertIn("canonical promoted stage wrappers kept raw ownership", fixture)
+        self.assertIn("published ledgers did not survive region end", fixture)
+        self.assertIn("post-region custody did not drain exactly", fixture)
 
     def test_native_failure_categories_use_existing_dependency_spelling(self) -> None:
         mapping = self.definition(
