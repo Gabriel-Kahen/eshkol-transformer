@@ -23,7 +23,10 @@ then generator-row/generator-anchor/generator-binding. The bridge enrolls all
 pending nodes before calling the route; bind changes existing fields, not heads.
 
 The route captures the seven exact pending node heads before any stage. The
-core invokes only `admit`, `bind`, and `verify`, all before native commit. Bind
+core invokes only `admit`, `bind`, and `verify`, all before native commit.
+It also captures the intended generator row/anchor/binding nodes, their original
+cars/cdrs and every original field before stages. Final checks require those
+same nodes still reachable and unchanged, including generators below the head. Bind
 receives the original pending output, live record and original-authority closure.
 Verify binds the selected count and IDs; it makes no final-RNG assumption.
 After the last callable stage, core rebuilds the authentic 31-slot precommit
@@ -44,7 +47,12 @@ and rows dead; mismatched cleanup or failed abort exits 134.
 
 IDs, length and cache owners delegate to the reviewed logical-clone and typed
 wrapper stack: native kinds 10/11/12, dense CPU-i64 rank one `[1]` or `[2]`.
-Public provenance is independent of the private typed authority. Public release
+Published output provenance is the secret issuer's immutable creation binding,
+including the admitted profile tag, budget and byte EOS. It does not revalidate
+generator/input/model/tokenizer liveness after publication. Generator/profile
+retirement therefore cannot strand a genuine output; native output and its own
+private/public authorities must still authenticate. Public result provenance is
+independent of the private typed authority. Public release
 maps the opaque internal typed kind to the existing operation kind and invokes
 its authentic private release; held-I1 rejection preserves authority. Text is a
 fresh logical bytevector. RNG remains an independently owned scalar RNG record.
@@ -71,3 +79,15 @@ allowlist is authorized. The staged installed fixture covers all five accessors,
 three release routes, EOS/non-EOS and detached RNG continuation. The single next
 executable gate is independent review of the frozen source/tests, followed by the
 orchestrator-scheduled supported installed build under the shared heavy lock.
+
+### Independent-review repairs
+
+The first frozen source `3f53c54b` was rejected for re-entering live generator
+profile admission during detached output access and for checking generator root
+heads without their intended node payloads. Its failed source/evidence remain
+sealed. The successor removes the live-generator dependency and independently
+checks the selected original generator provenance nodes/fields after the last
+callable stage. Actual-body host controls cover close-before-all-accessors/release,
+held-I1 rejection, typed/RNG survival after source retirement, head/interior node
+substitution/removal/closure mutation, and admission of an older generator.
+These repairs add no postzero registration or public API.

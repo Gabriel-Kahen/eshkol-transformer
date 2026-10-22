@@ -59,7 +59,7 @@ def seam_valid(source):
         assert '(if (or installed? (not (procedure? stage))' in source
         assert '(not (= (vector-length roots) 7))' in source
         assert '(eq? root (vector-ref original-roots other))' in source
-        assert '(vector ticket original-stage original-roots heads)' in source
+        assert '(vector ticket original-stage original-roots heads proof)' in source
         assert '(lambda (generator input) (core generator input #f))' in source
         # The only public calls in core are the fixed three prezero phases.
         stages = [call for call in calls(core, 'issuer') if len(call) > 2]
@@ -78,6 +78,10 @@ def seam_valid(source):
             "(eq? (vector-ref enrollment-ticket 12) 'pending)",
             "(eq? (vector-ref enrollment-row 8) 'pending)",
             "(eq? (vector-ref enrollment-anchor 8) 'pending)",
+            '(eq? (generator-node\n                                               (vector-ref enrollment-roots (+ index 4)) generator) node)',
+            '(eq? (car node) original-row)',
+            '(eq? (cdr node) (vector-ref generator-proof (+ index 9)))',
+            '(eq? (vector-ref original-row slot) (vector-ref fields slot))',
             '(eq? (vector-ref enrollment-ticket 16) enrollment-authority)',
             '(eq? (vector-ref enrollment-binding 1) enrollment-authority)',
             '(eq? (vector-ref generator-entry 7) creation-policy)',
@@ -153,6 +157,13 @@ class PublicG2Port(unittest.TestCase):
         tree = forms(source)
         self.assertNotIn('et_g3c4_private_terminal_result_tensor_create_v1', source)
         self.assertNotIn('g3c4-p2g2-terminal-origin-', source)
+        output_live = next(node for node in nodes(tree) if len(node) > 2
+                           and node[:2] == ['define', ['g3c4-public-g2-output-live', 'shell', 'operation']])
+        self.assertFalse(calls(output_live, 'g3c4-public-g2-profile-original'))
+        dispatch = DISPATCH.read_text()
+        self.assertIn("(eq? creation-profile 'diagnostic-c4-p2g2)", dispatch)
+        self.assertIn('(= creation-budget 2)', dispatch)
+        self.assertIn('(<= 0 creation-eos) (<= creation-eos 255)', dispatch)
         self.assertEqual(len(calls(tree, 'g3c4-p2g2-typed-create-private')), 1)
         self.assertEqual(len(calls(tree, 'g3c4-p2g2-terminal-ids-clone-private')), 1)
         self.assertEqual(len(calls(tree, 'g3c4-p2g2-typed-copy-private')), 1)
@@ -174,7 +185,8 @@ class PublicG2Port(unittest.TestCase):
         for name in ('native/g3g_manual_package_root.esk', 'native/g3c4_public_g2_result_extension.esk',
                      'tests/g3c4/p2_g2_public_result_test.esk', 'tests/g3c4/p2_g2_public_ticket_close_test.esk',
                      'tests/g3c4/p2_g2_public_ticket_host_test.scm',
-                     'tests/g3c4/p2_g2_public_typed_result_host_test.scm'):
+                     'tests/g3c4/p2_g2_public_typed_result_host_test.scm',
+                     'tests/g3c4/p2_g2_public_output_lifetime_host_test.scm'):
             self.assertTrue(forms((ROOT / name).read_text()), name)
         fixture = (ROOT / 'tests/g3c4/p2_g2_public_result_test.esk').read_text()
         for name in ('g3g-public-generation-output-ids', 'g3g-public-generation-output-lengths',

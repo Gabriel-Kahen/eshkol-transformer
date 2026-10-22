@@ -59,8 +59,9 @@
                   (eq? (vector-ref ticket 8) terminal)
                   (eq? (vector-ref ticket 9) terminal-anchor)
                   ((vector-ref binding 1) 'verify row anchor entry terminal terminal-anchor)
-                  (eq? (g3c4-public-g2-profile-original (vector-ref row 3) operation)
-                       (vector-ref row 5))
+                  ;; The secret issuance binding owns immutable creation
+                  ;; provenance; published output lifetime does not re-enter a
+                  ;; generator/input/model/tokenizer liveness validator.
                   (= (vector-ref row 9) (vector-ref terminal 6))
                   (= (vector-ref anchor 9) (vector-ref terminal 6))
                   (= (vector-ref ticket 13) (vector-ref terminal 6))
