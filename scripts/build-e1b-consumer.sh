@@ -1447,11 +1447,17 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
         "${e3_tuple_kind}" == retention ||
         "${e3_tuple_kind}" == retention-first-eval-mutant ||
         "${e3_tuple_kind}" == retention-overflow ]]; then
+    e3_p1_variant_flags=()
+    if [[ "${e3_tuple_kind}" == fault ]]; then
+      e3_p1_variant_flags+=(--fault-enter-denial)
+    fi
     python3 "${PROJECT_ROOT}/scripts/generate-e3-p1-mode-test-variant.py" \
       --output "${e3_generated_source_root}/transformer/module.esk" \
+      "${e3_p1_variant_flags[@]}" \
       >"${e1b_tmp}/retention-p1-generation.txt"
     python3 "${PROJECT_ROOT}/scripts/generate-e3-p1-mode-test-variant.py" \
       --output "${e3_generated_source_root}/transformer/module.esk" --check \
+      "${e3_p1_variant_flags[@]}" \
       >"${e1b_tmp}/retention-p1-check.txt"
     cmp "${e1b_tmp}/retention-p1-generation.txt" \
         "${e1b_tmp}/retention-p1-check.txt"

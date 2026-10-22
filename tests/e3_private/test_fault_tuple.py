@@ -1,9 +1,12 @@
 """Host-only lexical and source isolation checks for the noninstalled E3 fault tuple."""
 
 from pathlib import Path
+import hashlib
 import re
+import runpy
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -18,6 +21,163 @@ def rows(prefix: Path, suffix: str) -> list[str]:
 
 
 class FaultTupleTest(unittest.TestCase):
+    def test_stage4_p1_enter_cut_is_fault_only_and_prewrite(self):
+        variant = runpy.run_path(str(ROOT / "scripts/generate-e3-p1-mode-test-variant.py"))
+        canonical = (ROOT / "internal/p1/lib/transformer/module.esk").read_text()
+        plain = variant["compose"](canonical)
+        fault = variant["compose"](canonical, True)
+        self.assertEqual(hashlib.sha256(plain.encode()).hexdigest(),
+                         variant["VARIANT_SHA256"])
+        self.assertEqual(hashlib.sha256(fault.encode()).hexdigest(),
+                         variant["FAULT_VARIANT_SHA256"])
+        for excluded in (canonical, plain):
+            self.assertNotIn("p1-e3-test-enter-arm!", excluded)
+            self.assertNotIn("p1-e3-test-enter-denial!", excluded)
+        enter = fault.split("(define (e3-mode-enter! token)", 1)[1]
+        enter = enter.split("(define (e3-mode-restore! token)", 1)[0]
+        cut = "(if (p1-e3-test-enter-denial! token) 2 "
+        first_write = "(vector-set! (vector-ref nodes 0) 1 e3-mode-eval)"
+        self.assertEqual(enter.count(cut), 1)
+        self.assertLess(enter.index("(e3-mode-snapshot-check record #f)"),
+                        enter.index(cut))
+        self.assertLess(enter.index(cut), enter.index(first_write))
+        self.assertEqual(sum(enter.count(f"(vector-set! (vector-ref nodes {i}) 1 e3-mode-eval)")
+                             for i in range(17)), 17)
+        moved = enter.replace(cut, "", 1).replace(first_write,
+                         first_write + cut, 1)
+        self.assertFalse(moved.index(cut) < moved.index(first_write))
+        for clause in ("(eq? token (vector-ref p1-e3-test-seam 2))",
+                       "(eq? record (vector-ref p1-e3-test-seam 3))",
+                       "(not (= (vector-ref p1-e3-test-seam 7) 0)) 2",
+                       "(vector-set! p1-e3-test-seam 7 2)",
+                       "(vector-set! p1-e3-test-seam 7 3)",
+                       "(= (vector-ref p1-e3-test-seam 7) 3)"):
+            self.assertIn(clause, fault)
+        builder = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
+        self.assertIn('if [[ "${e3_tuple_kind}" == fault ]]; then\n'
+                      '      e3_p1_variant_flags+=(--fault-enter-denial)', builder)
+        self.assertEqual(builder.count('"${e3_p1_variant_flags[@]}"'), 2)
+        self.assertEqual((TESTS / "fault_package_source_closure.txt").read_text().count(
+            "@BUILD@/source/transformer/module.esk"), 1)
+        self.assertIn("internal/p1/lib/transformer/module.esk",
+                      (ROOT / "native/e3_private_package_source_closure.txt").read_text())
+
+    def test_fault_twin_retirement_allows_primary_but_rejects_busy_and_stale(self):
+        variant = runpy.run_path(str(ROOT / "scripts/generate-e3-p1-mode-test-variant.py"))
+        fault = variant["compose"](
+            (ROOT / "internal/p1/lib/transformer/module.esk").read_text(), True)
+        marker = "(and (vector-ref p1-e3-test-seam 2)\n"
+        start = fault.index(marker, fault.index("(vector-set! p1-e3-test-seam 0"))
+        end = next(end for begin, end, _ in variant["spans"](fault) if begin == start)
+        predicate = self.function_expression(
+            "(define (p1-busy token) " + fault[start:end] + ")", "p1-busy")
+        old_token, primary_token, foreign_token = object(), object(), object()
+        retired = [None, 3]
+        seam = [None, None, old_token, retired]
+        environment = {
+            "token": primary_token, "p1-e3-test-seam": seam,
+            "eq?": lambda left, right: left is right,
+            "e3-mode-i64=?": lambda value, expected: value == expected,
+        }
+        # The twin is unbound before primary preparation; P1 retirement sets
+        # record slot 1 to 3 while the old token remains a tombstone.
+        p1 = (ROOT / "internal/p1/lib/transformer/module.esk").read_text()
+        self.assertIn("(vector-set! record 1 3)", p1)
+        self.assertIn("(else (e3-mode-retire! record))", p1)
+        self.assertFalse(self.eval_probe(predicate, environment))
+        retired[1] = 0
+        self.assertTrue(self.eval_probe(predicate, environment))
+        retired[1] = 3
+        environment["token"] = old_token
+        self.assertFalse(self.eval_probe(predicate, environment))
+        self.assertIn("((not (e3-mode-i64=? (vector-ref record 1) 0)) 2)", fault)
+        arm_marker = "(and record\n                       (eq? token (vector-ref p1-e3-test-seam 2))"
+        arm_start = fault.index(arm_marker)
+        arm_end = next(end for begin, end, _ in variant["spans"](fault)
+                       if begin == arm_start)
+        bound = self.function_expression(
+            "(define (p1-bound token) " + fault[arm_start:arm_end] + ")",
+            "p1-bound")
+        primary_record = [primary_token, 0]
+        seam[2], seam[3] = primary_token, primary_record
+        environment["p1-e3-test-seam"] = seam
+        environment["record"] = primary_record
+        environment["token"] = primary_token
+        self.assertTrue(self.eval_probe(bound, environment))
+        environment["token"] = old_token
+        self.assertFalse(self.eval_probe(bound, environment))
+        environment["token"] = foreign_token
+        environment["record"] = False  # e3-mode-record rejects it
+        self.assertFalse(self.eval_probe(bound, environment))
+        clear_marker = "(and (eq? token (vector-ref p1-e3-test-seam 8))\n             (= (vector-ref p1-e3-test-seam 7) 3))"
+        clear_start = fault.index(clear_marker)
+        clear_end = next(end for begin, end, _ in variant["spans"](fault)
+                         if begin == clear_start)
+        clearable = self.function_expression(
+            "(define (p1-clearable token) " + fault[clear_start:clear_end] + ")",
+            "p1-clearable")
+        seam = [None] * 9
+        seam[8] = primary_token
+        seam[7] = 1  # An unreached arm cannot be cleared.
+        environment["p1-e3-test-seam"] = seam
+        environment["token"] = primary_token
+        self.assertFalse(self.eval_probe(clearable, environment))
+        seam[7] = 3
+        self.assertTrue(self.eval_probe(clearable, environment))
+        environment["token"] = foreign_token
+        self.assertFalse(self.eval_probe(clearable, environment))
+        self.assertNotIn("p1-e3-test-enter-arm!",
+                         variant["compose"](p1))
+
+    def test_stage4_driver_maps_first_p1_status_and_clears_before_retry(self):
+        driver = (TESTS / "fault_driver.esk").read_text()
+        execute = driver.split("(define (e3-test-fault-execute ", 1)[1]
+        execute = execute.split("(define (e3-test-fault-dispatch", 1)[0]
+        for clause in ("(= (vector-ref scenario 3) 14)",
+                       "(= (vector-ref scenario 4) 0)",
+                       "(= (vector-ref scenario 5) 1)",
+                       "(if (= site 14) 54",
+                       "(if (= site 14) 4",
+                       "(if (= site 14) 5",
+                       "(if (= site 14) 2",
+                       "(p1-e3-test-enter-read! token) 2",
+                       "(p1-e3-test-enter-read! token) -1",
+                       "(p1-e3-test-enter-clear! token) 0"):
+            self.assertIn(clause, driver)
+        self.assertLess(execute.index("(p1-e3-test-enter-arm! token) 0"),
+                        execute.index("(e3-evaluate-into! model dataset frame)"))
+        self.assertLess(execute.index("(p1-e3-test-enter-clear! token) 0"),
+                        execute.index("(e3-test-retention-call! model dataset frame"))
+        self.assertIn("(e3-test-retention-modes=? frame modes)", execute)
+        self.assertIn("(e3-test-retention-model=? model model-image)", execute)
+        self.assertIn("(e3-test-fault-probes-restored?", execute)
+        self.assertIn("(vector-ref twin 6)", execute)
+        self.assertIn("(vector-ref twin 5)", execute)
+        self.assertNotIn("site == 14", (ROOT / "src/eshkol_transformer/e3_frame.c").read_text())
+        native = (ROOT / "native/e3_private_extension.esk").read_text()
+        stage4 = native[native.index("(e3-stage-set! entry 4)"):]
+        stage4 = stage4[:stage4.index("(define (e3-evaluate-into! model dataset frame)")]
+        self.assertLess(stage4.index("(p1-e3-mode-enter!"),
+                        stage4.index("(e3-note-p1-error!"))
+        self.assertLess(stage4.index("(e3-note-p1-error!"),
+                        stage4.index("(e3-abort! frame)"))
+        mutant = stage4.replace("(e3-abort! frame)", "#f", 1)
+        self.assertFalse("(e3-note-p1-error!\n"
+                         "                                          entry 4 enter-status)\n"
+                         "                                         (e3-abort! frame)" in mutant)
+        restore = native[native.index("(define (e3-restore-closed! frame publish?)"):]
+        restore = restore[:restore.index("(define (e3-abort! frame)")]
+        def drains_and_restores(source):
+            return ("(e3-native-drain (vector-ref entry 4))" in source
+                    and source.count("(p1-e3-mode-restore! (vector-ref entry 6))") == 2
+                    and source.index("(e3-native-drain (vector-ref entry 4))") <
+                    source.index("(p1-e3-mode-restore! (vector-ref entry 6))"))
+        self.assertTrue(drains_and_restores(restore))
+        self.assertFalse(drains_and_restores(restore.replace(
+            "(p1-e3-mode-restore! (vector-ref entry 6))", "0", 1)))
+        self.assertFalse(drains_and_restores(restore.replace(
+            "(e3-native-drain (vector-ref entry 4))", "#f", 1)))
+
     @staticmethod
     def function_expression(source: str, name: str):
         """Parse an actual test-only predicate, including its nested clauses."""
@@ -249,7 +409,7 @@ printf '%s\n' "$e3_tuple_kind"
         self.assertLess(frame.index("frame->fault_state = 2; /* Consume before M3 admission"),
                         frame.index("pin_status = et_g3t_model_pins_begin_fail_before_internal"))
         self.assertIn("(if (= site 3) 42\n                    (if (= site 4) 47", driver)
-        self.assertIn("(if (or (= site 3) (= site 4) (= site 5))\n        (e3-test-fault-check 'independent-twin", driver)
+        self.assertIn("(if (or (= site 3) (= site 4) (= site 5) (= site 14))\n        (e3-test-fault-check 'independent-twin", driver)
         self.assertIn("if (fail_before >= M3_CALL_PIN_COUNT)", pins)
         self.assertIn("m3_call_drain(pins, i)", pins)
         self.assertIn("for(size_t n=0;n<14;++n)", (ROOT / "tests/m3cg/test_pins.c").read_text())
@@ -440,6 +600,8 @@ e3_reject_unresolved_private fault "$3" "$3"
         execute = execute.split("(define (e3-test-fault-dispatch", 1)[0]
         snapshots = (
             "(cursor (d2-token-dataset-cursor dataset))",
+            "(d2-state (d2-open-dataset-state dataset 'e3-evaluate-into!))",
+            "(generation-before (vector-ref d2-state 8))",
             "(modes (e3-test-retention-modes frame))",
             "(model-image (e3-test-retention-model-snapshot model))",
             "(rng-algorithm (m3t-public-initializer-algorithm initializer))",
@@ -453,13 +615,15 @@ e3_reject_unresolved_private fault "$3" "$3"
         required = (
             "(if (= site 2) 155 (if (= site 5) 107 95))",
             "(e3-test-fault-check 'cursor\n        (d2-core-bytes=? cursor",
+            "(e3-test-fault-check 'generation-after-failure\n            (and (= (vector-ref d2-state 8) (+ generation-before 2))\n                 (e3-d2-source-idle? d2-state)))",
             "(e3-test-fault-check 'output\n        (equal? publication",
             "(e3-test-fault-check 'modes\n        (e3-test-retention-modes=?",
             "(e3-test-fault-check 'model\n        (e3-test-retention-model=?",
             "(e3-test-fault-check 'rng\n        (and (eq? rng-algorithm",
             "(e3-test-fault-check 'owners\n        (e3-test-fault-probes-restored?",
-            "(e3-test-fault-check 'retry-output\n      (equal? (if (or (= site 2) (= site 3) (= site 4) (= site 5))",
+            "(e3-test-fault-check 'retry-output\n      (equal? (if (or (= site 2) (= site 3) (= site 4) (= site 5) (= site 14))",
             "(e3-test-fault-check 'retry-rng\n      (and (eq? rng-algorithm",
+            "(e3-test-fault-check 'generation-after-retry\n          (= (vector-ref d2-state 8) (+ generation-before 5)))",
         )
         def guarded(candidate):
             return all(clause in candidate for clause in required)
@@ -468,9 +632,54 @@ e3_reject_unresolved_private fault "$3" "$3"
                         execute.index("(e3-test-retention-call! model dataset frame"))
         self.assertLess(execute.index("(e3-test-retention-call! model dataset frame"),
                         execute.index("'retry-output"))
+        self.assertEqual(execute.count("(if (and (= site 5) (= occurrence 2))"), 2)
+        self.assertLess(execute.index("'first-error"),
+                        execute.index("'generation-after-failure"))
+        self.assertLess(execute.index("'cursor\n"),
+                        execute.index("'generation-after-failure"))
+        self.assertLess(execute.index("'generation-after-failure"),
+                        execute.index("(e3-test-retention-call! model dataset frame"))
+        self.assertLess(execute.index("(e3-test-retention-call! model dataset frame"),
+                        execute.index("'generation-after-retry"))
+        self.assertLess(execute.index("'generation-after-retry"),
+                        execute.index("'independent-twin"))
         for removal in required:
             self.assertFalse(guarded(execute.replace(removal, "#f", 1)),
                              f"omitted call assertion: {removal}")
+        for wrong in ("generation-before", "(d2-core-bytes=? cursor (d2-token-dataset-cursor dataset))"):
+            self.assertFalse(guarded(execute.replace("(+ generation-before 2)", wrong, 1)),
+                             f"failure comparator admitted {wrong}")
+        self.assertFalse(guarded(execute.replace("(+ generation-before 5)",
+                                                "generation-before", 1)))
+
+    def test_restore_generation_mutant_is_after_preflight_and_test_only(self):
+        source_path = ROOT / "internal/e3/lib/e3_d2_restore.esk"
+        source = source_path.read_text()
+        helper = TESTS / "r2_generation_mutant.py"
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "restore-mutant.esk"
+            command = [sys.executable, str(helper), str(source_path), str(output)]
+            subprocess.run(command, check=True, capture_output=True, text=True)
+            mutant = output.read_text()
+            insertion = "    (vector-set! state 8 (vector-ref record 13))\n"
+            self.assertEqual(mutant, source.replace(
+                "    (vector-set! core 15 (vector-ref record 7))\n",
+                "    (vector-set! core 15 (vector-ref record 7))\n" + insertion, 1))
+            self.assertEqual(mutant.count(insertion), 1)
+            self.assertLess(mutant.index("(define (e3-d2-restore-preflight! frame)"),
+                            mutant.index(insertion))
+            self.assertLess(mutant.index(insertion),
+                            mutant.index("(define (e3-d2-cancel-prepare! frame)"))
+            self.assertNotIn(insertion, source)
+            rejected = subprocess.run([sys.executable, str(helper), str(output),
+                                       str(Path(directory) / "twice.esk")],
+                                      capture_output=True, text=True)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("differs from the accepted N4 base", rejected.stderr)
+            same_path = subprocess.run(command[:3] + [str(source_path)],
+                                       capture_output=True, text=True)
+            self.assertNotEqual(same_path.returncode, 0)
+            self.assertIn("must differ from production source", same_path.stderr)
 
     def test_real_stage3_value_borrow_denial_is_causal(self):
         source = (TESTS / "fault_driver.esk").read_text()
@@ -481,9 +690,9 @@ e3_reject_unresolved_private fault "$3" "$3"
             "(held (if (= site 3)",
             "(e3-fault-value-borrow-begin owner role)",
             "(vector-ref before 3) (+ (vector-ref unheld 3) 1)",
-            "(if (or (= site 2) (= site 3) (= site 4) (= site 5))\n        (e3-test-fault-check 'distinct-precall",
+            "(if (or (= site 2) (= site 3) (= site 4) (= site 5) (= site 14))\n        (e3-test-fault-check 'distinct-precall",
             "(equal? publication e3-test-fault-sentinels)",
-            "(if (= site 3) 'invalid-state 'internal)",
+            "(if (or (= site 3) (= site 14)) 'invalid-state 'internal)",
             "(if (= site 2) 155 (if (= site 5) 107 95))",
             "(if (= site 2) 12 (if (= site 5) 8 7))",
             "(if (or (= site 3) (= site 4)) 3 0)",
@@ -566,7 +775,7 @@ e3_reject_unresolved_private fault "$3" "$3"
         self.assertIn("(e3-test-fault-all-distinct?", driver)
         self.assertIn("(if (= site 2) 155 (if (= site 5) 107 95))", driver)
         self.assertIn("(equal? publication\n                (e3-test-fault-publication", driver)
-        self.assertIn("(if (or (= site 2) (= site 3) (= site 4) (= site 5))\n                  e3-test-fault-final-publication publication)", driver)
+        self.assertIn("(if (or (= site 2) (= site 3) (= site 4) (= site 5) (= site 14))\n                  e3-test-fault-final-publication publication)", driver)
 
         for mutated in (
             publish[:cut] + publish[cut:].replace("frame->fault_state = 2;", "", 1),
