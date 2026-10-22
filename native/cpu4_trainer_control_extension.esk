@@ -147,7 +147,7 @@
                   (equal? (vector-ref tokenizer 1) 256)
                   (bytevector? (vector-ref pair 0)) (bytevector? (vector-ref pair 1))
                   (bytevector? (vector-ref config 0)) (string? (vector-ref config 1))
-                  (equal? (vector-ref config 0) canonical)
+                  (d2-core-bytes=? (vector-ref config 0) canonical)
                   (string=? (vector-ref config 1) fingerprint)
                   (cpu4-control-count? (vector-ref counts 0))
                   (cpu4-control-count? (vector-ref counts 1))

@@ -108,7 +108,7 @@ class SourceContract(unittest.TestCase):
         self.assertIn(["c2-d2-cursor-pair-internal", "request"], nodes)
         self.assertIn(["d2-core-state-identity=?", "core", "decoded"], nodes)
         self.assertIn(["=", ["vector-ref", "decoded", "5"], "4"], nodes)
-        self.assertIn(["equal?", ["vector-ref", "config", "0"], "canonical"], nodes)
+        self.assertIn(["d2-core-bytes=?", ["vector-ref", "config", "0"], "canonical"], nodes)
         self.assertIn(["cpu4-control-product", "updates", "accumulation", "operation"], nodes)
         self.assertIn(["cpu4-control-product", "4", "contributions", "operation"], nodes)
         self.assertIn(["=", "contributions", ["+", "epoch-contributions", "offset"]], nodes)
