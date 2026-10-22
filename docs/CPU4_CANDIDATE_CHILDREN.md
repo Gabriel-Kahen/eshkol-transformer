@@ -33,10 +33,12 @@ The owned binding helper rejects foreign/duplicate tickets or a missing owned O2
 before mode changes. Under its installed cleanup handler and busy claim, it
 resolves its own exact candidate model, calls `module-train!` on that model, then
 calls the unchanged strict binding constructor. TRAIN failure clears busy and
-rethrows the original error. A later binding failure also clears busy, retains
-all owned authority and leaves TRAIN in place for exact retry; mode rollback is
-not attempted. This transition changes mode, not model parameter values, and
-never transfers caller tokenizer/dataset ownership. The direct binding API keeps
+rethrows the original error. The tested guarded binding/context rejection paths
+clear busy, retain owned authority and leave TRAIN for exact retry; mode rollback
+is not attempted. Retry is not established for the lower constructor's
+pre-handler registry-publication/handler-allocation window. This transition
+changes mode, not model parameter values, and never transfers caller
+tokenizer/dataset ownership. The direct binding API keeps
 its existing strict TRAIN precondition. The P1 operation sets all seventeen mode
 flags; it does not consult the native context registry. An existing native
 context is rejected later by strict binding's native lease creation, after the
