@@ -122,7 +122,7 @@ static void abort_call(et_e3_frame_internal *frame) {
 static void run(int present) {
   et_g3c4_model_owner_internal *owner=make_model((size_t)present,present);
   image before;capture(owner,&before);void *lease=et_g3c4_private_training_lease_create_v1(owner);CHECK(lease);
-  et_f32_tensor *dest[4];et_f32_tensor_error error;
+  et_f32_tensor *dest[4]={NULL,NULL,NULL,NULL};et_f32_tensor_error error;
   for (size_t i=0;i<4;++i) {
     OK(et_f32_tensor_create_v1(0,NULL,&dest[i],&error));uint32_t sentinel=UINT32_C(0x3f000000)+(uint32_t)i;
     OK(et_f32_tensor_copy_bits_from_v1(dest[i],&sentinel,1,&error));
