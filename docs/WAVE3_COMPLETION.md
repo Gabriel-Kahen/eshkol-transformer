@@ -104,15 +104,23 @@ existing tiny one-byte proof alone does not satisfy CPU v1.
 Initial index and admitted source-only runner repairs change no API. Existing
 admission requirements remain intact.
 
-Pending private composition contract, integration owner: port the already reviewed
+Accepted bounded private composition source target (runtime unadmitted), integration owner: port the already reviewed
 public `diagnostic-c4-p2g2` adapter (budget two, explicit byte EOS) to the closed
 terminal coordinator and current typed-owner ABI. Baseline terminal source is
 `4506bc8f89bfe8083f5c47d71dcad74d968222c5`; existing public source is `cdf5f5e`
 and typed wrapper `666d54eb`. Public provenance must be preallocated and completely
 validated before native commit, with only fixed prevalidated state-marker writes
 after success. No postcommit registration, arbitrary callback, new public name or
-provenance-check relaxation is permitted. Independent source-contract review is
-pending before shared seam implementation/integration. The historical compiler
+provenance-check relaxation is permitted. Independent source-contract review accepts this target with the following
+constraints; exact changed source/tests must still pass independent review.
+Preserve the original two-argument wrapper. An internal closed core may receive
+explicit enrollment through a private three-argument public route; a factory must
+be one-use inside its owning initializer, capture the secret bridge once and seal
+installation before exposing a callable. No rebind or ambient ticket setter.
+Authenticate exact original/distinct ticket/row/anchor carriers and pending roots
+before commit; set the success barrier first, then exactly three fixed live-phase
+markers. Restore pending roots only after successful abort/drain and exact-root
+verification; mismatch or postzero error fails stop. The historical compiler
 AD/ND failure used test-only `6803dbe2`, not the supported fe9 toolchain.
 
 Any further contract change must be recorded here with owner, exact source and
