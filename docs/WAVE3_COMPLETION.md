@@ -88,6 +88,25 @@ Receipt: `finish-20261022/integration-source-union-tests.log`. Compiled producer
 retain their original immutable lane identities; these static results do not
 substitute for their supported runtime gates or final combined-source CI.
 
+## Current compatibility blocker
+
+The installed training/evaluation path in `native/cli3_b_extension.esk` admits
+context two and sequence length two. The multi-token/EOS public G3 target uses
+the distinct C4 owner with position parameters `[4,4]`. Its accepted
+[model contract](g3/G3_C4_MODEL_CONTEXT_SUCCESSOR_CONTRACT.md) forbids treating it
+as a C2 M3T owner and reserves its restore slot without authority. Public G2
+ownership alone cannot make a trained C2 checkpoint a C4 model. Owners are mapping
+existing admitted profile/restore sources; do not claim a freshly initialized C4
+model continues a trained C2 model or widen checkpoint/profile admission silently.
+
+The bounded E3 P1-enter/D2-generation fault source repair is independently accepted
+at worker `b34268a88cc5be80e98c5484f49b94c46c6cc590`; its original insertion-order
+defect and repaired structural regression remain recorded in
+`finish-20261022/e3/r1r2-source/REVIEW.md`. Integration preserves the strict M3CG
+builder pin at `7ce3b14cb069de147d12d1c332fdf0279a8fe1200e8ae74a6dca4ecd7cc136a3`;
+all nine M3CG contract tests and the full predecessor checksum manifest pass.
+Compiled failure/retry admission remains a separate queued gate.
+
 ## CPU v1 completion rule
 
 All checklist rows are required within the declared CPU profile: numerical and
