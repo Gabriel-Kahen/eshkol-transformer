@@ -16,19 +16,30 @@
      (begin (display "CPU4 binding FAIL: ") (display label) (newline) (exit 1))))
 (define (reject label thunk)
  (check label (guard (caught (#t (transformer-error? caught))) (thunk) #f)))
+(define-syntax diagnosed
+ (syntax-rules ()
+  ((_ label expression)
+   (guard (caught
+    (#t (display "CPU4 binding stage failed: ") (display label)
+        (if (transformer-error? caught)
+         (begin (display " category=") (display (transformer-error-category caught))
+                (display " operation=") (display (transformer-error-operation caught))
+                (display " message=") (display (transformer-error-message caught)))
+         (display " foreign condition"))
+        (newline) (exit 1))) expression))))
 (define (config context seed)
  (x1-private-config-resolve
   (x1-private-config-parse
    (string-append "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":"
     (number->string context) ",\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":"
     (number->string seed) "}")) '()))
-(define model (g3c4-model-create-seeded-internal 1729))
+(define model (diagnosed "C4 construct" (g3c4-model-create-seeded-internal 1729)))
 (define resolved (config 4 1729))
 (reject "C2 config refused" (lambda () (cpu4-model-binding-create-internal model (config 2 1729))))
 (reject "wrong original seed refused" (lambda () (cpu4-model-binding-create-internal model (config 4 1730))))
 (reject "eval tree refused" (lambda () (cpu4-model-binding-create-internal model resolved)))
 (module-train! model)
-(define binding (cpu4-model-binding-create-internal model resolved))
+(define binding (diagnosed "binding create" (cpu4-model-binding-create-internal model resolved)))
 (define record (cpu4-model-binding-check-internal binding))
 (define lease (cpu4-model-binding-native-lease-internal binding))
 (check "same canonical C4 model" (eq? model (cpu4-model-binding-model-internal binding)))
@@ -57,14 +68,17 @@
 (check "modeunbind" (= ((vector-ref p1-trusted-surface 68) modes) 0))
 ;;; A real N1/T4 byte-token D2 owner and checksummed cursor round trip.
 (define args (command-line))
-(define tokenizer (t2-wave2-tokenizer-load (car (cdr args))
- (c1-wave2-persistence-policy 1048576 1048576 1048576 1 'cpu)))
-(define dataset (d2-token-dataset-open
- (list ':directory (car (cdr (cdr args))) ':batch-size 1 ':sequence-length 4
+(define tokenizer (diagnosed "raw tokenizer" (t2-wave2-tokenizer-byte resolved)))
+(check "real raw tokenizer vocabulary256" (= (t2-wave2-tokenizer-vocab-size tokenizer) 256))
+(check "real raw tokenizer corpus identity"
+ (string=? (t2-wave2-tokenizer-fingerprint tokenizer)
+  "sha256:eshkol-byte-tokenizer-v1:aabb31f49216963582383a00fd2e85d7c20b658d5bef0e7945344ed6bfe50704"))
+(define dataset (diagnosed "D2 open" (d2-token-dataset-open
+ (list ':directory (car (cdr args)) ':batch-size 1 ':sequence-length 4
        ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
        ':maximum-total-tokens 65536 ':maximum-batch-bytes 68
-       ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #f) tokenizer))
-(define initial (cpu4-d2-cursor-capture-internal dataset))
+       ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #f) tokenizer)))
+(define initial (diagnosed "initial cursor" (cpu4-d2-cursor-capture-internal dataset)))
 (define batch (d2-token-dataset-next-batch dataset))
 (check "fourtokenbatch exists" (not (d2-token-dataset-end? batch)))
 (reject "cursor withlivebatch refused" (lambda () (cpu4-d2-cursor-capture-internal dataset)))
