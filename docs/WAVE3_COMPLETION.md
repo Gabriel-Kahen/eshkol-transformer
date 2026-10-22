@@ -137,6 +137,17 @@ passing advertised host tests is not source or runtime admission. Receipts:
 `finish-20261022/REVIEW-integration-public-g2-3f53c54b.md` and
 `REVIEW-integration-cpu4-provider-contract.md` / `REVIEW-integration-cpu4-metrics-addendum.md`.
 
+The [candidate producer/retirement contract](CPU4_CANDIDATE_CONTRACT.md) is adopted
+with the independently required OPEN_EMPTY versus authentic ABORTED native P1
+proof. G3 is implementing this upstream producer before checkpoint consumers,
+retaining P1/I2 authority before sealing rather than wrapping a sealed ordinary
+model. Initial Scheme cleanup rejects retained optimizer/generator children;
+compound restore/continuation cleanup remains required before that acceptance row.
+
+The next integrated execution priority is a thin supported same-owner
+train → SAVE → reload/resume → evaluate → multi-token/EOS generation smoke after
+foundations compile, then the complete numerical/negative/atomic/resource gates.
+
 ## CPU v1 completion rule
 
 All checklist rows are required within the declared CPU profile: numerical and
