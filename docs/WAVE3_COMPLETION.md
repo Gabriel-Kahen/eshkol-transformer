@@ -116,9 +116,16 @@ constraints; exact changed source/tests must still pass independent review.
 Preserve the original two-argument wrapper. An internal closed core may receive
 explicit enrollment through a private three-argument public route; a factory must
 be one-use inside its owning initializer, capture the secret bridge once and seal
-installation before exposing a callable. No rebind or ambient ticket setter.
-Authenticate exact original/distinct ticket/row/anchor carriers and pending roots
-before commit; set the success barrier first, then exactly three fixed live-phase
+installation before exposing a callable. Chosen source surface: one lexical
+initializer owns the two-argument private wrapper over a closed
+`core(generator,input,enrollment)`; its one-use factory seals installation before
+returning the private three-argument public route. Dispatch installs this once
+before exposing the public generator callable; a second install fails stop.
+No rebind or ambient ticket setter.
+Run every callable stage/verify before the core's final exact frame/marker/root
+and ownership checks. Authenticate exact original/distinct ticket/row/anchor
+carriers and pending roots before commit; set the success barrier first, then
+exactly three fixed live-phase
 markers. Restore pending roots only after successful abort/drain and exact-root
 verification; mismatch or postzero error fails stop. The historical compiler
 AD/ND failure used test-only `6803dbe2`, not the supported fe9 toolchain.
