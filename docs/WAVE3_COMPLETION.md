@@ -69,7 +69,14 @@ independent review/doc work while heavy gates run. Silence is never success.
   Source composition and recovered bounded hosted CLI execution accepted; full admission held.
 - E3 reports a supported fe9/Ubuntu22/LLVM21 native-frame control: 22,223 checks
   ordinary and ASan/UBSan/LSan plus cleanup-mutant rejection. The numerical
-  transcript gate is running separately; no full-matrix pass is inferred.
+  transcript gate completed at exact `44c0418d2`, tree `70706c0a`, exit zero in
+  3,750.864 seconds and passed independent result review. Five T2 layouts across
+  normal A/B, poison and ASan/UBSan/LSan yielded twenty independently validated
+  observations; three compiled numerical mutants failed at their intended
+  validators. Raw 510-file/10.4-GB custody and post-source/Q0 checks authenticate.
+  Six AOT compilers emitted the same retained vectorization warning; runtime
+  stderr was empty. Receipt: `finish-20261022/e3/numerical-a-review/REVIEW.md`.
+  This is a bounded frozen T2 prerequisite, not T4/full-matrix admission.
 - Historical TR3 learning/resume observations authenticate retained bytes, but
   17 relevant source files differ from the newer retained run.
   `finish-20261022/TR3-PRIOR-AUTH.json` records missing generated artifacts and
@@ -150,8 +157,10 @@ its native gate supervisor is being repaired before execution. The final public
 G2 repair `0a292f416a3add5ef511c84bb7d89922e4a690ab` passed independent
 source/tests review and is integrated at `10a1764f9` after authentication of all
 264 sealed Git blobs. Actual-union source/C11/feature-off and host controls pass.
-A bounded owner/builder merge assessment remains open; supported installed
-AOT/native/sanitizer execution remains pending. Earlier `3f53c54b` and successor source receipts remain held/preserved:
+The bounded owner/builder merge assessment accepted the scoped union; supported installed
+AOT/native/sanitizer execution remains pending. Simultaneous CPU4-training and
+typed-result operation additionally requires the new lease/control span checks
+in shared typed output alias validation; CLI3 owns that bounded transport delta. Earlier `3f53c54b` and successor source receipts remain held/preserved:
 causal tests exposed output lifetime coupled to generator liveness and incomplete
 final authority checks. The final repair reports 92 actual-core mutation controls;
 host controls do not establish supported AOT/native/sanitizer admission. Receipts:
