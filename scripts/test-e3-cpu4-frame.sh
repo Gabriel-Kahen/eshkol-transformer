@@ -38,7 +38,7 @@ for profile in normal sanitize; do
   selected=(-O2)
   [[ "$profile" != sanitize ]] || selected=(-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer)
   timeout --foreground --signal=TERM --kill-after=5s 120s "$cc" "${flags[@]}" "${selected[@]}" \
-    tests/e3_cpu4_frame/native.c tests/m3t/kernel_fail_allocator.c \
+    tests/e3_cpu4_frame/native.c tests/e3_cpu4_frame/kernel_allocator.c \
     native/n3k_primitives_provider.c native/n2_primitives_provider.c \
     native/a2_attention_provider.c native/indexed_cross_entropy.c \
     native/l3s_masked_objective_provider.c native/e3_evaluation_metrics_provider.c \
