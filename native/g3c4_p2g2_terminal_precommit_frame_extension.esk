@@ -1,0 +1,80 @@
+;;; Private fallible frame for the original P2/G2 native terminal operands.
+;;; Construct after logical text preflight, inside the same protected call.
+;;; This leaf does not invoke native commit or publish a terminal output.
+
+;;; Frame slots: marker, call, pending anchor, output entry, output shell,
+;;; native context, native output, first raw header, first extent, second
+;;; raw header or #f, second extent, logical count, selected text, protected
+;;; record/anchor, prefix anchor, ledger, generator/model entries, pending
+;;; anchor/original successors, protected record/anchor successors, prefix
+;;; successor, first/second staging, second raw, both text carriers, pending
+;;; raw/staging. All references are captured before a future native zero.
+(define (g3c4-p2g2-terminal-precommit-frame
+          call anchor first-selected second-selected logical-count)
+  (let* ((operation 'g3c4-p2g2-terminal-precommit-frame)
+         (checked (g3c4-p2g2-terminal-pending-check call anchor operation))
+         (record (vector-ref checked 2))
+         (protected-anchor (g3c4-p2g2-anchor-for call))
+         (prefix (vector-ref checked 3))
+         (output (vector-ref checked 4))
+         (first-raw (vector-ref checked 7))
+         (first-staging (vector-ref checked 8))
+         (second-raw (vector-ref checked 9))
+         (second-staging (vector-ref checked 10))
+         (pending-raw (vector-ref checked 11))
+         (pending-staging (vector-ref checked 12))
+         (text-one (vector-ref checked 13))
+         (text-two (vector-ref checked 14))
+         (eos (vector-ref (vector-ref record 15) 6))
+         (first-eos? (and (m3t-exact-i64? eos)
+                          (m3t-exact-i64? first-selected)
+                          (= first-selected eos)))
+         (expected-count (if first-eos? 1 2)))
+    (g3c4-p2g2-terminal-text-v256-check
+      first-staging first-raw first-selected operation)
+    (if (not (and (m3t-exact-i64? logical-count)
+                  (= logical-count expected-count)
+                  (g3c4-p2g2-terminal-text-zero? pending-raw 2)
+                  (g3c4-p2g2-terminal-text-zero? pending-staging 16)))
+        (g3c4-fail 'invalid-state operation
+                   "P2/G2 terminal count or pending carrier changed"))
+    (if first-eos?
+        (if (not (and (eq? second-selected #f)
+                      (eq? (vector-ref record 13) 'before-prefix)
+                      (eq? (vector-ref protected-anchor 13) 'before-prefix)
+                      (g3c4-p2g2-terminal-text-zero? second-raw 1)
+                      (g3c4-p2g2-terminal-text-zero? second-staging 8)
+                      (= (bytevector-u8-ref text-one 0) first-selected)
+                      (g3c4-p2g2-terminal-text-zero? text-two 2)))
+            (g3c4-fail 'invalid-state operation
+                       "P2/G2 first EOS text or phase changed"))
+        (begin
+          (if (not (and (eq? (vector-ref record 13) 'prefix-committed)
+                        (eq? (vector-ref protected-anchor 13)
+                             'prefix-committed)))
+              (g3c4-fail 'invalid-state operation
+                         "P2/G2 second frame lost its prefix phase"))
+          (g3c4-p2g2-prefix-byte-check record first-selected operation)
+          (g3c4-p2g2-terminal-text-v256-check
+            second-staging second-raw second-selected operation)
+          (if (not (and (g3c4-p2g2-terminal-text-zero? text-one 1)
+                        (= (bytevector-u8-ref text-two 0) first-selected)
+                        (= (bytevector-u8-ref text-two 1) second-selected)))
+              (g3c4-fail 'invalid-state operation
+                         "P2/G2 second logical text changed"))))
+    ;; Reauthenticate every original owner and list head immediately before
+    ;; allocating the private frame. No ptr conversion or native call occurs.
+    (g3c4-p2g2-terminal-pending-check call anchor operation)
+    (vector 'precommit call anchor output (vector-ref output 0)
+            (vector-ref record 5) (vector-ref output 3)
+            first-raw 9 (if first-eos? #f second-raw)
+            (if first-eos? 0 9) expected-count
+            (if first-eos? text-one text-two)
+            record protected-anchor prefix (vector-ref record 14)
+            (vector-ref record 1) (vector-ref record 2)
+            (vector-ref anchor 17) (vector-ref anchor 18)
+            (cdr (vector-ref g3c4-p2g2-protected-records 0))
+            (cdr (vector-ref g3c4-p2g2-protected-anchors 0))
+            (cdr (vector-ref g3c4-p2g2-prefix-input-anchors 0))
+            first-staging second-staging second-raw text-one text-two
+            pending-raw pending-staging)))

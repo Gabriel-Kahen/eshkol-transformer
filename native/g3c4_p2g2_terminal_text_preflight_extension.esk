@@ -1,0 +1,71 @@
+;;; Private fallible text preparation for the original pending P2/G2 owner.
+;;; Run after the authentic first decode, and after second decode for G2.
+;;; This leaf remains abort-only; no native terminal commit or output publish.
+
+(define (g3c4-p2g2-terminal-text-v256-check staging raw selected operation)
+  (if (not (and (m3t-exact-i64? selected)
+                (>= selected 0) (<= selected 255)
+                (= (bytevector-u8-ref staging 0) selected)
+                (= (bytevector-u8-ref raw 0) selected)))
+      (g3c4-fail 'invalid-state operation
+                 "P2/G2 text ID differs from genuine T1 carrier"))
+  (let upper ((index 1))
+    (if (< index 8)
+        (if (= (bytevector-u8-ref staging index) 0)
+            (upper (+ index 1))
+            (g3c4-fail 'invalid-state operation
+                       "P2/G2 text ID is outside raw V256")))))
+
+(define (g3c4-p2g2-terminal-text-zero? bytes count)
+  (let loop ((index 0))
+    (if (= index count) #t
+        (and (= (bytevector-u8-ref bytes index) 0)
+             (loop (+ index 1))))))
+
+(define (g3c4-p2g2-terminal-text-preflight!
+          call anchor first-selected second-selected)
+  (let* ((operation 'g3c4-p2g2-terminal-text-preflight!)
+         (checked (g3c4-p2g2-terminal-pending-check call anchor operation))
+         (record (vector-ref checked 2))
+         (protected-anchor (g3c4-p2g2-anchor-for call))
+         (first-raw (vector-ref checked 7))
+         (first-staging (vector-ref checked 8))
+         (second-raw (vector-ref checked 9))
+         (second-staging (vector-ref checked 10))
+         (text-one (vector-ref checked 13))
+         (text-two (vector-ref checked 14))
+         (eos (vector-ref (vector-ref record 15) 6))
+         (first-eos? (and (m3t-exact-i64? eos)
+                          (m3t-exact-i64? first-selected)
+                          (= first-selected eos))))
+    (g3c4-p2g2-terminal-text-v256-check
+      first-staging first-raw first-selected operation)
+    (if first-eos?
+        (if (not (and (eq? second-selected #f)
+                      (eq? (vector-ref record 13) 'before-prefix)
+                      (eq? (vector-ref protected-anchor 13) 'before-prefix)
+                      (g3c4-p2g2-terminal-text-zero? second-raw 1)
+                      (g3c4-p2g2-terminal-text-zero? second-staging 8)))
+            (g3c4-fail 'invalid-state operation
+                       "P2/G2 first EOS must have no prefix or second ID"))
+        (begin
+          (if (not (and (eq? (vector-ref record 13) 'prefix-committed)
+                        (eq? (vector-ref protected-anchor 13)
+                             'prefix-committed)))
+              (g3c4-fail 'invalid-state operation
+                         "P2/G2 second text requires committed prefix"))
+          (g3c4-p2g2-prefix-byte-check record first-selected operation)
+          (g3c4-p2g2-terminal-text-v256-check
+            second-staging second-raw second-selected operation)))
+    (if (not (and (g3c4-p2g2-terminal-text-zero? text-one 1)
+                  (g3c4-p2g2-terminal-text-zero? text-two 2)))
+        (g3c4-fail 'invalid-state operation
+                   "P2/G2 logical text carrier is not empty"))
+    (g3c4-p2g2-terminal-pending-check call anchor operation)
+    ;; Every fallible check precedes bounded writes to original unreachable
+    ;; text carriers. The native terminal commit remains a separate gate.
+    (if first-eos?
+        (begin (bytevector-u8-set! text-one 0 first-selected) 1)
+        (begin (bytevector-u8-set! text-two 0 first-selected)
+               (bytevector-u8-set! text-two 1 second-selected)
+               2))))
