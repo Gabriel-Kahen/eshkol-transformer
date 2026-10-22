@@ -159,6 +159,13 @@ int32_t et_o2_private_candidate_retire_commit_v1(
     et_o2_optimizer *optimizer, et_o2_error_v1 *error);
 #endif
 
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+int32_t et_cpu4_optimizer_roster_preflight_internal(
+    et_o2_optimizer *optimizer_or_null,
+    et_f32_parameter *const parameters[14],
+    const void *const handles[14], et_o2_error_v1 *error);
+#endif
+
 int32_t et_o2_optimizer_step_v1(et_o2_optimizer *optimizer,
                                 et_o2_error_v1 *error);
 int32_t et_o2_optimizer_zero_grad_v1(et_o2_optimizer *optimizer,

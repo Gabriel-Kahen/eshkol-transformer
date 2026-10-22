@@ -56,6 +56,132 @@ static void *add_token(void *context, void *scope, int handle) {
   return result(context);
 }
 
+static void candidate_phase_checks(et_p1_context *context) {
+  et_p1_context copied_context = *context;
+  assert(et_p1_private_construction_begin_v1(context) == 0);
+  void *ordinary = result(context);
+  assert(et_p1_private_candidate_state_preflight_v1(context, ordinary, 0) ==
+         ET_P1_STATUS_INVALID_ARGUMENT);
+  assert(et_p1_private_construction_abort_v1(context, ordinary) == 0);
+  assert(et_p1_private_candidate_state_preflight_v1(context, ordinary, 2) ==
+         ET_P1_STATUS_INVALID_ARGUMENT);
+  for (int prepared = 0; prepared < 2; ++prepared) {
+    et_p1_construction *scope = begin_candidate(context);
+    et_p1_construction before = *scope;
+    context->result_i64 = 137;
+    allocation_limit = 0;
+    assert(et_p1_private_candidate_state_preflight_v1(context, scope, 0) == 0);
+    assert(et_p1_private_candidate_state_preflight_v1(context, scope, 0) == 0);
+    assert(context->result_ptr == scope && memcmp(scope, &before, sizeof(before)) == 0);
+    assert(context->result_i64 == 137);
+    assert(allocation_limit == 0);
+    allocation_limit = -1;
+    assert(et_p1_private_candidate_state_preflight_v1((void *)1, scope, 0) ==
+           ET_P1_STATUS_INVALID_ARGUMENT);
+    context->origin_pid++;
+    assert(et_p1_private_candidate_state_preflight_v1(context, scope, 0) ==
+           ET_P1_STATUS_INVALID_ARGUMENT);
+    context->origin_pid--;
+    assert(et_p1_private_candidate_state_preflight_v1(&copied_context, scope, 0) ==
+           ET_P1_STATUS_INVALID_ARGUMENT);
+    assert(et_p1_private_candidate_state_preflight_v1(context, (void *)1, 0) ==
+           ET_P1_STATUS_INVALID_ARGUMENT);
+    context->result_ptr = scope;
+    scope->origin_pid++;
+    assert(et_p1_private_candidate_state_preflight_v1(context, scope, 0) ==
+           ET_P1_STATUS_INVALID_ARGUMENT);
+    scope->origin_pid--;
+    for (int64_t phase = -1; phase <= 3; ++phase) {
+      if (phase == 0 || phase == 2) continue;
+      assert(et_p1_private_candidate_state_preflight_v1(context, scope, phase) ==
+             ET_P1_STATUS_INVALID_ARGUMENT);
+    }
+    context->result_ptr = NULL;
+    assert(et_p1_private_candidate_state_preflight_v1(context, scope, 0) ==
+           ET_P1_STATUS_INVALID_STATE);
+    context->result_ptr = scope;
+    assert(et_p1_private_candidate_state_preflight_v1(context, scope, 0) == 0);
+    void *module = add_token(context, scope, 0);
+    assert(et_p1_private_candidate_state_preflight_v1(context, scope, 0) ==
+           ET_P1_STATUS_INVALID_STATE);
+    assert(et_p1_private_candidate_state_preflight_v1(context, scope, 2) ==
+           ET_P1_STATUS_INVALID_STATE);
+    assert(et_p1_public_token_live_v1(module) == 1);
+    if (prepared) {
+      assert(et_p1_private_construction_prepare_v1(context, scope) == 0);
+      assert(et_p1_private_candidate_state_preflight_v1(context, scope, 2) ==
+             ET_P1_STATUS_INVALID_STATE);
+      assert(et_p1_private_construction_abort_prepared_v1(context, scope) == 0);
+    } else {
+      assert(et_p1_private_construction_abort_v1(context, scope) == 0);
+    }
+    assert(scope->entries == NULL && scope->candidate_roster_base == NULL);
+    void *busy_scope = begin_candidate(context);
+    assert(et_p1_private_candidate_state_preflight_v1(context, scope, 2) ==
+           ET_P1_STATUS_INVALID_STATE);
+    assert(et_p1_private_construction_abort_v1(context, busy_scope) == 0);
+    before = *scope;
+    assert(et_p1_private_candidate_state_preflight_v1(context, scope, 2) == 0);
+    assert(et_p1_private_candidate_state_preflight_v1(context, scope, 2) == 0);
+    assert(memcmp(scope, &before, sizeof(before)) == 0);
+    scope->entries = (void *)1;
+    assert(et_p1_private_candidate_state_preflight_v1(context, scope, 2) ==
+           ET_P1_STATUS_INVALID_STATE);
+    scope->entries = NULL;
+    assert(et_p1_private_candidate_state_preflight_v1(context, scope, 2) == 0);
+    assert(et_p1_public_token_live_v1(module) == 0);
+    assert(et_p1_private_candidate_state_preflight_v1(context, scope, 0) ==
+           ET_P1_STATUS_INVALID_STATE);
+  }
+}
+
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+static void candidate_handle_checks(et_p1_context *context) {
+  et_p1_construction *first = begin_candidate(context);
+  void *first_handle = add_token(context, first, 1);
+  assert(et_p1_private_construction_seal_v1(context, first) == 0);
+  et_p1_construction *scope = begin_candidate(context);
+  void *module = add_token(context, scope, 0);
+  void *handle = add_token(context, scope, 1);
+  et_p1_record *record = find_record(handle);
+  assert(record != NULL);
+  et_p1_record before = *record;
+  allocation_limit = 0;
+  assert(et_p1_private_candidate_handle_preflight_v1(context, scope, handle) == 0);
+  assert(allocation_limit == 0 && memcmp(record, &before, sizeof(before)) == 0);
+  allocation_limit = -1;
+  assert(et_p1_private_candidate_handle_preflight_v1(context, scope, first_handle) ==
+         ET_P1_STATUS_INVALID_ARGUMENT);
+  assert(et_p1_private_candidate_handle_preflight_v1((void *)1, scope, handle) ==
+         ET_P1_STATUS_INVALID_ARGUMENT);
+  assert(et_p1_private_candidate_handle_preflight_v1(context, scope, module) ==
+         ET_P1_STATUS_INVALID_ARGUMENT);
+  assert(et_p1_private_candidate_handle_preflight_v1(context, scope, (void *)1) ==
+         ET_P1_STATUS_INVALID_ARGUMENT);
+  record->origin_pid++;
+  assert(et_p1_private_candidate_handle_preflight_v1(context, scope, handle) ==
+         ET_P1_STATUS_INVALID_ARGUMENT);
+  record->origin_pid--;
+  record->candidate_index = 0u;
+  assert(et_p1_private_candidate_handle_preflight_v1(context, scope, handle) ==
+         ET_P1_STATUS_INVALID_ARGUMENT);
+  record->candidate_index = 1u;
+  scope->entries[1] = find_record(first_handle);
+  assert(et_p1_private_candidate_handle_preflight_v1(context, scope, handle) ==
+         ET_P1_STATUS_INVALID_ARGUMENT);
+  scope->entries[1] = record;
+  assert(et_p1_private_construction_prepare_v1(context, scope) == 0);
+  assert(et_p1_private_candidate_handle_preflight_v1(context, scope, handle) == 0);
+  assert(et_p1_private_construction_commit_prepared_v1(context, scope) == 0);
+  assert(et_p1_private_candidate_handle_preflight_v1(context, scope, handle) == 0);
+  assert(et_p1_private_candidate_graph_revoke_v1(context, first) == 0);
+  assert(et_p1_private_candidate_handle_preflight_v1(context, scope, handle) == 0);
+  assert(et_p1_private_candidate_graph_revoke_v1(context, scope) == 0);
+  assert(et_p1_private_candidate_handle_preflight_v1(context, scope, handle) ==
+         ET_P1_STATUS_INVALID_STATE);
+}
+#endif
+
 static void candidate_cycle(void *context, int prepared) {
   void *scope = begin_candidate(context);
   void *module = add_token(context, scope, 0);
@@ -79,6 +205,10 @@ static void candidate_cycle(void *context, int prepared) {
     assert(et_p1_private_construction_seal_v1(context, scope) == 0);
   }
   assert(et_p1_private_candidate_graph_preflight_v1(context, scope) == 0);
+  assert(et_p1_private_candidate_state_preflight_v1(context, scope, 0) ==
+         ET_P1_STATUS_INVALID_STATE);
+  assert(et_p1_private_candidate_state_preflight_v1(context, scope, 2) ==
+         ET_P1_STATUS_INVALID_STATE);
   allocation_limit = 0;
   assert(et_p1_private_candidate_graph_revoke_v1(context, scope) == 0);
   assert(allocation_limit == 0);
@@ -107,6 +237,10 @@ int main(void) {
   int64_t baseline;
   int64_t tombstones;
   assert(context != NULL);
+  candidate_phase_checks(context);
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+  candidate_handle_checks(context);
+#endif
 
   assert(et_p1_private_construction_begin_v1(context) == 0);
   ordinary = result(context);
@@ -217,6 +351,6 @@ int main(void) {
   assert(live(context) == baseline);
   assert(dead(context) == tombstones + 19);
   assert(et_p1_public_token_live_v1(ordinary_module) == 1);
-  puts("G3-R P1 candidate roster PASS: 19 retired tokens, exact native enrollment and retained-roster baseline");
+  puts("G3-R P1 candidate roster PASS: phase0/2 proof, 19 main-context retired tokens and retained-roster baseline");
   return 0;
 }

@@ -755,6 +755,64 @@ static int64_t candidate_roster_preflight(et_p1_context *context,
   return ET_P1_STATUS_OK;
 }
 
+ET_P1_PRIVATE int64_t et_p1_private_candidate_state_preflight_v1(
+    void *candidate, void *construction, int64_t expected_phase) {
+  const char *operation = "candidate-state-preflight";
+  et_p1_context *context = find_context(candidate);
+  et_p1_construction *ledger;
+  if (!context_integrity(context)) return ET_P1_STATUS_INVALID_ARGUMENT;
+  /* Preserve the fresh begin result: this predicate creates no result. */
+  memset(&context->error, 0, sizeof(context->error));
+  ledger = require_construction(context, construction, operation);
+  if (ledger == NULL) return context->error.category;
+  if (ledger->candidate_retirable != 1u ||
+      (expected_phase != 0 && expected_phase != 2))
+    return set_error(context, ET_P1_STATUS_INVALID_ARGUMENT,
+                     ET_P1_CODE_FOREIGN_TOKEN, operation,
+                     "not a candidate scope or supported phase");
+  if ((expected_phase == 0 &&
+       ledger->state == 0u && active_construction == ledger &&
+       ledger->count == 0u && ledger->entries != NULL &&
+       ledger->entries == ledger->candidate_roster_base &&
+       context->result_ptr == ledger) ||
+      (expected_phase == 2 &&
+       ledger->state == 2u && active_construction == NULL &&
+       ledger->entries == NULL && ledger->candidate_roster_base == NULL))
+    return ET_P1_STATUS_OK;
+  return set_error(context, ET_P1_STATUS_INVALID_STATE,
+                   ET_P1_CODE_ALREADY_SEALED, operation,
+                   "candidate scope does not have the required phase");
+}
+
+#ifdef ET_CPU4_CANDIDATE_PRIVATE
+ET_P1_PRIVATE int64_t et_p1_private_candidate_handle_preflight_v1(
+    void *candidate, void *construction, const void *handle) {
+  const char *operation = "candidate-handle-preflight";
+  et_p1_context *context = require_context(candidate);
+  if (context == NULL) return ET_P1_STATUS_INVALID_ARGUMENT;
+  et_p1_construction *ledger = require_construction(context, construction, operation);
+  if (ledger == NULL) return context->error.category;
+  if (ledger->candidate_retirable != 1u || ledger->entries == NULL ||
+      ledger->entries != ledger->candidate_roster_base ||
+      ledger->count > ET_P1_CONSTRUCTION_CAPACITY ||
+      !(((ledger->state == 0u || ledger->state == 3u) &&
+          active_construction == ledger) ||
+        (ledger->state == 1u && active_construction == NULL &&
+          ledger->count == ledger->sealed_count)))
+    return set_error(context, ET_P1_STATUS_INVALID_STATE,
+        ET_P1_CODE_ALREADY_SEALED, operation, "candidate roster is unavailable");
+  et_p1_record *record = find_record(handle);
+  if (record == NULL || !token_integrity(record) || record->owner != context ||
+      record->kind != ET_P1_TOKEN_PARAMETER_HANDLE ||
+      record->candidate_construction != ledger ||
+      record->candidate_index >= ledger->count ||
+      ledger->entries[record->candidate_index] != record)
+    return set_error(context, ET_P1_STATUS_INVALID_ARGUMENT,
+        ET_P1_CODE_FOREIGN_TOKEN, operation, "handle is outside this candidate scope");
+  return ET_P1_STATUS_OK;
+}
+#endif
+
 ET_P1_PRIVATE int64_t et_p1_private_candidate_graph_preflight_v1(
     void *candidate, void *construction) {
   et_p1_context *context = require_context(candidate);
@@ -846,6 +904,9 @@ ET_P1_PRIVATE int64_t et_p1_private_construction_abort_prepared_v1(
   for (i = 0u; i < ledger->count; ++i) ledger->entries[i]->live = 0u;
   free(ledger->entries);
   ledger->entries = NULL;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  ledger->candidate_roster_base = NULL;
+#endif
   ledger->state = 2u;
   active_construction = NULL;
   return ET_P1_STATUS_OK;
@@ -867,6 +928,9 @@ ET_P1_PRIVATE int64_t et_p1_private_construction_abort_v1(
   active_construction = NULL;
   free(ledger->entries);
   ledger->entries = NULL;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  ledger->candidate_roster_base = NULL;
+#endif
   return ET_P1_STATUS_OK;
 }
 
