@@ -632,6 +632,10 @@ the old-head failure does not establish current-main runtime behavior.
 
 ## Wave 3 — first complete language model
 
+Current acceptance and finish ownership: [Wave 3 completion index](WAVE3_COMPLETION.md)
+(updated 2026-10-22). PR #214 exact-head hosted checks pass; compiled cross-workstream
+admission remains open. Historical detail below retains its original evidence scope.
+
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
 | N3K | [Bounded diagnostic numerical primitives and initializer](N3K_PRIMITIVES.md) | N2, A2, K1, I1, I2, Q0 | 31 exact operation/row pairs; independent VJP/bit/negative/carrier tests, private AOT and sanitizers; independent N3K-R approval, supported CI 34222643674, PR #67 merge and focused merged-main retest | complete |
