@@ -1,0 +1,177 @@
+;;; Source-private fresh FILE checkpoint factory, fixed serial/nonregional CPU-v1.
+;;; Load after the genuine C2 split reader/public K2 admission, checkpoint
+;;; consumer, and published typed child-custody/detach source. No public facade.
+(define cpu4-checkpoint-factory-tag (vector 'cpu4-file-factory-v1))
+(define cpu4-checkpoint-factories (vector '()))
+;;; [tag,self,ticket,state,path,policy,report,resolved,caller-T2,caller-D2,
+;;; reader-stage,owned-C2,checkpoint-parent,detached-metadata,child-ticket,
+;;; trainer,first-error,cleanup-error,busy?]. Returned children remain unpublished.
+(define (cpu4-checkpoint-factory-row ticket operation)
+  (let find ((rows (vector-ref cpu4-checkpoint-factories 0)))
+    (cond ((null? rows)
+           (cpu4-binding-fail 'invalid-argument operation "foreign checkpoint factory ticket"))
+          ((eq? ticket (vector-ref (car rows) 2))
+           (let ((row (car rows)))
+             (if (not (and (vector? row) (= (vector-length row) 19)
+                           (eq? (vector-ref row 0) cpu4-checkpoint-factory-tag)
+                           (eq? (vector-ref row 1) row)))
+                 (cpu4-binding-fail 'invalid-state operation "checkpoint factory identity changed"))
+             row))
+          (else (find (cdr rows))))))
+
+(define (cpu4-checkpoint-factory-image-dead? image)
+  (let ((state (c2-training-state-find image)))
+    (and state (eq? (vector-ref state 0) image)
+         (eq? (vector-ref state 7) 'dead))))
+(define (cpu4-checkpoint-factory-image-release! row)
+  (let ((image (vector-ref row 11)))
+    (if image
+        (begin
+          ;; Release allocates/reserves BEFORE transfer and can leave the owner
+          ;; live on rejection. Keep its rooted authority until success/dead.
+          (if (not (cpu4-checkpoint-factory-image-dead? image))
+              (guard (caught
+                       (#t
+                         (if (cpu4-checkpoint-factory-image-dead? image)
+                             (vector-set! row 11 #f))
+                         (raise caught)))
+                (c2-training-state-release-internal! image 'trainer-state-release!)))
+          (vector-set! row 11 #f)))
+    #t))
+(define (cpu4-checkpoint-factory-stage-release! row)
+  (let ((stage (vector-ref row 10)))
+    (if stage
+        (begin
+          (if (not (c2-checkpoint-load-staging-dead-internal? stage))
+              (c2-checkpoint-load-staging-release-internal! stage))
+          (vector-set! row 10 #f)))
+    #t))
+(define (cpu4-checkpoint-factory-cleanup! row)
+  ;; Access/borrow and all value/moment/plan custody MUST drain before the
+  ;; loaded C2 owner, and all owned source state before global O2 preflight.
+  (let ((parent (vector-ref row 12)))
+    (if (and parent (not (eq? (vector-ref parent 3) 'dead)))
+        (begin
+          (if (eq? (vector-ref parent 3) 'committing) (cpu4-binding-fail-stop 134))
+          (cpu4-checkpoint-abort! parent))))
+  (cpu4-checkpoint-factory-image-release! row)
+  (cpu4-checkpoint-factory-stage-release! row)
+  (if (vector-ref row 14)
+      (begin
+        (cpu4-owned-candidate-retire-internal! (vector-ref row 14))
+        (vector-set! row 14 #f)))
+  ;; T2/D2 are retained only by identity. No caller component release exists.
+  (vector-set! row 13 #f)
+  (vector-set! row 15 #f)
+  (vector-set! row 3 'dead)
+  #t)
+(define (cpu4-checkpoint-factory-retire-internal! ticket)
+  (cpu4-checkpoint-require-nonregional! 'cpu4-checkpoint-factory-retire)
+  (let* ((operation 'cpu4-checkpoint-factory-retire)
+         (row (cpu4-checkpoint-factory-row ticket operation)))
+    (if (eq? (vector-ref row 3) 'dead) #t
+        (begin
+          (if (vector-ref row 18)
+              (cpu4-binding-fail 'invalid-state operation "checkpoint factory is busy"))
+          (guard (caught
+                   (#t
+                     (vector-set! row 17 caught)
+                     (vector-set! row 18 #f)
+                     (vector-set! row 3 'cleanup-blocked)
+                     (raise caught)))
+            (vector-set! row 18 #t)
+            (cpu4-checkpoint-factory-cleanup! row)
+            (vector-set! row 18 #f)
+            #t)))))
+
+(define (cpu4-checkpoint-factory-load! row)
+  (let ((stage (c2-checkpoint-load-stage-internal (vector-ref row 4) (vector-ref row 5))))
+    (vector-set! row 10 stage)
+    (let ((descriptors
+            (c2-checkpoint-load-capability-descriptors-internal stage 'checkpoint-load)))
+      ;; Authentic caller K2 report, never a fabricated capability projection.
+      (c2-public-capability-admit-all (vector-ref row 6) descriptors)
+      (let ((image (c2-checkpoint-load-reconstruct-internal stage 'checkpoint-load)))
+        (vector-set! row 11 image)
+        (if (not (c2-checkpoint-load-staging-dead-internal? stage))
+            (cpu4-binding-fail 'internal 'cpu4-checkpoint-factory-create
+                               "C2 reconstruction left its stage live"))
+        (vector-set! row 10 #f)
+        image))))
+(define (cpu4-checkpoint-factory-config-check! row)
+  (let* ((operation 'cpu4-checkpoint-factory-create)
+         (resolved (vector-ref row 7))
+         (controls (vector-ref (vector-ref row 12) 8))
+         (config (vector-ref controls 3)) (rng (vector-ref controls 0)))
+    (cpu4-binding-profile! resolved operation)
+    (if (not (and (d2-core-bytes=? (vector-ref config 0)
+                                  (string->utf8 (x1-private-config-canonical resolved)))
+                  (string=? (vector-ref config 1) (x1-private-config-fingerprint resolved))
+                  (= (vector-ref rng 2) (x1-private-config-ref resolved 'run.seed))))
+        (cpu4-binding-fail 'invalid-argument operation "checkpoint configuration or seed differs"))
+    #t))
+
+;;; Recovery-cell is an exact empty one-slot cell. Its registered ticket is
+;;; published BEFORE file/owner acquisition; failure never hides cleanup custody.
+;;; Success returns the genuine trainer on the same still-unpublished candidate.
+(define (cpu4-checkpoint-factory-create-internal!
+          path policy report resolved tokenizer dataset recovery-cell)
+  (cpu4-checkpoint-require-nonregional! 'cpu4-checkpoint-factory-create)
+  (if (not (and (vector? recovery-cell) (= (vector-length recovery-cell) 1)
+                (not (vector-ref recovery-cell 0))))
+      (cpu4-binding-fail 'invalid-argument 'cpu4-checkpoint-factory-create
+                         "factory recovery cell must be exact and empty"))
+  (let* ((row (vector cpu4-checkpoint-factory-tag #f (vector 'cpu4-file-recovery) 'dead
+                      path policy report resolved tokenizer dataset
+                      #f #f #f #f #f #f #f #f #f))
+         (next (cons row (vector-ref cpu4-checkpoint-factories 0))))
+    ;; Handler installation precedes publication of any pending/busy authority.
+    (guard (caught
+             (#t
+               (if (vector-ref recovery-cell 0)
+                   (let ((canonical (cpu4-checkpoint-factory-row
+                                      (vector-ref recovery-cell 0) 'cpu4-checkpoint-factory-create)))
+                     (if (eq? (vector-ref canonical 3) 'committing)
+                         (cpu4-binding-fail-stop 134))
+                     (vector-set! canonical 16 caught)
+                     (vector-set! canonical 18 #f)
+                     (vector-set! canonical 3 'cleanup-blocked)
+                     (guard (cleanup-error
+                              (#t (vector-set! canonical 17 cleanup-error) (raise caught)))
+                       (cpu4-checkpoint-factory-retire-internal! (vector-ref canonical 2)))))
+               (raise caught)))
+      (vector-set! cpu4-checkpoint-factories 0 next)
+      (let ((canonical (car (vector-ref cpu4-checkpoint-factories 0))))
+        (vector-set! canonical 1 canonical)
+        (vector-set! recovery-cell 0 (vector-ref canonical 2))
+        (vector-set! canonical 3 'loading)
+        (vector-set! canonical 18 #t)
+        (let ((parent (cpu4-checkpoint-parent #f)))
+          (vector-set! canonical 12 parent)
+          (cpu4-checkpoint-factory-load! canonical)
+          (let ((detached (cpu4-checkpoint-stage-source! parent (vector-ref canonical 11))))
+            (vector-set! canonical 13 detached)
+            (cpu4-checkpoint-factory-config-check! canonical)
+            ;; No loaded native O2 state may survive into child construction.
+            ;; A release fault is still PREWRITE and retains exact owner retry.
+            (cpu4-checkpoint-factory-image-release! canonical)
+            (cpu4-checkpoint-factory-stage-release! canonical)
+            (vector-set! canonical 3 'constructing)
+            (let ((child (cpu4-owned-candidate-create-internal (vector-ref canonical 7))))
+              (vector-set! canonical 14 child)
+              (cpu4-owned-optimizer-create-internal! child (vector-ref (vector-ref detached 1) 0))
+              (cpu4-owned-binding-create-internal! child)
+              (let ((trainer (cpu4-owned-trainer-create-internal!
+                               child (vector-ref canonical 8) (vector-ref canonical 9))))
+                (vector-set! canonical 15 trainer)
+                (vector-set! parent 2 trainer)
+                (let ((record (cpu4-trainer-record-internal trainer 'cpu4-checkpoint-factory-create)))
+                  (vector-set! canonical 3 'preparing)
+                  (cpu4-checkpoint-prepare! record parent (vector-ref canonical 13))
+                  ;; Return data and all cleanup/publication identities already
+                  ;; exist. An unexpected error from this sealed tail fail-stops.
+                  (vector-set! canonical 3 'committing)
+                  (cpu4-checkpoint-commit! parent)
+                  (vector-set! canonical 3 'ready)
+                  (vector-set! canonical 18 #f)
+                  (vector-ref canonical 15))))))))))

@@ -82,8 +82,9 @@ class Contract(unittest.TestCase):
         self.assertIn('cpu4-checkpoint-drain-pending!', self.fn)
         self.assertIn('cpu4-snapshot-drain-pending!', self.fn)
         restore = self.fn['cpu4-trainer-restore-internal!']
-        self.assertEqual(restore[2], ['cpu4-checkpoint-drain-pending!', 'trainer'])
-        self.assertEqual(restore[3], ['cpu4-snapshot-drain-pending!', 'trainer'])
+        self.assertEqual(restore[2], ['cpu4-checkpoint-require-nonregional!', ['quote', 'cpu4-trainer-restore']])
+        self.assertEqual(restore[3], ['cpu4-checkpoint-drain-pending!', 'trainer'])
+        self.assertEqual(restore[4], ['cpu4-snapshot-drain-pending!', 'trainer'])
 
     def test_existing_trainer_only(self):
         self.assertNotIn('cpu4-candidate-model-create', self.text)

@@ -1,6 +1,15 @@
 ;;; Private CPU4 same-canonical C4 snapshot/restore consumer.
 ;;; Existing registered trainers only. No child factory, TR3 trainer authority,
 ;;; M3T owner cast or substituted model. See CPU4_CHECKPOINT_CONSUMER.md.
+;;; Fixed SERIAL CPU-v1 reader/control entry scope. This actual exported runtime
+;;; query is NULL exactly when no explicit Eshkol region is active. The source
+;;; proof covers authentic fixed provider/codec seams without rebinding/concurrency.
+(extern ptr cpu4-checkpoint-native-current-region :real region_current)
+(define (cpu4-checkpoint-require-nonregional! operation)
+  (if (not (null? (cpu4-checkpoint-native-current-region)))
+      (cpu4-control-fail 'unsupported operation
+                         "CPU4 checkpoint entry requires nonregional serial execution"))
+  #t)
 (define cpu4-checkpoint-operation 'cpu4-trainer-restore)
 (define cpu4-checkpoint-i64-max 9223372036854775807)
 (define cpu4-checkpoint-parents (vector '()))
@@ -480,6 +489,7 @@
     #t))
 
 (define (cpu4-trainer-restore-internal! trainer source)
+  (cpu4-checkpoint-require-nonregional! 'cpu4-trainer-restore)
   (cpu4-checkpoint-drain-pending! trainer)
   (cpu4-snapshot-drain-pending! trainer)
   (let* ((record (cpu4-trainer-idle-check-internal trainer cpu4-checkpoint-operation))
@@ -559,6 +569,7 @@
   (vector-set! envelope 5 'dead)
   #t)
 (define (cpu4-trainer-snapshot-internal trainer result-cell)
+  (cpu4-checkpoint-require-nonregional! 'cpu4-trainer-snapshot)
   (if (not (and (vector? result-cell) (= (vector-length result-cell) 1)
                 (not (vector-ref result-cell 0))))
       (cpu4-control-fail 'invalid-argument 'cpu4-trainer-snapshot
