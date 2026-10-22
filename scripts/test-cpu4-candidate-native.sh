@@ -6,38 +6,64 @@ out=${1:?usage: test-cpu4-candidate-native.sh FRESH_EVIDENCE_DIR}
 [[ "$out" == /* && ! -e "$out" && ! -L "$out" ]]
 mkdir -p "$out"
 cc=$(tsv_value "$(eshkol_build_dir)/eshkol-transformer-provenance.tsv" cc_path)
-flags=(-std=c11 -Wall -Wextra -Werror -Wpedantic -ffp-contract=off
-  -fexcess-precision=standard -fno-fast-math -fstack-protector-all
-  -I "$PROJECT_ROOT/include" -I "$PROJECT_ROOT/native" -I "$PROJECT_ROOT/src/eshkol_transformer")
+common_flags=(-std=c11 -Wall -Wextra -Werror -Wpedantic -ffp-contract=off
+  -fexcess-precision=standard -fno-fast-math -fstack-protector-all)
+flags=("${common_flags[@]}" -I "$PROJECT_ROOT/include" -I "$PROJECT_ROOT/native" -I "$PROJECT_ROOT/src/eshkol_transformer")
 feature=(-DET_CPU4_CANDIDATE_PRIVATE=1 -DET_G3R_CANDIDATE_RETIRE_PRIVATE=1
   -DET_P1_TRUSTED_BUILD=1)
-base=063bc4c93ee2c1c62d108d0d4818182613c93a9f
-mkdir -p "$out/base/native" "$out/base/src/eshkol_transformer"
-for file in native/f32_tensor.c native/o2_optimizer.c native/a2_kv_cache.c native/p1_identity.c \
-    src/eshkol_transformer/g3c4_model_owner.c src/eshkol_transformer/m3t_f32_integration.c; do
-  git -C "$PROJECT_ROOT" show "$base:$file" >"$out/base/$file"
+# Compare each family with an authenticated, complete candidate-off closure.
+provider_base=063bc4c93ee2c1c62d108d0d4818182613c93a9f
+owner_base=11d3d5b386441a52175a7a3def7c39975ec023df
+for family in provider owner; do
+  revision=$provider_base
+  [[ "$family" == provider ]] || revision=$owner_base
+  mkdir -p "$out/base-$family"
+  git -C "$PROJECT_ROOT" archive "$revision" include native src | tar -x -C "$out/base-$family"
+  printf '%s\n' "$revision" >"$out/base-$family.commit"
 done
-# CPU4_CANDIDATE off, including typed TRAINING on for the owner variants.
+check_baseline_deps() {
+  python3 - "$1" "$2" <<'PYDEPS'
+from pathlib import Path
+import shlex
+import sys
+root, depfile = map(Path, sys.argv[1:])
+root = root.resolve(strict=True)
+paths = shlex.split(depfile.read_text().partition(':')[2].replace('\\\n', ' '))
+assert paths, 'empty baseline dependency closure'
+for name in paths:
+    path = Path(name).resolve(strict=True)
+    assert path.is_relative_to(root), f'baseline escaped frozen closure: {path}'
+PYDEPS
+}
 for file in native/f32_tensor.c native/o2_optimizer.c native/a2_kv_cache.c native/p1_identity.c \
     src/eshkol_transformer/m3t_f32_integration.c; do
   name=${file##*/}
-  "$cc" "${flags[@]}" -O2 -c "$out/base/$file" -o "$out/base-$name.o"
-  "$cc" "${flags[@]}" -O2 -c "$PROJECT_ROOT/$file" -o "$out/current-$name.o"
+  snapshot="$out/base-provider"
+  "$cc" "${common_flags[@]}" -I "$snapshot/include" -I "$snapshot/native" \
+    -I "$snapshot/src/eshkol_transformer" -MMD -MF "$out/base-$name.d" -O2 \
+    -c "$snapshot/$file" -o "$out/base-$name.o"
+  check_baseline_deps "$snapshot" "$out/base-$name.d"
+  "$cc" "${flags[@]}" -MMD -MF "$out/current-$name.d" -O2 \
+    -c "$PROJECT_ROOT/$file" -o "$out/current-$name.o"
   cmp "$out/base-$name.o" "$out/current-$name.o"
   nm -g --defined-only "$out/current-$name.o" >"$out/current-$name.symbols"
   ! grep -F 'et_cpu4_' "$out/current-$name.symbols"
 done
+# Candidate off, training on: include accepted typed/transport/control-alias code.
 for profile in owner context generator; do
   macros=(-DET_CPU4_TRAINING_PRIVATE=1)
   [[ "$profile" == owner ]] || macros+=(-DET_G3C4_CONTEXT_PRIVATE)
   if [[ "$profile" == generator ]]; then
     macros+=(-DET_G3C4_NATIVE_PINS_PRIVATE -DET_G3C4_ACTIVE_CALL_PRIVATE -DET_G3C4_GENERATOR_PRIVATE)
   fi
-  for tree in base current; do
-    file="$out/base/src/eshkol_transformer/g3c4_model_owner.c"
-    [[ "$tree" == base ]] || file="$PROJECT_ROOT/src/eshkol_transformer/g3c4_model_owner.c"
-    "$cc" "${flags[@]}" "${macros[@]}" -O2 -c "$file" -o "$out/$tree-owner-$profile.o"
-  done
+  snapshot="$out/base-owner"
+  "$cc" "${common_flags[@]}" -I "$snapshot/include" -I "$snapshot/native" \
+    -I "$snapshot/src/eshkol_transformer" "${macros[@]}" -MMD \
+    -MF "$out/base-owner-$profile.d" -O2 \
+    -c "$snapshot/src/eshkol_transformer/g3c4_model_owner.c" -o "$out/base-owner-$profile.o"
+  check_baseline_deps "$snapshot" "$out/base-owner-$profile.d"
+  "$cc" "${flags[@]}" "${macros[@]}" -MMD -MF "$out/current-owner-$profile.d" -O2 \
+    -c "$PROJECT_ROOT/src/eshkol_transformer/g3c4_model_owner.c" -o "$out/current-owner-$profile.o"
   cmp "$out/base-owner-$profile.o" "$out/current-owner-$profile.o"
 done
 for mode in normal sanitize; do
