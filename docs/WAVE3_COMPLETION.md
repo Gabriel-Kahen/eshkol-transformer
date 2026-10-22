@@ -116,7 +116,11 @@ The later reviewed external-C2-header canonicalization repair is integrated
 without replacing the fault-builder changes; the exact combined builder pin is
 `e019798012bd6bc0f4ccfc13605c9f115a3f98edbfd613c5948a7f00a579a281`.
 Its canonical/external/old-policy/alias/foreign-header regression and strict
-M3CG checks pass. The earlier `7ce3...` pin is historical.
+M3CG checks pass. The public G2 union adds twelve package-flag lines while
+preserving both repairs; its combined builder pin is
+`225f2de63983c964d510e60765bba66d98fbd64385fad0cd023c3ca7697091ac`,
+with all nine M3CG tests and full predecessor hash manifest passing. Prior pins
+are historical.
 Compiled failure/retry admission remains a separate queued gate.
 
 ## Adopted upstream CPU4 lease and active implementation
@@ -139,10 +143,15 @@ C4/config/P1-mode binding remains an upstream dependency.
 
 A2/N2/N3K T4 source and independent primitive-gradient fixtures are integrated
 as `c7a3014d1` from source-approved worker `d5a5c33b`; the supported compiled
-gate is queued. E3 L3S/metrics source `d5970d77` is independently source-approved;
-its native gate supervisor is being repaired before execution. Public G2 final
-repair source `0a292f416a3add5ef511c84bb7d89922e4a690ab` is under independent
-review. Earlier `3f53c54b` and successor source receipts remain held/preserved:
+gate is queued. E3 L3S/metrics source `d5970d77` is independently source-approved and integrated
+as `bda0c8605` after authentication of all thirteen reviewed blobs; ten combined
+source/oracle tests and strict E3 predecessor hashes pass;
+its native gate supervisor is being repaired before execution. The final public
+G2 repair `0a292f416a3add5ef511c84bb7d89922e4a690ab` passed independent
+source/tests review and is integrated at `10a1764f9` after authentication of all
+264 sealed Git blobs. Actual-union source/C11/feature-off and host controls pass.
+A bounded owner/builder merge assessment remains open; supported installed
+AOT/native/sanitizer execution remains pending. Earlier `3f53c54b` and successor source receipts remain held/preserved:
 causal tests exposed output lifetime coupled to generator liveness and incomplete
 final authority checks. The final repair reports 92 actual-core mutation controls;
 host controls do not establish supported AOT/native/sanitizer admission. Receipts:
