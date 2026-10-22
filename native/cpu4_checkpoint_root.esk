@@ -1,0 +1,22 @@
+;;; Private single-identity CPU4 checkpoint consumer; never install this root.
+(load "d2_wave2_root.esk")
+(load "o2_wave2_extension.esk")
+(load "c2_d2_cursor_pair_extension.esk")
+(load "c2_x1_canonical_extension.esk")
+(load "c2_o2_reconstruct_extension.esk")
+(load "c2_training_state_extension.esk")
+(define t1-wave1-tensor-admitted? t2-wave2-tensor-admitted?)
+(load "m3t_transport_extension.esk")
+(load "m3_schedule.esk")
+(load "m3_model_extension.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "cpu4_p1_fixed_set_extension.esk")
+(load "cpu4_model_binding_extension.esk")
+(load "cpu4_trainer_control_extension.esk")
+(load "tr3_c_d2_restore_extension.esk")
+;;; Existing component bindings use this name only for an irreversible defect;
+;;; no TR3 lease, trainer authenticator or model authority is loaded.
+(define (tr3-lease-fail-stop status) (cpu4-binding-fail-stop status))
+(load "tr3_c_restore_bindings_extension.esk")
+(load "cpu4_checkpoint_extension.esk")
