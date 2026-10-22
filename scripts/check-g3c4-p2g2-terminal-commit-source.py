@@ -124,7 +124,7 @@ def valid_authority(text):
 
 def valid(text):
     code = clean(text)
-    if form_end(code, code.index("(define (g3c4-p2g2-terminal-commit-private!")) != len(code.rstrip()):
+    if form_end(code, code.index("(define g3c4-p2g2-terminal-commit-private!")) != len(code.rstrip()):
         return False
     required = (
         "(extern i64 g3c4-p2g2-native-terminal-commit ptr ptr ptr i64 ptr i64",
@@ -142,6 +142,8 @@ def valid(text):
         "(g3c4-native-call-acquire native 2 2)",
         "(set! pending (g3c4-p2g2-terminal-pending-reserve! call))",
         "(set! live (g3c4-p2g2-terminal-live-prepare call pending))",
+        "(set! live-anchor-node (vector-ref live 13))",
+        "(set! live-original-node (vector-ref live 14))",
         "(g3c4-p2g2-terminal-first-sample-decode! call pending)",
         "(g3c4-p2g2-terminal-non-eos-prefix-commit!",
         "(g3c4-p2g2-terminal-second-sample-decode!",
@@ -170,7 +172,7 @@ def valid(text):
         "(vector-set! g3c4-p2g2-prefix-input-anchors 0 prefix-next)",
         "(g3c4-native-check status operation)",
     )
-    if any(code.count(fragment) != (2 if fragment == "(g3c4-call-dead! call)" else 1)
+    if any(code.count(fragment) != (2 if fragment in ("(g3c4-call-dead! call)", "(g3c4-p2g2-terminal-precommit-frame") else 1)
            for fragment in required):
         return False
     order = (

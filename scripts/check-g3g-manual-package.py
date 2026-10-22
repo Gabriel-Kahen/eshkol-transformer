@@ -15,7 +15,7 @@ native_sources = read("native_source_closure")
 facades = read("facades")
 assert len(exports) == 105 and exports == sorted(set(exports))
 assert len(strings) == 111 and strings == sorted(set(strings))
-assert len(sources) == 52 and len(sources) == len(set(sources))
+assert len(sources) == 69 and len(sources) == len(set(sources))
 assert len(native_sources) == 59 and len(native_sources) == len(set(native_sources))
 assert len(read("native_objects")) == 6
 assert len(facades) == 8 and facades == sorted(set(facades))
@@ -34,7 +34,7 @@ assert {line.split()[1] for line in renames if line.startswith(("g3g-", "g3c4-pu
     for name in added | {name for name in exports if name.startswith("et_e1b_public_g3_")}
 }
 assert sources[0] == "native/g3g_manual_package_root.esk"
-assert sources[-13:] == [
+assert sources[-30:] == [
     f"native/{name}.esk" for name in (
         "g3c4_i2_construction_extension", "g3c4_p1_construction_extension",
         "g3c4_model_extension", "g3c4_call_entry_extension",
@@ -43,7 +43,24 @@ assert sources[-13:] == [
         "g3c4_p2g1_shell_publication_extension",
         "g3c4_p2g1_copyout_extension", "g3c4_p2g1_coordinator_extension",
         "g3c4_public_output_adapter_extension",
+        "g3c4_p2g2_ownership_extension",
+        "g3c4_p2g2_protected_scope_extension",
+        "g3c4_p2g2_t1_prefix_coordinator_extension",
+        "g3c4_p2g2_terminal_extension",
+        "g3c4_p2g2_terminal_abort_coordinator_extension",
+        "g3c4_p2g2_terminal_first_extension",
+        "g3c4_p2g2_terminal_prefix_extension",
+        "g3c4_p2g2_terminal_second_extension",
+        "g3c4_p2g2_terminal_text_preflight_extension",
+        "g3c4_p2g2_terminal_precommit_frame_extension",
+        "g3c4_p2g2_terminal_live_authority_extension",
+        "g3c4_p2g2_terminal_commit_extension",
+        "g3c4_p2g2_terminal_snapshot_extension",
+        "g3c4_p2g2_terminal_release_extension",
+        "g3c4_p2g2_terminal_ids_owner_extension",
+        "g3c4_p2g2_typed_result_extension",
         "g3c4_public_generation_dispatch_extension",
+        "g3c4_public_g2_result_extension",
         "g3g_manual_public_extension",
     )
 ]
@@ -57,7 +74,7 @@ assert (root / "scripts/build-e1b-consumer.sh").read_text().count(
 assert "native/i64_t1_pair_private.h" in native_sources
 assert "native/g3g_g0_package_bridge.c" not in native_sources
 package_root = (native / "g3g_manual_package_root.esk").read_text()
-for name in (name for name in sources[-13:]
+for name in (name for name in sources[-30:]
              if name != "native/g3c4_p1_construction_extension.esk"):
     assert package_root.count(f'(load "{Path(name).name}")') == 1
 bridge = (native / "g3g_manual_package_bridge.c").read_text()

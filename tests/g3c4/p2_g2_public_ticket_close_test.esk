@@ -1,0 +1,54 @@
+;;; Staged installed-aggregate close controls; AOT/native gate remains unrun.
+(load "g3g_manual_package_root.esk")
+
+(define checks 0)
+(define (check label truth)
+  (if truth (set! checks (+ checks 1))
+      (begin (display "public G2 close FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label thunk)
+  (check label
+    (guard (caught (#t (transformer-error? caught)))
+      (thunk) #f)))
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define model (g3c4-public-model-create-seeded 1729))
+(define (g2-config)
+  (list ':profile 'diagnostic-c4-p2g2 ':sampling 'greedy
+        ':temperature-bits 1065353216 ':top-k 256
+        ':top-p-bits 1065353216 ':max-new-tokens 2
+        ':eos 0 ':seed 41))
+(define first (g3c4-public-generator-create model tokenizer (g2-config)))
+(define first-entry (g3c4-registry-find first 'test))
+(check "creation-time public G2 authority exists"
+  (g3c4-public-g2-profile-live first 'test))
+(check "first genuine public G2 close" (g3c4-public-generator-close first))
+(check "native owner retired on first close"
+  (and (eq? (vector-ref first-entry 2) 'dead)
+       (eq? (vector-ref first-entry 3) #f)))
+(check "authentic dead public G2 generator close stays idempotent"
+  (g3c4-public-generator-close first))
+(vector-set! first-entry 7 (vector 'forged))
+(reject "malformed dead public G2 generator rejects"
+  (lambda () (g3c4-public-generator-close first)))
+(vector-set! first-entry 7 #f)
+(check "restored dead public G2 generator closes"
+  (g3c4-public-generator-close first))
+
+(define second (g3c4-public-generator-create model tokenizer (g2-config)))
+(define saved-rows (vector-ref g3c4-public-g2-generator-rows 0))
+(vector-set! g3c4-public-g2-generator-rows 0 (cdr saved-rows))
+(reject "missing public G2 profile root blocks live close"
+  (lambda () (g3c4-public-generator-close second)))
+(check "rejected close keeps native generator live"
+  (eq? (vector-ref (g3c4-registry-find second 'test) 2) 'live))
+(vector-set! g3c4-public-g2-generator-rows 0 saved-rows)
+(check "restored public G2 profile closes"
+  (g3c4-public-generator-close second))
+(check "second dead public G2 close remains idempotent"
+  (g3c4-public-generator-close second))
+(display "public G2 close staged PASS: checks=")
+(display checks)
+(newline)

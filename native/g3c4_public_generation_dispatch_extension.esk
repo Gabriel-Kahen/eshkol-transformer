@@ -6,7 +6,8 @@
 (define (g3c4-public-profile-config config operation)
   (let ((slots (make-vector 16 #f))
         (has-rng #f)
-        (rng-shell #f))
+        (rng-shell #f)
+        (profile #f))
     (let walk ((tail config) (index 0))
       (if (= index 16)
           (if (not (null? tail))
@@ -17,9 +18,11 @@
                          "C4 config must be a proper flat list")
               (let ((key (car tail)) (value (car (cdr tail))))
                 (if (and (eq? key ':profile)
-                         (not (eq? value 'diagnostic-c4-p2g1)))
+                         (not (or (eq? value 'diagnostic-c4-p2g1)
+                                  (eq? value 'diagnostic-c4-p2g2))))
                     (g3c4-fail 'invalid-argument operation
                                "C4 public profile is invalid"))
+                (if (eq? key ':profile) (set! profile value))
                 (vector-set! slots index
                   (if (eq? key ':rng) ':seed key))
                 (vector-set! slots (+ index 1)
@@ -38,7 +41,7 @@
             (vector-ref slots 10) (vector-ref slots 11)
             (vector-ref slots 12) (vector-ref slots 13)
             (vector-ref slots 14) (vector-ref slots 15))
-      has-rng rng-shell)))
+      has-rng rng-shell profile)))
 
 (define (g3c4-public-result-rng-entry rng operation)
   (let ((record (g3c4-public-result-record rng)))
@@ -48,8 +51,166 @@
               (g3c4-fail 'invalid-argument operation
                          "expected an exact C4 result RNG"))
           entry)
-        (g3c4-fail 'invalid-argument operation
-                   "expected an exact C4 result RNG"))))
+        (let* ((row (g3c4-public-g2-rng-result-live rng 'result-rng operation))
+               (entry (vector-ref row 1))
+               (native (vector-ref row 2))
+               (words (vector-ref row 7)))
+          ;; Native word reads admit the genuine live RNG owner kind. The
+          ;; generator constructor copies these exact words, never a seed.
+          (let check ((index 0))
+            (if (< index 4)
+                (if (= (g3c4-native-rng-word-checked native index operation)
+                       (vector-ref words (+ index 1)))
+                    (check (+ index 1))
+                    (g3c4-fail 'invalid-state operation
+                               "C4 public G2 RNG native words changed"))))
+          (if (not (eq? row (g3c4-public-g2-rng-result-live rng 'result-rng operation)))
+              (g3c4-fail 'invalid-state operation "C4 public G2 RNG source changed"))
+          entry))))
+
+;;; Only a public G2 construction enrolls these independent roots. The
+;;; lexical binding captures the original policy words, not just its mutable
+;;; vector identity. A private budget-two generator cannot acquire them.
+(define g3c4-public-g2-generator-rows (vector '()))
+(define g3c4-public-g2-generator-anchors (vector '()))
+(define g3c4-public-g2-generator-bindings (vector '()))
+
+(define (g3c4-public-g2-root-find root shell)
+  (let loop ((tail (vector-ref root 0)))
+    (cond ((null? tail) #f)
+          ((eq? (vector-ref (car tail) 0) shell) (car tail))
+          (else (loop (cdr tail))))))
+
+(define (g3c4-public-g2-profile-original generator operation)
+  (let* ((entry (g3c4-registry-find generator operation))
+         (row (g3c4-public-g2-root-find
+                g3c4-public-g2-generator-rows generator))
+         (anchor (g3c4-public-g2-root-find
+                   g3c4-public-g2-generator-anchors generator))
+         (binding (g3c4-public-g2-root-find
+                    g3c4-public-g2-generator-bindings generator)))
+    (if (not (and (vector? row) (= (vector-length row) 8)
+                  (vector? anchor) (= (vector-length anchor) 8)
+                  (vector? binding) (= (vector-length binding) 2)
+                  (procedure? (vector-ref binding 1))
+                  ((vector-ref binding 1) row anchor entry)
+                  (eq? (vector-ref entry 1) 'generator)
+                  (eq? (vector-ref entry 2) 'live)
+                  (eq? (vector-ref row 0) generator)
+                  (eq? (vector-ref row 1) entry)
+                  (eq? (vector-ref row 2) (vector-ref entry 3))
+                  (eq? (vector-ref row 3) (vector-ref entry 5))
+                  (eq? (vector-ref row 4) (vector-ref entry 6))
+                  (eq? (vector-ref row 5) (vector-ref entry 7))
+                  (eq? (vector-ref row 6) 'diagnostic-c4-p2g2)
+                  (eq? (vector-ref row 7) 'live)
+                  (= (vector-ref (vector-ref entry 7) 5) 2)
+                  (m3t-exact-i64? (vector-ref (vector-ref entry 7) 6))
+                  (<= 0 (vector-ref (vector-ref entry 7) 6))
+                  (<= (vector-ref (vector-ref entry 7) 6) 255)))
+        (g3c4-fail 'invalid-state operation
+                   "C4 public G2 creation profile or owner changed"))
+    row))
+
+(define (g3c4-public-g2-profile-live generator operation)
+  (g3c4-generator-entry-live generator operation)
+  (g3c4-public-g2-profile-original generator operation))
+
+(define (g3c4-public-g2-generator-create
+          model tokenizer policy source has-rng rng-shell)
+  (let* ((operation 'generator-create)
+         (model-entry (g3c4-model-entry-live model operation #f))
+         (tokenizer-entry
+           (g3c4-baseline-tokenizer-entry
+             tokenizer operation 'invalid-argument 'unsupported))
+         (row (vector #f #f #f model-entry (car tokenizer-entry)
+                      policy 'diagnostic-c4-p2g2 'pending))
+         (anchor (vector #f #f #f model-entry (car tokenizer-entry)
+                         policy 'diagnostic-c4-p2g2 'pending))
+         (bound-shell #f)
+         (bound-entry #f)
+         (bound-native #f)
+         (bound-mode (vector-ref policy 1))
+         (bound-temperature (vector-ref policy 2))
+         (bound-top-k (vector-ref policy 3))
+         (bound-top-p (vector-ref policy 4))
+         (bound-budget (vector-ref policy 5))
+         (bound-eos (vector-ref policy 6))
+         (binding
+           (vector #f
+             (lambda (candidate-row candidate-anchor candidate-entry)
+               (and bound-shell bound-entry bound-native
+                    (eq? (vector-ref candidate-row 0) bound-shell)
+                    (eq? (vector-ref candidate-anchor 0) bound-shell)
+                    (eq? (vector-ref candidate-row 1) bound-entry)
+                    (eq? (vector-ref candidate-anchor 1) bound-entry)
+                    (eq? candidate-entry bound-entry)
+                    (eq? (vector-ref candidate-row 2) bound-native)
+                    (eq? (vector-ref candidate-anchor 2) bound-native)
+                    (eq? (vector-ref candidate-row 3) model-entry)
+                    (eq? (vector-ref candidate-anchor 3) model-entry)
+                    (eq? (vector-ref candidate-row 4) tokenizer)
+                    (eq? (vector-ref candidate-anchor 4) tokenizer)
+                    (eq? (vector-ref candidate-row 5) policy)
+                    (eq? (vector-ref candidate-anchor 5) policy)
+                    (eq? (vector-ref candidate-row 6) 'diagnostic-c4-p2g2)
+                    (eq? (vector-ref candidate-anchor 6) 'diagnostic-c4-p2g2)
+                    (eq? (vector-ref candidate-row 7) 'live)
+                    (eq? (vector-ref candidate-anchor 7) 'live)
+                    (= (vector-ref policy 1) bound-mode)
+                    (= (vector-ref policy 2) bound-temperature)
+                    (= (vector-ref policy 3) bound-top-k)
+                    (= (vector-ref policy 4) bound-top-p)
+                    (= (vector-ref policy 5) bound-budget)
+                    (= (vector-ref policy 6) bound-eos)))))
+         (old-rows (vector-ref g3c4-public-g2-generator-rows 0))
+         (old-anchors (vector-ref g3c4-public-g2-generator-anchors 0))
+         (old-bindings (vector-ref g3c4-public-g2-generator-bindings 0))
+         (next-rows (cons row old-rows))
+         (next-anchors (cons anchor old-anchors))
+         (next-bindings (cons binding old-bindings))
+         (shell #f))
+    (guard (caught
+             (#t
+               (if shell
+                   (if (not (g3c4-generator-close-internal! shell))
+                       (exit 134)))
+               (vector-set! g3c4-public-g2-generator-rows 0 old-rows)
+               (vector-set! g3c4-public-g2-generator-anchors 0 old-anchors)
+               (vector-set! g3c4-public-g2-generator-bindings 0 old-bindings)
+               (raise caught)))
+      (vector-set! g3c4-public-g2-generator-rows 0 next-rows)
+      (vector-set! g3c4-public-g2-generator-anchors 0 next-anchors)
+      (vector-set! g3c4-public-g2-generator-bindings 0 next-bindings)
+      (set! shell
+        (g3c4-generator-create-with-source
+          model tokenizer operation
+          (lambda () source)
+          (lambda (entry)
+            (or (not has-rng)
+                (eq? entry
+                     (g3c4-public-result-rng-entry
+                       rng-shell operation))))))
+      (let ((entry (g3c4-generator-entry-call-ready shell operation)))
+        (if (not (and (eq? (vector-ref entry 5) model-entry)
+                      (eq? (vector-ref entry 6) tokenizer)
+                      (eq? (vector-ref entry 7) policy)))
+            (g3c4-fail 'invalid-state operation
+                       "C4 public G2 constructed owner changed"))
+        (set! bound-shell shell)
+        (set! bound-entry entry)
+        (set! bound-native (vector-ref entry 3))
+        (vector-set! row 0 shell)
+        (vector-set! anchor 0 shell)
+        (vector-set! row 1 entry)
+        (vector-set! anchor 1 entry)
+        (vector-set! row 2 bound-native)
+        (vector-set! anchor 2 bound-native)
+        (vector-set! binding 0 shell)
+        (vector-set! row 7 'live)
+        (vector-set! anchor 7 'live)
+        (g3c4-public-g2-profile-live shell operation)
+        shell))))
 
 (define (g3c4-public-generator-create model tokenizer config)
   (g3c4-public-boundary 'generator-create
@@ -61,6 +222,7 @@
            (translated (vector-ref parsed 0))
            (normalized (g3c4-normalize-config translated 'generator-create))
            (policy (vector-ref normalized 0))
+           (profile (vector-ref parsed 3))
            (has-rng (vector-ref parsed 1))
            (rng-shell (vector-ref parsed 2))
            (rng-entry (if has-rng
@@ -70,20 +232,256 @@
            (source (if has-rng
                        (vector policy 'rng rng-entry)
                        normalized)))
-      (if (not (and (= (vector-ref policy 5) 1)
-                    (eq? (vector-ref policy 6) #f)))
+      (if (not (or (and (eq? profile 'diagnostic-c4-p2g1)
+                        (= (vector-ref policy 5) 1)
+                        (eq? (vector-ref policy 6) #f))
+                   (and (eq? profile 'diagnostic-c4-p2g2)
+                        (= (vector-ref policy 5) 2)
+                        (m3t-exact-i64? (vector-ref policy 6))
+                        (<= 0 (vector-ref policy 6))
+                        (<= (vector-ref policy 6) 255))))
           (g3c4-fail 'invalid-argument 'generator-create
-                     "C4 public profile requires one token and no EOS"))
-      (g3c4-generator-create-with-source
-        model tokenizer 'generator-create
-        (lambda () source)
-        (lambda (entry)
-          (or (not has-rng)
-              (eq? entry
-                   (g3c4-public-result-rng-entry
-                     rng-shell 'generator-create))))))))
+                     "C4 public profile budget or EOS is invalid"))
+      (if (eq? profile 'diagnostic-c4-p2g2)
+          (g3c4-public-g2-generator-create
+            model tokenizer policy source has-rng rng-shell)
+          (g3c4-generator-create-with-source
+            model tokenizer 'generator-create
+            (lambda () source)
+            (lambda (entry)
+              (or (not has-rng)
+                  (eq? entry
+                       (g3c4-public-result-rng-entry
+                         rng-shell 'generator-create)))))))))
 
-(define (g3c4-public-generator-generate generator input)
+(define g3c4-public-g2-tickets (vector '()))
+(define g3c4-public-g2-output-rows (vector '()))
+(define g3c4-public-g2-output-anchors (vector '()))
+(define g3c4-public-g2-output-bindings (vector '()))
+
+(define g3c4-public-generator-generate
+  (lambda (generator input) (exit 134)))
+(define g3c4-p2g2-terminal-close-public-private
+  (let ((secret (vector 'g3c4-public-g2-call-secret)))
+    (let ((bridge (lambda (action generator input ticket output terminal-row
+                    terminal-anchor count first second operation)
+      (cond
+        ((eq? action 'generate)
+         (let* ((profile
+                  (g3c4-public-g2-profile-live generator operation))
+                (input-entry
+                  (g3c4-p2g2-prefix-preflight generator input))
+                (old-tickets (vector-ref g3c4-public-g2-tickets 0))
+                (old-rows (vector-ref g3c4-public-g2-output-rows 0))
+                (old-anchors (vector-ref g3c4-public-g2-output-anchors 0))
+                (old-bindings (vector-ref g3c4-public-g2-output-bindings 0))
+                (public-row
+                  (vector #f #f #f generator input profile #f #f
+                          'pending 0 -1 -1))
+                (public-anchor
+                  (vector #f #f #f generator input profile #f #f
+                          'pending 0 -1 -1))
+                (bound-shell #f)
+                (bound-entry #f)
+                (bound-native #f)
+                (bound-terminal-row #f)
+                (bound-terminal-anchor #f)
+                (issued
+                  (vector secret generator input profile input-entry
+                          #f #f #f #f #f public-row public-anchor
+                          'pending 0 -1 -1 #f old-tickets old-rows
+                          old-anchors old-bindings))
+                (authority
+                  (lambda (verb candidate-row candidate-anchor
+                                candidate-output candidate-terminal-row
+                                candidate-terminal-anchor)
+                    (cond
+                      ((eq? verb 'bind)
+                       (if bound-shell #f
+                           (begin
+                             (set! bound-shell (vector-ref candidate-output 0))
+                             (set! bound-entry candidate-output)
+                             (set! bound-native
+                                   (vector-ref candidate-output 3))
+                             (set! bound-terminal-row candidate-terminal-row)
+                             (set! bound-terminal-anchor
+                                   candidate-terminal-anchor)
+                             #t)))
+                      ((eq? verb 'verify)
+                       (and bound-shell bound-entry bound-native
+                            (eq? (vector-ref issued 0) secret)
+                            (eq? (vector-ref issued 1) generator)
+                            (eq? (vector-ref issued 2) input)
+                            (eq? (vector-ref issued 3) profile)
+                            (eq? (vector-ref issued 4) input-entry)
+                            (eq? (vector-ref candidate-row 0) bound-shell)
+                            (eq? (vector-ref candidate-anchor 0) bound-shell)
+                            (eq? (vector-ref candidate-row 1) bound-entry)
+                            (eq? (vector-ref candidate-anchor 1) bound-entry)
+                            (eq? candidate-output bound-entry)
+                            (eq? (vector-ref candidate-row 2) bound-native)
+                            (eq? (vector-ref candidate-anchor 2) bound-native)
+                            (eq? (vector-ref candidate-row 3) generator)
+                            (eq? (vector-ref candidate-anchor 3) generator)
+                            (eq? (vector-ref candidate-row 4) input)
+                            (eq? (vector-ref candidate-anchor 4) input)
+                            (eq? (vector-ref candidate-row 5) profile)
+                            (eq? (vector-ref candidate-anchor 5) profile)
+                            (eq? (vector-ref candidate-row 6)
+                                 bound-terminal-row)
+                            (eq? (vector-ref candidate-anchor 6)
+                                 bound-terminal-row)
+                            (eq? candidate-terminal-row bound-terminal-row)
+                            (eq? (vector-ref candidate-row 7)
+                                 bound-terminal-anchor)
+                            (eq? (vector-ref candidate-anchor 7)
+                                 bound-terminal-anchor)
+                            (eq? candidate-terminal-anchor
+                                 bound-terminal-anchor)))
+                      (else #f))))
+                (binding (vector #f authority))
+                (next-tickets (cons issued old-tickets))
+                (next-rows (cons public-row old-rows))
+                (next-anchors (cons public-anchor old-anchors))
+                (next-bindings (cons binding old-bindings)))
+           (vector-set! issued 16 authority)
+           (guard (caught
+                    (#t
+                      (if (not (eq? (vector-ref issued 12) 'live))
+                          (begin
+                            (if (not (and
+                                  (eq? (vector-ref issued 12) 'pending)
+                                  (eq? (vector-ref g3c4-public-g2-tickets 0) next-tickets)
+                                  (eq? (vector-ref g3c4-public-g2-output-rows 0) next-rows)
+                                  (eq? (vector-ref g3c4-public-g2-output-anchors 0) next-anchors)
+                                  (eq? (vector-ref g3c4-public-g2-output-bindings 0) next-bindings)
+                                  (eq? (vector-ref public-row 8) 'pending)
+                                  (eq? (vector-ref public-anchor 8) 'pending)))
+                                (exit 134))
+                            (vector-set! public-row 8 'dead)
+                            (vector-set! public-anchor 8 'dead)
+                            (vector-set! g3c4-public-g2-tickets 0 old-tickets)
+                            (vector-set! g3c4-public-g2-output-rows 0 old-rows)
+                            (vector-set! g3c4-public-g2-output-anchors
+                                         0 old-anchors)
+                            (vector-set! g3c4-public-g2-output-bindings
+                                         0 old-bindings)
+                            (vector-set! issued 12 'dead)))
+                      (raise caught)))
+             (vector-set! g3c4-public-g2-tickets 0 next-tickets)
+             (vector-set! g3c4-public-g2-output-rows 0 next-rows)
+             (vector-set! g3c4-public-g2-output-anchors 0 next-anchors)
+             (vector-set! g3c4-public-g2-output-bindings 0 next-bindings)
+             (g3c4-p2g2-terminal-close-public-private
+               generator input issued))))
+        ((or (eq? action 'admit) (eq? action 'bind)
+             (eq? action 'verify))
+         (if (not (and (vector? ticket) (= (vector-length ticket) 21)
+                       (eq? (vector-ref ticket 0) secret)
+                       (eq? (vector-ref ticket 1) generator)
+                       (eq? (vector-ref ticket 2) input)
+                       (eq? (vector-ref ticket 12) 'pending)
+                       (pair? (vector-ref g3c4-public-g2-tickets 0))
+                       (eq? (car (vector-ref g3c4-public-g2-tickets 0))
+                            ticket)
+                       (pair? (vector-ref g3c4-public-g2-output-rows 0))
+                       (eq? (car (vector-ref g3c4-public-g2-output-rows 0))
+                            (vector-ref ticket 10))
+                       (pair? (vector-ref g3c4-public-g2-output-anchors 0))
+                       (eq? (car (vector-ref g3c4-public-g2-output-anchors 0))
+                            (vector-ref ticket 11))
+                       (pair? (vector-ref g3c4-public-g2-output-bindings 0))
+                       (eq? (vector-ref
+                              (car (vector-ref
+                                     g3c4-public-g2-output-bindings 0)) 1)
+                            (vector-ref ticket 16))
+                       (eq? (g3c4-public-g2-profile-original
+                              generator operation)
+                            (vector-ref ticket 3))
+                       (eq? (g3c4-input-entry-live input operation)
+                            (vector-ref ticket 4))))
+             (g3c4-fail 'invalid-state operation
+                        "C4 public G2 ticket or creator changed"))
+         (cond
+           ((eq? action 'admit)
+            (if (not (and (eq? (vector-ref ticket 5) #f)
+                          (eq? (vector-ref ticket 6) #f)
+                          (eq? (vector-ref ticket 7) #f)))
+                (g3c4-fail 'invalid-state operation
+                           "C4 public G2 ticket already bound"))
+            #t)
+           ((eq? action 'bind)
+            (if (not (and (vector? output)
+                          (eq? ((vector-ref ticket 16) 'bind
+                                  (vector-ref ticket 10)
+                                  (vector-ref ticket 11)
+                                  output terminal-row terminal-anchor)
+                               #t)))
+                (g3c4-fail 'invalid-state operation
+                           "C4 public G2 ticket bind failed"))
+            (vector-set! ticket 5 (vector-ref output 0))
+            (vector-set! ticket 6 output)
+            (vector-set! ticket 7 (vector-ref output 3))
+            (vector-set! ticket 8 terminal-row)
+            (vector-set! ticket 9 terminal-anchor)
+            (let ((row (vector-ref ticket 10))
+                  (anchor (vector-ref ticket 11)))
+              (vector-set! row 0 (vector-ref output 0))
+              (vector-set! anchor 0 (vector-ref output 0))
+              (vector-set! row 1 output)
+              (vector-set! anchor 1 output)
+              (vector-set! row 2 (vector-ref output 3))
+              (vector-set! anchor 2 (vector-ref output 3))
+              (vector-set! row 6 terminal-row)
+              (vector-set! anchor 6 terminal-row)
+              (vector-set! row 7 terminal-anchor)
+              (vector-set! anchor 7 terminal-anchor))
+            (vector-set! (car (vector-ref
+                                g3c4-public-g2-output-bindings 0))
+                         0 (vector-ref output 0))
+            #t)
+           (else
+             (let ((row (vector-ref ticket 10))
+                   (anchor (vector-ref ticket 11)))
+               (if (not (and (eq? (vector-ref ticket 5)
+                                  (vector-ref output 0))
+                             (eq? (vector-ref ticket 6) output)
+                             (eq? (vector-ref ticket 7)
+                                  (vector-ref output 3))
+                             (eq? (vector-ref ticket 8) terminal-row)
+                             (eq? (vector-ref ticket 9) terminal-anchor)
+                             (eq? (vector-ref
+                                    (car (vector-ref
+                                           g3c4-public-g2-output-bindings 0))
+                                    0)
+                                  (vector-ref output 0))
+                             ((vector-ref ticket 16) 'verify row anchor
+                                output terminal-row terminal-anchor)
+                             (or (= count 1) (= count 2))
+                             (<= 0 first) (<= first 255)
+                             (or (= count 1)
+                                 (and (<= 0 second) (<= second 255)))))
+                   (g3c4-fail 'invalid-state operation
+                              "C4 public G2 output original changed"))
+               (vector-set! ticket 13 count)
+               (vector-set! ticket 14 first)
+               (vector-set! ticket 15 second)
+               (vector-set! row 9 count)
+               (vector-set! anchor 9 count)
+               (vector-set! row 10 first)
+               (vector-set! anchor 10 first)
+               (vector-set! row 11 second)
+               (vector-set! anchor 11 second)
+               #t))))
+        (else (g3c4-fail 'invalid-argument operation
+                         "C4 public G2 bridge action is invalid"))))))
+      (let ((route
+              (g3c4-p2g2-terminal-enrollment-route-private bridge
+                (vector g3c4-public-g2-tickets g3c4-public-g2-output-rows
+                        g3c4-public-g2-output-anchors g3c4-public-g2-output-bindings
+                        g3c4-public-g2-generator-rows g3c4-public-g2-generator-anchors
+                        g3c4-public-g2-generator-bindings))))
+      (set! g3c4-public-generator-generate (lambda (generator input)
   (g3c4-public-boundary 'generator-generate!
     (let ((member (g3c4-public-transport-member generator)))
       (if (not (and member (eq? (vector-ref member 1) 'generator)))
@@ -97,20 +495,58 @@
                  generator 'generator-generate!))
              (input-entry
                (g3c4-input-entry-live input 'generator-generate!)))
-        (g3c4-native-check
-          (g3c4-native-p2g1-preflight
-            (vector-ref generator-entry 3) (vector-ref input-entry 3))
-          'generator-generate!))
-      ;; Installed archives do not execute the pending extension's top-level
-      ;; initializer. Activate its existing private P2/G1 gate only on this
-      ;; exact C4 route before the output envelope checks P+G=3.
-      (vector-set! g3t-p2g1-pending-gate 0 #t)
-      (g3c4-p2g1-generate-internal generator input))))
+        (if (= (vector-ref (vector-ref generator-entry 7) 5) 2)
+            (begin
+              (g3c4-public-g2-profile-live
+                generator 'generator-generate!)
+              (bridge
+                'generate generator input #f #f #f #f 0 -1 -1
+                'generator-generate!))
+            (begin
+              (g3c4-native-check
+                (g3c4-native-p2g1-preflight
+                  (vector-ref generator-entry 3)
+                  (vector-ref input-entry 3))
+                'generator-generate!)
+              ;; Installed P2/G1 path remains unchanged below.
+              (vector-set! g3t-p2g1-pending-gate 0 #t)
+              (g3c4-p2g1-generate-internal generator input))))))))
+      (lambda (generator input ticket)
+        (route generator input ticket))))))
 
 (define (g3c4-public-generator-close generator)
   (g3c4-public-boundary 'generator-close!
     (let ((member (g3c4-public-transport-member generator)))
-      (if (not (and member (eq? (vector-ref member 1) 'generator)))
+      (if (not (and (vector? member) (= (vector-length member) 12)
+                    (eq? (vector-ref member 1) 'generator)))
           (g3c4-fail 'invalid-argument 'generator-close!
                      "C4 identity is not a generator"))
-      (g3c4-generator-close-internal! generator))))
+      (if (eq? (vector-ref member 2) 'dead)
+          (begin
+            (if (not (and (eq? (vector-ref member 3) #f)
+                          (eq? (vector-ref member 4) #f)
+                          (eq? (vector-ref member 5) #f)
+                          (eq? (vector-ref member 6) #f)
+                          (eq? (vector-ref member 7) #f)
+                          (eq? (vector-ref member 8) #f)
+                          (eq? (vector-ref member 9) #f)
+                          (eq? (vector-ref member 10) #f)
+                          (eq? (vector-ref member 11) #f)))
+                (g3c4-fail 'invalid-state 'generator-close!
+                           "C4 dead generator fields changed"))
+            (g3c4-generator-close-internal! generator))
+          (begin
+            (if (not (eq? (vector-ref member 2) 'live))
+                (g3c4-fail 'invalid-state 'generator-close!
+                           "C4 generator phase is invalid"))
+            (g3c4-generator-entry-live generator 'generator-close!)
+            (if (= (vector-ref (vector-ref member 7) 5) 2)
+                (let* ((row (g3c4-public-g2-profile-live
+                              generator 'generator-close!))
+                       (anchor (g3c4-public-g2-root-find
+                                 g3c4-public-g2-generator-anchors generator)))
+                  (g3c4-generator-close-internal! generator)
+                  (vector-set! row 7 'dead)
+                  (vector-set! anchor 7 'dead)
+                  #t)
+                (g3c4-generator-close-internal! generator)))))))
