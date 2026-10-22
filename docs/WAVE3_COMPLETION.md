@@ -88,16 +88,23 @@ Receipt: `finish-20261022/integration-source-union-tests.log`. Compiled producer
 retain their original immutable lane identities; these static results do not
 substitute for their supported runtime gates or final combined-source CI.
 
-## Current compatibility blocker
+## Shared-profile critical path
 
 The installed training/evaluation path in `native/cli3_b_extension.esk` admits
 context two and sequence length two. The multi-token/EOS public G3 target uses
 the distinct C4 owner with position parameters `[4,4]`. Its accepted
 [model contract](g3/G3_C4_MODEL_CONTEXT_SUCCESSOR_CONTRACT.md) forbids treating it
 as a C2 M3T owner and reserves its restore slot without authority. Public G2
-ownership alone cannot make a trained C2 checkpoint a C4 model. Owners are mapping
-existing admitted profile/restore sources; do not claim a freshly initialized C4
-model continues a trained C2 model or widen checkpoint/profile admission silently.
+ownership alone cannot make a trained C2 checkpoint a C4 model. Integration has selected the [single bounded CPU v1 profile](CPU_V1_PROFILE.md):
+full context/sequence four with the existing C4 geometry, one canonical trained
+model identity and explicit construction/restore/state-shape extension. CLI3 owns
+upstream training support before its CLI consumer; G3 owns same-owner restore and
+terminal/public continuation; E3 owns T4 evaluation after exact upstream contracts.
+The existing C4 source-authority check passes; next existing executable prerequisite
+is `bash scripts/test-g3c4-model-authority.sh`, then the frozen T4 forward/VJP
+numerical gate supplied by the upstream owner. Do not substitute a fresh model,
+convert legacy geometry or truncate inputs. In-flight gates remain running; future
+heavy gates prioritize this shared-profile dependency sequence.
 
 The bounded E3 P1-enter/D2-generation fault source repair is independently accepted
 at worker `b34268a88cc5be80e98c5484f49b94c46c6cc590`; its original insertion-order
