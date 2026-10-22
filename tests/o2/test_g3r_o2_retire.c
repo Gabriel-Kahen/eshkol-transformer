@@ -113,9 +113,17 @@ static void candidate_roster_checks(fixture *f) {
   CHECK(et_o2_optimizer_builder_create_v1(
       1u, ET_O2_CLIP_NONE, 0u, ET_O2_SCHEDULE_CONSTANT, 0u, 0u,
       UINT32_C(0x3f800000), &builder, &error) == 0);
+  /* The existing alias guard cannot authenticate builder-owned arrays.
+   * It rejects a supplied diagnostic without writing it. NULL diagnostics
+   * then reach the distinct active-builder exclusion. */
+  et_o2_error_v1 before_error = error;
   CHECK(et_cpu4_optimizer_roster_preflight_internal(
-      NULL, parameters, handles, &error) == ET_O2_STATUS_INVALID_STATE);
-  CHECK(error.code == ET_O2_CODE_ACTIVE_BORROW);
+      NULL, parameters, handles, &error) == ET_O2_STATUS_INVALID_ARGUMENT);
+  CHECK(memcmp(&error, &before_error, sizeof(error)) == 0);
+  CHECK(et_cpu4_optimizer_roster_preflight_internal(
+      NULL, parameters, handles, NULL) == ET_O2_STATUS_INVALID_STATE);
+  CHECK(builder != NULL && et_o2_builders == builder);
+  CHECK(memcmp(before, f->optimizer->entries, sizeof(before)) == 0);
   CHECK(et_o2_optimizer_builder_abort_v1(&builder, &error) == 0);
   CHECK(et_o2_optimizer_state_snapshot_v1(f->optimizer, &state, &error) == 0);
   CHECK(et_cpu4_optimizer_roster_preflight_internal(
