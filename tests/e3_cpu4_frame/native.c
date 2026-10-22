@@ -15,6 +15,8 @@
 
 void et_m3t_test_k1_fail_after(size_t);
 void et_m3t_test_k1_allocator_reset(void);
+size_t et_e3_cpu4_test_k1_live_allocations(void);
+static size_t k1_baseline;
 static size_t checks;
 #define CHECK(x) do { ++checks; if (!(x)) { \
   fprintf(stderr,"FAIL %d: %s E3=%lld/%lld/%lld raw=%lld/%lld/%lld\n",__LINE__,#x, \
@@ -67,6 +69,7 @@ static void destinations_bits(et_f32_tensor *dest[4],uint32_t words[4]) {
 }
 static void assert_idle(void *lease,et_e3_frame_internal *frame) {
   CHECK(frame->phase==E3_IDLE && frame->work==NULL);
+  CHECK(et_e3_cpu4_test_k1_live_allocations()==k1_baseline);
   OK(et_g3c4_private_training_lease_check_v1(lease));
   OK(et_g3c4_private_training_lease_enter_v1(lease,1));
   OK(et_g3c4_private_training_lease_leave_v1(lease));
@@ -126,6 +129,7 @@ static void run(int present) {
   et_e3_frame_internal *frame=et_e3_private_cpu4_frame_create_v1(lease,dest[0],dest[1],dest[2],dest[3]);CHECK(frame);
   et_f32_test_live_counts_v1 baseline={.struct_size=sizeof(baseline)};
   et_f32_test_live_counts_snapshot_v1(&baseline);
+  k1_baseline=et_e3_cpu4_test_k1_live_allocations();
   uint32_t published[4],after[4];destinations_bits(dest,published);
   NO(et_e3_private_acquire_v1(&foreign));
   /* Busy existing READ rejects without allocating another workspace. */
@@ -140,13 +144,21 @@ static void run(int present) {
   NO(et_e3_private_cleanup_preflight_v1(frame));CHECK(!frame->cleanup_ready);
   NO(et_g3c4_private_training_lease_leave_v1(lease));
   OK(et_f32_tensor_borrow_end_v1(&borrow,&error));
+  abort_call(frame);assert_idle(lease,frame);unchanged(owner,&before);
+  destinations_bits(dest,after);CHECK(!memcmp(after,published,sizeof(after)));
+  OK(et_e3_private_acquire_v1(frame));forward(frame);
   OK(et_e3_private_cleanup_preflight_v1(frame));et_e3_private_drain_v1(frame);
   NO(et_g3c4_private_training_lease_leave_v1(lease));
+  CHECK(e3_raw_category==0);
   /* Late scalar rejection is byte-atomic across all four destinations. */
   OK(et_f32_tensor_borrow_begin_v1(dest[3],&borrow,&error));
-  NO(et_e3_private_publish_v1(frame));destinations_bits(dest,after);CHECK(!memcmp(after,published,sizeof(after)));
+  NO(et_e3_private_publish_v1(frame));
+  CHECK(e3_last_domain==0 && e3_last_category==E3_INVALID_STATE && e3_last_code==E3_CODE_DESTINATION);
+  CHECK(e3_raw_domain==3 && e3_raw_category==ET_F32_TENSOR_ERROR_INVALID_STATE && e3_raw_code==ET_F32_TENSOR_CODE_ACTIVE_BORROW);
+  destinations_bits(dest,after);CHECK(!memcmp(after,published,sizeof(after)));
   OK(et_f32_tensor_borrow_end_v1(&borrow,&error));
   OK(et_e3_private_publish_v1(frame));et_e3_private_finish_v1(frame);
+  CHECK(e3_raw_domain==3 && e3_raw_category==ET_F32_TENSOR_ERROR_INVALID_STATE && e3_raw_code==ET_F32_TENSOR_CODE_ACTIVE_BORROW);
   assert_idle(lease,frame);unchanged(owner,&before);
   destinations_bits(dest,published);CHECK(frame->published_counts[0]==3 && frame->published_counts[1]==1);
   for (size_t i=0;i<4;++i) tensor_close(dest[i],&expected_metrics[i],1);
@@ -156,7 +168,10 @@ static void run(int present) {
     CHECK(e3_last_category==E3_INTERNAL && e3_last_code==E3_CODE_ALLOCATION);
     et_e3_cpu4_test_fail_after(SIZE_MAX);assert_idle(lease,frame);
     destinations_bits(dest,after);CHECK(!memcmp(after,published,sizeof(after)));
-    CHECK(frame->published_counts[0]==3 && frame->published_counts[1]==1);unchanged(owner,&before);
+    CHECK(et_e3_private_selected_metric_bits_ref_v1(frame,0)==published[0]);
+    CHECK(et_e3_private_selected_metric_bits_ref_v1(frame,1)==published[1]);
+    CHECK(et_e3_private_counter_ref_v1(frame,0)==3 && et_e3_private_counter_ref_v1(frame,1)==1);
+    unchanged(owner,&before);
   }
   /* Both real child-enrollment allocation failures unwind their own prefixes. */
   for (size_t child=0;child<2;++child) {
@@ -180,6 +195,9 @@ static void run(int present) {
   int64_t raw[3]={e3_raw_domain,e3_raw_category,e3_raw_code};
   abort_call(frame);CHECK(e3_raw_domain==raw[0] && e3_raw_category==raw[1] && e3_raw_code==raw[2]);
   destinations_bits(dest,after);CHECK(!memcmp(after,published,sizeof(after)));assert_idle(lease,frame);
+  CHECK(et_e3_private_selected_metric_bits_ref_v1(frame,0)==published[0]);
+  CHECK(et_e3_private_selected_metric_bits_ref_v1(frame,1)==published[1]);
+  CHECK(et_e3_private_counter_ref_v1(frame,0)==3 && et_e3_private_counter_ref_v1(frame,1)==1);
   OK(et_e3_private_acquire_v1(frame));forward(frame);OK(et_e3_private_cleanup_preflight_v1(frame));
   et_e3_private_drain_v1(frame);OK(et_e3_private_publish_v1(frame));et_e3_private_finish_v1(frame);
   assert_idle(lease,frame);unchanged(owner,&before);
@@ -200,6 +218,23 @@ int main(void) {
   et_g3c4_error_set_internal(0,ET_G3C4_INVALID_STATE,ET_G3C4_CODE_ALLOCATION);
   e3_raw_category=0;CHECK(e3_c4_error()==E3_INTERNAL && e3_last_code==E3_CODE_INVARIANT);
   run(0);run(1);
-  printf("CPU4-E3-NATIVE-PASS checks=%zu roles=21 logits=1024 gradients=absent,present scratch=per-call\n",checks);
+  size_t workspace_controls=0,pin_controls=0,child_records=0,live_children=0,workspace_children=0,pin_children=0;
+  for (e3_cpu4_workspace *w=e3_workspaces;w;w=w->next) {
+    ++workspace_controls; ++pin_controls;
+    CHECK(!w->live && !w->data && e3_pins_idle(&w->pins));
+  }
+  for (et_g3c4_training_lease_internal *lease=cpu4_training_leases;lease;lease=lease->next)
+    for (cpu4_training_child *child=lease->children;child;child=child->next) {
+      ++child_records;live_children+=(size_t)child->live;
+      workspace_children+=(size_t)(child->kind==2);pin_children+=(size_t)(child->kind==5);
+    }
+  CHECK(live_children==0);
+  printf("CPU4-E3-NATIVE-PASS checks=%zu roles=21 logits=1024 gradients=absent,present scratch=per-call "
+         "workspace-controls=%zu pin-subobjects=%zu workspace-control-bytes=%zu pin-bytes-included=%zu "
+         "lease-child-records=%zu lease-child-bytes=%zu registered-workspaces=%zu registered-pins=%zu live-children=%zu live-payloads=0 "
+         "payload-tensors-per-call=37 k1-live-baseline=%zu\n",checks,
+         workspace_controls,pin_controls,workspace_controls*sizeof(e3_cpu4_workspace),
+         pin_controls*sizeof(et_g3c4_model_pins_internal),child_records,
+         child_records*sizeof(cpu4_training_child),workspace_children,pin_children,live_children,k1_baseline);
   return 0;
 }

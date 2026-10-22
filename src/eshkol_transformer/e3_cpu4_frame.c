@@ -301,6 +301,9 @@ static int64_t e3_scope_begin(et_f32_tensor *tensor,
   et_f32_tensor_error error;
   int32_t rc = et_f32_tensor_scoped_begin_internal(tensor, guard, &error);
   if (!rc) return 0;
+  if (!e3_raw_category) {
+    e3_raw_domain=3; e3_raw_category=error.category; e3_raw_code=error.code;
+  }
   if (destination &&
       error.category == ET_F32_TENSOR_ERROR_INVALID_STATE &&
       error.code == ET_F32_TENSOR_CODE_ACTIVE_BORROW)
@@ -993,7 +996,7 @@ int64_t et_e3_private_correct_v1(void *pointer) {
 }
 
 static int64_t e3_accumulate_dispatch(et_e3_frame_internal *frame) {
-  const size_t current = frame->work->data->sum_bank, next = current ^ 1u;
+  const size_t current = frame->sum_bank, next = current ^ 1u;
   et_f32_scoped_guard_internal guards[9] = {{0}};
   et_kernel_tensor_view_v1 inputs[9], outputs[5];
   size_t opened = 0;
@@ -1046,7 +1049,7 @@ int64_t et_e3_private_accumulate_v1(void *pointer) {
     return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
   int64_t rc = e3_accumulate_dispatch(frame);
   if (!rc) {
-    frame->work->data->sum_bank ^= 1u;
+    frame->sum_bank ^= 1u;
     frame->phase = E3_ACQUIRED;
     frame->stage_plane = 0;
     frame->next_role = 0;
@@ -1062,7 +1065,7 @@ int64_t et_e3_private_finalize_v1(void *pointer) {
   if (frame->phase != E3_ACQUIRED || frame->stage_plane != 0 ||
       frame->cleanup_ready)
     return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
-  const size_t bank = frame->work->data->sum_bank;
+  const size_t bank = frame->sum_bank;
   if (frame->work->data->counts[bank][1] <= 0 || frame->work->data->counts[bank][0] <= 0)
     return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
   e3_operand inputs[] = {e3_tensor_operand(frame->work->data->sum[bank][0]),
@@ -1087,6 +1090,8 @@ int64_t et_e3_private_cleanup_preflight_v1(void *pointer) {
   if (!frame) return e3_last_domain ? e3_dependency_status(e3_last_domain,e3_last_category) : e3_last_category;
   if (frame->phase<E3_ACQUIRED || frame->phase>E3_FINALIZED || frame->cleanup_ready)
     return e3_fail(E3_INVALID_STATE,E3_CODE_PHASE);
+  if ((frame->phase==E3_FINALIZED)!=(frame->committed==1))
+    return e3_fail(E3_INTERNAL,E3_CODE_INVARIANT);
   et_f32_tensor_error error;
   if (et_g3c4_model_pins_check_internal(&frame->work->pins,&error)) return e3_f32_error(&error);
   int64_t rc=e3_storage_check(frame,1);
@@ -1190,8 +1195,9 @@ int64_t et_e3_private_selected_metric_bits_ref_v1(
     e3_fail(E3_INVALID_ARGUMENT, E3_CODE_PHASE);
     return -1;
   }
-  if (frame->phase != E3_IDLE || !frame->published_valid ||
-      frame->committed != 2) {
+  /* Transaction-local committed may be zero after rollback; the last
+   * publication remains valid until another atomic publication succeeds. */
+  if (frame->phase != E3_IDLE || !frame->published_valid) {
     e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
     return -1;
   }
