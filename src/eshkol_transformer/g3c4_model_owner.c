@@ -62,6 +62,10 @@ typedef struct et_g3c4_model_owner_internal {
   et_f32_parameter *parameters[14];
   const void *handles[14];
   void *active;
+#ifdef ET_CPU4_TRAINING_PRIVATE
+  et_g3c4_training_lease_internal *training_lease;
+  size_t live_contexts;
+#endif
 } et_g3c4_model_owner_internal;
 
 static _Thread_local et_g3c4_error_state_internal et_g3c4_error_state;
@@ -963,6 +967,10 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
 #ifdef ET_G3C4_MANUAL_A2_PRIVATE
 #include "eshkol_transformer/a2_attention_abi.h"
 #endif
+#endif
+
+#ifdef ET_CPU4_TRAINING_PRIVATE
+#include "cpu4_training_lease.inc"
 #endif
 
 #ifdef ET_G3C4_CONTEXT_PRIVATE
@@ -2259,6 +2267,9 @@ static int et_g3c4_pending_logits_lookup(
 #endif
 
 static void et_g3c4_enroll_context(et_g3c4_context_internal *context) {
+#ifdef ET_CPU4_TRAINING_PRIVATE
+  cpu4_context_published(context->owner);
+#endif
   context->transport.registry_next = et_g3c4_transport_registry;
   et_g3c4_transport_registry = &context->transport;
 }
@@ -2351,6 +2362,12 @@ void *et_g3c4_private_context_create_v1(void *candidate) {
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
     return NULL;
   }
+#ifdef ET_CPU4_TRAINING_PRIVATE
+  if (!cpu4_context_available(owner)) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return NULL;
+  }
+#endif
   context = et_g3c4_context_allocate();
   if (context == NULL) {
     (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_ALLOCATION);
@@ -2374,6 +2391,9 @@ void *et_g3c4_private_context_create_v1(void *candidate) {
 #ifdef ET_G3C4_GENERATOR_PRIVATE
   et_g3c4_enroll_context(context);
 #else
+#ifdef ET_CPU4_TRAINING_PRIVATE
+  cpu4_context_published(owner);
+#endif
   context->registry_next = et_g3c4_context_registry;
   et_g3c4_context_registry = context;
 #endif
@@ -2418,9 +2438,15 @@ int64_t et_g3c4_private_context_close_v1(void *candidate) {
       owner->active != NULL)
     return et_g3c4_fail(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+#ifdef ET_CPU4_TRAINING_PRIVATE
+  if (cpu4_context_close_ready(owner)) return et_g3c4_error_state.category;
+#endif
   if (et_g3c4_capture_kernel(
           et_a2_kv_cache_destroy_v1(&context->cache, &error), &error) != 0)
     return et_g3c4_error_state.category;
+#ifdef ET_CPU4_TRAINING_PRIVATE
+  owner->live_contexts--;
+#endif
   context->owner = NULL;
   ET_G3C4_CONTEXT_STATE(context) = ET_G3C4_CONTEXT_DEAD;
   return 0;
@@ -2693,6 +2719,12 @@ static void *et_g3c4_generator_create(
   et_g3c4_context_internal *context;
   et_a2_kv_cache *cache = NULL;
   et_kernel_error error;
+#ifdef ET_CPU4_TRAINING_PRIVATE
+  if (!cpu4_context_available(owner)) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return NULL;
+  }
+#endif
 #ifdef ET_G3C4_PROVIDER_ROUTES_PRIVATE
   et_kernel_runtime *forward_runtime = NULL;
   et_kernel_runtime *sampler_runtime = NULL;
@@ -2864,6 +2896,9 @@ int64_t et_g3c4_private_generator_close_v1(void *candidate) {
       owner->active != NULL)
     return et_g3c4_fail(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+#ifdef ET_CPU4_TRAINING_PRIVATE
+  if (cpu4_context_close_ready(owner)) return et_g3c4_error_state.category;
+#endif
   if (et_g3c4_capture_kernel(
           et_a2_kv_cache_destroy_v1(&context->cache, &error), &error) != 0)
     return et_g3c4_error_state.category;
@@ -2874,6 +2909,9 @@ int64_t et_g3c4_private_generator_close_v1(void *candidate) {
   et_g3c4_prefill_binding_clear(context);
 #endif
   context->generator_ready = 0u;
+#ifdef ET_CPU4_TRAINING_PRIVATE
+  owner->live_contexts--;
+#endif
   context->owner = NULL;
   ET_G3C4_CONTEXT_STATE(context) = ET_G3C4_CONTEXT_DEAD;
   return 0;
