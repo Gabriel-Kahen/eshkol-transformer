@@ -241,7 +241,9 @@ the actual envelope/registry before native finish and uses a fixed-store
 publication tail. Public O2 remains unchanged. Exact typed child cleanup must
 preflight the real native O2 before trainer detach, retire the unpublished native
 candidate with that O2, then invalidate its Scheme shell/registry without a
-second destructor. These source targets still need immutable review and runtime
+second destructor. The existing shared I2/O2 restore-bindings constructors have
+the same native-before-global-publication gap; G3 owns a bounded same-signature
+repair that roots both ledgers and installs cleanup before native acquisition. These source targets still need immutable review and runtime
 failure gates. Native adoption still requires trainer/binding release first.
 
 Any further contract change must be recorded here with owner, exact source and
