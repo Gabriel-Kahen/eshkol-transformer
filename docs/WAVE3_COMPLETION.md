@@ -132,7 +132,9 @@ training, native child/ordinal records enforce phase cleanup, and release preser
 the canonical C4 owner. The independently approved [thin transport contract](CPU4_THIN_TRANSPORT_CONTRACT.md)
 uses one frame-local workspace with immutable snapshots and the existing Eshkol
 21-forward/25-reverse schedule. CLI3 is implementing that producer; the narrow
-E3 lease-bound no-grad frame seam is under independent review. Joint canonical
+E3 lease-bound [no-grad frame seam](CPU4_E3_FRAME_CONTRACT.md) is independently
+accepted for implementation, with composite workspace and separate actual pin
+control. Runtime acceptance remains pending. Joint canonical
 C4/config/P1-mode binding remains an upstream dependency.
 
 A2/N2/N3K T4 source and independent primitive-gradient fixtures are integrated
