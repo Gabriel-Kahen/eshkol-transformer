@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CANONICAL = ROOT / "internal/p1/lib/transformer/module.esk"
 CANONICAL_SHA256 = "8629d7ee347fb81d0a24cbb5d296828208af9bf75965244d70f7a05ecb132e40"
 VARIANT_SHA256 = "4dfed83790ced23de91e91bede7bbc730b80273e9419de6b2c2678c5e8d58e1a"
-FAULT_VARIANT_SHA256 = "d4e22a1d2319f0a1c90c5af0c18960c48849a34dbdd51f86c2c1dff72721a6bc"
+FAULT_VARIANT_SHA256 = "a3b2bebba27d9e1ed594055957266cfacc1236b20da68c5cf477a82d05d69c37"
 
 
 def spans(source: str) -> list[tuple[int, int, int]]:
@@ -58,6 +58,18 @@ def one_form(source: str, forms: list[tuple[int, int, int]],
     if len(found) != 1:
         raise ValueError(f"expected one parsed {prefix!r} at depth {depth}")
     return found[0]
+
+
+def apply_insertions(source: str, additions: list[tuple[int, str]]) -> str:
+    """Apply distinct original-source offsets; ambiguous shared offsets reject."""
+    positions = [position for position, _ in additions]
+    if len(set(positions)) != len(positions):
+        raise ValueError("duplicate P1 insertion position")
+    if any(position < 0 or position > len(source) for position in positions):
+        raise ValueError("P1 insertion position is outside source")
+    for position, replacement in sorted(additions, reverse=True):
+        source = source[:position] + replacement + source[position:]
+    return source
 
 
 TEST_WRAPPERS = '''
@@ -234,10 +246,7 @@ def compose(source: str, fault_enter_denial: bool = False) -> str:
             (node_start, "(if (p1-e3-test-enter-denial! token) 2 "),
             (node_end, ")"),
         ])
-    result = source
-    for position, replacement in reversed(additions):
-        result = result[:position] + replacement + result[position:]
-    return result
+    return apply_insertions(source, additions)
 
 
 def main() -> None:

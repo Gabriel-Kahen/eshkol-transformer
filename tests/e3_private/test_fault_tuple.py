@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 TESTS = ROOT / "tests/e3_private"
@@ -21,6 +22,58 @@ def rows(prefix: Path, suffix: str) -> list[str]:
 
 
 class FaultTupleTest(unittest.TestCase):
+    def test_fault_initializers_are_direct_trusted_let_children(self):
+        variant = runpy.run_path(str(ROOT / "scripts/generate-e3-p1-mode-test-variant.py"))
+        canonical = (ROOT / "internal/p1/lib/transformer/module.esk").read_text()
+
+        def children(source):
+            forms = variant["spans"](source)
+            start, end = variant["one_form"](source, forms, "(let ()", 1)
+            return [(begin, finish, source[begin:finish])
+                    for begin, finish, depth in sorted(forms)
+                    if depth == 2 and start < begin < finish < end]
+
+        def check_structure(source):
+            body = children(source)
+            setup = [row for row in body
+                     if row[2].startswith("(vector-set! p1-e3-test-seam ")]
+            self.assertEqual([int(row[2].split()[2]) for row in setup],
+                             [0, 1, 7, 4, 5, 6])
+            final = [row for row in body
+                     if row[2].startswith("(vector\n  (lambda (module)")]
+            self.assertEqual(len(final), 1)
+            self.assertTrue(all(finish < final[0][0] for _, finish, _ in setup))
+            # Preserve the complete parsed trusted body, including its final
+            # 73-slot vector, except the deliberately wrapped enter function.
+            unchanged = lambda rows: [text for _, _, text in rows
+                if not text.startswith("(vector-set! p1-e3-test-seam ")
+                and not text.startswith("(define (e3-mode-enter!")]
+            self.assertEqual(unchanged(body), unchanged(children(canonical)))
+
+        check_structure(variant["compose"](canonical, True))
+
+        def legacy_insertions(source, additions):
+            for position, text in reversed(additions):
+                source = source[:position] + text + source[position:]
+            return source
+
+        with patch.dict(variant["compose"].__globals__,
+                        apply_insertions=legacy_insertions):
+            legacy = variant["compose"](canonical, True)
+        # The old output parses as balanced forms but puts setup inside a
+        # canonical tr3-fixed-recheck-handles call instead of the trusted let.
+        variant["spans"](legacy)
+        with self.assertRaises(AssertionError):
+            check_structure(legacy)
+
+    def test_original_source_insertions_sort_and_reject_duplicate_offsets(self):
+        variant = runpy.run_path(str(ROOT / "scripts/generate-e3-p1-mode-test-variant.py"))
+        insert = variant["apply_insertions"]
+        self.assertEqual(insert("abcd", [(3, "C"), (1, "A"), (2, "B")]),
+                         "aAbBcCd")
+        with self.assertRaisesRegex(ValueError, "duplicate P1 insertion"):
+            insert("abcd", [(2, "A"), (2, "B")])
+
     def test_stage4_p1_enter_cut_is_fault_only_and_prewrite(self):
         variant = runpy.run_path(str(ROOT / "scripts/generate-e3-p1-mode-test-variant.py"))
         canonical = (ROOT / "internal/p1/lib/transformer/module.esk").read_text()
