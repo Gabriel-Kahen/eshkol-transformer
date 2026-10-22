@@ -143,7 +143,7 @@ static void test_metadata(et_kernel_runtime *rt) {
                                              "residual.forward"};
   static const uint64_t embedding_rows[] = {1, 1, 1, 1, 1, 4, 3, 2, 2, 3, 5, 6};
   static const uint64_t linear_rows[] = {1, 1, 1, 1, 1, 2, 3, 4, 2, 3, 4, 5};
-  static const uint64_t norm_rows[] = {1, 1, 1, 1, 1, 3, 1, 2, 4, 2, 2, 4, 1, 4, 4};
+  static const uint64_t norm_rows[] = {1, 1, 1, 1, 1, 3, 1, 2, 4, 1, 4, 4, 2, 2, 4};
   static const uint64_t activation_rows[] = {1, 1, 1, 1, 1, 8,
                                              1, 2, 5, 2, 2, 4};
   static const uint64_t dropout_rows[] = {1, 1, 1, 1, 1, 2, 1, 1,
