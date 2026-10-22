@@ -60,6 +60,9 @@
 ;; model, Eshkol runtime, retirement admission or compiled behavior is claimed.
 (define active-record-root (vector '() '() #t #f '() '()))
 (define (fail category operation message details) (error message))
+;; Load the actual lexical dependencies used by the production planner.
+(for-each (lambda (name) (eval (definition name new-body) (current-module)))
+          '(bounded-acyclic-list-spine? bounded-list-length))
 (eval (definition 'candidate-cell-member? new-body) (current-module))
 (eval (definition 'candidate-active-plan new-body) (current-module))
 (define (apply-plan plan)
@@ -97,6 +100,8 @@
 (define i2-parameter-admission-carrier #f)
 (define (i2-modules-current) (vector-ref i2-module-registry-root 0))
 (define (g3c4-fail category operation message) (error message))
+(eval (definition 'i2-bounded-list-length
+                  (read-file "native/i2_wave2_extension.esk")) (current-module))
 (define feature-body (cddr (caddr (definition 'cpu4-candidate-surface feature))))
 (for-each (lambda (name) (eval (definition name feature-body) (current-module)))
           '(member-cell? i2-retain i2-preflight i2-invalidate))
@@ -249,17 +254,50 @@
         (for-each reject-bare-captures form))))
 (for-each reject-bare-captures feature)
 (display "CPU4 captured FFI closure guard PASS: checks=") (display checks) (newline)
-;; The repair must not change the existing producer/retirement implementation.
-(define normalized-feature (copy-tree feature))
-(define normalized-bindings
-  (cadr (caddr (definition 'cpu4-candidate-surface normalized-feature))))
-(for-each (lambda (capture)
-            (set-car! (cdr (assq (car capture) normalized-bindings)) (cadr capture)))
-          native-captures)
-(let* ((port (open-pipe* OPEN_READ "git" "show"
-                        "3f0358d3:native/cpu4_candidate_extension.esk"))
-       (prior (forms port)))
-  (check "repair baseline available" (= (close-pipe port) 0))
-  (check "only native capture representation changed"
-         (equal? normalized-feature prior)))
-(display "CPU4 FFI-only repair delta PASS: checks=") (display checks) (newline)
+(define candidate-p1-runtime
+  (map (lambda (name) (definition name new-body))
+       '(candidate-ticket candidate-cell-member? candidate-cell-present?
+         candidate-active-plan candidate-bridge-install)))
+(define (runtime-length-free? form)
+  (or (not (pair? form))
+      (eq? (car form) 'quote)
+      (and (not (eq? (car form) 'length))
+           (every runtime-length-free? form))))
+(for-each
+  (lambda (runtime-forms)
+    (check "new no-stdlib runtime has no bare length calls"
+           (every runtime-length-free? runtime-forms)))
+  (list candidate-p1-runtime feature (read-file "tests/cpu4_candidate/producer_test.esk")))
+(check "bare runtime length call is rejected"
+       (not (runtime-length-free? '(let ((rows (list 1))) (length rows)))))
+;; Actual bounded helpers reject overlong/improper/cyclic inputs via #f; equal?
+;; must reject that result without passing it to numeric equality.
+(for-each
+  (lambda (helper)
+    (check "actual helper exact limit" (equal? (helper '(1 2) 2) 2))
+    (check "actual helper over-limit is false" (eq? (helper '(1 2 3) 2) #f))
+    (check "actual helper improper list is false" (eq? (helper '(1 . 2) 2) #f))
+    (let ((cycle (list 1)))
+      (set-cdr! cycle cycle)
+      (check "actual helper cycle is false" (eq? (helper cycle 2) #f))))
+  (list bounded-list-length i2-bounded-list-length))
+(display "CPU4 no-stdlib bounded list runtime guard PASS: checks=") (display checks) (newline)
+;; fe9 parser's get_operator_type reserves match even in call position. A
+;; named-let binding cannot make a recursive (match ...) into an ordinary call.
+(define (runtime-loop-name-safe? form)
+  (or (not (pair? form))
+      (eq? (car form) 'quote)
+      (and (not (and (eq? (car form) 'let)
+                     (pair? (cdr form)) (eq? (cadr form) 'match)))
+           (every runtime-loop-name-safe? form))))
+(for-each
+  (lambda (runtime-forms)
+    (check "new runtime does not bind reserved match as a named loop"
+           (every runtime-loop-name-safe? runtime-forms)))
+  (list candidate-p1-runtime feature (read-file "tests/cpu4_candidate/producer_test.esk")))
+(check "reserved named-let match is rejected"
+       (not (runtime-loop-name-safe? '(let match ((xs rows)) (match (cdr xs))))))
+(check "ordinary named-let member-match-loop is accepted"
+       (runtime-loop-name-safe?
+         '(let member-match-loop ((xs rows)) (member-match-loop (cdr xs)))))
+(display "CPU4 reserved loop name guard PASS: checks=") (display checks) (newline)
