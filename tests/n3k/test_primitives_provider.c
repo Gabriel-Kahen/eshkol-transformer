@@ -15,18 +15,19 @@ static void test_metadata(et_kernel_runtime *runtime) {
     const char *name;
     const char *operations[4];
     size_t operation_count, rank, row_count;
-    uint64_t rows[5][4];
+    uint64_t rows[8][4];
   } expected[] = {
-    {"n3k.embedding-forward", {"n3k.embedding.forward"}, 1,4,2, {{1,2,256,4},{1,2,2,4}}},
-    {"n3k.embedding-backward", {"n3k.embedding.backward"}, 1,4,2, {{1,2,256,4},{1,2,2,4}}},
-    {"n3k.linear", {"n3k.linear.backward-no-bias","n3k.linear.forward-no-bias"}, 2,4,4,
-      {{1,2,4,4},{1,2,4,8},{1,2,8,4},{1,2,4,256}}},
-    {"n3k.gelu", {"n3k.gelu.backward","n3k.gelu.forward"}, 2,3,1, {{1,2,8}}},
-    {"n3k.residual", {"n3k.residual.backward","n3k.residual.forward"}, 2,3,1, {{1,2,4}}},
+    {"n3k.embedding-forward", {"n3k.embedding.forward"}, 1,4,4, {{1,2,256,4},{1,2,2,4},{1,4,256,4},{1,4,4,4}}},
+    {"n3k.embedding-backward", {"n3k.embedding.backward"}, 1,4,4, {{1,2,256,4},{1,2,2,4},{1,4,256,4},{1,4,4,4}}},
+    {"n3k.linear", {"n3k.linear.backward-no-bias","n3k.linear.forward-no-bias"}, 2,4,8,
+      {{1,2,4,4},{1,2,4,8},{1,2,8,4},{1,2,4,256},
+       {1,4,4,4},{1,4,4,8},{1,4,8,4},{1,4,4,256}}},
+    {"n3k.gelu", {"n3k.gelu.backward","n3k.gelu.forward"}, 2,3,2, {{1,2,8},{1,4,8}}},
+    {"n3k.residual", {"n3k.residual.backward","n3k.residual.forward"}, 2,3,2, {{1,2,4},{1,4,4}}},
     {"n3k.head-layout", {"n3k.heads.merge.backward","n3k.heads.merge.forward",
-      "n3k.heads.split.backward","n3k.heads.split.forward"}, 4,4,1, {{1,2,2,2}}},
+      "n3k.heads.split.backward","n3k.heads.split.forward"}, 4,4,2, {{1,2,2,2},{1,4,2,2}}},
     {"n3k.activation-sum", {"n3k.sum2.backward","n3k.sum2.forward","n3k.sum3.backward","n3k.sum3.forward"},
-      4,3,1, {{1,2,4}}},
+      4,3,2, {{1,2,4},{1,4,4}}},
     {"n3k.tied-sum", {"n3k.sum2.backward","n3k.sum2.forward"}, 2,2,1, {{256,4}}},
     {"n3k.matrix-init", {"n3k.matrix-init.uniform"}, 1,2,5, {{256,4},{2,4},{4,4},{8,4},{4,8}}},
   };
@@ -104,7 +105,7 @@ static void test_metadata(et_kernel_runtime *runtime) {
       }
     }
   }
-  CHECK(combinations == 31u);
+  CHECK(combinations == 55u);
 }
 
 static const char *reference_capability(const char *operation) {
