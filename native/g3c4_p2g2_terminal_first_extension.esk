@@ -1,0 +1,64 @@
+;;; Private recoverable first-token step for the original pending P2/G2 owner.
+;;; Load after the terminal reservation anchor. This still requires abort in
+;;; the protected call region; no terminal output is published here.
+
+(extern i64 g3c4-p2g2-native-eos-first-frame ptr ptr ptr i64
+        :real et_g3c4_private_p2g2_eos_first_frame_carrier_v1)
+
+(define (g3c4-p2g2-terminal-first-sample-decode-probed!
+          call anchor before-decode after-decode)
+  (let* ((operation 'g3c4-p2g2-terminal-first-sample-decode!)
+         (checked (g3c4-p2g2-terminal-pending-check call anchor operation))
+         (record (vector-ref checked 2))
+         (prefix (vector-ref checked 3))
+         (native (vector-ref record 5))
+         (native-input (vector-ref prefix 3))
+         (tokenizer (vector-ref record 3))
+         (staging (vector-ref checked 8))
+         (raw (vector-ref checked 7)))
+    ;; The terminal-specific bridge admits the authentic first EOS as well as
+    ;; non-EOS. Its i64 carrier is the original allocation-time staging[8].
+    (g3c4-native-check
+      (g3c4-p2g2-native-eos-first-frame native native-input staging 16)
+      operation)
+    (g3c4-p2g2-terminal-pending-check call anchor operation)
+    (if (not (and (eq? (vector-ref anchor 2) record)
+                  (eq? (vector-ref anchor 3) prefix)
+                  (eq? (vector-ref anchor 7) raw)
+                  (eq? (vector-ref anchor 8) staging)
+                  (eq? (vector-ref prefix 3) native-input)
+                  (eq? (vector-ref record 5) native)
+                  (eq? (vector-ref record 3) tokenizer)))
+        (g3c4-fail 'invalid-state operation
+                   "P2/G2 first native carrier identities changed"))
+    (let ((selected (bytevector-u8-ref staging 0)))
+      ;; A low byte alone must not turn a non-V256 i64 into a token ID.
+      (let upper ((index 1))
+        (if (< index 8)
+            (if (= (bytevector-u8-ref staging index) 0)
+                (upper (+ index 1))
+                (g3c4-fail 'invalid-state operation
+                           "P2/G2 first native ID is outside raw V256"))))
+      (before-decode anchor)
+      (g3c4-p2g2-terminal-pending-check call anchor operation)
+      (t1-private-g3-decode-raw-into! tokenizer staging raw)
+      (g3c4-p2g2-terminal-pending-check call anchor operation)
+      (after-decode anchor)
+      (g3c4-p2g2-terminal-pending-check call anchor operation)
+      (if (not (and (eq? (vector-ref anchor 7) raw)
+                    (eq? (vector-ref anchor 8) staging)
+                    (= (bytevector-u8-ref raw 0) selected)
+                    (= (bytevector-u8-ref staging 0) selected)))
+          (g3c4-fail 'invalid-state operation
+                     "P2/G2 first T1 byte differs from native selected ID"))
+      (let upper ((index 1))
+        (if (< index 8)
+            (if (= (bytevector-u8-ref staging index) 0)
+                (upper (+ index 1))
+                (g3c4-fail 'invalid-state operation
+                           "P2/G2 first native ID changed after T1 decode"))))
+      selected)))
+
+(define (g3c4-p2g2-terminal-first-sample-decode! call anchor)
+  (g3c4-p2g2-terminal-first-sample-decode-probed!
+    call anchor (lambda (pending) #t) (lambda (pending) #t)))

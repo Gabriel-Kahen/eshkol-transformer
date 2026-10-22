@@ -1,0 +1,330 @@
+;;; Source fixture for a fresh one-use compiled private diagnostic.
+;;; A consumed sealed package must never be edited or reused.
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+(load "g3c4_t1_output_decode_extension.esk")
+(load "g3c4_output_envelope_extension.esk")
+(load "g3c4_p2g2_ownership_extension.esk")
+(load "g3c4_p2g2_protected_scope_extension.esk")
+(load "g3c4_p2g2_t1_prefix_coordinator_extension.esk")
+(load "g3c4_p2g2_terminal_extension.esk")
+(load "g3c4_p2g2_terminal_first_extension.esk")
+(load "g3c4_p2g2_terminal_prefix_extension.esk")
+(load "g3c4_p2g2_terminal_second_extension.esk")
+(load "g3c4_p2g2_terminal_text_preflight_extension.esk")
+(load "g3c4_p2g2_terminal_precommit_frame_extension.esk")
+(load "g3c4_p2g2_terminal_live_authority_extension.esk")
+(load "g3c4_p2g2_terminal_commit_extension.esk")
+(load "g3c4_p2g2_terminal_snapshot_extension.esk")
+(load "g3c4_p2g2_terminal_release_extension.esk")
+(load "g3c4_p2g2_terminal_ids_owner_extension.esk")
+
+(extern i64 probe-clone-hold ptr :real et_g3c4_private_probe_clone_hold_v1)
+(extern i64 probe-clone-end :real et_g3c4_private_probe_clone_end_v1)
+(extern i64 probe-clone-live ptr :real et_g3c4_private_probe_clone_live_v1)
+(extern i64 probe-output-hold ptr :real et_g3c4_private_probe_output_hold_v1)
+(extern i64 probe-output-end :real et_g3c4_private_probe_output_end_v1)
+(extern i64 probe-output-live ptr :real et_g3c4_private_probe_output_live_v1)
+
+(define checks 0)
+(define (stage label count)
+  (display "G3-C4 private owners STAGE: ")
+  (display label)
+  (display " count=")
+  (display count)
+  (newline)
+  (flush-output-port (current-output-port)))
+(define (probe-failure caught)
+  (display "G3-C4 private owners PROBE ERROR: type=")
+  (display (if (transformer-error? caught)
+               'transformer-error 'non-transformer))
+  (display " category=")
+  (display (if (transformer-error? caught)
+               (transformer-error-category caught) 'unknown))
+  (display " operation=")
+  (display (if (transformer-error? caught)
+               (transformer-error-operation caught) 'unknown))
+  (newline)
+  (flush-output-port (current-output-port))
+  (raise caught))
+(define (probe-reserve-error caught)
+  ;; This guard runs inside m3-call, before its dependency rethrow replaces
+  ;; the leaf operation and message with the outer probe operation.
+  (display "G3-C4 private owners RESERVE FIRST ERROR: type=")
+  (display (if (transformer-error? caught)
+               'transformer-error 'non-transformer))
+  (display " category=")
+  (display (if (transformer-error? caught)
+               (transformer-error-category caught) 'unknown))
+  (display " operation=")
+  (display (if (transformer-error? caught)
+               (transformer-error-operation caught) 'unknown))
+  (display " message=")
+  (display (if (transformer-error? caught)
+               (transformer-error-message caught) 'unknown))
+  (display " details=")
+  (display (if (transformer-error? caught)
+               (transformer-error-details caught) 'unknown))
+  (newline)
+  (flush-output-port (current-output-port))
+  (raise caught))
+;;; The consumed count=1 gate ended after the pre-snapshot stage. Catch each
+;;; binding's first error before a later let* initializer can obscure it.
+(define (case-binding label count thunk)
+  (stage label count)
+  (guard (caught
+           (#t
+             (display "G3-C4 private owners CASE FIRST ERROR: binding=")
+             (display label)
+             (display " type=")
+             (display (if (transformer-error? caught)
+                          'transformer-error 'non-transformer))
+             (display " category=")
+             (display (if (transformer-error? caught)
+                          (transformer-error-category caught) 'unknown))
+             (display " operation=")
+             (display (if (transformer-error? caught)
+                          (transformer-error-operation caught) 'unknown))
+             (display " message=")
+             (display (if (transformer-error? caught)
+                          (transformer-error-message caught) 'unknown))
+             (display " details=")
+             (display (if (transformer-error? caught)
+                          (transformer-error-details caught) 'unknown))
+             (newline)
+             (flush-output-port (current-output-port))
+             (raise caught)))
+    (thunk)))
+(define (check label good)
+  (if good (set! checks (+ checks 1))
+      (begin (display "G3-C4 private owners FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label thunk)
+  (check label (guard (caught (#t (transformer-error? caught)))
+                 (thunk) #f)))
+(define (config eos)
+  (list ':profile 'diagnostic-c4 ':sampling 'greedy
+        ':temperature-bits 1065353216 ':top-k 256
+        ':top-p-bits 1065353216 ':max-new-tokens 2
+        ':eos eos ':seed 17))
+
+(stage "setup begin" 0)
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define model (g3c4-model-create-seeded-internal 1729))
+(define input
+  (g3c4-p2g2-owned-input-create
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255))))
+(stage "setup complete" 0)
+
+;;; Discover the authentic first selected ID, abort it, then replay the same
+;;; seeded request with that exact ID as the configured EOS. No ID is injected
+;;; into a terminal carrier.
+(define first-id #f)
+(stage "probe begin" 0)
+(guard (caught (#t (probe-failure caught)))
+  (stage "generator create begin" 0)
+  (let ((probe-generator
+          (g3c4-generator-create-internal model tokenizer (config #f))))
+    (stage "generator create complete" 0)
+    (guard (caught
+             (#t
+               (stage "generator close after failure begin" 0)
+               (guard (close-failure (#t (exit 134)))
+                 (g3c4-generator-close-internal! probe-generator))
+               (stage "generator close after failure complete" 0)
+               (raise caught)))
+      (stage "prefix entry/preflight begin" 0)
+      (check "first-ID probe abort"
+        (g3c4-with-p2g2-prefix-call 'private-owners-probe
+          probe-generator input (call)
+          (stage "prefix entry/preflight complete" 0)
+          (stage "pending reserve begin" 0)
+          (let ((pending
+                  (guard (caught (#t (probe-reserve-error caught)))
+                    (stage "reserve protected owner begin" 0)
+                    (g3c4-p2g2-protected-check call 'private-owners-probe)
+                    (stage "reserve protected owner complete" 0)
+                    (stage "reserve prefix owner begin" 0)
+                    (let ((prefix (g3c4-p2g2-prefix-anchor-for call)))
+                      (if (not prefix)
+                          (g3c4-fail 'invalid-state 'private-owners-probe
+                                     "P2/G2 prefix anchor is absent"))
+                      (g3c4-p2g2-prefix-input-check
+                        call (vector-ref prefix 1) (vector-ref prefix 2)
+                        (vector-ref prefix 3) 'private-owners-probe #f))
+                    (stage "reserve prefix owner complete" 0)
+                    (stage "reserve core begin" 0)
+                    (g3c4-p2g2-terminal-pending-reserve! call))))
+            (stage "pending reserve complete" 0)
+            (guard (caught
+                     (#t
+                       (stage "pending abort after failure begin" 0)
+                       (guard (abort-failure (#t (exit 134)))
+                         (g3c4-p2g2-terminal-pending-abort! call pending))
+                       (stage "pending abort after failure complete" 0)
+                       (raise caught)))
+              (stage "first frame/sample begin" 0)
+              (set! first-id
+                (g3c4-p2g2-terminal-first-sample-decode-probed!
+                  call pending
+                  (lambda (held) (stage "native first frame complete" 0))
+                  (lambda (held) (stage "T1 decode complete" 0))))
+              (stage "first frame/sample complete" 0))
+            (stage "pending abort begin" 0)
+            (g3c4-p2g2-terminal-pending-abort! call pending)
+            (stage "pending abort complete" 0))))
+      (check "authentic first ID" (and (m3t-exact-i64? first-id)
+                                        (>= first-id 0) (<= first-id 255))))
+    (stage "generator close begin" 0)
+    (check "probe generator closes"
+      (g3c4-generator-close-internal! probe-generator))
+    (stage "generator close complete" 0)))
+(stage "probe complete" 0)
+
+(define (case-run eos expected-count)
+  (stage "case begin" expected-count)
+  (let* ((generator
+           (g3c4-generator-create-internal model tokenizer (config eos)))
+         (shell (begin (stage "terminal commit" expected-count)
+                       (g3c4-p2g2-terminal-commit-private! generator input)))
+         (snapshot
+           (let ((value
+                   (case-binding "terminal snapshot" expected-count
+                     (lambda ()
+                       (g3c4-p2g2-terminal-snapshot-private shell)))))
+             (stage "terminal snapshot complete" expected-count)
+             value))
+         (source-entry
+           (let ((value
+                   (case-binding "source output entry begin" expected-count
+                     (lambda ()
+                       (g3c4-p2g2-terminal-output-entry-live
+                         shell 'private-owners)))))
+             (stage "source output entry complete" expected-count)
+             value))
+         (source-native
+           (let ((value
+                   (case-binding "source native pointer begin" expected-count
+                     (lambda () (vector-ref source-entry 3)))))
+             (stage "source native pointer complete" expected-count)
+             value))
+         (count
+           (let ((value
+                   (case-binding "snapshot count read begin" expected-count
+                     (lambda ()
+                       (g3c4-p2g2-terminal-snapshot-small-word
+                         snapshot 16)))))
+             (stage "snapshot count read complete" expected-count)
+             value))
+         (first
+           (let ((value
+                   (case-binding "snapshot first read begin" expected-count
+                     (lambda ()
+                       (g3c4-p2g2-terminal-snapshot-small-word
+                         snapshot 0)))))
+             (stage "snapshot first read complete" expected-count)
+             value))
+         (second
+           (let ((value
+                   (case-binding "snapshot second read begin" expected-count
+                     (lambda ()
+                       (g3c4-p2g2-terminal-snapshot-small-word
+                         snapshot 8)))))
+             (stage "snapshot second read complete" expected-count)
+             value))
+         (ids
+           (let ((value
+                   (case-binding "clone and readback" expected-count
+                     (lambda ()
+                       (car (g3c4-p2g2-terminal-ids-clone-private shell))))))
+             (stage "clone call complete" expected-count)
+             value))
+         (entry (g3c4-p2g2-terminal-ids-entry-live ids 'private-owners))
+         (native (vector-ref entry 3))
+         (extent (+ 8 (* count 8)))
+         (payload (* count 8))
+         (short-copy (make-bytevector payload 0))
+         (wrong-header (make-bytevector extent 0)))
+    (stage "clone readback complete" expected-count)
+    (check "logical count" (= count expected-count))
+    (check "clone payload has native header plus payload allocation"
+      (= (bytevector-length (vector-ref entry 8)) payload))
+    (stage "negative short extent" expected-count)
+    (check "native rejects payload-only passed extent"
+      (not (= (g3c4-p2g2-native-terminal-ids-clone-copy
+                native count short-copy (* count 8)) 0)))
+    (check "short extent preserves native declared length"
+      (= (bytevector-length short-copy) payload))
+    (check "short extent preserves payload"
+      (and (= (bytevector-u8-ref short-copy 0) 0)
+           (= (bytevector-u8-ref short-copy (- payload 1)) 0)))
+    (stage "negative wrong native header" expected-count)
+    (check "native rejects full extent with wrong header"
+      (not (= (g3c4-p2g2-native-terminal-ids-clone-copy
+                native count wrong-header extent) 0)))
+    (check "wrong header preserves payload"
+      (and (= (bytevector-length wrong-header) extent)
+           (= (bytevector-u8-ref wrong-header 0) 0)
+           (= (bytevector-u8-ref wrong-header (- extent 1)) 0)))
+    (check "first EOS truth value"
+      (eq? (and (= first first-id) (= count 1))
+           (if (= expected-count 1) #t #f)))
+    (if (= count 1)
+        (check "G1 zero physical second slot" (= second 0))
+        (check "G2 cache length"
+          (= (g3c4-p2g2-terminal-snapshot-small-word snapshot 24) 4)))
+    (stage "terminal lease and release" expected-count)
+    (check "hold genuine terminal output I1"
+      (= (probe-output-hold source-native) 0))
+    (reject "held terminal release leaves owner live"
+      (lambda () (g3c4-p2g2-terminal-release-private! shell)))
+    (check "held native terminal output still live"
+      (= (probe-output-live source-native) 0))
+    (check "end genuine terminal output I1 lease"
+      (= (probe-output-end) 0))
+    (vector-set! source-entry 2 'dead)
+    (reject "forged terminal dead does not skip native release"
+      (lambda () (g3c4-p2g2-terminal-release-private! shell)))
+    (check "forged terminal dead left native output live"
+      (= (probe-output-live source-native) 0))
+    (vector-set! source-entry 2 'live)
+    (check "source release zero"
+      (g3c4-p2g2-terminal-release-private! shell))
+    (check "native terminal output is dead"
+      (= (probe-output-live source-native) 1))
+    (check "source repeat release"
+      (g3c4-p2g2-terminal-release-private! shell))
+    (stage "clone copy after source release" expected-count)
+    (check "clone copy after source release"
+      (= (bytevector-length (g3c4-p2g2-terminal-ids-copy-private ids))
+         payload))
+    (stage "clone lease and release" expected-count)
+    (check "hold genuine clone I1" (= (probe-clone-hold native) 0))
+    (reject "held clone release leaves owner live"
+      (lambda () (g3c4-p2g2-terminal-ids-release-private! ids)))
+    (check "held native clone still live" (= (probe-clone-live native) 0))
+    (check "end genuine clone I1 lease" (= (probe-clone-end) 0))
+    (vector-set! entry 2 'dead)
+    (reject "forged dead does not skip native release"
+      (lambda () (g3c4-p2g2-terminal-ids-release-private! ids)))
+    (check "forged dead left native clone live"
+      (= (probe-clone-live native) 0))
+    (vector-set! entry 2 'live)
+    (check "restored owner releases native clone"
+      (g3c4-p2g2-terminal-ids-release-private! ids))
+    (check "native clone is dead" (= (probe-clone-live native) 1))
+    (check "exact same-shell dead repeat"
+      (g3c4-p2g2-terminal-ids-release-private! ids))
+    (check "generator closes" (g3c4-generator-close-internal! generator))
+    (stage "case complete" expected-count)))
+
+(case-run first-id 1)
+(case-run #f 2)
+(check "input release" (generation-tensor-release-internal! input))
+(display "G3-C4 private owners PASS: checks=")
+(display checks)
+(newline)

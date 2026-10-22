@@ -1,0 +1,33 @@
+;;; Private non-EOS successor for the original P2/G2 pending terminal owner.
+;;; Load after terminal first-token decode. The caller must still abort inside
+;;; its protected call region; this step publishes no terminal output.
+
+(define (g3c4-p2g2-terminal-non-eos-prefix-commit! call anchor selected)
+  (let* ((operation 'g3c4-p2g2-terminal-non-eos-prefix-commit!)
+         (checked (g3c4-p2g2-terminal-pending-check call anchor operation))
+         (record (vector-ref checked 2))
+         (protected-anchor (g3c4-p2g2-anchor-for call))
+         (native (vector-ref record 5))
+         (output-native (vector-ref checked 6))
+         (raw (vector-ref checked 7))
+         (staging (vector-ref checked 8)))
+    (if (not (and (eq? (vector-ref record 13) 'before-prefix)
+                  (eq? (vector-ref protected-anchor 13) 'before-prefix)
+                  (eq? (vector-ref record 7) output-native)
+                  (eq? (vector-ref record 11) raw)
+                  (eq? (vector-ref record 12) staging)))
+        (g3c4-fail 'invalid-state operation
+                   "P2/G2 original non-EOS prefix carriers changed"))
+    ;; The accepted check validates exact V256 LE staging, T1 raw parity and
+    ;; the authenticated policy EOS exclusion before the native transition.
+    (g3c4-p2g2-prefix-byte-check record selected operation)
+    (g3c4-p2g2-terminal-pending-check call anchor operation)
+    (g3c4-native-check
+      (g3c4-p2g2-native-prefix-commit native output-native raw)
+      operation)
+    ;; Native zero leaves the original output pending and the call abortable.
+    ;; All fallible checks precede these bounded writes of existing objects.
+    (vector-set! protected-anchor 13 'prefix-committed)
+    (vector-set! record 13 'prefix-committed)
+    (vector-set! (vector-ref record 14) 3 'p2g2-prefix-committed)
+    selected))
