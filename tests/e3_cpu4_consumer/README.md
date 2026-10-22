@@ -38,6 +38,22 @@ Source-only checks:
     python3 -B -m unittest -v tests.e3_cpu4_consumer.test_source
     bash -n scripts/test-e3-cpu4-consumer.sh
 
+The full host source suite requires genuine Guile. Since the supported f31 image
+has no Guile, the primary generates an immutable source-bound reader receipt on
+the host after the final clean commit:
+
+    python3 -B -m tests.e3_cpu4_consumer.host_reader create /absolute/evidence/host-reader.json
+
+The receipt binds exact HEAD/tree, the five files actually read, test and receipt
+code hashes, host reader binary/version, exact arguments and successful empty
+output. Keep the receipt beside the supervisor package, leaving its `out/` absent.
+Mount the receipt read-only at `/host-reader.json` and explicitly set guest
+`CPU4_CONSUMER_HOST_READER_RECEIPT=/host-reader.json` in the invocation. Before native compilation the guest validates it and
+explicitly reports `HOST GUILE VERIFIED / GUEST GUILE NOT RUN`. Only that reader
+obligation uses the receipt; all other source checks still execute in the guest.
+Head/tree/file/code mismatches, failed reader results and malformed receipts are
+rejected. No silent skip, image installation or changed compiler is permitted.
+
 Only the primary orchestrator launches the supported-container gate under the
 global heavy lock, with one compilation job and a 2400-second supervisor budget:
 

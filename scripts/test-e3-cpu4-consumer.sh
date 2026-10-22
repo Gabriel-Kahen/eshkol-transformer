@@ -43,7 +43,12 @@ run() {
   printf '%s\n' "$status" >"$out/$label.exit"
   [[ $status == 0 ]] || die "$label failed: $status"
 }
-run source python3 -B -m unittest -v tests.e3_cpu4_consumer.test_source
+reader_receipt=${CPU4_CONSUMER_HOST_READER_RECEIPT:?explicit host reader receipt path required}
+[[ "$reader_receipt" == /* && -f "$reader_receipt" && ! -L "$reader_receipt" ]] || die 'host reader receipt must be a regular absolute read-only mounted file'
+run host-reader python3 -B -m tests.e3_cpu4_consumer.host_reader validate "$reader_receipt"
+cp "$reader_receipt" "$out/host-reader.json"
+run source env CPU4_CONSUMER_HOST_READER_RECEIPT="$reader_receipt" \
+  python3 -B -m unittest -v tests.e3_cpu4_consumer.test_source
 run resources python3 -B -m tests.e3_cpu4_consumer.resources "$out/resources"
 sha256sum --quiet -c tests/e3_private/asan_ir_sources.sha256
 cp tests/e3_private/asan_ir_sources.sha256 "$out/asan-ir-sources.sha256"
