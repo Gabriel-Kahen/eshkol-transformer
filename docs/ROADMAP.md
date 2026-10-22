@@ -635,7 +635,8 @@ the old-head failure does not establish current-main runtime behavior.
 Active finish milestone: **first complete validated CPU v1**. Current acceptance
 and ownership: [CPU v1 completion index](WAVE3_COMPLETION.md), updated 2026-10-22.
 PR #214 exact-head hosted checks pass. Current-source CPU4 two-update training,
-detach and bounded evaluator-consumer gates independently pass; learning/resume,
+250-update one-batch learning, detach and bounded evaluator-consumer gates
+independently pass; held-out improvement and resume,
 multi-token EOS/continuation and compiled common integration remain required.
 GPU, mixed precision and optional expansion stay backlog. Historical detail below
 retains its original evidence scope.
