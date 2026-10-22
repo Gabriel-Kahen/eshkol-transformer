@@ -1,0 +1,14 @@
+;;; Source-private CPU4 P1 adapter. Load only in the reviewed CPU4 aggregate.
+;;; The binding authenticates the exact C4 entry and canonical slot-8 roster.
+;;; Slot 73 belongs to G3. Slot 74 is the closed CPU4 capture/recheck pair.
+(require transformer.module)
+
+(define (cpu4-p1-fixed-capture-internal
+          model handles modules retained-handles carriers)
+  ((vector-ref (vector-ref p1-trusted-surface 74) 0)
+   model handles modules retained-handles carriers))
+
+(define (cpu4-p1-fixed-recheck-internal
+          model modules retained-handles carriers)
+  ((vector-ref (vector-ref p1-trusted-surface 74) 1)
+   model modules retained-handles carriers))

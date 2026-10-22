@@ -5185,7 +5185,7 @@
 (define (tr3-fixed-dimension=? value expected)
   (and (integer? value) (exact? value) (= value expected)))
 
-(define (tr3-fixed-shape? shape index)
+(define (tr3-fixed-shape-context? shape index context)
   (cond
     ((or (<= index 3) (= index 5))
      (and (pair? shape)
@@ -5204,13 +5204,16 @@
           (tr3-fixed-dimension=? (car (cdr shape)) 4)
           (null? (cdr (cdr shape)))))
     ((= index 13)
-     (and (pair? shape) (tr3-fixed-dimension=? (car shape) 2)
+     (and (pair? shape) (tr3-fixed-dimension=? (car shape) context)
           (pair? (cdr shape))
           (tr3-fixed-dimension=? (car (cdr shape)) 4)
           (null? (cdr (cdr shape)))))
     (else
       (and (pair? shape) (tr3-fixed-dimension=? (car shape) 4)
            (null? (cdr shape))))))
+
+(define (tr3-fixed-shape? shape index)
+  (tr3-fixed-shape-context? shape index 2))
 
 (define (tr3-fixed-module-distinct? modules raw limit)
   (let loop ((index 0))
@@ -5304,8 +5307,8 @@
           ((eq? value (vector-ref values index)) #f)
           (else (loop (+ index 1))))))
 
-(define (tr3-fixed-capture-handle!
-          supplied modules handles carriers provider index)
+(define (tr3-fixed-capture-handle-context!
+          supplied modules handles carriers provider index context)
   (let* ((shell (vector-ref supplied index))
          (entry (shell-entry shell))
          (expected (tr3-fixed-expected-handle modules index)))
@@ -5318,7 +5321,7 @@
                    (tr3-fixed-module-raw modules
                      (tr3-fixed-handle-module-index index)))
               (tr3-fixed-path? (vector-ref expected 2) index)
-              (tr3-fixed-shape? (vector-ref expected 3) index)
+              (tr3-fixed-shape-context? (vector-ref expected 3) index context)
               (eq? (vector-ref expected 4) 'f32)
               (eq? (vector-ref expected 5) 'cpu)
               (vector-ref expected 6)
@@ -5329,6 +5332,11 @@
         (vector-set! handles index shell)
         (vector-set! carriers index (vector-ref expected 6))
         0))))
+
+(define (tr3-fixed-capture-handle!
+          supplied modules handles carriers provider index)
+  (tr3-fixed-capture-handle-context!
+    supplied modules handles carriers provider index 2))
 
 (define (tr3-fixed-capture-handles!
           supplied modules handles carriers provider)
@@ -5376,8 +5384,22 @@
       ))
     )))
 
-(define (tr3-fixed-capture!
-          model supplied modules handles carriers)
+(define (tr3-fixed-capture-handles-context!
+          supplied modules handles carriers provider context)
+  ;; Preserve the established context-two capture stores exactly. CPU4 uses
+  ;; bounded metadata traversal over the same canonical fourteen positions.
+  (if (= context 2)
+      (tr3-fixed-capture-handles!
+        supplied modules handles carriers provider)
+      (let loop ((index 0))
+        (if (= index 14) 0
+            (let ((status
+                    (tr3-fixed-capture-handle-context!
+                      supplied modules handles carriers provider index context)))
+              (if (= status 0) (loop (+ index 1)) status))))))
+
+(define (tr3-fixed-capture-context!
+          model supplied modules handles carriers context)
   (cond
     ((not (tr3-fixed-capture-arguments?
             supplied modules handles carriers)) 1)
@@ -5404,8 +5426,13 @@
                           (tr3-fixed-expected-handle modules 10)))
                     (if (not (and token-handle head-handle
                                   (eq? token-handle head-handle))) 3
-                        (tr3-fixed-capture-handles!
-                          supplied modules handles carriers provider)))))))))))
+                        (tr3-fixed-capture-handles-context!
+                          supplied modules handles carriers provider context)))))))))))
+
+(define (tr3-fixed-capture!
+          model supplied modules handles carriers)
+  (tr3-fixed-capture-context!
+    model supplied modules handles carriers 2))
 
 (define (tr3-fixed-recheck-module modules provider index)
   (let* ((shell (vector-ref modules index))
@@ -5439,7 +5466,8 @@
         (let ((status (tr3-fixed-recheck-module modules provider index)))
           (if (= status 0) (loop (+ index 1)) status)))))
 
-(define (tr3-fixed-recheck-handle modules handles carriers provider index)
+(define (tr3-fixed-recheck-handle-context
+          modules handles carriers provider index context)
   (let* ((shell (vector-ref handles index))
          (raw (tr3-fixed-shell-raw shell 'handle))
          (expected (tr3-fixed-expected-handle modules index)))
@@ -5448,7 +5476,7 @@
                   (tr3-fixed-module-raw modules
                     (tr3-fixed-handle-module-index index)))
              (tr3-fixed-path? (vector-ref raw 2) index)
-             (tr3-fixed-shape? (vector-ref raw 3) index)
+             (tr3-fixed-shape-context? (vector-ref raw 3) index context)
              (eq? (vector-ref raw 4) 'f32)
              (eq? (vector-ref raw 5) 'cpu)
              (vector-ref raw 6)
@@ -5458,15 +5486,24 @@
              (tr3-fixed-distinct? carriers (vector-ref raw 6) index))
         0 4)))
 
-(define (tr3-fixed-recheck-handles modules handles carriers provider)
+(define (tr3-fixed-recheck-handle modules handles carriers provider index)
+  (tr3-fixed-recheck-handle-context
+    modules handles carriers provider index 2))
+
+(define (tr3-fixed-recheck-handles-context
+          modules handles carriers provider context)
   (let loop ((index 0))
     (if (= index 14) 0
         (let ((status
-                (tr3-fixed-recheck-handle
-                  modules handles carriers provider index)))
+                (tr3-fixed-recheck-handle-context
+                  modules handles carriers provider index context)))
           (if (= status 0) (loop (+ index 1)) status)))))
 
-(define (tr3-fixed-recheck! model modules handles carriers)
+(define (tr3-fixed-recheck-handles modules handles carriers provider)
+  (tr3-fixed-recheck-handles-context
+    modules handles carriers provider 2))
+
+(define (tr3-fixed-recheck-context! model modules handles carriers context)
   (cond
     ((not (tr3-fixed-recheck-arguments? modules handles carriers)) 1)
     ((not (eq? model (vector-ref modules 0))) 1)
@@ -5490,8 +5527,22 @@
                           (tr3-fixed-expected-handle modules 10)))
                     (if (not (and token-handle head-handle
                                   (eq? token-handle head-handle))) 4
-                        (tr3-fixed-recheck-handles
-                          modules handles carriers provider)))))))))))
+                        (tr3-fixed-recheck-handles-context
+                          modules handles carriers provider context)))))))))))
+
+(define (tr3-fixed-recheck! model modules handles carriers)
+  (tr3-fixed-recheck-context! model modules handles carriers 2))
+
+;;; Closed CPU4 validators retain the same module/path/provider/tie contract.
+;;; Only the learned-position extent differs. Publication in the trusted
+;;; surface is composed separately after the reserved G3 slot 73 is fixed.
+(define (cpu4-fixed-capture!
+          model supplied modules handles carriers)
+  (tr3-fixed-capture-context!
+    model supplied modules handles carriers 4))
+
+(define (cpu4-fixed-recheck! model modules handles carriers)
+  (tr3-fixed-recheck-context! model modules handles carriers 4))
 
 
 (vector
@@ -5998,6 +6049,8 @@
     (construction-seal-prepared! identity))
   ;; Slot73 installs only the fixed feature-local candidate bridge once.
   candidate-bridge-install
+  ;; Append-only source-private CPU4 exact fixed-set capture/recheck, slot74.
+  (vector cpu4-fixed-capture! cpu4-fixed-recheck!)
   )))
 
 (define (module-parameters module)
