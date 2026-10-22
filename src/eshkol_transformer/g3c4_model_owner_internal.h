@@ -86,6 +86,8 @@ int64_t et_g3c4_private_training_lease_prepare_release_v1(void *lease);
 int64_t et_g3c4_private_training_lease_cancel_release_v1(void *lease);
 int64_t et_g3c4_private_training_lease_commit_release_v1(void *lease);
 /* Native transport only, after that transport's own resource authentication. */
+int64_t et_g3c4_training_span_disjoint_internal(
+    void *lease, const void *span, size_t bytes);
 int64_t et_g3c4_training_child_acquire_internal(
     void *lease, const void *child, int64_t kind);
 int64_t et_g3c4_training_child_release_internal(
