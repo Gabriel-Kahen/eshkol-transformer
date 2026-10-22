@@ -44,7 +44,8 @@
          (baseline (counts)) (registry o2-optimizers))
     (let attempt ((allowed 0))
       (if (= allowed 256) (begin (display "allocation fault sweep never succeeded\n") (exit 1)))
-      (if f32? (child-f32-fail allowed) (child-o2-fail allowed))
+      (if f32? (begin (child-f32-fail allowed) #t)
+          (begin (child-o2-fail allowed) #t))
       (let ((success
               (guard (caught (#t (if (transformer-error? caught) #f (exit 1))))
                 ;; Exercise actual global-promotion behavior on the admitted path.
