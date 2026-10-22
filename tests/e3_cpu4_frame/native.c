@@ -124,9 +124,17 @@ static void run(int present) {
   image before;capture(owner,&before);void *lease=et_g3c4_private_training_lease_create_v1(owner);CHECK(lease);
   et_f32_tensor *dest[4]={NULL,NULL,NULL,NULL};et_f32_tensor_error error;
   for (size_t i=0;i<4;++i) {
-    OK(et_f32_tensor_create_v1(0,NULL,&dest[i],&error));uint32_t sentinel=UINT32_C(0x3f000000)+(uint32_t)i;
+    int32_t status=et_f32_tensor_create_v1(0,NULL,&dest[i],&error);
+    if (status) fprintf(stderr,"destination-create index=%zu I2=%u/%u %s: %s\n",
+        i,(unsigned)error.category,(unsigned)error.code,error.operation,error.message);
+    OK(status);uint32_t sentinel=UINT32_C(0x3f000000)+(uint32_t)i;
     OK(et_f32_tensor_copy_bits_from_v1(dest[i],&sentinel,1,&error));
   }
+  /* The real I2 constructor rejects an occupied output slot unchanged. */
+  et_f32_tensor *occupied=dest[0];
+  NO(et_f32_tensor_create_v1(0,NULL,&occupied,&error));
+  CHECK(occupied==dest[0] && error.category==ET_F32_TENSOR_ERROR_INVALID_ARGUMENT &&
+        error.code==ET_F32_TENSOR_CODE_INVALID_BUFFER);
   CHECK(!et_e3_private_cpu4_frame_create_v1(&foreign,dest[0],dest[1],dest[2],dest[3]));
   CHECK(!et_e3_private_cpu4_frame_create_v1(owner,dest[0],dest[1],dest[2],dest[3]));
   CHECK(!et_e3_private_cpu4_frame_create_v1(lease,dest[0],dest[0],dest[2],dest[3]));
