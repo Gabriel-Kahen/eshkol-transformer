@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # E1B-only ordinary provider recipes for the fixed G3-G aggregate.
 [[ "${package_policy}" == g3g-manual-public-aggregate ]] || die "G3-G native input policy mismatch"
+g3g_manual_provider_mode=normal
+[[ "${g3g_manual_test_sanitize:-0}" == 1 ]] && g3g_manual_provider_mode=sanitize
 for g3g_provider in n2 n3k a2 g3n g3s g3c4; do
   "${e1b_clean_toolchain_env[@]}" /usr/bin/bash \
     "${PROJECT_ROOT}/scripts/build-${g3g_provider}.sh" \
-    "${e1b_tmp}/providers/${g3g_provider}" normal
+    "${e1b_tmp}/providers/${g3g_provider}" "${g3g_manual_provider_mode}"
 done
 g3g_reviewed_objects=(
   n2/n2_primitives_provider.o

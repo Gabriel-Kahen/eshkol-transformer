@@ -1236,6 +1236,25 @@ if [[ -n "${E3_ZERO_CONTROL_DISCOVERY+x}" ]]; then
   source "${PROJECT_ROOT}/scripts/e3-zero-discovery-evidence.sh"
   e3_zero_discovery_phase=preflight
 fi
+# Exact installed G3-G diagnostic test route; ordinary/default and E3
+# sanitizer selection/IR/import policy remain separate.
+g3g_manual_test_sanitize=0
+case "${G3G_MANUAL_SANITIZE:-0}" in
+  0) ;;
+  1)
+    [[ "${package_policy}" == g3g-manual-public-aggregate &&
+       "${e3_private_test_sanitize}" == 0 ]] ||
+      die "G3G manual sanitizer requires the exact installed manual tuple"
+    g3g_manual_test_sanitize=1 ;;
+  *) die "G3G_MANUAL_SANITIZE must be 0 or 1" ;;
+esac
+g3g_manual_test_sanitize_flags=()
+g3g_manual_test_reloc_flags=()
+if [[ "${g3g_manual_test_sanitize}" == 1 ]]; then
+  g3g_manual_test_sanitize_flags=(-O1 -g -fsanitize=address,undefined
+                                 -fno-omit-frame-pointer)
+  g3g_manual_test_reloc_flags=(-Wl,-d)
+fi
 e3_private_test_sanitize_flags=()
 e3_private_test_reloc_flags=()
 if [[ "${e3_private_test_sanitize}" == 1 ]]; then
@@ -1707,10 +1726,32 @@ if [[ "${e3_private_test_sanitize}" == 1 ]]; then
     "${e1b_tmp}/private.asan.json" || \
     die "E3 generated ASan IR exact streaming rewrite failed"
   e1b_private_compile_ir="${e1b_tmp}/private.asan.ll"
+elif [[ "${g3g_manual_test_sanitize}" == 1 ]]; then
+  require_command sha256sum
+  g3g_asan_source_manifest="${PROJECT_ROOT}/tests/e3_private/asan_ir_sources.sha256"
+  for g3g_asan_source in "${g3g_asan_source_manifest}" \
+      "${PROJECT_ROOT}/tests/shared/prepare_eshkol_asan_ir.py" \
+      "${PROJECT_ROOT}/tests/e3_private/check_asan_ir.py"; do
+    [[ -f "${g3g_asan_source}" && ! -L "${g3g_asan_source}" ]] ||
+      die "G3G generated ASan IR helper source is missing or symlinked"
+  done
+  (cd "${PROJECT_ROOT}" && sha256sum --quiet -c "${g3g_asan_source_manifest}") ||
+    die "G3G generated ASan IR helper source pins differ"
+  python3 -B "${PROJECT_ROOT}/tests/shared/prepare_eshkol_asan_ir.py" \
+    "${e1b_tmp}/private.ll" "${e1b_tmp}/private.asan.ll" \
+    "${e1b_tmp}/private.asan.json" ||
+    die "G3G generated ASan IR exact streaming rewrite failed"
+  e1b_private_compile_ir="${e1b_tmp}/private.asan.ll"
 fi
+if [[ "${g3g_manual_test_sanitize}" == 1 ]]; then
+  "${e1b_clean_toolchain_env[@]}" \
+    "${e1b_cc}" "${g3g_manual_test_sanitize_flags[@]}" -c -x ir "${e1b_private_compile_ir}" \
+    -o "${e1b_tmp}/private.o"
+else
 "${e1b_clean_toolchain_env[@]}" \
   "${e1b_cc}" "${e3_private_test_sanitize_flags[@]}" -c -x ir "${e1b_private_compile_ir}" \
   -o "${e1b_tmp}/private.o"
+fi
 if [[ "${e3_private_test_sanitize}" == 1 ]]; then
   nm -u --format=posix "${e1b_tmp}/private.o" \
     >"${e1b_tmp}/private.asan-imports.txt" \
@@ -1725,6 +1766,20 @@ if [[ "${e3_private_test_sanitize}" == 1 ]]; then
     die "E3 generated private object lacks exact ASan IR evidence"
   (cd "${PROJECT_ROOT}" && sha256sum --quiet -c "${e3_asan_source_manifest}") || \
     die "E3 generated ASan IR helper source changed during compilation"
+fi
+if [[ "${g3g_manual_test_sanitize}" == 1 ]]; then
+  nm -u --format=posix "${e1b_tmp}/private.o" \
+    >"${e1b_tmp}/private.asan-imports.txt" \
+    2>"${e1b_tmp}/private.asan-nm.stderr"
+  [[ ! -s "${e1b_tmp}/private.asan-nm.stderr" ]] ||
+    die "G3G generated ASan object symbol inventory emitted diagnostics"
+  python3 -B "${PROJECT_ROOT}/tests/e3_private/check_asan_ir.py" \
+    "${e1b_tmp}/private.ll" "${e1b_tmp}/private.asan.ll" \
+    "${e1b_tmp}/private.asan.json" "${e1b_tmp}/private.o" \
+    "${e1b_tmp}/private.asan-imports.txt" ||
+    die "G3G generated private object lacks exact ASan IR evidence"
+  (cd "${PROJECT_ROOT}" && sha256sum --quiet -c "${g3g_asan_source_manifest}") ||
+    die "G3G generated ASan IR helper source changed during compilation"
 fi
 
 {
@@ -1807,6 +1862,7 @@ objcopy --redefine-syms="${e1b_tmp}/renames.txt" \
   "${e1b_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
   -fstack-protector-all \
   "${e3_private_test_sanitize_flags[@]}" \
+  "${g3g_manual_test_sanitize_flags[@]}" \
   -I "${e1b_source}/inc" -I "${PROJECT_ROOT}/native" \
   -MMD -MF "${e1b_tmp}/bridge.d" \
   -c "${PROJECT_ROOT}/native/e1b_error_consumer_bridge.c" \
@@ -1837,6 +1893,7 @@ fi
 "${e1b_clean_toolchain_env[@]}" \
   "${e1b_cc}" -std=c11 -Wall -Wextra -Werror -Wpedantic \
   "${e3_private_test_sanitize_flags[@]}" \
+  "${g3g_manual_test_sanitize_flags[@]}" \
   "${package_bridge_flags[@]}" \
   -I "${e1b_source}/inc" -I "${PROJECT_ROOT}/include" \
   -I "${PROJECT_ROOT}/native" \
@@ -1854,6 +1911,7 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     -I "${PROJECT_ROOT}/src"
   )
   package_native_cflags+=("${e3_private_test_sanitize_flags[@]}")
+  package_native_cflags+=("${g3g_manual_test_sanitize_flags[@]}")
   if [[ "${package_policy}" == cli3-tr3-aggregate || \
       "${package_policy}" == cli3-c2-successor || \
     "${package_policy}" == e3-private-aggregate || \
@@ -2193,6 +2251,7 @@ fi
 if [[ "${e3_zero_discovery}" == 1 ]]; then e3_zero_discovery_phase=relocatable-link; fi
 "${e1b_clean_toolchain_env[@]}" \
   "${e1b_cxx}" -r "${e3_private_test_reloc_flags[@]}" \
+  "${g3g_manual_test_reloc_flags[@]}" \
   -Wl,-Map,"${e1b_tmp}/combined.map" \
   "${e1b_tmp}/private.o" "${e1b_tmp}/bridge.o" \
   "${e1b_tmp}/package-bridge.o" "${package_native_objects[@]}" \
@@ -2218,7 +2277,16 @@ if [[ "${e3_zero_discovery}" == 1 ]]; then e3_zero_discovery_phase=imports; fi
 nm -u --format=posix "${e1b_tmp}/combined.o" | awk '{ print $1 }' | \
   LC_ALL=C sort -u >"${e1b_tmp}/undefined.txt"
 e3_retention_sanitizer_inventory_verified=0
-if [[ "${e3_private_test_sanitize}" == 1 ]]; then
+if [[ "${g3g_manual_test_sanitize}" == 1 ]]; then
+  grep -E '^(__asan_|__ubsan_|__sanitizer_|__start_asan_globals$|__stop_asan_globals$)' \
+    "${e1b_tmp}/undefined.txt" >"${e1b_tmp}/sanitizer-undefined.txt" ||
+    die "G3G installed sanitizer object has no instrumentation references"
+  grep -Ev '^(__asan_|__ubsan_|__sanitizer_|__start_asan_globals$|__stop_asan_globals$)' \
+    "${e1b_tmp}/undefined.txt" >"${e1b_tmp}/noninstrumentation-undefined.txt" || true
+  e1b_compare_exact_undefined_allowlist \
+    "${e1b_tmp}/expected-undefined.txt" "${e1b_tmp}/noninstrumentation-undefined.txt" ||
+    die "G3G installed sanitizer changed noninstrumentation imports"
+elif [[ "${e3_private_test_sanitize}" == 1 ]]; then
   grep -E '^(__asan_|__ubsan_|__sanitizer_|__start_asan_globals$|__stop_asan_globals$)' \
     "${e1b_tmp}/undefined.txt" >"${e1b_tmp}/sanitizer-undefined.txt" || \
     die "E3 private test sanitizer object has no instrumentation references"
@@ -2615,7 +2683,14 @@ if [[ "${package_policy}" == e3-private-aggregate &&
         "${e3_tuple_kind:-}" == zero ) ]]; then
   cp "${e1b_tmp}/private.ll" "${evidence_dir}.tmp.$$/private.ll"
 fi
-if [[ "${e3_private_test_sanitize}" == 1 ]]; then
+if [[ "${g3g_manual_test_sanitize}" == 1 ]]; then
+  cp "${e1b_tmp}/private.ll" "${evidence_dir}.tmp.$$/private.ll"
+  cp "${e1b_tmp}/noninstrumentation-undefined.txt" \
+    "${evidence_dir}.tmp.$$/noninstrumentation-undefined.txt"
+  cp "${e1b_tmp}/sanitizer-undefined.txt" \
+    "${evidence_dir}.tmp.$$/sanitizer-undefined.txt"
+fi
+if [[ "${e3_private_test_sanitize}" == 1 || "${g3g_manual_test_sanitize}" == 1 ]]; then
   cp "${e1b_tmp}/private.asan.ll" "${evidence_dir}.tmp.$$/private.asan.ll"
   cp "${e1b_tmp}/private.asan.json" "${evidence_dir}.tmp.$$/private.asan.json"
   cp "${e1b_tmp}/private.asan-imports.txt" \
