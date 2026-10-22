@@ -1,5 +1,6 @@
 """Cheap source/recipe checks; genuine Eshkol/native execution is a separate gate."""
 from pathlib import Path
+import subprocess
 import sys
 import unittest
 
@@ -10,6 +11,40 @@ from test_source_contract import parse, walk
 SOURCE = ROOT / "native/cpu4_training_step_extension.esk"
 FIXTURE = ROOT / "tests/cpu4_step/runtime_test.esk"
 RECIPE = ROOT / "scripts/test-cpu4-training-step.sh"
+
+
+def fixture_check_budget(forms):
+    """Count successful fixture assertions, including its fixed14 roster loop.
+
+    This walks the actual fixture helper call graph. It does not execute model,
+    native, failure, cursor or optimizer code and is not runtime admission.
+    """
+    definitions = {f[1][0]: f for f in forms if f[0] == "define" and isinstance(f[1], list)}
+
+    def count(node, stack=()):
+        if not isinstance(node, list) or not node:
+            return 0
+        head = node[0]
+        if not isinstance(head, str):
+            return sum(count(part, stack) for part in node)
+        if head in ("define-syntax", "quote"):
+            return 0
+        if head == "define":
+            return 0 if isinstance(node[1], list) else sum(count(part, stack) for part in node[2:])
+        if head == "check":
+            return 1
+        if head == "let" and node[1] == "verify-roster-loop":
+            # Exactly14 canonical slots in each of the two genuine setups.
+            assert node[2] == [["index", "0"]]
+            assert node[3][0:2] == ["if", ["<", "index", "14"]]
+            return 14 * sum(count(part, stack) for part in node[3:])
+        if head in definitions:
+            if head in stack:
+                return 0
+            return sum(count(part, stack + (head,)) for part in definitions[head][2:])
+        return sum(count(part, stack) for part in node[1:])
+
+    return sum(count(form) for form in forms)
 
 
 class StepSource(unittest.TestCase):
@@ -115,6 +150,30 @@ class StepSource(unittest.TestCase):
                             epochs += 1
                         position += 1
                     self.assertEqual(update * accumulation, epochs * span + position)
+
+    def test_restore_decoder_uses_existing_core_error_boundary(self):
+        binding = parse((ROOT / "native/cpu4_model_binding_extension.esk").read_text())
+        restore = next(f for f in binding if f[0] == "define" and isinstance(f[1], list) and
+                       f[1][0] == "cpu4-d2-cursor-restore-internal!")
+        self.assertEqual(restore[2][0], "d2-with-core-errors")
+        self.assertEqual(restore[2][1][:2], ["lambda", []])
+        heads = [n[0] for n in walk(restore) if n and isinstance(n[0], str)]
+        self.assertLess(heads.index("d2-core-cursor-decode"), heads.index("d2-token-dataset-seek!"))
+        self.assertIn("cpu4-binding-fail", heads)
+        self.assertIn("'cpu4-d2-cursor-restore!", (ROOT / "native/cpu4_model_binding_extension.esk").read_text())
+        self.assertIn('"CPU4 identity error retains own operation"', self.fixture)
+        self.assertIn("(transformer-error-operation caught)", self.fixture)
+
+    def test_exact_successful_runtime_check_budget(self):
+        previous = subprocess.run(["git", "show",
+            "2574d0fb4eb94099802db18bf7a95fa3db096e63:tests/cpu4_step/runtime_test.esk"],
+            cwd=ROOT, check=True, capture_output=True, text=True).stdout
+        self.assertEqual(fixture_check_budget(parse(previous)), 118)
+        self.assertEqual(fixture_check_budget(parse(self.fixture)), 140)
+        self.assertIn("(not (= checks 140))", self.fixture)
+        script = RECIPE.read_text()
+        self.assertIn("grep -Fx 'CPU4 genuine full-step READ/WRITE/O2 PASS: checks=140'", script)
+        self.assertNotIn("checks=[1-9]", script)
 
 
 if __name__ == "__main__":
