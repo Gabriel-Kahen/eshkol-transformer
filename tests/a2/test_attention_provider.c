@@ -161,7 +161,7 @@ static void test_metadata(et_kernel_runtime *runtime) {
   CHECK(attention->status == ET_KERNEL_CAPABILITY_VERIFIED);
   CHECK(rope->status == ET_KERNEL_CAPABILITY_VERIFIED);
   CHECK(attention->deterministic == 1u && rope->deterministic == 1u);
-  CHECK(attention->shape_range_count == 10u);
+  CHECK(attention->shape_range_count == 11u);
   CHECK(rope->shape_range_count == 6u);
   for (size_t range = 0u; range < attention->shape_range_count; range++) {
     CHECK(attention->shape_ranges[range].rank == 6u);
