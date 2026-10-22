@@ -1,0 +1,123 @@
+"""Light source/reader/reference checks; never claims compiled acceptance."""
+import hashlib
+import json
+import re
+import subprocess
+import tempfile
+import ast
+import unittest
+from pathlib import Path
+from tests.e3_cpu4_consumer.resources import generate
+from tests.e3_cpu4_consumer.observation import parse
+from tests.t1.reference import Identity, fingerprint, decode_artifact
+
+ROOT = Path(__file__).resolve().parents[2]
+
+def forms(text):
+    out=[];start=None;depth=0;string=False;escape=False;comment=False
+    for i,char in enumerate(text):
+        if comment:
+            if char=='\n':comment=False
+        elif string:
+            if escape:escape=False
+            elif char=='\\':escape=True
+            elif char=='"':string=False
+        elif char==';':comment=True
+        elif char=='"':string=True
+        elif char=='(':
+            if depth==0:start=i
+            depth+=1
+        elif char==')':
+            depth-=1
+            if depth<0:raise ValueError('unbalanced close')
+            if depth==0:out.append(text[start:i+1])
+    if depth or string:raise ValueError('unterminated source')
+    return out
+
+class SourceTests(unittest.TestCase):
+    def test_exact_boundary_forms_and_original_sources(self):
+        pins=json.loads((ROOT/'native/e3_cpu4_boundary_forms.json').read_text())
+        copied=forms((ROOT/'native/e3_cpu4_boundary.esk').read_text())
+        self.assertEqual(len(copied),7)
+        for row,actual in zip(pins['forms'],copied):
+            raw=(ROOT/row['source']).read_bytes()
+            self.assertEqual(hashlib.sha256(raw).hexdigest(),row['source_sha256'])
+            original=subprocess.check_output(['git','show',pins['base_commit']+':'+row['source']],cwd=ROOT)
+            self.assertEqual(raw,original)
+            expected=next(f for f in forms(raw.decode()) if f.startswith(row['marker']))
+            self.assertEqual(actual,expected)
+            self.assertEqual(hashlib.sha256(actual.encode()).hexdigest(),row['form_sha256'])
+
+    def test_actual_scheme_reader(self):
+        names=['native/e3_cpu4_private_root.esk','native/e3_cpu4_private_extension.esk',
+               'native/e3_cpu4_boundary.esk','internal/e3/lib/e3_cpu4_d2_restore.esk',
+               'tests/e3_cpu4_consumer/runtime.esk']
+        expression='(for-each (lambda (p) (call-with-input-file p (lambda (s) (let loop () (if (not (eof-object? (read s))) (loop)))))) (cdr (command-line)))'
+        result=subprocess.run(['guile','--no-auto-compile','-c',expression,*names],cwd=ROOT,capture_output=True,text=True)
+        self.assertEqual((result.returncode,result.stdout,result.stderr),(0,'',''))
+
+    def test_closed_native_tuple_and_root(self):
+        names=(ROOT/'native/e3_cpu4_consumer_native_sources.txt').read_text().splitlines()
+        self.assertEqual(len(names),17)
+        self.assertEqual(len(names),len(set(names)))
+        self.assertIn('src/eshkol_transformer/m3_call_f32_integration.c',names)
+        self.assertIn('native/e3_d2_native.c',names)
+        self.assertIn('src/eshkol_transformer/e3_cpu4_frame.c',names)
+        self.assertFalse(set(names)&{'native/f32_tensor.c','native/i64_tensor.c','native/d2_native.c','src/eshkol_transformer/m3_model.c','src/eshkol_transformer/m3t_f32_integration.c','src/eshkol_transformer/e3_frame.c'})
+        root=(ROOT/'native/e3_cpu4_private_root.esk').read_text()
+        self.assertNotRegex(root,r'\(load "(?:m3t_transport_extension|m3_model_extension|m3_schedule|e3_private_root)')
+        self.assertIn('(load "cpu4_model_binding_extension.esk")',root)
+
+    def test_real_raw_v256_resources(self):
+        with tempfile.TemporaryDirectory() as directory:
+            a=Path(directory)/'a';b=Path(directory)/'b';generate(a);generate(b)
+            for path in a.rglob('*'):
+                if path.is_file():self.assertEqual(path.read_bytes(),(b/path.relative_to(a)).read_bytes())
+            parsed=decode_artifact((a/'tokenizer.tsv').read_bytes())
+            self.assertEqual(parsed.identity,Identity())
+            self.assertEqual(parsed.fingerprint,fingerprint(Identity()))
+            ref=json.loads((a/'reference.json').read_text())
+            self.assertEqual((ref['vocabulary'],ref['remaining_tokens'],ref['remaining_batches']),(256,8,2))
+
+    def test_closed_restore_tail_and_order(self):
+        source=(ROOT/'native/e3_cpu4_private_extension.esk').read_text()
+        restore=next(f for f in forms(source) if f.startswith('(define (e3-restore-closed!'))
+        positions=[restore.index(x) for x in ('(e3-native-drain','(e3-d2-restore-commit!','(p1-e3-mode-restore!','(cpu4-e3-restored-binding?','(e3-native-publish','(e3-native-finish')]
+        self.assertEqual(positions,sorted(positions))
+        tail=(ROOT/'internal/e3/lib/e3_cpu4_d2_restore.esk').read_text()
+        commit=next(f for f in forms(tail) if f.startswith('(define (e3-d2-restore-commit!'))
+        self.assertNotRegex(commit,r'(?:cursor-restore|dataset-seek|vector-set! state 8)')
+        self.assertIn('(vector-set! core 15 (vector-ref record 7))',commit)
+
+    def test_exact_transcript_accepts_words_rejects_noise(self):
+        valid='CPU4-CONSUMER-REPORT #(1085276160 1090519040 1132462080 0 8 2)\nCPU4-CONSUMER-PASS checks=99\n'
+        self.assertEqual(parse(valid)['physical_tokens'],8)
+        for bad in (valid+'noise\n','noise\n'+valid,valid.replace(' 8 2)',' 7 2)'),
+                    valid.replace('1085276160','4294967296'),valid.replace('1090519040','2139095040'),
+                    valid.replace('checks=99','checks=0'),valid.replace('REPORT','PASS')):
+            with self.assertRaises(ValueError):parse(bad)
+
+    def test_python310_syntax_and_bash(self):
+        for name in ('resources.py','test_source.py','observation.py'):
+            ast.parse((ROOT/'tests/e3_cpu4_consumer'/name).read_text(),feature_version=(3,10))
+        subprocess.run(['bash','-n','scripts/test-e3-cpu4-consumer.sh'],cwd=ROOT,check=True)
+
+    def test_actual_exit_seal_both_statuses(self):
+        script=(ROOT/'scripts/test-e3-cpu4-consumer.sh').read_text()
+        seal=script.split('seal() {',1)[1].split('\ntrap seal EXIT',1)[0]
+        for status in (0,37):
+            with tempfile.TemporaryDirectory() as directory:
+                root=Path(directory);(root/'nested').mkdir()
+                (root/'nested/data').write_bytes(b'hello'*500000)
+                (root/'empty').write_bytes(b'')
+                result=subprocess.run(['bash','-c','out=$1\nseal() {'+seal+'\ntrap seal EXIT\nexit '+str(status),'bash',directory],capture_output=True)
+                self.assertEqual((result.returncode,result.stdout,result.stderr),(status,b'',b''))
+                self.assertEqual((root/'gate.exit').read_text(),str(status)+'\n')
+                rows=dict(line.split('  ',1)[::-1] for line in (root/'SHA256SUMS').read_text().splitlines())
+                self.assertEqual(set(rows),{'nested/data','empty','gate.exit'})
+                for name,digest in rows.items():self.assertEqual(hashlib.sha256((root/name).read_bytes()).hexdigest(),digest)
+
+    def test_sanitizer_helpers_unchanged(self):
+        subprocess.run(['sha256sum','--quiet','-c','tests/e3_private/asan_ir_sources.sha256'],cwd=ROOT,check=True)
+
+if __name__=='__main__':unittest.main()
