@@ -1,0 +1,6 @@
+;;; Direct noninstalled caller: one actual owner, unchanged reviewed fixtures.
+(load "cpu4_v1_private_root.esk")
+(load "nonregional_runtime.esk")
+(load "positive_runtime.esk")
+(cpu4-factory-data-runtime! (car (cdr (command-line)))
+                          (car (cdr (cdr (command-line)))))
