@@ -112,6 +112,11 @@ defect and repaired structural regression remain recorded in
 `finish-20261022/e3/r1r2-source/REVIEW.md`. Integration preserves the strict M3CG
 builder pin at `7ce3b14cb069de147d12d1c332fdf0279a8fe1200e8ae74a6dca4ecd7cc136a3`;
 all nine M3CG contract tests and the full predecessor checksum manifest pass.
+The later reviewed external-C2-header canonicalization repair is integrated
+without replacing the fault-builder changes; the exact combined builder pin is
+`e019798012bd6bc0f4ccfc13605c9f115a3f98edbfd613c5948a7f00a579a281`.
+Its canonical/external/old-policy/alias/foreign-header regression and strict
+M3CG checks pass. The earlier `7ce3...` pin is historical.
 Compiled failure/retry admission remains a separate queued gate.
 
 ## CPU v1 completion rule

@@ -71,6 +71,21 @@ Current in-flight gates finish unchanged and remain bounded predecessor evidence
 Future heavy gates prioritize the shared C4 path. No duplicate legacy learning or
 broad retention run takes priority over an executable C4 prerequisite.
 
+## Native numerical implementation contract
+
+Independent review accepts additive exact T4 A2/N2/N3K, all six L3S bool/f32
+reduce/mean-seed/numerator-seed operations, and all three E3 metrics operations
+under existing provider getters, operations and schemas. Preserve legacy T2
+rows and exact adjacent-shape rejection at the K1 capability/invoke boundary.
+L3S validates every row before any write, with at least four seed scratch slots,
+fixed-mask derivatives and the original sequential binary32 fold.
+
+E3 metrics request profile `[1,{2|4},256]` selects bounds: 8,192 batches,
+16,384 tokens for T2 or 32,768 for T4; active count is one through width.
+Validate nonnegative/capped counters before overflow-safe token/batch inequalities.
+Keep legacy T2 errors/bits and original scalar accumulation/division/exp order.
+The T4 resource horizon is a contract target, not measured acceptance.
+
 ## Proving gates and negative compatibility
 
 The existing source check `python3 -B scripts/check-g3c4-model-authority.py` passes
