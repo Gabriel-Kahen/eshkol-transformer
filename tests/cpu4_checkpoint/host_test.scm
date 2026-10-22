@@ -14,6 +14,8 @@
         (current-module)))
 (define events '())
 (define (event x) (set! events (append events (list x))))
+(define (cpu4-checkpoint-native-current-region) '())
+(load-function 'cpu4-checkpoint-require-nonregional!)
 (define cpu4-checkpoint-operation 'test)
 (define cpu4-checkpoint-i64-max 9223372036854775807)
 (define cpu4-checkpoint-parents (vector '()))
