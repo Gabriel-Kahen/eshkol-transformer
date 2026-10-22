@@ -385,25 +385,25 @@
         ;; Publication boundary. Only fixed writes and preallocated return.
         (vector-set! row 1 'adopted)
         result))
-    (define (retire candidate)
+    (define (retire-owned-optimizer candidate optimizer)
       (let* ((operation 'cpu4-candidate-retire-internal!)
              (row (find candidate operation)))
         (cond ((eq? (vector-ref row 1) 'dead) #t)
               ((eq? (vector-ref row 1) 'cleanup-blocked) (abort-open row))
               (else
                 (unpublished candidate operation)
-                (vector-set! row 11 #t)
                 (guard (caught
                          (#t
                            (if (eq? (vector-ref row 1) 'graph-revoked) (exit 134))
                            (vector-set! row 11 #f)
                            (raise caught)))
+                  (vector-set! row 11 #t)
                   (p1-preflight (vector-ref row 6))
                   (i2-preflight (vector-ref row 7))
-                  ;; Initial producer owns no optimizer/generator/transport.
-                  ;; Native null/null proof rejects live contexts/consumers.
+                  ;; The closed child producer supplies its exact owned optimizer.
+                  ;; Native admission authenticates the complete original roster.
                   (g3c4-native-check
-                    (native-prepare (vector-ref row 2) '() '()) operation)
+                    (native-prepare (vector-ref row 2) optimizer '()) operation)
                   (let ((status (native-graph (vector-ref row 2))))
                     (if (not (= status 0))
                         (guard (first-error
@@ -426,7 +426,8 @@
                   (vector-set! row 1 'dead)
                   (vector-set! row 11 #f)
                   #t)))))
-    (vector create model adopt retire)))
+    (define (retire candidate) (retire-owned-optimizer candidate '()))
+    (vector create model adopt retire retire-owned-optimizer)))
 
 (define (cpu4-candidate-model-create-internal! resolved)
   ((vector-ref cpu4-candidate-surface 0) resolved))
@@ -436,3 +437,7 @@
   ((vector-ref cpu4-candidate-surface 2) candidate generator-or-false))
 (define (cpu4-candidate-retire-internal! candidate)
   ((vector-ref cpu4-candidate-surface 3) candidate))
+
+;;; Source-private typed child producer only. No callback or destructor input.
+(define (cpu4-candidate-retire-owned-optimizer-internal! candidate optimizer)
+  ((vector-ref cpu4-candidate-surface 4) candidate optimizer))
