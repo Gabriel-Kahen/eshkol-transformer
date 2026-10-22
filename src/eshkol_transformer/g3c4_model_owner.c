@@ -6952,6 +6952,11 @@ static size_t et_g3c4_transport_record_bytes(
 static int et_g3c4_output_decode_owned_alias(
     const et_g3c4_context_internal *context,
     const void *carrier, size_t carrier_bytes) {
+#ifdef ET_CPU4_TRAINING_PRIVATE
+  if (cpu4_control_span_overlaps_internal(carrier, carrier_bytes))
+    return 1;
+#endif
+
   const et_g3c4_transport_header_internal *header;
 #ifdef ET_G3C4_P2_G2_TERMINAL_IDS_CLONE_PRIVATE
   const et_g3c4_model_owner_internal *model;
@@ -6998,6 +7003,11 @@ static int et_g3c4_output_decode_owned_alias(
 static int et_g3c4_p2g2_carrier_owned_alias(
     const et_g3c4_context_internal *context, const void *carrier,
     size_t carrier_bytes) {
+#ifdef ET_CPU4_TRAINING_PRIVATE
+  if (cpu4_control_span_overlaps_internal(carrier, carrier_bytes))
+    return 1;
+#endif
+
   const et_g3c4_transport_header_internal *transport;
   const et_g3c4_model_owner_internal *model;
   size_t index;
@@ -7632,6 +7642,11 @@ fail:
 #ifdef ET_G3C4_P2_G1_COPYOUT_PRIVATE
 static int64_t et_g3c4_copyout_carrier_preflight(
     const void *carrier, size_t bytes) {
+#ifdef ET_CPU4_TRAINING_PRIVATE
+  if (cpu4_control_span_overlaps_internal(carrier, bytes))
+    return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_ALIAS);
+#endif
+
   const et_g3c4_transport_header_internal *transport;
   const et_g3c4_model_owner_internal *model;
   int32_t overlap;
@@ -8617,6 +8632,11 @@ int64_t et_g3c4_private_p2g2_terminal_commit_v1(
 
 static int64_t et_g3c4_terminal_snapshot_alias(
     const void *destination, size_t bytes) {
+#ifdef ET_CPU4_TRAINING_PRIVATE
+  if (cpu4_control_span_overlaps_internal(destination, bytes))
+    return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_ALIAS);
+#endif
+
   const et_g3c4_transport_header_internal *transport;
   const et_g3c4_model_owner_internal *model;
   int32_t overlap;
