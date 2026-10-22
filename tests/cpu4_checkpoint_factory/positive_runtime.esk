@@ -162,6 +162,16 @@
 (define cpu4-fdt-original-candidate cpu4-owned-candidate-create-internal)
 (define cpu4-fdt-original-binding cpu4-owned-binding-create-internal!)
 (define cpu4-fdt-original-trainer cpu4-owned-trainer-create-internal!)
+;;; Test-only R7RS redefinitions give these three names mutable locations in
+;;; pinned fe9. Capture the genuine original procedures ABOVE this point; each
+;;; transparent body forwards exact arguments to that one original definition.
+;;; No production source gains a hook or a second creator implementation.
+(define (cpu4-owned-candidate-create-internal resolved)
+  (cpu4-fdt-original-candidate resolved))
+(define (cpu4-owned-binding-create-internal! child)
+  (cpu4-fdt-original-binding child))
+(define (cpu4-owned-trainer-create-internal! child tokenizer dataset)
+  (cpu4-fdt-original-trainer child tokenizer dataset))
 (define cpu4-fdt-cut 'none)
 (define cpu4-fdt-observed-cut 'none)
 (define cpu4-fdt-before-child 0)

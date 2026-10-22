@@ -58,3 +58,10 @@ discovery and independent recipe review. Factory/guard source is composed, but
 its actual FILE/native/AOT/SAN and NULL/nested-region witnesses are NOT RUN. Preserve the checksum-pinned
 `tests/shared/prepare_eshkol_asan_ir.py` and
 `tests/e3_private/check_asan_ir.py` proof together in any later SAN recipe.
+
+The actual T1 and T2 roots share a short tokenizer-internal load spelling.
+This composition explicitly preloads both original internal files before either
+root; canonical-path deduplication preserves each distinct registry once. It
+must not select either registry by include-order accident or alias T1 to T2.
+The sole G2 boolean released-output membership check uses the existing loaded
+I2 identity helper, preserving eq? without requiring an absent stdlib memq.

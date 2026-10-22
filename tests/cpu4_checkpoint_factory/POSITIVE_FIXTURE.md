@@ -69,3 +69,11 @@ first executable gate is the root-owned authentic aggregate normal/repeat run
 using this fragment and real raw-V256 dataset, followed by existing native/SAN
 requirements under `heavy.lock`. Persisted C4 sampler/history continuation remains
 a separate actual-contract gate; no evaluator/generator path is implemented.
+
+Root-authorized source repair after the first actual no-stdlib compile failure:
+three transparent exact-arity definitions follow the original creator captures.
+Together with the single original source definitions these trigger fe9's existing
+R7RS mutable binding locations and ordered initializer stores. All six test-only
+install/restore mutations, actual creator bodies, cut markers and assertions are
+unchanged. No production callback or mutable provider seam is added. See the
+pinned fe9 binding-source proof; corrected AOT/FILE behavior is still NOT RUN.

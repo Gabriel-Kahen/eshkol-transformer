@@ -150,6 +150,12 @@ def validate(repo, roster, overrides=None):
                 name = form[1][0] if isinstance(form[1], list) else form[1]
                 assert name not in names, f'duplicate definition {name}: {names.get(name)}, {path}'
                 names[name] = path
+    for prefix, source in (('t1', 'internal/t1/lib/transformer/tokenizer_internal.esk'),
+                           ('t2', 'internal/t2/lib/transformer/tokenizer_internal.esk')):
+        for suffix in ('entry', 'tokenizer-byte', 'tokenizer-parse', 'tokenizer-payload-size',
+                       'tokenizer-serialize', 'tokenizer-encode-staging', 'tokenizer-decode-staging',
+                       'tokenizer-vocab-size', 'tokenizer-fingerprint', 'tokenizer-special-token-id'):
+            assert names.get(prefix + '-private-' + suffix) == source, 'original tokenizer authority absent/replaced'
     assert names['t1-wave1-tensor-admitted?'] == 'native/t1_wave1_root.esk', 'T1 predicate replaced'
     assert names['i2-module-registry-root'] == 'native/i2_wave2_root.esk', 'I2 root replaced'
     assert names['m3-call-state'] == 'native/m3_model_extension.esk', 'M3 call state replaced'
@@ -202,6 +208,9 @@ def validate(repo, roster, overrides=None):
         assert order[left] < order[right], 'leaf prerequisite order'
     # Root defines only the already-existing checkpoint fail-stop adapter.
     forms = next(forms for path, forms in closure if path == ENTRY)
+    assert forms[:2] == [
+        ['load', '../internal/t1/lib/transformer/tokenizer_internal.esk'],
+        ['load', '../internal/t2/lib/transformer/tokenizer_internal.esk']], 'both exact tokenizer leaves must precede roots'
     assert [f for f in forms if f[0] != 'load'] == [
         ['define', ['tr3-lease-fail-stop', 'status'], ['cpu4-binding-fail-stop', 'status']]], 'aggregate grew orchestration/alias'
     native = native_closure(repo, roster)

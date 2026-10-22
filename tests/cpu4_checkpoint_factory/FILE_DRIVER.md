@@ -6,8 +6,8 @@ parallel compiler jobs. The wrapper verifies the pinned fe9 toolchain and invoke
 `python3 -B -m tests.cpu4_checkpoint_factory.file_driver` with exact runner/compiler
 paths. Production source root and per-TU roster are unchanged.
 
-`file_runtime.esk` loads the real aggregate once, then the byte-pinned unchanged
-nonregional and positive64ea fixtures, and makes the actual data-movement call.
+`file_runtime.esk` loads the real aggregate once, then the byte-pinned accepted
+nonregional and positive64ea fixtures (with the reviewed test-only binding repair), and makes the actual data-movement call.
 `file_native_overlay.json` adds existing test hooks to five selected production
 TUs and links the existing header-only child observer once. All original flags
 and candidate ON remain. Test objects replace production object builds; no
@@ -44,3 +44,22 @@ and region check counters and exit1. Success stdout and the actual call argument
 are unchanged. This does not catch process exits, native aborts or errors while
 loading the fixture definitions. Fixtures, assertions and expected negatives are
 unchanged; no exception becomes an accepted rejection or successful result.
+
+The first real discovery gate failed before IR generation: the shared tokenizer
+load spelling selected T2 private helpers for the T1 root, memq was unavailable
+under no-stdlib, and the fixture attempted set! on ordinary named procedures.
+The corrected common root explicitly preloads both actual tokenizer internal
+leaves, preserving original distinct T1/T2 registries. G2 dead release uses the
+already loaded I2 eq?-identity helper directly in its boolean condition.
+
+Three test-only transparent procedure redefinitions now follow the captures of
+the genuine original child creators. Pinned fe9's top-level scanner recognizes
+multiple definitions, declares one mutable location and stores each procedure
+at its lexical initializer position; this permits the existing six interposition
+set! sites without adding a production hook. Each original body still occurs
+once; exact arities, arguments, real allocation/custody cuts and all assertions
+are unchanged. fe9_binding_source_proof.json pins compiler Git blobs/full hashes
+and the relevant canonical-load/location/initializer/set!/call-dispatch line
+blobs. This source proof does not admit corrected compiler/runtime behavior.
+If the same cause survives the next scheduled gate, stop for a minimal causal
+reproducer before any further broad retry.

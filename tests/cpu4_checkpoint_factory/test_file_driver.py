@@ -22,7 +22,7 @@ class FileDriver(unittest.TestCase):
                                       ['car', ['cdr', ['cdr', ['command-line']]]]]])
         for name, digest in {
             'nonregional_runtime.esk': 'fa3c7a8bd87512d109c95f00bb500fd8b8faf8f8a6a0f052ce89066c20e88cd7',
-            'positive_runtime.esk': 'ce6fae7dc9fd8be4caee0602ab484b3ef8e72cc4ea50672200f76bad2c202a24',
+            'positive_runtime.esk': 'e26d8001c2bab29c3605668692db56946dbd2d3aa45e6aa72e757edbdbac430c',
         }.items():
             self.assertEqual(hashlib.sha256((CALLER.parent / name).read_bytes()).hexdigest(), digest)
 

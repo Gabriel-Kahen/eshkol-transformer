@@ -77,7 +77,7 @@
 (define (g3c4-public-g2-output-release! shell operation)
   (let ((entry (g3c4-registry-find shell operation)))
     (if (g3c4-dead-entry? entry 'terminal-output)
-        (if (and (memq shell (vector-ref g3c4-public-g2-released-outputs 0))
+        (if (and (i2-identity-member? shell (vector-ref g3c4-public-g2-released-outputs 0))
                  (eq? (vector-ref entry 0) shell)
                  (eq? (vector-ref entry 3) #f)
                  (eq? (vector-ref entry 4) #f)

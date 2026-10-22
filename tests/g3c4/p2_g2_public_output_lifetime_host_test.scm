@@ -75,12 +75,16 @@
 
 (define (load-definition name)
   (call-with-input-file
-    (string-append (getenv "G3C4_TEST_ROOT") "/native/g3c4_public_generation_dispatch_extension.esk")
+    (string-append (getenv "G3C4_TEST_ROOT")
+      (if (eq? name 'i2-identity-member?) "/native/i2_wave2_root.esk"
+          "/native/g3c4_public_generation_dispatch_extension.esk"))
     (lambda (port) (let find () (let ((form (read port)))
       (if (eof-object? form) (error "missing definition" name)
           (if (and (pair? form) (eq? (car form) 'define)
                    (eq? (if (pair? (cadr form)) (caadr form) (cadr form)) name))
               (eval form (current-module)) (find))))))))
+;;; Execute the exact existing I2 helper, never a replacement membership stub.
+(load-definition 'i2-identity-member?)
 (for-each load-definition '(g3c4-public-g2-tickets g3c4-public-g2-output-rows
   g3c4-public-g2-output-anchors g3c4-public-g2-output-bindings
   g3c4-public-generator-generate g3c4-p2g2-terminal-close-public-private

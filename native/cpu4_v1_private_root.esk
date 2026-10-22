@@ -1,5 +1,9 @@
 ;;; Source-private CPU4-v1 union; never install or require this root publicly.
 ;;; Keep the actual public G2 closure and its original T1/I2/M3 identities.
+;;; Both roots use the same short load spelling. Preload their actual distinct
+;;; registries before either root; the compiler deduplicates canonical paths.
+(load "../internal/t1/lib/transformer/tokenizer_internal.esk")
+(load "../internal/t2/lib/transformer/tokenizer_internal.esk")
 (load "g3g_manual_package_root.esk")
 (load "t2_wave2_root.esk")
 (load "o2_wave2_extension.esk")
