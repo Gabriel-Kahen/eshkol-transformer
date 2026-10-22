@@ -107,6 +107,52 @@ static void typed_copy_case(void *owner, int64_t count,
 #undef REJECT_COPY
 }
 
+#ifdef ET_CPU4_TRAINING_PRIVATE
+static void typed_cpu4_control_aliases(
+    et_g3c4_model_owner_internal *model, void *typed,
+    et_g3c4_output_internal *output, int64_t length) {
+  static unsigned char child_identities[2];
+  const void *child_identity = &child_identities[length == 1 ? 0 : 1];
+  et_g3c4_training_lease_internal *training =
+      et_g3c4_private_training_lease_create_v1(model);
+  CHECK(training != NULL);
+  unsigned char lease_before[sizeof(*training)];
+  memcpy(lease_before, training, sizeof(lease_before));
+  CHECK(et_g3c4_private_p2g2_typed_copy_v1(
+      typed, length, training, 8 + length * 8) != 0);
+  CHECK(et_g3c4_private_p2g2_typed_element_v1(
+      typed, 0, (int64_t *)(void *)&training->ordinal) != 0);
+  CHECK(et_g3c4_private_p2g2_terminal_snapshot_v1(
+      output, training, 72) != 0);
+  CHECK(memcmp(lease_before, training, sizeof(lease_before)) == 0);
+  OK(et_g3c4_private_training_lease_enter_v1(training, 1));
+  OK(et_g3c4_training_child_acquire_internal(training, child_identity, 1));
+  cpu4_training_child *child = training->children;
+  CHECK(child != NULL && child->live);
+  OK(et_g3c4_training_child_release_internal(training, child_identity, 1));
+  OK(et_g3c4_private_training_lease_leave_v1(training));
+  unsigned char child_before[sizeof(*child)];
+  memcpy(child_before, child, sizeof(child_before));
+  CHECK(et_g3c4_private_p2g2_typed_copy_v1(
+      typed, length, child, 8 + length * 8) != 0);
+  CHECK(et_g3c4_private_p2g2_typed_element_v1(
+      typed, 0, (int64_t *)(void *)&child->ordinal) != 0);
+  CHECK(et_g3c4_private_p2g2_terminal_snapshot_v1(output, child, 72) != 0);
+  CHECK(et_g3c4_copyout_carrier_preflight(child, 8) != 0);
+  /* These alias walkers are pure extent queries; their early CPU4 rejection
+   * does not need a live generation context while the training lease exists. */
+  CHECK(et_g3c4_output_decode_owned_alias(NULL, child, 8) != 0);
+  CHECK(et_g3c4_p2g2_carrier_owned_alias(NULL, child, 8) != 0);
+  CHECK(memcmp(child_before, child, sizeof(child_before)) == 0);
+  OK(et_g3c4_private_training_lease_prepare_release_v1(training));
+  OK(et_g3c4_private_training_lease_commit_release_v1(training));
+  memcpy(lease_before, training, sizeof(lease_before));
+  CHECK(et_g3c4_private_p2g2_typed_element_v1(
+      typed, 0, (int64_t *)(void *)&training->ordinal) != 0);
+  CHECK(memcmp(lease_before, training, sizeof(lease_before)) == 0);
+}
+#endif
+
 static void typed_case(et_g3c4_model_owner_internal *model, int first_eos) {
   int64_t expected[2] = {0, 0}, value = -99;
   et_g3c4_output_internal *output =
@@ -175,6 +221,9 @@ static void typed_case(et_g3c4_model_owner_internal *model, int first_eos) {
   void *cache = et_g3c4_private_p2g2_typed_scalar_create_v1(12, 2 + length);
   CHECK(ids && ids_again && lengths && cache && ids != ids_again);
   typed_alias_walkers(model, ids);
+#ifdef ET_CPU4_TRAINING_PRIVATE
+  typed_cpu4_control_aliases(model, ids, output, length);
+#endif
   uint64_t extent = 0;
   OK(et_i64_tensor_shape_at_v1(
       ((et_g3c4_typed_result_internal *)ids)->tensor, 0u,
