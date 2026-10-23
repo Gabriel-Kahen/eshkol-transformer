@@ -35,6 +35,15 @@ CANDIDATE_DEFS='''(define (cpuv1-resource-candidate-visit packet row)
       (cpuv1-resource-reject! packet)))
 (define cpuv1-resource-candidate-visitor cpuv1-resource-candidate-visit)
 '''
+# Keep candidate phase interning in its original owning initialization.
+# New emitted capture/storage costs require a fresh compiler result.
+CANDIDATE_STATE_SYMBOLS=('unpublished','adopted','dead','live')
+for word in CANDIDATE_STATE_SYMBOLS:
+    CANDIDATE_DEFS=CANDIDATE_DEFS.replace(
+        "'"+word+')','cpuv1-resource-candidate-state-'+word+')')
+CANDIDATE_DEFS=''.join(
+    f"(define cpuv1-resource-candidate-state-{word} '{word})\n"
+    for word in CANDIDATE_STATE_SYMBOLS)+CANDIDATE_DEFS
 
 def visitor_name(i):return 'cpuv1-resource-row-'+str(i)
 # A first-class named function is boxed at each use by fe9. Bind its value in

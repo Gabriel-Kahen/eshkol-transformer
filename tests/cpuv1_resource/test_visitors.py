@@ -7,6 +7,30 @@ from tests.cpuv1_resource.test_review_fixes import Host,Vec
 
 
 class Visitors(unittest.TestCase):
+    def test_candidate_symbols_are_private_in_original_owning_initialization(self):
+        path=g.typed.CANDIDATE
+        staged,record=g.transform((g.ROOT/path).read_text(),path)
+        forms=parse(staged)
+        envelope=next(f for f in forms if f[:2]==['define','cpuv1-candidate-test-envelope'])
+        initialization=envelope[2][2:-1]
+        constants=[f for f in initialization if f[0]=='define' and isinstance(f[1],str)
+                   and f[1].startswith('cpuv1-resource-candidate-state-')]
+        visitor=next(f for f in initialization if f[:2]==[
+            'define',['cpuv1-resource-candidate-visit','packet','row']])
+        self.assertEqual(len(constants),4)
+        self.assertEqual({f[2][1] for f in constants},{'unpublished','adopted','dead','live'})
+        self.assertFalse(any(n and n[0]=='quote' for n in walk(visitor)))
+        for binding in constants:
+            self.assertEqual(binding[2][0],'quote')
+            self.assertEqual(list(walk(forms)).count(binding),1)
+            self.assertLess(initialization.index(binding),initialization.index(visitor))
+            self.assertFalse(any(n[:2]==['set!',binding[1]] for n in walk(forms)))
+            with self.assertRaises(ValueError):
+                g.reverse_projection(staged.replace(
+                    f"(define {binding[1]} '{binding[2][1]})",
+                    f"(define {binding[1]} 'unknown)",1),record,{},'__HELPER__')
+        g.reverse_projection(staged,record,{},'__HELPER__')
+
     def test_state_symbols_are_private_once_bound_before_observation(self):
         helper_forms=parse((g.ROOT/'tests/cpuv1_resource/helpers.esk').read_text())
         state=next(f for f in helper_forms if f[:2]==[

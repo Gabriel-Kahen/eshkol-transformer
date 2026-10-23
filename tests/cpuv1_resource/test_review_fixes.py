@@ -26,12 +26,13 @@ class Host:
         }
         # Load actual private quoted constants, not a mirrored phase map.
         sources=((g.ROOT/'tests/cpuv1_resource/helpers.esk').read_text(),
-                 g.typed.EXTRA_DEFS[g.P1])
+                 g.typed.EXTRA_DEFS[g.P1],g.typed.CANDIDATE_DEFS)
         for source in sources:
             for form in parse(source):
                 if (form[0]=='define' and isinstance(form[1],str)
                         and form[1].startswith(('cpuv1-resource-state-',
-                                                'cpuv1-resource-p1-state-'))):
+                                                'cpuv1-resource-p1-state-',
+                                                'cpuv1-resource-candidate-state-'))):
                     if len(form)!=3 or form[2][0]!='quote':
                         raise ValueError('private symbol must be a quoted constant')
                     self.env[form[1]]=self.ev(form[2])
@@ -93,10 +94,11 @@ class Findings(unittest.TestCase):
             'cpuv1-resource-candidate-link!':bridge,
             'cpuv1-resource-state!':lambda *args:states.append(args),
             'cpuv1-resource-reject!':lambda *args:errors.append(args)})
-        h.define(parse(g.typed.CANDIDATE_DEFS)[0])
+        h.define(next(f for f in parse(g.typed.CANDIDATE_DEFS) if f[:2]==[
+            'define',['cpuv1-resource-candidate-visit','packet','row']]))
         visit=h.env['cpuv1-resource-candidate-visit']
         visit(object(),row);self.assertEqual(seen,[cap]);self.assertEqual(len(states),1)
-        for slot,value in [(2,False),(2,object()),(3,object()),(1,'adopted')]:
+        for slot,value in [(2,False),(2,object()),(3,object()),(1,'adopted'),(1,'unknown')]:
             old=row[slot];row[slot]=value;seen.clear();states.clear();errors.clear()
             visit(object(),row);self.assertFalse(states);self.assertTrue(errors)
             row[slot]=old
@@ -114,7 +116,11 @@ class Findings(unittest.TestCase):
         for word,phase in [('unpublished',1),('adopted',2),('dead',3)]:
             row[1]=word;entry[2]='dead' if phase==3 else 'live'
             native[cap]=(owner,scope,phase,context);states.clear();errors.clear()
-            visit(object(),row);self.assertFalse(errors);self.assertEqual(states[0][-1],phase)
+            visit(object(),row);self.assertFalse(errors)
+            self.assertEqual(states[0][1:],(64,2 if phase==3 else 1,5,phase))
+            old=entry[2];entry[2]='live' if phase==3 else 'dead'
+            states.clear();errors.clear();visit(object(),row)
+            self.assertFalse(states);self.assertTrue(errors);entry[2]=old
 
     def test_provider_eight_native_callback_slots_and_omission(self):
         h=Host();h.helpers('cpuv1-resource-vector?','cpuv1-resource-provider-callbacks!',
