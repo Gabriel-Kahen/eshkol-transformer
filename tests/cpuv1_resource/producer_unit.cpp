@@ -95,6 +95,17 @@ int main() {
   require(et_cpuv1_test_runtime_resource_warm_v1()==ET_R_OK,"normal glibc/root warm");
   require(observe(&before)==ET_R_COVERAGE,"native-only cannot claim Scheme COMPLETE");
   require(before.coverage==((UINT64_C(1)<<ET_R_DOMAINS)-1-(UINT64_C(1)<<ET_R_SCHEME)),"all twelve native/runtime domains");
+  const uint64_t c4_na=(UINT64_C(1)<<8)|(UINT64_C(1)<<12);
+  require(before.details[ET_R_C4][ET_R_C4_NOT_APPLICABLE_KINDS]==c4_na,
+          "exact frozen C4 profile classifies logits/manual frame N/A");
+  require(before.details[ET_R_C4][ET_R_C4_COMPILED_KINDS]==(((UINT64_C(1)<<13)-1u)^c4_na),
+          "all remaining C4 kinds retain actual compiled layout facts");
+  require(!before.rows[ET_R_C4][8].control_size && !before.rows[ET_R_C4][12].control_size,
+          "N/A kinds have no invented control size");
+  et_cpuv1_test_resource_mutation_v1(4);
+  require(observe(&after)==ET_R_MISMATCH,"balanced absent-kind event history rejects profile");
+  et_cpuv1_test_resource_mutation_v1(0);
+  require(observe(&after)==ET_R_COVERAGE,"profile-negative never changed real event counters");
   require(et_cpuv1_test_k1_partial_cleanup_v1()==ET_R_OK,"real partial cleanup helper");
   require(observe(&after)==ET_R_COVERAGE,"partial helper conservation");
   const auto &a=before.rows[ET_R_K1][3],&b=after.rows[ET_R_K1][3];
