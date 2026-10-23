@@ -1,0 +1,27 @@
+{
+  "schema": "cpu4-trained-g2-test-overlay-v1",
+  "mode": "normal",
+  "per_tu_defines": {
+    "native/o2_optimizer.c": [
+      "ET_O2_TESTING"
+    ],
+    "src/eshkol_transformer/m3_call_f32_integration.c": [
+      "ET_F32_TENSOR_TESTING"
+    ]
+  },
+  "additional_translation_units": [
+    {
+      "source": "tests/cpu4_heldout/inspect.c",
+      "defines": [
+        "ET_O2_TESTING"
+      ]
+    },
+    {
+      "source": "tests/cpu4_candidate_children/native_observer.c",
+      "defines": [
+        "ET_O2_TESTING",
+        "ET_F32_TENSOR_TESTING"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+;;; One actual common identity universe, then accepted definitions-only bodies.
+(load "cpu4_v1_private_root.esk")
+(load "../cpu4_heldout/body.esk")
+(load "../cpu4_resume/body.esk")
+(load "generation.esk")
+(load "core.esk")
+(define (cpu4-resume-driver-open directory tokenizer)
+  (d2-token-dataset-open
+    (list ':directory directory ':batch-size 1 ':sequence-length 4
+          ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+          ':maximum-total-tokens 5 ':maximum-batch-bytes 68
+          ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #f) tokenizer))
+(define (cpu4-resume-driver-runtime!)
+  (let ((arguments (command-line)))
+    (if (not (equal? (i2-bounded-list-length arguments 6) 5))
+        (cpu4-binding-fail 'invalid-argument 'cpu4-resume-driver
+          "expected train-directory heldout-directory checkpoint-output closed-mode"))
+    (let* ((resolved (x1-private-config-resolve (x1-private-config-parse
+              "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":4,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729,\"training.accumulation-steps\":1}") '()))
+           (tokenizer (t2-wave2-tokenizer-byte resolved))
+           (train-a (cpu4-resume-driver-open (car (cdr arguments)) tokenizer))
+           (train-b (cpu4-resume-driver-open (car (cdr arguments)) tokenizer))
+           (heldout (cpu4-resume-driver-open (car (cdr (cdr arguments))) tokenizer))
+           (policy (c2-persistence-policy-internal 16777216 524288 8388608 64 'cpu))
+           (report (k2-public-capability-discover))
+           (mode (cond ((string=? (car (cdr (cdr (cdr (cdr arguments))))) "two-token") 'two-token)
+                       ((string=? (car (cdr (cdr (cdr (cdr arguments))))) "first-eos") 'first-eos)
+                       (else (cpu4-binding-fail 'invalid-argument 'cpu4-trained-g2 "closed mode required")))))
+      (cpu4-trained-g2-core! resolved tokenizer train-a train-b heldout
+        (car (cdr (cdr (cdr arguments)))) policy report mode)
+      ;; Actual caller has already drained its C2/E3/factory owners.
+      (d2-token-dataset-close! heldout)
+      (d2-token-dataset-close! train-b)
+      (d2-token-dataset-close! train-a)
+      #t)))
+;;; This diagnostic guard is nonrecursive and outside every named loop. It
+;;; accepts no unexpected rejection as success; caller fail-stop remains fatal.
+(guard (caught
+         (#t
+           (if (transformer-error? caught)
+               (begin
+                 (display "CPU4 RESUME unexpected E1 category=")
+                 (write (transformer-error-category caught))
+                 (display " operation=") (write (transformer-error-operation caught))
+                 (display " message=") (write (transformer-error-message caught))
+                 (display " details=") (write (transformer-error-details caught)) (newline))
+               (begin (display "CPU4 RESUME unexpected FOREIGN value=") (write caught) (newline)))
+           (display "CPU4 RESUME actual checks=") (display cpu4-resume-checks)
+           (display " actual steps=") (display cpu4-resume-steps) (newline)
+           (exit 1)))
+  (cpu4-resume-driver-runtime!))
