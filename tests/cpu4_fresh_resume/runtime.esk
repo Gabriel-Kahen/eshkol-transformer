@@ -1,0 +1,7 @@
+;;; One registry; reuse accepted numerical, FILE and observation implementations.
+(load "cpu4_v1_private_root.esk")
+(load "../cpu4_heldout/body.esk")
+(load "../cpu4_resume/body.esk")
+(require transformer.checkpoint_internal)
+(load "body.esk")
+(cpu4-fresh-main!)

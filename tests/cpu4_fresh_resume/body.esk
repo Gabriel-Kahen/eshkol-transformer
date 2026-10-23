@@ -1,0 +1,146 @@
+;;; Definitions only. Separate producer/consumer processes; no public API.
+(define (cpu4-fresh-resolved identity-negative?)
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      (string-append
+        "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":4,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":"
+        (if identity-negative? "1728" "1729")
+        ",\"training.accumulation-steps\":1}")) '()))
+
+(define (cpu4-fresh-open directory tokenizer)
+  (d2-token-dataset-open
+    (list ':directory directory ':batch-size 1 ':sequence-length 4
+          ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+          ':maximum-total-tokens 5 ':maximum-batch-bytes 68
+          ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #f) tokenizer))
+
+(define (cpu4-fresh-save! trainer updates phase path policy image-cell)
+  (cpu4-resume-counts! trainer updates)
+  (cpu4-trainer-snapshot-internal trainer image-cell)
+  (let ((copy (cpu4-resume-capture (vector-ref image-cell 0))))
+    (cpu4-resume-check "complete C4 value and moment planes"
+      (and (= (cpu4-resume-plane-size (vector-ref copy 0) 14) 4768)
+           (= (cpu4-resume-plane-size (vector-ref copy 1) 28) 9536)))
+    ;; A new destination only. The external checkpoint is never a SAVE target.
+    (c2-public-checkpoint-save! (vector-ref image-cell 0) path policy '(:overwrite? #f))
+    (c2-training-state-release-internal! (vector-ref image-cell 0) 'trainer-state-release!)
+    (vector-set! image-cell 0 #f)
+    (cpu4-resume-emit phase trainer copy)))
+
+(define (cpu4-fresh-metrics mode report)
+  (display "CPU4-FRESH-METRICS ") (display mode)
+  (let emit-words ((index 0))
+    (if (< index 9)
+        (begin (display " ") (display (vector-ref report index))
+               (emit-words (+ index 1)))))
+  (newline))
+
+(define (cpu4-fresh-produce! resolved tokenizer train heldout prefix policy ledger)
+  (vector-set! ledger 0 (cpu4-owned-candidate-create-internal resolved))
+  (let ((source (vector-ref ledger 0)))
+    (module-train! (cpu4-owned-model-internal source))
+    (cpu4-owned-optimizer-create-internal! source (cpu4-resume-config))
+    (cpu4-owned-binding-create-internal! source)
+    (let ((a (cpu4-owned-trainer-create-internal! source tokenizer train)))
+      (cpu4-resume-counts! a 0)
+      (cpu4-heldout-evaluate-internal! a heldout 'baseline)
+      (cpu4-resume-run! a 1 125)
+      (cpu4-fresh-save! a 125 'a125 (string-append prefix ".a125.c2")
+                        policy (vector-ref ledger 2))
+      (cpu4-resume-run! a 126 250)
+      (let ((metrics (cpu4-heldout-evaluate-internal! a heldout 'post)))
+        (cpu4-fresh-save! a 250 'a250 (string-append prefix ".a250.c2")
+                          policy (vector-ref ledger 2))
+        (cpu4-fresh-metrics 'produce metrics)))))
+
+(define (cpu4-fresh-consume! resolved tokenizer train heldout input prefix policy report ledger)
+  ;; Exactly one external FILE load. No independent A model exists here.
+  (let* ((b (cpu4-checkpoint-factory-create-internal!
+              input policy report resolved tokenizer train (vector-ref ledger 1)))
+         (factory (cpu4-checkpoint-factory-row
+                    (vector-ref (vector-ref ledger 1) 0) 'cpu4-fresh-consume)))
+    (cpu4-resume-check "loaded image and staging released before suffix"
+      (and (not (vector-ref factory 10)) (not (vector-ref factory 11))))
+    (cpu4-fresh-save! b 125 'b125 (string-append prefix ".restored125.c2")
+                      policy (vector-ref ledger 2))
+    ;; Raw byte reads are not a second C2 load or model reconstruction.
+    ;; All persisted planes/controls must match BEFORE the first suffix step.
+    (let ((raw-policy (c2-policy-c1-subpolicy-internal 'checkpoint-save! policy)))
+      (cpu4-resume-check "external A125 full checkpoint roundtrip before suffix"
+        (c1-bytes=?
+          (c1-read-file input raw-policy 'cpu4-fresh-compare)
+          (c1-read-file (string-append prefix ".restored125.c2") raw-policy
+                        'cpu4-fresh-compare))))
+    (display "CPU4-FRESH-RESTORED 25504 1192 2384") (newline)
+    (cpu4-resume-run! b 126 250)
+    (let ((metrics (cpu4-resume-evaluate-b! b heldout)))
+      (cpu4-fresh-save! b 250 'b250 (string-append prefix ".b250.c2")
+                        policy (vector-ref ledger 2))
+      (cpu4-fresh-metrics 'consume metrics))))
+
+(define (cpu4-fresh-reject! mode resolved tokenizer train input policy report ledger)
+  (let ((rejected?
+    (guard (caught
+      (#t
+        (if (not (and (transformer-error? caught)
+                 (if (string=? mode "reject-identity")
+                     (and (eq? (transformer-error-category caught) 'invalid-argument)
+                          (eq? (transformer-error-operation caught) 'cpu4-checkpoint-factory-create))
+                     (and (eq? (transformer-error-category caught) 'corrupt-data)
+                          (eq? (transformer-error-operation caught) 'checkpoint-load)))))
+            (raise caught))
+        #t))
+      (cpu4-checkpoint-factory-create-internal!
+        input policy report resolved tokenizer train (vector-ref ledger 1))
+      #f)))
+    (cpu4-resume-check "exact malformed or identity error required" rejected?)
+    (display "CPU4-FRESH-REJECT ") (display mode)
+    (if (string=? mode "reject-identity")
+        (display " invalid-argument cpu4-checkpoint-factory-create")
+        (display " corrupt-data checkpoint-load"))
+    (newline)))
+
+(define (cpu4-fresh-run! mode resolved tokenizer train heldout input prefix policy report)
+  (let ((ledger (vector #f (vector #f) (vector #f))))
+    (guard (caught (#t (cpu4-resume-cleanup! ledger) (raise caught)))
+      (cpu4-resume-check "fixed serial nonregional CPU4 entry"
+        (and (null? (cpu4-checkpoint-native-current-region)) (not (eq? train heldout))))
+      (cpu4-binding-profile! resolved 'cpu4-fresh-resume)
+      (cpu4-resume-stream! train)
+      (cond ((string=? mode "produce")
+               (cpu4-fresh-produce! resolved tokenizer train heldout prefix policy ledger))
+            ((string=? mode "consume")
+               (cpu4-fresh-consume! resolved tokenizer train heldout input prefix policy report ledger))
+            ((or (string=? mode "reject-corrupt") (string=? mode "reject-identity"))
+               (cpu4-fresh-reject! mode resolved tokenizer train input policy report ledger))
+            (else (cpu4-binding-fail 'invalid-argument 'cpu4-fresh-resume "unknown mode")))
+      (cpu4-resume-cleanup! ledger)
+      (cpu4-resume-check "exact successful step count"
+        (= cpu4-resume-steps (cond ((string=? mode "produce") 250)
+                                  ((string=? mode "consume") 125) (else 0))))
+      #t)))
+
+(define (cpu4-fresh-main!)
+  (let ((arguments (command-line)))
+    (if (not (equal? (i2-bounded-list-length arguments 7) 6))
+        (cpu4-binding-fail 'invalid-argument 'cpu4-fresh-resume
+          "expected mode train heldout input-checkpoint fresh-output-prefix"))
+    (let* ((mode (car (cdr arguments)))
+           (resolved (cpu4-fresh-resolved (string=? mode "reject-identity")))
+           (tokenizer (t2-wave2-tokenizer-byte resolved))
+           (train (cpu4-fresh-open (car (cdr (cdr arguments))) tokenizer))
+           (heldout #f))
+      (guard (caught
+        (#t (if heldout (d2-token-dataset-close! heldout))
+            (d2-token-dataset-close! train) (raise caught)))
+        (set! heldout (cpu4-fresh-open (car (cdr (cdr (cdr arguments)))) tokenizer))
+        (cpu4-fresh-run! mode resolved tokenizer train heldout
+          (car (cdr (cdr (cdr (cdr arguments)))))
+          (car (cdr (cdr (cdr (cdr (cdr arguments))))))
+          (c2-persistence-policy-internal 16777216 524288 8388608 64 'cpu)
+          (k2-public-capability-discover)))
+      (d2-token-dataset-close! heldout)
+      (d2-token-dataset-close! train)
+      ;; Canonical caller-owned tokenizer remains until process exit, as in b0.
+      (display "CPU4-FRESH-PASS ") (display mode) (display " ")
+      (display cpu4-resume-steps) (display " ") (display (heldout-live-owned)) (newline))))

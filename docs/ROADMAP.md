@@ -644,6 +644,12 @@ retirement; focused option-provenance repair and native causal proof are next.
 GPU, mixed precision and optional expansion stay backlog. Historical detail below
 retains its original evidence scope.
 
+A distinct [external CPU4 resume gate](../tests/cpu4_fresh_resume/README.md) is
+source-staged from immutable `b0af97d1`: uninterrupted A250 producer, retained
+A125 input and fresh-process 125-step suffix, with complete C2 equality and
+malformed/identity negatives. Host/source tests are separate from compiler,
+container and runtime admission; those heavy gates are **NOT RUN** for this leaf.
+
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
 | N3K | [Bounded diagnostic numerical primitives and initializer](N3K_PRIMITIVES.md) | N2, A2, K1, I1, I2, Q0 | 31 exact operation/row pairs; independent VJP/bit/negative/carrier tests, private AOT and sanitizers; independent N3K-R approval, supported CI 34222643674, PR #67 merge and focused merged-main retest | complete |
