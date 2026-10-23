@@ -106,7 +106,8 @@ class Findings(unittest.TestCase):
             visit(object(),row);self.assertFalse(errors);self.assertEqual(states[0][-1],phase)
 
     def test_provider_eight_native_callback_slots_and_omission(self):
-        h=Host();h.helpers('cpuv1-resource-vector?','cpuv1-resource-provider-callbacks!')
+        h=Host();h.helpers('cpuv1-resource-vector?','cpuv1-resource-provider-callbacks!',
+                          'cpuv1-resource-count-vector')
         context=object();provider=object();callbacks=Vec([object() for _ in range(8)])
         admitted=Vec([False]*10+[callbacks]);registration=Vec(['i2',provider,admitted])
         shell=Vec([provider,'provider',admitted]);seen=[]
@@ -116,6 +117,7 @@ class Findings(unittest.TestCase):
         callbacks_original=list(callbacks)
         h.env.update({'packet':object(),'row':registration,'native-context':context,
                       'shell-entry':lambda value:shell if value is provider else False,
+                      'tensor-provider-registry-root':Vec([[registration]]),
                       'cpuv1-resource-callback-native':callback})
         check=parse(SCHEMAS[2]['check'])[0]
         self.assertTrue(h.ev(check));self.assertEqual(seen,list(range(8)))
@@ -127,6 +129,35 @@ class Findings(unittest.TestCase):
             admitted[10]=bad;seen.clear();self.assertFalse(h.ev(check));self.assertLess(len(seen),8)
         admitted[10]=callbacks;h.env['native-context']=object();seen.clear()
         self.assertFalse(h.ev(check));self.assertFalse(seen)
+
+    def test_two_provider_same_or_copied_registration_cannot_omit_other(self):
+        h=Host();h.helpers('cpuv1-resource-vector?','cpuv1-resource-provider-callbacks!',
+                          'cpuv1-resource-count-vector')
+        context=object();providers=[object(),object()]
+        callbacks={provider:Vec([object() for _ in range(8)]) for provider in providers}
+        admitted={provider:Vec([False]*10+[callbacks[provider]]) for provider in providers}
+        registrations=[Vec(['provider',provider,admitted[provider]]) for provider in providers]
+        shells={provider:Vec([provider,'provider',admitted[provider]]) for provider in providers}
+        root=Vec([registrations]);seen=[]
+        def callback(packet,ctx,provider,token,slot):
+            if ctx is not context or provider not in callbacks or token is not callbacks[provider][slot]:return 5
+            seen.append((provider,slot));return 0
+        h.env.update({'packet':object(),'native-context':context,
+                      'tensor-provider-registry-root':root,
+                      'shell-entry':lambda provider:shells.get(provider,False),
+                      'cpuv1-resource-callback-native':callback})
+        check=parse(SCHEMAS[2]['check'])[0]
+        for registration in registrations:
+            h.env['row']=registration;self.assertTrue(h.ev(check))
+        self.assertEqual(seen,[(provider,slot) for provider in providers for slot in range(8)])
+        # Both source rows can otherwise validate A's exact eight callback
+        # slots twice, balancing native A+B's16 callbacks while omitting B.
+        for duplicate in [registrations[0],Vec(registrations[0])]:
+            root[0]=[registrations[0],duplicate];seen.clear()
+            self.assertEqual(len(root[0])*8,sum(map(len,callbacks.values())))
+            for registration in root[0]:
+                h.env['row']=registration;self.assertFalse(h.ev(check))
+            self.assertFalse(seen)
 
     def test_native_guard_source_and_declared_static_bytes(self):
         p1=(g.ROOT/'native/cpuv1_resource_p1.inc').read_text()
