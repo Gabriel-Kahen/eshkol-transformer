@@ -56,7 +56,7 @@ static void history_set_epoch(et_g3c4_context_internal *c,uint64_t epoch) {
   h->history.commit_epoch=c->cpu4_history.commit_epoch=epoch;
 }
 static void history_epoch_and_tamper(et_g3c4_model_owner_internal *owner) {
-  et_g3c4_context_internal *c=seed_generator(owner,7);
+  et_g3c4_context_internal *c=create_generator(owner);
   cpu4_history_node *h=cpu4_history_auth(c); CHECK(h!=NULL);
   CHECK(c->cpu4_history.state==1u && c->cpu4_history.count==0u);
   int64_t original=c->generator_policy[5]; c->generator_policy[5]=42;

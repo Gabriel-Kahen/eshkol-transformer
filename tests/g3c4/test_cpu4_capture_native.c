@@ -8,12 +8,22 @@
 #include "test_p2_g2_native_terminal.c"
 #undef ET_G3C4_P2_G2_TERMINAL_TEST_MAIN
 
+/* This terminal include graph has create_generator(owner) only for seed7. */
+static et_g3c4_context_internal *capture_seed_generator(
+    et_g3c4_model_owner_internal *owner, int64_t seed) {
+  et_g3c4_context_internal *context = et_g3c4_private_generator_seed_v1(
+      owner, seed, 0, INT64_C(0x3f800000), 256,
+      INT64_C(0x3f800000), 1, -1);
+  CHECK(context != NULL);
+  return context;
+}
+
 static size_t capture_registry_count(void) {
   size_t n=0;for(cpu4_capture_provenance *p=cpu4_captures;p;p=p->next) ++n;
   return n;
 }
 static void capture_fault_controls(et_g3c4_model_owner_internal *owner) {
-  et_g3c4_context_internal *c=seed_generator(owner,9);
+  et_g3c4_context_internal *c=capture_seed_generator(owner,9);
   size_t count=capture_registry_count();uint32_t capacity;
   for(size_t cut=0;cut<3u;++cut) {
     et_g3c4_allocation_limit=et_g3c4_successful_allocations+cut;
@@ -39,7 +49,7 @@ static void capture_fault_controls(et_g3c4_model_owner_internal *owner) {
 int main(void) {
   et_g3c4_model_owner_internal *owner = create_owner();
   capture_fault_controls(owner);
-  et_g3c4_context_internal *source = seed_generator(owner, 7);
+  et_g3c4_context_internal *source = capture_seed_generator(owner, 7);
   et_cpu4_c4_capture *capture =
       et_cpu4_private_c4_capture_create_v1(source);
   et_cpu4_c4_capture_record_v1 record, second;
@@ -124,7 +134,7 @@ int main(void) {
       capture, &second, sizeof(second)) == ET_G3C4_INVALID_STATE);
 
   /* A committed prompt binding must match capture's local pins at idle. */
-  et_g3c4_context_internal *nonempty = seed_generator(owner, 8);
+  et_g3c4_context_internal *nonempty = capture_seed_generator(owner, 8);
   int64_t prompt[3] = {3, 7, 11};
   float logits[256];
   OK(et_g3c4_private_call_acquire_v1(nonempty, 2, 1));
