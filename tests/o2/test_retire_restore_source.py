@@ -101,6 +101,8 @@ class Source(unittest.TestCase):
         self.assertIn('sizeof(*plan) == 1472u', native)
         self.assertIn('sizeof(*plan) == 1464u', native)
         self.assertIn('state->active_borrows == 0u', header)
+        self.assertIn('defined(ET_TR3_O2_STEP_CLEAR_NATIVE)', header)
+        self.assertIn('defined(ET_TR3_C_O2_RESTORE_NATIVE)', header)
         self.assertIn('field < 11u', ordinary)
         self.assertIn('field < 11u', function(native, 'probe_tr3_restore'))
 
