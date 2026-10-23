@@ -104,7 +104,16 @@ EXTRA_DEFS['native/cpu4_trainer_control_extension.esk']='''(define (cpuv1-resour
 '''
 # Values with no lifecycle in source are explicit permanent identity references.
 # No inferred destructor state is attributed to policy/config/tokenizer shells.
-SCHEMAS[58]['check']=SCHEMAS[58]['check'].replace('x1-private-entry','x1-config-entry')
+SCHEMAS[58]['check']=SCHEMAS[58]['check'].replace(
+    '(x1-private-entry (car row))',
+    '(cpuv1-resource-x1-entry (car row) x1-config-registry 0)')
+EXTRA_DEFS['native/x1_config_private.esk']='''(define (cpuv1-resource-x1-entry value remaining seen)
+  (cond ((null? remaining) #f)
+        ((or (not (pair? remaining)) (>= seen 16777216)) #f)
+        ((not (pair? (car remaining))) #f)
+        ((eq? value (car (car remaining))) (car remaining))
+        (else (cpuv1-resource-x1-entry value (cdr remaining) (+ seen 1)))))
+'''
 EXTRA_DEFS['native/cpu4_model_binding_extension.esk']='''(define (cpuv1-resource-binding-roster? row index)
   (if (= index 14) #t
       (let ((handle (vector-ref (vector-ref row 10) index))
