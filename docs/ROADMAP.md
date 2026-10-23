@@ -633,7 +633,7 @@ the old-head failure does not establish current-main runtime behavior.
 ## Wave 3 — first complete language model
 
 Active finish milestone: **first complete validated CPU v1**. Current acceptance
-and ownership: [CPU v1 completion index](WAVE3_COMPLETION.md), updated 2026-10-22.
+and ownership: [CPU v1 completion index](WAVE3_COMPLETION.md), updated 2026-10-23.
 PR #214 exact-head hosted checks pass. Current-source CPU4 two-update training,
 250-update one-batch learning, detach and bounded evaluator-consumer gates
 independently pass. Frozen b0 normal/repeat also passes synthetic held-out
@@ -650,16 +650,24 @@ and first-EOS modes, normal/repeat. Its generated-IR-ASan/native-ASan+UBSan
 gate fails on a real heap-buffer-overflow during terminal-IDs publication/release.
 Instrumentation/custody authenticate. The preserved source/IR diagnosis identifies
 the pinned compiler probing a foreign pointer's nonexistent Eshkol header during
-captured-variable retirement. A private managed-cell repair passes independent
-source review and host52 controls; genuine generated-IR-ASan clone and trained
-generation validation remain NOT RUN on the repair. Remaining failed-run
-processes/checkers were NOT RUN. The real binding OOM
+captured-variable retirement. Managed-cell repair `51d5cc9c` independently passes
+source review, host52 controls and the actual focused generated-IR-ASan/native
+sanitizer clone/release fixture (62 checks). Original-source control is running
+once from reviewed recipe `1c565836`; its independent trace comparison is blocked
+by the E3 chat's service rejection. Full trained-generation sanitizer validation
+remains NOT RUN on the repair. Remaining historical failed-run processes/checkers
+were NOT RUN. The real binding OOM
 witness independently passes normal/repeat cleanup and native lease retry.
 Native history/capture independently passes normal/repeat/ASan+UBSan, including
 bitwise no-draw greedy/categorical prefix replay; typed fresh-process import and
-remaining decode are still required. Resource observer Stage A is source-reviewed;
-its first native gate stops at unavailable feature-gated census types, before
-unit execution, and a focused source correction is pending. Frozen private CLI
+remaining decode are still required. Resource native244 and two bounded object
+emissions are independently accepted. Actual df7a object evidence proves that
+row58 calls an original X1 lookup which allocates16 arena bytes before any guard;
+whole-df7a no-allocation therefore fails on the successful tiny route. Reviewed
+source-only successor `67a69d79` replaces that observer lookup with a bounded
+top-level scan of the same current registry; 34 host tests pass. Its new object,
+transitive allocation proof, final bindings and runtime remain NOT RUN. Existing
+Scheme coverage and requested transient-peak limitations remain explicit. Frozen private CLI
 report producer688 now independently passes normal native99 checks and genuine
 two-step/same-binding E3 caller12 checks, each repeated. This is bounded producer
 proof, with a separately authenticated final guardian receipt supplement;

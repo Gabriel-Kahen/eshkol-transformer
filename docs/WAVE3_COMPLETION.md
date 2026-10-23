@@ -1,6 +1,6 @@
 # CPU v1 completion — current acceptance index
 
-Updated 2026-10-22. **Not admitted; PR #214 remains draft and unmerged.**
+Updated 2026-10-23. **Not admitted; PR #214 remains draft and unmerged.**
 Active milestone: the first complete validated **Eshkol-native CPU-f32 version**.
 The user narrowed scope on 2026-10-22; the team contract is
 `finish-20261022/CPU_V1_SCOPE.md` beneath the receipt root. Existing in-flight gates
@@ -72,9 +72,35 @@ failed receipts remain preserved; no safety/access setting was changed.
 
 The terminal-ID native capture [source repair](g3/G3_TERMINAL_NATIVE_CAPTURE.md)
 uses a preallocated managed cell and preserves handle clearing and ownership
-checks. Independent source review and the actual-adapter host52 regression pass;
-the genuine generated-IR-ASan clone gate and trained-generation retry are still
-NOT RUN. Host controls do not close the memory-correctness blocker.
+checks. Repair `51d5cc9c` passes independent source review, the actual-adapter
+host52 regression and the real focused generated-IR-ASan/native sanitizer fixture
+(PASS62). Actual-result review `terminal-managed-cell-ir-asan-reuse-result-review-20261023/REVIEW.md`
+beneath `finish-20261022` has seal
+`46a1153fbffe2aec00b54242838c74adcf7b3b2570565cdb1d907274b0ba88b8`.
+The prior600s compile timeout remains nonaccepting; the separately reviewed
+artifact-reuse successor completed. Original95070 control is running once from
+recipe `1c565836`; E3 subsequently received a service risk rejection on its
+custody/trace-review assignment. Preserve the existing supervisor/guardian; do not
+retry or reassign that rejected work. Comparative regression acceptance and full
+trained-generation sanitizer validation remain open. No full CPU-v1 admission follows.
+
+Resource Stage A native244 and bounded object emissions are independently
+accepted. Actual df7a row58 calls the original allocating X1 lookup (16 arena
+bytes unconditionally on entry), independently establishing whole-df7a
+no-allocation FAIL on the successful tiny route. Source-only successor
+`67a69d7985af05f3ddbd45fc2529c6e6bb2bcb61`, tree
+`5f9a94ac96dca5236a93f68ef3a51ad77cea2553`, published on
+`codex/cpuv1-resource-x1-observer-scan-20261023`, uses a bounded top-level
+observer scan of the same current registry. Primary and independent34 host tests
+pass; combined review `team/cpuv1-resource-row58-combined-delta-review-20261023/REVIEW.md`
+beneath `finish-20261022` has seal
+`ba0fa2fe3a9c0075d77ff9f464b526922faddcee0aafe944b99c3e98f2248502`.
+Original API/registry/coverage and failed artifacts are preserved. New emitted
+helper/transitive proof, final bindings, link/runtime/census and resource admission
+remain open. Candidate677 shares the original six-API registry under reviewed
+dispatch premises; later checked P1 live/authentication guards do not establish
+PID/nonce authentication before the first empty snapshot. Native requested peak
+is UNOBSERVED; native-unit Scheme coverage is UNAVAILABLE/COVERAGE.
 
 Frozen CLI report producer688 completed one supported normal gate in184.698s:
 native99 checks and real two-step/same-binding E3 caller12 checks, repeated with
