@@ -7,6 +7,8 @@ from pathlib import Path
 import ctypes
 import hashlib
 import struct
+import re
+import subprocess
 
 root = Path(__file__).resolve().parents[2]
 source = (root / 'src/eshkol_transformer/cpu4_c4_capture.inc').read_text()
@@ -58,7 +60,24 @@ assert 'cpu4_capture_overlap(dst, bytes)' in source
 assert 'cpu4_history_overlap(dst, bytes)' in source
 assert 'cpu4_capture_binding_matches_pins(context, &pins)' in source
 assert 'et_g3c4_prefill_binding_matches_pins(context)' not in source
-assert '#ifdef ET_G3C4_MANUAL_FRAME_BEGIN_PRIVATE\n    if (transport->kind' in source
+def frame_alias_authority(text):
+    alias=text[text.index('static int64_t cpu4_capture_copy_alias('):text.index('static int cpu4_capture_tls_alias(')]
+    alias=re.sub(r'/\*.*?\*/|//[^\n]*','',alias,flags=re.S)
+    assert 'history->pending.frame != NULL' in alias
+    assert 'sizeof(et_g3c4_manual_frame_internal)' in alias
+    assert 'context->manual_frame' not in alias
+frame_alias_authority(source)
+old_alias=subprocess.check_output(['git','show',
+    '58f35af2d595720981c4666ab97ae30af885a259:src/eshkol_transformer/cpu4_c4_capture.inc'],cwd=root,text=True)
+try: frame_alias_authority(old_alias)
+except AssertionError: pass
+else: raise AssertionError('trusted frame control missed original58f alias defect')
+manual=(root/'tests/g3c4/test_cpu4_history_manual_native.c').read_text()
+assert 'manual_alias_control(c,detached); /* ACTIVE */' in manual
+assert 'manual_alias_control(c,detached); /* COMMITTED' in manual
+assert 'c->manual_frame=NULL' in manual and 'c->transport.kind=ET_G3C4_RNG_KIND' in manual
+assert 'et_g3c4_private_generator_close_v1(source)' in manual
+assert 'manual_capture_count()==census' in manual
 
 for name in ('copy_record', 'copy_parameters'):
     function = source[source.index(f'et_cpu4_private_c4_capture_{name}_v1('):]
@@ -91,4 +110,4 @@ assert header.rfind('#endif') > header.index(
 assert '#define ET_G3C4_P2_G2_TERMINAL_TEST_MAIN' in native_fixture
 assert 'second.count == 3u && second.cache_capacity == 4u' in native_fixture
 assert 'et_g3c4_model_pins_begin_internal' in native_fixture
-print('PASS: host-only capture source, SHA derivation, ABI layout, and canonical fixture')
+print('PASS: authoritative frame control rejects58f; host-only capture source, SHA derivation, ABI layout, and canonical fixture')

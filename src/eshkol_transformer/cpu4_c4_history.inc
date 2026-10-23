@@ -270,6 +270,11 @@ fail:
 static int cpu4_history_effect(const et_g3c4_context_internal *c) {
   cpu4_history_node *h=cpu4_history_auth(c);
   if (!h) return (int)et_g3c4_error_state.category;
+#ifdef ET_G3C4_MANUAL_FRAME_COMMIT_PRIVATE
+  if (h->pending.frame != NULL &&
+      ((const et_g3c4_manual_frame_internal *)h->pending.frame)->publication_state == 3u)
+    return (int)et_g3c4_fail(ET_G3C4_INVALID_STATE,ET_G3C4_CODE_LIFECYCLE);
+#endif
   if (!h->pending.operation) return 0;
   return cpu4_history_preflight(c,h->pending.operation,1u,
       h->pending.capacity,1u) == NULL ? (int)et_g3c4_error_state.category : 0;
@@ -301,7 +306,12 @@ static void cpu4_history_publish(cpu4_history_node *h,
   ++r->commit_epoch;
   h->history=*r; h->current_cache=c->cache;
   memcpy(h->rng,c->generator_rng_words,sizeof(h->rng));
-  cpu4_history_pending_clear(h);
+  if (h->pending.operation >= 3u && h->pending.frame != NULL) {
+    /* COMMITTED still owns its frame until finish actually frees it. */
+    h->pending.transaction=NULL;
+    h->pending.candidate=NULL;
+    h->pending.epoch=r->commit_epoch;
+  } else cpu4_history_pending_clear(h);
 }
 static cpu4_history_node *cpu4_history_allocate(void) {
   cpu4_history_node *h=cpu4_history_calloc(sizeof(*h));
