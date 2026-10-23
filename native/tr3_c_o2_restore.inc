@@ -28,6 +28,9 @@ struct et_o2_tr3_c_restore_plan {
   et_f32_tensor *moment_destinations[ET_TR3_C_O2_MOMENT_ASSIGNMENTS];
   const et_f32_tensor *stages[ET_TR3_C_O2_MOMENT_ASSIGNMENTS];
   void *i2_builder;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  et_o2_retire_provenance *retire_record;
+#endif
 };
 
 static et_o2_tr3_c_restore_plan *et_o2_tr3_c_restore_plans;
@@ -149,6 +152,13 @@ static int32_t et_o2_tr3_c_restore_receiver(
         error, ET_O2_STATUS_INVALID_STATE, ET_O2_CODE_ACTIVE_BORROW,
         "optimizer receiver already owns an active operation");
   }
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  if (!et_o2_retire_record_matches(
+          optimizer, et_o2_retire_record_find(optimizer)))
+    return et_o2_tr3_c_restore_error(
+        error, ET_O2_STATUS_INVALID_STATE, ET_O2_CODE_OWNER_CONFLICT,
+        "optimizer publication provenance changed before restore");
+#endif
   *resolved = optimizer;
   return ET_O2_STATUS_OK;
 }
@@ -231,6 +241,12 @@ static int32_t et_o2_tr3_c_restore_baseline(
         error, ET_O2_STATUS_INVALID_STATE, ET_O2_CODE_OWNER_CONFLICT,
         "restore plan no longer owns the optimizer");
   }
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  if (!et_o2_retire_record_matches(owner, plan->retire_record))
+    return et_o2_tr3_c_restore_error(
+        error, ET_O2_STATUS_INVALID_STATE, ET_O2_CODE_OWNER_CONFLICT,
+        "optimizer publication provenance changed after restore prepare");
+#endif
   if (owner->completed_updates !=
       plan->expected_receiver_completed_updates) {
     return et_o2_tr3_c_restore_error(
@@ -299,9 +315,22 @@ static int et_o2_tr3_c_restore_sealed_state(
           target != 0 ? &plan->target_config : &plan->baseline_config)) {
     return 0;
   }
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  /* The exact registered record was captured and authenticated before the I2
+   * commit frontier. No lookup, allocation or new fallible call follows zero. */
+  if (plan->retire_record == NULL || plan->retire_record->owner != owner ||
+      plan->retire_record->live != 1u ||
+      plan->retire_record->entries != owner->entries ||
+      plan->retire_record->count != ET_TR3_C_MODEL_DESTINATIONS)
+    return 0;
+#endif
   for (size_t index = 0u; index < ET_TR3_C_MODEL_DESTINATIONS; ++index) {
     et_f32_gradient_metadata_v1 metadata = {.struct_size = sizeof(metadata)};
     const et_o2_entry *entry = &owner->entries[index];
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+    if (memcmp(entry, &plan->retire_record->roster[index], sizeof(*entry)) != 0)
+      return 0;
+#endif
     if (entry->initialized != 1u || entry->parameter != plan->parameters[index] ||
         entry->p1_handle != plan->p1_handles[index] ||
         entry->storage_owner != plan->value_tensors[index] ||
@@ -350,6 +379,9 @@ static void et_o2_tr3_c_restore_clear_pointers(
   }
   plan->i2_builder = NULL;
   plan->owner = NULL;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  plan->retire_record = NULL;
+#endif
 }
 
 int32_t et_o2_tr3_c_restore_prepare_v1(
@@ -549,6 +581,9 @@ int32_t et_o2_tr3_c_restore_prepare_v1(
         "cannot allocate native restore plan");
   }
   plan->owner = optimizer;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  plan->retire_record = et_o2_retire_record_find(optimizer);
+#endif
   plan->expected_receiver_completed_updates =
       request.expected_receiver_completed_updates;
   plan->target_completed_updates = request.target_completed_updates;
@@ -670,6 +705,9 @@ void et_o2_tr3_c_restore_commit_native_v1(
   plan->owner->config = plan->target_config;
   for (size_t index = 0u; index < ET_TR3_C_MODEL_DESTINATIONS; ++index) {
     plan->owner->entries[index].options = plan->target_options[index];
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+    plan->retire_record->roster[index].options = plan->target_options[index];
+#endif
   }
   plan->owner->completed_updates = plan->target_completed_updates;
 }

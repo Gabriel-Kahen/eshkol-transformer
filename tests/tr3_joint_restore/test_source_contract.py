@@ -310,11 +310,14 @@ class FailurePrefixModel(unittest.TestCase):
                 _, p1, moments, writes = self.run_prefix(ordinal % 60)
                 live += p1 + moments + writes
             self.assertEqual(live, 0)
-            # Accepted I2/O2 terminal control retention is linear: 64 + 1464.
-            self.assertEqual(
-                horizon * 1528,
-                {1024: 1_564_672, 8192: 12_517_376}[horizon],
-            )
+            # Source layout expectations: OFF64+1464; candidate ON adds the
+            # captured provenance pointer. Actual ON sizeof/slope waits native.
+            for candidate, slope, totals in (
+                (False, 1528, {1024: 1_564_672, 8192: 12_517_376}),
+                (True, 1536, {1024: 1_572_864, 8192: 12_582_912}),
+            ):
+                self.assertEqual(slope, 64 + 1464 + (8 if candidate else 0))
+                self.assertEqual(horizon * slope, totals[horizon])
 
 
 class AuthenticScheduleModel(unittest.TestCase):

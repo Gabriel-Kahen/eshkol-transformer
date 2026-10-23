@@ -177,6 +177,24 @@ static et_o2_retire_provenance *et_o2_retire_record_find(
     if (record->owner == owner) return record;
   return NULL;
 }
+
+/* Authenticate the original publication record, including the current authorized
+ * options. Restore may update options, never the entry's ownership identities.
+ * This check deliberately ignores live states/operations owned by the load. */
+static int et_o2_retire_record_matches(
+    const et_o2_optimizer *owner, const et_o2_retire_provenance *record) {
+  if (owner == NULL || record == NULL ||
+      record != et_o2_retire_record_find(owner) || record->owner != owner ||
+      record->live != 1u || record->count == 0u ||
+      record->count > ET_O2_MAX_PARAMETERS || owner->count != record->count ||
+      owner->entries == NULL || owner->entries != record->entries)
+    return 0;
+  for (size_t index = 0u; index < record->count; ++index)
+    if (memcmp(&owner->entries[index], &record->roster[index],
+               sizeof(et_o2_entry)) != 0)
+      return 0;
+  return 1;
+}
 #endif
 
 #ifdef ET_O2_TESTING
@@ -2254,12 +2272,22 @@ int32_t et_o2_optimizer_load_state_v1(et_o2_optimizer *optimizer_candidate,
   et_f32_tensor_error i2_error;
   size_t index;
   int32_t result;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  et_o2_retire_provenance *retire_record =
+      et_o2_retire_record_find(optimizer);
+#endif
   if ((result = et_o2_require_optimizer(optimizer_candidate,
                                         "optimizer-load-state!", error)) != 0 ||
       (result = et_o2_require_state_live(
            state_candidate, "optimizer-load-state!", error)) != 0) {
     return result;
   }
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  if (!et_o2_retire_record_matches(optimizer, retire_record))
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+        ET_O2_CODE_OWNER_CONFLICT, "optimizer-load-state!",
+        "optimizer publication provenance changed before load");
+#endif
   if (state->active_borrows != 0u) {
     return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
                       ET_O2_CODE_ACTIVE_BORROW, "optimizer-load-state!",
@@ -2306,6 +2334,14 @@ int32_t et_o2_optimizer_load_state_v1(et_o2_optimizer *optimizer_candidate,
                            ET_O2_STATUS_SHAPE_MISMATCH);
     goto cleanup;
   }
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+  if (!et_o2_retire_record_matches(optimizer, retire_record)) {
+    result = et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+        ET_O2_CODE_OWNER_CONFLICT, "optimizer-load-state!",
+        "optimizer publication provenance changed before load commit");
+    goto cleanup;
+  }
+#endif
   if (et_f32_tensor_copy_plan_commit_v1(plan, &i2_error) != 0) {
     result = et_o2_from_i2(&i2_error, error, "optimizer-load-state!",
                            ET_O2_STATUS_INTERNAL);
@@ -2315,6 +2351,9 @@ int32_t et_o2_optimizer_load_state_v1(et_o2_optimizer *optimizer_candidate,
   optimizer->completed_updates = state->completed_updates;
   for (index = 0u; index < optimizer->count; ++index) {
     optimizer->entries[index].options = state->entries[index].options;
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+    retire_record->roster[index].options = state->entries[index].options;
+#endif
   }
   result = et_o2_success(error);
 

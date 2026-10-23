@@ -3,7 +3,10 @@
 #define ET_I2_PRIVATE_OWNED_CLONE_MATCH 1
 #define ET_TR3_C_O2_RESTORE_NATIVE 1
 #define ET_TR3_O2_STEP_CLEAR_NATIVE 1
-#include "../../native/o2_optimizer.c"
+#ifndef ET_O2_RETIRE_PROBE_NATIVE_SOURCE
+#define ET_O2_RETIRE_PROBE_NATIVE_SOURCE "../../native/o2_optimizer.c"
+#endif
+#include ET_O2_RETIRE_PROBE_NATIVE_SOURCE
 
 #include <stdio.h>
 #include <sys/wait.h>
@@ -1025,7 +1028,101 @@ static void test_long_cycles(size_t abort_cycles, size_t commit_cycles) {
                abort_cycles, commit_cycles);
 }
 
+#ifdef ET_O2_RETIRE_RESTORE_PROBE
+#include "retire_restore_probe.h"
+
+/* Same original prepare/prefix/42-copy/commit/finalize seams as test_commit. */
+static void probe_tr3_restore(int changed) {
+  restore_fixture fixture;
+  et_o2_error_v1 error;
+  fixture_init(&fixture);
+  et_o2_entry before[14];
+  memcpy(before, fixture.optimizer->entries, sizeof(before));
+  CHECK(et_o2_private_candidate_retire_preflight_v1(fixture.optimizer, &error) == 0);
+  for (size_t index = 0u; index < 14u; ++index) {
+    const et_o2_options *options = &before[index].options;
+    fixture.request.entries[index].learning_rate_bits =
+        changed ? UINT32_C(0x3e4ccccd) : options->learning_rate_bits;
+    fixture.request.entries[index].beta1_bits = options->beta1_bits;
+    fixture.request.entries[index].beta2_bits = options->beta2_bits;
+    fixture.request.entries[index].epsilon_bits = options->epsilon_bits;
+    fixture.request.entries[index].weight_decay_bits = options->weight_decay_bits;
+  }
+#ifdef ET_O2_RETIRE_RESTORE_REPAIR_CHECKS
+  for (size_t index = 0u; index < 14u; ++index) {
+    for (unsigned field = 0u; field < 11u; ++field) {
+      et_o2_tr3_c_restore_plan *rejected = NULL;
+      retire_probe_corrupt(&fixture.optimizer->entries[index], &before[(index + 1u) % 14u], field);
+      CHECK(et_o2_tr3_c_restore_prepare_v1(fixture.optimizer, &fixture.request,
+                                          &rejected, &error) == ET_O2_STATUS_INVALID_STATE);
+      CHECK(error.code == ET_O2_CODE_OWNER_CONFLICT && rejected == NULL);
+      fixture.optimizer->entries[index] = before[index];
+    }
+  }
+#endif
+  et_o2_tr3_c_restore_test_counts_v1 retained_before = {.struct_size = sizeof(retained_before)};
+  et_o2_tr3_c_restore_test_counts_v1 retained_after = {.struct_size = sizeof(retained_after)};
+  et_o2_tr3_c_restore_test_counts_snapshot_v1(&retained_before);
+  et_o2_tr3_c_restore_plan *aborted = prepare(&fixture);
+  CHECK(et_o2_tr3_c_restore_abort_v1(aborted, &error) == 0);
+  forget_released_stages(&fixture);
+  refresh_owned_sources(&fixture, 0);
+  CHECK(memcmp(before, fixture.optimizer->entries, sizeof(before)) == 0);
+  CHECK(memcmp(before, et_o2_retire_record_find(fixture.optimizer)->roster, sizeof(before)) == 0);
+  et_o2_tr3_c_restore_plan *plan = prepare(&fixture);
+  void *builder = prefix_builder(&fixture, plan);
+  CHECK(et_o2_tr3_c_restore_append_v1(plan, builder, 14u, &error) == 0);
+#ifdef ET_O2_RETIRE_RESTORE_REPAIR_CHECKS
+  for (size_t index = 0u; index < 14u; ++index) {
+    for (unsigned field = 0u; field < 11u; ++field) {
+      retire_probe_corrupt(&fixture.optimizer->entries[index], &before[(index + 1u) % 14u], field);
+      CHECK(et_o2_tr3_c_restore_check_v1(plan, &error) == ET_O2_STATUS_INVALID_STATE);
+      CHECK(error.code == ET_O2_CODE_OWNER_CONFLICT);
+      fixture.optimizer->entries[index] = before[index];
+    }
+  }
+  et_o2_retire_provenance *original_record = plan->retire_record;
+  plan->retire_record = NULL;
+  CHECK(et_o2_tr3_c_restore_check_v1(plan, &error) == ET_O2_STATUS_INVALID_STATE);
+  plan->retire_record = original_record;
+  original_record->roster[0].options.learning_rate_bits ^= 1u;
+  CHECK(et_o2_tr3_c_restore_check_v1(plan, &error) == ET_O2_STATUS_INVALID_STATE);
+  original_record->roster[0].options.learning_rate_bits ^= 1u;
+#endif
+  CHECK(et_o2_tr3_c_restore_check_v1(plan, &error) == 0);
+  CHECK(memcmp(before, fixture.optimizer->entries, sizeof(before)) == 0);
+  CHECK(et_tr3_c_i2_copy_builder_prepare_restore42_v1(builder, plan) == 0);
+  CHECK(et_tr3_c_i2_copy_builder_commit_restore42_checked_v1(builder, plan) == 0);
+  et_o2_tr3_c_restore_commit_native_v1(plan);
+  et_o2_tr3_c_restore_finalize_v1(plan);
+  forget_released_stages(&fixture);
+  release_prefix_sources(&fixture);
+  retire_probe_result(fixture.optimizer, before, changed, "tr3");
+  et_o2_tr3_c_restore_test_counts_snapshot_v1(&retained_after);
+  size_t retained_delta = retained_after.retained_control_bytes - retained_before.retained_control_bytes;
+  CHECK(retained_delta == 2u * sizeof(*plan));
+#ifdef ET_O2_RETIRE_RESTORE_REPAIR_CHECKS
+  _Static_assert(sizeof(void *) != 8u || sizeof(*plan) == 1472u,
+                 "candidate-ON LP64 restore control extent changed");
+  CHECK(plan->retire_record == NULL && aborted->retire_record == NULL);
+#else
+  _Static_assert(sizeof(void *) != 8u || sizeof(*plan) == 1464u,
+                 "baseline LP64 restore control extent changed");
+#endif
+  printf("O2-RESTORE-CONTROL bytes=%zu measured-retention-delta=%zu plans=2 candidate=ON\n",
+         sizeof(*plan), retained_delta);
+}
+#endif
+
 int main(void) {
+#ifdef ET_O2_RETIRE_RESTORE_PROBE
+  const char *probe = getenv("ET_O2_RETIRE_RESTORE_PROBE");
+  if (probe != NULL) {
+    CHECK(strcmp(probe, "changed") == 0 || strcmp(probe, "same") == 0);
+    probe_tr3_restore(strcmp(probe, "changed") == 0);
+    return failures != 0 ? 1 : 0;
+  }
+#endif
   const char *cycle_mode = getenv("ET_TR3_C_O2_CYCLE_MODE");
   if (cycle_mode != NULL) {
     if (strcmp(cycle_mode, "abort") == 0) {

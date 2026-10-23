@@ -3,7 +3,10 @@
 #define ET_O2_TESTING 1
 #define ET_F32_TENSOR_TESTING 1
 #define ET_F32_TENSOR_STORAGE_QUERY_PRIVATE 1
-#include "../../native/o2_optimizer.c"
+#ifndef ET_O2_RETIRE_PROBE_NATIVE_SOURCE
+#define ET_O2_RETIRE_PROBE_NATIVE_SOURCE "../../native/o2_optimizer.c"
+#endif
+#include ET_O2_RETIRE_PROBE_NATIVE_SOURCE
 
 #include <stdio.h>
 #include <sys/wait.h>
@@ -189,7 +192,64 @@ static void expect_fail_closed(et_o2_optimizer *candidate) {
   for (size_t i = 0u; i < sizeof(error); ++i) CHECK(bytes[i] == 0xa5u);
 }
 
+#ifdef ET_O2_RETIRE_RESTORE_PROBE
+#include "retire_restore_probe.h"
+
+static void probe_ordinary_restore(int changed) {
+  fixture f;
+  et_o2_error_v1 error;
+  make_fixture(&f);
+  et_o2_entry before[14];
+  memcpy(before, f.optimizer->entries, sizeof(before));
+  CHECK(et_o2_private_candidate_retire_preflight_v1(f.optimizer, &error) == 0);
+  const uint64_t shape[] = {80u};
+  uint32_t avg[80] = {0}, sq[80] = {0};
+  et_o2_state_reconstruct_config_v1 config = {
+      sizeof(config), ET_O2_CLIP_NONE, 0u, ET_O2_SCHEDULE_CONSTANT,
+      UINT32_C(0x3f800000), 0u, 0u, 1u, 14u};
+  et_o2_state_reconstruct_builder *builder = NULL;
+  et_o2_optimizer_state *state = NULL;
+  CHECK(et_o2_optimizer_state_reconstruct_create_v1(&config, &builder, &error) == 0);
+  for (size_t index = 0u; index < 14u; ++index) {
+    const et_o2_options *options = &before[index].options;
+    et_o2_state_reconstruct_entry_v1 entry = {
+        sizeof(entry), 1u, shape, avg, sq, 80u,
+        changed ? UINT32_C(0x3e4ccccd) : options->learning_rate_bits,
+        options->beta1_bits, options->beta2_bits, options->epsilon_bits,
+        options->weight_decay_bits, 0u};
+    CHECK(et_o2_optimizer_state_reconstruct_set_v1(builder, index, &entry, &error) == 0);
+  }
+  CHECK(et_o2_optimizer_state_reconstruct_prepare_v1(builder, &error) == 0);
+  CHECK(et_o2_optimizer_state_reconstruct_commit_v1(&builder, &state, &error) == 0);
+  CHECK(builder == NULL && state != NULL);
+  CHECK(memcmp(before, f.optimizer->entries, sizeof(before)) == 0);
+#ifdef ET_O2_RETIRE_RESTORE_REPAIR_CHECKS
+  for (size_t index = 0u; index < 14u; ++index) {
+    for (unsigned field = 0u; field < 11u; ++field) {
+      retire_probe_corrupt(&f.optimizer->entries[index], &before[(index + 1u) % 14u], field);
+      CHECK(et_o2_optimizer_load_state_v1(f.optimizer, state, &error) == ET_O2_STATUS_INVALID_STATE);
+      CHECK(error.code == ET_O2_CODE_OWNER_CONFLICT);
+      f.optimizer->entries[index] = before[index];
+      CHECK(memcmp(before, f.optimizer->entries, sizeof(before)) == 0);
+      CHECK(memcmp(before, et_o2_retire_record_find(f.optimizer)->roster, sizeof(before)) == 0);
+    }
+  }
+#endif
+  CHECK(et_o2_optimizer_load_state_v1(f.optimizer, state, &error) == 0);
+  CHECK(et_o2_optimizer_state_release_v1(state, &error) == 0);
+  retire_probe_result(f.optimizer, before, changed, "ordinary");
+}
+#endif
+
 int main(void) {
+#ifdef ET_O2_RETIRE_RESTORE_PROBE
+  const char *probe = getenv("ET_O2_RETIRE_RESTORE_PROBE");
+  if (probe != NULL) {
+    CHECK(strcmp(probe, "changed") == 0 || strcmp(probe, "same") == 0);
+    probe_ordinary_restore(strcmp(probe, "changed") == 0);
+    return 0;
+  }
+#endif
   fixture first, second;
   et_o2_error_v1 error;
   et_f32_tensor_error f32_error;
