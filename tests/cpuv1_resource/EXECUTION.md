@@ -119,3 +119,13 @@ phase5 after open/sealed/prepared/aborted. Original records, identity checks and
 unknown-state rejection remain intact. Generated-visitor host regression covers
 all five phases and malformed/copied identities. This is a source-only repair;
 new compiler/IR, allocation, link/runtime and resource admission are NOT RUN.
+
+Resource observer symbol prebinding (2026-10-23): twelve private helper symbol
+values and six private original-P1 envelope values are initialized before
+observation. The state helper and row5/63 comparisons reuse these values while
+preserving phase ordinals, identity rejection, public APIs and reverse projection.
+All37 resource host tests pass. Initialization must succeed; allocation/failure
+may occur earlier during interning. Emitted storage, capture sizes, ABI transfer
+and transitive effects are unmeasured. This is SOURCE ONLY; fresh compiler/IR,
+link/runtime and resource acceptance remain NOT RUN. The numbered execution
+gates retain their original prerequisites.

@@ -639,6 +639,16 @@ identity checks and unknown-state rejection. Generated-visitor regression and
 all35 resource host tests pass. This is SOURCE ONLY; successor emitted-IR,
 allocation, link/runtime and resource admission remain NOT RUN.
 
+Resource observer symbol prebinding (2026-10-23): twelve private helper symbol
+values and six private original-P1 envelope values are initialized before
+observation. The state helper and row5/63 comparisons reuse these values while
+preserving phase ordinals, identity rejection, public APIs and reverse projection.
+All37 resource host tests pass. Initialization must succeed; allocation/failure
+may occur earlier during interning. Emitted storage, capture sizes, ABI transfer
+and transitive effects are unmeasured. This is SOURCE ONLY; fresh compiler/IR,
+link/runtime and resource acceptance remain NOT RUN. The numbered execution
+gates retain their original prerequisites.
+
 Active finish milestone: **first complete validated CPU v1**. Current acceptance
 and ownership: [CPU v1 completion index](WAVE3_COMPLETION.md), updated 2026-10-22.
 PR #214 exact-head hosted checks pass. Current-source CPU4 two-update training,
