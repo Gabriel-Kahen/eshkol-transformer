@@ -1,28 +1,20 @@
 # Staged CPU4 held-out / FILE-resume frontend and normal driver
 
-**SOURCE ONLY. Compilation/runtime are NOT RUN. Execution is BLOCKED** pending
-root-owned composition of the actual a7 compile repair and G3 TRAIN-mode fix,
-root's refreshed exact caller/common source pins, independent source acceptance,
-and a reviewed supported-image launcher. This leaf supplies no launcher,
-`run.py`, `inside.sh`, shell gate recipe, static-pin update, alternate freeze
-manifest, compiler repair or production change. Root controls the supported
-image/toolchain identity, source mount, outer timeout, resource limits and shared
-heavy lock (future intent8GiB memory/3CPU/one compile job). This driver is not
-authorized to start itself from this document.
+**SOURCE ONLY. Compilation/runtime are NOT RUN.** The root composition and
+caller dependency refresh are staged for independent source acceptance. Actual
+execution still requires a reviewed supported-image launcher and a frozen exact
+source revision. This leaf supplies no launcher or production change. Root
+controls image/toolchain identity, source mount, outer timeout, resource limits
+and shared heavy lock (intended8GiB memory/3CPU/one compile job).
 
-Five additive files under `tests/cpu4_resume`: `runtime.esk`,
-`normal_driver.py`, `normal_native_overlay.json`, `test_driver.py`, this document.
-Base is `e82e24af2201b4bf78f734c5bfdf644d0024d163`; the exact seven accepted
-caller files and their eight dependency rows remain unchanged. On this staging
-base the eight caller pins match, but the actual common source-member manifest
-is stale: the driver intentionally refuses compilation. Incorporating real
-upstream fixes may also stale caller pins. Only root refreshes those pins after
-actual source composition/review. Never skip, relax, regenerate or substitute
-this preflight to make a run pass.
-The unchanged caller `test_source.py` also compares those eight hashes to
-immutable4d2c source. Root must supply an independently accepted successor
-normalization for that guard when its dependency rows change; this leaf does
-not claim that old source test passes after a future pin refresh.
+The five additive driver files originated at
+`e82e24af2201b4bf78f734c5bfdf644d0024d163`. The caller's same eight dependency
+paths now authenticate against reviewed support composition
+`9b066e64a6e2fa6eef4f62b6db7309b9927465bf` and current bytes. The root, child
+helper and positive reference fixture hashes changed for the accepted compile,
+TRAIN-mode and handoff composition; caller body/checker/helpers remain unchanged.
+Both exact caller and common source-member preflights must pass before compiler
+invocation. Never skip, relax or substitute either preflight.
 The Python module exposes `gate` and a normal five-argument CLI entry point,
 analogous to the reviewed FILE driver. Both remain unexecuted pending final
 root freeze; its tests replace all subprocess calls with explicit doubles.

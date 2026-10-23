@@ -13,7 +13,15 @@ universe and accepted `tests/cpu4_heldout/body.esk`, with its existing
 requires the existing `ET_O2_TESTING` moment getter. Do not load another root or
 link another I2/O2/C4 registry. No native flags or source lists change here.
 
-The frozen producer base is `4d2c05ccfde31b3ca6d7fd57880be37e5510b45f`.
+The original producer base is `4d2c05ccfde31b3ca6d7fd57880be37e5510b45f`.
+The reviewed support composition is now
+`9b066e64a6e2fa6eef4f62b6db7309b9927465bf`: explicit T1/T2 loads,
+compiler-supported test interpositions, the owned TRAIN transition, and the
+source-only handoff leaf. The same eight dependency paths remain pinned; only
+the root, child helper and positive reference fixture hashes changed. The source
+guard authenticates every row against that immutable support commit as well as
+the working files. Caller body, checker and helper contracts are unchanged.
+This refresh establishes source identity, not compilation or runtime.
 `DEPENDENCIES.sha256` pins the actual union root, checkpoint/factory/child
 contracts, accepted held-out body/native observer/checker, and the positive FILE
 fixture used as the capture algorithm reference. This caller locally adapts its

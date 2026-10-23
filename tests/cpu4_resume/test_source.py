@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT / 'tests/cpu4_trainer_control'))
 from test_source_contract import parse, walk
 
 BODY = ROOT / 'tests/cpu4_resume/body.esk'
+SUPPORT_COMMIT = '9b066e64a6e2fa6eef4f62b6db7309b9927465bf'
 
 
 def calls(form, name):
@@ -31,7 +32,7 @@ class Source(unittest.TestCase):
         for line in (ROOT / 'tests/cpu4_resume/DEPENDENCIES.sha256').read_text().splitlines():
             digest, path = line.split('  ')
             self.assertEqual(hashlib.sha256((ROOT / path).read_bytes()).hexdigest(), digest, path)
-            pinned = subprocess.check_output(['git', 'show', '4d2c05cc:'+path], cwd=ROOT)
+            pinned = subprocess.check_output(['git', 'show', SUPPORT_COMMIT+':'+path], cwd=ROOT)
             self.assertEqual(hashlib.sha256(pinned).hexdigest(), digest)
         own = set(self.functions)
         include_dirs = json.loads((ROOT / 'native/cpu4_v1_private_inputs.json').read_text())['source_include_dirs']
