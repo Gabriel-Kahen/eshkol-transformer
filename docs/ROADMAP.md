@@ -649,6 +649,16 @@ and transitive effects are unmeasured. This is SOURCE ONLY; fresh compiler/IR,
 link/runtime and resource acceptance remain NOT RUN. The numbered execution
 gates retain their original prerequisites.
 
+Candidate observer symbol prebinding (2026-10-23): four private candidate-envelope
+symbol values replace nine comparison-time literal evaluations. The original
+six APIs, registries, phase1/2/3, broad LIVE/LIVE/DEAD mappings, link ABI and exact
+reverse projection are preserved. All38 resource host tests pass, including all
+three phases, unknown phase, owner/lifetime/identity failures and altered private
+initializer rejection. This is SOURCE ONLY. Successful initialization is required;
+allocation/failure may move earlier. Emitted interner removal, capture/storage/ABI
+changes, caller identity and resource/runtime acceptance remain unmeasured or
+NOT RUN. No successor compiler is scheduled from this source change.
+
 Active finish milestone: **first complete validated CPU v1**. Current acceptance
 and ownership: [CPU v1 completion index](WAVE3_COMPLETION.md), updated 2026-10-22.
 PR #214 exact-head hosted checks pass. Current-source CPU4 two-update training,
