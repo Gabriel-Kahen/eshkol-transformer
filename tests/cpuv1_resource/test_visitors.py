@@ -7,6 +7,67 @@ from tests.cpuv1_resource.test_review_fixes import Host,Vec
 
 
 class Visitors(unittest.TestCase):
+    def test_state_symbols_are_private_once_bound_before_observation(self):
+        helper_forms=parse((g.ROOT/'tests/cpuv1_resource/helpers.esk').read_text())
+        state=next(f for f in helper_forms if f[:2]==[
+            'define',['cpuv1-resource-state-code','value']])
+        constants=[f for f in helper_forms if f[0]=='define'
+                   and isinstance(f[1],str)
+                   and f[1].startswith('cpuv1-resource-state-')]
+        self.assertEqual(len(constants),12)
+        self.assertTrue(all(helper_forms.index(f)<helper_forms.index(state) for f in constants))
+        self.assertFalse(any(n and n[0]=='quote' for n in walk(state)))
+        self.assertTrue(all(f[1] not in helper_forms[0][1:] for f in constants))
+        h=Host();h.helpers('cpuv1-resource-state-code')
+        for code,words in [(1,('live','open','sealed')),(2,('dead','aborted','released')),
+                           (3,('pending','constructing')),(4,('prepared',)),
+                           (5,('busy','releasing','consuming')),(0,('retired','unknown'))]:
+            for word in words:self.assertEqual(h.env['cpuv1-resource-state-code'](word),code)
+
+        staged,record=g.transform((g.ROOT/g.P1).read_text(),g.P1)
+        forms=parse(staged)
+        envelope=next(f for f in forms if f[:2]==['define','cpuv1-p1-test-envelope'])
+        initialization=envelope[2][2:-1]
+        p1_constants=[f for f in initialization if f[0]=='define'
+                      and isinstance(f[1],str)
+                      and f[1].startswith('cpuv1-resource-p1-state-')]
+        self.assertEqual(len(p1_constants),6)
+        for i in (5,63):
+            visitor=next(f for f in initialization if f[:2]==[
+                'define',[g.typed.visitor_name(i),'packet','row']])
+            self.assertFalse(any(n and n[0]=='quote' for n in walk(visitor)))
+            self.assertTrue(all(initialization.index(f)<initialization.index(visitor)
+                                for f in p1_constants))
+        for binding in constants+p1_constants:
+            self.assertEqual(binding[2][0],'quote')
+            self.assertFalse(any(n[:2]==['set!',binding[1]] for n in walk(forms+helper_forms)))
+        g.reverse_projection(staged,record,{},'__HELPER__')
+        for binding in p1_constants:
+            with self.assertRaises(ValueError):
+                g.reverse_projection(staged.replace(
+                    f"(define {binding[1]} '{binding[2][1]})",
+                    f"(define {binding[1]} 'unknown)",1),record,{},'__HELPER__')
+
+    def test_prebound_live_and_retired_tensor_rows_keep_identity_and_ordinals(self):
+        staged,_=g.transform((g.ROOT/g.P1).read_text(),g.P1)
+        visitor=next(n for n in walk(parse(staged)) if n and n[:2]==[
+            'define',['cpuv1-resource-row-63','packet','row']])
+        h=Host();h.helpers('cpuv1-resource-vector?')
+        shell=object();construction=object();row=Vec([shell,construction,False,False,False,'live'])
+        states=[];errors=[]
+        h.env.update({'construction-record-resource':lambda value:construction if value is shell else False,
+                      'cpuv1-resource-state!':lambda *values:states.append(values[1:]),
+                      'cpuv1-resource-reject!':lambda packet:errors.append('identity')})
+        h.define(visitor);visit=h.env['cpuv1-resource-row-63'];packet=object()
+        self.assertEqual(RAW_NAMES[63],['STATIC','live','retired'])
+        for phase,broad,raw in [('live',1,1),('retired',2,2)]:
+            row[5]=phase;states.clear();errors.clear();visit(packet,row)
+            self.assertEqual(states,[(63,broad,2,raw)]);self.assertFalse(errors)
+        for bad in (Vec(row[:5]+['unknown']),Vec([object()]+row[1:]),
+                    Vec([shell,object()]+row[2:]),row[:5],object()):
+            states.clear();errors.clear();visit(packet,bad)
+            self.assertFalse(states);self.assertEqual(errors,['identity'])
+
     def test_construction_retirement_preserves_source_phase_and_identity(self):
         path=g.P1
         staged,_=g.transform((g.ROOT/path).read_text(),path)

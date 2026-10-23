@@ -24,6 +24,17 @@ class Host:
             'integer?':lambda x:type(x) is int,'procedure?':callable,
             '+':lambda *x:sum(x),'=':lambda a,b:a==b,'>':lambda a,b:a>b,'>=':lambda a,b:a>=b,
         }
+        # Load actual private quoted constants, not a mirrored phase map.
+        sources=((g.ROOT/'tests/cpuv1_resource/helpers.esk').read_text(),
+                 g.typed.EXTRA_DEFS[g.P1])
+        for source in sources:
+            for form in parse(source):
+                if (form[0]=='define' and isinstance(form[1],str)
+                        and form[1].startswith(('cpuv1-resource-state-',
+                                                'cpuv1-resource-p1-state-'))):
+                    if len(form)!=3 or form[2][0]!='quote':
+                        raise ValueError('private symbol must be a quoted constant')
+                    self.env[form[1]]=self.ev(form[2])
     def ev(self,n,scope=None):
         env=self.env if scope is None else scope
         if not isinstance(n,list):

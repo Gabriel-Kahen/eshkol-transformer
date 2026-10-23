@@ -206,3 +206,16 @@ SCHEMAS[25]['check']='''(and (cpuv1-resource-vector? row 17)
 # F1: admitted provider native identities have eight callback tokens outside
 # shell-registry/index. Authenticate each exact slot rather than count as shell.
 SCHEMAS[2]['check']=SCHEMAS[2]['check'][:-1]+" (cpuv1-resource-vector? (vector-ref (vector-ref row 2) 10) 8) (= (cpuv1-resource-count-vector (vector-ref row 1) (vector-ref tensor-provider-registry-root 0) 1 0 0) 1) (= (cpuv1-resource-provider-callbacks! packet native-context (vector-ref row 1) (vector-ref (vector-ref row 2) 10) 0) 0))"
+
+# Private symbol values are initialized once in the original owning P1 envelope.
+# These values add no public surface or registry. New emitted captures/storage
+# and all transitive allocation effects still require successor IR validation.
+P1_STATE_SYMBOLS=('live','open','sealed','prepared','aborted','retired')
+EXTRA_DEFS['internal/p1/lib/transformer/module.esk']=''.join(
+    f"(define cpuv1-resource-p1-state-{word} '{word})\n"
+    for word in P1_STATE_SYMBOLS)+EXTRA_DEFS['internal/p1/lib/transformer/module.esk']
+for i in (5,63):
+    for field in ('check','state','raw'):
+        for word in P1_STATE_SYMBOLS:
+            SCHEMAS[i][field]=SCHEMAS[i][field].replace(
+                "'"+word+')','cpuv1-resource-p1-state-'+word+')')
