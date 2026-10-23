@@ -4,7 +4,18 @@ The preserved first native-unit attempt compiled two owner objects and failed
 on the third, C4 owner, before the unit ran. Its census referenced optional types
 absent under the frozen flags. The source correction guards those references
 and explicitly reports kinds8/12 N/A; it does not widen the build profile.
-Corrected native compilation/unit and all tiny gates remain NOT RUN.
+At a2356ff6 the corrected native unit passed244 checks and the separate tiny
+object-only gate emitted authenticated IR/object/bitcode/dependencies. Its
+no-allocation proof FAILED: the first getter constructs a fresh48-byte visitor
+closure before walking even an empty registry. No tiny link/runtime ran.
+
+The successor prebinds each registry visitor value once during its owning
+initialization; getters pass that immutable value rather than a named function
+that fe9 boxes on each use. Candidate and P1 visitors stay in their original
+lexical scope; no root head is copied. Host identity/projection negatives cover
+repeated observations, changed canonical roots, reboxing and lazy rebinding.
+Successor compiler/IR/allocation/canonical proof remains NOT RUN. Reuse prior
+evidence only for its exact unchanged source/artifact scope.
 
 Only root dispatches after independent source/test/recipe review, under the
 existing exclusive heavy lock, 8GiB/3CPU/one compiler job. No sanitizers, alternate
