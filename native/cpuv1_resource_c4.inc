@@ -7,6 +7,8 @@
 } while (0)
 #define C_CONTROL(K,B,STATE) C_BASE(K,B,1u,sizeof(*(B)),STATE,_Alignof(__typeof__(*(B))))
 void et_cpuv1_test_census_c4_v1(et_cpuv1_resource_packet_v1 *packet) {
+  packet->details[ET_R_C4][ET_R_C4_COMPILED_KINDS]=(UINT64_C(1)<<13)-1u;
+  packet->details[ET_R_C4][ET_R_C4_NOT_APPLICABLE_KINDS]=0;
   et_cpuv1_test_resource_layout_v1(packet,ET_R_C4,0,sizeof(et_g3c4_model_owner_internal),_Alignof(et_g3c4_model_owner_internal));
   et_cpuv1_test_resource_layout_v1(packet,ET_R_C4,1,sizeof(et_cpu4_candidate_internal),_Alignof(et_cpu4_candidate_internal));
   et_cpuv1_test_resource_layout_v1(packet,ET_R_C4,2,sizeof(et_g3c4_training_lease_internal),_Alignof(et_g3c4_training_lease_internal));
@@ -15,11 +17,23 @@ void et_cpuv1_test_census_c4_v1(et_cpuv1_resource_packet_v1 *packet) {
   et_cpuv1_test_resource_layout_v1(packet,ET_R_C4,5,sizeof(et_g3c4_rng_internal),_Alignof(et_g3c4_rng_internal));
   et_cpuv1_test_resource_layout_v1(packet,ET_R_C4,6,sizeof(et_g3c4_input_internal),_Alignof(et_g3c4_input_internal));
   et_cpuv1_test_resource_layout_v1(packet,ET_R_C4,7,sizeof(et_g3c4_output_internal),_Alignof(et_g3c4_output_internal));
+#ifdef ET_G3C4_LOGITS_RESERVATION_PRIVATE
   et_cpuv1_test_resource_layout_v1(packet,ET_R_C4,8,sizeof(et_g3c4_logits_internal),_Alignof(et_g3c4_logits_internal));
+#else
+  /* The owning type/allocator is compiled out: N/A, never a measured size0. */
+  packet->details[ET_R_C4][ET_R_C4_COMPILED_KINDS]&=~(UINT64_C(1)<<8);
+  packet->details[ET_R_C4][ET_R_C4_NOT_APPLICABLE_KINDS]|=UINT64_C(1)<<8;
+#endif
   et_cpuv1_test_resource_layout_v1(packet,ET_R_C4,9,sizeof(et_g3c4_typed_result_internal),_Alignof(et_g3c4_typed_result_internal));
   et_cpuv1_test_resource_layout_v1(packet,ET_R_C4,10,sizeof(et_g3c4_terminal_ids_clone_internal),_Alignof(et_g3c4_terminal_ids_clone_internal));
   et_cpuv1_test_resource_layout_v1(packet,ET_R_C4,11,sizeof(et_g3c4_result_tensor_internal),_Alignof(et_g3c4_result_tensor_internal));
+#ifdef ET_G3C4_MANUAL_FRAME_BEGIN_PRIVATE
   et_cpuv1_test_resource_layout_v1(packet,ET_R_C4,12,sizeof(et_g3c4_manual_frame_internal),_Alignof(et_g3c4_manual_frame_internal));
+#else
+  /* The owning type/allocator is compiled out: N/A, never a measured size0. */
+  packet->details[ET_R_C4][ET_R_C4_COMPILED_KINDS]&=~(UINT64_C(1)<<12);
+  packet->details[ET_R_C4][ET_R_C4_NOT_APPLICABLE_KINDS]|=UINT64_C(1)<<12;
+#endif
 
   for (et_g3c4_model_owner_internal *p=et_g3c4_owner_registry;p;p=p->registry_next) {
     unsigned state=p->state==ET_G3C4_OWNER_ABORTED?ET_R_DEAD:
@@ -91,7 +105,9 @@ void et_cpuv1_test_census_c4_v1(et_cpuv1_resource_packet_v1 *packet) {
       case ET_G3C4_RNG_KIND:C_KIND(et_g3c4_rng_internal,5);break;
       case ET_G3C4_INPUT_KIND:C_KIND(et_g3c4_input_internal,6);break;
       case ET_G3C4_OUTPUT_KIND:C_KIND(et_g3c4_output_internal,7);break;
+#ifdef ET_G3C4_LOGITS_RESERVATION_PRIVATE
       case ET_G3C4_LOGITS_KIND:C_KIND(et_g3c4_logits_internal,8);break;
+#endif
       case ET_G3C4_TYPED_IDS_KIND:
       case ET_G3C4_TYPED_LENGTHS_KIND:
       case ET_G3C4_TYPED_CACHE_KIND:C_KIND(et_g3c4_typed_result_internal,9);break;
@@ -99,6 +115,7 @@ void et_cpuv1_test_census_c4_v1(et_cpuv1_resource_packet_v1 *packet) {
       case ET_G3C4_IDS_KIND:
       case ET_G3C4_LENGTHS_KIND:
       case ET_G3C4_CACHE_LENGTHS_KIND:C_KIND(et_g3c4_result_tensor_internal,11);break;
+      /* Includes any forged member of a compiled-out kind. */
       default:et_cpuv1_test_resource_fail_v1(packet,ET_R_COVERAGE);return;
     }
 #undef C_KIND

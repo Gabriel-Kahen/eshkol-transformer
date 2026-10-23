@@ -235,6 +235,29 @@ int et_cpuv1_test_resource_finish_v1(et_cpuv1_resource_packet_v1 *p) {
   et_cpuv1_test_resource_fail_v1(p,event_error);
   if (mutation==1) p->rows[ET_R_F32][0].bases++;
   if (mutation==2) p->coverage &= ~(UINT64_C(1)<<ET_R_F32);
+  /* Snapshot-only negative: perfectly conserved history of an unavailable C4
+   * kind still violates the compiled profile; actual event totals stay intact. */
+  if (mutation==4) {
+    et_cpuv1_resource_row_v1 *r=&p->rows[ET_R_C4][8];
+    r->created++;r->freed++;
+    r->allocated_requested+=16;r->freed_requested+=16;
+    r->allocated_usable+=16;r->freed_usable+=16;
+  }
+  uint64_t c4_compiled=p->details[ET_R_C4][ET_R_C4_COMPILED_KINDS];
+  uint64_t c4_na=p->details[ET_R_C4][ET_R_C4_NOT_APPLICABLE_KINDS];
+  if ((c4_compiled&c4_na) || (c4_compiled|c4_na)!=(UINT64_C(1)<<13)-1u)
+    et_cpuv1_test_resource_fail_v1(p,ET_R_COVERAGE);
+  for (unsigned k=0;k<13;k++) {
+    const et_cpuv1_resource_row_v1 *r=&p->rows[ET_R_C4][k];
+    if ((c4_compiled&(UINT64_C(1)<<k)) && (!r->control_size || !r->control_alignment))
+      et_cpuv1_test_resource_fail_v1(p,ET_R_COVERAGE);
+    if ((c4_na&(UINT64_C(1)<<k)) &&
+        (r->created || r->freed || r->allocated_requested || r->freed_requested ||
+         r->allocated_usable || r->freed_usable || r->failed || r->bases ||
+         r->requested || r->usable || r->live || r->pending || r->prepared ||
+         r->busy || r->dead || r->control_size || r->control_alignment))
+      et_cpuv1_test_resource_fail_v1(p,ET_R_MISMATCH);
+  }
   for (unsigned d=0;d<ET_R_DOMAINS;d++) {
     if (d==ET_R_SCHEME) continue;
     for (unsigned k=0;k<ET_R_KINDS;k++) {

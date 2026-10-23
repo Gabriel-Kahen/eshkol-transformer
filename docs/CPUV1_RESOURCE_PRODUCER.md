@@ -100,5 +100,17 @@ reconciliation and retained-dead identity, native candidate bijection, complete
 declared producer static extents, and hidden C++ bridge compilation flags. The
 prepared genuine native unit adds eight-callback positive/omission/slot/context
 controls plus original-construction DEAD nonce/PID controls. The tiny gate adds
-native candidate capability/owner/scope/phase negatives. All are prepared source;
-actual native, symbol-visibility and AOT outcomes remain NOT RUN.
+native candidate capability/owner/scope/phase negatives.
+
+The first supported native-unit attempt compiled two owner objects, then failed
+at the C4 census: optional logits/manual-frame types are compiled out under the
+frozen owner flags. The successor guards those references with their original
+owning-source feature guards; it does not enable either feature. C4 details
+words48/49 report disjoint compiled/N/A kind masks. In this exact profile kinds8
+and12 are N/A (mask0x1100), and all other kinds0–12 retain real compiled layout
+facts (mask0x0eff). Zero layout fields for N/A kinds are not measured sizes.
+Any active membership or nonzero allocation/free/failure history for an N/A
+kind rejects the snapshot, including balanced retired history. The prepared
+native unit checks these masks and a snapshot-only balanced-history negative.
+Host guard/profile tests pass; the corrected native compilation/unit, remaining
+symbol-visibility gates and AOT outcomes remain NOT RUN.

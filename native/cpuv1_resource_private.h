@@ -19,6 +19,8 @@ enum et_cpuv1_resource_domain {
   ET_R_SCHEME, ET_R_RUNTIME, ET_R_DOMAINS
 };
 enum { ET_R_KINDS = 64, ET_R_PACKET_VERSION = 1 };
+/* C4 details words: disjoint per-kind profile masks, not sizeof measurements. */
+enum { ET_R_C4_COMPILED_KINDS = 48, ET_R_C4_NOT_APPLICABLE_KINDS = 49 };
 enum et_cpuv1_runtime_field {
  ET_R_ROOT,ET_R_CURRENT_BLOCKS,ET_R_ADOPTED_BLOCKS,ET_R_CURRENT_USED,
  ET_R_ADOPTED_USED,ET_R_CURRENT_CAPACITY,ET_R_ADOPTED_CAPACITY,ET_R_SCOPES,

@@ -1,4 +1,10 @@
-# Stage A prepared execution gates — NOT RUN
+# Stage A prepared execution gates
+
+The preserved first native-unit attempt compiled two owner objects and failed
+on the third, C4 owner, before the unit ran. Its census referenced optional types
+absent under the frozen flags. The source correction guards those references
+and explicitly reports kinds8/12 N/A; it does not widen the build profile.
+Corrected native compilation/unit and all tiny gates remain NOT RUN.
 
 Only root dispatches after independent source/test/recipe review, under the
 existing exclusive heavy lock, 8GiB/3CPU/one compiler job. No sanitizers, alternate
@@ -30,7 +36,11 @@ both native unit and tiny; the tiny body never invokes corruption helpers.
    P1 callback identities (one provider shell versus nine native records),
    omitted/wrong-slot/wrong-context callbacks, authentic DEAD construction shell
    plus restored nonce/PID mutation negatives, declared runtime static extents,
-   actual adopted arena blocks, layout/overflow/duplicate/scratch negatives. Preserve all logs,
+   actual adopted arena blocks, layout/overflow/duplicate/scratch negatives.
+   Require exact C4 compiled/N/A masks0x0eff/0x1100, real layout facts for every
+   available kind, and rejection of any N/A membership or event history, even
+   balanced allocation/free history. N/A zero fields never establish sizeof0.
+   Preserve all logs,
    native depfiles, actual compiler argv, archive/object/ELF hashes and normal
    glibc runtime evidence. A source projection is not an object parity proof.
 2. Separately run `tiny-compile.sh`. It builds only generated `tiny.esk`, with one
