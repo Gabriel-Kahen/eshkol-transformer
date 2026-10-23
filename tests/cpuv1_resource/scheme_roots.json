@@ -1,0 +1,322 @@
+[
+  {
+    "id": 0,
+    "path": "internal/c1/lib/transformer/checkpoint_internal.esk",
+    "name": "c1-hard-tensors"
+  },
+  {
+    "id": 1,
+    "path": "internal/c1/lib/transformer/persistence_policy_internal.esk",
+    "name": "c1-policy-hard-tensors"
+  },
+  {
+    "id": 2,
+    "path": "internal/p1/lib/transformer/module.esk",
+    "name": "tensor-provider-registry-root"
+  },
+  {
+    "id": 3,
+    "path": "internal/p1/lib/transformer/module.esk",
+    "name": "shell-registry-root"
+  },
+  {
+    "id": 4,
+    "path": "internal/p1/lib/transformer/module.esk",
+    "name": "shell-identity-index"
+  },
+  {
+    "id": 5,
+    "path": "internal/p1/lib/transformer/module.esk",
+    "name": "construction-registry-root"
+  },
+  {
+    "id": 6,
+    "path": "internal/p1/lib/transformer/module.esk",
+    "name": "e3-mode-registry-root"
+  },
+  {
+    "id": 7,
+    "path": "internal/t1/lib/transformer/tokenizer_internal.esk",
+    "name": "t1-private-tokenizer-registry"
+  },
+  {
+    "id": 8,
+    "path": "internal/t2/lib/transformer/tokenizer_internal.esk",
+    "name": "t2-private-tokenizer-registry"
+  },
+  {
+    "id": 9,
+    "path": "native/c2_checkpoint_load_extension.esk",
+    "name": "c2-load-stages"
+  },
+  {
+    "id": 10,
+    "path": "native/c2_checkpoint_load_extension.esk",
+    "name": "c2-load-controls-internal"
+  },
+  {
+    "id": 11,
+    "path": "native/c2_o2_encode_extension.esk",
+    "name": "c2-o2-wire-max-total-tensors"
+  },
+  {
+    "id": 12,
+    "path": "native/c2_persistence_policy_extension.esk",
+    "name": "c2-policy-hard-tensors"
+  },
+  {
+    "id": 13,
+    "path": "native/c2_persistence_policy_extension.esk",
+    "name": "c2-policy-c1-hard-tensors"
+  },
+  {
+    "id": 14,
+    "path": "native/c2_persistence_policy_extension.esk",
+    "name": "c2-policy-operational-tensors"
+  },
+  {
+    "id": 15,
+    "path": "native/c2_training_state_extension.esk",
+    "name": "c2-training-state-states"
+  },
+  {
+    "id": 16,
+    "path": "native/cpu4_candidate_children_extension.esk",
+    "name": "cpu4-owned-candidates"
+  },
+  {
+    "id": 17,
+    "path": "native/cpu4_checkpoint_extension.esk",
+    "name": "cpu4-checkpoint-parents"
+  },
+  {
+    "id": 18,
+    "path": "native/cpu4_checkpoint_extension.esk",
+    "name": "cpu4-snapshot-envelopes"
+  },
+  {
+    "id": 19,
+    "path": "native/cpu4_checkpoint_factory_extension.esk",
+    "name": "cpu4-checkpoint-factories"
+  },
+  {
+    "id": 20,
+    "path": "native/cpu4_generator_handoff_extension.esk",
+    "name": "cpu4-handoffs"
+  },
+  {
+    "id": 21,
+    "path": "native/cpu4_model_binding_extension.esk",
+    "name": "cpu4-model-bindings"
+  },
+  {
+    "id": 22,
+    "path": "native/cpu4_trainer_control_extension.esk",
+    "name": "cpu4-control-parents"
+  },
+  {
+    "id": 23,
+    "path": "native/cpu4_trainer_control_extension.esk",
+    "name": "cpu4-control-stages"
+  },
+  {
+    "id": 24,
+    "path": "native/cpu4_training_step_extension.esk",
+    "name": "cpu4-step-frames"
+  },
+  {
+    "id": 25,
+    "path": "native/e3_cpu4_private_extension.esk",
+    "name": "e3-frame-registry-root"
+  },
+  {
+    "id": 26,
+    "path": "native/g3c4_call_entry_extension.esk",
+    "name": "g3c4-registry"
+  },
+  {
+    "id": 27,
+    "path": "native/g3c4_model_extension.esk",
+    "name": "g3c4-model-registry"
+  },
+  {
+    "id": 28,
+    "path": "native/g3c4_p2g1_shell_publication_extension.esk",
+    "name": "g3c4-p2g1-output-records"
+  },
+  {
+    "id": 29,
+    "path": "native/g3c4_p2g2_protected_scope_extension.esk",
+    "name": "g3c4-p2g2-protected-records"
+  },
+  {
+    "id": 30,
+    "path": "native/g3c4_p2g2_protected_scope_extension.esk",
+    "name": "g3c4-p2g2-protected-anchors"
+  },
+  {
+    "id": 31,
+    "path": "native/g3c4_p2g2_t1_prefix_coordinator_extension.esk",
+    "name": "g3c4-p2g2-prefix-input-anchors"
+  },
+  {
+    "id": 32,
+    "path": "native/g3c4_p2g2_terminal_extension.esk",
+    "name": "g3c4-p2g2-terminal-pending-anchors"
+  },
+  {
+    "id": 33,
+    "path": "native/g3c4_p2g2_terminal_ids_owner_extension.esk",
+    "name": "g3c4-p2g2-terminal-ids-anchors"
+  },
+  {
+    "id": 34,
+    "path": "native/g3c4_p2g2_terminal_live_authority_extension.esk",
+    "name": "g3c4-p2g2-terminal-live-anchors"
+  },
+  {
+    "id": 35,
+    "path": "native/g3c4_p2g2_typed_result_extension.esk",
+    "name": "g3c4-p2g2-typed-anchors"
+  },
+  {
+    "id": 36,
+    "path": "native/g3c4_public_g2_result_extension.esk",
+    "name": "g3c4-public-g2-released-outputs"
+  },
+  {
+    "id": 37,
+    "path": "native/g3c4_public_g2_result_extension.esk",
+    "name": "g3c4-public-g2-results"
+  },
+  {
+    "id": 38,
+    "path": "native/g3c4_public_g2_result_extension.esk",
+    "name": "g3c4-public-g2-result-bindings"
+  },
+  {
+    "id": 39,
+    "path": "native/g3c4_public_g2_result_extension.esk",
+    "name": "g3c4-public-g2-released-results"
+  },
+  {
+    "id": 40,
+    "path": "native/g3c4_public_generation_dispatch_extension.esk",
+    "name": "g3c4-public-g2-generator-rows"
+  },
+  {
+    "id": 41,
+    "path": "native/g3c4_public_generation_dispatch_extension.esk",
+    "name": "g3c4-public-g2-generator-anchors"
+  },
+  {
+    "id": 42,
+    "path": "native/g3c4_public_generation_dispatch_extension.esk",
+    "name": "g3c4-public-g2-generator-bindings"
+  },
+  {
+    "id": 43,
+    "path": "native/g3c4_public_generation_dispatch_extension.esk",
+    "name": "g3c4-public-g2-tickets"
+  },
+  {
+    "id": 44,
+    "path": "native/g3c4_public_generation_dispatch_extension.esk",
+    "name": "g3c4-public-g2-output-rows"
+  },
+  {
+    "id": 45,
+    "path": "native/g3c4_public_generation_dispatch_extension.esk",
+    "name": "g3c4-public-g2-output-anchors"
+  },
+  {
+    "id": 46,
+    "path": "native/g3c4_public_generation_dispatch_extension.esk",
+    "name": "g3c4-public-g2-output-bindings"
+  },
+  {
+    "id": 47,
+    "path": "native/g3c4_public_output_adapter_extension.esk",
+    "name": "g3c4-public-result-records"
+  },
+  {
+    "id": 48,
+    "path": "native/g3t_model_admission_extension.esk",
+    "name": "g3t-registry"
+  },
+  {
+    "id": 49,
+    "path": "native/i2_wave2_root.esk",
+    "name": "i2-module-registry-root"
+  },
+  {
+    "id": 50,
+    "path": "native/i2_wave2_root.esk",
+    "name": "i2-construction-registry-root"
+  },
+  {
+    "id": 51,
+    "path": "native/k2_wave2_extension.esk",
+    "name": "k2-factories-ready"
+  },
+  {
+    "id": 52,
+    "path": "native/m3t_transport_extension.esk",
+    "name": "m3t-registry"
+  },
+  {
+    "id": 53,
+    "path": "native/o2_wave2_extension.esk",
+    "name": "o2-states"
+  },
+  {
+    "id": 54,
+    "path": "native/t1_wave1_root.esk",
+    "name": "t1-wave1-policy-registry"
+  },
+  {
+    "id": 55,
+    "path": "native/t1_wave1_root.esk",
+    "name": "t1-wave1-tensor-registry"
+  },
+  {
+    "id": 56,
+    "path": "native/t2_wave2_root.esk",
+    "name": "t2-wave2-policy-registry"
+  },
+  {
+    "id": 57,
+    "path": "native/t2_wave2_root.esk",
+    "name": "t2-wave2-tensor-registry"
+  },
+  {
+    "id": 58,
+    "path": "native/x1_config_private.esk",
+    "name": "x1-config-registry"
+  },
+  {
+    "id": 59,
+    "path": "tests/cpu4_heldout/body.esk",
+    "name": "heldout-fixture-session"
+  },
+  {
+    "id": 60,
+    "path": "tests/cpu4_resume/body.esk",
+    "name": "cpu4-resume-session"
+  },
+  {
+    "id": 61,
+    "path": "tests/cpu4_trained_g2/generation.esk",
+    "name": "cpu4-trained-g2-session"
+  },
+  {
+    "id": 62,
+    "path": "internal/p1/lib/transformer/module.esk",
+    "name": "active-record-root"
+  },
+  {
+    "id": 63,
+    "path": "internal/p1/lib/transformer/module.esk",
+    "name": "candidate-ticket-root"
+  }
+]

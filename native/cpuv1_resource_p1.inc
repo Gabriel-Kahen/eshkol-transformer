@@ -48,5 +48,28 @@ void et_cpuv1_test_census_p1_v1(et_cpuv1_resource_packet_v1 *packet) {
   packet->details[ET_R_P1][32]=active_construction!=NULL;
   if (active_construction) et_cpuv1_test_resource_fail_v1(packet,ET_R_NOT_QUIESCENT);
 }
+int64_t et_cpuv1_test_p1_context_v1(void *raw,void *candidate) {
+  et_cpuv1_resource_packet_v1 *packet=raw;
+  et_p1_context *p=contexts;
+  while(p && p!=candidate)p=p->next;
+  if(!packet || !p || !p->live) {
+    et_cpuv1_test_resource_fail_v1(packet,ET_R_MISMATCH);return ET_R_MISMATCH;
+  }
+  packet->scheme_p1[0]=(uint64_t)(uintptr_t)p;
+  return (int64_t)packet->status;
+}
+int64_t et_cpuv1_test_p1_shell_v1(void *raw,void *context,void *shell,
+ int64_t kind,int64_t known_dead) {
+  et_cpuv1_resource_packet_v1 *packet=raw;
+  et_p1_record *record=find_record(shell);
+  if(!packet || !record || !token_integrity(record) || record->owner!=context ||
+     kind<1 || kind>8 || record->kind!=kind || known_dead<0 || known_dead>1 ||
+     (known_dead && record->live)) {
+    et_cpuv1_test_resource_fail_v1(packet,ET_R_MISMATCH);return ET_R_MISMATCH;
+  }
+  packet->scheme_p1[4+(unsigned)kind]++;
+  et_cpuv1_test_scheme_state_v1(packet,3,record->live?1:2,2,record->live?1:2);
+  return (int64_t)packet->status;
+}
 #undef P_BASE
 #endif

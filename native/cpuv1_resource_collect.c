@@ -40,4 +40,39 @@ int et_cpuv1_test_native_resource_snapshot_v1(et_cpuv1_resource_packet_v1 *p) {
   et_cpuv1_test_census_k1_v1(p,slots,7u);
   return (int)p->status;
 }
+int64_t et_cpuv1_test_resource_open_v1(void *raw) {
+  et_cpuv1_resource_packet_v1 *p=raw;
+  int rc=et_cpuv1_test_resource_begin_v1(p);
+  return rc?rc:et_cpuv1_test_native_resource_snapshot_v1(p);
+}
+int64_t et_cpuv1_test_resource_close_v1(void *raw) {
+  et_cpuv1_resource_packet_v1 *p=raw;
+  et_cpuv1_test_runtime_resource_snapshot_v1(p);
+  return et_cpuv1_test_resource_finish_v1(p);
+}
+int64_t et_cpuv1_test_resource_warm_v1(void) {
+  return et_cpuv1_test_runtime_resource_warm_v1();
+}
+int64_t et_cpuv1_test_resource_pair_v1(void *left,void *right) {
+  const et_cpuv1_resource_packet_v1 *a=left,*b=right;
+  if(!a || !b || a==b || a->status || b->status ||
+     a->coverage!=(UINT64_C(1)<<ET_R_DOMAINS)-1 || a->coverage!=b->coverage)
+    return 0;
+  return memcmp(a,b,sizeof(*a))==0;
+}
+int64_t et_cpuv1_test_resource_word_v1(void *raw,int64_t group,int64_t index) {
+  const et_cpuv1_resource_packet_v1 *p=raw;
+  if(!p || index<0 || index>=64)return -1;
+  if(group==0)return (int64_t)p->runtime[index];
+  if(group==1)return (int64_t)p->details[ET_R_SCHEME][index];
+  if(group==2)return (int64_t)p->rows[ET_R_SCHEME][index].live;
+  if(group==3)return (int64_t)p->details[ET_R_C4][index];
+  if(group==4 && index<16)return (int64_t)p->scheme_p1[index];
+  if(group>=5 && group<13)return (int64_t)p->scheme_states[index][group-5];
+  if(group==13)return (int64_t)p->scheme_scalar[index];
+  if(group==14 && index<8)return (int64_t)p->scheme_candidate[index];
+  if(group>=15 && group<31)return (int64_t)p->scheme_source[index][group-15];
+  if(group==31 && index<16)return (int64_t)p->scheme_source[64][index];
+  return -1;
+}
 #endif

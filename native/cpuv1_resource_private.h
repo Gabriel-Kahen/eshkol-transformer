@@ -58,6 +58,15 @@ typedef struct et_cpuv1_resource_packet_v1 {
   uint64_t details[ET_R_DOMAINS][64];
   /* Runtime values are named in runtime-fields.json; scalar words only. */
   uint64_t runtime[64];
+  /* Owning-scope references only: presence/kind/count/active; never bases. */
+  uint64_t scheme_lexical[64][4];
+  uint64_t scheme_p1[16];
+  uint64_t scheme_classified; /* No bit is set by a generic value writer. */
+  /* total/live/dead/pending/prepared/busy/static/verified-reference-links. */
+  uint64_t scheme_states[64][8];
+  uint64_t scheme_candidate[8], scheme_candidate_ready;
+  uint64_t scheme_source[65][16]; /* Per-root exact source-phase counts. */
+  uint64_t scheme_scalar[64]; /* Actual scalar/boolean value, not a truthy tag. */
 } et_cpuv1_resource_packet_v1;
 
 void *et_cpuv1_test_alloc_event_v1(unsigned domain, unsigned kind, void *base,
@@ -85,6 +94,26 @@ int et_cpuv1_test_native_resource_snapshot_v1(et_cpuv1_resource_packet_v1 *packe
 /* Explicit pre-P0 initialization. Observe itself never initializes an arena. */
 int et_cpuv1_test_runtime_resource_warm_v1(void);
 void et_cpuv1_test_runtime_resource_snapshot_v1(et_cpuv1_resource_packet_v1 *packet);
+void *et_cpuv1_test_resource_packet_slot_v1(int64_t slot);
+int64_t et_cpuv1_test_scheme_value_v1(void *packet,int64_t index,
+                                    int64_t lexical,int64_t kind,int64_t count);
+int64_t et_cpuv1_test_scheme_reject_v1(void *packet);
+int64_t et_cpuv1_test_scheme_state_v1(void *packet,int64_t index,
+                                     int64_t state,int64_t links,int64_t source_state);
+int64_t et_cpuv1_test_scheme_seal_v1(void *packet,int64_t index,int64_t count);
+int64_t et_cpuv1_test_scheme_scalar_v1(void *packet,int64_t index,
+                                     int64_t lexical,int64_t value);
+int64_t et_cpuv1_test_scheme_finish_v1(void *packet);
+int64_t et_cpuv1_test_scheme_hash_v1(void *packet,int64_t index,
+                                   int64_t lexical,void *hash);
+int64_t et_cpuv1_test_p1_context_v1(void *packet,void *context);
+int64_t et_cpuv1_test_p1_shell_v1(void *packet,void *context,void *shell,
+                                int64_t kind,int64_t known_dead);
+int64_t et_cpuv1_test_resource_open_v1(void *packet);
+int64_t et_cpuv1_test_resource_close_v1(void *packet);
+int64_t et_cpuv1_test_resource_warm_v1(void);
+int64_t et_cpuv1_test_resource_pair_v1(void *left,void *right);
+int64_t et_cpuv1_test_resource_word_v1(void *packet,int64_t group,int64_t index);
 /* Test mutation only; absence/mismatch must never produce COMPLETE. */
 void et_cpuv1_test_resource_mutation_v1(unsigned mutation);
 

@@ -15,6 +15,17 @@ void et_cpuv1_test_census_i2_v1(et_cpuv1_resource_packet_v1 *packet) {
     if(p->magic || (EXTRA)) {et_cpuv1_test_resource_fail_v1(packet,ET_R_MISMATCH);return;} \
   }
   I2_DEAD(et_i2_copy_builder,et_i2_retired_copy_builders,15,p->count || p->assignments || p->plan);
+#ifdef ET_TR3_C_I2_RESTORE_PRIVATE
+  for(et_i2_copy_builder *p=et_i2_retired_copy_builders;p;p=p->registry_next) {
+    if(p->tr3_c_restore_authority || p->tr3_c_next_index ||
+       (p->tr3_c_restore_phase!=ET_TR3_C_I2_RESTORE_PHASE_ORDINARY &&
+        p->tr3_c_restore_phase!=ET_TR3_C_I2_RESTORE_PHASE_COMMITTED &&
+        p->tr3_c_restore_phase!=ET_TR3_C_I2_RESTORE_PHASE_ABORTED)) {
+      et_cpuv1_test_resource_fail_v1(packet,ET_R_MISMATCH);return;
+    }
+    packet->details[ET_R_F32][33+p->tr3_c_restore_phase]++;
+  }
+#endif
   I2_DEAD(et_i2_reset_builder,et_i2_retired_reset_builders,16,p->count || p->parameters || p->plan);
   I2_DEAD(et_i2_decode_builder,et_i2_retired_decode_builders,17,p->rank || p->shape || p->payload || p->payload_size);
 #undef I2_DEAD

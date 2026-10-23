@@ -23,6 +23,7 @@
 static et_cpuv1_resource_row_v1 events[ET_R_DOMAINS][ET_R_KINDS];
 static unsigned event_error;
 static unsigned mutation;
+static et_cpuv1_resource_packet_v1 observer_packets[2];
 /* Snapshot-only duplicate/cycle scratch, not an allocation tracking registry.
  * BSS is preallocated before P0, reported separately and never usable-queried. */
 enum { ET_R_BASE_SLOTS = 1u << 20, ET_R_BASE_LIMIT = ET_R_BASE_SLOTS / 2 };
@@ -167,9 +168,10 @@ int et_cpuv1_test_resource_begin_v1(et_cpuv1_resource_packet_v1 *p) {
   if (snapshot_packet) return ET_R_NOT_QUIESCENT;
   memset(snapshot_bases,0,sizeof(snapshot_bases)); snapshot_base_count=0;
   snapshot_packet=p;
+  if(mutation==3)snapshot_base_count=ET_R_BASE_LIMIT;
   memset(p,0,sizeof(*p)); p->struct_size=sizeof(*p);
   p->version=ET_R_PACKET_VERSION; p->status=event_error;
-  p->observer_static_bytes=sizeof(events)+sizeof(event_error)+sizeof(mutation)+
+  p->observer_static_bytes=sizeof(events)+sizeof(event_error)+sizeof(mutation)+sizeof(observer_packets)+
     sizeof(snapshot_bases)+sizeof(snapshot_base_count)+sizeof(snapshot_packet)+sizeof(kind_count);
   p->observer_packet_bytes=sizeof(*p);
 #ifdef ET_R_ALTERNATE_PROFILE
@@ -258,6 +260,99 @@ int et_cpuv1_test_resource_finish_v1(et_cpuv1_resource_packet_v1 *p) {
   memset(snapshot_bases,0,sizeof(snapshot_bases));snapshot_base_count=0;
   snapshot_packet=NULL;
   return (int)p->status;
+}
+void *et_cpuv1_test_resource_packet_slot_v1(int64_t slot) {
+  if(slot<0 || slot>=2 || snapshot_packet) return NULL;
+  et_cpuv1_resource_packet_v1 *p=&observer_packets[slot];
+  p->struct_size=sizeof(*p);p->version=ET_R_PACKET_VERSION;
+  return p;
+}
+int64_t et_cpuv1_test_scheme_reject_v1(void *raw) {
+  et_cpuv1_test_resource_fail_v1(raw,ET_R_NOT_QUIESCENT);return ET_R_NOT_QUIESCENT;
+}
+int64_t et_cpuv1_test_scheme_value_v1(void *raw,int64_t index,
+                                    int64_t lexical,int64_t kind,int64_t count) {
+  et_cpuv1_resource_packet_v1 *p=raw;
+  if(!p || p!=snapshot_packet || index<0 || index>=64 ||
+     lexical<0 || lexical>1 || kind<1 || kind>7 || count<0) {
+    et_cpuv1_test_resource_fail_v1(p,ET_R_ARGUMENT);return ET_R_ARGUMENT;
+  }
+  if(lexical) {
+    if(index>=51 || p->scheme_lexical[index][0]) {
+      et_cpuv1_test_resource_fail_v1(p,ET_R_COVERAGE);return ET_R_COVERAGE;
+    }
+    p->scheme_lexical[index][0]=1u;p->scheme_lexical[index][1]=(uint64_t)kind;
+    p->scheme_lexical[index][2]=(uint64_t)count;
+  } else {
+    if(p->details[ET_R_SCHEME][index]) {
+      et_cpuv1_test_resource_fail_v1(p,ET_R_COVERAGE);return ET_R_COVERAGE;
+    }
+    p->details[ET_R_SCHEME][index]=(uint64_t)kind;
+    p->rows[ET_R_SCHEME][index].live=(uint64_t)count;
+  }
+  return (int64_t)p->status;
+}
+/* Only concrete owning-scope visitors call this after schema/identity checks.
+ * This is a semantic census, never another native allocation or byte charge. */
+int64_t et_cpuv1_test_scheme_state_v1(void *raw,int64_t index,
+                                     int64_t state,int64_t links,int64_t source_state) {
+  et_cpuv1_resource_packet_v1 *p=raw;
+  if(!p || p!=snapshot_packet || index<0 || index>=65 ||
+     state<1 || state>6 || links<0 || source_state<0 || source_state>=15 ||
+     (index<64 && (p->scheme_classified&(UINT64_C(1)<<index)))) {
+    et_cpuv1_test_resource_fail_v1(p,ET_R_COVERAGE);return ET_R_COVERAGE;
+  }
+  uint64_t *states=index==64?p->scheme_candidate:p->scheme_states[index];
+  if(!add(&p->scheme_source[index][source_state],1) ||
+     !add(&states[0],1) || !add(&states[state],1) ||
+     !add(&states[7],(uint64_t)links))
+    et_cpuv1_test_resource_fail_v1(p,ET_R_OVERFLOW);
+  return (int64_t)p->status;
+}
+int64_t et_cpuv1_test_scheme_seal_v1(void *raw,int64_t index,int64_t count) {
+  et_cpuv1_resource_packet_v1 *p=raw;
+  if(p && p==snapshot_packet && index==64 && count>=0) {
+    if(p->scheme_candidate_ready || p->scheme_candidate[0]!=(uint64_t)count)
+      et_cpuv1_test_resource_fail_v1(p,ET_R_COVERAGE);
+    if(p->status==ET_R_OK)p->scheme_candidate_ready=1;
+    return (int64_t)p->status;
+  }
+  if(!p || p!=snapshot_packet || index<0 || index>=64 || count<0 ||
+     !p->details[ET_R_SCHEME][index] ||
+     (p->scheme_classified&(UINT64_C(1)<<index)) ||
+     p->scheme_states[index][0]!=(uint64_t)count) {
+    et_cpuv1_test_resource_fail_v1(p,ET_R_COVERAGE);return ET_R_COVERAGE;
+  }
+  if(p->status==ET_R_OK)p->scheme_classified|=UINT64_C(1)<<index;
+  return (int64_t)p->status;
+}
+int64_t et_cpuv1_test_scheme_scalar_v1(void *raw,int64_t index,
+                                     int64_t lexical,int64_t value) {
+  et_cpuv1_resource_packet_v1 *p=raw;
+  if(!p || p!=snapshot_packet || index<0 || index>=64 ||
+     lexical<0 || lexical>1 || value<0) {
+    et_cpuv1_test_resource_fail_v1(p,ET_R_ARGUMENT);return ET_R_ARGUMENT;
+  }
+  if(lexical)p->scheme_lexical[index][3]=(uint64_t)value;
+  else p->scheme_scalar[index]=(uint64_t)value;
+  return (int64_t)p->status;
+}
+int64_t et_cpuv1_test_scheme_finish_v1(void *raw) {
+  et_cpuv1_resource_packet_v1 *p=raw;
+  if(!p || p!=snapshot_packet)return ET_R_ARGUMENT;
+  for(unsigned i=0;i<64;i++)if(!p->details[ET_R_SCHEME][i])
+    et_cpuv1_test_resource_fail_v1(p,ET_R_COVERAGE);
+  for(unsigned i=0;i<51;i++)if(!p->scheme_lexical[i][0])
+    et_cpuv1_test_resource_fail_v1(p,ET_R_COVERAGE);
+  if(p->scheme_p1[1]!=p->scheme_states[3][0] ||
+     p->scheme_states[3][0]!=p->rows[ET_R_P1][1].bases)
+    et_cpuv1_test_resource_fail_v1(p,ET_R_MISMATCH);
+  if(!p->scheme_p1[0] || !p->scheme_candidate_ready || p->scheme_classified!=UINT64_MAX)
+    et_cpuv1_test_resource_fail_v1(p,ET_R_COVERAGE);
+  if(p->status==ET_R_OK) {
+    p->scheme_ready=1u;et_cpuv1_test_resource_domain_v1(p,ET_R_SCHEME);
+  }
+  return (int64_t)p->status;
 }
 void et_cpuv1_test_resource_mutation_v1(unsigned m) { mutation=m; }
 #endif

@@ -1,0 +1,57 @@
+;;; Body appended ONLY to the generated private root. Exactly one genuine
+;;; unadopted candidate, no trainer/dataset/optimizer/generator/full caller.
+(extern ptr cpuv1-resource-slot i64 :real et_cpuv1_test_resource_packet_slot_v1)
+(extern i64 cpuv1-resource-open ptr :real et_cpuv1_test_resource_open_v1)
+(extern i64 cpuv1-resource-close ptr :real et_cpuv1_test_resource_close_v1)
+(extern i64 cpuv1-resource-warm :real et_cpuv1_test_resource_warm_v1)
+(extern i64 cpuv1-resource-pair ptr ptr :real et_cpuv1_test_resource_pair_v1)
+(extern i64 cpuv1-resource-word ptr i64 i64 :real et_cpuv1_test_resource_word_v1)
+(define (cpuv1-tiny-check good)
+  (if (not good) (exit 1)))
+;;; This entire transitive observer path, including every indirect closure
+;;; dispatch, requires independently reviewed emitted-IR no-allocation proof.
+(define (cpuv1-tiny-observe packet)
+  (cpuv1-tiny-check (= (cpuv1-resource-open packet) 0))
+  (cpuv1-resource-scheme-into! packet)
+  (cpuv1-tiny-check (= (cpuv1-resource-close packet) 0)))
+(define cpuv1-tiny-resolved
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":4,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define cpuv1-tiny-left (cpuv1-resource-slot 0))
+(define cpuv1-tiny-right (cpuv1-resource-slot 1))
+;;; Pre-P0 runtime/native/BSS/getters/constants/closures/hash lookup warming.
+(cpuv1-tiny-check (= (cpuv1-resource-warm) 0))
+(cpuv1-tiny-observe cpuv1-tiny-left)
+(cpuv1-tiny-observe cpuv1-tiny-right)
+(cpuv1-tiny-observe cpuv1-tiny-left)
+(cpuv1-tiny-observe cpuv1-tiny-right)
+(cpuv1-tiny-check (= (cpuv1-resource-pair cpuv1-tiny-left cpuv1-tiny-right) 1))
+(define cpuv1-tiny-context (cpuv1-resource-word cpuv1-tiny-left 4 0))
+(define cpuv1-tiny-shells (cpuv1-resource-word cpuv1-tiny-left 5 3))
+;;; Original closed custody API creates the sole model, original P1 API mutates
+;;; its same canonical graph, original retirement API revokes it. No seeding.
+(define cpuv1-tiny-ticket (cpu4-owned-candidate-create-internal cpuv1-tiny-resolved))
+(define cpuv1-tiny-model (cpu4-owned-model-internal cpuv1-tiny-ticket))
+(module-train! cpuv1-tiny-model)
+(cpuv1-tiny-check (eq? (module-mode-internal cpuv1-tiny-model) 'train))
+(module-eval! cpuv1-tiny-model)
+(cpuv1-tiny-check (eq? (module-mode-internal cpuv1-tiny-model) 'eval))
+(cpuv1-tiny-observe cpuv1-tiny-left)
+(cpuv1-tiny-observe cpuv1-tiny-right)
+(cpuv1-tiny-check (= (cpuv1-resource-pair cpuv1-tiny-left cpuv1-tiny-right) 1))
+(cpuv1-tiny-check (= cpuv1-tiny-context (cpuv1-resource-word cpuv1-tiny-left 4 0)))
+(cpuv1-tiny-check (= (+ cpuv1-tiny-shells 31) (cpuv1-resource-word cpuv1-tiny-left 5 3)))
+(cpuv1-tiny-check (= (cpuv1-resource-word cpuv1-tiny-left 6 16) 1))
+(cpuv1-tiny-check (= (cpuv1-resource-word cpuv1-tiny-left 14 1) 1))
+(cpuv1-tiny-check (cpu4-owned-candidate-retire-internal! cpuv1-tiny-ticket))
+(cpuv1-tiny-observe cpuv1-tiny-left)
+(cpuv1-tiny-observe cpuv1-tiny-right)
+(cpuv1-tiny-check (= (cpuv1-resource-pair cpuv1-tiny-left cpuv1-tiny-right) 1))
+(cpuv1-tiny-check (= cpuv1-tiny-context (cpuv1-resource-word cpuv1-tiny-left 4 0)))
+(cpuv1-tiny-check (= (cpuv1-resource-word cpuv1-tiny-left 7 16) 1))
+(cpuv1-tiny-check (= (cpuv1-resource-word cpuv1-tiny-left 14 2) 1))
+(cpuv1-tiny-check (= (cpuv1-resource-word cpuv1-tiny-left 31 3) 1))
+(display "CPUV1-TINY-GENUINE one-unadopted-model canonical-P1-and-candidate PASS")
+(newline)

@@ -1,0 +1,132 @@
+;;; Noninstalled owning-scope helper module. All closures/constants are created
+;;; and warmed before P0. No snapshot creates a list/vector/guard/exception.
+(provide cpuv1-resource-value-into! cpuv1-resource-reject!
+         cpuv1-resource-p1-shells cpuv1-resource-p1-native-context!
+         cpuv1-resource-scheme-finish! cpuv1-resource-state! cpuv1-resource-seal!
+         cpuv1-resource-scalar! cpuv1-resource-walk! cpuv1-resource-vector?
+         cpuv1-resource-member? cpuv1-resource-state-code cpuv1-resource-find-vector
+         cpuv1-resource-all-cells-clear? cpuv1-resource-spine-count
+         cpuv1-resource-active-list)
+(extern i64 cpuv1-resource-set-native ptr i64 i64 i64 i64
+  :real et_cpuv1_test_scheme_value_v1)
+(extern i64 cpuv1-resource-reject-native ptr
+  :real et_cpuv1_test_scheme_reject_v1)
+(extern i64 cpuv1-resource-hash-native ptr i64 i64 ptr
+  :real et_cpuv1_test_scheme_hash_v1)
+(extern i64 cpuv1-resource-context-native ptr ptr
+  :real et_cpuv1_test_p1_context_v1)
+(extern i64 cpuv1-resource-shell-native ptr ptr ptr i64 i64
+  :real et_cpuv1_test_p1_shell_v1)
+(extern i64 cpuv1-resource-finish-native ptr
+  :real et_cpuv1_test_scheme_finish_v1)
+(extern i64 cpuv1-resource-state! ptr i64 i64 i64 i64
+  :real et_cpuv1_test_scheme_state_v1)
+(extern i64 cpuv1-resource-seal! ptr i64 i64
+  :real et_cpuv1_test_scheme_seal_v1)
+(extern i64 cpuv1-resource-scalar! ptr i64 i64 i64
+  :real et_cpuv1_test_scheme_scalar_v1)
+;;; State codes preserve source meanings; unknown values fail the observation.
+(define (cpuv1-resource-state-code value)
+  (cond ((or (eq? value 'live) (eq? value 'open) (eq? value 'sealed)) 1)
+        ((or (eq? value 'dead) (eq? value 'aborted) (eq? value 'released)) 2)
+        ((or (eq? value 'pending) (eq? value 'constructing)) 3)
+        ((eq? value 'prepared) 4)
+        ((or (eq? value 'busy) (eq? value 'releasing) (eq? value 'consuming)) 5)
+        (else 0)))
+(define (cpuv1-resource-vector? value size)
+  (and (vector? value) (= (vector-length value) size)))
+(define (cpuv1-resource-member? value remaining seen)
+  (cond ((null? remaining) #f)
+        ((or (not (pair? remaining)) (>= seen 16777216)) #f)
+        ((eq? value (car remaining)) #t)
+        (else (cpuv1-resource-member? value (cdr remaining) (+ seen 1)))))
+(define (cpuv1-resource-find-vector identity remaining slot seen)
+  (cond ((null? remaining) #f)
+        ((or (not (pair? remaining)) (>= seen 16777216)) #f)
+        ((and (vector? (car remaining))
+              (> (vector-length (car remaining)) slot)
+              (eq? identity (vector-ref (car remaining) slot))) (car remaining))
+        (else (cpuv1-resource-find-vector identity (cdr remaining) slot (+ seen 1)))))
+(define (cpuv1-resource-all-cells-clear? cells index)
+  (if (= index (vector-length cells)) #t
+      (and (cpuv1-resource-vector? (vector-ref cells index) 1)
+           (not (vector-ref (vector-ref cells index) 0))
+           (cpuv1-resource-all-cells-clear? cells (+ index 1)))))
+;;; Each visitor is a pre-P0 top-level function with a concrete source schema.
+(define (cpuv1-resource-walk! packet index remaining visitor seen)
+  (cond ((null? remaining) (cpuv1-resource-seal! packet index seen))
+        ((or (not (pair? remaining)) (>= seen 16777216))
+         (cpuv1-resource-reject! packet))
+        (else (visitor packet (car remaining))
+              (cpuv1-resource-walk! packet index (cdr remaining) visitor (+ seen 1)))))
+(define (cpuv1-resource-reject! packet) (cpuv1-resource-reject-native packet))
+;;; 512MiB/32-byte cons bounds this count policy. Saturation rejects; never
+;;; silently truncates. Counts are semantic references, whole arena owns bytes.
+(define (cpuv1-resource-spine-count packet remaining count)
+  (cond ((null? remaining) count)
+        ((or (not (pair? remaining)) (>= count 16777216))
+         (cpuv1-resource-reject! packet) 0)
+        (else (cpuv1-resource-spine-count packet (cdr remaining) (+ count 1)))))
+(define (cpuv1-resource-value-into! packet index value lexical)
+  (cond
+    ((hash-table? value) (cpuv1-resource-hash-native packet index lexical value))
+    ((or (pair? value) (null? value))
+     (cpuv1-resource-set-native packet index lexical 1
+       (cpuv1-resource-spine-count packet value 0)))
+    ((vector? value)
+     (if (and (> (vector-length value) 0)
+              (or (pair? (vector-ref value 0)) (null? (vector-ref value 0))))
+         (begin
+           (if (and (= (vector-length value) 2) (vector-ref value 1))
+               (cpuv1-resource-reject! packet))
+           (cpuv1-resource-set-native packet index lexical 2
+             (cpuv1-resource-spine-count packet (vector-ref value 0) 0)))
+         (cpuv1-resource-set-native packet index lexical 5 (vector-length value))))
+    ((boolean? value)
+     (cpuv1-resource-set-native packet index lexical 7 1)
+     (cpuv1-resource-scalar! packet index lexical (if value 1 0)))
+    ((procedure? value) (cpuv1-resource-set-native packet index lexical 6 1))
+    (else (cpuv1-resource-set-native packet index lexical 4 1))))
+;;; Direct native index lookup must agree for every retained canonical shell.
+;;; No fallback can conceal stale copied advisory rows in this producer gate.
+(define (cpuv1-resource-p1-shell-kind value)
+  (cond ((eq? value 'provider) 1) ((eq? value 'module) 2)
+        ((eq? value 'handle) 3) ((eq? value 'tree) 4)
+        ((eq? value 'state) 5) ((eq? value 'entry) 6)
+        ((eq? value 'state-tensor) 8) (else 0)))
+(define (cpuv1-resource-p1-shells packet remaining index context
+          dead-construction dead-state dead-tensor dead-entry seen)
+  (cond ((null? remaining) #t)
+        ((or (not (pair? remaining)) (>= seen 16777216))
+         (cpuv1-resource-reject! packet))
+        (else
+         (let ((entry (car remaining)))
+           (if (and (vector? entry) (>= (vector-length entry) 3)
+                    (eq? (hash-table-ref index
+                              (ptr->usize (vector-ref entry 0)) #f) entry))
+               (begin
+                 (cpuv1-resource-shell-native packet context (vector-ref entry 0)
+                   (cpuv1-resource-p1-shell-kind (vector-ref entry 1))
+                   (if (or (eq? (vector-ref entry 2) dead-construction)
+                           (eq? (vector-ref entry 2) dead-state)
+                           (eq? (vector-ref entry 2) dead-tensor)
+                           (eq? (vector-ref entry 2) dead-entry)) 1 0))
+                 (cpuv1-resource-p1-shells packet (cdr remaining) index context
+                   dead-construction dead-state dead-tensor dead-entry (+ seen 1)))
+               (cpuv1-resource-reject! packet))))))
+(define (cpuv1-resource-p1-native-context! packet context)
+  (cpuv1-resource-context-native packet context))
+(define (cpuv1-resource-scheme-finish! packet)
+  (cpuv1-resource-finish-native packet))
+
+(define (cpuv1-resource-active-list packet remaining index seen)
+  (cond ((null? remaining) #t)
+        ((or (not (pair? remaining)) (>= seen 16777216))
+         (cpuv1-resource-reject! packet))
+        (else
+         (let ((entry (car remaining)))
+           (if (and (vector? entry) (>= (vector-length entry) 3)
+                    (eq? (hash-table-ref index (ptr->usize (vector-ref entry 0)) #f) entry))
+               (cpuv1-resource-state! packet 62 1 1 1)
+               (cpuv1-resource-reject! packet)))
+         (cpuv1-resource-active-list packet (cdr remaining) index (+ seen 1)))))

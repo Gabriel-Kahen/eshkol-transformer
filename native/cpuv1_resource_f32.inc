@@ -20,13 +20,18 @@ void et_cpuv1_test_census_f32_v1(et_cpuv1_resource_packet_v1 *packet) {
   et_cpuv1_test_resource_layout_v1(packet,ET_R_F32,12,sizeof(et_f32_parameter *),_Alignof(et_f32_parameter *));
   et_cpuv1_test_resource_layout_v1(packet,ET_R_F32,13,sizeof(f32_destroy_provenance),_Alignof(f32_destroy_provenance));
 
+#ifndef ET_I2_PRIVATE_OWNED_CLONE_MATCH
+#error "CPUv1 resource F32 census requires the original canonical-layout check"
+#endif
 #ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
   /* Frozen producer is history/capture/save-witness OFF. */
   et_cpuv1_test_resource_fail_v1(packet,ET_R_UNSUPPORTED); return;
 #endif
   for (et_f32_tensor *t=live_tensors;t;t=t->registry_next) {
     if (t->magic!=ET_F32_TENSOR_MAGIC || t->rank>ET_KERNEL_MAX_RANK ||
-        t->byte_length!=t->element_count*sizeof(float)) {
+        t->element_count>SIZE_MAX/sizeof(float) ||
+        t->byte_length!=t->element_count*sizeof(float) ||
+        !et_i2_private_tensor_is_canonical(t)) {
       et_cpuv1_test_resource_fail_v1(packet,ET_R_MISMATCH); return;
     }
     R_CONTROL(0,t,ET_R_LIVE);
