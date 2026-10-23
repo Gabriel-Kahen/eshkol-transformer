@@ -155,5 +155,68 @@ assert 'if (!op) return h;' in helper
 assert helper.index('if (!op) return h;')<helper.index('UINT64_MAX-epochs')
 assert 'h->history.count>=cap' in helper and 'n>target_capacity' in helper
 assert 'cpu4_history_staged_check' in helper
+# Local test helpers must exist in each actual quoted C/.inc include topology.
+# This bounded lexical control is not a C preprocessor/compiler admission.
+fixture_names=['test_cpu4_history_native.c','test_cpu4_capture_native.c',
+               'test_cpu4_history_manual_native.c']
+def fixture_text(path,overrides):
+    return overrides.get(path,path.read_text())
+def c_code(text):
+    return re.sub(r'/\*.*?\*/|//[^\n]*|"(?:\\.|[^"\\])*"', '',text,flags=re.S)
+def fixture_helpers(overrides=None):
+    overrides={} if overrides is None else overrides
+    for name in fixture_names:
+        entry=root/'tests/g3c4'/name
+        seen={}
+        def visit(path):
+            path=path.resolve()
+            if path in seen: return
+            text=fixture_text(path,overrides);seen[path]=text
+            for included in re.findall(r'^\s*#\s*include\s*"([^"\n]+\.(?:c|inc))"',text,re.M):
+                target=(path.parent/included).resolve()
+                assert target.is_relative_to(root) and target.is_file(),included
+                visit(target)
+        visit(entry)
+        assert root/'tests/g3c4/test_prefill3.c' in seen,name
+        assert root/'tests/g3c4/test_generator_native.c' not in seen,name
+        definitions=set(re.findall(r'\b([A-Za-z_]\w*)\s*\([^;{}]*?\)\s*\{',
+                                   '\n'.join(c_code(t) for t in seen.values()),re.S))
+        calls=set(re.findall(r'\b([A-Za-z_]\w*)\s*\(',c_code(seen[entry])))
+        fixed={'if','for','while','switch','sizeof','_Alignas','_Static_assert',
+               'CHECK','OK','INT64_C','UINT64_C','memcpy','memset','memcmp','printf','strcmp'}
+        local={n for n in calls-fixed if not n.startswith(('et_','cpu4_','__real_'))}
+        missing=local-definitions
+        assert not missing,(name,'unavailable fixture helpers',sorted(missing))
+    history=fixture_text(root/'tests/g3c4/test_cpu4_history_native.c',overrides)
+    capture=fixture_text(root/'tests/g3c4/test_cpu4_capture_native.c',overrides)
+    # Seed7 reuses the genuine inherited greedy budget1 constructor.
+    inherited=(root/'tests/g3c4/test_prefill3.c').read_text()
+    ordinary=body(inherited,'create_generator')
+    assert 'owner, 7, 0, INT64_C(0x3f800000), 256,' in ordinary
+    assert 'INT64_C(0x3f800000), 1, -1)' in ordinary
+    assert 'create_generator(owner)' in history
+    seeded=body(capture,'capture_seed_generator')
+    assert 'owner, seed, 0, INT64_C(0x3f800000), 256,' in seeded
+    assert 'INT64_C(0x3f800000), 1, -1)' in seeded
+    assert 'CHECK(context != NULL)' in seeded
+    assert re.findall(r'capture_seed_generator\(owner,\s*(\d+)\)',capture)==['9','7','8']
+fixture_helpers()
+original78={root/'tests/g3c4'/name:subprocess.check_output(
+    ['git','show','78aec5b0972058c3e8a2bddc56a09302e1925597:tests/g3c4/'+name],cwd=root,text=True)
+    for name in fixture_names}
+for name in fixture_names[:2]:
+    path=root/'tests/g3c4'/name
+    try: fixture_helpers({path:original78[path]})
+    except AssertionError as error:
+        assert 'seed_generator' in str(error)
+    else: raise AssertionError(('actual78 unavailable-helper defect escaped guard',name))
+capture_path=root/'tests/g3c4/test_cpu4_capture_native.c'
+for before,after in [('owner, seed, 0,','owner, seed, 1,'),
+                     ('INT64_C(0x3f800000), 1, -1)','INT64_C(0x3f800000), 2, -1)')]:
+    mutated=capture_path.read_text().replace(before,after,1)
+    try: fixture_helpers({capture_path:mutated})
+    except AssertionError: pass
+    else: raise AssertionError('seeded fixture policy mutation escaped guard')
+print('PASS: all3 actual fixture include topologies resolve local helpers; actual78 unavailable helper rejected; exact greedy seed/policy/budget controls reject 2 mutations.')
 print('PASS: physical line-splicing and manual-custody controls reject58f; OFF source tokens unchanged; effective tuple guard; LP64 80/40/464/544; early/final custody ordering and 3 causal negative controls.')
 print('NOT RUN: C compiler, native layout, numerical/runtime/provider/fault gates.')
