@@ -88,6 +88,31 @@ independent review/doc work while heavy gates run. Silence is never success.
 
 ## Source integration (runtime admission still held)
 
+Latest CPU4 unblock: reviewed ordinary/TR3 O2 restore-provenance repair54df is
+integrated through `b0af97d1` with exactly two strict common211 pin updates.
+Its focused native attempt2 independently ACCEPTS all128 literal steps,16 probes,
+13 stdout comparisons, strict negatives, native ASan/UBSan and OFF controls.
+The original changed-option cases fail retirement with raw7/7/2; repaired
+changed/same cases pass. Legacy retirement passes1841 checks and original
+restore-OFF passes19696. The private TR3 plan measures1464→1472 bytes and two
+retained plans2928→2944; combined I2/O2 long-cycle retention is unmeasured.
+Receipt `finish-20261022/o2-restore-retirement-54df1d2a-attempt2` has outer seal
+`32475690bcc91eccd1eeeb77a0d272158e25ac5cfd18755ed2ccc20f397a17cc`;
+independent review `team/integration-review-o2-native-attempt2/REVIEW.md` beneath
+the finish root has seal`bd3015abb6240d14d0c75b3704477b0f9c7ca5afeb7e564481d55d1f6764d658`.
+Program/custody and wrapper exits are0 with complete dependency and inner seals.
+Attempt1 remains failed because its Python-incompatible collector could not seal
+the inventory. The repaired v3 collector uses portable hashing; original evidence
+is preserved. Native acceptance does not admit FILE, resume or generation.
+
+The separately reviewed FILEv5 recipe on frozen `b0af97d1` is now running.
+Plain resumev2 remains prepared and blocked on accepted FILE results. Trained
+same-B public-G2 source4c6 plus support-context55a is independently accepted;
+its four-process functional gate is being prepared. Complete owner/byte census
+is still blocked on missing observability:13424 is a partial source subtotal,
+and the six existing native counts do not establish total retention. OS process
+limits cannot substitute for that required census. No full CPU-v1 admission.
+
 The published integration source union `cad08034e94a383f0e1191949419d9191e89b928`
 (tree `2f021cac225edad622edd6fae514a7a08a00789b`) selectively composes reviewed
 E3 retention-import/test repairs, CLI corpus-validation assertions and G3 SAVE/replay

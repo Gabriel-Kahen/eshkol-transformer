@@ -638,9 +638,11 @@ PR #214 exact-head hosted checks pass. Current-source CPU4 two-update training,
 250-update one-batch learning, detach and bounded evaluator-consumer gates
 independently pass; held-out improvement and resume,
 multi-token EOS/continuation and compiled common integration remain required.
-The corrected common source composition is independently accepted. Its corrected
-FILE run passes native/AOT compilation and regional guards, then rejects optimizer
-retirement; focused option-provenance repair and native causal proof are next.
+The corrected common source composition is independently accepted. After its
+FILE run exposed stale optimizer option provenance, the strict-preserving repair
+passes an independently audited native causal gate, including sanitizer and OFF
+controls. The repaired integrated FILE normal/repeat gate is running; actual
+FILE acceptance precedes the trained resume/held-out gate.
 GPU, mixed precision and optional expansion stay backlog. Historical detail below
 retains its original evidence scope.
 
