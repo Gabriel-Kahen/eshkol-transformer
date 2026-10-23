@@ -1,0 +1,102 @@
+;;; Tiny genuine producer gate. No learning, performance, or installed claim.
+(load "cpu4_v1_private_root.esk")
+(load "cpu4_cli_report_extension.esk")
+(load "preservation.esk")
+(define cpu4-cli-test-checks 0)
+(define (cpu4-cli-test-check label value)
+  (if value (set! cpu4-cli-test-checks (+ cpu4-cli-test-checks 1))
+      (cpu4-binding-fail 'internal 'cpu4-cli-report-test label)))
+(define (cpu4-cli-test-open directory tokenizer)
+  (d2-token-dataset-open
+    (list ':directory directory ':batch-size 1 ':sequence-length 4
+          ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+          ':maximum-total-tokens 5 ':maximum-batch-bytes 68
+          ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #f) tokenizer))
+(define (cpu4-cli-test-modes record)
+  (let ((copy (make-vector 17 #f)))
+    (let scan ((i 0))
+      (if (= i 17) copy
+          (begin (vector-set! copy i (module-mode-internal (vector-ref (vector-ref record 10) i)))
+                 (scan (+ i 1)))))))
+(define (cpu4-cli-test-gradients-absent? record)
+  (let scan ((i 0))
+    (or (= i 14)
+        (and (equal? (i2-parameter-gradient-metadata-internal
+                        (vector-ref (vector-ref record 12) i)) (vector 0 0))
+             (scan (+ i 1))))))
+(define (cpu4-cli-test-runtime!)
+  (let* ((args (command-line))
+         (resolved (x1-private-config-resolve (x1-private-config-parse
+           "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":4,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729,\"training.accumulation-steps\":1}") '()))
+         (tokenizer (t2-wave2-tokenizer-byte resolved))
+         (train (cpu4-cli-test-open (car (cdr args)) tokenizer))
+         (heldout (cpu4-cli-test-open (car (cdr (cdr args))) tokenizer))
+         (recovery (vector #f)) (image (vector #f)) (child #f))
+    (guard (caught
+             (#t
+               (display "CPU4-CLI-REPORT-RUNTIME-ERROR ")
+               (if (transformer-error? caught)
+                   (begin (display (transformer-error-category caught)) (display " ")
+                          (display (transformer-error-operation caught)) (display " ")
+                          (display (transformer-error-message caught)))
+                   (display "foreign condition"))
+               (newline)
+               (guard (cleanup (#t (cpu4-binding-fail-stop 70)))
+                 (if (vector-ref recovery 0) (cpu4-cli-report-release-internal! (vector-ref recovery 0)))
+                 (if (vector-ref image 0)
+                     (c2-training-state-release-internal! (vector-ref image 0) 'trainer-state-release!))
+                 (if child (cpu4-owned-candidate-retire-internal! child))
+                 (d2-token-dataset-close! train) (d2-token-dataset-close! heldout))
+               (exit 1)))
+      (set! child (cpu4-owned-candidate-create-internal resolved))
+      (module-train! (cpu4-owned-model-internal child))
+      (cpu4-owned-optimizer-create-internal! child
+        (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu '(none) '(constant)
+          (list (list 'group (cpu4-checkpoint-vector->list g3c4-model-paths 14)
+                      "3dcccccd" "3f000000" "3f000000" "3a83126f" "00000000"))))
+      (cpu4-owned-binding-create-internal! child)
+      (let* ((trainer (cpu4-owned-trainer-create-internal! child tokenizer train))
+             (record (cpu4-trainer-idle-check-internal trainer 'cpu4-cli-report-test))
+             (context (cpu4-cli-report-bind-internal trainer recovery)))
+        (cpu4-cli-test-check "initial detached controls5"
+          (= (vector-length (cpu4-cli-controls-report-copy-internal context)) 5))
+        (cpu4-cli-test-check "genuine producer step1 #t" (eq? #t (cpu4-cli-report-step-internal! context)))
+        (cpu4-cli-test-check "genuine producer step2 #t" (eq? #t (cpu4-cli-report-step-internal! context)))
+        (let* ((final (cpu4-cli-final-step-report-copy-internal context))
+               (controls (cpu4-cli-controls-report-copy-internal context))
+               (before (cpu4-resume-snapshot-copy! trainer image))
+               (modes (cpu4-cli-test-modes record))
+               (cursor (cpu4-d2-cursor-capture-internal heldout))
+               (binding (vector-ref record 9)) (model (vector-ref record 8))
+               (optimizer (vector-ref record 14))
+               (evaluation (cpu4-cli-evaluation-report-internal context heldout))
+               (after (cpu4-resume-snapshot-copy! trainer image)))
+          (cpu4-cli-test-check "final8 counters active-target tokens"
+            (and (= (vector-length final) 8) (= (vector-ref final 1) 8)
+                 (= (vector-ref final 2) 2) (= (vector-ref final 3) 1)
+                 (= (vector-ref final 4) 4) (= (vector-ref final 6) 1082130432)))
+          (cpu4-cli-test-check "same model binding optimizer identities and absent gradients"
+            (and (eq? binding (vector-ref record 9)) (eq? model (vector-ref record 8))
+                 (eq? optimizer (vector-ref record 14)) (cpu4-cli-test-gradients-absent? record)))
+          (cpu4-cli-test-check "independent full values/moments/controls/topology preservation"
+            (cpu4-resume-copy=? before after))
+          (cpu4-cli-test-check "independent modes and heldout cursor preservation"
+            (and (equal? modes (cpu4-cli-test-modes record))
+                 (d2-core-bytes=? cursor (cpu4-d2-cursor-capture-internal heldout))))
+          (cpu4-cli-test-check "actual E3 report7 physical tokens/batches"
+            (and (= (vector-length evaluation) 7) (= (vector-ref evaluation 5) 4)
+                 (= (vector-ref evaluation 6) 1)))
+          (vector-set! final 7 0)
+          (cpu4-cli-test-check "returned final copy independent"
+            (> (vector-ref (cpu4-cli-final-step-report-copy-internal context) 7) 0))
+          (cpu4-cli-test-check "context release" (cpu4-cli-report-release-internal! context))
+          (cpu4-cli-test-check "context repeat release" (cpu4-cli-report-release-internal! context))
+          (cpu4-owned-candidate-retire-internal! child) (set! child #f)
+          (d2-token-dataset-close! train) (d2-token-dataset-close! heldout)
+          (cpu4-cli-test-check "reports inert after trainer/model retirement"
+            (and (= (vector-ref evaluation 5) 4) (= (vector-ref (vector-ref controls 4) 1) 2)))
+          (display "CPU4-CLI-REPORT-RUNTIME-PASS ") (display cpu4-cli-test-checks)
+          (display " 2 ") (display (vector-ref evaluation 1)) (display " ")
+          (display (vector-ref evaluation 2)) (display " ") (display (vector-ref evaluation 3))
+          (display " ") (display (vector-ref evaluation 4)) (newline))))))
+(cpu4-cli-test-runtime!)
