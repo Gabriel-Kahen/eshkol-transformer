@@ -651,8 +651,12 @@ gate is running; no sanitizer result is admitted yet. The real binding OOM
 witness independently passes normal/repeat cleanup and native lease retry.
 Native history/capture independently passes normal/repeat/ASan+UBSan, including
 bitwise no-draw greedy/categorical prefix replay; typed fresh-process import and
-remaining decode are still required. Resource observer Stage A, production CLI
-report producers and candidate-ON E3 fault coverage are under implementation.
+remaining decode are still required. Resource observer Stage A and production
+CLI report producers are under implementation. The independently source-reviewed
+current-root ON80 E3 consumer variation preserves217/219 absent/present fault
+assertions and original metric words with a genuine candidate; its two-process
+normal gate remains NOT RUN. Prior OFF64 fault/SAN results are not promoted. See
+[fixture contract](../tests/e3_cpu4_on80/README.md).
 Retention and full CPU-v1 admission stay held.
 GPU, mixed precision and optional expansion stay backlog. Historical detail below
 retains its original evidence scope.
