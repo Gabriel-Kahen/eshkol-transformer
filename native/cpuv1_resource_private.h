@@ -60,7 +60,9 @@ typedef struct et_cpuv1_resource_packet_v1 {
   uint64_t runtime[64];
   /* Owning-scope references only: presence/kind/count/active; never bases. */
   uint64_t scheme_lexical[64][4];
-  uint64_t scheme_p1[16];
+  /* context/index metadata/kind links, then verified callbacks(13),
+   * same-context noncallbacks(14), callbacks(15), live providers(16). */
+  uint64_t scheme_p1[24];
   uint64_t scheme_classified; /* No bit is set by a generic value writer. */
   /* total/live/dead/pending/prepared/busy/static/verified-reference-links. */
   uint64_t scheme_states[64][8];
@@ -107,6 +109,17 @@ int64_t et_cpuv1_test_scheme_finish_v1(void *packet);
 int64_t et_cpuv1_test_scheme_hash_v1(void *packet,int64_t index,
                                    int64_t lexical,void *hash);
 int64_t et_cpuv1_test_p1_context_v1(void *packet,void *context);
+int64_t et_cpuv1_test_p1_links_finish_v1(void *packet);
+/* Prepared native-unit mutation controls; restore original fields before return. */
+int64_t et_cpuv1_test_p1_shell_mutation_v1(void *packet,void *context,void *shell,
+                                         int64_t kind,int64_t known_dead,
+                                         unsigned mutation);
+int64_t et_cpuv1_test_p1_callback_v1(void *packet,void *context,void *provider,
+                                   void *callback,int64_t slot);
+int64_t et_cpuv1_test_candidate_link_v1(void *packet,void *capability,
+                                      void *owner,void *scope,int64_t phase);
+int64_t et_cpuv1_test_candidate_links_finish_v1(void *packet);
+size_t et_cpuv1_test_runtime_static_bytes_v1(void);
 int64_t et_cpuv1_test_p1_shell_v1(void *packet,void *context,void *shell,
                                 int64_t kind,int64_t known_dead);
 int64_t et_cpuv1_test_resource_open_v1(void *packet);

@@ -22,6 +22,10 @@
 static arena_t *resource_root;
 static long resource_page_bytes;
 static bool resource_warmed;
+/* Sum declared static object extents. Linker padding/code/rodata are excluded. */
+extern "C" size_t et_cpuv1_test_runtime_static_bytes_v1(void) {
+  return sizeof(resource_root)+sizeof(resource_page_bytes)+sizeof(resource_warmed);
+}
 static bool libc_symbol(const void *symbol) {
   Dl_info info;
   if(!dladdr(symbol,&info) || !info.dli_fname)return false;

@@ -172,7 +172,8 @@ int et_cpuv1_test_resource_begin_v1(et_cpuv1_resource_packet_v1 *p) {
   memset(p,0,sizeof(*p)); p->struct_size=sizeof(*p);
   p->version=ET_R_PACKET_VERSION; p->status=event_error;
   p->observer_static_bytes=sizeof(events)+sizeof(event_error)+sizeof(mutation)+sizeof(observer_packets)+
-    sizeof(snapshot_bases)+sizeof(snapshot_base_count)+sizeof(snapshot_packet)+sizeof(kind_count);
+    sizeof(snapshot_bases)+sizeof(snapshot_base_count)+sizeof(snapshot_packet)+sizeof(kind_count)+
+    et_cpuv1_test_runtime_static_bytes_v1();
   p->observer_packet_bytes=sizeof(*p);
 #ifdef ET_R_ALTERNATE_PROFILE
   p->status=ET_R_UNSUPPORTED;
@@ -344,9 +345,8 @@ int64_t et_cpuv1_test_scheme_finish_v1(void *raw) {
     et_cpuv1_test_resource_fail_v1(p,ET_R_COVERAGE);
   for(unsigned i=0;i<51;i++)if(!p->scheme_lexical[i][0])
     et_cpuv1_test_resource_fail_v1(p,ET_R_COVERAGE);
-  if(p->scheme_p1[1]!=p->scheme_states[3][0] ||
-     p->scheme_states[3][0]!=p->rows[ET_R_P1][1].bases)
-    et_cpuv1_test_resource_fail_v1(p,ET_R_MISMATCH);
+  et_cpuv1_test_p1_links_finish_v1(p);
+  et_cpuv1_test_candidate_links_finish_v1(p);
   if(!p->scheme_p1[0] || !p->scheme_candidate_ready || p->scheme_classified!=UINT64_MAX)
     et_cpuv1_test_resource_fail_v1(p,ET_R_COVERAGE);
   if(p->status==ET_R_OK) {

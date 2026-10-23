@@ -26,7 +26,14 @@ current capacity and exposes tracked peak, normal-glibc backing/in-use/usable/
 residual, root/shared/current/region, PID and RSS values. Runtime warm is explicit
 before P0. Overflow, malformed layout/alias/shape, unsupported allocator/profile,
 nonquiescence, scratch saturation and event/census mismatches prevent COMPLETE.
-Absolute native transient requested peak is UNOBSERVED.
+Absolute native transient requested peak is UNOBSERVED. `observer_static_bytes`
+means the summed declared producer static-object extents in events.c and
+runtime.cpp, including runtime root/page/warmed fields and both static packet
+slots. `observer_packet_bytes` is the extent of one packet, already included for
+those slots, not another byte charge. Linker padding, code/rodata, native-unit
+fixture globals/stack and original production statics are excluded from that
+observer-only scalar; process RSS covers the actual program image. BSS is never
+passed to malloc_usable_size.
 
 Owning-source Scheme access is generated into one explicit literal-path graph.
 Every dependency edge is rewritten and every original AST reverse-projected.
@@ -57,7 +64,18 @@ protected/prefix/pending roots must be empty at quiescent samples; source-presen
 legacy G3T/M3T roots must be route-unused, rather than omitted. P1 hashes report
 actual occupied/capacity/tombstone metadata without materializing keys/values;
 every retained shell must match its index record and native kind/context/state.
-Index cardinality, Scheme shells and native records must agree. Whole-arena
+Index cardinality and Scheme shells must agree with the selected context's
+native **non-callback** records. Eight native callback identities per admitted
+provider live outside the Scheme shell/index: seven immutable callback slots
+plus the release-owned binding. Each exact token slot/context/provider backlink
+is authenticated and verified callback links reconcile with that context's full
+native callback population. Every callback allocation remains in native byte
+and event conservation. Retained DEAD shells validate token nonce/PID/context
+identity separately from native liveness, so authentic tombstones are accepted.
+Candidate source rows authenticate their actual native capability/owner/P1 scope
+and unpublished/adopted/dead phase. Bounded occurrence counts require exactly one
+source token and native capability reference, including rejecting the same row
+object linked twice; source/native phase totals then prove census bijection. Whole-arena
 backing already charges unreachable bump objects and auxiliary immutable/error
 roots; selected getter crosslinks cover auxiliary trainers and terminal originals.
 
@@ -76,3 +94,11 @@ proof, and normal/repeat execution after pre-P0 warming. Equal endpoint packets
 alone do not exclude temporary allocation. Host source/AST mutation tests do not
 establish compiler lowering, native execution, canonical AOT promotion or budgets.
 No Stage B consumer, sidecar, CLI integration or full training caller is included.
+
+The focused successor to d65 addresses review F1–F4: callback/non-callback P1
+reconciliation and retained-dead identity, native candidate bijection, complete
+declared producer static extents, and hidden C++ bridge compilation flags. The
+prepared genuine native unit adds eight-callback positive/omission/slot/context
+controls plus original-construction DEAD nonce/PID controls. The tiny gate adds
+native candidate capability/owner/scope/phase negatives. All are prepared source;
+actual native, symbol-visibility and AOT outcomes remain NOT RUN.

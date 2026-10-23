@@ -88,7 +88,7 @@ class Typed(unittest.TestCase):
         generic=events.split('int64_t et_cpuv1_test_scheme_value_v1(',1)[1].split('/* Only concrete',1)[0]
         self.assertNotIn('scheme_classified',generic)
         self.assertIn('p->scheme_states[index][0]!=(uint64_t)count',events)
-        self.assertIn('p->scheme_p1[1]!=p->scheme_states[3][0]',events)
+        self.assertIn('et_cpuv1_test_p1_links_finish_v1(p)',events)
         self.assertIn('!p->scheme_candidate_ready',events)
 
     def test_candidate_same_scope_and_six_slot_inverse(self):

@@ -6,7 +6,8 @@
          cpuv1-resource-scalar! cpuv1-resource-walk! cpuv1-resource-vector?
          cpuv1-resource-member? cpuv1-resource-state-code cpuv1-resource-find-vector
          cpuv1-resource-all-cells-clear? cpuv1-resource-spine-count
-         cpuv1-resource-active-list)
+         cpuv1-resource-active-list cpuv1-resource-provider-callbacks!
+         cpuv1-resource-candidate-link! cpuv1-resource-count-vector)
 (extern i64 cpuv1-resource-set-native ptr i64 i64 i64 i64
   :real et_cpuv1_test_scheme_value_v1)
 (extern i64 cpuv1-resource-reject-native ptr
@@ -59,6 +60,26 @@
          (cpuv1-resource-reject! packet))
         (else (visitor packet (car remaining))
               (cpuv1-resource-walk! packet index (cdr remaining) visitor (+ seen 1)))))
+(extern i64 cpuv1-resource-callback-native ptr ptr ptr ptr i64
+  :real et_cpuv1_test_p1_callback_v1)
+(extern i64 cpuv1-resource-candidate-link! ptr ptr ptr ptr i64
+  :real et_cpuv1_test_candidate_link_v1)
+(define (cpuv1-resource-provider-callbacks! packet context provider callbacks index)
+  (if (= index 8) 0
+      (let ((status (cpuv1-resource-callback-native packet context provider
+                      (vector-ref callbacks index) index)))
+        (if (= status 0)
+            (cpuv1-resource-provider-callbacks! packet context provider callbacks (+ index 1))
+            status))))
+;;; Exact occurrence count rejects the SAME row object consed twice, as well
+;;; as copied rows reusing a native capability. No lifetime tracking table.
+(define (cpuv1-resource-count-vector identity remaining slot seen found)
+  (cond ((null? remaining) found)
+        ((or (not (pair? remaining)) (>= seen 16777216) (>= found 2)) 2)
+        ((not (and (vector? (car remaining))
+                   (> (vector-length (car remaining)) slot))) 2)
+        (else (cpuv1-resource-count-vector identity (cdr remaining) slot (+ seen 1)
+                (+ found (if (eq? identity (vector-ref (car remaining) slot)) 1 0))))))
 (define (cpuv1-resource-reject! packet) (cpuv1-resource-reject-native packet))
 ;;; 512MiB/32-byte cons bounds this count policy. Saturation rejects; never
 ;;; silently truncates. Counts are semantic references, whole arena owns bytes.

@@ -67,7 +67,7 @@ int64_t et_cpuv1_test_resource_word_v1(void *raw,int64_t group,int64_t index) {
   if(group==1)return (int64_t)p->details[ET_R_SCHEME][index];
   if(group==2)return (int64_t)p->rows[ET_R_SCHEME][index].live;
   if(group==3)return (int64_t)p->details[ET_R_C4][index];
-  if(group==4 && index<16)return (int64_t)p->scheme_p1[index];
+  if(group==4 && index<24)return (int64_t)p->scheme_p1[index];
   if(group>=5 && group<13)return (int64_t)p->scheme_states[index][group-5];
   if(group==13)return (int64_t)p->scheme_scalar[index];
   if(group==14 && index<8)return (int64_t)p->scheme_candidate[index];
