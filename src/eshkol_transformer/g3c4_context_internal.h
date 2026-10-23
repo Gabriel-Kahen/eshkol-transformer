@@ -273,6 +273,10 @@ int64_t et_g3c4_private_p2g2_typed_copy_v1(
 int64_t et_g3c4_private_p2g2_typed_release_v1(void *owner);
 #endif
 
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+#include "cpu4_c4_capture_private.h"
+#endif
+
 #ifdef __cplusplus
 }
 #endif

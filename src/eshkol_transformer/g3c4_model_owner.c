@@ -58,6 +58,7 @@ typedef struct et_cpu4_candidate_internal et_cpu4_candidate_internal;
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "cpu4_c4_history_types.h"
 
 enum {
   ET_G3C4_OWNER_OPEN = 0,
@@ -1269,6 +1270,9 @@ typedef struct et_g3c4_context_internal {
   int64_t prefill_tokens[3];
 #endif
 #endif
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_record cpu4_history;
+#endif
 } et_g3c4_context_internal;
 
 #ifdef ET_G3C4_MANUAL_FRAME_BEGIN_PRIVATE
@@ -1554,6 +1558,12 @@ static et_g3c4_context_internal *et_g3c4_context_registry;
 #define ET_G3C4_CONTEXT_BUSY(context) ((context)->busy)
 #endif
 
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+static int et_g3c4_prefill_binding_matches_pins(
+    const et_g3c4_context_internal *context);
+#endif
+#include "cpu4_c4_history.inc"
+
 #ifdef ET_G3C4_GENERATOR_PRIVATE
 static int et_g3c4_valid_generator_policy(
     int64_t mode, int64_t temperature_bits, int64_t k,
@@ -1704,6 +1714,9 @@ static void et_g3c4_p2g2_prefix_clear(
 
 static int et_g3c4_context_subtype_valid(
     const et_g3c4_context_internal *context) {
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_auth(context) == NULL) return 0;
+#endif
   if (context->generator_kind == 0u)
     return context->generator_ready == 0u &&
            et_g3c4_zero_i64_words(context->generator_policy, 6u) &&
@@ -2439,6 +2452,17 @@ _Static_assert(sizeof(et_g3c4_transport_header_internal) == 32u,
                "G3-C4 transport header must be 32 bytes");
 _Static_assert(offsetof(et_g3c4_context_internal, transport) == 0u,
                "G3-C4 context header must be first");
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+#if defined(ET_G3C4_P2_G2_PREFIX_COMMIT_PRIVATE) && defined(ET_G3C4_MANUAL_FRAME_BEGIN_PRIVATE)
+_Static_assert(sizeof(et_g3c4_context_internal) == 8784u, "CPU4 prefix/manual history context");
+#elif defined(ET_G3C4_P2_G2_PREFIX_COMMIT_PRIVATE)
+_Static_assert(sizeof(et_g3c4_context_internal) == 8776u, "CPU4 prefix history context");
+#elif defined(ET_G3C4_MANUAL_FRAME_BEGIN_PRIVATE)
+_Static_assert(sizeof(et_g3c4_context_internal) == 6584u, "CPU4 manual history context");
+#else
+_Static_assert(sizeof(et_g3c4_context_internal) == 6576u, "CPU4 history context");
+#endif
+#else
 #if defined(ET_G3C4_P2_G2_PREFIX_COMMIT_PRIVATE) && \
     defined(ET_G3C4_MANUAL_FRAME_BEGIN_PRIVATE)
 _Static_assert(sizeof(et_g3c4_context_internal) == 8704u,
@@ -2461,6 +2485,7 @@ _Static_assert(sizeof(et_g3c4_context_internal) == 1576u,
 #else
 _Static_assert(sizeof(et_g3c4_context_internal) == 1520u,
                "G3-C4 generator context must be 1520 bytes");
+#endif
 #endif
 _Static_assert(sizeof(et_g3c4_rng_internal) == 64u,
                "G3-C4 RNG record must be 64 bytes");
@@ -2503,8 +2528,16 @@ void *et_g3c4_private_context_create_v1(void *candidate) {
     return NULL;
   }
 #endif
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_node *history = cpu4_history_allocate();
+  if (history == NULL) return NULL;
+#endif
   context = et_g3c4_context_allocate();
   if (context == NULL) {
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+    free(history);
+#endif
+
     (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_ALLOCATION);
     return NULL;
   }
@@ -2514,6 +2547,10 @@ void *et_g3c4_private_context_create_v1(void *candidate) {
           &error) != 0) {
     et_g3c4_error_state_internal first = et_g3c4_error_snapshot_internal();
     free(context);
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+    free(history);
+#endif
+
     et_g3c4_error_restore_internal(first);
     return NULL;
   }
@@ -2523,6 +2560,9 @@ void *et_g3c4_private_context_create_v1(void *candidate) {
   ET_G3C4_CONTEXT_BUSY(context) = 0u;
   context->owner = owner;
   context->cache = cache;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_enroll(history, context);
+#endif
 #ifdef ET_G3C4_GENERATOR_PRIVATE
   et_g3c4_enroll_context(context);
 #else
@@ -2576,11 +2616,20 @@ int64_t et_g3c4_private_context_close_v1(void *candidate) {
 #ifdef ET_CPU4_TRAINING_PRIVATE
   if (cpu4_context_close_ready(owner)) return et_g3c4_error_state.category;
 #endif
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_node *history = cpu4_history_preflight(context,0u,0u,0u,0u);
+  if (history == NULL || history->pending.operation != 0u)
+    return et_g3c4_error_state.category ? et_g3c4_error_state.category :
+        et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+#endif
   if (et_g3c4_capture_kernel(
           et_a2_kv_cache_destroy_v1(&context->cache, &error), &error) != 0)
     return et_g3c4_error_state.category;
 #ifdef ET_CPU4_TRAINING_PRIVATE
   owner->live_contexts--;
+#endif
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_close(history, context);
 #endif
   context->owner = NULL;
   ET_G3C4_CONTEXT_STATE(context) = ET_G3C4_CONTEXT_DEAD;
@@ -2870,14 +2919,26 @@ static void *et_g3c4_generator_create(
         ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
     return NULL;
   }
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_node *history = cpu4_history_allocate();
+  if (history == NULL) return NULL;
+#endif
 #ifdef ET_G3C4_PROVIDER_ROUTES_PRIVATE
   if (et_g3c4_stage_provider_routes(
           et_g3c4_kernel_provider_v1(), et_g3s_kernel_provider_v1(),
-          &forward_runtime, &sampler_runtime) != 0)
+          &forward_runtime, &sampler_runtime) != 0) {
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+    free(history);
+#endif
     return NULL;
+  }
 #endif
   context = et_g3c4_context_allocate();
   if (context == NULL) {
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+    free(history);
+#endif
+
 #ifdef ET_G3C4_PROVIDER_ROUTES_PRIVATE
     et_g3c4_abort_staged_routes(forward_runtime, sampler_runtime);
 #endif
@@ -2890,6 +2951,10 @@ static void *et_g3c4_generator_create(
           &error) != 0) {
     et_g3c4_error_state_internal first = et_g3c4_error_snapshot_internal();
     free(context);
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+    free(history);
+#endif
+
 #ifdef ET_G3C4_PROVIDER_ROUTES_PRIVATE
     et_g3c4_abort_staged_routes(forward_runtime, sampler_runtime);
 #endif
@@ -2915,6 +2980,9 @@ static void *et_g3c4_generator_create(
 #ifdef ET_G3C4_PROVIDER_ROUTES_PRIVATE
   et_g3c4_forward_runtime = forward_runtime;
   et_g3c4_sampler_runtime = sampler_runtime;
+#endif
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_enroll(history, context);
 #endif
   et_g3c4_enroll_context(context);
   return context;
@@ -3034,6 +3102,12 @@ int64_t et_g3c4_private_generator_close_v1(void *candidate) {
 #ifdef ET_CPU4_TRAINING_PRIVATE
   if (cpu4_context_close_ready(owner)) return et_g3c4_error_state.category;
 #endif
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_node *history = cpu4_history_preflight(context,0u,0u,0u,0u);
+  if (history == NULL || history->pending.operation != 0u)
+    return et_g3c4_error_state.category ? et_g3c4_error_state.category :
+        et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+#endif
   if (et_g3c4_capture_kernel(
           et_a2_kv_cache_destroy_v1(&context->cache, &error), &error) != 0)
     return et_g3c4_error_state.category;
@@ -3046,6 +3120,9 @@ int64_t et_g3c4_private_generator_close_v1(void *candidate) {
   context->generator_ready = 0u;
 #ifdef ET_CPU4_TRAINING_PRIVATE
   owner->live_contexts--;
+#endif
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_close(history, context);
 #endif
   context->owner = NULL;
   ET_G3C4_CONTEXT_STATE(context) = ET_G3C4_CONTEXT_DEAD;
@@ -3441,6 +3518,10 @@ int64_t et_g3c4_private_full_prefix_forward_v1(
   size_t key;
 
   et_g3c4_error_reset_internal();
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_output_alias(logits,1024u*sizeof(float)))
+    return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT,ET_G3C4_CODE_ALIAS);
+#endif
   if (token_ids == NULL || logits == NULL) {
     (void)et_g3c4_fail(
         ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
@@ -3460,6 +3541,10 @@ int64_t et_g3c4_private_full_prefix_forward_v1(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
     return et_g3c4_error_state.category;
   }
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_node *history=cpu4_history_preflight(context,0u,0u,0u,0u);
+  if (history==NULL) return et_g3c4_error_state.category;
+#endif
   memset(&scratch, 0, sizeof(scratch));
   memcpy(&epsilon, &epsilon_bits, sizeof(epsilon));
 
@@ -3468,6 +3553,9 @@ int64_t et_g3c4_private_full_prefix_forward_v1(
   inputs[1] = context->pins.views[10];
   output = et_g3c4_view(
       scratch.et, sizeof(scratch.et), "f32", 3u, d4_shape);
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_auth(context)!=history) goto fail;
+#endif
   if (et_g3c4_dispatch_forward(
           "g3c4.embedding-forward", "g3c4.embedding.forward",
           4u, token_embedding_row, inputs, 2u, output) != 0)
@@ -3478,6 +3566,9 @@ int64_t et_g3c4_private_full_prefix_forward_v1(
   inputs[1] = context->pins.views[13];
   output = et_g3c4_view(
       scratch.ep, sizeof(scratch.ep), "f32", 3u, d4_shape);
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_auth(context)!=history) goto fail;
+#endif
   if (et_g3c4_dispatch_forward(
           "g3c4.embedding-forward", "g3c4.embedding.forward",
           4u, position_embedding_row, inputs, 2u, output) != 0)
@@ -3488,6 +3579,9 @@ int64_t et_g3c4_private_full_prefix_forward_v1(
   inputs[1] = et_g3c4_view(
       scratch.ep, sizeof(scratch.ep), "f32", 3u, d4_shape);
   output = et_g3c4_view(scratch.x, sizeof(scratch.x), "f32", 3u, d4_shape);
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_auth(context)!=history) goto fail;
+#endif
   if (et_g3c4_dispatch_forward(
           "g3c4.residual", "g3c4.residual.forward",
           3u, d4_shape, inputs, 2u, output) != 0)
@@ -3499,6 +3593,9 @@ int64_t et_g3c4_private_full_prefix_forward_v1(
   inputs[3] = et_g3c4_view(&epsilon, sizeof(epsilon), "f32", 0u, NULL);
   output = et_g3c4_view(
       scratch.n1, sizeof(scratch.n1), "f32", 3u, d4_shape);
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_auth(context)!=history) goto fail;
+#endif
   if (et_g3c4_dispatch_forward(
           "g3c4.layer-norm", "g3c4.layer-norm.forward",
           3u, d4_shape, inputs, 4u, output) != 0)
@@ -3514,6 +3611,9 @@ int64_t et_g3c4_private_full_prefix_forward_v1(
       sizeof(target) == sizeof(scratch.fu) ? d8_shape : \
       (sizeof(target) == sizeof(scratch.z) ? \
           (const uint64_t[3]){1u, 4u, 256u} : d4_shape)); \
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_auth(context)!=history) goto fail;
+#endif
   if (et_g3c4_dispatch_forward( \
           "g3c4.linear", "g3c4.linear.forward-no-bias", \
           4u, (row), inputs, 2u, output) != 0) \
@@ -3531,6 +3631,9 @@ int64_t et_g3c4_private_full_prefix_forward_v1(
       (source), sizeof(source), "f32", (source_rank), (source_shape)); \
   output = et_g3c4_view( \
       (target), sizeof(target), "f32", (target_rank), (target_shape)); \
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_auth(context)!=history) goto fail;
+#endif
   if (et_g3c4_dispatch_forward( \
           "g3c4.head-layout", (operation), 4u, head_layout_row, \
           inputs, 1u, output) != 0) \
@@ -3595,6 +3698,9 @@ int64_t et_g3c4_private_full_prefix_forward_v1(
       attention_mask_shape);
   output = et_g3c4_view(
       scratch.ah, sizeof(scratch.ah), "f32", 4u, heads_shape);
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_auth(context)!=history) goto fail;
+#endif
   if (et_g3c4_dispatch_forward(
           "g3c4.causal-attention", "g3c4.causal-attention.forward",
           6u, attention_row, inputs, 6u, output) != 0)
@@ -3613,6 +3719,9 @@ int64_t et_g3c4_private_full_prefix_forward_v1(
   inputs[1] = et_g3c4_view(
       scratch.ao, sizeof(scratch.ao), "f32", 3u, d4_shape);
   output = et_g3c4_view(scratch.r, sizeof(scratch.r), "f32", 3u, d4_shape);
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_auth(context)!=history) goto fail;
+#endif
   if (et_g3c4_dispatch_forward(
           "g3c4.residual", "g3c4.residual.forward",
           3u, d4_shape, inputs, 2u, output) != 0)
@@ -3624,6 +3733,9 @@ int64_t et_g3c4_private_full_prefix_forward_v1(
   inputs[3] = et_g3c4_view(&epsilon, sizeof(epsilon), "f32", 0u, NULL);
   output = et_g3c4_view(
       scratch.n2, sizeof(scratch.n2), "f32", 3u, d4_shape);
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_auth(context)!=history) goto fail;
+#endif
   if (et_g3c4_dispatch_forward(
           "g3c4.layer-norm", "g3c4.layer-norm.forward",
           3u, d4_shape, inputs, 4u, output) != 0)
@@ -3634,6 +3746,9 @@ int64_t et_g3c4_private_full_prefix_forward_v1(
       scratch.fu, sizeof(scratch.fu), "f32", 3u, d8_shape);
   output = et_g3c4_view(
       scratch.fg, sizeof(scratch.fg), "f32", 3u, d8_shape);
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_auth(context)!=history) goto fail;
+#endif
   if (et_g3c4_dispatch_forward(
           "g3c4.gelu", "g3c4.gelu.forward",
           3u, d8_shape, inputs, 1u, output) != 0)
@@ -3645,6 +3760,9 @@ int64_t et_g3c4_private_full_prefix_forward_v1(
   inputs[1] = et_g3c4_view(
       scratch.fd, sizeof(scratch.fd), "f32", 3u, d4_shape);
   output = et_g3c4_view(scratch.y, sizeof(scratch.y), "f32", 3u, d4_shape);
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_auth(context)!=history) goto fail;
+#endif
   if (et_g3c4_dispatch_forward(
           "g3c4.residual", "g3c4.residual.forward",
           3u, d4_shape, inputs, 2u, output) != 0)
@@ -3656,6 +3774,9 @@ int64_t et_g3c4_private_full_prefix_forward_v1(
   inputs[3] = et_g3c4_view(&epsilon, sizeof(epsilon), "f32", 0u, NULL);
   output = et_g3c4_view(
       scratch.nf, sizeof(scratch.nf), "f32", 3u, d4_shape);
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_auth(context)!=history) goto fail;
+#endif
   if (et_g3c4_dispatch_forward(
           "g3c4.layer-norm", "g3c4.layer-norm.forward",
           3u, d4_shape, inputs, 4u, output) != 0)
@@ -3724,6 +3845,11 @@ int64_t et_g3c4_private_sample_last_v1(
   int categorical;
 
   et_g3c4_error_reset_internal();
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_output_alias(token_output,sizeof(*token_output)) ||
+      cpu4_history_output_alias(successor_output,4u*sizeof(*successor_output)))
+    return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT,ET_G3C4_CODE_ALIAS);
+#endif
   if (!et_g3c4_range_valid(full_logits, 1024u * sizeof(float)) ||
       !et_g3c4_range_valid(token_output, sizeof(*token_output)) ||
       !et_g3c4_range_valid(successor_output,
@@ -3762,6 +3888,10 @@ int64_t et_g3c4_private_sample_last_v1(
     return et_g3c4_error_state.category;
   }
 
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_node *history=cpu4_history_preflight(context,0u,0u,0u,0u);
+  if (history==NULL) return et_g3c4_error_state.category;
+#endif
   memcpy(last_logits, full_logits + 3u * 256u, sizeof(last_logits));
   memcpy(numeric_rng, context->generator_rng_words, sizeof(numeric_rng));
   categorical = context->generator_policy[0] == 1;
@@ -3810,6 +3940,9 @@ int64_t et_g3c4_private_sample_last_v1(
     (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
     return et_g3c4_error_state.category;
   }
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_auth(context)!=history) return et_g3c4_error_state.category;
+#endif
   memcpy(token_output, &token_candidate, sizeof(token_candidate));
   memcpy(successor_output, successor_candidate, sizeof(successor_candidate));
   return 0;
@@ -3970,6 +4103,10 @@ static void et_g3c4_token_frame_discard(
       et_a2_kv_cache_transaction_abort_v1(
           &context->token_frame_transaction, &error) != 0)
     abort();
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_node *history = cpu4_history_find(context);
+  cpu4_history_pending_clear(history);
+#endif
   et_g3c4_token_frame_reset(context);
 }
 
@@ -3995,6 +4132,10 @@ int64_t et_g3c4_private_token_frame_begin_v1(
 #endif
 
   et_g3c4_error_reset_internal();
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_output_alias(speculative_token_output,sizeof(*speculative_token_output)))
+    return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT,ET_G3C4_CODE_ALIAS);
+#endif
   if (!et_g3c4_range_valid(full_logits, 1024u * sizeof(float)) ||
       !et_g3c4_range_valid(
           speculative_token_output, sizeof(*speculative_token_output)) ||
@@ -4029,6 +4170,10 @@ int64_t et_g3c4_private_token_frame_begin_v1(
         ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
     return et_g3c4_error_state.category;
   }
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_node *history = cpu4_history_preflight(context,2u,1u,4u,1u);
+  if (history == NULL) return et_g3c4_error_state.category;
+#endif
   if (et_g3c4_private_sample_last_v1(
           context, full_logits, &token_candidate,
           successor_candidate) != 0)
@@ -4064,11 +4209,23 @@ int64_t et_g3c4_private_token_frame_begin_v1(
 #endif
   append_counts = et_g3c4_view(
       &append_count, sizeof(append_count), "i64", 1u, append_shape);
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_auth(context) != history) return et_g3c4_error_state.category;
+  cpu4_history_start(history,2u,4u);
+#endif
   if (et_g3c4_capture_kernel(
           et_a2_kv_cache_transaction_begin_v1(
               context->cache, 1u, &append_counts, &transaction, &error),
-          &error) != 0)
+          &error) != 0) {
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+    cpu4_history_pending_clear(history);
+#endif
     return et_g3c4_error_state.category;
+  }
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  history->pending.transaction = transaction;
+#endif
+
   context->token_frame_transaction = transaction;
   context->token_frame_state = ET_G3C4_TOKEN_FRAME_SAMPLED;
   context->token_frame_candidate = token_candidate;
@@ -4119,6 +4276,10 @@ int64_t et_g3c4_private_token_frame_stage_v1(
         ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
     return et_g3c4_error_state.category;
   }
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_preflight(context,2u,1u,4u,1u) == NULL)
+    return et_g3c4_error_state.category;
+#endif
   key_view = et_g3c4_view(
       (void *)keys, 4u * sizeof(float), "f32", 4u, kv_shape);
   value_view = et_g3c4_view(
@@ -4145,6 +4306,10 @@ int64_t et_g3c4_private_token_frame_publish_v1(
   int64_t successor_candidate[4];
 
   et_g3c4_error_reset_internal();
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_output_alias(token_output,sizeof(*token_output)))
+    return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT,ET_G3C4_CODE_ALIAS);
+#endif
   if (!et_g3c4_range_valid(token_output, sizeof(*token_output)) ||
       (uintptr_t)token_output % _Alignof(int64_t) != 0u) {
     (void)et_g3c4_fail(
@@ -4179,6 +4344,12 @@ int64_t et_g3c4_private_token_frame_publish_v1(
   token_candidate = context->token_frame_candidate;
   memcpy(successor_candidate, context->token_frame_successor,
          sizeof(successor_candidate));
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_node *history = cpu4_history_preflight(context,2u,1u,4u,1u);
+  if (history == NULL) return et_g3c4_error_state.category;
+  if (cpu4_history_staged_check(history,context->token_frame_transaction,
+          history->history.count+1u,4u) != 0) return et_g3c4_error_state.category;
+#endif
   if (et_g3c4_capture_kernel(
           et_a2_kv_cache_transaction_commit_v1(
               &context->token_frame_transaction, &error),
@@ -4187,6 +4358,10 @@ int64_t et_g3c4_private_token_frame_publish_v1(
 
   memcpy(context->generator_rng_words, successor_candidate,
          sizeof(successor_candidate));
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_publish(history,context,&token_candidate,1u,2u,0);
+#endif
+
   memcpy(token_output, &token_candidate, sizeof(token_candidate));
   context->budget = 0;
   et_g3c4_token_frame_reset(context);
@@ -4268,6 +4443,29 @@ static int et_g3c4_token_dispatch(
       et_kernel_runtime_dispatch(runtime, &call, &error), &error);
 }
 
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+static int cpu4_history_dispatch(et_g3c4_context_internal *context,
+    et_kernel_runtime *runtime, const char *capability, const char *operation,
+    size_t rank, const uint64_t *shape, et_kernel_tensor_view_v1 *inputs,
+    size_t input_count, et_kernel_tensor_view_v1 output) {
+  if (cpu4_history_effect(context) != 0)
+    return (int)et_g3c4_error_state.category;
+  return et_g3c4_token_dispatch(runtime,capability,operation,rank,shape,
+                               inputs,input_count,output);
+}
+static int cpu4_history_discover(et_g3c4_context_internal *context,
+    const et_kernel_provider_v1 *provider, et_kernel_runtime **output) {
+  if (cpu4_history_effect(context) != 0)
+    return (int)et_g3c4_error_state.category;
+  return et_g3c4_token_runtime_discover(provider,output);
+}
+#define CPU4_TOKEN_DISPATCH(...) cpu4_history_dispatch(context,__VA_ARGS__)
+#define CPU4_TOKEN_DISCOVER(...) cpu4_history_discover(context,__VA_ARGS__)
+#else
+#define CPU4_TOKEN_DISPATCH(...) et_g3c4_token_dispatch(__VA_ARGS__)
+#define CPU4_TOKEN_DISCOVER(...) et_g3c4_token_runtime_discover(__VA_ARGS__)
+#endif
+
 int64_t et_g3c4_private_token_forward_v1(
     void *candidate, int64_t speculative_token,
     float logits_output[256]) {
@@ -4308,6 +4506,10 @@ int64_t et_g3c4_private_token_forward_v1(
   size_t key;
 
   et_g3c4_error_reset_internal();
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_output_alias(logits_output,256u*sizeof(float)))
+    return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT,ET_G3C4_CODE_ALIAS);
+#endif
   if (!et_g3c4_range_valid(logits_output, 256u * sizeof(float)) ||
       (uintptr_t)logits_output % _Alignof(float) != 0u) {
     (void)et_g3c4_fail(
@@ -4338,12 +4540,16 @@ int64_t et_g3c4_private_token_forward_v1(
         ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
     return et_g3c4_error_state.category;
   }
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_preflight(context,2u,1u,4u,1u) == NULL)
+    return et_g3c4_error_state.category;
+#endif
   memset(&scratch, 0, sizeof(scratch));
   memcpy(&epsilon, &epsilon_bits, sizeof(epsilon));
-  if (et_g3c4_token_runtime_discover(
+  if (CPU4_TOKEN_DISCOVER(
           et_g3n_kernel_provider_v1(), &g3n_runtime) != 0)
     goto fail;
-  if (et_g3c4_token_runtime_discover(
+  if (CPU4_TOKEN_DISCOVER(
           et_n2_kernel_provider_v1(), &n2_runtime) != 0)
     goto fail;
 
@@ -4352,13 +4558,13 @@ int64_t et_g3c4_private_token_forward_v1(
   inputs[1] = context->pins.views[10];
   output = et_g3c4_view(
       scratch.et, sizeof(scratch.et), "f32", 3u, d4_shape);
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           g3n_runtime, "g3n.embedding-forward", "g3n.embedding.forward",
           4u, token_embedding_row, inputs, 2u, output) != 0)
     goto fail;
 
   query_position = context->token_frame_position;
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           et_g3c4_forward_runtime, "g3c4.embedding-forward",
           "g3c4.embedding.forward", 4u, position_embedding_row,
           (et_kernel_tensor_view_v1[2]){
@@ -4368,7 +4574,7 @@ int64_t et_g3c4_private_token_forward_v1(
           et_g3c4_view(scratch.ep, sizeof(scratch.ep),
                        "f32", 3u, d4_shape)) != 0)
     goto fail;
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           g3n_runtime, "g3n.residual-forward", "g3n.residual.forward",
           3u, d4_shape,
           (et_kernel_tensor_view_v1[2]){
@@ -4384,7 +4590,7 @@ int64_t et_g3c4_private_token_forward_v1(
   inputs[1] = context->pins.views[7];
   inputs[2] = context->pins.views[6];
   inputs[3] = et_g3c4_view(&epsilon, sizeof(epsilon), "f32", 0u, NULL);
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           g3n_runtime, "g3n.layer-norm-forward",
           "g3n.layer-norm.forward", 3u, d4_shape, inputs, 4u,
           et_g3c4_view(scratch.n1, sizeof(scratch.n1),
@@ -4401,7 +4607,7 @@ int64_t et_g3c4_private_token_forward_v1(
       sizeof(target) == sizeof(scratch.fu) ? d8_shape : \
       (sizeof(target) == sizeof(scratch.z) ? \
           (const uint64_t[3]){1u, 1u, 256u} : d4_shape)); \
-  if (et_g3c4_token_dispatch( \
+  if (CPU4_TOKEN_DISPATCH( \
           g3n_runtime, "g3n.linear-forward", \
           "g3n.linear.forward-no-bias", 4u, (row), \
           inputs, 2u, output) != 0) \
@@ -4418,7 +4624,7 @@ int64_t et_g3c4_private_token_forward_v1(
       (source), sizeof(source), "f32", (source_rank), (source_shape)); \
   output = et_g3c4_view( \
       (target), sizeof(target), "f32", (target_rank), (target_shape)); \
-  if (et_g3c4_token_dispatch( \
+  if (CPU4_TOKEN_DISPATCH( \
           g3n_runtime, "g3n.head-layout-forward", (operation), \
           4u, head_layout_row, inputs, 1u, output) != 0) \
     goto fail; \
@@ -4487,7 +4693,7 @@ int64_t et_g3c4_private_token_forward_v1(
   inputs[5] = et_g3c4_view(
       causal_keep, sizeof(causal_keep), "bool", 3u,
       attention_mask_shape);
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           et_g3c4_forward_runtime, "g3c4.causal-attention",
           "g3c4.causal-attention.forward", 6u, attention_row,
           inputs, 6u,
@@ -4506,7 +4712,7 @@ int64_t et_g3c4_private_token_forward_v1(
       scratch.x, sizeof(scratch.x), "f32", 3u, d4_shape);
   inputs[1] = et_g3c4_view(
       scratch.ao, sizeof(scratch.ao), "f32", 3u, d4_shape);
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           g3n_runtime, "g3n.residual-forward", "g3n.residual.forward",
           3u, d4_shape, inputs, 2u,
           et_g3c4_view(scratch.r, sizeof(scratch.r),
@@ -4517,7 +4723,7 @@ int64_t et_g3c4_private_token_forward_v1(
   inputs[1] = context->pins.views[9];
   inputs[2] = context->pins.views[8];
   inputs[3] = et_g3c4_view(&epsilon, sizeof(epsilon), "f32", 0u, NULL);
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           g3n_runtime, "g3n.layer-norm-forward",
           "g3n.layer-norm.forward", 3u, d4_shape, inputs, 4u,
           et_g3c4_view(scratch.n2, sizeof(scratch.n2),
@@ -4526,7 +4732,7 @@ int64_t et_g3c4_private_token_forward_v1(
   ET_G3C4_TOKEN_LINEAR(5u, scratch.n2, scratch.fu, linear_d4_d8);
   inputs[0] = et_g3c4_view(
       scratch.fu, sizeof(scratch.fu), "f32", 3u, d8_shape);
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           n2_runtime, "kernel.activation", "gelu.forward",
           3u, d8_shape, inputs, 1u,
           et_g3c4_view(scratch.fg, sizeof(scratch.fg),
@@ -4537,7 +4743,7 @@ int64_t et_g3c4_private_token_forward_v1(
       scratch.r, sizeof(scratch.r), "f32", 3u, d4_shape);
   inputs[1] = et_g3c4_view(
       scratch.fd, sizeof(scratch.fd), "f32", 3u, d4_shape);
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           g3n_runtime, "g3n.residual-forward", "g3n.residual.forward",
           3u, d4_shape, inputs, 2u,
           et_g3c4_view(scratch.y, sizeof(scratch.y),
@@ -4548,7 +4754,7 @@ int64_t et_g3c4_private_token_forward_v1(
   inputs[1] = context->pins.views[12];
   inputs[2] = context->pins.views[11];
   inputs[3] = et_g3c4_view(&epsilon, sizeof(epsilon), "f32", 0u, NULL);
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           g3n_runtime, "g3n.layer-norm-forward",
           "g3n.layer-norm.forward", 3u, d4_shape, inputs, 4u,
           et_g3c4_view(scratch.nf, sizeof(scratch.nf),
@@ -4641,6 +4847,10 @@ int64_t et_g3c4_private_prefill3_v1(
   size_t binding_offset = 0u;
 
   et_g3c4_error_reset_internal();
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_output_alias(last_logits_output,256u*sizeof(float)))
+    return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT,ET_G3C4_CODE_ALIAS);
+#endif
   if (!et_g3c4_range_valid(token_ids, 3u * sizeof(token_ids[0])) ||
       !et_g3c4_range_valid(
           last_logits_output, 256u * sizeof(last_logits_output[0])) ||
@@ -4681,23 +4891,34 @@ int64_t et_g3c4_private_prefill3_v1(
   if (et_g3c4_prefill_reject_owned_aliases(
           context, token_ids, last_logits_output) != 0)
     return et_g3c4_error_state.category;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_node *history = cpu4_history_preflight(context,1u,3u,4u,1u);
+  if (history == NULL) return et_g3c4_error_state.category;
+#endif
   memset(&scratch, 0, sizeof(scratch));
   memset(binding_identities, 0, sizeof(binding_identities));
   memset(binding_values, 0, sizeof(binding_values));
   memcpy(&epsilon, &epsilon_bits, sizeof(epsilon));
-  if (et_g3c4_token_runtime_discover(
+  if (CPU4_TOKEN_DISCOVER(
           et_n2_kernel_provider_v1(), &n2_runtime) != 0)
     goto fail;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_start(history,1u,4u);
+#endif
   if (et_g3c4_capture_kernel(
           et_a2_kv_cache_create_v1(
               1u, 1u, 2u, 4u, 2u, &candidate_cache, &error),
           &error) != 0)
     goto fail;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  history->pending.candidate = candidate_cache;
+#endif
+
 
   inputs[0] = et_g3c4_view(
       (void *)token_ids, 3u * sizeof(token_ids[0]), "i64", 2u, ids_shape);
   inputs[1] = context->pins.views[10];
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           et_g3c4_forward_runtime, "g3c4.embedding-forward",
           "g3c4.embedding.forward", 4u, token_embedding_row, inputs, 2u,
           et_g3c4_view(scratch.et, sizeof(scratch.et),
@@ -4706,7 +4927,7 @@ int64_t et_g3c4_private_prefill3_v1(
   inputs[0] = et_g3c4_view(
       positions, sizeof(positions), "i64", 2u, ids_shape);
   inputs[1] = context->pins.views[13];
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           et_g3c4_forward_runtime, "g3c4.embedding-forward",
           "g3c4.embedding.forward", 4u, position_embedding_row,
           inputs, 2u,
@@ -4719,7 +4940,7 @@ int64_t et_g3c4_private_prefill3_v1(
       (source_a), sizeof(source_a), "f32", 3u, d4_shape); \
   inputs[1] = et_g3c4_view( \
       (source_b), sizeof(source_b), "f32", 3u, d4_shape); \
-  if (et_g3c4_token_dispatch( \
+  if (CPU4_TOKEN_DISPATCH( \
           n2_runtime, "kernel.residual", "residual.forward", \
           3u, d4_shape, inputs, 2u, \
           et_g3c4_view((target), sizeof(target), \
@@ -4733,7 +4954,7 @@ int64_t et_g3c4_private_prefill3_v1(
   inputs[1] = context->pins.views[(gamma_index)]; \
   inputs[2] = context->pins.views[(beta_index)]; \
   inputs[3] = et_g3c4_view(&epsilon, sizeof(epsilon), "f32", 0u, NULL); \
-  if (et_g3c4_token_dispatch( \
+  if (CPU4_TOKEN_DISPATCH( \
           et_g3c4_forward_runtime, "g3c4.layer-norm", \
           "g3c4.layer-norm.forward", 3u, d4_shape, inputs, 4u, \
           et_g3c4_view((target), sizeof(target), \
@@ -4751,7 +4972,7 @@ int64_t et_g3c4_private_prefill3_v1(
       sizeof(target) == sizeof(scratch.fu) ? d8_shape : \
       (sizeof(target) == sizeof(scratch.z) ? \
           (const uint64_t[3]){1u, 3u, 256u} : d4_shape)); \
-  if (et_g3c4_token_dispatch( \
+  if (CPU4_TOKEN_DISPATCH( \
           et_g3c4_forward_runtime, "g3c4.linear", \
           "g3c4.linear.forward-no-bias", 4u, (row), \
           inputs, 2u, output) != 0) \
@@ -4762,7 +4983,7 @@ int64_t et_g3c4_private_prefill3_v1(
                                target, target_rank, target_shape) do { \
   inputs[0] = et_g3c4_view( \
       (source), sizeof(source), "f32", (source_rank), (source_shape)); \
-  if (et_g3c4_token_dispatch( \
+  if (CPU4_TOKEN_DISPATCH( \
           et_g3c4_forward_runtime, "g3c4.head-layout", (operation), \
           4u, head_layout_row, inputs, 1u, \
           et_g3c4_view((target), sizeof(target), \
@@ -4792,6 +5013,10 @@ int64_t et_g3c4_private_prefill3_v1(
               candidate_cache, 3u, &append_counts, &transaction, &error),
           &error) != 0)
     goto fail;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  history->pending.transaction = transaction;
+#endif
+
   staged_keys = et_g3c4_view(
       scratch.kh, sizeof(scratch.kh), "f32", 4u, heads_shape);
   staged_values = et_g3c4_view(
@@ -4834,7 +5059,7 @@ int64_t et_g3c4_private_prefill3_v1(
   inputs[5] = et_g3c4_view(
       causal_keep, sizeof(causal_keep), "bool", 3u,
       attention_mask_shape);
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           et_g3c4_forward_runtime, "g3c4.causal-attention",
           "g3c4.causal-attention.forward", 6u, attention_row,
           inputs, 6u,
@@ -4854,7 +5079,7 @@ int64_t et_g3c4_private_prefill3_v1(
   ET_G3C4_PREFILL3_LINEAR(5u, scratch.n2, scratch.fu, linear_d4_d8);
   inputs[0] = et_g3c4_view(
       scratch.fu, sizeof(scratch.fu), "f32", 3u, d8_shape);
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           et_g3c4_forward_runtime, "g3c4.gelu", "g3c4.gelu.forward",
           3u, d8_shape, inputs, 1u,
           et_g3c4_view(scratch.fg, sizeof(scratch.fg),
@@ -4889,10 +5114,18 @@ int64_t et_g3c4_private_prefill3_v1(
     (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
     goto fail;
   }
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_auth(context) != history) goto fail;
+  if (cpu4_history_staged_check(history,transaction,3u,4u) != 0) goto fail;
+#endif
   if (et_g3c4_capture_kernel(
           et_a2_kv_cache_transaction_commit_v1(&transaction, &error),
           &error) != 0)
     goto fail;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  history->pending.transaction = NULL;
+#endif
+
   et_kernel_runtime_destroy(n2_runtime);
   n2_runtime = NULL;
   old_cache = context->cache;
@@ -4902,6 +5135,10 @@ int64_t et_g3c4_private_prefill3_v1(
 
   context->cache = candidate_cache;
   candidate_cache = NULL;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_publish(history,context,token_ids,3u,1u,1);
+#endif
+
   memcpy(context->prefill_binding_identities, binding_identities,
          sizeof(binding_identities));
   memcpy(context->prefill_binding_values, binding_values,
@@ -4926,6 +5163,9 @@ fail:
       et_a2_kv_cache_destroy_v1(&candidate_cache, &error) != 0)
     abort();
   if (n2_runtime != NULL) et_kernel_runtime_destroy(n2_runtime);
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_pending_clear(history);
+#endif
   et_g3c4_error_restore_internal(first);
   return et_g3c4_error_state.category;
 }
@@ -4984,6 +5224,10 @@ int64_t et_g3c4_private_prefill1_v1(
   size_t binding_offset = 0u;
 
   et_g3c4_error_reset_internal();
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_output_alias(last_logits_output,256u*sizeof(float)))
+    return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT,ET_G3C4_CODE_ALIAS);
+#endif
   if (token_id < 0 || token_id > 255) {
     (void)et_g3c4_fail(
         ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
@@ -5017,26 +5261,37 @@ int64_t et_g3c4_private_prefill1_v1(
           context, last_logits_output) != 0)
     return et_g3c4_error_state.category;
 
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_node *history = cpu4_history_preflight(context,1u,1u,4u,1u);
+  if (history == NULL) return et_g3c4_error_state.category;
+#endif
   memset(&scratch, 0, sizeof(scratch));
   memset(binding_identities, 0, sizeof(binding_identities));
   memset(binding_values, 0, sizeof(binding_values));
   memcpy(&epsilon, &epsilon_bits, sizeof(epsilon));
-  if (et_g3c4_token_runtime_discover(
+  if (CPU4_TOKEN_DISCOVER(
           et_g3n_kernel_provider_v1(), &g3n_runtime) != 0)
     goto fail;
-  if (et_g3c4_token_runtime_discover(
+  if (CPU4_TOKEN_DISCOVER(
           et_n2_kernel_provider_v1(), &n2_runtime) != 0)
     goto fail;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_start(history,1u,4u);
+#endif
   if (et_g3c4_capture_kernel(
           et_a2_kv_cache_create_v1(
               1u, 1u, 2u, 4u, 2u, &candidate_cache, &error),
           &error) != 0)
     goto fail;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  history->pending.candidate = candidate_cache;
+#endif
+
 
   inputs[0] = et_g3c4_view(
       &token_id, sizeof(token_id), "i64", 2u, ids_shape);
   inputs[1] = context->pins.views[10];
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           g3n_runtime, "g3n.embedding-forward", "g3n.embedding.forward",
           4u, token_embedding_row, inputs, 2u,
           et_g3c4_view(scratch.et, sizeof(scratch.et),
@@ -5045,7 +5300,7 @@ int64_t et_g3c4_private_prefill1_v1(
   inputs[0] = et_g3c4_view(
       &position, sizeof(position), "i64", 2u, ids_shape);
   inputs[1] = context->pins.views[13];
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           et_g3c4_forward_runtime, "g3c4.embedding-forward",
           "g3c4.embedding.forward", 4u, position_embedding_row,
           inputs, 2u,
@@ -5058,7 +5313,7 @@ int64_t et_g3c4_private_prefill1_v1(
       (source_a), sizeof(source_a), "f32", 3u, d4_shape); \
   inputs[1] = et_g3c4_view( \
       (source_b), sizeof(source_b), "f32", 3u, d4_shape); \
-  if (et_g3c4_token_dispatch( \
+  if (CPU4_TOKEN_DISPATCH( \
           g3n_runtime, "g3n.residual-forward", "g3n.residual.forward", \
           3u, d4_shape, inputs, 2u, \
           et_g3c4_view((target), sizeof(target), \
@@ -5072,7 +5327,7 @@ int64_t et_g3c4_private_prefill1_v1(
   inputs[1] = context->pins.views[(gamma_index)]; \
   inputs[2] = context->pins.views[(beta_index)]; \
   inputs[3] = et_g3c4_view(&epsilon, sizeof(epsilon), "f32", 0u, NULL); \
-  if (et_g3c4_token_dispatch( \
+  if (CPU4_TOKEN_DISPATCH( \
           g3n_runtime, "g3n.layer-norm-forward", \
           "g3n.layer-norm.forward", 3u, d4_shape, inputs, 4u, \
           et_g3c4_view((target), sizeof(target), \
@@ -5090,7 +5345,7 @@ int64_t et_g3c4_private_prefill1_v1(
       sizeof(target) == sizeof(scratch.fu) ? d8_shape : \
       (sizeof(target) == sizeof(scratch.z) ? \
           (const uint64_t[3]){1u, 1u, 256u} : d4_shape)); \
-  if (et_g3c4_token_dispatch( \
+  if (CPU4_TOKEN_DISPATCH( \
           g3n_runtime, "g3n.linear-forward", \
           "g3n.linear.forward-no-bias", 4u, (row), \
           inputs, 2u, output) != 0) \
@@ -5101,7 +5356,7 @@ int64_t et_g3c4_private_prefill1_v1(
                                target, target_rank, target_shape) do { \
   inputs[0] = et_g3c4_view( \
       (source), sizeof(source), "f32", (source_rank), (source_shape)); \
-  if (et_g3c4_token_dispatch( \
+  if (CPU4_TOKEN_DISPATCH( \
           g3n_runtime, "g3n.head-layout-forward", (operation), \
           4u, head_layout_row, inputs, 1u, \
           et_g3c4_view((target), sizeof(target), \
@@ -5131,6 +5386,10 @@ int64_t et_g3c4_private_prefill1_v1(
               candidate_cache, 1u, &append_counts, &transaction, &error),
           &error) != 0)
     goto fail;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  history->pending.transaction = transaction;
+#endif
+
   staged_keys = et_g3c4_view(
       scratch.kh, sizeof(scratch.kh), "f32", 4u, heads_shape);
   staged_values = et_g3c4_view(
@@ -5172,7 +5431,7 @@ int64_t et_g3c4_private_prefill1_v1(
   inputs[5] = et_g3c4_view(
       causal_keep, sizeof(causal_keep), "bool", 3u,
       attention_mask_shape);
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           et_g3c4_forward_runtime, "g3c4.causal-attention",
           "g3c4.causal-attention.forward", 6u, attention_row,
           inputs, 6u,
@@ -5192,7 +5451,7 @@ int64_t et_g3c4_private_prefill1_v1(
   ET_G3C4_PREFILL1_LINEAR(5u, scratch.n2, scratch.fu, linear_d4_d8);
   inputs[0] = et_g3c4_view(
       scratch.fu, sizeof(scratch.fu), "f32", 3u, d8_shape);
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           n2_runtime, "kernel.activation", "gelu.forward",
           3u, d8_shape, inputs, 1u,
           et_g3c4_view(scratch.fg, sizeof(scratch.fg),
@@ -5227,10 +5486,18 @@ int64_t et_g3c4_private_prefill1_v1(
     (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
     goto fail;
   }
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_auth(context) != history) goto fail;
+  if (cpu4_history_staged_check(history,transaction,1u,4u) != 0) goto fail;
+#endif
   if (et_g3c4_capture_kernel(
           et_a2_kv_cache_transaction_commit_v1(&transaction, &error),
           &error) != 0)
     goto fail;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  history->pending.transaction = NULL;
+#endif
+
   et_kernel_runtime_destroy(n2_runtime);
   n2_runtime = NULL;
   et_kernel_runtime_destroy(g3n_runtime);
@@ -5242,6 +5509,10 @@ int64_t et_g3c4_private_prefill1_v1(
 
   context->cache = candidate_cache;
   candidate_cache = NULL;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_publish(history,context,&token_id,1u,1u,1);
+#endif
+
   memcpy(context->prefill_binding_identities, binding_identities,
          sizeof(binding_identities));
   memcpy(context->prefill_binding_values, binding_values,
@@ -5266,6 +5537,9 @@ fail:
     abort();
   if (n2_runtime != NULL) et_kernel_runtime_destroy(n2_runtime);
   if (g3n_runtime != NULL) et_kernel_runtime_destroy(g3n_runtime);
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_pending_clear(history);
+#endif
   et_g3c4_error_restore_internal(first);
   return et_g3c4_error_state.category;
 }
@@ -5334,6 +5608,10 @@ static int64_t et_g3c4_prefill2_impl(
   size_t binding_offset = 0u;
 
   et_g3c4_error_reset_internal();
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_output_alias(last_logits_output,256u*sizeof(float)))
+    return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT,ET_G3C4_CODE_ALIAS);
+#endif
   if (!et_g3c4_range_valid(token_ids, 2u * sizeof(token_ids[0])) ||
       !et_g3c4_range_valid(
           last_logits_output, 256u * sizeof(last_logits_output[0])) ||
@@ -5391,26 +5669,37 @@ static int64_t et_g3c4_prefill2_impl(
   committed_tokens[0] = token_ids[0];
   committed_tokens[1] = token_ids[1];
   committed_tokens[2] = 0;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_node *history = cpu4_history_preflight(context,1u,2u,4u,1u);
+  if (history == NULL) return et_g3c4_error_state.category;
+#endif
   memset(&scratch, 0, sizeof(scratch));
   memset(binding_identities, 0, sizeof(binding_identities));
   memset(binding_values, 0, sizeof(binding_values));
   memcpy(&epsilon, &epsilon_bits, sizeof(epsilon));
-  if (et_g3c4_token_runtime_discover(
+  if (CPU4_TOKEN_DISCOVER(
           et_n3k_kernel_provider_v1(), &n3k_runtime) != 0)
     goto fail;
-  if (et_g3c4_token_runtime_discover(
+  if (CPU4_TOKEN_DISCOVER(
           et_n2_kernel_provider_v1(), &n2_runtime) != 0)
     goto fail;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_start(history,1u,4u);
+#endif
   if (et_g3c4_capture_kernel(
           et_a2_kv_cache_create_v1(
               1u, 1u, 2u, 4u, 2u, &candidate_cache, &error),
           &error) != 0)
     goto fail;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  history->pending.candidate = candidate_cache;
+#endif
+
 
   inputs[0] = et_g3c4_view(
       (void *)token_ids, 2u * sizeof(token_ids[0]), "i64", 2u, ids_shape);
   inputs[1] = context->pins.views[10];
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           n3k_runtime, "n3k.embedding-forward", "n3k.embedding.forward",
           4u, token_embedding_row, inputs, 2u,
           et_g3c4_view(scratch.et, sizeof(scratch.et),
@@ -5419,7 +5708,7 @@ static int64_t et_g3c4_prefill2_impl(
   inputs[0] = et_g3c4_view(
       positions, sizeof(positions), "i64", 2u, ids_shape);
   inputs[1] = context->pins.views[13];
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           et_g3c4_forward_runtime, "g3c4.embedding-forward",
           "g3c4.embedding.forward", 4u, position_embedding_row,
           inputs, 2u,
@@ -5432,7 +5721,7 @@ static int64_t et_g3c4_prefill2_impl(
       (source_a), sizeof(source_a), "f32", 3u, d4_shape); \
   inputs[1] = et_g3c4_view( \
       (source_b), sizeof(source_b), "f32", 3u, d4_shape); \
-  if (et_g3c4_token_dispatch( \
+  if (CPU4_TOKEN_DISPATCH( \
           n3k_runtime, "n3k.residual", "n3k.residual.forward", \
           3u, d4_shape, inputs, 2u, \
           et_g3c4_view((target), sizeof(target), \
@@ -5446,7 +5735,7 @@ static int64_t et_g3c4_prefill2_impl(
   inputs[1] = context->pins.views[(gamma_index)]; \
   inputs[2] = context->pins.views[(beta_index)]; \
   inputs[3] = et_g3c4_view(&epsilon, sizeof(epsilon), "f32", 0u, NULL); \
-  if (et_g3c4_token_dispatch( \
+  if (CPU4_TOKEN_DISPATCH( \
           n2_runtime, "kernel.norm", "layer-norm.forward", \
           3u, d4_shape, inputs, 4u, \
           et_g3c4_view((target), sizeof(target), \
@@ -5464,7 +5753,7 @@ static int64_t et_g3c4_prefill2_impl(
       sizeof(target) == sizeof(scratch.fu) ? d8_shape : \
       (sizeof(target) == sizeof(scratch.z) ? \
           (const uint64_t[3]){1u, 2u, 256u} : d4_shape)); \
-  if (et_g3c4_token_dispatch( \
+  if (CPU4_TOKEN_DISPATCH( \
           n3k_runtime, "n3k.linear", \
           "n3k.linear.forward-no-bias", 4u, (row), \
           inputs, 2u, output) != 0) \
@@ -5475,7 +5764,7 @@ static int64_t et_g3c4_prefill2_impl(
                                target, target_rank, target_shape) do { \
   inputs[0] = et_g3c4_view( \
       (source), sizeof(source), "f32", (source_rank), (source_shape)); \
-  if (et_g3c4_token_dispatch( \
+  if (CPU4_TOKEN_DISPATCH( \
           n3k_runtime, "n3k.head-layout", (operation), \
           4u, head_layout_row, inputs, 1u, \
           et_g3c4_view((target), sizeof(target), \
@@ -5505,6 +5794,10 @@ static int64_t et_g3c4_prefill2_impl(
               candidate_cache, 2u, &append_counts, &transaction, &error),
           &error) != 0)
     goto fail;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  history->pending.transaction = transaction;
+#endif
+
   staged_keys = et_g3c4_view(
       scratch.kh, sizeof(scratch.kh), "f32", 4u, heads_shape);
   staged_values = et_g3c4_view(
@@ -5548,7 +5841,7 @@ static int64_t et_g3c4_prefill2_impl(
   inputs[5] = et_g3c4_view(
       causal_keep, sizeof(causal_keep), "bool", 3u,
       attention_mask_shape);
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           et_g3c4_forward_runtime, "g3c4.causal-attention",
           "g3c4.causal-attention.forward", 6u, attention_row,
           inputs, 6u,
@@ -5568,7 +5861,7 @@ static int64_t et_g3c4_prefill2_impl(
   ET_G3C4_PREFILL2_LINEAR(5u, scratch.n2, scratch.fu, linear_d4_d8);
   inputs[0] = et_g3c4_view(
       scratch.fu, sizeof(scratch.fu), "f32", 3u, d8_shape);
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           n3k_runtime, "n3k.gelu", "n3k.gelu.forward",
           3u, d8_shape, inputs, 1u,
           et_g3c4_view(scratch.fg, sizeof(scratch.fg),
@@ -5603,10 +5896,18 @@ static int64_t et_g3c4_prefill2_impl(
     (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
     goto fail;
   }
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_auth(context) != history) goto fail;
+  if (cpu4_history_staged_check(history,transaction,2u,4u) != 0) goto fail;
+#endif
   if (et_g3c4_capture_kernel(
           et_a2_kv_cache_transaction_commit_v1(&transaction, &error),
           &error) != 0)
     goto fail;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  history->pending.transaction = NULL;
+#endif
+
   et_kernel_runtime_destroy(n2_runtime);
   n2_runtime = NULL;
   et_kernel_runtime_destroy(n3k_runtime);
@@ -5618,6 +5919,10 @@ static int64_t et_g3c4_prefill2_impl(
 
   context->cache = candidate_cache;
   candidate_cache = NULL;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_publish(history,context,token_ids,2u,1u,1);
+#endif
+
   memcpy(context->prefill_binding_identities, binding_identities,
          sizeof(binding_identities));
   memcpy(context->prefill_binding_values, binding_values,
@@ -5643,6 +5948,9 @@ fail:
     abort();
   if (n2_runtime != NULL) et_kernel_runtime_destroy(n2_runtime);
   if (n3k_runtime != NULL) et_kernel_runtime_destroy(n3k_runtime);
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_pending_clear(history);
+#endif
   et_g3c4_error_restore_internal(first);
   return et_g3c4_error_state.category;
 }
@@ -5836,6 +6144,11 @@ int64_t et_g3c4_private_prompt_prefill_v1(
     return et_g3c4_error_state.category;
 #endif
 
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_preflight(context,1u,(uint32_t)input->length,4u,
+          context->budget == 0 ? 1u : 2u) == NULL)
+    return et_g3c4_error_state.category;
+#endif
   if (et_g3c4_prompt_prefill_borrow(input, &borrow, &view) != 0)
     goto fail;
   if (et_g3c4_ranges_overlap(
@@ -5961,6 +6274,10 @@ int64_t et_g3c4_private_token_frame_begin_last_v1(
   int overlap = 0;
 
   et_g3c4_error_reset_internal();
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_output_alias(speculative_token_output,sizeof(*speculative_token_output)))
+    return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT,ET_G3C4_CODE_ALIAS);
+#endif
   if (!et_g3c4_range_valid(last_logits, sizeof(private_logits)) ||
       !et_g3c4_range_valid(
           speculative_token_output, sizeof(*speculative_token_output)) ||
@@ -6033,6 +6350,10 @@ int64_t et_g3c4_private_token_frame_begin_last_v1(
     return et_g3c4_error_state.category;
   }
 
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_node *history = cpu4_history_preflight(context,2u,1u,4u,1u);
+  if (history == NULL) return et_g3c4_error_state.category;
+#endif
   memcpy(private_logits, last_logits, sizeof(private_logits));
   memcpy(numeric_rng, context->generator_rng_words, sizeof(numeric_rng));
   categorical = context->generator_policy[0] == 1;
@@ -6118,11 +6439,22 @@ int64_t et_g3c4_private_token_frame_begin_last_v1(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
   append_counts = et_g3c4_view(
       &append_count, sizeof(append_count), "i64", 1u, append_shape);
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_auth(context) != history) return et_g3c4_error_state.category;
+  cpu4_history_start(history,2u,4u);
+#endif
   if (et_g3c4_capture_kernel(
           et_a2_kv_cache_transaction_begin_v1(
               context->cache, 1u, &append_counts, &transaction, &error),
-          &error) != 0)
+          &error) != 0) {
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+    cpu4_history_pending_clear(history);
+#endif
     return et_g3c4_error_state.category;
+  }
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  history->pending.transaction = transaction;
+#endif
 
   context->token_frame_transaction = transaction;
   context->token_frame_state = ET_G3C4_TOKEN_FRAME_SAMPLED;
@@ -6318,6 +6650,11 @@ int64_t et_g3c4_private_frame_begin_v1(
   }
   memcpy(ids, view->data, (size_t)input->length * sizeof(ids[0]));
   if (et_i64_tensor_borrow_end_v1(&borrow, &error) != 0) abort();
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_node *history = cpu4_history_preflight(context,
+      frame_kind == 1 ? 3u : 4u,(uint32_t)input->length,2u,1u);
+  if (history == NULL) return et_g3c4_error_state.category;
+#endif
   frame = et_g3c4_manual_frame_allocate();
   if (frame == NULL)
     return et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_ALLOCATION);
@@ -6325,6 +6662,10 @@ int64_t et_g3c4_private_frame_begin_v1(
   frame->input_length = input->length;
   memcpy(frame->input_ids, ids, sizeof(frame->input_ids));
   frame->next_ordinal = 0;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_start(history,frame_kind == 1 ? 3u : 4u,2u);
+  history->pending.frame = frame;
+#endif
   context->manual_frame = frame;
   return 0;
 }
@@ -6346,6 +6687,9 @@ static inline __attribute__((unused)) int64_t et_g3c4_manual_role0_run(
   et_g3c4_error_reset_internal();
   context = et_g3c4_admit_active_call(candidate);
   if (context == NULL) return et_g3c4_error_state.category;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_effect(context) != 0) return et_g3c4_error_state.category;
+#endif
   frame = context->manual_frame;
   if (frame == NULL || frame->next_ordinal != 0)
     return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
@@ -6361,7 +6705,7 @@ static inline __attribute__((unused)) int64_t et_g3c4_manual_role0_run(
   row_shape[2] = 256u;
   row_shape[3] = et_shape[2] = 4u;
   bytes = (size_t)frame->input_length * 4u * sizeof(float);
-  if (et_g3c4_token_runtime_discover(
+  if (CPU4_TOKEN_DISCOVER(
           frame->input_length == 1 ? et_g3n_kernel_provider_v1() :
                                      et_n3k_kernel_provider_v1(),
           &runtime) != 0)
@@ -6370,7 +6714,7 @@ static inline __attribute__((unused)) int64_t et_g3c4_manual_role0_run(
                             (size_t)frame->input_length * sizeof(int64_t),
                             "i64", 2u, ids_shape);
   inputs[1] = context->pins.views[10];
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           runtime,
           frame->input_length == 1 ? "g3n.embedding-forward" :
                                      "n3k.embedding-forward",
@@ -6420,6 +6764,9 @@ static inline __attribute__((unused)) int64_t et_g3c4_manual_pre_a2_run(
     return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
   context = et_g3c4_admit_active_call(candidate_context);
   if (context == NULL) return et_g3c4_error_state.category;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_effect(context) != 0) return et_g3c4_error_state.category;
+#endif
   frame = context->manual_frame;
   if (frame == NULL || frame->next_ordinal != ordinal)
     return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
@@ -6501,9 +6848,9 @@ static inline __attribute__((unused)) int64_t et_g3c4_manual_pre_a2_run(
                     (ordinal == 8 ? frame->kh : frame->vh);
       break;
   }
-  if (et_g3c4_token_runtime_discover(provider, &runtime) != 0)
+  if (CPU4_TOKEN_DISCOVER(provider, &runtime) != 0)
     return et_g3c4_error_state.category;
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           runtime, capability, operation, request_rank, request_shape,
           inputs, input_count,
           et_g3c4_view(step_candidate, bytes, "f32", output_rank,
@@ -6551,6 +6898,9 @@ static inline __attribute__((unused)) int64_t et_g3c4_manual_a2_run(
   et_g3c4_error_reset_internal();
   context = et_g3c4_admit_active_call(candidate_context);
   if (context == NULL) return et_g3c4_error_state.category;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_effect(context) != 0) return et_g3c4_error_state.category;
+#endif
   frame = context->manual_frame;
   if (frame == NULL || frame->next_ordinal != 10)
     return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
@@ -6566,9 +6916,17 @@ static inline __attribute__((unused)) int64_t et_g3c4_manual_a2_run(
       request_shape[3] = (uint64_t)count;
   bytes = (size_t)count * 4u * sizeof(float);
   if (frame->frame_kind == 2) positions[0] = 1;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_node *history = cpu4_history_auth(context);
+  if (history == NULL) return et_g3c4_error_state.category;
+#endif
   if (et_g3c4_capture_kernel(et_a2_kv_cache_create_v1(
           1u, 1u, 2u, 2u, 2u, &candidate, &error), &error) != 0)
     return et_g3c4_error_state.category;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  history->pending.candidate = candidate;
+  frame->a2_candidate = candidate;
+#endif
 
   if (frame->frame_kind == 2) {
     uint64_t prefix_shape[4] = {1u, 2u, 1u, 2u};
@@ -6618,6 +6976,10 @@ static inline __attribute__((unused)) int64_t et_g3c4_manual_a2_run(
           candidate, (uint64_t)count, &count_view,
           &transaction, &error), &error) != 0)
     goto fail;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  history->pending.transaction = transaction;
+  frame->a2_transaction = transaction;
+#endif
   inputs[0] = et_g3c4_view(frame->kh, bytes, "f32", 4u, stage_shape);
   inputs[1] = et_g3c4_view(frame->vh, bytes, "f32", 4u, stage_shape);
   if (et_g3c4_capture_kernel(et_a2_kv_cache_transaction_stage_layer_v1(
@@ -6639,7 +7001,7 @@ static inline __attribute__((unused)) int64_t et_g3c4_manual_a2_run(
       mask[row * 2u + key] = (uint8_t)(
           ((const uint8_t *)keep->data)[key] != 0u &&
           key_positions[key] <= positions[row]);
-  if (et_g3c4_token_runtime_discover(et_a2_kernel_provider_v1(),
+  if (CPU4_TOKEN_DISCOVER(et_a2_kernel_provider_v1(),
                                        &runtime) != 0)
     goto fail;
   inputs[0] = et_g3c4_view(frame->qh, bytes, "f32", 4u, head_shape);
@@ -6651,7 +7013,7 @@ static inline __attribute__((unused)) int64_t et_g3c4_manual_a2_run(
                              "i64", 2u, key_shape);
   inputs[5] = et_g3c4_view(mask, (size_t)count * 2u, "bool", 3u,
                              mask_shape);
-  if (et_g3c4_token_dispatch(runtime, "kernel.causal-attention",
+  if (CPU4_TOKEN_DISPATCH(runtime, "kernel.causal-attention",
           "causal-attention.forward", 6u, request_shape, inputs, 6u,
           et_g3c4_view(ah, bytes, "f32", 4u, head_shape)) != 0)
     goto fail;
@@ -6679,6 +7041,12 @@ fail:
           &prefix, &error) != 0) abort();
   if (candidate != NULL && et_a2_kv_cache_destroy_v1(
           &candidate, &error) != 0) abort();
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  history->pending.transaction = NULL;
+  history->pending.candidate = NULL;
+  frame->a2_transaction = NULL;
+  frame->a2_candidate = NULL;
+#endif
   et_g3c4_error_state = first;
   return first.category;
 }
@@ -6705,6 +7073,9 @@ static inline __attribute__((unused)) int64_t et_g3c4_manual_at_run(
   et_g3c4_error_reset_internal();
   context = et_g3c4_admit_active_call(candidate_context);
   if (context == NULL) return et_g3c4_error_state.category;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_effect(context) != 0) return et_g3c4_error_state.category;
+#endif
   frame = context->manual_frame;
   if (frame == NULL || frame->next_ordinal != 11)
     return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
@@ -6720,11 +7091,11 @@ static inline __attribute__((unused)) int64_t et_g3c4_manual_at_run(
       (uint64_t)frame->input_length;
   bytes = (size_t)frame->input_length * 4u * sizeof(float);
   input = et_g3c4_view(frame->ah, bytes, "f32", 4u, heads_shape);
-  if (et_g3c4_token_runtime_discover(
+  if (CPU4_TOKEN_DISCOVER(
           t2 ? et_n3k_kernel_provider_v1() : et_g3n_kernel_provider_v1(),
           &runtime) != 0)
     return et_g3c4_error_state.category;
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           runtime, t2 ? "n3k.head-layout" : "g3n.head-layout-forward",
           t2 ? "n3k.heads.merge.forward" : "g3n.heads.merge.forward",
           4u, row, &input, 1u,
@@ -6759,6 +7130,9 @@ static inline __attribute__((unused)) int64_t et_g3c4_manual_ao_run(
   et_g3c4_error_reset_internal();
   context = et_g3c4_admit_active_call(candidate_context);
   if (context == NULL) return et_g3c4_error_state.category;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_effect(context) != 0) return et_g3c4_error_state.category;
+#endif
   frame = context->manual_frame;
   if (frame == NULL || frame->next_ordinal != 12)
     return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
@@ -6774,11 +7148,11 @@ static inline __attribute__((unused)) int64_t et_g3c4_manual_ao_run(
   bytes = (size_t)frame->input_length * 4u * sizeof(float);
   inputs[0] = et_g3c4_view(frame->at, bytes, "f32", 3u, output_shape);
   inputs[1] = context->pins.views[1];
-  if (et_g3c4_token_runtime_discover(
+  if (CPU4_TOKEN_DISCOVER(
           t2 ? et_n3k_kernel_provider_v1() : et_g3n_kernel_provider_v1(),
           &runtime) != 0)
     return et_g3c4_error_state.category;
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           runtime, t2 ? "n3k.linear" : "g3n.linear-forward",
           t2 ? "n3k.linear.forward-no-bias" :
                "g3n.linear.forward-no-bias",
@@ -6813,6 +7187,9 @@ static inline __attribute__((unused)) int64_t et_g3c4_manual_r_run(
   et_g3c4_error_reset_internal();
   context = et_g3c4_admit_active_call(candidate_context);
   if (context == NULL) return et_g3c4_error_state.category;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_effect(context) != 0) return et_g3c4_error_state.category;
+#endif
   frame = context->manual_frame;
   if (frame == NULL || frame->next_ordinal != 13)
     return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
@@ -6828,11 +7205,11 @@ static inline __attribute__((unused)) int64_t et_g3c4_manual_r_run(
   bytes = (size_t)frame->input_length * 4u * sizeof(float);
   inputs[0] = et_g3c4_view(frame->x, bytes, "f32", 3u, shape);
   inputs[1] = et_g3c4_view(frame->ao, bytes, "f32", 3u, shape);
-  if (et_g3c4_token_runtime_discover(
+  if (CPU4_TOKEN_DISCOVER(
           t2 ? et_n3k_kernel_provider_v1() : et_g3n_kernel_provider_v1(),
           &runtime) != 0)
     return et_g3c4_error_state.category;
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           runtime, t2 ? "n3k.residual" : "g3n.residual-forward",
           t2 ? "n3k.residual.forward" : "g3n.residual.forward",
           3u, shape, inputs, 2u,
@@ -6877,6 +7254,9 @@ static inline __attribute__((unused)) int64_t et_g3c4_manual_tail_run(
     return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
   context = et_g3c4_admit_active_call(candidate_context);
   if (context == NULL) return et_g3c4_error_state.category;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_effect(context) != 0) return et_g3c4_error_state.category;
+#endif
   frame = context->manual_frame;
   if (frame == NULL || frame->next_ordinal != ordinal)
     return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
@@ -6959,9 +7339,9 @@ static inline __attribute__((unused)) int64_t et_g3c4_manual_tail_run(
       return et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
   }
   bytes = (size_t)frame->input_length * width * sizeof(float);
-  if (et_g3c4_token_runtime_discover(provider, &runtime) != 0)
+  if (CPU4_TOKEN_DISCOVER(provider, &runtime) != 0)
     return et_g3c4_error_state.category;
-  if (et_g3c4_token_dispatch(
+  if (CPU4_TOKEN_DISPATCH(
           runtime, capability, operation, request_rank, request_shape,
           inputs, input_count,
           et_g3c4_view(result, bytes, "f32", 3u, output_shape)) != 0) {
@@ -6989,6 +7369,9 @@ int64_t et_g3c4_private_role_step_v1(void *candidate, int64_t ordinal) {
   if (frame == NULL || frame->publication_state != 0u ||
       frame->next_ordinal != ordinal)
     return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_effect(context) != 0) return et_g3c4_error_state.category;
+#endif
   if (ordinal == 0) return et_g3c4_manual_role0_run(context);
   if (ordinal <= 9) return et_g3c4_manual_pre_a2_run(context, ordinal);
   if (ordinal == 10) return et_g3c4_manual_a2_run(context);
@@ -7040,6 +7423,11 @@ static size_t et_g3c4_transport_record_bytes(
 static int et_g3c4_output_decode_owned_alias(
     const et_g3c4_context_internal *context,
     const void *carrier, size_t carrier_bytes) {
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_capture_overlap(carrier,carrier_bytes) ||
+      cpu4_history_overlap(carrier,carrier_bytes)) return 1;
+#endif
+
 #ifdef ET_CPU4_TRAINING_PRIVATE
   if (cpu4_control_span_overlaps_internal(carrier, carrier_bytes))
     return 1;
@@ -7091,6 +7479,11 @@ static int et_g3c4_output_decode_owned_alias(
 static int et_g3c4_p2g2_carrier_owned_alias(
     const et_g3c4_context_internal *context, const void *carrier,
     size_t carrier_bytes) {
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_capture_overlap(carrier,carrier_bytes) ||
+      cpu4_history_overlap(carrier,carrier_bytes)) return 1;
+#endif
+
 #ifdef ET_CPU4_TRAINING_PRIVATE
   if (cpu4_control_span_overlaps_internal(carrier, carrier_bytes))
     return 1;
@@ -7177,6 +7570,10 @@ int64_t et_g3c4_private_p2g2_first_frame_carrier_v1(
     return et_g3c4_fail(
         ET_G3C4_SHAPE_MISMATCH, ET_G3C4_CODE_SHAPE);
 
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_preflight(context,1u,2u,4u,2u) == NULL)
+    return et_g3c4_error_state.category;
+#endif
   bridge_result = et_g3c4_private_prompt_prefill_v1(
       context, input, last_logits);
   if (bridge_result != 0) return bridge_result;
@@ -7353,6 +7750,10 @@ int64_t et_g3c4_private_p2g2_second_frame_carrier_v1(
   memcpy(&declared_bytes, staging_header, sizeof(declared_bytes));
   if (declared_bytes != 8)
     return et_g3c4_fail(ET_G3C4_SHAPE_MISMATCH, ET_G3C4_CODE_SHAPE);
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_preflight(context,2u,1u,4u,1u) == NULL)
+    return et_g3c4_error_state.category;
+#endif
   if (et_g3c4_p2g2_second_cache_preflight(context) != 0)
     return et_g3c4_error_state.category;
   memcpy(last_logits, context->p2g2_prefix_next_logits, sizeof(last_logits));
@@ -7700,10 +8101,20 @@ int64_t et_g3c4_private_p2g2_prefix_commit_v1(
 
   /* All fallible work is above this point. The A2 commit must succeed on
    * the verified, view-free transaction or the process fails closed. */
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_node *history = cpu4_history_preflight(context,2u,1u,4u,1u);
+  if (history == NULL) return et_g3c4_error_state.category;
+  if (cpu4_history_staged_check(history,context->token_frame_transaction,
+          history->history.count+1u,4u) != 0) return et_g3c4_error_state.category;
+#endif
   if (et_a2_kv_cache_transaction_commit_v1(
           &context->token_frame_transaction, &cache_error) != 0) abort();
   memcpy(context->generator_rng_words, context->token_frame_successor,
          sizeof(context->generator_rng_words));
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_publish(history,context,&context->token_frame_candidate,1u,2u,0);
+#endif
+
   memcpy(context->p2g2_prefix_next_logits,
          context->p2g2_frame_next_logits,
          sizeof(context->p2g2_prefix_next_logits));
@@ -7730,6 +8141,10 @@ fail:
 #ifdef ET_G3C4_P2_G1_COPYOUT_PRIVATE
 static int64_t et_g3c4_copyout_carrier_preflight(
     const void *carrier, size_t bytes) {
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_output_alias(carrier,bytes))
+    return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT,ET_G3C4_CODE_ALIAS);
+#endif
 #ifdef ET_CPU4_TRAINING_PRIVATE
   if (cpu4_control_span_overlaps_internal(carrier, bytes))
     return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_ALIAS);
@@ -7986,10 +8401,20 @@ int64_t et_g3c4_private_generation_frame_commit_v1(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
   if (et_g3c4_p2g1_publication_preflight(context, output) != 0)
     return et_g3c4_error_state.category;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_node *history = cpu4_history_preflight(context,2u,1u,4u,1u);
+  if (history == NULL) return et_g3c4_error_state.category;
+  if (cpu4_history_staged_check(history,context->token_frame_transaction,
+          history->history.count+1u,4u) != 0) return et_g3c4_error_state.category;
+#endif
   if (et_a2_kv_cache_transaction_commit_v1(
           &context->token_frame_transaction, &error) != 0) abort();
   memcpy(context->generator_rng_words, context->token_frame_successor,
          sizeof(context->generator_rng_words));
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_publish(history,context,&context->token_frame_candidate,1u,2u,0);
+#endif
+
   context->budget = 0;
   output->parent_ctx = NULL;
   output->transport.state = ET_G3C4_OUTPUT_PUBLISHED;
@@ -8125,6 +8550,14 @@ int64_t et_g3c4_private_frame_commit_v1(void *candidate) {
   if (et_g3c4_manual_publication_preflight(context, pending) != 0)
     return et_g3c4_error_state.category;
 
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_node *history = cpu4_history_preflight(context,
+      frame->frame_kind == 1 ? 3u : 4u,
+      (uint32_t)frame->input_length,2u,1u);
+  if (history == NULL) return et_g3c4_error_state.category;
+  if (cpu4_history_staged_check(history,frame->a2_transaction,
+          frame->frame_kind == 1 ? (uint32_t)frame->input_length : 2u,2u) != 0) return et_g3c4_error_state.category;
+#endif
   /* All recoverable checks precede this tail. Unexpected native failures
    * would otherwise expose a partially published cache. */
   if (et_a2_kv_cache_transaction_commit_v1(
@@ -8133,6 +8566,12 @@ int64_t et_g3c4_private_frame_commit_v1(void *candidate) {
   if (et_a2_kv_cache_destroy_v1(&old_cache, &error) != 0) abort();
   context->cache = frame->a2_candidate;
   frame->a2_candidate = NULL;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_publish(history,context,frame->input_ids,
+      (uint32_t)frame->input_length,frame->frame_kind == 1 ? 1u : 3u,
+      frame->frame_kind == 1);
+#endif
+
   if (frame->frame_kind == 1) {
     memcpy(context->prefill_binding_identities, frame->binding_identities,
            sizeof(frame->binding_identities));
@@ -8200,6 +8639,10 @@ int64_t et_g3c4_private_call_acquire_v1(
   if (budget == 2 && context->generator_policy[4] != 2)
     return et_g3c4_fail(
         ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
+#endif
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_preflight(context,0u,0u,0u,0u) == NULL)
+    return et_g3c4_error_state.category;
 #endif
   if (et_g3c4_cache_idle_preflight(context) != 0)
     return et_g3c4_error_state.category;
@@ -8484,14 +8927,23 @@ int64_t et_g3c4_private_call_abort_v1(void *candidate) {
         et_g3c4_capture_kernel(et_a2_kv_cache_transaction_abort_v1(
             &frame->a2_transaction, &error), &error) != 0)
       return et_g3c4_error_state.category;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+    cpu4_history_find(context)->pending.transaction = NULL;
+#endif
     if (frame->a2_candidate != NULL &&
         et_g3c4_capture_kernel(et_a2_kv_cache_destroy_v1(
             &frame->a2_candidate, &error), &error) != 0)
       return et_g3c4_error_state.category;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+    cpu4_history_find(context)->pending.candidate = NULL;
+#endif
   }
 #endif
   free(context->manual_frame);
   context->manual_frame = NULL;
+#endif
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_pending_clear(cpu4_history_find(context));
 #endif
   return et_g3c4_active_call_drain(context);
 }
@@ -8695,6 +9147,12 @@ int64_t et_g3c4_private_p2g2_terminal_commit_v1(
     return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_ALIAS);
   if (et_g3c4_terminal_candidate_preflight(context, prior) != 0)
     return et_g3c4_error_state.category;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_node *history = cpu4_history_preflight(context,2u,1u,4u,1u);
+  if (history == NULL) return et_g3c4_error_state.category;
+  if (cpu4_history_staged_check(history,context->token_frame_transaction,
+          history->history.count+1u,4u) != 0) return et_g3c4_error_state.category;
+#endif
   /* The validated I1 copy and A2 commit are the no-failure terminal tail. */
   if (et_i64_tensor_copy_from_v1(output->ids, ids, 2u, &ids_error) != 0)
     abort();
@@ -8703,6 +9161,10 @@ int64_t et_g3c4_private_p2g2_terminal_commit_v1(
     abort();
   memcpy(context->generator_rng_words, context->token_frame_successor,
          sizeof(context->generator_rng_words));
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_publish(history,context,&context->token_frame_candidate,1u,2u,0);
+#endif
+
   memcpy(output->rng, context->generator_rng_words, sizeof(output->rng));
   output->length = count;
   output->cache_length = prior + 1;
@@ -8720,6 +9182,10 @@ int64_t et_g3c4_private_p2g2_terminal_commit_v1(
 
 static int64_t et_g3c4_terminal_snapshot_alias(
     const void *destination, size_t bytes) {
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (cpu4_history_output_alias(destination,bytes))
+    return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT,ET_G3C4_CODE_ALIAS);
+#endif
 #ifdef ET_CPU4_TRAINING_PRIVATE
   if (cpu4_control_span_overlaps_internal(destination, bytes))
     return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_ALIAS);
@@ -9515,4 +9981,8 @@ fail:
 
 #ifdef ET_CPU4_CANDIDATE_PRIVATE
 #include "cpu4_candidate.inc"
+#endif
+
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+#include "cpu4_c4_capture.inc"
 #endif
