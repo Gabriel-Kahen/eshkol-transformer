@@ -157,7 +157,7 @@ Initial failed sources/receipts remain preserved.
 | Candidate-ON common aggregate | [Private composition contract](../native/cpu4_v1_private_contract.md); original public generation root once, genuine T1/T2/C4 authorities and single native owners, candidate-ON80-byte I2 controls. Actual C2/K2 composition `e687388c` integrated as `4d2c05cc`. | First actual FILE30f compiles36 native TUs/archive, then fails Eshkol compilation (T1 selection, absent memq, fixture set!). Reviewed `a7c2fb79` repairs both explicit tokenizer loads, existing identity helper and compiler-supported transparent test bindings. Mode/handoff composition `9b066e64` independently ACCEPTED:211 exact static members and unchanged35-TU production roster. Later lower-binding guard/pin `fd0db727` independently accepted; all211 members match. Corrected FILE normal/repeat recipe freezes exact9b separately; execution remains NOT RUN. Static inventory is not runtime/package admission. |
 | Same-model generation handoff | Six source-reviewed files `bade6126` integrated as `695e5238`, loaded/pinned by accepted`9b066e64`: closed real-public-G2 authentication, O2 preflight before TRAIN detach, same-model EVAL, fresh generator and fixed ownership-transfer tail. Source7/host105/legacy1,433 plus15 identity/retry probes PASS. | Actual trained/factory→public-G2 normal/SAN gate NOT RUN. Distinct genuine original T1 preserves training T2/D2. E3 must finish/unbind before detach; active READ rejection does not discover every idle E3 frame. |
 | Trained FILE resume and held-out caller | Seven definitions-only files `5af5816e` integrated as `98e2c0bf`: A125 SAVE→A250 versus B FILE restore125→B250, complete value/moment/metadata/cursor equality and fresh B E3 on its same binding;770 checks/375 real step calls. Five-file actual frontend/normal-repeat driver `39ca9b9f` independently source-accepted/integrated as `21128e63`. | Eight-path/three-hash dependency refresh `2abd347b` independently ACCEPTED against immutable9b, retaining both current-byte and immutable-source guards; source6/driver7/checker6/helper64 PASS. Actual frozen train/held-out resource generation is defined and mock-tested; native/AOT/learning/FILE restore/held-out improvement/cleanup remain NOT RUN. No artificial seeding or generation API. |
-| Persisted C4 generation continuation | Source-only maps authenticate existing APIs; proposed history/capture ABI v2 evidence seal`214ec8ab` has explicit early preflights, bounded pending proof, trusted ownership scope and detached lifetime. No implementation admitted yet. | Missing committed history/capture, authenticated typed RNG import, explicit C4 wire profile and atomic no-draw replay/fresh-process continuation. History3→decode4 still needs a genuinely admitted policy/constructor route and exact KV/logit/mask/RNG replay proof. Existing profile1/history≤2 and result-RNG chaining do not discharge this row. |
+| Persisted C4 generation continuation | Source-only maps authenticate existing APIs; proposed history/capture ABI v2 evidence seal`214ec8ab` has explicit early preflights, bounded pending proof, trusted ownership scope and detached lifetime. Root accepts this exact proposed contract after independent E3 delta review`09978127`; source implementation is authorized, runtime is not admitted. | Missing committed history/capture, authenticated typed RNG import, explicit C4 wire profile and atomic no-draw replay/fresh-process continuation. History3→decode4 still needs a genuinely admitted policy/constructor route and exact KV/logit/mask/RNG replay proof. Existing profile1/history≤2 and result-RNG chaining do not discharge this row. |
 | Installed G2 proving recipe | Independently reviewed `81704701` integrated as `b8e0d4e0`, preserving prior E3/C2-header changes. Combined source gate: eight unit/Q0 plus four public-source tests PASS. | Actual installed normal/SAN/coexistence NOT RUN. Supported native98a5 held-kind9 diagnostic independently PASS151; it supplies no Eshkol attribution. Old stage45 status134 remains unattributed; reviewed historical E attribution is staged but unqueued behind the CPU4 smoke priority. |
 
 Actual E3 consumer result is `e3/cpu4-consumer-native-b-result-review/REVIEW.md`
@@ -284,6 +284,24 @@ The sealed no-region checked-store proof is
 `cpu4-nonregional-reader-source-proof-de2e6d83/PROOF.md`; guard source is accepted; genuine
 regional rejection/ownership tests remain pending. General active-region C2 use
 is not admitted by this narrowed target.
+
+Accepted private C4 history/capture v2 contract, G3 owner, source-only implementation
+authorized after proposal seal`214ec8aba6ceb8f946572cc2261c4c42f95b03ae4d67f55b8886af3960f9f062`
+and independent E3 review seal`09978127a6615cebe527ae86262230c0f999252dbecfcad95d8c19d2c52f0b58`.
+The exact proposal is pinned to30f2a02a native inputs, rechecked before implementation
+against current supportfd0db727. Feature-OFF layouts and behavior remain unchanged;
+complete feature-ON tuple adds80 context bytes and464 provenance bytes, including
+40 bytes of authenticated pending custody. Four private detached-capture operations
+create/copy-record/copy-parameters/release use a224-byte record plus4768 value bytes;
+live5344 bytes, retired352 control bytes per capture. Capture leaves no source lease.
+Early authentication/bounds precede providers/A2 mutation/sampling; fixed mirror
+tails follow native commit, and abort preserves an already committed first prefix.
+Pure queries and legal replacement retain existing admission. Detached operations
+never dereference weak source addresses; exact DEAD validation precedes hash/free.
+Authoritative native allocation links are trusted, SHA is not authority, and the
+specified alias/TLS exception remains explicit. This changes no public interface
+or continuation/import/wire/decode admission. Separate immutable implementation
+review and genuine ON/OFF ordering/lifecycle/failure/alias/census gates are required.
 
 Any further contract change must be recorded here with owner, exact source and
 review decision before integration.
