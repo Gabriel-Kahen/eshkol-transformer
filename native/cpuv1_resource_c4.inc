@@ -130,6 +130,55 @@ void et_cpuv1_test_census_c4_v1(et_cpuv1_resource_packet_v1 *packet) {
     }
   }
 }
+/* Source/native bijection for the generated candidate owning-scope census.
+ * Scan real registries before any source-supplied pointer is dereferenced.
+ * Same-object and copied-row duplicate capability references are separately
+ * rejected by bounded owning-Scheme occurrence counts before this call. */
+int64_t et_cpuv1_test_candidate_link_v1(void *raw,void *capability,
+ void *owner,void *scope,int64_t source_phase) {
+  et_cpuv1_resource_packet_v1 *packet=raw;
+  et_cpu4_candidate_internal *p=cpu4_candidates;
+  et_g3c4_model_owner_internal *o=et_g3c4_owner_registry;
+  while(p && p!=capability)p=p->next;
+  while(o && o!=owner)o=o->registry_next;
+  int expected=source_phase==1?CPU4_CANDIDATE_UNPUBLISHED:
+               source_phase==2?CPU4_CANDIDATE_ADOPTED:
+               source_phase==3?CPU4_CANDIDATE_DEAD:-1;
+  if(!packet || !p || !o || expected<0 || p->owner!=o ||
+     o->candidate!=p || o->magic!=ET_G3C4_OWNER_MAGIC ||
+     p->origin_pid!=(int64_t)getpid() || p->state!=expected ||
+     !packet->scheme_p1[0] ||
+     p->p1_context!=(void *)(uintptr_t)packet->scheme_p1[0] ||
+     !scope || p->p1_scope!=scope || o->active) {
+    et_cpuv1_test_resource_fail_v1(packet,ET_R_MISMATCH);return ET_R_MISMATCH;
+  }
+  if(expected==CPU4_CANDIDATE_DEAD) {
+    if(!cpu4_candidate_dead_exact(p)) {
+      et_cpuv1_test_resource_fail_v1(packet,ET_R_MISMATCH);return ET_R_MISMATCH;
+    }
+  } else if(o->state!=ET_G3C4_OWNER_SEALED || o->initialized!=14 ||
+            memcmp(p->parameters,o->parameters,sizeof(p->parameters)) ||
+            memcmp(p->handles,o->handles,sizeof(p->handles))) {
+    et_cpuv1_test_resource_fail_v1(packet,ET_R_MISMATCH);return ET_R_MISMATCH;
+  }
+  packet->details[ET_R_C4][40+(unsigned)p->state]++;
+  return (int64_t)packet->status;
+}
+int64_t et_cpuv1_test_candidate_links_finish_v1(void *raw) {
+  et_cpuv1_resource_packet_v1 *packet=raw;
+  if(!packet)return ET_R_ARGUMENT;
+  const unsigned phases[]={CPU4_CANDIDATE_UNPUBLISHED,
+                           CPU4_CANDIDATE_ADOPTED,CPU4_CANDIDATE_DEAD};
+  for(unsigned i=0;i<3;i++) {
+    unsigned phase=phases[i];
+    if(packet->details[ET_R_C4][24+phase]!=packet->details[ET_R_C4][40+phase] ||
+       packet->scheme_source[64][i+1]!=packet->details[ET_R_C4][40+phase])
+      et_cpuv1_test_resource_fail_v1(packet,ET_R_MISMATCH);
+  }
+  if(packet->scheme_candidate[0]!=packet->rows[ET_R_C4][1].bases)
+    et_cpuv1_test_resource_fail_v1(packet,ET_R_MISMATCH);
+  return (int64_t)packet->status;
+}
 et_kernel_runtime *et_cpuv1_test_c4_runtime_slot_v1(size_t index) {
   switch(index) {
     case 0:return et_g3c4_initializer_runtime;

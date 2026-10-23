@@ -7,6 +7,10 @@ CANDIDATE_DEFS='''(define (cpuv1-resource-candidate-visit packet row)
            (cpuv1-resource-vector? (vector-ref row 0) 1)
            (eq? (vector-ref (vector-ref row 0) 0) (vector-ref row 0))
            (not (vector-ref row 11))
+           (= (cpuv1-resource-count-vector (vector-ref row 0)
+                (vector-ref registry 0) 0 0 0) 1)
+           (= (cpuv1-resource-count-vector (vector-ref row 2)
+                (vector-ref registry 0) 2 0 0) 1)
            (or (eq? (vector-ref row 1) 'unpublished)
                (eq? (vector-ref row 1) 'adopted)
                (eq? (vector-ref row 1) 'dead))
@@ -21,10 +25,13 @@ CANDIDATE_DEFS='''(define (cpuv1-resource-candidate-visit packet row)
                (eq? (vector-ref (vector-ref row 4) 2) 'dead)
                (and (eq? (vector-ref (vector-ref row 4) 3) (vector-ref row 3))
                     (eq? (vector-ref (vector-ref row 4) 2) 'live))))
-      (cpuv1-resource-state! packet 64
-        (if (eq? (vector-ref row 1) 'dead) 2 1) 4
-        (cond ((eq? (vector-ref row 1) 'unpublished) 1)
-              ((eq? (vector-ref row 1) 'adopted) 2) (else 3)))
+      (let ((phase (cond ((eq? (vector-ref row 1) 'unpublished) 1)
+                         ((eq? (vector-ref row 1) 'adopted) 2) (else 3))))
+        (if (= (cpuv1-resource-candidate-link! packet (vector-ref row 2)
+                  (vector-ref row 3) (vector-ref (vector-ref row 6) 0) phase) 0)
+            (cpuv1-resource-state! packet 64
+              (if (eq? (vector-ref row 1) 'dead) 2 1) 5 phase)
+            (cpuv1-resource-reject! packet)))
       (cpuv1-resource-reject! packet)))
 '''
 

@@ -2,6 +2,8 @@
 #include "cpuv1_resource_private.h"
 #include "eshkol_transformer/f32_tensor.h"
 #include "f32_parameter_internal.h"
+#define ET_P1_PRIVATE_API
+#include "p1_identity_internal.h"
 #include "arena_memory.h"
 #include <cerrno>
 #include <cstdio>
@@ -22,6 +24,72 @@ static int observe(et_cpuv1_resource_packet_v1 *p) {
   if(!r)r=et_cpuv1_test_native_resource_snapshot_v1(p);
   if(!r)et_cpuv1_test_runtime_resource_snapshot_v1(p);
   return et_cpuv1_test_resource_finish_v1(p);
+}
+/* Prepared genuine P1 callback and retained-dead identity controls. These
+ * call original constructors/revocation; no fixture asserts Scheme COMPLETE. */
+static void p1_callback_and_dead_checks() {
+  void *context=et_p1_private_context_create_v1();
+  require(context!=nullptr,"genuine P1 context");
+  const char name[]="cpuv1-unit-provider";
+  require(et_p1_private_provider_create_v1(context,name,sizeof(name)-1)==0,"genuine provider token");
+  void *provider=et_p1_private_result_ptr_v1(context),*callbacks[8];
+  for(unsigned i=0;i<8;i++) {
+    require(et_p1_private_callback_identity_create_v1(context)==0,"genuine callback token");
+    callbacks[i]=et_p1_private_result_ptr_v1(context);
+  }
+  require(et_p1_private_provider_seal_release_v1(context,provider,callbacks[0],callbacks[1],
+    callbacks[2],callbacks[3],callbacks[4],callbacks[5],callbacks[6],callbacks[7])==0,
+    "seven immutable callback slots plus eighth release-owned binding");
+  auto start=[&](){
+    after.struct_size=sizeof(after);after.version=ET_R_PACKET_VERSION;
+    require(et_cpuv1_test_resource_begin_v1(&after)==0,"P1 fixture snapshot begin");
+    require(et_cpuv1_test_native_resource_snapshot_v1(&after)==0,"P1 actual native census");
+    require(et_cpuv1_test_p1_context_v1(&after,context)==0,"selected context split census");
+  };
+  start();
+  require(et_cpuv1_test_p1_shell_v1(&after,context,provider,1,0)==0,"provider is one Scheme shell");
+  for(int64_t i=0;i<8;i++)
+    require(et_cpuv1_test_p1_callback_v1(&after,context,provider,callbacks[i],i)==0,"exact live callback/native slot");
+  require(after.scheme_p1[14]==1 && after.scheme_p1[15]==8 && after.scheme_p1[13]==8 &&
+          after.rows[ET_R_P1][1].bases==9,"one Scheme shell plus eight native-only callback bases");
+  /* Isolate link reconciliation with a one-entry Scheme-index scalar fixture.
+   * No typed roots/readiness are synthesized; overall finish stays COVERAGE. */
+  after.scheme_p1[1]=1;
+  require(et_cpuv1_test_p1_links_finish_v1(&after)==0,"full callback coverage reconciles");
+  require(et_cpuv1_test_resource_finish_v1(&after)==ET_R_COVERAGE,"P1 fixture cannot fabricate Scheme COMPLETE");
+  start();after.scheme_p1[1]=1;
+  require(et_cpuv1_test_p1_shell_v1(&after,context,provider,1,0)==0,"omission fixture provider");
+  for(int64_t i=0;i<7;i++)
+    require(et_cpuv1_test_p1_callback_v1(&after,context,provider,callbacks[i],i)==0,"first seven callbacks");
+  require(et_cpuv1_test_p1_links_finish_v1(&after)==ET_R_MISMATCH,"omitted eighth callback rejected");
+  require(et_cpuv1_test_resource_finish_v1(&after)==ET_R_MISMATCH,"callback omission cannot COMPLETE");
+  start();
+  require(et_cpuv1_test_p1_callback_v1(&after,context,provider,callbacks[1],0)==ET_R_MISMATCH,
+          "duplicate/wrong-slot callback rejected");
+  require(et_cpuv1_test_resource_finish_v1(&after)==ET_R_MISMATCH,"wrong slot cannot COMPLETE");
+  start();
+  require(et_cpuv1_test_p1_callback_v1(&after,nullptr,provider,callbacks[0],0)==ET_R_MISMATCH,
+          "foreign selected context rejected");
+  require(et_cpuv1_test_resource_finish_v1(&after)==ET_R_MISMATCH,"wrong context cannot COMPLETE");
+
+  require(et_p1_private_construction_begin_v1(context)==0,"genuine construction begin");
+  void *construction=et_p1_private_result_ptr_v1(context);
+  require(et_p1_private_construction_module_create_v1(context,construction)==0,"genuine scoped module identity");
+  void *module=et_p1_private_result_ptr_v1(context);
+  require(et_p1_private_construction_abort_v1(context,construction)==0,"original revocation leaves DEAD identity");
+  start();
+  require(et_cpuv1_test_p1_shell_v1(&after,context,module,2,1)==0,"retained DEAD identity has valid nonce/PID/context");
+  require(after.scheme_states[3][2]==1,"actual native DEAD state reported");
+  require(et_cpuv1_test_resource_finish_v1(&after)==ET_R_COVERAGE,"dead fixture lacks complete Scheme roots");
+  for(unsigned mutation=1;mutation<=2;mutation++) {
+    start();
+    require(et_cpuv1_test_p1_shell_mutation_v1(&after,context,module,2,1,mutation)==ET_R_MISMATCH,
+            "genuine retained DEAD nonce/PID mutation rejected and restored");
+    require(et_cpuv1_test_resource_finish_v1(&after)==ET_R_MISMATCH,"identity mutation cannot COMPLETE");
+  }
+  start();
+  require(et_cpuv1_test_p1_shell_v1(&after,context,module,2,1)==0,"restored DEAD identity remains authentic");
+  require(et_cpuv1_test_resource_finish_v1(&after)==ET_R_COVERAGE,"restored identity census");
 }
 int main() {
   require(et_cpuv1_test_runtime_resource_warm_v1()==ET_R_OK,"normal glibc/root warm");
@@ -105,6 +173,11 @@ int main() {
   require(observe(&after)==ET_R_COVERAGE,"all actual event/census rows conserved after negatives");
   require(after.rows[ET_R_K1][0].control_size>0 && after.rows[ET_R_C2_IO][0].control_alignment>0 &&
           after.details[ET_R_C2_IO][1]>0,"empty kinds still report compiled layout/prefix");
+  require(et_cpuv1_test_runtime_static_bytes_v1()==sizeof(void *)+sizeof(long)+sizeof(bool),
+          "runtime root/page/warmed declared static extents included");
+  require(after.observer_static_bytes>=et_cpuv1_test_runtime_static_bytes_v1(),"full reported static extents");
+  p1_callback_and_dead_checks();
+  require(observe(&after)==ET_R_COVERAGE,"final actual native/runtime facts after P1 controls");
   std::printf("CPUV1-NATIVE-PRODUCER checks=%u Scheme=UNAVAILABLE native-requested-peak=UNOBSERVED\n",checks);
   std::printf("LAYOUT packet=%zu pointer=%zu F32=%llu K1=%llu C2prefix=%llu arena=%llu block=%llu scope=%llu mutex=%llu reflection=%llu entry=%llu\n",
     sizeof(after),sizeof(void *),(unsigned long long)after.rows[ET_R_F32][0].control_size,

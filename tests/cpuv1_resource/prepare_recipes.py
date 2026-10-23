@@ -32,7 +32,7 @@ def prepare(out,cc,cxx,eshkol_source,eshkol_build):
         local=['-D'+s for s in unit['defines']+overlay['per_tu_defines'].get(source,[])]
         commands.append([cc]+common+local+['-MMD','-MF',str(obj.with_suffix('.d')),'-c',str(ROOT/source),'-o',str(obj)])
         objects.append(str(obj));inputs.add(source)
-    cppflags=['-std=c++17','-O2','-Wall','-Wextra','-Werror','-fPIC']+include+defs
+    cppflags=['-std=c++17','-O2','-Wall','-Wextra','-Werror','-fPIC','-fvisibility=hidden']+include+defs
     cpp=out/'objects/resource_runtime.o'
     commands.append([cxx]+cppflags+['-MMD','-MF',str(cpp.with_suffix('.d')),'-c',str(ROOT/'native/cpuv1_resource_runtime.cpp'),'-o',str(cpp)])
     objects.append(str(cpp));inputs.add('native/cpuv1_resource_runtime.cpp')

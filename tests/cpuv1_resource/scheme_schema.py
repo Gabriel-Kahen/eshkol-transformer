@@ -191,3 +191,7 @@ SCHEMAS[25]['check']='''(and (cpuv1-resource-vector? row 17)
                       (vector-ref cpu4-model-bindings 0) 0 0)))
        (and (cpuv1-resource-vector? binding 12)
             (eq? (vector-ref row 9) (vector-ref binding 5))))))'''
+
+# F1: admitted provider native identities have eight callback tokens outside
+# shell-registry/index. Authenticate each exact slot rather than count as shell.
+SCHEMAS[2]['check']=SCHEMAS[2]['check'][:-1]+" (cpuv1-resource-vector? (vector-ref (vector-ref row 2) 10) 8) (= (cpuv1-resource-provider-callbacks! packet native-context (vector-ref row 1) (vector-ref (vector-ref row 2) 10) 0) 0))"

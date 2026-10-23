@@ -14,6 +14,12 @@
   (cpuv1-tiny-check (= (cpuv1-resource-open packet) 0))
   (cpuv1-resource-scheme-into! packet)
   (cpuv1-tiny-check (= (cpuv1-resource-close packet) 0)))
+(define (cpuv1-tiny-link-reject capability owner scope phase)
+  (cpuv1-tiny-check (= (cpuv1-resource-open cpuv1-tiny-right) 0))
+  (cpuv1-resource-scheme-into! cpuv1-tiny-right)
+  (cpuv1-tiny-check (not (= (cpuv1-resource-candidate-link!
+                            cpuv1-tiny-right capability owner scope phase) 0)))
+  (cpuv1-tiny-check (not (= (cpuv1-resource-close cpuv1-tiny-right) 0))))
 (define cpuv1-tiny-resolved
   (x1-private-config-resolve
     (x1-private-config-parse
@@ -45,6 +51,18 @@
 (cpuv1-tiny-check (= (+ cpuv1-tiny-shells 31) (cpuv1-resource-word cpuv1-tiny-left 5 3)))
 (cpuv1-tiny-check (= (cpuv1-resource-word cpuv1-tiny-left 6 16) 1))
 (cpuv1-tiny-check (= (cpuv1-resource-word cpuv1-tiny-left 14 1) 1))
+(define cpuv1-tiny-candidate-row
+  (cpuv1-resource-candidate-row
+    (vector-ref (cpu4-owned-row cpuv1-tiny-ticket 'cpuv1-tiny) 5)))
+(cpuv1-tiny-link-reject '() (vector-ref cpuv1-tiny-candidate-row 3)
+  (vector-ref (vector-ref cpuv1-tiny-candidate-row 6) 0) 1)
+(cpuv1-tiny-link-reject (vector-ref cpuv1-tiny-candidate-row 2) '()
+  (vector-ref (vector-ref cpuv1-tiny-candidate-row 6) 0) 1)
+(cpuv1-tiny-link-reject (vector-ref cpuv1-tiny-candidate-row 2)
+  (vector-ref cpuv1-tiny-candidate-row 3) '() 1)
+(cpuv1-tiny-link-reject (vector-ref cpuv1-tiny-candidate-row 2)
+  (vector-ref cpuv1-tiny-candidate-row 3)
+  (vector-ref (vector-ref cpuv1-tiny-candidate-row 6) 0) 3)
 (cpuv1-tiny-check (cpu4-owned-candidate-retire-internal! cpuv1-tiny-ticket))
 (cpuv1-tiny-observe cpuv1-tiny-left)
 (cpuv1-tiny-observe cpuv1-tiny-right)

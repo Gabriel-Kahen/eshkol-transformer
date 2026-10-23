@@ -26,8 +26,11 @@ both native unit and tiny; the tiny body never invokes corruption helpers.
    links `producer_unit.cpp` against the real runtime/archive. Require exit0,
    the native12-domain coverage, Scheme unavailable rejecting COMPLETE, genuine
    allocation/free/usable conservation, partial K1 cleanup, actual F32 metadata
-   corruption and restore, retired payload/control distinction, actual adopted
-   arena blocks, layout/overflow/duplicate/scratch negatives. Preserve all logs,
+   corruption and restore, retired payload/control distinction, eight genuine
+   P1 callback identities (one provider shell versus nine native records),
+   omitted/wrong-slot/wrong-context callbacks, authentic DEAD construction shell
+   plus restored nonce/PID mutation negatives, declared runtime static extents,
+   actual adopted arena blocks, layout/overflow/duplicate/scratch negatives. Preserve all logs,
    native depfiles, actual compiler argv, archive/object/ELF hashes and normal
    glibc runtime evidence. A source projection is not an object parity proof.
 2. Separately run `tiny-compile.sh`. It builds only generated `tiny.esk`, with one
@@ -62,7 +65,18 @@ both native unit and tiny; the tiny body never invokes corruption helpers.
    conservation and unchanged consecutive warmed observations at baseline,
    live-model and retired-model phases. Verify same P1 context,31 genuine new
    shell/index/native links, one candidate unpublished then dead, one outer
-   owned custody live then dead, and zero adopted model. Preserve actual IR,
+   owned custody live then dead, zero adopted model, and rejected native
+   candidate capability/owner/P1-scope/phase mismatches. Source host predicates
+   also reject same-object and copied-row duplicate capability references, even
+   when a second same-phase native candidate is omitted to balance counts. Preserve actual IR,
    deps/link map, source/provenance/native/ELF hashes and process exits. Tiny
    cannot establish full frozen375-caller budget admission or flag-OFF object
    parity; both remain separate future gates.
+
+C++ runtime bridge and native-unit commands explicitly retain
+`-fvisibility=hidden`, matching the C producer profile. Actual symbol visibility
+still requires the executed object/link-symbol gate; this flag is source intent.
+The static-byte scalar sums producer declared object extents (including both
+static packets and runtime root/page/warmed fields). One-packet extent is a
+reported subset; linker padding/code/rodata and unit fixture globals/stack are
+excluded from that scalar and must not be silently added or usable-queried.
