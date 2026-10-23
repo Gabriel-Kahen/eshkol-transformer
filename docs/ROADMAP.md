@@ -648,14 +648,22 @@ region21/data96 and checkpoint byte parity. Trained resume passes770 checks and
 same-trained-model public generation independently passes both frozen two-token
 and first-EOS modes, normal/repeat. Its generated-IR-ASan/native-ASan+UBSan
 gate fails on a real heap-buffer-overflow during terminal-IDs publication/release.
-Instrumentation/custody authenticate; cause and focused repair are the immediate
-correctness priority. Remaining processes/checkers were NOT RUN. The real binding OOM
+Instrumentation/custody authenticate. The preserved source/IR diagnosis identifies
+the pinned compiler probing a foreign pointer's nonexistent Eshkol header during
+captured-variable retirement. A private managed-cell repair passes independent
+source review and host52 controls; genuine generated-IR-ASan clone and trained
+generation validation remain NOT RUN on the repair. Remaining failed-run
+processes/checkers were NOT RUN. The real binding OOM
 witness independently passes normal/repeat cleanup and native lease retry.
 Native history/capture independently passes normal/repeat/ASan+UBSan, including
 bitwise no-draw greedy/categorical prefix replay; typed fresh-process import and
-remaining decode are still required. Resource observer Stage A remains under
-implementation. Private CLI scalar/report producers are source-reviewed and
-integrated, with Guile53/Python7 root checks; native/AOT execution is NOT RUN. The independently source-reviewed
+remaining decode are still required. Resource observer Stage A is source-reviewed;
+its first native gate stops at unavailable feature-gated census types, before
+unit execution, and a focused source correction is pending. Frozen private CLI
+report producer688 now independently passes normal native99 checks and genuine
+two-step/same-binding E3 caller12 checks, each repeated. This is bounded producer
+proof, with a separately authenticated final guardian receipt supplement;
+installed and sanitizer acceptance remain open. The independently source-reviewed
 current-root ON80 E3 consumer variation preserves217/219 absent/present fault
 assertions and original metric words with a genuine candidate; its two-process
 normal gate remains NOT RUN. Prior OFF64 fault/SAN results are not promoted. See

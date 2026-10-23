@@ -329,7 +329,7 @@ def valid(text):
         "(anchor 'publish #f)",
         "(vector-set! entry 2 'live)",
         "(g3c4-p2g2-terminal-ids-entry-live shell operation)",
-        "(g3c4-p2g2-native-terminal-ids-clone-release\n                                original-native)",
+        "(g3c4-p2g2-native-terminal-ids-clone-release\n                                (vector-ref native-cell 0))",
         "(g3c4-dead-entry? entry 'terminal-ids)",
         "(begin\n              (g3c4-p2g2-terminal-ids-entry-dead shell entry operation)\n              #t)",
         "(g3c4-p2g2-terminal-ids-entry-dead shell entry operation)",
@@ -339,6 +339,10 @@ def valid(text):
         "(release-request (cons live barrier))",
         "(if (= status 0)\n                            (begin\n                              (vector-set! (cdr candidate) 0 #t)\n                              (set! native-released? #t)))",
         "(and retired? native-released? node-bound?",
+        "(native-cell (vector '()))",
+        "(vector-set! native-cell 0 candidate)",
+        "(vector-set! native-cell 0 '())",
+        "(and retired? native-released? node-bound?\n                           (null? (vector-ref native-cell 0))",
         "(anchor 'retire live)",
         "(anchor 'node-bind anchor-node)",
         "(anchor 'node nodes)",
@@ -351,6 +355,8 @@ def valid(text):
         "(bytevector-u8-set! bytes 0 payload)",
         "g3c4-public-generation",
         "g3c4-native-result-tensor-create",
+        "(set! native-cell ",
+        "(set! original-native ",
         "g3c4-p2g1-output-release-internal!",
     )):
         return False
@@ -385,6 +391,11 @@ def valid(text):
 
 assert valid(source)
 mutations = (
+    ("(native-cell (vector '()))", "(native-cell '())"),
+    ("(vector-set! native-cell 0 candidate)", "#t"),
+    ("(vector-set! native-cell 0 '())", "#t"),
+    ("(and retired? native-released? node-bound?\n                           (null? (vector-ref native-cell 0))",
+     "(and retired? native-released? node-bound?\n                           #t"),
     ("et_g3c4_private_p2g2_terminal_ids_clone_v1",
      "et_g3c4_private_p2g2_terminal_ids_clone_wrong"),
     ("et_g3c4_private_p2g2_terminal_ids_clone_copy_v1",

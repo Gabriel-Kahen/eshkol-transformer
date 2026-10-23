@@ -1,5 +1,9 @@
 ;;; Source-private detached logical I1 owner. The native clone is opaque;
 ;;; copied bytes are checked before this typed shell becomes live.
+;;; Keep the opaque C handle in a preallocated managed cell. The pinned
+;;; compiler's captured-variable set! checks a prior heap-tagged value's
+;;; Eshkol header; a foreign ptr has no such header. Mutating the managed
+;;; vector slot preserves pointer identity and clears it on retirement.
 
 (extern ptr g3c4-p2g2-native-terminal-ids-clone ptr
         :real et_g3c4_private_p2g2_terminal_ids_clone_v1)
@@ -100,7 +104,7 @@
                      (original-count count)
                      (original-zero id-zero)
                      (original-one id-one)
-                     (original-native '())
+                     (native-cell (vector '()))
                      (original-node #f)
                      (node-bound? #f)
                      (published? #f)
@@ -124,17 +128,17 @@
                       (and node-bound? (eq? candidate original-node)))
                      ((eq? command 'bind)
                       (if (or (not node-bound?)
-                              (not (null? original-native))
+                              (not (null? (vector-ref native-cell 0)))
                               (not (eq? (vector-ref original-entry 2)
                                         'pending)))
                           (g3c4-fail 'invalid-state operation
                                      "terminal ID clone already bound"))
-                     (set! original-native candidate)
+                     (vector-set! native-cell 0 candidate)
                       (vector-set! original-entry 3 candidate)
                       #t)
                      ((eq? command 'bound)
-                      (and (not (null? original-native))
-                           (eq? candidate original-native)))
+                      (and (not (null? (vector-ref native-cell 0)))
+                           (eq? candidate (vector-ref native-cell 0))))
                      ((eq? command 'publish)
                       (set! published? #t)
                       #t)
@@ -151,8 +155,8 @@
                                 'terminal-ids)
                            (eq? (vector-ref original-entry 2) 'live)
                            (eq? (vector-ref original-entry 3)
-                                original-native)
-                           (not (null? original-native))
+                                (vector-ref native-cell 0))
+                           (not (null? (vector-ref native-cell 0)))
                            (eq? (vector-ref original-entry 4) #f)
                            (eq? (vector-ref original-entry 5) #f)
                            (eq? (vector-ref original-entry 6) #f)
@@ -196,12 +200,12 @@
                                     (eq? (vector-ref (cdr candidate) 0) #f)
                                     (eq? (vector-ref original-entry 2) 'live)
                                     (eq? (vector-ref original-entry 3)
-                                         original-native)))
+                                         (vector-ref native-cell 0))))
                           (g3c4-fail 'invalid-state operation
                                      "terminal ID clone release owner changed"))
                       (let ((status
                               (g3c4-p2g2-native-terminal-ids-clone-release
-                                original-native)))
+                                (vector-ref native-cell 0))))
                         (if (= status 0)
                             (begin
                               (vector-set! (cdr candidate) 0 #t)
@@ -216,11 +220,12 @@
                           (g3c4-fail 'invalid-state operation
                                      "terminal ID clone cannot retire"))
                       (set! original-bytes #f)
-                      (set! original-native '())
+                      (vector-set! native-cell 0 '())
                       (set! retired? #t)
                       #t)
                      ((eq? command 'dead)
                       (and retired? native-released? node-bound?
+                           (null? (vector-ref native-cell 0))
                            (eq? candidate original-entry)
                            (eq? (vector-ref original-entry 0)
                                 original-shell)

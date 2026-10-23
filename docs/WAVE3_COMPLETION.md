@@ -65,6 +65,27 @@ independent review/doc work while heavy gates run. Silence is never success.
 
 ## Current execution receipts
 
+Recovery 2026-10-23: the integration and G3 chats stopped with service-side risk
+flags; completed E3/CLI3 tasks waited without a live coordinator. The primary
+dispatcher now coordinates unblocked work. Original commits, diagnostics and
+failed receipts remain preserved; no safety/access setting was changed.
+
+The terminal-ID native capture [source repair](g3/G3_TERMINAL_NATIVE_CAPTURE.md)
+uses a preallocated managed cell and preserves handle clearing and ownership
+checks. Independent source review and the actual-adapter host52 regression pass;
+the genuine generated-IR-ASan clone gate and trained-generation retry are still
+NOT RUN. Host controls do not close the memory-correctness blocker.
+
+Frozen CLI report producer688 completed one supported normal gate in184.698s:
+native99 checks and real two-step/same-binding E3 caller12 checks, repeated with
+identical stdout. Independent result review accepts this bounded scope at
+`e3/cpu4-cli-report-producer-normal-result-review-20261023/REVIEW.md`, seal
+`9b27e9be490f4710ba67af8d4895fe8d8a70960f5468abfddcc41b3f5c9d95f8`.
+Original411-member run manifest remains incomplete for three late guardian
+receipts; the independent review authenticates their supplemental hashes and
+the complete414-data-file roster without changing the raw receipt. No newer
+integration-tree, sanitizer, installed, generation or resource acceptance follows.
+
 - Independent initial integration review: `finish-20261022/REVIEW-integration-initial.md`.
   Source composition and recovered bounded hosted CLI execution accepted; full admission held.
 - E3 reports a supported fe9/Ubuntu22/LLVM21 native-frame control: 22,223 checks
