@@ -17,6 +17,17 @@ repeated observations, changed canonical roots, reboxing and lazy rebinding.
 Successor compiler/IR/allocation/canonical proof remains NOT RUN. Reuse prior
 evidence only for its exact unchanged source/artifact scope.
 
+The df7a object removed that visitor-boxing edge, but actual recursive review
+found row58 calling original `x1-config-entry`: its entry unconditionally requests
+16 arena bytes for a nested definition at IR291340 (tiny.o call0xd4c71,
+arena_allocate relocation0xd4c72). The successful tiny config route makes the X1
+registry nonempty before observations, so this is a normal-path no-allocation
+failure, not a generic unreachable tensor branch. The row58-only successor
+replaces that observer call with a top-level bounded scan of the same current
+registry; original X1 code and row coverage are preserved. Host tests do not
+establish its future lowering. No successor compiler, link or runtime is admitted
+without independent review, an exact sealed packet and dispatcher scheduling.
+
 Only root dispatches after independent source/test/recipe review, under the
 existing exclusive heavy lock, 8GiB/3CPU/one compiler job. No sanitizers, alternate
 allocator, malloc trimming, tracker reset or full caller are part of this gate.

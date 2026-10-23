@@ -2,10 +2,55 @@
 import unittest
 from tests.cpu4_trainer_control.test_source_contract import parse,walk
 from tests.cpuv1_resource import generate_scheme as g
+from tests.cpuv1_resource.scheme_schema import EXTRA_DEFS,SCHEMAS
 from tests.cpuv1_resource.test_review_fixes import Host
 
 
 class Visitors(unittest.TestCase):
+    def test_x1_row_uses_current_registry_and_top_level_bounded_scan(self):
+        path='native/x1_config_private.esk'
+        name='cpuv1-resource-x1-entry'
+        helper=parse(EXTRA_DEFS[path])
+        self.assertEqual(len(helper),1)
+        self.assertEqual(helper[0][1],[name,'value','remaining','seen'])
+        self.assertFalse(any(n and n[0] in ('define','lambda','let','let*','cons','list','vector')
+                             for n in walk(helper[0][2:])))
+        staged,_=g.transform((g.ROOT/path).read_text(),path)
+        row58=next(f for f in parse(staged) if f[0]=='define' and
+                   isinstance(f[1],list) and f[1][0]=='cpuv1-resource-row-58')
+        calls=[n[0] for n in walk(row58) if n]
+        self.assertIn(name,calls)
+        self.assertNotIn('x1-config-entry',calls)
+        check=SCHEMAS[58]['check']
+        self.assertIn(f'({name} (car row) x1-config-registry 0)',check)
+        self.assertIn('(null? (cdr (cdr (cdr (cdr row)))))',check)
+
+        h=Host();h.define(helper[0]);shell=object()
+        old=[shell,object(),object(),object()]
+        new=[shell,object(),object(),object()]
+        h.env.update({'row':old,'x1-config-registry':[]})
+        predicate=parse(check)[0]
+        self.assertFalse(h.ev(predicate))
+        h.env['x1-config-registry']=[old]
+        self.assertIs(h.ev(predicate),True)
+        h.env['x1-config-registry']=[new]
+        self.assertFalse(h.ev(predicate))
+        h.env['row']=new
+        self.assertIs(h.ev(predicate),True)
+        h.env['x1-config-registry']=[object()]
+        self.assertFalse(h.ev(predicate))
+        h.env['x1-config-registry']=object()
+        self.assertFalse(h.ev(predicate))
+        h.env['row']=object()
+        self.assertFalse(h.ev(predicate))
+
+        scan=h.env[name]
+        self.assertFalse(scan(shell,[new],16777216))
+        self.assertIs(scan(shell,[new],16777215),new)
+        cycle=[[object(),object(),object(),object()]]
+        h.env['cdr']=lambda x:cycle if x is cycle else x[1:]
+        self.assertFalse(scan(shell,cycle,16777215))
+
     def test_each_registry_passes_one_prebound_value(self):
         for path in {r['path'] for r in g.ROOTS}|{g.typed.CANDIDATE}:
             staged,_=g.transform((g.ROOT/path).read_text(),path)

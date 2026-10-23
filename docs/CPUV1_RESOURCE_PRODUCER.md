@@ -130,3 +130,14 @@ APIs are unchanged. Host tests cover repeated observations/current-root sharing
 and reject reboxing, lazy rebinding and copied captures. Actual successor IR
 must prove the causal allocation is gone; canonical P1, other indirect/native/
 glibc edges, object-OFF parity and resource admission remain OPEN/NOT RUN.
+
+Further read-only review of the actual df7a object found a different reachable
+allocation: row58 calls original `x1-config-entry`, whose nested definition
+unconditionally allocates a16-byte arena cell at entry (IR291340). Successful
+tiny config parse/resolve registers genuine X1 rows before observation, so warming
+does not remove this repeated allocation. The row58-only successor uses an
+observer-private top-level bounded scan of the same current X1 registry, with
+explicit value/remaining/seen arguments. Original X1 APIs and the four-cons guard
+remain unchanged. Focused host regressions cover current-head identity and
+malformed/cyclic/boundary cases. Successor compiler/IR/no-allocation proof and
+all runtime/admission gates remain NOT RUN; df7a evidence is preserved as failed.
