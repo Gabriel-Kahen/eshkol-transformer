@@ -1,3 +1,6 @@
+/* CPUV1_RESOURCE_BEGIN */
+#include "cpuv1_resource_private.h"
+/* CPUV1_RESOURCE_END */
 #if defined(ET_P1_TRUSTED_BUILD)
 #define ET_P1_PRIVATE_API 1
 #endif
@@ -400,15 +403,15 @@ static int64_t create_token(void *candidate, int64_t kind,
                        "opaque identity token capacity is exhausted");
     }
   }
-  token = (et_p1_token *)calloc(1u, sizeof(*token));
+  token = (et_p1_token *)ET_R_ALLOC(ET_R_P1,0,calloc(1u, sizeof(*token)),1u,sizeof(*token));
   if (token == NULL) {
     return set_error(context, ET_P1_STATUS_INTERNAL,
                      ET_P1_CODE_ALLOCATION_FAILED, operation,
                      "cannot allocate opaque identity token");
   }
-  record = (et_p1_record *)calloc(1u, sizeof(*record));
+  record = (et_p1_record *)ET_R_ALLOC(ET_R_P1,1,calloc(1u, sizeof(*record)),1u,sizeof(*record));
   if (record == NULL) {
-    free(token);
+    ET_R_FREE(ET_R_P1,0,token,1u,sizeof(*token));
     return set_error(context, ET_P1_STATUS_INTERNAL,
                      ET_P1_CODE_ALLOCATION_FAILED, operation,
                      "cannot allocate private identity registry record");
@@ -419,8 +422,8 @@ static int64_t create_token(void *candidate, int64_t kind,
   record->origin_pid = (int64_t)getpid();
   if (!create_unique_nonce(&record->expected_nonce_lo,
                            &record->expected_nonce_hi)) {
-    free(record);
-    free(token);
+    ET_R_FREE(ET_R_P1,1,record,1u,sizeof(*record));
+    ET_R_FREE(ET_R_P1,0,token,1u,sizeof(*token));
     return set_error(context, ET_P1_STATUS_UNSUPPORTED,
                      ET_P1_CODE_ENTROPY_UNAVAILABLE, operation,
                      "cannot obtain process-local identity entropy");
@@ -481,14 +484,14 @@ ET_P1_PUBLIC int64_t et_p1_public_token_live_v1(const void *token) {
 #if defined(ET_P1_TRUSTED_BUILD)
 ET_P1_PRIVATE void *et_p1_private_context_create_v1(void) {
   uint64_t nonce[2];
-  et_p1_context *context = (et_p1_context *)calloc(1u, sizeof(*context));
+  et_p1_context *context = (et_p1_context *)ET_R_ALLOC(ET_R_P1,2,calloc(1u, sizeof(*context)),1u,sizeof(*context));
   if (private_context_claimed != 0u || context == NULL) {
-    free(context);
+    ET_R_FREE(ET_R_P1,2,context,1u,sizeof(*context));
     return NULL;
   }
   if (!fill_entropy(nonce, sizeof(nonce)) ||
       (nonce[0] == 0u && nonce[1] == 0u)) {
-    free(context);
+    ET_R_FREE(ET_R_P1,2,context,1u,sizeof(*context));
     return NULL;
   }
   private_context_claimed = 1u;
@@ -562,14 +565,14 @@ ET_P1_PRIVATE int64_t et_p1_private_construction_begin_v1(void *candidate) {
   if (active_construction != NULL)
     return set_error(context, ET_P1_STATUS_INVALID_STATE,
                      ET_P1_CODE_BINDING_CONFLICT, operation, "nested construction");
-  ledger = (et_p1_construction *)calloc(1u, sizeof(*ledger));
+  ledger = (et_p1_construction *)ET_R_ALLOC(ET_R_P1,3,calloc(1u, sizeof(*ledger)),1u,sizeof(*ledger));
   if (ledger == NULL)
     return set_error(context, ET_P1_STATUS_INTERNAL, ET_P1_CODE_ALLOCATION_FAILED,
                      operation, "cannot allocate construction ledger");
-  ledger->entries = (et_p1_record **)calloc(ET_P1_CONSTRUCTION_CAPACITY,
-                                           sizeof(*ledger->entries));
+  ledger->entries = (et_p1_record **)ET_R_ALLOC(ET_R_P1,4,calloc(ET_P1_CONSTRUCTION_CAPACITY,
+                                           sizeof(*ledger->entries)),ET_P1_CONSTRUCTION_CAPACITY,sizeof(*ledger->entries));
   if (ledger->entries == NULL) {
-    free(ledger);
+    ET_R_FREE(ET_R_P1,3,ledger,1u,sizeof(*ledger));
     return set_error(context, ET_P1_STATUS_INTERNAL, ET_P1_CODE_ALLOCATION_FAILED,
                      operation, "cannot allocate construction enrollment");
   }
@@ -651,7 +654,7 @@ ET_P1_PRIVATE int64_t et_p1_private_construction_seal_v1(
     ledger->sealed_count = ledger->count;
   } else {
 #endif
-  free(ledger->entries);
+  ET_R_FREE(ET_R_P1,4,ledger->entries,ET_P1_CONSTRUCTION_CAPACITY,sizeof(*ledger->entries));
   ledger->entries = NULL;
 #if defined(ET_G3R_CANDIDATE_RETIRE_PRIVATE)
   }
@@ -697,7 +700,7 @@ ET_P1_PRIVATE int64_t et_p1_private_construction_commit_prepared_v1(
     ledger->sealed_count = ledger->count;
   } else {
 #endif
-    free(ledger->entries);
+    ET_R_FREE(ET_R_P1,4,ledger->entries,ET_P1_CONSTRUCTION_CAPACITY,sizeof(*ledger->entries));
     ledger->entries = NULL;
 #if defined(ET_G3R_CANDIDATE_RETIRE_PRIVATE)
   }
@@ -843,7 +846,7 @@ ET_P1_PRIVATE int64_t et_p1_private_candidate_graph_revoke_v1(
     return context->error.category;
   /* Complete admission above; this tail invokes no callback or allocation. */
   for (i = 0u; i < ledger->count; ++i) ledger->entries[i]->live = 0u;
-  free(ledger->entries);
+  ET_R_FREE(ET_R_P1,4,ledger->entries,ET_P1_CONSTRUCTION_CAPACITY,sizeof(*ledger->entries));
   ledger->entries = NULL;
   ledger->candidate_roster_base = NULL;
   ledger->state = 4u;
@@ -902,7 +905,7 @@ ET_P1_PRIVATE int64_t et_p1_private_construction_abort_prepared_v1(
                                         "construction-abort-prepared");
   if (status != ET_P1_STATUS_OK) return status;
   for (i = 0u; i < ledger->count; ++i) ledger->entries[i]->live = 0u;
-  free(ledger->entries);
+  ET_R_FREE(ET_R_P1,4,ledger->entries,ET_P1_CONSTRUCTION_CAPACITY,sizeof(*ledger->entries));
   ledger->entries = NULL;
 #ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
   ledger->candidate_roster_base = NULL;
@@ -926,7 +929,7 @@ ET_P1_PRIVATE int64_t et_p1_private_construction_abort_v1(
   for (i = 0u; i < ledger->count; ++i) ledger->entries[i]->live = 0u;
   ledger->state = 2u;
   active_construction = NULL;
-  free(ledger->entries);
+  ET_R_FREE(ET_R_P1,4,ledger->entries,ET_P1_CONSTRUCTION_CAPACITY,sizeof(*ledger->entries));
   ledger->entries = NULL;
 #ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
   ledger->candidate_roster_base = NULL;
@@ -1667,3 +1670,9 @@ ET_P1_PRIVATE int64_t et_p1_private_tombstone_count_v1(void *candidate) {
                          : count_entries(context, 0);
 }
 #endif
+
+/* CPUV1_RESOURCE_BEGIN */
+#ifdef ET_CPUV1_RESOURCE_TESTING
+#include "cpuv1_resource_p1.inc"
+#endif
+/* CPUV1_RESOURCE_END */

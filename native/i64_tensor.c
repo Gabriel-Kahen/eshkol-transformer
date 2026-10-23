@@ -1,3 +1,6 @@
+/* CPUV1_RESOURCE_BEGIN */
+#include "cpuv1_resource_private.h"
+/* CPUV1_RESOURCE_END */
 #include "eshkol_transformer/i64_tensor.h"
 
 #ifdef ET_G3C4_T1_I1_EXACT_PAIR_PRIVATE
@@ -488,7 +491,7 @@ int32_t et_i64_tensor_create_v1(size_t rank, const uint64_t *shape,
   if (result != 0) {
     return result;
   }
-  tensor = (et_i64_tensor *)i64_calloc(1u, sizeof(*tensor));
+  tensor = (et_i64_tensor *)ET_R_ALLOC(ET_R_I64_T1,0,i64_calloc(1u, sizeof(*tensor)),1u,sizeof(*tensor));
   if (tensor == NULL) {
     return set_i64_error(error, ET_I64_TENSOR_ERROR_INTERNAL,
                          ET_I64_TENSOR_CODE_ALLOCATION_FAILED,
@@ -499,12 +502,12 @@ int32_t et_i64_tensor_create_v1(size_t rank, const uint64_t *shape,
   tensor->element_count = element_count;
   tensor->byte_length = byte_length;
   if (rank > 0u) {
-    tensor->shape = (uint64_t *)i64_calloc(rank, sizeof(*tensor->shape));
-    tensor->strides = (size_t *)i64_calloc(rank, sizeof(*tensor->strides));
+    tensor->shape = (uint64_t *)ET_R_ALLOC(ET_R_I64_T1,3,i64_calloc(rank, sizeof(*tensor->shape)),rank,sizeof(*tensor->shape));
+    tensor->strides = (size_t *)ET_R_ALLOC(ET_R_I64_T1,4,i64_calloc(rank, sizeof(*tensor->strides)),rank,sizeof(*tensor->strides));
     if (tensor->shape == NULL || tensor->strides == NULL) {
-      free(tensor->strides);
-      free(tensor->shape);
-      free(tensor);
+      ET_R_FREE(ET_R_I64_T1,4,tensor->strides,tensor->rank,sizeof(*tensor->strides));
+      ET_R_FREE(ET_R_I64_T1,3,tensor->shape,tensor->rank,sizeof(*tensor->shape));
+      ET_R_FREE(ET_R_I64_T1,0,tensor,1u,sizeof(*tensor));
       return set_i64_error(error, ET_I64_TENSOR_ERROR_INTERNAL,
                            ET_I64_TENSOR_CODE_ALLOCATION_FAILED,
                            "i64-tensor-create",
@@ -521,11 +524,11 @@ int32_t et_i64_tensor_create_v1(size_t rank, const uint64_t *shape,
     }
   }
   if (byte_length > 0u) {
-    tensor->data = (int64_t *)i64_calloc(element_count, sizeof(*tensor->data));
+    tensor->data = (int64_t *)ET_R_ALLOC(ET_R_I64_T1,2,i64_calloc(element_count, sizeof(*tensor->data)),element_count,sizeof(*tensor->data));
     if (tensor->data == NULL) {
-      free(tensor->strides);
-      free(tensor->shape);
-      free(tensor);
+      ET_R_FREE(ET_R_I64_T1,4,tensor->strides,tensor->rank,sizeof(*tensor->strides));
+      ET_R_FREE(ET_R_I64_T1,3,tensor->shape,tensor->rank,sizeof(*tensor->shape));
+      ET_R_FREE(ET_R_I64_T1,0,tensor,1u,sizeof(*tensor));
       return set_i64_error(error, ET_I64_TENSOR_ERROR_INTERNAL,
                            ET_I64_TENSOR_CODE_ALLOCATION_FAILED,
                            "i64-tensor-create",
@@ -573,10 +576,10 @@ int32_t et_i64_tensor_destroy_v1(et_i64_tensor **tensor,
   (void)success(error);
   unregister_tensor(value);
   value->magic = 0u;
-  free(value->data);
-  free(value->strides);
-  free(value->shape);
-  free(value);
+  ET_R_FREE(ET_R_I64_T1,2,value->data,value->element_count,sizeof(*value->data));
+  ET_R_FREE(ET_R_I64_T1,4,value->strides,value->rank,sizeof(*value->strides));
+  ET_R_FREE(ET_R_I64_T1,3,value->shape,value->rank,sizeof(*value->shape));
+  ET_R_FREE(ET_R_I64_T1,0,value,1u,sizeof(*value));
   *tensor = NULL;
   return 0;
 }
@@ -838,7 +841,7 @@ int32_t et_i64_tensor_borrow_begin_v1(et_i64_tensor *tensor,
                          "i64-tensor-borrow-begin",
                          "tensor already has an active borrow");
   }
-  borrow = (et_i64_tensor_borrow *)i64_calloc(1u, sizeof(*borrow));
+  borrow = (et_i64_tensor_borrow *)ET_R_ALLOC(ET_R_I64_T1,1,i64_calloc(1u, sizeof(*borrow)),1u,sizeof(*borrow));
   if (borrow == NULL) {
     return set_i64_error(error, ET_I64_TENSOR_ERROR_INTERNAL,
                          ET_I64_TENSOR_CODE_ALLOCATION_FAILED,
@@ -938,7 +941,7 @@ int32_t et_i64_tensor_borrow_end_v1(et_i64_tensor_borrow **borrow,
   unregister_borrow(value);
   value->owner->active_borrow = NULL;
   value->magic = 0u;
-  free(value);
+  ET_R_FREE(ET_R_I64_T1,1,value,1u,sizeof(*value));
   *borrow = NULL;
   return 0;
 }
@@ -1187,3 +1190,9 @@ static const et_kernel_provider_v1 provider = {
 const et_kernel_provider_v1 *et_i64_tensor_provider_v1(void) {
   return &provider;
 }
+
+/* CPUV1_RESOURCE_BEGIN */
+#ifdef ET_CPUV1_RESOURCE_TESTING
+#include "cpuv1_resource_i64.inc"
+#endif
+/* CPUV1_RESOURCE_END */

@@ -1,3 +1,6 @@
+/* CPUV1_RESOURCE_BEGIN */
+#include "cpuv1_resource_private.h"
+/* CPUV1_RESOURCE_END */
 /* Separate, noninstalled CPU4 implementation of the opaque E3 native spine.
  * Compile instead of e3_frame.c; never enroll a C4 lease as an M3T OWNER. */
 #include "e3_cpu4_frame.h"
@@ -522,7 +525,7 @@ static void e3_release_workspace(et_e3_frame_internal *frame) {
     e3_destroy_owned(frame);
     for (size_t i=6;i>0;--i)
       et_kernel_runtime_destroy(work->data->runtime[i-1]);
-    memset(work->data,0,sizeof(*work->data)); free(work->data); work->data=NULL;
+    memset(work->data,0,sizeof(*work->data)); ET_R_FREE(ET_R_E3,2,work->data,1u,sizeof(*work->data)); work->data=NULL;
   }
   if (work->workspace_child) {
     if (et_g3c4_training_child_release_internal(frame->lease,work,2)) abort();
@@ -539,7 +542,7 @@ void *et_e3_private_cpu4_frame_create_v1(void *lease, et_f32_tensor *loss,
   staged.destination[0]=loss; staged.destination[1]=weight;
   staged.destination[2]=perplexity; staged.destination[3]=accuracy;
   if (e3_destinations(&staged)) return NULL;
-  et_e3_frame_internal *frame=e3_allocate(sizeof(*frame));
+  et_e3_frame_internal *frame=ET_R_ALLOC(ET_R_E3,0,e3_allocate(sizeof(*frame)),1u,sizeof(*frame));
   if (!frame) { e3_fail(E3_INTERNAL,E3_CODE_ALLOCATION); return NULL; }
   *frame=staged; frame->lifecycle=1; frame->next=e3_registry; e3_registry=frame;
   return frame;
@@ -556,13 +559,13 @@ int64_t et_e3_private_acquire_v1(void *pointer) {
   if (e3_destinations(frame)) return e3_last_domain ? e3_dependency_status(e3_last_domain,e3_last_category) : e3_last_category;
   if (et_g3c4_private_training_lease_enter_v1(frame->lease,1)) return e3_c4_error();
   int64_t rc=0;
-  e3_cpu4_workspace *work=e3_allocate(sizeof(*work));
+  e3_cpu4_workspace *work=ET_R_ALLOC(ET_R_E3,1,e3_allocate(sizeof(*work)),1u,sizeof(*work));
   if (!work) { rc=e3_fail(E3_INTERNAL,E3_CODE_ALLOCATION); goto failed; }
   work->next=e3_workspaces; e3_workspaces=work; frame->work=work;
   work->frame=frame; work->lease=frame->lease; work->live=1;
   if (et_g3c4_training_child_acquire_internal(frame->lease,work,2)) { rc=e3_c4_error(); goto failed; }
   work->workspace_child=1;
-  work->data=e3_allocate(sizeof(*work->data));
+  work->data=ET_R_ALLOC(ET_R_E3,2,e3_allocate(sizeof(*work->data)),1u,sizeof(*work->data));
   if (!work->data) { rc=e3_fail(E3_INTERNAL,E3_CODE_ALLOCATION); goto failed; }
   if ((rc=e3_create_owned(frame))) goto failed;
   const et_kernel_provider_v1 *providers[6]={et_n3k_kernel_provider_v1(),et_n2_kernel_provider_v1(),
@@ -1251,3 +1254,9 @@ void et_e3_private_frame_destroy_v1(void *pointer) {
   frame->lifecycle=2;frame->lease=NULL;memset(frame->destination,0,sizeof(frame->destination));
   memset(frame->published_counts,0,sizeof(frame->published_counts));frame->published_valid=frame->committed=0;
 }
+
+/* CPUV1_RESOURCE_BEGIN */
+#ifdef ET_CPUV1_RESOURCE_TESTING
+#include "cpuv1_resource_e3.inc"
+#endif
+/* CPUV1_RESOURCE_END */

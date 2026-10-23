@@ -42,14 +42,14 @@ static int cpu4_candidate_dead_exact(const et_cpu4_candidate_internal *candidate
 
 void *et_cpu4_private_candidate_begin_v1(int64_t seed) {
   et_g3c4_error_reset_internal();
-  et_cpu4_candidate_internal *candidate = et_g3c4_allocate(sizeof(*candidate));
+  et_cpu4_candidate_internal *candidate = ET_R_ALLOC(ET_R_C4,1,et_g3c4_allocate(sizeof(*candidate)),1u,sizeof(*candidate));
   if (candidate == NULL) {
     (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_ALLOCATION);
     return NULL;
   }
   et_g3c4_model_owner_internal *owner =
       et_g3c4_private_model_owner_create_seeded_v1(seed);
-  if (owner == NULL) { free(candidate); return NULL; }
+  if (owner == NULL) { ET_R_FREE(ET_R_C4,1,candidate,1u,sizeof(*candidate)); return NULL; }
   /* All allocations precede this exact typed enrollment. */
   candidate->owner = owner;
   memcpy(candidate->parameters, owner->parameters, sizeof(candidate->parameters));
