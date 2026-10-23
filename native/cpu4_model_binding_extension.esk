@@ -142,10 +142,21 @@
                              (x1-private-config-fingerprint resolved)
                              (make-vector 17 #f) (make-vector 14 #f) (make-vector 14 #f)))
              (next (cons record (vector-ref cpu4-model-bindings 0))))
-        (vector-set! cpu4-model-bindings 0 next)
-        (let ((canonical (car (vector-ref cpu4-model-bindings 0))))
-          (guard (caught
-                   (#t (vector-set! canonical 1 'dead) (raise caught)))
+        ;; fe9 handler installation may allocate. No global pending authority
+        ;; exists until that handler is active. Publication can promote the row:
+        ;; cleanup must re-read the registry, using the immutable native owner.
+        (guard (caught
+                 (#t
+                   (let abort-pending ((rows (vector-ref cpu4-model-bindings 0)))
+                     (if (not (null? rows))
+                         (let ((pending (car rows)))
+                           (if (and (eq? (vector-ref pending 4) owner)
+                                    (eq? (vector-ref pending 1) 'pending))
+                               (vector-set! pending 1 'dead)
+                               (abort-pending (cdr rows))))))
+                   (raise caught)))
+          (vector-set! cpu4-model-bindings 0 next)
+          (let ((canonical (car (vector-ref cpu4-model-bindings 0))))
             (cpu4-binding-p1-check
               (cpu4-p1-fixed-capture-internal model (vector-ref entry 8)
                 (vector-ref canonical 9) (vector-ref canonical 10) (vector-ref canonical 11))
