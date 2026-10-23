@@ -647,6 +647,11 @@ region21/data96 and checkpoint byte parity. Trained resume passes770 checks and
 375 actual steps per run; held-out mean loss5.51855→0.00003266. Functional
 same-trained-model public generation independently passes both frozen two-token
 and first-EOS modes, normal/repeat. Retention and full CPU-v1 admission stay held.
+A source-only current-root ON80 E3 consumer variation preserves the accepted
+217/219 absent/present fault assertions and original metric words while using a
+genuine candidate. Source review and a narrow two-process normal gate remain
+required; prior OFF64 fault/SAN results are not promoted. See
+[fixture contract](../tests/e3_cpu4_on80/README.md).
 GPU, mixed precision and optional expansion stay backlog. Historical detail below
 retains its original evidence scope.
 
