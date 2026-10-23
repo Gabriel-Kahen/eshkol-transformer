@@ -25,7 +25,7 @@ These are retained accepted words, never retuned after a runtime result.
 
 The normal driver uses unchanged35 production TUs/per-TU features from
 `native/cpu4_v1_private_inputs.json`, plus the ORIGINAL consumer helper once with
-no testing overlay. Common211 hashes and exact caller dependency bytes must pass.
+no testing overlay. Current common215 hashes and exact caller dependency bytes must pass.
 The actual common root preserves original T1/T2 and sole F32/I1/D2/P1 registries;
 there is no legacy E3 boundary/root, M3T build flag or copied provider.
 
