@@ -1,3 +1,6 @@
+/* CPUV1_RESOURCE_BEGIN */
+#include "cpuv1_resource_private.h"
+/* CPUV1_RESOURCE_END */
 #include "eshkol_transformer/a2_kv_cache.h"
 
 #include <limits.h>
@@ -421,15 +424,15 @@ int32_t et_a2_kv_cache_create_v1(uint64_t layers64, uint64_t batch64,
       (size_t)batch64 > SIZE_MAX / sizeof(int64_t))
     return fail(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
                 ET_KERNEL_CODE_INTEGER_OVERFLOW, op, "cache size overflows size_t");
-  cache = a2_calloc(1u, sizeof(*cache));
+  cache = ET_R_ALLOC(ET_R_GENERATION,16,a2_calloc(1u, sizeof(*cache)),1u,sizeof(*cache));
   if (cache == NULL) goto allocation_failed;
-  cache->keys = a2_calloc(elements, sizeof(float));
+  cache->keys = ET_R_ALLOC(ET_R_GENERATION,20,a2_calloc(elements, sizeof(float)),elements,sizeof(float));
   if (cache->keys == NULL) goto allocation_failed;
-  cache->values = a2_calloc(elements, sizeof(float));
+  cache->values = ET_R_ALLOC(ET_R_GENERATION,21,a2_calloc(elements, sizeof(float)),elements,sizeof(float));
   if (cache->values == NULL) goto allocation_failed;
-  cache->lengths = a2_calloc((size_t)batch64, sizeof(int64_t));
+  cache->lengths = ET_R_ALLOC(ET_R_GENERATION,22,a2_calloc((size_t)batch64, sizeof(int64_t)),(size_t)batch64,sizeof(int64_t));
   if (cache->lengths == NULL) goto allocation_failed;
-  cache->key_keep_mask = a2_calloc((size_t)batch64, (size_t)capacity64);
+  cache->key_keep_mask = ET_R_ALLOC(ET_R_GENERATION,23,a2_calloc((size_t)batch64, (size_t)capacity64),(size_t)batch64*(size_t)capacity64,1u);
   if (cache->key_keep_mask == NULL) goto allocation_failed;
   cache->magic = CACHE_MAGIC;
   cache->layers = (size_t)layers64; cache->batch = (size_t)batch64;
@@ -441,7 +444,7 @@ int32_t et_a2_kv_cache_create_v1(uint64_t layers64, uint64_t batch64,
   *output = cache;
   return success_preflighted(error);
 allocation_failed:
-  if (cache != NULL) { free(cache->key_keep_mask); free(cache->lengths); free(cache->values); free(cache->keys); free(cache); }
+  if (cache != NULL) { ET_R_FREE(ET_R_GENERATION,23,cache->key_keep_mask,(size_t)batch64*(size_t)capacity64,1u); ET_R_FREE(ET_R_GENERATION,22,cache->lengths,(size_t)batch64,sizeof(int64_t)); ET_R_FREE(ET_R_GENERATION,21,cache->values,elements,sizeof(float)); ET_R_FREE(ET_R_GENERATION,20,cache->keys,elements,sizeof(float)); ET_R_FREE(ET_R_GENERATION,16,cache,1u,sizeof(*cache)); }
   return fail(error, ET_KERNEL_ERROR_INTERNAL, ET_KERNEL_CODE_ALLOCATION_FAILED,
               op, "cache allocation failed");
 }
@@ -479,7 +482,7 @@ int32_t et_a2_kv_cache_destroy_v1(et_a2_kv_cache **slot,
     return fail(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
                 ET_KERNEL_CODE_PROVIDER_REJECTED, op, "cache has a live lease");
   unlink_cache(cache); cache->magic = 0u;
-  free(cache->key_keep_mask); free(cache->lengths); free(cache->values); free(cache->keys); free(cache);
+  ET_R_FREE(ET_R_GENERATION,23,cache->key_keep_mask,cache->batch*cache->capacity,1u); ET_R_FREE(ET_R_GENERATION,22,cache->lengths,cache->batch,sizeof(*cache->lengths)); ET_R_FREE(ET_R_GENERATION,21,cache->values,cache->total_elements,sizeof(*cache->values)); ET_R_FREE(ET_R_GENERATION,20,cache->keys,cache->total_elements,sizeof(*cache->keys)); ET_R_FREE(ET_R_GENERATION,16,cache,1u,sizeof(*cache));
   *slot = NULL;
   return success_preflighted(error);
 }
@@ -545,15 +548,15 @@ int32_t et_a2_kv_cache_transaction_begin_v1(
     return fail(error, ET_KERNEL_ERROR_SHAPE_MISMATCH,
                 ET_KERNEL_CODE_INVALID_SHAPE, op,
                 "at least one append count must be positive");
-  txn = a2_calloc(1u, sizeof(*txn));
+  txn = ET_R_ALLOC(ET_R_GENERATION,17,a2_calloc(1u, sizeof(*txn)),1u,sizeof(*txn));
   if (txn == NULL) goto allocation_failed;
-  txn->counts = a2_calloc(cache->batch, sizeof(*txn->counts));
+  txn->counts = ET_R_ALLOC(ET_R_GENERATION,24,a2_calloc(cache->batch, sizeof(*txn->counts)),cache->batch,sizeof(*txn->counts));
   if (txn->counts == NULL) goto allocation_failed;
-  txn->effective_lengths = a2_calloc(cache->batch, sizeof(*txn->effective_lengths));
+  txn->effective_lengths = ET_R_ALLOC(ET_R_GENERATION,25,a2_calloc(cache->batch, sizeof(*txn->effective_lengths)),cache->batch,sizeof(*txn->effective_lengths));
   if (txn->effective_lengths == NULL) goto allocation_failed;
-  txn->effective_key_keep_mask = a2_calloc(cache->batch, cache->capacity);
+  txn->effective_key_keep_mask = ET_R_ALLOC(ET_R_GENERATION,26,a2_calloc(cache->batch, cache->capacity),cache->batch*cache->capacity,1u);
   if (txn->effective_key_keep_mask == NULL) goto allocation_failed;
-  txn->staged = a2_calloc(cache->layers, sizeof(*txn->staged));
+  txn->staged = ET_R_ALLOC(ET_R_GENERATION,27,a2_calloc(cache->layers, sizeof(*txn->staged)),cache->layers,sizeof(*txn->staged));
   if (txn->staged == NULL) goto allocation_failed;
   txn->magic = TXN_MAGIC; txn->cache = cache; txn->append_width = (size_t)width64;
   for (i = 0u; i < cache->batch; i++) {
@@ -567,7 +570,7 @@ int32_t et_a2_kv_cache_transaction_begin_v1(
   cache->active_transaction = txn; *output = txn;
   return success_preflighted(error);
 allocation_failed:
-  if (txn != NULL) { free(txn->staged); free(txn->effective_key_keep_mask); free(txn->effective_lengths); free(txn->counts); free(txn); }
+  if (txn != NULL) { ET_R_FREE(ET_R_GENERATION,27,txn->staged,cache->layers,sizeof(*txn->staged)); ET_R_FREE(ET_R_GENERATION,26,txn->effective_key_keep_mask,cache->batch*cache->capacity,1u); ET_R_FREE(ET_R_GENERATION,25,txn->effective_lengths,cache->batch,sizeof(*txn->effective_lengths)); ET_R_FREE(ET_R_GENERATION,24,txn->counts,cache->batch,sizeof(*txn->counts)); ET_R_FREE(ET_R_GENERATION,17,txn,1u,sizeof(*txn)); }
   return fail(error, ET_KERNEL_ERROR_INTERNAL, ET_KERNEL_CODE_ALLOCATION_FAILED,
               op, "transaction allocation failed");
 }
@@ -685,7 +688,7 @@ int32_t et_a2_kv_cache_transaction_view_begin_v1(
   if (layer64 >= txn->cache->layers || !txn->staged[layer64])
     return fail(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
                 ET_KERNEL_CODE_PROVIDER_REJECTED, op, "layer is not staged");
-  view = a2_calloc(1u, sizeof(*view));
+  view = ET_R_ALLOC(ET_R_GENERATION,18,a2_calloc(1u, sizeof(*view)),1u,sizeof(*view));
   if (view == NULL)
     return fail(error, ET_KERNEL_ERROR_INTERNAL, ET_KERNEL_CODE_ALLOCATION_FAILED,
                 op, "transaction view allocation failed");
@@ -756,7 +759,7 @@ int32_t et_a2_kv_cache_transaction_view_end_v1(
     return fail(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
                 ET_KERNEL_CODE_INVALID_BUFFER, op, "view handle is invalid");
   view->transaction->active_view = NULL;
-  unlink_view(view); view->magic = 0u; free(view); *slot = NULL;
+  unlink_view(view); view->magic = 0u; ET_R_FREE(ET_R_GENERATION,18,view,1u,sizeof(*view)); *slot = NULL;
   return success_preflighted(error);
 }
 
@@ -775,8 +778,8 @@ static void scrub_transaction(et_a2_kv_cache_transaction *txn) {
 
 static void free_transaction(et_a2_kv_cache_transaction *txn) {
   txn->cache->active_transaction = NULL; unlink_transaction(txn); txn->magic=0u;
-  free(txn->staged); free(txn->effective_key_keep_mask);
-  free(txn->effective_lengths); free(txn->counts); free(txn);
+  ET_R_FREE(ET_R_GENERATION,27,txn->staged,txn->cache->layers,sizeof(*txn->staged)); ET_R_FREE(ET_R_GENERATION,26,txn->effective_key_keep_mask,txn->cache->batch*txn->cache->capacity,1u);
+  ET_R_FREE(ET_R_GENERATION,25,txn->effective_lengths,txn->cache->batch,sizeof(*txn->effective_lengths)); ET_R_FREE(ET_R_GENERATION,24,txn->counts,txn->cache->batch,sizeof(*txn->counts)); ET_R_FREE(ET_R_GENERATION,17,txn,1u,sizeof(*txn));
 }
 
 int32_t et_a2_kv_cache_transaction_commit_v1(
@@ -833,11 +836,11 @@ int32_t et_a2_kv_cache_read_borrow_begin_v1(
   if(c->active_transaction!=NULL||c->active_borrow!=NULL)
     return fail(error,ET_KERNEL_ERROR_INVALID_ARGUMENT,
         ET_KERNEL_CODE_PROVIDER_REJECTED,op,"cache already has a live lease");
-  b=a2_calloc(1u,sizeof(*b));
+  b=ET_R_ALLOC(ET_R_GENERATION,19,a2_calloc(1u,sizeof(*b)),1u,sizeof(*b));
   if(b==NULL)goto allocation_failed;
-  b->keys=a2_calloc(c->layers,sizeof(*b->keys));
+  b->keys=ET_R_ALLOC(ET_R_GENERATION,28,a2_calloc(c->layers,sizeof(*b->keys)),c->layers,sizeof(*b->keys));
   if(b->keys==NULL)goto allocation_failed;
-  b->values=a2_calloc(c->layers,sizeof(*b->values));
+  b->values=ET_R_ALLOC(ET_R_GENERATION,29,a2_calloc(c->layers,sizeof(*b->values)),c->layers,sizeof(*b->values));
   if(b->values==NULL)goto allocation_failed;
   b->magic=BORROW_MAGIC;b->cache=c;
   for(layer=0u;layer<c->layers;layer++) {
@@ -853,7 +856,7 @@ int32_t et_a2_kv_cache_read_borrow_begin_v1(
   b->registry_next=live_borrows;live_borrows=b;c->active_borrow=b;*output=b;
   return success_preflighted(error);
 allocation_failed:
-  if (b != NULL) { free(b->values); free(b->keys); free(b); }
+  if (b != NULL) { ET_R_FREE(ET_R_GENERATION,29,b->values,c->layers,sizeof(*b->values)); ET_R_FREE(ET_R_GENERATION,28,b->keys,c->layers,sizeof(*b->keys)); ET_R_FREE(ET_R_GENERATION,19,b,1u,sizeof(*b)); }
   return fail(error,ET_KERNEL_ERROR_INTERNAL,
       ET_KERNEL_CODE_ALLOCATION_FAILED,op,"read borrow allocation failed");
 }
@@ -892,6 +895,10 @@ int32_t et_a2_kv_cache_read_borrow_end_v1(
   b=find_borrow(*slot);if(b==NULL)return fail(error,ET_KERNEL_ERROR_INVALID_ARGUMENT,
       ET_KERNEL_CODE_INVALID_BUFFER,op,"read borrow handle is invalid");
   b->cache->active_borrow=NULL;unlink_borrow(b);b->magic=0u;
-  free(b->values);free(b->keys);free(b);*slot=NULL;
+  ET_R_FREE(ET_R_GENERATION,29,b->values,b->cache->layers,sizeof(*b->values));ET_R_FREE(ET_R_GENERATION,28,b->keys,b->cache->layers,sizeof(*b->keys));ET_R_FREE(ET_R_GENERATION,19,b,1u,sizeof(*b));*slot=NULL;
   return success_preflighted(error);
 }
+
+/* CPUV1_RESOURCE_BEGIN */
+#include "cpuv1_resource_a2.inc"
+/* CPUV1_RESOURCE_END */

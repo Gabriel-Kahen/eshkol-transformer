@@ -574,7 +574,7 @@ int32_t et_o2_tr3_c_restore_prepare_v1(
     }
   }
 
-  plan = (et_o2_tr3_c_restore_plan *)et_o2_calloc(1u, sizeof(*plan));
+  plan = (et_o2_tr3_c_restore_plan *)ET_R_ALLOC(ET_R_O2,19,et_o2_calloc(1u, sizeof(*plan)),1u,sizeof(*plan));
   if (plan == NULL) {
     return et_o2_tr3_c_restore_error(
         error, ET_O2_STATUS_INTERNAL, ET_O2_CODE_ALLOCATION_FAILED,
@@ -629,7 +629,7 @@ fail:
       et_o2_active_operation_release(plan->owner, plan) != 0) {
     et_o2_tr3_c_restore_fail_stop();
   }
-  free(plan);
+  ET_R_FREE(ET_R_O2,19,plan,1u,sizeof(*plan));
   return result;
 }
 

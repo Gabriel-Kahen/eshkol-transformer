@@ -5,6 +5,21 @@
 } while (0)
 #define R_CONTROL(K,B,STATE) R_BASE(K,B,1u,sizeof(*(B)),STATE,_Alignof(__typeof__(*(B))))
 void et_cpuv1_test_census_f32_v1(et_cpuv1_resource_packet_v1 *packet) {
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_F32,0,sizeof(et_f32_tensor),_Alignof(et_f32_tensor));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_F32,1,sizeof(et_f32_tensor_borrow),_Alignof(et_f32_tensor_borrow));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_F32,2,sizeof(et_f32_tensor_copy_plan),_Alignof(et_f32_tensor_copy_plan));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_F32,3,sizeof(et_f32_parameter),_Alignof(et_f32_parameter));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_F32,4,sizeof(et_f32_gradient_plan),_Alignof(et_f32_gradient_plan));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_F32,5,sizeof(et_f32_gradient_reset_plan),_Alignof(et_f32_gradient_reset_plan));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_F32,6,sizeof(float),_Alignof(float));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_F32,7,sizeof(uint64_t),_Alignof(uint64_t));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_F32,8,sizeof(size_t),_Alignof(size_t));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_F32,9,sizeof(et_f32_tensor_copy_assignment_v1),_Alignof(et_f32_tensor_copy_assignment_v1));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_F32,10,sizeof(et_f32_gradient_plan_entry),_Alignof(et_f32_gradient_plan_entry));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_F32,11,sizeof(float),_Alignof(float));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_F32,12,sizeof(et_f32_parameter *),_Alignof(et_f32_parameter *));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_F32,13,sizeof(f32_destroy_provenance),_Alignof(f32_destroy_provenance));
+
 #ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
   /* Frozen producer is history/capture/save-witness OFF. */
   et_cpuv1_test_resource_fail_v1(packet,ET_R_UNSUPPORTED); return;

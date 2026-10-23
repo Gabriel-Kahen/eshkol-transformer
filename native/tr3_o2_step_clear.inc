@@ -136,9 +136,9 @@ static void et_o2_tr3_destroy_stages(et_o2_trainer_step_clear_plan *plan,
 }
 
 static void et_o2_tr3_free_payload(et_o2_trainer_step_clear_plan *plan) {
-  free(plan->parameters);
-  free(plan->assignments);
-  free(plan->stages);
+  ET_R_FREE(ET_R_O2,17,plan->parameters,plan->count,sizeof(*plan->parameters));
+  ET_R_FREE(ET_R_O2,16,plan->assignments,plan->count * 3u,sizeof(*plan->assignments));
+  ET_R_FREE(ET_R_O2,15,plan->stages,plan->count * 3u,sizeof(*plan->stages));
   plan->parameters = NULL;
   plan->assignments = NULL;
   plan->stages = NULL;
@@ -156,7 +156,7 @@ static void et_o2_tr3_prepare_cleanup(et_o2_trainer_step_clear_plan *plan) {
       et_o2_active_operation_release(plan->owner, plan) != 0) {
     et_o2_tr3_step_clear_fail_stop();
   }
-  free(plan);
+  ET_R_FREE(ET_R_O2,14,plan,1u,sizeof(*plan));
 }
 
 static int32_t et_o2_tr3_require_prepared(
@@ -264,7 +264,7 @@ int32_t et_o2_trainer_step_clear_prepare_v1(
                       "binary32 environment is unsupported");
   }
 
-  plan = (et_o2_trainer_step_clear_plan *)et_o2_tr3_calloc(1u, sizeof(*plan));
+  plan = (et_o2_trainer_step_clear_plan *)ET_R_ALLOC(ET_R_O2,14,et_o2_tr3_calloc(1u, sizeof(*plan)),1u,sizeof(*plan));
   if (plan == NULL) {
     return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
                       ET_O2_CODE_ALLOCATION_FAILED, operation,
@@ -275,18 +275,18 @@ int32_t et_o2_trainer_step_clear_prepare_v1(
   plan->expected_completed_updates = expected_completed_updates;
   plan->next_completed_updates = expected_completed_updates + 1u;
   if (et_o2_active_operation_acquire(optimizer, plan) != 0) {
-    free(plan);
+    ET_R_FREE(ET_R_O2,14,plan,1u,sizeof(*plan));
     return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
                       ET_O2_CODE_ACTIVE_BORROW, operation,
                       "optimizer operation ownership was not acquired");
   }
-  plan->stages = (et_f32_tensor **)et_o2_tr3_calloc(
-      plan->count * 3u, sizeof(*plan->stages));
+  plan->stages = (et_f32_tensor **)ET_R_ALLOC(ET_R_O2,15,et_o2_tr3_calloc(
+      plan->count * 3u, sizeof(*plan->stages)),plan->count * 3u,sizeof(*plan->stages));
   plan->assignments =
-      (et_f32_tensor_copy_assignment_v1 *)et_o2_tr3_calloc(
-          plan->count * 3u, sizeof(*plan->assignments));
-  plan->parameters = (et_f32_parameter **)et_o2_tr3_calloc(
-      plan->count, sizeof(*plan->parameters));
+      (et_f32_tensor_copy_assignment_v1 *)ET_R_ALLOC(ET_R_O2,16,et_o2_tr3_calloc(
+          plan->count * 3u, sizeof(*plan->assignments)),plan->count * 3u,sizeof(*plan->assignments));
+  plan->parameters = (et_f32_parameter **)ET_R_ALLOC(ET_R_O2,17,et_o2_tr3_calloc(
+      plan->count, sizeof(*plan->parameters)),plan->count,sizeof(*plan->parameters));
   if (plan->stages == NULL || plan->assignments == NULL ||
       plan->parameters == NULL) {
     result = et_o2_fail(error, ET_O2_STATUS_INTERNAL,

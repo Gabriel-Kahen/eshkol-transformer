@@ -6,6 +6,12 @@
  if (et_cpuv1_test_resource_add_v1(packet,ET_R_P1,K,B,N,S,STATE,A)) return; \
 } while (0)
 void et_cpuv1_test_census_p1_v1(et_cpuv1_resource_packet_v1 *packet) {
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_P1,0,sizeof(et_p1_token),_Alignof(et_p1_token));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_P1,1,sizeof(et_p1_record),_Alignof(et_p1_record));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_P1,2,sizeof(et_p1_context),_Alignof(et_p1_context));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_P1,3,sizeof(et_p1_construction),_Alignof(et_p1_construction));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_P1,4,sizeof(et_p1_record *),_Alignof(et_p1_record *));
+
   for (et_p1_context *p=contexts;p;p=p->next)
     P_BASE(2,p,1u,sizeof(*p),p->live?ET_R_LIVE:ET_R_DEAD,_Alignof(et_p1_context));
   for (et_p1_record *p=records;p;p=p->next) {
@@ -27,6 +33,10 @@ void et_cpuv1_test_census_p1_v1(et_cpuv1_resource_packet_v1 *packet) {
       et_cpuv1_test_resource_fail_v1(packet,ET_R_MISMATCH); return;
     }
     P_BASE(3,p,1u,sizeof(*p),state,_Alignof(et_p1_construction));
+    packet->details[ET_R_P1][40+p->state]++;
+    if (p->state==0 || p->state==3) {
+      et_cpuv1_test_resource_fail_v1(packet,ET_R_NOT_QUIESCENT); return;
+    }
     P_BASE(4,p->entries,ET_P1_CONSTRUCTION_CAPACITY,sizeof(*p->entries),state,
            _Alignof(et_p1_record *));
 #ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
@@ -36,6 +46,7 @@ void et_cpuv1_test_census_p1_v1(et_cpuv1_resource_packet_v1 *packet) {
 #endif
   }
   packet->details[ET_R_P1][32]=active_construction!=NULL;
+  if (active_construction) et_cpuv1_test_resource_fail_v1(packet,ET_R_NOT_QUIESCENT);
 }
 #undef P_BASE
 #endif

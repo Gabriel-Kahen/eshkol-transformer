@@ -1,3 +1,6 @@
+/* CPUV1_RESOURCE_BEGIN */
+#include "../../native/cpuv1_resource_private.h"
+/* CPUV1_RESOURCE_END */
 /* Source-private G3-T transport composition. M3T's native registry and owner
  * are included once; no C4 identity or transport source enters this TU. */
 #ifdef ET_G3T_REUSE_E3_M3_OWNER_PRIVATE
@@ -504,7 +507,7 @@ static g3t_context *g3t_allocate(void) {
 #ifdef ET_G3T_TESTING
   if (g3t_allocations >= g3t_allocation_limit) return NULL;
 #endif
-  g3t_context *c = calloc(1, sizeof(*c));
+  g3t_context *c = ET_R_ALLOC(ET_R_GENERATION,0,calloc(1, sizeof(*c)),1u,sizeof(*c));
 #ifdef ET_G3T_TESTING
   if (c) ++g3t_allocations;
 #endif
@@ -515,7 +518,7 @@ static g3t_logits *g3t_logits_allocate(void) {
 #ifdef ET_G3T_TESTING
   if (g3t_allocations >= g3t_allocation_limit) return NULL;
 #endif
-  g3t_logits *logits = calloc(1, sizeof(*logits));
+  g3t_logits *logits = ET_R_ALLOC(ET_R_GENERATION,2,calloc(1, sizeof(*logits)),1u,sizeof(*logits));
 #ifdef ET_G3T_TESTING
   if (logits) ++g3t_allocations;
 #endif
@@ -643,7 +646,7 @@ void *et_g3t_private_generator_seed_v1(
   et_kernel_error error;
   if (et_a2_kv_cache_create_v1(1, 1, 2, 2, 2, &c->cache, &error)) {
     g3t_a2_failure(&error);
-    free(c);
+    ET_R_FREE(ET_R_GENERATION,0,c,1u,sizeof(*c));
     return NULL;
   }
   c->h.kind = G3T_GENERATOR;
@@ -691,7 +694,7 @@ void *et_g3t_private_generator_rng_v1(
   et_kernel_error error;
   if (et_a2_kv_cache_create_v1(1, 1, 2, 2, 2, &c->cache, &error)) {
     g3t_a2_failure(&error);
-    free(c);
+    ET_R_FREE(ET_R_GENERATION,0,c,1u,sizeof(*c));
     return NULL;
   }
   c->h.kind = G3T_GENERATOR;
@@ -1035,7 +1038,7 @@ void *et_g3r_private_g3t_save_begin_v1(
     g3t_bad(G3T_STATE, G3T_INVARIANT);
     return NULL;
   }
-  g3r_save_hold *hold = calloc(1, sizeof(*hold));
+  g3r_save_hold *hold = ET_R_ALLOC(ET_R_GENERATION,8,calloc(1, sizeof(*hold)),1u,sizeof(*hold));
   if (!hold) {
     g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
     return NULL;
@@ -1043,13 +1046,13 @@ void *et_g3r_private_g3t_save_begin_v1(
   et_f32_tensor_error error;
   if (et_g3t_model_pins_begin_internal(
           o->p, (const void *const *)o->handles, &c->pins, &error) != 0) {
-    free(hold);
+    ET_R_FREE(ET_R_GENERATION,8,hold,1u,sizeof(*hold));
     g3t_f32_failure(&error);
     return NULL;
   }
   if (g3t_check_binding(c) != 0) {
     et_g3t_model_pins_end_internal(&c->pins);
-    free(hold);
+    ET_R_FREE(ET_R_GENERATION,8,hold,1u,sizeof(*hold));
     return NULL;
   }
   hold->context = c;
@@ -1059,14 +1062,14 @@ void *et_g3r_private_g3t_save_begin_v1(
   if (g3t_capture_kernel(et_a2_kv_cache_read_borrow_begin_v1(
           c->cache, &hold->cache_borrow, &cache_error), &cache_error)) {
     et_g3t_model_pins_end_internal(&c->pins);
-    free(hold);
+    ET_R_FREE(ET_R_GENERATION,8,hold,1u,sizeof(*hold));
     return NULL;
   }
   if (g3r_save_cache_check(hold, 1) != 0) {
     if (et_a2_kv_cache_read_borrow_end_v1(
             &hold->cache_borrow, &cache_error) != 0) abort();
     et_g3t_model_pins_end_internal(&c->pins);
-    free(hold);
+    ET_R_FREE(ET_R_GENERATION,8,hold,1u,sizeof(*hold));
     return NULL;
   }
   g3r_save_capture_words(c, &hold->value);
@@ -1438,7 +1441,7 @@ void *et_g3t_private_input_from_pair_v1(int64_t first, int64_t second) {
     g3t_bad(G3T_ARGUMENT, G3T_CONFIG);
     return NULL;
   }
-  g3t_input *input = calloc(1, sizeof(*input));
+  g3t_input *input = ET_R_ALLOC(ET_R_GENERATION,1,calloc(1, sizeof(*input)),1u,sizeof(*input));
   if (!input) {
     g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
     return NULL;
@@ -1465,7 +1468,7 @@ void *et_g3t_private_input_from_token_v1(int64_t token) {
     return NULL;
   }
 #endif
-  g3t_input *input = calloc(1, sizeof(*input));
+  g3t_input *input = ET_R_ALLOC(ET_R_GENERATION,1,calloc(1, sizeof(*input)),1u,sizeof(*input));
   if (!input) {
     g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
     return NULL;
@@ -1478,13 +1481,13 @@ void *et_g3t_private_input_from_token_v1(int64_t token) {
   et_i64_tensor_error error;
   if (et_i64_tensor_create_v1(2, shape, &input->tensor, &error)) {
     g3t_i64_failure(&error);
-    free(input);
+    ET_R_FREE(ET_R_GENERATION,1,input,1u,sizeof(*input));
     return NULL;
   }
   if (et_i64_tensor_copy_from_v1(input->tensor, &token, 1, &error)) {
     g3t_i64_failure(&error);
     if (et_i64_tensor_destroy_v1(&input->tensor, &error)) abort();
-    free(input);
+    ET_R_FREE(ET_R_GENERATION,1,input,1u,sizeof(*input));
     return NULL;
   }
 #endif
@@ -1528,7 +1531,7 @@ void *et_g3t_private_input_from_t1_v1(void *sealed_t1) {
     return NULL;
   }
 #endif
-  g3t_input *input = calloc(1, sizeof(*input));
+  g3t_input *input = ET_R_ALLOC(ET_R_GENERATION,1,calloc(1, sizeof(*input)),1u,sizeof(*input));
   if (!input) {
     g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
     return NULL;
@@ -1540,14 +1543,14 @@ void *et_g3t_private_input_from_t1_v1(void *sealed_t1) {
   et_i64_tensor_error error;
   if (et_i64_tensor_create_v1(2, shape, &input->tensor, &error)) {
     g3t_i64_failure(&error);
-    free(input);
+    ET_R_FREE(ET_R_GENERATION,1,input,1u,sizeof(*input));
     return NULL;
   }
   if (et_i64_tensor_copy_from_v1(input->tensor, words, (size_t)length,
                                  &error)) {
     g3t_i64_failure(&error);
     if (et_i64_tensor_destroy_v1(&input->tensor, &error)) abort();
-    free(input);
+    ET_R_FREE(ET_R_GENERATION,1,input,1u,sizeof(*input));
     return NULL;
   }
   input->length = length;
@@ -1673,7 +1676,7 @@ void *et_g3t_private_logits_reserve_v1(void *candidate) {
   et_f32_tensor_error error;
   if (et_f32_tensor_create_v1(2, shape, &logits->tensor, &error)) {
     g3t_f32_failure(&error);
-    free(logits);
+    ET_R_FREE(ET_R_GENERATION,2,logits,1u,sizeof(*logits));
     return NULL;
   }
   logits->h.kind = G3T_LOGITS;
@@ -1759,7 +1762,7 @@ void *et_g3t_private_output_reserve_v1(void *candidate, int64_t prompt_length) {
     g3t_bad(G3T_STATE, G3T_CONFIG);
     return NULL;
   }
-  g3t_output *output = calloc(1, sizeof(*output));
+  g3t_output *output = ET_R_ALLOC(ET_R_GENERATION,3,calloc(1, sizeof(*output)),1u,sizeof(*output));
   if (!output) {
     g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
     return NULL;
@@ -1768,7 +1771,7 @@ void *et_g3t_private_output_reserve_v1(void *candidate, int64_t prompt_length) {
   et_i64_tensor_error error;
   if (et_i64_tensor_create_v1(1, shape, &output->ids, &error)) {
     g3t_i64_failure(&error);
-    free(output);
+    ET_R_FREE(ET_R_GENERATION,3,output,1u,sizeof(*output));
     return NULL;
   }
   output->h.kind = G3T_OUTPUT;
@@ -1829,7 +1832,7 @@ void *et_g3t_private_output_ids_clone_v1(void *candidate) {
     return NULL;
   }
 #endif
-  g3t_ids_clone *clone = calloc(1, sizeof(*clone));
+  g3t_ids_clone *clone = ET_R_ALLOC(ET_R_GENERATION,4,calloc(1, sizeof(*clone)),1u,sizeof(*clone));
   if (!clone) {
     g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
     return NULL;
@@ -1840,7 +1843,7 @@ void *et_g3t_private_output_ids_clone_v1(void *candidate) {
   const uint64_t shape[1] = {(uint64_t)output->G};
   if (et_i64_tensor_create_v1(1, shape, &clone->ids, &error)) {
     g3t_i64_failure(&error);
-    free(clone);
+    ET_R_FREE(ET_R_GENERATION,4,clone,1u,sizeof(*clone));
     return NULL;
   }
   int64_t value[1] = {0};
@@ -1850,7 +1853,7 @@ void *et_g3t_private_output_ids_clone_v1(void *candidate) {
                                  &error)) {
     g3t_i64_failure(&error);
     if (et_i64_tensor_destroy_v1(&clone->ids, &error)) abort();
-    free(clone);
+    ET_R_FREE(ET_R_GENERATION,4,clone,1u,sizeof(*clone));
     return NULL;
   }
   clone->h.kind = G3T_IDS_CLONE;
@@ -1884,7 +1887,7 @@ void *et_g3t_private_output_lengths_clone_v1(void *candidate) {
     return NULL;
   }
 #endif
-  g3t_lengths_clone *clone = calloc(1, sizeof(*clone));
+  g3t_lengths_clone *clone = ET_R_ALLOC(ET_R_GENERATION,5,calloc(1, sizeof(*clone)),1u,sizeof(*clone));
   if (!clone) {
     g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
     return NULL;
@@ -1895,14 +1898,14 @@ void *et_g3t_private_output_lengths_clone_v1(void *candidate) {
   const uint64_t shape[1] = {1};
   if (et_i64_tensor_create_v1(1, shape, &clone->value, &error)) {
     g3t_i64_failure(&error);
-    free(clone);
+    ET_R_FREE(ET_R_GENERATION,5,clone,1u,sizeof(*clone));
     return NULL;
   }
   const int64_t value = output->length;
   if (et_i64_tensor_copy_from_v1(clone->value, &value, 1, &error)) {
     g3t_i64_failure(&error);
     if (et_i64_tensor_destroy_v1(&clone->value, &error)) abort();
-    free(clone);
+    ET_R_FREE(ET_R_GENERATION,5,clone,1u,sizeof(*clone));
     return NULL;
   }
   clone->h.kind = G3T_LENGTHS_CLONE;
@@ -1938,7 +1941,7 @@ void *et_g3t_private_output_cache_lengths_clone_v1(void *candidate) {
     return NULL;
   }
 #endif
-  g3t_cache_lengths_clone *clone = calloc(1, sizeof(*clone));
+  g3t_cache_lengths_clone *clone = ET_R_ALLOC(ET_R_GENERATION,6,calloc(1, sizeof(*clone)),1u,sizeof(*clone));
   if (!clone) {
     g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
     return NULL;
@@ -1949,14 +1952,14 @@ void *et_g3t_private_output_cache_lengths_clone_v1(void *candidate) {
   const uint64_t shape[1] = {1};
   if (et_i64_tensor_create_v1(1, shape, &clone->value, &error)) {
     g3t_i64_failure(&error);
-    free(clone);
+    ET_R_FREE(ET_R_GENERATION,6,clone,1u,sizeof(*clone));
     return NULL;
   }
   const int64_t value = output->cache_length;
   if (et_i64_tensor_copy_from_v1(clone->value, &value, 1, &error)) {
     g3t_i64_failure(&error);
     if (et_i64_tensor_destroy_v1(&clone->value, &error)) abort();
-    free(clone);
+    ET_R_FREE(ET_R_GENERATION,6,clone,1u,sizeof(*clone));
     return NULL;
   }
   clone->h.kind = G3T_CACHE_LENGTHS_CLONE;
@@ -1987,7 +1990,7 @@ void *et_g3t_private_output_rng_clone_v1(void *candidate) {
     return NULL;
   }
 #endif
-  g3t_rng_clone *clone = calloc(1, sizeof(*clone));
+  g3t_rng_clone *clone = ET_R_ALLOC(ET_R_GENERATION,7,calloc(1, sizeof(*clone)),1u,sizeof(*clone));
   if (!clone) {
     g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
     return NULL;
@@ -2017,7 +2020,7 @@ void *et_g3t_private_rng_words_create_v1(
     return NULL;
   }
 #endif
-  g3t_rng_clone *clone = calloc(1, sizeof(*clone));
+  g3t_rng_clone *clone = ET_R_ALLOC(ET_R_GENERATION,7,calloc(1, sizeof(*clone)),1u,sizeof(*clone));
   if (!clone) {
     g3t_bad(G3T_INTERNAL, G3T_ALLOCATION);
     return NULL;
@@ -4008,3 +4011,7 @@ int64_t et_g3t_test_cache_length_v1(void *candidate) {
 }
 #endif
 #endif
+
+/* CPUV1_RESOURCE_BEGIN */
+#include "../../native/cpuv1_resource_generation.inc"
+/* CPUV1_RESOURCE_END */

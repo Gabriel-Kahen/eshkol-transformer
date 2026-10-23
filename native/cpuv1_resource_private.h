@@ -19,6 +19,19 @@ enum et_cpuv1_resource_domain {
   ET_R_SCHEME, ET_R_RUNTIME, ET_R_DOMAINS
 };
 enum { ET_R_KINDS = 64, ET_R_PACKET_VERSION = 1 };
+enum et_cpuv1_runtime_field {
+ ET_R_ROOT,ET_R_CURRENT_BLOCKS,ET_R_ADOPTED_BLOCKS,ET_R_CURRENT_USED,
+ ET_R_ADOPTED_USED,ET_R_CURRENT_CAPACITY,ET_R_ADOPTED_CAPACITY,ET_R_SCOPES,
+ ET_R_METADATA_REQUESTED,ET_R_SCHEME_CAPACITY,ET_R_SCHEME_USED,
+ ET_R_TRACKED_CURRENT,ET_R_TRACKED_PEAK,ET_R_LAMBDA_COUNT,ET_R_LAMBDA_CAPACITY,
+ ET_R_MALL_ARENA,ET_R_MALL_HBLKHD,ET_R_MALL_UORDBLKS,ET_R_MALL_FORDBLKS,
+ ET_R_MALL_HBLKS,ET_R_MALL_ORDBLKS,ET_R_ALLOCATOR_BACKING,ET_R_ALLOCATOR_INUSE,
+ ET_R_KNOWN_USABLE,ET_R_ALLOCATOR_RESIDUAL,ET_R_RSS_CURRENT,ET_R_RSS_PEAK,
+ ET_R_PID,ET_R_PAGE_BYTES,ET_R_NORMAL_PROFILE,ET_R_SIZEOF_ARENA,
+ ET_R_SIZEOF_BLOCK,ET_R_SIZEOF_SCOPE,ET_R_SIZEOF_MUTEX,ET_R_SIZEOF_REFLECTION,
+ ET_R_SIZEOF_REFLECTION_ENTRY,ET_R_CURRENT_ARENA,ET_R_SHARED_ARENA,ET_R_REGION,
+ ET_R_RUNTIME_FIELDS
+};
 enum et_cpuv1_resource_status {
   ET_R_OK, ET_R_ARGUMENT, ET_R_OVERFLOW, ET_R_UNSUPPORTED,
   ET_R_COVERAGE, ET_R_MISMATCH, ET_R_SCRATCH, ET_R_NOT_QUIESCENT
@@ -60,16 +73,25 @@ int et_cpuv1_test_resource_add_v1(et_cpuv1_resource_packet_v1 *packet,
                                 unsigned domain, unsigned kind,
                                 const void *base, size_t count, size_t size,
                                 unsigned state, size_t alignment);
+void et_cpuv1_test_resource_layout_v1(et_cpuv1_resource_packet_v1 *packet,
+                                    unsigned domain,unsigned kind,
+                                    size_t unit_size,size_t alignment);
 void et_cpuv1_test_resource_fail_v1(et_cpuv1_resource_packet_v1 *packet,
                                   unsigned status);
 void et_cpuv1_test_resource_domain_v1(et_cpuv1_resource_packet_v1 *packet,
                                     unsigned domain);
+/* Native producer aggregator; no Scheme COMPLETE is synthesized. */
+int et_cpuv1_test_native_resource_snapshot_v1(et_cpuv1_resource_packet_v1 *packet);
+/* Explicit pre-P0 initialization. Observe itself never initializes an arena. */
+int et_cpuv1_test_runtime_resource_warm_v1(void);
+void et_cpuv1_test_runtime_resource_snapshot_v1(et_cpuv1_resource_packet_v1 *packet);
 /* Test mutation only; absence/mismatch must never produce COMPLETE. */
 void et_cpuv1_test_resource_mutation_v1(unsigned mutation);
 
 #ifdef __cplusplus
 }
 #endif
+#define ET_R_EXTRA_ARG(X) , X
 #define ET_R_ALLOC(D,K,E,N,S) \
   et_cpuv1_test_alloc_event_v1((D),(K),(E),(N),(S))
 #define ET_R_FREE(D,K,P,N,S) do { \
@@ -80,6 +102,7 @@ void et_cpuv1_test_resource_mutation_v1(unsigned mutation);
 #define ET_R_REALLOC(D,K,E,P,O,N,S) \
   et_cpuv1_test_realloc_event_v1((D),(K),(P),(O),(N),(S))
 #else
+#define ET_R_EXTRA_ARG(X)
 #define ET_R_ALLOC(D,K,E,N,S) E
 #define ET_R_FREE(D,K,P,N,S) free(P)
 #define ET_R_REALLOC(D,K,E,P,O,N,S) E

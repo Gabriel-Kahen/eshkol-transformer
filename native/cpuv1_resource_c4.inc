@@ -7,6 +7,20 @@
 } while (0)
 #define C_CONTROL(K,B,STATE) C_BASE(K,B,1u,sizeof(*(B)),STATE,_Alignof(__typeof__(*(B))))
 void et_cpuv1_test_census_c4_v1(et_cpuv1_resource_packet_v1 *packet) {
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_C4,0,sizeof(et_g3c4_model_owner_internal),_Alignof(et_g3c4_model_owner_internal));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_C4,1,sizeof(et_cpu4_candidate_internal),_Alignof(et_cpu4_candidate_internal));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_C4,2,sizeof(et_g3c4_training_lease_internal),_Alignof(et_g3c4_training_lease_internal));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_C4,3,sizeof(cpu4_training_child),_Alignof(cpu4_training_child));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_C4,4,sizeof(et_g3c4_context_internal),_Alignof(et_g3c4_context_internal));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_C4,5,sizeof(et_g3c4_rng_internal),_Alignof(et_g3c4_rng_internal));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_C4,6,sizeof(et_g3c4_input_internal),_Alignof(et_g3c4_input_internal));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_C4,7,sizeof(et_g3c4_output_internal),_Alignof(et_g3c4_output_internal));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_C4,8,sizeof(et_g3c4_logits_internal),_Alignof(et_g3c4_logits_internal));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_C4,9,sizeof(et_g3c4_typed_result_internal),_Alignof(et_g3c4_typed_result_internal));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_C4,10,sizeof(et_g3c4_terminal_ids_clone_internal),_Alignof(et_g3c4_terminal_ids_clone_internal));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_C4,11,sizeof(et_g3c4_result_tensor_internal),_Alignof(et_g3c4_result_tensor_internal));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_C4,12,sizeof(et_g3c4_manual_frame_internal),_Alignof(et_g3c4_manual_frame_internal));
+
   for (et_g3c4_model_owner_internal *p=et_g3c4_owner_registry;p;p=p->registry_next) {
     unsigned state=p->state==ET_G3C4_OWNER_ABORTED?ET_R_DEAD:
         p->state==ET_G3C4_OWNER_SEALED?ET_R_LIVE:ET_R_PREPARED;
@@ -16,6 +30,9 @@ void et_cpuv1_test_census_c4_v1(et_cpuv1_resource_packet_v1 *packet) {
       et_cpuv1_test_resource_fail_v1(packet,ET_R_MISMATCH); return;
     }
     packet->details[ET_R_C4][p->state==ET_G3C4_OWNER_ABORTED?1:0]++;
+    if (p->state!=ET_G3C4_OWNER_SEALED && p->state!=ET_G3C4_OWNER_ABORTED) {
+      et_cpuv1_test_resource_fail_v1(packet,ET_R_NOT_QUIESCENT); return;
+    }
     /* A live idle generator is allowed; an active native call is not. */
     if (p->active) {
       et_cpuv1_test_resource_fail_v1(packet,ET_R_NOT_QUIESCENT); return;
@@ -28,6 +45,11 @@ void et_cpuv1_test_census_c4_v1(et_cpuv1_resource_packet_v1 *packet) {
     if (p->state<CPU4_CANDIDATE_CONSTRUCTING || p->state>CPU4_CANDIDATE_DEAD ||
         !p->owner || p->owner->candidate!=p) {
       et_cpuv1_test_resource_fail_v1(packet,ET_R_MISMATCH); return;
+    }
+    packet->details[ET_R_C4][24+(unsigned)p->state]++;
+    if (p->state==CPU4_CANDIDATE_CONSTRUCTING ||
+        p->state==CPU4_CANDIDATE_PREPARED || p->state==CPU4_CANDIDATE_REVOKED) {
+      et_cpuv1_test_resource_fail_v1(packet,ET_R_NOT_QUIESCENT); return;
     }
     if (p->state==CPU4_CANDIDATE_ADOPTED) packet->details[ET_R_C4][2]++;
   }
@@ -49,7 +71,10 @@ void et_cpuv1_test_census_c4_v1(et_cpuv1_resource_packet_v1 *packet) {
       }
       packet->details[ET_R_C4][7]++;
       packet->details[ET_R_C4][8+(unsigned)c->kind]++;
-      if (c->live) packet->details[ET_R_C4][6]++;
+      if (c->live) {
+        packet->details[ET_R_C4][6]++;
+        et_cpuv1_test_resource_fail_v1(packet,ET_R_NOT_QUIESCENT); return;
+      }
     }
     if (p->phase!=CPU4_LEASE_IDLE && p->phase!=CPU4_LEASE_DEAD) {
       et_cpuv1_test_resource_fail_v1(packet,ET_R_NOT_QUIESCENT); return;

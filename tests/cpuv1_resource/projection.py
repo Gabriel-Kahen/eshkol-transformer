@@ -31,12 +31,15 @@ def arguments(text, opening):
 def off(text):
     text = re.sub(r'/\* CPUV1_RESOURCE_BEGIN \*/.*?/\* CPUV1_RESOURCE_END \*/',
                   '', text, flags=re.S)
-    pattern = re.compile(r'\bET_R_(ALLOC|FREE|REALLOC)\s*\(')
+    pattern = re.compile(r'\bET_R_(ALLOC|FREE|REALLOC|EXTRA_ARG)\s*\(')
     while True:
         m = pattern.search(text)
         if not m: return text
         args, end = arguments(text, m.end() - 1)
-        if m[1] == 'FREE':
+        if m[1] == 'EXTRA_ARG':
+            assert len(args) == 1
+            original = ''
+        elif m[1] == 'FREE':
             assert len(args) == 5
             original = 'free(' + args[2] + ')'
         else:

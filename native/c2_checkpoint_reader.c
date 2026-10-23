@@ -1,5 +1,9 @@
 #define _GNU_SOURCE
 
+/* CPUV1_RESOURCE_BEGIN */
+#include "cpuv1_resource_private.h"
+/* CPUV1_RESOURCE_END */
+
 #include "c2_checkpoint_reader.h"
 
 #include <errno.h>
@@ -254,7 +258,7 @@ int64_t et_c2_checkpoint_reader_open_v1(const char *path,
     test_fd_closed();
     return make_status(ET_CHECKPOINT_IO_STAGE_ALLOCATE, saved_errno);
   }
-  reader = (et_c2_checkpoint_reader *)malloc(sizeof(*reader));
+  reader = (et_c2_checkpoint_reader *)ET_R_ALLOC(ET_R_C2_IO,1,malloc(sizeof(*reader)),1u,sizeof(*reader));
   if (reader == NULL) {
     (void)close(descriptor);
     test_fd_closed();
@@ -371,7 +375,7 @@ et_c2_checkpoint_reader_close_v1(et_c2_checkpoint_reader **reader_slot) {
     saved_errno = errno;
   }
   test_fd_closed();
-  free(reader);
+  ET_R_FREE(ET_R_C2_IO,1,reader,1u,sizeof(*reader));
   if (injected_failure) {
     return make_status(ET_CHECKPOINT_IO_STAGE_CLOSE_SOURCE, saved_errno);
   }
@@ -380,3 +384,9 @@ et_c2_checkpoint_reader_close_v1(et_c2_checkpoint_reader **reader_slot) {
   }
   return 0;
 }
+
+/* CPUV1_RESOURCE_BEGIN */
+#ifdef ET_CPUV1_RESOURCE_TESTING
+#include "cpuv1_resource_c2_reader.inc"
+#endif
+/* CPUV1_RESOURCE_END */

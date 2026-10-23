@@ -1,3 +1,6 @@
+/* CPUV1_RESOURCE_BEGIN */
+#include "../../native/cpuv1_resource_private.h"
+/* CPUV1_RESOURCE_END */
 #include "m3t_transport.h"
 #include "m3t_f32_scoped.h"
 #include "../../native/f32_parameter_internal.h"
@@ -108,7 +111,7 @@ static int copy_tensor(et_f32_tensor *dst,et_f32_tensor *src) {
 }
 void *et_m3t_private_initializer_create_v1(int64_t seed) {
  clear();if(seed<0) {bad(ET_M3T_INVALID_ARGUMENT,ET_M3T_CODE_SELECTOR);return NULL;}
- initializer *s=allocate(sizeof(*s));if(!s)return NULL;
+ initializer *s=ET_R_ALLOC(ET_R_TRAIN,3,allocate(sizeof(*s)),1u,sizeof(*s));if(!s)return NULL;
  s->words[0]=1;s->words[1]=seed;enroll(&s->r,INITIALIZER);return s;
 }
 int64_t et_m3t_private_initializer_word_v1(void *p,int64_t i) {
@@ -133,8 +136,8 @@ void *et_m3t_private_owner_create_v1(void *p) {
  uint64_t low,high;memcpy(&low,&s->words[2],8);memcpy(&high,&s->words[3],8);
  if(high==UINT64_MAX && low>UINT64_MAX-290) {bad(ET_M3T_INVALID_STATE,ET_M3T_CODE_COUNTER);return NULL;}
  if(discover() || preflight_capabilities())return NULL;
- owner *o=allocate(sizeof(*o));if(!o)return NULL;
- o->successor=allocate(sizeof(*o->successor));if(!o->successor){free(o);return NULL;}
+ owner *o=ET_R_ALLOC(ET_R_TRAIN,4,allocate(sizeof(*o)),1u,sizeof(*o));if(!o)return NULL;
+ o->successor=ET_R_ALLOC(ET_R_TRAIN,3,allocate(sizeof(*o->successor)),1u,sizeof(*o->successor));if(!o->successor){ET_R_FREE(ET_R_TRAIN,4,o,1u,sizeof(*o));return NULL;}
  memcpy(o->successor->words,s->words,sizeof(s->words));o->original=s;
  for(size_t i=0;i<14;i++) {
   et_f32_tensor *t=new_tensor(parameter_rank(i),parameter_shape[i]);et_f32_tensor_error e;
@@ -145,7 +148,7 @@ void *et_m3t_private_owner_create_v1(void *p) {
  enroll(&o->successor->r,INITIALIZER);enroll(&o->r,OWNER);staged_owner=o;return o;
 failed:
  for(size_t i=0;i<14;i++)if(o->p[i]){et_f32_tensor_error e;et_f32_parameter_destroy_v1(&o->p[i],&e);}
- free(o->successor);free(o);return NULL;
+ ET_R_FREE(ET_R_TRAIN,3,o->successor,1u,sizeof(*o->successor));ET_R_FREE(ET_R_TRAIN,4,o,1u,sizeof(*o));return NULL;
 }
 void *et_m3t_private_owner_parameter_v1(void *p,int64_t i) {
  clear();owner *o=admit(p,OWNER,0);if(!o)return NULL;
@@ -308,8 +311,8 @@ int64_t et_m3t_private_owner_abort_v1(void *p) {
  o->successor->r.state=-1;o->r.state=-1;staged_owner=NULL;return 0;
 }
 void *et_m3t_private_input_create_v1(void) {
- clear();input *i=allocate(sizeof(*i));if(!i)return NULL;
- i->tensor=new_ids();if(!i->tensor){free(i);return NULL;}
+ clear();input *i=ET_R_ALLOC(ET_R_TRAIN,5,allocate(sizeof(*i)),1u,sizeof(*i));if(!i)return NULL;
+ i->tensor=new_ids();if(!i->tensor){ET_R_FREE(ET_R_TRAIN,5,i,1u,sizeof(*i));return NULL;}
  enroll(&i->r,INPUT);return i;
 }
 int64_t et_m3t_private_input_copy_v1(void *p,int64_t first,int64_t second) {
@@ -336,8 +339,8 @@ int64_t et_m3t_private_input_release_v1(void *p) {
  i->r.state=-1;return 0;
 }
 void *et_m3t_private_logits_create_v1(void) {
- clear();logits *l=allocate(sizeof(*l));if(!l)return NULL;
- l->tensor=new_tensor(3,logits_shape);if(!l->tensor){free(l);return NULL;}
+ clear();logits *l=ET_R_ALLOC(ET_R_TRAIN,6,allocate(sizeof(*l)),1u,sizeof(*l));if(!l)return NULL;
+ l->tensor=new_tensor(3,logits_shape);if(!l->tensor){ET_R_FREE(ET_R_TRAIN,6,l,1u,sizeof(*l));return NULL;}
  enroll(&l->r,LOGITS);return l;
 }
 static unsigned char *byte_payload(void *header,int64_t count) {
@@ -397,7 +400,7 @@ static void destroy_workspace(workspace *w) {
 void *et_m3t_private_workspace_create_v1(void *p) {
  clear();owner *o=admit(p,OWNER,0);if(!o)return NULL;
  if(o->r.state!=1){bad(ET_M3T_INVALID_STATE,ET_M3T_CODE_LIFECYCLE);return NULL;}
- workspace *w=allocate(sizeof(*w));if(!w)return NULL;w->model=o;
+ workspace *w=ET_R_ALLOC(ET_R_TRAIN,7,allocate(sizeof(*w)),1u,sizeof(*w));if(!w)return NULL;w->model=o;
  for(size_t i=0;i<14;i++)if(!(w->saved[i]=new_tensor(parameter_rank(i),parameter_shape[i])))goto failed;
  for(size_t i=0;i<SLOT_COUNT;i++) {
   const uint64_t *shape;size_t rank=slot_shape(i,&shape);
@@ -410,7 +413,7 @@ void *et_m3t_private_workspace_create_v1(void *p) {
  int64_t positions[]={0,1};et_i64_tensor_error ie;
  if(ierror(et_i64_tensor_copy_from_v1(w->positions,positions,2,&ie),&ie))goto failed;
  memset(w->keep,1,4);enroll(&w->r,WORKSPACE);return w;
-failed:destroy_workspace(w);free(w);return NULL;
+failed:destroy_workspace(w);ET_R_FREE(ET_R_TRAIN,7,w,1u,sizeof(*w));return NULL;
 }
 static int active(workspace *w) {
  if(w->busy)return (int)bad(ET_M3T_INVALID_STATE,ET_M3T_CODE_REENTRANCY);

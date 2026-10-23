@@ -1,3 +1,6 @@
+/* CPUV1_RESOURCE_BEGIN */
+#include "cpuv1_resource_private.h"
+/* CPUV1_RESOURCE_END */
 #include "c2_checkpoint_core.h"
 
 #include "c2_checkpoint_reader.h"
@@ -421,7 +424,7 @@ int32_t et_c2_private_checkpoint_load_image_v1(
   }
   allocation_bytes = offsetof(et_c2_private_checkpoint_image, bytes) +
                      (size_t)physical;
-  image = (et_c2_private_checkpoint_image *)c2_malloc(allocation_bytes);
+  image = (et_c2_private_checkpoint_image *)ET_R_ALLOC(ET_R_C2_IO,0,c2_malloc(allocation_bytes),allocation_bytes,1u);
   if (image == NULL) {
     const int allocation_errno = errno == 0 ? ENOMEM : errno;
     status = core_fail(error, ET_C2_CORE_IO,
@@ -484,7 +487,7 @@ int32_t et_c2_private_checkpoint_load_image_v1(
   return ET_C2_CORE_OK;
 
 cleanup:
-  free(image);
+  ET_R_FREE(ET_R_C2_IO,0,image,offsetof(et_c2_private_checkpoint_image,bytes)+(size_t)image->bytevector_length,1u);
   if (reader != NULL) {
     native_status = et_c2_checkpoint_reader_close_v1(&reader);
     if (status == ET_C2_CORE_OK && native_status != 0)
@@ -538,6 +541,12 @@ int32_t et_c2_private_checkpoint_image_release_v1(
   *image_slot = NULL;
   image->magic = 0u;
   memset(image->bytes, 0, (size_t)image->bytevector_length);
-  free(image);
+  ET_R_FREE(ET_R_C2_IO,0,image,offsetof(et_c2_private_checkpoint_image,bytes)+(size_t)image->bytevector_length,1u);
   return ET_C2_CORE_OK;
 }
+
+/* CPUV1_RESOURCE_BEGIN */
+#ifdef ET_CPUV1_RESOURCE_TESTING
+#include "cpuv1_resource_c2.inc"
+#endif
+/* CPUV1_RESOURCE_END */

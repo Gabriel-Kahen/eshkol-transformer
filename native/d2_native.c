@@ -1,5 +1,9 @@
 #define _POSIX_C_SOURCE 200809L
 
+/* CPUV1_RESOURCE_BEGIN */
+#include "cpuv1_resource_private.h"
+/* CPUV1_RESOURCE_END */
+
 #include "d2_native.h"
 
 #include "eshkol_transformer/i64_tensor.h"
@@ -367,12 +371,12 @@ static void cleanup_control(et_d2_batch_control *batch) {
     require_i1_cleanup(et_i64_tensor_destroy_v1(&batch->input_tensor, &error));
   }
   if (batch->mask_data != NULL) {
-    free(batch->mask_data);
+    ET_R_FREE(ET_R_D2,3,batch->mask_data,batch->elements,sizeof(*batch->mask_data));
 #ifdef ET_D2_NATIVE_TESTING
     owned_allocations--;
 #endif
   }
-  free(batch);
+  ET_R_FREE(ET_R_D2,2,batch,1u,sizeof(*batch));
 #ifdef ET_D2_NATIVE_TESTING
   owned_allocations--;
 #endif
@@ -394,7 +398,7 @@ int64_t et_d2_dataset_open_v1(const void *owner, int64_t shuffle_slots_value) {
   if (should_fail(ET_D2_TEST_FAIL_DATASET)) {
     return status(ET_D2_NATIVE_STATUS_ALLOCATION_FAILED);
   }
-  dataset = (et_d2_dataset_control *)calloc(1u, sizeof(*dataset));
+  dataset = (et_d2_dataset_control *)ET_R_ALLOC(ET_R_D2,0,calloc(1u, sizeof(*dataset)),1u,sizeof(*dataset));
   if (dataset == NULL) {
     return status(ET_D2_NATIVE_STATUS_ALLOCATION_FAILED);
   }
@@ -403,16 +407,16 @@ int64_t et_d2_dataset_open_v1(const void *owner, int64_t shuffle_slots_value) {
 #endif
   if (shuffle_slots != 0u) {
     if (should_fail(ET_D2_TEST_FAIL_SHUFFLE)) {
-      free(dataset);
+      ET_R_FREE(ET_R_D2,0,dataset,1u,sizeof(*dataset));
 #ifdef ET_D2_NATIVE_TESTING
       owned_allocations--;
 #endif
       return status(ET_D2_NATIVE_STATUS_ALLOCATION_FAILED);
     }
     dataset->shuffle_window =
-        (int64_t *)calloc(shuffle_slots, sizeof(*dataset->shuffle_window));
+        (int64_t *)ET_R_ALLOC(ET_R_D2,1,calloc(shuffle_slots, sizeof(*dataset->shuffle_window)),shuffle_slots,sizeof(*dataset->shuffle_window));
     if (dataset->shuffle_window == NULL) {
-      free(dataset);
+      ET_R_FREE(ET_R_D2,0,dataset,1u,sizeof(*dataset));
 #ifdef ET_D2_NATIVE_TESTING
       owned_allocations--;
 #endif
@@ -448,13 +452,13 @@ int64_t et_d2_dataset_close_v1(const void *owner) {
   if (batch != NULL) {
     cleanup_control(batch);
   }
-  free(dataset->shuffle_window);
+  ET_R_FREE(ET_R_D2,1,dataset->shuffle_window,dataset->shuffle_slots,sizeof(*dataset->shuffle_window));
 #ifdef ET_D2_NATIVE_TESTING
   if (dataset->shuffle_window != NULL) {
     owned_allocations--;
   }
 #endif
-  free(dataset);
+  ET_R_FREE(ET_R_D2,0,dataset,1u,sizeof(*dataset));
 #ifdef ET_D2_NATIVE_TESTING
   owned_allocations--;
 #endif
@@ -743,7 +747,7 @@ int64_t et_d2_batch_create_v1(const void *owner, int64_t rows_value,
     (void)status(ET_D2_NATIVE_STATUS_ALLOCATION_FAILED);
     return 0;
   }
-  batch = (et_d2_batch_control *)calloc(1u, sizeof(*batch));
+  batch = (et_d2_batch_control *)ET_R_ALLOC(ET_R_D2,2,calloc(1u, sizeof(*batch)),1u,sizeof(*batch));
   if (batch == NULL) {
     (void)status(ET_D2_NATIVE_STATUS_ALLOCATION_FAILED);
     return 0;
@@ -789,7 +793,7 @@ int64_t et_d2_batch_create_v1(const void *owner, int64_t rows_value,
     (void)status(ET_D2_NATIVE_STATUS_ALLOCATION_FAILED);
     return 0;
   }
-  batch->mask_data = (uint8_t *)calloc(batch->elements, sizeof(uint8_t));
+  batch->mask_data = (uint8_t *)ET_R_ALLOC(ET_R_D2,3,calloc(batch->elements, sizeof(uint8_t)),batch->elements,sizeof(uint8_t));
   if (batch->mask_data == NULL) {
     cleanup_control(batch);
     (void)status(ET_D2_NATIVE_STATUS_ALLOCATION_FAILED);
@@ -1026,3 +1030,9 @@ int64_t et_d2_batch_release_v1(const void *owner, int64_t generation) {
   cleanup_control(batch);
   return status(ET_D2_NATIVE_STATUS_OK);
 }
+
+/* CPUV1_RESOURCE_BEGIN */
+#ifdef ET_CPUV1_RESOURCE_TESTING
+#include "cpuv1_resource_d2.inc"
+#endif
+/* CPUV1_RESOURCE_END */
