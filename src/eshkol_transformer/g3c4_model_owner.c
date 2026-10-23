@@ -3477,6 +3477,14 @@ static int et_g3c4_dispatch_forward(
       &error);
 }
 
+/* Keep directives outside continued LINEAR/LAYOUT replacement lists. */
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+#define CPU4_QUERY_FORWARD(...) \
+  (cpu4_history_auth(context) != history ? \
+   (int)et_g3c4_error_state.category : et_g3c4_dispatch_forward(__VA_ARGS__))
+#else
+#define CPU4_QUERY_FORWARD(...) et_g3c4_dispatch_forward(__VA_ARGS__)
+#endif
 int64_t et_g3c4_private_full_prefix_forward_v1(
     void *candidate, const int64_t token_ids[4], float logits[1024]) {
   static const uint64_t ids_shape[2] = {1u, 4u};
@@ -3553,10 +3561,7 @@ int64_t et_g3c4_private_full_prefix_forward_v1(
   inputs[1] = context->pins.views[10];
   output = et_g3c4_view(
       scratch.et, sizeof(scratch.et), "f32", 3u, d4_shape);
-#ifdef ET_CPU4_C4_HISTORY_PRIVATE
-  if (cpu4_history_auth(context)!=history) goto fail;
-#endif
-  if (et_g3c4_dispatch_forward(
+  if (CPU4_QUERY_FORWARD(
           "g3c4.embedding-forward", "g3c4.embedding.forward",
           4u, token_embedding_row, inputs, 2u, output) != 0)
     goto fail;
@@ -3566,10 +3571,7 @@ int64_t et_g3c4_private_full_prefix_forward_v1(
   inputs[1] = context->pins.views[13];
   output = et_g3c4_view(
       scratch.ep, sizeof(scratch.ep), "f32", 3u, d4_shape);
-#ifdef ET_CPU4_C4_HISTORY_PRIVATE
-  if (cpu4_history_auth(context)!=history) goto fail;
-#endif
-  if (et_g3c4_dispatch_forward(
+  if (CPU4_QUERY_FORWARD(
           "g3c4.embedding-forward", "g3c4.embedding.forward",
           4u, position_embedding_row, inputs, 2u, output) != 0)
     goto fail;
@@ -3579,10 +3581,7 @@ int64_t et_g3c4_private_full_prefix_forward_v1(
   inputs[1] = et_g3c4_view(
       scratch.ep, sizeof(scratch.ep), "f32", 3u, d4_shape);
   output = et_g3c4_view(scratch.x, sizeof(scratch.x), "f32", 3u, d4_shape);
-#ifdef ET_CPU4_C4_HISTORY_PRIVATE
-  if (cpu4_history_auth(context)!=history) goto fail;
-#endif
-  if (et_g3c4_dispatch_forward(
+  if (CPU4_QUERY_FORWARD(
           "g3c4.residual", "g3c4.residual.forward",
           3u, d4_shape, inputs, 2u, output) != 0)
     goto fail;
@@ -3593,10 +3592,7 @@ int64_t et_g3c4_private_full_prefix_forward_v1(
   inputs[3] = et_g3c4_view(&epsilon, sizeof(epsilon), "f32", 0u, NULL);
   output = et_g3c4_view(
       scratch.n1, sizeof(scratch.n1), "f32", 3u, d4_shape);
-#ifdef ET_CPU4_C4_HISTORY_PRIVATE
-  if (cpu4_history_auth(context)!=history) goto fail;
-#endif
-  if (et_g3c4_dispatch_forward(
+  if (CPU4_QUERY_FORWARD(
           "g3c4.layer-norm", "g3c4.layer-norm.forward",
           3u, d4_shape, inputs, 4u, output) != 0)
     goto fail;
@@ -3611,10 +3607,7 @@ int64_t et_g3c4_private_full_prefix_forward_v1(
       sizeof(target) == sizeof(scratch.fu) ? d8_shape : \
       (sizeof(target) == sizeof(scratch.z) ? \
           (const uint64_t[3]){1u, 4u, 256u} : d4_shape)); \
-#ifdef ET_CPU4_C4_HISTORY_PRIVATE
-  if (cpu4_history_auth(context)!=history) goto fail;
-#endif
-  if (et_g3c4_dispatch_forward( \
+  if (CPU4_QUERY_FORWARD( \
           "g3c4.linear", "g3c4.linear.forward-no-bias", \
           4u, (row), inputs, 2u, output) != 0) \
     goto fail; \
@@ -3631,10 +3624,7 @@ int64_t et_g3c4_private_full_prefix_forward_v1(
       (source), sizeof(source), "f32", (source_rank), (source_shape)); \
   output = et_g3c4_view( \
       (target), sizeof(target), "f32", (target_rank), (target_shape)); \
-#ifdef ET_CPU4_C4_HISTORY_PRIVATE
-  if (cpu4_history_auth(context)!=history) goto fail;
-#endif
-  if (et_g3c4_dispatch_forward( \
+  if (CPU4_QUERY_FORWARD( \
           "g3c4.head-layout", (operation), 4u, head_layout_row, \
           inputs, 1u, output) != 0) \
     goto fail; \
@@ -3698,10 +3688,7 @@ int64_t et_g3c4_private_full_prefix_forward_v1(
       attention_mask_shape);
   output = et_g3c4_view(
       scratch.ah, sizeof(scratch.ah), "f32", 4u, heads_shape);
-#ifdef ET_CPU4_C4_HISTORY_PRIVATE
-  if (cpu4_history_auth(context)!=history) goto fail;
-#endif
-  if (et_g3c4_dispatch_forward(
+  if (CPU4_QUERY_FORWARD(
           "g3c4.causal-attention", "g3c4.causal-attention.forward",
           6u, attention_row, inputs, 6u, output) != 0)
     goto fail;
@@ -3719,10 +3706,7 @@ int64_t et_g3c4_private_full_prefix_forward_v1(
   inputs[1] = et_g3c4_view(
       scratch.ao, sizeof(scratch.ao), "f32", 3u, d4_shape);
   output = et_g3c4_view(scratch.r, sizeof(scratch.r), "f32", 3u, d4_shape);
-#ifdef ET_CPU4_C4_HISTORY_PRIVATE
-  if (cpu4_history_auth(context)!=history) goto fail;
-#endif
-  if (et_g3c4_dispatch_forward(
+  if (CPU4_QUERY_FORWARD(
           "g3c4.residual", "g3c4.residual.forward",
           3u, d4_shape, inputs, 2u, output) != 0)
     goto fail;
@@ -3733,10 +3717,7 @@ int64_t et_g3c4_private_full_prefix_forward_v1(
   inputs[3] = et_g3c4_view(&epsilon, sizeof(epsilon), "f32", 0u, NULL);
   output = et_g3c4_view(
       scratch.n2, sizeof(scratch.n2), "f32", 3u, d4_shape);
-#ifdef ET_CPU4_C4_HISTORY_PRIVATE
-  if (cpu4_history_auth(context)!=history) goto fail;
-#endif
-  if (et_g3c4_dispatch_forward(
+  if (CPU4_QUERY_FORWARD(
           "g3c4.layer-norm", "g3c4.layer-norm.forward",
           3u, d4_shape, inputs, 4u, output) != 0)
     goto fail;
@@ -3746,10 +3727,7 @@ int64_t et_g3c4_private_full_prefix_forward_v1(
       scratch.fu, sizeof(scratch.fu), "f32", 3u, d8_shape);
   output = et_g3c4_view(
       scratch.fg, sizeof(scratch.fg), "f32", 3u, d8_shape);
-#ifdef ET_CPU4_C4_HISTORY_PRIVATE
-  if (cpu4_history_auth(context)!=history) goto fail;
-#endif
-  if (et_g3c4_dispatch_forward(
+  if (CPU4_QUERY_FORWARD(
           "g3c4.gelu", "g3c4.gelu.forward",
           3u, d8_shape, inputs, 1u, output) != 0)
     goto fail;
@@ -3760,10 +3738,7 @@ int64_t et_g3c4_private_full_prefix_forward_v1(
   inputs[1] = et_g3c4_view(
       scratch.fd, sizeof(scratch.fd), "f32", 3u, d4_shape);
   output = et_g3c4_view(scratch.y, sizeof(scratch.y), "f32", 3u, d4_shape);
-#ifdef ET_CPU4_C4_HISTORY_PRIVATE
-  if (cpu4_history_auth(context)!=history) goto fail;
-#endif
-  if (et_g3c4_dispatch_forward(
+  if (CPU4_QUERY_FORWARD(
           "g3c4.residual", "g3c4.residual.forward",
           3u, d4_shape, inputs, 2u, output) != 0)
     goto fail;
@@ -3774,10 +3749,7 @@ int64_t et_g3c4_private_full_prefix_forward_v1(
   inputs[3] = et_g3c4_view(&epsilon, sizeof(epsilon), "f32", 0u, NULL);
   output = et_g3c4_view(
       scratch.nf, sizeof(scratch.nf), "f32", 3u, d4_shape);
-#ifdef ET_CPU4_C4_HISTORY_PRIVATE
-  if (cpu4_history_auth(context)!=history) goto fail;
-#endif
-  if (et_g3c4_dispatch_forward(
+  if (CPU4_QUERY_FORWARD(
           "g3c4.layer-norm", "g3c4.layer-norm.forward",
           3u, d4_shape, inputs, 4u, output) != 0)
     goto fail;
@@ -3802,6 +3774,8 @@ fail:
   et_g3c4_error_restore_internal(first);
   return et_g3c4_error_state.category;
 }
+#undef CPU4_QUERY_FORWARD
+
 #endif
 
 #ifdef ET_G3C4_GENERATOR_PRIVATE
@@ -4099,12 +4073,14 @@ static void et_g3c4_token_frame_reset(
 static void et_g3c4_token_frame_discard(
     et_g3c4_context_internal *context) {
   et_kernel_error error;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_node *history = cpu4_history_find(context);
+#endif
   if (context->token_frame_transaction != NULL &&
       et_a2_kv_cache_transaction_abort_v1(
           &context->token_frame_transaction, &error) != 0)
     abort();
 #ifdef ET_CPU4_C4_HISTORY_PRIVATE
-  cpu4_history_node *history = cpu4_history_find(context);
   cpu4_history_pending_clear(history);
 #endif
   et_g3c4_token_frame_reset(context);
@@ -6959,6 +6935,10 @@ static inline __attribute__((unused)) int64_t et_g3c4_manual_a2_run(
     if (et_g3c4_capture_kernel(et_a2_kv_cache_transaction_begin_v1(
             candidate, 1u, &count_view, &prefix, &error), &error) != 0)
       goto fail;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+    history->pending.transaction = prefix;
+    frame->a2_transaction = prefix;
+#endif
     inputs[0] = et_g3c4_view(prefix_keys, sizeof(prefix_keys), "f32", 4u,
                                prefix_shape);
     inputs[1] = et_g3c4_view(prefix_values, sizeof(prefix_values), "f32", 4u,
@@ -6969,6 +6949,10 @@ static inline __attribute__((unused)) int64_t et_g3c4_manual_a2_run(
     if (et_g3c4_capture_kernel(et_a2_kv_cache_transaction_commit_v1(
             &prefix, &error), &error) != 0)
       goto fail;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+    history->pending.transaction = NULL;
+    frame->a2_transaction = NULL;
+#endif
   }
 
   count_view = et_g3c4_view(&count, sizeof(count), "i64", 1u, count_shape);
@@ -7035,10 +7019,23 @@ fail:
           &view, &error) != 0) abort();
   if (borrow != NULL && et_a2_kv_cache_read_borrow_end_v1(
           &borrow, &error) != 0) abort();
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  if (transaction != NULL) {
+    if (et_a2_kv_cache_transaction_abort_v1(&transaction,&error) != 0) abort();
+    history->pending.transaction = NULL;
+    frame->a2_transaction = NULL;
+  }
+  if (prefix != NULL) {
+    if (et_a2_kv_cache_transaction_abort_v1(&prefix,&error) != 0) abort();
+    history->pending.transaction = NULL;
+    frame->a2_transaction = NULL;
+  }
+#else
   if (transaction != NULL && et_a2_kv_cache_transaction_abort_v1(
           &transaction, &error) != 0) abort();
   if (prefix != NULL && et_a2_kv_cache_transaction_abort_v1(
           &prefix, &error) != 0) abort();
+#endif
   if (candidate != NULL && et_a2_kv_cache_destroy_v1(
           &candidate, &error) != 0) abort();
 #ifdef ET_CPU4_C4_HISTORY_PRIVATE
@@ -8785,8 +8782,15 @@ int64_t et_g3c4_private_call_finish_v1(void *candidate) {
 #ifdef ET_G3C4_MANUAL_FRAME_COMMIT_PRIVATE
   if (context->manual_frame != NULL &&
       context->manual_frame->publication_state == 3u) {
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+    cpu4_history_node *history=cpu4_history_auth(context);
+    if (history==NULL) return et_g3c4_error_state.category;
+#endif
     free(context->manual_frame);
     context->manual_frame = NULL;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+    cpu4_history_pending_clear(history);
+#endif
     return et_g3c4_active_call_drain(context);
   }
 #endif
@@ -8836,6 +8840,10 @@ int64_t et_g3c4_private_call_abort_v1(void *candidate) {
   et_g3c4_error_reset_internal();
   context = et_g3c4_admit_active_call(candidate);
   if (context == NULL) return et_g3c4_error_state.category;
+#ifdef ET_CPU4_C4_HISTORY_PRIVATE
+  cpu4_history_node *history=cpu4_history_auth(context);
+  if (history==NULL) return et_g3c4_error_state.category;
+#endif
 #ifdef ET_G3C4_P2_G1_PUBLICATION_PRIVATE
   if (context->token_frame_state == ET_G3C4_TOKEN_FRAME_COMMITTED)
     return et_g3c4_fail(
@@ -8928,14 +8936,14 @@ int64_t et_g3c4_private_call_abort_v1(void *candidate) {
             &frame->a2_transaction, &error), &error) != 0)
       return et_g3c4_error_state.category;
 #ifdef ET_CPU4_C4_HISTORY_PRIVATE
-    cpu4_history_find(context)->pending.transaction = NULL;
+    history->pending.transaction = NULL;
 #endif
     if (frame->a2_candidate != NULL &&
         et_g3c4_capture_kernel(et_a2_kv_cache_destroy_v1(
             &frame->a2_candidate, &error), &error) != 0)
       return et_g3c4_error_state.category;
 #ifdef ET_CPU4_C4_HISTORY_PRIVATE
-    cpu4_history_find(context)->pending.candidate = NULL;
+    history->pending.candidate = NULL;
 #endif
   }
 #endif
@@ -8943,7 +8951,7 @@ int64_t et_g3c4_private_call_abort_v1(void *candidate) {
   context->manual_frame = NULL;
 #endif
 #ifdef ET_CPU4_C4_HISTORY_PRIVATE
-  cpu4_history_pending_clear(cpu4_history_find(context));
+  cpu4_history_pending_clear(history);
 #endif
   return et_g3c4_active_call_drain(context);
 }

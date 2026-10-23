@@ -29,7 +29,8 @@ def off_projection(text):
     assert not stack
     text='\n'.join(out)
     text=re.sub(r'^#include "cpu4_c4_history(?:_types\.h|\.inc)"\n?', '',text,flags=re.M)
-    text=re.sub(r'^#define CPU4_TOKEN_(?:DISPATCH|DISCOVER).*\n?', '',text,flags=re.M)
+    text=re.sub(r'^#(?:define|undef) CPU4_(?:TOKEN_(?:DISPATCH|DISCOVER)|QUERY_FORWARD).*\n?', '',text,flags=re.M)
+    text=text.replace('CPU4_QUERY_FORWARD(', 'et_g3c4_dispatch_forward(')
     text=text.replace('CPU4_TOKEN_DISPATCH(', 'et_g3c4_token_dispatch(').replace('CPU4_TOKEN_DISCOVER(', 'et_g3c4_token_runtime_discover(')
     return text
 
@@ -38,6 +39,18 @@ def tokens(t):
     # Added allocation cleanup needs braces ON; one-return blocks normalize OFF.
     t=re.sub(r'\{\s*(return [^;]+;)\s*\}',r'\1',t)
     return re.findall(r'"(?:\\.|[^"\\])*"|[A-Za-z_]\w*|0[xX][\da-fA-F]+|\d+|[^\s]',t)
+def physical_directives(text):
+    # C translation phase2: splice BEFORE recognizing preprocessing directives.
+    logical=re.sub(r'\\\r?\n','',text)
+    for line in logical.splitlines():
+        if re.match(r'^\s*#\s*define\b',line):
+            replacement=re.sub(r'^\s*#\s*define\s+\w+(?:\([^)]*\))?','',line)
+            assert not re.search(r'#\s*(?:if|ifdef|ifndef|elif|else|endif)\b',replacement), 'directive hidden by line splicing'
+physical_directives(owner)
+bad58f=subprocess.check_output(['git','show','58f35af2d595720981c4666ab97ae30af885a259:src/eshkol_transformer/g3c4_model_owner.c'],cwd=root,text=True)
+try: physical_directives(bad58f)
+except AssertionError: pass
+else: raise AssertionError('physical-line control missed actual58f defect')
 old=tokens(base);new=tokens(off_projection(owner))
 if old!=new:
     difference=list(difflib.unified_diff(old,new,n=3))
@@ -99,6 +112,36 @@ def early_checks(source):
         assert 'cpu4_history_preflight(context,2u' not in b,name
     assert 'cpu4_history_publish' not in body(source,'et_g3c4_private_call_abort_v1')
     assert 'cpu4_history_publish' not in body(source,'et_g3c4_manual_a2_run')
+def manual_custody_checks(source):
+    b=body(source,'et_g3c4_manual_a2_run')
+    begin=b.index('candidate, 1u, &count_view, &prefix, &error)')
+    enroll=b.index('history->pending.transaction = prefix;',begin)
+    frame=b.index('frame->a2_transaction = prefix;',enroll)
+    stage=b.index('et_a2_kv_cache_transaction_stage_layer_v1(',frame)
+    commit=b.index('et_a2_kv_cache_transaction_commit_v1(',stage)
+    clear=b.index('history->pending.transaction = NULL;',commit)
+    final=b.index('candidate, (uint64_t)count, &count_view',clear)
+    assert begin<enroll<frame<stage<commit<clear<final
+    assert 'cpu4_history_publish(' not in b
+    c=body(source,'et_g3c4_private_frame_commit_v1')
+    assert 'cpu4_history_publish(' in c and 'cpu4_history_pending_clear(' not in c
+    publish=body(helper,'cpu4_history_publish')
+    assert 'h->pending.operation >= 3u && h->pending.frame != NULL' in publish
+    assert 'h->pending.epoch=r->commit_epoch' in publish
+    retained=publish[publish.index('if (h->pending.operation >= 3u'):publish.index('} else cpu4_history_pending_clear(h);')]
+    assert 'pending.frame=' not in retained and 'pending.operation=' not in retained and 'pending_clear' not in retained
+    finish=body(source,'et_g3c4_private_call_finish_v1')
+    assert finish.index('cpu4_history_auth(context)')<finish.index('free(context->manual_frame)')<finish.index('cpu4_history_pending_clear(history)')<finish.index('et_g3c4_active_call_drain(context)')
+manual_custody_checks(owner)
+try: manual_custody_checks(bad58f)
+except (AssertionError,ValueError): pass
+else: raise AssertionError('manual custody control missed original58f omission')
+manual_fixture=(root/'tests/g3c4/test_cpu4_history_manual_native.c').read_text()
+assert 'prefix_cut_phase==1' in manual_fixture and 'prefix_cut_phase==2' in manual_fixture
+assert 'prefix_custody_witnesses==witnessed+1u' in manual_fixture
+assert 'h->pending.epoch=UINT64_MAX' in manual_fixture
+assert 'publication_state == 3u' in helper
+assert helper.index('publication_state == 3u')<helper.index('if (!h->pending.operation) return 0;')
 early_checks(owner)
 # Causal negative source controls: remove/move actual guard; checker must fail.
 mutants=[owner.replace('cpu4_history_preflight(context,2u,1u,4u,1u)','cpu4_history_omitted(context,2u,1u,4u,1u)',1),
@@ -112,5 +155,5 @@ assert 'if (!op) return h;' in helper
 assert helper.index('if (!op) return h;')<helper.index('UINT64_MAX-epochs')
 assert 'h->history.count>=cap' in helper and 'n>target_capacity' in helper
 assert 'cpu4_history_staged_check' in helper
-print('PASS: OFF source tokens unchanged; effective tuple guard; LP64 80/40/464/544; early/final custody ordering and 3 causal negative controls.')
+print('PASS: physical line-splicing and manual-custody controls reject58f; OFF source tokens unchanged; effective tuple guard; LP64 80/40/464/544; early/final custody ordering and 3 causal negative controls.')
 print('NOT RUN: C compiler, native layout, numerical/runtime/provider/fault gates.')
