@@ -149,6 +149,33 @@ is still blocked on missing observability:13424 is a partial source subtotal,
 and the six existing native counts do not establish total retention. OS process
 limits cannot substitute for that required census. No full CPU-v1 admission.
 
+One-pass resource measurement policy is accepted from proposal-v2 seal
+`386b4838c6137636e15fae2c648385bd5e93561588851f1ec6b4eeb409528711`
+and independent review`team/cpuv1-resource-contract-review/REVIEW.md`, seal
+`dbef04498658d71556d4c80dd1f551ca3cf55ab5fcddfea49b0acefd864bd795`.
+CLI3 owns Stage A private observer producers; exact packets/source/tests require
+review before a dependent sidecar is composed. Frozen history-OFF one-pass
+limits: native requested growth128MiB (nested F32-retired64MiB/O2-step256KiB),
+Scheme reservation plus metadata growth512MiB and tracked peak minus P0 current
+512MiB, runtime peak RSS2GiB, normal-glibc backing2GiB and nonnegative deduplicated
+residual growth32MiB. Absolute totals and thirteen family domains, all successful
+allocation/free histories, retained controls, both arena chains, metadata and
+semantic roots must reconcile at final P9 after D2 close. Native usable bytes,
+allocator residual, backing and RSS are distinct columns. One original P1
+runtime vector has75 slots0..74 (its AST list has76 elements including `vector`);
+the proposed owning-scope census closure must preserve it exactly. No observer,
+sizeof, measured fit, native transient peak, history-ON or retention admission
+is established by this policy.
+
+Binding-OOM witness attempt1 compiles35 production TUs, shim and actual AOT/link,
+then its collector rejects LOCAL real lease symbols omitted by `nm -g`.
+Raw`7e716949ee35e8babba7f934409e2c3f76ecd18b67eecfa8defd8e0d2fb7a6ea`
+and `team/integration-review-binding-witness-ce46e8d9-failure/REVIEW.md`, seal
+`bcac9fd9bae24893a3a1df3fedfe9c1c2f2610d60d949883d412004d9c8866d4`,
+authenticate the failure. Runtime/handler-OOM/retry remain NOT RUN. A collector
+successor must retain global-wrapper checks and prove exact real local symbols
+through typed ELF/map/call addresses; source/runtime assertions remain unchanged.
+
 Private history/capture source352 is now integrated through `09e76fae`, after
 independent repair acceptance`8b8cffec` and composition acceptance`caeb05d8`.
 The common static closure has215 paths (four added includes/two updated hashes);
