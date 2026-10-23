@@ -1,9 +1,13 @@
 # Final resumed B → actual public G2: staged source fixture
 
 This isolated source leaf starts at `fd0db7270ca0212f73fc64337379d1ada32d0154`.
-Root composition now authenticates production support against immutable
-`b0af97d10a96fc62ef414a26953582f5c79ad642`, including the independently
-accepted O2 restore-provenance repair. All nineteen dependency rows remain
+Root composition now authenticates complete production/plain source against immutable
+`b8b717b94a3ca59d0f279b909e5b3c2f80bfcffa` (tree
+`2887b60e7a3c2f44a74dcba30cb23a1dbc1566f7`): accepted private C4 history/capture
+source58f plus repair352 on42a00c87, followed by the strict215-row inventory refresh.
+`ET_CPU4_C4_HISTORY_PRIVATE` remains OFF; common flags/roster and caller770 are
+unchanged. This includes the independently accepted O2 restore-provenance repair
+`b0af97d10a96fc62ef414a26953582f5c79ad642`. All nineteen dependency rows remain
 unchanged. The real preflight must accept this composition and reject either
 original fd0 native repair leaf; source tests exercise both exact old blobs.
 This establishes source identity only; compilation/runtime remain NOT RUN.
@@ -26,7 +30,7 @@ temperature/top-p bits1065353216, top-k256, max2, seed41. No probe generator:
 | `first-eos` | 3 | `(3)` | 1 | 3 |
 
 These are unmeasured acceptance expectations, frozen before execution. They
-cannot be tuned after a run. There is no history/capture dependency, callback,
+cannot be tuned after a run. This caller has no history/capture dependency, callback,
 new production API, model substitution, numerical path or destructor.
 
 `check_output.py` requires exactly eleven ordered LF records. It feeds the
@@ -56,7 +60,7 @@ The driver builds once and schedules normal+repeat for each mode (four future
 processes), checks exact output/checkpoint parity per mode and saved checkpoint
 parity across modes. Its resources match the unchanged plain driver byte-for-byte.
 `DEPENDENCIES.sha256` freezes this isolated fixture/support source. **Execution
-requires root composition and pin refresh to the actual accepted O2 repair**:
+requires the immutable composed source baseline above, including the actual accepted O2 repair**:
 `b0af97d10a96fc62ef414a26953582f5c79ad642` / tree
 `7b98ae1d3ad8df26e56dd87390d2c9d8a202fabc`, O2 SHA
 `bc83b46a3a0b0c96dea06d81abed28baaf0655f5781b1a09635f77b41dee7f47`,
@@ -64,7 +68,7 @@ restore include SHA
 `5fd13e2c4bad5a2667a198aabf79acec6a172119ed337f5d163938a5e6f48745`.
 Preflight rejects this old fd0 production support before native build; no API or
 roster change is proposed. Root owns common source inventory, recipe and launch.
-Independent source/tests review and a fresh locked recipe remain required.
+Independent composition-delta review and a fresh locked recipe remain required; this source composition grants no compiler/native/runtime admission.
 
 Source/host checks only:
 
