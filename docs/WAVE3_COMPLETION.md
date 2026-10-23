@@ -105,13 +105,33 @@ Attempt1 remains failed because its Python-incompatible collector could not seal
 the inventory. The repaired v3 collector uses portable hashing; original evidence
 is preserved. Native acceptance does not admit FILE, resume or generation.
 
-The separately reviewed FILEv5 recipe on frozen `b0af97d1` is now running.
-Plain resumev2 remains prepared and blocked on accepted FILE results. Trained
+The FILEv5 gate on frozen `b0af97d1` independently ACCEPTS normal/repeat:
+each reports region21/data96 and identical25506-byte C2 files, SHA
+`d514e1440bbf5703f9544478435dcb52b8d66db5bb52b1cb0b4ebb3e0f028e56`.
+Raw seal`8f9f0439f9315b4ff00a98f47737f8a5e62239a6e2ceddab83e79f8666ad2971`
+and review`team/integration-review-file-b0af97d1-attempt1/REVIEW.md`, seal
+`7c36a86be2a09c469e5fba83e1c15c1233587d6baed82b69f13bfdd13ea81218`,
+authenticate source/dependencies/IR/BC/object/ELF, all exits0 and cleanup. Its
+198-second duration is not throughput. This is untrained artificial coherent
+FILE movement, not learning or resume evidence. Plain trained resumev2 is now
+running on the separately frozen b0 source. Trained
 same-B public-G2 source4c6 plus support-context55a is independently accepted;
 its four-process functional gate is being prepared. Complete owner/byte census
 is still blocked on missing observability:13424 is a partial source subtotal,
 and the six existing native counts do not establish total retention. OS process
 limits cannot substitute for that required census. No full CPU-v1 admission.
+
+Private history/capture source352 is now integrated through `09e76fae`, after
+independent repair acceptance`8b8cffec` and composition acceptance`caeb05d8`.
+The common static closure has215 paths (four added includes/two updated hashes);
+all35 production TU flags remain unchanged and history remains OFF. Root source
+guards pass; all source bytes equal accepted composition78, with only index and
+roadmap documentation differing. The SAME40 committed-frame lifetime and legacy
+allocation-metadata trust boundary are explicit in
+[CPU4_C4_HISTORY_CAPTURE.md](CPU4_C4_HISTORY_CAPTURE.md). Native ON/OFF, failure,
+alias, census and replay computation gates are prepared separately, NOT RUN.
+No history import, wire, public partial-producer or fresh-process continuation
+API is admitted by this source integration.
 
 The published integration source union `cad08034e94a383f0e1191949419d9191e89b928`
 (tree `2f021cac225edad622edd6fae514a7a08a00789b`) selectively composes reviewed

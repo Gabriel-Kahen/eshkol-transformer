@@ -641,8 +641,9 @@ multi-token EOS/continuation and compiled common integration remain required.
 The corrected common source composition is independently accepted. After its
 FILE run exposed stale optimizer option provenance, the strict-preserving repair
 passes an independently audited native causal gate, including sanitizer and OFF
-controls. The repaired integrated FILE normal/repeat gate is running; actual
-FILE acceptance precedes the trained resume/held-out gate.
+controls. The repaired integrated FILE normal/repeat gate independently passes
+region21/data96 and checkpoint byte parity. The trained resume/held-out gate is
+now running; it has no result yet.
 GPU, mixed precision and optional expansion stay backlog. Historical detail below
 retains its original evidence scope.
 
