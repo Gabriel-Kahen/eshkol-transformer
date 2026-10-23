@@ -1,3 +1,6 @@
+/* CPUV1_RESOURCE_BEGIN */
+#include "cpuv1_resource_private.h"
+/* CPUV1_RESOURCE_END */
 #include "o2_optimizer_internal.h"
 
 #include <limits.h>
@@ -1148,7 +1151,7 @@ int32_t et_o2_private_candidate_retire_commit_v1(
 #endif
     }
   }
-  free(optimizer->entries);
+  ET_R_FREE(ET_R_O2,7,optimizer->entries,optimizer->count,sizeof(*optimizer->entries));
   optimizer->entries = NULL;
   record->entries = NULL;
   record->live = 0u;
@@ -1182,13 +1185,13 @@ int32_t et_o2_optimizer_builder_create_v1(
                       ET_O2_CODE_INVALID_OPTION, "optimizer-create",
                       "optimizer count or schedule/clip options are invalid");
   }
-  builder = (et_o2_optimizer_builder *)et_o2_calloc(1u, sizeof(*builder));
+  builder = (et_o2_optimizer_builder *)ET_R_ALLOC(ET_R_O2,0,et_o2_calloc(1u, sizeof(*builder)),1u,sizeof(*builder));
   if (builder != NULL) {
     builder->entries =
-        (et_o2_entry *)et_o2_calloc(parameter_count, sizeof(*builder->entries));
+        (et_o2_entry *)ET_R_ALLOC(ET_R_O2,7,et_o2_calloc(parameter_count, sizeof(*builder->entries)),parameter_count,sizeof(*builder->entries));
   }
   if (builder == NULL || builder->entries == NULL) {
-    free(builder);
+    ET_R_FREE(ET_R_O2,0,builder,1u,sizeof(*builder));
     return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
                       ET_O2_CODE_ALLOCATION_FAILED, "optimizer-create",
                       "cannot allocate optimizer builder");
@@ -1312,7 +1315,7 @@ int32_t et_o2_optimizer_builder_finish_v1(et_o2_optimizer_builder **slot,
       }
     }
   }
-  optimizer = (et_o2_optimizer *)et_o2_calloc(1u, sizeof(*optimizer));
+  optimizer = (et_o2_optimizer *)ET_R_ALLOC(ET_R_O2,1,et_o2_calloc(1u, sizeof(*optimizer)),1u,sizeof(*optimizer));
   if (optimizer == NULL) {
     return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
                       ET_O2_CODE_ALLOCATION_FAILED, "optimizer-create",
@@ -1321,7 +1324,7 @@ int32_t et_o2_optimizer_builder_finish_v1(et_o2_optimizer_builder **slot,
 #ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
   if (builder->count > (SIZE_MAX - sizeof(et_o2_retire_provenance)) /
                            sizeof(et_o2_entry)) {
-    free(optimizer);
+    ET_R_FREE(ET_R_O2,1,optimizer,1u,sizeof(*optimizer));
     return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
                       ET_O2_CODE_ALLOCATION_FAILED, "optimizer-create",
                       "cannot record optimizer entry provenance");
@@ -1329,9 +1332,9 @@ int32_t et_o2_optimizer_builder_finish_v1(et_o2_optimizer_builder **slot,
   size_t retire_bytes = sizeof(et_o2_retire_provenance) +
                         builder->count * sizeof(et_o2_entry);
   et_o2_retire_provenance *record =
-      (et_o2_retire_provenance *)et_o2_calloc(1u, retire_bytes);
+      (et_o2_retire_provenance *)ET_R_ALLOC(ET_R_O2,6,et_o2_calloc(1u, retire_bytes),retire_bytes,1u);
   if (record == NULL) {
-    free(optimizer);
+    ET_R_FREE(ET_R_O2,1,optimizer,1u,sizeof(*optimizer));
     return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
                       ET_O2_CODE_ALLOCATION_FAILED, "optimizer-create",
                       "cannot record optimizer entry provenance");
@@ -1359,7 +1362,7 @@ int32_t et_o2_optimizer_builder_finish_v1(et_o2_optimizer_builder **slot,
   builder->entries = NULL;
   et_o2_unlink_builder(builder);
   builder->magic = 0u;
-  free(builder);
+  ET_R_FREE(ET_R_O2,0,builder,1u,sizeof(*builder));
   *slot = NULL;
   *output = optimizer;
   return et_o2_success(error);
@@ -1384,9 +1387,9 @@ int32_t et_o2_optimizer_builder_abort_v1(et_o2_optimizer_builder **slot,
   }
   et_o2_unlink_builder(builder);
   et_o2_destroy_entry_moments(builder->entries, builder->count);
-  free(builder->entries);
+  ET_R_FREE(ET_R_O2,7,builder->entries,builder->count,sizeof(*builder->entries));
   builder->magic = 0u;
-  free(builder);
+  ET_R_FREE(ET_R_O2,0,builder,1u,sizeof(*builder));
   *slot = NULL;
   return et_o2_success(error);
 }
@@ -1965,9 +1968,9 @@ int32_t et_o2_optimizer_step_v1(et_o2_optimizer *candidate,
     }
   }
   stages =
-      (et_f32_tensor **)et_o2_calloc(optimizer->count * 3u, sizeof(*stages));
-  assignments = (et_f32_tensor_copy_assignment_v1 *)et_o2_calloc(
-      optimizer->count * 3u, sizeof(*assignments));
+      (et_f32_tensor **)ET_R_ALLOC(ET_R_O2,11,et_o2_calloc(optimizer->count * 3u, sizeof(*stages)),optimizer->count * 3u,sizeof(*stages));
+  assignments = (et_f32_tensor_copy_assignment_v1 *)ET_R_ALLOC(ET_R_O2,12,et_o2_calloc(
+      optimizer->count * 3u, sizeof(*assignments)),optimizer->count * 3u,sizeof(*assignments));
   if (stages == NULL || assignments == NULL) {
     result =
         et_o2_fail(error, ET_O2_STATUS_INTERNAL, ET_O2_CODE_ALLOCATION_FAILED,
@@ -2029,8 +2032,8 @@ cleanup:
       }
     }
   }
-  free(assignments);
-  free(stages);
+  ET_R_FREE(ET_R_O2,12,assignments,optimizer->count * 3u,sizeof(*assignments));
+  ET_R_FREE(ET_R_O2,11,stages,optimizer->count * 3u,sizeof(*stages));
   optimizer->busy = 0u;
   return result;
 }
@@ -2049,7 +2052,7 @@ int32_t et_o2_optimizer_zero_grad_v1(et_o2_optimizer *candidate,
   }
   optimizer->busy = 1u;
   parameters =
-      (et_f32_parameter **)et_o2_calloc(optimizer->count, sizeof(*parameters));
+      (et_f32_parameter **)ET_R_ALLOC(ET_R_O2,13,et_o2_calloc(optimizer->count, sizeof(*parameters)),optimizer->count,sizeof(*parameters));
   if (parameters == NULL) {
     result = et_o2_fail(error, ET_O2_STATUS_INTERNAL,
                         ET_O2_CODE_ALLOCATION_FAILED, "optimizer-zero-grad!",
@@ -2080,7 +2083,7 @@ cleanup:
   if (plan != NULL) {
     (void)et_f32_gradient_reset_plan_release_v1(&plan, NULL);
   }
-  free(parameters);
+  ET_R_FREE(ET_R_O2,13,parameters,optimizer->count,sizeof(*parameters));
   optimizer->busy = 0u;
   return result;
 }
@@ -2165,14 +2168,14 @@ int32_t et_o2_optimizer_state_snapshot_v1(et_o2_optimizer *candidate,
                                                 error)) != 0) {
     goto cleanup;
   }
-  state = (et_o2_optimizer_state *)et_o2_calloc(1u, sizeof(*state));
+  state = (et_o2_optimizer_state *)ET_R_ALLOC(ET_R_O2,2,et_o2_calloc(1u, sizeof(*state)),1u,sizeof(*state));
   if (state != NULL) {
-    state->entries = (et_o2_state_entry *)et_o2_calloc(optimizer->count,
-                                                       sizeof(*state->entries));
-    state->handles = (et_o2_optimizer_state_handle **)et_o2_calloc(
-        optimizer->count * 2u, sizeof(*state->handles));
-    state->owned_clones = (et_f32_tensor **)et_o2_calloc(
-        optimizer->count * 2u, sizeof(*state->owned_clones));
+    state->entries = (et_o2_state_entry *)ET_R_ALLOC(ET_R_O2,8,et_o2_calloc(optimizer->count,
+                                                       sizeof(*state->entries)),optimizer->count,sizeof(*state->entries));
+    state->handles = (et_o2_optimizer_state_handle **)ET_R_ALLOC(ET_R_O2,9,et_o2_calloc(
+        optimizer->count * 2u, sizeof(*state->handles)),optimizer->count * 2u,sizeof(*state->handles));
+    state->owned_clones = (et_f32_tensor **)ET_R_ALLOC(ET_R_O2,10,et_o2_calloc(
+        optimizer->count * 2u, sizeof(*state->owned_clones)),optimizer->count * 2u,sizeof(*state->owned_clones));
   }
   if (state == NULL || state->entries == NULL || state->handles == NULL ||
       state->owned_clones == NULL) {
@@ -2215,7 +2218,7 @@ int32_t et_o2_optimizer_state_snapshot_v1(et_o2_optimizer *candidate,
   for (handle_index = 0u; handle_index < optimizer->count * 2u;
        ++handle_index) {
     et_o2_optimizer_state_handle *handle =
-        (et_o2_optimizer_state_handle *)et_o2_calloc(1u, sizeof(*handle));
+        (et_o2_optimizer_state_handle *)ET_R_ALLOC(ET_R_O2,3,et_o2_calloc(1u, sizeof(*handle)),1u,sizeof(*handle));
     if (handle == NULL) {
       result = et_o2_fail(error, ET_O2_STATUS_INTERNAL,
                           ET_O2_CODE_ALLOCATION_FAILED, "optimizer-state",
@@ -2247,16 +2250,16 @@ cleanup:
     if (state->handles != NULL) {
       for (handle_index = 0u; handle_index < optimizer->count * 2u;
            ++handle_index) {
-        free(state->handles[handle_index]);
+        ET_R_FREE(ET_R_O2,3,state->handles[handle_index],1u,sizeof(*state->handles[handle_index]));
       }
     }
     if (state->owned_clones != NULL) {
       et_o2_release_owned_state_prefix(state);
     }
-    free(state->owned_clones);
-    free(state->handles);
-    free(state->entries);
-    free(state);
+    ET_R_FREE(ET_R_O2,10,state->owned_clones,optimizer->count * 2u,sizeof(*state->owned_clones));
+    ET_R_FREE(ET_R_O2,9,state->handles,optimizer->count * 2u,sizeof(*state->handles));
+    ET_R_FREE(ET_R_O2,8,state->entries,optimizer->count,sizeof(*state->entries));
+    ET_R_FREE(ET_R_O2,2,state,1u,sizeof(*state));
   }
   optimizer->busy = 0u;
   return result;
@@ -2308,8 +2311,8 @@ int32_t et_o2_optimizer_load_state_v1(et_o2_optimizer *optimizer_candidate,
                         "optimizer state parameter count differs");
     goto cleanup;
   }
-  assignments = (et_f32_tensor_copy_assignment_v1 *)et_o2_calloc(
-      optimizer->count * 2u, sizeof(*assignments));
+  assignments = (et_f32_tensor_copy_assignment_v1 *)ET_R_ALLOC(ET_R_O2,12,et_o2_calloc(
+      optimizer->count * 2u, sizeof(*assignments)),optimizer->count * 2u,sizeof(*assignments));
   if (assignments == NULL) {
     result = et_o2_fail(error, ET_O2_STATUS_INTERNAL,
                         ET_O2_CODE_ALLOCATION_FAILED, "optimizer-load-state!",
@@ -2361,7 +2364,7 @@ cleanup:
   if (plan != NULL) {
     (void)et_f32_tensor_copy_plan_release_v1(&plan, NULL);
   }
-  free(assignments);
+  ET_R_FREE(ET_R_O2,12,assignments,optimizer->count * 2u,sizeof(*assignments));
   state->active_borrows--;
   optimizer->busy = 0u;
   return result;
@@ -2493,7 +2496,7 @@ int32_t et_o2_optimizer_state_borrow_begin_v1(
           error) != 0) {
     return ET_O2_STATUS_INVALID_STATE;
   }
-  borrow = (et_o2_optimizer_state_borrow *)et_o2_calloc(1u, sizeof(*borrow));
+  borrow = (et_o2_optimizer_state_borrow *)ET_R_ALLOC(ET_R_O2,4,et_o2_calloc(1u, sizeof(*borrow)),1u,sizeof(*borrow));
   if (borrow == NULL) {
     return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
                       ET_O2_CODE_ALLOCATION_FAILED, "optimizer-state-borrow",
@@ -2509,7 +2512,7 @@ int32_t et_o2_optimizer_state_borrow_begin_v1(
     if (borrow->i2_borrow != NULL) {
       (void)et_f32_tensor_borrow_end_v1(&borrow->i2_borrow, NULL);
     }
-    free(borrow);
+    ET_R_FREE(ET_R_O2,4,borrow,1u,sizeof(*borrow));
     return et_o2_from_i2(&i2_error, error, "optimizer-state-borrow",
                          ET_O2_STATUS_INVALID_STATE);
   }
@@ -2648,9 +2651,9 @@ int32_t et_o2_optimizer_state_release_v1(et_o2_optimizer_state *candidate,
   for (index = 0u; index < entry_count; ++index) {
     state->handles[index]->owner = NULL;
   }
-  free(state->owned_clones);
-  free(state->handles);
-  free(state->entries);
+  ET_R_FREE(ET_R_O2,10,state->owned_clones,state->count * 2u,sizeof(*state->owned_clones));
+  ET_R_FREE(ET_R_O2,9,state->handles,state->count * 2u,sizeof(*state->handles));
+  ET_R_FREE(ET_R_O2,8,state->entries,state->count,sizeof(*state->entries));
   state->owned_clones = NULL;
   state->owned_clone_ledger_count = 0u;
   state->handles = NULL;
@@ -2699,13 +2702,13 @@ static void et_o2_reconstruct_free_prepared(
   }
   if (state->handles != NULL) {
     for (index = 0u; index < builder->count * 2u; ++index) {
-      free(state->handles[index]);
+      ET_R_FREE(ET_R_O2,3,state->handles[index],1u,sizeof(*state->handles[index]));
     }
   }
-  free(state->owned_clones);
-  free(state->handles);
-  free(state->entries);
-  free(state);
+  ET_R_FREE(ET_R_O2,10,state->owned_clones,builder->count * 2u,sizeof(*state->owned_clones));
+  ET_R_FREE(ET_R_O2,9,state->handles,builder->count * 2u,sizeof(*state->handles));
+  ET_R_FREE(ET_R_O2,8,state->entries,builder->count,sizeof(*state->entries));
+  ET_R_FREE(ET_R_O2,2,state,1u,sizeof(*state));
   builder->prepared_state = NULL;
   builder->prepared = 0u;
 }
@@ -2736,24 +2739,24 @@ int32_t et_o2_optimizer_state_reconstruct_create_v1(
                       "optimizer-state-reconstruct",
                       "reconstruction optimizer config is invalid");
   }
-  builder = (et_o2_state_reconstruct_builder *)et_o2_calloc(1u,
-                                                              sizeof(*builder));
+  builder = (et_o2_state_reconstruct_builder *)ET_R_ALLOC(ET_R_O2,5,et_o2_calloc(1u,
+                                                              sizeof(*builder)),1u,sizeof(*builder));
   if (builder != NULL) {
-    builder->entries = (et_o2_state_entry *)et_o2_calloc(
-        input->parameter_count, sizeof(*builder->entries));
-    builder->owned_clones = (et_f32_tensor **)et_o2_calloc(
-        input->parameter_count * 2u, sizeof(*builder->owned_clones));
-    builder->entry_set = (unsigned char *)et_o2_calloc(
-        input->parameter_count, sizeof(*builder->entry_set));
+    builder->entries = (et_o2_state_entry *)ET_R_ALLOC(ET_R_O2,18,et_o2_calloc(
+        input->parameter_count, sizeof(*builder->entries)),input->parameter_count,sizeof(*builder->entries));
+    builder->owned_clones = (et_f32_tensor **)ET_R_ALLOC(ET_R_O2,20,et_o2_calloc(
+        input->parameter_count * 2u, sizeof(*builder->owned_clones)),input->parameter_count * 2u,sizeof(*builder->owned_clones));
+    builder->entry_set = (unsigned char *)ET_R_ALLOC(ET_R_O2,21,et_o2_calloc(
+        input->parameter_count, sizeof(*builder->entry_set)),input->parameter_count,sizeof(*builder->entry_set));
   }
   if (builder == NULL || builder->entries == NULL ||
       builder->owned_clones == NULL || builder->entry_set == NULL) {
     if (builder != NULL) {
-      free(builder->entry_set);
-      free(builder->owned_clones);
-      free(builder->entries);
+      ET_R_FREE(ET_R_O2,21,builder->entry_set,input->parameter_count,sizeof(*builder->entry_set));
+      ET_R_FREE(ET_R_O2,20,builder->owned_clones,input->parameter_count * 2u,sizeof(*builder->owned_clones));
+      ET_R_FREE(ET_R_O2,18,builder->entries,input->parameter_count,sizeof(*builder->entries));
     }
-    free(builder);
+    ET_R_FREE(ET_R_O2,5,builder,1u,sizeof(*builder));
     return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
                       ET_O2_CODE_ALLOCATION_FAILED,
                       "optimizer-state-reconstruct",
@@ -2906,23 +2909,23 @@ int32_t et_o2_optimizer_state_reconstruct_prepare_v1(
                         "reconstruction builder is incomplete or stale");
     }
   }
-  state = (et_o2_optimizer_state *)et_o2_calloc(1u, sizeof(*state));
+  state = (et_o2_optimizer_state *)ET_R_ALLOC(ET_R_O2,2,et_o2_calloc(1u, sizeof(*state)),1u,sizeof(*state));
   if (state != NULL) {
-    state->entries = (et_o2_state_entry *)et_o2_calloc(
-        builder->count, sizeof(*state->entries));
-    state->handles = (et_o2_optimizer_state_handle **)et_o2_calloc(
-        builder->count * 2u, sizeof(*state->handles));
-    state->owned_clones = (et_f32_tensor **)et_o2_calloc(
-        builder->count * 2u, sizeof(*state->owned_clones));
+    state->entries = (et_o2_state_entry *)ET_R_ALLOC(ET_R_O2,8,et_o2_calloc(
+        builder->count, sizeof(*state->entries)),builder->count,sizeof(*state->entries));
+    state->handles = (et_o2_optimizer_state_handle **)ET_R_ALLOC(ET_R_O2,9,et_o2_calloc(
+        builder->count * 2u, sizeof(*state->handles)),builder->count * 2u,sizeof(*state->handles));
+    state->owned_clones = (et_f32_tensor **)ET_R_ALLOC(ET_R_O2,10,et_o2_calloc(
+        builder->count * 2u, sizeof(*state->owned_clones)),builder->count * 2u,sizeof(*state->owned_clones));
   }
   if (state == NULL || state->entries == NULL || state->handles == NULL ||
       state->owned_clones == NULL) {
     if (state != NULL) {
-      free(state->owned_clones);
-      free(state->handles);
-      free(state->entries);
+      ET_R_FREE(ET_R_O2,10,state->owned_clones,builder->count * 2u,sizeof(*state->owned_clones));
+      ET_R_FREE(ET_R_O2,9,state->handles,builder->count * 2u,sizeof(*state->handles));
+      ET_R_FREE(ET_R_O2,8,state->entries,builder->count,sizeof(*state->entries));
     }
-    free(state);
+    ET_R_FREE(ET_R_O2,2,state,1u,sizeof(*state));
     return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
                       ET_O2_CODE_ALLOCATION_FAILED,
                       "optimizer-state-reconstruct",
@@ -2930,7 +2933,7 @@ int32_t et_o2_optimizer_state_reconstruct_prepare_v1(
   }
   for (index = 0u; index < builder->count * 2u; ++index) {
     et_o2_optimizer_state_handle *handle =
-        (et_o2_optimizer_state_handle *)et_o2_calloc(1u, sizeof(*handle));
+        (et_o2_optimizer_state_handle *)ET_R_ALLOC(ET_R_O2,3,et_o2_calloc(1u, sizeof(*handle)),1u,sizeof(*handle));
     if (handle == NULL) {
       builder->prepared_state = state;
       et_o2_reconstruct_free_prepared(builder);
@@ -3010,10 +3013,10 @@ int32_t et_o2_optimizer_state_reconstruct_commit_v1(
   builder->prepared_state = NULL;
   et_o2_unlink_reconstruct_builder(builder);
   builder->magic = 0u;
-  free(builder->entry_set);
-  free(builder->owned_clones);
-  free(builder->entries);
-  free(builder);
+  ET_R_FREE(ET_R_O2,21,builder->entry_set,builder->count,sizeof(*builder->entry_set));
+  ET_R_FREE(ET_R_O2,20,builder->owned_clones,builder->count * 2u,sizeof(*builder->owned_clones));
+  ET_R_FREE(ET_R_O2,18,builder->entries,builder->count,sizeof(*builder->entries));
+  ET_R_FREE(ET_R_O2,5,builder,1u,sizeof(*builder));
   *slot = NULL;
   *output = state;
   return et_o2_success(error);
@@ -3053,10 +3056,10 @@ int32_t et_o2_optimizer_state_reconstruct_abort_v1(
   }
   et_o2_unlink_reconstruct_builder(builder);
   builder->magic = 0u;
-  free(builder->entry_set);
-  free(builder->owned_clones);
-  free(builder->entries);
-  free(builder);
+  ET_R_FREE(ET_R_O2,21,builder->entry_set,builder->count,sizeof(*builder->entry_set));
+  ET_R_FREE(ET_R_O2,20,builder->owned_clones,builder->count * 2u,sizeof(*builder->owned_clones));
+  ET_R_FREE(ET_R_O2,18,builder->entries,builder->count,sizeof(*builder->entries));
+  ET_R_FREE(ET_R_O2,5,builder,1u,sizeof(*builder));
   *slot = NULL;
   if (defect != 0) {
     return et_o2_fail(error, ET_O2_STATUS_INTERNAL,
@@ -3475,3 +3478,9 @@ int32_t et_o2_test_optimizer_moment_bits_v1(const et_o2_optimizer *candidate,
 #undef ET_O2_TR3_UNDEFINE_PRIVATE_OPERATIONS
 #undef ET_TR3_O2_PRIVATE_OPERATIONS
 #endif
+
+/* CPUV1_RESOURCE_BEGIN */
+#ifdef ET_CPUV1_RESOURCE_TESTING
+#include "cpuv1_resource_o2.inc"
+#endif
+/* CPUV1_RESOURCE_END */

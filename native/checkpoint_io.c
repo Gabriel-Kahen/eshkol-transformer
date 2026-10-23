@@ -1,5 +1,9 @@
 #define _GNU_SOURCE
 
+/* CPUV1_RESOURCE_BEGIN */
+#include "cpuv1_resource_private.h"
+/* CPUV1_RESOURCE_END */
+
 #include "checkpoint_io.h"
 
 #include <errno.h>
@@ -157,8 +161,8 @@ static int validate_bytevector(const void *header, uint64_t expected_length,
 }
 
 static void free_path_parts(et_path_parts *parts) {
-  free(parts->parent);
-  free(parts->basename);
+  ET_R_FREE(ET_R_C2_IO,2,parts->parent,strlen(parts->parent)+1u,1u);
+  ET_R_FREE(ET_R_C2_IO,3,parts->basename,strlen(parts->basename)+1u,1u);
   parts->parent = NULL;
   parts->basename = NULL;
 }
@@ -181,18 +185,18 @@ static int split_path(const char *path, et_path_parts *parts) {
     errno = EINVAL;
     return -1;
   }
-  parts->basename = (char *)malloc(base_length + 1u);
+  parts->basename = (char *)ET_R_ALLOC(ET_R_C2_IO,3,malloc(base_length + 1u),base_length + 1u,1u);
   if (parts->basename == NULL) {
     return -1;
   }
   memcpy(parts->basename, base, base_length + 1u);
   if (slash == NULL) {
-    parts->parent = (char *)malloc(2u);
+    parts->parent = (char *)ET_R_ALLOC(ET_R_C2_IO,2,malloc(2u),2u,1u);
     if (parts->parent != NULL) {
       memcpy(parts->parent, ".", 2u);
     }
   } else if (slash == path) {
-    parts->parent = (char *)malloc(2u);
+    parts->parent = (char *)ET_R_ALLOC(ET_R_C2_IO,2,malloc(2u),2u,1u);
     if (parts->parent != NULL) {
       memcpy(parts->parent, "/", 2u);
     }
@@ -201,7 +205,7 @@ static int split_path(const char *path, et_path_parts *parts) {
     while (parent_length > 1u && path[parent_length - 1u] == '/') {
       --parent_length;
     }
-    parts->parent = (char *)malloc(parent_length + 1u);
+    parts->parent = (char *)ET_R_ALLOC(ET_R_C2_IO,2,malloc(parent_length + 1u),parent_length + 1u,1u);
     if (parts->parent != NULL) {
       memcpy(parts->parent, path, parent_length);
       parts->parent[parent_length] = '\0';
@@ -481,7 +485,7 @@ int64_t et_checkpoint_io_read_exact_v1(const char *path,
     return make_status(ET_CHECKPOINT_IO_STAGE_VALIDATE, errno, 0);
   }
   if (expected_length != 0u) {
-    temporary = (uint8_t *)wrapped_payload_malloc((size_t)expected_length);
+    temporary = (uint8_t *)ET_R_ALLOC(ET_R_C2_IO,4,wrapped_payload_malloc((size_t)expected_length),(size_t)expected_length,1u);
     if (temporary == NULL) {
       return make_status(ET_CHECKPOINT_IO_STAGE_ALLOCATE, errno, 0);
     }
@@ -489,7 +493,7 @@ int64_t et_checkpoint_io_read_exact_v1(const char *path,
   directory = open_parent(path, &parts);
   if (directory < 0) {
     saved_errno = errno;
-    free(temporary);
+    ET_R_FREE(ET_R_C2_IO,4,temporary,(size_t)expected_length,1u);
     return make_status(ET_CHECKPOINT_IO_STAGE_OPEN_PARENT, saved_errno, 0);
   }
   source = wrapped_openat(directory, parts.basename,
@@ -548,7 +552,7 @@ int64_t et_checkpoint_io_read_exact_v1(const char *path,
            (size_t)expected_length);
   }
   free_path_parts(&parts);
-  free(temporary);
+  ET_R_FREE(ET_R_C2_IO,4,temporary,(size_t)expected_length,1u);
   return 0;
 
 read_stat_failure:
@@ -559,7 +563,7 @@ read_stat_failure:
     (void)close(directory);
   }
   free_path_parts(&parts);
-  free(temporary);
+  ET_R_FREE(ET_R_C2_IO,4,temporary,(size_t)expected_length,1u);
   return make_status(ET_CHECKPOINT_IO_STAGE_STAT_SOURCE, saved_errno, 0);
 read_data_failure:
   if (source >= 0) {
@@ -569,18 +573,18 @@ read_data_failure:
     (void)close(directory);
   }
   free_path_parts(&parts);
-  free(temporary);
+  ET_R_FREE(ET_R_C2_IO,4,temporary,(size_t)expected_length,1u);
   return make_status(ET_CHECKPOINT_IO_STAGE_READ_SOURCE, saved_errno, 0);
 read_close_failure:
   if (directory >= 0) {
     (void)close(directory);
   }
   free_path_parts(&parts);
-  free(temporary);
+  ET_R_FREE(ET_R_C2_IO,4,temporary,(size_t)expected_length,1u);
   return make_status(ET_CHECKPOINT_IO_STAGE_CLOSE_SOURCE, saved_errno, 0);
 read_directory_failure:
   free_path_parts(&parts);
-  free(temporary);
+  ET_R_FREE(ET_R_C2_IO,4,temporary,(size_t)expected_length,1u);
   return make_status(ET_CHECKPOINT_IO_STAGE_CLOSE_DIRECTORY, saved_errno, 0);
 read_failure:
   if (source >= 0) {
@@ -590,7 +594,7 @@ read_failure:
     (void)close(directory);
   }
   free_path_parts(&parts);
-  free(temporary);
+  ET_R_FREE(ET_R_C2_IO,4,temporary,(size_t)expected_length,1u);
   return make_status(source < 0 ? ET_CHECKPOINT_IO_STAGE_OPEN_SOURCE
                                 : ET_CHECKPOINT_IO_STAGE_READ_SOURCE,
                      saved_errno, 0);
@@ -620,7 +624,7 @@ int64_t et_checkpoint_io_atomic_write_v1(const char *path,
     return make_status(ET_CHECKPOINT_IO_STAGE_VALIDATE, errno, 0);
   }
   if (expected_length != 0u) {
-    snapshot = (uint8_t *)wrapped_payload_malloc((size_t)expected_length);
+    snapshot = (uint8_t *)ET_R_ALLOC(ET_R_C2_IO,5,wrapped_payload_malloc((size_t)expected_length),(size_t)expected_length,1u);
     if (snapshot == NULL) {
       return make_status(ET_CHECKPOINT_IO_STAGE_ALLOCATE, errno, 0);
     }
@@ -629,7 +633,7 @@ int64_t et_checkpoint_io_atomic_write_v1(const char *path,
   directory = open_parent(path, &parts);
   if (directory < 0) {
     saved_errno = errno;
-    free(snapshot);
+    ET_R_FREE(ET_R_C2_IO,5,snapshot,(size_t)expected_length,1u);
     return make_status(ET_CHECKPOINT_IO_STAGE_OPEN_PARENT, saved_errno, 0);
   }
   temporary_fd = create_temp(directory, temporary_name, &failure_stage);
@@ -674,7 +678,7 @@ int64_t et_checkpoint_io_atomic_write_v1(const char *path,
     goto committed_failure;
   }
   free_path_parts(&parts);
-  free(snapshot);
+  ET_R_FREE(ET_R_C2_IO,5,snapshot,(size_t)expected_length,1u);
   return 0;
 
 write_failure:
@@ -693,7 +697,7 @@ write_failure:
     (void)close(directory);
   }
   free_path_parts(&parts);
-  free(snapshot);
+  ET_R_FREE(ET_R_C2_IO,5,snapshot,(size_t)expected_length,1u);
   if (cleanup_error != 0) {
     return make_status(ET_CHECKPOINT_IO_STAGE_CLEANUP_TEMP, cleanup_error, 0);
   }
@@ -707,6 +711,12 @@ committed_failure:
     (void)close(directory);
   }
   free_path_parts(&parts);
-  free(snapshot);
+  ET_R_FREE(ET_R_C2_IO,5,snapshot,(size_t)expected_length,1u);
   return make_status(failure_stage, saved_errno, 1);
 }
+
+/* CPUV1_RESOURCE_BEGIN */
+#ifdef ET_CPUV1_RESOURCE_TESTING
+#include "cpuv1_resource_io.inc"
+#endif
+/* CPUV1_RESOURCE_END */

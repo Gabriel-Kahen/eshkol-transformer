@@ -1,5 +1,9 @@
 #ifdef ET_CPUV1_RESOURCE_TESTING
 void et_cpuv1_test_census_training_v1(et_cpuv1_resource_packet_v1 *packet) {
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_TRAIN,0,sizeof(c4t_input),_Alignof(c4t_input));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_TRAIN,1,sizeof(c4t_workspace),_Alignof(c4t_workspace));
+  et_cpuv1_test_resource_layout_v1(packet,ET_R_TRAIN,2,sizeof(c4t_logits),_Alignof(c4t_logits));
+
   for (c4t_record *p=c4t_registry;p;p=p->next) {
     size_t size,alignment; unsigned kind;
     if (p->kind==C4T_INPUT) { kind=0;size=sizeof(c4t_input);alignment=_Alignof(c4t_input); }

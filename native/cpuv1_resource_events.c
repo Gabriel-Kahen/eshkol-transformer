@@ -1,5 +1,6 @@
 #include "cpuv1_resource_private.h"
 #ifdef ET_CPUV1_RESOURCE_TESTING
+#include <errno.h>
 #include <limits.h>
 #include <malloc.h>
 #include <stdlib.h>
@@ -44,8 +45,14 @@ static int unique_base(const void *base) {
   return ET_R_SCRATCH;
 }
 
-static int valid(unsigned d, unsigned k) {
-  return d < ET_R_DOMAINS && k < ET_R_KINDS && d != ET_R_SCHEME;
+static const unsigned kind_count[ET_R_DOMAINS]={23,5,13,11,5,22,6,30,4,6,6,64,8};
+static int valid_kind(unsigned d,unsigned k) {
+  return d<ET_R_DOMAINS && k<kind_count[d] &&
+         !(d==ET_R_GENERATION && k>=9 && k<16);
+}
+static int valid(unsigned d,unsigned k) {
+  return valid_kind(d,k) && d!=ET_R_SCHEME &&
+         (d!=ET_R_RUNTIME || k==6);
 }
 static int bytes(size_t n, size_t s, uint64_t *out) {
   if (s && n > SIZE_MAX / s) return 0;
@@ -74,7 +81,7 @@ static void note(unsigned d, unsigned k, uint64_t requested,
              !add(&r->allocated_requested,requested) ||
              !add(&r->allocated_usable,usable)) event_error = ET_R_OVERFLOW;
 }
-void *et_cpuv1_test_alloc_event_v1(unsigned d, unsigned k, void *p,
+static void *alloc_event(unsigned d, unsigned k, void *p,
                                  size_t n, size_t s) {
   uint64_t requested;
   if (snapshot_packet) event_error=ET_R_NOT_QUIESCENT;
@@ -93,7 +100,7 @@ void *et_cpuv1_test_alloc_event_v1(unsigned d, unsigned k, void *p,
 #endif
   return p;
 }
-void et_cpuv1_test_free_event_v1(unsigned d, unsigned k, void *p,
+static void free_event(unsigned d, unsigned k, void *p,
                                size_t n, size_t s) {
   uint64_t requested;
   if (!p) return;
@@ -105,23 +112,40 @@ void et_cpuv1_test_free_event_v1(unsigned d, unsigned k, void *p,
   (void)d; (void)k; event_error = ET_R_UNSUPPORTED;
 #endif
 }
+/* Bookkeeping must preserve the actual allocator/IO failure errno. */
+void *et_cpuv1_test_alloc_event_v1(unsigned d,unsigned k,void *p,size_t n,size_t z) {
+  int saved_errno=errno;
+  void *result=alloc_event(d,k,p,n,z);
+  errno=saved_errno;
+  return result;
+}
+void et_cpuv1_test_free_event_v1(unsigned d,unsigned k,void *p,size_t n,size_t z) {
+  int saved_errno=errno;
+  free_event(d,k,p,n,z);
+  errno=saved_errno;
+}
 void *et_cpuv1_test_realloc_event_v1(unsigned d, unsigned k, void *p,
                                    size_t old_n, size_t new_n, size_t s) {
   uint64_t old_bytes, new_bytes;
   if (!bytes(old_n,s,&old_bytes) || !bytes(new_n,s,&new_bytes) ||
       !valid(d,k)) { event_error = ET_R_OVERFLOW; return NULL; }
 #ifndef ET_R_ALTERNATE_PROFILE
+  int incoming_errno=errno;
   uint64_t old_usable = p ? (uint64_t)malloc_usable_size(p) : 0;
   int had_old = p != NULL;
+  errno=incoming_errno;
   void *result = realloc(p,(size_t)new_bytes);
+  int allocator_errno=errno;
   /* On normal glibc realloc(p,0) releases p. Failure at positive size leaves
    * its exact old allocation owned, including same-address successful cases. */
   if (!result && new_bytes != 0) {
     if (!add(&events[d][k].failed,1)) event_error = ET_R_OVERFLOW;
+    errno=allocator_errno;
     return NULL;
   }
   if (had_old) note(d,k,old_bytes,old_usable,1);
   if (result) note(d,k,new_bytes,(uint64_t)malloc_usable_size(result),0);
+  errno=allocator_errno;
   return result;
 #else
   event_error = ET_R_UNSUPPORTED;
@@ -146,7 +170,7 @@ int et_cpuv1_test_resource_begin_v1(et_cpuv1_resource_packet_v1 *p) {
   memset(p,0,sizeof(*p)); p->struct_size=sizeof(*p);
   p->version=ET_R_PACKET_VERSION; p->status=event_error;
   p->observer_static_bytes=sizeof(events)+sizeof(event_error)+sizeof(mutation)+
-    sizeof(snapshot_bases)+sizeof(snapshot_base_count)+sizeof(snapshot_packet);
+    sizeof(snapshot_bases)+sizeof(snapshot_base_count)+sizeof(snapshot_packet)+sizeof(kind_count);
   p->observer_packet_bytes=sizeof(*p);
 #ifdef ET_R_ALTERNATE_PROFILE
   p->status=ET_R_UNSUPPORTED;
@@ -155,16 +179,33 @@ int et_cpuv1_test_resource_begin_v1(et_cpuv1_resource_packet_v1 *p) {
     for (unsigned k=0;k<ET_R_KINDS;k++) p->rows[d][k]=events[d][k];
   return (int)p->status;
 }
+/* Owning TUs publish all applicable layout facts even with no live bases. */
+void et_cpuv1_test_resource_layout_v1(et_cpuv1_resource_packet_v1 *p,
+ unsigned d,unsigned k,size_t size,size_t alignment) {
+  if (!p || p!=snapshot_packet || !valid_kind(d,k) || d==ET_R_SCHEME ||
+      !size || !alignment || (alignment&(alignment-1u))) {
+    et_cpuv1_test_resource_fail_v1(p,ET_R_ARGUMENT);return;
+  }
+  et_cpuv1_resource_row_v1 *r=&p->rows[d][k];
+  if ((r->control_size && r->control_size!=size) ||
+      (r->control_alignment && r->control_alignment!=alignment)) {
+    et_cpuv1_test_resource_fail_v1(p,ET_R_MISMATCH);return;
+  }
+  r->control_size=size;r->control_alignment=alignment;
+}
 int et_cpuv1_test_resource_add_v1(et_cpuv1_resource_packet_v1 *p,
  unsigned d,unsigned k,const void *base,size_t n,size_t s,unsigned state,
  size_t alignment) {
   uint64_t requested;
-  if (!p || p!=snapshot_packet || !valid(d,k) || state>ET_R_DEAD ||
+  if (!p || p!=snapshot_packet || (!valid_kind(d,k) || d==ET_R_SCHEME) || state>ET_R_DEAD ||
       !alignment || (alignment&(alignment-1u)) ||
       !bytes(n,s,&requested)) {
     et_cpuv1_test_resource_fail_v1(p,ET_R_ARGUMENT); return ET_R_ARGUMENT;
   }
   if (!base) return ET_R_OK;
+  if ((uintptr_t)base%alignment) {
+    et_cpuv1_test_resource_fail_v1(p,ET_R_MISMATCH);return ET_R_MISMATCH;
+  }
   int unique=unique_base(base);
   if (unique!=ET_R_OK) {
     et_cpuv1_test_resource_fail_v1(p,(unsigned)unique); return unique;
@@ -192,9 +233,17 @@ int et_cpuv1_test_resource_finish_v1(et_cpuv1_resource_packet_v1 *p) {
   if (mutation==1) p->rows[ET_R_F32][0].bases++;
   if (mutation==2) p->coverage &= ~(UINT64_C(1)<<ET_R_F32);
   for (unsigned d=0;d<ET_R_DOMAINS;d++) {
-    if (d==ET_R_SCHEME || d==ET_R_RUNTIME) continue;
+    if (d==ET_R_SCHEME) continue;
     for (unsigned k=0;k<ET_R_KINDS;k++) {
       et_cpuv1_resource_row_v1 *r=&p->rows[d][k];
+      /* Arena backing/metadata are census-only; allocated observer buffers
+       * retain their ordinary independent event conservation. */
+      if (d==ET_R_RUNTIME && k!=6) continue;
+      uint64_t states=0;
+      if (!add(&states,r->live) || !add(&states,r->pending) ||
+          !add(&states,r->prepared) || !add(&states,r->busy) ||
+          !add(&states,r->dead) || states!=r->bases)
+        et_cpuv1_test_resource_fail_v1(p,ET_R_MISMATCH);
       if (r->freed>r->created || r->freed_requested>r->allocated_requested ||
           r->freed_usable>r->allocated_usable ||
           r->created-r->freed!=r->bases ||
@@ -206,6 +255,7 @@ int et_cpuv1_test_resource_finish_v1(et_cpuv1_resource_packet_v1 *p) {
   if (!p->scheme_ready ||
       p->coverage != (UINT64_C(1)<<ET_R_DOMAINS)-1)
     et_cpuv1_test_resource_fail_v1(p,ET_R_COVERAGE);
+  memset(snapshot_bases,0,sizeof(snapshot_bases));snapshot_base_count=0;
   snapshot_packet=NULL;
   return (int)p->status;
 }

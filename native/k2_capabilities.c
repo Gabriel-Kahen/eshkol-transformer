@@ -1386,3 +1386,10 @@ int64_t et_k2_test_copy_k1_result_v1(int32_t result, uint32_t category,
   return copy_k1_result(error_payload, result, &source, "capability-require");
 }
 #endif
+
+/* CPUV1_RESOURCE_BEGIN */
+#ifdef ET_CPUV1_RESOURCE_TESTING
+/* Read only: never invokes runtime discovery or initialization. */
+et_kernel_runtime *et_cpuv1_test_k2_runtime_slot_v1(void) { return state.runtime; }
+#endif
+/* CPUV1_RESOURCE_END */

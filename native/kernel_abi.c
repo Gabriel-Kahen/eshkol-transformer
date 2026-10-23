@@ -1,3 +1,6 @@
+/* CPUV1_RESOURCE_BEGIN */
+#include "cpuv1_resource_private.h"
+/* CPUV1_RESOURCE_END */
 #include "eshkol_transformer/kernel_abi.h"
 
 #include <limits.h>
@@ -145,39 +148,39 @@ static int valid_symbol(const char *text) {
 
 static char *duplicate_text(const char *text) {
   const size_t length = strlen(text);
-  char *copy = (char *)malloc(length + 1u);
+  char *copy = (char *)ET_R_ALLOC(ET_R_K1,2,malloc(length + 1u),length+1u,1u);
   if (copy != NULL) {
     memcpy(copy, text, length + 1u);
   }
   return copy;
 }
 
-static void free_string_array(size_t count, const char *const *values) {
+static void free_string_array(size_t count, const char *const *values ET_R_EXTRA_ARG(size_t allocated_count)) {
   if (values != NULL) {
     for (size_t index = 0; index < count; index++) {
-      free((void *)values[index]);
+      ET_R_FREE(ET_R_K1,2,(void *)values[index],strlen(values[index])+1u,1u);
     }
   }
-  free((void *)values);
+  ET_R_FREE(ET_R_K1,3,(void *)values,allocated_count,sizeof(*values));
 }
 
 static void free_capability(et_kernel_capability_v1 *capability) {
   if (capability == NULL) {
     return;
   }
-  free((void *)capability->name);
-  free((void *)capability->implementation);
-  free((void *)capability->version);
-  free((void *)capability->evidence);
-  free_string_array(capability->operation_count, capability->operations);
-  free_string_array(capability->dtype_count, capability->dtypes);
-  free_string_array(capability->device_count, capability->devices);
+  ET_R_FREE(ET_R_K1,2,(void *)capability->name,strlen(capability->name)+1u,1u);
+  ET_R_FREE(ET_R_K1,2,(void *)capability->implementation,strlen(capability->implementation)+1u,1u);
+  ET_R_FREE(ET_R_K1,2,(void *)capability->version,strlen(capability->version)+1u,1u);
+  ET_R_FREE(ET_R_K1,2,(void *)capability->evidence,strlen(capability->evidence)+1u,1u);
+  free_string_array(capability->operation_count, capability->operations ET_R_EXTRA_ARG(capability->operation_count));
+  free_string_array(capability->dtype_count, capability->dtypes ET_R_EXTRA_ARG(capability->dtype_count));
+  free_string_array(capability->device_count, capability->devices ET_R_EXTRA_ARG(capability->device_count));
   if (capability->shape_ranges != NULL) {
     for (size_t index = 0; index < capability->shape_range_count; index++) {
-      free((void *)capability->shape_ranges[index].dimensions);
+      ET_R_FREE(ET_R_K1,5,(void *)capability->shape_ranges[index].dimensions,capability->shape_ranges[index].rank,sizeof(*capability->shape_ranges[index].dimensions));
     }
   }
-  free((void *)capability->shape_ranges);
+  ET_R_FREE(ET_R_K1,4,(void *)capability->shape_ranges,capability->shape_range_count,sizeof(*capability->shape_ranges));
   memset(capability, 0, sizeof(*capability));
 }
 
@@ -188,8 +191,8 @@ void et_kernel_runtime_destroy(et_kernel_runtime *runtime) {
   for (size_t index = 0; index < runtime->capability_count; index++) {
     free_capability(&runtime->capabilities[index]);
   }
-  free(runtime->capabilities);
-  free(runtime);
+  ET_R_FREE(ET_R_K1,1,runtime->capabilities,runtime->capability_count,sizeof(*runtime->capabilities));
+  ET_R_FREE(ET_R_K1,0,runtime,1u,sizeof(*runtime));
 }
 
 static int string_pointer_compare(const void *left, const void *right) {
@@ -289,7 +292,7 @@ static int32_t copy_string_array(const char *operation, size_t count,
   if (result != 0 || count == 0u) {
     return result;
   }
-  copy = (const char **)calloc(count, sizeof(*copy));
+  copy = (const char **)ET_R_ALLOC(ET_R_K1,3,calloc(count, sizeof(*copy)),count,sizeof(*copy));
   if (copy == NULL) {
     return set_error(error, ET_KERNEL_ERROR_INTERNAL,
                      ET_KERNEL_CODE_ALLOCATION_FAILED, operation,
@@ -298,7 +301,7 @@ static int32_t copy_string_array(const char *operation, size_t count,
   for (size_t index = 0; index < count; index++) {
     copy[index] = duplicate_text(source[index]);
     if (copy[index] == NULL) {
-      free_string_array(index, copy);
+      free_string_array(index, copy ET_R_EXTRA_ARG(count));
       return set_error(error, ET_KERNEL_ERROR_INTERNAL,
                        ET_KERNEL_CODE_ALLOCATION_FAILED, operation,
                        "cannot copy capability symbol");
@@ -391,7 +394,7 @@ static int32_t copy_shape_ranges(const char *operation, size_t count,
   if (result != 0 || count == 0u) {
     return result;
   }
-  copy = (et_kernel_shape_range_v1 *)calloc(count, sizeof(*copy));
+  copy = (et_kernel_shape_range_v1 *)ET_R_ALLOC(ET_R_K1,4,calloc(count, sizeof(*copy)),count,sizeof(*copy));
   if (copy == NULL) {
     return set_error(error, ET_KERNEL_ERROR_INTERNAL,
                      ET_KERNEL_CODE_ALLOCATION_FAILED, operation,
@@ -404,13 +407,13 @@ static int32_t copy_shape_ranges(const char *operation, size_t count,
     if (rank == 0) {
       continue;
     }
-    dimensions = (et_kernel_dimension_range_v1 *)calloc(
-        rank, sizeof(*dimensions));
+    dimensions = (et_kernel_dimension_range_v1 *)ET_R_ALLOC(ET_R_K1,5,calloc(
+        rank, sizeof(*dimensions)),rank,sizeof(*dimensions));
     if (dimensions == NULL) {
       for (size_t index = 0; index < range_index; index++) {
-        free((void *)copy[index].dimensions);
+        ET_R_FREE(ET_R_K1,5,(void *)copy[index].dimensions,copy[index].rank,sizeof(*copy[index].dimensions));
       }
-      free(copy);
+      ET_R_FREE(ET_R_K1,4,copy,count,sizeof(*copy));
       return set_error(error, ET_KERNEL_ERROR_INTERNAL,
                        ET_KERNEL_CODE_ALLOCATION_FAILED, operation,
                        "cannot allocate shape dimensions");
@@ -555,14 +558,14 @@ static int32_t create_baseline(et_kernel_runtime **output,
                      "runtime output pointer is null");
   }
   *output = NULL;
-  runtime = (et_kernel_runtime *)calloc(1, sizeof(*runtime));
+  runtime = (et_kernel_runtime *)ET_R_ALLOC(ET_R_K1,0,calloc(1, sizeof(*runtime)),1u,sizeof(*runtime));
   if (runtime == NULL) {
     return set_error(error, ET_KERNEL_ERROR_INTERNAL,
                      ET_KERNEL_CODE_ALLOCATION_FAILED, "capability-discover",
                      "cannot allocate capability runtime");
   }
-  runtime->capabilities = (et_kernel_capability_v1 *)calloc(
-      baseline_count, sizeof(*runtime->capabilities));
+  runtime->capabilities = (et_kernel_capability_v1 *)ET_R_ALLOC(ET_R_K1,1,calloc(
+      baseline_count, sizeof(*runtime->capabilities)),baseline_count,sizeof(*runtime->capabilities));
   if (runtime->capabilities == NULL) {
     et_kernel_runtime_destroy(runtime);
     return set_error(error, ET_KERNEL_ERROR_INTERNAL,
@@ -739,9 +742,9 @@ static int32_t merge_provider(et_kernel_runtime *runtime,
                          ET_KERNEL_CODE_INTEGER_OVERFLOW,
                          "capability-discover", "capability count overflows");
       }
-      resized = (et_kernel_capability_v1 *)realloc(
+      resized = (et_kernel_capability_v1 *)ET_R_REALLOC(ET_R_K1,1,realloc(
           runtime->capabilities,
-          (runtime->capability_count + 1u) * sizeof(*resized));
+          (runtime->capability_count + 1u) * sizeof(*resized)),runtime->capabilities,runtime->capability_count,runtime->capability_count+1u,sizeof(*resized));
       if (resized == NULL) {
         free_capability(&copied);
         return set_error(error, ET_KERNEL_ERROR_INTERNAL,
@@ -1533,3 +1536,7 @@ int32_t et_kernel_runtime_report_json(const et_kernel_runtime *runtime,
   et_kernel_error_clear(error);
   return 0;
 }
+
+/* CPUV1_RESOURCE_BEGIN */
+#include "cpuv1_resource_k1.inc"
+/* CPUV1_RESOURCE_END */

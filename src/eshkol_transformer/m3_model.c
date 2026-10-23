@@ -1,3 +1,6 @@
+/* CPUV1_RESOURCE_BEGIN */
+#include "../../native/cpuv1_resource_private.h"
+/* CPUV1_RESOURCE_END */
 /* Fixed-profile graph ownership and transaction transport only. Every numerical
  * forward/reverse schedule lives in Eshkol. M3T's standalone source is unchanged. */
 #include "m3_model.h"
@@ -128,10 +131,10 @@ void *et_m3t_private_workspace_create_v1(void *p) {
   /* Stage history before workspace publication, including public workspaces. */
   owner *o = admit(p, OWNER, 0);
   if (!o) return NULL;
-  m3_workspace *s = allocate(sizeof(*s));
+  m3_workspace *s = ET_R_ALLOC(ET_R_TRAIN,8,allocate(sizeof(*s)),1u,sizeof(*s));
   if (!s) return NULL;
   workspace *w = m3t_workspace_create_original(p);
-  if (!w) { free(s); return NULL; }
+  if (!w) { ET_R_FREE(ET_R_TRAIN,8,s,1u,sizeof(*s)); return NULL; }
   s->value = w; s->next = m3_workspaces; m3_workspaces = s;
   return w;
 }
@@ -217,7 +220,7 @@ void *et_m3_private_graph_capture_v1(void *p) {
     bad(ET_M3T_INVALID_STATE, ET_M3T_CODE_LIFECYCLE); return NULL;
   }
   if (m3_workspace_eligible(s)) return NULL;
-  m3_graph *g = allocate(sizeof(*g));
+  m3_graph *g = ET_R_ALLOC(ET_R_TRAIN,9,allocate(sizeof(*g)),1u,sizeof(*g));
   if (!g) return NULL;
   g->model = w->model; g->original = w->model->original;
   g->successor = w->model->successor; g->mode = w->mode;
@@ -242,7 +245,7 @@ void *et_m3_private_graph_capture_v1(void *p) {
 #endif
   return g;
 failed:
-  m3_destroy_graph_payload(g); free(g); return NULL;
+  m3_destroy_graph_payload(g); ET_R_FREE(ET_R_TRAIN,9,g,1u,sizeof(*g)); return NULL;
 }
 int64_t et_m3_private_graph_restore_v1(void *p, void *gp) {
   clear();
@@ -313,9 +316,9 @@ void *et_m3_private_model_logits_create_v1(void *gp) {
   if (g->active || g->leases == SIZE_MAX) {
     bad(ET_M3T_INVALID_STATE, ET_M3T_CODE_REENTRANCY); return NULL;
   }
-  m3_logits *l = allocate(sizeof(*l)); if (!l) return NULL;
+  m3_logits *l = ET_R_ALLOC(ET_R_TRAIN,10,allocate(sizeof(*l)),1u,sizeof(*l)); if (!l) return NULL;
   et_f32_tensor_error e;
-  if (f32_error(et_f32_tensor_clone_v1(g->logits, &l->tensor, &e), &e)) { free(l); return NULL; }
+  if (f32_error(et_f32_tensor_clone_v1(g->logits, &l->tensor, &e), &e)) { ET_R_FREE(ET_R_TRAIN,10,l,1u,sizeof(*l)); return NULL; }
   l->graph = g; ++g->leases; enroll(&l->r, M3_LOGITS); return l;
 }
 int64_t et_m3_private_model_logits_copy_to_v1(void *lp, void *header, int64_t count) {
@@ -490,3 +493,7 @@ int64_t et_m3_test_report_counts_v1(void) {
   return 0;
 }
 #endif
+
+/* CPUV1_RESOURCE_BEGIN */
+#include "../../native/cpuv1_resource_m3.inc"
+/* CPUV1_RESOURCE_END */

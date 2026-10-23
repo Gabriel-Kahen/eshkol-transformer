@@ -1,3 +1,6 @@
+/* CPUV1_RESOURCE_BEGIN */
+#include "cpuv1_resource_private.h"
+/* CPUV1_RESOURCE_END */
 #include <stddef.h>
 
 /* Wave 2 extends the accepted source-composed Wave 1 bridge. The fixed native
@@ -441,7 +444,7 @@ void *et_i2_private_tensor_create_uniform_v1(int64_t count, int64_t bits) {
   }
   if (count > 0) {
     payload =
-        (uint32_t *)et_i2_system_calloc((size_t)count, sizeof(*payload));
+        (uint32_t *)ET_R_ALLOC(ET_R_F32,22,et_i2_system_calloc((size_t)count, sizeof(*payload)),(size_t)count,sizeof(*payload));
     if (payload == NULL) {
       (void)et_f32_tensor_destroy_v1(&tensor, &et_i2_last_error);
       et_i2_set_bridge_error(ET_F32_TENSOR_ERROR_INTERNAL,
@@ -453,11 +456,11 @@ void *et_i2_private_tensor_create_uniform_v1(int64_t count, int64_t bits) {
     }
     if (et_f32_tensor_copy_bits_from_v1(tensor, payload, (size_t)count,
                                         &et_i2_last_error) != 0) {
-      free(payload);
+      ET_R_FREE(ET_R_F32,22,payload,(size_t)count,sizeof(*payload));
       (void)et_f32_tensor_destroy_v1(&tensor, &et_i2_last_error);
       return NULL;
     }
-    free(payload);
+    ET_R_FREE(ET_R_F32,22,payload,(size_t)count,sizeof(*payload));
   }
   return tensor;
 }
@@ -783,22 +786,22 @@ void *et_i2_private_decode_builder_create_v1(int64_t rank, void *payload,
                            ET_F32_TENSOR_CODE_INVALID_SHAPE);
     return NULL;
   }
-  builder = (et_i2_decode_builder *)et_i2_system_calloc(1u, sizeof(*builder));
+  builder = (et_i2_decode_builder *)ET_R_ALLOC(ET_R_F32,17,et_i2_system_calloc(1u, sizeof(*builder)),1u,sizeof(*builder));
   if (builder != NULL && rank > 0) {
-    builder->shape = (uint64_t *)et_i2_system_calloc(
-        (size_t)rank, sizeof(*builder->shape));
+    builder->shape = (uint64_t *)ET_R_ALLOC(ET_R_F32,18,et_i2_system_calloc(
+        (size_t)rank, sizeof(*builder->shape)),(size_t)rank,sizeof(*builder->shape));
   }
   if (builder != NULL && payload_size > 0) {
     builder->payload =
-        (unsigned char *)et_i2_system_malloc((size_t)payload_size);
+        (unsigned char *)ET_R_ALLOC(ET_R_F32,19,et_i2_system_malloc((size_t)payload_size),(size_t)payload_size,1u);
   }
   if (builder == NULL || (rank > 0 && builder->shape == NULL) ||
       (payload_size > 0 && builder->payload == NULL)) {
     if (builder != NULL) {
-      free(builder->payload);
-      free(builder->shape);
+      ET_R_FREE(ET_R_F32,19,builder->payload,(size_t)payload_size,1u);
+      ET_R_FREE(ET_R_F32,18,builder->shape,(size_t)rank,sizeof(*builder->shape));
     }
-    free(builder);
+    ET_R_FREE(ET_R_F32,17,builder,1u,sizeof(*builder));
     et_i2_set_bridge_error(ET_F32_TENSOR_ERROR_INTERNAL,
                            ET_F32_TENSOR_CODE_ALLOCATION_FAILED);
     return NULL;
@@ -858,8 +861,8 @@ done:
   if (owned != NULL) {
     et_i2_owned_clone_count++;
     et_i2_unlink_decode_builder(builder);
-    free(builder->payload);
-    free(builder->shape);
+    ET_R_FREE(ET_R_F32,19,builder->payload,builder->payload_size,1u);
+    ET_R_FREE(ET_R_F32,18,builder->shape,builder->rank,sizeof(*builder->shape));
     et_i2_retire_decode_builder(builder);
   }
   return owned;
@@ -874,8 +877,8 @@ int64_t et_i2_private_decode_builder_abort_v1(void *opaque) {
   }
   if (builder != NULL) {
     et_i2_unlink_decode_builder(builder);
-    free(builder->payload);
-    free(builder->shape);
+    ET_R_FREE(ET_R_F32,19,builder->payload,builder->payload_size,1u);
+    ET_R_FREE(ET_R_F32,18,builder->shape,builder->rank,sizeof(*builder->shape));
     et_i2_retire_decode_builder(builder);
   }
   return 0;
@@ -888,13 +891,13 @@ void *et_i2_private_copy_builder_create_v1(int64_t count) {
                            ET_F32_TENSOR_CODE_INVALID_SHAPE);
     return NULL;
   }
-  builder = (et_i2_copy_builder *)et_i2_system_calloc(1u, sizeof(*builder));
+  builder = (et_i2_copy_builder *)ET_R_ALLOC(ET_R_F32,15,et_i2_system_calloc(1u, sizeof(*builder)),1u,sizeof(*builder));
   if (builder != NULL) {
     builder->assignments = (et_f32_tensor_copy_assignment_v1 *)
-        et_i2_system_calloc((size_t)count, sizeof(*builder->assignments));
+        ET_R_ALLOC(ET_R_F32,20,et_i2_system_calloc((size_t)count, sizeof(*builder->assignments)),(size_t)count,sizeof(*builder->assignments));
   }
   if (builder == NULL || builder->assignments == NULL) {
-    free(builder);
+    ET_R_FREE(ET_R_F32,15,builder,1u,sizeof(*builder));
     et_i2_set_bridge_error(ET_F32_TENSOR_ERROR_INTERNAL,
                            ET_F32_TENSOR_CODE_ALLOCATION_FAILED);
     return NULL;
@@ -997,7 +1000,7 @@ int64_t et_i2_private_copy_builder_commit_v1(void *opaque) {
     (void)et_f32_tensor_copy_plan_release_v1(&builder->plan,
                                              &et_i2_last_error);
     et_i2_unlink_copy_builder(builder);
-    free(builder->assignments);
+    ET_R_FREE(ET_R_F32,20,builder->assignments,builder->count,sizeof(*builder->assignments));
     et_i2_retire_copy_builder(builder);
   }
   return status;
@@ -1025,7 +1028,7 @@ int64_t et_i2_private_copy_builder_abort_v1(void *opaque) {
                                              &et_i2_last_error);
   }
   et_i2_unlink_copy_builder(builder);
-  free(builder->assignments);
+  ET_R_FREE(ET_R_F32,20,builder->assignments,builder->count,sizeof(*builder->assignments));
   et_i2_retire_copy_builder(builder);
   return 0;
 }
@@ -1290,7 +1293,7 @@ static int32_t et_tr3_c_i2_translate_copy_prepare(
 static void et_tr3_c_i2_retire_restore_builder(
     et_i2_copy_builder *builder, uint32_t terminal_phase) {
   et_i2_unlink_copy_builder(builder);
-  free(builder->assignments);
+  ET_R_FREE(ET_R_F32,20,builder->assignments,builder->count,sizeof(*builder->assignments));
   builder->count = 0u;
   builder->assignments = NULL;
   builder->plan = NULL;
@@ -1315,17 +1318,17 @@ int32_t et_tr3_c_i2_copy_builder_create_restore42_v1(
   if (*output != NULL) {
     return ET_I2_PRIVATE_OWNED_RESULT_OWNER_CONFLICT;
   }
-  builder = (et_i2_copy_builder *)et_i2_system_calloc(1u, sizeof(*builder));
+  builder = (et_i2_copy_builder *)ET_R_ALLOC(ET_R_F32,15,et_i2_system_calloc(1u, sizeof(*builder)),1u,sizeof(*builder));
   if (builder != NULL) {
     builder->assignments = (et_f32_tensor_copy_assignment_v1 *)
-        et_i2_system_calloc(ET_TR3_C_RESTORE_ASSIGNMENTS,
-                            sizeof(*builder->assignments));
+        ET_R_ALLOC(ET_R_F32,20,et_i2_system_calloc(ET_TR3_C_RESTORE_ASSIGNMENTS,
+                            sizeof(*builder->assignments)),ET_TR3_C_RESTORE_ASSIGNMENTS,sizeof(*builder->assignments));
   }
   if (builder == NULL || builder->assignments == NULL) {
     if (builder != NULL) {
-      free(builder->assignments);
+      ET_R_FREE(ET_R_F32,20,builder->assignments,ET_TR3_C_RESTORE_ASSIGNMENTS,sizeof(*builder->assignments));
     }
-    free(builder);
+    ET_R_FREE(ET_R_F32,15,builder,1u,sizeof(*builder));
     return ET_I2_PRIVATE_OWNED_RESULT_ALLOCATION_FAILED;
   }
   builder->magic = ET_I2_COPY_BUILDER_MAGIC;
@@ -1596,7 +1599,7 @@ int64_t et_tr3_c_i2_copy_builder_commit_checked_v1(void *opaque) {
     et_tr3_c_i2_fail_stop();
   }
   et_i2_unlink_copy_builder(builder);
-  free(builder->assignments);
+  ET_R_FREE(ET_R_F32,20,builder->assignments,builder->count,sizeof(*builder->assignments));
   et_i2_retire_copy_builder(builder);
   return 0;
 }
@@ -1625,7 +1628,7 @@ int64_t et_tr3_c_i2_copy_builder_abort_checked_v1(void *opaque) {
     }
   }
   et_i2_unlink_copy_builder(builder);
-  free(builder->assignments);
+  ET_R_FREE(ET_R_F32,20,builder->assignments,builder->count,sizeof(*builder->assignments));
   et_i2_retire_copy_builder(builder);
   return 0;
 }
@@ -1657,13 +1660,13 @@ void *et_i2_private_reset_builder_create_v1(int64_t count) {
                            ET_F32_TENSOR_CODE_INVALID_SHAPE);
     return NULL;
   }
-  builder = (et_i2_reset_builder *)et_i2_system_calloc(1u, sizeof(*builder));
+  builder = (et_i2_reset_builder *)ET_R_ALLOC(ET_R_F32,16,et_i2_system_calloc(1u, sizeof(*builder)),1u,sizeof(*builder));
   if (builder != NULL) {
-    builder->parameters = (et_f32_parameter **)et_i2_system_calloc(
-        (size_t)count, sizeof(*builder->parameters));
+    builder->parameters = (et_f32_parameter **)ET_R_ALLOC(ET_R_F32,21,et_i2_system_calloc(
+        (size_t)count, sizeof(*builder->parameters)),(size_t)count,sizeof(*builder->parameters));
   }
   if (builder == NULL || builder->parameters == NULL) {
-    free(builder);
+    ET_R_FREE(ET_R_F32,16,builder,1u,sizeof(*builder));
     et_i2_set_bridge_error(ET_F32_TENSOR_ERROR_INTERNAL,
                            ET_F32_TENSOR_CODE_ALLOCATION_FAILED);
     return NULL;
@@ -1725,7 +1728,7 @@ int64_t et_i2_private_reset_builder_commit_v1(void *opaque) {
     (void)et_f32_gradient_reset_plan_release_v1(&builder->plan,
                                                 &et_i2_last_error);
     et_i2_unlink_reset_builder(builder);
-    free(builder->parameters);
+    ET_R_FREE(ET_R_F32,21,builder->parameters,builder->count,sizeof(*builder->parameters));
     et_i2_retire_reset_builder(builder);
   }
   return status;
@@ -1746,7 +1749,7 @@ int64_t et_i2_private_reset_builder_abort_v1(void *opaque) {
                                                 &et_i2_last_error);
   }
   et_i2_unlink_reset_builder(builder);
-  free(builder->parameters);
+  ET_R_FREE(ET_R_F32,21,builder->parameters,builder->count,sizeof(*builder->parameters));
   et_i2_retire_reset_builder(builder);
   return 0;
 }
@@ -1777,7 +1780,7 @@ int64_t et_i2_private_parameter_accumulate_uniform_v1(
     goto cleanup;
   }
   if (count > 0u) {
-    payload = (uint32_t *)et_i2_system_calloc(count, sizeof(*payload));
+    payload = (uint32_t *)ET_R_ALLOC(ET_R_F32,22,et_i2_system_calloc(count, sizeof(*payload)),count,sizeof(*payload));
     if (payload == NULL) {
       et_i2_set_bridge_error(ET_F32_TENSOR_ERROR_INTERNAL,
                              ET_F32_TENSOR_CODE_ALLOCATION_FAILED);
@@ -1804,7 +1807,7 @@ int64_t et_i2_private_parameter_accumulate_uniform_v1(
 
 cleanup:
   saved_error = et_i2_last_error;
-  free(payload);
+  ET_R_FREE(ET_R_F32,22,payload,(size_t)count,sizeof(*payload));
   if (plan != NULL) {
     (void)et_f32_gradient_plan_release_v1(&plan, NULL);
   }
@@ -1847,3 +1850,7 @@ int64_t et_i2_private_parameter_gradient_count_v1(void *carrier,
   }
   return (int64_t)metadata.contribution_count;
 }
+
+/* CPUV1_RESOURCE_BEGIN */
+#include "cpuv1_resource_i2.inc"
+/* CPUV1_RESOURCE_END */

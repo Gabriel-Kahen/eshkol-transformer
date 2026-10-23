@@ -18,7 +18,15 @@
       "prepared_gradient",
       "reset_parameters",
       "destroy_provenance",
-      "save_witness"
+      "save_witness",
+      "i2_copy_builder",
+      "i2_reset_builder",
+      "i2_decode_builder",
+      "i2_decode_shape",
+      "i2_decode_payload",
+      "i2_copy_assignments",
+      "i2_reset_parameters",
+      "i2_transient_words"
     ],
     "P1": [
       "token",
@@ -45,7 +53,15 @@
     "TRAIN": [
       "input",
       "workspace",
-      "logits"
+      "logits",
+      "m3t_initializer",
+      "m3t_owner",
+      "m3t_input",
+      "m3t_logits",
+      "m3t_workspace",
+      "m3_workspace",
+      "m3_graph",
+      "m3_logits"
     ],
     "E3": [
       "frame",
@@ -73,7 +89,10 @@
       "step_stages",
       "step_assignments",
       "step_parameters",
-      "reconstruct_entries"
+      "reconstruct_entries",
+      "restore_plan",
+      "reconstruct_clone_pointers",
+      "reconstruct_entry_set"
     ],
     "I64_T1": [
       "tensor",
@@ -210,7 +229,8 @@
       "scope",
       "mutex",
       "reflection_entries",
-      "observer_buffer"
+      "observer_buffer",
+      "reflection_registry"
     ]
   },
   "translation_units": [
@@ -472,10 +492,10 @@
     "include/eshkol_transformer/n2_primitives_abi.h": "22a137a491746703501387a6524f70babcc7b237e0831c6a4b92416c644f5895",
     "include/eshkol_transformer/n3k_primitives_abi.h": "c943a75e2f963fd5cf0a8f9296d92f4c3d0d3cd5cc2fd30cc4c3318f375ed3e9",
     "native/a2_attention_provider.c": "52aaa888b8d4f4a4b74d17d0d3b8ff2908c3e914a62dd8ab39345cbd22912c09",
-    "native/a2_kv_cache.c": "e9dc211f90185764f111e1f9dfa1bb98e0f7c3d7392e9e995c738da57dab9637",
+    "native/a2_kv_cache.c": "6633742aaa936d864f20f7f1366b5885ad95e7747eed9112e276b7b7d65abab1",
     "native/c2_checkpoint_codec.c": "f11454f0a916c11dc0c8844f82caf94a24061adfb5b8b53262cab224ec9e4869",
     "native/c2_checkpoint_codec.h": "5121060b146bcfc39bbdbeafab2eedcb4f4874e4dd31f060fc85d2b2838b091e",
-    "native/c2_checkpoint_core.c": "60d484413c2e2da9ab8cbff95f67cd52465a37fb191d73ddc7f8ba25cc237da2",
+    "native/c2_checkpoint_core.c": "e91eb2a62c23aaae02f0e9540f035ddf6f56d98d809e50db59981d5002110053",
     "native/c2_checkpoint_core.h": "61681c445f83981c36c164ea5b90b02350b6c626d340e9ecc25c07e040c2386c",
     "native/c2_checkpoint_format.c": "e42ccc792e026341699008942883a4284c32b29a9ec721b8d0ecdca7ab9f6ef0",
     "native/c2_checkpoint_format.h": "303c49e2b97f2d6046bd7c540f3236b8aeb7ad4ee1aea3b7e690d2b1d34a4dea",
@@ -484,16 +504,35 @@
     "native/c2_checkpoint_load_bridge.c": "902786d07ba2afc0493a8e85f980b93bfe45ed65e9d592f5bddf08d18ce902ed",
     "native/c2_checkpoint_load_bridge.h": "45d0a0ca8632656d0d9db3e07c39a7dfeba2b0a439bc91af895991fb94d704ff",
     "native/c2_checkpoint_load_sha.inc": "c2b5f887755e986d12ca65d9288324c6efe1b831f22813d850b8c84b55b16d6c",
-    "native/c2_checkpoint_reader.c": "2c689ba890f02c819fb99a07fd33c07966dd8541f965074aa8806edb92544a6e",
+    "native/c2_checkpoint_reader.c": "52c3dbcf839786e679435f0d82d0d0cab2db1520a55af48ac97dd83f741d69c2",
     "native/c2_checkpoint_reader.h": "8c3c9317b96d06c66d05ba87be48e0505e5944c8e2db23df5d1f8b5d1f316abd",
     "native/c2_checkpoint_save_bridge.c": "b7cf6a0518386a1475567181aea45a8e03dc4c2edcb6a5ec4309796eed5531c2",
     "native/c2_checkpoint_save_bridge.h": "63a0aa492719f61c7a66560b240146d4658400b6e8424eabb98c257de0f182b3",
     "native/c2_x1_canonical.c": "5ccb23d9a2b2befcd30fead18f1c1d90c12f797b8493b09c82c957b0c771e521",
     "native/c2_x1_canonical.h": "6303a0e0640c9d842f3177a47478f2d7f51011a08ae370f180d9b53754cead67",
-    "native/checkpoint_io.c": "9ce8d661004279c71118f710c78654e4740887a5c9200a8ebb20932d43db665d",
+    "native/checkpoint_io.c": "dadc81e4100a16a6206aaa2e8da05fb872011cb332b9aa135aaad61a72216c44",
     "native/checkpoint_io.h": "13dae05d5813ac9309b0335aff55ae3ed8ebf2ddc632a395b9ee0c5a2b5bf7d0",
+    "native/cpuv1_resource_a2.inc": "57af638df2facae11051e3d662452b349ed2976e842a5039505b45503c23a826",
+    "native/cpuv1_resource_c2.inc": "15eafac567e955f5e0a38ba42fa524a470ceb090fda85fab3b5b5de3d1b6d4cb",
+    "native/cpuv1_resource_c2_reader.inc": "4ae1c346b77e5c8b291b2983d3939d4ea7196d4008e80319a19301b077a685af",
+    "native/cpuv1_resource_c4.inc": "f0ca38a0fc5c07fe96a83ae45d3c230dcbe34234a79ab52bca084f1818796d4f",
+    "native/cpuv1_resource_d2.inc": "056184080c45e7206ab9b204fddc71ea182ec27d0b5300c61b0dc11af34b385a",
+    "native/cpuv1_resource_e3.inc": "e7e295df862a5465fd39e597f9cd043fbe63b2d332bcbfd9cfa9d0095d6cda78",
+    "native/cpuv1_resource_f32.inc": "448f4bc36a985eca549f7f8508ce7c1092bf2d6f15bc285fad71c57b957e2eca",
+    "native/cpuv1_resource_generation.inc": "b4a0b879e959826f67936fd43882e7154b601539865e8172bcff19ae1ce863a5",
+    "native/cpuv1_resource_i2.inc": "2bd775406a9debf783e75e7751ed61adc0ac76ab4922e901b58f45be41f06762",
+    "native/cpuv1_resource_i64.inc": "cc6a4af32dbe183cc60ccac7711092f7f7f4801dc7d72af8a0710d3e1cfc9fc2",
+    "native/cpuv1_resource_inspector.inc": "396d22e81e1fd920a1aed6c57dac8e7b1edfb6d44a31fda2cd04cac33b1cdde6",
+    "native/cpuv1_resource_io.inc": "5870ae46c38ee0cb01cf4856f3271980c63f9554e8a816fa78589b9f054edbb0",
+    "native/cpuv1_resource_k1.inc": "d5c9b7c722450f2635e2598a965d2b0058951ec023793115f644e7efac4ed649",
+    "native/cpuv1_resource_m3.inc": "e79d7b06e6d0e4c93440efe3636863487f4a7e8bd3223719ab51cd466fb942e2",
+    "native/cpuv1_resource_o2.inc": "b142e514680637e0e0e52e04d0b4b41bf14ba1f8514b2dcea1e9682904391d09",
+    "native/cpuv1_resource_p1.inc": "e6d89019ea48d5805b722ea69146016b55dd717afe053b346d10c5b8da124bc5",
+    "native/cpuv1_resource_private.h": "81d83fbd1653ee77d00f972dff1f4ec36e2572b194c7bb04d63dd6c7eaa72750",
+    "native/cpuv1_resource_t1.inc": "614ee40920cbba92a44c86b838d071fa9ef6f92a938e32ded258377b8edaf36c",
+    "native/cpuv1_resource_training.inc": "e81243d3d66746bedd0fcc07019f7bb418cbdc66f17bbc037578207e31ebafbe",
     "native/d1_e1b_package_bridge.c": "4d0b9bcd76e92e64e77d8a10003aceed0dc223219a061aa15bee3b04bb3837ba",
-    "native/d2_native.c": "c49c42641e89dba02e56535dd39f6ca643db30d191d2a6fbca960a72891366ae",
+    "native/d2_native.c": "4a59e29c30d92327a3b3bda37873b69b6d368323bdf761bdf7c2731cb1de9a17",
     "native/d2_native.h": "165dc0184d288b5ea1eef0b3a6a4d5aee4c44e7a2acc1eb1d4d46908206163e8",
     "native/data_io.c": "71a47292641230f4df6454fb41242003b4b838270c68927cd01f32a0e4617d62",
     "native/e1b_error_consumer_bridge.h": "62be6bd81b712824007f74b61b6d78a4309df3db03d5c95f62d65a42153725f1",
@@ -501,3553 +540,2081 @@
     "native/e3_d2_native.h": "b6f951b352f40beff458c98d12a10ba388fd913f8178dfe3fc4ed5324497e150",
     "native/e3_evaluation_metrics_provider.c": "5e948e4916a60073dec8a03cd63c39f24e01b8b78768bc5da38e90e37a19a0f0",
     "native/f32_parameter_internal.h": "76665f108da8fad12c9dbc1b88fab2f239decfe18a966d574e8d3aba777faab7",
-    "native/f32_tensor.c": "0193626e08d5e386c2f48ce3dcde6b6b5a40d2bb7fc8a3c0a892e7a8f0ffa7fe",
+    "native/f32_tensor.c": "346bdc68432e758b9f71adff4502de29b7e43375719759a73faed296a7fa77fb",
     "native/g3c4_primitives_provider.c": "85287b7c059380c3d55cc9aaadcc4feca6a106a27982f356bebe84ffd3ea3624",
     "native/g3n_primitives_provider.c": "cdc7a0416ea8f519c135aeb79b4c74f4660b2c116684dc24ffb7a975c4b7d195",
     "native/g3s_sampling_provider.c": "2dc0e4426b6126ecd9abf8e227ab54105403b05b341cb8df7d01f221760635f5",
-    "native/i2_wave2_package_bridge.c": "fd3a314af97e6cc432ad3b1455110ac11cb8a23d2da1ff7a1f96280f3d45de67",
+    "native/i2_wave2_package_bridge.c": "4bd335a139cf829826f32004f32d018908cb3f3b97423f1802f56a4eca92a41b",
     "native/i64_t1_pair_private.h": "9ee88c920aeac96c9d1bf71da55c20f31d26cb786f8dca6397266a32e2a765da",
-    "native/i64_tensor.c": "017470122bc081d6e4c2966a01c3d9e2eb95224d92564f34681f199930ca283c",
+    "native/i64_tensor.c": "2f60ae9d844b1d1cdd90ba840fd3dd13946ccfddf9b839cd83b20b2fe44fc6c8",
     "native/indexed_cross_entropy.c": "28e7328ec8261353cead3ad72ee95cf7a13336e8f267e5cfff3e53502ba9a0c0",
-    "native/k2_capabilities.c": "33757eda34f673c2cf257df0080a2e4f214c1a173edecc21e6b8f8a14a5f0a93",
+    "native/k2_capabilities.c": "79604893791832b1ea301203e59880881aa81061e232018c8e83d0f21efa33e4",
     "native/k2_capabilities_internal.h": "3d287530c329f01aa4fd0bdbcb48cf1d47dfc3fed3e51b66cb6e9be22ba8b3dd",
-    "native/kernel_abi.c": "efa6a15d2c674c2d8ec9015e3799bb545b25bda067f9021ef6b7440d5c6e6100",
+    "native/kernel_abi.c": "9852f0981e50a32b64a548ca1b3c22ae6f9a01c3be4b5c3ba68e7fad0dd43d42",
     "native/l3s_masked_objective_provider.c": "ff09fce2374ad7d00fc7a5072df32e2325d22ac3b55f16d6fdff9c341fd9da89",
     "native/n2_primitives_provider.c": "fd80267064519c3bd3189594f8c71ee5c04e9d61e97c1b2bc0b922b5b58985a1",
     "native/n3k_primitives_provider.c": "34c9da20a59805e7de5a02f299e586b9a2a0e8e6ff7025d906aa27d4913fad79",
-    "native/o2_optimizer.c": "bc83b46a3a0b0c96dea06d81abed28baaf0655f5781b1a09635f77b41dee7f47",
+    "native/o2_optimizer.c": "e65282a2fd74271646861d00b7f0bcdc7e3b423867ea117879ad47ba69d7c28a",
     "native/o2_optimizer_internal.h": "eb0b598adec8dd3631e4a61ae15db57782fa04646338aa868683d9252980ff15",
     "native/o2_wave2_package_bridge.c": "41e6b9a7296729bac5cac91ee142b472e3155be8c34512ee63b0f77ce2cf4f36",
     "native/o2_wave2_public_bridge_extension.c": "d4f3e6d1958c0c2f04a258ff6ae351a53fe02547ff088ad1841e85121e44c3b4",
-    "native/p1_identity.c": "3e1df1ff0098cb2a92e27b5811fc583e06004747411e8592c75cf7adddf5f5e7",
+    "native/p1_identity.c": "02b3701634a51caf95d55714bb1b170811ef5ce5771c595631bb3519a198d448",
     "native/p1_identity_internal.h": "cc4ad79a3084926f960457aad1ab6f39cdc7a886692cecf9050c12dedea5669b",
     "native/p1_package_bridge.c": "f29d6d3f7ce77b0321069fb18e1d674e0cb7d3842b5bea58fe808b8c3bbd9315",
-    "native/t1_i64_shell.c": "7312a461b7c4131440ad1ec745e15ae6e76c9ba21394f00149534159f30b498a",
+    "native/t1_i64_shell.c": "38ddd2c59756e9b798e2fb914e254958107de9dc02f47bb860e3dac6befeddee",
     "native/t1_i64_shell.h": "e3ae72c7815706480e4c71dc71660f87077d05eb95d9d9e4a29be997ad3a94a3",
     "native/t1_wave1_package_bridge.c": "2ba4f72c52cf1b267780f7c8d00ddb63f23581a4efeb0c74abd79d0d08fbb406",
     "native/tr3_c_i2_restore_internal.h": "bb71c42f32bd0c5db152a276287b5a5807c3010dc0f1169dee52db35b645cb3a",
-    "native/tr3_c_o2_restore.inc": "5fd13e2c4bad5a2667a198aabf79acec6a172119ed337f5d163938a5e6f48745",
+    "native/tr3_c_o2_restore.inc": "b394397838a66996b8cd31a2d9f097d9289d2df8125317d729489cf4b0db9432",
     "native/tr3_c_o2_restore_internal.h": "6db0ea41d03516a86e8dd9888ebda800890100adfc3eb79492f23bcca8f52156",
     "native/tr3_c_restore_bindings.c": "a8c70644279831f3bbc0efd2219a175756e54e957ad381d73f47aac6a78c52e8",
     "native/tr3_c_restore_bindings.h": "d6a6f2d1c6681f97eb8aa8da047e7715f33235ac2fbce7c47774a5b6877c4637",
-    "native/tr3_o2_step_clear.inc": "ebc7bf778c3abada51efc0f9fedbfdf0ac4c867625a4192f03f5a6414dcedaac",
+    "native/tr3_o2_step_clear.inc": "59e9bc539effe8a763bfacbfb9451adacdb35d1121aefb87382a5d423eedf040",
     "native/tr3_o2_step_clear_internal.h": "ba093e57bd9749f5dd5e1424c33afddc82045c64df2166404215335fa7dc9d83",
     "native/x1_config_consumer_bridge.c": "8ded467549ced591b5c484f5e66a8e11f0783c343eafc5f4e462a6d969c280e2",
     "src/eshkol_transformer/cpu4_c4_capture.inc": "de47c7b95d422abba74e2929c55ccaecc6e738d3ff72d3d922d6c3c0f3595d9f",
     "src/eshkol_transformer/cpu4_c4_capture_private.h": "cdaa1efc080a3abaa4a2e4ff038637ba751c9833af1510a08516f7b40c9a0644",
     "src/eshkol_transformer/cpu4_c4_history.inc": "6bdf5496f16dbd96e2decd03c29d9759c87363d8bf1a7b301ced6acd32c83c58",
     "src/eshkol_transformer/cpu4_c4_history_types.h": "2dfa9914a740e2c6425129563ea6e35f44d940aecdc55d9d59c7276ff858a1c7",
-    "src/eshkol_transformer/cpu4_candidate.inc": "18fefa2a9a7b00e5c1de8f253a1d84c03e8c5448720f322d4709a07bb543d8b5",
+    "src/eshkol_transformer/cpu4_candidate.inc": "182c74cb6b84ad6b4ad52225bc8eeb9cbcf84008f4a460d6d8789984c549860b",
     "src/eshkol_transformer/cpu4_candidate_internal.h": "806c9efb601b0bdb8b1338b6936413f3c97b3750f6239b73438d66f600de7803",
-    "src/eshkol_transformer/cpu4_training_lease.inc": "aca519376bd46bf92adf89875d938cd650cf649942e895b7e16c094f8063dce0",
+    "src/eshkol_transformer/cpu4_training_lease.inc": "cd8b06762c09ea98aa5e4115461b978f5a288928835056dcc00cd030f628f038",
     "src/eshkol_transformer/cpu4_training_objective.inc": "031e51efa27f1934972b59e88b72b6cefd0a3dd6e5a20ac8584d056d1033af40",
-    "src/eshkol_transformer/cpu4_training_transport.c": "80c1f95d368ffce1e9270413e6b37c42c724fb829f2082f45f83e2755c9928e8",
+    "src/eshkol_transformer/cpu4_training_transport.c": "2f7ff43d63f836464d837e471a3457cb6872f4e10a1f04f02293508fed32df02",
     "src/eshkol_transformer/cpu4_training_transport.h": "64f318cf909e9b0d31c9ca3c3d4a2ed6e7cedc2e934077835f50ad945feb2725",
-    "src/eshkol_transformer/e3_cpu4_frame.c": "de603cd09f21b5b3bcff2c770937c4b7d2c11e046e53c34d91c570a462199d6b",
+    "src/eshkol_transformer/e3_cpu4_frame.c": "5e2de38b0f84daffd3a5cd2637a3e58fef7bbf31d531be42047bbcd8ca9be3af",
     "src/eshkol_transformer/e3_cpu4_frame.h": "a1a68a31b55f5c91dc67119b9e6cc03c60b7c79536fbeb63a3fe22930abfbec8",
     "src/eshkol_transformer/e3_frame_internal.h": "678186cf1926d5e39e66aa298b7db294f9b29f780a08b14ce4aca7612e13de0b",
     "src/eshkol_transformer/g3c4_context_internal.h": "360a069f6da12d8e039ab80a9461592e98216146f629610d74b07e2cb719c382",
-    "src/eshkol_transformer/g3c4_model_owner.c": "e2d65cf0cf9901846fd68053d75d6b3d22497c39ff12a43fd12ba0fda4b46fce",
+    "src/eshkol_transformer/g3c4_model_owner.c": "e56949ff6407dde07125fb64e197eb734eb4de42f84dcb8d438e809a444e4b97",
     "src/eshkol_transformer/g3c4_model_owner_internal.h": "3d863ac7e7bd580a05028524d78bcad58c2da0cf2aca51184f7cc796c0014d16",
     "src/eshkol_transformer/g3t_prefill2_roles.inc": "f622468535d04b1794ffec1d48158f40d4de219d5171386e8e8fcd26bdfeeeaa",
     "src/eshkol_transformer/g3t_prefill_roles.inc": "30530296c1fb90436d63c163895381186cd8af11664818a03463cacff227521b",
-    "src/eshkol_transformer/g3t_transport.c": "d517f4d65545cefa769748806957da6add8ac8e3a293c9b8077ca36c3a38f465",
+    "src/eshkol_transformer/g3t_transport.c": "dfe327897bb2ebf1c3e5cd357b216d91d8fbb01ab25c00763565bc9fc58adf75",
     "src/eshkol_transformer/g3t_transport.h": "3d0541e5bf0fc387689fd858c8d30a1f4bd8da2694370fd5e6e5e719a28f5c41",
     "src/eshkol_transformer/m3_call_f32_integration.c": "088ec6fda152740910c0a5eb491bcb1db77396cb12a9f45f843af9ec144a32e5",
     "src/eshkol_transformer/m3_call_pins.h": "8c240da83d73b0f1b058000887a6fae8583bfbc6967f375cef581c01349c9cf3",
     "src/eshkol_transformer/m3_i64_integration.c": "de41d30a86701b2f94320bb3f252f5da1e6e32bfcb4b13af5548fbc113d6e36b",
-    "src/eshkol_transformer/m3_model.c": "f0189f526cfa4e2fa4ce8018ba97b1efb5e318cdb9122189e1a7e921e73cdf95",
+    "src/eshkol_transformer/m3_model.c": "221edaa824c7148255d904b1a44e002cf07bd012667735850fc766487312abe9",
     "src/eshkol_transformer/m3_model.h": "c4b16b63f346fe5558495872c18d8489604aa422c28c96f86dc831f74f48dafd",
     "src/eshkol_transformer/m3t_f32_integration.c": "3fb9f9baa010a7a62211768f2b530753767703689aa39b3f05bc410913ffcd68",
     "src/eshkol_transformer/m3t_f32_scoped.h": "722c1adf60cf2c99260831a36507a97fd1a00b788be140bab3f083abeb61d52e",
-    "src/eshkol_transformer/m3t_transport.c": "08e6db9b8ae0f2d370394bb73e60d3ad3695990362e6d96d986e429cefaf1025",
+    "src/eshkol_transformer/m3t_transport.c": "7f88b189ed1e8490ee097d08df96a66260e5f84501920864007a2ec230d6357d",
     "src/eshkol_transformer/m3t_transport.h": "1cd885d9a4fd6322fb67cb52f963de5c9c83d0a36321f0bbae90b875dfee9a8c",
     "tests/cpu4_candidate_children/native_observer.c": "f1e3f7dd95aeb681a3cb8ba884604baa8b8ebb79f080328ce90b24168fea8143",
-    "tests/cpu4_heldout/inspect.c": "d8f53d21c74c45db9a60132f1bdab967ce575398a23c57a7710af0f4c451cc0a"
+    "tests/cpu4_heldout/inspect.c": "58c4fafc0405d3b8acf8f614bb6ecb925054a9e6821ec8d511c5f593a3beabfc"
   },
   "sites": [
     {
       "path": "native/a2_kv_cache.c",
       "owner": "native/a2_kv_cache.c",
       "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 90,
+      "offset": 2588,
+      "end": 2607,
+      "line": 93,
       "callee": "calloc",
-      "expression": "calloc(count, size)"
+      "expression": "calloc(count, size)",
+      "status": "DELEGATED_HELPER_REAL_ALLOCATOR"
     },
     {
       "path": "native/a2_kv_cache.c",
       "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 424,
+      "domain": "ET_R_GENERATION",
+      "offset": 17827,
+      "end": 17856,
+      "line": 427,
       "callee": "a2_calloc",
-      "expression": "a2_calloc(1u, sizeof(*cache))"
+      "expression": "a2_calloc(1u, sizeof(*cache))",
+      "status": "WRAPPED",
+      "kind": "16"
     },
     {
       "path": "native/a2_kv_cache.c",
       "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 426,
+      "domain": "ET_R_GENERATION",
+      "offset": 17968,
+      "end": 18002,
+      "line": 429,
       "callee": "a2_calloc",
-      "expression": "a2_calloc(elements, sizeof(float))"
+      "expression": "a2_calloc(elements, sizeof(float))",
+      "status": "WRAPPED",
+      "kind": "20"
     },
     {
       "path": "native/a2_kv_cache.c",
       "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 428,
+      "domain": "ET_R_GENERATION",
+      "offset": 18127,
+      "end": 18161,
+      "line": 431,
       "callee": "a2_calloc",
-      "expression": "a2_calloc(elements, sizeof(float))"
+      "expression": "a2_calloc(elements, sizeof(float))",
+      "status": "WRAPPED",
+      "kind": "21"
     },
     {
       "path": "native/a2_kv_cache.c",
       "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 430,
+      "domain": "ET_R_GENERATION",
+      "offset": 18289,
+      "end": 18332,
+      "line": 433,
       "callee": "a2_calloc",
-      "expression": "a2_calloc((size_t)batch64, sizeof(int64_t))"
+      "expression": "a2_calloc((size_t)batch64, sizeof(int64_t))",
+      "status": "WRAPPED",
+      "kind": "22"
     },
     {
       "path": "native/a2_kv_cache.c",
       "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 432,
+      "domain": "ET_R_GENERATION",
+      "offset": 18476,
+      "end": 18522,
+      "line": 435,
       "callee": "a2_calloc",
-      "expression": "a2_calloc((size_t)batch64, (size_t)capacity64)"
+      "expression": "a2_calloc((size_t)batch64, (size_t)capacity64)",
+      "status": "WRAPPED",
+      "kind": "23"
     },
     {
       "path": "native/a2_kv_cache.c",
       "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 444,
-      "callee": "free",
-      "expression": "free(cache->key_keep_mask)"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 444,
-      "callee": "free",
-      "expression": "free(cache->lengths)"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 444,
-      "callee": "free",
-      "expression": "free(cache->values)"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 444,
-      "callee": "free",
-      "expression": "free(cache->keys)"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 444,
-      "callee": "free",
-      "expression": "free(cache)"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 482,
-      "callee": "free",
-      "expression": "free(cache->key_keep_mask)"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 482,
-      "callee": "free",
-      "expression": "free(cache->lengths)"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 482,
-      "callee": "free",
-      "expression": "free(cache->values)"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 482,
-      "callee": "free",
-      "expression": "free(cache->keys)"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 482,
-      "callee": "free",
-      "expression": "free(cache)"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 548,
-      "callee": "a2_calloc",
-      "expression": "a2_calloc(1u, sizeof(*txn))"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 550,
-      "callee": "a2_calloc",
-      "expression": "a2_calloc(cache->batch, sizeof(*txn->counts))"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 552,
-      "callee": "a2_calloc",
-      "expression": "a2_calloc(cache->batch, sizeof(*txn->effective_lengths))"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 554,
-      "callee": "a2_calloc",
-      "expression": "a2_calloc(cache->batch, cache->capacity)"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 556,
-      "callee": "a2_calloc",
-      "expression": "a2_calloc(cache->layers, sizeof(*txn->staged))"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 570,
-      "callee": "free",
-      "expression": "free(txn->staged)"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 570,
-      "callee": "free",
-      "expression": "free(txn->effective_key_keep_mask)"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 570,
-      "callee": "free",
-      "expression": "free(txn->effective_lengths)"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 570,
-      "callee": "free",
-      "expression": "free(txn->counts)"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 570,
-      "callee": "free",
-      "expression": "free(txn)"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 688,
-      "callee": "a2_calloc",
-      "expression": "a2_calloc(1u, sizeof(*view))"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 759,
-      "callee": "free",
-      "expression": "free(view)"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 778,
-      "callee": "free",
-      "expression": "free(txn->staged)"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 778,
-      "callee": "free",
-      "expression": "free(txn->effective_key_keep_mask)"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 779,
-      "callee": "free",
-      "expression": "free(txn->effective_lengths)"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 779,
-      "callee": "free",
-      "expression": "free(txn->counts)"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 779,
-      "callee": "free",
-      "expression": "free(txn)"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 836,
-      "callee": "a2_calloc",
-      "expression": "a2_calloc(1u,sizeof(*b))"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 838,
-      "callee": "a2_calloc",
-      "expression": "a2_calloc(c->layers,sizeof(*b->keys))"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 840,
-      "callee": "a2_calloc",
-      "expression": "a2_calloc(c->layers,sizeof(*b->values))"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 856,
-      "callee": "free",
-      "expression": "free(b->values)"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 856,
-      "callee": "free",
-      "expression": "free(b->keys)"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 856,
-      "callee": "free",
-      "expression": "free(b)"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 895,
-      "callee": "free",
-      "expression": "free(b->values)"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 895,
-      "callee": "free",
-      "expression": "free(b->keys)"
-    },
-    {
-      "path": "native/a2_kv_cache.c",
-      "owner": "native/a2_kv_cache.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 895,
-      "callee": "free",
-      "expression": "free(b)"
-    },
-    {
-      "path": "native/c2_checkpoint_core.c",
-      "owner": "native/c2_checkpoint_core.c",
-      "domain": "C2_IO",
-      "status": "UNIMPLEMENTED",
-      "line": 108,
-      "callee": "malloc",
-      "expression": "malloc(bytes)"
-    },
-    {
-      "path": "native/c2_checkpoint_core.c",
-      "owner": "native/c2_checkpoint_core.c",
-      "domain": "C2_IO",
-      "status": "UNIMPLEMENTED",
-      "line": 424,
-      "callee": "c2_malloc",
-      "expression": "c2_malloc(allocation_bytes)"
-    },
-    {
-      "path": "native/c2_checkpoint_core.c",
-      "owner": "native/c2_checkpoint_core.c",
-      "domain": "C2_IO",
-      "status": "UNIMPLEMENTED",
-      "line": 487,
-      "callee": "free",
-      "expression": "free(image)"
-    },
-    {
-      "path": "native/c2_checkpoint_core.c",
-      "owner": "native/c2_checkpoint_core.c",
-      "domain": "C2_IO",
-      "status": "UNIMPLEMENTED",
-      "line": 541,
-      "callee": "free",
-      "expression": "free(image)"
-    },
-    {
-      "path": "native/c2_checkpoint_reader.c",
-      "owner": "native/c2_checkpoint_reader.c",
-      "domain": "C2_IO",
-      "status": "UNIMPLEMENTED",
-      "line": 257,
-      "callee": "malloc",
-      "expression": "malloc(sizeof(*reader))"
-    },
-    {
-      "path": "native/c2_checkpoint_reader.c",
-      "owner": "native/c2_checkpoint_reader.c",
-      "domain": "C2_IO",
-      "status": "UNIMPLEMENTED",
-      "line": 374,
-      "callee": "free",
-      "expression": "free(reader)"
-    },
-    {
-      "path": "native/checkpoint_io.c",
-      "owner": "native/checkpoint_io.c",
-      "domain": "C2_IO",
-      "status": "UNIMPLEMENTED",
-      "line": 133,
-      "callee": "malloc",
-      "expression": "malloc(length)"
-    },
-    {
-      "path": "native/checkpoint_io.c",
-      "owner": "native/checkpoint_io.c",
-      "domain": "C2_IO",
-      "status": "UNIMPLEMENTED",
-      "line": 160,
-      "callee": "free",
-      "expression": "free(parts->parent)"
-    },
-    {
-      "path": "native/checkpoint_io.c",
-      "owner": "native/checkpoint_io.c",
-      "domain": "C2_IO",
-      "status": "UNIMPLEMENTED",
-      "line": 161,
-      "callee": "free",
-      "expression": "free(parts->basename)"
-    },
-    {
-      "path": "native/checkpoint_io.c",
-      "owner": "native/checkpoint_io.c",
-      "domain": "C2_IO",
-      "status": "UNIMPLEMENTED",
-      "line": 184,
-      "callee": "malloc",
-      "expression": "malloc(base_length + 1u)"
-    },
-    {
-      "path": "native/checkpoint_io.c",
-      "owner": "native/checkpoint_io.c",
-      "domain": "C2_IO",
-      "status": "UNIMPLEMENTED",
-      "line": 190,
-      "callee": "malloc",
-      "expression": "malloc(2u)"
-    },
-    {
-      "path": "native/checkpoint_io.c",
-      "owner": "native/checkpoint_io.c",
-      "domain": "C2_IO",
-      "status": "UNIMPLEMENTED",
-      "line": 195,
-      "callee": "malloc",
-      "expression": "malloc(2u)"
-    },
-    {
-      "path": "native/checkpoint_io.c",
-      "owner": "native/checkpoint_io.c",
-      "domain": "C2_IO",
-      "status": "UNIMPLEMENTED",
-      "line": 204,
-      "callee": "malloc",
-      "expression": "malloc(parent_length + 1u)"
-    },
-    {
-      "path": "native/checkpoint_io.c",
-      "owner": "native/checkpoint_io.c",
-      "domain": "C2_IO",
-      "status": "UNIMPLEMENTED",
-      "line": 492,
-      "callee": "free",
-      "expression": "free(temporary)"
-    },
-    {
-      "path": "native/checkpoint_io.c",
-      "owner": "native/checkpoint_io.c",
-      "domain": "C2_IO",
-      "status": "UNIMPLEMENTED",
+      "domain": "ET_R_GENERATION",
+      "offset": 24626,
+      "end": 24653,
       "line": 551,
-      "callee": "free",
-      "expression": "free(temporary)"
+      "callee": "a2_calloc",
+      "expression": "a2_calloc(1u, sizeof(*txn))",
+      "status": "WRAPPED",
+      "kind": "17"
     },
     {
-      "path": "native/checkpoint_io.c",
-      "owner": "native/checkpoint_io.c",
+      "path": "native/a2_kv_cache.c",
+      "owner": "native/a2_kv_cache.c",
+      "domain": "ET_R_GENERATION",
+      "offset": 24761,
+      "end": 24806,
+      "line": 553,
+      "callee": "a2_calloc",
+      "expression": "a2_calloc(cache->batch, sizeof(*txn->counts))",
+      "status": "WRAPPED",
+      "kind": "24"
+    },
+    {
+      "path": "native/a2_kv_cache.c",
+      "owner": "native/a2_kv_cache.c",
+      "domain": "ET_R_GENERATION",
+      "offset": 24951,
+      "end": 25007,
+      "line": 555,
+      "callee": "a2_calloc",
+      "expression": "a2_calloc(cache->batch, sizeof(*txn->effective_lengths))",
+      "status": "WRAPPED",
+      "kind": "25"
+    },
+    {
+      "path": "native/a2_kv_cache.c",
+      "owner": "native/a2_kv_cache.c",
+      "domain": "ET_R_GENERATION",
+      "offset": 25180,
+      "end": 25220,
+      "line": 557,
+      "callee": "a2_calloc",
+      "expression": "a2_calloc(cache->batch, cache->capacity)",
+      "status": "WRAPPED",
+      "kind": "26"
+    },
+    {
+      "path": "native/a2_kv_cache.c",
+      "owner": "native/a2_kv_cache.c",
+      "domain": "ET_R_GENERATION",
+      "offset": 25369,
+      "end": 25415,
+      "line": 559,
+      "callee": "a2_calloc",
+      "expression": "a2_calloc(cache->layers, sizeof(*txn->staged))",
+      "status": "WRAPPED",
+      "kind": "27"
+    },
+    {
+      "path": "native/a2_kv_cache.c",
+      "owner": "native/a2_kv_cache.c",
+      "domain": "ET_R_GENERATION",
+      "offset": 32611,
+      "end": 32639,
+      "line": 691,
+      "callee": "a2_calloc",
+      "expression": "a2_calloc(1u, sizeof(*view))",
+      "status": "WRAPPED",
+      "kind": "18"
+    },
+    {
+      "path": "native/a2_kv_cache.c",
+      "owner": "native/a2_kv_cache.c",
+      "domain": "ET_R_GENERATION",
+      "offset": 39985,
+      "end": 40009,
+      "line": 839,
+      "callee": "a2_calloc",
+      "expression": "a2_calloc(1u,sizeof(*b))",
+      "status": "WRAPPED",
+      "kind": "19"
+    },
+    {
+      "path": "native/a2_kv_cache.c",
+      "owner": "native/a2_kv_cache.c",
+      "domain": "ET_R_GENERATION",
+      "offset": 40103,
+      "end": 40140,
+      "line": 841,
+      "callee": "a2_calloc",
+      "expression": "a2_calloc(c->layers,sizeof(*b->keys))",
+      "status": "WRAPPED",
+      "kind": "28"
+    },
+    {
+      "path": "native/a2_kv_cache.c",
+      "owner": "native/a2_kv_cache.c",
+      "domain": "ET_R_GENERATION",
+      "offset": 40255,
+      "end": 40294,
+      "line": 843,
+      "callee": "a2_calloc",
+      "expression": "a2_calloc(c->layers,sizeof(*b->values))",
+      "status": "WRAPPED",
+      "kind": "29"
+    },
+    {
+      "path": "native/c2_checkpoint_core.c",
+      "owner": "native/c2_checkpoint_core.c",
       "domain": "C2_IO",
-      "status": "UNIMPLEMENTED",
-      "line": 562,
-      "callee": "free",
-      "expression": "free(temporary)"
-    },
-    {
-      "path": "native/checkpoint_io.c",
-      "owner": "native/checkpoint_io.c",
-      "domain": "C2_IO",
-      "status": "UNIMPLEMENTED",
-      "line": 572,
-      "callee": "free",
-      "expression": "free(temporary)"
-    },
-    {
-      "path": "native/checkpoint_io.c",
-      "owner": "native/checkpoint_io.c",
-      "domain": "C2_IO",
-      "status": "UNIMPLEMENTED",
-      "line": 579,
-      "callee": "free",
-      "expression": "free(temporary)"
-    },
-    {
-      "path": "native/checkpoint_io.c",
-      "owner": "native/checkpoint_io.c",
-      "domain": "C2_IO",
-      "status": "UNIMPLEMENTED",
-      "line": 583,
-      "callee": "free",
-      "expression": "free(temporary)"
-    },
-    {
-      "path": "native/checkpoint_io.c",
-      "owner": "native/checkpoint_io.c",
-      "domain": "C2_IO",
-      "status": "UNIMPLEMENTED",
-      "line": 593,
-      "callee": "free",
-      "expression": "free(temporary)"
-    },
-    {
-      "path": "native/checkpoint_io.c",
-      "owner": "native/checkpoint_io.c",
-      "domain": "C2_IO",
-      "status": "UNIMPLEMENTED",
-      "line": 632,
-      "callee": "free",
-      "expression": "free(snapshot)"
-    },
-    {
-      "path": "native/checkpoint_io.c",
-      "owner": "native/checkpoint_io.c",
-      "domain": "C2_IO",
-      "status": "UNIMPLEMENTED",
-      "line": 677,
-      "callee": "free",
-      "expression": "free(snapshot)"
-    },
-    {
-      "path": "native/checkpoint_io.c",
-      "owner": "native/checkpoint_io.c",
-      "domain": "C2_IO",
-      "status": "UNIMPLEMENTED",
-      "line": 696,
-      "callee": "free",
-      "expression": "free(snapshot)"
-    },
-    {
-      "path": "native/checkpoint_io.c",
-      "owner": "native/checkpoint_io.c",
-      "domain": "C2_IO",
-      "status": "UNIMPLEMENTED",
-      "line": 710,
-      "callee": "free",
-      "expression": "free(snapshot)"
-    },
-    {
-      "path": "native/d2_native.c",
-      "owner": "native/e3_d2_native.c",
-      "domain": "D2",
-      "status": "UNIMPLEMENTED",
-      "line": 370,
-      "callee": "free",
-      "expression": "free(batch->mask_data)"
-    },
-    {
-      "path": "native/d2_native.c",
-      "owner": "native/e3_d2_native.c",
-      "domain": "D2",
-      "status": "UNIMPLEMENTED",
-      "line": 375,
-      "callee": "free",
-      "expression": "free(batch)"
-    },
-    {
-      "path": "native/d2_native.c",
-      "owner": "native/e3_d2_native.c",
-      "domain": "D2",
-      "status": "UNIMPLEMENTED",
-      "line": 397,
-      "callee": "calloc",
-      "expression": "calloc(1u, sizeof(*dataset))"
-    },
-    {
-      "path": "native/d2_native.c",
-      "owner": "native/e3_d2_native.c",
-      "domain": "D2",
-      "status": "UNIMPLEMENTED",
-      "line": 406,
-      "callee": "free",
-      "expression": "free(dataset)"
-    },
-    {
-      "path": "native/d2_native.c",
-      "owner": "native/e3_d2_native.c",
-      "domain": "D2",
-      "status": "UNIMPLEMENTED",
-      "line": 413,
-      "callee": "calloc",
-      "expression": "calloc(shuffle_slots, sizeof(*dataset->shuffle_window))"
-    },
-    {
-      "path": "native/d2_native.c",
-      "owner": "native/e3_d2_native.c",
-      "domain": "D2",
-      "status": "UNIMPLEMENTED",
-      "line": 415,
-      "callee": "free",
-      "expression": "free(dataset)"
-    },
-    {
-      "path": "native/d2_native.c",
-      "owner": "native/e3_d2_native.c",
-      "domain": "D2",
-      "status": "UNIMPLEMENTED",
-      "line": 451,
-      "callee": "free",
-      "expression": "free(dataset->shuffle_window)"
-    },
-    {
-      "path": "native/d2_native.c",
-      "owner": "native/e3_d2_native.c",
-      "domain": "D2",
-      "status": "UNIMPLEMENTED",
-      "line": 457,
-      "callee": "free",
-      "expression": "free(dataset)"
-    },
-    {
-      "path": "native/d2_native.c",
-      "owner": "native/e3_d2_native.c",
-      "domain": "D2",
-      "status": "UNIMPLEMENTED",
-      "line": 746,
-      "callee": "calloc",
-      "expression": "calloc(1u, sizeof(*batch))"
-    },
-    {
-      "path": "native/d2_native.c",
-      "owner": "native/e3_d2_native.c",
-      "domain": "D2",
-      "status": "UNIMPLEMENTED",
-      "line": 792,
-      "callee": "calloc",
-      "expression": "calloc(batch->elements, sizeof(uint8_t))"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 308,
-      "callee": "calloc",
-      "expression": "calloc(count, size)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 332,
-      "callee": "f32_calloc",
-      "expression": "f32_calloc(1u, sizeof(*record))"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 363,
-      "callee": "free",
-      "expression": "free(record)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 817,
-      "callee": "free",
-      "expression": "free(data)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 818,
-      "callee": "free",
-      "expression": "free(strides)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 819,
-      "callee": "free",
-      "expression": "free(shape)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 821,
-      "callee": "free",
-      "expression": "free(tensor->data)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 822,
-      "callee": "free",
-      "expression": "free(tensor->strides)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 823,
-      "callee": "free",
-      "expression": "free(tensor->shape)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 1250,
-      "callee": "f32_calloc",
-      "expression": "f32_calloc(1u, sizeof(*tensor))"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 1260,
-      "callee": "f32_calloc",
-      "expression": "f32_calloc(rank, sizeof(*tensor->shape))"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 1261,
-      "callee": "f32_calloc",
-      "expression": "f32_calloc(rank, sizeof(*tensor->strides))"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 1263,
-      "callee": "free",
-      "expression": "free(tensor->strides)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 1264,
-      "callee": "free",
-      "expression": "free(tensor->shape)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 1265,
-      "callee": "free",
-      "expression": "free(tensor)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 1281,
-      "callee": "f32_calloc",
-      "expression": "f32_calloc(count, sizeof(*tensor->data))"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 1283,
-      "callee": "free",
-      "expression": "free(tensor->strides)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 1284,
-      "callee": "free",
-      "expression": "free(tensor->shape)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 1285,
-      "callee": "free",
-      "expression": "free(tensor)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 1293,
-      "callee": "free",
-      "expression": "free(tensor->data)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 1294,
-      "callee": "free",
-      "expression": "free(tensor->strides)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 1295,
-      "callee": "free",
-      "expression": "free(tensor->shape)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 1296,
-      "callee": "free",
-      "expression": "free(tensor)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 2273,
-      "callee": "f32_calloc",
-      "expression": "f32_calloc(1u, sizeof(*plan))"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 2280,
-      "callee": "f32_calloc",
-      "expression": "f32_calloc(count, sizeof(*plan->assignments))"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 2282,
-      "callee": "free",
-      "expression": "free(plan)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 2356,
-      "callee": "free",
-      "expression": "free(plan->assignments)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 2521,
-      "callee": "f32_calloc",
-      "expression": "f32_calloc(1u, sizeof(*parameter))"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 2984,
-      "callee": "f32_calloc",
-      "expression": "f32_calloc(1u, sizeof(*w))"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 3015,
-      "callee": "free",
-      "expression": "free(w)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 3024,
-      "callee": "free",
-      "expression": "free(w)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 3268,
-      "callee": "f32_calloc",
-      "expression": "f32_calloc(1u, sizeof(*plan))"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 3275,
-      "callee": "f32_calloc",
-      "expression": "f32_calloc(count, sizeof(*plan->entries))"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 3277,
-      "callee": "free",
-      "expression": "free(plan)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 3293,
-      "callee": "f32_calloc",
-      "expression": "f32_calloc(parameter->gradient->element_count, sizeof(float))"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 3296,
-      "callee": "free",
-      "expression": "free(plan->entries[prior].prepared)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 3298,
-      "callee": "free",
-      "expression": "free(plan->entries)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 3299,
-      "callee": "free",
-      "expression": "free(plan)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 3317,
-      "callee": "free",
-      "expression": "free(plan->entries[prior].prepared)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 3319,
-      "callee": "free",
-      "expression": "free(plan->entries)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 3320,
-      "callee": "free",
-      "expression": "free(plan)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 3328,
-      "callee": "free",
-      "expression": "free(plan->entries[prior].prepared)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 3330,
-      "callee": "free",
-      "expression": "free(plan->entries)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 3331,
-      "callee": "free",
-      "expression": "free(plan)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 3411,
-      "callee": "free",
-      "expression": "free(plan->entries[index].prepared)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 3413,
-      "callee": "free",
-      "expression": "free(plan->entries)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 3483,
-      "callee": "f32_calloc",
-      "expression": "f32_calloc(1u, sizeof(*plan))"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 3490,
-      "callee": "f32_calloc",
-      "expression": "f32_calloc(count, sizeof(*plan->parameters))"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 3492,
-      "callee": "free",
-      "expression": "free(plan)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 3569,
-      "callee": "free",
-      "expression": "free(plan->parameters)"
-    },
-    {
-      "path": "native/f32_tensor.c",
-      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
-      "domain": "F32",
-      "status": "UNIMPLEMENTED",
-      "line": 3775,
-      "callee": "f32_calloc",
-      "expression": "f32_calloc(1u, sizeof(*borrow))"
-    },
-    {
-      "path": "native/i2_wave2_package_bridge.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 199,
-      "callee": "calloc",
-      "expression": "calloc(count, size)"
-    },
-    {
-      "path": "native/i2_wave2_package_bridge.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 215,
+      "offset": 3100,
+      "end": 3113,
+      "line": 111,
       "callee": "malloc",
-      "expression": "malloc(size)"
+      "expression": "malloc(bytes)",
+      "status": "DELEGATED_HELPER_REAL_ALLOCATOR"
+    },
+    {
+      "path": "native/c2_checkpoint_core.c",
+      "owner": "native/c2_checkpoint_core.c",
+      "domain": "ET_R_C2_IO",
+      "offset": 17810,
+      "end": 17837,
+      "line": 427,
+      "callee": "c2_malloc",
+      "expression": "c2_malloc(allocation_bytes)",
+      "status": "WRAPPED",
+      "kind": "0"
+    },
+    {
+      "path": "native/c2_checkpoint_reader.c",
+      "owner": "native/c2_checkpoint_reader.c",
+      "domain": "ET_R_C2_IO",
+      "offset": 7925,
+      "end": 7948,
+      "line": 261,
+      "callee": "malloc",
+      "expression": "malloc(sizeof(*reader))",
+      "status": "WRAPPED",
+      "kind": "1"
+    },
+    {
+      "path": "native/checkpoint_io.c",
+      "owner": "native/checkpoint_io.c",
+      "domain": "C2_IO",
+      "offset": 3739,
+      "end": 3753,
+      "line": 137,
+      "callee": "malloc",
+      "expression": "malloc(length)",
+      "status": "DELEGATED_HELPER_REAL_ALLOCATOR"
+    },
+    {
+      "path": "native/checkpoint_io.c",
+      "owner": "native/checkpoint_io.c",
+      "domain": "ET_R_C2_IO",
+      "offset": 5412,
+      "end": 5436,
+      "line": 188,
+      "callee": "malloc",
+      "expression": "malloc(base_length + 1u)",
+      "status": "WRAPPED",
+      "kind": "3"
+    },
+    {
+      "path": "native/checkpoint_io.c",
+      "owner": "native/checkpoint_io.c",
+      "domain": "ET_R_C2_IO",
+      "offset": 5637,
+      "end": 5647,
+      "line": 194,
+      "callee": "malloc",
+      "expression": "malloc(2u)",
+      "status": "WRAPPED",
+      "kind": "2"
+    },
+    {
+      "path": "native/checkpoint_io.c",
+      "owner": "native/checkpoint_io.c",
+      "domain": "ET_R_C2_IO",
+      "offset": 5815,
+      "end": 5825,
+      "line": 199,
+      "callee": "malloc",
+      "expression": "malloc(2u)",
+      "status": "WRAPPED",
+      "kind": "2"
+    },
+    {
+      "path": "native/checkpoint_io.c",
+      "owner": "native/checkpoint_io.c",
+      "domain": "ET_R_C2_IO",
+      "offset": 6115,
+      "end": 6141,
+      "line": 208,
+      "callee": "malloc",
+      "expression": "malloc(parent_length + 1u)",
+      "status": "WRAPPED",
+      "kind": "2"
+    },
+    {
+      "path": "native/checkpoint_io.c",
+      "owner": "native/checkpoint_io.c",
+      "domain": "ET_R_C2_IO",
+      "offset": 13917,
+      "end": 13964,
+      "line": 488,
+      "callee": "wrapped_payload_malloc",
+      "expression": "wrapped_payload_malloc((size_t)expected_length)",
+      "status": "WRAPPED",
+      "kind": "4"
+    },
+    {
+      "path": "native/checkpoint_io.c",
+      "owner": "native/checkpoint_io.c",
+      "domain": "ET_R_C2_IO",
+      "offset": 18504,
+      "end": 18551,
+      "line": 627,
+      "callee": "wrapped_payload_malloc",
+      "expression": "wrapped_payload_malloc((size_t)expected_length)",
+      "status": "WRAPPED",
+      "kind": "5"
+    },
+    {
+      "path": "native/cpuv1_resource_k1.inc",
+      "owner": "native/kernel_abi.c",
+      "domain": "ET_R_K1",
+      "offset": 3579,
+      "end": 3618,
+      "line": 72,
+      "callee": "calloc",
+      "expression": "calloc(allocated_count,sizeof(*values))",
+      "status": "WRAPPED",
+      "kind": "3"
+    },
+    {
+      "path": "native/cpuv1_resource_private.h",
+      "owner": "native/i2_wave2_package_bridge.c",
+      "domain": null,
+      "offset": 4916,
+      "end": 4937,
+      "line": 100,
+      "callee": "free",
+      "expression": "free(et_cpuv1_base__)",
+      "status": "OBSERVER_INTERNAL_REVIEW_REQUIRED"
+    },
+    {
+      "path": "native/cpuv1_resource_private.h",
+      "owner": "native/i2_wave2_package_bridge.c",
+      "domain": null,
+      "offset": 5142,
+      "end": 5149,
+      "line": 107,
+      "callee": "free",
+      "expression": "free(P)",
+      "status": "OBSERVER_INTERNAL_REVIEW_REQUIRED"
+    },
+    {
+      "path": "native/d2_native.c",
+      "owner": "native/e3_d2_native.c",
+      "domain": "ET_R_D2",
+      "offset": 13689,
+      "end": 13717,
+      "line": 401,
+      "callee": "calloc",
+      "expression": "calloc(1u, sizeof(*dataset))",
+      "status": "WRAPPED",
+      "kind": "0"
+    },
+    {
+      "path": "native/d2_native.c",
+      "owner": "native/e3_d2_native.c",
+      "domain": "ET_R_D2",
+      "offset": 14216,
+      "end": 14271,
+      "line": 417,
+      "callee": "calloc",
+      "expression": "calloc(shuffle_slots, sizeof(*dataset->shuffle_window))",
+      "status": "WRAPPED",
+      "kind": "1"
+    },
+    {
+      "path": "native/d2_native.c",
+      "owner": "native/e3_d2_native.c",
+      "domain": "ET_R_D2",
+      "offset": 25099,
+      "end": 25125,
+      "line": 750,
+      "callee": "calloc",
+      "expression": "calloc(1u, sizeof(*batch))",
+      "status": "WRAPPED",
+      "kind": "2"
+    },
+    {
+      "path": "native/d2_native.c",
+      "owner": "native/e3_d2_native.c",
+      "domain": "ET_R_D2",
+      "offset": 26700,
+      "end": 26740,
+      "line": 796,
+      "callee": "calloc",
+      "expression": "calloc(batch->elements, sizeof(uint8_t))",
+      "status": "WRAPPED",
+      "kind": "3"
+    },
+    {
+      "path": "native/f32_tensor.c",
+      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
+      "domain": "F32",
+      "offset": 9430,
+      "end": 9449,
+      "line": 311,
+      "callee": "calloc",
+      "expression": "calloc(count, size)",
+      "status": "DELEGATED_HELPER_REAL_ALLOCATOR"
+    },
+    {
+      "path": "native/f32_tensor.c",
+      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
+      "domain": "ET_R_F32",
+      "offset": 10099,
+      "end": 10130,
+      "line": 335,
+      "callee": "f32_calloc",
+      "expression": "f32_calloc(1u, sizeof(*record))",
+      "status": "WRAPPED",
+      "kind": "13"
+    },
+    {
+      "path": "native/f32_tensor.c",
+      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
+      "domain": "ET_R_F32",
+      "offset": 41803,
+      "end": 41834,
+      "line": 1253,
+      "callee": "f32_calloc",
+      "expression": "f32_calloc(1u, sizeof(*tensor))",
+      "status": "WRAPPED",
+      "kind": "0"
+    },
+    {
+      "path": "native/f32_tensor.c",
+      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
+      "domain": "ET_R_F32",
+      "offset": 42238,
+      "end": 42278,
+      "line": 1263,
+      "callee": "f32_calloc",
+      "expression": "f32_calloc(rank, sizeof(*tensor->shape))",
+      "status": "WRAPPED",
+      "kind": "7"
+    },
+    {
+      "path": "native/f32_tensor.c",
+      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
+      "domain": "ET_R_F32",
+      "offset": 42363,
+      "end": 42405,
+      "line": 1264,
+      "callee": "f32_calloc",
+      "expression": "f32_calloc(rank, sizeof(*tensor->strides))",
+      "status": "WRAPPED",
+      "kind": "8"
+    },
+    {
+      "path": "native/f32_tensor.c",
+      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
+      "domain": "ET_R_F32",
+      "offset": 43308,
+      "end": 43348,
+      "line": 1284,
+      "callee": "f32_calloc",
+      "expression": "f32_calloc(count, sizeof(*tensor->data))",
+      "status": "WRAPPED",
+      "kind": "6"
+    },
+    {
+      "path": "native/f32_tensor.c",
+      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
+      "domain": "ET_R_F32",
+      "offset": 82815,
+      "end": 82844,
+      "line": 2276,
+      "callee": "f32_calloc",
+      "expression": "f32_calloc(1u, sizeof(*plan))",
+      "status": "WRAPPED",
+      "kind": "2"
+    },
+    {
+      "path": "native/f32_tensor.c",
+      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
+      "domain": "ET_R_F32",
+      "offset": 83170,
+      "end": 83215,
+      "line": 2283,
+      "callee": "f32_calloc",
+      "expression": "f32_calloc(count, sizeof(*plan->assignments))",
+      "status": "WRAPPED",
+      "kind": "9"
+    },
+    {
+      "path": "native/f32_tensor.c",
+      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
+      "domain": "ET_R_F32",
+      "offset": 92157,
+      "end": 92191,
+      "line": 2524,
+      "callee": "f32_calloc",
+      "expression": "f32_calloc(1u, sizeof(*parameter))",
+      "status": "WRAPPED",
+      "kind": "3"
+    },
+    {
+      "path": "native/f32_tensor.c",
+      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
+      "domain": "ET_R_F32",
+      "offset": 111745,
+      "end": 111771,
+      "line": 2987,
+      "callee": "f32_calloc",
+      "expression": "f32_calloc(1u, sizeof(*w))",
+      "status": "WRAPPED",
+      "kind": "14"
+    },
+    {
+      "path": "native/f32_tensor.c",
+      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
+      "domain": "ET_R_F32",
+      "offset": 123924,
+      "end": 123953,
+      "line": 3271,
+      "callee": "f32_calloc",
+      "expression": "f32_calloc(1u, sizeof(*plan))",
+      "status": "WRAPPED",
+      "kind": "4"
+    },
+    {
+      "path": "native/f32_tensor.c",
+      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
+      "domain": "ET_R_F32",
+      "offset": 124287,
+      "end": 124328,
+      "line": 3278,
+      "callee": "f32_calloc",
+      "expression": "f32_calloc(count, sizeof(*plan->entries))",
+      "status": "WRAPPED",
+      "kind": "10"
+    },
+    {
+      "path": "native/f32_tensor.c",
+      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
+      "domain": "ET_R_F32",
+      "offset": 125184,
+      "end": 125245,
+      "line": 3296,
+      "callee": "f32_calloc",
+      "expression": "f32_calloc(parameter->gradient->element_count, sizeof(float))",
+      "status": "WRAPPED",
+      "kind": "11"
+    },
+    {
+      "path": "native/f32_tensor.c",
+      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
+      "domain": "ET_R_F32",
+      "offset": 133741,
+      "end": 133770,
+      "line": 3486,
+      "callee": "f32_calloc",
+      "expression": "f32_calloc(1u, sizeof(*plan))",
+      "status": "WRAPPED",
+      "kind": "5"
+    },
+    {
+      "path": "native/f32_tensor.c",
+      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
+      "domain": "ET_R_F32",
+      "offset": 134086,
+      "end": 134130,
+      "line": 3493,
+      "callee": "f32_calloc",
+      "expression": "f32_calloc(count, sizeof(*plan->parameters))",
+      "status": "WRAPPED",
+      "kind": "12"
+    },
+    {
+      "path": "native/f32_tensor.c",
+      "owner": "src/eshkol_transformer/m3_call_f32_integration.c",
+      "domain": "ET_R_F32",
+      "offset": 144298,
+      "end": 144329,
+      "line": 3778,
+      "callee": "f32_calloc",
+      "expression": "f32_calloc(1u, sizeof(*borrow))",
+      "status": "WRAPPED",
+      "kind": "1"
     },
     {
       "path": "native/i2_wave2_package_bridge.c",
       "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 444,
+      "domain": "F32",
+      "offset": 6035,
+      "end": 6054,
+      "line": 202,
+      "callee": "calloc",
+      "expression": "calloc(count, size)",
+      "status": "DELEGATED_HELPER_REAL_ALLOCATOR"
+    },
+    {
+      "path": "native/i2_wave2_package_bridge.c",
+      "owner": "native/i2_wave2_package_bridge.c",
+      "domain": "F32",
+      "offset": 6388,
+      "end": 6400,
+      "line": 218,
+      "callee": "malloc",
+      "expression": "malloc(size)",
+      "status": "DELEGATED_HELPER_REAL_ALLOCATOR"
+    },
+    {
+      "path": "native/i2_wave2_package_bridge.c",
+      "owner": "native/i2_wave2_package_bridge.c",
+      "domain": "ET_R_F32",
+      "offset": 15919,
+      "end": 15971,
+      "line": 447,
       "callee": "et_i2_system_calloc",
-      "expression": "et_i2_system_calloc((size_t)count, sizeof(*payload))"
+      "expression": "et_i2_system_calloc((size_t)count, sizeof(*payload))",
+      "status": "WRAPPED",
+      "kind": "22"
     },
     {
       "path": "native/i2_wave2_package_bridge.c",
       "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 456,
-      "callee": "free",
-      "expression": "free(payload)"
-    },
-    {
-      "path": "native/i2_wave2_package_bridge.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 460,
-      "callee": "free",
-      "expression": "free(payload)"
-    },
-    {
-      "path": "native/i2_wave2_package_bridge.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 786,
+      "domain": "ET_R_F32",
+      "offset": 28215,
+      "end": 28256,
+      "line": 789,
       "callee": "et_i2_system_calloc",
-      "expression": "et_i2_system_calloc(1u, sizeof(*builder))"
+      "expression": "et_i2_system_calloc(1u, sizeof(*builder))",
+      "status": "WRAPPED",
+      "kind": "17"
     },
     {
       "path": "native/i2_wave2_package_bridge.c",
       "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 788,
+      "domain": "ET_R_F32",
+      "offset": 28372,
+      "end": 28439,
+      "line": 791,
       "callee": "et_i2_system_calloc",
-      "expression": "et_i2_system_calloc(\n        (size_t)rank, sizeof(*builder->shape))"
+      "expression": "et_i2_system_calloc(\n        (size_t)rank, sizeof(*builder->shape))",
+      "status": "WRAPPED",
+      "kind": "18"
     },
     {
       "path": "native/i2_wave2_package_bridge.c",
       "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 798,
-      "callee": "free",
-      "expression": "free(builder->payload)"
+      "domain": "ET_R_F32",
+      "offset": 28599,
+      "end": 28640,
+      "line": 796,
+      "callee": "et_i2_system_malloc",
+      "expression": "et_i2_system_malloc((size_t)payload_size)",
+      "status": "WRAPPED",
+      "kind": "19"
     },
     {
       "path": "native/i2_wave2_package_bridge.c",
       "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 799,
-      "callee": "free",
-      "expression": "free(builder->shape)"
-    },
-    {
-      "path": "native/i2_wave2_package_bridge.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 801,
-      "callee": "free",
-      "expression": "free(builder)"
-    },
-    {
-      "path": "native/i2_wave2_package_bridge.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 861,
-      "callee": "free",
-      "expression": "free(builder->payload)"
-    },
-    {
-      "path": "native/i2_wave2_package_bridge.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 862,
-      "callee": "free",
-      "expression": "free(builder->shape)"
-    },
-    {
-      "path": "native/i2_wave2_package_bridge.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 877,
-      "callee": "free",
-      "expression": "free(builder->payload)"
-    },
-    {
-      "path": "native/i2_wave2_package_bridge.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 878,
-      "callee": "free",
-      "expression": "free(builder->shape)"
-    },
-    {
-      "path": "native/i2_wave2_package_bridge.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 891,
-      "callee": "et_i2_system_calloc",
-      "expression": "et_i2_system_calloc(1u, sizeof(*builder))"
-    },
-    {
-      "path": "native/i2_wave2_package_bridge.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
+      "domain": "ET_R_F32",
+      "offset": 32278,
+      "end": 32319,
       "line": 894,
       "callee": "et_i2_system_calloc",
-      "expression": "et_i2_system_calloc((size_t)count, sizeof(*builder->assignments))"
+      "expression": "et_i2_system_calloc(1u, sizeof(*builder))",
+      "status": "WRAPPED",
+      "kind": "15"
     },
     {
       "path": "native/i2_wave2_package_bridge.c",
       "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
+      "domain": "ET_R_F32",
+      "offset": 32462,
+      "end": 32527,
       "line": 897,
-      "callee": "free",
-      "expression": "free(builder)"
-    },
-    {
-      "path": "native/i2_wave2_package_bridge.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 1000,
-      "callee": "free",
-      "expression": "free(builder->assignments)"
-    },
-    {
-      "path": "native/i2_wave2_package_bridge.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 1028,
-      "callee": "free",
-      "expression": "free(builder->assignments)"
-    },
-    {
-      "path": "native/i2_wave2_package_bridge.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 1293,
-      "callee": "free",
-      "expression": "free(builder->assignments)"
-    },
-    {
-      "path": "native/i2_wave2_package_bridge.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 1318,
       "callee": "et_i2_system_calloc",
-      "expression": "et_i2_system_calloc(1u, sizeof(*builder))"
+      "expression": "et_i2_system_calloc((size_t)count, sizeof(*builder->assignments))",
+      "status": "WRAPPED",
+      "kind": "20"
     },
     {
       "path": "native/i2_wave2_package_bridge.c",
       "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
+      "domain": "ET_R_F32",
+      "offset": 48923,
+      "end": 48964,
       "line": 1321,
       "callee": "et_i2_system_calloc",
-      "expression": "et_i2_system_calloc(ET_TR3_C_RESTORE_ASSIGNMENTS,\n                            sizeof(*builder->assignments))"
+      "expression": "et_i2_system_calloc(1u, sizeof(*builder))",
+      "status": "WRAPPED",
+      "kind": "15"
     },
     {
       "path": "native/i2_wave2_package_bridge.c",
       "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 1326,
-      "callee": "free",
-      "expression": "free(builder->assignments)"
-    },
-    {
-      "path": "native/i2_wave2_package_bridge.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 1328,
-      "callee": "free",
-      "expression": "free(builder)"
-    },
-    {
-      "path": "native/i2_wave2_package_bridge.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 1599,
-      "callee": "free",
-      "expression": "free(builder->assignments)"
-    },
-    {
-      "path": "native/i2_wave2_package_bridge.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 1628,
-      "callee": "free",
-      "expression": "free(builder->assignments)"
-    },
-    {
-      "path": "native/i2_wave2_package_bridge.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 1660,
+      "domain": "ET_R_F32",
+      "offset": 49107,
+      "end": 49215,
+      "line": 1324,
       "callee": "et_i2_system_calloc",
-      "expression": "et_i2_system_calloc(1u, sizeof(*builder))"
+      "expression": "et_i2_system_calloc(ET_TR3_C_RESTORE_ASSIGNMENTS,\n                            sizeof(*builder->assignments))",
+      "status": "WRAPPED",
+      "kind": "20"
     },
     {
       "path": "native/i2_wave2_package_bridge.c",
       "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 1662,
+      "domain": "ET_R_F32",
+      "offset": 61473,
+      "end": 61514,
+      "line": 1663,
       "callee": "et_i2_system_calloc",
-      "expression": "et_i2_system_calloc(\n        (size_t)count, sizeof(*builder->parameters))"
+      "expression": "et_i2_system_calloc(1u, sizeof(*builder))",
+      "status": "WRAPPED",
+      "kind": "16"
     },
     {
       "path": "native/i2_wave2_package_bridge.c",
       "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 1666,
-      "callee": "free",
-      "expression": "free(builder)"
-    },
-    {
-      "path": "native/i2_wave2_package_bridge.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 1728,
-      "callee": "free",
-      "expression": "free(builder->parameters)"
-    },
-    {
-      "path": "native/i2_wave2_package_bridge.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 1749,
-      "callee": "free",
-      "expression": "free(builder->parameters)"
-    },
-    {
-      "path": "native/i2_wave2_package_bridge.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 1780,
+      "domain": "ET_R_F32",
+      "offset": 61632,
+      "end": 61705,
+      "line": 1665,
       "callee": "et_i2_system_calloc",
-      "expression": "et_i2_system_calloc(count, sizeof(*payload))"
+      "expression": "et_i2_system_calloc(\n        (size_t)count, sizeof(*builder->parameters))",
+      "status": "WRAPPED",
+      "kind": "21"
     },
     {
       "path": "native/i2_wave2_package_bridge.c",
       "owner": "native/i2_wave2_package_bridge.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 1807,
-      "callee": "free",
-      "expression": "free(payload)"
+      "domain": "ET_R_F32",
+      "offset": 66345,
+      "end": 66389,
+      "line": 1783,
+      "callee": "et_i2_system_calloc",
+      "expression": "et_i2_system_calloc(count, sizeof(*payload))",
+      "status": "WRAPPED",
+      "kind": "22"
     },
     {
       "path": "native/i64_tensor.c",
       "owner": "src/eshkol_transformer/m3_i64_integration.c",
       "domain": "I64_T1",
-      "status": "UNIMPLEMENTED",
-      "line": 159,
+      "offset": 5372,
+      "end": 5391,
+      "line": 162,
       "callee": "calloc",
-      "expression": "calloc(count, size)"
+      "expression": "calloc(count, size)",
+      "status": "DELEGATED_HELPER_REAL_ALLOCATOR"
     },
     {
       "path": "native/i64_tensor.c",
       "owner": "src/eshkol_transformer/m3_i64_integration.c",
-      "domain": "I64_T1",
-      "status": "UNIMPLEMENTED",
-      "line": 491,
+      "domain": "ET_R_I64_T1",
+      "offset": 17050,
+      "end": 17081,
+      "line": 494,
       "callee": "i64_calloc",
-      "expression": "i64_calloc(1u, sizeof(*tensor))"
+      "expression": "i64_calloc(1u, sizeof(*tensor))",
+      "status": "WRAPPED",
+      "kind": "0"
     },
     {
       "path": "native/i64_tensor.c",
       "owner": "src/eshkol_transformer/m3_i64_integration.c",
-      "domain": "I64_T1",
-      "status": "UNIMPLEMENTED",
-      "line": 502,
-      "callee": "i64_calloc",
-      "expression": "i64_calloc(rank, sizeof(*tensor->shape))"
-    },
-    {
-      "path": "native/i64_tensor.c",
-      "owner": "src/eshkol_transformer/m3_i64_integration.c",
-      "domain": "I64_T1",
-      "status": "UNIMPLEMENTED",
-      "line": 503,
-      "callee": "i64_calloc",
-      "expression": "i64_calloc(rank, sizeof(*tensor->strides))"
-    },
-    {
-      "path": "native/i64_tensor.c",
-      "owner": "src/eshkol_transformer/m3_i64_integration.c",
-      "domain": "I64_T1",
-      "status": "UNIMPLEMENTED",
+      "domain": "ET_R_I64_T1",
+      "offset": 17549,
+      "end": 17589,
       "line": 505,
-      "callee": "free",
-      "expression": "free(tensor->strides)"
+      "callee": "i64_calloc",
+      "expression": "i64_calloc(rank, sizeof(*tensor->shape))",
+      "status": "WRAPPED",
+      "kind": "3"
     },
     {
       "path": "native/i64_tensor.c",
       "owner": "src/eshkol_transformer/m3_i64_integration.c",
-      "domain": "I64_T1",
-      "status": "UNIMPLEMENTED",
+      "domain": "ET_R_I64_T1",
+      "offset": 17677,
+      "end": 17719,
       "line": 506,
-      "callee": "free",
-      "expression": "free(tensor->shape)"
-    },
-    {
-      "path": "native/i64_tensor.c",
-      "owner": "src/eshkol_transformer/m3_i64_integration.c",
-      "domain": "I64_T1",
-      "status": "UNIMPLEMENTED",
-      "line": 507,
-      "callee": "free",
-      "expression": "free(tensor)"
-    },
-    {
-      "path": "native/i64_tensor.c",
-      "owner": "src/eshkol_transformer/m3_i64_integration.c",
-      "domain": "I64_T1",
-      "status": "UNIMPLEMENTED",
-      "line": 524,
       "callee": "i64_calloc",
-      "expression": "i64_calloc(element_count, sizeof(*tensor->data))"
+      "expression": "i64_calloc(rank, sizeof(*tensor->strides))",
+      "status": "WRAPPED",
+      "kind": "4"
     },
     {
       "path": "native/i64_tensor.c",
       "owner": "src/eshkol_transformer/m3_i64_integration.c",
-      "domain": "I64_T1",
-      "status": "UNIMPLEMENTED",
-      "line": 526,
-      "callee": "free",
-      "expression": "free(tensor->strides)"
-    },
-    {
-      "path": "native/i64_tensor.c",
-      "owner": "src/eshkol_transformer/m3_i64_integration.c",
-      "domain": "I64_T1",
-      "status": "UNIMPLEMENTED",
+      "domain": "ET_R_I64_T1",
+      "offset": 18695,
+      "end": 18743,
       "line": 527,
-      "callee": "free",
-      "expression": "free(tensor->shape)"
-    },
-    {
-      "path": "native/i64_tensor.c",
-      "owner": "src/eshkol_transformer/m3_i64_integration.c",
-      "domain": "I64_T1",
-      "status": "UNIMPLEMENTED",
-      "line": 528,
-      "callee": "free",
-      "expression": "free(tensor)"
-    },
-    {
-      "path": "native/i64_tensor.c",
-      "owner": "src/eshkol_transformer/m3_i64_integration.c",
-      "domain": "I64_T1",
-      "status": "UNIMPLEMENTED",
-      "line": 576,
-      "callee": "free",
-      "expression": "free(value->data)"
-    },
-    {
-      "path": "native/i64_tensor.c",
-      "owner": "src/eshkol_transformer/m3_i64_integration.c",
-      "domain": "I64_T1",
-      "status": "UNIMPLEMENTED",
-      "line": 577,
-      "callee": "free",
-      "expression": "free(value->strides)"
-    },
-    {
-      "path": "native/i64_tensor.c",
-      "owner": "src/eshkol_transformer/m3_i64_integration.c",
-      "domain": "I64_T1",
-      "status": "UNIMPLEMENTED",
-      "line": 578,
-      "callee": "free",
-      "expression": "free(value->shape)"
-    },
-    {
-      "path": "native/i64_tensor.c",
-      "owner": "src/eshkol_transformer/m3_i64_integration.c",
-      "domain": "I64_T1",
-      "status": "UNIMPLEMENTED",
-      "line": 579,
-      "callee": "free",
-      "expression": "free(value)"
-    },
-    {
-      "path": "native/i64_tensor.c",
-      "owner": "src/eshkol_transformer/m3_i64_integration.c",
-      "domain": "I64_T1",
-      "status": "UNIMPLEMENTED",
-      "line": 841,
       "callee": "i64_calloc",
-      "expression": "i64_calloc(1u, sizeof(*borrow))"
+      "expression": "i64_calloc(element_count, sizeof(*tensor->data))",
+      "status": "WRAPPED",
+      "kind": "2"
     },
     {
       "path": "native/i64_tensor.c",
       "owner": "src/eshkol_transformer/m3_i64_integration.c",
-      "domain": "I64_T1",
-      "status": "UNIMPLEMENTED",
-      "line": 941,
-      "callee": "free",
-      "expression": "free(value)"
+      "domain": "ET_R_I64_T1",
+      "offset": 30948,
+      "end": 30979,
+      "line": 844,
+      "callee": "i64_calloc",
+      "expression": "i64_calloc(1u, sizeof(*borrow))",
+      "status": "WRAPPED",
+      "kind": "1"
     },
     {
       "path": "native/kernel_abi.c",
       "owner": "native/kernel_abi.c",
-      "domain": "K1",
-      "status": "UNIMPLEMENTED",
-      "line": 148,
+      "domain": "ET_R_K1",
+      "offset": 4357,
+      "end": 4376,
+      "line": 151,
       "callee": "malloc",
-      "expression": "malloc(length + 1u)"
+      "expression": "malloc(length + 1u)",
+      "status": "WRAPPED",
+      "kind": "2"
     },
     {
       "path": "native/kernel_abi.c",
       "owner": "native/kernel_abi.c",
-      "domain": "K1",
-      "status": "UNIMPLEMENTED",
-      "line": 158,
-      "callee": "free",
-      "expression": "free((void *)values[index])"
-    },
-    {
-      "path": "native/kernel_abi.c",
-      "owner": "native/kernel_abi.c",
-      "domain": "K1",
-      "status": "UNIMPLEMENTED",
-      "line": 161,
-      "callee": "free",
-      "expression": "free((void *)values)"
-    },
-    {
-      "path": "native/kernel_abi.c",
-      "owner": "native/kernel_abi.c",
-      "domain": "K1",
-      "status": "UNIMPLEMENTED",
-      "line": 168,
-      "callee": "free",
-      "expression": "free((void *)capability->name)"
-    },
-    {
-      "path": "native/kernel_abi.c",
-      "owner": "native/kernel_abi.c",
-      "domain": "K1",
-      "status": "UNIMPLEMENTED",
-      "line": 169,
-      "callee": "free",
-      "expression": "free((void *)capability->implementation)"
-    },
-    {
-      "path": "native/kernel_abi.c",
-      "owner": "native/kernel_abi.c",
-      "domain": "K1",
-      "status": "UNIMPLEMENTED",
-      "line": 170,
-      "callee": "free",
-      "expression": "free((void *)capability->version)"
-    },
-    {
-      "path": "native/kernel_abi.c",
-      "owner": "native/kernel_abi.c",
-      "domain": "K1",
-      "status": "UNIMPLEMENTED",
-      "line": 171,
-      "callee": "free",
-      "expression": "free((void *)capability->evidence)"
-    },
-    {
-      "path": "native/kernel_abi.c",
-      "owner": "native/kernel_abi.c",
-      "domain": "K1",
-      "status": "UNIMPLEMENTED",
-      "line": 177,
-      "callee": "free",
-      "expression": "free((void *)capability->shape_ranges[index].dimensions)"
-    },
-    {
-      "path": "native/kernel_abi.c",
-      "owner": "native/kernel_abi.c",
-      "domain": "K1",
-      "status": "UNIMPLEMENTED",
-      "line": 180,
-      "callee": "free",
-      "expression": "free((void *)capability->shape_ranges)"
-    },
-    {
-      "path": "native/kernel_abi.c",
-      "owner": "native/kernel_abi.c",
-      "domain": "K1",
-      "status": "UNIMPLEMENTED",
-      "line": 191,
-      "callee": "free",
-      "expression": "free(runtime->capabilities)"
-    },
-    {
-      "path": "native/kernel_abi.c",
-      "owner": "native/kernel_abi.c",
-      "domain": "K1",
-      "status": "UNIMPLEMENTED",
-      "line": 192,
-      "callee": "free",
-      "expression": "free(runtime)"
-    },
-    {
-      "path": "native/kernel_abi.c",
-      "owner": "native/kernel_abi.c",
-      "domain": "K1",
-      "status": "UNIMPLEMENTED",
-      "line": 292,
+      "domain": "ET_R_K1",
+      "offset": 10621,
+      "end": 10649,
+      "line": 295,
       "callee": "calloc",
-      "expression": "calloc(count, sizeof(*copy))"
+      "expression": "calloc(count, sizeof(*copy))",
+      "status": "WRAPPED",
+      "kind": "3"
     },
     {
       "path": "native/kernel_abi.c",
       "owner": "native/kernel_abi.c",
-      "domain": "K1",
-      "status": "UNIMPLEMENTED",
-      "line": 394,
+      "domain": "ET_R_K1",
+      "offset": 15229,
+      "end": 15257,
+      "line": 397,
       "callee": "calloc",
-      "expression": "calloc(count, sizeof(*copy))"
+      "expression": "calloc(count, sizeof(*copy))",
+      "status": "WRAPPED",
+      "kind": "4"
     },
     {
       "path": "native/kernel_abi.c",
       "owner": "native/kernel_abi.c",
-      "domain": "K1",
-      "status": "UNIMPLEMENTED",
-      "line": 407,
+      "domain": "ET_R_K1",
+      "offset": 15804,
+      "end": 15846,
+      "line": 410,
       "callee": "calloc",
-      "expression": "calloc(\n        rank, sizeof(*dimensions))"
+      "expression": "calloc(\n        rank, sizeof(*dimensions))",
+      "status": "WRAPPED",
+      "kind": "5"
     },
     {
       "path": "native/kernel_abi.c",
       "owner": "native/kernel_abi.c",
-      "domain": "K1",
-      "status": "UNIMPLEMENTED",
-      "line": 411,
-      "callee": "free",
-      "expression": "free((void *)copy[index].dimensions)"
-    },
-    {
-      "path": "native/kernel_abi.c",
-      "owner": "native/kernel_abi.c",
-      "domain": "K1",
-      "status": "UNIMPLEMENTED",
-      "line": 413,
-      "callee": "free",
-      "expression": "free(copy)"
-    },
-    {
-      "path": "native/kernel_abi.c",
-      "owner": "native/kernel_abi.c",
-      "domain": "K1",
-      "status": "UNIMPLEMENTED",
-      "line": 558,
+      "domain": "ET_R_K1",
+      "offset": 22234,
+      "end": 22261,
+      "line": 561,
       "callee": "calloc",
-      "expression": "calloc(1, sizeof(*runtime))"
+      "expression": "calloc(1, sizeof(*runtime))",
+      "status": "WRAPPED",
+      "kind": "0"
     },
     {
       "path": "native/kernel_abi.c",
       "owner": "native/kernel_abi.c",
-      "domain": "K1",
-      "status": "UNIMPLEMENTED",
-      "line": 564,
+      "domain": "ET_R_K1",
+      "offset": 22579,
+      "end": 22640,
+      "line": 567,
       "callee": "calloc",
-      "expression": "calloc(\n      baseline_count, sizeof(*runtime->capabilities))"
+      "expression": "calloc(\n      baseline_count, sizeof(*runtime->capabilities))",
+      "status": "WRAPPED",
+      "kind": "1"
     },
     {
       "path": "native/kernel_abi.c",
       "owner": "native/kernel_abi.c",
-      "domain": "K1",
-      "status": "UNIMPLEMENTED",
-      "line": 742,
+      "domain": "ET_R_K1",
+      "offset": 30267,
+      "end": 30371,
+      "line": 745,
       "callee": "realloc",
-      "expression": "realloc(\n          runtime->capabilities,\n          (runtime->capability_count + 1u) * sizeof(*resized))"
+      "expression": "realloc(\n          runtime->capabilities,\n          (runtime->capability_count + 1u) * sizeof(*resized))",
+      "status": "WRAPPED",
+      "kind": "1"
     },
     {
       "path": "native/o2_optimizer.c",
       "owner": "native/o2_optimizer.c",
       "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 218,
+      "offset": 6812,
+      "end": 6831,
+      "line": 221,
       "callee": "calloc",
-      "expression": "calloc(count, size)"
+      "expression": "calloc(count, size)",
+      "status": "DELEGATED_HELPER_REAL_ALLOCATOR"
     },
     {
       "path": "native/o2_optimizer.c",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 1151,
-      "callee": "free",
-      "expression": "free(optimizer->entries)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 1185,
-      "callee": "et_o2_calloc",
-      "expression": "et_o2_calloc(1u, sizeof(*builder))"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
+      "domain": "ET_R_O2",
+      "offset": 44747,
+      "end": 44781,
       "line": 1188,
       "callee": "et_o2_calloc",
-      "expression": "et_o2_calloc(parameter_count, sizeof(*builder->entries))"
+      "expression": "et_o2_calloc(1u, sizeof(*builder))",
+      "status": "WRAPPED",
+      "kind": "0"
     },
     {
       "path": "native/o2_optimizer.c",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
+      "domain": "ET_R_O2",
+      "offset": 44896,
+      "end": 44952,
       "line": 1191,
-      "callee": "free",
-      "expression": "free(builder)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 1315,
       "callee": "et_o2_calloc",
-      "expression": "et_o2_calloc(1u, sizeof(*optimizer))"
+      "expression": "et_o2_calloc(parameter_count, sizeof(*builder->entries))",
+      "status": "WRAPPED",
+      "kind": "7"
     },
     {
       "path": "native/o2_optimizer.c",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 1324,
-      "callee": "free",
-      "expression": "free(optimizer)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 1332,
+      "domain": "ET_R_O2",
+      "offset": 50647,
+      "end": 50683,
+      "line": 1318,
       "callee": "et_o2_calloc",
-      "expression": "et_o2_calloc(1u, retire_bytes)"
+      "expression": "et_o2_calloc(1u, sizeof(*optimizer))",
+      "status": "WRAPPED",
+      "kind": "1"
     },
     {
       "path": "native/o2_optimizer.c",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 1334,
-      "callee": "free",
-      "expression": "free(optimizer)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 1362,
-      "callee": "free",
-      "expression": "free(builder)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 1387,
-      "callee": "free",
-      "expression": "free(builder->entries)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 1389,
-      "callee": "free",
-      "expression": "free(builder)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 1968,
+      "domain": "ET_R_O2",
+      "offset": 51545,
+      "end": 51575,
+      "line": 1335,
       "callee": "et_o2_calloc",
-      "expression": "et_o2_calloc(optimizer->count * 3u, sizeof(*stages))"
+      "expression": "et_o2_calloc(1u, retire_bytes)",
+      "status": "WRAPPED",
+      "kind": "6"
     },
     {
       "path": "native/o2_optimizer.c",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 1969,
+      "domain": "ET_R_O2",
+      "offset": 78676,
+      "end": 78728,
+      "line": 1971,
       "callee": "et_o2_calloc",
-      "expression": "et_o2_calloc(\n      optimizer->count * 3u, sizeof(*assignments))"
+      "expression": "et_o2_calloc(optimizer->count * 3u, sizeof(*stages))",
+      "status": "WRAPPED",
+      "kind": "11"
     },
     {
       "path": "native/o2_optimizer.c",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2032,
-      "callee": "free",
-      "expression": "free(assignments)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2033,
-      "callee": "free",
-      "expression": "free(stages)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2052,
+      "domain": "ET_R_O2",
+      "offset": 78843,
+      "end": 78907,
+      "line": 1972,
       "callee": "et_o2_calloc",
-      "expression": "et_o2_calloc(optimizer->count, sizeof(*parameters))"
+      "expression": "et_o2_calloc(\n      optimizer->count * 3u, sizeof(*assignments))",
+      "status": "WRAPPED",
+      "kind": "12"
     },
     {
       "path": "native/o2_optimizer.c",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2083,
-      "callee": "free",
-      "expression": "free(parameters)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2168,
+      "domain": "ET_R_O2",
+      "offset": 82304,
+      "end": 82355,
+      "line": 2055,
       "callee": "et_o2_calloc",
-      "expression": "et_o2_calloc(1u, sizeof(*state))"
+      "expression": "et_o2_calloc(optimizer->count, sizeof(*parameters))",
+      "status": "WRAPPED",
+      "kind": "13"
     },
     {
       "path": "native/o2_optimizer.c",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2170,
+      "domain": "ET_R_O2",
+      "offset": 86980,
+      "end": 87012,
+      "line": 2171,
       "callee": "et_o2_calloc",
-      "expression": "et_o2_calloc(optimizer->count,\n                                                       sizeof(*state->entries))"
+      "expression": "et_o2_calloc(1u, sizeof(*state))",
+      "status": "WRAPPED",
+      "kind": "2"
     },
     {
       "path": "native/o2_optimizer.c",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2172,
+      "domain": "ET_R_O2",
+      "offset": 87119,
+      "end": 87229,
+      "line": 2173,
       "callee": "et_o2_calloc",
-      "expression": "et_o2_calloc(\n        optimizer->count * 2u, sizeof(*state->handles))"
+      "expression": "et_o2_calloc(optimizer->count,\n                                                       sizeof(*state->entries))",
+      "status": "WRAPPED",
+      "kind": "8"
     },
     {
       "path": "native/o2_optimizer.c",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2174,
+      "domain": "ET_R_O2",
+      "offset": 87348,
+      "end": 87417,
+      "line": 2175,
       "callee": "et_o2_calloc",
-      "expression": "et_o2_calloc(\n        optimizer->count * 2u, sizeof(*state->owned_clones))"
+      "expression": "et_o2_calloc(\n        optimizer->count * 2u, sizeof(*state->handles))",
+      "status": "WRAPPED",
+      "kind": "9"
     },
     {
       "path": "native/o2_optimizer.c",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2218,
+      "domain": "ET_R_O2",
+      "offset": 87532,
+      "end": 87606,
+      "line": 2177,
       "callee": "et_o2_calloc",
-      "expression": "et_o2_calloc(1u, sizeof(*handle))"
+      "expression": "et_o2_calloc(\n        optimizer->count * 2u, sizeof(*state->owned_clones))",
+      "status": "WRAPPED",
+      "kind": "10"
     },
     {
       "path": "native/o2_optimizer.c",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2250,
-      "callee": "free",
-      "expression": "free(state->handles[handle_index])"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2256,
-      "callee": "free",
-      "expression": "free(state->owned_clones)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2257,
-      "callee": "free",
-      "expression": "free(state->handles)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2258,
-      "callee": "free",
-      "expression": "free(state->entries)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2259,
-      "callee": "free",
-      "expression": "free(state)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2311,
+      "domain": "ET_R_O2",
+      "offset": 89678,
+      "end": 89711,
+      "line": 2221,
       "callee": "et_o2_calloc",
-      "expression": "et_o2_calloc(\n      optimizer->count * 2u, sizeof(*assignments))"
+      "expression": "et_o2_calloc(1u, sizeof(*handle))",
+      "status": "WRAPPED",
+      "kind": "3"
     },
     {
       "path": "native/o2_optimizer.c",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2364,
-      "callee": "free",
-      "expression": "free(assignments)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2496,
+      "domain": "ET_R_O2",
+      "offset": 93453,
+      "end": 93517,
+      "line": 2314,
       "callee": "et_o2_calloc",
-      "expression": "et_o2_calloc(1u, sizeof(*borrow))"
+      "expression": "et_o2_calloc(\n      optimizer->count * 2u, sizeof(*assignments))",
+      "status": "WRAPPED",
+      "kind": "12"
     },
     {
       "path": "native/o2_optimizer.c",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2512,
-      "callee": "free",
-      "expression": "free(borrow)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2651,
-      "callee": "free",
-      "expression": "free(state->owned_clones)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2652,
-      "callee": "free",
-      "expression": "free(state->handles)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2653,
-      "callee": "free",
-      "expression": "free(state->entries)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2702,
-      "callee": "free",
-      "expression": "free(state->handles[index])"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2705,
-      "callee": "free",
-      "expression": "free(state->owned_clones)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2706,
-      "callee": "free",
-      "expression": "free(state->handles)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2707,
-      "callee": "free",
-      "expression": "free(state->entries)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2708,
-      "callee": "free",
-      "expression": "free(state)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2739,
+      "domain": "ET_R_O2",
+      "offset": 101302,
+      "end": 101335,
+      "line": 2499,
       "callee": "et_o2_calloc",
-      "expression": "et_o2_calloc(1u,\n                                                              sizeof(*builder))"
+      "expression": "et_o2_calloc(1u, sizeof(*borrow))",
+      "status": "WRAPPED",
+      "kind": "4"
     },
     {
       "path": "native/o2_optimizer.c",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
+      "domain": "ET_R_O2",
+      "offset": 111286,
+      "end": 111382,
       "line": 2742,
       "callee": "et_o2_calloc",
-      "expression": "et_o2_calloc(\n        input->parameter_count, sizeof(*builder->entries))"
+      "expression": "et_o2_calloc(1u,\n                                                              sizeof(*builder))",
+      "status": "WRAPPED",
+      "kind": "5"
     },
     {
       "path": "native/o2_optimizer.c",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2744,
+      "domain": "ET_R_O2",
+      "offset": 111496,
+      "end": 111568,
+      "line": 2745,
       "callee": "et_o2_calloc",
-      "expression": "et_o2_calloc(\n        input->parameter_count * 2u, sizeof(*builder->owned_clones))"
+      "expression": "et_o2_calloc(\n        input->parameter_count, sizeof(*builder->entries))",
+      "status": "WRAPPED",
+      "kind": "18"
     },
     {
       "path": "native/o2_optimizer.c",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2746,
+      "domain": "ET_R_O2",
+      "offset": 111688,
+      "end": 111770,
+      "line": 2747,
       "callee": "et_o2_calloc",
-      "expression": "et_o2_calloc(\n        input->parameter_count, sizeof(*builder->entry_set))"
+      "expression": "et_o2_calloc(\n        input->parameter_count * 2u, sizeof(*builder->owned_clones))",
+      "status": "WRAPPED",
+      "kind": "20"
     },
     {
       "path": "native/o2_optimizer.c",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2752,
-      "callee": "free",
-      "expression": "free(builder->entry_set)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2753,
-      "callee": "free",
-      "expression": "free(builder->owned_clones)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2754,
-      "callee": "free",
-      "expression": "free(builder->entries)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2756,
-      "callee": "free",
-      "expression": "free(builder)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2909,
+      "domain": "ET_R_O2",
+      "offset": 111896,
+      "end": 111970,
+      "line": 2749,
       "callee": "et_o2_calloc",
-      "expression": "et_o2_calloc(1u, sizeof(*state))"
+      "expression": "et_o2_calloc(\n        input->parameter_count, sizeof(*builder->entry_set))",
+      "status": "WRAPPED",
+      "kind": "21"
     },
     {
       "path": "native/o2_optimizer.c",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2911,
+      "domain": "ET_R_O2",
+      "offset": 119344,
+      "end": 119376,
+      "line": 2912,
       "callee": "et_o2_calloc",
-      "expression": "et_o2_calloc(\n        builder->count, sizeof(*state->entries))"
+      "expression": "et_o2_calloc(1u, sizeof(*state))",
+      "status": "WRAPPED",
+      "kind": "2"
     },
     {
       "path": "native/o2_optimizer.c",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2913,
+      "domain": "ET_R_O2",
+      "offset": 119483,
+      "end": 119545,
+      "line": 2914,
       "callee": "et_o2_calloc",
-      "expression": "et_o2_calloc(\n        builder->count * 2u, sizeof(*state->handles))"
+      "expression": "et_o2_calloc(\n        builder->count, sizeof(*state->entries))",
+      "status": "WRAPPED",
+      "kind": "8"
     },
     {
       "path": "native/o2_optimizer.c",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2915,
+      "domain": "ET_R_O2",
+      "offset": 119662,
+      "end": 119729,
+      "line": 2916,
       "callee": "et_o2_calloc",
-      "expression": "et_o2_calloc(\n        builder->count * 2u, sizeof(*state->owned_clones))"
+      "expression": "et_o2_calloc(\n        builder->count * 2u, sizeof(*state->handles))",
+      "status": "WRAPPED",
+      "kind": "9"
     },
     {
       "path": "native/o2_optimizer.c",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2921,
-      "callee": "free",
-      "expression": "free(state->owned_clones)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2922,
-      "callee": "free",
-      "expression": "free(state->handles)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2923,
-      "callee": "free",
-      "expression": "free(state->entries)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2925,
-      "callee": "free",
-      "expression": "free(state)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 2933,
+      "domain": "ET_R_O2",
+      "offset": 119842,
+      "end": 119914,
+      "line": 2918,
       "callee": "et_o2_calloc",
-      "expression": "et_o2_calloc(1u, sizeof(*handle))"
+      "expression": "et_o2_calloc(\n        builder->count * 2u, sizeof(*state->owned_clones))",
+      "status": "WRAPPED",
+      "kind": "10"
     },
     {
       "path": "native/o2_optimizer.c",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 3013,
-      "callee": "free",
-      "expression": "free(builder->entry_set)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 3014,
-      "callee": "free",
-      "expression": "free(builder->owned_clones)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 3015,
-      "callee": "free",
-      "expression": "free(builder->entries)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 3016,
-      "callee": "free",
-      "expression": "free(builder)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 3056,
-      "callee": "free",
-      "expression": "free(builder->entry_set)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 3057,
-      "callee": "free",
-      "expression": "free(builder->owned_clones)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 3058,
-      "callee": "free",
-      "expression": "free(builder->entries)"
-    },
-    {
-      "path": "native/o2_optimizer.c",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 3059,
-      "callee": "free",
-      "expression": "free(builder)"
+      "domain": "ET_R_O2",
+      "offset": 120821,
+      "end": 120854,
+      "line": 2936,
+      "callee": "et_o2_calloc",
+      "expression": "et_o2_calloc(1u, sizeof(*handle))",
+      "status": "WRAPPED",
+      "kind": "3"
     },
     {
       "path": "native/p1_identity.c",
       "owner": "native/i2_wave2_package_bridge.c",
-      "domain": "P1",
-      "status": "UNIMPLEMENTED",
-      "line": 403,
+      "domain": "ET_R_P1",
+      "offset": 12673,
+      "end": 12699,
+      "line": 406,
       "callee": "calloc",
-      "expression": "calloc(1u, sizeof(*token))"
+      "expression": "calloc(1u, sizeof(*token))",
+      "status": "WRAPPED",
+      "kind": "0"
     },
     {
       "path": "native/p1_identity.c",
       "owner": "native/i2_wave2_package_bridge.c",
-      "domain": "P1",
-      "status": "UNIMPLEMENTED",
-      "line": 409,
+      "domain": "ET_R_P1",
+      "offset": 12973,
+      "end": 13000,
+      "line": 412,
       "callee": "calloc",
-      "expression": "calloc(1u, sizeof(*record))"
+      "expression": "calloc(1u, sizeof(*record))",
+      "status": "WRAPPED",
+      "kind": "1"
     },
     {
       "path": "native/p1_identity.c",
       "owner": "native/i2_wave2_package_bridge.c",
-      "domain": "P1",
-      "status": "UNIMPLEMENTED",
-      "line": 411,
-      "callee": "free",
-      "expression": "free(token)"
-    },
-    {
-      "path": "native/p1_identity.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": "P1",
-      "status": "UNIMPLEMENTED",
-      "line": 422,
-      "callee": "free",
-      "expression": "free(record)"
-    },
-    {
-      "path": "native/p1_identity.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": "P1",
-      "status": "UNIMPLEMENTED",
-      "line": 423,
-      "callee": "free",
-      "expression": "free(token)"
-    },
-    {
-      "path": "native/p1_identity.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": "P1",
-      "status": "UNIMPLEMENTED",
-      "line": 484,
+      "domain": "ET_R_P1",
+      "offset": 15648,
+      "end": 15676,
+      "line": 487,
       "callee": "calloc",
-      "expression": "calloc(1u, sizeof(*context))"
+      "expression": "calloc(1u, sizeof(*context))",
+      "status": "WRAPPED",
+      "kind": "2"
     },
     {
       "path": "native/p1_identity.c",
       "owner": "native/i2_wave2_package_bridge.c",
-      "domain": "P1",
-      "status": "UNIMPLEMENTED",
-      "line": 486,
-      "callee": "free",
-      "expression": "free(context)"
-    },
-    {
-      "path": "native/p1_identity.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": "P1",
-      "status": "UNIMPLEMENTED",
-      "line": 491,
-      "callee": "free",
-      "expression": "free(context)"
-    },
-    {
-      "path": "native/p1_identity.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": "P1",
-      "status": "UNIMPLEMENTED",
-      "line": 565,
+      "domain": "ET_R_P1",
+      "offset": 19168,
+      "end": 19195,
+      "line": 568,
       "callee": "calloc",
-      "expression": "calloc(1u, sizeof(*ledger))"
+      "expression": "calloc(1u, sizeof(*ledger))",
+      "status": "WRAPPED",
+      "kind": "3"
     },
     {
       "path": "native/p1_identity.c",
       "owner": "native/i2_wave2_package_bridge.c",
-      "domain": "P1",
-      "status": "UNIMPLEMENTED",
-      "line": 569,
-      "callee": "calloc",
-      "expression": "calloc(ET_P1_CONSTRUCTION_CAPACITY,\n                                           sizeof(*ledger->entries))"
-    },
-    {
-      "path": "native/p1_identity.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": "P1",
-      "status": "UNIMPLEMENTED",
+      "domain": "ET_R_P1",
+      "offset": 19452,
+      "end": 19556,
       "line": 572,
-      "callee": "free",
-      "expression": "free(ledger)"
-    },
-    {
-      "path": "native/p1_identity.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": "P1",
-      "status": "UNIMPLEMENTED",
-      "line": 654,
-      "callee": "free",
-      "expression": "free(ledger->entries)"
-    },
-    {
-      "path": "native/p1_identity.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": "P1",
-      "status": "UNIMPLEMENTED",
-      "line": 700,
-      "callee": "free",
-      "expression": "free(ledger->entries)"
-    },
-    {
-      "path": "native/p1_identity.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": "P1",
-      "status": "UNIMPLEMENTED",
-      "line": 846,
-      "callee": "free",
-      "expression": "free(ledger->entries)"
-    },
-    {
-      "path": "native/p1_identity.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": "P1",
-      "status": "UNIMPLEMENTED",
-      "line": 905,
-      "callee": "free",
-      "expression": "free(ledger->entries)"
-    },
-    {
-      "path": "native/p1_identity.c",
-      "owner": "native/i2_wave2_package_bridge.c",
-      "domain": "P1",
-      "status": "UNIMPLEMENTED",
-      "line": 929,
-      "callee": "free",
-      "expression": "free(ledger->entries)"
-    },
-    {
-      "path": "native/t1_i64_shell.c",
-      "owner": "native/t1_i64_shell.c",
-      "domain": "I64_T1",
-      "status": "UNIMPLEMENTED",
-      "line": 216,
-      "callee": "free",
-      "expression": "free(shell)"
-    },
-    {
-      "path": "native/t1_i64_shell.c",
-      "owner": "native/t1_i64_shell.c",
-      "domain": "I64_T1",
-      "status": "UNIMPLEMENTED",
-      "line": 238,
       "callee": "calloc",
-      "expression": "calloc(1u, sizeof(*shell))"
+      "expression": "calloc(ET_P1_CONSTRUCTION_CAPACITY,\n                                           sizeof(*ledger->entries))",
+      "status": "WRAPPED",
+      "kind": "4"
+    },
+    {
+      "path": "native/t1_i64_shell.c",
+      "owner": "native/t1_i64_shell.c",
+      "domain": "ET_R_I64_T1",
+      "offset": 8594,
+      "end": 8620,
+      "line": 241,
+      "callee": "calloc",
+      "expression": "calloc(1u, sizeof(*shell))",
+      "status": "WRAPPED",
+      "kind": "5"
     },
     {
       "path": "native/tr3_c_o2_restore.inc",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
+      "domain": "ET_R_O2",
+      "offset": 25089,
+      "end": 25120,
       "line": 577,
       "callee": "et_o2_calloc",
-      "expression": "et_o2_calloc(1u, sizeof(*plan))"
-    },
-    {
-      "path": "native/tr3_c_o2_restore.inc",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 632,
-      "callee": "free",
-      "expression": "free(plan)"
+      "expression": "et_o2_calloc(1u, sizeof(*plan))",
+      "status": "WRAPPED",
+      "kind": "19"
     },
     {
       "path": "native/tr3_o2_step_clear.inc",
       "owner": "native/o2_optimizer.c",
       "domain": "O2",
-      "status": "UNIMPLEMENTED",
+      "offset": 2002,
+      "end": 2021,
       "line": 69,
       "callee": "calloc",
-      "expression": "calloc(count, size)"
+      "expression": "calloc(count, size)",
+      "status": "DELEGATED_HELPER_REAL_ALLOCATOR"
     },
     {
       "path": "native/tr3_o2_step_clear.inc",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 139,
-      "callee": "free",
-      "expression": "free(plan->parameters)"
-    },
-    {
-      "path": "native/tr3_o2_step_clear.inc",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 140,
-      "callee": "free",
-      "expression": "free(plan->assignments)"
-    },
-    {
-      "path": "native/tr3_o2_step_clear.inc",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 141,
-      "callee": "free",
-      "expression": "free(plan->stages)"
-    },
-    {
-      "path": "native/tr3_o2_step_clear.inc",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 159,
-      "callee": "free",
-      "expression": "free(plan)"
-    },
-    {
-      "path": "native/tr3_o2_step_clear.inc",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
+      "domain": "ET_R_O2",
+      "offset": 9849,
+      "end": 9884,
       "line": 267,
       "callee": "et_o2_tr3_calloc",
-      "expression": "et_o2_tr3_calloc(1u, sizeof(*plan))"
+      "expression": "et_o2_tr3_calloc(1u, sizeof(*plan))",
+      "status": "WRAPPED",
+      "kind": "14"
     },
     {
       "path": "native/tr3_o2_step_clear.inc",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
-      "line": 278,
-      "callee": "free",
-      "expression": "free(plan)"
-    },
-    {
-      "path": "native/tr3_o2_step_clear.inc",
-      "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
+      "domain": "ET_R_O2",
+      "offset": 10657,
+      "end": 10721,
       "line": 283,
       "callee": "et_o2_tr3_calloc",
-      "expression": "et_o2_tr3_calloc(\n      plan->count * 3u, sizeof(*plan->stages))"
+      "expression": "et_o2_tr3_calloc(\n      plan->count * 3u, sizeof(*plan->stages))",
+      "status": "WRAPPED",
+      "kind": "15"
     },
     {
       "path": "native/tr3_o2_step_clear.inc",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
+      "domain": "ET_R_O2",
+      "offset": 10849,
+      "end": 10922,
       "line": 286,
       "callee": "et_o2_tr3_calloc",
-      "expression": "et_o2_tr3_calloc(\n          plan->count * 3u, sizeof(*plan->assignments))"
+      "expression": "et_o2_tr3_calloc(\n          plan->count * 3u, sizeof(*plan->assignments))",
+      "status": "WRAPPED",
+      "kind": "16"
     },
     {
       "path": "native/tr3_o2_step_clear.inc",
       "owner": "native/o2_optimizer.c",
-      "domain": "O2",
-      "status": "UNIMPLEMENTED",
+      "domain": "ET_R_O2",
+      "offset": 11033,
+      "end": 11096,
       "line": 288,
       "callee": "et_o2_tr3_calloc",
-      "expression": "et_o2_tr3_calloc(\n      plan->count, sizeof(*plan->parameters))"
+      "expression": "et_o2_tr3_calloc(\n      plan->count, sizeof(*plan->parameters))",
+      "status": "WRAPPED",
+      "kind": "17"
     },
     {
       "path": "src/eshkol_transformer/cpu4_c4_capture.inc",
       "owner": "src/eshkol_transformer/g3c4_model_owner.c",
       "domain": null,
-      "status": "HISTORY_CAPTURE_OFF",
+      "offset": 17036,
+      "end": 17069,
       "line": 410,
       "callee": "et_g3c4_allocate",
-      "expression": "et_g3c4_allocate(sizeof(*handle))"
+      "expression": "et_g3c4_allocate(sizeof(*handle))",
+      "status": "HISTORY_CAPTURE_OFF"
     },
     {
       "path": "src/eshkol_transformer/cpu4_c4_capture.inc",
       "owner": "src/eshkol_transformer/g3c4_model_owner.c",
       "domain": null,
-      "status": "HISTORY_CAPTURE_OFF",
+      "offset": 17080,
+      "end": 17111,
       "line": 411,
       "callee": "et_g3c4_allocate",
-      "expression": "et_g3c4_allocate(sizeof(*node))"
+      "expression": "et_g3c4_allocate(sizeof(*node))",
+      "status": "HISTORY_CAPTURE_OFF"
     },
     {
       "path": "src/eshkol_transformer/cpu4_c4_capture.inc",
       "owner": "src/eshkol_transformer/g3c4_model_owner.c",
       "domain": null,
-      "status": "HISTORY_CAPTURE_OFF",
+      "offset": 17125,
+      "end": 17159,
       "line": 412,
       "callee": "et_g3c4_allocate",
-      "expression": "et_g3c4_allocate(sizeof(*payload))"
+      "expression": "et_g3c4_allocate(sizeof(*payload))",
+      "status": "HISTORY_CAPTURE_OFF"
     },
     {
       "path": "src/eshkol_transformer/cpu4_c4_capture.inc",
       "owner": "src/eshkol_transformer/g3c4_model_owner.c",
       "domain": null,
-      "status": "HISTORY_CAPTURE_OFF",
+      "offset": 20360,
+      "end": 20373,
       "line": 492,
       "callee": "free",
-      "expression": "free(payload)"
+      "expression": "free(payload)",
+      "status": "HISTORY_CAPTURE_OFF"
     },
     {
       "path": "src/eshkol_transformer/cpu4_c4_capture.inc",
       "owner": "src/eshkol_transformer/g3c4_model_owner.c",
       "domain": null,
-      "status": "HISTORY_CAPTURE_OFF",
+      "offset": 20379,
+      "end": 20389,
       "line": 493,
       "callee": "free",
-      "expression": "free(node)"
+      "expression": "free(node)",
+      "status": "HISTORY_CAPTURE_OFF"
     },
     {
       "path": "src/eshkol_transformer/cpu4_c4_capture.inc",
       "owner": "src/eshkol_transformer/g3c4_model_owner.c",
       "domain": null,
-      "status": "HISTORY_CAPTURE_OFF",
+      "offset": 20393,
+      "end": 20405,
       "line": 494,
       "callee": "free",
-      "expression": "free(handle)"
+      "expression": "free(handle)",
+      "status": "HISTORY_CAPTURE_OFF"
     },
     {
       "path": "src/eshkol_transformer/cpu4_c4_capture.inc",
       "owner": "src/eshkol_transformer/g3c4_model_owner.c",
       "domain": null,
-      "status": "HISTORY_CAPTURE_OFF",
+      "offset": 22737,
+      "end": 22756,
       "line": 547,
       "callee": "free",
-      "expression": "free(node->payload)"
+      "expression": "free(node->payload)",
+      "status": "HISTORY_CAPTURE_OFF"
     },
     {
       "path": "src/eshkol_transformer/cpu4_c4_history.inc",
       "owner": "src/eshkol_transformer/g3c4_model_owner.c",
       "domain": null,
-      "status": "HISTORY_CAPTURE_OFF",
+      "offset": 1345,
+      "end": 1357,
       "line": 36,
       "callee": "calloc",
-      "expression": "calloc(1u,n)"
+      "expression": "calloc(1u,n)",
+      "status": "HISTORY_CAPTURE_OFF"
     },
     {
       "path": "src/eshkol_transformer/cpu4_c4_history.inc",
       "owner": "src/eshkol_transformer/g3c4_model_owner.c",
       "domain": null,
-      "status": "HISTORY_CAPTURE_OFF",
+      "offset": 14314,
+      "end": 14345,
       "line": 317,
       "callee": "cpu4_history_calloc",
-      "expression": "cpu4_history_calloc(sizeof(*h))"
+      "expression": "cpu4_history_calloc(sizeof(*h))",
+      "status": "HISTORY_CAPTURE_OFF"
     },
     {
       "path": "src/eshkol_transformer/cpu4_candidate.inc",
       "owner": "src/eshkol_transformer/g3c4_model_owner.c",
-      "domain": "C4",
-      "status": "UNIMPLEMENTED",
+      "domain": "ET_R_C4",
+      "offset": 1907,
+      "end": 1943,
       "line": 45,
       "callee": "et_g3c4_allocate",
-      "expression": "et_g3c4_allocate(sizeof(*candidate))"
-    },
-    {
-      "path": "src/eshkol_transformer/cpu4_candidate.inc",
-      "owner": "src/eshkol_transformer/g3c4_model_owner.c",
-      "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 52,
-      "callee": "free",
-      "expression": "free(candidate)"
+      "expression": "et_g3c4_allocate(sizeof(*candidate))",
+      "status": "WRAPPED",
+      "kind": "1"
     },
     {
       "path": "src/eshkol_transformer/cpu4_training_lease.inc",
       "owner": "src/eshkol_transformer/g3c4_model_owner.c",
-      "domain": "C4",
-      "status": "UNIMPLEMENTED",
+      "domain": "ET_R_C4",
+      "offset": 4280,
+      "end": 4312,
       "line": 107,
       "callee": "et_g3c4_allocate",
-      "expression": "et_g3c4_allocate(sizeof(*lease))"
+      "expression": "et_g3c4_allocate(sizeof(*lease))",
+      "status": "WRAPPED",
+      "kind": "2"
     },
     {
       "path": "src/eshkol_transformer/cpu4_training_lease.inc",
       "owner": "src/eshkol_transformer/g3c4_model_owner.c",
-      "domain": "C4",
-      "status": "UNIMPLEMENTED",
+      "domain": "ET_R_C4",
+      "offset": 7956,
+      "end": 7988,
       "line": 182,
       "callee": "et_g3c4_allocate",
-      "expression": "et_g3c4_allocate(sizeof(*child))"
+      "expression": "et_g3c4_allocate(sizeof(*child))",
+      "status": "WRAPPED",
+      "kind": "3"
     },
     {
       "path": "src/eshkol_transformer/cpu4_training_transport.c",
       "owner": "src/eshkol_transformer/cpu4_training_transport.c",
       "domain": "TRAIN",
-      "status": "UNIMPLEMENTED",
-      "line": 52,
+      "offset": 2251,
+      "end": 2266,
+      "line": 55,
       "callee": "calloc",
-      "expression": "calloc(1,bytes)"
+      "expression": "calloc(1,bytes)",
+      "status": "DELEGATED_HELPER_REAL_ALLOCATOR"
     },
     {
       "path": "src/eshkol_transformer/cpu4_training_transport.c",
       "owner": "src/eshkol_transformer/cpu4_training_transport.c",
-      "domain": "TRAIN",
-      "status": "UNIMPLEMENTED",
-      "line": 124,
-      "callee": "free",
-      "expression": "free(input)"
+      "domain": "ET_R_TRAIN",
+      "offset": 5889,
+      "end": 5917,
+      "line": 125,
+      "callee": "c4t_allocate",
+      "expression": "c4t_allocate(sizeof(*input))",
+      "status": "WRAPPED",
+      "kind": "0"
     },
     {
       "path": "src/eshkol_transformer/cpu4_training_transport.c",
       "owner": "src/eshkol_transformer/cpu4_training_transport.c",
-      "domain": "TRAIN",
-      "status": "UNIMPLEMENTED",
-      "line": 136,
-      "callee": "free",
-      "expression": "free(l)"
+      "domain": "ET_R_TRAIN",
+      "offset": 6604,
+      "end": 6628,
+      "line": 138,
+      "callee": "c4t_allocate",
+      "expression": "c4t_allocate(sizeof(*l))",
+      "status": "WRAPPED",
+      "kind": "2"
     },
     {
       "path": "src/eshkol_transformer/cpu4_training_transport.c",
       "owner": "src/eshkol_transformer/cpu4_training_transport.c",
-      "domain": "TRAIN",
-      "status": "UNIMPLEMENTED",
-      "line": 137,
-      "callee": "free",
-      "expression": "free(l)"
-    },
-    {
-      "path": "src/eshkol_transformer/cpu4_training_transport.c",
-      "owner": "src/eshkol_transformer/cpu4_training_transport.c",
-      "domain": "TRAIN",
-      "status": "UNIMPLEMENTED",
-      "line": 234,
-      "callee": "free",
-      "expression": "free(w)"
+      "domain": "ET_R_TRAIN",
+      "offset": 10893,
+      "end": 10917,
+      "line": 216,
+      "callee": "c4t_allocate",
+      "expression": "c4t_allocate(sizeof(*w))",
+      "status": "WRAPPED",
+      "kind": "1"
     },
     {
       "path": "src/eshkol_transformer/e3_cpu4_frame.c",
       "owner": "src/eshkol_transformer/e3_cpu4_frame.c",
       "domain": "E3",
-      "status": "UNIMPLEMENTED",
-      "line": 70,
+      "offset": 3015,
+      "end": 3031,
+      "line": 73,
       "callee": "calloc",
-      "expression": "calloc(1, bytes)"
+      "expression": "calloc(1, bytes)",
+      "status": "DELEGATED_HELPER_REAL_ALLOCATOR"
     },
     {
       "path": "src/eshkol_transformer/e3_cpu4_frame.c",
       "owner": "src/eshkol_transformer/e3_cpu4_frame.c",
-      "domain": "E3",
-      "status": "UNIMPLEMENTED",
+      "domain": "ET_R_E3",
+      "offset": 25021,
+      "end": 25048,
+      "line": 545,
+      "callee": "e3_allocate",
+      "expression": "e3_allocate(sizeof(*frame))",
+      "status": "WRAPPED",
+      "kind": "0"
+    },
+    {
+      "path": "src/eshkol_transformer/e3_cpu4_frame.c",
+      "owner": "src/eshkol_transformer/e3_cpu4_frame.c",
+      "domain": "ET_R_E3",
+      "offset": 26138,
+      "end": 26164,
+      "line": 562,
+      "callee": "e3_allocate",
+      "expression": "e3_allocate(sizeof(*work))",
+      "status": "WRAPPED",
+      "kind": "1"
+    },
+    {
+      "path": "src/eshkol_transformer/e3_cpu4_frame.c",
+      "owner": "src/eshkol_transformer/e3_cpu4_frame.c",
+      "domain": "ET_R_E3",
+      "offset": 26549,
+      "end": 26581,
+      "line": 568,
+      "callee": "e3_allocate",
+      "expression": "e3_allocate(sizeof(*work->data))",
+      "status": "WRAPPED",
+      "kind": "2"
+    },
+    {
+      "path": "src/eshkol_transformer/g3c4_model_owner.c",
+      "owner": "src/eshkol_transformer/g3c4_model_owner.c",
+      "domain": "C4",
+      "offset": 7993,
+      "end": 8009,
+      "line": 262,
+      "callee": "calloc",
+      "expression": "calloc(1u, size)",
+      "status": "DELEGATED_HELPER_REAL_ALLOCATOR"
+    },
+    {
+      "path": "src/eshkol_transformer/g3c4_model_owner.c",
+      "owner": "src/eshkol_transformer/g3c4_model_owner.c",
+      "domain": "ET_R_C4",
+      "offset": 17707,
+      "end": 17739,
       "line": 525,
-      "callee": "free",
-      "expression": "free(work->data)"
-    },
-    {
-      "path": "src/eshkol_transformer/e3_cpu4_frame.c",
-      "owner": "src/eshkol_transformer/e3_cpu4_frame.c",
-      "domain": "E3",
-      "status": "UNIMPLEMENTED",
-      "line": 542,
-      "callee": "e3_allocate",
-      "expression": "e3_allocate(sizeof(*frame))"
-    },
-    {
-      "path": "src/eshkol_transformer/e3_cpu4_frame.c",
-      "owner": "src/eshkol_transformer/e3_cpu4_frame.c",
-      "domain": "E3",
-      "status": "UNIMPLEMENTED",
-      "line": 559,
-      "callee": "e3_allocate",
-      "expression": "e3_allocate(sizeof(*work))"
-    },
-    {
-      "path": "src/eshkol_transformer/e3_cpu4_frame.c",
-      "owner": "src/eshkol_transformer/e3_cpu4_frame.c",
-      "domain": "E3",
-      "status": "UNIMPLEMENTED",
-      "line": 565,
-      "callee": "e3_allocate",
-      "expression": "e3_allocate(sizeof(*work->data))"
-    },
-    {
-      "path": "src/eshkol_transformer/g3c4_model_owner.c",
-      "owner": "src/eshkol_transformer/g3c4_model_owner.c",
-      "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 259,
-      "callee": "calloc",
-      "expression": "calloc(1u, size)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3c4_model_owner.c",
-      "owner": "src/eshkol_transformer/g3c4_model_owner.c",
-      "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 522,
       "callee": "et_g3c4_allocate",
-      "expression": "et_g3c4_allocate(sizeof(*owner))"
+      "expression": "et_g3c4_allocate(sizeof(*owner))",
+      "status": "WRAPPED",
+      "kind": "0"
     },
     {
       "path": "src/eshkol_transformer/g3c4_model_owner.c",
       "owner": "src/eshkol_transformer/g3c4_model_owner.c",
-      "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 558,
-      "callee": "free",
-      "expression": "free(owner)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3c4_model_owner.c",
-      "owner": "src/eshkol_transformer/g3c4_model_owner.c",
-      "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 2027,
+      "domain": "ET_R_C4",
+      "offset": 74577,
+      "end": 74605,
+      "line": 2030,
       "callee": "calloc",
-      "expression": "calloc(1u, sizeof(*context))"
+      "expression": "calloc(1u, sizeof(*context))",
+      "status": "WRAPPED",
+      "kind": "4"
     },
     {
       "path": "src/eshkol_transformer/g3c4_model_owner.c",
       "owner": "src/eshkol_transformer/g3c4_model_owner.c",
-      "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 2042,
+      "domain": "ET_R_C4",
+      "offset": 75115,
+      "end": 75141,
+      "line": 2045,
       "callee": "calloc",
-      "expression": "calloc(1u, sizeof(*frame))"
+      "expression": "calloc(1u, sizeof(*frame))",
+      "status": "WRAPPED",
+      "kind": "12"
     },
     {
       "path": "src/eshkol_transformer/g3c4_model_owner.c",
       "owner": "src/eshkol_transformer/g3c4_model_owner.c",
-      "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 2058,
+      "domain": "ET_R_C4",
+      "offset": 75604,
+      "end": 75628,
+      "line": 2061,
       "callee": "calloc",
-      "expression": "calloc(1u, sizeof(*rng))"
+      "expression": "calloc(1u, sizeof(*rng))",
+      "status": "WRAPPED",
+      "kind": "5"
     },
     {
       "path": "src/eshkol_transformer/g3c4_model_owner.c",
       "owner": "src/eshkol_transformer/g3c4_model_owner.c",
-      "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 2073,
+      "domain": "ET_R_C4",
+      "offset": 76095,
+      "end": 76121,
+      "line": 2076,
       "callee": "calloc",
-      "expression": "calloc(1u, sizeof(*input))"
+      "expression": "calloc(1u, sizeof(*input))",
+      "status": "WRAPPED",
+      "kind": "6"
     },
     {
       "path": "src/eshkol_transformer/g3c4_model_owner.c",
       "owner": "src/eshkol_transformer/g3c4_model_owner.c",
-      "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 2087,
+      "domain": "ET_R_C4",
+      "offset": 76623,
+      "end": 76650,
+      "line": 2090,
       "callee": "calloc",
-      "expression": "calloc(1u, sizeof(*result))"
+      "expression": "calloc(1u, sizeof(*result))",
+      "status": "WRAPPED",
+      "kind": "11"
     },
     {
       "path": "src/eshkol_transformer/g3c4_model_owner.c",
       "owner": "src/eshkol_transformer/g3c4_model_owner.c",
-      "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 2104,
+      "domain": "ET_R_C4",
+      "offset": 77147,
+      "end": 77174,
+      "line": 2107,
       "callee": "calloc",
-      "expression": "calloc(1u, sizeof(*output))"
+      "expression": "calloc(1u, sizeof(*output))",
+      "status": "WRAPPED",
+      "kind": "7"
     },
     {
       "path": "src/eshkol_transformer/g3c4_model_owner.c",
       "owner": "src/eshkol_transformer/g3c4_model_owner.c",
-      "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 2120,
+      "domain": "ET_R_C4",
+      "offset": 77664,
+      "end": 77691,
+      "line": 2123,
       "callee": "calloc",
-      "expression": "calloc(1u, sizeof(*logits))"
+      "expression": "calloc(1u, sizeof(*logits))",
+      "status": "WRAPPED",
+      "kind": "8"
     },
     {
       "path": "src/eshkol_transformer/g3c4_model_owner.c",
       "owner": "src/eshkol_transformer/g3c4_model_owner.c",
       "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 2538,
+      "offset": 93623,
+      "end": 93636,
+      "line": 2541,
       "callee": "free",
-      "expression": "free(history)"
+      "expression": "free(history)",
+      "status": "HISTORY_CAPTURE_OFF"
     },
     {
       "path": "src/eshkol_transformer/g3c4_model_owner.c",
       "owner": "src/eshkol_transformer/g3c4_model_owner.c",
       "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 2549,
+      "offset": 94045,
+      "end": 94058,
+      "line": 2554,
       "callee": "free",
-      "expression": "free(context)"
+      "expression": "free(history)",
+      "status": "HISTORY_CAPTURE_OFF"
     },
     {
       "path": "src/eshkol_transformer/g3c4_model_owner.c",
       "owner": "src/eshkol_transformer/g3c4_model_owner.c",
       "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 2551,
+      "offset": 106941,
+      "end": 106954,
+      "line": 2934,
       "callee": "free",
-      "expression": "free(history)"
+      "expression": "free(history)",
+      "status": "HISTORY_CAPTURE_OFF"
     },
     {
       "path": "src/eshkol_transformer/g3c4_model_owner.c",
       "owner": "src/eshkol_transformer/g3c4_model_owner.c",
       "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 2762,
+      "offset": 107094,
+      "end": 107107,
+      "line": 2942,
       "callee": "free",
-      "expression": "free(input)"
+      "expression": "free(history)",
+      "status": "HISTORY_CAPTURE_OFF"
     },
     {
       "path": "src/eshkol_transformer/g3c4_model_owner.c",
       "owner": "src/eshkol_transformer/g3c4_model_owner.c",
       "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 2931,
+      "offset": 107629,
+      "end": 107642,
+      "line": 2958,
       "callee": "free",
-      "expression": "free(history)"
+      "expression": "free(history)",
+      "status": "HISTORY_CAPTURE_OFF"
     },
     {
       "path": "src/eshkol_transformer/g3c4_model_owner.c",
       "owner": "src/eshkol_transformer/g3c4_model_owner.c",
-      "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 2939,
-      "callee": "free",
-      "expression": "free(history)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3c4_model_owner.c",
-      "owner": "src/eshkol_transformer/g3c4_model_owner.c",
-      "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 2953,
-      "callee": "free",
-      "expression": "free(context)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3c4_model_owner.c",
-      "owner": "src/eshkol_transformer/g3c4_model_owner.c",
-      "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 2955,
-      "callee": "free",
-      "expression": "free(history)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3c4_model_owner.c",
-      "owner": "src/eshkol_transformer/g3c4_model_owner.c",
-      "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 3259,
-      "callee": "free",
-      "expression": "free(output)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3c4_model_owner.c",
-      "owner": "src/eshkol_transformer/g3c4_model_owner.c",
-      "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 3441,
-      "callee": "free",
-      "expression": "free(logits)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3c4_model_owner.c",
-      "owner": "src/eshkol_transformer/g3c4_model_owner.c",
-      "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 8789,
-      "callee": "free",
-      "expression": "free(context->manual_frame)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3c4_model_owner.c",
-      "owner": "src/eshkol_transformer/g3c4_model_owner.c",
-      "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 8950,
-      "callee": "free",
-      "expression": "free(context->manual_frame)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3c4_model_owner.c",
-      "owner": "src/eshkol_transformer/g3c4_model_owner.c",
-      "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 9420,
+      "domain": "ET_R_C4",
+      "offset": 368976,
+      "end": 369002,
+      "line": 9423,
       "callee": "calloc",
-      "expression": "calloc(1u, sizeof(*clone))"
+      "expression": "calloc(1u, sizeof(*clone))",
+      "status": "WRAPPED",
+      "kind": "10"
     },
     {
       "path": "src/eshkol_transformer/g3c4_model_owner.c",
       "owner": "src/eshkol_transformer/g3c4_model_owner.c",
-      "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 9471,
-      "callee": "free",
-      "expression": "free(clone)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3c4_model_owner.c",
-      "owner": "src/eshkol_transformer/g3c4_model_owner.c",
-      "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 9609,
+      "domain": "ET_R_C4",
+      "offset": 377174,
+      "end": 377201,
+      "line": 9612,
       "callee": "calloc",
-      "expression": "calloc(1u, sizeof(*result))"
-    },
-    {
-      "path": "src/eshkol_transformer/g3c4_model_owner.c",
-      "owner": "src/eshkol_transformer/g3c4_model_owner.c",
-      "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 9649,
-      "callee": "free",
-      "expression": "free(result)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3c4_model_owner.c",
-      "owner": "src/eshkol_transformer/g3c4_model_owner.c",
-      "domain": "C4",
-      "status": "UNIMPLEMENTED",
-      "line": 9884,
-      "callee": "free",
-      "expression": "free(result)"
+      "expression": "calloc(1u, sizeof(*result))",
+      "status": "WRAPPED",
+      "kind": "9"
     },
     {
       "path": "src/eshkol_transformer/g3t_transport.c",
       "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 507,
+      "domain": "ET_R_GENERATION",
+      "offset": 17665,
+      "end": 17686,
+      "line": 510,
       "callee": "calloc",
-      "expression": "calloc(1, sizeof(*c))"
+      "expression": "calloc(1, sizeof(*c))",
+      "status": "WRAPPED",
+      "kind": "0"
     },
     {
       "path": "src/eshkol_transformer/g3t_transport.c",
       "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 518,
+      "domain": "ET_R_GENERATION",
+      "offset": 17998,
+      "end": 18024,
+      "line": 521,
       "callee": "calloc",
-      "expression": "calloc(1, sizeof(*logits))"
+      "expression": "calloc(1, sizeof(*logits))",
+      "status": "WRAPPED",
+      "kind": "2"
     },
     {
       "path": "src/eshkol_transformer/g3t_transport.c",
       "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 646,
-      "callee": "free",
-      "expression": "free(c)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3t_transport.c",
-      "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 694,
-      "callee": "free",
-      "expression": "free(c)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3t_transport.c",
-      "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 1038,
+      "domain": "ET_R_GENERATION",
+      "offset": 39033,
+      "end": 39057,
+      "line": 1041,
       "callee": "calloc",
-      "expression": "calloc(1, sizeof(*hold))"
+      "expression": "calloc(1, sizeof(*hold))",
+      "status": "WRAPPED",
+      "kind": "8"
     },
     {
       "path": "src/eshkol_transformer/g3t_transport.c",
       "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 1046,
-      "callee": "free",
-      "expression": "free(hold)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3t_transport.c",
-      "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 1052,
-      "callee": "free",
-      "expression": "free(hold)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3t_transport.c",
-      "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 1062,
-      "callee": "free",
-      "expression": "free(hold)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3t_transport.c",
-      "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 1069,
-      "callee": "free",
-      "expression": "free(hold)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3t_transport.c",
-      "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 1441,
+      "domain": "ET_R_GENERATION",
+      "offset": 55741,
+      "end": 55766,
+      "line": 1444,
       "callee": "calloc",
-      "expression": "calloc(1, sizeof(*input))"
+      "expression": "calloc(1, sizeof(*input))",
+      "status": "WRAPPED",
+      "kind": "1"
     },
     {
       "path": "src/eshkol_transformer/g3t_transport.c",
       "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 1468,
+      "domain": "ET_R_GENERATION",
+      "offset": 56492,
+      "end": 56517,
+      "line": 1471,
       "callee": "calloc",
-      "expression": "calloc(1, sizeof(*input))"
+      "expression": "calloc(1, sizeof(*input))",
+      "status": "WRAPPED",
+      "kind": "1"
     },
     {
       "path": "src/eshkol_transformer/g3t_transport.c",
       "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 1481,
-      "callee": "free",
-      "expression": "free(input)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3t_transport.c",
-      "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 1487,
-      "callee": "free",
-      "expression": "free(input)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3t_transport.c",
-      "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 1531,
+      "domain": "ET_R_GENERATION",
+      "offset": 58399,
+      "end": 58424,
+      "line": 1534,
       "callee": "calloc",
-      "expression": "calloc(1, sizeof(*input))"
+      "expression": "calloc(1, sizeof(*input))",
+      "status": "WRAPPED",
+      "kind": "1"
     },
     {
       "path": "src/eshkol_transformer/g3t_transport.c",
       "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 1543,
-      "callee": "free",
-      "expression": "free(input)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3t_transport.c",
-      "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 1550,
-      "callee": "free",
-      "expression": "free(input)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3t_transport.c",
-      "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 1676,
-      "callee": "free",
-      "expression": "free(logits)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3t_transport.c",
-      "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 1762,
+      "domain": "ET_R_GENERATION",
+      "offset": 66972,
+      "end": 66998,
+      "line": 1765,
       "callee": "calloc",
-      "expression": "calloc(1, sizeof(*output))"
+      "expression": "calloc(1, sizeof(*output))",
+      "status": "WRAPPED",
+      "kind": "3"
     },
     {
       "path": "src/eshkol_transformer/g3t_transport.c",
       "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 1771,
-      "callee": "free",
-      "expression": "free(output)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3t_transport.c",
-      "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 1832,
+      "domain": "ET_R_GENERATION",
+      "offset": 69539,
+      "end": 69564,
+      "line": 1835,
       "callee": "calloc",
-      "expression": "calloc(1, sizeof(*clone))"
+      "expression": "calloc(1, sizeof(*clone))",
+      "status": "WRAPPED",
+      "kind": "4"
     },
     {
       "path": "src/eshkol_transformer/g3t_transport.c",
       "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 1843,
-      "callee": "free",
-      "expression": "free(clone)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3t_transport.c",
-      "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 1853,
-      "callee": "free",
-      "expression": "free(clone)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3t_transport.c",
-      "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 1887,
+      "domain": "ET_R_GENERATION",
+      "offset": 71389,
+      "end": 71414,
+      "line": 1890,
       "callee": "calloc",
-      "expression": "calloc(1, sizeof(*clone))"
+      "expression": "calloc(1, sizeof(*clone))",
+      "status": "WRAPPED",
+      "kind": "5"
     },
     {
       "path": "src/eshkol_transformer/g3t_transport.c",
       "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 1898,
-      "callee": "free",
-      "expression": "free(clone)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3t_transport.c",
-      "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 1905,
-      "callee": "free",
-      "expression": "free(clone)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3t_transport.c",
-      "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 1941,
+      "domain": "ET_R_GENERATION",
+      "offset": 73203,
+      "end": 73228,
+      "line": 1944,
       "callee": "calloc",
-      "expression": "calloc(1, sizeof(*clone))"
+      "expression": "calloc(1, sizeof(*clone))",
+      "status": "WRAPPED",
+      "kind": "6"
     },
     {
       "path": "src/eshkol_transformer/g3t_transport.c",
       "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 1952,
-      "callee": "free",
-      "expression": "free(clone)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3t_transport.c",
-      "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 1959,
-      "callee": "free",
-      "expression": "free(clone)"
-    },
-    {
-      "path": "src/eshkol_transformer/g3t_transport.c",
-      "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 1990,
+      "domain": "ET_R_GENERATION",
+      "offset": 74858,
+      "end": 74883,
+      "line": 1993,
       "callee": "calloc",
-      "expression": "calloc(1, sizeof(*clone))"
+      "expression": "calloc(1, sizeof(*clone))",
+      "status": "WRAPPED",
+      "kind": "7"
     },
     {
       "path": "src/eshkol_transformer/g3t_transport.c",
       "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": "GENERATION",
-      "status": "UNIMPLEMENTED",
-      "line": 2020,
+      "domain": "ET_R_GENERATION",
+      "offset": 75704,
+      "end": 75729,
+      "line": 2023,
       "callee": "calloc",
-      "expression": "calloc(1, sizeof(*clone))"
+      "expression": "calloc(1, sizeof(*clone))",
+      "status": "WRAPPED",
+      "kind": "7"
     },
     {
       "path": "src/eshkol_transformer/m3_model.c",
       "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
+      "domain": "ET_R_TRAIN",
+      "offset": 4813,
+      "end": 4833,
       "line": 134,
-      "callee": "free",
-      "expression": "free(s)"
+      "callee": "allocate",
+      "expression": "allocate(sizeof(*s))",
+      "status": "WRAPPED",
+      "kind": "8"
     },
     {
       "path": "src/eshkol_transformer/m3_model.c",
       "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 245,
-      "callee": "free",
-      "expression": "free(g)"
+      "domain": "ET_R_TRAIN",
+      "offset": 8039,
+      "end": 8059,
+      "line": 223,
+      "callee": "allocate",
+      "expression": "allocate(sizeof(*g))",
+      "status": "WRAPPED",
+      "kind": "9"
     },
     {
       "path": "src/eshkol_transformer/m3_model.c",
       "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 318,
-      "callee": "free",
-      "expression": "free(l)"
+      "domain": "ET_R_TRAIN",
+      "offset": 12567,
+      "end": 12587,
+      "line": 319,
+      "callee": "allocate",
+      "expression": "allocate(sizeof(*l))",
+      "status": "WRAPPED",
+      "kind": "10"
     },
     {
       "path": "src/eshkol_transformer/m3t_transport.c",
       "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 39,
+      "domain": "TRAIN",
+      "offset": 2024,
+      "end": 2035,
+      "line": 42,
       "callee": "calloc",
-      "expression": "calloc(1,n)"
+      "expression": "calloc(1,n)",
+      "status": "DELEGATED_HELPER_REAL_ALLOCATOR"
     },
     {
       "path": "src/eshkol_transformer/m3t_transport.c",
       "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 137,
-      "callee": "free",
-      "expression": "free(o)"
+      "domain": "ET_R_TRAIN",
+      "offset": 6013,
+      "end": 6033,
+      "line": 114,
+      "callee": "allocate",
+      "expression": "allocate(sizeof(*s))",
+      "status": "WRAPPED",
+      "kind": "3"
     },
     {
       "path": "src/eshkol_transformer/m3t_transport.c",
       "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 148,
-      "callee": "free",
-      "expression": "free(o->successor)"
+      "domain": "ET_R_TRAIN",
+      "offset": 7411,
+      "end": 7431,
+      "line": 139,
+      "callee": "allocate",
+      "expression": "allocate(sizeof(*o))",
+      "status": "WRAPPED",
+      "kind": "4"
     },
     {
       "path": "src/eshkol_transformer/m3t_transport.c",
       "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 148,
-      "callee": "free",
-      "expression": "free(o)"
+      "domain": "ET_R_TRAIN",
+      "offset": 7504,
+      "end": 7535,
+      "line": 140,
+      "callee": "allocate",
+      "expression": "allocate(sizeof(*o->successor))",
+      "status": "WRAPPED",
+      "kind": "3"
     },
     {
       "path": "src/eshkol_transformer/m3t_transport.c",
       "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 312,
-      "callee": "free",
-      "expression": "free(i)"
+      "domain": "ET_R_TRAIN",
+      "offset": 16467,
+      "end": 16487,
+      "line": 314,
+      "callee": "allocate",
+      "expression": "allocate(sizeof(*i))",
+      "status": "WRAPPED",
+      "kind": "5"
     },
     {
       "path": "src/eshkol_transformer/m3t_transport.c",
       "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 340,
-      "callee": "free",
-      "expression": "free(l)"
+      "domain": "ET_R_TRAIN",
+      "offset": 18013,
+      "end": 18033,
+      "line": 342,
+      "callee": "allocate",
+      "expression": "allocate(sizeof(*l))",
+      "status": "WRAPPED",
+      "kind": "6"
     },
     {
       "path": "src/eshkol_transformer/m3t_transport.c",
       "owner": "src/eshkol_transformer/g3t_transport.c",
-      "domain": null,
-      "status": "UNIMPLEMENTED",
-      "line": 413,
-      "callee": "free",
-      "expression": "free(w)"
+      "domain": "ET_R_TRAIN",
+      "offset": 21368,
+      "end": 21388,
+      "line": 403,
+      "callee": "allocate",
+      "expression": "allocate(sizeof(*w))",
+      "status": "WRAPPED",
+      "kind": "7"
     },
     {
       "path": "tests/cpu4_heldout/inspect.c",
       "owner": "tests/cpu4_heldout/inspect.c",
-      "domain": "E3",
-      "status": "UNIMPLEMENTED",
-      "line": 75,
+      "domain": "ET_R_E3",
+      "offset": 3518,
+      "end": 3540,
+      "line": 78,
       "callee": "malloc",
-      "expression": "malloc(sizeof(*value))"
+      "expression": "malloc(sizeof(*value))",
+      "status": "WRAPPED",
+      "kind": "3"
     },
     {
       "path": "tests/cpu4_heldout/inspect.c",
       "owner": "tests/cpu4_heldout/inspect.c",
-      "domain": "E3",
-      "status": "UNIMPLEMENTED",
-      "line": 77,
-      "callee": "free",
-      "expression": "free(value)"
-    },
-    {
-      "path": "tests/cpu4_heldout/inspect.c",
-      "owner": "tests/cpu4_heldout/inspect.c",
-      "domain": "E3",
-      "status": "UNIMPLEMENTED",
-      "line": 96,
-      "callee": "free",
-      "expression": "free(value)"
-    },
-    {
-      "path": "tests/cpu4_heldout/inspect.c",
-      "owner": "tests/cpu4_heldout/inspect.c",
-      "domain": "E3",
-      "status": "UNIMPLEMENTED",
-      "line": 101,
+      "domain": "ET_R_E3",
+      "offset": 4557,
+      "end": 4579,
+      "line": 104,
       "callee": "malloc",
-      "expression": "malloc(sizeof(*value))"
-    },
-    {
-      "path": "tests/cpu4_heldout/inspect.c",
-      "owner": "tests/cpu4_heldout/inspect.c",
-      "domain": "E3",
-      "status": "UNIMPLEMENTED",
-      "line": 105,
-      "callee": "free",
-      "expression": "free(value)"
-    },
-    {
-      "path": "tests/cpu4_heldout/inspect.c",
-      "owner": "tests/cpu4_heldout/inspect.c",
-      "domain": "E3",
-      "status": "UNIMPLEMENTED",
-      "line": 130,
-      "callee": "free",
-      "expression": "free(value)"
+      "expression": "malloc(sizeof(*value))",
+      "status": "WRAPPED",
+      "kind": "4"
     }
   ]
 }
