@@ -2,11 +2,41 @@
 import unittest
 from tests.cpu4_trainer_control.test_source_contract import parse,walk
 from tests.cpuv1_resource import generate_scheme as g
-from tests.cpuv1_resource.scheme_schema import EXTRA_DEFS,SCHEMAS
-from tests.cpuv1_resource.test_review_fixes import Host
+from tests.cpuv1_resource.scheme_schema import EXTRA_DEFS,SCHEMAS,RAW_NAMES
+from tests.cpuv1_resource.test_review_fixes import Host,Vec
 
 
 class Visitors(unittest.TestCase):
+    def test_construction_retirement_preserves_source_phase_and_identity(self):
+        path=g.P1
+        staged,_=g.transform((g.ROOT/path).read_text(),path)
+        visitor=next(n for n in walk(parse(staged)) if n and n[0]=='define'
+                     and n[1]==['cpuv1-resource-row-5','packet','row'])
+        h=Host();h.helpers('cpuv1-resource-vector?','cpuv1-resource-state-code')
+        shell=object();row=Vec([shell,'open',False,False,False])
+        observed=[];errors=[]
+        def record(packet,index,state,links,source):
+            if not 1<=state<=6 or not 0<=source<15:errors.append('state')
+            else:observed.append((index,state,links,source))
+        h.env.update({'construction-record-resource':lambda value:row if value is shell else False,
+                      'cpuv1-resource-state!':record,
+                      'cpuv1-resource-reject!':lambda packet:errors.append('identity')})
+        h.define(visitor);visit=h.env['cpuv1-resource-row-5'];packet=object()
+        self.assertEqual(RAW_NAMES[5],['STATIC','open','sealed','prepared','aborted','retired'])
+        for phase,broad,source in [('open',1,1),('sealed',1,2),('prepared',4,3),
+                                   ('aborted',2,4),('retired',2,5)]:
+            row[1]=phase;observed.clear();errors.clear();visit(packet,row)
+            self.assertEqual(observed,[(5,broad,2,source)])
+            self.assertFalse(errors)
+        row[1]='unknown';observed.clear();errors.clear();visit(packet,row)
+        self.assertFalse(observed);self.assertEqual(errors,['state'])
+        row[1]='retired'
+        for bad in (Vec(row),Vec([object()]+row[1:]),row[:4],object()):
+            observed.clear();errors.clear();visit(packet,bad)
+            self.assertFalse(observed);self.assertEqual(errors,['identity'])
+        # Retired is scoped to construction rows; unknown global states still fail.
+        self.assertEqual(h.env['cpuv1-resource-state-code']('retired'),0)
+
     def test_x1_row_uses_current_registry_and_top_level_bounded_scan(self):
         path='native/x1_config_private.esk'
         name='cpuv1-resource-x1-entry'

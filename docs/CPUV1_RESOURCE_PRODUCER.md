@@ -141,3 +141,10 @@ explicit value/remaining/seen arguments. Original X1 APIs and the four-cons guar
 remain unchanged. Focused host regressions cover current-head identity and
 malformed/cyclic/boundary cases. Successor compiler/IR/no-allocation proof and
 all runtime/admission gates remain NOT RUN; df7a evidence is preserved as failed.
+
+The construction observer now classifies the original P1 invalidate path's
+retained `retired` construction record as broad DEAD (2), with distinct source
+phase5 after open/sealed/prepared/aborted. Original records, identity checks and
+unknown-state rejection remain intact. Generated-visitor host regression covers
+all five phases and malformed/copied identities. This is a source-only repair;
+new compiler/IR, allocation, link/runtime and resource admission are NOT RUN.

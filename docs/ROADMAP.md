@@ -632,6 +632,13 @@ the old-head failure does not establish current-main runtime behavior.
 
 ## Wave 3 — first complete language model
 
+Resource producer construction-retirement repair (2026-10-23): the original P1
+invalidate path retains a canonical construction record with state `retired`.
+The row5 observer now reports DEAD2/source-phase5 while preserving original
+identity checks and unknown-state rejection. Generated-visitor regression and
+all35 resource host tests pass. This is SOURCE ONLY; successor emitted-IR,
+allocation, link/runtime and resource admission remain NOT RUN.
+
 Active finish milestone: **first complete validated CPU v1**. Current acceptance
 and ownership: [CPU v1 completion index](WAVE3_COMPLETION.md), updated 2026-10-22.
 PR #214 exact-head hosted checks pass. Current-source CPU4 two-update training,

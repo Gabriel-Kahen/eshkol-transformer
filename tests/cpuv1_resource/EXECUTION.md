@@ -112,3 +112,10 @@ The static-byte scalar sums producer declared object extents (including both
 static packets and runtime root/page/warmed fields). One-packet extent is a
 reported subset; linker padding/code/rodata and unit fixture globals/stack are
 excluded from that scalar and must not be silently added or usable-queried.
+
+The construction observer now classifies the original P1 invalidate path's
+retained `retired` construction record as broad DEAD (2), with distinct source
+phase5 after open/sealed/prepared/aborted. Original records, identity checks and
+unknown-state rejection remain intact. Generated-visitor host regression covers
+all five phases and malformed/copied identities. This is a source-only repair;
+new compiler/IR, allocation, link/runtime and resource admission are NOT RUN.
