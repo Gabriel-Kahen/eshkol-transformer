@@ -194,4 +194,4 @@ SCHEMAS[25]['check']='''(and (cpuv1-resource-vector? row 17)
 
 # F1: admitted provider native identities have eight callback tokens outside
 # shell-registry/index. Authenticate each exact slot rather than count as shell.
-SCHEMAS[2]['check']=SCHEMAS[2]['check'][:-1]+" (cpuv1-resource-vector? (vector-ref (vector-ref row 2) 10) 8) (= (cpuv1-resource-provider-callbacks! packet native-context (vector-ref row 1) (vector-ref (vector-ref row 2) 10) 0) 0))"
+SCHEMAS[2]['check']=SCHEMAS[2]['check'][:-1]+" (cpuv1-resource-vector? (vector-ref (vector-ref row 2) 10) 8) (= (cpuv1-resource-count-vector (vector-ref row 1) (vector-ref tensor-provider-registry-root 0) 1 0 0) 1) (= (cpuv1-resource-provider-callbacks! packet native-context (vector-ref row 1) (vector-ref (vector-ref row 2) 10) 0) 0))"
