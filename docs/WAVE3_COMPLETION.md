@@ -285,6 +285,24 @@ The sealed no-region checked-store proof is
 regional rejection/ownership tests remain pending. General active-region C2 use
 is not admitted by this narrowed target.
 
+Accepted final trained-model public-G2 caller source target, G3 owner: extend the
+actual A125 SAVE/A250 versus FILE-B125/B250 path at its live-B seam, after complete
+B E3 unbind and before old cleanup. Preserve the original plain770-check caller;
+new strict composite evidence retains all seven original records and375 steps.
+One genuine handoff/public generator per process, distinct original T1, frozen
+prompt bytes(3,197). Two fixed modes: EOS255 expects IDs/text(3,41), length2,
+cache4; EOS3 expects IDs/text(3), length1, cache3. These are unmeasured criteria,
+not results. Normal/repeat per mode must preserve every B value plane and caller
+T2/D2, release output/input/detached copies and close the generator. The adopted
+B/P1 model and sealed T1 encoding intentionally remain until one-pass process
+exit; no new destructor, zero-owner or flat-memory claim. Plan`065592e2` plus
+review`e9fb79ab` supports this source scope with root's explicit two-mode delta.
+The existing read-only child observer and F32-testing flag may be added to the
+sole owners beside O2-testing/held-out observer (37 TUs). Actual sizeof, complete
+owner/byte census and bounded process resources remain separate required gates;
+13,424 bytes is only the plan's partial source subtotal. No capture/import/wire
+or continuation admission follows this caller.
+
 Accepted bounded O2 retirement-provenance repair target, integration expert owner:
 source cause map`733aca1e` shows legitimate ordinary LOAD and TR3 restore change
 entry option words without updating the full-entry retirement roster. Preserve
