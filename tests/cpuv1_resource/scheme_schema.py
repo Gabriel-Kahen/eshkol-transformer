@@ -24,6 +24,8 @@ permanent(2,f'(and {vector(3)} (cpuv1-resource-vector? {v(2)} 11) (let ((record 
 SCHEMAS[3]=dict(mode='p1-shells')
 SCHEMAS[4]=dict(mode='p1-index')
 registry(5,5,1,call('construction-record-resource'),2) # local bounded wrapper generated below
+# Invalidation retains the canonical construction row with a retired lifetime.
+SCHEMAS[5]['state']=f"(if (eq? {v(1)} 'retired) 2 {state(1)})"
 SCHEMAS[6]=dict(mode='registry',holder=True,check=f'(and {vector(11)} (eq? (e3-mode-record {v(0)}) row) (not (vector-ref e3-mode-registry-root 1)))',state=f'(if (= {v(1)} 3) 2 (if (= {v(1)} 0) 1 5))',links=1)
 SCHEMAS[62]=dict(mode='p1-active')
 registry(63,6,5,f'(and (eq? (construction-record-resource {v(0)}) {v(1)}) (or (eq? {v(5)} \'live) (eq? {v(5)} \'retired)))',2)
@@ -140,7 +142,7 @@ def raw(i,slot,names):
     value=f'(vector-ref row {slot})'
     SCHEMAS[i]['raw']='(cond '+ ' '.join(f"((eq? {value} '{name}) {j})" for j,name in enumerate(names,1))+' (else 15))'
 for i,slot,names in [
- (5,1,['open','sealed','prepared','aborted']), (9,2,['live','consuming','dead']),
+ (5,1,['open','sealed','prepared','aborted','retired']), (9,2,['live','consuming','dead']),
  (15,7,['constructing','live','releasing','dead']), (16,3,['open','dead','payload-retired']),
  (17,3,['constructing','source-staged','source-closed','sealed','committing','cleanup-blocked','dead']),
  (18,5,['constructing','cleanup-blocked','dead']),
