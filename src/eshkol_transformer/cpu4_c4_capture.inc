@@ -298,25 +298,23 @@ static int64_t cpu4_capture_copy_alias(const void *dst, size_t bytes) {
   /* The trusted history crosslink preserves the full context allocation span
      even if a mutable transport kind word was corrupted. */
   for (history = cpu4_history_registry; history != NULL;
-       history = history->next)
+       history = history->next) {
     if (et_g3c4_ranges_overlap(dst, bytes, history->context,
                                 sizeof(*history->context)))
       return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_ALIAS);
+#ifdef ET_G3C4_MANUAL_FRAME_BEGIN_PRIVATE
+    /* Authoritative ownership survives corruption of context->manual_frame. */
+    if (history->pending.frame != NULL &&
+        et_g3c4_ranges_overlap(dst, bytes, history->pending.frame,
+                                sizeof(et_g3c4_manual_frame_internal)))
+      return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_ALIAS);
+#endif
+  }
   for (transport = et_g3c4_transport_registry; transport != NULL;
        transport = transport->registry_next) {
     if (et_g3c4_ranges_overlap(dst, bytes, transport,
                                 et_g3c4_transport_record_bytes(transport)))
       return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_ALIAS);
-#ifdef ET_G3C4_MANUAL_FRAME_BEGIN_PRIVATE
-    if (transport->kind == ET_G3C4_CONTEXT_KIND) {
-      const et_g3c4_context_internal *context =
-          (const et_g3c4_context_internal *)transport;
-      if (context->manual_frame != NULL &&
-          et_g3c4_ranges_overlap(dst, bytes, context->manual_frame,
-                                  sizeof(*context->manual_frame)))
-        return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_ALIAS);
-    }
-#endif
   }
   for (model = et_g3c4_owner_registry; model != NULL;
        model = model->registry_next)
