@@ -248,8 +248,18 @@ SAN/result promotion or retention admission follows.
 The production CLI scalar/report contract v3 is accepted as a proposed API:
 proposal `86c45f138b2bee3dea3bc6cdc5b1442fe371bc9d2e2b06bea9f757049e58ccb5`,
 independent review `e72642b303b3e9cfbb9a8b3c6d9ffda195e53118397064cb9e9d5515335872fd`.
-Five native scalar helpers and a closed Scheme report leaf are authorized for
-implementation/review before CLI consumers. A failed report after a committed
+Its five native scalar helpers and closed Scheme report leaf are implemented
+at68899222 and integrated as `ab654852`: three additive production files and
+seven test/docs files, with all15 upstream producers/root/base35 unchanged.
+Source review `e3/cpu4-cli-report-producer-source-review/REVIEW.md`, seal
+`d3c11ceacbba38fac86393462b02159ecbc78b7b9023746f50a508a63a0729f3`,
+and final-pin review `ee36ab0c53b6c1ccde87a8fd3b13d84f2606840d29361528b96c73a8e73c17b0`
+authenticate source-only acceptance. Root Guile53 orchestration-double and
+Python7 source checks pass. The prepared native/AOT unit recipe is sealed
+`8f10d290f3bedd233edf5e106cd7835b36adb57ff1c852aff54736f0423c8e9a`:
+base35+shim36, separate C unit/double-fault caller, genuine two-step/E3 full
+state-preservation runtime normal/repeat. Compiler/native/AOT/SAN remain NOT RUN;
+heavy execution is deferred to the immediate generation memory defect. A failed report after a committed
 step must retain advanced U and permit report retry without repeating the step.
 Per-step closed WRITE snapshots and32-byte scalar custody sidecars require a
 separate resource-profile extension; the frozen55a resource counts do not cover

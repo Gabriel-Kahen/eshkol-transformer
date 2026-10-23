@@ -653,8 +653,9 @@ correctness priority. Remaining processes/checkers were NOT RUN. The real bindin
 witness independently passes normal/repeat cleanup and native lease retry.
 Native history/capture independently passes normal/repeat/ASan+UBSan, including
 bitwise no-draw greedy/categorical prefix replay; typed fresh-process import and
-remaining decode are still required. Resource observer Stage A and production
-CLI report producers are under implementation. The independently source-reviewed
+remaining decode are still required. Resource observer Stage A remains under
+implementation. Private CLI scalar/report producers are source-reviewed and
+integrated, with Guile53/Python7 root checks; native/AOT execution is NOT RUN. The independently source-reviewed
 current-root ON80 E3 consumer variation preserves217/219 absent/present fault
 assertions and original metric words with a genuine candidate; its two-process
 normal gate remains NOT RUN. Prior OFF64 fault/SAN results are not promoted. See
