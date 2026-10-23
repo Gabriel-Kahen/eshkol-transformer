@@ -33,9 +33,13 @@ CANDIDATE_DEFS='''(define (cpuv1-resource-candidate-visit packet row)
               (if (eq? (vector-ref row 1) 'dead) 2 1) 5 phase)
             (cpuv1-resource-reject! packet)))
       (cpuv1-resource-reject! packet)))
+(define cpuv1-resource-candidate-visitor cpuv1-resource-candidate-visit)
 '''
 
 def visitor_name(i):return 'cpuv1-resource-row-'+str(i)
+# A first-class named function is boxed at each use by fe9. Bind its value in
+# the owning initialization, then pass that same value on every observation.
+def visitor_value_name(i):return 'cpuv1-resource-visitor-'+str(i)
 
 def definitions(path,rows):
     answer=EXTRA_DEFS.get(path,'')
@@ -46,6 +50,7 @@ def definitions(path,rows):
   (if {s['check']}
       (cpuv1-resource-state! packet {i} {s['state']} {s['links']} {s['raw']})
       (cpuv1-resource-reject! packet)))
+(define {visitor_value_name(i)} {visitor_name(i)})
 '''
     return answer
 
@@ -53,7 +58,7 @@ def definitions(path,rows):
 def typed_call(row):
     i=row['id'];name=row['name'];s=SCHEMAS[i];mode=s['mode']
     head=f'(vector-ref {name} 0)' if s.get('holder') else name
-    if mode=='registry':return f'(cpuv1-resource-walk! packet {i} {head} {visitor_name(i)} 0)'
+    if mode=='registry':return f'(cpuv1-resource-walk! packet {i} {head} {visitor_value_name(i)} 0)'
     if mode=='quiescent-empty':return f'(if (null? {head}) (cpuv1-resource-seal! packet {i} 0) (cpuv1-resource-reject! packet))'
     if mode in ('constant','procedure','boolean-holder'):
         valid=f'(and (integer? {name}) (>= {name} 0))' if mode=='constant' else f'(procedure? {name})'

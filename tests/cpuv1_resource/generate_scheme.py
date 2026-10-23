@@ -122,7 +122,7 @@ def transform(text,path):
         extra=typed.CANDIDATE_DEFS
         edits.append((vector.start,vector.start,extra))
         original_vector=text[vector.start:vector.end]
-        census="(lambda (packet) (cpuv1-resource-walk! packet 64 (vector-ref registry 0) cpuv1-resource-candidate-visit 0))"
+        census="(lambda (packet) (cpuv1-resource-walk! packet 64 (vector-ref registry 0) cpuv1-resource-candidate-visitor 0))"
         lookup="(lambda (candidate) (cpuv1-resource-find-vector candidate (vector-ref registry 0) 0 0))"
         edits.append((vector.start,vector.end,'(vector '+original_vector+' '+census+' '+lookup+')'))
         edits.append((n.end,n.end,'\n(define cpu4-candidate-surface (vector-ref cpuv1-candidate-test-envelope 0))\n'))

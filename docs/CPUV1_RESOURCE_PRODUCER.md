@@ -114,3 +114,19 @@ kind rejects the snapshot, including balanced retired history. The prepared
 native unit checks these masks and a snapshot-only balanced-history negative.
 Host guard/profile tests pass; the corrected native compilation/unit, remaining
 symbol-visibility gates and AOT outcomes remain NOT RUN.
+
+At a2356ff6 the supported native unit subsequently passed244 assertions, and
+the object-only tiny gate emitted authenticated IR/object/bitcode/dependencies.
+Independent actual-IR/object/C7 review then found a normal-path allocation:
+the first owning getter boxes its named row visitor into a fresh48-byte arena
+closure, even when the registry is empty. No-allocation is FAIL; no tiny link
+or runtime admission follows from successful object emission.
+
+The focused successor binds each registry visitor value once beside its
+owning definition, including P1 and candidate visitors inside their existing
+lexical initialization. Getters reuse that immutable value and continue reading
+the current canonical roots. Original row guards,75/6 slots, coverage and native
+APIs are unchanged. Host tests cover repeated observations/current-root sharing
+and reject reboxing, lazy rebinding and copied captures. Actual successor IR
+must prove the causal allocation is gone; canonical P1, other indirect/native/
+glibc edges, object-OFF parity and resource admission remain OPEN/NOT RUN.
