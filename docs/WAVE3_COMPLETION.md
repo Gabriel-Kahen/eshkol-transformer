@@ -206,12 +206,44 @@ not a measured retention slope. Typed history/RNG import, cache4 result,
 closed public partial producer, wire and fresh-process continuation remain open.
 See [CPU4_C4_HISTORY_CAPTURE.md](CPU4_C4_HISTORY_CAPTURE.md).
 
-Trained-G2 SAN recipe `e217824acd1472f4d6a69b0a760146cdd72e57d7685619a46aaa5b277356f45b`
+Trained-G2 SAN attempt1 is an independently authenticated FAILURE, not acceptance.
+Recipe `e217824acd1472f4d6a69b0a760146cdd72e57d7685619a46aaa5b277356f45b`
 and independent recipe review `725dc008a668544869ecc02c5e1bc6b277ab46aead4abf3d0c6ace6bf36399c2`
-are accepted for exact55a. Attempt1 is RUNNING, not accepted: all37 native TUs
-use ASan+UBSan; generated IR uses ASan only; the pinned C7 runtime archive is
-uninstrumented. Four actual trained/resume/EOS processes and equality to the
-accepted normal artifact are required. No whole-runtime SAN claim follows.
+remain valid preparation. Raw receipt
+`df95145c3798e5b743b8d2ca416f312f3734bf5d243715ab0bfc98ea841c5bf2`
+and `team/integration-review-trained-g2-san-55a56f2f-failure/REVIEW.md`, seal
+`035863de36e7da70630791ef7aeae872d86c2bae19d78e8989393cdfcd585fce`,
+authenticate exact55a, all37 native ASan+UBSan TUs, reversible3,010-definition
+generated-IR ASan rewrite, actual derived object/link/ELF and custody. Native,
+IR compile/proof/link stages return0. First two-token process exits1: ASan detects
+READ1 seven bytes before a48-byte terminal-IDs clone, in generated
+runtime_lambda_60 through terminal-IDs release/typed publication/output-IDs.
+Static machine code maps this to a pointer-minus-seven header probe; allocator,
+source-wrapper and compiler attribution remain unresolved. Its seven stdout
+records match accepted normal through B250 E3 and same-B handoff; A125 C2 bytes
+match49900851. G2 RESULT/PASS, first checker, remaining three processes and all
+output comparisons are NOT RUN. Program1/custody0 and owned CID cleanup pass;
+2,315s is gate duration. Four LLVM vectorization and separate readelf DWARF
+warnings occur in successful static stages. C7 runtime is uninstrumented;
+generated-IR UBSan/full-runtime/leak-free claims remain excluded. Preserve the
+failure; bounded causal reproduction, independent repair review and focused
+sanitizer regression precede another full trained path. This memory defect is
+the immediate correctness blocker; other new heavy gates are deferred.
+
+The additive ON80 E3 source variation28e51cf2/README correction7fffd7a5 is
+integrated through `cd966d44`, source-identical to reviewed7fff except roadmap
+and this index. Root22 source tests pass. Three exact fixture projections keep
+the original body/helper/assertions: current root once, genuine candidate create,
+and candidate retirement after all original drainage. Original217/219 checks
+and six metric words remain frozen;35 production TUs plus original helper once,
+common215/caller13/resource4, historyOFF. Independent combined source/recipe
+review `team/review-e3-cpu4-on80-source-and-normal-recipe-7fffd7a5-independent/REVIEW.md`
+is sealed `af47d4e32e3c1b0233482d1610a9b08e664d89b9ac56bb649f0a083e2b5a8fe9`.
+Corrected recipev3 `01f483cb7382558ae950c9b1f524d8112bd429b18a74e0152f2bbf37ed82d9b0`
+authenticates actual checkout and normal producer/collector paths with fail-closed
+controls. Failed preparationsv1/v2 stay NOT RUN/HOLD. The two-process normal
+runtime matrix is NOT RUN and deferred to the memory-blocker priority; no OFF64
+SAN/result promotion or retention admission follows.
 
 The production CLI scalar/report contract v3 is accepted as a proposed API:
 proposal `86c45f138b2bee3dea3bc6cdc5b1442fe371bc9d2e2b06bea9f757049e58ccb5`,

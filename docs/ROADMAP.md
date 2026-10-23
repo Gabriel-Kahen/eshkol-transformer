@@ -647,7 +647,9 @@ region21/data96 and checkpoint byte parity. Trained resume passes770 checks and
 375 actual steps per run; held-out mean loss5.51855→0.00003266. Functional
 same-trained-model public generation independently passes both frozen two-token
 and first-EOS modes, normal/repeat. Its generated-IR-ASan/native-ASan+UBSan
-gate is running; no sanitizer result is admitted yet. The real binding OOM
+gate fails on a real heap-buffer-overflow during terminal-IDs publication/release.
+Instrumentation/custody authenticate; cause and focused repair are the immediate
+correctness priority. Remaining processes/checkers were NOT RUN. The real binding OOM
 witness independently passes normal/repeat cleanup and native lease retry.
 Native history/capture independently passes normal/repeat/ASan+UBSan, including
 bitwise no-draw greedy/categorical prefix replay; typed fresh-process import and
