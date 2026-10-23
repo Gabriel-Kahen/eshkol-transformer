@@ -1,3 +1,6 @@
+/* CPUV1_RESOURCE_BEGIN */
+#include "cpuv1_resource_private.h"
+/* CPUV1_RESOURCE_END */
 #include "t1_i64_shell.h"
 
 #include "eshkol_transformer/i64_tensor.h"
@@ -213,7 +216,7 @@ static void et_t1_i64_shell_cleanup_unpublished(et_t1_i64_shell *shell) {
     (void)et_i64_tensor_destroy_v1(&shell->tensor, &error);
   }
   shell->magic = 0u;
-  free(shell);
+  ET_R_FREE(ET_R_I64_T1,5,shell,1u,sizeof(*shell));
 }
 
 void *et_t1_i64_shell_create_v1(int64_t length) {
@@ -235,7 +238,7 @@ void *et_t1_i64_shell_create_v1(int64_t length) {
     return NULL;
   }
   shape = (uint64_t)length;
-  shell = (et_t1_i64_shell *)calloc(1u, sizeof(*shell));
+  shell = (et_t1_i64_shell *)ET_R_ALLOC(ET_R_I64_T1,5,calloc(1u, sizeof(*shell)),1u,sizeof(*shell));
   if (shell == NULL) {
     et_t1_i64_shell_last_status = ET_T1_I64_SHELL_STATUS_ALLOCATION_FAILED;
     return NULL;
@@ -391,3 +394,9 @@ int64_t et_t1_i64_shell_abort_v1(void *candidate) {
 int64_t et_t1_i64_shell_last_status_v1(void) {
   return et_t1_i64_shell_last_status;
 }
+
+/* CPUV1_RESOURCE_BEGIN */
+#ifdef ET_CPUV1_RESOURCE_TESTING
+#include "cpuv1_resource_t1.inc"
+#endif
+/* CPUV1_RESOURCE_END */

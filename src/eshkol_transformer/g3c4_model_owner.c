@@ -1,3 +1,6 @@
+/* CPUV1_RESOURCE_BEGIN */
+#include "cpuv1_resource_private.h"
+/* CPUV1_RESOURCE_END */
 #ifndef ET_G3C4_NATIVE_OWNER_PRIVATE
 #define ET_G3C4_NATIVE_OWNER_PRIVATE 1
 #endif
@@ -519,7 +522,7 @@ void *et_g3c4_private_model_owner_create_seeded_v1(int64_t seed) {
           &initializer, &staged_initializer))
     return NULL;
   owner = (et_g3c4_model_owner_internal *)
-      et_g3c4_allocate(sizeof(*owner));
+      ET_R_ALLOC(ET_R_C4,0,et_g3c4_allocate(sizeof(*owner)),1u,sizeof(*owner));
   if (owner == NULL) {
     if (staged_initializer) et_kernel_runtime_destroy(initializer);
     (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_ALLOCATION);
@@ -555,7 +558,7 @@ void *et_g3c4_private_model_owner_create_seeded_v1(int64_t seed) {
                   &owner->parameters[prior], NULL) != 0)
             abort();
       }
-      free(owner);
+      ET_R_FREE(ET_R_C4,0,owner,1u,sizeof(*owner));
       if (staged_initializer) et_kernel_runtime_destroy(initializer);
       et_g3c4_error_restore_internal(first);
       return NULL;
@@ -2024,7 +2027,7 @@ static et_g3c4_context_internal *et_g3c4_context_allocate(void) {
     return NULL;
 #endif
   et_g3c4_context_internal *context =
-      (et_g3c4_context_internal *)calloc(1u, sizeof(*context));
+      (et_g3c4_context_internal *)ET_R_ALLOC(ET_R_C4,4,calloc(1u, sizeof(*context)),1u,sizeof(*context));
 #ifdef ET_G3C4_CONTEXT_TESTING
   if (context != NULL) et_g3c4_context_successful_allocations++;
 #endif
@@ -2039,7 +2042,7 @@ static et_g3c4_manual_frame_internal *et_g3c4_manual_frame_allocate(void) {
     return NULL;
 #endif
   et_g3c4_manual_frame_internal *frame =
-      (et_g3c4_manual_frame_internal *)calloc(1u, sizeof(*frame));
+      (et_g3c4_manual_frame_internal *)ET_R_ALLOC(ET_R_C4,12,calloc(1u, sizeof(*frame)),1u,sizeof(*frame));
 #ifdef ET_G3C4_CONTEXT_TESTING
   if (frame != NULL) et_g3c4_context_successful_allocations++;
 #endif
@@ -2055,7 +2058,7 @@ static et_g3c4_rng_internal *et_g3c4_rng_allocate(void) {
     return NULL;
 #endif
   et_g3c4_rng_internal *rng =
-      (et_g3c4_rng_internal *)calloc(1u, sizeof(*rng));
+      (et_g3c4_rng_internal *)ET_R_ALLOC(ET_R_C4,5,calloc(1u, sizeof(*rng)),1u,sizeof(*rng));
 #ifdef ET_G3C4_CONTEXT_TESTING
   if (rng != NULL) et_g3c4_context_successful_allocations++;
 #endif
@@ -2070,7 +2073,7 @@ static et_g3c4_input_internal *et_g3c4_input_allocate(void) {
     return NULL;
 #endif
   et_g3c4_input_internal *input =
-      (et_g3c4_input_internal *)calloc(1u, sizeof(*input));
+      (et_g3c4_input_internal *)ET_R_ALLOC(ET_R_C4,6,calloc(1u, sizeof(*input)),1u,sizeof(*input));
 #ifdef ET_G3C4_CONTEXT_TESTING
   if (input != NULL) et_g3c4_context_successful_allocations++;
 #endif
@@ -2084,7 +2087,7 @@ static et_g3c4_result_tensor_internal *et_g3c4_result_allocate(void) {
     return NULL;
 #endif
   et_g3c4_result_tensor_internal *result =
-      (et_g3c4_result_tensor_internal *)calloc(1u, sizeof(*result));
+      (et_g3c4_result_tensor_internal *)ET_R_ALLOC(ET_R_C4,11,calloc(1u, sizeof(*result)),1u,sizeof(*result));
 #ifdef ET_G3C4_CONTEXT_TESTING
   if (result != NULL) et_g3c4_context_successful_allocations++;
 #endif
@@ -2101,7 +2104,7 @@ static et_g3c4_output_internal *et_g3c4_output_allocate(void) {
     return NULL;
 #endif
   et_g3c4_output_internal *output =
-      (et_g3c4_output_internal *)calloc(1u, sizeof(*output));
+      (et_g3c4_output_internal *)ET_R_ALLOC(ET_R_C4,7,calloc(1u, sizeof(*output)),1u,sizeof(*output));
 #ifdef ET_G3C4_CONTEXT_TESTING
   if (output != NULL) et_g3c4_context_successful_allocations++;
 #endif
@@ -2117,7 +2120,7 @@ static et_g3c4_logits_internal *et_g3c4_logits_allocate(void) {
     return NULL;
 #endif
   et_g3c4_logits_internal *logits =
-      (et_g3c4_logits_internal *)calloc(1u, sizeof(*logits));
+      (et_g3c4_logits_internal *)ET_R_ALLOC(ET_R_C4,8,calloc(1u, sizeof(*logits)),1u,sizeof(*logits));
 #ifdef ET_G3C4_CONTEXT_TESTING
   if (logits != NULL) et_g3c4_context_successful_allocations++;
 #endif
@@ -2546,7 +2549,7 @@ void *et_g3c4_private_context_create_v1(void *candidate) {
               1u, 1u, 2u, 4u, 2u, &cache, &error),
           &error) != 0) {
     et_g3c4_error_state_internal first = et_g3c4_error_snapshot_internal();
-    free(context);
+    ET_R_FREE(ET_R_C4,4,context,1u,sizeof(*context));
 #ifdef ET_CPU4_C4_HISTORY_PRIVATE
     free(history);
 #endif
@@ -2759,7 +2762,7 @@ static void et_g3c4_input_cleanup_unpublished(
     et_i64_tensor_error error;
     if (et_i64_tensor_destroy_v1(&input->tensor, &error) != 0) abort();
   }
-  free(input);
+  ET_R_FREE(ET_R_C4,6,input,1u,sizeof(*input));
 }
 
 static void *et_g3c4_input_from_t1_internal(void *sealed_t1,
@@ -2950,7 +2953,7 @@ static void *et_g3c4_generator_create(
               1u, 1u, 2u, 4u, 2u, &cache, &error),
           &error) != 0) {
     et_g3c4_error_state_internal first = et_g3c4_error_snapshot_internal();
-    free(context);
+    ET_R_FREE(ET_R_C4,4,context,1u,sizeof(*context));
 #ifdef ET_CPU4_C4_HISTORY_PRIVATE
     free(history);
 #endif
@@ -3256,7 +3259,7 @@ static void et_g3c4_output_cleanup_unpublished(
     et_i64_tensor_error error;
     if (et_i64_tensor_destroy_v1(&output->ids, &error) != 0) abort();
   }
-  free(output);
+  ET_R_FREE(ET_R_C4,7,output,1u,sizeof(*output));
 }
 
 static int64_t et_g3c4_output_discard_preflight(
@@ -3438,7 +3441,7 @@ void *et_g3c4_private_logits_reserve_v1(void *candidate) {
           &error) != 0) {
     et_g3c4_error_state_internal first =
         et_g3c4_error_snapshot_internal();
-    free(logits);
+    ET_R_FREE(ET_R_C4,8,logits,1u,sizeof(*logits));
     et_g3c4_error_restore_internal(first);
     return NULL;
   }
@@ -8786,7 +8789,7 @@ int64_t et_g3c4_private_call_finish_v1(void *candidate) {
     cpu4_history_node *history=cpu4_history_auth(context);
     if (history==NULL) return et_g3c4_error_state.category;
 #endif
-    free(context->manual_frame);
+    ET_R_FREE(ET_R_C4,12,context->manual_frame,1u,sizeof(*context->manual_frame));
     context->manual_frame = NULL;
 #ifdef ET_CPU4_C4_HISTORY_PRIVATE
     cpu4_history_pending_clear(history);
@@ -8947,7 +8950,7 @@ int64_t et_g3c4_private_call_abort_v1(void *candidate) {
 #endif
   }
 #endif
-  free(context->manual_frame);
+  ET_R_FREE(ET_R_C4,12,context->manual_frame,1u,sizeof(*context->manual_frame));
   context->manual_frame = NULL;
 #endif
 #ifdef ET_CPU4_C4_HISTORY_PRIVATE
@@ -9417,7 +9420,7 @@ void *et_g3c4_private_p2g2_terminal_ids_clone_v1(void *source_candidate) {
     return NULL;
   }
 #endif
-  clone = (et_g3c4_terminal_ids_clone_internal *)calloc(1u, sizeof(*clone));
+  clone = (et_g3c4_terminal_ids_clone_internal *)ET_R_ALLOC(ET_R_C4,10,calloc(1u, sizeof(*clone)),1u,sizeof(*clone));
   if (clone == NULL) {
     (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_ALLOCATION);
     return NULL;
@@ -9468,7 +9471,7 @@ fail:
   first = et_g3c4_error_snapshot_internal();
   if (clone->ids != NULL && et_i64_tensor_destroy_v1(&clone->ids, &error) != 0)
     abort();
-  free(clone);
+  ET_R_FREE(ET_R_C4,10,clone,1u,sizeof(*clone));
   et_g3c4_error_restore_internal(first);
   return NULL;
 }
@@ -9606,7 +9609,7 @@ static void *et_g3c4_typed_create(
     return NULL;
   }
 #endif
-  result = (et_g3c4_typed_result_internal *)calloc(1u, sizeof(*result));
+  result = (et_g3c4_typed_result_internal *)ET_R_ALLOC(ET_R_C4,9,calloc(1u, sizeof(*result)),1u,sizeof(*result));
   if (result == NULL) {
     (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_ALLOCATION);
     return NULL;
@@ -9646,7 +9649,7 @@ fail:
   first = et_g3c4_error_snapshot_internal();
   if (result->tensor != NULL &&
       et_i64_tensor_destroy_v1(&result->tensor, &error) != 0) abort();
-  free(result);
+  ET_R_FREE(ET_R_C4,9,result,1u,sizeof(*result));
   et_g3c4_error_restore_internal(first);
   return NULL;
 }
@@ -9881,7 +9884,7 @@ void *et_g3c4_private_result_tensor_create_v1(
     if (result->tensor != NULL &&
         et_i64_tensor_destroy_v1(&result->tensor, &error) != 0)
       abort();
-    free(result);
+    ET_R_FREE(ET_R_C4,11,result,1u,sizeof(*result));
     et_g3c4_error_restore_internal(first);
     return NULL;
   }
@@ -9994,3 +9997,9 @@ fail:
 #ifdef ET_CPU4_C4_HISTORY_PRIVATE
 #include "cpu4_c4_capture.inc"
 #endif
+
+/* CPUV1_RESOURCE_BEGIN */
+#ifdef ET_CPUV1_RESOURCE_TESTING
+#include "cpuv1_resource_c4.inc"
+#endif
+/* CPUV1_RESOURCE_END */

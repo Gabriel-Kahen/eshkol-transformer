@@ -1,3 +1,6 @@
+/* CPUV1_RESOURCE_BEGIN */
+#include "cpuv1_resource_private.h"
+/* CPUV1_RESOURCE_END */
 #include "f32_parameter_internal.h"
 
 #include <float.h>
@@ -329,7 +332,7 @@ static f32_destroy_provenance *f32_destroy_record_find(
 
 static int f32_destroy_record_add(const et_f32_tensor *tensor) {
   f32_destroy_provenance *record =
-      (f32_destroy_provenance *)f32_calloc(1u, sizeof(*record));
+      (f32_destroy_provenance *)ET_R_ALLOC(ET_R_F32,13,f32_calloc(1u, sizeof(*record)),1u,sizeof(*record));
   if (record == NULL) {
     return 0;
   }
@@ -360,7 +363,7 @@ static void f32_destroy_record_remove(const et_f32_tensor *owner) {
   }
   f32_destroy_provenance *record = *cursor;
   *cursor = record->next;
-  free(record);
+  ET_R_FREE(ET_R_F32,13,record,1u,sizeof(*record));
 }
 #endif
 
@@ -814,13 +817,13 @@ static void destroy_tensor_admitted(et_f32_tensor *tensor) {
 #endif
   unregister_tensor(tensor);
 #ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
-  free(data);
-  free(strides);
-  free(shape);
+  ET_R_FREE(ET_R_F32,6,data,tensor->element_count,sizeof(float));
+  ET_R_FREE(ET_R_F32,8,strides,tensor->rank,sizeof(*strides));
+  ET_R_FREE(ET_R_F32,7,shape,tensor->rank,sizeof(*shape));
 #else
-  free(tensor->data);
-  free(tensor->strides);
-  free(tensor->shape);
+  ET_R_FREE(ET_R_F32,6,tensor->data,tensor->element_count,sizeof(*tensor->data));
+  ET_R_FREE(ET_R_F32,8,tensor->strides,tensor->rank,sizeof(*tensor->strides));
+  ET_R_FREE(ET_R_F32,7,tensor->shape,tensor->rank,sizeof(*tensor->shape));
 #endif
   retire_tensor(tensor);
 }
@@ -1247,7 +1250,7 @@ int32_t et_f32_tensor_create_v1(size_t rank, const uint64_t *shape,
   if (result != 0) {
     return result;
   }
-  tensor = (et_f32_tensor *)f32_calloc(1u, sizeof(*tensor));
+  tensor = (et_f32_tensor *)ET_R_ALLOC(ET_R_F32,0,f32_calloc(1u, sizeof(*tensor)),1u,sizeof(*tensor));
   if (tensor == NULL) {
     return set_error(error, ET_F32_TENSOR_ERROR_INTERNAL,
                      ET_F32_TENSOR_CODE_ALLOCATION_FAILED,
@@ -1257,12 +1260,12 @@ int32_t et_f32_tensor_create_v1(size_t rank, const uint64_t *shape,
   tensor->element_count = count;
   tensor->byte_length = bytes;
   if (rank > 0u) {
-    tensor->shape = (uint64_t *)f32_calloc(rank, sizeof(*tensor->shape));
-    tensor->strides = (size_t *)f32_calloc(rank, sizeof(*tensor->strides));
+    tensor->shape = (uint64_t *)ET_R_ALLOC(ET_R_F32,7,f32_calloc(rank, sizeof(*tensor->shape)),rank,sizeof(*tensor->shape));
+    tensor->strides = (size_t *)ET_R_ALLOC(ET_R_F32,8,f32_calloc(rank, sizeof(*tensor->strides)),rank,sizeof(*tensor->strides));
     if (tensor->shape == NULL || tensor->strides == NULL) {
-      free(tensor->strides);
-      free(tensor->shape);
-      free(tensor);
+      ET_R_FREE(ET_R_F32,8,tensor->strides,tensor->rank,sizeof(*tensor->strides));
+      ET_R_FREE(ET_R_F32,7,tensor->shape,tensor->rank,sizeof(*tensor->shape));
+      ET_R_FREE(ET_R_F32,0,tensor,1u,sizeof(*tensor));
       return set_error(error, ET_F32_TENSOR_ERROR_INTERNAL,
                        ET_F32_TENSOR_CODE_ALLOCATION_FAILED,
                        "f32-tensor-create", "cannot allocate tensor metadata");
@@ -1278,11 +1281,11 @@ int32_t et_f32_tensor_create_v1(size_t rank, const uint64_t *shape,
     }
   }
   if (bytes > 0u) {
-    tensor->data = (float *)f32_calloc(count, sizeof(*tensor->data));
+    tensor->data = (float *)ET_R_ALLOC(ET_R_F32,6,f32_calloc(count, sizeof(*tensor->data)),count,sizeof(*tensor->data));
     if (tensor->data == NULL) {
-      free(tensor->strides);
-      free(tensor->shape);
-      free(tensor);
+      ET_R_FREE(ET_R_F32,8,tensor->strides,tensor->rank,sizeof(*tensor->strides));
+      ET_R_FREE(ET_R_F32,7,tensor->shape,tensor->rank,sizeof(*tensor->shape));
+      ET_R_FREE(ET_R_F32,0,tensor,1u,sizeof(*tensor));
       return set_error(error, ET_F32_TENSOR_ERROR_INTERNAL,
                        ET_F32_TENSOR_CODE_ALLOCATION_FAILED,
                        "f32-tensor-create", "cannot allocate tensor storage");
@@ -1290,10 +1293,10 @@ int32_t et_f32_tensor_create_v1(size_t rank, const uint64_t *shape,
   }
 #ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
   if (!f32_destroy_record_add(tensor)) {
-    free(tensor->data);
-    free(tensor->strides);
-    free(tensor->shape);
-    free(tensor);
+    ET_R_FREE(ET_R_F32,6,tensor->data,tensor->element_count,sizeof(*tensor->data));
+    ET_R_FREE(ET_R_F32,8,tensor->strides,tensor->rank,sizeof(*tensor->strides));
+    ET_R_FREE(ET_R_F32,7,tensor->shape,tensor->rank,sizeof(*tensor->shape));
+    ET_R_FREE(ET_R_F32,0,tensor,1u,sizeof(*tensor));
     return set_error(error, ET_F32_TENSOR_ERROR_INTERNAL,
                      ET_F32_TENSOR_CODE_ALLOCATION_FAILED,
                      "f32-tensor-create", "cannot record tensor backing");
@@ -2270,16 +2273,16 @@ int32_t et_f32_tensor_copy_plan_prepare_v1(
       }
     }
   }
-  plan = (et_f32_tensor_copy_plan *)f32_calloc(1u, sizeof(*plan));
+  plan = (et_f32_tensor_copy_plan *)ET_R_ALLOC(ET_R_F32,2,f32_calloc(1u, sizeof(*plan)),1u,sizeof(*plan));
   if (plan == NULL) {
     return set_error(error, ET_F32_TENSOR_ERROR_INTERNAL,
                      ET_F32_TENSOR_CODE_ALLOCATION_FAILED,
                      "f32-copy-plan-prepare", "cannot allocate copy plan");
   }
   plan->assignments = (et_f32_tensor_copy_assignment_v1 *)
-      f32_calloc(count, sizeof(*plan->assignments));
+      ET_R_ALLOC(ET_R_F32,9,f32_calloc(count, sizeof(*plan->assignments)),count,sizeof(*plan->assignments));
   if (plan->assignments == NULL) {
-    free(plan);
+    ET_R_FREE(ET_R_F32,2,plan,1u,sizeof(*plan));
     return set_error(error, ET_F32_TENSOR_ERROR_INTERNAL,
                      ET_F32_TENSOR_CODE_ALLOCATION_FAILED,
                      "f32-copy-plan-prepare", "cannot allocate assignments");
@@ -2353,7 +2356,7 @@ int32_t et_f32_tensor_copy_plan_release_v1(
     plan->assignments[index].destination->plan_pins--;
     ((et_f32_tensor *)plan->assignments[index].source)->plan_pins--;
   }
-  free(plan->assignments);
+  ET_R_FREE(ET_R_F32,9,plan->assignments,plan->count,sizeof(*plan->assignments));
   retire_copy_plan(plan);
   *slot = NULL;
   return success(error);
@@ -2518,7 +2521,7 @@ int32_t et_f32_parameter_create_v1(const et_f32_tensor *initial,
     (void)et_f32_tensor_destroy_v1(&value, NULL);
     return result;
   }
-  parameter = (et_f32_parameter *)f32_calloc(1u, sizeof(*parameter));
+  parameter = (et_f32_parameter *)ET_R_ALLOC(ET_R_F32,3,f32_calloc(1u, sizeof(*parameter)),1u,sizeof(*parameter));
   if (parameter == NULL) {
     (void)et_f32_tensor_destroy_v1(&gradient, NULL);
     (void)et_f32_tensor_destroy_v1(&value, NULL);
@@ -2981,7 +2984,7 @@ int32_t et_f32_parameter_save_witness_begin_v1(
                      "injected witness capture allocation failure");
   if (save_witness_fail_after != SIZE_MAX) --save_witness_fail_after;
 #endif
-  et_f32_parameter_save_witness *w = f32_calloc(1u, sizeof(*w));
+  et_f32_parameter_save_witness *w = ET_R_ALLOC(ET_R_F32,14,f32_calloc(1u, sizeof(*w)),1u,sizeof(*w));
   if (!w)
     return set_error(error, ET_F32_TENSOR_ERROR_INTERNAL,
                      ET_F32_TENSOR_CODE_ALLOCATION_FAILED, "f32-save-witness",
@@ -3012,7 +3015,7 @@ int32_t et_f32_parameter_save_witness_begin_v1(
       for (size_t j = 2u; j > 0u; --j)
         if (w->baseline[j - 1u] &&
             et_f32_tensor_destroy_v1(&w->baseline[j - 1u], &cleanup)) abort();
-      free(w);
+      ET_R_FREE(ET_R_F32,14,w,1u,sizeof(*w));
       *error = first;
       return result;
     }
@@ -3021,7 +3024,7 @@ int32_t et_f32_parameter_save_witness_begin_v1(
     et_f32_tensor_error first = *error, cleanup;
     for (size_t j = 2u; j > 0u; --j)
       if (et_f32_tensor_destroy_v1(&w->baseline[j - 1u], &cleanup)) abort();
-    free(w);
+    ET_R_FREE(ET_R_F32,14,w,1u,sizeof(*w));
     *error = first;
     return first.category;
   }
@@ -3265,16 +3268,16 @@ int32_t et_f32_gradient_plan_prepare_v1(
                        ET_F32_TENSOR_CODE_INVALID_BUFFER,
                        "f32-gradient-prepare", "normalization weight became nonfinite");
     }
-    plan = (et_f32_gradient_plan *)f32_calloc(1u, sizeof(*plan));
+    plan = (et_f32_gradient_plan *)ET_R_ALLOC(ET_R_F32,4,f32_calloc(1u, sizeof(*plan)),1u,sizeof(*plan));
     if (plan == NULL) {
       return set_error(error, ET_F32_TENSOR_ERROR_INTERNAL,
                        ET_F32_TENSOR_CODE_ALLOCATION_FAILED,
                        "f32-gradient-prepare", "cannot allocate gradient plan");
     }
     plan->entries = (et_f32_gradient_plan_entry *)
-        f32_calloc(count, sizeof(*plan->entries));
+        ET_R_ALLOC(ET_R_F32,10,f32_calloc(count, sizeof(*plan->entries)),count,sizeof(*plan->entries));
     if (plan->entries == NULL) {
-      free(plan);
+      ET_R_FREE(ET_R_F32,4,plan,1u,sizeof(*plan));
       return set_error(error, ET_F32_TENSOR_ERROR_INTERNAL,
                        ET_F32_TENSOR_CODE_ALLOCATION_FAILED,
                        "f32-gradient-prepare", "cannot allocate gradient entries");
@@ -3290,13 +3293,13 @@ int32_t et_f32_gradient_plan_prepare_v1(
     plan->entries[index].source = source;
     if (parameter->gradient->byte_length > 0u) {
       plan->entries[index].prepared =
-          (float *)f32_calloc(parameter->gradient->element_count, sizeof(float));
+          (float *)ET_R_ALLOC(ET_R_F32,11,f32_calloc(parameter->gradient->element_count, sizeof(float)),parameter->gradient->element_count,sizeof(float));
       if (plan->entries[index].prepared == NULL) {
         for (size_t prior = 0u; prior < index; prior++) {
-          free(plan->entries[prior].prepared);
+          ET_R_FREE(ET_R_F32,11,plan->entries[prior].prepared,plan->entries[prior].parameter->gradient->element_count,sizeof(float));
         }
-        free(plan->entries);
-        free(plan);
+        ET_R_FREE(ET_R_F32,10,plan->entries,plan->count,sizeof(*plan->entries));
+        ET_R_FREE(ET_R_F32,4,plan,1u,sizeof(*plan));
         return set_error(error, ET_F32_TENSOR_ERROR_INTERNAL,
                          ET_F32_TENSOR_CODE_ALLOCATION_FAILED,
                          "f32-gradient-prepare", "cannot allocate gradient scratch");
@@ -3314,10 +3317,10 @@ int32_t et_f32_gradient_plan_prepare_v1(
       memcpy(&source_bits, &source->data[element], sizeof(source_bits));
       if (!add_f32_bits(current_bits, source_bits, &sum_bits)) {
         for (size_t prior = 0u; prior <= index; prior++) {
-          free(plan->entries[prior].prepared);
+          ET_R_FREE(ET_R_F32,11,plan->entries[prior].prepared,plan->entries[prior].parameter->gradient->element_count,sizeof(float));
         }
-        free(plan->entries);
-        free(plan);
+        ET_R_FREE(ET_R_F32,10,plan->entries,plan->count,sizeof(*plan->entries));
+        ET_R_FREE(ET_R_F32,4,plan,1u,sizeof(*plan));
         return set_error(error, ET_F32_TENSOR_ERROR_INVALID_STATE,
                          ET_F32_TENSOR_CODE_FLOAT_ENVIRONMENT,
                          "f32-gradient-prepare",
@@ -3325,10 +3328,10 @@ int32_t et_f32_gradient_plan_prepare_v1(
       }
       if (!bits_finite(sum_bits)) {
         for (size_t prior = 0u; prior <= index; prior++) {
-          free(plan->entries[prior].prepared);
+          ET_R_FREE(ET_R_F32,11,plan->entries[prior].prepared,plan->entries[prior].parameter->gradient->element_count,sizeof(float));
         }
-        free(plan->entries);
-        free(plan);
+        ET_R_FREE(ET_R_F32,10,plan->entries,plan->count,sizeof(*plan->entries));
+        ET_R_FREE(ET_R_F32,4,plan,1u,sizeof(*plan));
         return set_error(error, ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
                          ET_F32_TENSOR_CODE_INVALID_BUFFER,
                          "f32-gradient-prepare", "gradient sum became nonfinite");
@@ -3408,9 +3411,9 @@ int32_t et_f32_gradient_plan_release_v1(et_f32_gradient_plan **slot,
     plan->entries[index].parameter->plan_pins--;
     plan->entries[index].parameter->gradient->plan_pins--;
     ((et_f32_tensor *)plan->entries[index].source)->plan_pins--;
-    free(plan->entries[index].prepared);
+    ET_R_FREE(ET_R_F32,11,plan->entries[index].prepared,plan->entries[index].parameter->gradient->element_count,sizeof(float));
   }
-  free(plan->entries);
+  ET_R_FREE(ET_R_F32,10,plan->entries,plan->count,sizeof(*plan->entries));
   retire_gradient_plan(plan);
   *slot = NULL;
   return success(error);
@@ -3480,16 +3483,16 @@ int32_t et_f32_gradient_reset_plan_prepare_v1(
       }
     }
   }
-  plan = (et_f32_gradient_reset_plan *)f32_calloc(1u, sizeof(*plan));
+  plan = (et_f32_gradient_reset_plan *)ET_R_ALLOC(ET_R_F32,5,f32_calloc(1u, sizeof(*plan)),1u,sizeof(*plan));
   if (plan == NULL) {
     return set_error(error, ET_F32_TENSOR_ERROR_INTERNAL,
                      ET_F32_TENSOR_CODE_ALLOCATION_FAILED,
                      "f32-gradient-reset-prepare", "cannot allocate reset plan");
   }
   plan->parameters =
-      (et_f32_parameter **)f32_calloc(count, sizeof(*plan->parameters));
+      (et_f32_parameter **)ET_R_ALLOC(ET_R_F32,12,f32_calloc(count, sizeof(*plan->parameters)),count,sizeof(*plan->parameters));
   if (plan->parameters == NULL) {
-    free(plan);
+    ET_R_FREE(ET_R_F32,5,plan,1u,sizeof(*plan));
     return set_error(error, ET_F32_TENSOR_ERROR_INTERNAL,
                      ET_F32_TENSOR_CODE_ALLOCATION_FAILED,
                      "f32-gradient-reset-prepare", "cannot allocate reset table");
@@ -3566,7 +3569,7 @@ int32_t et_f32_gradient_reset_plan_release_v1(
     plan->parameters[index]->plan_pins--;
     plan->parameters[index]->gradient->plan_pins--;
   }
-  free(plan->parameters);
+  ET_R_FREE(ET_R_F32,12,plan->parameters,plan->count,sizeof(*plan->parameters));
   retire_reset_plan(plan);
   *slot = NULL;
   return success(error);
@@ -3772,7 +3775,7 @@ int32_t et_f32_tensor_borrow_begin_v1(et_f32_tensor *tensor,
                      "f32-tensor-borrow-begin",
                      "tensor is retained by a prepared plan");
   }
-  borrow = (et_f32_tensor_borrow *)f32_calloc(1u, sizeof(*borrow));
+  borrow = (et_f32_tensor_borrow *)ET_R_ALLOC(ET_R_F32,1,f32_calloc(1u, sizeof(*borrow)),1u,sizeof(*borrow));
   if (borrow == NULL) {
     return set_error(error, ET_F32_TENSOR_ERROR_INTERNAL,
                      ET_F32_TENSOR_CODE_ALLOCATION_FAILED,
@@ -4128,3 +4131,9 @@ size_t et_f32_tensor_test_borrow_bytes_v1(void) {
   return sizeof(et_f32_tensor_borrow);
 }
 #endif
+
+/* CPUV1_RESOURCE_BEGIN */
+#ifdef ET_CPUV1_RESOURCE_TESTING
+#include "cpuv1_resource_f32.inc"
+#endif
+/* CPUV1_RESOURCE_END */

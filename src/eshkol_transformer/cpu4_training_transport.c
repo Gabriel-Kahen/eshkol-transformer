@@ -1,3 +1,6 @@
+/* CPUV1_RESOURCE_BEGIN */
+#include "cpuv1_resource_private.h"
+/* CPUV1_RESOURCE_END */
 /* Frame-local transport only. Eshkol owns the 21/25 numerical schedule. */
 #include "cpu4_training_transport.h"
 #if defined(ET_CPU4_TRAINING_PRIVATE)
@@ -119,9 +122,9 @@ void *et_cpu4_private_input_create_v1(void *lease,int64_t a,int64_t b,int64_t c,
  for(size_t i=0;i<4;i++)if(ids[i]<0||ids[i]>=256) {
   c4t_bad(ET_M3T_SHAPE_MISMATCH,ET_M3T_CODE_SHAPE);return NULL;
  }
- c4t_input *input=c4t_allocate(sizeof(*input));if(!input)return NULL;
+ c4t_input *input=ET_R_ALLOC(ET_R_TRAIN,0,c4t_allocate(sizeof(*input)),1u,sizeof(*input));if(!input)return NULL;
  memcpy(input->ids,ids,sizeof(ids));
- if(c4t_publish(&input->r,lease,C4T_INPUT,sizeof(*input),1)){free(input);return NULL;}
+ if(c4t_publish(&input->r,lease,C4T_INPUT,sizeof(*input),1)){ET_R_FREE(ET_R_TRAIN,0,input,1u,sizeof(*input));return NULL;}
  return input;
 }
 int64_t et_cpu4_private_input_release_v1(void *p) {
@@ -132,9 +135,9 @@ int64_t et_cpu4_private_input_release_v1(void *p) {
 }
 void *et_cpu4_private_logits_create_v1(void *lease) {
  c4t_clear();if(c4t_cerror(et_g3c4_private_training_lease_check_v1(lease)))return NULL;
- c4t_logits *l=c4t_allocate(sizeof(*l));if(!l)return NULL;
- l->tensor=c4t_new(3,c4t_logits_shape);if(!l->tensor){free(l);return NULL;}
- if(c4t_publish(&l->r,lease,C4T_LOGITS,sizeof(*l),4)){c4t_destroy(&l->tensor);free(l);return NULL;}
+ c4t_logits *l=ET_R_ALLOC(ET_R_TRAIN,2,c4t_allocate(sizeof(*l)),1u,sizeof(*l));if(!l)return NULL;
+ l->tensor=c4t_new(3,c4t_logits_shape);if(!l->tensor){ET_R_FREE(ET_R_TRAIN,2,l,1u,sizeof(*l));return NULL;}
+ if(c4t_publish(&l->r,lease,C4T_LOGITS,sizeof(*l),4)){c4t_destroy(&l->tensor);ET_R_FREE(ET_R_TRAIN,2,l,1u,sizeof(*l));return NULL;}
  return l;
 }
 static int c4t_finite(const uint32_t bits[1024]) {
@@ -210,7 +213,7 @@ void *et_cpu4_private_workspace_create_v1(void *lease,void *ip,int64_t mode) {
    c4t_bad(ET_M3T_INVALID_STATE,ET_M3T_CODE_LIFECYCLE);return NULL;
   }
  if(c4t_preflight_capabilities())return NULL;
- c4t_workspace *w=c4t_allocate(sizeof(*w));if(!w)return NULL;
+ c4t_workspace *w=ET_R_ALLOC(ET_R_TRAIN,1,c4t_allocate(sizeof(*w)),1u,sizeof(*w));if(!w)return NULL;
  w->mode=(int)mode;memcpy(w->ids,input->ids,sizeof(w->ids));memcpy(w->captured_ids,input->ids,sizeof(w->ids));
  for(size_t i=0;i<4;i++) {if(w->ids[i]<0||w->ids[i]>=256) {
    c4t_bad(ET_M3T_SHAPE_MISMATCH,ET_M3T_CODE_SHAPE);goto failed;}w->positions[i]=(int64_t)i;}
@@ -231,7 +234,7 @@ void *et_cpu4_private_workspace_create_v1(void *lease,void *ip,int64_t mode) {
  if(c4t_ferror(et_f32_tensor_copy_bits_from_v1(w->epsilon,&epsilon,1,&e),&e))goto failed;
  if(c4t_publish(&w->r,lease,C4T_WORKSPACE,sizeof(*w),2))goto failed;
  return w;
-failed:c4t_destroy_workspace(w);free(w);return NULL;
+failed:c4t_destroy_workspace(w);ET_R_FREE(ET_R_TRAIN,1,w,1u,sizeof(*w));return NULL;
 }
 static int c4t_active(c4t_workspace *w) {
  if(w->busy)return c4t_bad(ET_M3T_INVALID_STATE,ET_M3T_CODE_REENTRANCY);
@@ -432,3 +435,9 @@ int64_t et_cpu4_private_workspace_role_v1(void *p,int64_t family,int64_t index,i
 #endif
 
 #endif
+
+/* CPUV1_RESOURCE_BEGIN */
+#ifdef ET_CPUV1_RESOURCE_TESTING
+#include "cpuv1_resource_training.inc"
+#endif
+/* CPUV1_RESOURCE_END */

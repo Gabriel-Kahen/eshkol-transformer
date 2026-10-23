@@ -1,3 +1,6 @@
+/* CPUV1_RESOURCE_BEGIN */
+#include "cpuv1_resource_private.h"
+/* CPUV1_RESOURCE_END */
 /* Development-only observations. No model, optimizer or gradient mutation.
  * Link into the SAME I2/O2/C4 registry aggregate; O2 requires ET_O2_TESTING. */
 #include "eshkol_transformer/g3c4_model_owner_internal.h"
@@ -72,9 +75,9 @@ static int capture(void *lease, void *optimizer, observation *out) {
 }
 
 void *et_cpu4_heldout_image_create(void *lease, void *optimizer) {
-  image *value = malloc(sizeof(*value));
+  image *value = ET_R_ALLOC(ET_R_E3,3,malloc(sizeof(*value)),1u,sizeof(*value));
   if (!value) return NULL;
-  if (capture(lease, optimizer, &value->data) != 0) { free(value); return NULL; }
+  if (capture(lease, optimizer, &value->data) != 0) { ET_R_FREE(ET_R_E3,3,value,1u,sizeof(*value)); return NULL; }
   value->next = images;
   images = value;
   return value;
@@ -93,16 +96,16 @@ int64_t et_cpu4_heldout_image_destroy(void *candidate) {
   if (!*slot) return -1;
   image *value = *slot;
   *slot = value->next;
-  free(value);
+  ET_R_FREE(ET_R_E3,3,value,1u,sizeof(*value));
   return 0;
 }
 void *et_cpu4_heldout_output_create(void) {
   et_f32_tensor_error error;
-  output *value = malloc(sizeof(*value));
+  output *value = ET_R_ALLOC(ET_R_E3,4,malloc(sizeof(*value)),1u,sizeof(*value));
   if (!value) return NULL;
   value->tensor = NULL;
   if (et_f32_tensor_create_v1(0, NULL, &value->tensor, &error) != 0) {
-    free(value); return NULL;
+    ET_R_FREE(ET_R_E3,4,value,1u,sizeof(*value)); return NULL;
   }
   value->next = outputs;
   outputs = value;
@@ -127,7 +130,7 @@ int64_t et_cpu4_heldout_output_destroy(void *candidate) {
   output *value = *slot;
   if (et_f32_tensor_destroy_v1(&value->tensor, &error) != 0) return -1;
   *slot = value->next;
-  free(value);
+  ET_R_FREE(ET_R_E3,4,value,1u,sizeof(*value));
   return 0;
 }
 int64_t et_cpu4_heldout_live_owned(void) {
@@ -136,3 +139,9 @@ int64_t et_cpu4_heldout_live_owned(void) {
   for (output *value = outputs; value; value = value->next) ++count;
   return count;
 }
+
+/* CPUV1_RESOURCE_BEGIN */
+#ifdef ET_CPUV1_RESOURCE_TESTING
+#include "cpuv1_resource_inspector.inc"
+#endif
+/* CPUV1_RESOURCE_END */

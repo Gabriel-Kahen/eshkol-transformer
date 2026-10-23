@@ -104,7 +104,7 @@ void *et_g3c4_private_training_lease_create_v1(void *candidate) {
       (void)cpu4_lease_error(ET_G3C4_SHAPE_MISMATCH, ET_G3C4_CODE_SHAPE);
       return NULL;
     }
-  et_g3c4_training_lease_internal *lease = et_g3c4_allocate(sizeof(*lease));
+  et_g3c4_training_lease_internal *lease = ET_R_ALLOC(ET_R_C4,2,et_g3c4_allocate(sizeof(*lease)),1u,sizeof(*lease));
   if (lease == NULL) {
     (void)cpu4_lease_error(ET_G3C4_INTERNAL, ET_G3C4_CODE_ALLOCATION);
     return NULL;
@@ -179,7 +179,7 @@ int64_t et_g3c4_training_child_acquire_internal(
     for (cpu4_training_child *child = other->children; child != NULL; child = child->next)
       if (child->identity == identity)
         return cpu4_lease_error(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_IDENTITY);
-  cpu4_training_child *child = et_g3c4_allocate(sizeof(*child));
+  cpu4_training_child *child = ET_R_ALLOC(ET_R_C4,3,et_g3c4_allocate(sizeof(*child)),1u,sizeof(*child));
   if (child == NULL) return cpu4_lease_error(ET_G3C4_INTERNAL, ET_G3C4_CODE_ALLOCATION);
   child->identity = identity;
   child->kind = kind;
