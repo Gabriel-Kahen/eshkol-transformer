@@ -56,6 +56,44 @@ def getter_name(path):
     return 'cpuv1-resource-own-'+hashlib.sha256(path.encode()).hexdigest()[:12]
 
 
+def observer_symbol_sites(text):
+    """Runtime atomic symbol quotes in added functions, excluding quoted data."""
+    answer=[]
+    def visit(node):
+        raw=text[node.start:node.end]
+        atom=None
+        if raw.startswith("'"):
+            atom=node.children[0]
+        elif node.children and text[node.children[0].start:node.children[0].end]=='quote':
+            if len(node.children)!=2:raise ValueError('malformed observer quote')
+            atom=node.children[1]
+        if atom is not None:
+            word=text[atom.start:atom.end]
+            if re.fullmatch(r'[A-Za-z_][A-Za-z0-9_!?*+<>=:/.-]*',word):
+                answer.append((node.start,node.end,word))
+            return
+        for child in node.children:visit(child)
+    for form,node in zip(parse(text),spans(text)):
+        if not isinstance(form,list) or not form:continue
+        if form[0]=='lambda' or (form[0]=='define' and isinstance(form[1],list)):
+            for body in node.children[2:]:visit(body)
+    return answer
+
+
+def prebind_observer_symbols(owner,*fragments):
+    """Hoist only added observer operands into immutable owning-init values."""
+    sites=[observer_symbol_sites(text) for text in fragments]
+    words=sorted({word for part in sites for _,_,word in part})
+    stem='cpuv1-resource-literal-'+hashlib.sha256(owner.encode()).hexdigest()[:12]+'-'
+    bindings={word:stem+word.encode().hex() for word in words}
+    if any(name in text for name in bindings.values() for text in fragments):
+        raise ValueError('observer symbol binding collision')
+    rewritten=[splice(text,[(start,end,bindings[word]) for start,end,word in part])
+               for text,part in zip(fragments,sites)]
+    initializers=''.join(f"(define {name} '{word})\n" for word,name in bindings.items())
+    return initializers,rewritten,bindings
+
+
 def resolve(path,flavor,name):
     # String require paths are already literal; symbolic require is module syntax.
     spelling=name if flavor=='load' or '/' in name or name.endswith('.esk') else name.replace('.','/')+'.esk'
@@ -90,7 +128,7 @@ def p1_census(rows,lexical):
 
 def transform(text,path):
     rows=[r for r in ROOTS if r['path']==path]
-    forms=parse(text);nodes=spans(text);edits=[];extra='';tail=''
+    forms=parse(text);nodes=spans(text);edits=[];extra='';tail='';census='';lookup=''
     if rows or path==typed.CANDIDATE:
         # Getter imports are only in generated test copies.
         pre='(require "__HELPER__")\n'
@@ -108,8 +146,7 @@ def transform(text,path):
         name=n.children[1];edits.append((name.start,name.end,'cpuv1-p1-test-envelope'))
         original_vector=text[vector.start:vector.end]
         extra=typed.definitions(path,rows)
-        edits.append((vector.start,vector.start,extra))
-        edits.append((vector.start,vector.end,'(vector '+original_vector+'\n'+p1_census(rows,lexical)+')'))
+        census=p1_census(rows,lexical)
         # Alias before all original wrappers: one staged published envelope.
         alias='\n(define p1-trusted-surface (vector-ref cpuv1-p1-test-envelope 0))\n'
         edits.append((n.end,n.end,alias))
@@ -120,21 +157,28 @@ def transform(text,path):
         if f[2][-1][0]!='vector' or len(f[2][-1])!=7:raise ValueError('candidate six-slot surface mismatch')
         name=n.children[1];edits.append((name.start,name.end,'cpuv1-candidate-test-envelope'))
         extra=typed.CANDIDATE_DEFS
-        edits.append((vector.start,vector.start,extra))
         original_vector=text[vector.start:vector.end]
         census="(lambda (packet) (cpuv1-resource-walk! packet 64 (vector-ref registry 0) cpuv1-resource-candidate-visitor 0))"
         lookup="(lambda (candidate) (cpuv1-resource-find-vector candidate (vector-ref registry 0) 0 0))"
-        edits.append((vector.start,vector.end,'(vector '+original_vector+' '+census+' '+lookup+')'))
         edits.append((n.end,n.end,'\n(define cpu4-candidate-surface (vector-ref cpuv1-candidate-test-envelope 0))\n'))
         tail='\n(define (cpuv1-resource-candidate-into! packet) ((vector-ref cpuv1-candidate-test-envelope 1) packet))\n(define (cpuv1-resource-candidate-row candidate) ((vector-ref cpuv1-candidate-test-envelope 2) candidate))\n'
     elif rows:
         extra=typed.definitions(path,rows)
         tail=f'\n(define ({getter_name(path)} packet)\n'+''.join(root_call(r) for r in rows)+'  #t)\n'
     else:tail=''
+    initializers,(extra,tail,census,lookup),symbols=prebind_observer_symbols(path,extra,tail,census,lookup)
+    if any(name in text for name in symbols.values()):
+        raise ValueError('observer symbol collides with original owner')
+    extra=initializers+extra
+    if path in (P1,typed.CANDIDATE):
+        edits.append((vector.start,vector.start,extra))
+        fields=original_vector+'\n'+census+(' '+lookup if lookup else '')
+        edits.append((vector.start,vector.end,'(vector '+fields+')'))
     result=pre+splice(text,edits)+(extra if path not in (P1,typed.CANDIDATE) else '')+tail
     return result,{'path':path,'original_sha256':hashlib.sha256(text.encode()).hexdigest(),
                    'original':text,'getter':getter_name(path) if rows else None,'extra':extra,
                    'tail':tail,'candidate':path==typed.CANDIDATE,
+                   'observer_symbols':symbols,
                    'candidate_closures':parse(census+' '+lookup) if path==typed.CANDIDATE else []}
 
 
