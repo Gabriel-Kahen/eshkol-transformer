@@ -9,7 +9,7 @@ import unittest
 from tests.cpu4_trainer_control.test_source_contract import parse, walk
 
 ROOT = Path(__file__).resolve().parents[2]
-PIN = 'fd0db7270ca0212f73fc64337379d1ada32d0154'
+PIN = 'b0af97d10a96fc62ef414a26953582f5c79ad642'
 HERE = ROOT / 'tests/cpu4_trained_g2'
 GENERATE = ['cpu4-trained-g2-generate!', 'resolved', 'tokenizer', 'train-a', 'train-b',
             'heldout', 'factory', 'b-record', 'final-b', 'generation']

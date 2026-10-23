@@ -1,6 +1,12 @@
 # Final resumed B → actual public G2: staged source fixture
 
 This isolated source leaf starts at `fd0db7270ca0212f73fc64337379d1ada32d0154`.
+Root composition now authenticates production support against immutable
+`b0af97d10a96fc62ef414a26953582f5c79ad642`, including the independently
+accepted O2 restore-provenance repair. All nineteen dependency rows remain
+unchanged. The real preflight must accept this composition and reject either
+original fd0 native repair leaf; source tests exercise both exact old blobs.
+This establishes source identity only; compilation/runtime remain NOT RUN.
 All existing plain `tests/cpu4_resume` files remain byte-identical, including
 its 770-check caller, seven records and driver. `core.esk` mirrors only that
 caller; independent AST projection permits exactly the rooted generation ledger,

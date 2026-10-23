@@ -33,8 +33,20 @@ class Driver(unittest.TestCase):
             if field=='san':bad['mode']='sanitize'
             with self.assertRaises(ValueError):driver.plan(roster,bad)
         driver.strict_dependencies(driver.ROOT)
-        with self.assertRaisesRegex(ValueError, 'O2 repair composition'):
-            driver.preflight(driver.ROOT, roster, overlay)
+        self.assertEqual(driver.preflight(driver.ROOT, roster, overlay), units)
+        # The composed source passes; either original native leaf must still
+        # fail the real repair barrier before native compilation.
+        read_bytes = Path.read_bytes
+        for relative in driver.REQUIRED_REPAIR:
+            stale_path = driver.ROOT / relative
+            baseline = subprocess.check_output(
+                ['git', 'show', 'fd0db7270ca0212f73fc64337379d1ada32d0154:' + relative],
+                cwd=driver.ROOT)
+            def stale_read(path, target=stale_path, data=baseline):
+                return data if path == target else read_bytes(path)
+            with patch.object(Path, 'read_bytes', stale_read):
+                with self.assertRaisesRegex(ValueError, 'O2 repair composition'):
+                    driver.preflight(driver.ROOT, roster, overlay)
 
     def test_immutable_resource_bytes_same_as_plain(self):
         with tempfile.TemporaryDirectory() as tmp:
