@@ -38,7 +38,7 @@ the roadmap and linked contracts retain scope and measured limits.
 | E3 section 9 | E3 | Prior bounded leaves and native/provider checks only where exact source and seals authenticate | Complete [section 9 matrix](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md): numeric/mode/gradient/failure/resource rows, poison and leak-enabled runs. First choose missing supported runner from retained evidence; `scripts/test-e3-numerical-transcript.sh`, `scripts/test-e3-mode-graph.sh`, and `scripts/test-e3-complete-call-retention.sh` remain separate gates. |
 | Installed CLI3 chain and resume parity | CLI3 | Exact-c71 hosted job `116183228215` includes `CLI3-PRODUCTION-GENERATE-PASS` and `CLI3-CROSS-COMMAND-CHAIN-PASS`; retained authenticated log | `bash scripts/test-cli3-cross-command-chain.sh DISK_BACKED_EVIDENCE_DIR`: tokenizer/corpus → train → SAVE → resume vs uninterrupted → evaluate/generate, malformed/identity negatives and checkpoint immutability. |
 | CPU multi-token/EOS terminal and data-only continuation | G3 + integration public adapter → CLI3 | Native terminal prerequisites and fixed one-byte CLI path only | Implement/compile accepted [same-call terminal contract](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md), then public G2 gates and [data-only continuation](g3/G3_R_DATA_ONLY_CONTINUATION_CONTRACT.md); larger repeated-decode/EOS profile remains required by the full G3 contract. CLI adapter follows admitted exports. |
-| Current-source CPU training/learning/resume acceptance | CLI3 | Bounded two-update CLI parity is distinct from training acceptance | Authenticate retained one-batch-overfit, held-out-improvement and longer interrupted-resume receipts against current source; execute genuinely missing declared gates and retain unsupported scope. |
+| Current-source CPU training/learning/resume acceptance | CLI3 | CPU4 two-update140 checks,250-update learning2010 checks and frozen-b0 normal/repeat FILE resume770 checks/375 real steps independently accepted; synthetic held-out mean5.51855→0.00003266 | Complete affected union, SAN/resources, separate fresh-process adoption and installed workflow; tiny synthetic improvement is not language generalization. |
 | Combined source/tests/evidence and current-main union | Integration reviewer | Prior exact-c71 source review accepted; runtime union open | Review worker immutable commits, provenance, seals, results, scope limits and integration diff once the three lane results exist. |
 | Installed CPU binary, artifacts and usable command walkthrough | Integration + CLI3 | Scripted chain exists; execution pending | Run and document an installed supported binary using the validated configuration and artifacts; retain actual JSON, parity and failure evidence. |
 | Merge and final validation | Integration only | None; admission held | All rows above discharged, exact-head checks satisfied, reviewed main union, then merge and authenticate resulting main identity/checks. |
@@ -113,10 +113,26 @@ and review`team/integration-review-file-b0af97d1-attempt1/REVIEW.md`, seal
 `7c36a86be2a09c469e5fba83e1c15c1233587d6baed82b69f13bfdd13ea81218`,
 authenticate source/dependencies/IR/BC/object/ELF, all exits0 and cleanup. Its
 198-second duration is not throughput. This is untrained artificial coherent
-FILE movement, not learning or resume evidence. Plain trained resumev2 is now
-running on the separately frozen b0 source. Trained
+FILE movement, not learning or resume evidence.
+
+Plain trained resumev2 on frozen b0 independently ACCEPTS two exact770-check,
+375-step executions. Trained A125 SAVE→A250 versus actual FILE-B125→B250 matches
+all1192 values/2384 moment words, controls/RNG/cursors/config/tokenizer and fresh
+same-B E3 reports. Mean CE5.518550395965576→0.0000326615190715529 satisfies the
+fixed synthetic held-out criterion; perplexity249.2734→1.0000327, accuracy0→1.
+Both25504-byte checkpoints have SHA
+`499008516bce12c9ca07de19e97cee99ec373b0070cf13b34d035296889692cc`.
+Raw`9240d74c5bbc88fca1fcae94cbf1a0d344ead51fa3f4844b52365e5858256932`
+and `team/integration-review-resume-b0af97d1-attempt1/REVIEW.md`, seal
+`89a8e435af91e940d0e08102df707122e649cbb0859605990c99f2f39aa1d0b9`,
+authenticate emitted real-step backedges/full-plane comparisons, source/native
+ownership, artifacts, all exits0 and cleanup.265s is gate duration. This is
+normal/repeat within-process FILE resume; SAN, independent fresh-process
+adoption, language generalization, installed and generation claims remain open.
+
+Trained
 same-B public-G2 source4c6 plus support-context55a is independently accepted;
-its four-process functional gate is being prepared. Complete owner/byte census
+its four-process functional gate is running. Complete owner/byte census
 is still blocked on missing observability:13424 is a partial source subtotal,
 and the six existing native counts do not establish total retention. OS process
 limits cannot substitute for that required census. No full CPU-v1 admission.

@@ -636,14 +636,16 @@ Active finish milestone: **first complete validated CPU v1**. Current acceptance
 and ownership: [CPU v1 completion index](WAVE3_COMPLETION.md), updated 2026-10-22.
 PR #214 exact-head hosted checks pass. Current-source CPU4 two-update training,
 250-update one-batch learning, detach and bounded evaluator-consumer gates
-independently pass; held-out improvement and resume,
+independently pass. Frozen b0 normal/repeat also passes synthetic held-out
+improvement and exact within-process FILE resume; SAN, fresh-process adoption,
 multi-token EOS/continuation and compiled common integration remain required.
 The corrected common source composition is independently accepted. After its
 FILE run exposed stale optimizer option provenance, the strict-preserving repair
 passes an independently audited native causal gate, including sanitizer and OFF
 controls. The repaired integrated FILE normal/repeat gate independently passes
-region21/data96 and checkpoint byte parity. The trained resume/held-out gate is
-now running; it has no result yet.
+region21/data96 and checkpoint byte parity. Trained resume passes770 checks and
+375 actual steps per run; held-out mean loss5.51855→0.00003266. Functional
+trained-model generation is now running with retention admission held.
 GPU, mixed precision and optional expansion stay backlog. Historical detail below
 retains its original evidence scope.
 
