@@ -132,7 +132,19 @@ adoption, language generalization, installed and generation claims remain open.
 
 Trained
 same-B public-G2 source4c6 plus support-context55a is independently accepted;
-its four-process functional gate is running. Complete owner/byte census
+its four-process functional gate independently ACCEPTS exact770 resume/375 step
+plus19 G2 checks per process. EOS255 returns IDs/raw(3,41), length2/cache4;
+EOS3 returns(3), length1/cache3; all actual result RNG words are(1,41,0,0).
+Same B fourteen handles/4768 value bytes remain unchanged, all four checkpoint
+files match SHA49900851 above. Raw seal
+`ee00a454f7cbe1fa22503e6978cead10b2edc196b2b4d4d4e5b31a838fb11f36`
+and `team/integration-review-trained-g2-55a56f2f-attempt1/REVIEW.md`, seal
+`5d9356db7caa1875957284510f5cffb9bb57c5ae31cb7b2aed30e228f2c3dcc9`,
+authenticate all37 native owners/38 MMD files/208 observed paths, real emitted
+handoff/public-generation/release calls, all exits0 and cleanup.340s is gate
+duration. Functional acceptance excludes SAN, history, persisted continuation,
+independent fresh-process resume, installed and complete-retention claims.
+Complete owner/byte census
 is still blocked on missing observability:13424 is a partial source subtotal,
 and the six existing native counts do not establish total retention. OS process
 limits cannot substitute for that required census. No full CPU-v1 admission.
@@ -145,7 +157,12 @@ guards pass; all source bytes equal accepted composition78, with only index and
 roadmap documentation differing. The SAME40 committed-frame lifetime and legacy
 allocation-metadata trust boundary are explicit in
 [CPU4_C4_HISTORY_CAPTURE.md](CPU4_C4_HISTORY_CAPTURE.md). Native ON/OFF, failure,
-alias, census and replay computation gates are prepared separately, NOT RUN.
+alias, census and replay computation gates are separate. First native attempt
+`cpu4-history-capture-native-78aec5b0-attempt1` fails at the history fixture's
+undeclared seed_generator helper; runtime/SAN/replay are NOT RUN. Raw seal
+`d48f81304240a85c1268efbc7282dbbd61ea0e1ed3b887df222e1001d347a397`
+is preserved; the preceding reached boundary phases passed. Focused fixture
+repair and independent failure audit are in progress; no unchanged rerun.
 No history import, wire, public partial-producer or fresh-process continuation
 API is admitted by this source integration.
 

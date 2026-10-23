@@ -645,7 +645,8 @@ passes an independently audited native causal gate, including sanitizer and OFF
 controls. The repaired integrated FILE normal/repeat gate independently passes
 region21/data96 and checkpoint byte parity. Trained resume passes770 checks and
 375 actual steps per run; held-out mean loss5.51855→0.00003266. Functional
-trained-model generation is now running with retention admission held.
+same-trained-model public generation independently passes both frozen two-token
+and first-EOS modes, normal/repeat. Retention and full CPU-v1 admission stay held.
 GPU, mixed precision and optional expansion stay backlog. Historical detail below
 retains its original evidence scope.
 
