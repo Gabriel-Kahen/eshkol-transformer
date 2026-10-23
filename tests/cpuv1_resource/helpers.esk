@@ -124,11 +124,19 @@
     (else (cpuv1-resource-set-native packet index lexical 4 1))))
 ;;; Direct native index lookup must agree for every retained canonical shell.
 ;;; No fallback can conceal stale copied advisory rows in this producer gate.
+;;; Private shell-kind values are interned before observations.
+(define cpuv1-resource-literal-b2a5e6fc1a46-656e747279 'entry)
+(define cpuv1-resource-literal-b2a5e6fc1a46-68616e646c65 'handle)
+(define cpuv1-resource-literal-b2a5e6fc1a46-6d6f64756c65 'module)
+(define cpuv1-resource-literal-b2a5e6fc1a46-70726f7669646572 'provider)
+(define cpuv1-resource-literal-b2a5e6fc1a46-7374617465 'state)
+(define cpuv1-resource-literal-b2a5e6fc1a46-73746174652d74656e736f72 'state-tensor)
+(define cpuv1-resource-literal-b2a5e6fc1a46-74726565 'tree)
 (define (cpuv1-resource-p1-shell-kind value)
-  (cond ((eq? value 'provider) 1) ((eq? value 'module) 2)
-        ((eq? value 'handle) 3) ((eq? value 'tree) 4)
-        ((eq? value 'state) 5) ((eq? value 'entry) 6)
-        ((eq? value 'state-tensor) 8) (else 0)))
+  (cond ((eq? value cpuv1-resource-literal-b2a5e6fc1a46-70726f7669646572) 1) ((eq? value cpuv1-resource-literal-b2a5e6fc1a46-6d6f64756c65) 2)
+        ((eq? value cpuv1-resource-literal-b2a5e6fc1a46-68616e646c65) 3) ((eq? value cpuv1-resource-literal-b2a5e6fc1a46-74726565) 4)
+        ((eq? value cpuv1-resource-literal-b2a5e6fc1a46-7374617465) 5) ((eq? value cpuv1-resource-literal-b2a5e6fc1a46-656e747279) 6)
+        ((eq? value cpuv1-resource-literal-b2a5e6fc1a46-73746174652d74656e736f72) 8) (else 0)))
 (define (cpuv1-resource-p1-shells packet remaining index context
           dead-construction dead-state dead-tensor dead-entry seen)
   (cond ((null? remaining) #t)

@@ -139,3 +139,18 @@ initializer rejection. This is SOURCE ONLY. Successful initialization is require
 allocation/failure may move earlier. Emitted interner removal, capture/storage/ABI
 changes, caller identity and resource/runtime acceptance remain unmeasured or
 NOT RUN. No successor compiler is scheduled from this source change.
+
+Complete observer-symbol batch (2026-10-23): 104 additional immutable private
+owning-unit values replace 161 runtime atomic-symbol operands (144 comparisons
+and 17 protocol arguments) across 22 units. Existing helper/P1/candidate values,
+original APIs and records, protocol call order, phase ordinals, unknown rejection,
+load/require behavior and exact reverse projection are preserved. Constants are
+initialized before their added observer functions become callable; quoted data,
+strings, comments and original source are untouched. All44 resource host tests
+pass, including actual generated constants, shell kinds, raw-phase tables,
+session getters, protocol identity and inverse-projection mutation negatives.
+This is SOURCE ONLY. Successful initialization is required and allocation/failure
+may move earlier. Emitted lookup removal, storage/captures, initialization
+preservation, calling ABI and full recursive effects remain unmeasured. One
+reviewed successor emission must verify the complete batch before link/runtime;
+the original numbered gates and runtime/resource prerequisites remain in force.
