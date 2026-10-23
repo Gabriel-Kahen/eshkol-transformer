@@ -6,7 +6,8 @@
 static void retire_probe_quiescent(et_o2_optimizer *optimizer) {
   CHECK(et_o2_builders == NULL && et_o2_reconstruct_builders == NULL);
   CHECK(optimizer->busy == 0u);
-#ifdef ET_TR3_O2_PRIVATE_OPERATIONS
+#if defined(ET_TR3_O2_PRIVATE_OPERATIONS) || defined(ET_TR3_O2_STEP_CLEAR_NATIVE) || \
+    defined(ET_TR3_C_O2_RESTORE_NATIVE)
   CHECK(optimizer->active_operation == NULL);
 #endif
   CHECK(et_o2_borrows == NULL);
