@@ -30,8 +30,10 @@
 (define seen-context 0)
 (define p1-train? #t)
 (define p1-recheck-status 0)
+(define p1-capture-hook (lambda () #t))
 (define (tr3-fixed-capture-context! model supplied modules handles carriers context)
   (set! seen-context context)
+  (p1-capture-hook)
   (if (not p1-train?) 2
       (begin
        (do ((i 0 (+ i 1))) ((= i 17)) (vector-set! modules i (vector i)))
@@ -46,13 +48,15 @@
 (vector-set! p1-trusted-surface 74 (vector cpu4-fixed-capture! cpu4-fixed-recheck!))
 (for-each (lambda (x) (if (and (pair? x) (eq? (car x) 'define)) (eval x (current-module))))
  (read-source "native/cpu4_p1_fixed_set_extension.esk"))
+(define guard-install-hook (lambda () #t))
 (define-syntax guard
  (syntax-rules ()
   ((_ (caught clauses ...) body ...)
+   (begin (guard-install-hook)
    (catch #t (lambda () body ...)
     (lambda (key . args)
      (let ((caught (if (eq? key 'source-reraise) (car args) (cons key args))))
-      (cond clauses ...)))))))
+      (cond clauses ...))))))))
 (define (raise x) (throw 'source-reraise x))
 ;; Execute the real D2 normalizer. Only the outer structured raise is a host
 ;; double; the wrapper is a function spelling of its source syntax adapter.
@@ -103,7 +107,7 @@
 (define (cpu4-native-lease-commit-release lease) (vector-set! lease 1 'dead) 0)
 (define (cpu4-binding-fail-stop n) (error "unexpected nofail-tail error" n))
 (for-each (lambda (x) (if (and (pair? x) (eq? (car x) 'define)) (eval x (current-module))))
- (read-source "native/cpu4_model_binding_extension.esk"))
+ (read-source (or (getenv "CPU4_BINDING_SOURCE") "native/cpu4_model_binding_extension.esk")))
 (define (alter key value) (resolved (acons key value (filter (lambda (x) (not (eq? key (car x)))) config-rows))))
 (for-each (lambda (pair) (check (reject (lambda () (cpu4-model-binding-create-internal fixture-model (alter (car pair) (cdr pair)))))))
  '((model.context-length . 2) (model.hidden-size . 8) (model.dtype . f64) (run.seed . 99) (run.deterministic . #f)))
