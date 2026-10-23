@@ -11,6 +11,7 @@ void et_cpuv1_test_census_i64_v1(et_cpuv1_resource_packet_v1 *packet) {
 
   for (et_i64_tensor *p=live_tensors;p;p=p->registry_next) {
     if (p->magic!=ET_I64_TENSOR_MAGIC || p->rank>ET_KERNEL_MAX_RANK ||
+        p->element_count>SIZE_MAX/sizeof(int64_t) ||
         p->byte_length!=p->element_count*sizeof(int64_t)) {
       et_cpuv1_test_resource_fail_v1(packet,ET_R_MISMATCH); return;
     }

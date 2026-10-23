@@ -1,43 +1,78 @@
-# CPU-v1 resource producer — Stage A, incomplete
+# CPU-v1 resource producer — Stage A source candidate
 
-This private test producer is under implementation from base
-`6368785d815451f409af3be42c7baec5a4c02756`. Its packet/API is provisional and
-has **no admission**. Production and installed APIs stay unchanged when
-`ET_CPUV1_RESOURCE_TESTING` is absent. History/capture is unsupported here.
+Noninstalled test-only producer from base
+`6368785d815451f409af3be42c7baec5a4c02756`. Packet version1 is private to this
+candidate and has **no resource admission**. Native/compiler/preprocessor/AOT
+execution and actual flag-OFF object/symbol parity remain **NOT RUN**. Root owns
+the shared pins/roadmap; this leaf does not refresh or bypass them.
 
-Implemented source foundation: thirteen-domain fixed packet, aggregate
-allocation/free/requested/allocator-usable counters, independent native census,
-fixed snapshot-only duplicate/cycle scratch and owning hooks for the complete
-selected native allocation closure. This includes retained I2 builders under
-separate F32 kinds and legacy M3/M3T controls under TRAIN; legacy authority/use
-is rejected by the frozen CPU4 profile. The original six-kind F32 retired-control
-cap excludes appended I2 kinds. Unconditional owning-TU layout facts survive an
-empty final registry; flexible prefixes are separate from byte allocation units.
+The thirteen-domain fixed packet carries family/kind allocation/free requested
+and allocator-usable event totals plus independent owning-registry census.
+Snapshots use fixed reported BSS duplicate/cycle scratch; no per-object event
+registry, generic malloc tracing, owner-layout change or destructor is added.
+F32/I64 own their payload/shape/stride bases; parents charge their controls only.
+Every census reports concrete size/alignment even when no retained base exists.
+K1 deep-copy arrays/strings are traversed from actual authenticated owner slots.
+I2 retained builders and legacy M3/M3T sites are explicit; legacy authority is
+rejected by this profile. Production allocator expressions/ABI/exports/math
+reverse to the original tokens when `ET_CPUV1_RESOURCE_TESTING` is absent.
+History/capture ON is unsupported. Source token projection is not preprocessing
+or object parity, and the lexical allocation ledger is not compiler active-site
+proof.
 
-The runtime bridge source walks both root chains, separate block headers/memory,
-scopes/mutex, reflection control and entry arrays. It reconciles tracked current
-capacity and exposes peak, allocator and PID/RSS fields. Its explicit pre-P0 warm
-is required; no lazy native runtime initialization occurs in owner census.
-Static observer storage is reported separately from actual allocated bases.
-F32/I64 own their buffers; parent controls never charge those twice. Normal glibc
-only; overflow/profile/alias/scratch/conservation failures prevent COMPLETE.
+The runtime bridge reads both current and adopted root block chains plus block,
+arena, scope, mutex and reflection metadata separately. It reconciles tracked
+current capacity and exposes tracked peak, normal-glibc backing/in-use/usable/
+residual, root/shared/current/region, PID and RSS values. Runtime warm is explicit
+before P0. Overflow, malformed layout/alias/shape, unsupported allocator/profile,
+nonquiescence, scratch saturation and event/census mismatches prevent COMPLETE.
+Absolute native transient requested peak is UNOBSERVED.
 
-**UNIMPLEMENTED:** all owning-scope Scheme access/generator and genuine P1 AOT
-smoke; bounded native unit/recipe, source-overlay custody and runtime-field
-checker. The native aggregator deliberately cannot fabricate Scheme COMPLETE.
-All overall coverage remains unavailable until these are implemented, reviewed
-and actually validated. The source allocation ledger classifies wrappers/delegated allocator helpers and
-history-OFF sites lexically. This is not compiler-resolved active-site proof.
+Owning-source Scheme access is generated into one explicit literal-path graph.
+Every dependency edge is rewritten and every original AST reverse-projected.
+The original75-slot P1 vector remains the first member of one private envelope;
+its census closes over the original51 lexical values and current canonical
+holders. All original wrappers/exports retain their positions. The original
+six-slot CPU4 candidate surface similarly remains intact inside its own generated
+private envelope; its census and canonical lookup share the lexical registry.
+No production Scheme source is edited and no second identity universe is loaded.
 
-Cheap Python source tests currently check exact OFF token projection of the 24
-modified original owner/include files against the immutable base, including
-parenthesis/math mutation controls. This is **not** actual preprocessed-token,
-object/symbol parity, C/C++ syntax, native execution or allocation-free AOT proof;
-those remain NOT RUN. No training caller, 375-step loop, resource sidecar or full
-resource admission is part of Stage A. Root owns common source pins and roadmap;
-their intentional staleness is not bypassed or silently refreshed here.
+All64 selected roots have concrete classification, separate from generic
+shape/length facts. `scheme_states[root]` fields are total/live/dead/pending/
+prepared/busy/static/verified-reference-links. These are semantic references,
+never extra byte ownership. `scheme_source[65][16]` preserves distinct actual
+source phases (for example committed/aborted/dead steps); the generated
+`source-states.json` names each code. The supplemental row64 is the candidate
+lexical registry with unpublished/adopted/dead source counts and its separate
+`scheme_candidate` lifecycle totals. Boolean scalar values remain actual0/1 in
+`scheme_scalar` and lexical field3. Closed custody does not imply model death;
+released binding/control/step lease fields are historical references. LIVE
+bindings compare every one of14 native lease parameters/identities against the
+canonical owner/handle/carrier roster. Terminal live tombstones use paired
+original closure authority after public fields are scrubbed.
 
-The final Stage A leaf must implement the accepted resource contract, carry an
-exact source overlay, and supply a bounded native unit plus separate genuine
-owning-scope smoke recipe for root dispatch under the shared heavy lock. Stage B
-waits for the independently admitted producer API.
+Generic writers cannot set classification or COMPLETE. Concrete visitors
+validate exact schemas and canonical links before state access. Transaction-only
+protected/prefix/pending roots must be empty at quiescent samples; source-present
+legacy G3T/M3T roots must be route-unused, rather than omitted. P1 hashes report
+actual occupied/capacity/tombstone metadata without materializing keys/values;
+every retained shell must match its index record and native kind/context/state.
+Index cardinality, Scheme shells and native records must agree. Whole-arena
+backing already charges unreachable bump objects and auxiliary immutable/error
+roots; selected getter crosslinks cover auxiliary trainers and terminal originals.
+
+The frozen64MiB retired-control policy applies to **all eligible genuinely
+retired F32-domain control kinds, including I2**, already within the128MiB native
+total. Live payload is not retired control. Actual compiled minimum40-byte/layout
+facts must pass before any count-derived admission. Stage A publishes facts;
+the later Stage B checker enforces accepted caps and the frozen375-caller counts.
+
+`tests/cpuv1_resource/EXECUTION.md` specifies one bounded real native unit and a
+separately reviewed tiny genuine AOT gate using one original unadopted model.
+`prepare_recipes.py` only writes exact command arrays/source seals and generated
+sources. The tiny gate requires actual emitted-IR transitive allocation-free
+proof including indirect closure dispatch, single P1 dependency/initialization
+proof, and normal/repeat execution after pre-P0 warming. Equal endpoint packets
+alone do not exclude temporary allocation. Host source/AST mutation tests do not
+establish compiler lowering, native execution, canonical AOT promotion or budgets.
+No Stage B consumer, sidecar, CLI integration or full training caller is included.

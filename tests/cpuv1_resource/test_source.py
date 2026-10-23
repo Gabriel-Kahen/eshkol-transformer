@@ -97,6 +97,11 @@ class Source(unittest.TestCase):
         for field in ['et_i2_retired_copy_builders','et_i2_retired_reset_builders',
                       'et_i2_retired_decode_builders']:
             self.assertIn(field,i2)
+        for field in ['tr3_c_restore_authority','tr3_c_next_index',
+                      'ET_TR3_C_I2_RESTORE_PHASE_ORDINARY',
+                      'ET_TR3_C_I2_RESTORE_PHASE_COMMITTED',
+                      'ET_TR3_C_I2_RESTORE_PHASE_ABORTED']:
+            self.assertIn(field,i2)
 
     def test_lexical_coverage_rejects_omissions_and_alternate_allocators(self):
         import tempfile

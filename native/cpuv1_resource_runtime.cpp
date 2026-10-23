@@ -1,3 +1,6 @@
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
 /* Noninstalled bridge compiled only against the authenticated pinned fe9
  * private header. No changes to the Eshkol runtime or public runtime ABI. */
 #include "cpuv1_resource_private.h"
@@ -8,6 +11,9 @@
 #include <climits>
 #include <cstdint>
 #include <fcntl.h>
+#include <dlfcn.h>
+#include <cstring>
+#include <cstdlib>
 #include <malloc.h>
 #include <pthread.h>
 #include <sys/resource.h>
@@ -16,6 +22,13 @@
 static arena_t *resource_root;
 static long resource_page_bytes;
 static bool resource_warmed;
+static bool libc_symbol(const void *symbol) {
+  Dl_info info;
+  if(!dladdr(symbol,&info) || !info.dli_fname)return false;
+  const char *base=std::strrchr(info.dli_fname,'/');
+  base=base?base+1:info.dli_fname;
+  return std::strcmp(base,"libc.so.6")==0;
+}
 
 static bool plus(et_cpuv1_resource_packet_v1 *p,uint64_t &a,uint64_t b) {
   if(a>UINT64_MAX-b) {
@@ -34,7 +47,12 @@ extern "C" int et_cpuv1_test_runtime_resource_warm_v1(void) {
   struct rusage usage;
   (void)mallinfo2();(void)getrusage(RUSAGE_SELF,&usage);
   (void)eshkol_get_heap_usage();(void)eshkol_get_peak_heap_usage();
-  resource_warmed=resource_root && resource_page_bytes>0 && !region_current() &&
+  resource_warmed=libc_symbol(reinterpret_cast<const void *>(&std::malloc)) &&
+      libc_symbol(reinterpret_cast<const void *>(&std::calloc)) &&
+      libc_symbol(reinterpret_cast<const void *>(&std::realloc)) &&
+      libc_symbol(reinterpret_cast<const void *>(&std::free)) &&
+      libc_symbol(reinterpret_cast<const void *>(&malloc_usable_size)) &&
+      libc_symbol(reinterpret_cast<const void *>(&mallinfo2)) && resource_root && resource_page_bytes>0 && !region_current() &&
       get_global_arena()==resource_root && get_global_arena_shared()==resource_root;
   return resource_warmed?ET_R_OK:ET_R_UNSUPPORTED;
 }
@@ -156,5 +174,30 @@ extern "C" void et_cpuv1_test_runtime_resource_snapshot_v1(et_cpuv1_resource_pac
   v[ET_R_ALLOCATOR_RESIDUAL]=v[ET_R_ALLOCATOR_INUSE]-v[ET_R_KNOWN_USABLE];
   v[ET_R_NORMAL_PROFILE]=1u;
   et_cpuv1_test_resource_domain_v1(p,ET_R_RUNTIME);
+}
+extern "C" int64_t et_cpuv1_test_scheme_hash_v1(void *raw,int64_t index,
+ int64_t lexical,void *candidate) {
+  et_cpuv1_resource_packet_v1 *p=static_cast<et_cpuv1_resource_packet_v1 *>(raw);
+  if(!resource_warmed || !candidate || !arena_contains(resource_root,candidate)) {
+    et_cpuv1_test_resource_fail_v1(p,ET_R_MISMATCH);return ET_R_MISMATCH;
+  }
+  const eshkol_hash_table_t *h=static_cast<const eshkol_hash_table_t *>(candidate);
+  if(h->size>h->capacity || h->tombstones>h->capacity-h->size ||
+     (h->capacity && (!h->keys || !h->values || !h->status)) || h->size>INT64_MAX) {
+    et_cpuv1_test_resource_fail_v1(p,ET_R_MISMATCH);return ET_R_MISMATCH;
+  }
+  size_t occupied=0,deleted=0;
+  for(size_t i=0;i<h->capacity;i++) {
+    if(h->status[i]==HASH_ENTRY_OCCUPIED)occupied++;
+    else if(h->status[i]==HASH_ENTRY_DELETED)deleted++;
+    else if(h->status[i]!=HASH_ENTRY_EMPTY) {
+      et_cpuv1_test_resource_fail_v1(p,ET_R_MISMATCH);return ET_R_MISMATCH;
+    }
+  }
+  if(occupied!=h->size || deleted!=h->tombstones) {
+    et_cpuv1_test_resource_fail_v1(p,ET_R_MISMATCH);return ET_R_MISMATCH;
+  }
+  p->scheme_p1[1]=h->size;p->scheme_p1[2]=h->capacity;p->scheme_p1[3]=h->tombstones;
+  return et_cpuv1_test_scheme_value_v1(raw,index,lexical,3,static_cast<int64_t>(h->size));
 }
 #endif
