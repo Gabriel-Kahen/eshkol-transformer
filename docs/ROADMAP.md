@@ -646,7 +646,14 @@ controls. The repaired integrated FILE normal/repeat gate independently passes
 region21/data96 and checkpoint byte parity. Trained resume passes770 checks and
 375 actual steps per run; held-out mean loss5.51855→0.00003266. Functional
 same-trained-model public generation independently passes both frozen two-token
-and first-EOS modes, normal/repeat. Retention and full CPU-v1 admission stay held.
+and first-EOS modes, normal/repeat. Its generated-IR-ASan/native-ASan+UBSan
+gate is running; no sanitizer result is admitted yet. The real binding OOM
+witness independently passes normal/repeat cleanup and native lease retry.
+Native history/capture independently passes normal/repeat/ASan+UBSan, including
+bitwise no-draw greedy/categorical prefix replay; typed fresh-process import and
+remaining decode are still required. Resource observer Stage A, production CLI
+report producers and candidate-ON E3 fault coverage are under implementation.
+Retention and full CPU-v1 admission stay held.
 GPU, mixed precision and optional expansion stay backlog. Historical detail below
 retains its original evidence scope.
 

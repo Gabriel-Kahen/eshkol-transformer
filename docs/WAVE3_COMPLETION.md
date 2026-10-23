@@ -167,31 +167,63 @@ the proposed owning-scope census closure must preserve it exactly. No observer,
 sizeof, measured fit, native transient peak, history-ON or retention admission
 is established by this policy.
 
-Binding-OOM witness attempt1 compiles35 production TUs, shim and actual AOT/link,
-then its collector rejects LOCAL real lease symbols omitted by `nm -g`.
-Raw`7e716949ee35e8babba7f934409e2c3f76ecd18b67eecfa8defd8e0d2fb7a6ea`
-and `team/integration-review-binding-witness-ce46e8d9-failure/REVIEW.md`, seal
-`bcac9fd9bae24893a3a1df3fedfe9c1c2f2610d60d949883d412004d9c8866d4`,
-authenticate the failure. Runtime/handler-OOM/retry remain NOT RUN. A collector
-successor must retain global-wrapper checks and prove exact real local symbols
-through typed ELF/map/call addresses; source/runtime assertions remain unchanged.
+Binding-OOM witness attempt1 remains a preserved collector failure: `nm -g`
+omitted genuine LOCAL lease symbols after successful native/AOT/link builds.
+Raw seal `7e716949ee35e8babba7f934409e2c3f76ecd18b67eecfa8defd8e0d2fb7a6ea`
+and failure audit `bcac9fd9bae24893a3a1df3fedfe9c1c2f2610d60d949883d412004d9c8866d4`
+remain unchanged. Collector-only v2 retains strict global-wrapper checks and
+proves exact LOCAL definitions through typed ELF, map and actual call addresses.
+Clean attempt2 independently ACCEPTS two identical four-record runs in194s:
+old publication leaves pending1/retry blocked; fixed early and post-publication
+failure cases leave pending0 and each retry reaches real lease prepare/commit.
+Raw seal `cccfaeff8b700036da2b1ba5f33318cdc609f7ac6e521f4160f74c1131878340`;
+independent actual review
+`team/review-cpu4-binding-witness-ce46e8d9-attempt2-actual-independent/REVIEW.md`,
+seal `8bf8dbc36a293e74cf09a305c8c7517807f50ff258eaebe79a8b1954007a7556`.
+All81 statuses/custody are0. Relocation remains UNPROVEN and retained bytes
+UNMEASURED; this is normal native handler/lease evidence, not SAN or retention.
 
-Private history/capture source352 is now integrated through `09e76fae`, after
-independent repair acceptance`8b8cffec` and composition acceptance`caeb05d8`.
-The common static closure has215 paths (four added includes/two updated hashes);
-all35 production TU flags remain unchanged and history remains OFF. Root source
-guards pass; all source bytes equal accepted composition78, with only index and
-roadmap documentation differing. The SAME40 committed-frame lifetime and legacy
-allocation-metadata trust boundary are explicit in
-[CPU4_C4_HISTORY_CAPTURE.md](CPU4_C4_HISTORY_CAPTURE.md). Native ON/OFF, failure,
-alias, census and replay computation gates are separate. First native attempt
-`cpu4-history-capture-native-78aec5b0-attempt1` fails at the history fixture's
-undeclared seed_generator helper; runtime/SAN/replay are NOT RUN. Raw seal
-`d48f81304240a85c1268efbc7282dbbd61ea0e1ed3b887df222e1001d347a397`
-is preserved; the preceding reached boundary phases passed. Focused fixture
-repair and independent failure audit are in progress; no unchanged rerun.
-No history import, wire, public partial-producer or fresh-process continuation
-API is admitted by this source integration.
+Private history/capture repair352 and exact composition78 remain accepted.
+Focused fixture-only repair93db869d is integrated through `8e609c2a`; common
+closure215 and all35 production TU flags remain unchanged, history OFF.
+Original native78 attempt1 remains FAIL at undeclared fixture seed_generator,
+raw `d48f81304240a85c1268efbc7282dbbd61ea0e1ed3b887df222e1001d347a397`;
+its independent failure audit is sealed `5e050cf78b5acc95054ae0f50e23e97d6914ea70bfa52b7281694905f7c5b113`.
+Fresh exact93 native attempt1 independently ACCEPTS in91s: normal, repeat and
+native ASan+UBSan each pass history173/capture144/manual668 checks. Seven OFF
+objects equal the accepted baseline; four ON layouts, expected compile failures,
+all136 command outcomes,94 depfiles and654 sealed members authenticate.
+Raw `a3dd8f232d7ec926314e3a85697aa3232d95a21cfb9e327bc15cb6df82b529e4`;
+independent actual review
+`history-capture-native-93db869d-attempt1-independent-resolution/RESOLUTION.md`,
+seal `68e0d1d49c0a61e1e2796ce68198d04ae179b64ca213593acc4b4d93020bcc85`.
+Genuine greedy and categorical replay of the three-token committed prefix
+reproduces all16 K/all16 V values, keep/length,256 logits and RNG bit-for-bit
+without another sampler call. Detached copies survive generator close while
+the model stays test-owned; model destruction is not tested. SAME40 committed
+frame lifetime, failure/alias/capture cuts pass. Static live/dead arithmetic is
+not a measured retention slope. Typed history/RNG import, cache4 result,
+closed public partial producer, wire and fresh-process continuation remain open.
+See [CPU4_C4_HISTORY_CAPTURE.md](CPU4_C4_HISTORY_CAPTURE.md).
+
+Trained-G2 SAN recipe `e217824acd1472f4d6a69b0a760146cdd72e57d7685619a46aaa5b277356f45b`
+and independent recipe review `725dc008a668544869ecc02c5e1bc6b277ab46aead4abf3d0c6ace6bf36399c2`
+are accepted for exact55a. Attempt1 is RUNNING, not accepted: all37 native TUs
+use ASan+UBSan; generated IR uses ASan only; the pinned C7 runtime archive is
+uninstrumented. Four actual trained/resume/EOS processes and equality to the
+accepted normal artifact are required. No whole-runtime SAN claim follows.
+
+The production CLI scalar/report contract v3 is accepted as a proposed API:
+proposal `86c45f138b2bee3dea3bc6cdc5b1442fe371bc9d2e2b06bea9f757049e58ccb5`,
+independent review `e72642b303b3e9cfbb9a8b3c6d9ffda195e53118397064cb9e9d5515335872fd`.
+Five native scalar helpers and a closed Scheme report leaf are authorized for
+implementation/review before CLI consumers. A failed report after a committed
+step must retain advanced U and permit report retry without repeating the step.
+Per-step closed WRITE snapshots and32-byte scalar custody sidecars require a
+separate resource-profile extension; the frozen55a resource counts do not cover
+installed CLI commands. The current candidate-ON E3 consumer fault matrix is
+also authorized as a bounded source variation; the older OFF64 matrix alone
+does not establish ON80 failure/rollback behavior.
 
 The published integration source union `cad08034e94a383f0e1191949419d9191e89b928`
 (tree `2f021cac225edad622edd6fae514a7a08a00789b`) selectively composes reviewed
@@ -251,7 +283,7 @@ Initial failed sources/receipts remain preserved.
 | E3 no-grad frame | [Accepted frame contract](CPU4_E3_FRAME_CONTRACT.md); six reviewed blobs at `393b5358` integrated as `9a7bfc67`. Fixture repairs through `c9613ef6` integrated as `98875504`; supported native result independently PASS: 22,890 assertions each in two normal/two ASan+UBSan+LSan runs, 21 roles/full 1,024 logits, gradient/owner preservation, atomicity/first-error/resource cases. | Real consumer `4c745a0f` independently PASS in1,280.106s: eight genuine normal/generated-IR-ASan absent/present/repeat runs,217/219checks. Exact1,774-definition ASan rewrite/object proof,17nativeTUs+helper and single F32/I1/D2 owners verified. Candidate-OFF64-byte direct uninstalled scope only; candidate-ON/trainer handoff/package and retention gates remain. Failed mount and precondition fixtures remain preserved. No whole-frame bitwise or unbounded memory claim. |
 | Candidate constructor/retirement | [Accepted contract](CPU4_CANDIDATE_CONTRACT.md); producer/FFI/bounded-helper repairs integrated through `f0df7708`, O2 diagnostic test-only `f94eeb43` as `22707205`. Independent final gate PASS: genuine producer normal/repeat84 via authenticated unchanged-source reuse; fresh native-provider SAN84; native805 normal/repeat/SAN, 34 exact fault exits, F32/P1/O2 repeats and eight feature-off pairs equal. | Typed child/factory compound runtime and checkpoint cleanup. Reviewed child source is tracked below; earlier null-child-only admission does not admit it. Generated Eshkol IR/prebuilt runtime are uninstrumented; provider SAN is not whole-runtime coverage. |
 | Public G2 ownership and aliasing | Reviewed `0a292f416` integrated as `10a1764f9`; actual-union C11/feature-off/host controls PASS. Control-alias `11d3d5b3` passed690 checks; candidate-record successor `0064e886` independently PASS732 normal/repeat/SAN, genuine live/DEAD capability ALIAS plus per-call byte invariance. Capability records are288 bytes; candidate-on I2 parameter controls are separately80 bytes. | Complete installed AOT/runtime/SAN and same-trained-model generation/continuation. Control observer protects known record extents; arbitrary child-payload extent is not inferred. |
-| Canonical binding/P1/D2 | Nine reviewed blobs at `78f39c93` integrated as `02336953`; trusted75-slot checker retained. Independent supported normal2/native-C-SAN2 PASS68 covers14 handle/carrier identities, position[4,4],17 modes, real T4 cursor and release. D2 normalization `f0646f75` is separately validated by full-step. | Lower binding publication guard repair `ac9afc63` integrated as `c960dddc`: install handler before pending publication; cleanup rereads its canonical owner/pending row and preserves the exact error. Independent source3/host23 and existing40/66 checks PASS, including both intended baseline failures. Common211-member pin resolution `fd0db727` independently ACCEPTED. Genuine fe9 handler-OOM/promotion/native-lease retry witness remains NOT RUN. |
+| Canonical binding/P1/D2 | Nine reviewed blobs at `78f39c93` integrated as `02336953`; trusted75-slot checker retained. Independent supported normal2/native-C-SAN2 PASS68 covers14 handle/carrier identities, position[4,4],17 modes, real T4 cursor and release. D2 normalization `f0646f75` is separately validated by full-step. | Lower binding publication guard repair `ac9afc63` integrated as `c960dddc`: install handler before pending publication; cleanup rereads its canonical owner/pending row and preserves the exact error. Independent source3/host23 and existing40/66 checks PASS, including both intended baseline failures. Common211-member pin resolution `fd0db727` independently ACCEPTED. Genuine fe9 normal/repeat handler-OOM/native-lease retry witness independently ACCEPTS: rawcccfaeff/review8bf8dbc3; exact failed attempt retained. Relocation and retained bytes remain unmeasured. |
 | Trainer snapshot/restore controls | Authenticated22-slot record, real WRITE lease and prepared controls-last tail at `fd1691ff`/`1a97ecc1`. Runtime recipe `eecf9396` and canonical bytewise comparison repair `502f0671` integrated through `948b8c31`; six source guards, four recipe checks and thirteen actual byte-helper host checks PASS. [Closed detach](CPU4_TRAINER_DETACH.md) `3580136f` integrated as `13af5c4b`. | Controls supported gate independently PASS104 checks in normal2/native-provider SAN2,259.021s. Detach fixture `be65fb8a` initial67-check result remains partial: reserved named-let `values` removed its preservation-loop backedge. Reviewed test-only `00ae5c50` integrated as `d94e056f`; corrected supported normal2/native-provider SAN2 independently PASS exactly93 checks each in247.599s, including actual loop backedge, all fourteen native value checksums, lifecycle/contention and same-trainer retry. This is not a full value-word/moment oracle or generation adoption. Full C2/I2/O2/D2 transaction remains separate. Original bytevector-pointer constructor failure stays preserved. |
 | Masked training objective and Eshkol schedule | [Objective contract](CPU4_TRAINING_OBJECTIVE.md), twelve reviewed blobs at `bb6ca081` integrated as `4df3500f`. Independent supported result PASS: native2,501 objective checks/full1,192 CE central derivatives and genuine Eshkol114 checks of21F→L2/L3S→25R→atomic fourteen-gradient contribution in normal2/native-provider SAN2,255.108s. | Full-step component is accepted below; learning and same-model resume remain separate. Recorded toolchain is fe9/runner7dd254ba; generated IR is uninstrumented. |
 | Full training step | [Step contract](CPU4_TRAINING_STEP.md); six reviewed new blobs at `a8e24ea7` integrated as `fdbe3a69`, seven host source guards PASS. Own exact frame drains READ microbatches before WRITE/O2 prepare; guard installed before first write; controls-last tail and retryable prewrite abort. Accumulation bounded at2^22. | Initial actual IR/ELF run stopped before O2 update: test helper used the absent-gradient state-snapshot API after expected gradient contribution. Reviewed moment-bit-observer fixture `2574d0fb` integrated as `7b49d17e`; seven host guards PASS. Its genuine retry exposed raw D2 cursor-decode error escape. Reviewed existing-error-adapter repair `f0646f75` integrated as `d9e59b38`; supported gate independently PASS four actual140-check runs in255.088s. Each reaches two real O2 updates on the same canonical C4 and compares all1,192 values/4,768 bytes plus2,384 moment words against ordinary O2, with rollback/EOS and exact cursor errors. Native C sanitizer/arena-poison scope; generated IR uninstrumented. Learning/checkpoint/resume remain separate. |
@@ -262,7 +294,7 @@ Initial failed sources/receipts remain preserved.
 | Candidate-ON common aggregate | [Private composition contract](../native/cpu4_v1_private_contract.md); original public generation root once, genuine T1/T2/C4 authorities and single native owners, candidate-ON80-byte I2 controls. Actual C2/K2 composition `e687388c` integrated as `4d2c05cc`. | First actual FILE30f compiles36 native TUs/archive, then fails Eshkol compilation (T1 selection, absent memq, fixture set!). Reviewed `a7c2fb79` repairs both explicit tokenizer loads, existing identity helper and compiler-supported transparent test bindings. Mode/handoff composition `9b066e64` independently ACCEPTED:211 exact static members and unchanged35-TU production roster. Later lower-binding guard/pin `fd0db727` independently accepted; all211 members match. Corrected exact9b FILE gate now compiles36native TUs/AOT/link with empty diagnostics in182s, passes21 real regional checks, then exits1 at data49 with native optimizer-retirement ownership rejection; custody0, repeat/SAN NOT RUN. Failure audit`d8d392be` authenticates all artifacts. Source cause map identifies stale option provenance after legitimate restore; its exact native branch still needs a focused test before another FILE run. Static inventory is not runtime/package admission. |
 | Same-model generation handoff | Six source-reviewed files `bade6126` integrated as `695e5238`, loaded/pinned by accepted`9b066e64`: closed real-public-G2 authentication, O2 preflight before TRAIN detach, same-model EVAL, fresh generator and fixed ownership-transfer tail. Source7/host105/legacy1,433 plus15 identity/retry probes PASS. | Actual trained/factory→public-G2 normal/SAN gate NOT RUN. Distinct genuine original T1 preserves training T2/D2. E3 must finish/unbind before detach; active READ rejection does not discover every idle E3 frame. |
 | Trained FILE resume and held-out caller | Seven definitions-only files `5af5816e` integrated as `98e2c0bf`: A125 SAVE→A250 versus B FILE restore125→B250, complete value/moment/metadata/cursor equality and fresh B E3 on its same binding;770 checks/375 real step calls. Five-file actual frontend/normal-repeat driver `39ca9b9f` independently source-accepted/integrated as `21128e63`. | Eight-path/three-hash dependency refresh `2abd347b` independently ACCEPTED against immutable9b, retaining both current-byte and immutable-source guards; source6/driver7/checker6/helper64 PASS. Actual frozen train/held-out resource generation is defined and mock-tested; native/AOT/learning/FILE restore/held-out improvement/cleanup remain NOT RUN. No artificial seeding or generation API. |
-| Persisted C4 generation continuation | Source-only maps authenticate existing APIs; proposed history/capture ABI v2 evidence seal`214ec8ab` has explicit early preflights, bounded pending proof, trusted ownership scope and detached lifetime. Root accepts this exact proposed contract after independent E3 delta review`09978127`; source implementation is authorized, runtime is not admitted. | Missing committed history/capture, authenticated typed RNG import, explicit C4 wire profile and atomic no-draw replay/fresh-process continuation. History3→decode4 still needs a genuinely admitted policy/constructor route and exact KV/logit/mask/RNG replay proof. Existing profile1/history≤2 and result-RNG chaining do not discharge this row. |
+| Persisted C4 generation continuation | Source-only maps authenticate existing APIs; proposed history/capture ABI v2 evidence seal`214ec8ab` has explicit early preflights, bounded pending proof, trusted ownership scope and detached lifetime. Root accepts this exact proposed contract after independent E3 delta review`09978127`; source implementation is authorized, runtime is not admitted. | Bounded native history/capture and bitwise no-draw prefix replay independently ACCEPT at93db869d (rawa3dd8f23/review68e0d1d). Authenticated typed RNG/history import, explicit C4 wire profile, cache4 result and fresh-process remaining decode remain missing. Existing profile1/history≤2 and result-RNG chaining do not discharge this row. |
 | Installed G2 proving recipe | Independently reviewed `81704701` integrated as `b8e0d4e0`, preserving prior E3/C2-header changes. Combined source gate: eight unit/Q0 plus four public-source tests PASS. | Actual installed normal/SAN/coexistence NOT RUN. Supported native98a5 held-kind9 diagnostic independently PASS151; it supplies no Eshkol attribution. Old stage45 status134 remains unattributed; reviewed historical E attribution is staged but unqueued behind the CPU4 smoke priority. |
 
 Actual E3 consumer result is `e3/cpu4-consumer-native-b-result-review/REVIEW.md`
