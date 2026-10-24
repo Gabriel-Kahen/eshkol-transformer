@@ -1383,6 +1383,14 @@ Clang 22 host. Independent source/test review accepted the E3 union at
 `9aed9c65`/tree `55377da7`; supported compiled Eshkol normal, poison and
 sanitizer gates remain open; no §9 R1 admission follows.
 
+The isolated stage-8 compiled-gate candidate fixes that existing noninstalled
+tuple to site 5, occurrence 2 on the current `44c0418d` E3 source. Its exact
+manifest recipe builds the real evaluator fault package and checks the first
+error, pre-call state and six seeded outputs, same-frame retry and an
+independent twin for absent and present gradients. Focused source checks pass.
+The supported normal/repeat/sanitizer run and independent result review are
+pending; this one cut leaves the other R1 rows and §9 admission open.
+
 The stage-8 fault candidate and retention post-report teardown now share a
 source-only branch based on the independently reviewed CLI3 `baf0a03f` union.
 The shared E3 lexical fault sequence is applied once; the accepted stage-8 and
