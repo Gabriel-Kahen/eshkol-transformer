@@ -2259,6 +2259,13 @@ P3, fills the real first T1 carriers and Eshkol prefix phase, then uses the
 existing second-frame and terminal publication tail. Focused source checks
 pass. Aggregate compilation, issuer integration and fresh-process continuation
 remain **NOT RUN** for this bridge.
+The separate final-B250 FILE factory witness is source-staged. It prints the
+producer's 14 live final-B parameter planes before SAVE and requires a sealed
+raw 4,768-byte witness. A new process will restore the exact B250 C2 through
+the accepted FILE factory, compare every restored plane to that independent
+producer witness, authenticate T1/D2 and exercise a companion G2 handoff.
+Compiled fresh FILE factory, checked RNG/history and P3→G2 continuation remain
+**NOT RUN**; the context-two G3-R pair reader is a distinct checkpoint lane.
 
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1
