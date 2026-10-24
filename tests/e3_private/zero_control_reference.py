@@ -96,7 +96,7 @@ def create(output: Path) -> dict[str, object]:
                for word in row["logits_f32"]):
             raise AssertionError("independent zero M3 forward did not yield zero logits")
         expected_accuracy = sum(value == 0 for value in
-                                next(row for row in CASES if row[0] == name)[2]) / 5
+                                next(row for row in CASES if row[0] == case["name"])[2]) / 5
         if case["synthetic"]["final"]["metrics_f32"][3] != f32_bits(expected_accuracy):
             raise AssertionError("independent zero M3 tie/correctness outcome changed")
     (output / "reference.json").write_bytes(encode(bundle))

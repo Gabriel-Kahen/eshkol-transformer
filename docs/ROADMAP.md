@@ -1005,6 +1005,15 @@ generator was missing from the exact development-script allowlist. The focused
 Q0 and zero-control source tests pass after its exact path and near-miss checks
 were added; a fresh exact-head hosted run remains pending.
 
+A separate zero-control oracle successor corrects a stale case-name reference
+in the all-correct/all-wrong/mixed accuracy assertion. Pinned Q0 Python
+3.14.6/PyTorch 2.13.0+cpu regenerated all three genuine zero-M3 D1/D2
+cases twice with eight byte-identical files and expected accuracy words
+`3f800000`, `00000000`, and `3f19999a`; 16 focused host contract tests pass.
+This is source/oracle evidence only. The zero-control tuple still needs exact
+compiled inventories, independent review, and normal/poison/sanitizer AOT
+runtime evidence before any N3 tie/uniform claim.
+
 A bounded N3 target-offset source extension adds two generated, checksummed
 three-byte D1 corpora, `(3,197,0)` and `(3,197,7)`. Their packed D2 row has
 the same `[3,197]` inputs and `11` mask and differs only in the second target.

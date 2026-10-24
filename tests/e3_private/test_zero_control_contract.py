@@ -41,6 +41,20 @@ def complete_observation() -> bytes:
 
 
 class ZeroControlContract(unittest.TestCase):
+    def test_independent_zero_forward_distinguishes_all_three_target_classes(self) -> None:
+        from tests.e3_private.zero_control_reference import create
+
+        with tempfile.TemporaryDirectory(prefix="e3-zero-reference-") as temporary:
+            bundle = create(Path(temporary) / "corpus")
+        self.assertEqual([case["name"] for case in bundle["cases"]],
+                         ["all-correct", "all-wrong", "mixed"])
+        self.assertEqual([case["synthetic"]["final"]["metrics_f32"][3]
+                          for case in bundle["cases"]],
+                         ["3f800000", "00000000", "3f19999a"])
+        self.assertTrue(all(word == ZERO for case in bundle["cases"]
+                            for batch in case["synthetic"]["batches"]
+                            for word in batch["logits_f32"]))
+
     def test_new_eshkol_driver_forms_are_balanced(self) -> None:
         for name in ("zero_control_driver.esk", "zero_control_negative_driver.esk"):
             with self.subTest(name=name):
