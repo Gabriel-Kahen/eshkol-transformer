@@ -31,6 +31,20 @@
   (equal? (utf8->string (vector-ref output 6))
           "sha256:eshkol-byte-tokenizer-v1:0000000000000000000000000000000000000000000000000000000000000000"))
 (define pending (make-vector 8 'untouched))
+(define short-destination (make-vector 7 'untouched))
+(reject "short destination"
+  (lambda () (g3r-c2-pair-file-verify-c2-tokenizer-internal!
+               receipt (companion "matched.g3r") short-destination)))
+(check "short destination has no partial writes"
+  (let loop ((at 0))
+    (if (= at 7) #t
+        (and (eq? (vector-ref short-destination at) 'untouched)
+             (loop (+ at 1))))))
+(reject "non-vector destination"
+  (lambda () (g3r-c2-pair-file-verify-c2-tokenizer-internal!
+               receipt (companion "matched.g3r") #f)))
+(check "malformed destination leaves receipt idle"
+  (eq? (vector-ref (g3r-c2-receipt-find receipt) 1) 'live))
 (reject "synthetic fingerprint mismatch"
   (lambda () (g3r-c2-pair-file-verify-c2-tokenizer-internal!
                receipt (companion "valid.g3r") pending)))

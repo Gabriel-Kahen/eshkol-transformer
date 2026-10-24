@@ -5,6 +5,9 @@
   (let ((operation 'checkpoint-load)
         (staged (make-vector 8 #f))
         (borrow-cell (vector #f)))
+    (if (not (and (vector? destination) (= (vector-length destination) 8)))
+        (c2-load-fail 'invalid-argument operation
+                      "expected exact eight-slot G3-R destination" '()))
     (g3r-c2-pair-file-decode-internal! receipt path staged)
     (guard (caught
              (#t

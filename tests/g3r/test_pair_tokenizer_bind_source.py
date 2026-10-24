@@ -18,6 +18,7 @@ class PairTokenizerBindSourceTest(unittest.TestCase):
                          ["g3r-c2-pair-file-verify-c2-tokenizer-internal!",
                           "receipt", "path", "destination"])
         ordered = (
+            "(vector? destination) (= (vector-length destination) 8)",
             "(g3r-c2-pair-file-decode-internal! receipt path staged)",
             "(g3r-c2-receipt-borrow-begin-internal receipt operation)",
             "(g3r-c2-receipt-borrow-c2-internal",
