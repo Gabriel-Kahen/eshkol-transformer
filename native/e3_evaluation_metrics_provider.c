@@ -8,6 +8,9 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#if defined(ET_E3_NUMERICAL_CAPACITY_DENOMINATOR) && !defined(ET_E3_NUMERICAL_TESTING)
+#error "capacity-denominator mutation requires the private numerical test tuple"
+#endif
 #if !defined(__x86_64__)
 #error "E3 metrics v1 requires the reviewed x86-64 binary32 lane"
 #endif
@@ -220,7 +223,13 @@ static int32_t evaluate_correct(const et_kernel_call_v1 *c, union results *resul
   correct = correct + p0;
   correct = correct + p1;
   result->correct.correct = correct;
+#ifdef ET_E3_NUMERICAL_CAPACITY_DENOMINATOR
+  /* Match the mutant L3S weight while retaining the real masked hit count. */
+  result->correct.active = mask[0] == 1u && mask[1] == 0u ? 2 :
+      (int64_t)mask[0] + (int64_t)mask[1];
+#else
   result->correct.active = (int64_t)mask[0] + (int64_t)mask[1];
+#endif
   return 0;
 }
 static int32_t evaluate_accumulate(const et_kernel_call_v1 *c, union results *result,

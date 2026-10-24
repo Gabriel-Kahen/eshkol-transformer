@@ -7,6 +7,9 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#if defined(ET_E3_NUMERICAL_CAPACITY_DENOMINATOR) && !defined(ET_E3_NUMERICAL_TESTING)
+#error "capacity-denominator mutation requires the private numerical test tuple"
+#endif
 #if !defined(__x86_64__)
 #error "L3S v1 requires the reviewed x86-64 binary32 lane"
 #endif
@@ -157,10 +160,16 @@ static int evaluate(const et_kernel_call_v1 *c, enum operation op, float result[
     if (!isfinite(n)) return 0;
     n = n + p1;
     if (!isfinite(n)) return 0;
-    const float mean = n / w;
+    float reported_w = w;
+#ifdef ET_E3_NUMERICAL_CAPACITY_DENOMINATOR
+    /* Mutant: use the physical width for the authentic final 10 row. */
+    if (op == REDUCE_BOOL && m[0] == 1.0f && m[1] == 0.0f)
+      reported_w = 2.0f;
+#endif
+    const float mean = n / reported_w;
     if (!isfinite(mean)) return 0;
     result[0] = positive_zero(n);
-    result[1] = w;
+    result[1] = reported_w;
     result[2] = positive_zero(mean);
   } else {
     for (size_t i = 0; i < 2; ++i) {

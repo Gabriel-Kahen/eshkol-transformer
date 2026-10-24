@@ -1160,6 +1160,13 @@ The 7eeaa03 current-main M2 union added the padded-position test selector to
 composition failed only the M3CG predecessor checksum. This bounded successor
 repins that one script hash; independent review and fresh hosted exact-head
 validation remain required before integration.
+The distinct [M2 physical-capacity denominator source candidate](e3/E3_CAPACITY_DENOMINATOR_MUTANT_SOURCE.md)
+on exact T2 `44c0418` retains the genuine final `10` D2 mask, M3 roles,
+L2 CE and masked numerator/correct count, but reports physical weight and
+active count 2. Three new source/host tests and the affected numerical tuple
+tests pass (17 total). The noninstalled private AOT gate and independent
+source/result reviews are **NOT RUN**; no compiled kill is claimed yet.
+This does not supersede the separately accepted padded-position receipt.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each
