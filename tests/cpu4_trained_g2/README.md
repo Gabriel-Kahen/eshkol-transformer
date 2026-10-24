@@ -17,8 +17,12 @@ caller; independent AST projection permits exactly the rooted generation ledger,
 pre-cleanup G2 phase, phase-aware failure custody and post-cleanup checks.
 Mutation controls reject changed step ranges, equality criteria, cleanup and seam.
 
-Both closed modes execute the identical complete A1–250/SAVE A125/FILE B125/
-B126–250/fresh B E3 chain (375 actual optimizer calls). Each process hands the
+All three closed modes execute the identical complete A1–250/SAVE A125/FILE B125/
+B126–250/fresh B E3 chain (375 actual optimizer calls). Before handoff, each
+process saves a separate final B250 C2 image and loads it through the accepted
+reader/K2 path. All fourteen decoded parameter planes must match the final B
+snapshot bitwise. The existing B125 image remains the training resume input;
+the B250 image is the generation model identity. Each process then hands the
 same final B model to one genuine factory handoff and one public generator.
 Generation uses distinct real T1 encoding raw `(3,197)` while retaining T2 and
 all three caller D2 shells. Frozen greedy request: diagnostic-c4-p2g2,
@@ -36,7 +40,8 @@ new production API, model substitution, numerical path or destructor.
 
 `check_output.py` requires exactly eleven ordered LF records. It feeds the
 original seven-record projection to the unchanged strict resume/learning checker
-and freezes 19 additional checks in both modes. Native owner/count assertions
+and freezes 21 additional checks in all three modes, including the two B250
+source and decoded-plane assertions. Native owner/count assertions
 use only the existing child observer read API. The overlay adds that observer
 and ET_F32_TENSOR_TESTING on the sole inherited F32 owner/observer to the existing
 O2_TESTING/heldout observer: 37 unique TUs. No failpoint is called.
@@ -58,10 +63,13 @@ boundaries. Complete sizeof and owner/byte census, one-pass retention acceptance
 learning, native execution and admission are **NOT RUN**.
 
 The driver builds once and schedules normal+repeat for each mode (six processes),
-checks exact output/checkpoint parity per mode and saved checkpoint parity across
-modes. Every C2 file must hash to the accepted 25,504-byte trained checkpoint
+checks exact output/B125/B250 parity per mode and both checkpoint identities
+across modes. Every B125 C2 file must hash to the accepted 25,504-byte training checkpoint
 `499008516bce12c9ca07de19e97cee99ec373b0070cf13b34d035296889692cc`;
-every successor RNG must be `(1,41,0,0)`. The EOS41 mode exercises a second-token
+every B250 C2 file must be 25,504 bytes, differ from B125, and have one
+identical SHA-256 across all six processes. The first compiled receipt will
+establish and seal its exact SHA-256; that value is not yet measured. Every
+successor RNG must be `(1,41,0,0)`. The EOS41 mode exercises a second-token
 terminal after the same B training path. Its resources match the unchanged plain
 driver byte-for-byte. The EOS41 compiled normal/repeat and sanitizer gates are
 pending; the prior two-mode functional receipt does not admit this added mode.

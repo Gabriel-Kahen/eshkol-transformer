@@ -1,5 +1,5 @@
 ;;; Closed fixture core; AST projection must equal the unchanged plain caller.
-(define (cpu4-trained-g2-core! resolved tokenizer train-a train-b heldout path policy report mode)
+(define (cpu4-trained-g2-core! resolved tokenizer train-a train-b heldout path b250-path policy report mode)
   (cpu4-trained-g2-mode mode)
   (if (not (eq? (vector-ref cpu4-resume-session 0) 'new))
       (cpu4-binding-fail 'invalid-state 'cpu4-heldout-resume "caller cannot repeat"))
@@ -84,6 +84,8 @@
                       (begin (display " ") (display (vector-ref post-b index))
                              (emit-resume-metrics (+ index 1)))))
                 (newline)
+                (cpu4-trained-g2-save-b250!
+                  b final-b b250-path policy report (vector-ref ledger 2))
                 (cpu4-trained-g2-generate! resolved tokenizer train-a train-b heldout factory b-record final-b generation)
                 (cpu4-resume-cleanup! ledger)
                 (cpu4-resume-check "375 actual steps and all caller-owned native factories drained"

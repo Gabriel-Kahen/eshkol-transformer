@@ -51,6 +51,51 @@
     (let compare-modes ((index 0))
       (or (= index 17) (and (eq? (vector-ref modes index) expected)
                             (compare-modes (+ index 1)))))))
+;;; SAVE the final B250 generation model as its own C2 image. The loaded image
+;;; is independently decoded and compared before the irreversible G2 handoff.
+;;; recovery=[stage,loaded-image]; the caller's image-cell owns the snapshot.
+(define (cpu4-trained-g2-b250-loaded-release! recovery)
+  (if (vector-ref recovery 1)
+      (begin
+        (c2-training-state-release-internal!
+          (vector-ref recovery 1) 'trainer-state-release!)
+        (vector-set! recovery 1 #f)))
+  (if (vector-ref recovery 0)
+      (begin
+        (c2-checkpoint-load-staging-release-internal! (vector-ref recovery 0))
+        (vector-set! recovery 0 #f)))
+  #t)
+(define (cpu4-trained-g2-save-b250! trainer final-b path policy report image-cell)
+  (let ((recovery (vector #f #f)))
+    (guard (caught
+             (#t (guard (cleanup-error (#t (cpu4-binding-fail-stop 70)))
+                   (cpu4-trained-g2-b250-loaded-release! recovery))
+                 (raise caught)))
+      (cpu4-trainer-snapshot-internal trainer image-cell)
+      (let ((snapshot (cpu4-resume-capture (vector-ref image-cell 0))))
+        (cpu4-trained-g2-check "B250 SAVE source is exact final-B fourteen planes"
+          (and (= (cpu4-resume-plane-size (vector-ref snapshot 0) 14) 4768)
+               (cpu4-resume-values=? (vector-ref final-b 0)
+                                     (vector-ref snapshot 0))))
+        (c2-public-checkpoint-save!
+          (vector-ref image-cell 0) path policy '(:overwrite? #f))
+        (c2-training-state-release-internal!
+          (vector-ref image-cell 0) 'trainer-state-release!)
+        (vector-set! image-cell 0 #f)
+        (vector-set! recovery 0 (c2-checkpoint-load-stage-internal path policy))
+        (c2-public-capability-admit-all report
+          (c2-checkpoint-load-capability-descriptors-internal
+            (vector-ref recovery 0) 'checkpoint-load))
+        (vector-set! recovery 1
+          (c2-checkpoint-load-reconstruct-internal
+            (vector-ref recovery 0) 'checkpoint-load))
+        (let ((decoded (cpu4-resume-capture (vector-ref recovery 1))))
+          (cpu4-trained-g2-check "B250 C2 decoded fourteen planes match final B bitwise"
+            (and (= (cpu4-resume-plane-size (vector-ref decoded 0) 14) 4768)
+                 (cpu4-resume-values=? (vector-ref final-b 0)
+                                       (vector-ref decoded 0)))))
+        (cpu4-trained-g2-b250-loaded-release! recovery)
+        #t))))
 ;;; Before the transfer starts, original cleanup is safe. Once attempted, retain
 ;;; the complete rooted pending/adopted graph and exact ticket for fatal exit.
 ;;; No forced busy-child retirement, rollback, implicit retry or second creator.

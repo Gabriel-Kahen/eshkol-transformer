@@ -14,6 +14,7 @@ from .check_output import check, MODES
 from .test_checker import records,text
 
 MOCK_C2 = b'C2' * 12752
+MOCK_B250 = b'B2' * 12752
 
 
 class Driver(unittest.TestCase):
@@ -61,7 +62,8 @@ class Driver(unittest.TestCase):
                     data,_=load_d1_resource(b/'resources'/label,expected_fingerprint=driver.FINGERPRINT,expected_vocab=256)
                     self.assertEqual(data,(expected,))
 
-    def mocked_gate(self,out,fail_run=None,repeat_mismatch=False,checkpoint_mismatch=False,custody_failure=False):
+    def mocked_gate(self,out,fail_run=None,repeat_mismatch=False,checkpoint_mismatch=False,
+                    b250_mismatch=False,b250_alias=False,custody_failure=False):
         commands=[];runs=[]
         def run(argv,**kwargs):
             commands.append(argv);stdout=kwargs['stdout']
@@ -76,17 +78,20 @@ class Driver(unittest.TestCase):
             elif '-o' in argv:Path(argv[argv.index('-o')+1]).write_bytes(b'ELF')
             elif argv[:2]==['ar','rcsD']:Path(argv[2]).write_bytes(b'archive')
             elif '900s' in argv:
-                mode=argv[-1];checkpoint=Path(argv[-2]);runs.append((mode,checkpoint.name))
+                mode=argv[-1];checkpoint=Path(argv[-3]);final_b250=Path(argv[-2]);runs.append((mode,checkpoint.name,final_b250.name))
                 if len(runs)==fail_run:return subprocess.CompletedProcess(argv,37)
                 data=text(records(mode)).encode()
                 if repeat_mismatch and checkpoint.name=='two-token.saved2.c2':data=data.replace(b'RNG 1 41',b'RNG 1 42')
                 stdout.write(data);checkpoint.write_bytes(MOCK_C2+(b'x' if checkpoint_mismatch and checkpoint.name=='first-eos.saved1.c2' else b''))
+                final_b250.write_bytes(
+                    MOCK_C2 if b250_alias else
+                    MOCK_B250+(b'x' if b250_mismatch and final_b250.name=='first-eos.final-b250.1.c2' else b''))
             elif argv[0]==driver.sys.executable:
                 check(Path(argv[-2]).read_text(),argv[-1]);stdout.write(b'CHECK-PASS\n')
             elif argv[0]=='cmp' and Path(argv[1]).read_bytes()!=Path(argv[2]).read_bytes():
                 return subprocess.CompletedProcess(argv,1)
             return subprocess.CompletedProcess(argv,0)
-        with patch.object(driver,'preflight',return_value=[{'source':'native/o2_optimizer.c','defines':[]}]),patch.object(driver,'EXPECTED_CHECKPOINT_SHA256',hashlib.sha256(MOCK_C2).hexdigest()),patch.object(driver.subprocess,'run',side_effect=run):
+        with patch.object(driver,'preflight',return_value=[{'source':'native/o2_optimizer.c','defines':[]}]),patch.object(driver,'EXPECTED_B125_SHA256',hashlib.sha256(MOCK_C2).hexdigest()),patch.object(driver.subprocess,'run',side_effect=run):
             if custody_failure:
                 with patch.object(driver,'inventory_depfiles',side_effect=ValueError('custody')):
                     status=driver.gate(out,Path('/runner'),Path('/cc'),Path('/cxx'),Path('/compiler'))
@@ -97,18 +102,21 @@ class Driver(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             out=Path(tmp)/'fresh';status,commands,runs=self.mocked_gate(out)
             self.assertEqual(status,0)
-            self.assertEqual(runs,[(m,f'{m}.saved{r}.c2') for m in MODES for r in (1,2)])
+            self.assertEqual(runs,[(m,f'{m}.saved{r}.c2',f'{m}.final-b250.{r}.c2') for m in MODES for r in (1,2)])
             self.assertEqual(sum(a[0]==driver.sys.executable for a in commands),6)
-            self.assertEqual(sum(a[0]=='cmp' for a in commands),8)
+            self.assertEqual(sum(a[0]=='cmp' for a in commands),13)
             for row in (out/'SHA256SUMS').read_text().splitlines():
                 digest,path=row.split('  ');self.assertEqual(hashlib.sha256((out/path).read_bytes()).hexdigest(),digest)
             self.assertEqual((out/'driver-custody.exit').read_text(),'0\n')
 
     def test_failure_stops_first_and_preserves_exit_custody_and_mode_parity(self):
-        for failure,expected in [('run',37),('custody',74),('repeat',1),('checkpoint',1)]:
+        for failure,expected in [('run',37),('custody',74),('repeat',1),('checkpoint',1),
+                                 ('b250',1),('alias',1)]:
             with self.subTest(failure=failure),tempfile.TemporaryDirectory() as tmp:
                 status,commands,runs=self.mocked_gate(Path(tmp)/'fresh',fail_run=1 if failure in ('run','custody') else None,
-                    custody_failure=failure=='custody',repeat_mismatch=failure=='repeat',checkpoint_mismatch=failure=='checkpoint')
+                    custody_failure=failure=='custody',repeat_mismatch=failure=='repeat',
+                    checkpoint_mismatch=failure=='checkpoint',b250_mismatch=failure=='b250',
+                    b250_alias=failure=='alias')
                 self.assertEqual(status,expected)
                 if failure in ('run','custody'):self.assertEqual(len(runs),1)
 

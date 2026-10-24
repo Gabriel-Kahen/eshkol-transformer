@@ -21,7 +21,7 @@ OBSERVERS = [{'source': 'tests/cpu4_heldout/inspect.c', 'defines': ['ET_O2_TESTI
              {'source': 'tests/cpu4_candidate_children/native_observer.c',
               'defines': ['ET_O2_TESTING', 'ET_F32_TENSOR_TESTING']}]
 MODES = ('two-token', 'first-eos', 'second-eos')
-EXPECTED_CHECKPOINT_SHA256 = '499008516bce12c9ca07de19e97cee99ec373b0070cf13b34d035296889692cc'
+EXPECTED_B125_SHA256 = '499008516bce12c9ca07de19e97cee99ec373b0070cf13b34d035296889692cc'
 # Mandatory root composition dependency; this isolated fd0 leaf is not executable.
 REQUIRED_REPAIR = {
     'native/o2_optimizer.c': 'bc83b46a3a0b0c96dea06d81abed28baaf0655f5781b1a09635f77b41dee7f47',
@@ -196,25 +196,41 @@ def gate(out, runner, cc, cxx, compiler_source):
         run('elf.notes', ['readelf', '-n', executable])
         run('elf.symbols', ['nm', '-a', '--format=posix', executable])
         run('elf.imports', ['nm', '-u', '--format=posix', executable])
+        b250_digest = None
         for mode in MODES:
             for repeat in (1, 2):
                 environment['ESHKOL_ARENA_POISON'] = '1'
                 label = f'{mode}.run{repeat}'
                 checkpoint = out / f'{mode}.saved{repeat}.c2'
+                final_b250 = out / f'{mode}.final-b250.{repeat}.c2'
                 run(label, ['timeout', '--foreground', '--signal=TERM', '--kill-after=5s', '900s',
-                            executable, train, heldout, checkpoint, mode], environment)
+                            executable, train, heldout, checkpoint, final_b250, mode], environment)
                 require(not (out / (label + '.stderr')).read_bytes(), 'runtime diagnostics')
-                require(checkpoint.stat().st_size == 25504, 'trained checkpoint size changed')
-                require(hashlib.sha256(checkpoint.read_bytes()).hexdigest() == EXPECTED_CHECKPOINT_SHA256,
-                        'trained checkpoint identity changed')
+                require(checkpoint.stat().st_size == 25504, 'B125 checkpoint size changed')
+                require(hashlib.sha256(checkpoint.read_bytes()).hexdigest() == EXPECTED_B125_SHA256,
+                        'B125 checkpoint identity changed')
+                require(final_b250.stat().st_size == 25504, 'B250 checkpoint size changed')
+                observed_b250 = hashlib.sha256(final_b250.read_bytes()).hexdigest()
+                require(observed_b250 != EXPECTED_B125_SHA256, 'B250 must differ from B125')
+                if b250_digest is None:
+                    b250_digest = observed_b250
+                    (out / 'final-b250.sha256').write_text(
+                        b250_digest + '  ' + final_b250.name + '\n')
+                require(observed_b250 == b250_digest, 'B250 checkpoint identity changed')
                 check_label = f'{mode}.check{repeat}'
                 run(check_label, [sys.executable, ROOT / 'tests/cpu4_trained_g2/check_output.py',
                                  out / (label + '.stdout'), mode], environment)
                 require(not (out / (check_label + '.stderr')).read_bytes(), 'checker diagnostics')
             run(mode + '.repeat.stdout', ['cmp', out / f'{mode}.run1.stdout', out / f'{mode}.run2.stdout'])
             run(mode + '.repeat.checkpoint', ['cmp', out / f'{mode}.saved1.c2', out / f'{mode}.saved2.c2'])
+            run(mode + '.repeat.final-b250', ['cmp', out / f'{mode}.final-b250.1.c2',
+                                               out / f'{mode}.final-b250.2.c2'])
         run('modes.checkpoint', ['cmp', out / 'two-token.saved1.c2', out / 'first-eos.saved1.c2'])
         run('second-eos.checkpoint', ['cmp', out / 'two-token.saved1.c2', out / 'second-eos.saved1.c2'])
+        run('modes.final-b250', ['cmp', out / 'two-token.final-b250.1.c2',
+                                  out / 'first-eos.final-b250.1.c2'])
+        run('second-eos.final-b250', ['cmp', out / 'two-token.final-b250.1.c2',
+                                      out / 'second-eos.final-b250.1.c2'])
         program_status = 0
     except subprocess.CalledProcessError as error:
         program_status = error.returncode

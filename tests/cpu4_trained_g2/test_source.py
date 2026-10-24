@@ -14,6 +14,8 @@ HERE = ROOT / 'tests/cpu4_trained_g2'
 GENERATE = ['cpu4-trained-g2-generate!', 'resolved', 'tokenizer', 'train-a', 'train-b',
             'heldout', 'factory', 'b-record', 'final-b', 'generation']
 FINISH = ['cpu4-trained-g2-finish!', 'generation', 'tokenizer', 'train-a', 'train-b', 'heldout', 'final-b']
+SAVE_B250 = ['cpu4-trained-g2-save-b250!', 'b', 'final-b', 'b250-path',
+             'policy', 'report', ['vector-ref', 'ledger', '2']]
 
 
 def functions(path):
@@ -24,10 +26,10 @@ def project(core):
     """Whitelist exact syntactic insertions, including their sibling seam."""
     form = copy.deepcopy(core)
     expected = ['cpu4-trained-g2-core!', 'resolved', 'tokenizer', 'train-a', 'train-b',
-                'heldout', 'path', 'policy', 'report', 'mode']
+                'heldout', 'path', 'b250-path', 'policy', 'report', 'mode']
     if form[1] != expected or form[2] != ['cpu4-trained-g2-mode', 'mode']:
         raise ValueError('wrong closed core entry')
-    form[1] = ['cpu4-heldout-resume-runtime!'] + expected[1:-1]
+    form[1] = ['cpu4-heldout-resume-runtime!'] + expected[1:7] + expected[8:-1]
     del form[2]
     let = form[3]
     if let[0] != 'let' or let[1][-1] != ['generation', ['cpu4-trained-g2-ledger', 'mode']]:
@@ -36,7 +38,7 @@ def project(core):
     if let[2] != ['vector-set!', 'cpu4-trained-g2-session', '0', 'generation']:
         raise ValueError('generation ledger not rooted before original body')
     del let[2]
-    seen = {'failure': 0, 'generation': 0, 'finish': 0}
+    seen = {'failure': 0, 'save-b250': 0, 'generation': 0, 'finish': 0}
     def transform(node):
         if not isinstance(node, list):
             return node
@@ -45,8 +47,12 @@ def project(core):
             return ['cpu4-resume-cleanup!', 'ledger']
         result = []
         for index, child in enumerate(node):
-            if child == GENERATE:
-                if node[index-1] != ['newline'] or node[index+1] != ['cpu4-resume-cleanup!', 'ledger']:
+            if child == SAVE_B250:
+                if node[index-1] != ['newline'] or node[index+1] != GENERATE:
+                    raise ValueError('B250 SAVE must follow equality evidence and precede G2')
+                seen['save-b250'] += 1
+            elif child == GENERATE:
+                if node[index-1] != SAVE_B250 or node[index+1] != ['cpu4-resume-cleanup!', 'ledger']:
                     raise ValueError('G2 must follow complete record emission and precede original cleanup')
                 seen['generation'] += 1
             elif child == FINISH:
@@ -57,7 +63,7 @@ def project(core):
                 result.append(transform(child))
         return result
     form = transform(form)
-    if seen != {'failure': 1, 'generation': 1, 'finish': 1}:
+    if seen != {'failure': 1, 'save-b250': 1, 'generation': 1, 'finish': 1}:
         raise ValueError('missing/duplicate allowed core insertion')
     return form
 
@@ -95,6 +101,9 @@ class Source(unittest.TestCase):
         parent=next(n for n in walk(bad) if GENERATE in n)
         index=parent.index(GENERATE);parent[index],parent[index+1]=parent[index+1],parent[index]
         mutations.append(bad)
+        bad=copy.deepcopy(self.core)
+        parent=next(n for n in walk(bad) if SAVE_B250 in n)
+        parent.remove(SAVE_B250);mutations.append(bad)
         for bad in mutations:
             with self.assertRaises(ValueError):verify(bad,self.original)
 
@@ -106,7 +115,7 @@ class Source(unittest.TestCase):
         for name in ('cpu4-checkpoint-factory-generator-handoff-internal!','g3g-public-generator-generate',
                      't1-wave1-tokenizer-byte','t1-wave1-tokenizer-encode','g3c4-public-generation-input-create'):
             self.assertEqual(len(calls(gen,name)),1,name)
-        self.assertEqual(sum(len(calls(f,'cpu4-trained-g2-check')) for f in self.generation.values()),19)
+        self.assertEqual(sum(len(calls(f,'cpu4-trained-g2-check')) for f in self.generation.values()),21)
         for forbidden in ('fail-after','failpoint','rng-config','model-create-seeded','handoff-retry-internal!',
                           'candidate-adopt','native-capture','restore-internal!'):
             self.assertNotIn(forbidden,(HERE/'generation.esk').read_text())
@@ -137,12 +146,13 @@ class Source(unittest.TestCase):
         self.assertEqual(branches[4][0],'else')
         runtime[2][3][1].pop()
         bound=runtime[2][2][1][1][1]
-        self.assertEqual(bound,['i2-bounded-list-length','arguments','6'])
+        self.assertEqual(bound,['i2-bounded-list-length','arguments','7'])
         bound[2]='5';runtime[2][2][1][1][2]='4'
         runtime[2][2][2][3]='expected train-directory heldout-directory checkpoint-output'
         call=runtime[2][3][2]
         self.assertEqual(call[0],'cpu4-trained-g2-core!');self.assertEqual(call[-1],'mode')
-        call[0]='cpu4-heldout-resume-runtime!';call.pop()
+        self.assertEqual(call[7],['car',['cdr',['cdr',['cdr',['cdr','arguments']]]]])
+        call[0]='cpu4-heldout-resume-runtime!';call.pop();call.pop(7)
         self.assertEqual(runtime,old)
         self.assertEqual(new[7],original[5])  # actual error guard and D2 close remain unchanged
 

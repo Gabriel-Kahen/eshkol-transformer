@@ -7,7 +7,7 @@ sys.path.insert(0, str(ROOT))
 from tests.cpu4_resume.check_resume import check as check_resume, integers
 
 MODES = ('two-token', 'first-eos', 'second-eos')
-EXPECTED_CHECKS = 19
+EXPECTED_CHECKS = 21
 HANDOFF = '14 4768 1 28 28'
 RESULT = {'two-token': '255 2 4 3 41 3 41', 'first-eos': '3 1 3 3 3',
           'second-eos': '41 2 4 3 41 3 41'}

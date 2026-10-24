@@ -2211,6 +2211,16 @@ sanitizer and fresh-process continuation are not yet admitted. The CPU4
 capture record has no typed C4 import, checked wire profile or fresh-process
 no-draw replay transaction, so this fixture alone cannot close G3-R.
 
+The B250 SAVE continuation prerequisite is staged separately on the same
+trained-CPU4 lineage. Before G2 handoff, it saves the final resumed B250 model
+to a distinct C2 file, loads that file through the existing checked reader and
+K2 capability path, and compares all fourteen decoded parameter planes bitwise
+with the final B snapshot. The six-process driver keeps the original B125
+25,504-byte/SHA pin and requires a distinct 25,504-byte B250 image with one
+identical SHA across all modes and repeats. Focused source/host checks pass;
+compiled B250 SAVE, its exact SHA, fresh-process P3 replay, trained sanitizer
+and full continuation remain **NOT RUN** on this staged change.
+
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1
 commit to one generated G1. Its host synthetic state witness and causal source
