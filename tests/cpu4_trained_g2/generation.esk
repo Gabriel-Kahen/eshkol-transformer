@@ -82,13 +82,35 @@
         (c2-training-state-release-internal!
           (vector-ref image-cell 0) 'trainer-state-release!)
         (vector-set! image-cell 0 #f)
-        (vector-set! recovery 0 (c2-checkpoint-load-stage-internal path policy))
-        (c2-public-capability-admit-all report
-          (c2-checkpoint-load-capability-descriptors-internal
-            (vector-ref recovery 0) 'checkpoint-load))
-        (vector-set! recovery 1
-          (c2-checkpoint-load-reconstruct-internal
-            (vector-ref recovery 0) 'checkpoint-load))
+        (let ((stage #f))
+          ;; The returned stage remains in a lexical root until cell enrollment.
+          (guard (caught
+                   (#t (if (and stage (not (eq? (vector-ref recovery 0) stage)))
+                           (guard (cleanup-error (#t (cpu4-binding-fail-stop 70)))
+                             (c2-checkpoint-load-staging-release-internal! stage)))
+                       (raise caught)))
+            (set! stage (c2-checkpoint-load-stage-internal path policy))
+            (let ((descriptors
+                    (c2-checkpoint-load-capability-descriptors-internal
+                      stage 'checkpoint-load)))
+              (vector-set! recovery 0 stage)
+              (c2-public-capability-admit-all report descriptors))))
+        (let ((owner #f))
+          ;; Reconstruction consumes stage. A failed return-to-cell promotion
+          ;; releases the lexical C2 owner directly, then the outer guard
+          ;; retires the stage and rethrows the original failure.
+          (guard (caught
+                   (#t (if (and owner (not (eq? (vector-ref recovery 1) owner)))
+                           (guard (cleanup-error (#t (cpu4-binding-fail-stop 70)))
+                             (c2-training-state-release-internal!
+                               owner 'trainer-state-release!)))
+                       (raise caught)))
+            (set! owner (c2-checkpoint-load-reconstruct-internal
+                          (vector-ref recovery 0) 'checkpoint-load))
+            (if (not (c2-load-exact-live-owner? owner))
+                (cpu4-binding-fail 'invalid-state 'cpu4-trained-g2
+                  "B250 C2 reader returned no exact live owner"))
+            (vector-set! recovery 1 owner)))
         (let ((decoded (cpu4-resume-capture (vector-ref recovery 1))))
           (cpu4-trained-g2-check "B250 C2 decoded fourteen planes match final B bitwise"
             (and (= (cpu4-resume-plane-size (vector-ref decoded 0) 14) 4768)

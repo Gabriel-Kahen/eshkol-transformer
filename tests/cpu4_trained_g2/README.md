@@ -71,8 +71,9 @@ identical SHA-256 across all six processes. The first compiled receipt will
 establish and seal its exact SHA-256; that value is not yet measured. Every
 successor RNG must be `(1,41,0,0)`. The EOS41 mode exercises a second-token
 terminal after the same B training path. Its resources match the unchanged plain
-driver byte-for-byte. The EOS41 compiled normal/repeat and sanitizer gates are
-pending; the prior two-mode functional receipt does not admit this added mode.
+driver byte-for-byte. The immutable `ee90307a` EOS41 compiled normal/repeat
+gate passed six actual trained processes and independent receipt review;
+trained sanitizer remains pending.
 `DEPENDENCIES.sha256` freezes this isolated fixture/support source. **Execution
 requires the immutable composed source baseline above, including the actual accepted O2 repair**:
 `b0af97d10a96fc62ef414a26953582f5c79ad642` / tree

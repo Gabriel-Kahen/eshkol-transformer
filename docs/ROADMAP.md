@@ -2206,8 +2206,10 @@ terminal mode beside the previously accepted EOS255/two-token and EOS3/first-EOS
 modes. It requires the same 25,504-byte C2 checkpoint SHA-256
 `499008516bce12c9ca07de19e97cee99ec373b0070cf13b34d035296889692cc`
 and exact successor RNG `(1,41,0,0)` for all modes. Focused source, checker,
-driver and Guile host checks pass; EOS41 compiled normal/repeat, trained
-sanitizer and fresh-process continuation are not yet admitted. The CPU4
+driver and Guile host checks pass. The immutable `ee90307a` EOS41 compiled
+normal/repeat receipt passed all six actual trained processes and independent
+review, with the same B125 C2 SHA and successor RNG. Trained sanitizer and
+fresh-process continuation are not yet admitted. The CPU4
 capture record has no typed C4 import, checked wire profile or fresh-process
 no-draw replay transaction, so this fixture alone cannot close G3-R.
 
