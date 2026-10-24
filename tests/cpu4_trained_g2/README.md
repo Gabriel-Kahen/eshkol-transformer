@@ -28,6 +28,7 @@ temperature/top-p bits1065353216, top-k256, max2, seed41. No probe generator:
 | --- | --- | --- | --- | --- |
 | `two-token` | 255 | `(3,41)` | 2 | 4 |
 | `first-eos` | 3 | `(3)` | 1 | 3 |
+| `second-eos` | 41 | `(3,41)` | 2 | 4 |
 
 These are unmeasured acceptance expectations, frozen before execution. They
 cannot be tuned after a run. This caller has no history/capture dependency, callback,
@@ -56,9 +57,14 @@ unmeasured. Explicit public releases and process-exit reclamation are different
 boundaries. Complete sizeof and owner/byte census, one-pass retention acceptance,
 learning, native execution and admission are **NOT RUN**.
 
-The driver builds once and schedules normal+repeat for each mode (four future
-processes), checks exact output/checkpoint parity per mode and saved checkpoint
-parity across modes. Its resources match the unchanged plain driver byte-for-byte.
+The driver builds once and schedules normal+repeat for each mode (six processes),
+checks exact output/checkpoint parity per mode and saved checkpoint parity across
+modes. Every C2 file must hash to the accepted 25,504-byte trained checkpoint
+`499008516bce12c9ca07de19e97cee99ec373b0070cf13b34d035296889692cc`;
+every successor RNG must be `(1,41,0,0)`. The EOS41 mode exercises a second-token
+terminal after the same B training path. Its resources match the unchanged plain
+driver byte-for-byte. The EOS41 compiled normal/repeat and sanitizer gates are
+pending; the prior two-mode functional receipt does not admit this added mode.
 `DEPENDENCIES.sha256` freezes this isolated fixture/support source. **Execution
 requires the immutable composed source baseline above, including the actual accepted O2 repair**:
 `b0af97d10a96fc62ef414a26953582f5c79ad642` / tree

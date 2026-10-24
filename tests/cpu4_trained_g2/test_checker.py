@@ -15,7 +15,7 @@ def text(lines):return '\n'.join(lines)+'\n'
 
 
 class Checker(unittest.TestCase):
-    def test_both_frozen_modes(self):
+    def test_all_frozen_modes(self):
         for mode in MODES:check(text(records(mode)),mode)
 
     def test_every_record_and_numeric_generation_field_rejects_mutation(self):
@@ -34,11 +34,12 @@ class Checker(unittest.TestCase):
             base=records(mode)
             cases=[base+[base[0]],base[1:],list(reversed(base)),[line.replace('census=NOT-RUN','census=PASS') for line in base],
                    [line.replace('partial-bytes=13424','total-bytes=13424') for line in base],
-                   [line.replace('CPU4-TRAINED-G2-RNG 1','CPU4-TRAINED-G2-RNG 0') for line in base]]
+                   [line.replace('CPU4-TRAINED-G2-RNG 1','CPU4-TRAINED-G2-RNG 0') for line in base],
+                   [line.replace('CPU4-TRAINED-G2-RNG 1 41 0 0','CPU4-TRAINED-G2-RNG 1 42 0 0') for line in base]]
             for bad in cases:
                 with self.assertRaises(ValueError):check(text(bad),mode)
             with self.assertRaises(ValueError):check(text(base),'unknown')
-            with self.assertRaises(ValueError):check(text(base),MODES[1-MODES.index(mode)])
+            with self.assertRaises(ValueError):check(text(base),MODES[(1+MODES.index(mode)) % len(MODES)])
             with self.assertRaises(ValueError):check(text(base).rstrip('\n'),mode)
             bad=base[:];bad[2]=bad[2].replace('1056964608','1084227584');bad[5]=bad[5].replace('1056964608','1084227584')
             with self.assertRaises(ValueError):check(text(bad),mode)

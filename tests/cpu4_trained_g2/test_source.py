@@ -9,7 +9,7 @@ import unittest
 from tests.cpu4_trainer_control.test_source_contract import parse, walk
 
 ROOT = Path(__file__).resolve().parents[2]
-PIN = 'b8b717b94a3ca59d0f279b909e5b3c2f80bfcffa'
+PIN = '51d5cc9c1dbd8058d972f367ef677f9a61209c71'
 HERE = ROOT / 'tests/cpu4_trained_g2'
 GENERATE = ['cpu4-trained-g2-generate!', 'resolved', 'tokenizer', 'train-a', 'train-b',
             'heldout', 'factory', 'b-record', 'final-b', 'generation']
@@ -132,8 +132,9 @@ class Source(unittest.TestCase):
         self.assertEqual(mode_bind[0],'mode')
         branches=mode_bind[1]
         self.assertEqual(branches[0],'cond')
-        self.assertEqual([b[1] for b in branches[1:3]],[['quote','two-token'],['quote','first-eos']])
-        self.assertEqual(branches[3][0],'else')
+        self.assertEqual([b[1] for b in branches[1:4]],
+                         [['quote','two-token'],['quote','first-eos'],['quote','second-eos']])
+        self.assertEqual(branches[4][0],'else')
         runtime[2][3][1].pop()
         bound=runtime[2][2][1][1][1]
         self.assertEqual(bound,['i2-bounded-list-length','arguments','6'])
@@ -148,7 +149,13 @@ class Source(unittest.TestCase):
     def test_actual_dependencies_and_no_production_change(self):
         for row in (HERE/'DEPENDENCIES.sha256').read_text().splitlines():
             digest,path=row.split('  ');self.assertEqual(hashlib.sha256((ROOT/path).read_bytes()).hexdigest(),digest,path)
-        self.assertEqual(subprocess.check_output(['git','diff',PIN,'--','native','src','internal','lib','include','tests/cpu4_resume'],cwd=ROOT),b'')
+        self.assertEqual(subprocess.check_output(['git','diff',PIN,'--','native','src','internal','lib','include','tests/cpu4_resume',
+                          ':(exclude)native/cpu4_v1_source_members.sha256'],cwd=ROOT),b'')
+        baseline=subprocess.check_output(['git','show',PIN+':native/cpu4_v1_source_members.sha256'],cwd=ROOT).decode()
+        current=(ROOT/'native/cpu4_v1_source_members.sha256').read_text()
+        self.assertEqual(current,baseline.replace(
+            'c765acc6dcb2bd1c97ef8361c488a2e5dabc83bfa01b763cc166feebe7339250  native/g3c4_p2g2_terminal_ids_owner_extension.esk',
+            'cf12120277eca23d84e7bbc18b9e92fac83fb68455dc930b3f84f7f9ef24bf2f  native/g3c4_p2g2_terminal_ids_owner_extension.esk'))
         include_dirs=json.loads((ROOT/'native/cpu4_v1_private_inputs.json').read_text())['source_include_dirs']
         seen=set()
         def closure(path):

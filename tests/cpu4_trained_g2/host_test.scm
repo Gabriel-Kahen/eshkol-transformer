@@ -91,7 +91,7 @@
 (define (g3g-public-generation-output-lengths output) (event 'lengths) 'lengths)
 (define (g3g-public-generation-output-cache-lengths output) (event 'cache) 'cache)
 (define (g3g-public-generation-output-text output)
-  (event 'text) (list (u8-list->bytevector (if (eq? variant 'text) '(4 41) (if (eq? current-mode 'two-token) '(3 41) '(3))))))
+  (event 'text) (list (u8-list->bytevector (if (eq? variant 'text) '(4 41) (if (eq? current-mode 'first-eos) '(3) '(3 41))))))
 (define (g3g-public-generation-output-rng output) (event 'rng) 'rng)
 (define (native-words words)
   (let ((bytes (make-bytevector (* 8 (length words)) 0)))
@@ -99,11 +99,11 @@
       (if (null? tail) bytes
           (begin (bytevector-u64-set! bytes index (car tail) (endianness little)) (put (cdr tail) (+ index 8)))))))
 (define (g3c4-p2g2-typed-copy-private shell)
-  (native-words (cond ((eq? shell 'ids) (if (eq? variant 'IDs) '(3 40) (if (eq? current-mode 'two-token) '(3 41) '(3))))
-                     ((eq? shell 'lengths) (list (if (eq? variant 'length) 0 (if (eq? current-mode 'two-token) 2 1))))
-                     (else (list (if (eq? variant 'cache) 0 (if (eq? current-mode 'two-token) 4 3)))))))
+  (native-words (cond ((eq? shell 'ids) (if (eq? variant 'IDs) '(3 40) (if (eq? current-mode 'first-eos) '(3) '(3 41))))
+                     ((eq? shell 'lengths) (list (if (eq? variant 'length) 0 (if (eq? current-mode 'first-eos) 1 2))))
+                     (else (list (if (eq? variant 'cache) 0 (if (eq? current-mode 'first-eos) 3 4)))))))
 (define (g3c4-public-g2-source-snapshot output operation)
-  (vector 3 41 (if (eq? current-mode 'two-token) 2 1) #f 1 41 0 0))
+  (vector 3 41 (if (eq? current-mode 'first-eos) 1 2) #f 1 41 0 0))
 (define (g3c4-registry-find shell operation)
   (let ((entry (make-vector 8 #f))) (vector-set! entry 7 (vector 'algorithm 1 (if (eq? variant 'RNG) 42 41) 0 0)) entry))
 (define (g3g-public-generation-output-release output) (event 'output-release) #t)
@@ -131,7 +131,7 @@
      (check (= cpu4-trained-g2-checks 19))
      (check (= (length (filter (lambda (e) (eq? e 'handoff-before)) events)) 1))
      (check (= (length (filter (lambda (e) (eq? e 'generate)) events)) 1))))
- '(two-token first-eos))
+ '(two-token first-eos second-eos))
 ;;; Every enrollment/release boundary can fail without forced old cleanup or
 ;;; losing the already-rooted exact recovery/model/input/created output shell.
 (for-each
@@ -165,4 +165,8 @@
 (cpu4-trained-g2-failure-cleanup! #f (cpu4-trained-g2-ledger 'two-token))
 (check (equal? events '(old-cleanup)))
 (check (reject (lambda () (cpu4-trained-g2-mode 'unknown))))
+(check (equal? (cpu4-trained-g2-config 'second-eos)
+  (list ':profile 'diagnostic-c4-p2g2 ':sampling 'greedy
+        ':temperature-bits 1065353216 ':top-k 256 ':top-p-bits 1065353216
+        ':max-new-tokens 2 ':eos 41 ':seed 41)))
 (display "CPU4 trained G2 actual fixture helpers with explicit doubles PASS: checks=") (display checks) (newline)

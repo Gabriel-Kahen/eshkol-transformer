@@ -20,7 +20,8 @@ TEST_FLAGS = {'native/o2_optimizer.c': ['ET_O2_TESTING'],
 OBSERVERS = [{'source': 'tests/cpu4_heldout/inspect.c', 'defines': ['ET_O2_TESTING']},
              {'source': 'tests/cpu4_candidate_children/native_observer.c',
               'defines': ['ET_O2_TESTING', 'ET_F32_TENSOR_TESTING']}]
-MODES = ('two-token', 'first-eos')
+MODES = ('two-token', 'first-eos', 'second-eos')
+EXPECTED_CHECKPOINT_SHA256 = '499008516bce12c9ca07de19e97cee99ec373b0070cf13b34d035296889692cc'
 # Mandatory root composition dependency; this isolated fd0 leaf is not executable.
 REQUIRED_REPAIR = {
     'native/o2_optimizer.c': 'bc83b46a3a0b0c96dea06d81abed28baaf0655f5781b1a09635f77b41dee7f47',
@@ -144,7 +145,7 @@ def gate(out, runner, cc, cxx, compiler_source):
         (out / 'selected-native-inputs.json').write_text(json.dumps(units, indent=2) + '\n')
         (out / 'caller-dependencies.sha256').write_bytes((ROOT / DEPENDENCIES).read_bytes())
         (out / 'common-source-members.sha256').write_bytes((ROOT / 'native/cpu4_v1_source_members.sha256').read_bytes())
-        (out / 'profile.txt').write_text('candidate=ON\ncompile_jobs=1\nmode=normal\nclosed_modes=two-token,first-eos\nrepeat=2-each\nactual_processes=4\n'
+        (out / 'profile.txt').write_text('candidate=ON\ncompile_jobs=1\nmode=normal\nclosed_modes=two-token,first-eos,second-eos\nrepeat=2-each\nactual_processes=6\n'
             'SAN=NOT RUN\nfresh-process-replay=NOT RUN\ninstalled=NOT RUN\n'
             'closure=actual discovery; independent admission required\n')
         train, heldout = write_resources(out)
@@ -203,7 +204,9 @@ def gate(out, runner, cc, cxx, compiler_source):
                 run(label, ['timeout', '--foreground', '--signal=TERM', '--kill-after=5s', '900s',
                             executable, train, heldout, checkpoint, mode], environment)
                 require(not (out / (label + '.stderr')).read_bytes(), 'runtime diagnostics')
-                require(checkpoint.stat().st_size > 0, 'saved C2 missing')
+                require(checkpoint.stat().st_size == 25504, 'trained checkpoint size changed')
+                require(hashlib.sha256(checkpoint.read_bytes()).hexdigest() == EXPECTED_CHECKPOINT_SHA256,
+                        'trained checkpoint identity changed')
                 check_label = f'{mode}.check{repeat}'
                 run(check_label, [sys.executable, ROOT / 'tests/cpu4_trained_g2/check_output.py',
                                  out / (label + '.stdout'), mode], environment)
@@ -211,6 +214,7 @@ def gate(out, runner, cc, cxx, compiler_source):
             run(mode + '.repeat.stdout', ['cmp', out / f'{mode}.run1.stdout', out / f'{mode}.run2.stdout'])
             run(mode + '.repeat.checkpoint', ['cmp', out / f'{mode}.saved1.c2', out / f'{mode}.saved2.c2'])
         run('modes.checkpoint', ['cmp', out / 'two-token.saved1.c2', out / 'first-eos.saved1.c2'])
+        run('second-eos.checkpoint', ['cmp', out / 'two-token.saved1.c2', out / 'second-eos.saved1.c2'])
         program_status = 0
     except subprocess.CalledProcessError as error:
         program_status = error.returncode

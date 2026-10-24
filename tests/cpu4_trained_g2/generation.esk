@@ -6,7 +6,8 @@
   (if good (set! cpu4-trained-g2-checks (+ cpu4-trained-g2-checks 1))
       (cpu4-binding-fail 'invalid-state 'cpu4-trained-g2 label)))
 (define (cpu4-trained-g2-mode mode)
-  (if (not (or (eq? mode 'two-token) (eq? mode 'first-eos)))
+  (if (not (or (eq? mode 'two-token) (eq? mode 'first-eos)
+               (eq? mode 'second-eos)))
       (cpu4-binding-fail 'invalid-argument 'cpu4-trained-g2 "closed generation mode required"))
   mode)
 ;;; [phase,recovery,T1,encoding,input,pair,output,IDs,lengths,cache,RNG,text,
@@ -17,7 +18,9 @@
   (cpu4-trained-g2-mode mode)
   (list ':profile 'diagnostic-c4-p2g2 ':sampling 'greedy
         ':temperature-bits 1065353216 ':top-k 256 ':top-p-bits 1065353216
-        ':max-new-tokens 2 ':eos (if (eq? mode 'two-token) 255 3) ':seed 41))
+        ':max-new-tokens 2 ':eos (cond ((eq? mode 'two-token) 255)
+                                       ((eq? mode 'second-eos) 41)
+                                       (else 3)) ':seed 41))
 (define (cpu4-trained-g2-counts)
   (vector (cpu4-trained-g2-count 0) (cpu4-trained-g2-count 1)
           (cpu4-trained-g2-count 2) (cpu4-trained-g2-count 3)
@@ -135,7 +138,7 @@
              (lengths (g3c4-p2g2-typed-copy-private (vector-ref generation 8)))
              (caches (g3c4-p2g2-typed-copy-private (vector-ref generation 9)))
              (text (vector-ref generation 11))
-             (count (if (eq? mode 'two-token) 2 1))
+             (count (if (eq? mode 'first-eos) 1 2))
              (snapshot (g3c4-public-g2-source-snapshot (vector-ref generation 6) 'cpu4-trained-g2))
              (rng (vector-ref (g3c4-registry-find (vector-ref generation 10) 'cpu4-trained-g2) 7)))
         (cpu4-trained-g2-check "frozen genuine typed IDs and length/cache"
@@ -153,7 +156,9 @@
                (= (vector-ref rng 3) (vector-ref snapshot 6))
                (= (vector-ref rng 4) (vector-ref snapshot 7))))
         (display "CPU4-TRAINED-G2-RESULT ") (display mode)
-        (display " ") (display (if (eq? mode 'two-token) 255 3))
+        (display " ") (display (cond ((eq? mode 'two-token) 255)
+                                      ((eq? mode 'second-eos) 41)
+                                      (else 3)))
         (display " ") (display (g3c4-public-g2-word lengths 0))
         (display " ") (display (g3c4-public-g2-word caches 0))
         (let emit-actual-ids ((index 0))

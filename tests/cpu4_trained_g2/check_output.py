@@ -6,10 +6,11 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from tests.cpu4_resume.check_resume import check as check_resume, integers
 
-MODES = ('two-token', 'first-eos')
+MODES = ('two-token', 'first-eos', 'second-eos')
 EXPECTED_CHECKS = 19
 HANDOFF = '14 4768 1 28 28'
-RESULT = {'two-token': '255 2 4 3 41 3 41', 'first-eos': '3 1 3 3 3'}
+RESULT = {'two-token': '255 2 4 3 41 3 41', 'first-eos': '3 1 3 3 3',
+          'second-eos': '41 2 4 3 41 3 41'}
 
 
 def check(text, mode):
@@ -27,8 +28,8 @@ def check(text, mode):
     if parts[0] != 'CPU4-TRAINED-G2-RNG' or len(parts) != 5:
         raise ValueError('missing genuine detached RNG evidence')
     words = integers(parts[1:])
-    if words[0] != 1 or any(word > 9223372036854775807 for word in words):
-        raise ValueError('wrong RNG version or non-int64 words')
+    if words != (1, 41, 0, 0):
+        raise ValueError('wrong successor RNG words')
     if lines[10] != (f'CPU4-TRAINED-G2-PASS {mode} {EXPECTED_CHECKS} 375 14 28 0 0 '
                      'retained-model-and-T1 partial-bytes=13424 census=NOT-RUN'):
         raise ValueError('wrong assertion/cleanup/explicit-retention boundary')

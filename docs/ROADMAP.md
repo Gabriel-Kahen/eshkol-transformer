@@ -2201,6 +2201,16 @@ publication transaction. Full G3-R still requires a separately admitted larger
 repeated-decode and later-EOS continuation profile. No persistence implementation
 or save/reload equivalence is claimed.
 
+The isolated same-trained-B CPU4 G2 fixture adds a closed EOS41 second-token
+terminal mode beside the previously accepted EOS255/two-token and EOS3/first-EOS
+modes. It requires the same 25,504-byte C2 checkpoint SHA-256
+`499008516bce12c9ca07de19e97cee99ec373b0070cf13b34d035296889692cc`
+and exact successor RNG `(1,41,0,0)` for all modes. Focused source, checker,
+driver and Guile host checks pass; EOS41 compiled normal/repeat, trained
+sanitizer and fresh-process continuation are not yet admitted. The CPU4
+capture record has no typed C4 import, checked wire profile or fresh-process
+no-draw replay transaction, so this fixture alone cannot close G3-R.
+
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1
 commit to one generated G1. Its host synthetic state witness and causal source

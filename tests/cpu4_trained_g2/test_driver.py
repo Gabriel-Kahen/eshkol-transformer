@@ -13,6 +13,8 @@ from . import normal_driver as driver
 from .check_output import check, MODES
 from .test_checker import records,text
 
+MOCK_C2 = b'C2' * 12752
+
 
 class Driver(unittest.TestCase):
     def test37_unique_TUs_only_authorized_readonly_overlay(self):
@@ -78,26 +80,26 @@ class Driver(unittest.TestCase):
                 if len(runs)==fail_run:return subprocess.CompletedProcess(argv,37)
                 data=text(records(mode)).encode()
                 if repeat_mismatch and checkpoint.name=='two-token.saved2.c2':data=data.replace(b'RNG 1 41',b'RNG 1 42')
-                stdout.write(data);checkpoint.write_bytes(b'C2'+(b'x' if checkpoint_mismatch and checkpoint.name=='first-eos.saved1.c2' else b''))
+                stdout.write(data);checkpoint.write_bytes(MOCK_C2+(b'x' if checkpoint_mismatch and checkpoint.name=='first-eos.saved1.c2' else b''))
             elif argv[0]==driver.sys.executable:
                 check(Path(argv[-2]).read_text(),argv[-1]);stdout.write(b'CHECK-PASS\n')
             elif argv[0]=='cmp' and Path(argv[1]).read_bytes()!=Path(argv[2]).read_bytes():
                 return subprocess.CompletedProcess(argv,1)
             return subprocess.CompletedProcess(argv,0)
-        with patch.object(driver,'preflight',return_value=[{'source':'native/o2_optimizer.c','defines':[]}]),patch.object(driver.subprocess,'run',side_effect=run):
+        with patch.object(driver,'preflight',return_value=[{'source':'native/o2_optimizer.c','defines':[]}]),patch.object(driver,'EXPECTED_CHECKPOINT_SHA256',hashlib.sha256(MOCK_C2).hexdigest()),patch.object(driver.subprocess,'run',side_effect=run):
             if custody_failure:
                 with patch.object(driver,'inventory_depfiles',side_effect=ValueError('custody')):
                     status=driver.gate(out,Path('/runner'),Path('/cc'),Path('/cxx'),Path('/compiler'))
             else:status=driver.gate(out,Path('/runner'),Path('/cc'),Path('/cxx'),Path('/compiler'))
         return status,commands,runs
 
-    def test_four_actual_process_slots_strict_checks_and_sealed_discovery_mocked(self):
+    def test_six_actual_process_slots_strict_checks_and_sealed_discovery_mocked(self):
         with tempfile.TemporaryDirectory() as tmp:
             out=Path(tmp)/'fresh';status,commands,runs=self.mocked_gate(out)
             self.assertEqual(status,0)
             self.assertEqual(runs,[(m,f'{m}.saved{r}.c2') for m in MODES for r in (1,2)])
-            self.assertEqual(sum(a[0]==driver.sys.executable for a in commands),4)
-            self.assertEqual(sum(a[0]=='cmp' for a in commands),5)
+            self.assertEqual(sum(a[0]==driver.sys.executable for a in commands),6)
+            self.assertEqual(sum(a[0]=='cmp' for a in commands),8)
             for row in (out/'SHA256SUMS').read_text().splitlines():
                 digest,path=row.split('  ');self.assertEqual(hashlib.sha256((out/path).read_bytes()).hexdigest(),digest)
             self.assertEqual((out/'driver-custody.exit').read_text(),'0\n')

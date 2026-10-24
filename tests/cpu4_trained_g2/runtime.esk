@@ -25,6 +25,7 @@
            (report (k2-public-capability-discover))
            (mode (cond ((string=? (car (cdr (cdr (cdr (cdr arguments))))) "two-token") 'two-token)
                        ((string=? (car (cdr (cdr (cdr (cdr arguments))))) "first-eos") 'first-eos)
+                       ((string=? (car (cdr (cdr (cdr (cdr arguments))))) "second-eos") 'second-eos)
                        (else (cpu4-binding-fail 'invalid-argument 'cpu4-trained-g2 "closed mode required")))))
       (cpu4-trained-g2-core! resolved tokenizer train-a train-b heldout
         (car (cdr (cdr (cdr arguments)))) policy report mode)
