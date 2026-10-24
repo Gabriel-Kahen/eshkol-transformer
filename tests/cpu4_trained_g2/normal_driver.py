@@ -10,6 +10,7 @@ import sys
 sys.dont_write_bytecode = True
 from tests.cpu4_v1_aggregate.closure import ROOT, load_roster, manifest, validate
 from tests.d2.test_resources import write_d1_resource
+from tests.cpuv1_resource.projection import off, tokens
 
 CALLER = ROOT / 'tests/cpu4_trained_g2/runtime.esk'
 OVERLAY = ROOT / 'tests/cpu4_trained_g2/normal_native_overlay.json'
@@ -21,7 +22,7 @@ OBSERVERS = [{'source': 'tests/cpu4_heldout/inspect.c', 'defines': ['ET_O2_TESTI
              {'source': 'tests/cpu4_candidate_children/native_observer.c',
               'defines': ['ET_O2_TESTING', 'ET_F32_TENSOR_TESTING']}]
 MODES = ('two-token', 'first-eos')
-# Mandatory root composition dependency; this isolated fd0 leaf is not executable.
+# Immutable accepted O2 repair before resource instrumentation.
 REQUIRED_REPAIR = {
     'native/o2_optimizer.c': 'bc83b46a3a0b0c96dea06d81abed28baaf0655f5781b1a09635f77b41dee7f47',
     'native/tr3_c_o2_restore.inc': '5fd13e2c4bad5a2667a198aabf79acec6a172119ed337f5d163938a5e6f48745',
@@ -67,7 +68,9 @@ def plan(roster, overlay):
 def preflight(repo, roster, overlay):
     strict_dependencies(repo)
     for path, digest in REQUIRED_REPAIR.items():
-        require(hashlib.sha256((repo / path).read_bytes()).hexdigest() == digest,
+        pinned = subprocess.check_output(['git', 'show', 'b8b717b94a3ca59d0f279b909e5b3c2f80bfcffa:' + path], cwd=repo)
+        require(hashlib.sha256(pinned).hexdigest() == digest and
+                tokens(off((repo / path).read_bytes().decode())) == tokens(pinned.decode()),
                 'root accepted O2 repair composition/pin refresh required: ' + path)
     units = plan(roster, overlay)
     require(manifest(repo, roster) == (repo / 'native/cpu4_v1_source_members.sha256').read_text(),

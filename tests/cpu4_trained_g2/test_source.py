@@ -7,9 +7,16 @@ import re
 import subprocess
 import unittest
 from tests.cpu4_trainer_control.test_source_contract import parse, walk
+from tests.cpuv1_resource.projection import off, tokens
+from tests.cpuv1_resource.test_source import OWNERS as RESOURCE_OWNERS
 
 ROOT = Path(__file__).resolve().parents[2]
 PIN = 'b8b717b94a3ca59d0f279b909e5b3c2f80bfcffa'
+RESOURCE_PIN = '4dfdec3eb3af12a90c3d3124239cb7e741d50429'
+RESOURCE_ADDITIONS = {'native/cpuv1_resource_' + name for name in '''
+a2.inc c2.inc c2_reader.inc c4.inc collect.c d2.inc e3.inc events.c
+f32.inc generation.inc i2.inc i64.inc inspector.inc io.inc k1.inc m3.inc
+o2.inc p1.inc private.h runtime.cpp t1.inc training.inc'''.split()}
 HERE = ROOT / 'tests/cpu4_trained_g2'
 GENERATE = ['cpu4-trained-g2-generate!', 'resolved', 'tokenizer', 'train-a', 'train-b',
             'heldout', 'factory', 'b-record', 'final-b', 'generation']
@@ -75,7 +82,7 @@ class Source(unittest.TestCase):
 
     def test_plain_all_files_byte_identical_and_complete_AST_projection(self):
         for path in sorted((ROOT/'tests/cpu4_resume').iterdir()):
-            if path.is_file() and path.suffix != '.pyc':
+            if path.is_file() and path.name not in ('DEPENDENCIES.sha256', 'test_source.py') and path.suffix != '.pyc':
                 pinned = subprocess.check_output(['git','show',PIN+':'+str(path.relative_to(ROOT))],cwd=ROOT)
                 self.assertEqual(path.read_bytes(), pinned, path)
         verify(self.core,self.original)
@@ -148,7 +155,33 @@ class Source(unittest.TestCase):
     def test_actual_dependencies_and_no_production_change(self):
         for row in (HERE/'DEPENDENCIES.sha256').read_text().splitlines():
             digest,path=row.split('  ');self.assertEqual(hashlib.sha256((ROOT/path).read_bytes()).hexdigest(),digest,path)
-        self.assertEqual(subprocess.check_output(['git','diff',PIN,'--','native','src','internal','lib','include','tests/cpu4_resume'],cwd=ROOT),b'')
+            if path == 'tests/cpu4_heldout/inspect.c':
+                pinned = subprocess.check_output(['git','show',PIN+':'+path],cwd=ROOT)
+                self.assertEqual(tokens(off((ROOT/path).read_text())),tokens(pinned.decode()))
+            elif path != 'tests/cpu4_trained_g2/normal_driver.py':
+                pinned = subprocess.check_output(['git','show',PIN+':'+path],cwd=ROOT)
+                self.assertEqual(hashlib.sha256(pinned).hexdigest(),digest,path)
+        changes = subprocess.check_output(['git','diff','--name-only',PIN,'--','native','src','internal','lib','include','tests/cpu4_resume'],cwd=ROOT,text=True).splitlines()
+        cli3 = {'native/cpu4_cli_package_bridge.c', 'native/cpu4_cli_report_extension.esk',
+                'src/eshkol_transformer/cpu4_cli_scalar_private.h'}
+        metadata = {'native/cpu4_v1_source_members.sha256',
+                    'tests/cpu4_resume/DEPENDENCIES.sha256', 'tests/cpu4_resume/test_source.py'}
+        for path in changes:
+            current = (ROOT/path).read_bytes()
+            if path in metadata:
+                continue  # separately checked by manifest and source-contract suites
+            if path in cli3:
+                reviewed = subprocess.check_output(['git','show','ab654852:'+path],cwd=ROOT)
+                self.assertEqual(current,reviewed,path)
+            elif path in RESOURCE_ADDITIONS:
+                pinned = subprocess.check_output(['git','show',RESOURCE_PIN+':'+path],cwd=ROOT)
+                self.assertEqual(current,pinned,path)
+            elif path in RESOURCE_OWNERS:
+                pinned = subprocess.check_output(['git','show',PIN+':'+path],cwd=ROOT)
+                self.assertEqual(tokens(off(current.decode())),tokens(pinned.decode()),path)
+            else:
+                pinned = subprocess.check_output(['git','show',PIN+':'+path],cwd=ROOT)
+                self.assertEqual(current,pinned,path)
         include_dirs=json.loads((ROOT/'native/cpu4_v1_private_inputs.json').read_text())['source_include_dirs']
         seen=set()
         def closure(path):

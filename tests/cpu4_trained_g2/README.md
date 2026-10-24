@@ -4,15 +4,22 @@ This isolated source leaf starts at `fd0db7270ca0212f73fc64337379d1ada32d0154`.
 Root composition now authenticates complete production/plain source against immutable
 `b8b717b94a3ca59d0f279b909e5b3c2f80bfcffa` (tree
 `2887b60e7a3c2f44a74dcba30cb23a1dbc1566f7`): accepted private C4 history/capture
-source58f plus repair352 on42a00c87, followed by the strict215-row inventory refresh.
+source58f plus repair352 on42a00c87. The current union has a strict 233-row
+source inventory.
 `ET_CPU4_C4_HISTORY_PRIVATE` remains OFF; common flags/roster and caller770 are
-unchanged. This includes the independently accepted O2 restore-provenance repair
-`b0af97d10a96fc62ef414a26953582f5c79ad642`. All nineteen dependency rows remain
-unchanged. The real preflight must accept this composition and reject either
+unchanged. Current source-only preflight projects resource hooks exactly onto
+the frozen production tokens, pins 22 resource files byte-for-byte to
+`4dfdec3e`, and pins the three reviewed CLI3 additions to `ab654852`.
+Other production changes are rejected. This includes the independently accepted
+O2 restore-provenance repair `b0af97d10a96fc62ef414a26953582f5c79ad642`.
+All nineteen dependency rows remain exact-current; only the instrumented
+heldout observer and driver hashes changed. The real preflight must accept
+this composition and reject either
 original fd0 native repair leaf; source tests exercise both exact old blobs.
 This establishes source identity only; compilation/runtime remain NOT RUN.
-All existing plain `tests/cpu4_resume` files remain byte-identical, including
-its 770-check caller, seven records and driver. `core.esk` mirrors only that
+All existing plain `tests/cpu4_resume` runtime files remain byte-identical, including
+its 770-check caller, seven records and driver. Dependency/source tests carry
+source-only current-union checks. `core.esk` mirrors only that
 caller; independent AST projection permits exactly the rooted generation ledger,
 pre-cleanup G2 phase, phase-aware failure custody and post-cleanup checks.
 Mutation controls reject changed step ranges, equality criteria, cleanup and seam.
@@ -60,11 +67,11 @@ The driver builds once and schedules normal+repeat for each mode (four future
 processes), checks exact output/checkpoint parity per mode and saved checkpoint
 parity across modes. Its resources match the unchanged plain driver byte-for-byte.
 `DEPENDENCIES.sha256` freezes this isolated fixture/support source. **Execution
-requires the immutable composed source baseline above, including the actual accepted O2 repair**:
+requires the current composed source plus the accepted O2 repair under exact OFF projection**:
 `b0af97d10a96fc62ef414a26953582f5c79ad642` / tree
 `7b98ae1d3ad8df26e56dd87390d2c9d8a202fabc`, O2 SHA
-`bc83b46a3a0b0c96dea06d81abed28baaf0655f5781b1a09635f77b41dee7f47`,
-restore include SHA
+`bc83b46a3a0b0c96dea06d81abed28baaf0655f5781b1a09635f77b41dee7f47` before resource instrumentation,
+restore include SHA before resource instrumentation
 `5fd13e2c4bad5a2667a198aabf79acec6a172119ed337f5d163938a5e6f48745`.
 Preflight rejects this old fd0 production support before native build; no API or
 roster change is proposed. Root owns common source inventory, recipe and launch.
