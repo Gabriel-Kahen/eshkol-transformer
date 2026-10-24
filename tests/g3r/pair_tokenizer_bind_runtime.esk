@@ -42,7 +42,7 @@
              (loop (+ at 1))))))
 (reject "non-vector destination"
   (lambda () (g3r-c2-pair-file-verify-c2-tokenizer-internal!
-               receipt (companion "matched.g3r") #f)))
+               receipt (companion "matched.g3r") 17)))
 (check "malformed destination leaves receipt idle"
   (eq? (vector-ref (g3r-c2-receipt-find receipt) 1) 'live))
 (reject "synthetic fingerprint mismatch"
