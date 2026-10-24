@@ -1391,7 +1391,10 @@ independent twin for absent and present gradients. Focused source checks pass.
 The host launcher holds `heavy.lock` across the container run and pins the
 reviewed successor HEAD/tree after acquisition; the guest checks that exact
 pair against its mounted checkout before compilation. The guest has no lock
-path, so it cannot relock an unmounted host file.
+path, so it cannot relock an unmounted host file. The launcher now creates a
+labeled container before starting its exact CID, retains the lock through
+owned-container stop/removal and absence inspection after timeout or signal,
+and records custody in a separate receipt. Focused host custody tests pass.
 The supported normal/repeat/sanitizer run and independent result review are
 pending; this one cut leaves the other R1 rows and §9 admission open.
 
