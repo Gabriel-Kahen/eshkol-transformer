@@ -35,7 +35,7 @@ real D2 open, frame bind and evaluator. Its driver first evaluates one active
 token, then succeeds on the authentic 8,192-row fixture and checks 8,192
 batches, 16,384 active tokens and cursor stability. Only then does it evaluate
 8,193 rows and require the stage-2 `unsupported` table identity, idle frame,
-unchanged cursor, mode bits, frame/model owner state and all six published outputs. This successful control rules
+unchanged cursor, mode-token identity, frame/model owner state and all six published outputs. This successful control rules
 out a shared profile mismatch as the cause of the one-over rejection. The
 stage-2 runner declares a 524,288 KiB peak runtime RSS ceiling for each
 normal, repeated, poisoned and sanitized process. The closed package has exact
@@ -48,8 +48,8 @@ builder stage with `noninstrumentation-undefined.txt` and
 `sanitizer-undefined.txt` for independent review and pinning. This discovery
 call is not admission. No source-only result establishes a compiled outcome.
 
-The remainder of N5 still needs the other three edge cases and the full
-resource/ownership gate. For each case, the requirements below apply; the
+The remainder of N5 still needs the other three edge cases, a genuine P1
+mode-bit snapshot seam and the full resource/ownership gate. For each case, the requirements below apply; the
 stage-2 candidate covers only the control and one-over subset.
 
 For each case, open D2 with the current driver config
