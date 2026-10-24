@@ -1,14 +1,17 @@
 # E3 §9 compiled acceptance matrix contract
 
-This is a **pending test contract**, not acceptance evidence. It refines the
+This is a **pending full-matrix test contract**. Row statuses below cite
+separate acceptance evidence where available. It refines the
 required gates in [§9](../E3_EVALUATION_PROPOSAL.md) for the current private
 N1/T2/V256/D4 bool evaluator. The source basis is
 `native/e3_private_extension.esk`, `src/eshkol_transformer/e3_frame.c`,
 `tests/e3_private/driver.esk`, `tests/e3_reference/{corpus,reference,transcript}.py`,
 and `native/e3_evaluation_metrics_provider.c` at `94b8fecd`/tree `d28cffc1`.
-The existing three-batch numerical gate, mode/graph gate and complete-call
-retention gate remain separate prerequisites. Their preparation, execution or failure status
-does not mark any row below proved.
+The existing three-batch numerical, mode/graph and complete-call retention
+gates are separate prerequisites. The exact `44c0418d` T2 numerical gate is
+accepted for the bounded rows named below; mode/graph and complete-call
+retention on that source remain pending. No prerequisite proves an unrelated
+row by association.
 
 ## Evidence rule and frozen records
 
@@ -65,9 +68,9 @@ already accepted source-staging repair changes no numerical comparison rule.
 same six bytes `(3,197,0,255,7,7)`. `driver.esk` admits only a two-field
 `#(packing? skipped-batches)` scenario, always creates the seed-1729 model,
 and returns four destination bits, two counters and two cursor bytevectors.
-The numerical AOT currently observes only packed-single. These rows therefore
-specify **new** independently derived cases, not assertions about current
-observations.
+The accepted `44c0418d` T2 numerical AOT observes all five layouts. The
+remaining cases in this table still require their own independently derived
+resources and compiled observations.
 
 | Required case/control | Compiled assertion and reachability rule |
 |---|---|
@@ -186,16 +189,24 @@ The named next gates keep each still-open obligation visible:
 
 | Row | Current status | Next proving gate |
 |---|---|---|
-| N1 three-batch exact roles/CE/states/outputs | Numerical F failed sanitized import admission before AOT/runtime; no pass inferred | Independently reviewed inventory repair, fresh supported rerun, sealed evidence verdict. |
-| N2 five authentic layouts, cursor/repartition/boundary | Open beyond reference-only and final-only checks | Expanded frozen-corpus private AOT transcript. |
+| N1 three-batch exact roles/CE/states/outputs | Compiled-private T2 predecessor accepted at `44c0418d`/tree `70706c0a`: exact roles, CE, serial state, six outputs and cursor in normal A/B, poison and sanitizer. The earlier failed F attempt remains nonaccepting. | Carry only after consumed-source equality review; CPU4/current integration needs its own affected gate. |
+| N2 five authentic layouts, cursor/repartition/boundary | The same independently reviewed F gate accepts all five genuine layouts, their D2 rows and the packed equivalence/different-layout assertions across 20 compiled streams. | Carry only after consumed-source equality review; new profile or D2 changes require fresh evidence. |
 | N3 correct/wrong/tie/uniform/target offset | Bounded target-offset leaf passed F compiled gate and independent result review on exact `7bb38a56c` source/tree `370b6365`; current-main union unreviewed. Correct/wrong/tie/uniform and full N3 remain open. | Independent source/evidence/docs union review and hosted checks; separately prove remaining N3 cases with reviewed model control, independent M3 oracle and private AOT. |
 | N4 `01`, masked invalid, fenv, subnormal/signed-zero | Provider-only unless independent model reachability is shown | Retained direct K1 provider numeric/admission gate; leave private requirement explicitly unsupported or open after reachability review. |
 | N5 empty/singleton/EOS/one-token/8,192/8,193/resources | Horizon proves only a subset and lacks compiled 8,193 preflight | Authentic D2 private edge/cap and measured resource gate. |
-| M1 wrong target/mean of means | Compiled source exists, supported F result pending | Numerical F exact value assertions. |
-| M2 denominator/batch/normalization/axis/padding/tie/exp/overflow/reorder | Exact noninstalled sum-order subgate accepted at `ad4ad9ac`/tree `aa17f1bf` by independent compiled RESULT review (`e3-sum-order-ad4ad9ac-a-independent-result-review-20261014/REVIEW.md`, SHA-256 `a58151c84401527909d63b2fb6f2d3cf5c4fc86b28c9008883e24b835fd5a26f`): genuine three-batch normal/repeat/poison/sanitizer runs passed and four mutants rejected first at third-batch numerator without transcript. The earlier df9546 C mathematical witness failed and remains preserved. Direct provider/composition kills are separate. | Run and review the remaining one-at-a-time M2 numerical mutants. Full §9 matrix remains open. |
+| M1 wrong target/mean of means | Both mutants compiled, traversed the actual evaluator and were rejected by the independent T2 numerical validator at `44c0418d`; their first divergent CE/state words are retained. | Carry only on the authenticated consumed source; other M1 profiles remain open. |
+| M2 denominator/batch/normalization/axis/padding/tie/exp/overflow/reorder | The `44c0418d` F gate additionally kills second normalization at final metric words. The exact noninstalled sum-order subgate was separately accepted at `ad4ad9ac`/tree `aa17f1bf` by independent compiled RESULT review (`e3-sum-order-ad4ad9ac-a-independent-result-review-20261014/REVIEW.md`, SHA-256 `a58151c84401527909d63b2fb6f2d3cf5c4fc86b28c9008883e24b835fd5a26f`): genuine three-batch normal/repeat/poison/sanitizer runs passed and four mutants rejected first at third-batch numerator without transcript. The earlier df9546 C mathematical witness failed and remains preserved. Direct provider/composition kills are separate. | Run and review the remaining one-at-a-time M2 numerical mutants. Full §9 matrix remains open. |
 | M3 equivalent controls and native malformed/atomicity | Provider-level evidence only | Preserve compiled provider equivalence/admission plus source/IR review in full matrix evidence. |
 | R1 allocation/copy/pin/provider-preflight/read/final cuts and full rollback | Open; late D2 fault is a partial witness | Reviewed one-shot test-only cuts and complete private failure/retry matrix. |
-| R2 modes/grad/RNG/owners/graph/event/resource horizons | Mode B and retention G prepared but unrun; no complete failure matrix | Supported B/G verdicts, then stage-by-stage matrix and normal/poison/LSan horizons. |
+| R2 modes/grad/RNG/owners/graph/event/resource horizons | Exact `44c0418d` mode and complete-call retention compiled runs are pending. Older mode evidence is on a changed E3/P1 source closure and cannot be carried without review. | Supported exact-source mode/gradient and complete-call retention verdicts, then stage-by-stage failure matrix and normal/poison/LSan horizons. |
+
+The accepted T2 numerical F evidence is
+`/home/gabe/.codex/evidence/eshkol-transformer/finish-20261022/e3/numerical-a-review/REVIEW.md`:
+supported f31/fe9 exit 0 after 3,750.864 seconds; 510-file raw seal
+`f6b04ae125ae58710893ef5c32d3420de7063fabd2f844a140046e1c01d6e2c1`.
+Its five layouts, three mutant kills and sanitizer observations are bounded to
+that T2 source. Candidate-ON CPU4 and the full trained-path sanitizer remain
+unadmitted until their own exact-source runs and independent result reviews.
 
 Completion requires independent source-and-test review, frozen oracle and
 mutation inventory, every row's supported compiled proof or explicit accepted

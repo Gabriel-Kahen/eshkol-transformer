@@ -1080,16 +1080,25 @@ syntax defect exists in the correctness driver. An isolated test-only successor
 removes that one character from each driver and checks complete source parsing
 with malformed-close controls. The frozen failed evidence is preserved at
 `e3-numerical-five-case-2b74b53-fe9-f31-20261004-prepared-a/SHA256SUMS-FAILED`
-(`cdb4d3cd...`). Independent source review and a fresh supported compile/runtime
-gate remain required; static parsing does not prove E3 numerical acceptance.
+(`cdb4d3cd...`). Static parsing did not prove numerical acceptance; the later
+supported T2 F gate below supplies the bounded compiled result.
 
 The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
-is a docs-only candidate for the remaining private numerical, compiled-mutant,
-failure and rollback gates. It tracks authentic D2/model reachability separately
+tracks the remaining private numerical, compiled-mutant, failure and rollback
+gates. It tracks authentic D2/model reachability separately
 from direct-provider-only cases and names the missing noninstalled model-control
-and stage-selective fault/observer seams for review. It provides no new runtime
-proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
-verdicts remain prerequisites before the full matrix is implemented and run.
+and stage-selective fault/observer seams for review. The exact `44c0418d` T2
+numerical F gate has since passed supported compiled normal A/B, poison and
+ASan/UBSan/LSan runs for all five authentic layouts, with 21 roles per batch,
+CE, serial state, six outputs and cursor, plus wrong-target, mean-of-means and
+second-normalization mutant kills. Its independent result review is
+`/home/gabe/.codex/evidence/eshkol-transformer/finish-20261022/e3/numerical-a-review/REVIEW.md`
+(510-file raw seal `f6b04ae1...`; exit 0, 3,750.864 seconds). This closes the
+bounded T2 N1/N2 and named M1/M2 predecessor rows only. Exact-source
+mode/gradient, complete-call retention, failure/resource and remaining numeric
+verdicts are still required; candidate-ON CPU4 and full trained-path sanitizer
+are unadmitted.
+
 The first [mathematical three-batch M2 sum-order witness](../tests/e3_reference/sum_order_witness_v1.json)
 failed the one-use df9546 compiled C gate: compiled CE rounded both groupings
 to `41dcde82`. The successor [compiled witness](../tests/e3_reference/sum_order_witness_v2.json)
