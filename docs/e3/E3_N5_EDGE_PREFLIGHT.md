@@ -1,7 +1,10 @@
 # E3 N5 authentic edge and 8,193 preflight preparation
 
-Status: **source/host input preparation only** on base `44c0418d`. No N5
-compiled-private or resource acceptance follows from this file. The distinct
+Status: **source/host tuple preparation only** on base `44c0418d`. The
+noninstalled stage-2 candidate runs a genuine 8,192-row success control before
+the 8,193-row rejection, with six-output and cursor checks. Its sanitizer
+import inventories still require measurement and pinning, so the compiled gate
+has **NOT RUN**. No N5 resource acceptance follows from this file. The distinct
 single-invocation 8,192 horizon and 1,024/8,192 complete-call retention gates
 retain their own evidence and scope.
 
@@ -23,17 +26,31 @@ the compiled evaluator. The fixture is generated outside Git for each run.
 | `cap-8192` | 16,385 tokens, 8,192 full-mask rows | Existing single-invocation predecessor is the successful horizon control; a new private gate must still bind its own exact fixture, six outputs and resources. |
 | `cap-8193` | 16,387 tokens, 8,193 full-mask rows | Stage-2 `unsupported` before native acquire or traversal; unchanged entry cursor, all six outputs, modes and owners. No 8,193rd batch or publication. |
 
-## Smallest genuine compiled-private gate to add
+## Compiled-private stage-2 candidate and remaining N5 gate
 
-Use a **separate noninstalled E3 test tuple** derived from the already admitted
-retention package. Do not edit `retention_driver.esk`: its exact first-evaluation
-mutant and source hashes depend on those bytes. Reuse its fixed seed-1729 M3
-constructor, real `d2-token-dataset-open`, `e3-frame-bind!`, and the real
-`e3-evaluate-into!`; do not supply logits, CE, masks or row values through a
-hook. The new closed driver needs only one case selector and an entry skip
-count. Its build needs its own exact source, native, defined/undefined/export
-and sanitized-import manifests under `scripts/e3-private-package-policy.sh`;
-the canonical private object must remain observer-free.
+The current **separate noninstalled E3 test tuple** extends the canonical
+private root and bridge in `tests/e3_n5/`; it does not edit the accepted
+retention tuple or installed library. It reuses the fixed seed-1729 M3 fixture,
+real D2 open, frame bind and evaluator. Its driver first evaluates one active
+token, then succeeds on the authentic 8,192-row fixture and checks 8,192
+batches, 16,384 active tokens and cursor stability. Only then does it evaluate
+8,193 rows and require the stage-2 `unsupported` table identity, idle frame,
+unchanged cursor, mode bits, frame/model owner state and all six published outputs. This successful control rules
+out a shared profile mismatch as the cause of the one-over rejection. The
+stage-2 runner declares a 524,288 KiB peak runtime RSS ceiling for each
+normal, repeated, poisoned and sanitized process. The closed package has exact
+source, native, defined/export and normal undefined
+manifests. The sanitized import inventories are deliberately absent until
+measured from this exact compiled tuple; the full runner refuses to start
+without them. Under `heavy.lock`, one direct
+`scripts/build-e3-n5-test.sh FRESH_PATH sanitize` call can retain a rejected
+builder stage with `noninstrumentation-undefined.txt` and
+`sanitizer-undefined.txt` for independent review and pinning. This discovery
+call is not admission. No source-only result establishes a compiled outcome.
+
+The remainder of N5 still needs the other three edge cases and the full
+resource/ownership gate. For each case, the requirements below apply; the
+stage-2 candidate covers only the control and one-over subset.
 
 For each case, open D2 with the current driver config
 `N=1,T=2,V=256,packing=#t,shuffle=#f,window=1`, save the bytevector cursor,
@@ -65,6 +82,7 @@ the predeclared ceilings. Seal toolchain/source hashes, generated resources,
 raw output, `/usr/bin/time` receipts and post-exit SHA-256. Route heavy builds
 through `heavy.lock`; do not infer this gate from a previous source tree.
 
-The current generator and host tests establish only authentic D1 bytes, D2
-rows, signed cursor bytes and deterministic output. Model-forward values,
-stage/category observations, rollback and resource ceilings remain **NOT RUN**.
+The current generator and host tests establish authentic D1 bytes, D2 rows,
+signed cursor bytes, deterministic output and source closure for the stage-2
+candidate. Model-forward values, stage/category observations, rollback and
+resource ceilings remain **NOT RUN**.
