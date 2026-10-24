@@ -893,6 +893,12 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
     !defined(ET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE)
 #error "ET_G3C4_PREFILL3_PRIVATE requires the private A2 storage query"
 #endif
+#if defined(ET_CPU4_C4_P3_RESUME_PRIVATE) && \
+    (!defined(ET_G3C4_PREFILL3_PRIVATE) || \
+     !defined(ET_G3C4_P2_G2_SECOND_FRAME_PRIVATE) || \
+     !defined(ET_CPU4_C4_HISTORY_PRIVATE))
+#error "ET_CPU4_C4_P3_RESUME_PRIVATE requires prefill3, second frame, and history"
+#endif
 #if defined(ET_G3C4_PREFILL1_PRIVATE) && \
     !defined(ET_G3C4_PREFILL3_PRIVATE)
 #error "ET_G3C4_PREFILL1_PRIVATE requires Step 12A"
@@ -4764,6 +4770,12 @@ fail:
 }
 
 #ifdef ET_G3C4_PREFILL3_PRIVATE
+#ifdef ET_CPU4_C4_P3_RESUME_PRIVATE
+static int et_g3c4_p2g2_second_output_clean(
+    et_g3c4_context_internal *, et_g3c4_output_internal *);
+static int et_g3c4_p2g2_carrier_owned_alias(
+    const et_g3c4_context_internal *, const void *, size_t);
+#endif
 typedef struct et_g3c4_prefill3_scratch {
   float et[12], ep[12], x[12], n1[12];
   float qt[12], kt[12], vt[12];
@@ -4772,9 +4784,9 @@ typedef struct et_g3c4_prefill3_scratch {
   float fu[24], fg[24], fd[12], y[12], nf[12], z[768];
 } et_g3c4_prefill3_scratch;
 
-int64_t et_g3c4_private_prefill3_v1(
+static int64_t et_g3c4_prefill3_internal(
     void *candidate, const int64_t token_ids[3],
-    float last_logits_output[256]) {
+    float last_logits_output[256], int resume_p3) {
   static const uint64_t ids_shape[2] = {1u, 3u};
   static const uint64_t token_embedding_row[4] = {1u, 3u, 256u, 4u};
   static const uint64_t position_embedding_row[4] = {1u, 3u, 4u, 4u};
@@ -4849,7 +4861,8 @@ int64_t et_g3c4_private_prefill3_v1(
   if (context == NULL) return et_g3c4_error_state.category;
   if (!((context->call_kind == 0 && context->budget == 0) ||
         (context->call_kind == 2 &&
-         (context->budget == 0 || context->budget == 1))) ||
+         (context->budget == 0 || context->budget == 1 ||
+          (resume_p3 && context->budget == 2)))) ||
       !et_g3c4_token_frame_idle(context)) {
     (void)et_g3c4_fail(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
@@ -4868,7 +4881,8 @@ int64_t et_g3c4_private_prefill3_v1(
           context, token_ids, last_logits_output) != 0)
     return et_g3c4_error_state.category;
 #ifdef ET_CPU4_C4_HISTORY_PRIVATE
-  cpu4_history_node *history = cpu4_history_preflight(context,1u,3u,4u,1u);
+  cpu4_history_node *history = cpu4_history_preflight(
+      context,1u,3u,4u,resume_p3 ? 2u : 1u);
   if (history == NULL) return et_g3c4_error_state.category;
 #endif
   memset(&scratch, 0, sizeof(scratch));
@@ -5112,7 +5126,12 @@ int64_t et_g3c4_private_prefill3_v1(
   context->cache = candidate_cache;
   candidate_cache = NULL;
 #ifdef ET_CPU4_C4_HISTORY_PRIVATE
-  cpu4_history_publish(history,context,token_ids,3u,1u,1);
+  if (resume_p3) {
+    cpu4_history_publish(history,context,token_ids,2u,1u,1);
+    cpu4_history_publish(history,context,token_ids+2,1u,2u,0);
+  } else {
+    cpu4_history_publish(history,context,token_ids,3u,1u,1);
+  }
 #endif
 
   memcpy(context->prefill_binding_identities, binding_identities,
@@ -5145,6 +5164,78 @@ fail:
   et_g3c4_error_restore_internal(first);
   return et_g3c4_error_state.category;
 }
+
+int64_t et_g3c4_private_prefill3_v1(
+    void *candidate, const int64_t token_ids[3],
+    float last_logits_output[256]) {
+  return et_g3c4_prefill3_internal(
+      candidate, token_ids, last_logits_output, 0);
+}
+
+#ifdef ET_CPU4_C4_P3_RESUME_PRIVATE
+/* The caller must authenticate the persisted C2/T1/capture pair. This
+ * private native seam only reconstructs a live P3 numerical prefix. */
+int64_t et_cpu4_private_c4_p3_resume_prefix_v1(
+    void *context_candidate, void *output_candidate,
+    const int64_t ids3[3], float last_logits_output[256]) {
+  et_g3c4_context_internal *context;
+  et_g3c4_output_internal *output;
+  int64_t committed_ids[3];
+  int64_t saved_rng[4];
+  et_g3c4_error_reset_internal();
+  context = et_g3c4_admit_active_call(context_candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  output = et_g3c4_admit_output(output_candidate, 0);
+  if (output == NULL) return et_g3c4_error_state.category;
+  if (context->call_kind != 2 || context->budget != 2 ||
+      context->generator_policy[4] != 2 ||
+      context->p2g2_prefix_committed != 0u ||
+      !et_g3c4_token_frame_idle(context) ||
+      context->prefill_binding_ready != 0u ||
+      et_g3c4_p2g2_second_output_clean(context, output) != 0)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (!et_g3c4_range_valid(ids3, 3u * sizeof(*ids3)) ||
+      (uintptr_t)ids3 % _Alignof(int64_t) != 0u ||
+      !et_g3c4_range_valid(last_logits_output,
+                           256u * sizeof(*last_logits_output)) ||
+      (uintptr_t)last_logits_output % _Alignof(float) != 0u ||
+      et_g3c4_ranges_overlap(ids3, 3u * sizeof(*ids3),
+                             last_logits_output,
+                             256u * sizeof(*last_logits_output)) ||
+      et_g3c4_ranges_overlap(ids3, 3u * sizeof(*ids3),
+                             context, sizeof(*context)))
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+  if (et_g3c4_prefill_reject_owned_aliases(
+          context, ids3, last_logits_output) != 0)
+    return et_g3c4_error_state.category;
+  if (et_g3c4_p2g2_carrier_owned_alias(
+          context, ids3, 3u * sizeof(*ids3)) ||
+      et_g3c4_p2g2_carrier_owned_alias(
+          context, last_logits_output,
+          256u * sizeof(*last_logits_output)))
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_ALIAS);
+  if (ids3[2] < 0 || ids3[2] > 255 ||
+      ids3[2] == context->generator_policy[5])
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
+  memcpy(committed_ids, ids3, sizeof(committed_ids));
+  memcpy(saved_rng, context->generator_rng_words, sizeof(saved_rng));
+  if (et_g3c4_prefill3_internal(
+          context, committed_ids, last_logits_output, 1) != 0)
+    return et_g3c4_error_state.category;
+  if (memcmp(saved_rng, context->generator_rng_words,
+             sizeof(saved_rng)) != 0) abort();
+  memcpy(context->p2g2_prefix_next_logits, last_logits_output,
+         sizeof(context->p2g2_prefix_next_logits));
+  context->p2g2_prefix_token = committed_ids[2];
+  context->p2g2_prefix_raw = (unsigned char)committed_ids[2];
+  context->p2g2_prefix_committed = 1u;
+  return 0;
+}
+#endif
 
 #ifdef ET_G3C4_PREFILL1_PRIVATE
 int64_t et_g3c4_private_prefill1_v1(

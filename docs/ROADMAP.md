@@ -2206,10 +2206,21 @@ terminal mode beside the previously accepted EOS255/two-token and EOS3/first-EOS
 modes. It requires the same 25,504-byte C2 checkpoint SHA-256
 `499008516bce12c9ca07de19e97cee99ec373b0070cf13b34d035296889692cc`
 and exact successor RNG `(1,41,0,0)` for all modes. Focused source, checker,
-driver and Guile host checks pass; EOS41 compiled normal/repeat, trained
+driver and Guile host checks pass. The pinned `ee90307a` compiled normal and
+repeat gate passed all six process/checker runs with the same B125 SHA and was
+independently reviewed (`cpu4-trained-g2-second-eos-ee90307a-attempt1`). Trained
 sanitizer and fresh-process continuation are not yet admitted. The CPU4
 capture record has no typed C4 import, checked wire profile or fresh-process
 no-draw replay transaction, so this fixture alone cannot close G3-R.
+
+The [private C4 P3 resume prerequisite](g3/G3_C4_P3_RESUME_NATIVE_LEAF.md)
+is source-staged from the same trained-G2 branch. It adds a native no-draw
+P3 cache/history reconstruction that leaves the existing second-frame path
+ready, plus an uninterrupted native parity and failure/retry control. Source
+review and syntax checks found no blocker; its native runtime gate is queued.
+The caller must still authenticate a persisted B250 C2 image, live tokenizer,
+checked RNG and saved prompt/G1 before invoking it. This leaf alone does not
+establish a FILE pair or fresh-process continuation.
 
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1
