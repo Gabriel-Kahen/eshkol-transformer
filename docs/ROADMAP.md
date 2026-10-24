@@ -1160,6 +1160,11 @@ The 7eeaa03 current-main M2 union added the padded-position test selector to
 composition failed only the M3CG predecessor checksum. This bounded successor
 repins that one script hash; independent review and fresh hosted exact-head
 validation remain required before integration.
+The distinct [M2 exp-before-global source candidate](e3/E3_EXP_BEFORE_GLOBAL_MUTANT_SOURCE.md)
+on exact T2 `44c0418` uses the authentic three-batch compiled CE witness:
+normal global perplexity `43815d49`, weighted per-batch exp `438160e2`.
+Sixteen source/host tests pass. Its noninstalled private AOT gate and
+independent source/result review are **NOT RUN**; no compiled kill is claimed.
 The test-only retention driver now snapshots all 14 parameter value and gradient
 word arrays plus three metadata fields before its first evaluator call, after
 optional fixed gradient seeding, and compares that original image after each
