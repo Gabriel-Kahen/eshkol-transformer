@@ -154,3 +154,14 @@ may move earlier. Emitted lookup removal, storage/captures, initialization
 preservation, calling ABI and full recursive effects remain unmeasured. One
 reviewed successor emission must verify the complete batch before link/runtime;
 the original numbered gates and runtime/resource prerequisites remain in force.
+
+Finite item-1 local-transfer verifier (2026-10-24):
+`python -m tests.cpuv1_resource.verify_local_transfer SEALED_C5F_STREAM_DIR`
+authenticates the five retained collector files and checks 30 exact cached MAIN
+instructions plus the two typed lambda headers. It emits machine-readable
+`PASS_LOCAL_TRANSFER` only for the selected P1 live and candidate unpublished
+holder-to-closure-slot transfers. Its item-1 result is always `FAIL_ITEM1`:
+full initializer dominance, 29 lexically open private definitions, canonical
+holder identity through every indirect observer, lifetime and ABI transfer are
+still unproved. The separate six-helper effect review remains FAIL; G5 runtime
+is NOT RUN. This verifier reads the finite cache and never executes the target.
