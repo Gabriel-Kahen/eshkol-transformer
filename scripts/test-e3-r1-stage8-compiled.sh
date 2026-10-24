@@ -1,22 +1,24 @@
 #!/usr/bin/env bash
-# Supported f31/LLVM21 container only. This gate owns the shared heavy lock.
+# Supported f31/LLVM21 container only. The host launcher owns heavy.lock.
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
-[[ $# == 1 && "$1" == /* && -d "$1" && ! -L "$1" ]] ||
-  die "usage: $0 /ABSOLUTE_EMPTY_OUTPUT_DIRECTORY"
+[[ $# == 3 && "$1" == /* && -d "$1" && ! -L "$1" &&
+   "$2" =~ ^[0-9a-f]{40}$ && "$3" =~ ^[0-9a-f]{40}$ ]] ||
+  die "usage: $0 /ABSOLUTE_EMPTY_OUTPUT_DIRECTORY EXPECTED_HEAD EXPECTED_TREE"
 out=$1
+expected_head=$2
+expected_tree=$3
 [[ -z "$(find "$out" -mindepth 1 -maxdepth 1 -print -quit)" ]] ||
   die "E3 R1 stage-8 output must be empty"
-for tool in ar cmp env find flock git grep nm python3 sha256sum timeout; do
+for tool in ar cmp env find git grep nm python3 sha256sum timeout; do
   require_command "$tool"
 done
-lock=/home/gabe/.codex/evidence/eshkol-transformer/finish-20261022/heavy.lock
-[[ -f "$lock" && ! -L "$lock" ]] || die "shared heavy lock is missing"
-exec 9<>"$lock"
-flock 9
-verify_toolchain
 [[ -z "$(git -C "$PROJECT_ROOT" status --porcelain)" ]] ||
   die "E3 stage-8 source tree must be clean"
+[[ "$(git -C "$PROJECT_ROOT" rev-parse HEAD)" == "$expected_head" &&
+   "$(git -C "$PROJECT_ROOT" rev-parse HEAD^{tree})" == "$expected_tree" ]] ||
+  die "E3 stage-8 checkout differs from the host-pinned HEAD/tree"
+verify_toolchain
 git -C "$PROJECT_ROOT" rev-parse HEAD >"$out/source.commit"
 git -C "$PROJECT_ROOT" rev-parse HEAD^{tree} >"$out/source.tree"
 prefix="${PROJECT_ROOT}/tests/e3_private/fault_package"

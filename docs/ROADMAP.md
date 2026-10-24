@@ -1388,6 +1388,10 @@ tuple to site 5, occurrence 2 on the current `44c0418d` E3 source. Its exact
 manifest recipe builds the real evaluator fault package and checks the first
 error, pre-call state and six seeded outputs, same-frame retry and an
 independent twin for absent and present gradients. Focused source checks pass.
+The host launcher holds `heavy.lock` across the container run and pins the
+reviewed successor HEAD/tree after acquisition; the guest checks that exact
+pair against its mounted checkout before compilation. The guest has no lock
+path, so it cannot relock an unmounted host file.
 The supported normal/repeat/sanitizer run and independent result review are
 pending; this one cut leaves the other R1 rows and §9 admission open.
 
