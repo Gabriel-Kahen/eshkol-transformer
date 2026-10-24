@@ -71,10 +71,11 @@ compile_public no-save "$PROJECT_ROOT/tests/g3r/public_without_save.esk"
 compile_public producer "$PROJECT_ROOT/tests/c2/public_runtime.esk"
 rg 'et_e1b_public_c2_checkpoint_save_v1' \
   "$out/producer/program.ll" >"$out/producer/save-call-ir.txt"
-if rg 'et_e1b_public_c2_checkpoint_save_v1' \
-    "$out/no-save/program.ll" >"$out/no-save/unexpected-save-ir.txt"; then
-  die "missing-SAVE control unexpectedly references public SAVE"
-fi
+# Whole-program IR retains the installed facade's SAVE closure even when the
+# caller never invokes it. The no-SAVE source check and compiled output-absence
+# control below are the causal negative; retain linked IR for diagnosis.
+rg 'et_e1b_public_c2_checkpoint_save_v1' \
+  "$out/no-save/program.ll" >"$out/no-save/linked-facade-save-ir.txt" || true
 
 saved="$out/roundtrip.c2"
 test ! -e "$saved" && test ! -L "$saved"
