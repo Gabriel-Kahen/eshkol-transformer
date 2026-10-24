@@ -2223,6 +2223,14 @@ identical SHA across all modes and repeats. Focused source/host checks pass;
 compiled B250 SAVE, its exact SHA, fresh-process P3 replay, trained sanitizer
 and full continuation remain **NOT RUN** on this staged change.
 
+The separate final-B250 FILE factory witness is source-staged. It prints the
+producer's 14 live final-B parameter planes before SAVE and requires a sealed
+raw 4,768-byte witness. A new process will restore the exact B250 C2 through
+the accepted FILE factory, compare every restored plane to that independent
+producer witness, authenticate T1/D2 and exercise a companion G2 handoff.
+Compiled fresh FILE factory, checked RNG/history and P3→G2 continuation remain
+**NOT RUN**; the context-two G3-R pair reader is a distinct checkpoint lane.
+
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1
 commit to one generated G1. Its host synthetic state witness and causal source
