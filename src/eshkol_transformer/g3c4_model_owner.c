@@ -9994,3 +9994,7 @@ fail:
 #ifdef ET_CPU4_C4_HISTORY_PRIVATE
 #include "cpu4_c4_capture.inc"
 #endif
+
+#if defined(ET_CPU4_C4_P3_WIRE_PRIVATE) && !defined(ET_CPU4_C4_HISTORY_PRIVATE)
+#error "C4 P3 wire requires the private C4 history and capture source"
+#endif

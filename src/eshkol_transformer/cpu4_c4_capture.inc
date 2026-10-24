@@ -553,3 +553,7 @@ int64_t et_cpu4_private_c4_capture_release_v1(et_cpu4_c4_capture *capture) {
   capture->state = CPU4_CAPTURE_DEAD;
   return 0;
 }
+
+#ifdef ET_CPU4_C4_P3_WIRE_PRIVATE
+#include "cpu4_c4_p3_wire.inc"
+#endif

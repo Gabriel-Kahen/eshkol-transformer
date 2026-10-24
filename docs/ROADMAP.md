@@ -2223,6 +2223,13 @@ identical SHA across all modes and repeats. Focused source/host checks pass;
 compiled B250 SAVE, its exact SHA, fresh-process P3 replay, trained sanitizer
 and full continuation remain **NOT RUN** on this staged change.
 
+The separate [private C4 P3 data codec](g3/G3_C4_P3_WIRE_PRIVATE.md) fixes a
+400-byte `C4GRCV1` record around the 224-byte canonical capture, distinct
+B250 C2 SHA and raw 96-byte T1 fingerprint. A focused compiled codec unit and
+independent Python SHA/layout oracle cover exact bytes, declared spans and
+failure atomicity. This source-private record does not authenticate a current
+factory issuer, import a typed RNG/history owner, or prove fresh-process G2.
+
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1
 commit to one generated G1. Its host synthetic state witness and causal source

@@ -40,5 +40,18 @@ int64_t et_cpu4_private_c4_capture_copy_parameters_v1(
     const et_cpu4_c4_capture *capture, void *dst, uint64_t dst_bytes);
 int64_t et_cpu4_private_c4_capture_release_v1(et_cpu4_c4_capture *capture);
 
+#ifdef ET_CPU4_C4_P3_WIRE_PRIVATE
+/* Source-private C4GRCV1 data codec. No registry or model authority is imported. */
+int64_t et_cpu4_private_c4_p3_wire_encode_v1(
+    const et_cpu4_c4_capture_record_v1 *record, const void *values,
+    uint64_t values_bytes, const uint8_t c2_sha[32], const uint8_t t1_fp[96],
+    void *wire, uint64_t wire_bytes);
+int64_t et_cpu4_private_c4_p3_wire_decode_v1(
+    const void *wire, uint64_t wire_bytes, const void *values,
+    uint64_t values_bytes, const uint8_t expected_c2_sha[32],
+    const uint8_t expected_t1_fp[96],
+    et_cpu4_c4_capture_record_v1 *out_record);
+#endif
+
 #endif
 #endif
