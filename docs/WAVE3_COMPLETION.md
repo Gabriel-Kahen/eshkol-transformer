@@ -75,6 +75,11 @@ independent review/doc work while heavy gates run. Silence is never success.
   This test-only leaf is integrated here; the current native roster has 215
   members versus 211 on the accepted a262 source, so current-union execution
   and installed behavior remain open.
+- Intermediate exact-head CI run `40140825549` on integration commit
+  `9b281a96` failed `canonical-build` and `parameter-state` at the stale
+  generated trusted P1 root check. The corrected source template and strict
+  structural checkers pass locally; this does not replace a successful hosted
+  exact-head rerun after the repair is published.
 
 - Independent initial integration review: `finish-20261022/REVIEW-integration-initial.md`.
   Source composition and recovered bounded hosted CLI execution accepted; full admission held.

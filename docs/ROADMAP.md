@@ -676,6 +676,13 @@ CLI, public generation, persisted continuation or full CPU-v1 behavior. The
 integrated native source roster has changed from 211 to 215 members, so the
 accepted a262 runtime result does not establish current-union execution.
 
+Intermediate exact-head supported CI run `40140825549` on integration commit
+`9b281a96` exposed a stale generated trusted P1 root in `canonical-build` and
+`parameter-state`; it is a failed integration run, not admission. The reviewed
+source repair synchronizes the P1 template with the checked-in trusted root and
+updates exact structural pins for the already present CPU4 slots. Focused
+generator and P1 structural checks pass; hosted CI must pass on the repair head.
+
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
 | N3K | [Bounded diagnostic numerical primitives and initializer](N3K_PRIMITIVES.md) | N2, A2, K1, I1, I2, Q0 | 31 exact operation/row pairs; independent VJP/bit/negative/carrier tests, private AOT and sanitizers; independent N3K-R approval, supported CI 34222643674, PR #67 merge and focused merged-main retest | complete |

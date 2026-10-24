@@ -11,8 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "internal/p1/lib/transformer/module.esk"
 WRAPPER = ROOT / "native/tr3_p1_fixed_set_extension.esk"
 MANIFEST = ROOT / "native/tr3_p1_fixed_set_source_closure.txt"
-# Reviewed P1 active-record source retains the exact TR3 fixed-set leaf.
-COMPOSED_BASE_SHA256 = "3b8599b07affc3f98bf43a06bb08a92d37b59101cbd5f51b4437f334a675b96b"
+# The reviewed current trusted root retains the original TR3 slots and adds
+# the closed CPU4 context-four validators in slots 73/74.
+COMPOSED_SOURCE_SHA256 = "e1249050c340fdd246f337a688f329462a1e1aa94720881d0cc5f9a3e8c47a94"
 
 
 def require(condition, message):
@@ -67,6 +68,10 @@ def check():
 
     capture = definition(text, "tr3-fixed-capture!")
     recheck = definition(text, "tr3-fixed-recheck!")
+    capture_context = definition(text, "tr3-fixed-capture-context!")
+    recheck_context = definition(text, "tr3-fixed-recheck-context!")
+    cpu4_capture = definition(text, "cpu4-fixed-capture!")
+    cpu4_recheck = definition(text, "cpu4-fixed-recheck!")
     capture_module = definition(text, "tr3-fixed-capture-module!")
     recheck_module = definition(text, "tr3-fixed-recheck-module")
     capture_modules = definition(text, "tr3-fixed-capture-modules!")
@@ -94,11 +99,17 @@ def check():
     ):
         require(forbidden not in leaf,
                 f"TR3 fixed-set leaf gained forbidden operation: {forbidden}")
-    require("(fail " not in capture and "(fail " not in recheck,
+    require(all("(fail " not in body for body in
+                (capture, recheck, capture_context, recheck_context)),
             "public exception transport entered status-only leaf")
-    require(capture.count("(eq? token-handle head-handle)") == 1 and
-            recheck.count("(eq? token-handle head-handle)") == 1,
+    require(capture_context.count("(eq? token-handle head-handle)") == 1 and
+            recheck_context.count("(eq? token-handle head-handle)") == 1,
             "capture/recheck no longer enforce the head/token raw-handle tie")
+    require("model supplied modules handles carriers 2" in capture and
+            "model modules handles carriers 2" in recheck and
+            "model supplied modules handles carriers 4" in cpu4_capture and
+            "model modules handles carriers 4" in cpu4_recheck,
+            "TR3/CPU4 wrappers no longer use their exact context")
     for helper_name, helper in (
         ("capture", capture_module), ("recheck", recheck_module)):
         require("(vector-ref node 7) #t" in helper and
@@ -116,43 +127,8 @@ def check():
         "  tr3-fixed-recheck!\n")
     require(text.count(vector_append) == 1,
             "TR3 P1 surface append is missing or duplicated")
-    without_leaf = text[:leaf_start] + "\n" + text[leaf_end + 2:]
-    without_leaf = without_leaf.replace(vector_append, "")
-    successor_tail = ("\n         module-construction-parameters-internal"
-                      "\n         p1-trusted-surface)")
-    require(without_leaf.count(successor_tail) == 1,
-            "trusted P1 provide differs from exact private import delta")
-    without_leaf = without_leaf.replace(successor_tail,
-        "\n         module-construction-parameters-internal)")
-    # The L sanitizer repair is a bounded P1 admission-guard delta. Restore
-    # only these exact source spans before checking the accepted TR3 base hash.
-    sanitizer_repair = (
-        (
-            ";;; Keep the raw native shell inside a managed value. Overwriting a global\n"
-            ";;; holding the raw pointer makes the compiler's borrow check read before the\n"
-            ";;; native allocation while clearing the admission guard.\n",
-            "",
-        ),
-        (
-            "(if (eq? nested-shell\n"
-            "                       (vector-ref tensor-provider-admission-active-shell 0))",
-            "(if (eq? nested-shell tensor-provider-admission-active-shell)",
-        ),
-        (
-            "                       (active-shell (vector shell))\n",
-            "",
-        ),
-        (
-            "(set! tensor-provider-admission-active-shell active-shell)",
-            "(set! tensor-provider-admission-active-shell shell)",
-        ),
-    )
-    for revised, inherited in sanitizer_repair:
-        require(without_leaf.count(revised) == 1,
-                "P1 sanitizer guard repair changed outside its reviewed shape")
-        without_leaf = without_leaf.replace(revised, inherited)
-    require(sha256(without_leaf.encode()).hexdigest() == COMPOSED_BASE_SHA256,
-            "reviewed integrated P1 source changed outside the exact TR3 helper/vector append")
+    require(sha256(text.encode()).hexdigest() == COMPOSED_SOURCE_SHA256,
+            "reviewed current trusted P1 source changed")
 
     print("TR3-P1 FIXED STRUCTURE PASS: slots=69,70 modules=17 handles=14 carriers=14")
     for path in (SOURCE, WRAPPER, MANIFEST):

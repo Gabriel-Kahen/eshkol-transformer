@@ -67,8 +67,8 @@ def check():
         "native/p1_package_defined_symbols.txt":
             "ea56c69b4fd42507688df052219a62dc3c8b7a9039e4aa7be9dc7bcb0febdf17",
         "native/p1_package_undefined_symbols.txt":
-            # 07dbc6e admitted the reviewed indexed shell-lookup runtime calls.
-            "1941268ad78dad3d432fcbe5a8cd93ee7a959d3714c23fe59e8a6f3736566173",
+            # bb992c80 added the package's required fatal-runtime symbol.
+            "f40f509083cc74748e92a6ec2da9de9376c330d9ad53174a19024736e00f1639",
         "native/m3t_transport_extension.esk":
             "71247e722d72764ce1b3400cb3f818ba12c3754dd11a6c742ffcec63942d5815",
         "native/i2_wave2_root.esk":
