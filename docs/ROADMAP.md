@@ -1155,6 +1155,16 @@ The remaining M2 mutants and full E3 §9 admission matrix remain open;
 installed/public E3 behavior and GPU execution are not established. This
 current-main source/docs union still needs independent review and hosted
 exact-head validation before integration.
+A separate exact-`44c0418` noninstalled M2 missing-batch source candidate
+uses the frozen genuine three-row sum-order D1/D2 witness and a test-only K1
+third-row lost accumulation. The numerical observer counts completed real rows
+independently of K1's mutated batch counter, so the third M3/CE/L3S row remains
+observable. Its independent rational oracle expects the third serial `N,W`
+and token/batch counters to diverge, followed by an exact third-state rejection
+without a mutant transcript. The frozen seed-1729 row is wrong, so `C` remains
+zero under both states; a genuinely correct final-row corpus is still needed
+to distinguish a missing correct-count update. This is source preparation only:
+independent source review, compiled execution and result review are pending.
 The 7eeaa03 current-main M2 union added the padded-position test selector to
 `scripts/build-e1b-consumer.sh`, changing its source bytes. Hosted model
 composition failed only the M3CG predecessor checksum. This bounded successor

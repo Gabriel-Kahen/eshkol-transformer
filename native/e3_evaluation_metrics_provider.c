@@ -172,6 +172,9 @@ static int64_t argmax(const float *row) {
 #if defined(ET_E3_NUMERICAL_WRONG_VOCAB_AXIS) && !defined(ET_E3_NUMERICAL_TESTING)
 #error "wrong-vocabulary-axis mutation requires the private numerical test tuple"
 #endif
+#if defined(ET_E3_NUMERICAL_MISSING_BATCH) && !defined(ET_E3_NUMERICAL_TESTING)
+#error "missing-batch mutation requires the private numerical test tuple"
+#endif
 #ifdef ET_E3_NUMERICAL_WRONG_VOCAB_AXIS
 /* Test mutant: reinterpret the same [T=2,V=256] logits as [V=256,T=2]. */
 static int64_t wrong_vocab_axis_argmax(const float *logits, size_t token) {
@@ -257,6 +260,17 @@ static int32_t evaluate_accumulate(const et_kernel_call_v1 *c, union results *re
   const int64_t next_tokens = tokens + active;
   const int64_t next_batches = batches + 1;
   if (next_batches > 8192 || next_tokens > 16384) return capped(e,op);
+#ifdef ET_E3_NUMERICAL_MISSING_BATCH
+  /* Test-only: the genuine third D2 row is reduced, but K1 loses its update. */
+  if (batches == 2 && active == 1) {
+    result->accumulate.n = n;
+    result->accumulate.w = w;
+    result->accumulate.correct = correct;
+    result->accumulate.tokens = tokens;
+    result->accumulate.batches = batches;
+    return 0;
+  }
+#endif
 #ifdef ET_E3_NUMERICAL_MEAN_OF_MEANS
   const float next_n = n + nb / wb;
 #else

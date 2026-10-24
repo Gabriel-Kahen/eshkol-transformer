@@ -27,6 +27,9 @@ int32_t et_g3t_model_pins_begin_fail_before_internal(
 #if defined(ET_E3_NUMERICAL_PADDED_POSITION) && !defined(ET_E3_NUMERICAL_TESTING)
 #error "padded-position mutation requires the private numerical test tuple"
 #endif
+#if defined(ET_E3_NUMERICAL_MISSING_BATCH) && !defined(ET_E3_NUMERICAL_TESTING)
+#error "missing-batch mutation requires the private numerical test tuple"
+#endif
 
 #if defined(ET_E3_NUMERICAL_TESTING) || defined(ET_E3_ZERO_CONTROL_TESTING)
 #include <inttypes.h>
@@ -101,6 +104,9 @@ struct et_e3_frame_internal {
 #ifdef ET_E3_NUMERICAL_SUM_ORDER
   float sum_order_first, sum_order_second;
   uint32_t sum_order_seen;
+#endif
+#ifdef ET_E3_NUMERICAL_MISSING_BATCH
+  uint32_t missing_batch_emitted;
 #endif
 #ifdef ET_E3_FAULT_TESTING
   /* State: 0 clear, 1 armed, 2 fired, 3 unreached after one call. */
@@ -441,7 +447,12 @@ static void e3_numerical_words(et_f32_tensor *tensor, size_t expected) {
 
 static void e3_numerical_batch(et_e3_frame_internal *frame) {
   const size_t bank = frame->sum_bank;
+#ifdef ET_E3_NUMERICAL_MISSING_BATCH
+  /* This observer ordinal follows real completed D2 rows, not K1's count. */
+  const int64_t ordinal = frame->missing_batch_emitted++;
+#else
   const int64_t ordinal = frame->counts[bank][1] - 1;
+#endif
   if (ordinal < 0 || ordinal >= 3) abort();
   printf("E3ROW\t%" PRId64 "\t%" PRId64 ",%" PRId64
          "\t%" PRId64 ",%" PRId64 "\t%u,%u\n", ordinal,
@@ -875,6 +886,9 @@ int64_t et_e3_private_acquire_v1(void *pointer) {
   frame->active = 0;
   memset(frame->staged_counts, 0, sizeof(frame->staged_counts));
   frame->sum_bank = 0;
+#ifdef ET_E3_NUMERICAL_MISSING_BATCH
+  frame->missing_batch_emitted = 0;
+#endif
 #ifdef ET_E3_NUMERICAL_SUM_ORDER
   frame->sum_order_first = frame->sum_order_second = 0.0f;
   frame->sum_order_seen = 0;

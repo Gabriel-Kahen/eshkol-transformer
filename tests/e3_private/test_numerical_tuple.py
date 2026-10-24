@@ -278,7 +278,8 @@ printf '%s\\n' "$e3_tuple_kind"
                 env={"E3_NUMERICAL_MUTANT": value}, capture_output=True,
                 text=True, check=False,
             )
-        for value in ("wrong-vocab-axis", "sum-order", "padded-position"):
+        for value in ("wrong-vocab-axis", "sum-order", "padded-position",
+                      "missing-batch"):
             accepted = select("e3-private-aggregate", "numerical", value)
             self.assertEqual((accepted.returncode, accepted.stdout),
                              (0, value + "\n"), accepted.stderr)
@@ -291,9 +292,13 @@ printf '%s\\n' "$e3_tuple_kind"
                                     ("e3-private-aggregate", "base", "padded-position"),
                                     ("e3-private-aggregate", "mode-graph", "padded-position"),
                                     ("other", "numerical", "padded-position"),
+                                    ("e3-private-aggregate", "base", "missing-batch"),
+                                    ("e3-private-aggregate", "mode-graph", "missing-batch"),
+                                    ("other", "numerical", "missing-batch"),
                                     ("e3-private-aggregate", "numerical", "wrong-vocab-axes"),
                                     ("e3-private-aggregate", "numerical", "sum-orders"),
-                                    ("e3-private-aggregate", "numerical", "padded-positions")):
+                                    ("e3-private-aggregate", "numerical", "padded-positions"),
+                                    ("e3-private-aggregate", "numerical", "missing-batches")):
             with self.subTest(policy=policy, kind=kind, value=value):
                 self.assertEqual(select(policy, kind, value).returncode, 77)
 
