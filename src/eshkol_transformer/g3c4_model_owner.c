@@ -5177,7 +5177,8 @@ int64_t et_g3c4_private_prefill3_v1(
  * private native seam only reconstructs a live P3 numerical prefix. */
 int64_t et_cpu4_private_c4_p3_resume_prefix_v1(
     void *context_candidate, void *output_candidate,
-    const int64_t ids3[3], float last_logits_output[256]) {
+    const int64_t ids3[3], const int64_t expected_rng[4],
+    float last_logits_output[256]) {
   et_g3c4_context_internal *context;
   et_g3c4_output_internal *output;
   int64_t committed_ids[3];
@@ -5197,12 +5198,21 @@ int64_t et_cpu4_private_c4_p3_resume_prefix_v1(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
   if (!et_g3c4_range_valid(ids3, 3u * sizeof(*ids3)) ||
       (uintptr_t)ids3 % _Alignof(int64_t) != 0u ||
+      !et_g3c4_range_valid(expected_rng, 4u * sizeof(*expected_rng)) ||
+      (uintptr_t)expected_rng % _Alignof(int64_t) != 0u ||
       !et_g3c4_range_valid(last_logits_output,
                            256u * sizeof(*last_logits_output)) ||
       (uintptr_t)last_logits_output % _Alignof(float) != 0u ||
       et_g3c4_ranges_overlap(ids3, 3u * sizeof(*ids3),
                              last_logits_output,
                              256u * sizeof(*last_logits_output)) ||
+      et_g3c4_ranges_overlap(expected_rng, 4u * sizeof(*expected_rng),
+                             ids3, 3u * sizeof(*ids3)) ||
+      et_g3c4_ranges_overlap(expected_rng, 4u * sizeof(*expected_rng),
+                             last_logits_output,
+                             256u * sizeof(*last_logits_output)) ||
+      et_g3c4_ranges_overlap(expected_rng, 4u * sizeof(*expected_rng),
+                             context, sizeof(*context)) ||
       et_g3c4_ranges_overlap(ids3, 3u * sizeof(*ids3),
                              context, sizeof(*context)))
     return et_g3c4_fail(
@@ -5210,8 +5220,24 @@ int64_t et_cpu4_private_c4_p3_resume_prefix_v1(
   if (et_g3c4_prefill_reject_owned_aliases(
           context, ids3, last_logits_output) != 0)
     return et_g3c4_error_state.category;
+  if (et_g3c4_ranges_overlap(expected_rng,
+          4u * sizeof(*expected_rng), context->owner,
+          sizeof(*context->owner)) ||
+      et_a2_kv_cache_private_storage_overlap_v1(expected_rng,
+          4u * sizeof(*expected_rng)) != 0)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+  for (size_t index = 0u; index < 14u; ++index)
+    if (et_g3c4_ranges_overlap(expected_rng,
+            4u * sizeof(*expected_rng),
+            context->pins.views[index].data,
+            context->pins.views[index].byte_length))
+      return et_g3c4_fail(
+          ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
   if (et_g3c4_p2g2_carrier_owned_alias(
           context, ids3, 3u * sizeof(*ids3)) ||
+      et_g3c4_p2g2_carrier_owned_alias(
+          context, expected_rng, 4u * sizeof(*expected_rng)) ||
       et_g3c4_p2g2_carrier_owned_alias(
           context, last_logits_output,
           256u * sizeof(*last_logits_output)))
@@ -5221,6 +5247,13 @@ int64_t et_cpu4_private_c4_p3_resume_prefix_v1(
       ids3[2] == context->generator_policy[5])
     return et_g3c4_fail(
         ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
+  if (expected_rng[0] != 1 || expected_rng[1] < 0)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
+  if (memcmp(expected_rng, context->generator_rng_words,
+             sizeof(context->generator_rng_words)) != 0)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_STALE_BINDING);
   memcpy(committed_ids, ids3, sizeof(committed_ids));
   memcpy(saved_rng, context->generator_rng_words, sizeof(saved_rng));
   if (et_g3c4_prefill3_internal(
