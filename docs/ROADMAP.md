@@ -2318,6 +2318,16 @@ normal/repeat/native-sanitizer gate and independent review remain pending;
 this does not restore a live model or T1 owner, import G3 RNG, or replay a
 candidate generator.
 
+A private same-registry FILE/C2-to-TR3 restore candidate is source-staged.
+Its new root composes CLI3/G3-G with the G3-R receipt extensions once. After
+the checked FILE pair and C2 tokenizer comparison close their receipt borrow,
+it compares the supplied live T1 fingerprint and vocabulary with the TR3
+trainer's retained tokenizer identity, marks the receipt busy, and passes its
+exact owned C2 shell to the existing joint `trainer-load-state!` transaction.
+The receipt retains ownership and returns live only after C2 and trainer idle
+revalidation. This is a source candidate pending compiled same-registry
+controls; it does not yet replay history, import G3 RNG, or admit continuation.
+
 The source-only current-main union of these G3-R leaves starts from the
 reviewed CLI3 `baf0a03f` child of main `ee24ef4` and carries only G3 leaf
 commits `2569ccf`, `c63951e`, `b8b64b9`, `f3e1485`, and `308dd596`.

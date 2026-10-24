@@ -1,0 +1,53 @@
+;;; Private FILE-bound restore in the CLI3/TR3/G3-G registry. The receipt
+;;; retains its exact C2 owner; TR3 only borrows it for joint restore.
+(define (g3r-c2-pair-file-restore-trainer-internal!
+          receipt path tokenizer trainer)
+  (let* ((operation 'checkpoint-load)
+         (fields (make-vector 8 #f)))
+    ;; This closes the receipt borrow before TR3 opens its own C2 borrow.
+    (g3r-c2-pair-file-verify-c2-tokenizer-internal! receipt path fields)
+    (let* ((fingerprint (utf8->string (vector-ref fields 6)))
+           (vocabulary (t2-private-tokenizer-vocab-size tokenizer))
+           (live-fingerprint (t2-private-tokenizer-fingerprint tokenizer))
+           (trainer-record
+             (tr3-lease-record-for-shell-internal trainer operation))
+           (trainer-tokenizer (vector-ref trainer-record 7))
+           (receipt-record (g3r-c2-receipt-find receipt)))
+      (if (not (and (= vocabulary 256)
+                    (= (vector-ref trainer-tokenizer 1) vocabulary)
+                    (string=? live-fingerprint fingerprint)
+                    (string=? (vector-ref trainer-tokenizer 0) fingerprint)
+                    receipt-record
+                    (eq? (vector-ref receipt-record 1) 'live)
+                    (not (vector-ref receipt-record 4))
+                    (eq? (vector-ref trainer-record 3) 'idle)
+                    (not (vector-ref trainer-record 4))))
+          (c2-load-fail 'invalid-state operation
+                        "G3-R FILE pair has no matching idle live T1/TR3 owner" '()))
+      (let ((owner (vector-ref receipt-record 2)))
+        (if (not (c2-load-exact-live-owner? owner))
+            (c2-load-fail 'invalid-state operation
+                          "G3-R FILE pair C2 owner is not live" '()))
+        ;; Both handlers exist before the busy publication; an impossible
+        ;; cleanup defect cannot leave an owned C2 shell stranded here.
+        (guard (cleanup-defect (#t (g3r-c2-sha-fail-stop 134)))
+          (guard (caught
+                   (#t
+                     (if (not (and (eq? (vector-ref receipt-record 2) owner)
+                                   (c2-load-exact-live-owner? owner)
+                                   (eq? (vector-ref trainer-record 3) 'idle)
+                                   (not (vector-ref trainer-record 4))))
+                         (g3r-c2-sha-fail-stop 134))
+                     (vector-set! receipt-record 1 'live)
+                     (raise caught)))
+            ;; Busy receipt blocks release/second borrow while TR3 borrows C2.
+            (vector-set! receipt-record 1 'restoring)
+            (if (not (eq? (trainer-load-state! trainer owner) #t))
+                (g3r-c2-sha-fail-stop 134))
+            (if (not (and (eq? (vector-ref receipt-record 2) owner)
+                          (c2-load-exact-live-owner? owner)
+                          (eq? (vector-ref trainer-record 3) 'idle)
+                          (not (vector-ref trainer-record 4))))
+                (g3r-c2-sha-fail-stop 134))
+            (vector-set! receipt-record 1 'live)
+            fields))))))
