@@ -43,7 +43,7 @@ def verify(gate: str, producer: str, control: str) -> None:
     for marker in ("et_e1b_public_c2_checkpoint_save_v1",
                    "et_c2_private_checkpoint_load_stage_with_sha_v1",
                    '"$out/producer/program.ll" >"$out/producer/save-call-ir.txt"',
-                   '"$out/no-save/program.ll" >"$out/no-save/unexpected-save-ir.txt"',
+                   '"$out/no-save/program.ll" >"$out/no-save/linked-facade-save-ir.txt"',
                    'build_reader normal', 'build_reader sanitize',
                    'cmp "$out/private-normal/run.stdout" "$out/private-normal/repeat.stdout"',
                    'cmp "$out/private-normal/run.stdout" "$out/private-sanitize/run.stdout"'):
