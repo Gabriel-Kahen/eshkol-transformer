@@ -1370,6 +1370,20 @@ union at `9aed9c65`/tree `55377da7`. This remains a source candidate;
 supported optimized Eshkol AOT normal, poison and sanitizer gates are the next
 admission gate.
 
+An isolated exact-`44c0418d` stage-3 compiled-gate recipe now fixes the
+existing guarded selector to site 4, ordinal 7, occurrence 1. This denies the
+eighth pin after a real seven-pin prefix and exercises M3's ordinary prefix
+drain before the E3 call returns. The unchanged fault driver checks mapped
+stage 3/internal first error, exact cursor, 17 modes, model/gradient/RNG,
+six distinct seeded outputs and owner counts, then resets the one-shot arm
+and retries on the same authorities against an independent twin. The gate
+compares exact source/native/object/export/string/import manifests and
+specifies absent/present gradient runs under normal, repeat, poison and
+sanitizer. Its host launcher pins reviewed HEAD/tree under `heavy.lock` and
+retains labeled container custody through removal. Focused host source and
+custody tests pass; supported compiled execution and independent result
+review remain **NOT RUN**. No other stage-3 cut or E3 §9 R1/R2 row is admitted.
+
 The bounded E3 §9 stage-8 source candidate adds noninstalled frame-owned
 site 5, ordinal 0, occurrences 1 or 2. After all 21 forward roles, it
 consumes the one-shot selector before L2 CE dispatch and returns the existing
