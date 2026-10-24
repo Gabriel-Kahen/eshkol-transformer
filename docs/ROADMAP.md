@@ -664,6 +664,18 @@ Retention and full CPU-v1 admission stay held.
 GPU, mixed precision and optional expansion stay backlog. Historical detail below
 retains its original evidence scope.
 
+A distinct [external CPU4 resume gate](../tests/cpu4_fresh_resume/README.md) is
+integrated from reviewed source `a2626f12`: uninterrupted A250 producer, retained
+A125 input and fresh-process 125-step suffix, with complete C2 equality and
+malformed/identity negatives. Its exact-source normal gate independently passed
+on 2026-10-23: producer/consumer A125 and full A250/B250 checkpoint bytes,
+including all value and moment planes, agree; three negative processes passed.
+Receipt: `finish-20261022/team/cpu4-fresh-external-resume-attempt2-independent-review-20261023/REVIEW.md`.
+This fixed synthetic training result does not admit sanitizer, resource, installed
+CLI, public generation, persisted continuation or full CPU-v1 behavior. The
+integrated native source roster has changed from 211 to 215 members, so the
+accepted a262 runtime result does not establish current-union execution.
+
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
 | N3K | [Bounded diagnostic numerical primitives and initializer](N3K_PRIMITIVES.md) | N2, A2, K1, I1, I2, Q0 | 31 exact operation/row pairs; independent VJP/bit/negative/carrier tests, private AOT and sanitizers; independent N3K-R approval, supported CI 34222643674, PR #67 merge and focused merged-main retest | complete |
