@@ -961,6 +961,13 @@ independent source review, and supported normal/repeat, poison and sanitizer
 execution remain pending. This supplies no §9 N3/M2 compiled acceptance or
 target-offset, wrong-axis, finite-boundary or overflow proof.
 
+A noninstalled uniform-tie successor corrects the idle first-model RNG
+successor assertion from `(1 1729 580 0)` (the second-model continuation) to
+`(1 1729 290 0)`. A focused host guard checks one model construction,
+zero-state load before frame bind, and the pinned independent M3 initializer
+successor. Pinned Q0 uniform tests pass; compiled C1 admission, private E3
+forward, last-tie mutation, sanitizer and resource evidence remain pending.
+
 The separate E3 N3 zero-model source candidate on the exact `a64caf9a7`
 union uses the registered M3 tree's 14 unique CPU/f32 owners and one
 head/embedding tie. A noninstalled root decodes 4,736 zero bytes through I2,
