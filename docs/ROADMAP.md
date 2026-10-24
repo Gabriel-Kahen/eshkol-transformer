@@ -2209,9 +2209,9 @@ and exact successor RNG `(1,41,0,0)` for all modes. Focused source, checker,
 driver and Guile host checks pass. The immutable `ee90307a` EOS41 compiled
 normal/repeat receipt passed all six actual trained processes and independent
 review, with the same B125 C2 SHA and successor RNG. Trained sanitizer and
-fresh-process continuation are not yet admitted. The CPU4
-capture record has no typed C4 import, checked wire profile or fresh-process
-no-draw replay transaction, so this fixture alone cannot close G3-R.
+fresh-process continuation are not yet admitted. The CPU4 capture record has
+no typed C4 authority import or fresh-process no-draw replay transaction, so
+this fixture alone cannot close G3-R.
 
 The B250 SAVE continuation prerequisite is staged separately on the same
 trained-CPU4 lineage. Before G2 handoff, it saves the final resumed B250 model
@@ -2229,6 +2229,15 @@ B250 C2 SHA and raw 96-byte T1 fingerprint. A focused compiled codec unit and
 independent Python SHA/layout oracle cover exact bytes, declared spans and
 failure atomicity. This source-private record does not authenticate a current
 factory issuer, import a typed RNG/history owner, or prove fresh-process G2.
+
+The [private C4 P3 resume prerequisite](g3/G3_C4_P3_RESUME_NATIVE_LEAF.md)
+is source-staged from the same trained-G2 branch. It adds a native no-draw
+P3 cache/history reconstruction that leaves the existing second-frame path
+ready, plus an uninterrupted native parity and failure/retry control. Source
+review and syntax checks found no blocker; its native runtime gate is queued.
+The caller must still authenticate a persisted B250 C2 image, live tokenizer,
+checked RNG and saved prompt/G1 before invoking it. This leaf alone does not
+establish a FILE pair or fresh-process continuation.
 
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1

@@ -163,7 +163,10 @@ static void history_replay3_witness(et_g3c4_model_owner_internal *owner,int cate
   OK(et_g3c4_private_generator_close_v1(c));
 }
 
-int main(void) {
+#ifndef ET_CPU4_C4_HISTORY_TEST_MAIN
+#define ET_CPU4_C4_HISTORY_TEST_MAIN main
+#endif
+int ET_CPU4_C4_HISTORY_TEST_MAIN(void) {
   et_g3c4_model_owner_internal *owner=create_owner();
   history_effects before=history_now();
   cpu4_history_node *head=cpu4_history_registry;
