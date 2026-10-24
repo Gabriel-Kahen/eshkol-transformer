@@ -208,6 +208,15 @@ Its five layouts, three mutant kills and sanitizer observations are bounded to
 that T2 source. Candidate-ON CPU4 and the full trained-path sanitizer remain
 unadmitted until their own exact-source runs and independent result reviews.
 
+The separately sealed original-source terminal-control exit 1 at `95070d729`
+is classified against repair-only `51d5cc9c` PASS 62 in
+`/home/gabe/.codex/evidence/eshkol-transformer/finish-20261022/terminal-managed-cell-ir-asan-control-trace-review-20261024/REVIEW.md`.
+The original ASan trace strongly matches the predicted native-clone
+borrow-header probe without final allocator/compiler fault attribution;
+the repair-only result is a focused pass. Neither run was repeated for this
+classification. This pair does not admit E3 §9, candidate-ON CPU4, or the full
+trained-path sanitizer.
+
 Completion requires independent source-and-test review, frozen oracle and
 mutation inventory, every row's supported compiled proof or explicit accepted
 unreachable/equivalent disposition, all pre/post state checks, and fresh
