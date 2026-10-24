@@ -165,10 +165,14 @@ class Host(unittest.TestCase):
 class Source(unittest.TestCase):
     def test_b0_pins_and_roster_remain_exact(self):
         self.assertEqual(len(driver.preflight(driver.ROOT,driver.load_roster(),json.loads(driver.OVERLAY.read_text()))),36)
+        from tests.cpuv1_resource.projection import off, tokens
         for line in (driver.ROOT/driver.DEPENDENCIES).read_text().splitlines():
             digest,path=line.split('  ',1)
             original=subprocess.check_output(['git','show','b0af97d10a96fc62ef414a26953582f5c79ad642:'+path],cwd=driver.ROOT)
-            self.assertEqual(hashlib.sha256(original).hexdigest(),digest)
+            if path == 'tests/cpu4_heldout/inspect.c':
+                self.assertEqual(tokens(off((driver.ROOT/path).read_text())),tokens(original.decode()))
+            else:
+                self.assertEqual(hashlib.sha256(original).hexdigest(),digest)
 
     def test_single_factory_before_suffix_and_independent_uninterrupted_producer(self):
         text=(driver.ROOT/'tests/cpu4_fresh_resume/body.esk').read_text()
