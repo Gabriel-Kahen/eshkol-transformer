@@ -1,0 +1,3 @@
+;;; Private FILE-bound C2/tokenizer prerequisite; no live model or RNG import.
+(load "g3r_c2_pair_file_read_root.esk")
+(load "g3r_c2_pair_tokenizer_bind_extension.esk")

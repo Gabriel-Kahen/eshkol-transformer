@@ -1,0 +1,62 @@
+;;; Genuine FILE-bound C2 fingerprint comparison in one receipt registry.
+(load "g3r_c2_pair_tokenizer_bind_root.esk")
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3-R TOKENIZER BIND FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label thunk)
+  (let ((caught? #f))
+    (guard (raised (#t (set! caught? #t))) (thunk))
+    (check label caught?)))
+(define (untouched? values)
+  (let loop ((at 0))
+    (if (= at 8) #t
+        (and (eq? (vector-ref values at) 'untouched)
+             (loop (+ at 1))))))
+(define args (command-line))
+(define c2-path (car (cdr args)))
+(define directory (car (cdr (cdr args))))
+(define (companion name) (string-append directory "/" name))
+(define policy
+  (c2-persistence-policy-internal 1048576 1048576 1048576 16 'cpu))
+(define report (k2-public-capability-discover))
+(define receipt (g3r-c2-load-with-sha-internal c2-path policy report))
+(define output (make-vector 8 'untouched))
+(check "matching saved C2 tokenizer accepted"
+  (eq? (g3r-c2-pair-file-verify-c2-tokenizer-internal!
+         receipt (companion "matched.g3r") output) output))
+(check "exact C2 field retained"
+  (equal? (utf8->string (vector-ref output 6))
+          "sha256:eshkol-byte-tokenizer-v1:0000000000000000000000000000000000000000000000000000000000000000"))
+(define pending (make-vector 8 'untouched))
+(reject "synthetic fingerprint mismatch"
+  (lambda () (g3r-c2-pair-file-verify-c2-tokenizer-internal!
+               receipt (companion "valid.g3r") pending)))
+(check "mismatch preserves destination and receipt"
+  (and (untouched? pending)
+       (eq? (vector-ref (g3r-c2-receipt-find receipt) 1) 'live)))
+(reject "wrong C2 digest"
+  (lambda () (g3r-c2-pair-file-verify-c2-tokenizer-internal!
+               receipt (companion "wrong-digest.g3r") pending)))
+(check "wrong digest preserves destination" (untouched? pending))
+(reject "forged receipt"
+  (lambda () (g3r-c2-pair-file-verify-c2-tokenizer-internal!
+               (vector 'forged) (companion "matched.g3r") pending)))
+(check "forgery preserves destination" (untouched? pending))
+(define borrow
+  (g3r-c2-receipt-borrow-begin-internal receipt 'checkpoint-load))
+(reject "busy receipt"
+  (lambda () (g3r-c2-pair-file-verify-c2-tokenizer-internal!
+               receipt (companion "matched.g3r") pending)))
+(g3r-c2-receipt-borrow-end-internal! borrow)
+(check "busy receipt preserves destination" (untouched? pending))
+(check "release receipt" (g3r-c2-receipt-release-internal! receipt))
+(reject "dead receipt"
+  (lambda () (g3r-c2-pair-file-verify-c2-tokenizer-internal!
+               receipt (companion "matched.g3r") pending)))
+(check "dead receipt preserves destination" (untouched? pending))
+(display "G3-R C2/FILE tokenizer bind PASS: checks=")
+(display checks)
+(newline)

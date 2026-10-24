@@ -2308,6 +2308,16 @@ existing private file reader against that image in normal, repeat and
 sanitizer modes. Source and host checks are complete; the compiled gate is
 unrun and does not establish restored model or public continuation.
 
+A private C2/FILE tokenizer-binding prerequisite is source-staged on the
+G3-R branch. It checks the companion's 96-byte raw-V256 fingerprint against
+the controls projected from an active borrow of the exact C2/SHA receipt,
+closes that borrow, then publishes eight decoded fields together. The test
+fixture derives the positive fingerprint from the saved C2 image and keeps
+the prior synthetic fingerprint as a rejection case. Its compiled
+normal/repeat/native-sanitizer gate and independent review remain pending;
+this does not restore a live model or T1 owner, import G3 RNG, or replay a
+candidate generator.
+
 The source-only current-main union of these G3-R leaves starts from the
 reviewed CLI3 `baf0a03f` child of main `ee24ef4` and carries only G3 leaf
 commits `2569ccf`, `c63951e`, `b8b64b9`, `f3e1485`, and `308dd596`.

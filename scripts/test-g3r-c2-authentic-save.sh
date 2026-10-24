@@ -242,6 +242,73 @@ test ! -s "$out/private-normal/repeat.stderr"
 cmp "$out/private-normal/run.stdout" "$out/private-normal/repeat.stdout"
 build_reader sanitize
 cmp "$out/private-normal/run.stdout" "$out/private-sanitize/run.stdout"
+
+build_tokenizer_bind() {
+  local mode="$1" directory="$out/private-$1" binder="$out/tokenizer-$1"
+  local -a runtime=(env)
+  if [[ "$mode" == sanitize ]]; then
+    runtime=(env ASAN_OPTIONS=detect_leaks=1:halt_on_error=1
+                 UBSAN_OPTIONS=halt_on_error=1
+                 LSAN_OPTIONS=exitcode=23:report_objects=1)
+  fi
+  mkdir -p "$binder/cache"
+  local -a inputs=(
+    -I "$PROJECT_ROOT/internal/p1/lib" -I "$PROJECT_ROOT/internal/c1/lib"
+    -I "$PROJECT_ROOT/internal/t2/lib" -I "$PROJECT_ROOT/internal/t1/lib"
+    -I "$PROJECT_ROOT/internal/d2/lib" -I "$PROJECT_ROOT/src"
+    -I "$PROJECT_ROOT/lib" -I "$PROJECT_ROOT/native" -L "$directory"
+    --lib g3r_c2_sha_stage
+    "$PROJECT_ROOT/tests/g3r/pair_tokenizer_bind_runtime.esk")
+  env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
+    XDG_CACHE_HOME="$binder/cache" ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
+    ESHKOL_CXX_COMPILER="$directory/cxx-wrap" \
+    timeout --foreground --signal=TERM --kill-after=5s 1200s "$runner" \
+      --strict-types --optimize 0 --no-stdlib --dump-ir "${inputs[@]}" \
+      -o "$binder/caller" >"$binder/build.stdout" 2>"$binder/build.stderr"
+  test -s "$binder/caller" && test -s "$binder/caller.ll"
+  test ! -s "$binder/build.stderr"
+  nm -u --format=posix "$binder/caller" >"$binder/linked-undefined-symbols.txt"
+  rg 'et_c2_private_checkpoint_load_stage_with_sha_v1' \
+    "$binder/caller.ll" >"$binder/c2-sha-ir.txt"
+  if [[ "$mode" == normal ]]; then
+    env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
+      XDG_CACHE_HOME="$binder/cache" ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
+      ESHKOL_CXX_COMPILER="$directory/cxx-wrap" \
+      timeout --foreground --signal=TERM --kill-after=5s 1200s "$runner" \
+        --strict-types --optimize 0 --no-stdlib --emit-object \
+        --emit-depfile "$binder/caller.d" "${inputs[@]}" \
+        -o "$binder/caller.o" \
+        >"$binder/object.stdout" 2>"$binder/object.stderr"
+    test ! -s "$binder/object.stderr"
+    sed -e 's/^[^:]*://' -e 's/\\//g' "$binder/caller.d" | \
+      tr -s '[:space:]' '\n' | rg "^$PROJECT_ROOT/" | \
+      sed "s#^$PROJECT_ROOT/##" | \
+      rg -v '^tests/g3r/pair_tokenizer_bind_runtime\.esk$' \
+      >"$binder/source-closure.txt"
+    cmp "$PROJECT_ROOT/native/g3r_c2_pair_tokenizer_bind_source_closure.txt" \
+      "$binder/source-closure.txt"
+    nm -u --format=posix "$binder/caller.o" \
+      >"$binder/eshkol-object-undefined-symbols.txt"
+    rg 'et_c2_private_checkpoint_load_stage_with_sha_v1' \
+      "$binder/eshkol-object-undefined-symbols.txt" >/dev/null
+  fi
+  "${runtime[@]}" ESHKOL_ARENA_POISON=1 \
+    timeout --foreground --signal=TERM --kill-after=5s 360s \
+    "$binder/caller" "$saved" "$out/companions" \
+    >"$binder/run.stdout" 2>"$binder/run.stderr"
+  test ! -s "$binder/run.stderr"
+  rg -x 'G3-R C2/FILE tokenizer bind PASS: checks=[1-9][0-9]*' \
+    "$binder/run.stdout" >/dev/null
+}
+build_tokenizer_bind normal
+ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s 360s \
+  "$out/tokenizer-normal/caller" "$saved" "$out/companions" \
+  >"$out/tokenizer-normal/repeat.stdout" \
+  2>"$out/tokenizer-normal/repeat.stderr"
+test ! -s "$out/tokenizer-normal/repeat.stderr"
+cmp "$out/tokenizer-normal/run.stdout" "$out/tokenizer-normal/repeat.stdout"
+build_tokenizer_bind sanitize
+cmp "$out/tokenizer-normal/run.stdout" "$out/tokenizer-sanitize/run.stdout"
 sha256sum "$saved" "$out/companions/valid.g3r" \
   >"$out/pair-after-reader.sha256"
 cmp "$out/pair-before-reader.sha256" "$out/pair-after-reader.sha256" || \

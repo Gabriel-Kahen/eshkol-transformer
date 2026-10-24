@@ -6,6 +6,7 @@ import tempfile
 import unittest
 
 from tests.c2.test_handler_order import definition, parse
+from tests.c2.test_checkpoint_format import make_fixture
 from tests.g3r.prepare_pair_file_inputs import prepare
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -118,16 +119,19 @@ class FileReadSourceTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as scratch:
             home = Path(scratch)
             c2 = home / "image.c2"
-            c2.write_bytes(b"independent fixture image")
+            c2.write_bytes(make_fixture()[0])
             output = home / "files"
             prepare(c2, output)
             valid = (output / "valid.g3r").read_bytes()
             wrong = (output / "wrong-digest.g3r").read_bytes()
+            matched = (output / "matched.g3r").read_bytes()
             self.assertEqual(len(valid), 288)
             self.assertEqual(valid[:8], b"G3RCV1\0\0")
             self.assertEqual(valid[224:256], hashlib.sha256(c2.read_bytes()).digest())
             self.assertEqual(valid[256:], hashlib.sha256(valid[:256]).digest())
             self.assertNotEqual(valid[224:256], wrong[224:256])
+            self.assertEqual(matched[128:224], c2.read_bytes()[256:352])
+            self.assertNotEqual(matched[128:224], valid[128:224])
             self.assertEqual(wrong[256:], hashlib.sha256(wrong[:256]).digest())
             self.assertEqual(len((output / "short.g3r").read_bytes()), 287)
             self.assertEqual(len((output / "long.g3r").read_bytes()), 289)

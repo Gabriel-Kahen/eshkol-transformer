@@ -1,0 +1,38 @@
+;;; Bind a checked companion's tokenizer bytes to the C2 owner that supplied
+;;; its SHA receipt. Decoded fields remain data, never model/T1/RNG authority.
+(define (g3r-c2-pair-file-verify-c2-tokenizer-internal!
+          receipt path destination)
+  (let ((operation 'checkpoint-load)
+        (staged (make-vector 8 #f))
+        (borrow-cell (vector #f)))
+    (g3r-c2-pair-file-decode-internal! receipt path staged)
+    (guard (caught
+             (#t
+               (if (vector-ref borrow-cell 0)
+                   (guard (cleanup-defect
+                            (#t (g3r-c2-sha-fail-stop 134)))
+                     (g3r-c2-receipt-borrow-end-internal!
+                       (vector-ref borrow-cell 0))))
+               (raise caught)))
+      (vector-set! borrow-cell 0
+        (g3r-c2-receipt-borrow-begin-internal receipt operation))
+      (let* ((c2-borrow
+               (g3r-c2-receipt-borrow-c2-internal
+                 (vector-ref borrow-cell 0) operation))
+             (projection
+               (c2-training-state-borrow-projection-internal c2-borrow))
+             (controls (vector-ref projection 2))
+             (tokenizer (vector-ref controls 1))
+             (fingerprint (vector-ref tokenizer 0))
+             (vocabulary (vector-ref tokenizer 1))
+             (record-fingerprint (vector-ref staged 6)))
+        (if (not (and (= vocabulary 256)
+                      (string=? fingerprint
+                        (utf8->string record-fingerprint))))
+            (c2-load-fail 'corrupt-data operation
+                          "G3-R companion tokenizer differs from C2" '())))
+      (g3r-c2-receipt-borrow-end-internal! (vector-ref borrow-cell 0))
+      (vector-set! borrow-cell 0 #f)
+      ;; The pinned runtime promotes the full tagged range before first write.
+      (vector-copy! destination 0 staged 0 8)
+      destination)))
