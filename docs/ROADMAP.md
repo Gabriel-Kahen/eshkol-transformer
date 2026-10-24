@@ -2327,6 +2327,9 @@ exact owned C2 shell to the existing joint `trainer-load-state!` transaction.
 The receipt retains ownership and returns live only after C2 and trainer idle
 revalidation. This is a source candidate pending compiled same-registry
 controls; it does not yet replay history, import G3 RNG, or admit continuation.
+Its fixed context-two wire is not the CPU4 B250 context-four checkpoint
+continuation contract; that exact-model integration requires a separate C4
+pair/receipt and replay gate.
 
 The source-only current-main union of these G3-R leaves starts from the
 reviewed CLI3 `baf0a03f` child of main `ee24ef4` and carries only G3 leaf
