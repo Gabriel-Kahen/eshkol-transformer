@@ -117,10 +117,13 @@ for mode in normal sanitized; do
   fi
 done
 
-for mode in normal normal-repeat sanitized; do
+for mode in normal normal-repeat poisoned sanitized; do
   binary=${mode%-repeat}
+  [[ "$mode" != poisoned ]] || binary=normal
+  poison=0
+  [[ "$mode" != poisoned && "$mode" != sanitized ]] || poison=1
   for gradient in absent present; do
-    capture "runtime-$mode-$gradient" 1200 env ESHKOL_ARENA_POISON=1 \
+    capture "runtime-$mode-$gradient" 1200 env ESHKOL_ARENA_POISON="$poison" \
       ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
       UBSAN_OPTIONS=halt_on_error=1 \
       "$out/runtime-$binary" "$corpus" "$gradient"
@@ -134,6 +137,8 @@ done
 for gradient in absent present; do
   cmp "$out/runtime-normal-$gradient.stdout" \
       "$out/runtime-normal-repeat-$gradient.stdout"
+  cmp "$out/runtime-normal-$gradient.stdout" \
+      "$out/runtime-poisoned-$gradient.stdout"
   cmp "$out/runtime-normal-$gradient.stdout" \
       "$out/runtime-sanitized-$gradient.stdout"
 done
