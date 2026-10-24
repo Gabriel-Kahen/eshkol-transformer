@@ -688,6 +688,11 @@ repins current source and checks historical F32 equivalence under the selected
 compiler; supported Clang 21 source checks pass, but current-head hosted and
 runtime gates remain open. No main merge follows this update.
 
+The independent C4 T4 numerical bridge source review accepts test-only
+`c629e378`, with genuine C4/P1/D2 transport and independent CE/gradient
+checks. Its supported compiled normal/sanitizer gate is **NOT RUN**; the CLI3
+installed C4 producer and consumer remain downstream.
+
 Active finish milestone: **first complete validated CPU v1**. Current acceptance
 and ownership: [CPU v1 completion index](WAVE3_COMPLETION.md), updated 2026-10-24.
 PR #214 exact-head hosted checks pass. Current-source CPU4 two-update training,
