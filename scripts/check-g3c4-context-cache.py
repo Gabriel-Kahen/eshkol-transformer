@@ -12,11 +12,21 @@ DISABLED_STEP4 = frozenset({
     "ET_G3C4_ACTIVE_CALL_PRIVATE",
     "ET_G3C4_GENERATOR_PRIVATE",
     "ET_G3C4_P2_G2_TERMINAL_PRIVATE",
+    "ET_CPU4_CANDIDATE_PRIVATE",
+    "ET_CPU4_C4_HISTORY_PRIVATE",
+    "ET_CPUV1_RESOURCE_TESTING",
 })
 SAFE_STEP4_INCLUDES = frozenset({
     '"g3c4_context_internal.h"',
     '"eshkol_transformer/a2_kv_cache.h"',
+    '"cpu4_c4_history.inc"',
 })
+
+
+def require_history_include_guarded(contents):
+    projected = step4_projection(contents)
+    require(not _mask_comments(projected).strip(),
+            "history include reaches Step 4a")
 
 
 def require(condition, message):
@@ -258,6 +268,8 @@ def check():
         cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
 
     source = (ROOT / "src/eshkol_transformer/g3c4_model_owner.c").read_text()
+    require_history_include_guarded(
+        (ROOT / "src/eshkol_transformer/cpu4_c4_history.inc").read_text())
     header = (ROOT / "src/eshkol_transformer/g3c4_context_internal.h").read_text()
     test = (ROOT / "tests/g3c4/test_context_cache.c").read_text()
     contract = (ROOT / "docs/g3/G3_C4_CONTEXT_CACHE_STEP4A_CONTRACT.md").read_text()
@@ -306,7 +318,11 @@ def check():
         "context->owner = NULL",
         "ET_G3C4_CONTEXT_STATE(context) = ET_G3C4_CONTEXT_DEAD",
     ], "context close")
-    require("free(context);\n    et_g3c4_error_restore_internal(first);" in block,
+    step4_block = step4_projection(block)
+    require(any(re.search(re.escape(line) +
+                          r"\s*et_g3c4_error_restore_internal\(first\);", step4_block)
+                for line in ("free(context);",
+                             "ET_R_FREE(ET_R_C4,4,context,1u,sizeof(*context));")),
             "constructor failure does not preserve first error")
 
     for phrase in [

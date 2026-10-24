@@ -41,6 +41,26 @@ class Step4ProjectionTests(unittest.TestCase):
         )
         CHECKER.require_no_deferred_surface(block)
 
+    def test_later_feature_includes_require_their_guards(self):
+        for flag, include in (
+            ("ET_CPU4_CANDIDATE_PRIVATE", "cpu4_candidate.inc"),
+            ("ET_CPU4_C4_HISTORY_PRIVATE", "cpu4_c4_capture.inc"),
+            ("ET_CPUV1_RESOURCE_TESTING", "cpuv1_resource_c4.inc"),
+        ):
+            guarded = (f'#ifdef ET_G3C4_CONTEXT_PRIVATE\n#ifdef {flag}\n'
+                       f'#include "{include}"\n#endif\n#endif\n')
+            with self.subTest(flag=flag):
+                CHECKER.require_no_deferred_surface(guarded)
+                unguarded = guarded.replace(f'#ifdef {flag}\n', '', 1)
+                with self.assertRaisesRegex(ValueError, 'unsupported Step 4a include'):
+                    CHECKER.require_no_deferred_surface(unguarded)
+
+    def test_history_include_is_entirely_feature_guarded(self):
+        included = (ROOT / 'src/eshkol_transformer/cpu4_c4_history.inc').read_text()
+        CHECKER.require_history_include_guarded(included)
+        with self.assertRaisesRegex(ValueError, 'history include reaches Step 4a'):
+            CHECKER.require_history_include_guarded(included + '\nint unguarded_history;\n')
+
     def test_false_arm_leak_is_rejected(self):
         mutant = BASE.replace(
             "#ifdef ET_G3C4_GENERATOR_PRIVATE\nint generator_rng;\n#endif",

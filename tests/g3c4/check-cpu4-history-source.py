@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Host source/contract regression; never invokes a C preprocessor/compiler."""
 from pathlib import Path
-import ctypes, difflib, re, subprocess
+import ctypes, difflib, re, subprocess, sys
 root=Path(__file__).resolve().parents[2]
+sys.path.insert(0,str(root))
+from tests.cpuv1_resource.projection import off as resource_off
 owner=(root/'src/eshkol_transformer/g3c4_model_owner.c').read_text()
 helper=(root/'src/eshkol_transformer/cpu4_c4_history.inc').read_text()
 types=(root/'src/eshkol_transformer/cpu4_c4_history_types.h').read_text()
@@ -51,7 +53,7 @@ bad58f=subprocess.check_output(['git','show','58f35af2d595720981c4666ab97ae30af8
 try: physical_directives(bad58f)
 except AssertionError: pass
 else: raise AssertionError('physical-line control missed actual58f defect')
-old=tokens(base);new=tokens(off_projection(owner))
+old=tokens(base);new=tokens(off_projection(resource_off(owner)))
 if old!=new:
     difference=list(difflib.unified_diff(old,new,n=3))
     raise AssertionError('OFF source path differs: '+' '.join(difference[:140]))
@@ -132,7 +134,7 @@ def manual_custody_checks(source):
     assert 'pending.frame=' not in retained and 'pending.operation=' not in retained and 'pending_clear' not in retained
     finish=body(source,'et_g3c4_private_call_finish_v1')
     assert finish.index('cpu4_history_auth(context)')<finish.index('free(context->manual_frame)')<finish.index('cpu4_history_pending_clear(history)')<finish.index('et_g3c4_active_call_drain(context)')
-manual_custody_checks(owner)
+manual_custody_checks(resource_off(owner))
 try: manual_custody_checks(bad58f)
 except (AssertionError,ValueError): pass
 else: raise AssertionError('manual custody control missed original58f omission')
@@ -174,6 +176,8 @@ def fixture_helpers(overrides=None):
             text=fixture_text(path,overrides);seen[path]=text
             for included in re.findall(r'^\s*#\s*include\s*"([^"\n]+\.(?:c|inc))"',text,re.M):
                 target=(path.parent/included).resolve()
+                if included == 'cpuv1_resource_c4.inc' and not target.is_file():
+                    target=(root/'native'/included).resolve()
                 assert target.is_relative_to(root) and target.is_file(),included
                 visit(target)
         visit(entry)
