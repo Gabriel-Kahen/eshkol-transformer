@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import shlex
 import subprocess
+from check_f32_lineage import check as check_f32_lineage
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -34,7 +35,8 @@ def check_arithmetic_order(source: str) -> None:
     assert positions == sorted(positions), 'accepted binary32 traversal changed'
 
 
-def check(artifact: Path) -> None:
+def check(artifact: Path, cc: str) -> None:
+    check_f32_lineage(cc)
     obj = artifact / 'l3s_masked_objective_provider.o'
     archive = artifact / 'libeshkol_transformer_l3s.a'
     assert output('ar', 't', str(archive)).splitlines() == manifest('archive_members')
@@ -80,4 +82,6 @@ def check(artifact: Path) -> None:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('artifact', type=Path)
-    check(parser.parse_args().artifact.resolve())
+    parser.add_argument('compiler')
+    args = parser.parse_args()
+    check(args.artifact.resolve(), args.compiler)

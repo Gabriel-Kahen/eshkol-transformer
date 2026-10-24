@@ -104,6 +104,9 @@ jobs:
       G3C4_ASAN_DETECT_LEAKS: '1'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          # L3S compares current F32 with its historical source in the core suite.
+          fetch-depth: ${{ matrix.suite == 'native-numerics' && '0' || '1' }}
 
       - name: Install host dependencies
         shell: /usr/bin/bash -euo pipefail {0}

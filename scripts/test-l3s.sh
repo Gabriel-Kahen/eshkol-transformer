@@ -36,7 +36,7 @@ l3s_cflags=(-std=c11 -Wall -Wextra -Werror -Wpedantic -ffp-contract=off
 for l3s_artifact in "${l3s_library}" "${l3s_l2}" "${l3s_k1}" "${l3s_i1}" "${l3s_i2}"; do
   [[ -r "${l3s_artifact}" ]] || die "required canonical archive missing: ${l3s_artifact}"
 done
-python3 "${l3s_tests_dir}/test_package_contract.py" "${l3s_dir}"
+python3 -E -B "${l3s_tests_dir}/test_package_contract.py" "${l3s_dir}" "${l3s_cc}"
 if objdump -d "${l3s_dir}/l3s_masked_objective_provider.o" | grep -E '\b(v?fmadd|fma)' >/dev/null; then
   die 'L3S contains a fused multiply-add instruction'
 fi

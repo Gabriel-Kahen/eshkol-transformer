@@ -101,7 +101,7 @@ cmp native/l3s_public_exports.txt "$out/l3s_masked_objective_provider.exports"
 cmp native/l3s_undefined_symbols.txt "$out/l3s_masked_objective_provider.undefined"
 printf 'et_e3_metrics_kernel_provider_v1\n' | cmp - "$out/e3_evaluation_metrics_provider.exports"
 cmp tests/e3_metrics/expected/undefined_symbols.txt "$out/e3_evaluation_metrics_provider.undefined"
-log l3s-package python3 -B tests/l3s/test_package_contract.py "$out/a"
+log l3s-package python3 -E -B tests/l3s/test_package_contract.py "$out/a" "$cc"
 log metrics-package python3 -B tests/e3_metrics/test_package_contract.py "$out/a" "$out/e3_evaluation_metrics_provider.ll"
 log capability-report-link "$cc" "${flags[@]}" -O2 tests/e3_metrics/report_provider.c \
   "$out/a/kernel_abi.o" "$out/a/e3_evaluation_metrics_provider.o" -lm -o "$out/report"
