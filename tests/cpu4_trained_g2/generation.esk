@@ -65,6 +65,28 @@
         (c2-checkpoint-load-staging-release-internal! (vector-ref recovery 0))
         (vector-set! recovery 0 #f)))
   #t)
+;;; Producer witness is emitted from the live final-B capture, before SAVE.
+;;; The driver seals all 4,768 raw bytes and the canonical per-plane lengths.
+(define (cpu4-trained-g2-emit-live-b250! final-b)
+  (let ((planes (vector-ref final-b 0)))
+    (let emit-plane ((index 0))
+      (if (< index 14)
+          (let* ((plane (vector-ref planes index))
+                 (length (bytevector-length plane))
+                 (expected (* 4 (cpu4-checkpoint-product
+                                  (vector-ref g3c4-model-shapes index)))))
+            (if (not (= length expected))
+                (cpu4-binding-fail 'invalid-state 'cpu4-trained-g2
+                  "live B250 witness plane extent changed"))
+            (display "CPU4-LIVE-B250-PLANE ")
+            (display index) (display " ") (display length)
+            (let emit-byte ((offset 0))
+              (if (< offset length)
+                  (begin (display " ") (display (bytevector-u8-ref plane offset))
+                         (emit-byte (+ offset 1)))))
+            (newline)
+            (emit-plane (+ index 1))))))
+  #t)
 (define (cpu4-trained-g2-save-b250! trainer final-b path policy report image-cell)
   (let ((recovery (vector #f #f)) (failure (vector #f #f)))
     ;; Both handlers exist before any stage/image authority can be returned.
@@ -82,6 +104,7 @@
           (and (= (cpu4-resume-plane-size (vector-ref snapshot 0) 14) 4768)
                (cpu4-resume-values=? (vector-ref final-b 0)
                                      (vector-ref snapshot 0))))
+        (cpu4-trained-g2-emit-live-b250! final-b)
         (c2-public-checkpoint-save!
           (vector-ref image-cell 0) path policy '(:overwrite? #f))
         (c2-training-state-release-internal!

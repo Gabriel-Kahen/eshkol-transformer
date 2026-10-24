@@ -1,0 +1,119 @@
+;;; Fresh-process final-B250 FILE factory witness. One genuine CPU4 universe.
+(load "cpu4_v1_private_root.esk")
+(load "../cpu4_heldout/body.esk")
+(load "../cpu4_resume/body.esk")
+
+(define cpu4-b250-fresh-checks 0)
+(define (cpu4-b250-fresh-check label good)
+  (if good (set! cpu4-b250-fresh-checks (+ cpu4-b250-fresh-checks 1))
+      (cpu4-binding-fail 'invalid-state 'cpu4-b250-fresh label)))
+(define (cpu4-b250-fresh-open directory tokenizer)
+  (d2-token-dataset-open
+    (list ':directory directory ':batch-size 1 ':sequence-length 4
+          ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+          ':maximum-total-tokens 5 ':maximum-batch-bytes 68
+          ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #f) tokenizer))
+(define (cpu4-b250-fresh-config)
+  (list ':profile 'diagnostic-c4-p2g2 ':sampling 'greedy
+        ':temperature-bits 1065353216 ':top-k 256 ':top-p-bits 1065353216
+        ':max-new-tokens 2 ':eos 41 ':seed 41))
+(define (cpu4-b250-fresh-emit! copy)
+  (let ((planes (vector-ref copy 0)))
+    (let emit-plane ((index 0))
+      (if (< index 14)
+          (let* ((plane (vector-ref planes index))
+                 (length (bytevector-length plane))
+                 (expected (* 4 (cpu4-checkpoint-product
+                                  (vector-ref g3c4-model-shapes index)))))
+            (cpu4-b250-fresh-check "restored plane extent" (= length expected))
+            (display "CPU4-FRESH-B250-PLANE ")
+            (display index) (display " ") (display length)
+            (let emit-byte ((offset 0))
+              (if (< offset length)
+                  (begin (display " ") (display (bytevector-u8-ref plane offset))
+                         (emit-byte (+ offset 1)))))
+            (newline)
+            (emit-plane (+ index 1))))))
+  #t)
+(define (cpu4-b250-fresh-run! train-directory path mode)
+  (if (not (or (string=? mode "inspect") (string=? mode "handoff")))
+      (cpu4-binding-fail 'invalid-argument 'cpu4-b250-fresh "closed mode required"))
+  (let* ((resolved (x1-private-config-resolve (x1-private-config-parse
+             "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":4,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729,\"training.accumulation-steps\":1}") '()))
+         (t2 (t2-wave2-tokenizer-byte resolved))
+         (dataset (cpu4-b250-fresh-open train-directory t2))
+         (policy (c2-persistence-policy-internal 16777216 524288 8388608 64 'cpu))
+         (report (k2-public-capability-discover))
+         (ledger (vector #f (vector #f) (vector #f)))
+         (handoff (vector #f))
+         (phase (vector 'inspect)))
+    ;; The snapshot cell and factory ticket are rooted before either provider.
+    (guard (caught
+             (#t (if (or (eq? (vector-ref phase 0) 'handoff)
+                         (eq? (vector-ref phase 0) 'adopted))
+                     (begin (display "CPU4-B250-FRESH-PENDING ")
+                            (display (vector-ref phase 0)) (newline)
+                            (cpu4-binding-fail-stop 70))
+                     (cpu4-resume-cleanup! ledger))
+                 (raise caught)))
+      (cpu4-b250-fresh-check "nonregional exact CPU4 profile"
+        (and (null? (cpu4-checkpoint-native-current-region))
+             (= (x1-private-config-ref resolved 'run.seed) 1729)
+             (= (x1-private-config-ref resolved 'training.accumulation-steps) 1)))
+      (cpu4-resume-stream! dataset)
+      (let* ((trainer (cpu4-checkpoint-factory-create-internal!
+                        path policy report resolved t2 dataset (vector-ref ledger 1)))
+             (ticket (vector-ref (vector-ref ledger 1) 0))
+             (factory (cpu4-checkpoint-factory-row ticket 'cpu4-b250-fresh))
+             (model (cpu4-owned-model-internal (vector-ref factory 14)))
+             (record (cpu4-resume-counts! trainer 250)))
+        (cpu4-b250-fresh-check "exact ready FILE trainer and released reader"
+          (and (eq? (vector-ref factory 3) 'ready)
+               (eq? (vector-ref factory 15) trainer)
+               (eq? (vector-ref record 8) model)
+               (eq? (vector-ref record 15) dataset)
+               (not (vector-ref factory 10)) (not (vector-ref factory 11))))
+        (let ((copy (cpu4-resume-snapshot-copy! trainer (vector-ref ledger 2))))
+          (cpu4-b250-fresh-check "all parameter and moment extents"
+            (and (= (cpu4-resume-plane-size (vector-ref copy 0) 14) 4768)
+                 (= (cpu4-resume-plane-size (vector-ref copy 1) 28) 9536)))
+          (cpu4-resume-emit 'fresh250 trainer copy)
+          (cpu4-b250-fresh-emit! copy))
+        (let ((t1 (t1-wave1-tokenizer-byte resolved)))
+          (cpu4-b250-fresh-check "fresh T1 has exact checked byte fingerprint"
+            (and (not (eq? t1 t2))
+                 (string=? (t1-wave1-tokenizer-fingerprint t1)
+                   "sha256:eshkol-byte-tokenizer-v1:aabb31f49216963582383a00fd2e85d7c20b658d5bef0e7945344ed6bfe50704")))
+          (if (string=? mode "handoff")
+              (begin
+                (vector-set! phase 0 'handoff)
+                (let* ((pair (cpu4-checkpoint-factory-generator-handoff-internal!
+                               ticket t1 (cpu4-b250-fresh-config) handoff))
+                       (generator (vector-ref pair 1)))
+                  (vector-set! phase 0 'adopted)
+                  (cpu4-b250-fresh-check "same factory B250 model adopted by G2"
+                    (and (eq? (vector-ref pair 0) model)
+                         (g3c4-public-g2-profile-live generator 'cpu4-b250-fresh)))
+                  (cpu4-b250-fresh-check "G2 generator closes"
+                    (g3g-public-generator-close generator))
+                  (vector-set! phase 0 'closed)))))
+        (cpu4-resume-cleanup! ledger)
+        (d2-token-dataset-close! dataset)
+        (display "CPU4-B250-FRESH-PASS ") (display mode)
+        (display " ") (display cpu4-b250-fresh-checks) (newline)
+        #t))))
+(guard (caught
+         (#t (display "CPU4-B250-FRESH-ERROR ")
+             (if (transformer-error? caught)
+                 (begin (write (transformer-error-category caught)) (display " ")
+                        (write (transformer-error-operation caught)) (display " ")
+                        (write (transformer-error-message caught)))
+                 (write caught))
+             (newline) (exit 1)))
+  (let ((args (command-line)))
+    (if (not (= (i2-bounded-list-length args 5) 4))
+        (cpu4-binding-fail 'invalid-argument 'cpu4-b250-fresh
+          "expected train-directory B250-file inspect|handoff"))
+    (cpu4-b250-fresh-run! (car (cdr args))
+                          (car (cdr (cdr args)))
+                          (car (cdr (cdr (cdr args)))))))
