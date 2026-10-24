@@ -45,6 +45,17 @@ class ModeGraphTupleTest(unittest.TestCase):
                 self.assertEqual(generator.digest(extension),
                                  generator.OUTPUT_DIGESTS[mode][1])
                 self.assertEqual(extension.count(
+                    "(vector-ref (vector-ref canonical 8) 1)"), 1)
+                self.assertIn("(p1-e3-mode-bind! root-model root-setup-box)",
+                              extension)
+                self.assertNotIn("(let ((mode-token (vector-ref setup-box 1)))",
+                                 extension)
+                self.assertLess(extension.index(
+                    "(p1-e3-mode-bind! root-model root-setup-box)"),
+                                extension.index("(vector-set! canonical 8 #f)"))
+                self.assertLess(extension.index("(vector-set! canonical 1 1)"),
+                                extension.index("(vector-set! canonical 8 #f)"))
+                self.assertEqual(extension.count(
                     "\n                                (e3-mode-graph-note! entry)"), 1)
                 self.assertEqual(extension.count(
                     "\n                                         (e3-mode-graph-note! entry)"), 1)

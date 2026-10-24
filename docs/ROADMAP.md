@@ -874,6 +874,13 @@ The expected abort diagnostic appears in Docker stderr; ordinary/sanitized
 compile and runtime stderr is empty. Its current-main `5520dfe` union changes
 only unrelated G3 RNG code/tests and documentation outside the seven package
 source/native closures and depfiles; hosted CI and merge remain pending.
+The exact `44c0418` mode/graph attempt3 stopped during the first noninstalled
+package build because its generator still pinned the pre-rooted frame-binding
+extension; the retained failure is not a mode runtime verdict. A scoped
+successor repins that generator to the current canonical extension and its
+four derived mode digests while preserving the P1 variant digests and the
+in-call insertion anchors. Focused source checks pass; an independent review
+and fresh supported compiled mode/graph gate remain pending.
 The supported mode/graph gate did not include retention or numerical test
 candidates. A scoped source integration adds the separate complete-call
 retention tuple and strict 1,024/8,192-call normal A/B, poison A/B and
