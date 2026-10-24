@@ -66,11 +66,16 @@
         (vector-set! recovery 0 #f)))
   #t)
 (define (cpu4-trained-g2-save-b250! trainer final-b path policy report image-cell)
-  (let ((recovery (vector #f #f)))
-    (guard (caught
-             (#t (guard (cleanup-error (#t (cpu4-binding-fail-stop 70)))
-                   (cpu4-trained-g2-b250-loaded-release! recovery))
-                 (raise caught)))
+  (let ((recovery (vector #f #f)) (failure (vector #f #f)))
+    ;; Both handlers exist before any stage/image authority can be returned.
+    ;; The outer guard handles cleanup defects; the inner one records the first
+    ;; failure so the original value can be raised after cleanup completes.
+    (guard (cleanup-error (#t (cpu4-binding-fail-stop 70)))
+      (guard (caught
+               (#t (cpu4-trained-g2-b250-loaded-release! recovery)
+                   (vector-set! failure 0 #t)
+                   (vector-set! failure 1 caught)
+                   #f))
       (cpu4-trainer-snapshot-internal trainer image-cell)
       (let ((snapshot (cpu4-resume-capture (vector-ref image-cell 0))))
         (cpu4-trained-g2-check "B250 SAVE source is exact final-B fourteen planes"
@@ -82,42 +87,49 @@
         (c2-training-state-release-internal!
           (vector-ref image-cell 0) 'trainer-state-release!)
         (vector-set! image-cell 0 #f)
-        (let ((stage #f))
+        (let ((stage #f) (stage-cut (vector #f #f)))
           ;; The returned stage remains in a lexical root until cell enrollment.
-          (guard (caught
-                   (#t (if (and stage (not (eq? (vector-ref recovery 0) stage)))
-                           (guard (cleanup-error (#t (cpu4-binding-fail-stop 70)))
-                             (c2-checkpoint-load-staging-release-internal! stage)))
-                       (raise caught)))
-            (set! stage (c2-checkpoint-load-stage-internal path policy))
-            (let ((descriptors
-                    (c2-checkpoint-load-capability-descriptors-internal
-                      stage 'checkpoint-load)))
-              (vector-set! recovery 0 stage)
-              (c2-public-capability-admit-all report descriptors))))
-        (let ((owner #f))
+          (guard (cleanup-error (#t (cpu4-binding-fail-stop 70)))
+            (guard (caught
+                     (#t (if (and stage (not (eq? (vector-ref recovery 0) stage)))
+                             (c2-checkpoint-load-staging-release-internal! stage))
+                         (vector-set! stage-cut 0 #t)
+                         (vector-set! stage-cut 1 caught)
+                         #f))
+              (set! stage (c2-checkpoint-load-stage-internal path policy))
+              (let ((descriptors
+                      (c2-checkpoint-load-capability-descriptors-internal
+                        stage 'checkpoint-load)))
+                (vector-set! recovery 0 stage)
+                (c2-public-capability-admit-all report descriptors))))
+          (if (vector-ref stage-cut 0) (raise (vector-ref stage-cut 1))))
+        (let ((owner #f) (owner-cut (vector #f #f)))
           ;; Reconstruction consumes stage. A failed return-to-cell promotion
           ;; releases the lexical C2 owner directly, then the outer guard
           ;; retires the stage and rethrows the original failure.
-          (guard (caught
-                   (#t (if (and owner (not (eq? (vector-ref recovery 1) owner)))
-                           (guard (cleanup-error (#t (cpu4-binding-fail-stop 70)))
+          (guard (cleanup-error (#t (cpu4-binding-fail-stop 70)))
+            (guard (caught
+                     (#t (if (and owner (not (eq? (vector-ref recovery 1) owner)))
                              (c2-training-state-release-internal!
-                               owner 'trainer-state-release!)))
-                       (raise caught)))
-            (set! owner (c2-checkpoint-load-reconstruct-internal
-                          (vector-ref recovery 0) 'checkpoint-load))
-            (if (not (c2-load-exact-live-owner? owner))
-                (cpu4-binding-fail 'invalid-state 'cpu4-trained-g2
-                  "B250 C2 reader returned no exact live owner"))
-            (vector-set! recovery 1 owner)))
+                               owner 'trainer-state-release!))
+                         (vector-set! owner-cut 0 #t)
+                         (vector-set! owner-cut 1 caught)
+                         #f))
+              (set! owner (c2-checkpoint-load-reconstruct-internal
+                            (vector-ref recovery 0) 'checkpoint-load))
+              (if (not (c2-load-exact-live-owner? owner))
+                  (cpu4-binding-fail 'invalid-state 'cpu4-trained-g2
+                    "B250 C2 reader returned no exact live owner"))
+              (vector-set! recovery 1 owner)))
+          (if (vector-ref owner-cut 0) (raise (vector-ref owner-cut 1))))
         (let ((decoded (cpu4-resume-capture (vector-ref recovery 1))))
           (cpu4-trained-g2-check "B250 C2 decoded fourteen planes match final B bitwise"
             (and (= (cpu4-resume-plane-size (vector-ref decoded 0) 14) 4768)
                  (cpu4-resume-values=? (vector-ref final-b 0)
                                        (vector-ref decoded 0)))))
         (cpu4-trained-g2-b250-loaded-release! recovery)
-        #t))))
+        #t)))
+    (if (vector-ref failure 0) (raise (vector-ref failure 1)) #t)))
 ;;; Before the transfer starts, original cleanup is safe. Once attempted, retain
 ;;; the complete rooted pending/adopted graph and exact ticket for fatal exit.
 ;;; No forced busy-child retirement, rollback, implicit retry or second creator.
