@@ -1,8 +1,9 @@
 # E3 N5 authentic edge and 8,193 preflight preparation
 
 Status: **source/host tuple preparation only** on base `44c0418d`. The
-noninstalled stage-2 candidate runs a genuine 8,192-row success control before
-the 8,193-row rejection, with six-output and cursor checks. Its sanitizer
+noninstalled private candidate includes a genuine 8,192-row success control
+before the 8,193-row rejection, plus one-token, empty, singleton and entry-EOS
+edges with six-output and cursor checks. Its sanitizer
 import inventories still require measurement and pinning, so the compiled gate
 has **NOT RUN**. No N5 resource acceptance follows from this file. The distinct
 single-invocation 8,192 horizon and 1,024/8,192 complete-call retention gates
@@ -22,7 +23,7 @@ the compiled evaluator. The fixture is generated outside Git for each run.
 | `empty` | zero shards, zero rows | Current finalizer cannot publish `W=0`; capture typed stage-12 rejection and six-output/cursor atomicity. |
 | `singleton` | one token, zero rows | Same typed stage-12 rejection, independently checks a present D1 shard. |
 | `entry-eos` | two tokens, one row, entry cursor already at ordinal 1 | Same stage-12 rejection with exact nonzero entry cursor. |
-| `one-token` | two tokens, one row, `[(3,0)→(197,0)]`, mask `10` | Genuine one-active-token success; compare six outputs and end cursor to a separately frozen independent M3/L2/L3S oracle. |
+| `one-token` | two tokens, one row, `[(3,0)→(197,0)]`, mask `10` | Genuine one-active-token success; compare six outputs against the pinned independent M3/CE/rational-metrics oracle and unchanged entry cursor against D2 reference bytes. |
 | `cap-8192` | 16,385 tokens, 8,192 full-mask rows | Existing single-invocation predecessor is the successful horizon control; a new private gate must still bind its own exact fixture, six outputs and resources. |
 | `cap-8193` | 16,387 tokens, 8,193 full-mask rows | Stage-2 `unsupported` before native acquire or traversal; unchanged entry cursor, all six outputs, modes and owners. No 8,193rd batch or publication. |
 
@@ -48,9 +49,26 @@ builder stage with `noninstrumentation-undefined.txt` and
 `sanitizer-undefined.txt` for independent review and pinning. This discovery
 call is not admission. No source-only result establishes a compiled outcome.
 
-The remainder of N5 still needs the other three edge cases, a genuine P1
-mode-bit snapshot seam and the full resource/ownership gate. For each case, the requirements below apply; the
-stage-2 candidate covers only the control and one-over subset.
+The same test tuple now has a second boxed edge entry. It opens each D2
+resource, checks the genuine total/next ordinal, evaluates one token, then
+checks empty, singleton and entry-EOS for exact stage-12 `invalid-state`, idle
+frame, unchanged six outputs and byte-identical cursor. Entry-EOS advances
+and releases its sole batch before evaluation. The runtime emits all four
+cursor bytevectors as decimal bytes so the development verifier can compare
+them to the signed D2 preflight. The pinned Python 3.14.6/PyTorch 2.13.0+cpu
+M3 reference computes one-token logits and CE; the rational metrics oracle
+checks the frozen `40b28797/3f800000/43846900/00000000` words. The compiled
+loss and perplexity are compared using the existing E3 mathematical tolerance;
+weight, accuracy and counters remain exact. This is an independent oracle,
+not a compiled observation.
+
+The six D1 manifest/shard payloads total exactly 269,104 bytes: 224, 496,
+504, 504, 133,680 and 133,696 bytes in the table's order. The runner checks
+these sizes and declares a 524,288 KiB peak RSS ceiling for each normal,
+repeated, poisoned and sanitized runtime process. No RSS value has been
+measured for this tuple. N5 still needs a genuine P1 mode-bit snapshot seam,
+full native-owner/FD/borrow/pin/root-region accounting and reviewed compiled
+outcomes. The requirements below describe those remaining checks.
 
 For each case, open D2 with the current driver config
 `N=1,T=2,V=256,packing=#t,shuffle=#f,window=1`, save the bytevector cursor,
@@ -83,6 +101,6 @@ raw output, `/usr/bin/time` receipts and post-exit SHA-256. Route heavy builds
 through `heavy.lock`; do not infer this gate from a previous source tree.
 
 The current generator and host tests establish authentic D1 bytes, D2 rows,
-signed cursor bytes, deterministic output and source closure for the stage-2
-candidate. Model-forward values, stage/category observations, rollback and
-resource ceilings remain **NOT RUN**.
+signed cursor bytes, deterministic payload sizes, the one-token oracle and
+source closure. Model-forward values, stage/category observations, rollback
+and runtime resource ceilings remain **NOT RUN**.

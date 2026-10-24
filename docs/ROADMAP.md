@@ -1093,12 +1093,13 @@ verdicts remain prerequisites before the full matrix is implemented and run.
 The [N5 edge preflight](e3/E3_N5_EDGE_PREFLIGHT.md) prepares six checksummed
 raw-T1/D1 corpora and independent D2 cursor/row receipts, including authentic
 8,192 and 8,193 rows. A separate noninstalled source tuple now calls the real
-private evaluator for one-token seed, an 8,192-row success control, then the
-8,193-row stage-2 rejection and six-output/cursor atomicity. Its host tests
-establish source closure and input bytes only. Exact sanitizer imports remain
-unmeasured; the compiled-private gate, edge outcomes, resource measurements
-and sanitizer run are **NOT RUN**. The accepted retention tuple and installed API
-are unchanged.
+private evaluator for one-token success, empty/singleton/entry-EOS stage-12
+errors, an 8,192-row success control and the 8,193-row stage-2 rejection.
+Its host tests establish source closure, input bytes, independent one-token
+oracle and 269,104-byte D1 payload. Exact sanitizer imports remain unmeasured;
+the compiled-private edge/cap outcomes, RSS and sanitizer run are **NOT RUN**.
+Full owner/mode/resource probes remain dependent work. The accepted retention
+tuple and installed API are unchanged.
 The first [mathematical three-batch M2 sum-order witness](../tests/e3_reference/sum_order_witness_v1.json)
 failed the one-use df9546 compiled C gate: compiled CE rounded both groupings
 to `41dcde82`. The successor [compiled witness](../tests/e3_reference/sum_order_witness_v2.json)

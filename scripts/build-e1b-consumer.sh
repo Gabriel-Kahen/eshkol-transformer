@@ -1562,7 +1562,7 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     elif [[ "${e3_tuple_kind}" == zero ]]; then
       export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_zero_(control|negative)_run_v1)$'
     elif [[ "${e3_tuple_kind}" == n5 ]]; then
-      export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_n5_run_v1)$'
+      export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_n5_(edge_)?run_v1)$'
     fi
   fi
 fi
@@ -2577,7 +2577,8 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
         et_e3_zero_control_census_v1
       )
     elif [[ "${e3_tuple_kind}" == n5 ]]; then
-      e3_required_private+=(et_e3_private_n5_dispatch_cabi_v1)
+      e3_required_private+=(et_e3_private_n5_dispatch_cabi_v1
+                            et_e3_private_n5_edge_dispatch_cabi_v1)
     elif [[ "${e3_tuple_kind}" == mode-graph ]]; then
       e3_required_private+=(
         et_e3_mode_graph_dispatch_cabi_v1
@@ -2734,7 +2735,7 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     elif [[ "${e3_tuple_kind}" == zero ]]; then
       public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_zero_(control|negative)_run_v1)$'
     elif [[ "${e3_tuple_kind}" == n5 ]]; then
-      public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_n5_run_v1)$'
+      public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_n5_(edge_)?run_v1)$'
     fi
   fi
 fi

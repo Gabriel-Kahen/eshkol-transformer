@@ -38,6 +38,11 @@ class N5PreflightTests(unittest.TestCase):
                              [cases["one-token"]["first_row"]])
             self.assertEqual(cases["cap-8192"]["shard_tokens"], [2048] * 8 + [1])
             self.assertEqual(cases["cap-8193"]["shard_tokens"], [2048] * 8 + [3])
+            self.assertEqual(
+                [sum(item["bytes"] for item in cases[name]["files"])
+                 for name in CASES],
+                [224, 496, 504, 504, 133680, 133696],
+            )
             for name in CASES:
                 case = cases[name]
                 loaded, digest = load_d1_resource(

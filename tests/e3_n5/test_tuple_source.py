@@ -20,18 +20,21 @@ class N5TupleSourceTests(unittest.TestCase):
     def test_exact_private_tuple_manifests(self) -> None:
         for suffix in ("defined_symbols", "public_exports", "public_strings"):
             self.assertEqual(lines(N5 / "package", suffix),
-                             sorted(lines(BASE, suffix) + ["et_e3_n5_run_v1"]))
+                             sorted(lines(BASE, suffix) + ["et_e3_n5_run_v1",
+                                                            "et_e3_n5_edge_run_v1"]))
         for suffix in ("native_objects", "undefined_symbols"):
             self.assertEqual(lines(N5 / "package", suffix), lines(BASE, suffix))
         self.assertEqual(lines(N5 / "package", "archive_members"),
                          ["e3_n5_package.o"])
         self.assertEqual(lines(N5 / "package", "private_renames"),
                          lines(BASE, "private_renames") +
-                         ["e3-n5-dispatch et_e3_private_n5_dispatch_cabi_v1"])
+                         ["e3-n5-dispatch et_e3_private_n5_dispatch_cabi_v1",
+                          "e3-n5-edge-dispatch et_e3_private_n5_edge_dispatch_cabi_v1"])
         self.assertEqual(lines(N5 / "package", "source_closure"),
                          ["tests/e3_n5/driver_root.esk"] +
                          lines(BASE, "source_closure") +
-                         ["tests/e3_n5/driver.esk"])
+                         ["tests/e3_n5/driver.esk",
+                          "tests/e3_n5/edge_driver.esk"])
         native = lines(BASE, "native_source_closure")
         native.insert(native.index("native/e3_private_bridge.c"),
                       "tests/e3_n5/bridge.c")
@@ -90,6 +93,21 @@ printf '%s\\n' "$e3_tuple_kind"
         self.assertNotIn("et_e3_n5_run_v1", (ROOT / "native/e3_private_bridge.c").read_text())
         self.assertNotIn("e3-n5-dispatch", (ROOT / "native/e3_private_driver_root.esk").read_text())
 
+    def test_edge_driver_reaches_authentic_finalizer_and_preserves_atomicity(self) -> None:
+        driver = (N5 / "edge_driver.esk").read_text()
+        runtime = (N5 / "edge_runtime.esk").read_text()
+        self.assertEqual(len(parse_source(driver)), 3)
+        self.assertGreater(len(parse_source(runtime)), 0)
+        self.assertEqual(driver.count("(e3-evaluate-into! model"), 2)
+        self.assertIn("(e3-test-skip! dataset 1)", driver)
+        self.assertIn("(e3-error-table-ref 12 'invalid-state)", driver)
+        self.assertIn("'edge-six-outputs", driver)
+        self.assertIn("'edge-cursor", driver)
+        self.assertIn("'edge-diagnostic-stage12", driver)
+        self.assertIn("(e3-n5-edge-counts dataset total skip)", driver)
+        self.assertIn("E3-N5-EDGE-PASS", runtime)
+        self.assertNotIn("e3-n5-edge-dispatch", (ROOT / "native/e3_private_driver_root.esk").read_text())
+
     def test_gate_binds_the_successful_control_and_refuses_unmeasured_sanitizer(self) -> None:
         gate = (ROOT / "scripts/test-e3-n5-private.sh").read_text()
         runtime = (N5 / "runtime.esk").read_text()
@@ -98,6 +116,9 @@ printf '%s\\n' "$e3_tuple_kind"
         self.assertIn("control=8192 stage=2 rows=8193", runtime)
         self.assertIn("N5 sanitizer import inventory is not pinned", gate)
         self.assertIn("$4 <= 524288", gate)
+        for expected in ("tests.e3_n5.oracle", "edge_runtime.esk",
+                         "edge-${variant}.stdout", "269104"):
+            self.assertIn(expected, gate)
 
     def test_builder_and_gate_are_closed(self) -> None:
         builder = (ROOT / "scripts/build-e1b-consumer.sh").read_text()

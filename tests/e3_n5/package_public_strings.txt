@@ -91,5 +91,6 @@ et_e1b_public_x1_config_parse_v1
 et_e1b_public_x1_config_ref_v1
 et_e1b_public_x1_config_resolve_v1
 et_e1b_public_x1_config_validate_v1
+et_e3_n5_edge_run_v1
 et_e3_n5_run_v1
 et_e3_test_run_v1

@@ -1,0 +1,74 @@
+;;; Authentic D2 zero-weight edges and one-active-token control.
+(define (e3-n5-edge-counts dataset total next)
+  (let ((core (vector-ref
+               (d2-open-dataset-state dataset 'e3-evaluate-into!) 6)))
+    (and (= (vector-ref core 14) total)
+         (= (vector-ref core 15) next))))
+
+(define (e3-n5-edge-reject! model tokenizer frame destinations path total skip)
+  (let ((dataset (d2-token-dataset-open
+                  (e3-test-dataset-config path #t) tokenizer)))
+    (if (= skip 1) (e3-test-skip! dataset 1))
+    (e3-n5-check 'edge-d2-counts (e3-n5-edge-counts dataset total skip))
+    (let* ((before (d2-token-dataset-cursor dataset))
+           (outputs (e3-n5-outputs frame destinations))
+           (entry (e3-frame-entry-internal frame))
+           (mode-token (vector-ref entry 6))
+           (matched? #f))
+      (e3-n5-check 'edge-entry-no-owner
+        (and (not (vector-ref (vector-ref entry 3) 10))
+             (= (e3-native-frame-check (vector-ref entry 4)) 0)))
+      (with-region ('e3-n5-zero-weight 262144)
+        (guard
+         (caught
+          (#t (set! matched?
+                (and (transformer-error? caught)
+                     (eq? (transformer-error-category caught) 'invalid-state)
+                     (eq? (transformer-error-operation caught)
+                          'e3-evaluate-into!)
+                     (eq? caught (e3-error-table-ref 12 'invalid-state))))))
+         (e3-evaluate-into! model dataset frame)))
+      (e3-n5-check 'edge-stage12-error matched?)
+      (e3-n5-check 'edge-diagnostic-stage12
+        (= (vector-ref (vector-ref entry 12) 0) 12))
+      (e3-n5-check 'edge-idle (= (vector-ref entry 1) 1))
+      (e3-n5-check 'edge-mode-token (eq? mode-token (vector-ref entry 6)))
+      (e3-n5-check 'edge-no-owner
+        (and (not (vector-ref (vector-ref entry 3) 10))
+             (= (e3-native-frame-check (vector-ref entry 4)) 0)))
+      (e3-n5-check 'edge-six-outputs
+        (e3-n5-outputs=? outputs frame destinations))
+      (e3-n5-check 'edge-cursor
+        (d2-core-bytes=? before (d2-token-dataset-cursor dataset)))
+      (d2-token-dataset-close! dataset)
+      before)))
+
+(define (e3-n5-edge-dispatch one-path empty-path singleton-path eos-path)
+  (let* ((fixture (e3-test-fixture))
+         (model (vector-ref fixture 0))
+         (tokenizer (vector-ref fixture 1))
+         (destinations (vector-ref fixture 2))
+         (frame (vector-ref fixture 3))
+         (one (d2-token-dataset-open
+               (e3-test-dataset-config one-path #t) tokenizer)))
+    (e3-n5-check 'one-d2-counts (e3-n5-edge-counts one 1 0))
+    (let ((one-before (d2-token-dataset-cursor one)))
+      (with-region ('e3-n5-one-token 262144)
+        (e3-evaluate-into! model one frame))
+      (e3-n5-check 'one-cursor
+        (d2-core-bytes=? one-before (d2-token-dataset-cursor one)))
+      (d2-token-dataset-close! one)
+      (let* ((outputs (e3-n5-outputs frame destinations))
+             (empty (e3-n5-edge-reject! model tokenizer frame destinations
+                         empty-path 0 0))
+             (singleton (e3-n5-edge-reject! model tokenizer frame destinations
+                             singleton-path 0 0))
+             (eos (e3-n5-edge-reject! model tokenizer frame destinations
+                       eos-path 1 1)))
+        (e3-n5-check 'one-weight
+          (= (vector-ref outputs 1) 1065353216))
+        (e3-n5-check 'one-accuracy (= (vector-ref outputs 3) 0))
+        (e3-n5-check 'one-counters
+          (and (= (vector-ref outputs 4) 1)
+               (= (vector-ref outputs 5) 1)))
+        (vector 'e3-n5-edge-result-v1 outputs one-before empty singleton eos)))))
