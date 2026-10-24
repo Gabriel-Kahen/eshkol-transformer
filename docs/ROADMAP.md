@@ -1342,6 +1342,19 @@ under ptrace. Independent source/test review accepted the composed E3 union at
 `9aed9c65`/tree `55377da7`; supported optimized Eshkol AOT
 normal/poison/sanitizer evidence and the remaining R1/R2 stage cuts stay open.
 
+An isolated exact-`44c0418d` stage-12 compiled-gate recipe now selects only
+the existing site-2, ordinal-0, occurrence-1 pre-first-write denial. Its
+noninstalled fault package uses the pinned source, native, object, symbol,
+string and ordinary/sanitized import manifests. The driver seeds six distinct
+pre-call words, checks mapped stage 12/first error, exact cursor, mode,
+model/gradient/RNG, outputs and owners after failure, then resets the arm and
+retries on the same authorities. The guest recipe specifies absent/present
+gradients under normal, repeated normal, poison and sanitizer; the host
+launcher pins the reviewed HEAD/tree under `heavy.lock` and retains labeled
+container custody through removal. Focused host source/custody checks pass.
+The supported compiled run and independent result review remain **NOT RUN**;
+this does not admit stage 12, other R1/R2 cuts or E3 §9.
+
 A bounded noninstalled stage-3 successor holds an authentic model parameter
 value borrow through the existing private fault tuple. The real M3 pin
 preflight denies acquisition before any of the 14 pins are committed, and the
