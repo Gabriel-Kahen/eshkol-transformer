@@ -103,11 +103,12 @@ int64_t et_g3c4_private_prefill3_v1(
 
 #ifdef ET_CPU4_C4_P3_RESUME_PRIVATE
 /* Native numerical reconstruction only. The caller authenticates the
- * persisted C2, tokenizer, RNG and history before invoking this private seam.
- * Success leaves a committed no-draw P3 cache and genuine G2-ready prefix. */
+ * persisted C2, tokenizer and history; this seam compares the checked RNG
+ * words to the live generator before any mutation. Success leaves a committed
+ * no-draw P3 cache and genuine G2-ready prefix. */
 int64_t et_cpu4_private_c4_p3_resume_prefix_v1(
     void *context, void *pending_output, const int64_t ids3[3],
-    float last_logits[256]);
+    const int64_t expected_rng[4], float last_logits[256]);
 #endif
 
 #ifdef ET_G3C4_PREFILL1_PRIVATE

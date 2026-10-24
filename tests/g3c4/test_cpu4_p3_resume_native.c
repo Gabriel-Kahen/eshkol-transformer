@@ -57,11 +57,11 @@ static void resume_parity(et_g3c4_model_owner_internal *owner) {
   snapshot_cache(after->cache, &empty_before);
   CHECK(et_g3c4_private_prefill3_v1(after, ids3, replay_logits) != 0);
   CHECK(et_cpu4_private_c4_p3_resume_prefix_v1(
-      after, before_output, ids3, replay_logits) != 0);
+      after, before_output, ids3, rng, replay_logits) != 0);
   union { int64_t ids[128]; float logits[256]; } alias = {0};
   memcpy(alias.ids, ids3, sizeof(ids3));
   CHECK(et_cpu4_private_c4_p3_resume_prefix_v1(
-      after, after_output, alias.ids, alias.logits) != 0);
+      after, after_output, alias.ids, rng, alias.logits) != 0);
   et_i64_tensor_borrow *borrow = NULL;
   const et_kernel_tensor_view_v1 *view = NULL;
   et_i64_tensor_error ids_error;
@@ -71,12 +71,22 @@ static void resume_parity(et_g3c4_model_owner_internal *owner) {
   float *owned_logits = (float *)view->data;
   OK(et_i64_tensor_borrow_end_v1(&borrow, &ids_error));
   CHECK(et_cpu4_private_c4_p3_resume_prefix_v1(
-      after, after_output, ids3, owned_logits) != 0);
+      after, after_output, ids3, rng, owned_logits) != 0);
+  CHECK(et_cpu4_private_c4_p3_resume_prefix_v1(
+      after, after_output, ids3, (const int64_t *)owned_logits,
+      replay_logits) != 0);
+  int64_t wrong_rng[4];
+  memcpy(wrong_rng, rng, sizeof(wrong_rng));
+  wrong_rng[2]++;
+  CHECK(et_cpu4_private_c4_p3_resume_prefix_v1(
+      after, after_output, ids3, wrong_rng, replay_logits) != 0);
+  CHECK(et_cpu4_private_c4_p3_resume_prefix_v1(
+      after, after_output, ids3, NULL, replay_logits) != 0);
   record_prefill = 1;
   prefill_dispatches = 0u;
   fail_prefill_at = 10u;
   CHECK(et_cpu4_private_c4_p3_resume_prefix_v1(
-      after, after_output, ids3, replay_logits) != 0);
+      after, after_output, ids3, rng, replay_logits) != 0);
   record_prefill = 0;
   fail_prefill_at = SIZE_MAX;
   snapshot_cache(after->cache, &empty_after);
@@ -95,7 +105,7 @@ static void resume_parity(et_g3c4_model_owner_internal *owner) {
         history_samples == draws);
   assert_pending(after_output);
   OK(et_cpu4_private_c4_p3_resume_prefix_v1(
-      after, after_output, ids3, replay_logits));
+      after, after_output, ids3, rng, replay_logits));
   CHECK(history_samples == draws);
   CHECK(memcmp(logits, replay_logits, sizeof(logits)) == 0);
   CHECK(memcmp(rng, after->generator_rng_words, sizeof(rng)) == 0);
