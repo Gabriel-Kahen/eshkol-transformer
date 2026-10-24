@@ -674,8 +674,22 @@ preservation, calling ABI and full recursive effects remain unmeasured. One
 reviewed successor emission must verify the complete batch before link/runtime;
 the original numbered gates and runtime/resource prerequisites remain in force.
 
+Integration update (2026-10-24): the reviewed resource producer sequence through
+`c5f50fd8` and finite-cache verifier `4e0173c1` are on the CPU-v1 integration
+branch as `b4b950af` and `4dfdec3e`. Current source/lineage repairs preserve
+the 233-member common roster, exact resource-OFF projections and trained-G2
+caller; 48 resource host tests pass. The verifier proves only two selected local
+holder transfers and reports `FAIL_ITEM1`. Nineteen helper-global initializer
+selectors, full dominance, indirect holder identity, lifetime and ABI are
+unresolved; six-helper effects fail. Prior c5f object/IR/static receipts are
+exact-source evidence only. Numbered resource runtime/census and installed
+CPU-v1 admission remain **NOT RUN**. Reviewed L3S lineage repair `eefe25d1`
+repins current source and checks historical F32 equivalence under the selected
+compiler; supported Clang 21 source checks pass, but current-head hosted and
+runtime gates remain open. No main merge follows this update.
+
 Active finish milestone: **first complete validated CPU v1**. Current acceptance
-and ownership: [CPU v1 completion index](WAVE3_COMPLETION.md), updated 2026-10-22.
+and ownership: [CPU v1 completion index](WAVE3_COMPLETION.md), updated 2026-10-24.
 PR #214 exact-head hosted checks pass. Current-source CPU4 two-update training,
 250-update one-batch learning, detach and bounded evaluator-consumer gates
 independently pass. Frozen b0 normal/repeat also passes synthetic held-out
@@ -695,9 +709,10 @@ correctness priority. Remaining processes/checkers were NOT RUN. The real bindin
 witness independently passes normal/repeat cleanup and native lease retry.
 Native history/capture independently passes normal/repeat/ASan+UBSan, including
 bitwise no-draw greedy/categorical prefix replay; typed fresh-process import and
-remaining decode are still required. Resource observer Stage A remains under
-implementation. Private CLI scalar/report producers are source-reviewed and
-integrated, with Guile53/Python7 root checks; native/AOT execution is NOT RUN. The independently source-reviewed
+remaining decode are still required. Resource observer Stage A source is
+integrated with resource proof and runtime gates still open. Private CLI
+scalar/report producers are source-reviewed and integrated, with Guile53/Python7
+root checks; native/AOT execution is NOT RUN. The independently source-reviewed
 current-root ON80 E3 consumer variation preserves217/219 absent/present fault
 assertions and original metric words with a genuine candidate; its two-process
 normal gate remains NOT RUN. Prior OFF64 fault/SAN results are not promoted. See

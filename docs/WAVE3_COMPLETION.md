@@ -36,6 +36,7 @@ the roadmap and linked contracts retain scope and measured limits.
 | Exact-head hosted suites | Integration | c71 run above: 24/24 success | Reuse for unchanged source; changed integration source needs affected gates and hosted checks. |
 | G3-R replay / same-registry generation / authentic C2 SAVE | G3 | Reviewed source union; hosted C2 suites cover their declared scope | Authenticate retained receipts, then supported SAVE/reader normal, repeat, sanitizer and genuine replay/same-registry evidence. First entry point: `bash scripts/test-g3r-c2-authentic-save.sh FRESH_OUTPUT_DIRECTORY`. |
 | E3 section 9 | E3 | Prior bounded leaves and native/provider checks only where exact source and seals authenticate | Complete [section 9 matrix](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md): numeric/mode/gradient/failure/resource rows, poison and leak-enabled runs. First choose missing supported runner from retained evidence; `scripts/test-e3-numerical-transcript.sh`, `scripts/test-e3-mode-graph.sh`, and `scripts/test-e3-complete-call-retention.sh` remain separate gates. |
+| CPU-v1 resource census | CLI3 + integration | Reviewed producer stack through `b4b950af` and finite-cache verifier `4dfdec3e` are integrated; 48 resource host tests pass. Selected P1/candidate local transfers pass, but item 1 is `FAIL_TO_PROVE`, six-helper effects fail, and target runtime is not run. | Prove private initialization/dominance, holder identity/lifetime/ABI and transitive effects on authenticated current source; then run numbered resource gates and bounded runtime/census. Frozen c5f object/IR receipts do not transfer to this union. |
 | Installed CLI3 chain and resume parity | CLI3 | Exact-c71 hosted job `116183228215` includes `CLI3-PRODUCTION-GENERATE-PASS` and `CLI3-CROSS-COMMAND-CHAIN-PASS`; retained authenticated log | `bash scripts/test-cli3-cross-command-chain.sh DISK_BACKED_EVIDENCE_DIR`: tokenizer/corpus → train → SAVE → resume vs uninterrupted → evaluate/generate, malformed/identity negatives and checkpoint immutability. |
 | CPU multi-token/EOS terminal and data-only continuation | G3 + integration public adapter → CLI3 | Native terminal prerequisites and fixed one-byte CLI path only | Implement/compile accepted [same-call terminal contract](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md), then public G2 gates and [data-only continuation](g3/G3_R_DATA_ONLY_CONTINUATION_CONTRACT.md); larger repeated-decode/EOS profile remains required by the full G3 contract. CLI adapter follows admitted exports. |
 | CPU training/learning/resume acceptance | CLI3 | CPU4 two-update140 checks,250-update learning2010 checks, frozen-b0 normal/repeat FILE resume770 checks/375 real steps, and exact-a262 distinct fresh-process training resume with full A250/B250 C2 equality and three negatives independently accepted; synthetic held-out mean5.51855→0.00003266 | Complete affected current union, SAN/resources and installed workflow; tiny synthetic improvement is not language generalization or persisted generation continuation. |
@@ -182,6 +183,20 @@ runtime vector has75 slots0..74 (its AST list has76 elements including `vector`)
 the proposed owning-scope census closure must preserve it exactly. No observer,
 sizeof, measured fit, native transient peak, history-ON or retention admission
 is established by this policy.
+
+The reviewed resource producer stack through source `c5f50fd8` is integrated as
+`b4b950af`; its finite-cache verifier `4e0173c1` is integrated as `4dfdec3e`.
+Current-union source pins and trained-G2 preservation guards were refreshed
+after independent review; 48 resource host tests pass. The verifier reports
+`PASS_LOCAL_TRANSFER` for two selected holder transfers and `FAIL_ITEM1` for
+the wider proof. Nineteen helper-global initializer selectors, full dominance,
+indirect holder identity, lifetime and ABI remain open; separate six-helper
+effect closure fails. Existing c5f object/IR/static receipts retain their
+frozen source identity. Numbered runtime, owner-byte census and installed
+admission remain **NOT RUN** on this union. Reviewed integration repair
+`eefe25d1` repins the L3S current-source manifest and checks historical F32
+preprocessing in normal/testing modes; supported Clang 21 source checks pass.
+Current-head hosted L3S and installed behavior remain **NOT RUN**.
 
 Binding-OOM witness attempt1 remains a preserved collector failure: `nm -g`
 omitted genuine LOCAL lease symbols after successful native/AOT/link builds.
