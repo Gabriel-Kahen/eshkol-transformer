@@ -2292,9 +2292,16 @@ The [private C4 token-embedding VJP source candidate]
 lookup and staged `[256,4]` tied table gradient. Local Clang 22 normal,
 repeat and native ASan+UBSan test all 1,024 gradient words and central
 differences for touched and distributed untouched coordinates, including
-duplicate IDs. Independent review and pinned compiled admission remain
-pending. A composed trainable C4 graph must still combine this gradient
-with the tied output-head gradient.
+duplicate IDs. Source `f58b4b85`/tree `0dd3e23e` passed a pinned rootless
+Clang 21 normal/repeat/native ASan+UBSan gate with 1,131 checks per mode,
+byte-identical stdout, empty runtime stderr and 2,607-file source custody.
+The 49-file receipt is `g3r-c4-embedding-vjp-f58b4b85-attempt1/SHA256SUMS-RUN`
+(SHA-256 `6e5429895cf05d535945eb88b4bea4d767669ab43df338c8a83de1a4cdc2f03c`);
+independent result review is sealed at
+`g3r-c4-vjp-leaves-independent-result-review-20261025/SHA256SUMS-REVIEW`
+(SHA-256 `09d4a732d6734b1fc8dcd55b816027755bd5c09e2bf146138ea393209cdfc24f`).
+A composed trainable C4 graph must still combine this gradient with the tied
+output-head gradient.
 
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1

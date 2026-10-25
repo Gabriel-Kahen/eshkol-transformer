@@ -1,7 +1,7 @@
 # Private C4 token-embedding VJP leaf
 
-Status: bounded source candidate. Independent review and pinned compiled
-admission remain pending.
+Status: pinned native Clang 21 normal/repeat/ASan+UBSan leaf gate and
+independent result review accepted.
 
 The genuine G3-C4 `g3c4.embedding.forward` row has raw V256 IDs `[1,4]`,
 the tied token/head table `[256,4]`, and output `[1,4,4]`. This private
@@ -23,3 +23,12 @@ coordinates through the genuine C4 forward provider. It also checks shape,
 dtype, device, layout, alias, invalid IDs, nonfinite values, accumulation
 overflow, null views and feature-off isolation. This is not a composed C4
 backward graph, trained model or checkpoint continuation.
+
+Source `f58b4b85`/tree `0dd3e23e` passed 1,131 checks per mode with byte
+parity, empty runtime stderr, feature-off rejection and exact 2,607-file
+source custody. The 49-file sealed receipt is
+`g3r-c4-embedding-vjp-f58b4b85-attempt1/SHA256SUMS-RUN` (SHA-256
+`6e5429895cf05d535945eb88b4bea4d767669ab43df338c8a83de1a4cdc2f03c`).
+Independent result review is sealed at
+`g3r-c4-vjp-leaves-independent-result-review-20261025/SHA256SUMS-REVIEW`
+(SHA-256 `09d4a732d6734b1fc8dcd55b816027755bd5c09e2bf146138ea393209cdfc24f`).
