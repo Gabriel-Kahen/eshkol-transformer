@@ -30,6 +30,10 @@ cflags=(-std=c11 -Wall -Wextra -Werror -Wpedantic -fPIC -fvisibility=hidden
         -I "$PROJECT_ROOT/src" -DET_F32_TENSOR_TESTING)
 for mode in candidate ordinary; do
   mkdir "$out/$mode" "$out/$mode/cache"
+  candidate_flag=()
+  if [[ $mode == candidate ]]; then
+    candidate_flag=(-DET_G3R_CANDIDATE_RETIRE_PRIVATE=1)
+  fi
   "$cc" "${cflags[@]}" -DET_I2_NATIVE_HELPERS_ONLY -DET_M3T_PACKAGE_BUILD \
     -c "$PROJECT_ROOT/native/i2_wave2_package_bridge.c" \
     -o "$out/$mode/i2_bridge.o"
@@ -39,23 +43,29 @@ for mode in candidate ordinary; do
       -o "$out/$mode/$source.o"
   done
   for source in m3t_transport m3t_f32_integration; do
-    "$cc" "${cflags[@]}" -c "$PROJECT_ROOT/src/eshkol_transformer/$source.c" \
+    "$cc" "${cflags[@]}" "${candidate_flag[@]}" \
+      -c "$PROJECT_ROOT/src/eshkol_transformer/$source.c" \
       -o "$out/$mode/$source.o"
   done
-  candidate_flag=()
-  if [[ $mode == candidate ]]; then
-    candidate_flag=(-DET_G3R_CANDIDATE_RETIRE_PRIVATE=1)
-  fi
   "$cc" "${cflags[@]}" "${candidate_flag[@]}" \
     -c "$PROJECT_ROOT/tests/p1/i2_construction_test_bridge.c" \
     -o "$out/$mode/test_bridge.o"
   nm -g --defined-only --format=posix "$out/$mode/test_bridge.o" \
     >"$out/$mode/defined.nm"
+  nm -g --defined-only --format=posix "$out/$mode/m3t_transport.o" \
+    >"$out/$mode/m3t-defined.nm"
   if [[ $mode == candidate ]]; then
     [[ $(awk '$1 == "et_p1_private_candidate_construction_begin_v1" {n++} END {print n+0}' \
       "$out/$mode/defined.nm") == 1 ]]
+    [[ $(awk '$1 == "et_m3t_private_candidate_binding_preflight_v1" {n++} END {print n+0}' \
+      "$out/$mode/m3t-defined.nm") == 1 ]]
   else
     ! grep -F 'et_p1_private_candidate_' "$out/$mode/defined.nm"
+    ! grep -F 'et_m3t_private_candidate_binding_preflight_v1' \
+      "$out/$mode/m3t-defined.nm"
+    printf '%s\n' \
+      '2a8521181277d65c95875e3478ad3e68031c496e87b3be6e2c7ac56431ea324c  ordinary/m3t_transport.o' \
+      | (cd "$out" && sha256sum -c -)
   fi
   ar rcsD "$out/$mode/libm3t_construction_test.a" "$out/$mode"/*.o
   source_file="$PROJECT_ROOT/tests/g3r/m3t_candidate_feature_off_test.esk"
@@ -90,5 +100,25 @@ for mode in candidate ordinary; do
   fi
 done
 cmp "$out/candidate/i2_bridge.o" "$out/ordinary/i2_bridge.o"
-cmp "$out/candidate/m3t_transport.o" "$out/ordinary/m3t_transport.o"
-echo 'G3-R M3T candidate constructor PASS: candidate and ordinary normal/repeat'
+cmp "$out/candidate/m3t_f32_integration.o" "$out/ordinary/m3t_f32_integration.o"
+mkdir "$out/native"
+"$cc" "${cflags[@]}" -O1 \
+  "$PROJECT_ROOT/tests/g3r/m3t_candidate_binding_preflight_native_test.c" \
+  "$PROJECT_ROOT/src/eshkol_transformer/m3t_f32_integration.c" \
+  "$PROJECT_ROOT/native/kernel_abi.c" \
+  "$PROJECT_ROOT/native/i64_tensor.c" \
+  "$PROJECT_ROOT/native/t1_i64_shell.c" \
+  "$PROJECT_ROOT/native/n3k_primitives_provider.c" \
+  "$PROJECT_ROOT/native/n2_primitives_provider.c" \
+  "$PROJECT_ROOT/native/a2_attention_provider.c" \
+  -lm -o "$out/native/caller" \
+  >"$out/native/compile.stdout" 2>"$out/native/compile.stderr"
+for run in a b; do
+  timeout --foreground --signal=TERM --kill-after=5s 120s \
+    "$out/native/caller" >"$out/native/$run.stdout" \
+    2>"$out/native/$run.stderr"
+  test ! -s "$out/native/$run.stderr"
+done
+cmp "$out/native/a.stdout" "$out/native/b.stdout"
+grep -Fx 'G3-R native binding preflight PASS' "$out/native/a.stdout" >/dev/null
+echo 'G3-R M3T native binding preflight PASS: candidate, ordinary and native normal/repeat'

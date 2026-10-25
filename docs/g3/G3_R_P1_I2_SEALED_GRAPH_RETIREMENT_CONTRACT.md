@@ -146,6 +146,26 @@ pass. The pinned normal/repeat gate at source `d8757672`/tree `a7788904`
 has an 83-file receipt, `g3r-graph-preflight-d8757672-v1-attempt1/SHA256SUMS-RUN`
 (SHA-256 `c403e0d3062e463db196bf0791ddc048291f53f68017b83fa09e7ee551c3415c`),
 with 38 candidate checks per process and unchanged ordinary feature-off
-object bytes. Native owner parameter lookup does not prove
+object bytes. At that source pin, native owner parameter lookup does not prove
 each P1 handle is still bound to that same native parameter. O2 identity,
 consumer/lease exclusion, revocation and teardown remain separate gates.
+
+## Native M3T binding identity leaf
+
+The next candidate-only ABI,
+`et_m3t_private_candidate_binding_preflight_v1(owner, index, exact_handle)`,
+returns only a status. The exact handle argument is the P1 **shell pointer**
+passed earlier to `et_m3t_private_owner_bind_v1`, not the P1 native token.
+The Eshkol graph check first authenticates that shell through the sealed P1
+roster and live parameter tree, then calls the native status check for each of
+the 14 canonical indices. Native M3T admits the owner through its registry,
+validates the complete sealed roster and each f32 parameter's bound identity,
+and compares the selected shell. The 14 calls are serialized and invoke no
+callback; no roster pointer array crosses into Eshkol. The reviewed
+same-owner SAVE roster validation is shared under private feature flags, while
+ordinary M3T source compiles without either symbol.
+
+The source and focused native test are staged for independent review. Local
+Clang 22 native binding checks and the existing M3T transport regression pass;
+the pinned compiled feature-on/feature-off gate remains unrun. This leaf
+still does not authenticate O2, exclude graph leases or revoke authority.

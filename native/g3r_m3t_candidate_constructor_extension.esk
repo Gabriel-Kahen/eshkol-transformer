@@ -1,6 +1,8 @@
 ;;; Feature-local diagnostic M3T candidate constructor. Load after the
 ;;; ordinary M3T source and the accepted P1/I2 candidate extensions.
 ;;; The ordinary constructor and public package never load this source.
+(extern i64 g3r-m3t-native-binding-preflight ptr i64 ptr
+        :real et_m3t_private_candidate_binding_preflight_v1)
 
 ;;; Ledger slots: shell, phase, config shell, canonical config, input entry,
 ;;; model entry, successor entry, I2/P1 cell, native owner, I2 record, root,
@@ -209,13 +211,11 @@
     (let ((tree (module-parameters model)))
       (let paths ((index 0))
         (if (= index 14) #t
-            (let ((handle (vector-ref handles index))
-                  (parameter (m3t-native-owner-parameter owner index)))
+            (let ((handle (vector-ref handles index)))
               (if (or (not (equal? (parameter-handle-path handle)
                                    (vector-ref m3t-paths index)))
                       (not (eq? (parameter-tree-handle
-                                  tree (vector-ref m3t-paths index)) handle))
-                      (null? parameter))
+                                  tree (vector-ref m3t-paths index)) handle)))
                   (m3t-fail 'invalid-state operation
                     "candidate parameter identity changed"))
               (let distinct ((previous 0))
@@ -225,6 +225,9 @@
                           (m3t-fail 'invalid-state operation
                             "candidate parameter alias changed"))
                       (distinct (+ previous 1)))))
+              (m3t-check
+                (g3r-m3t-native-binding-preflight owner index handle)
+                operation)
               (paths (+ index 1)))))
       (if (or (not (eq? (parameter-tree-handle
                           tree '("token_embedding" "weight"))

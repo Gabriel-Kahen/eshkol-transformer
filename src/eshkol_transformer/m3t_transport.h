@@ -18,6 +18,11 @@ void *et_m3t_private_owner_parameter_v1(void *owner, int64_t index);
 int64_t et_m3t_private_owner_save_roster_v1(
     void *owner, void *parameters[14], const void *identities[14]);
 #endif
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+/* Read-only sealed owner/parameter binding check; returns status only. */
+int64_t et_m3t_private_candidate_binding_preflight_v1(
+    void *owner, int64_t index, const void *exact_handle);
+#endif
 int64_t et_m3t_private_owner_bind_v1(void *owner, int64_t index, void *handle);
 int64_t et_m3t_private_owner_initialize_v1(void *owner, int64_t index);
 void *et_m3t_private_owner_successor_v1(void *owner);

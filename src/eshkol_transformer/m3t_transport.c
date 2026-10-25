@@ -152,6 +152,27 @@ void *et_m3t_private_owner_parameter_v1(void *p,int64_t i) {
  if(i<0||i>=14){bad(ET_M3T_INVALID_ARGUMENT,ET_M3T_CODE_SELECTOR);return NULL;}
  return o->p[i];
 }
+#if defined(ET_G3R_SAME_OWNER_SAVE_PRIVATE) || \
+    defined(ET_G3R_CANDIDATE_RETIRE_PRIVATE)
+/* Shared sealed-roster admission. P1 authenticates the exact handle shells
+ * before the candidate caller passes one shell at a time to native M3T. */
+static int64_t owner_roster_preflight(owner *o) {
+  if (o->r.state != 1 || o->initialized != 14)
+    return bad(ET_M3T_INVALID_STATE, ET_M3T_CODE_LIFECYCLE);
+  for (size_t i = 0; i < 14; ++i) {
+    et_f32_tensor_error error;
+    if (!o->p[i] || !o->handles[i])
+      return bad(ET_M3T_INVALID_STATE, ET_M3T_CODE_TOPOLOGY);
+    if (f32_error(et_f32_parameter_validate_identity_v1(
+            o->p[i], o->handles[i], &error), &error))
+      return error_category;
+    for (size_t j = 0; j < i; ++j)
+      if (o->p[i] == o->p[j] || o->handles[i] == o->handles[j])
+        return bad(ET_M3T_INVALID_STATE, ET_M3T_CODE_TOPOLOGY);
+  }
+  return 0;
+}
+#endif
 #ifdef ET_G3R_SAME_OWNER_SAVE_PRIVATE
 static int roster_span_overlaps(const void *a, size_t an, const void *b, size_t bn) {
   uintptr_t x = (uintptr_t)a, y = (uintptr_t)b;
@@ -178,23 +199,26 @@ int64_t et_m3t_private_owner_save_roster_v1(
       roster_span_overlaps(identities, 14 * sizeof(*identities),
           o->successor, sizeof(*o->successor)))
     return bad(ET_M3T_INVALID_ARGUMENT, ET_M3T_CODE_IDENTITY);
-  if (o->r.state != 1 || o->initialized != 14)
-    return bad(ET_M3T_INVALID_STATE, ET_M3T_CODE_LIFECYCLE);
-  for (size_t i = 0; i < 14; ++i) {
-    et_f32_tensor_error error;
-    if (!o->p[i] || !o->handles[i])
-      return bad(ET_M3T_INVALID_STATE, ET_M3T_CODE_TOPOLOGY);
-    if (f32_error(et_f32_parameter_validate_identity_v1(
-            o->p[i], o->handles[i], &error), &error))
-      return error_category;
-    for (size_t j = 0; j < i; ++j)
-      if (o->p[i] == o->p[j] || o->handles[i] == o->handles[j])
-        return bad(ET_M3T_INVALID_STATE, ET_M3T_CODE_TOPOLOGY);
-  }
+  if (owner_roster_preflight(o)) return error_category;
   for (size_t i = 0; i < 14; ++i) {
     parameters[i] = o->p[i];
     identities[i] = o->handles[i];
   }
+  return 0;
+}
+#endif
+#ifdef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+int64_t et_m3t_private_candidate_binding_preflight_v1(
+    void *candidate, int64_t index, const void *exact_handle) {
+  clear();
+  owner *o = admit(candidate, OWNER, 0);
+  if (!o) return error_category;
+  if (index < 0 || index >= 14 || !exact_handle)
+    return bad(ET_M3T_INVALID_ARGUMENT, ET_M3T_CODE_SELECTOR);
+  if (owner_roster_preflight(o))
+    return bad(ET_M3T_INVALID_STATE, ET_M3T_CODE_TOPOLOGY);
+  if (o->handles[index] != exact_handle)
+    return bad(ET_M3T_INVALID_STATE, ET_M3T_CODE_TOPOLOGY);
   return 0;
 }
 #endif

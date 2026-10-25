@@ -2724,6 +2724,18 @@ does not check native parameter-to-handle bindings, O2 or lease conflicts,
 or produce a revocation witness. Graph retirement, restore and replay remain
 unimplemented.
 
+The next private read-only native binding preflight is staged on
+`codex/g3r-native-binding-preflight-20261025`. It extends the accepted graph
+identity leaf with a status-only M3T ABI that checks the complete sealed
+14-parameter native roster and compares each bound handle against the exact
+P1 shell already authenticated by the Eshkol graph check. No pointer array
+crosses the Eshkol boundary. The old same-owner SAVE roster validator is
+shared under private flags. Local Clang 22 native binding checks and the
+existing M3T transport regression pass; the source checker passes. Independent
+source/recipe review and the pinned compiled feature-on/feature-off gate are
+pending. O2 identity, active leases, graph revocation, restore and replay
+remain unproved.
+
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
 names would return newly owned authenticated CPU f32 `[1,256]` kind-3 shells,

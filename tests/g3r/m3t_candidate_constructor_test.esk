@@ -136,6 +136,11 @@
 (check "ordinary and candidate config agree"
   (equal? (vector-ref model-entry 7)
           (vector-ref ordinary-entry 7)))
+(check "foreign native owner rejects candidate P1 shell"
+  (= (g3r-m3t-native-binding-preflight
+       (vector-ref ordinary-entry 3) 0
+       (vector-ref (vector-ref model-entry 8) 0))
+     2))
 (check "sealed candidate graph identity"
   (g3r-candidate-graph-identity-preflight-internal! tampered-ledger model))
 (reject "foreign graph ledger" 'invalid-argument
