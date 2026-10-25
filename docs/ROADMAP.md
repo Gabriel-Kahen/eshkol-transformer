@@ -2185,8 +2185,19 @@ train-mode fault/rollback fixture twice (53 checks each, byte-identical) and
 the inherited eval fixture (51 checks) on the same source and pinned toolchain.
 Its 55-file sealed receipt is `g3r-c4-train-prepare-883cc8d6-attempt2/SHA256SUMS-RUN`
 (SHA-256 `fe3230dee056e5122a2a012cdb02093ad8ed3dda6743fc5d81c29e9e9a9da4f2`);
-independent result audit accepts that normal/repeat scope. Native sanitizer,
-broader inherited overlay, trainable constructor, workspace runtime,
+independent result audit accepts that normal/repeat scope. The separate
+exact-source native ASan+UBSan successor compiled instrumented
+native objects and sanitizer-linked Eshkol train/eval callers. Its train
+fixture passed 53 checks twice with byte-identical output, and the inherited
+eval control passed 51 checks, with empty compile/runtime/Docker stderr.
+The 71-file sealed receipt is
+`g3r-c4-train-prepare-883cc8d6-san-attempt1/SHA256SUMS-RUN`
+(SHA-256 `f6cf28a7f3cf5f50f0cc4b41c7a23246f8c8c8edea6827383bc9ca25c1ca470c`);
+the independent result review at
+`g3r-c4-train-prepare-san-independent-result-review-20261025/REVIEW.md`
+accepts only this train-prepared seam (`SHA256SUMS-REVIEW` SHA-256
+`c1db4b67d097d92976ad6846c12b8ea1a7bf6a9060366b26c0202f83e6fe2423`).
+The broader inherited overlay, trainable constructor, workspace runtime,
 forward/backward composition, trainer and C2 admission remain pending.
 
 The [private C4 position VJP leaf](g3/G3_R_C4_POSITION_VJP_LEAF.md) supplies
