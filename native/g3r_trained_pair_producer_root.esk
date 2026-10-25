@@ -7,15 +7,29 @@
 (load "g3r_committed_save_snapshot_extension.esk")
 (load "g3r_record_codec_extension.esk")
 (load "g3r_trained_pair_producer_extension.esk")
+(load "g3r_trained_c2_eos_reference_extension.esk")
 
 ;;; Single entry for the private test package. The public caller passes one
 ;;; boxed vector; the model, trainer and T1 owner stay in this private root.
 (define (g3r-trained-pair-private-produce arguments)
-  (if (not (and (vector? arguments) (= (vector-length arguments) 7)))
+  (if (not (vector? arguments))
       (c2-load-fail 'invalid-argument 'checkpoint-save!
-                    "trained-pair entry requires seven arguments" '()))
-  (g3r-trained-pair-produce-internal!
-    (vector-ref arguments 0) (vector-ref arguments 1)
-    (vector-ref arguments 2) (vector-ref arguments 3)
-    (vector-ref arguments 4) (vector-ref arguments 5)
-    (cli3-parse-i64 (vector-ref arguments 6) "PROMPT" 255)))
+                    "trained-pair entry requires an argument vector" '()))
+  ;; Direct private callers bypass CLI3 dispatch; install its exact T2/C2
+  ;; projection before either path can load the canonical tokenizer.
+  (vector-set! t2-wave2-policy-projector 0 c2-policy-t2-entry-internal)
+  (cond
+    ((= (vector-length arguments) 7)
+     (g3r-trained-pair-produce-internal!
+       (vector-ref arguments 0) (vector-ref arguments 1)
+       (vector-ref arguments 2) (vector-ref arguments 3)
+       (vector-ref arguments 4) (vector-ref arguments 5)
+       (cli3-parse-i64 (vector-ref arguments 6) "PROMPT" 255)))
+    ((= (vector-length arguments) 5)
+     (g3r-trained-c2-eos-reference-internal!
+       (vector-ref arguments 0) (vector-ref arguments 1)
+       (vector-ref arguments 2) (vector-ref arguments 3)
+       (cli3-parse-i64 (vector-ref arguments 4) "PROMPT" 255)))
+    (else
+     (c2-load-fail 'invalid-argument 'checkpoint-save!
+                   "trained-pair entry requires five or seven arguments" '()))))

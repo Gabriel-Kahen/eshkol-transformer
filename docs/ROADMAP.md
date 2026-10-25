@@ -2359,6 +2359,15 @@ model, and compares committed terminal/history/output/RNG data. Its source and
 receipt-parser checks pass; compiled normal/repeat/sanitizer execution and
 fresh-process comparison remain pending. Context-two budget-one admission
 cannot establish repeated-token generation or later-token EOS.
+The first compiled EOS recipe on `24fa0628` sealed a failed link-only receipt
+(`g3r-trained-eos-24fa0628-attempt1/SHA256SUMS-RUN`, SHA-256
+`e1a78bd3475a0486220daad0fca71da12d6a79a843a701544ee5dd115382bbae`):
+all 36 native TUs and the 93-source Eshkol depfile closed, but the sole-main
+native-only archive left private E1B/CLI3 CABI aliases unresolved. No EOS
+runtime or sanitizer result exists. A source-staged package repair reuses the
+accepted private bridge and rename map, adding an exact five-field EOS request
+alongside the existing seven-field producer request; a fresh package/link gate
+and independent review remain required.
 
 The earlier G3-R C2 SAVE continuation on `0581426b` sealed a failed runtime
 receipt at `g3-save-0581426b-cont-attempt1/SHA256SUMS-RUN`: its compiled

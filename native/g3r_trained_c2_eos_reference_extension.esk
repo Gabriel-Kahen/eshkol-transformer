@@ -1,0 +1,124 @@
+;;; Same trained C2, same private CLI3/T2/TR3/G3-T registry; first-token EOS only.
+(define (g3r-trained-c2-eos-reference-internal!
+          config-path tokenizer-path corpus-path trained-c2 prompt)
+  (let ((dataset #f) (trainer #f) (first-generator #f)
+        (eos-generator #f) (first-input #f) (eos-input #f)
+        (first-output #f) (eos-output #f) (answer #f))
+(define (cleanup)
+  (if first-output (g3t-output-release! first-output))
+  (if eos-output (g3t-output-release! eos-output))
+  (if first-input (g3t-generation-tensor-release! first-input))
+  (if eos-input (g3t-generation-tensor-release! eos-input))
+  (if first-generator (g3t-generator-close! first-generator))
+  (if eos-generator (g3t-generator-close! eos-generator))
+  (if trainer (trainer-release! trainer))
+  (if dataset (d2-token-dataset-close! dataset))
+  #t)
+(define (check condition)
+  (if (not condition)
+      (c2-load-fail 'invalid-state 'generate
+                    "trained C2 EOS reference changed" '())))
+(define (policy eos)
+  (list ':profile 'diagnostic-c2 ':sampling 'categorical
+        ':temperature-bits #x3f800000 ':top-k 256
+        ':top-p-bits #x3f800000 ':max-new-tokens 1
+        ':eos eos ':seed 1729))
+(define (same-bytes? left right)
+  (and (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+(define (same-words? left right)
+  (and (= (vector-length left) (vector-length right))
+       (let loop ((index 0))
+         (if (= index (vector-length left)) #t
+             (and (= (vector-ref left index) (vector-ref right index))
+                  (loop (+ index 1)))))))
+
+(guard (caught
+         (#t (guard (cleanup-defect (#t (exit 134))) (cleanup))
+             (raise caught)))
+  (let* ((resolved (cli3-b-resolved config-path 'generate))
+         (tokenizer (cli3-b-tokenizer tokenizer-path resolved))
+         (model
+           (with-region ('g3r-trained-eos-model 65536)
+             (m3t-public-model-create
+               resolved (m3t-public-initializer-state
+                          (x1-private-config-ref resolved 'run.seed)))))
+         (tree (module-parameters model))
+         (paths (cli3-b-unique-paths tree))
+         (optimizer
+           (o2-public-optimizer-create
+             (list 'transformer-optimizer-config 1 0 '() 'adamw
+                   'f32 'cpu '(none) '(constant)
+                   (list (list 'group paths "3dcccccd" "3f000000"
+                               "3f000000" "3a83126f" "00000000")))
+             tree))
+         (trained-image
+           (g3r-trained-pair-file-image trained-c2 16777216))
+         (trained-digest (c1-sha256 trained-image)))
+    (set! dataset (cli3-b-dataset corpus-path tokenizer))
+    (set! trainer (trainer-create resolved tokenizer dataset model optimizer))
+    (cli3-b-restore! trainer trained-c2)
+    (check (same-bytes?
+             trained-image
+             (g3r-trained-pair-file-image trained-c2 16777216)))
+    (trainer-release! trainer)
+    (set! trainer #f)
+    (check (module-eval! model))
+    (set! first-generator (g3t-generator-create model tokenizer (policy #f)))
+    (set! first-input (g3t-generation-token-input-create prompt))
+    (set! first-output (g3m-generate-p1-g1! first-generator first-input))
+    (let* ((first-snapshot
+             (g3r-committed-save-snapshot!
+               first-generator (make-bytevector 136 0)))
+           (first-text (car (g3t-generation-output-text first-output)))
+           (id (bytevector-u8-ref (vector-ref first-snapshot 2) 1)))
+      (check (and (= (bytevector-length first-text) 1)
+                  (= (bytevector-u8-ref first-text 0) id)
+                  (= (vector-ref (vector-ref first-snapshot 0) 4) 1)
+                  (= (vector-ref (vector-ref first-snapshot 0) 5) -1)
+                  (= (vector-ref first-snapshot 3) 1)
+                  (= (vector-ref first-snapshot 4) 1)
+                  (= (vector-ref first-snapshot 5) 0)
+                  (= (vector-ref first-snapshot 6) 0)
+                  (= (bytevector-u8-ref (vector-ref first-snapshot 2) 0)
+                     prompt)))
+      ;; The snapshot and raw T1 result are detached data. Retire every first
+      ;; call owner before starting the EOS call on the restored model.
+      (g3t-output-release! first-output)
+      (set! first-output #f)
+      (g3t-generation-tensor-release! first-input)
+      (set! first-input #f)
+      (g3t-generator-close! first-generator)
+      (set! first-generator #f)
+      (set! eos-generator (g3t-generator-create model tokenizer (policy id)))
+      (set! eos-input (g3t-generation-token-input-create prompt))
+      (set! eos-output (g3m-generate-p1-g1! eos-generator eos-input))
+      (let* ((eos-snapshot
+               (g3r-committed-save-snapshot!
+                 eos-generator (make-bytevector 136 0)))
+             (eos-text (car (g3t-generation-output-text eos-output))))
+        (check (and (= (bytevector-length trained-digest) 32)
+                    (= (bytevector-length eos-text) 1)
+                    (same-bytes? first-text eos-text)
+                    (same-bytes? (vector-ref first-snapshot 2)
+                                 (vector-ref eos-snapshot 2))
+                    (same-words? (vector-ref first-snapshot 1)
+                                 (vector-ref eos-snapshot 1))
+                    (= (vector-ref eos-snapshot 3) 1)
+                    (= (vector-ref eos-snapshot 4) 1)
+                    (= (vector-ref eos-snapshot 5) 0)
+                    (= (vector-ref eos-snapshot 6) 1)
+                    (= (vector-ref (vector-ref eos-snapshot 0) 4) 1)
+                    (= (vector-ref (vector-ref eos-snapshot 0) 5) id)))
+        (set! answer
+          (vector trained-digest prompt id (vector-ref eos-snapshot 1))))
+    (cleanup)
+    (set! first-output #f) (set! eos-output #f)
+    (set! first-input #f) (set! eos-input #f)
+    (set! first-generator #f) (set! eos-generator #f)
+    (set! dataset #f)
+    answer)))))

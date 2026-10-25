@@ -70,8 +70,12 @@ class TrainedPairProducerSource(unittest.TestCase):
         self.assertIn("(g3t-generator-create model tokenizer", producer)
         self.assertNotIn("g3r-c2-pair-file-verify-c2-tokenizer-internal!", extension)
         caller = (ROOT / "tests/g3r/trained_pair_producer.esk").read_text()
+        self.assertIn('((= (vector-length arguments) 7)\n     (g3r-trained-pair-produce-internal!', root)
         self.assertIn('(cli3-parse-i64 (vector-ref arguments 6) "PROMPT" 255)', root)
         self.assertIn('et_g3r_private_test_trained_pair_produce_v1', caller)
+        self.assertIn('(vector (vector (argument 0) (argument 1) (argument 2)\n'
+                      '                  (argument 3) (argument 4) (argument 5)\n'
+                      '                  (argument 6)))', caller)
         self.assertNotIn('(load "g3r_trained_pair_producer_root.esk")', caller)
         self.assertNotIn('(list-ref args', caller)
 
@@ -96,7 +100,11 @@ class TrainedPairProducerSource(unittest.TestCase):
         self.assertEqual(len(closure), len(set(closure)))
         for item in closure:
             self.assertTrue((ROOT / item).is_file(), item)
-        self.assertEqual(closure[-1], "native/g3r_trained_pair_producer_extension.esk")
+        self.assertEqual(closure[-2:], [
+            "native/g3r_trained_pair_producer_extension.esk",
+            "native/g3r_trained_c2_eos_reference_extension.esk",
+        ])
+        self.assertEqual(len(closure), 93)
 
     def test_byte_oracle_and_negatives(self):
         c2, record = fixture()

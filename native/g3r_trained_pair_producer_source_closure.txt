@@ -90,3 +90,4 @@ native/g3m_prefill_p1_extension.esk
 native/g3r_committed_save_snapshot_extension.esk
 native/g3r_record_codec_extension.esk
 native/g3r_trained_pair_producer_extension.esk
+native/g3r_trained_c2_eos_reference_extension.esk
