@@ -2374,8 +2374,9 @@ G3RCV1 companion, compares the companion fingerprint first with C2 controls
 and then with the live canonical T1 owner after installing CLI3's same-registry
 C2 policy projector, closes the C2 receipt, and returns
 only eight data fields. The thin caller checks the current one-token,
-zero-budget fixture. Its source tests and host C bridge syntax pass. A genuine
-pair reader run, native sanitizer, model restore and replay remain unrun.
+zero-budget fixture. Its source tests and host C bridge syntax pass. The
+bounded compiled reader result is recorded below; model restore and replay
+remain unrun.
 
 The first compiled trained-pair reader attempt at `26016906` failed LLVM
 verification before IR emission (`%raised_tagged` referenced across functions).
@@ -2399,8 +2400,8 @@ has zero launcher/Docker exits, 99-source private closure, one init/owner,
 17 exact exports, thin caller/negative depfiles and empty runtime stderr.
 It authenticates the same sealed trained C2/companion from the fa9 producer
 receipts in a fresh process and returns only data. Independent exact-result
-review remains pending. It does not restore a model, replay cache/logits, or
-continue generation.
+review accepted this bounded positive and the short-file/corrupt-C2 categories.
+It does not restore a model, replay cache/logits, or continue generation.
 
 Independent v5 review accepted the fresh-process data-only reader and its
 short-file and corrupt-C2 categories, but the wrong-digest category remained
@@ -2411,8 +2412,20 @@ negative-only continuation compiled against the sealed v5 package and exited
 (SHA-256 `bda88c3b4524d1bd4b105db825482608bbe3c95f0546079077e56c6915a54e9f`).
 The source-level cause is the in-memory codec's plain-string decode failure.
 A focused FILE-boundary source repair now maps only malformed record reasons
-to `checkpoint-load/corrupt-data` after receipt cleanup; source, compiled and
-fresh-process category gates for that repair remain separate.
+to `checkpoint-load/corrupt-data` after receipt cleanup. Independent source
+review accepted `7c4f3305`/tree `ab336175`. Its fresh one-use compiled gate
+sealed 480/480 files at
+`g3r-trained-pair-reader-7c4f3305-attempt1/SHA256SUMS-RUN` (SHA-256
+`3dff2d1f851105763e0ea5de922a8ab6c0113dd3cf3fd953585638125c0250c2`)
+with zero launcher/Docker exits. Independent result audit accepted exact
+normal/repeat/native ASan+UBSan positive markers and six strict negative
+markers: short-file `checkpoint-load/io`, wrong-digest and corrupt-C2
+`checkpoint-load/corrupt-data` in both modes. The negative caller required
+typed operation/category, and the sealed object/link and runtime stderr were
+empty. Both producer authorities, source hashes, package closure and 17
+exports per mode checked. This is fresh-process data-only FILE reader evidence
+for the same trained C2/T1 pair; model restoration, multi-token/EOS generation
+and replay remain separate.
 
 The earlier G3-R C2 SAVE continuation on `0581426b` sealed a failed runtime
 receipt at `g3-save-0581426b-cont-attempt1/SHA256SUMS-RUN`: its compiled
