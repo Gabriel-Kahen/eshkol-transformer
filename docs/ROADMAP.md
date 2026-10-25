@@ -2175,10 +2175,22 @@ The separately scoped trained same-registry replay candidate starts from the
 same restored CLI3 M3T owner as the authentic C2 producer. It keeps the
 accepted zero-budget companion separate, captures a new budget-one companion
 bound to byte-identical saved C2, reads and decodes that exact companion,
-then compares uninterrupted G1 with private replayed G1 on the same model
-owner. Source and host checks alone do not admit this package. Its compiled
-normal/repeat/native-sanitizer gate and independent result review are pending;
-it does not restore a model from the companion or continue in a fresh process.
+constructs a separate generator from decoded policy/RNG/history on that same
+model owner, manually replays P1 without a draw, then compares its G1 with an
+uninterrupted reference. At source `01a584c6`/tree `005d0b80`, the reviewed
+rootless compiled normal/repeat/native ASan+UBSan gate passed with empty
+runtime stderr, exact 36-native-TU and thin-caller closures, and byte-identical
+budget-one artifacts. The trained and newly saved C2 images both have SHA-256
+`9ec2a1d40ebd43e57d1e8b75fa8f6d96cd4d17abc1002f70da04d20144ee78df`;
+the normal and sanitizer budget-one companions both have SHA-256
+`75fec71697cf50556228481b0a2a30f634ce8991a7f6db4ad7fbdc700f1cfbf2`.
+The 519-file receipt is sealed at
+`g3r-trained-replay-01a584c6-attempt3/SHA256SUMS-RUN` (SHA-256
+`18b9577bf6651a6df7d74f54a6ddefbaf483f1cfe8fefc46aa2dca2c40d5960f`);
+independent result review accepted this same-registry scope. Attempts 1 and 2
+remain nonaccepting compile and pre-sanitizer symbol-check predecessors.
+This does not restore a generator in a fresh process or establish multi-token
+and EOS terminal continuation.
 
 The [private G3-R fixed-record codec leaf](g3/G3_R_RECORD_CODEC_LEAF.md)
 stages an in-memory 288-byte encoder/decoder using the existing C1 SHA-256.
