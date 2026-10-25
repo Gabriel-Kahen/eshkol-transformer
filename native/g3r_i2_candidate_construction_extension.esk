@@ -31,7 +31,9 @@
             (not (eq? (vector-ref record 2) (vector-ref sidecar 7)))
             (not (eq? (vector-ref p1-cell 1) (vector-ref sidecar 8)))
             (not (eq? (vector-ref p1-cell 2) (vector-ref sidecar 7)))
-            (not (eq? (vector-ref record 9) 'm3t)))
+            (not (eq? (vector-ref record 0) 'i2-construction))
+            (not (eq? (vector-ref record 9) 'm3t))
+            (vector-ref record 10))
         (i2-candidate-fail operation "candidate I2/P1 identity changed"))
     (if (eq? expected 'sealed)
         (if (or (not (integer? (vector-ref cell 3)))
@@ -92,6 +94,19 @@
         (let ((member (car remaining)))
           (stage (cdr remaining)
                  (cons (vector member (vector-ref member 0)) snapshot))))))
+
+(define (i2-candidate-stage-head! sidecar count operation)
+  ;; Publish the exact I2 list head to the rooted sidecar before P1's
+  ;; irreversible native seal. This may promote the list and may raise.
+  (vector-set! sidecar 10 (i2-modules-current))
+  (if (or (not (eq? (vector-ref sidecar 10) (i2-modules-current)))
+          (not (= count (vector-ref sidecar 11)))
+          (not (= i2-module-count (+ (vector-ref sidecar 5) count))))
+      (i2-candidate-fail operation "candidate staged head changed"))
+  (i2-candidate-member-prefix!
+    sidecar (vector-ref sidecar 10) (vector-ref (vector-ref sidecar 1) 4)
+    #f operation)
+  #t)
 
 (define (i2-candidate-active-check! sidecar expected operation)
   (let* ((record (i2-candidate-cell-check! sidecar expected operation))
@@ -169,9 +184,12 @@
              (root-member (car (vector-ref canonical 4))))
         (guard (caught
                  (#t
-                   (if (vector-ref canonical 1)
+                   ;; P1 publishes its identity into this rooted cell before
+                   ;; returning. I2's record slot can still be unset if its
+                   ;; later write barrier fails, so recover from P1's cell.
+                   (if (vector-ref p1-cell 1)
                        (module-construction-abort-internal!
-                         (vector-ref canonical 1)))
+                         (vector-ref p1-cell 1)))
                    (i2-construction-rollback-tail! canonical)
                    (i2-candidate-mark-dead! owner)
                    (raise caught)))
@@ -214,9 +232,9 @@
          (record (vector-ref checked 0))
          (count (vector-ref checked 1)))
     (i2-candidate-stage-members! sidecar record count)
+    (i2-candidate-stage-head! sidecar count operation)
     (let ((root (module-construction-seal-internal! (vector-ref sidecar 8))))
       ;; The native P1 seal is complete. This is an assignment-only tail.
-      (vector-set! sidecar 10 (vector-ref i2-module-registry-root 0))
       (vector-set! record 1 #f)
       (vector-set! record 3 'sealed)
       (vector-set! record 4 '())
@@ -257,10 +275,10 @@
          (record (vector-ref checked 0))
          (count (vector-ref checked 1)))
     ;; P1's prepared commit rejects before native mutation or fails stop.
+    (i2-candidate-stage-head! sidecar count operation)
     (let ((root (module-construction-seal-prepared-internal!
                   (vector-ref sidecar 8))))
       ;; The native P1 commit is complete. This is an assignment-only tail.
-      (vector-set! sidecar 10 (vector-ref i2-module-registry-root 0))
       (vector-set! record 1 #f)
       (vector-set! record 3 'sealed)
       (vector-set! record 4 '())

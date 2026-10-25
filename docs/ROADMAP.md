@@ -2665,7 +2665,11 @@ snapshot. It calls the accepted P1 candidate begin before the first module
 token, validates the I2 membership prefix/count before ordinary or prepared
 P1 seal, and retains member-cell/module identities through seal. Its ordinary
 I2 root, extension, bridge, and M3T constructor remain byte-identical. The
-focused feature-on/feature-off normal/repeat runner is not yet admitted by a
+reviewed begin failure cut recovers the native P1 identity from the rooted P1
+cell before I2 rollback. Both seal routes stage the exact list head and
+validate it before irreversible P1 seal; a source checker pins the resulting
+fixed-write tail. This source check is not a compiled failure-injection gate.
+The focused feature-on/feature-off normal/repeat runner is not yet admitted by a
 supported compiled gate. There is no I2 graph revocation, M3T candidate
 constructor, complete candidate cleanup, restore, or replay claim.
 
