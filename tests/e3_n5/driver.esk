@@ -48,10 +48,16 @@
       (with-region ('e3-n5-cap-control 262144)
         (e3-evaluate-into! model control frame))
       (e3-n5-stage "control-after-eval")
+      (e3-n5-stage "control-batches-before-check")
       (e3-n5-check 'control-batches (= (e3-counter-ref frame 0) 8192))
+      (e3-n5-stage "control-batches-after-check")
+      (e3-n5-stage "control-tokens-before-check")
       (e3-n5-check 'control-tokens (= (e3-counter-ref frame 1) 16384))
+      (e3-n5-stage "control-tokens-after-check")
+      (e3-n5-stage "control-cursor-before-check")
       (e3-n5-check 'control-cursor
         (d2-core-bytes=? control-before (d2-token-dataset-cursor control)))
+      (e3-n5-stage "control-cursor-after-check")
       (e3-n5-stage "control-after-checks")
       (d2-token-dataset-close! control))
     (let* ((dataset (d2-token-dataset-open

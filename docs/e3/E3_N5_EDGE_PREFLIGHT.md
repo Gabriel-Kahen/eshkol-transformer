@@ -1,5 +1,20 @@
 # E3 N5 authentic edge and 8,193 preflight preparation
 
+## Control-check diagnostic successor after `2a39341`
+
+The sealed `2a39341` attempt2 completed six AOT builds and returned from the
+normal-A 8,192-row control evaluation, then exited 134 before
+`control-after-checks` (independent review:
+`e3/n5-stage-2a39341-full-attempt2-independent-review-20261025/REVIEW.md`,
+raw seal `d1fb1653...`). Its trace cannot distinguish the batch-count,
+token-count and cursor checks. This test-only successor places a flushed
+`before-check` and `after-check` marker around each existing assertion. The
+last emitted marker can identify the first check interval that aborts, while
+the assertions, authentic D2/M3 evaluation, cap/edge AOTs, resource limits and
+final gate result remain unchanged. The resulting package/IR/AOT must be
+rebuilt and independently reviewed. No control count, stage-2 outcome, edge
+case, resource ceiling or E3 §9 admission follows from this source change.
+
 ## Diagnostic successor after the `943b745` runtime abort
 
 The sealed `943b745` attempt completed its private builds and AOTs but its

@@ -1105,6 +1105,14 @@ successor adds flushed seed/control/stage-2 markers and exact gate-output
 checks to locate a fresh failure; its changed source needs new private
 packages, AOTs and measured import inventories. That successor has **NOT RUN**
 as a compiled or runtime gate.
+The sealed `2a39341` attempt2 completed six AOTs and returned from the normal-A
+8,192-row control evaluation but aborted before its batch/token/cursor checks
+completed (`e3/n5-stage-2a39341-full-attempt2-independent-review-20261025/REVIEW.md`,
+raw seal `d1fb1653...`). An isolated test-only successor brackets those three
+unchanged assertions with flushed per-check markers to name the first aborting
+check interval. Host/source checks alone do not establish a successful control,
+stage-2 rejection, edge result, sanitizer or resource admission; a fresh
+compiled run and independent result review are required.
 Full owner/mode/resource probes remain dependent work. The accepted retention
 tuple and installed API are unchanged.
 The first [mathematical three-batch M2 sum-order witness](../tests/e3_reference/sum_order_witness_v1.json)

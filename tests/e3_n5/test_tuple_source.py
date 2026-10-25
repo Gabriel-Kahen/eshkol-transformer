@@ -12,7 +12,11 @@ ROOT = Path(__file__).resolve().parents[2]
 N5 = ROOT / "tests/e3_n5"
 BASE = ROOT / "native/e3_private_package"
 STAGES = ["seed-before", "seed-after-eval", "seed-after-checks",
-          "control-before", "control-after-eval", "control-after-checks",
+          "control-before", "control-after-eval",
+          "control-batches-before-check", "control-batches-after-check",
+          "control-tokens-before-check", "control-tokens-after-check",
+          "control-cursor-before-check", "control-cursor-after-check",
+          "control-after-checks",
           "stage2-before", "stage2-after-eval", "stage2-after-checks"]
 
 
@@ -117,6 +121,13 @@ printf '%s\\n' "$e3_tuple_kind"
                             driver.index(f'(e3-n5-stage "{after}")'))
         self.assertLess(driver.index("'seed-tokens"), driver.index('"seed-after-checks"'))
         self.assertLess(driver.index("'control-cursor"), driver.index('"control-after-checks"'))
+        for label in ("control-batches", "control-tokens", "control-cursor"):
+            assertion = driver.index(f"(e3-n5-check '{label}")
+            self.assertLess(driver.index(f'"{label}-before-check"'), assertion)
+            self.assertLess(assertion, driver.index(f'"{label}-after-check"'))
+        self.assertEqual(driver.count("(e3-n5-check 'control-batches"), 1)
+        self.assertEqual(driver.count("(e3-n5-check 'control-tokens"), 1)
+        self.assertEqual(driver.count("(e3-n5-check 'control-cursor"), 1)
         self.assertLess(driver.index("'six-outputs-atomic"), driver.index('"stage2-after-checks"'))
 
     def test_edge_driver_reaches_authentic_finalizer_and_preserves_atomicity(self) -> None:
