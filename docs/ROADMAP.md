@@ -2219,8 +2219,12 @@ scoped-pin status. The [P1 topology leaf](g3/G3_R_C4_P1_TOPOLOGY_STATUS_LEAF.md)
 is a source-only candidate: it appends status-only slot 74 without changing
 slots 0–73 or the feature-off ABI, and has an unrun fixture for the exact C4
 tree, ordered handles/tie, CPU f32 provider, `[4,4]` position shape and
-negative controls. Compiled runtime and native owner checks remain open.
-The workspace contract requires an exact live
+negative controls. A [private native source candidate](g3/G3_R_C4_NATIVE_SEALED_OWNER_TOPOLOGY_LEAF.md)
+implements the sealed-owner scoped-pin status behind
+`ET_G3R_C4_OWNER_TOPOLOGY_PRIVATE`;
+local Clang normal and ASan/UBSan passed 25 checks each, and feature-off
+compilation omitted its symbol. No pinned compiled gate has run for this leaf.
+The combined authority requires an exact live
 owner-to-P1 handle association proof and a swapped-handle negative; the first
 gate can claim topology/owner identity only. Active generation, workspace and
 trainer lease exclusion depend on later C4 ledgers, so full workspace
