@@ -74,9 +74,9 @@
                pending)))
 (check "embedded-NUL path preserves destination and receipt"
   (and (untouched? pending) (receipt-idle? receipt)))
-(define oversized-utf8-path (make-string 2049 (string-ref "é" 0)))
-(check "oversized path has fewer than 4096 characters"
-  (< (string-length oversized-utf8-path) 4096))
+(define oversized-utf8-path (make-string 4097 #\a))
+(check "oversized path has 4097 characters"
+  (= (string-length oversized-utf8-path) 4097))
 (check "oversized path has more than 4096 UTF-8 bytes"
   (> (bytevector-length (string->utf8 oversized-utf8-path)) 4096))
 (reject "oversized UTF-8 path" 'invalid-argument

@@ -58,7 +58,7 @@ def verify(source: str, root: str, closure: str, predecessor: str,
             '"valid.g3r"', '"wrong-digest.g3r"', '"torn.g3r"',
             '"short.g3r"', '"long.g3r"', '"link.g3r"', '"fifo.g3r"',
             '(string #\\nul)',
-            '(make-string 2049 (string-ref "é" 0))',
+            '(make-string 4097 #\\a)',
             '(string->utf8 oversized-utf8-path)',
             '"embedded-NUL path"', '"oversized UTF-8 path"',
             '(g3r-pair-file-io-fail 6 1 5)',
@@ -108,7 +108,7 @@ class FileReadSourceTest(unittest.TestCase):
                    self.predecessor,
                    self.fixture.replace('(g3r-pair-file-io-fail 7 1 5)', ''))
         for marker in ('(string #\\nul)',
-                       '(make-string 2049 (string-ref "é" 0))',
+                       '(make-string 4097 #\\a)',
                        '(string->utf8 oversized-utf8-path)',
                        '"embedded-NUL path"', '"oversized UTF-8 path"'):
             with self.subTest(marker=marker), self.assertRaises(ValueError):
