@@ -141,7 +141,11 @@ shell arguments. It checks the sealed M3T ledger and native owner/successor,
 the retained I2/P1 sidecars, the current 14 canonical paths and tied alias.
 It mutates no authority and returns only `#t`, not a retirement witness.
 Focused forged, stale and changed-graph negatives run beside ordinary M3T
-feature-off parity. Its source checker and independent source review pass; a pinned
-compiled gate remain pending. Native owner parameter lookup does not prove
+feature-off parity. Its source checker and independent source/result reviews
+pass. The pinned normal/repeat gate at source `d8757672`/tree `a7788904`
+has an 83-file receipt, `g3r-graph-preflight-d8757672-v1-attempt1/SHA256SUMS-RUN`
+(SHA-256 `c403e0d3062e463db196bf0791ddc048291f53f68017b83fa09e7ee551c3415c`),
+with 38 candidate checks per process and unchanged ordinary feature-off
+object bytes. Native owner parameter lookup does not prove
 each P1 handle is still bound to that same native parameter. O2 identity,
 consumer/lease exclusion, revocation and teardown remain separate gates.

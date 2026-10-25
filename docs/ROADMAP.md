@@ -2710,7 +2710,16 @@ A separate private read-only graph identity leaf is staged on
 `codex/g3r-graph-preflight-m3t-admitted-20261025`. It authenticates the exact sealed
 M3T ledger and model, I2/P1 sidecars, current fixed 14 paths/tied alias,
 and native owner/successor liveness. Its source checker and independent
-source review pass; a pinned compiled candidate/feature-off gate is pending. This
+source review pass. Source `d8757672`/tree `a7788904` passed the pinned
+compiled normal/repeat gate: candidate 38 checks in each identical process,
+two matching ordinary feature-off processes, zero launcher/Docker/gate exits,
+empty compiler/runtime stderr, and ordinary I2/M3T native object parity.
+The sealed 83-file receipt is
+`g3r-graph-preflight-d8757672-v1-attempt1/SHA256SUMS-RUN` (SHA-256
+`c403e0d3062e463db196bf0791ddc048291f53f68017b83fa09e7ee551c3415c`).
+Independent exact-result review accepted this bounded leaf; its sealed
+`g3r-graph-preflight-independent-review-20261025/SHA256SUMS-REVIEW` has
+SHA-256 `c817a40a3b26834e830e004e01eee72e1d611ecae5e14c8eb65d2c9aa096f0b3`. This
 does not check native parameter-to-handle bindings, O2 or lease conflicts,
 or produce a revocation witness. Graph retirement, restore and replay remain
 unimplemented.
