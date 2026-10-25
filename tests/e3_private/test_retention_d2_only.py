@@ -1,6 +1,7 @@
 """Host contracts for the isolated direct-D2 retention diagnostic."""
 from pathlib import Path
 import os
+import re
 import subprocess
 import tempfile
 import unittest
@@ -45,7 +46,7 @@ class D2ArenaDiagnosticTest(unittest.TestCase):
                      '(d2-token-batch-release! batch)',
                      '(d2-token-dataset-seek! dataset cursor)',
                      "'token-dataset-next-batch", "'d2-direct-outcome",
-                     "'d2-direct-cursor", "'d2-direct-no-live-batch",
+                     "'d2-direct-cursor", "'d2-direct-no-live-batch-or-borrow",
                      '(e3-test-retention-call! model dataset frame destinations cursor modes'):
             self.assertIn(text, probe)
         self.assertLess(probe.index('(d2-token-dataset-next-batch dataset)'),
@@ -60,6 +61,21 @@ class D2ArenaDiagnosticTest(unittest.TestCase):
                         runtime.index('(e3-retention-test-run diagnose input output)'))
         self.assertIn('(e3-retention-test-run report input output)', runtime)
         self.assertIn('(e3-retention-test-run teardown input output)', runtime)
+
+    def test_native_d2_live_selector_negative(self):
+        native = (ROOT / 'src/eshkol_transformer/e3_frame.c').read_text()
+        self.assertIn('case 23: return et_d2_batch_test_live_count_v1();', native)
+        self.assertIn('case 24: return et_d2_batch_test_borrow_count_v1();', native)
+        body = DRIVER.read_text()
+        start = body.index("'d2-direct-no-live-batch-or-borrow")
+        end = body.index('(vector-set! samples 3', start)
+        selectors = [int(value) for value in re.findall(
+            r'\(= \(e3-test-retention-probe ([0-9]+)\) 0\)', body[start:end])]
+        self.assertEqual(selectors, [23, 24])
+        for leaked in (23, 24):
+            observed = {23: 0, 24: 0}
+            observed[leaked] = 1
+            self.assertFalse(all(observed[index] == 0 for index in selectors))
 
     def test_pair_runs_control_after_fault_failure_in_fresh_process(self):
         subprocess.run(['bash', '-n', str(PAIR)], check=True)

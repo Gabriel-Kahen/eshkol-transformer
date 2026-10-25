@@ -495,8 +495,9 @@
     (with-region ('e3-retention-d2-check 262144)
       (e3-test-retention-check 'd2-direct-cursor
         (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset)))
-      (e3-test-retention-check 'd2-direct-no-live-batch
-        (= (e3-test-retention-probe 3) 0)))
+      (e3-test-retention-check 'd2-direct-no-live-batch-or-borrow
+        (and (= (e3-test-retention-probe 23) 0)
+             (= (e3-test-retention-probe 24) 0))))
     (vector-set! samples 3 (__arena-used))
     (e3-test-retention-check 'd2-direct-retry-region-byte-equality
       (= (e3-test-retention-call! model dataset frame destinations cursor modes
