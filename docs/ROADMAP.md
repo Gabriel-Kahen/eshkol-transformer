@@ -2633,7 +2633,7 @@ parameter graph or live O2 witness; the candidate-aware I2/P1/M3T adapter
 and owner teardown
 remain dependent work.
 
-A source-only P1 candidate handshake is staged on
+A bounded P1 candidate handshake is staged on
 `codex/g3r-p1-candidate-handshake-20261025`. The ordinary trusted P1 root
 keeps its feature-off native linkage; a feature-local extension installs the
 existing guarded native candidate begin and read-only roster preflight. The
@@ -2646,8 +2646,15 @@ ordinary package provide manifest is unchanged, with candidate wrappers kept
 in the feature-local extension. A source-only successor checker pins all
 legacy closure slots and the new three slots. Historical P1/E3 checkers
 still pin the 73-slot pre-candidate source and therefore reject this changed
-root; they have not been relabeled as passing. The focused feature-on/ordinary
-test runner has not passed a supported compiled Eshkol gate. I2/M3T preseal enrollment,
+root; they have not been relabeled as passing. The reviewed source at
+`084833cf`/tree `8f251700` passed the pinned compiled feature-on and ordinary
+feature-off normal/repeat gate. Its sealed 63-file receipt
+`g3r-p1-handshake-084833cf-v5-attempt1/SHA256SUMS-RUN` (SHA-256
+`f7050225dd0cf29f3d7f57f85e408163bc653ab422104bc84e139a65ec003271`)
+has zero launcher/Docker exits, 40 candidate checks and 23 ordinary checks
+in each process, byte-identical repeats, empty runtime stderr and the
+feature-off native symbol check. This does not supply native sanitizer evidence
+for the composed Eshkol gate. I2/M3T preseal enrollment,
 graph revocation, full
 candidate cleanup, C2 restore and replay remain unimplemented.
 
