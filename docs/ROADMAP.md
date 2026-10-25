@@ -1094,7 +1094,9 @@ CE, serial state, six outputs and cursor, plus wrong-target, mean-of-means and
 second-normalization mutant kills. Its independent result review is
 `/home/gabe/.codex/evidence/eshkol-transformer/finish-20261022/e3/numerical-a-review/REVIEW.md`
 (510-file raw seal `f6b04ae1...`; exit 0, 3,750.864 seconds). This closes the
-bounded T2 N1/N2 and named M1/M2 predecessor rows only. Exact-source
+bounded T2 N1/N2 and named M1/M2 predecessor rows only. A consumed-closure audit independently carried the accepted N1/N2/M1 result
+from `44c0418d` to docs-only `b4b82d2b` without another compile
+(`t2-f-carry-44c0418-to-b4b82d2-independent-review-20261025/REVIEW.md`). Exact-source
 mode/gradient, complete-call retention, failure/resource and remaining numeric
 verdicts are still required; candidate-ON CPU4 and full trained-path sanitizer
 are unadmitted.
