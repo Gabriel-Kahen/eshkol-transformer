@@ -2692,8 +2692,15 @@ publication, public G2 and continuation remain pending.
   focused Python checker uses independent G3-S/Philox sampling reference code.
   A source-only f31 archive recipe records member and symbol inventories plus
   final link maps and invokes the typed feature-off native gate. The 14 source
-  checks and host syntax checks pass; this fixture, oracle and archive remain
-  uncompiled. Exact fe9/f31 dependencies are pinned; compiled same-call
+  checks and host syntax checks pass. The first pinned fe9/f31 cut
+  (`g3c4-p2g2-typed-aggregate-3d89be16-attempt1/SHA256SUMS-RUN`, SHA-256
+  `edbe0c48473e91be1d6d65364955643152e556d2abdb76f3702d9aaa9eb74bcd`)
+  passed native feature-off/on and the normal C archive, then stopped during
+  Eshkol IR compilation: a misplaced closing parenthesis nested the private
+  clone helper definition. A focused source repair now makes that definition
+  top-level and guards against a balanced but nested mutant. This failed cut
+  provides no link or runtime evidence; a fresh exact-source compiled gate
+  remains pending. Exact fe9/f31 dependencies are pinned; compiled same-call
   RNG/A2 parity, feature-off execution and supported integration review remain
   pending. Public P2/G2 dispatch stays disabled.
 

@@ -62,6 +62,17 @@ class TerminalDetachedSource(unittest.TestCase):
         self.assertNotIn("g3c4-public-", self.source)
         self.assertNotIn("g3c4-native-result-tensor-create", self.source)
 
+    def test_clone_probed_definition_is_top_level(self):
+        marker = "(define (g3c4-p2g2-terminal-ids-clone-probed-internal"
+        before = self.source.split(marker, 1)[0]
+        self.assertTrue(balanced(before))
+        mutant = self.source.replace(
+            "(bytevector-u8-ref text 1)))))))",
+            "(bytevector-u8-ref text 1))))))", 1,
+        ).replace("answer)))))", "answer))))))", 1)
+        self.assertTrue(balanced(mutant))
+        self.assertFalse(balanced(mutant.split(marker, 1)[0]))
+
     def test_snapshot_destination_precedes_ptr_and_no_cached_failure(self):
         segment = self.source.split(
             "(define (g3c4-p2g2-terminal-snapshot-internal shell)", 1

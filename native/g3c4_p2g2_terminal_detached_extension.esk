@@ -181,7 +181,7 @@
              (and (= (vector-ref snapshot 1)
                      (bytevector-u8-ref (vector-ref anchor 9) 0))
                   (= (vector-ref snapshot 1)
-                     (bytevector-u8-ref text 1))))))
+                     (bytevector-u8-ref text 1)))))))
 
 (define (g3c4-p2g2-terminal-ids-clone-probed-internal
           source-shell after-clone repair-clone)
@@ -368,7 +368,7 @@
           (vector-set! entry 2 'live)
           (vector-set! owner 5 'live)
           (set! published #t)
-          answer))))))
+          answer)))))
 
 (define (g3c4-p2g2-terminal-ids-clone-internal source-shell)
   (g3c4-p2g2-terminal-ids-clone-probed-internal
