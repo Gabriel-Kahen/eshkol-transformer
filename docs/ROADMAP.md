@@ -2287,6 +2287,16 @@ The sealed independent result review is
 (SHA-256 `8849d354137025ae3d9f68cf9b21ad412383a0fd4adc7ab1996469bce1621fd0`).
 Attention VJP and trainable C4 remain separate.
 
+The [private C4 causal-attention VJP source candidate]
+(g3/G3_R_C4_ATTENTION_VJP_LEAF.md) covers the fixed `[1,2,4,2]`
+full-length self-attention row with `[1,4]` positions and `[1,4,4]` keep
+mask. It stages dQ/dK/dV and validates exact CPU f32 views, causal mask,
+finite values and disjoint storage. Local Clang 22 normal/repeat/native
+ASan+UBSan passed 171 checks per mode, including all 48 central differences
+under each of two masks through the genuine forward provider and feature-off
+rejection. Independent review and pinned compiled admission remain pending;
+this leaf does not establish a composed trainable C4 model.
+
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1
 commit to one generated G1. Its host synthetic state witness and causal source
