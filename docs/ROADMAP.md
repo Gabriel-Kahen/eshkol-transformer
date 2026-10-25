@@ -719,13 +719,20 @@ closure, C2/O2 counts, M3 hash pin and CLI3 source fixture are repinned. Focused
 host source tests pass, but supported package builds and exact-head hosted CI
 have not run on this repaired tree.
 
-The exact-`a2ce9526` hosted run `40146212572` reached CLI3 production-generate
-and failed at its ordered native depfile closure before package/runtime checks.
-The production owner unconditionally includes the G3-T generation resource
-fragment, which was absent from the CLI3 production and fixture manifests.
-The reviewed one-entry manifest correction and source assertion pass 13 focused
-CLI3 source contract tests. The hosted run is still in progress; this correction
-has no compiled or hosted result yet. CPU-v1 admission and main merge remain held.
+The exact-`a2ce9526` hosted run `40146212572` completed **failure**: 17/24
+jobs passed, five supported suites failed, and two aggregate jobs failed as a
+consequence. CLI3 production-generate failed its ordered native depfile closure
+before package/runtime checks. The production owner unconditionally includes
+the G3-T generation resource fragment, which was absent from the CLI3
+production and fixture manifests. The independently reviewed one-entry
+manifest correction and source assertion pass 13 focused CLI3 source contract
+tests and are published as `a6427940`; that corrected head has no compiled or
+hosted result. Model-composition and canonical-build failed the same M3 native
+closure check; native-numerics failed E3 metrics source inventory; shard-loader
+failed an exact D2 `checkpoint_io` header closure comparison. Parameter-state
+and C2 operational passed on `a2ce9526`. Remaining corrections, fresh exact-head
+CI, CPU-v1 runtime admission and main merge remain held. The immutable result
+receipt is under `integration-a2ce9526-20261024/ADDENDUM-ci-result.md`.
 
 Active finish milestone: **first complete validated CPU v1**. Current acceptance
 and ownership: [CPU v1 completion index](WAVE3_COMPLETION.md), updated 2026-10-24.
