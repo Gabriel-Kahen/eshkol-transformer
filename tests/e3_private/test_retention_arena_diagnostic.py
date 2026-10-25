@@ -17,6 +17,13 @@ SPEC.loader.exec_module(LAUNCHER)
 CID = 'a' * 64
 
 
+def exact_diagnostic_normal_imports(canonical: str, diagnostic: str) -> bool:
+    symbols = canonical.splitlines(keepends=True)
+    return ('fflush\n' not in symbols
+            and symbols == sorted(set(symbols))
+            and diagnostic == ''.join(sorted((*symbols, 'fflush\n'))))
+
+
 def container(running=False, label='owned', exit_code=0):
     return {'Id': CID, 'Config': {'Labels': {LAUNCHER.LABEL: label}},
             'State': {'Running': running, 'ExitCode': exit_code,
@@ -71,9 +78,26 @@ class RetentionArenaDiagnosticTest(unittest.TestCase):
             if original.name.endswith('_native_source_closure.txt'):
                 expected = expected.replace('retention_bridge.c',
                                             'retention_arena_diagnostic_bridge.c')
-            self.assertEqual(candidate.read_text(), expected, candidate.name)
+            if original.name == 'retention_package_undefined_symbols.txt':
+                self.assertTrue(exact_diagnostic_normal_imports(expected, candidate.read_text()),
+                                candidate.name)
+            else:
+                self.assertEqual(candidate.read_text(), expected, candidate.name)
         self.assertEqual((private / 'retention_arena_diagnostic_bridge.c').read_bytes(),
                          (private / 'retention_bridge.c').read_bytes())
+
+    def test_diagnostic_normal_import_manifest_rejects_drift(self):
+        private = SCRIPT.parents[1] / 'tests/e3_private'
+        canonical = (private / 'retention_package_undefined_symbols.txt').read_text()
+        diagnostic = (private / 'retention_arena_diagnostic_package_undefined_symbols.txt').read_text()
+        self.assertTrue(exact_diagnostic_normal_imports(canonical, diagnostic))
+        for name, changed in (
+            ('missing measured import', diagnostic.replace('fflush\n', '')),
+            ('extra import', diagnostic + 'unmeasured_symbol\n'),
+            ('same-count substitution', diagnostic.replace('fflush\n', 'unmeasured_symbol\n')),
+        ):
+            with self.subTest(name=name):
+                self.assertFalse(exact_diagnostic_normal_imports(canonical, changed))
 
     def test_policy_admits_only_complete_diagnostic_tuple(self):
         root = SCRIPT.parents[1]
