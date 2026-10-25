@@ -2168,6 +2168,14 @@ while the separate C4 generation owner is seeded. C2 storage admits the
 `[4,4]` position table, but no trained-C4 runtime or same-checkpoint
 multi-token continuation is accepted. This is a dependency proposal only.
 
+The [private C4 position VJP leaf](g3/G3_R_C4_POSITION_VJP_LEAF.md) supplies
+one fixed `[1,4]` position-ID and `[1,4,4]` upstream to `[4,4]` gradient
+operation behind a separate feature flag. Its source and tests were independently
+reviewed; local Clang 22 normal and sanitizer runs passed 79 checks, including
+finite differences against the genuine C4 forward provider. The pinned Clang
+21 recipe and model integration remain separate gates. This leaf is not a
+trainable C4 model or a checkpoint/generation admission.
+
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1
 commit to one generated G1. Its host synthetic state witness and causal source
