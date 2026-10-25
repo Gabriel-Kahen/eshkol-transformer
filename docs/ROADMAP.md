@@ -2245,6 +2245,13 @@ one opaque same-owner workspace, exact fourteen retained bindings, exclusive
 C4 and native owner edges, failure-atomic create/reset/release, and C4-specific
 lease exclusion. It is documentation only; no workspace implementation,
 four-token graph, trainer, C2 checkpoint or continuation is admitted.
+The [native live-context exclusion leaf](g3/G3_R_C4_NATIVE_CONTEXT_EXCLUSION_LEAF.md)
+adds a source-private read-only status for the first create prerequisite. It
+scans the mixed native registry and rejects any live same-owner C4 context,
+including idle cached generators for which `owner->active` is empty. Local
+normal/repeat/ASan+UBSan and feature-off symbol tests passed 207 checks per
+runtime mode. This is local native evidence only: no exact-source compiled
+gate, context-create interlock, workspace, C4 lease or trainer admission.
 
 The [private C4 position VJP leaf](g3/G3_R_C4_POSITION_VJP_LEAF.md) supplies
 one fixed `[1,4]` position-ID and `[1,4,4]` upstream to `[4,4]` gradient
