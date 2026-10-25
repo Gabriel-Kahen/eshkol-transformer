@@ -112,6 +112,15 @@
     (g3r-candidate-model-create-internal! tampered-ledger config initial)))
 
 (define ordinary (m3t-public-model-create config initial))
+(define ordinary-entry (m3t-entry ordinary 'model 'candidate-test #t))
+(check "ordinary and candidate fourteen paths agree"
+  (let paths ((index 0))
+    (if (= index 14) #t
+        (and (equal? (parameter-handle-path
+                       (vector-ref (vector-ref ordinary-entry 8) index))
+                     (parameter-handle-path
+                       (vector-ref (vector-ref model-entry 8) index)))
+             (paths (+ index 1)))))
 (define ordinary-tree (module-parameters ordinary))
 (check "ordinary exact tie parity"
   (and (eq? (parameter-tree-handle ordinary-tree '("head" "weight"))
@@ -126,7 +135,7 @@
             (m3t-public-model-initializer ordinary))))
 (check "ordinary and candidate config agree"
   (equal? (vector-ref model-entry 7)
-          (vector-ref (m3t-entry ordinary 'model 'candidate-test #t) 7)))
+          (vector-ref ordinary-entry 7)))
 (display "G3-R M3T candidate constructor PASS: ")
 (display checks)
 (newline)

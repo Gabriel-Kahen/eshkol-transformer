@@ -8,10 +8,14 @@
     '()))
 (define original (m3t-public-initializer-state 1729))
 (define model (m3t-public-model-create config original))
+(define handles (vector-ref (m3t-entry model 'model 'feature-off #t) 8))
 (if (and (eq? (m3t-public-model-profile model) m3t-profile)
-         (= (vector-length
-              (vector-ref (m3t-entry model 'model 'feature-off #t) 8))
-            14))
+         (= (vector-length handles) 14)
+         (let paths ((index 0))
+           (if (= index 14) #t
+               (and (equal? (parameter-handle-path (vector-ref handles index))
+                            (vector-ref m3t-paths index))
+                    (paths (+ index 1))))))
     (display "G3-R M3T ordinary feature-off PASS")
     (exit 1))
 (newline)

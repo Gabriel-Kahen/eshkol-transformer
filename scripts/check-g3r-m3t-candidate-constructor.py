@@ -72,6 +72,10 @@ assert not re.search(r"\((?:cons|vector|make-vector|list)(?:\s|\))", tail)
 fixture = (root / "tests/g3r/m3t_candidate_constructor_test.esk").read_text()
 assert '"candidate exact head/embedding handle tie"' in fixture
 assert '"ordinary exact tie parity"' in fixture
+assert '"ordinary and candidate fourteen paths agree"' in fixture
 assert fixture.count("(parameter-tree-handle") >= 5
 assert "(parameter-tree-tie-groups candidate-tree)" in fixture
+feature_off = (root / "tests/g3r/m3t_candidate_feature_off_test.esk").read_text()
+assert "(parameter-handle-path (vector-ref handles index))" in feature_off
+assert "(vector-ref m3t-paths index)" in feature_off
 print("G3-R M3T candidate source contract PASS")
