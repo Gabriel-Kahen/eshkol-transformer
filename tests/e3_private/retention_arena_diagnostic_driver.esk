@@ -508,6 +508,80 @@
             (vector-ref samples 2) (vector-ref samples 3)
             (vector-ref samples 4))))
 
+;;; Test-only mapper probe. The direct D2 fault is identical to diagnose-d2;
+;;; only the E3 stage-5 classification is added before leaving the call region.
+(define (e3-test-retention-diagnose-d2-map horizon present?)
+  (let* ((record (vector-ref e3-test-retention-root 0))
+         (model (vector-ref record 0))
+         (destinations (vector-ref record 1))
+         (frame (vector-ref record 2))
+         (dataset (vector-ref record 3))
+         (cursor (vector-ref record 4))
+         (modes (vector-ref record 5))
+         (model-image (vector-ref record 6))
+         (entry (e3-frame-entry-live frame 'e3-evaluate-into!))
+         (inspect-args (cons #f '()))
+         (samples (make-vector 7 0)))
+    (e3-test-retention-check 'd2-map-identity
+      (and (= horizon 1024) (eq? present? #f)
+           (not (vector-ref record 13))))
+    (let prefix ((index 0))
+      (if (= index 512) #t
+          (begin
+            (e3-test-retention-check 'd2-map-prefix-region-byte-equality
+              (= (e3-test-retention-call! model dataset frame destinations
+                                          cursor modes model-image)
+                 (vector-ref record 14)))
+            (prefix (+ index 1)))))
+    (vector-set! samples 0 (__arena-used))
+    (e3-test-read-fail-stage 1)
+    (vector-set! samples 1 (__arena-used))
+    (with-region ('e3-retention-d2-map 262144)
+      (let ((caught?
+             (guard
+              (caught
+               (#t
+                (vector-set! samples 2 (__arena-used))
+                (e3-test-retention-check 'd2-map-typed-read
+                  (and (transformer-error? caught)
+                       (eq? (transformer-error-category caught) 'io)
+                       (eq? (transformer-error-operation caught)
+                            'token-dataset-next-batch)))
+                (e3-test-retention-check 'd2-map-escape-identity
+                  (eq? (vector-ref
+                         (vector-ref (d2-dataset-state dataset
+                                                      'token-dataset-next-batch)
+                                     11) 0)
+                       caught))
+                (e3-note-caught-error! entry 5 caught inspect-args)
+                (vector-set! samples 3 (__arena-used))
+                (e3-test-retention-check 'd2-map-fixed-error
+                  (and (= (vector-ref entry 15) (+ (* 5 12) 7))
+                       (eq? (vector-ref entry 11)
+                            (e3-error-table-ref 5 'io))))
+                #t))
+              (d2-token-dataset-next-batch dataset)
+              #f)))
+        (e3-test-retention-check 'd2-map-fault-consumed caught?)))
+    (vector-set! samples 4 (__arena-used))
+    (e3-test-read-fail-stage 0)
+    (with-region ('e3-retention-d2-map-check 262144)
+      (e3-test-retention-check 'd2-map-cursor
+        (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset)))
+      (e3-test-retention-check 'd2-map-no-live-batch-or-borrow
+        (and (= (e3-test-retention-probe 23) 0)
+             (= (e3-test-retention-probe 24) 0))))
+    (vector-set! samples 5 (__arena-used))
+    (e3-test-retention-check 'd2-map-retry-region-byte-equality
+      (= (e3-test-retention-call! model dataset frame destinations cursor modes
+                                  model-image) (vector-ref record 14)))
+    (vector-set! samples 6 (__arena-used))
+    (vector 'e3-retention-d2-map-diagnostic-v1
+            (vector-ref samples 0) (vector-ref samples 1)
+            (vector-ref samples 2) (vector-ref samples 3)
+            (vector-ref samples 4) (vector-ref samples 5)
+            (vector-ref samples 6))))
+
 (define (e3-test-retention-run phase horizon present? corpus-path)
   (cond ((eq? phase 'prepare)
          (e3-test-retention-prepare horizon present? corpus-path))
@@ -528,7 +602,10 @@
                       (eq? (vector-ref scenario 1) 'diagnose-d2))
                   (boolean? (vector-ref scenario 4))))
          (eq? (vector-ref scenario 0) 'retention)))
-  (if (eq? (vector-ref scenario 1) 'diagnose-d2)
+  (if (eq? (vector-ref scenario 1) 'diagnose-d2-map)
+      (e3-test-retention-diagnose-d2-map (vector-ref scenario 2)
+                                         (vector-ref scenario 3))
+      (if (eq? (vector-ref scenario 1) 'diagnose-d2)
       (e3-test-retention-diagnose-d2 (vector-ref scenario 2)
                                      (vector-ref scenario 3)
                                      (vector-ref scenario 4))
@@ -538,4 +615,4 @@
                                   (vector-ref scenario 4))
       (e3-test-retention-run (vector-ref scenario 1)
                              (vector-ref scenario 2)
-                             (vector-ref scenario 3) corpus-path))))
+                             (vector-ref scenario 3) corpus-path)))))

@@ -1122,6 +1122,15 @@ batch idleness and a real evaluator retry. This is a causal localization probe:
 it has no compiled result, does not alter the original report/retention
 assertions, and cannot by itself admit complete-call retention or E3 §9.
 
+The independently reviewed `8fec18f` direct-D2 compiled diagnostic measured
++2,288 root-arena bytes only on injected read faults, persistent through retry;
+the corresponding complete-E3 fault delta was +2,360. The 72-byte difference
+is not attributed to an object or mapping operation. A source-only test probe
+adds D2 escape-slot identity and E3 stage-5 mapping phase samples with a
+fresh-process direct-D2 fault/control comparison. [The causal audit](e3/E3_RETENTION_ERROR_PROMOTION_AUDIT.md)
+sets the repair decision gate; production D2/E3/M3 and complete-call retention
+remain unchanged and unadmitted.
+
 The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
 is a docs-only candidate for the remaining private numerical, compiled-mutant,
 failure and rollback gates. It tracks authentic D2/model reachability separately

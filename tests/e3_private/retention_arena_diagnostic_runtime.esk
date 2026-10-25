@@ -16,7 +16,8 @@
 (define path (car (cdr args)))
 (define mode (car (cdr (cdr args))))
 (check 'mode (or (string=? mode "fault") (string=? mode "control")
-                 (string=? mode "d2-fault") (string=? mode "d2-control")))
+                 (string=? mode "d2-fault") (string=? mode "d2-control")
+                 (string=? mode "d2-map-fault")))
 (define d2-only? (or (string=? mode "d2-fault")
                      (string=? mode "d2-control")))
 (define fault? (or (string=? mode "fault")
@@ -30,6 +31,27 @@
 
 (e3-retention-test-run prepare input output)
 (check 'prepared (eq? (vector-ref output 0) #t))
+(if (string=? mode "d2-map-fault")
+    (begin
+      (e3-retention-test-run
+        (vector (vector 'retention 'diagnose-d2-map 1024 #f))
+        input output)
+      (let ((mapped (vector-ref output 0)))
+        (check 'd2-map-samples
+          (and (vector? mapped) (= (vector-length mapped) 8)
+               (eq? (vector-ref mapped 0)
+                    'e3-retention-d2-map-diagnostic-v1)))
+        (display "E3-RETENTION-D2-MAP before=")
+        (display (vector-ref mapped 1))
+        (display " after-arm=") (display (vector-ref mapped 2))
+        (display " caught=") (display (vector-ref mapped 3))
+        (display " after-map=") (display (vector-ref mapped 4))
+        (display " after-call=") (display (vector-ref mapped 5))
+        (display " after-checks=") (display (vector-ref mapped 6))
+        (display " after-retry=") (display (vector-ref mapped 7))
+        (newline)
+        (flush-output-port (current-output-port)))
+      (exit 0)))
 (if d2-only?
     (begin
       (e3-retention-test-run
