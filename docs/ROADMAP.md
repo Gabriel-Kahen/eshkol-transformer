@@ -1116,7 +1116,7 @@ authentic third D2 row. The mutant retained prior N/W and counters
 These are bounded leaf results;
 the N3 uniform attempt stopped before AOT on four unpinned imports, and the
 repinned mode/gradient attempt 4 stopped at sanitized import admission.
-Neither full N3 nor mode/gradient nor §9 is admitted.
+A read-only source-closure audit also found three changed native files between the accepted `7bb38a56c` N3 target-offset gate and `44c0418d`; that target-offset result does not carry to the exact-44c compiled union. Neither full N3 nor mode/gradient nor §9 is admitted.
 
 The exact-`44c0418d` [N4 private-reachability audit](e3/E3_N4_PRIVATE_REACHABILITY_AUDIT.md)
 finds that admitted D1/D2 cannot emit mask `01` or a masked invalid target;
