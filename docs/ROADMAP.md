@@ -2428,12 +2428,29 @@ for the same trained C2/T1 pair; model restoration, multi-token/EOS generation
 and replay remain separate.
 
 The [private C2/SHA receipt-to-TR3 seam](g3/G3_R_RECEIPT_TR3_RESTORE_SEAM.md)
-is source-staged on the accepted reader source pin. It takes the exact retained
-C2 owner from a live receipt in the same registry, authenticates an enrolled
-idle trainer, holds the receipt busy through TR3 joint restore, and restores
-the receipt phase on success or failure. It reopens no path and returns no
-owner. Focused source and mutation checks pass; a fresh candidate ledger,
-compiled restore, bitwise model comparison and continuation remain unrun.
+is source-reviewed at `bba97271`/tree `9e3d9f3f` on the accepted reader pin.
+It takes the exact retained C2 owner from a live receipt in the same registry,
+authenticates an enrolled idle trainer, holds the receipt busy through TR3
+joint restore, and restores the receipt phase on success or failure. It reopens
+no path and returns no owner. The sealed compiled gate
+`g3r-receipt-tr3-seam-bba97271-attempt5/SHA256SUMS-RUN` (SHA-256
+`b6389609ebfeed07f95796d5caad9ec591fa32ff07a8b6f84959dc10b9863503`)
+passed 447/447 hashes, zero launcher/Docker exits, exact 101-source package
+closure plus its private root/extension, caller-only depfiles and 19 exports
+in both modes. Independent result review accepted identical normal, fresh
+process repeat and native ASan+UBSan traces with 15 checks, including forged,
+busy and dead receipt and wrong-trainer typed negatives; relevant stderr is
+empty. The separate failed receipts remain nonaccepting: attempt1 (SHA-256
+`cdbe9abb614bd1a0c6888157838f955200212c6b11ea2a1bb5c9d1a0238d8d61`)
+stopped at a direct-link dependency; attempt2 (SHA-256
+`fbc887d0845afede80f468ac4a53f64f38b61f2f78e5004f4d5e61ed303cc511`)
+raised SIGILL before a runtime marker; attempt4 (SHA-256
+`b6b2dd601923b8942b7c81db6d1aba10ff385f0993ff0273f7bdaabcfcf39122`)
+durably reached only caller stage C00 before the bridge. The recipe-only cause
+was a missing one-element E1B argument box, fixed in attempt5; buffered-marker
+draft v3 was never run. This establishes the exact same-image receipt-to-TR3
+seam, not restored parameter-bit parity, generation or persisted fresh-process
+continuation.
 
 The earlier G3-R C2 SAVE continuation on `0581426b` sealed a failed runtime
 receipt at `g3-save-0581426b-cont-attempt1/SHA256SUMS-RUN`: its compiled

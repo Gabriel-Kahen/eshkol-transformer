@@ -1,8 +1,9 @@
 # G3-R private C2/SHA receipt to TR3 restore seam
 
-**Source-staged only.** This leaf composes the accepted fresh-process reader
-root and the accepted TR3 joint restore under one CLI3/T1/C2/TR3 registry. It
-does not establish a restored model or continued generation.
+**Source-reviewed and bounded compiled seam accepted.** This leaf composes the
+accepted fresh-process reader root and TR3 joint restore under one
+CLI3/T1/C2/TR3 registry. It does not establish parameter-bit parity or
+continued generation.
 
 `(g3r-c2-receipt-tr3-restore-internal! receipt trainer) -> #t` accepts only
 an exact live C2/SHA receipt identity from the owning registry and an exact
@@ -23,10 +24,17 @@ candidate ledger retains receipt and trainer ownership and must release them
 in dependency order after success or failure.
 
 This API authenticates an enrolled idle receiver; it cannot prove when that
-receiver was constructed. The next aggregate must create a fresh same-registry
-model, optimizer, dataset and trainer under its candidate ledger, check the
-pair/C2/T1/X1/profile controls, call this seam once, and verify restored
-parameter bits before publication. A current caller trainer is not a valid
-candidate. Source mutation tests cover the identity, phase, owner and trainer
-checks. Compiled normal/repeat/native-sanitizer behavior and forged/dead/busy
-receipt or wrong-trainer runtime negatives remain unrun.
+receiver was constructed. The compiled fixture constructs a fresh same-registry
+model, optimizer, dataset and trainer, verifies the exact fa9 C2 companion
+against the SHA receipt and live T1, then calls the seam. Its sealed attempt5
+receipt `g3r-receipt-tr3-seam-bba97271-attempt5/SHA256SUMS-RUN` (SHA-256
+`b6389609ebfeed07f95796d5caad9ec591fa32ff07a8b6f84959dc10b9863503`)
+passed normal, fresh-process repeat and native sanitizer with identical
+15-check traces and typed forged/dead/busy receipt and wrong-trainer rejects.
+The 447-file seal and result were independently audited in
+`g3r-receipt-tr3-seam-independent-review-20261025/SHA256SUMS-REVIEW`
+(SHA-256 `302a60c2a5c1fb6fe3e460a459fb5185f00ef1852aa4414e9891a2081dd82af5`).
+The next aggregate must verify exact restored parameter bits and G1 trace
+before model publication or continuation. Source mutation tests cover identity,
+phase, owner and trainer checks; this seam does not prove replay, multi-token
+generation or EOS behavior.
