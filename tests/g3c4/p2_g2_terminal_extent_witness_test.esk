@@ -1,0 +1,76 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+(load "g3c4_t1_output_decode_extension.esk")
+(load "g3c4_output_envelope_extension.esk")
+(load "g3c4_p2g2_ownership_extension.esk")
+(load "g3c4_p2g2_protected_scope_extension.esk")
+(load "g3c4_p2g2_terminal_pending_anchor_extension.esk")
+
+;;; The test-only native ledger captures the original pointer and the real
+;;; allocator request at construction. It exposes only equality predicates.
+(extern i64 extent-arm :real et_g3c4_terminal_extent_arm_v1)
+(extern i64 extent-seal :real et_g3c4_terminal_extent_seal_v1)
+(extern i64 extent-match i64 ptr i64 i64
+        :real et_g3c4_terminal_extent_match_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "P2/G2 terminal extent FAIL: ")
+             (display label) (newline) (exit 1))))
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define model (g3c4-model-create-seeded-internal 1729))
+(define generator
+  (g3c4-generator-create-internal model tokenizer
+    (list ':profile 'diagnostic-c4 ':sampling 'greedy
+          ':temperature-bits 1065353216 ':top-k 256
+          ':top-p-bits 1065353216 ':max-new-tokens 2
+          ':eos #f ':seed 7)))
+
+(check "arm" (= (extent-arm) 0))
+(g3c4-with-p2g2-terminal-pending-probe
+  'terminal-extent-witness generator (call pending)
+  (let* ((record (vector-ref pending 1))
+         (anchor (g3c4-p2g2-terminal-pending-anchor-for call))
+         (original-second (vector-ref pending 11))
+         (original-text (vector-ref pending 14)))
+    (check "eight original allocations captured" (= (extent-seal) 1))
+    ;;; Each argument travels through the actual compiled extern `ptr` path.
+    ;;; Sizes are payload extents (length header + data), then full rounded
+    ;;; backing sizes (object header + payload + alignment padding).
+    (check "first raw" (= (extent-match 0 (vector-ref record 11) 9 24) 1))
+    (check "first staging" (= (extent-match 1 (vector-ref record 12) 16 24) 1))
+    (check "pending raw" (= (extent-match 2 (vector-ref record 9) 10 24) 1))
+    (check "pending staging" (= (extent-match 3 (vector-ref record 10) 24 32) 1))
+    (check "second raw" (= (extent-match 4 original-second 9 24) 1))
+    (check "second staging" (= (extent-match 5 (vector-ref pending 12) 16 24) 1))
+    (check "text one" (= (extent-match 6 (vector-ref pending 13) 9 24) 1))
+    (check "text two" (= (extent-match 7 original-text 10 24) 1))
+    (check "wrong declared payload rejected"
+      (= (extent-match 4 original-second 10 24) 0))
+    (check "wrong backing size rejected"
+      (= (extent-match 4 original-second 9 16) 0))
+    (check "swapped original rejected"
+      (= (extent-match 4 original-text 9 24) 0))
+    (let ((replacement (make-bytevector 1 0)))
+      (vector-set! pending 11 replacement)
+      (vector-set! anchor 11 replacement)
+      (check "paired equal-length substitution still matches mutable records"
+        (eq? (g3c4-p2g2-terminal-pending-check call 'test) pending))
+      (check "creation-time ledger rejects paired substitution"
+        (= (extent-match 4 (vector-ref pending 11) 9 24) 0))
+      (vector-set! pending 11 original-second)
+      (vector-set! anchor 11 original-second))
+    (check "original restored"
+      (= (extent-match 4 (vector-ref pending 11) 9 24) 1))
+    (check "authenticated abort"
+      (g3c4-p2g2-terminal-pending-abort! call))))
+(check "generator reusable" (g3c4-generator-close-internal! generator))
+(display "G3-C4 P2/G2 terminal extent PASS: checks=")
+(display checks)
+(newline)

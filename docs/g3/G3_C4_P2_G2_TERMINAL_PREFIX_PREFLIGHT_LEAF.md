@@ -17,10 +17,10 @@ must check that relation after an independently authenticated carrier backing
 extent; this predicate cannot authorize a second frame or terminal commit.
 
 The exact upstream Eshkol lowering at
-`lib/backend/llvm_codegen.cpp:16993-17048` creates bytevectors with an
+`lib/backend/llvm_codegen.cpp:16286-16318` creates bytevectors with an
 eight-byte length followed by `len` data bytes and calls
 `arena_allocate_with_header(data_size=8+len)`; the allocator at
-`lib/core/runtime_object_alloc.cpp:25-64` records that size. This supports a
+`lib/core/runtime_object_alloc.cpp:20-61` records that size. This supports a
 *possible derived extent proof* for fixed literal allocation sites, bound to
 the exact compiler ABI and the original authenticated allocation identities.
 The current mutable extent vectors and `bytevector-length` checks do not

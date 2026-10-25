@@ -3513,6 +3513,14 @@ publication, public G2 and continuation remain pending.
   remain pending E3 trained-G2 sanitizer classification and a reviewed
   compiler/allocator-bound extent proof.
 
+- **Private P2/G2 original-allocation extent witness candidate:**
+  [bounded test-only ledger and fixture](g3/G3_C4_P2_G2_TERMINAL_EXTENT_WITNESS_LEAF.md)
+  capture allocator request and returned addresses for the eight fixed
+  bytevector sites and check original extern `ptr` identity without a
+  caller-pointer header probe. Static source and compiler syntax checks pass;
+  the focused normal/repeat/sanitizer fixture is **NOT RUN** while `heavy.lock`
+  is occupied. The ledger is test-only and cannot authorize terminal close.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
