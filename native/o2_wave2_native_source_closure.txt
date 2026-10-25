@@ -6,6 +6,7 @@ native/e1b_error_consumer_bridge.h
 .deps/eshkol-src/inc/eshkol/ad_node_registry.def
 native/o2_wave2_package_bridge.c
 native/i2_wave2_package_bridge.c
+native/cpuv1_resource_private.h
 native/t1_wave1_package_bridge.c
 native/x1_config_consumer_bridge.c
 native/p1_package_bridge.c
@@ -15,13 +16,14 @@ native/d1_e1b_package_bridge.c
 native/f32_parameter_internal.h
 include/eshkol_transformer/f32_tensor.h
 include/eshkol_transformer/kernel_abi.h
+native/cpuv1_resource_i2.inc
 native/o2_optimizer_internal.h
 native/o2_wave2_public_bridge_extension.c
 native/data_io.c
 native/checkpoint_io.c
-native/cpuv1_resource_private.h
 native/checkpoint_io.h
 native/kernel_abi.c
+native/cpuv1_resource_k1.inc
 native/i64_tensor.c
 include/eshkol_transformer/i64_tensor.h
 native/t1_i64_shell.c

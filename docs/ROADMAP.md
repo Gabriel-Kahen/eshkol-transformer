@@ -711,6 +711,14 @@ The scoped fixture repair appends its diagnostic control at slot 75, retains
 the two production slots and their indexes, and has independent source review.
 Compiler/runtime and exact-head hosted rerun remain open.
 
+Further `ef8f9bb5` CI diagnostics confirm strict native depfile drift in C2
+public/state, CLI3 commands and K2 native numerics. The shared C resource
+header and unconditional I2/K1/A2 include fragments now have source-derived
+positions in the affected package manifests; the standalone C2 I2 model-copy
+closure, C2/O2 counts, M3 hash pin and CLI3 source fixture are repinned. Focused
+host source tests pass, but supported package builds and exact-head hosted CI
+have not run on this repaired tree.
+
 Active finish milestone: **first complete validated CPU v1**. Current acceptance
 and ownership: [CPU v1 completion index](WAVE3_COMPLETION.md), updated 2026-10-24.
 PR #214 exact-head hosted checks pass. Current-source CPU4 two-update training,

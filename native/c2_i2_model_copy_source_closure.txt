@@ -1,4 +1,6 @@
 native/i2_wave2_package_bridge.c
+native/cpuv1_resource_private.h
 native/f32_parameter_internal.h
 include/eshkol_transformer/f32_tensor.h
 include/eshkol_transformer/kernel_abi.h
+native/cpuv1_resource_i2.inc

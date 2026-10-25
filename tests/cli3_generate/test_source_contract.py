@@ -133,6 +133,7 @@ class SingleRegistryContract(unittest.TestCase):
         ]
         expected += [
             'native/a2_kv_cache.c',
+            'native/cpuv1_resource_a2.inc',
             'native/g3n_primitives_provider.c',
             'native/g3s_sampling_provider.c',
         ]

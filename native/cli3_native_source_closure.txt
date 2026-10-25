@@ -13,9 +13,11 @@ native/k2_wave2_public_wrappers.inc
 native/c2_wave2_public_wrappers.inc
 native/data_io.c
 native/checkpoint_io.c
+native/cpuv1_resource_private.h
 native/checkpoint_io.h
 native/kernel_abi.c
 include/eshkol_transformer/kernel_abi.h
+native/cpuv1_resource_k1.inc
 src/eshkol_transformer/m3_i64_integration.c
 native/i64_tensor.c
 include/eshkol_transformer/i64_tensor.h
@@ -63,6 +65,7 @@ native/tr3_c_i2_restore_internal.h
 native/p1_identity.c
 native/p1_identity_internal.h
 native/i2_wave2_package_bridge.c
+native/cpuv1_resource_i2.inc
 native/o2_wave2_package_bridge.c
 native/c2_x1_canonical.c
 native/c2_x1_canonical.h

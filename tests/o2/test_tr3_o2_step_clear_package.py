@@ -123,13 +123,13 @@ class Tr3O2StepClearPackageTests(unittest.TestCase):
             "o2_wave2_private_renames.txt": 6,
             "o2_wave2_undefined_symbols.txt": 159,
             "o2_wave2_source_closure.txt": 15,
-            "o2_wave2_native_source_closure.txt": 29,
+            "o2_wave2_native_source_closure.txt": 32,
             "c2_wave2_defined_symbols.txt": 81,
             "c2_wave2_public_exports.txt": 75,
             "c2_wave2_public_strings.txt": 81,
             "c2_wave2_private_renames.txt": 6,
             "c2_wave2_source_closure.txt": 32,
-            "c2_wave2_native_source_closure.txt": 53,
+            "c2_wave2_native_source_closure.txt": 56,
         }
         for name, expected in expected_counts.items():
             lines = (ROOT / "native" / name).read_text().splitlines()
