@@ -1,6 +1,12 @@
 #include "m3t_transport.h"
 #include "m3t_f32_scoped.h"
 #include "../../native/f32_parameter_internal.h"
+#ifdef ET_G3R_O2_GRAPH_PREFLIGHT_PRIVATE
+#ifndef ET_G3R_CANDIDATE_RETIRE_PRIVATE
+#error "G3-R O2 graph preflight requires candidate retirement provenance"
+#endif
+#include "../../native/o2_optimizer_internal.h"
+#endif
 #include "../../native/t1_i64_shell.h"
 #include "eshkol_transformer/i64_tensor.h"
 #include "eshkol_transformer/n3k_primitives_abi.h"
@@ -219,6 +225,31 @@ int64_t et_m3t_private_candidate_binding_preflight_v1(
     return bad(ET_M3T_INVALID_STATE, ET_M3T_CODE_TOPOLOGY);
   if (o->handles[index] != exact_handle)
     return bad(ET_M3T_INVALID_STATE, ET_M3T_CODE_TOPOLOGY);
+  return 0;
+}
+#endif
+#ifdef ET_G3R_O2_GRAPH_PREFLIGHT_PRIVATE
+int64_t et_m3t_private_candidate_o2_graph_preflight_v1(
+    void *candidate, void *optimizer) {
+  clear();
+  owner *o = admit(candidate, OWNER, 0);
+  if (!o) return error_category;
+  if (owner_roster_preflight(o))
+    return bad(ET_M3T_INVALID_STATE, ET_M3T_CODE_TOPOLOGY);
+  for (size_t index = 0; index < 14; ++index) {
+    const et_f32_tensor *storage =
+        et_f32_parameter_canonical_owner_v1(o->p[index]);
+    et_o2_error_v1 error = {0};
+    if (storage == NULL)
+      return bad(ET_M3T_INVALID_STATE, ET_M3T_CODE_TOPOLOGY);
+    int32_t status = et_o2_private_candidate_graph_entry_match_v1(
+        (et_o2_optimizer *)optimizer, index, o->p[index],
+        o->handles[index], storage, &error);
+    if (status != 0)
+      return bad(status == ET_O2_STATUS_INTERNAL ? ET_M3T_INTERNAL :
+                     ET_M3T_INVALID_STATE,
+                 ET_M3T_CODE_TOPOLOGY);
+  }
   return 0;
 }
 #endif

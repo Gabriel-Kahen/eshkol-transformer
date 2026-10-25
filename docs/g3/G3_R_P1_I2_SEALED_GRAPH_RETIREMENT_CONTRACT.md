@@ -175,3 +175,29 @@ twice, and native binding fixture 61 checks twice. Its sealed receipt is
 The first runner attempt at `cf6afa4e` remains nonaccepting because an invalid
 f32 object parity assertion stopped before its native fixture. This leaf
 still does not authenticate O2, exclude graph leases or revoke authority.
+
+## Next private O2 association and TR3 lease preflight
+
+The next feature-local `ET_G3R_O2_GRAPH_PREFLIGHT_PRIVATE` leaf enrolls one
+exact O2 Scheme shell, registry record and native receiver in a private
+candidate sidecar only after the sealed graph check, ordered 14-handle check,
+native O2/M3T identity check and read-only TR3 lease exclusion pass. The
+sidecar preflight repeats those checks without mutation and rejects a changed
+or substituted enrollment. `et_m3t_private_candidate_o2_graph_preflight_v1`
+returns only a status to Eshkol. Its native implementation admits the sealed
+M3T owner through the owner registry and compares each exact parameter,
+bound P1 shell and canonical storage owner with the registered live O2 entry.
+The feature-only O2 per-entry helper invokes the accepted O2 retirement
+preflight, so moments and operations must be idle, active O2 states must be
+absent, and no live O2 optimizer may share an entry identity. No parameter
+array crosses the Eshkol FFI.
+
+The TR3 check uses the source-private fixed P1 capture and the current
+`tr3-trainers` registry. It refuses acquisition/unlink staging and any
+enrolled record overlapping the candidate model, optimizer, module, handle
+or carrier identities. It observes only; it neither unenrolls a trainer nor
+changes the optimizer. The candidate O2 enrollment is not a retirement
+witness and grants no graph revocation authority. This source and its focused
+native fixture are staged for independent review; the composed Eshkol fixture
+and pinned compiled gate remain **NOT RUN**. Their link closure must add the
+genuine O2 and TR3/T2/D2 sources beyond the accepted M3T constructor archive.

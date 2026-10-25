@@ -23,6 +23,11 @@ int64_t et_m3t_private_owner_save_roster_v1(
 int64_t et_m3t_private_candidate_binding_preflight_v1(
     void *owner, int64_t index, const void *exact_handle);
 #endif
+#ifdef ET_G3R_O2_GRAPH_PREFLIGHT_PRIVATE
+/* One status across the complete native M3T/O2 14-entry identity graph. */
+int64_t et_m3t_private_candidate_o2_graph_preflight_v1(
+    void *owner, void *optimizer);
+#endif
 int64_t et_m3t_private_owner_bind_v1(void *owner, int64_t index, void *handle);
 int64_t et_m3t_private_owner_initialize_v1(void *owner, int64_t index);
 void *et_m3t_private_owner_successor_v1(void *owner);

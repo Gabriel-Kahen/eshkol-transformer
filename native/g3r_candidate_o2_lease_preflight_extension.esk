@@ -1,0 +1,155 @@
+;;; Private G3-R read-only O2/TR3 admission. Load after the accepted candidate
+;;; constructor, O2 extension and TR3 lease core in one registry universe.
+(extern i64 g3r-native-o2-graph-preflight ptr ptr
+        :real et_m3t_private_candidate_o2_graph_preflight_v1)
+
+;;; Record: ledger, model, M3T entry, optimizer shell, O2 record, native O2,
+;;; and a private copy of the fourteen canonical P1 handle shells.
+(define g3r-candidate-o2-enrollments (vector '()))
+
+(define (g3r-candidate-o2-handle-order? handles ordered)
+  (and (vector? handles) (= (vector-length handles) 14)
+       (let loop ((index 0) (remaining ordered))
+         (if (= index 14) (null? remaining)
+             (and (pair? remaining)
+                  (eq? (vector-ref handles index) (car remaining))
+                  (loop (+ index 1) (cdr remaining)))))))
+
+(define (g3r-candidate-o2-copy-handles handles)
+  (let ((copy (make-vector 14 #f)))
+    (let loop ((index 0))
+      (if (= index 14) copy
+          (begin (vector-set! copy index (vector-ref handles index))
+                 (loop (+ index 1)))))))
+
+(define (g3r-candidate-tr3-lease-clear-internal! model optimizer handles
+                                                    operation)
+  (if (or tr3-acquisition-active? tr3-lease-unenroll-active?
+          (vector-ref tr3-trainers 1))
+      (m3t-fail 'invalid-state operation "trainer lease registry is busy"))
+  (let* ((observed-head (vector-ref tr3-trainers 0))
+         (modules (make-vector 17 #f))
+         (retained-handles (make-vector 14 #f))
+         (carriers (make-vector 14 #f)))
+    (tr3-lease-p1-status!
+      (tr3-p1-fixed-capture-internal
+        model handles modules retained-handles carriers)
+      operation)
+    (let compare ((index 0))
+      (if (= index 14) #t
+          (begin
+            (if (not (eq? (vector-ref retained-handles index)
+                          (vector-ref handles index)))
+                (m3t-fail 'invalid-state operation
+                          "trainer P1 capture changed candidate handles"))
+            (compare (+ index 1)))))
+    (let scan ((remaining observed-head))
+      (cond
+        ((null? remaining) #t)
+        ((not (pair? remaining))
+         (m3t-fail 'invalid-state operation "trainer registry is malformed"))
+        (else
+          (let ((record (car remaining)))
+            (if (or (not (vector? record))
+                    (not (= (vector-length record) tr3-lease-record-length))
+                    (not (eq? (vector-ref record 0) tr3-lease-record-tag))
+                    (not (eq? (vector-ref record 1) record))
+                    (not (vector? (vector-ref record 10)))
+                    (not (= (vector-length (vector-ref record 10)) 17))
+                    (not (vector? (vector-ref record 11)))
+                    (not (= (vector-length (vector-ref record 11)) 14))
+                    (not (vector? (vector-ref record 12)))
+                    (not (= (vector-length (vector-ref record 12)) 14)))
+                (m3t-fail 'invalid-state operation
+                          "enrolled trainer record is malformed"))
+            (if (tr3-lease-record-overlap?
+                  record model optimizer #f modules retained-handles carriers)
+                (m3t-fail 'invalid-state operation
+                          "candidate graph overlaps an active trainer lease"))
+            (scan (cdr remaining))))))
+    (if (or tr3-acquisition-active? tr3-lease-unenroll-active?
+            (vector-ref tr3-trainers 1)
+            (not (eq? observed-head (vector-ref tr3-trainers 0))))
+        (m3t-fail 'invalid-state operation "trainer registry changed"))
+    #t))
+
+(define (g3r-candidate-o2-admit ledger model optimizer operation)
+  (let* ((candidate (g3r-candidate-ledger-record ledger operation))
+         (entry (m3t-entry model 'model operation #t))
+         (o2-record (o2-require-optimizer operation optimizer))
+         (native (if (and (vector? o2-record)
+                          (= (vector-length o2-record) 6))
+                     (vector-ref o2-record 1) '())))
+    (if (or (not (eq? (vector-ref candidate 1) 'sealed))
+            (not (eq? (vector-ref candidate 5) entry))
+            (not (eq? (vector-ref candidate 10) model))
+            (not (vector? o2-record))
+            (not (= (vector-length o2-record) 6))
+            (not (eq? (vector-ref o2-record 0) optimizer))
+            (null? native)
+            (not (g3r-candidate-o2-handle-order?
+                   (vector-ref entry 8) (vector-ref o2-record 5))))
+        (m3t-fail 'invalid-state operation
+                  "candidate optimizer enrollment differs from graph"))
+    (g3r-candidate-graph-identity-preflight-internal! ledger model)
+    (m3t-check
+      (g3r-native-o2-graph-preflight
+        (vector-ref candidate 8) native)
+      operation)
+    (g3r-candidate-tr3-lease-clear-internal!
+      model optimizer (vector-ref entry 8) operation)
+    (if (or (not (eq? (o2-require-optimizer operation optimizer)
+                      o2-record))
+            (not (eq? native (vector-ref o2-record 1)))
+            (not (g3r-candidate-o2-handle-order?
+                   (vector-ref entry 8) (vector-ref o2-record 5))))
+        (m3t-fail 'invalid-state operation
+                  "candidate optimizer registry changed"))
+    (vector candidate entry o2-record native)))
+
+(define (g3r-candidate-o2-enroll-internal! ledger model optimizer)
+  (let* ((operation 'g3r-candidate-o2-enroll-internal!)
+         (admission (g3r-candidate-o2-admit ledger model optimizer operation)))
+    (let scan ((remaining (vector-ref g3r-candidate-o2-enrollments 0)))
+      (if (null? remaining) #t
+          (begin
+            (if (or (eq? ledger (vector-ref (car remaining) 0))
+                    (eq? optimizer (vector-ref (car remaining) 3)))
+                (m3t-fail 'invalid-state operation
+                          "candidate or optimizer is already enrolled"))
+            (scan (cdr remaining)))))
+    (let* ((entry (vector-ref admission 1))
+           (record (vector ledger model entry optimizer
+                           (vector-ref admission 2) (vector-ref admission 3)
+                           (g3r-candidate-o2-copy-handles
+                             (vector-ref entry 8)))))
+      (vector-set! g3r-candidate-o2-enrollments 0
+                   (cons record (vector-ref g3r-candidate-o2-enrollments 0)))
+      #t)))
+
+(define (g3r-candidate-o2-lease-preflight-internal! ledger model optimizer)
+  (let ((operation 'g3r-candidate-o2-lease-preflight-internal!))
+    (let find ((remaining (vector-ref g3r-candidate-o2-enrollments 0)))
+      (cond
+        ((null? remaining)
+         (m3t-fail 'invalid-argument operation
+                   "candidate has no exact optimizer enrollment"))
+        ((eq? ledger (vector-ref (car remaining) 0))
+         (let* ((record (car remaining))
+                (admission
+                  (g3r-candidate-o2-admit ledger model optimizer operation))
+                (entry (vector-ref admission 1)))
+           (if (or (not (eq? model (vector-ref record 1)))
+                   (not (eq? entry (vector-ref record 2)))
+                   (not (eq? optimizer (vector-ref record 3)))
+                   (not (eq? (vector-ref admission 2)
+                             (vector-ref record 4)))
+                   (not (eq? (vector-ref admission 3)
+                             (vector-ref record 5)))
+                   (not (g3r-candidate-o2-handle-order?
+                          (vector-ref record 6)
+                          (vector-ref (vector-ref admission 2) 5))))
+               (m3t-fail 'invalid-state operation
+                         "candidate optimizer identity changed"))
+           #t))
+        (else (find (cdr remaining)))))))

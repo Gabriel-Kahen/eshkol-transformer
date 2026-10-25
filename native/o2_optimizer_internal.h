@@ -155,6 +155,14 @@ int32_t et_o2_optimizer_builder_abort_v1(et_o2_optimizer_builder **builder,
  * closed Eshkol ledger and the ordered M3T/P1 graph before commit. */
 int32_t et_o2_private_candidate_retire_preflight_v1(
     et_o2_optimizer *optimizer, et_o2_error_v1 *error);
+#ifdef ET_G3R_O2_GRAPH_PREFLIGHT_PRIVATE
+/* Native-only exact entry comparison after registry-backed retirement
+ * readiness. No entry pointer is returned to the Eshkol caller. */
+int32_t et_o2_private_candidate_graph_entry_match_v1(
+    et_o2_optimizer *optimizer, size_t index,
+    const et_f32_parameter *parameter, const void *p1_handle,
+    const et_f32_tensor *storage_owner, et_o2_error_v1 *error);
+#endif
 int32_t et_o2_private_candidate_retire_commit_v1(
     et_o2_optimizer *optimizer, et_o2_error_v1 *error);
 #endif

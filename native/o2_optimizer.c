@@ -6,6 +6,11 @@
 #include <string.h>
 #include <xmmintrin.h>
 
+#if defined(ET_G3R_O2_GRAPH_PREFLIGHT_PRIVATE) && \
+    !defined(ET_G3R_CANDIDATE_RETIRE_PRIVATE)
+#error "G3-R O2 graph preflight requires candidate retirement provenance"
+#endif
+
 #if defined(ET_TR3_C_O2_RESTORE_NATIVE) &&                                  \
     !defined(ET_I2_PRIVATE_OWNED_CLONE_MATCH)
 #error "TR3-C O2 restore requires the shared owned-clone authorizer"
@@ -1015,6 +1020,32 @@ int32_t et_o2_private_candidate_retire_preflight_v1(
   }
   return et_o2_success(error);
 }
+
+#ifdef ET_G3R_O2_GRAPH_PREFLIGHT_PRIVATE
+int32_t et_o2_private_candidate_graph_entry_match_v1(
+    et_o2_optimizer *candidate, size_t index,
+    const et_f32_parameter *parameter, const void *p1_handle,
+    const et_f32_tensor *storage_owner, et_o2_error_v1 *error) {
+  static const char operation[] = "candidate-optimizer-graph-entry";
+  int32_t status =
+      et_o2_private_candidate_retire_preflight_v1(candidate, error);
+  if (status != 0) return status;
+  if (index >= ET_O2_CANDIDATE_COUNT || parameter == NULL ||
+      p1_handle == NULL || storage_owner == NULL) {
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_ARGUMENT,
+                      ET_O2_CODE_INVALID_HANDLE, operation,
+                      "candidate graph entry operands are invalid");
+  }
+  const et_o2_entry *entry = &candidate->entries[index];
+  if (entry->parameter != parameter || entry->p1_handle != p1_handle ||
+      entry->storage_owner != storage_owner) {
+    return et_o2_fail(error, ET_O2_STATUS_INVALID_STATE,
+                      ET_O2_CODE_INVALID_HANDLE, operation,
+                      "candidate graph entry identity differs");
+  }
+  return et_o2_success(error);
+}
+#endif
 
 #ifdef ET_O2_TESTING
 static size_t et_o2_retire_fail_after = SIZE_MAX;

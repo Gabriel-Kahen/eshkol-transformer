@@ -2756,6 +2756,21 @@ Independent source/test/result review is sealed at
 The v1 attempt remains nonaccepting. O2 identity, active leases, graph
 revocation, restore and replay remain unproved.
 
+A separate private O2 association/TR3 lease preflight is staged on
+`codex/g3r-o2-lease-preflight-20261025`. Its feature-only native status ABI
+compares each of the accepted sealed M3T owner's 14 parameters, P1 shells and
+canonical storage owners with the exact live O2 optimizer entry. A candidate
+sidecar enrolls the exact O2 Scheme shell, registry record and native receiver
+only after that check, the graph identity check and read-only TR3 fixed-P1
+capture/active-lease overlap exclusion. Preflight repeats those admissions
+without mutation. Local Clang 22 native normal/repeat passes 123 checks per
+run, source checker passes, and ordinary and prior G3-R O2/M3T objects retain
+byte parity with the accepted `5504b2a9` base. Independent source/test review
+and the composed Eshkol gate remain pending; the existing M3T constructor
+archive lacks the O2/TR3/T2/D2 link closure needed for that gate. This leaf
+does not produce an O2 witness, revoke graph authority, restore, replay or
+claim sanitizer admission.
+
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
 names would return newly owned authenticated CPU f32 `[1,256]` kind-3 shells,

@@ -1,0 +1,106 @@
+(load "tr3_lease_root.esk")
+(load "g3r_p1_candidate_construction_extension.esk")
+(load "g3c4_p1_construction_extension.esk")
+(load "g3r_i2_candidate_construction_extension.esk")
+(load "g3r_m3t_candidate_constructor_extension.esk")
+(load "g3r_candidate_o2_lease_preflight_extension.esk")
+
+(define checks 0)
+(define (check label value)
+  (if value (set! checks (+ checks 1))
+      (begin (display "G3-R O2/lease FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label category thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category))))
+      (thunk) #f)))
+(define (config-create)
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define (handle-paths handles)
+  (let loop ((index 0))
+    (if (= index 14) '()
+        (cons (parameter-handle-path (vector-ref handles index))
+              (loop (+ index 1))))))
+(define (optimizer-config handles)
+  (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+        '(none) '(constant)
+        (list (list 'group (handle-paths handles)
+                    "3dcccccd" "3f000000" "3f000000"
+                    "3a83126f" "00000000"))))
+
+(define config (config-create))
+(define initializer (m3t-public-initializer-state 1729))
+(define ledger (g3r-candidate-ledger-begin-internal! config initializer))
+(define model (g3r-candidate-model-create-internal! ledger config initializer))
+(define entry (m3t-entry model 'model 'g3r-o2-test #t))
+(define handles (vector-ref entry 8))
+(define tree (module-parameters model))
+(define optimizer (o2-public-optimizer-create (optimizer-config handles) tree))
+(define o2-record (o2-require-optimizer 'g3r-o2-test optimizer))
+
+(reject "unenrolled candidate" 'invalid-argument
+  (lambda () (g3r-candidate-o2-lease-preflight-internal!
+               ledger model optimizer)))
+(reject "foreign ledger" 'invalid-argument
+  (lambda () (g3r-candidate-o2-enroll-internal!
+               (vector 'g3r-candidate-ledger-v1) model optimizer)))
+(define ordinary (m3t-public-model-create config initializer))
+(define ordinary-entry (m3t-entry ordinary 'model 'g3r-o2-test #t))
+(define ordinary-optimizer
+  (o2-public-optimizer-create
+    (optimizer-config (vector-ref ordinary-entry 8))
+    (module-parameters ordinary)))
+(reject "foreign optimizer" 'invalid-state
+  (lambda () (g3r-candidate-o2-enroll-internal!
+               ledger model ordinary-optimizer)))
+(check "exact O2 candidate enrollment"
+  (g3r-candidate-o2-enroll-internal! ledger model optimizer))
+(check "exact O2 and TR3 preflight"
+  (g3r-candidate-o2-lease-preflight-internal! ledger model optimizer))
+(reject "duplicate enrollment" 'invalid-state
+  (lambda () (g3r-candidate-o2-enroll-internal! ledger model optimizer)))
+(reject "foreign preflight optimizer" 'invalid-state
+  (lambda () (g3r-candidate-o2-lease-preflight-internal!
+               ledger model ordinary-optimizer)))
+(define original-native (vector-ref o2-record 1))
+(vector-set! o2-record 1 (vector-ref
+                            (o2-require-optimizer
+                              'g3r-o2-test ordinary-optimizer) 1))
+(reject "changed native O2 receiver" 'invalid-state
+  (lambda () (g3r-candidate-o2-lease-preflight-internal!
+               ledger model optimizer)))
+(vector-set! o2-record 1 original-native)
+(define original-roster (vector-ref o2-record 5))
+(vector-set! o2-record 5 (cdr original-roster))
+(reject "changed Scheme O2 roster" 'invalid-state
+  (lambda () (g3r-candidate-o2-lease-preflight-internal!
+               ledger model optimizer)))
+(vector-set! o2-record 5 original-roster)
+(define mock-lease (make-vector tr3-lease-record-length #f))
+(vector-set! mock-lease 0 tr3-lease-record-tag)
+(vector-set! mock-lease 1 mock-lease)
+(vector-set! mock-lease 8 model)
+(vector-set! mock-lease 10 (make-vector 17 #f))
+(vector-set! mock-lease 11 (make-vector 14 #f))
+(vector-set! mock-lease 12 (make-vector 14 #f))
+(vector-set! mock-lease 13 optimizer)
+(vector-set! tr3-trainers 0 (cons mock-lease (vector-ref tr3-trainers 0)))
+(reject "active exact TR3 lease" 'invalid-state
+  (lambda () (g3r-candidate-o2-lease-preflight-internal!
+               ledger model optimizer)))
+(vector-set! tr3-trainers 0 (cdr (vector-ref tr3-trainers 0)))
+(set! tr3-acquisition-active? #t)
+(reject "busy TR3 acquisition" 'invalid-state
+  (lambda () (g3r-candidate-o2-lease-preflight-internal!
+               ledger model optimizer)))
+(set! tr3-acquisition-active? #f)
+(check "candidate remains live after negatives"
+  (g3r-candidate-o2-lease-preflight-internal! ledger model optimizer))
+(display "G3-R O2/lease preflight PASS: ")
+(display checks)
+(newline)
