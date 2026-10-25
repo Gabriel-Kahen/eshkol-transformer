@@ -704,6 +704,13 @@ count have independent source review. This is source repair only. Fresh
 exact-head hosted CI and the CPU-v1 runtime gates remain **NOT RUN** on the
 repaired tree.
 
+The earlier exact-`d0c8d305` diagnostic run `40141371229` reached
+`parameter-state` and exposed a stale test-only P1 overlay anchor: production
+slots 73 and 74 had been appended after the overlay's former slot-72 tail.
+The scoped fixture repair appends its diagnostic control at slot 75, retains
+the two production slots and their indexes, and has independent source review.
+Compiler/runtime and exact-head hosted rerun remain open.
+
 Active finish milestone: **first complete validated CPU v1**. Current acceptance
 and ownership: [CPU v1 completion index](WAVE3_COMPLETION.md), updated 2026-10-24.
 PR #214 exact-head hosted checks pass. Current-source CPU4 two-update training,

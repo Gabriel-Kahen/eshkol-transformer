@@ -469,13 +469,21 @@ inject("  ;; Append-only source-private G3-C4 construction split, slots 71..72.\
        "    (construction-prepare-eval-guarded! identity))\n"
        "  (lambda (identity)\n"
        "    (construction-seal-prepared! identity))\n"
+       "  ;; Slot73 installs only the fixed feature-local candidate bridge once.\n"
+       "  candidate-bridge-install\n"
+       "  ;; Append-only source-private CPU4 exact fixed-set capture/recheck, slot74.\n"
+       "  (vector cpu4-fixed-capture! cpu4-fixed-recheck!)\n"
        "  )))",
        "  ;; Append-only source-private G3-C4 construction split, slots 71..72.\n"
        "  (lambda (identity)\n"
        "    (construction-prepare-eval-guarded! identity))\n"
        "  (lambda (identity)\n"
        "    (construction-seal-prepared! identity))\n"
-       "  ;; Test-only slot 73 models failed advisory linkage.\n"
+       "  ;; Slot73 installs only the fixed feature-local candidate bridge once.\n"
+       "  candidate-bridge-install\n"
+       "  ;; Append-only source-private CPU4 exact fixed-set capture/recheck, slot74.\n"
+       "  (vector cpu4-fixed-capture! cpu4-fixed-recheck!)\n"
+       "  ;; Test-only slot 75 models failed advisory linkage.\n"
        "  (lambda (mode)\n"
        "    (cond ((eq? mode 'fail-stage)\n"
        "           (set! p1-index-test-fail-stage? #t) #t)\n"
@@ -490,7 +498,7 @@ inject("  ;; Append-only source-private G3-C4 construction split, slots 71..72.\
        "          (else #f)))\n"
        "  )))")
 source += "\n(define (p1-index-test-control! mode)\n"
-source += "  ((vector-ref p1-trusted-surface 73) mode))\n"
+source += "  ((vector-ref p1-trusted-surface 75) mode))\n"
 Path(sys.argv[2]).write_text(source)
 PY
 
