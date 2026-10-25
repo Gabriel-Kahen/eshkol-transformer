@@ -2172,9 +2172,13 @@ The [private C4 position VJP leaf](g3/G3_R_C4_POSITION_VJP_LEAF.md) supplies
 one fixed `[1,4]` position-ID and `[1,4,4]` upstream to `[4,4]` gradient
 operation behind a separate feature flag. Its source and tests were independently
 reviewed; local Clang 22 normal and sanitizer runs passed 79 checks, including
-finite differences against the genuine C4 forward provider. The pinned Clang
-21 recipe and model integration remain separate gates. This leaf is not a
-trainable C4 model or a checkpoint/generation admission.
+finite differences against the genuine C4 forward provider. The exact pinned
+Clang 21 normal/repeat/sanitizer and feature-off gate passed 79 checks per
+runtime mode on `b0c61fba`/tree `3cf7c608`; its 15-file post-exit seal is
+`g3r-c4-position-vjp-b0c61fba-f31-attempt2/SHA256SUMS-RUN` (SHA-256
+`d9a537d2dff2938880c5b8c439d3e40614e833cf90579b776742b2b9d1449629`).
+Root independent receipt review and model integration remain separate gates.
+This leaf is not a trainable C4 model or a checkpoint/generation admission.
 
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1
