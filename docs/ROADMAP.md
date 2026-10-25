@@ -2308,6 +2308,18 @@ existing private file reader against that image in normal, repeat and
 sanitizer modes. Source and host checks are complete; the compiled gate is
 unrun and does not establish restored model or public continuation.
 
+The current G3-R C2 SAVE continuation on `0581426b` sealed a failed runtime
+receipt at `g3-save-0581426b-cont-attempt1/SHA256SUMS-RUN`: its compiled
+no-SAVE control left output absent and its compiled public LOAD/SAVE producer
+wrote a byte-identical C2 image. The newly compiled normal private reader
+stopped at a fixture assertion before its file negatives: repeating one
+`string-ref` byte from `"é"` 2,049 times did not create over 4,096 UTF-8
+bytes in the pinned Eshkol runtime. The fixture now uses 4,097 ASCII bytes
+for an unambiguous over-limit path. A reviewed fresh normal/repeat/sanitizer
+continuation remains required; this failed receipt is not SAVE/reader
+admission. The image has a zero tokenizer fingerprint and cannot authorize
+live byte-T1 replay.
+
 The source-only current-main union of these G3-R leaves starts from the
 reviewed CLI3 `baf0a03f` child of main `ee24ef4` and carries only G3 leaf
 commits `2569ccf`, `c63951e`, `b8b64b9`, `f3e1485`, and `308dd596`.
