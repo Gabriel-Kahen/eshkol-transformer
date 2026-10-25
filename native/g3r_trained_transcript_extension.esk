@@ -6,6 +6,22 @@
 (define g3rt-trace-start 5056)
 (define g3rt-checksum-start 6260)
 (define g3rt-magic (string->utf8 "G3RTV1"))
+(define g3rt-fixed-paths
+  (vector
+    '("blocks" "0" "attention" "key" "weight")
+    '("blocks" "0" "attention" "output" "weight")
+    '("blocks" "0" "attention" "query" "weight")
+    '("blocks" "0" "attention" "value" "weight")
+    '("blocks" "0" "ffn" "down" "weight")
+    '("blocks" "0" "ffn" "up" "weight")
+    '("blocks" "0" "norm1" "bias")
+    '("blocks" "0" "norm1" "weight")
+    '("blocks" "0" "norm2" "bias")
+    '("blocks" "0" "norm2" "weight")
+    '("head" "weight")
+    '("norm_final" "bias")
+    '("norm_final" "weight")
+    '("position_embedding" "weight")))
 
 (define (g3rt-fail detail)
   (c2-load-fail 'invalid-state 'g3r-trained-transcript detail '()))
@@ -31,6 +47,16 @@
   (cond ((= (g3rt-rank index) 1) 0)
         ((= index 4) 8) (else 4)))
 
+(define (g3rt-fixed-path? path index)
+  (and (>= index 0) (< index 14)
+       (equal? path (vector-ref g3rt-fixed-paths index))))
+
+(define (g3rt-fixed-shape? shape index)
+  (equal? shape
+          (if (= (g3rt-rank index) 1)
+              (list (g3rt-dim0 index))
+              (list (g3rt-dim0 index) (g3rt-dim1 index)))))
+
 (define (g3rt-stage-parameters! bytes tree)
   (let ((paths (cli3-b-unique-paths tree))
         (head (parameter-tree-handle tree '("head" "weight")))
@@ -55,8 +81,9 @@
                                              'g3r-trained-transcript))
                      (length (* 4 (g3rt-words index)))
                      (payload (make-bytevector length 0)))
-                (if (not (and (tr3-fixed-path? path index)
-                              (tr3-fixed-shape? shape index)
+                (if (not (and (g3rt-fixed-path? path index)
+                              (equal? (parameter-handle-path handle) path)
+                              (g3rt-fixed-shape? shape index)
                               (eq? (parameter-handle-dtype handle) 'f32)
                               (eq? (parameter-handle-device handle) 'cpu)
                               (= (i2-native-byte-length

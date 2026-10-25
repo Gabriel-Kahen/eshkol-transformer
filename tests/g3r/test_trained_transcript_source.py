@@ -74,6 +74,10 @@ class TranscriptV1(unittest.TestCase):
                         compare.index("(observer 'g1 replay-native"))
         self.assertIn('(i2-native-copy-bytes', capture)
         self.assertIn('(parameter-handle-tensor-internal handle)', capture)
+        self.assertIn('(g3rt-fixed-path? path index)', capture)
+        self.assertIn('(g3rt-fixed-shape? shape index)', capture)
+        self.assertNotIn('(tr3-fixed-path? path index)', capture)
+        self.assertNotIn('(tr3-fixed-shape? shape index)', capture)
         self.assertNotIn('state-dict-tensor', capture)
         self.assertLess(producer.index('(cli3-b-restore! trainer trained-c2)'),
                         producer.index('(observer-builder tree digest record prompt)'))

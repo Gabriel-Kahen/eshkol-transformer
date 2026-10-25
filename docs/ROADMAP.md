@@ -2189,10 +2189,15 @@ The [private trained producer transcript candidate]
 (g3/G3_R_TRAINED_TRANSCRIPT_PRODUCER_LEAF.md) adds a source-only observer to
 that replayed generator: live 14-parameter carrier bits and one P1/G1 trace
 are staged into a distinct checksummed V1 image. Focused source and byte
-oracles check roster, pair binding and malformed records. Authentic compiled
-capture, normal/repeat/native-sanitizer determinism, and independent result
-review remain pending; this is not a fresh-process consumer or multi-token/EOS
-continuation.
+oracles check roster, pair binding and malformed records. The first pinned
+compiled attempt stopped at a non-exported TR3 roster helper during private
+IR compilation, before native link or runtime; its sealed receipt is
+`g3r-trained-transcript-d6ee6571-attempt1/SHA256SUMS-RUN` (SHA-256
+`a3210f9e21a27cac314d8ccda71f1aedd1268d1e7cb27dccd52f1fd386fc4e48`). The source now
+uses a local exact roster predicate and needs a reviewed compiled successor.
+Authentic capture, normal/repeat/native-sanitizer determinism and independent
+result review remain pending. This is not a fresh-process consumer or
+multi-token/EOS continuation.
 
 The [private G3-R fixed-record codec leaf](g3/G3_R_RECORD_CODEC_LEAF.md)
 stages an in-memory 288-byte encoder/decoder using the existing C1 SHA-256.
