@@ -2240,7 +2240,8 @@ checked RNG and saved prompt/G1 before invoking it. This leaf alone does not
 establish a FILE pair or fresh-process continuation.
 
 The source-private fixed-B250 C4 FILE issuer now stages a checked factory
-ticket, exact B250 C2 SHA, `C4GRCV1` decode, and 4,768-byte comparison against
+ticket, exact B250 C2 SHA, `C4GRCV1` decode through a checked bytevector-header
+ABI adapter, and 4,768-byte comparison against
 the factory's live fourteen model planes before the actual public G2 handoff.
 It binds that handoff's generator and a same-registry T1 encoding of the
 two-byte prompt to one opaque terminal ticket. Its admit/verify seam rechecks

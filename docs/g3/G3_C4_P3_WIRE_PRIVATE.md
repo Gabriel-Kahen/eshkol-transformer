@@ -39,3 +39,8 @@ The focused C unit compiles the actual codec body with an independent OpenSSL
 SHA shim and fixed synthetic capture-validator stub; its Python oracle derives
 the exact 400 bytes separately. This is codec behavior evidence only. A full
 CPU4 aggregate/native and fresh-process continuation gate remains required.
+
+The checked FILE reader uses a separate Eshkol FFI adapter for the decoder.
+It validates the bytevector length headers for wire, values, C2 SHA, T1
+fingerprint and output record, then passes the five payload pointers to the
+raw codec. A direct Eshkol bytevector pointer would address the length header.
