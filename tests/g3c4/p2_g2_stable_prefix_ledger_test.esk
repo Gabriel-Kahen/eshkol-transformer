@@ -1,0 +1,156 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+(load "g3c4_t1_output_decode_extension.esk")
+(load "g3c4_output_envelope_extension.esk")
+(load "g3c4_p2g2_ownership_extension.esk")
+(load "g3c4_p2g2_protected_scope_extension.esk")
+(load "g3c4_p2g2_t1_prefix_coordinator_extension.esk")
+(load "g3c4_p2g2_stable_prefix_ledger_extension.esk")
+
+(extern i64 ledger-mark ptr i64 i64
+        :real et_g3c4_p2g2_coordinator_test_mark_v1)
+(extern i64 ledger-ids-lease ptr i64
+        :real et_g3c4_p2g2_coordinator_test_ids_lease_v1)
+(extern i64 ledger-cache-lease ptr i64
+        :real et_g3c4_p2g2_coordinator_test_cache_lease_v1)
+(extern i64 ledger-dead-output ptr
+        :real et_g3c4_p2g2_coordinator_test_dead_output_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3-C4 stable ledger FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label thunk)
+  (check label
+    (guard (caught (#t (transformer-error? caught)))
+      (thunk) #f)))
+(define (config)
+  (list ':profile 'diagnostic-c4 ':sampling 'greedy
+        ':temperature-bits 1065353216 ':top-k 256
+        ':top-p-bits 1065353216 ':max-new-tokens 2
+        ':eos #f ':seed 7))
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define model (g3c4-model-create-seeded-internal 1729))
+(define prompt
+  (g3c4-p2g2-owned-input-create
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255))))
+(define foreign-prompt
+  (g3c4-p2g2-owned-input-create
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 7 11))))
+(define generator (g3c4-generator-create-internal model tokenizer (config)))
+(define generator-entry (g3c4-generator-entry-call-ready generator 'test))
+(define native (vector-ref generator-entry 3))
+(define saved-output #f)
+(define saved-native-output #f)
+(define saved-call #f)
+(define saved-protected-anchor #f)
+(define saved-prefix-raw #f)
+(define saved-prefix-staging #f)
+(define saved-final-raw #f)
+(define saved-final-staging #f)
+
+(check "native fixture armed" (= (ledger-mark native 0 255) 0))
+(g3c4-with-p2g2-prefix-call 'stable-prefix-test generator prompt (call)
+  (let* ((record (g3c4-p2g2-protected-for call))
+         (ledger (vector-ref record 14))
+         (output (g3c4-p2g2-protected-reserve call))
+         (raw (vector-ref record 11))
+         (staging (vector-ref record 12))
+         (auxiliary (vector-ref output 8)))
+    (set! saved-output output)
+    (set! saved-native-output (vector-ref output 3))
+    (set! saved-call call)
+    (set! saved-protected-anchor (g3c4-p2g2-anchor-for call))
+    (set! saved-prefix-raw raw)
+    (set! saved-prefix-staging staging)
+    (set! saved-final-raw (vector-ref auxiliary 0))
+    (set! saved-final-staging (vector-ref auxiliary 1))
+    (g3c4-p2g2-prefix-commit! call prompt)
+    (check "genuine active non-EOS prefix"
+           (and (eq? (vector-ref record 13) 'prefix-committed)
+                (eq? (vector-ref ledger 4) output)
+                (eq? (vector-ref generator-entry 9) call)))
+    (reject "foreign P2 input rejected before native close"
+      (lambda () (g3c4-p2g2-stable-prefix-close! call foreign-prompt)))
+    (vector-set! record 13 'before-prefix)
+    (reject "changed phase rejected before native close"
+      (lambda () (g3c4-p2g2-stable-prefix-close! call prompt)))
+    (vector-set! record 13 'prefix-committed)
+    (let ((selected (bytevector-u8-ref raw 0)))
+      (bytevector-u8-set! raw 0 (if (= selected 0) 1 0))
+      (reject "changed raw byte rejected before native close"
+        (lambda () (g3c4-p2g2-stable-prefix-close! call prompt)))
+      (bytevector-u8-set! raw 0 selected))
+    (check "held I1 lease" (= (ledger-ids-lease saved-native-output 1) 0))
+    (reject "held I1 rejects close without losing active ledger"
+      (lambda () (g3c4-p2g2-stable-prefix-close! call prompt)))
+    (check "release I1 lease" (= (ledger-ids-lease saved-native-output 0) 0))
+    (check "held A2 lease" (= (ledger-cache-lease native 1) 0))
+    (reject "held A2 rejects close without losing active ledger"
+      (lambda () (g3c4-p2g2-stable-prefix-close! call prompt)))
+    (check "release A2 lease" (= (ledger-cache-lease native 0) 0))
+    (check "pre-tail negatives retained active owner"
+           (and (eq? (vector-ref ledger 4) output)
+                (eq? (vector-ref saved-call 2) 'live)
+                (eq? (vector-ref generator-entry 9) call)
+                (eq? (vector-ref (vector-ref generator-entry 5) 10) call)
+                (eq? (vector-ref generator-entry 8) #f)
+                (eq? (vector-ref generator-entry 10) #f)))
+    (check "same-region native/Eshkol stable close"
+           (g3c4-p2g2-stable-prefix-close! call prompt))
+    (check "closed Eshkol call, output and links"
+           (and (eq? (vector-ref call 2) 'dead)
+                (eq? (vector-ref output 2) 'dead)
+                (eq? (vector-ref generator-entry 9) #f)
+                (eq? (vector-ref (vector-ref generator-entry 5) 10) #f)
+                (not (g3c4-p2g2-protected-for call))
+                (not (g3c4-p2g2-anchor-for call))
+                (eq? (vector-ref saved-protected-anchor 0) #f)
+                (null? (vector-ref g3c4-p2g2-protected-records 0))
+                (null? (vector-ref g3c4-p2g2-protected-anchors 0))))))
+
+(check "original prefix input anchor removed on return"
+       (null? (vector-ref g3c4-p2g2-prefix-input-anchors 0)))
+(check "native pending output dead"
+       (= (ledger-dead-output saved-native-output) 0))
+(check "all transient byte carriers scrubbed"
+       (and (= (bytevector-u8-ref saved-prefix-raw 0) 0)
+            (= (bytevector-u8-ref saved-prefix-staging 0) 0)
+            (= (bytevector-u8-ref saved-final-raw 0) 0)
+            (= (bytevector-u8-ref saved-final-staging 0) 0)))
+(check "rooted stable record and native status"
+       (and (vector-ref generator-entry 8)
+            (vector-ref generator-entry 10)
+            (g3c4-p2g2-stable-prefix-check generator)))
+(reject "ordinary call cannot consume the stable prefix"
+  (lambda () (g3c4-generator-entry-call-ready generator 'test)))
+(reject "dead call cannot close again"
+  (lambda () (g3c4-p2g2-stable-prefix-close! saved-call prompt)))
+(let* ((record (vector-ref generator-entry 8))
+       (input (vector-ref record 6)))
+  (vector-set! record 6 foreign-prompt)
+  (reject "swapped stable input rejected"
+    (lambda () (g3c4-p2g2-stable-prefix-check generator)))
+  (vector-set! record 6 input)
+  (check "original stable input restored"
+         (g3c4-p2g2-stable-prefix-check generator)))
+(let ((policy (vector-ref generator-entry 7)))
+  (vector-set! policy 6 0)
+  (reject "changed policy rejected by independent snapshots"
+    (lambda () (g3c4-p2g2-stable-prefix-check generator)))
+  (vector-set! policy 6 #f)
+  (check "original policy restored"
+         (g3c4-p2g2-stable-prefix-check generator)))
+(check "generator close retires stable owner"
+       (g3c4-generator-close-internal! generator))
+(reject "closed stable owner rejected"
+  (lambda () (g3c4-p2g2-stable-prefix-check generator)))
+(display "G3-C4 stable prefix ledger PASS: checks=")
+(display checks)
+(newline)

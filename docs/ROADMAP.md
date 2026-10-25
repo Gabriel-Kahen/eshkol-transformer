@@ -2185,6 +2185,16 @@ isolation, held I1/A2 lease rejection, forged/changed edge negatives, and
 post-tail fail-stop injection. This is source/local evidence pending independent
 review and a pinned supported gate. It does not close the original Eshkol
 `m3-call` ledger or admit SAVE hold, idle-P3 entry or trained C4 continuation.
+The [private Eshkol stable-prefix ledger candidate]
+(g3/G3_R_C4_ESHKOL_STABLE_PREFIX_LEDGER_CONTRACT.md) adds a feature-local
+same-region transition from the genuine P2/G2 non-EOS prefix to the native
+stable close. It preallocates rooted dual-slot generator identity records,
+reauthenticates the original protected/input anchors and pending output,
+then scrubs transient carriers, kills the call/output, drops protected map
+heads and clears active model/generator edges. The ordinary call-ready path
+rejects this stable state. Focused source/mutation checks pass; its Eshkol
+fixture and post-close compiled allocation/failure behavior are **UNRUN**.
+This does not admit SAVE, idle-P3 entry or trained C4 continuation.
 The [source-pinned dependency map](g3/G3_R_TRAINED_C4_DEPENDENCY_MAP.md) at
 `59670d39` separates the constructor/topology, owned C4 workspace,
 complete four-token gradient and loss, TR3/D2/O2/C2 training and restore,

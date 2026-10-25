@@ -1,0 +1,127 @@
+;;; Private same-region transition from a committed P2/G2 prefix to the
+;;; native stable context. Load after the prefix coordinator; never install.
+
+(extern i64 g3c4-p2g2-native-stable-close ptr ptr
+        :real et_g3c4_private_p2g2_stable_prefix_close_v1)
+(extern i64 g3c4-p2g2-native-stable-check ptr
+        :real et_g3c4_private_p2g2_stable_prefix_check_v1)
+(vector-set! g3c4-p2g2-stable-ledger-gate 0 #t)
+
+(define (g3c4-p2g2-stable-policy-copy policy)
+  (vector (vector-ref policy 0) (vector-ref policy 1)
+          (vector-ref policy 2) (vector-ref policy 3)
+          (vector-ref policy 4) (vector-ref policy 5)
+          (vector-ref policy 6)))
+
+;;; The stable record and its distinct anchor are rooted by the live
+;;; generator entry in slots 8 and 10. Both carry identities, not a copy
+;;; of native ID/logits/RNG authority.
+(define (g3c4-p2g2-stable-prefix-check generator)
+  (let* ((operation 'g3c4-p2g2-stable-prefix-check)
+         (entry (g3c4-generator-entry-live generator operation))
+         (record (vector-ref entry 8))
+         (input (if record (vector-ref record 6) #f))
+         (input-entry (if record (vector-ref record 7) #f))
+         (output (if record (vector-ref record 9) #f)))
+    (if (not (and (g3c4-p2g2-stable-slots? entry)
+                  (eq? (vector-ref record 4)
+                       (car (cdr (g3c4-baseline-tokenizer-entry
+                                   (vector-ref record 3) operation
+                                   'invalid-state 'invalid-state))))
+                  (eq? (g3c4-input-entry-live input operation) input-entry)
+                  (vector? output) (= (vector-length output) 12)
+                  (eq? (vector-ref output 1) 'output)
+                  (eq? (vector-ref output 2) 'dead)
+                  (eq? (vector-ref output 0) (vector-ref record 10))
+                  (eq? (vector-ref (vector-ref entry 5) 10) #f)))
+        (g3c4-fail 'invalid-state operation
+                   "C4 stable-prefix ledger identity changed"))
+    (g3c4-native-check
+      (g3c4-p2g2-native-stable-check (vector-ref record 5)) operation)
+    #t))
+
+(define (g3c4-p2g2-stable-prefix-close! call input)
+  (let* ((operation 'g3c4-p2g2-stable-prefix-close!)
+         (record (g3c4-p2g2-protected-check call operation))
+         (protected-anchor (g3c4-p2g2-anchor-for call))
+         (input-anchor (g3c4-p2g2-prefix-anchor-for call))
+         (generator-entry (vector-ref record 1))
+         (model-entry (vector-ref record 2))
+         (input-entry (g3c4-input-entry-live input operation))
+         (output (vector-ref record 6))
+         (ledger (vector-ref record 14))
+         (selected (bytevector-u8-ref (vector-ref record 12) 0))
+         (policy (vector-ref record 15))
+         (tail-started (vector #f))
+         (stable-record
+           (vector generator-entry (vector-ref generator-entry 0)
+                   model-entry (vector-ref record 3) (vector-ref record 4)
+                   (vector-ref record 5) input input-entry
+                   policy output (if (and (vector? output)
+                                          (= (vector-length output) 12))
+                                     (vector-ref output 0) #f)
+                   'stable-prefix
+                   (g3c4-p2g2-stable-policy-copy policy)))
+         (stable-anchor
+           (vector generator-entry (vector-ref generator-entry 0)
+                   model-entry (vector-ref record 3) (vector-ref record 4)
+                   (vector-ref record 5) input input-entry
+                   policy output (if (and (vector? output)
+                                          (= (vector-length output) 12))
+                                     (vector-ref output 0) #f)
+                   'stable-prefix
+                   (g3c4-p2g2-stable-policy-copy policy))))
+    (if (not (and (vector? output) (= (vector-length output) 12)
+                  (vector? input-anchor) (= (vector-length input-anchor) 5)
+                  (eq? (vector-ref record 13) 'prefix-committed)
+                  (eq? (vector-ref ledger 3) 'p2g2-prefix-committed)
+                  (eq? (vector-ref ledger 4) output)
+                  (eq? (vector-ref generator-entry 8) #f)
+                  (eq? (vector-ref generator-entry 10) #f)
+                  (eq? (vector-ref input-anchor 0) call)
+                  (pair? (vector-ref g3c4-p2g2-prefix-input-anchors 0))
+                  (eq? (car (vector-ref
+                              g3c4-p2g2-prefix-input-anchors 0))
+                       input-anchor)
+                  (eq? (vector-ref input-anchor 1) input)
+                  (eq? (vector-ref input-anchor 2) input-entry)
+                  (eq? (vector-ref input-anchor 3)
+                       (vector-ref input-entry 3))
+                  (eq? (vector-ref input-anchor 4) generator-entry)
+                  (eq? (vector-ref record 7) (vector-ref output 3))
+                  (eq? (vector-ref stable-record 9) output)
+                  (eq? (vector-ref stable-anchor 9) output)))
+        (g3c4-fail 'invalid-state operation
+                   "C4 stable close lost its original call or input"))
+    (g3c4-p2g2-prefix-byte-check record selected operation)
+    ;; Native refusal is recoverable: the enclosing protected region still
+    ;; owns the live call and will abort it before returning.
+    ;; Install the failure handler before native close. A native refusal is
+    ;; recoverable; any failure after success is fail-stop, never rollback.
+    (guard (caught (#t (if (vector-ref tail-started 0)
+                           (exit 134) (raise caught))))
+      (g3c4-native-check
+        (g3c4-p2g2-native-stable-close
+          (vector-ref record 5) (vector-ref record 7))
+        operation)
+      ;; Every identity, list head, vector extent and carrier length was
+      ;; checked before native close. Only fixed writes/head drops follow.
+      (vector-set! tail-started 0 #t)
+      (g3c4-p2g2-zero-bytes! (vector-ref record 9) 2)
+      (g3c4-p2g2-zero-bytes! (vector-ref record 10) 16)
+      (g3c4-p2g2-zero-bytes! (vector-ref record 11) 1)
+      (g3c4-p2g2-zero-bytes! (vector-ref record 12) 8)
+      (g3c4-entry-dead! output)
+      (vector-set! ledger 4 #f)
+      (vector-set! model-entry 10 #f)
+      (vector-set! generator-entry 9 #f)
+      (g3c4-call-dead! call)
+      (vector-set! record 0 #f)
+      (vector-set! protected-anchor 0 #f)
+      (vector-set! g3c4-p2g2-protected-records 0
+                   (cdr (vector-ref g3c4-p2g2-protected-records 0)))
+      (vector-set! g3c4-p2g2-protected-anchors 0
+                   (cdr (vector-ref g3c4-p2g2-protected-anchors 0)))
+      (vector-set! generator-entry 8 stable-record)
+      (vector-set! generator-entry 10 stable-anchor)
+      #t)))

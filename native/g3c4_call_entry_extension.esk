@@ -32,6 +32,40 @@
 (define g3c4-rng-algorithm 'g3.philox4x32-10.categorical-f32.v1)
 ;;; Enabled only by the source-private P2/G2 ownership extension.
 (define g3c4-p2g2-ownership-gate (vector #f))
+(define g3c4-p2g2-stable-ledger-gate (vector #f))
+
+(define (g3c4-p2g2-stable-slots? entry)
+  (let ((record (vector-ref entry 8))
+        (anchor (vector-ref entry 10)))
+    (and (vector-ref g3c4-p2g2-stable-ledger-gate 0)
+         (vector? record) (= (vector-length record) 13)
+         (vector? anchor) (= (vector-length anchor) 13)
+         (not (eq? record anchor))
+         (let same ((index 0))
+           (if (= index 12) #t
+               (and (eq? (vector-ref record index)
+                         (vector-ref anchor index))
+                    (same (+ index 1)))))
+         (eq? (vector-ref record 0) entry)
+         (eq? (vector-ref record 1) (vector-ref entry 0))
+         (eq? (vector-ref record 2) (vector-ref entry 5))
+         (eq? (vector-ref record 3) (vector-ref entry 6))
+         (eq? (vector-ref record 5) (vector-ref entry 3))
+         (eq? (vector-ref record 8) (vector-ref entry 7))
+         (eq? (vector-ref record 11) 'stable-prefix)
+         (let ((policy (vector-ref entry 7))
+               (left (vector-ref record 12))
+               (right (vector-ref anchor 12)))
+           (and (vector? left) (= (vector-length left) 7)
+                (vector? right) (= (vector-length right) 7)
+                (not (eq? left right))
+                (let same-policy ((index 0))
+                  (if (= index 7) #t
+                      (and (eq? (vector-ref left index)
+                                (vector-ref policy index))
+                           (eq? (vector-ref right index)
+                                (vector-ref policy index))
+                           (same-policy (+ index 1))))))))))
 
 (define (g3c4-entry-dead! entry)
   (vector-set! entry 3 #f)
@@ -443,9 +477,10 @@
                   (vector? model-entry)
                   tokenizer
                   (g3c4-policy? (vector-ref entry 7))
-                  (eq? (vector-ref entry 8) #f)
+                  (or (and (eq? (vector-ref entry 8) #f)
+                           (eq? (vector-ref entry 10) #f))
+                      (g3c4-p2g2-stable-slots? entry))
                   (eq? (vector-ref entry 9) #f)
-                  (eq? (vector-ref entry 10) #f)
                   (eq? (vector-ref entry 11) g3c4-model-profile)))
         (g3c4-fail 'invalid-state operation
                    "C4 generator authority is not exact and idle"))
@@ -463,6 +498,9 @@
     (g3c4-baseline-tokenizer-entry
       tokenizer operation 'invalid-state 'invalid-state)
     (g3c4-require-model-eval model-entry operation 'invalid-state)
+    (if (vector-ref entry 8)
+        (g3c4-fail 'invalid-state operation
+                   "C4 stable prefix needs a separate idle-P3 entry"))
     entry))
 
 (define (g3c4-generator-create-with-source
