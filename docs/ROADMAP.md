@@ -2219,9 +2219,11 @@ to a distinct C2 file, loads that file through the existing checked reader and
 K2 capability path, and compares all fourteen decoded parameter planes bitwise
 with the final B snapshot. The six-process driver keeps the original B125
 25,504-byte/SHA pin and requires a distinct 25,504-byte B250 image with one
-identical SHA across all modes and repeats. Focused source/host checks pass;
-compiled B250 SAVE, its exact SHA, fresh-process P3 replay, trained sanitizer
-and full continuation remain **NOT RUN** on this staged change.
+identical SHA across all modes and repeats. Focused source/host checks passed
+on this staged change. The later compiled six-process B250 SAVE/load gate passed with B250 SHA-256
+`42b0563039e77109303d9ef766a437bb31745cfc2660e4ca19707b9995853434`;
+the fixed fresh-process P3 continuation result is recorded below. Trained
+sanitizer and general continuation remain **NOT RUN**.
 
 The separate [private C4 P3 data codec](g3/G3_C4_P3_WIRE_PRIVATE.md) fixes a
 400-byte `C4GRCV1` record around the 224-byte canonical capture, distinct
@@ -2250,8 +2252,9 @@ admission. During the native call, which pins those tensors, verification
 checks the exact admitted model entry and active call links without borrowing
 the tensors again. Its 22-check
 adversarial host test covers mutable ticket and identity substitutions;
-independent source review found no remaining issuer authority bypass. Compiled
-aggregate and fresh-process acceptance remain **NOT RUN**.
+independent source review found no remaining issuer authority bypass. The
+later fixed compiled aggregate exercised this issuer and fresh-process path,
+as recorded below; general issuer admission remains **NOT RUN**.
 
 The [private P3 to G2 terminal bridge](g3/G3_C4_P3_TERMINAL_RESUME_BRIDGE.md)
 is source-staged on the composed C4 tree. A checked FILE issuer ticket selects
@@ -2259,15 +2262,20 @@ the alternate first stage; the bridge rechecks its fixed IDs/RNG before native
 P3 through a checked bytevector-header ABI adapter, fills the real first T1
 carriers and Eshkol prefix phase, then uses the
 existing second-frame and terminal publication tail. Focused source checks
-pass. Aggregate compilation, issuer integration and fresh-process continuation
-remain **NOT RUN** for this bridge.
+pass. The later fixed compiled aggregate exercised this bridge with the
+issuer and fresh-process continuation, as recorded below; general bridge
+admission remains **NOT RUN**.
+
 The separate final-B250 FILE factory witness is source-staged. It prints the
 producer's 14 live final-B parameter planes before SAVE and requires a sealed
 raw 4,768-byte witness. A new process will restore the exact B250 C2 through
 the accepted FILE factory, compare every restored plane to that independent
 producer witness, authenticate T1/D2 and exercise a companion G2 handoff.
-Compiled fresh FILE factory, checked RNG/history and P3→G2 continuation remain
-**NOT RUN**; the context-two G3-R pair reader is a distinct checkpoint lane.
+This independent producer-plane witness gate remains **NOT RUN**. The later
+fixed integrated P3 gate below restores the same B250 and checks its live
+planes, RNG/history and P3→G2 terminal result; it does not supply this
+separately sealed pre-SAVE producer-plane witness. The context-two G3-R pair
+reader is a distinct checkpoint lane.
 
 The separate private B250 P3 producer source calls the accepted first G2
 frame and T1 decoder on the same registered generator, commits its non-EOS
@@ -2279,17 +2287,21 @@ A focused native control tests the first-commit/abort/idle-capture transition.
 The producer's private boxed bridge checks all five Eshkol bytevector length
 headers and passes payload pointers to the existing capture and wire APIs;
 malformed headers leave output bytes intact. The focused native control passes
-under ASan and UBSan, and the C4 source inventory tests pass. No trained B250
-wire, compiled Eshkol producer, FILE pair, or fresh-process continuation is
-accepted yet.
-The fixed B250 P3 fresh-process fixture is source-staged: one fresh FILE
-factory produces genuine G1/P3 capture and persists C4 wire plus 4,768 model
-bytes; another fresh FILE factory admits that pair through the checked issuer
-and resumes EOS41 G2. Its driver pins the prior B250 receipt, exact C2 and
-uninterrupted second-EOS reference, uses the boxed producer/decoder/resume
-adapters in one native archive, and checks the final IDs, cache, T1 text and
-RNG against that reference. Source and host checks pass; compiled producer,
-two-process FILE continuation and sanitizer acceptance remain **NOT RUN**.
+under ASan and UBSan, and the C4 source inventory tests pass. The integrated
+trained-B250 evidence for this private producer and continuation is below.
+
+The fixed B250 P3 fresh-process gate passed on exact source
+`840f546f`/tree `c492e9da` with receipt
+`cpu4-c4-p3-full-840f546f-attempt1/SHA256SUMS-RUN` (SHA-256
+`fe73aa358b9b3347797bfe9f7378c00941abb4e5493bf4555292b7512e6ca1b0`).
+One fresh FILE factory produced genuine G1/P3 capture and persisted the
+400-byte C4 wire and 4,768 model bytes; a separate runtime process restored
+the same B250 C2 (SHA-256 `42b0563039e77109303d9ef766a437bb31745cfc2660e4ca19707b9995853434`),
+admitted the pair through the checked issuer, and resumed EOS41 G2. The
+driver compared terminal IDs, cache, T1 text and RNG with the sealed
+uninterrupted second-EOS reference. Independent review accepted this fixed
+private diagnostic result; sanitizer, general checkpoint/tokenizer behavior,
+installed CLI and current-integration admission remain **NOT RUN**.
 
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1
