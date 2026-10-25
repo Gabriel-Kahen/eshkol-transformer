@@ -1155,6 +1155,14 @@ The remaining M2 mutants and full E3 §9 admission matrix remain open;
 installed/public E3 behavior and GPU execution are not established. This
 current-main source/docs union still needs independent review and hosted
 exact-head validation before integration.
+An exact-`44c0418d` bounded mathematical C1/M3/D2 gamma sweep tested 513
+consecutive f32 states around the finalizer exp boundary. The local compiled
+libm comparison found no `expf` versus f64-`exp`-then-f32-cast word difference,
+including the adjacent finite/overflow loss words `42b17217`/`42b17218`.
+This is a bounded equivalent-result control, not compiled-private M2 f64-retry
+acceptance; the row remains open pending a genuinely changed outcome and
+independent normal/repeat/poison/sanitizer review. Raw scout evidence is sealed
+at `/home/gabe/.codex/evidence/eshkol-transformer/e3-m2-f64-retry-scout-20261025/SHA256SUMS`.
 The 7eeaa03 current-main M2 union added the padded-position test selector to
 `scripts/build-e1b-consumer.sh`, changing its source bytes. Hosted model
 composition failed only the M3CG predecessor checksum. This bounded successor
