@@ -1178,6 +1178,16 @@ edge/sanitizer runtime was published. A fresh test-only diagnostic needs
 flushed markers around the one-token seed, 8,192 control and 8,193 preflight
 before the full N5/resource gate is repeated.
 
+The exact `0a86c35` N5 stage-marker import discovery passed host custody but
+stopped before AOT: the normal rejected E1B `combined.o` full inventory and
+the sanitized rejected E1B `combined.o` noninstrumentation split each added
+the same four measured output imports, while sanitizer instrumentation
+was unchanged (143-file raw seal `c7f8f2c8...`,
+`n5-stage-0a86c35-import-discovery-attempt2-independent-review-20261025/REVIEW.md`).
+The test-only manifest/policy successor `2a39341c`/tree `971b5379` is
+committed after independent source review. A fresh compiled stage-marker gate
+must locate the first abort; no N5 resource row is accepted from discovery.
+
 The exact `44c0418d` complete-call retention attempt 2 is sealed and
 independently classified NONACCEPTING. Its normal and sanitized packages and
 AOT binaries built, but the first 1,024-call absent-gradient runtime aborted
