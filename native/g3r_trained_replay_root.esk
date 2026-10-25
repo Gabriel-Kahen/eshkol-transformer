@@ -16,4 +16,4 @@
     (vector-ref arguments 2) (vector-ref arguments 3)
     (vector-ref arguments 4) (vector-ref arguments 5)
     (cli3-parse-i64 (vector-ref arguments 6) "PROMPT" 255)
-    1 #t))
+    1 #t #f))

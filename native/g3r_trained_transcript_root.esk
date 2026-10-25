@@ -1,0 +1,30 @@
+;;; Separate private transcript entry. The accepted replay entry remains
+;;; available as a control in the same source union.
+(load "g3r_trained_replay_root.esk")
+(load "g3r_trained_transcript_extension.esk")
+
+(define (g3r-trained-pair-private-transcript arguments)
+  (if (not (and (vector? arguments) (= (vector-length arguments) 8)))
+      (c2-load-fail 'invalid-argument 'g3r-trained-transcript
+                    "trained transcript entry requires eight arguments" '()))
+  (let ((saved (vector-ref arguments 4))
+        (companion (vector-ref arguments 5))
+        (transcript (vector-ref arguments 6)))
+    (if (not (and (t2-wave2-valid-file-path? transcript)
+                  (not (string=? transcript (vector-ref arguments 3)))
+                  (not (string=? transcript saved))
+                  (not (string=? transcript companion))))
+        (c2-load-fail 'invalid-argument 'g3r-trained-transcript
+                      "transcript path aliases the pair" '()))
+    (vector-set! t2-wave2-policy-projector 0 c2-policy-t2-entry-internal)
+    (g3r-trained-replay-produce-internal!
+      (vector-ref arguments 0) (vector-ref arguments 1)
+      (vector-ref arguments 2) (vector-ref arguments 3)
+      saved companion
+      (cli3-parse-i64 (vector-ref arguments 7) "PROMPT" 255)
+      1 #t
+      (lambda (tree digest record prompt)
+        (g3rt-observer-create tree digest record prompt transcript)))))
+
+(define (g3r-trained-transcript-private-decode-check arguments)
+  (g3rt-private-decode-check arguments))

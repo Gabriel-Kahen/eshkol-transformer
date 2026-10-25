@@ -57,7 +57,8 @@
                     (loop (+ i 1))))))))
 
 (define (g3r-trained-replay-compare! model tokenizer captured input
-                                     snapshot record digest companion-path)
+                                     snapshot record digest companion-path
+                                     observer)
   (let ((imported #f) (replayed #f) (replay-input #f) (replay-logits #f)
         (reference #f) (reference-output #f) (replay-output #f))
     (define (cleanup)
@@ -138,6 +139,8 @@
                  (g3r-trained-replay-kv=? capture-native replay-native 4)
                  (g3r-trained-replay-rng=? capture-native replay-native))
             "decoded no-draw P1 replay differs from captured trained owner")
+          (if observer
+              (observer 'p1 replay-native #f (vector-ref decoded 1)))
           (set! reference
             (g3t-generator-create model tokenizer
               (list ':profile 'diagnostic-c2 ':sampling 'categorical
@@ -167,7 +170,9 @@
                       (g3r-test-output replay-output-native 6))
                    (g3r-trained-replay-rng=? reference-native replay-native)
                    (g3r-trained-replay-kv=? reference-native replay-native 8))
-              "trained same-registry generated G1 mismatch"))))
+              "trained same-registry generated G1 mismatch")
+            (if observer
+                (observer 'g1 replay-native replay-output-native #f)))))
       (cleanup)
       (set! imported #f)
       (set! replayed #f)

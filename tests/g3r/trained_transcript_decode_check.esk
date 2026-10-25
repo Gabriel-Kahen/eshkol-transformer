@@ -1,0 +1,17 @@
+;;; Run the real private decoder and six exact-category, unchanged-slot controls.
+(extern void g3rt-private-decode-check ptr ptr
+        :real et_g3r_private_test_transcript_decode_check_v1)
+(define args (command-line))
+(define (proper-length values)
+  (let loop ((rest values) (n 0))
+    (if (null? rest) n (loop (cdr rest) (+ n 1)))))
+(define (argument at)
+  (let loop ((rest (cdr args)) (index at))
+    (if (= index 0) (car rest)
+        (loop (cdr rest) (- index 1)))))
+(if (not (= (proper-length args) 4)) (exit 2))
+(define output (vector #f))
+(g3rt-private-decode-check
+  (vector (vector (argument 0) (argument 1) (argument 2))) output)
+(if (not (= (vector-ref output 0) 6)) (exit 1))
+(display "G3-R TRAINED TRANSCRIPT DECODE PASS: checks=6") (newline)

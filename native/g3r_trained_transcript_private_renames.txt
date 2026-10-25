@@ -1,0 +1,2 @@
+g3r-trained-pair-private-transcript et_e1b_private_g3r_trained_transcript_cabi_v1
+g3r-trained-transcript-private-decode-check et_e1b_private_g3r_transcript_decode_check_cabi_v1

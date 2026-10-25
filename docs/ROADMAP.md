@@ -2171,14 +2171,28 @@ unrun and pinned normal/repeat/sanitizer compiled acceptance is required
 before this private seam is accepted. This does not bind a C2 pair, expose a
 public route, or prove resumed generation.
 
-The separately scoped trained same-registry replay candidate starts from the
-same restored CLI3 M3T owner as the authentic C2 producer. It keeps the
-accepted zero-budget companion separate, captures a new budget-one companion
-bound to byte-identical saved C2, reads and decodes that exact companion,
-then compares uninterrupted G1 with private replayed G1 on the same model
-owner. Source and host checks alone do not admit this package. Its compiled
-normal/repeat/native-sanitizer gate and independent result review are pending;
-it does not restore a model from the companion or continue in a fresh process.
+The separately scoped trained same-registry replay starts from the same
+restored CLI3 M3T owner as the authentic C2 producer. It keeps the accepted
+zero-budget companion separate, captures a new budget-one companion bound to
+byte-identical saved C2, reads and decodes that exact companion, and compares
+uninterrupted G1 with private replayed G1 on the same model owner. Its pinned
+normal/repeat/native-sanitizer gate passed on `01a584c6`/tree `005d0b80`;
+the 519-file run seal is
+`g3r-trained-replay-01a584c6-attempt3/SHA256SUMS-RUN` (SHA-256
+`18b9577bf6651a6df7d74f54a6ddefbaf483f1cfe8fefc46aa2dca2c40d5960f`).
+The sealed independent result review is at
+`g3r-trained-replay-independent-review-20261025/SHA256SUMS-REVIEW`
+(SHA-256 `802f0224870683e29adb06deb7506832d6d8d6202a3536567161b2a9af6f6d06`).
+This does not restore a model from the companion or continue in a fresh process.
+
+The [private trained producer transcript candidate]
+(g3/G3_R_TRAINED_TRANSCRIPT_PRODUCER_LEAF.md) adds a source-only observer to
+that replayed generator: live 14-parameter carrier bits and one P1/G1 trace
+are staged into a distinct checksummed V1 image. Focused source and byte
+oracles check roster, pair binding and malformed records. Authentic compiled
+capture, normal/repeat/native-sanitizer determinism, and independent result
+review remain pending; this is not a fresh-process consumer or multi-token/EOS
+continuation.
 
 The [private G3-R fixed-record codec leaf](g3/G3_R_RECORD_CODEC_LEAF.md)
 stages an in-memory 288-byte encoder/decoder using the existing C1 SHA-256.

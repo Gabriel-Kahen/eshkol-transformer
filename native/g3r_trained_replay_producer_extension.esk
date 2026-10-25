@@ -16,10 +16,11 @@
 
 (define (g3r-trained-replay-produce-internal!
           config-path tokenizer-path corpus-path trained-c2
-          saved-c2 companion-path prompt budget compare?)
+          saved-c2 companion-path prompt budget compare? observer-builder)
   (let ((operation 'checkpoint-save!)
         (dataset #f) (trainer #f) (state #f)
-        (generator #f) (input #f) (logits #f))
+        (generator #f) (input #f) (logits #f) (observer #f)
+        (transcript-digest #f))
     (define (cleanup)
       (if logits (g3t-generation-tensor-release! logits))
       (if input (g3t-generation-tensor-release! input))
@@ -109,10 +110,19 @@
               (c2-load-fail 'io operation
                             "G3-R companion publication failed" '()))
           (if compare?
-              (g3r-trained-replay-compare! model tokenizer generator input
-                                           snapshot record digest
-                                           companion-path))
+              (begin
+                (if observer-builder
+                    (set! observer
+                      (observer-builder tree digest record prompt)))
+                (g3r-trained-replay-compare! model tokenizer generator input
+                                             snapshot record digest
+                                             companion-path observer)
+                (if observer
+                    (set! transcript-digest
+                      (observer 'finish #f #f #f)))))
           (cleanup)
           (set! logits #f) (set! input #f) (set! generator #f)
           (set! dataset #f)
-          (vector digest fingerprint snapshot)))))))
+          (if observer
+              (vector digest fingerprint snapshot transcript-digest)
+              (vector digest fingerprint snapshot))))))))

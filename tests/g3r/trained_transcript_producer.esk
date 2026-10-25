@@ -1,0 +1,26 @@
+;;; Thin compiled caller: one private package owns restore, replay and capture.
+(extern void g3rt-private-produce ptr ptr
+        :real et_g3r_private_test_trained_transcript_v1)
+(define args (command-line))
+(define (argument at)
+  (let loop ((remaining (cdr args)) (index at))
+    (if (= index 0) (car remaining)
+        (loop (cdr remaining) (- index 1)))))
+(define (proper-length values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining) (+ count 1)))))
+(if (not (= (proper-length args) 9)) (exit 2))
+(define output (vector #f))
+(g3rt-private-produce
+  (vector (vector (argument 0) (argument 1) (argument 2)
+                  (argument 3) (argument 4) (argument 5)
+                  (argument 6) (argument 7)))
+  output)
+(define result (vector-ref output 0))
+(if (not (and (vector? result) (= (vector-length result) 4)
+              (= (bytevector-length (vector-ref result 0)) 32)
+              (= (bytevector-length (vector-ref result 1)) 96)
+              (= (bytevector-length (vector-ref result 3)) 32)))
+    (exit 1))
+(display "G3-R TRAINED REPLAYED-OWNER TRANSCRIPT PASS") (newline)
