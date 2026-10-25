@@ -2641,8 +2641,14 @@ candidate path roots an exact enrollment cell before native begin and retains
 the construction identity, root and scoped shell roster through ordinary or
 prepared seal. Both paths check the mutable cell before native commit; the
 prepared path keeps its roster private until commit and aborts on precommit
-tampering. The focused feature-on/ordinary test runner has not passed a supported
-compiled Eshkol gate. I2/M3T preseal enrollment, graph revocation, full
+tampering. The generated trusted P1 root and template remain in sync; its
+ordinary package provide manifest is unchanged, with candidate wrappers kept
+in the feature-local extension. A source-only successor checker pins all
+legacy closure slots and the new three slots. Historical P1/E3 checkers
+still pin the 73-slot pre-candidate source and therefore reject this changed
+root; they have not been relabeled as passing. The focused feature-on/ordinary
+test runner has not passed a supported compiled Eshkol gate. I2/M3T preseal enrollment,
+graph revocation, full
 candidate cleanup, C2 restore and replay remain unimplemented.
 
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)

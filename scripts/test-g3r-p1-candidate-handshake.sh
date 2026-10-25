@@ -6,6 +6,8 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 out=$1
 [[ $out == /* && ! -e $out && ! -L $out ]] || die "evidence directory must be fresh"
 mkdir -- "$out"
+python3 "$PROJECT_ROOT/scripts/check-g3r-p1-candidate-contract.py" \
+  >"$out/source-contract.stdout" 2>"$out/source-contract.stderr"
 verify_toolchain >"$out/toolchain.stdout" 2>"$out/toolchain.stderr"
 for command in ar cmp grep nm timeout; do require_command "$command"; done
 provenance="$(eshkol_build_dir)/eshkol-transformer-provenance.tsv"

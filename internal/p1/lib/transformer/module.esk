@@ -113,9 +113,6 @@
          module-construction-seal-internal!
          module-construction-abort-internal!
          module-construction-parameters-internal
-         module-candidate-construction-bind-native-internal!
-         module-candidate-construction-begin-internal
-         module-candidate-construction-preflight-internal!
          p1-trusted-surface)
 
 (define p1-trusted-surface
@@ -4347,7 +4344,7 @@
                        (vector-set! cell 3 #f))))
           (vector-set! construction-registry-root 1 #f)
           #t))))
-(define (construction-begin provider-name candidate-cell)
+(define (construction-begin-with-candidate provider-name candidate-cell)
   (reject-protected-storage-comparison-reentry 'module-construction-begin-internal)
   (require-provider-name 'module-construction-begin-internal provider-name)
   (if candidate-cell
@@ -4395,6 +4392,8 @@
               3 root)
             (if candidate-cell (vector-set! candidate-cell 2 root))
             identity))))))
+(define (construction-begin provider-name)
+  (construction-begin-with-candidate provider-name #f))
 (define (construction-parameters identity)
   (let* ((record (construction-open 'module-construction-parameters-internal identity))
          (snapshot (construction-rows record 'module-construction-parameters-internal))
@@ -5887,7 +5886,7 @@
       (validate-bound-state-admitted operation raw)
       (wrap-entry-items operation state raw (vector-ref raw 6))))
   ;; Append-only slots 59..63: fresh unpublished construction only.
-  (lambda (provider-name) (construction-begin provider-name #f))
+  (lambda (provider-name) (construction-begin provider-name))
   (lambda (identity)
     (vector-ref (construction-open 'module-construction-root-internal identity) 3))
   (lambda (identity)
@@ -5929,7 +5928,7 @@
     (if (not cell)
         (fail 'invalid-argument 'module-candidate-construction-begin-internal
               "candidate enrollment cell is required" '()))
-    (construction-begin provider-name cell))
+    (construction-begin-with-candidate provider-name cell))
   (lambda (cell)
     (let ((operation 'module-candidate-construction-preflight-internal!))
       (if (or (not (vector? cell)) (not (= (vector-length cell) 4))
@@ -6126,10 +6125,3 @@
   ((vector-ref p1-trusted-surface 62) value))
 (define (module-construction-parameters-internal value)
   ((vector-ref p1-trusted-surface 63) value))
-(define (module-candidate-construction-bind-native-internal!
-          begin-hook preflight-hook)
-  ((vector-ref p1-trusted-surface 73) begin-hook preflight-hook))
-(define (module-candidate-construction-begin-internal provider-name cell)
-  ((vector-ref p1-trusted-surface 74) provider-name cell))
-(define (module-candidate-construction-preflight-internal! cell)
-  ((vector-ref p1-trusted-surface 75) cell))
