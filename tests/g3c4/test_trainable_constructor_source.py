@@ -115,6 +115,19 @@ class TrainableConstructorSource(unittest.TestCase):
             self.assertIn(marker, fixture)
         self.assertNotIn("module-parameters", fixture)
 
+    def test_runner_uses_existing_model_archive_and_private_fixture(self) -> None:
+        runner = source("scripts/test-g3c4-trainable-constructor.sh")
+        for marker in (
+            "-DET_I2_NATIVE_HELPERS_ONLY",
+            "-DET_P1_TRUSTED_BUILD=1",
+            "tests/g3c4/model_authority_native.c",
+            "--lib g3c4_trainable_constructor",
+            "tests/g3c4/trainable_constructor_test.esk",
+            "G3-C4 trainable constructor PASS:",
+        ):
+            self.assertIn(marker, runner)
+        self.assertNotIn("native/m3_package_bridge.c", runner)
+
     def test_wrong_prepare_route_is_detected(self) -> None:
         mutant = self.text.replace(
             "(i2-g3c4-construction-prepare-train-internal!",
