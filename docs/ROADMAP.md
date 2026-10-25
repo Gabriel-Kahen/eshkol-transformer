@@ -2167,6 +2167,13 @@ profile: CLI3, trainable M3T and the TR3 factory currently require context two,
 while the separate C4 generation owner is seeded. C2 storage admits the
 `[4,4]` position table, but no trained-C4 runtime or same-checkpoint
 multi-token continuation is accepted. This is a dependency proposal only.
+The [source-pinned dependency map](g3/G3_R_TRAINED_C4_DEPENDENCY_MAP.md) at
+`59670d39` separates the constructor/topology, owned C4 workspace,
+complete four-token gradient and loss, TR3/D2/O2/C2 training and restore,
+trained-owner P2/G2, and versioned history/replay gates. The smallest leaf
+after read-only P1/native owner association and future C4 lease exclusion is
+private workspace ownership and same-owner binding; no C4 workspace
+implementation or trained-C4 C2 exists at this source pin.
 
 The [C4 trainable constructor/workspace authority contract](g3/G3_R_C4_TRAINABLE_CONSTRUCTOR_WORKSPACE_AUTHORITY_CONTRACT.md)
 specifies a proposed tagged trainable branch in the existing C4 model registry,
