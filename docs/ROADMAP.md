@@ -1223,8 +1223,16 @@ unchanged sanitizer instrumentation (142-file raw seal `4423fdd2...`,
 Its host eligibility is false because shared Git config changed during the
 run; no AOT, raw probes, or paired runtime executed. The independently
 reviewed test-only import successor `ef126033`/tree `c0b3a958` pins the
-measured sanitized symbol. A fresh paired diagnostic gate must locate the
-native begin/view/end counters before complete-call retention can be retried.
+measured sanitized symbol. Its independently reviewed paired diagnostic
+compiled normal A/B and sanitized AOTs, matched the exact import manifests,
+and retained eight fault/control cases (`retention-raw-i2-ef126033-attempt1-independent-review-20261025/REVIEW.md`,
+228-file raw seal `f2855c4e...`). Every case printed native public I2
+begin/view/end counters of zero before and after, then aborted at the
+positive-begin `balanced-i2-views-pins` assertion. Fault arms alone retained
+2,360 root-arena bytes through retry; controls were flat. This proves the
+positive public-counter expectation false on this path, while the allocation
+source remains unproved. Correct the observer contract and trace the separate
+arena growth before repeating complete-call retention.
 The separate trained-G2 sanitizer attempt at `55a56f2f` is also NONACCEPTING:
 the first two-token run hit an ASan one-byte read seven bytes before a live
 48-byte terminal-ID clone allocation in the release path (review:
