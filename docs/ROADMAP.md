@@ -1129,6 +1129,15 @@ the N3 uniform attempt stopped before AOT on four unpinned imports, and the
 repinned mode/gradient attempt 4 stopped at sanitized import admission.
 A read-only source-closure audit also found three changed native files between the accepted `7bb38a56c` N3 target-offset gate and `44c0418d`; that target-offset result does not carry to the exact-44c compiled union. Neither full N3 nor full R2 nor §9 is admitted.
 
+The fresh noninstalled `b482c9b`/tree `039d1b2c` N3 target-offset gate
+passed independent compiled result review (324-file raw seal `51a5df8b...`,
+`n3-target-offset-b482c9b-v3-independent-result-review-20261025/REVIEW.md`).
+Its consumed production/native closure matches `44c0418d`. Both genuine D2
+target-offset rows matched the independent oracle across normal A/B, poison
+and sanitizer; the compiled wrong-target mutant failed first at CE with no
+report. This admits that bounded leaf; uniform/tie and the full N3/§9 union
+remain open.
+
 The noninstalled `dc565e1` mode/graph successor has since passed independent
 compiled result review: absent-gradient and seeded-present-gradient runtime stdout matched
 across normal A/B, poison, and ASan/UBSan runs; in-call mode and graph mutants
