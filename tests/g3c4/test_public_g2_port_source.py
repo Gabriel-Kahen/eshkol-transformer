@@ -52,7 +52,7 @@ def seam_valid(source):
         core = next(node for node in nodes(tree)
                     if len(node) == 2 and node[0] == 'core'
                     and isinstance(node[1], list) and node[1][:2] ==
-                    ['lambda', ['generator', 'input', 'enrollment']])
+                    ['lambda', ['generator', 'input', 'enrollment', 'resume-ticket']])
         assert len(calls(tree, 'set!')) >= 8
         assert ['set!', 'installed?', '#t'] in list(nodes(tree))
         assert source.count('(lambda (stage roots)') == 2
@@ -60,7 +60,7 @@ def seam_valid(source):
         assert '(not (= (vector-length roots) 7))' in source
         assert '(eq? root (vector-ref original-roots other))' in source
         assert '(vector ticket original-stage original-roots heads proof' in source
-        assert '(lambda (generator input) (core generator input #f))' in source
+        assert '(lambda (generator input) (core generator input #f #f))' in source
         # The only public calls in core are the fixed three prezero phases.
         stages = [call for call in calls(core, 'issuer') if len(call) > 2]
         assert [call[1] for call in stages] == ["'admit", "'bind", "'verify"]

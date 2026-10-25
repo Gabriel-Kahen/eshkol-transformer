@@ -4,6 +4,40 @@
 
 (extern i64 g3c4-p2g2-native-terminal-commit ptr ptr ptr i64 ptr i64
         :real et_g3c4_private_p2g2_terminal_commit_v1)
+(extern i64 g3c4-p2g2-native-p3-resume ptr ptr ptr ptr ptr
+        :real et_cpu4_private_c4_p3_resume_prefix_v1)
+
+;;; The checked-FILE issuer is a separately loaded same-aggregate definition.
+;;; This private route accepts only its opaque ticket, never a callback or raw
+;;; caller-shaped descriptor.
+(define g3c4-p2g2-terminal-resume-private!
+  (lambda (generator input ticket) (exit 134)))
+
+(define (g3c4-p2g2-resume-word? bytes offset low)
+  (and (= (bytevector-u8-ref bytes offset) low)
+       (let upper ((index 1))
+         (or (= index 8)
+             (and (= (bytevector-u8-ref bytes (+ offset index)) 0)
+                  (upper (+ index 1)))))))
+
+(define (g3c4-p2g2-resume-descriptor-check descriptor operation)
+  (if (not (and (vector? descriptor) (= (vector-length descriptor) 3)
+                (bytevector? (vector-ref descriptor 0))
+                (= (bytevector-length (vector-ref descriptor 0)) 24)
+                (bytevector? (vector-ref descriptor 1))
+                (= (bytevector-length (vector-ref descriptor 1)) 32)
+                (m3t-exact-i64? (vector-ref descriptor 2))
+                (= (vector-ref descriptor 2) 3)
+                (g3c4-p2g2-resume-word? (vector-ref descriptor 0) 0 3)
+                (g3c4-p2g2-resume-word? (vector-ref descriptor 0) 8 197)
+                (g3c4-p2g2-resume-word? (vector-ref descriptor 0) 16 3)
+                (g3c4-p2g2-resume-word? (vector-ref descriptor 1) 0 1)
+                (g3c4-p2g2-resume-word? (vector-ref descriptor 1) 8 41)
+                (g3c4-p2g2-resume-word? (vector-ref descriptor 1) 16 0)
+                (g3c4-p2g2-resume-word? (vector-ref descriptor 1) 24 0)))
+      (g3c4-fail 'invalid-state operation
+                 "checked P3 record is not the fixed EOS41 profile"))
+  descriptor)
 
 ;;; The enrollment installer is consumed exactly once by the owning public
 ;;; dispatcher during package initialization. No current-ticket cell exists.
@@ -22,8 +56,20 @@
                   (if (and (vector? row) (> (vector-length row) 0)
                            (eq? (vector-ref row 0) shell))
                       nodes (find (cdr nodes))))))))
-    (let ((core (lambda (generator input enrollment)
+    (let ((core (lambda (generator input enrollment resume-ticket)
   (let* ((operation 'g3c4-p2g2-terminal-commit-private!)
+         (resume (not (eq? resume-ticket #f)))
+         (resume-descriptor
+           (if resume
+               (begin
+                 (if enrollment
+                     (g3c4-fail 'invalid-state operation
+                                "checked P3 route cannot use enrollment"))
+                 (g3c4-p2g2-resume-descriptor-check
+                   (cpu4-c4-p3-resume-issuer-internal
+                     'admit generator input resume-ticket operation)
+                   operation))
+               #f))
          (input-entry (g3c4-p2g2-prefix-preflight generator input))
          (native-input (vector-ref input-entry 3))
          (generator-entry (g3c4-generator-entry-call-ready generator operation))
@@ -165,7 +211,74 @@
                       (vector-ref live 1) live (vector-ref live 10)
                       0 -1 -1 operation))
           (let* ((first-selected
-                   (g3c4-p2g2-terminal-first-sample-decode! call pending))
+                   (if resume
+                       (let* ((checked
+                                (g3c4-p2g2-terminal-pending-check
+                                  call pending operation))
+                              (protected-record (vector-ref checked 2))
+                              (protected-anchor
+                                (g3c4-p2g2-anchor-for call))
+                              (output-native (vector-ref checked 6))
+                              (first-raw (vector-ref checked 7))
+                              (first-staging (vector-ref checked 8))
+                              (logits (make-bytevector 1024 0)))
+                         ;; The issuer rechecks its FILE/model/T1 roots and
+                         ;; returns the same descriptor before native state
+                         ;; changes. The core checks its exact fixed bytes.
+                         (if (not (eq? resume-descriptor
+                                       (cpu4-c4-p3-resume-issuer-internal
+                                         'verify generator input resume-ticket
+                                         operation)))
+                             (g3c4-fail 'invalid-state operation
+                                        "checked P3 issuer changed"))
+                         (g3c4-p2g2-resume-descriptor-check
+                           resume-descriptor operation)
+                         (if (not (and
+                               (eq? (vector-ref protected-record 13)
+                                    'before-prefix)
+                               (eq? (vector-ref protected-anchor 13)
+                                    'before-prefix)
+                               (eq? (vector-ref protected-record 5) native)
+                               (eq? (vector-ref protected-record 7)
+                                    output-native)
+                               (eq? (vector-ref protected-record 11)
+                                    first-raw)
+                               (eq? (vector-ref protected-record 12)
+                                    first-staging)
+                               (g3c4-p2g2-terminal-text-zero?
+                                 first-raw 1)
+                               (g3c4-p2g2-terminal-text-zero?
+                                 first-staging 8)))
+                             (g3c4-fail 'invalid-state operation
+                                        "checked P3 original carriers changed"))
+                         (g3c4-native-check
+                           (g3c4-p2g2-native-p3-resume
+                             native output-native
+                             (vector-ref resume-descriptor 0)
+                             (vector-ref resume-descriptor 1) logits)
+                           operation)
+                         ;; Native success reconstructed the genuine cache,
+                         ;; history and retained logits. Decode the saved G1
+                         ;; byte through the real T1 into original carriers.
+                         (g3c4-p2g2-terminal-pending-check
+                           call pending operation)
+                         (bytevector-u8-set! first-staging 0 3)
+                         (t1-private-g3-decode-raw-into!
+                           tokenizer first-staging first-raw)
+                         (g3c4-p2g2-prefix-byte-check
+                           protected-record 3 operation)
+                         (g3c4-p2g2-terminal-pending-check
+                           call pending operation)
+                         ;; All fallible work precedes the bounded phase
+                         ;; writes. Abort still owns the native pending pair.
+                         (vector-set! protected-anchor 13
+                                      'prefix-committed)
+                         (vector-set! protected-record 13
+                                      'prefix-committed)
+                         (vector-set! (vector-ref protected-record 14)
+                                      3 'p2g2-prefix-committed)
+                         3)
+                       (g3c4-p2g2-terminal-first-sample-decode! call pending)))
                  (checked
                    (g3c4-p2g2-terminal-pending-check
                      call pending operation))
@@ -175,8 +288,9 @@
                  (second-selected
                    (if first-eos? #f
                        (begin
-                         (g3c4-p2g2-terminal-non-eos-prefix-commit!
-                           call pending first-selected)
+                         (if (not resume)
+                             (g3c4-p2g2-terminal-non-eos-prefix-commit!
+                               call pending first-selected))
                          (g3c4-p2g2-terminal-second-sample-decode!
                            call pending))))
                  (logical-count
@@ -522,5 +636,11 @@
                         (vector ticket original-stage original-roots heads proof
                                 (vector (vector-ref ticket 0)
                                         (cdr (vector-ref heads 0)) (cdr (vector-ref heads 1))
-                                        (cdr (vector-ref heads 2)) (cdr (vector-ref heads 3)))))))))))
-      (lambda (generator input) (core generator input #f))))))
+                                        (cdr (vector-ref heads 2)) (cdr (vector-ref heads 3)))))) #f)))))
+      (set! g3c4-p2g2-terminal-resume-private!
+        (lambda (generator input ticket)
+          (if (eq? ticket #f)
+              (g3c4-fail 'invalid-state 'g3c4-p2g2-terminal-commit-private!
+                         "checked P3 ticket is absent"))
+          (core generator input #f ticket)))
+      (lambda (generator input) (core generator input #f #f))))))

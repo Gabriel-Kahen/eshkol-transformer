@@ -2247,6 +2247,14 @@ two-byte prompt to one opaque terminal ticket. Its admit/verify seam rechecks
 the saved file and model before native P3 reconstruction. Syntax/source checks
 pass; independent review and compiled fresh-process acceptance are **NOT RUN**.
 
+The [private P3 to G2 terminal bridge](g3/G3_C4_P3_TERMINAL_RESUME_BRIDGE.md)
+is source-staged on the composed C4 tree. A checked FILE issuer ticket selects
+the alternate first stage; the bridge rechecks its fixed IDs/RNG before native
+P3, fills the real first T1 carriers and Eshkol prefix phase, then uses the
+existing second-frame and terminal publication tail. Focused source checks
+pass. Aggregate compilation, issuer integration and fresh-process continuation
+remain **NOT RUN** for this bridge.
+
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1
 commit to one generated G1. Its host synthetic state witness and causal source
