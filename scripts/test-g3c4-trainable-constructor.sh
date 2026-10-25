@@ -78,9 +78,9 @@ env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
 ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s \
   120s "${temporary_dir}/trainable-constructor" \
   >"${temporary_dir}/runtime.stdout"
-grep -E '^G3-C4 trainable constructor PASS: checks=[1-9][0-9]*$' \
-  "${temporary_dir}/runtime.stdout" >/dev/null
 cp "${temporary_dir}/compile.log" "${evidence}/compile.log"
 cp "${temporary_dir}/runtime.stdout" "${evidence}/runtime.stdout"
+grep -E '^G3-C4 trainable constructor PASS checks=[1-9][0-9]*$' \
+  "${evidence}/runtime.stdout" >/dev/null
 cat "${evidence}/runtime.stdout"
 printf 'G3-C4 trainable constructor evidence: %s\n' "${evidence}"

@@ -134,16 +134,26 @@ class TrainableConstructorSource(unittest.TestCase):
 
     def test_runner_uses_existing_model_archive_and_private_fixture(self) -> None:
         runner = source("scripts/test-g3c4-trainable-constructor.sh")
+        fixture = source("tests/g3c4/trainable_constructor_test.esk")
         for marker in (
             "-DET_I2_NATIVE_HELPERS_ONLY",
             "-DET_P1_TRUSTED_BUILD=1",
             "tests/g3c4/model_authority_native.c",
             "--lib g3c4_trainable_constructor",
             "tests/g3c4/trainable_constructor_test.esk",
-            "G3-C4 trainable constructor PASS:",
+            "G3-C4 trainable constructor PASS checks=",
         ):
             self.assertIn(marker, runner)
         self.assertNotIn("native/m3_package_bridge.c", runner)
+        self.assertIn('(display "G3-C4 trainable constructor PASS checks=")', fixture)
+        self.assertIn("grep -E '^G3-C4 trainable constructor PASS checks=", runner)
+
+    def test_runner_marker_mutation_is_detected(self) -> None:
+        runner = source("scripts/test-g3c4-trainable-constructor.sh")
+        fixture = source("tests/g3c4/trainable_constructor_test.esk")
+        bad = runner.replace("PASS checks=", "PASS: checks=", 1)
+        self.assertIn('(display "G3-C4 trainable constructor PASS checks=")', fixture)
+        self.assertNotIn("grep -E '^G3-C4 trainable constructor PASS checks=", bad)
 
     def test_wrong_prepare_route_is_detected(self) -> None:
         mutant = self.text.replace(

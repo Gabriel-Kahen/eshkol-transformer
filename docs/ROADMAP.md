@@ -2195,6 +2195,15 @@ strict private compile stopped before IR because the fixture reached for
 unexported lexical `x1-config-registry`. X1 resolved shells have no stale
 withdrawal state; the source successor tests a foreign or unresolved shell.
 No constructor runtime ran in that receipt.
+The v3 source successor reached fixture runtime but is also **NONACCEPTING**:
+`g3r-c4-trainable-constructor-c6837711-attempt1/SHA256SUMS-RUN`
+(SHA-256 `d936546515ca5c3385e0b0e339cdd74e62b52686287359e548430d201f5b876c`),
+launcher/Docker exit 1. The fixture printed `G3-C4 trainable constructor
+PASS checks=48`, while the runner and inside classifier expected a surplus
+colon (`PASS: checks=`); temporary compile/runtime files were not retained as
+the normal gate output. That observation is not compiled admission. A focused
+successor aligns both classifiers with the fixture and retains runtime output
+before checking it.
 
 The [private C4 position VJP leaf](g3/G3_R_C4_POSITION_VJP_LEAF.md) supplies
 one fixed `[1,4]` position-ID and `[1,4,4]` upstream to `[4,4]` gradient
