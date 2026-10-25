@@ -1249,6 +1249,14 @@ live scoped guards returned to zero, and report/teardown postchecks passed
 across normal A/B, poison and sanitizer. Fault arms still retained 2,360
 root-arena bytes through retry; controls stayed flat. This diagnostic did not
 run the complete-call root-arena equality assertion, so retention is open.
+The `2e941bb7` test-only mapper diagnostic then passed its independently
+reviewed bounded compiled gate (`retention-map-2e941bb-attempt1-independent-review-20261025/REVIEW.md`,
+244-file raw seal `085cb296...`). Its twelve direct-fault, mapped-fault and
+control cases all exited zero. Direct and mapped D2 faults each retained
+2,288 root-arena bytes through retry; controls were flat. Samples immediately
+before and after `e3-note-caught-error!` showed zero net used-byte change in
+the active region. That does not establish zero allocation or explain the
+separately observed 2,360-byte full-E3 fault growth. Retention remains open.
 The separate trained-G2 sanitizer attempt at `55a56f2f` is also NONACCEPTING:
 the first two-token run hit an ASan one-byte read seven bytes before a live
 48-byte terminal-ID clone allocation in the release path (review:
