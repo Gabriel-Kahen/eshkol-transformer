@@ -1327,6 +1327,19 @@ pre-call values and its own genuine preflight cut. Other R1/R2 stages,
 tie identity, graph-producing mutations, and complete-call horizons remain
 open; no §9 admission follows from this source slice.
 
+An isolated exact-`44c0418d` stage-11 source successor adds test-only fault
+site 8, ordinal 0, occurrence 1 to the existing frame selector. The forward,
+CE, L3S and correct providers complete before the one-shot denial; the
+accumulate provider is not entered. The private driver checks six distinct
+pre-call publication words, first stage-11/internal error, restored cursor,
+model/gradient, mixed modes, RNG and live owners, then compares the
+same-authority retry against an
+independent fixed-seed twin. A noninstalled normal/sanitized AOT recipe is
+staged for absent/present gradients, normal repeat and poison. Supported
+compilation, runtime, sanitizer and resource evidence are **NOT RUN**;
+stage-9 L3S, stage-10 correct and full §9 admission remain open on this
+independent branch.
+
 A bounded noninstalled stage-12 successor extends the existing
 `ET_E3_FAULT_TESTING` frame selector with site 2, ordinal 0, occurrence 1.
 It fires after all four destination and four result view checks, count

@@ -249,7 +249,7 @@ printf '%s\n' "$e3_tuple_kind"
         self.assertLess(frame.index("frame->fault_state = 2; /* Consume before M3 admission"),
                         frame.index("pin_status = et_g3t_model_pins_begin_fail_before_internal"))
         self.assertIn("(if (= site 3) 42\n                    (if (= site 4) 47", driver)
-        self.assertIn("(if (or (= site 3) (= site 4) (= site 5))\n        (e3-test-fault-check 'independent-twin", driver)
+        self.assertIn("(if (or (= site 3) (= site 4) (= site 5) (= site 8))\n        (e3-test-fault-check 'independent-twin", driver)
         self.assertIn("if (fail_before >= M3_CALL_PIN_COUNT)", pins)
         self.assertIn("m3_call_drain(pins, i)", pins)
         self.assertIn("for(size_t n=0;n<14;++n)", (ROOT / "tests/m3cg/test_pins.c").read_text())
@@ -272,9 +272,9 @@ printf '%s\n' "$e3_tuple_kind"
             ce[ce.index("#ifdef ET_E3_FAULT_TESTING"):ce.index(dispatch)]
         self.assertFalse(safe_order(moved))
         self.assertIn("site == 5 && ordinal == 0 && occurrence >= 1 && occurrence <= 2", frame)
-        self.assertIn("(if (= site 5) 107 95)", driver)
+        self.assertIn("(if (= site 5) 107 (if (= site 8) 143 95))", driver)
         self.assertIn("((= site 5) 'typed-stage8)", driver)
-        self.assertIn("(if (= site 5) 8 7)", driver)
+        self.assertIn("(if (= site 5) 8 (if (= site 8) 11 7))", driver)
         self.assertIn("(<= (vector-ref scenario 5) 2)", driver)
         self.assertIn("(= (vector-ref scenario 4) 0)", driver)
         self.assertIn("(e3-test-fault-make-twin present? corpus-path)", driver)
@@ -451,14 +451,14 @@ e3_reject_unresolved_private fault "$3" "$3"
             self.assertIn(snapshot, execute)
             self.assertLess(execute.index(snapshot), execute.index("(e3-test-fault-arm native"))
         required = (
-            "(if (= site 2) 155 (if (= site 5) 107 95))",
+            "(if (= site 2) 155\n                            (if (= site 5) 107 (if (= site 8) 143 95)))",
             "(e3-test-fault-check 'cursor\n        (d2-core-bytes=? cursor",
             "(e3-test-fault-check 'output\n        (equal? publication",
             "(e3-test-fault-check 'modes\n        (e3-test-retention-modes=?",
             "(e3-test-fault-check 'model\n        (e3-test-retention-model=?",
             "(e3-test-fault-check 'rng\n        (and (eq? rng-algorithm",
             "(e3-test-fault-check 'owners\n        (e3-test-fault-probes-restored?",
-            "(e3-test-fault-check 'retry-output\n      (equal? (if (or (= site 2) (= site 3) (= site 4) (= site 5))",
+            "(e3-test-fault-check 'retry-output\n      (equal? (if (or (= site 2) (= site 3) (= site 4) (= site 5) (= site 8))",
             "(e3-test-fault-check 'retry-rng\n      (and (eq? rng-algorithm",
         )
         def guarded(candidate):
@@ -481,11 +481,11 @@ e3_reject_unresolved_private fault "$3" "$3"
             "(held (if (= site 3)",
             "(e3-fault-value-borrow-begin owner role)",
             "(vector-ref before 3) (+ (vector-ref unheld 3) 1)",
-            "(if (or (= site 2) (= site 3) (= site 4) (= site 5))\n        (e3-test-fault-check 'distinct-precall",
+            "(if (or (= site 2) (= site 3) (= site 4) (= site 5) (= site 8))\n        (e3-test-fault-check 'distinct-precall",
             "(equal? publication e3-test-fault-sentinels)",
             "(if (= site 3) 'invalid-state 'internal)",
-            "(if (= site 2) 155 (if (= site 5) 107 95))",
-            "(if (= site 2) 12 (if (= site 5) 8 7))",
+            "(if (= site 2) 155\n                            (if (= site 5) 107 (if (= site 8) 143 95)))",
+            "(if (= site 2) 12 (if (= site 5) 8 (if (= site 8) 11 7)))",
             "(if (or (= site 3) (= site 4)) 3 0)",
             "(if (= site 3) 4 (if (= site 4) 6 5))",
             "(if (= site 3) 8 (if (= site 4) 6 9))",
@@ -564,9 +564,9 @@ e3_reject_unresolved_private fault "$3" "$3"
         self.assertIn("et_e3_test_fault_seed_publication_v1", native)
         self.assertIn("(equal? publication e3-test-fault-sentinels)", driver)
         self.assertIn("(e3-test-fault-all-distinct?", driver)
-        self.assertIn("(if (= site 2) 155 (if (= site 5) 107 95))", driver)
+        self.assertIn("(if (= site 2) 155\n                            (if (= site 5) 107 (if (= site 8) 143 95)))", driver)
         self.assertIn("(equal? publication\n                (e3-test-fault-publication", driver)
-        self.assertIn("(if (or (= site 2) (= site 3) (= site 4) (= site 5))\n                  e3-test-fault-final-publication publication)", driver)
+        self.assertIn("(if (or (= site 2) (= site 3) (= site 4) (= site 5) (= site 8))\n                  e3-test-fault-final-publication publication)", driver)
 
         for mutated in (
             publish[:cut] + publish[cut:].replace("frame->fault_state = 2;", "", 1),

@@ -152,7 +152,7 @@
     (e3-test-fault-check 'prepared-output
       (equal? publication
               (e3-test-fault-publication frame destinations)))
-    (if (or (= site 2) (= site 3) (= site 4) (= site 5))
+    (if (or (= site 2) (= site 3) (= site 4) (= site 5) (= site 8))
         (e3-test-fault-check 'distinct-precall
           (and (equal? publication e3-test-fault-sentinels)
                (e3-test-fault-all-distinct?
@@ -180,6 +180,7 @@
         (cond ((or (= site 3) (= site 4)) 'typed-stage3)
               ((= site 2) 'typed-stage12)
               ((= site 5) 'typed-stage8)
+              ((= site 8) 'typed-stage11)
               (else 'typed-stage7))
                            failed?))
     ;; The wrapper has already captured the native error before readback clears it.
@@ -188,10 +189,11 @@
         (and (= (vector-ref entry 15)
                 (if (= site 3) 42
                     (if (= site 4) 47
-                        (if (= site 2) 155 (if (= site 5) 107 95)))))
+                        (if (= site 2) 155
+                            (if (= site 5) 107 (if (= site 8) 143 95))))))
              (= (vector-ref error 0)
                 (if (or (= site 3) (= site 4)) 3
-                    (if (= site 2) 12 (if (= site 5) 8 7))))
+                    (if (= site 2) 12 (if (= site 5) 8 (if (= site 8) 11 7)))))
              (= (vector-ref error 1) (if (or (= site 3) (= site 4)) 3 0))
              (= (vector-ref error 2) (if (= site 3) 4 (if (= site 4) 6 5)))
              (= (vector-ref error 3) (if (= site 3) 8 (if (= site 4) 6 9))))))
@@ -233,7 +235,7 @@
           (e3-test-fault-check 'clear (= (e3-test-fault-ref native 0) 0))))
     (e3-test-retention-call! model dataset frame destinations cursor modes
                              model-image)
-    (if (or (= site 3) (= site 4) (= site 5))
+    (if (or (= site 3) (= site 4) (= site 5) (= site 8))
         (e3-test-fault-check 'independent-twin
           (and (vector? twin)
                (not (eq? model (vector-ref twin 0)))
@@ -244,7 +246,7 @@
                (d2-core-bytes=? (d2-token-dataset-cursor dataset)
                                  (vector-ref twin 5)))))
     (e3-test-fault-check 'retry-output
-      (equal? (if (or (= site 2) (= site 3) (= site 4) (= site 5))
+      (equal? (if (or (= site 2) (= site 3) (= site 4) (= site 5) (= site 8))
                   e3-test-fault-final-publication publication)
               (e3-test-fault-publication frame destinations)))
     (e3-test-fault-check 'retry-rng
@@ -283,7 +285,10 @@
              (and (= (vector-ref scenario 3) 5)
                   (= (vector-ref scenario 4) 0)
                   (>= (vector-ref scenario 5) 1)
-                  (<= (vector-ref scenario 5) 2)))))
+                  (<= (vector-ref scenario 5) 2))
+             (and (= (vector-ref scenario 3) 8)
+                  (= (vector-ref scenario 4) 0)
+                  (= (vector-ref scenario 5) 1)))))
   (let ((phase (vector-ref scenario 1))
         (present? (vector-ref scenario 2)))
     (cond ((eq? phase 'prepare)
@@ -293,14 +298,16 @@
            (let ((path-image (e3-test-fault-path-snapshot corpus-path))
                  (twin (if (or (= (vector-ref scenario 3) 3)
                                (= (vector-ref scenario 3) 4)
-                               (= (vector-ref scenario 3) 5))
+                               (= (vector-ref scenario 3) 5)
+                               (= (vector-ref scenario 3) 8))
                            (e3-test-fault-make-twin present? corpus-path)
                            #f)))
              (e3-test-retention-prepare 1024 present? corpus-path)
              (if (or (= (vector-ref scenario 3) 2)
                      (= (vector-ref scenario 3) 3)
                      (= (vector-ref scenario 3) 4)
-                     (= (vector-ref scenario 3) 5))
+                     (= (vector-ref scenario 3) 5)
+                     (= (vector-ref scenario 3) 8))
                  (let* ((record (vector-ref e3-test-retention-root 0))
                         (frame (vector-ref record 2))
                         (native (vector-ref

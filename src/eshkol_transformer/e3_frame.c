@@ -331,6 +331,7 @@ int64_t et_e3_test_fault_arm_v1(void *pointer, int64_t site,
          occurrence >= 1 && occurrence <= 8192) ||
         (site == 2 && ordinal == 0 && occurrence == 1)
         || (site == 5 && ordinal == 0 && occurrence >= 1 && occurrence <= 2)
+        || (site == 8 && ordinal == 0 && occurrence == 1)
 #ifdef ET_E3_PARTIAL_PIN_TESTING
         || (site == 4 && ordinal >= 0 && ordinal < 14 && occurrence == 1)
 #endif
@@ -1412,6 +1413,13 @@ int64_t et_e3_private_accumulate_v1(void *pointer) {
       e3_dependency_status(e3_last_domain, e3_last_category) : e3_last_category;
   if (frame->phase != E3_CORRECTED || frame->cleanup_ready)
     return e3_fail(E3_INVALID_STATE, E3_CODE_PHASE);
+#ifdef ET_E3_FAULT_TESTING
+  if (frame->fault_state == 1 && frame->fault_site == 8) {
+    ++frame->fault_reached;
+    frame->fault_state = 2; /* Consume after correct, before accumulate dispatch. */
+    return e3_fail(E3_INTERNAL, E3_CODE_INVARIANT);
+  }
+#endif
   int64_t rc = e3_accumulate_dispatch(frame);
   if (!rc) {
     frame->sum_bank ^= 1u;
