@@ -2167,6 +2167,15 @@ profile: CLI3, trainable M3T and the TR3 factory currently require context two,
 while the separate C4 generation owner is seeded. C2 storage admits the
 `[4,4]` position table, but no trained-C4 runtime or same-checkpoint
 multi-token continuation is accepted. This is a dependency proposal only.
+The [one-token C4 SAVE boundary contract]
+(g3/G3_R_C4_ONE_TOKEN_SAVE_BOUNDARY_CONTRACT.md) identifies a separate
+runtime gap: authentic P2/G2 prefix commit stores the first non-EOS ID/raw,
+next logits and successor RNG only in an active call. Ordinary finish rejects
+that state; abort clears its prefix authority, and G3-R SAVE requires idle
+ownership. The accepted second-frame entry likewise requires the same active
+call and pending capacity-two output. A reviewed stable closed-call snapshot
+and a genuine idle-P3 second-token entry are distinct unimplemented gates;
+neither a budget-one P2/G1 result nor data-only C4 phase bytes substitute.
 The [source-pinned dependency map](g3/G3_R_TRAINED_C4_DEPENDENCY_MAP.md) at
 `59670d39` separates the constructor/topology, owned C4 workspace,
 complete four-token gradient and loss, TR3/D2/O2/C2 training and restore,
