@@ -127,7 +127,7 @@ class ModeGraphTupleTest(unittest.TestCase):
         normal = lines(MODE, "undefined_symbols")
         sanitized = (lines(MODE, "sanitized_noninstrumentation_undefined_symbols")
                      + lines(MODE, "sanitized_instrumentation_undefined_symbols"))
-        self.assertEqual((len(normal), len(sanitized)), (175, 223))
+        self.assertEqual((len(normal), len(sanitized)), (175, 228))
         self.assertEqual(normal, sorted(set(normal)))
         self.assertEqual(len(sanitized), len(set(sanitized)))
 
@@ -205,13 +205,18 @@ printf '%s\\n' "$e3_tuple_kind"
         non = lines(MODE, "sanitized_noninstrumentation_undefined_symbols")
         instrumentation = lines(MODE, "sanitized_instrumentation_undefined_symbols")
         self.assertEqual((len(normal), len(non), len(instrumentation)),
-                         (175, 172, 51))
+                         (175, 169, 59))
         self.assertEqual((len(set(non) - set(normal)),
-                          len(set(normal) - set(non))), (2, 5))
+                          len(set(normal) - set(non))), (2, 8))
         self.assertEqual(set(non) - set(normal), {"bcmp", "puts"})
         self.assertEqual(set(normal) - set(non),
                          {"eshkol_ad_seed_flag", "eshkol_runtime_fatal",
-                          "eshkol_taylor_lift_ad_node", "memcmp", "printf"})
+                          "eshkol_taylor_lift_ad_node", "memcmp", "memcpy",
+                          "memmove", "memset", "printf"})
+        self.assertTrue({"__asan_alloca_poison", "__asan_allocas_unpoison",
+                         "__asan_load1", "__asan_load8", "__asan_store1",
+                         "__asan_store2", "__asan_store4", "__asan_store8"}
+                        <= set(instrumentation))
         self.assertEqual(non, sorted(set(non)))
         self.assertEqual(instrumentation, sorted(set(instrumentation)))
         self.assertFalse(set(non) & set(instrumentation))

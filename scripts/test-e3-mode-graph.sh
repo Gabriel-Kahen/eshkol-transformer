@@ -45,7 +45,7 @@ for variant in a b missed-child enter-write-only graph-create sanitized; do
       "${artifact}/noninstrumentation-undefined.txt"
     cmp "${prefix}_sanitized_instrumentation_undefined_symbols.txt" \
       "${artifact}/sanitizer-undefined.txt"
-    [[ "$(awk 'END {print NR}' "${artifact}/undefined.txt")" == 223 ]] || \
+    [[ "$(awk 'END {print NR}' "${artifact}/undefined.txt")" == 228 ]] || \
       die "mode/graph sanitized total import count differs from sealed tuple"
     cat "${artifact}/noninstrumentation-undefined.txt" \
         "${artifact}/sanitizer-undefined.txt" | LC_ALL=C sort -u | \

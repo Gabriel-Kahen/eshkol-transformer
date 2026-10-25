@@ -881,6 +881,16 @@ successor repins that generator to the current canonical extension and its
 four derived mode digests while preserving the P1 variant digests and the
 in-call insertion anchors. Focused source checks pass; an independent review
 and fresh supported compiled mode/graph gate remain pending.
+The exact `e265cad` attempt4 passed source generation and normal/private
+package construction but stopped before AOT at sanitized import admission.
+The sealed retained object measures 169 noninstrumentation imports, 59 ASan
+imports and 228 total, against the old 172/51/223 mode tuple pins. Clang 21
+lowered the three ordinary memory calls to ASan interceptors and emitted eight
+additional ASan symbols; the raw/derived IR hashes, object `nm` inventory and
+source closure were checked. A test-only successor updates only this mode
+tuple's two exact manifests and count policy. It has no compiled runtime
+verdict; independent source review and a fresh supported mode/graph gate remain
+pending.
 The supported mode/graph gate did not include retention or numerical test
 candidates. A scoped source integration adds the separate complete-call
 retention tuple and strict 1,024/8,192-call normal A/B, poison A/B and

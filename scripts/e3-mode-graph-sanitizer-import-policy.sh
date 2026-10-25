@@ -13,8 +13,8 @@ e3_mode_graph_verify_sanitizer_imports() {
       die "E3 mode/graph sanitizer import manifest is not sorted unique text"
   done
   [[ "$(awk 'END {print NR}' "${expected_normal}")" == 175 &&
-     "$(awk 'END {print NR}' "${expected_non}")" == 172 &&
-     "$(awk 'END {print NR}' "${expected_instrumentation}")" == 51 ]] ||
+     "$(awk 'END {print NR}' "${expected_non}")" == 169 &&
+     "$(awk 'END {print NR}' "${expected_instrumentation}")" == 59 ]] ||
     die "E3 mode/graph sanitizer manifest counts differ from the sealed tuple"
   cmp -s "${expected_normal}" "${normal}" ||
     die "E3 mode/graph normal imports differ from the sealed tuple"
@@ -26,6 +26,6 @@ e3_mode_graph_verify_sanitizer_imports() {
     awk 'END {if (NR != 2) exit 1}' ||
     die "E3 mode/graph sanitizer added import count differs"
   comm -23 "${normal}" "${noninstrumentation}" |
-    awk 'END {if (NR != 5) exit 1}' ||
+    awk 'END {if (NR != 8) exit 1}' ||
     die "E3 mode/graph sanitizer absent import count differs"
 }
