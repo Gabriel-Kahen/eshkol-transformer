@@ -16,6 +16,10 @@
     !defined(ET_G3R_C4_OWNER_TOPOLOGY_PRIVATE)
 #error "sealed C4 binding status requires topology status"
 #endif
+#if defined(ET_G3R_C4_CONTEXT_EXCLUSION_PRIVATE) && \
+    !defined(ET_G3C4_GENERATOR_PRIVATE)
+#error "C4 context exclusion requires the generation transport registry"
+#endif
 #ifdef ET_G3R_C4_OWNER_TOPOLOGY_PRIVATE
 #ifndef ET_G3C4_NATIVE_PINS_PRIVATE
 #error "sealed C4 topology status requires fixed14 native pins"
@@ -1946,6 +1950,39 @@ static et_g3c4_context_internal *et_g3c4_admit_context(
   return context;
 #endif
 }
+
+#ifdef ET_G3R_C4_CONTEXT_EXCLUSION_PRIVATE
+/* Create-only status: inspect the mixed native registry, including idle
+ * generators whose owner->active edge is NULL. No context or owner escapes. */
+int64_t et_g3c4_private_no_live_owner_context_status_v1(
+    const void *candidate) {
+  et_g3c4_model_owner_internal *owner;
+  et_g3c4_transport_header_internal *header;
+  et_g3c4_error_reset_internal();
+  owner = et_g3c4_admit_owner(candidate, 0);
+  if (owner == NULL) return et_g3c4_error_state.category;
+  if (owner->state != ET_G3C4_OWNER_SEALED)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  for (header = et_g3c4_transport_registry; header != NULL;
+       header = header->registry_next) {
+    const et_g3c4_context_internal *context;
+    if (!et_g3c4_transport_record_valid(header))
+      return et_g3c4_fail(
+          ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+    if (header->kind != ET_G3C4_CONTEXT_KIND) continue;
+    context = (const et_g3c4_context_internal *)header;
+    if (header->state == ET_G3C4_CONTEXT_LIVE &&
+        context->owner == owner)
+      return et_g3c4_fail(
+          ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  }
+  if (owner->active != NULL)
+    return et_g3c4_fail(
+        ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  return 0;
+}
+#endif
 
 static et_g3c4_context_internal *et_g3c4_context_allocate(void) {
 #ifdef ET_G3C4_CONTEXT_TESTING
