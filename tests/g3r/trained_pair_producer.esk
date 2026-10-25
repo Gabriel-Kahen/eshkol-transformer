@@ -1,0 +1,22 @@
+;;; Compile this one-shot caller only in the reviewed CLI3/G3-R private union.
+(load "g3r_trained_pair_producer_root.esk")
+(define args (command-line))
+(define (argument at)
+  (let loop ((remaining (cdr args)) (index at))
+    (if (= index 0) (car remaining)
+        (loop (cdr remaining) (- index 1)))))
+(define (proper-length values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining) (+ count 1)))))
+(if (not (= (proper-length args) 8)) (exit 2))
+(define result
+  (g3r-trained-pair-produce-internal!
+    (argument 0) (argument 1) (argument 2)
+    (argument 3) (argument 4) (argument 5)
+    (cli3-parse-i64 (argument 6) "PROMPT" 255)))
+(if (not (and (vector? result) (= (vector-length result) 3)
+              (= (bytevector-length (vector-ref result 0)) 32)
+              (= (bytevector-length (vector-ref result 1)) 96)))
+    (exit 1))
+(display "G3-R TRAINED PAIR PRODUCER PASS") (newline)

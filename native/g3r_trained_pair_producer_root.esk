@@ -1,0 +1,9 @@
+;;; One-shot private producer in CLI3's single T2/TR3/G3-T registry.
+;;; No installed entry and no replay or fresh-process ownership transfer.
+(load "cli3_generate_root.esk")
+(load "g3t_manual_p1_extension.esk")
+(load "g3t_manual_logits_materialize_extension.esk")
+(load "g3m_prefill_p1_extension.esk")
+(load "g3r_committed_save_snapshot_extension.esk")
+(load "g3r_record_codec_extension.esk")
+(load "g3r_trained_pair_producer_extension.esk")

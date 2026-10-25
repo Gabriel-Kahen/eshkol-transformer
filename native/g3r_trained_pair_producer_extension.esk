@@ -1,0 +1,111 @@
+;;; Produce G3RCV1 only from an idle, genuinely restored CLI3 model and the
+;;; exact tokenizer shell used by that trainer. This is a one-shot fixture.
+(define (g3r-trained-pair-file-image path limit)
+  (if (not (t2-wave2-valid-file-path? path))
+      (c2-load-fail 'invalid-argument 'checkpoint-save!
+                    "invalid saved C2 path" '()))
+  (let ((size (file-size path)))
+    (if (not (and (integer? size) (exact? size) (> size 0) (<= size limit)))
+        (c2-load-fail 'invalid-state 'checkpoint-save!
+                      "saved C2 size exceeds the fixed policy" '()))
+    (let ((bytes (make-bytevector size 0)))
+      (if (not (= 0 (t1-native-read-exact path bytes size limit)))
+          (c2-load-fail 'io 'checkpoint-save!
+                        "saved C2 exact read failed" '()))
+      bytes)))
+
+(define (g3r-trained-pair-produce-internal!
+          config-path tokenizer-path corpus-path trained-c2
+          saved-c2 companion-path prompt)
+  (let ((operation 'checkpoint-save!)
+        (dataset #f) (trainer #f) (state #f)
+        (generator #f) (input #f) (logits #f))
+    (define (cleanup)
+      (if logits (g3t-generation-tensor-release! logits))
+      (if input (g3t-generation-tensor-release! input))
+      (if generator (g3t-generator-close! generator))
+      (if state (c2-public-trainer-state-release! state))
+      (if trainer (trainer-release! trainer))
+      (if dataset (d2-token-dataset-close! dataset))
+      #t)
+    (if (not (and (m3t-exact-i64? prompt) (>= prompt 0) (<= prompt 255)
+                  (t2-wave2-valid-file-path? saved-c2)
+                  (t2-wave2-valid-file-path? companion-path)
+                  (not (string=? saved-c2 companion-path))))
+        (c2-load-fail 'invalid-argument operation
+                      "invalid fixed G3-R producer paths or prompt" '()))
+    (guard (caught
+             (#t (guard (cleanup-defect (#t (exit 134))) (cleanup))
+                 (raise caught)))
+      (let* ((resolved (cli3-b-resolved config-path 'generate))
+             (tokenizer (cli3-b-tokenizer tokenizer-path resolved))
+             (model
+               (with-region ('g3r-trained-pair-model 65536)
+                 (m3t-public-model-create
+                   resolved (m3t-public-initializer-state
+                              (x1-private-config-ref resolved 'run.seed)))))
+             (tree (module-parameters model))
+             (paths (cli3-b-unique-paths tree))
+             (optimizer
+               (o2-public-optimizer-create
+                 (list 'transformer-optimizer-config 1 0 '() 'adamw
+                       'f32 'cpu '(none) '(constant)
+                       (list (list 'group paths "3dcccccd" "3f000000"
+                                   "3f000000" "3a83126f" "00000000")))
+                 tree)))
+        (set! dataset (cli3-b-dataset corpus-path tokenizer))
+        (set! trainer (trainer-create resolved tokenizer dataset
+                                      model optimizer))
+        (cli3-b-restore! trainer trained-c2)
+        (let ((trained-image
+                (g3r-trained-pair-file-image trained-c2 16777216)))
+        (set! state (trainer-state trainer))
+        ;; C2's no-overwrite publication completes before the G3 companion.
+        (if (not (c2-public-checkpoint-save!
+                   state saved-c2 (cli3-b-policy) '()))
+            (c2-load-fail 'internal operation "C2 SAVE did not publish" '()))
+        (c2-public-trainer-state-release! state)
+        (set! state #f)
+        (trainer-release! trainer)
+        (set! trainer #f)
+        (module-eval! model)
+        (set! generator
+          (g3t-generator-create model tokenizer
+            (list ':profile 'diagnostic-c2 ':sampling 'categorical
+                  ':temperature-bits #x3f800000 ':top-k 256
+                  ':top-p-bits #x3f800000 ':max-new-tokens 0
+                  ':eos #f ':seed 1729)))
+        (set! input (g3t-generation-token-input-create prompt))
+        (set! logits (g3m-prefill-p1! generator input))
+        (let* ((snapshot
+                 (g3r-committed-save-snapshot!
+                   generator (make-bytevector 136 0)))
+               (fingerprint
+                 (string->utf8 (t2-wave2-tokenizer-fingerprint tokenizer)))
+               (saved-image
+                 (g3r-trained-pair-file-image saved-c2 16777216))
+               (digest (c1-sha256 saved-image))
+               (record (make-bytevector 288 0)))
+          (if (not (and (= (bytevector-length trained-image)
+                            (bytevector-length saved-image))
+                        (g3r-bytes=? trained-image 0 saved-image 0
+                                      (bytevector-length saved-image))
+                        (= (bytevector-length fingerprint) 96)
+                        (string=? (utf8->string fingerprint)
+                                  cli3-b-byte-fingerprint)))
+              (c2-load-fail 'invalid-state operation
+                            "trained C2 image or T1 fingerprint changed" '()))
+          (g3r-record-encode!
+            record (vector-ref snapshot 0) (vector-ref snapshot 1)
+            (vector-ref snapshot 2) (vector-ref snapshot 3)
+            (vector-ref snapshot 4) (vector-ref snapshot 5)
+            fingerprint digest)
+          ;; 0 forbids replacement. A failure leaves an unreachable C2 image.
+          (if (not (= 0 (t1-native-atomic-write
+                          companion-path record 288 0)))
+              (c2-load-fail 'io operation
+                            "G3-R companion publication failed" '()))
+          (cleanup)
+          (set! logits #f) (set! input #f) (set! generator #f)
+          (set! dataset #f)
+          (vector digest fingerprint snapshot)))))))
