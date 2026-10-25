@@ -6,10 +6,12 @@ e3_retention_verify_sanitizer_imports() {
   case "${e3_tuple_kind:-retention}" in
     retention)
       prefix="${PROJECT_ROOT}/tests/e3_private/retention_package_sanitized"
+      expected_non_count=172 expected_instrumentation_count=59 expected_absent_count=8
       if [[ "${e3_retention_arena_diagnostic_tuple:-0}" == 1 ]]; then
         prefix="${PROJECT_ROOT}/tests/e3_private/retention_arena_diagnostic_package_sanitized"
+        expected_non_count=173
       fi
-      expected_non_count=172 expected_instrumentation_count=59 expected_absent_count=8 ;;
+      ;;
     fault)
       prefix="${PROJECT_ROOT}/tests/e3_private/fault_package_sanitized"
       expected_non_count=175 expected_instrumentation_count=51 expected_absent_count=5 ;;

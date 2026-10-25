@@ -127,6 +127,7 @@ fclose
 fegetenv
 fegetround
 fesetenv
+fflush
 fgetc
 floor
 fmod

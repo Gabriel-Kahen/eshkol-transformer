@@ -17,7 +17,7 @@ SPEC.loader.exec_module(LAUNCHER)
 CID = 'a' * 64
 
 
-def exact_diagnostic_normal_imports(canonical: str, diagnostic: str) -> bool:
+def exact_diagnostic_fflush_delta(canonical: str, diagnostic: str) -> bool:
     symbols = canonical.splitlines(keepends=True)
     return ('fflush\n' not in symbols
             and symbols == sorted(set(symbols))
@@ -79,7 +79,10 @@ class RetentionArenaDiagnosticTest(unittest.TestCase):
                 expected = expected.replace('retention_bridge.c',
                                             'retention_arena_diagnostic_bridge.c')
             if original.name == 'retention_package_undefined_symbols.txt':
-                self.assertTrue(exact_diagnostic_normal_imports(expected, candidate.read_text()),
+                self.assertTrue(exact_diagnostic_fflush_delta(expected, candidate.read_text()),
+                                candidate.name)
+            elif original.name == 'retention_package_sanitized_noninstrumentation_undefined_symbols.txt':
+                self.assertTrue(exact_diagnostic_fflush_delta(expected, candidate.read_text()),
                                 candidate.name)
             else:
                 self.assertEqual(candidate.read_text(), expected, candidate.name)
@@ -90,14 +93,42 @@ class RetentionArenaDiagnosticTest(unittest.TestCase):
         private = SCRIPT.parents[1] / 'tests/e3_private'
         canonical = (private / 'retention_package_undefined_symbols.txt').read_text()
         diagnostic = (private / 'retention_arena_diagnostic_package_undefined_symbols.txt').read_text()
-        self.assertTrue(exact_diagnostic_normal_imports(canonical, diagnostic))
+        self.assertTrue(exact_diagnostic_fflush_delta(canonical, diagnostic))
         for name, changed in (
             ('missing measured import', diagnostic.replace('fflush\n', '')),
             ('extra import', diagnostic + 'unmeasured_symbol\n'),
             ('same-count substitution', diagnostic.replace('fflush\n', 'unmeasured_symbol\n')),
         ):
             with self.subTest(name=name):
-                self.assertFalse(exact_diagnostic_normal_imports(canonical, changed))
+                self.assertFalse(exact_diagnostic_fflush_delta(canonical, changed))
+
+    def test_diagnostic_sanitized_import_policy_rejects_drift(self):
+        root = SCRIPT.parents[1]
+        private = root / 'tests/e3_private'
+        canonical = (private / 'retention_package_sanitized_noninstrumentation_undefined_symbols.txt').read_text()
+        diagnostic = (private / 'retention_arena_diagnostic_package_sanitized_noninstrumentation_undefined_symbols.txt').read_text()
+        self.assertTrue(exact_diagnostic_fflush_delta(canonical, diagnostic))
+        normal = private / 'retention_arena_diagnostic_package_undefined_symbols.txt'
+        instrumentation = private / 'retention_arena_diagnostic_package_sanitized_instrumentation_undefined_symbols.txt'
+        policy = root / 'scripts/e3-retention-sanitizer-import-policy.sh'
+        with tempfile.TemporaryDirectory() as directory:
+            emitted = Path(directory) / 'noninstrumentation.txt'
+            for name, content in (
+                ('measured', diagnostic),
+                ('missing', diagnostic.replace('fflush\n', '')),
+                ('extra', diagnostic + 'unmeasured_symbol\n'),
+                ('same-count', diagnostic.replace('fflush\n', 'unmeasured_symbol\n')),
+            ):
+                with self.subTest(name=name):
+                    emitted.write_text(''.join(f'{row}\n' for row in sorted(set(content.splitlines()))))
+                    result = subprocess.run(
+                        ['bash', '-c', 'set -euo pipefail; PROJECT_ROOT=$1; '
+                         'e3_tuple_kind=retention; e3_retention_arena_diagnostic_tuple=1; '
+                         'die() { printf "%s\\n" "$*" >&2; exit 77; }; '
+                         'source "$2"; e3_retention_verify_sanitizer_imports "$3" "$4" "$5"',
+                         'policy', str(root), str(policy), str(normal), str(emitted),
+                         str(instrumentation)], capture_output=True, text=True)
+                    self.assertEqual(result.returncode == 0, name == 'measured', result.stderr)
 
     def test_policy_admits_only_complete_diagnostic_tuple(self):
         root = SCRIPT.parents[1]
