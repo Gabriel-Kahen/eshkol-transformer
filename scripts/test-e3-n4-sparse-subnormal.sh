@@ -62,7 +62,8 @@ run_checked toolchain.cxx "$cxx" --version
 run_checked toolchain.runner sha256sum "$runner"
 run_checked static env PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -v \
   tests.e3_reference.test_n4_sparse_bits tests.e3_private.test_n4_sparse_tuple \
-  tests.e3_private.test_overflow_tuple
+  tests.e3_private.test_overflow_tuple \
+  tests.e3_private.test_n4_initializer_successor
 run_checked fixture env PYTHONDONTWRITEBYTECODE=1 python3 -B -m \
   tests.e3_reference.n4_sparse_bits "$out/fixture"
 mkdir "$out/package-builds"
