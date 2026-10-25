@@ -2275,6 +2275,15 @@ and local native suites pass together (23 and 14 Python tests; 99 owner and
 admission. Constructor, P1, association, context and lease compiled gates and
 serialized workspace edge publication remain separate dependencies.
 
+The next [workspace ownership source audit](g3/G3_R_C4_WORKSPACE_OWNERSHIP_BLOCKER.md)
+found a missing P1 read-only authority before an implementation can satisfy
+the accepted contract. Slot 74 and the owner association are train-only,
+whereas workspace release must remain possible after `module-eval!` and still
+prove the current fourteen-handle P1 tree. Handle/carrier and native binding
+statuses cannot prove the parent/child topology. A mode-neutral exact C4 P1
+topology status is required before the workspace create/reset/release leaf;
+no workspace code or compiled admission is claimed by this audit.
+
 The [private C4 position VJP leaf](g3/G3_R_C4_POSITION_VJP_LEAF.md) supplies
 one fixed `[1,4]` position-ID and `[1,4,4]` upstream to `[4,4]` gradient
 operation behind a separate feature flag. Its source and tests were independently
