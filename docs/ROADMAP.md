@@ -2161,6 +2161,13 @@ publication transaction. Full G3-R still requires a separately admitted larger
 repeated-decode and later-EOS continuation profile. No persistence implementation
 or save/reload equivalence is claimed.
 
+The [trained C4 upstream contract](g3/G3_R_TRAINED_C4_UPSTREAM_CONTRACT.md)
+records the first source-level blocker to a context-four checkpoint for that
+profile: CLI3, trainable M3T and the TR3 factory currently require context two,
+while the separate C4 generation owner is seeded. C2 storage admits the
+`[4,4]` position table, but no trained-C4 runtime or same-checkpoint
+multi-token continuation is accepted. This is a dependency proposal only.
+
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1
 commit to one generated G1. Its host synthetic state witness and causal source
