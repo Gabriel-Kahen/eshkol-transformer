@@ -27,12 +27,11 @@ static int check_view(const et_kernel_tensor_view_v1 *view) {
   return ET_M3T_C4_A2_EMPTY_STAGE_VJP_OK;
 }
 
-static int overlaps(const et_kernel_tensor_view_v1 *a,
-                    const et_kernel_tensor_view_v1 *b) {
-  const uintptr_t x = (uintptr_t)a->data, y = (uintptr_t)b->data;
-  return x > UINTPTR_MAX - a->byte_length ||
-         y > UINTPTR_MAX - b->byte_length ||
-         (x < y + b->byte_length && y < x + a->byte_length);
+static int span_overlaps(const void *a, size_t a_bytes,
+                         const void *b, size_t b_bytes) {
+  const uintptr_t x = (uintptr_t)a, y = (uintptr_t)b;
+  return x > UINTPTR_MAX - a_bytes || y > UINTPTR_MAX - b_bytes ||
+         (x < y + b_bytes && y < x + a_bytes);
 }
 
 int et_m3t_c4_a2_empty_stage_vjp_private_v1(
@@ -49,7 +48,19 @@ int et_m3t_c4_a2_empty_stage_vjp_private_v1(
   }
   for (size_t i = 0u; i < 4u; ++i)
     for (size_t j = i + 1u; j < 4u; ++j)
-      if (overlaps(views[i], views[j]))
+      if (span_overlaps(views[i]->data, views[i]->byte_length,
+                        views[j]->data, views[j]->byte_length))
+        return ET_M3T_C4_A2_EMPTY_STAGE_VJP_OVERLAP;
+  for (size_t destination = 2u; destination < 4u; ++destination)
+    for (size_t control = 0u; control < 4u; ++control)
+      if (span_overlaps(views[destination]->data, 64u,
+                        views[control], views[control]->struct_size) ||
+          span_overlaps(views[destination]->data, 64u,
+                        views[control]->shape, 4u * sizeof(uint64_t)) ||
+          span_overlaps(views[destination]->data, 64u,
+                        views[control]->dtype, sizeof("f32")) ||
+          span_overlaps(views[destination]->data, 64u,
+                        views[control]->device, sizeof("cpu")))
         return ET_M3T_C4_A2_EMPTY_STAGE_VJP_OVERLAP;
   const float *dk = cache_key_gradient->data;
   const float *dv = cache_value_gradient->data;

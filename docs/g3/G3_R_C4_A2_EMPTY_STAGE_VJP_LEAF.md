@@ -16,13 +16,18 @@ Under `ET_M3T_C4_A2_EMPTY_STAGE_VJP_PRIVATE`, the direct status-only function
 accepts two disjoint upstream and two disjoint destination CPU f32 dense K1
 views `[1,2,4,2]`. It rejects malformed shapes, dtype, device, layout,
 overlap and nonfinite upstream values before writing either destination. It
-retains no pointer and does not touch the A2 cache. Feature-off compilation
+also rejects destination overlap with every supplied view descriptor's declared
+extent, four-element shape array, and validated dtype/device strings before
+either copy; otherwise the first copy could corrupt the second output pointer.
+It retains no pointer and does not touch the A2 cache. Feature-off compilation
 rejects the leaf; ordinary A2 exports no private symbol.
 
 The focused fixture computes an objective through genuine A2 create, begin,
 stage, view, end, abort and destroy operations. All 32 source K/V central
 differences match the leaf's gradients. Mutation controls check unchanged
-destinations after typed rejection. The fixture's cache is freshly empty for
+destinations and control bytes after typed rejection, including destination
+aliases into each descriptor, shape array, dtype string and device string.
+The fixture's cache is freshly empty for
 every objective evaluation, and verifies four visible positions and K/V byte
 equality with the staged source.
 

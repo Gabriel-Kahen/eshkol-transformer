@@ -2308,7 +2308,9 @@ The [private empty-cache A2 stage/view VJP candidate]
 (g3/G3_R_C4_A2_EMPTY_STAGE_VJP_LEAF.md) proves the fixed four-token
 mathematical reverse mapping for staged K/V when the cache starts empty. Its
 focused fixture uses a genuine A2 transaction and checks all 32 finite
-differences, typed negatives and feature-off isolation. This is a source/local
+differences, typed negatives, feature-off isolation, and unchanged control
+bytes when a destination aliases a descriptor, shape or dtype/device string.
+This is a source/local
 candidate only; same-owner view-gradient association, a backward tape and
 composed C4 training remain unadmitted.
 

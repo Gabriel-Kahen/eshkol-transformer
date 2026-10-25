@@ -100,6 +100,71 @@ static void reject_unchanged(et_kernel_tensor_view_v1 a[4], int expected) {
   CHECK(memcmp(before_v, gradient_v, sizeof(before_v)) == 0);
 }
 
+static void reject_control_alias(et_kernel_tensor_view_v1 a[4],
+                                 const void *control, size_t control_bytes) {
+  unsigned char before_views[4u * sizeof(*a)];
+  unsigned char before_control[4u * sizeof(*a)];
+  unsigned char before_k[sizeof(gradient_k)], before_v[sizeof(gradient_v)];
+  CHECK(control_bytes <= sizeof(before_control));
+  memcpy(before_views, a, sizeof(before_views));
+  memcpy(before_control, control, control_bytes);
+  memcpy(before_k, gradient_k, sizeof(before_k));
+  memcpy(before_v, gradient_v, sizeof(before_v));
+  CHECK(backward(a) == ET_M3T_C4_A2_EMPTY_STAGE_VJP_OVERLAP);
+  CHECK(memcmp(before_views, a, sizeof(before_views)) == 0);
+  CHECK(memcmp(before_control, control, control_bytes) == 0);
+  CHECK(memcmp(before_k, gradient_k, sizeof(before_k)) == 0);
+  CHECK(memcmp(before_v, gradient_v, sizeof(before_v)) == 0);
+}
+
+static void control_alias_negatives(void) {
+  et_kernel_tensor_view_v1 a[4];
+  for (size_t control = 0u; control < 4u; ++control) {
+    views(a);
+    a[2].data = &a[control];
+    reject_control_alias(a, a, sizeof(a));
+
+    uint64_t writable_shape[8] = {1u, 2u, 4u, 2u};
+    views(a);
+    a[control].shape = writable_shape;
+    a[2].data = writable_shape;
+    reject_control_alias(a, writable_shape, sizeof(writable_shape));
+
+    uint32_t writable_text[16] = {0};
+    memcpy(writable_text, "f32", sizeof("f32"));
+    views(a);
+    a[control].dtype = (char *)writable_text;
+    a[2].data = writable_text;
+    reject_control_alias(a, writable_text, sizeof(writable_text));
+
+    memset(writable_text, 0, sizeof(writable_text));
+    memcpy(writable_text, "cpu", sizeof("cpu"));
+    views(a);
+    a[control].device = (char *)writable_text;
+    a[2].data = writable_text;
+    reject_control_alias(a, writable_text, sizeof(writable_text));
+  }
+
+  struct extended_view {
+    et_kernel_tensor_view_v1 view;
+    uint32_t tail[16];
+  } extended;
+  views(a);
+  extended.view = a[3];
+  extended.view.struct_size = sizeof(extended);
+  memset(extended.tail, 0x6b, sizeof(extended.tail));
+  a[2].data = extended.tail;
+  unsigned char before_extended[sizeof(extended)];
+  unsigned char before_views[sizeof(a)];
+  memcpy(before_extended, &extended, sizeof(extended));
+  memcpy(before_views, a, sizeof(a));
+  CHECK(et_m3t_c4_a2_empty_stage_vjp_private_v1(
+      &a[0], &a[1], &a[2], &extended.view) ==
+      ET_M3T_C4_A2_EMPTY_STAGE_VJP_OVERLAP);
+  CHECK(memcmp(before_extended, &extended, sizeof(extended)) == 0);
+  CHECK(memcmp(before_views, a, sizeof(a)) == 0);
+}
+
 static void negatives(void) {
   et_kernel_tensor_view_v1 a[4];
   views(a); a[0].rank = 3u;
@@ -134,6 +199,7 @@ int main(void) {
   CHECK(fesetround(FE_TONEAREST) == 0);
   positive();
   negatives();
+  control_alias_negatives();
   printf("PASS: C4 A2 empty-stage VJP checks=%zu\n", checks);
   return 0;
 }
