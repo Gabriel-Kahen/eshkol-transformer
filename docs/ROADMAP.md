@@ -2304,6 +2304,14 @@ independent result review is sealed at
 (SHA-256 `09d4a732d6734b1fc8dcd55b816027755bd5c09e2bf146138ea393209cdfc24f`).
 This leaf does not establish a composed trainable C4 model.
 
+The [private empty-cache A2 stage/view VJP candidate]
+(g3/G3_R_C4_A2_EMPTY_STAGE_VJP_LEAF.md) proves the fixed four-token
+mathematical reverse mapping for staged K/V when the cache starts empty. Its
+focused fixture uses a genuine A2 transaction and checks all 32 finite
+differences, typed negatives and feature-off isolation. This is a source/local
+candidate only; same-owner view-gradient association, a backward tape and
+composed C4 training remain unadmitted.
+
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1
 commit to one generated G1. Its host synthetic state witness and causal source
