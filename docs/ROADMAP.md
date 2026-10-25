@@ -2170,8 +2170,12 @@ multi-token continuation is accepted. This is a dependency proposal only.
 
 The [C4 trainable constructor/workspace authority contract](g3/G3_R_C4_TRAINABLE_CONSTRUCTOR_WORKSPACE_AUTHORITY_CONTRACT.md)
 specifies a proposed tagged trainable branch in the existing C4 model registry,
-exact context-four X1/T1/initializer/native-owner binding, and a first
-read-only identity/shape workspace preflight. Source checks pin the current
+exact context-four X1/T1/initializer/native-owner binding, a fixed nine-slot
+private metadata layout, trainable profile, and the C4 native owner's
+`[1,seed,0,0]` to `[1,seed,292,0]` transition. The next gate is
+constructor-only; read-only identity/shape workspace preflight requires a
+separate topology authority and must not use P1 `module-parameters`, which
+commits module observations. Source checks pin the current
 seeded-eval C4 path and C2-only M3T profile. The bounded C4 P1/I2 train-mode
 prepared sibling is now a separate source candidate: append-only P1 slot 73,
 same prepared seal/abort ledgers, and unchanged eval/seeded route. Focused
