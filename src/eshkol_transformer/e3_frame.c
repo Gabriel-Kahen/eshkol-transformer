@@ -31,6 +31,13 @@ int32_t et_g3t_model_pins_begin_fail_before_internal(
     (!defined(ET_E3_OVERFLOW_TESTING) || !defined(ET_E3_NUMERICAL_TESTING))
 #error "N4 sparse observer requires the noninstalled overflow numerical tuple"
 #endif
+#if defined(ET_E3_N4_STICKY_MODE) && !defined(ET_E3_N4_SPARSE_TESTING)
+#error "N4 sticky observer requires the sparse private tuple"
+#endif
+#if defined(ET_E3_N4_STICKY_MODE) && \
+    (ET_E3_N4_STICKY_MODE < 0 || ET_E3_N4_STICKY_MODE > 3)
+#error "N4 sticky mode must be clear, seed, clear-before, or clear-after"
+#endif
 
 #if defined(ET_E3_NUMERICAL_TESTING) || defined(ET_E3_ZERO_CONTROL_TESTING)
 #include <inttypes.h>
@@ -1347,8 +1354,43 @@ int64_t et_e3_private_correct_v1(void *pointer) {
         3, sizeof(input_views[0]), sizeof(input_views), input_views,
         2, sizeof(outputs[0]), sizeof(outputs), outputs};
       et_kernel_error error;
-      if (et_kernel_runtime_dispatch(frame->runtime[E3_RUNTIME_METRICS],
-                                     &call, &error) != 0)
+#ifdef ET_E3_N4_STICKY_MODE
+      /* Test-only same-thread status control. Keep all x87/MXCSR control bits. */
+      __asm__ volatile("fnclex" ::: "memory");
+      unsigned mxcsr_status = _mm_getcsr() & ~0x3fu;
+      if (ET_E3_N4_STICKY_MODE != 0) mxcsr_status |= 0x21u;
+      _mm_setcsr(mxcsr_status);
+      if (ET_E3_N4_STICKY_MODE != 0) {
+        /* Masked x87 1/0 raises status bit 2 without leaving a stack value. */
+        __asm__ volatile("fld1\n\tfldz\n\tfdivrp %%st, %%st(1)\n\t"
+                         "fstp %%st(0)" ::: "memory");
+      }
+      if (ET_E3_N4_STICKY_MODE == 2) {
+        __asm__ volatile("fnclex" ::: "memory");
+        _mm_setcsr(_mm_getcsr() & ~0x3fu);
+      }
+      unsigned short n4_cw_before, n4_sw_before, n4_cw_after, n4_sw_after;
+      __asm__ volatile("fnstcw %0\n\tfnstsw %1"
+                       : "=m"(n4_cw_before), "=m"(n4_sw_before) :: "memory");
+      const unsigned n4_mx_before = _mm_getcsr();
+#endif
+      const int32_t dispatch_status =
+          et_kernel_runtime_dispatch(frame->runtime[E3_RUNTIME_METRICS],
+                                     &call, &error);
+#ifdef ET_E3_N4_STICKY_MODE
+      if (ET_E3_N4_STICKY_MODE == 3) {
+        __asm__ volatile("fnclex" ::: "memory");
+        _mm_setcsr(_mm_getcsr() & ~0x3fu);
+      }
+      __asm__ volatile("fnstcw %0\n\tfnstsw %1"
+                       : "=m"(n4_cw_after), "=m"(n4_sw_after) :: "memory");
+      const unsigned n4_mx_after = _mm_getcsr();
+      printf("E3N4FENV\t%d\t%04x\t%04x\t%04x\t%04x\t%08x\t%08x\n",
+             ET_E3_N4_STICKY_MODE, (unsigned)n4_cw_before,
+             (unsigned)n4_cw_after, (unsigned)n4_sw_before,
+             (unsigned)n4_sw_after, n4_mx_before, n4_mx_after);
+#endif
+      if (dispatch_status != 0)
         rc = e3_kernel_error(&error);
       e3_scope_end(&input_guard);
     }

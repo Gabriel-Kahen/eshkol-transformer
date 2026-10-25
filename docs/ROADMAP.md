@@ -1098,6 +1098,12 @@ derives a source barrier to authentic negative-zero K1 logits/finalizer inputs,
 and stage-7 N3K rejection for externally unsupported controls before traversal;
 its bounded 4,096-case host check is not compiled admission. Sticky-flag
 preservation and timed fenv cases remain open.
+An isolated [N4 sticky-status test candidate](e3/E3_N4_STICKY_FENV_CANDIDATE.md)
+adds test-only clear/seed and clear-before/after variants immediately around
+the genuine sparse fixture's private K1 dispatch. Host source/parser checks
+pass; no private package, AOT, runtime, or sanitizer gate has run for this
+successor. The frozen `03b698a7` subnormal packet is unchanged, and sticky
+status remains **NOT RUN** pending independent source and compiled review.
 The first [mathematical three-batch M2 sum-order witness](../tests/e3_reference/sum_order_witness_v1.json)
 failed the one-use df9546 compiled C gate: compiled CE rounded both groupings
 to `41dcde82`. The successor [compiled witness](../tests/e3_reference/sum_order_witness_v2.json)
