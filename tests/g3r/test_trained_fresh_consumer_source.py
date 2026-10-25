@@ -17,6 +17,7 @@ SEAM = ROOT / "native/g3r_c2_receipt_tr3_restore_source_closure.txt"
 BRIDGE = ROOT / "native/g3r_trained_fresh_consumer_bridge.c"
 RENAMES = ROOT / "native/g3r_trained_fresh_consumer_private_renames.txt"
 CALLER = ROOT / "tests/g3r/trained_fresh_consumer.esk"
+NEGATIVE = ROOT / "tests/g3r/trained_fresh_consumer_negative.esk"
 C2_SHA = bytes.fromhex(
     "9ec2a1d40ebd43e57d1e8b75fa8f6d96cd4d17abc1002f70da04d20144ee78df"
 )
@@ -156,6 +157,13 @@ class FreshConsumerSourceTest(unittest.TestCase):
         self.assertIn("et_g3r_private_test_fresh_consume_v1", bridge)
         self.assertIn("et_g3r_private_test_fresh_consume_v1", caller)
         self.assertIn("G3-R FRESH TRAINED C2 TRANSCRIPT PASS", caller)
+        negative = NEGATIVE.read_text()
+        self.assertIn("(require transformer.error_consumer)", negative)
+        self.assertIn("(eq? (vector-ref output 0) 'untouched)", negative)
+        self.assertIn("(eq? (transformer-error-category caught) 'invalid-state)",
+                      negative)
+        self.assertIn("'g3r-trained-fresh-consume!", negative)
+        self.assertIn("(eq? (vector-ref record 1) 'dead)", wrapper)
 
     def test_source_mutations(self):
         source, closure, seam = (SOURCE.read_text(), CLOSURE.read_text(),

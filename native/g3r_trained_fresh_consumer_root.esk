@@ -374,10 +374,13 @@
              (#t
                (if receipt
                    (guard (defect (#t (exit 134)))
-                     (g3r-c2-receipt-release-internal! receipt)))
-               (if trainer
-                   (guard (defect (#t (exit 134)))
-                     (trainer-release! trainer)))
+                     (let ((record (g3r-c2-receipt-find receipt)))
+                       (if (eq? (vector-ref record 1) 'live)
+                           (begin
+                             (g3r-c2-receipt-release-internal! receipt)
+                             (if trainer (trainer-release! trainer)))
+                           (if (not (eq? (vector-ref record 1) 'dead))
+                               (exit 134))))))
                (if dataset
                    (guard (defect (#t (exit 134)))
                      (d2-token-dataset-close! dataset)))

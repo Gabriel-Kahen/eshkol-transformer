@@ -2466,7 +2466,8 @@ composes one 103-source root with a private V1 decoder, exact receipt/C2
 carrier-to-restored-model and producer-payload bit comparisons, and one P1/G1
 trace comparator. A private wrapper and distinct thin executable now stage the
 exact sealed files and construct a fresh tokenizer/trainer/C2 receipt within
-that root. Local source/schema mutation checks pass; independent source/test
+that root; a second thin caller specifies typed one-bit mismatch controls.
+Local source/schema mutation checks pass; independent source/test
 review and linked fresh-process compiled normal/repeat/sanitizer gates remain pending.
 This does not establish fresh parameter or P1/G1 runtime parity.
 

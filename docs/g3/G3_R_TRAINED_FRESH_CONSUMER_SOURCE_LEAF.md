@@ -46,6 +46,9 @@ not native behavior. A new private test wrapper constructs a canonical tokenizer
 fresh trainer and exact C2/SHA receipt, reads the host-sealed companion and
 transcript files, and calls the consumer within one package. A separate thin
 executable invokes it; neither piece has compiled admission yet. The next gate
+also uses a separate thin negative caller to require the exact typed consumer
+failure and unchanged destination for checksum, pair, parameter, logit,
+P1/G1 K/V, ID and RNG mutations; these are still source-only cases. It
 requires source/test review and an exact linked one-root harness,
 fresh-process normal/repeat and native sanitizer runs with the pinned source
 closure and feature-off controls. No persisted generated-history resume,
