@@ -18,6 +18,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q \
   tests.g3c4.test_p2_g2_terminal_close_source \
   tests.g3c4.test_p2_g2_terminal_detached_source \
   tests.g3c4.test_p2_g2_terminal_typed_composition_source \
+  tests.g3c4.test_p2_g2_typed_aggregate_package_source \
   >"$evidence/static.stdout" 2>"$evidence/static.stderr"
 if env -u PYTHONOPTIMIZE python3 \
     "$PROJECT_ROOT/tests/g3c4/check_p2_g2_typed_aggregate_oracle.py" \
@@ -77,6 +78,7 @@ transport=(-DET_G3T_TESTING -DET_F32_TENSOR_TESTING
   -DET_I64_TENSOR_STORAGE_QUERY_PRIVATE
   -DET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE)
 sources=(native/data_io.c native/checkpoint_io.c native/kernel_abi.c
+  native/f32_tensor.c
   tests/g3c4/p2_g2_typed_aggregate_shape_native.c
   native/n3k_primitives_provider.c native/g3n_primitives_provider.c
   native/n2_primitives_provider.c native/g3c4_primitives_provider.c
@@ -108,6 +110,7 @@ build_mode() {
         -DET_I64_TENSOR_TESTING) ;;
       p2_g2_typed_aggregate_oracle_owner) extra=("${owner[@]}") ;;
       g3t_transport) extra=("${transport[@]}") ;;
+      f32_tensor) extra=(-DET_F32_TENSOR_TESTING) ;;
       m3_i64_integration) extra=(-DET_M3_TESTING -DET_I64_TENSOR_TESTING
         -DET_I64_TENSOR_STORAGE_QUERY_PRIVATE
         -DET_G3C4_T1_I1_EXACT_PAIR_PRIVATE) ;;
@@ -137,7 +140,7 @@ build_mode() {
   nm -A -u "$dir/libg3c4_p2g2_typed_aggregate.a" \
     >"$evidence/$mode.archive-undefined.txt"
   test "$(wc -l <"$evidence/$mode.archive-members.txt")" -eq "${#sources[@]}"
-  for stem in g3t_transport p2_g2_typed_aggregate_oracle_owner \
+  for stem in f32_tensor g3t_transport p2_g2_typed_aggregate_oracle_owner \
               p2_g2_typed_aggregate_shape_native; do
     grep -Fx "$stem.o" "$evidence/$mode.archive-members.txt" >/dev/null
   done
@@ -175,6 +178,8 @@ WRAPPER
   test ! -s "$dir/fixture.compile.stderr"
   test -s "$dir/link.map"
   grep -F "libg3c4_p2g2_typed_aggregate.a(g3t_transport.o)" \
+    "$dir/link.map" >/dev/null
+  grep -F "libg3c4_p2g2_typed_aggregate.a(f32_tensor.o)" \
     "$dir/link.map" >/dev/null
   grep -F "libg3c4_p2g2_typed_aggregate.a(p2_g2_typed_aggregate_oracle_owner.o)" \
     "$dir/link.map" >/dev/null

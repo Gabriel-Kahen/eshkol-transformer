@@ -2699,8 +2699,14 @@ publication, public G2 and continuation remain pending.
   Eshkol IR compilation: a misplaced closing parenthesis nested the private
   clone helper definition. A focused source repair now makes that definition
   top-level and guards against a balanced but nested mutant. This failed cut
-  provides no link or runtime evidence; a fresh exact-source compiled gate
-  remains pending. Exact fe9/f31 dependencies are pinned; compiled same-call
+  provides no link or runtime evidence. The next sealed cut
+  (`g3c4-p2g2-typed-aggregate-51012d1e-attempt2/SHA256SUMS-RUN`, SHA-256
+  `cd72e4d462ac46f29c1a073f92751a0dc82e4ab14a617cc205148d76c1347a28`)
+  compiled that IR but stopped at link on five test-only f32 helper symbols.
+  The fixture package now compiles one `f32_tensor.c` testing owner with
+  `ET_F32_TENSOR_TESTING`, checks its archive/link-map presence, and source
+  tests the five-hook closure. A fresh exact-source compiled gate remains
+  pending. Exact fe9/f31 dependencies are pinned; compiled same-call
   RNG/A2 parity, feature-off execution and supported integration review remain
   pending. Public P2/G2 dispatch stays disabled.
 
