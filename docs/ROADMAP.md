@@ -2220,6 +2220,17 @@ The sealed independent result review is at
 This leaf is not integrated with trainable M3T and does not admit trained C4,
 C2 SAVE/LOAD, or generation.
 
+The next isolated [private C4 no-bias linear/projection VJP leaf]
+(g3/G3_R_C4_LINEAR_VJP_LEAF.md) is source-staged for the genuine C4 forward
+provider's four context-four `(I,O)` rows: `(4,4)`, `(4,8)`, `(8,4)`, and
+`(4,256)`. It computes `dX[1,4,I]` and `dW[O,I]` from exact `X`, `W`, and
+`U[1,4,O]` borrowed views, stages both gradients, rejects malformed or
+overlapping views and nonfinite operations, and leaves destinations unchanged
+on failure. Local Clang 22 normal/repeat/native ASan+UBSan and central
+differences through the genuine C4 forward provider pass 321 checks;
+independent source/test review and the pinned compiled gate remain **NOT RUN**.
+This leaf is not yet a trainable C4 model or checkpoint/generation admission.
+
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1
 commit to one generated G1. Its host synthetic state witness and causal source
