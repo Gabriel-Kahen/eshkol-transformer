@@ -1144,9 +1144,12 @@ across normal A/B, poison, and ASan/UBSan runs; in-call mode and graph mutants
 failed at their intended first assertions. The 406-file raw seal is
 `da61d695...`, with review
 `/home/gabe/.codex/evidence/eshkol-transformer/finish-20261022/e3/mode-dc565e1-attempt6-independent-review/REVIEW.md`.
-This accepts bounded mode/graph and gradient preservation. Numerical gradient
-accuracy, peak RSS, and complete R2 remain open; the historical `/out:rw`
-mount limits adversarial receipt isolation.
+This accepts bounded mode/graph and gradient-image preservation. E3 is
+forward-only with no VJP, reset, or gradient contribution; accepted M3/L2/L3S
+numerical-gradient checks remain predecessor evidence
+(`r2-gradient-contract-independent-review-20261025/REVIEW.md`). Peak RSS
+and complete R2 remain open; the historical `/out:rw` mount limits
+adversarial receipt isolation.
 
 The independently reviewed `4ab378a3` retention phase diagnostic reused the
 sealed prior packages and ran eight fresh fault/control processes. Every case
