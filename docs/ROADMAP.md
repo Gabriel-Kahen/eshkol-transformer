@@ -2698,6 +2698,15 @@ compiled caller or runtime result is admitted. The current injected fixture
 reaches P1 native begin allocation cuts only, not a later I2 publication
 failure. Ordinary M3T remains unchanged.
 
+A separate private read-only graph identity leaf is staged on
+`codex/g3r-graph-preflight-leaf-20261025`. It authenticates the exact sealed
+M3T ledger and model, I2/P1 sidecars, current fixed 14 paths/tied alias,
+and native owner/successor liveness. Its source checker passes; independent
+review and a pinned compiled candidate/feature-off gate are pending. This
+does not check native parameter-to-handle bindings, O2 or lease conflicts,
+or produce a revocation witness. Graph retirement, restore and replay remain
+unimplemented.
+
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
 names would return newly owned authenticated CPU f32 `[1,256]` kind-3 shells,

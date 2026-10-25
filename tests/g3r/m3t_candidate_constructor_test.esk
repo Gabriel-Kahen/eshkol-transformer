@@ -136,6 +136,36 @@
 (check "ordinary and candidate config agree"
   (equal? (vector-ref model-entry 7)
           (vector-ref ordinary-entry 7)))
+(check "sealed candidate graph identity"
+  (g3r-candidate-graph-identity-preflight-internal! tampered-ledger model))
+(reject "foreign graph ledger" 'invalid-argument
+  (lambda () (g3r-candidate-graph-identity-preflight-internal!
+               (vector 'g3r-candidate-ledger-v1) model)))
+(reject "ordinary model is not this graph" 'invalid-state
+  (lambda () (g3r-candidate-graph-identity-preflight-internal!
+               tampered-ledger ordinary)))
+(define (reject-graph-change label vector slot changed)
+  (let ((original (vector-ref vector slot)))
+    (vector-set! vector slot changed)
+    (reject label 'invalid-state
+      (lambda ()
+        (g3r-candidate-graph-identity-preflight-internal!
+          tampered-ledger model)))
+    (vector-set! vector slot original)
+    (check "restored graph identity"
+      (g3r-candidate-graph-identity-preflight-internal!
+        tampered-ledger model))))
+(reject-graph-change "changed model root" ledger-record 10 ordinary)
+(reject-graph-change "changed native owner" ledger-record 8
+  (vector-ref ordinary-entry 3))
+(reject-graph-change "stale successor" (vector-ref ledger-record 6) 2 'dead)
+(reject-graph-change "changed config fingerprint" ledger-record 3
+  (vector 'changed))
+(reject-graph-change "changed I2 count" (vector-ref ledger-record 7) 3 0)
+(reject-graph-change "changed P1 roster"
+  (vector-ref (vector-ref ledger-record 7) 2) 3 '())
+(reject-graph-change "changed canonical handle" (vector-ref model-entry 8) 0
+  (vector-ref (vector-ref ordinary-entry 8) 0))
 (display "G3-R M3T candidate constructor PASS: ")
 (display checks)
 (newline)
