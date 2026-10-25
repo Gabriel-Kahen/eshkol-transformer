@@ -1093,7 +1093,11 @@ verdicts remain prerequisites before the full matrix is implemented and run.
 The N4 [sparse subnormal C1/D2 candidate](e3/E3_N4_SPARSE_SUBNORMAL_CANDIDATE.md)
 has host-only oracle and fixture checks. Its one-use noninstalled compiled
 launcher is prepared; source review and a supported run are pending. N4
-remains **HOLD**.
+remains **HOLD**. The separate [signed-zero/fenv reachability audit](e3/E3_N4_SIGNED_ZERO_FENV_REACHABILITY.md)
+derives a source barrier to authentic negative-zero K1 logits/finalizer inputs,
+and stage-7 N3K rejection for externally unsupported controls before traversal;
+its bounded 4,096-case host check is not compiled admission. Sticky-flag
+preservation and timed fenv cases remain open.
 The first [mathematical three-batch M2 sum-order witness](../tests/e3_reference/sum_order_witness_v1.json)
 failed the one-use df9546 compiled C gate: compiled CE rounded both groupings
 to `41dcde82`. The successor [compiled witness](../tests/e3_reference/sum_order_witness_v2.json)
