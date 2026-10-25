@@ -2189,6 +2189,9 @@ The 519-file receipt is sealed at
 `18b9577bf6651a6df7d74f54a6ddefbaf483f1cfe8fefc46aa2dca2c40d5960f`);
 independent result review accepted this same-registry scope. Attempts 1 and 2
 remain nonaccepting compile and pre-sanitizer symbol-check predecessors.
+The independent source/test/result review is sealed at
+`g3r-trained-replay-independent-review-20261025/SHA256SUMS-REVIEW`
+(SHA-256 `802f0224870683e29adb06deb7506832d6d8d6202a3536567161b2a9af6f6d06`).
 This does not restore a generator in a fresh process or establish multi-token
 and EOS terminal continuation.
 
