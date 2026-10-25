@@ -1,7 +1,7 @@
 # Private C4 causal-attention VJP leaf
 
-Status: bounded native source candidate. Compiled pinned and independent
-review gates remain pending.
+Status: the pinned native Clang 21 normal/repeat/ASan+UBSan leaf gate and
+independent result review are accepted.
 
 The accepted G3-C4 forward provider's fixed full-length self-attention row
 has Q, K, V and output `[1,2,4,2]`, query/key positions `[1,4]`, and keep
@@ -28,3 +28,14 @@ overlap, positions, mask, nonfinite inputs, overflowing score and unchanged
 outputs after rejection. Normal/repeat/native ASan+UBSan, feature-off and
 ordinary-provider symbol isolation are in the focused runner. This leaf is
 not a composed trainable C4 backward graph or trained checkpoint.
+
+Source `38c3ff7c`/tree `b7728c7d` passed 178 checks per mode with byte
+parity, empty runtime stderr, feature-off rejection, and exact 2,607-file
+source custody. The 49-file sealed receipt is
+`g3r-c4-attention-vjp-38c3ff7c-attempt2/SHA256SUMS-RUN` (SHA-256
+`8a43a5f7c69b9ba2a9c99674d712ad7be228f1637f92b16c28f53349b68b58af`).
+Independent result review is sealed at
+`g3r-c4-vjp-leaves-independent-result-review-20261025/SHA256SUMS-REVIEW`
+(SHA-256 `09d4a732d6734b1fc8dcd55b816027755bd5c09e2bf146138ea393209cdfc24f`).
+The earlier v1 recipe remains held for its finite-score softmax-shift parity
+defect; it was never run.

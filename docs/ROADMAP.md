@@ -2294,8 +2294,15 @@ mask. It stages dQ/dK/dV and validates exact CPU f32 views, causal mask,
 finite values and disjoint storage. Local Clang 22 normal/repeat/native
 ASan+UBSan passed 178 checks per mode, including all 48 central differences
 under each of two masks through the genuine forward provider and feature-off
-rejection. Independent review and pinned compiled admission remain pending;
-this leaf does not establish a composed trainable C4 model.
+rejection. Source `38c3ff7c`/tree `b7728c7d` then passed a pinned rootless
+Clang 21 normal/repeat/native ASan+UBSan gate with 178 checks per mode,
+byte-identical stdout, empty runtime stderr and 2,607-file source custody.
+The 49-file receipt is `g3r-c4-attention-vjp-38c3ff7c-attempt2/SHA256SUMS-RUN`
+(SHA-256 `8a43a5f7c69b9ba2a9c99674d712ad7be228f1637f92b16c28f53349b68b58af`);
+independent result review is sealed at
+`g3r-c4-vjp-leaves-independent-result-review-20261025/SHA256SUMS-REVIEW`
+(SHA-256 `09d4a732d6734b1fc8dcd55b816027755bd5c09e2bf146138ea393209cdfc24f`).
+This leaf does not establish a composed trainable C4 model.
 
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1
