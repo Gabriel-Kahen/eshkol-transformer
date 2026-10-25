@@ -16,11 +16,15 @@ SEAL = '12d127e794607f120edc1d936e4063e1e64c50ea3dad0eded8ed42c633bd4b0e'
 
 
 class RetentionArenaPhaseV2Test(unittest.TestCase):
-    def test_inherited_private_driver_and_prior_receipt_are_fixed(self):
+    def test_predecessor_private_driver_and_prior_receipt_are_fixed(self):
         old = subprocess.check_output(
             ['git', '-C', str(ROOT), 'show', 'dd2c7ee68c99099e5b633a27737f14639d8290ad:'
              'tests/e3_private/retention_arena_diagnostic_driver.esk'])
-        self.assertEqual(DRIVER.read_bytes(), old)
+        predecessor = subprocess.check_output(
+            ['git', '-C', str(ROOT), 'show', '4ab378a373ecad342907ca8f66d02a29a16d2537:'
+             'tests/e3_private/retention_arena_diagnostic_driver.esk'])
+        self.assertEqual(predecessor, old)
+        self.assertNotEqual(DRIVER.read_bytes(), predecessor)
         self.assertEqual(hashlib.sha256((PRIOR / 'POSTEXIT-SHA256SUMS').read_bytes()).hexdigest(), SEAL)
         guest = GATE.read_text()
         self.assertIn('prior_seal=' + SEAL, guest)

@@ -157,3 +157,24 @@ is claimed before the supported gate passes.
 The sealed `dd2c7ee` diagnostic attempt 1 (`retention-arena-dd2c7ee-attempt1/POSTEXIT-SHA256SUMS`, SHA-256 `12d127e794607f120edc1d936e4063e1e64c50ea3dad0eded8ed42c633bd4b0e`) built normal A/B and sanitized AOT executables, then exited 134 on the first fault process at `balanced-i2-views-pins` in report. Its six arena phase samples were computed but printed only after report and teardown, so the receipt has no numeric samples or separate control process. This failure is nonaccepting and remains unchanged.
 
 This noninstalled test-only successor moves the existing six-sample output immediately after `diagnose` and flushes it before the inherited report and teardown calls. It leaves the diagnostic driver, package manifests, native bridge, and report assertions unchanged. A separate phase recipe authenticates all files of the sealed attempt-1 receipt and reuses its normal A/B and sanitized private archives and packed D2 corpus. It rebuilds only the three changed-runtime AOT executables. Each profile runs fault and nearest control in separate fresh processes even when a report fails; `STATUS.tsv` records each exit, sample marker, and postcheck marker. A nonzero report remains a nonzero diagnostic result. This is source and recipe preparation only: no successor compiler or runtime gate has run, and complete-call retention and E3 §9 admission remain open. Raw I2 begin/view/end probe 14/15/16 values are not exposed by the existing boxed `diagnose` result and require a separate private-package rebuild if phase samples leave ambiguity.
+
+The next bounded test-only source successor reads the existing native I2 probe
+indices 14/15/16 from the exact `before` and `after` vectors consumed by the
+diagnostic report, prints their raw begin/view/end values, and flushes that
+line before the preserved `balanced-i2-views-pins` assertion. Fault and control
+still run as separate fresh processes; a nonzero report remains nonaccepting.
+The six root-arena samples continue to print before report and before this raw
+I2 line. Their adjacent differences (`after-arm - before`, `after-call -
+after-arm`, `after-checks - after-call`, and `after-retry - after-checks`) can
+localize where the previously observed +2360 fault-path root-arena growth
+appears relative to the control. They do not identify an allocator or establish
+causation. I2 event counters and root-arena bytes are separate measurements.
+No private export, bridge, or production source changes. The new raw-pair
+helper records a separate raw-I2 marker for each process and still runs the
+control after a fault exit. The predecessor v2 recipe reuses the old diagnostic
+archive and cannot execute this changed private driver; a fresh private-package
+build, exact compiler import inventory, and supported paired AOT diagnostic
+gate are required after independent source review. The new report flush may
+add a compiler-selected libc import, so no import manifest is guessed from
+source. Neither successor is compiled or runtime admission for complete-call
+retention or E3 §9.

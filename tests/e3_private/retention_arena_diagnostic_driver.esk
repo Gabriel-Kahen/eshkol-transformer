@@ -387,17 +387,28 @@
            (vector-ref record 13) (not (vector-ref record 18))))
     (let* ((before (vector-ref record 8))
            (after (e3-test-retention-probes))
-           (growth (e3-test-retention-reconcile! before after))
            (dataset (vector-ref record 3)))
-      (d2-token-dataset-close! dataset)
-      (e3-test-retention-check 'dataset-close
-        (= (e3-test-retention-probe 22) 0))
-      (vector-set! record 17 (e3-test-retention-probes))
-      (vector-set! record 18 #t)
-      (vector 'e3-retention-result-v1 horizon present?
-              (vector-ref record 11) (vector-ref record 12)
-              before after growth (vector-ref record 14)
-              (vector-ref record 15) (vector-ref record 16)))))
+      ;; These are the native indices consumed by reconciliation. Emit the
+      ;; exact before/after snapshot words before its balanced-view assertion.
+      (display "E3-RETENTION-I2-RAW before-begin=")
+      (display (vector-ref before 14))
+      (display " before-view=") (display (vector-ref before 15))
+      (display " before-end=") (display (vector-ref before 16))
+      (display " after-begin=") (display (vector-ref after 14))
+      (display " after-view=") (display (vector-ref after 15))
+      (display " after-end=") (display (vector-ref after 16))
+      (newline)
+      (flush-output-port (current-output-port))
+      (let ((growth (e3-test-retention-reconcile! before after)))
+        (d2-token-dataset-close! dataset)
+        (e3-test-retention-check 'dataset-close
+          (= (e3-test-retention-probe 22) 0))
+        (vector-set! record 17 (e3-test-retention-probes))
+        (vector-set! record 18 #t)
+        (vector 'e3-retention-result-v1 horizon present?
+                (vector-ref record 11) (vector-ref record 12)
+                before after growth (vector-ref record 14)
+                (vector-ref record 15) (vector-ref record 16))))))
 
 (define (e3-test-retention-teardown horizon present?)
   (let ((record (vector-ref e3-test-retention-root 0)))
