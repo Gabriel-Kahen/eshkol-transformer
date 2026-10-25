@@ -2245,6 +2245,7 @@ one opaque same-owner workspace, exact fourteen retained bindings, exclusive
 C4 and native owner edges, failure-atomic create/reset/release, and C4-specific
 lease exclusion. It is documentation only; no workspace implementation,
 four-token graph, trainer, C2 checkpoint or continuation is admitted.
+
 The [native live-context exclusion leaf](g3/G3_R_C4_NATIVE_CONTEXT_EXCLUSION_LEAF.md)
 adds a source-private read-only status for the first create prerequisite. It
 scans the mixed native registry and rejects any live same-owner C4 context,
@@ -2252,6 +2253,7 @@ including idle cached generators for which `owner->active` is empty. Local
 normal/repeat/ASan+UBSan and feature-off symbol tests passed 207 checks per
 runtime mode. This is local native evidence only: no exact-source compiled
 gate, context-create interlock, workspace, C4 lease or trainer admission.
+
 The [native context-entry edge proof](g3/G3_R_C4_WORKSPACE_CONTEXT_EDGE_INTERLOCK_PROOF.md)
 extends that local fixture to 221 checks: base-context, seeded-generator and
 typed-RNG-generator creation all reject a synthetic non-null owner edge before
@@ -2264,6 +2266,14 @@ and fourteen I2 value/gradient borrows or plan pins. Local Clang normal,
 repeat and ASan+UBSan pass 99 checks each; feature-off omits the symbol.
 It does not cover future C4 workspace/trainer leases, which have no C4 ledger
 yet, and does not establish compiled Eshkol workspace preflight.
+
+An isolated source union contains the constructor source, P1 slot 74,
+owner-association candidate, native context exclusion and entry proof, and
+parameter-lease status without changing their production APIs. Focused source
+and local native suites pass together (23 and 14 Python tests; 99 owner and
+221 context checks in each native mode). The union is not a compiled package
+admission. Constructor, P1, association, context and lease compiled gates and
+serialized workspace edge publication remain separate dependencies.
 
 The [private C4 position VJP leaf](g3/G3_R_C4_POSITION_VJP_LEAF.md) supplies
 one fixed `[1,4]` position-ID and `[1,4,4]` upstream to `[4,4]` gradient
