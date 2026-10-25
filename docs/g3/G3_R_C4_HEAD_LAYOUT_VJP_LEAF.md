@@ -1,6 +1,7 @@
 # Private C4 head-layout VJP leaf
 
-Status: source candidate; compiled acceptance pending.
+Status: bounded private native leaf accepted by independent source/test and
+compiled result review. Exact receipts are recorded in `docs/ROADMAP.md`.
 
 The genuine G3-C4 provider admits split and merge rows with request shape
 `[1,4,2,2]`. Split maps `X[1,4,4]` to `[1,2,4,2]`; merge maps

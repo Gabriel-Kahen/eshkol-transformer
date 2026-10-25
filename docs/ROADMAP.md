@@ -2267,14 +2267,24 @@ The sealed independent result review is
 This direct leaf is not integrated with trainable C4 and does not admit
 checkpoint SAVE/LOAD or generation.
 
-The next [private C4 head-layout VJP leaf]
-(g3/G3_R_C4_HEAD_LAYOUT_VJP_LEAF.md) is source-staged for the genuine
+The [private C4 head-layout VJP leaf]
+(g3/G3_R_C4_HEAD_LAYOUT_VJP_LEAF.md) covers the genuine
 `g3c4.heads.split.forward` and `g3c4.heads.merge.forward` `[1,4,2,2]`
 rows. Both backward operations are exact 16-element permutations between
 `[1,4,4]` token and `[1,2,4,2]` head layouts. Local Clang 22 normal/repeat/
 native ASan+UBSan and all 32 central differences through the genuine provider
-pass 182 checks per mode, including malformed/feature-off controls;
-independent source/test review and the pinned compiled gate remain **NOT RUN**.
+pass 182 checks per mode, including malformed/feature-off controls. Source
+`1002b222`/tree `f67488e1` passed independent source/test review, sealed at
+`g3r-c4-head-layout-vjp-source-review-20261025/SHA256SUMS-REVIEW`
+(SHA-256 `3752efdb7b8b9c7892756b218eb01372bae476d8d572ab65534d7bf3e72748d3`).
+The pinned rootless Clang 21 normal/repeat/native ASan+UBSan gate passed 182
+checks per mode with byte-identical stdout, empty stderr, and feature-off
+rejection. Its 49-file post-exit seal is
+`g3r-c4-head-layout-vjp-1002b222-attempt1/SHA256SUMS-RUN` (SHA-256
+`1db521f695b3d37cb35ab03b5c3ab013e79d28d64fbb559960ac7a43bfe3bcb9`).
+The sealed independent result review is
+`g3r-c4-head-layout-vjp-independent-result-review-20261025/SHA256SUMS-REVIEW`
+(SHA-256 `8849d354137025ae3d9f68cf9b21ad412383a0fd4adc7ab1996469bce1621fd0`).
 Attention VJP and trainable C4 remain separate.
 
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
