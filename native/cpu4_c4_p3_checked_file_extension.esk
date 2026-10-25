@@ -1,0 +1,283 @@
+;;; Private fixed-B250 C4 P3 file admission. Load in the one CPU4/C2/T1/G3
+;;; registry after the checkpoint factory and C4 wire codec. The caller's
+;;; expected SHA is pinned by the sealed producer receipt; this source also
+;;; hashes the exact factory path before and after admission.
+(extern i64 cpu4-c4-p3-native-wire-decode ptr i64 ptr i64 ptr ptr ptr
+        :real et_cpu4_private_c4_p3_wire_decode_v1)
+
+(define cpu4-c4-p3-checked-file-tag (vector 'cpu4-c4-p3-checked-file-v1))
+(define cpu4-c4-p3-checked-file-rows (vector '()))
+
+(define (cpu4-c4-p3-bytes=? a b)
+  (and (bytevector? a) (bytevector? b)
+       (= (bytevector-length a) (bytevector-length b))
+       (let same ((i 0))
+         (or (= i (bytevector-length a))
+             (and (= (bytevector-u8-ref a i) (bytevector-u8-ref b i))
+                  (same (+ i 1)))))))
+
+(define (cpu4-c4-p3-read-exact path length operation)
+  (if (not (t2-wave2-valid-file-path? path))
+      (cpu4-binding-fail 'invalid-argument operation "invalid C4 file path"))
+  (let* ((bytes (make-bytevector length 0))
+         (status (t1-native-read-exact path bytes length length)))
+    (if (not (= status 0))
+        (cpu4-binding-fail 'invalid-state operation "exact C4 file read failed"))
+    bytes))
+
+(define (cpu4-c4-p3-file-sha path operation)
+  (c1-sha256 (cpu4-c4-p3-read-exact path 25504 operation)))
+
+(define (cpu4-c4-p3-model-values handles operation)
+  (let ((values (make-bytevector 4768 0)))
+    (if (not (and (vector? handles) (= (vector-length handles) 14)))
+        (cpu4-binding-fail 'invalid-state operation
+                           "factory child has no exact fourteen handles"))
+    (let planes ((index 0) (offset 0))
+      (if (= index 14)
+          (if (= offset 4768) values
+              (cpu4-binding-fail 'invalid-state operation
+                                 "factory model plane extent changed"))
+          (let ((plane
+                  (i2-checkpoint-encode
+                    (vector
+                      (parameter-handle-tensor-identity-internal
+                        (vector-ref handles index))
+                      'parameter (vector-ref g3c4-model-shapes index)
+                      'f32 'cpu 'dense-row-major-contiguous operation))))
+            (if (or (not (bytevector? plane))
+                    (> (+ offset (bytevector-length plane)) 4768))
+                (cpu4-binding-fail 'invalid-state operation
+                                   "factory model plane is malformed"))
+            (bytevector-copy! values offset plane 0 (bytevector-length plane))
+            (planes (+ index 1) (+ offset (bytevector-length plane))))))))
+
+;;; Row: tag,self,factory-ticket,factory-row,child,model,T1,C2 path,
+;;; expected SHA, wire,values,decoded record,ids3,RNG words,original closure,
+;;; adopted generator, exact owned input, immutable descriptor.
+;;; The record is checked data, not a public RNG or checkpoint authority.
+(define (cpu4-c4-p3-checked-file-issue-internal!
+          factory-ticket generation-t1 expected-c2-sha wire-path values-path)
+  (let* ((operation 'cpu4-c4-p3-checked-file-issue)
+         (factory (cpu4-checkpoint-factory-row factory-ticket operation))
+         (path (vector-ref factory 4))
+         (child-token (vector-ref factory 14))
+         (child (if child-token (cpu4-owned-row child-token operation) #f))
+         (model (if child-token (cpu4-owned-model-internal child-token) #f))
+         (t1-entry
+           (g3c4-baseline-tokenizer-entry
+             generation-t1 operation 'invalid-argument 'unsupported)))
+    (if (not (and (bytevector? expected-c2-sha)
+                  (= (bytevector-length expected-c2-sha) 32)
+                  (eq? (vector-ref factory 2) factory-ticket)
+                  (eq? (vector-ref factory 3) 'ready)
+                  (not (vector-ref factory 10))
+                  (not (vector-ref factory 11))
+                  child (eq? (vector-ref child 3) 'open)
+                  (eq? (vector-ref factory 15) (vector-ref child 10))
+                  (eq? model
+                       (vector-ref
+                         (cpu4-trainer-record-internal
+                           (vector-ref child 10) operation) 8))
+                  (g3c4-model-entry-live model operation #f)
+                  (eq? (car t1-entry) generation-t1)))
+        (cpu4-binding-fail 'invalid-state operation
+                           "factory, trainer, model or T1 owner changed"))
+    (let* ((first-sha (cpu4-c4-p3-file-sha path operation))
+           (wire (cpu4-c4-p3-read-exact wire-path 400 operation))
+           (values (cpu4-c4-p3-read-exact values-path 4768 operation))
+           (fingerprint (string->utf8 g3c4-baseline-tokenizer-fingerprint))
+           (record (make-bytevector 224 0)))
+      (if (not (and (cpu4-c4-p3-bytes=? first-sha expected-c2-sha)
+                    (= (bytevector-length fingerprint) 96)
+                    (= (cpu4-c4-p3-native-wire-decode
+                         wire 400 values 4768 first-sha fingerprint record)
+                       0)
+                    (cpu4-c4-p3-bytes=?
+                      values (cpu4-c4-p3-model-values
+                               (vector-ref child 13) operation))
+                    (cpu4-c4-p3-bytes=?
+                      first-sha (cpu4-c4-p3-file-sha path operation))
+                    (eq? factory (cpu4-checkpoint-factory-row
+                                   factory-ticket operation))
+                    (eq? child (cpu4-owned-row child-token operation))
+                    (eq? model (cpu4-owned-model-internal child-token))
+                    (eq? (car (g3c4-baseline-tokenizer-entry
+                                generation-t1 operation
+                                'invalid-state 'invalid-state))
+                         generation-t1)))
+          (cpu4-binding-fail 'invalid-state operation
+                             "B250 C2, C4 wire or live model changed"))
+      (let* ((sha-copy (bytevector-copy first-sha))
+             (wire-copy (bytevector-copy wire))
+             (values-copy (bytevector-copy values))
+             (record-copy (bytevector-copy record))
+             (ids3 (bytevector-copy record 48 72))
+             (rng (bytevector-copy record 144 176))
+             (descriptor (vector ids3 rng 3))
+             (row (vector cpu4-c4-p3-checked-file-tag #f factory-ticket
+                          factory child model generation-t1 path sha-copy
+                          wire values record ids3 rng #f #f #f
+                          descriptor #f #f))
+             (original
+               (lambda (candidate)
+                 (and (eq? candidate row)
+                      (eq? (vector-ref candidate 0)
+                           cpu4-c4-p3-checked-file-tag)
+                      (eq? (vector-ref candidate 1) candidate)
+                      (eq? (vector-ref candidate 2) factory-ticket)
+                      (eq? (vector-ref candidate 3) factory)
+                      (eq? (vector-ref candidate 4) child)
+                      (eq? (vector-ref candidate 5) model)
+                      (eq? (vector-ref candidate 6) generation-t1)
+                      (eq? (vector-ref candidate 7) path)
+                      (cpu4-c4-p3-bytes=? (vector-ref candidate 8) sha-copy)
+                      (cpu4-c4-p3-bytes=? (vector-ref candidate 9) wire-copy)
+                      (cpu4-c4-p3-bytes=? (vector-ref candidate 10) values-copy)
+                      (cpu4-c4-p3-bytes=? (vector-ref candidate 11) record-copy)
+                      (cpu4-c4-p3-bytes=? (vector-ref candidate 12) ids3)
+                      (cpu4-c4-p3-bytes=? (vector-ref candidate 13) rng)
+                      (eq? (vector-ref candidate 17) descriptor)))))
+        (vector-set! row 1 row)
+        (vector-set! row 14 original)
+        (vector-set! cpu4-c4-p3-checked-file-rows 0
+                     (cons row (vector-ref cpu4-c4-p3-checked-file-rows 0)))
+        row))))
+
+(define (cpu4-c4-p3-checked-file-row-live row operation)
+  (let ((known
+          (let search ((remaining
+                         (vector-ref cpu4-c4-p3-checked-file-rows 0)))
+            (cond ((null? remaining) #f)
+                  ((eq? (car remaining) row) (car remaining))
+                  (else (search (cdr remaining)))))))
+    (if (not (and known (vector? row) (= (vector-length row) 20)
+                  (procedure? (vector-ref row 14))
+                  ((vector-ref row 14) row)
+                  (eq? (vector-ref row 3)
+                       (cpu4-checkpoint-factory-row
+                         (vector-ref row 2) operation))
+                  (eq? (vector-ref row 4)
+                       (cpu4-owned-row
+                         (vector-ref (vector-ref row 3) 14) operation))
+                  (eq? (vector-ref row 5)
+                       (cpu4-owned-model-internal
+                         (vector-ref (vector-ref row 3) 14)))
+                  (eq? (car (g3c4-baseline-tokenizer-entry
+                              (vector-ref row 6) operation
+                              'invalid-state 'invalid-state))
+                       (vector-ref row 6))
+                  (cpu4-c4-p3-bytes=?
+                    (vector-ref row 8)
+                    (cpu4-c4-p3-file-sha (vector-ref row 7) operation))
+                  (cpu4-c4-p3-bytes=?
+                    (vector-ref row 10)
+                    (cpu4-c4-p3-model-values
+                      (vector-ref (vector-ref row 4) 13) operation)))
+        (cpu4-binding-fail 'invalid-state operation
+                           "checked C4 FILE admission became stale"))
+    row))
+
+;;; The checked ticket is bound to the actual factory-adopted public G2
+;;; generator. The factory handoff may be destructive; its recovery cell stays
+;;; with the caller on failure, and no alternate generator is accepted.
+(define (cpu4-c4-p3-checked-file-handoff-internal!
+          row config recovery-cell)
+  (let* ((operation 'cpu4-c4-p3-checked-file-handoff)
+         (checked (cpu4-c4-p3-checked-file-row-live row operation))
+         (model (vector-ref checked 5))
+         (t1 (vector-ref checked 6)))
+    (if (or (vector-ref row 15) (vector-ref row 16))
+        (cpu4-binding-fail 'invalid-state operation
+                           "checked FILE ticket was already handed off"))
+    (let* ((result
+             (cpu4-checkpoint-factory-generator-handoff-internal!
+               (vector-ref row 2) t1 config recovery-cell))
+           (generator (vector-ref result 1))
+           (entry (g3c4-generator-entry-call-ready generator operation)))
+      (if (not (and (eq? (vector-ref result 0) model)
+                    (eq? (vector-ref entry 5)
+                         (g3c4-model-entry-live model operation #f))
+                    (eq? (vector-ref entry 6) t1)
+                    (cpu4-c4-p3-bytes=?
+                      (vector-ref row 10)
+                      (cpu4-c4-p3-model-values
+                        (vector-ref (vector-ref entry 5) 8) operation))))
+          (cpu4-binding-fail-stop 134))
+      (vector-set! row 15 generator)
+      generator)))
+
+;;; This exact input is created in the same T1 and G3 registry as the adopted
+;;; generator. The issuer accepts only this rooted identity.
+(define (cpu4-c4-p3-checked-file-input-internal! row)
+  (let* ((operation 'cpu4-c4-p3-checked-file-input)
+         (generator (vector-ref row 15)))
+    (if (or (not generator) (vector-ref row 16))
+        (cpu4-binding-fail 'invalid-state operation
+                           "checked FILE generator is absent or input exists"))
+    (let ((entry (g3c4-generator-entry-call-ready generator operation)))
+      (if (not (and (eq? (vector-ref entry 5)
+                         (g3c4-model-entry-live
+                           (vector-ref row 5) operation #f))
+                    (eq? (vector-ref entry 6) (vector-ref row 6))
+                    (cpu4-c4-p3-bytes=?
+                      (vector-ref row 8)
+                      (cpu4-c4-p3-file-sha (vector-ref row 7) operation))))
+          (cpu4-binding-fail 'invalid-state operation
+                             "checked FILE generator or C2 changed"))
+      (let ((input
+              (g3c4-p2g2-owned-input-create
+                (t1-wave1-tokenizer-encode
+                  (vector-ref row 6) (bytevector 3 197)))))
+        (vector-set! row 16 input)
+        input))))
+
+(define (cpu4-c4-p3-resume-issuer-internal action generator input ticket operation)
+  (if (not (or (eq? action 'admit) (eq? action 'verify)))
+      (cpu4-binding-fail 'invalid-argument operation
+                         "unknown checked FILE issuer action"))
+  (let ((row ticket))
+    (if (not (and (vector? row) (= (vector-length row) 20)
+                  (eq? (vector-ref row 15) generator)
+                  (eq? (vector-ref row 16) input)
+                  (procedure? (vector-ref row 14))
+                  ((vector-ref row 14) row)
+                  (cpu4-c4-p3-bytes=?
+                    (vector-ref row 8)
+                    (cpu4-c4-p3-file-sha (vector-ref row 7) operation))))
+        (cpu4-binding-fail 'invalid-state operation
+                           "checked FILE issuer ticket became stale"))
+    (let* ((entry (if (eq? action 'admit)
+                      (g3c4-generator-entry-call-ready generator operation)
+                      (g3c4-registry-find generator operation)))
+           (model-entry (vector-ref entry 5))
+           (input-entry (g3c4-input-entry-live input operation))
+           (active-call (if (eq? action 'verify)
+                            (vector-ref m3-call-state 0) #f)))
+      (if (not (and (eq? (vector-ref model-entry 0) (vector-ref row 5))
+                    (eq? (vector-ref entry 6) (vector-ref row 6))
+                    (eq? (vector-ref entry 0) generator)
+                    (eq? (vector-ref input-entry 0) input)
+                    (if (eq? action 'admit)
+                        (and (not (vector-ref row 18))
+                             (eq? input-entry
+                                  (g3c4-p2g2-prefix-preflight
+                                    generator input)))
+                        (and (eq? entry (vector-ref row 18))
+                             (eq? input-entry (vector-ref row 19))
+                             (vector? active-call)
+                             (eq? (vector-ref entry 9) active-call)
+                             (eq? (vector-ref model-entry 10) active-call)))
+                    (eq? model-entry
+                         (g3c4-model-entry-live
+                           (vector-ref row 5) operation active-call))
+                    (cpu4-c4-p3-bytes=?
+                      (vector-ref row 10)
+                      (cpu4-c4-p3-model-values
+                        (vector-ref model-entry 8) operation))))
+          (cpu4-binding-fail 'invalid-state operation
+                             "checked FILE live model or T1 changed")))
+      (if (eq? action 'admit)
+          (begin (vector-set! row 18 entry)
+                 (vector-set! row 19 input-entry)))
+    (vector-ref row 17))))

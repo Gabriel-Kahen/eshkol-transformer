@@ -2239,6 +2239,14 @@ The caller must still authenticate a persisted B250 C2 image, live tokenizer,
 checked RNG and saved prompt/G1 before invoking it. This leaf alone does not
 establish a FILE pair or fresh-process continuation.
 
+The source-private fixed-B250 C4 FILE issuer now stages a checked factory
+ticket, exact B250 C2 SHA, `C4GRCV1` decode, and 4,768-byte comparison against
+the factory's live fourteen model planes before the actual public G2 handoff.
+It binds that handoff's generator and a same-registry T1 encoding of the
+two-byte prompt to one opaque terminal ticket. Its admit/verify seam rechecks
+the saved file and model before native P3 reconstruction. Syntax/source checks
+pass; independent review and compiled fresh-process acceptance are **NOT RUN**.
+
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1
 commit to one generated G1. Its host synthetic state witness and causal source
