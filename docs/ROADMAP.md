@@ -2396,7 +2396,11 @@ independent oracle confirms trained C2 SHA `9ec2a1d4...`, prompt byte 41,
 sampled byte 80, first-token EOS terminal latch, history two/generated one,
 and G3-S words `(1,1729,1,0)`; corrupt C2 and out-of-range prompt reject.
 The generated Eshkol object is uninstrumented. This admits only the
-first-token terminal reference. CLI3/TR3/M3T and G3-T diagnostic policy remain
+first-token terminal reference. An independent exact-source/result review
+found no blocker for that bounded claim; its sealed review digest is
+`g3r-independent-result-review-20261025/SHA256SUMS-REVIEW` SHA-256
+`6854e57a09d25d6cfd0b1196487cc53695ac5768812532c2e7222d1de2ba9502`.
+CLI3/TR3/M3T and G3-T diagnostic policy remain
 fixed to context two and one new token; the current G3RCV1 record likewise
 caps history at two. A genuine trained larger-context C2, multi-token/later
 EOS, and persisted fresh-process continuation require reviewed upstream C4
