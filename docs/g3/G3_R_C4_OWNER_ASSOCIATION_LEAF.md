@@ -32,13 +32,16 @@ Local focused Clang normal/repeat/ASan+UBSan passed 48 native checks per mode,
 including cross-owner, aborted owner, active owner, wrong indexed parameter,
 wrong shell, forged pointer, position-shape corruption and fourteen partial
 pin acquisitions. Feature-off compilation omits both private native status
-symbols. Twenty-two source assertions pass for the constructor, P1 topology
+symbols. Twenty-three source assertions pass for the constructor, P1 topology
 and association chain. The Eshkol fixture records positive, cross-owner,
-forged, swapped-handle, eval-mode and `[2,4]` C2 controls; it has **not**
-been compiled or run. A changed live P1 carrier cannot safely be induced by
-this fixture without mutating the accepted P1/I2 registry object; the native
-wrong-parameter scalar is tested, and a later test-only authority must cover
-that full live-binding mutation.
+forged, swapped-handle, eval-mode and `[2,4]` C2 controls. A test-only
+changed-live-carrier control temporarily substitutes another live owner's
+native parameter in the original P1 handle's retained I2 carrier. It requires
+status `4`, restores the original field in both normal and exceptional paths,
+checks exact registry/owner/handle identities, compares all fourteen value
+byte payloads for both models, and requires association success again. This
+fixture has **not** been compiled or run; the native wrong-parameter scalar
+has passed local compilation.
 
 Constructor compiled admission, the combined private package runtime gate,
 and future generation/workspace/trainer lease exclusion remain open. No

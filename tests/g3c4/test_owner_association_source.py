@@ -80,6 +80,25 @@ class AssociationSource(unittest.TestCase):
                       "C2 position [2,4]"):
             self.assertIn(label, FIXTURE)
 
+    def test_changed_live_carrier_restores_and_preserves_bits(self):
+        self.assertIn("(define before-registry (vector-ref g3c4-model-registry 0))",
+                      FIXTURE)
+        self.assertIn("(define before-a-bits (parameter-bytes handles-a))", FIXTURE)
+        self.assertIn("(define before-b-bits (parameter-bytes handles-b))", FIXTURE)
+        self.assertIn("(vector-set! carrier-a0 2 foreign-parameter)", FIXTURE)
+        self.assertEqual(FIXTURE.count("(vector-set! carrier-a0 2 original-parameter)"), 2)
+        self.assertIn("(guard (caught", FIXTURE)
+        self.assertIn("(status \"changed live P1 carrier rejected\" changed-live-status 4)",
+                      FIXTURE)
+        self.assertIn("(eq? (vector-ref g3c4-model-registry 0) before-registry)",
+                      FIXTURE)
+        self.assertIn("(same-parameter-bits? before-a-bits (parameter-bytes handles-a))",
+                      FIXTURE)
+        self.assertIn("(same-parameter-bits? before-b-bits (parameter-bytes handles-b))",
+                      FIXTURE)
+        self.assertIn("(status \"association valid after restored carrier\"",
+                      FIXTURE)
+
 
 if __name__ == "__main__":
     unittest.main()

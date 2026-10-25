@@ -27,6 +27,32 @@
       (if (= i (vector-length input)) result
           (begin (vector-set! result i (vector-ref input i))
                  (loop (+ i 1)))))))
+(define (parameter-bytes handles)
+  (let ((result (make-vector 14 #f)))
+    (let loop ((i 0))
+      (if (= i 14) result
+          (begin
+            (vector-set! result i
+              (i2-checkpoint-encode
+                (vector (parameter-handle-tensor-identity-internal
+                          (vector-ref handles i))
+                        'parameter '() 'f32 'cpu
+                        'dense-row-major-contiguous
+                        'g3r-c4-association-fixture)))
+            (loop (+ i 1)))))))
+(define (same-bytes? left right)
+  (and (bytevector? left) (bytevector? right)
+       (= (bytevector-length left) (bytevector-length right))
+       (let loop ((i 0))
+         (if (= i (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left i)
+                     (bytevector-u8-ref right i))
+                  (loop (+ i 1)))))))
+(define (same-parameter-bits? left right)
+  (let loop ((i 0))
+    (if (= i 14) #t
+        (and (same-bytes? (vector-ref left i) (vector-ref right i))
+             (loop (+ i 1))))))
 
 (define c4-config (config 4))
 (define tokenizer (t1-private-tokenizer-byte c4-config))
@@ -41,6 +67,7 @@
 (define model-b
   (g3c4-model-create-trainable-internal c4-config tokenizer initializer))
 (define entry-b (car (vector-ref g3c4-model-registry 0)))
+(define handles-b (vector-ref entry-b 8))
 (define owner-b (vector-ref entry-b 3))
 (status "cross-owner" (g3r-c4-trainable-owner-association-status-internal
                          model-a handles-a owner-b) 1)
@@ -56,6 +83,47 @@
                        model-a handles-a owner-a) 12)
 (module-train! model-a)
 (status "train mode restored"
+        (g3r-c4-trainable-owner-association-status-internal
+          model-a handles-a owner-a) 0)
+
+;;; Test-only controlled change to the *live* P1 handle's retained I2 carrier.
+;;; The original native field is restored both after a normal status and if
+;;; any assertion or status call raises. No registry list or model bit is edited.
+(define before-registry (vector-ref g3c4-model-registry 0))
+(define before-a-bits (parameter-bytes handles-a))
+(define before-b-bits (parameter-bytes handles-b))
+(define carrier-a0
+  (parameter-handle-tensor-identity-internal (vector-ref handles-a 0)))
+(define carrier-b0
+  (parameter-handle-tensor-identity-internal (vector-ref handles-b 0)))
+(define original-parameter (vector-ref carrier-a0 2))
+(define foreign-parameter (vector-ref carrier-b0 2))
+(check "distinct live native parameters"
+       (not (eq? original-parameter foreign-parameter)))
+(define changed-live-status
+  (guard (caught
+           (#t (vector-set! carrier-a0 2 original-parameter)
+               (raise caught)))
+    (vector-set! carrier-a0 2 foreign-parameter)
+    (let ((result
+            (g3r-c4-trainable-owner-association-status-internal
+              model-a handles-a owner-a)))
+      (vector-set! carrier-a0 2 original-parameter)
+      result)))
+(status "changed live P1 carrier rejected" changed-live-status 4)
+(check "carrier and registry restored"
+  (and (eq? (vector-ref carrier-a0 2) original-parameter)
+       (eq? (vector-ref g3c4-model-registry 0) before-registry)
+       (eq? entry-a (car (cdr before-registry)))
+       (eq? entry-b (car before-registry))
+       (eq? owner-a (vector-ref entry-a 3))
+       (eq? owner-b (vector-ref entry-b 3))
+       (eq? handles-a (vector-ref entry-a 8))
+       (eq? handles-b (vector-ref entry-b 8))))
+(check "all original model value bytes unchanged"
+  (and (same-parameter-bits? before-a-bits (parameter-bytes handles-a))
+       (same-parameter-bits? before-b-bits (parameter-bytes handles-b))))
+(status "association valid after restored carrier"
         (g3r-c4-trainable-owner-association-status-internal
           model-a handles-a owner-a) 0)
 (define c2-model
