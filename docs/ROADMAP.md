@@ -1099,6 +1099,32 @@ mode/gradient, complete-call retention, failure/resource and remaining numeric
 verdicts are still required; candidate-ON CPU4 and full trained-path sanitizer
 are unadmitted.
 
+Independent exact-source reviews accepted the `44c0418d` N3 all-correct and
+all-wrong compiled controls with normal/repeat/poison/sanitizer and the
+wrong-vocabulary-axis correct-count kill (raw seal `8d984330...`). Separate
+noninstalled direct-44c M2 compiled successors accepted the authentic final
+`10` row capacity-denominator kill at reduction weight
+`3f800000`→`40000000` (`248f56c`, review SHA `fb3d7cf4...`) and
+exp-before-global final-perplexity kill `43815d49`→`438160e2`
+(`af8cde4`, review SHA `d1a46768...`). These are bounded leaf results;
+the N3 uniform attempt stopped before AOT on four unpinned imports, and the
+repinned mode/gradient attempt 4 stopped at sanitized import admission.
+Neither full N3 nor mode/gradient nor §9 is admitted.
+
+The exact `44c0418d` complete-call retention attempt 2 is sealed and
+independently classified NONACCEPTING. Its normal and sanitized packages and
+AOT binaries built, but the first 1,024-call absent-gradient runtime aborted
+at `failure-arena-bytes` after an injected read failure and successful retry.
+The 223-file receipt seal is `e933e65c...`; the review is
+`/home/gabe/.codex/evidence/eshkol-transformer/finish-20261022/e3/retention-44c0418-attempt2-review/REVIEW.md`.
+The receipt does not locate or attribute the arena growth. A diagnostic
+failure-versus-success control must precede a reviewed repair and fresh gate.
+The separate trained-G2 sanitizer attempt at `55a56f2f` is also NONACCEPTING:
+the first two-token run hit an ASan one-byte read seven bytes before a live
+48-byte terminal-ID clone allocation in the release path (review:
+`/home/gabe/.codex/evidence/eshkol-transformer/finish-20261022/team/integration-review-trained-g2-san-55a56f2f-failure/REVIEW.md`).
+The full trained path, candidate-ON CPU4 and E3 §9 remain unadmitted.
+
 The first [mathematical three-batch M2 sum-order witness](../tests/e3_reference/sum_order_witness_v1.json)
 failed the one-use df9546 compiled C gate: compiled CE rounded both groupings
 to `41dcde82`. The successor [compiled witness](../tests/e3_reference/sum_order_witness_v2.json)
