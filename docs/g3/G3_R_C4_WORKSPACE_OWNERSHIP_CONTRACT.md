@@ -1,0 +1,84 @@
+# Private C4 trainable workspace ownership contract
+
+**Proposed next gate; no workspace API or runtime is admitted here.** This
+contract depends on compiled admission of the tagged C4 constructor, P1 slot
+74, sealed native owner topology and exact per-index P1/I2/native association.
+The source candidates `5503bb2b`, `9772674e`, `dd0cb754` and `95f44968`
+provide the proposed authorities, not a completed workspace. It adds no
+public or seeded-model route.
+
+## Exact owner and lifetime
+
+The input is the exact live `trainable-c4` model shell in the sole C4 model
+registry, with its rooted nine-field X1/T1/initializer metadata, fourteen
+ordered P1 handles, native owner at entry slot 3 and no construction or active
+call at entry slots 9/10. The model remains in `train` mode. The new private
+workspace identity may have a separate workspace registry, but it must not
+create another model registry or copy the model into a seeded owner. One model
+entry has at most one live workspace. Its slot 10 is the workspace edge while
+that workspace lives; the native owner has the matching exclusive active edge.
+The current generation call-entry and native context paths must reject those
+edges before borrowing parameters. A second workspace and an active generator
+call reject without changing the first.
+
+The proposed private operations are `g3r-c4-workspace-create-internal(model)`,
+`g3r-c4-workspace-reset-internal!(workspace)` and
+`g3r-c4-workspace-release-internal!(workspace)`. They return an owned opaque
+workspace shell, or a typed error, never a parameter array, raw pointer,
+borrowed tensor or numerical result. The source-private native owner accepts
+only its exact sealed owner and may retain the fourteen existing parameter
+identities; its workspace record is distinct from a G3 generation context.
+
+| Authority | Create requirement | While live | Release result |
+| --- | --- | --- | --- |
+| C4 registry | exact trainable entry, slot 10 empty | slot 10 identifies the sole workspace | slot 10 empty |
+| P1/I2 | slot-74 train topology and fourteen exact retained carriers | no observation commit or replacement binding | original handles unchanged |
+| native C4 owner | sealed, ready, idle, exact scalar association | exclusive active edge to this workspace | active edge empty |
+| workspace | fresh shell and native allocation | idle phase only in this gate | dead tombstone; repeated same-owner release succeeds |
+
+## Transaction and exclusion
+
+Create validates the complete registry tuple, P1 topology, I2 live carriers,
+native owner topology and fourteen scalar bindings before publication. It
+also requires no held parameter or tensor lease, no active generation call,
+no active construction and no prior workspace. Recheck after allocation and
+before commit. Stage every fallible allocation under a cleanup ledger; abort
+only the candidate on failure. The final publication of the native and C4
+registry edges must be a reviewed no-failure tail. Failure leaves the model,
+parameter bits, gradients, RNG words, handles, registry entry and any other
+workspace byte-for-byte unchanged.
+
+Reset is an idle, same-owner operation in this gate: it reauthenticates both
+edges and clears only workspace-owned scratch, leaving the exclusive edge and
+model bytes intact. No forward frame, graph, gradient or optimizer state is
+created yet, so reset must not pretend to clear those future states. Release
+requires idle state and no genuine held lease; it preflights all fallible
+native cleanup before clearing both edges and tombstoning the workspace.
+Foreign, forged and stale shells reject. A dead same-owner shell releases
+idempotently. No route may clear an unrelated owner's edge to recover from
+an error.
+
+The lease check must be a reviewed C4-specific authority. The existing TR3
+lease predicate covers a context-two trainer and does not close this C4
+boundary. If a future C4 trainer introduces an additional lease or active
+graph state, workspace admission and release must be extended and regated
+before that trainer can use them. This gate does not expose a forward, VJP,
+loss, optimizer, SAVE/LOAD or generation operation.
+
+## Proof boundary
+
+The first compiled fixture must use a genuine freshly constructed trainable
+C4 model. It checks exact fourteen same-owner bindings and tied alias; rejects
+seeded/C2/foreign/stale models, swapped or replaced handles, wrong `[2,4]`
+position shape, changed live carrier, eval mode, active construction/call,
+second workspace, held native/P1 leases and each allocation/edge cut. Test
+reset and release, independent model coexistence, unchanged parameter and
+gradient bits, and no partial publication. Feature-off symbols remain absent.
+Normal/repeat and native ASan+UBSan+LSan must use pinned source/toolchain and
+have an independently reviewed post-exit seal. Repeated create/release must
+show bounded retained bytes rather than rely on a leak-free assertion alone.
+
+Passing this gate establishes ownership and exclusion only. A subsequent
+reviewed shape/lifetime schedule must bind the workspace to the genuine
+four-token forward provider and all VJPs; only then can TR3/D2/O2 and C2
+training/restore be attempted for the same checkpoint.
