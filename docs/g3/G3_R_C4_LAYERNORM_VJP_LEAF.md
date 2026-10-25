@@ -1,6 +1,7 @@
 # Private C4 LayerNorm VJP leaf
 
-Status: source candidate; compiled acceptance pending.
+Status: bounded private native leaf accepted by independent source/test and
+compiled result review. The exact receipts are recorded in `docs/ROADMAP.md`.
 
 The existing `g3c4.layer-norm.forward` provider admits `[1,3,4]` and
 `[1,4,4]`. This feature-private leaf covers only the four-token row. The

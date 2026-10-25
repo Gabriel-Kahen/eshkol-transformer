@@ -2242,14 +2242,30 @@ The sealed independent result review is
 The `(4,256)` numerical check samples 32 distributed `dW` coordinates;
 this leaf is not a trainable C4 model or checkpoint/generation admission.
 
-The next [private C4 LayerNorm VJP leaf]
-(g3/G3_R_C4_LAYERNORM_VJP_LEAF.md) is source-staged for the genuine
+The [private C4 LayerNorm VJP leaf]
+(g3/G3_R_C4_LAYERNORM_VJP_LEAF.md) covers the genuine
 `g3c4.layer-norm.forward` `[1,4,4]` row. It computes staged `dX[1,4,4]`,
 `dGamma[4]`, and `dBeta[4]` from exact borrowed CPU f32 views and positive
 finite epsilon. Local Clang 22 normal/repeat/native ASan+UBSan, all 24
 central differences through the genuine provider, and negative/feature-off
-controls pass; independent source/test review and the pinned compiled gate
-remain **NOT RUN**. This is not trainable C4 admission.
+controls pass. Independent source/test review accepted `b52820c8`; its sealed
+record is `g3r-c4-layernorm-vjp-source-review-20261025/SHA256SUMS-REVIEW`
+(SHA-256 `4973cc2e1979bd05167fefa726195eb05b566d2e64753042c426d4c280ba6251`).
+The first pinned gate stopped before tests at launcher/Docker exit 126 because
+the new runner lacked executable mode; its nonaccepting seal is
+`g3r-c4-layernorm-vjp-b52820c8-attempt1/SHA256SUMS-RUN` (SHA-256
+`ea1fe8a484e07de253931db1161455b28365cf13eb04ba4ee4649690736da0f3`).
+The sole mode correction is `29b9a6e7`/tree `444c370f`; independent prelaunch
+review accepted the distinct attempt2 recipe. Its pinned rootless Clang 21
+normal/repeat/native ASan+UBSan gate passed 176 checks per mode with byte
+parity, empty stderr and feature-off rejection. The 49-file post-exit seal is
+`g3r-c4-layernorm-vjp-29b9a6e7-attempt2/SHA256SUMS-RUN` (SHA-256
+`bb025c866f97ddd166b1469b9aa2ba18356edf288eeeca0bce74eddbd8dee204`).
+The sealed independent result review is
+`g3r-c4-layernorm-vjp-result-review-20261025/SHA256SUMS-REVIEW` (SHA-256
+`c65ea922d7c5519805c1d810f4e5fd8b0b374ab08e65f2d88a2ee13b61e5a63e`).
+This direct leaf is not integrated with trainable C4 and does not admit
+checkpoint SAVE/LOAD or generation.
 
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1
