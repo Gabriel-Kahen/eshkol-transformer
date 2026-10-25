@@ -107,7 +107,7 @@
                                    (vector 'prepared-tamper 'bits)))
 (module-construction-parameters-internal prepared-tamper)
 (module-construction-prepare-eval-internal! prepared-tamper)
-(vector-set! prepared-tamper-cell 3 '())
+(vector-set! prepared-tamper-cell 3 (vector 'tampered-roster))
 (reject 'invalid-state
   (lambda () (module-construction-seal-prepared-internal! prepared-tamper)))
 (check (eq? (vector-ref prepared-tamper-cell 0) 'dead))
