@@ -122,7 +122,7 @@ class SingleRegistryContract(unittest.TestCase):
             'tests/cli3_generate/aggregate_bridge.c'] + predecessor[6:]
         expected.insert(expected.index('src/eshkol_transformer/e3_frame.c'),
                         'tests/cli3_generate/aggregate_native_owner.c')
-        g3_at = expected.index('src/eshkol_transformer/m3t_transport.h') + 1
+        g3_at = expected.index('native/cpuv1_resource_m3.inc') + 1
         expected[g3_at:g3_at] = [
             'src/eshkol_transformer/g3t_transport.c',
             'src/eshkol_transformer/g3t_transport.h',

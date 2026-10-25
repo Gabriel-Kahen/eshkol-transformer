@@ -18,6 +18,7 @@ native/a2_attention_provider.c
 native/a2_kv_cache.c
 native/checkpoint_io.c
 native/checkpoint_io.h
+native/cpuv1_resource_m3.inc
 native/data_io.c
 native/e1b_error_consumer_private.esk
 native/f32_parameter_internal.h

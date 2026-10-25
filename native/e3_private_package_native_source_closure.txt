@@ -43,6 +43,7 @@ include/eshkol_transformer/n2_primitives_abi.h
 include/eshkol_transformer/n3k_primitives_abi.h
 src/eshkol_transformer/m3_model.c
 src/eshkol_transformer/m3t_transport.c
+native/cpuv1_resource_m3.inc
 native/e3_d2_native.c
 native/d2_native.c
 native/d2_native.h

@@ -746,6 +746,16 @@ pass; the G3-R RNG import checker still rejects `calloc(` in unchanged
 `g3t_transport.c`, an independent source gate. No compiled/runtime or hosted
 result on this correction is claimed; PR #214 remains draft and main unmerged.
 
+Exact-`842a820e` full CI was dispatched as run `40153197596`. Its CLI3
+commands job failed after compiling the G3 providers because the generated
+aggregate native closure found a transitive M3 resource include missing from
+the CLI3 production manifest. A repository inventory audit found 24 package
+closure manifests with `m3_model.c` but without its unconditional resource
+include. The one-entry-per-manifest correction and CLI3 fixture derivation test
+pass 19 CLI3 source contracts, three M3 closure tests and CI topology. An
+independent source review accepted the ordered insertions; the hosted matrix is
+still running, and no corrected-head compiled or runtime result is claimed.
+
 Active finish milestone: **first complete validated CPU v1**. Current acceptance
 and ownership: [CPU v1 completion index](WAVE3_COMPLETION.md), updated 2026-10-24.
 PR #214 exact-head hosted checks pass. Current-source CPU4 two-update training,

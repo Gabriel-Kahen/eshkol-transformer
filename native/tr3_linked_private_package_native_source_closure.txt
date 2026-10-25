@@ -25,6 +25,7 @@ native/c2_x1_canonical.c
 native/c2_x1_canonical.h
 native/checkpoint_io.c
 native/checkpoint_io.h
+native/cpuv1_resource_m3.inc
 native/d2_native.c
 native/d2_native.h
 native/data_io.c
