@@ -2427,6 +2427,14 @@ exports per mode checked. This is fresh-process data-only FILE reader evidence
 for the same trained C2/T1 pair; model restoration, multi-token/EOS generation
 and replay remain separate.
 
+The [private C2/SHA receipt-to-TR3 seam](g3/G3_R_RECEIPT_TR3_RESTORE_SEAM.md)
+is source-staged on the accepted reader source pin. It takes the exact retained
+C2 owner from a live receipt in the same registry, authenticates an enrolled
+idle trainer, holds the receipt busy through TR3 joint restore, and restores
+the receipt phase on success or failure. It reopens no path and returns no
+owner. Focused source and mutation checks pass; a fresh candidate ledger,
+compiled restore, bitwise model comparison and continuation remain unrun.
+
 The earlier G3-R C2 SAVE continuation on `0581426b` sealed a failed runtime
 receipt at `g3-save-0581426b-cont-attempt1/SHA256SUMS-RUN`: its compiled
 no-SAVE control left output absent and its compiled public LOAD/SAVE producer

@@ -1,0 +1,3 @@
+;;; One CLI3/T1/C2/TR3 registry. The accepted reader root is loaded once.
+(load "g3r_trained_pair_reader_root.esk")
+(load "g3r_c2_receipt_tr3_restore_extension.esk")
