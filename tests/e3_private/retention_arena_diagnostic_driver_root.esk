@@ -1,0 +1,3 @@
+;;; Exact test-only successor; the canonical private root remains unchanged.
+(load "../../native/e3_private_driver_root.esk")
+(load "retention_arena_diagnostic_driver.esk")

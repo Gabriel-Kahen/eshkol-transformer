@@ -38,6 +38,15 @@ def tracked_digest():
     return digest.hexdigest()
 
 
+def prepare_dependency_mountpoint():
+    mountpoint = SOURCE / '.deps'
+    if not mountpoint.exists() and not mountpoint.is_symlink():
+        mountpoint.mkdir(mode=0o700)
+    if mountpoint.is_symlink() or not mountpoint.is_dir() or any(mountpoint.iterdir()):
+        raise RuntimeError('source .deps mountpoint must be an empty real directory')
+    return mountpoint
+
+
 def inspect_container(target):
     result = subprocess.run(['docker', 'inspect', target], capture_output=True,
                             text=True, timeout=30, check=False)
@@ -200,6 +209,7 @@ def main():
                                 '--is-ancestor', BASE, args.expected_head],
                                check=False).returncode != 0):
             raise SystemExit('locked source differs from reviewed gate HEAD/tree or 44c base')
+        prepare_dependency_mountpoint()
         if inspect_container(name) is not None:
             raise SystemExit('generated container name is occupied')
         git_dir = Path(git('rev-parse', '--git-dir'))

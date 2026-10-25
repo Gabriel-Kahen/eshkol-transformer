@@ -8,6 +8,7 @@ e3_base_prefix="${PROJECT_ROOT}/native/e3_private_package"
 e3_diagnostic_prefix="${PROJECT_ROOT}/native/e3_diagnostic_private_package"
 e3_public_prefix="${PROJECT_ROOT}/native/e3_diagnostic_public_package"
 e3_retention_prefix="${PROJECT_ROOT}/tests/e3_private/retention_package"
+e3_retention_arena_diagnostic_prefix="${PROJECT_ROOT}/tests/e3_private/retention_arena_diagnostic_package"
 e3_fault_prefix="${PROJECT_ROOT}/tests/e3_private/fault_package"
 e3_first_eval_mutant_prefix="${PROJECT_ROOT}/tests/e3_private/retention_first_eval_mutant_package"
 e3_overflow_prefix="${PROJECT_ROOT}/tests/e3_private/overflow_package"
@@ -38,6 +39,12 @@ e3_retention_inputs=(
   "${PROJECT_ROOT}/tests/e3_private/retention_bridge.c"
   "${e3_retention_prefix}_private_renames.txt"
   "${e3_retention_prefix}_public_exports.txt"
+)
+e3_retention_arena_diagnostic_inputs=(
+  "${PROJECT_ROOT}/tests/e3_private/retention_arena_diagnostic_driver_root.esk"
+  "${PROJECT_ROOT}/tests/e3_private/retention_arena_diagnostic_bridge.c"
+  "${e3_retention_arena_diagnostic_prefix}_private_renames.txt"
+  "${e3_retention_arena_diagnostic_prefix}_public_exports.txt"
 )
 e3_fault_inputs=(
   "${PROJECT_ROOT}/tests/e3_private/fault_driver_root.esk"
@@ -87,6 +94,7 @@ e3_tuple_requested=0
 e3_tuple_kind=
 e3_diagnostic_tuple=0
 e3_public_tuple=0
+e3_retention_arena_diagnostic_tuple=0
 for e3_raw in "${raw_private_root}" "${raw_package_bridge}" \
     "${raw_package_renames}" "${raw_public_exports}"; do
   for e3_expected in "${e3_base_inputs[@]}"; do
@@ -119,6 +127,15 @@ for e3_raw in "${raw_private_root}" "${raw_package_bridge}" \
         die "E3 policy rejects mixed retention and canonical tuples"
       e3_tuple_kind=retention
       e3_tuple_requested=1
+    fi
+  done
+  for e3_expected in "${e3_retention_arena_diagnostic_inputs[@]}"; do
+    if [[ "$(realpath -m -- "${e3_raw}")" == "${e3_expected}" ]]; then
+      [[ -z "${e3_tuple_kind}" || "${e3_tuple_kind}" == retention ]] || \
+        die "E3 policy rejects mixed arena diagnostic and other tuples"
+      e3_tuple_kind=retention
+      e3_tuple_requested=1
+      e3_retention_arena_diagnostic_tuple=1
     fi
   done
   for e3_expected in "${e3_fault_inputs[@]}"; do
@@ -188,6 +205,9 @@ elif [[ "${e3_tuple_kind}" == public ]]; then
   e3_prefix="${e3_public_prefix}"
   e3_inputs=("${e3_public_inputs[@]}")
   e3_public_tuple=1
+elif [[ "${e3_retention_arena_diagnostic_tuple}" == 1 ]]; then
+  e3_prefix="${e3_retention_arena_diagnostic_prefix}"
+  e3_inputs=("${e3_retention_arena_diagnostic_inputs[@]}")
 elif [[ "${e3_tuple_kind}" == retention ]]; then
   e3_prefix="${e3_retention_prefix}"
   e3_inputs=("${e3_retention_inputs[@]}")

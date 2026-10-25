@@ -23,6 +23,61 @@ def container(running=False, label='owned', exit_code=0):
 
 
 class RetentionArenaDiagnosticTest(unittest.TestCase):
+    def test_separate_driver_and_exact_manifest_delta(self):
+        root = SCRIPT.parents[1]
+        private = root / 'tests/e3_private'
+        self.assertEqual(hashlib.sha256((private / 'retention_driver.esk').read_bytes()).hexdigest(),
+                         '5c2d5dcd28219e5977e574a75c983366b7fcd243e6ba100a5c9b0eee1ed9c97d')
+        diagnostic = (private / 'retention_arena_diagnostic_driver.esk').read_text()
+        self.assertIn('(define (e3-test-retention-diagnose', diagnostic)
+        self.assertEqual((private / 'retention_arena_diagnostic_driver_root.esk').read_text(),
+                         ';;; Exact test-only successor; the canonical private root remains unchanged.\n'
+                         '(load "../../native/e3_private_driver_root.esk")\n'
+                         '(load "retention_arena_diagnostic_driver.esk")\n')
+        for original in sorted(private.glob('retention_package_*.txt')):
+            candidate = private / original.name.replace('retention_package_',
+                                                        'retention_arena_diagnostic_package_')
+            expected = original.read_text()
+            if original.name.endswith('_source_closure.txt') and not original.name.endswith('_native_source_closure.txt'):
+                expected = expected.replace('retention_driver_root.esk',
+                                            'retention_arena_diagnostic_driver_root.esk')
+                expected = expected.replace('retention_driver.esk',
+                                            'retention_arena_diagnostic_driver.esk')
+            if original.name.endswith('_native_source_closure.txt'):
+                expected = expected.replace('retention_bridge.c',
+                                            'retention_arena_diagnostic_bridge.c')
+            self.assertEqual(candidate.read_text(), expected, candidate.name)
+        self.assertEqual((private / 'retention_arena_diagnostic_bridge.c').read_bytes(),
+                         (private / 'retention_bridge.c').read_bytes())
+
+    def test_policy_admits_only_complete_diagnostic_tuple(self):
+        root = SCRIPT.parents[1]
+        private = root / 'tests/e3_private'
+        prefix = private / 'retention_arena_diagnostic_package'
+        code = '''
+PROJECT_ROOT=$1
+raw_private_root=$2
+raw_package_bridge=$3
+raw_package_renames=$4
+raw_public_exports=$5
+raw_include_dirs=("$1/internal/p1/lib" "$1/internal/c1/lib" "$1/internal/t1/lib" "$1/src" "$1/internal/d2/lib" "$1/internal/e3/lib")
+die() { printf '%s\\n' "$*" >&2; exit 77; }
+source "$1/scripts/e3-private-package-policy.sh"
+printf '%s %s %s\\n' "$e3_tuple_kind" "$e3_retention_arena_diagnostic_tuple" "$e3_prefix"
+'''
+        argv = ['bash', '-c', code, 'bash', str(root),
+                str(private / 'retention_arena_diagnostic_driver_root.esk'),
+                str(private / 'retention_arena_diagnostic_bridge.c'),
+                str(prefix) + '_private_renames.txt',
+                str(prefix) + '_public_exports.txt']
+        accepted = subprocess.run(argv, capture_output=True, text=True)
+        self.assertEqual((accepted.returncode, accepted.stdout),
+                         (0, f'retention 1 {prefix}\n'), accepted.stderr)
+        argv[6] = str(private / 'retention_bridge.c')
+        mixed = subprocess.run(argv, capture_output=True, text=True)
+        self.assertEqual(mixed.returncode, 77)
+        self.assertIn('exact lexical repository tuple', mixed.stderr)
+
     def test_postexit_seal_covers_nested_results_and_rejects_symlinks(self):
         with tempfile.TemporaryDirectory() as directory:
             evidence = Path(directory)
@@ -43,7 +98,7 @@ class RetentionArenaDiagnosticTest(unittest.TestCase):
         root = SCRIPT.parents[1]
         runtime = (root / 'tests/e3_private/retention_arena_diagnostic_runtime.esk').read_text()
         guest = (root / 'scripts/test-e3-complete-call-retention.sh').read_text()
-        driver = (root / 'tests/e3_private/retention_driver.esk').read_text()
+        driver = (root / 'tests/e3_private/retention_arena_diagnostic_driver.esk').read_text()
         launcher = SCRIPT.read_text()
         self.assertIn("(vector 'retention 'diagnose 1024 #f fault?)", runtime)
         self.assertIn('for mode in fault control; do', guest)
@@ -58,7 +113,7 @@ class RetentionArenaDiagnosticTest(unittest.TestCase):
             self.assertIn(f'(vector-set! (vector-ref record 19) {index} (__arena-used))', driver)
 
     def test_fault_probes_bracket_failure_checks_and_retry(self):
-        driver = (SCRIPT.parents[1] / 'tests/e3_private/retention_driver.esk').read_text()
+        driver = (SCRIPT.parents[1] / 'tests/e3_private/retention_arena_diagnostic_driver.esk').read_text()
         failure = driver.split('(define (e3-test-retention-fail-retry!', 1)[1]
         failure = failure.split('(define (e3-test-retention-reconcile!', 1)[0]
         anchors = [
@@ -179,6 +234,21 @@ class RetentionArenaDiagnosticTest(unittest.TestCase):
         self.assertEqual(kill.call_args_list,
                          [mock.call(1234, signal.SIGTERM), mock.call(1234, signal.SIGKILL)])
         self.assertEqual(child.wait.call_count, 2)
+
+    def test_dependency_mountpoint_is_empty_real_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with mock.patch.object(LAUNCHER, 'SOURCE', root):
+                self.assertEqual(LAUNCHER.prepare_dependency_mountpoint(), root / '.deps')
+                self.assertTrue((root / '.deps').is_dir())
+                (root / '.deps' / 'foreign').write_text('preserve')
+                with self.assertRaisesRegex(RuntimeError, 'empty real directory'):
+                    LAUNCHER.prepare_dependency_mountpoint()
+                (root / '.deps' / 'foreign').unlink()
+                (root / '.deps').rmdir()
+                (root / '.deps').symlink_to(root)
+                with self.assertRaisesRegex(RuntimeError, 'empty real directory'):
+                    LAUNCHER.prepare_dependency_mountpoint()
 
 
 if __name__ == '__main__':

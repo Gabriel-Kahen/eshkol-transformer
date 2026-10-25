@@ -911,9 +911,11 @@ delta was not emitted, so this is a failed resource gate, not a leak
 attribution or an accepted retention result. An isolated diagnostic-only
 successor now retains the same failure checks and adds five root-byte samples
 around the fault, checks and retry, paired with a fresh-process no-fault
-control after the same 512-call prefix. It uses the existing noninstalled
-retention tuple and exact package manifests; no production API changes.
-Focused host source/custody tests pass. Its supported normal, repeat, poison
+control after the same 512-call prefix. The canonical retention driver remains
+byte-identical to exact `44c0418d`; a separate noninstalled diagnostic
+driver/root/bridge and exact package manifests isolate these samples. There
+are no production API changes. Focused host source/custody tests pass. Its
+supported normal, repeat, poison
 and sanitizer measurements and independent result review remain **NOT RUN**.
 An isolated all-correct/all-wrong source candidate adds two fixed raw V256
 six-byte D1 corpora, authentic packed D2 rows, seed-1729 M3 selection proof,

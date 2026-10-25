@@ -17,8 +17,15 @@ if [[ $# -ge 2 ]]; then
   diagnostic=1
 fi
 runtime_source="${PROJECT_ROOT}/tests/e3_private/retention_runtime.esk"
+tuple=retention
+manifest="${PROJECT_ROOT}/tests/e3_private/retention_package"
 [[ "$diagnostic" == 0 ]] || \
   runtime_source="${PROJECT_ROOT}/tests/e3_private/retention_arena_diagnostic_runtime.esk"
+if [[ "$diagnostic" == 1 ]]; then
+  tuple=diagnostic
+  e3_retention_arena_diagnostic_tuple=1
+  manifest="${PROJECT_ROOT}/tests/e3_private/retention_arena_diagnostic_package"
+fi
 out="$(realpath -m -- "${1:-$(project_build_dir)/e3-complete-call-retention}")"
 [[ ! -e "${out}" ]] || die "E3 retention output directory must be fresh: ${out}"
 mkdir -p "${out}"
@@ -71,7 +78,7 @@ done
 for cache in a b; do
   artifact="${out}/private-${cache}"
   /usr/bin/bash "${PROJECT_ROOT}/scripts/build-e3-retention-test.sh" \
-    "${artifact}" >"${out}/package-${cache}.stdout" \
+    "${artifact}" normal "${tuple}" >"${out}/package-${cache}.stdout" \
     2>"${out}/package-${cache}.stderr"
   for pair in defined_symbols:global-defined public_exports:package-exports \
       public_strings:public-strings undefined_symbols:undefined \
@@ -79,7 +86,7 @@ for cache in a b; do
       native_objects:native-objects; do
     expected=${pair%%:*}
     observed=${pair#*:}
-    cmp "${PROJECT_ROOT}/tests/e3_private/retention_package_${expected}.txt" \
+    cmp "${manifest}_${expected}.txt" \
       "${artifact}/e3_retention_package.o.evidence/${observed}.txt"
   done
   for observer in et_e3_private_retention_dispatch_cabi_v1 \
@@ -114,7 +121,7 @@ diff -r "${out}/private-a/e3_retention_package.o.evidence/native-depfiles" \
         "${out}/private-b/e3_retention_package.o.evidence/native-depfiles"
 sanitized="${out}/sanitized-private"
 /usr/bin/bash "${PROJECT_ROOT}/scripts/build-e3-retention-test.sh" \
-  "${sanitized}" sanitize \
+  "${sanitized}" sanitize "${tuple}" \
   >"${out}/sanitized-package.stdout" \
   2>"${out}/sanitized-package.stderr"
 for pair in defined_symbols:global-defined public_exports:package-exports \
@@ -122,16 +129,16 @@ for pair in defined_symbols:global-defined public_exports:package-exports \
     native_source_closure:native-source-closure native_objects:native-objects; do
   expected=${pair%%:*}
   observed=${pair#*:}
-  cmp "${PROJECT_ROOT}/tests/e3_private/retention_package_${expected}.txt" \
+  cmp "${manifest}_${expected}.txt" \
     "${sanitized}/e3_retention_package.o.evidence/${observed}.txt"
 done
 source "${PROJECT_ROOT}/scripts/e3-retention-sanitizer-import-policy.sh"
 e3_retention_verify_sanitizer_imports \
-  "${PROJECT_ROOT}/tests/e3_private/retention_package_undefined_symbols.txt" \
+  "${manifest}_undefined_symbols.txt" \
   "${sanitized}/e3_retention_package.o.evidence/noninstrumentation-undefined.txt" \
   "${sanitized}/e3_retention_package.o.evidence/sanitizer-undefined.txt"
-cat "${PROJECT_ROOT}/tests/e3_private/retention_package_sanitized_noninstrumentation_undefined_symbols.txt" \
-    "${PROJECT_ROOT}/tests/e3_private/retention_package_sanitized_instrumentation_undefined_symbols.txt" | \
+cat "${manifest}_sanitized_noninstrumentation_undefined_symbols.txt" \
+    "${manifest}_sanitized_instrumentation_undefined_symbols.txt" | \
   LC_ALL=C sort -u >"${out}/expected-sanitized-undefined.txt"
 cmp "${out}/expected-sanitized-undefined.txt" \
     "${sanitized}/e3_retention_package.o.evidence/undefined.txt"
