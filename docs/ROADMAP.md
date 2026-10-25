@@ -2658,6 +2658,17 @@ for the composed Eshkol gate. I2/M3T preseal enrollment,
 graph revocation, full
 candidate cleanup, C2 restore and replay remain unimplemented.
 
+A source-only I2 candidate producer is staged on
+`codex/g3r-i2-candidate-handshake-20261025`. A feature-local extension owns
+the preallocated I2/P1 enrollment cell and privately rooted exact member
+snapshot. It calls the accepted P1 candidate begin before the first module
+token, validates the I2 membership prefix/count before ordinary or prepared
+P1 seal, and retains member-cell/module identities through seal. Its ordinary
+I2 root, extension, bridge, and M3T constructor remain byte-identical. The
+focused feature-on/feature-off normal/repeat runner is not yet admitted by a
+supported compiled gate. There is no I2 graph revocation, M3T candidate
+constructor, complete candidate cleanup, restore, or replay claim.
+
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
 names would return newly owned authenticated CPU f32 `[1,256]` kind-3 shells,

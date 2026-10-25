@@ -1,0 +1,132 @@
+(load "i2_wave2_root.esk")
+(load "g3r_p1_candidate_construction_extension.esk")
+(load "g3c4_p1_construction_extension.esk")
+(load "g3r_i2_candidate_construction_extension.esk")
+
+(extern i64 candidate-test-live-count
+        :real et_p1_test_live_entry_count_v1)
+
+(define checks 0)
+(define (check label value)
+  (if value (set! checks (+ checks 1))
+      (begin (display "G3-R I2 candidate FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label category thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category))))
+      (thunk) #f)))
+(define (fresh-cell)
+  (vector #f #f (vector #f #f #f #f) #f))
+(define (schedule! record)
+  (module-construction-parameters-internal (vector-ref record 1)))
+
+(define baseline (candidate-test-live-count))
+(define module-baseline i2-module-count)
+(reject "short cell" 'invalid-argument
+  (lambda () (i2-candidate-construction-begin-internal! (vector #f))))
+(define abandoned-cell (fresh-cell))
+(define abandoned (i2-candidate-construction-begin-internal! abandoned-cell))
+(check "root enrolled before user work"
+  (and (eq? (vector-ref abandoned-cell 0) 'open)
+       (eq? (vector-ref abandoned-cell 1) abandoned)
+       (eq? (vector-ref (vector-ref abandoned-cell 2) 2)
+            (vector-ref abandoned 2))
+       (i2-module? (vector-ref abandoned 2))))
+(reject "nested candidate" 'invalid-state
+  (lambda () (i2-candidate-construction-begin-internal! (fresh-cell))))
+(check "open abort" (i2-candidate-construction-abort-internal! abandoned-cell))
+(check "open abort idempotent"
+  (i2-candidate-construction-abort-internal! abandoned-cell))
+(check "open abort restores baselines"
+  (and (= baseline (candidate-test-live-count))
+       (= module-baseline i2-module-count)
+       (eq? (vector-ref abandoned-cell 0) 'dead)
+       (eq? (vector-ref (vector-ref abandoned-cell 2) 0) 'dead)))
+
+(define ordinary-cell (fresh-cell))
+(define ordinary (i2-candidate-construction-begin-internal! ordinary-cell))
+(define ordinary-root (vector-ref ordinary 2))
+(schedule! ordinary)
+(check "candidate ordinary seal returns root"
+  (eq? ordinary-root
+       (i2-candidate-construction-seal-internal! ordinary-cell)))
+(check "ordinary candidate sealed"
+  (and (eq? (vector-ref ordinary-cell 0) 'sealed)
+       (= (vector-ref ordinary-cell 3) 1)
+       (i2-candidate-construction-preflight-internal! ordinary-cell)))
+(reject "copied candidate cell" 'invalid-argument
+  (lambda () (i2-candidate-construction-preflight-internal!
+               (vector 'sealed ordinary (vector-ref ordinary-cell 2) 1))))
+(vector-set! ordinary-cell 3 2)
+(reject "changed sealed count" 'invalid-state
+  (lambda () (i2-candidate-construction-preflight-internal! ordinary-cell)))
+(vector-set! ordinary-cell 3 1)
+(check "sealed preflight retry"
+  (i2-candidate-construction-preflight-internal! ordinary-cell))
+(reject "sealed abort" 'invalid-state
+  (lambda () (i2-candidate-construction-abort-internal! ordinary-cell)))
+
+(define prepared-cell (fresh-cell))
+(define prepared (i2-candidate-construction-begin-internal! prepared-cell))
+(define prepared-root (vector-ref prepared 2))
+(schedule! prepared)
+(check "prepared root"
+  (eq? prepared-root
+       (i2-candidate-construction-prepare-eval-internal! prepared-cell)))
+(check "prepared cell remains unpublished"
+  (and (eq? (vector-ref prepared-cell 0) 'prepared)
+       (not (vector-ref prepared-cell 3))
+       (not (vector-ref (vector-ref prepared-cell 2) 3))))
+(check "candidate prepared seal returns root"
+  (eq? prepared-root
+       (i2-candidate-construction-seal-prepared-internal! prepared-cell)))
+(check "prepared candidate sealed"
+  (and (eq? (vector-ref prepared-cell 0) 'sealed)
+       (= (vector-ref prepared-cell 3) 1)
+       (i2-candidate-construction-preflight-internal! prepared-cell)))
+
+(define sealed-baseline (candidate-test-live-count))
+(define sealed-module-baseline i2-module-count)
+(define prepared-abort-cell (fresh-cell))
+(define prepared-abort
+  (i2-candidate-construction-begin-internal! prepared-abort-cell))
+(schedule! prepared-abort)
+(i2-candidate-construction-prepare-eval-internal! prepared-abort-cell)
+(check "prepared abort"
+  (i2-candidate-construction-abort-internal! prepared-abort-cell))
+(check "prepared abort restores sealed baselines"
+  (and (= sealed-baseline (candidate-test-live-count))
+       (= sealed-module-baseline i2-module-count)
+       (eq? (vector-ref prepared-abort-cell 0) 'dead)))
+
+(define tamper-cell (fresh-cell))
+(define tamper (i2-candidate-construction-begin-internal! tamper-cell))
+(schedule! tamper)
+(define members (vector-ref tamper 4))
+(vector-set! tamper 4 '())
+(reject "membership removed before seal" 'invalid-state
+  (lambda () (i2-candidate-construction-seal-internal! tamper-cell)))
+(vector-set! tamper 4 members)
+(check "tampered ordinary remains abortable"
+  (i2-candidate-construction-abort-internal! tamper-cell))
+
+(define prepared-tamper-cell (fresh-cell))
+(define prepared-tamper
+  (i2-candidate-construction-begin-internal! prepared-tamper-cell))
+(schedule! prepared-tamper)
+(i2-candidate-construction-prepare-eval-internal! prepared-tamper-cell)
+(vector-set! (vector-ref prepared-tamper-cell 2) 3 (vector 'tampered))
+(reject "prepared P1 cell tamper before commit" 'invalid-state
+  (lambda ()
+    (i2-candidate-construction-seal-prepared-internal! prepared-tamper-cell)))
+(vector-set! (vector-ref prepared-tamper-cell 2) 3 #f)
+(check "tampered prepared remains abortable"
+  (i2-candidate-construction-abort-internal! prepared-tamper-cell))
+(check "all rejected candidates leave sealed baselines"
+  (and (= sealed-baseline (candidate-test-live-count))
+       (= sealed-module-baseline i2-module-count)))
+(display "G3-R I2 candidate construction PASS: ")
+(display checks)
+(newline)
