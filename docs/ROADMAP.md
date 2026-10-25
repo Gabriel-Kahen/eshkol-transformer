@@ -1327,6 +1327,18 @@ pre-call values and its own genuine preflight cut. Other R1/R2 stages,
 tie identity, graph-producing mutations, and complete-call horizons remain
 open; no §9 admission follows from this source slice.
 
+An isolated exact-`44c0418d` stage-9 source successor adds test-only fault
+site 6, ordinal 0, occurrence 1 to the existing frame selector. A successful
+CE provider call advances the frame to role 22; the one-shot denial then fires
+before the L3S reduction provider is invoked. The private driver seeds six
+distinct pre-call publication words, checks the first stage-9/internal error,
+rollback of cursor, model/gradient, mixed modes, RNG and live owners, then
+compares a same-authority retry with an independent fixed-seed twin. A
+noninstalled normal/sanitized AOT recipe is staged for absent/present gradients,
+normal repeat and poison. Supported compilation, runtime, sanitizer and
+resource evidence are **NOT RUN**; stage-10 correct, stage-11 accumulate and
+full §9 admission remain open.
+
 A bounded noninstalled stage-12 successor extends the existing
 `ET_E3_FAULT_TESTING` frame selector with site 2, ordinal 0, occurrence 1.
 It fires after all four destination and four result view checks, count

@@ -977,6 +977,59 @@ static void test_ce_preinvoke_selector(
   CHECK(et_e3_test_fault_arm_v1(frame, 5, 0, 1) == E3_INVALID_STATE);
 }
 
+static void test_l3s_preinvoke_selector(
+    owner *model, et_f32_tensor *destination[4]) {
+  et_e3_frame_internal *frame = et_e3_private_frame_create_v1(
+      model, destination[0], destination[1], destination[2], destination[3]);
+  CHECK(frame != NULL);
+  CHECK(et_e3_test_fault_arm_v1(frame, 6, -1, 1) == E3_INVALID_ARGUMENT);
+  CHECK(et_e3_test_fault_arm_v1(frame, 6, 1, 1) == E3_INVALID_ARGUMENT);
+  CHECK(et_e3_test_fault_arm_v1(frame, 6, 0, 0) == E3_INVALID_ARGUMENT);
+  CHECK(et_e3_test_fault_arm_v1(frame, 6, 0, 2) == E3_INVALID_ARGUMENT);
+  uint32_t words[4];
+  for (size_t i = 0; i < 4; ++i) read_scalar(destination[i], &words[i]);
+  const int64_t tokens = et_e3_private_counter_ref_v1(frame, 0);
+  const int64_t batches = et_e3_private_counter_ref_v1(frame, 1);
+  OK(et_e3_test_fault_arm_v1(frame, 6, 0, 1));
+  CHECK(et_e3_test_fault_arm_v1(frame, 6, 0, 1) == E3_INVALID_STATE);
+  OK(et_e3_private_acquire_v1(frame));
+  stage(frame, 3, 197, 197, 0, 1, 1);
+  CHECK(et_e3_private_reduce_v1(frame) == E3_INVALID_STATE);
+  CHECK(frame->fault_reached == 0);
+  for (int64_t role = 0; role < 21; ++role)
+    OK(et_e3_private_forward_role_v1(frame, role));
+  const size_t before_ce = observed_dispatches;
+  OK(et_e3_private_ce_v1(frame));
+  CHECK(frame->next_role == 22 && observed_dispatches == before_ce + 1);
+  CHECK(et_e3_private_reduce_v1(frame) == E3_INTERNAL);
+  CHECK(e3_last_domain == 0 && e3_last_category == E3_INTERNAL &&
+        e3_last_code == E3_CODE_INVARIANT);
+  CHECK(frame->phase == E3_CE_READY && frame->next_role == 22 &&
+        frame->fault_state == 2 && frame->fault_reached == 1 &&
+        observed_dispatches == before_ce + 1);
+  abort_call(frame);
+  CHECK(et_e3_test_fault_ref_v1(frame, 0) == 2);
+  CHECK(et_e3_test_fault_ref_v1(frame, 1) == 6);
+  CHECK(et_e3_test_fault_ref_v1(frame, 2) == 0);
+  CHECK(et_e3_test_fault_ref_v1(frame, 3) == 1);
+  CHECK(et_e3_test_fault_ref_v1(frame, 4) == 1);
+  CHECK(et_e3_private_counter_ref_v1(frame, 0) == tokens &&
+        et_e3_private_counter_ref_v1(frame, 1) == batches);
+  for (size_t i = 0; i < 4; ++i) {
+    uint32_t after;
+    read_scalar(destination[i], &after);
+    CHECK(after == words[i]);
+  }
+  CHECK(et_e3_private_acquire_v1(frame) == E3_INVALID_STATE);
+  OK(et_e3_test_fault_reset_v1(frame));
+  OK(et_e3_private_acquire_v1(frame));
+  stage(frame, 3, 197, 197, 0, 1, 1);
+  forward_batch(frame);
+  abort_call(frame);
+  OK(et_e3_private_frame_destroy_preflight_v1(frame));
+  et_e3_private_frame_destroy_v1(frame);
+}
+
 static void test_publication_precommit_selector(
     owner *model, et_f32_tensor *destination[4]) {
   et_e3_frame_internal *frame = et_e3_private_frame_create_v1(
@@ -1068,6 +1121,7 @@ int main(void) {
   test_discovery_bind_rollback(model, destination);
   test_forward_preinvoke_selector(model, destination);
   test_ce_preinvoke_selector(model, destination);
+  test_l3s_preinvoke_selector(model, destination);
   test_partial_pin_selector(model, destination);
   test_publication_precommit_selector(model, destination);
   for (size_t i = 0; i < 4; ++i) destroy_tensor(&destination[i]);
