@@ -26,12 +26,19 @@ row and four RNG words, then genuine reference/replayed G1 ID, logical and
 cache lengths, both K/V rows and successor RNG. Its sealed stdout contains
 only a pass marker. **It contains no reusable bit or G1 trace transcript.**
 A separate reviewed, data-only oracle fixture must capture the fixed ordered
-14 live parameter payloads and P1/G1 trace from that trained owner, in the
-producer process, before owner release. It must version, bound and checksum
+14 live parameter payloads from that trained model, no-draw P1 from the
+producer's `captured` generator and genuine G1 from its distinct `reference`
+generator, in the producer process before owner release. The accepted gate
+compares captured P1 to decoded replayed P1 and reference G1 to replayed G1;
+the future transcript must retain those distinct owner labels. It must
+version, bound and checksum
 its output, bind it to the exact C2 and G3RCV1 SHA values, and seal it with
 normal/repeat/native sanitizer byte parity. No pointer, registry identity or
 executable term may be serialized. Its capture must not alter training,
-model parameters, generation state or saved pair bytes.
+model parameters or saved pair bytes; observational reads add no RNG draws or
+state changes beyond the existing genuine G1 call. The historical replay
+receipt authenticates the pair, while a new receipt must authenticate the
+transcript bytes and source closure.
 
 ## Fresh consumer and parameter proof
 
