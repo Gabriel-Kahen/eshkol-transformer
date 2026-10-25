@@ -2330,8 +2330,16 @@ saved C2 bytes, then publishes the companion last without replacement. A
 separate byte oracle checks equality to the trained C2,
 canonical T1 field, history/policy/RNG fields and both SHA bindings, with
 deterministic negatives. This is source/host evidence only: its combined
-native/Eshkol build, genuine trained artifact, fresh-process reader and
-runtime failure cleanup remain unrun. It does not restore a replay candidate
+native/Eshkol build, fresh-process reader and runtime failure cleanup remain
+unaccepted. Its first compiled attempt on `2cebf63a` sealed a failed receipt
+at `g3r-trained-pair-producer-2cebf63a-attempt1/SHA256SUMS-RUN`: the public
+CLI3 path produced a genuine trained `first.c2` (25,408 bytes, SHA-256
+`9ec2a1d40ebd43e57d1e8b75fa8f6d96cd4d17abc1002f70da04d20144ee78df`),
+then native owner TU7 failed syntax checking because the committed-history
+condition had an unmatched parenthesis without the replay flag. No private
+owner object, caller, saved pair or sanitizer run was produced. The focused
+preprocessor repair and flag-combination syntax control await a compiled
+successor gate. It does not restore a replay candidate
 or establish full same-registry continuation.
 
 The earlier G3-R C2 SAVE continuation on `0581426b` sealed a failed runtime
