@@ -27,6 +27,10 @@ int32_t et_g3t_model_pins_begin_fail_before_internal(
 #if defined(ET_E3_NUMERICAL_PADDED_POSITION) && !defined(ET_E3_NUMERICAL_TESTING)
 #error "padded-position mutation requires the private numerical test tuple"
 #endif
+#if defined(ET_E3_N4_SPARSE_TESTING) && \
+    (!defined(ET_E3_OVERFLOW_TESTING) || !defined(ET_E3_NUMERICAL_TESTING))
+#error "N4 sparse observer requires the noninstalled overflow numerical tuple"
+#endif
 
 #if defined(ET_E3_NUMERICAL_TESTING) || defined(ET_E3_ZERO_CONTROL_TESTING)
 #include <inttypes.h>
@@ -35,6 +39,9 @@ int32_t et_g3t_model_pins_begin_fail_before_internal(
 #ifdef ET_E3_ZERO_CONTROL_TESTING
 #include "f32_parameter_internal.h"
 extern et_f32_tensor *et_m3t_test_parameter_gradient(et_f32_parameter *);
+#endif
+#ifdef ET_E3_N4_SPARSE_TESTING
+#include <xmmintrin.h>
 #endif
 
 #ifdef ET_E3_RETENTION_TESTING
@@ -1318,6 +1325,21 @@ int64_t et_e3_private_correct_v1(void *pointer) {
       input_views[0] = input_guard.view;
       input_views[1] = targets;
       input_views[2] = mask;
+#ifdef ET_E3_N4_SPARSE_TESTING
+      if (input_guard.view.byte_length != 512u * sizeof(uint32_t)) abort();
+      unsigned short control;
+      __asm__ volatile("fnstcw %0" : "=m"(control));
+      const unsigned mxcsr = _mm_getcsr();
+      printf("E3N4K1\t%04x\t%08x\t", (unsigned)control, mxcsr);
+      for (size_t word_index = 0; word_index < 512u; ++word_index) {
+        uint32_t word;
+        memcpy(&word, (const unsigned char *)input_guard.view.data +
+                      word_index * sizeof(word), sizeof(word));
+        if (word_index) printf(",");
+        printf("%08" PRIx32, word);
+      }
+      printf("\n");
+#endif
       et_kernel_request_v1 request = {sizeof(request),
         "e3.evaluation-metrics.correct.bool", "f32", "cpu", 3,
         e3_shape_logits, 1, {0}};

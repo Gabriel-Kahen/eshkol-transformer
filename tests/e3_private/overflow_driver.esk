@@ -256,7 +256,8 @@
     (and (vector? scenario) (= (vector-length scenario) 4)
          (eq? (vector-ref scenario 0) 'finite-overflow)
          (or (eq? (vector-ref scenario 1) 'finite)
-             (eq? (vector-ref scenario 1) 'overflow))
+             (eq? (vector-ref scenario 1) 'overflow)
+             (eq? (vector-ref scenario 1) 'sparse))
          (string? (vector-ref scenario 2))
          (boolean? (vector-ref scenario 3))
          (not (vector-ref e3-overflow-root 0))))
@@ -264,10 +265,22 @@
   ;; process; the finite and overflow cases therefore run in separate processes.
   (let ((record (e3-overflow-create (vector-ref scenario 2)
                                      corpus-path (vector-ref scenario 3))))
-    (if (eq? (vector-ref scenario 1) 'finite)
-        (e3-overflow-finite! record)
-        (begin (e3-overflow-reject-once! record)
-               (e3-overflow-reject-once! record)))
+    (if (eq? (vector-ref scenario 1) 'sparse)
+        (let ((arena-before (__arena-used)))
+          (with-region ('e3-n4-sparse-call 262144)
+            (e3-evaluate-into! (vector-ref record 0) (vector-ref record 4)
+                               (vector-ref record 3)))
+          (e3-overflow-check 'sparse-region-restored
+            (= (__arena-used) arena-before))
+          (e3-overflow-check 'sparse-owner-controls
+            (e3-overflow-controls-stable? record))
+          (e3-overflow-check 'sparse-k1-counts
+            (and (= (e3-counter-ref (vector-ref record 3) 0) 1)
+                 (= (e3-counter-ref (vector-ref record 3) 1) 1))))
+        (if (eq? (vector-ref scenario 1) 'finite)
+            (e3-overflow-finite! record)
+            (begin (e3-overflow-reject-once! record)
+                   (e3-overflow-reject-once! record))))
     (d2-token-dataset-close! (vector-ref record 4))
     (e3-overflow-check 'overflow-datasets-closed
       (= (e3-test-retention-probe 22) 0))

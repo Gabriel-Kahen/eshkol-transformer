@@ -28,24 +28,34 @@ and these independent bits.
 
 ## Compiled gate to discharge this row
 
-After independent source/test review, add a **noninstalled** private E3 driver
-using the existing C1 load/byte/owner checks and existing D1/D2 corpus.
-Capture the C1 payload bytes, D2 row, all 21 actual M3 role outputs, CE and
-E3 K1 result without writing any post-forward logit or row bytes. Assert the
-masked logit at index 260 is `0x00000001` immediately after the tied-head role
-and remains so at the E3 K1 input. Assert active index 4 too, and compare the
-complete 512-word model output to the frozen oracle above. Check the first
-predecessor error if any stage fails. Before invoking M3, verify RN-even,
-FTZ=0, DAZ=0 and supported exception masks; restore the environment after the
-call. A first M3/N3K rejection or changed environment invalidates an E3 K1
-claim. A successful C1 load and M3 forward alone do not prove K1 accepted the
-operand.
+The one-use noninstalled source gate extends the existing overflow private
+tuple with a `sparse` scenario. The accepted C1 load/byte/owner checks and
+existing D2 path remain in that tuple. Its compiled observer captures the D2
+row, all 21 M3 roles including every word of `Z`, CE, K1-derived batch/state
+and final output. A test-only `ET_E3_N4_SPARSE_TESTING` observer records all
+512 K1 input words and x87/MXCSR controls immediately before dispatch. The
+parser compares both K1 input and retained `Z` to the complete independent
+oracle and checks successful K1/accumulate output. `et_e3_private_correct_v1`
+binds its K1 input directly from `frame->forward[20]`; the numerical observer
+reads that same retained handle after K1. Source and result review must verify
+this identity and lack of mutation between those points. The fixture writes no
+post-forward logit or row bytes. A first M3/N3K rejection invalidates a K1
+claim; captured failure logs must identify the predecessor, not be counted as
+an N4 pass.
+
+The compiled run must verify RN-even, FTZ=0, DAZ=0 and supported exception
+masks at runtime; sticky flags are allowed. The existing N3K/N2/K1 provider
+checks enforce their admitted controls. A changed environment or failed first
+role invalidates this candidate. The external launcher accepts the exact
+commit and tree plus a fresh evidence directory and takes the shared lock
+without waiting; it must run only after the other scheduled lock turns.
 
 Run the reviewed gate on the supported fe9/f31 Clang 21 lane with the shared
 `heavy.lock`: normal, repeat, poison and ASan/UBSan/LSan. Seal exact source,
 compiler/runtime identities, fixture hash, stdout/stderr, exit status and
-resource checks. Independently review the result before updating the N4
-private row. No Docker gate is requested here.
+resource checks. The launcher and gate are prepared but **NOT_RUN**;
+independently review source, then the result before updating the N4 private
+row. No Docker gate is requested here.
 
 Negative-zero logit is a separate case. The final N3K tied-head linear role
 starts each sum at positive zero and has no bias. With admitted RN-even,

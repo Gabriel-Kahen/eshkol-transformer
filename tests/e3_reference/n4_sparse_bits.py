@@ -8,9 +8,16 @@ from __future__ import annotations
 
 import math
 import struct
+from pathlib import Path
+import hashlib
+import json
 
 from tests.c1.test_checkpoint_format import build_container, parse_golden
 from tests.e3_reference.uniform_tie import ALIAS, PROVIDER, SHAPES
+from tests.e3_reference.finite_overflow import PROFILE, RAW
+from tests.e3_reference.corpus import FINGERPRINT, VOCAB_SIZE
+from tests.d2.reference import ReferenceDataset
+from tests.d2.test_resources import load_d1_resource, write_d1_resource
 
 
 AXIS = (0x3F800000, 0xBF800000, 0x3F800000, 0xBF800000)
@@ -86,3 +93,43 @@ def forward_bits() -> tuple[int, ...]:
         out[position * 256 + 3] = bits(head3)
         out[position * 256 + 4] = bits(tiny)
     return tuple(out)
+
+
+def materialize(root: Path) -> dict:
+    if root.exists() or root.is_symlink() or root.parent.resolve() != root.parent.absolute():
+        raise ValueError("N4 fixture directory must be fresh and canonical")
+    root.mkdir()
+    encoded = checkpoint()
+    (root / "sparse.etcp").write_bytes(encoded)
+    corpus = root / "sparse-corpus"
+    corpus.mkdir()
+    write_d1_resource(corpus, (tuple(RAW),),
+                      fingerprint=FINGERPRINT, vocab=VOCAB_SIZE)
+    loaded, digest = load_d1_resource(
+        corpus, expected_fingerprint=FINGERPRINT,
+        expected_vocab=VOCAB_SIZE, maximum_total_tokens=2)
+    dataset = ReferenceDataset(loaded, PROFILE, manifest_digest=digest,
+                               tokenizer_fingerprint=FINGERPRINT,
+                               vocab_size=VOCAB_SIZE)
+    row = dataset.next_batch()
+    assert row is not None and dataset.next_batch() is None
+    assert list(row.inputs[0]) == [3, 0]
+    assert list(row.targets[0]) == [4, 0]
+    assert list(row.loss_mask[0]) == [True, False]
+    manifest = {
+        "kind": "e3-n4-sparse-subnormal-v1",
+        "checkpoint_sha256": hashlib.sha256(encoded).hexdigest(),
+        "corpus": {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+                   for path in sorted(corpus.iterdir())},
+        "inputs": [3, 0], "targets": [4, 0], "mask": [1, 0],
+        "logit_words_sha256": hashlib.sha256(struct.pack("<512I", *forward_bits())).hexdigest(),
+    }
+    (root / "fixture.json").write_text(json.dumps(manifest, sort_keys=True) + "\n")
+    return manifest
+
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) != 2:
+        raise SystemExit("usage: python -m tests.e3_reference.n4_sparse_bits FRESH_DIR")
+    print(json.dumps(materialize(Path(sys.argv[1])), sort_keys=True))

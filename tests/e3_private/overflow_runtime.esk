@@ -11,7 +11,8 @@
 (overflow-check 'arguments (= (length arguments) 5))
 (define case-name (list-ref arguments 1))
 (overflow-check 'case
-  (or (string=? case-name "finite") (string=? case-name "overflow")))
+  (or (string=? case-name "finite") (string=? case-name "overflow")
+      (string=? case-name "sparse")))
 (define checkpoint (list-ref arguments 2))
 (define corpus-path (list-ref arguments 3))
 (define present? (string=? (list-ref arguments 4) "present"))
@@ -20,7 +21,8 @@
 (define output (vector #f))
 (e3-overflow-test-run
   (vector (vector 'finite-overflow
-                  (if (string=? case-name "finite") 'finite 'overflow)
+                  (if (string=? case-name "finite") 'finite
+                      (if (string=? case-name "sparse") 'sparse 'overflow))
                   checkpoint present?))
   (vector corpus-path) output)
 (define result (vector-ref output 0))
@@ -28,10 +30,13 @@
   (and (vector? result) (= (vector-length result) 4)
        (eq? (vector-ref result 0) 'e3-finite-overflow-result-v1)
        (eq? (vector-ref result 1)
-            (if (string=? case-name "finite") 'finite 'overflow))
+            (if (string=? case-name "finite") 'finite
+                (if (string=? case-name "sparse") 'sparse 'overflow)))
        (vector? (vector-ref result 2))
        (= (vector-length (vector-ref result 2)) 6)
        (bytevector? (vector-ref result 3))))
-(display "E3-FINITE-OVERFLOW-PASS gradient=")
+(display (if (string=? case-name "sparse")
+             "E3-N4-SPARSE-PASS gradient="
+             "E3-FINITE-OVERFLOW-PASS gradient="))
 (display (if present? "present" "absent"))
 (newline)

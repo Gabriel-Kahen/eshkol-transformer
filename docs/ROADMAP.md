@@ -1091,8 +1091,9 @@ and stage-selective fault/observer seams for review. It provides no new runtime
 proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
 verdicts remain prerequisites before the full matrix is implemented and run.
 The N4 [sparse subnormal C1/D2 candidate](e3/E3_N4_SPARSE_SUBNORMAL_CANDIDATE.md)
-has host-only oracle and fixture checks; its genuine compiled M3-to-K1 witness
-is pending independent review and a supported run. N4 remains **HOLD**.
+has host-only oracle and fixture checks. Its one-use noninstalled compiled
+launcher is prepared; source review and a supported run are pending. N4
+remains **HOLD**.
 The first [mathematical three-batch M2 sum-order witness](../tests/e3_reference/sum_order_witness_v1.json)
 failed the one-use df9546 compiled C gate: compiled CE rounded both groupings
 to `41dcde82`. The successor [compiled witness](../tests/e3_reference/sum_order_witness_v2.json)

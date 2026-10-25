@@ -1173,6 +1173,12 @@ if [[ "${E3_OVERFLOW_SANITIZE:-0}" != 0 ]]; then
     die "E3 overflow sanitizer is allowed only for the exact test tuple"
   e3_private_test_sanitize=1
 fi
+if [[ "${E3_N4_SPARSE_TESTING:-0}" != 0 ]]; then
+  [[ "${E3_N4_SPARSE_TESTING}" == 1 &&
+     "${package_policy}" == e3-private-aggregate &&
+     "${e3_tuple_kind}" == retention-overflow ]] ||
+    die "E3 N4 sparse observer is allowed only for the exact overflow test tuple"
+fi
 if [[ "${E3_MODE_GRAPH_SANITIZE:-0}" != 0 ]]; then
   [[ "${E3_MODE_GRAPH_SANITIZE}" == 1 && \
      "${package_policy}" == e3-private-aggregate && \
@@ -1886,6 +1892,9 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     package_native_cflags+=(-DET_E3_RETENTION_TESTING
                             -DET_E3_OVERFLOW_TESTING
                             -DET_E3_NUMERICAL_TESTING -fno-builtin-printf)
+    if [[ "${E3_N4_SPARSE_TESTING:-0}" == 1 ]]; then
+      package_native_cflags+=(-DET_E3_N4_SPARSE_TESTING)
+    fi
   fi
   if [[ "${package_policy}" == e3-private-aggregate &&
         "${e3_tuple_kind}" == mode-graph ]]; then
