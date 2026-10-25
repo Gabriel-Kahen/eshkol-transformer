@@ -2239,6 +2239,13 @@ value-byte preservation control, but the fixture and pinned compiled package
 gate remain unrun. It cannot yet claim constructor admission, compiled
 changed-live-carrier rejection, lease exclusion or workspace authority.
 
+The [private C4 trainable workspace ownership contract](g3/G3_R_C4_WORKSPACE_OWNERSHIP_CONTRACT.md)
+proposes the next gate after compiled constructor/topology/association admission:
+one opaque same-owner workspace, exact fourteen retained bindings, exclusive
+C4 and native owner edges, failure-atomic create/reset/release, and C4-specific
+lease exclusion. It is documentation only; no workspace implementation,
+four-token graph, trainer, C2 checkpoint or continuation is admitted.
+
 The [private C4 position VJP leaf](g3/G3_R_C4_POSITION_VJP_LEAF.md) supplies
 one fixed `[1,4]` position-ID and `[1,4,4]` upstream to `[4,4]` gradient
 operation behind a separate feature flag. Its source and tests were independently
