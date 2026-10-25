@@ -10,6 +10,9 @@ from tests.cpu4_trainer_control.test_source_contract import parse, walk
 
 ROOT = Path(__file__).resolve().parents[2]
 PIN = 'b0af97d10a96fc62ef414a26953582f5c79ad642'
+REPAIR = '51d5cc9c1dbd8058d972f367ef677f9a61209c71'
+OWNER = 'native/g3c4_p2g2_terminal_ids_owner_extension.esk'
+OWNER_SHA256 = 'cf12120277eca23d84e7bbc18b9e92fac83fb68455dc930b3f84f7f9ef24bf2f'
 HERE = ROOT / 'tests/cpu4_trained_g2'
 GENERATE = ['cpu4-trained-g2-generate!', 'resolved', 'tokenizer', 'train-a', 'train-b',
             'heldout', 'factory', 'b-record', 'final-b', 'generation']
@@ -145,10 +148,19 @@ class Source(unittest.TestCase):
         self.assertEqual(runtime,old)
         self.assertEqual(new[7],original[5])  # actual error guard and D2 close remain unchanged
 
-    def test_actual_dependencies_and_no_production_change(self):
+    def test_actual_dependencies_and_only_reviewed_owner_change(self):
         for row in (HERE/'DEPENDENCIES.sha256').read_text().splitlines():
             digest,path=row.split('  ');self.assertEqual(hashlib.sha256((ROOT/path).read_bytes()).hexdigest(),digest,path)
-        self.assertEqual(subprocess.check_output(['git','diff',PIN,'--','native','src','internal','lib','include','tests/cpu4_resume'],cwd=ROOT),b'')
+        changed=subprocess.check_output(['git','diff','--name-only',PIN,'--','native','src','internal','lib','include','tests/cpu4_resume'],cwd=ROOT).decode().splitlines()
+        self.assertEqual(changed,['native/cpu4_v1_source_members.sha256',OWNER])
+        actual=(ROOT/OWNER).read_bytes()
+        reviewed=subprocess.check_output(['git','show',REPAIR+':'+OWNER],cwd=ROOT)
+        self.assertEqual(actual,reviewed)
+        self.assertEqual(hashlib.sha256(actual).hexdigest(),OWNER_SHA256)
+        rows=(ROOT/'native/cpu4_v1_source_members.sha256').read_text().splitlines()
+        matching=[row for row in rows if row.endswith('  '+OWNER)]
+        self.assertEqual(matching,[OWNER_SHA256+'  '+OWNER])
+        self.assertNotEqual(hashlib.sha256(actual+b'\n').hexdigest(),OWNER_SHA256)
         include_dirs=json.loads((ROOT/'native/cpu4_v1_private_inputs.json').read_text())['source_include_dirs']
         seen=set()
         def closure(path):

@@ -1,5 +1,16 @@
 # Final resumed B → actual public G2: staged source fixture
 
+## Managed terminal-ID sanitizer successor
+
+The isolated direct child of `55a56f2f` replaces only
+`native/g3c4_p2g2_terminal_ids_owner_extension.esk` with the exact reviewed
+`51d5cc9c` managed-cell leaf and updates its one source-member digest. The
+G2 caller, checker, resources, overlay, expected records and four-process
+normal/repeat/cross-mode comparisons retain the `55a56f2f` bytes. The copied
+reviewed Guile host fixture checks clone/identity/release behavior; source
+tests reject any additional production delta. The full trained-G2 sanitizer
+gate on this composed source is **NOT RUN**.
+
 This isolated source leaf starts at `fd0db7270ca0212f73fc64337379d1ada32d0154`.
 Root composition now authenticates production support against immutable
 `b0af97d10a96fc62ef414a26953582f5c79ad642`, including the independently

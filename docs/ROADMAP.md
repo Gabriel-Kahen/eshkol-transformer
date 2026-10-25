@@ -638,6 +638,13 @@ PR #214 exact-head hosted checks pass. Current-source CPU4 two-update training,
 250-update one-batch learning, detach and bounded evaluator-consumer gates
 independently pass; held-out improvement and resume,
 multi-token EOS/continuation and compiled common integration remain required.
+The isolated trained-G2 sanitizer successor to `55a56f2f` carries only the
+reviewed `51d5cc9c` private terminal-ID managed-cell production leaf and its
+exact CPU4 source-member pin. Its caller/checker and four-process semantics
+remain at `55a56f2f`; host checks are source evidence only. The original
+`55a56f2f` ASan run stopped in `two-token.run1` before G2 result/checker, while
+the separate `51d5cc9c` 62-check repair fixture passed. Fresh genuine trained
+G2 sanitizer execution and independent result review remain required.
 The corrected common source composition is independently accepted. Its corrected
 FILE run passes native/AOT compilation and regional guards, then rejects optimizer
 retirement; focused option-provenance repair and native causal proof are next.
