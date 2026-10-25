@@ -19,12 +19,18 @@ class TrainedC2EosReferenceSource(unittest.TestCase):
         self.assertNotIn('g3c4-model-create-seeded-internal', source)
         self.assertNotIn('g3t-checked-m3t-initializer-state', source)
         ordered = (
+            '(vector-set! t2-wave2-policy-projector 0 c2-policy-t2-entry-internal)',
+            '(tokenizer (cli3-b-tokenizer (argument 1) resolved))',
             '(g3r-trained-pair-file-image (argument 3) 16777216)',
             '(cli3-b-restore! trainer (argument 3))',
             '(trainer-release! trainer)',
             '(module-eval! model)',
             '(g3m-generate-p1-g1! first-generator first-input)',
             '(g3r-committed-save-snapshot!',
+            '(g3t-output-release! first-output)',
+            '(g3t-generation-tensor-release! first-input)',
+            '(g3t-generator-close! first-generator)',
+            '(set! eos-generator (g3t-generator-create model tokenizer (policy id)))',
             '(g3m-generate-p1-g1! eos-generator eos-input)',
         )
         at = 0
