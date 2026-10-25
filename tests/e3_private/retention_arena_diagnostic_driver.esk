@@ -449,6 +449,64 @@
         (vector-set! e3-test-retention-root 0 #f)
         (vector 'e3-retention-teardown-v1 before after)))))
 
+;;; Diagnostic-only matched D2 call after the same 512 completed E3 calls.
+;;; This never replaces the complete-call retention predicate or report.
+(define (e3-test-retention-diagnose-d2 horizon present? fault?)
+  (let* ((record (vector-ref e3-test-retention-root 0))
+         (model (vector-ref record 0))
+         (destinations (vector-ref record 1))
+         (frame (vector-ref record 2))
+         (dataset (vector-ref record 3))
+         (cursor (vector-ref record 4))
+         (modes (vector-ref record 5))
+         (model-image (vector-ref record 6))
+         (samples (make-vector 5 0)))
+    (e3-test-retention-check 'd2-diagnostic-identity
+      (and (= horizon 1024) (eq? present? #f) (not (vector-ref record 13))
+           (boolean? fault?)))
+    (let prefix ((index 0))
+      (if (= index 512) #t
+          (begin
+            (e3-test-retention-check 'd2-prefix-region-byte-equality
+              (= (e3-test-retention-call! model dataset frame destinations
+                                          cursor modes model-image)
+                 (vector-ref record 14)))
+            (prefix (+ index 1)))))
+    (vector-set! samples 0 (__arena-used))
+    (e3-test-read-fail-stage (if fault? 1 0))
+    (vector-set! samples 1 (__arena-used))
+    (with-region ('e3-retention-d2-direct 262144)
+      (let ((caught?
+             (guard
+              (caught
+               (#t (and (transformer-error? caught)
+                        (eq? (transformer-error-category caught) 'io)
+                        (eq? (transformer-error-operation caught)
+                             'token-dataset-next-batch))))
+              (let ((batch (d2-token-dataset-next-batch dataset)))
+                (e3-test-retention-check 'd2-direct-not-eos
+                  (not (d2-token-dataset-end? batch)))
+                (d2-token-batch-release! batch)
+                (d2-token-dataset-seek! dataset cursor)
+                #f))))
+        (e3-test-retention-check 'd2-direct-outcome (eq? caught? fault?))))
+    (vector-set! samples 2 (__arena-used))
+    (e3-test-read-fail-stage 0)
+    (with-region ('e3-retention-d2-check 262144)
+      (e3-test-retention-check 'd2-direct-cursor
+        (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset)))
+      (e3-test-retention-check 'd2-direct-no-live-batch
+        (= (e3-test-retention-probe 3) 0)))
+    (vector-set! samples 3 (__arena-used))
+    (e3-test-retention-check 'd2-direct-retry-region-byte-equality
+      (= (e3-test-retention-call! model dataset frame destinations cursor modes
+                                  model-image) (vector-ref record 14)))
+    (vector-set! samples 4 (__arena-used))
+    (vector 'e3-retention-d2-arena-diagnostic-v1 fault?
+            (vector-ref samples 0) (vector-ref samples 1)
+            (vector-ref samples 2) (vector-ref samples 3)
+            (vector-ref samples 4))))
+
 (define (e3-test-retention-run phase horizon present? corpus-path)
   (cond ((eq? phase 'prepare)
          (e3-test-retention-prepare horizon present? corpus-path))
@@ -465,13 +523,18 @@
     (and (vector? scenario)
          (or (= (vector-length scenario) 4)
              (and (= (vector-length scenario) 5)
-                  (eq? (vector-ref scenario 1) 'diagnose)
+                  (or (eq? (vector-ref scenario 1) 'diagnose)
+                      (eq? (vector-ref scenario 1) 'diagnose-d2))
                   (boolean? (vector-ref scenario 4))))
          (eq? (vector-ref scenario 0) 'retention)))
-  (if (eq? (vector-ref scenario 1) 'diagnose)
+  (if (eq? (vector-ref scenario 1) 'diagnose-d2)
+      (e3-test-retention-diagnose-d2 (vector-ref scenario 2)
+                                     (vector-ref scenario 3)
+                                     (vector-ref scenario 4))
+      (if (eq? (vector-ref scenario 1) 'diagnose)
       (e3-test-retention-diagnose (vector-ref scenario 2)
                                   (vector-ref scenario 3)
                                   (vector-ref scenario 4))
       (e3-test-retention-run (vector-ref scenario 1)
                              (vector-ref scenario 2)
-                             (vector-ref scenario 3) corpus-path)))
+                             (vector-ref scenario 3) corpus-path))))

@@ -26,7 +26,9 @@ class RetentionRawI2Tests(unittest.TestCase):
         reconcile = '(define (e3-test-retention-reconcile! before after)'
         prepare = '(define (e3-test-retention-prepare horizon present? corpus-path)'
         self.assertEqual(previous[:previous.index(report)], current[:current.index(report)])
-        self.assertEqual(previous[previous.index(teardown):], current[current.index(teardown):])
+        run = '(define (e3-test-retention-run phase horizon present? corpus-path)'
+        self.assertEqual(previous[previous.index(teardown):previous.index(run)],
+                         current[current.index(teardown):current.index(';;; Diagnostic-only matched D2 call')])
         self.assertEqual(previous[previous.index(reconcile):previous.index(prepare)],
                          current[current.index(reconcile):current.index(prepare)])
         body = current[current.index(report):current.index(teardown)]
@@ -41,7 +43,11 @@ class RetentionRawI2Tests(unittest.TestCase):
             for index in (14, 15, 16):
                 self.assertEqual(body.count(f'(vector-ref {side} {index})'), 1)
         self.assertIn("'balanced-i2-views-pins", current)
-        self.assertEqual(RUNTIME.read_bytes(), old(RUNTIME))
+        runtime = RUNTIME.read_text()
+        inherited = '(e3-retention-test-run diagnose input output)'
+        previous_runtime = old(RUNTIME).decode()
+        self.assertEqual(previous_runtime[previous_runtime.index(inherited):],
+                         runtime[runtime.index(inherited):])
         for rel in ('tests/e3_private/retention_arena_diagnostic_bridge.c',
                     'tests/e3_private/retention_arena_diagnostic_driver_root.esk',
                     'tests/e3_private/retention_arena.cpp'):

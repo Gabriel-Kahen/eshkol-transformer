@@ -1110,6 +1110,18 @@ a newly built diagnostic private package, independent review and a fresh
 supported paired AOT run are pending. This source-only change does not close
 complete-call retention or E3 §9. See [retention status](e3/E3_COMPLETE_CALL_RETENTION.md).
 
+The independent `ef126033` paired raw-I2 diagnostic measured a fault-only
+2,360-byte root-arena increase after the injected D2 read failure, persistent
+through retry; paired controls stayed flat. The existing D2 shard path promotes
+the caught read error through `region-close` into its dataset-owned exception
+slot before E3 stage-5 mapping and M3 boundary rethrow. A separate test-only
+`diagnose-d2` source candidate compares direct D2 fault and successful D2
+control after the same 512 completed evaluator calls in fresh processes. It
+records root-arena samples around the direct call and checks cursor, native
+batch idleness and a real evaluator retry. This is a causal localization probe:
+it has no compiled result, does not alter the original report/retention
+assertions, and cannot by itself admit complete-call retention or E3 §9.
+
 The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
 is a docs-only candidate for the remaining private numerical, compiled-mutant,
 failure and rollback gates. It tracks authentic D2/model reachability separately

@@ -41,8 +41,9 @@ class RetentionArenaPhaseV2Test(unittest.TestCase):
         teardown = '(e3-retention-test-run teardown input output)'
         marker = '(display "E3-RETENTION-ARENA-DIAGNOSTIC mode=")'
         flush = '(flush-output-port (current-output-port))'
-        self.assertLess(new.index(marker), new.index(flush))
-        self.assertLess(new.index(flush), new.index(report))
+        inherited_flush = new.index(flush, new.index(marker))
+        self.assertLess(new.index(marker), inherited_flush)
+        self.assertLess(inherited_flush, new.index(report))
         self.assertLess(new.index(report), new.index(teardown))
         for anchor in (report, teardown, "(check 'report", "(check 'teardown"):
             self.assertIn(anchor, old)
