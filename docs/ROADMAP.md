@@ -2385,8 +2385,22 @@ locates this compiler failure in the receipt's first opaque identity definition:
 its original `define`/`lambda` form fails, while the equivalent named-function
 definition emits the full reader IR and shared library under the original
 compiler flags. The receipt identity remains a mutable zero-argument binding
-with the same guard and marker. This is compiled IR evidence only; fresh
-reader runtime authentication, negative controls, and replay are still open.
+with the same guard and marker. The first full repaired reader attempt sealed
+FAIL before native link because its recipe named a nonexistent producer bridge;
+its 224-file receipt is
+`g3r-trained-pair-reader-2fec6de4-attempt1/SHA256SUMS-RUN` (SHA-256
+`cf0e23aac0e7e90fff246095d1f2ff39785c7a12ae6717079dac2ee3b3224cf1`).
+The corrected, independently reviewed recipe passed a fresh compiled normal,
+repeat and native ASan+UBSan FILE reader plus short-file, wrong-digest and
+corrupt-C2 controls. Its 479-file receipt
+`g3r-trained-pair-reader-2fec6de4-attempt2/SHA256SUMS-RUN` (SHA-256
+`d3fe857dc442fa04fe5e65eff03e2c6efc7ff0bc4153d684d734418b0d52d273`)
+has zero launcher/Docker exits, 99-source private closure, one init/owner,
+17 exact exports, thin caller/negative depfiles and empty runtime stderr.
+It authenticates the same sealed trained C2/companion from the fa9 producer
+receipts in a fresh process and returns only data. Independent exact-result
+review remains pending. It does not restore a model, replay cache/logits, or
+continue generation.
 
 The earlier G3-R C2 SAVE continuation on `0581426b` sealed a failed runtime
 receipt at `g3-save-0581426b-cont-attempt1/SHA256SUMS-RUN`: its compiled
