@@ -126,6 +126,18 @@ static void negatives(void) {
   keep[0] = 1; q[0] = FLT_MAX; k[0] = FLT_MAX;
   reject_unchanged(a, ET_M3T_C4_ATTENTION_VJP_VALUE);
   q[0] = 0.0f; k[0] = 0.0f;
+  /* Each score is finite, but their difference is -Inf. The genuine
+   * provider rejects this row before evaluating expf. */
+  q[2] = 2.0e19f; k[0] = -1.5e19f; k[2] = 1.5e19f;
+  et_kernel_tensor_view_v1 result = tv(out, sizeof(out), "f32", 4u, head_shape);
+  et_kernel_request_v1 request =
+      rq("g3c4.causal-attention.forward", 6u, request_shape);
+  et_kernel_call_v1 call = kc("g3c4.causal-attention", &request, a, 6u,
+                              &result, 1u);
+  reject(runtime, &call, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+         ET_KERNEL_CODE_PROVIDER_REJECTED);
+  reject_unchanged(a, ET_M3T_C4_ATTENTION_VJP_VALUE);
+  q[2] = 0.0f; k[0] = 0.0f; k[2] = 0.0f;
   CHECK(et_m3t_c4_attention_vjp_private_v1(NULL, &a[1], &a[2], &a[3],
       &a[4], &a[5], &a[6], &a[7], &a[8], &a[9]) ==
       ET_M3T_C4_ATTENTION_VJP_INVALID_ARGUMENT);

@@ -2292,7 +2292,7 @@ The [private C4 causal-attention VJP source candidate]
 full-length self-attention row with `[1,4]` positions and `[1,4,4]` keep
 mask. It stages dQ/dK/dV and validates exact CPU f32 views, causal mask,
 finite values and disjoint storage. Local Clang 22 normal/repeat/native
-ASan+UBSan passed 171 checks per mode, including all 48 central differences
+ASan+UBSan passed 178 checks per mode, including all 48 central differences
 under each of two masks through the genuine forward provider and feature-off
 rejection. Independent review and pinned compiled admission remain pending;
 this leaf does not establish a composed trainable C4 model.

@@ -16,7 +16,9 @@ For each admitted row, `p = softmax((Q K^T) / sqrt(2))`. With upstream U,
 `ds_j = p_j (g_j - sum_l p_l g_l)`,
 `dQ += (ds K) / sqrt(2)`, and `dK += (ds^T Q) / sqrt(2)`.
 All three gradients are staged until every view, value, mask, position,
-overlap and finite result check succeeds. The function retains no state.
+overlap and finite result check succeeds. It rejects a nonfinite
+score-minus-maximum before `expf`, matching the forward provider even when
+both scores themselves are finite. The function retains no state.
 Its fixed loops are a native numerical leaf and have no scalar fallback.
 
 The focused test checks all 48 central differences for both a full causal

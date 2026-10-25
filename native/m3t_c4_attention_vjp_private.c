@@ -105,7 +105,9 @@ int et_m3t_c4_attention_vjp_private_v1(
       if (!any) continue;
       for (size_t j = 0; j < 4u; ++j) {
         if (!mask[t * 4u + j] || kp[j] > qp[t]) continue;
-        p[j] = expf(score[j] - maximum);
+        const float shifted = score[j] - maximum;
+        if (!isfinite(shifted)) return ET_M3T_C4_ATTENTION_VJP_VALUE;
+        p[j] = expf(shifted);
         denominator += p[j];
       }
       if (!isfinite(denominator) || denominator <= 0.0f)
