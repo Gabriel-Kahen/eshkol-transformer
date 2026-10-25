@@ -20,6 +20,12 @@
     !defined(ET_G3C4_GENERATOR_PRIVATE)
 #error "C4 context exclusion requires the generation transport registry"
 #endif
+#if defined(ET_G3R_C4_WORKSPACE_PRIVATE) && \
+    (!defined(ET_G3R_C4_CONTEXT_EXCLUSION_PRIVATE) || \
+     !defined(ET_G3R_C4_OWNER_PARAMETER_LEASE_PRIVATE) || \
+     !defined(ET_G3R_C4_OWNER_ASSOCIATION_PRIVATE))
+#error "C4 workspace requires context, lease and owner association authorities"
+#endif
 #ifdef ET_G3R_C4_OWNER_TOPOLOGY_PRIVATE
 #ifndef ET_G3C4_NATIVE_PINS_PRIVATE
 #error "sealed C4 topology status requires fixed14 native pins"
@@ -1980,6 +1986,221 @@ int64_t et_g3c4_private_no_live_owner_context_status_v1(
   if (owner->active != NULL)
     return et_g3c4_fail(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  return 0;
+}
+#endif
+
+#ifdef ET_G3R_C4_WORKSPACE_PRIVATE
+/* Only the Eshkol aggregate publishes a workspace shell. This record is a
+ * native exclusive edge, never a generation context or a public pointer. */
+typedef struct et_g3c4_workspace_internal {
+  struct et_g3c4_workspace_internal *next;
+  et_g3c4_model_owner_internal *owner;
+  int64_t nonce;
+} et_g3c4_workspace_internal;
+
+static et_g3c4_workspace_internal *et_g3c4_workspace_staged;
+static et_g3c4_workspace_internal *et_g3c4_workspace_live;
+static int64_t et_g3c4_workspace_next_nonce = 1;
+#ifdef ET_G3R_C4_WORKSPACE_TESTING
+static int et_g3c4_workspace_fail_allocation;
+static int et_g3c4_workspace_fail_commit;
+static size_t et_g3c4_workspace_retained_bytes;
+size_t et_g3c4_private_workspace_test_retained_bytes_v1(void) {
+  return et_g3c4_workspace_retained_bytes;
+}
+int64_t et_g3c4_private_workspace_test_fail_allocation_once_v1(void) {
+  et_g3c4_workspace_fail_allocation = 1;
+  return 0;
+}
+int64_t et_g3c4_private_workspace_test_fail_commit_once_v1(void) {
+  et_g3c4_workspace_fail_commit = 1;
+  return 0;
+}
+#endif
+
+static et_g3c4_workspace_internal *et_g3c4_workspace_find(
+    const void *candidate, et_g3c4_workspace_internal ***link) {
+  et_g3c4_workspace_internal **cursor = &et_g3c4_workspace_live;
+  while (*cursor != NULL && *cursor != candidate) cursor = &(*cursor)->next;
+  if (link != NULL) *link = cursor;
+  return *cursor;
+}
+
+static int64_t et_g3c4_workspace_admit_live(
+    const void *candidate_owner, const void *candidate_workspace,
+    int64_t nonce) {
+  et_g3c4_model_owner_internal *owner =
+      et_g3c4_admit_owner(candidate_owner, 0);
+  et_g3c4_workspace_internal *workspace;
+  et_f32_tensor_error error = {0};
+  if (owner == NULL) return et_g3c4_error_state.category;
+  workspace = et_g3c4_workspace_find(candidate_workspace, NULL);
+  if (workspace == NULL || nonce <= 0 || workspace->nonce != nonce ||
+      workspace->owner != owner)
+    return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+  if (owner->state != ET_G3C4_OWNER_SEALED || owner->active != workspace ||
+      owner->initialized != 14u || !owner->successor_ready)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (et_g3c4_owner_idle_preflight(owner, &error) != 0)
+    return et_g3c4_error_state.category;
+  return 0;
+}
+
+void *et_g3c4_private_workspace_stage_v1(const void *candidate_owner) {
+  et_g3c4_model_owner_internal *owner;
+  et_g3c4_workspace_internal *workspace;
+  et_g3c4_error_reset_internal();
+  owner = et_g3c4_admit_owner(candidate_owner, 0);
+  if (owner == NULL) return NULL;
+  if (owner->state != ET_G3C4_OWNER_SEALED || owner->active != NULL ||
+      et_g3c4_workspace_staged != NULL ||
+      et_g3c4_workspace_next_nonce == INT64_MAX) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return NULL;
+  }
+  if (et_g3c4_private_no_live_owner_context_status_v1(owner) != 0 ||
+      et_g3c4_private_sealed_owner_parameter_lease_status_v1(owner) != 0)
+    return NULL;
+#ifdef ET_G3R_C4_WORKSPACE_TESTING
+  if (et_g3c4_workspace_fail_allocation) {
+    et_g3c4_workspace_fail_allocation = 0;
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_ALLOCATION);
+    return NULL;
+  }
+#endif
+  workspace = (et_g3c4_workspace_internal *)calloc(1u, sizeof(*workspace));
+  if (workspace == NULL) {
+    (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_ALLOCATION);
+    return NULL;
+  }
+  workspace->owner = owner;
+  workspace->nonce = et_g3c4_workspace_next_nonce++;
+#ifdef ET_G3R_C4_WORKSPACE_TESTING
+  et_g3c4_workspace_retained_bytes += sizeof(*workspace);
+#endif
+  et_g3c4_workspace_staged = workspace;
+  return workspace;
+}
+
+int64_t et_g3c4_private_workspace_staged_nonce_v1(
+    const void *candidate_workspace) {
+  et_g3c4_error_reset_internal();
+  if (et_g3c4_workspace_staged == NULL ||
+      candidate_workspace != et_g3c4_workspace_staged)
+    return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+  return et_g3c4_workspace_staged->nonce;
+}
+
+int64_t et_g3c4_private_workspace_abort_v1(void *candidate_workspace) {
+  et_g3c4_error_reset_internal();
+  if (et_g3c4_workspace_staged == NULL ||
+      candidate_workspace != et_g3c4_workspace_staged)
+    return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
+  free(et_g3c4_workspace_staged);
+  et_g3c4_workspace_staged = NULL;
+#ifdef ET_G3R_C4_WORKSPACE_TESTING
+  et_g3c4_workspace_retained_bytes -= sizeof(et_g3c4_workspace_internal);
+#endif
+  return 0;
+}
+
+int64_t et_g3c4_private_workspace_prepare_commit_v1(
+    const void *candidate_owner, const void *candidate_workspace,
+    int64_t nonce) {
+  et_g3c4_model_owner_internal *owner;
+  et_g3c4_error_reset_internal();
+  owner = et_g3c4_admit_owner(candidate_owner, 0);
+  if (owner == NULL) return et_g3c4_error_state.category;
+  if (et_g3c4_workspace_staged == NULL ||
+      candidate_workspace != et_g3c4_workspace_staged ||
+      et_g3c4_workspace_staged->owner != owner || nonce <= 0 ||
+      et_g3c4_workspace_staged->nonce != nonce ||
+      owner->state != ET_G3C4_OWNER_SEALED || owner->active != NULL)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (et_g3c4_private_no_live_owner_context_status_v1(owner) != 0 ||
+      et_g3c4_private_sealed_owner_parameter_lease_status_v1(owner) != 0)
+    return et_g3c4_error_state.category;
+  return 0;
+}
+
+/* No allocation, borrowing or fallible provider call after prepare under
+ * the aggregate's external serialization. */
+int64_t et_g3c4_private_workspace_commit_v1(
+    void *candidate_owner, void *candidate_workspace, int64_t nonce) {
+  et_g3c4_model_owner_internal *owner;
+  et_g3c4_workspace_internal *workspace = et_g3c4_workspace_staged;
+  et_g3c4_error_reset_internal();
+  owner = et_g3c4_admit_owner(candidate_owner, 0);
+  if (owner == NULL) return et_g3c4_error_state.category;
+  if (workspace == NULL || candidate_workspace != workspace ||
+      workspace->owner != owner || nonce <= 0 || workspace->nonce != nonce ||
+      owner->state != ET_G3C4_OWNER_SEALED || owner->active != NULL)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+#ifdef ET_G3R_C4_WORKSPACE_TESTING
+  if (et_g3c4_workspace_fail_commit) {
+    et_g3c4_workspace_fail_commit = 0;
+    return et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_ALLOCATION);
+  }
+#endif
+  workspace->next = et_g3c4_workspace_live;
+  et_g3c4_workspace_live = workspace;
+  et_g3c4_workspace_staged = NULL;
+  owner->active = workspace;
+  return 0;
+}
+
+int64_t et_g3c4_private_workspace_live_status_v1(
+    const void *candidate_owner, const void *candidate_workspace,
+    int64_t nonce) {
+  et_g3c4_error_reset_internal();
+  return et_g3c4_workspace_admit_live(
+      candidate_owner, candidate_workspace, nonce);
+}
+
+int64_t et_g3c4_private_workspace_binding_status_v1(
+    const void *candidate_owner, const void *candidate_workspace,
+    int64_t nonce, int64_t index, const void *exact_handle,
+    const void *exact_parameter) {
+  et_g3c4_model_owner_internal *owner;
+  et_f32_tensor_error error = {0};
+  et_g3c4_error_reset_internal();
+  if (et_g3c4_workspace_admit_live(
+          candidate_owner, candidate_workspace, nonce) != 0)
+    return et_g3c4_error_state.category;
+  owner = et_g3c4_admit_owner(candidate_owner, 0);
+  if (index < 0 || index >= 14 || exact_handle == NULL ||
+      exact_parameter == NULL)
+    return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_SELECTOR);
+  if (owner->handles[index] != exact_handle ||
+      owner->parameters[index] != exact_parameter)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_STALE_BINDING);
+  if (et_g3c4_capture_f32(et_f32_parameter_validate_identity_v1(
+          owner->parameters[index], exact_handle, &error), &error))
+    return et_g3c4_error_state.category;
+  return 0;
+}
+
+/* Eshkol performs the P1/I2/registry recheck before calling this cleanup.
+ * The status preflight is fallible; the final edge clear/free is not. */
+int64_t et_g3c4_private_workspace_release_v1(
+    void *candidate_owner, void *candidate_workspace, int64_t nonce) {
+  et_g3c4_model_owner_internal *owner;
+  et_g3c4_workspace_internal **link = NULL;
+  et_g3c4_workspace_internal *workspace;
+  et_g3c4_error_reset_internal();
+  if (et_g3c4_workspace_admit_live(
+          candidate_owner, candidate_workspace, nonce) != 0)
+    return et_g3c4_error_state.category;
+  owner = et_g3c4_admit_owner(candidate_owner, 0);
+  workspace = et_g3c4_workspace_find(candidate_workspace, &link);
+  if (workspace == NULL || link == NULL) abort();
+  owner->active = NULL;
+  *link = workspace->next;
+  free(workspace);
+#ifdef ET_G3R_C4_WORKSPACE_TESTING
+  et_g3c4_workspace_retained_bytes -= sizeof(et_g3c4_workspace_internal);
+#endif
   return 0;
 }
 #endif

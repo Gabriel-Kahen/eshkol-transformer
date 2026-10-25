@@ -3,6 +3,7 @@
 
 #include "../../native/f32_parameter_internal.h"
 
+#include <stddef.h>
 #include <stdint.h>
 
 /* Source-private ABI. All owner calls require external serialization. */
@@ -83,6 +84,30 @@ int64_t et_g3c4_private_sealed_owner_binding_status_v1(
  * A future C4 workspace/trainer lease ledger needs a separate gate. */
 int64_t et_g3c4_private_sealed_owner_parameter_lease_status_v1(
     const void *exact_owner);
+#endif
+
+#ifdef ET_G3R_C4_WORKSPACE_PRIVATE
+/* One staged allocation and one live exclusive edge per exact sealed owner.
+ * The nonce distinguishes released pointer addresses reused by malloc. */
+void *et_g3c4_private_workspace_stage_v1(const void *exact_owner);
+int64_t et_g3c4_private_workspace_staged_nonce_v1(const void *candidate);
+int64_t et_g3c4_private_workspace_abort_v1(void *candidate);
+int64_t et_g3c4_private_workspace_prepare_commit_v1(
+    const void *exact_owner, const void *candidate, int64_t nonce);
+int64_t et_g3c4_private_workspace_commit_v1(
+    void *exact_owner, void *candidate, int64_t nonce);
+int64_t et_g3c4_private_workspace_live_status_v1(
+    const void *exact_owner, const void *candidate, int64_t nonce);
+int64_t et_g3c4_private_workspace_binding_status_v1(
+    const void *exact_owner, const void *candidate, int64_t nonce,
+    int64_t index, const void *exact_handle, const void *exact_parameter);
+int64_t et_g3c4_private_workspace_release_v1(
+    void *exact_owner, void *candidate, int64_t nonce);
+#ifdef ET_G3R_C4_WORKSPACE_TESTING
+size_t et_g3c4_private_workspace_test_retained_bytes_v1(void);
+int64_t et_g3c4_private_workspace_test_fail_allocation_once_v1(void);
+int64_t et_g3c4_private_workspace_test_fail_commit_once_v1(void);
+#endif
 #endif
 
 int32_t et_g3c4_construction_parameter_preflight_internal(

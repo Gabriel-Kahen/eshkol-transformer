@@ -1,0 +1,299 @@
+;;; Private C4 workspace lifetime. Load after trainable constructor, P1 slots
+;;; 74/75, owner association, I2, and the native context/lease authorities.
+;;; A workspace shell is a closure: callers cannot inspect a native pointer.
+
+(extern ptr g3r-c4-workspace-native-stage ptr
+        :real et_g3c4_private_workspace_stage_v1)
+(extern i64 g3r-c4-workspace-native-nonce ptr
+        :real et_g3c4_private_workspace_staged_nonce_v1)
+(extern i64 g3r-c4-workspace-native-abort ptr
+        :real et_g3c4_private_workspace_abort_v1)
+(extern i64 g3r-c4-workspace-native-prepare ptr ptr i64
+        :real et_g3c4_private_workspace_prepare_commit_v1)
+(extern i64 g3r-c4-workspace-native-commit ptr ptr i64
+        :real et_g3c4_private_workspace_commit_v1)
+(extern i64 g3r-c4-workspace-native-live ptr ptr i64
+        :real et_g3c4_private_workspace_live_status_v1)
+(extern i64 g3r-c4-workspace-native-binding ptr ptr i64 i64 ptr ptr
+        :real et_g3c4_private_workspace_binding_status_v1)
+(extern i64 g3r-c4-workspace-native-release ptr ptr i64
+        :real et_g3c4_private_workspace_release_v1)
+(extern i64 g3r-c4-workspace-native-no-context ptr
+        :real et_g3c4_private_no_live_owner_context_status_v1)
+(extern i64 g3r-c4-workspace-native-no-lease ptr
+        :real et_g3c4_private_sealed_owner_parameter_lease_status_v1)
+
+(define g3r-c4-workspace-registry (vector '()))
+(define g3r-c4-workspace-seal (vector 'g3r-c4-workspace-seal))
+;;; Source-private fixture seam; shipped behavior is inert.
+(define g3r-c4-workspace-fault-hook (lambda (phase) #t))
+
+(define (g3r-c4-workspace-entry model expected operation)
+  (let find ((remaining (vector-ref g3c4-model-registry 0)))
+    (cond
+      ((null? remaining)
+       (g3c4-fail 'invalid-argument operation "C4 model is not registered"))
+      ((not (and (pair? remaining) (vector? (car remaining))
+                 (= (vector-length (car remaining)) 12)))
+       (g3c4-fail 'invalid-state operation "C4 registry is malformed"))
+      ((not (eq? (vector-ref (car remaining) 0) model))
+       (find (cdr remaining)))
+      (else
+        (let* ((entry (car remaining))
+               (metadata (vector-ref entry 7))
+               (original (vector-ref entry 5))
+               (successor (vector-ref entry 6))
+               (handles (vector-ref entry 8)))
+          (if (not (and
+                     (eq? (vector-ref entry 1) 'c4-model)
+                     (eq? (vector-ref entry 2) 'live)
+                     (eq? (vector-ref entry 4) 'trainable)
+                     (eq? (vector-ref entry 9) #f)
+                     (eq? (vector-ref entry 10) expected)
+                     (eq? (vector-ref entry 11) 'trainable-c4)
+                     (not (vector-ref g3c4-model-cleanup-root 0))
+                     (not (vector-ref i2-construction-registry-root 1))
+                     (vector? metadata) (= (vector-length metadata) 9)
+                     (eq? (vector-ref metadata 0) 'g3c4-trainable-metadata-v1)
+                     (string? (vector-ref metadata 2))
+                     (string? (vector-ref metadata 3))
+                     (string? (vector-ref metadata 5))
+                     (vector? original) (= (vector-length original) 4)
+                     (vector? successor) (= (vector-length successor) 4)
+                     (vector? (vector-ref metadata 8))
+                     (= (vector-length (vector-ref metadata 8)) 4)
+                     (equal? original (vector-ref metadata 8))
+                     (equal? successor
+                             (vector 1 (vector-ref original 1) 292 0))
+                     (vector? handles) (= (vector-length handles) 14)))
+              (g3c4-fail 'invalid-state operation
+                          "trainable C4 model tuple is not exact"))
+          (let ((current (g3c4-trainable-metadata
+                           (vector-ref metadata 1) (vector-ref metadata 4)
+                           (vector-ref metadata 6) operation)))
+            (if (not (and (eq? (vector-ref metadata 1) (vector-ref current 1))
+                          (string=? (vector-ref metadata 2)
+                                    (vector-ref current 2))
+                          (string=? (vector-ref metadata 3)
+                                    (vector-ref current 3))
+                          (eq? (vector-ref metadata 4) (vector-ref current 4))
+                          (string=? (vector-ref metadata 5)
+                                    (vector-ref current 5))
+                          (eq? (vector-ref metadata 6) (vector-ref current 6))
+                          (eq? (vector-ref metadata 7) (vector-ref current 7))
+                          (equal? (vector-ref metadata 8)
+                                  (vector-ref current 8))))
+                (g3c4-fail 'invalid-state operation
+                            "trainable C4 metadata changed")))
+          entry)))))
+
+(define (g3r-c4-workspace-create-preflight model operation)
+  (let* ((entry (g3r-c4-workspace-entry model #f operation))
+         (owner (vector-ref entry 3))
+         (handles (vector-ref entry 8)))
+    (if (not (eq? (module-mode-internal model) 'train))
+        (g3c4-fail 'invalid-state operation "C4 model is not in train mode"))
+    (if (not (= (g3r-c4-trainable-owner-association-status-internal
+                   model handles owner) 0))
+        (g3c4-fail 'invalid-state operation
+                    "C4 P1/I2/native owner association differs"))
+    (g3c4-native-check (g3r-c4-workspace-native-no-context owner) operation)
+    (g3c4-native-check (g3r-c4-workspace-native-no-lease owner) operation)
+    entry))
+
+(define (g3r-c4-workspace-capture-carriers handles operation)
+  (let ((carriers (make-vector 14 #f)))
+    (let loop ((index 0))
+      (if (= index 14) carriers
+          (let* ((handle (vector-ref handles index))
+                 (carrier (parameter-handle-tensor-identity-internal handle)))
+            (if (not (and (i2-carrier-shape? carrier)
+                          (eq? (vector-ref carrier 1) 'parameter)
+                          (eq? (vector-ref carrier 4) 'parameter)
+                          (eq? (vector-ref carrier 3) handle)
+                          (= (i2-native-carrier-live
+                               (vector-ref carrier 2) 1 handle) 1)))
+                (g3c4-fail 'invalid-state operation
+                            "C4 handle carrier changed"))
+            (vector-set! carriers index carrier)
+            (loop (+ index 1)))))))
+
+;;; The private seal is never returned by this operation. A dead shell owns a
+;;; GC-reclaimable tombstone; the live registry retains only live rows.
+(define (g3r-c4-workspace-row workspace operation)
+  (let ((row (if (procedure? workspace)
+                 (guard (caught (#t #f))
+                   (workspace g3r-c4-workspace-seal)) #f)))
+    (if (not (and (vector? row) (= (vector-length row) 10)
+                  (eq? (vector-ref row 0) g3r-c4-workspace-seal)
+                  (eq? (vector-ref row 1) workspace)))
+        (g3c4-fail 'invalid-argument operation
+                    "workspace shell is foreign or forged"))
+    row))
+
+(define (g3r-c4-workspace-live-registry-row? row)
+  (let find ((remaining (vector-ref g3r-c4-workspace-registry 0)))
+    (cond ((null? remaining) #f)
+          ((eq? (car remaining) row) #t)
+          (else (find (cdr remaining))))))
+
+(define (g3r-c4-workspace-auth-live row require-train operation)
+  (if (not (and (eq? (vector-ref row 9) 'live)
+                (g3r-c4-workspace-live-registry-row? row)))
+      (g3c4-fail 'invalid-state operation "workspace is not live"))
+  (let* ((shell (vector-ref row 1))
+         (model (vector-ref row 2))
+         (entry (g3r-c4-workspace-entry model shell operation))
+         (owner (vector-ref row 4))
+         (native (vector-ref row 5))
+         (nonce (vector-ref row 6))
+         (handles (vector-ref row 7))
+         (carriers (vector-ref row 8))
+         (current (vector-ref entry 8)))
+    (if (not (and (eq? entry (vector-ref row 3))
+                  (eq? owner (vector-ref entry 3))
+                  (vector? handles) (= (vector-length handles) 14)
+                  (vector? carriers) (= (vector-length carriers) 14)
+                  (vector? current) (= (vector-length current) 14)))
+        (g3c4-fail 'invalid-state operation
+                    "workspace/model owner tuple changed"))
+    (if (not (= (module-c4-lifetime-topology-status-internal model handles) 0))
+        (g3c4-fail 'invalid-state operation
+                    "C4 lifetime P1 topology changed"))
+    (if (and require-train
+             (not (= (module-c4-train-topology-status-internal model handles) 0)))
+        (g3c4-fail 'invalid-state operation
+                    "C4 workspace reset requires train topology"))
+    (g3c4-native-check
+      (g3r-c4-workspace-native-live owner native nonce) operation)
+    (let loop ((index 0))
+      (if (= index 14) #t
+          (let* ((handle (vector-ref handles index))
+                 (carrier (parameter-handle-tensor-identity-internal handle)))
+            (if (not (and (eq? handle (vector-ref current index))
+                          (eq? carrier (vector-ref carriers index))
+                          (i2-carrier-shape? carrier)
+                          (eq? (vector-ref carrier 3) handle)
+                          (eq? (vector-ref carrier 1) 'parameter)
+                          (eq? (vector-ref carrier 4) 'parameter)
+                          (= (i2-native-carrier-live
+                               (vector-ref carrier 2) 1 handle) 1)))
+                (g3c4-fail 'invalid-state operation
+                            "original C4 handle/carrier changed"))
+            (g3c4-native-check
+              (g3r-c4-workspace-native-binding
+                owner native nonce index handle (vector-ref carrier 2))
+              operation)
+            (loop (+ index 1)))))
+    (if (not (= (module-c4-lifetime-topology-status-internal model handles) 0))
+        (g3c4-fail 'invalid-state operation
+                    "C4 lifetime topology changed during recheck"))
+    (g3c4-native-check
+      (g3r-c4-workspace-native-live owner native nonce) operation)
+    entry))
+
+(define (g3r-c4-workspace-create-internal model)
+  (let ((operation 'g3r-c4-workspace-create-internal))
+    (m3-call operation
+      (let* ((entry (g3r-c4-workspace-create-preflight model operation))
+             (owner (vector-ref entry 3))
+             (original (vector-ref entry 8))
+             (handles (make-vector 14 #f))
+             (carriers (g3r-c4-workspace-capture-carriers original operation))
+             (native '())
+             (committed #f))
+        (let copy ((index 0))
+          (if (< index 14)
+              (begin (vector-set! handles index (vector-ref original index))
+                     (copy (+ index 1)))))
+        (guard (caught
+                 (#t
+                   (if (and (not committed) (not (null? native)))
+                       (g3c4-native-check
+                         (g3r-c4-workspace-native-abort native) operation))
+                   (m3t-rethrow-raw caught operation)))
+          (set! native (g3r-c4-workspace-native-stage owner))
+          (if (null? native) (g3c4-native-fail operation))
+          (let ((nonce (g3r-c4-workspace-native-nonce native)))
+            (if (not (and (> nonce 0)
+                          (= (g3c4-native-last-error-category) 0)))
+                (g3c4-native-fail operation))
+            (if (not (g3r-c4-workspace-fault-hook 'after-stage))
+                (g3c4-fail 'internal operation "workspace stage fault"))
+            (let* ((row (vector g3r-c4-workspace-seal #f model entry owner
+                                native nonce handles carriers 'staged))
+                   (shell (lambda (secret)
+                            (if (eq? secret g3r-c4-workspace-seal) row #f)))
+                   (next (cons row (vector-ref g3r-c4-workspace-registry 0))))
+              (vector-set! row 1 shell)
+              (if (not (g3r-c4-workspace-fault-hook 'after-shell))
+                  (g3c4-fail 'internal operation "workspace shell fault"))
+              (if (not (g3r-c4-workspace-fault-hook 'before-commit))
+                  (g3c4-fail 'internal operation "workspace commit fault"))
+              (if (not (eq? entry
+                            (g3r-c4-workspace-create-preflight model operation)))
+                  (g3c4-fail 'invalid-state operation
+                              "C4 model changed after workspace allocation"))
+              (let ((again (g3r-c4-workspace-capture-carriers
+                             original operation)))
+                (let compare ((index 0))
+                  (if (< index 14)
+                      (begin
+                        (if (not (and
+                                   (eq? (vector-ref original index)
+                                        (vector-ref handles index))
+                                   (eq? (vector-ref again index)
+                                        (vector-ref carriers index))))
+                            (g3c4-fail 'invalid-state operation
+                                        "C4 binding changed after allocation"))
+                        (compare (+ index 1))))))
+              (g3c4-native-check
+                (g3r-c4-workspace-native-prepare owner native nonce) operation)
+              ;; Serialized no-failure tail: native edge, C4 edge, registry.
+              (g3c4-native-check
+                (g3r-c4-workspace-native-commit owner native nonce) operation)
+              (set! committed #t)
+              (vector-set! row 9 'live)
+              (vector-set! entry 10 shell)
+              (vector-set! g3r-c4-workspace-registry 0 next)
+              shell)))))))
+
+(define (g3r-c4-workspace-reset-internal! workspace)
+  (let ((operation 'g3r-c4-workspace-reset-internal!))
+    (m3-call operation
+      (let ((row (g3r-c4-workspace-row workspace operation)))
+        (g3r-c4-workspace-auth-live row #t operation)
+        ;; No scratch or graph is owned by this gate.
+        workspace))))
+
+(define (g3r-c4-workspace-without row)
+  (let loop ((remaining (vector-ref g3r-c4-workspace-registry 0)))
+    (if (null? remaining) '()
+        (if (eq? (car remaining) row) (cdr remaining)
+            (cons (car remaining) (loop (cdr remaining)))))))
+
+(define (g3r-c4-workspace-release-internal! workspace)
+  (let ((operation 'g3r-c4-workspace-release-internal!))
+    (m3-call operation
+      (let ((row (g3r-c4-workspace-row workspace operation)))
+        (if (eq? (vector-ref row 9) 'dead) #t
+            (let* ((entry (g3r-c4-workspace-auth-live row #f operation))
+                   (next (g3r-c4-workspace-without row)))
+              (if (not (g3r-c4-workspace-live-registry-row? row))
+                  (g3c4-fail 'invalid-state operation
+                              "workspace registry changed"))
+              (g3r-c4-workspace-auth-live row #f operation)
+              ;; Native preflight can fail; after success only edge clears and
+              ;; the already prepared registry-list publication remain.
+              (g3c4-native-check
+                (g3r-c4-workspace-native-release
+                  (vector-ref row 4) (vector-ref row 5) (vector-ref row 6))
+                operation)
+              (vector-set! entry 10 #f)
+              (vector-set! row 9 'dead)
+              (vector-set! row 4 #f)
+              (vector-set! row 5 #f)
+              (vector-set! row 7 #f)
+              (vector-set! row 8 #f)
+              (vector-set! g3r-c4-workspace-registry 0 next)
+              #t))))))

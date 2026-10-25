@@ -2283,6 +2283,16 @@ and local native suites pass together (23 and 14 Python tests; 99 owner and
 admission. Constructor, P1, association, context and lease compiled gates and
 serialized workspace edge publication remain separate dependencies.
 
+An isolated [workspace ownership source leaf](g3/G3_R_C4_WORKSPACE_OWNERSHIP_SOURCE_LEAF.md)
+now composes those existing authorities with the source-only P1 slot 75.
+Create uses slot 74 and a staged native exclusive edge; reset remains
+train-only, and release uses slot 75 after eval-mode drift. Local native
+normal/repeat/ASan+UBSan passed 530 checks per mode, including failure cuts
+and 32 release cycles. Its genuine trainable-C4 Eshkol fixture is **UNRUN**.
+No compiled workspace admission, C4 compute path or trained-C4 checkpoint is
+claimed; individual prerequisite compiled gates and an independently reviewed
+pinned workspace package gate remain pending.
+
 The [private C4 position VJP leaf](g3/G3_R_C4_POSITION_VJP_LEAF.md) supplies
 one fixed `[1,4]` position-ID and `[1,4,4]` upstream to `[4,4]` gradient
 operation behind a separate feature flag. Its source and tests were independently

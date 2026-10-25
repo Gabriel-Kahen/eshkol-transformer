@@ -1,0 +1,179 @@
+;;; Source candidate only; run in a future exact compiled private package gate.
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_trainable_constructor_extension.esk")
+(load "g3c4_trainable_owner_association_extension.esk")
+(load "g3r_c4_workspace_ownership_extension.esk")
+(extern i64 g3r-c4-test-workspace-fail-allocation
+        :real et_g3c4_private_workspace_test_fail_allocation_once_v1)
+(extern i64 g3r-c4-test-workspace-fail-commit
+        :real et_g3c4_private_workspace_test_fail_commit_once_v1)
+
+(define checks 0)
+(define (check label ok)
+  (if ok (set! checks (+ checks 1))
+      (begin (display "G3-R C4 workspace FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label category thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category))))
+      (thunk) #f)))
+(define (config context)
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      (string-append
+        "{\"config-schema-major\":1,\"config-schema-minor\":0,"
+        "\"model.context-length\":" (number->string context)
+        ",\"model.hidden-size\":4,\"model.layer-count\":1,"
+        "\"model.query-head-count\":2,\"model.vocabulary-size\":256,"
+        "\"run.seed\":1729}")) '()))
+(define c4-config (config 4))
+(define tokenizer (t1-private-tokenizer-byte c4-config))
+(define initializer (m3t-public-initializer-state 1729))
+(define model-a
+  (g3c4-model-create-trainable-internal c4-config tokenizer initializer))
+(define entry-a (car (vector-ref g3c4-model-registry 0)))
+(define handles-a (vector-ref entry-a 8))
+(define model-b
+  (g3c4-model-create-trainable-internal c4-config tokenizer initializer))
+(define entry-b (car (vector-ref g3c4-model-registry 0)))
+(define handles-b (vector-ref entry-b 8))
+(define before-registry (vector-ref g3c4-model-registry 0))
+(define before-workspaces (vector-ref g3r-c4-workspace-registry 0))
+(define saved-hook g3r-c4-workspace-fault-hook)
+
+(reject "foreign shell" 'invalid-argument
+        (lambda () (g3r-c4-workspace-reset-internal! (vector 'foreign))))
+(reject "forged closure shell" 'invalid-argument
+        (lambda ()
+          (g3r-c4-workspace-reset-internal!
+            (lambda (secret) (vector 'forged secret)))))
+(reject "C2 model" 'invalid-argument
+        (lambda ()
+          (g3r-c4-workspace-create-internal
+            (m3t-public-model-create (config 2) initializer))))
+(module-eval! model-a)
+(reject "eval create" 'invalid-state
+        (lambda () (g3r-c4-workspace-create-internal model-a)))
+(module-train! model-a)
+
+(g3r-c4-test-workspace-fail-allocation)
+(reject "native stage allocation failure" 'internal
+        (lambda () (g3r-c4-workspace-create-internal model-a)))
+(check "native allocation failure atomic"
+  (and (not (vector-ref entry-a 10))
+       (eq? (vector-ref g3r-c4-workspace-registry 0) before-workspaces)))
+
+(set! g3r-c4-workspace-fault-hook
+  (lambda (phase) (not (eq? phase 'after-stage))))
+(reject "after-stage rollback" 'internal
+        (lambda () (g3r-c4-workspace-create-internal model-a)))
+(set! g3r-c4-workspace-fault-hook saved-hook)
+(check "after-stage failure atomic"
+  (and (not (vector-ref entry-a 10))
+       (eq? (vector-ref g3r-c4-workspace-registry 0) before-workspaces)
+       (eq? (vector-ref g3c4-model-registry 0) before-registry)))
+(set! g3r-c4-workspace-fault-hook
+  (lambda (phase) (not (eq? phase 'after-shell))))
+(reject "after-shell rollback" 'internal
+        (lambda () (g3r-c4-workspace-create-internal model-a)))
+(set! g3r-c4-workspace-fault-hook saved-hook)
+(check "after-shell failure atomic"
+  (and (not (vector-ref entry-a 10))
+       (eq? (vector-ref g3r-c4-workspace-registry 0) before-workspaces)))
+(set! g3r-c4-workspace-fault-hook
+  (lambda (phase) (not (eq? phase 'before-commit))))
+(reject "before-commit rollback" 'internal
+        (lambda () (g3r-c4-workspace-create-internal model-a)))
+(set! g3r-c4-workspace-fault-hook saved-hook)
+(check "before-commit failure atomic"
+  (and (not (vector-ref entry-a 10))
+       (eq? (vector-ref g3r-c4-workspace-registry 0) before-workspaces)))
+(define create-carrier
+  (parameter-handle-tensor-identity-internal (vector-ref handles-a 0)))
+(define create-parameter (vector-ref create-carrier 2))
+(define create-foreign-parameter
+  (vector-ref
+    (parameter-handle-tensor-identity-internal (vector-ref handles-b 0)) 2))
+(set! g3r-c4-workspace-fault-hook
+  (lambda (phase)
+    (if (eq? phase 'before-commit)
+        (vector-set! create-carrier 2 create-foreign-parameter))
+    #t))
+(guard (caught (#t (vector-set! create-carrier 2 create-parameter)
+                   (set! g3r-c4-workspace-fault-hook saved-hook)
+                   (raise caught)))
+  (reject "after-allocation changed binding recheck" 'invalid-state
+          (lambda () (g3r-c4-workspace-create-internal model-a)))
+  (vector-set! create-carrier 2 create-parameter)
+  (set! g3r-c4-workspace-fault-hook saved-hook))
+(check "changed binding rejection atomic"
+  (and (not (vector-ref entry-a 10))
+       (eq? (vector-ref g3r-c4-workspace-registry 0) before-workspaces)
+       (eq? (vector-ref create-carrier 2) create-parameter)))
+(g3r-c4-test-workspace-fail-commit)
+(reject "native edge commit failure" 'internal
+        (lambda () (g3r-c4-workspace-create-internal model-a)))
+(check "native edge failure atomic"
+  (and (not (vector-ref entry-a 10))
+       (eq? (vector-ref g3r-c4-workspace-registry 0) before-workspaces)))
+
+(define workspace-a (g3r-c4-workspace-create-internal model-a))
+(check "one exact live C4 edge"
+  (and (eq? (vector-ref entry-a 10) workspace-a)
+       (= (length (vector-ref g3r-c4-workspace-registry 0)) 1)
+       (eq? (vector-ref entry-b 10) #f)))
+(reject "second workspace" 'invalid-state
+        (lambda () (g3r-c4-workspace-create-internal model-a)))
+(check "reset retains edge"
+  (eq? (g3r-c4-workspace-reset-internal! workspace-a) workspace-a))
+
+;;; Recheck current P1 binding and retained carrier, then restore exactly.
+(define original-handle (vector-ref handles-a 0))
+(vector-set! handles-a 0 (vector-ref handles-b 0))
+(reject "swapped current handle" 'invalid-state
+        (lambda () (g3r-c4-workspace-release-internal! workspace-a)))
+(vector-set! handles-a 0 original-handle)
+(define carrier-a0 (parameter-handle-tensor-identity-internal original-handle))
+(define original-parameter (vector-ref carrier-a0 2))
+(define foreign-parameter
+  (vector-ref
+    (parameter-handle-tensor-identity-internal (vector-ref handles-b 0)) 2))
+(guard (caught (#t (vector-set! carrier-a0 2 original-parameter)
+                   (raise caught)))
+  (vector-set! carrier-a0 2 foreign-parameter)
+  (reject "changed live carrier" 'invalid-state
+          (lambda () (g3r-c4-workspace-release-internal! workspace-a)))
+  (vector-set! carrier-a0 2 original-parameter))
+(check "failed release keeps edges"
+  (and (eq? (vector-ref entry-a 10) workspace-a)
+       (eq? (vector-ref carrier-a0 2) original-parameter)))
+(module-eval! model-a)
+(reject "eval reset" 'invalid-state
+        (lambda () (g3r-c4-workspace-reset-internal! workspace-a)))
+(vector-set! handles-a 0 (vector-ref handles-b 0))
+(reject "eval lifetime original-handle rejection" 'invalid-state
+        (lambda () (g3r-c4-workspace-release-internal! workspace-a)))
+(vector-set! handles-a 0 original-handle)
+(vector-set! carrier-a0 2 foreign-parameter)
+(reject "eval lifetime original-carrier rejection" 'invalid-state
+        (lambda () (g3r-c4-workspace-release-internal! workspace-a)))
+(vector-set! carrier-a0 2 original-parameter)
+(check "eval release" (g3r-c4-workspace-release-internal! workspace-a))
+(check "dead shell idempotent" (g3r-c4-workspace-release-internal! workspace-a))
+(check "released C4 edge" (not (vector-ref entry-a 10)))
+(reject "stale reset" 'invalid-state
+        (lambda () (g3r-c4-workspace-reset-internal! workspace-a)))
+(module-train! model-a)
+(define workspace-b (g3r-c4-workspace-create-internal model-a))
+(check "recreate after release" (not (eq? workspace-a workspace-b)))
+(check "independent model coexistence"
+  (let ((other (g3r-c4-workspace-create-internal model-b)))
+    (and (eq? (vector-ref entry-b 10) other)
+         (g3r-c4-workspace-release-internal! other))))
+(check "final release" (g3r-c4-workspace-release-internal! workspace-b))
+(display "G3-R C4 workspace source fixture PASS checks=")
+(display checks) (newline)
