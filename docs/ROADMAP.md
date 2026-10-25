@@ -690,8 +690,14 @@ runtime gates remain open. No main merge follows this update.
 
 The independent C4 T4 numerical bridge source review accepts test-only
 `c629e378`, with genuine C4/P1/D2 transport and independent CE/gradient
-checks. Its supported compiled normal/sanitizer gate is **NOT RUN**; the CLI3
-installed C4 producer and consumer remain downstream.
+checks. The exact-`77b7a774` supported normal gate compiled and reached the
+first runtime, then failed after 1,024 logit rows at its first gradient-plane
+read; the sealed receipt is
+`team/integration-cpu4-t4-numerical-normal-77b7-20261025`. Independent source
+diagnosis found the test observer released an ordinary gradient snapshot with
+the private-clone API. The observer now uses the ordinary tensor destroy API;
+normal/repeat/oracle and sanitizer acceptance remain **NOT RUN** after this
+correction. The CLI3 installed C4 producer and consumer remain downstream.
 
 The exact-`ef8f9bb5` hosted full-suite run `40145090136` is in progress. Its
 first C2 SAVE, LOAD and format jobs failed strict native source-closure checks:

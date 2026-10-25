@@ -34,7 +34,7 @@ int64_t et_cpu4_numerical_plane(void *lease, int64_t parameter,
   uint32_t bits[1024];
   int32_t status = et_f32_tensor_copy_bits_to_v1(
       plane, bits, words[parameter], &error);
-  if (snapshot && et_f32_owned_tensor_release_v1(snapshot, &error)) return -1;
+  if (snapshot && et_f32_tensor_destroy_v1(&snapshot, &error)) return -1;
   if (status) return -1;
   for (size_t i = 0; i < words[parameter]; ++i)
     for (size_t j = 0; j < 4; ++j)
