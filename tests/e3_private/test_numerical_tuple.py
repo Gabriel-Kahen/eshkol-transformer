@@ -256,7 +256,7 @@ printf '%s\\n' "$e3_tuple_kind"
         self.assertEqual(admitted.returncode, 0, admitted.stderr)
         selector = (ROOT / "scripts/build-e3-numerical-test.sh").read_text()
         runner = (ROOT / "scripts/test-e3-correctness-cases.sh").read_text()
-        self.assertIn("wrong-vocab-axis|sum-order|padded-position|sanitize|sum-order-sanitize|padded-position-sanitize", selector)
+        self.assertIn("wrong-vocab-axis|sum-order|padded-position|capacity-denominator|exp-before-global|missing-batch|sanitize|sum-order-sanitize|padded-position-sanitize|capacity-denominator-sanitize|exp-before-global-sanitize|missing-batch-sanitize", selector)
         self.assertIn('wrong_vocab_axis_rejection.py" run', runner)
         self.assertIn('wrong_vocab_axis_rejection.py" check', runner)
         self.assertIn('verify-wrong-vocab-axis-all-correct.exit', runner)
@@ -278,7 +278,8 @@ printf '%s\\n' "$e3_tuple_kind"
                 env={"E3_NUMERICAL_MUTANT": value}, capture_output=True,
                 text=True, check=False,
             )
-        for value in ("wrong-vocab-axis", "sum-order", "padded-position"):
+        for value in ("wrong-vocab-axis", "sum-order", "padded-position",
+                      "capacity-denominator", "exp-before-global", "missing-batch"):
             accepted = select("e3-private-aggregate", "numerical", value)
             self.assertEqual((accepted.returncode, accepted.stdout),
                              (0, value + "\n"), accepted.stderr)
@@ -291,9 +292,21 @@ printf '%s\\n' "$e3_tuple_kind"
                                     ("e3-private-aggregate", "base", "padded-position"),
                                     ("e3-private-aggregate", "mode-graph", "padded-position"),
                                     ("other", "numerical", "padded-position"),
+                                    ("e3-private-aggregate", "base", "capacity-denominator"),
+                                    ("e3-private-aggregate", "mode-graph", "capacity-denominator"),
+                                    ("other", "numerical", "capacity-denominator"),
+                                    ("e3-private-aggregate", "base", "exp-before-global"),
+                                    ("e3-private-aggregate", "mode-graph", "exp-before-global"),
+                                    ("other", "numerical", "exp-before-global"),
+                                    ("e3-private-aggregate", "base", "missing-batch"),
+                                    ("e3-private-aggregate", "mode-graph", "missing-batch"),
+                                    ("other", "numerical", "missing-batch"),
                                     ("e3-private-aggregate", "numerical", "wrong-vocab-axes"),
                                     ("e3-private-aggregate", "numerical", "sum-orders"),
-                                    ("e3-private-aggregate", "numerical", "padded-positions")):
+                                    ("e3-private-aggregate", "numerical", "padded-positions"),
+                                    ("e3-private-aggregate", "numerical", "capacity-denominators"),
+                                    ("e3-private-aggregate", "numerical", "exp-before-globals"),
+                                    ("e3-private-aggregate", "numerical", "missing-batches")):
             with self.subTest(policy=policy, kind=kind, value=value):
                 self.assertEqual(select(policy, kind, value).returncode, 77)
 

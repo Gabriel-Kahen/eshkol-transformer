@@ -1205,6 +1205,14 @@ if [[ "${E3_ZERO_CONTROL_SANITIZE:-0}" != 0 ]]; then
     die "E3 zero-control sanitizer requires its exact test tuple"
   e3_private_test_sanitize=1
 fi
+if [[ "${E3_N5_SANITIZE:-0}" != 0 ]]; then
+  [[ "${E3_N5_SANITIZE}" == 1 &&
+     "${package_policy}" == e3-private-aggregate &&
+     "${e3_tuple_kind}" == n5 &&
+     "${e3_private_test_sanitize}" == 0 ]] ||
+    die "E3 N5 sanitizer requires its exact test tuple"
+  e3_private_test_sanitize=1
+fi
 e3_zero_discovery=0
 if [[ -n "${E3_ZERO_CONTROL_DISCOVERY+x}" ]]; then
   [[ "${E3_ZERO_CONTROL_DISCOVERY}" == 1 &&
@@ -1262,7 +1270,7 @@ if [[ -n "${E3_NUMERICAL_MUTANT+x}" ]]; then
     die "E3 numerical mutation is allowed only for the exact test tuple"
 fi
 case "${e3_numerical_mutant}" in
-  normal|wrong-target|mean-of-means|second-normalization|wrong-vocab-axis|sum-order|padded-position) ;;
+  normal|wrong-target|mean-of-means|second-normalization|wrong-vocab-axis|sum-order|padded-position|capacity-denominator|exp-before-global|missing-batch) ;;
   *) die "unknown E3 numerical mutation: ${e3_numerical_mutant}" ;;
 esac
 e3_uniform_mutant=${E3_UNIFORM_MUTANT:-normal}
@@ -1315,6 +1323,7 @@ e3_overflow_generated_dir=
 e3_numerical_generated_dir=
 e3_uniform_generated_dir=
 e3_zero_generated_dir=
+e3_n5_generated_dir=
 if [[ "${package_policy}" == e3-private-aggregate &&
       "${e3_tuple_kind}" == mode-graph ]]; then
   source "${PROJECT_ROOT}/scripts/e3-mode-graph-stage-cleanup.sh"
@@ -1351,6 +1360,11 @@ elif [[ "${package_policy}" == e3-private-aggregate &&
   source "${PROJECT_ROOT}/scripts/e3-zero-generated-source-stage.sh"
   e3_zero_generated_dir="$(e3_zero_generated_stage "${output_object}")" ||
     die "E3 zero-control generated source requires a fresh private gate stage"
+elif [[ "${package_policy}" == e3-private-aggregate &&
+        "${e3_tuple_kind}" == n5 ]]; then
+  source "${PROJECT_ROOT}/scripts/e3-generated-source-stage.sh"
+  e3_n5_generated_dir="$(e3_n5_generated_stage "${output_object}")" ||
+    die "E3 N5 generated source requires a fresh private gate stage"
 fi
 
 e1b_tmp="$(mktemp -d "${TMPDIR:-/tmp}/eshkol-transformer-e1b.XXXXXX")"
@@ -1361,6 +1375,7 @@ e3_overflow_generated_owned=0
 e3_numerical_generated_owned=0
 e3_uniform_generated_owned=0
 e3_zero_generated_owned=0
+e3_n5_generated_owned=0
 e1b_cleanup() {
   local status=$?
   if [[ "${e3_zero_discovery}" == 1 && "${status}" != 0 ]]; then
@@ -1398,10 +1413,13 @@ e1b_cleanup() {
   if [[ "${status}" == 0 && "${e3_zero_generated_owned}" == 1 ]]; then
     rm -rf -- "${e3_zero_generated_dir}"
   fi
+  if [[ "${status}" == 0 && "${e3_n5_generated_owned}" == 1 ]]; then
+    rm -rf -- "${e3_n5_generated_dir}"
+  fi
   return "${status}"
 }
 trap e1b_cleanup EXIT
-if [[ -n "${e3_mode_graph_generated_dir}${e3_retention_generated_dir}${e3_fault_generated_dir}${e3_overflow_generated_dir}${e3_numerical_generated_dir}${e3_uniform_generated_dir}${e3_zero_generated_dir}" ]]; then
+if [[ -n "${e3_mode_graph_generated_dir}${e3_retention_generated_dir}${e3_fault_generated_dir}${e3_overflow_generated_dir}${e3_numerical_generated_dir}${e3_uniform_generated_dir}${e3_zero_generated_dir}${e3_n5_generated_dir}" ]]; then
   trap 'exit 143' TERM
   trap 'exit 130' INT
 fi
@@ -1436,10 +1454,14 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     mkdir -m 0700 -- "${e3_zero_generated_dir}" ||
       die "E3 zero-control generated source path was claimed concurrently"
     e3_zero_generated_owned=1
+  elif [[ -n "${e3_n5_generated_dir}" ]]; then
+    mkdir -m 0700 -- "${e3_n5_generated_dir}" ||
+      die "E3 N5 generated source path was claimed concurrently"
+    e3_n5_generated_owned=1
   else
     e3_mode_graph_generated_dir="${e1b_tmp}/generated"
   fi
-  e3_generated_dir="${e3_fault_generated_dir:-${e3_zero_generated_dir:-${e3_uniform_generated_dir:-${e3_numerical_generated_dir:-${e3_overflow_generated_dir:-${e3_retention_generated_dir:-${e3_mode_graph_generated_dir}}}}}}}"
+  e3_generated_dir="${e3_n5_generated_dir:-${e3_fault_generated_dir:-${e3_zero_generated_dir:-${e3_uniform_generated_dir:-${e3_numerical_generated_dir:-${e3_overflow_generated_dir:-${e3_retention_generated_dir:-${e3_mode_graph_generated_dir}}}}}}}}"
   python3 "${PROJECT_ROOT}/scripts/generate-e3-d2-source.py" \
     --output-dir "${e3_generated_dir}" >"${e1b_tmp}/d2-generation.json"
   e3_generated_source_root="${e3_generated_dir}/source"
@@ -1539,6 +1561,8 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
       export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_mode_graph_run_v1)$'
     elif [[ "${e3_tuple_kind}" == zero ]]; then
       export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_zero_(control|negative)_run_v1)$'
+    elif [[ "${e3_tuple_kind}" == n5 ]]; then
+      export_pattern='^(et_e1b_public_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_n5_(edge_)?run_v1)$'
     fi
   fi
 fi
@@ -1683,7 +1707,7 @@ if [[ "${e3_private_test_sanitize}" == 1 ]]; then
   [[ "${package_policy}" == e3-private-aggregate ]] || \
     die "E3 generated ASan IR is restricted to private test tuples"
   case "${e3_tuple_kind:-}" in
-    fault|retention|retention-first-eval-mutant|retention-overflow|mode-graph|numerical|uniform|zero) ;;
+    fault|retention|retention-first-eval-mutant|retention-overflow|mode-graph|numerical|uniform|zero|n5) ;;
     *) die "E3 generated ASan IR has no admitted test tuple" ;;
   esac
   require_command sha256sum
@@ -1903,6 +1927,9 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
       wrong-vocab-axis) package_native_cflags+=(-DET_E3_NUMERICAL_WRONG_VOCAB_AXIS) ;;
       sum-order) package_native_cflags+=(-DET_E3_NUMERICAL_SUM_ORDER) ;;
       padded-position) package_native_cflags+=(-DET_E3_NUMERICAL_PADDED_POSITION) ;;
+      capacity-denominator) package_native_cflags+=(-DET_E3_NUMERICAL_CAPACITY_DENOMINATOR) ;;
+      exp-before-global) package_native_cflags+=(-DET_E3_NUMERICAL_EXP_BEFORE_GLOBAL) ;;
+      missing-batch) package_native_cflags+=(-DET_E3_NUMERICAL_MISSING_BATCH) ;;
     esac
   fi
   if [[ "${package_policy}" == e3-private-aggregate &&
@@ -2231,6 +2258,14 @@ if [[ "${e3_private_test_sanitize}" == 1 ]]; then
     cmp -s "${overflow_inst}" "${e1b_tmp}/sanitizer-undefined.txt" ||
       die "E3 overflow sanitizer instrumentation imports differ"
     e3_retention_sanitizer_inventory_verified=1
+  elif [[ "${e3_tuple_kind:-}" == n5 ]]; then
+    cmp -s "${e3_prefix}_sanitized_noninstrumentation_undefined_symbols.txt" \
+      "${e1b_tmp}/noninstrumentation-undefined.txt" ||
+      die "E3 N5 sanitized noninstrumentation imports differ"
+    cmp -s "${e3_prefix}_sanitized_instrumentation_undefined_symbols.txt" \
+      "${e1b_tmp}/sanitizer-undefined.txt" ||
+      die "E3 N5 sanitizer instrumentation imports differ"
+    e3_retention_sanitizer_inventory_verified=1
   elif [[ "${e3_tuple_kind:-}" == numerical ||
           "${e3_tuple_kind:-}" == uniform ]]; then
     numerical_added="${e3_prefix}_sanitized_added_undefined_symbols.txt"
@@ -2544,6 +2579,9 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
         et_e3_zero_gradient_metadata_v1
         et_e3_zero_control_census_v1
       )
+    elif [[ "${e3_tuple_kind}" == n5 ]]; then
+      e3_required_private+=(et_e3_private_n5_dispatch_cabi_v1
+                            et_e3_private_n5_edge_dispatch_cabi_v1)
     elif [[ "${e3_tuple_kind}" == mode-graph ]]; then
       e3_required_private+=(
         et_e3_mode_graph_dispatch_cabi_v1
@@ -2593,7 +2631,8 @@ if [[ "${package_policy}" == e3-private-aggregate &&
         "${e3_tuple_kind:-}" == retention-overflow ||
         "${e3_tuple_kind:-}" == numerical ||
         "${e3_tuple_kind:-}" == uniform ||
-        "${e3_tuple_kind:-}" == zero ) ]]; then
+        "${e3_tuple_kind:-}" == zero ||
+        "${e3_tuple_kind:-}" == n5 ) ]]; then
   cp "${e1b_tmp}/private.ll" "${evidence_dir}.tmp.$$/private.ll"
 fi
 if [[ "${e3_private_test_sanitize}" == 1 ]]; then
@@ -2698,6 +2737,8 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
       public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_mode_graph_run_v1)$'
     elif [[ "${e3_tuple_kind}" == zero ]]; then
       public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_zero_(control|negative)_run_v1)$'
+    elif [[ "${e3_tuple_kind}" == n5 ]]; then
+      public_string_pattern='^(et_e1b_(error|public)_[a-z0-9_]+_v1|et_e3_test_run_v1|et_e3_n5_(edge_)?run_v1)$'
     fi
   fi
 fi

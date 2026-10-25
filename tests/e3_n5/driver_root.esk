@@ -1,0 +1,4 @@
+;;; Separate noninstalled N5 tuple; canonical E3 root is unchanged.
+(load "../../native/e3_private_driver_root.esk")
+(load "driver.esk")
+(load "edge_driver.esk")

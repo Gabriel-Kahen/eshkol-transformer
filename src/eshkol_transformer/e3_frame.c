@@ -17,6 +17,7 @@ int32_t et_g3t_model_pins_begin_fail_before_internal(
 #endif
 
 #include <limits.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,6 +27,12 @@ int32_t et_g3t_model_pins_begin_fail_before_internal(
 #endif
 #if defined(ET_E3_NUMERICAL_PADDED_POSITION) && !defined(ET_E3_NUMERICAL_TESTING)
 #error "padded-position mutation requires the private numerical test tuple"
+#endif
+#if defined(ET_E3_NUMERICAL_EXP_BEFORE_GLOBAL) && !defined(ET_E3_NUMERICAL_TESTING)
+#error "exp-before-global mutation requires the private numerical test tuple"
+#endif
+#if defined(ET_E3_NUMERICAL_MISSING_BATCH) && !defined(ET_E3_NUMERICAL_TESTING)
+#error "missing-batch mutation requires the private numerical test tuple"
 #endif
 
 #if defined(ET_E3_NUMERICAL_TESTING) || defined(ET_E3_ZERO_CONTROL_TESTING)
@@ -101,6 +108,13 @@ struct et_e3_frame_internal {
 #ifdef ET_E3_NUMERICAL_SUM_ORDER
   float sum_order_first, sum_order_second;
   uint32_t sum_order_seen;
+#endif
+#ifdef ET_E3_NUMERICAL_EXP_BEFORE_GLOBAL
+  float exp_before_sum, exp_before_weight;
+  uint32_t exp_before_seen;
+#endif
+#ifdef ET_E3_NUMERICAL_MISSING_BATCH
+  uint32_t missing_batch_emitted;
 #endif
 #ifdef ET_E3_FAULT_TESTING
   /* State: 0 clear, 1 armed, 2 fired, 3 unreached after one call. */
@@ -441,7 +455,12 @@ static void e3_numerical_words(et_f32_tensor *tensor, size_t expected) {
 
 static void e3_numerical_batch(et_e3_frame_internal *frame) {
   const size_t bank = frame->sum_bank;
+#ifdef ET_E3_NUMERICAL_MISSING_BATCH
+  /* Observer ordinal follows completed D2 rows, not the mutated K1 count. */
+  const int64_t ordinal = frame->missing_batch_emitted++;
+#else
   const int64_t ordinal = frame->counts[bank][1] - 1;
+#endif
   if (ordinal < 0 || ordinal >= 3) abort();
   printf("E3ROW\t%" PRId64 "\t%" PRId64 ",%" PRId64
          "\t%" PRId64 ",%" PRId64 "\t%u,%u\n", ordinal,
@@ -875,9 +894,16 @@ int64_t et_e3_private_acquire_v1(void *pointer) {
   frame->active = 0;
   memset(frame->staged_counts, 0, sizeof(frame->staged_counts));
   frame->sum_bank = 0;
+#ifdef ET_E3_NUMERICAL_MISSING_BATCH
+  frame->missing_batch_emitted = 0;
+#endif
 #ifdef ET_E3_NUMERICAL_SUM_ORDER
   frame->sum_order_first = frame->sum_order_second = 0.0f;
   frame->sum_order_seen = 0;
+#endif
+#ifdef ET_E3_NUMERICAL_EXP_BEFORE_GLOBAL
+  frame->exp_before_sum = frame->exp_before_weight = 0.0f;
+  frame->exp_before_seen = 0;
 #endif
   frame->committed = 0;
   frame->next_role = 0;
@@ -1392,6 +1418,22 @@ static int64_t e3_accumulate_dispatch(et_e3_frame_internal *frame) {
     if (et_kernel_runtime_dispatch(frame->runtime[E3_RUNTIME_METRICS],
                                    &call, &error) != 0)
       rc = e3_kernel_error(&error);
+#ifdef ET_E3_NUMERICAL_EXP_BEFORE_GLOBAL
+    if (!rc) {
+      float batch_n, batch_w;
+      memcpy(&batch_n, inputs[5].data, sizeof(batch_n));
+      memcpy(&batch_w, inputs[6].data, sizeof(batch_w));
+      volatile float batch_loss = batch_n / batch_w;
+      volatile float batch_ppl = expf(batch_loss);
+      volatile float contribution = batch_ppl * batch_w;
+      volatile float next_sum = frame->exp_before_sum + contribution;
+      volatile float next_weight = frame->exp_before_weight + batch_w;
+      if (!isfinite(next_sum) || !isfinite(next_weight)) abort();
+      frame->exp_before_sum = next_sum;
+      frame->exp_before_weight = next_weight;
+      ++frame->exp_before_seen;
+    }
+#endif
 #ifdef ET_E3_NUMERICAL_SUM_ORDER
     if (!rc && ordinal < 2) {
       if (ordinal < 0 || frame->sum_order_seen != (uint32_t)ordinal) abort();
@@ -1444,6 +1486,19 @@ int64_t et_e3_private_finalize_v1(void *pointer) {
   int64_t rc = e3_dispatch(frame, E3_RUNTIME_METRICS,
       "e3.evaluation-metrics", "e3.evaluation-metrics.finalize",
       3, e3_shape_logits, inputs, 3, outputs, 4);
+#ifdef ET_E3_NUMERICAL_EXP_BEFORE_GLOBAL
+  if (!rc) {
+    if (frame->exp_before_seen != (uint32_t)frame->counts[bank][1] ||
+        frame->exp_before_weight <= 0.0f) abort();
+    volatile float ppl = frame->exp_before_sum / frame->exp_before_weight;
+    if (!isfinite(ppl)) abort();
+    const float published_ppl = ppl;
+    et_f32_scoped_guard_internal guard = {0};
+    rc = e3_scope_begin(frame->result[2], &guard, 0);
+    if (!rc) memcpy(guard.view.data, &published_ppl, sizeof(float));
+    if (guard.owner) e3_scope_end(&guard);
+  }
+#endif
   if (!rc) {
     frame->staged_counts[0] = frame->counts[bank][0];
     frame->staged_counts[1] = frame->counts[bank][1];

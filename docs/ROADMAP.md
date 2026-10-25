@@ -1090,6 +1090,17 @@ from direct-provider-only cases and names the missing noninstalled model-control
 and stage-selective fault/observer seams for review. It provides no new runtime
 proof or §9 acceptance; numerical, mode/graph and complete-call retention gate
 verdicts remain prerequisites before the full matrix is implemented and run.
+An isolated exact-`44c0418` source union stages the N3 first-model uniform
+successor and per-corpus zero-control accuracy checks, three one-at-a-time M2
+capacity-denominator/exp-before-global/missing-batch mutants, separate R1
+stage-3/8/12 compiled-gate launchers, and authentic N5 edge/cap inputs.
+The overlapping numerical builder selectors remain restricted to the single
+noninstalled `numerical` tuple; N5 uses its own tuple and generated-source
+stage. Focused pinned-Q0 source/host suites pass 78 tests in total, while
+supported optimized AOT, poison, sanitizer, independent union review and
+exact-head hosted CI are **NOT RUN**. The builder source change requires one
+mechanical M3CG predecessor checksum repin; it supplies no M3CG runtime
+admission. These candidates do not close any remaining E3 §9 row.
 The first [mathematical three-batch M2 sum-order witness](../tests/e3_reference/sum_order_witness_v1.json)
 failed the one-use df9546 compiled C gate: compiled CE rounded both groupings
 to `41dcde82`. The successor [compiled witness](../tests/e3_reference/sum_order_witness_v2.json)

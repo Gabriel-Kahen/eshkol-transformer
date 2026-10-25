@@ -1,6 +1,7 @@
 """Noninstalled uniform-tie tuple and private fault-hook boundaries."""
 
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import unittest
@@ -19,6 +20,22 @@ def lines(prefix: Path, suffix: str) -> list[str]:
 
 
 class UniformTupleTest(unittest.TestCase):
+    def test_zero_state_load_uses_first_model_initializer_successor(self) -> None:
+        from tests.m3 import reference as m3
+
+        m3.setup()
+        _, successor = m3.parameters(1729)
+        self.assertEqual(successor, (1, 1729, 290, 0))
+        source = (ROOT / "tests/e3_private/uniform_driver.esk").read_text()
+        fixture = source.split("(define (e3-test-fixture)", 1)[1].split(
+            "(define (e3-test-scenario", 1)[0]
+        self.assertEqual(fixture.count("(g3t-checked-m3t-model-create config initial)"), 1)
+        self.assertLess(fixture.index("(e3-uniform-load-before-frame! model)"),
+                        fixture.index("(e3-frame-bind! model destinations)"))
+        match = re.search(r"'seed1729-successor\s*\(equal\? words '\(([^)]*)\)\)", source)
+        self.assertIsNotNone(match)
+        self.assertEqual(tuple(map(int, match.group(1).split())), successor)
+
     def test_completed_state_marker_and_closed_frame_records(self) -> None:
         frame = frame_bytes(frame_lines(3))
         complete = MARKER + frame[:-len(b"E3-NUMERICAL-RUNTIME-PASS\n")] + (

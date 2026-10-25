@@ -35,7 +35,8 @@ def _pair(raw: str, *, mask: bool = False) -> list[int] | list[bool]:
     return values
 
 
-def parse(raw: bytes, batch_count: int, *, padded_mutant: bool = False) -> tuple[dict[str, object], bytes]:
+def parse(raw: bytes, batch_count: int, *, padded_mutant: bool = False,
+          capacity_mutant: bool = False) -> tuple[dict[str, object], bytes]:
     if type(batch_count) is not int or batch_count not in (1, 2, 3):
         raise ValueError("numerical batch count must be one, two or three")
     try:
@@ -120,7 +121,7 @@ def parse(raw: bytes, batch_count: int, *, padded_mutant: bool = False) -> tuple
         ids, targets, mask = batch["row"]
         reduction, active = batch["batch"]
         state, counters = batch["state"]
-        allowed_padded = (padded_mutant and batch_count == 3 and ordinal == 2
+        allowed_padded = ((padded_mutant or capacity_mutant) and batch_count == 3 and ordinal == 2
                           and mask == [True, False] and active == 2)
         if active != sum(mask) and not allowed_padded:
             raise ValueError("numerical frame active count differs from mask")
@@ -143,11 +144,13 @@ def main() -> None:
     parser.add_argument("--stdout", required=True, type=Path)
     parser.add_argument("--batch-count", required=True, type=int, choices=(1, 2, 3))
     parser.add_argument("--padded-mutant", action="store_true")
+    parser.add_argument("--capacity-mutant", action="store_true")
     parser.add_argument("--observed", required=True, type=Path)
     parser.add_argument("--roles", required=True, type=Path)
     args = parser.parse_args()
     payload, roles = parse(args.stdout.read_bytes(), args.batch_count,
-                           padded_mutant=args.padded_mutant)
+                           padded_mutant=args.padded_mutant,
+                           capacity_mutant=args.capacity_mutant)
     args.observed.write_bytes(canonical(payload))
     args.roles.write_bytes(roles)
 

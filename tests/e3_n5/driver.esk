@@ -1,0 +1,83 @@
+;;; Genuine private E3 one-over admission; no synthetic rows or logits.
+(define (e3-n5-check label condition)
+  (if condition #t (e3-native-invariant-fail)))
+
+(define (e3-n5-outputs frame destinations)
+  (vector (e3-test-u32-ref (vector-ref destinations 0))
+          (e3-test-u32-ref (vector-ref destinations 1))
+          (e3-test-u32-ref (vector-ref destinations 2))
+          (e3-test-u32-ref (vector-ref destinations 3))
+          (e3-counter-ref frame 0) (e3-counter-ref frame 1)))
+
+(define (e3-n5-outputs=? expected frame destinations)
+  (let ((actual (e3-n5-outputs frame destinations)))
+    (and (= (vector-ref expected 0) (vector-ref actual 0))
+         (= (vector-ref expected 1) (vector-ref actual 1))
+         (= (vector-ref expected 2) (vector-ref actual 2))
+         (= (vector-ref expected 3) (vector-ref actual 3))
+         (= (vector-ref expected 4) (vector-ref actual 4))
+         (= (vector-ref expected 5) (vector-ref actual 5)))))
+
+(define (e3-n5-dispatch seed-path control-path cap-path)
+  (let* ((fixture (e3-test-fixture))
+         (model (vector-ref fixture 0))
+         (tokenizer (vector-ref fixture 1))
+         (destinations (vector-ref fixture 2))
+         (frame (vector-ref fixture 3))
+         (seed (d2-token-dataset-open
+                (e3-test-dataset-config seed-path #t) tokenizer)))
+    ;; A real one-active-token traversal seeds nonzero published counters.
+    (with-region ('e3-n5-seed 262144)
+      (e3-evaluate-into! model seed frame))
+    (e3-n5-check 'seed-batches (= (e3-counter-ref frame 0) 1))
+    (e3-n5-check 'seed-tokens (= (e3-counter-ref frame 1) 1))
+    (d2-token-dataset-close! seed)
+    (let* ((control (d2-token-dataset-open
+                      (e3-test-dataset-config control-path #t) tokenizer))
+           (control-before (d2-token-dataset-cursor control)))
+      (with-region ('e3-n5-cap-control 262144)
+        (e3-evaluate-into! model control frame))
+      (e3-n5-check 'control-batches (= (e3-counter-ref frame 0) 8192))
+      (e3-n5-check 'control-tokens (= (e3-counter-ref frame 1) 16384))
+      (e3-n5-check 'control-cursor
+        (d2-core-bytes=? control-before (d2-token-dataset-cursor control)))
+      (d2-token-dataset-close! control))
+    (let* ((dataset (d2-token-dataset-open
+                     (e3-test-dataset-config cap-path #t) tokenizer))
+           (before (d2-token-dataset-cursor dataset))
+           (outputs (e3-n5-outputs frame destinations))
+           (entry (e3-frame-entry-internal frame))
+           (mode-token (vector-ref entry 6))
+           (matched? #f))
+      (e3-n5-check 'seed-metrics-published
+        (and (not (= (vector-ref outputs 0) 0))
+             (not (= (vector-ref outputs 1) 0))
+             (not (= (vector-ref outputs 2) 0))))
+      (e3-n5-check 'entry-no-owner
+        (and (not (vector-ref (vector-ref entry 3) 10))
+             (= (e3-native-frame-check (vector-ref entry 4)) 0)))
+      (with-region ('e3-n5-one-over 262144)
+        (guard
+         (caught
+          (#t (set! matched?
+                (and (transformer-error? caught)
+                     (eq? (transformer-error-category caught) 'unsupported)
+                     (eq? (transformer-error-operation caught)
+                          'e3-evaluate-into!)
+                     (eq? caught (e3-error-table-ref 2 'unsupported))))))
+         (e3-evaluate-into! model dataset frame)))
+      (e3-n5-check 'stage2-unsupported matched?)
+      (e3-n5-check 'diagnostic-stage2
+        (= (vector-ref (vector-ref entry 12) 0) 2))
+      (e3-n5-check 'idle-frame (= (vector-ref entry 1) 1))
+      (e3-n5-check 'mode-token-identity (eq? mode-token (vector-ref entry 6)))
+      (e3-n5-check 'no-owner-after-rejection
+        (and (not (vector-ref (vector-ref entry 3) 10))
+             (= (e3-native-frame-check (vector-ref entry 4)) 0)))
+      (e3-n5-check 'cursor-atomic
+        (d2-core-bytes=? before (d2-token-dataset-cursor dataset)))
+      (e3-n5-check 'six-outputs-atomic
+        (e3-n5-outputs=? outputs frame destinations))
+      (d2-token-dataset-close! dataset)
+      (vector 'e3-n5-cap-result-v1 (vector-ref outputs 4)
+              (vector-ref outputs 5) before))))
