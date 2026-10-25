@@ -2302,6 +2302,16 @@ the first candidate is nonaccepting. The exploit regression is present in the
 source fixture but remains unrun as compiled Eshkol. A pinned package gate and
 its predecessor compiled admissions remain open.
 
+The [private C4 trainable composition schedule](g3/G3_R_C4_TRAINABLE_COMPOSITION_SCHEDULE.md)
+pins the proposed workspace-owned `[1,4]`/14-parameter forward tape and VJP
+fan-in to `0c441e56`, the accepted 21-role full-prefix numerical schedule,
+and the separately reviewed C4 VJP rows. The generation-bound full-prefix
+function cannot be called from a live training workspace. The first bounded
+compute leaf is authentic 14-binding snapshot acquisition plus token/position
+embedding and residual; it is held behind compiled constructor, P1,
+association and workspace ownership admission. This document is a source
+contract only: no integrated C4 graph or trained checkpoint is claimed.
+
 The [private C4 position VJP leaf](g3/G3_R_C4_POSITION_VJP_LEAF.md) supplies
 one fixed `[1,4]` position-ID and `[1,4,4]` upstream to `[4,4]` gradient
 operation behind a separate feature flag. Its source and tests were independently
