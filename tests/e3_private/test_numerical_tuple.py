@@ -248,6 +248,20 @@ printf '%s\\n' "$e3_tuple_kind"
             capture_output=True, text=True, check=False,
         )
         self.assertNotEqual(forbidden.returncode, 0)
+        self.assertIn("requires the private numerical test tuple", forbidden.stderr)
+        admitted = subprocess.run(
+            base + ["-DET_E3_NUMERICAL_TESTING", "-DET_E3_NUMERICAL_WRONG_VOCAB_AXIS",
+                    str(source)], capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(admitted.returncode, 0, admitted.stderr)
+        selector = (ROOT / "scripts/build-e3-numerical-test.sh").read_text()
+        runner = (ROOT / "scripts/test-e3-correctness-cases.sh").read_text()
+        self.assertIn("wrong-vocab-axis|sum-order|padded-position|sanitize|sum-order-sanitize|padded-position-sanitize", selector)
+        self.assertIn('wrong_vocab_axis_rejection.py" run', runner)
+        self.assertIn('wrong_vocab_axis_rejection.py" check', runner)
+        self.assertIn('verify-wrong-vocab-axis-all-correct.exit', runner)
+        self.assertIn('"${e3_tuple_kind}" == numerical',
+                      (ROOT / "scripts/build-e1b-consumer.sh").read_text())
 
     def test_two_term_reversal_is_private_and_uses_real_oracle(self) -> None:
         source = ROOT / "native/e3_evaluation_metrics_provider.c"
@@ -285,20 +299,6 @@ printf '%s\\n' "$e3_tuple_kind"
             capture_output=True, text=True, check=False,
         )
         self.assertEqual(admitted.returncode, 0, admitted.stderr)
-        self.assertIn("requires the private numerical test tuple", forbidden.stderr)
-        admitted = subprocess.run(
-            base + ["-DET_E3_NUMERICAL_TESTING", "-DET_E3_NUMERICAL_WRONG_VOCAB_AXIS",
-                    str(source)], capture_output=True, text=True, check=False,
-        )
-        self.assertEqual(admitted.returncode, 0, admitted.stderr)
-        selector = (ROOT / "scripts/build-e3-numerical-test.sh").read_text()
-        runner = (ROOT / "scripts/test-e3-correctness-cases.sh").read_text()
-        self.assertIn("wrong-vocab-axis|sum-order|padded-position|sanitize|sum-order-sanitize|padded-position-sanitize", selector)
-        self.assertIn('wrong_vocab_axis_rejection.py" run', runner)
-        self.assertIn('wrong_vocab_axis_rejection.py" check', runner)
-        self.assertIn('verify-wrong-vocab-axis-all-correct.exit', runner)
-        self.assertIn('"${e3_tuple_kind}" == numerical',
-                      (ROOT / "scripts/build-e1b-consumer.sh").read_text())
 
     def test_wrong_vocab_axis_selector_rejects_mixed_and_near_miss_tuples(self) -> None:
         builder = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
