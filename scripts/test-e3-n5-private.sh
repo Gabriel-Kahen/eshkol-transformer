@@ -153,10 +153,10 @@ printf '%s\n' \
   'E3-N5-STAGE seed-after-checks' \
   'E3-N5-STAGE control-before' \
   'E3-N5-STAGE control-after-eval' \
-  'E3-N5-STAGE control-batches-before-check' \
-  'E3-N5-STAGE control-batches-after-check' \
-  'E3-N5-STAGE control-tokens-before-check' \
-  'E3-N5-STAGE control-tokens-after-check' \
+  'E3-N5-STAGE control-batches-counter1-before-check' \
+  'E3-N5-STAGE control-batches-counter1-after-check' \
+  'E3-N5-STAGE control-tokens-counter0-before-check' \
+  'E3-N5-STAGE control-tokens-counter0-after-check' \
   'E3-N5-STAGE control-cursor-before-check' \
   'E3-N5-STAGE control-cursor-after-check' \
   'E3-N5-STAGE control-after-checks' \

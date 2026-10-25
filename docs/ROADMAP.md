@@ -1113,6 +1113,12 @@ unchanged assertions with flushed per-check markers to name the first aborting
 check interval. Host/source checks alone do not establish a successful control,
 stage-2 rejection, edge result, sanitizer or resource admission; a fresh
 compiled run and independent result review are required.
+The next isolated N5 test-only source corrects that control assertion's
+selector order to the native contract: counter 0 is tokens (16,384) and
+counter 1 is batches (8,192). It also returns batches before tokens to the
+existing runtime result checker and labels the flushed check markers with
+their selectors. The prior abort remains unclassified without a fresh compiled
+run; this source change has **NOT RUN** as a private package, AOT or runtime gate.
 Full owner/mode/resource probes remain dependent work. The accepted retention
 tuple and installed API are unchanged.
 The first [mathematical three-batch M2 sum-order witness](../tests/e3_reference/sum_order_witness_v1.json)

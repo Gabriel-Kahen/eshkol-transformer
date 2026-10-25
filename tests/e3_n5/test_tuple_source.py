@@ -13,8 +13,8 @@ N5 = ROOT / "tests/e3_n5"
 BASE = ROOT / "native/e3_private_package"
 STAGES = ["seed-before", "seed-after-eval", "seed-after-checks",
           "control-before", "control-after-eval",
-          "control-batches-before-check", "control-batches-after-check",
-          "control-tokens-before-check", "control-tokens-after-check",
+          "control-batches-counter1-before-check", "control-batches-counter1-after-check",
+          "control-tokens-counter0-before-check", "control-tokens-counter0-after-check",
           "control-cursor-before-check", "control-cursor-after-check",
           "control-after-checks",
           "stage2-before", "stage2-after-eval", "stage2-after-checks"]
@@ -22,6 +22,38 @@ STAGES = ["seed-before", "seed-after-eval", "seed-after-checks",
 
 def lines(prefix: Path, suffix: str) -> list[str]:
     return Path(f"{prefix}_{suffix}.txt").read_text().splitlines()
+
+
+def assert_counter_order(driver: str, native: str, runtime: str) -> None:
+    """Pin the public result to the native tokens=0, batches=1 selectors."""
+    required_native = (
+        "const int64_t tokens = frame->staged_counts[0];",
+        "const int64_t batches = frame->staged_counts[1];",
+        "frame->published_counts[0] = frame->staged_counts[0];",
+        "frame->published_counts[1] = frame->staged_counts[1];",
+        "int64_t et_e3_private_counter_ref_v1(void *pointer, int64_t selector) {",
+    )
+    required_driver = (
+        "'seed-batches (= (e3-counter-ref frame 1) 1)",
+        "'seed-tokens (= (e3-counter-ref frame 0) 1)",
+        "'control-batches (= (e3-counter-ref frame 1) 8192)",
+        "'control-tokens (= (e3-counter-ref frame 0) 16384)",
+        "(vector 'e3-n5-cap-result-v1 (vector-ref outputs 5)\n"
+        "              (vector-ref outputs 4) before)",
+    )
+    required_runtime = (
+        "(= (vector-ref result 1) 8192)",
+        "(= (vector-ref result 2) 16384)",
+    )
+    for source, snippets in ((native, required_native),
+                             (driver, required_driver),
+                             (runtime, required_runtime)):
+        for snippet in snippets:
+            if source.count(snippet) != 1:
+                raise ValueError(f"N5 counter contract drift: {snippet}")
+    getter = native.split("int64_t et_e3_private_counter_ref_v1(", 1)[1].split("\n}", 1)[0]
+    if getter.count("return frame->published_counts[selector];") != 1:
+        raise ValueError("N5 counter contract drift: selector getter")
 
 
 class N5TupleSourceTests(unittest.TestCase):
@@ -91,8 +123,8 @@ printf '%s\\n' "$e3_tuple_kind"
         self.assertEqual(driver.count("(e3-evaluate-into! model"), 3)
         self.assertLess(driver.index("'e3-n5-seed"), driver.index("'e3-n5-one-over"))
         self.assertLess(driver.index("'e3-n5-cap-control"), driver.index("'e3-n5-one-over"))
-        self.assertIn("'control-batches (= (e3-counter-ref frame 0) 8192)", driver)
-        self.assertIn("'control-tokens (= (e3-counter-ref frame 1) 16384)", driver)
+        assert_counter_order(driver, (ROOT / "src/eshkol_transformer/e3_frame.c").read_text(),
+                             (N5 / "runtime.esk").read_text())
         self.assertIn("(d2-token-dataset-open", driver)
         self.assertIn("(e3-error-table-ref 2 'unsupported)", driver)
         self.assertIn("'diagnostic-stage2", driver)
@@ -121,14 +153,33 @@ printf '%s\\n' "$e3_tuple_kind"
                             driver.index(f'(e3-n5-stage "{after}")'))
         self.assertLess(driver.index("'seed-tokens"), driver.index('"seed-after-checks"'))
         self.assertLess(driver.index("'control-cursor"), driver.index('"control-after-checks"'))
-        for label in ("control-batches", "control-tokens", "control-cursor"):
+        for label, marker in (("control-batches", "control-batches-counter1"),
+                              ("control-tokens", "control-tokens-counter0"),
+                              ("control-cursor", "control-cursor")):
             assertion = driver.index(f"(e3-n5-check '{label}")
-            self.assertLess(driver.index(f'"{label}-before-check"'), assertion)
-            self.assertLess(assertion, driver.index(f'"{label}-after-check"'))
+            self.assertLess(driver.index(f'"{marker}-before-check"'), assertion)
+            self.assertLess(assertion, driver.index(f'"{marker}-after-check"'))
         self.assertEqual(driver.count("(e3-n5-check 'control-batches"), 1)
         self.assertEqual(driver.count("(e3-n5-check 'control-tokens"), 1)
         self.assertEqual(driver.count("(e3-n5-check 'control-cursor"), 1)
         self.assertLess(driver.index("'six-outputs-atomic"), driver.index('"stage2-after-checks"'))
+
+    def test_counter_order_negative_drifts(self) -> None:
+        driver = (N5 / "driver.esk").read_text()
+        native = (ROOT / "src/eshkol_transformer/e3_frame.c").read_text()
+        runtime = (N5 / "runtime.esk").read_text()
+        assert_counter_order(driver, native, runtime)
+        for old, wrong in (("'control-batches (= (e3-counter-ref frame 1) 8192)",
+                            "'control-batches (= (e3-counter-ref frame 0) 8192)"),
+                           ("'control-tokens (= (e3-counter-ref frame 0) 16384)",
+                            "'control-tokens (= (e3-counter-ref frame 1) 16384)"),
+                           ("(vector-ref outputs 5)\n              (vector-ref outputs 4)",
+                            "(vector-ref outputs 4)\n              (vector-ref outputs 5)")):
+            with self.subTest(wrong=wrong), self.assertRaisesRegex(ValueError, "counter contract drift"):
+                assert_counter_order(driver.replace(old, wrong), native, runtime)
+        with self.assertRaisesRegex(ValueError, "counter contract drift"):
+            assert_counter_order(driver, native.replace("staged_counts[0];", "staged_counts[1];", 1),
+                                 runtime)
 
     def test_edge_driver_reaches_authentic_finalizer_and_preserves_atomicity(self) -> None:
         driver = (N5 / "edge_driver.esk").read_text()
