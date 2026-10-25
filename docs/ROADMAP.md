@@ -2374,9 +2374,19 @@ G3RCV1 companion, compares the companion fingerprint first with C2 controls
 and then with the live canonical T1 owner after installing CLI3's same-registry
 C2 policy projector, closes the C2 receipt, and returns
 only eight data fields. The thin caller checks the current one-token,
-zero-budget fixture. Its source tests and host C bridge syntax pass; compiled
-package/link, a genuine pair input, native sanitizer, model restore and replay
-remain unrun.
+zero-budget fixture. Its source tests and host C bridge syntax pass. A genuine
+pair reader run, native sanitizer, model restore and replay remain unrun.
+
+The first compiled trained-pair reader attempt at `26016906` failed LLVM
+verification before IR emission (`%raised_tagged` referenced across functions).
+The sealed bounded isolation at
+`g3r-reader-ir-identity-diagnostic-26016906-attempt1/SHA256SUMS-RUN`
+locates this compiler failure in the receipt's first opaque identity definition:
+its original `define`/`lambda` form fails, while the equivalent named-function
+definition emits the full reader IR and shared library under the original
+compiler flags. The receipt identity remains a mutable zero-argument binding
+with the same guard and marker. This is compiled IR evidence only; fresh
+reader runtime authentication, negative controls, and replay are still open.
 
 The earlier G3-R C2 SAVE continuation on `0581426b` sealed a failed runtime
 receipt at `g3-save-0581426b-cont-attempt1/SHA256SUMS-RUN`: its compiled

@@ -123,8 +123,14 @@ def verify_runner(source: str) -> None:
 
 def verify_fault_bindings(source: str) -> None:
     forms = parse(source)
+    identity = [node for node in forms if isinstance(node, list)
+                and len(node) == 3 and node[:2] ==
+                ["define", ["g3r-c2-receipt-identity"]]]
+    if (len(identity) != 1 or identity[0][2][:1] != ["guard"]
+            or '"transformer.g3r-c2-sha-receipt:v1"' not in source
+            or "(set! g3r-c2-receipt-identity" not in FIXTURE.read_text()):
+        raise ValueError("receipt identity needs a mutable binding and guard")
     for name, parameters in (
-            ("g3r-c2-receipt-identity", []),
             ("g3r-c2-receipt-after-owner-enrolled-internal", []),
             ("g3r-c2-receipt-after-stage-return-internal", ["stage"]),
             ("g3r-c2-receipt-after-owner-return-internal", ["owner"])):
@@ -313,7 +319,7 @@ class C2ShaReceiptStaticTest(unittest.TestCase):
                                          'if False:', 1))
         with self.assertRaisesRegex(ValueError, "mutable binding"):
             verify_fault_bindings(source.replace(
-                "(define g3r-c2-receipt-identity\n  (lambda ()",
+                "(define (g3r-c2-receipt-identity)\n  (guard",
                 "(define (g3r-c2-receipt-identity)\n  (begin", 1))
         with self.assertRaisesRegex(ValueError, "digest did not come"):
             verify_pair_admission(PAIR.read_text().replace(
