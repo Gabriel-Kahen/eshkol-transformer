@@ -46,7 +46,10 @@
         (destination (make-vector 8 'untouched)))
     (bytevector-u8-set! wrong 0
                         (bitwise-xor (bytevector-u8-ref wrong 0) 1))
-    (and (guard (caught (#t #t))
+    (and (guard (caught
+                  (#t (and (string? caught)
+                           (string=? caught
+                             "G3-R record decode: header, pair or checksum"))))
            (g3r-record-decode! readback wrong destination) #f)
          (let loop ((i 0))
            (if (= i 8) #t
