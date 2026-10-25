@@ -1156,6 +1156,28 @@ are `+0` under supported controls and unsupported external fenv controls first r
 stage-7 role 0; this is structural/provider-only, with sticky-flag
 preservation still open. Private N4 remains open.
 
+The exact-`44c0418d` `make test-e3-metrics` attempt 6 passed supported
+compiled provider and numerical-bridge checks with eligible host custody and
+independent review (`metrics-44c0418-attempt6-independent-review-20261025/REVIEW.md`,
+45-file raw seal `936cd9d2...`). It includes 70,231 native and 135 fenv
+checks, rational/Decimal references, 12 numerical, five admission/atomicity
+and five orchestration mutant kills, five equivalent controls, two fresh
+private numerical-bridge AOTs, and C provider/bridge ASan/UBSan/LSan.
+Attempt 5's guest PASS remained host NONACCEPTING after an unrelated shared
+Git config write; attempt 6 kept that identity stable. The AOT bridge has no
+private evaluator/frame/model authority, so private N4, M3 traversal and
+full trained-path sanitizer remain open.
+
+The `943b745` N5 edge/cap attempt 3 is authenticated but NONACCEPTING
+(`n5-edge-full-943b745-v5-attempt3-independent-result-review-20261025/REVIEW.md`,
+229-file raw seal `f6691719...`). Canonical, normal A/B and sanitized
+packages, the authentic corpus/oracle, and six cap/edge AOT binaries built.
+The first normal cap process aborted with signal 6 after 1,239.90 seconds;
+its 158,592 KiB peak RSS belongs to that failed process. No cap result or
+edge/sanitizer runtime was published. A fresh test-only diagnostic needs
+flushed markers around the one-token seed, 8,192 control and 8,193 preflight
+before the full N5/resource gate is repeated.
+
 The exact `44c0418d` complete-call retention attempt 2 is sealed and
 independently classified NONACCEPTING. Its normal and sanitized packages and
 AOT binaries built, but the first 1,024-call absent-gradient runtime aborted
