@@ -2255,7 +2255,8 @@ aggregate and fresh-process acceptance remain **NOT RUN**.
 The [private P3 to G2 terminal bridge](g3/G3_C4_P3_TERMINAL_RESUME_BRIDGE.md)
 is source-staged on the composed C4 tree. A checked FILE issuer ticket selects
 the alternate first stage; the bridge rechecks its fixed IDs/RNG before native
-P3, fills the real first T1 carriers and Eshkol prefix phase, then uses the
+P3 through a checked bytevector-header ABI adapter, fills the real first T1
+carriers and Eshkol prefix phase, then uses the
 existing second-frame and terminal publication tail. Focused source checks
 pass. Aggregate compilation, issuer integration and fresh-process continuation
 remain **NOT RUN** for this bridge.

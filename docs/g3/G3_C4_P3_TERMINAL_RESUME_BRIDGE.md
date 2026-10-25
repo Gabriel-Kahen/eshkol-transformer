@@ -23,3 +23,8 @@ the existing second-sample, terminal commit and publication tail. A failure
 before terminal commit is handled by the existing protected abort. This
 source-only bridge requires aggregate compilation and fresh-process
 functional admission with the issuer before continuation can be claimed.
+
+The Eshkol FFI passes bytevectors at their eight-byte length header. The
+private C adapter validates exact 24-byte IDs, 32-byte RNG and 1,024-byte
+logit carriers, then passes payload pointers to the native P3 function. Direct
+bytevector pointers would make native code read length words as IDs and RNG.
