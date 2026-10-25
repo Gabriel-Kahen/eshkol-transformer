@@ -2467,9 +2467,23 @@ carrier-to-restored-model and producer-payload bit comparisons, and one P1/G1
 trace comparator. A private wrapper and distinct thin executable now stage the
 exact sealed files and construct a fresh tokenizer/trainer/C2 receipt within
 that root; a second thin caller specifies typed one-bit mismatch controls.
-Local source/schema mutation checks pass; independent source/test
-review and linked fresh-process compiled normal/repeat/sanitizer gates remain pending.
-This does not establish fresh parameter or P1/G1 runtime parity.
+Independent source/test review accepted `f4214f6a`/tree `c2456cce`.
+The first linked gate is sealed nonaccepting at
+`g3r-trained-fresh-consumer-f4214f6a-attempt1/SHA256SUMS-RUN` (SHA-256
+`b1c7db388a7c10b042b25a1f73b0aff472a57ec5b3ea931abf76b08c68330775`):
+the positive thin executable link lacked the private C2 SHA-stage symbol;
+no runtime test ran. A recipe-only successor enabled that symbol on the C2
+LOAD bridge TU and reused the authenticated 103-source private object.
+Its one-use normal/repeat/native ASan+UBSan gate passed at
+`g3r-trained-fresh-consumer-f4214f6a-attempt2/SHA256SUMS-RUN` (SHA-256
+`a1407b14da03523b019165a1d6eae92f416fa00280122e44aba8c7669f092b70`,
+498 files); independent result review is sealed at
+`g3r-trained-fresh-consumer-v2-independent-result-review-20261025/SHA256SUMS-REVIEW`
+(SHA-256 `0fa1a88faea087621236293708200f5b9f8070fc931eabe3eea1e620a51bb323`).
+This admits exact 14-parameter bit parity and P1/G1 trace reproduction from
+the same trained C2 and budget-one companion in a separate process, including
+eight typed mismatch controls. It does not establish restored generated
+history, multi-token decoding, EOS, or public continuation.
 
 The proposed [trained producer transcript V1 contract](g3/G3_R_TRAINED_PRODUCER_TRANSCRIPT_V1_CONTRACT.md)
 specifies a fixed 6,292-byte, checksummed data-only oracle for the exact
@@ -2482,8 +2496,9 @@ source-only union preflight pins seam
 `bba97271` and replay `01a584c6`: all 92 shared paths have identical Git
 blobs; the planned fresh consumer is one seam root plus two replay leaves
 (103 unique sources), while the distinct producer starts from the 97-source
-replay root. This is a proposed schema and host source check only. No capture
-leaf, transcript bytes, compiled union or fresh parameter/G1 parity exists.
+replay root. That initial V1 source preflight was a proposed schema and host
+source check; the separate producer and fresh-consumer receipts above now
+supply the bounded compiled byte and P1/G1 comparison for this exact C2.
 
 The earlier G3-R C2 SAVE continuation on `0581426b` sealed a failed runtime
 receipt at `g3-save-0581426b-cont-attempt1/SHA256SUMS-RUN`: its compiled

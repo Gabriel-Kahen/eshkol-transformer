@@ -1,11 +1,21 @@
-# G3-R trained C2 fresh consumer source candidate
+# G3-R trained C2 fresh consumer
 
-**Source-only consumer candidate.** The producer transcript is accepted
+**Bounded compiled fresh-process comparison accepted.** Source
+`f4214f6a`/tree `c2456cce` passed independent source review. The one-use
+normal/repeat/native ASan+UBSan consumer gate is sealed at
+`g3r-trained-fresh-consumer-f4214f6a-attempt2/SHA256SUMS-RUN` (SHA-256
+`a1407b14da03523b019165a1d6eae92f416fa00280122e44aba8c7669f092b70`)
+with independent review
+`g3r-trained-fresh-consumer-v2-independent-result-review-20261025/SHA256SUMS-REVIEW`
+(SHA-256 `0fa1a88faea087621236293708200f5b9f8070fc931eabe3eea1e620a51bb323`).
+The first attempt remains sealed nonaccepting: SHA-256
+`b1c7db388a7c10b042b25a1f73b0aff472a57ec5b3ea931abf76b08c68330775`,
+missing the private C2 SHA-stage native symbol at thin executable link.
+The producer transcript is accepted
 separately at `c04f7017` with sealed run
 `g3r-trained-transcript-c04f7017-attempt3/SHA256SUMS-RUN` (SHA-256
 `4bcedbf176296accf8afa8699cc710a552cc892e263ed731fd03ab81bb3cebc3`).
-No linked consumer compiled test or cross-process parity is accepted here. The exact input pair
-and V1 layout are specified by the [fresh comparison contract](G3_R_TRAINED_FRESH_BIT_G1_COMPARISON_CONTRACT.md)
+The exact input pair and V1 layout are specified by the [fresh comparison contract](G3_R_TRAINED_FRESH_BIT_G1_COMPARISON_CONTRACT.md)
 and [producer transcript contract](G3_R_TRAINED_PRODUCER_TRANSCRIPT_V1_CONTRACT.md).
 
 `native/g3r_trained_fresh_consumer_root.esk` loads the reader, receipt-to-TR3
@@ -45,11 +55,10 @@ logit, K/V, ID, and RNG fields. These Python checks are schema/source checks,
 not native behavior. A new private test wrapper constructs a canonical tokenizer,
 fresh trainer and exact C2/SHA receipt, reads the host-sealed companion and
 transcript files, and calls the consumer within one package. A separate thin
-executable invokes it; neither piece has compiled admission yet. The next gate
-also uses a separate thin negative caller to require the exact typed consumer
-failure and unchanged destination for checksum, pair, parameter, logit,
-P1/G1 K/V, ID and RNG mutations; these are still source-only cases. It
-requires source/test review and an exact linked one-root harness,
-fresh-process normal/repeat and native sanitizer runs with the pinned source
-closure and feature-off controls. No persisted generated-history resume,
-multi-token decoding, EOS, public API, or full G3 continuation is claimed.
+executable invokes it. The linked gate passed this executable in normal,
+repeat and native sanitizer processes, with exact parameter-bit and P1/G1
+trace comparisons. A separate thin negative caller required the exact typed
+consumer failure and unchanged destination for checksum, pair, parameter,
+logit, P1/G1 K/V, ID and RNG mutations in normal and sanitizer modes.
+No persisted generated-history resume, multi-token decoding, EOS, public API,
+or full G3 continuation is claimed.
