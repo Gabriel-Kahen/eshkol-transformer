@@ -1,6 +1,6 @@
-# Private trained producer transcript candidate
+# Private trained producer transcript leaf
 
-This source-only candidate extends the accepted `01a584c6` budget-one
+The compiled private producer at `c04f7017` extends the accepted `01a584c6` budget-one
 same-registry replay. The private entry restores the authentic CLI3 C2, saves
 the exact C2 bytes and 288-byte companion, and observes the **decoded replay**
 generator before its release. The prior captured P1 and uninterrupted G1
@@ -21,7 +21,13 @@ publication. A failure can leave an orphaned C2/companion pair.
 `g3rt-decode!` checks the fixed header, both pair digests, companion budget,
 record table, lengths, P1 RNG binding, and checksum before changing its sole
 destination slot. A Python byte oracle exercises header, record, trace and
-checksum mutation classes with unchanged destination. This does not yet prove
-the compiled package, live bit capture, deterministic runtime modes, or fresh
-process comparison. It remains a one-G1, context-two witness, not multi-token
-or EOS continuation.
+checksum mutation classes with unchanged destination. The reviewed pinned
+normal/repeat/native-sanitizer gate emitted byte-identical C2, companion and
+transcript artifacts, with six compiled decoder rejection checks per transcript
+run. Its 536-file seal is
+`g3r-trained-transcript-c04f7017-attempt3/SHA256SUMS-RUN` (SHA-256
+`4bcedbf176296accf8afa8699cc710a552cc892e263ed731fd03ab81bb3cebc3`).
+The first IR-helper attempt and second Python-oracle import attempt remain
+nonaccepting predecessors. This is a one-G1, context-two same-process
+producer witness. Fresh-process comparison, multi-token and EOS continuation
+remain open.

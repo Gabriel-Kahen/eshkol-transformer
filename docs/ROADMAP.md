@@ -2185,18 +2185,24 @@ The sealed independent result review is at
 (SHA-256 `802f0224870683e29adb06deb7506832d6d8d6202a3536567161b2a9af6f6d06`).
 This does not restore a model from the companion or continue in a fresh process.
 
-The [private trained producer transcript candidate]
-(g3/G3_R_TRAINED_TRANSCRIPT_PRODUCER_LEAF.md) adds a source-only observer to
-that replayed generator: live 14-parameter carrier bits and one P1/G1 trace
-are staged into a distinct checksummed V1 image. Focused source and byte
-oracles check roster, pair binding and malformed records. The first pinned
-compiled attempt stopped at a non-exported TR3 roster helper during private
-IR compilation, before native link or runtime; its sealed receipt is
-`g3r-trained-transcript-d6ee6571-attempt1/SHA256SUMS-RUN` (SHA-256
-`a3210f9e21a27cac314d8ccda71f1aedd1268d1e7cb27dccd52f1fd386fc4e48`). The source now
-uses a local exact roster predicate and needs a reviewed compiled successor.
-Authentic capture, normal/repeat/native-sanitizer determinism and independent
-result review remain pending. This is not a fresh-process consumer or
+The [private trained producer transcript leaf]
+(g3/G3_R_TRAINED_TRANSCRIPT_PRODUCER_LEAF.md) observes the decoded replayed
+generator on the same restored CLI3 model: live 14-parameter carrier bits and
+one P1/G1 trace are staged into a distinct 6,292-byte checksummed V1 image.
+The first pinned attempt stopped at an unexported TR3 helper during IR compile
+(`g3r-trained-transcript-d6ee6571-attempt1/SHA256SUMS-RUN`, SHA-256
+`a3210f9e21a27cac314d8ccda71f1aedd1268d1e7cb27dccd52f1fd386fc4e48`).
+The second compiled the normal producer but stopped at a Python byte-oracle
+import before repeat or sanitizer (`g3r-trained-transcript-c04f7017-attempt2/SHA256SUMS-RUN`,
+SHA-256 `9e4080e11e5c05e04c55663faaaa4d2b4393461c9f3dc3b29987f27850cc51e4`).
+Both are nonaccepting. The reviewed `c04f7017`/tree `9b822b92` successor
+gate exited zero: normal/repeat/native ASan+UBSan produced byte-identical
+trained C2 (`9ec2a1d4...`), budget-one companion (`75fec716...`) and transcript
+(`ce44329e...`), passed six compiled decoder rejections per transcript run,
+and sealed 536 files at
+`g3r-trained-transcript-c04f7017-attempt3/SHA256SUMS-RUN` (SHA-256
+`4bcedbf176296accf8afa8699cc710a552cc892e263ed731fd03ab81bb3cebc3`).
+This is a same-process producer witness, not fresh-process comparison or
 multi-token/EOS continuation.
 
 The [private G3-R fixed-record codec leaf](g3/G3_R_RECORD_CODEC_LEAF.md)
