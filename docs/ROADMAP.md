@@ -2203,6 +2203,13 @@ The sealed independent result review is at
 This leaf is not integrated with trainable M3T and does not admit trained C4,
 C2 SAVE/LOAD, or generation.
 
+The next isolated [private C4 GELU VJP candidate]
+(g3/G3_R_C4_GELU_VJP_LEAF.md) targets the accepted four-token
+`g3c4.gelu.forward` row at `f32[1,4,8]`. Its feature-private analytic
+derivative and central finite differences against the genuine C4 provider
+are under focused local verification. M3T integration, independent review,
+and a pinned compiled gate remain pending.
+
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1
 commit to one generated G1. Its host synthetic state witness and causal source
