@@ -2176,6 +2176,15 @@ ownership. The accepted second-frame entry likewise requires the same active
 call and pending capacity-two output. A reviewed stable closed-call snapshot
 and a genuine idle-P3 second-token entry are distinct unimplemented gates;
 neither a budget-one P2/G1 result nor data-only C4 phase bytes substitute.
+The [private native stable-prefix close candidate]
+(g3/G3_R_C4_NATIVE_STABLE_PREFIX_CLOSE_CONTRACT.md) now adds a feature-local
+status-only close/check pair on the same generator context. Its local
+unsupported-host Clang 22.1.8 normal/repeat/ASan+UBSan fixture passes 197
+checks per mode with byte-identical stdout, empty stderr, feature-off symbol
+isolation, held I1/A2 lease rejection, forged/changed edge negatives, and
+post-tail fail-stop injection. This is source/local evidence pending independent
+review and a pinned supported gate. It does not close the original Eshkol
+`m3-call` ledger or admit SAVE hold, idle-P3 entry or trained C4 continuation.
 The [source-pinned dependency map](g3/G3_R_TRAINED_C4_DEPENDENCY_MAP.md) at
 `59670d39` separates the constructor/topology, owned C4 workspace,
 complete four-token gradient and loss, TR3/D2/O2/C2 training and restore,
