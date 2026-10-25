@@ -1,5 +1,6 @@
 """Cheap source/projection controls; these do not execute native code."""
 from pathlib import Path
+import json
 import re
 import subprocess
 import unittest
@@ -27,6 +28,20 @@ def baseline(path):
 
 
 class Source(unittest.TestCase):
+    def test_saved_inventory_tracks_source_bytes_and_sites(self):
+        from unittest.mock import patch
+        saved = json.loads((ROOT/'tests/cpuv1_resource/allocation_sites.json').read_text())
+        self.assertEqual(saved, ledger())
+        header = ROOT/'native/cpuv1_resource_private.h'
+        read_bytes = Path.read_bytes
+        with patch.object(Path, 'read_bytes', lambda path: read_bytes(path)+b'\n'
+                          if path == header else read_bytes(path)):
+            self.assertNotEqual(saved['source_sha256'], ledger()['source_sha256'])
+        read_text = Path.read_text
+        with patch.object(Path, 'read_text', lambda path: '\n'+read_text(path)
+                          if path == header else read_text(path)):
+            self.assertNotEqual(saved['sites'], ledger()['sites'])
+
     def test_exact_off_owner_tokens(self):
         for name in OWNERS:
             with self.subTest(name=name):

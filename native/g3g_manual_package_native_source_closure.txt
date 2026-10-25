@@ -8,6 +8,7 @@ native/g3g_manual_package_bridge.c
 native/m3_package_bridge.c
 native/m3t_package_bridge.c
 native/i2_wave2_package_bridge.c
+native/cpuv1_resource_private.h
 native/t1_wave1_package_bridge.c
 native/x1_config_consumer_bridge.c
 native/p1_package_bridge.c
@@ -19,10 +20,12 @@ include/eshkol_transformer/f32_tensor.h
 include/eshkol_transformer/kernel_abi.h
 src/eshkol_transformer/g3c4_model_owner_internal.h
 src/eshkol_transformer/m3t_transport.h
+native/cpuv1_resource_i2.inc
 native/data_io.c
 native/checkpoint_io.c
 native/checkpoint_io.h
 native/kernel_abi.c
+native/cpuv1_resource_k1.inc
 src/eshkol_transformer/m3_i64_integration.c
 native/i64_tensor.c
 include/eshkol_transformer/i64_tensor.h
@@ -48,7 +51,9 @@ include/eshkol_transformer/g3n_primitives_abi.h
 include/eshkol_transformer/g3s_sampling_abi.h
 src/eshkol_transformer/g3t_prefill2_roles.inc
 src/eshkol_transformer/g3t_prefill_roles.inc
+native/cpuv1_resource_generation.inc
 native/a2_kv_cache.c
+native/cpuv1_resource_a2.inc
 src/eshkol_transformer/g3c4_model_owner.c
 include/eshkol_transformer/g3c4_primitives_abi.h
 src/eshkol_transformer/g3c4_context_internal.h

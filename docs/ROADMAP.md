@@ -763,6 +763,24 @@ pinned in the CPU-v1 allocation inventory and source-member list. An
 independently reviewed one-value E3-D2 identity repin matches both current D2
 source/header bytes. E3-D2 compiled admission after this repin remains unrun.
 
+Exact-`19096272` hosted run `40156102186` completed **failure**: 20/24 jobs
+passed. CLI3 commands, canonical build, model composition and parameter state
+passed on that exact head. Shard-loader again reached D2 PASS then rejected the
+old E3-D2 D2-source pin; native numerics passed N2/N3K composition but stopped
+at the unchanged N3K `cases==31u` assertion. Suite evidence and Ubuntu required
+check failed as consequences. The E3-D2 pin correction `a608141f` is later
+than this run. A bounded current-source audit found six stale native resource
+inventory hashes and two moved header site coordinates; the regenerated ledger
+and a saved-versus-live negative source test have independent source review.
+E3-D2's seven ordered depfiles match GCC and Clang `-MM`, and seven synthetic
+missing/order mutations reject. No compiled E3-D2, resource runtime or full
+hosted result is claimed on the corrected union; N3K remains a separate gate.
+The same audit found 20 E3/G3G/TR3 package native closure manifests missing
+unconditional resource dependencies. Their source-derived correction adds the
+shared header plus I2/K1 fragments, and the three G3G lists also add A2 and
+generation fragments. First-seen package order and sorted TR3 order are
+preserved; targeted package compilation remains pending.
+
 Active finish milestone: **first complete validated CPU v1**. Current acceptance
 and ownership: [CPU v1 completion index](WAVE3_COMPLETION.md), updated 2026-10-24.
 PR #214 exact-head hosted checks pass. Current-source CPU4 two-update training,

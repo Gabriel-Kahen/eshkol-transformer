@@ -1,6 +1,6 @@
 # CPU v1 completion — current acceptance index
 
-Updated 2026-10-24. **Not admitted; PR #214 remains draft and unmerged.**
+Updated 2026-10-25. **Not admitted; PR #214 remains draft and unmerged.**
 Active milestone: the first complete validated **Eshkol-native CPU-f32 version**.
 The user narrowed scope on 2026-10-22; the team contract is
 `finish-20261022/CPU_V1_SCOPE.md` beneath the receipt root. Existing in-flight gates
@@ -67,6 +67,14 @@ independent review/doc work while heavy gates run. Silence is never success.
 
 ## Current execution receipts
 
+- Integration exact-head [run 40156102186](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/40156102186)
+  at `19096272` finished 20/24: CLI3 commands and canonical/model/parameter
+  suites passed; shard-loader stopped at a stale E3-D2 source pin and native
+  numerics at the unchanged N3K `cases==31u` assertion. The two aggregate
+  failures are derivative. The E3-D2 pin was subsequently corrected at
+  `a608141f`; the resource inventory and 20 exact package closure manifests
+  have independently reviewed source corrections. No corrected-head compiled
+  or hosted acceptance exists yet.
 - A distinct fixed-profile fresh-process training-resume result is independently
   accepted on immutable `a2626f12`, tree `fd9ab06b`: separate 250-step producer
   and A125→B250 consumer, complete 25,504-byte A250/B250 checkpoint equality,
