@@ -698,8 +698,11 @@ first C2 SAVE, LOAD and format jobs failed strict native source-closure checks:
 `cpuv1_resource_private.h` was included by the current C2 sources but absent
 from three exact manifests. Independent review accepted the three one-line
 manifest corrections against both C compilers' `-MM` output; the strict `cmp`
-checks remain. This is source repair only. Fresh exact-head hosted CI and the
-CPU-v1 runtime gates remain **NOT RUN** on the repaired tree.
+checks remain. The same header also enters the C2 inspect dependency list and
+six current-CI package depfile manifests; their exact lists and the C2 public
+count have independent source review. This is source repair only. Fresh
+exact-head hosted CI and the CPU-v1 runtime gates remain **NOT RUN** on the
+repaired tree.
 
 Active finish milestone: **first complete validated CPU v1**. Current acceptance
 and ownership: [CPU v1 completion index](WAVE3_COMPLETION.md), updated 2026-10-24.

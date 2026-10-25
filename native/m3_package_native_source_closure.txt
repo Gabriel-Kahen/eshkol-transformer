@@ -19,6 +19,7 @@ include/eshkol_transformer/kernel_abi.h
 src/eshkol_transformer/m3t_transport.h
 native/data_io.c
 native/checkpoint_io.c
+native/cpuv1_resource_private.h
 native/checkpoint_io.h
 native/kernel_abi.c
 src/eshkol_transformer/m3_i64_integration.c

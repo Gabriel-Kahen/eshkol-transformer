@@ -18,6 +18,7 @@ include/eshkol_transformer/kernel_abi.h
 native/k2_wave2_public_wrappers.inc
 native/data_io.c
 native/checkpoint_io.c
+native/cpuv1_resource_private.h
 native/checkpoint_io.h
 native/kernel_abi.c
 native/i64_tensor.c

@@ -84,8 +84,8 @@ awk 'NF != 2 { bad = 1 } END { exit bad ? 1 : 0 }' \
   die "C2 aggregate must contain exactly 81 public-name strings"
 [[ "$(wc -l <"${evidence}/source-closure.txt")" == 32 ]] || \
   die "C2 aggregate must have exactly 32 trusted Eshkol sources"
-[[ "$(wc -l <"${evidence}/native-source-closure.txt")" == 53 ]] || \
-  die "C2 aggregate must have exactly 53 trusted native sources"
+[[ "$(wc -l <"${evidence}/native-source-closure.txt")" == 54 ]] || \
+  die "C2 aggregate must have exactly 54 trusted native sources"
 [[ "$(wc -l <"${PROJECT_ROOT}/native/c2_wave2_private_renames.txt")" == 6 ]] || \
   die "C2 aggregate must have exactly six private facade renames"
 if grep -Ev '^et_e1b_(error|public)_[a-z0-9_]+_v1$' \
