@@ -97,9 +97,13 @@ class WorkspaceTopologyContractSource(unittest.TestCase):
             "(tr3-fixed-distinct? supplied shell index)",
             "(tr3-fixed-distinct? carriers (vector-ref raw 6) index)",
             "(tr3-fixed-dimension=? (car shape) 4)",
-            "(protected-storage-comparison-active?)",
+            "(protected-storage-comparison-active? 2)",
         ):
             self.assertIn(phrase, leaf)
+        self.assertNotIn("((protected-storage-comparison-active?) 2)", leaf)
+        mutated = leaf.replace("(protected-storage-comparison-active? 2)",
+                               "((protected-storage-comparison-active?) 2)", 1)
+        self.assertNotIn("(protected-storage-comparison-active? 2)", mutated)
         for forbidden in ("module-parameters", "commit-module-observation!",
                           "finalize-modules!", "shell-for-raw", "p1-native-"):
             self.assertNotIn(forbidden, leaf)

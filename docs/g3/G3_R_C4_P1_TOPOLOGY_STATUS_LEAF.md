@@ -35,5 +35,15 @@ its direct `set!` of the loaded I2 tied-registration function was undefined
 to the compiler. Its sealed receipt is
 `g3r-c4-p1-topology-9772674e-attempt1/SHA256SUMS-RUN` (SHA-256
 `7d083207c3bc0870b8351074cfcd87afb9fb4a9294162c902ac8e67d1ce8fc09`).
-The delegate repair preserves the missing-tie negative and production I2 call;
-it awaits independent source review and a fresh compiled gate.
+The delegate repair preserves the missing-tie negative and production I2 call.
+Its first compiled attempt timed out waiting for `heavy.lock`; the next
+exact-source attempt reached runtime but failed with an uncaught user exception.
+Two sealed diagnostic-only cuts localized that exception to the first slot-74
+status call. The second trace passed the missing-tie rejection and positive C4
+constructor, then stopped immediately after `S13-before-first-status`:
+`g3r-c4-p1-topology-7bda2971-diagnostic-attempt4/SHA256SUMS-RUN`
+(SHA-256 `a2768c42808e8cf7449ec90c4cd87b184d950c4bf3e1a750200f10844854bad8`).
+The slot-74 guard had called the boolean
+`protected-storage-comparison-active?` as a zero-argument function. This
+source repair uses the existing boolean `cond` form and pins it with a
+mutation test. Compiled status behavior remains unrun for the repaired source.

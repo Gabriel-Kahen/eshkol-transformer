@@ -2229,9 +2229,17 @@ slot-74 topology cut at `9772674e` remains **NONACCEPTING**; its sealed receipt
 reports a compile-time `set!` undefined-variable error on the fixture's loaded
 I2 tied-registration function, before any P1 runtime. A scoped source candidate
 uses a private default-I2 delegate so the same missing-tie negative can be
-injected without rebinding the loaded I2 function. That repair has source/static
-tests only; compiled P1 topology, native owner checks, and dependent slot 75
-remain open.
+injected without rebinding the loaded I2 function. Its first successor timed out
+waiting for `heavy.lock`; its next compiled cut reached runtime but failed
+before a status marker. Sealed diagnostic-only cuts localized the exception to
+the first slot-74 call after the missing-tie negative and positive C4
+construction. The decisive receipt is
+`g3r-c4-p1-topology-7bda2971-diagnostic-attempt4/SHA256SUMS-RUN`
+(SHA-256 `a2768c42808e8cf7449ec90c4cd87b184d950c4bf3e1a750200f10844854bad8`),
+which is **NONACCEPTING**. Slot 74 used a call form on the boolean
+`protected-storage-comparison-active?`; a focused source repair now uses its
+existing boolean `cond` form with a mutation test. Repaired compiled P1
+topology, native owner checks, and dependent slot 75 remain open.
 The workspace contract requires an exact live
 owner-to-P1 handle association proof and a swapped-handle negative; the first
 gate can claim topology/owner identity only. Active generation, workspace and

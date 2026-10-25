@@ -5460,7 +5460,7 @@
   (cond
     ((not (tr3-fixed-vector? supplied 14)) 1)
     (construction-busy? 2)
-    ((protected-storage-comparison-active?) 2)
+    (protected-storage-comparison-active? 2)
     (else
       (let* ((entry (shell-entry model))
              (root (if (and entry (eq? (vector-ref entry 1) 'module))
