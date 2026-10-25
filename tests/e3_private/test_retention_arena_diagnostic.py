@@ -2,6 +2,7 @@
 import importlib.util
 import hashlib
 import json
+import os
 from pathlib import Path
 import signal
 import subprocess
@@ -23,6 +24,30 @@ def container(running=False, label='owned', exit_code=0):
 
 
 class RetentionArenaDiagnosticTest(unittest.TestCase):
+    def test_guest_git_environment_keeps_source_and_fe9_distinct(self):
+        launcher = SCRIPT.read_text()
+        self.assertNotIn("'-e', f'GIT_DIR=", launcher)
+        self.assertNotIn("'-e', 'GIT_WORK_TREE=", launcher)
+        self.assertIn("'-v', f'{common_git}:{common_git}:ro'", launcher)
+        source = SCRIPT.parents[1]
+        fe9 = LAUNCHER.DEPS / 'eshkol-src'
+        if not (fe9 / '.git').is_dir():
+            self.skipTest('pinned fe9 checkout is unavailable on this host')
+        env = os.environ.copy()
+        env.pop('GIT_DIR', None)
+        env.pop('GIT_WORK_TREE', None)
+        def head(path, selected_env):
+            return subprocess.check_output(['git', '-C', str(path), 'rev-parse', 'HEAD'],
+                                           env=selected_env, text=True).strip()
+        source_head = head(source, env)
+        self.assertEqual(head(fe9, env),
+                         'fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9')
+        self.assertNotEqual(source_head, head(fe9, env))
+        poisoned = dict(env, GIT_DIR=subprocess.check_output(
+            ['git', '-C', str(source), 'rev-parse', '--git-dir'],
+            env=env, text=True).strip(), GIT_WORK_TREE=str(source))
+        self.assertEqual(head(fe9, poisoned), source_head)
+
     def test_separate_driver_and_exact_manifest_delta(self):
         root = SCRIPT.parents[1]
         private = root / 'tests/e3_private'
