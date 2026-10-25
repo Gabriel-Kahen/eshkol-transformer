@@ -2684,6 +2684,13 @@ the begin failure cut is checked statically but has no injected runtime result.
 There is no I2 graph revocation, M3T candidate
 constructor, complete candidate cleanup, restore, or replay claim.
 
+The [private M3T candidate constructor contract](g3/G3_R_M3T_CANDIDATE_CONSTRUCTOR_CONTRACT.md)
+specifies the next proposed producer seam: a rooted, single-use ledger
+retains the native M3T owner before candidate I2 begin, then the fixed
+14-parameter/tied-alias constructor uses the accepted P1/I2 handshake.
+It defines preseal cleanup and a nonretryable postseal tail. The ledger and
+constructor are not implemented or compiled; ordinary M3T remains unchanged.
+
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
 names would return newly owned authenticated CPU f32 `[1,256]` kind-3 shells,
