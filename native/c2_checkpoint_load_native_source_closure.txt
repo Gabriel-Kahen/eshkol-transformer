@@ -10,3 +10,4 @@ native/c2_x1_canonical.c
 native/c2_x1_canonical.h
 native/checkpoint_io.c
 native/checkpoint_io.h
+native/cpuv1_resource_private.h

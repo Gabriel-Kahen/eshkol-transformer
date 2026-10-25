@@ -693,6 +693,14 @@ The independent C4 T4 numerical bridge source review accepts test-only
 checks. Its supported compiled normal/sanitizer gate is **NOT RUN**; the CLI3
 installed C4 producer and consumer remain downstream.
 
+The exact-`ef8f9bb5` hosted full-suite run `40145090136` is in progress. Its
+first C2 SAVE, LOAD and format jobs failed strict native source-closure checks:
+`cpuv1_resource_private.h` was included by the current C2 sources but absent
+from three exact manifests. Independent review accepted the three one-line
+manifest corrections against both C compilers' `-MM` output; the strict `cmp`
+checks remain. This is source repair only. Fresh exact-head hosted CI and the
+CPU-v1 runtime gates remain **NOT RUN** on the repaired tree.
+
 Active finish milestone: **first complete validated CPU v1**. Current acceptance
 and ownership: [CPU v1 completion index](WAVE3_COMPLETION.md), updated 2026-10-24.
 PR #214 exact-head hosted checks pass. Current-source CPU4 two-update training,
