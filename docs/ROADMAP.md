@@ -2701,7 +2701,10 @@ symbol separation, and ordinary I2/M3T object parity. The sealed 83-file
 receipt is `g3r-m3t-candidate-a0b24c09-v4-attempt1/SHA256SUMS-RUN` (SHA-256
 `d71d9838ed5af88c92143219c14921c45ceb182b1bbba09f15f73b6a405c5c42`);
 independent exact-result review found no blocker for this bounded constructor
-gate. The injected fixture reaches P1 native begin allocation cuts only, not
+gate. Its sealed review is
+`g3r-m3t-independent-review-20261025/SHA256SUMS-REVIEW` (SHA-256
+`8e213cbd81fcad7befd973e288f7a3e118efc6038b3a2c3261403f80adc79c3f`).
+The injected fixture reaches P1 native begin allocation cuts only, not
 a later I2 publication failure. Ordinary M3T remains unchanged. There is no
 candidate retirement, C2 restore, SAVE, replay, generation, or composed
 sanitizer claim from this gate.
