@@ -7,6 +7,7 @@ test ! -e "$out"
 mkdir -p "$out"
 cc=clang-21
 "$cc" --version | head -1 | grep -F 'Ubuntu clang version 21.1.8'
+"$cc" --version >"$out/toolchain.txt"
 common=(-std=c11 -O1 -g -Wall -Wextra -Werror -fno-fast-math
         -ffp-contract=off -DET_M3T_C4_POSITION_VJP_PRIVATE
         -I"$source_root/include")
@@ -45,17 +46,19 @@ fi
 (
   cd "$source_root"
   sha256sum tests/g3c4/test_position_vjp_private.c \
+    tests/g3c4/test_common.h \
     scripts/test-g3r-c4-position-vjp.sh \
     docs/g3/G3_R_C4_POSITION_VJP_LEAF.md \
     native/m3t_c4_position_vjp_private.c \
     native/m3t_c4_position_vjp_private.h \
     native/g3c4_primitives_provider.c native/kernel_abi.c \
+    include/eshkol_transformer/g3c4_primitives_abi.h \
     include/eshkol_transformer/kernel_abi.h
 ) >"$out/source.sha256"
 (
   cd "$out"
   sha256sum normal normal.stdout normal.stderr repeat.stdout repeat.stderr \
     sanitize sanitize.stdout sanitize.stderr feature-off.stdout \
-    feature-off.stderr ordinary-c4.o source.sha256
+    feature-off.stderr ordinary-c4.o source.sha256 toolchain.txt
 ) >"$out/SHA256SUMS"
 echo 'PASS: pinned C4 position VJP normal/repeat/sanitizer/feature-off'
