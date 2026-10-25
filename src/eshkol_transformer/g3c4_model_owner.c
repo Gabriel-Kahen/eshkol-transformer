@@ -757,6 +757,24 @@ int64_t et_g3c4_private_sealed_owner_topology_status_v1(
 }
 #endif
 
+#ifdef ET_G3R_C4_OWNER_PARAMETER_LEASE_PRIVATE
+int64_t et_g3c4_private_sealed_owner_parameter_lease_status_v1(
+    const void *exact_owner) {
+  et_g3c4_model_owner_internal *owner;
+  et_f32_tensor_error error = {0};
+  et_g3c4_error_reset_internal();
+  owner = et_g3c4_admit_owner(exact_owner, 0);
+  if (owner == NULL) return et_g3c4_error_state.category;
+  if (owner->state != ET_G3C4_OWNER_SEALED || owner->active != NULL)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (owner->initialized != 14u || !owner->successor_ready)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_READINESS);
+  if (et_g3c4_owner_idle_preflight(owner, &error) != 0)
+    return et_g3c4_error_state.category;
+  return 0;
+}
+#endif
+
 #ifdef ET_G3R_C4_OWNER_ASSOCIATION_PRIVATE
 int64_t et_g3c4_private_sealed_owner_binding_status_v1(
     const void *exact_owner, int64_t index, const void *exact_handle,

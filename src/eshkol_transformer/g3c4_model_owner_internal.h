@@ -78,6 +78,13 @@ int64_t et_g3c4_private_sealed_owner_binding_status_v1(
     const void *exact_parameter);
 #endif
 
+#ifdef ET_G3R_C4_OWNER_PARAMETER_LEASE_PRIVATE
+/* Status only for current native call and fourteen I2 parameter borrows/pins.
+ * A future C4 workspace/trainer lease ledger needs a separate gate. */
+int64_t et_g3c4_private_sealed_owner_parameter_lease_status_v1(
+    const void *exact_owner);
+#endif
+
 int32_t et_g3c4_construction_parameter_preflight_internal(
     const void *exact_owner, void *parameter,
     const void *exact_handle, et_f32_tensor_error *error);

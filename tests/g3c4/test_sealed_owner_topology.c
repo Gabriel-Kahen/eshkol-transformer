@@ -3,6 +3,7 @@
 #define ET_G3C4_NATIVE_OWNER_PRIVATE 1
 #define ET_G3R_C4_OWNER_TOPOLOGY_PRIVATE 1
 #define ET_G3R_C4_OWNER_ASSOCIATION_PRIVATE 1
+#define ET_G3R_C4_OWNER_PARAMETER_LEASE_PRIVATE 1
 #include "../../src/eshkol_transformer/m3_call_f32_integration.c"
 #include "../../src/eshkol_transformer/g3c4_model_owner.c"
 
@@ -86,6 +87,18 @@ static void binding(const void *candidate, int64_t index,
   unchanged(); ++checks;
 }
 
+static void lease_status(const void *candidate, int64_t wanted,
+    int64_t domain, int64_t code) {
+  et_g3c4_model_owner_internal before = *owner;
+  int64_t got = et_g3c4_private_sealed_owner_parameter_lease_status_v1(candidate);
+  CHECK(got == wanted);
+  CHECK(et_g3c4_private_last_error_domain_v1() == domain);
+  CHECK(et_g3c4_private_last_error_category_v1() == wanted);
+  CHECK(et_g3c4_private_last_error_code_v1() == code);
+  CHECK(!memcmp(owner, &before, sizeof(before)));
+  ++checks;
+}
+
 int main(void) {
   owner = et_g3c4_private_model_owner_create_seeded_v1(1729);
   CHECK(owner);
@@ -96,11 +109,56 @@ int main(void) {
   snapshot();
   status(ET_G3C4_INVALID_STATE, ET_G3C4_DOMAIN_C4,
          ET_G3C4_CODE_LIFECYCLE);
+  lease_status(owner, ET_G3C4_INVALID_STATE, ET_G3C4_DOMAIN_C4,
+      ET_G3C4_CODE_LIFECYCLE);
   OK(et_g3c4_private_model_owner_prepare_seal_v1(owner));
   status(ET_G3C4_INVALID_STATE, ET_G3C4_DOMAIN_C4,
          ET_G3C4_CODE_LIFECYCLE);
+  lease_status(owner, ET_G3C4_INVALID_STATE, ET_G3C4_DOMAIN_C4,
+      ET_G3C4_CODE_LIFECYCLE);
   OK(et_g3c4_private_model_owner_commit_seal_v1(owner));
   status(0, 0, 0);
+  lease_status(owner, 0, 0, 0);
+  lease_status(NULL, ET_G3C4_INVALID_ARGUMENT, ET_G3C4_DOMAIN_C4,
+      ET_G3C4_CODE_IDENTITY);
+  int foreign_lease = 0;
+  lease_status(&foreign_lease, ET_G3C4_INVALID_ARGUMENT, ET_G3C4_DOMAIN_C4,
+      ET_G3C4_CODE_IDENTITY);
+  owner->active = &foreign_lease;
+  lease_status(owner, ET_G3C4_INVALID_STATE, ET_G3C4_DOMAIN_C4,
+      ET_G3C4_CODE_LIFECYCLE);
+  owner->active = NULL;
+  for (size_t i = 0; i < 14; ++i) {
+    et_f32_tensor_error error;
+    et_f32_tensor_borrow *borrow = NULL;
+    OK(et_f32_parameter_value_borrow_begin_v1(owner->parameters[i], &borrow, &error));
+    lease_status(owner, ET_F32_TENSOR_ERROR_INVALID_STATE,
+        ET_G3C4_DOMAIN_I2, ET_F32_TENSOR_CODE_INVALID_HANDLE);
+    CHECK(borrow != NULL);
+    CHECK(owner->parameters[i]->value->active_borrow == borrow);
+    OK(et_f32_tensor_borrow_end_v1(&borrow, &error));
+    CHECK(borrow == NULL);
+    et_f32_parameter_test_set_metadata_v1(owner->parameters[i],
+        ET_F32_GRADIENT_PRESENT, 1u, UINT32_C(0x3f800000));
+    OK(et_f32_parameter_gradient_borrow_begin_v1(owner->parameters[i], &borrow, &error));
+    lease_status(owner, ET_F32_TENSOR_ERROR_INVALID_STATE,
+        ET_G3C4_DOMAIN_I2, ET_F32_TENSOR_CODE_INVALID_HANDLE);
+    CHECK(borrow != NULL);
+    CHECK(owner->parameters[i]->gradient->active_borrow == borrow);
+    OK(et_f32_tensor_borrow_end_v1(&borrow, &error));
+    et_f32_parameter_test_set_metadata_v1(owner->parameters[i],
+        ET_F32_GRADIENT_ABSENT, 0u, 0u);
+    lease_status(owner, 0, 0, 0);
+  }
+  et_f32_tensor_error lease_error;
+  et_f32_gradient_reset_plan *reset = NULL;
+  OK(et_f32_gradient_reset_plan_prepare_v1(
+      14, owner->parameters, &reset, &lease_error));
+  lease_status(owner, ET_F32_TENSOR_ERROR_INVALID_STATE,
+      ET_G3C4_DOMAIN_I2, ET_F32_TENSOR_CODE_INVALID_HANDLE);
+  OK(et_f32_gradient_reset_plan_release_v1(&reset, &lease_error));
+  lease_status(owner, 0, 0, 0);
+  unchanged();
 
   CHECK(et_g3c4_private_sealed_owner_topology_status_v1(NULL) ==
         ET_G3C4_INVALID_ARGUMENT);
@@ -189,6 +247,8 @@ int main(void) {
       et_g3c4_private_model_owner_create_seeded_v1(1731);
   CHECK(aborted);
   OK(et_g3c4_private_model_owner_abort_v1(aborted));
+  lease_status(aborted, ET_G3C4_INVALID_STATE, ET_G3C4_DOMAIN_C4,
+      ET_G3C4_CODE_LIFECYCLE);
   binding(aborted, 0, &identity[0], owner->parameters[0],
           ET_G3C4_INVALID_STATE, ET_G3C4_DOMAIN_C4,
           ET_G3C4_CODE_LIFECYCLE);

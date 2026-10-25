@@ -2239,6 +2239,13 @@ value-byte preservation control, but the fixture and pinned compiled package
 gate remain unrun. It cannot yet claim constructor admission, compiled
 changed-live-carrier rejection, lease exclusion or workspace authority.
 
+A [source-only C4 parameter lease status](g3/G3_R_C4_OWNER_PARAMETER_LEASE_STATUS_LEAF.md)
+adds a private read-only sealed-owner native status for the current active call
+and fourteen I2 value/gradient borrows or plan pins. Local Clang normal,
+repeat and ASan+UBSan pass 99 checks each; feature-off omits the symbol.
+It does not cover future C4 workspace/trainer leases, which have no C4 ledger
+yet, and does not establish compiled Eshkol workspace preflight.
+
 The [private C4 position VJP leaf](g3/G3_R_C4_POSITION_VJP_LEAF.md) supplies
 one fixed `[1,4]` position-ID and `[1,4,4]` upstream to `[4,4]` gradient
 operation behind a separate feature flag. Its source and tests were independently
