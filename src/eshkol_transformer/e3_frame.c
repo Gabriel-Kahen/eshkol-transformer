@@ -400,12 +400,26 @@ int64_t et_e3_test_fault_seed_publication_v1(void *pointer) {
 }
 #endif
 
+#ifdef ET_E3_RETENTION_TESTING
+/* Private observer for E3's stack-scoped I2 guards. Public lease counters do
+ * not include these guards; keep both accounting domains separate. */
+static uint64_t e3_scoped_begin_successes;
+static uint64_t e3_scoped_end_successes;
+static uint64_t e3_scoped_live;
+#endif
+
 static int64_t e3_scope_begin(et_f32_tensor *tensor,
                               et_f32_scoped_guard_internal *guard,
                               int destination) {
   et_f32_tensor_error error;
   int32_t rc = et_f32_tensor_scoped_begin_internal(tensor, guard, &error);
-  if (!rc) return 0;
+  if (!rc) {
+#ifdef ET_E3_RETENTION_TESTING
+    ++e3_scoped_begin_successes;
+    ++e3_scoped_live;
+#endif
+    return 0;
+  }
   if (destination &&
       error.category == ET_F32_TENSOR_ERROR_INVALID_STATE &&
       error.code == ET_F32_TENSOR_CODE_ACTIVE_BORROW)
@@ -414,7 +428,17 @@ static int64_t e3_scope_begin(et_f32_tensor *tensor,
 }
 
 static void e3_scope_end(et_f32_scoped_guard_internal *guard) {
+#ifdef ET_E3_RETENTION_TESTING
+  int had_owner = guard && guard->owner != NULL;
+#endif
   if (et_f32_tensor_scoped_end_internal(guard) != 0) abort();
+#ifdef ET_E3_RETENTION_TESTING
+  if (had_owner) {
+    if (e3_scoped_live == 0) abort();
+    --e3_scoped_live;
+    ++e3_scoped_end_successes;
+  }
+#endif
 }
 
 #ifdef ET_E3_NUMERICAL_TESTING
@@ -1739,6 +1763,9 @@ int64_t et_e3_test_retention_probe_v1(int64_t selector) {
     case 26: return et_d2_exact_read_test_fd_live_count_v1();
     case 27: return et_d2_exact_read_test_fd_peak_count_v1();
     case 28: return (int64_t)et_f32_tensor_test_borrow_bytes_v1();
+    case 29: return (int64_t)e3_scoped_begin_successes;
+    case 30: return (int64_t)e3_scoped_end_successes;
+    case 31: return (int64_t)e3_scoped_live;
     default: return -1;
   }
 }

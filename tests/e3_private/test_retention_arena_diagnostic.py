@@ -58,10 +58,14 @@ class RetentionArenaDiagnosticTest(unittest.TestCase):
     def test_separate_driver_and_exact_manifest_delta(self):
         root = SCRIPT.parents[1]
         private = root / 'tests/e3_private'
-        self.assertEqual(hashlib.sha256((private / 'retention_driver.esk').read_bytes()).hexdigest(),
-                         '5c2d5dcd28219e5977e574a75c983366b7fcd243e6ba100a5c9b0eee1ed9c97d')
+        canonical = (private / 'retention_driver.esk').read_text()
         diagnostic = (private / 'retention_arena_diagnostic_driver.esk').read_text()
         self.assertIn('(define (e3-test-retention-diagnose', diagnostic)
+        reconcile = '(define (e3-test-retention-reconcile! before after)'
+        prepare = '(define (e3-test-retention-prepare horizon present? corpus-path)'
+        self.assertEqual(canonical[canonical.index(reconcile):canonical.index(prepare)],
+                         diagnostic[diagnostic.index(reconcile):diagnostic.index(prepare)])
+        self.assertIn("'balanced-e3-scoped-guards", canonical)
         self.assertEqual((private / 'retention_arena_diagnostic_driver_root.esk').read_text(),
                          ';;; Exact test-only successor; the canonical private root remains unchanged.\n'
                          '(load "../../native/e3_private_driver_root.esk")\n'

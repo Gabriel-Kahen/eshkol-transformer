@@ -600,35 +600,41 @@ e3_reject_unresolved_private fault "$3" "$3"
     def test_probe_balance_negative_mutants(self):
         source = (TESTS / "fault_driver.esk").read_text()
         expression = self.function_expression(source, "e3-test-fault-probes-restored?")
-        before = [0] * 29
+        before = [0] * 32
         before[9], before[13], before[14], before[15], before[16] = 4, 64, 10, 10, 10
         before[27], before[28] = 2, 16
+        before[29], before[30] = 100, 100
         after = before.copy()
         after[9], after[13], after[14], after[15], after[16] = 6, 96, 12, 14, 12
+        after[29], after[30] = 102, 102
         after[27] = 3
         def admits(candidate=after, predicate=expression):
             return self.eval_probe(predicate, {"before": before, "after": candidate})
         self.assertTrue(admits())
-        for field in (0, 20, 21, 23, 24, 26):
+        for field in (0, 20, 21, 23, 24, 26, 31):
             leaked = after.copy()
             leaked[field] += 1
             self.assertFalse(admits(leaked), f"live owner {field}")
-        for field in (9, 13, 14, 16):
+        for field in (9, 13, 14, 16, 29, 30):
             unbalanced = after.copy()
             unbalanced[field] += 1
             self.assertFalse(admits(unbalanced), f"event {field}")
         mutations = (
-            ("(= (vector-ref before index) (vector-ref after index))", 0),
-            ("(= retired ends)", 9),
-            ("(= bytes (* ends (vector-ref before 28)))", 13),
+            ("(= (vector-ref before index) (vector-ref after index))", ((0, 1),)),
+            ("(= retired public-ends)", ((9, 1), (13, 16))),
+            ("(= bytes (* retired (vector-ref before 28)))", ((13, 1),)),
         )
-        for clause, field in mutations:
+        for clause, changes in mutations:
             self.assertIn(clause, source)
             mutant = self.function_expression(source.replace(clause, "#t", 1),
                                               "e3-test-fault-probes-restored?")
             changed = after.copy()
-            changed[field] += 1
-            self.assertTrue(admits(changed, mutant), f"mutant failed to escape {field}")
+            for field, delta in changes:
+                changed[field] += delta
+            self.assertTrue(admits(changed, mutant), f"mutant failed to escape {changes}")
+        no_public = before.copy()
+        no_public[29], no_public[30] = 102, 102
+        self.assertTrue(admits(no_public), "scoped guards must be observed without public leases")
 
     def test_fourteen_model_images_reject_gradient_and_metadata_mutants(self):
         source = (TESTS / "retention_driver.esk").read_text()

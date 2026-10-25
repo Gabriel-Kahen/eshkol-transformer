@@ -6,6 +6,7 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
+PRIVATE = ROOT / 'tests/e3_private'
 DRIVER = ROOT / 'tests/e3_private/retention_arena_diagnostic_driver.esk'
 RUNTIME = ROOT / 'tests/e3_private/retention_arena_diagnostic_runtime.esk'
 PAIR = ROOT / 'scripts/e3-retention-arena-raw-pair.sh'
@@ -23,24 +24,30 @@ class RetentionRawI2Tests(unittest.TestCase):
         current = DRIVER.read_text()
         report = '(define (e3-test-retention-report horizon present?)'
         teardown = '(define (e3-test-retention-teardown horizon present?)'
-        reconcile = '(define (e3-test-retention-reconcile! before after)'
-        prepare = '(define (e3-test-retention-prepare horizon present? corpus-path)'
-        self.assertEqual(previous[:previous.index(report)], current[:current.index(report)])
         self.assertEqual(previous[previous.index(teardown):], current[current.index(teardown):])
-        self.assertEqual(previous[previous.index(reconcile):previous.index(prepare)],
-                         current[current.index(reconcile):current.index(prepare)])
+        self.assertIn('(make-vector 32 0)', current)
+        self.assertIn("'balanced-e3-scoped-guards", current)
+        self.assertIn("'balanced-public-i2-views", current)
+        self.assertIn("'reconciled-retired-borrows", current)
+        for name in ('retention_driver.esk',
+                     'retention_arena_diagnostic_driver.esk',
+                     'retention_first_eval_mutant_driver.esk'):
+            self.assertIn("'failure-scoped-guards-idle\n"
+                          "        (= (e3-test-retention-probe 31) 0)",
+                          (PRIVATE / name).read_text())
         body = current[current.index(report):current.index(teardown)]
         start = body.index('(after (e3-test-retention-probes))')
         marker = body.index('(display "E3-RETENTION-I2-RAW before-begin=")')
+        scoped = body.index('(display "E3-RETENTION-SCOPED-RAW before-begin=")')
         flush = body.index('(flush-output-port (current-output-port))')
         assertion = body.index('(e3-test-retention-reconcile! before after)')
         self.assertLess(start, marker)
-        self.assertLess(marker, flush)
+        self.assertLess(marker, scoped)
+        self.assertLess(scoped, flush)
         self.assertLess(flush, assertion)
         for side in ('before', 'after'):
-            for index in (14, 15, 16):
+            for index in (14, 15, 16, 29, 30, 31):
                 self.assertEqual(body.count(f'(vector-ref {side} {index})'), 1)
-        self.assertIn("'balanced-i2-views-pins", current)
         self.assertEqual(RUNTIME.read_bytes(), old(RUNTIME))
         for rel in ('tests/e3_private/retention_arena_diagnostic_bridge.c',
                     'tests/e3_private/retention_arena_diagnostic_driver_root.esk',

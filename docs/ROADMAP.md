@@ -1110,6 +1110,17 @@ a newly built diagnostic private package, independent review and a fresh
 supported paired AOT run are pending. This source-only change does not close
 complete-call retention or E3 §9. See [retention status](e3/E3_COMPLETE_CALL_RETENTION.md).
 
+The raw-I2 paired diagnostic then observed zero public borrow begin/view/end
+calls in all eight fault/control processes; each stopped at the old predicate
+that required a positive public begin count. The fault arm alone retained
+2,360 root-arena bytes immediately after the failed call, while controls stayed
+flat. A narrow test-only source successor now observes E3's private stack
+scoped guards separately, requires positive balanced scoped operations and zero
+live guards, and preserves public lease balance, retired-byte reconciliation,
+and existing owner checks. This has host source/syntax evidence only;
+independent source review and a new compiled diagnostic gate remain pending,
+and the 2,360-byte fault-path allocation is unresolved.
+
 The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
 is a docs-only candidate for the remaining private numerical, compiled-mutant,
 failure and rollback gates. It tracks authentic D2/model reachability separately

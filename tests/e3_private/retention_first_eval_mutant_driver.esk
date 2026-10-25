@@ -27,9 +27,9 @@
              (e3-native-invariant-fail))))
 
 (define (e3-test-retention-probes)
-  (let ((result (make-vector 29 0)))
+  (let ((result (make-vector 32 0)))
     (let fill ((index 0))
-      (if (= index 29) result
+      (if (= index 32) result
           (begin (vector-set! result index (e3-test-retention-probe index))
                  (fill (+ index 1)))))))
 
@@ -195,6 +195,8 @@
                     (= (vector-ref probes index)
                        (e3-test-retention-probe index))))
               (check (+ index 1)))))
+      (e3-test-retention-check 'failure-scoped-guards-idle
+        (= (e3-test-retention-probe 31) 0))
       #t)
     (vector-set! record 16
       (e3-test-retention-call! model dataset frame destinations cursor modes
@@ -215,20 +217,26 @@
   (e3-test-retention-check 'zero-batch-view-fd
     (and (= (vector-ref after 3) 0) (= (vector-ref after 23) 0)
          (= (vector-ref after 24) 0) (= (vector-ref after 26) 0)))
-  (let ((begins (- (vector-ref after 14) (vector-ref before 14)))
-        (views (- (vector-ref after 15) (vector-ref before 15)))
-        (ends (- (vector-ref after 16) (vector-ref before 16)))
+  (let ((public-begins (- (vector-ref after 14) (vector-ref before 14)))
+        (public-views (- (vector-ref after 15) (vector-ref before 15)))
+        (public-ends (- (vector-ref after 16) (vector-ref before 16)))
+        (scoped-begins (- (vector-ref after 29) (vector-ref before 29)))
+        (scoped-ends (- (vector-ref after 30) (vector-ref before 30)))
         (retired-borrows (- (vector-ref after 9) (vector-ref before 9)))
         (retained-bytes (- (vector-ref after 13) (vector-ref before 13)))
         (fd-peak-growth (- (vector-ref after 27) (vector-ref before 27))))
-    (e3-test-retention-check 'balanced-i2-views-pins
-      (and (> begins 0) (= begins ends) (>= views begins)))
+    (e3-test-retention-check 'balanced-e3-scoped-guards
+      (and (> scoped-begins 0) (= scoped-begins scoped-ends)
+           (= (vector-ref before 31) 0) (= (vector-ref after 31) 0)))
+    (e3-test-retention-check 'balanced-public-i2-views
+      (and (= public-begins public-ends)
+           (>= public-views public-begins)))
     (e3-test-retention-check 'reconciled-retired-borrows
-      (and (= retired-borrows ends)
+      (and (= retired-borrows public-ends)
            (= retained-bytes (* retired-borrows (vector-ref before 28)))))
     (e3-test-retention-check 'fd-peak-growth
       (>= fd-peak-growth 0))
-    (vector begins views ends retired-borrows retained-bytes
+    (vector scoped-begins public-views scoped-ends retired-borrows retained-bytes
             fd-peak-growth)))
 
 (define (e3-test-retention-prepare horizon present? corpus-path mutation)
