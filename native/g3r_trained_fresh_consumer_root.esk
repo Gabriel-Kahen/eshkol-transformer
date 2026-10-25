@@ -362,3 +362,58 @@
               (g3rf-fail "full-context no-draw guard admitted G2"))))
       (cleanup)
       #t)))
+
+;;; Test-only file harness. A distinct executable owns one fresh registry and
+;;; reads only the host-sealed C2, companion and transcript byte files.
+(define (g3rf-private-test-run arguments)
+  (if (not (and (vector? arguments) (= (vector-length arguments) 6)))
+      (g3rf-fail "fresh caller requires six paths"))
+  (vector-set! t2-wave2-policy-projector 0 c2-policy-t2-entry-internal)
+  (let ((dataset #f) (trainer #f) (receipt #f))
+    (guard (caught
+             (#t
+               (if receipt
+                   (guard (defect (#t (exit 134)))
+                     (g3r-c2-receipt-release-internal! receipt)))
+               (if trainer
+                   (guard (defect (#t (exit 134)))
+                     (trainer-release! trainer)))
+               (if dataset
+                   (guard (defect (#t (exit 134)))
+                     (d2-token-dataset-close! dataset)))
+               (raise caught)))
+      (let* ((resolved
+               (cli3-b-resolved (vector-ref arguments 0) 'generate))
+             (tokenizer
+               (cli3-b-tokenizer (vector-ref arguments 1) resolved))
+             (companion-path
+               (cli3-path (vector-ref arguments 4) 'checkpoint-load))
+             (transcript-path
+               (cli3-path (vector-ref arguments 5) 'checkpoint-load))
+             (companion (make-bytevector 288 0))
+             (transcript (make-bytevector g3rf-size 0)))
+        (if (not (and (= (file-size companion-path) 288)
+                      (= (file-size transcript-path) g3rf-size)
+                      (= (t1-native-read-exact companion-path companion
+                                               288 288) 0)
+                      (= (t1-native-read-exact transcript-path transcript
+                                               g3rf-size g3rf-size) 0)))
+            (g3rf-fail "fresh pair or transcript read failed"))
+        (set! dataset
+          (cli3-b-dataset (vector-ref arguments 2) tokenizer))
+        (set! trainer (cli3-b-create-trainer resolved tokenizer dataset))
+        (set! receipt
+          (g3r-c2-load-with-sha-internal
+            (cli3-path (vector-ref arguments 3) 'checkpoint-load)
+            (cli3-b-policy) (k2-public-capability-discover)))
+        (g3r-c2-pair-decode-internal!
+          receipt companion (make-vector 8 #f))
+        (if (not (g3r-trained-fresh-consume-internal!
+                   receipt trainer tokenizer companion transcript))
+            (g3rf-fail "fresh comparison did not complete"))
+        ;; The consumer ended the idle trainer lease and receipt itself.
+        (set! receipt #f)
+        (set! trainer #f)
+        (d2-token-dataset-close! dataset)
+        (set! dataset #f)
+        #t))))

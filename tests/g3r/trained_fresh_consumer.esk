@@ -1,0 +1,20 @@
+;;; Separate executable and process from the sealed trained-C2 producer.
+(extern void g3rf-private-test ptr ptr
+        :real et_g3r_private_test_fresh_consume_v1)
+(define args (command-line))
+(define (proper-length values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining) (+ count 1)))))
+(if (not (= (proper-length args) 7)) (exit 2))
+(define (argument at)
+  (let loop ((remaining (cdr args)) (index at))
+    (if (= index 0) (car remaining)
+        (loop (cdr remaining) (- index 1)))))
+(define result (vector #f))
+(g3rf-private-test
+  (vector (vector (argument 0) (argument 1) (argument 2)
+                  (argument 3) (argument 4) (argument 5)))
+  result)
+(if (not (eq? (vector-ref result 0) #t)) (exit 1))
+(display "G3-R FRESH TRAINED C2 TRANSCRIPT PASS") (newline)

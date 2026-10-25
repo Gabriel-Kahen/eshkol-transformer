@@ -14,6 +14,9 @@ ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "native/g3r_trained_fresh_consumer_root.esk"
 CLOSURE = ROOT / "native/g3r_trained_fresh_consumer_source_closure.txt"
 SEAM = ROOT / "native/g3r_c2_receipt_tr3_restore_source_closure.txt"
+BRIDGE = ROOT / "native/g3r_trained_fresh_consumer_bridge.c"
+RENAMES = ROOT / "native/g3r_trained_fresh_consumer_private_renames.txt"
+CALLER = ROOT / "tests/g3r/trained_fresh_consumer.esk"
 C2_SHA = bytes.fromhex(
     "9ec2a1d40ebd43e57d1e8b75fa8f6d96cd4d17abc1002f70da04d20144ee78df"
 )
@@ -126,6 +129,33 @@ def decode(data: bytes, destination: list) -> None:
 class FreshConsumerSourceTest(unittest.TestCase):
     def test_one_root_and_authority_order(self):
         verify_source(SOURCE.read_text(), CLOSURE.read_text(), SEAM.read_text())
+
+    def test_distinct_process_file_harness(self):
+        source, bridge, caller = (SOURCE.read_text(), BRIDGE.read_text(),
+                                  CALLER.read_text())
+        wrapper = source[source.index("(define (g3rf-private-test-run"):]
+        sequence = (
+            "(cli3-b-resolved", "(cli3-b-tokenizer",
+            "(t1-native-read-exact companion-path companion",
+            "(t1-native-read-exact transcript-path transcript",
+            "(cli3-b-dataset", "(cli3-b-create-trainer",
+            "(g3r-c2-load-with-sha-internal",
+            "(g3r-c2-pair-decode-internal!",
+            "(g3r-trained-fresh-consume-internal!",
+        )
+        positions = [wrapper.find(part) for part in sequence]
+        self.assertNotIn(-1, positions)
+        self.assertEqual(positions, sorted(positions))
+        self.assertIn("(cli3-b-policy)", wrapper)
+        self.assertIn("(k2-public-capability-discover)", wrapper)
+        self.assertIn("(g3r-c2-receipt-release-internal! receipt)", wrapper)
+        self.assertIn("(trainer-release! trainer)", wrapper)
+        self.assertEqual(RENAMES.read_text().strip(),
+                         "g3rf-private-test-run et_e1b_private_g3r_fresh_test_run_cabi_v1")
+        self.assertIn("et_e1b_private_g3r_fresh_test_run_cabi_v1", bridge)
+        self.assertIn("et_g3r_private_test_fresh_consume_v1", bridge)
+        self.assertIn("et_g3r_private_test_fresh_consume_v1", caller)
+        self.assertIn("G3-R FRESH TRAINED C2 TRANSCRIPT PASS", caller)
 
     def test_source_mutations(self):
         source, closure, seam = (SOURCE.read_text(), CLOSURE.read_text(),

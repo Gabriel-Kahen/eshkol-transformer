@@ -2458,12 +2458,16 @@ checkpoint, while its G3RCV1 policy permits one G1. The accepted same-registry
 replay receipt proves a G1 comparison but exports only a pass marker. A sealed
 producer bit/trace transcript and a reviewed single-registry reader/replay
 source union are required before cross-process parameter and G1 parity can be
-claimed. A separate [fresh consumer source candidate](g3/G3_R_TRAINED_FRESH_CONSUMER_SOURCE_LEAF.md)
-now composes one 103-source root with a private V1 decoder, exact receipt/C2
+claimed. The producer transcript is now accepted at `c04f7017`, sealed by
+`g3r-trained-transcript-c04f7017-attempt3/SHA256SUMS-RUN` (SHA-256
+`4bcedbf176296accf8afa8699cc710a552cc892e263ed731fd03ab81bb3cebc3`).
+A separate [fresh consumer source candidate](g3/G3_R_TRAINED_FRESH_CONSUMER_SOURCE_LEAF.md)
+composes one 103-source root with a private V1 decoder, exact receipt/C2
 carrier-to-restored-model and producer-payload bit comparisons, and one P1/G1
-trace comparator. Local source/schema mutation checks pass; independent
-source/test review, accepted producer transcript bytes and receipt, linked
-consumer, and fresh-process compiled normal/repeat/sanitizer gates are pending.
+trace comparator. A private wrapper and distinct thin executable now stage the
+exact sealed files and construct a fresh tokenizer/trainer/C2 receipt within
+that root. Local source/schema mutation checks pass; independent source/test
+review and linked fresh-process compiled normal/repeat/sanitizer gates remain pending.
 This does not establish fresh parameter or P1/G1 runtime parity.
 
 The proposed [trained producer transcript V1 contract](g3/G3_R_TRAINED_PRODUCER_TRANSCRIPT_V1_CONTRACT.md)
