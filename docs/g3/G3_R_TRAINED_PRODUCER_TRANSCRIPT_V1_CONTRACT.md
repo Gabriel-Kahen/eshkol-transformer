@@ -3,8 +3,8 @@
 **Proposed private data contract. Capture, decoder, source union, and compiled
 comparison are not yet accepted.** The accepted budget-one replay gate emits a
 pass marker, not a transcript. This separate fixture must observe the same
-trained CLI3 model and its two existing budget-one generator paths before
-their release. Its pair is
+trained CLI3 model and the accepted `captured`, decoded `replayed`, and genuine
+`reference` generator paths before their release. Its pair is
 `replay.c2` SHA-256 `9ec2a1d40ebd43e57d1e8b75fa8f6d96cd4d17abc1002f70da04d20144ee78df`
 and `replay.g3rcv1` SHA-256
 `75fec71697cf50556228481b0a2a30f634ce8991a7f6db4ad7fbdc700f1cfbf2`.
@@ -50,13 +50,13 @@ binary32 words. All are CPU f32. The tokenizer embedding is tied to head;
 its live alias identity must be checked separately and is never serialized as
 a second payload. Reject path order, rank, shape, dtype/device or tie drift.
 
-The trace fields occur in this exact order: 256 last-logit binary32 bits from
-the existing **captured** no-draw P1 owner; 4 key and 4 value binary32 cache
-words at its length one; its 4 RNG signed 64-bit words; its logical length and
-cache length (both one); emitted G1 token ID from the separate genuine
-**reference** generator; 8 key and 8 value binary32 cache words from that
-reference after G1; its 4 successor RNG signed 64-bit words; its G1 logical
-length and cache length (both two). The 4 captured P1 RNG words must equal the
+The trace fields occur in this exact order from the decoded **replayed**
+generator: 256 last-logit binary32 bits after its no-draw P1; 4 key and 4
+value binary32 cache words at length one; 4 RNG signed 64-bit words; logical
+length and cache length (both one); the emitted ID from
+`g3r-private-replayed-p1-g1!`; 8 key and 8 value binary32 cache words after
+that G1; 4 successor RNG signed 64-bit words; logical length and cache length
+(both two). The 4 replayed P1 RNG words must equal the
 authenticated companion state: P1 consumes no draw. The ID is 0–255 and the
 companion's policy is exactly budget one. No text, pointer, registry identity,
 object header, or executable term is present.
@@ -65,15 +65,17 @@ object header, or executable term is present.
 
 Capture parameter bits directly from the live trained model after authentic
 CLI3 restore and exact C2 SAVE, while the owner is retained; do not derive
-them by decoding C2. Capture P1 from the producer's `captured` generator and
-G1 from its separate genuine `reference` generator. The accepted
-`g3r-trained-replay-compare!` first checks captured P1 against the decoded
-no-draw `replayed` owner, then checks genuine reference G1 against replayed
-G1, including ID, lengths, K/V and successor RNG. The transcript must preserve
-these owner labels; it must not claim that P1 and G1 were observed on one
-generator. Getter reads and serialization must add no draws or state changes.
-The existing reference G1 call advances RNG as part of ordinary generation;
-model, tokenizer, checkpoint, and companion bytes remain unchanged. Publish to a distinct
+them by decoding C2. Capture both P1 and G1 from the decoded `replayed`
+generator: `g3m-prefill-p1!` commits its no-draw P1 and
+`g3r-private-replayed-p1-g1!` is the actual private replay continuation call.
+The accepted `g3r-trained-replay-compare!` checks replayed P1 against the
+independent `captured` P1 owner, then checks replayed G1 against the separate
+genuine `reference` generated call, including ID, lengths, K/V and successor
+RNG. Thus the serialized P1/G1 belongs to one replayed generator, while the
+captured and reference owners remain independent controls. Getter reads and
+serialization must add no draws or state changes beyond the two existing G1
+calls; those calls advance their respective RNG as designed. Model,
+tokenizer, checkpoint, and companion bytes remain unchanged. Publish to a distinct
 path with atomic no-overwrite semantics after all fields and checksum are
 complete. A failure may leave an orphaned pair and must not overwrite it.
 

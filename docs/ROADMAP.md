@@ -2463,8 +2463,9 @@ claimed. This contract is proposed; source and compiled comparison are unrun.
 The proposed [trained producer transcript V1 contract](g3/G3_R_TRAINED_PRODUCER_TRANSCRIPT_V1_CONTRACT.md)
 specifies a fixed 6,292-byte, checksummed data-only oracle for the exact
 budget-one pair: 1,184 raw binary32 parameter words in the 14-path TR3 roster
-and a fixed trace from distinct captured P1 and genuine reference G1 owners,
-with exact signed 64-bit RNG words. The historical replay receipt authenticates
+and a fixed P1/G1 trace from one decoded `replayed` generator, with independent
+captured-P1 and genuine-reference-G1 controls and exact signed 64-bit RNG
+words. The historical replay receipt authenticates
 the pair only; a new receipt must authenticate future transcript bytes. Its
 source-only union preflight pins seam
 `bba97271` and replay `01a584c6`: all 92 shared paths have identical Git
