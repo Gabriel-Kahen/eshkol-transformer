@@ -2658,7 +2658,7 @@ for the composed Eshkol gate. I2/M3T preseal enrollment,
 graph revocation, full
 candidate cleanup, C2 restore and replay remain unimplemented.
 
-A source-only I2 candidate producer is staged on
+A bounded I2 candidate producer is staged on
 `codex/g3r-i2-candidate-handshake-20261025`. A feature-local extension owns
 the preallocated I2/P1 enrollment cell and privately rooted exact member
 snapshot. It calls the accepted P1 candidate begin before the first module
@@ -2668,9 +2668,15 @@ I2 root, extension, bridge, and M3T constructor remain byte-identical. The
 reviewed begin failure cut recovers the native P1 identity from the rooted P1
 cell before I2 rollback. Both seal routes stage the exact list head and
 validate it before irreversible P1 seal; a source checker pins the resulting
-fixed-write tail. This source check is not a compiled failure-injection gate.
-The focused feature-on/feature-off normal/repeat runner is not yet admitted by a
-supported compiled gate. There is no I2 graph revocation, M3T candidate
+fixed-write tail. The reviewed source `888030b8`/tree `8c6a600e` passed a
+pinned compiled feature-on/ordinary normal and repeat gate. Its sealed
+82-file receipt `g3r-i2-handshake-888030b8-attempt1/SHA256SUMS-RUN` (SHA-256
+`94f76ca6f2c9c07c2f4a1346d7101bf3df4bbb26b9f4c3ea07d1e4c669d806b2`)
+has zero launcher/Docker exits, 23 candidate checks in each process,
+byte-identical ordinary feature-off results, empty runtime stderr, and the
+feature-off native symbol/object parity checks. This is not a compiled
+failure-injection or sanitizer gate. Independent exact-result review is
+pending. There is no I2 graph revocation, M3T candidate
 constructor, complete candidate cleanup, restore, or replay claim.
 
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
