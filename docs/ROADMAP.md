@@ -1207,6 +1207,15 @@ The 223-file receipt seal is `e933e65c...`; the review is
 `/home/gabe/.codex/evidence/eshkol-transformer/finish-20261022/e3/retention-44c0418-attempt2-review/REVIEW.md`.
 The receipt does not locate or attribute the arena growth. A diagnostic
 failure-versus-success control must precede a reviewed repair and fresh gate.
+The `6cc2d16d` raw-I2 diagnostic import discovery measured exact normal
+imports and one added sanitized noninstrumentation import, `fflush`, with
+unchanged sanitizer instrumentation (142-file raw seal `4423fdd2...`,
+`retention-raw-i2-6cc2d16-import-discovery-attempt2-independent-review-20261025/REVIEW.md`).
+Its host eligibility is false because shared Git config changed during the
+run; no AOT, raw probes, or paired runtime executed. The independently
+reviewed test-only import successor `ef126033`/tree `c0b3a958` pins the
+measured sanitized symbol. A fresh paired diagnostic gate must locate the
+native begin/view/end counters before complete-call retention can be retried.
 The separate trained-G2 sanitizer attempt at `55a56f2f` is also NONACCEPTING:
 the first two-token run hit an ASan one-byte read seven bytes before a live
 48-byte terminal-ID clone allocation in the release path (review:
