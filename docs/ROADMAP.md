@@ -2654,7 +2654,11 @@ feature-off normal/repeat gate. Its sealed 63-file receipt
 has zero launcher/Docker exits, 40 candidate checks and 23 ordinary checks
 in each process, byte-identical repeats, empty runtime stderr and the
 feature-off native symbol check. This does not supply native sanitizer evidence
-for the composed Eshkol gate. I2/M3T preseal enrollment,
+for the composed Eshkol gate. An independent exact-source/result review found
+no blocker for this bounded P1 claim; its sealed review digest is
+`g3r-independent-result-review-20261025/SHA256SUMS-REVIEW` SHA-256
+`6854e57a09d25d6cfd0b1196487cc53695ac5768812532c2e7222d1de2ba9502`.
+I2/M3T preseal enrollment,
 graph revocation, full
 candidate cleanup, C2 restore and replay remain unimplemented.
 
