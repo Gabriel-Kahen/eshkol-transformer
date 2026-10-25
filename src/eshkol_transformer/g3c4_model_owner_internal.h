@@ -65,6 +65,12 @@ int64_t et_g3c4_private_model_owner_prepare_seal_v1(void *owner);
 int64_t et_g3c4_private_model_owner_commit_seal_v1(void *owner);
 int64_t et_g3c4_private_model_owner_abort_v1(void *owner);
 
+#ifdef ET_G3R_C4_OWNER_TOPOLOGY_PRIVATE
+/* Status only: 0 or a typed C4/I2 category in the last-error triple. */
+int64_t et_g3c4_private_sealed_owner_topology_status_v1(
+    const void *exact_owner);
+#endif
+
 int32_t et_g3c4_construction_parameter_preflight_internal(
     const void *exact_owner, void *parameter,
     const void *exact_handle, et_f32_tensor_error *error);

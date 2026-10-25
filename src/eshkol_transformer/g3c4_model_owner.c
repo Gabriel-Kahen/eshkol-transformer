@@ -12,6 +12,12 @@
 #include "m3_model.h"
 #endif
 #include "eshkol_transformer/n3k_primitives_abi.h"
+#ifdef ET_G3R_C4_OWNER_TOPOLOGY_PRIVATE
+#ifndef ET_G3C4_NATIVE_PINS_PRIVATE
+#error "sealed C4 topology status requires fixed14 native pins"
+#endif
+#include "m3_call_pins.h"
+#endif
 #ifdef ET_G3C4_PROMPT_T1_BORROW_PRIVATE
 #include "../../native/t1_i64_shell.h"
 #endif
@@ -714,6 +720,38 @@ int64_t et_g3c4_private_model_owner_commit_seal_v1(void *candidate) {
   staged_c4_owner = NULL;
   return 0;
 }
+
+#ifdef ET_G3R_C4_OWNER_TOPOLOGY_PRIVATE
+int64_t et_g3c4_private_sealed_owner_topology_status_v1(
+    const void *exact_owner) {
+  et_g3c4_model_owner_internal *owner;
+  et_g3c4_model_pins_internal pins = {0};
+  et_f32_tensor_error error = {0};
+  et_g3c4_error_state_internal first;
+  et_g3c4_error_reset_internal();
+  owner = et_g3c4_admit_owner(exact_owner, 0);
+  if (owner == NULL) return et_g3c4_error_state.category;
+  if (owner->state != ET_G3C4_OWNER_SEALED)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (owner->active != NULL)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (owner->initialized != 14u || !owner->successor_ready)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_READINESS);
+  if (et_g3c4_owner_idle_preflight(owner, &error) != 0)
+    return et_g3c4_error_state.category;
+  if (et_g3c4_capture_f32(et_g3c4_model_pins_begin_internal(
+          owner->parameters, owner->handles, &pins, &error), &error) ||
+      et_g3c4_capture_f32(et_g3c4_model_pins_check_internal(
+          &pins, &error), &error)) {
+    first = et_g3c4_error_snapshot_internal();
+    et_g3c4_model_pins_end_internal(&pins);
+    et_g3c4_error_restore_internal(first);
+    return first.category;
+  }
+  et_g3c4_model_pins_end_internal(&pins);
+  return 0;
+}
+#endif
 
 int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
   et_g3c4_model_owner_internal *owner;

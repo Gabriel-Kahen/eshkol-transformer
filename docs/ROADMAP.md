@@ -2199,7 +2199,11 @@ trainer or C2 admission is claimed.
 
 The proposed [C4 workspace topology authority contract](g3/G3_R_C4_WORKSPACE_TOPOLOGY_AUTHORITY_CONTRACT.md)
 pins a future read-only P1 trusted slot 74 and separate native sealed-owner
-scoped-pin status. Neither is implemented. It requires an exact live
+scoped-pin status. A [private native source candidate](g3/G3_R_C4_NATIVE_SEALED_OWNER_TOPOLOGY_LEAF.md)
+now implements only the latter behind `ET_G3R_C4_OWNER_TOPOLOGY_PRIVATE`;
+local Clang normal and ASan/UBSan passed 25 checks each, and feature-off
+compilation omitted its symbol. No pinned compiled gate has run for this leaf.
+The P1 trusted slot is unimplemented. The combined authority requires an exact live
 owner-to-P1 handle association proof and a swapped-handle negative; the first
 gate can claim topology/owner identity only. Active generation, workspace and
 trainer lease exclusion depend on later C4 ledgers, so full workspace
