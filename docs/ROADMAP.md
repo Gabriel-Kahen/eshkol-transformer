@@ -1111,6 +1111,13 @@ the N3 uniform attempt stopped before AOT on four unpinned imports, and the
 repinned mode/gradient attempt 4 stopped at sanitized import admission.
 Neither full N3 nor mode/gradient nor §9 is admitted.
 
+The exact-`44c0418d` [N4 private-reachability audit](e3/E3_N4_PRIVATE_REACHABILITY_AUDIT.md)
+finds that admitted D1/D2 cannot emit mask `01` or a masked invalid target;
+E3 checks both target bounds at stage 6. Those cases remain direct-provider
+evidence unless a separate D2 injection is reviewed. Genuine C1/M3
+subnormal, signed-zero, masked-nonfinite and timed fenv witnesses are still
+unproven; private N4 remains open.
+
 The exact `44c0418d` complete-call retention attempt 2 is sealed and
 independently classified NONACCEPTING. Its normal and sanitized packages and
 AOT binaries built, but the first 1,024-call absent-gradient runtime aborted
