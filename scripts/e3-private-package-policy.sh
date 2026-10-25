@@ -209,6 +209,14 @@ elif [[ "${e3_tuple_kind}" == numerical ]]; then
 elif [[ "${e3_tuple_kind}" == uniform ]]; then
   e3_prefix="${e3_uniform_prefix}"
   e3_inputs=("${e3_uniform_inputs[@]}")
+  source "${PROJECT_ROOT}/scripts/e3-uniform-import-policy.sh"
+  e3_uniform_verify_import_manifests \
+    "${e3_numerical_prefix}_undefined_symbols.txt" \
+    "${e3_uniform_prefix}_undefined_symbols.txt" \
+    "${e3_numerical_prefix}_sanitized_added_undefined_symbols.txt" \
+    "${e3_uniform_prefix}_sanitized_added_undefined_symbols.txt" \
+    "${e3_numerical_prefix}_sanitized_absent_undefined_symbols.txt" \
+    "${e3_uniform_prefix}_sanitized_absent_undefined_symbols.txt"
 elif [[ "${e3_tuple_kind}" == zero ]]; then
   e3_prefix="${e3_zero_prefix}"
   e3_inputs=("${e3_zero_inputs[@]}")

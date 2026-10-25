@@ -36,10 +36,18 @@ class UniformTupleTest(unittest.TestCase):
     def test_exact_closed_manifest_topology(self) -> None:
         for suffix in (
             "native_objects", "defined_symbols", "public_exports",
-            "public_strings", "private_renames", "undefined_symbols",
+            "public_strings", "private_renames",
             "sanitized_added_undefined_symbols", "sanitized_absent_undefined_symbols",
         ):
             self.assertEqual(lines(UNIFORM, suffix), lines(BASE, suffix), suffix)
+        imports = set(lines(BASE, "undefined_symbols"))
+        uniform_imports = set(lines(UNIFORM, "undefined_symbols"))
+        self.assertEqual(uniform_imports - imports, {
+            "eshkol_display_value", "eshkol_runtime_current_output_fp",
+            "eshkol_tail_transfer_slot", "fputc",
+        })
+        self.assertEqual(imports - uniform_imports, set())
+        self.assertEqual(len(uniform_imports), 177)
         source = lines(BASE, "source_closure")
         source[0] = "tests/e3_private/uniform_driver_root.esk"
         source.remove("native/e3_private_driver_root.esk")
@@ -54,6 +62,52 @@ class UniformTupleTest(unittest.TestCase):
                          ["e3_uniform_package.o"])
         self.assertIn("native/i2_wave2_root.esk", source)
         self.assertIn("native/i2_wave2_package_bridge.c", native)
+
+    def test_uniform_import_policy_rejects_manifest_drift(self) -> None:
+        suffixes = ("undefined_symbols", "sanitized_added_undefined_symbols",
+                    "sanitized_absent_undefined_symbols")
+        policy = ROOT / "scripts/e3-uniform-import-policy.sh"
+
+        def verify(change=None, tuple_kind="uniform"):
+            with tempfile.TemporaryDirectory(prefix="e3-uniform-imports-") as temporary:
+                files = []
+                for prefix in (BASE, UNIFORM):
+                    for suffix in suffixes:
+                        target = Path(temporary) / f"{prefix.name}_{suffix}.txt"
+                        target.write_text("\n".join(lines(prefix, suffix)) + "\n")
+                        files.append(target)
+                if change:
+                    index, old, new = change
+                    rows = files[index].read_text().splitlines()
+                    if old is None:
+                        rows.append(new)
+                    elif new is None:
+                        rows.remove(old)
+                    else:
+                        rows[rows.index(old)] = new
+                    files[index].write_text("\n".join(sorted(rows)) + "\n")
+                command = ('set -euo pipefail; die() { echo "$*" >&2; exit 77; }; '
+                           'e3_tuple_kind=$1; source "$2"; '
+                           'e3_uniform_verify_import_manifests "$3" "$6" '
+                           '"$4" "$7" "$5" "$8"')
+                return subprocess.run(
+                    ["bash", "-c", command, "bash", tuple_kind, str(policy),
+                     *(str(path) for path in files)],
+                    capture_output=True, text=True, check=False,
+                )
+
+        self.assertEqual(verify().returncode, 0)
+        self.assertEqual(verify(tuple_kind="numerical").returncode, 77)
+        for name in ("eshkol_display_value", "eshkol_runtime_current_output_fp",
+                     "eshkol_tail_transfer_slot", "fputc"):
+            with self.subTest(missing=name):
+                self.assertEqual(verify((3, name, None)).returncode, 77)
+        for change in ((3, None, "zz_unreviewed_import"),
+                       (3, "fputc", "zz_unreviewed_import"),
+                       (4, None, "zz_unreviewed_import"),
+                       (5, None, "zz_unreviewed_import")):
+            with self.subTest(change=change):
+                self.assertEqual(verify(change).returncode, 77)
 
     def test_exact_tuple_and_mixed_rejection(self) -> None:
         policy = ROOT / "scripts/e3-private-package-policy.sh"
