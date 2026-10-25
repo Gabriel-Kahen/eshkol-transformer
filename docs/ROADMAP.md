@@ -1099,13 +1099,22 @@ mode/gradient, complete-call retention, failure/resource and remaining numeric
 verdicts are still required; candidate-ON CPU4 and full trained-path sanitizer
 are unadmitted.
 
+The separately sealed original-source terminal-ID control at `95070d729`
+exited 1 with an ASan clone-adjacent read; independent trace review classifies
+it against the repair-only `51d5cc9c` 62-check pass without repeating either
+run. The mechanism match does not establish final allocator/compiler fault
+attribution or admit the full trained path; see
+`/home/gabe/.codex/evidence/eshkol-transformer/finish-20261022/terminal-managed-cell-ir-asan-control-trace-review-20261024/REVIEW.md`.
+
 Independent exact-source reviews accepted the `44c0418d` N3 all-correct and
 all-wrong compiled controls with normal/repeat/poison/sanitizer and the
 wrong-vocabulary-axis correct-count kill (raw seal `8d984330...`). Separate
 noninstalled direct-44c M2 compiled successors accepted the authentic final
 `10` row capacity-denominator kill at reduction weight
-`3f800000`→`40000000` (`248f56c`, review SHA `fb3d7cf4...`) and
-exp-before-global final-perplexity kill `43815d49`→`438160e2`
+`3f800000`→`40000000` (`248f56c`, review SHA `fb3d7cf4...`); its correct
+count remains zero, so this witness does not prove a changed nonzero `C`.
+The separate exp-before-global kill changes final perplexity
+`43815d49`→`438160e2`
 (`af8cde4`, review SHA `d1a46768...`). The independently reviewed noninstalled M2 missing-batch successor
 `b396761`/tree `56f3213` passed normal A/B, poison and sanitizer on an
 authentic third D2 row. The mutant retained prior N/W and counters
