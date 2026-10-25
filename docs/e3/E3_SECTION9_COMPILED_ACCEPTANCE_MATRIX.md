@@ -121,6 +121,26 @@ errors are identical; they must compile/run and compare equal, never be
 reported as numerically killed. The existing independent M3/L2/L3S gradient
 gates remain predecessor evidence; E3 introduces no backward promise.
 
+At exact `44c0418d`/tree `70706c0a`, a bounded development sweep encoded and
+parsed 513 checksummed C1 states with consecutive `norm_final/weight` f32 words
+`41b17113..41b17313`, retaining the fixture's tied head and authentic D1/D2
+`[3,0] -> [4,0]`, mask `10` row. The pinned mathematical M3/CE reference
+produced 513 distinct final loss words. A local compiled C/libm probe found no
+`expf(loss)` versus `(float)exp((double)loss)` word difference across them.
+The adjacent boundary states `41b17251` and `41b17252` yielded losses
+`42b17217` and `42b17218`: both calculations gave `7f7fff84` in the first
+case and `7f800000` in the second. This is a bounded equivalent-result
+disposition for these mathematical candidates, not a compiled-private E3
+mutant result or a global equivalence proof. The existing private
+finite/overflow fixture expects losses `42b0ffc6`/`42b1ffc6`; the latter's
+f64 exponential likewise casts to infinity in the local probe. The f64-retry
+M2 row stays open
+until an actual C1/M3/D2 outcome-changing word or typed error is demonstrated
+and independently reviewed in a compiled normal/repeat/poison/sanitizer gate.
+The sweep and source identity are retained under
+`/home/gabe/.codex/evidence/eshkol-transformer/e3-m2-f64-retry-scout-20261025/SHA256SUMS`;
+the gate above is not claimed by that evidence.
+
 ## Failure and rollback matrix
 
 For every recoverable injected cut, snapshot **before** the call: exact D2
