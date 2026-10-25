@@ -77,9 +77,17 @@ class TrainedPairProducerSource(unittest.TestCase):
 
     def test_single_private_package_entry(self):
         root = (ROOT / "native/g3r_trained_pair_producer_root.esk").read_text()
+        cli3 = (ROOT / "native/cli3_extension.esk").read_text()
+        generate = (ROOT / "native/cli3_generate_extension.esk").read_text()
         bridge = (ROOT / "native/g3r_trained_pair_package_bridge.c").read_text()
         renames = (ROOT / "native/g3r_trained_pair_private_renames.txt").read_text()
         self.assertIn('(g3r-trained-pair-produce-internal!', root)
+        projector = '(vector-set! t2-wave2-policy-projector 0 c2-policy-t2-entry-internal)'
+        self.assertIn(projector, cli3)
+        self.assertIn(projector, generate)
+        self.assertEqual(root.count(projector), 1)
+        self.assertLess(root.index(projector),
+                        root.index('(g3r-trained-pair-produce-internal!'))
         self.assertEqual(renames.strip(),
                          'g3r-trained-pair-private-produce '
                          'et_e1b_private_g3r_trained_pair_produce_cabi_v1')

@@ -14,6 +14,9 @@
   (if (not (and (vector? arguments) (= (vector-length arguments) 7)))
       (c2-load-fail 'invalid-argument 'checkpoint-save!
                     "trained-pair entry requires seven arguments" '()))
+  ;; Match CLI3's executable entry: T2 must recognize C2's authenticated
+  ;; persistence policy before the first tokenizer load.
+  (vector-set! t2-wave2-policy-projector 0 c2-policy-t2-entry-internal)
   (g3r-trained-pair-produce-internal!
     (vector-ref arguments 0) (vector-ref arguments 1)
     (vector-ref arguments 2) (vector-ref arguments 3)
