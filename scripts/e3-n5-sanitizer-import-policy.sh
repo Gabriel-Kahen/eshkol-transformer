@@ -11,8 +11,8 @@ e3_n5_verify_sanitizer_imports() {
     LC_ALL=C sort -u "${manifest}" | cmp -s "${manifest}" - ||
       die "E3 N5 import manifest is not sorted unique text"
   done
-  [[ "$(wc -l <"${normal}")" == 172 &&
-     "$(wc -l <"${expected_non}")" == 166 &&
+  [[ "$(wc -l <"${normal}")" == 176 &&
+     "$(wc -l <"${expected_non}")" == 170 &&
      "$(wc -l <"${expected_instrumentation}")" == 57 ]] ||
     die "E3 N5 import counts differ from discovery"
   comm -13 "${normal}" "${expected_non}" |

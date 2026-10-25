@@ -1,6 +1,7 @@
 """Reject import drift in the measured noninstalled N5 sanitizer tuple."""
 
 from pathlib import Path
+import hashlib
 import subprocess
 import tempfile
 import unittest
@@ -49,7 +50,14 @@ class N5SanitizerImportPolicyTests(unittest.TestCase):
                   .read_text().splitlines())
         instrumentation = set(Path(str(PREFIX) + "_sanitized_instrumentation_undefined_symbols.txt")
                               .read_text().splitlines())
-        self.assertEqual((len(normal), len(non), len(instrumentation)), (172, 166, 57))
+        self.assertEqual((len(normal), len(non), len(instrumentation)), (176, 170, 57))
+        for suffix, digest in (
+            ("undefined_symbols", "59b619891b121be4e872840a8ba4be3150e3041b3e4569447293409f4ce8f708"),
+            ("sanitized_noninstrumentation_undefined_symbols", "ce882fcb0794927c83225366cfa22e1e76bfe2de32e089f7ad87a58d6c742ed4"),
+            ("sanitized_instrumentation_undefined_symbols", "e500dfb82c45fcd94c2d2cef383e4868c73088f892fd5c42b95d9c49dcd94d7b"),
+        ):
+            path = Path(str(PREFIX) + f"_{suffix}.txt")
+            self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), digest)
         self.assertEqual(non - normal, {"bcmp", "puts"})
         self.assertEqual(normal - non, {
             "eshkol_ad_seed_flag", "eshkol_runtime_fatal", "eshkol_taylor_lift_ad_node",
@@ -62,6 +70,9 @@ class N5SanitizerImportPolicyTests(unittest.TestCase):
     def test_rejects_actual_import_drift(self):
         for change in ((1, "bcmp", None), (1, None, "zz_unreviewed_import"),
                        (1, "puts", "zz_unreviewed_import"),
+                       *((1, symbol, None) for symbol in
+                         ("eshkol_display_value", "eshkol_runtime_current_output_fp",
+                          "fflush", "fputc")),
                        (2, "__asan_load8", None),
                        (2, None, "__asan_unreviewed")):
             with self.subTest(change=change):
@@ -69,7 +80,9 @@ class N5SanitizerImportPolicyTests(unittest.TestCase):
 
     def test_rejects_manifest_and_normal_drift(self):
         for change in ((0, "printf", None), (0, None, "zz_unreviewed_import"),
+                       (0, "fflush", "zz_unreviewed_import"),
                        (3, "bcmp", "zz_unreviewed_import"),
+                       (3, "fputc", "zz_unreviewed_import"),
                        (4, "__asan_load8", "__asan_unreviewed")):
             with self.subTest(change=change):
                 self.assertEqual(self.run_policy(change).returncode, 77)

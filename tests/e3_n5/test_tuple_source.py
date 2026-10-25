@@ -26,8 +26,12 @@ class N5TupleSourceTests(unittest.TestCase):
             self.assertEqual(lines(N5 / "package", suffix),
                              sorted(lines(BASE, suffix) + ["et_e3_n5_run_v1",
                                                             "et_e3_n5_edge_run_v1"]))
-        for suffix in ("native_objects", "undefined_symbols"):
-            self.assertEqual(lines(N5 / "package", suffix), lines(BASE, suffix))
+        self.assertEqual(lines(N5 / "package", "native_objects"),
+                         lines(BASE, "native_objects"))
+        self.assertEqual(lines(N5 / "package", "undefined_symbols"),
+                         sorted(lines(BASE, "undefined_symbols") +
+                                ["eshkol_display_value",
+                                 "eshkol_runtime_current_output_fp", "fflush", "fputc"]))
         self.assertEqual(lines(N5 / "package", "archive_members"),
                          ["e3_n5_package.o"])
         self.assertEqual(lines(N5 / "package", "private_renames"),
