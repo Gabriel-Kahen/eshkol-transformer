@@ -1,0 +1,240 @@
+(load "c1_sha256.esk")
+(load "g3r_record_codec_extension.esk")
+(load "g3r_c4_record_codec_extension.esk")
+
+(define checks 0)
+(define (check label good)
+  (if good (set! checks (+ checks 1))
+      (begin (display "G3-R C4 codec FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (bytes=? a b)
+  (and (bytevector? a) (bytevector? b)
+       (= (bytevector-length a) (bytevector-length b))
+       (g3r-bytes=? a 0 b 0 (bytevector-length a))))
+(define (untouched? destination)
+  (let loop ((index 0))
+    (if (= index 9) #t
+        (and (eq? (vector-ref destination index) 'untouched)
+             (loop (+ index 1))))))
+(define (reject-encode label destination policy rng history prompt generated
+                       manual phase fingerprint digest)
+  (let ((before (bytevector-copy destination 0
+                                 (bytevector-length destination)))
+        (caught #f))
+    (guard (condition (#t (set! caught #t)))
+      (g3r-c4-record-encode! destination policy rng history prompt
+                             generated manual phase fingerprint digest))
+    (check label (and caught (bytes=? destination before)))))
+(define (reject-decode label source digest)
+  (let ((destination (make-vector 9 'untouched))
+        (caught #f))
+    (guard (condition (#t (set! caught #t)))
+      (g3r-c4-record-decode! source digest destination))
+    (check label (and caught (untouched? destination)))))
+(define (reseal! bytes)
+  (bytevector-copy! bytes 256
+                    (c1-sha256 (bytevector-copy bytes 0 256)) 0 32))
+(define (changed source offset value seal?)
+  (let ((copy (bytevector-copy source 0 288)))
+    (bytevector-u8-set! copy offset value)
+    (if seal? (reseal! copy))
+    copy))
+(define digits "0123456789abcdef")
+(define (emit label record)
+  (display "G3RC4_VECTOR ") (display label) (display " ")
+  (let loop ((index 0))
+    (if (< index 288)
+        (let ((value (bytevector-u8-ref record index)))
+          (display (string-ref digits (quotient value 16)))
+          (display (string-ref digits (modulo value 16)))
+          (loop (+ index 1)))))
+  (newline))
+
+(define fingerprint
+  (string->utf8
+   "sha256:eshkol-byte-tokenizer-v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+(define digest (make-bytevector 32 0))
+(let fill ((index 0))
+  (if (< index 32)
+      (begin (bytevector-u8-set! digest index index)
+             (fill (+ index 1)))))
+(define greedy (vector 0 1065353216 256 1065353216 2 -1))
+(define categorical (vector 1 1065353216 17 1056964608 2 65))
+(define rng (vector 1 1729 -1 0))
+(define exhausted (vector 1 1729 -1 -1))
+(define high-bit (vector 1 9223372036854775807
+                         -9223372036854775808 9223372036854775807))
+(define prompt (bytevector 7 11))
+(define prefix (bytevector 7 11 31))
+(define first-eos (bytevector 7 11 65))
+(define second (bytevector 7 11 31 41))
+(define second-eos (bytevector 7 11 31 65))
+(define prompt-eos (bytevector 65 11 31))
+(define prompt-record (make-bytevector 288 0))
+(define prefix-record (make-bytevector 288 0))
+(define first-eos-record (make-bytevector 288 0))
+(define second-record (make-bytevector 288 0))
+(define second-eos-record (make-bytevector 288 0))
+(define prompt-eos-record (make-bytevector 288 0))
+(check "prompt encode"
+       (eq? (g3r-c4-record-encode! prompt-record greedy rng prompt
+                                    2 0 0 0 fingerprint digest)
+            prompt-record))
+(check "proposed stable one-token history encode"
+       (eq? (g3r-c4-record-encode! prefix-record categorical rng prefix
+                                    2 1 0 1 fingerprint digest)
+            prefix-record))
+(check "first EOS terminal encode"
+       (eq? (g3r-c4-record-encode! first-eos-record categorical exhausted
+                                    first-eos 2 1 0 2 fingerprint digest)
+            first-eos-record))
+(check "two-token terminal encode"
+       (eq? (g3r-c4-record-encode! second-record categorical high-bit second
+                                    2 2 0 3 fingerprint digest)
+            second-record))
+(check "second EOS terminal encode"
+       (eq? (g3r-c4-record-encode! second-eos-record categorical rng
+                                    second-eos 2 2 0 3 fingerprint digest)
+            second-eos-record))
+(check "prompt EOS match does not terminate prefix"
+       (eq? (g3r-c4-record-encode! prompt-eos-record categorical rng
+                                    prompt-eos 2 1 0 1 fingerprint digest)
+            prompt-eos-record))
+(emit "prompt" prompt-record)
+(emit "prefix" prefix-record)
+(emit "first-eos" first-eos-record)
+(emit "second" second-record)
+(emit "second-eos" second-eos-record)
+(emit "prompt-eos" prompt-eos-record)
+
+(define decoded (make-vector 9 'untouched))
+(check "decode exact authenticated pair"
+       (eq? (g3r-c4-record-decode! prefix-record digest decoded) decoded))
+(check "decode proposed one-token partition and phase"
+       (and (bytes=? (vector-ref decoded 2) prefix)
+            (= (vector-ref decoded 3) 2)
+            (= (vector-ref decoded 4) 1)
+            (= (vector-ref decoded 5) 0)
+            (= (vector-ref decoded 6) 1)))
+(check "decode detached policy RNG fingerprint digest"
+       (and (equal? (vector-ref decoded 0) categorical)
+            (equal? (vector-ref decoded 1) rng)
+            (bytes=? (vector-ref decoded 7) fingerprint)
+            (bytes=? (vector-ref decoded 8) digest)
+            (not (eq? (vector-ref decoded 7) fingerprint))
+            (not (eq? (vector-ref decoded 8) digest))))
+(let ((roundtrip (make-bytevector 288 0)))
+  (check "canonical decode/encode bytes"
+         (bytes=? prefix-record
+                  (g3r-c4-record-encode! roundtrip
+                    (vector-ref decoded 0) (vector-ref decoded 1)
+                    (vector-ref decoded 2) (vector-ref decoded 3)
+                    (vector-ref decoded 4) (vector-ref decoded 5)
+                    (vector-ref decoded 6) (vector-ref decoded 7)
+                    (vector-ref decoded 8)))))
+(check "decode terminal count and exhausted RNG"
+       (and (eq? (g3r-c4-record-decode! first-eos-record digest decoded)
+                 decoded)
+            (= (vector-ref decoded 6) 2)
+            (equal? (vector-ref decoded 1) exhausted)))
+(check "decode two-token high-bit RNG"
+       (and (eq? (g3r-c4-record-decode! second-record digest decoded) decoded)
+            (= (vector-ref decoded 6) 3)
+            (equal? (vector-ref decoded 1) high-bit)))
+
+(define untouched (make-bytevector 288 90))
+(reject-encode "reject wrong budget" untouched
+               (vector 1 1065353216 17 1056964608 1 65)
+               rng prefix 2 1 0 1 fingerprint digest)
+(reject-encode "reject bad greedy controls" untouched
+               (vector 0 1065353216 17 1065353216 2 -1)
+               rng prompt 2 0 0 0 fingerprint digest)
+(reject-encode "reject NaN temperature" untouched
+               (vector 1 2143289344 17 1056964608 2 65)
+               rng prompt 2 0 0 0 fingerprint digest)
+(reject-encode "reject bad RNG" untouched categorical
+               (vector 2 1729 -1 0) prefix 2 1 0 1 fingerprint digest)
+(reject-encode "reject wrong prompt count" untouched categorical rng
+               prefix 1 2 0 3 fingerprint digest)
+(reject-encode "reject manual append" untouched categorical rng
+               second 2 1 1 1 fingerprint digest)
+(reject-encode "reject first EOS marked prefix" untouched categorical rng
+               first-eos 2 1 0 1 fingerprint digest)
+(reject-encode "reject non-EOS marked first terminal" untouched categorical rng
+               prefix 2 1 0 2 fingerprint digest)
+(reject-encode "reject disabled EOS marked first terminal" untouched greedy rng
+               (bytevector 7 11 65) 2 1 0 2 fingerprint digest)
+(reject-encode "reject G2 after first EOS" untouched categorical rng
+               (bytevector 7 11 65 41) 2 2 0 3 fingerprint digest)
+(reject-encode "reject G2 marked nonterminal" untouched categorical rng
+               second 2 2 0 1 fingerprint digest)
+(reject-encode "reject G0 marked terminal" untouched categorical rng
+               prompt 2 0 0 2 fingerprint digest)
+(reject-encode "reject malformed fingerprint" untouched categorical rng
+               prefix 2 1 0 1 (make-bytevector 96 97) digest)
+(reject-encode "reject short digest" untouched categorical rng
+               prefix 2 1 0 1 fingerprint (make-bytevector 31 0))
+(reject-encode "reject short destination" (make-bytevector 287 90)
+               categorical rng prefix 2 1 0 1 fingerprint digest)
+
+(reject-decode "reject short" (bytevector-copy prefix-record 0 287) digest)
+(let ((extended (make-bytevector 289 0)))
+  (bytevector-copy! extended 0 prefix-record 0 288)
+  (reject-decode "reject extended" extended digest))
+(reject-decode "reject torn checksum"
+               (changed prefix-record 120 8 #f) digest)
+(reject-decode "reject magic" (changed prefix-record 0 0 #t) digest)
+(reject-decode "reject reserved header"
+               (changed prefix-record 6 1 #t) digest)
+(reject-decode "reject major version"
+               (changed prefix-record 8 1 #t) digest)
+(reject-decode "reject minor version"
+               (changed prefix-record 10 1 #t) digest)
+(reject-decode "reject declared length"
+               (changed prefix-record 12 0 #t) digest)
+(reject-decode "reject profile" (changed prefix-record 16 1 #t) digest)
+(reject-decode "reject algorithm" (changed prefix-record 20 2 #t) digest)
+(reject-decode "reject unused history byte"
+               (changed prefix-record 123 1 #t) digest)
+(reject-decode "reject resealed partition"
+               (changed prefix-record 36 1 #t) digest)
+(reject-decode "reject resealed impossible phase"
+               (changed prefix-record 124 2 #t) digest)
+(reject-decode "reject resealed phase high byte"
+               (changed prefix-record 127 1 #t) digest)
+(reject-decode "reject resealed first EOS relabeled as prefix"
+               (changed first-eos-record 124 1 #t) digest)
+(reject-decode "reject resealed G2 after first EOS"
+               (changed second-record 122 65 #t) digest)
+(reject-decode "reject resealed bad policy"
+               (changed prefix-record 72 1 #t) digest)
+(reject-decode "reject resealed bad RNG"
+               (changed prefix-record 88 2 #t) digest)
+(reject-decode "reject resealed bad fingerprint"
+               (changed prefix-record 128 0 #t) digest)
+(let ((other-digest (make-bytevector 32 0)))
+  (reject-decode "reject wrong authenticated C2" prefix-record other-digest))
+(let ((c2 (make-bytevector 288 0)))
+  (g3r-record-encode! c2 (vector 0 1065353216 256 1065353216 1 -1)
+                      rng (bytevector 7) 1 0 0 fingerprint digest)
+  (reject-decode "C4 rejects C2 record" c2 digest)
+  (let ((old-destination (make-vector 8 'untouched)) (caught #f))
+    (guard (condition (#t (set! caught #t)))
+      (g3r-record-decode! prefix-record digest old-destination))
+    (check "C2 rejects C4 record"
+           (and caught
+                (let loop ((index 0))
+                  (if (= index 8) #t
+                      (and (eq? (vector-ref old-destination index) 'untouched)
+                           (loop (+ index 1)))))))))
+(let ((numeric-destination #(77 77 77 77 77 77 77 77 77))
+      (caught #f))
+  (guard (condition (#t (set! caught #t)))
+    (g3r-c4-record-decode! prefix-record digest numeric-destination))
+  (check "failed whole-vector publication is atomic"
+         (and caught
+              (let loop ((index 0))
+                (if (= index 9) #t
+                    (and (= (vector-ref numeric-destination index) 77)
+                         (loop (+ index 1))))))))
+(display "G3-R C4 codec PASS: checks=") (display checks) (newline)

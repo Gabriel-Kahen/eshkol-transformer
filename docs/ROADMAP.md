@@ -2351,6 +2351,21 @@ The 44-file run is sealed at
 The digest is an authenticated C2-image precondition; this leaf does not
 perform C2 I/O, live-owner reconstruction, cache replay or continuation.
 
+The separate [private C4 data-only record codec candidate]
+(g3/G3_R_C4_RECORD_CODEC_LEAF.md) defines `G3RCV2`/profile 2 within an
+exact 288-byte checked envelope, with four ordered history slots and an
+explicit prompt/proposed-one-token/first-EOS/two-token phase. It leaves the
+accepted C2 codec byte-for-byte unchanged and rejects cross-profile records.
+Its source/local fixture and independent Python oracle cover exact bytes,
+phase/EOS partitions, malformed records and failure-atomic destinations.
+Unpinned local Eshkol/Clang 22 normal, repeat and ASan+UBSan runs pass C4
+50 checks, legacy C2 49 and feature-off 2 per run; six C4 and five C2 full
+records match independent Python oracles. No pinned compiled gate has run.
+This is not a C4 continuation admission: the P2/G2 one-token prefix remains
+inside an active call, which G3-R SAVE rejects. A reviewed stable closed-call
+one-token snapshot and a separate idle-P3 second-token entry are missing;
+the completed budget-one P2/G1 output cannot supply a budget-two state.
+
 The proposed [G3-R typed RNG import contract](g3/G3_R_TYPED_RNG_IMPORT_CONTRACT.md)
 defines a source-private G3-T kind-8 owner constructor for four exact signed
 G3-S words, preserving carry and exhaustion without a seed reset. It records
