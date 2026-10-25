@@ -2690,7 +2690,11 @@ retains the native M3T owner before candidate I2 begin, then the fixed
 14-parameter/tied-alias constructor uses the accepted P1/I2 handshake.
 It defines preseal cleanup and a nonretryable postseal tail. A feature-local
 source candidate and focused feature-on/feature-off fixtures are staged for
-review; they are not yet compiled or admitted. The current injected fixture
+review. The pinned v3 gate built all candidate native objects/archive, then
+stopped at a missing pair of fixture list closes during Eshkol parsing; its
+sealed outer receipt is `b39777805c7c7afdd99fdddeb14a5d351bbaa8b6d95a58d185b9d83e29834881`.
+The fixture and pre-gate delimiter check are repaired in a successor, but no
+compiled caller or runtime result is admitted. The current injected fixture
 reaches P1 native begin allocation cuts only, not a later I2 publication
 failure. Ordinary M3T remains unchanged.
 

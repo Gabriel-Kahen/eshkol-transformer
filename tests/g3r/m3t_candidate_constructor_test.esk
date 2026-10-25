@@ -106,7 +106,7 @@
        (eq? (parameter-tree-handle candidate-tree '("head" "weight"))
             (vector-ref (vector-ref model-entry 8) 10))
        (equal? (parameter-tree-tie-groups candidate-tree)
-               '((("head" "weight") ("token_embedding" "weight")))))
+               '((("head" "weight") ("token_embedding" "weight"))))))
 (reject "sealed ledger cannot build twice" 'invalid-state
   (lambda ()
     (g3r-candidate-model-create-internal! tampered-ledger config initial)))
@@ -120,7 +120,7 @@
                        (vector-ref (vector-ref ordinary-entry 8) index))
                      (parameter-handle-path
                        (vector-ref (vector-ref model-entry 8) index)))
-             (paths (+ index 1)))))
+             (paths (+ index 1))))))
 (define ordinary-tree (module-parameters ordinary))
 (check "ordinary exact tie parity"
   (and (eq? (parameter-tree-handle ordinary-tree '("head" "weight"))

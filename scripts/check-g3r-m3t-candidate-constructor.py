@@ -7,6 +7,37 @@ import re
 
 
 root = Path(__file__).resolve().parents[1]
+
+
+def check_fixture_delimiters(path):
+    """Catch unclosed lists before the expensive compiled gate."""
+    stack = []
+    string = escaped = comment = False
+    for line, row in enumerate(path.read_text().splitlines(), 1):
+        comment = False
+        for column, char in enumerate(row, 1):
+            if comment:
+                continue
+            if string:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == '"':
+                    string = False
+            elif char == ";":
+                comment = True
+            elif char == '"':
+                string = True
+            elif char == "(":
+                stack.append((line, column))
+            elif char == ")":
+                assert stack, f"{path}:{line}:{column}: unexpected close"
+                stack.pop()
+    assert not string, f"{path}: unterminated string"
+    assert not stack, f"{path}:{stack[-1][0]}:{stack[-1][1]}: unclosed list"
+
+
 source = (root / "native/g3r_m3t_candidate_constructor_extension.esk").read_text()
 ordinary = root / "native/m3t_transport_extension.esk"
 assert sha256(ordinary.read_bytes()).hexdigest() == (
@@ -70,12 +101,14 @@ assert "(exit 134)" in tail and "(m3t-native-owner-seal created)" in tail
 assert "(m3t-native-initializer-seal" in tail
 assert not re.search(r"\((?:cons|vector|make-vector|list)(?:\s|\))", tail)
 fixture = (root / "tests/g3r/m3t_candidate_constructor_test.esk").read_text()
+check_fixture_delimiters(root / "tests/g3r/m3t_candidate_constructor_test.esk")
 assert '"candidate exact head/embedding handle tie"' in fixture
 assert '"ordinary exact tie parity"' in fixture
 assert '"ordinary and candidate fourteen paths agree"' in fixture
 assert fixture.count("(parameter-tree-handle") >= 5
 assert "(parameter-tree-tie-groups candidate-tree)" in fixture
 feature_off = (root / "tests/g3r/m3t_candidate_feature_off_test.esk").read_text()
+check_fixture_delimiters(root / "tests/g3r/m3t_candidate_feature_off_test.esk")
 assert "(parameter-handle-path (vector-ref handles index))" in feature_off
 assert "(vector-ref m3t-paths index)" in feature_off
 print("G3-R M3T candidate source contract PASS")
