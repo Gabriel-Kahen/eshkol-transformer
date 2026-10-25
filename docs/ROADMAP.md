@@ -2203,12 +2203,22 @@ The sealed independent result review is at
 This leaf is not integrated with trainable M3T and does not admit trained C4,
 C2 SAVE/LOAD, or generation.
 
-The next isolated [private C4 GELU VJP candidate]
-(g3/G3_R_C4_GELU_VJP_LEAF.md) targets the accepted four-token
+The isolated [private C4 GELU VJP leaf]
+(g3/G3_R_C4_GELU_VJP_LEAF.md) covers the accepted four-token
 `g3c4.gelu.forward` row at `f32[1,4,8]`. Its feature-private analytic
-derivative and central finite differences against the genuine C4 provider
-are under focused local verification. M3T integration, independent review,
-and a pinned compiled gate remain pending.
+derivative passed 32 central finite differences through the genuine C4
+provider, negative preservation checks, and feature-off isolation on
+`9900199e`/tree `39a0c852`. Independent source/test review accepted the
+bounded leaf. The pinned rootless Clang 21 normal/repeat/native ASan+UBSan
+gate passed 88 checks per mode with matching stdout and empty stderr; its
+49-file post-exit seal is
+`g3r-c4-gelu-vjp-9900199e-attempt1/SHA256SUMS-RUN` (SHA-256
+`9415465dec59abbd77b25570e95480baf26bd43c1fb9b508d2685ec24a5bd16b`).
+The sealed independent result review is at
+`g3r-c4-gelu-vjp-independent-review-20261025/SHA256SUMS-REVIEW`
+(SHA-256 `4e7c072d79dfa34ca53822820821cd693ab9525c71a29f5502a91df02550f8e5`).
+This leaf is not integrated with trainable M3T and does not admit trained C4,
+C2 SAVE/LOAD, or generation.
 
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1
