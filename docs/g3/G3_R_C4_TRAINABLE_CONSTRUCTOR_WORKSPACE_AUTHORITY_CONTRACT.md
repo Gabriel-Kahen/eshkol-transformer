@@ -35,7 +35,9 @@ train-mode prepare sibling.
 The private entry is a new **tagged branch in `g3c4-model-registry`**, not a
 second model type or copied generator owner. Its proposed operation is
 `g3c4-model-create-trainable-internal(resolved-config, tokenizer, initializer)`;
-this name and signature are not implemented. Admit only the exact resolved
+`native/g3c4_trainable_constructor_extension.esk` now contains a source-only
+candidate for this operation. It is neither installed nor compiled-admitted.
+Admit only the exact resolved
 context-four profile: CPU f32, deterministic, vocabulary 256, hidden size 4,
 one layer, two query and KV heads, head size 2, and context length 4.
 Authenticate a live canonical raw V256 T1 shell with the existing T1 registry;

@@ -1,0 +1,110 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_trainable_constructor_extension.esk")
+
+(extern i64 g3c4-test-owner-fail-after i64
+        :real et_g3c4_model_test_owner_fail_after_v1)
+(extern i64 g3c4-test-owner-reset
+        :real et_g3c4_model_test_owner_reset_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3-C4 trainable constructor FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label category thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category))))
+      (thunk) #f)))
+(define (config context seed)
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      (string-append
+        "{\"config-schema-major\":1,\"config-schema-minor\":0,"
+        "\"model.context-length\":" (number->string context)
+        ",\"model.hidden-size\":4,\"model.layer-count\":1,"
+        "\"model.query-head-count\":2,\"model.vocabulary-size\":256,"
+        "\"run.seed\":" (number->string seed) "}"))
+    '()))
+
+(define c4 (config 4 1729))
+(define c2 (config 2 1729))
+(define tokenizer (t1-private-tokenizer-byte c4))
+(define initializer (m3t-public-initializer-state 1729))
+(define wrong-initializer (m3t-public-initializer-state 1728))
+(define before (vector-ref g3c4-model-registry 0))
+(reject "context two" 'unsupported
+        (lambda () (g3c4-model-create-trainable-internal
+                     c2 tokenizer initializer)))
+(reject "wrong initializer seed" 'invalid-argument
+        (lambda () (g3c4-model-create-trainable-internal
+                     c4 tokenizer wrong-initializer)))
+(reject "foreign tokenizer" 'invalid-argument
+        (lambda () (g3c4-model-create-trainable-internal
+                     c4 (vector 'foreign) initializer)))
+(reject "foreign initializer" 'invalid-argument
+        (lambda () (g3c4-model-create-trainable-internal
+                     c4 tokenizer (vector 'foreign))))
+(check "admission errors publish no entry"
+       (eq? before (vector-ref g3c4-model-registry 0)))
+
+(g3c4-test-owner-fail-after 0)
+(reject "native allocation rollback" 'internal
+        (lambda () (g3c4-model-create-trainable-internal
+                     c4 tokenizer initializer)))
+(g3c4-test-owner-reset)
+(check "allocation failure tombstone"
+       (and (eq? (vector-ref (car (vector-ref g3c4-model-registry 0)) 2)
+                 'dead)
+            (not (vector-ref g3c4-model-cleanup-root 0))
+            (not (vector-ref m3-call-state 0))
+            (not (vector-ref i2-construction-registry-root 1))))
+
+(define model (g3c4-model-create-trainable-internal
+                c4 tokenizer initializer))
+(define entry (car (vector-ref g3c4-model-registry 0)))
+(define metadata (vector-ref entry 7))
+(check "same registry live trainable"
+       (and (eq? (vector-ref entry 0) model)
+            (eq? (vector-ref entry 2) 'live)
+            (eq? (vector-ref entry 4) 'trainable)
+            (eq? (vector-ref entry 11) 'trainable-c4)
+            (eq? (module-mode-internal model) 'train)
+            (not (vector-ref entry 9))
+            (not (vector-ref g3c4-model-cleanup-root 0))))
+(check "original and successor words"
+       (and (equal? (vector-ref entry 5) '#(1 1729 0 0))
+            (equal? (vector-ref entry 6) '#(1 1729 292 0))
+            (equal? (m3t-public-initializer-words initializer)
+                    '(1 1729 0 0))))
+(check "closed rooted metadata"
+       (and (vector? metadata) (= (vector-length metadata) 9)
+            (eq? (vector-ref metadata 0) 'g3c4-trainable-metadata-v1)
+            (eq? (vector-ref metadata 1) c4)
+            (string=? (vector-ref metadata 2)
+                      (x1-private-config-canonical c4))
+            (string=? (vector-ref metadata 3)
+                      (x1-private-config-fingerprint c4))
+            (eq? (vector-ref metadata 4) tokenizer)
+            (string=? (vector-ref metadata 5)
+                      g3c4-trainable-tokenizer-fingerprint)
+            (eq? (vector-ref metadata 6) initializer)
+            (eq? (vector-ref metadata 7) m3t-algorithm)
+            (equal? (vector-ref metadata 8) '#(1 1729 0 0))))
+(check "fourteen fixed handles"
+       (let ((handles (vector-ref entry 8)))
+         (and (vector? handles) (= (vector-length handles) 14)
+              (let loop ((index 0))
+                (if (= index 14) #t
+                    (and (equal? (parameter-handle-shape
+                                   (vector-ref handles index))
+                                 (vector-ref g3c4-model-shapes index))
+                         (loop (+ index 1))))))))
+(check "aggregate and I2 idle"
+       (and (not (vector-ref m3-call-state 0))
+            (not (vector-ref i2-construction-registry-root 1))))
+(display "G3-C4 trainable constructor PASS checks=")
+(display checks) (newline)

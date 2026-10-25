@@ -1,0 +1,277 @@
+;;; Proposed private C4 trainable constructor. Load after g3c4_model_extension.esk.
+;;; Source candidate only; no installed/public route.
+
+(define g3c4-trainable-model-profile 'trainable-c4)
+(define g3c4-trainable-tokenizer-fingerprint
+  "sha256:eshkol-byte-tokenizer-v1:aabb31f49216963582383a00fd2e85d7c20b658d5bef0e7945344ed6bfe50704")
+
+(define (g3c4-trainable-tokenizer-entry tokenizer operation)
+  (let ((entry (t1-private-entry tokenizer)))
+    (if (not entry)
+        (g3c4-fail 'invalid-argument operation
+                    "trainable C4 tokenizer identity is not registered"))
+    (if (not (and (pair? entry) (eq? (car entry) tokenizer)
+                  (pair? (cdr entry)) (null? (cdr (cdr entry)))))
+        (g3c4-fail 'invalid-state operation
+                    "trainable C4 tokenizer registry entry is not exact"))
+    (let ((core (car (cdr entry))))
+      (if (not (and (t1-core-tokenizer? core)
+                    (eq? (vector-ref core 1) 'raw)
+                    (null? (vector-ref core 2))
+                    (null? (vector-ref core 3))
+                    (null? (vector-ref core 4))
+                    (= (t1-tokenizer-core-vocab-size core) 256)
+                    (string? (vector-ref core 6))
+                    (string=? (vector-ref core 6)
+                              g3c4-trainable-tokenizer-fingerprint)))
+          (g3c4-fail 'unsupported operation
+                      "trainable C4 requires baseline raw V256 tokenizer"))
+      entry)))
+
+(define (g3c4-trainable-metadata config tokenizer initializer operation)
+  (x1-private-config-validate config)
+  (let loop ((checks '((model.context-length . 4)
+                       (model.hidden-size . 4)
+                       (model.layer-count . 1)
+                       (model.query-head-count . 2)
+                       (model.kv-head-count . 2)
+                       (model.head-size . 2)
+                       (model.vocabulary-size . 256)
+                       (model.dtype . f32)
+                       (model.device . cpu)
+                       (run.deterministic . #t))))
+    (if (null? checks) #t
+        (begin
+          (if (not (equal? (x1-private-config-ref config (car (car checks)))
+                           (cdr (car checks))))
+              (g3c4-fail 'unsupported operation
+                          "configuration differs from fixed trainable C4"))
+          (loop (cdr checks)))))
+  (let* ((seed (x1-private-config-ref config 'run.seed))
+         (t1-entry (g3c4-trainable-tokenizer-entry tokenizer operation))
+         (t1-core (car (cdr t1-entry)))
+         (m3t-initializer (m3t-entry initializer 'initializer operation #t))
+         (algorithm (m3t-public-initializer-algorithm initializer))
+         (words (m3t-public-initializer-words initializer)))
+    (if (not (and (m3t-exact-i64? seed) (>= seed 0)
+                  (eq? (vector-ref m3t-initializer 0) initializer)
+                  (eq? algorithm m3t-algorithm)
+                  (equal? words (list 1 seed 0 0))))
+        (g3c4-fail 'invalid-argument operation
+                    "initializer authority differs from C4 configuration"))
+    (vector 'g3c4-trainable-metadata-v1
+            config
+            (string-copy (x1-private-config-canonical config))
+            (string-copy (x1-private-config-fingerprint config))
+            tokenizer
+            (string-copy (vector-ref t1-core 6))
+            initializer algorithm (vector 1 seed 0 0))))
+
+(define (g3c4-trainable-tail-preflight entry cleanup operation)
+  (let* ((construction (vector-ref entry 9))
+         (owner (vector-ref entry 3))
+         (handles (vector-ref entry 8))
+         (original (vector-ref entry 5))
+         (successor (vector-ref entry 6))
+         (metadata (vector-ref entry 7)))
+    (if (not (and
+               (eq? entry (car (vector-ref g3c4-model-registry 0)))
+               (vector? entry) (= (vector-length entry) 12)
+               (eq? (vector-ref entry 1) 'c4-model)
+               (eq? (vector-ref entry 2) 'pending)
+               (eq? (vector-ref entry 4) 'trainable)
+               (vector? metadata) (= (vector-length metadata) 9)
+               (eq? (vector-ref metadata 0) 'g3c4-trainable-metadata-v1)
+               (vector? original) (= (vector-length original) 4)
+               (vector? successor) (= (vector-length successor) 4)
+               (vector? (vector-ref metadata 8))
+               (= (vector-length (vector-ref metadata 8)) 4)
+               (equal? original (vector-ref metadata 8))
+               (equal? original
+                       (vector 1 (vector-ref original 1) 0 0))
+               (equal? successor
+                       (vector 1 (vector-ref original 1) 292 0))
+               (eq? (vector-ref entry 10) #f)
+               (eq? (vector-ref entry 11) g3c4-trainable-model-profile)
+               (vector? handles) (= (vector-length handles) 14)
+               (eq? cleanup (vector-ref g3c4-model-cleanup-root 0))
+               (eq? owner (vector-ref cleanup 0))
+               (eq? construction (vector-ref cleanup 1))
+               (eq? (vector-ref cleanup 2) 'rollback)
+               (eq? (vector-ref construction 2) (vector-ref entry 0))
+               (eq? (vector-ref construction 3) 'prepared)
+               (eq? (vector-ref construction 9) 'g3c4)
+               (eq? (vector-ref construction 10) owner)
+               (eq? construction
+                    (vector-ref i2-construction-registry-root 1))))
+        (g3c4-fail 'internal operation
+                    "trainable C4 publication differs from rooted authority"))
+    (let* ((config (vector-ref metadata 1))
+           (tokenizer (vector-ref metadata 4))
+           (initializer (vector-ref metadata 6))
+           (current (g3c4-trainable-metadata
+                      config tokenizer initializer operation)))
+      (if (not (and (eq? config (vector-ref current 1))
+                    (string=? (vector-ref metadata 2)
+                              (vector-ref current 2))
+                    (string=? (vector-ref metadata 3)
+                              (vector-ref current 3))
+                    (eq? tokenizer (vector-ref current 4))
+                    (string=? (vector-ref metadata 5)
+                              (vector-ref current 5))
+                    (eq? initializer (vector-ref current 6))
+                    (eq? (vector-ref metadata 7)
+                         (vector-ref current 7))
+                    (equal? (vector-ref metadata 8)
+                            (vector-ref current 8))
+                    (= (vector-ref original 1)
+                       (vector-ref (vector-ref metadata 8) 1))))
+          (g3c4-fail 'internal operation
+                      "trainable C4 metadata changed before publication")))
+    (let handles-complete ((index 0))
+      (if (= index 14) #t
+          (begin
+            (if (not (vector-ref handles index))
+                (g3c4-fail 'internal operation
+                            "trainable C4 handle vector is incomplete"))
+            (let distinct ((prior 0))
+              (if (= prior index) #t
+                  (begin
+                    (if (eq? (vector-ref handles prior)
+                             (vector-ref handles index))
+                        (g3c4-fail 'internal operation
+                                    "trainable C4 handles alias"))
+                    (distinct (+ prior 1)))))
+            (handles-complete (+ index 1)))))
+    #t))
+
+(define (g3c4-model-create-trainable-internal config tokenizer initializer)
+  (let ((operation 'g3c4-model-create-trainable-internal))
+    (m3-call operation
+      (let* ((metadata (g3c4-trainable-metadata config tokenizer initializer operation))
+             (seed (x1-private-config-ref config 'run.seed)))
+      (if (not (and (m3t-exact-i64? seed) (>= seed 0)))
+          (g3c4-fail 'invalid-argument operation
+                      "C4 seed must be a nonnegative exact int64"))
+      (if (vector-ref g3c4-model-cleanup-root 0)
+          (g3c4-fail 'invalid-state operation
+                      "C4 model construction is already active"))
+      (let* ((original (vector 0 0 0 0))
+             (successor (vector 0 0 0 0))
+             (handles (make-vector 14 #f))
+             (prefix-index (vector '()))
+             ;; #(native-owner I2-construction phase module-prefix-index)
+             (cleanup (vector #f #f 'rollback prefix-index))
+             ;; Captured before native enrollment. These exact locals protect
+             ;; cleanup if a subsequent rooted-ledger write itself raises.
+             (native-owner '())
+             (active-construction #f)
+             (entry
+               (vector #f 'c4-model 'pending #f 'trainable
+                       original successor metadata handles #f #f
+                       g3c4-trainable-model-profile))
+             (next (cons entry (vector-ref g3c4-model-registry 0))))
+        (guard (caught
+                 (#t
+                   (if (eq? (vector-ref cleanup 2) 'rollback)
+                       (begin
+                         ;; Revoke P1/I2 handle authority before native storage.
+                         (if active-construction
+                             (i2-g3c4-construction-abort-internal!
+                               active-construction))
+                         (if (not (null? native-owner))
+                             (if (not (= (g3c4-native-owner-abort
+                                           native-owner) 0))
+                                 (exit 134)))
+                         (g3c4-model-dead! entry)))
+                   (vector-set! g3c4-model-cleanup-root 0 #f)
+                   (raise caught)))
+          ;; Canonical promotion and readback precede native enrollment.
+          (vector-set! g3c4-model-registry 0 next)
+          (vector-set! g3c4-model-cleanup-root 0 cleanup)
+          (let* ((canonical-entry
+                   (car (vector-ref g3c4-model-registry 0)))
+                 (canonical-cleanup
+                   (vector-ref g3c4-model-cleanup-root 0))
+                 (canonical-handles (vector-ref canonical-entry 8))
+                 (canonical-prefix-index (vector-ref canonical-cleanup 3))
+                 (owner (g3c4-native-owner-create-seeded seed)))
+            (set! native-owner owner)
+            (if (null? owner) (g3c4-native-fail operation))
+            (vector-set! canonical-cleanup 0 owner)
+            (vector-set! canonical-entry 3 owner)
+            (let ((construction
+                    (i2-g3c4-construction-begin-internal owner)))
+              (set! active-construction construction)
+              (vector-set! canonical-cleanup 1 construction)
+              (vector-set! canonical-entry 9 construction)
+              (vector-set! canonical-entry 0 (vector-ref construction 2))
+              ;; The anchor authenticates owner membership before any carrier
+              ;; enrollment and receives the exact handle at registration 0.
+              (vector-set! (vector-ref construction 8) 2
+                           (i2-native-g3c4-owner-parameter owner 0))
+              (let register ((index 0))
+                (if (= index 14) #t
+                    (let* ((path (vector-ref g3c4-model-paths index))
+                           (parent
+                             (g3c4-model-child-parent
+                               (vector-ref canonical-entry 0)
+                               path canonical-prefix-index))
+                           (parameter
+                             (i2-native-g3c4-owner-parameter owner index)))
+                      (if (null? parameter) (g3c4-native-fail operation))
+                      (let ((handle
+                              (i2-module-register-parameter-internal!
+                                parent (g3c4-model-path-leaf path)
+                                (i2-carrier
+                                  'parameter parameter 'parameter))))
+                        (vector-set! canonical-handles index handle)
+                        (register (+ index 1))))))
+              (let ((parent
+                      (g3c4-model-child-parent
+                        (vector-ref canonical-entry 0)
+                        '("token_embedding" "weight")
+                        canonical-prefix-index)))
+                (i2-module-register-tied-parameter-internal!
+                  parent "weight" (vector-ref canonical-handles 10)))
+              (let ((schedule
+                      (module-construction-parameters-internal
+                        (vector-ref construction 1))))
+                (g3c4-model-validate-schedule
+                  schedule canonical-handles operation))
+              (let initialize ((index 0))
+                (if (= index 14) #t
+                    (begin
+                      (g3c4-native-check
+                        (g3c4-native-owner-initialize owner index)
+                        operation)
+                      (initialize (+ index 1)))))
+              (let capture ((index 0))
+                (if (= index 4) #t
+                    (begin
+                      (vector-set! (vector-ref canonical-entry 5) index
+                        (g3c4-model-owner-word-checked
+                          owner index operation))
+                      (vector-set! (vector-ref canonical-entry 6) index
+                        (g3c4-model-owner-word-checked
+                          owner (+ index 4) operation))
+                      (capture (+ index 1)))))
+              (let ((root
+                      (i2-g3c4-construction-prepare-train-internal!
+                        construction)))
+                (if (not (eq? root (vector-ref canonical-entry 0)))
+                    (g3c4-fail 'internal operation
+                                "C4 prepared root identity changed")))
+              (g3c4-native-check
+                (g3c4-native-owner-prepare-seal owner) operation)
+              (g3c4-trainable-tail-preflight
+                canonical-entry canonical-cleanup operation)
+              ;; Both prepared authorities are now infallible commits.
+              (vector-set! canonical-cleanup 2 'tail)
+              (i2-g3c4-construction-seal-prepared-internal! construction)
+              (if (not (= (g3c4-native-owner-commit-seal owner) 0))
+                  (exit 134))
+              (vector-set! canonical-entry 9 #f)
+              (vector-set! canonical-entry 2 'live)
+              (vector-set! g3c4-model-cleanup-root 0 #f)
+              (vector-ref canonical-entry 0)))))))))

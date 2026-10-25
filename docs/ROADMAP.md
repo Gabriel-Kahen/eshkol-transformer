@@ -2180,7 +2180,10 @@ seeded-eval C4 path and C2-only M3T profile. The bounded C4 P1/I2 train-mode
 prepared sibling is now a separate source candidate: append-only P1 slot 73,
 same prepared seal/abort ledgers, and unchanged eval/seeded route. Focused
 source/mutation checks and train-mode fault/rollback fixture exist; compiled
-normal/repeat/sanitizer admission and independent review remain pending. No
+normal/repeat/sanitizer admission and independent review remain pending. A
+source-only private trainable constructor candidate now uses the same C4
+registry, native owner and P1/I2 train-prepare route; its focused source and
+fixture tests are not a compiled constructor admission. No admitted
 trainable constructor, workspace runtime, forward/backward composition,
 trainer or C2 admission is claimed.
 
