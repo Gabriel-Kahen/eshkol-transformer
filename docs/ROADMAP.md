@@ -2352,6 +2352,14 @@ load. A link-only package and symbol-closure gate remains required before a
 full normal/repeat/sanitizer successor. It does not restore a replay candidate
 or establish full same-registry continuation.
 
+A separate [trained-C2 EOS reference fixture](g3/G3_R_TRAINED_C2_EOS_REFERENCE.md)
+is source-staged. It restores the exact trained C2 through CLI3/TR3, uses the
+genuine first P1/G1 sampled ID as EOS for a second call on the same restored
+model, and compares committed terminal/history/output/RNG data. Its source and
+receipt-parser checks pass; compiled normal/repeat/sanitizer execution and
+fresh-process comparison remain pending. Context-two budget-one admission
+cannot establish repeated-token generation or later-token EOS.
+
 The earlier G3-R C2 SAVE continuation on `0581426b` sealed a failed runtime
 receipt at `g3-save-0581426b-cont-attempt1/SHA256SUMS-RUN`: its compiled
 no-SAVE control left output absent and its compiled public LOAD/SAVE producer
