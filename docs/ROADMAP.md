@@ -1125,7 +1125,26 @@ authentic third D2 row. The mutant retained prior N/W and counters
 These are bounded leaf results;
 the N3 uniform attempt stopped before AOT on four unpinned imports, and the
 repinned mode/gradient attempt 4 stopped at sanitized import admission.
-A read-only source-closure audit also found three changed native files between the accepted `7bb38a56c` N3 target-offset gate and `44c0418d`; that target-offset result does not carry to the exact-44c compiled union. Neither full N3 nor mode/gradient nor §9 is admitted.
+A read-only source-closure audit also found three changed native files between the accepted `7bb38a56c` N3 target-offset gate and `44c0418d`; that target-offset result does not carry to the exact-44c compiled union. Neither full N3 nor full R2 nor §9 is admitted.
+
+The noninstalled `dc565e1` mode/graph successor has since passed independent
+compiled result review: absent-gradient and seeded-present-gradient runtime stdout matched
+across normal A/B, poison, and ASan/UBSan runs; in-call mode and graph mutants
+failed at their intended first assertions. The 406-file raw seal is
+`da61d695...`, with review
+`/home/gabe/.codex/evidence/eshkol-transformer/finish-20261022/e3/mode-dc565e1-attempt6-independent-review/REVIEW.md`.
+This accepts bounded mode/graph and gradient preservation. Numerical gradient
+accuracy, peak RSS, and complete R2 remain open; the historical `/out:rw`
+mount limits adversarial receipt isolation.
+
+The independently reviewed `4ab378a3` retention phase diagnostic reused the
+sealed prior packages and ran eight fresh fault/control processes. Every case
+aborted at `balanced-i2-views-pins`; fault cases alone gained 2,360 root-arena
+bytes after the call, while controls stayed flat and still failed that
+predicate. The result is diagnostic only, with no completed sanitizer or
+retention pass. Raw native begin/view/end probes and fault-path allocation
+attribution are the next causal checks; see
+`/home/gabe/.codex/evidence/eshkol-transformer/finish-20261022/e3/retention-arena-phase-4ab378a3-v2-attempt1-independent-review-20261025/REVIEW.md`.
 
 The exact-`44c0418d` [N4 private-reachability audit](e3/E3_N4_PRIVATE_REACHABILITY_AUDIT.md)
 finds that admitted D1/D2 cannot emit mask `01` or a masked invalid target;
