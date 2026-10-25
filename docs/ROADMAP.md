@@ -1240,6 +1240,15 @@ zero; direct D2 read faults retained 2,288 root-arena bytes after the call
 through a genuine E3 retry, while matched controls stayed flat. The prior
 full E3 fault retained 2,360 bytes; the 72-byte difference does not identify
 an allocation or lifetime cause. Complete-call retention remains unadmitted.
+The test-only scoped-guard observer at `d1f7b743`/tree `41f10320` passed its
+independently reviewed bounded compiled diagnostic
+(`retention-scoped-d1f7b743-attempt1-independent-review-20261025/REVIEW.md`,
+229-file raw seal `615aacb1...`). All eight fault/control cases exited zero:
+public I2 counters stayed zero, E3 scoped begins and ends increased equally,
+live scoped guards returned to zero, and report/teardown postchecks passed
+across normal A/B, poison and sanitizer. Fault arms still retained 2,360
+root-arena bytes through retry; controls stayed flat. This diagnostic did not
+run the complete-call root-arena equality assertion, so retention is open.
 The separate trained-G2 sanitizer attempt at `55a56f2f` is also NONACCEPTING:
 the first two-token run hit an ASan one-byte read seven bytes before a live
 48-byte terminal-ID clone allocation in the release path (review:
