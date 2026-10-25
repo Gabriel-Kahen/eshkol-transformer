@@ -2703,9 +2703,13 @@ publication, public G2 and continuation remain pending.
   (`g3c4-p2g2-typed-aggregate-51012d1e-attempt2/SHA256SUMS-RUN`, SHA-256
   `cd72e4d462ac46f29c1a073f92751a0dc82e4ab14a617cc205148d76c1347a28`)
   compiled that IR but stopped at link on five test-only f32 helper symbols.
-  The fixture package now compiles one `f32_tensor.c` testing owner with
-  `ET_F32_TENSOR_TESTING`, checks its archive/link-map presence, and source
-  tests the five-hook closure. A fresh exact-source compiled gate remains
+  A third sealed cut (`g3c4-p2g2-typed-aggregate-0e692935-attempt3/SHA256SUMS-RUN`,
+  SHA-256 `a3b2757454e9823c6e7c9f1d452549c78c38e6349da7abe7e8c557faf7f41797`)
+  also reached link, then rejected duplicate f32 definitions: the attempted
+  test owner was separate from the existing M3-call replacement TU that
+  includes `f32_tensor.c`. The fixture now sets `ET_F32_TENSOR_TESTING` on
+  that sole replacement TU, with a source test for the include chain and
+  five-hook closure. A fresh exact-source compiled gate remains
   pending. Exact fe9/f31 dependencies are pinned; compiled same-call
   RNG/A2 parity, feature-off execution and supported integration review remain
   pending. Public P2/G2 dispatch stays disabled.

@@ -78,7 +78,6 @@ transport=(-DET_G3T_TESTING -DET_F32_TENSOR_TESTING
   -DET_I64_TENSOR_STORAGE_QUERY_PRIVATE
   -DET_A2_KV_CACHE_STORAGE_QUERY_PRIVATE)
 sources=(native/data_io.c native/checkpoint_io.c native/kernel_abi.c
-  native/f32_tensor.c
   tests/g3c4/p2_g2_typed_aggregate_shape_native.c
   native/n3k_primitives_provider.c native/g3n_primitives_provider.c
   native/n2_primitives_provider.c native/g3c4_primitives_provider.c
@@ -110,11 +109,11 @@ build_mode() {
         -DET_I64_TENSOR_TESTING) ;;
       p2_g2_typed_aggregate_oracle_owner) extra=("${owner[@]}") ;;
       g3t_transport) extra=("${transport[@]}") ;;
-      f32_tensor) extra=(-DET_F32_TENSOR_TESTING) ;;
       m3_i64_integration) extra=(-DET_M3_TESTING -DET_I64_TENSOR_TESTING
         -DET_I64_TENSOR_STORAGE_QUERY_PRIVATE
         -DET_G3C4_T1_I1_EXACT_PAIR_PRIVATE) ;;
-      m3_call_f32_integration) extra=(-DET_G3C4_NATIVE_PINS_PRIVATE
+      m3_call_f32_integration) extra=(-DET_F32_TENSOR_TESTING
+        -DET_G3C4_NATIVE_PINS_PRIVATE
         -DET_G3C4_NATIVE_OWNER_PRIVATE -DET_F32_TENSOR_STORAGE_QUERY_PRIVATE) ;;
       t1_i64_shell) extra=(-DET_G3C4_T1_I1_EXACT_PAIR_PRIVATE
         -DET_T1_I64_SHELL_TESTING) ;;
@@ -140,9 +139,20 @@ build_mode() {
   nm -A -u "$dir/libg3c4_p2g2_typed_aggregate.a" \
     >"$evidence/$mode.archive-undefined.txt"
   test "$(wc -l <"$evidence/$mode.archive-members.txt")" -eq "${#sources[@]}"
-  for stem in f32_tensor g3t_transport p2_g2_typed_aggregate_oracle_owner \
+  ! grep -Fx f32_tensor.o "$evidence/$mode.archive-members.txt" >/dev/null
+  for stem in m3_call_f32_integration g3t_transport p2_g2_typed_aggregate_oracle_owner \
               p2_g2_typed_aggregate_shape_native; do
     grep -Fx "$stem.o" "$evidence/$mode.archive-members.txt" >/dev/null
+  done
+  nm -g --defined-only --format=posix \
+    "$dir/objects/m3_call_f32_integration.o" | awk '{print $1}' \
+    >"$evidence/$mode.f32-testing-symbols.txt"
+  for symbol in et_f32_tensor_test_metadata_snapshot_v1 \
+                et_f32_tensor_test_metadata_corrupt_v1 \
+                et_f32_tensor_test_metadata_restore_v1 \
+                et_f32_tensor_test_fail_alloc_after_v1 \
+                et_f32_test_live_counts_snapshot_v1; do
+    grep -Fx "$symbol" "$evidence/$mode.f32-testing-symbols.txt" >/dev/null
   done
   local sanitizer_link=
   [[ "$mode" == sanitize ]] && \
@@ -179,7 +189,7 @@ WRAPPER
   test -s "$dir/link.map"
   grep -F "libg3c4_p2g2_typed_aggregate.a(g3t_transport.o)" \
     "$dir/link.map" >/dev/null
-  grep -F "libg3c4_p2g2_typed_aggregate.a(f32_tensor.o)" \
+  grep -F "libg3c4_p2g2_typed_aggregate.a(m3_call_f32_integration.o)" \
     "$dir/link.map" >/dev/null
   grep -F "libg3c4_p2g2_typed_aggregate.a(p2_g2_typed_aggregate_oracle_owner.o)" \
     "$dir/link.map" >/dev/null
