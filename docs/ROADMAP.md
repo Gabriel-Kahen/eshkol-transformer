@@ -2384,6 +2384,24 @@ same-registry trained-pair producer under native ASan+UBSan; generated Eshkol
 code was uninstrumented. Fresh-process FILE reader, replay, resumed draw and
 full multi-token/EOS continuation remain open.
 
+The first-token EOS reference for that exact trained context-two C2 passed a
+separate compiled private-package gate on `5363ceb9`/tree `9e0295f1`. The
+sealed 430-file receipt at
+`g3r-trained-eos-5363ceb9-package-v2-attempt1/SHA256SUMS-RUN` (SHA-256
+`6f127d2c54f85a94f5bd74a212c2eee9a938d9811408645715ea7b96a7f38b50`)
+has zero launcher/Docker exits, one private Eshkol init and G3-T native owner,
+16 exact package exports, thin caller closure, and byte-identical normal,
+fresh repeat and native ASan+UBSan output with empty positive stderr. The
+independent oracle confirms trained C2 SHA `9ec2a1d4...`, prompt byte 41,
+sampled byte 80, first-token EOS terminal latch, history two/generated one,
+and G3-S words `(1,1729,1,0)`; corrupt C2 and out-of-range prompt reject.
+The generated Eshkol object is uninstrumented. This admits only the
+first-token terminal reference. CLI3/TR3/M3T and G3-T diagnostic policy remain
+fixed to context two and one new token; the current G3RCV1 record likewise
+caps history at two. A genuine trained larger-context C2, multi-token/later
+EOS, and persisted fresh-process continuation require reviewed upstream C4
+training/restore and larger G3-R profiles; no context-four fixture is admitted.
+
 The earlier G3-R C2 SAVE continuation on `0581426b` sealed a failed runtime
 receipt at `g3-save-0581426b-cont-attempt1/SHA256SUMS-RUN`: its compiled
 no-SAVE control left output absent and its compiled public LOAD/SAVE producer
