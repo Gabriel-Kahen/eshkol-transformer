@@ -1163,6 +1163,16 @@ This is a bounded equivalent-result control, not compiled-private M2 f64-retry
 acceptance; the row remains open pending a genuinely changed outcome and
 independent normal/repeat/poison/sanitizer review. Raw scout evidence is sealed
 at `/home/gabe/.codex/evidence/eshkol-transformer/e3-m2-f64-retry-scout-20261025/SHA256SUMS`.
+A separate bounded 257-state C1/M3/D2 mathematical sweep found one local
+finite f64-recompute candidate: gamma `41ad026a`, loss `42ad0231`, host
+`expf` `7ddec091` versus f64-exp/f32-cast `7ddec090`, with the latter
+confirmed by the independent Decimal oracle. An exhaustive 524,289-word
+local overflow-region scan found no nonfinite-triggered retry whose f32 cast
+became finite. This does not close the M2 f64-retry row or establish supported
+compiled-private behavior. A hash-bound one-line finite-recompute overlay
+proposal and its supported-lane prerequisite are recorded in the §9 matrix;
+frozen evidence is sealed at
+`/home/gabe/.codex/evidence/eshkol-transformer/e3-m2-f64-retry-extended-20261025/SHA256SUMS`.
 The 7eeaa03 current-main M2 union added the padded-position test selector to
 `scripts/build-e1b-consumer.sh`, changing its source bytes. Hosted model
 composition failed only the M3CG predecessor checksum. This bounded successor
