@@ -2676,7 +2676,12 @@ has zero launcher/Docker exits, 23 candidate checks in each process,
 byte-identical ordinary feature-off results, empty runtime stderr, and the
 feature-off native symbol/object parity checks. This is not a compiled
 failure-injection or sanitizer gate. Independent exact-result review is
-pending. There is no I2 graph revocation, M3T candidate
+complete with no blocker for this bounded result; the sealed review at
+`g3r-i2-independent-result-review-20261025/SHA256SUMS-REVIEW` has SHA-256
+`274ab2d536fb5dc7ce6fe35c92aba5199ac1d899a5b614251e7d46c43f3c4664`.
+The candidate compile log retains one named-let capture-forwarding warning;
+the begin failure cut is checked statically but has no injected runtime result.
+There is no I2 graph revocation, M3T candidate
 constructor, complete candidate cleanup, restore, or replay claim.
 
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
