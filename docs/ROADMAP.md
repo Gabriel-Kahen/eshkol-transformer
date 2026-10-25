@@ -2219,7 +2219,19 @@ scoped-pin status. The [P1 topology leaf](g3/G3_R_C4_P1_TOPOLOGY_STATUS_LEAF.md)
 is a source-only candidate: it appends status-only slot 74 without changing
 slots 0–73 or the feature-off ABI, and has an unrun fixture for the exact C4
 tree, ordered handles/tie, CPU f32 provider, `[4,4]` position shape and
-negative controls. Compiled runtime and native owner checks remain open.
+negative controls. The separately accepted C4 trainable constructor compiled
+fixture is sealed at `g3r-c4-trainable-constructor-5503bb2b-attempt3/SHA256SUMS-RUN`
+(SHA-256 `899c2b238127af698475fb6947ad72f8e385dea36b613853a12552fcb835a3d6`):
+normal/repeat each passed 48 checks and the seeded control passed 25. The first
+slot-74 topology cut at `9772674e` remains **NONACCEPTING**; its sealed receipt
+`g3r-c4-p1-topology-9772674e-attempt1/SHA256SUMS-RUN`
+(SHA-256 `7d083207c3bc0870b8351074cfcd87afb9fb4a9294162c902ac8e67d1ce8fc09`)
+reports a compile-time `set!` undefined-variable error on the fixture's loaded
+I2 tied-registration function, before any P1 runtime. A scoped source candidate
+uses a private default-I2 delegate so the same missing-tie negative can be
+injected without rebinding the loaded I2 function. That repair has source/static
+tests only; compiled P1 topology, native owner checks, and dependent slot 75
+remain open.
 The workspace contract requires an exact live
 owner-to-P1 handle association proof and a swapped-handle negative; the first
 gate can claim topology/owner identity only. Active generation, workspace and

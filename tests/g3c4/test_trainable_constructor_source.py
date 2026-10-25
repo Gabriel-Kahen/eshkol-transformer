@@ -72,6 +72,9 @@ def asserted_constructor(text: str, model: str, i2: str, call: str) -> None:
     for phase in ("after-registration", "after-p1-prepare", "after-native-prepare"):
         assert f"'{phase} canonical-entry" in text
     assert "(define g3c4-trainable-constructor-fault-hook" in text
+    assert "(define g3c4-trainable-tie-register-internal" in text
+    assert "(i2-module-register-tied-parameter-internal!\n      parent \"weight\" handle)" in text
+    assert "(g3c4-trainable-tie-register-internal\n                  parent (vector-ref canonical-handles 10))" in text
     assert "(g3c4-model-dead! entry)" in text
     assert "(i2-g3c4-construction-abort-internal!" in text
     assert "(g3c4-native-owner-abort" in text
@@ -159,6 +162,14 @@ class TrainableConstructorSource(unittest.TestCase):
         mutant = self.text.replace(
             "(i2-g3c4-construction-prepare-train-internal!",
             "(i2-g3c4-construction-prepare-eval-internal!", 1,
+        )
+        with self.assertRaises(AssertionError):
+            asserted_constructor(mutant, self.model, self.i2, self.call)
+
+    def test_missing_tie_delegate_is_detected(self) -> None:
+        mutant = self.text.replace(
+            '(i2-module-register-tied-parameter-internal!\n      parent "weight" handle)',
+            '#t', 1,
         )
         with self.assertRaises(AssertionError):
             asserted_constructor(mutant, self.model, self.i2, self.call)

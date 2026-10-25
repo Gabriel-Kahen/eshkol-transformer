@@ -106,6 +106,9 @@ class WorkspaceTopologyContractSource(unittest.TestCase):
 
     def test_fixture_has_exact_negative_categories(self) -> None:
         fixture = source("tests/g3c4/p1_train_topology_status_test.esk")
+        self.assertIn("(set! g3c4-trainable-tie-register-internal", fixture)
+        self.assertIn("(set! g3c4-trainable-tie-register-internal saved-tie-register)", fixture)
+        self.assertNotIn("(set! i2-module-register-tied-parameter-internal!", fixture)
         for label in ("missing tied binding at construction",
                       "wrong tie publishes no live entry", "foreign shell",
                       "swapped handles", "forged head/tie shell",

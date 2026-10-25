@@ -1,6 +1,6 @@
 # G3-R C4 P1 topology status leaf
 
-**Source candidate; compiled fixture not run.** This append-only private P1
+**Source candidate; compiled P1 runtime not admitted.** This append-only private P1
 slot 74 accepts a model shell and fourteen ordered handle shells. It returns
 only a closed integer status: `0` means the exact P1 topology was observed,
 `1` means an invalid supplied shell/vector or mismatched ordered handle,
@@ -20,7 +20,8 @@ returning. Slots 0–73 and the public feature-off module remain unchanged.
 The source-only fixture covers exact C4, foreign root, malformed and swapped
 supplied handles, a forged supplied head shell, the genuine C2 `[2,4]`
 position shape, and eval/train mode. It also suppresses the constructor's
-tie registration and requires that malformed construction to fail without a
+tie registration through a private default-I2 delegate and requires that
+malformed construction to fail without a
 live entry. The source checker pins the P1 tie equality branch, shape
 distinction, read-only calls, slot mapping, and ordinary ABI. The forged head
 shell does **not** corrupt a finalized P1 binding; a controlled changed-live-
@@ -28,3 +29,11 @@ binding negative remains for a later test-only authority. This leaf also
 does not authenticate the native owner-to-P1 association, active C4 call or
 lease exclusion, or a workspace. Those remain the separate obligations in
 the [workspace authority contract](G3_R_C4_WORKSPACE_TOPOLOGY_AUTHORITY_CONTRACT.md).
+
+The first compiled fixture attempt at `9772674e` stopped before IR because
+its direct `set!` of the loaded I2 tied-registration function was undefined
+to the compiler. Its sealed receipt is
+`g3r-c4-p1-topology-9772674e-attempt1/SHA256SUMS-RUN` (SHA-256
+`7d083207c3bc0870b8351074cfcd87afb9fb4a9294162c902ac8e67d1ce8fc09`).
+The delegate repair preserves the missing-tie negative and production I2 call;
+it awaits independent source review and a fresh compiled gate.
