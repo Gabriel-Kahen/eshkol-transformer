@@ -2175,10 +2175,19 @@ read-only identity/shape workspace preflight. Source checks pin the current
 seeded-eval C4 path and C2-only M3T profile. The bounded C4 P1/I2 train-mode
 prepared sibling is now a separate source candidate: append-only P1 slot 73,
 same prepared seal/abort ledgers, and unchanged eval/seeded route. Focused
-source/mutation checks and train-mode fault/rollback fixture exist; compiled
-normal/repeat/sanitizer admission and independent review remain pending. No
-trainable constructor, workspace runtime, forward/backward composition,
-trainer or C2 admission is claimed.
+source/mutation checks passed independent review at `883cc8d6`/tree
+`2f5078b9`. Its first pinned attempt stopped before runtime when container
+`/tmp` denied executing the compiled caller (exit 126); the nonaccepting
+receipt is `g3r-c4-train-prepare-883cc8d6-attempt1/SHA256SUMS-RUN`
+(SHA-256 `584ad9d26190617d2cf89cd6a116ea502465e14293516b0103224938d4923d69`).
+The reviewed v2 recipe verified an executable `/out/tmp`, then passed the
+train-mode fault/rollback fixture twice (53 checks each, byte-identical) and
+the inherited eval fixture (51 checks) on the same source and pinned toolchain.
+Its 55-file sealed receipt is `g3r-c4-train-prepare-883cc8d6-attempt2/SHA256SUMS-RUN`
+(SHA-256 `fe3230dee056e5122a2a012cdb02093ad8ed3dda6743fc5d81c29e9e9a9da4f2`);
+independent result audit accepts that normal/repeat scope. Native sanitizer,
+broader inherited overlay, trainable constructor, workspace runtime,
+forward/backward composition, trainer and C2 admission remain pending.
 
 The [private C4 position VJP leaf](g3/G3_R_C4_POSITION_VJP_LEAF.md) supplies
 one fixed `[1,4]` position-ID and `[1,4,4]` upstream to `[4,4]` gradient

@@ -26,7 +26,21 @@ It reuses the existing P1/I2 prepared seal and abort ledgers, without changing
 the seeded path or the M3T route. The train sibling performs the same fallible
 schedule, attachment, canonical-path, finalization, mode verification, and
 native-prepare checks as `construction-prepare-eval!`, with final mode `train`.
-Its focused source and fixture tests are not a compiled runtime admission.
+The sibling at source `883cc8d6`/tree `2f5078b9` passed independent source
+review (`g3r-c4-train-prepare-independent-source-review-20261025/SHA256SUMS-REVIEW`,
+SHA-256 `e5191b96037cb84502911eed543980843bf8c55da4b20198536e8f71d11cf6cb`).
+Its first pinned compiled attempt ended at launcher/Docker exit 126:
+the generated caller could not execute from container `/tmp`, so no train
+runtime or eval control ran. That nonaccepting receipt is
+`g3r-c4-train-prepare-883cc8d6-attempt1/SHA256SUMS-RUN` (SHA-256
+`584ad9d26190617d2cf89cd6a116ea502465e14293516b0103224938d4923d69`).
+The separately reviewed v2 recipe tested an executable `/out/tmp` mount and
+ran the same source/toolchain: train-prepared fixture 53 checks twice with
+byte-identical output, plus inherited eval control 51 checks. Its 55-file
+post-exit seal is `g3r-c4-train-prepare-883cc8d6-attempt2/SHA256SUMS-RUN`
+(SHA-256 `fe3230dee056e5122a2a012cdb02093ad8ed3dda6743fc5d81c29e9e9a9da4f2`).
+Independent result audit accepts only this normal/repeat P1/I2 seam. Native
+sanitizers and broader inherited overlays remain unrun on this source.
 
 ## Proposed constructor authority
 
