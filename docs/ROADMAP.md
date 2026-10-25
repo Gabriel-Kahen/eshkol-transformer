@@ -1096,8 +1096,15 @@ raw-T1/D1 corpora and independent D2 cursor/row receipts, including authentic
 private evaluator for one-token success, empty/singleton/entry-EOS stage-12
 errors, an 8,192-row success control and the 8,193-row stage-2 rejection.
 Its host tests establish source closure, input bytes, independent one-token
-oracle and 269,104-byte D1 payload. Exact sanitizer imports remain unmeasured;
-the compiled-private edge/cap outcomes, RSS and sanitizer run are **NOT RUN**.
+oracle and 269,104-byte D1 payload. The diagnostic successor's exact imports
+remain unmeasured; its compiled-private edge/cap outcomes, RSS and sanitizer
+run are **NOT RUN**.
+The sealed `943b745` private attempt completed builds and AOTs, then its first
+normal cap process aborted with empty stdout before a result. A test-only
+successor adds flushed seed/control/stage-2 markers and exact gate-output
+checks to locate a fresh failure; its changed source needs new private
+packages, AOTs and measured import inventories. That successor has **NOT RUN**
+as a compiled or runtime gate.
 Full owner/mode/resource probes remain dependent work. The accepted retention
 tuple and installed API are unchanged.
 The first [mathematical three-batch M2 sum-order witness](../tests/e3_reference/sum_order_witness_v1.json)

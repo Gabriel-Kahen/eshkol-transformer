@@ -1,5 +1,24 @@
 # E3 N5 authentic edge and 8,193 preflight preparation
 
+## Diagnostic successor after the `943b745` runtime abort
+
+The sealed `943b745` attempt completed its private builds and AOTs but its
+first normal cap process aborted before the final result, with empty stdout.
+That observation does not locate the failure within the seed, 8,192 control,
+or 8,193 preflight. This test-only successor emits and flushes nine ordered
+`E3-N5-STAGE` lines: before evaluation, after evaluation, and after checks for
+each of those three phases. The final cap result still follows all original
+assertions. The gate requires the exact ordered lines and result for every
+mode; an abort retains the last completed marker in raw stdout. The genuine D2
+corpora, model evaluator, limits, and stage-2 atomicity checks are unchanged.
+
+This successor has source/host-test evidence only. Its changed driver and gate
+require fresh normal A/B/sanitized private packages and cap/edge AOT builds;
+`943b745` binaries cannot validate it. The resulting undefined import
+inventories, including any flush-related import, must be measured and reviewed
+against the exact new source before a compiled gate. No N5 runtime or resource
+admission follows from these markers.
+
 Status: **source/host tuple preparation only** on base `44c0418d`. The
 noninstalled private candidate includes a genuine 8,192-row success control
 before the 8,193-row rejection, plus one-token, empty, singleton and entry-EOS

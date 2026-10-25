@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import subprocess
 import unittest
 from tests.c2.test_handler_order import parse as parse_source
@@ -10,6 +11,9 @@ from tests.c2.test_handler_order import parse as parse_source
 ROOT = Path(__file__).resolve().parents[2]
 N5 = ROOT / "tests/e3_n5"
 BASE = ROOT / "native/e3_private_package"
+STAGES = ["seed-before", "seed-after-eval", "seed-after-checks",
+          "control-before", "control-after-eval", "control-after-checks",
+          "stage2-before", "stage2-after-eval", "stage2-after-checks"]
 
 
 def lines(prefix: Path, suffix: str) -> list[str]:
@@ -74,7 +78,7 @@ printf '%s\\n' "$e3_tuple_kind"
 
     def test_real_evaluator_and_atomic_checks(self) -> None:
         driver = (N5 / "driver.esk").read_text()
-        self.assertEqual(len(parse_source(driver)), 4)
+        self.assertEqual(len(parse_source(driver)), 5)
         self.assertGreater(len(parse_source((N5 / "runtime.esk").read_text())), 0)
         self.assertEqual(driver.count("(e3-evaluate-into! model"), 3)
         self.assertLess(driver.index("'e3-n5-seed"), driver.index("'e3-n5-one-over"))
@@ -92,6 +96,24 @@ printf '%s\\n' "$e3_tuple_kind"
         self.assertIn("(d2-core-bytes=? before (d2-token-dataset-cursor dataset))", driver)
         self.assertNotIn("et_e3_n5_run_v1", (ROOT / "native/e3_private_bridge.c").read_text())
         self.assertNotIn("e3-n5-dispatch", (ROOT / "native/e3_private_driver_root.esk").read_text())
+
+    def test_flushed_stage_markers_bracket_real_evaluations_and_checks(self) -> None:
+        driver = (N5 / "driver.esk").read_text()
+        gate = (ROOT / "scripts/test-e3-n5-private.sh").read_text()
+        self.assertIn("(flush-output-port (current-output-port))", driver)
+        self.assertEqual(re.findall(r'\(e3-n5-stage "([^"]+)"\)', driver), STAGES)
+        self.assertEqual(re.findall(r"'E3-N5-STAGE ([^']+)'", gate), STAGES)
+        self.assertIn('cmp "${out}/cap-expected.stdout" "${out}/run-${variant}.stdout"', gate)
+        for before, after, region in (("seed-before", "seed-after-eval", "e3-n5-seed"),
+                                      ("control-before", "control-after-eval", "e3-n5-cap-control"),
+                                      ("stage2-before", "stage2-after-eval", "e3-n5-one-over")):
+            self.assertLess(driver.index(f'(e3-n5-stage "{before}")'),
+                            driver.index(f"(with-region ('{region}"))
+            self.assertLess(driver.index(f"(with-region ('{region}"),
+                            driver.index(f'(e3-n5-stage "{after}")'))
+        self.assertLess(driver.index("'seed-tokens"), driver.index('"seed-after-checks"'))
+        self.assertLess(driver.index("'control-cursor"), driver.index('"control-after-checks"'))
+        self.assertLess(driver.index("'six-outputs-atomic"), driver.index('"stage2-after-checks"'))
 
     def test_edge_driver_reaches_authentic_finalizer_and_preserves_atomicity(self) -> None:
         driver = (N5 / "edge_driver.esk").read_text()

@@ -147,6 +147,18 @@ check_time() {
                  END {exit !accepted}' "${path}" ||
     die "N5 runtime peak RSS exceeds the 524288 KiB ceiling"
 }
+printf '%s\n' \
+  'E3-N5-STAGE seed-before' \
+  'E3-N5-STAGE seed-after-eval' \
+  'E3-N5-STAGE seed-after-checks' \
+  'E3-N5-STAGE control-before' \
+  'E3-N5-STAGE control-after-eval' \
+  'E3-N5-STAGE control-after-checks' \
+  'E3-N5-STAGE stage2-before' \
+  'E3-N5-STAGE stage2-after-eval' \
+  'E3-N5-STAGE stage2-after-checks' \
+  'E3-N5-CAP-PASS control=8192 stage=2 rows=8193 cursor=unchanged outputs=6' \
+  >"${out}/cap-expected.stdout"
 for variant in a b poison sanitized; do
   executable="${out}/runtime-${variant}"
   [[ "${variant}" != poison ]] || executable="${out}/runtime-a"
@@ -160,10 +172,10 @@ for variant in a b poison sanitized; do
       "${executable}" "${out}/corpus/one-token" \
       "${out}/corpus/cap-8192" "${out}/corpus/cap-8193" \
       >"${out}/run-${variant}.stdout" 2>"${out}/run-${variant}.stderr"
-  grep -Fx 'E3-N5-CAP-PASS control=8192 stage=2 rows=8193 cursor=unchanged outputs=6' \
-    "${out}/run-${variant}.stdout" >/dev/null || die "N5 runtime failed"
-  [[ "$(wc -l <"${out}/run-${variant}.stdout")" == 1 &&
-     ! -s "${out}/run-${variant}.stderr" ]] || die "N5 runtime emitted diagnostics"
+  cmp "${out}/cap-expected.stdout" "${out}/run-${variant}.stdout" ||
+    die "N5 runtime stage markers or result differ"
+  [[ ! -s "${out}/run-${variant}.stderr" ]] ||
+    die "N5 runtime emitted diagnostics"
   check_time "${out}/run-${variant}.time"
   cmp "${out}/run-a.stdout" "${out}/run-${variant}.stdout" \
     >/dev/null 2>&1 || [[ "${variant}" == a ]] ||
