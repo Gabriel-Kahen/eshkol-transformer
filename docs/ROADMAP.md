@@ -1098,6 +1098,8 @@ with malformed-close controls. The frozen failed evidence is preserved at
 (`cdb4d3cd...`). Independent source review and a fresh supported compile/runtime
 gate remain required; static parsing does not prove E3 numerical acceptance.
 
+The sealed `dd2c7ee` retention arena diagnostic attempt 1 built its private packages and AOTs but aborted in the first fault-process report at `balanced-i2-views-pins` before printing captured arena phase samples; the separate control did not run. A narrow test-only successor prepares a flushed pre-report six-sample runtime and a paired fresh-process fault/control recipe using the authenticated prior archive and corpus. The original report assertion remains active, and a failed postcheck remains nonaccepting. This successor is source/recipe only: independent review and a fresh supported diagnostic run are pending; complete-call retention and E3 §9 admission remain open. See [retention status](e3/E3_COMPLETE_CALL_RETENTION.md).
+
 The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
 is a docs-only candidate for the remaining private numerical, compiled-mutant,
 failure and rollback gates. It tracks authentic D2/model reachability separately

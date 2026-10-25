@@ -36,6 +36,18 @@
          (if (= index 8) #t
              (and (>= (vector-ref samples index) 0)
                   (check-values (+ index 1)))))))
+(display "E3-RETENTION-ARENA-DIAGNOSTIC mode=")
+(display mode)
+(display " prepared=") (display (vector-ref samples 2))
+(display " before=") (display (vector-ref samples 3))
+(display " after-arm=") (display (vector-ref samples 4))
+(display " after-call=") (display (vector-ref samples 5))
+(display " after-checks=") (display (vector-ref samples 6))
+(display " after-retry=") (display (vector-ref samples 7))
+(newline)
+(flush-output-port (current-output-port))
+;; Report and teardown retain their original checks. Emit the measured phases
+;; first so an abort in either check cannot erase a completed diagnose result.
 (e3-retention-test-run report input output)
 (define result (vector-ref output 0))
 (check 'report (and (vector? result) (= (vector-length result) 11)
@@ -47,12 +59,6 @@
 (check 'teardown (and (vector? released) (= (vector-length released) 3)
                       (eq? (vector-ref released 0) 'e3-retention-teardown-v1)))
 
-(display "E3-RETENTION-ARENA-DIAGNOSTIC mode=")
+(display "E3-RETENTION-ARENA-POSTCHECK-PASS mode=")
 (display mode)
-(display " prepared=") (display (vector-ref samples 2))
-(display " before=") (display (vector-ref samples 3))
-(display " after-arm=") (display (vector-ref samples 4))
-(display " after-call=") (display (vector-ref samples 5))
-(display " after-checks=") (display (vector-ref samples 6))
-(display " after-retry=") (display (vector-ref samples 7))
 (newline)
