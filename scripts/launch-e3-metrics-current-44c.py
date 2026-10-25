@@ -11,6 +11,9 @@ import signal
 import subprocess
 import time
 
+# Source and dependency custody probes must not refresh either linked Git index.
+os.environ['GIT_OPTIONAL_LOCKS'] = '0'
+
 source = Path('/home/gabe/.codex/worktrees/finish-e3-20261022')
 evidence = Path('/home/gabe/.codex/evidence/eshkol-transformer/finish-20261022/e3/metrics-44c0418-attempt2')
 deps = Path('/home/gabe/.codex/evidence/eshkol-transformer/e3-retention-teardown-gate-d985917-20261014-a/deps')
