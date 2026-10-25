@@ -2177,17 +2177,33 @@ constructor-only; read-only identity/shape workspace preflight requires a
 separate topology authority and must not use P1 `module-parameters`, which
 commits module observations. Source checks pin the current
 seeded-eval C4 path and C2-only M3T profile. The bounded C4 P1/I2 train-mode
-prepared sibling is now a separate source candidate: append-only P1 slot 73,
+prepared sibling uses append-only P1 slot 73,
 same prepared seal/abort ledgers, and unchanged eval/seeded route. Focused
-source/mutation checks and train-mode fault/rollback fixture exist; compiled
-normal/repeat/sanitizer admission and independent review remain pending. A
-source-only private trainable constructor candidate now uses the same C4
+source/mutation checks and train-mode fault/rollback fixture passed independent
+review at `883cc8d6`/tree `2f5078b9`. Normal/repeat/eval control passed on a
+fresh executable `/out/tmp` recipe, sealed at
+`g3r-c4-train-prepare-883cc8d6-attempt2/SHA256SUMS-RUN` (SHA-256
+`fe3230dee056e5122a2a012cdb02093ad8ed3dda6743fc5d81c29e9e9a9da4f2`).
+The separate native ASan+UBSan linked-caller run passed train 53 checks twice
+and eval 51, sealed at `g3r-c4-train-prepare-883cc8d6-san-attempt1/SHA256SUMS-RUN`
+(SHA-256 `f6cf28a7f3cf5f50f0cc4b41c7a23246f8c8c8edea6827383bc9ca25c1ca470c`);
+its independent result review SHA-256 is
+`c1db4b67d097d92976ad6846c12b8ea1a7bf6a9060366b26c0202f83e6fe2423`.
+A source-only private trainable constructor candidate now uses the same C4
 registry, native owner and P1/I2 train-prepare route; its focused source and
 fixture negatives include stale X1, metadata/RNG corruption and rollback
 cuts around registration, train prepare and native prepare. They are not a
 compiled constructor admission. No admitted
 trainable constructor, workspace runtime, forward/backward composition,
 trainer or C2 admission is claimed.
+
+The proposed [C4 workspace topology authority contract](g3/G3_R_C4_WORKSPACE_TOPOLOGY_AUTHORITY_CONTRACT.md)
+pins a future read-only P1 trusted slot 74 and separate native sealed-owner
+scoped-pin status. Neither is implemented. It requires an exact live
+owner-to-P1 handle association proof and a swapped-handle negative; the first
+gate can claim topology/owner identity only. Active generation, workspace and
+trainer lease exclusion depend on later C4 ledgers, so full workspace
+admission remains open.
 
 The [private C4 position VJP leaf](g3/G3_R_C4_POSITION_VJP_LEAF.md) supplies
 one fixed `[1,4]` position-ID and `[1,4,4]` upstream to `[4,4]` gradient
