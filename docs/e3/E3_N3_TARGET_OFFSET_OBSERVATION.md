@@ -45,3 +45,17 @@ AOT normal/repeat/poison/sanitized observations and wrong-target rejection.
 Failed A–E raw and decisions remain preserved. This is one target-offset leaf
 on that exact source. The current-main integration union requires independent
 review and hosted checks; the other N3 cases and full E3 §9 remain open.
+
+## 44c source successor
+
+The source-only successor branches from `44c0418d2d2d8f3c1354c922d3eeee39b0d7e6ef`
+(tree `70706c0a25cf2055815de363eec6539823a8fca8`). Its target-offset
+runtime, paired D2 corpus generator, parser, verifier and Eshkol source closure
+are byte-identical to the accepted F leaf. The compiled native closure changed
+in `e3_frame.c`, `e3_frame_internal.h` and `m3_call_f32_integration.c`; the
+successor pins their exact 44c bytes in
+`tests/e3_private/test_target_offset_44c_successor.py`. The F result therefore
+does not carry to this source. A separately reviewed, fresh supported compiled
+gate must repeat the paired normal, repeat, poison and sanitizer observations
+and wrong-target rejection. Preparation and source checks are not compiled
+acceptance.
