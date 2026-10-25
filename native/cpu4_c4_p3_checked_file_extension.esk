@@ -7,6 +7,15 @@
 
 (define cpu4-c4-p3-checked-file-tag (vector 'cpu4-c4-p3-checked-file-v1))
 (define cpu4-c4-p3-checked-file-rows (vector '()))
+;;; Private registration: [ticket, original verifier, bound identities].
+;;; It is never returned to the caller with the mutable ticket.
+(define (cpu4-c4-p3-checked-file-registration row operation)
+  (let find ((entries (vector-ref cpu4-c4-p3-checked-file-rows 0)))
+    (cond ((null? entries)
+           (cpu4-binding-fail 'invalid-argument operation
+                              "foreign checked FILE ticket"))
+          ((eq? (vector-ref (car entries) 0) row) (car entries))
+          (else (find (cdr entries))))))
 
 (define (cpu4-c4-p3-bytes=? a b)
   (and (bytevector? a) (bytevector? b)
@@ -114,7 +123,15 @@
              (record-copy (bytevector-copy record))
              (ids3 (bytevector-copy record 48 72))
              (rng (bytevector-copy record 144 176))
+             ;; Private copies never escape in the ticket or descriptor.
+             (sha-seal (bytevector-copy sha-copy))
+             (wire-seal (bytevector-copy wire-copy))
+             (values-seal (bytevector-copy values-copy))
+             (record-seal (bytevector-copy record-copy))
+             (ids-seal (bytevector-copy ids3))
+             (rng-seal (bytevector-copy rng))
              (descriptor (vector ids3 rng 3))
+             (bound (vector #f #f #f #f))
              (row (vector cpu4-c4-p3-checked-file-tag #f factory-ticket
                           factory child model generation-t1 path sha-copy
                           wire values record ids3 rng #f #f #f
@@ -131,29 +148,36 @@
                       (eq? (vector-ref candidate 5) model)
                       (eq? (vector-ref candidate 6) generation-t1)
                       (eq? (vector-ref candidate 7) path)
-                      (cpu4-c4-p3-bytes=? (vector-ref candidate 8) sha-copy)
-                      (cpu4-c4-p3-bytes=? (vector-ref candidate 9) wire-copy)
-                      (cpu4-c4-p3-bytes=? (vector-ref candidate 10) values-copy)
-                      (cpu4-c4-p3-bytes=? (vector-ref candidate 11) record-copy)
-                      (cpu4-c4-p3-bytes=? (vector-ref candidate 12) ids3)
-                      (cpu4-c4-p3-bytes=? (vector-ref candidate 13) rng)
-                      (eq? (vector-ref candidate 17) descriptor)))))
+                      (cpu4-c4-p3-bytes=? (vector-ref candidate 8) sha-seal)
+                      (cpu4-c4-p3-bytes=? (vector-ref candidate 9) wire-seal)
+                      (cpu4-c4-p3-bytes=? (vector-ref candidate 10) values-seal)
+                      (cpu4-c4-p3-bytes=? (vector-ref candidate 11) record-seal)
+                      (cpu4-c4-p3-bytes=? (vector-ref candidate 12) ids-seal)
+                      (cpu4-c4-p3-bytes=? (vector-ref candidate 13) rng-seal)
+                      (eq? (vector-ref candidate 17) descriptor)
+                      (vector? descriptor)
+                      (= (vector-length descriptor) 3)
+                      (eq? (vector-ref descriptor 0) ids3)
+                      (eq? (vector-ref descriptor 1) rng)
+                      (equal? (vector-ref descriptor 2) 3)
+                      (cpu4-c4-p3-bytes=?
+                        (vector-ref descriptor 0) ids-seal)
+                      (cpu4-c4-p3-bytes=?
+                        (vector-ref descriptor 1) rng-seal)))))
         (vector-set! row 1 row)
         (vector-set! row 14 original)
         (vector-set! cpu4-c4-p3-checked-file-rows 0
-                     (cons row (vector-ref cpu4-c4-p3-checked-file-rows 0)))
+                     (cons (vector row original bound)
+                           (vector-ref cpu4-c4-p3-checked-file-rows 0)))
         row))))
 
 (define (cpu4-c4-p3-checked-file-row-live row operation)
-  (let ((known
-          (let search ((remaining
-                         (vector-ref cpu4-c4-p3-checked-file-rows 0)))
-            (cond ((null? remaining) #f)
-                  ((eq? (car remaining) row) (car remaining))
-                  (else (search (cdr remaining)))))))
-    (if (not (and known (vector? row) (= (vector-length row) 20)
-                  (procedure? (vector-ref row 14))
-                  ((vector-ref row 14) row)
+  (let ((registration
+          (cpu4-c4-p3-checked-file-registration row operation)))
+    (if (not (and (vector? row) (= (vector-length row) 20)
+                  (eq? (vector-ref row 14)
+                       (vector-ref registration 1))
+                  ((vector-ref registration 1) row)
                   (eq? (vector-ref row 3)
                        (cpu4-checkpoint-factory-row
                          (vector-ref row 2) operation))
@@ -185,9 +209,12 @@
           row config recovery-cell)
   (let* ((operation 'cpu4-c4-p3-checked-file-handoff)
          (checked (cpu4-c4-p3-checked-file-row-live row operation))
+         (bound (vector-ref
+                  (cpu4-c4-p3-checked-file-registration row operation) 2))
          (model (vector-ref checked 5))
          (t1 (vector-ref checked 6)))
-    (if (or (vector-ref row 15) (vector-ref row 16))
+    (if (or (vector-ref row 15) (vector-ref row 16)
+            (vector-ref bound 0) (vector-ref bound 1))
         (cpu4-binding-fail 'invalid-state operation
                            "checked FILE ticket was already handed off"))
     (let* ((result
@@ -204,6 +231,7 @@
                       (cpu4-c4-p3-model-values
                         (vector-ref (vector-ref entry 5) 8) operation))))
           (cpu4-binding-fail-stop 134))
+      (vector-set! bound 0 generator)
       (vector-set! row 15 generator)
       generator)))
 
@@ -211,8 +239,13 @@
 ;;; generator. The issuer accepts only this rooted identity.
 (define (cpu4-c4-p3-checked-file-input-internal! row)
   (let* ((operation 'cpu4-c4-p3-checked-file-input)
+         (registration (cpu4-c4-p3-checked-file-registration row operation))
+         (bound (vector-ref registration 2))
          (generator (vector-ref row 15)))
-    (if (or (not generator) (vector-ref row 16))
+    (if (or (not (eq? (vector-ref row 14) (vector-ref registration 1)))
+            (not ((vector-ref registration 1) row))
+            (not generator) (not (eq? generator (vector-ref bound 0)))
+            (vector-ref row 16) (vector-ref bound 1))
         (cpu4-binding-fail 'invalid-state operation
                            "checked FILE generator is absent or input exists"))
     (let ((entry (g3c4-generator-entry-call-ready generator operation)))
@@ -229,6 +262,7 @@
               (g3c4-p2g2-owned-input-create
                 (t1-wave1-tokenizer-encode
                   (vector-ref row 6) (bytevector 3 197)))))
+        (vector-set! bound 1 input)
         (vector-set! row 16 input)
         input))))
 
@@ -236,12 +270,17 @@
   (if (not (or (eq? action 'admit) (eq? action 'verify)))
       (cpu4-binding-fail 'invalid-argument operation
                          "unknown checked FILE issuer action"))
-  (let ((row ticket))
+  (let* ((row ticket)
+         (registration
+           (cpu4-c4-p3-checked-file-registration row operation))
+         (bound (vector-ref registration 2)))
     (if (not (and (vector? row) (= (vector-length row) 20)
                   (eq? (vector-ref row 15) generator)
                   (eq? (vector-ref row 16) input)
-                  (procedure? (vector-ref row 14))
-                  ((vector-ref row 14) row)
+                  (eq? (vector-ref bound 0) generator)
+                  (eq? (vector-ref bound 1) input)
+                  (eq? (vector-ref row 14) (vector-ref registration 1))
+                  ((vector-ref registration 1) row)
                   (cpu4-c4-p3-bytes=?
                     (vector-ref row 8)
                     (cpu4-c4-p3-file-sha (vector-ref row 7) operation))))
@@ -260,11 +299,14 @@
                     (eq? (vector-ref input-entry 0) input)
                     (if (eq? action 'admit)
                         (and (not (vector-ref row 18))
+                             (not (vector-ref bound 2))
                              (eq? input-entry
                                   (g3c4-p2g2-prefix-preflight
                                     generator input)))
                         (and (eq? entry (vector-ref row 18))
+                             (eq? entry (vector-ref bound 2))
                              (eq? input-entry (vector-ref row 19))
+                             (eq? input-entry (vector-ref bound 3))
                              (vector? active-call)
                              (eq? (vector-ref entry 9) active-call)
                              (eq? (vector-ref model-entry 10) active-call)))
@@ -278,6 +320,8 @@
           (cpu4-binding-fail 'invalid-state operation
                              "checked FILE live model or T1 changed")))
       (if (eq? action 'admit)
-          (begin (vector-set! row 18 entry)
+          (begin (vector-set! bound 2 entry)
+                 (vector-set! bound 3 input-entry)
+                 (vector-set! row 18 entry)
                  (vector-set! row 19 input-entry)))
     (vector-ref row 17))))
