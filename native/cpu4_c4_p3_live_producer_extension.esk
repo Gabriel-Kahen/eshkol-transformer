@@ -1,0 +1,113 @@
+;;; Private B250 producer: one genuine G2 first frame, then an idle C4 P3
+;;; capture. Load after the accepted P2/G2 terminal and checked-file issuer;
+;;; the latter supplies exact-read and byte-equality helpers.
+;;; This is fixture authority only; the original public two-token path remains
+;;; the separate uninterrupted reference.
+(extern ptr cpu4-c4-p3-capture-create ptr
+        :real et_cpu4_private_c4_capture_create_v1)
+(extern i64 cpu4-c4-p3-capture-record ptr ptr i64
+        :real et_cpu4_private_c4_capture_copy_record_v1)
+(extern i64 cpu4-c4-p3-capture-values ptr ptr i64
+        :real et_cpu4_private_c4_capture_copy_parameters_v1)
+(extern i64 cpu4-c4-p3-capture-release ptr
+        :real et_cpu4_private_c4_capture_release_v1)
+(extern i64 cpu4-c4-p3-wire-encode ptr ptr i64 ptr ptr ptr i64
+        :real et_cpu4_private_c4_p3_wire_encode_v1)
+(extern i64 cpu4-c4-p3-write-new ptr ptr i64
+        :real et_d1_checked_write_new_v1)
+
+(define (cpu4-c4-p3-live-first! generator input)
+  (let ((operation 'cpu4-c4-p3-live-first!)
+        (selected (vector #f)))
+    (g3c4-with-p2g2-prefix-call operation generator input (call)
+      (let ((anchor (g3c4-p2g2-terminal-pending-reserve! call)))
+        (guard (caught
+                 (#t (guard (abort-failure (#t (exit 134)))
+                       (g3c4-p2g2-terminal-pending-abort! call anchor))
+                     (raise caught)))
+          (let ((first
+                  (g3c4-p2g2-terminal-first-sample-decode! call anchor)))
+            (if (not (= first 3))
+                (g3c4-fail 'invalid-state operation
+                           "trained B250 first G2 ID changed"))
+            (g3c4-p2g2-terminal-non-eos-prefix-commit! call anchor first)
+            (vector-set! selected 0 first)))
+        ;; The accepted abort closes the pending output and call. Its native
+        ;; predecessor committed G1 history, A2 cache and successor RNG.
+        (guard (abort-failure (#t (exit 134)))
+          (g3c4-p2g2-terminal-pending-abort! call anchor))))
+    (if (not (and (m3t-exact-i64? (vector-ref selected 0))
+                  (= (vector-ref selected 0) 3)))
+        (g3c4-fail 'invalid-state operation "first G2 step did not commit"))
+    3))
+
+(define (cpu4-c4-p3-live-file-sha path operation)
+  (if (not (t2-wave2-valid-file-path? path))
+      (cpu4-binding-fail 'invalid-argument operation "invalid B250 path"))
+  (let ((bytes (make-bytevector 25504 0)))
+    (if (not (= (t1-native-read-exact path bytes 25504 25504) 0))
+        (cpu4-binding-fail 'invalid-state operation "B250 exact read failed"))
+    (c1-sha256 bytes)))
+
+(define (cpu4-c4-p3-live-produce!
+          generator input b250-path expected-c2-sha wire-path values-path)
+  (let* ((operation 'cpu4-c4-p3-live-produce!)
+         (entry (g3c4-generator-entry-call-ready generator operation))
+         (native (vector-ref entry 3))
+         (before (cpu4-c4-p3-live-file-sha b250-path operation))
+         (fingerprint (string->utf8 g3c4-baseline-tokenizer-fingerprint)))
+    (if (not (and (bytevector? expected-c2-sha)
+                  (= (bytevector-length expected-c2-sha) 32)
+                  (cpu4-c4-p3-bytes=? before expected-c2-sha)
+                  (= (bytevector-length fingerprint) 96)
+                  (t2-wave2-valid-file-path? wire-path)
+                  (t2-wave2-valid-file-path? values-path)
+                  (not (string=? wire-path values-path))))
+        (cpu4-binding-fail 'invalid-argument operation
+                           "B250 identity or output paths changed"))
+    (cpu4-c4-p3-live-first! generator input)
+    (if (not (eq? entry (g3c4-generator-entry-call-ready
+                           generator operation)))
+        (cpu4-binding-fail 'invalid-state operation
+                           "same-registry generator changed after G1"))
+    (let ((capture (cpu4-c4-p3-capture-create native)))
+      (if (not capture)
+          (cpu4-binding-fail 'invalid-state operation
+                             "idle genuine P3 capture rejected"))
+      (guard (caught
+               (#t (if capture
+                       (if (not (= (cpu4-c4-p3-capture-release capture) 0))
+                           (exit 134)))
+                   (raise caught)))
+        (let ((record (make-bytevector 224 0))
+              (values (make-bytevector 4768 0))
+              (wire (make-bytevector 400 0)))
+          (g3c4-native-check
+            (cpu4-c4-p3-capture-record capture record 224) operation)
+          (g3c4-native-check
+            (cpu4-c4-p3-capture-values capture values 4768) operation)
+          (if (not (cpu4-c4-p3-bytes=?
+                     before (cpu4-c4-p3-live-file-sha b250-path operation)))
+              (cpu4-binding-fail 'invalid-state operation
+                                 "B250 changed across live capture"))
+          ;; The fixed wire encoder rejects a synthetic or wrong-profile P3
+          ;; record and hashes the captured 14-plane values into the wire.
+          (g3c4-native-check
+            (cpu4-c4-p3-wire-encode
+              record values 4768 before fingerprint wire 400) operation)
+          (g3c4-native-check
+            (cpu4-c4-p3-capture-release capture) operation)
+          (set! capture #f)
+          (if (not (= (cpu4-c4-p3-write-new values-path values 4768) 0))
+              (cpu4-binding-fail 'io operation "P3 values write failed"))
+          (if (not (= (cpu4-c4-p3-write-new wire-path wire 400) 0))
+              (cpu4-binding-fail 'io operation "P3 wire write failed"))
+          (if (not (and (cpu4-c4-p3-bytes=?
+                         values (cpu4-c4-p3-read-exact values-path 4768 operation))
+                        (cpu4-c4-p3-bytes=?
+                         wire (cpu4-c4-p3-read-exact wire-path 400 operation))
+                        (cpu4-c4-p3-bytes=?
+                         before (cpu4-c4-p3-live-file-sha b250-path operation))))
+              (cpu4-binding-fail 'invalid-state operation
+                                 "P3 persisted bytes or B250 identity changed"))
+          (vector before wire values))))))
