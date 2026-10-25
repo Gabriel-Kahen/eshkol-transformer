@@ -313,10 +313,15 @@
                     (eq? model-entry
                          (g3c4-model-entry-live
                            (vector-ref row 5) operation active-call))
-                    (cpu4-c4-p3-bytes=?
-                      (vector-ref row 10)
-                      (cpu4-c4-p3-model-values
-                        (vector-ref model-entry 8) operation))))
+                    ;; The active native call owns all model pins. Admission
+                    ;; copied every plane while idle; verify checks the same
+                    ;; model entry under that call without a second I2 borrow.
+                    (if (eq? action 'admit)
+                        (cpu4-c4-p3-bytes=?
+                          (vector-ref row 10)
+                          (cpu4-c4-p3-model-values
+                            (vector-ref model-entry 8) operation))
+                        #t)))
           (cpu4-binding-fail 'invalid-state operation
                              "checked FILE live model or T1 changed"))
       (if (eq? action 'admit)

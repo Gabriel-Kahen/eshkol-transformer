@@ -2244,7 +2244,10 @@ ticket, exact B250 C2 SHA, `C4GRCV1` decode, and 4,768-byte comparison against
 the factory's live fourteen model planes before the actual public G2 handoff.
 It binds that handoff's generator and a same-registry T1 encoding of the
 two-byte prompt to one opaque terminal ticket. Its admit/verify seam rechecks
-the saved file and model before native P3 reconstruction. Its 22-check
+the saved file at both points and compares all 4,768 model bytes while idle at
+admission. During the native call, which pins those tensors, verification
+checks the exact admitted model entry and active call links without borrowing
+the tensors again. Its 22-check
 adversarial host test covers mutable ticket and identity substitutions;
 independent source review found no remaining issuer authority bypass. Compiled
 aggregate and fresh-process acceptance remain **NOT RUN**.
