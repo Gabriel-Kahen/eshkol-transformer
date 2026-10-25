@@ -2638,8 +2638,10 @@ A source-only P1 candidate handshake is staged on
 keeps its feature-off native linkage; a feature-local extension installs the
 existing guarded native candidate begin and read-only roster preflight. The
 candidate path roots an exact enrollment cell before native begin and retains
-the construction identity, root and scoped shell roster through ordinary
-seal. The focused feature-on/ordinary test runner has not passed a supported
+the construction identity, root and scoped shell roster through ordinary or
+prepared seal. Both paths check the mutable cell before native commit; the
+prepared path keeps its roster private until commit and aborts on precommit
+tampering. The focused feature-on/ordinary test runner has not passed a supported
 compiled Eshkol gate. I2/M3T preseal enrollment, graph revocation, full
 candidate cleanup, C2 restore and replay remain unimplemented.
 

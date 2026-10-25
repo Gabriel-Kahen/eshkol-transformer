@@ -4419,6 +4419,22 @@
                (eq? (vector-ref a 3) (vector-ref b 3))
                (equal? (vector-ref a 4) (vector-ref b 4))
                (rows (cdr left) (cdr right))))))))
+(define (construction-candidate-preseal! operation record identity staged?)
+  (let ((cell (vector-ref record 5)))
+    (if cell
+        (begin
+          (if (or (not (vector? cell)) (not (= (vector-length cell) 4))
+                  (not (eq? (vector-ref cell 0) 'open))
+                  (not (eq? (vector-ref cell 1) identity))
+                  (not (eq? (vector-ref cell 2) (vector-ref record 3))))
+              (fail 'invalid-state operation "candidate enrollment changed" '()))
+          (if staged?
+              (if (or (vector-ref cell 3) (not (pair? (vector-ref record 6))))
+                  (fail 'invalid-state operation
+                        "candidate shell roster changed" '()))
+              (if (or (vector-ref cell 3) (vector-ref record 6))
+                  (fail 'invalid-state operation
+                        "candidate shell roster changed" '())))))))
 (define (construction-seal! identity)
   (let* ((operation 'module-construction-seal-internal!)
          (record (construction-open operation identity))
@@ -4432,6 +4448,7 @@
          (candidate-roster '()))
     (if (or (not schedule) (not (construction-schedule-equal? actual schedule)))
         (fail 'invalid-state operation "construction changed after parameter schedule" '()))
+    (construction-candidate-preseal! operation record identity #f)
     (let scan ((remaining (shell-registry-current)))
       (if (null? remaining) #t
           (let ((entry (car remaining)))
@@ -4479,10 +4496,13 @@
          (finalizers (finalization-plan operation root))
          (updates
            (canonical-path-updates
-             (sort-entries (flatten-parameters root '())))))
+             (sort-entries (flatten-parameters root '()))))
+         (candidate-cell (vector-ref record 5))
+         (candidate-roster '()))
     (if (or (not schedule) (not (construction-schedule-equal? actual schedule)))
         (fail 'invalid-state operation
               "construction changed after parameter schedule" '()))
+    (construction-candidate-preseal! operation record identity #f)
     (let scan ((remaining (shell-registry-current)))
       (if (null? remaining) #t
           (let ((entry (car remaining)))
@@ -4503,6 +4523,11 @@
                                   (else (handles (cdr rows)))))))
                 (fail 'invalid-state operation
                       "construction has unattached handles" '()))
+            (if (and candidate-cell (= (vector-length entry) 4)
+                     (or (eq? (vector-ref entry 1) 'module)
+                         (eq? (vector-ref entry 1) 'handle))
+                     (eq? (vector-ref entry 3) identity))
+                (set! candidate-roster (cons entry candidate-roster)))
             (scan (cdr remaining)))))
     ;; Promotion, traversal, mode writes, and verification all precede native
     ;; PREPARED. Reread every retained value through the rooted canonical graph.
@@ -4516,9 +4541,13 @@
       (finalize-modules! canonical-finalizers)
       (set-mode-modules! canonical-finalizers 'eval)
       (verify-finalized-mode! operation canonical-finalizers 'eval)
+      ;; Keep the roster private while PREPARED can still be aborted. The
+      ;; native commit tail publishes this already rooted list by assignment.
+      (if candidate-cell
+          (vector-set! canonical-record 6 (list-reverse candidate-roster)))
       (native-check operation
                     (p1-native-construction-prepare native-context identity))
-      (vector-set! canonical-record 1 'prepared)
+      (vector-set! (construction-record operation identity) 1 'prepared)
       canonical-root-shell)))
 
 (define (construction-seal-prepared! identity)
@@ -4528,7 +4557,12 @@
               "construction operation is not reentrant" '()))
     ;; Complete every recoverable preflight before entering the guard-free tail.
     (let* ((record (construction-prepared operation identity))
-           (root-shell (vector-ref record 3)))
+           (root-shell (vector-ref record 3))
+           (candidate-cell (vector-ref record 5)))
+      (if candidate-cell
+          (guard (caught
+                   (#t (construction-abort! identity) (raise caught)))
+            (construction-candidate-preseal! operation record identity #t)))
       (set! construction-busy? #t)
       (let ((status
               (p1-native-construction-commit-prepared
@@ -4537,6 +4571,10 @@
         ;; the native commit boundary as a recoverable transformer error.
         (if (not (= status 0)) (exit 134) #t)
         (vector-set! record 1 'sealed)
+        (if candidate-cell
+            (begin
+              (vector-set! candidate-cell 3 (vector-ref record 6))
+              (vector-set! candidate-cell 0 'sealed)))
         (vector-set! record 4 #f)
         (vector-set! construction-registry-root 1 #f)
         (set! construction-busy? #f)
