@@ -1,0 +1,95 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+(load "g3c4_t1_output_decode_extension.esk")
+(load "g3c4_output_envelope_extension.esk")
+(load "g3c4_p2g2_ownership_extension.esk")
+(load "g3c4_p2g2_protected_scope_extension.esk")
+(load "g3c4_p2g2_t1_prefix_coordinator_extension.esk")
+(load "g3c4_p2g2_terminal_pending_anchor_extension.esk")
+(load "g3c4_p2g2_terminal_prefix_preflight_extension.esk")
+
+(define checks 0)
+(define (check label value)
+  (if value (set! checks (+ checks 1))
+      (begin (display "P2/G2 committed preflight FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught)
+                           'invalid-state))))
+      (thunk) #f)))
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define model (g3c4-model-create-seeded-internal 1729))
+(define input
+  (g3c4-p2g2-owned-input-create
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255))))
+(define other-input
+  (g3c4-p2g2-owned-input-create
+    (t1-wave1-tokenizer-encode tokenizer (bytevector 7 11))))
+(define generator
+  (g3c4-generator-create-internal
+    model tokenizer
+    (list ':profile 'diagnostic-c4 ':sampling 'greedy
+          ':temperature-bits 1065353216 ':top-k 256
+          ':top-p-bits 1065353216 ':max-new-tokens 2
+          ':eos #f ':seed 7)))
+
+(g3c4-with-p2g2-prefix-call
+  'terminal-prefix-preflight generator input (call)
+  (let* ((pending (g3c4-p2g2-terminal-pending-prepare call))
+         (record (vector-ref pending 1))
+         (prefix (g3c4-p2g2-prefix-anchor-for call))
+         (input-entry (vector-ref prefix 2))
+         (original-native-input (vector-ref input-entry 3)))
+    (reject "before-prefix is not terminal-ready"
+      (lambda ()
+        (g3c4-p2g2-terminal-prefix-committed-check
+          call input 'test)))
+    (g3c4-p2g2-prefix-commit! call input)
+    (check "original committed input and pending output admitted"
+      (g3c4-p2g2-terminal-prefix-committed-check call input 'test))
+    (reject "foreign original input rejected"
+      (lambda ()
+        (g3c4-p2g2-terminal-prefix-committed-check
+          call other-input 'test)))
+    (let ((stack (vector-ref g3c4-p2g2-prefix-input-anchors 0)))
+      (vector-set! g3c4-p2g2-prefix-input-anchors 0
+                   (cons 'forged (cdr stack)))
+      (reject "malformed top input anchor rejected"
+        (lambda ()
+          (g3c4-p2g2-terminal-prefix-committed-check
+            call input 'test)))
+      (vector-set! g3c4-p2g2-prefix-input-anchors 0 stack))
+    (vector-set! input-entry 3 #f)
+    (reject "changed live input binding rejected"
+      (lambda ()
+        (g3c4-p2g2-terminal-prefix-committed-check
+          call input 'test)))
+    (vector-set! input-entry 3 original-native-input)
+    (vector-set! prefix 1 other-input)
+    (reject "changed original input anchor rejected"
+      (lambda ()
+        (g3c4-p2g2-terminal-prefix-committed-check
+          call input 'test)))
+    (vector-set! prefix 1 input)
+    (vector-set! (vector-ref record 14) 3 'p2g2-protected)
+    (reject "ledger phase drift rejected"
+      (lambda ()
+        (g3c4-p2g2-terminal-prefix-committed-check
+          call input 'test)))
+    (vector-set! (vector-ref record 14) 3 'p2g2-prefix-committed)
+    (check "repair preserves original committed admission"
+      (g3c4-p2g2-terminal-prefix-committed-check call input 'test))
+    (check "authenticated abort" (g3c4-p2g2-terminal-pending-abort! call))))
+
+(check "generator reusable" (g3c4-generator-close-internal! generator))
+(display "P2/G2 committed preflight PASS: checks=")
+(display checks)
+(newline)

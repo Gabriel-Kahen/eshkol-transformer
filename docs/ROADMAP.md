@@ -3503,6 +3503,16 @@ publication, public G2 and continuation remain pending.
   are included; compiled validation, native terminal close, detached clone,
   public G2, and continuation remain pending.
 
+- **Private P2/G2 committed-prefix identity preflight candidate:**
+  [source-only bounded leaf](g3/G3_C4_P2_G2_TERMINAL_PREFIX_PREFLIGHT_LEAF.md)
+  checks the exact original P2 input and pending output through the
+  post-prefix phase without native pointer conversion. Its source mutation
+  checks pass; its Eshkol fixture is **NOT RUN**. It does not authenticate
+  mutable sampled-ID bytes or bytevector backing extents. Same-call second
+  sampling, EOS close, terminal publication, snapshot/clone and continuation
+  remain pending E3 trained-G2 sanitizer classification and a reviewed
+  compiler/allocator-bound extent proof.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
