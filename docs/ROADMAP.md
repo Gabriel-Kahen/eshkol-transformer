@@ -2426,6 +2426,12 @@ empty. Both producer authorities, source hashes, package closure and 17
 exports per mode checked. This is fresh-process data-only FILE reader evidence
 for the same trained C2/T1 pair; model restoration, multi-token/EOS generation
 and replay remain separate.
+The sealed independent source, test and result review is
+`g3r-reader-category-independent-review-20261025/SHA256SUMS-REVIEW`
+(SHA-256 `67400a31ca6cf91ddf65700c52ccb02e0e7c50f3198d9cb7821d927ee07d2719`).
+Trained same-registry replay attempt2 passed normal/repeat but stopped before
+sanitizer runtime on the package's ASan COMMON-symbol check; its outer gate
+remains nonaccepting pending the focused recipe successor.
 
 The earlier G3-R C2 SAVE continuation on `0581426b` sealed a failed runtime
 receipt at `g3-save-0581426b-cont-attempt1/SHA256SUMS-RUN`: its compiled
