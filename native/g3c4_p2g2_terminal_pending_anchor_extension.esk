@@ -1,0 +1,158 @@
+;;; Private pre-sampling P2/G2 terminal allocation anchor. This leaf only
+;;; prepares, rechecks and aborts a pending output; it cannot commit a token.
+;;; Load after g3c4_p2g2_protected_scope_extension.esk.
+
+(define g3c4-p2g2-terminal-pending-records (vector '()))
+(define g3c4-p2g2-terminal-pending-anchors (vector '()))
+
+;;; Slots: call, protected record/anchor, output/its shell/native, auxiliary,
+;;; raw[2]/staging[16], first raw[1]/staging[8], second raw[1]/staging[8],
+;;; text[1]/text[2], allocated header extents, state.
+(define (g3c4-p2g2-terminal-pending-for call)
+  (let loop ((remaining (vector-ref g3c4-p2g2-terminal-pending-records 0)))
+    (cond ((null? remaining) #f)
+          ((eq? (vector-ref (car remaining) 0) call) (car remaining))
+          (else (loop (cdr remaining))))))
+
+(define (g3c4-p2g2-terminal-pending-anchor-for call)
+  (let loop ((remaining (vector-ref g3c4-p2g2-terminal-pending-anchors 0)))
+    (cond ((null? remaining) #f)
+          ((eq? (vector-ref (car remaining) 0) call) (car remaining))
+          (else (loop (cdr remaining))))))
+
+(define (g3c4-p2g2-terminal-pending-check call operation)
+  (let ((pending (g3c4-p2g2-terminal-pending-for call))
+        (anchor (g3c4-p2g2-terminal-pending-anchor-for call))
+        (record (g3c4-p2g2-protected-check call operation)))
+    (if (not (and pending (vector? pending) (= (vector-length pending) 17)
+                  anchor (vector? anchor) (= (vector-length anchor) 17)
+                  (pair? (vector-ref g3c4-p2g2-terminal-pending-records 0))
+                  (eq? (car (vector-ref
+                              g3c4-p2g2-terminal-pending-records 0)) pending)
+                  (pair? (vector-ref g3c4-p2g2-terminal-pending-anchors 0))
+                  (eq? (car (vector-ref
+                              g3c4-p2g2-terminal-pending-anchors 0)) anchor)
+                  (let original ((i 0))
+                    (if (= i 17) #t
+                        (and (eq? (vector-ref pending i)
+                                  (vector-ref anchor i))
+                             (original (+ i 1)))))
+                  (eq? (vector-ref anchor 0) call)
+                  (eq? (vector-ref anchor 1) record)
+                  (eq? (vector-ref anchor 2)
+                       (g3c4-p2g2-anchor-for call))
+                  (eq? (vector-ref anchor 3) (vector-ref record 6))
+                  (vector? (vector-ref anchor 3))
+                  (= (vector-length (vector-ref anchor 3)) 12)
+                  (eq? (vector-ref anchor 4)
+                       (vector-ref (vector-ref anchor 3) 0))
+                  (eq? (vector-ref anchor 5) (vector-ref record 7))
+                  (eq? (vector-ref anchor 6) (vector-ref record 8))
+                  (eq? (vector-ref anchor 7) (vector-ref record 9))
+                  (eq? (vector-ref anchor 8) (vector-ref record 10))
+                  (eq? (vector-ref anchor 9) (vector-ref record 11))
+                  (eq? (vector-ref anchor 10) (vector-ref record 12))
+                  (eq? (vector-ref anchor 16) 'pending)
+                  (bytevector? (vector-ref anchor 11))
+                  (= (bytevector-length (vector-ref anchor 11)) 1)
+                  (bytevector? (vector-ref anchor 12))
+                  (= (bytevector-length (vector-ref anchor 12)) 8)
+                  (bytevector? (vector-ref anchor 13))
+                  (= (bytevector-length (vector-ref anchor 13)) 1)
+                  (bytevector? (vector-ref anchor 14))
+                  (= (bytevector-length (vector-ref anchor 14)) 2)
+                  (vector? (vector-ref anchor 15))
+                  (= (vector-length (vector-ref anchor 15)) 8)
+                  (= (vector-ref (vector-ref anchor 15) 0) 10)
+                  (= (vector-ref (vector-ref anchor 15) 1) 24)
+                  (= (vector-ref (vector-ref anchor 15) 2) 9)
+                  (= (vector-ref (vector-ref anchor 15) 3) 16)
+                  (= (vector-ref (vector-ref anchor 15) 4) 9)
+                  (= (vector-ref (vector-ref anchor 15) 5) 16)
+                  (= (vector-ref (vector-ref anchor 15) 6) 9)
+                  (= (vector-ref (vector-ref anchor 15) 7) 10)
+                  (let distinct ((i 7))
+                    (if (= i 15) #t
+                        (let after ((j (+ i 1)))
+                          (if (= j 15)
+                              (distinct (+ i 1))
+                              (and (not (eq? (vector-ref anchor i)
+                                             (vector-ref anchor j)))
+                                   (after (+ j 1)))))))))
+        (g3c4-fail 'invalid-state operation
+                   "P2/G2 terminal pending allocations changed"))
+    pending))
+
+(define (g3c4-p2g2-terminal-pending-prepare call)
+  (let* ((operation 'g3c4-p2g2-terminal-pending-prepare)
+         (record (g3c4-p2g2-protected-check call operation)))
+    (if (g3c4-p2g2-terminal-pending-for call)
+        (g3c4-fail 'invalid-state operation
+                   "P2/G2 terminal anchor already exists"))
+    (let* ((output (g3c4-p2g2-protected-reserve call))
+           (second-raw (make-bytevector 1 0))
+           (second-staging (make-bytevector 8 0))
+           (text-one (make-bytevector 1 0))
+           (text-two (make-bytevector 2 0))
+           (extents (vector 10 24 9 16 9 16 9 10))
+           (anchor (vector call record (g3c4-p2g2-anchor-for call)
+                           output (vector-ref output 0) (vector-ref output 3)
+                           (vector-ref record 8) (vector-ref record 9)
+                           (vector-ref record 10) (vector-ref record 11)
+                           (vector-ref record 12) second-raw second-staging
+                           text-one text-two extents 'pending))
+           (pending (vector call record (g3c4-p2g2-anchor-for call)
+                            output (vector-ref output 0) (vector-ref output 3)
+                            (vector-ref record 8) (vector-ref record 9)
+                            (vector-ref record 10) (vector-ref record 11)
+                            (vector-ref record 12) second-raw second-staging
+                            text-one text-two extents 'pending))
+           (record-node
+             (cons pending (vector-ref g3c4-p2g2-terminal-pending-records 0)))
+           (anchor-node
+             (cons anchor (vector-ref g3c4-p2g2-terminal-pending-anchors 0))))
+      (g3c4-p2g2-protected-check call operation)
+      (vector-set! g3c4-p2g2-terminal-pending-records 0
+                   record-node)
+      (vector-set! g3c4-p2g2-terminal-pending-anchors 0
+                   anchor-node)
+      pending)))
+
+;;; All fallible checks precede native abort. If a genuine lease rejects
+;;; abort, the entire pending anchor and its original bytes remain live.
+(define (g3c4-p2g2-terminal-pending-abort! call)
+  (let* ((operation 'g3c4-p2g2-terminal-pending-abort!)
+         (pending (g3c4-p2g2-terminal-pending-check call operation))
+         (anchor (g3c4-p2g2-terminal-pending-anchor-for call)))
+    (g3c4-p2g2-protected-abort! call)
+    (g3c4-p2g2-zero-bytes! (vector-ref anchor 11) 1)
+    (g3c4-p2g2-zero-bytes! (vector-ref anchor 12) 8)
+    (g3c4-p2g2-zero-bytes! (vector-ref anchor 13) 1)
+    (g3c4-p2g2-zero-bytes! (vector-ref anchor 14) 2)
+    (vector-set! anchor 16 'dead)
+    (vector-set! anchor 0 #f)
+    (vector-set! pending 16 'dead)
+    (vector-set! pending 0 #f)
+    (vector-set! g3c4-p2g2-terminal-pending-records 0
+                 (cdr (vector-ref g3c4-p2g2-terminal-pending-records 0)))
+    (vector-set! g3c4-p2g2-terminal-pending-anchors 0
+                 (cdr (vector-ref g3c4-p2g2-terminal-pending-anchors 0)))
+    #t))
+
+;;; Abort-only diagnostic wrapper. A future successful terminal coordinator
+;;; needs its own scope and its own audited no-failure commit tail.
+(define-syntax g3c4-with-p2g2-terminal-pending-probe
+  (syntax-rules ()
+    ((_ operation generator (call anchor) body ...)
+     (g3c4-with-p2g2-protected-call operation generator (call)
+       (let ((anchor (g3c4-p2g2-terminal-pending-prepare call)))
+         (guard (caught
+                  (#t
+                    (if (eq? (vector-ref anchor 16) 'pending)
+                        (guard (abort-failure (#t (exit 134)))
+                          (g3c4-p2g2-terminal-pending-abort! call)))
+                    (raise caught)))
+           body ...
+           (if (not (eq? (vector-ref anchor 16) 'dead))
+               (g3c4-fail 'invalid-state operation
+                          "P2/G2 terminal pending probe must abort"))))))))

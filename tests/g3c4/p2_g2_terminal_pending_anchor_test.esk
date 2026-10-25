@@ -1,0 +1,129 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+(load "g3c4_t1_output_decode_extension.esk")
+(load "g3c4_output_envelope_extension.esk")
+(load "g3c4_p2g2_ownership_extension.esk")
+(load "g3c4_p2g2_protected_scope_extension.esk")
+(load "g3c4_p2g2_terminal_pending_anchor_extension.esk")
+
+(extern i64 pending-ids-lease ptr i64
+        :real et_g3c4_p2g2_protected_test_ids_lease_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3-C4 P2/G2 terminal anchor FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught)
+                           'invalid-state))))
+      (thunk) #f)))
+(define (config seed)
+  (list ':profile 'diagnostic-c4 ':sampling 'greedy
+        ':temperature-bits 1065353216 ':top-k 256
+        ':top-p-bits 1065353216 ':max-new-tokens 2
+        ':eos #f ':seed seed))
+
+(define tokenizer
+  (t1-private-register-core
+    (t1-tokenizer-core-create 'raw '() '() '())))
+(define model (g3c4-model-create-seeded-internal 1729))
+
+(define (one-case seed fault)
+  (let* ((generator
+           (g3c4-generator-create-internal model tokenizer (config seed)))
+         (saved #f)
+         (second #f)
+         (text-one #f)
+         (text-two #f))
+    (if fault
+        (reject "exception wrapper aborts and retains no pending anchor"
+          (lambda ()
+            (g3c4-with-p2g2-terminal-pending-probe
+              'terminal-anchor-fault generator (call pending)
+              (set! saved pending)
+              (set! second (vector-ref pending 11))
+              (set! text-one (vector-ref pending 13))
+              (set! text-two (vector-ref pending 14))
+              (g3c4-fail 'invalid-state 'terminal-anchor-fault
+                         "injected pre-sampling fault"))))
+        (g3c4-with-p2g2-terminal-pending-probe
+          'terminal-anchor-test generator (call pending)
+          (set! saved pending)
+          (set! second (vector-ref pending 11))
+          (set! text-one (vector-ref pending 13))
+          (set! text-two (vector-ref pending 14))
+          (check "pending original output and carrier shape"
+            (and (eq? (vector-ref pending 3)
+                      (vector-ref (vector-ref pending 1) 6))
+                 (= (bytevector-length second) 1)
+                 (= (bytevector-length (vector-ref pending 12)) 8)
+                 (= (bytevector-length text-one) 1)
+                 (= (bytevector-length text-two) 2)
+                 (not (eq? second text-one))
+                 (eq? (g3c4-p2g2-terminal-pending-check call 'test)
+                      pending)))
+          (reject "second prepare cannot reserve another output"
+            (lambda () (g3c4-p2g2-terminal-pending-prepare call)))
+          (reject "foreign call rejected"
+            (lambda ()
+              (g3c4-p2g2-terminal-pending-check
+                (vector 'foreign) 'test)))
+          (let ((replacement (make-bytevector 1 0)))
+            (vector-set! pending 11 replacement)
+            (reject "equal-length second raw replacement rejected"
+              (lambda () (g3c4-p2g2-terminal-pending-check call 'test)))
+            (vector-set! pending 11 second))
+          (let ((replacement (make-bytevector 2 0)))
+            (vector-set! pending 14 replacement)
+            (reject "equal-length logical text replacement rejected"
+              (lambda () (g3c4-p2g2-terminal-pending-check call 'test)))
+            (vector-set! pending 14 text-two))
+          (let ((extents (vector-ref pending 15)))
+            (vector-set! extents 7 9)
+            (reject "changed allocated extent rejected"
+              (lambda () (g3c4-p2g2-terminal-pending-check call 'test)))
+            (vector-set! extents 7 10))
+          (let ((output (vector-ref pending 3))
+                (replacement (vector 'forged-output)))
+            (vector-set! output 0 replacement)
+            (reject "output shell drift rejected"
+              (lambda () (g3c4-p2g2-terminal-pending-check call 'test)))
+            (vector-set! output 0 (vector-ref pending 4)))
+          (bytevector-u8-set! second 0 93)
+          (bytevector-u8-set! text-one 0 94)
+          (bytevector-u8-set! text-two 0 95)
+          (check "open genuine pending I1 lease"
+            (= (pending-ids-lease (vector-ref pending 5) 1) 0))
+          (reject "held lease keeps terminal anchor pending"
+            (lambda () (g3c4-p2g2-terminal-pending-abort! call)))
+          (check "lease rejection preserves original text and owner"
+            (and (eq? (vector-ref pending 16) 'pending)
+                 (= (bytevector-u8-ref second 0) 93)
+                 (= (bytevector-u8-ref text-one 0) 94)
+                 (= (bytevector-u8-ref text-two 0) 95)
+                 (eq? (g3c4-p2g2-terminal-pending-for call) pending)))
+          (check "release genuine pending I1 lease"
+            (= (pending-ids-lease (vector-ref pending 5) 0) 0))
+          (check "authenticated pending abort"
+            (g3c4-p2g2-terminal-pending-abort! call))))
+    (check "pending anchor scrubbed and removed after abort"
+      (and (eq? (vector-ref saved 16) 'dead)
+           (= (bytevector-u8-ref second 0) 0)
+           (= (bytevector-u8-ref text-one 0) 0)
+           (= (bytevector-u8-ref text-two 0) 0)
+           (null? (vector-ref g3c4-p2g2-terminal-pending-records 0))
+           (null? (vector-ref g3c4-p2g2-terminal-pending-anchors 0))))
+    (check "generator reusable" (g3c4-generator-close-internal! generator))))
+
+(one-case 7 #f)
+(one-case 11 #t)
+(display "G3-C4 P2/G2 terminal anchor PASS: checks=")
+(display checks)
+(display " pending-only=1")
+(newline)

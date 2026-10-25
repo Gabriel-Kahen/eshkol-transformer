@@ -3495,6 +3495,13 @@ publication, public G2 and continuation remain pending.
   are prerequisites; Eshkol implementation and compiled same-call proof remain
   pending. No public G2 or continuation acceptance is claimed.
 
+- **Private P2/G2 terminal pending anchor candidate:**
+  [bounded allocation/abort leaf](g3/G3_C4_P2_G2_TERMINAL_PENDING_ANCHOR_LEAF.md)
+  binds one original pending output to distinct second raw/staging and logical
+  text carriers before sampling. Source checker and Eshkol fixture are included;
+  compiled validation, native terminal close, detached clone, public G2, and
+  continuation remain pending.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
