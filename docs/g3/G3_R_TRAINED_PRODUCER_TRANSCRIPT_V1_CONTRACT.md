@@ -55,8 +55,10 @@ generator: 256 last-logit binary32 bits after its no-draw P1; 4 key and 4
 value binary32 cache words at length one; 4 RNG signed 64-bit words; logical
 length and cache length (both one); the emitted ID from
 `g3r-private-replayed-p1-g1!`; 8 key and 8 value binary32 cache words after
-that G1; 4 successor RNG signed 64-bit words; logical length and cache length
-(both two). The 4 replayed P1 RNG words must equal the
+that G1; 4 successor RNG signed 64-bit words; G1 output logical length one
+and cache length two. These last two fields are the accepted
+`et_g3t_test_output_word_v1` fields 1 and 2, respectively, on the replayed
+output owner. The 4 replayed P1 RNG words must equal the
 authenticated companion state: P1 consumes no draw. The ID is 0–255 and the
 companion's policy is exactly budget one. No text, pointer, registry identity,
 object header, or executable term is present.

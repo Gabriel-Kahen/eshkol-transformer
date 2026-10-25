@@ -23,7 +23,7 @@ must not replace the exact saved image.
 The accepted `01a584c6` same-registry producer compares its captured trained
 owner to its decoded no-draw P1 replay: all 256 last-logit bits, first A2 K/V
 row and four RNG words, then genuine reference/replayed G1 ID, logical and
-cache lengths, both K/V rows and successor RNG. Its sealed stdout contains
+cache lengths (one and two), both K/V rows and successor RNG. Its sealed stdout contains
 only a pass marker. **It contains no reusable bit or G1 trace transcript.**
 A separate reviewed, data-only oracle fixture must capture the fixed ordered
 14 live parameter payloads from that trained model and both no-draw P1 and
@@ -74,8 +74,9 @@ accepted typed RNG owner. Under the exact recorded budget-one policy and
 raw-V256 prompt, it executes genuine no-draw `g3m-prefill-p1!`, checks the
 four RNG words unchanged, then executes one admitted G1 path. The accepted
 `g3r_replayed_p1_g1_extension.esk` and its test-only native getters show the
-source shape for 256 last-logit bits, A2 K/V rows, emitted ID, logical/cache
-lengths and successor RNG; they need an exact reviewed union with the reader
+source shape for 256 last-logit bits, A2 K/V rows, emitted ID, G1 output
+logical length one/cache length two and successor RNG; they need an exact
+reviewed union with the reader
 root, not a second CLI3/T1/G3 registry. The fresh trace is compared element
 for element against the sealed producer transcript. Include a one-bit logit,
 K/V, output-ID and RNG mutation control, plus full-context no-draw rejection
