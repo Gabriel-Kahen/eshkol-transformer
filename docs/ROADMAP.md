@@ -2252,6 +2252,11 @@ including idle cached generators for which `owner->active` is empty. Local
 normal/repeat/ASan+UBSan and feature-off symbol tests passed 207 checks per
 runtime mode. This is local native evidence only: no exact-source compiled
 gate, context-create interlock, workspace, C4 lease or trainer admission.
+The [native context-entry edge proof](g3/G3_R_C4_WORKSPACE_CONTEXT_EDGE_INTERLOCK_PROOF.md)
+extends that local fixture to 221 checks: base-context, seeded-generator and
+typed-RNG-generator creation all reject a synthetic non-null owner edge before
+allocation. It establishes only existing entry-path behavior; no workspace
+edge publication, serialized recheck, or pinned compiled gate is admitted.
 
 A [source-only C4 parameter lease status](g3/G3_R_C4_OWNER_PARAMETER_LEASE_STATUS_LEAF.md)
 adds a private read-only sealed-owner native status for the current active call

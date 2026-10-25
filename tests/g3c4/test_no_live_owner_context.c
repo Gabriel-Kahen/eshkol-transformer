@@ -1,6 +1,7 @@
 /* Private status-only C4 owner/context exclusion fixture. */
 #define ET_F32_TENSOR_TESTING 1
 #define ET_M3_CALL_TESTING 1
+#define ET_G3C4_CONTEXT_TESTING 1
 #define ET_G3C4_NATIVE_OWNER_PRIVATE 1
 #define ET_G3C4_NATIVE_PINS_PRIVATE 1
 #define ET_G3C4_CONTEXT_PRIVATE 1
@@ -122,7 +123,31 @@ int main(void) {
 
   first->active = &foreign;
   status(first, ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  et_g3c4_rng_internal *edge_rng =
+      (et_g3c4_rng_internal *)et_g3c4_private_rng_seed_v1(11);
+  CHECK(edge_rng != NULL);
+  et_g3c4_model_owner_internal edge_before = *first;
+  et_g3c4_transport_header_internal *edge_registry =
+      et_g3c4_transport_registry;
+  size_t edge_allocations = et_g3c4_context_successful_allocations;
+  CHECK(et_g3c4_private_context_create_v1(first) == NULL);
+  CHECK(et_g3c4_private_last_error_category_v1() == ET_G3C4_INVALID_STATE);
+  CHECK(et_g3c4_private_last_error_code_v1() == ET_G3C4_CODE_LIFECYCLE);
+  CHECK(et_g3c4_private_generator_seed_v1(
+      first, 12, 0, INT64_C(0x3f800000), 256,
+      INT64_C(0x3f800000), 1, -1) == NULL);
+  CHECK(et_g3c4_private_last_error_category_v1() == ET_G3C4_INVALID_STATE);
+  CHECK(et_g3c4_private_last_error_code_v1() == ET_G3C4_CODE_LIFECYCLE);
+  CHECK(et_g3c4_private_generator_rng_v1(
+      first, edge_rng, 0, INT64_C(0x3f800000), 256,
+      INT64_C(0x3f800000), 1, -1) == NULL);
+  CHECK(et_g3c4_private_last_error_category_v1() == ET_G3C4_INVALID_STATE);
+  CHECK(et_g3c4_private_last_error_code_v1() == ET_G3C4_CODE_LIFECYCLE);
+  CHECK(!memcmp(first, &edge_before, sizeof(edge_before)));
+  CHECK(et_g3c4_transport_registry == edge_registry);
+  CHECK(et_g3c4_context_successful_allocations == edge_allocations);
   first->active = NULL;
+  OK(et_g3c4_private_rng_release_v1(edge_rng));
   CHECK(!memcmp(first, &first_before, sizeof(first_before)));
   CHECK(!memcmp(second, &second_before, sizeof(second_before)));
   printf("G3-R C4 native context exclusion PASS checks=%d\n", checks);
