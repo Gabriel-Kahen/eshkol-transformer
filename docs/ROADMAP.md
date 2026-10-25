@@ -1122,8 +1122,11 @@ The exact-`44c0418d` [N4 private-reachability audit](e3/E3_N4_PRIVATE_REACHABILI
 finds that admitted D1/D2 cannot emit mask `01` or a masked invalid target;
 E3 checks both target bounds at stage 6. Those cases remain direct-provider
 evidence unless a separate D2 injection is reviewed. Genuine C1/M3
-subnormal, signed-zero, masked-nonfinite and timed fenv witnesses are still
-unproven; private N4 remains open.
+subnormal and masked-nonfinite compiled witnesses remain unproven. A
+reviewed source/host audit at `03b698a7` finds authentic zero K1 logits
+are `+0` under supported controls and unsupported external fenv controls first reject at
+stage-7 role 0; this is structural/provider-only, with sticky-flag
+preservation still open. Private N4 remains open.
 
 The exact `44c0418d` complete-call retention attempt 2 is sealed and
 independently classified NONACCEPTING. Its normal and sanitized packages and
