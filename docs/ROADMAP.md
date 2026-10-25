@@ -2220,16 +2220,27 @@ The sealed independent result review is at
 This leaf is not integrated with trainable M3T and does not admit trained C4,
 C2 SAVE/LOAD, or generation.
 
-The next isolated [private C4 no-bias linear/projection VJP leaf]
-(g3/G3_R_C4_LINEAR_VJP_LEAF.md) is source-staged for the genuine C4 forward
+The isolated [private C4 no-bias linear/projection VJP leaf]
+(g3/G3_R_C4_LINEAR_VJP_LEAF.md) covers the genuine C4 forward
 provider's four context-four `(I,O)` rows: `(4,4)`, `(4,8)`, `(8,4)`, and
 `(4,256)`. It computes `dX[1,4,I]` and `dW[O,I]` from exact `X`, `W`, and
 `U[1,4,O]` borrowed views, stages both gradients, rejects malformed or
 overlapping views and nonfinite operations, and leaves destinations unchanged
-on failure. Local Clang 22 normal/repeat/native ASan+UBSan and central
-differences through the genuine C4 forward provider pass 321 checks;
-independent source/test review and the pinned compiled gate remain **NOT RUN**.
-This leaf is not yet a trainable C4 model or checkpoint/generation admission.
+on failure. Source `3df316ec`/tree `335c1883` passed local Clang 22
+normal/repeat/native ASan+UBSan and central differences through the genuine
+C4 forward provider. The sealed independent source/test review is
+`g3r-c4-linear-vjp-independent-review-20261025/SHA256SUMS-REVIEW`
+(SHA-256 `bc50a057f4c32356a49edc30c86eb7e2c06e6358fda704af30c6c31513834144`).
+The pinned rootless Clang 21 normal/repeat/native ASan+UBSan gate passed 321
+checks per mode with byte-identical stdout, empty runtime stderr, and
+feature-off rejection. Its 49-file post-exit seal is
+`g3r-c4-linear-vjp-3df316ec-attempt1/SHA256SUMS-RUN` (SHA-256
+`5bddd1623a1d0107d740f699daf324d2e13d34b1dc97111e1b3bd1e04c1d63ac`).
+The sealed independent result review is
+`g3r-c4-linear-vjp-result-review-20261025/SHA256SUMS-REVIEW` (SHA-256
+`b972b117c47f2463529b449fcb1d44c67ac30e10aeeadd93b7a8c97727718410`).
+The `(4,256)` numerical check samples 32 distributed `dW` coordinates;
+this leaf is not a trainable C4 model or checkpoint/generation admission.
 
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1
