@@ -1233,6 +1233,13 @@ positive-begin `balanced-i2-views-pins` assertion. Fault arms alone retained
 positive public-counter expectation false on this path, while the allocation
 source remains unproved. Correct the observer contract and trace the separate
 arena growth before repeating complete-call retention.
+The independently reviewed direct-D2 diagnostic at `8fec18f2`/tree
+`9370d418` passed its bounded compiled gate (`retention-d2-only-8fec18f-attempt1-independent-review-20261025/REVIEW.md`,
+228-file raw seal `80a8a114...`). All eight fresh fault/control cases exited
+zero; direct D2 read faults retained 2,288 root-arena bytes after the call
+through a genuine E3 retry, while matched controls stayed flat. The prior
+full E3 fault retained 2,360 bytes; the 72-byte difference does not identify
+an allocation or lifetime cause. Complete-call retention remains unadmitted.
 The separate trained-G2 sanitizer attempt at `55a56f2f` is also NONACCEPTING:
 the first two-token run hit an ASan one-byte read seven bytes before a live
 48-byte terminal-ID clone allocation in the release path (review:
