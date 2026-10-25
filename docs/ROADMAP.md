@@ -2458,7 +2458,13 @@ checkpoint, while its G3RCV1 policy permits one G1. The accepted same-registry
 replay receipt proves a G1 comparison but exports only a pass marker. A sealed
 producer bit/trace transcript and a reviewed single-registry reader/replay
 source union are required before cross-process parameter and G1 parity can be
-claimed. This contract is proposed; source and compiled comparison are unrun.
+claimed. A separate [fresh consumer source candidate](g3/G3_R_TRAINED_FRESH_CONSUMER_SOURCE_LEAF.md)
+now composes one 103-source root with a private V1 decoder, exact receipt/C2
+carrier-to-restored-model and producer-payload bit comparisons, and one P1/G1
+trace comparator. Local source/schema mutation checks pass; independent
+source/test review, accepted producer transcript bytes and receipt, linked
+consumer, and fresh-process compiled normal/repeat/sanitizer gates are pending.
+This does not establish fresh parameter or P1/G1 runtime parity.
 
 The proposed [trained producer transcript V1 contract](g3/G3_R_TRAINED_PRODUCER_TRANSCRIPT_V1_CONTRACT.md)
 specifies a fixed 6,292-byte, checksummed data-only oracle for the exact
