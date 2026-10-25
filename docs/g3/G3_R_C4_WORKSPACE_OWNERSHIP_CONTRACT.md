@@ -12,7 +12,7 @@ public or seeded-model route.
 The input is the exact live `trainable-c4` model shell in the sole C4 model
 registry, with its rooted nine-field X1/T1/initializer metadata, fourteen
 ordered P1 handles, native owner at entry slot 3 and no construction or active
-call at entry slots 9/10. The model remains in `train` mode. The new private
+call at entry slots 9/10. Create requires the model in `train` mode. The new
 workspace identity may have a separate workspace registry, but it must not
 create another model registry or copy the model into a seeded owner. One model
 entry has at most one live workspace. Its slot 10 is the workspace edge while
@@ -75,6 +75,16 @@ treats slot 10 as an active call and admits only the seeded profile; future
 trainable generation must explicitly reject a workspace-tagged slot on every
 entry path rather than reinterpret it as a call.
 
+P1's existing `module-eval!` and `module-train!` can change a finalized
+model's mode without consulting this proposed workspace. This ownership-only
+gate therefore permits release after mode drift by rechecking identity and
+both exact edges without requiring `train`; reset rejects eval mode and leaves
+the workspace releasable. No forward or VJP may run after mode drift. Before
+a C4 compute gate, either P1 mode transitions must reject a live C4 workspace
+through a reviewed interlock or every compute admission must prove the full
+train-mode topology under the active workspace edge. A successful create
+alone cannot assert a permanent train-mode invariant.
+
 The lease check must be a reviewed C4-specific authority. The existing TR3
 lease predicate covers a context-two trainer and does not close this C4
 boundary. If a future C4 trainer introduces an additional lease or active
@@ -89,8 +99,9 @@ C4 model. It checks exact fourteen same-owner bindings and tied alias; rejects
 seeded/C2/foreign/stale models, swapped or replaced handles, wrong `[2,4]`
 position shape, changed live carrier, eval mode, active construction/call,
 an idle live same-owner generator with retained cache, second workspace,
-held native/P1 leases and each allocation/edge cut. Test
-reset and release, independent model coexistence, unchanged parameter and
+held native/P1 leases and each allocation/edge cut. Test eval-mode drift
+after create: reset rejects while release still clears both exact edges. Test
+independent model coexistence, unchanged parameter and
 gradient bits, and no partial publication. Feature-off symbols remain absent.
 Normal/repeat and native ASan+UBSan+LSan must use pinned source/toolchain and
 have an independently reviewed post-exit seal. Repeated create/release must
