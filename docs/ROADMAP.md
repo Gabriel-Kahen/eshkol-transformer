@@ -2216,8 +2216,9 @@ before checking it.
 The proposed [C4 workspace topology authority contract](g3/G3_R_C4_WORKSPACE_TOPOLOGY_AUTHORITY_CONTRACT.md)
 pins a read-only P1 trusted slot 74 and separate native sealed-owner
 scoped-pin status. The [P1 topology leaf](g3/G3_R_C4_P1_TOPOLOGY_STATUS_LEAF.md)
-is a source-only candidate: it appends status-only slot 74 without changing
-slots 0–73 or the feature-off ABI, and has an unrun fixture for the exact C4
+is an accepted bounded compiled status leaf: it appends status-only slot 74
+without changing slots 0–73 or the feature-off ABI, and has a checked fixture
+for the exact C4
 tree, ordered handles/tie, CPU f32 provider, `[4,4]` position shape and
 negative controls. The C4 constructor is independently compiled at
 `g3r-c4-trainable-constructor-5503bb2b-attempt3/SHA256SUMS-RUN`
