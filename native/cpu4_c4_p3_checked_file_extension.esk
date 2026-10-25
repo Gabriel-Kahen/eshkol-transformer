@@ -197,7 +197,7 @@
                   (cpu4-c4-p3-bytes=?
                     (vector-ref row 10)
                     (cpu4-c4-p3-model-values
-                      (vector-ref (vector-ref row 4) 13) operation)))
+                      (vector-ref (vector-ref row 4) 13) operation))))
         (cpu4-binding-fail 'invalid-state operation
                            "checked C4 FILE admission became stale"))
     row))
@@ -318,10 +318,10 @@
                       (cpu4-c4-p3-model-values
                         (vector-ref model-entry 8) operation))))
           (cpu4-binding-fail 'invalid-state operation
-                             "checked FILE live model or T1 changed")))
+                             "checked FILE live model or T1 changed"))
       (if (eq? action 'admit)
           (begin (vector-set! bound 2 entry)
                  (vector-set! bound 3 input-entry)
                  (vector-set! row 18 entry)
                  (vector-set! row 19 input-entry)))
-    (vector-ref row 17))))
+      (vector-ref row 17))))

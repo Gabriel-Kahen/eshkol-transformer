@@ -2244,8 +2244,10 @@ ticket, exact B250 C2 SHA, `C4GRCV1` decode, and 4,768-byte comparison against
 the factory's live fourteen model planes before the actual public G2 handoff.
 It binds that handoff's generator and a same-registry T1 encoding of the
 two-byte prompt to one opaque terminal ticket. Its admit/verify seam rechecks
-the saved file and model before native P3 reconstruction. Syntax/source checks
-pass; independent review and compiled fresh-process acceptance are **NOT RUN**.
+the saved file and model before native P3 reconstruction. Its 22-check
+adversarial host test covers mutable ticket and identity substitutions;
+independent source review found no remaining issuer authority bypass. Compiled
+aggregate and fresh-process acceptance remain **NOT RUN**.
 
 The [private P3 to G2 terminal bridge](g3/G3_C4_P3_TERMINAL_RESUME_BRIDGE.md)
 is source-staged on the composed C4 tree. A checked FILE issuer ticket selects
