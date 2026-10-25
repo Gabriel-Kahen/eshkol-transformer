@@ -2365,8 +2365,24 @@ original positive call caught `invalid-argument/tokenizer-load` with message
 `expected aggregate persistence policy`. The private producer entry had
 bypassed CLI3 dispatch's authenticated C2-to-T2 policy projector setup.
 The focused source repair installs the same projector before its first
-tokenizer load. No repaired compiled runtime, trained pair, reader replay or
-sanitizer result is accepted yet.
+tokenizer load. On `fa9aaec2`/tree `a2f90728`, the fresh compiled normal
+producer, separate repeat, byte oracle and exact no-overwrite/corrupt-C2
+negatives passed. Its sealed 417-file receipt
+`g3r-trained-pair-fa9aaec2-runtime-attempt1/SHA256SUMS-RUN` (SHA-256
+`413a27420e2e1f15016415fcca80aa2183c4d5cdc2a8d27b14cdb5d94da6137e`)
+failed as a whole before sanitizer execution because ASan added a COMMON
+symbol outside the fixed export list. The independently reviewed sanitizer
+continuation reused that authenticated normal pair and 36 instrumented native
+objects, materialized the COMMON cell during relocatable linking, then passed
+fresh positive, repeat and exact negatives. Its 106-file receipt
+`g3r-trained-pair-fa9aaec2-sanitize-cont-attempt2/SHA256SUMS-RUN` (SHA-256
+`d83949dae0dfe54aa72fa1a5117efd28f0b80726c38c5f5027b816cdb087e6a9`)
+has zero launcher/Docker exits. The saved 25,408-byte C2 equals the exact
+trained image (SHA-256 `9ec2a1d4...`); the 288-byte companion is identical
+across normal and sanitizer (SHA-256 `17dfe384...`). This admits the bounded
+same-registry trained-pair producer under native ASan+UBSan; generated Eshkol
+code was uninstrumented. Fresh-process FILE reader, replay, resumed draw and
+full multi-token/EOS continuation remain open.
 
 The earlier G3-R C2 SAVE continuation on `0581426b` sealed a failed runtime
 receipt at `g3-save-0581426b-cont-attempt1/SHA256SUMS-RUN`: its compiled
