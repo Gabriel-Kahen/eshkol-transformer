@@ -135,6 +135,11 @@ X1/T1/initializer shells, changed canonical identities, context-two config,
 wrong initializer seed or algorithm, and forged or changed four-word snapshots.
 A constructor fault matrix must separately prove rollback before and after
 P1/I2 enrollment and native prepare, leaving no live shell or usable handle.
+The source candidate has one inert, source-private fixture hook at the
+post-registration, post-P1-prepare and post-native-prepare cuts. It is neither
+a public API nor an installed route. The compiled fixture must use it to
+capture the exact pending shell/handle/owner, inject one failure per cut,
+and prove P1 handle revocation and native owner abort after each failure.
 Feature-off builds must retain the ordinary seeded ABI and reject private
 trainable symbols. The later workspace gate must separately reject seeded or
 foreign model shells, swapped handles, wrong position shape or dtype, broken

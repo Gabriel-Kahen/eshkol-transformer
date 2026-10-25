@@ -7,6 +7,8 @@
         :real et_g3c4_model_test_owner_fail_after_v1)
 (extern i64 g3c4-test-owner-reset
         :real et_g3c4_model_test_owner_reset_v1)
+(extern i64 g3c4-test-owner-state ptr
+        :real et_g3c4_model_test_owner_state_v1)
 
 (define checks 0)
 (define (check label condition)
@@ -19,6 +21,12 @@
              (#t (and (transformer-error? caught)
                       (eq? (transformer-error-category caught) category))))
       (thunk) #f)))
+(define (live-count)
+  (let loop ((entries (vector-ref g3c4-model-registry 0)) (count 0))
+    (if (null? entries) count
+        (loop (cdr entries)
+              (if (eq? (vector-ref (car entries) 2) 'live)
+                  (+ count 1) count)))))
 (define (config context seed)
   (x1-private-config-resolve
     (x1-private-config-parse
@@ -36,6 +44,15 @@
 (define initializer (m3t-public-initializer-state 1729))
 (define wrong-initializer (m3t-public-initializer-state 1728))
 (define before (vector-ref g3c4-model-registry 0))
+(reject "foreign X1" 'invalid-argument
+        (lambda () (g3c4-model-create-trainable-internal
+                     (vector 'foreign) tokenizer initializer)))
+(define saved-x1-registry x1-config-registry)
+(set! x1-config-registry '())
+(reject "stale exact X1 shell" 'invalid-argument
+        (lambda () (g3c4-model-create-trainable-internal
+                     c4 tokenizer initializer)))
+(set! x1-config-registry saved-x1-registry)
 (reject "context two" 'unsupported
         (lambda () (g3c4-model-create-trainable-internal
                      c2 tokenizer initializer)))
@@ -48,6 +65,12 @@
 (reject "foreign initializer" 'invalid-argument
         (lambda () (g3c4-model-create-trainable-internal
                      c4 tokenizer (vector 'foreign))))
+(define saved-m3t-algorithm m3t-algorithm)
+(set! m3t-algorithm 'wrong-algorithm)
+(reject "wrong live initializer algorithm" 'invalid-argument
+        (lambda () (g3c4-model-create-trainable-internal
+                     c4 tokenizer initializer)))
+(set! m3t-algorithm saved-m3t-algorithm)
 (check "admission errors publish no entry"
        (eq? before (vector-ref g3c4-model-registry 0)))
 
@@ -62,6 +85,84 @@
             (not (vector-ref g3c4-model-cleanup-root 0))
             (not (vector-ref m3-call-state 0))
             (not (vector-ref i2-construction-registry-root 1))))
+(check "allocation failure left no live model" (= (live-count) 0))
+
+(define saved-fault-hook g3c4-trainable-constructor-fault-hook)
+(define fault-entry #f)
+(define captured-root #f)
+(define captured-handle #f)
+(define captured-owner #f)
+(define (fault-case label phase action)
+  (set! fault-entry #f)
+  (set! captured-root #f)
+  (set! captured-handle #f)
+  (set! captured-owner #f)
+  (set! g3c4-trainable-constructor-fault-hook
+    (lambda (at entry)
+      (if (eq? at phase)
+          (begin (set! fault-entry entry) (action entry))
+          #t)))
+  (reject label 'internal
+          (lambda () (g3c4-model-create-trainable-internal
+                       c4 tokenizer initializer)))
+  (set! g3c4-trainable-constructor-fault-hook saved-fault-hook)
+  (check (string-append label " dead and unrooted")
+         (and fault-entry
+              (eq? (vector-ref fault-entry 2) 'dead)
+              (not (vector-ref fault-entry 3))
+              (not (vector-ref fault-entry 7))
+              (not (vector-ref g3c4-model-cleanup-root 0))
+              (not (vector-ref i2-construction-registry-root 1))
+              (not (vector-ref m3-call-state 0))
+              captured-root captured-handle captured-owner
+              (= (g3c4-test-owner-state captured-owner) 3)
+              (= (live-count) 0)))
+  (reject (string-append label " root revoked") 'invalid-state
+          (lambda () (module-mode-internal captured-root)))
+  (reject (string-append label " handle revoked") 'invalid-state
+          (lambda () (parameter-handle-tensor-internal captured-handle)))
+  #t)
+
+;;; The hook captures exact pending identities separately because the dead
+;;; entry clears all owner, root, handle and metadata fields on rollback.
+(define (capture-fault-entry! entry)
+  (set! captured-root (vector-ref entry 0))
+  (set! captured-handle (vector-ref (vector-ref entry 8) 0))
+  (set! captured-owner (vector-ref entry 3))
+  #t)
+(define (fail-fault entry)
+  (capture-fault-entry! entry)
+  (g3c4-fail 'internal 'g3c4-trainable-fixture "injected constructor cut"))
+
+(fault-case "after registration" 'after-registration fail-fault)
+(fault-case "after P1 prepare" 'after-p1-prepare fail-fault)
+(fault-case "after native prepare" 'after-native-prepare fail-fault)
+
+(define (corrupt-canonical entry)
+  (capture-fault-entry! entry)
+  (vector-set! (vector-ref entry 7) 2 "wrong-canonical"))
+(define (corrupt-fingerprint entry)
+  (capture-fault-entry! entry)
+  (vector-set! (vector-ref entry 7) 3 "wrong-fingerprint"))
+(define (corrupt-algorithm entry)
+  (capture-fault-entry! entry)
+  (vector-set! (vector-ref entry 7) 7 'wrong-algorithm))
+(define (corrupt-initializer-words entry)
+  (capture-fault-entry! entry)
+  (vector-set! (vector-ref entry 7) 8 (vector 1 1729 1 0)))
+(define (corrupt-successor-words entry)
+  (capture-fault-entry! entry)
+  (vector-set! (vector-ref entry 6) 2 291))
+(fault-case "canonical identity mismatch" 'after-native-prepare
+            corrupt-canonical)
+(fault-case "fingerprint identity mismatch" 'after-native-prepare
+            corrupt-fingerprint)
+(fault-case "algorithm snapshot mismatch" 'after-native-prepare
+            corrupt-algorithm)
+(fault-case "initializer word snapshot mismatch" 'after-native-prepare
+            corrupt-initializer-words)
+(fault-case "native successor snapshot mismatch" 'after-native-prepare
+            corrupt-successor-words)
 
 (define model (g3c4-model-create-trainable-internal
                 c4 tokenizer initializer))

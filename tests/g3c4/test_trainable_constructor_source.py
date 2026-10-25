@@ -54,7 +54,7 @@ def asserted_constructor(text: str, model: str, i2: str, call: str) -> None:
     assert "(g3c4-trainable-tokenizer-entry tokenizer operation)" in text
     assert "(t1-private-entry tokenizer)" in text
     assert "(m3t-entry initializer 'initializer operation #t)" in text
-    assert "(eq? algorithm m3t-algorithm)" in text
+    assert "(eq? algorithm 'n3k.philox4x32-10.uniform-f32.v1)" in text
     assert "(equal? words (list 1 seed 0 0))" in text
     assert "(string-copy (x1-private-config-canonical config))" in text
     assert "(string-copy (x1-private-config-fingerprint config))" in text
@@ -69,6 +69,9 @@ def asserted_constructor(text: str, model: str, i2: str, call: str) -> None:
     assert "(g3c4-trainable-tail-preflight" in text
     assert "(i2-g3c4-construction-seal-prepared-internal! construction)" in text
     assert "(g3c4-native-owner-commit-seal owner)" in text
+    for phase in ("after-registration", "after-p1-prepare", "after-native-prepare"):
+        assert f"'{phase} canonical-entry" in text
+    assert "(define g3c4-trainable-constructor-fault-hook" in text
     assert "(g3c4-model-dead! entry)" in text
     assert "(i2-g3c4-construction-abort-internal!" in text
     assert "(g3c4-native-owner-abort" in text
@@ -106,11 +109,24 @@ class TrainableConstructorSource(unittest.TestCase):
         self.assertIn("(eq? (module-mode-internal model) 'train)", fixture)
         self.assertIn("(equal? (vector-ref entry 6) '#(1 1729 292 0))", fixture)
         for marker in (
+            '"foreign X1" \'invalid-argument',
+            '"stale exact X1 shell" \'invalid-argument',
             '"context two" \'unsupported',
             '"wrong initializer seed" \'invalid-argument',
             '"foreign tokenizer" \'invalid-argument',
             '"foreign initializer" \'invalid-argument',
             '"native allocation rollback" \'internal',
+            '"wrong live initializer algorithm" \'invalid-argument',
+            '"after registration" \'after-registration',
+            '"after P1 prepare" \'after-p1-prepare',
+            '"after native prepare" \'after-native-prepare',
+            '"canonical identity mismatch" \'after-native-prepare',
+            '"fingerprint identity mismatch" \'after-native-prepare',
+            '"algorithm snapshot mismatch" \'after-native-prepare',
+            '"initializer word snapshot mismatch" \'after-native-prepare',
+            '"native successor snapshot mismatch" \'after-native-prepare',
+            '(parameter-handle-tensor-internal captured-handle)',
+            '(g3c4-test-owner-state captured-owner) 3',
         ):
             self.assertIn(marker, fixture)
         self.assertNotIn("module-parameters", fixture)
@@ -139,6 +155,11 @@ class TrainableConstructorSource(unittest.TestCase):
     def test_wrong_rng_successor_is_detected(self) -> None:
         mutant = self.text.replace("(vector 1 (vector-ref original 1) 292 0)",
                                    "(vector 1 (vector-ref original 1) 290 0)", 1)
+        with self.assertRaises(AssertionError):
+            asserted_constructor(mutant, self.model, self.i2, self.call)
+
+    def test_missing_post_native_fault_cut_is_detected(self) -> None:
+        mutant = self.text.replace("'after-native-prepare canonical-entry", "", 1)
         with self.assertRaises(AssertionError):
             asserted_constructor(mutant, self.model, self.i2, self.call)
 

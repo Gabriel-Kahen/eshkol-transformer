@@ -2183,7 +2183,9 @@ source/mutation checks and train-mode fault/rollback fixture exist; compiled
 normal/repeat/sanitizer admission and independent review remain pending. A
 source-only private trainable constructor candidate now uses the same C4
 registry, native owner and P1/I2 train-prepare route; its focused source and
-fixture tests are not a compiled constructor admission. No admitted
+fixture negatives include stale X1, metadata/RNG corruption and rollback
+cuts around registration, train prepare and native prepare. They are not a
+compiled constructor admission. No admitted
 trainable constructor, workspace runtime, forward/backward composition,
 trainer or C2 admission is claimed.
 

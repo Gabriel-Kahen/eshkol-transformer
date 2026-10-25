@@ -4,6 +4,10 @@
 (define g3c4-trainable-model-profile 'trainable-c4)
 (define g3c4-trainable-tokenizer-fingerprint
   "sha256:eshkol-byte-tokenizer-v1:aabb31f49216963582383a00fd2e85d7c20b658d5bef0e7945344ed6bfe50704")
+;;; Source-private fault seam for the constructor fixture. The shipped binding
+;;; is inert; no caller receives this binding or the pending entry.
+(define g3c4-trainable-constructor-fault-hook
+  (lambda (phase entry) #t))
 
 (define (g3c4-trainable-tokenizer-entry tokenizer operation)
   (let ((entry (t1-private-entry tokenizer)))
@@ -55,7 +59,7 @@
          (words (m3t-public-initializer-words initializer)))
     (if (not (and (m3t-exact-i64? seed) (>= seed 0)
                   (eq? (vector-ref m3t-initializer 0) initializer)
-                  (eq? algorithm m3t-algorithm)
+                  (eq? algorithm 'n3k.philox4x32-10.uniform-f32.v1)
                   (equal? words (list 1 seed 0 0))))
         (g3c4-fail 'invalid-argument operation
                     "initializer authority differs from C4 configuration"))
@@ -239,6 +243,8 @@
                         (vector-ref construction 1))))
                 (g3c4-model-validate-schedule
                   schedule canonical-handles operation))
+              (g3c4-trainable-constructor-fault-hook
+                'after-registration canonical-entry)
               (let initialize ((index 0))
                 (if (= index 14) #t
                     (begin
@@ -262,8 +268,12 @@
                 (if (not (eq? root (vector-ref canonical-entry 0)))
                     (g3c4-fail 'internal operation
                                 "C4 prepared root identity changed")))
+              (g3c4-trainable-constructor-fault-hook
+                'after-p1-prepare canonical-entry)
               (g3c4-native-check
                 (g3c4-native-owner-prepare-seal owner) operation)
+              (g3c4-trainable-constructor-fault-hook
+                'after-native-prepare canonical-entry)
               (g3c4-trainable-tail-preflight
                 canonical-entry canonical-cleanup operation)
               ;; Both prepared authorities are now infallible commits.
