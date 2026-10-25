@@ -54,17 +54,24 @@ for mode in candidate ordinary; do
     >"$out/$mode/defined.nm"
   nm -g --defined-only --format=posix "$out/$mode/m3t_transport.o" \
     >"$out/$mode/m3t-defined.nm"
+  nm -g --defined-only --format=posix "$out/$mode/m3t_f32_integration.o" \
+    >"$out/$mode/m3t-f32-defined.nm"
   if [[ $mode == candidate ]]; then
     [[ $(awk '$1 == "et_p1_private_candidate_construction_begin_v1" {n++} END {print n+0}' \
       "$out/$mode/defined.nm") == 1 ]]
     [[ $(awk '$1 == "et_m3t_private_candidate_binding_preflight_v1" {n++} END {print n+0}' \
       "$out/$mode/m3t-defined.nm") == 1 ]]
+    [[ $(awk '$1 == "et_f32_tensor_private_destroy_ready_v1" {n++} END {print n+0}' \
+      "$out/$mode/m3t-f32-defined.nm") == 1 ]]
   else
     ! grep -F 'et_p1_private_candidate_' "$out/$mode/defined.nm"
     ! grep -F 'et_m3t_private_candidate_binding_preflight_v1' \
       "$out/$mode/m3t-defined.nm"
+    ! grep -F 'et_f32_tensor_private_destroy_ready_v1' \
+      "$out/$mode/m3t-f32-defined.nm"
     printf '%s\n' \
       '2a8521181277d65c95875e3478ad3e68031c496e87b3be6e2c7ac56431ea324c  ordinary/m3t_transport.o' \
+      '480e7f624872e6991629ccb15b58f9a8be7ff8c677abb7b0103b26bef978ee4b  ordinary/m3t_f32_integration.o' \
       | (cd "$out" && sha256sum -c -)
   fi
   ar rcsD "$out/$mode/libm3t_construction_test.a" "$out/$mode"/*.o
@@ -100,7 +107,6 @@ for mode in candidate ordinary; do
   fi
 done
 cmp "$out/candidate/i2_bridge.o" "$out/ordinary/i2_bridge.o"
-cmp "$out/candidate/m3t_f32_integration.o" "$out/ordinary/m3t_f32_integration.o"
 mkdir "$out/native"
 "$cc" "${cflags[@]}" -O1 \
   "$PROJECT_ROOT/tests/g3r/m3t_candidate_binding_preflight_native_test.c" \

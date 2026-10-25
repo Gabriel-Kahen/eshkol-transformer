@@ -2732,7 +2732,17 @@ P1 shell already authenticated by the Eshkol graph check. No pointer array
 crosses the Eshkol boundary. The old same-owner SAVE roster validator is
 shared under private flags. Local Clang 22 native binding checks and the
 existing M3T transport regression pass; the source checker passes. Independent
-source/recipe review and the pinned compiled feature-on/feature-off gate are
+source/recipe review accepted `cf6afa4e`/tree `232aeeb8`. Its first pinned
+compiled attempt sealed a nonaccepting runner result at
+`g3r-native-binding-cf6afa4e-v1-attempt1/SHA256SUMS-RUN` (SHA-256
+`1aab395fad35f895e826273f80764e1ee315542c1438bc3016163bb9a00ce128`):
+candidate 39 checks and ordinary feature-off each passed, but the runner
+stopped before the native fixture because it incorrectly compared candidate
+and ordinary f32 objects byte-for-byte. The candidate flag intentionally adds
+private f32 symbols through `m3t_f32_integration.c`; the ordinary object hash
+matched the accepted graph gate. A focused runner correction now checks
+candidate-only symbols, pins that ordinary object, and retains unchanged I2
+object parity. The corrected compiled gate and exact-result review remain
 pending. O2 identity, active leases, graph revocation, restore and replay
 remain unproved.
 
