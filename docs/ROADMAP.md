@@ -2179,7 +2179,10 @@ runtime mode on `b0c61fba`/tree `3cf7c608`; its 15-file post-exit seal is
 `d9a537d2dff2938880c5b8c439d3e40614e833cf90579b776742b2b9d1449629`).
 Independent exact-result review found no blocker for this bounded leaf; it
 verified the outer and inner seals, source/recipe/image pins, three matching
-compiled modes, and feature-off isolation. Model integration remains a
+compiled modes, and feature-off isolation. Its sealed review is
+`g3r-c4-vjp-independent-review-20261025/SHA256SUMS-REVIEW` (SHA-256
+`90a6271d716f18ae2cfbf5e901ebb1ba3ce067bc78294b2bd62019f3b2f31d7e`).
+Model integration remains a
 separate gate. The first one-use attempt is retained as a precompiler
 rootless-mount permission failure, not a runtime result.
 This leaf is not a trainable C4 model or a checkpoint/generation admission.
