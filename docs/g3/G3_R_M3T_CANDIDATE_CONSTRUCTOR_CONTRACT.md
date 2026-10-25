@@ -60,6 +60,7 @@ The first version of its rooted canonical record has these fixed slots:
 | 8 | returned native M3T owner pointer, initially false |
 | 9 | exact I2 construction record, initially false |
 | 10 | exact model root shell, initially false |
+| 11 | monotonic seal-entered bit, initially false |
 
 The registry and record are rooted before `model-create` can call native
 owner creation. A `fresh` ledger is single-use. The constructor requires the
@@ -72,9 +73,14 @@ No raw owner pointer or I2/P1 cell is accepted as an argument.
 
 The constructor prepublishes the model entry's original initializer,
 successor, config, 14-slot handle vector and profile exactly as the ordinary
-fixed profile does. After `et_m3t_private_owner_create_v1` returns, it stores
-that opaque pointer in rooted ledger slot 8 **before** I2 begin or any
-fallible registration. It stores the same pointer in the M3T model entry.
+fixed profile does. The first-error guard surrounds native owner creation.
+Its lexical `native` local retains the returned opaque pointer even if the
+first rooted publication raises: that native call has already allocated 14
+f32 parameters and a successor. The constructor stores the pointer in
+rooted ledger slot 8 **before** I2 begin or any fallible registration, then
+stores it in the M3T model entry. Until slot 8 is published, cleanup uses
+the lexical pointer; an abort failure exits 134. Slot 8 is never the sole
+recovery route for its own publication failure.
 The candidate I2 begin receives only rooted slot 7. If I2 begin succeeds but
 publishing ledger slot 9 raises, cleanup recovers the exact construction from
 I2 cell slot 1. The preallocated I2 anchor receives owner parameter zero
@@ -90,20 +96,30 @@ head/token-embedding tie, and stores the returned successor pointer in its
 rooted M3T entry before I2 seal. No caller callback, alternate topology, or
 second construction route is accepted.
 
-Before I2 seal, a guard preserves the first construction error: if the I2
-cell is open it aborts that exact candidate graph, then aborts the still
-staged native owner and marks model, successor, and ledger dead. If candidate
-I2 begin already aborted itself, cleanup does not abort a foreign graph.
-A cleanup defect is fail-stop 134 rather than a retry with an unaccounted
+Before entering I2 seal, a guard preserves the first construction error: it
+aborts the exact candidate graph only when its authenticated I2 cell is open.
+An I2 begin self-abort leaves that cell dead; a rejection before I2 begin
+leaves it fresh. Neither permits another graph abort. Cleanup then aborts the
+still staged native owner and marks model, successor, and ledger dead. A
+cleanup defect is fail-stop 134 rather than a retry with an unaccounted
 native owner. The caller-owned input initializer is never aborted. A failed
 preseal candidate cannot be reused; a new ledger is required for retry.
 
 The constructor uses `i2-candidate-construction-seal-internal!` after the
 complete M3T schedule and successor checks. All Eshkol graph retention and
-pointer publication precede this call. Once the I2/P1 cell says `sealed`,
-no construction abort is allowed. Native M3T owner and successor seal calls
-must return success in their already validated fixed state; an unexpected
-status or exception after I2/P1 seal exits 134. The remaining Eshkol tail
+pointer publication precede this call. It sets ledger slot 11 immediately
+before entering that seal call. An exception from the call is fail-stop 134,
+even if a source preflight happened to reject before native seal: the I2
+cell can still say `open` after P1 has sealed natively and before P1/I2 state
+publication. No handler may infer rollback authority from that cell once
+slot 11 is set. This deliberately narrows recoverable failure cuts to those
+before seal entry; a separate authenticated open-state query would be needed
+to recoverably handle a seal preflight rejection. Direct native P1 seal
+preflights its roster before an assignment-only commit, and the reviewed I2
+tail stages the retained list head before calling it. Native M3T owner and
+successor seal calls must return success in their already validated fixed
+state; an unexpected status or exception after I2/P1 seal exits 134. The
+remaining Eshkol tail
 writes only immediate `live`/`sealed` lifecycle states and returns the
 already rooted model shell. It allocates no list/vector, invokes no callback,
 and publishes no new pointer after the irreversible P1 seal.
@@ -117,7 +133,8 @@ no ledger or candidate name is provided by ordinary packages.
 ## Focused gate and limits
 
 Source review must verify preallocation before native owner creation,
-pointer enrollment before candidate I2 begin, recovery from I2 cell slot 1,
+lexical native-pointer recovery on rooted-publication failure, pointer
+enrollment before candidate I2 begin, recovery from I2 cell slot 1,
 complete fixed 14/tie schedule, first-error cleanup, and the postseal tail.
 A supported focused compiled normal/repeat gate must construct the candidate,
 compare its config, parameter paths, tie and initializer words to the
