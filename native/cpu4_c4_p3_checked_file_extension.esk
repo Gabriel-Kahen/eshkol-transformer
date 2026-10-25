@@ -3,7 +3,7 @@
 ;;; expected SHA is pinned by the sealed producer receipt; this source also
 ;;; hashes the exact factory path before and after admission.
 (extern i64 cpu4-c4-p3-native-wire-decode ptr i64 ptr i64 ptr ptr ptr
-        :real et_cpu4_private_c4_p3_wire_decode_v1)
+        :real et_cpu4_private_c4_p3_wire_decode_eshkol_v1)
 
 (define cpu4-c4-p3-checked-file-tag (vector 'cpu4-c4-p3-checked-file-v1))
 (define cpu4-c4-p3-checked-file-rows (vector '()))
