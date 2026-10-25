@@ -1,0 +1,171 @@
+;;; Two separate invocations share only the exact B250 C2, C4GRCV1 wire and
+;;; captured values. All CPU4/C2/T1/G3 owners are fresh in each process.
+(load "cpu4_v1_private_root.esk")
+(load "../cpu4_heldout/body.esk")
+(load "../cpu4_resume/body.esk")
+(load "cpu4_c4_p3_checked_file_extension.esk")
+(load "cpu4_c4_p3_live_producer_extension.esk")
+
+(define cpu4-p3-fresh-checks 0)
+(define (cpu4-p3-fresh-check label good)
+  (if good (set! cpu4-p3-fresh-checks (+ cpu4-p3-fresh-checks 1))
+      (cpu4-binding-fail 'invalid-state 'cpu4-p3-fresh label)))
+(define (cpu4-p3-fresh-open directory tokenizer)
+  (d2-token-dataset-open
+    (list ':directory directory ':batch-size 1 ':sequence-length 4
+          ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+          ':maximum-total-tokens 5 ':maximum-batch-bytes 68
+          ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #f) tokenizer))
+(define (cpu4-p3-fresh-config)
+  (list ':profile 'diagnostic-c4-p2g2 ':sampling 'greedy
+        ':temperature-bits 1065353216 ':top-k 256 ':top-p-bits 1065353216
+        ':max-new-tokens 2 ':eos 41 ':seed 41))
+(define (cpu4-p3-fresh-result! output)
+  (let* ((operation 'cpu4-p3-fresh-result!)
+         (snapshot (g3c4-p2g2-terminal-snapshot-private output))
+         (entry (g3c4-p2g2-terminal-output-entry-live output operation))
+         (live (g3c4-p2g2-terminal-snapshot-live-for output entry operation))
+         (text (vector-ref live 7)))
+    (cpu4-p3-fresh-check "actual resumed terminal IDs, EOS, cache, RNG and T1"
+      (and (= (bytevector-length snapshot) 64)
+           (= (g3c4-public-g2-word snapshot 0) 3)
+           (= (g3c4-public-g2-word snapshot 8) 41)
+           (= (g3c4-public-g2-word snapshot 16) 2)
+           (= (g3c4-public-g2-word snapshot 24) 4)
+           (= (g3c4-public-g2-word snapshot 32) 1)
+           (= (g3c4-public-g2-word snapshot 40) 41)
+           (= (g3c4-public-g2-word snapshot 48) 0)
+           (= (g3c4-public-g2-word snapshot 56) 0)
+           (bytevector? text) (= (bytevector-length text) 2)
+           (= (bytevector-u8-ref text 0) 3)
+           (= (bytevector-u8-ref text 1) 41)))
+    (display "CPU4-P3-RESUMED 41 2 4 3 41 3 41 1 41 0 0") (newline)
+    snapshot))
+
+(define (cpu4-p3-fresh-run! train-directory path expected-path
+                            wire-path values-path mode)
+  (if (not (or (string=? mode "produce") (string=? mode "resume")))
+      (cpu4-binding-fail 'invalid-argument 'cpu4-p3-fresh
+                         "closed produce|resume mode required"))
+  (let* ((resolved (x1-private-config-resolve (x1-private-config-parse
+             "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":4,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729,\"training.accumulation-steps\":1}") '()))
+         (t2 (t2-wave2-tokenizer-byte resolved))
+         (dataset (cpu4-p3-fresh-open train-directory t2))
+         (policy (c2-persistence-policy-internal 16777216 524288 8388608 64 'cpu))
+         (report (k2-public-capability-discover))
+         (ledger (vector #f (vector #f) (vector #f)))
+         (handoff (vector #f))
+         (phase (vector 'factory))
+         (expected (cpu4-c4-p3-read-exact expected-path 32 'cpu4-p3-fresh)))
+    (guard (caught
+             (#t (if (or (eq? (vector-ref phase 0) 'handoff)
+                         (eq? (vector-ref phase 0) 'adopted))
+                     (begin (display "CPU4-P3-FRESH-PENDING ")
+                            (display (vector-ref phase 0)) (newline)
+                            (cpu4-binding-fail-stop 70))
+                     (cpu4-resume-cleanup! ledger))
+                 (raise caught)))
+      (cpu4-p3-fresh-check "expected exact B250 C2 SHA"
+        (cpu4-c4-p3-bytes=? expected
+          (cpu4-c4-p3-file-sha path 'cpu4-p3-fresh)))
+      (cpu4-p3-fresh-check "nonregional CPU4 training identity"
+        (and (null? (cpu4-checkpoint-native-current-region))
+             (= (x1-private-config-ref resolved 'run.seed) 1729)
+             (= (x1-private-config-ref resolved 'training.accumulation-steps) 1)))
+      (cpu4-resume-stream! dataset)
+      (let* ((trainer (cpu4-checkpoint-factory-create-internal!
+                        path policy report resolved t2 dataset
+                        (vector-ref ledger 1)))
+             (ticket (vector-ref (vector-ref ledger 1) 0))
+             (factory (cpu4-checkpoint-factory-row ticket 'cpu4-p3-fresh))
+             (model (cpu4-owned-model-internal (vector-ref factory 14)))
+             (record (cpu4-resume-counts! trainer 250))
+             (t1 (t1-wave1-tokenizer-byte resolved)))
+        (cpu4-p3-fresh-check "ready FILE factory with released reader"
+          (and (eq? (vector-ref factory 3) 'ready)
+               (eq? (vector-ref factory 15) trainer)
+               (eq? (vector-ref record 8) model)
+               (eq? (vector-ref record 15) dataset)
+               (not (vector-ref factory 10))
+               (not (vector-ref factory 11))))
+        (let ((copy (cpu4-resume-snapshot-copy! trainer
+                            (vector-ref ledger 2))))
+          (cpu4-p3-fresh-check "restored B250 plane and moment extents"
+            (and (= (cpu4-resume-plane-size (vector-ref copy 0) 14) 4768)
+                 (= (cpu4-resume-plane-size (vector-ref copy 1) 28) 9536))))
+        (cpu4-p3-fresh-check "same-registry raw byte T1 fingerprint"
+          (and (not (eq? t1 t2))
+               (string=? (t1-wave1-tokenizer-fingerprint t1)
+                 "sha256:eshkol-byte-tokenizer-v1:aabb31f49216963582383a00fd2e85d7c20b658d5bef0e7945344ed6bfe50704")))
+        (if (string=? mode "produce")
+            (begin
+              (vector-set! phase 0 'handoff)
+              (let* ((pair (cpu4-checkpoint-factory-generator-handoff-internal!
+                             ticket t1 (cpu4-p3-fresh-config) handoff))
+                     (generator (vector-ref pair 1))
+                     (input (g3c4-p2g2-owned-input-create
+                              (t1-wave1-tokenizer-encode t1
+                                (bytevector 3 197)))))
+                (vector-set! phase 0 'adopted)
+                (cpu4-p3-fresh-check "same B250 model adopted for genuine G1"
+                  (and (eq? (vector-ref pair 0) model)
+                       (g3c4-public-g2-profile-live generator
+                         'cpu4-p3-fresh)))
+                (cpu4-c4-p3-live-produce!
+                  generator input path expected wire-path values-path)
+                (cpu4-p3-fresh-check "producer input releases"
+                  (generation-tensor-release-internal! input))
+                (cpu4-p3-fresh-check "producer generator closes"
+                  (g3g-public-generator-close generator))
+                (vector-set! phase 0 'closed)
+                (display "CPU4-P3-PRODUCED 3 1 41 0 0") (newline)))
+            (let* ((checked (cpu4-c4-p3-checked-file-issue-internal!
+                              ticket t1 expected wire-path values-path)))
+              (vector-set! phase 0 'handoff)
+              (let* ((generator (cpu4-c4-p3-checked-file-handoff-internal!
+                                  checked (cpu4-p3-fresh-config) handoff))
+                     (input (cpu4-c4-p3-checked-file-input-internal! checked))
+                     (output (g3c4-p2g2-terminal-resume-private!
+                               generator input checked)))
+                (vector-set! phase 0 'adopted)
+                (cpu4-p3-fresh-check "same checked B250 model adopted"
+                  (eq? (vector-ref
+                         (g3c4-generator-entry-call-ready
+                           generator 'cpu4-p3-fresh) 5)
+                       (g3c4-model-entry-live model
+                         'cpu4-p3-fresh #f)))
+                (cpu4-p3-fresh-result! output)
+                (cpu4-p3-fresh-check "terminal output releases"
+                  (g3c4-p2g2-terminal-release-private! output))
+                (cpu4-p3-fresh-check "checked input releases"
+                  (generation-tensor-release-internal! input))
+                (cpu4-p3-fresh-check "generator closes"
+                  (g3g-public-generator-close generator))
+                (vector-set! phase 0 'closed))))
+        (cpu4-p3-fresh-check "B250 C2 remains exact after generation"
+          (cpu4-c4-p3-bytes=? expected
+            (cpu4-c4-p3-file-sha path 'cpu4-p3-fresh)))
+        (cpu4-resume-cleanup! ledger)
+        (d2-token-dataset-close! dataset)
+        (display "CPU4-P3-FRESH-PASS ") (display mode)
+        (display " ") (display cpu4-p3-fresh-checks) (newline)
+        #t))))
+
+(guard (caught
+         (#t (display "CPU4-P3-FRESH-ERROR ")
+             (if (transformer-error? caught)
+                 (begin (write (transformer-error-category caught)) (display " ")
+                        (write (transformer-error-operation caught))
+                        (display " ") (write (transformer-error-message caught)))
+                 (write caught))
+             (newline) (exit 1)))
+  (let ((args (command-line)))
+    (if (not (= (i2-bounded-list-length args 8) 7))
+        (cpu4-binding-fail 'invalid-argument 'cpu4-p3-fresh
+          "expected train-directory B250-file expected-SHA-file wire values produce|resume"))
+    (cpu4-p3-fresh-run!
+      (car (cdr args)) (car (cdr (cdr args)))
+      (car (cdr (cdr (cdr args))))
+      (car (cdr (cdr (cdr (cdr args)))))
+      (car (cdr (cdr (cdr (cdr (cdr args))))))
+      (car (cdr (cdr (cdr (cdr (cdr (cdr args))))))))))

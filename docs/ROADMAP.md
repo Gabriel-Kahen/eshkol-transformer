@@ -2282,6 +2282,14 @@ the accepted FILE factory, compare every restored plane to that independent
 producer witness, authenticate T1/D2 and exercise a companion G2 handoff.
 Compiled fresh FILE factory, checked RNG/history and P3→G2 continuation remain
 **NOT RUN**; the context-two G3-R pair reader is a distinct checkpoint lane.
+The fixed B250 P3 fresh-process fixture is source-staged: one fresh FILE
+factory produces genuine G1/P3 capture and persists C4 wire plus 4,768 model
+bytes; another fresh FILE factory admits that pair through the checked issuer
+and resumes EOS41 G2. Its driver pins the prior B250 receipt, exact C2 and
+uninterrupted second-EOS reference, uses the boxed producer/decoder/resume
+adapters in one native archive, and checks the final IDs, cache, T1 text and
+RNG against that reference. Source and host checks pass; compiled producer,
+two-process FILE continuation and sanitizer acceptance remain **NOT RUN**.
 
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1
