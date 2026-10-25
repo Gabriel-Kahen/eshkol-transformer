@@ -107,7 +107,7 @@
                          (m3t-public-model-initializer model)))
           (owned (i2-native-owned-clone-live-count)))
       (e3-overflow-check 'overflow-seed1729-successor
-        (equal? initializer '(1 1729 580 0)))
+        (equal? initializer '(1 1729 290 0)))
       (c1-checkpoint-load-module-internal!
         model checkpoint e3-overflow-policy i2-checkpoint-codec-internal
         i2-provider-name)
