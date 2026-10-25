@@ -690,14 +690,18 @@ runtime gates remain open. No main merge follows this update.
 
 The independent C4 T4 numerical bridge source review accepts test-only
 `c629e378`, with genuine C4/P1/D2 transport and independent CE/gradient
-checks. The exact-`77b7a774` supported normal gate compiled and reached the
-first runtime, then failed after 1,024 logit rows at its first gradient-plane
-read; the sealed receipt is
-`team/integration-cpu4-t4-numerical-normal-77b7-20261025`. Independent source
-diagnosis found the test observer released an ordinary gradient snapshot with
-the private-clone API. The observer now uses the ordinary tensor destroy API;
-normal/repeat/oracle and sanitizer acceptance remain **NOT RUN** after this
-correction. The CLI3 installed C4 producer and consumer remain downstream.
+checks. The exact-`77b7a774` supported normal gate failed after 1,024 logit
+rows at its first gradient-plane read; that failure is sealed at
+`team/integration-cpu4-t4-numerical-normal-77b7-20261025`. Independent
+diagnosis traced the test observer's wrong private-clone release of an ordinary
+snapshot. Correction `1db90521` is source-reviewed; supported normal and native
+ASan+UBSan gates independently accept two identical 173-check runs each,
+1,192 captured value words unchanged after contribution, plus 1,024 logits
+and 1,192 gradients compared with the Python CE oracle,
+nonfinite and mutated-logit negatives, and unchanged custody. Seals are in
+`team/integration-cpu4-t4-numerical-{normal,san}-1db9-20261025`. Generated
+Eshkol IR was not sanitizer-instrumented. Installed CLI3 C4 producer/consumer
+and full CPU-v1 union admission remain downstream.
 
 The exact-`ef8f9bb5` hosted full-suite run `40145090136` is in progress. Its
 first C2 SAVE, LOAD and format jobs failed strict native source-closure checks:
