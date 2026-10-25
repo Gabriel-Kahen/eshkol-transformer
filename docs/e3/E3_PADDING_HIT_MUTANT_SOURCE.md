@@ -50,3 +50,13 @@ passed. Fresh pinned Q0 generation, exact
 supported f31/LLVM21 package/AOT/runtime, independent source review and
 independent compiled-result review are required before M2 admission. Full E3
 §9 remains open.
+
+An independent pre-gate review held the first source candidate because the
+uniform tuple listed 173 imports although the sealed N3 source build measured
+177, and its driver expected initializer successor `580` although the pinned
+Q0 reference reports `290`. This successor reuses the reviewed `3aade9b1`
+actual-only four-import policy and changes that single driver expectation to
+`290`. Successor host checks passed 22/22 focused tests, shell syntax,
+uniform-driver parse and whitespace checks. The padded-hit mutation and oracle
+are unchanged. No compiled claim
+follows from the corrected source controls.

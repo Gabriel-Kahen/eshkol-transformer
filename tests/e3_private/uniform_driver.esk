@@ -119,7 +119,7 @@
          (builders (e3-uniform-live-builders))
          (retired (e3-uniform-retired-builder-bytes)))
     (e3-uniform-check 'seed1729-successor
-      (equal? words '(1 1729 580 0)))
+      (equal? words '(1 1729 290 0)))
     (e3-uniform-expect-rejection model (vector-ref e3-uniform-files 1)
                                  'corrupt-data 'c1-checkpoint-decode-state-internal)
     (e3-uniform-assert-original model words handles before owned builders)

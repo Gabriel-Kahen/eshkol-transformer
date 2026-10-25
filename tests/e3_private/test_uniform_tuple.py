@@ -170,6 +170,8 @@ printf '%s\\n' "$e3_tuple_kind"
         self.assertIn("-DET_F32_TENSOR_TESTING", builder)
         self.assertIn("-DET_E3_UNIFORM_LAST_TIE_TEST", builder)
         self.assertIn("#ifdef ET_E3_UNIFORM_LAST_TIE_TEST", metrics)
+        self.assertIn("(equal? words '(1 1729 290 0))",
+                      (ROOT / "tests/e3_private/uniform_driver.esk").read_text())
         for hook in ("et_i2_test_live_builder_counts_v1",
                      "et_i2_test_retired_builder_counts_v1",
                      "et_i2_test_decode_builder_control_bytes_v1"):

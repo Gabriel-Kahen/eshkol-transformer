@@ -1163,6 +1163,11 @@ mutant `5/5` accuracy and unchanged N/W/tokens/batches/cursor. The test-only
 uniform-tuple selector and independent oracle passed 21 focused host source
 tests, shell syntax and Clang macro controls;
 supported private AOT, poison, sanitizer and independent review are pending.
+The first source review held its uniform tuple on the independently observed
+173-versus-177 import mismatch and seed-1729 successor `580` versus pinned
+`290`. The narrow successor reuses reviewed `3aade9b1` import policy and
+corrects the driver expectation; compiled admission remains pending.
+Its 22 focused host tests and shell/source syntax checks pass on the successor.
 The 7eeaa03 current-main M2 union added the padded-position test selector to
 `scripts/build-e1b-consumer.sh`, changing its source bytes. Hosted model
 composition failed only the M3CG predecessor checksum. This bounded successor
