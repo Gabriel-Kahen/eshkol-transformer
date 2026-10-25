@@ -331,6 +331,8 @@ int64_t et_e3_test_fault_arm_v1(void *pointer, int64_t site,
          occurrence >= 1 && occurrence <= 8192) ||
         (site == 2 && ordinal == 0 && occurrence == 1)
         || (site == 5 && ordinal == 0 && occurrence >= 1 && occurrence <= 2)
+        || (site == 6 && ordinal >= 0 && ordinal <= 2 &&
+            occurrence >= 1 && occurrence <= 8192)
 #ifdef ET_E3_PARTIAL_PIN_TESTING
         || (site == 4 && ordinal >= 0 && ordinal < 14 && occurrence == 1)
 #endif
@@ -396,6 +398,19 @@ int64_t et_e3_test_fault_seed_publication_v1(void *pointer) {
   }
   frame->published_counts[0] = 7;
   frame->published_counts[1] = 4;
+  return 0;
+}
+
+static int64_t e3_test_pre_copy(et_e3_frame_internal *frame,
+                                uint32_t ordinal) {
+  if (frame->fault_state == 1 && frame->fault_site == 6 &&
+      frame->fault_ordinal == ordinal) {
+    ++frame->fault_reached;
+    if (frame->fault_reached == frame->fault_occurrence) {
+      frame->fault_state = 2; /* Consume before the selected staging copy. */
+      return e3_fail(E3_INTERNAL, E3_CODE_INVARIANT);
+    }
+  }
   return 0;
 }
 #endif
@@ -1008,6 +1023,10 @@ int64_t et_e3_private_stage_inputs_v1(
   for (size_t i = 0; i < 2; ++i)
     if (ids[i] < 0 || ids[i] >= 256)
       return e3_fail(E3_SHAPE_MISMATCH, E3_CODE_SHAPE);
+#ifdef ET_E3_FAULT_TESTING
+  rc = e3_test_pre_copy(frame, 0);
+  if (rc) return rc;
+#endif
   memcpy(frame->ids, ids, sizeof(frame->ids));
   frame->phase = E3_STAGING;
   frame->stage_plane = 1;
@@ -1030,6 +1049,10 @@ int64_t et_e3_private_stage_targets_v1(
   for (size_t i = 0; i < 2; ++i)
     if (targets[i] < 0 || targets[i] >= 256)
       return e3_fail(E3_SHAPE_MISMATCH, E3_CODE_SHAPE);
+#ifdef ET_E3_FAULT_TESTING
+  rc = e3_test_pre_copy(frame, 1);
+  if (rc) return rc;
+#endif
   memcpy(frame->targets, targets, sizeof(frame->targets));
   frame->stage_plane = 2;
   return 0;
@@ -1049,6 +1072,10 @@ int64_t et_e3_private_stage_mask_v1(
   const unsigned char *mask = view->data;
   if (mask[0] > 1 || mask[1] > 1 || (mask[0] == 0 && mask[1] == 0))
     return e3_fail(E3_INVALID_ARGUMENT, E3_CODE_PROFILE);
+#ifdef ET_E3_FAULT_TESTING
+  rc = e3_test_pre_copy(frame, 2);
+  if (rc) return rc;
+#endif
   memcpy(frame->mask, mask, sizeof(frame->mask));
   frame->stage_plane = 3;
   frame->next_role = 0;

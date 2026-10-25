@@ -977,6 +977,59 @@ static void test_ce_preinvoke_selector(
   CHECK(et_e3_test_fault_arm_v1(frame, 5, 0, 1) == E3_INVALID_STATE);
 }
 
+static void test_stage_pre_copy_selector(
+    owner *model, et_f32_tensor *destination[4]) {
+  et_e3_frame_internal *frame = et_e3_private_frame_create_v1(
+      model, destination[0], destination[1], destination[2], destination[3]);
+  CHECK(frame != NULL);
+  CHECK(et_e3_test_fault_arm_v1(frame, 6, -1, 1) == E3_INVALID_ARGUMENT);
+  CHECK(et_e3_test_fault_arm_v1(frame, 6, 3, 1) == E3_INVALID_ARGUMENT);
+  CHECK(et_e3_test_fault_arm_v1(frame, 6, 0, 0) == E3_INVALID_ARGUMENT);
+  CHECK(et_e3_test_fault_arm_v1(frame, 6, 0, 8193) == E3_INVALID_ARGUMENT);
+  for (int64_t ordinal = 0; ordinal < 3; ++ordinal) {
+    int64_t inputs[2] = {197, 197};
+    int64_t targets[2] = {197, 0};
+    unsigned char masks[2] = {1, 1};
+    et_kernel_tensor_view_v1 input = i64_pair(inputs);
+    et_kernel_tensor_view_v1 target = i64_pair(targets);
+    et_kernel_tensor_view_v1 mask = bool_pair(masks);
+    OK(et_e3_test_fault_arm_v1(frame, 6, ordinal, 2));
+    CHECK(et_e3_test_fault_arm_v1(frame, 6, ordinal, 2) == E3_INVALID_STATE);
+    OK(et_e3_private_acquire_v1(frame));
+    stage(frame, 3, 197, 197, 0, 1, 1);
+    forward_batch(frame);
+    CHECK(et_e3_test_fault_ref_v1(frame, 0) == -1); /* Active frame. */
+    CHECK(frame->fault_state == 1 && frame->fault_reached == 1);
+    if (ordinal >= 1) OK(et_e3_private_stage_inputs_v1(frame, &input));
+    if (ordinal >= 2) OK(et_e3_private_stage_targets_v1(frame, &target));
+    int64_t result = ordinal == 0 ? et_e3_private_stage_inputs_v1(frame, &input)
+                   : ordinal == 1 ? et_e3_private_stage_targets_v1(frame, &target)
+                                  : et_e3_private_stage_mask_v1(frame, &mask);
+    CHECK(result == E3_INTERNAL);
+    CHECK(e3_last_domain == 0 && e3_last_category == E3_INTERNAL &&
+          e3_last_code == E3_CODE_INVARIANT);
+    CHECK(frame->fault_state == 2 && frame->fault_reached == 2 &&
+          frame->stage_plane == ordinal);
+    abort_call(frame);
+    CHECK(et_e3_test_fault_ref_v1(frame, 0) == 2);
+    CHECK(et_e3_test_fault_ref_v1(frame, 1) == 6);
+    CHECK(et_e3_test_fault_ref_v1(frame, 2) == ordinal);
+    CHECK(et_e3_test_fault_ref_v1(frame, 3) == 2);
+    CHECK(et_e3_test_fault_ref_v1(frame, 4) == 2);
+    OK(et_e3_test_fault_reset_v1(frame));
+  }
+  OK(et_e3_test_fault_arm_v1(frame, 6, 0, 2));
+  OK(et_e3_private_acquire_v1(frame));
+  stage(frame, 3, 197, 197, 0, 1, 1);
+  forward_batch(frame);
+  abort_call(frame);
+  CHECK(et_e3_test_fault_ref_v1(frame, 0) == 3);
+  CHECK(et_e3_test_fault_ref_v1(frame, 4) == 1);
+  OK(et_e3_test_fault_reset_v1(frame));
+  OK(et_e3_private_frame_destroy_preflight_v1(frame));
+  et_e3_private_frame_destroy_v1(frame);
+}
+
 static void test_publication_precommit_selector(
     owner *model, et_f32_tensor *destination[4]) {
   et_e3_frame_internal *frame = et_e3_private_frame_create_v1(
@@ -1068,6 +1121,7 @@ int main(void) {
   test_discovery_bind_rollback(model, destination);
   test_forward_preinvoke_selector(model, destination);
   test_ce_preinvoke_selector(model, destination);
+  test_stage_pre_copy_selector(model, destination);
   test_partial_pin_selector(model, destination);
   test_publication_precommit_selector(model, destination);
   for (size_t i = 0; i < 4; ++i) destroy_tensor(&destination[i]);

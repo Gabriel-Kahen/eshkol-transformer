@@ -314,6 +314,57 @@ static void test_exact_read(void) {
   CHECK(et_d2_exact_read_test_fd_peak_count_v1() == 1);
 }
 
+#ifdef ET_E3_LATE_D2_TESTING
+static void test_late_exact_read(void) {
+  char path[] = "/tmp/et-d2-late-read-XXXXXX";
+  bytevector_fixture vector;
+  int descriptor = mkstemp(path);
+  int64_t result;
+  CHECK(descriptor >= 0);
+  if (descriptor < 0) return;
+  CHECK(write(descriptor, "abcdef", 6) == 6);
+  CHECK(close(descriptor) == 0);
+  CHECK(et_d2_exact_read_test_late_arm_v1(0) == 0);
+  CHECK(et_d2_exact_read_test_late_arm_v1(1) == 0);
+  CHECK(et_d2_exact_read_test_late_arm_v1(8193) == 0);
+  CHECK(et_d2_exact_read_test_late_ref_v1(0) == 0);
+  CHECK(et_d2_exact_read_test_late_ref_v1(3) == -1);
+  CHECK(et_d2_exact_read_test_late_reset_v1() == 0);
+  et_d2_exact_read_test_fail_stage_v1(ET_D2_TEST_READ_FAIL_READ);
+  CHECK(et_d2_exact_read_test_late_arm_v1(2) == 0);
+  et_d2_exact_read_test_fail_stage_v1(ET_D2_TEST_READ_FAIL_NONE);
+  CHECK(et_d2_exact_read_test_late_arm_v1(2) == 1);
+  CHECK(et_d2_exact_read_test_late_arm_v1(2) == 0);
+  CHECK(et_d2_exact_read_test_late_ref_v1(1) == 2);
+  init_bytevector(&vector, 0);
+  CHECK(et_d2_exact_read_v1(path, (int64_t)sizeof(path), 0, &vector, 0) == 0);
+  CHECK(et_d2_exact_read_test_late_ref_v1(2) == 0);
+  init_bytevector(&vector, 3);
+  CHECK(et_d2_exact_read_v1(path, (int64_t)sizeof(path), 0, &vector, 3) == 0);
+  CHECK(et_d2_exact_read_test_late_ref_v1(2) == 1);
+  CHECK(et_d2_exact_read_test_late_reset_v1() == 1); /* Unreached arm. */
+  CHECK(et_d2_exact_read_test_late_ref_v1(0) == 0);
+  CHECK(et_d2_exact_read_test_late_arm_v1(2) == 1);
+  init_bytevector(&vector, 3);
+  CHECK(et_d2_exact_read_v1(path, (int64_t)sizeof(path), 0, &vector, 3) == 0);
+  init_bytevector(&vector, 3);
+  result = et_d2_exact_read_v1(path, (int64_t)sizeof(path), 0, &vector, 3);
+  CHECK(read_stage(result) == ET_D2_EXACT_READ_READ);
+  CHECK(read_errno(result) == EIO);
+  CHECK(et_d2_exact_read_test_late_ref_v1(0) == 2);
+  CHECK(et_d2_exact_read_test_late_ref_v1(1) == 2);
+  CHECK(et_d2_exact_read_test_late_ref_v1(2) == 2);
+  CHECK(et_d2_exact_read_test_fd_live_count_v1() == 0);
+  CHECK(et_d2_exact_read_test_late_arm_v1(2) == 0);
+  CHECK(et_d2_exact_read_test_late_reset_v1() == 1);
+  CHECK(et_d2_exact_read_test_late_reset_v1() == 0);
+  init_bytevector(&vector, 3);
+  CHECK(et_d2_exact_read_v1(path, (int64_t)sizeof(path), 0, &vector, 3) == 0);
+  CHECK(memcmp(payload(&vector), "abc", 3) == 0);
+  CHECK(unlink(path) == 0);
+}
+#endif
+
 static void encode_i64le(bytevector_fixture *fixture, const int64_t *values,
                          size_t count) {
   size_t value_index;
@@ -696,6 +747,9 @@ static void test_generation_exhaustion(void) {
 int main(void) {
   test_shell_factory_identity();
   test_exact_read();
+#ifdef ET_E3_LATE_D2_TESTING
+  test_late_exact_read();
+#endif
   test_unpublished_cleanup();
   test_i1_allocation_failures();
   test_dataset_lifetime();

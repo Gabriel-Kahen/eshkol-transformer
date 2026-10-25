@@ -162,6 +162,14 @@ enum {
 #ifdef ET_D2_NATIVE_TESTING
 void et_d2_batch_test_fail_stage_v1(int64_t stage);
 void et_d2_exact_read_test_fail_stage_v1(int64_t stage);
+#ifdef ET_E3_LATE_D2_TESTING
+/* Closed, serialized E3 fault tuple only. Count nonempty exact reads after
+ * arm; fail the selected later read once after descriptor open, before pread.
+ * Reset explicitly clears a fired or unreached arm before any retry. */
+int64_t et_d2_exact_read_test_late_arm_v1(int64_t occurrence);
+int64_t et_d2_exact_read_test_late_ref_v1(int64_t field);
+int64_t et_d2_exact_read_test_late_reset_v1(void);
+#endif
 int64_t et_d2_dataset_test_live_count_v1(void);
 int64_t et_d2_batch_test_live_count_v1(void);
 int64_t et_d2_batch_test_borrow_count_v1(void);

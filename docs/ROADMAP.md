@@ -1392,6 +1392,19 @@ host. Independent source/test review accepted this E3 union at `9aed9c65`;
 supported compiled Eshkol normal, poison, and sanitizer evidence remains
 required; E3 §9 admission remains **HOLD**.
 
+An isolated exact-`44c0418` E3 §9 R1 source candidate adds a closed fault-tuple
+second exact D2 read denial (after one packed T=2 batch completes) and a
+frame-owned stage-6 selector immediately before the input, target, or mask
+copy. The D2 occurrence hook is process-global test state, limited to this
+single-driver witness; it is explicitly reset before the same-authority
+retry. The fixture keeps one model, dataset, frame and six seeded publication
+values across failure and retry, then compares a separate fixed-seed twin.
+Host D2 and E3 native tests cover bounds, duplicate arms, reached/unreached
+selectors, descriptor closure and reset. The supported optimized Eshkol
+normal/repeat/poison/sanitizer gate and exact package import inventory are
+**NOT_RUN** pending independent source review and heavy-lock scheduling; R1
+and full E3 §9 remain **HOLD**.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained

@@ -1,6 +1,9 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "d2_native.h"
+#if defined(ET_E3_LATE_D2_TESTING) && !defined(ET_D2_NATIVE_TESTING)
+#error "E3 late D2 testing requires the D2 test carrier"
+#endif
 
 #include "eshkol_transformer/i64_tensor.h"
 
@@ -87,6 +90,11 @@ _Static_assert(offsetof(et_d2_eshkol_closure, func_ptr) == 0u,
 #ifdef ET_D2_NATIVE_TESTING
 static int64_t fail_stage;
 static int64_t read_fail_stage;
+#ifdef ET_E3_LATE_D2_TESTING
+static int64_t late_read_state;
+static int64_t late_read_target;
+static int64_t late_read_seen;
+#endif
 static int64_t owned_allocations;
 static int64_t exact_read_fd_live;
 static int64_t exact_read_fd_peak;
@@ -490,6 +498,30 @@ void et_d2_exact_read_test_fail_stage_v1(int64_t stage) {
   read_fail_stage = stage;
 }
 
+#ifdef ET_E3_LATE_D2_TESTING
+int64_t et_d2_exact_read_test_late_arm_v1(int64_t occurrence) {
+  if (late_read_state != 0 || read_fail_stage != 0 || occurrence < 2 ||
+      occurrence > 8192) return 0;
+  late_read_state = 1;
+  late_read_target = occurrence;
+  late_read_seen = 0;
+  return 1;
+}
+
+int64_t et_d2_exact_read_test_late_ref_v1(int64_t field) {
+  if (field == 0) return late_read_state;
+  if (field == 1) return late_read_target;
+  if (field == 2) return late_read_seen;
+  return -1;
+}
+
+int64_t et_d2_exact_read_test_late_reset_v1(void) {
+  if (late_read_state == 0) return 0;
+  late_read_state = late_read_target = late_read_seen = 0;
+  return 1;
+}
+#endif
+
 static int should_fail(int64_t stage) { return fail_stage == stage; }
 
 static int should_fail_read(int64_t stage) {
@@ -639,6 +671,17 @@ int64_t et_d2_exact_read_v1(const char *path, int64_t path_bytes_value,
     return read_status(ET_D2_EXACT_READ_OPEN, errno);
   }
   ET_D2_TEST_FD_OPENED();
+#ifdef ET_E3_LATE_D2_TESTING
+  if (late_read_state == 1 && remaining != 0u) {
+    ++late_read_seen;
+    if (late_read_seen == late_read_target) {
+      late_read_state = 2; /* Consume before the genuine read denial. */
+      (void)close(descriptor);
+      ET_D2_TEST_FD_CLOSED();
+      return read_status(ET_D2_EXACT_READ_READ, EIO);
+    }
+  }
+#endif
   while (remaining != 0u) {
     size_t request =
         remaining > (size_t)SSIZE_MAX ? (size_t)SSIZE_MAX : remaining;
