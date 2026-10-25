@@ -13,11 +13,14 @@ logical text[1]/text[2] allocations. The private extension
 after authenticated reservation and before any frame. It roots a working
 record and separate allocation-time anchor, binds the original protected
 record/anchor, pending output shell/native owner, first and second carrier
-identities, and exact header-plus-payload extents 10/24, 9/16, 9/16, 9/10.
+identities, and fixed expected header-plus-payload sizes 10/24, 9/16, 9/16,
+9/10 derived from the fresh bytevector lengths. It does not inspect allocator
+backing headers or authenticate actual backing extents. That proof remains
+required before any native pointer conversion in the terminal coordinator.
 
 `g3c4-p2g2-terminal-pending-check` is read-only. Its status is valid only
 while the authentic protected call and pending output are live. Equal-length
-working-record substitutions, changed extents, output drift, foreign calls,
+working-record substitutions, changed expected sizes, output drift, foreign calls,
 and duplicate reservation reject before mutation. The pending-only abort
 checks the complete anchor before invoking accepted native abort through the
 protected scope. A held genuine I1 lease leaves the anchor and text unchanged;
