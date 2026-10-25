@@ -1155,6 +1155,16 @@ The remaining M2 mutants and full E3 §9 admission matrix remain open;
 installed/public E3 behavior and GPU execution are not established. This
 current-main source/docs union still needs independent review and hosted
 exact-head validation before integration.
+The separate noninstalled M2 doubled-batch source candidate uses the existing
+independently derived all-correct, three-row packed D2 corpus. Its test-only
+variant reapplies the accepted K1 accumulator to the still-live final `10`
+row, so the third serial N/W/C and counters must equal two applications of
+that genuine batch. Normal and mutant runs retain all three emitted D2 rows,
+M3 roles, six result cells and cursor bytes. The new gate prepares normal,
+repeat, poison and sanitizer controls and requires first rejection at the
+third serial state without a mutant transcript. Source tests pass; compiled
+execution and independent source/launcher review are pending. This does not
+admit the M2 row or full E3 §9 matrix.
 The 7eeaa03 current-main M2 union added the padded-position test selector to
 `scripts/build-e1b-consumer.sh`, changing its source bytes. Hosted model
 composition failed only the M3CG predecessor checksum. This bounded successor

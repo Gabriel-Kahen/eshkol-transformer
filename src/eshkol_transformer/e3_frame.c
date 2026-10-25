@@ -27,6 +27,9 @@ int32_t et_g3t_model_pins_begin_fail_before_internal(
 #if defined(ET_E3_NUMERICAL_PADDED_POSITION) && !defined(ET_E3_NUMERICAL_TESTING)
 #error "padded-position mutation requires the private numerical test tuple"
 #endif
+#if defined(ET_E3_NUMERICAL_DOUBLED_BATCH) && !defined(ET_E3_NUMERICAL_TESTING)
+#error "doubled-batch mutation requires the private numerical test tuple"
+#endif
 
 #if defined(ET_E3_NUMERICAL_TESTING) || defined(ET_E3_ZERO_CONTROL_TESTING)
 #include <inttypes.h>
@@ -441,7 +444,11 @@ static void e3_numerical_words(et_f32_tensor *tensor, size_t expected) {
 
 static void e3_numerical_batch(et_e3_frame_internal *frame) {
   const size_t bank = frame->sum_bank;
-  const int64_t ordinal = frame->counts[bank][1] - 1;
+  int64_t ordinal = frame->counts[bank][1] - 1;
+#ifdef ET_E3_NUMERICAL_DOUBLED_BATCH
+  /* One extra accumulation used the same third live D2 batch. */
+  if (ordinal == 3) ordinal = 2;
+#endif
   if (ordinal < 0 || ordinal >= 3) abort();
   printf("E3ROW\t%" PRId64 "\t%" PRId64 ",%" PRId64
          "\t%" PRId64 ",%" PRId64 "\t%u,%u\n", ordinal,
@@ -1415,6 +1422,15 @@ int64_t et_e3_private_accumulate_v1(void *pointer) {
   int64_t rc = e3_accumulate_dispatch(frame);
   if (!rc) {
     frame->sum_bank ^= 1u;
+#ifdef ET_E3_NUMERICAL_DOUBLED_BATCH
+    /* Reapply the accepted K1 accumulation to the third genuine D2 row,
+     * while its staged reduction and correct count are still live. */
+    if (frame->counts[frame->sum_bank][1] == 3) {
+      rc = e3_accumulate_dispatch(frame);
+      if (rc) return rc;
+      frame->sum_bank ^= 1u;
+    }
+#endif
 #ifdef ET_E3_NUMERICAL_TESTING
     e3_numerical_batch(frame);
 #endif
