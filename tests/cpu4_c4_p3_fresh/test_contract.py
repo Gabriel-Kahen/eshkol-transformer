@@ -103,6 +103,8 @@ class FreshP3Contract(unittest.TestCase):
                 prior_receipt(Path(directory), seal, pins)
 
     def test_outer_receipt_requires_all_rows_and_success(self):
+        self.assertEqual(PRIOR_RECIPE_SHA,
+            'b1a273783d7ea54344f750db9e141a90d9a7ca150b57fab46c9919f8c4d5b9a4')
         with tempfile.TemporaryDirectory() as directory:
             prior = Path(directory)
             for name, content in {

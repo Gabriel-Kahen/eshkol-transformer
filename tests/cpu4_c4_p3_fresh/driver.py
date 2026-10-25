@@ -17,7 +17,7 @@ CALLER = ROOT / 'tests/cpu4_c4_p3_fresh/runtime.esk'
 OVERLAY = ROOT / 'tests/cpu4_trained_g2/normal_native_overlay.json'
 PRIOR_SOURCE = ('c41c6403683eb2474d60a1ec81a1609e2d6377f6',
                 '2c20653a75e0a58a5152221a9b55f6139682917d')
-PRIOR_RECIPE_SHA = 'b8fafe11bd5c6ad7c31444ace15161f86af037ee47d767d86a27edaa58b2d159'
+PRIOR_RECIPE_SHA = 'b1a273783d7ea54344f750db9e141a90d9a7ca150b57fab46c9919f8c4d5b9a4'
 
 
 def require(condition, message):
