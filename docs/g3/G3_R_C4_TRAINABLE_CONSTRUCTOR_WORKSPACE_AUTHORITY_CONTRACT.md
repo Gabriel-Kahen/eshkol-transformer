@@ -130,9 +130,14 @@ status representation are not specified or implemented by the constructor
 gate.
 
 Constructor positive tests must use a newly constructed trainable owner in
-its original registry. Constructor negatives must reject foreign or stale
-X1/T1/initializer shells, changed canonical identities, context-two config,
+its original registry. Constructor negatives must reject foreign or unresolved
+X1 shells, foreign or stale T1/initializer shells where their lifecycle admits
+that state, changed canonical identities, context-two config,
 wrong initializer seed or algorithm, and forged or changed four-word snapshots.
+X1 resolved shells have permanent lexical registry membership and no
+withdrawal/close route; a stale resolved X1 shell is not a representable
+source state. The unresolved-shell negative exercises its actual admission
+boundary without mutating X1's accepted private registry.
 A constructor fault matrix must separately prove rollback before and after
 P1/I2 enrollment and native prepare, leaving no live shell or usable handle.
 The source candidate has one inert, source-private fixture hook at the

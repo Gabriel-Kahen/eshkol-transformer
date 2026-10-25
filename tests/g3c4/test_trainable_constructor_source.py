@@ -110,7 +110,7 @@ class TrainableConstructorSource(unittest.TestCase):
         self.assertIn("(equal? (vector-ref entry 6) '#(1 1729 292 0))", fixture)
         for marker in (
             '"foreign X1" \'invalid-argument',
-            '"stale exact X1 shell" \'invalid-argument',
+            '"unresolved exact X1 shell" \'invalid-argument',
             '"context two" \'unsupported',
             '"wrong initializer seed" \'invalid-argument',
             '"foreign tokenizer" \'invalid-argument',
@@ -130,6 +130,7 @@ class TrainableConstructorSource(unittest.TestCase):
         ):
             self.assertIn(marker, fixture)
         self.assertNotIn("module-parameters", fixture)
+        self.assertNotIn("x1-config-registry", fixture)
 
     def test_runner_uses_existing_model_archive_and_private_fixture(self) -> None:
         runner = source("scripts/test-g3c4-trainable-constructor.sh")

@@ -2188,6 +2188,13 @@ cuts around registration, train prepare and native prepare. They are not a
 compiled constructor admission. No admitted
 trainable constructor, workspace runtime, forward/backward composition,
 trainer or C2 admission is claimed.
+The first constructor compiled cut is sealed **NONACCEPTING** at
+`g3r-c4-trainable-constructor-59670d39-attempt1/SHA256SUMS-RUN`
+(SHA-256 `afb2604db4df3fd8136eb1542a2ec844b6aeba4650c095793f8455bf1a26da06`):
+strict private compile stopped before IR because the fixture reached for
+unexported lexical `x1-config-registry`. X1 resolved shells have no stale
+withdrawal state; the source successor tests a foreign or unresolved shell.
+No constructor runtime ran in that receipt.
 
 The [private C4 position VJP leaf](g3/G3_R_C4_POSITION_VJP_LEAF.md) supplies
 one fixed `[1,4]` position-ID and `[1,4,4]` upstream to `[4,4]` gradient
