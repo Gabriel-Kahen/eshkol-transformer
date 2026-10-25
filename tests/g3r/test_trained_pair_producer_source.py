@@ -70,8 +70,23 @@ class TrainedPairProducerSource(unittest.TestCase):
         self.assertIn("(g3t-generator-create model tokenizer", producer)
         self.assertNotIn("g3r-c2-pair-file-verify-c2-tokenizer-internal!", extension)
         caller = (ROOT / "tests/g3r/trained_pair_producer.esk").read_text()
-        self.assertIn('(cli3-parse-i64 (argument 6) "PROMPT" 255)', caller)
+        self.assertIn('(cli3-parse-i64 (vector-ref arguments 6) "PROMPT" 255)', root)
+        self.assertIn('et_g3r_private_test_trained_pair_produce_v1', caller)
+        self.assertNotIn('(load "g3r_trained_pair_producer_root.esk")', caller)
         self.assertNotIn('(list-ref args', caller)
+
+    def test_single_private_package_entry(self):
+        root = (ROOT / "native/g3r_trained_pair_producer_root.esk").read_text()
+        bridge = (ROOT / "native/g3r_trained_pair_package_bridge.c").read_text()
+        renames = (ROOT / "native/g3r_trained_pair_private_renames.txt").read_text()
+        self.assertIn('(g3r-trained-pair-produce-internal!', root)
+        self.assertEqual(renames.strip(),
+                         'g3r-trained-pair-private-produce '
+                         'et_e1b_private_g3r_trained_pair_produce_cabi_v1')
+        self.assertIn('et_e1b_ensure_private_initialized_v1();', bridge)
+        self.assertIn('et_e1b_box_value_v1(arguments)', bridge)
+        self.assertIn('et_e1b_box_value_v1(output)', bridge)
+        self.assertIn('et_e1b_private_g3r_trained_pair_produce_cabi_v1(', bridge)
 
     def test_source_closure(self):
         closure = (ROOT / "native/g3r_trained_pair_producer_source_closure.txt").read_text().splitlines()

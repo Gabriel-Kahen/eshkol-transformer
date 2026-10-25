@@ -7,3 +7,15 @@
 (load "g3r_committed_save_snapshot_extension.esk")
 (load "g3r_record_codec_extension.esk")
 (load "g3r_trained_pair_producer_extension.esk")
+
+;;; Single entry for the private test package. The public caller passes one
+;;; boxed vector; the model, trainer and T1 owner stay in this private root.
+(define (g3r-trained-pair-private-produce arguments)
+  (if (not (and (vector? arguments) (= (vector-length arguments) 7)))
+      (c2-load-fail 'invalid-argument 'checkpoint-save!
+                    "trained-pair entry requires seven arguments" '()))
+  (g3r-trained-pair-produce-internal!
+    (vector-ref arguments 0) (vector-ref arguments 1)
+    (vector-ref arguments 2) (vector-ref arguments 3)
+    (vector-ref arguments 4) (vector-ref arguments 5)
+    (cli3-parse-i64 (vector-ref arguments 6) "PROMPT" 255)))

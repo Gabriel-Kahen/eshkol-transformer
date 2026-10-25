@@ -2338,8 +2338,18 @@ CLI3 path produced a genuine trained `first.c2` (25,408 bytes, SHA-256
 then native owner TU7 failed syntax checking because the committed-history
 condition had an unmatched parenthesis without the replay flag. No private
 owner object, caller, saved pair or sanitizer run was produced. The focused
-preprocessor repair and flag-combination syntax control await a compiled
-successor gate. It does not restore a replay candidate
+preprocessor repair passed a sealed Clang 21 four-case owner syntax matrix and
+all 36 normal native TUs in the `dfd29d8b` compiled successor at
+`g3r-trained-pair-dfd29d8b-cont-attempt1/SHA256SUMS-RUN` (outer SHA-256
+`e2c01848546e3715e57a23e77b3893e4520e8f3aed20b8eaab779234d3d96d79`),
+but that receipt failed while linking its Eshkol caller: the direct native archive
+omitted the private E1B/CLI3 package object needed for 140 localized private
+CABI, dispatch and initialization imports. It produced no caller, saved pair,
+runtime result or sanitizer build. A source-staged private test package now
+places the trained-pair entry in one Eshkol private root with the existing
+E1B/CLI3 bridges and one native G3-T owner; its thin caller has no private-root
+load. A link-only package and symbol-closure gate remains required before a
+full normal/repeat/sanitizer successor. It does not restore a replay candidate
 or establish full same-registry continuation.
 
 The earlier G3-R C2 SAVE continuation on `0581426b` sealed a failed runtime
