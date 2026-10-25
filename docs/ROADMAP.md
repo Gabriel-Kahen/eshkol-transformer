@@ -2282,6 +2282,14 @@ malformed headers leave output bytes intact. The focused native control passes
 under ASan and UBSan, and the C4 source inventory tests pass. No trained B250
 wire, compiled Eshkol producer, FILE pair, or fresh-process continuation is
 accepted yet.
+The fixed B250 P3 fresh-process fixture is source-staged: one fresh FILE
+factory produces genuine G1/P3 capture and persists C4 wire plus 4,768 model
+bytes; another fresh FILE factory admits that pair through the checked issuer
+and resumes EOS41 G2. Its driver pins the prior B250 receipt, exact C2 and
+uninterrupted second-EOS reference, uses the boxed producer/decoder/resume
+adapters in one native archive, and checks the final IDs, cache, T1 text and
+RNG against that reference. Source and host checks pass; compiled producer,
+two-process FILE continuation and sanitizer acceptance remain **NOT RUN**.
 
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1
