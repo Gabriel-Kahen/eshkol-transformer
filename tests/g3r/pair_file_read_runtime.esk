@@ -94,12 +94,12 @@
 (file-reject "long exact record" (companion "long.g3r"))
 (file-reject "symlink record" (companion "link.g3r"))
 (file-reject "FIFO record" (companion "fifo.g3r"))
-(reject-any "valid wrong-image record rejects"
+(reject "valid wrong-image record rejects" 'corrupt-data
   (lambda () (g3r-c2-pair-file-decode-internal!
                receipt (companion "wrong-digest.g3r") pending)))
 (check "wrong digest preserves destination and receipt"
   (and (untouched? pending) (receipt-idle? receipt)))
-(reject-any "torn record rejects"
+(reject "torn record rejects" 'corrupt-data
   (lambda () (g3r-c2-pair-file-decode-internal!
                receipt (companion "torn.g3r") pending)))
 (check "torn record preserves destination and receipt"

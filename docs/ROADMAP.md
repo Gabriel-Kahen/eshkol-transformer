@@ -2402,6 +2402,18 @@ receipts in a fresh process and returns only data. Independent exact-result
 review remains pending. It does not restore a model, replay cache/logits, or
 continue generation.
 
+Independent v5 review accepted the fresh-process data-only reader and its
+short-file and corrupt-C2 categories, but the wrong-digest category remained
+NONACCEPTING: the v5 negative caller accepted any caught value. A corrected
+negative-only continuation compiled against the sealed v5 package and exited
+1 on the wrong-digest assertion; its 89-file sealed receipt is
+`g3r-trained-pair-reader-wrong-digest-2fec6de4-cont-attempt3/SHA256SUMS-RUN`
+(SHA-256 `bda88c3b4524d1bd4b105db825482608bbe3c95f0546079077e56c6915a54e9f`).
+The source-level cause is the in-memory codec's plain-string decode failure.
+A focused FILE-boundary source repair now maps only malformed record reasons
+to `checkpoint-load/corrupt-data` after receipt cleanup; source, compiled and
+fresh-process category gates for that repair remain separate.
+
 The earlier G3-R C2 SAVE continuation on `0581426b` sealed a failed runtime
 receipt at `g3-save-0581426b-cont-attempt1/SHA256SUMS-RUN`: its compiled
 no-SAVE control left output absent and its compiled public LOAD/SAVE producer

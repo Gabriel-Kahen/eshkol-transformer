@@ -1,6 +1,12 @@
 ;;; Private data-only pair admission. A live C2/SHA receipt supplies the
 ;;; expected digest; decoded fields grant no model, tokenizer or RNG authority.
 
+(define (g3r-c2-pair-codec-corrupt? caught)
+  (and (string? caught)
+       (or (string=? caught "G3-R record decode: header, pair or checksum")
+           (string=? caught "G3-R record decode: noncanonical history")
+           (string=? caught "G3-R record decode: invalid bounded fields"))))
+
 (define (g3r-c2-pair-decode-internal! receipt record destination)
   ;; Keep cleanup authority in cells that survive the guard's longjmp path.
   (let ((borrow-cell (vector #f)) (digest-cell (vector #f)))
@@ -13,7 +19,10 @@
                        (vector-ref borrow-cell 0))))
                (if (vector-ref digest-cell 0)
                    (g3r-c2-sha-zero! (vector-ref digest-cell 0)))
-               (raise caught)))
+               (if (g3r-c2-pair-codec-corrupt? caught)
+                   (c2-load-fail 'corrupt-data 'checkpoint-load
+                                 "G3-R companion decode failed" '())
+                   (raise caught))))
       (vector-set! borrow-cell 0
         (g3r-c2-receipt-borrow-begin-internal receipt 'checkpoint-load))
       (vector-set! digest-cell 0

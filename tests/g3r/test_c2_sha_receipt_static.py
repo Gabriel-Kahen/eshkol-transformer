@@ -142,7 +142,19 @@ def verify_fault_bindings(source: str) -> None:
 
 
 def verify_pair_admission(source: str) -> None:
-    pair = definition({"pair": parse(source)}, "g3r-c2-pair-decode-internal!")
+    forms = parse(source)
+    pair = definition({"pair": forms}, "g3r-c2-pair-decode-internal!")
+    codec = definition({"pair": forms}, "g3r-c2-pair-codec-corrupt?")
+    if codec[1] != ["g3r-c2-pair-codec-corrupt?", "caught"]:
+        raise ValueError("codec category helper signature differs")
+    for reason in (
+            '"G3-R record decode: header, pair or checksum"',
+            '"G3-R record decode: noncanonical history"',
+            '"G3-R record decode: invalid bounded fields"'):
+        if reason not in source:
+            raise ValueError("codec corrupt reason omitted")
+    if '"G3-R record decode: invalid extents"' in source:
+        raise ValueError("invalid extents must not become corrupt data")
     cleanup = form("""(caught
       (#t
         (if (vector-ref borrow-cell 0)
@@ -151,7 +163,10 @@ def verify_pair_admission(source: str) -> None:
                 (vector-ref borrow-cell 0))))
         (if (vector-ref digest-cell 0)
             (g3r-c2-sha-zero! (vector-ref digest-cell 0)))
-        (raise caught)))""")
+        (if (g3r-c2-pair-codec-corrupt? caught)
+            (c2-load-fail 'corrupt-data 'checkpoint-load
+                          "G3-R companion decode failed" '())
+            (raise caught))))""")
     if pair[2][2][1] != cleanup:
         raise ValueError("pair negative cleanup order differs")
     required = (
@@ -184,6 +199,11 @@ def verify_pair_admission(source: str) -> None:
 
 def verify_race_assertions(source: str) -> None:
     forms = parse(source)
+    for label in (
+            'other valid C2 digest cannot enter live receipt',
+            'torn companion rejects without publication'):
+        if f'(reject "{label}" \'corrupt-data' not in source:
+            raise ValueError("pair malformed-record category differs")
     phases = (
         (("same second image publishes one exact receipt", "record"),
          ("same second image publishes one live C2 owner",
@@ -251,7 +271,7 @@ def verify_race_assertions(source: str) -> None:
                 raise ValueError(f"receipt race check differs: {label}")
             if not start < match[0][0] < end:
                 raise ValueError(f"receipt race phase order differs: {label}")
-    wrong_start = position("reject-any", '"other valid C2 digest cannot enter live receipt"')
+    wrong_start = position("reject", '"other valid C2 digest cannot enter live receipt"')
     wrong_end = position("define", "torn-pair")
     wrong_labels = [f'"{name}"' for name in (
         "wrong pair keeps destination untouched",
@@ -333,12 +353,16 @@ class C2ShaReceiptStaticTest(unittest.TestCase):
                 "        (g3r-c2-receipt-borrow-end-internal! (vector-ref borrow-cell 0))", 1))
         with self.assertRaisesRegex(ValueError, "negative cleanup order"):
             verify_pair_admission(PAIR.read_text().replace(
-                "               (if (vector-ref digest-cell 0)\n"
-                "                   (g3r-c2-sha-zero! (vector-ref digest-cell 0)))\n"
-                "               (raise caught)",
-                "               (raise caught)\n"
-                "               (if (vector-ref digest-cell 0)\n"
-                "                   (g3r-c2-sha-zero! (vector-ref digest-cell 0)))", 1))
+                "(g3r-c2-sha-zero! (vector-ref digest-cell 0))",
+                "(g3r-c2-sha-zero! #f)", 1))
+        with self.assertRaisesRegex(ValueError, "codec corrupt reason omitted"):
+            verify_pair_admission(PAIR.read_text().replace(
+                '"G3-R record decode: header, pair or checksum"',
+                '"G3-R record decode: accepted wrong digest"', 1))
+        with self.assertRaisesRegex(ValueError, "negative cleanup order"):
+            verify_pair_admission(PAIR.read_text().replace(
+                "(c2-load-fail 'corrupt-data 'checkpoint-load",
+                "(c2-load-fail 'internal 'checkpoint-load", 1))
 
     def test_race_assertion_near_misses_reject(self) -> None:
         source = FIXTURE.read_text()
@@ -353,6 +377,10 @@ class C2ShaReceiptStaticTest(unittest.TestCase):
             verify_race_assertions(source.replace(
                 "(= (vector-ref counts-after-wrong-pair 1) busy-before)",
                 "#t", 1))
+        with self.assertRaisesRegex(ValueError, "pair malformed-record category"):
+            verify_race_assertions(source.replace(
+                '(reject "other valid C2 digest cannot enter live receipt" \'corrupt-data',
+                '(reject "other valid C2 digest cannot enter live receipt" \'io', 1))
         late = ('(check "borrow end restores one live C2 owner"\n'
                 '  (= (vector-ref counts-after-borrow-end 0) (+ owners-before 1)))')
         with self.assertRaisesRegex(ValueError, "receipt race phase order"):

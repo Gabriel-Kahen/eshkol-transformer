@@ -319,7 +319,7 @@
 (g3r-record-encode! wrong-pair pair-policy pair-rng pair-history 1 0 0
                     pair-fingerprint expected-a)
 (define untouched-pair (make-vector 8 'untouched))
-(reject-any "other valid C2 digest cannot enter live receipt"
+(reject "other valid C2 digest cannot enter live receipt" 'corrupt-data
   (lambda ()
     (g3r-c2-pair-decode-internal! receipt wrong-pair untouched-pair)))
 (check "wrong pair keeps destination untouched"
@@ -333,7 +333,7 @@
   (= (vector-ref counts-after-wrong-pair 1) busy-before))
 (define torn-pair (bytevector-copy pair-image 0 288))
 (bytevector-u8-set! torn-pair 120 8)
-(reject-any "torn companion rejects without publication"
+(reject "torn companion rejects without publication" 'corrupt-data
   (lambda ()
     (g3r-c2-pair-decode-internal! receipt torn-pair untouched-pair)))
 (check "torn companion closes borrow and preserves destination"

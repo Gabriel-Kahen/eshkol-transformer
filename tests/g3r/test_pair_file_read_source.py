@@ -56,6 +56,8 @@ def verify(source: str, root: str, closure: str, predecessor: str,
     parse(fixture)
     for text in (
             '"valid.g3r"', '"wrong-digest.g3r"', '"torn.g3r"',
+            '(reject "valid wrong-image record rejects" \'corrupt-data',
+            '(reject "torn record rejects" \'corrupt-data',
             '"short.g3r"', '"long.g3r"', '"link.g3r"', '"fifo.g3r"',
             '(string #\\nul)',
             '(make-string 4097 #\\a)',
@@ -114,6 +116,11 @@ class FileReadSourceTest(unittest.TestCase):
             with self.subTest(marker=marker), self.assertRaises(ValueError):
                 verify(self.source, self.root, self.closure,
                        self.predecessor, self.fixture.replace(marker, '', 1))
+        with self.assertRaises(ValueError):
+            verify(self.source, self.root, self.closure, self.predecessor,
+                   self.fixture.replace(
+                       '(reject "valid wrong-image record rejects" \'corrupt-data',
+                       '(reject "valid wrong-image record rejects" \'io', 1))
 
     def test_independent_files(self):
         with tempfile.TemporaryDirectory() as scratch:

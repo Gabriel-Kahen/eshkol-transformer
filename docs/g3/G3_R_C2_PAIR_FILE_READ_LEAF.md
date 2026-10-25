@@ -18,6 +18,13 @@ authoritative C2-image SHA and atomically copies eight detached fields after
 closing its borrow. A failed read never borrows the receipt; any read or decode
 failure leaves the caller destination and receipt authority unchanged.
 
+The FILE-bound pair decoder now maps only its codec's malformed header/pair/
+checksum, noncanonical history, and invalid bounded-field failures to the
+private `checkpoint-load/corrupt-data` transformer error, after retiring its
+receipt borrow and zeroing the borrowed SHA. It rethrows invalid extents and
+other failures unchanged. The in-memory G3RCV1 codec still raises its original
+string reasons; no codec API or successful data layout changes.
+
 `native/g3r_c2_pair_file_read_root.esk` loads the accepted SHA-receipt root
 before the new extension. The separate source-closure manifest retains that
 entire predecessor and adds no installed symbol. The deterministic Python
