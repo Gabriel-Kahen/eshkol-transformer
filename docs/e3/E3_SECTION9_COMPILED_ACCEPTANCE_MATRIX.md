@@ -134,12 +134,33 @@ disposition for these mathematical candidates, not a compiled-private E3
 mutant result or a global equivalence proof. The existing private
 finite/overflow fixture expects losses `42b0ffc6`/`42b1ffc6`; the latter's
 f64 exponential likewise casts to infinity in the local probe. The f64-retry
-M2 row stays open
-until an actual C1/M3/D2 outcome-changing word or typed error is demonstrated
-and independently reviewed in a compiled normal/repeat/poison/sanitizer gate.
+M2 row stays open for a nonfinite-triggered retry that changes an outcome.
 The sweep and source identity are retained under
 `/home/gabe/.codex/evidence/eshkol-transformer/e3-m2-f64-retry-scout-20261025/SHA256SUMS`;
 the gate above is not claimed by that evidence.
+
+A separate finite-path f64 **recompute** candidate exists on this same
+mathematical C1/M3/D2 route. In a new 257-word gamma sweep
+`41ad01eb..41ad02eb`, state `41ad026a` produced C1 SHA-256
+`3f6f6354655198266a42f508757c88307292692c1aebea1a659c7b8772b6e860`
+and final loss `42ad0231`. On local GCC 16.2.1/glibc 2.44,
+`expf(loss)` returned `7ddec091` while `(float)exp((double)loss)` returned
+`7ddec090`; the independent 100/180-digit Decimal oracle rounds to
+`7ddec090`. The one-at-a-time source proposal replaces only the finalizer's
+`const float perplexity = expf(loss);` with
+`const float perplexity = (float)exp((double)loss);` in a noninstalled,
+hash-bound test overlay. Because `expf` is finite here, this is not a kill of
+the nonfinite-triggered f64 **retry** row. On the same local host, an exhaustive
+524,289-word scan `42ad0000..42b50000` found zero cases where nonfinite
+`expf` became finite after f64 exponential and f32 cast. Both results are
+bounded host controls, not a global equivalence proof. Before a finite
+recompute mutant gate, the supported Ubuntu 22/LLVM 21 lane must show this
+exact normal-versus-overlay word difference on the frozen C1/D2 fixture, then
+independent normal/repeat/poison/sanitizer review must identify the first
+changed final metric without accepting a mutant transcript. No such compiled
+private run has occurred. The frozen candidate, Decimal check, host
+compiler/libm identity and scan counts are sealed at
+`/home/gabe/.codex/evidence/eshkol-transformer/e3-m2-f64-retry-extended-20261025/SHA256SUMS`.
 
 ## Failure and rollback matrix
 
