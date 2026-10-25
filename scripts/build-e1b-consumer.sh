@@ -2256,12 +2256,13 @@ if [[ "${e3_private_test_sanitize}" == 1 ]]; then
       die "E3 overflow sanitizer instrumentation imports differ"
     e3_retention_sanitizer_inventory_verified=1
   elif [[ "${e3_tuple_kind:-}" == n5 ]]; then
-    cmp -s "${e3_prefix}_sanitized_noninstrumentation_undefined_symbols.txt" \
-      "${e1b_tmp}/noninstrumentation-undefined.txt" ||
-      die "E3 N5 sanitized noninstrumentation imports differ"
-    cmp -s "${e3_prefix}_sanitized_instrumentation_undefined_symbols.txt" \
-      "${e1b_tmp}/sanitizer-undefined.txt" ||
-      die "E3 N5 sanitizer instrumentation imports differ"
+    source "${PROJECT_ROOT}/scripts/e3-n5-sanitizer-import-policy.sh"
+    e3_n5_verify_sanitizer_imports \
+      "${e1b_tmp}/expected-undefined.txt" \
+      "${e1b_tmp}/noninstrumentation-undefined.txt" \
+      "${e1b_tmp}/sanitizer-undefined.txt" \
+      "${e3_prefix}_sanitized_noninstrumentation_undefined_symbols.txt" \
+      "${e3_prefix}_sanitized_instrumentation_undefined_symbols.txt"
     e3_retention_sanitizer_inventory_verified=1
   elif [[ "${e3_tuple_kind:-}" == numerical ||
           "${e3_tuple_kind:-}" == uniform ]]; then

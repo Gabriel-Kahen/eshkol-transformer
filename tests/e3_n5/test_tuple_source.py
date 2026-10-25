@@ -115,6 +115,9 @@ printf '%s\\n' "$e3_tuple_kind"
         self.assertIn("control=8192 stage=2 rows=8193", gate)
         self.assertIn("control=8192 stage=2 rows=8193", runtime)
         self.assertIn("N5 sanitizer import inventory is not pinned", gate)
+        for suffix in ("sanitized_noninstrumentation_undefined_symbols",
+                       "sanitized_instrumentation_undefined_symbols"):
+            self.assertTrue((N5 / f"package_{suffix}.txt").is_file())
         self.assertIn("$4 <= 524288", gate)
         for expected in ("tests.e3_n5.oracle", "edge_runtime.esk",
                          "edge-${variant}.stdout", "269104"):
