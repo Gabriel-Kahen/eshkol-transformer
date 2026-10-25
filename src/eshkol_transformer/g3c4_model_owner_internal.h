@@ -71,6 +71,13 @@ int64_t et_g3c4_private_sealed_owner_topology_status_v1(
     const void *exact_owner);
 #endif
 
+#ifdef ET_G3R_C4_OWNER_ASSOCIATION_PRIVATE
+/* One scalar P1 shell and I2 parameter per call; no pointer output. */
+int64_t et_g3c4_private_sealed_owner_binding_status_v1(
+    const void *exact_owner, int64_t index, const void *exact_handle,
+    const void *exact_parameter);
+#endif
+
 int32_t et_g3c4_construction_parameter_preflight_internal(
     const void *exact_owner, void *parameter,
     const void *exact_handle, et_f32_tensor_error *error);

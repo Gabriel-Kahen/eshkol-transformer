@@ -1,0 +1,76 @@
+;;; Source-only proposed caller fixture; not a compiled admission receipt.
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_trainable_constructor_extension.esk")
+(load "g3c4_trainable_owner_association_extension.esk")
+
+(define checks 0)
+(define (check label value)
+  (if value (set! checks (+ checks 1))
+      (begin (display "G3-R C4 association FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (status label actual wanted)
+  (check label (and (integer? actual) (exact? actual) (= actual wanted))))
+(define (config context)
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      (string-append
+        "{\"config-schema-major\":1,\"config-schema-minor\":0,"
+        "\"model.context-length\":" (number->string context)
+        ",\"model.hidden-size\":4,\"model.layer-count\":1,"
+        "\"model.query-head-count\":2,\"model.vocabulary-size\":256,"
+        "\"run.seed\":1729}")) '()))
+(define (copy-vector input)
+  (let ((result (make-vector (vector-length input) #f)))
+    (let loop ((i 0))
+      (if (= i (vector-length input)) result
+          (begin (vector-set! result i (vector-ref input i))
+                 (loop (+ i 1)))))))
+
+(define c4-config (config 4))
+(define tokenizer (t1-private-tokenizer-byte c4-config))
+(define initializer (m3t-public-initializer-state 1729))
+(define model-a
+  (g3c4-model-create-trainable-internal c4-config tokenizer initializer))
+(define entry-a (car (vector-ref g3c4-model-registry 0)))
+(define handles-a (vector-ref entry-a 8))
+(define owner-a (vector-ref entry-a 3))
+(status "exact live owner" (g3r-c4-trainable-owner-association-status-internal
+                              model-a handles-a owner-a) 0)
+(define model-b
+  (g3c4-model-create-trainable-internal c4-config tokenizer initializer))
+(define entry-b (car (vector-ref g3c4-model-registry 0)))
+(define owner-b (vector-ref entry-b 3))
+(status "cross-owner" (g3r-c4-trainable-owner-association-status-internal
+                         model-a handles-a owner-b) 1)
+(status "forged root" (g3r-c4-trainable-owner-association-status-internal
+                         (vector 'foreign) handles-a owner-a) 1)
+(define swapped (copy-vector handles-a))
+(vector-set! swapped 0 (vector-ref handles-a 1))
+(vector-set! swapped 1 (vector-ref handles-a 0))
+(status "swapped handles" (g3r-c4-trainable-owner-association-status-internal
+                             model-a swapped owner-a) 1)
+(module-eval! model-a)
+(status "eval mode" (g3r-c4-trainable-owner-association-status-internal
+                       model-a handles-a owner-a) 12)
+(module-train! model-a)
+(status "train mode restored"
+        (g3r-c4-trainable-owner-association-status-internal
+          model-a handles-a owner-a) 0)
+(define c2-model
+  (m3t-public-model-create (config 2)
+                           (m3t-public-initializer-state 1729)))
+(define c2-handles
+  (vector-ref (m3t-entry c2-model 'model 'c4-association-fixture #t) 8))
+(status "C2 position [2,4]" (module-c4-train-topology-status-internal
+                              c2-model c2-handles) 4)
+(check "retained exact entry and owner"
+  (and (eq? entry-a (car (cdr (vector-ref g3c4-model-registry 0))))
+       (eq? owner-a (vector-ref entry-a 3))
+       (eq? handles-a (vector-ref entry-a 8))
+       (eq? owner-b (vector-ref entry-b 3))
+       (not (vector-ref g3c4-model-cleanup-root 0))
+       (not (vector-ref i2-construction-registry-root 1))))
+(display "G3-R C4 association source fixture PASS checks=")
+(display checks) (newline)

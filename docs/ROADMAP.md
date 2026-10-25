@@ -2230,6 +2230,13 @@ gate can claim topology/owner identity only. Active generation, workspace and
 trainer lease exclusion depend on later C4 ledgers, so full workspace
 admission remains open.
 
+A [source-only association candidate](g3/G3_R_C4_OWNER_ASSOCIATION_LEAF.md)
+now composes those two statuses with an exact per-index P1/I2/native binding
+check. Local Clang normal/repeat/ASan+UBSan passed 48 native checks per mode,
+and 22 focused source assertions passed; its Eshkol fixture and pinned
+compiled package gate remain unrun. It cannot yet claim constructor admission,
+changed-live-carrier rejection, lease exclusion or workspace authority.
+
 The [private C4 position VJP leaf](g3/G3_R_C4_POSITION_VJP_LEAF.md) supplies
 one fixed `[1,4]` position-ID and `[1,4,4]` upstream to `[4,4]` gradient
 operation behind a separate feature flag. Its source and tests were independently

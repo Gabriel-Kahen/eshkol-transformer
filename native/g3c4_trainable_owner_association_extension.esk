@@ -1,0 +1,82 @@
+;;; Source-private C4 live-owner association. Load after the trainable
+;;; constructor, P1 slot 74, and the native topology/binding helpers.
+;;; No pointer, carrier, handle array, tree or workspace escapes this status.
+
+(extern i64 g3r-c4-native-owner-topology-status ptr
+        :real et_g3c4_private_sealed_owner_topology_status_v1)
+(extern i64 g3r-c4-native-owner-binding-status ptr i64 ptr ptr
+        :real et_g3c4_private_sealed_owner_binding_status_v1)
+
+;;; 0 exact; 1 supplied identity; 2 live/busy tuple; 4 I2 carrier;
+;;; 11..14 P1 slot-74 status; 21..26 native topology category;
+;;; 31..36 native scalar binding category. The native last-error triple
+;;; remains available for 21..26 and 31..36.
+(define (g3r-c4-trainable-owner-association-status-internal model handles owner)
+  (let find ((remaining (vector-ref g3c4-model-registry 0)))
+    (cond
+      ((null? remaining) 1)
+      ((not (and (pair? remaining) (vector? (car remaining))
+                 (= (vector-length (car remaining)) 12))) 2)
+      ((not (eq? (vector-ref (car remaining) 0) model))
+       (find (cdr remaining)))
+      (else
+        (let* ((entry (car remaining))
+               (canonical (vector-ref entry 8)))
+          (cond
+            ((not (and (vector? handles) (= (vector-length handles) 14)
+                       (vector? canonical) (= (vector-length canonical) 14)
+                       (eq? owner (vector-ref entry 3)))) 1)
+            ((not (and (eq? (vector-ref entry 1) 'c4-model)
+                       (eq? (vector-ref entry 2) 'live)
+                       (eq? (vector-ref entry 4) 'trainable)
+                       (eq? (vector-ref entry 9) #f)
+                       (eq? (vector-ref entry 10) #f)
+                       (eq? (vector-ref entry 11) 'trainable-c4)
+                       (not (vector-ref g3c4-model-cleanup-root 0))
+                       (not (vector-ref i2-construction-registry-root 1)))) 2)
+            (else
+              (let same ((index 0))
+                (if (= index 14)
+                    (let ((p1 (module-c4-train-topology-status-internal
+                                model handles)))
+                      (if (not (= p1 0)) (+ 10 p1)
+                          (let ((native
+                                  (g3r-c4-native-owner-topology-status owner)))
+                            (if (not (= native 0)) (+ 20 native)
+                                (let loop ((index 0))
+                                  (if (= index 14)
+                                      (let ((p1-again
+                                              (module-c4-train-topology-status-internal
+                                                model handles)))
+                                        (if (not (= p1-again 0)) (+ 10 p1-again)
+                                            (let ((native-again
+                                                    (g3r-c4-native-owner-topology-status
+                                                      owner)))
+                                              (if (= native-again 0) 0
+                                                  (+ 20 native-again)))))
+                                      (let* ((handle (vector-ref handles index))
+                                             (carrier
+                                               (parameter-handle-tensor-identity-internal
+                                                 handle)))
+                                        (if (not (and
+                                                   (i2-carrier-shape? carrier)
+                                                   (eq? (vector-ref carrier 1)
+                                                        'parameter)
+                                                   (eq? (vector-ref carrier 4)
+                                                        'parameter)
+                                                   (eq? (vector-ref carrier 3)
+                                                        handle)
+                                                   (= (i2-native-carrier-live
+                                                        (vector-ref carrier 2) 1
+                                                        handle) 1)))
+                                            4
+                                            (let ((status
+                                                    (g3r-c4-native-owner-binding-status
+                                                      owner index handle
+                                                      (vector-ref carrier 2))))
+                                              (if (= status 0)
+                                                  (loop (+ index 1))
+                                                  (+ 30 status)))))))))))
+                    (if (eq? (vector-ref handles index)
+                             (vector-ref canonical index))
+                        (same (+ index 1)) 1))))))))))

@@ -25,12 +25,15 @@ cmp "${tmp}/normal.stdout" "${tmp}/san.stdout"
 "${cc}" "${flags[@]}" -DET_G3C4_NATIVE_OWNER_PRIVATE -c \
   src/eshkol_transformer/g3c4_model_owner.c -o "${tmp}/off.o"
 "${cc}" "${flags[@]}" -DET_G3C4_NATIVE_OWNER_PRIVATE \
-  -DET_G3C4_NATIVE_PINS_PRIVATE -DET_G3R_C4_OWNER_TOPOLOGY_PRIVATE -c \
+  -DET_G3C4_NATIVE_PINS_PRIVATE -DET_G3R_C4_OWNER_TOPOLOGY_PRIVATE \
+  -DET_G3R_C4_OWNER_ASSOCIATION_PRIVATE -c \
   src/eshkol_transformer/g3c4_model_owner.c -o "${tmp}/on.o"
-symbol=et_g3c4_private_sealed_owner_topology_status_v1
-if nm -g --defined-only "${tmp}/off.o" | awk '{print $3}' | rg -Fx "${symbol}"; then
-  echo "feature-off owner exports topology helper" >&2
-  exit 1
-fi
-nm -g --defined-only "${tmp}/on.o" | awk '{print $3}' | rg -Fx "${symbol}" >/dev/null
+for symbol in et_g3c4_private_sealed_owner_topology_status_v1 \
+              et_g3c4_private_sealed_owner_binding_status_v1; do
+  if nm -g --defined-only "${tmp}/off.o" | awk '{print $3}' | rg -Fx "${symbol}"; then
+    echo "feature-off owner exports ${symbol}" >&2
+    exit 1
+  fi
+  nm -g --defined-only "${tmp}/on.o" | awk '{print $3}' | rg -Fx "${symbol}" >/dev/null
+done
 cat "${tmp}/normal.stdout"

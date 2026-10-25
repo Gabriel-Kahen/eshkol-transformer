@@ -2,6 +2,7 @@
 #define ET_G3C4_NATIVE_PINS_PRIVATE 1
 #define ET_G3C4_NATIVE_OWNER_PRIVATE 1
 #define ET_G3R_C4_OWNER_TOPOLOGY_PRIVATE 1
+#define ET_G3R_C4_OWNER_ASSOCIATION_PRIVATE 1
 #include "../../src/eshkol_transformer/m3_call_f32_integration.c"
 #include "../../src/eshkol_transformer/g3c4_model_owner.c"
 
@@ -71,6 +72,20 @@ static void status(int64_t wanted, int64_t domain, int64_t code) {
   ++checks;
 }
 
+static void binding(const void *candidate, int64_t index,
+    const void *handle, const void *parameter,
+    int64_t wanted, int64_t domain, int64_t code) {
+  et_g3c4_model_owner_internal before = *owner;
+  int64_t got = et_g3c4_private_sealed_owner_binding_status_v1(
+      candidate, index, handle, parameter);
+  CHECK(got == wanted);
+  CHECK(et_g3c4_private_last_error_domain_v1() == domain);
+  CHECK(et_g3c4_private_last_error_category_v1() == wanted);
+  CHECK(et_g3c4_private_last_error_code_v1() == code);
+  CHECK(!memcmp(owner, &before, sizeof(before)));
+  unchanged(); ++checks;
+}
+
 int main(void) {
   owner = et_g3c4_private_model_owner_create_seeded_v1(1729);
   CHECK(owner);
@@ -131,6 +146,52 @@ int main(void) {
   }
   m3_call_test_fail_after = SIZE_MAX;
   status(0, 0, 0);
+  for (int64_t index = 0; index < 14; ++index)
+    binding(owner, index, &identity[index], owner->parameters[index], 0, 0, 0);
+  binding(owner, -1, &identity[0], owner->parameters[0],
+          ET_G3C4_INVALID_ARGUMENT, ET_G3C4_DOMAIN_C4,
+          ET_G3C4_CODE_SELECTOR);
+  binding(owner, 14, &identity[0], owner->parameters[0],
+          ET_G3C4_INVALID_ARGUMENT, ET_G3C4_DOMAIN_C4,
+          ET_G3C4_CODE_SELECTOR);
+  binding(owner, 0, &identity[1], owner->parameters[0],
+          ET_G3C4_INVALID_STATE, ET_G3C4_DOMAIN_C4,
+          ET_G3C4_CODE_STALE_BINDING);
+  binding(owner, 0, &identity[0], owner->parameters[1],
+          ET_G3C4_INVALID_STATE, ET_G3C4_DOMAIN_C4,
+          ET_G3C4_CODE_STALE_BINDING);
+  binding(owner, 0, &identity[0], &foreign,
+          ET_G3C4_INVALID_STATE, ET_G3C4_DOMAIN_C4,
+          ET_G3C4_CODE_STALE_BINDING);
+  binding(&foreign, 0, &identity[0], owner->parameters[0],
+          ET_G3C4_INVALID_ARGUMENT, ET_G3C4_DOMAIN_C4,
+          ET_G3C4_CODE_IDENTITY);
+  owner->active = &foreign;
+  binding(owner, 0, &identity[0], owner->parameters[0],
+          ET_G3C4_INVALID_STATE, ET_G3C4_DOMAIN_C4,
+          ET_G3C4_CODE_LIFECYCLE);
+  owner->active = NULL;
+  unsigned char other_identity[14];
+  et_g3c4_model_owner_internal *other =
+      et_g3c4_private_model_owner_create_seeded_v1(1730);
+  CHECK(other);
+  for (size_t i = 0; i < 14; ++i)
+    OK(et_g3c4_private_model_owner_bind_v1(other, (int64_t)i,
+                                           &other_identity[i]));
+  for (size_t i = 0; i < 14; ++i)
+    OK(et_g3c4_private_model_owner_initialize_v1(other, (int64_t)i));
+  OK(et_g3c4_private_model_owner_prepare_seal_v1(other));
+  OK(et_g3c4_private_model_owner_commit_seal_v1(other));
+  binding(other, 0, &identity[0], owner->parameters[0],
+          ET_G3C4_INVALID_STATE, ET_G3C4_DOMAIN_C4,
+          ET_G3C4_CODE_STALE_BINDING);
+  et_g3c4_model_owner_internal *aborted =
+      et_g3c4_private_model_owner_create_seeded_v1(1731);
+  CHECK(aborted);
+  OK(et_g3c4_private_model_owner_abort_v1(aborted));
+  binding(aborted, 0, &identity[0], owner->parameters[0],
+          ET_G3C4_INVALID_STATE, ET_G3C4_DOMAIN_C4,
+          ET_G3C4_CODE_LIFECYCLE);
   printf("G3-R C4 sealed owner topology: PASS checks=%d\n", checks);
   return 0;
 }
