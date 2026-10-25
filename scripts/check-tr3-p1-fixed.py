@@ -57,11 +57,13 @@ def check():
         [sys.executable, str(ROOT / "scripts/check-e3-p1-contract.py")],
         cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
     text = SOURCE.read_text()
-    # The C4 train-prepared sibling is an exact append to the accepted P1
-    # source. Remove only its four reviewed spans for the inherited TR3 pin.
+    # C4 train prepare and topology are append-only to the accepted P1 source.
+    # Remove their exact spans before checking the inherited TR3 pin.
     inherited = text
     for name in ("construction-prepare-train!",
-                 "construction-prepare-train-guarded!"):
+                 "construction-prepare-train-guarded!",
+                 "c4-topology-shape?", "c4-topology-handle-status",
+                 "c4-topology-handles-status", "c4-topology-status"):
         span = definition(inherited, name) + "\n\n"
         require(inherited.count(span) == 1, f"C4 train span is not unique: {name}")
         inherited = inherited.replace(span, "", 1)
@@ -70,6 +72,10 @@ def check():
         "  ;; Append-only source-private C4 train-mode prepare, slot 73.\n"
         "  (lambda (identity)\n"
         "    (construction-prepare-train-guarded! identity))\n",
+        "  ;; Append-only source-private read-only C4 topology status, slot 74.\n"
+        "  c4-topology-status\n",
+        ";;; C4 read-only topology authority. Slot 74 owns only a closed status; its\n"
+        ";;; scratch vectors never escape and no module observation/finalizer runs.\n",
     ):
         require(inherited.count(span) == 1, "C4 train append is not exact")
         inherited = inherited.replace(span, "", 1)

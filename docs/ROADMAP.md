@@ -2214,8 +2214,13 @@ successor aligns both classifiers with the fixture and retains runtime output
 before checking it.
 
 The proposed [C4 workspace topology authority contract](g3/G3_R_C4_WORKSPACE_TOPOLOGY_AUTHORITY_CONTRACT.md)
-pins a future read-only P1 trusted slot 74 and separate native sealed-owner
-scoped-pin status. Neither is implemented. It requires an exact live
+pins a read-only P1 trusted slot 74 and separate native sealed-owner
+scoped-pin status. The [P1 topology leaf](g3/G3_R_C4_P1_TOPOLOGY_STATUS_LEAF.md)
+is a source-only candidate: it appends status-only slot 74 without changing
+slots 0–73 or the feature-off ABI, and has an unrun fixture for the exact C4
+tree, ordered handles/tie, CPU f32 provider, `[4,4]` position shape and
+negative controls. Compiled runtime and native owner checks remain open.
+The workspace contract requires an exact live
 owner-to-P1 handle association proof and a swapped-handle negative; the first
 gate can claim topology/owner identity only. Active generation, workspace and
 trainer lease exclusion depend on later C4 ledgers, so full workspace

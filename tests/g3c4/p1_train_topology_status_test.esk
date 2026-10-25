@@ -1,0 +1,104 @@
+;;; Private P1 topology-only fixture. Native owner/lease/workspace are out of scope.
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_trainable_constructor_extension.esk")
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "G3-C4 P1 topology FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (status label actual expected)
+  (check label (and (integer? actual) (exact? actual) (= actual expected))))
+(define (reject-internal label thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) 'internal))))
+      (thunk) #f)))
+(define (config context)
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      (string-append
+        "{\"config-schema-major\":1,\"config-schema-minor\":0,"
+        "\"model.context-length\":" (number->string context)
+        ",\"model.hidden-size\":4,\"model.layer-count\":1,"
+        "\"model.query-head-count\":2,\"model.vocabulary-size\":256,"
+        "\"run.seed\":1729}")) '()))
+(define (copy-vector input)
+  (let ((copy (make-vector (vector-length input) #f)))
+    (let loop ((index 0))
+      (if (= index (vector-length input)) copy
+          (begin (vector-set! copy index (vector-ref input index))
+                 (loop (+ index 1)))))))
+
+(define c4-config (config 4))
+(define c4-tokenizer (t1-private-tokenizer-byte c4-config))
+(define c4-initializer (m3t-public-initializer-state 1729))
+;;; A construction with no tied binding must be rejected before publication.
+;;; The trusted status itself cannot mutate a finalized P1 binding to forge
+;;; this case; its exact equality branch is pinned by the source checker.
+(define saved-tie-register i2-module-register-tied-parameter-internal!)
+(define before-wrong-tie (vector-ref g3c4-model-registry 0))
+(set! i2-module-register-tied-parameter-internal!
+  (lambda (module name handle) #t))
+(reject-internal "missing tied binding at construction"
+  (lambda ()
+    (g3c4-model-create-trainable-internal
+      c4-config c4-tokenizer c4-initializer)))
+(set! i2-module-register-tied-parameter-internal! saved-tie-register)
+(check "wrong tie publishes no live entry"
+  (and (not (eq? before-wrong-tie (vector-ref g3c4-model-registry 0)))
+       (eq? (vector-ref (car (vector-ref g3c4-model-registry 0)) 2) 'dead)
+       (not (vector-ref g3c4-model-cleanup-root 0))
+       (not (vector-ref i2-construction-registry-root 1))))
+(define c4-model
+  (g3c4-model-create-trainable-internal
+    c4-config c4-tokenizer c4-initializer))
+(define c4-entry (car (vector-ref g3c4-model-registry 0)))
+(define handles (vector-ref c4-entry 8))
+(define owner (vector-ref c4-entry 3))
+(define original (vector-ref c4-entry 5))
+(define successor (vector-ref c4-entry 6))
+(status "exact C4 topology" (module-c4-train-topology-status-internal
+                               c4-model handles) 0)
+(status "foreign shell" (module-c4-train-topology-status-internal
+                           (vector 'foreign) handles) 1)
+(status "malformed handle vector" (module-c4-train-topology-status-internal
+                                    c4-model (vector)) 1)
+(define swapped (copy-vector handles))
+(vector-set! swapped 0 (vector-ref handles 1))
+(vector-set! swapped 1 (vector-ref handles 0))
+(status "swapped handles" (module-c4-train-topology-status-internal
+                            c4-model swapped) 1)
+(define forged-head (copy-vector handles))
+(vector-set! forged-head 10 (vector-ref handles 11))
+(status "forged head/tie shell" (module-c4-train-topology-status-internal
+                                  c4-model forged-head) 1)
+
+;;; The real C2 M3T owner has the same P1 paths/provider/tie but [2,4]
+;;; position storage. This isolates the C4-only final shape rejection.
+(define c2-model
+  (m3t-public-model-create (config 2)
+                           (m3t-public-initializer-state 1729)))
+(define c2-handles
+  (vector-ref (m3t-entry c2-model 'model 'c4-p1-topology-fixture #t) 8))
+(status "C2 position shape [2,4]" (module-c4-train-topology-status-internal
+                                     c2-model c2-handles) 4)
+(module-eval! c4-model)
+(status "eval mode" (module-c4-train-topology-status-internal
+                       c4-model handles) 2)
+(module-train! c4-model)
+(status "train mode restored" (module-c4-train-topology-status-internal
+                                 c4-model handles) 0)
+(check "no entry/owner/handle mutation"
+  (and (eq? c4-entry (car (vector-ref g3c4-model-registry 0)))
+       (eq? owner (vector-ref c4-entry 3))
+       (eq? handles (vector-ref c4-entry 8))
+       (equal? original '#(1 1729 0 0))
+       (equal? successor '#(1 1729 292 0))
+       (not (vector-ref g3c4-model-cleanup-root 0))
+       (not (vector-ref i2-construction-registry-root 1))))
+(display "G3-C4 P1 topology PASS checks=")
+(display checks) (newline)

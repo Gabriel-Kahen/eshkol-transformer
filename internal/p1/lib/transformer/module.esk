@@ -5413,6 +5413,90 @@
                         (tr3-fixed-recheck-handles
                           modules handles carriers provider)))))))))))
 
+;;; C4 read-only topology authority. Slot 74 owns only a closed status; its
+;;; scratch vectors never escape and no module observation/finalizer runs.
+(define (c4-topology-shape? shape index)
+  (if (= index 13)
+      (and (pair? shape) (tr3-fixed-dimension=? (car shape) 4)
+           (pair? (cdr shape))
+           (tr3-fixed-dimension=? (car (cdr shape)) 4)
+           (null? (cdr (cdr shape))))
+      (tr3-fixed-shape? shape index)))
+
+(define (c4-topology-handle-status supplied modules carriers provider index)
+  (let* ((shell (vector-ref supplied index))
+         (entry (shell-entry shell))
+         (raw (if (and entry (eq? (vector-ref entry 1) 'handle))
+                  (vector-ref entry 2) #f))
+         (expected (tr3-fixed-expected-handle modules index)))
+    (cond
+      ((not (and raw expected (eq? raw expected))) 1)
+      ((not (and (handle-value? raw)
+                 (eq? (tr3-fixed-existing-shell 'handle raw) shell)
+                 (eq? (vector-ref raw 1)
+                      (tr3-fixed-module-raw modules
+                        (tr3-fixed-handle-module-index index)))
+                 (tr3-fixed-path? (vector-ref raw 2) index)
+                 (c4-topology-shape? (vector-ref raw 3) index)
+                 (eq? (vector-ref raw 4) 'f32)
+                 (eq? (vector-ref raw 5) 'cpu)
+                 (vector-ref raw 6)
+                 (eq? (vector-ref raw 7) provider)
+                 (tr3-fixed-distinct? supplied shell index)
+                 (tr3-fixed-distinct? carriers (vector-ref raw 6) index))) 4)
+      (else
+        (vector-set! carriers index (vector-ref raw 6))
+        0))))
+
+(define (c4-topology-handles-status supplied modules carriers provider)
+  (let loop ((index 0))
+    (if (= index 14) 0
+        (let ((status
+                (c4-topology-handle-status
+                  supplied modules carriers provider index)))
+          (if (= status 0) (loop (+ index 1)) status)))))
+
+(define (c4-topology-status model supplied)
+  (cond
+    ((not (tr3-fixed-vector? supplied 14)) 1)
+    (construction-busy? 2)
+    ((protected-storage-comparison-active?) 2)
+    (else
+      (let* ((entry (shell-entry model))
+             (root (if (and entry (eq? (vector-ref entry 1) 'module))
+                       (vector-ref entry 2) #f))
+             (provider (tensor-provider-find e3-mode-provider-name)))
+        (cond
+          ((not (and entry (eq? (vector-ref entry 1) 'module))) 1)
+          ((not (and (module-value? root) provider
+                     (eq? (vector-ref root 5) #f)
+                     (eq? (vector-ref root 6) provider))) 4)
+          (else
+            (let* ((modules (make-vector 17 #f))
+                   (carriers (make-vector 14 #f))
+                   (module-status
+                     (tr3-fixed-capture-modules! root provider modules)))
+              (if (not (= module-status 0)) module-status
+                  (if (not (eq? model (vector-ref modules 0))) 1
+                      (let ((token-handle
+                              (tr3-fixed-binding-handle
+                                (tr3-fixed-module-raw modules 16) "weight"))
+                            (head-handle
+                              (tr3-fixed-expected-handle modules 10)))
+                        (if (not (and token-handle head-handle
+                                      (eq? token-handle head-handle))) 4
+                            (let ((handle-status
+                                    (c4-topology-handles-status
+                                      supplied modules carriers provider)))
+                              (if (not (= handle-status 0)) handle-status
+                                  (let ((recheck
+                                          (tr3-fixed-recheck-modules
+                                            modules provider)))
+                                    (if (not (= recheck 0)) recheck
+                                        (c4-topology-handles-status
+                                          supplied modules carriers
+                                          provider))))))))))))))))
+
 
 (vector
   (lambda (module)
@@ -5919,6 +6003,8 @@
   ;; Append-only source-private C4 train-mode prepare, slot 73.
   (lambda (identity)
     (construction-prepare-train-guarded! identity))
+  ;; Append-only source-private read-only C4 topology status, slot 74.
+  c4-topology-status
   )))
 
 (define (module-parameters module)

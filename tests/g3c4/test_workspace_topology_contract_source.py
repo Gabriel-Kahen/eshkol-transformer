@@ -52,7 +52,9 @@ class WorkspaceTopologyContractSource(unittest.TestCase):
         self.assertIn("(commit-module-observation! (prepare-module-parameters module))", p1)
         self.assertIn("(vector-ref p1-trusted-surface 73)",
                       source("native/g3c4_p1_construction_extension.esk"))
-        self.assertNotIn("(vector-ref p1-trusted-surface 74)", p1)
+        self.assertIn("  c4-topology-status\n", p1)
+        self.assertIn("(vector-ref p1-trusted-surface 74)",
+                      source("native/g3c4_p1_construction_extension.esk"))
 
     def test_native_live_status_is_new_dependency(self) -> None:
         owner = source("src/eshkol_transformer/g3c4_model_owner.c")
@@ -79,6 +81,38 @@ class WorkspaceTopologyContractSource(unittest.TestCase):
             "active generation/workspace/lease exclusion",
         ):
             self.assertIn(phrase, contract)
+
+    def test_p1_leaf_is_read_only_and_c4_specific(self) -> None:
+        p1 = source("internal/p1/lib/transformer/module.esk")
+        leaf = p1.split(";;; C4 read-only topology authority.", 1)[1].split(
+            "\n\n(vector\n", 1
+        )[0]
+        for phrase in (
+            "(define (c4-topology-status model supplied)",
+            "(tr3-fixed-capture-modules! root provider modules)",
+            "(tr3-fixed-recheck-modules",
+            "(c4-topology-shape? (vector-ref raw 3) index)",
+            "(eq? token-handle head-handle)",
+            "(eq? (vector-ref raw 7) provider)",
+            "(tr3-fixed-distinct? supplied shell index)",
+            "(tr3-fixed-distinct? carriers (vector-ref raw 6) index)",
+            "(tr3-fixed-dimension=? (car shape) 4)",
+            "(protected-storage-comparison-active?)",
+        ):
+            self.assertIn(phrase, leaf)
+        for forbidden in ("module-parameters", "commit-module-observation!",
+                          "finalize-modules!", "shell-for-raw", "p1-native-"):
+            self.assertNotIn(forbidden, leaf)
+
+    def test_fixture_has_exact_negative_categories(self) -> None:
+        fixture = source("tests/g3c4/p1_train_topology_status_test.esk")
+        for label in ("missing tied binding at construction",
+                      "wrong tie publishes no live entry", "foreign shell",
+                      "swapped handles", "forged head/tie shell",
+                      "C2 position shape [2,4]", "eval mode",
+                      "train mode restored", "no entry/owner/handle mutation"):
+            self.assertIn(label, fixture)
+        self.assertNotIn("module-parameters", fixture)
 
 
 if __name__ == "__main__":

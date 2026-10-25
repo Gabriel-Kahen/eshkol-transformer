@@ -8,3 +8,8 @@
 
 (define (module-construction-seal-prepared-internal! identity)
   ((vector-ref p1-trusted-surface 72) identity))
+
+;;; Exact P1 module topology only; no tree, handle, carrier or native pointer
+;;; is returned. A separate native owner association gate remains required.
+(define (module-c4-train-topology-status-internal root handles)
+  ((vector-ref p1-trusted-surface 74) root handles))
