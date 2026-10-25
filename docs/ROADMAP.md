@@ -756,6 +756,13 @@ pass 19 CLI3 source contracts, three M3 closure tests and CI topology. An
 independent source review accepted the ordered insertions; the hosted matrix is
 still running, and no corrected-head compiled or runtime result is claimed.
 
+The same `842a820e` run later reached D2 PASS in shard-loader, then E3-D2
+rejected a stale `d2_native.c` predecessor hash. That pin named the source
+before accepted CPU-v1 resource instrumentation; the current digest is already
+pinned in the CPU-v1 allocation inventory and source-member list. An
+independently reviewed one-value E3-D2 identity repin matches both current D2
+source/header bytes. E3-D2 compiled admission after this repin remains unrun.
+
 Active finish milestone: **first complete validated CPU v1**. Current acceptance
 and ownership: [CPU v1 completion index](WAVE3_COMPLETION.md), updated 2026-10-24.
 PR #214 exact-head hosted checks pass. Current-source CPU4 two-update training,
