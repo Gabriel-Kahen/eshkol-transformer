@@ -2690,8 +2690,8 @@ publication, public G2 and continuation remain pending.
   release/retry. A test-only native helper captures the actual call's IDs,
   RNG and A2 cache, then computes separate P2/P3/T4 native references; a
   focused Python checker uses independent G3-S/Philox sampling reference code.
-  A source-only f31 archive recipe records member and symbol inventories plus
-  final link maps and invokes the typed feature-off native gate. The 14 source
+  A pinned f31 archive recipe records member and symbol inventories plus
+  final link maps and invokes the typed feature-off native gate. The 16 source
   checks and host syntax checks pass. The first pinned fe9/f31 cut
   (`g3c4-p2g2-typed-aggregate-3d89be16-attempt1/SHA256SUMS-RUN`, SHA-256
   `edbe0c48473e91be1d6d65364955643152e556d2abdb76f3702d9aaa9eb74bcd`)
@@ -2709,10 +2709,17 @@ publication, public G2 and continuation remain pending.
   test owner was separate from the existing M3-call replacement TU that
   includes `f32_tensor.c`. The fixture now sets `ET_F32_TENSOR_TESTING` on
   that sole replacement TU, with a source test for the include chain and
-  five-hook closure. A fresh exact-source compiled gate remains
-  pending. Exact fe9/f31 dependencies are pinned; compiled same-call
-  RNG/A2 parity, feature-off execution and supported integration review remain
-  pending. Public P2/G2 dispatch stays disabled.
+  five-hook closure. The independently audited exact `fef051f9`/tree
+  `38797cb0` cut passed normal/repeat/native ASan+UBSan: 340 fixture checks
+  per mode with byte-identical stdout, empty runtime stderr, independent
+  RNG/A2 oracle parity for four cases and seven draws, and 398 typed-native
+  checks. Its 18-member archive has one M3 f32 owner. Launcher/Docker/gate
+  exits were zero and the 238-file seal
+  `g3c4-p2g2-typed-aggregate-fef051f9-attempt4/SHA256SUMS-RUN`
+  (SHA-256 `2230d55eeede84b47a92cb9eeff9087d1e2276b1affa5ac9232df4a9691b6d9f`)
+  verified. This is a seeded private C4 P2/G2 terminal prerequisite;
+  same-trained-C2 multi-token/EOS continuation and supported integration
+  review remain pending. Public P2/G2 dispatch stays disabled.
 
 ## Wave 4 — practical pretraining and performance
 
