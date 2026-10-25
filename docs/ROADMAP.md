@@ -2177,7 +2177,11 @@ Clang 21 normal/repeat/sanitizer and feature-off gate passed 79 checks per
 runtime mode on `b0c61fba`/tree `3cf7c608`; its 15-file post-exit seal is
 `g3r-c4-position-vjp-b0c61fba-f31-attempt2/SHA256SUMS-RUN` (SHA-256
 `d9a537d2dff2938880c5b8c439d3e40614e833cf90579b776742b2b9d1449629`).
-Root independent receipt review and model integration remain separate gates.
+Independent exact-result review found no blocker for this bounded leaf; it
+verified the outer and inner seals, source/recipe/image pins, three matching
+compiled modes, and feature-off isolation. Model integration remains a
+separate gate. The first one-use attempt is retained as a precompiler
+rootless-mount permission failure, not a runtime result.
 This leaf is not a trainable C4 model or a checkpoint/generation admission.
 
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
