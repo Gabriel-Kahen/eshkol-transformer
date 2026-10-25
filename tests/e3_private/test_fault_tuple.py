@@ -249,7 +249,7 @@ printf '%s\n' "$e3_tuple_kind"
         self.assertLess(frame.index("frame->fault_state = 2; /* Consume before M3 admission"),
                         frame.index("pin_status = et_g3t_model_pins_begin_fail_before_internal"))
         self.assertIn("(if (= site 3) 42\n                    (if (= site 4) 47", driver)
-        self.assertIn("(if (or (= site 3) (= site 4) (= site 5))\n        (e3-test-fault-check 'independent-twin", driver)
+        self.assertIn("(if (or (= site 1) (= site 3) (= site 4) (= site 5))\n        (e3-test-fault-check 'independent-twin", driver)
         self.assertIn("if (fail_before >= M3_CALL_PIN_COUNT)", pins)
         self.assertIn("m3_call_drain(pins, i)", pins)
         self.assertIn("for(size_t n=0;n<14;++n)", (ROOT / "tests/m3cg/test_pins.c").read_text())
@@ -458,7 +458,7 @@ e3_reject_unresolved_private fault "$3" "$3"
             "(e3-test-fault-check 'model\n        (e3-test-retention-model=?",
             "(e3-test-fault-check 'rng\n        (and (eq? rng-algorithm",
             "(e3-test-fault-check 'owners\n        (e3-test-fault-probes-restored?",
-            "(e3-test-fault-check 'retry-output\n      (equal? (if (or (= site 2) (= site 3) (= site 4) (= site 5))",
+            "(e3-test-fault-check 'retry-output\n      (equal? (if (or (= site 1) (= site 2) (= site 3) (= site 4) (= site 5))",
             "(e3-test-fault-check 'retry-rng\n      (and (eq? rng-algorithm",
         )
         def guarded(candidate):
@@ -481,7 +481,7 @@ e3_reject_unresolved_private fault "$3" "$3"
             "(held (if (= site 3)",
             "(e3-fault-value-borrow-begin owner role)",
             "(vector-ref before 3) (+ (vector-ref unheld 3) 1)",
-            "(if (or (= site 2) (= site 3) (= site 4) (= site 5))\n        (e3-test-fault-check 'distinct-precall",
+            "(if (or (= site 1) (= site 2) (= site 3) (= site 4) (= site 5))\n        (e3-test-fault-check 'distinct-precall",
             "(equal? publication e3-test-fault-sentinels)",
             "(if (= site 3) 'invalid-state 'internal)",
             "(if (= site 2) 155 (if (= site 5) 107 95))",
@@ -505,7 +505,7 @@ e3_reject_unresolved_private fault "$3" "$3"
                         execute.index("(e3-test-retention-call! model dataset frame"))
         self.assertLess(execute.index("(e3-test-retention-call! model dataset frame"),
                         execute.index("'independent-twin"))
-        self.assertIn("(twin (if (or (= (vector-ref scenario 3) 3)", source)
+        self.assertIn("(twin (if (or (= (vector-ref scenario 3) 1)\n                               (= (vector-ref scenario 3) 3)", source)
         self.assertIn("(e3-test-fault-make-twin present? corpus-path)", source)
         self.assertLess(source.index("(e3-test-fault-make-twin present? corpus-path)",
                                      source.index("(define (e3-test-fault-dispatch")),
@@ -566,7 +566,7 @@ e3_reject_unresolved_private fault "$3" "$3"
         self.assertIn("(e3-test-fault-all-distinct?", driver)
         self.assertIn("(if (= site 2) 155 (if (= site 5) 107 95))", driver)
         self.assertIn("(equal? publication\n                (e3-test-fault-publication", driver)
-        self.assertIn("(if (or (= site 2) (= site 3) (= site 4) (= site 5))\n                  e3-test-fault-final-publication publication)", driver)
+        self.assertIn("(if (or (= site 1) (= site 2) (= site 3) (= site 4) (= site 5))\n                  e3-test-fault-final-publication publication)", driver)
 
         for mutated in (
             publish[:cut] + publish[cut:].replace("frame->fault_state = 2;", "", 1),

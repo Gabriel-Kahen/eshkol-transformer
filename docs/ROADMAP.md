@@ -1327,6 +1327,15 @@ pre-call values and its own genuine preflight cut. Other R1/R2 stages,
 tie identity, graph-producing mutations, and complete-call horizons remain
 open; no §9 admission follows from this source slice.
 
+An isolated exact-`44c0418d` stage-7 successor selects the existing guarded
+site 1, role 1, occurrence 1: role 0 completes before the denial, and role 1
+does not enter its provider. The noninstalled fault driver now seeds six
+distinct pre-call output words for site 1 and compares the same-authority
+retry with an independent fixed-seed twin. A pinned compiled recipe is staged
+for absent/present gradients, normal/repeat, poison and sanitizer. Focused
+host source tests pass; that recipe, its emitted manifests and runtime remain
+**NOT RUN** pending independent review and a shared-lock custody launcher.
+
 A bounded noninstalled stage-12 successor extends the existing
 `ET_E3_FAULT_TESTING` frame selector with site 2, ordinal 0, occurrence 1.
 It fires after all four destination and four result view checks, count
