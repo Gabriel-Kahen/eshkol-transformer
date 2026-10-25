@@ -2352,6 +2352,16 @@ load. A link-only package and symbol-closure gate remains required before a
 full normal/repeat/sanitizer successor. It does not restore a replay candidate
 or establish full same-registry continuation.
 
+A separate fresh-process trained-pair reader is source-staged from the same
+private CLI3 package root. It authenticates the saved C2 SHA against the
+G3RCV1 companion, compares the companion fingerprint first with C2 controls
+and then with the live canonical T1 owner after installing CLI3's same-registry
+C2 policy projector, closes the C2 receipt, and returns
+only eight data fields. The thin caller checks the current one-token,
+zero-budget fixture. Its source tests and host C bridge syntax pass; compiled
+package/link, a genuine pair input, native sanitizer, model restore and replay
+remain unrun.
+
 The earlier G3-R C2 SAVE continuation on `0581426b` sealed a failed runtime
 receipt at `g3-save-0581426b-cont-attempt1/SHA256SUMS-RUN`: its compiled
 no-SAVE control left output absent and its compiled public LOAD/SAVE producer

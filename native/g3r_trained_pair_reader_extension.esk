@@ -1,0 +1,33 @@
+;;; A matched C2/companion record is data, never a restored model or RNG owner.
+(define (g3r-trained-pair-read-internal
+          config-path tokenizer-path saved-c2 companion-path)
+  ;; CLI3 dispatch installs this same-registry C2 projector before T2 LOAD.
+  (vector-set! t2-wave2-policy-projector 0 c2-policy-t2-entry-internal)
+  (let ((receipt-cell (vector #f))
+        (operation 'checkpoint-load))
+    (guard (caught
+             (#t
+               (if (vector-ref receipt-cell 0)
+                   (guard (cleanup-defect
+                            (#t (g3r-c2-sha-fail-stop 134)))
+                     (g3r-c2-receipt-release-internal!
+                       (vector-ref receipt-cell 0))))
+               (raise caught)))
+      (let* ((resolved (cli3-b-resolved config-path 'generate))
+             (tokenizer (cli3-b-tokenizer tokenizer-path resolved))
+             (live-fingerprint (t2-wave2-tokenizer-fingerprint tokenizer))
+             (decoded (make-vector 8 #f)))
+        (vector-set! receipt-cell 0
+          (g3r-c2-load-with-sha-internal
+            (cli3-path saved-c2 operation) (cli3-b-policy)
+            (k2-public-capability-discover)))
+        (g3r-c2-pair-file-verify-c2-tokenizer-internal!
+          (vector-ref receipt-cell 0)
+          (cli3-path companion-path operation) decoded)
+        (if (not (string=? live-fingerprint
+                            (utf8->string (vector-ref decoded 6))))
+            (c2-load-fail 'corrupt-data operation
+                          "G3-R pair differs from live canonical tokenizer" '()))
+        (g3r-c2-receipt-release-internal! (vector-ref receipt-cell 0))
+        (vector-set! receipt-cell 0 #f)
+        decoded))))
