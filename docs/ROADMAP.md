@@ -2187,13 +2187,21 @@ separate gate. The first one-use attempt is retained as a precompiler
 rootless-mount permission failure, not a runtime result.
 This leaf is not a trainable C4 model or a checkpoint/generation admission.
 
-The next isolated [private C4 residual VJP candidate]
+The isolated [private C4 residual VJP leaf]
 (g3/G3_R_C4_RESIDUAL_VJP_LEAF.md) covers the accepted four-token
 `g3c4.residual.forward` add with two `f32[1,4,4]` gradients. Its private
 source, central-difference checks against the genuine C4 provider, negative
-ownership/shape controls, and feature-off proof are under focused local
-verification. It is not integrated with trainable M3T, and a pinned compiled
-gate plus independent review remain pending.
+ownership/shape controls, and feature-off proof passed independent source and
+test review. The pinned rootless Clang 21 normal/repeat/native ASan+UBSan gate
+passed 160 checks per mode with byte-identical stdout and empty stderr on
+`82357bab`/tree `0ebad67f`; its 49-file post-exit seal is
+`g3r-c4-residual-vjp-82357bab-attempt1/SHA256SUMS-RUN` (SHA-256
+`f3ecbed6fa1bba068e9685a58235df4f3836c1559f06c604311e73d46ab25edf`).
+The sealed independent result review is at
+`g3r-c4-residual-vjp-independent-review-20261025/SHA256SUMS-REVIEW`
+(SHA-256 `5606df8bbf574b60d943ea02aa71769f9b62ba15c78ee0ecdbb3bb0f688a63f5`).
+This leaf is not integrated with trainable M3T and does not admit trained C4,
+C2 SAVE/LOAD, or generation.
 
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1
