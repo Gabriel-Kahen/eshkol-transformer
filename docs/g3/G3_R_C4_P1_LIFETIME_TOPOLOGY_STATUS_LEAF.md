@@ -1,7 +1,8 @@
 # C4 P1 lifetime topology status
 
-**Source candidate only.** The C4 workspace ownership contract requires release
-after `module-eval!`, while the existing trusted P1 slot 74 intentionally rejects
+**Intermediate compiled normal/repeat evidence accepted.** The C4 workspace
+ownership contract requires release after `module-eval!`, while the existing
+trusted P1 slot 74 intentionally rejects
 eval mode. This leaf appends trusted slot 75 and a private wrapper. Slot 74
 continues to govern workspace creation and future train-mode computation.
 
@@ -27,6 +28,13 @@ train, swapped handles and C2 `[2,4]` position negatives. The source union
 includes the independently accepted slot-74 repair and fixes slot 75's same
 boolean comparison guard; a focused mutation test pins both forms. The prior
 `f61436de` recipe remains sealed and unrun because it predates those repairs.
-An exact-union compiled
-normal/repeat/sanitizer and feature-off gate is pending. This leaf is not C4
+The exact-union normal/repeat receipt
+`g3r-c4-p1-lifetime-6d350a9c-attempt2/SHA256SUMS-RUN` (SHA-256
+`952f25e4f26b24c45bae6d6a63990ca419bb9b4f38c8e26219e5e54e38408549`)
+is independently accepted as intermediate evidence: 65/65 sealed files,
+launcher/Docker zero, normal/repeat 17 byte-identical checks, and seeded
+authority control 25 checks. The independent result review seal is
+`3c8853c29c9a15c08c0b2b5d97c2da1e9abb2a71f801fb6ac4004ad483079e64`.
+Exact-source sanitizer and feature-off gates remain pending before full slot-75
+admission. This leaf is not C4
 workspace, numerical training, checkpoint or continuation admission.

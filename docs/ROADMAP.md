@@ -2269,7 +2269,14 @@ checkers; their accepted slot 0–74 pins remain unchanged. The reviewed
 `f61436de` compiled recipe remains **UNRUN** because its source predates the
 accepted slot-74 repair and carries the same boolean-call defect in slot 75.
 An isolated source union fixes both status guards and retains the constructor's
-missing-tie negative; it needs a fresh exact-source compiled recipe and review.
+missing-tie negative. Its reviewed intermediate compiled receipt is
+`g3r-c4-p1-lifetime-6d350a9c-attempt2/SHA256SUMS-RUN`
+(SHA-256 `952f25e4f26b24c45bae6d6a63990ca419bb9b4f38c8e26219e5e54e38408549`):
+65/65 sealed files, launcher/Docker zero, normal/repeat 17 byte-identical
+checks and seeded control 25 checks. Independent result review seal
+`3c8853c29c9a15c08c0b2b5d97c2da1e9abb2a71f801fb6ac4004ad483079e64`.
+Full slot-75 admission still requires exact-source sanitizer and feature-off
+gates.
 
 The [native live-context exclusion leaf](g3/G3_R_C4_NATIVE_CONTEXT_EXCLUSION_LEAF.md)
 adds a source-private read-only status for the first create prerequisite. It
