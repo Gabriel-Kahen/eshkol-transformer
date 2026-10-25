@@ -132,3 +132,16 @@ sanitizer gate must test candidate enrollment cuts, exact root/14/tie parity,
 accepted live O2 witness versus foreign O2, held TR3/P1/I2/G3-T lease,
 first-error/retry before commit, and fail-stop after it. No full candidate or
 replay acceptance follows from this producer leaf alone.
+
+## Read-only M3T/P1/I2 identity leaf
+
+The next feature-local source candidate adds
+`g3r-candidate-graph-identity-preflight-internal!` with exact ledger and model
+shell arguments. It checks the sealed M3T ledger and native owner/successor,
+the retained I2/P1 sidecars, the current 14 canonical paths and tied alias.
+It mutates no authority and returns only `#t`, not a retirement witness.
+Focused forged, stale and changed-graph negatives run beside ordinary M3T
+feature-off parity. Its source checker passes; independent review and a pinned
+compiled gate remain pending. Native owner parameter lookup does not prove
+each P1 handle is still bound to that same native parameter. O2 identity,
+consumer/lease exclusion, revocation and teardown remain separate gates.

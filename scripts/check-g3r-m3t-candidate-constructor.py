@@ -100,6 +100,22 @@ assert re.findall(r"\(vector-set! ([\w-]+) (\d+) ([^)]+)\)", tail) == [
 assert "(exit 134)" in tail and "(m3t-native-owner-seal created)" in tail
 assert "(m3t-native-initializer-seal" in tail
 assert not re.search(r"\((?:cons|vector|make-vector|list)(?:\s|\))", tail)
+preflight = section("g3r-candidate-graph-identity-preflight-internal!")
+for fragment in (
+    "(g3r-candidate-ledger-record ledger operation)",
+    "(m3t-entry model 'model operation #t)",
+    "(i2-candidate-construction-preflight-internal! cell)",
+    "(m3t-config-check",
+    "(module-parameters model)",
+    "(parameter-handle-path handle)",
+    "(parameter-tree-handle",
+    "(parameter-tree-tie-groups tree)",
+    "(m3t-native-owner-parameter owner index)",
+    "(m3t-native-owner-successor owner)",
+):
+    assert fragment in preflight, f"graph identity leaf missing {fragment}"
+assert "(vector-set!" not in preflight, "graph identity leaf writes state"
+assert not re.search(r"(?:revoke|retire|release|abort|commit)-internal!", preflight)
 fixture = (root / "tests/g3r/m3t_candidate_constructor_test.esk").read_text()
 check_fixture_delimiters(root / "tests/g3r/m3t_candidate_constructor_test.esk")
 assert '"candidate exact head/embedding handle tie"' in fixture
@@ -107,6 +123,18 @@ assert '"ordinary exact tie parity"' in fixture
 assert '"ordinary and candidate fourteen paths agree"' in fixture
 assert fixture.count("(parameter-tree-handle") >= 5
 assert "(parameter-tree-tie-groups candidate-tree)" in fixture
+for negative in (
+    '"foreign graph ledger"',
+    '"ordinary model is not this graph"',
+    '"changed model root"',
+    '"changed native owner"',
+    '"stale successor"',
+    '"changed config fingerprint"',
+    '"changed I2 count"',
+    '"changed P1 roster"',
+    '"changed canonical handle"',
+):
+    assert negative in fixture, f"graph identity negative missing {negative}"
 feature_off = (root / "tests/g3r/m3t_candidate_feature_off_test.esk").read_text()
 check_fixture_delimiters(root / "tests/g3r/m3t_candidate_feature_off_test.esk")
 assert "(parameter-handle-path (vector-ref handles index))" in feature_off
