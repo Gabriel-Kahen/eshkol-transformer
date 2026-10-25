@@ -2306,11 +2306,16 @@ The [private C4 trainable composition schedule](g3/G3_R_C4_TRAINABLE_COMPOSITION
 pins the proposed workspace-owned `[1,4]`/14-parameter forward tape and VJP
 fan-in to `0c441e56`, the accepted 21-role full-prefix numerical schedule,
 and the separately reviewed C4 VJP rows. The generation-bound full-prefix
-function cannot be called from a live training workspace. The first bounded
-compute leaf is authentic 14-binding snapshot acquisition plus token/position
-embedding and residual; it is held behind compiled constructor, P1,
-association and workspace ownership admission. This document is a source
-contract only: no integrated C4 graph or trained checkpoint is claimed.
+function cannot be called from a live training workspace. Snapshot acquisition
+must use the existing private C4 14-pin begin/check/end lifecycle under exact
+workspace edge authentication. The first bounded compute leaf is that
+snapshot plus token/position embedding and residual; it is held behind
+compiled constructor, P1, association and workspace ownership admission.
+Later attention composition must account for the accepted empty A2 stage/view:
+bitwise K/V and logits parity with the genuine staged forward and gradient
+parity through the reviewed empty-stage identity VJP are required before a
+direct route is accepted. This document is a source contract only: no
+integrated C4 graph or trained checkpoint is claimed.
 
 The [private C4 position VJP leaf](g3/G3_R_C4_POSITION_VJP_LEAF.md) supplies
 one fixed `[1,4]` position-ID and `[1,4,4]` upstream to `[4,4]` gradient
