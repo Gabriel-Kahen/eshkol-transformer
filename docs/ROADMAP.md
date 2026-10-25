@@ -2172,9 +2172,13 @@ The [C4 trainable constructor/workspace authority contract](g3/G3_R_C4_TRAINABLE
 specifies a proposed tagged trainable branch in the existing C4 model registry,
 exact context-four X1/T1/initializer/native-owner binding, and a first
 read-only identity/shape workspace preflight. Source checks pin the current
-seeded-eval C4 path, C2-only M3T profile, and missing C4 train-mode prepared
-route. This is documentation and source-boundary testing only: no constructor,
-workspace runtime, forward/backward composition, trainer or C2 admission.
+seeded-eval C4 path and C2-only M3T profile. The bounded C4 P1/I2 train-mode
+prepared sibling is now a separate source candidate: append-only P1 slot 73,
+same prepared seal/abort ledgers, and unchanged eval/seeded route. Focused
+source/mutation checks and train-mode fault/rollback fixture exist; compiled
+normal/repeat/sanitizer admission and independent review remain pending. No
+trainable constructor, workspace runtime, forward/backward composition,
+trainer or C2 admission is claimed.
 
 The [private C4 position VJP leaf](g3/G3_R_C4_POSITION_VJP_LEAF.md) supplies
 one fixed `[1,4]` position-ID and `[1,4,4]` upstream to `[4,4]` gradient

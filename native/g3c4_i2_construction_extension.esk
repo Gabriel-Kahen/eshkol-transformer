@@ -101,6 +101,23 @@
         (vector-set! record 3 'prepared)
         root))))
 
+(define (i2-g3c4-construction-prepare-train-internal! value)
+  (let* ((operation 'i2-g3c4-construction-prepare-train-internal!)
+         (record (i2-construction-open-route value 'g3c4 operation)))
+    (i2-construction-retained-preflight! record operation)
+    (guard (caught
+             (#t
+               ;; The P1 train prepare guard revokes its admitted ledger first.
+               (i2-construction-rollback-tail! record)
+               (vector-set! record 1 #f)
+               (vector-set! record 7 0)
+               (raise caught)))
+      (let ((root
+              (module-construction-prepare-train-internal!
+                (vector-ref record 1))))
+        (vector-set! record 3 'prepared)
+        root))))
+
 (define (i2-g3c4-construction-seal-prepared-internal! value)
   (let* ((operation 'i2-g3c4-construction-seal-prepared-internal!)
          (record (i2-construction-record value operation)))

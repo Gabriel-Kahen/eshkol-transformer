@@ -57,6 +57,25 @@ def check():
         [sys.executable, str(ROOT / "scripts/check-e3-p1-contract.py")],
         cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
     text = SOURCE.read_text()
+    # The C4 train-prepared sibling is an exact append to the accepted P1
+    # source. Remove only its four reviewed spans for the inherited TR3 pin.
+    inherited = text
+    for name in ("construction-prepare-train!",
+                 "construction-prepare-train-guarded!"):
+        span = definition(inherited, name) + "\n\n"
+        require(inherited.count(span) == 1, f"C4 train span is not unique: {name}")
+        inherited = inherited.replace(span, "", 1)
+    for span in (
+        "      (eq? operation 'module-construction-prepare-train-internal!)\n",
+        "  ;; Append-only source-private C4 train-mode prepare, slot 73.\n"
+        "  (lambda (identity)\n"
+        "    (construction-prepare-train-guarded! identity))\n",
+    ):
+        require(inherited.count(span) == 1, "C4 train append is not exact")
+        inherited = inherited.replace(span, "", 1)
+    require(sha256(inherited.encode()).hexdigest() ==
+            "8629d7ee347fb81d0a24cbb5d296828208af9bf75965244d70f7a05ecb132e40",
+            "C4 train append changed inherited P1 source")
     wrapper = WRAPPER.read_text()
     manifest = MANIFEST.read_text().splitlines()
 
@@ -83,9 +102,9 @@ def check():
             f"provider {index})") == 1,
             f"handle capture index {index} is missing or duplicated")
 
-    leaf_start = text.index(";;; TR3 fixed-profile read-only validators.")
-    leaf_end = text.index("\n\n(vector\n", leaf_start)
-    leaf = text[leaf_start:leaf_end]
+    leaf_start = inherited.index(";;; TR3 fixed-profile read-only validators.")
+    leaf_end = inherited.index("\n\n(vector\n", leaf_start)
+    leaf = inherited[leaf_start:leaf_end]
     for forbidden in (
         "shell-for-raw", "raw-for-shell", "finalization-plan",
         "module-parameters", "parameter-tree", "construction-begin",
@@ -116,7 +135,7 @@ def check():
         "  tr3-fixed-recheck!\n")
     require(text.count(vector_append) == 1,
             "TR3 P1 surface append is missing or duplicated")
-    without_leaf = text[:leaf_start] + "\n" + text[leaf_end + 2:]
+    without_leaf = inherited[:leaf_start] + "\n" + inherited[leaf_end + 2:]
     without_leaf = without_leaf.replace(vector_append, "")
     successor_tail = ("\n         module-construction-parameters-internal"
                       "\n         p1-trusted-surface)")

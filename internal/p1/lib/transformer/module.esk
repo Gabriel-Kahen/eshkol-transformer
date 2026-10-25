@@ -237,6 +237,7 @@
       (eq? operation 'parameter-handle-tensor-internal)
       (eq? operation 'module-construction-parameters-internal)
       (eq? operation 'module-construction-prepare-eval-internal!)
+      (eq? operation 'module-construction-prepare-train-internal!)
       (eq? operation 'module-construction-seal-internal!)))
 (define (construction-registration? operation)
   (or (eq? operation 'module-register-parameter-internal!)
@@ -4483,6 +4484,58 @@
       (vector-set! canonical-record 1 'prepared)
       canonical-root-shell)))
 
+(define (construction-prepare-train! identity)
+  (let* ((operation 'module-construction-prepare-train-internal!)
+         (record (construction-open operation identity))
+         (root-shell (vector-ref record 3))
+         (root (raw-for-shell operation 'module root-shell))
+         (actual (construction-rows record operation))
+         (schedule (vector-ref record 4))
+         (finalizers (finalization-plan operation root))
+         (updates
+           (canonical-path-updates
+             (sort-entries (flatten-parameters root '())))))
+    (if (or (not schedule) (not (construction-schedule-equal? actual schedule)))
+        (fail 'invalid-state operation
+              "construction changed after parameter schedule" '()))
+    (let scan ((remaining (shell-registry-current)))
+      (if (null? remaining) #t
+          (let ((entry (car remaining)))
+            (if (and (= (vector-length entry) 4)
+                     (eq? (vector-ref entry 1) 'module)
+                     (eq? (vector-ref entry 3) identity)
+                     (not (identity-member-local?
+                            (vector-ref entry 2) finalizers)))
+                (fail 'invalid-state operation
+                      "construction has unattached modules" '()))
+            (if (and (= (vector-length entry) 4)
+                     (eq? (vector-ref entry 1) 'handle)
+                     (eq? (vector-ref entry 3) identity)
+                     (not (let handles ((rows (vector-ref actual 0)))
+                            (cond ((null? rows) #f)
+                                  ((eq? (vector-ref entry 0)
+                                        (vector-ref (car rows) 1)) #t)
+                                  (else (handles (cdr rows)))))))
+                (fail 'invalid-state operation
+                      "construction has unattached handles" '()))
+            (scan (cdr remaining)))))
+    ;; Promotion, traversal, mode writes, and verification all precede native
+    ;; PREPARED. Reread every retained value through the rooted canonical graph.
+    (install-canonical-paths! updates)
+    (let* ((canonical-record (construction-record operation identity))
+           (canonical-root-shell (vector-ref canonical-record 3))
+           (canonical-root
+             (raw-for-shell operation 'module canonical-root-shell))
+           (canonical-finalizers
+             (finalization-plan operation canonical-root)))
+      (finalize-modules! canonical-finalizers)
+      (set-mode-modules! canonical-finalizers 'train)
+      (verify-finalized-mode! operation canonical-finalizers 'train)
+      (native-check operation
+                    (p1-native-construction-prepare native-context identity))
+      (vector-set! canonical-record 1 'prepared)
+      canonical-root-shell)))
+
 (define (construction-seal-prepared! identity)
   (let ((operation 'module-construction-seal-prepared-internal!))
     (if construction-busy?
@@ -4527,6 +4580,32 @@
                (raise caught)))
       (set! construction-busy? #t)
       (let ((result (construction-prepare-eval! identity)))
+        (set! construction-busy? #f)
+        result))))
+
+(define (construction-prepare-train-guarded! identity)
+  (let ((operation 'module-construction-prepare-train-internal!))
+    (if construction-busy?
+        (fail 'invalid-state operation
+              "construction operation is not reentrant" '()))
+    ;; Wrong/closed identities reject without aborting another active ledger.
+    (construction-open operation identity)
+    ;; Reserve before installing cleanup or mutating the reentrancy guard.
+    ;; Reserve failure leaves no handler to rely on, so abort directly while
+    ;; the exact admitted construction is still OPEN.
+    (if (not (= (p1-runtime-reserve-exception-handlers 1) 0))
+        (begin
+          (construction-abort! identity)
+          (fail 'internal operation
+                "handler reserve returned an invalid status" '()))
+        #t)
+    (guard (caught
+             (#t
+               (set! construction-busy? #f)
+               (construction-abort! identity)
+               (raise caught)))
+      (set! construction-busy? #t)
+      (let ((result (construction-prepare-train! identity)))
         (set! construction-busy? #f)
         result))))
 
@@ -5837,6 +5916,9 @@
     (construction-prepare-eval-guarded! identity))
   (lambda (identity)
     (construction-seal-prepared! identity))
+  ;; Append-only source-private C4 train-mode prepare, slot 73.
+  (lambda (identity)
+    (construction-prepare-train-guarded! identity))
   )))
 
 (define (module-parameters module)

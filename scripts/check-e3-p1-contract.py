@@ -78,7 +78,7 @@ def check():
     require(atom(lexical[2][0]) == "let", "P1 authority must remain lexical")
     vector = lexical[2][-1]
     require(atom(vector[2][0]) == "vector", "P1 surface must end with its vector")
-    require(len(vector[2]) == 74, "expected exactly 73 trusted closure slots")
+    require(len(vector[2]) == 75, "expected exactly 74 trusted closure slots")
     require(digest(text, vector[2][1:65]) ==
             "d7d3d3a9aff533aa5f3422130d702f730b3cf227c3ecdd0a56423a634fec7d5e",
             "inherited closure 0..63 changed from accepted #121 base")
@@ -96,6 +96,10 @@ def check():
     ]
     require([signature(n) for n in vector[2][72:74]] == g3c4_slots,
             "G3-C4 private closures differ from exact slot71/72 calls")
+    require(signature(vector[2][74]) ==
+            ["lambda", ["identity"],
+             ["construction-prepare-train-guarded!", "identity"]],
+            "G3-C4 train prepare differs from append-only slot73")
     e3_definitions = []
     for node in lexical[2][1:-1]:
         if not (isinstance(node[2], list) and len(node[2]) > 1
@@ -181,6 +185,8 @@ def check():
     g3c4_expected = [
         ["define", ["module-construction-prepare-eval-internal!", "identity"],
          [["vector-ref", "p1-trusted-surface", "71"], "identity"]],
+        ["define", ["module-construction-prepare-train-internal!", "identity"],
+         [["vector-ref", "p1-trusted-surface", "73"], "identity"]],
         ["define", ["module-construction-seal-prepared-internal!", "identity"],
          [["vector-ref", "p1-trusted-surface", "72"], "identity"]],
     ]
@@ -195,7 +201,7 @@ def check():
                 f"predecessor source closure gained E3-only wrappers: {path.name}")
         require(G3C4_WRAPPERS not in paths,
                 f"predecessor source closure gained G3-C4-only wrappers: {path.name}")
-    print(f"E3-P1 STRUCTURE PASS: base={BASE} first71=accepted-exact total=73 public=unchanged")
+    print(f"E3-P1 STRUCTURE PASS: base={BASE} slots0..72=accepted-exact slot73=candidate total=74 public=unchanged")
     for path in (SOURCE, WRAPPERS, TR3_WRAPPERS, G3C4_WRAPPERS):
         print(f"sha256 {sha256((ROOT / path).read_bytes()).hexdigest()} {path}")
 

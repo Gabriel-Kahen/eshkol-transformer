@@ -3,5 +3,8 @@
 (define (module-construction-prepare-eval-internal! identity)
   ((vector-ref p1-trusted-surface 71) identity))
 
+(define (module-construction-prepare-train-internal! identity)
+  ((vector-ref p1-trusted-surface 73) identity))
+
 (define (module-construction-seal-prepared-internal! identity)
   ((vector-ref p1-trusted-surface 72) identity))

@@ -44,7 +44,8 @@ def asserted_anchors(files: dict[str, str]) -> None:
     assert "(define g3c4-model-cleanup-root (vector #f))" in c4
     assert "(define (g3c4-baseline-tokenizer-entry" in call
     assert "(t1-private-entry tokenizer)" in call
-    assert "i2-g3c4-construction-prepare-train-internal!" not in i2
+    assert "(define (i2-g3c4-construction-prepare-train-internal! value)" in i2
+    assert "(vector-ref p1-trusted-surface 73)" in p1
     for operation in ("begin", "check", "end"):
         assert f"et_g3c4_model_pins_{operation}_internal" in pins
 
@@ -71,7 +72,7 @@ class ContractSourceBoundary(unittest.TestCase):
         )
         for marker in (
             "Proposed private contract",
-            "new C4 train-mode prepare",
+            "C4 train-mode prepare",
             "same C4 registry",
             "identity and shape only",
             "same live entry and owner in place",

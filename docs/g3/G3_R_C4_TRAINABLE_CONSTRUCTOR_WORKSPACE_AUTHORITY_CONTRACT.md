@@ -18,15 +18,15 @@ seeded tag and requires eval mode. Its diagnostic generator is a negative
 control for trained-model identity.
 
 The C2 M3T constructor checks context two and position `[2,4]`; its workspace
-has two ID slots. It cannot be reinterpreted as C4. The C4 I2 route currently
-has only `i2-g3c4-construction-prepare-eval-internal!`, backed by P1 trusted
-slot 71; slot 72 seals a prepared construction. A **new C4 train-mode prepare
-sibling** in P1 and I2 is prerequisite to an atomic trainable constructor.
-It must reuse the existing P1/I2 prepared seal and abort ledgers, without
-changing the seeded path or the M3T route. Allocate a reviewed new trusted
-slot; do not repurpose 71 or 72. The train sibling performs the same fallible
+has two ID slots. It cannot be reinterpreted as C4. The accepted C4 I2 route
+had only `i2-g3c4-construction-prepare-eval-internal!`, backed by P1 trusted
+slot 71; slot 72 seals a prepared construction. The separate source candidate
+adds **C4 train-mode prepare** in P1/I2 at append-only production slot 73.
+It reuses the existing P1/I2 prepared seal and abort ledgers, without changing
+the seeded path or the M3T route. The train sibling performs the same fallible
 schedule, attachment, canonical-path, finalization, mode verification, and
 native-prepare checks as `construction-prepare-eval!`, with final mode `train`.
+Its focused source and fixture tests are not a compiled runtime admission.
 
 ## Proposed constructor authority
 
