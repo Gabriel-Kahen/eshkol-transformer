@@ -14,9 +14,12 @@ FINGERPRINT = (b"sha256:eshkol-byte-tokenizer-v1:"
 MAGIC = bytes.fromhex("894553484b54524e53544154450d0a00")
 
 
-def verify(trained: bytes, saved: bytes, record: bytes, prompt: int) -> None:
+def verify(trained: bytes, saved: bytes, record: bytes, prompt: int,
+           budget: int = 0) -> None:
     if not 0 <= prompt <= 255:
         raise ValueError("prompt is outside raw V256")
+    if budget not in (0, 1):
+        raise ValueError("unsupported companion budget")
     if trained != saved:
         raise ValueError("saved C2 differs from the exact trained checkpoint")
     if (len(saved) < 352 or saved[:16] != MAGIC or
@@ -34,7 +37,7 @@ def verify(trained: bytes, saved: bytes, record: bytes, prompt: int) -> None:
     if struct.unpack_from("<6I", record, 16) != (1, 1, 1, 1, 0, 0):
         raise ValueError("companion profile or history partition differs")
     if struct.unpack_from("<6q", record, 40) != (
-            1, 1065353216, 256, 1065353216, 0, -1):
+            1, 1065353216, 256, 1065353216, budget, -1):
         raise ValueError("companion policy differs")
     if struct.unpack_from("<4q", record, 88) != (1, 1729, 0, 0):
         raise ValueError("companion RNG differs")
@@ -54,9 +57,10 @@ def main() -> None:
     parser.add_argument("--saved", type=Path, required=True)
     parser.add_argument("--companion", type=Path, required=True)
     parser.add_argument("--prompt", type=int, required=True)
+    parser.add_argument("--budget", type=int, choices=(0, 1), default=0)
     args = parser.parse_args()
     verify(args.trained.read_bytes(), args.saved.read_bytes(),
-           args.companion.read_bytes(), args.prompt)
+           args.companion.read_bytes(), args.prompt, args.budget)
     print("G3-R TRAINED PAIR BYTES PASS")
 
 

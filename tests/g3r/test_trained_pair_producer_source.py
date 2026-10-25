@@ -138,6 +138,15 @@ class TrainedPairProducerSource(unittest.TestCase):
             with self.subTest(case=cases.index(case)), self.assertRaises(ValueError):
                 verify(*case)
 
+    def test_budget_one_record_is_distinct(self):
+        c2, record = fixture()
+        changed = bytearray(record)
+        struct.pack_into("<q", changed, 72, 1)
+        changed[256:] = hashlib.sha256(changed[:256]).digest()
+        verify(c2, c2, bytes(changed), 65, budget=1)
+        with self.assertRaises(ValueError):
+            verify(c2, c2, bytes(changed), 65, budget=0)
+
 
 if __name__ == "__main__":
     unittest.main()

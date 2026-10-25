@@ -2171,6 +2171,15 @@ unrun and pinned normal/repeat/sanitizer compiled acceptance is required
 before this private seam is accepted. This does not bind a C2 pair, expose a
 public route, or prove resumed generation.
 
+The separately scoped trained same-registry replay candidate starts from the
+same restored CLI3 M3T owner as the authentic C2 producer. It keeps the
+accepted zero-budget companion separate, captures a new budget-one companion
+bound to byte-identical saved C2, reads and decodes that exact companion,
+then compares uninterrupted G1 with private replayed G1 on the same model
+owner. Source and host checks alone do not admit this package. Its compiled
+normal/repeat/native-sanitizer gate and independent result review are pending;
+it does not restore a model from the companion or continue in a fresh process.
+
 The [private G3-R fixed-record codec leaf](g3/G3_R_RECORD_CODEC_LEAF.md)
 stages an in-memory 288-byte encoder/decoder using the existing C1 SHA-256.
 It validates the exact policy, G3-S words, history/EOS partition, T1

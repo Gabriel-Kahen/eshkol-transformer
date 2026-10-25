@@ -1,0 +1,26 @@
+;;; Thin caller. The private package owns CLI3 restore, pair publication,
+;;; and both G1 paths in the same trained M3T registry.
+(extern void g3r-private-replay ptr ptr
+        :real et_g3r_private_test_trained_replay_v1)
+(define args (command-line))
+(define (argument at)
+  (let loop ((remaining (cdr args)) (index at))
+    (if (= index 0) (car remaining)
+        (loop (cdr remaining) (- index 1)))))
+(define (proper-length values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining) (+ count 1)))))
+(if (not (= (proper-length args) 8)) (exit 2))
+(define output (vector #f))
+(g3r-private-replay
+  (vector (vector (argument 0) (argument 1) (argument 2)
+                  (argument 3) (argument 4) (argument 5)
+                  (argument 6)))
+  output)
+(define result (vector-ref output 0))
+(if (not (and (vector? result) (= (vector-length result) 3)
+              (= (bytevector-length (vector-ref result 0)) 32)
+              (= (bytevector-length (vector-ref result 1)) 96)))
+    (exit 1))
+(display "G3-R TRAINED SAME-REGISTRY REPLAY PASS") (newline)

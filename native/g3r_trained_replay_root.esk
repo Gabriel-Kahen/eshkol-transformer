@@ -1,0 +1,19 @@
+;;; Test-only budget-one capture and same-registry G1 comparison on the
+;;; exact restored CLI3 M3T owner. This is not a fresh-process loader.
+(load "g3r_trained_pair_producer_root.esk")
+(load "g3r_rng_import_extension.esk")
+(load "g3r_replayed_p1_g1_extension.esk")
+(load "g3r_trained_replay_compare_extension.esk")
+(load "g3r_trained_replay_producer_extension.esk")
+
+(define (g3r-trained-pair-private-replay arguments)
+  (if (not (and (vector? arguments) (= (vector-length arguments) 7)))
+      (c2-load-fail 'invalid-argument 'checkpoint-save!
+                    "trained replay entry requires seven arguments" '()))
+  (vector-set! t2-wave2-policy-projector 0 c2-policy-t2-entry-internal)
+  (g3r-trained-replay-produce-internal!
+    (vector-ref arguments 0) (vector-ref arguments 1)
+    (vector-ref arguments 2) (vector-ref arguments 3)
+    (vector-ref arguments 4) (vector-ref arguments 5)
+    (cli3-parse-i64 (vector-ref arguments 6) "PROMPT" 255)
+    1 #t))
