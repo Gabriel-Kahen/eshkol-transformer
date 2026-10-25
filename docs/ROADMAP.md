@@ -2693,10 +2693,18 @@ source candidate and focused feature-on/feature-off fixtures are staged for
 review. The pinned v3 gate built all candidate native objects/archive, then
 stopped at a missing pair of fixture list closes during Eshkol parsing; its
 sealed outer receipt is `b39777805c7c7afdd99fdddeb14a5d351bbaa8b6d95a58d185b9d83e29834881`.
-The fixture and pre-gate delimiter check are repaired in a successor, but no
-compiled caller or runtime result is admitted. The current injected fixture
-reaches P1 native begin allocation cuts only, not a later I2 publication
-failure. Ordinary M3T remains unchanged.
+The fixture and pre-gate delimiter check were repaired at `a0b24c09`/tree
+`2249de0f`. Its pinned v4 compiled gate passed with zero launcher/Docker
+exits, 21 candidate checks in each of two identical processes, two matching
+ordinary feature-off processes, empty compiler/runtime stderr, exact native
+symbol separation, and ordinary I2/M3T object parity. The sealed 83-file
+receipt is `g3r-m3t-candidate-a0b24c09-v4-attempt1/SHA256SUMS-RUN` (SHA-256
+`d71d9838ed5af88c92143219c14921c45ceb182b1bbba09f15f73b6a405c5c42`);
+independent exact-result review found no blocker for this bounded constructor
+gate. The injected fixture reaches P1 native begin allocation cuts only, not
+a later I2 publication failure. Ordinary M3T remains unchanged. There is no
+candidate retirement, C2 restore, SAVE, replay, generation, or composed
+sanitizer claim from this gate.
 
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
