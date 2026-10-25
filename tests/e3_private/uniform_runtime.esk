@@ -37,10 +37,14 @@
 (uniform-check 'arguments (= (uniform-count arguments) 8))
 (uniform-check 'case
   (or (string=? (uniform-argument arguments 1) "uniform-zero")
-      (string=? (uniform-argument arguments 1) "uniform-zero-last-tie")))
+      (string=? (uniform-argument arguments 1) "uniform-zero-last-tie")
+      (string=? (uniform-argument arguments 1) "padding-hit-normal")
+      (string=? (uniform-argument arguments 1) "padding-hit-mutant")))
 (define expected-accuracy
   (if (string=? (uniform-argument arguments 1) "uniform-zero-last-tie")
-      0 1065353216))
+      0
+      (if (string=? (uniform-argument arguments 1) "padding-hit-normal")
+          1061997773 1065353216)))
 (e3-uniform-set-files!
   (vector (uniform-argument arguments 3)
           (uniform-argument arguments 4)

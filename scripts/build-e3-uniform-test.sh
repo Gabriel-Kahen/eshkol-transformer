@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
-[[ $# -le 2 ]] || die "usage: $0 [ARTIFACT_DIR] [normal|last-tie|sanitize]"
+[[ $# -le 2 ]] || die "usage: $0 [ARTIFACT_DIR] [normal|last-tie|padding-hit|sanitize|padding-hit-sanitize]"
 verify_toolchain
 for command in ar cmp; do require_command "${command}"; done
 artifact="${1:-$(project_build_dir)/e3-uniform-test}"
 mode="${2:-normal}"
-case "${mode}" in normal|last-tie|sanitize) ;; *) die "unknown E3 uniform mode: ${mode}" ;; esac
+case "${mode}" in normal|last-tie|padding-hit|sanitize|padding-hit-sanitize) ;; *) die "unknown E3 uniform mode: ${mode}" ;; esac
 mkdir -p "$(dirname -- "${artifact}")"
 staging="$(mktemp -d "$(dirname -- "${artifact}")/.e3-uniform.XXXXXX")"
 uniform_stage_cleanup() {
@@ -25,6 +25,7 @@ prefix="${PROJECT_ROOT}/tests/e3_private/uniform_package"
 mutant="${mode}"
 sanitize=0
 if [[ "${mode}" == sanitize ]]; then mutant=normal; sanitize=1; fi
+if [[ "${mode}" == padding-hit-sanitize ]]; then mutant=padding-hit; sanitize=1; fi
 E1B_COMPILER_TIMEOUT_SECONDS="${E3_COMPILER_TIMEOUT_SECONDS:-900}" \
   E3_UNIFORM_MUTANT="${mutant}" E3_UNIFORM_SANITIZE="${sanitize}" \
   /usr/bin/bash "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \

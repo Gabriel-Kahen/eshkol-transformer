@@ -41,7 +41,7 @@ def main() -> None:
     reference = decode(args.reference.read_bytes())
     cases = reference.get("cases") if isinstance(reference, dict) else None
     if not isinstance(cases, list) or len(cases) != 1 or \
-            cases[0].get("name") != "uniform-zero":
+            cases[0].get("name") not in ("uniform-zero", "padding-hit"):
         raise ValueError("uniform reference case differs")
     expected_cursor = cases[0]["corpus"]["start_cursor"]
     payload, roles = parse_uniform(args.stdout.read_bytes(), args.batch_count,

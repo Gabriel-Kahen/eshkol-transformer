@@ -1272,7 +1272,7 @@ if [[ -n "${E3_UNIFORM_MUTANT+x}" ]]; then
     die "E3 uniform mutation is allowed only for the exact test tuple"
 fi
 case "${e3_uniform_mutant}" in
-  normal|last-tie) ;;
+  normal|last-tie|padding-hit) ;;
   *) die "unknown E3 uniform mutation: ${e3_uniform_mutant}" ;;
 esac
 require_command awk
@@ -1910,6 +1910,8 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
     package_native_cflags+=(-DET_E3_NUMERICAL_TESTING -fno-builtin-printf)
     if [[ "${e3_uniform_mutant}" == last-tie ]]; then
       package_native_cflags+=(-DET_E3_UNIFORM_LAST_TIE_TEST)
+    elif [[ "${e3_uniform_mutant}" == padding-hit ]]; then
+      package_native_cflags+=(-DET_E3_PADDING_HIT_TEST)
     fi
   fi
   if [[ "${package_policy}" == e3-private-aggregate &&

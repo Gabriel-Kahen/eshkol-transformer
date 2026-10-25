@@ -1155,6 +1155,14 @@ The remaining M2 mutants and full E3 §9 admission matrix remain open;
 installed/public E3 behavior and GPU execution are not established. This
 current-main source/docs union still needs independent review and hosted
 exact-head validation before integration.
+An isolated [padded-hit M2 source candidate](e3/E3_PADDING_HIT_MUTANT_SOURCE.md)
+uses an authentic packed `11,11,10` D2 row and the existing zero-state C1
+model control to make only the masked padded prediction hit. It predicts the
+first distinct wrong word at final-row `correct_f32`, with normal `4/5` versus
+mutant `5/5` accuracy and unchanged N/W/tokens/batches/cursor. The test-only
+uniform-tuple selector and independent oracle passed 21 focused host source
+tests, shell syntax and Clang macro controls;
+supported private AOT, poison, sanitizer and independent review are pending.
 The 7eeaa03 current-main M2 union added the padded-position test selector to
 `scripts/build-e1b-consumer.sh`, changing its source bytes. Hosted model
 composition failed only the M3CG predecessor checksum. This bounded successor

@@ -8,6 +8,9 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#if defined(ET_E3_PADDING_HIT_TEST) && !defined(ET_E3_NUMERICAL_TESTING)
+#error "padding-hit mutation requires the private numerical test tuple"
+#endif
 #if !defined(__x86_64__)
 #error "E3 metrics v1 requires the reviewed x86-64 binary32 lane"
 #endif
@@ -211,7 +214,12 @@ static int32_t evaluate_correct(const et_kernel_call_v1 *c, union results *resul
   const int64_t winner1 = argmax(logits + 256);
 #endif
   const float weight0 = mask[0] == 0u ? 0.0f : 1.0f;
+#ifdef ET_E3_PADDING_HIT_TEST
+  /* Test only: count a padded hit, but retain the true active-token count. */
+  const float weight1 = 1.0f;
+#else
   const float weight1 = mask[1] == 0u ? 0.0f : 1.0f;
+#endif
   const float hit0 = winner0 == targets[0] ? 1.0f : 0.0f;
   const float hit1 = winner1 == targets[1] ? 1.0f : 0.0f;
   const float p0 = weight0 * hit0;
