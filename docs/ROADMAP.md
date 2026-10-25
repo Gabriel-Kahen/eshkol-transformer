@@ -2216,8 +2216,8 @@ before checking it.
 The proposed [C4 workspace topology authority contract](g3/G3_R_C4_WORKSPACE_TOPOLOGY_AUTHORITY_CONTRACT.md)
 pins a read-only P1 trusted slot 74 and separate native sealed-owner
 scoped-pin status. The [P1 topology leaf](g3/G3_R_C4_P1_TOPOLOGY_STATUS_LEAF.md)
-is a source-only candidate: it appends status-only slot 74 without changing
-slots 0–73 or the feature-off ABI, and has an unrun fixture for the exact C4
+is a bounded compiled status leaf: it appends status-only slot 74 without changing
+slots 0–73 or the feature-off ABI, and has a checked fixture for the exact C4
 tree, ordered handles/tie, CPU f32 provider, `[4,4]` position shape and
 negative controls. The separately accepted C4 trainable constructor compiled
 fixture is sealed at `g3r-c4-trainable-constructor-5503bb2b-attempt3/SHA256SUMS-RUN`
@@ -2238,8 +2238,20 @@ construction. The decisive receipt is
 (SHA-256 `a2768c42808e8cf7449ec90c4cd87b184d950c4bf3e1a750200f10844854bad8`),
 which is **NONACCEPTING**. Slot 74 used a call form on the boolean
 `protected-storage-comparison-active?`; a focused source repair now uses its
-existing boolean `cond` form with a mutation test. Repaired compiled P1
-topology, native owner checks, and dependent slot 75 remain open.
+existing boolean `cond` form with a mutation test. The first full
+`0ed895a6` cut remained **NONACCEPTING**; diagnostics then passed the slot-74
+controls and localized the next failure to fixture C2 construction. Its
+recipe compiled the I2 bridge without `ET_M3T_PACKAGE_BUILD`, which makes the
+M3T construction preflight unavailable. A fresh reviewed recipe added that
+flag alongside the C4 bridge flags, preserving the exact source and fixture.
+The accepted bounded compiled receipt is
+`g3r-c4-p1-topology-0ed895a6-attempt2/SHA256SUMS-RUN`
+(SHA-256 `34d3341206289c6d9771888f633bdf900c90a8cba48619e96ebb459b21acd03f`):
+60/60 sealed files, launcher/Docker exit zero, normal/repeat each 11 checks
+with byte-identical output, seeded model-authority control 25 checks, and
+independent result review seal
+`22f9156e53caed11e03f3dc28c3f0ff9b365b9bdee523de45a9fd16a24362dc1`.
+Native owner checks and dependent slot 75 remain open.
 The workspace contract requires an exact live
 owner-to-P1 handle association proof and a swapped-handle negative; the first
 gate can claim topology/owner identity only. Active generation, workspace and
