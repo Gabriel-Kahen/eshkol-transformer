@@ -130,6 +130,7 @@ class SingleRegistryContract(unittest.TestCase):
             'include/eshkol_transformer/g3n_primitives_abi.h',
             'include/eshkol_transformer/g3s_sampling_abi.h',
             'src/eshkol_transformer/g3t_prefill_roles.inc',
+            'native/cpuv1_resource_generation.inc',
         ]
         expected += [
             'native/a2_kv_cache.c',
@@ -138,6 +139,8 @@ class SingleRegistryContract(unittest.TestCase):
             'native/g3s_sampling_provider.c',
         ]
         self.assertEqual(closure, expected)
+        self.assertIn('#include "../../native/cpuv1_resource_generation.inc"',
+                      (ROOT / 'src/eshkol_transformer/g3t_transport.c').read_text())
         self.assertIn('#include "tr3_public_installed_bridge.c"',
                       (NATIVE / 'cli3_package_bridge.c').read_text())
         for legacy_bridge in ('native/t1_wave1_package_bridge.c',
