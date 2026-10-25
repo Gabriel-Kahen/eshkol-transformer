@@ -1188,9 +1188,8 @@ The `943b745` N5 edge/cap attempt 3 is authenticated but NONACCEPTING
 packages, the authentic corpus/oracle, and six cap/edge AOT binaries built.
 The first normal cap process aborted with signal 6 after 1,239.90 seconds;
 its 158,592 KiB peak RSS belongs to that failed process. No cap result or
-edge/sanitizer runtime was published. A fresh test-only diagnostic needs
-flushed markers around the one-token seed, 8,192 control and 8,193 preflight
-before the full N5/resource gate is repeated.
+edge/sanitizer runtime was published. The later test-only stage-marker
+diagnostic distinguishes the seed and 8,192 evaluation below.
 
 The exact `0a86c35` N5 stage-marker import discovery passed host custody but
 stopped before AOT: the normal rejected E1B `combined.o` full inventory and
@@ -1198,9 +1197,16 @@ the sanitized rejected E1B `combined.o` noninstrumentation split each added
 the same four measured output imports, while sanitizer instrumentation
 was unchanged (143-file raw seal `c7f8f2c8...`,
 `n5-stage-0a86c35-import-discovery-attempt2-independent-review-20261025/REVIEW.md`).
-The test-only manifest/policy successor `2a39341c`/tree `971b5379` is
-committed after independent source review. A fresh compiled stage-marker gate
-must locate the first abort; no N5 resource row is accepted from discovery.
+The test-only manifest/policy successor `2a39341c`/tree `971b5379` compiled
+canonical, normal A/B and sanitized packages and six cap/edge AOTs. Its
+independently reviewed normal A runtime aborted with signal 6 after the 8,192
+control evaluation returned, before the batch/token/cursor checks completed
+(`n5-stage-2a39341-full-attempt2-independent-review-20261025/REVIEW.md`,
+230-file raw seal `d1fb1653...`). The seed passed; no stage-2, edge,
+repeat, poison or sanitizer runtime ran. Its 1,255.59 seconds and 155,360 KiB
+peak RSS are failed-process measurements. The sealed trace does not identify
+the exact failed check. Inspect retained IR/object, add a flushed per-check
+diagnostic, and repeat the reviewed full N5/resource gate after repair.
 
 The exact `44c0418d` complete-call retention attempt 2 is sealed and
 independently classified NONACCEPTING. Its normal and sanitized packages and
