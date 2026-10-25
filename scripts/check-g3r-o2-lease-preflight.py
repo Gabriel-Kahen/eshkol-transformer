@@ -80,6 +80,9 @@ require("(load \"tr3_lease_root.esk\")" in fixture,
         "fixture lacks genuine TR3 root")
 require("(load \"g3r_candidate_o2_lease_preflight_extension.esk\")" in fixture,
         "fixture lacks candidate extension")
+for name in ("tr3-lease-create-internal", "tr3-lease-unenroll-internal!",
+             "genuine live TR3 lease overlap"):
+    require(name in fixture, f"fixture lacks genuine TR3 control: {name}")
 require("(define-public" not in scheme and "(export" not in scheme,
         "private source exposes a package API")
 print("G3-R O2/lease source contract PASS")

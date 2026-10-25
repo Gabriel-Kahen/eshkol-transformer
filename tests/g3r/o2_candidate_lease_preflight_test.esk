@@ -32,6 +32,11 @@
         (list (list 'group (handle-paths handles)
                     "3dcccccd" "3f000000" "3f000000"
                     "3a83126f" "00000000"))))
+(define (dataset-config directory)
+  (list ':directory directory ':batch-size 1 ':sequence-length 2
+        ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+        ':maximum-total-tokens 4 ':maximum-batch-bytes 34
+        ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #t))
 
 (define config (config-create))
 (define initializer (m3t-public-initializer-state 1729))
@@ -94,6 +99,21 @@
   (lambda () (g3r-candidate-o2-lease-preflight-internal!
                ledger model optimizer)))
 (vector-set! tr3-trainers 0 (cdr (vector-ref tr3-trainers 0)))
+(define tokenizer (t2-wave2-tokenizer-byte config))
+(define dataset
+  (d2-token-dataset-open
+    (dataset-config (car (cdr (command-line)))) tokenizer))
+(define trainer
+  (tr3-lease-create-internal config tokenizer dataset model optimizer))
+(check "genuine TR3 lease enrolled"
+  (pair? (vector-ref tr3-trainers 0)))
+(reject "genuine live TR3 lease overlap" 'invalid-state
+  (lambda () (g3r-candidate-o2-lease-preflight-internal!
+               ledger model optimizer)))
+(check "genuine TR3 lease released"
+  (tr3-lease-unenroll-internal! trainer))
+(check "preflight after genuine lease release"
+  (g3r-candidate-o2-lease-preflight-internal! ledger model optimizer))
 (set! tr3-acquisition-active? #t)
 (reject "busy TR3 acquisition" 'invalid-state
   (lambda () (g3r-candidate-o2-lease-preflight-internal!

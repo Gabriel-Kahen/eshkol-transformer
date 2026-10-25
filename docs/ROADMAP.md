@@ -2766,8 +2766,11 @@ capture/active-lease overlap exclusion. Preflight repeats those admissions
 without mutation. Local Clang 22 native normal/repeat passes 123 checks per
 run, source checker passes, and ordinary and prior G3-R O2/M3T objects retain
 byte parity with the accepted `5504b2a9` base. Independent source/test review
-and the composed Eshkol gate remain pending; the existing M3T constructor
-archive lacks the O2/TR3/T2/D2 link closure needed for that gate. This leaf
+accepts source `41da9e6b` as bounded. The fixture now also requests a genuine
+TR3 lease for the enrolled candidate model and optimizer, checks live overlap,
+then releases that lease and rechecks admission; this added control and the
+composed Eshkol gate remain uncompiled. The existing M3T constructor archive
+lacks the O2/TR3/T2/D2 link closure needed for that gate. This leaf
 does not produce an O2 witness, revoke graph authority, restore, replay or
 claim sanitizer admission.
 
