@@ -1106,7 +1106,14 @@ noninstalled direct-44c M2 compiled successors accepted the authentic final
 `10` row capacity-denominator kill at reduction weight
 `3f800000`→`40000000` (`248f56c`, review SHA `fb3d7cf4...`) and
 exp-before-global final-perplexity kill `43815d49`→`438160e2`
-(`af8cde4`, review SHA `d1a46768...`). These are bounded leaf results;
+(`af8cde4`, review SHA `d1a46768...`). The independently reviewed noninstalled M2 missing-batch successor
+`b396761`/tree `56f3213` passed normal A/B, poison and sanitizer on an
+authentic third D2 row. The mutant retained prior N/W and counters
+(`41b195f4`/`40800000`, `[4,2]`) where normal reached
+`41de3b31`/`40a00000`, `[5,3]`; four modes rejected at
+`batches[2].state_f32` without a transcript. Its 370-file seal is
+`bbbbb0a9...`, with independent review SHA-256 `431f61d8...`.
+These are bounded leaf results;
 the N3 uniform attempt stopped before AOT on four unpinned imports, and the
 repinned mode/gradient attempt 4 stopped at sanitized import admission.
 Neither full N3 nor mode/gradient nor §9 is admitted.
