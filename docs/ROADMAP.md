@@ -1118,18 +1118,30 @@ slot before E3 stage-5 mapping and M3 boundary rethrow. A separate test-only
 `diagnose-d2` source candidate compares direct D2 fault and successful D2
 control after the same 512 completed evaluator calls in fresh processes. It
 records root-arena samples around the direct call and checks cursor, native
-batch idleness and a real evaluator retry. This is a causal localization probe:
-it has no compiled result, does not alter the original report/retention
-assertions, and cannot by itself admit complete-call retention or E3 §9.
+batch idleness and a real evaluator retry. This causal localization probe
+does not alter the original report/retention assertions; its compiled result
+is summarized below and cannot by itself admit complete-call retention or E3 §9.
 
 The independently reviewed `8fec18f` direct-D2 compiled diagnostic measured
 +2,288 root-arena bytes only on injected read faults, persistent through retry;
 the corresponding complete-E3 fault delta was +2,360. The 72-byte difference
-is not attributed to an object or mapping operation. A source-only test probe
-adds D2 escape-slot identity and E3 stage-5 mapping phase samples with a
+is not attributed to an object or mapping operation. A subsequent test-only
+probe adds D2 escape-slot identity and E3 stage-5 mapping phase samples with a
 fresh-process direct-D2 fault/control comparison. [The causal audit](e3/E3_RETENTION_ERROR_PROMOTION_AUDIT.md)
-sets the repair decision gate; production D2/E3/M3 and complete-call retention
-remain unchanged and unadmitted.
+sets the repair decision gate; no compiled production repair or complete-call
+retention admission follows from those receipts.
+
+The independently reviewed `2e941bb` compiled mapper diagnostic reproduced
++2,288 fault-only root-arena bytes in direct and mapped D2 calls, with flat
+controls; adjacent stage-5 mapper samples were equal only inside the active
+region. A [source-only D2 invocation-owned escape candidate](e3/E3_D2_INVOCATION_ESCAPE_REPAIR_CANDIDATE.md)
+returns the promoted shard error in a fault-only envelope in the enclosing
+caller region instead of writing dataset-lifetime `state[11]`, whose barrier
+can promote a younger graph to root. It preserves the typed read error, native cleanup, cursor and
+retry paths in source. Pinned `raise` also allocates in shared root, so no
+measured bytes or complete-call retention are credited to this uncompiled
+candidate. Independent source review and fresh paired compiled D2/E3 and
+complete-call gates remain required.
 
 The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
 is a docs-only candidate for the remaining private numerical, compiled-mutant,

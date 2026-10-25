@@ -419,9 +419,10 @@
 
 (define-syntax d2-with-shard-region
   (syntax-rules ()
-    ((_ operation escape body ...)
+    ((_ operation body ...)
      ;; The guard is installed after open. A body condition is promoted through
-     ;; the close before it is re-raised from parent-owned storage.
+     ;; the close before it is re-raised. The fault-only envelope is created
+     ;; after close restored the caller's arena; success allocates no envelope.
      (let ((region (d2-open-shard-region operation)))
        (let ((result
               (guard
@@ -430,12 +431,12 @@
                  (guard
                   (close-error (#t d2-region-close-failure-marker))
                   (let ((promoted (region-close region caught)))
-                    (vector-set! escape 0 promoted)
-                    d2-region-exception-marker))))
+                    (vector d2-region-exception-marker promoted)))))
                (begin body ...))))
          (cond
-          ((eq? result d2-region-exception-marker)
-           (raise (vector-ref escape 0)))
+          ((and (vector? result) (= (vector-length result) 2)
+                (eq? (vector-ref result 0) d2-region-exception-marker))
+           (raise (vector-ref result 1)))
           ((eq? result d2-region-close-failure-marker)
            (guard (ignored (#t #f)) (region-close region))
            (let ((unreachable (d2-region-close-fail operation)))
@@ -525,11 +526,11 @@
 
 (define (d2-fill-packed-row! state generation batch-row row-ordinal control
                              boundary-input)
-  (let ((escape (vector-ref state 11)))
+  (begin
     ;; Locate the row start once. Thereafter shard/local position is maintained
     ;; in fixed bytevector state, so crossing many singleton shards is O(shards)
     ;; rather than rescanning the manifest from zero at every boundary.
-    (d2-with-shard-region 'token-dataset-next-batch escape
+    (d2-with-shard-region 'token-dataset-next-batch
       (let* ((config (vector-ref state 3))
              (manifest (vector-ref state 5))
              (sequence-length (d2-core-config-ref config ':sequence-length))
@@ -542,7 +543,7 @@
         #t))
     (let loop ()
       (let ((action
-             (d2-with-shard-region 'token-dataset-next-batch escape
+             (d2-with-shard-region 'token-dataset-next-batch
                (let ((remaining (d2-core-load-unsigned-le control 24 8)))
                  (if (= remaining 0) 'done
                      (let* ((config (vector-ref state 3))
@@ -588,7 +589,7 @@
          ((eq? action 'done) #t)
          ((eq? action 'continue) (loop))
          (else
-          (d2-with-shard-region 'token-dataset-next-batch escape
+          (d2-with-shard-region 'token-dataset-next-batch
             (let* ((config (vector-ref state 3))
                    (sequence-length
                     (d2-core-config-ref config ':sequence-length))
@@ -611,8 +612,8 @@
           (loop)))))))
 
 (define (d2-fill-unpacked-row! state generation batch-row row-ordinal control)
-  (let ((escape (vector-ref state 11)))
-    (d2-with-shard-region 'token-dataset-next-batch escape
+  (begin
+    (d2-with-shard-region 'token-dataset-next-batch
       (let* ((config (vector-ref state 3))
              (manifest (vector-ref state 5))
              (sequence-length (d2-core-config-ref config ':sequence-length)))
@@ -718,9 +719,9 @@
             ;; Fixed private singleton, not a per-generation authority.
             (vector-set! state 9 d2-dataset-query)
             (vector-set! state 10 'none)
-            ;; One parent-owned slot is reused to promote exceptions out of
-            ;; every checked shard region.
-            (vector-set! state 11 (vector #f))
+            ;; Reserved private slot remains empty; a younger fault graph must
+            ;; never be stored into dataset-lifetime state.
+            (vector-set! state 11 #f)
             (vector-set! state 15 0)
             (vector-set! state 16 #f)
             (vector-set! state 17 rows)

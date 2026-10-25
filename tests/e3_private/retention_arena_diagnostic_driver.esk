@@ -547,12 +547,11 @@
                        (eq? (transformer-error-category caught) 'io)
                        (eq? (transformer-error-operation caught)
                             'token-dataset-next-batch)))
-                (e3-test-retention-check 'd2-map-escape-identity
-                  (eq? (vector-ref
-                         (vector-ref (d2-dataset-state dataset
-                                                      'token-dataset-next-batch)
-                                     11) 0)
-                       caught))
+                (e3-test-retention-check 'd2-map-no-dataset-escape
+                  (eq? (vector-ref (d2-dataset-state dataset
+                                                     'token-dataset-next-batch)
+                                   11)
+                       #f))
                 (vector-set! samples 3 (__arena-used))
                 (e3-note-caught-error! entry 5 caught inspect-args)
                 (vector-set! samples 4 (__arena-used))

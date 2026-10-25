@@ -19,8 +19,7 @@ def old(relative):
 
 class D2MapProbeTest(unittest.TestCase):
     def test_production_and_predecessor_diagnostics_are_unchanged(self):
-        for relative in ('internal/d2/lib/d2_dataset.esk',
-                         'native/e3_private_extension.esk',
+        for relative in ('native/e3_private_extension.esk',
                          'native/e3_errors_extension.esk',
                          'native/m3_model_extension.esk',
                          'tests/e3_private/retention_arena_diagnostic_bridge.c'):
@@ -38,8 +37,8 @@ class D2MapProbeTest(unittest.TestCase):
     def test_exact_promotion_and_mapper_seams(self):
         d2 = (ROOT / 'internal/d2/lib/d2_dataset.esk').read_text()
         self.assertIn('(let ((promoted (region-close region caught)))', d2)
-        self.assertIn('(vector-set! escape 0 promoted)', d2)
-        self.assertIn('(raise (vector-ref escape 0))', d2)
+        self.assertIn('(vector d2-region-exception-marker promoted)', d2)
+        self.assertIn('(raise (vector-ref result 1))', d2)
         e3 = (ROOT / 'native/e3_private_extension.esk').read_text()
         self.assertIn('(e3-note-caught-error! entry stage caught inspect-args)', e3)
         self.assertIn('(vector-set! entry 11 (vector-ref e3-error-table index))', e3)
@@ -49,7 +48,7 @@ class D2MapProbeTest(unittest.TestCase):
         probe = body[start:end]
         for anchor in ('(if (= index 512)', '(e3-test-read-fail-stage 1)',
                        '(d2-token-dataset-next-batch dataset)',
-                       "'d2-map-escape-identity", '(e3-note-caught-error! entry 5 caught inspect-args)',
+                       "'d2-map-no-dataset-escape", '(e3-note-caught-error! entry 5 caught inspect-args)',
                        '(e3-error-table-ref 5 \'io)',
                        '(e3-test-retention-probe 23)', '(e3-test-retention-probe 24)',
                        '(e3-test-retention-call! model dataset frame destinations cursor modes'):

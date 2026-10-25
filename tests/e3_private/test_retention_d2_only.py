@@ -31,10 +31,6 @@ class D2ArenaDiagnosticTest(unittest.TestCase):
             ['git', '-C', str(ROOT), 'show',
              f'{PARENT}:native/e3_private_extension.esk']),
             (ROOT / 'native/e3_private_extension.esk').read_bytes())
-        self.assertEqual(subprocess.check_output(
-            ['git', '-C', str(ROOT), 'show',
-             f'{PARENT}:internal/d2/lib/d2_dataset.esk']),
-            (ROOT / 'internal/d2/lib/d2_dataset.esk').read_bytes())
 
     def test_direct_fault_is_matched_and_retry_is_real(self):
         body = DRIVER.read_text()
