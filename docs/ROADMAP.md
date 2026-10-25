@@ -2298,27 +2298,30 @@ public generation or continuation. The current-main G3 leaf union was
 independently source-reviewed at `c812b019`/tree `0d237093`; pinned compiled
 normal/repeat/sanitizer acceptance remains pending.
 
-The G3-R authentic C2 SAVE test gate is prepared at
-`scripts/test-g3r-c2-authentic-save.sh`. It compiles the accepted public C2
-LOAD→SAVE→release fixture, retains a fresh `roundtrip.c2` with archive,
-facade, build, size, hash and byte-equality evidence, and first runs a
-compiled LOAD/release control without SAVE that must leave the output absent.
-It derives G3RCV1 companions from the retained saved bytes and invokes the
-existing private file reader against that image in normal, repeat and
-sanitizer modes. Source and host checks are complete; the compiled gate is
-unrun and does not establish restored model or public continuation.
+The G3-R authentic C2 SAVE gate at
+`scripts/test-g3r-c2-authentic-save.sh` now has bounded compiled evidence.
+The public C2 LOAD→SAVE→release fixture retained a fresh `roundtrip.c2` and
+a compiled LOAD/release control without SAVE left output absent in the prior
+sealed receipt. The corrected private reader passed fresh normal, repeat and
+native-sanitizer runs against that saved image in the later `d182d308`
+receipt (`g3-save-d182d308-cont-attempt1/SHA256SUMS-RUN`, SHA-256
+`1de40824cd6ab6fd36fa5f8ce797d20edc5c36f9325a520b32de1bbb5187927b`).
+The later reader receipt did not rerun the public SAVE control. Neither
+receipt establishes a restored model or public continuation.
 
-A private C2/FILE tokenizer-binding prerequisite is source-staged on the
-G3-R branch. It checks the companion's 96-byte raw-V256 fingerprint against
-the controls projected from an active borrow of the exact C2/SHA receipt,
-closes that borrow, then publishes eight decoded fields together. The test
-fixture derives the positive fingerprint from the saved C2 image and keeps
-the prior synthetic fingerprint as a rejection case. Its compiled
-normal/repeat/native-sanitizer gate and independent review remain pending;
-this does not restore a live model or T1 owner, import G3 RNG, or replay a
-candidate generator.
+The private C2/FILE tokenizer-binding prerequisite passed the compiled
+normal, repeat and native-sanitizer gate on `e65b83d4`/tree `1570735e`
+(`g3-tokenizer-bind-e65b83d4-reuse-attempt1/SHA256SUMS-RUN`, SHA-256
+`b8218df77028fdc5ed4687b1e67f23d09ff1a31ea746fe55bdfe2b80c0d5dd19`).
+It compares the companion's 96-byte raw-V256 fingerprint with controls from
+an active borrow of the exact C2/SHA receipt, closes the borrow, and publishes
+eight decoded fields together. The saved C2 fingerprint has 64 zero digest
+characters. This authentic pair is accepted for reading and binding, but
+cannot authenticate the canonical live same-registry T1 owner. No restored
+model, typed RNG import, fresh-process replay or public continuation is
+accepted for this G3-R pair.
 
-The current G3-R C2 SAVE continuation on `0581426b` sealed a failed runtime
+The earlier G3-R C2 SAVE continuation on `0581426b` sealed a failed runtime
 receipt at `g3-save-0581426b-cont-attempt1/SHA256SUMS-RUN`: its compiled
 no-SAVE control left output absent and its compiled public LOAD/SAVE producer
 wrote a byte-identical C2 image. The newly compiled normal private reader
