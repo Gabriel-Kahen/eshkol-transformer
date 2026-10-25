@@ -113,6 +113,9 @@
          module-construction-seal-internal!
          module-construction-abort-internal!
          module-construction-parameters-internal
+         module-candidate-construction-bind-native-internal!
+         module-candidate-construction-begin-internal
+         module-candidate-construction-preflight-internal!
          p1-trusted-surface)
 
 (define p1-trusted-surface
@@ -200,6 +203,8 @@
 (define construction-registry-root (vector '() #f))
 (define dead-construction-raw (vector 'aborted-construction))
 (define construction-busy? #f)
+(define candidate-construction-native-begin #f)
+(define candidate-construction-native-preflight #f)
 (define (construction-call operation thunk)
   (if construction-busy?
       (fail 'invalid-state operation "construction operation is not reentrant" '()))
@@ -4333,16 +4338,31 @@
           (vector-set! record 1 'aborted)
           (vector-set! record 3 #f)
           (vector-set! record 4 #f)
+          (vector-set! record 6 #f)
+          (let ((cell (vector-ref record 5)))
+            (if cell
+                (begin (vector-set! cell 0 'dead)
+                       (vector-set! cell 1 #f)
+                       (vector-set! cell 2 #f)
+                       (vector-set! cell 3 #f))))
           (vector-set! construction-registry-root 1 #f)
           #t))))
-(define (construction-begin provider-name)
+(define (construction-begin provider-name candidate-cell)
   (reject-protected-storage-comparison-reentry 'module-construction-begin-internal)
   (require-provider-name 'module-construction-begin-internal provider-name)
+  (if candidate-cell
+      (if (or (not candidate-construction-native-begin)
+              (not (vector? candidate-cell))
+              (not (= (vector-length candidate-cell) 4))
+              (vector-ref candidate-cell 0) (vector-ref candidate-cell 1)
+              (vector-ref candidate-cell 2) (vector-ref candidate-cell 3))
+          (fail 'invalid-argument 'module-candidate-construction-begin-internal
+                "expected fresh four-slot candidate enrollment cell" '())))
   (if (or (active-construction) construction-busy?)
       (fail 'invalid-state 'module-construction-begin-internal "nested construction" '()))
   ;; Publish/promote the complete Eshkol ledger graph before native begin.
   ;; Until its native identity is installed it is an inert aborted record.
-  (let* ((record (vector #f 'aborted provider-name #f #f))
+  (let* ((record (vector #f 'aborted provider-name #f #f candidate-cell #f))
          (next (cons record (vector-ref construction-registry-root 0))))
     (vector-set! construction-registry-root 0 next)
     (let ((canonical (car (vector-ref construction-registry-root 0))))
@@ -4356,18 +4376,24 @@
                        (construction-abort! (vector-ref current 0)) #t))
                  (raise caught)))
         (native-check 'module-construction-begin-internal
-                      (p1-native-construction-begin native-context))
+          (if candidate-cell
+              (candidate-construction-native-begin native-context)
+              (p1-native-construction-begin native-context)))
         (let ((identity (p1-native-result-ptr native-context)))
           ;; Native pointers and existing symbols require no graph promotion.
           (vector-set! canonical 0 identity)
           (vector-set! canonical 1 'open)
           (vector-set! construction-registry-root 1 identity)
+          (if candidate-cell
+              (begin (vector-set! candidate-cell 0 'open)
+                     (vector-set! candidate-cell 1 identity)))
           (let ((root (shell-for-raw 'module
                         (module-create-with-provider-internal provider-name))))
             ;; Shell publication can promote the rooted ledger graph.
             (vector-set!
               (construction-record 'module-construction-begin-internal identity)
               3 root)
+            (if candidate-cell (vector-set! candidate-cell 2 root))
             identity))))))
 (define (construction-parameters identity)
   (let* ((record (construction-open 'module-construction-parameters-internal identity))
@@ -4401,7 +4427,9 @@
          (actual (construction-rows record operation))
          (schedule (vector-ref record 4))
          (finalizers (finalization-plan operation root))
-         (updates (canonical-path-updates (sort-entries (flatten-parameters root '())))))
+         (updates (canonical-path-updates (sort-entries (flatten-parameters root '()))))
+         (candidate-cell (vector-ref record 5))
+         (candidate-roster '()))
     (if (or (not schedule) (not (construction-schedule-equal? actual schedule)))
         (fail 'invalid-state operation "construction changed after parameter schedule" '()))
     (let scan ((remaining (shell-registry-current)))
@@ -4421,12 +4449,22 @@
                                         (vector-ref (car rows) 1)) #t)
                                   (else (handles (cdr rows)))))))
                 (fail 'invalid-state operation "construction has unattached handles" '()))
+            (if (and candidate-cell (= (vector-length entry) 4)
+                     (or (eq? (vector-ref entry 1) 'module)
+                         (eq? (vector-ref entry 1) 'handle))
+                     (eq? (vector-ref entry 3) identity))
+                (set! candidate-roster (cons entry candidate-roster)))
             (scan (cdr remaining)))))
     ;; Write barriers/promotion and all traversal finish while abortable.
     (install-canonical-paths! updates)
     (finalize-modules! finalizers)
+    (if candidate-cell
+        (begin
+          (vector-set! record 6 (list-reverse candidate-roster))
+          (vector-set! candidate-cell 3 (list-reverse candidate-roster))))
     (native-check operation (p1-native-construction-seal native-context identity))
     (vector-set! record 1 'sealed)
+    (if candidate-cell (vector-set! candidate-cell 0 'sealed))
     (vector-set! record 4 #f)
     (vector-set! construction-registry-root 1 #f)
     root-shell))
@@ -5811,7 +5849,7 @@
       (validate-bound-state-admitted operation raw)
       (wrap-entry-items operation state raw (vector-ref raw 6))))
   ;; Append-only slots 59..63: fresh unpublished construction only.
-  (lambda (provider-name) (construction-begin provider-name))
+  (lambda (provider-name) (construction-begin provider-name #f))
   (lambda (identity)
     (vector-ref (construction-open 'module-construction-root-internal identity) 3))
   (lambda (identity)
@@ -5837,6 +5875,62 @@
     (construction-prepare-eval-guarded! identity))
   (lambda (identity)
     (construction-seal-prepared! identity))
+  ;; Append-only private candidate slots 73..75. The guarded native hooks
+  ;; are installed only by the feature-local owning aggregate.
+  (lambda (begin-hook preflight-hook)
+    (if (or candidate-construction-native-begin
+            candidate-construction-native-preflight
+            (not (procedure? begin-hook)) (not (procedure? preflight-hook))
+            (active-construction))
+        (fail 'invalid-state 'module-candidate-construction-bind-native-internal!
+              "candidate native hooks are already bound or construction is busy" '()))
+    (set! candidate-construction-native-begin begin-hook)
+    (set! candidate-construction-native-preflight preflight-hook)
+    #t)
+  (lambda (provider-name cell)
+    (if (not cell)
+        (fail 'invalid-argument 'module-candidate-construction-begin-internal
+              "candidate enrollment cell is required" '()))
+    (construction-begin provider-name cell))
+  (lambda (cell)
+    (let ((operation 'module-candidate-construction-preflight-internal!))
+      (if (or (not (vector? cell)) (not (= (vector-length cell) 4))
+              (not (eq? (vector-ref cell 0) 'sealed)))
+          (fail 'invalid-argument operation "expected sealed candidate cell" '()))
+      (let* ((identity (vector-ref cell 1))
+             (record (construction-record operation identity))
+             (roster (vector-ref cell 3)))
+        (if (or (not (eq? (vector-ref record 5) cell))
+                (not (eq? (vector-ref record 1) 'sealed))
+                (not (eq? (vector-ref record 3) (vector-ref cell 2)))
+                (not (pair? roster)) (active-construction))
+            (fail 'invalid-state operation "candidate graph identity changed" '()))
+        (let loop ((remaining roster) (canonical (vector-ref record 6))
+                   (count 0))
+          (cond ((and (null? remaining) (null? canonical)) #t)
+                ((or (not (pair? remaining)) (not (pair? canonical))
+                     (>= count 4096))
+                 (fail 'invalid-state operation "candidate shell roster is malformed" '()))
+                (else
+                  (let ((entry (car remaining)))
+                    (if (or (not (vector? entry))
+                            (not (= (vector-length entry) 4))
+                            (not (eq? entry (car canonical)))
+                            (not (eq? (vector-ref entry 3) identity))
+                            (not (identity-member-local? entry (shell-registry-current))))
+                        (fail 'invalid-state operation "candidate shell roster changed" '()))
+                    (loop (cdr remaining) (cdr canonical) (+ count 1))))))
+        (let scan ((remaining (shell-registry-current)))
+          (if (null? remaining) #t
+              (let ((entry (car remaining)))
+                (if (and (= (vector-length entry) 4)
+                         (eq? (vector-ref entry 3) identity)
+                         (not (identity-member-local? entry roster)))
+                    (fail 'invalid-state operation "candidate shell roster is incomplete" '()))
+                (scan (cdr remaining)))))
+        (native-check operation
+          (candidate-construction-native-preflight native-context identity))
+        #t)))
   )))
 
 (define (module-parameters module)
@@ -5994,3 +6088,10 @@
   ((vector-ref p1-trusted-surface 62) value))
 (define (module-construction-parameters-internal value)
   ((vector-ref p1-trusted-surface 63) value))
+(define (module-candidate-construction-bind-native-internal!
+          begin-hook preflight-hook)
+  ((vector-ref p1-trusted-surface 73) begin-hook preflight-hook))
+(define (module-candidate-construction-begin-internal provider-name cell)
+  ((vector-ref p1-trusted-surface 74) provider-name cell))
+(define (module-candidate-construction-preflight-internal! cell)
+  ((vector-ref p1-trusted-surface 75) cell))

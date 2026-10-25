@@ -2633,6 +2633,16 @@ parameter graph or live O2 witness; the candidate-aware I2/P1/M3T adapter
 and owner teardown
 remain dependent work.
 
+A source-only P1 candidate handshake is staged on
+`codex/g3r-p1-candidate-handshake-20261025`. The ordinary trusted P1 root
+keeps its feature-off native linkage; a feature-local extension installs the
+existing guarded native candidate begin and read-only roster preflight. The
+candidate path roots an exact enrollment cell before native begin and retains
+the construction identity, root and scoped shell roster through ordinary
+seal. The focused feature-on/ordinary test runner has not passed a supported
+compiled Eshkol gate. I2/M3T preseal enrollment, graph revocation, full
+candidate cleanup, C2 restore and replay remain unimplemented.
+
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
 names would return newly owned authenticated CPU f32 `[1,256]` kind-3 shells,

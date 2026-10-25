@@ -1,0 +1,67 @@
+(require transformer.module)
+(require p1_test.tensor_provider)
+(load "g3r_p1_candidate_construction_extension.esk")
+
+(define checks 0)
+(define (check condition)
+  (if condition (set! checks (+ checks 1)) (exit 1)))
+(define (reject category thunk)
+  (check
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category))))
+      (thunk) #f)))
+
+(reject 'invalid-argument
+  (lambda () (module-candidate-construction-begin-internal
+               'fixture-v1 (vector #f))))
+(reject 'invalid-argument
+  (lambda () (module-candidate-construction-begin-internal 'fixture-v1 #f)))
+(define cell (vector #f #f #f #f))
+(define construction
+  (module-candidate-construction-begin-internal 'fixture-v1 cell))
+(define root (module-construction-root-internal construction))
+(check (and (eq? (vector-ref cell 0) 'open)
+            (eq? (vector-ref cell 1) construction)
+            (eq? (vector-ref cell 2) root)))
+(reject 'invalid-state
+  (lambda () (module-candidate-construction-begin-internal
+               'fixture-v1 (vector #f #f #f #f))))
+(define handle
+  (module-register-parameter-internal!
+    root "weight" (fixture-tensor-internal '(2) 'f32 'cpu
+                     (vector 'candidate 'bits))))
+(module-construction-parameters-internal construction)
+(check (eq? root (module-construction-seal-internal! construction)))
+(check (eq? (vector-ref cell 0) 'sealed))
+(check (pair? (vector-ref cell 3)))
+(check (module-candidate-construction-preflight-internal! cell))
+(reject 'invalid-argument
+  (lambda () (module-candidate-construction-begin-internal
+               'fixture-v1 cell)))
+(reject 'invalid-state
+  (lambda () (module-candidate-construction-preflight-internal!
+               (vector 'sealed construction root (vector-ref cell 3)))))
+(define prior (vector-ref cell 3))
+(vector-set! cell 3 (cdr prior))
+(reject 'invalid-state
+  (lambda () (module-candidate-construction-preflight-internal! cell)))
+(vector-set! cell 3 prior)
+(check (module-candidate-construction-preflight-internal! cell))
+(define ordinary (module-construction-begin-internal 'fixture-v1))
+(check (module-construction-abort-internal! ordinary))
+(define abandoned-cell (vector #f #f #f #f))
+(define abandoned
+  (module-candidate-construction-begin-internal 'fixture-v1 abandoned-cell))
+(check (module-construction-abort-internal! abandoned))
+(check (and (eq? (vector-ref abandoned-cell 0) 'dead)
+            (not (vector-ref abandoned-cell 1))
+            (not (vector-ref abandoned-cell 2))
+            (not (vector-ref abandoned-cell 3))))
+(reject 'invalid-argument
+  (lambda () (module-candidate-construction-begin-internal
+               'fixture-v1 abandoned-cell)))
+(check (eq? (vector-ref cell 0) 'sealed))
+(display "G3-R P1 candidate construction PASS: ")
+(display checks)
+(newline)
