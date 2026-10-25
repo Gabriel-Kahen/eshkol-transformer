@@ -1005,6 +1005,15 @@ generator was missing from the exact development-script allowlist. The focused
 Q0 and zero-control source tests pass after its exact path and near-miss checks
 were added; a fresh exact-head hosted run remains pending.
 
+The [exact-`44c0418` N4 private reachability audit](e3/E3_N4_PRIVATE_REACHABILITY_AUDIT.md)
+finds that admitted D1/D2 cannot emit mask `01` or an out-of-range masked target;
+E3 stage-6 target validation rejects the latter before K1. Existing C1 load
+controls can stage a real model state, but no independent M3 forward oracle
+establishes subnormal, negative-zero or masked-nonfinite logits through the
+evaluator, and altered fenv may fail first in N3K. Direct K1 provider results
+remain provider-only. No N4 code or compiled gate ran; private N4 and full
+§9 acceptance remain **HOLD**.
+
 A bounded N3 target-offset source extension adds two generated, checksummed
 three-byte D1 corpora, `(3,197,0)` and `(3,197,7)`. Their packed D2 row has
 the same `[3,197]` inputs and `11` mask and differs only in the second target.
