@@ -2724,7 +2724,7 @@ does not check native parameter-to-handle bindings, O2 or lease conflicts,
 or produce a revocation witness. Graph retirement, restore and replay remain
 unimplemented.
 
-The next private read-only native binding preflight is staged on
+The private read-only native binding preflight is accepted as a bounded leaf on
 `codex/g3r-native-binding-preflight-20261025`. It extends the accepted graph
 identity leaf with a status-only M3T ABI that checks the complete sealed
 14-parameter native roster and compares each bound handle against the exact
@@ -2742,9 +2742,19 @@ and ordinary f32 objects byte-for-byte. The candidate flag intentionally adds
 private f32 symbols through `m3t_f32_integration.c`; the ordinary object hash
 matched the accepted graph gate. A focused runner correction now checks
 candidate-only symbols, pins that ordinary object, and retains unchanged I2
-object parity. The corrected compiled gate and exact-result review remain
-pending. O2 identity, active leases, graph revocation, restore and replay
-remain unproved.
+object parity. The focused correction at `592c8f00`/tree `896b35f3` passed its
+independently reviewed pinned v2 gate: launcher/Docker/gate exits zero,
+94/94 receipt hashes, candidate 39 checks in each of two identical runs,
+ordinary feature-off in two identical runs, native binding fixture 61 checks
+in two identical runs, empty compiler/runtime stderr, and pinned ordinary
+M3T/f32 object hashes with unchanged I2 bridge parity. The accepted receipt is
+`g3r-native-binding-592c8f00-v2-attempt1/SHA256SUMS-RUN` (SHA-256
+`c371d5ec250589b273f762f63f0534d43dc1fb87dc8a524eb3366645040c01ad`).
+Independent source/test/result review is sealed at
+`g3r-native-binding-independent-review-20261025/SHA256SUMS-REVIEW`
+(SHA-256 `85fc6cb0f789e25e3ff98890557b04eb624f0eeff03d7882fc47dce3fa64512d`).
+The v1 attempt remains nonaccepting. O2 identity, active leases, graph
+revocation, restore and replay remain unproved.
 
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual

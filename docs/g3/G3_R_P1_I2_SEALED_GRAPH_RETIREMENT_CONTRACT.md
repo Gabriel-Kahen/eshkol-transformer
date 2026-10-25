@@ -165,7 +165,13 @@ callback; no roster pointer array crosses into Eshkol. The reviewed
 same-owner SAVE roster validation is shared under private feature flags, while
 ordinary M3T source compiles without either symbol.
 
-The source and focused native test are staged for independent review. Local
-Clang 22 native binding checks and the existing M3T transport regression pass;
-the pinned compiled feature-on/feature-off gate remains unrun. This leaf
+The source, focused native test, and corrected runner passed independent
+review. Local Clang 22 native binding checks and the existing M3T transport
+regression pass. Source `592c8f00`/tree `896b35f3` passed a pinned compiled
+feature-on/feature-off gate with candidate 39 checks twice, ordinary mode
+twice, and native binding fixture 61 checks twice. Its sealed receipt is
+`g3r-native-binding-592c8f00-v2-attempt1/SHA256SUMS-RUN` (SHA-256
+`c371d5ec250589b273f762f63f0534d43dc1fb87dc8a524eb3366645040c01ad`).
+The first runner attempt at `cf6afa4e` remains nonaccepting because an invalid
+f32 object parity assertion stopped before its native fixture. This leaf
 still does not authenticate O2, exclude graph leases or revoke authority.
