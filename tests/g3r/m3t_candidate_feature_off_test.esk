@@ -1,0 +1,17 @@
+(load "i2_wave2_root.esk")
+(load "m3t_transport_extension.esk")
+
+(define config
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define original (m3t-public-initializer-state 1729))
+(define model (m3t-public-model-create config original))
+(if (and (eq? (m3t-public-model-profile model) m3t-profile)
+         (= (vector-length
+              (vector-ref (m3t-entry model 'model 'feature-off #t) 8))
+            14))
+    (display "G3-R M3T ordinary feature-off PASS")
+    (exit 1))
+(newline)

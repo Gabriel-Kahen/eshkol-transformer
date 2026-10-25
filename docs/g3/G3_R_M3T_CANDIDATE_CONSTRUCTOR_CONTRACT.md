@@ -1,7 +1,7 @@
 # G3-R private M3T candidate constructor enrollment
 
-**Proposed bounded producer contract; implementation and runtime admission are
-pending.** This is the feature-local M3T constructor dependency named by
+**Proposed bounded producer contract; a source candidate is staged, and runtime
+admission is pending.** This is the feature-local M3T constructor dependency named by
 [the sealed-graph contract](G3_R_P1_I2_SEALED_GRAPH_RETIREMENT_CONTRACT.md).
 It uses the accepted P1/I2 candidate construction handshake. It does not add
 a public model constructor, alter `m3t-public-model-create`, release a sealed

@@ -2688,8 +2688,11 @@ The [private M3T candidate constructor contract](g3/G3_R_M3T_CANDIDATE_CONSTRUCT
 specifies the next proposed producer seam: a rooted, single-use ledger
 retains the native M3T owner before candidate I2 begin, then the fixed
 14-parameter/tied-alias constructor uses the accepted P1/I2 handshake.
-It defines preseal cleanup and a nonretryable postseal tail. The ledger and
-constructor are not implemented or compiled; ordinary M3T remains unchanged.
+It defines preseal cleanup and a nonretryable postseal tail. A feature-local
+source candidate and focused feature-on/feature-off fixtures are staged for
+review; they are not yet compiled or admitted. The current injected fixture
+reaches P1 native begin allocation cuts only, not a later I2 publication
+failure. Ordinary M3T remains unchanged.
 
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual

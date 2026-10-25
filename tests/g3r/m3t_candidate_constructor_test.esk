@@ -1,0 +1,132 @@
+(load "i2_wave2_root.esk")
+(load "g3r_p1_candidate_construction_extension.esk")
+(load "g3c4_p1_construction_extension.esk")
+(load "g3r_i2_candidate_construction_extension.esk")
+(load "m3t_transport_extension.esk")
+(load "g3r_m3t_candidate_constructor_extension.esk")
+
+(extern i64 candidate-test-live-count
+        :real et_p1_test_live_entry_count_v1)
+(extern i64 candidate-test-count i64
+        :real et_i2_construction_test_count_v1)
+(extern i64 candidate-test-fail-after i64
+        :real et_i2_construction_test_fail_after_v1)
+
+(define checks 0)
+(define (check label value)
+  (if value (set! checks (+ checks 1))
+      (begin (display "G3-R M3T candidate FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label category thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) category))))
+      (thunk) #f)))
+(define (config-create)
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      "{\"config-schema-major\":1,\"config-schema-minor\":0,\"model.context-length\":2,\"model.hidden-size\":4,\"model.layer-count\":1,\"model.query-head-count\":2,\"model.vocabulary-size\":256,\"run.seed\":1729}")
+    '()))
+(define config (config-create))
+(define initial (m3t-public-initializer-state 1729))
+(define baseline-p1 (candidate-test-live-count))
+(define baseline-i2 i2-module-count)
+(define baseline-parameters (candidate-test-count 0))
+(define baseline-tensors (candidate-test-count 1))
+
+(reject "foreign ledger" 'invalid-argument
+  (lambda () (g3r-candidate-model-create-internal!
+               (vector 'g3r-candidate-ledger-v1) config initial)))
+(define tampered-ledger
+  (g3r-candidate-ledger-begin-internal! config initial))
+(vector-set! tampered-ledger 0 'changed)
+(reject "changed ledger shell" 'invalid-state
+  (lambda () (g3r-candidate-model-create-internal!
+               tampered-ledger config initial)))
+(vector-set! tampered-ledger 0 'g3r-candidate-ledger-v1)
+(reject "different config shell" 'invalid-state
+  (lambda () (g3r-candidate-model-create-internal!
+               tampered-ledger (config-create) initial)))
+(reject "different initializer" 'invalid-state
+  (lambda () (g3r-candidate-model-create-internal!
+               tampered-ledger config (m3t-public-initializer-state 1729))))
+
+(let failure ((cut 0))
+  (if (= cut 2) #t
+      (let ((ledger (g3r-candidate-ledger-begin-internal! config initial)))
+        (candidate-test-fail-after cut)
+        (reject "P1 begin failure preserves original category" 'internal
+          (lambda ()
+            (g3r-candidate-model-create-internal! ledger config initial)))
+        (check "failed candidate is dead"
+          (eq? (vector-ref
+                 (g3r-candidate-ledger-record ledger 'candidate-test) 1)
+               'dead))
+        (check "failed candidate restores live baselines"
+          (and (= baseline-p1 (candidate-test-live-count))
+               (= baseline-i2 i2-module-count)
+               (= baseline-parameters (candidate-test-count 0))
+               (= baseline-tensors (candidate-test-count 1))))
+        (reject "failed ledger cannot retry" 'invalid-state
+          (lambda ()
+            (g3r-candidate-model-create-internal! ledger config initial)))
+        (failure (+ cut 1)))))
+
+(define model
+  (g3r-candidate-model-create-internal! tampered-ledger config initial))
+(define ledger-record
+  (g3r-candidate-ledger-record tampered-ledger 'candidate-test))
+(define model-entry (m3t-entry model 'model 'candidate-test #t))
+(check "exact owner enrolled"
+  (and (eq? (vector-ref ledger-record 1) 'sealed)
+       (eq? (vector-ref ledger-record 5) model-entry)
+       (eq? (vector-ref ledger-record 8) (vector-ref model-entry 3))
+       (eq? (vector-ref ledger-record 10) model)
+       (vector-ref ledger-record 11)))
+(check "candidate graph retained"
+  (and (eq? (vector-ref (vector-ref ledger-record 7) 0) 'sealed)
+       (= (vector-ref (vector-ref ledger-record 7) 3)
+          (- i2-module-count baseline-i2))
+       (i2-candidate-construction-preflight-internal!
+         (vector-ref ledger-record 7))))
+(check "fixed fourteen handles"
+  (and (= (vector-length (vector-ref model-entry 8)) 14)
+       (let paths ((index 0))
+         (if (= index 14) #t
+             (and (equal? (parameter-handle-path
+                            (vector-ref (vector-ref model-entry 8) index))
+                          (vector-ref m3t-paths index))
+                  (paths (+ index 1)))))))
+(define candidate-tree (module-parameters model))
+(check "candidate exact head/embedding handle tie"
+  (and (eq? (parameter-tree-handle candidate-tree '("head" "weight"))
+            (parameter-tree-handle
+              candidate-tree '("token_embedding" "weight")))
+       (eq? (parameter-tree-handle candidate-tree '("head" "weight"))
+            (vector-ref (vector-ref model-entry 8) 10))
+       (equal? (parameter-tree-tie-groups candidate-tree)
+               '((("head" "weight") ("token_embedding" "weight")))))
+(reject "sealed ledger cannot build twice" 'invalid-state
+  (lambda ()
+    (g3r-candidate-model-create-internal! tampered-ledger config initial)))
+
+(define ordinary (m3t-public-model-create config initial))
+(define ordinary-tree (module-parameters ordinary))
+(check "ordinary exact tie parity"
+  (and (eq? (parameter-tree-handle ordinary-tree '("head" "weight"))
+            (parameter-tree-handle
+              ordinary-tree '("token_embedding" "weight")))
+       (equal? (parameter-tree-tie-groups ordinary-tree)
+               (parameter-tree-tie-groups candidate-tree))))
+(check "ordinary and candidate successor words agree"
+  (equal? (m3t-public-initializer-words
+            (m3t-public-model-initializer model))
+          (m3t-public-initializer-words
+            (m3t-public-model-initializer ordinary))))
+(check "ordinary and candidate config agree"
+  (equal? (vector-ref model-entry 7)
+          (vector-ref (m3t-entry ordinary 'model 'candidate-test #t) 7)))
+(display "G3-R M3T candidate constructor PASS: ")
+(display checks)
+(newline)

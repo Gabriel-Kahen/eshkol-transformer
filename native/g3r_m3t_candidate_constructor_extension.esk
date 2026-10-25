@@ -1,0 +1,174 @@
+;;; Feature-local diagnostic M3T candidate constructor. Load after the
+;;; ordinary M3T source and the accepted P1/I2 candidate extensions.
+;;; The ordinary constructor and public package never load this source.
+
+;;; Ledger slots: shell, phase, config shell, canonical config, input entry,
+;;; model entry, successor entry, I2/P1 cell, native owner, I2 record, root,
+;;; irreversible seal-entered flag.
+(define g3r-candidate-ledger-registry (vector '()))
+
+(define (g3r-candidate-ledger-record ledger operation)
+  (let find ((remaining (vector-ref g3r-candidate-ledger-registry 0)))
+    (cond
+      ((null? remaining)
+       (m3t-fail 'invalid-argument operation "foreign candidate ledger"))
+      ((eq? ledger (vector-ref (car remaining) 0))
+       (let ((record (car remaining)))
+         (if (or (not (vector? ledger))
+                 (not (= (vector-length ledger) 1))
+                 (not (eq? (vector-ref ledger 0) 'g3r-candidate-ledger-v1)))
+             (m3t-fail 'invalid-state operation "candidate ledger changed"))
+         record))
+      (else (find (cdr remaining))))))
+
+(define (g3r-candidate-ledger-begin-internal! config initializer)
+  (let* ((operation 'g3r-candidate-ledger-begin-internal!)
+         (initial (m3t-entry initializer 'initializer operation #t))
+         (config-data (m3t-config-check config initial operation))
+         (model #f)
+         (successor #f))
+    (guard (caught
+             (#t
+               (if model (vector-set! model 2 'dead))
+               (if successor (vector-set! successor 2 'dead))
+               (raise caught)))
+      (set! model (m3t-stage 'model))
+      (set! successor (m3t-stage 'initializer))
+      (let* ((shell (vector 'g3r-candidate-ledger-v1))
+             (cell (vector #f #f (vector #f #f #f #f) #f))
+             (record (vector shell 'fresh config config-data initial model
+                             successor cell #f #f #f #f))
+             (next (cons record (vector-ref g3r-candidate-ledger-registry 0))))
+        (vector-set! g3r-candidate-ledger-registry 0 next)
+        (vector-ref
+          (car (vector-ref g3r-candidate-ledger-registry 0)) 0)))))
+
+(define (g3r-candidate-model-create-internal! ledger config initializer)
+  (let* ((operation 'g3r-candidate-model-create-internal!)
+         (record (g3r-candidate-ledger-record ledger operation))
+         (initial (m3t-entry initializer 'initializer operation #t))
+         (entry (vector-ref record 5))
+         (successor (vector-ref record 6))
+         (cell (vector-ref record 7)))
+    (if (or (not (eq? (vector-ref record 1) 'fresh))
+            (not (eq? config (vector-ref record 2)))
+            (not (eq? initial (vector-ref record 4)))
+            (not (equal? (m3t-config-check config initial operation)
+                         (vector-ref record 3)))
+            (not (eq? (m3t-find (vector-ref entry 0)) entry))
+            (not (eq? (m3t-find (vector-ref successor 0)) successor))
+            (not (eq? (vector-ref entry 2) 'pending))
+            (not (eq? (vector-ref successor 2) 'pending))
+            (not (vector? cell)) (not (= (vector-length cell) 4))
+            (vector-ref cell 0) (vector-ref cell 1) (vector-ref cell 3)
+            (not (vector? (vector-ref cell 2)))
+            (not (= (vector-length (vector-ref cell 2)) 4))
+            (vector-ref (vector-ref cell 2) 0)
+            (vector-ref (vector-ref cell 2) 1)
+            (vector-ref (vector-ref cell 2) 2)
+            (vector-ref (vector-ref cell 2) 3)
+            (vector-ref record 8) (vector-ref record 9)
+            (vector-ref record 10) (vector-ref record 11))
+        (m3t-fail 'invalid-state operation "candidate ledger is not fresh"))
+    (let ((native '()))
+      (m3t-boundary operation
+        (guard (caught
+                 (#t
+                   ;; A native seal may precede either Scheme cell's sealed
+                   ;; state. Never infer abortability after seal entry.
+                   (if (vector-ref record 11) (exit 134))
+                   (guard (cleanup-defect (#t (exit 134)))
+                     (let ((state (vector-ref cell 0)))
+                       (cond
+                         ((eq? state 'open)
+                          (i2-candidate-construction-abort-internal! cell))
+                         ((or (not state) (eq? state 'dead)) #t)
+                         (else (exit 134))))
+                     (if (not (null? native))
+                         (if (not (= (m3t-native-owner-abort native) 0))
+                             (exit 134)))
+                     (vector-set! entry 2 'dead)
+                     (vector-set! successor 2 'dead)
+                     (vector-set! record 1 'dead))
+                   (raise caught)))
+          (vector-set! record 1 'building)
+          ;; Promote the complete Eshkol model metadata before native owner
+          ;; allocation. The registry and ledger were rooted by begin.
+          (let ((handles (make-vector 14 #f))
+                (cache (vector '())))
+            (vector-set! entry 5 initial)
+            (vector-set! entry 6 successor)
+            (vector-set! entry 7 (vector-ref record 3))
+            (vector-set! entry 8 handles)
+            (vector-set! entry 11 m3t-profile)
+            (let ((created
+                    (m3t-native-owner-create (vector-ref initial 3))))
+              ;; Lexical pointer recovery is installed before either rooted
+              ;; publication can promote or raise.
+              (set! native created)
+              (if (null? created) (m3t-native-fail operation))
+              (vector-set! record 8 created)
+              (vector-set! entry 3 created)
+              (let ((construction
+                      (i2-candidate-construction-begin-internal! cell)))
+                (vector-set! record 9 construction)
+                (let ((anchor-parameter
+                        (m3t-native-owner-parameter created 0)))
+                  (if (null? anchor-parameter) (m3t-native-fail operation))
+                  (vector-set! (vector-ref construction 8) 2
+                               anchor-parameter))
+                (let ((root (vector-ref construction 2)))
+                  (vector-set! record 10 root)
+                  (vector-set! entry 0 root)
+                  (let register ((index 0))
+                    (if (= index 14) #t
+                        (let* ((path (vector-ref m3t-paths index))
+                               (parent (m3t-child-parent root path cache))
+                               (parameter
+                                 (m3t-native-owner-parameter created index)))
+                          (if (null? parameter) (m3t-native-fail operation))
+                          (let* ((carrier
+                                   (i2-carrier 'parameter parameter 'parameter))
+                                 (handle
+                                   (i2-module-register-parameter-internal!
+                                     parent (m3t-path-leaf path) carrier)))
+                            (vector-set! (vector-ref entry 8) index handle)
+                            (m3t-check
+                              (m3t-native-owner-bind created index handle)
+                              operation)
+                            (register (+ index 1))))))
+                  (let ((parent
+                          (m3t-child-parent
+                            root '("token_embedding" "weight") cache)))
+                    (i2-module-register-tied-parameter-internal!
+                      parent "weight" (vector-ref (vector-ref entry 8) 10)))
+                  (let ((schedule
+                          (module-construction-parameters-internal
+                            (vector-ref construction 1))))
+                    (m3t-validate-schedule schedule (vector-ref entry 8)
+                                           operation))
+                  (let initialize ((index 0))
+                    (if (= index 14) #t
+                        (begin
+                          (m3t-check
+                            (m3t-native-owner-initialize created index)
+                            operation)
+                          (initialize (+ index 1)))))
+                  (let ((next (m3t-native-owner-successor created)))
+                    (if (null? next) (m3t-native-fail operation))
+                    (vector-set! successor 3 next))
+                  ;; From this bit onward an exception cannot be converted
+                  ;; into construction abort, even if the I2 cell says open.
+                  (vector-set! record 11 #t)
+                  (let ((sealed-root
+                          (i2-candidate-construction-seal-internal! cell)))
+                    (if (not (eq? sealed-root root)) (exit 134))
+                    (if (not (= (m3t-native-owner-seal created) 0))
+                        (exit 134))
+                    (if (not (= (m3t-native-initializer-seal
+                                  (vector-ref successor 3)) 0))
+                        (exit 134))
+                    (vector-set! successor 2 'live)
+                    (vector-set! entry 2 'live)
+                    (vector-set! record 1 'sealed)
+                    (vector-ref entry 0)))))))))))
