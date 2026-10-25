@@ -2287,6 +2287,15 @@ The sealed independent result review is
 (SHA-256 `8849d354137025ae3d9f68cf9b21ad412383a0fd4adc7ab1996469bce1621fd0`).
 Attention VJP and trainable C4 remain separate.
 
+The [private C4 token-embedding VJP source candidate]
+(g3/G3_R_C4_EMBEDDING_VJP_LEAF.md) covers the genuine `[1,4]` raw V256
+lookup and staged `[256,4]` tied table gradient. Local Clang 22 normal,
+repeat and native ASan+UBSan test all 1,024 gradient words and central
+differences for touched and distributed untouched coordinates, including
+duplicate IDs. Independent review and pinned compiled admission remain
+pending. A composed trainable C4 graph must still combine this gradient
+with the tied output-head gradient.
+
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1
 commit to one generated G1. Its host synthetic state witness and causal source
